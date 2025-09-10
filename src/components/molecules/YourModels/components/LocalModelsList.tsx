@@ -1,0 +1,93 @@
+import React from "react";
+import { Button } from "@/components/ui/button";
+import { Loader2, Play, Square } from "lucide-react";
+import { llmService, type ModelInfo } from "@/services/llm";
+import { logInfo } from "@/utils/logger";
+import type { Provider } from "../hooks/use-provider-config";
+import type { CurrentModel } from "../hooks/use-current-model";
+
+interface LocalModelsListProps {
+	localModels: ModelInfo[];
+	quickProvider: Provider;
+	loading: boolean;
+	current: CurrentModel | null;
+	onModelLoaded?: (modelId: string, provider: Provider) => void;
+}
+
+export const LocalModelsList: React.FC<LocalModelsListProps> = ({
+	localModels,
+	quickProvider,
+	loading,
+	current,
+	onModelLoaded,
+}) => {
+	if (localModels.length === 0) {
+		return (
+			<div className="flex items-center justify-center p-4 border rounded-lg border-dashed">
+				<span className="text-sm text-muted-foreground">
+					No models available in {quickProvider}. Make sure {quickProvider} is
+					running and has models installed.
+				</span>
+			</div>
+		);
+	}
+
+	return (
+		<>
+			{localModels.map((model) => {
+				const isLoaded =
+					llmService.has("openai") &&
+					current?.modelId === model.id &&
+					current?.provider === quickProvider;
+				return (
+					<div
+						key={model.id}
+						className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/30 transition-colors"
+					>
+						<div className="flex-1">
+							<div className="flex items-center gap-2">
+								<div className="font-medium text-sm">
+									{model.name || model.id}
+								</div>
+								{isLoaded && (
+									<span className="text-xs text-green-600 font-medium">
+										● Loaded
+									</span>
+								)}
+							</div>
+							<div className="text-xs text-muted-foreground">
+								{quickProvider} model
+							</div>
+						</div>
+						<Button
+							size="sm"
+							onClick={async () => {
+								// Set current model when clicking Use
+								// Let LLMService handle the state and notify via events
+								await llmService.setCurrentModel(model.id, quickProvider);
+								logInfo(`${model.name || model.id} set as current model`);
+								onModelLoaded?.(model.id, quickProvider);
+							}}
+							disabled={loading || isLoaded}
+							variant={isLoaded ? "outline" : "default"}
+						>
+							{loading ? (
+								<Loader2 className="w-4 h-4 animate-spin" />
+							) : isLoaded ? (
+								<>
+									<Square className="w-4 h-4" />
+									Ready
+								</>
+							) : (
+								<>
+									<Play className="w-4 h-4" />
+									Use
+								</>
+							)}
+						</Button>
+					</div>
+				);
+			})}
+		</>
+	);
+};

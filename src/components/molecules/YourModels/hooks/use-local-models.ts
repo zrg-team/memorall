@@ -1,0 +1,78 @@
+import { useState, useEffect } from "react";
+import { llmService, type ModelInfo } from "@/services/llm";
+import { databaseService } from "@/services/database";
+import { schema } from "@/services/database/db";
+import { eq } from "drizzle-orm";
+import { logError } from "@/utils/logger";
+import type { Provider } from "./use-provider-config";
+
+export function useLocalModels(
+	quickProvider: Provider,
+	localConfigExists: boolean | null,
+) {
+	const [localModels, setLocalModels] = useState<ModelInfo[]>([]);
+	const [localModelsLoading, setLocalModelsLoading] = useState(false);
+
+	// Fetch models from local provider when configuration exists
+	useEffect(() => {
+		const fetchLocalModels = async () => {
+			if (
+				(quickProvider !== "lmstudio" && quickProvider !== "ollama") ||
+				!localConfigExists
+			) {
+				setLocalModels([]);
+				return;
+			}
+
+			setLocalModelsLoading(true);
+			try {
+				// For local providers, the service is created as "openai" but with local config
+				// We need to check if the "openai" service exists and has the right provider type
+				if (llmService.has("openai")) {
+					const response = await llmService.modelsFor("openai");
+					setLocalModels(response.data);
+				} else {
+					// Try to create the service from saved configuration
+					const configKey =
+						quickProvider === "lmstudio" ? "lmstudio_config" : "ollama_config";
+					try {
+						const row = (
+							await databaseService.use(({ db }) =>
+								db
+									.select()
+									.from(schema.configurations)
+									.where(eq(schema.configurations.key, configKey)),
+							)
+						)[0] as unknown as { data?: any } | undefined;
+
+						if (row?.data) {
+							// Create the service with the saved configuration
+							await llmService.create("openai", {
+								type: quickProvider,
+								baseURL: row.data.baseUrl,
+							} as any);
+
+							// Now fetch models
+							const response = await llmService.modelsFor("openai");
+							setLocalModels(response.data);
+						} else {
+							setLocalModels([]);
+						}
+					} catch (createErr) {
+						logError(`Failed to create ${quickProvider} service:`, createErr);
+						setLocalModels([]);
+					}
+				}
+			} catch (err) {
+				logError(`Failed to fetch ${quickProvider} models:`, err);
+				setLocalModels([]);
+			} finally {
+				setLocalModelsLoading(false);
+			}
+		};
+
+		fetchLocalModels();
+	}, [quickProvider, localConfigExists]);
+
+	return { localModels, localModelsLoading };
+}

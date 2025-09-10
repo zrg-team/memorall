@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Memorall Background Processor</title>
+    <style>
+        body {
+            display: none; /* Hidden offscreen document */
+            font-family: monospace;
+            margin: 0;
+            padding: 20px;
+            background: #000;
+            color: #0f0;
+            font-size: 12px;
+        }
+
+        /* Simple minimal indicator for debugging */
+        .indicator {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            background: #333;
+            color: #0f0;
+            padding: 5px 10px;
+            border-radius: 3px;
+            font-size: 10px;
+            z-index: 9999;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <!-- Minimal debug indicator -->
+    <div class="indicator" id="status">OFFSCREEN: Starting...</div>
+
+    <!-- All logs will be sent to LogsPage via persistentLogger -->
+    <script type="module" src="scripts/offscreen.js"></script>
+</body>
+</html>

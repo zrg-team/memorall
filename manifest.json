@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json.schemastore.org/chrome-manifest.json",
+  "manifest_version": 3,
+  "version": "0.0.1",
+  "name": "Memorall",
+  "description": "Memorall - AI-powered memory and knowledge management browser extension",
+  "icons": {
+    "16": "images/extension_48.png",
+    "32": "images/extension_48.png",
+    "48": "images/extension_48.png",
+    "128": "images/extension_48.png"
+  },
+  "author": "Your Name",
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Memorall Extension"
+  },
+  "options_page": "standalone.html",
+  "permissions": [
+    "activeTab",
+    "storage",
+    "contextMenus",
+    "scripting",
+    "notifications",
+    "offscreen"
+  ],
+  "host_permissions": [
+    "https://huggingface.co/*",
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "src/background.ts",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["src/content.ts"],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "src/workers/*.worker.js",
+        "src/workers/*.worker.ts",
+        "example.worker.js",
+        "vendors/transformers/*",
+        "vendors/mozilla-readability/Readability.js",
+        "offscreen.html",
+        "*.js",
+        "*.css"
+      ],
+      "matches": ["<all_urls>"]
+    }
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval' http://localhost:* http://127.0.0.1:*; worker-src 'self'; object-src 'self'; frame-src http://localhost:* http://127.0.0.1:* https: data: blob:;"
+  }
+}

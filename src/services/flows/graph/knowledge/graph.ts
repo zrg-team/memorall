@@ -1,0 +1,693 @@
+import { END, START, StateGraph } from "@langchain/langgraph/web";
+import { logInfo, logError } from "@/utils/logger";
+import type { NewSource } from "@/services/database/entities/sources";
+import type { NewNode } from "@/services/database/entities/nodes";
+import type { NewEdge } from "@/services/database/entities/edges";
+import { or, and, ilike, inArray } from "drizzle-orm";
+import { combineSearchResults, vectorSearchNodes } from "@/utils/vector-search";
+
+import { KnowledgeGraphAnnotation, type KnowledgeGraphState } from "./state";
+import { EntityExtractionFlow } from "./entity-extraction";
+import { EntityResolutionFlow } from "./entity-resolution";
+import { FactExtractionFlow } from "./fact-extraction";
+import { FactResolutionFlow } from "./fact-resolution";
+import { TemporalExtractionFlow } from "./temporal-extraction";
+import { GraphBase } from "../../interfaces/graph.base";
+import type { AllServices } from "../../interfaces/tool";
+
+export class KnowledgeGraphFlow extends GraphBase<
+	| "load_entities"
+	| "extract_entities"
+	| "resolve_entities"
+	| "extract_facts"
+	| "load_facts"
+	| "resolve_facts"
+	| "extract_temporal"
+	| "save_to_database",
+	KnowledgeGraphState,
+	AllServices
+> {
+	private entityExtraction: EntityExtractionFlow;
+	private entityResolution: EntityResolutionFlow;
+	private factExtraction: FactExtractionFlow;
+	private factResolution: FactResolutionFlow;
+	private temporalExtraction: TemporalExtractionFlow;
+
+	constructor(services: AllServices) {
+		super(services);
+		this.workflow = new StateGraph(KnowledgeGraphAnnotation);
+
+		// Initialize sub-flows
+		this.entityExtraction = new EntityExtractionFlow(services);
+		this.entityResolution = new EntityResolutionFlow(services);
+		this.factExtraction = new FactExtractionFlow(services);
+		this.factResolution = new FactResolutionFlow(services);
+		this.temporalExtraction = new TemporalExtractionFlow(services);
+
+		// Add nodes
+		this.workflow.addNode("load_entities", this.loadExistingEntitiesNode);
+		this.workflow.addNode("load_facts", this.loadExistingFactsNode);
+		this.workflow.addNode("extract_entities", this.extractEntitiesNode);
+		this.workflow.addNode("resolve_entities", this.resolveEntitiesNode);
+		this.workflow.addNode("extract_facts", this.extractFactsNode);
+		this.workflow.addNode("resolve_facts", this.resolveFactsNode);
+		this.workflow.addNode("extract_temporal", this.extractTemporalNode);
+		this.workflow.addNode("save_to_database", this.saveToDatabaseNode);
+
+		// Define the flow
+		// Ordering: extract -> load entities -> resolve -> extract facts -> load facts -> resolve
+		this.workflow.addEdge(START, "extract_entities");
+		this.workflow.addEdge("extract_entities", "load_entities");
+		this.workflow.addEdge("load_entities", "resolve_entities");
+		this.workflow.addEdge("resolve_entities", "extract_facts");
+		this.workflow.addEdge("extract_facts", "load_facts");
+		this.workflow.addEdge("load_facts", "resolve_facts");
+		this.workflow.addEdge("resolve_facts", "extract_temporal");
+		this.workflow.addEdge("extract_temporal", "save_to_database");
+		this.workflow.addEdge("save_to_database", END);
+
+		// Compile the workflow
+		this.compile();
+	}
+
+	loadExistingEntitiesNode = async (
+		state: KnowledgeGraphState,
+	): Promise<Partial<KnowledgeGraphState>> => {
+		try {
+			logInfo("[LOAD_ENTITIES] Loading related existing nodes for resolution");
+
+			const databaseService = this.services.database;
+			const embeddingService = this.services.embedding;
+
+			if (!databaseService) {
+				throw new Error("Database service not available");
+			}
+
+			// If we have no extracted entities yet, skip
+			const names = (state.extractedEntities || [])
+				.map((e) => e.name)
+				.filter((n) => n && n.trim().length > 0);
+			if (names.length === 0) {
+				return { existingNodes: [], existingEdges: [] };
+			}
+
+			const TOTAL_LIMIT = 200;
+			const WEIGHTS = { sqlPercentage: 60, vectorPercentage: 40 };
+
+			// Perform SQL search (existing logic)
+			const sqlResults = await databaseService.use(async ({ db, schema }) => {
+				const conditions = names.flatMap((n) => {
+					const pat = `%${n}%`;
+					return [
+						ilike(schema.nodes.name, pat),
+						ilike(schema.nodes.summary, pat),
+					];
+				});
+				if (conditions.length === 0)
+					return [] as (typeof schema.nodes.$inferSelect)[];
+				const where = or(...conditions);
+				const nodes = await db
+					.select()
+					.from(schema.nodes)
+					.where(where!)
+					.limit(Math.floor((TOTAL_LIMIT * WEIGHTS.sqlPercentage) / 100));
+				return nodes;
+			});
+
+			// Perform vector search if embedding service is available
+			let vectorResults: {
+				item: (typeof sqlResults)[0];
+				similarity: number;
+			}[] = [];
+			if (embeddingService) {
+				try {
+					const defaultEmbedding = await embeddingService.get("default");
+					if (defaultEmbedding && defaultEmbedding.isReady()) {
+						vectorResults = await vectorSearchNodes(
+							databaseService,
+							defaultEmbedding,
+							names,
+							Math.floor((TOTAL_LIMIT * WEIGHTS.vectorPercentage) / 100),
+						);
+					}
+				} catch (error) {
+					logError("[LOAD_ENTITIES] Vector search failed:", error);
+				}
+			}
+
+			// Combine results with deduplication
+			const related = combineSearchResults(
+				sqlResults,
+				vectorResults,
+				WEIGHTS,
+				TOTAL_LIMIT,
+				(node) => node.id,
+			);
+
+			logInfo(
+				`[LOAD_ENTITIES] Loaded ${related.length} related nodes (${sqlResults.length} SQL, ${vectorResults.length} vector)`,
+			);
+
+			return {
+				existingNodes: related,
+				// Defer edge loading; load_facts will query per facts
+				existingEdges: [],
+				actions: [
+					{
+						id: crypto.randomUUID(),
+						name: "Related Nodes Loaded",
+						description: `Loaded ${related.length} related nodes for entity resolution (${sqlResults.length} SQL + ${vectorResults.length} vector)`,
+						metadata: {
+							nodeCount: related.length,
+							sqlCount: sqlResults.length,
+							vectorCount: vectorResults.length,
+						},
+					},
+				],
+			};
+		} catch (error) {
+			logError("[LOAD_ENTITIES] Error:", error);
+			return {
+				errors: [
+					error instanceof Error
+						? error.message
+						: "Failed to load existing data",
+				],
+				existingNodes: [],
+				existingEdges: [],
+			};
+		}
+	};
+
+	loadExistingFactsNode = async (
+		state: KnowledgeGraphState,
+	): Promise<Partial<KnowledgeGraphState>> => {
+		try {
+			logInfo("[LOAD_FACTS] Loading related edges for fact resolution");
+			const databaseService = this.services.database;
+			const embeddingService = this.services.embedding;
+
+			if (!databaseService) {
+				throw new Error("Database service not available");
+			}
+
+			if (!state.extractedFacts || state.extractedFacts.length === 0) {
+				return { existingEdges: [] };
+			}
+
+			// Import vector search utilities
+			const { vectorSearchEdges, combineSearchResults } = await import(
+				"../../../../utils/vector-search"
+			);
+
+			const TOTAL_LIMIT = 500;
+			const WEIGHTS = { sqlPercentage: 50, vectorPercentage: 30 }; // 20% reserved for relations
+
+			// Collect candidate node IDs from resolved entities
+			const candidateIds = new Set<string>();
+			for (const ent of state.resolvedEntities || []) {
+				if (ent.isExisting && ent.existingId) candidateIds.add(ent.existingId);
+			}
+			const unresolvedNames = (state.resolvedEntities || [])
+				.filter((e) => !e.isExisting || !e.existingId)
+				.map((e) => e.finalName);
+
+			// Find additional nodes for unresolved entities
+			if (unresolvedNames.length > 0) {
+				const found = await databaseService.use(async ({ db, schema }) => {
+					const conditions = unresolvedNames.flatMap((n) => {
+						const pat = `%${n}%`;
+						return [
+							ilike(schema.nodes.name, pat),
+							ilike(schema.nodes.summary, pat),
+						];
+					});
+					if (conditions.length === 0) return [] as { id: string }[];
+					const rows = await db
+						.select({ id: schema.nodes.id })
+						.from(schema.nodes)
+						.where(or(...conditions)!)
+						.limit(200);
+					return rows;
+				});
+				for (const r of found) candidateIds.add(r.id);
+			}
+
+			const idList = Array.from(candidateIds);
+
+			// 1. SQL-based edge search (relations from resolved entities)
+			let sqlResults: typeof state.existingEdges = [];
+			if (idList.length > 0) {
+				sqlResults = await databaseService.use(async ({ db, schema }) => {
+					return db
+						.select()
+						.from(schema.edges)
+						.where(
+							or(
+								inArray(schema.edges.sourceId, idList),
+								inArray(schema.edges.destinationId, idList),
+							)!,
+						)
+						.limit(Math.floor((TOTAL_LIMIT * WEIGHTS.sqlPercentage) / 100));
+				});
+			}
+
+			// 2. Vector search based on extracted facts
+			let vectorResults: {
+				item: (typeof sqlResults)[0];
+				similarity: number;
+			}[] = [];
+			if (embeddingService && state.extractedFacts.length > 0) {
+				try {
+					const defaultEmbedding = await embeddingService.get("default");
+					if (defaultEmbedding && defaultEmbedding.isReady()) {
+						// Create search terms from extracted facts
+						const factSearchTerms = state.extractedFacts
+							.map((f) => `${f.relationType} ${f.factText || ""}`.trim())
+							.filter((term) => term.length > 0);
+
+						if (factSearchTerms.length > 0) {
+							vectorResults = await vectorSearchEdges(
+								databaseService,
+								defaultEmbedding,
+								factSearchTerms,
+								Math.floor((TOTAL_LIMIT * WEIGHTS.vectorPercentage) / 100),
+							);
+						}
+					}
+				} catch (error) {
+					logError("[LOAD_FACTS] Vector search failed:", error);
+				}
+			}
+
+			// 3. Additional relations from resolved entity connections (if space available)
+			let relationResults: typeof sqlResults = [];
+			const usedSpace = sqlResults.length + vectorResults.length;
+			const remainingSpace = TOTAL_LIMIT - usedSpace;
+
+			if (remainingSpace > 0 && idList.length > 0) {
+				// Find edges that connect any of our resolved entities to other entities
+				relationResults = await databaseService.use(async ({ db, schema }) => {
+					// Find edges where both source and destination are in our candidate list
+					return db
+						.select()
+						.from(schema.edges)
+						.where(
+							and(
+								inArray(schema.edges.sourceId, idList),
+								inArray(schema.edges.destinationId, idList),
+							)!,
+						)
+						.limit(remainingSpace);
+				});
+			}
+
+			// Combine all results with deduplication
+			const allEdgeResults = [
+				...sqlResults,
+				...vectorResults.map((r) => r.item),
+				...relationResults,
+			];
+			const edges = combineSearchResults(
+				allEdgeResults,
+				[], // Vector results already incorporated above
+				{ sqlPercentage: 100, vectorPercentage: 0 },
+				TOTAL_LIMIT,
+				(edge) => edge.id,
+			);
+
+			// Ensure node data for edges
+			const nodeIds = Array.from(
+				new Set<string>(edges.flatMap((e) => [e.sourceId, e.destinationId])),
+			);
+			const missingNodeIds = nodeIds.filter(
+				(id) => !(state.existingNodes || []).some((n) => n.id === id),
+			);
+			let newNodes: KnowledgeGraphState["existingNodes"] = [];
+			if (missingNodeIds.length > 0) {
+				newNodes = await databaseService.use(async ({ db, schema }) => {
+					return db
+						.select()
+						.from(schema.nodes)
+						.where(inArray(schema.nodes.id, missingNodeIds));
+				});
+			}
+
+			logInfo(
+				`[LOAD_FACTS] Loaded ${edges.length} related edges (${sqlResults.length} SQL, ${vectorResults.length} vector, ${relationResults.length} relations)`,
+			);
+
+			return {
+				existingEdges: edges,
+				existingNodes: (state.existingNodes || []).concat(newNodes),
+				actions: [
+					{
+						id: crypto.randomUUID(),
+						name: "Related Edges Loaded",
+						description: `Loaded ${edges.length} related edges for fact resolution (${sqlResults.length} SQL + ${vectorResults.length} vector + ${relationResults.length} relations)`,
+						metadata: {
+							edgeCount: edges.length,
+							sqlCount: sqlResults.length,
+							vectorCount: vectorResults.length,
+							relationCount: relationResults.length,
+						},
+					},
+				],
+			};
+		} catch (error) {
+			logError("[LOAD_FACTS] Error:", error);
+			return {
+				errors: [
+					error instanceof Error
+						? error.message
+						: "Failed to load facts context",
+				],
+			};
+		}
+	};
+
+	extractEntitiesNode = async (
+		state: KnowledgeGraphState,
+	): Promise<Partial<KnowledgeGraphState>> => {
+		logInfo("[EXTRACT_ENTITIES] Starting entity extraction node", {
+			url: state.url,
+			pageId: state.pageId,
+			processingStage: state.processingStage,
+		});
+		const result = await this.entityExtraction.extractEntities(state);
+		logInfo("[EXTRACT_ENTITIES] Entity extraction completed", {
+			nextStage: result.processingStage,
+			entitiesCount: result.extractedEntities?.length || 0,
+		});
+		return result;
+	};
+
+	resolveEntitiesNode = async (
+		state: KnowledgeGraphState,
+	): Promise<Partial<KnowledgeGraphState>> => {
+		return await this.entityResolution.resolveEntities(state);
+	};
+
+	extractFactsNode = async (
+		state: KnowledgeGraphState,
+	): Promise<Partial<KnowledgeGraphState>> => {
+		return await this.factExtraction.extractFacts(state);
+	};
+
+	resolveFactsNode = async (
+		state: KnowledgeGraphState,
+	): Promise<Partial<KnowledgeGraphState>> => {
+		return await this.factResolution.resolveFacts(state);
+	};
+
+	extractTemporalNode = async (
+		state: KnowledgeGraphState,
+	): Promise<Partial<KnowledgeGraphState>> => {
+		return await this.temporalExtraction.extractTemporal(state);
+	};
+
+	saveToDatabaseNode = async (
+		state: KnowledgeGraphState,
+	): Promise<Partial<KnowledgeGraphState>> => {
+		try {
+			logInfo("[SAVE_TO_DATABASE] Saving knowledge graph to database");
+			logInfo("[SAVE_TO_DATABASE] State debug:", {
+				hasPageId: !!state.pageId,
+				pageId: state.pageId,
+				url: state.url,
+				title: state.title,
+				processingStage: state.processingStage,
+			});
+
+			const databaseService = this.services.database;
+			if (!databaseService) {
+				throw new Error("Database service not available");
+			}
+
+			const embeddingService = this.services.embedding;
+
+			const result = await databaseService.use(async ({ db, schema }) => {
+				// Validate required fields
+				if (
+					!state.pageId ||
+					typeof state.pageId !== "string" ||
+					state.pageId.trim().length === 0
+				) {
+					throw new Error(
+						"Invalid or missing pageId - cannot create source without valid target ID",
+					);
+				}
+
+				if (
+					!state.title ||
+					typeof state.title !== "string" ||
+					state.title.trim().length === 0
+				) {
+					throw new Error(
+						"Invalid or missing title - cannot create source without name",
+					);
+				}
+
+				// Create source first
+				logInfo("💾 Creating source with polymorphic relation", {
+					targetType: "remembered_pages",
+					targetId: state.pageId,
+					hasPageId: !!state.pageId,
+					title: state.title,
+				});
+
+				const sourceData: NewSource = {
+					targetType: "remembered_pages",
+					targetId: state.pageId.trim(),
+					name: state.title.trim(),
+					metadata: state.metadata || {},
+					referenceTime: new Date(state.referenceTimestamp),
+					weight: 1.0,
+				};
+
+				// Generate embedding for source
+				if (embeddingService) {
+					try {
+						const embeddingText = `${state.title}\n\n${state.content.substring(0, 2000)}`;
+						const embedding =
+							await embeddingService.textToVector(embeddingText);
+						(sourceData as NewSource & { embedding?: number[] }).embedding =
+							embedding;
+					} catch (embeddingError) {
+						logError(
+							"[SAVE_TO_DATABASE] Failed to generate source embedding:",
+							embeddingError,
+						);
+					}
+				}
+
+				const [createdSource] = await db
+					.insert(schema.sources)
+					.values(sourceData)
+					.returning();
+
+				// Create new nodes
+				const createdNodes = [];
+				const newEntities = state.resolvedEntities.filter((e) => !e.isExisting);
+
+				for (const entity of newEntities) {
+					const nodeData: NewNode = {
+						nodeType: entity.nodeType,
+						name: entity.finalName,
+						summary: entity.summary,
+						attributes: entity.attributes || {},
+					};
+
+					// Generate embedding for node name
+					if (embeddingService) {
+						try {
+							const nameEmbedding = await embeddingService.textToVector(
+								entity.finalName,
+							);
+							(
+								nodeData as NewNode & { nameEmbedding?: number[] }
+							).nameEmbedding = nameEmbedding;
+						} catch (embeddingError) {
+							logError(
+								`[SAVE_TO_DATABASE] Failed to generate embedding for node "${entity.finalName}":`,
+								embeddingError,
+							);
+						}
+					}
+
+					const [createdNode] = await db
+						.insert(schema.nodes)
+						.values(nodeData)
+						.returning();
+
+					createdNodes.push(createdNode);
+
+					// Create source-node relationship
+					await db.insert(schema.sourceNodes).values({
+						sourceId: createdSource.id,
+						nodeId: createdNode.id,
+						relation: "MENTIONED_IN",
+					});
+				}
+
+				// Create new edges
+				const createdEdges = [];
+				const newFacts = state.enrichedFacts.filter((f) => !f.isExisting);
+
+				for (const fact of newFacts) {
+					// Map entity UUIDs to actual node IDs
+					const sourceEntity = state.resolvedEntities.find(
+						(e) => e.uuid === fact.sourceEntityId,
+					);
+					const destEntity = state.resolvedEntities.find(
+						(e) => e.uuid === fact.destinationEntityId,
+					);
+
+					if (!sourceEntity || !destEntity) {
+						logError(
+							`[SAVE_TO_DATABASE] Could not find entities for fact: ${fact.sourceEntityId} -> ${fact.destinationEntityId}`,
+						);
+						continue;
+					}
+
+					// Get actual node IDs
+					let sourceNodeId: string;
+					let destNodeId: string;
+
+					if (sourceEntity.isExisting && sourceEntity.existingId) {
+						sourceNodeId = sourceEntity.existingId;
+					} else {
+						const newNode = createdNodes.find(
+							(n) => n.name === sourceEntity.finalName,
+						);
+						if (!newNode) {
+							logError(
+								`[SAVE_TO_DATABASE] Could not find created node for entity: ${sourceEntity.finalName}`,
+							);
+							continue;
+						}
+						sourceNodeId = newNode.id;
+					}
+
+					if (destEntity.isExisting && destEntity.existingId) {
+						destNodeId = destEntity.existingId;
+					} else {
+						const newNode = createdNodes.find(
+							(n) => n.name === destEntity.finalName,
+						);
+						if (!newNode) {
+							logError(
+								`[SAVE_TO_DATABASE] Could not find created node for entity: ${destEntity.finalName}`,
+							);
+							continue;
+						}
+						destNodeId = newNode.id;
+					}
+
+					const edgeData: NewEdge = {
+						sourceId: sourceNodeId,
+						destinationId: destNodeId,
+						edgeType: fact.relationType,
+						factText: fact.factText,
+						validAt: fact.temporal.validAt
+							? new Date(fact.temporal.validAt)
+							: undefined,
+						invalidAt: fact.temporal.invalidAt
+							? new Date(fact.temporal.invalidAt)
+							: undefined,
+						attributes: fact.attributes || {},
+					};
+
+					// Generate embedding for fact
+					if (embeddingService) {
+						try {
+							const factEmbedding = await embeddingService.textToVector(
+								fact.factText,
+							);
+							const typeEmbedding = await embeddingService.textToVector(
+								fact.relationType,
+							);
+							(
+								edgeData as NewEdge & {
+									factEmbedding?: number[];
+									typeEmbedding?: number[];
+								}
+							).factEmbedding = factEmbedding;
+							(
+								edgeData as NewEdge & {
+									factEmbedding?: number[];
+									typeEmbedding?: number[];
+								}
+							).typeEmbedding = typeEmbedding;
+						} catch (embeddingError) {
+							logError(
+								`[SAVE_TO_DATABASE] Failed to generate embedding for edge "${fact.factText}":`,
+								embeddingError,
+							);
+						}
+					}
+
+					const [createdEdge] = await db
+						.insert(schema.edges)
+						.values(edgeData)
+						.returning();
+
+					createdEdges.push(createdEdge);
+
+					// Create source-edge relationship
+					await db.insert(schema.sourceEdges).values({
+						sourceId: createdSource.id,
+						edgeId: createdEdge.id,
+						relation: "EXTRACTED_FROM",
+						linkWeight: 1.0,
+					});
+				}
+
+				return { createdSource, createdNodes, createdEdges };
+			});
+
+			logInfo(
+				`[SAVE_TO_DATABASE] Successfully saved ${result.createdNodes.length} nodes and ${result.createdEdges.length} edges`,
+			);
+
+			return {
+				createdSource: result.createdSource,
+				createdNodes: result.createdNodes,
+				createdEdges: result.createdEdges,
+				processingStage: "completed",
+				finalMessage: `Knowledge graph creation completed. Created ${result.createdNodes.length} new nodes and ${result.createdEdges.length} new edges from "${state.title}".`,
+				actions: [
+					{
+						id: crypto.randomUUID(),
+						name: "Knowledge Graph Saved",
+						description: `Successfully created knowledge graph with ${result.createdNodes.length} nodes and ${result.createdEdges.length} edges`,
+						metadata: {
+							sourceId: result.createdSource.id,
+							nodeCount: result.createdNodes.length,
+							edgeCount: result.createdEdges.length,
+						},
+					},
+				],
+			};
+		} catch (error) {
+			logError("[SAVE_TO_DATABASE] Error:", error);
+
+			return {
+				errors: [
+					error instanceof Error ? error.message : "Failed to save to database",
+				],
+				finalMessage:
+					"Knowledge graph creation failed during database save operation.",
+				actions: [
+					{
+						id: crypto.randomUUID(),
+						name: "Database Save Failed",
+						description:
+							error instanceof Error ? error.message : "Unknown error",
+						metadata: {},
+					},
+				],
+			};
+		}
+	};
+}
