@@ -132,7 +132,7 @@ graph TD
   STD[standalone.html] --> BG
 
   BG --> JQ[src/services/background-jobs/*]
-  BG --> SVC[Core Services\n(LLM/Embedding/DB/Remember/KG)]
+  BG --> SVC[Core Services\nLLM/Embedding/DB/Remember/KG]
 
   JQ -->|enqueue/claim| BG
 
