@@ -25,33 +25,19 @@ See Memorall in action! The extension seamlessly integrates with your browsing e
 
 ### 📷 Screenshots
 
-**Main Chat Interface**
 ![Main Interface](docs/assets/1.png)
-*Chat with AI to summarize pages and manage your knowledge*
 
-**Knowledge Graph Visualization**
 ![Knowledge Graph](docs/assets/2.png)
-*Visualize connections between concepts, people, and ideas*
 
-**Memory Recall in Action**
 ![Memory Recall](docs/assets/3.png)
-*Ask questions and get contextual answers from your knowledge base*
 
-**Page Summarization**
 ![Page Summary](docs/assets/4.png)
-*Get AI-powered summaries of articles and web content*
 
-**Entity Recognition**
 ![Entity Recognition](docs/assets/5.png)
-*Automatic extraction of people, organizations, and concepts*
 
-**Personal Knowledge Building**
 ![Knowledge Building](docs/assets/6.png)
-*Build and explore your personal knowledge graph over time*
 
-**Smart Context Awareness**
 ![Context Awareness](docs/assets/7.png)
-*AI understands and connects related information across your browsing*
 
 ## 🎯 Use Cases
 
