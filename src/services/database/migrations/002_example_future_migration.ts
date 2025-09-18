@@ -1,8 +1,8 @@
 import type { PGlite } from "@electric-sql/pglite";
 
 export const up = async (db: PGlite) => {
-  // Example future migration - add new table or modify existing schema
-  await db.exec(`
+	// Example future migration - add new table or modify existing schema
+	await db.exec(`
     -- Example: Add a new table for user preferences
     -- CREATE TABLE IF NOT EXISTS user_preferences (
     --   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -20,8 +20,8 @@ export const up = async (db: PGlite) => {
 };
 
 export const down = async (db: PGlite) => {
-  // Optional: Rollback functionality
-  await db.exec(`
+	// Optional: Rollback functionality
+	await db.exec(`
     -- DROP TABLE IF EXISTS user_preferences;
     SELECT 1; -- No-op placeholder
   `);

@@ -3,7 +3,7 @@ import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
 import { uuid_ossp } from "@electric-sql/pglite/contrib/uuid_ossp";
 import { vector } from "@electric-sql/pglite/vector";
-import { pg_trgm } from '@electric-sql/pglite/contrib/pg_trgm';
+import { pg_trgm } from "@electric-sql/pglite/contrib/pg_trgm";
 import { logError, logInfo } from "@/utils/logger";
 
 // Import all schemas
@@ -18,7 +18,7 @@ import * as encryptionSchema from "./entities/encryption";
 import * as configurationSchema from "./entities/configuration";
 import * as rememberedContentSchema from "./entities/remembered-contents";
 
-import { runMigrations } from './migrations'
+import { runMigrations } from "./migrations";
 
 // Export schemas for direct access
 export const schema = {

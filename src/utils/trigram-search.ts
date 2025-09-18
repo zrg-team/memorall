@@ -14,7 +14,7 @@ export interface TrigramSearchParams {
  * Prepares search text for trigram similarity
  */
 function prepareSearchText(searchTerms: string[]): string {
-	return searchTerms.join(' ').toLowerCase().trim();
+	return searchTerms.join(" ").toLowerCase().trim();
 }
 
 /**
@@ -24,7 +24,7 @@ export async function trigramSearchNodes(
 	databaseService: DatabaseService,
 	searchTerms: string[],
 	limit: number,
-	params: TrigramSearchParams = {}
+	params: TrigramSearchParams = {},
 ): Promise<TrigramSearchResult<Node>[]> {
 	if (searchTerms.length === 0) return [];
 
@@ -36,8 +36,8 @@ export async function trigramSearchNodes(
 
 		const results = await databaseService.use(async ({ raw }) => {
 			const queryResult = await raw(
-				'SELECT * FROM search_nodes_trigram($1, $2, $3)',
-				[searchText, threshold, limit]
+				"SELECT * FROM search_nodes_trigram($1, $2, $3)",
+				[searchText, threshold, limit],
 			);
 			const rows = (queryResult as { rows: [] })?.rows || [];
 			return rows as Array<Node & { similarity_score: number }>;
@@ -59,9 +59,11 @@ export async function trigramSearchNodes(
 				score: row.similarity_score,
 			})) || []
 		);
-
 	} catch (error) {
-		console.warn("Trigram search for nodes failed, falling back to empty results:", error);
+		console.warn(
+			"Trigram search for nodes failed, falling back to empty results:",
+			error,
+		);
 		return [];
 	}
 }
@@ -73,7 +75,7 @@ export async function trigramSearchEdges(
 	databaseService: DatabaseService,
 	searchTerms: string[],
 	limit: number,
-	params: TrigramSearchParams = {}
+	params: TrigramSearchParams = {},
 ): Promise<TrigramSearchResult<Edge>[]> {
 	if (searchTerms.length === 0) return [];
 
@@ -85,8 +87,8 @@ export async function trigramSearchEdges(
 
 		const results = await databaseService.use(async ({ raw }) => {
 			const queryResult = await raw(
-				'SELECT * FROM search_edges_trigram($1, $2, $3)',
-				[searchText, threshold, limit]
+				"SELECT * FROM search_edges_trigram($1, $2, $3)",
+				[searchText, threshold, limit],
 			);
 			const rows = (queryResult as { rows: [] })?.rows || [];
 			return rows as Array<Edge & { similarity_score: number }>;
@@ -117,9 +119,11 @@ export async function trigramSearchEdges(
 				score: row.similarity_score,
 			})) || []
 		);
-
 	} catch (error) {
-		console.warn("Trigram search for edges failed, falling back to empty results:", error);
+		console.warn(
+			"Trigram search for edges failed, falling back to empty results:",
+			error,
+		);
 		return [];
 	}
 }
@@ -131,12 +135,19 @@ export function combineSearchResultsWithTrigram<T>(
 	sqlResults: T[],
 	vectorResults: Array<{ item: T; similarity: number }>,
 	trigramResults: TrigramSearchResult<T>[],
-	weights: { sqlPercentage: number; vectorPercentage: number; trigramPercentage: number },
+	weights: {
+		sqlPercentage: number;
+		vectorPercentage: number;
+		trigramPercentage: number;
+	},
 	totalLimit: number,
 	getKey: (item: T) => string,
 ): T[] {
 	// Normalize weights to 100%
-	const totalWeight = weights.sqlPercentage + weights.vectorPercentage + weights.trigramPercentage;
+	const totalWeight =
+		weights.sqlPercentage +
+		weights.vectorPercentage +
+		weights.trigramPercentage;
 	const normalizedWeights = {
 		sql: weights.sqlPercentage / totalWeight,
 		vector: weights.vectorPercentage / totalWeight,
@@ -163,8 +174,12 @@ export function combineSearchResultsWithTrigram<T>(
 		// Redistribute limits among active methods
 		const availableLimit = totalLimit;
 		sqlLimit = hasResults.sql ? Math.floor(availableLimit / activeResults) : 0;
-		vectorLimit = hasResults.vector ? Math.floor(availableLimit / activeResults) : 0;
-		trigramLimit = hasResults.trigram ? Math.floor(availableLimit / activeResults) : 0;
+		vectorLimit = hasResults.vector
+			? Math.floor(availableLimit / activeResults)
+			: 0;
+		trigramLimit = hasResults.trigram
+			? Math.floor(availableLimit / activeResults)
+			: 0;
 
 		// Handle remainder
 		const remainder = availableLimit - (sqlLimit + vectorLimit + trigramLimit);

@@ -6,7 +6,11 @@ import type { ChatCompletionResponse, ChatMessage } from "@/types/openai";
 import { logError, logInfo } from "@/utils/logger";
 import { eq, or, like, desc } from "drizzle-orm";
 import type { Node, Edge } from "@/services/database/db";
-import { trigramSearchNodes, trigramSearchEdges, combineSearchResultsWithTrigram } from "@/utils/trigram-search";
+import {
+	trigramSearchNodes,
+	trigramSearchEdges,
+	combineSearchResultsWithTrigram,
+} from "@/utils/trigram-search";
 
 // Types for vector search results with similarity scores
 interface NodeWithSimilarity extends Node {
@@ -162,7 +166,11 @@ export class KnowledgeRAGFlow extends GraphBase<
 
 			const TOTAL_NODE_LIMIT = 15;
 			const TOTAL_EDGE_LIMIT = 20;
-			const WEIGHTS = { sqlPercentage: 60, trigramPercentage: 40, vectorPercentage: 0 };
+			const WEIGHTS = {
+				sqlPercentage: 60,
+				trigramPercentage: 40,
+				vectorPercentage: 0,
+			};
 
 			// 1. SQL search for nodes
 			const sqlNodes = await database.use(async ({ db, schema }) => {
@@ -229,14 +237,15 @@ export class KnowledgeRAGFlow extends GraphBase<
 			});
 
 			// 3. Trigram search for nodes
-			let trigramNodeResults: Awaited<ReturnType<typeof trigramSearchNodes>> = [];
+			let trigramNodeResults: Awaited<ReturnType<typeof trigramSearchNodes>> =
+				[];
 			if (state.extractedEntities.length > 0) {
 				try {
 					trigramNodeResults = await trigramSearchNodes(
 						database,
 						state.extractedEntities,
 						Math.floor((TOTAL_NODE_LIMIT * WEIGHTS.trigramPercentage) / 100),
-						{ threshold: 0.1 }
+						{ threshold: 0.1 },
 					);
 				} catch (error) {
 					logError("[KNOWLEDGE_RAG] Trigram search for nodes failed:", error);
@@ -244,14 +253,15 @@ export class KnowledgeRAGFlow extends GraphBase<
 			}
 
 			// 4. Trigram search for edges
-			let trigramEdgeResults: Awaited<ReturnType<typeof trigramSearchEdges>> = [];
+			let trigramEdgeResults: Awaited<ReturnType<typeof trigramSearchEdges>> =
+				[];
 			if (state.extractedEntities.length > 0) {
 				try {
 					trigramEdgeResults = await trigramSearchEdges(
 						database,
 						state.extractedEntities,
 						Math.floor((TOTAL_EDGE_LIMIT * WEIGHTS.trigramPercentage) / 100),
-						{ threshold: 0.1 }
+						{ threshold: 0.1 },
 					);
 				} catch (error) {
 					logError("[KNOWLEDGE_RAG] Trigram search for edges failed:", error);
@@ -264,8 +274,14 @@ export class KnowledgeRAGFlow extends GraphBase<
 			const combinedNodeResults = sqlNodes.length + trigramNodeResults.length;
 			const combinedEdgeResults = sqlEdges.length + trigramEdgeResults.length;
 
-			if ((combinedNodeResults < TOTAL_NODE_LIMIT * 0.5 || combinedEdgeResults < TOTAL_EDGE_LIMIT * 0.5) && embedding) {
-				logInfo("[KNOWLEDGE_RAG] Insufficient results from SQL/trigram, falling back to vector search");
+			if (
+				(combinedNodeResults < TOTAL_NODE_LIMIT * 0.5 ||
+					combinedEdgeResults < TOTAL_EDGE_LIMIT * 0.5) &&
+				embedding
+			) {
+				logInfo(
+					"[KNOWLEDGE_RAG] Insufficient results from SQL/trigram, falling back to vector search",
+				);
 
 				try {
 					// Generate embedding for search terms
@@ -283,7 +299,10 @@ export class KnowledgeRAGFlow extends GraphBase<
 								ORDER BY similarity DESC
 								LIMIT $2
 							`;
-							const nodeLimit = Math.min(TOTAL_NODE_LIMIT - combinedNodeResults, Math.floor(TOTAL_NODE_LIMIT * 0.4));
+							const nodeLimit = Math.min(
+								TOTAL_NODE_LIMIT - combinedNodeResults,
+								Math.floor(TOTAL_NODE_LIMIT * 0.4),
+							);
 							const result = await raw(query, [
 								JSON.stringify(searchEmbedding),
 								nodeLimit,
@@ -304,7 +323,10 @@ export class KnowledgeRAGFlow extends GraphBase<
 								ORDER BY similarity DESC
 								LIMIT $2
 							`;
-							const edgeLimit = Math.min(TOTAL_EDGE_LIMIT - combinedEdgeResults, Math.floor(TOTAL_EDGE_LIMIT * 0.4));
+							const edgeLimit = Math.min(
+								TOTAL_EDGE_LIMIT - combinedEdgeResults,
+								Math.floor(TOTAL_EDGE_LIMIT * 0.4),
+							);
 							const result = await raw(query, [
 								JSON.stringify(searchEmbedding),
 								edgeLimit,
@@ -314,14 +336,20 @@ export class KnowledgeRAGFlow extends GraphBase<
 						vectorEdges = vectorEdgeResults;
 					}
 				} catch (embeddingError) {
-					logError("[KNOWLEDGE_RAG] Vector search fallback failed:", embeddingError);
+					logError(
+						"[KNOWLEDGE_RAG] Vector search fallback failed:",
+						embeddingError,
+					);
 				}
 			}
 
 			// 6. Combine results using trigram combiner
 			const combinedNodes = combineSearchResultsWithTrigram(
 				sqlNodes,
-				vectorNodes.map(node => ({ item: node, similarity: (node as any).similarity || 0 })),
+				vectorNodes.map((node) => ({
+					item: node,
+					similarity: (node as any).similarity || 0,
+				})),
 				trigramNodeResults,
 				WEIGHTS,
 				TOTAL_NODE_LIMIT,
@@ -330,7 +358,10 @@ export class KnowledgeRAGFlow extends GraphBase<
 
 			const combinedEdges = combineSearchResultsWithTrigram(
 				sqlEdges,
-				vectorEdges.map(edge => ({ item: edge, similarity: (edge as any).similarity || 0 })),
+				vectorEdges.map((edge) => ({
+					item: edge,
+					similarity: (edge as any).similarity || 0,
+				})),
 				trigramEdgeResults,
 				WEIGHTS,
 				TOTAL_EDGE_LIMIT,

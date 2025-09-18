@@ -6,10 +6,10 @@ import { backgroundJobQueue } from "./services/background-jobs/background-job-qu
 import { sharedStorageService } from "./services/shared-storage";
 import { llmService } from "./services/llm/llm-service";
 
-const CONTEXT_MENU_ID = "remember-this-page";
-const REMEMBER_CONTENT_ID = "remember-content";
-const LET_REMEMBER_ID = "let-remember";
-const OPEN_FULL_PAGE = "open-full-page";
+const REMEMBER_THIS_PAGE_CONTEXT_MENU_ID = "remember-this-page";
+const REMEMBER_CONTENT_CONTEXT_MENU_ID = "remember-content";
+const LET_REMEMBER_CONTEXT_MENU_ID = "let-remember";
+const OPEN_FULL_PAGE_CONTEXT_MENU_ID = "open-full-page";
 
 // Offscreen document management
 let offscreenCreated = false;
@@ -173,21 +173,21 @@ chrome.runtime.onInstalled.addListener(async () => {
 
 		// Create main "Remember this" menu for full page
 		chrome.contextMenus.create({
-			id: CONTEXT_MENU_ID,
+			id: REMEMBER_THIS_PAGE_CONTEXT_MENU_ID,
 			title: "Remember this page",
 			contexts: ["page", "link"],
 		});
 
 		// Create "Remember now" menu for selected content
 		chrome.contextMenus.create({
-			id: REMEMBER_CONTENT_ID,
+			id: REMEMBER_CONTENT_CONTEXT_MENU_ID,
 			title: "Remember this selection",
 			contexts: ["selection"],
 		});
 
 		// Create "Let remember" menu that opens chat input
 		chrome.contextMenus.create({
-			id: LET_REMEMBER_ID,
+			id: LET_REMEMBER_CONTEXT_MENU_ID,
 			title: "Remember ...",
 			contexts: ["page", "selection"],
 		});
@@ -199,7 +199,7 @@ chrome.runtime.onInstalled.addListener(async () => {
 
 		// Create "Open full page" menu that opens full page
 		chrome.contextMenus.create({
-			id: OPEN_FULL_PAGE,
+			id: OPEN_FULL_PAGE_CONTEXT_MENU_ID,
 			title: "Open platform",
 			contexts: ["page", "link"],
 		});
@@ -221,9 +221,9 @@ chrome.runtime.onInstalled.addListener(async () => {
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 	// Open the action popup immediately only for remember-related items
 	if (
-		info.menuItemId === CONTEXT_MENU_ID ||
-		info.menuItemId === REMEMBER_CONTENT_ID ||
-		info.menuItemId === LET_REMEMBER_ID
+		info.menuItemId === REMEMBER_THIS_PAGE_CONTEXT_MENU_ID ||
+		info.menuItemId === REMEMBER_CONTENT_CONTEXT_MENU_ID ||
+		info.menuItemId === LET_REMEMBER_CONTEXT_MENU_ID
 	) {
 		try {
 			// Check if user has configured an LLM (only check configuration, not readiness)
@@ -231,7 +231,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 			const hasConfiguredLLM = !!currentModel;
 
 			// For LET_REMEMBER specifically, always open popup and navigate to remember page
-			if (info.menuItemId === LET_REMEMBER_ID) {
+			if (info.menuItemId === LET_REMEMBER_CONTEXT_MENU_ID) {
 				try {
 					chrome.storage?.session?.set?.({ navigateTo: "remember" });
 				} catch (_) {}
@@ -273,7 +273,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 			return;
 		}
 
-		if (info.menuItemId === OPEN_FULL_PAGE) {
+		if (info.menuItemId === OPEN_FULL_PAGE_CONTEXT_MENU_ID) {
 			logInfo("🧭 Open full page clicked");
 			try {
 				await chrome.runtime.openOptionsPage?.();
@@ -295,7 +295,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 					logError("❌ Failed to open options/standalone page:", e2);
 				}
 			}
-		} else if (info.menuItemId === CONTEXT_MENU_ID) {
+		} else if (info.menuItemId === REMEMBER_THIS_PAGE_CONTEXT_MENU_ID) {
 			logInfo(
 				`🔄 Remember this page clicked for tab: ${tab.id}, URL: ${tab.url}`,
 			);
@@ -307,7 +307,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 				url: tab.url,
 			});
 			logInfo("📨 Content script response to REMEMBER_THIS:", contentResponse);
-		} else if (info.menuItemId === REMEMBER_CONTENT_ID) {
+		} else if (info.menuItemId === REMEMBER_CONTENT_CONTEXT_MENU_ID) {
 			logInfo(
 				`🔄 Remember now clicked for tab: ${tab.id}, selection: "${info.selectionText}"`,
 			);
@@ -323,7 +323,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 				"📨 Content script response to REMEMBER_CONTENT:",
 				selectionResponse,
 			);
-		} else if (info.menuItemId === LET_REMEMBER_ID) {
+		} else if (info.menuItemId === LET_REMEMBER_CONTEXT_MENU_ID) {
 			logInfo(`🔄 Let remember clicked for tab: ${tab.id}`);
 
 			// Send message to content script to store context data

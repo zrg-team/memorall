@@ -1,7 +1,7 @@
-import type { PGlite } from "@electric-sql/pglite"
+import type { PGlite } from "@electric-sql/pglite";
 
 export const up = async (pg: PGlite) => {
-  await pg.exec(`
+	await pg.exec(`
     -- Enable extensions
     CREATE EXTENSION IF NOT EXISTS vector;
     CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
@@ -314,4 +314,4 @@ export const up = async (pg: PGlite) => {
     END;
     $$ LANGUAGE plpgsql;
   `);
-}
+};

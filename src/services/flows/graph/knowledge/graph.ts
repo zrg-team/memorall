@@ -4,8 +4,12 @@ import type { NewSource } from "@/services/database/entities/sources";
 import type { NewNode } from "@/services/database/entities/nodes";
 import type { NewEdge } from "@/services/database/entities/edges";
 import { or, and, ilike, inArray } from "drizzle-orm";
-import { combineSearchResults, vectorSearchNodes, vectorSearchEdges } from "@/utils/vector-search";
-import { trigramSearchNodes, trigramSearchEdges, combineSearchResultsWithTrigram } from "@/utils/trigram-search";
+import { vectorSearchNodes, vectorSearchEdges } from "@/utils/vector-search";
+import {
+	trigramSearchNodes,
+	trigramSearchEdges,
+	combineSearchResultsWithTrigram,
+} from "@/utils/trigram-search";
 
 import { KnowledgeGraphAnnotation, type KnowledgeGraphState } from "./state";
 import { EntityExtractionFlow } from "./entity-extraction";
@@ -111,7 +115,11 @@ export class KnowledgeGraphFlow extends GraphBase<
 			}
 
 			const TOTAL_LIMIT = 200;
-			const WEIGHTS = { sqlPercentage: 60, trigramPercentage: 40, vectorPercentage: 0 };
+			const WEIGHTS = {
+				sqlPercentage: 60,
+				trigramPercentage: 40,
+				vectorPercentage: 0,
+			};
 
 			// Perform SQL search (existing logic)
 			const sqlResults = await databaseService.use(async ({ db, schema }) => {
@@ -140,7 +148,7 @@ export class KnowledgeGraphFlow extends GraphBase<
 					databaseService,
 					names,
 					Math.floor((TOTAL_LIMIT * WEIGHTS.trigramPercentage) / 100),
-					{ threshold: 0.1 }
+					{ threshold: 0.1 },
 				);
 			} catch (error) {
 				logError("[LOAD_ENTITIES] Trigram search failed:", error);
@@ -153,11 +161,15 @@ export class KnowledgeGraphFlow extends GraphBase<
 			}[] = [];
 			const combinedResults = sqlResults.length + trigramResults.length;
 
-			if (combinedResults < TOTAL_LIMIT * 0.5 && embeddingService) { // Less than 50% of desired results
+			if (combinedResults < TOTAL_LIMIT * 0.5 && embeddingService) {
+				// Less than 50% of desired results
 				try {
 					const defaultEmbedding = await embeddingService.get("default");
 					if (defaultEmbedding && defaultEmbedding.isReady()) {
-						const vectorLimit = Math.min(TOTAL_LIMIT - combinedResults, Math.floor(TOTAL_LIMIT * 0.4));
+						const vectorLimit = Math.min(
+							TOTAL_LIMIT - combinedResults,
+							Math.floor(TOTAL_LIMIT * 0.4),
+						);
 						vectorResults = await vectorSearchNodes(
 							databaseService,
 							defaultEmbedding,
@@ -233,7 +245,11 @@ export class KnowledgeGraphFlow extends GraphBase<
 			}
 
 			const TOTAL_LIMIT = 500;
-			const WEIGHTS = { sqlPercentage: 60, trigramPercentage: 40, vectorPercentage: 0 };
+			const WEIGHTS = {
+				sqlPercentage: 60,
+				trigramPercentage: 40,
+				vectorPercentage: 0,
+			};
 
 			// Collect candidate node IDs from resolved entities
 			const candidateIds = new Set<string>();
@@ -298,7 +314,7 @@ export class KnowledgeGraphFlow extends GraphBase<
 							databaseService,
 							factSearchTerms,
 							Math.floor((TOTAL_LIMIT * WEIGHTS.trigramPercentage) / 100),
-							{ threshold: 0.1 }
+							{ threshold: 0.1 },
 						);
 					}
 				} catch (error) {
@@ -313,7 +329,11 @@ export class KnowledgeGraphFlow extends GraphBase<
 			}[] = [];
 			const combinedResults = sqlResults.length + trigramResults.length;
 
-			if (combinedResults < TOTAL_LIMIT * 0.5 && embeddingService && state.extractedFacts.length > 0) {
+			if (
+				combinedResults < TOTAL_LIMIT * 0.5 &&
+				embeddingService &&
+				state.extractedFacts.length > 0
+			) {
 				try {
 					const defaultEmbedding = await embeddingService.get("default");
 					if (defaultEmbedding && defaultEmbedding.isReady()) {
@@ -323,7 +343,10 @@ export class KnowledgeGraphFlow extends GraphBase<
 							.filter((term) => term.length > 0);
 
 						if (factSearchTerms.length > 0) {
-							const vectorLimit = Math.min(TOTAL_LIMIT - combinedResults, Math.floor(TOTAL_LIMIT * 0.4));
+							const vectorLimit = Math.min(
+								TOTAL_LIMIT - combinedResults,
+								Math.floor(TOTAL_LIMIT * 0.4),
+							);
 							vectorResults = await vectorSearchEdges(
 								databaseService,
 								defaultEmbedding,
@@ -339,7 +362,8 @@ export class KnowledgeGraphFlow extends GraphBase<
 
 			// 4. Additional relations from resolved entity connections (if space available)
 			let relationResults: typeof sqlResults = [];
-			const usedSpace = sqlResults.length + trigramResults.length + vectorResults.length;
+			const usedSpace =
+				sqlResults.length + trigramResults.length + vectorResults.length;
 			const remainingSpace = TOTAL_LIMIT - usedSpace;
 
 			if (remainingSpace > 0 && idList.length > 0) {
@@ -674,6 +698,58 @@ export class KnowledgeGraphFlow extends GraphBase<
 			logInfo(
 				`[SAVE_TO_DATABASE] Successfully saved ${result.createdNodes.length} nodes and ${result.createdEdges.length} edges`,
 			);
+
+			// Extra success logs with names/details
+			try {
+				if (result.createdNodes?.length) {
+					const nodeNames = result.createdNodes
+						.map((n) => n.name)
+						.filter((n) => typeof n === "string" && n.trim().length > 0);
+					logInfo("[SAVE_TO_DATABASE] New nodes created", {
+						count: result.createdNodes.length,
+						names: nodeNames,
+					});
+				}
+
+				if (result.createdEdges?.length) {
+					// Build an id->name map from existing + newly created nodes
+					const idToName = new Map<string, string>();
+					for (const n of state.existingNodes || []) {
+						if (n?.id) idToName.set(String(n.id), n.name ?? String(n.id));
+					}
+					for (const n of result.createdNodes || []) {
+						if (n?.id) idToName.set(String(n.id), n.name ?? String(n.id));
+					}
+
+					const edges = result.createdEdges.map((e) => ({
+						type: e.edgeType,
+						fact: e.factText,
+						source: idToName.get(String(e.sourceId)) ?? String(e.sourceId),
+						destination:
+							idToName.get(String(e.destinationId)) ?? String(e.destinationId),
+					}));
+
+					logInfo("[SAVE_TO_DATABASE] New edges created", {
+						count: result.createdEdges.length,
+						edges,
+					});
+
+					const factNames = result.createdEdges
+						.map((e) => e.factText)
+						.filter(
+							(t): t is string => typeof t === "string" && t.trim().length > 0,
+						);
+					if (factNames.length) {
+						logInfo("[SAVE_TO_DATABASE] Facts stored", {
+							count: factNames.length,
+							facts: factNames,
+						});
+					}
+				}
+			} catch (e) {
+				// Non-fatal logging error; continue
+				logError("[SAVE_TO_DATABASE] Post-save logging failed", e);
+			}
 
 			return {
 				createdSource: result.createdSource,

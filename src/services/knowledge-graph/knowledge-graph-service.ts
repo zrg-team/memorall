@@ -330,9 +330,6 @@ export class KnowledgeGraphService {
 				});
 			}
 
-			// Fetch the created knowledge graph
-			const knowledgeGraphData = await this.getKnowledgeGraphForPage(page.id);
-
 			// Update source status to completed
 			await this.updateSourceStatus(page.id, "completed");
 
@@ -341,7 +338,6 @@ export class KnowledgeGraphService {
 				stage: "Completed successfully",
 				progress: 100,
 				completedAt: new Date(),
-				knowledgeGraph: knowledgeGraphData || undefined,
 				stats,
 			});
 
