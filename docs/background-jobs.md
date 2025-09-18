@@ -14,7 +14,7 @@ graph TD
   S --> Q[BackgroundJobQueue]
   Q --> ST[IndexedDB]
   Q --> L[Listeners]
-  C[Consumers<br/>(Background Worker)] --> Q
+  C[Consumers<br/>Background Worker] --> Q
 ```
 
 Key characteristics:

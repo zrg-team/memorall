@@ -1,10 +1,38 @@
-<a href="https://extension.js.org" target="_blank"><img src="https://img.shields.io/badge/Powered%20by%20%7C%20Extension.js-0971fe" alt="Powered by Extension.js" align="right" /></a>
+<div align="center">
 
 # Memorall 🧠
 
-> AI-powered memory and knowledge management browser extension that runs entirely in your browser - no server required!
+### AI-Powered Personal Knowledge Assistant
 
-Memorall helps users manage their digital memories with the power of AI running locally in the browser. Users can ask AI to summarize webpages, remember important information, and recall memories when needed. Everything runs client-side for complete privacy and offline functionality.
+*Build your digital memory with AI that runs entirely in your browser*
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Extension.js](https://img.shields.io/badge/Powered%20by%20Extension.js-0971fe)](https://extension.js.org)
+[![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![React](https://img.shields.io/badge/React-20232A?logo=react&logoColor=61DAFB)](https://reactjs.org/)
+[![Privacy Focused](https://img.shields.io/badge/Privacy-First-green)](https://github.com)
+
+</div>
+
+---
+
+Memorall is an AI-powered browser extension that transforms how you manage digital knowledge. It seamlessly captures, organizes, and recalls information from your browsing experience while maintaining complete privacy through local AI processing.
+
+## 📋 Table of Contents
+
+- [✨ Key Features](#-key-features)
+- [🚀 Quick Start](#-quick-start)
+- [📸 Demo](#-demo)
+- [🎯 Use Cases](#-use-cases)
+- [🛠️ Technical Architecture](#️-technical-architecture)
+- [🕸️ Knowledge Graph Engine](#️-knowledge-graph-engine)
+- [🏗️ Architecture Details](#️-architecture-details)
+- [🔀 Extension Flow](#-extension-flow)
+- [📋 Installation & Development](#-installation--development)
+- [🎮 Usage](#-usage)
+- [🤝 Contributing](#-contributing)
+- [📚 Documentation](#-documentation)
+- [📄 License](#-license)
 
 ## ✨ Key Features
 
@@ -15,6 +43,23 @@ Memorall helps users manage their digital memories with the power of AI running 
 - **🧠 Intelligent Memory Recall**: AI agent provides smart answers based on your accumulated context and memories. Ask natural questions like "What did I learn about that React project?" and get contextual responses from your personal knowledge graph with relevant connections and insights.
 
 - **🔒 Offline Privacy & Free**: Runs entirely in your browser with no server dependencies. Your data stays local, works offline after initial setup, and has zero ongoing costs - no API fees or subscriptions required.
+
+## 🚀 Quick Start
+
+Get started with Memorall in just a few steps:
+
+1. **📥 Install**: Clone the repository and run `npm install`
+2. **🔧 Build**: Run `npm run build` to create the extension
+3. **🌐 Load**: Add the built extension to your browser in developer mode
+4. **🎉 Use**: Click the extension icon and start building your knowledge base!
+
+```bash
+git clone <repository-url>
+cd memorall
+npm install
+npm run build
+# Load the 'dist' folder in your browser's extension manager
+```
 
 ## 📸 Demo
 
@@ -102,11 +147,49 @@ The Knowledge Graph enables Memorall to provide contextual, intelligent response
 
 ## 🤝 Contributing
 
-This project is built with Extension.js and follows modern web development practices. Contributions are welcome!
+We welcome contributions to Memorall! Here's how you can help:
+
+### 🐛 Bug Reports
+- Use GitHub Issues to report bugs
+- Include steps to reproduce and expected behavior
+- Provide browser and extension version information
+
+### 💡 Feature Requests
+- Open a GitHub Issue with the "enhancement" label
+- Describe the feature and its benefits
+- Consider submitting a pull request!
+
+### 🔧 Development
+- Fork the repository
+- Create a feature branch: `git checkout -b feature/amazing-feature`
+- Make your changes following the existing code style
+- Test your changes thoroughly
+- Submit a pull request with a clear description
+
+### 📝 Documentation
+- Help improve documentation and examples
+- Fix typos and clarify instructions
+- Add tutorials or guides
+
+## 💬 Support
+
+- 📖 **Documentation**: Check out our [comprehensive docs](docs/)
+- 🐛 **Issues**: Report bugs or request features on [GitHub Issues](https://github.com/your-repo/issues)
+- 💡 **Discussions**: Join conversations in [GitHub Discussions](https://github.com/your-repo/discussions)
 
 ## 📄 License
 
-MIT License - see package.json for details.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+---
+
+<div align="center">
+
+**Built with ❤️ using Extension.js • Made for privacy-conscious knowledge workers**
+
+[⭐ Star this repo](https://github.com/your-repo) • [🐛 Report Issue](https://github.com/your-repo/issues) • [💡 Request Feature](https://github.com/your-repo/issues/new)
+
+</div>
 
 ## 📚 Documentation
 
@@ -148,47 +231,31 @@ graph TD
 - `public/offscreen.html`: Dedicated offscreen document for long-running or resource-intensive work to keep the UI responsive and within extension constraints.
 
 
-## 🚀 Installation
+## 📋 Installation & Development
 
 ### 🛠️ Development Setup
 
 ```bash
-📋 git clone <repository-url>
-📁 cd memorall
-📦 npm install
+git clone <repository-url>
+cd memorall
+npm install
 ```
 
-### 📋 Available Commands
+### 🔧 Available Commands
 
-#### 🚀 Development Mode
-Run the extension in development mode with hot reloading:
+| Command | Description |
+|---------|-------------|
+| `npm run dev` | 🚀 Development mode with hot reloading |
+| `npm run build` | 📦 Production build |
+| `npm run preview` | 👀 Preview built extension |
+| `npm run type-check` | 🔍 TypeScript type checking |
 
-```bash
-npm run dev
-```
+### 🌐 Browser Installation
 
-This starts both the local AI runner server and the extension in development mode.
-
-#### 📦 Production Build
-Build the extension for production:
-
-```bash
-npm run build
-```
-
-#### 👀 Preview
-Preview the built extension:
-
-```bash
-npm run preview
-```
-
-#### 🔍 Type Checking
-Run TypeScript type checking:
-
-```bash
-npm run type-check
-```
+1. Build the extension: `npm run build`
+2. Open your browser's extension management page
+3. Enable "Developer mode"
+4. Click "Load unpacked" and select the `dist` folder
 
 ## 🎮 Usage
 
