@@ -1,5 +1,6 @@
 import { useCallback } from "react";
-import { llmService, type ModelInfo, DEFAULT_SERVICES } from "@/services/llm";
+import { type ModelInfo } from "@/services/llm";
+import { serviceManager } from '@/services'
 import { QUICK_WALLAMA_LLMS } from "@/constants/wllama";
 import { QUICK_WEBLLM_LLMS } from "@/constants/webllm";
 import { QUICK_OPENAI_LLMS } from "@/constants/openai";
@@ -7,6 +8,7 @@ import { logError, logInfo } from "@/utils/logger";
 import type { Provider } from "./use-provider-config";
 import type { CurrentModel } from "./use-current-model";
 import type { DownloadProgress } from "./use-download-progress";
+import { DEFAULT_SERVICES } from "@/services/llm/constants";
 
 interface UseModelOperationsProps {
 	quickProvider: Provider;
@@ -31,7 +33,6 @@ export function useModelOperations({
 }: UseModelOperationsProps) {
 	// Initialize services
 	const ensureServices = useCallback(async () => {
-		await llmService.ensureAllServices();
 	}, []);
 
 	// Quick download a model (supports wllama, webllm, and openai)
@@ -55,7 +56,7 @@ export function useModelOperations({
 					quickProvider === "ollama"
 				) {
 					// For all openai-compatible providers, the service is registered as "openai"
-					if (!llmService.has("openai")) {
+					if (!serviceManager.llmService.has("openai")) {
 						logError(
 							quickProvider === "openai"
 								? "OpenAI not configured. Please configure OpenAI in the Advanced section first."
@@ -68,7 +69,7 @@ export function useModelOperations({
 					const openaiModel = model as (typeof QUICK_OPENAI_LLMS)[0];
 					const providerType =
 						quickProvider === "openai" ? "openai" : quickProvider;
-					await llmService.setCurrentModel(openaiModel.model, providerType);
+					await serviceManager.llmService.setCurrentModel(openaiModel.model, providerType);
 					setCurrent({ modelId: openaiModel.model, provider: providerType });
 					logInfo(`${modelName} connected successfully`);
 
@@ -94,7 +95,7 @@ export function useModelOperations({
 						loadedModel.filename || loadedModel.id.includes("/")
 							? DEFAULT_SERVICES.WLLAMA
 							: DEFAULT_SERVICES.WEBLLM;
-					await llmService.unloadFor(currentServiceName, loadedModel.id);
+					await serviceManager.llmService.unloadFor(currentServiceName, loadedModel.id);
 				}
 
 				let modelId: string;
@@ -104,7 +105,7 @@ export function useModelOperations({
 					modelId = model.model;
 				}
 
-				await llmService.serveFor(
+				await serviceManager.llmService.serveFor(
 					serviceName,
 					modelId,
 					(progress: { loaded: number; total: number; percent: number }) => {
@@ -114,7 +115,7 @@ export function useModelOperations({
 
 				// Update current state
 				modelId = isWllama ? model.repo : model.model;
-				await llmService.setCurrentModel(modelId, provider);
+				await serviceManager.llmService.setCurrentModel(modelId, provider);
 				setCurrent({ modelId, provider });
 				logInfo(`${modelName} downloaded and loaded successfully`);
 
@@ -134,7 +135,7 @@ export function useModelOperations({
 								? "wllama"
 								: "webllm";
 					const modelId = isWllama ? model.repo : model.model;
-					await llmService.setCurrentModel(modelId, provider);
+					await serviceManager.llmService.setCurrentModel(modelId, provider);
 					setCurrent({ modelId, provider });
 					logInfo(`${modelName} was already loaded`);
 					await fetchDownloadedModels();
@@ -193,17 +194,17 @@ export function useModelOperations({
 						: DEFAULT_SERVICES.WLLAMA;
 
 					try {
-						await llmService.unloadFor(loadedModelService, loadedModel.id);
+						await serviceManager.llmService.unloadFor(loadedModelService, loadedModel.id);
 					} catch (unloadErr) {
 						logInfo(
 							"Failed to unload from specific service, trying default:",
 							unloadErr,
 						);
-						await llmService.unload(loadedModel.id);
+						await serviceManager.llmService.unload(loadedModel.id);
 					}
 				}
 
-				await llmService.serveFor(
+				await serviceManager.llmService.serveFor(
 					serviceName,
 					modelId,
 					(progress: { loaded: number; total: number; percent: number }) => {
@@ -213,7 +214,7 @@ export function useModelOperations({
 
 				// Update current state
 				const provider: "wllama" | "webllm" = isWebLLM ? "webllm" : "wllama";
-				await llmService.setCurrentModel(modelId, provider);
+				await serviceManager.llmService.setCurrentModel(modelId, provider);
 				setCurrent({ modelId, provider });
 				logInfo(`${modelId} loaded successfully`);
 
@@ -231,7 +232,7 @@ export function useModelOperations({
 					const provider: "wllama" | "webllm" = modelIsWebLLM
 						? "webllm"
 						: "wllama";
-					await llmService.setCurrentModel(modelId, provider);
+					await serviceManager.llmService.setCurrentModel(modelId, provider);
 					setCurrent({ modelId, provider });
 					logInfo(`${modelId} was already loaded`);
 					await fetchDownloadedModels();
@@ -263,13 +264,13 @@ export function useModelOperations({
 				const isWebLLM = model && !model.filename && !modelId.includes("/");
 
 				if (isWebLLM) {
-					const webllmServices = llmService
+					const webllmServices = serviceManager.llmService
 						.list()
 						.filter((name) => name.includes("webllm"));
 					let unloaded = false;
 					for (const serviceName of webllmServices) {
 						try {
-							await llmService.unloadFor(serviceName, modelId);
+							await serviceManager.llmService.unloadFor(serviceName, modelId);
 							unloaded = true;
 							break;
 						} catch (err) {
@@ -277,17 +278,17 @@ export function useModelOperations({
 						}
 					}
 					if (!unloaded) {
-						await llmService.unload(modelId);
+						await serviceManager.llmService.unload(modelId);
 					}
 				} else {
-					await llmService.unload(modelId);
+					await serviceManager.llmService.unload(modelId);
 				}
 
 				logInfo(`${modelId} unloaded`);
 				// Clear current banner if unloading the active model
-				const currentModel = await llmService.getCurrentModel();
+				const currentModel = await serviceManager.llmService.getCurrentModel();
 				if (currentModel?.modelId === modelId) {
-					await llmService.clearCurrentModel();
+					await serviceManager.llmService.clearCurrentModel();
 					setCurrent(null);
 				}
 				await fetchDownloadedModels();

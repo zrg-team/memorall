@@ -1,9 +1,7 @@
 import { desc, eq, like, and, or } from "drizzle-orm";
 import { logError, logInfo } from "@/utils/logger";
 import { persistentLogger } from "@/services/logging/persistent-logger";
-import { databaseService } from "@/services/database/database-service";
-import { embeddingService } from "@/services/embedding/embedding-service";
-import { llmService } from "@/services/llm/llm-service";
+import { serviceManager } from '@/services'
 import { flowsService } from "@/services/flows/flows-service";
 import type { RememberedContent } from "@/services/database/db";
 import type {
@@ -75,8 +73,6 @@ export class RememberService {
 		if (this.initialized) return;
 
 		try {
-			await databaseService.initialize();
-			// EmbeddingService will auto-initialize when used
 			this.initialized = true;
 			logInfo("✅ RememberService initialized successfully");
 		} catch (error) {
@@ -162,7 +158,7 @@ export class RememberService {
 			if (!isServiceWorker) {
 				try {
 					const embeddingText = `${data.title}\n\n${data.textContent}`;
-					embedding = await embeddingService.textToVector(embeddingText);
+					embedding = await serviceManager.embeddingService.textToVector(embeddingText);
 				} catch (embeddingError) {
 					logError(
 						"⚠️ Failed to generate embedding, continuing without it:",
@@ -210,7 +206,7 @@ export class RememberService {
 			};
 
 			// Save to database
-			const result = await databaseService.use(async ({ db, schema }) => {
+			const result = await serviceManager.databaseService.use(async ({ db, schema }) => {
 				const [savedContent] = await db
 					.insert(schema.rememberedContent)
 					.values(newContent)
@@ -300,7 +296,7 @@ export class RememberService {
 			if (!isServiceWorker) {
 				try {
 					const embeddingText = `${contentData.title}\n\n${contentData.textContent}`;
-					embedding = await embeddingService.textToVector(embeddingText);
+					embedding = await serviceManager.embeddingService.textToVector(embeddingText);
 				} catch (embeddingError) {
 					logError(
 						"⚠️ Failed to generate embedding for update:",
@@ -321,7 +317,7 @@ export class RememberService {
 				contentData.sourceMetadata,
 			);
 
-			const result = await databaseService.use(async ({ db, schema }) => {
+			const result = await serviceManager.databaseService.use(async ({ db, schema }) => {
 				const [updatedPage] = await db
 					.update(schema.rememberedContent)
 					.set({
@@ -369,7 +365,7 @@ export class RememberService {
 				await this.initialize();
 			}
 
-			const result = await databaseService.use(async ({ db, schema }) => {
+			const result = await serviceManager.databaseService.use(async ({ db, schema }) => {
 				const pages = await db
 					.select()
 					.from(schema.rememberedContent)
@@ -405,7 +401,7 @@ export class RememberService {
 				sortOrder = "desc",
 			} = options;
 
-			const result = await databaseService.use(async ({ db, schema }) => {
+			const result = await serviceManager.databaseService.use(async ({ db, schema }) => {
 				// Build where conditions
 				const conditions = [];
 
@@ -484,7 +480,7 @@ export class RememberService {
 				await this.initialize();
 			}
 
-			const result = await databaseService.use(async ({ db, schema }) => {
+			const result = await serviceManager.databaseService.use(async ({ db, schema }) => {
 				const pages = await db
 					.select()
 					.from(schema.rememberedContent)
@@ -509,7 +505,7 @@ export class RememberService {
 				await this.initialize();
 			}
 
-			await databaseService.use(async ({ db, schema }) => {
+			await serviceManager.databaseService.use(async ({ db, schema }) => {
 				await db
 					.delete(schema.rememberedContent)
 					.where(eq(schema.rememberedContent.id, id));
@@ -535,7 +531,7 @@ export class RememberService {
 			const page = await this.getPageById(id);
 			if (!page) return false;
 
-			await databaseService.use(async ({ db, schema }) => {
+			await serviceManager.databaseService.use(async ({ db, schema }) => {
 				await db
 					.update(schema.rememberedContent)
 					.set({
@@ -564,7 +560,7 @@ export class RememberService {
 			const page = await this.getPageById(id);
 			if (!page) return false;
 
-			await databaseService.use(async ({ db, schema }) => {
+			await serviceManager.databaseService.use(async ({ db, schema }) => {
 				await db
 					.update(schema.rememberedContent)
 					.set({
@@ -596,7 +592,7 @@ export class RememberService {
 			const currentTags = Array.isArray(page.tags) ? page.tags : [];
 			const updatedTags = [...new Set([...currentTags, ...newTags])];
 
-			await databaseService.use(async ({ db, schema }) => {
+			await serviceManager.databaseService.use(async ({ db, schema }) => {
 				await db
 					.update(schema.rememberedContent)
 					.set({
@@ -715,12 +711,12 @@ export class RememberService {
 			logInfo("🧠 Processing content through knowledge graph flow");
 
 			// Check if LLM service is ready
-			if (!llmService.isReady()) {
+			if (!serviceManager.llmService.isReady()) {
 				await persistentLogger.warn(
 					"❌ LLM service not ready, skipping knowledge graph processing",
 					{
 						url: data.url,
-						llmReady: llmService.isReady(),
+						llmReady: serviceManager.llmService.isReady(),
 					},
 					"background",
 				);
@@ -735,16 +731,16 @@ export class RememberService {
 				"✅ LLM service ready, proceeding with knowledge graph",
 				{
 					url: data.url,
-					llmReady: llmService.isReady(),
+					llmReady: serviceManager.llmService.isReady(),
 				},
 				"background",
 			);
 
 			// Create knowledge graph flow
 			const knowledgeGraph = flowsService.createGraph("knowledge", {
-				llm: llmService,
-				embedding: embeddingService,
-				database: databaseService,
+				llm: serviceManager.llmService,
+				embedding: serviceManager.embeddingService,
+				database: serviceManager.databaseService,
 			});
 
 			await persistentLogger.info(
@@ -853,7 +849,7 @@ export class RememberService {
 		try {
 			logInfo("🧠 Processing generic content through knowledge graph flow");
 
-			if (!llmService.isReady()) {
+			if (!serviceManager.llmService.isReady()) {
 				logError(
 					"❌ LLM service not ready, skipping knowledge graph processing",
 				);
@@ -862,9 +858,9 @@ export class RememberService {
 
 			// Create knowledge graph flow
 			const knowledgeGraph = flowsService.createGraph("knowledge", {
-				llm: llmService,
-				embedding: embeddingService,
-				database: databaseService,
+				llm: serviceManager.llmService,
+				embedding: serviceManager.embeddingService,
+				database: serviceManager.databaseService,
 			});
 
 			// Prepare input state for generic content

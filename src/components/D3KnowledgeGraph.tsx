@@ -3,8 +3,8 @@ import * as d3 from "d3";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, ArrowRight, X } from "lucide-react";
-import { databaseService } from "@/services/database/database-service";
-import type { Node, Edge, Source } from "@/services/database/db";
+import { serviceManager } from "@/services";
+import type { Node, Edge } from "@/services/database/db";
 import { logError } from "@/utils/logger";
 import { inArray, eq, and } from "drizzle-orm";
 
@@ -202,7 +202,7 @@ export const D3KnowledgeGraph: React.FC<D3KnowledgeGraphProps> = ({
 				return;
 			}
 
-			await databaseService.use(async ({ db, schema }) => {
+			await serviceManager.databaseService.use(async ({ db, schema }) => {
 				let nodes: Node[] = [];
 				let edges: Edge[] = [];
 

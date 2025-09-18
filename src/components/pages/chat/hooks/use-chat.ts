@@ -1,7 +1,5 @@
 import { useState, useEffect } from "react";
-import { llmService } from "@/services/llm";
-import { embeddingService } from "@/services/embedding";
-import { databaseService } from "@/services/database";
+import { serviceManager } from "@/services";
 import { flowsService } from "@/services/flows/flows-service";
 import type {
 	ChatCompletionRequest,
@@ -120,9 +118,9 @@ export const useChat = (model: string) => {
 			if (chatMode === "agent") {
 				// Use SimpleGraph for agent mode
 				const graph = flowsService.createGraph("simple", {
-					llm: llmService,
-					embedding: embeddingService,
-					database: databaseService,
+					llm: serviceManager.llmService,
+					embedding: serviceManager.embeddingService,
+					database: serviceManager.databaseService,
 				});
 
 				// Create assistant message placeholder
@@ -198,9 +196,9 @@ export const useChat = (model: string) => {
 			} else if (chatMode === "knowledge") {
 				// Use KnowledgeRAGFlow for knowledge mode
 				const graph = flowsService.createGraph("knowledge-rag", {
-					llm: llmService,
-					embedding: embeddingService,
-					database: databaseService,
+					llm: serviceManager.llmService,
+					embedding: serviceManager.embeddingService,
+					database: serviceManager.databaseService,
 				});
 
 				// Create assistant message placeholder
@@ -293,7 +291,7 @@ export const useChat = (model: string) => {
 				try {
 					if (request.stream) {
 						// For streaming, the result should be an AsyncIterableIterator
-						const stream = llmService.chatCompletions(
+						const stream = serviceManager.llmService.chatCompletions(
 							request,
 						) as AsyncIterableIterator<ChatCompletionChunk>;
 						for await (const chunk of stream) {

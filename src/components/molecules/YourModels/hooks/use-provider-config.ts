@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { databaseService } from "@/services/database";
+import { serviceManager } from "@/services";
 import { schema } from "@/services/database/db";
 import { eq } from "drizzle-orm";
 import secureSession from "@/utils/secure-session";
@@ -36,7 +36,7 @@ export function useProviderConfig() {
 			}
 			try {
 				const row = (
-					await databaseService.use(({ db }) =>
+					await serviceManager.databaseService.use(({ db }) =>
 						db
 							.select()
 							.from(schema.encryption)
@@ -61,7 +61,7 @@ export function useProviderConfig() {
 				quickProvider === "lmstudio" ? "lmstudio_config" : "ollama_config";
 			try {
 				const row = (
-					await databaseService.use(({ db }) =>
+					await serviceManager.databaseService.use(({ db }) =>
 						db
 							.select()
 							.from(schema.configurations)

@@ -1,5 +1,4 @@
 import { useCallback } from "react";
-import { llmService, DEFAULT_SERVICES } from "@/services/llm";
 import type {
 	ChatCompletionRequest,
 	ChatCompletionResponse,
@@ -8,12 +7,13 @@ import type {
 import { RECOMMENDATION_WEBLLM_LLMS } from "@/constants/webllm";
 import { logError } from "@/utils/logger";
 import secureSession from "@/utils/secure-session";
-import { databaseService } from "@/services/database";
+import { serviceManager } from "@/services";
 import { schema } from "@/services/database/db";
 import { eq } from "drizzle-orm";
 import { FIXED_ENCRYPTION_KEY } from "@/config/security";
 import { deriveAesKeyFromString, decryptStringAes } from "@/utils/aes";
 import type { FileInfo, ProgressData } from "./use-llm-state";
+import { DEFAULT_SERVICES } from "@/services/llm/constants";
 
 interface UseLLMActionsProps {
 	// State setters
@@ -78,7 +78,6 @@ export const useLLMActions = ({
 
 	// Initialize services using the centralized method
 	const ensureServices = useCallback(async () => {
-		await llmService.ensureAllServices();
 	}, []);
 
 	// Fetch available WebLLM models from API
@@ -86,7 +85,7 @@ export const useLLMActions = ({
 		setLogs((l) => [...l, "[ui] fetching available WebLLM models..."]);
 		try {
 			await ensureServices();
-			const response = await llmService.modelsFor(DEFAULT_SERVICES.WEBLLM);
+			const response = await serviceManager.llmService.modelsFor(DEFAULT_SERVICES.WEBLLM);
 			const modelNames = response.data.map((model) => model.id);
 			setWebllmAvailableModels(modelNames);
 			setLogs((l) => [
@@ -107,7 +106,7 @@ export const useLLMActions = ({
 		setLoading(true);
 		setStatus("Unloading...");
 		try {
-			await llmService.unload("");
+			await serviceManager.llmService.unload("");
 			setReady(false);
 			setOutput("");
 			setStatus("Unloaded");
@@ -175,7 +174,7 @@ export const useLLMActions = ({
 			setStatus("Loading WebLLM model...");
 			setLogs((l) => [...l, `[ui] serve ${webllmModel}`]);
 
-			await llmService.serveFor(
+			await serviceManager.llmService.serveFor(
 				DEFAULT_SERVICES.WEBLLM,
 				modelId,
 				(progress) => {
@@ -230,7 +229,7 @@ export const useLLMActions = ({
 
 			setStatus("Loading model from Hugging Face...");
 			setLogs((l) => [...l, `[ui] serve ${repo}/${filePath}`]);
-			await llmService.serve(modelId, (progress) => {
+			await serviceManager.llmService.serve(modelId, (progress) => {
 				setDownloadProgress({ text: "", ...progress });
 				setStatus(`Loading... ${progress.percent}%`);
 				setLogs((l) => [
@@ -283,7 +282,7 @@ export const useLLMActions = ({
 				temperature: 0.2,
 			};
 
-			const response = (await llmService.chatCompletions(
+			const response = (await serviceManager.llmService.chatCompletions(
 				request,
 			)) as ChatCompletionResponse;
 			const text = response.choices[0].message.content;
@@ -360,14 +359,14 @@ export const useLLMActions = ({
 
 		try {
 			// Create OpenAI service instance to test connection
-			await llmService.create("openai-test", {
+			await serviceManager.llmService.create("openai-test", {
 				type: "openai",
 				apiKey: await getDecryptedOpenAIKey(),
 				baseURL: openaiBaseUrl,
 			});
 
 			// Try to get models list
-			const models = await llmService.modelsFor("openai-test");
+			const models = await serviceManager.llmService.modelsFor("openai-test");
 			setStatus(`Connection successful - found ${models.data.length} models`);
 			setLogs((l) => [
 				...l,
@@ -375,7 +374,7 @@ export const useLLMActions = ({
 			]);
 
 			// Clean up test service
-			llmService.remove("openai-test");
+			serviceManager.llmService.remove("openai-test");
 		} catch (err) {
 			const msg = err instanceof Error ? err.message : "Unknown error";
 			setStatus(`Connection failed: ${msg}`);
@@ -421,7 +420,7 @@ export const useLLMActions = ({
 		try {
 			const decryptedKey = await getDecryptedOpenAIKey();
 
-			await llmService.create("openai", {
+			await serviceManager.llmService.create("openai", {
 				type: "openai",
 				apiKey: decryptedKey,
 				baseURL: openaiBaseUrl,
@@ -456,7 +455,7 @@ export const useLLMActions = ({
 			if (!passkey) throw new Error("Missing OpenAI passkey in session");
 
 			const row = (
-				await databaseService.use(({ db }) => {
+				await serviceManager.databaseService.use(({ db }) => {
 					return db
 						.select()
 						.from(schema.encryption)
@@ -477,7 +476,7 @@ export const useLLMActions = ({
 
 		// Fetch encrypted data from DB and decrypt with combined key
 		const encryptedRow = (
-			await databaseService.use(({ db }) => {
+			await serviceManager.databaseService.use(({ db }) => {
 				return db
 					.select()
 					.from(schema.encryption)

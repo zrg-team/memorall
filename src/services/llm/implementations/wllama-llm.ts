@@ -7,9 +7,9 @@ import type {
 	ChatCompletionChunk,
 	ChatCompletionRequest,
 	ChatCompletionResponse,
-	ChatMessage,
 } from "@/types/openai";
 import { LLM_RUNNER_URLS } from "@/config/llm-runner";
+import { waitForDOMReady } from "@/utils/dom";
 
 interface ServeRequest {
 	model: string;
@@ -86,6 +86,8 @@ export class WllamaLLM implements BaseLLM {
 		}
 		this.loading = true;
 		try {
+			// Wait for DOM to be ready before accessing document
+			await waitForDOMReady();
 			this.iframe = document.createElement("iframe");
 			this.iframe.src = this.url;
 			this.iframe.style.display = "none";

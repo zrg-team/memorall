@@ -11,7 +11,7 @@ The Background Jobs subsystem provides a lightweight queue for offloading work l
 ```mermaid
 graph TD
   P[Producers<br/>UI/Offscreen/Background] --> S[BackgroundJobService]
-  S --> Q[BackgroundJobQueue]
+  S --> Q[BackgroundJob]
   Q --> ST[IndexedDB]
   Q --> L[Listeners]
   C[Consumers<br/>Background Worker] --> Q
@@ -95,7 +95,7 @@ export interface KnowledgeGraphJob extends BackgroundJobBase {
 }
 ```
 
-### 🧰 BackgroundJobQueue
+### 🧰 BackgroundJob
 ```typescript
 // Lifecycle & subscription
 async initialize(): Promise<void>

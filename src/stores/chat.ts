@@ -1,12 +1,10 @@
 import { create } from "zustand";
-import { nanoid } from "nanoid";
 import {
 	type Message,
-	type NewMessage,
 	type Conversation,
 	type NewConversation,
 } from "@/services/database/db";
-import { databaseService } from "@/services/database";
+import { serviceManager } from "@/services";
 import { eq, desc, asc } from "drizzle-orm";
 import { logError } from "@/utils/logger";
 import { v4 } from "@/utils/uuid";
@@ -61,7 +59,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
 		// Save to database
 		try {
-			await databaseService.use(({ db, schema }) =>
+			await serviceManager.databaseService.use(({ db, schema }) =>
 				db.insert(schema.messages).values(message),
 			);
 		} catch (error) {
@@ -92,7 +90,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 				"",
 			);
 
-			await databaseService.use(({ db, schema }) =>
+			await serviceManager.databaseService.use(({ db, schema }) =>
 				db
 					.update(schema.messages)
 					.set({
@@ -122,7 +120,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 			};
 
 			// Get or create the conversation
-			const conversation = await databaseService.use(async ({ db, schema }) => {
+			const conversation = await serviceManager.databaseService.use(async ({ db, schema }) => {
 				const [created] = await db
 					.insert(schema.conversations)
 					.values(newConversation)
@@ -141,14 +139,14 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 	ensureMainConversation: async () => {
 		try {
 			// Pick the most recent conversation if exists; otherwise create one
-			const existing = await databaseService.use(({ db, schema }) =>
+			const existing = await serviceManager.databaseService.use(({ db, schema }) =>
 				db
 					.select()
 					.from(schema.conversations)
 					.orderBy(desc(schema.conversations.createdAt))
 					.limit(1),
 			);
-			const messages = await databaseService.use(({ db, schema }) =>
+			const messages = await serviceManager.databaseService.use(({ db, schema }) =>
 				db
 					.select()
 					.from(schema.messages)
@@ -170,7 +168,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 	loadConversation: async (id: string) => {
 		try {
 			// Load conversation
-			const conversation = await databaseService.use(async ({ db, schema }) => {
+			const conversation = await serviceManager.databaseService.use(async ({ db, schema }) => {
 				const [conv] = await db
 					.select()
 					.from(schema.conversations)
@@ -183,7 +181,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 			}
 
 			// Load messages
-			const messages = await databaseService.use(({ db, schema }) =>
+			const messages = await serviceManager.databaseService.use(({ db, schema }) =>
 				db
 					.select()
 					.from(schema.messages)
@@ -219,7 +217,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 			const conversationId = get().currentConversation!.id;
 
 			// Load latest messages from DB
-			const messages = await databaseService.use(({ db, schema }) =>
+			const messages = await serviceManager.databaseService.use(({ db, schema }) =>
 				db
 					.select()
 					.from(schema.messages)

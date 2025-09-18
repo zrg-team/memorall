@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
-import { llmService, type ModelInfo, DEFAULT_SERVICES } from "@/services/llm";
+import { type ModelInfo } from "@/services/llm";
+import { serviceManager } from "@/services";
 import { logError, logInfo } from "@/utils/logger";
+import { DEFAULT_SERVICES } from "@/services/llm/constants";
 
 export function useDownloadedModels() {
 	const [downloadedModels, setDownloadedModels] = useState<ModelInfo[]>([]);
@@ -23,16 +25,16 @@ export function useDownloadedModels() {
 		try {
 			// Try to get models from Wllama service
 			try {
-				const response = await llmService.modelsFor(DEFAULT_SERVICES.WLLAMA);
+				const response = await serviceManager.llmService.modelsFor(DEFAULT_SERVICES.WLLAMA);
 				allModels = [...allModels, ...response.data];
 			} catch (err) {
 				logInfo("Failed to fetch wllama models:", err);
 			}
 
 			// Try to get models from WebLLM service
-			if (llmService.has(DEFAULT_SERVICES.WEBLLM)) {
+			if (serviceManager.llmService.has(DEFAULT_SERVICES.WEBLLM)) {
 				try {
-					const response = await llmService.modelsFor(DEFAULT_SERVICES.WEBLLM);
+					const response = await serviceManager.llmService.modelsFor(DEFAULT_SERVICES.WEBLLM);
 					const newModels = response.data.filter(
 						(model) => !allModels.some((existing) => existing.id === model.id),
 					);

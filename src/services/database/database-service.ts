@@ -86,7 +86,7 @@ export class DatabaseService {
 	private initialized = false;
 	private initPromise: Promise<void> | null = null;
 
-	private constructor() {}
+	constructor() {}
 
 	static getInstance(): DatabaseService {
 		if (!DatabaseService.instance) {

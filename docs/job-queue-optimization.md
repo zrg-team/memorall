@@ -66,7 +66,7 @@ this.port.postMessage({
 
 ### 3. 📈 Enhanced Background Job Queue
 
-**File**: `src/services/background-jobs/background-job-queue.ts`
+**File**: `src/services/background-jobs/background-job.ts`
 
 **Improvements**:
 - Triple notification system for maximum reliability

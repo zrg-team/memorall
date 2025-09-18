@@ -2,7 +2,6 @@ import type {
 	KnowledgeGraphState,
 	EnrichedFact,
 	TemporalInfo,
-	ResolvedFact,
 } from "./state";
 import type { AllServices } from "@/services/flows/interfaces/tool";
 import { logInfo, logError } from "@/utils/logger";

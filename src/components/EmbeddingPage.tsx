@@ -21,11 +21,9 @@ import {
 	Hash,
 	Database,
 } from "lucide-react";
-import { databaseService } from "@/services/database";
-import { serviceManager } from "@/services/ServiceManager";
+import { serviceManager } from "@/services";
 import { logError, logInfo } from "@/utils/logger";
 import { schema } from "@/services/database/db";
-import { embeddingService } from "@/services/embedding";
 
 // Utility function to get vector columns from a table schema
 const getVectorColumns = (table: any): string[] => {
@@ -237,7 +235,7 @@ export const EmbeddingPage: React.FC<EmbeddingPageProps> = () => {
 	// Load stats for vector-enabled tables
 	const loadStats = async () => {
 		try {
-			await databaseService.use(async ({ db, schema }) => {
+			await serviceManager.databaseService.use(async ({ db, schema }) => {
 				const statsPromises = Object.keys(VECTOR_TABLES).map(
 					async (tableKey) => {
 						const table = schema[tableKey as keyof typeof schema];
@@ -297,11 +295,11 @@ export const EmbeddingPage: React.FC<EmbeddingPageProps> = () => {
 		setLoading(true);
 		try {
 			// Generate embedding for the search query
-			const queryVector = await embeddingService.textToVector(
+			const queryVector = await serviceManager.embeddingService.textToVector(
 				searchParams.query,
 			);
 
-			await databaseService.use(async ({ db, schema }) => {
+			await serviceManager.databaseService.use(async ({ db, schema }) => {
 				const table = schema[searchParams.table as keyof typeof schema];
 				if (!table) {
 					throw new Error(`Table ${searchParams.table} not found`);

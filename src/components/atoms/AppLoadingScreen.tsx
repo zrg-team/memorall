@@ -12,8 +12,8 @@ import {
 } from "lucide-react";
 import {
 	serviceManager,
-	type InitializationProgress,
-} from "@/services/ServiceManager";
+} from "@/services";
+import type { InitializationProgress } from "@/services/ServiceManager";
 
 interface LoadingStep {
 	id: string;

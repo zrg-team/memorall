@@ -1,4 +1,4 @@
-import type { BackgroundJob } from "./background-job-queue";
+import type { BaseJob } from "./background-job";
 
 const DB_NAME = "memorall-bg-jobs";
 const DB_VERSION = 1;
@@ -27,7 +27,7 @@ export class IdbJobStore {
 		return this.dbPromise;
 	}
 
-	async put(job: BackgroundJob): Promise<void> {
+	async put(job: BaseJob): Promise<void> {
 		const db = await this.open();
 		await new Promise<void>((resolve, reject) => {
 			const tx = db.transaction(STORE, "readwrite");
@@ -38,24 +38,24 @@ export class IdbJobStore {
 		});
 	}
 
-	async get(id: string): Promise<BackgroundJob | null> {
+	async get(id: string): Promise<BaseJob | null> {
 		const db = await this.open();
-		return await new Promise<BackgroundJob | null>((resolve, reject) => {
+		return await new Promise<BaseJob | null>((resolve, reject) => {
 			const tx = db.transaction(STORE, "readonly");
 			const store = tx.objectStore(STORE);
 			const req = store.get(id);
-			req.onsuccess = () => resolve((req.result as BackgroundJob) || null);
+			req.onsuccess = () => resolve((req.result as BaseJob) || null);
 			req.onerror = () => reject(req.error);
 		});
 	}
 
-	async getAll(): Promise<BackgroundJob[]> {
+	async getAll(): Promise<BaseJob[]> {
 		const db = await this.open();
-		return await new Promise<BackgroundJob[]>((resolve, reject) => {
+		return await new Promise<BaseJob[]>((resolve, reject) => {
 			const tx = db.transaction(STORE, "readonly");
 			const store = tx.objectStore(STORE);
 			const req = store.getAll();
-			req.onsuccess = () => resolve((req.result as BackgroundJob[]) || []);
+			req.onsuccess = () => resolve((req.result as BaseJob[]) || []);
 			req.onerror = () => reject(req.error);
 		});
 	}

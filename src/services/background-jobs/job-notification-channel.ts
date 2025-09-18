@@ -1,10 +1,10 @@
 import { logInfo, logError } from "@/utils/logger";
-import type { BackgroundJob } from "./background-job-queue";
+import type { BaseJob } from "./offscreen-handlers/types";
 
 export interface JobNotificationMessage {
 	type: "JOB_ENQUEUED" | "JOB_UPDATED" | "JOB_COMPLETED" | "QUEUE_UPDATED";
 	jobId?: string;
-	job?: BackgroundJob;
+	job?: BaseJob;
 	timestamp: number;
 }
 
@@ -111,7 +111,7 @@ export class JobNotificationChannel {
 	/**
 	 * Notify that a new job has been enqueued (immediate notification)
 	 */
-	notifyJobEnqueued(job: BackgroundJob): void {
+	notifyJobEnqueued(job: BaseJob): void {
 		this.postMessage({
 			type: "JOB_ENQUEUED",
 			jobId: job.id,
@@ -123,7 +123,7 @@ export class JobNotificationChannel {
 	/**
 	 * Notify that a job has been updated
 	 */
-	notifyJobUpdated(jobId: string, job?: BackgroundJob): void {
+	notifyJobUpdated(jobId: string, job: BaseJob): void {
 		this.postMessage({
 			type: "JOB_UPDATED",
 			jobId,

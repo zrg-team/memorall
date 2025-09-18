@@ -5,8 +5,7 @@ import React, {
 	useCallback,
 	useEffect,
 } from "react";
-import { serviceManager } from "@/services/ServiceManager";
-import { llmService } from "@/services/llm/llm-service";
+import { serviceManager } from "@/services";
 import { logError } from "@/utils/logger";
 
 export interface CopilotStep {
@@ -172,7 +171,7 @@ export const CopilotProvider: React.FC<{ children: React.ReactNode }> = ({
 				let hasLLM = false;
 
 				if (isReady) {
-					const currentModel = await llmService.getCurrentModel();
+					const currentModel = await serviceManager.llmService.getCurrentModel();
 					hasLLM = !!currentModel;
 				}
 

@@ -1,6 +1,5 @@
 import type {
 	KnowledgeGraphState,
-	ExtractedEntity,
 	ResolvedEntity,
 } from "./state";
 import type { AllServices } from "@/services/flows/interfaces/tool";

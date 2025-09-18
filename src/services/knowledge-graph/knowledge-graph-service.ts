@@ -1,8 +1,6 @@
 import { eq, and } from "drizzle-orm";
-import { databaseService } from "@/services/database/database-service";
 import { flowsService } from "@/services/flows/flows-service";
-import { llmService } from "@/services/llm/llm-service";
-import { embeddingService } from "@/services/embedding/embedding-service";
+import { serviceManager } from '@/services'
 import { logError, logInfo } from "@/utils/logger";
 import type { RememberedContent } from "@/services/database/db";
 import type {
@@ -52,7 +50,7 @@ export class KnowledgeGraphService {
 		pageId: string,
 	): Promise<KnowledgeGraphData | null> {
 		try {
-			const result = await databaseService.use(async ({ db, schema }) => {
+			const result = await serviceManager.databaseService.use(async ({ db, schema }) => {
 				// Find source by remembered page URL
 				const rememberedContent = await db
 					.select()
@@ -184,7 +182,7 @@ export class KnowledgeGraphService {
 
 		try {
 			// Check if LLM service is ready
-			if (!llmService.isReady()) {
+			if (!serviceManager.getLLMService().isReady()) {
 				throw new Error("LLM service not ready");
 			}
 
@@ -199,9 +197,9 @@ export class KnowledgeGraphService {
 
 			// Create knowledge graph flow
 			const knowledgeGraph = flowsService.createGraph("knowledge", {
-				llm: llmService,
-				embedding: embeddingService,
-				database: databaseService,
+				llm: serviceManager.getLLMService(),
+				embedding: serviceManager.getEmbeddingService(),
+				database: serviceManager.getDatabaseService(),
 			});
 
 			// Prepare input state
@@ -366,7 +364,7 @@ export class KnowledgeGraphService {
 		status: "pending" | "processing" | "completed" | "failed",
 	): Promise<void> {
 		try {
-			await databaseService.use(async ({ db, schema }) => {
+			await serviceManager.databaseService.use(async ({ db, schema }) => {
 				const now = new Date();
 				await db
 					.update(schema.sources)

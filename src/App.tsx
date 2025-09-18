@@ -11,7 +11,8 @@ import { Layout } from "./components/Layout";
 import { ChatPage } from "./components/ChatPage";
 import { EmbeddingPage } from "./components/EmbeddingPage";
 import { LLMPage } from "./components/LLMPage";
-import { serviceManager } from "./services/ServiceManager";
+import { backgroundJob } from "./services/background-jobs/background-job";
+import { serviceManager } from "./services";
 import { logError, logInfo } from "./utils/logger";
 import { DatabasePage } from "./components/DatabasePage";
 import { RememberedContentsPage } from "./components/RememberedContentsPage";
@@ -57,44 +58,33 @@ const App: React.FC = () => {
 		return null;
 	};
 
-	// Enhanced loading progress with correct strategy: Database 5% + Embedding 90% + LLM 5%
 	useEffect(() => {
 		const initializeApp = async () => {
 			try {
 				logInfo("🚀 Starting app initialization...");
 				setServicesStatus("loading");
 
-				// Map actual progress to UX progress ranges
-				const mapProgressToUX = (actualProgress: number) => {
-					if (actualProgress <= 25) {
-						// Database phase: 0-25% actual → 0-5% UX
-						return (actualProgress / 25) * 5;
-					} else if (actualProgress <= 75) {
-						// Embedding phase: 25-75% actual → 5-95% UX
-						return 5 + ((actualProgress - 25) / 50) * 90;
-					} else {
-						// LLM phase: 75-100% actual → 95-100% UX
-						return 95 + ((actualProgress - 75) / 25) * 5;
-					}
-				};
+				// Initialize services through offscreen with progress streaming
+				const progressStream = await backgroundJob.initializeServices();
 
-				// Listen to ServiceManager progress
-				const unsubscribe = serviceManager.onProgressChange((progress) => {
-					const newUxProgress = mapProgressToUX(progress.progress);
-					setUiProgress(newUxProgress);
+				// Listen to initialization progress
+				for await (const progress of progressStream) {
+					setUiProgress(progress.progress);
 
-					if (progress.isComplete) {
+					if (progress.status === "completed") {
 						setUiProgress(100);
+
+						// Initialize ServiceManager in lite mode for frontend
+						await serviceManager.initialize({ liteMode: true });
+
 						// Small delay before showing app
 						setTimeout(() => {
 							setServicesStatus("ready");
 							logInfo("✅ App initialization complete");
-							unsubscribe();
 						}, 300);
+						break;
 					}
-				});
-
-				await serviceManager.initialize();
+				}
 			} catch (error) {
 				logError("❌ App initialization failed:", error);
 				setServicesStatus("error");
@@ -131,24 +121,28 @@ const App: React.FC = () => {
 					<AppLoadingScreen
 						error={servicesStatus === "error" ? initError : null}
 						uiProgress={uiProgress}
-						onRetry={() => {
+						onRetry={async () => {
 							setServicesStatus("loading");
 							setInitError(null);
 							setUiProgress(0);
 							// Re-run initialization
-							serviceManager
-								.initialize()
-								.then(() => {
-									setServicesStatus("ready");
-									logInfo("✅ App re-initialization complete");
-								})
-								.catch((error) => {
-									logError("❌ App re-initialization failed:", error);
-									setServicesStatus("error");
-									setInitError(
-										error instanceof Error ? error.message : "Unknown error",
-									);
-								});
+							try {
+								const progressStream = await backgroundJob.initializeServices();
+								for await (const progress of progressStream) {
+									setUiProgress(progress.progress);
+									if (progress.status === "completed") {
+										setServicesStatus("ready");
+										logInfo("✅ App re-initialization complete");
+										break;
+									}
+								}
+							} catch (error) {
+								logError("❌ App re-initialization failed:", error);
+								setServicesStatus("error");
+								setInitError(
+									error instanceof Error ? error.message : "Unknown error",
+								);
+							}
 						}}
 					/>
 				</CursorProvider>

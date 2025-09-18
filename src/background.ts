@@ -2,9 +2,9 @@
 // Handles context menu registration and message routing only.
 
 import { logInfo, logError } from "./utils/logger";
-import { backgroundJobQueue } from "./services/background-jobs/background-job-queue";
+import { backgroundJob } from "./services/background-jobs/background-job";
 import { sharedStorageService } from "./services/shared-storage";
-import { llmService } from "./services/llm/llm-service";
+
 
 const REMEMBER_THIS_PAGE_CONTEXT_MENU_ID = "remember-this-page";
 const REMEMBER_CONTENT_CONTEXT_MENU_ID = "remember-content";
@@ -167,9 +167,7 @@ chrome.runtime.onInstalled.addListener(async () => {
 		await sharedStorageService.initialize();
 
 		// Initialize background job queue
-		await backgroundJobQueue.initialize();
-
-		await llmService.initialize();
+		await backgroundJob.initialize();
 
 		// Create main "Remember this" menu for full page
 		chrome.contextMenus.create({
@@ -226,9 +224,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 		info.menuItemId === LET_REMEMBER_CONTEXT_MENU_ID
 	) {
 		try {
-			// Check if user has configured an LLM (only check configuration, not readiness)
-			const currentModel = await llmService.getCurrentModel();
-			const hasConfiguredLLM = !!currentModel;
+			const hasConfiguredLLM = false
 
 			// For LET_REMEMBER specifically, always open popup and navigate to remember page
 			if (info.menuItemId === LET_REMEMBER_CONTEXT_MENU_ID) {
@@ -358,7 +354,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 		// Handle request for job status from popup
 		(async () => {
 			try {
-				const jobs = await backgroundJobQueue.getAllJobs();
+				const jobs = await backgroundJob.getAllJobs();
 				sendResponse({ success: true, jobs });
 			} catch (error) {
 				logError("Failed to get background jobs:", error);
@@ -374,7 +370,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 		// Handle request to clear completed jobs
 		(async () => {
 			try {
-				await backgroundJobQueue.clearCompletedJobs();
+				await backgroundJob.clearCompletedJobs();
 				sendResponse({ success: true });
 			} catch (error) {
 				logError("Failed to clear completed jobs:", error);
@@ -392,7 +388,12 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 			try {
 				const { pageData } = message;
 				startLoading(); // Show loading indicator
-				const jobId = await backgroundJobQueue.addKnowledgeGraphJob(pageData);
+				const result = await backgroundJob.createJob(
+					"knowledge-graph",
+					pageData,
+					{ stream: false },
+				);
+				const jobId = result.jobId;
 				sendResponse({ success: true, jobId });
 			} catch (error) {
 				logError("Failed to add knowledge graph job:", error);
@@ -410,7 +411,12 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 			try {
 				// Queue the page for background save (offscreen will process)
 				startLoading(); // Show loading indicator
-				const jobId = await backgroundJobQueue.addRememberSaveJob(message.data);
+				const result = await backgroundJob.createJob(
+					"remember-save",
+					message.data,
+					{ stream: false },
+				);
+				const jobId = result.jobId;
 				logInfo("📨 Queued page for background save:", { jobId });
 
 				// Notify offscreen about job queue update with retry mechanism
@@ -471,8 +477,12 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 					},
 				};
 				startLoading(); // Show loading indicator
-				const jobId =
-					await backgroundJobQueue.addRememberSaveJob(selectionData);
+				const result = await backgroundJob.createJob(
+					"remember-save",
+					selectionData,
+					{ stream: false },
+				);
+				const jobId = result.jobId;
 				try {
 					chrome.runtime.sendMessage({ type: "JOB_QUEUE_UPDATED" });
 				} catch (_) {}
@@ -493,48 +503,12 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 		})();
 
 		return true;
-	} else if (message.type === "CLAIM_JOB_FOR_OFFSCREEN") {
-		// Handle request from offscreen to claim a specific job
-		(async () => {
-			try {
-				const { jobId } = message;
-				logInfo(`🎯 Offscreen requesting to claim job: ${jobId}`);
-
-				// Use the background job queue to claim the job
-				const claimedJob = await backgroundJobQueue.claimNextPendingJob();
-
-				if (claimedJob && claimedJob.id === jobId) {
-					logInfo(`✅ Successfully claimed job for offscreen: ${jobId}`);
-					sendResponse({ success: true, job: claimedJob });
-				} else if (claimedJob) {
-					// Wrong job claimed, this shouldn't happen but handle it
-					logError(
-						`⚠️ Claimed wrong job. Expected: ${jobId}, Got: ${claimedJob.id}`,
-					);
-					sendResponse({
-						success: false,
-						error: `Expected job ${jobId} but claimed ${claimedJob.id}`,
-					});
-				} else {
-					logInfo(`❌ No job available to claim for: ${jobId}`);
-					sendResponse({ success: false, error: "No pending jobs available" });
-				}
-			} catch (error) {
-				logError("❌ Failed to claim job for offscreen:", error);
-				sendResponse({
-					success: false,
-					error: error instanceof Error ? error.message : "Unknown error",
-				});
-			}
-		})();
-
-		return true;
 	} else if (message.type === "UPDATE_JOB_PROGRESS") {
 		// Handle job progress update from offscreen
 		(async () => {
 			try {
 				const { jobId, progress } = message;
-				await backgroundJobQueue.updateJobProgress(jobId, progress);
+				await backgroundJob.updateJobProgress(jobId, progress);
 				sendResponse({ success: true });
 			} catch (error) {
 				logError("❌ Failed to update job progress:", error);
@@ -551,7 +525,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 		(async () => {
 			try {
 				const { jobId, result } = message;
-				await backgroundJobQueue.completeJob(jobId, result);
+				await backgroundJob.completeJob(jobId, result);
 				sendResponse({ success: true });
 			} catch (error) {
 				logError("❌ Failed to complete job:", error);
@@ -591,8 +565,12 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 					},
 				};
 				startLoading(); // Show loading indicator
-				const jobId =
-					await backgroundJobQueue.addRememberSaveJob(userInputData);
+				const result = await backgroundJob.createJob(
+					"remember-save",
+					userInputData,
+					{ stream: false },
+				);
+				const jobId = result.jobId;
 				try {
 					chrome.runtime.sendMessage({ type: "JOB_QUEUE_UPDATED" });
 				} catch (_) {}
@@ -632,12 +610,7 @@ chrome.runtime.onStartup.addListener(async () => {
 		await sharedStorageService.initialize();
 
 		// Initialize background job queue on startup
-		await backgroundJobQueue.initialize();
-
-		// Initialize LLM service to load current model selection on startup
-		logInfo("🦙 Initializing LLM service in background context on startup...");
-		await llmService.initialize();
-		logInfo("✅ LLM service initialized in background context on startup");
+		await backgroundJob.initialize();
 
 		// Ensure offscreen document on startup (non-blocking)
 		ensureOffscreenDocument().catch((error) => {

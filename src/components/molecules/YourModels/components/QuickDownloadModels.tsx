@@ -4,7 +4,8 @@ import { Loader2, Download, Play, Square } from "lucide-react";
 import { QUICK_WALLAMA_LLMS } from "@/constants/wllama";
 import { QUICK_WEBLLM_LLMS } from "@/constants/webllm";
 import { QUICK_OPENAI_LLMS } from "@/constants/openai";
-import { llmService, type ModelInfo } from "@/services/llm";
+import { type ModelInfo } from "@/services/llm";
+import { serviceManager } from '@/services'
 import type { Provider } from "../hooks/use-provider-config";
 import type { CurrentModel } from "../hooks/use-current-model";
 
@@ -117,7 +118,7 @@ export const QuickDownloadModels: React.FC<QuickDownloadModelsProps> = ({
 							| "openai"
 							| "lmstudio"
 							| "ollama") === "ollama"
-							? llmService.has("openai") &&
+							? serviceManager.llmService.has("openai") &&
 								current?.modelId ===
 									(model as (typeof QUICK_OPENAI_LLMS)[0]).model &&
 								current?.provider ===
@@ -192,7 +193,7 @@ export const QuickDownloadModels: React.FC<QuickDownloadModelsProps> = ({
 											| "openai"
 											| "lmstudio"
 											| "ollama") === "ollama"
-											? llmService.has("openai")
+											? serviceManager.llmService.has("openai")
 												? "Use"
 												: "Connect"
 											: "Load"}
@@ -218,7 +219,7 @@ export const QuickDownloadModels: React.FC<QuickDownloadModelsProps> = ({
 											| "openai"
 											| "lmstudio"
 											| "ollama") === "ollama"
-											? llmService.has("openai")
+											? serviceManager.llmService.has("openai")
 												? "Use"
 												: "Connect"
 											: "Get"}

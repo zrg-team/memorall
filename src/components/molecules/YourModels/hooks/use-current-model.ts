@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { llmService } from "@/services/llm";
+import { serviceManager } from "@/services";
 import type { Provider } from "./use-provider-config";
 
 export interface CurrentModel {
@@ -44,7 +44,7 @@ export function useCurrentModel(
 	useEffect(() => {
 		const loadCurrentModel = async () => {
 			try {
-				const cm = await llmService.getCurrentModel();
+				const cm = await serviceManager.llmService.getCurrentModel();
 				updateCurrentModel(cm);
 			} catch (_) {
 				setCurrent(null);
@@ -55,7 +55,7 @@ export function useCurrentModel(
 
 	// PROPER ARCHITECTURE: Listen to LLMService events, not SharedStorage directly
 	useEffect(() => {
-		const unsubscribe = llmService.onCurrentModelChange((modelInfo) => {
+		const unsubscribe = serviceManager.llmService.onCurrentModelChange((modelInfo) => {
 			console.log("🔔 Current model changed via LLMService:", modelInfo);
 			updateCurrentModel(modelInfo);
 		});

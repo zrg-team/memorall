@@ -3,9 +3,9 @@ import {
 	BaseAnnotation,
 	type BaseStateBase,
 } from "../../interfaces/graph.base";
-import type { Node, NewNode } from "@/services/database/entities/nodes";
-import type { Edge, NewEdge } from "@/services/database/entities/edges";
-import type { Source, NewSource } from "@/services/database/entities/sources";
+import type { Node } from "@/services/database/entities/nodes";
+import type { Edge } from "@/services/database/entities/edges";
+import type { Source } from "@/services/database/entities/sources";
 
 export interface ExtractedEntity {
 	uuid: string;

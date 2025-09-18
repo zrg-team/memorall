@@ -1,10 +1,10 @@
 import { logInfo, logError } from "@/utils/logger";
-import type { BackgroundJob } from "./background-job-queue";
+import type { BaseJob } from "./background-job";
 
 export interface JobPortMessage {
 	type: "NEW_JOB" | "JOB_UPDATED" | "JOB_COMPLETED" | "PING" | "PONG";
 	jobId?: string;
-	job?: BackgroundJob;
+	job?: BaseJob;
 	timestamp: number;
 }
 
@@ -178,7 +178,7 @@ export class JobPortManager {
 	/**
 	 * Notify about a new job via port
 	 */
-	notifyNewJob(job: BackgroundJob): void {
+	notifyNewJob(job: BaseJob): void {
 		this.sendMessage({
 			type: "NEW_JOB",
 			jobId: job.id,
@@ -190,7 +190,7 @@ export class JobPortManager {
 	/**
 	 * Notify about a job update via port
 	 */
-	notifyJobUpdated(jobId: string, job?: BackgroundJob): void {
+	notifyJobUpdated(jobId: string, job?: BaseJob): void {
 		this.sendMessage({
 			type: "JOB_UPDATED",
 			jobId,

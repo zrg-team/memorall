@@ -34,9 +34,9 @@ import {
 	type SearchOptions,
 } from "@/services/remember/remember-service";
 import { knowledgeGraphService } from "@/services/knowledge-graph/knowledge-graph-service";
-import { backgroundJobService } from "@/services/background-jobs/background-job-service";
-import { databaseService } from "@/services/database/database-service";
+import { backgroundJob } from "@/services/background-jobs/background-job";
 import type { RememberedContent, Node, Edge } from "@/services/database/db";
+import { serviceManager } from "@/services";
 
 // Helper function to get URL from the new data structure
 function getContentUrl(content: RememberedContent): string {
@@ -133,8 +133,8 @@ export const KnowledgeGraphPage: React.FC<KnowledgeGraphPageProps> = () => {
 
 	// Subscribe to background job updates
 	useEffect(() => {
-		const unsubscribe = backgroundJobService.subscribe((state) => {
-			setBackgroundJobs(state.jobs);
+		const unsubscribe = backgroundJob.subscribe((state: any) => {
+			setBackgroundJobs(Object.values(state.jobs));
 
 			// Reload source statuses when jobs complete
 			const pageIds = pages.map((p) => p.id);
@@ -143,12 +143,11 @@ export const KnowledgeGraphPage: React.FC<KnowledgeGraphPageProps> = () => {
 			}
 		});
 
-		// Start polling for background job updates
-		backgroundJobService.startPolling();
+		// Initialize background job queue
+		backgroundJob.initialize();
 
 		return () => {
 			unsubscribe();
-			backgroundJobService.stopPolling();
 		};
 	}, [pages]);
 
@@ -226,8 +225,11 @@ export const KnowledgeGraphPage: React.FC<KnowledgeGraphPageProps> = () => {
 				"🔄 KnowledgeGraphPage: Starting background job for:",
 				page.title,
 			);
-			// Use background service for conversion
-			const jobId = await backgroundJobService.addKnowledgeGraphJob(page);
+			// Use background queue for conversion
+			const result = await backgroundJob.createJob("knowledge-graph", page, {
+				stream: false,
+			});
+			const jobId = result.jobId;
 			console.log("✅ KnowledgeGraphPage: Background job queued:", jobId);
 		} catch (error) {
 			console.error(
@@ -253,7 +255,9 @@ export const KnowledgeGraphPage: React.FC<KnowledgeGraphPageProps> = () => {
 			// Add multiple pages to background queue (limit to 10 at a time)
 			const pagesToConvert = unconvertedPages.slice(0, 10);
 			for (const page of pagesToConvert) {
-				await backgroundJobService.addKnowledgeGraphJob(page);
+				await backgroundJob.createJob("knowledge-graph", page, {
+					stream: false,
+				});
 			}
 		}
 	};
@@ -261,13 +265,13 @@ export const KnowledgeGraphPage: React.FC<KnowledgeGraphPageProps> = () => {
 	const handleClearCompleted = async () => {
 		// Clear both in-memory conversions and background jobs
 		knowledgeGraphService.clearCompletedConversions();
-		await backgroundJobService.clearCompletedJobs();
+		await backgroundJob.clearCompletedJobs();
 	};
 
 	const loadGraphDataForPage = async (pageId: string) => {
 		setLoadingGraph(true);
 		try {
-			await databaseService.use(async ({ db, schema }) => {
+			await serviceManager.databaseService.use(async ({ db, schema }) => {
 				// Step 1: Find sources related to this page using polymorphic relationship
 				const sources = await db
 					.select()
@@ -380,7 +384,7 @@ export const KnowledgeGraphPage: React.FC<KnowledgeGraphPageProps> = () => {
 				string,
 				{ status: string; validFrom: Date | null }
 			>();
-			await databaseService.use(async ({ db, schema }) => {
+			await serviceManager.databaseService.use(async ({ db, schema }) => {
 				const sources = await db
 					.select({
 						targetId: schema.sources.targetId,

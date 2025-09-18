@@ -19,8 +19,6 @@ import {
 	Play,
 	Zap,
 } from "lucide-react";
-// Remove individual type imports since we'll use dynamic typing
-import { databaseService } from "../services/database";
 import {
 	desc,
 	asc,
@@ -34,9 +32,9 @@ import {
 	isNull,
 	isNotNull,
 } from "drizzle-orm";
-import { serviceManager } from "../services/ServiceManager";
+import { serviceManager } from "@/services";
 import { logError, logInfo } from "@/utils/logger";
-import { schema } from "../services/database/db";
+import { schema } from "@/services/database/db";
 
 // Automatically build entity types from schema keys
 type EntityType = keyof typeof schema;
@@ -197,7 +195,7 @@ export const DatabasePage: React.FC = () => {
 	// Load stats for all entities dynamically
 	const loadStats = async () => {
 		try {
-			await databaseService.use(async ({ db, schema }) => {
+			await serviceManager.databaseService.use(async ({ db, schema }) => {
 				// Build dynamic promise array for all entities
 				const entityKeys = Object.keys(schema) as EntityType[];
 				const countPromises = entityKeys.map((entityKey) =>
@@ -225,7 +223,7 @@ export const DatabasePage: React.FC = () => {
 	// Load available fields for current entity type
 	const loadAvailableFields = async () => {
 		try {
-			await databaseService.use(async ({ schema }) => {
+			await serviceManager.databaseService.use(async ({ schema }) => {
 				const table = schema[queryParams.entityType];
 				if (table) {
 					// Get field info from the table schema
@@ -305,7 +303,7 @@ export const DatabasePage: React.FC = () => {
 
 		setLoading(true);
 		try {
-			await databaseService.use(async ({ db, schema }) => {
+			await serviceManager.databaseService.use(async ({ db, schema }) => {
 				const table = schema[queryParams.entityType];
 				const whereClause = buildWhereConditions(queryParams.conditions, table);
 				const sortField = (table as unknown as Record<string, unknown>)[
@@ -355,7 +353,7 @@ export const DatabasePage: React.FC = () => {
 	const createSampleConversation = async () => {
 		setLoading(true);
 		try {
-			await databaseService.use(async ({ db, schema }) => {
+			await serviceManager.databaseService.use(async ({ db, schema }) => {
 				// Create conversation
 				const [conversation] = await db
 					.insert(schema.conversations)
