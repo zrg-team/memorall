@@ -4,7 +4,8 @@ import type { NewSource } from "@/services/database/entities/sources";
 import type { NewNode } from "@/services/database/entities/nodes";
 import type { NewEdge } from "@/services/database/entities/edges";
 import { or, and, ilike, inArray } from "drizzle-orm";
-import { combineSearchResults, vectorSearchNodes } from "@/utils/vector-search";
+import { combineSearchResults, vectorSearchNodes, vectorSearchEdges } from "@/utils/vector-search";
+import { trigramSearchNodes, trigramSearchEdges, combineSearchResultsWithTrigram } from "@/utils/trigram-search";
 
 import { KnowledgeGraphAnnotation, type KnowledgeGraphState } from "./state";
 import { EntityExtractionFlow } from "./entity-extraction";
@@ -110,7 +111,7 @@ export class KnowledgeGraphFlow extends GraphBase<
 			}
 
 			const TOTAL_LIMIT = 200;
-			const WEIGHTS = { sqlPercentage: 60, vectorPercentage: 40 };
+			const WEIGHTS = { sqlPercentage: 60, trigramPercentage: 40, vectorPercentage: 0 };
 
 			// Perform SQL search (existing logic)
 			const sqlResults = await databaseService.use(async ({ db, schema }) => {
@@ -132,38 +133,55 @@ export class KnowledgeGraphFlow extends GraphBase<
 				return nodes;
 			});
 
-			// Perform vector search if embedding service is available
+			// Perform trigram search for fuzzy text matching
+			let trigramResults: Awaited<ReturnType<typeof trigramSearchNodes>> = [];
+			try {
+				trigramResults = await trigramSearchNodes(
+					databaseService,
+					names,
+					Math.floor((TOTAL_LIMIT * WEIGHTS.trigramPercentage) / 100),
+					{ threshold: 0.1 }
+				);
+			} catch (error) {
+				logError("[LOAD_ENTITIES] Trigram search failed:", error);
+			}
+
+			// Fallback to vector search if both SQL and trigram fail or have insufficient results
 			let vectorResults: {
 				item: (typeof sqlResults)[0];
 				similarity: number;
 			}[] = [];
-			if (embeddingService) {
+			const combinedResults = sqlResults.length + trigramResults.length;
+
+			if (combinedResults < TOTAL_LIMIT * 0.5 && embeddingService) { // Less than 50% of desired results
 				try {
 					const defaultEmbedding = await embeddingService.get("default");
 					if (defaultEmbedding && defaultEmbedding.isReady()) {
+						const vectorLimit = Math.min(TOTAL_LIMIT - combinedResults, Math.floor(TOTAL_LIMIT * 0.4));
 						vectorResults = await vectorSearchNodes(
 							databaseService,
 							defaultEmbedding,
 							names,
-							Math.floor((TOTAL_LIMIT * WEIGHTS.vectorPercentage) / 100),
+							vectorLimit,
 						);
 					}
 				} catch (error) {
-					logError("[LOAD_ENTITIES] Vector search failed:", error);
+					logError("[LOAD_ENTITIES] Vector search fallback failed:", error);
 				}
 			}
 
-			// Combine results with deduplication
-			const related = combineSearchResults(
+			// Combine results with deduplication - use new trigram combiner
+			const related = combineSearchResultsWithTrigram(
 				sqlResults,
 				vectorResults,
+				trigramResults,
 				WEIGHTS,
 				TOTAL_LIMIT,
 				(node) => node.id,
 			);
 
 			logInfo(
-				`[LOAD_ENTITIES] Loaded ${related.length} related nodes (${sqlResults.length} SQL, ${vectorResults.length} vector)`,
+				`[LOAD_ENTITIES] Loaded ${related.length} related nodes (${sqlResults.length} SQL, ${trigramResults.length} trigram, ${vectorResults.length} vector)`,
 			);
 
 			return {
@@ -174,10 +192,11 @@ export class KnowledgeGraphFlow extends GraphBase<
 					{
 						id: crypto.randomUUID(),
 						name: "Related Nodes Loaded",
-						description: `Loaded ${related.length} related nodes for entity resolution (${sqlResults.length} SQL + ${vectorResults.length} vector)`,
+						description: `Loaded ${related.length} related nodes for entity resolution (${sqlResults.length} SQL + ${trigramResults.length} trigram + ${vectorResults.length} vector)`,
 						metadata: {
 							nodeCount: related.length,
 							sqlCount: sqlResults.length,
+							trigramCount: trigramResults.length,
 							vectorCount: vectorResults.length,
 						},
 					},
@@ -213,13 +232,8 @@ export class KnowledgeGraphFlow extends GraphBase<
 				return { existingEdges: [] };
 			}
 
-			// Import vector search utilities
-			const { vectorSearchEdges, combineSearchResults } = await import(
-				"../../../../utils/vector-search"
-			);
-
 			const TOTAL_LIMIT = 500;
-			const WEIGHTS = { sqlPercentage: 50, vectorPercentage: 30 }; // 20% reserved for relations
+			const WEIGHTS = { sqlPercentage: 60, trigramPercentage: 40, vectorPercentage: 0 };
 
 			// Collect candidate node IDs from resolved entities
 			const candidateIds = new Set<string>();
@@ -270,12 +284,36 @@ export class KnowledgeGraphFlow extends GraphBase<
 				});
 			}
 
-			// 2. Vector search based on extracted facts
+			// 2. Trigram search based on extracted facts
+			let trigramResults: Awaited<ReturnType<typeof trigramSearchEdges>> = [];
+			if (state.extractedFacts.length > 0) {
+				try {
+					// Create search terms from extracted facts
+					const factSearchTerms = state.extractedFacts
+						.map((f) => `${f.relationType} ${f.factText || ""}`.trim())
+						.filter((term) => term.length > 0);
+
+					if (factSearchTerms.length > 0) {
+						trigramResults = await trigramSearchEdges(
+							databaseService,
+							factSearchTerms,
+							Math.floor((TOTAL_LIMIT * WEIGHTS.trigramPercentage) / 100),
+							{ threshold: 0.1 }
+						);
+					}
+				} catch (error) {
+					logError("[LOAD_FACTS] Trigram search failed:", error);
+				}
+			}
+
+			// 3. Fallback to vector search if both SQL and trigram fail or have insufficient results
 			let vectorResults: {
 				item: (typeof sqlResults)[0];
 				similarity: number;
 			}[] = [];
-			if (embeddingService && state.extractedFacts.length > 0) {
+			const combinedResults = sqlResults.length + trigramResults.length;
+
+			if (combinedResults < TOTAL_LIMIT * 0.5 && embeddingService && state.extractedFacts.length > 0) {
 				try {
 					const defaultEmbedding = await embeddingService.get("default");
 					if (defaultEmbedding && defaultEmbedding.isReady()) {
@@ -285,22 +323,23 @@ export class KnowledgeGraphFlow extends GraphBase<
 							.filter((term) => term.length > 0);
 
 						if (factSearchTerms.length > 0) {
+							const vectorLimit = Math.min(TOTAL_LIMIT - combinedResults, Math.floor(TOTAL_LIMIT * 0.4));
 							vectorResults = await vectorSearchEdges(
 								databaseService,
 								defaultEmbedding,
 								factSearchTerms,
-								Math.floor((TOTAL_LIMIT * WEIGHTS.vectorPercentage) / 100),
+								vectorLimit,
 							);
 						}
 					}
 				} catch (error) {
-					logError("[LOAD_FACTS] Vector search failed:", error);
+					logError("[LOAD_FACTS] Vector search fallback failed:", error);
 				}
 			}
 
-			// 3. Additional relations from resolved entity connections (if space available)
+			// 4. Additional relations from resolved entity connections (if space available)
 			let relationResults: typeof sqlResults = [];
-			const usedSpace = sqlResults.length + vectorResults.length;
+			const usedSpace = sqlResults.length + trigramResults.length + vectorResults.length;
 			const remainingSpace = TOTAL_LIMIT - usedSpace;
 
 			if (remainingSpace > 0 && idList.length > 0) {
@@ -320,16 +359,12 @@ export class KnowledgeGraphFlow extends GraphBase<
 				});
 			}
 
-			// Combine all results with deduplication
-			const allEdgeResults = [
-				...sqlResults,
-				...vectorResults.map((r) => r.item),
-				...relationResults,
-			];
-			const edges = combineSearchResults(
-				allEdgeResults,
-				[], // Vector results already incorporated above
-				{ sqlPercentage: 100, vectorPercentage: 0 },
+			// Combine all results with deduplication using trigram combiner
+			const edges = combineSearchResultsWithTrigram(
+				[...sqlResults, ...relationResults], // Combine SQL and relation results
+				vectorResults,
+				trigramResults,
+				WEIGHTS,
 				TOTAL_LIMIT,
 				(edge) => edge.id,
 			);
@@ -352,7 +387,7 @@ export class KnowledgeGraphFlow extends GraphBase<
 			}
 
 			logInfo(
-				`[LOAD_FACTS] Loaded ${edges.length} related edges (${sqlResults.length} SQL, ${vectorResults.length} vector, ${relationResults.length} relations)`,
+				`[LOAD_FACTS] Loaded ${edges.length} related edges (${sqlResults.length} SQL, ${trigramResults.length} trigram, ${vectorResults.length} vector, ${relationResults.length} relations)`,
 			);
 
 			return {
@@ -362,10 +397,11 @@ export class KnowledgeGraphFlow extends GraphBase<
 					{
 						id: crypto.randomUUID(),
 						name: "Related Edges Loaded",
-						description: `Loaded ${edges.length} related edges for fact resolution (${sqlResults.length} SQL + ${vectorResults.length} vector + ${relationResults.length} relations)`,
+						description: `Loaded ${edges.length} related edges for fact resolution (${sqlResults.length} SQL + ${trigramResults.length} trigram + ${vectorResults.length} vector + ${relationResults.length} relations)`,
 						metadata: {
 							edgeCount: edges.length,
 							sqlCount: sqlResults.length,
+							trigramCount: trigramResults.length,
 							vectorCount: vectorResults.length,
 							relationCount: relationResults.length,
 						},

@@ -107,7 +107,47 @@ export interface ConversionProgress {
 
 ## ⚙️ Flow Stages
 
-Stages observed in streaming updates include: `load_entities`, `extract_entities`, `resolve_entities`, `extract_facts`, `load_facts`, `resolve_facts`, `extract_temporal`, `save_to_database`. These map to user-facing statuses and progress percentages.
+The knowledge graph pipeline consists of the following stages:
+
+### 🔍 Entity Loading (`load_entities`)
+**Hybrid Search Approach:**
+- **SQL Search (60%)**: Direct pattern matching on entity names using `ILIKE` queries
+- **Trigram Search (40%)**: Database-level fuzzy text matching using PostgreSQL's `pg_trgm` extension
+- **Vector Fallback**: Activates when combined SQL + trigram results < 50% of target limit (200 nodes)
+
+### 📝 Entity Extraction (`extract_entities`)
+LLM-powered extraction of entities from page content.
+
+### 🔗 Entity Resolution (`resolve_entities`)
+Determines which extracted entities match existing nodes vs. need creation.
+
+### 📊 Fact Extraction (`extract_facts`)
+LLM-powered extraction of relationships between entities.
+
+### 🔍 Fact Loading (`load_facts`)
+**Hybrid Search Approach:**
+- **SQL Search (60%)**: Relationship-based search using resolved entity IDs
+- **Trigram Search (40%)**: Database-level fuzzy matching on fact text and edge types
+- **Vector Fallback**: Activates when combined SQL + trigram results < 50% of target limit (500 edges)
+
+### 🔗 Fact Resolution (`resolve_facts`)
+Determines which extracted facts match existing edges vs. need creation.
+
+### ⏰ Temporal Extraction (`extract_temporal`)
+Extraction of temporal information for facts.
+
+### 💾 Database Save (`save_to_database`)
+Persists new entities and relationships to the database.
+
+## 🔍 Search Technology
+
+The pipeline uses a **three-tier hybrid search strategy**:
+
+1. **SQL Search**: Fast, exact pattern matching using database indexes
+2. **Trigram Search**: Fuzzy text matching using PostgreSQL's `pg_trgm` for typo tolerance
+3. **Vector Search**: Semantic similarity using embeddings as intelligent fallback
+
+This approach ensures optimal performance while maintaining high recall through multiple search methodologies.
 
 ## ⚠️ Error Handling
 

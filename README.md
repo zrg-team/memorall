@@ -115,13 +115,24 @@ The **Knowledge Graph Flow** is Memorall's core intelligence module that transfo
 - **🎯 Smart Deduplication**: Prevents duplicate entities (e.g., "Dr. Smith" = "John Smith")
 - **🔄 Incremental Learning**: Continuously builds knowledge from new content
 - **🕐 Temporal Awareness**: Tracks how relationships change over time
-- **🔍 Semantic Search**: Finds related information through meaning, not just keywords
+- **🔍 Hybrid Search System**: Three-tier search using SQL, trigram matching, and vector similarity
+- **🎯 Intelligent Fallback**: Automatic failover to vector search when needed for optimal recall
 - **📈 Context Building**: Connects new information to existing knowledge
 
 ### 💼 Real-World Examples
 - **Research**: *"Alice published a paper on AI safety in 2023"* → Creates entities for Alice (Person), AI Safety (Concept), and their relationship with publication date
 - **Professional**: *"Google acquired DeepMind"* → Links companies and captures acquisition relationship
 - **Personal**: *"Met Sarah at the conference last week"* → Records social connection with temporal context
+
+### 🔍 Advanced Search Technology
+
+Memorall uses a **sophisticated three-tier hybrid search system** for optimal knowledge retrieval:
+
+1. **SQL Search (60%)**: Lightning-fast exact pattern matching using database indexes
+2. **Trigram Search (40%)**: Fuzzy text matching with PostgreSQL's `pg_trgm` extension for typo tolerance
+3. **Vector Fallback**: Intelligent semantic similarity using embeddings when primary methods yield insufficient results
+
+This approach ensures both **high performance** and **comprehensive recall**, making knowledge discovery both fast and thorough.
 
 The Knowledge Graph enables Memorall to provide contextual, intelligent responses by understanding not just what you've encountered, but how everything connects together.
 
@@ -132,7 +143,10 @@ The Knowledge Graph enables Memorall to provide contextual, intelligent response
 ### 🧠 AI Components
 - **🤖 Language Model**: Wllama (WebAssembly-based LLM)
 - **📊 Embeddings**: HuggingFace Transformers for text embeddings
-- **🔍 Vector Search**: PostgreSQL with pgvector for semantic search
+- **🔍 Hybrid Search Engine**:
+  - **SQL Search (60%)**: Fast exact pattern matching using database indexes
+  - **Trigram Search (40%)**: Fuzzy text matching with PostgreSQL's `pg_trgm` extension
+  - **Vector Fallback**: Semantic similarity using embeddings when primary methods insufficient
 
 ### 🗄️ Data Storage
 - **💬 Conversations**: Chat history and context
@@ -193,17 +207,21 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 📚 Documentation
 
-- Services Overview: `docs/services.md`
-- LLM Service: `docs/llm-service.md`
-- Embedding Service: `docs/embedding-service.md`
-- Database Service: `docs/database-service.md`
-- Flows Service: `docs/flows-service.md`
-- Shared Storage Service: `docs/shared-storage.md`
-- Background Jobs: `docs/background-jobs.md`
-- Logging Service: `docs/logging-service.md`
-- Remember Service: `docs/remember-service.md`
-- Knowledge Graph Service: `docs/knowledge-graph-service.md`
-- Knowledge Pipeline (concept): `docs/knowledge-pipeline.md`
+### 🏗️ Core Services
+- **Services Overview**: [`docs/services.md`](docs/services.md)
+- **LLM Service**: [`docs/llm-service.md`](docs/llm-service.md)
+- **Embedding Service**: [`docs/embedding-service.md`](docs/embedding-service.md)
+- **Database Service**: [`docs/database-service.md`](docs/database-service.md)
+- **Flows Service**: [`docs/flows-service.md`](docs/flows-service.md)
+- **Shared Storage Service**: [`docs/shared-storage.md`](docs/shared-storage.md)
+- **Background Jobs**: [`docs/background-jobs.md`](docs/background-jobs.md)
+- **Logging Service**: [`docs/logging-service.md`](docs/logging-service.md)
+- **Remember Service**: [`docs/remember-service.md`](docs/remember-service.md)
+
+### 🧠 Knowledge Graph & AI
+- **Knowledge Graph Service**: [`docs/knowledge-graph-service.md`](docs/knowledge-graph-service.md) - Service for building knowledge graphs
+- **Knowledge Pipeline**: [`docs/knowledge-pipeline.md`](docs/knowledge-pipeline.md) - Complete pipeline architecture and flow
+- **Knowledge RAG System**: [`docs/knowledge-rag-service.md`](docs/knowledge-rag-service.md) - Retrieval-Augmented Generation for Q&A
 
 ## 🔀 Extension Flow
 
