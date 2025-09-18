@@ -360,7 +360,9 @@ export class LLMService {
 		// Find the actual service name for this provider type
 		const serviceName = this.findServiceNameForProvider(provider);
 		if (!serviceName) {
-			throw new Error(`No service found for provider: ${provider}. Available services: ${this.list().join(', ')}`);
+			throw new Error(
+				`No service found for provider: ${provider}. Available services: ${this.list().join(", ")}`,
+			);
 		}
 
 		this.currentModel = {
@@ -418,8 +420,8 @@ export class LLMService {
 		}
 
 		// Fallback: look for services with names containing the provider
-		const matchingService = services.find(name =>
-			name.toLowerCase().includes(provider.toLowerCase())
+		const matchingService = services.find((name) =>
+			name.toLowerCase().includes(provider.toLowerCase()),
 		);
 
 		return matchingService || null;
@@ -479,7 +481,9 @@ export class LLMService {
 						logWarn(
 							`⚠️ Stored service '${storedModel.serviceName}' not found, attempting to resolve...`,
 						);
-						const correctServiceName = this.findServiceNameForProvider(storedModel.provider);
+						const correctServiceName = this.findServiceNameForProvider(
+							storedModel.provider,
+						);
 						if (correctServiceName) {
 							this.currentModel = {
 								...storedModel,
@@ -492,7 +496,7 @@ export class LLMService {
 							);
 						} else {
 							logWarn(
-								`❌ No available service found for provider '${storedModel.provider}'. Available services: ${this.list().join(', ')}`,
+								`❌ No available service found for provider '${storedModel.provider}'. Available services: ${this.list().join(", ")}`,
 							);
 							this.currentModel = null; // Clear invalid model
 						}

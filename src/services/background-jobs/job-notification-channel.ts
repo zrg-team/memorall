@@ -2,7 +2,7 @@ import { logInfo, logError } from "@/utils/logger";
 import type { BackgroundJob } from "./background-job-queue";
 
 export interface JobNotificationMessage {
-	type: 'JOB_ENQUEUED' | 'JOB_UPDATED' | 'JOB_COMPLETED' | 'QUEUE_UPDATED';
+	type: "JOB_ENQUEUED" | "JOB_UPDATED" | "JOB_COMPLETED" | "QUEUE_UPDATED";
 	jobId?: string;
 	job?: BackgroundJob;
 	timestamp: number;
@@ -17,11 +17,14 @@ export interface JobNotificationMessage {
 export class JobNotificationChannel {
 	private static instance: JobNotificationChannel;
 	private channel: BroadcastChannel;
-	private listeners = new Map<string, Set<(message: JobNotificationMessage) => void>>();
+	private listeners = new Map<
+		string,
+		Set<(message: JobNotificationMessage) => void>
+	>();
 	private isInitialized = false;
 
 	private constructor() {
-		this.channel = new BroadcastChannel('memorall-job-queue');
+		this.channel = new BroadcastChannel("memorall-job-queue");
 		this.setupEventListeners();
 	}
 
@@ -33,44 +36,47 @@ export class JobNotificationChannel {
 	}
 
 	private setupEventListeners(): void {
-		this.channel.addEventListener('message', (event) => {
+		this.channel.addEventListener("message", (event) => {
 			try {
 				const message = event.data as JobNotificationMessage;
 				logInfo(`📡 Received job notification: ${message.type}`, {
 					jobId: message.jobId,
-					latency: Date.now() - message.timestamp
+					latency: Date.now() - message.timestamp,
 				});
 
 				// Notify all subscribers for this message type
 				const typeListeners = this.listeners.get(message.type);
 				if (typeListeners) {
-					typeListeners.forEach(listener => {
+					typeListeners.forEach((listener) => {
 						try {
 							listener(message);
 						} catch (error) {
-							logError(`Error in job notification listener for ${message.type}:`, error);
+							logError(
+								`Error in job notification listener for ${message.type}:`,
+								error,
+							);
 						}
 					});
 				}
 
 				// Notify wildcard listeners
-				const wildcardListeners = this.listeners.get('*');
+				const wildcardListeners = this.listeners.get("*");
 				if (wildcardListeners) {
-					wildcardListeners.forEach(listener => {
+					wildcardListeners.forEach((listener) => {
 						try {
 							listener(message);
 						} catch (error) {
-							logError('Error in wildcard job notification listener:', error);
+							logError("Error in wildcard job notification listener:", error);
 						}
 					});
 				}
 			} catch (error) {
-				logError('Error processing job notification message:', error);
+				logError("Error processing job notification message:", error);
 			}
 		});
 
 		this.isInitialized = true;
-		logInfo('🚀 Job notification channel initialized');
+		logInfo("🚀 Job notification channel initialized");
 	}
 
 	/**
@@ -80,8 +86,8 @@ export class JobNotificationChannel {
 	 * @returns Unsubscribe function
 	 */
 	subscribe(
-		messageType: JobNotificationMessage['type'] | '*',
-		listener: (message: JobNotificationMessage) => void
+		messageType: JobNotificationMessage["type"] | "*",
+		listener: (message: JobNotificationMessage) => void,
 	): () => void {
 		if (!this.listeners.has(messageType)) {
 			this.listeners.set(messageType, new Set());
@@ -107,10 +113,10 @@ export class JobNotificationChannel {
 	 */
 	notifyJobEnqueued(job: BackgroundJob): void {
 		this.postMessage({
-			type: 'JOB_ENQUEUED',
+			type: "JOB_ENQUEUED",
 			jobId: job.id,
 			job,
-			timestamp: Date.now()
+			timestamp: Date.now(),
 		});
 	}
 
@@ -119,10 +125,10 @@ export class JobNotificationChannel {
 	 */
 	notifyJobUpdated(jobId: string, job?: BackgroundJob): void {
 		this.postMessage({
-			type: 'JOB_UPDATED',
+			type: "JOB_UPDATED",
 			jobId,
 			job,
-			timestamp: Date.now()
+			timestamp: Date.now(),
 		});
 	}
 
@@ -131,9 +137,9 @@ export class JobNotificationChannel {
 	 */
 	notifyJobCompleted(jobId: string): void {
 		this.postMessage({
-			type: 'JOB_COMPLETED',
+			type: "JOB_COMPLETED",
 			jobId,
-			timestamp: Date.now()
+			timestamp: Date.now(),
 		});
 	}
 
@@ -142,14 +148,14 @@ export class JobNotificationChannel {
 	 */
 	notifyQueueUpdated(): void {
 		this.postMessage({
-			type: 'QUEUE_UPDATED',
-			timestamp: Date.now()
+			type: "QUEUE_UPDATED",
+			timestamp: Date.now(),
 		});
 	}
 
 	private postMessage(message: JobNotificationMessage): void {
 		if (!this.isInitialized) {
-			logError('Job notification channel not initialized');
+			logError("Job notification channel not initialized");
 			return;
 		}
 
@@ -157,7 +163,7 @@ export class JobNotificationChannel {
 			this.channel.postMessage(message);
 			logInfo(`📡 Sent job notification: ${message.type}`, {
 				jobId: message.jobId,
-				timestamp: message.timestamp
+				timestamp: message.timestamp,
 			});
 		} catch (error) {
 			logError(`Failed to send job notification ${message.type}:`, error);
@@ -172,9 +178,9 @@ export class JobNotificationChannel {
 			this.channel.close();
 			this.listeners.clear();
 			this.isInitialized = false;
-			logInfo('📡 Job notification channel closed');
+			logInfo("📡 Job notification channel closed");
 		} catch (error) {
-			logError('Error closing job notification channel:', error);
+			logError("Error closing job notification channel:", error);
 		}
 	}
 
@@ -188,8 +194,11 @@ export class JobNotificationChannel {
 	} {
 		return {
 			isInitialized: this.isInitialized,
-			listenerCount: Array.from(this.listeners.values()).reduce((sum, set) => sum + set.size, 0),
-			subscribedTypes: Array.from(this.listeners.keys())
+			listenerCount: Array.from(this.listeners.values()).reduce(
+				(sum, set) => sum + set.size,
+				0,
+			),
+			subscribedTypes: Array.from(this.listeners.keys()),
 		};
 	}
 }

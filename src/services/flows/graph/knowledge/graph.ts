@@ -15,6 +15,24 @@ import { TemporalExtractionFlow } from "./temporal-extraction";
 import { GraphBase } from "../../interfaces/graph.base";
 import type { AllServices } from "../../interfaces/tool";
 
+// Safe embedding generation that continues storage even on failure
+async function safeTextToVector(
+	embeddingService: any,
+	text: string,
+	context: string,
+): Promise<number[] | null> {
+	try {
+		if (!text || text.trim().length === 0) return null;
+		return await embeddingService.textToVector(text);
+	} catch (error) {
+		logError(`[${context}] Embedding failed, continuing without vector:`, {
+			error: error instanceof Error ? error.message : String(error),
+			textLength: text.length,
+		});
+		return null;
+	}
+}
+
 export class KnowledgeGraphFlow extends GraphBase<
 	| "load_entities"
 	| "extract_entities"
@@ -465,29 +483,13 @@ export class KnowledgeGraphFlow extends GraphBase<
 					weight: 1.0,
 				};
 
-				// Generate embedding for source
-				if (embeddingService) {
-					try {
-						const embeddingText = `${state.title}\n\n${state.content.substring(0, 2000)}`;
-						const embedding =
-							await embeddingService.textToVector(embeddingText);
-						(sourceData as NewSource & { embedding?: number[] }).embedding =
-							embedding;
-					} catch (embeddingError) {
-						logError(
-							"[SAVE_TO_DATABASE] Failed to generate source embedding:",
-							embeddingError,
-						);
-					}
-				}
-
 				const [createdSource] = await db
 					.insert(schema.sources)
 					.values(sourceData)
 					.returning();
 
 				// Create new nodes
-				const createdNodes = [];
+				const createdNodes: (typeof schema.nodes.$inferSelect)[] = [];
 				const newEntities = state.resolvedEntities.filter((e) => !e.isExisting);
 
 				for (const entity of newEntities) {
@@ -500,18 +502,13 @@ export class KnowledgeGraphFlow extends GraphBase<
 
 					// Generate embedding for node name
 					if (embeddingService) {
-						try {
-							const nameEmbedding = await embeddingService.textToVector(
-								entity.finalName,
-							);
-							(
-								nodeData as NewNode & { nameEmbedding?: number[] }
-							).nameEmbedding = nameEmbedding;
-						} catch (embeddingError) {
-							logError(
-								`[SAVE_TO_DATABASE] Failed to generate embedding for node "${entity.finalName}":`,
-								embeddingError,
-							);
+						const nameEmbedding = await safeTextToVector(
+							embeddingService,
+							entity.finalName,
+							`NODE_EMBEDDING:${entity.finalName.substring(0, 50)}`,
+						);
+						if (nameEmbedding) {
+							nodeData.nameEmbedding = nameEmbedding;
 						}
 					}
 
@@ -566,7 +563,7 @@ export class KnowledgeGraphFlow extends GraphBase<
 							);
 							continue;
 						}
-						sourceNodeId = newNode.id;
+						sourceNodeId = `${newNode.id}`;
 					}
 
 					if (destEntity.isExisting && destEntity.existingId) {
@@ -581,7 +578,7 @@ export class KnowledgeGraphFlow extends GraphBase<
 							);
 							continue;
 						}
-						destNodeId = newNode.id;
+						destNodeId = `${newNode.id}`;
 					}
 
 					const edgeData: NewEdge = {
@@ -600,30 +597,22 @@ export class KnowledgeGraphFlow extends GraphBase<
 
 					// Generate embedding for fact
 					if (embeddingService) {
-						try {
-							const factEmbedding = await embeddingService.textToVector(
-								fact.factText,
-							);
-							const typeEmbedding = await embeddingService.textToVector(
-								fact.relationType,
-							);
-							(
-								edgeData as NewEdge & {
-									factEmbedding?: number[];
-									typeEmbedding?: number[];
-								}
-							).factEmbedding = factEmbedding;
-							(
-								edgeData as NewEdge & {
-									factEmbedding?: number[];
-									typeEmbedding?: number[];
-								}
-							).typeEmbedding = typeEmbedding;
-						} catch (embeddingError) {
-							logError(
-								`[SAVE_TO_DATABASE] Failed to generate embedding for edge "${fact.factText}":`,
-								embeddingError,
-							);
+						const factEmbedding = await safeTextToVector(
+							embeddingService,
+							fact.factText,
+							`FACT_EMBEDDING:${fact.factText.substring(0, 50)}`,
+						);
+						const typeEmbedding = await safeTextToVector(
+							embeddingService,
+							fact.relationType,
+							`TYPE_EMBEDDING:${fact.relationType}`,
+						);
+
+						if (factEmbedding) {
+							edgeData.factEmbedding = factEmbedding;
+						}
+						if (typeEmbedding) {
+							edgeData.typeEmbedding = typeEmbedding;
 						}
 					}
 

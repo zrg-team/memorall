@@ -120,7 +120,10 @@ export class BackgroundJobQueue {
 
 		// Fallback chrome.runtime message for compatibility
 		try {
-			chrome.runtime?.sendMessage?.({ type: "JOB_QUEUE_UPDATED", immediate: true });
+			chrome.runtime?.sendMessage?.({
+				type: "JOB_QUEUE_UPDATED",
+				immediate: true,
+			});
 		} catch (_) {}
 		logInfo(`📋 Queued save job: ${jobId} - job saved to storage successfully`);
 
@@ -164,7 +167,10 @@ export class BackgroundJobQueue {
 
 		// Fallback chrome.runtime message for compatibility
 		try {
-			chrome.runtime?.sendMessage?.({ type: "JOB_QUEUE_UPDATED", immediate: true });
+			chrome.runtime?.sendMessage?.({
+				type: "JOB_QUEUE_UPDATED",
+				immediate: true,
+			});
 		} catch (_) {}
 		logInfo(`📋 Queued KG job: ${jobId}`);
 		return jobId;
@@ -216,7 +222,10 @@ export class BackgroundJobQueue {
 
 		// Fallback chrome.runtime message for compatibility
 		try {
-			chrome.runtime?.sendMessage?.({ type: "JOB_QUEUE_UPDATED", immediate: true });
+			chrome.runtime?.sendMessage?.({
+				type: "JOB_QUEUE_UPDATED",
+				immediate: true,
+			});
 		} catch (_) {}
 		logInfo(`✅ Job claimed successfully: ${pending.id}`);
 		return pending;
@@ -237,7 +246,10 @@ export class BackgroundJobQueue {
 
 		// Fallback chrome.runtime message for compatibility
 		try {
-			chrome.runtime?.sendMessage?.({ type: "JOB_QUEUE_UPDATED", immediate: true });
+			chrome.runtime?.sendMessage?.({
+				type: "JOB_QUEUE_UPDATED",
+				immediate: true,
+			});
 		} catch (_) {}
 	}
 
@@ -263,7 +275,10 @@ export class BackgroundJobQueue {
 
 		// Fallback chrome.runtime message for compatibility
 		try {
-			chrome.runtime?.sendMessage?.({ type: "JOB_QUEUE_UPDATED", immediate: true });
+			chrome.runtime?.sendMessage?.({
+				type: "JOB_QUEUE_UPDATED",
+				immediate: true,
+			});
 		} catch (_) {}
 		logInfo(`📋 Job ${result.success ? "completed" : "failed"}: ${jobId}`);
 	}
@@ -277,7 +292,10 @@ export class BackgroundJobQueue {
 
 		// Fallback chrome.runtime message for compatibility
 		try {
-			chrome.runtime?.sendMessage?.({ type: "JOB_QUEUE_UPDATED", immediate: true });
+			chrome.runtime?.sendMessage?.({
+				type: "JOB_QUEUE_UPDATED",
+				immediate: true,
+			});
 		} catch (_) {}
 		logInfo("📋 Cleared completed/failed jobs");
 	}

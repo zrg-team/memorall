@@ -10,9 +10,7 @@ import { knowledgeGraphService } from "@/services/knowledge-graph/knowledge-grap
 import { embeddingService } from "@/services/embedding/embedding-service";
 import { sharedStorageService } from "@/services/shared-storage";
 import type { RememberedContent } from "@/services/database/db";
-import {
-	type BackgroundJob,
-} from "@/services/background-jobs/background-job-queue";
+import { type BackgroundJob } from "@/services/background-jobs/background-job-queue";
 import { jobNotificationChannel } from "@/services/background-jobs/job-notification-channel";
 import {
 	rememberService,
@@ -42,7 +40,10 @@ class OffscreenProcessor {
 			try {
 				await persistentLogger.initialize();
 			} catch (error) {
-				console.warn("Failed to initialize persistentLogger in offscreen context:", error);
+				console.warn(
+					"Failed to initialize persistentLogger in offscreen context:",
+					error,
+				);
 				// Continue anyway - logging will fall back to console only
 			}
 
@@ -238,7 +239,10 @@ class OffscreenProcessor {
 							await persistentLogger.error(
 								"❌ Failed to claim job via message",
 								{
-									error: claimErr instanceof Error ? claimErr.message : String(claimErr),
+									error:
+										claimErr instanceof Error
+											? claimErr.message
+											: String(claimErr),
 									jobId: pendingJob.id,
 								},
 								"offscreen",
@@ -257,37 +261,46 @@ class OffscreenProcessor {
 					await persistentLogger.error(
 						"❌ Job processing failed",
 						{
-							error: jobsErr instanceof Error ? jobsErr.message : String(jobsErr),
+							error:
+								jobsErr instanceof Error ? jobsErr.message : String(jobsErr),
 						},
 						"offscreen",
 					);
 				}
 			} catch (e) {
 				logError("Queue processing error:", e);
-				await persistentLogger.error("❌ Queue processing error", e, "offscreen");
+				await persistentLogger.error(
+					"❌ Queue processing error",
+					e,
+					"offscreen",
+				);
 			} finally {
 				this.ticking = false;
 				if (this.tickRequested) {
 					this.tickRequested = false;
-					await persistentLogger.debug("🔄 Restarting processing due to request", {}, "offscreen");
+					await persistentLogger.debug(
+						"🔄 Restarting processing due to request",
+						{},
+						"offscreen",
+					);
 					void processJobs();
 				}
 			}
 		};
 
 		// Setup immediate event-driven notifications via BroadcastChannel
-		jobNotificationChannel.subscribe('*', async (message) => {
+		jobNotificationChannel.subscribe("*", async (message) => {
 			await persistentLogger.info(
 				"🚀 Immediate job notification received",
 				{
 					type: message.type,
 					jobId: message.jobId,
-					latency: Date.now() - message.timestamp
+					latency: Date.now() - message.timestamp,
 				},
 				"offscreen",
 			);
 
-			if (message.type === 'JOB_ENQUEUED') {
+			if (message.type === "JOB_ENQUEUED") {
 				// Immediate processing for new jobs (0-50ms latency)
 				void processJobs();
 			}
@@ -345,12 +358,20 @@ class OffscreenProcessor {
 		}
 
 		// Initial processing
-		await persistentLogger.info("🎬 Running initial job processing", {}, "offscreen");
+		await persistentLogger.info(
+			"🎬 Running initial job processing",
+			{},
+			"offscreen",
+		);
 		void processJobs();
 
 		// Delayed initialization check
 		setTimeout(async () => {
-			await persistentLogger.info("⏰ Running delayed initialization check", {}, "offscreen");
+			await persistentLogger.info(
+				"⏰ Running delayed initialization check",
+				{},
+				"offscreen",
+			);
 			void processJobs();
 		}, 1000);
 
@@ -360,7 +381,11 @@ class OffscreenProcessor {
 			void processJobs();
 		}, 60000);
 
-		await persistentLogger.info("✅ Event-driven job processing system initialized", {}, "offscreen");
+		await persistentLogger.info(
+			"✅ Event-driven job processing system initialized",
+			{},
+			"offscreen",
+		);
 	}
 
 	private async processClaimedJob(job: BackgroundJob): Promise<void> {

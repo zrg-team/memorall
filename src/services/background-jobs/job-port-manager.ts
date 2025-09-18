@@ -2,7 +2,7 @@ import { logInfo, logError } from "@/utils/logger";
 import type { BackgroundJob } from "./background-job-queue";
 
 export interface JobPortMessage {
-	type: 'NEW_JOB' | 'JOB_UPDATED' | 'JOB_COMPLETED' | 'PING' | 'PONG';
+	type: "NEW_JOB" | "JOB_UPDATED" | "JOB_COMPLETED" | "PING" | "PONG";
 	jobId?: string;
 	job?: BackgroundJob;
 	timestamp: number;
@@ -37,14 +37,14 @@ export class JobPortManager {
 	private setupPort(): void {
 		try {
 			if (chrome.runtime?.connect) {
-				this.port = chrome.runtime.connect({ name: 'memorall-job-queue' });
+				this.port = chrome.runtime.connect({ name: "memorall-job-queue" });
 				this.setupPortListeners();
 				this.isConnected = true;
 				this.connectionAttempts = 0;
-				logInfo('🔌 Job port connection established');
+				logInfo("🔌 Job port connection established");
 			}
 		} catch (error) {
-			logError('Failed to establish port connection:', error);
+			logError("Failed to establish port connection:", error);
 			this.scheduleReconnect();
 		}
 	}
@@ -56,13 +56,13 @@ export class JobPortManager {
 			try {
 				logInfo(`📡 Port message received: ${message.type}`, {
 					jobId: message.jobId,
-					latency: Date.now() - message.timestamp
+					latency: Date.now() - message.timestamp,
 				});
 
 				// Notify all subscribers for this message type
 				const typeListeners = this.listeners.get(message.type);
 				if (typeListeners) {
-					typeListeners.forEach(listener => {
+					typeListeners.forEach((listener) => {
 						try {
 							listener(message);
 						} catch (error) {
@@ -72,23 +72,23 @@ export class JobPortManager {
 				}
 
 				// Notify wildcard listeners
-				const wildcardListeners = this.listeners.get('*');
+				const wildcardListeners = this.listeners.get("*");
 				if (wildcardListeners) {
-					wildcardListeners.forEach(listener => {
+					wildcardListeners.forEach((listener) => {
 						try {
 							listener(message);
 						} catch (error) {
-							logError('Error in wildcard port listener:', error);
+							logError("Error in wildcard port listener:", error);
 						}
 					});
 				}
 			} catch (error) {
-				logError('Error processing port message:', error);
+				logError("Error processing port message:", error);
 			}
 		});
 
 		this.port.onDisconnect.addListener(() => {
-			logInfo('🔌 Port connection lost, scheduling reconnect');
+			logInfo("🔌 Port connection lost, scheduling reconnect");
 			this.isConnected = false;
 			this.port = null;
 			this.scheduleReconnect();
@@ -96,8 +96,8 @@ export class JobPortManager {
 
 		// Send initial ping to establish connection
 		this.sendMessage({
-			type: 'PING',
-			timestamp: Date.now()
+			type: "PING",
+			timestamp: Date.now(),
 		});
 	}
 
@@ -107,7 +107,9 @@ export class JobPortManager {
 		}
 
 		if (this.connectionAttempts >= this.maxReconnectAttempts) {
-			logError('Max reconnection attempts reached, giving up on port connection');
+			logError(
+				"Max reconnection attempts reached, giving up on port connection",
+			);
 			return;
 		}
 
@@ -115,7 +117,9 @@ export class JobPortManager {
 		this.connectionAttempts++;
 
 		this.reconnectTimeout = setTimeout(() => {
-			logInfo(`🔄 Attempting port reconnection (attempt ${this.connectionAttempts}/${this.maxReconnectAttempts})`);
+			logInfo(
+				`🔄 Attempting port reconnection (attempt ${this.connectionAttempts}/${this.maxReconnectAttempts})`,
+			);
 			this.setupPort();
 		}, delay);
 	}
@@ -127,8 +131,8 @@ export class JobPortManager {
 	 * @returns Unsubscribe function
 	 */
 	subscribe(
-		messageType: JobPortMessage['type'] | '*',
-		listener: (message: JobPortMessage) => void
+		messageType: JobPortMessage["type"] | "*",
+		listener: (message: JobPortMessage) => void,
 	): () => void {
 		if (!this.listeners.has(messageType)) {
 			this.listeners.set(messageType, new Set());
@@ -154,7 +158,7 @@ export class JobPortManager {
 	 */
 	sendMessage(message: JobPortMessage): void {
 		if (!this.isConnected || !this.port) {
-			logError('Port not connected, cannot send message:', message.type);
+			logError("Port not connected, cannot send message:", message.type);
 			return;
 		}
 
@@ -162,7 +166,7 @@ export class JobPortManager {
 			this.port.postMessage(message);
 			logInfo(`📡 Port message sent: ${message.type}`, {
 				jobId: message.jobId,
-				timestamp: message.timestamp
+				timestamp: message.timestamp,
 			});
 		} catch (error) {
 			logError(`Failed to send port message ${message.type}:`, error);
@@ -176,10 +180,10 @@ export class JobPortManager {
 	 */
 	notifyNewJob(job: BackgroundJob): void {
 		this.sendMessage({
-			type: 'NEW_JOB',
+			type: "NEW_JOB",
 			jobId: job.id,
 			job,
-			timestamp: Date.now()
+			timestamp: Date.now(),
 		});
 	}
 
@@ -188,10 +192,10 @@ export class JobPortManager {
 	 */
 	notifyJobUpdated(jobId: string, job?: BackgroundJob): void {
 		this.sendMessage({
-			type: 'JOB_UPDATED',
+			type: "JOB_UPDATED",
 			jobId,
 			job,
-			timestamp: Date.now()
+			timestamp: Date.now(),
 		});
 	}
 
@@ -200,9 +204,9 @@ export class JobPortManager {
 	 */
 	notifyJobCompleted(jobId: string): void {
 		this.sendMessage({
-			type: 'JOB_COMPLETED',
+			type: "JOB_COMPLETED",
 			jobId,
-			timestamp: Date.now()
+			timestamp: Date.now(),
 		});
 	}
 
@@ -218,8 +222,11 @@ export class JobPortManager {
 		return {
 			isConnected: this.isConnected,
 			connectionAttempts: this.connectionAttempts,
-			listenerCount: Array.from(this.listeners.values()).reduce((sum, set) => sum + set.size, 0),
-			subscribedTypes: Array.from(this.listeners.keys())
+			listenerCount: Array.from(this.listeners.values()).reduce(
+				(sum, set) => sum + set.size,
+				0,
+			),
+			subscribedTypes: Array.from(this.listeners.keys()),
 		};
 	}
 
@@ -239,7 +246,7 @@ export class JobPortManager {
 
 		this.isConnected = false;
 		this.listeners.clear();
-		logInfo('🔌 Job port manager closed');
+		logInfo("🔌 Job port manager closed");
 	}
 }
 
