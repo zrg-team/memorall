@@ -1,28 +1,25 @@
 // Offscreen document for background knowledge graph processing
 // This runs in a hidden document with full DOM access for LLM/Embedding services
-
-import { logError } from "../src/utils/logger";
-import { persistentLogger } from "../src/services/logging/persistent-logger";
-import { serviceManager } from "../src/services/ServiceManager";
-import { llmService } from "../src/services/llm/llm-service";
-import { flowsService } from "../src/services/flows/flows-service";
-import { knowledgeGraphService } from "../src/services/knowledge-graph/knowledge-graph-service";
-import { embeddingService } from "../src/services/embedding/embedding-service";
-import { sharedStorageService } from "../src/services/shared-storage";
-import type { RememberedContent } from "../src/services/database/db";
+import { eq } from "drizzle-orm";
+import { logError } from "@/utils/logger";
+import { persistentLogger } from "@/services/logging/persistent-logger";
+import { serviceManager } from "@/services/ServiceManager";
+import { llmService } from "@/services/llm/llm-service";
+import { flowsService } from "@/services/flows/flows-service";
+import { knowledgeGraphService } from "@/services/knowledge-graph/knowledge-graph-service";
+import { embeddingService } from "@/services/embedding/embedding-service";
+import { sharedStorageService } from "@/services/shared-storage";
+import type { RememberedContent } from "@/services/database/db";
 import {
-	backgroundJobQueue,
 	type BackgroundJob,
-} from "../src/services/background-jobs/background-job-queue";
+} from "@/services/background-jobs/background-job-queue";
+import { jobNotificationChannel } from "@/services/background-jobs/job-notification-channel";
 import {
 	rememberService,
 	type SaveContentData,
 	type SavePageData,
-} from "../src/services/remember/remember-service";
-import { eq } from "drizzle-orm";
+} from "@/services/remember/remember-service";
 import { databaseService } from "@/services/database";
-
-// Jobs are persisted in IndexedDB and coordinated via runtime messages with the background script
 
 class OffscreenProcessor {
 	private initialized = false;
@@ -40,6 +37,15 @@ class OffscreenProcessor {
 	private async initialize(): Promise<void> {
 		try {
 			this.updateStatus("Initializing...");
+
+			// Initialize persistent logger first before any logging
+			try {
+				await persistentLogger.initialize();
+			} catch (error) {
+				console.warn("Failed to initialize persistentLogger in offscreen context:", error);
+				// Continue anyway - logging will fall back to console only
+			}
+
 			await persistentLogger.info(
 				"🚀 Starting offscreen processor initialization",
 				{},
@@ -80,13 +86,7 @@ class OffscreenProcessor {
 				"offscreen",
 			);
 
-			// DEBUG: Log current model in offscreen context
-			const currentModel = await llmService.getCurrentModel();
-			await persistentLogger.info(
-				"🔍 DEBUG: Current model in offscreen:",
-				{ currentModel },
-				"offscreen",
-			);
+			// LLM service is now ready (avoid getCurrentModel call during initialization)
 
 			// Initialize Embedding service (ensure default embedding is ready)
 			try {
@@ -142,7 +142,7 @@ class OffscreenProcessor {
 				{},
 				"offscreen",
 			);
-			this.startQueueProcessing();
+			await this.startQueueProcessing();
 			await persistentLogger.info(
 				"✅ Job queue processing loop started",
 				{},
@@ -158,8 +158,8 @@ class OffscreenProcessor {
 			);
 		}
 	}
-	private startQueueProcessing(): void {
-		const runTick = async () => {
+	private async startQueueProcessing(): Promise<void> {
+		const processJobs = async () => {
 			if (this.ticking) {
 				this.tickRequested = true;
 				return;
@@ -167,17 +167,15 @@ class OffscreenProcessor {
 			this.ticking = true;
 			try {
 				await persistentLogger.info(
-					"🧭 Queue tick started",
+					"🧭 Event-driven job processing started",
 					{ timestamp: new Date().toISOString() },
 					"offscreen",
 				);
 
-				// Try to get jobs via background script message instead of direct storage access
+				// Get jobs via background script message
 				try {
 					let jobs: BackgroundJob[] = [];
 
-					// Offscreen documents can't directly access background storage
-					// Always use message-based approach
 					await persistentLogger.info(
 						"📞 Requesting jobs from background script via message",
 						{},
@@ -202,36 +200,21 @@ class OffscreenProcessor {
 					}
 
 					const pendingJobs = jobs.filter((j) => j.status === "pending");
-					const runningJobs = jobs.filter((j) => j.status === "running");
-					const completedJobs = jobs.filter((j) => j.status === "completed");
 
 					await persistentLogger.info(
 						"📋 Jobs snapshot",
 						{
 							total: jobs.length,
 							pending: pendingJobs.length,
-							running: runningJobs.length,
-							completed: completedJobs.length,
 							pendingIds: pendingJobs.map((j) => j.id),
 						},
 						"offscreen",
 					);
 
-					// Now try to claim and process jobs via message-based approach
+					// Process pending jobs
 					let jobCount = 0;
-
 					for (const pendingJob of pendingJobs) {
 						try {
-							await persistentLogger.info(
-								"🎯 Attempting to claim job via background script",
-								{
-									jobId: pendingJob.id,
-									jobType: pendingJob.jobType,
-								},
-								"offscreen",
-							);
-
-							// Request background script to claim this specific job for us
 							const claimResponse = await chrome.runtime.sendMessage({
 								type: "CLAIM_JOB_FOR_OFFSCREEN",
 								jobId: pendingJob.id,
@@ -246,29 +229,16 @@ class OffscreenProcessor {
 										id: claimedJob.id,
 										type: claimedJob.jobType,
 										jobNumber: jobCount,
-										status: claimedJob.status,
 									},
 									"offscreen",
 								);
 								await this.processClaimedJob(claimedJob);
-							} else {
-								await persistentLogger.warn(
-									"⚠️ Failed to claim job via background script",
-									{
-										jobId: pendingJob.id,
-										error: claimResponse?.error || "Unknown error",
-									},
-									"offscreen",
-								);
 							}
 						} catch (claimErr) {
 							await persistentLogger.error(
 								"❌ Failed to claim job via message",
 								{
-									error:
-										claimErr instanceof Error
-											? claimErr.message
-											: String(claimErr),
+									error: claimErr instanceof Error ? claimErr.message : String(claimErr),
 									jobId: pendingJob.id,
 								},
 								"offscreen",
@@ -276,15 +246,7 @@ class OffscreenProcessor {
 						}
 					}
 
-					if (jobCount === 0 && pendingJobs.length > 0) {
-						await persistentLogger.warn(
-							"⚠️ No jobs claimed despite pending jobs available",
-							{
-								pendingCount: pendingJobs.length,
-							},
-							"offscreen",
-						);
-					} else if (jobCount === 0) {
+					if (jobCount === 0) {
 						await persistentLogger.debug(
 							"👀 No pending jobs found to claim",
 							{},
@@ -293,98 +255,75 @@ class OffscreenProcessor {
 					}
 				} catch (jobsErr) {
 					await persistentLogger.error(
-						"❌ Complete job processing failed",
+						"❌ Job processing failed",
 						{
-							error:
-								jobsErr instanceof Error ? jobsErr.message : String(jobsErr),
-							hasChrome: !!globalThis.chrome,
-							hasRuntime: !!globalThis.chrome?.runtime,
+							error: jobsErr instanceof Error ? jobsErr.message : String(jobsErr),
 						},
 						"offscreen",
 					);
 				}
 			} catch (e) {
 				logError("Queue processing error:", e);
-				await persistentLogger.error(
-					"❌ Queue processing error",
-					e,
-					"offscreen",
-				);
+				await persistentLogger.error("❌ Queue processing error", e, "offscreen");
 			} finally {
 				this.ticking = false;
 				if (this.tickRequested) {
 					this.tickRequested = false;
-					await persistentLogger.debug(
-						"🔄 Restarting tick due to request",
-						{},
-						"offscreen",
-					);
-					// Run again if a tick was requested during processing
-					void runTick();
+					await persistentLogger.debug("🔄 Restarting processing due to request", {}, "offscreen");
+					void processJobs();
 				}
 			}
 		};
 
-		// Initial tick
-		persistentLogger.info(
-			"🎬 Running initial job processing tick",
-			{},
-			"offscreen",
-		);
-		void runTick();
-
-		// Also run an immediate tick after a short delay to catch any jobs that might have been queued during initialization
-		setTimeout(async () => {
+		// Setup immediate event-driven notifications via BroadcastChannel
+		jobNotificationChannel.subscribe('*', async (message) => {
 			await persistentLogger.info(
-				"⏰ Running delayed initialization tick",
-				{},
+				"🚀 Immediate job notification received",
+				{
+					type: message.type,
+					jobId: message.jobId,
+					latency: Date.now() - message.timestamp
+				},
 				"offscreen",
 			);
-			void runTick();
-		}, 1000);
 
-		// Subscribe to queue changes to trigger ticks
-		backgroundJobQueue.subscribe(async () => {
-			await persistentLogger.info(
-				"🔔 Background job queue subscription triggered, running tick",
-				{},
-				"offscreen",
-			);
-			void runTick();
+			if (message.type === 'JOB_ENQUEUED') {
+				// Immediate processing for new jobs (0-50ms latency)
+				void processJobs();
+			}
 		});
 
-		// Also listen for explicit broadcast from background
+		// Fallback chrome.runtime message listener
 		try {
 			chrome.runtime.onMessage.addListener(async (msg) => {
 				if (msg?.type === "JOB_QUEUE_UPDATED") {
-					persistentLogger.info(
-						"📢 Received JOB_QUEUE_UPDATED message, triggering tick",
-						{},
+					await persistentLogger.info(
+						"📢 Fallback JOB_QUEUE_UPDATED message received",
+						{ immediate: msg.immediate },
 						"offscreen",
 					);
-					void runTick();
+					void processJobs();
 				} else if (msg?.type === "ENSURE_LLM_SERVICE") {
 					// Handle LLM service configuration sync
 					try {
-						persistentLogger.info(
+						await persistentLogger.info(
 							`📥 Received ENSURE_LLM_SERVICE: ${msg.serviceName}`,
 							msg.config,
 							"offscreen",
 						);
 
-						// Create/update the service in offscreen context
 						if (llmService.has(msg.serviceName)) {
 							llmService.remove(msg.serviceName);
 						}
 						await llmService.create(msg.serviceName, msg.config);
 
-						persistentLogger.info(
+						await persistentLogger.info(
 							`✅ LLM service ${msg.serviceName} created in offscreen`,
 							{},
 							"offscreen",
 						);
 					} catch (error) {
-						persistentLogger.error(
+						await persistentLogger.error(
 							`❌ Failed to create LLM service ${msg.serviceName} in offscreen`,
 							error,
 							"offscreen",
@@ -392,21 +331,36 @@ class OffscreenProcessor {
 					}
 				}
 			});
-			persistentLogger.info(
-				"🎧 Message listeners registered for JOB_QUEUE_UPDATED and ENSURE_LLM_SERVICE",
+			await persistentLogger.info(
+				"🎧 Event listeners registered for immediate notifications",
 				{},
 				"offscreen",
 			);
 		} catch (err) {
-			persistentLogger.error(
+			await persistentLogger.error(
 				"❌ Failed to register message listener",
 				err,
 				"offscreen",
 			);
 		}
 
-		// Periodic safety tick
-		setInterval(() => void runTick(), 8000);
+		// Initial processing
+		await persistentLogger.info("🎬 Running initial job processing", {}, "offscreen");
+		void processJobs();
+
+		// Delayed initialization check
+		setTimeout(async () => {
+			await persistentLogger.info("⏰ Running delayed initialization check", {}, "offscreen");
+			void processJobs();
+		}, 1000);
+
+		// Backup safety interval (reduced from 8s to 60s since we have immediate notifications)
+		setInterval(() => {
+			void persistentLogger.info("🛡️ Safety interval check", {}, "offscreen");
+			void processJobs();
+		}, 60000);
+
+		await persistentLogger.info("✅ Event-driven job processing system initialized", {}, "offscreen");
 	}
 
 	private async processClaimedJob(job: BackgroundJob): Promise<void> {
@@ -562,14 +516,12 @@ class OffscreenProcessor {
 			"offscreen",
 		);
 
-		// CRITICAL DEBUG: Check what services and current model we have before processing
+		// DEBUG: Check what services we have before processing (avoid repeated storage access)
 		const availableServices = llmService.list();
-		const currentModel = await llmService.getCurrentModel();
 		await persistentLogger.info(
-			"🔍 CRITICAL DEBUG: Before knowledge graph processing:",
+			"🔍 DEBUG: Before knowledge graph processing:",
 			{
 				availableServices,
-				currentModel,
 				hasLmstudio: llmService.has("lmstudio"),
 				hasOpenai: llmService.has("openai"),
 			},

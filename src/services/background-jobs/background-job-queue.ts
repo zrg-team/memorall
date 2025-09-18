@@ -6,6 +6,7 @@ import type {
 	SavePageData,
 } from "@/services/remember/remember-service";
 import { IdbJobStore } from "./idb-job-store";
+import { jobNotificationChannel } from "./job-notification-channel";
 
 export type JobType = "remember-save" | "knowledge-graph-conversion";
 
@@ -51,6 +52,9 @@ export class BackgroundJobQueue {
 				}
 			});
 		} catch (_) {}
+
+		// Initialize immediate notification system
+		logInfo("🚀 Initializing optimized job notification system");
 	}
 
 	static getInstance(): BackgroundJobQueue {
@@ -110,8 +114,13 @@ export class BackgroundJobQueue {
 
 		await this.saveJob(job);
 		await this.notifyListeners();
+
+		// Immediate notification via BroadcastChannel (0-50ms latency)
+		jobNotificationChannel.notifyJobEnqueued(job);
+
+		// Fallback chrome.runtime message for compatibility
 		try {
-			chrome.runtime?.sendMessage?.({ type: "JOB_QUEUE_UPDATED" });
+			chrome.runtime?.sendMessage?.({ type: "JOB_QUEUE_UPDATED", immediate: true });
 		} catch (_) {}
 		logInfo(`📋 Queued save job: ${jobId} - job saved to storage successfully`);
 
@@ -149,8 +158,13 @@ export class BackgroundJobQueue {
 		};
 		await this.saveJob(job);
 		await this.notifyListeners();
+
+		// Immediate notification via BroadcastChannel (0-50ms latency)
+		jobNotificationChannel.notifyJobEnqueued(job);
+
+		// Fallback chrome.runtime message for compatibility
 		try {
-			chrome.runtime?.sendMessage?.({ type: "JOB_QUEUE_UPDATED" });
+			chrome.runtime?.sendMessage?.({ type: "JOB_QUEUE_UPDATED", immediate: true });
 		} catch (_) {}
 		logInfo(`📋 Queued KG job: ${jobId}`);
 		return jobId;
@@ -196,8 +210,13 @@ export class BackgroundJobQueue {
 		pending.progress.progress = 5;
 		await this.saveJob(pending);
 		await this.notifyListeners();
+
+		// Immediate notification for job updates
+		jobNotificationChannel.notifyJobUpdated(pending.id, pending);
+
+		// Fallback chrome.runtime message for compatibility
 		try {
-			chrome.runtime?.sendMessage?.({ type: "JOB_QUEUE_UPDATED" });
+			chrome.runtime?.sendMessage?.({ type: "JOB_QUEUE_UPDATED", immediate: true });
 		} catch (_) {}
 		logInfo(`✅ Job claimed successfully: ${pending.id}`);
 		return pending;
@@ -212,8 +231,13 @@ export class BackgroundJobQueue {
 		job.progress = { ...job.progress, ...progress } as ConversionProgress;
 		await this.saveJob(job);
 		await this.notifyListeners();
+
+		// Immediate notification for progress updates
+		jobNotificationChannel.notifyJobUpdated(jobId, job);
+
+		// Fallback chrome.runtime message for compatibility
 		try {
-			chrome.runtime?.sendMessage?.({ type: "JOB_QUEUE_UPDATED" });
+			chrome.runtime?.sendMessage?.({ type: "JOB_QUEUE_UPDATED", immediate: true });
 		} catch (_) {}
 	}
 
@@ -233,8 +257,13 @@ export class BackgroundJobQueue {
 		if (!result.success) job.progress.error = result.error;
 		await this.saveJob(job);
 		await this.notifyListeners();
+
+		// Immediate notification for job completion
+		jobNotificationChannel.notifyJobCompleted(jobId);
+
+		// Fallback chrome.runtime message for compatibility
 		try {
-			chrome.runtime?.sendMessage?.({ type: "JOB_QUEUE_UPDATED" });
+			chrome.runtime?.sendMessage?.({ type: "JOB_QUEUE_UPDATED", immediate: true });
 		} catch (_) {}
 		logInfo(`📋 Job ${result.success ? "completed" : "failed"}: ${jobId}`);
 	}
@@ -242,8 +271,13 @@ export class BackgroundJobQueue {
 	async clearCompletedJobs(): Promise<void> {
 		await this.store.clearCompleted();
 		await this.notifyListeners();
+
+		// Immediate notification for queue cleanup
+		jobNotificationChannel.notifyQueueUpdated();
+
+		// Fallback chrome.runtime message for compatibility
 		try {
-			chrome.runtime?.sendMessage?.({ type: "JOB_QUEUE_UPDATED" });
+			chrome.runtime?.sendMessage?.({ type: "JOB_QUEUE_UPDATED", immediate: true });
 		} catch (_) {}
 		logInfo("📋 Cleared completed/failed jobs");
 	}

@@ -94,6 +94,7 @@ export class LLMService {
 	private llms = new Map<string, BaseLLM>();
 	private currentModel: CurrentModelInfo | null = null;
 	private storageUnsubscribe: (() => void) | null = null;
+	private storageLoadAttempted = false; // Prevent repeated storage access attempts
 	private static readonly CURRENT_MODEL_KEY = "llm-current-model";
 
 	// Shared config keys - used by both UI and service
@@ -343,8 +344,8 @@ export class LLMService {
 
 	// Current model tracking with persistence
 	async getCurrentModel(): Promise<CurrentModelInfo | null> {
-		// Try to load from storage if not in memory
-		if (!this.currentModel) {
+		// Try to load from storage if not in memory and not already attempted
+		if (!this.currentModel && !this.storageLoadAttempted) {
 			await this.loadCurrentModelFromStorage();
 		}
 		return this.currentModel;
@@ -356,20 +357,20 @@ export class LLMService {
 	): Promise<void> {
 		logWarn(`🔧 Setting current model: ${modelId} (${provider})`);
 
+		// Find the actual service name for this provider type
+		const serviceName = this.findServiceNameForProvider(provider);
+		if (!serviceName) {
+			throw new Error(`No service found for provider: ${provider}. Available services: ${this.list().join(', ')}`);
+		}
+
 		this.currentModel = {
 			modelId,
 			provider,
-			serviceName:
-				provider === "wllama"
-					? DEFAULT_SERVICES.WLLAMA
-					: provider === "webllm"
-						? DEFAULT_SERVICES.WEBLLM
-						: provider === "lmstudio"
-							? "lmstudio"
-							: provider === "ollama"
-								? "ollama"
-								: DEFAULT_SERVICES.OPENAI,
+			serviceName,
 		};
+
+		// Reset the flag since we now have a model
+		this.storageLoadAttempted = true;
 
 		// Persist to storage so offscreen document can access it
 		try {
@@ -384,8 +385,50 @@ export class LLMService {
 		this.notifyCurrentModelChange();
 	}
 
+	/**
+	 * Find the actual service name for a given provider type
+	 * This searches through existing services to find one that matches the provider
+	 */
+	private findServiceNameForProvider(provider: ServiceProvider): string | null {
+		const services = this.list();
+
+		// For default services, try to find them first
+		if (provider === "wllama" && services.includes(DEFAULT_SERVICES.WLLAMA)) {
+			return DEFAULT_SERVICES.WLLAMA;
+		}
+		if (provider === "webllm" && services.includes(DEFAULT_SERVICES.WEBLLM)) {
+			return DEFAULT_SERVICES.WEBLLM;
+		}
+		if (provider === "openai" && services.includes(DEFAULT_SERVICES.OPENAI)) {
+			return DEFAULT_SERVICES.OPENAI;
+		}
+
+		// For external services (lmstudio, ollama), find any service that matches the type
+		// by checking the service info
+		for (const serviceName of services) {
+			try {
+				const serviceInfo = this.getInfoFor(serviceName);
+				if (serviceInfo.type === provider) {
+					return serviceName;
+				}
+			} catch (error) {
+				// Skip services that can't provide info
+				continue;
+			}
+		}
+
+		// Fallback: look for services with names containing the provider
+		const matchingService = services.find(name =>
+			name.toLowerCase().includes(provider.toLowerCase())
+		);
+
+		return matchingService || null;
+	}
+
 	async clearCurrentModel(): Promise<void> {
 		this.currentModel = null;
+		// Reset the flag to allow reloading from storage if needed
+		this.storageLoadAttempted = false;
 		// Clear from storage as well
 		await this.saveCurrentModelToStorage();
 
@@ -411,6 +454,9 @@ export class LLMService {
 
 	private async loadCurrentModelFromStorage(): Promise<void> {
 		try {
+			// Mark that we've attempted to load from storage
+			this.storageLoadAttempted = true;
+
 			// Check if SharedStorageService is available
 			if (!sharedStorageService.isAvailable()) {
 				return;
@@ -422,11 +468,35 @@ export class LLMService {
 			if (storedModel) {
 				// Check if the stored model has a valid modelId (not empty)
 				if (storedModel.modelId && storedModel.modelId.trim() !== "") {
-					this.currentModel = storedModel;
-					// Only log on successful restoration
-					logWarn(
-						`✅ Restored model from storage: ${this.currentModel?.modelId} (${this.currentModel?.provider})`,
-					);
+					// Validate that the stored service name actually exists
+					if (storedModel.serviceName && this.has(storedModel.serviceName)) {
+						this.currentModel = storedModel;
+						logWarn(
+							`✅ Restored model from storage: ${this.currentModel?.modelId} (${this.currentModel?.provider})`,
+						);
+					} else {
+						// Service doesn't exist, try to find the correct one
+						logWarn(
+							`⚠️ Stored service '${storedModel.serviceName}' not found, attempting to resolve...`,
+						);
+						const correctServiceName = this.findServiceNameForProvider(storedModel.provider);
+						if (correctServiceName) {
+							this.currentModel = {
+								...storedModel,
+								serviceName: correctServiceName,
+							};
+							// Save the corrected model back to storage
+							await this.saveCurrentModelToStorage();
+							logWarn(
+								`✅ Corrected service name from '${storedModel.serviceName}' to '${correctServiceName}' for ${storedModel.modelId}`,
+							);
+						} else {
+							logWarn(
+								`❌ No available service found for provider '${storedModel.provider}'. Available services: ${this.list().join(', ')}`,
+							);
+							this.currentModel = null; // Clear invalid model
+						}
+					}
 				} else {
 					this.currentModel = storedModel; // Keep provider info but mark as not loaded
 				}
