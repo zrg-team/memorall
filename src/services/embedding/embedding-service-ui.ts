@@ -167,11 +167,56 @@ export class EmbeddingServiceUI
 	}
 
 	protected async createDefaultEmbedding(): Promise<void> {
-		// In UI mode, we don't create a default embedding without credentials
-		// Embeddings will be created on-demand when needed with proper credentials
-		// This avoids API key errors during initialization
+		// Ensure the background embedding service is initialized and has a
+		// default embedding we can proxy to from the UI process.
+		const ensureBackgroundReady = await backgroundJob.execute(
+			"initialize-embedding-service",
+			{},
+		);
+
+		if (
+			ensureBackgroundReady.status !== "completed" ||
+			!ensureBackgroundReady.result?.ready
+		) {
+			throw new Error(
+				ensureBackgroundReady.error || "Background embedding service not ready",
+			);
+		}
+
+		// Try to reuse the default embedding that the background service manages.
+		const existingEmbedding = await backgroundJob.execute("get-embedding", {
+			name: this.defaultName,
+		});
+
+		let embeddingType: string | undefined;
+		if (
+			existingEmbedding.status === "completed" &&
+			existingEmbedding.result?.embeddingInfo?.exists
+		) {
+			embeddingType = existingEmbedding.result.embeddingInfo.type;
+		} else {
+			// No default embedding yet – ask background to create a worker-backed one.
+			const createResult = await backgroundJob.execute("create-embedding", {
+				name: this.defaultName,
+				embeddingType: "worker",
+				config: { type: "worker" },
+			});
+
+			if (createResult.status !== "completed") {
+				throw new Error(
+					createResult.error || "Failed to create default embedding",
+				);
+			}
+			embeddingType = createResult.result?.embeddingInfo?.type || "worker";
+		}
+
+		const proxyEmbedding = new EmbeddingProxy(
+			this.defaultName,
+			embeddingType || "worker",
+		);
+		this.embeddings.set(this.defaultName, proxyEmbedding);
 		logInfo(
-			"🔤 UI mode: Default embedding will be created on-demand when needed",
+			`🔤 UI mode: Default embedding proxied as ${embeddingType || "worker"}`,
 		);
 	}
 }
