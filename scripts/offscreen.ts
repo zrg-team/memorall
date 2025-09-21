@@ -297,22 +297,22 @@ class OffscreenProcessor {
 				type: "GET_BACKGROUND_JOBS",
 			});
 
-				if (response?.success && response?.jobs) {
-					// Process jobs from response
-					for (const job of response.jobs) {
-						if (!job || job.status !== "pending") {
-							persistentLogger.debug(
-								"⏭️ Skipping non-pending job from storage",
-								{ jobId: job?.id, status: job?.status },
-								"offscreen",
-							);
-							continue;
-						}
-						persistentLogger.info(
-							"📋 Processing job from storage",
-							{ jobId: job.id },
+			if (response?.success && response?.jobs) {
+				// Process jobs from response
+				for (const job of response.jobs) {
+					if (!job || job.status !== "pending") {
+						persistentLogger.debug(
+							"⏭️ Skipping non-pending job from storage",
+							{ jobId: job?.id, status: job?.status },
 							"offscreen",
 						);
+						continue;
+					}
+					persistentLogger.info(
+						"📋 Processing job from storage",
+						{ jobId: job.id },
+						"offscreen",
+					);
 
 					// Process jobs ONE BY ONE sequentially for heavy processes
 					await this.processClaimedJob(job);

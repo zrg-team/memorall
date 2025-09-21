@@ -22,16 +22,16 @@ export interface RememberSaveResult extends Record<string, unknown> {
 // Extend global registry for smart type inference
 declare global {
 	interface JobTypeRegistry {
-		"save-content": RememberSavePayload;
+		"remember-save": RememberSavePayload;
 	}
 
 	interface JobResultRegistry {
-		"save-content": RememberSaveResult;
+		"remember-save": RememberSaveResult;
 	}
 }
 
 const JOB_NAMES = {
-	saveContent: "save-content",
+	rememberSave: "remember-save",
 } as const;
 
 // Define handler-specific job type locally
@@ -65,7 +65,7 @@ export class RememberSaveHandler extends BaseProcessHandler<RememberSaveJob> {
 			dependencies.updateStatus(`Saving: ${title.substring(0, 30)}...`);
 
 			await dependencies.logger.info(
-				`💾 Processing save-content job: ${jobId}`,
+				`💾 Processing remember-save job: ${jobId}`,
 				{ title },
 				"offscreen",
 			);
