@@ -25,8 +25,16 @@ export interface JobProgressUpdate<T = ItemHandlerResult> {
 	stage: string;
 	progress: number; // 0-100
 	timestamp?: Date;
+	status?: JobStatus;
+	completedAt?: Date;
+	error?: string;
 	result?: T;
 	metadata?: Record<string, unknown>; // Additional context for this progress step
+}
+
+export interface JobProgressEvent<T = ItemHandlerResult>
+	extends JobProgressUpdate<T> {
+	status: JobStatus;
 }
 
 export interface JobResult<T = ItemHandlerResult> {

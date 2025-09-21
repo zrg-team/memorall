@@ -9,7 +9,10 @@ import type {
 	ChatCompletionRequest,
 	ChatCompletionResponse,
 } from "@/types/openai";
-import type { JobProgressUpdate } from "@/services/background-jobs/offscreen-handlers/types";
+import type {
+	ItemHandlerResult,
+	JobProgressEvent,
+} from "@/services/background-jobs/offscreen-handlers/types";
 
 // Proxy class for LLMs that exist in background jobs
 export class LLMProxy implements BaseLLM {
@@ -33,7 +36,7 @@ export class LLMProxy implements BaseLLM {
 				serviceName: this.name,
 			});
 
-			if (result.status === 'completed' && result.result) {
+			if (result.status === "completed" && result.result) {
 				return result.result.models as ModelsResponse;
 			}
 			throw new Error(result.error || "Failed to get models");
@@ -64,7 +67,11 @@ export class LLMProxy implements BaseLLM {
 						request: { ...request, stream: true },
 					});
 
-					if (result.status === 'completed' && result.result && "response" in result.result) {
+					if (
+						result.status === "completed" &&
+						result.result &&
+						"response" in result.result
+					) {
 						const responseData = result.result as {
 							response: { chunks: ChatCompletionChunk[] };
 						};
@@ -92,7 +99,11 @@ export class LLMProxy implements BaseLLM {
 						request,
 					});
 
-					if (result.status === 'completed' && result.result && "response" in result.result) {
+					if (
+						result.status === "completed" &&
+						result.result &&
+						"response" in result.result
+					) {
 						const responseData = result.result as {
 							response: ChatCompletionResponse;
 						};
@@ -113,7 +124,7 @@ export class LLMProxy implements BaseLLM {
 				modelId,
 			});
 
-			if (!result.error || result.status === 'failed') {
+			if (!result.error || result.status === "failed") {
 				throw new Error(result.error || "Failed to unload model");
 			}
 		} catch (error) {
@@ -128,7 +139,7 @@ export class LLMProxy implements BaseLLM {
 				modelId,
 			});
 
-			if (!result.error || result.status === 'failed') {
+			if (!result.error || result.status === "failed") {
 				throw new Error(result.error || "Failed to delete model");
 			}
 		} catch (error) {
@@ -152,12 +163,16 @@ export class LLMProxy implements BaseLLM {
 					{ stream: true },
 				);
 
-				let lastProgressEvent: JobProgressUpdate | null = null;
+				let lastProgressEvent: JobProgressEvent | null = null;
 
-				console.log('==============================>')
+				console.log("==============================>");
 				// Stream progress updates to onProgress callback
 				for await (const progressEvent of stream) {
-					console.log('=========================> progressEvent', progressEvent)
+					console.log(
+						"=========================> progressEvent",
+						progressEvent,
+					);
+					lastProgressEvent = progressEvent;
 					if (progressEvent.progress !== undefined) {
 						onProgress({
 							loaded: progressEvent.progress,
@@ -166,19 +181,24 @@ export class LLMProxy implements BaseLLM {
 						});
 					}
 
-					// Check if job completed with result
-					if (
-						progressEvent.status === "completed" &&
-						progressEvent.completedAt
-					) {
-						// Job completed, will get result from execute call below
-						lastProgressEvent = progressEvent;
+					if (progressEvent.status === "failed") {
+						throw new Error(progressEvent.error || "Job failed");
+					}
+
+					if (progressEvent.status === "completed") {
 						break;
 					}
 				}
-				console.log('lastProgressEvent', lastProgressEvent)
-				if (lastProgressEvent?.result && 'modelInfo' in lastProgressEvent?.result) {
-					return lastProgressEvent?.result?.modelInfo as ModelInfo;
+				console.log("lastProgressEvent", lastProgressEvent);
+				if (
+					lastProgressEvent?.status === "completed" &&
+					lastProgressEvent.result &&
+					isModelInfoResult(lastProgressEvent.result)
+				) {
+					return lastProgressEvent.result.modelInfo as ModelInfo;
+				}
+				if (lastProgressEvent?.status === "failed") {
+					throw new Error(lastProgressEvent.error || "Failed to serve model");
 				}
 			} else {
 				// Get final result (or fallback if no progress callback)
@@ -187,9 +207,9 @@ export class LLMProxy implements BaseLLM {
 					serviceName: this.name,
 				});
 
-				if (result.status === 'completed' && result.result) {
+				if (result.status === "completed" && result.result) {
 					return result.result.modelInfo as ModelInfo;
-				}	
+				}
 			}
 			throw new Error("Failed to serve model");
 		} catch (error) {
@@ -208,4 +228,15 @@ export class LLMProxy implements BaseLLM {
 			ready: this.isReady(),
 		};
 	}
+}
+
+function isModelInfoResult(
+	value: ItemHandlerResult,
+): value is { modelInfo: ModelInfo } {
+	return (
+		!!value &&
+		!Array.isArray(value) &&
+		typeof value === "object" &&
+		"modelInfo" in value
+	);
 }

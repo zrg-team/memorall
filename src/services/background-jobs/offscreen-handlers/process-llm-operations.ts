@@ -476,10 +476,7 @@ export class LLMOperationsHandler implements ProcessHandler<BaseJob> {
 
 		const llmService = serviceManager.getLLMService();
 
-		await logger.info(
-			`LLM service: ${llmService}`,
-			{ jobId },
-		);
+		await logger.info(`LLM service: ${llmService}`, { jobId });
 
 		if (!llmService) {
 			throw new Error("LLM service not available");
@@ -529,7 +526,9 @@ export class LLMOperationsHandler implements ProcessHandler<BaseJob> {
 			});
 		}
 
-		logger.info(`LLM service created: ${payload.name} result ${JSON.stringify(serviceInfo)}`);
+		logger.info(
+			`LLM service created: ${payload.name} result ${JSON.stringify(serviceInfo)}`,
+		);
 
 		return { serviceInfo };
 	}

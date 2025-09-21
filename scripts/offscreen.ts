@@ -297,14 +297,22 @@ class OffscreenProcessor {
 				type: "GET_BACKGROUND_JOBS",
 			});
 
-			if (response?.success && response?.jobs) {
-				// Process jobs from response
-				for (const job of response.jobs) {
-					persistentLogger.info(
-						"📋 Processing job from storage",
-						{ jobId: job.id },
-						"offscreen",
-					);
+				if (response?.success && response?.jobs) {
+					// Process jobs from response
+					for (const job of response.jobs) {
+						if (!job || job.status !== "pending") {
+							persistentLogger.debug(
+								"⏭️ Skipping non-pending job from storage",
+								{ jobId: job?.id, status: job?.status },
+								"offscreen",
+							);
+							continue;
+						}
+						persistentLogger.info(
+							"📋 Processing job from storage",
+							{ jobId: job.id },
+							"offscreen",
+						);
 
 					// Process jobs ONE BY ONE sequentially for heavy processes
 					await this.processClaimedJob(job);
@@ -365,12 +373,29 @@ class OffscreenProcessor {
 			jobNotificationChannel.subscribe(
 				"JOB_UPDATED",
 				async (message: JobNotificationMessage) => {
+					// Only trigger queue processing when a pending job update arrives
+					const jobStatus = message.job?.status;
+					if (jobStatus && jobStatus !== "pending") {
+						persistentLogger.debug(
+							"⏭️ Ignoring JOB_UPDATED for non-pending job",
+							{
+								jobId: message.jobId,
+								jobStatus,
+							},
+							"offscreen",
+						);
+						return;
+					}
+
 					// QUEUE: Trigger queue processing for updates
 					void processQueueJobs();
 				},
 			);
 
-			logInfo("🎧 JobNotificationChannel handlers registered for offscreen", {});
+			logInfo(
+				"🎧 JobNotificationChannel handlers registered for offscreen",
+				{},
+			);
 		} catch (err) {
 			logError("❌ Failed to register message handlers", err);
 		}

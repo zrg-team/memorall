@@ -95,14 +95,11 @@ export class LLMServiceUI extends LLMServiceCore implements ILLMService {
 				};
 
 				try {
-					const result = await backgroundJob.execute(
-						"create-llm-service",
-						{
-							name,
-							llmType: config.type,
-							config,
-						},
-					);
+					const result = await backgroundJob.execute("create-llm-service", {
+						name,
+						llmType: config.type,
+						config,
+					});
 					logInfo(
 						`📋 Background job result: status=${result.status}, hasResult=${!!result.result}`,
 					);

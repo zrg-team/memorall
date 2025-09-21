@@ -26,8 +26,8 @@ export class EmbeddingProxy implements BaseEmbedding {
 				embeddingName: this.name,
 			});
 
-			if (result.success && result.data) {
-				return result.data.vector as number[];
+			if (result.status === "completed" && result.result) {
+				return result.result.vector as number[];
 			}
 			throw new Error(result.error || "Failed to convert text to vector");
 		} catch (error) {
@@ -42,8 +42,8 @@ export class EmbeddingProxy implements BaseEmbedding {
 				embeddingName: this.name,
 			});
 
-			if (result.success && result.data) {
-				return result.data.vectors as number[][];
+			if (result.status === "completed" && result.result) {
+				return result.result.vectors as number[][];
 			}
 			throw new Error(result.error || "Failed to convert texts to vectors");
 		} catch (error) {

@@ -4,23 +4,16 @@ import { logInfo, logError } from "@/utils/logger";
 import { v4 as nanoid } from "@/utils/uuid";
 import type {
 	BaseJob,
+	JobProgressEvent,
 	JobProgressUpdate,
 	JobResult,
 	JobResultFor,
+	JobStatus,
 } from "./offscreen-handlers/types";
 export type { BaseJob };
 
 export interface JobQueueState {
 	jobs: Record<string, BaseJob>;
-}
-
-export interface JobProgressEvent {
-	stage: string;
-	progress: number;
-	status: string;
-	error?: string;
-	completedAt?: Date;
-	[key: string]: unknown;
 }
 
 export interface JobStreamResult {
@@ -57,6 +50,7 @@ export class BackgroundJob {
 			stream: ReadableStream<JobProgressEvent>;
 		}
 	>();
+	private jobProgressListeners = new Map<string, () => void>();
 	private store = new IdbJobStore();
 
 	private constructor() {
@@ -157,6 +151,7 @@ export class BackgroundJob {
 		if (options.stream) {
 			// Create progress stream
 			const stream = this.createJobProgressStream(jobId);
+			this.attachProgressForwarder(jobId);
 			return { jobId, stream };
 		} else {
 			// Create promise that resolves on completion
@@ -215,18 +210,21 @@ export class BackgroundJob {
 			JobResultFor<T extends keyof JobResultRegistry ? T : never>
 		>((resolve) => {
 			// Listen ONLY for job completion for this specific job - not all messages
-			const unsubscribe = jobNotificationChannel.subscribe("JOB_COMPLETED", (message) => {
-				console.log("JOB_COMPLETED ========>", message);
-				if (message.jobId === jobId) {
-					unsubscribe();
-					// Get result from the message
-					resolve(
-						(message.result as JobResultFor<
-							T extends keyof JobResultRegistry ? T : never
-						>) || ({ status: "completed", progress: [] } as any),
-					);
-				}
-			});
+			const unsubscribe = jobNotificationChannel.subscribe(
+				"JOB_COMPLETED",
+				(message) => {
+					console.log("JOB_COMPLETED ========>", message);
+					if (message.jobId === jobId) {
+						unsubscribe();
+						// Get result from the message
+						resolve(
+							(message.result as JobResultFor<
+								T extends keyof JobResultRegistry ? T : never
+							>) || ({ status: "completed", progress: [] } as any),
+						);
+					}
+				},
+			);
 		});
 
 		// Immediate notification via BroadcastChannel for fast processing
@@ -357,8 +355,11 @@ export class BackgroundJob {
 		let controller: ReadableStreamDefaultController<JobProgressEvent>;
 
 		const stream = new ReadableStream<JobProgressEvent>({
-			start(ctrl) {
+			start: (ctrl) => {
 				controller = ctrl;
+			},
+			cancel: () => {
+				this.cleanupProgressStream(jobId);
 			},
 		});
 
@@ -382,6 +383,90 @@ export class BackgroundJob {
 		};
 	}
 
+	private attachProgressForwarder(jobId: string): void {
+		if (this.jobProgressListeners.has(jobId)) return;
+
+		const localContext = jobNotificationChannel.getContextType();
+
+		const unsubscribe = jobNotificationChannel.subscribe(
+			"JOB_PROGRESS",
+			(message) => {
+				if (message.jobId !== jobId || !message.progress) return;
+				if (message.sender === localContext) return;
+
+				const streamData = this.jobProgressStreams.get(jobId);
+				if (!streamData) return;
+
+				try {
+					streamData.controller.enqueue(message.progress);
+				} catch (error) {
+					logError(`Error enqueuing progress event for job ${jobId}`, error);
+				}
+
+				if (
+					message.progress.status === "completed" ||
+					message.progress.status === "failed"
+				) {
+					try {
+						streamData.controller.close();
+					} catch (error) {
+						logError(`Error closing progress stream for job ${jobId}`, error);
+					} finally {
+						this.cleanupProgressStream(jobId);
+					}
+				}
+			},
+		);
+
+		this.jobProgressListeners.set(jobId, unsubscribe);
+	}
+
+	private cleanupProgressStream(jobId: string): void {
+		const unsubscribe = this.jobProgressListeners.get(jobId);
+		if (unsubscribe) {
+			unsubscribe();
+			this.jobProgressListeners.delete(jobId);
+		}
+		this.jobProgressStreams.delete(jobId);
+	}
+
+	private normalizeProgressEvent(
+		job: BaseJob,
+		progress: JobProgressUpdate,
+	): JobProgressEvent {
+		const status: JobStatus =
+			progress.status ??
+			(job.status === "failed"
+				? "failed"
+				: progress.progress >= 100
+					? "completed"
+					: "processing");
+
+		const completedAt =
+			progress.completedAt ??
+			(status === "completed" || status === "failed"
+				? (progress.timestamp ?? job.completedAt ?? new Date())
+				: undefined);
+
+		const event: JobProgressEvent = {
+			...progress,
+			status,
+			completedAt,
+			error: progress.error ?? job.error,
+			timestamp: progress.timestamp ?? new Date(),
+		};
+
+		if (event.metadata) {
+			event.metadata = { ...event.metadata };
+		}
+
+		if (!event.result && progress.result) {
+			event.result = progress.result;
+		}
+
+		return event;
+	}
+
 	async updateJobProgress(
 		jobId: string,
 		progress: JobProgressUpdate,
@@ -389,11 +474,14 @@ export class BackgroundJob {
 		const job = await this.getJob(jobId);
 		if (!job) return;
 
+		const event = this.normalizeProgressEvent(job, progress);
+
 		// Add the new progress update to the array
 		if (!job.progress) {
 			job.progress = [];
 		}
-		job.progress.push(progress);
+		job.progress.push(event);
+		job.status = event.status;
 
 		await this.saveJob(job);
 		await this.notifyListeners();
@@ -401,11 +489,14 @@ export class BackgroundJob {
 		// Notify progress stream if exists
 		const streamData = this.jobProgressStreams.get(jobId);
 		if (streamData) {
-			streamData.controller.enqueue(progress as JobProgressEvent);
+			streamData.controller.enqueue(event);
 		}
 
 		// Immediate notification for progress updates
 		jobNotificationChannel.notifyJobUpdated(jobId, job);
+		if (jobNotificationChannel.getContextType() !== "ui") {
+			jobNotificationChannel.notifyJobProgress(jobId, event, "all");
+		}
 	}
 
 	async completeJob(jobId: string, result: JobResult): Promise<void> {
@@ -415,8 +506,16 @@ export class BackgroundJob {
 		// Close progress stream if exists
 		const streamData = this.jobProgressStreams.get(jobId);
 		if (streamData) {
-			streamData.controller.close();
-			this.jobProgressStreams.delete(jobId);
+			try {
+				streamData.controller.close();
+			} catch (error) {
+				logError(
+					`Error closing progress stream for completed job ${jobId}`,
+					error,
+				);
+			} finally {
+				this.cleanupProgressStream(jobId);
+			}
 		}
 
 		// Notify completion listener if exists

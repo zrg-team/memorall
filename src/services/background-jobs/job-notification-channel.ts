@@ -1,11 +1,21 @@
 import { logInfo, logError } from "@/utils/logger";
-import type { BaseJob, JobResult } from "./offscreen-handlers/types";
+import type {
+	BaseJob,
+	JobProgressEvent,
+	JobResult,
+} from "./offscreen-handlers/types";
 
 export interface JobNotificationMessage {
-	type: "JOB_ENQUEUED" | "JOB_UPDATED" | "JOB_COMPLETED" | "QUEUE_UPDATED";
+	type:
+		| "JOB_ENQUEUED"
+		| "JOB_UPDATED"
+		| "JOB_COMPLETED"
+		| "QUEUE_UPDATED"
+		| "JOB_PROGRESS";
 	jobId?: string;
 	job?: BaseJob;
 	result?: JobResult;
+	progress?: JobProgressEvent;
 	timestamp: number;
 	sender: "background" | "offscreen" | "ui";
 	destination?: "background" | "offscreen" | "ui" | "all";
@@ -35,11 +45,19 @@ export class JobNotificationChannel {
 
 	private detectContextType(): "background" | "offscreen" | "ui" {
 		if (typeof chrome !== "undefined" && chrome.runtime) {
-			try {
-				if (document.URL.endsWith("offscreen.html")) {
-					return "offscreen";
+			if (typeof document !== "undefined") {
+				try {
+					if (document.URL.endsWith("offscreen.html")) {
+						return "offscreen";
+					}
+				} catch {
+					// fall through to ui when document access fails
 				}
-			} catch {
+				return "ui";
+			}
+
+			if (typeof window === "undefined") {
+				return "background";
 			}
 		}
 		return "ui";
@@ -58,7 +76,11 @@ export class JobNotificationChannel {
 				const message = event.data as JobNotificationMessage;
 
 				// Filter messages by destination - ignore messages not intended for this context
-				if (message.destination && message.destination !== "all" && message.destination !== this.contextType) {
+				if (
+					message.destination &&
+					message.destination !== "all" &&
+					message.destination !== this.contextType
+				) {
 					return;
 				}
 
@@ -67,7 +89,9 @@ export class JobNotificationChannel {
 					return;
 				}
 
-				logInfo(`📡 [${this.contextType}] Received job notification: [${message.jobId}] ${message.type} from ${message.sender} (${Date.now() - message.timestamp}ms)`);
+				logInfo(
+					`📡 [${this.contextType}] Received job notification: [${message.jobId}] ${message.type} from ${message.sender} (${Date.now() - message.timestamp}ms)`,
+				);
 
 				// Notify all subscribers for this message type
 				const typeListeners = this.listeners.get(message.type);
@@ -101,7 +125,9 @@ export class JobNotificationChannel {
 		});
 
 		this.isInitialized = true;
-		logInfo(`🚀 Job notification channel initialized for ${this.contextType} context`);
+		logInfo(
+			`🚀 Job notification channel initialized for ${this.contextType} context`,
+		);
 	}
 
 	/**
@@ -136,7 +162,10 @@ export class JobNotificationChannel {
 	/**
 	 * Notify that a new job has been enqueued (immediate notification)
 	 */
-	notifyJobEnqueued(job: BaseJob, destination?: "background" | "offscreen" | "ui" | "all"): void {
+	notifyJobEnqueued(
+		job: BaseJob,
+		destination?: "background" | "offscreen" | "ui" | "all",
+	): void {
 		this.postMessage({
 			type: "JOB_ENQUEUED",
 			jobId: job.id,
@@ -150,7 +179,11 @@ export class JobNotificationChannel {
 	/**
 	 * Notify that a job has been updated
 	 */
-	notifyJobUpdated(jobId: string, job: BaseJob, destination?: "background" | "offscreen" | "ui" | "all"): void {
+	notifyJobUpdated(
+		jobId: string,
+		job: BaseJob,
+		destination?: "background" | "offscreen" | "ui" | "all",
+	): void {
 		this.postMessage({
 			type: "JOB_UPDATED",
 			jobId,
@@ -162,9 +195,31 @@ export class JobNotificationChannel {
 	}
 
 	/**
+	 * Notify progress for a job
+	 */
+	notifyJobProgress(
+		jobId: string,
+		progress: JobProgressEvent,
+		destination?: "background" | "offscreen" | "ui" | "all",
+	): void {
+		this.postMessage({
+			type: "JOB_PROGRESS",
+			jobId,
+			progress,
+			timestamp: Date.now(),
+			sender: this.contextType,
+			destination: destination || "all", // Progress updates consumed across contexts
+		});
+	}
+
+	/**
 	 * Notify that a job has been completed
 	 */
-	notifyJobCompleted(jobId: string, result?: JobResult, destination?: "background" | "offscreen" | "ui" | "all"): void {
+	notifyJobCompleted(
+		jobId: string,
+		result?: JobResult,
+		destination?: "background" | "offscreen" | "ui" | "all",
+	): void {
 		this.postMessage({
 			type: "JOB_COMPLETED",
 			jobId,
@@ -178,7 +233,9 @@ export class JobNotificationChannel {
 	/**
 	 * Notify that the queue has been updated (general notification)
 	 */
-	notifyQueueUpdated(destination?: "background" | "offscreen" | "ui" | "all"): void {
+	notifyQueueUpdated(
+		destination?: "background" | "offscreen" | "ui" | "all",
+	): void {
 		this.postMessage({
 			type: "QUEUE_UPDATED",
 			timestamp: Date.now(),
@@ -195,10 +252,13 @@ export class JobNotificationChannel {
 
 		try {
 			this.channel.postMessage(message);
-			logInfo(`📡 [${this.contextType}] Sent job notification: ${message.type} to ${message.destination || "all"}`, {
-				jobId: message.jobId,
-				timestamp: message.timestamp,
-			});
+			logInfo(
+				`📡 [${this.contextType}] Sent job notification: ${message.type} to ${message.destination || "all"}`,
+				{
+					jobId: message.jobId,
+					timestamp: message.timestamp,
+				},
+			);
 		} catch (error) {
 			logError(`Failed to send job notification ${message.type}:`, error);
 		}
@@ -234,6 +294,10 @@ export class JobNotificationChannel {
 			),
 			subscribedTypes: Array.from(this.listeners.keys()),
 		};
+	}
+
+	getContextType(): "background" | "offscreen" | "ui" {
+		return this.contextType;
 	}
 }
 

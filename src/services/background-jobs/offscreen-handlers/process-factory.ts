@@ -54,6 +54,7 @@ export class ProcessFactory {
 				stage: "Starting...",
 				progress: 0,
 				timestamp: new Date(),
+				status: "processing",
 			};
 			progressHistory.push(startProgress);
 
@@ -67,10 +68,14 @@ export class ProcessFactory {
 			);
 
 			// Final progress update
+			const finalTimestamp = new Date();
 			const finalProgress: JobProgressUpdate = {
 				stage: "Completed successfully",
 				progress: 100,
-				timestamp: new Date(),
+				timestamp: finalTimestamp,
+				completedAt: finalTimestamp,
+				status: "completed",
+				result: handlerResult,
 			};
 			progressHistory.push(finalProgress);
 
@@ -110,10 +115,14 @@ export class ProcessFactory {
 				"offscreen",
 			);
 
+			const errorTimestamp = new Date();
 			const errorProgress: JobProgressUpdate = {
 				stage: "Failed with error",
 				progress: 100,
-				timestamp: new Date(),
+				timestamp: errorTimestamp,
+				completedAt: errorTimestamp,
+				status: "failed",
+				error: errorMessage,
 				metadata: { error: errorMessage },
 			};
 			progressHistory.push(errorProgress);
