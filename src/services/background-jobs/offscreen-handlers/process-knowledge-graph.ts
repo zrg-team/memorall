@@ -16,22 +16,21 @@ export interface KnowledgeGraphResult extends Record<string, unknown> {
 // Extend global registry for smart type inference
 declare global {
 	interface JobTypeRegistry {
-		'convert-page-to-knowledge-graph': KnowledgeGraphPayload;
+		"convert-page-to-knowledge-graph": KnowledgeGraphPayload;
 	}
 
 	interface JobResultRegistry {
-		'convert-page-to-knowledge-graph': KnowledgeGraphResult;
+		"convert-page-to-knowledge-graph": KnowledgeGraphResult;
 	}
 }
 
 const JOB_NAMES = {
-	convertPageToKnowledgeGraph: 'convert-page-to-knowledge-graph'
+	convertPageToKnowledgeGraph: "convert-page-to-knowledge-graph",
 } as const;
 
 export type KnowledgeGraphJob = BaseJob & {
-	jobType: typeof JOB_NAMES[keyof typeof JOB_NAMES];
-	payload:
-		| KnowledgeGraphPayload
+	jobType: (typeof JOB_NAMES)[keyof typeof JOB_NAMES];
+	payload: KnowledgeGraphPayload;
 };
 
 export class KnowledgeGraphHandler extends BaseProcessHandler<KnowledgeGraphJob> {
@@ -139,5 +138,5 @@ export class KnowledgeGraphHandler extends BaseProcessHandler<KnowledgeGraphJob>
 // Self-register the handler
 backgroundProcessFactory.register({
 	instance: new KnowledgeGraphHandler(),
-	jobs: Object.values(JOB_NAMES)
+	jobs: Object.values(JOB_NAMES),
 });

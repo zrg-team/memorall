@@ -1,9 +1,14 @@
-import type { ProcessHandler, ProcessDependencies, BaseJob, ItemHandlerResult } from "./types";
+import type {
+	ProcessHandler,
+	ProcessDependencies,
+	BaseJob,
+	ItemHandlerResult,
+} from "./types";
 import { backgroundProcessFactory } from "./process-factory";
 
 const JOB_NAMES = {
-	async: 'basic-async',
-	stream: 'basic-stream'
+	async: "basic-async",
+	stream: "basic-stream",
 } as const;
 
 // Define payload interfaces for type inference
@@ -34,18 +39,18 @@ export interface BasicStreamResult extends Record<string, unknown> {
 // Extend global registry for smart type inference
 declare global {
 	interface JobTypeRegistry {
-		'basic-async': BasicAsyncPayload;
-		'basic-stream': BasicStreamPayload;
+		"basic-async": BasicAsyncPayload;
+		"basic-stream": BasicStreamPayload;
 	}
 
 	interface JobResultRegistry {
-		'basic-async': BasicAsyncResult;
-		'basic-stream': BasicStreamResult;
+		"basic-async": BasicAsyncResult;
+		"basic-stream": BasicStreamResult;
 	}
 }
 
 export type BasicJob = BaseJob & {
-	jobType: typeof JOB_NAMES[keyof typeof JOB_NAMES];
+	jobType: (typeof JOB_NAMES)[keyof typeof JOB_NAMES];
 	payload: BasicAsyncPayload | BasicStreamPayload;
 };
 
@@ -73,20 +78,20 @@ export class BasicHandler implements ProcessHandler<BaseJob> {
 		const { logger } = dependencies;
 		const payload = job.payload as BasicAsyncPayload;
 
-		await logger.info(
-			`[START] handleBasicAsync ${jobId}`,
-			{ message: payload.message, delay: payload.delay }
-		);
+		await logger.info(`[START] handleBasicAsync ${jobId}`, {
+			message: payload.message,
+			delay: payload.delay,
+		});
 
 		// Use payload delay if provided
 		if (payload.delay) {
-			await new Promise(resolve => setTimeout(resolve, payload.delay));
+			await new Promise((resolve) => setTimeout(resolve, payload.delay));
 		}
 
 		return {
-			result: 'async test completed',
-			message: payload.message || 'default message',
-			delay: payload.delay || 0
+			result: "async test completed",
+			message: payload.message || "default message",
+			delay: payload.delay || 0,
 		};
 	}
 
@@ -100,10 +105,10 @@ export class BasicHandler implements ProcessHandler<BaseJob> {
 		const steps = payload.steps || 3;
 		const interval = payload.interval || 1000;
 
-		await logger.info(
-			`[START] handleBasicStream ${jobId}`,
-			{ steps, interval }
-		);
+		await logger.info(`[START] handleBasicStream ${jobId}`, {
+			steps,
+			interval,
+		});
 
 		for (let i = 0; i < steps; i++) {
 			const progress = Math.round((i / steps) * 100);
@@ -118,10 +123,10 @@ export class BasicHandler implements ProcessHandler<BaseJob> {
 		}
 
 		return {
-			result: 'stream test completed',
+			result: "stream test completed",
 			steps,
 			interval,
-			duration: `${steps * interval}ms`
+			duration: `${steps * interval}ms`,
 		};
 	}
 }
@@ -129,5 +134,5 @@ export class BasicHandler implements ProcessHandler<BaseJob> {
 // Self-register the handler
 backgroundProcessFactory.register({
 	instance: new BasicHandler(),
-	jobs: Object.values(JOB_NAMES)
+	jobs: Object.values(JOB_NAMES),
 });

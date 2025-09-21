@@ -2,7 +2,12 @@ import { jobNotificationChannel } from "./job-notification-channel";
 import { IdbJobStore } from "./idb-job-store";
 import { logInfo, logError } from "@/utils/logger";
 import { v4 as nanoid } from "@/utils/uuid";
-import type { BaseJob, JobProgressUpdate, JobResult, JobResultFor } from "./offscreen-handlers/types";
+import type {
+	BaseJob,
+	JobProgressUpdate,
+	JobResult,
+	JobResultFor,
+} from "./offscreen-handlers/types";
 export type { BaseJob };
 
 export interface JobQueueState {
@@ -23,7 +28,9 @@ export interface JobStreamResult {
 	stream: AsyncIterable<JobProgressEvent>;
 }
 
-export interface JobPromiseResult<T extends keyof JobResultRegistry = keyof JobResultRegistry> {
+export interface JobPromiseResult<
+	T extends keyof JobResultRegistry = keyof JobResultRegistry,
+> {
 	jobId: string;
 	promise: Promise<JobResultFor<T>>;
 }
@@ -112,7 +119,10 @@ export class BackgroundJob {
 		jobType: T,
 		payload: JobTypeRegistry[T],
 		options: JobOptions,
-	): Promise<JobStreamResult | JobPromiseResult<T extends keyof JobResultRegistry ? T : never>>;
+	): Promise<
+		| JobStreamResult
+		| JobPromiseResult<T extends keyof JobResultRegistry ? T : never>
+	>;
 	// Fallback for unregistered job types
 	createJob(
 		jobType: string,
@@ -150,7 +160,9 @@ export class BackgroundJob {
 			return { jobId, stream };
 		} else {
 			// Create promise that resolves on completion
-			const promise = new Promise<JobResultFor<T extends keyof JobResultRegistry ? T : never>>((resolve) => {
+			const promise = new Promise<
+				JobResultFor<T extends keyof JobResultRegistry ? T : never>
+			>((resolve) => {
 				this.subscribeToJobCompletion(jobId, resolve as any); // TODO: Fix type system
 			});
 			return { jobId, promise };
@@ -199,13 +211,20 @@ export class BackgroundJob {
 		};
 
 		// Register completion listener via jobNotificationChannel BEFORE sending job
-		const completionPromise = new Promise<JobResultFor<T extends keyof JobResultRegistry ? T : never>>((resolve) => {
-			// Listen for job completion via notification channel
-			const unsubscribe = jobNotificationChannel.subscribe("*", (message) => {
-				if (message.type === "JOB_COMPLETED" && message.jobId === jobId) {
+		const completionPromise = new Promise<
+			JobResultFor<T extends keyof JobResultRegistry ? T : never>
+		>((resolve) => {
+			// Listen ONLY for job completion for this specific job - not all messages
+			const unsubscribe = jobNotificationChannel.subscribe("JOB_COMPLETED", (message) => {
+				console.log("JOB_COMPLETED ========>", message);
+				if (message.jobId === jobId) {
 					unsubscribe();
 					// Get result from the message
-					resolve(message.result as JobResultFor<T extends keyof JobResultRegistry ? T : never> || { status: "completed", progress: [] } as any);
+					resolve(
+						(message.result as JobResultFor<
+							T extends keyof JobResultRegistry ? T : never
+						>) || ({ status: "completed", progress: [] } as any),
+					);
 				}
 			});
 		});
@@ -221,10 +240,7 @@ export class BackgroundJob {
 				try {
 					options.onProgress?.(progressEvent);
 				} catch (error) {
-					logError(
-						`Error in onProgress handler for job ${jobId}:`,
-						error,
-					);
+					logError(`Error in onProgress handler for job ${jobId}:`, error);
 				}
 			}
 		}
@@ -392,10 +408,7 @@ export class BackgroundJob {
 		jobNotificationChannel.notifyJobUpdated(jobId, job);
 	}
 
-	async completeJob(
-		jobId: string,
-		result: JobResult,
-	): Promise<void> {
+	async completeJob(jobId: string, result: JobResult): Promise<void> {
 		const job = await this.getJob(jobId);
 		if (!job) return;
 
@@ -408,23 +421,26 @@ export class BackgroundJob {
 
 		// Notify completion listener if exists
 		const completionListener = this.jobCompletionListeners.get(jobId);
-		console.log(`🔍 Looking for completion listener for ${jobId}: ${!!completionListener}`);
-		console.log(`🔍 All registered listeners:`, Array.from(this.jobCompletionListeners.keys()));
+		console.log(
+			`🔍 Looking for completion listener for ${jobId}: ${!!completionListener}`,
+		);
+		console.log(
+			`🔍 All registered listeners:`,
+			Array.from(this.jobCompletionListeners.keys()),
+		);
 		if (completionListener) {
 			completionListener(result);
 			this.jobCompletionListeners.delete(jobId);
 		}
 
-		// Immediate notification for job completion
-		jobNotificationChannel.notifyJobCompleted(jobId);
+		// Immediate notification for job completion - send to all contexts
+		jobNotificationChannel.notifyJobCompleted(jobId, result, "all");
 
 		// Remove completed job from queue
 		await this.store.delete(jobId);
 		await this.notifyListeners();
 
-		logInfo(
-			`📋 Job completed and removed: ${jobId}`,
-		);
+		logInfo(`📋 Job completed and removed: ${jobId}`);
 	}
 
 	async clearCompletedJobs(): Promise<void> {
@@ -461,7 +477,7 @@ export class BackgroundJob {
 		// Normalize date fields in progress updates
 		let normalizedProgress = job.progress;
 		if (job.progress && Array.isArray(job.progress)) {
-			normalizedProgress = job.progress.map(update => ({
+			normalizedProgress = job.progress.map((update) => ({
 				...update,
 				timestamp: update.timestamp ? new Date(update.timestamp) : undefined,
 			}));

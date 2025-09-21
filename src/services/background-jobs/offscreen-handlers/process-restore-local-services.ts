@@ -5,7 +5,7 @@ import { eq } from "drizzle-orm";
 import { backgroundProcessFactory } from "./process-factory";
 
 const JOB_NAMES = {
-	restoreLocalServices: 'restore-local-services'
+	restoreLocalServices: "restore-local-services",
 } as const;
 
 export interface RestoreLocalServicesPayload {
@@ -20,19 +20,18 @@ export interface RestoreLocalServicesResult extends Record<string, unknown> {
 // Extend global registry for smart type inference
 declare global {
 	interface JobTypeRegistry {
-		'restore-local-services': RestoreLocalServicesPayload;
+		"restore-local-services": RestoreLocalServicesPayload;
 	}
 
 	interface JobResultRegistry {
-		'restore-local-services': RestoreLocalServicesResult;
+		"restore-local-services": RestoreLocalServicesResult;
 	}
 }
 
 // Define handler-specific job type locally
 export type RestoreLocalServicesJob = BaseJob & {
-	jobType: typeof JOB_NAMES[keyof typeof JOB_NAMES];
-	payload:
-		| RestoreLocalServicesPayload
+	jobType: (typeof JOB_NAMES)[keyof typeof JOB_NAMES];
+	payload: RestoreLocalServicesPayload;
 };
 
 export class RestoreLocalServicesHandler extends BaseProcessHandler<RestoreLocalServicesJob> {
@@ -141,5 +140,5 @@ export class RestoreLocalServicesHandler extends BaseProcessHandler<RestoreLocal
 // Self-register the handler
 backgroundProcessFactory.register({
 	instance: new RestoreLocalServicesHandler(),
-	jobs: Object.values(JOB_NAMES)
+	jobs: Object.values(JOB_NAMES),
 });

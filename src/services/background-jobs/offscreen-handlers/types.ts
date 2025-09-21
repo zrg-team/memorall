@@ -23,7 +23,10 @@ export interface JobProgressUpdate {
 	metadata?: Record<string, unknown>; // Additional context for this progress step
 }
 
-export type ItemHandlerResult = Record<string, unknown> | Record<string, unknown>[] | undefined
+export type ItemHandlerResult =
+	| Record<string, unknown>
+	| Record<string, unknown>[]
+	| undefined;
 
 export interface JobResult<T = ItemHandlerResult> {
 	status: JobStatus;
@@ -33,9 +36,10 @@ export interface JobResult<T = ItemHandlerResult> {
 }
 
 // Type helper to extract result type from JobResultRegistry
-export type JobResultFor<T extends keyof JobResultRegistry> = T extends keyof JobResultRegistry
-	? JobResult<JobResultRegistry[T]>
-	: JobResult<ItemHandlerResult>;
+export type JobResultFor<T extends keyof JobResultRegistry> =
+	T extends keyof JobResultRegistry
+		? JobResult<JobResultRegistry[T]>
+		: JobResult<ItemHandlerResult>;
 
 export interface LoggerMethods {
 	info: (

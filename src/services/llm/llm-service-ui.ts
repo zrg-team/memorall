@@ -80,7 +80,8 @@ export class LLMServiceUI extends LLMServiceCore implements ILLMService {
 					if (typeof window === "undefined") return;
 					const normalized = Number.isFinite(progress) ? progress : 0;
 					const clamped = Math.max(0, Math.min(100, normalized));
-					const stageText = typeof stage === "string" ? stage : String(stage ?? "");
+					const stageText =
+						typeof stage === "string" ? stage : String(stage ?? "");
 					window.dispatchEvent(
 						new CustomEvent(progressEventName as string, {
 							detail: {
@@ -94,7 +95,13 @@ export class LLMServiceUI extends LLMServiceCore implements ILLMService {
 				};
 
 				try {
-					console.log("=====================>", config);
+					console.log("load=====================>", config);
+					const basic = await backgroundJob.execute(
+						'basic-async', {
+							delay: 1000
+						}
+					)
+					console.log("basic=====================>", basic)
 					const result = await backgroundJob.execute(
 						"create-llm-service",
 						{
@@ -110,7 +117,9 @@ export class LLMServiceUI extends LLMServiceCore implements ILLMService {
 						},
 					);
 					console.log("result=====================>", result);
-					logInfo(`📋 Background job result: status=${result.status}, hasResult=${!!result.result}`);
+					logInfo(
+						`📋 Background job result: status=${result.status}, hasResult=${!!result.result}`,
+					);
 
 					if (result.status === "completed" && result.result) {
 						emitProgress(100, "LLM service ready");
@@ -119,7 +128,9 @@ export class LLMServiceUI extends LLMServiceCore implements ILLMService {
 							config.type,
 						) as LLMRegistry[K]["llm"];
 						this.llms.set(name, proxyLLM);
-						logInfo(`🎯 LLMProxy created and registered for ${name}: ${!!proxyLLM}, hasServe: ${!!(proxyLLM as any).serve}`);
+						logInfo(
+							`🎯 LLMProxy created and registered for ${name}: ${!!proxyLLM}, hasServe: ${!!(proxyLLM as any).serve}`,
+						);
 						return proxyLLM;
 					}
 					logError(`❌ Background job failed for ${name}:`, result);
@@ -154,7 +165,10 @@ export class LLMServiceUI extends LLMServiceCore implements ILLMService {
 		try {
 			const result = await backgroundJob.execute("get-all-models", {});
 			if (result.status === "completed" && result.result) {
-				return (result.result as any).models as { object: "list"; data: ModelInfo[] };
+				return (result.result as any).models as {
+					object: "list";
+					data: ModelInfo[];
+				};
 			}
 			return { object: "list", data: [] };
 		} catch (error) {
@@ -182,7 +196,10 @@ export class LLMServiceUI extends LLMServiceCore implements ILLMService {
 				serviceName: name,
 			});
 			if (result.status === "completed" && result.result) {
-				return (result.result as any).models as { object: "list"; data: ModelInfo[] };
+				return (result.result as any).models as {
+					object: "list";
+					data: ModelInfo[];
+				};
 			}
 		} catch (error) {
 			logWarn(`Failed to get models for ${name} via background job:`, error);
@@ -354,11 +371,7 @@ export class LLMServiceUI extends LLMServiceCore implements ILLMService {
 
 	private async restoreLocalServices(): Promise<void> {
 		try {
-
-			const result = await backgroundJob.execute("restore-local-services", {})
-
-			logInfo('result===============>', result)
-
+			const result = await backgroundJob.execute("restore-local-services", {});
 			if (
 				result &&
 				typeof result === "object" &&
@@ -437,7 +450,11 @@ export class LLMServiceUI extends LLMServiceCore implements ILLMService {
 		if (modelId.includes("/") && modelId.includes(".gguf")) {
 			return DEFAULT_SERVICES.WLLAMA; // "wllama" for GGUF files with repo/filename format
 		}
-		if (modelId.includes("llama") || modelId.includes("vicuna") || modelId.includes("gguf")) {
+		if (
+			modelId.includes("llama") ||
+			modelId.includes("vicuna") ||
+			modelId.includes("gguf")
+		) {
 			return DEFAULT_SERVICES.WLLAMA;
 		}
 		if (!modelId.includes("/") && !modelId.includes(".gguf")) {

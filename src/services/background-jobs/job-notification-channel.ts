@@ -7,6 +7,8 @@ export interface JobNotificationMessage {
 	job?: BaseJob;
 	result?: JobResult;
 	timestamp: number;
+	sender: "background" | "offscreen" | "ui";
+	destination?: "background" | "offscreen" | "ui" | "all";
 }
 
 /**
@@ -23,10 +25,24 @@ export class JobNotificationChannel {
 		Set<(message: JobNotificationMessage) => void>
 	>();
 	private isInitialized = false;
+	private contextType: "background" | "offscreen" | "ui";
 
 	private constructor() {
 		this.channel = new BroadcastChannel("memorall-job-queue");
+		this.contextType = this.detectContextType();
 		this.setupEventListeners();
+	}
+
+	private detectContextType(): "background" | "offscreen" | "ui" {
+		if (typeof chrome !== "undefined" && chrome.runtime) {
+			try {
+				if (document.URL.endsWith("offscreen.html")) {
+					return "offscreen";
+				}
+			} catch {
+			}
+		}
+		return "ui";
 	}
 
 	static getInstance(): JobNotificationChannel {
@@ -40,10 +56,18 @@ export class JobNotificationChannel {
 		this.channel.addEventListener("message", (event) => {
 			try {
 				const message = event.data as JobNotificationMessage;
-				logInfo(`📡 Received job notification: ${message.type}`, {
-					jobId: message.jobId,
-					latency: Date.now() - message.timestamp,
-				});
+
+				// Filter messages by destination - ignore messages not intended for this context
+				if (message.destination && message.destination !== "all" && message.destination !== this.contextType) {
+					return;
+				}
+
+				// Ignore messages from self unless specifically targeted
+				if (message.sender === this.contextType && !message.destination) {
+					return;
+				}
+
+				logInfo(`📡 [${this.contextType}] Received job notification: [${message.jobId}] ${message.type} from ${message.sender} (${Date.now() - message.timestamp}ms)`);
 
 				// Notify all subscribers for this message type
 				const typeListeners = this.listeners.get(message.type);
@@ -77,7 +101,7 @@ export class JobNotificationChannel {
 		});
 
 		this.isInitialized = true;
-		logInfo("🚀 Job notification channel initialized");
+		logInfo(`🚀 Job notification channel initialized for ${this.contextType} context`);
 	}
 
 	/**
@@ -112,46 +136,54 @@ export class JobNotificationChannel {
 	/**
 	 * Notify that a new job has been enqueued (immediate notification)
 	 */
-	notifyJobEnqueued(job: BaseJob): void {
+	notifyJobEnqueued(job: BaseJob, destination?: "background" | "offscreen" | "ui" | "all"): void {
 		this.postMessage({
 			type: "JOB_ENQUEUED",
 			jobId: job.id,
 			job,
 			timestamp: Date.now(),
+			sender: this.contextType,
+			destination: destination || "offscreen", // Default to offscreen for processing
 		});
 	}
 
 	/**
 	 * Notify that a job has been updated
 	 */
-	notifyJobUpdated(jobId: string, job: BaseJob): void {
+	notifyJobUpdated(jobId: string, job: BaseJob, destination?: "background" | "offscreen" | "ui" | "all"): void {
 		this.postMessage({
 			type: "JOB_UPDATED",
 			jobId,
 			job,
 			timestamp: Date.now(),
+			sender: this.contextType,
+			destination: destination || "all", // Updates go to all contexts
 		});
 	}
 
 	/**
 	 * Notify that a job has been completed
 	 */
-	notifyJobCompleted(jobId: string, result?: JobResult): void {
+	notifyJobCompleted(jobId: string, result?: JobResult, destination?: "background" | "offscreen" | "ui" | "all"): void {
 		this.postMessage({
 			type: "JOB_COMPLETED",
 			jobId,
 			result,
 			timestamp: Date.now(),
+			sender: this.contextType,
+			destination: destination || "background", // Completions go to background by default
 		});
 	}
 
 	/**
 	 * Notify that the queue has been updated (general notification)
 	 */
-	notifyQueueUpdated(): void {
+	notifyQueueUpdated(destination?: "background" | "offscreen" | "ui" | "all"): void {
 		this.postMessage({
 			type: "QUEUE_UPDATED",
 			timestamp: Date.now(),
+			sender: this.contextType,
+			destination: destination || "all", // Queue updates go to all contexts
 		});
 	}
 
@@ -163,7 +195,7 @@ export class JobNotificationChannel {
 
 		try {
 			this.channel.postMessage(message);
-			logInfo(`📡 Sent job notification: ${message.type}`, {
+			logInfo(`📡 [${this.contextType}] Sent job notification: ${message.type} to ${message.destination || "all"}`, {
 				jobId: message.jobId,
 				timestamp: message.timestamp,
 			});

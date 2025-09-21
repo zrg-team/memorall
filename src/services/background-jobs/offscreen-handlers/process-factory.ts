@@ -39,7 +39,9 @@ export class ProcessFactory {
 	 */
 	async executeJob(jobId: string, job: BaseJob): Promise<void> {
 		if (!this.dependencies) {
-			throw new Error("ProcessFactory dependencies not set. Call setDependencies() first.");
+			throw new Error(
+				"ProcessFactory dependencies not set. Call setDependencies() first.",
+			);
 		}
 
 		const progressHistory: JobProgressUpdate[] = [];
@@ -58,7 +60,11 @@ export class ProcessFactory {
 			await this.dependencies.updateJobProgress(jobId, startProgress);
 
 			// Execute the handler and get result
-			const handlerResult = await handler.process(jobId, job, this.dependencies);
+			const handlerResult = await handler.process(
+				jobId,
+				job,
+				this.dependencies,
+			);
 
 			// Final progress update
 			const finalProgress: JobProgressUpdate = {
@@ -82,7 +88,7 @@ export class ProcessFactory {
 
 			// Log result
 			await this.dependencies.logger.info(
-				`✅ Job completed: ${jobId}`,
+				`✅ Job completed: [${jobId}] ${job.jobType}`,
 				{ jobType: job.jobType, result: handlerResult },
 				"offscreen",
 			);
@@ -91,12 +97,12 @@ export class ProcessFactory {
 			await this.dependencies.sendMessage({
 				type: "JOB_COMPLETED",
 				jobId,
-				result: jobResult
+				result: jobResult,
 			});
-
 		} catch (error) {
 			// Handle unexpected errors
-			const errorMessage = error instanceof Error ? error.message : String(error);
+			const errorMessage =
+				error instanceof Error ? error.message : String(error);
 
 			await this.dependencies.logger.error(
 				`💥 Unexpected error in job: ${jobId}`,
@@ -125,7 +131,7 @@ export class ProcessFactory {
 			await this.dependencies.sendMessage({
 				type: "JOB_COMPLETED",
 				jobId,
-				result: jobResult
+				result: jobResult,
 			});
 		}
 	}

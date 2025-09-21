@@ -83,7 +83,10 @@ export class ServiceManager {
 	}
 
 	async initialize(
-		options: { liteMode?: boolean; callback?: (service: string, progress: number) => void } = {
+		options: {
+			liteMode?: boolean;
+			callback?: (service: string, progress: number) => void;
+		} = {
 			liteMode: false,
 			callback: undefined,
 		},
@@ -97,7 +100,10 @@ export class ServiceManager {
 	}
 
 	private async initializeServices(
-		options: { liteMode?: boolean; callback?: (service: string, progress: number) => void } = {
+		options: {
+			liteMode?: boolean;
+			callback?: (service: string, progress: number) => void;
+		} = {
 			liteMode: false,
 			callback: undefined,
 		},

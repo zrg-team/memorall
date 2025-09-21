@@ -6,6 +6,6 @@ import "./process-knowledge-graph";
 import "./process-llm-operations";
 import "./process-restore-local-services";
 
-export { backgroundProcessFactory } from "./process-factory";
+export { backgroundProcessFactory, ProcessFactory } from "./process-factory";
 export { handlerRegistry } from "./handler-registry";
 export type { HandlerRegistration } from "./handler-registry";

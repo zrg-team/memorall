@@ -142,10 +142,14 @@ export class LLMProxy implements BaseLLM {
 		try {
 			if (onProgress) {
 				// Use streaming job to capture progress for heavy operations like wllama
-				const { stream } = await backgroundJob.createJob("serve-model", {
-					modelId,
-					serviceName: this.name,
-				}, { stream: true });
+				const { stream } = await backgroundJob.createJob(
+					"serve-model",
+					{
+						modelId,
+						serviceName: this.name,
+					},
+					{ stream: true },
+				);
 
 				// Stream progress updates to onProgress callback
 				for await (const progressEvent of stream) {
@@ -158,7 +162,10 @@ export class LLMProxy implements BaseLLM {
 					}
 
 					// Check if job completed with result
-					if (progressEvent.status === "completed" && progressEvent.completedAt) {
+					if (
+						progressEvent.status === "completed" &&
+						progressEvent.completedAt
+					) {
 						// Job completed, will get result from execute call below
 						break;
 					}

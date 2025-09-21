@@ -22,23 +22,22 @@ export interface RememberSaveResult extends Record<string, unknown> {
 // Extend global registry for smart type inference
 declare global {
 	interface JobTypeRegistry {
-		'save-content': RememberSavePayload;
+		"save-content": RememberSavePayload;
 	}
 
 	interface JobResultRegistry {
-		'save-content': RememberSaveResult;
+		"save-content": RememberSaveResult;
 	}
 }
 
 const JOB_NAMES = {
-	saveContent: 'save-content'
+	saveContent: "save-content",
 } as const;
 
 // Define handler-specific job type locally
 export type RememberSaveJob = BaseJob & {
-	jobType: typeof JOB_NAMES[keyof typeof JOB_NAMES];
-	payload:
-		| RememberSavePayload
+	jobType: (typeof JOB_NAMES)[keyof typeof JOB_NAMES];
+	payload: RememberSavePayload;
 };
 
 export class RememberSaveHandler extends BaseProcessHandler<RememberSaveJob> {
@@ -72,7 +71,12 @@ export class RememberSaveHandler extends BaseProcessHandler<RememberSaveJob> {
 			);
 
 			// Initialize remember service on demand
-			await this.addProgress(jobId, "Initializing services...", 10, dependencies);
+			await this.addProgress(
+				jobId,
+				"Initializing services...",
+				10,
+				dependencies,
+			);
 			await this.rememberService.initialize();
 
 			// Save content
@@ -94,18 +98,14 @@ export class RememberSaveHandler extends BaseProcessHandler<RememberSaveJob> {
 					dependencies,
 				);
 
-				await this.addProgress(
-					jobId,
-					"Finalizing...",
-					90,
-					dependencies,
-					{ pageId: result.pageId || "unknown" }
-				);
+				await this.addProgress(jobId, "Finalizing...", 90, dependencies, {
+					pageId: result.pageId || "unknown",
+				});
 
 				return this.createSuccessResult({
 					pageId: result.pageId,
 					title: title,
-					contentType: "html" in payload ? "page" : "content"
+					contentType: "html" in payload ? "page" : "content",
 				});
 			} else {
 				this.createErrorResult(new Error(result.error || "Save failed"));
@@ -150,5 +150,5 @@ export class RememberSaveHandler extends BaseProcessHandler<RememberSaveJob> {
 // Self-register the handler
 backgroundProcessFactory.register({
 	instance: new RememberSaveHandler(),
-	jobs: Object.values(JOB_NAMES)
+	jobs: Object.values(JOB_NAMES),
 });

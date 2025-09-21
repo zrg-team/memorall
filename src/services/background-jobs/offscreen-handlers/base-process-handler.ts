@@ -36,7 +36,9 @@ export abstract class BaseProcessHandler<TPayload = BaseJob>
 		await dependencies.updateJobProgress(jobId, progressUpdate);
 	}
 
-	protected createSuccessResult(result?: Record<string, unknown>): ItemHandlerResult {
+	protected createSuccessResult(
+		result?: Record<string, unknown>,
+	): ItemHandlerResult {
 		return result;
 	}
 

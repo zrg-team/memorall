@@ -1,7 +1,10 @@
 // Offscreen document for background knowledge graph processing
 // This runs in a hidden document with full DOM access for LLM/Embedding services
 import { logError, logInfo } from "@/utils/logger";
-import { backgroundProcessFactory } from "@/services/background-jobs/offscreen-handlers";
+import {
+	backgroundProcessFactory,
+	ProcessFactory,
+} from "@/services/background-jobs/offscreen-handlers";
 import { jobNotificationChannel } from "@/services/background-jobs/job-notification-channel";
 import type { JobNotificationMessage } from "@/services/background-jobs/job-notification-channel";
 import type { BaseJob } from "@/services/background-jobs/offscreen-handlers/types";
@@ -11,6 +14,7 @@ import type { ProcessDependencies } from "@/services/background-jobs/offscreen-h
 import type {
 	JobProgressUpdate,
 	ChromeMessage,
+	JobResult,
 } from "@/services/background-jobs/offscreen-handlers/types";
 
 import { serviceManager } from "@/services";
@@ -20,24 +24,27 @@ import { EmbeddingServiceMain } from "@/services/embedding/embedding-service-mai
 import { EmbeddingServiceCore } from "@/services/embedding/embedding-service-core";
 
 type OffscreenGlobal = typeof globalThis & {
-	__contextaOffscreenProcessor__?: OffscreenProcessor;
-	__contextaOffscreenSetupDone__?: boolean;
-	__contextaOffscreenStartLogged__?: boolean;
-	__contextaEmbeddingPatchDone__?: boolean;
+	__memorallOffscreenProcessor__?: OffscreenProcessor;
+	__memorallOffscreenSetupDone__?: boolean;
+	__memorallOffscreenStartLogged__?: boolean;
+	__memorallEmbeddingPatchDone__?: boolean;
 };
 
 const offscreenGlobal = globalThis as OffscreenGlobal;
 
 type PatchedEmbeddingService = EmbeddingServiceMain & {
-	__contextaSkipDefaultEmbedding__?: boolean;
+	__memorallSkipDefaultEmbedding__?: boolean;
 };
 
-if (!offscreenGlobal.__contextaEmbeddingPatchDone__) {
+if (!offscreenGlobal.__memorallEmbeddingPatchDone__) {
 	const embeddingMainProto =
-		EmbeddingServiceMain.prototype as unknown as Record<string, any>;
+		EmbeddingServiceMain.prototype as unknown as Record<
+			string,
+			(this: PatchedEmbeddingService) => Promise<void>
+		>;
 	const coreProto = EmbeddingServiceCore.prototype as unknown as Record<
 		string,
-		any
+		(this: PatchedEmbeddingService) => Promise<void>
 	>;
 	const originalInitialize: () => Promise<void> = embeddingMainProto.initialize;
 	const baseEnsureDefault: () => Promise<void> =
@@ -46,7 +53,7 @@ if (!offscreenGlobal.__contextaEmbeddingPatchDone__) {
 	embeddingMainProto.ensureDefaultEmbedding = async function (
 		this: PatchedEmbeddingService,
 	): Promise<void> {
-		if (this.__contextaSkipDefaultEmbedding__) {
+		if (this.__memorallSkipDefaultEmbedding__) {
 			// Defer default creation; ServiceManager will create the initial model explicitly.
 			return;
 		}
@@ -56,15 +63,15 @@ if (!offscreenGlobal.__contextaEmbeddingPatchDone__) {
 	embeddingMainProto.initialize = async function (
 		this: PatchedEmbeddingService,
 	): Promise<void> {
-		this.__contextaSkipDefaultEmbedding__ = true;
+		this.__memorallSkipDefaultEmbedding__ = true;
 		try {
 			await originalInitialize.call(this);
 		} finally {
-			delete this.__contextaSkipDefaultEmbedding__;
+			delete this.__memorallSkipDefaultEmbedding__;
 		}
 	};
 
-	offscreenGlobal.__contextaEmbeddingPatchDone__ = true;
+	offscreenGlobal.__memorallEmbeddingPatchDone__ = true;
 }
 
 class OffscreenProcessor {
@@ -73,7 +80,7 @@ class OffscreenProcessor {
 		progress: 0,
 		services: [] as string[],
 		status: "Initializing...",
-	}
+	};
 	private ticking = false;
 	private tickRequested = false;
 	private processFactory: ProcessFactory;
@@ -98,17 +105,19 @@ class OffscreenProcessor {
 
 	private setupInitialMessageListener(): void {
 		try {
-			chrome.runtime?.onMessage.addListener((message, _sender, sendResponse) => {
-				console.log("🔔 OffscreenProcessor received message:", message.type);
+			chrome.runtime?.onMessage.addListener(
+				(message, _sender, sendResponse) => {
+					console.log("🔔 OffscreenProcessor received message:", message.type);
 
-				if (message.type === "INITIAL") {
-					console.log("🚀 OffscreenProcessor handling INITIAL message");
-					console.log("📊 Current progress:", this.currentProgress);
-					this.reportProgress();
-					sendResponse(true);
-					return true;
-				}
-			});
+					if (message.type === "INITIAL") {
+						console.log("🚀 OffscreenProcessor handling INITIAL message");
+						console.log("📊 Current progress:", this.currentProgress);
+						this.reportProgress();
+						sendResponse(true);
+						return true;
+					}
+				},
+			);
 			console.log("✅ OffscreenProcessor INITIAL message listener registered");
 		} catch (error) {
 			console.warn("Failed to add INITIAL message listener:", error);
@@ -167,10 +176,10 @@ class OffscreenProcessor {
 			);
 			await serviceManager.initialize({
 				callback: (service: string, progress) => {
-					this.currentProgress.progress = 30 + (progress * 0.6); // 30% + 60% of serviceManager progress
+					this.currentProgress.progress = 30 + progress * 0.6; // 30% + 60% of serviceManager progress
 					this.currentProgress.status = `Initializing ${service}... (${progress}%)`;
 					this.reportProgress();
-				}
+				},
 			});
 			persistentLogger.info(
 				"✅ All services initialized via ServiceManager",
@@ -273,9 +282,7 @@ class OffscreenProcessor {
 		);
 	}
 
-	private updateInitialProgress() {
-
-	}
+	private updateInitialProgress() {}
 
 	private async processQueueJobs(): Promise<void> {
 		persistentLogger.info(
@@ -345,21 +352,25 @@ class OffscreenProcessor {
 		processFastMessage: (message: JobNotificationMessage) => Promise<void>,
 	): Promise<void> {
 		try {
-			// Use jobNotificationChannel like background-job.ts
+			// Subscribe only to JOB_ENQUEUED messages intended for offscreen processing
 			jobNotificationChannel.subscribe(
-				"*",
+				"JOB_ENQUEUED",
 				async (message: JobNotificationMessage) => {
-					if (message.type === "JOB_ENQUEUED") {
-						// FAST: Direct processing
-						await processFastMessage(message);
-					} else {
-						// QUEUE: Trigger queue processing for other message types
-						void processQueueJobs();
-					}
+					// FAST: Direct processing
+					await processFastMessage(message);
 				},
 			);
 
-			logInfo("🎧 JobNotificationChannel handler registered", {});
+			// Subscribe to other job events that might trigger queue processing
+			jobNotificationChannel.subscribe(
+				"JOB_UPDATED",
+				async (message: JobNotificationMessage) => {
+					// QUEUE: Trigger queue processing for updates
+					void processQueueJobs();
+				},
+			);
+
+			logInfo("🎧 JobNotificationChannel handlers registered for offscreen", {});
 		} catch (err) {
 			logError("❌ Failed to register message handlers", err);
 		}
@@ -404,11 +415,11 @@ class OffscreenProcessor {
 	// Helper method to complete job via jobNotificationChannel
 	private async completeJobViaMessage(
 		jobId: string,
-		result: { success: boolean; error?: string; data?: Record<string, unknown> },
+		result: JobResult,
 	): Promise<void> {
 		try {
-			// Send completion via jobNotificationChannel to communicate between threads
-			jobNotificationChannel.notifyJobCompleted(jobId, result);
+			// Send completion via jobNotificationChannel to background context
+			jobNotificationChannel.notifyJobCompleted(jobId, result, "all");
 		} catch (error) {
 			persistentLogger.error(
 				`❌ Failed to send job completion: ${jobId}`,
@@ -429,7 +440,7 @@ class OffscreenProcessor {
 		try {
 			chrome.runtime?.sendMessage?.({
 				type: "INITIAL_PROGRESS",
-				currentProgress: this.currentProgress
+				currentProgress: this.currentProgress,
 			});
 			console.log("✅ INITIAL_PROGRESS message sent successfully");
 		} catch (error) {
@@ -448,7 +459,7 @@ class OffscreenProcessor {
 }
 
 // Initialize the offscreen processor
-if (!offscreenGlobal.__contextaOffscreenSetupDone__) {
+if (!offscreenGlobal.__memorallOffscreenSetupDone__) {
 	console.log("🚀 OFFSCREEN HTML LOADED!");
 	try {
 		const statusEl = document.getElementById("status");
@@ -459,10 +470,10 @@ if (!offscreenGlobal.__contextaOffscreenSetupDone__) {
 	} catch (_) {}
 
 	console.log("🚀 Offscreen document script loading...");
-	offscreenGlobal.__contextaOffscreenSetupDone__ = true;
+	offscreenGlobal.__memorallOffscreenSetupDone__ = true;
 
-	if (!offscreenGlobal.__contextaOffscreenStartLogged__) {
-		offscreenGlobal.__contextaOffscreenStartLogged__ = true;
+	if (!offscreenGlobal.__memorallOffscreenStartLogged__) {
+		offscreenGlobal.__memorallOffscreenStartLogged__ = true;
 		void (async () => {
 			try {
 				await persistentLogger.initialize();
@@ -500,8 +511,8 @@ if (!offscreenGlobal.__contextaOffscreenSetupDone__) {
 	}, 30000); // Every 30 seconds
 }
 
-if (!offscreenGlobal.__contextaOffscreenProcessor__) {
-	offscreenGlobal.__contextaOffscreenProcessor__ = new OffscreenProcessor();
+if (!offscreenGlobal.__memorallOffscreenProcessor__) {
+	offscreenGlobal.__memorallOffscreenProcessor__ = new OffscreenProcessor();
 } else {
 	console.info(
 		"♻️ OffscreenProcessor already initialized; reusing existing instance.",

@@ -1,13 +1,18 @@
 import { serviceManager } from "@/services";
-import type { ProcessHandler, ProcessDependencies, BaseJob, ItemHandlerResult } from "./types";
+import type {
+	ProcessHandler,
+	ProcessDependencies,
+	BaseJob,
+	ItemHandlerResult,
+} from "./types";
 import { backgroundProcessFactory } from "./process-factory";
 
 const JOB_NAMES = {
-	textToVector: 'text-to-vector',
-	textsToVectors: 'texts-to-vectors',
-	createEmbedding: 'create-embedding',
-	getEmbedding: 'get-embedding',
-	initializeEmbeddingService: 'initialize-embedding-service'
+	textToVector: "text-to-vector",
+	textsToVectors: "texts-to-vectors",
+	createEmbedding: "create-embedding",
+	getEmbedding: "get-embedding",
+	initializeEmbeddingService: "initialize-embedding-service",
 } as const;
 
 export interface TextToVectorPayload {
@@ -63,7 +68,8 @@ export interface GetEmbeddingResult extends Record<string, unknown> {
 	};
 }
 
-export interface InitializeEmbeddingServiceResult extends Record<string, unknown> {
+export interface InitializeEmbeddingServiceResult
+	extends Record<string, unknown> {
 	initialized: boolean;
 	ready: boolean;
 	availableEmbeddings: string[];
@@ -73,24 +79,24 @@ export interface InitializeEmbeddingServiceResult extends Record<string, unknown
 // Extend global registry for smart type inference
 declare global {
 	interface JobTypeRegistry {
-		'text-to-vector': TextToVectorPayload;
-		'texts-to-vectors': TextsToVectorsPayload;
-		'create-embedding': CreateEmbeddingPayload;
-		'get-embedding': GetEmbeddingPayload;
-		'initialize-embedding-service': InitializeEmbeddingServicePayload;
+		"text-to-vector": TextToVectorPayload;
+		"texts-to-vectors": TextsToVectorsPayload;
+		"create-embedding": CreateEmbeddingPayload;
+		"get-embedding": GetEmbeddingPayload;
+		"initialize-embedding-service": InitializeEmbeddingServicePayload;
 	}
 
 	interface JobResultRegistry {
-		'text-to-vector': TextToVectorResult;
-		'texts-to-vectors': TextsToVectorsResult;
-		'create-embedding': CreateEmbeddingResult;
-		'get-embedding': GetEmbeddingResult;
-		'initialize-embedding-service': InitializeEmbeddingServiceResult;
+		"text-to-vector": TextToVectorResult;
+		"texts-to-vectors": TextsToVectorsResult;
+		"create-embedding": CreateEmbeddingResult;
+		"get-embedding": GetEmbeddingResult;
+		"initialize-embedding-service": InitializeEmbeddingServiceResult;
 	}
 }
 
 export type EmbeddingJob = BaseJob & {
-	jobType: typeof JOB_NAMES[keyof typeof JOB_NAMES];
+	jobType: (typeof JOB_NAMES)[keyof typeof JOB_NAMES];
 	payload:
 		| TextToVectorPayload
 		| TextsToVectorsPayload
@@ -115,7 +121,11 @@ export class EmbeddingOperationsHandler implements ProcessHandler<BaseJob> {
 			case JOB_NAMES.getEmbedding:
 				return await this.handleGetEmbedding(jobId, job, dependencies);
 			case JOB_NAMES.initializeEmbeddingService:
-				return await this.handleInitializeEmbeddingService(jobId, job, dependencies);
+				return await this.handleInitializeEmbeddingService(
+					jobId,
+					job,
+					dependencies,
+				);
 			default:
 				throw new Error(`Unknown embedding job type: ${job.jobType}`);
 		}
@@ -393,5 +403,5 @@ export class EmbeddingOperationsHandler implements ProcessHandler<BaseJob> {
 // Self-register the handler
 backgroundProcessFactory.register({
 	instance: new EmbeddingOperationsHandler(),
-	jobs: Object.values(JOB_NAMES)
+	jobs: Object.values(JOB_NAMES),
 });

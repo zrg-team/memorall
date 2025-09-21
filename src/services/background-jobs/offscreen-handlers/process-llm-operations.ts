@@ -1,17 +1,23 @@
 import { serviceManager } from "@/services";
 import type { ModelInfo } from "@/services/llm/interfaces/base-llm";
 import type { ILLMService } from "@/services/llm/interfaces/llm-service.interface";
-import type { ProcessHandler, ProcessDependencies, BaseJob, ItemHandlerResult } from "./types";
+import type {
+	ProcessHandler,
+	ProcessDependencies,
+	BaseJob,
+	ItemHandlerResult,
+} from "./types";
 import { backgroundProcessFactory } from "./process-factory";
+import type { ChatCompletionRequest } from "@/types/openai";
 
 const JOB_NAMES = {
-	getAllModels: 'get-all-models',
-	getModelsForService: 'get-models-for-service',
-	serveModel: 'serve-model',
-	unloadModel: 'unload-model',
-	deleteModel: 'delete-model',
-	createLLMService: 'create-llm-service',
-	chatCompletion: 'chat-completion'
+	getAllModels: "get-all-models",
+	getModelsForService: "get-models-for-service",
+	serveModel: "serve-model",
+	unloadModel: "unload-model",
+	deleteModel: "delete-model",
+	createLLMService: "create-llm-service",
+	chatCompletion: "chat-completion",
 } as const;
 
 export interface GetAllModelsPayload {
@@ -40,12 +46,12 @@ export interface DeleteModelPayload {
 export interface CreateLLMServicePayload {
 	name: string;
 	llmType: string;
-	config: any;
+	config: Record<string, unknown>;
 }
 
 export interface ChatCompletionPayload {
 	serviceName: string;
-	request: any; // ChatCompletionRequest from @/types/openai
+	request: Record<string, unknown>; // ChatCompletionRequest from @/types/openai
 }
 
 // Define result types that handlers return
@@ -84,28 +90,28 @@ export interface ChatCompletionResult extends Record<string, unknown> {
 // Extend global registry for smart type inference
 declare global {
 	interface JobTypeRegistry {
-		'get-all-models': GetAllModelsPayload;
-		'get-models-for-service': GetModelsForServicePayload;
-		'serve-model': ServeModelPayload;
-		'unload-model': UnloadModelPayload;
-		'delete-model': DeleteModelPayload;
-		'create-llm-service': CreateLLMServicePayload;
-		'chat-completion': ChatCompletionPayload;
+		"get-all-models": GetAllModelsPayload;
+		"get-models-for-service": GetModelsForServicePayload;
+		"serve-model": ServeModelPayload;
+		"unload-model": UnloadModelPayload;
+		"delete-model": DeleteModelPayload;
+		"create-llm-service": CreateLLMServicePayload;
+		"chat-completion": ChatCompletionPayload;
 	}
 
 	interface JobResultRegistry {
-		'get-all-models': GetAllModelsResult;
-		'get-models-for-service': GetModelsForServiceResult;
-		'serve-model': ServeModelResult;
-		'unload-model': UnloadModelResult;
-		'delete-model': DeleteModelResult;
-		'create-llm-service': CreateLLMServiceResult;
-		'chat-completion': ChatCompletionResult;
+		"get-all-models": GetAllModelsResult;
+		"get-models-for-service": GetModelsForServiceResult;
+		"serve-model": ServeModelResult;
+		"unload-model": UnloadModelResult;
+		"delete-model": DeleteModelResult;
+		"create-llm-service": CreateLLMServiceResult;
+		"chat-completion": ChatCompletionResult;
 	}
 }
 
 export type LLMModelsJob = BaseJob & {
-	jobType: typeof JOB_NAMES[keyof typeof JOB_NAMES];
+	jobType: (typeof JOB_NAMES)[keyof typeof JOB_NAMES];
 	payload:
 		| GetAllModelsPayload
 		| GetModelsForServicePayload
@@ -269,9 +275,9 @@ export class LLMOperationsHandler implements ProcessHandler<BaseJob> {
 							// Forward wllama progress to job progress
 							await updateJobProgress(jobId, {
 								stage: `Loading model... ${progress.percent.toFixed(1)}%`,
-								progress: 50 + (progress.percent * 0.4), // 50% to 90%
+								progress: 50 + progress.percent * 0.4, // 50% to 90%
 							});
-						}
+						},
 					);
 
 					await logger.info(
@@ -286,13 +292,16 @@ export class LLMOperationsHandler implements ProcessHandler<BaseJob> {
 				});
 
 				// Auto-detect service and serve with progress callback
-				modelInfo = await llmService.serve(payload.modelId, async (progress) => {
-					// Forward wllama progress to job progress
-					await updateJobProgress(jobId, {
-						stage: `Loading model... ${progress.percent.toFixed(1)}%`,
-						progress: 50 + (progress.percent * 0.4), // 50% to 90%
-					});
-				});
+				modelInfo = await llmService.serve(
+					payload.modelId,
+					async (progress) => {
+						// Forward wllama progress to job progress
+						await updateJobProgress(jobId, {
+							stage: `Loading model... ${progress.percent.toFixed(1)}%`,
+							progress: 50 + progress.percent * 0.4, // 50% to 90%
+						});
+					},
+				);
 
 				await logger.info(`Model ${payload.modelId} auto-loaded`, { jobId });
 			}
@@ -460,7 +469,17 @@ export class LLMOperationsHandler implements ProcessHandler<BaseJob> {
 			progress: 20,
 		});
 
+		await logger.info(
+			`Checking if LLM service already exists: ${payload.name}`,
+			{ jobId },
+		);
+
 		const llmService = serviceManager.getLLMService();
+
+		await logger.info(
+			`LLM service: ${llmService}`,
+			{ jobId },
+		);
 
 		if (!llmService) {
 			throw new Error("LLM service not available");
@@ -510,6 +529,8 @@ export class LLMOperationsHandler implements ProcessHandler<BaseJob> {
 			});
 		}
 
+		logger.info(`LLM service created: ${payload.name} result ${JSON.stringify(serviceInfo)}`);
+
 		return { serviceInfo };
 	}
 
@@ -549,7 +570,7 @@ export class LLMOperationsHandler implements ProcessHandler<BaseJob> {
 			const chunks: any[] = [];
 			const streamResponse = llmService.chatCompletionsFor(
 				payload.serviceName,
-				payload.request,
+				payload.request as unknown as ChatCompletionRequest,
 			);
 
 			for await (const chunk of streamResponse as AsyncIterableIterator<any>) {
@@ -560,7 +581,7 @@ export class LLMOperationsHandler implements ProcessHandler<BaseJob> {
 			// Non-streaming response
 			response = await llmService.chatCompletionsFor(
 				payload.serviceName,
-				payload.request,
+				payload.request as unknown as ChatCompletionRequest,
 			);
 		}
 
@@ -581,5 +602,5 @@ export class LLMOperationsHandler implements ProcessHandler<BaseJob> {
 // Self-register the handler
 backgroundProcessFactory.register({
 	instance: new LLMOperationsHandler(),
-	jobs: Object.values(JOB_NAMES)
+	jobs: Object.values(JOB_NAMES),
 });
