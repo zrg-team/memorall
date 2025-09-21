@@ -28,14 +28,16 @@ export const useCurrentModel = () => {
 		loadInitialModel();
 
 		// Subscribe to model changes
-		const unsubscribe = serviceManager.llmService.onCurrentModelChange((current) => {
-			setIsInitialized(true);
-			if (current) {
-				setModel(current.modelId);
-			} else {
-				setModel("");
-			}
-		});
+		const unsubscribe = serviceManager.llmService.onCurrentModelChange(
+			(current) => {
+				setIsInitialized(true);
+				if (current) {
+					setModel(current.modelId);
+				} else {
+					setModel("");
+				}
+			},
+		);
 
 		return unsubscribe;
 	}, []);

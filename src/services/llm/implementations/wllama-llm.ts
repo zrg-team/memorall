@@ -273,6 +273,22 @@ export class WllamaLLM implements BaseLLM {
 		if (parts.length < 3) {
 			throw new Error('Model must be in format "username/repo/filename"');
 		}
+
+		// Avoid reloading a model that's already active inside the runner
+		const existingModels = await this.models();
+		const existingModel = existingModels.data.find(
+			(m) => m.loaded && m.id.toLowerCase() === model.toLowerCase(),
+		);
+		if (existingModel) {
+			if (onProgress) {
+				onProgress({
+					loaded: existingModel.size ?? 0,
+					total: existingModel.size ?? 0,
+					percent: 100,
+				});
+			}
+			return existingModel;
+		}
 		const request: ServeRequest = { model };
 		const response = await this.send("serve", request, { onProgress });
 		return response as ModelInfo;

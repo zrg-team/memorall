@@ -1,29 +1,41 @@
-// Base types and interfaces for process handlers
+export type JobStatus = "pending" | "processing" | "completed" | "failed";
 
-// Only truly universal job statuses - handlers can extend with their own
-export type BaseJobStatus = "pending" | "processing" | "completed" | "failed";
+// Global job type registry for smart payload type inference
+// Handlers extend this interface to register their job types and payload structures
+declare global {
+	interface JobTypeRegistry {
+		// Empty by default - handlers will extend this interface
+		// Example: 'basic-async': BasicAsyncPayload;
+	}
 
+	// Registry for handler result types (what handlers return)
+	interface JobResultRegistry {
+		// Empty by default - handlers will extend this interface
+		// Example: 'basic-async': { result: string; message: string; delay: number };
+	}
+}
+
+// Generic progress update interface
 export interface JobProgressUpdate {
-	status: string; // Handlers define their own status types
 	stage: string;
-	progress: number;
-	completedAt?: Date;
-	pageId?: string;
-	error?: string;
+	progress: number; // 0-100
+	timestamp?: Date;
+	metadata?: Record<string, unknown>; // Additional context for this progress step
 }
 
-export interface JobResultData {
-	pageId?: string;
-	serviceName?: string;
-	pageTitle?: string;
-	[key: string]: unknown;
+export type ItemHandlerResult = Record<string, unknown> | Record<string, unknown>[] | undefined
+
+export interface JobResult<T = ItemHandlerResult> {
+	status: JobStatus;
+	result?: T; // Extended by each handler for their specific data
+	progress: JobProgressUpdate[]; // Array of progress updates throughout job execution
+	error?: string; // Only present when status is "failed"
 }
 
-export interface JobResult {
-	success: boolean;
-	error?: string;
-	data?: JobResultData;
-}
+// Type helper to extract result type from JobResultRegistry
+export type JobResultFor<T extends keyof JobResultRegistry> = T extends keyof JobResultRegistry
+	? JobResult<JobResultRegistry[T]>
+	: JobResult<ItemHandlerResult>;
 
 export interface LoggerMethods {
 	info: (
@@ -57,24 +69,33 @@ export interface ProcessDependencies {
 	sendMessage: (message: ChromeMessage) => Promise<void>;
 }
 
+// Handler return interface - simplified to just return the result data
+export interface HandlerResult {
+	status: JobStatus;
+	result?: Record<string, unknown>;
+	error?: string;
+}
+
 export interface ProcessHandler<TJob = Record<string, unknown>> {
 	process(
 		jobId: string,
 		job: TJob,
 		dependencies: ProcessDependencies,
-	): Promise<void>;
+	): Promise<ItemHandlerResult>;
 }
 
 // Generic job interface - foundation for all job types
 export interface BaseJob {
 	id: string;
 	jobType: string;
-	status: string;
+	status: JobStatus;
 	createdAt: Date;
 	startedAt?: Date;
 	completedAt?: Date;
+	progress: JobProgressUpdate[]; // Track all progress updates
+	result?: Record<string, unknown>; // Final result data
 	error?: string;
-	[key: string]: unknown; // Allow any additional properties including progress
+	[key: string]: unknown; // Allow any additional properties
 }
 
 export interface ProcessMessage {

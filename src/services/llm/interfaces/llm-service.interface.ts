@@ -22,7 +22,7 @@ export interface ILLMService {
 	// Initialization
 	initialize(): Promise<void>;
 
-	// LLM management
+	// LLM management - Core functionality
 	create<K extends string>(name: string, config: any): Promise<BaseLLM>;
 	get(name: string): Promise<BaseLLM | undefined>;
 	has(name: string): boolean;
@@ -30,26 +30,41 @@ export interface ILLMService {
 	list(): string[];
 	clear(): void;
 
-	// Current model management
+	// Current model management - Core functionality
 	getCurrentModel(): Promise<CurrentModelInfo | null>;
 	setCurrentModel(modelId: string, provider: ServiceProvider): Promise<void>;
 	clearCurrentModel(): Promise<void>;
-	onCurrentModelChange(listener: (model: CurrentModelInfo | null) => void): () => void;
+	onCurrentModelChange(
+		listener: (model: CurrentModelInfo | null) => void,
+	): () => void;
 
-	// Model operations
+	// Status - Core functionality
+	isReady(): boolean;
+	isReadyByName(name: string): boolean;
+	getInfo(): { name: string; type: string; ready: boolean };
+	getInfoFor(name: string): { name: string; type: string; ready: boolean };
+
+	// Cleanup - Core functionality
+	destroy(): void;
+
+	// Model operations - Implementation specific
 	models(): Promise<{ object: "list"; data: ModelInfo[] }>;
 	modelsFor(name: string): Promise<{ object: "list"; data: ModelInfo[] }>;
 
-	// Chat completions
+	// Chat completions - Implementation specific
 	chatCompletions(
 		request: ChatCompletionRequest,
-	): Promise<ChatCompletionResponse> | AsyncIterableIterator<ChatCompletionChunk>;
+	):
+		| Promise<ChatCompletionResponse>
+		| AsyncIterableIterator<ChatCompletionChunk>;
 	chatCompletionsFor(
 		name: string,
 		request: ChatCompletionRequest,
-	): Promise<ChatCompletionResponse> | AsyncIterableIterator<ChatCompletionChunk>;
+	):
+		| Promise<ChatCompletionResponse>
+		| AsyncIterableIterator<ChatCompletionChunk>;
 
-	// Model serving
+	// Model serving - Implementation specific
 	serve(
 		model: string,
 		onProgress?: (progress: ProgressEvent) => void,
@@ -60,18 +75,9 @@ export interface ILLMService {
 		onProgress?: (progress: ProgressEvent) => void,
 	): Promise<ModelInfo>;
 
-	// Model lifecycle
+	// Model lifecycle - Implementation specific
 	unload(modelId: string): Promise<void>;
 	unloadFor(name: string, modelId: string): Promise<void>;
 	deleteModel(modelId: string): Promise<void>;
 	deleteModelFor(name: string, modelId: string): Promise<void>;
-
-	// Status
-	isReady(): boolean;
-	isReadyByName(name: string): boolean;
-	getInfo(): { name: string; type: string; ready: boolean };
-	getInfoFor(name: string): { name: string; type: string; ready: boolean };
-
-	// Cleanup
-	destroy(): void;
 }

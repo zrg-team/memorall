@@ -2,10 +2,10 @@
 export * from "./interfaces/base-embedding";
 export * from "./implementations/local-embedding";
 export * from "./implementations/openai-embedding";
+export * from "./implementations/worker-embedding";
 export * from "./embedding-service";
 
-// Export service instance
-export { embeddingService } from "./embedding-service";
+// Note: Embedding service instances are created by ServiceManager
 
 // Cosine similarity utility function
 export function cosineSimilarity(vecA: number[], vecB: number[]): number {

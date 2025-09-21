@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
 import { type ModelInfo } from "@/services/llm";
-import { schema } from "@/services/database/db";
 import { eq } from "drizzle-orm";
 import { logError } from "@/utils/logger";
 import { serviceManager } from "@/services";
@@ -37,7 +36,7 @@ export function useLocalModels(
 						quickProvider === "lmstudio" ? "lmstudio_config" : "ollama_config";
 					try {
 						const row = (
-							await serviceManager.databaseService.use(({ db }) =>
+							await serviceManager.databaseService.use(({ db, schema }) =>
 								db
 									.select()
 									.from(schema.configurations)
@@ -53,7 +52,8 @@ export function useLocalModels(
 							} as any);
 
 							// Now fetch models
-							const response = await serviceManager.llmService.modelsFor("openai");
+							const response =
+								await serviceManager.llmService.modelsFor("openai");
 							setLocalModels(response.data);
 						} else {
 							setLocalModels([]);

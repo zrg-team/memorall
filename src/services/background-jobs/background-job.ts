@@ -1,11 +1,8 @@
 import { jobNotificationChannel } from "./job-notification-channel";
 import { IdbJobStore } from "./idb-job-store";
 import { logInfo, logError } from "@/utils/logger";
-import type { RememberSavePayload } from "./offscreen-handlers/process-remember-save";
-import type { KnowledgeGraphPayload } from "./offscreen-handlers/process-knowledge-graph";
-import type { TextToVectorPayload } from "./offscreen-handlers/process-text-to-vector";
-import type { TextsToVectorsPayload } from "./offscreen-handlers/process-texts-to-vectors";
-import type { BaseJob } from "./offscreen-handlers/types";
+import { v4 as nanoid } from "@/utils/uuid";
+import type { BaseJob, JobProgressUpdate, JobResult, JobResultFor } from "./offscreen-handlers/types";
 export type { BaseJob };
 
 export interface JobQueueState {
@@ -26,64 +23,25 @@ export interface JobStreamResult {
 	stream: AsyncIterable<JobProgressEvent>;
 }
 
-export interface JobPromiseResult {
+export interface JobPromiseResult<T extends keyof JobResultRegistry = keyof JobResultRegistry> {
 	jobId: string;
-	promise: Promise<{
-		success: boolean;
-		error?: string;
-		data?: Record<string, unknown>;
-	}>;
+	promise: Promise<JobResultFor<T>>;
 }
 
 export interface JobOptions {
 	stream: boolean;
 }
 
-// Job type mapping for type safety
-type JobTypeMap = {
-	"remember-save": RememberSavePayload;
-	"knowledge-graph": KnowledgeGraphPayload;
-	"restore-local-services": Record<string, never>; // No payload needed
-	"text-to-vector": TextToVectorPayload;
-	"texts-to-vectors": TextsToVectorsPayload;
-};
-
-type JobTypeName = keyof JobTypeMap;
-
-// Job configuration mapping
-const JOB_CONFIG = {
-	"remember-save": {
-		jobType: "remember-save" as const,
-		idPrefix: "save" as const,
-	},
-	"knowledge-graph": {
-		jobType: "knowledge-graph-conversion" as const,
-		idPrefix: "kg" as const,
-	},
-	"restore-local-services": {
-		jobType: "restore-local-services" as const,
-		idPrefix: "restore" as const,
-	},
-	"text-to-vector": {
-		jobType: "text-to-vector" as const,
-		idPrefix: "ttv" as const,
-	},
-	"texts-to-vectors": {
-		jobType: "texts-to-vectors" as const,
-		idPrefix: "ttvs" as const,
-	},
-} as const;
+// Smart type inference using global JobTypeRegistry
+// Handlers extend the global interface to register their types
+// This provides perfect IntelliSense for job types and payload structures
 
 export class BackgroundJob {
 	private static instance: BackgroundJob;
 	private listeners = new Set<(state: JobQueueState) => void>();
 	private jobCompletionListeners = new Map<
 		string,
-		(result: {
-			success: boolean;
-			error?: string;
-			data?: Record<string, unknown>;
-		}) => void
+		(result: JobResult) => void
 	>();
 	private jobProgressStreams = new Map<
 		string,
@@ -122,11 +80,7 @@ export class BackgroundJob {
 	 */
 	subscribeToJobCompletion(
 		jobId: string,
-		callback: (result: {
-			success: boolean;
-			error?: string;
-			data?: Record<string, unknown>;
-		}) => void,
+		callback: (result: JobResult) => void,
 	): void {
 		this.jobCompletionListeners.set(jobId, callback);
 	}
@@ -137,38 +91,49 @@ export class BackgroundJob {
 	}
 
 	/**
-	 * Generic type-safe job creation with streaming or promise-based progress tracking
+	 * Create a job with smart payload type inference
+	 * TypeScript will suggest the correct payload structure based on jobType
+	 *
+	 * @example
+	 * // TypeScript knows the exact payload structure:
+	 * backgroundJob.createJob("basic-async", { message: "hello", delay: 1000 })
 	 */
-	createJob<T extends JobTypeName>(
+	createJob<T extends keyof JobTypeRegistry>(
 		jobType: T,
-		payload: JobTypeMap[T],
+		payload: JobTypeRegistry[T],
 		options: { stream: true },
 	): Promise<JobStreamResult>;
-	createJob<T extends JobTypeName>(
+	createJob<T extends keyof JobTypeRegistry>(
 		jobType: T,
-		payload: JobTypeMap[T],
+		payload: JobTypeRegistry[T],
 		options: { stream: false },
-	): Promise<JobPromiseResult>;
-	createJob<T extends JobTypeName>(
+	): Promise<JobPromiseResult<T extends keyof JobResultRegistry ? T : never>>;
+	createJob<T extends keyof JobTypeRegistry>(
 		jobType: T,
-		payload: JobTypeMap[T],
+		payload: JobTypeRegistry[T],
+		options: JobOptions,
+	): Promise<JobStreamResult | JobPromiseResult<T extends keyof JobResultRegistry ? T : never>>;
+	// Fallback for unregistered job types
+	createJob(
+		jobType: string,
+		payload: unknown,
 		options: JobOptions,
 	): Promise<JobStreamResult | JobPromiseResult>;
-	async createJob<T extends JobTypeName>(
-		jobType: T,
-		payload: JobTypeMap[T],
+	async createJob<T extends keyof JobTypeRegistry>(
+		jobType: T | string,
+		payload: T extends keyof JobTypeRegistry ? JobTypeRegistry[T] : unknown,
 		options: JobOptions,
 	): Promise<JobStreamResult | JobPromiseResult> {
-		// Generic job creation - no business logic, just message passing
-		const config = JOB_CONFIG[jobType];
-		const jobId = `${config.idPrefix}-${Date.now()}`;
+		// Generic job creation - completely dynamic, no configuration needed
+		const jobId = nanoid();
 
 		const job: BaseJob = {
 			id: jobId,
-			jobType: config.jobType,
+			jobType: jobType,
 			status: "pending",
 			payload,
 			createdAt: new Date(),
+			progress: [],
 		};
 
 		await this.saveJob(job);
@@ -185,54 +150,87 @@ export class BackgroundJob {
 			return { jobId, stream };
 		} else {
 			// Create promise that resolves on completion
-			const promise = new Promise<{
-				success: boolean;
-				error?: string;
-				data?: Record<string, unknown>;
-			}>((resolve) => {
-				this.subscribeToJobCompletion(jobId, resolve);
+			const promise = new Promise<JobResultFor<T extends keyof JobResultRegistry ? T : never>>((resolve) => {
+				this.subscribeToJobCompletion(jobId, resolve as any); // TODO: Fix type system
 			});
 			return { jobId, promise };
 		}
 	}
 
 	/**
-	 * Execute job immediately without queue (for fast operations)
+	 * Execute job immediately with smart payload type inference
+	 * TypeScript will suggest the correct payload structure based on jobType
+	 *
+	 * @example
+	 * // TypeScript knows the exact payload structure:
+	 * await backgroundJob.execute("basic-async", { message: "hello", delay: 1000 })
 	 */
-	async execute<T extends JobTypeName>(
+	execute<T extends keyof JobTypeRegistry>(
 		jobType: T,
-		payload: JobTypeMap[T],
-	): Promise<{
-		success: boolean;
-		error?: string;
-		data?: Record<string, unknown>;
-	}> {
-		const config = JOB_CONFIG[jobType];
-		const jobId = `${config.idPrefix}-immediate-${Date.now()}`;
+		payload: JobTypeRegistry[T],
+		options?: {
+			onProgress?: (progress: JobProgressEvent) => void;
+		},
+	): Promise<JobResultFor<T extends keyof JobResultRegistry ? T : never>>;
+	// Fallback for unregistered job types
+	execute(
+		jobType: string,
+		payload: unknown,
+		options?: {
+			onProgress?: (progress: JobProgressEvent) => void;
+		},
+	): Promise<JobResult>;
+	async execute<T extends keyof JobTypeRegistry>(
+		jobType: T | string,
+		payload: T extends keyof JobTypeRegistry ? JobTypeRegistry[T] : unknown,
+		options?: {
+			onProgress?: (progress: JobProgressEvent) => void;
+		},
+	): Promise<JobResult> {
+		const jobId = nanoid();
 
 		const job: BaseJob = {
 			id: jobId,
-			jobType: config.jobType,
+			jobType: jobType,
 			status: "pending",
 			payload,
 			createdAt: new Date(),
+			progress: [],
 		};
+
+		// Register completion listener via jobNotificationChannel BEFORE sending job
+		const completionPromise = new Promise<JobResultFor<T extends keyof JobResultRegistry ? T : never>>((resolve) => {
+			// Listen for job completion via notification channel
+			const unsubscribe = jobNotificationChannel.subscribe("*", (message) => {
+				if (message.type === "JOB_COMPLETED" && message.jobId === jobId) {
+					unsubscribe();
+					// Get result from the message
+					resolve(message.result as JobResultFor<T extends keyof JobResultRegistry ? T : never> || { status: "completed", progress: [] } as any);
+				}
+			});
+		});
 
 		// Immediate notification via BroadcastChannel for fast processing
 		jobNotificationChannel.notifyJobEnqueued(job);
 
 		logInfo(`⚡ Executing immediate ${jobType} job: ${jobId}`);
 
-		// Return a promise that resolves when job completes
-		return new Promise<{
-			success: boolean;
-			error?: string;
-			data?: Record<string, unknown>;
-		}>((resolve) => {
-			this.subscribeToJobCompletion(jobId, (result) => {
-				resolve(result);
-			});
-		});
+		if (options?.onProgress) {
+			const stream = this.createJobProgressStream(jobId);
+			for await (const progressEvent of stream) {
+				try {
+					options.onProgress?.(progressEvent);
+				} catch (error) {
+					logError(
+						`Error in onProgress handler for job ${jobId}:`,
+						error,
+					);
+				}
+			}
+		}
+
+		// Return the completion promise
+		return completionPromise;
 	}
 
 	/**
@@ -258,71 +256,63 @@ export class BackgroundJob {
 			},
 		});
 
-		// Check if offscreen is already initialized by testing a simple message
-		const checkOffscreenStatus = async (): Promise<boolean> => {
-			try {
-				if (typeof chrome === "undefined" || !chrome.runtime) {
-					return false;
-				}
-
-				// Try to send a test message to see if offscreen is responsive
-				const response = await chrome.runtime.sendMessage({
-					type: "PING_OFFSCREEN",
-				});
-				return response === true;
-			} catch (error) {
-				return false;
-			}
-		};
-
-		// Set up message listener for offscreen ready and progress updates
+		// Set up message listener for initialization progress updates
 		const messageListener = (message: any) => {
-			if (message.type === "OFFSCREEN_READY") {
+			if (message.type === "INITIAL_PROGRESS") {
+				// Forward currentProgress from offscreen
 				controller.enqueue({
-					stage: "Services ready",
-					progress: 100,
-					status: "completed",
+					stage: message.currentProgress?.status || "Initializing...",
+					progress: message.currentProgress?.progress || 0,
+					status: message.currentProgress?.done ? "completed" : "initializing",
 				});
-				controller.close();
-				chrome.runtime?.onMessage.removeListener(messageListener);
+
+				// Complete when done
+				if (message.currentProgress?.done) {
+					controller.close();
+					chrome.runtime?.onMessage.removeListener(messageListener);
+				}
 			}
 		};
 
 		try {
-			const isAlreadyReady = await checkOffscreenStatus();
+			// Check if chrome API is available
+			if (typeof chrome !== "undefined" && chrome.runtime) {
+				// Listen for progress updates
+				chrome.runtime.onMessage.addListener(messageListener);
 
-			if (isAlreadyReady) {
-				// Offscreen is already initialized, immediately report completion
-				logInfo("✅ Offscreen already initialized");
-				controller.enqueue({
-					stage: "Services already ready",
-					progress: 100,
-					status: "completed",
-				});
-				controller.close();
+				// Send INITIAL message to trigger offscreen initialization
+				try {
+					await chrome.runtime.sendMessage({ type: "INITIAL" });
+					logInfo("📋 Sent INITIAL message to offscreen");
+				} catch (error) {
+					logError("Failed to send INITIAL message:", error);
+					controller.enqueue({
+						stage: "Failed to initialize",
+						progress: 0,
+						status: "error",
+					});
+					controller.close();
+				}
 			} else {
-				// Offscreen not ready, listen for initialization completion
-				logInfo("🚀 Waiting for offscreen initialization...");
-				chrome.runtime?.onMessage.addListener(messageListener);
-
-				// Start with initial progress
-				controller.enqueue({
-					stage: "Initializing services...",
-					progress: 10,
-					status: "initializing",
-				});
+				// If chrome API not available, simulate completion
+				logInfo("🔧 Chrome API not available, simulating completion");
+				setTimeout(() => {
+					controller.enqueue({
+						stage: "Services initialized",
+						progress: 100,
+						status: "completed",
+					});
+					controller.close();
+				}, 1000);
 			}
 		} catch (error) {
-			// If chrome API not available, simulate completion
-			logInfo("🔧 Chrome API not available, simulating completion");
-			setTimeout(() => {
-				controller.enqueue({
-					stage: "Services initialized",
-					progress: 100,
-					status: "completed",
-				});
-				controller.close();
-			}, 1000);
+			logError("Failed to initialize services:", error);
+			controller.enqueue({
+				stage: "Initialization failed",
+				progress: 0,
+				status: "error",
+			});
+			controller.close();
 		}
 
 		// Convert ReadableStream to AsyncIterable
@@ -378,12 +368,17 @@ export class BackgroundJob {
 
 	async updateJobProgress(
 		jobId: string,
-		progress: Record<string, unknown>,
+		progress: JobProgressUpdate,
 	): Promise<void> {
 		const job = await this.getJob(jobId);
 		if (!job) return;
-		const currentProgress = (job.progress as Record<string, unknown>) || {};
-		job.progress = { ...currentProgress, ...progress };
+
+		// Add the new progress update to the array
+		if (!job.progress) {
+			job.progress = [];
+		}
+		job.progress.push(progress);
+
 		await this.saveJob(job);
 		await this.notifyListeners();
 
@@ -399,11 +394,7 @@ export class BackgroundJob {
 
 	async completeJob(
 		jobId: string,
-		result: {
-			success: boolean;
-			error?: string;
-			data?: Record<string, unknown>;
-		},
+		result: JobResult,
 	): Promise<void> {
 		const job = await this.getJob(jobId);
 		if (!job) return;
@@ -417,6 +408,8 @@ export class BackgroundJob {
 
 		// Notify completion listener if exists
 		const completionListener = this.jobCompletionListeners.get(jobId);
+		console.log(`🔍 Looking for completion listener for ${jobId}: ${!!completionListener}`);
+		console.log(`🔍 All registered listeners:`, Array.from(this.jobCompletionListeners.keys()));
 		if (completionListener) {
 			completionListener(result);
 			this.jobCompletionListeners.delete(jobId);
@@ -430,7 +423,7 @@ export class BackgroundJob {
 		await this.notifyListeners();
 
 		logInfo(
-			`📋 Job ${result.success ? "completed" : "failed"} and removed: ${jobId}`,
+			`📋 Job completed and removed: ${jobId}`,
 		);
 	}
 
@@ -465,18 +458,13 @@ export class BackgroundJob {
 	}
 
 	private async saveJob(job: BaseJob): Promise<void> {
-		// Normalize date fields while preserving flexible structure
+		// Normalize date fields in progress updates
 		let normalizedProgress = job.progress;
-		if (job.progress) {
-			normalizedProgress = { ...(job.progress as Record<string, unknown>) };
-			const progress = normalizedProgress as Record<string, unknown>;
-			// Normalize common date fields if they exist
-			if (progress.startedAt) {
-				progress.startedAt = new Date(progress.startedAt as Date);
-			}
-			if (progress.completedAt) {
-				progress.completedAt = new Date(progress.completedAt as Date);
-			}
+		if (job.progress && Array.isArray(job.progress)) {
+			normalizedProgress = job.progress.map(update => ({
+				...update,
+				timestamp: update.timestamp ? new Date(update.timestamp) : undefined,
+			}));
 		}
 
 		const norm: BaseJob = {
@@ -486,7 +474,7 @@ export class BackgroundJob {
 			completedAt: job.completedAt
 				? new Date(job.completedAt as Date)
 				: undefined,
-			progress: normalizedProgress,
+			progress: normalizedProgress || [],
 		};
 		await this.store.put(norm);
 	}

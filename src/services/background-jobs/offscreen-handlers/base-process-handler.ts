@@ -2,74 +2,50 @@ import type {
 	ProcessHandler,
 	ProcessDependencies,
 	BaseJob,
-	JobResultData,
+	ItemHandlerResult,
+	JobProgressUpdate,
 } from "./types";
 
 export abstract class BaseProcessHandler<TPayload = BaseJob>
 	implements ProcessHandler<TPayload>
 {
-	protected dependencies: ProcessDependencies;
-
-	constructor(dependencies: ProcessDependencies) {
-		this.dependencies = dependencies;
-	}
+	protected progressHistory: JobProgressUpdate[] = [];
 
 	abstract process(
 		jobId: string,
 		payload: TPayload,
 		dependencies: ProcessDependencies,
-	): Promise<void>;
+	): Promise<ItemHandlerResult>;
 
-	protected async handleError(
+	protected async addProgress(
 		jobId: string,
-		error: unknown,
 		stage: string,
+		progress: number,
+		dependencies: ProcessDependencies,
+		metadata?: Record<string, unknown>,
 	): Promise<void> {
-		const errorMessage = error instanceof Error ? error.message : String(error);
+		const progressUpdate: JobProgressUpdate = {
+			stage,
+			progress,
+			timestamp: new Date(),
+			metadata,
+		};
 
-		await this.dependencies.logger.error(
-			`❌ ${this.constructor.name} failed: ${jobId}`,
-			error,
-			"offscreen",
-		);
+		this.progressHistory.push(progressUpdate);
 
-		await this.dependencies.updateJobProgress(jobId, {
-			status: "failed",
-			stage: `Error during ${stage}`,
-			progress: 100,
-			completedAt: new Date(),
-			error: errorMessage,
-		});
-
-		await this.dependencies.completeJob(jobId, {
-			success: false,
-			error: errorMessage,
-		});
-
-		// Notify background script about job completion
-		try {
-			await this.dependencies.sendMessage({ type: "JOB_COMPLETED", jobId });
-		} catch (_) {}
+		await dependencies.updateJobProgress(jobId, progressUpdate);
 	}
 
-	protected async completeSuccess(
-		jobId: string,
-		data?: JobResultData,
-	): Promise<void> {
-		await this.dependencies.completeJob(jobId, {
-			success: true,
-			data,
-		});
+	protected createSuccessResult(result?: Record<string, unknown>): ItemHandlerResult {
+		return result;
+	}
 
-		await this.dependencies.logger.info(
-			`✅ ${this.constructor.name} completed: ${jobId}`,
-			{ data },
-			"offscreen",
-		);
+	protected createErrorResult(error: unknown): never {
+		const errorMessage = error instanceof Error ? error.message : String(error);
+		throw new Error(errorMessage);
+	}
 
-		// Notify background script about job completion
-		try {
-			await this.dependencies.sendMessage({ type: "JOB_COMPLETED", jobId });
-		} catch (_) {}
+	protected getProgressHistory(): JobProgressUpdate[] {
+		return [...this.progressHistory];
 	}
 }

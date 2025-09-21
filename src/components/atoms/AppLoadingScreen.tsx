@@ -10,9 +10,7 @@ import {
 	CheckCircle2,
 	Loader2,
 } from "lucide-react";
-import {
-	serviceManager,
-} from "@/services";
+import { serviceManager } from "@/services";
 import type { InitializationProgress } from "@/services/ServiceManager";
 
 interface LoadingStep {

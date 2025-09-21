@@ -7,54 +7,126 @@ import type {
 	ChromeMessage,
 	BaseJob,
 } from "./types";
-import { RememberSaveHandler } from "./process-remember-save";
-import { KnowledgeGraphHandler } from "./process-knowledge-graph";
-import { RestoreLocalServicesHandler } from "./process-restore-local-services";
-import { ProcessTextToVector } from "./process-text-to-vector";
-import { ProcessTextsToVectors } from "./process-texts-to-vectors";
+import { handlerRegistry, type HandlerRegistration } from "./handler-registry";
 
 export class ProcessFactory {
-	private dependencies: ProcessDependencies;
+	private static instance: ProcessFactory;
+	private dependencies?: ProcessDependencies;
 
-	constructor(dependencies: ProcessDependencies) {
+	private constructor() {}
+
+	static getInstance(): ProcessFactory {
+		if (!ProcessFactory.instance) {
+			ProcessFactory.instance = new ProcessFactory();
+		}
+		return ProcessFactory.instance;
+	}
+
+	setDependencies(dependencies: ProcessDependencies): void {
 		this.dependencies = dependencies;
 	}
 
-	createRememberSaveHandler(): ProcessHandler<BaseJob> {
-		return new RememberSaveHandler(this.dependencies);
-	}
-
-	createKnowledgeGraphHandler(): ProcessHandler<BaseJob> {
-		return new KnowledgeGraphHandler(this.dependencies);
-	}
-
-	createRestoreLocalServicesHandler(): ProcessHandler<BaseJob> {
-		return new RestoreLocalServicesHandler(this.dependencies);
-	}
-
-	createTextToVectorHandler(): ProcessHandler<BaseJob> {
-		return new ProcessTextToVector();
-	}
-
-	createTextsToVectorsHandler(): ProcessHandler<BaseJob> {
-		return new ProcessTextsToVectors();
+	register(registration: HandlerRegistration): void {
+		handlerRegistry.register(registration);
 	}
 
 	createUnifiedHandler(jobType: string): ProcessHandler<BaseJob> {
-		// SINGLE UNIFIED HANDLER - same logic for all job types
-		switch (jobType) {
-			case "remember-save":
-				return new RememberSaveHandler(this.dependencies);
-			case "knowledge-graph-conversion":
-				return new KnowledgeGraphHandler(this.dependencies);
-			case "restore-local-services":
-				return new RestoreLocalServicesHandler(this.dependencies);
-			case "text-to-vector":
-				return new ProcessTextToVector();
-			case "texts-to-vectors":
-				return new ProcessTextsToVectors();
-			default:
-				throw new Error(`Unknown job type: ${jobType}`);
+		return handlerRegistry.getHandler(jobType);
+	}
+
+	/**
+	 * Execute a job with automatic completion and error handling
+	 */
+	async executeJob(jobId: string, job: BaseJob): Promise<void> {
+		if (!this.dependencies) {
+			throw new Error("ProcessFactory dependencies not set. Call setDependencies() first.");
+		}
+
+		const progressHistory: JobProgressUpdate[] = [];
+
+		try {
+			const handler = this.createUnifiedHandler(job.jobType);
+
+			// Initial progress update
+			const startProgress: JobProgressUpdate = {
+				stage: "Starting...",
+				progress: 0,
+				timestamp: new Date(),
+			};
+			progressHistory.push(startProgress);
+
+			await this.dependencies.updateJobProgress(jobId, startProgress);
+
+			// Execute the handler and get result
+			const handlerResult = await handler.process(jobId, job, this.dependencies);
+
+			// Final progress update
+			const finalProgress: JobProgressUpdate = {
+				stage: "Completed successfully",
+				progress: 100,
+				timestamp: new Date(),
+			};
+			progressHistory.push(finalProgress);
+
+			await this.dependencies.updateJobProgress(jobId, finalProgress);
+
+			// Create complete job result
+			const jobResult: JobResult = {
+				status: "completed",
+				result: handlerResult,
+				progress: progressHistory,
+			};
+
+			// Complete the job automatically
+			await this.dependencies.completeJob(jobId, jobResult);
+
+			// Log result
+			await this.dependencies.logger.info(
+				`✅ Job completed: ${jobId}`,
+				{ jobType: job.jobType, result: handlerResult },
+				"offscreen",
+			);
+
+			// Notify completion
+			await this.dependencies.sendMessage({
+				type: "JOB_COMPLETED",
+				jobId,
+				result: jobResult
+			});
+
+		} catch (error) {
+			// Handle unexpected errors
+			const errorMessage = error instanceof Error ? error.message : String(error);
+
+			await this.dependencies.logger.error(
+				`💥 Unexpected error in job: ${jobId}`,
+				error,
+				"offscreen",
+			);
+
+			const errorProgress: JobProgressUpdate = {
+				stage: "Failed with error",
+				progress: 100,
+				timestamp: new Date(),
+				metadata: { error: errorMessage },
+			};
+			progressHistory.push(errorProgress);
+
+			await this.dependencies.updateJobProgress(jobId, errorProgress);
+
+			const jobResult: JobResult = {
+				status: "failed",
+				progress: progressHistory,
+				error: errorMessage,
+			};
+
+			await this.dependencies.completeJob(jobId, jobResult);
+
+			await this.dependencies.sendMessage({
+				type: "JOB_COMPLETED",
+				jobId,
+				result: jobResult
+			});
 		}
 	}
 
@@ -97,3 +169,5 @@ export class ProcessFactory {
 		};
 	}
 }
+
+export const backgroundProcessFactory = ProcessFactory.getInstance();

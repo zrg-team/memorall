@@ -1,5 +1,5 @@
 import type { ChatMessage } from "@/types/openai";
-import type { LLMService } from "@/services/llm/llm-service";
+import type { ILLMService } from "@/services/llm/interfaces/llm-service.interface";
 
 // Simple token estimator: ~4 chars per token heuristic
 function estimateTokens(text: string): number {
@@ -70,7 +70,7 @@ export interface MapRefineOptions<T> extends ChunkingOptions {
 // Includes real-time token control to prevent exceeding model limits.
 // Now supports retry mechanism with error handling.
 export async function mapRefine<T>(
-	llm: LLMService,
+	llm: ILLMService,
 	systemPrompt: string,
 	buildUser: (
 		chunk: string,
@@ -264,7 +264,7 @@ export async function mapRefine<T>(
 
 // Helper function to process a chunk with retry mechanism
 async function processChunkWithRetry<T>(
-	llm: LLMService,
+	llm: ILLMService,
 	systemPrompt: string,
 	userPrompt: string,
 	parse: (assistantContent: string) => T[],

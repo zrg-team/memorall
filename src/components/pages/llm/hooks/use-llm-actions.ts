@@ -8,7 +8,6 @@ import { RECOMMENDATION_WEBLLM_LLMS } from "@/constants/webllm";
 import { logError } from "@/utils/logger";
 import secureSession from "@/utils/secure-session";
 import { serviceManager } from "@/services";
-import { schema } from "@/services/database/db";
 import { eq } from "drizzle-orm";
 import { FIXED_ENCRYPTION_KEY } from "@/config/security";
 import { deriveAesKeyFromString, decryptStringAes } from "@/utils/aes";
@@ -77,15 +76,16 @@ export const useLLMActions = ({
 	);
 
 	// Initialize services using the centralized method
-	const ensureServices = useCallback(async () => {
-	}, []);
+	const ensureServices = useCallback(async () => {}, []);
 
 	// Fetch available WebLLM models from API
 	const fetchWebLLMModels = useCallback(async () => {
 		setLogs((l) => [...l, "[ui] fetching available WebLLM models..."]);
 		try {
 			await ensureServices();
-			const response = await serviceManager.llmService.modelsFor(DEFAULT_SERVICES.WEBLLM);
+			const response = await serviceManager.llmService.modelsFor(
+				DEFAULT_SERVICES.WEBLLM,
+			);
 			const modelNames = response.data.map((model) => model.id);
 			setWebllmAvailableModels(modelNames);
 			setLogs((l) => [
@@ -455,7 +455,7 @@ export const useLLMActions = ({
 			if (!passkey) throw new Error("Missing OpenAI passkey in session");
 
 			const row = (
-				await serviceManager.databaseService.use(({ db }) => {
+				await serviceManager.databaseService.use(({ db, schema }) => {
 					return db
 						.select()
 						.from(schema.encryption)
@@ -476,7 +476,7 @@ export const useLLMActions = ({
 
 		// Fetch encrypted data from DB and decrypt with combined key
 		const encryptedRow = (
-			await serviceManager.databaseService.use(({ db }) => {
+			await serviceManager.databaseService.use(({ db, schema }) => {
 				return db
 					.select()
 					.from(schema.encryption)

@@ -12,7 +12,6 @@ import {
 	Trash2,
 } from "lucide-react";
 import { serviceManager } from "@/services";
-import { schema } from "@/services/database/db";
 import { eq } from "drizzle-orm";
 import { FIXED_ENCRYPTION_KEY } from "@/config/security";
 import {
@@ -68,7 +67,7 @@ export const OpenAITab: React.FC<OpenAITabProps> = ({ onModelLoaded }) => {
 
 			// Check if config exists in database
 			const encryptedConfig = (
-				await serviceManager.databaseService.use(({ db }) => {
+				await serviceManager.databaseService.use(({ db, schema }) => {
 					return db
 						.select()
 						.from(schema.encryption)
@@ -124,7 +123,7 @@ export const OpenAITab: React.FC<OpenAITabProps> = ({ onModelLoaded }) => {
 
 			// Insert or update
 			const existing = (
-				await serviceManager.databaseService.use(({ db }) => {
+				await serviceManager.databaseService.use(({ db, schema }) => {
 					return db
 						.select()
 						.from(schema.encryption)
@@ -133,14 +132,14 @@ export const OpenAITab: React.FC<OpenAITabProps> = ({ onModelLoaded }) => {
 			)[0];
 
 			if (existing) {
-				await serviceManager.databaseService.use(({ db }) => {
+				await serviceManager.databaseService.use(({ db, schema }) => {
 					return db
 						.update(schema.encryption)
 						.set({ encryptedData, advancedSeed, updatedAt: new Date() })
 						.where(eq(schema.encryption.key, "openai_config"));
 				});
 			} else {
-				await serviceManager.databaseService.use(({ db }) => {
+				await serviceManager.databaseService.use(({ db, schema }) => {
 					return db.insert(schema.encryption).values({
 						key: "openai_config",
 						encryptedData,
@@ -178,7 +177,7 @@ export const OpenAITab: React.FC<OpenAITabProps> = ({ onModelLoaded }) => {
 
 		try {
 			const encryptedConfig = (
-				await serviceManager.databaseService.use(({ db }) => {
+				await serviceManager.databaseService.use(({ db, schema }) => {
 					return db
 						.select()
 						.from(schema.encryption)
@@ -251,7 +250,7 @@ export const OpenAITab: React.FC<OpenAITabProps> = ({ onModelLoaded }) => {
 		setError("");
 
 		try {
-			await serviceManager.databaseService.use(({ db }) => {
+			await serviceManager.databaseService.use(({ db, schema }) => {
 				return db
 					.delete(schema.encryption)
 					.where(eq(schema.encryption.key, "openai_config"));

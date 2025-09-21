@@ -2,7 +2,6 @@ import React, { useEffect, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { serviceManager } from "@/services";
-import { schema } from "@/services/database/db";
 import { eq } from "drizzle-orm";
 import { Loader2, Shield, CheckCircle, Trash2 } from "lucide-react";
 
@@ -47,7 +46,7 @@ export const LocalOpenAITab: React.FC<LocalOpenAITabProps> = ({
 		setError("");
 		try {
 			const row = (
-				await serviceManager.databaseService.use(({ db }) => {
+				await serviceManager.databaseService.use(({ db, schema }) => {
 					return db
 						.select()
 						.from(schema.configurations)
@@ -76,7 +75,7 @@ export const LocalOpenAITab: React.FC<LocalOpenAITabProps> = ({
 		setError("");
 		try {
 			const existing = (
-				await serviceManager.databaseService.use(({ db }) => {
+				await serviceManager.databaseService.use(({ db, schema }) => {
 					return db
 						.select()
 						.from(schema.configurations)
@@ -84,7 +83,7 @@ export const LocalOpenAITab: React.FC<LocalOpenAITabProps> = ({
 				})
 			)[0];
 			if (existing) {
-				await serviceManager.databaseService.use(({ db }) => {
+				await serviceManager.databaseService.use(({ db, schema }) => {
 					return db
 						.update(schema.configurations)
 						.set({
@@ -94,7 +93,7 @@ export const LocalOpenAITab: React.FC<LocalOpenAITabProps> = ({
 						.where(eq(schema.configurations.key, configKey));
 				});
 			} else {
-				await serviceManager.databaseService.use(({ db }) => {
+				await serviceManager.databaseService.use(({ db, schema }) => {
 					return db.insert(schema.configurations).values({
 						key: configKey,
 						data: { baseUrl: baseUrl.trim(), modelId: modelId.trim() },
@@ -118,7 +117,8 @@ export const LocalOpenAITab: React.FC<LocalOpenAITabProps> = ({
 		try {
 			// Use correct service name instead of hardcoded "openai"
 			const serviceName = providerKind;
-			if (serviceManager.llmService.has(serviceName)) serviceManager.llmService.remove(serviceName);
+			if (serviceManager.llmService.has(serviceName))
+				serviceManager.llmService.remove(serviceName);
 
 			const serviceConfig = {
 				type: providerKind,
@@ -145,12 +145,13 @@ export const LocalOpenAITab: React.FC<LocalOpenAITabProps> = ({
 		setBusy(true);
 		setError("");
 		try {
-			await serviceManager.databaseService.use(({ db }) => {
+			await serviceManager.databaseService.use(({ db, schema }) => {
 				return db
 					.delete(schema.configurations)
 					.where(eq(schema.configurations.key, configKey));
 			});
-			if (serviceManager.llmService.has("openai")) serviceManager.llmService.remove("openai");
+			if (serviceManager.llmService.has("openai"))
+				serviceManager.llmService.remove("openai");
 			setView("no-config");
 		} catch (e) {
 			const msg = e instanceof Error ? e.message : "Unknown error";

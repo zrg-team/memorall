@@ -5,7 +5,7 @@ import { QUICK_WALLAMA_LLMS } from "@/constants/wllama";
 import { QUICK_WEBLLM_LLMS } from "@/constants/webllm";
 import { QUICK_OPENAI_LLMS } from "@/constants/openai";
 import { type ModelInfo } from "@/services/llm";
-import { serviceManager } from '@/services'
+import { serviceManager } from "@/services";
 import type { Provider } from "../hooks/use-provider-config";
 import type { CurrentModel } from "../hooks/use-current-model";
 

@@ -1,10 +1,10 @@
-import type { BaseEmbedding } from "../interfaces/base-embedding";
+import type { BaseEmbedding } from "./base-embedding";
 
 export interface IEmbeddingService {
-	// Initialization
+	// Initialization - Core functionality
 	initialize(): Promise<void>;
 
-	// Embedding management
+	// Embedding management - Core functionality
 	create(
 		name: string,
 		embeddingType: string,
@@ -16,17 +16,21 @@ export interface IEmbeddingService {
 	list(): string[];
 	clear(): void;
 
-	// Default operations (uses "default" embedding)
+	// Status - Core functionality
+	isReady(): boolean;
+	isReadyByName(name: string): boolean;
+	getInfo(): { name: string; type: string; ready: boolean };
+	getInfoFor(name: string): { name: string; type: string; ready: boolean };
+
+	// Cleanup - Core functionality
+	destroy(): void;
+
+	// Embedding operations - Implementation specific
 	textToVector(text: string): Promise<number[]>;
 	textsToVectors(texts: string[]): Promise<number[][]>;
-
-	// Named operations
 	textToVectorFor(embeddingName: string, text: string): Promise<number[]>;
-	textsToVectorsFor(embeddingName: string, texts: string[]): Promise<number[][]>;
-
-	// Status
-	isReady(): boolean;
-
-	// Cleanup
-	destroy(): void;
+	textsToVectorsFor(
+		embeddingName: string,
+		texts: string[],
+	): Promise<number[][]>;
 }

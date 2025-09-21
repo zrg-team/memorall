@@ -1,9 +1,10 @@
 import chalk from "chalk";
 import dayjs from "dayjs";
 
-const log = process.env.NODE_ENV === "development" ? console.log : undefined;
-const debug =
-	process.env.NODE_ENV === "development" ? console.debug : undefined;
+const isDevelopment =
+	typeof process !== "undefined" && process.env?.NODE_ENV === "development";
+const log = isDevelopment ? console.log : undefined;
+const debug = isDevelopment ? console.debug : undefined;
 const warn = console.warn;
 const error = console.error;
 

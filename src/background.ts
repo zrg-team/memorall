@@ -5,7 +5,6 @@ import { logInfo, logError } from "./utils/logger";
 import { backgroundJob } from "./services/background-jobs/background-job";
 import { sharedStorageService } from "./services/shared-storage";
 
-
 const REMEMBER_THIS_PAGE_CONTEXT_MENU_ID = "remember-this-page";
 const REMEMBER_CONTENT_CONTEXT_MENU_ID = "remember-content";
 const LET_REMEMBER_CONTEXT_MENU_ID = "let-remember";
@@ -224,7 +223,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 		info.menuItemId === LET_REMEMBER_CONTEXT_MENU_ID
 	) {
 		try {
-			const hasConfiguredLLM = false
+			const hasConfiguredLLM = false;
 
 			// For LET_REMEMBER specifically, always open popup and navigate to remember page
 			if (info.menuItemId === LET_REMEMBER_CONTEXT_MENU_ID) {

@@ -25,7 +25,9 @@ export function useDownloadedModels() {
 		try {
 			// Try to get models from Wllama service
 			try {
-				const response = await serviceManager.llmService.modelsFor(DEFAULT_SERVICES.WLLAMA);
+				const response = await serviceManager.llmService.modelsFor(
+					DEFAULT_SERVICES.WLLAMA,
+				);
 				allModels = [...allModels, ...response.data];
 			} catch (err) {
 				logInfo("Failed to fetch wllama models:", err);
@@ -34,7 +36,9 @@ export function useDownloadedModels() {
 			// Try to get models from WebLLM service
 			if (serviceManager.llmService.has(DEFAULT_SERVICES.WEBLLM)) {
 				try {
-					const response = await serviceManager.llmService.modelsFor(DEFAULT_SERVICES.WEBLLM);
+					const response = await serviceManager.llmService.modelsFor(
+						DEFAULT_SERVICES.WEBLLM,
+					);
 					const newModels = response.data.filter(
 						(model) => !allModels.some((existing) => existing.id === model.id),
 					);

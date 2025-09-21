@@ -1,7 +1,4 @@
-import type {
-	KnowledgeGraphState,
-	ResolvedEntity,
-} from "./state";
+import type { KnowledgeGraphState, ResolvedEntity } from "./state";
 import type { AllServices } from "@/services/flows/interfaces/tool";
 import { logInfo, logError } from "@/utils/logger";
 import { mapRefine } from "@/utils/map-refine";

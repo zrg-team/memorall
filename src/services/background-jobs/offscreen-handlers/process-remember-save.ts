@@ -4,29 +4,52 @@ import {
 	type SaveContentData,
 	type SavePageData,
 } from "@/services/remember/remember-service";
-import type { DatabaseService } from '@/services/database/database-service'
+import type { DatabaseService } from "@/services/database/database-service";
 import { serviceManager } from "@/services";
 import { BaseProcessHandler } from "./base-process-handler";
-import type { ProcessDependencies, BaseJob } from "./types";
+import type { ProcessDependencies, BaseJob, ItemHandlerResult } from "./types";
+import { backgroundProcessFactory } from "./process-factory";
 
 export type RememberSavePayload = SaveContentData | SavePageData;
 
-// Define handler-specific job type locally
-interface RememberSaveJob extends BaseJob {
-	payload: RememberSavePayload;
-	[key: string]: unknown;
+// Define result types that handlers return
+export interface RememberSaveResult extends Record<string, unknown> {
+	pageId: string;
+	title: string;
+	contentType: "page" | "content";
 }
+
+// Extend global registry for smart type inference
+declare global {
+	interface JobTypeRegistry {
+		'save-content': RememberSavePayload;
+	}
+
+	interface JobResultRegistry {
+		'save-content': RememberSaveResult;
+	}
+}
+
+const JOB_NAMES = {
+	saveContent: 'save-content'
+} as const;
+
+// Define handler-specific job type locally
+export type RememberSaveJob = BaseJob & {
+	jobType: typeof JOB_NAMES[keyof typeof JOB_NAMES];
+	payload:
+		| RememberSavePayload
+};
 
 export class RememberSaveHandler extends BaseProcessHandler<RememberSaveJob> {
 	private rememberService: typeof rememberService;
 	private databaseService: DatabaseService;
 
 	constructor(
-		dependencies: ProcessDependencies,
 		rememberServiceInstance = rememberService,
 		databaseServiceInstance = serviceManager.getDatabaseService(),
 	) {
-		super(dependencies);
+		super();
 		this.rememberService = rememberServiceInstance;
 		this.databaseService = databaseServiceInstance;
 	}
@@ -35,8 +58,7 @@ export class RememberSaveHandler extends BaseProcessHandler<RememberSaveJob> {
 		jobId: string,
 		job: RememberSaveJob,
 		dependencies: ProcessDependencies,
-	): Promise<void> {
-		// Job is properly typed - no casting needed
+	): Promise<ItemHandlerResult> {
 		const payload = job.payload;
 		try {
 			const title =
@@ -50,20 +72,13 @@ export class RememberSaveHandler extends BaseProcessHandler<RememberSaveJob> {
 			);
 
 			// Initialize remember service on demand
-			await dependencies.updateJobProgress(jobId, {
-				status: "saving_to_database",
-				stage: "Initializing services...",
-				progress: 10,
-			});
+			await this.addProgress(jobId, "Initializing services...", 10, dependencies);
 			await this.rememberService.initialize();
 
-			let result;
-			await dependencies.updateJobProgress(jobId, {
-				status: "saving_to_database",
-				stage: "Saving content...",
-				progress: 30,
-			});
+			// Save content
+			await this.addProgress(jobId, "Saving content...", 30, dependencies);
 
+			let result;
 			if ("html" in payload && "article" in payload) {
 				result = await this.rememberService.savePage(payload as SavePageData);
 			} else {
@@ -79,47 +94,24 @@ export class RememberSaveHandler extends BaseProcessHandler<RememberSaveJob> {
 					dependencies,
 				);
 
-				await dependencies.updateJobProgress(jobId, {
-					status: "saving_to_database",
-					stage: "Finalizing...",
-					progress: 90,
-					pageId: result.pageId || "unknown",
-				});
-
-				await dependencies.updateJobProgress(jobId, {
-					status: "completed",
-					stage: "Saved to database",
-					progress: 100,
-					completedAt: new Date(),
-					pageId: result.pageId || "unknown",
-				});
-
-				await this.completeSuccess(jobId, { pageId: result.pageId });
-			} else {
-				await dependencies.updateJobProgress(jobId, {
-					status: "failed",
-					stage: "Failed to save",
-					progress: 100,
-					completedAt: new Date(),
-					error: result.error,
-				});
-
-				await dependencies.completeJob(jobId, {
-					success: false,
-					error: result.error,
-				});
-
-				await dependencies.logger.error(
-					`❌ Save-content job failed: ${jobId}`,
-					result.error,
-					"offscreen",
+				await this.addProgress(
+					jobId,
+					"Finalizing...",
+					90,
+					dependencies,
+					{ pageId: result.pageId || "unknown" }
 				);
 
-				await dependencies.sendMessage({ type: "JOB_COMPLETED", jobId });
+				return this.createSuccessResult({
+					pageId: result.pageId,
+					title: title,
+					contentType: "html" in payload ? "page" : "content"
+				});
+			} else {
+				this.createErrorResult(new Error(result.error || "Save failed"));
 			}
 		} catch (error) {
-			await this.handleError(jobId, error, "save");
-			throw error;
+			this.createErrorResult(error);
 		}
 	}
 
@@ -154,3 +146,9 @@ export class RememberSaveHandler extends BaseProcessHandler<RememberSaveJob> {
 		}
 	}
 }
+
+// Self-register the handler
+backgroundProcessFactory.register({
+	instance: new RememberSaveHandler(),
+	jobs: Object.values(JOB_NAMES)
+});

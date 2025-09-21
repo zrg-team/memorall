@@ -1,29 +1,48 @@
 import { knowledgeGraphService } from "@/services/knowledge-graph/knowledge-graph-service";
 import type { RememberedContent } from "@/services/database/db";
 import { BaseProcessHandler } from "./base-process-handler";
-import type { ProcessDependencies, BaseJob } from "./types";
+import type { ProcessDependencies, BaseJob, ItemHandlerResult } from "./types";
 import type { ILLMService } from "@/services/llm/interfaces/llm-service.interface";
 import { serviceManager } from "@/services";
+import { backgroundProcessFactory } from "./process-factory";
 
 export type KnowledgeGraphPayload = RememberedContent;
 
-// Define handler-specific job type locally
-interface KnowledgeGraphJob extends BaseJob {
-	payload: KnowledgeGraphPayload;
-	activeJobs?: Map<string, { pageData: RememberedContent; startTime: number }>;
-	[key: string]: unknown;
+// Define result types that handlers return
+export interface KnowledgeGraphResult extends Record<string, unknown> {
+	pageTitle: string;
 }
+
+// Extend global registry for smart type inference
+declare global {
+	interface JobTypeRegistry {
+		'convert-page-to-knowledge-graph': KnowledgeGraphPayload;
+	}
+
+	interface JobResultRegistry {
+		'convert-page-to-knowledge-graph': KnowledgeGraphResult;
+	}
+}
+
+const JOB_NAMES = {
+	convertPageToKnowledgeGraph: 'convert-page-to-knowledge-graph'
+} as const;
+
+export type KnowledgeGraphJob = BaseJob & {
+	jobType: typeof JOB_NAMES[keyof typeof JOB_NAMES];
+	payload:
+		| KnowledgeGraphPayload
+};
 
 export class KnowledgeGraphHandler extends BaseProcessHandler<KnowledgeGraphJob> {
 	private llmService: ILLMService;
 	private knowledgeGraphService: typeof knowledgeGraphService;
 
 	constructor(
-		dependencies: ProcessDependencies,
 		llmServiceInstance = serviceManager.getLLMService(),
 		knowledgeGraphServiceInstance = knowledgeGraphService,
 	) {
-		super(dependencies);
+		super();
 		this.llmService = llmServiceInstance;
 		this.knowledgeGraphService = knowledgeGraphServiceInstance;
 	}
@@ -32,12 +51,9 @@ export class KnowledgeGraphHandler extends BaseProcessHandler<KnowledgeGraphJob>
 		jobId: string,
 		job: KnowledgeGraphJob,
 		dependencies: ProcessDependencies,
-	): Promise<void> {
+	): Promise<ItemHandlerResult> {
 		// Job is properly typed - no casting needed
 		const pageData = job.payload;
-		const activeJobs =
-			job.activeJobs ||
-			new Map<string, { pageData: RememberedContent; startTime: number }>();
 
 		await dependencies.logger.info(
 			`🔄 Starting knowledge graph job: ${jobId}`,
@@ -60,7 +76,6 @@ export class KnowledgeGraphHandler extends BaseProcessHandler<KnowledgeGraphJob>
 			"offscreen",
 		);
 
-		activeJobs.set(jobId, { pageData, startTime: Date.now() });
 		dependencies.updateStatus(
 			`Processing: ${pageData.title.substring(0, 30)}...`,
 		);
@@ -68,7 +83,6 @@ export class KnowledgeGraphHandler extends BaseProcessHandler<KnowledgeGraphJob>
 		try {
 			// Send initial progress update
 			await dependencies.updateJobProgress(jobId, {
-				status: "extracting_entities",
 				stage: "Starting background processing...",
 				progress: 5,
 			});
@@ -109,23 +123,21 @@ export class KnowledgeGraphHandler extends BaseProcessHandler<KnowledgeGraphJob>
 					`✅ Knowledge graph job completed successfully: ${jobId}`,
 					{
 						pageTitle: pageData.title,
-						duration: Date.now() - activeJobs.get(jobId)!.startTime,
 					},
 					"offscreen",
 				);
 
-				await this.completeSuccess(jobId, { pageTitle: pageData.title });
+				return { pageTitle: pageData.title };
 			} finally {
 				unsubscribe();
 			}
-		} catch (error) {
-			await this.handleError(jobId, error, "knowledge graph processing");
-			throw error;
 		} finally {
-			activeJobs.delete(jobId);
-			dependencies.updateStatus(
-				activeJobs.size > 0 ? `Processing ${activeJobs.size} jobs...` : "Ready",
-			);
 		}
 	}
 }
+
+// Self-register the handler
+backgroundProcessFactory.register({
+	instance: new KnowledgeGraphHandler(),
+	jobs: Object.values(JOB_NAMES)
+});

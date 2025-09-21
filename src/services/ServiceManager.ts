@@ -1,9 +1,12 @@
 import type { IEmbeddingService } from "./embedding/embedding-service";
 import { logError, logInfo, logWarn } from "@/utils/logger";
-import { EmbeddingServiceFull, EmbeddingServiceLite } from "./embedding/embedding-service";
+import {
+	EmbeddingServiceMain,
+	EmbeddingServiceUI,
+} from "./embedding/embedding-service";
 import type { ILLMService } from "./llm/interfaces/llm-service.interface";
-import { LLMServiceLite } from "./llm/llm-service-lite";
-import { LLMServiceFull } from "./llm/llm-service-full";
+import { LLMServiceUI } from "./llm/llm-service-ui";
+import { LLMServiceMain } from "./llm/llm-service-main";
 import { flowsService } from "./flows/flows-service";
 import { DatabaseService } from "./database";
 
@@ -80,7 +83,10 @@ export class ServiceManager {
 	}
 
 	async initialize(
-		options: { liteMode: boolean } = { liteMode: false },
+		options: { liteMode?: boolean; callback?: (service: string, progress: number) => void } = {
+			liteMode: false,
+			callback: undefined,
+		},
 	): Promise<void> {
 		if (this.initialized) return;
 		if (this.initPromise) return this.initPromise;
@@ -91,7 +97,10 @@ export class ServiceManager {
 	}
 
 	private async initializeServices(
-		options: { liteMode: boolean } = { liteMode: false },
+		options: { liteMode?: boolean; callback?: (service: string, progress: number) => void } = {
+			liteMode: false,
+			callback: undefined,
+		},
 	): Promise<void> {
 		const mode = options.liteMode ? "lite mode" : "full mode";
 		logInfo(`🚀 Initializing services in ${mode}...`);
@@ -102,16 +111,18 @@ export class ServiceManager {
 			this.databaseService = new DatabaseService();
 			if (options.liteMode) {
 				logInfo("🔧 Creating lite service implementations");
-				this.embeddingService = new EmbeddingServiceLite();
-				this.llmService = new LLMServiceLite();
+				this.embeddingService = new EmbeddingServiceUI();
+				this.llmService = new LLMServiceUI();
 			} else {
 				logInfo("🔧 Creating full service implementations");
-				this.embeddingService = new EmbeddingServiceFull();
-				this.llmService = new LLMServiceFull();
+				this.embeddingService = new EmbeddingServiceMain();
+				this.llmService = new LLMServiceMain();
 			}
 
+			options.callback?.("database", 0);
 			// Initialize services sequentially for better progress tracking
 			await this.initializeDatabase();
+			options.callback?.("database", 100);
 			this.updateProgress("Database ready", 25, "database");
 
 			if (options.liteMode) {
@@ -123,14 +134,20 @@ export class ServiceManager {
 				this.updateProgress("LLM service ready (lite)", 75, "llm");
 			} else {
 				// Full mode: Initialize all services normally
+				options.callback?.("embedding", 0);
 				await this.initializeEmbeddingService(false);
+				options.callback?.("embedding", 100);
 				this.updateProgress("Embedding models loaded", 50, "embedding");
 
+				options.callback?.("llm", 0);
 				await this.initializeLLMService(false);
+				options.callback?.("llm", 100);
 				this.updateProgress("LLM service ready", 75, "llm");
 			}
 
+			options.callback?.("flow", 0);
 			await this.initializeFlowsService();
+			options.callback?.("flow", 100);
 			this.updateProgress("All services ready", 100, "flows");
 
 			logInfo(`✅ All services initialized successfully in ${mode}`);
@@ -185,7 +202,9 @@ export class ServiceManager {
 				});
 				logInfo("✅ Embedding service initialized with local models");
 			} else {
-				logInfo("✅ Embedding service initialized in lite mode (will use offscreen for operations)");
+				logInfo(
+					"✅ Embedding service initialized in lite mode (will use offscreen for operations)",
+				);
 			}
 
 			this.serviceStatus.embedding = true;
@@ -214,7 +233,9 @@ export class ServiceManager {
 			await this.llmService.initialize();
 
 			if (liteMode) {
-				logInfo("✅ LLM service initialized in lite mode (will use offscreen for heavy operations)");
+				logInfo(
+					"✅ LLM service initialized in lite mode (will use offscreen for heavy operations)",
+				);
 			} else {
 				logInfo("✅ LLM service initialized with local models");
 			}
@@ -261,7 +282,9 @@ export class ServiceManager {
 	}
 
 	isLLMServiceReady(): boolean {
-		return this.serviceStatus.llm && this.llmService && this.llmService.isReady();
+		return (
+			this.serviceStatus.llm && this.llmService && this.llmService.isReady()
+		);
 	}
 
 	isDatabaseReady(): boolean {

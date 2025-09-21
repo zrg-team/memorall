@@ -1,4 +1,31 @@
-// Base embedding interface
+export interface LocalEmbeddingConfig {
+	type: "local";
+	modelName?: string;
+	normalize?: boolean;
+	quantized?: boolean;
+	modelId?: string;
+}
+
+export interface OpenAIEmbeddingConfig {
+	type: "openai";
+	modelName?: string;
+	apiKey?: string;
+	baseUrl?: string;
+}
+
+export interface WorkerEmbeddingConfig {
+	type: "worker";
+	modelName?: string;
+	normalize?: boolean;
+	quantized?: boolean;
+	modelId?: string;
+}
+
+export type EmbeddingConfig =
+	| LocalEmbeddingConfig
+	| OpenAIEmbeddingConfig
+	| WorkerEmbeddingConfig;
+
 export interface BaseEmbedding {
 	name: string;
 	dimensions: number;

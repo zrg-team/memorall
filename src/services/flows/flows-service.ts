@@ -5,14 +5,11 @@ import { logInfo } from "@/utils/logger";
 import type { AllServices } from "./interfaces/tool";
 
 // Type mapping for graph types and their required services
-interface SimpleGraphServices extends AllServices {
-}
+interface SimpleGraphServices extends AllServices {}
 
-interface KnowledgeGraphServices extends AllServices {
-}
+interface KnowledgeGraphServices extends AllServices {}
 
-interface KnowledgeRAGServices extends AllServices {
-}
+interface KnowledgeRAGServices extends AllServices {}
 
 // Graph registry with proper type mapping
 interface GraphRegistry {

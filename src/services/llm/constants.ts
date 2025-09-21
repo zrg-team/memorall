@@ -5,11 +5,4 @@ export const DEFAULT_SERVICES = {
 	OPENAI: "openai",
 } as const;
 
-export type ServiceProvider =
-	| "wllama"
-	| "webllm"
-	| "openai"
-	| "lmstudio"
-	| "ollama";
-
 export const CURRENT_MODEL_KEY = "_CURRENT_MODEL_KEY_";

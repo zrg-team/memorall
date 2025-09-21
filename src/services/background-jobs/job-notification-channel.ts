@@ -1,10 +1,11 @@
 import { logInfo, logError } from "@/utils/logger";
-import type { BaseJob } from "./offscreen-handlers/types";
+import type { BaseJob, JobResult } from "./offscreen-handlers/types";
 
 export interface JobNotificationMessage {
 	type: "JOB_ENQUEUED" | "JOB_UPDATED" | "JOB_COMPLETED" | "QUEUE_UPDATED";
 	jobId?: string;
 	job?: BaseJob;
+	result?: JobResult;
 	timestamp: number;
 }
 
@@ -135,10 +136,11 @@ export class JobNotificationChannel {
 	/**
 	 * Notify that a job has been completed
 	 */
-	notifyJobCompleted(jobId: string): void {
+	notifyJobCompleted(jobId: string, result?: JobResult): void {
 		this.postMessage({
 			type: "JOB_COMPLETED",
 			jobId,
+			result,
 			timestamp: Date.now(),
 		});
 	}

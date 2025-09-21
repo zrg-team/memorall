@@ -1,6 +1,6 @@
 import { useCallback } from "react";
 import { type ModelInfo } from "@/services/llm";
-import { serviceManager } from '@/services'
+import { serviceManager } from "@/services";
 import { QUICK_WALLAMA_LLMS } from "@/constants/wllama";
 import { QUICK_WEBLLM_LLMS } from "@/constants/webllm";
 import { QUICK_OPENAI_LLMS } from "@/constants/openai";
@@ -32,8 +32,7 @@ export function useModelOperations({
 	onModelLoaded,
 }: UseModelOperationsProps) {
 	// Initialize services
-	const ensureServices = useCallback(async () => {
-	}, []);
+	const ensureServices = useCallback(async () => {}, []);
 
 	// Quick download a model (supports wllama, webllm, and openai)
 	const handleQuickDownload = useCallback(
@@ -69,7 +68,10 @@ export function useModelOperations({
 					const openaiModel = model as (typeof QUICK_OPENAI_LLMS)[0];
 					const providerType =
 						quickProvider === "openai" ? "openai" : quickProvider;
-					await serviceManager.llmService.setCurrentModel(openaiModel.model, providerType);
+					await serviceManager.llmService.setCurrentModel(
+						openaiModel.model,
+						providerType,
+					);
 					setCurrent({ modelId: openaiModel.model, provider: providerType });
 					logInfo(`${modelName} connected successfully`);
 
@@ -95,7 +97,10 @@ export function useModelOperations({
 						loadedModel.filename || loadedModel.id.includes("/")
 							? DEFAULT_SERVICES.WLLAMA
 							: DEFAULT_SERVICES.WEBLLM;
-					await serviceManager.llmService.unloadFor(currentServiceName, loadedModel.id);
+					await serviceManager.llmService.unloadFor(
+						currentServiceName,
+						loadedModel.id,
+					);
 				}
 
 				let modelId: string;
@@ -194,7 +199,10 @@ export function useModelOperations({
 						: DEFAULT_SERVICES.WLLAMA;
 
 					try {
-						await serviceManager.llmService.unloadFor(loadedModelService, loadedModel.id);
+						await serviceManager.llmService.unloadFor(
+							loadedModelService,
+							loadedModel.id,
+						);
 					} catch (unloadErr) {
 						logInfo(
 							"Failed to unload from specific service, trying default:",

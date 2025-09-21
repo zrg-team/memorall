@@ -55,10 +55,12 @@ export function useCurrentModel(
 
 	// PROPER ARCHITECTURE: Listen to LLMService events, not SharedStorage directly
 	useEffect(() => {
-		const unsubscribe = serviceManager.llmService.onCurrentModelChange((modelInfo) => {
-			console.log("🔔 Current model changed via LLMService:", modelInfo);
-			updateCurrentModel(modelInfo);
-		});
+		const unsubscribe = serviceManager.llmService.onCurrentModelChange(
+			(modelInfo) => {
+				console.log("🔔 Current model changed via LLMService:", modelInfo);
+				updateCurrentModel(modelInfo);
+			},
+		);
 
 		return unsubscribe;
 	}, [openaiReady]); // Re-subscribe when openaiReady changes

@@ -1,7 +1,7 @@
 // Offscreen document for background knowledge graph processing
 // This runs in a hidden document with full DOM access for LLM/Embedding services
 import { logError, logInfo } from "@/utils/logger";
-import { ProcessFactory } from "@/services/background-jobs/offscreen-handlers/process-factory";
+import { backgroundProcessFactory } from "@/services/background-jobs/offscreen-handlers";
 import { jobNotificationChannel } from "@/services/background-jobs/job-notification-channel";
 import type { JobNotificationMessage } from "@/services/background-jobs/job-notification-channel";
 import type { BaseJob } from "@/services/background-jobs/offscreen-handlers/types";
@@ -14,17 +14,66 @@ import type {
 } from "@/services/background-jobs/offscreen-handlers/types";
 
 import { serviceManager } from "@/services";
-import { flowsService } from "@/services/flows/flows-service";
 import { sharedStorageService } from "@/services/shared-storage";
-import type { RememberedContent } from "@/services/database/db";
 import { persistentLogger } from "@/services/logging/persistent-logger";
+import { EmbeddingServiceMain } from "@/services/embedding/embedding-service-main";
+import { EmbeddingServiceCore } from "@/services/embedding/embedding-service-core";
+
+type OffscreenGlobal = typeof globalThis & {
+	__contextaOffscreenProcessor__?: OffscreenProcessor;
+	__contextaOffscreenSetupDone__?: boolean;
+	__contextaOffscreenStartLogged__?: boolean;
+	__contextaEmbeddingPatchDone__?: boolean;
+};
+
+const offscreenGlobal = globalThis as OffscreenGlobal;
+
+type PatchedEmbeddingService = EmbeddingServiceMain & {
+	__contextaSkipDefaultEmbedding__?: boolean;
+};
+
+if (!offscreenGlobal.__contextaEmbeddingPatchDone__) {
+	const embeddingMainProto =
+		EmbeddingServiceMain.prototype as unknown as Record<string, any>;
+	const coreProto = EmbeddingServiceCore.prototype as unknown as Record<
+		string,
+		any
+	>;
+	const originalInitialize: () => Promise<void> = embeddingMainProto.initialize;
+	const baseEnsureDefault: () => Promise<void> =
+		coreProto.ensureDefaultEmbedding;
+
+	embeddingMainProto.ensureDefaultEmbedding = async function (
+		this: PatchedEmbeddingService,
+	): Promise<void> {
+		if (this.__contextaSkipDefaultEmbedding__) {
+			// Defer default creation; ServiceManager will create the initial model explicitly.
+			return;
+		}
+		return baseEnsureDefault.call(this);
+	};
+
+	embeddingMainProto.initialize = async function (
+		this: PatchedEmbeddingService,
+	): Promise<void> {
+		this.__contextaSkipDefaultEmbedding__ = true;
+		try {
+			await originalInitialize.call(this);
+		} finally {
+			delete this.__contextaSkipDefaultEmbedding__;
+		}
+	};
+
+	offscreenGlobal.__contextaEmbeddingPatchDone__ = true;
+}
 
 class OffscreenProcessor {
-	private initialized = false;
-	private activeJobs = new Map<
-		string,
-		{ pageData: RememberedContent; startTime: number }
-	>();
+	currentProgress = {
+		done: false,
+		progress: 0,
+		services: [] as string[],
+		status: "Initializing...",
+	}
 	private ticking = false;
 	private tickRequested = false;
 	private processFactory: ProcessFactory;
@@ -38,13 +87,39 @@ class OffscreenProcessor {
 			this.updateStatus.bind(this),
 			this.sendChromeMessage.bind(this),
 		);
-		this.processFactory = new ProcessFactory(this.dependencies);
+		this.processFactory = backgroundProcessFactory;
+		this.processFactory.setDependencies(this.dependencies);
+
+		// Set up message listener for INITIAL command
+		this.setupInitialMessageListener();
+
 		this.initialize();
+	}
+
+	private setupInitialMessageListener(): void {
+		try {
+			chrome.runtime?.onMessage.addListener((message, _sender, sendResponse) => {
+				console.log("🔔 OffscreenProcessor received message:", message.type);
+
+				if (message.type === "INITIAL") {
+					console.log("🚀 OffscreenProcessor handling INITIAL message");
+					console.log("📊 Current progress:", this.currentProgress);
+					this.reportProgress();
+					sendResponse(true);
+					return true;
+				}
+			});
+			console.log("✅ OffscreenProcessor INITIAL message listener registered");
+		} catch (error) {
+			console.warn("Failed to add INITIAL message listener:", error);
+		}
 	}
 
 	private async initialize(): Promise<void> {
 		try {
 			this.updateStatus("Initializing...");
+			this.reportProgress();
+
 			// Initialize persistent logger first before any logging
 			try {
 				await persistentLogger.initialize();
@@ -68,58 +143,58 @@ class OffscreenProcessor {
 				{},
 				"offscreen",
 			);
+			this.currentProgress.progress = 10;
+			this.currentProgress.status = "Initializing SharedStorageService...";
+			this.reportProgress();
+
 			await sharedStorageService.initialize();
 			persistentLogger.info(
 				"✅ SharedStorageService initialized",
 				{},
 				"offscreen",
 			);
+			this.currentProgress.services.push("SharedStorageService");
+			this.currentProgress.progress = 30;
+			this.currentProgress.status = "Initializing ServiceManager...";
+			this.reportProgress();
 
 			// Initialize all services via ServiceManager (centralized)
-			// Wait for DOM ready before initializing services that require DOM access
+			// ServiceManager handles all service initialization - no need for manual initialization
 			persistentLogger.info(
 				"🔄 Initializing all services via ServiceManager...",
 				{},
 				"offscreen",
 			);
-			await serviceManager.initialize();
+			await serviceManager.initialize({
+				callback: (service: string, progress) => {
+					this.currentProgress.progress = 30 + (progress * 0.6); // 30% + 60% of serviceManager progress
+					this.currentProgress.status = `Initializing ${service}... (${progress}%)`;
+					this.reportProgress();
+				}
+			});
 			persistentLogger.info(
 				"✅ All services initialized via ServiceManager",
 				{},
 				"offscreen",
 			);
 
-			try {
-				persistentLogger.info(
-					"🔄 Initializing Embedding service...",
-					{},
-					"offscreen",
-				);
-				// Warm up by requesting a tiny vector; this triggers ensureDefault()
-				await serviceManager.embeddingService.textToVector("warmup");
-				persistentLogger.info(
-					"✅ Embedding service initialized",
-					{},
-					"offscreen",
-				);
-			} catch (embedErr) {
-				logError("Failed to initialize embedding service:", embedErr);
-				persistentLogger.warn(
-					"⚠️ Embedding service initialization failed; continuing",
-					embedErr instanceof Error ? embedErr.message : String(embedErr),
-					"offscreen",
-				);
-			}
+			this.currentProgress.progress = 90;
+			this.currentProgress.status = "Starting job queue processing...";
+			this.reportProgress();
 
+			// Begin processing queue before announcing readiness so message handlers are live
+			await this.startQueueProcessing();
 			persistentLogger.info(
-				"🔄 Initializing flows service...",
+				"✅ Job queue processing loop started",
 				{},
 				"offscreen",
 			);
-			await flowsService.initialize();
-			persistentLogger.info("✅ Flows service initialized", {}, "offscreen");
 
-			this.initialized = true;
+			this.currentProgress.progress = 100;
+			this.currentProgress.status = "Ready";
+			this.currentProgress.done = true;
+			this.reportProgress();
+
 			this.updateStatus("Ready");
 			persistentLogger.info(
 				"🎉 All services initialized - ready for background processing",
@@ -127,21 +202,16 @@ class OffscreenProcessor {
 				"offscreen",
 			);
 
-			// Notify background that offscreen is ready so creation wait resolves
+			// Notify background that offscreen is ready once handlers are registered
 			try {
 				chrome.runtime?.sendMessage?.({ type: "OFFSCREEN_READY" });
 			} catch (_) {}
-
-			// Begin processing queue
-			await this.startQueueProcessing();
-			persistentLogger.info(
-				"✅ Job queue processing loop started",
-				{},
-				"offscreen",
-			);
 		} catch (error) {
 			logError("Failed to initialize offscreen processor:", error);
 			this.updateStatus("Failed");
+			this.currentProgress.status = "Failed";
+			this.currentProgress.done = true;
+			this.reportProgress();
 			persistentLogger.error("❌ Initialization failed", error, "offscreen");
 		}
 	}
@@ -201,6 +271,10 @@ class OffscreenProcessor {
 			{},
 			"offscreen",
 		);
+	}
+
+	private updateInitialProgress() {
+
 	}
 
 	private async processQueueJobs(): Promise<void> {
@@ -292,9 +366,8 @@ class OffscreenProcessor {
 	}
 
 	private async processClaimedJob(job: BaseJob): Promise<void> {
-		// SINGLE UNIFIED HANDLER - handlers deal with their own payload logic
-		const handler = this.processFactory.createUnifiedHandler(job.jobType);
-		await handler.process(job.id, job as unknown as BaseJob, this.dependencies);
+		// Use the new standardized execution with automatic completion and error handling
+		await this.processFactory.executeJob(job.id, job);
 	}
 
 	// Helper method to update job progress via background script message
@@ -328,28 +401,14 @@ class OffscreenProcessor {
 		}
 	}
 
-	// Helper method to complete job via background script message
+	// Helper method to complete job via jobNotificationChannel
 	private async completeJobViaMessage(
 		jobId: string,
-		result: { success: boolean; error?: string },
+		result: { success: boolean; error?: string; data?: Record<string, unknown> },
 	): Promise<void> {
 		try {
-			const response = await chrome.runtime.sendMessage({
-				type: "COMPLETE_JOB",
-				jobId,
-				result,
-			});
-
-			if (!response?.success) {
-				persistentLogger.error(
-					`❌ Failed to complete job via message: ${jobId}`,
-					{
-						error: response?.error || "Unknown error",
-						result,
-					},
-					"offscreen",
-				);
-			}
+			// Send completion via jobNotificationChannel to communicate between threads
+			jobNotificationChannel.notifyJobCompleted(jobId, result);
 		} catch (error) {
 			persistentLogger.error(
 				`❌ Failed to send job completion: ${jobId}`,
@@ -361,9 +420,20 @@ class OffscreenProcessor {
 
 	// Simple status indicator for debugging
 	private updateStatus(message: string): void {
-		const statusEl = document.getElementById("status");
-		if (statusEl) {
-			statusEl.textContent = `OFFSCREEN: ${message}`;
+		// NONE
+	}
+
+	// Report current progress to UI thread
+	reportProgress(): void {
+		console.log("📤 Sending INITIAL_PROGRESS:", this.currentProgress);
+		try {
+			chrome.runtime?.sendMessage?.({
+				type: "INITIAL_PROGRESS",
+				currentProgress: this.currentProgress
+			});
+			console.log("✅ INITIAL_PROGRESS message sent successfully");
+		} catch (error) {
+			console.error("❌ Failed to send INITIAL_PROGRESS:", error);
 		}
 	}
 
@@ -378,38 +448,62 @@ class OffscreenProcessor {
 }
 
 // Initialize the offscreen processor
-console.log("🚀 OFFSCREEN HTML LOADED!");
-try {
-	const statusEl = document.getElementById("status");
-	if (statusEl) {
-		statusEl.textContent = "OFFSCREEN: HTML Loaded!";
-		(statusEl as HTMLElement).style.display = "block";
-	}
-} catch (_) {}
-
-console.log("🚀 Offscreen document script loading...");
-persistentLogger.info(
-	"🚀 Offscreen document script started",
-	{ timestamp: new Date().toISOString() },
-	"offscreen",
-);
-
-new OffscreenProcessor();
-
-// Add message listener for ping/status checks
-try {
-	chrome.runtime?.onMessage.addListener((message, _sender, sendResponse) => {
-		if (message.type === "PING_OFFSCREEN") {
-			sendResponse(true);
-			return true;
+if (!offscreenGlobal.__contextaOffscreenSetupDone__) {
+	console.log("🚀 OFFSCREEN HTML LOADED!");
+	try {
+		const statusEl = document.getElementById("status");
+		if (statusEl) {
+			statusEl.textContent = "OFFSCREEN: HTML Loaded!";
+			(statusEl as HTMLElement).style.display = "block";
 		}
-	});
-} catch (error) {
-	console.warn("Failed to add message listener:", error);
+	} catch (_) {}
+
+	console.log("🚀 Offscreen document script loading...");
+	offscreenGlobal.__contextaOffscreenSetupDone__ = true;
+
+	if (!offscreenGlobal.__contextaOffscreenStartLogged__) {
+		offscreenGlobal.__contextaOffscreenStartLogged__ = true;
+		void (async () => {
+			try {
+				await persistentLogger.initialize();
+				persistentLogger.info(
+					"🚀 Offscreen document script started",
+					{ timestamp: new Date().toISOString() },
+					"offscreen",
+				);
+			} catch (error) {
+				console.warn(
+					"Failed to initialize persistentLogger for offscreen start log:",
+					error,
+				);
+			}
+		})();
+	}
+
+	// Add message listener for ping/status checks
+	try {
+		chrome.runtime?.onMessage.addListener((message, _sender, sendResponse) => {
+			if (message.type === "PING_OFFSCREEN") {
+				sendResponse(true);
+				return true;
+			}
+		});
+		console.log("✅ Basic message listener registered for PING");
+	} catch (error) {
+		console.warn("Failed to add message listener:", error);
+	}
+
+	// Keep the offscreen document alive
+	setInterval(() => {
+		// This prevents the offscreen document from being terminated
+		console.log("Offscreen document heartbeat");
+	}, 30000); // Every 30 seconds
 }
 
-// Keep the offscreen document alive
-setInterval(() => {
-	// This prevents the offscreen document from being terminated
-	console.log("Offscreen document heartbeat");
-}, 30000); // Every 30 seconds
+if (!offscreenGlobal.__contextaOffscreenProcessor__) {
+	offscreenGlobal.__contextaOffscreenProcessor__ = new OffscreenProcessor();
+} else {
+	console.info(
+		"♻️ OffscreenProcessor already initialized; reusing existing instance.",
+	);
+}

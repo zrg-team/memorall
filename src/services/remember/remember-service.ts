@@ -1,7 +1,7 @@
 import { desc, eq, like, and, or } from "drizzle-orm";
 import { logError, logInfo } from "@/utils/logger";
 import { persistentLogger } from "@/services/logging/persistent-logger";
-import { serviceManager } from '@/services'
+import { serviceManager } from "@/services";
 import { flowsService } from "@/services/flows/flows-service";
 import type { RememberedContent } from "@/services/database/db";
 import type {
@@ -158,7 +158,8 @@ export class RememberService {
 			if (!isServiceWorker) {
 				try {
 					const embeddingText = `${data.title}\n\n${data.textContent}`;
-					embedding = await serviceManager.embeddingService.textToVector(embeddingText);
+					embedding =
+						await serviceManager.embeddingService.textToVector(embeddingText);
 				} catch (embeddingError) {
 					logError(
 						"⚠️ Failed to generate embedding, continuing without it:",
@@ -206,13 +207,15 @@ export class RememberService {
 			};
 
 			// Save to database
-			const result = await serviceManager.databaseService.use(async ({ db, schema }) => {
-				const [savedContent] = await db
-					.insert(schema.rememberedContent)
-					.values(newContent)
-					.returning();
-				return savedContent;
-			});
+			const result = await serviceManager.databaseService.use(
+				async ({ db, schema }) => {
+					const [savedContent] = await db
+						.insert(schema.rememberedContent)
+						.values(newContent)
+						.returning();
+					return savedContent;
+				},
+			);
 
 			logInfo("✅ Content saved successfully:", result.id);
 
@@ -296,7 +299,8 @@ export class RememberService {
 			if (!isServiceWorker) {
 				try {
 					const embeddingText = `${contentData.title}\n\n${contentData.textContent}`;
-					embedding = await serviceManager.embeddingService.textToVector(embeddingText);
+					embedding =
+						await serviceManager.embeddingService.textToVector(embeddingText);
 				} catch (embeddingError) {
 					logError(
 						"⚠️ Failed to generate embedding for update:",
@@ -317,29 +321,31 @@ export class RememberService {
 				contentData.sourceMetadata,
 			);
 
-			const result = await serviceManager.databaseService.use(async ({ db, schema }) => {
-				const [updatedPage] = await db
-					.update(schema.rememberedContent)
-					.set({
-						sourceType: contentData.sourceType,
-						sourceUrl: contentData.sourceUrl,
-						originalUrl: contentData.originalUrl,
-						title: contentData.title,
-						rawContent: contentData.rawContent,
-						cleanContent: contentData.cleanContent,
-						textContent: contentData.textContent,
-						sourceMetadata: contentData.sourceMetadata as any,
-						extractionMetadata: contentData.extractionMetadata as any,
-						embedding,
-						searchVector,
-						contentLength,
-						readabilityScore,
-						updatedAt: new Date(),
-					})
-					.where(eq(schema.rememberedContent.id, pageId))
-					.returning();
-				return updatedPage;
-			});
+			const result = await serviceManager.databaseService.use(
+				async ({ db, schema }) => {
+					const [updatedPage] = await db
+						.update(schema.rememberedContent)
+						.set({
+							sourceType: contentData.sourceType,
+							sourceUrl: contentData.sourceUrl,
+							originalUrl: contentData.originalUrl,
+							title: contentData.title,
+							rawContent: contentData.rawContent,
+							cleanContent: contentData.cleanContent,
+							textContent: contentData.textContent,
+							sourceMetadata: contentData.sourceMetadata as any,
+							extractionMetadata: contentData.extractionMetadata as any,
+							embedding,
+							searchVector,
+							contentLength,
+							readabilityScore,
+							updatedAt: new Date(),
+						})
+						.where(eq(schema.rememberedContent.id, pageId))
+						.returning();
+					return updatedPage;
+				},
+			);
 
 			logInfo("✅ Page updated successfully:", pageId);
 
@@ -365,14 +371,16 @@ export class RememberService {
 				await this.initialize();
 			}
 
-			const result = await serviceManager.databaseService.use(async ({ db, schema }) => {
-				const pages = await db
-					.select()
-					.from(schema.rememberedContent)
-					.where(eq(schema.rememberedContent.sourceUrl, url))
-					.limit(1);
-				return pages[0] || null;
-			});
+			const result = await serviceManager.databaseService.use(
+				async ({ db, schema }) => {
+					const pages = await db
+						.select()
+						.from(schema.rememberedContent)
+						.where(eq(schema.rememberedContent.sourceUrl, url))
+						.limit(1);
+					return pages[0] || null;
+				},
+			);
 
 			return result;
 		} catch (error) {
@@ -401,68 +409,74 @@ export class RememberService {
 				sortOrder = "desc",
 			} = options;
 
-			const result = await serviceManager.databaseService.use(async ({ db, schema }) => {
-				// Build where conditions
-				const conditions = [];
+			const result = await serviceManager.databaseService.use(
+				async ({ db, schema }) => {
+					// Build where conditions
+					const conditions = [];
 
-				if (query.trim()) {
-					conditions.push(
-						or(
-							like(schema.rememberedContent.title, `%${query}%`),
-							like(schema.rememberedContent.textContent, `%${query}%`),
-							like(schema.rememberedContent.searchVector, `%${query}%`),
-						),
-					);
-				}
+					if (query.trim()) {
+						conditions.push(
+							or(
+								like(schema.rememberedContent.title, `%${query}%`),
+								like(schema.rememberedContent.textContent, `%${query}%`),
+								like(schema.rememberedContent.searchVector, `%${query}%`),
+							),
+						);
+					}
 
-				if (tags.length > 0) {
-					// PostgreSQL JSONB array contains check
-					conditions.push(
-						// This would need proper JSONB query syntax in production
-						like(schema.rememberedContent.tags as any, `%${tags[0]}%`),
-					);
-				}
+					if (tags.length > 0) {
+						// PostgreSQL JSONB array contains check
+						conditions.push(
+							// This would need proper JSONB query syntax in production
+							like(schema.rememberedContent.tags as any, `%${tags[0]}%`),
+						);
+					}
 
-				if (isArchived !== undefined) {
-					conditions.push(eq(schema.rememberedContent.isArchived, isArchived));
-				}
+					if (isArchived !== undefined) {
+						conditions.push(
+							eq(schema.rememberedContent.isArchived, isArchived),
+						);
+					}
 
-				if (isFavorite !== undefined) {
-					conditions.push(eq(schema.rememberedContent.isFavorite, isFavorite));
-				}
+					if (isFavorite !== undefined) {
+						conditions.push(
+							eq(schema.rememberedContent.isFavorite, isFavorite),
+						);
+					}
 
-				const whereClause =
-					conditions.length > 0 ? and(...conditions) : undefined;
+					const whereClause =
+						conditions.length > 0 ? and(...conditions) : undefined;
 
-				// Build order by
-				const column = schema.rememberedContent[sortBy];
-				const orderBy = sortOrder === "desc" ? desc(column) : column;
+					// Build order by
+					const column = schema.rememberedContent[sortBy];
+					const orderBy = sortOrder === "desc" ? desc(column) : column;
 
-				// Get total count
-				const totalQuery = db
-					.select({ count: schema.rememberedContent.id })
-					.from(schema.rememberedContent);
-				if (whereClause) {
-					totalQuery.where(whereClause);
-				}
+					// Get total count
+					const totalQuery = db
+						.select({ count: schema.rememberedContent.id })
+						.from(schema.rememberedContent);
+					if (whereClause) {
+						totalQuery.where(whereClause);
+					}
 
-				// Get pages
-				const pagesQuery = db.select().from(schema.rememberedContent);
-				if (whereClause) {
-					pagesQuery.where(whereClause);
-				}
-				pagesQuery.orderBy(orderBy).limit(limit).offset(offset);
+					// Get pages
+					const pagesQuery = db.select().from(schema.rememberedContent);
+					if (whereClause) {
+						pagesQuery.where(whereClause);
+					}
+					pagesQuery.orderBy(orderBy).limit(limit).offset(offset);
 
-				const [totalResult, pages] = await Promise.all([
-					totalQuery,
-					pagesQuery,
-				]);
+					const [totalResult, pages] = await Promise.all([
+						totalQuery,
+						pagesQuery,
+					]);
 
-				const total = totalResult.length;
-				const hasMore = offset + limit < total;
+					const total = totalResult.length;
+					const hasMore = offset + limit < total;
 
-				return { pages, total, hasMore };
-			});
+					return { pages, total, hasMore };
+				},
+			);
 
 			return result;
 		} catch (error) {
@@ -480,14 +494,16 @@ export class RememberService {
 				await this.initialize();
 			}
 
-			const result = await serviceManager.databaseService.use(async ({ db, schema }) => {
-				const pages = await db
-					.select()
-					.from(schema.rememberedContent)
-					.where(eq(schema.rememberedContent.id, id))
-					.limit(1);
-				return pages[0] || null;
-			});
+			const result = await serviceManager.databaseService.use(
+				async ({ db, schema }) => {
+					const pages = await db
+						.select()
+						.from(schema.rememberedContent)
+						.where(eq(schema.rememberedContent.id, id))
+						.limit(1);
+					return pages[0] || null;
+				},
+			);
 
 			return result;
 		} catch (error) {
