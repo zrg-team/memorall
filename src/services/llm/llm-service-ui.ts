@@ -95,13 +95,6 @@ export class LLMServiceUI extends LLMServiceCore implements ILLMService {
 				};
 
 				try {
-					console.log("load=====================>", config);
-					const basic = await backgroundJob.execute(
-						'basic-async', {
-							delay: 1000
-						}
-					)
-					console.log("basic=====================>", basic)
 					const result = await backgroundJob.execute(
 						"create-llm-service",
 						{
@@ -109,20 +102,12 @@ export class LLMServiceUI extends LLMServiceCore implements ILLMService {
 							llmType: config.type,
 							config,
 						},
-						{
-							onProgress: ({ progress = 0, stage = "" }) => {
-								console.log("=====================>", stage);
-								emitProgress(progress, stage);
-							},
-						},
 					);
-					console.log("result=====================>", result);
 					logInfo(
 						`📋 Background job result: status=${result.status}, hasResult=${!!result.result}`,
 					);
 
 					if (result.status === "completed" && result.result) {
-						emitProgress(100, "LLM service ready");
 						const proxyLLM = new LLMProxy(
 							name,
 							config.type,
@@ -265,8 +250,11 @@ export class LLMServiceUI extends LLMServiceCore implements ILLMService {
 		// Auto-detect which service should handle this model
 		const serviceName = this.determineServiceFromModel(model);
 
+		console.log("serve=====================>", model, serviceName);
 		// Get service, create if not exists
 		let service = await this.get(serviceName);
+
+		console.log("service=====================>", service);
 
 		if (!service) {
 			// Create the service if it doesn't exist
@@ -461,14 +449,6 @@ export class LLMServiceUI extends LLMServiceCore implements ILLMService {
 			return DEFAULT_SERVICES.WEBLLM; // WebLLM for simple model names
 		}
 		return DEFAULT_SERVICES.WLLAMA; // Default to wllama for complex models
-	}
-
-	private determineProviderFromModel(modelId: string): ServiceProvider {
-		// Simple heuristic to determine provider from model ID
-		if (modelId.includes("gpt") || modelId.includes("openai")) return "openai";
-		if (modelId.includes("llama") || modelId.includes("vicuna"))
-			return "wllama";
-		return "openai"; // Default fallback
 	}
 
 	private determineProviderFromService(serviceName: string): ServiceProvider {

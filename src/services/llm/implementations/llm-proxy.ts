@@ -9,6 +9,7 @@ import type {
 	ChatCompletionRequest,
 	ChatCompletionResponse,
 } from "@/types/openai";
+import type { JobProgressUpdate } from "@/services/background-jobs/offscreen-handlers/types";
 
 // Proxy class for LLMs that exist in background jobs
 export class LLMProxy implements BaseLLM {
@@ -32,8 +33,8 @@ export class LLMProxy implements BaseLLM {
 				serviceName: this.name,
 			});
 
-			if (result.success && result.data) {
-				return result.data.models as ModelsResponse;
+			if (result.status === 'completed' && result.result) {
+				return result.result.models as ModelsResponse;
 			}
 			throw new Error(result.error || "Failed to get models");
 		} catch (error) {
@@ -63,8 +64,8 @@ export class LLMProxy implements BaseLLM {
 						request: { ...request, stream: true },
 					});
 
-					if (result.success && result.data && "response" in result.data) {
-						const responseData = result.data as {
+					if (result.status === 'completed' && result.result && "response" in result.result) {
+						const responseData = result.result as {
 							response: { chunks: ChatCompletionChunk[] };
 						};
 						if (responseData.response?.chunks) {
@@ -91,8 +92,8 @@ export class LLMProxy implements BaseLLM {
 						request,
 					});
 
-					if (result.success && result.data && "response" in result.data) {
-						const responseData = result.data as {
+					if (result.status === 'completed' && result.result && "response" in result.result) {
+						const responseData = result.result as {
 							response: ChatCompletionResponse;
 						};
 						return responseData.response;
@@ -112,7 +113,7 @@ export class LLMProxy implements BaseLLM {
 				modelId,
 			});
 
-			if (!result.success) {
+			if (!result.error || result.status === 'failed') {
 				throw new Error(result.error || "Failed to unload model");
 			}
 		} catch (error) {
@@ -127,7 +128,7 @@ export class LLMProxy implements BaseLLM {
 				modelId,
 			});
 
-			if (!result.success) {
+			if (!result.error || result.status === 'failed') {
 				throw new Error(result.error || "Failed to delete model");
 			}
 		} catch (error) {
@@ -151,8 +152,12 @@ export class LLMProxy implements BaseLLM {
 					{ stream: true },
 				);
 
+				let lastProgressEvent: JobProgressUpdate | null = null;
+
+				console.log('==============================>')
 				// Stream progress updates to onProgress callback
 				for await (const progressEvent of stream) {
+					console.log('=========================> progressEvent', progressEvent)
 					if (progressEvent.progress !== undefined) {
 						onProgress({
 							loaded: progressEvent.progress,
@@ -167,21 +172,26 @@ export class LLMProxy implements BaseLLM {
 						progressEvent.completedAt
 					) {
 						// Job completed, will get result from execute call below
+						lastProgressEvent = progressEvent;
 						break;
 					}
 				}
-			}
+				console.log('lastProgressEvent', lastProgressEvent)
+				if (lastProgressEvent?.result && 'modelInfo' in lastProgressEvent?.result) {
+					return lastProgressEvent?.result?.modelInfo as ModelInfo;
+				}
+			} else {
+				// Get final result (or fallback if no progress callback)
+				const result = await backgroundJob.execute("serve-model", {
+					modelId,
+					serviceName: this.name,
+				});
 
-			// Get final result (or fallback if no progress callback)
-			const result = await backgroundJob.execute("serve-model", {
-				modelId,
-				serviceName: this.name,
-			});
-
-			if (result.success && result.data) {
-				return result.data.modelInfo as ModelInfo;
+				if (result.status === 'completed' && result.result) {
+					return result.result.modelInfo as ModelInfo;
+				}	
 			}
-			throw new Error(result.error || "Failed to serve model");
+			throw new Error("Failed to serve model");
 		} catch (error) {
 			throw new Error(`Background job failed: ${error}`);
 		}

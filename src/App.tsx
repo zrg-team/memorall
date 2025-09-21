@@ -67,12 +67,9 @@ const App: React.FC = () => {
 				// Initialize services through offscreen with progress streaming
 				const progressStream = await backgroundJob.initializeServices();
 
-				logInfo("🚀 App initialization started ============>", progressStream);
-
 				// Listen to initialization progress
 				for await (const progress of progressStream) {
 					setUiProgress(progress.progress);
-					logInfo("🚀 App initialization progress ============>", progress);
 
 					if (progress.status === "completed") {
 						setUiProgress(100);
@@ -84,7 +81,6 @@ const App: React.FC = () => {
 						break;
 					}
 				}
-				logInfo("🚀 App initialization end ============>");
 				await serviceManager.initialize({ liteMode: true });
 			} catch (error) {
 				logError("❌ App initialization failed:", error);

@@ -15,23 +15,24 @@ declare global {
 	}
 }
 
-// Generic progress update interface
-export interface JobProgressUpdate {
-	stage: string;
-	progress: number; // 0-100
-	timestamp?: Date;
-	metadata?: Record<string, unknown>; // Additional context for this progress step
-}
-
 export type ItemHandlerResult =
 	| Record<string, unknown>
 	| Record<string, unknown>[]
 	| undefined;
 
+// Generic progress update interface
+export interface JobProgressUpdate<T = ItemHandlerResult> {
+	stage: string;
+	progress: number; // 0-100
+	timestamp?: Date;
+	result?: T;
+	metadata?: Record<string, unknown>; // Additional context for this progress step
+}
+
 export interface JobResult<T = ItemHandlerResult> {
 	status: JobStatus;
 	result?: T; // Extended by each handler for their specific data
-	progress: JobProgressUpdate[]; // Array of progress updates throughout job execution
+	progress: JobProgressUpdate<T>[]; // Array of progress updates throughout job execution
 	error?: string; // Only present when status is "failed"
 }
 
