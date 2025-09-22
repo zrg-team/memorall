@@ -1,4 +1,4 @@
-import { logWarn } from "@/utils/logger";
+import { logDebug, logWarn } from "@/utils/logger";
 import { sharedStorageService } from "@/services/shared-storage";
 import type { BaseLLM } from "./interfaces/base-llm";
 import type {
@@ -202,11 +202,13 @@ export abstract class LLMServiceCore {
 		const modelUnsubscribe = sharedStorageService.subscribe<CurrentModelInfo>(
 			CURRENT_MODEL_KEY,
 			async (event) => {
-				await this.ensureCurrentModelService();
+				logDebug(`Storage event for ${CURRENT_MODEL_KEY}:`, event);
+				// Update in-memory state if changed externally
 				if (event.newValue !== this.currentModel) {
 					this.currentModel = event.newValue;
 					this.notifyCurrentModelChange();
 					// Auto-create service when model changes from storage
+					await this.ensureCurrentModelService();
 				}
 			},
 		);

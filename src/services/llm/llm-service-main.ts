@@ -319,7 +319,6 @@ export class LLMServiceMain extends LLMServiceCore implements ILLMService {
 		try {
 			// Main service handles local service restoration directly from storage
 			const serviceConfigs = await this.loadLocalServiceConfigs();
-			console.log('serviceConfigs', serviceConfigs)
 			if (serviceConfigs) {
 				await this.createLocalServicesFromConfigs(serviceConfigs);
 			}
