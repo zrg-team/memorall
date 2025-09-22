@@ -3,6 +3,7 @@ import type { ProcessDependencies, BaseJob, ItemHandlerResult } from "./types";
 import { serviceManager } from "@/services";
 import { eq } from "drizzle-orm";
 import { backgroundProcessFactory } from "./process-factory";
+import { LOCAL_SERVER_LLM_CONFIG_KEYS } from "@/config/local-server-llm";
 
 const JOB_NAMES = {
 	restoreLocalServices: "restore-local-services",
@@ -38,12 +39,6 @@ export type RestoreLocalServicesJob = BaseJob & {
 };
 
 export class RestoreLocalServicesHandler extends BaseProcessHandler<RestoreLocalServicesJob> {
-	// Shared config keys - copied from LLMService
-	private static readonly CONFIG_KEYS = {
-		LMSTUDIO: "lmstudio_config",
-		OLLAMA: "ollama_config",
-	} as const;
-
 	constructor() {
 		super();
 	}
@@ -74,12 +69,13 @@ export class RestoreLocalServicesHandler extends BaseProcessHandler<RestoreLocal
 						.where(
 							eq(
 								schema.configurations.key,
-								RestoreLocalServicesHandler.CONFIG_KEYS.LMSTUDIO,
+								LOCAL_SERVER_LLM_CONFIG_KEYS.LLM_STUDIO,
 							),
 						)
 						.limit(1);
 				},
 			);
+			console.log('lmstudioConfig', lmstudioConfig)
 			if (lmstudioConfig.length > 0) {
 				const config = lmstudioConfig[0].data as {
 					baseUrl: string;
@@ -109,12 +105,13 @@ export class RestoreLocalServicesHandler extends BaseProcessHandler<RestoreLocal
 						.where(
 							eq(
 								schema.configurations.key,
-								RestoreLocalServicesHandler.CONFIG_KEYS.OLLAMA,
+								LOCAL_SERVER_LLM_CONFIG_KEYS.OLLAMA,
 							),
 						)
 						.limit(1);
 				},
 			);
+			console.log('ollamaConfig', ollamaConfig)
 			if (ollamaConfig.length > 0) {
 				const config = ollamaConfig[0].data as {
 					baseUrl: string;

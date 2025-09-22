@@ -86,11 +86,8 @@ export class LLMServiceUI extends LLMServiceCore implements ILLMService {
 						{ stream: false },
 					);
 
-					console.log("executeResult", executeResult);
-
 					if ("promise" in executeResult) {
 						const result = await executeResult.promise;
-						console.log("result", result);
 						logInfo(
 							`📋 Background job result: status=${result.status}, hasResult=${!!result.result}`,
 						);
@@ -169,6 +166,7 @@ export class LLMServiceUI extends LLMServiceCore implements ILLMService {
 			const self = this;
 			return (async function* () {
 				let llm = await self.get(name);
+				console.log('>>>>>>>>>>>>>>>', llm, self.llms)
 				if (!llm) throw new Error(`LLM "${name}" not found`);
 				for await (const chunk of llm.chatCompletions(
 					request as ChatCompletionRequest & { stream: true },

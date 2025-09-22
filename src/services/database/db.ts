@@ -99,7 +99,7 @@ export async function initDB(dataDir?: string) {
 
 	try {
 		// Create PGlite instance with IndexedDB persistence for browser extensions
-		pglite = new PGlite("idb://memorall-db", {
+		pglite = new PGlite(dataDir || "idb://memorall-db", {
 			extensions: { vector, uuid_ossp, pg_trgm },
 		});
 		await pglite.waitReady;

@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { serviceManager } from "@/services";
 import { eq } from "drizzle-orm";
 import { Loader2, Shield, CheckCircle, Trash2 } from "lucide-react";
+import { LOCAL_SERVER_LLM_CONFIG_KEYS } from "@/config/local-server-llm";
 
 interface LocalOpenAITabProps {
 	providerKind: "lmstudio" | "ollama";
@@ -32,7 +33,7 @@ export const LocalOpenAITab: React.FC<LocalOpenAITabProps> = ({
 	const [existingModelId, setExistingModelId] = useState("");
 
 	const configKey =
-		providerKind === "lmstudio" ? "lmstudio_config" : "ollama_config";
+		providerKind === "lmstudio" ? LOCAL_SERVER_LLM_CONFIG_KEYS.LLM_STUDIO : LOCAL_SERVER_LLM_CONFIG_KEYS.OLLAMA;
 
 	useEffect(() => {
 		setBaseUrl(defaultBase);
@@ -50,7 +51,7 @@ export const LocalOpenAITab: React.FC<LocalOpenAITabProps> = ({
 					return db
 						.select()
 						.from(schema.configurations)
-						.where(eq(schema.configurations.key, configKey));
+						.where(eq(schema.configurations.key, configKey)).limit(1);
 				})
 			)[0] as unknown as { data?: any; updatedAt?: Date } | undefined;
 			if (row?.data) {

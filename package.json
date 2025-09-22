@@ -11,8 +11,10 @@
   },
   "scripts": {
     "predev": "node public/tools/copy-transformers-assets.mjs",
-    "dev": "sh -c 'npx http-server runner -p 34115 --cors >/dev/null 2>&1 & extension dev'",
+    "dev": "concurrently \"npm run runner:dev\" \"npm run extension:dev\"",
     "start": "extension start",
+    "runner:dev": "npx http-server runner -p 34115 --cors",
+    "extension:dev": "extension dev",
     "prebuild": "node public/tools/copy-transformers-assets.mjs",
     "build": "extension build",
     "preview": "extension preview",

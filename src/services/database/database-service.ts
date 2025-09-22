@@ -287,6 +287,3 @@ export class DatabaseService {
 		return fn(ctx);
 	}
 }
-
-// Export singleton instance
-export const databaseService = DatabaseService.getInstance();

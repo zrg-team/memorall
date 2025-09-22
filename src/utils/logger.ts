@@ -1,5 +1,4 @@
 import chalk from "chalk";
-import dayjs from "dayjs";
 
 const isDevelopment =
 	typeof process !== "undefined" && process.env?.NODE_ENV === "development";
@@ -7,9 +6,6 @@ const log = isDevelopment ? console.log : undefined;
 const debug = isDevelopment ? console.debug : undefined;
 const warn = console.warn;
 const error = console.error;
-
-const group = console.group;
-const groupEnd = console.groupEnd;
 
 const logBase = (
 	prefix: string,
@@ -21,15 +17,13 @@ const logBase = (
 	const isKeyString = typeof key === "string";
 	const messageKey = isKeyString ? key : "";
 
-	group(colorFunc(`${prefix} ${messageKey}`));
-	logFunc?.(`[TIME]: ${dayjs().format("DD-MM-YYYY HH:mm:ss")}`);
-	if (!isKeyString) {
-		logFunc?.(...args);
-	}
-	if (rest?.length) {
-		logFunc?.(...rest);
-	}
-	groupEnd();
+	logFunc?.(
+		`${colorFunc(`${prefix} ${messageKey}`)}}`,
+		...[
+			isKeyString ? undefined : key,
+			...rest?.length ? rest : [],
+			].filter(Boolean)
+	);
 };
 
 export const logInfo = (...args: unknown[]) => {
