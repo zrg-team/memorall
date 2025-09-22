@@ -164,7 +164,6 @@ The Knowledge Graph enables Memorall to provide contextual, intelligent response
 - **Flows Service**: [`docs/flows-service.md`](docs/flows-service.md)
 - **Shared Storage Service**: [`docs/shared-storage.md`](docs/shared-storage.md)
 - **Background Jobs**: [`docs/background-jobs.md`](docs/background-jobs.md)
-- **Logging Service**: [`docs/logging-service.md`](docs/logging-service.md)
 - **Remember Service**: [`docs/remember-service.md`](docs/remember-service.md)
 
 ### 🧠 Knowledge Graph & AI

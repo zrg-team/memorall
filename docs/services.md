@@ -34,11 +34,6 @@ Documents
   - Why: Offload long-running work, provide resilient progress, and keep UIs responsive.
   - Read: ./background-jobs.md
 
-- Logging Service
-  - What: Persistent structured logger across all extension contexts with filters, stats, and JSON export.
-  - Why: Diagnose issues, audit flows, and enable postmortems even when contexts restart.
-  - Read: ./logging-service.md
-
 - Remember Service
   - What: Ingest and persist content (pages, selections, user input) with search vectors/embeddings and optional knowledge-graph processing.
   - Why: Capture and organize knowledge for later retrieval, tagging, and analysis.
