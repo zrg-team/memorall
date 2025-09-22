@@ -194,9 +194,6 @@ export const D3KnowledgeGraph: React.FC<D3KnowledgeGraphProps> = ({
 						weight: 1,
 					}));
 
-				console.log(
-					`Using external data: ${d3Nodes.length} nodes and ${d3Edges.length} edges`,
-				);
 				setGraphData({ nodes: d3Nodes, edges: d3Edges });
 				setLoading(false);
 				return;
@@ -296,12 +293,6 @@ export const D3KnowledgeGraph: React.FC<D3KnowledgeGraphProps> = ({
 						weight: 1,
 					}));
 
-				console.log(
-					`Loaded ${d3Nodes.length} nodes and ${d3Edges.length} edges`,
-				);
-				console.log("Sample nodes:", d3Nodes.slice(0, 3));
-				console.log("Sample edges:", d3Edges.slice(0, 3));
-
 				setGraphData({ nodes: d3Nodes, edges: d3Edges });
 			});
 		} catch (err) {
@@ -322,17 +313,8 @@ export const D3KnowledgeGraph: React.FC<D3KnowledgeGraphProps> = ({
 		svg.selectAll("*").remove();
 
 		if (graphData.nodes.length === 0) {
-			console.log("No nodes to render");
 			return;
 		}
-
-		console.log(
-			"Rendering graph with",
-			graphData.nodes.length,
-			"nodes and",
-			graphData.edges.length,
-			"edges",
-		);
 
 		const g = svg.append("g");
 

@@ -166,7 +166,6 @@ export class LLMServiceUI extends LLMServiceCore implements ILLMService {
 			const self = this;
 			return (async function* () {
 				let llm = await self.get(name);
-				console.log('>>>>>>>>>>>>>>>', llm, self.llms)
 				if (!llm) throw new Error(`LLM "${name}" not found`);
 				for await (const chunk of llm.chatCompletions(
 					request as ChatCompletionRequest & { stream: true },
@@ -324,25 +323,15 @@ export class LLMServiceUI extends LLMServiceCore implements ILLMService {
 				{},
 				{ stream: false },
 			);
-			const result = await promise;
-			console.log('restoreLocalServices UI =====================>', result)
+			const response = await promise;
 			if (
-				result &&
-				typeof result === "object" &&
-				"success" in result &&
-				result.success &&
-				"data" in result &&
-				result.result
+				response?.result &&
+				response?.result.serviceConfigs &&
+				Object.keys(response.result.serviceConfigs).length
 			) {
-				const serviceConfigs = (
-					result.result as {
-						serviceConfigs?: Record<string, { type: string; baseURL: string }>;
-					}
-				).serviceConfigs;
-
-				if (serviceConfigs) {
-					await this.createLocalServicesFromConfigs(serviceConfigs);
-				}
+				await this.createLocalServicesFromConfigs(
+					response.result.serviceConfigs,
+				);
 			}
 		} catch (error) {
 			logWarn(

@@ -8,7 +8,7 @@ import type { ILLMService } from "./llm/interfaces/llm-service.interface";
 import { LLMServiceUI } from "./llm/llm-service-ui";
 import { LLMServiceMain } from "./llm/llm-service-main";
 import { flowsService } from "./flows/flows-service";
-import { DatabaseService } from "./database";
+import { DatabaseMode, DatabaseService } from "./database";
 
 export interface InitializationProgress {
 	step: string;
@@ -84,10 +84,10 @@ export class ServiceManager {
 
 	async initialize(
 		options: {
-			liteMode?: boolean;
+			proxy?: boolean;
 			callback?: (service: string, progress: number) => void;
 		} = {
-			liteMode: false,
+			proxy: false,
 			callback: undefined,
 		},
 	): Promise<void> {
@@ -101,37 +101,40 @@ export class ServiceManager {
 
 	private async initializeServices(
 		options: {
-			liteMode?: boolean;
+			proxy?: boolean;
 			callback?: (service: string, progress: number) => void;
 		} = {
-			liteMode: false,
+			proxy: false,
 			callback: undefined,
 		},
 	): Promise<void> {
-		const mode = options.liteMode ? "lite mode" : "full mode";
+		const mode = options.proxy ? "proxy mode" : "full mode";
 		logInfo(`🚀 Initializing services in ${mode}...`);
 		this.updateProgress(`Initializing services (${mode})`, 5);
 
 		try {
 			// Create service instances based on mode
-			this.databaseService = new DatabaseService();
-			if (options.liteMode) {
+			if (options.proxy) {
 				logInfo("🔧 Creating lite service implementations");
+				this.databaseService = DatabaseService.getInstance();
+				await this.initializeDatabase({ mode: DatabaseMode.PROXY });
 				this.embeddingService = new EmbeddingServiceUI();
 				this.llmService = new LLMServiceUI();
 			} else {
 				logInfo("🔧 Creating full service implementations");
+				this.databaseService = DatabaseService.getInstance();
+				await this.initializeDatabase({ mode: DatabaseMode.MAIN });
 				this.embeddingService = new EmbeddingServiceMain();
 				this.llmService = new LLMServiceMain();
 			}
 
 			options.callback?.("database", 0);
 			// Initialize services sequentially for better progress tracking
-			await this.initializeDatabase();
+
 			options.callback?.("database", 100);
 			this.updateProgress("Database ready", 25, "database");
 
-			if (options.liteMode) {
+			if (options.proxy) {
 				// Lite mode: Initialize services without heavy operations
 				await this.initializeEmbeddingService(true);
 				this.updateProgress("Embedding service ready (lite)", 50, "embedding");
@@ -164,7 +167,9 @@ export class ServiceManager {
 		}
 	}
 
-	private async initializeDatabase(): Promise<void> {
+	private async initializeDatabase(options: {
+		mode: DatabaseMode;
+	}): Promise<void> {
 		try {
 			logInfo("📚 Initializing database...");
 			this.updateProgress(
@@ -172,7 +177,7 @@ export class ServiceManager {
 				10,
 				"database",
 			);
-			await this.databaseService.initialize();
+			await this.databaseService.initialize(options);
 			this.serviceStatus.database = true;
 			logInfo("✅ Database initialized");
 		} catch (error) {

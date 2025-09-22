@@ -81,7 +81,7 @@ const App: React.FC = () => {
 						break;
 					}
 				}
-				await serviceManager.initialize({ liteMode: true });
+				await serviceManager.initialize({ proxy: true });
 			} catch (error) {
 				logError("❌ App initialization failed:", error);
 				setServicesStatus("error");

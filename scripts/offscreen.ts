@@ -175,6 +175,7 @@ class OffscreenProcessor {
 				"offscreen",
 			);
 			await serviceManager.initialize({
+				proxy: false,
 				callback: (service: string, progress) => {
 					this.currentProgress.progress = 30 + progress * 0.6; // 30% + 60% of serviceManager progress
 					this.currentProgress.status = `Initializing ${service}... (${progress}%)`;

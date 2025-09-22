@@ -56,7 +56,6 @@ export function useCurrentModel(
 	useEffect(() => {
 		const unsubscribe = serviceManager.llmService.onCurrentModelChange(
 			(modelInfo) => {
-				console.log("🔔 Current model changed via LLMService:", modelInfo);
 				updateCurrentModel(modelInfo);
 			},
 		);

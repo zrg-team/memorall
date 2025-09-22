@@ -29,7 +29,6 @@ export function useDownloadProgress() {
 					percent: detail.percent ?? 0,
 					text: detail.text ?? "",
 				};
-				console.log("📊 Setting progress:", progressData);
 				setDownloadProgress(progressData);
 			}
 		};

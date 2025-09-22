@@ -19,10 +19,9 @@ const logBase = (
 
 	logFunc?.(
 		`${colorFunc(`${prefix} ${messageKey}`)}}`,
-		...[
-			isKeyString ? undefined : key,
-			...rest?.length ? rest : [],
-			].filter(Boolean)
+		...[isKeyString ? undefined : key, ...(rest?.length ? rest : [])].filter(
+			Boolean,
+		),
 	);
 };
 

@@ -1,5 +1,18 @@
 import { logError, logInfo } from "@/utils/logger";
-import { initDB, getDB, getPGLite, healthCheck, closeDB, schema } from "./db";
+import {
+	initDB,
+	getDB,
+	getPGLite,
+	healthCheck,
+	closeDB,
+	schema,
+	DatabaseMode,
+	getCurrentMode,
+	isMainMode,
+	isProxyMode,
+} from "./db";
+import type { DatabaseConfig } from "./db";
+import { DatabaseRpcHandler } from "./bridges/rpc-handler";
 
 // The database type is already correct from getDB - it includes the schema and query API
 type DatabaseWithSchema = ReturnType<typeof getDB>;
@@ -85,6 +98,7 @@ export class DatabaseService {
 	private static instance: DatabaseService;
 	private initialized = false;
 	private initPromise: Promise<void> | null = null;
+	private config: DatabaseConfig | null = null;
 
 	constructor() {}
 
@@ -95,21 +109,32 @@ export class DatabaseService {
 		return DatabaseService.instance;
 	}
 
-	async initialize(): Promise<void> {
+	async initialize(config?: DatabaseConfig): Promise<void> {
 		if (this.initialized) return;
 		if (this.initPromise) return this.initPromise;
 
+		this.config = config || { mode: DatabaseMode.MAIN };
 		this.initPromise = this.initializeDatabase();
 		await this.initPromise;
 		this.initialized = true;
 	}
 
 	private async initializeDatabase(): Promise<void> {
-		logInfo("📚 Initializing database service...");
+		logInfo(
+			`📚 Initializing database service in ${this.config?.mode.toUpperCase()} mode...`,
+		);
 
 		try {
-			// Initialize the database
-			await initDB();
+			// Initialize the database with configuration
+			await initDB(this.config!);
+
+			// If in main mode, start RPC handler to serve proxy requests
+			if (this.config!.mode === DatabaseMode.MAIN) {
+				const rpcHandler = DatabaseRpcHandler.getInstance();
+				rpcHandler.startListening(this.config!.proxyOptions?.channelName);
+				logInfo("📡 RPC handler started for proxy connections");
+			}
+
 			logInfo("✅ Database service initialized successfully");
 		} catch (error) {
 			logError("❌ Database service initialization failed:", error);
@@ -171,6 +196,9 @@ export class DatabaseService {
 	async getStatus() {
 		const status = {
 			initialized: this.initialized,
+			mode: getCurrentMode(),
+			isMainMode: isMainMode(),
+			isProxyMode: isProxyMode(),
 			tableCount: Object.keys(schema).length,
 			availableTables: this.getTableNames(),
 			healthy: false,
@@ -192,6 +220,26 @@ export class DatabaseService {
 		return status;
 	}
 
+	// Get current database mode
+	getMode(): DatabaseMode | null {
+		return getCurrentMode();
+	}
+
+	// Check if in main mode
+	isMainMode(): boolean {
+		return isMainMode();
+	}
+
+	// Check if in proxy mode
+	isProxyMode(): boolean {
+		return isProxyMode();
+	}
+
+	// Get current configuration
+	getConfig(): DatabaseConfig | null {
+		return this.config;
+	}
+
 	// Health check method
 	async healthCheck(): Promise<boolean> {
 		try {
@@ -209,9 +257,17 @@ export class DatabaseService {
 
 	// Close database connection
 	async close(): Promise<void> {
+		// Stop RPC handler if in main mode
+		if (this.config?.mode === DatabaseMode.MAIN) {
+			const rpcHandler = DatabaseRpcHandler.getInstance();
+			rpcHandler.stop();
+			logInfo("📡 RPC handler stopped");
+		}
+
 		await closeDB();
 		this.initialized = false;
 		this.initPromise = null;
+		this.config = null;
 		logInfo("📚 Database service closed");
 	}
 
