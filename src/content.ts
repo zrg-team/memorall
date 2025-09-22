@@ -1,6 +1,7 @@
 // Content script for Memorall extension
 // Extracts page content using Mozilla Readability
 import { Readability } from "@mozilla/readability";
+import { CONTENT_BACKGROUND_EVENTS } from "./constants/content-background";
 
 // We import Readability as a module so it runs in the
 // content script's isolated world (no DOM injection required).
@@ -189,14 +190,14 @@ async function extractPageContent() {
 
 // Listen for messages from background script
 chrome.runtime.onMessage.addListener(async (message, _sender, sendResponse) => {
-	if (message.type === "REMEMBER_THIS") {
+	if (message.type === CONTENT_BACKGROUND_EVENTS.REMEMBER_THIS) {
 		try {
 			// Extract page content
 			const extractedData = await extractPageContent();
 
 			// Send extracted content back to background script
 			const payload = {
-				type: "CONTENT_EXTRACTED" as const,
+				type: CONTENT_BACKGROUND_EVENTS.CONTENT_EXTRACTED,
 				tabId: message.tabId as number,
 				data: extractedData,
 			};
@@ -222,14 +223,14 @@ chrome.runtime.onMessage.addListener(async (message, _sender, sendResponse) => {
 
 		// Return true to indicate async response
 		return true;
-	} else if (message.type === "REMEMBER_CONTENT") {
+	} else if (message.type === CONTENT_BACKGROUND_EVENTS.REMEMBER_CONTENT) {
 		try {
 			// Extract selection metadata
 			const selectionMetadata = extractSelection(message.selectedText);
 
 			// Send extracted selection back to background script
 			const payload = {
-				type: "SELECTION_EXTRACTED" as const,
+				type: CONTENT_BACKGROUND_EVENTS.SELECTION_EXTRACTED,
 				tabId: message.tabId as number,
 				data: {
 					selectedText: message.selectedText,
@@ -265,7 +266,7 @@ chrome.runtime.onMessage.addListener(async (message, _sender, sendResponse) => {
 		}
 
 		return true;
-	} else if (message.type === "LET_REMEMBER") {
+	} else if (message.type === CONTENT_BACKGROUND_EVENTS.LET_REMEMBER) {
 		try {
 			// Store context data for the popup to access
 			storeRememberContext(message.context);

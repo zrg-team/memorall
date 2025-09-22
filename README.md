@@ -154,6 +154,107 @@ The Knowledge Graph enables Memorall to provide contextual, intelligent response
 - **📊 Embeddings**: Vector representations for semantic search
 - **📜 Sources**: Webpage content and metadata
 
+## 📚 Documentation
+
+### 🏗️ Core Services
+- **Services Overview**: [`docs/services.md`](docs/services.md)
+- **LLM Service**: [`docs/llm-service.md`](docs/llm-service.md)
+- **Embedding Service**: [`docs/embedding-service.md`](docs/embedding-service.md)
+- **Database Service**: [`docs/database-service.md`](docs/database-service.md)
+- **Flows Service**: [`docs/flows-service.md`](docs/flows-service.md)
+- **Shared Storage Service**: [`docs/shared-storage.md`](docs/shared-storage.md)
+- **Background Jobs**: [`docs/background-jobs.md`](docs/background-jobs.md)
+- **Logging Service**: [`docs/logging-service.md`](docs/logging-service.md)
+- **Remember Service**: [`docs/remember-service.md`](docs/remember-service.md)
+
+### 🧠 Knowledge Graph & AI
+- **Knowledge Graph Service**: [`docs/knowledge-graph-service.md`](docs/knowledge-graph-service.md) - Service for building knowledge graphs
+- **Knowledge Pipeline**: [`docs/knowledge-pipeline.md`](docs/knowledge-pipeline.md) - Complete pipeline architecture and flow
+- **Knowledge RAG System**: [`docs/knowledge-rag-service.md`](docs/knowledge-rag-service.md) - Retrieval-Augmented Generation for Q&A
+
+## 🔀 Extension Flow
+
+High-level flow showing clear separation between UI, background coordination, content script injection, and offscreen processing.
+
+```mermaid
+graph TD
+  %% UI Layer - Direct to Offscreen via Background Jobs
+  UI[UI Surfaces] -.->|background-jobs| JQ[Job Queue]
+
+  %% Background Script - Context Menus & Content Script Communication Only
+  BG[Background Script] -->|inject & extract| CS[Content Scripts]
+  CS -->|page data| BG
+  BG -->|enqueue extracted data| JQ
+
+  %% Offscreen Processing
+  JQ --> OFF[Offscreen Document]
+  OFF --> SVC[Core Services\nLLM/Embedding/DB/Remember/KG]
+  OFF -->|claim & process| JQ
+
+  %% Content Scripts - Page Injection Only
+  CS -.->|page context| WEB[Web Pages]
+```
+
+### 🔄 Communication Patterns
+
+- **UI Surfaces → Offscreen Document**: Direct communication via Job Queue (no background script involvement)
+- **Background Script → Content Scripts**: Context menu actions trigger content script data extraction
+- **Content Scripts → Background Script**: Return extracted page data (HTML, selections, metadata)
+- **Background Script → Offscreen Document**: Enqueue extracted data for processing via Job Queue
+- **Offscreen Document ↔ Job Queue**: Claim jobs, process data, update status
+
+### 📦 Component Responsibilities
+
+- **Background Script**: Context menu registration, content script communication, and job enqueueing only
+- **Job Queue**: Cross-context job queue with progress tracking and offscreen processing
+- **UI Surfaces**: Directly use job queue service for user actions
+- **Content Scripts**: Page data extraction and injection (communicate only with background script)
+- **Offscreen Document**: Heavy processing, AI operations, and database work to keep UI responsive
+
+### 🏷️ Component Aliases
+
+- **UI Surfaces**: `popup.html` & `standalone.html` - Extension popup and full-page interfaces
+- **Background Script**: `src/background.ts` - Chrome extension service worker
+- **Job Queue**: `src/services/background-jobs/*` - Cross-context job management system
+- **Content Scripts**: Injected scripts in web pages for data extraction
+- **Offscreen Document**: `public/offscreen.html` - Dedicated processing environment
+- **Core Services**: Database, LLM, Embedding, Remember, and Knowledge Graph services
+
+
+## 📋 Installation & Development
+
+### 🛠️ Development Setup
+
+```bash
+git clone <repository-url>
+cd memorall
+npm install
+```
+
+### 🔧 Available Commands
+
+| Command | Description |
+|---------|-------------|
+| `npm run dev` | 🚀 Development mode with hot reloading |
+| `npm run build` | 📦 Production build |
+| `npm run preview` | 👀 Preview built extension |
+| `npm run type-check` | 🔍 TypeScript type checking |
+
+### 🌐 Browser Installation
+
+1. Build the extension: `npm run build`
+2. Open your browser's extension management page
+3. Enable "Developer mode"
+4. Click "Load unpacked" and select the `dist` folder
+
+## 🎮 Usage
+
+1. **📥 Install the Extension**: Load the built extension in your browser's developer mode
+2. **🚀 First Launch**: The extension will download and initialize AI models (one-time setup)
+3. **📊 Summarize Pages**: Click the extension icon and ask "Summarize this page"
+4. **💾 Store Memories**: Tell the AI "Remember that [important information]"
+5. **🔍 Recall Information**: Ask "What did I learn about [topic]?" or "Remind me about [context]"
+
 ### 🔒 Privacy & Security
 - **💻 No Server Dependencies**: Everything runs in your browser
 - **💾 Local Storage**: Data stored in IndexedDB, never transmitted
@@ -204,81 +305,3 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 [⭐ Star this repo](https://github.com/your-repo) • [🐛 Report Issue](https://github.com/your-repo/issues) • [💡 Request Feature](https://github.com/your-repo/issues/new)
 
 </div>
-
-## 📚 Documentation
-
-### 🏗️ Core Services
-- **Services Overview**: [`docs/services.md`](docs/services.md)
-- **LLM Service**: [`docs/llm-service.md`](docs/llm-service.md)
-- **Embedding Service**: [`docs/embedding-service.md`](docs/embedding-service.md)
-- **Database Service**: [`docs/database-service.md`](docs/database-service.md)
-- **Flows Service**: [`docs/flows-service.md`](docs/flows-service.md)
-- **Shared Storage Service**: [`docs/shared-storage.md`](docs/shared-storage.md)
-- **Background Jobs**: [`docs/background-jobs.md`](docs/background-jobs.md)
-- **Logging Service**: [`docs/logging-service.md`](docs/logging-service.md)
-- **Remember Service**: [`docs/remember-service.md`](docs/remember-service.md)
-
-### 🧠 Knowledge Graph & AI
-- **Knowledge Graph Service**: [`docs/knowledge-graph-service.md`](docs/knowledge-graph-service.md) - Service for building knowledge graphs
-- **Knowledge Pipeline**: [`docs/knowledge-pipeline.md`](docs/knowledge-pipeline.md) - Complete pipeline architecture and flow
-- **Knowledge RAG System**: [`docs/knowledge-rag-service.md`](docs/knowledge-rag-service.md) - Retrieval-Augmented Generation for Q&A
-
-## 🔀 Extension Flow
-
-High-level flow between UI surfaces, background orchestration, job queue, and the offscreen page for long-running tasks.
-
-```mermaid
-graph TD
-  POP[popup.html] --> BG[src/background.ts]
-  STD[standalone.html] --> BG
-
-  BG --> JQ[src/services/background-jobs/*]
-  BG --> SVC[Core Services\nLLM/Embedding/DB/Remember/KG]
-
-  JQ -->|enqueue/claim| BG
-
-  %% Long-running tasks use the offscreen document
-  BG --> OFF[public/offscreen.html]
-  OFF --> SVC
-  OFF --> JQ
-```
-
-- `src/background.ts`: Central orchestrator; initializes services, handles extension events, and coordinates job execution.
-- `src/services/background-jobs`: Persistent queue for save/conversion work with progress tracking; producers (UI/background) enqueue, background/offscreen consumers claim and process.
-- `standalone.html` and `popup.html`: UI entry points that dispatch actions (e.g., save page, convert to KG) to background.
-- `public/offscreen.html`: Dedicated offscreen document for long-running or resource-intensive work to keep the UI responsive and within extension constraints.
-
-
-## 📋 Installation & Development
-
-### 🛠️ Development Setup
-
-```bash
-git clone <repository-url>
-cd memorall
-npm install
-```
-
-### 🔧 Available Commands
-
-| Command | Description |
-|---------|-------------|
-| `npm run dev` | 🚀 Development mode with hot reloading |
-| `npm run build` | 📦 Production build |
-| `npm run preview` | 👀 Preview built extension |
-| `npm run type-check` | 🔍 TypeScript type checking |
-
-### 🌐 Browser Installation
-
-1. Build the extension: `npm run build`
-2. Open your browser's extension management page
-3. Enable "Developer mode"
-4. Click "Load unpacked" and select the `dist` folder
-
-## 🎮 Usage
-
-1. **📥 Install the Extension**: Load the built extension in your browser's developer mode
-2. **🚀 First Launch**: The extension will download and initialize AI models (one-time setup)
-3. **📊 Summarize Pages**: Click the extension icon and ask "Summarize this page"
-4. **💾 Store Memories**: Tell the AI "Remember that [important information]"
-5. **🔍 Recall Information**: Ask "What did I learn about [topic]?" or "Remind me about [context]"

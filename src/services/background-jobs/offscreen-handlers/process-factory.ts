@@ -1,4 +1,4 @@
-import { persistentLogger } from "@/services/logging/persistent-logger";
+import { logger } from "@/utils/logger";
 import type {
 	ProcessDependencies,
 	ProcessHandler,
@@ -161,20 +161,20 @@ export class ProcessFactory {
 					data?: Record<string, unknown>,
 					context?: string,
 				) => {
-					await persistentLogger.info(message, data, context);
+					await logger.info(context, "process-factory", message, data);
 				},
 				error: async (message: string, error: unknown, context?: string) => {
-					await persistentLogger.error(message, error, context);
+					await logger.error(context, "process-factory", message, error);
 				},
 				warn: async (message: string, message2: string, context?: string) => {
-					await persistentLogger.warn(message, message2, context);
+					await logger.warn(context, "process-factory", message, message2);
 				},
 				debug: async (
 					message: string,
 					data?: Record<string, unknown>,
 					context?: string,
 				) => {
-					await persistentLogger.debug(message, data, context);
+					await logger.debug(context, "process-factory", message, data);
 				},
 			},
 			updateJobProgress,

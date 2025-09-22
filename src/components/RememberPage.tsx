@@ -7,6 +7,7 @@ import { Separator } from "@/components/ui/separator";
 import { Brain, Clock, Globe, Send, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { logError, logWarn } from "@/utils/logger";
+import { backgroundJob } from "@/services/background-jobs/background-job";
 
 interface RememberContext {
 	context?: string;
@@ -48,26 +49,48 @@ export const RememberPage: React.FC = () => {
 		setIsSubmitting(true);
 
 		try {
-			const messageData = {
-				type: "USER_INPUT_EXTRACTED",
-				data: {
-					userInput: userInput.trim(),
-					context: rememberContext?.context,
+			// Create user input data payload for remember-save job
+			const userInputData = {
+				sourceType: "user_input" as const,
+				sourceUrl: undefined,
+				originalUrl: rememberContext?.pageUrl,
+				title: `User Note: ${userInput.trim().substring(0, 50)}${userInput.trim().length > 50 ? "..." : ""}`,
+				rawContent: userInput.trim(),
+				cleanContent: userInput.trim(),
+				textContent: userInput.trim(),
+				sourceMetadata: {
 					inputMethod: "popup",
 					timestamp: new Date().toISOString(),
+					context: rememberContext?.context,
+					pageTitle: rememberContext?.pageTitle,
+					pageUrl: rememberContext?.pageUrl,
+				},
+				extractionMetadata: {
+					inputLength: userInput.trim().length,
+					hasContext: !!rememberContext?.context,
+					hasPageUrl: !!rememberContext?.pageUrl,
+					extractedAt: new Date().toISOString(),
 				},
 			};
 
-			// Send user input to background script
-			const response = await chrome.runtime.sendMessage(messageData);
-			if (response?.success) {
+			// Use background-jobs service instead of direct background script message
+			const result = await backgroundJob.execute(
+				"remember-save",
+				userInputData,
+				{ stream: false }
+			);
+
+			if (result?.jobId && 'promise' in result) {
+				// Wait for job completion
+				const jobResult = await result.promise;
+
 				// Clear the context data from storage
 				await chrome.storage?.session?.remove?.(["rememberContext"]);
 
 				// Navigate to knowledge graph to see the result
 				navigate("/knowledge-graph");
 			} else {
-				logWarn(`Failed to save: ${response?.error || "Unknown error"}`);
+				logWarn("Failed to create remember-save job");
 				setIsSubmitting(false);
 			}
 		} catch (error) {

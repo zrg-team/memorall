@@ -1,4 +1,4 @@
-import type { LocalOpenAICompatLLM } from "../implementations/local-openai-llm";
+import type { LocalOpenAICompatibleLLM } from "../implementations/local-openai-llm";
 import type { OpenAILLM } from "../implementations/openai-llm";
 import type { WebLLMLLM } from "../implementations/webllm-llm";
 import type { WllamaLLM } from "../implementations/wllama-llm";
@@ -71,11 +71,11 @@ export interface LLMRegistry {
 	};
 	ollama: {
 		config: OllamaConfig;
-		llm: LocalOpenAICompatLLM;
+		llm: LocalOpenAICompatibleLLM;
 	};
 	lmstudio: {
 		config: LMStudioConfig;
-		llm: LocalOpenAICompatLLM;
+		llm: LocalOpenAICompatibleLLM;
 	};
 	custom: {
 		config: CustomConfig;

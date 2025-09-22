@@ -1,3 +1,85 @@
+/**
+ * ServiceManager - Central orchestrator for all extension services
+ *
+ * ## 🏗️ Service Architecture Overview
+ *
+ * The extension uses a dual-mode service architecture to handle different execution contexts:
+ *
+ * ### 🔄 Service Modes
+ *
+ * **Main Mode (Offscreen Document)**:
+ * - Full service implementations with complete functionality
+ * - Real database instance, actual AI model loading
+ * - Heavy computation and resource-intensive operations
+ * - Acts as the "server" for proxy services
+ *
+ * **Proxy Mode (UI/Popup)**:
+ * - Lightweight proxy implementations
+ * - Forward requests to main services via RPC
+ * - Minimal resource usage for responsive UI
+ * - No direct model/database access
+ *
+ * ### 📍 Context-Specific Service Usage
+ *
+ * **🖥️ Offscreen Document (`public/offscreen.html`)**:
+ * ```typescript
+ * // Uses MAIN mode - full service implementations
+ * await serviceManager.initialize({ proxy: false });
+ *
+ * // Services have direct access to:
+ * - Real PGlite database instance
+ * - Loaded AI models (embeddings, LLM)
+ * - Full processing capabilities
+ * ```
+ *
+ * **🎨 UI/Popup (`popup.html`, `standalone.html`)**:
+ * ```typescript
+ * // Uses PROXY mode - lightweight proxies
+ * await serviceManager.initialize({ proxy: true });
+ *
+ * // Services forward requests to offscreen:
+ * - DatabaseService → sends RPC to main database
+ * - EmbeddingService → forwards to offscreen models
+ * - LLMService → proxies to main thread
+ * ```
+ *
+ * **📜 Background Script (`src/background.ts`)**:
+ * ```typescript
+ * // NO SERVICE ACCESS - Background script does not use ServiceManager
+ * // Only handles:
+ * - Context menu registration
+ * - Content script communication
+ * - Job enqueueing via background-jobs
+ * ```
+ *
+ * **📄 Content Scripts**:
+ * ```typescript
+ * // NO SERVICE ACCESS - Content scripts do not use ServiceManager
+ * // Only handles:
+ * - Page data extraction
+ * - DOM manipulation
+ * - Communication with background script only
+ * ```
+ *
+ * ### 🔗 Service Communication Flow
+ *
+ * ```
+ * UI (Proxy Services) ─RPC─> Offscreen (Main Services) ─> Database/AI Models
+ *                                    ↑
+ * Background Script ─jobs─> Background Jobs Queue
+ *                                    ↑
+ * Content Scripts ─data─> Background Script
+ * ```
+ *
+ * ### 💡 Benefits of This Architecture
+ *
+ * - **Performance**: Heavy operations isolated to offscreen document
+ * - **Responsiveness**: UI remains fast with lightweight proxy services
+ * - **Resource Management**: Single source of truth for models/database
+ * - **Clean Separation**: Each context has well-defined responsibilities
+ * - **Type Safety**: Same interfaces for both main and proxy implementations
+ */
+
 import { logError, logInfo, logWarn } from "@/utils/logger";
 import type { IEmbeddingService } from "./embedding";
 import {
