@@ -151,7 +151,7 @@ export class BackgroundJob {
 		if (options.stream) {
 			// Create progress stream
 			const stream = this.createJobProgressStream(jobId);
-			this.attachProgressForwarder(jobId);
+			this.attachProgressForwarder(jobId, false); // createJob uses queue-based completion
 			return { jobId, stream };
 		} else {
 			// Create promise that resolves on completion
@@ -221,14 +221,24 @@ export class BackgroundJob {
 		if (options.stream) {
 			// Create progress stream
 			const stream = this.createJobProgressStream(jobId);
-			this.attachProgressForwarder(jobId);
+			this.attachProgressForwarder(jobId, true); // execute needs direct completion handling
 			return { jobId, stream };
 		} else {
-			// Create promise that resolves on completion
+			// Create promise that resolves on completion - direct notification handling for execute
 			const promise = new Promise<
 				JobResultFor<T extends keyof JobResultRegistry ? T : never>
-			>((resolve) => {
-				this.subscribeToJobCompletion(jobId, resolve as (result: JobResult) => void);
+			>((resolve, reject) => {
+				// Listen directly for job completion notifications since execute doesn't use queue
+				const unsubscribe = jobNotificationChannel.subscribe("JOB_COMPLETED", (message) => {
+					if (message.jobId === jobId) {
+						unsubscribe();
+						if (message.result) {
+							resolve(message.result as any);
+						} else {
+							reject(new Error("Job completed without result"));
+						}
+					}
+				});
 			});
 			return { jobId, promise };
 		}
@@ -370,12 +380,13 @@ export class BackgroundJob {
 		};
 	}
 
-	private attachProgressForwarder(jobId: string): void {
+	private attachProgressForwarder(jobId: string, handleDirectCompletion: boolean = false): void {
 		if (this.jobProgressListeners.has(jobId)) return;
 
 		const localContext = jobNotificationChannel.getContextType();
 
-		const unsubscribe = jobNotificationChannel.subscribe(
+		// Listen for progress updates
+		const unsubscribeProgress = jobNotificationChannel.subscribe(
 			"JOB_PROGRESS",
 			(message) => {
 				if (message.jobId !== jobId || !message.progress) return;
@@ -405,7 +416,43 @@ export class BackgroundJob {
 			},
 		);
 
-		this.jobProgressListeners.set(jobId, unsubscribe);
+		// Conditionally listen for job completion (only for execute jobs)
+		let unsubscribeCompleted: (() => void) | undefined;
+		if (handleDirectCompletion) {
+			unsubscribeCompleted = jobNotificationChannel.subscribe(
+				"JOB_COMPLETED",
+				(message) => {
+					if (message.jobId !== jobId) return;
+					if (message.sender === localContext) return;
+
+					const streamData = this.jobProgressStreams.get(jobId);
+					if (!streamData) return;
+
+					// Send final completion event to stream
+					try {
+						streamData.controller.enqueue({
+							status: "completed" as const,
+							progress: 100,
+							result: message.result,
+							timestamp: new Date(),
+						} as JobProgressEvent);
+						streamData.controller.close();
+					} catch (error) {
+						logError(`Error closing progress stream for job ${jobId}`, error);
+					} finally {
+						this.cleanupProgressStream(jobId);
+					}
+				},
+			);
+		}
+
+		// Store unsubscribe functions
+		this.jobProgressListeners.set(jobId, () => {
+			unsubscribeProgress();
+			if (unsubscribeCompleted) {
+				unsubscribeCompleted();
+			}
+		});
 	}
 
 	private cleanupProgressStream(jobId: string): void {
@@ -459,7 +506,25 @@ export class BackgroundJob {
 		progress: JobProgressUpdate,
 	): Promise<void> {
 		const job = await this.getJob(jobId);
-		if (!job) return;
+
+		// For execute jobs (no job in queue), create a minimal event and send notifications
+		if (!job) {
+			const event: JobProgressEvent = {
+				...progress,
+				status: progress.status ?? "processing",
+				timestamp: progress.timestamp ?? new Date(),
+			};
+
+			// Notify progress stream if exists
+			const streamData = this.jobProgressStreams.get(jobId);
+			if (streamData) {
+				streamData.controller.enqueue(event);
+			}
+
+			// Send immediate notification for execute jobs
+			jobNotificationChannel.notifyJobProgress(jobId, event, "all");
+			return;
+		}
 
 		const event = this.normalizeProgressEvent(job, progress);
 

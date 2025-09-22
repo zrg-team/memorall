@@ -110,8 +110,11 @@ export class LLMServiceUI extends LLMServiceCore implements ILLMService {
 						config,
 					}, { stream: false });
 
+					console.log('executeResult', executeResult)
+
 					if ('promise' in executeResult) {
 						const result = await executeResult.promise;
+						console.log('result', result)
 						logInfo(
 							`📋 Background job result: status=${result.status}, hasResult=${!!result.result}`,
 						);
@@ -177,58 +180,23 @@ export class LLMServiceUI extends LLMServiceCore implements ILLMService {
 		);
 	}
 
-	// Heavy operations delegated to background jobs
 	async models(): Promise<{ object: "list"; data: ModelInfo[] }> {
-		try {
-			const executeResult = await backgroundJob.execute("get-all-models", {}, { stream: false });
-			if ('promise' in executeResult) {
-				const result = await executeResult.promise;
-				if (result.status === "completed" && result.result) {
-					return (result.result as any).models as {
-						object: "list";
-						data: ModelInfo[];
-					};
-				}
-				return { object: "list", data: [] };
-			} else {
-				throw new Error("Expected promise result from non-streaming execute");
-			}
-		} catch (error) {
-			logWarn("Failed to get models via background job:", error);
-			return { object: "list", data: [] };
+		if (!this.currentModel) {
+			throw new Error("No current model selected");
 		}
+
+		return this.modelsFor(this.currentModel.serviceName);
 	}
 
 	async modelsFor(
 		name: string,
 	): Promise<{ object: "list"; data: ModelInfo[] }> {
-		// For lite services, try local first, then delegate if needed
 		const llm = await this.get(name);
-		if (llm) {
-			try {
-				return await llm.models();
-			} catch (error) {
-				logWarn(`Failed to get models for ${name}:`, error);
-			}
+		if (!llm) {
+			throw new Error(`Service "${name}" not found. Service must be registered first.`);
 		}
 
-		// Delegate to background job for heavy services
-		try {
-			const { promise } = await backgroundJob.execute("get-models-for-service", {
-				serviceName: name,
-			}, { stream: false });
-			const result = await promise;
-			if (result.status === "completed" && result.result) {
-				return (result.result as any).models as {
-					object: "list";
-					data: ModelInfo[];
-				};
-			}
-		} catch (error) {
-			logWarn(`Failed to get models for ${name} via background job:`, error);
-		}
-
-		return { object: "list", data: [] };
+		return await llm.models();
 	}
 
 	chatCompletionsFor(
@@ -370,44 +338,20 @@ export class LLMServiceUI extends LLMServiceCore implements ILLMService {
 
 	async unloadFor(name: string, modelId: string): Promise<void> {
 		const llm = await this.get(name);
-		if (llm) {
-			return llm.unload(modelId);
+		if (!llm) {
+			throw new Error(`Service "${name}" not found. Service must be registered first.`);
 		}
 
-		// Delegate to background job if service not available locally
-		try {
-			const { promise } = await backgroundJob.execute("unload-model", {
-				serviceName: name,
-				modelId,
-			}, { stream: false });
-			const result = await promise;
-			if (result.status !== "completed") {
-				throw new Error(result.error || "Failed to unload model");
-			}
-		} catch (error) {
-			throw new Error(`Background job failed: ${error}`);
-		}
+		return llm.unload(modelId);
 	}
 
 	async deleteModelFor(name: string, modelId: string): Promise<void> {
 		const llm = await this.get(name);
-		if (llm) {
-			return llm.delete(modelId);
+		if (!llm) {
+			throw new Error(`Service "${name}" not found. Service must be registered first.`);
 		}
 
-		// Delegate to background job if service not available locally
-		try {
-			const { promise } = await backgroundJob.execute("delete-model", {
-				serviceName: name,
-				modelId,
-			}, { stream: false });
-			const result = await promise;
-			if (result.status !== "completed") {
-				throw new Error(result.error || "Failed to delete model");
-			}
-		} catch (error) {
-			throw new Error(`Background job failed: ${error}`);
-		}
+		return llm.delete(modelId);
 	}
 
 	async unload(modelId: string): Promise<void> {

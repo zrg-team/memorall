@@ -21,7 +21,6 @@ export function useDownloadProgress() {
 	// Listen for progress events from background jobs
 	useEffect(() => {
 		const handleProgressEvent = (event: CustomEvent) => {
-			console.log("🎯 Progress event received:", event.detail);
 			const detail = event.detail;
 			if (detail && typeof detail === "object") {
 				const progressData = {

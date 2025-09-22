@@ -89,10 +89,6 @@ export class JobNotificationChannel {
 					return;
 				}
 
-				logInfo(
-					`📡 [${this.contextType}] Received job notification: [${message.jobId}] ${message.type} from ${message.sender} (${Date.now() - message.timestamp}ms)`,
-				);
-
 				// Notify all subscribers for this message type
 				const typeListeners = this.listeners.get(message.type);
 				if (typeListeners) {
@@ -252,13 +248,6 @@ export class JobNotificationChannel {
 
 		try {
 			this.channel.postMessage(message);
-			logInfo(
-				`📡 [${this.contextType}] Sent job notification: ${message.type} to ${message.destination || "all"}`,
-				{
-					jobId: message.jobId,
-					timestamp: message.timestamp,
-				},
-			);
 		} catch (error) {
 			logError(`Failed to send job notification ${message.type}:`, error);
 		}

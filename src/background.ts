@@ -537,7 +537,6 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
 		return true;
 	} else if (message.type === "USER_INPUT_EXTRACTED") {
-		console.log("📥 Background received USER_INPUT_EXTRACTED:", message);
 		// Handle async processing for user input content
 		(async () => {
 			try {
@@ -573,7 +572,6 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 				try {
 					chrome.runtime.sendMessage({ type: "JOB_QUEUE_UPDATED" });
 				} catch (_) {}
-				console.log("📤 Background sending success response, jobId:", jobId);
 				sendResponse({ success: true, jobId });
 			} catch (error) {
 				logError("❌ Failed to process user input:", error);
@@ -586,7 +584,6 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 							: "Failed to remember user input",
 				};
 
-				console.log("📤 Background sending error response:", errorResponse);
 				sendResponse(errorResponse);
 			}
 		})();

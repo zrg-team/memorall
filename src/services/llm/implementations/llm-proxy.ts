@@ -81,8 +81,6 @@ export class LLMProxy implements BaseLLM {
 			const self = this;
 			return (async function* () {
 				try {
-					console.log("🎯 LLMProxy starting streaming execute");
-
 					const { stream } = await backgroundJob.execute(
 						"chat-completion",
 						{
@@ -96,11 +94,9 @@ export class LLMProxy implements BaseLLM {
 
 					// Stream chunks as they come from progress updates
 					for await (const progressEvent of stream) {
-						console.log("📨 Progress event received:", progressEvent);
 
 						// If progress contains a chunk in metadata, yield it immediately
 						if (progressEvent.metadata?.chunk) {
-							console.log("🔄 Yielding real-time chunk:", progressEvent.metadata.chunk);
 							yield progressEvent.metadata.chunk as ChatCompletionChunk;
 						}
 
@@ -109,16 +105,13 @@ export class LLMProxy implements BaseLLM {
 						}
 
 						if (progressEvent.status === "completed") {
-							console.log("✅ Streaming job completed");
 							// Handle any final chunks in the result
 							if (progressEvent.result && "response" in progressEvent.result) {
 								const responseData = progressEvent.result as {
 									response: { chunks: ChatCompletionChunk[] };
 								};
 								if (responseData.response?.chunks) {
-									console.log("📦 Final chunks from completion:", responseData.response.chunks.length);
 									for (const chunk of responseData.response.chunks) {
-										console.log("🔄 Yielding final chunk:", chunk);
 										yield chunk;
 									}
 								}
