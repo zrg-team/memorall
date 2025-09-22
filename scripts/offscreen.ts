@@ -356,10 +356,6 @@ class OffscreenProcessor {
 				jobId,
 				progress,
 			});
-
-			if (!response?.success) {
-				logger.error("offscreen", "queue", `❌ Failed to update job progress via message: ${jobId}`, { error: response?.error || "Unknown error", progress });
-			}
 		} catch (error) {
 			logger.error("offscreen", "queue", `❌ Failed to send job progress update: ${jobId}`, error);
 		}

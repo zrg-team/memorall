@@ -34,9 +34,9 @@ if (container) {
   };
 
   try {
-    const area: any = (chrome.storage as any)?.session ?? (chrome.storage as any)?.local;
+    const area: any = (chrome.storage)?.session ?? (chrome.storage)?.local;
     if (area?.get) {
-      area.get(['navigateTo'], (data: any) => {
+      area.get(['navigateTo'], (data: { navigateTo?: string }) => {
         try {
           const target = data?.navigateTo as string | undefined;
           if (target === 'knowledge-graph') {

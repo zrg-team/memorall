@@ -84,7 +84,7 @@ const immediateResult = await result.promise;
 
 ### 📚 Remember & Knowledge Graph
 - **`remember-save`**: Save content to database with processing
-- **`convert-page-to-knowledge-graph`**: Extract entities and relationships
+- **`knowledge-graph`**: Extract entities and relationships
 
 ### 🤖 AI Operations
 - **`text-to-vector`**: Convert text to embedding vector
@@ -153,7 +153,7 @@ console.log("Vector:", embedding.vector);
 ```typescript
 // Stream progress updates
 const result = await backgroundJob.createJob(
-  "convert-page-to-knowledge-graph",
+  "knowledge-graph",
   { pageId: "abc123", contentData },
   { stream: true }
 );
