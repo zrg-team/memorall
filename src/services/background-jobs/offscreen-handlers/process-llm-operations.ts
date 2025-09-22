@@ -296,7 +296,9 @@ export class LLMOperationsHandler implements ProcessHandler<BaseJob> {
 					);
 				}
 			} else {
-				throw new Error("Service name is required - cannot auto-detect service from provider");
+				throw new Error(
+					"Service name is required - cannot auto-detect service from provider",
+				);
 			}
 		} catch (error) {
 			const errorMessage =
@@ -562,14 +564,19 @@ export class LLMOperationsHandler implements ProcessHandler<BaseJob> {
 			// But since background jobs can't stream back directly, we still need to collect
 			// TODO: Implement proper streaming via progress updates or different mechanism
 			const chunks: any[] = [];
-			await logger.info(`Getting streaming response for ${payload.serviceName}`, { jobId });
+			await logger.info(
+				`Getting streaming response for ${payload.serviceName}`,
+				{ jobId },
+			);
 
 			const streamResponse = llmService.chatCompletionsFor(
 				payload.serviceName,
 				payload.request as unknown as ChatCompletionRequest,
 			);
 
-			await logger.info(`Got stream response, starting to iterate chunks`, { jobId });
+			await logger.info(`Got stream response, starting to iterate chunks`, {
+				jobId,
+			});
 			let chunkCount = 0;
 
 			for await (const chunk of streamResponse as AsyncIterableIterator<any>) {

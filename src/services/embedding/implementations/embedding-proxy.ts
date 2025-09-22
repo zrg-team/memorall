@@ -21,12 +21,16 @@ export class EmbeddingProxy implements BaseEmbedding {
 
 	async textToVector(text: string): Promise<number[]> {
 		try {
-			const executeResult = await backgroundJob.execute("text-to-vector", {
-				text,
-				embeddingName: this.name,
-			}, { stream: false });
+			const executeResult = await backgroundJob.execute(
+				"text-to-vector",
+				{
+					text,
+					embeddingName: this.name,
+				},
+				{ stream: false },
+			);
 
-			if ('promise' in executeResult) {
+			if ("promise" in executeResult) {
 				const result = await executeResult.promise;
 				if (result.status === "completed" && result.result) {
 					return result.result.vector as number[];
@@ -42,12 +46,16 @@ export class EmbeddingProxy implements BaseEmbedding {
 
 	async textsToVectors(texts: string[]): Promise<number[][]> {
 		try {
-			const executeResult = await backgroundJob.execute("texts-to-vectors", {
-				texts,
-				embeddingName: this.name,
-			}, { stream: false });
+			const executeResult = await backgroundJob.execute(
+				"texts-to-vectors",
+				{
+					texts,
+					embeddingName: this.name,
+				},
+				{ stream: false },
+			);
 
-			if ('promise' in executeResult) {
+			if ("promise" in executeResult) {
 				const result = await executeResult.promise;
 				if (result.status === "completed" && result.result) {
 					return result.result.vectors as number[][];

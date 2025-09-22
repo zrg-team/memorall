@@ -42,13 +42,17 @@ export class EmbeddingServiceUI
 
 		// For heavy services (local, worker), delegate to background jobs
 		try {
-			const executeResult = await backgroundJob.execute("create-embedding", {
-				name,
-				embeddingType,
-				config,
-			}, { stream: false });
+			const executeResult = await backgroundJob.execute(
+				"create-embedding",
+				{
+					name,
+					embeddingType,
+					config,
+				},
+				{ stream: false },
+			);
 
-			if ('promise' in executeResult) {
+			if ("promise" in executeResult) {
 				const result = await executeResult.promise;
 				if (result.status === "completed" && result.result) {
 					// Create a proxy object that represents the embedding created in background
@@ -83,8 +87,12 @@ export class EmbeddingServiceUI
 	// Heavy operations delegated to background jobs
 	async textToVector(text: string): Promise<number[]> {
 		try {
-			const executeResult = await backgroundJob.execute("text-to-vector", { text }, { stream: false });
-			if ('promise' in executeResult) {
+			const executeResult = await backgroundJob.execute(
+				"text-to-vector",
+				{ text },
+				{ stream: false },
+			);
+			if ("promise" in executeResult) {
 				const result = await executeResult.promise;
 				if (result.status === "completed" && result.result) {
 					return result.result.vector;
@@ -104,8 +112,12 @@ export class EmbeddingServiceUI
 
 	async textsToVectors(texts: string[]): Promise<number[][]> {
 		try {
-			const executeResult = await backgroundJob.execute("texts-to-vectors", { texts }, { stream: false });
-			if ('promise' in executeResult) {
+			const executeResult = await backgroundJob.execute(
+				"texts-to-vectors",
+				{ texts },
+				{ stream: false },
+			);
+			if ("promise" in executeResult) {
 				const result = await executeResult.promise;
 				if (result.status === "completed" && result.result) {
 					return result.result.vectors;
@@ -139,11 +151,15 @@ export class EmbeddingServiceUI
 
 		// Delegate to background job if local service not available
 		try {
-			const executeResult = await backgroundJob.execute("text-to-vector", {
-				text,
-				embeddingName,
-			}, { stream: false });
-			if ('promise' in executeResult) {
+			const executeResult = await backgroundJob.execute(
+				"text-to-vector",
+				{
+					text,
+					embeddingName,
+				},
+				{ stream: false },
+			);
+			if ("promise" in executeResult) {
 				const result = await executeResult.promise;
 				if (result.status === "completed" && result.result) {
 					return result.result.vector;
@@ -173,11 +189,15 @@ export class EmbeddingServiceUI
 
 		// Delegate to background job if local service not available
 		try {
-			const executeResult = await backgroundJob.execute("texts-to-vectors", {
-				texts,
-				embeddingName,
-			}, { stream: false });
-			if ('promise' in executeResult) {
+			const executeResult = await backgroundJob.execute(
+				"texts-to-vectors",
+				{
+					texts,
+					embeddingName,
+				},
+				{ stream: false },
+			);
+			if ("promise" in executeResult) {
 				const result = await executeResult.promise;
 				if (result.status === "completed" && result.result) {
 					return result.result.vectors;
@@ -197,10 +217,10 @@ export class EmbeddingServiceUI
 		const ensureExecuteResult = await backgroundJob.execute(
 			"initialize-embedding-service",
 			{},
-			{ stream: false }
+			{ stream: false },
 		);
 
-		if (!('promise' in ensureExecuteResult)) {
+		if (!("promise" in ensureExecuteResult)) {
 			throw new Error("Expected promise result from non-streaming execute");
 		}
 		const ensureBackgroundReady = await ensureExecuteResult.promise;
@@ -215,11 +235,15 @@ export class EmbeddingServiceUI
 		}
 
 		// Try to reuse the default embedding that the background service manages.
-		const existingExecuteResult = await backgroundJob.execute("get-embedding", {
-			name: this.defaultName,
-		}, { stream: false });
+		const existingExecuteResult = await backgroundJob.execute(
+			"get-embedding",
+			{
+				name: this.defaultName,
+			},
+			{ stream: false },
+		);
 
-		if (!('promise' in existingExecuteResult)) {
+		if (!("promise" in existingExecuteResult)) {
 			throw new Error("Expected promise result from non-streaming execute");
 		}
 		const existingEmbedding = await existingExecuteResult.promise;
@@ -232,13 +256,17 @@ export class EmbeddingServiceUI
 			embeddingType = existingEmbedding.result.embeddingInfo.type;
 		} else {
 			// No default embedding yet – ask background to create a worker-backed one.
-			const createExecuteResult = await backgroundJob.execute("create-embedding", {
-				name: this.defaultName,
-				embeddingType: "worker",
-				config: { type: "worker" },
-			}, { stream: false });
+			const createExecuteResult = await backgroundJob.execute(
+				"create-embedding",
+				{
+					name: this.defaultName,
+					embeddingType: "worker",
+					config: { type: "worker" },
+				},
+				{ stream: false },
+			);
 
-			if (!('promise' in createExecuteResult)) {
+			if (!("promise" in createExecuteResult)) {
 				throw new Error("Expected promise result from non-streaming execute");
 			}
 			const createResult = await createExecuteResult.promise;

@@ -262,8 +262,6 @@ export class LLMServiceMain extends LLMServiceCore implements ILLMService {
 		return this.deleteModelFor(this.currentModel.serviceName, modelId);
 	}
 
-
-
 	async serve(
 		model: string,
 		onProgress?: (progress: ProgressEvent) => void,
@@ -332,10 +330,10 @@ export class LLMServiceMain extends LLMServiceCore implements ILLMService {
 		}
 	}
 
-private async loadLocalServiceConfigs(): Promise<Record<
-	string,
-	{ type: string; baseURL: string; modelId?: string }
-> | null> {
+	private async loadLocalServiceConfigs(): Promise<Record<
+		string,
+		{ type: string; baseURL: string; modelId?: string }
+	> | null> {
 		try {
 			// Load configurations from database (same pattern as LocalOpenAITab)
 			const configs: Record<
@@ -408,12 +406,12 @@ private async loadLocalServiceConfigs(): Promise<Record<
 		}
 	}
 
-private async createLocalServicesFromConfigs(
-	serviceConfigs: Record<
-		string,
-		{ type: string; baseURL: string; modelId?: string }
-	>,
-): Promise<void> {
+	private async createLocalServicesFromConfigs(
+		serviceConfigs: Record<
+			string,
+			{ type: string; baseURL: string; modelId?: string }
+		>,
+	): Promise<void> {
 		if (serviceConfigs.lmstudio) {
 			try {
 				const lmstudioConfig: LMStudioConfig = {

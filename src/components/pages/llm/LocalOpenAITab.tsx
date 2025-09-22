@@ -7,10 +7,7 @@ import { Loader2, Shield, CheckCircle, Trash2 } from "lucide-react";
 
 interface LocalOpenAITabProps {
 	providerKind: "lmstudio" | "ollama";
-	onModelLoaded?: (
-		modelId: string,
-		provider: "lmstudio" | "ollama",
-	) => void;
+	onModelLoaded?: (modelId: string, provider: "lmstudio" | "ollama") => void;
 }
 
 export const LocalOpenAITab: React.FC<LocalOpenAITabProps> = ({

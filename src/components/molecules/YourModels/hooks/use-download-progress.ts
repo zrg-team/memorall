@@ -35,10 +35,16 @@ export function useDownloadProgress() {
 		};
 
 		// Listen for global LLM download progress event
-		window.addEventListener(LLM_DOWNLOAD_PROGRESS_EVENT, handleProgressEvent as EventListener);
+		window.addEventListener(
+			LLM_DOWNLOAD_PROGRESS_EVENT,
+			handleProgressEvent as EventListener,
+		);
 
 		return () => {
-			window.removeEventListener(LLM_DOWNLOAD_PROGRESS_EVENT, handleProgressEvent as EventListener);
+			window.removeEventListener(
+				LLM_DOWNLOAD_PROGRESS_EVENT,
+				handleProgressEvent as EventListener,
+			);
 		};
 	}, []);
 

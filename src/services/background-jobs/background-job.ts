@@ -229,16 +229,19 @@ export class BackgroundJob {
 				JobResultFor<T extends keyof JobResultRegistry ? T : never>
 			>((resolve, reject) => {
 				// Listen directly for job completion notifications since execute doesn't use queue
-				const unsubscribe = jobNotificationChannel.subscribe("JOB_COMPLETED", (message) => {
-					if (message.jobId === jobId) {
-						unsubscribe();
-						if (message.result) {
-							resolve(message.result as any);
-						} else {
-							reject(new Error("Job completed without result"));
+				const unsubscribe = jobNotificationChannel.subscribe(
+					"JOB_COMPLETED",
+					(message) => {
+						if (message.jobId === jobId) {
+							unsubscribe();
+							if (message.result) {
+								resolve(message.result as any);
+							} else {
+								reject(new Error("Job completed without result"));
+							}
 						}
-					}
-				});
+					},
+				);
 			});
 			return { jobId, promise };
 		}
@@ -380,7 +383,10 @@ export class BackgroundJob {
 		};
 	}
 
-	private attachProgressForwarder(jobId: string, handleDirectCompletion: boolean = false): void {
+	private attachProgressForwarder(
+		jobId: string,
+		handleDirectCompletion: boolean = false,
+	): void {
 		if (this.jobProgressListeners.has(jobId)) return;
 
 		const localContext = jobNotificationChannel.getContextType();

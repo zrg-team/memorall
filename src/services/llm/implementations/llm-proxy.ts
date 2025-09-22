@@ -37,9 +37,13 @@ export class LLMProxy implements BaseLLM {
 
 	async models(): Promise<ModelsResponse> {
 		try {
-			const { promise } = await backgroundJob.execute("get-models-for-service", {
-				serviceName: this.name,
-			}, { stream: false });
+			const { promise } = await backgroundJob.execute(
+				"get-models-for-service",
+				{
+					serviceName: this.name,
+				},
+				{ stream: false },
+			);
 
 			const result = await promise;
 
@@ -71,7 +75,7 @@ export class LLMProxy implements BaseLLM {
 			this.signalMap.set(signalId, signal);
 
 			// Clean up signal from map when aborted or completed
-			signal.addEventListener('abort', () => {
+			signal.addEventListener("abort", () => {
 				this.signalMap.delete(signalId!);
 			});
 		}
@@ -87,14 +91,13 @@ export class LLMProxy implements BaseLLM {
 							serviceName: self.name,
 							request: { ...requestPayload, stream: true, signalId },
 						},
-						{ stream: true }
+						{ stream: true },
 					);
 
 					console.log("📡 Got stream, starting to iterate");
 
 					// Stream chunks as they come from progress updates
 					for await (const progressEvent of stream) {
-
 						// If progress contains a chunk in metadata, yield it immediately
 						if (progressEvent.metadata?.chunk) {
 							yield progressEvent.metadata.chunk as ChatCompletionChunk;
@@ -138,7 +141,7 @@ export class LLMProxy implements BaseLLM {
 							serviceName: this.name,
 							request: { ...requestPayload, signalId },
 						},
-						{ stream: false }
+						{ stream: false },
 					);
 
 					const result = await promise;
@@ -168,10 +171,14 @@ export class LLMProxy implements BaseLLM {
 
 	async unload(modelId: string): Promise<void> {
 		try {
-			const { promise } = await backgroundJob.execute("unload-model", {
-				serviceName: this.name,
-				modelId,
-			}, { stream: false });
+			const { promise } = await backgroundJob.execute(
+				"unload-model",
+				{
+					serviceName: this.name,
+					modelId,
+				},
+				{ stream: false },
+			);
 
 			const result = await promise;
 
@@ -185,10 +192,14 @@ export class LLMProxy implements BaseLLM {
 
 	async delete(modelId: string): Promise<void> {
 		try {
-			const { promise } = await backgroundJob.execute("delete-model", {
-				serviceName: this.name,
-				modelId,
-			}, { stream: false });
+			const { promise } = await backgroundJob.execute(
+				"delete-model",
+				{
+					serviceName: this.name,
+					modelId,
+				},
+				{ stream: false },
+			);
 
 			const result = await promise;
 
@@ -253,7 +264,10 @@ export class LLMProxy implements BaseLLM {
 						}
 
 						// Emit DOM event for cross-thread communication
-						this.emitProgressEvent(progressData, progressEvent.stage || "Loading...");
+						this.emitProgressEvent(
+							progressData,
+							progressEvent.stage || "Loading...",
+						);
 					}
 
 					if (progressEvent.status === "failed") {
@@ -276,11 +290,15 @@ export class LLMProxy implements BaseLLM {
 				}
 			} else {
 				// Get final result (or fallback if no progress callback)
-				const { promise } = await backgroundJob.execute("serve-model", {
-					modelId,
-					serviceName: this.name,
-					provider,
-				}, { stream: false });
+				const { promise } = await backgroundJob.execute(
+					"serve-model",
+					{
+						modelId,
+						serviceName: this.name,
+						provider,
+					},
+					{ stream: false },
+				);
 
 				const result = await promise;
 

@@ -8,7 +8,10 @@ import { logError, logInfo } from "@/utils/logger";
 import type { Provider } from "./use-provider-config";
 import type { CurrentModel } from "./use-current-model";
 import type { DownloadProgress } from "./use-download-progress";
-import { DEFAULT_SERVICES, PROVIDER_TO_SERVICE } from "@/services/llm/constants";
+import {
+	DEFAULT_SERVICES,
+	PROVIDER_TO_SERVICE,
+} from "@/services/llm/constants";
 
 interface UseModelOperationsProps {
 	setCurrent: (current: CurrentModel | null) => void;
@@ -44,7 +47,12 @@ export function useModelOperations({
 			setLoading(true);
 			const modelName = "repo" in model ? model.repo : model.model;
 			setQuickDownloadModel(modelName);
-			setDownloadProgress({ loaded: 0, total: 0, percent: 0, text: "Initializing..." });
+			setDownloadProgress({
+				loaded: 0,
+				total: 0,
+				percent: 0,
+				text: "Initializing...",
+			});
 
 			try {
 				// Use map for provider -> service name
@@ -75,8 +83,10 @@ export function useModelOperations({
 					},
 				};
 
-				const { serveModelId, currentModelId } =
-					(modelStructure[provider as keyof typeof modelStructure] || modelStructure.default)();
+				const { serveModelId, currentModelId } = (
+					modelStructure[provider as keyof typeof modelStructure] ||
+					modelStructure.default
+				)();
 
 				// Set current model FIRST so serveFor can use provider info
 				await serviceManager.llmService.setCurrentModel(

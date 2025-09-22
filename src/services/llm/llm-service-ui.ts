@@ -40,8 +40,10 @@ export class LLMServiceUI extends LLMServiceCore implements ILLMService {
 
 		if (!this.has(serviceName)) {
 			const serviceConfigs = {
-				wllama: () => this.create(serviceName, { type: "wllama" } as WllamaConfig),
-				webllm: () => this.create(serviceName, { type: "webllm" } as WebLLMConfig),
+				wllama: () =>
+					this.create(serviceName, { type: "wllama" } as WllamaConfig),
+				webllm: () =>
+					this.create(serviceName, { type: "webllm" } as WebLLMConfig),
 				openai: () => {
 					// OpenAI requires user configuration - do nothing
 				},
@@ -104,17 +106,21 @@ export class LLMServiceUI extends LLMServiceCore implements ILLMService {
 			case "wllama":
 			case "webllm": {
 				try {
-					const executeResult = await backgroundJob.execute("create-llm-service", {
-						name,
-						llmType: config.type,
-						config,
-					}, { stream: false });
+					const executeResult = await backgroundJob.execute(
+						"create-llm-service",
+						{
+							name,
+							llmType: config.type,
+							config,
+						},
+						{ stream: false },
+					);
 
-					console.log('executeResult', executeResult)
+					console.log("executeResult", executeResult);
 
-					if ('promise' in executeResult) {
+					if ("promise" in executeResult) {
 						const result = await executeResult.promise;
-						console.log('result', result)
+						console.log("result", result);
 						logInfo(
 							`📋 Background job result: status=${result.status}, hasResult=${!!result.result}`,
 						);
@@ -133,7 +139,9 @@ export class LLMServiceUI extends LLMServiceCore implements ILLMService {
 						logError(`❌ Background job failed for ${name}:`, result);
 						throw new Error(result.error || "Failed to create LLM service");
 					} else {
-						throw new Error("Expected promise result from non-streaming execute");
+						throw new Error(
+							"Expected promise result from non-streaming execute",
+						);
 					}
 				} catch (error) {
 					throw new Error(`Background job failed: ${error}`);
@@ -162,9 +170,14 @@ export class LLMServiceUI extends LLMServiceCore implements ILLMService {
 		if (!this.has(serviceName)) {
 			try {
 				await this.createServiceForProvider(provider);
-				logInfo(`✅ Service ${serviceName} created successfully for provider ${provider}`);
+				logInfo(
+					`✅ Service ${serviceName} created successfully for provider ${provider}`,
+				);
 			} catch (error) {
-				logError(`❌ Failed to create service ${serviceName} for provider ${provider}:`, error);
+				logError(
+					`❌ Failed to create service ${serviceName} for provider ${provider}:`,
+					error,
+				);
 				// If creation fails, continue anyway - the service might be created elsewhere
 			}
 		}
@@ -193,7 +206,9 @@ export class LLMServiceUI extends LLMServiceCore implements ILLMService {
 	): Promise<{ object: "list"; data: ModelInfo[] }> {
 		const llm = await this.get(name);
 		if (!llm) {
-			throw new Error(`Service "${name}" not found. Service must be registered first.`);
+			throw new Error(
+				`Service "${name}" not found. Service must be registered first.`,
+			);
 		}
 
 		return await llm.models();
@@ -281,7 +296,11 @@ export class LLMServiceUI extends LLMServiceCore implements ILLMService {
 			throw new Error("No current model selected");
 		}
 
-		const result = await this.serveFor(this.currentModel.serviceName, model, onProgress);
+		const result = await this.serveFor(
+			this.currentModel.serviceName,
+			model,
+			onProgress,
+		);
 		return result;
 	}
 
@@ -339,7 +358,9 @@ export class LLMServiceUI extends LLMServiceCore implements ILLMService {
 	async unloadFor(name: string, modelId: string): Promise<void> {
 		const llm = await this.get(name);
 		if (!llm) {
-			throw new Error(`Service "${name}" not found. Service must be registered first.`);
+			throw new Error(
+				`Service "${name}" not found. Service must be registered first.`,
+			);
 		}
 
 		return llm.unload(modelId);
@@ -348,7 +369,9 @@ export class LLMServiceUI extends LLMServiceCore implements ILLMService {
 	async deleteModelFor(name: string, modelId: string): Promise<void> {
 		const llm = await this.get(name);
 		if (!llm) {
-			throw new Error(`Service "${name}" not found. Service must be registered first.`);
+			throw new Error(
+				`Service "${name}" not found. Service must be registered first.`,
+			);
 		}
 
 		return llm.delete(modelId);
@@ -374,7 +397,11 @@ export class LLMServiceUI extends LLMServiceCore implements ILLMService {
 
 	private async restoreLocalServices(): Promise<void> {
 		try {
-			const { promise } = await backgroundJob.execute("restore-local-services", {}, { stream: false });
+			const { promise } = await backgroundJob.execute(
+				"restore-local-services",
+				{},
+				{ stream: false },
+			);
 			const result = await promise;
 			if (
 				result &&
@@ -403,12 +430,12 @@ export class LLMServiceUI extends LLMServiceCore implements ILLMService {
 		}
 	}
 
-private async createLocalServicesFromConfigs(
-	serviceConfigs: Record<
-		string,
-		{ type: string; baseURL: string; modelId?: string }
-	>,
-): Promise<void> {
+	private async createLocalServicesFromConfigs(
+		serviceConfigs: Record<
+			string,
+			{ type: string; baseURL: string; modelId?: string }
+		>,
+	): Promise<void> {
 		if (serviceConfigs.lmstudio) {
 			try {
 				const lmstudioConfig: LMStudioConfig = {
@@ -465,6 +492,4 @@ private async createLocalServicesFromConfigs(
 			}
 		}
 	}
-
-
 }

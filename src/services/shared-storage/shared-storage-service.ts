@@ -100,7 +100,9 @@ export class SharedStorageService {
 			// Set new value
 			await chrome.storage.local.set({ [key]: value });
 
-			logInfo(`📦 Storage set: ${key} had old value ${oldValue !== null}, has new value ${value !== null}`);
+			logInfo(
+				`📦 Storage set: ${key} had old value ${oldValue !== null}, has new value ${value !== null}`,
+			);
 
 			// Notify other contexts via message
 			this.broadcastStorageChange(key, oldValue, value);

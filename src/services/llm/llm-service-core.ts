@@ -130,7 +130,6 @@ export abstract class LLMServiceCore {
 		return this.llms.delete(name);
 	}
 
-
 	protected async createServiceForProvider(
 		provider: ServiceProvider,
 	): Promise<void> {
@@ -140,7 +139,6 @@ export abstract class LLMServiceCore {
 			`Cannot create service for provider: ${provider}. Override createServiceForProvider in subclass.`,
 		);
 	}
-
 
 	async clearCurrentModel(): Promise<void> {
 		this.currentModel = null;
