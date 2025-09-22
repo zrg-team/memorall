@@ -37,6 +37,7 @@ export abstract class LLMServiceCore {
 		await sharedStorageService.initialize();
 		await this.loadCurrentModelFromStorage();
 		this.setupStorageListener();
+		await this.ensureCurrentModelService();
 	}
 
 	// Current model tracking with persistence
@@ -60,10 +61,15 @@ export abstract class LLMServiceCore {
 			);
 		}
 
+		// Auto-create service if it doesn't exist
 		if (!this.has(serviceName)) {
-			throw new Error(
-				`Service "${serviceName}" not found. Available services: ${this.list().join(", ")}`,
-			);
+			try {
+				await this.createServiceForProvider(provider);
+			} catch (error) {
+				throw new Error(
+					`Service "${serviceName}" not found. Available services: ${this.list().join(", ")}. Failed to create: ${error}`,
+				);
+			}
 		}
 
 		this.currentModel = {
@@ -140,6 +146,17 @@ export abstract class LLMServiceCore {
 		);
 	}
 
+	protected async ensureCurrentModelService(): Promise<void> {
+		const currentModel = await this.getCurrentModel();
+		if (currentModel && !this.has(currentModel.serviceName)) {
+			try {
+				await this.createServiceForProvider(currentModel.provider);
+			} catch (error) {
+				logWarn(`Failed to auto-create service ${currentModel.serviceName}:`, error);
+			}
+		}
+	}
+
 	async clearCurrentModel(): Promise<void> {
 		this.currentModel = null;
 		// Reset the flag to allow reloading from storage if needed
@@ -199,6 +216,8 @@ export abstract class LLMServiceCore {
 				if (event.newValue !== this.currentModel) {
 					this.currentModel = event.newValue;
 					this.notifyCurrentModelChange();
+					// Auto-create service when model changes from storage
+					await this.ensureCurrentModelService();
 				}
 			},
 		);

@@ -161,30 +161,6 @@ export class LLMServiceUI extends LLMServiceCore implements ILLMService {
 		return llm;
 	}
 
-	async setCurrentModel(
-		modelId: string,
-		provider: ServiceProvider,
-		serviceName: string,
-	): Promise<void> {
-		// Auto-create service if it doesn't exist
-		if (!this.has(serviceName)) {
-			try {
-				await this.createServiceForProvider(provider);
-				logInfo(
-					`✅ Service ${serviceName} created successfully for provider ${provider}`,
-				);
-			} catch (error) {
-				logError(
-					`❌ Failed to create service ${serviceName} for provider ${provider}:`,
-					error,
-				);
-				// If creation fails, continue anyway - the service might be created elsewhere
-			}
-		}
-
-		// Call parent implementation
-		await super.setCurrentModel(modelId, provider, serviceName);
-	}
 
 	isReady(): boolean {
 		return (
@@ -227,10 +203,13 @@ export class LLMServiceUI extends LLMServiceCore implements ILLMService {
 				if (!llm) {
 					// Try to auto-create service from current model
 					const currentModel = await self.getCurrentModel();
+					logError(`🔍 Debug chatCompletionsFor: name=${name}, currentModel=`, currentModel, `availableServices=`, self.list());
 					if (currentModel && currentModel.serviceName === name) {
 						try {
+							logError(`🔧 Attempting to create service for provider: ${currentModel.provider}`);
 							await self.createServiceForProvider(currentModel.provider);
 							llm = await self.get(name);
+							logError(`✅ Service created, llm exists: ${!!llm}`);
 						} catch (error) {
 							logError(`Failed to auto-create service ${name}:`, error);
 						}
@@ -249,10 +228,13 @@ export class LLMServiceUI extends LLMServiceCore implements ILLMService {
 				if (!llm) {
 					// Try to auto-create service from current model
 					const currentModel = await this.getCurrentModel();
+					logError(`🔍 Debug chatCompletionsFor: name=${name}, currentModel=`, currentModel, `availableServices=`, this.list());
 					if (currentModel && currentModel.serviceName === name) {
 						try {
+							logError(`🔧 Attempting to create service for provider: ${currentModel.provider}`);
 							await this.createServiceForProvider(currentModel.provider);
 							llm = await this.get(name);
+							logError(`✅ Service created, llm exists: ${!!llm}`);
 						} catch (error) {
 							logError(`Failed to auto-create service ${name}:`, error);
 						}
@@ -275,14 +257,6 @@ export class LLMServiceUI extends LLMServiceCore implements ILLMService {
 			throw new Error("No current model selected");
 		}
 		const name = this.currentModel.serviceName;
-
-		if (!this.has(name)) {
-			logWarn(`Service not found for chatCompletions:`, {
-				requestedService: name,
-				currentModel: this.currentModel,
-				availableServices: this.list(),
-			});
-		}
 
 		return this.chatCompletionsFor(name, request);
 	}
@@ -394,6 +368,7 @@ export class LLMServiceUI extends LLMServiceCore implements ILLMService {
 		// Restore local services (Ollama, LMStudio) which are lightweight proxies
 		await this.restoreLocalServices();
 	}
+
 
 	private async restoreLocalServices(): Promise<void> {
 		try {
