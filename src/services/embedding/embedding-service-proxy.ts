@@ -9,7 +9,7 @@ import { OpenAIEmbedding } from "./implementations/openai-embedding";
 import { EmbeddingProxy } from "./implementations/embedding-proxy";
 import { EmbeddingServiceCore } from "./embedding-service-core";
 
-export class EmbeddingServiceUI
+export class EmbeddingServiceProxy
 	extends EmbeddingServiceCore
 	implements IEmbeddingService
 {

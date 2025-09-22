@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Brain, Clock, Globe, Send, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { logError, logWarn } from "@/utils/logger";
 
 interface RememberContext {
 	context?: string;
@@ -41,18 +42,12 @@ export const RememberPage: React.FC = () => {
 
 	const handleSubmit = async () => {
 		if (!userInput.trim()) {
-			console.log("⚠️ No user input provided");
 			return;
 		}
 
-		console.log("🚀 RememberPage handleSubmit called");
 		setIsSubmitting(true);
 
 		try {
-			console.log("🔄 Submitting user input:", userInput.trim());
-			console.log("🔄 Context:", rememberContext?.context);
-			console.log("🔄 Chrome runtime available:", !!chrome.runtime);
-
 			const messageData = {
 				type: "USER_INPUT_EXTRACTED",
 				data: {
@@ -62,32 +57,21 @@ export const RememberPage: React.FC = () => {
 					timestamp: new Date().toISOString(),
 				},
 			};
-			console.log("📤 Sending message:", messageData);
 
 			// Send user input to background script
 			const response = await chrome.runtime.sendMessage(messageData);
-
-			console.log("📦 Response from background:", response);
-
 			if (response?.success) {
-				console.log(
-					"✅ Successfully submitted, clearing context and navigating",
-				);
 				// Clear the context data from storage
 				await chrome.storage?.session?.remove?.(["rememberContext"]);
 
 				// Navigate to knowledge graph to see the result
 				navigate("/knowledge-graph");
 			} else {
-				console.error("❌ Failed to process user input:", response?.error);
-				alert(`Failed to save: ${response?.error || "Unknown error"}`);
+				logWarn(`Failed to save: ${response?.error || "Unknown error"}`);
 				setIsSubmitting(false);
 			}
 		} catch (error) {
-			console.error("❌ Failed to process user input:", error);
-			alert(
-				`Error: ${error instanceof Error ? error.message : "Unknown error"}`,
-			);
+			logError("❌ Failed to process user input:", error);
 			setIsSubmitting(false);
 		}
 	};

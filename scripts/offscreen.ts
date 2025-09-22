@@ -1,6 +1,6 @@
 // Offscreen document for background knowledge graph processing
 // This runs in a hidden document with full DOM access for LLM/Embedding services
-import { logError, logInfo } from "@/utils/logger";
+import { logError, logInfo, logWarn } from "@/utils/logger";
 import {
 	backgroundProcessFactory,
 	ProcessFactory,
@@ -107,20 +107,20 @@ class OffscreenProcessor {
 		try {
 			chrome.runtime?.onMessage.addListener(
 				(message, _sender, sendResponse) => {
-					console.log("🔔 OffscreenProcessor received message:", message.type);
+					logInfo("🔔 OffscreenProcessor received message:", message.type);
 
 					if (message.type === "INITIAL") {
-						console.log("🚀 OffscreenProcessor handling INITIAL message");
-						console.log("📊 Current progress:", this.currentProgress);
+						logInfo("🚀 OffscreenProcessor handling INITIAL message");
+						logInfo("📊 Current progress:", this.currentProgress);
 						this.reportProgress();
 						sendResponse(true);
 						return true;
 					}
 				},
 			);
-			console.log("✅ OffscreenProcessor INITIAL message listener registered");
+			logInfo("✅ OffscreenProcessor INITIAL message listener registered");
 		} catch (error) {
-			console.warn("Failed to add INITIAL message listener:", error);
+			logWarn("Failed to add INITIAL message listener:", error);
 		}
 	}
 
@@ -133,7 +133,7 @@ class OffscreenProcessor {
 			try {
 				await persistentLogger.initialize();
 			} catch (error) {
-				console.warn(
+				logWarn(
 					"Failed to initialize persistentLogger in offscreen context:",
 					error,
 				);
@@ -462,15 +462,15 @@ class OffscreenProcessor {
 
 	// Report current progress to UI thread
 	reportProgress(): void {
-		console.log("📤 Sending INITIAL_PROGRESS:", this.currentProgress);
+		logInfo("📤 Sending INITIAL_PROGRESS:", this.currentProgress);
 		try {
 			chrome.runtime?.sendMessage?.({
 				type: "INITIAL_PROGRESS",
 				currentProgress: this.currentProgress,
 			});
-			console.log("✅ INITIAL_PROGRESS message sent successfully");
+			logInfo("✅ INITIAL_PROGRESS message sent successfully");
 		} catch (error) {
-			console.error("❌ Failed to send INITIAL_PROGRESS:", error);
+			logError("❌ Failed to send INITIAL_PROGRESS:", error);
 		}
 	}
 
@@ -486,7 +486,7 @@ class OffscreenProcessor {
 
 // Initialize the offscreen processor
 if (!offscreenGlobal.__memorallOffscreenSetupDone__) {
-	console.log("🚀 OFFSCREEN HTML LOADED!");
+	logInfo("🚀 OFFSCREEN HTML LOADED!");
 	try {
 		const statusEl = document.getElementById("status");
 		if (statusEl) {
@@ -495,7 +495,7 @@ if (!offscreenGlobal.__memorallOffscreenSetupDone__) {
 		}
 	} catch (_) {}
 
-	console.log("🚀 Offscreen document script loading...");
+	logInfo("🚀 Offscreen document script loading...");
 	offscreenGlobal.__memorallOffscreenSetupDone__ = true;
 
 	if (!offscreenGlobal.__memorallOffscreenStartLogged__) {
@@ -509,7 +509,7 @@ if (!offscreenGlobal.__memorallOffscreenSetupDone__) {
 					"offscreen",
 				);
 			} catch (error) {
-				console.warn(
+				logWarn(
 					"Failed to initialize persistentLogger for offscreen start log:",
 					error,
 				);
@@ -525,15 +525,15 @@ if (!offscreenGlobal.__memorallOffscreenSetupDone__) {
 				return true;
 			}
 		});
-		console.log("✅ Basic message listener registered for PING");
+		logInfo("✅ Basic message listener registered for PING");
 	} catch (error) {
-		console.warn("Failed to add message listener:", error);
+		logWarn("Failed to add message listener:", error);
 	}
 
 	// Keep the offscreen document alive
 	setInterval(() => {
 		// This prevents the offscreen document from being terminated
-		console.log("Offscreen document heartbeat");
+		logInfo("Offscreen document heartbeat");
 	}, 30000); // Every 30 seconds
 }
 

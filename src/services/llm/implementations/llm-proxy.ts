@@ -94,8 +94,6 @@ export class LLMProxy implements BaseLLM {
 						{ stream: true },
 					);
 
-					console.log("📡 Got stream, starting to iterate");
-
 					// Stream chunks as they come from progress updates
 					for await (const progressEvent of stream) {
 						// If progress contains a chunk in metadata, yield it immediately

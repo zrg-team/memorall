@@ -123,8 +123,11 @@ export class WllamaLLM implements BaseLLM {
 
 	async models(): Promise<ModelsResponse> {
 		if (!this.ready) await this.initialize();
-		const response = await this.send("models");
-		return response as ModelsResponse;
+		const response = (await this.send("models")) as ModelsResponse;
+		response.data.forEach((model) => {
+			model.provider = "wllama";
+		});
+		return response;
 	}
 
 	chatCompletions(

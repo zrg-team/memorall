@@ -8,23 +8,20 @@ import { backgroundJob } from "@/services/background-jobs/background-job";
 import type { BaseLLM, ProgressEvent, ModelInfo } from "./interfaces/base-llm";
 import type {
 	ILLMService,
-	ServiceProvider,
 } from "./interfaces/llm-service.interface";
 import { OpenAILLM } from "./implementations/openai-llm";
-import { LocalOpenAICompatLLM } from "./implementations/local-openai-llm";
+import { LocalOpenAICompatibleLLM } from "./implementations/local-openai-llm";
 import { LLMProxy } from "./implementations/llm-proxy";
 import type {
 	LLMRegistry,
 	LMStudioConfig,
 	OllamaConfig,
 	OpenAIConfig,
-	WllamaConfig,
-	WebLLMConfig,
 } from "./interfaces/service";
-import { DEFAULT_SERVICES, PROVIDER_TO_SERVICE } from "./constants";
+import { DEFAULT_SERVICES } from "./constants";
 import { LLMServiceCore } from "./llm-service-core";
 
-export class LLMServiceUI extends LLMServiceCore implements ILLMService {
+export class LLMServiceProxy extends LLMServiceCore implements ILLMService {
 	async initialize(): Promise<void> {
 		logInfo(
 			"🚀 LLM service initializing in UI mode - heavy operations will use background jobs",
@@ -54,7 +51,7 @@ export class LLMServiceUI extends LLMServiceCore implements ILLMService {
 				return llm;
 
 			case "ollama":
-				llm = new LocalOpenAICompatLLM(
+				llm = new LocalOpenAICompatibleLLM(
 					(config as OllamaConfig).baseURL,
 					undefined,
 					"ollama",
@@ -64,7 +61,7 @@ export class LLMServiceUI extends LLMServiceCore implements ILLMService {
 				return llm;
 
 			case "lmstudio":
-				llm = new LocalOpenAICompatLLM(
+				llm = new LocalOpenAICompatibleLLM(
 					(config as LMStudioConfig).baseURL,
 					undefined,
 					"lmstudio",

@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Loader2, Download, Play, Square, Bot } from "lucide-react";
 import type { ModelInfo } from "@/services/llm";
 import type { CurrentModel } from "../hooks/use-current-model";
+import type { Provider } from "../hooks/use-provider-config";
 
 interface DownloadedModelsSectionProps {
 	downloadedOnly: ModelInfo[];
@@ -12,8 +13,11 @@ interface DownloadedModelsSectionProps {
 	modelsLoading: boolean;
 	loading: boolean;
 	fetchDownloadedModels: () => Promise<void>;
-	loadDownloadedModel: (modelId: string) => Promise<void>;
-	unloadDownloadedModel: (modelId: string) => Promise<void>;
+	loadDownloadedModel: (model: ModelInfo, provider: Provider) => Promise<void>;
+	unloadDownloadedModel: (
+		model: ModelInfo,
+		provider: Provider,
+	) => Promise<void>;
 	showDownloadMoreButton?: boolean;
 	onDownloadMore?: () => void;
 }
@@ -97,11 +101,15 @@ export const DownloadedModelsSection: React.FC<
 							</div>
 						</div>
 						<div className="flex gap-2">
-							{model.loaded ? (
+							{model.loaded &&
+							current?.modelId === model.id &&
+							(!model.provider || current.provider === model.provider) ? (
 								<Button
 									variant="outline"
 									size="sm"
-									onClick={() => unloadDownloadedModel(model.id)}
+									onClick={() =>
+										unloadDownloadedModel(model, model.provider as Provider)
+									}
 									disabled={loading}
 								>
 									{loading ? (
@@ -114,7 +122,9 @@ export const DownloadedModelsSection: React.FC<
 							) : (
 								<Button
 									size="sm"
-									onClick={() => loadDownloadedModel(model.id)}
+									onClick={() =>
+										loadDownloadedModel(model, model.provider as Provider)
+									}
 									disabled={loading}
 								>
 									{loading ? (

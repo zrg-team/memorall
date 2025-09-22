@@ -112,8 +112,6 @@ function extractPageMetadata() {
 // Clean and extract readable content using Readability
 async function extractReadableContent() {
 	try {
-		console.log("🔄 Initializing Readability...");
-
 		// Clone the document for Readability processing
 		const documentClone = document.cloneNode(true) as Document;
 
@@ -133,13 +131,6 @@ async function extractReadableContent() {
 		if (!article) {
 			throw new Error("Failed to parse article content");
 		}
-
-		console.log("✅ Content extracted successfully:", {
-			title: article.title,
-			length: article.length,
-			hasContent: !!article.content,
-		});
-
 		return {
 			title: article.title || document.title,
 			content: article.content || "",
@@ -152,8 +143,6 @@ async function extractReadableContent() {
 			siteName: article.siteName || window.location.hostname,
 		};
 	} catch (error) {
-		console.error("❌ Failed to extract readable content:", error);
-
 		// Fallback: extract basic text content
 		const title = document.title || "";
 		const textContent = document.body?.innerText || "";
@@ -176,8 +165,6 @@ async function extractReadableContent() {
 // Main content extraction function
 async function extractPageContent() {
 	try {
-		console.log("🔄 Extracting page content...");
-
 		// Extract metadata and readable content in parallel
 		const [metadata, article] = await Promise.all([
 			Promise.resolve(extractPageMetadata()),
@@ -194,11 +181,8 @@ async function extractPageContent() {
 			},
 			article,
 		};
-
-		console.log("✅ Page content extracted successfully");
 		return data;
 	} catch (error) {
-		console.error("❌ Failed to extract page content:", error);
 		throw error;
 	}
 }
@@ -207,8 +191,6 @@ async function extractPageContent() {
 chrome.runtime.onMessage.addListener(async (message, _sender, sendResponse) => {
 	if (message.type === "REMEMBER_THIS") {
 		try {
-			console.log("📥 Received remember this request for:", message.url);
-
 			// Extract page content
 			const extractedData = await extractPageContent();
 
@@ -219,32 +201,11 @@ chrome.runtime.onMessage.addListener(async (message, _sender, sendResponse) => {
 				data: extractedData,
 			};
 
-			console.log("🚚 Sending CONTENT_EXTRACTED to background:", {
-				tabId: payload.tabId,
-				url: payload.data.url,
-				title: payload.data.title,
-				textLength: payload.data.article?.textContent?.length ?? 0,
-				hasHtml: !!payload.data.article?.content,
-			});
-
 			let response;
 			try {
 				response = await chrome.runtime.sendMessage(payload);
 			} catch (err) {
-				const lastError = (chrome.runtime as any).lastError?.message;
-				console.error(
-					"❌ Failed sending CONTENT_EXTRACTED to background:",
-					err,
-					lastError ? `(lastError: ${lastError})` : "",
-				);
-			}
-
-			if (typeof response === "undefined") {
-				console.warn(
-					"⚠️ Background processing result is undefined (no response).",
-				);
-			} else {
-				console.log("📦 Background processing result:", response);
+				// Ignore errors if background is not reachable
 			}
 
 			// Reply to the original REMEMBER_THIS message regardless
@@ -252,8 +213,6 @@ chrome.runtime.onMessage.addListener(async (message, _sender, sendResponse) => {
 				response ?? { success: false, error: "No response from background" },
 			);
 		} catch (error) {
-			console.error("❌ Content extraction failed:", error);
-
 			sendResponse({
 				success: false,
 				error:
@@ -265,9 +224,6 @@ chrome.runtime.onMessage.addListener(async (message, _sender, sendResponse) => {
 		return true;
 	} else if (message.type === "REMEMBER_CONTENT") {
 		try {
-			console.log("📥 Received remember now request for:", message.url);
-			console.log("🔤 Selected text:", message.selectedText);
-
 			// Extract selection metadata
 			const selectionMetadata = extractSelection(message.selectedText);
 
@@ -284,12 +240,6 @@ chrome.runtime.onMessage.addListener(async (message, _sender, sendResponse) => {
 				},
 			};
 
-			console.log("🚚 Sending SELECTION_EXTRACTED to background:", {
-				tabId: payload.tabId,
-				selectedText: payload.data.selectedText.substring(0, 100) + "...",
-				hasContext: !!payload.data.selectionContext,
-			});
-
 			let response: any;
 			try {
 				response = await chrome.runtime.sendMessage(payload);
@@ -300,7 +250,6 @@ chrome.runtime.onMessage.addListener(async (message, _sender, sendResponse) => {
 				);
 			}
 
-			console.log("📦 Selection processing result:", response);
 			sendResponse(
 				response ?? { success: false, error: "No response from background" },
 			);
@@ -318,15 +267,12 @@ chrome.runtime.onMessage.addListener(async (message, _sender, sendResponse) => {
 		return true;
 	} else if (message.type === "LET_REMEMBER") {
 		try {
-			console.log("📥 Received let remember request for:", message.url);
-
 			// Store context data for the popup to access
 			storeRememberContext(message.context);
 
 			// Response handled immediately - no UI shown in content script
 			sendResponse({ success: true });
 		} catch (error) {
-			console.error("❌ Let remember failed:", error);
 			sendResponse({
 				success: false,
 				error:

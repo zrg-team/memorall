@@ -10,7 +10,7 @@ import type {
 } from "@/types/openai";
 
 // Local OpenAI-compatible LLM (works for LM Studio and Ollama /v1 endpoints)
-export class LocalOpenAICompatLLM implements BaseLLM {
+export class LocalOpenAICompatibleLLM implements BaseLLM {
 	name = "local-openai";
 	private ready = false;
 	private baseURL: string;

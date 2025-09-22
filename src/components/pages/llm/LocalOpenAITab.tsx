@@ -5,6 +5,7 @@ import { serviceManager } from "@/services";
 import { eq } from "drizzle-orm";
 import { Loader2, Shield, CheckCircle, Trash2 } from "lucide-react";
 import { LOCAL_SERVER_LLM_CONFIG_KEYS } from "@/config/local-server-llm";
+import { logWarn } from "@/utils/logger";
 
 interface LocalOpenAITabProps {
 	providerKind: "lmstudio" | "ollama";
@@ -133,10 +134,12 @@ export const LocalOpenAITab: React.FC<LocalOpenAITabProps> = ({
 			// Create service in current context
 			await serviceManager.llmService.create(serviceName, serviceConfig);
 
+			let modelExists = false;
 			try {
-				await serviceManager.llmService.modelsFor(serviceName);
+				const response = await serviceManager.llmService.modelsFor(serviceName);
+				modelExists = !!response?.data?.length;
 			} catch (modelsError) {
-				console.warn(
+				logWarn(
 					`Failed to fetch models for ${serviceName} after connect:`,
 					modelsError,
 				);
@@ -151,7 +154,10 @@ export const LocalOpenAITab: React.FC<LocalOpenAITabProps> = ({
 				);
 				onModelLoaded?.(trimmedModelId, providerKind);
 			}
-			setView(trimmedModelId ? "loaded" : "has-config");
+			if (trimmedModelId || modelExists) {
+				onModelLoaded?.(trimmedModelId, providerKind);
+			}
+			setView(trimmedModelId || modelExists ? "loaded" : "has-config");
 		} catch (e) {
 			const msg = e instanceof Error ? e.message : "Unknown error";
 			setError(`Failed to connect: ${msg}`);
@@ -170,8 +176,11 @@ export const LocalOpenAITab: React.FC<LocalOpenAITabProps> = ({
 					.delete(schema.configurations)
 					.where(eq(schema.configurations.key, configKey));
 			});
-			if (serviceManager.llmService.has("openai"))
-				serviceManager.llmService.remove("openai");
+			const serviceName = providerKind;
+			if (serviceManager.llmService.has(serviceName)) {
+				serviceManager.llmService.remove(serviceName);
+			}
+
 			setView("no-config");
 		} catch (e) {
 			const msg = e instanceof Error ? e.message : "Unknown error";

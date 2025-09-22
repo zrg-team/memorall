@@ -75,7 +75,6 @@ export class RestoreLocalServicesHandler extends BaseProcessHandler<RestoreLocal
 						.limit(1);
 				},
 			);
-			console.log("lmstudioConfig", lmstudioConfig);
 			if (lmstudioConfig.length > 0) {
 				const config = lmstudioConfig[0].data as {
 					baseUrl: string;
@@ -111,7 +110,6 @@ export class RestoreLocalServicesHandler extends BaseProcessHandler<RestoreLocal
 						.limit(1);
 				},
 			);
-			console.log("ollamaConfig", ollamaConfig);
 			if (ollamaConfig.length > 0) {
 				const config = ollamaConfig[0].data as {
 					baseUrl: string;

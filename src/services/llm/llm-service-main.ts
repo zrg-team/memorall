@@ -10,12 +10,8 @@ import type { BaseLLM, ProgressEvent, ModelInfo } from "./interfaces/base-llm";
 import { WllamaLLM } from "./implementations/wllama-llm";
 import { WebLLMLLM } from "./implementations/webllm-llm";
 import { OpenAILLM } from "./implementations/openai-llm";
-import { LocalOpenAICompatLLM } from "./implementations/local-openai-llm";
-import type {
-	ILLMService,
-	ServiceProvider,
-	CurrentModelInfo,
-} from "./interfaces/llm-service.interface";
+import { LocalOpenAICompatibleLLM } from "./implementations/local-openai-llm";
+import type { ILLMService } from "./interfaces/llm-service.interface";
 import { DEFAULT_SERVICES } from "./constants";
 import type {
 	LLMRegistry,
@@ -26,6 +22,7 @@ import type {
 	WllamaConfig,
 } from "./interfaces/service";
 import { LLMServiceCore } from "./llm-service-core";
+import { LOCAL_SERVER_LLM_CONFIG_KEYS } from "@/config/local-server-llm";
 
 export class LLMServiceMain extends LLMServiceCore implements ILLMService {
 	async initialize(): Promise<void> {
@@ -64,14 +61,14 @@ export class LLMServiceMain extends LLMServiceCore implements ILLMService {
 				) as LLMRegistry[K]["llm"];
 				break;
 			case "ollama":
-				llm = new LocalOpenAICompatLLM(
+				llm = new LocalOpenAICompatibleLLM(
 					(config as OllamaConfig).baseURL,
 					undefined,
 					"ollama",
 				) as LLMRegistry[K]["llm"];
 				break;
 			case "lmstudio":
-				llm = new LocalOpenAICompatLLM(
+				llm = new LocalOpenAICompatibleLLM(
 					(config as LMStudioConfig).baseURL,
 					undefined,
 					"lmstudio",
@@ -322,6 +319,7 @@ export class LLMServiceMain extends LLMServiceCore implements ILLMService {
 		try {
 			// Main service handles local service restoration directly from storage
 			const serviceConfigs = await this.loadLocalServiceConfigs();
+			console.log('serviceConfigs', serviceConfigs)
 			if (serviceConfigs) {
 				await this.createLocalServicesFromConfigs(serviceConfigs);
 			}
@@ -348,18 +346,16 @@ export class LLMServiceMain extends LLMServiceCore implements ILLMService {
 						return db
 							.select()
 							.from(schema.configurations)
-							.where(eq(schema.configurations.key, "lmstudio_config"));
+							.where(eq(schema.configurations.key, LOCAL_SERVER_LLM_CONFIG_KEYS.LLM_STUDIO));
 					},
 				);
 
-				const lmstudioConfig = lmstudioRows[0] as unknown as
-					| { data?: { baseUrl: string; modelId: string } }
-					| undefined;
+				const lmstudioConfig = lmstudioRows[0]
 				if (lmstudioConfig?.data?.baseUrl) {
 					configs.lmstudio = {
 						type: "lmstudio",
-						baseURL: lmstudioConfig.data.baseUrl,
-						modelId: lmstudioConfig.data.modelId || undefined,
+						baseURL: `${lmstudioConfig.data.baseUrl}`,
+						modelId: lmstudioConfig.data.modelId ? `${lmstudioConfig.data.modelId}` : undefined,
 					};
 					logInfo(
 						"🔍 Loaded LMStudio config from database:",
@@ -377,18 +373,16 @@ export class LLMServiceMain extends LLMServiceCore implements ILLMService {
 						return db
 							.select()
 							.from(schema.configurations)
-							.where(eq(schema.configurations.key, "ollama_config"));
+							.where(eq(schema.configurations.key, LOCAL_SERVER_LLM_CONFIG_KEYS.OLLAMA));
 					},
 				);
 
-				const ollamaConfig = ollamaRows[0] as unknown as
-					| { data?: { baseUrl: string; modelId: string } }
-					| undefined;
+				const ollamaConfig = ollamaRows[0]
 				if (ollamaConfig?.data?.baseUrl) {
 					configs.ollama = {
 						type: "ollama",
-						baseURL: ollamaConfig.data.baseUrl,
-						modelId: ollamaConfig.data.modelId || undefined,
+						baseURL: `${ollamaConfig.data.baseUrl}`,
+						modelId: ollamaConfig.data.modelId ? `${ollamaConfig.data.modelId}` : undefined,
 					};
 					logInfo(
 						"🔍 Loaded Ollama config from database:",

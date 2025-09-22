@@ -12,7 +12,6 @@ import dayjs from "dayjs";
 import mermaid from "mermaid";
 
 // Initialize mermaid with browser extension compatible settings
-console.log("Initializing mermaid library...");
 mermaid.initialize({
 	startOnLoad: false,
 	theme: "default",
@@ -39,29 +38,18 @@ const TaskMermaidDiagram: React.FC<{ chart: string }> = ({ chart }) => {
 	);
 	const [svgContent, setSvgContent] = React.useState<string>("");
 
-	console.log("TaskMermaidDiagram", chart);
-
 	useEffect(() => {
 		let isMounted = true;
 		let timeoutId: NodeJS.Timeout;
 
 		const renderChart = async () => {
 			const trimmedChart = chart.trim();
-
-			console.log("renderChart called:", {
-				trimmedChart,
-				isMounted,
-				uniqueId,
-			});
-
 			if (!trimmedChart) {
-				console.log("No chart content, setting error state");
 				setRenderState("error");
 				return;
 			}
 
 			if (!isMounted) {
-				console.log("Component unmounted, aborting render");
 				return;
 			}
 
@@ -69,18 +57,15 @@ const TaskMermaidDiagram: React.FC<{ chart: string }> = ({ chart }) => {
 				// Add timeout to prevent infinite loading
 				timeoutId = setTimeout(() => {
 					if (isMounted) {
-						console.log("Timeout reached, setting error state");
 						setRenderState("error");
 					}
 				}, 5000);
 
-				console.log("Parsing chart:", trimmedChart);
 				// Try to parse first to catch syntax errors
 				await mermaid.parse(trimmedChart);
 
 				if (!isMounted) return;
 
-				console.log("Rendering chart with mermaid.render");
 				// Render the diagram
 				const { svg } = await mermaid.render(uniqueId, trimmedChart);
 
@@ -88,22 +73,13 @@ const TaskMermaidDiagram: React.FC<{ chart: string }> = ({ chart }) => {
 
 				clearTimeout(timeoutId);
 
-				console.log("Mermaid render result:", {
-					hasSvg: !!svg,
-					svgLength: svg?.length,
-					containsSvgTag: svg?.includes("<svg"),
-					containsError: svg?.includes("Syntax error"),
-				});
-
 				if (svg && svg.includes("<svg") && !svg.includes("Syntax error")) {
 					setSvgContent(svg);
 					setRenderState("success");
 				} else {
-					console.log("Invalid SVG result");
 					setRenderState("error");
 				}
 			} catch (error) {
-				console.error("Mermaid rendering error:", error);
 				if (!isMounted) return;
 				clearTimeout(timeoutId);
 				setRenderState("error");

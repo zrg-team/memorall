@@ -1,12 +1,11 @@
-import type { IEmbeddingService } from "./embedding/embedding-service";
 import { logError, logInfo, logWarn } from "@/utils/logger";
+import type { IEmbeddingService } from "./embedding";
 import {
 	EmbeddingServiceMain,
-	EmbeddingServiceUI,
-} from "./embedding/embedding-service";
+	EmbeddingServiceProxy,
+} from "./embedding";
 import type { ILLMService } from "./llm/interfaces/llm-service.interface";
-import { LLMServiceUI } from "./llm/llm-service-ui";
-import { LLMServiceMain } from "./llm/llm-service-main";
+import { LLMServiceProxy, LLMServiceMain } from "./llm";
 import { flowsService } from "./flows/flows-service";
 import { DatabaseMode, DatabaseService } from "./database";
 
@@ -118,8 +117,8 @@ export class ServiceManager {
 				logInfo("🔧 Creating lite service implementations");
 				this.databaseService = DatabaseService.getInstance();
 				await this.initializeDatabase({ mode: DatabaseMode.PROXY });
-				this.embeddingService = new EmbeddingServiceUI();
-				this.llmService = new LLMServiceUI();
+				this.embeddingService = new EmbeddingServiceProxy();
+				this.llmService = new LLMServiceProxy();
 			} else {
 				logInfo("🔧 Creating full service implementations");
 				this.databaseService = DatabaseService.getInstance();

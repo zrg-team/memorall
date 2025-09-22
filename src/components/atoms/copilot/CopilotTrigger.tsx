@@ -36,7 +36,7 @@ export const CopilotTrigger: React.FC<CopilotTriggerProps> = ({
 			className={`${className}`}
 		>
 			{showIcon && <HelpCircle size={16} className="mr-1" />}
-			{children || "Help Tour"}
+			{children || "Help"}
 		</Button>
 	);
 };

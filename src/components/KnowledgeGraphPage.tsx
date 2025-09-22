@@ -221,18 +221,12 @@ export const KnowledgeGraphPage: React.FC<KnowledgeGraphPageProps> = () => {
 
 	const handleConvertPage = async (page: RememberedContent) => {
 		try {
-			console.log(
-				"🔄 KnowledgeGraphPage: Starting background job for:",
-				page.title,
-			);
 			// Use background queue for conversion
-			const result = await backgroundJob.createJob("knowledge-graph", page, {
+			await backgroundJob.createJob("knowledge-graph", page, {
 				stream: false,
 			});
-			const jobId = result.jobId;
-			console.log("✅ KnowledgeGraphPage: Background job queued:", jobId);
 		} catch (error) {
-			console.error(
+			logError(
 				"❌ KnowledgeGraphPage: Failed to start background job:",
 				error,
 			);

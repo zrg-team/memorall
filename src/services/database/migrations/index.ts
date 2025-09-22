@@ -1,5 +1,6 @@
 import type { PGlite } from "@electric-sql/pglite";
 import { up as initialMigration } from "./initial";
+import { logDebug, logError } from "@/utils/logger";
 // import { up as futureExampleUp, down as futureExampleDown } from './002_example_future_migration';
 
 export interface Migration {
@@ -82,20 +83,20 @@ export async function runMigrations(db: PGlite): Promise<void> {
 	// Run pending migrations in order
 	for (const migration of migrations) {
 		if (!appliedMigrations.includes(migration.id)) {
-			console.log(
+			logDebug(
 				`Running migration: ${migration.id} - ${migration.description}`,
 			);
 
 			try {
 				await migration.up(db);
 				await markMigrationApplied(db, migration);
-				console.log(`✅ Migration ${migration.id} completed successfully`);
+				logDebug(`✅ Migration ${migration.id} completed successfully`);
 			} catch (error) {
-				console.error(`❌ Migration ${migration.id} failed:`, error);
+				logError(`❌ Migration ${migration.id} failed:`, error);
 				throw error;
 			}
 		} else {
-			console.log(`⏭️ Migration ${migration.id} already applied`);
+			logDebug(`⏭️ Migration ${migration.id} already applied`);
 		}
 	}
 }

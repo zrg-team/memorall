@@ -1,9 +1,11 @@
-// Export embedding architecture
-export * from "./interfaces/base-embedding";
-export * from "./implementations/local-embedding";
-export * from "./implementations/openai-embedding";
-export * from "./implementations/worker-embedding";
-export * from "./embedding-service";
+// Main embedding service file - exports interface and implementations
+export type { IEmbeddingService } from "./interfaces/embedding-service.interface";
+export { EmbeddingServiceMain } from "./embedding-service-main";
+export { EmbeddingServiceProxy } from "./embedding-service-proxy";
+export { EmbeddingServiceCore } from "./embedding-service-core";
+
+// Re-export types for compatibility
+export type { BaseEmbedding } from "./interfaces/base-embedding";
 
 // Note: Embedding service instances are created by ServiceManager
 

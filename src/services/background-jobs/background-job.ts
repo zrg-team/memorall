@@ -578,13 +578,6 @@ export class BackgroundJob {
 
 		// Notify completion listener if exists
 		const completionListener = this.jobCompletionListeners.get(jobId);
-		console.log(
-			`🔍 Looking for completion listener for ${jobId}: ${!!completionListener}`,
-		);
-		console.log(
-			`🔍 All registered listeners:`,
-			Array.from(this.jobCompletionListeners.keys()),
-		);
 		if (completionListener) {
 			completionListener(result);
 			this.jobCompletionListeners.delete(jobId);
