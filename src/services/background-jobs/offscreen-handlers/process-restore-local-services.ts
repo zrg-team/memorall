@@ -135,8 +135,8 @@ export class RestoreLocalServicesHandler extends BaseProcessHandler<RestoreLocal
 		}
 
 		await dependencies.logger.info(
-			`✅ [RESTORE_LOCAL_SERVICES] Local service configurations retrieved`,
-			{ configs: Object.keys(serviceConfigs) },
+			`✅ [RESTORE_LOCAL_SERVICES] Local service configurations retrieved ${Object.keys(serviceConfigs)}`,
+			{},
 			"offscreen",
 		);
 

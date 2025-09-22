@@ -298,7 +298,7 @@ export class LLMServiceMain extends LLMServiceCore implements ILLMService {
 		}
 	}
 
-	private async ensureAllServices(): Promise<void> {
+	async ensureAllServices(): Promise<void> {
 		// Main mode: Create all services including heavy ones
 		if (!this.has(DEFAULT_SERVICES.WLLAMA)) {
 			try {
@@ -318,7 +318,7 @@ export class LLMServiceMain extends LLMServiceCore implements ILLMService {
 		await this.restoreLocalServices();
 	}
 
-	private async restoreLocalServices(): Promise<void> {
+	async restoreLocalServices(): Promise<void> {
 		try {
 			// Main service handles local service restoration directly from storage
 			const serviceConfigs = await this.loadLocalServiceConfigs();
@@ -424,13 +424,6 @@ export class LLMServiceMain extends LLMServiceCore implements ILLMService {
 				}
 
 				await this.create("lmstudio", lmstudioConfig);
-				if (serviceConfigs.lmstudio.modelId) {
-					await this.setCurrentModel(
-						serviceConfigs.lmstudio.modelId,
-						"lmstudio",
-						"lmstudio",
-					);
-				}
 			} catch (error) {
 				logWarn("Failed to create/update LMStudio service:", error);
 			}
@@ -452,13 +445,6 @@ export class LLMServiceMain extends LLMServiceCore implements ILLMService {
 				}
 
 				await this.create("ollama", ollamaConfig);
-				if (serviceConfigs.ollama.modelId) {
-					await this.setCurrentModel(
-						serviceConfigs.ollama.modelId,
-						"ollama",
-						"ollama",
-					);
-				}
 			} catch (error) {
 				logWarn("Failed to create/update Ollama service:", error);
 			}

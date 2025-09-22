@@ -30,36 +30,6 @@ export class LLMServiceUI extends LLMServiceCore implements ILLMService {
 			"🚀 LLM service initializing in UI mode - heavy operations will use background jobs",
 		);
 		await super.initialize();
-		await this.ensureLiteServices();
-	}
-
-	protected override async createServiceForProvider(
-		provider: ServiceProvider,
-	): Promise<void> {
-		const serviceName = PROVIDER_TO_SERVICE[provider];
-
-		if (!this.has(serviceName)) {
-			const serviceConfigs = {
-				wllama: () =>
-					this.create(serviceName, { type: "wllama" } as WllamaConfig),
-				webllm: () =>
-					this.create(serviceName, { type: "webllm" } as WebLLMConfig),
-				openai: () => {
-					// OpenAI requires user configuration - do nothing
-				},
-				lmstudio: () => {
-					// LMStudio requires user configuration - do nothing
-				},
-				ollama: () => {
-					// Ollama requires user configuration - do nothing
-				},
-			};
-
-			const createService = serviceConfigs[provider];
-			if (createService) {
-				await createService();
-			}
-		}
 	}
 
 	async create<K extends keyof LLMRegistry>(
@@ -161,7 +131,6 @@ export class LLMServiceUI extends LLMServiceCore implements ILLMService {
 		return llm;
 	}
 
-
 	isReady(): boolean {
 		return (
 			this.isReadyByName(DEFAULT_SERVICES.OPENAI) ||
@@ -200,21 +169,6 @@ export class LLMServiceUI extends LLMServiceCore implements ILLMService {
 			const self = this;
 			return (async function* () {
 				let llm = await self.get(name);
-				if (!llm) {
-					// Try to auto-create service from current model
-					const currentModel = await self.getCurrentModel();
-					logError(`🔍 Debug chatCompletionsFor: name=${name}, currentModel=`, currentModel, `availableServices=`, self.list());
-					if (currentModel && currentModel.serviceName === name) {
-						try {
-							logError(`🔧 Attempting to create service for provider: ${currentModel.provider}`);
-							await self.createServiceForProvider(currentModel.provider);
-							llm = await self.get(name);
-							logError(`✅ Service created, llm exists: ${!!llm}`);
-						} catch (error) {
-							logError(`Failed to auto-create service ${name}:`, error);
-						}
-					}
-				}
 				if (!llm) throw new Error(`LLM "${name}" not found`);
 				for await (const chunk of llm.chatCompletions(
 					request as ChatCompletionRequest & { stream: true },
@@ -225,21 +179,6 @@ export class LLMServiceUI extends LLMServiceCore implements ILLMService {
 		} else {
 			return (async () => {
 				let llm = await this.get(name);
-				if (!llm) {
-					// Try to auto-create service from current model
-					const currentModel = await this.getCurrentModel();
-					logError(`🔍 Debug chatCompletionsFor: name=${name}, currentModel=`, currentModel, `availableServices=`, this.list());
-					if (currentModel && currentModel.serviceName === name) {
-						try {
-							logError(`🔧 Attempting to create service for provider: ${currentModel.provider}`);
-							await this.createServiceForProvider(currentModel.provider);
-							llm = await this.get(name);
-							logError(`✅ Service created, llm exists: ${!!llm}`);
-						} catch (error) {
-							logError(`Failed to auto-create service ${name}:`, error);
-						}
-					}
-				}
 				if (!llm) throw new Error(`LLM "${name}" not found`);
 				return llm.chatCompletions(
 					request as ChatCompletionRequest & { stream?: false },
@@ -361,16 +300,26 @@ export class LLMServiceUI extends LLMServiceCore implements ILLMService {
 		return this.deleteModelFor(this.currentModel.serviceName, modelId);
 	}
 
-	// Private helper methods
-	private async ensureLiteServices(): Promise<void> {
-		// Only create lightweight services (API-based)
+	async ensureAllServices(): Promise<void> {
+		if (!this.has(DEFAULT_SERVICES.WLLAMA)) {
+			try {
+				await this.create(DEFAULT_SERVICES.WLLAMA, { type: "wllama" });
+			} catch (error) {
+				logWarn("Failed to create Wllama service:", error);
+			}
+		}
+		if (!this.has(DEFAULT_SERVICES.WEBLLM)) {
+			try {
+				await this.create(DEFAULT_SERVICES.WEBLLM, { type: "webllm" });
+			} catch (error) {
+				logWarn("Failed to create WebLLM service:", error);
+			}
+		}
 
-		// Restore local services (Ollama, LMStudio) which are lightweight proxies
 		await this.restoreLocalServices();
 	}
 
-
-	private async restoreLocalServices(): Promise<void> {
+	async restoreLocalServices(): Promise<void> {
 		try {
 			const { promise } = await backgroundJob.execute(
 				"restore-local-services",
@@ -378,6 +327,7 @@ export class LLMServiceUI extends LLMServiceCore implements ILLMService {
 				{ stream: false },
 			);
 			const result = await promise;
+			console.log('restoreLocalServices UI =====================>', result)
 			if (
 				result &&
 				typeof result === "object" &&
@@ -423,13 +373,6 @@ export class LLMServiceUI extends LLMServiceCore implements ILLMService {
 				}
 
 				await this.create("lmstudio", lmstudioConfig);
-				if (serviceConfigs.lmstudio.modelId) {
-					await this.setCurrentModel(
-						serviceConfigs.lmstudio.modelId,
-						"lmstudio",
-						"lmstudio",
-					);
-				}
 			} catch (error) {
 				logWarn("Failed to create/update LMStudio service:", error);
 			}
@@ -451,13 +394,6 @@ export class LLMServiceUI extends LLMServiceCore implements ILLMService {
 				}
 
 				await this.create("ollama", ollamaConfig);
-				if (serviceConfigs.ollama.modelId) {
-					await this.setCurrentModel(
-						serviceConfigs.ollama.modelId,
-						"ollama",
-						"ollama",
-					);
-				}
 			} catch (error) {
 				logWarn("Failed to create/update Ollama service:", error);
 			}

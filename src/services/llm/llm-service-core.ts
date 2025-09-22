@@ -37,6 +37,7 @@ export abstract class LLMServiceCore {
 		await sharedStorageService.initialize();
 		await this.loadCurrentModelFromStorage();
 		this.setupStorageListener();
+		await this.ensureAllServices();
 		await this.ensureCurrentModelService();
 	}
 
@@ -61,16 +62,7 @@ export abstract class LLMServiceCore {
 			);
 		}
 
-		// Auto-create service if it doesn't exist
-		if (!this.has(serviceName)) {
-			try {
-				await this.createServiceForProvider(provider);
-			} catch (error) {
-				throw new Error(
-					`Service "${serviceName}" not found. Available services: ${this.list().join(", ")}. Failed to create: ${error}`,
-				);
-			}
-		}
+		await this.ensureCurrentModelService();
 
 		this.currentModel = {
 			modelId,
@@ -136,23 +128,20 @@ export abstract class LLMServiceCore {
 		return this.llms.delete(name);
 	}
 
-	protected async createServiceForProvider(
-		provider: ServiceProvider,
-	): Promise<void> {
-		// Default implementation - subclasses should override
-		// This allows UI service to handle on-demand service creation
-		throw new Error(
-			`Cannot create service for provider: ${provider}. Override createServiceForProvider in subclass.`,
-		);
-	}
-
 	protected async ensureCurrentModelService(): Promise<void> {
 		const currentModel = await this.getCurrentModel();
-		if (currentModel && !this.has(currentModel.serviceName)) {
+		if (
+			currentModel &&
+			!this.has(currentModel.serviceName) &&
+			this.ensureAllServices
+		) {
 			try {
-				await this.createServiceForProvider(currentModel.provider);
+				await this.ensureAllServices();
 			} catch (error) {
-				logWarn(`Failed to auto-create service ${currentModel.serviceName}:`, error);
+				logWarn(
+					`Failed to auto-create service ${currentModel.serviceName}:`,
+					error,
+				);
 			}
 		}
 	}
@@ -213,11 +202,11 @@ export abstract class LLMServiceCore {
 		const modelUnsubscribe = sharedStorageService.subscribe<CurrentModelInfo>(
 			CURRENT_MODEL_KEY,
 			async (event) => {
+				await this.ensureCurrentModelService();
 				if (event.newValue !== this.currentModel) {
 					this.currentModel = event.newValue;
 					this.notifyCurrentModelChange();
 					// Auto-create service when model changes from storage
-					await this.ensureCurrentModelService();
 				}
 			},
 		);
@@ -240,4 +229,5 @@ export abstract class LLMServiceCore {
 	// Abstract methods that must be implemented by concrete classes
 	abstract get(name: string): Promise<BaseLLM | undefined>;
 	abstract isReady(): boolean;
+	abstract ensureAllServices(): Promise<void>;
 }
