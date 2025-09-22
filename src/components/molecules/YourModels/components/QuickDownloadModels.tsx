@@ -16,7 +16,13 @@ interface QuickDownloadModelsProps {
 	loading: boolean;
 	quickDownloadModel: string | null;
 	current: CurrentModel | null;
-	handleQuickDownload: (model: any) => Promise<void>;
+	handleQuickDownload: (
+		model:
+			| (typeof QUICK_WALLAMA_LLMS)[0]
+			| (typeof QUICK_WEBLLM_LLMS)[0]
+			| (typeof QUICK_OPENAI_LLMS)[0],
+		provider: Provider,
+	) => Promise<void>;
 }
 
 export const QuickDownloadModels: React.FC<QuickDownloadModelsProps> = ({
@@ -161,7 +167,7 @@ export const QuickDownloadModels: React.FC<QuickDownloadModelsProps> = ({
 							</div>
 							<Button
 								size="sm"
-								onClick={() => handleQuickDownload(model)}
+								onClick={() => handleQuickDownload(model, quickProvider)}
 								disabled={loading || isLoaded}
 								variant={isDownloaded ? "outline" : "default"}
 							>

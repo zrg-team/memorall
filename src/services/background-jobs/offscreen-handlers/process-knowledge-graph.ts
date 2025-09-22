@@ -1,7 +1,13 @@
 import { knowledgeGraphService } from "@/services/knowledge-graph/knowledge-graph-service";
 import type { RememberedContent } from "@/services/database/db";
+import type { ConversionProgress } from "@/types/knowledge-graph";
 import { BaseProcessHandler } from "./base-process-handler";
-import type { ProcessDependencies, BaseJob, ItemHandlerResult } from "./types";
+import type {
+	ProcessDependencies,
+	BaseJob,
+	ItemHandlerResult,
+	JobProgressUpdate,
+} from "./types";
 import type { ILLMService } from "@/services/llm/interfaces/llm-service.interface";
 import { serviceManager } from "@/services";
 import { backgroundProcessFactory } from "./process-factory";
@@ -90,18 +96,19 @@ export class KnowledgeGraphHandler extends BaseProcessHandler<KnowledgeGraphJob>
 			const unsubscribe = this.knowledgeGraphService.subscribe(
 				(conversions) => {
 					const conversion = conversions.get(pageData.id);
-					if (conversion) {
-						dependencies.updateJobProgress(jobId, conversion);
-						dependencies.logger.info(
-							`📊 Job ${jobId} progress: ${conversion.stage}`,
-							{
-								status: conversion.status,
-								progress: conversion.progress,
-								stage: conversion.stage,
-							},
-							"offscreen",
-						);
-					}
+					if (!conversion) return;
+
+					const progressUpdate = this.mapConversionToJobProgress(conversion);
+					void dependencies.updateJobProgress(jobId, progressUpdate);
+					dependencies.logger.info(
+						`📊 Job ${jobId} progress: ${conversion.stage}`,
+						{
+							status: conversion.status,
+							progress: conversion.progress,
+							stage: conversion.stage,
+						},
+						"offscreen",
+					);
 				},
 			);
 
@@ -132,6 +139,39 @@ export class KnowledgeGraphHandler extends BaseProcessHandler<KnowledgeGraphJob>
 			}
 		} finally {
 		}
+	}
+
+	private mapConversionToJobProgress(
+		conversion: ConversionProgress,
+	): JobProgressUpdate {
+		const status =
+			conversion.status === "failed"
+				? "failed"
+				: conversion.status === "completed"
+					? "completed"
+					: "processing";
+
+		const update: JobProgressUpdate = {
+			stage: conversion.stage,
+			progress: conversion.progress,
+			status,
+			completedAt: conversion.completedAt,
+			error: conversion.error,
+			metadata: {
+				conversionStatus: conversion.status,
+				pageId: conversion.pageId,
+			},
+		};
+
+		if (status === "completed" && conversion.knowledgeGraph) {
+			update.result = {
+				pageId: conversion.pageId,
+				knowledgeGraph: conversion.knowledgeGraph,
+				stats: conversion.stats,
+			};
+		}
+
+		return update;
 	}
 }
 

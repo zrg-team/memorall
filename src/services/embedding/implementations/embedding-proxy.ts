@@ -21,15 +21,20 @@ export class EmbeddingProxy implements BaseEmbedding {
 
 	async textToVector(text: string): Promise<number[]> {
 		try {
-			const result = await backgroundJob.execute("text-to-vector", {
+			const executeResult = await backgroundJob.execute("text-to-vector", {
 				text,
 				embeddingName: this.name,
-			});
+			}, { stream: false });
 
-			if (result.status === "completed" && result.result) {
-				return result.result.vector as number[];
+			if ('promise' in executeResult) {
+				const result = await executeResult.promise;
+				if (result.status === "completed" && result.result) {
+					return result.result.vector as number[];
+				}
+				throw new Error(result.error || "Failed to convert text to vector");
+			} else {
+				throw new Error("Expected promise result from non-streaming execute");
 			}
-			throw new Error(result.error || "Failed to convert text to vector");
 		} catch (error) {
 			throw new Error(`Background job failed: ${error}`);
 		}
@@ -37,15 +42,20 @@ export class EmbeddingProxy implements BaseEmbedding {
 
 	async textsToVectors(texts: string[]): Promise<number[][]> {
 		try {
-			const result = await backgroundJob.execute("texts-to-vectors", {
+			const executeResult = await backgroundJob.execute("texts-to-vectors", {
 				texts,
 				embeddingName: this.name,
-			});
+			}, { stream: false });
 
-			if (result.status === "completed" && result.result) {
-				return result.result.vectors as number[][];
+			if ('promise' in executeResult) {
+				const result = await executeResult.promise;
+				if (result.status === "completed" && result.result) {
+					return result.result.vectors as number[][];
+				}
+				throw new Error(result.error || "Failed to convert texts to vectors");
+			} else {
+				throw new Error("Expected promise result from non-streaming execute");
 			}
-			throw new Error(result.error || "Failed to convert texts to vectors");
 		} catch (error) {
 			throw new Error(`Background job failed: ${error}`);
 		}

@@ -76,7 +76,7 @@ export class SharedStorageService {
 			const result = await chrome.storage.local.get([key]);
 			const value = result[key] ?? null;
 
-			logInfo(`📦 Storage get: ${key}`, { hasValue: value !== null });
+			logInfo(`📦 Storage get: ${key} has value ${value !== null}`);
 			return value;
 		} catch (error) {
 			logError(`Failed to get storage key: ${key}`, error);
@@ -100,10 +100,7 @@ export class SharedStorageService {
 			// Set new value
 			await chrome.storage.local.set({ [key]: value });
 
-			logInfo(`📦 Storage set: ${key}`, {
-				hadOldValue: oldValue !== null,
-				hasNewValue: value !== null,
-			});
+			logInfo(`📦 Storage set: ${key} had old value ${oldValue !== null}, has new value ${value !== null}`);
 
 			// Notify other contexts via message
 			this.broadcastStorageChange(key, oldValue, value);
@@ -129,7 +126,7 @@ export class SharedStorageService {
 			// Remove key
 			await chrome.storage.local.remove([key]);
 
-			logInfo(`📦 Storage remove: ${key}`, { hadValue: oldValue !== null });
+			logInfo(`📦 Storage remove: ${key} had value ${oldValue !== null}`);
 
 			// Notify other contexts via message
 			this.broadcastStorageChange(key, oldValue, null);

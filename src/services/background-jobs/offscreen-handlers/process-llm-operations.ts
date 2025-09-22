@@ -1,6 +1,9 @@
 import { serviceManager } from "@/services";
 import type { ModelInfo } from "@/services/llm/interfaces/base-llm";
-import type { ILLMService } from "@/services/llm/interfaces/llm-service.interface";
+import type {
+	ILLMService,
+	ServiceProvider,
+} from "@/services/llm/interfaces/llm-service.interface";
 import type {
 	ProcessHandler,
 	ProcessDependencies,
@@ -30,7 +33,8 @@ export interface GetModelsForServicePayload {
 
 export interface ServeModelPayload {
 	modelId: string;
-	serviceName?: string; // Optional - will auto-detect if not provided
+	provider: ServiceProvider;
+	serviceName?: string; // Optional when using default service name for provider
 }
 
 export interface UnloadModelPayload {
@@ -225,6 +229,8 @@ export class LLMOperationsHandler implements ProcessHandler<BaseJob> {
 
 		await logger.info(`Starting serve-model job for: ${payload.modelId}`, {
 			jobId,
+			provider: payload.provider,
+			serviceName: payload.serviceName,
 		});
 
 		await updateJobProgress(jobId, {
@@ -242,6 +248,10 @@ export class LLMOperationsHandler implements ProcessHandler<BaseJob> {
 		let modelInfo;
 
 		try {
+			if (!payload.provider) {
+				throw new Error("Provider is required to serve a model");
+			}
+
 			if (payload.serviceName) {
 				// Check specific service
 				const models = await llmService.modelsFor(payload.serviceName);
@@ -286,24 +296,7 @@ export class LLMOperationsHandler implements ProcessHandler<BaseJob> {
 					);
 				}
 			} else {
-				await updateJobProgress(jobId, {
-					stage: `Auto-detecting service and loading model ${payload.modelId}`,
-					progress: 50,
-				});
-
-				// Auto-detect service and serve with progress callback
-				modelInfo = await llmService.serve(
-					payload.modelId,
-					async (progress) => {
-						// Forward wllama progress to job progress
-						await updateJobProgress(jobId, {
-							stage: `Loading model... ${progress.percent.toFixed(1)}%`,
-							progress: 50 + progress.percent * 0.4, // 50% to 90%
-						});
-					},
-				);
-
-				await logger.info(`Model ${payload.modelId} auto-loaded`, { jobId });
+				throw new Error("Service name is required - cannot auto-detect service from provider");
 			}
 		} catch (error) {
 			const errorMessage =
@@ -565,16 +558,37 @@ export class LLMOperationsHandler implements ProcessHandler<BaseJob> {
 		// Handle both streaming and non-streaming requests
 		let response;
 		if (payload.request.stream) {
-			// For streaming, we need to collect all chunks
+			// For streaming, we should yield chunks as they come, not collect them all
+			// But since background jobs can't stream back directly, we still need to collect
+			// TODO: Implement proper streaming via progress updates or different mechanism
 			const chunks: any[] = [];
+			await logger.info(`Getting streaming response for ${payload.serviceName}`, { jobId });
+
 			const streamResponse = llmService.chatCompletionsFor(
 				payload.serviceName,
 				payload.request as unknown as ChatCompletionRequest,
 			);
 
+			await logger.info(`Got stream response, starting to iterate chunks`, { jobId });
+			let chunkCount = 0;
+
 			for await (const chunk of streamResponse as AsyncIterableIterator<any>) {
+				chunkCount++;
+				await logger.info(`Received chunk ${chunkCount}`, { jobId });
 				chunks.push(chunk);
+
+				// Try to send chunk via progress update for real-time streaming
+				await updateJobProgress(jobId, {
+					stage: `Streaming token ${chunkCount}...`,
+					progress: 60 + Math.min(30, chunkCount * 0.1), // Progress from 60% to 90%
+					// Include chunk in metadata for real-time streaming
+					metadata: {
+						chunk: chunk,
+					},
+				});
 			}
+
+			await logger.info(`Collected ${chunks.length} chunks total`, { jobId });
 			response = { chunks };
 		} else {
 			// Non-streaming response

@@ -74,7 +74,7 @@ interface AdvancedSectionProps {
 	onOpenAITabSelect: () => void;
 	onModelLoaded?: (
 		modelId: string,
-		provider: "wllama" | "webllm" | "openai",
+		provider: "wllama" | "webllm" | "openai" | "lmstudio" | "ollama",
 	) => void;
 }
 

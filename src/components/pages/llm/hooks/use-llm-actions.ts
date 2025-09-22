@@ -64,7 +64,12 @@ export const useLLMActions = ({
 }: UseLLMActionsProps) => {
 	// Handle model loaded callback from YourModels component
 	const handleModelLoaded = useCallback(
-		(modelId: string, provider: string) => {
+		(modelId: string, provider?: string) => {
+			if (!modelId || !provider) {
+				setReady(false);
+				setStatus("Select a model");
+				return;
+			}
 			setReady(true);
 			setStatus(`${modelId} ${provider === "openai" ? "connected" : "loaded"}`);
 			setLogs((l) => [
@@ -229,14 +234,18 @@ export const useLLMActions = ({
 
 			setStatus("Loading model from Hugging Face...");
 			setLogs((l) => [...l, `[ui] serve ${repo}/${filePath}`]);
-			await serviceManager.llmService.serve(modelId, (progress) => {
-				setDownloadProgress({ text: "", ...progress });
-				setStatus(`Loading... ${progress.percent}%`);
-				setLogs((l) => [
-					...l,
-					`[progress] ${progress.percent}% (${progress.loaded}/${progress.total})`,
-				]);
-			});
+			await serviceManager.llmService.serveFor(
+				DEFAULT_SERVICES.WLLAMA,
+				modelId,
+				(progress) => {
+					setDownloadProgress({ text: "", ...progress });
+					setStatus(`Loading... ${progress.percent}%`);
+					setLogs((l) => [
+						...l,
+						`[progress] ${progress.percent}% (${progress.loaded}/${progress.total})`,
+					]);
+				},
+			);
 
 			setReady(true);
 			setStatus("Model loaded");

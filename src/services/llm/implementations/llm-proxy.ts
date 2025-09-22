@@ -3,7 +3,10 @@ import type {
 	BaseLLM,
 	ModelInfo,
 	ModelsResponse,
+	ProgressEvent,
 } from "../interfaces/base-llm";
+import type { ServiceProvider } from "../interfaces/llm-service.interface";
+import { LLM_DOWNLOAD_PROGRESS_EVENT } from "../constants";
 import type {
 	ChatCompletionChunk,
 	ChatCompletionRequest,
@@ -16,6 +19,8 @@ import type {
 
 // Proxy class for LLMs that exist in background jobs
 export class LLMProxy implements BaseLLM {
+	private signalMap = new Map<string, AbortSignal>();
+
 	constructor(
 		public readonly name: string,
 		public readonly llmType: string,
@@ -32,9 +37,11 @@ export class LLMProxy implements BaseLLM {
 
 	async models(): Promise<ModelsResponse> {
 		try {
-			const result = await backgroundJob.execute("get-models-for-service", {
+			const { promise } = await backgroundJob.execute("get-models-for-service", {
 				serviceName: this.name,
-			});
+			}, { stream: false });
+
+			const result = await promise;
 
 			if (result.status === "completed" && result.result) {
 				return result.result.models as ModelsResponse;
@@ -56,48 +63,92 @@ export class LLMProxy implements BaseLLM {
 	):
 		| Promise<ChatCompletionResponse>
 		| AsyncIterableIterator<ChatCompletionChunk> {
+		// Extract signal from request (can't serialize AbortSignal)
+		const { signal, ...requestPayload } = request;
+		let signalId: string | undefined;
+		if (signal) {
+			signalId = Math.random().toString(36).slice(2);
+			this.signalMap.set(signalId, signal);
+
+			// Clean up signal from map when aborted or completed
+			signal.addEventListener('abort', () => {
+				this.signalMap.delete(signalId!);
+			});
+		}
+
 		if (request.stream) {
-			// For streaming, we need to handle it differently since background jobs can't stream
-			// For now, convert to non-streaming and return chunks as array
+			// Use execute with stream: true to get real-time streaming
 			const self = this;
 			return (async function* () {
 				try {
-					const result = await backgroundJob.execute("chat-completion", {
-						serviceName: self.name,
-						request: { ...request, stream: true },
-					});
+					console.log("🎯 LLMProxy starting streaming execute");
 
-					if (
-						result.status === "completed" &&
-						result.result &&
-						"response" in result.result
-					) {
-						const responseData = result.result as {
-							response: { chunks: ChatCompletionChunk[] };
-						};
-						if (responseData.response?.chunks) {
-							// Yield each chunk from the collected chunks
-							for (const chunk of responseData.response.chunks) {
-								yield chunk;
-							}
+					const { stream } = await backgroundJob.execute(
+						"chat-completion",
+						{
+							serviceName: self.name,
+							request: { ...requestPayload, stream: true, signalId },
+						},
+						{ stream: true }
+					);
+
+					console.log("📡 Got stream, starting to iterate");
+
+					// Stream chunks as they come from progress updates
+					for await (const progressEvent of stream) {
+						console.log("📨 Progress event received:", progressEvent);
+
+						// If progress contains a chunk in metadata, yield it immediately
+						if (progressEvent.metadata?.chunk) {
+							console.log("🔄 Yielding real-time chunk:", progressEvent.metadata.chunk);
+							yield progressEvent.metadata.chunk as ChatCompletionChunk;
 						}
-					} else {
-						throw new Error(
-							result.error || "Failed to process chat completion",
-						);
+
+						if (progressEvent.status === "failed") {
+							throw new Error(progressEvent.error || "Job failed");
+						}
+
+						if (progressEvent.status === "completed") {
+							console.log("✅ Streaming job completed");
+							// Handle any final chunks in the result
+							if (progressEvent.result && "response" in progressEvent.result) {
+								const responseData = progressEvent.result as {
+									response: { chunks: ChatCompletionChunk[] };
+								};
+								if (responseData.response?.chunks) {
+									console.log("📦 Final chunks from completion:", responseData.response.chunks.length);
+									for (const chunk of responseData.response.chunks) {
+										console.log("🔄 Yielding final chunk:", chunk);
+										yield chunk;
+									}
+								}
+							}
+							break;
+						}
 					}
 				} catch (error) {
 					throw new Error(`Background job failed: ${error}`);
+				} finally {
+					// Clean up signal from map
+					if (signalId) {
+						self.signalMap.delete(signalId);
+					}
 				}
 			})();
 		} else {
 			// Non-streaming request
 			return (async () => {
 				try {
-					const result = await backgroundJob.execute("chat-completion", {
-						serviceName: this.name,
-						request,
-					});
+					const { promise } = await backgroundJob.execute(
+						"chat-completion",
+						{
+							serviceName: this.name,
+							request: { ...requestPayload, signalId },
+						},
+						{ stream: false }
+					);
+
+					const result = await promise;
 
 					if (
 						result.status === "completed" &&
@@ -112,6 +163,11 @@ export class LLMProxy implements BaseLLM {
 					throw new Error(result.error || "Failed to process chat completion");
 				} catch (error) {
 					throw new Error(`Background job failed: ${error}`);
+				} finally {
+					// Clean up signal from map
+					if (signalId) {
+						this.signalMap.delete(signalId);
+					}
 				}
 			})();
 		}
@@ -119,12 +175,14 @@ export class LLMProxy implements BaseLLM {
 
 	async unload(modelId: string): Promise<void> {
 		try {
-			const result = await backgroundJob.execute("unload-model", {
+			const { promise } = await backgroundJob.execute("unload-model", {
 				serviceName: this.name,
 				modelId,
-			});
+			}, { stream: false });
 
-			if (!result.error || result.status === "failed") {
+			const result = await promise;
+
+			if (result.status === "failed") {
 				throw new Error(result.error || "Failed to unload model");
 			}
 		} catch (error) {
@@ -134,12 +192,14 @@ export class LLMProxy implements BaseLLM {
 
 	async delete(modelId: string): Promise<void> {
 		try {
-			const result = await backgroundJob.execute("delete-model", {
+			const { promise } = await backgroundJob.execute("delete-model", {
 				serviceName: this.name,
 				modelId,
-			});
+			}, { stream: false });
 
-			if (!result.error || result.status === "failed") {
+			const result = await promise;
+
+			if (result.status === "failed") {
 				throw new Error(result.error || "Failed to delete model");
 			}
 		} catch (error) {
@@ -147,11 +207,28 @@ export class LLMProxy implements BaseLLM {
 		}
 	}
 
-	async serve?(
+	private emitProgressEvent(progress: ProgressEvent, stage: string): void {
+		if (typeof window === "undefined") return;
+
+		window.dispatchEvent(
+			new CustomEvent(LLM_DOWNLOAD_PROGRESS_EVENT, {
+				detail: {
+					loaded: progress.loaded,
+					total: progress.total,
+					percent: progress.percent,
+					text: stage,
+					provider: this.llmType, // Include provider for debugging/logging if needed
+				},
+			}),
+		);
+	}
+
+	async serve(
 		modelId: string,
-		onProgress?: (progress: any) => void,
+		onProgress?: (progress: ProgressEvent) => void,
 	): Promise<ModelInfo> {
 		try {
+			const provider = this.llmType as ServiceProvider;
 			if (onProgress) {
 				// Use streaming job to capture progress for heavy operations like wllama
 				const { stream } = await backgroundJob.createJob(
@@ -159,26 +236,31 @@ export class LLMProxy implements BaseLLM {
 					{
 						modelId,
 						serviceName: this.name,
+						provider,
 					},
 					{ stream: true },
 				);
 
 				let lastProgressEvent: JobProgressEvent | null = null;
 
-				console.log("==============================>");
-				// Stream progress updates to onProgress callback
+				// Stream progress updates to onProgress callback and DOM events
 				for await (const progressEvent of stream) {
-					console.log(
-						"=========================> progressEvent",
-						progressEvent,
-					);
 					lastProgressEvent = progressEvent;
 					if (progressEvent.progress !== undefined) {
-						onProgress({
-							loaded: progressEvent.progress,
+						const percent = Math.min(100, Math.max(0, progressEvent.progress));
+						const progressData = {
+							loaded: percent,
 							total: 100,
-							percent: progressEvent.progress,
-						});
+							percent: percent,
+						};
+
+						// Call callback if provided
+						if (onProgress) {
+							onProgress(progressData);
+						}
+
+						// Emit DOM event for cross-thread communication
+						this.emitProgressEvent(progressData, progressEvent.stage || "Loading...");
 					}
 
 					if (progressEvent.status === "failed") {
@@ -189,7 +271,6 @@ export class LLMProxy implements BaseLLM {
 						break;
 					}
 				}
-				console.log("lastProgressEvent", lastProgressEvent);
 				if (
 					lastProgressEvent?.status === "completed" &&
 					lastProgressEvent.result &&
@@ -202,10 +283,13 @@ export class LLMProxy implements BaseLLM {
 				}
 			} else {
 				// Get final result (or fallback if no progress callback)
-				const result = await backgroundJob.execute("serve-model", {
+				const { promise } = await backgroundJob.execute("serve-model", {
 					modelId,
 					serviceName: this.name,
-				});
+					provider,
+				}, { stream: false });
+
+				const result = await promise;
 
 				if (result.status === "completed" && result.result) {
 					return result.result.modelInfo as ModelInfo;

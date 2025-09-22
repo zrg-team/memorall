@@ -14,7 +14,10 @@ export interface RestoreLocalServicesPayload {
 
 // Define result types that handlers return
 export interface RestoreLocalServicesResult extends Record<string, unknown> {
-	serviceConfigs: Record<string, { type: string; baseURL: string }>;
+	serviceConfigs: Record<
+		string,
+		{ type: string; baseURL: string; modelId?: string }
+	>;
 }
 
 // Extend global registry for smart type inference
@@ -56,8 +59,10 @@ export class RestoreLocalServicesHandler extends BaseProcessHandler<RestoreLocal
 			"offscreen",
 		);
 
-		const serviceConfigs: Record<string, { type: string; baseURL: string }> =
-			{};
+		const serviceConfigs: Record<
+			string,
+			{ type: string; baseURL: string; modelId?: string }
+		> = {};
 
 		// Check for LMStudio config
 		try {
@@ -83,6 +88,7 @@ export class RestoreLocalServicesHandler extends BaseProcessHandler<RestoreLocal
 				serviceConfigs.lmstudio = {
 					type: "lmstudio",
 					baseURL: config.baseUrl, // Note: database stores 'baseUrl', service expects 'baseURL'
+					modelId: config.modelId || undefined,
 				};
 			}
 		} catch (error) {
@@ -116,7 +122,8 @@ export class RestoreLocalServicesHandler extends BaseProcessHandler<RestoreLocal
 				};
 				serviceConfigs.ollama = {
 					type: "ollama",
-					baseURL: config.baseUrl, // Note: database stores 'baseUrl', service expects 'baseURL'
+					baseURL: config.baseUrl,
+					modelId: config.modelId || undefined,
 				};
 			}
 		} catch (error) {

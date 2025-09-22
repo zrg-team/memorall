@@ -27,6 +27,23 @@ export function useCurrentModel(
 			setCurrent(null);
 			return;
 		}
+
+		if (!modelInfo.modelId || !modelInfo.provider) {
+			console.log("❌ Missing modelId/provider, clearing current model");
+			setCurrent(null);
+			return;
+		}
+
+		if (
+			["lmstudio", "ollama"].includes(modelInfo.provider) &&
+			modelInfo.modelId === "local-model"
+		) {
+			console.log(
+				"⚠️ Provider configured but no explicit model loaded, ignoring current model",
+			);
+			setCurrent(null);
+			return;
+		}
 		if (modelInfo.provider === "openai" && !openaiReady) {
 			console.log("❌ OpenAI provider but not ready, setting to null");
 			setCurrent(null);

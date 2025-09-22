@@ -18,8 +18,10 @@ import type {
 	LMStudioConfig,
 	OllamaConfig,
 	OpenAIConfig,
+	WllamaConfig,
+	WebLLMConfig,
 } from "./interfaces/service";
-import { DEFAULT_SERVICES } from "./constants";
+import { DEFAULT_SERVICES, PROVIDER_TO_SERVICE } from "./constants";
 import { LLMServiceCore } from "./llm-service-core";
 
 export class LLMServiceUI extends LLMServiceCore implements ILLMService {
@@ -29,6 +31,33 @@ export class LLMServiceUI extends LLMServiceCore implements ILLMService {
 		);
 		await super.initialize();
 		await this.ensureLiteServices();
+	}
+
+	protected override async createServiceForProvider(
+		provider: ServiceProvider,
+	): Promise<void> {
+		const serviceName = PROVIDER_TO_SERVICE[provider];
+
+		if (!this.has(serviceName)) {
+			const serviceConfigs = {
+				wllama: () => this.create(serviceName, { type: "wllama" } as WllamaConfig),
+				webllm: () => this.create(serviceName, { type: "webllm" } as WebLLMConfig),
+				openai: () => {
+					// OpenAI requires user configuration - do nothing
+				},
+				lmstudio: () => {
+					// LMStudio requires user configuration - do nothing
+				},
+				ollama: () => {
+					// Ollama requires user configuration - do nothing
+				},
+			};
+
+			const createService = serviceConfigs[provider];
+			if (createService) {
+				await createService();
+			}
+		}
 	}
 
 	async create<K extends keyof LLMRegistry>(
@@ -74,49 +103,35 @@ export class LLMServiceUI extends LLMServiceCore implements ILLMService {
 
 			case "wllama":
 			case "webllm": {
-				const progressEventName =
-					config.type === "wllama" ? "wllama:progress" : "webllm:progress";
-				const emitProgress = (progress: number, stage: string) => {
-					if (typeof window === "undefined") return;
-					const normalized = Number.isFinite(progress) ? progress : 0;
-					const clamped = Math.max(0, Math.min(100, normalized));
-					const stageText =
-						typeof stage === "string" ? stage : String(stage ?? "");
-					window.dispatchEvent(
-						new CustomEvent(progressEventName as string, {
-							detail: {
-								loaded: clamped,
-								total: 100,
-								percent: clamped,
-								text: stageText,
-							},
-						}),
-					);
-				};
-
 				try {
-					const result = await backgroundJob.execute("create-llm-service", {
+					const executeResult = await backgroundJob.execute("create-llm-service", {
 						name,
 						llmType: config.type,
 						config,
-					});
-					logInfo(
-						`📋 Background job result: status=${result.status}, hasResult=${!!result.result}`,
-					);
+					}, { stream: false });
 
-					if (result.status === "completed" && result.result) {
-						const proxyLLM = new LLMProxy(
-							name,
-							config.type,
-						) as LLMRegistry[K]["llm"];
-						this.llms.set(name, proxyLLM);
+					if ('promise' in executeResult) {
+						const result = await executeResult.promise;
 						logInfo(
-							`🎯 LLMProxy created and registered for ${name}: ${!!proxyLLM}, hasServe: ${!!(proxyLLM as any).serve}`,
+							`📋 Background job result: status=${result.status}, hasResult=${!!result.result}`,
 						);
-						return proxyLLM;
+
+						if (result.status === "completed" && result.result) {
+							const proxyLLM = new LLMProxy(
+								name,
+								config.type,
+							) as LLMRegistry[K]["llm"];
+							this.llms.set(name, proxyLLM);
+							logInfo(
+								`🎯 LLMProxy created and registered for ${name}: ${!!proxyLLM}, hasServe: ${!!(proxyLLM as any).serve}`,
+							);
+							return proxyLLM;
+						}
+						logError(`❌ Background job failed for ${name}:`, result);
+						throw new Error(result.error || "Failed to create LLM service");
+					} else {
+						throw new Error("Expected promise result from non-streaming execute");
 					}
-					logError(`❌ Background job failed for ${name}:`, result);
-					throw new Error(result.error || "Failed to create LLM service");
 				} catch (error) {
 					throw new Error(`Background job failed: ${error}`);
 				}
@@ -135,6 +150,26 @@ export class LLMServiceUI extends LLMServiceCore implements ILLMService {
 		return llm;
 	}
 
+	async setCurrentModel(
+		modelId: string,
+		provider: ServiceProvider,
+		serviceName: string,
+	): Promise<void> {
+		// Auto-create service if it doesn't exist
+		if (!this.has(serviceName)) {
+			try {
+				await this.createServiceForProvider(provider);
+				logInfo(`✅ Service ${serviceName} created successfully for provider ${provider}`);
+			} catch (error) {
+				logError(`❌ Failed to create service ${serviceName} for provider ${provider}:`, error);
+				// If creation fails, continue anyway - the service might be created elsewhere
+			}
+		}
+
+		// Call parent implementation
+		await super.setCurrentModel(modelId, provider, serviceName);
+	}
+
 	isReady(): boolean {
 		return (
 			this.isReadyByName(DEFAULT_SERVICES.OPENAI) ||
@@ -145,14 +180,19 @@ export class LLMServiceUI extends LLMServiceCore implements ILLMService {
 	// Heavy operations delegated to background jobs
 	async models(): Promise<{ object: "list"; data: ModelInfo[] }> {
 		try {
-			const result = await backgroundJob.execute("get-all-models", {});
-			if (result.status === "completed" && result.result) {
-				return (result.result as any).models as {
-					object: "list";
-					data: ModelInfo[];
-				};
+			const executeResult = await backgroundJob.execute("get-all-models", {}, { stream: false });
+			if ('promise' in executeResult) {
+				const result = await executeResult.promise;
+				if (result.status === "completed" && result.result) {
+					return (result.result as any).models as {
+						object: "list";
+						data: ModelInfo[];
+					};
+				}
+				return { object: "list", data: [] };
+			} else {
+				throw new Error("Expected promise result from non-streaming execute");
 			}
-			return { object: "list", data: [] };
 		} catch (error) {
 			logWarn("Failed to get models via background job:", error);
 			return { object: "list", data: [] };
@@ -174,9 +214,10 @@ export class LLMServiceUI extends LLMServiceCore implements ILLMService {
 
 		// Delegate to background job for heavy services
 		try {
-			const result = await backgroundJob.execute("get-models-for-service", {
+			const { promise } = await backgroundJob.execute("get-models-for-service", {
 				serviceName: name,
-			});
+			}, { stream: false });
+			const result = await promise;
 			if (result.status === "completed" && result.result) {
 				return (result.result as any).models as {
 					object: "list";
@@ -199,7 +240,19 @@ export class LLMServiceUI extends LLMServiceCore implements ILLMService {
 		if (request.stream) {
 			const self = this;
 			return (async function* () {
-				const llm = await self.get(name);
+				let llm = await self.get(name);
+				if (!llm) {
+					// Try to auto-create service from current model
+					const currentModel = await self.getCurrentModel();
+					if (currentModel && currentModel.serviceName === name) {
+						try {
+							await self.createServiceForProvider(currentModel.provider);
+							llm = await self.get(name);
+						} catch (error) {
+							logError(`Failed to auto-create service ${name}:`, error);
+						}
+					}
+				}
 				if (!llm) throw new Error(`LLM "${name}" not found`);
 				for await (const chunk of llm.chatCompletions(
 					request as ChatCompletionRequest & { stream: true },
@@ -209,7 +262,19 @@ export class LLMServiceUI extends LLMServiceCore implements ILLMService {
 			})();
 		} else {
 			return (async () => {
-				const llm = await this.get(name);
+				let llm = await this.get(name);
+				if (!llm) {
+					// Try to auto-create service from current model
+					const currentModel = await this.getCurrentModel();
+					if (currentModel && currentModel.serviceName === name) {
+						try {
+							await this.createServiceForProvider(currentModel.provider);
+							llm = await this.get(name);
+						} catch (error) {
+							logError(`Failed to auto-create service ${name}:`, error);
+						}
+					}
+				}
 				if (!llm) throw new Error(`LLM "${name}" not found`);
 				return llm.chatCompletions(
 					request as ChatCompletionRequest & { stream?: false },
@@ -244,34 +309,12 @@ export class LLMServiceUI extends LLMServiceCore implements ILLMService {
 		model: string,
 		onProgress?: (progress: ProgressEvent) => void,
 	): Promise<ModelInfo> {
-		// Auto-detect which service should handle this model
-		const serviceName = this.determineServiceFromModel(model);
-
-		console.log("serve=====================>", model, serviceName);
-		// Get service, create if not exists
-		let service = await this.get(serviceName);
-
-		console.log("service=====================>", service);
-
-		if (!service) {
-			// Create the service if it doesn't exist
-			if (serviceName === DEFAULT_SERVICES.WLLAMA) {
-				service = await this.create(serviceName, { type: "wllama" });
-			} else if (serviceName === DEFAULT_SERVICES.WEBLLM) {
-				service = await this.create(serviceName, { type: "webllm" });
-			} else {
-				throw new Error(`Unknown service type for ${serviceName}`);
-			}
+		if (!this.currentModel) {
+			throw new Error("No current model selected");
 		}
 
-		if (service && service.serve) {
-			const result = await service.serve(model, onProgress);
-			const provider = this.determineProviderFromService(serviceName);
-			await this.setCurrentModel(model, provider);
-			return result;
-		}
-
-		throw new Error(`Service ${serviceName} not available for model ${model}`);
+		const result = await this.serveFor(this.currentModel.serviceName, model, onProgress);
+		return result;
 	}
 
 	async serveFor(
@@ -281,19 +324,48 @@ export class LLMServiceUI extends LLMServiceCore implements ILLMService {
 	): Promise<ModelInfo> {
 		// For lite services, try local first
 		const llm = await this.get(name);
-		if (llm && llm.serve) {
+		const llmWithServe = llm as BaseLLM & {
+			serve?: (
+				model: string,
+				onProgress?: (progress: ProgressEvent) => void,
+			) => Promise<ModelInfo>;
+		};
+
+		if (!llmWithServe || typeof llmWithServe.serve !== "function") {
+			// Some providers (OpenAI-compatible, etc.) do not require an explicit
+			// serve step. Update current model and return a best-effort model record.
+			let existingModel: ModelInfo | undefined;
 			try {
-				const result = await llm.serve(model, onProgress);
-				const provider = this.determineProviderFromService(name);
-				await this.setCurrentModel(model, provider);
-				return result;
+				const models = await this.modelsFor(name);
+				existingModel = models.data.find((m) => m.id === model);
 			} catch (error) {
-				logWarn(`Failed to serve ${model} on ${name}:`, error);
+				logWarn(`Failed to fetch models for ${name}:`, error);
 			}
+
+			// For serveFor, we need to get the provider from the current model
+			if (!this.currentModel) {
+				throw new Error("Cannot determine provider - no current model set");
+			}
+
+			await this.setCurrentModel(model, this.currentModel.provider, name);
+			return (
+				existingModel ?? {
+					id: model,
+					name: model,
+					object: "model",
+					created: Math.floor(Date.now() / 1000),
+					owned_by: this.currentModel.provider,
+					loaded: true,
+				}
+			);
 		}
 
-		// Delegate to background job for heavy services
-		return this.serve(model, onProgress);
+		const result = await llmWithServe.serve(model, onProgress);
+		if (!this.currentModel) {
+			throw new Error("Cannot determine provider - no current model set");
+		}
+		await this.setCurrentModel(model, this.currentModel.provider, name);
+		return result;
 	}
 
 	async unloadFor(name: string, modelId: string): Promise<void> {
@@ -304,10 +376,11 @@ export class LLMServiceUI extends LLMServiceCore implements ILLMService {
 
 		// Delegate to background job if service not available locally
 		try {
-			const result = await backgroundJob.execute("unload-model", {
+			const { promise } = await backgroundJob.execute("unload-model", {
 				serviceName: name,
 				modelId,
-			});
+			}, { stream: false });
+			const result = await promise;
 			if (result.status !== "completed") {
 				throw new Error(result.error || "Failed to unload model");
 			}
@@ -324,10 +397,11 @@ export class LLMServiceUI extends LLMServiceCore implements ILLMService {
 
 		// Delegate to background job if service not available locally
 		try {
-			const result = await backgroundJob.execute("delete-model", {
+			const { promise } = await backgroundJob.execute("delete-model", {
 				serviceName: name,
 				modelId,
-			});
+			}, { stream: false });
+			const result = await promise;
 			if (result.status !== "completed") {
 				throw new Error(result.error || "Failed to delete model");
 			}
@@ -356,7 +430,8 @@ export class LLMServiceUI extends LLMServiceCore implements ILLMService {
 
 	private async restoreLocalServices(): Promise<void> {
 		try {
-			const result = await backgroundJob.execute("restore-local-services", {});
+			const { promise } = await backgroundJob.execute("restore-local-services", {}, { stream: false });
+			const result = await promise;
 			if (
 				result &&
 				typeof result === "object" &&
@@ -384,9 +459,12 @@ export class LLMServiceUI extends LLMServiceCore implements ILLMService {
 		}
 	}
 
-	private async createLocalServicesFromConfigs(
-		serviceConfigs: Record<string, { type: string; baseURL: string }>,
-	): Promise<void> {
+private async createLocalServicesFromConfigs(
+	serviceConfigs: Record<
+		string,
+		{ type: string; baseURL: string; modelId?: string }
+	>,
+): Promise<void> {
 		if (serviceConfigs.lmstudio) {
 			try {
 				const lmstudioConfig: LMStudioConfig = {
@@ -399,6 +477,13 @@ export class LLMServiceUI extends LLMServiceCore implements ILLMService {
 				}
 
 				await this.create("lmstudio", lmstudioConfig);
+				if (serviceConfigs.lmstudio.modelId) {
+					await this.setCurrentModel(
+						serviceConfigs.lmstudio.modelId,
+						"lmstudio",
+						"lmstudio",
+					);
+				}
 			} catch (error) {
 				logWarn("Failed to create/update LMStudio service:", error);
 			}
@@ -420,6 +505,13 @@ export class LLMServiceUI extends LLMServiceCore implements ILLMService {
 				}
 
 				await this.create("ollama", ollamaConfig);
+				if (serviceConfigs.ollama.modelId) {
+					await this.setCurrentModel(
+						serviceConfigs.ollama.modelId,
+						"ollama",
+						"ollama",
+					);
+				}
 			} catch (error) {
 				logWarn("Failed to create/update Ollama service:", error);
 			}
@@ -430,30 +522,5 @@ export class LLMServiceUI extends LLMServiceCore implements ILLMService {
 		}
 	}
 
-	private determineServiceFromModel(modelId: string): string {
-		// Determine service name from model ID - maps to DEFAULT_SERVICES
-		if (modelId.includes("/") && modelId.includes(".gguf")) {
-			return DEFAULT_SERVICES.WLLAMA; // "wllama" for GGUF files with repo/filename format
-		}
-		if (
-			modelId.includes("llama") ||
-			modelId.includes("vicuna") ||
-			modelId.includes("gguf")
-		) {
-			return DEFAULT_SERVICES.WLLAMA;
-		}
-		if (!modelId.includes("/") && !modelId.includes(".gguf")) {
-			return DEFAULT_SERVICES.WEBLLM; // WebLLM for simple model names
-		}
-		return DEFAULT_SERVICES.WLLAMA; // Default to wllama for complex models
-	}
 
-	private determineProviderFromService(serviceName: string): ServiceProvider {
-		if (serviceName === "openai") return "openai";
-		if (serviceName === "ollama") return "ollama";
-		if (serviceName === "lmstudio") return "lmstudio";
-		if (serviceName === "wllama") return "wllama";
-		if (serviceName === "webllm") return "webllm";
-		return "openai"; // Default fallback
-	}
 }

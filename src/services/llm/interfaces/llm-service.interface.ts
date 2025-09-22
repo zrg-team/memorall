@@ -32,7 +32,11 @@ export interface ILLMService {
 
 	// Current model management - Core functionality
 	getCurrentModel(): Promise<CurrentModelInfo | null>;
-	setCurrentModel(modelId: string, provider: ServiceProvider): Promise<void>;
+	setCurrentModel(
+		modelId: string,
+		provider: ServiceProvider,
+		serviceName: string,
+	): Promise<void>;
 	clearCurrentModel(): Promise<void>;
 	onCurrentModelChange(
 		listener: (model: CurrentModelInfo | null) => void,

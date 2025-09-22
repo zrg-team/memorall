@@ -51,28 +51,25 @@ export abstract class LLMServiceCore {
 	async setCurrentModel(
 		modelId: string,
 		provider: ServiceProvider,
+		serviceName: string,
 	): Promise<void> {
-		let serviceName = this.findServiceNameForProvider(provider);
-
-		// If service not found, try to create it on-demand for known providers
+		// All data must be provided independently - no detection or derivation
 		if (!serviceName) {
-			try {
-				await this.createServiceForProvider(provider);
-				serviceName = this.findServiceNameForProvider(provider);
-			} catch (error) {
-				// If still can't create/find service, throw error
-				if (!serviceName) {
-					throw new Error(
-						`No service found for provider: ${provider}. Available services: ${this.list().join(", ")}. Failed to create service: ${error}`,
-					);
-				}
-			}
+			throw new Error(
+				`Service name is required. Cannot detect service from provider. Available services: ${this.list().join(", ")}`,
+			);
+		}
+
+		if (!this.has(serviceName)) {
+			throw new Error(
+				`Service "${serviceName}" not found. Available services: ${this.list().join(", ")}`,
+			);
 		}
 
 		this.currentModel = {
 			modelId,
 			provider,
-			serviceName: serviceName!,
+			serviceName,
 		};
 
 		this.storageLoadAttempted = true;
@@ -133,28 +130,6 @@ export abstract class LLMServiceCore {
 		return this.llms.delete(name);
 	}
 
-	protected findServiceNameForProvider(
-		provider: ServiceProvider,
-	): string | null {
-		const services = this.list();
-
-		for (const serviceName of services) {
-			try {
-				const serviceInfo = this.getInfoFor(serviceName);
-				if (serviceInfo.type === provider) {
-					return serviceName;
-				}
-			} catch (error) {
-				continue;
-			}
-		}
-
-		const matchingService = services.find((name) =>
-			name.toLowerCase().includes(provider.toLowerCase()),
-		);
-
-		return matchingService || null;
-	}
 
 	protected async createServiceForProvider(
 		provider: ServiceProvider,
@@ -165,6 +140,7 @@ export abstract class LLMServiceCore {
 			`Cannot create service for provider: ${provider}. Override createServiceForProvider in subclass.`,
 		);
 	}
+
 
 	async clearCurrentModel(): Promise<void> {
 		this.currentModel = null;
@@ -199,27 +175,11 @@ export abstract class LLMServiceCore {
 
 			const storedModel =
 				await sharedStorageService.get<CurrentModelInfo>(CURRENT_MODEL_KEY);
+
 			if (storedModel) {
-				if (storedModel.modelId && storedModel.modelId.trim() !== "") {
-					if (storedModel.serviceName && this.has(storedModel.serviceName)) {
-						this.currentModel = storedModel;
-					} else {
-						const correctServiceName = this.findServiceNameForProvider(
-							storedModel.provider,
-						);
-						if (correctServiceName) {
-							this.currentModel = {
-								...storedModel,
-								serviceName: correctServiceName,
-							};
-							await this.saveCurrentModelToStorage();
-						} else {
-							this.currentModel = null;
-						}
-					}
-				} else {
-					this.currentModel = storedModel;
-				}
+				// Use stored data independently - no detection or derivation
+				// storedModel should contain: provider, serviceName, modelId
+				this.currentModel = storedModel;
 			}
 
 			this.notifyCurrentModelChange();

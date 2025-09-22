@@ -1,9 +1,8 @@
 import { useState, useEffect } from "react";
+import type { ProgressEvent } from "@/services/llm/interfaces/base-llm";
+import { LLM_DOWNLOAD_PROGRESS_EVENT } from "@/services/llm/constants";
 
-export interface DownloadProgress {
-	loaded: number;
-	total: number;
-	percent: number;
+export interface DownloadProgress extends ProgressEvent {
 	text: string;
 }
 
@@ -19,21 +18,29 @@ export function useDownloadProgress() {
 		null,
 	);
 
-	// Progress listener for wllama
+	// Listen for progress events from background jobs
 	useEffect(() => {
-		const handler = (e: any) => {
-			if (e?.type === "wllama:progress") {
-				const d = e.detail || {};
-				setDownloadProgress({
-					loaded: d.loaded ?? 0,
-					total: d.total ?? 0,
-					percent: d.percent ?? 0,
-					text: "",
-				});
+		const handleProgressEvent = (event: CustomEvent) => {
+			console.log("🎯 Progress event received:", event.detail);
+			const detail = event.detail;
+			if (detail && typeof detail === "object") {
+				const progressData = {
+					loaded: detail.loaded ?? 0,
+					total: detail.total ?? 0,
+					percent: detail.percent ?? 0,
+					text: detail.text ?? "",
+				};
+				console.log("📊 Setting progress:", progressData);
+				setDownloadProgress(progressData);
 			}
 		};
-		window.addEventListener("wllama:progress" as any, handler);
-		return () => window.removeEventListener("wllama:progress" as any, handler);
+
+		// Listen for global LLM download progress event
+		window.addEventListener(LLM_DOWNLOAD_PROGRESS_EVENT, handleProgressEvent as EventListener);
+
+		return () => {
+			window.removeEventListener(LLM_DOWNLOAD_PROGRESS_EVENT, handleProgressEvent as EventListener);
+		};
 	}, []);
 
 	return {

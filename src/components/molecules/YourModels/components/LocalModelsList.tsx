@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Loader2, Play, Square } from "lucide-react";
 import { type ModelInfo } from "@/services/llm";
 import { serviceManager } from "@/services";
+import { DEFAULT_SERVICES } from "@/services/llm/constants";
 import { logInfo } from "@/utils/logger";
 import type { Provider } from "../hooks/use-provider-config";
 import type { CurrentModel } from "../hooks/use-current-model";
@@ -65,9 +66,14 @@ export const LocalModelsList: React.FC<LocalModelsListProps> = ({
 							onClick={async () => {
 								// Set current model when clicking Use
 								// Let LLMService handle the state and notify via events
+								const serviceName =
+									quickProvider === "openai"
+										? DEFAULT_SERVICES.OPENAI
+										: quickProvider;
 								await serviceManager.llmService.setCurrentModel(
 									model.id,
 									quickProvider,
+									serviceName,
 								);
 								logInfo(`${model.name || model.id} set as current model`);
 								onModelLoaded?.(model.id, quickProvider);

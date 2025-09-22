@@ -71,6 +71,9 @@ export const YourModels: React.FC<YourModelsProps> = ({
 		localConfigExists,
 	);
 
+	console.log('localConfigExists', localConfigExists)
+	console.log('localModels', localModels)
+
 	const {
 		downloadProgress,
 		setDownloadProgress,
@@ -80,7 +83,6 @@ export const YourModels: React.FC<YourModelsProps> = ({
 
 	const { handleQuickDownload, loadDownloadedModel, unloadDownloadedModel } =
 		useModelOperations({
-			quickProvider,
 			setCurrent,
 			setLoading,
 			setQuickDownloadModel,

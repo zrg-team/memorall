@@ -14,6 +14,7 @@ import { LocalOpenAICompatLLM } from "./implementations/local-openai-llm";
 import type {
 	ILLMService,
 	ServiceProvider,
+	CurrentModelInfo,
 } from "./interfaces/llm-service.interface";
 import { DEFAULT_SERVICES } from "./constants";
 import type {
@@ -156,18 +157,47 @@ export class LLMServiceMain extends LLMServiceCore implements ILLMService {
 	): Promise<ModelInfo> {
 		const llm = await this.get(name);
 		if (!llm) throw new Error(`LLM "${name}" not found`);
-		if (!llm.serve)
-			throw new Error(`LLM "${name}" does not support serve operation`);
-		// Unload models from other services before serving this one
+		const llmWithServe = llm as BaseLLM & {
+			serve?: (
+				model: string,
+				onProgress?: (progress: ProgressEvent) => void,
+			) => Promise<ModelInfo>;
+		};
+
 		await this.unloadOtherServices(name);
-		const result = await llm.serve(model, onProgress);
-		const provider: ServiceProvider =
-			name === DEFAULT_SERVICES.WEBLLM
-				? "webllm"
-				: name === DEFAULT_SERVICES.WLLAMA
-					? "wllama"
-					: "openai";
-		await this.setCurrentModel(model, provider);
+
+		if (!llmWithServe.serve) {
+			let existingModel: ModelInfo | undefined;
+			try {
+				const models = await this.modelsFor(name);
+				existingModel = models.data.find((m) => m.id === model);
+			} catch (error) {
+				logWarn(`Failed to fetch models for ${name}:`, error);
+			}
+
+			// For serveFor, we need to get the provider from the current model or determine it
+			if (!this.currentModel) {
+				throw new Error("Cannot determine provider - no current model set");
+			}
+
+			await this.setCurrentModel(model, this.currentModel.provider, name);
+			return (
+				existingModel ?? {
+					id: model,
+					name: model,
+					object: "model",
+					created: Math.floor(Date.now() / 1000),
+					owned_by: this.currentModel.provider,
+					loaded: true,
+				}
+			);
+		}
+
+		const result = await llmWithServe.serve(model, onProgress);
+		if (!this.currentModel) {
+			throw new Error("Cannot determine provider - no current model set");
+		}
+		await this.setCurrentModel(model, this.currentModel.provider, name);
 		return result;
 	}
 
@@ -232,33 +262,18 @@ export class LLMServiceMain extends LLMServiceCore implements ILLMService {
 		return this.deleteModelFor(this.currentModel.serviceName, modelId);
 	}
 
+
+
 	async serve(
 		model: string,
 		onProgress?: (progress: ProgressEvent) => void,
 	): Promise<ModelInfo> {
+		if (!this.currentModel) {
+			throw new Error("No current model selected");
+		}
+
 		await this.ensureAllServices();
-		if (this.has(DEFAULT_SERVICES.OPENAI)) {
-			try {
-				const openai = await this.modelsFor(DEFAULT_SERVICES.OPENAI);
-				const found = openai.data.find((m) => m.id === model);
-				if (found) {
-					await this.unloadOtherServices(DEFAULT_SERVICES.OPENAI);
-					await this.setCurrentModel(model, "openai");
-					return found;
-				}
-			} catch (e) {
-				// ignore openai errors here
-			}
-		}
-		try {
-			const webllm = await this.modelsFor(DEFAULT_SERVICES.WEBLLM);
-			if (webllm?.data?.some((m) => m.id === model)) {
-				return this.serveFor(DEFAULT_SERVICES.WEBLLM, model, onProgress);
-			}
-		} catch {
-			// ignore
-		}
-		return this.serveFor(DEFAULT_SERVICES.WLLAMA, model, onProgress);
+		return this.serveFor(this.currentModel.serviceName, model, onProgress);
 	}
 
 	private async unloadOtherServices(exceptName: string): Promise<void> {
@@ -317,13 +332,16 @@ export class LLMServiceMain extends LLMServiceCore implements ILLMService {
 		}
 	}
 
-	private async loadLocalServiceConfigs(): Promise<Record<
-		string,
-		{ type: string; baseURL: string }
-	> | null> {
+private async loadLocalServiceConfigs(): Promise<Record<
+	string,
+	{ type: string; baseURL: string; modelId?: string }
+> | null> {
 		try {
 			// Load configurations from database (same pattern as LocalOpenAITab)
-			const configs: Record<string, { type: string; baseURL: string }> = {};
+			const configs: Record<
+				string,
+				{ type: string; baseURL: string; modelId?: string }
+			> = {};
 
 			// Check for LMStudio config
 			try {
@@ -343,6 +361,7 @@ export class LLMServiceMain extends LLMServiceCore implements ILLMService {
 					configs.lmstudio = {
 						type: "lmstudio",
 						baseURL: lmstudioConfig.data.baseUrl,
+						modelId: lmstudioConfig.data.modelId || undefined,
 					};
 					logInfo(
 						"🔍 Loaded LMStudio config from database:",
@@ -371,6 +390,7 @@ export class LLMServiceMain extends LLMServiceCore implements ILLMService {
 					configs.ollama = {
 						type: "ollama",
 						baseURL: ollamaConfig.data.baseUrl,
+						modelId: ollamaConfig.data.modelId || undefined,
 					};
 					logInfo(
 						"🔍 Loaded Ollama config from database:",
@@ -388,9 +408,12 @@ export class LLMServiceMain extends LLMServiceCore implements ILLMService {
 		}
 	}
 
-	private async createLocalServicesFromConfigs(
-		serviceConfigs: Record<string, { type: string; baseURL: string }>,
-	): Promise<void> {
+private async createLocalServicesFromConfigs(
+	serviceConfigs: Record<
+		string,
+		{ type: string; baseURL: string; modelId?: string }
+	>,
+): Promise<void> {
 		if (serviceConfigs.lmstudio) {
 			try {
 				const lmstudioConfig: LMStudioConfig = {
@@ -403,6 +426,13 @@ export class LLMServiceMain extends LLMServiceCore implements ILLMService {
 				}
 
 				await this.create("lmstudio", lmstudioConfig);
+				if (serviceConfigs.lmstudio.modelId) {
+					await this.setCurrentModel(
+						serviceConfigs.lmstudio.modelId,
+						"lmstudio",
+						"lmstudio",
+					);
+				}
 			} catch (error) {
 				logWarn("Failed to create/update LMStudio service:", error);
 			}
@@ -424,6 +454,13 @@ export class LLMServiceMain extends LLMServiceCore implements ILLMService {
 				}
 
 				await this.create("ollama", ollamaConfig);
+				if (serviceConfigs.ollama.modelId) {
+					await this.setCurrentModel(
+						serviceConfigs.ollama.modelId,
+						"ollama",
+						"ollama",
+					);
+				}
 			} catch (error) {
 				logWarn("Failed to create/update Ollama service:", error);
 			}

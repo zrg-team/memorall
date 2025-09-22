@@ -175,25 +175,32 @@ export class BackgroundJob {
 	execute<T extends keyof JobTypeRegistry>(
 		jobType: T,
 		payload: JobTypeRegistry[T],
-		options?: {
-			onProgress?: (progress: JobProgressEvent) => void;
-		},
-	): Promise<JobResultFor<T extends keyof JobResultRegistry ? T : never>>;
+		options: { stream: true },
+	): Promise<JobStreamResult>;
+	execute<T extends keyof JobTypeRegistry>(
+		jobType: T,
+		payload: JobTypeRegistry[T],
+		options: { stream: false },
+	): Promise<JobPromiseResult<T extends keyof JobResultRegistry ? T : never>>;
+	execute<T extends keyof JobTypeRegistry>(
+		jobType: T,
+		payload: JobTypeRegistry[T],
+		options: JobOptions,
+	): Promise<
+		| JobStreamResult
+		| JobPromiseResult<T extends keyof JobResultRegistry ? T : never>
+	>;
 	// Fallback for unregistered job types
 	execute(
 		jobType: string,
 		payload: unknown,
-		options?: {
-			onProgress?: (progress: JobProgressEvent) => void;
-		},
-	): Promise<JobResult>;
+		options: JobOptions,
+	): Promise<JobStreamResult | JobPromiseResult>;
 	async execute<T extends keyof JobTypeRegistry>(
 		jobType: T | string,
 		payload: T extends keyof JobTypeRegistry ? JobTypeRegistry[T] : unknown,
-		options?: {
-			onProgress?: (progress: JobProgressEvent) => void;
-		},
-	): Promise<JobResult> {
+		options: JobOptions,
+	): Promise<JobStreamResult | JobPromiseResult> {
 		const jobId = nanoid();
 
 		const job: BaseJob = {
@@ -205,46 +212,26 @@ export class BackgroundJob {
 			progress: [],
 		};
 
-		// Register completion listener via jobNotificationChannel BEFORE sending job
-		const completionPromise = new Promise<
-			JobResultFor<T extends keyof JobResultRegistry ? T : never>
-		>((resolve) => {
-			// Listen ONLY for job completion for this specific job - not all messages
-			const unsubscribe = jobNotificationChannel.subscribe(
-				"JOB_COMPLETED",
-				(message) => {
-					console.log("JOB_COMPLETED ========>", message);
-					if (message.jobId === jobId) {
-						unsubscribe();
-						// Get result from the message
-						resolve(
-							(message.result as JobResultFor<
-								T extends keyof JobResultRegistry ? T : never
-							>) || ({ status: "completed", progress: [] } as any),
-						);
-					}
-				},
-			);
-		});
-
+		// Skip saveJob - send directly to offscreen for immediate processing
 		// Immediate notification via BroadcastChannel for fast processing
 		jobNotificationChannel.notifyJobEnqueued(job);
 
 		logInfo(`⚡ Executing immediate ${jobType} job: ${jobId}`);
 
-		if (options?.onProgress) {
+		if (options.stream) {
+			// Create progress stream
 			const stream = this.createJobProgressStream(jobId);
-			for await (const progressEvent of stream) {
-				try {
-					options.onProgress?.(progressEvent);
-				} catch (error) {
-					logError(`Error in onProgress handler for job ${jobId}:`, error);
-				}
-			}
+			this.attachProgressForwarder(jobId);
+			return { jobId, stream };
+		} else {
+			// Create promise that resolves on completion
+			const promise = new Promise<
+				JobResultFor<T extends keyof JobResultRegistry ? T : never>
+			>((resolve) => {
+				this.subscribeToJobCompletion(jobId, resolve as (result: JobResult) => void);
+			});
+			return { jobId, promise };
 		}
-
-		// Return the completion promise
-		return completionPromise;
 	}
 
 	/**

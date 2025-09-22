@@ -7,7 +7,10 @@ import { Loader2, Shield, CheckCircle, Trash2 } from "lucide-react";
 
 interface LocalOpenAITabProps {
 	providerKind: "lmstudio" | "ollama";
-	onModelLoaded?: (modelId: string, provider: "openai") => void;
+	onModelLoaded?: (
+		modelId: string,
+		provider: "lmstudio" | "ollama",
+	) => void;
 }
 
 export const LocalOpenAITab: React.FC<LocalOpenAITabProps> = ({
@@ -117,21 +120,37 @@ export const LocalOpenAITab: React.FC<LocalOpenAITabProps> = ({
 		try {
 			// Use correct service name instead of hardcoded "openai"
 			const serviceName = providerKind;
-			if (serviceManager.llmService.has(serviceName))
+			if (serviceManager.llmService.has(serviceName)) {
 				serviceManager.llmService.remove(serviceName);
+			}
 
 			const serviceConfig = {
 				type: providerKind,
 				baseURL: existingBaseUrl,
-			} as any;
+			};
 
 			// Create service in current context
 			await serviceManager.llmService.create(serviceName, serviceConfig);
 
-			const mid = existingModelId || "local-model";
-			await serviceManager.llmService.setCurrentModel(mid, providerKind as any);
-			setView("loaded");
-			onModelLoaded?.(mid, "openai");
+			try {
+				await serviceManager.llmService.modelsFor(serviceName);
+			} catch (modelsError) {
+				console.warn(
+					`Failed to fetch models for ${serviceName} after connect:`,
+					modelsError,
+				);
+			}
+
+			const trimmedModelId = existingModelId.trim();
+			if (trimmedModelId) {
+				await serviceManager.llmService.setCurrentModel(
+					trimmedModelId,
+					providerKind,
+					providerKind,
+				);
+				onModelLoaded?.(trimmedModelId, providerKind);
+			}
+			setView(trimmedModelId ? "loaded" : "has-config");
 		} catch (e) {
 			const msg = e instanceof Error ? e.message : "Unknown error";
 			setError(`Failed to connect: ${msg}`);
