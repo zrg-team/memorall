@@ -15,7 +15,7 @@ graph TD
     UI[Popup / Options / UI] --> S
 
     S --> ST[chrome.storage.local]
-    S --> RM[chrome.runtime (messages)]
+    S --> RM[chrome.runtime messages]
 
     ST --> EVT[onChanged events]
     RM --> BR[Cross-context broadcast]
@@ -145,14 +145,6 @@ async clear(): Promise<void>
 - `chrome.storage.local` is asynchronous and quota-limited; batch updates when possible.
 - Cross-context sync uses both native `onChanged` and explicit `STORAGE_CHANGED` messages for reliability.
 - Timestamps on events help with ordering in complex flows.
-
-## 🧪 Testing
-
-You can invoke a built-in test helper from any extension context console:
-```javascript
-// Run in popup/options/background console
-testSharedStorage();
-```
 
 What it does:
 - Initializes the service
