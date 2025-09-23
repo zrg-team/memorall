@@ -1,8 +1,95 @@
-import { embeddingService } from "./embedding";
-import { llmService } from "./llm";
-import { flowsService } from "./flows/flows-service";
-import { databaseService } from "./database";
+/**
+ * ServiceManager - Central orchestrator for all extension services
+ *
+ * ## 🏗️ Service Architecture Overview
+ *
+ * The extension uses a dual-mode service architecture to handle different execution contexts:
+ *
+ * ### 🔄 Service Modes
+ *
+ * **Main Mode (Offscreen Document)**:
+ * - Full service implementations with complete functionality
+ * - Real database instance, actual AI model loading
+ * - Heavy computation and resource-intensive operations
+ * - Acts as the "server" for proxy services
+ *
+ * **Proxy Mode (UI/Popup)**:
+ * - Lightweight proxy implementations
+ * - Forward requests to main services via RPC
+ * - Minimal resource usage for responsive UI
+ * - No direct model/database access
+ *
+ * ### 📍 Context-Specific Service Usage
+ *
+ * **🖥️ Offscreen Document (`public/offscreen.html`)**:
+ * ```typescript
+ * // Uses MAIN mode - full service implementations
+ * await serviceManager.initialize({ proxy: false });
+ *
+ * // Services have direct access to:
+ * - Real PGlite database instance
+ * - Loaded AI models (embeddings, LLM)
+ * - Full processing capabilities
+ * ```
+ *
+ * **🎨 UI/Popup (`popup.html`, `standalone.html`)**:
+ * ```typescript
+ * // Uses PROXY mode - lightweight proxies
+ * await serviceManager.initialize({ proxy: true });
+ *
+ * // Services forward requests to offscreen:
+ * - DatabaseService → sends RPC to main database
+ * - EmbeddingService → forwards to offscreen models
+ * - LLMService → proxies to main thread
+ * ```
+ *
+ * **📜 Background Script (`src/background.ts`)**:
+ * ```typescript
+ * // NO SERVICE ACCESS - Background script does not use ServiceManager
+ * // Only handles:
+ * - Context menu registration
+ * - Content script communication
+ * - Job enqueueing via background-jobs
+ * ```
+ *
+ * **📄 Content Scripts**:
+ * ```typescript
+ * // NO SERVICE ACCESS - Content scripts do not use ServiceManager
+ * // Only handles:
+ * - Page data extraction
+ * - DOM manipulation
+ * - Communication with background script only
+ * ```
+ *
+ * ### 🔗 Service Communication Flow
+ *
+ * ```
+ * UI (Proxy Services) ─RPC─> Offscreen (Main Services) ─> Database/AI Models
+ *                                    ↑
+ * Background Script ─jobs─> Background Jobs Queue
+ *                                    ↑
+ * Content Scripts ─data─> Background Script
+ * ```
+ *
+ * ### 💡 Benefits of This Architecture
+ *
+ * - **Performance**: Heavy operations isolated to offscreen document
+ * - **Responsiveness**: UI remains fast with lightweight proxy services
+ * - **Resource Management**: Single source of truth for models/database
+ * - **Clean Separation**: Each context has well-defined responsibilities
+ * - **Type Safety**: Same interfaces for both main and proxy implementations
+ */
+
 import { logError, logInfo, logWarn } from "@/utils/logger";
+import type { IEmbeddingService } from "./embedding";
+import {
+	EmbeddingServiceMain,
+	EmbeddingServiceProxy,
+} from "./embedding";
+import type { ILLMService } from "./llm/interfaces/llm-service.interface";
+import { LLMServiceProxy, LLMServiceMain } from "./llm";
+import { flowsService } from "./flows/flows-service";
+import { DatabaseMode, DatabaseService } from "./database";
 
 export interface InitializationProgress {
 	step: string;
@@ -21,6 +108,11 @@ export class ServiceManager {
 		llm: false,
 		flows: false,
 	};
+
+	// Child services - initialized based on mode
+	public embeddingService!: IEmbeddingService;
+	public llmService!: ILLMService;
+	public databaseService!: DatabaseService;
 
 	// Progress tracking
 	private progressListeners = new Set<
@@ -71,34 +163,84 @@ export class ServiceManager {
 		return { ...this.currentProgress };
 	}
 
-	async initialize(): Promise<void> {
+	async initialize(
+		options: {
+			proxy?: boolean;
+			callback?: (service: string, progress: number) => void;
+		} = {
+			proxy: false,
+			callback: undefined,
+		},
+	): Promise<void> {
 		if (this.initialized) return;
 		if (this.initPromise) return this.initPromise;
 
-		this.initPromise = this.initializeServices();
+		this.initPromise = this.initializeServices(options);
 		await this.initPromise;
 		this.initialized = true;
 	}
 
-	private async initializeServices(): Promise<void> {
-		logInfo("🚀 Initializing services...");
-		this.updateProgress("Initializing services", 5);
+	private async initializeServices(
+		options: {
+			proxy?: boolean;
+			callback?: (service: string, progress: number) => void;
+		} = {
+			proxy: false,
+			callback: undefined,
+		},
+	): Promise<void> {
+		const mode = options.proxy ? "proxy mode" : "full mode";
+		logInfo(`🚀 Initializing services in ${mode}...`);
+		this.updateProgress(`Initializing services (${mode})`, 5);
 
 		try {
+			// Create service instances based on mode
+			if (options.proxy) {
+				logInfo("🔧 Creating lite service implementations");
+				this.databaseService = DatabaseService.getInstance();
+				await this.initializeDatabase({ mode: DatabaseMode.PROXY });
+				this.embeddingService = new EmbeddingServiceProxy();
+				this.llmService = new LLMServiceProxy();
+			} else {
+				logInfo("🔧 Creating full service implementations");
+				this.databaseService = DatabaseService.getInstance();
+				await this.initializeDatabase({ mode: DatabaseMode.MAIN });
+				this.embeddingService = new EmbeddingServiceMain();
+				this.llmService = new LLMServiceMain();
+			}
+
+			options.callback?.("database", 0);
 			// Initialize services sequentially for better progress tracking
-			await this.initializeDatabase();
-			this.updateProgress("Database ready", 5, "database");
 
-			await this.initializeEmbeddingService();
-			this.updateProgress("Embedding models loaded", 75, "embedding");
+			options.callback?.("database", 100);
+			this.updateProgress("Database ready", 25, "database");
 
-			await this.initializeLLMService();
-			this.updateProgress("LLM service ready", 80, "llm");
+			if (options.proxy) {
+				// Lite mode: Initialize services without heavy operations
+				await this.initializeEmbeddingService(true);
+				this.updateProgress("Embedding service ready (lite)", 50, "embedding");
 
+				await this.initializeLLMService(true);
+				this.updateProgress("LLM service ready (lite)", 75, "llm");
+			} else {
+				// Full mode: Initialize all services normally
+				options.callback?.("embedding", 0);
+				await this.initializeEmbeddingService(false);
+				options.callback?.("embedding", 100);
+				this.updateProgress("Embedding models loaded", 50, "embedding");
+
+				options.callback?.("llm", 0);
+				await this.initializeLLMService(false);
+				options.callback?.("llm", 100);
+				this.updateProgress("LLM service ready", 75, "llm");
+			}
+
+			options.callback?.("flow", 0);
 			await this.initializeFlowsService();
+			options.callback?.("flow", 100);
 			this.updateProgress("All services ready", 100, "flows");
 
-			logInfo("✅ All services initialized successfully");
+			logInfo(`✅ All services initialized successfully in ${mode}`);
 		} catch (error) {
 			logError("❌ Failed to initialize services:", error);
 			this.updateProgress("All services ready", 100, "flows");
@@ -106,7 +248,9 @@ export class ServiceManager {
 		}
 	}
 
-	private async initializeDatabase(): Promise<void> {
+	private async initializeDatabase(options: {
+		mode: DatabaseMode;
+	}): Promise<void> {
 		try {
 			logInfo("📚 Initializing database...");
 			this.updateProgress(
@@ -114,7 +258,7 @@ export class ServiceManager {
 				10,
 				"database",
 			);
-			await databaseService.initialize();
+			await this.databaseService.initialize(options);
 			this.serviceStatus.database = true;
 			logInfo("✅ Database initialized");
 		} catch (error) {
@@ -125,21 +269,37 @@ export class ServiceManager {
 		}
 	}
 
-	private async initializeEmbeddingService(): Promise<void> {
+	private async initializeEmbeddingService(
+		liteMode: boolean = false,
+	): Promise<void> {
 		try {
-			logInfo("🔤 Initializing embedding service...");
+			logInfo(
+				`🔤 Initializing embedding service${liteMode ? " (lite mode)" : ""}...`,
+			);
 			this.updateProgress(
-				"Loading embedding models for semantic search",
+				liteMode
+					? "Setting up embedding service proxy"
+					: "Loading embedding models for semantic search",
 				35,
 				"embedding",
 			);
-			// Create default embedding
-			await embeddingService.create("default", "local", {
-				type: "local",
-				modelName: "nomic-ai/nomic-embed-text-v1.5",
-			});
+
+			await this.embeddingService.initialize();
+
+			if (!liteMode) {
+				// Full mode: Create default embedding model
+				await this.embeddingService.create("default", "local", {
+					type: "local",
+					modelName: "nomic-ai/nomic-embed-text-v1.5",
+				});
+				logInfo("✅ Embedding service initialized with local models");
+			} else {
+				logInfo(
+					"✅ Embedding service initialized in lite mode (will use offscreen for operations)",
+				);
+			}
+
 			this.serviceStatus.embedding = true;
-			logInfo("✅ Embedding service initialized");
 		} catch (error) {
 			logError("❌ Embedding service initialization failed:", error);
 			this.serviceStatus.embedding = false;
@@ -149,17 +309,30 @@ export class ServiceManager {
 		}
 	}
 
-	private async initializeLLMService(): Promise<void> {
+	private async initializeLLMService(liteMode: boolean = false): Promise<void> {
 		try {
-			logInfo("🦙 Initializing LLM service...");
+			logInfo(
+				`🦙 Initializing LLM service${liteMode ? " (lite mode)" : ""}...`,
+			);
 			this.updateProgress(
-				"Initializing local LLM inference service",
+				liteMode
+					? "Setting up LLM service proxy"
+					: "Initializing local LLM inference service",
 				60,
 				"llm",
 			);
-			await llmService.initialize();
+
+			await this.llmService.initialize();
+
+			if (liteMode) {
+				logInfo(
+					"✅ LLM service initialized in lite mode (will use offscreen for heavy operations)",
+				);
+			} else {
+				logInfo("✅ LLM service initialized with local models");
+			}
+
 			this.serviceStatus.llm = true;
-			logInfo("✅ LLM service initialized");
 		} catch (error) {
 			logError("❌ LLM service initialization failed:", error);
 			this.serviceStatus.llm = false;
@@ -193,18 +366,21 @@ export class ServiceManager {
 
 	// Check individual service status
 	async isEmbeddingServiceReady(): Promise<boolean> {
-		const embedding = await embeddingService.get("default");
+		if (!this.embeddingService) return false;
+		const embedding = await this.embeddingService.get("default");
 		return this.serviceStatus.embedding && embedding
 			? embedding.isReady()
 			: false;
 	}
 
 	isLLMServiceReady(): boolean {
-		return this.serviceStatus.llm && llmService.isReady();
+		return (
+			this.serviceStatus.llm && this.llmService && this.llmService.isReady()
+		);
 	}
 
 	isDatabaseReady(): boolean {
-		return this.serviceStatus.database && databaseService.isReady();
+		return this.serviceStatus.database && this.databaseService.isReady();
 	}
 
 	isFlowsServiceReady(): boolean {
@@ -221,21 +397,18 @@ export class ServiceManager {
 
 	// Service getters for easy access
 	getEmbeddingService() {
-		return embeddingService;
+		return this.embeddingService;
 	}
 
 	getLLMService() {
-		return llmService;
+		return this.llmService;
 	}
 
 	getDatabaseService() {
-		return databaseService;
+		return this.databaseService;
 	}
 
 	getFlowsService() {
 		return flowsService;
 	}
 }
-
-// Export singleton instance
-export const serviceManager = ServiceManager.getInstance();

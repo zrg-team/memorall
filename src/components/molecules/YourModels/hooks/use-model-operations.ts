@@ -1,5 +1,6 @@
 import { useCallback } from "react";
-import { llmService, type ModelInfo, DEFAULT_SERVICES } from "@/services/llm";
+import { type ModelInfo } from "@/services/llm";
+import { serviceManager } from "@/services";
 import { QUICK_WALLAMA_LLMS } from "@/constants/wllama";
 import { QUICK_WEBLLM_LLMS } from "@/constants/webllm";
 import { QUICK_OPENAI_LLMS } from "@/constants/openai";
@@ -7,9 +8,9 @@ import { logError, logInfo } from "@/utils/logger";
 import type { Provider } from "./use-provider-config";
 import type { CurrentModel } from "./use-current-model";
 import type { DownloadProgress } from "./use-download-progress";
+import { PROVIDER_TO_SERVICE } from "@/services/llm/constants";
 
 interface UseModelOperationsProps {
-	quickProvider: Provider;
 	setCurrent: (current: CurrentModel | null) => void;
 	setLoading: (loading: boolean) => void;
 	setQuickDownloadModel: (model: string | null) => void;
@@ -20,7 +21,6 @@ interface UseModelOperationsProps {
 }
 
 export function useModelOperations({
-	quickProvider,
 	setCurrent,
 	setLoading,
 	setQuickDownloadModel,
@@ -30,9 +30,7 @@ export function useModelOperations({
 	onModelLoaded,
 }: UseModelOperationsProps) {
 	// Initialize services
-	const ensureServices = useCallback(async () => {
-		await llmService.ensureAllServices();
-	}, []);
+	const ensureServices = useCallback(async () => {}, []);
 
 	// Quick download a model (supports wllama, webllm, and openai)
 	const handleQuickDownload = useCallback(
@@ -41,116 +39,88 @@ export function useModelOperations({
 				| (typeof QUICK_WALLAMA_LLMS)[0]
 				| (typeof QUICK_WEBLLM_LLMS)[0]
 				| (typeof QUICK_OPENAI_LLMS)[0],
+			provider: Provider,
 		) => {
 			setLoading(true);
 			const modelName = "repo" in model ? model.repo : model.model;
 			setQuickDownloadModel(modelName);
-			setDownloadProgress({ loaded: 0, total: 0, percent: 0, text: "" });
+			setDownloadProgress({
+				loaded: 0,
+				total: 0,
+				percent: 0,
+				text: "Initializing...",
+			});
 
 			try {
-				// For OpenAI/local providers, check if service is available
-				if (
-					quickProvider === "openai" ||
-					quickProvider === "lmstudio" ||
-					quickProvider === "ollama"
-				) {
-					// For all openai-compatible providers, the service is registered as "openai"
-					if (!llmService.has("openai")) {
-						logError(
-							quickProvider === "openai"
-								? "OpenAI not configured. Please configure OpenAI in the Advanced section first."
-								: "Local LLM not configured. Please configure it in the Advanced section.",
-						);
-						return;
-					}
+				// Use map for provider -> service name
+				const serviceName = PROVIDER_TO_SERVICE[provider];
 
-					// Update current state
-					const openaiModel = model as (typeof QUICK_OPENAI_LLMS)[0];
-					const providerType =
-						quickProvider === "openai" ? "openai" : quickProvider;
-					await llmService.setCurrentModel(openaiModel.model, providerType);
-					setCurrent({ modelId: openaiModel.model, provider: providerType });
-					logInfo(`${modelName} connected successfully`);
+				// Determine model IDs based on provider type
+				const modelStructure = {
+					wllama: () => {
+						const wllamaModel = model as (typeof QUICK_WALLAMA_LLMS)[0];
+						return {
+							serveModelId: `${wllamaModel.repo}/${wllamaModel.filename}`,
+							currentModelId: wllamaModel.repo,
+						};
+					},
+					webllm: () => {
+						const webllmModel = model as (typeof QUICK_WEBLLM_LLMS)[0];
+						return {
+							serveModelId: webllmModel.model,
+							currentModelId: webllmModel.model,
+						};
+					},
+					default: () => {
+						const openaiModel = model as (typeof QUICK_OPENAI_LLMS)[0];
+						return {
+							serveModelId: openaiModel.model,
+							currentModelId: openaiModel.model,
+						};
+					},
+				};
 
-					// Notify parent component
-					onModelLoaded?.(openaiModel.model, providerType);
-					return;
-				}
+				const { serveModelId, currentModelId } = (
+					modelStructure[provider as keyof typeof modelStructure] ||
+					modelStructure.default
+				)();
 
-				await ensureServices();
-
-				// Determine provider and service
-				const isWllama = "repo" in model;
-				const serviceName = isWllama
-					? DEFAULT_SERVICES.WLLAMA
-					: DEFAULT_SERVICES.WEBLLM;
-				const provider: "wllama" | "webllm" = isWllama ? "wllama" : "webllm";
-
-				// Unload previous model if needed
-				const loadedModel = downloadedModels.find((m) => m.loaded);
-				if (loadedModel) {
-					logInfo(`Unloading previous model: ${loadedModel.id}`);
-					const currentServiceName =
-						loadedModel.filename || loadedModel.id.includes("/")
-							? DEFAULT_SERVICES.WLLAMA
-							: DEFAULT_SERVICES.WEBLLM;
-					await llmService.unloadFor(currentServiceName, loadedModel.id);
-				}
-
-				let modelId: string;
-				if (isWllama) {
-					modelId = `${model.repo}/${model.filename}`;
-				} else {
-					modelId = model.model;
-				}
-
-				await llmService.serveFor(
+				// Set current model FIRST so serveFor can use provider info
+				await serviceManager.llmService.setCurrentModel(
+					currentModelId,
+					provider,
 					serviceName,
-					modelId,
-					(progress: { loaded: number; total: number; percent: number }) => {
+				);
+
+				// Always call serveFor - each implementation knows if it needs to download
+				await serviceManager.llmService.serveFor(
+					serviceName,
+					serveModelId,
+					(progress) => {
 						setDownloadProgress({ text: "", ...progress });
 					},
 				);
+				setCurrent({ modelId: currentModelId, provider });
+				logInfo(`${modelName} loaded successfully`);
 
-				// Update current state
-				modelId = isWllama ? model.repo : model.model;
-				await llmService.setCurrentModel(modelId, provider);
-				setCurrent({ modelId, provider });
-				logInfo(`${modelName} downloaded and loaded successfully`);
-
-				// Refresh models list
-				await fetchDownloadedModels();
+				// Refresh models list after a brief delay to ensure background service is updated
+				setTimeout(async () => {
+					await fetchDownloadedModels();
+				}, 100);
 
 				// Notify parent component
-				onModelLoaded?.(modelId, provider);
+				onModelLoaded?.(currentModelId, provider);
 			} catch (err) {
 				const msg = err instanceof Error ? err.message : "Unknown error";
-				if (msg.includes("already initialized")) {
-					const isWllama = "repo" in model;
-					const provider: "wllama" | "webllm" | "openai" =
-						quickProvider === "openai"
-							? "openai"
-							: isWllama
-								? "wllama"
-								: "webllm";
-					const modelId = isWllama ? model.repo : model.model;
-					await llmService.setCurrentModel(modelId, provider);
-					setCurrent({ modelId, provider });
-					logInfo(`${modelName} was already loaded`);
-					await fetchDownloadedModels();
-					onModelLoaded?.(modelId, provider);
-				} else {
-					logError(
-						`Error ${quickProvider === "openai" ? "connecting to" : "downloading"} ${modelName}: ${msg}`,
-					);
-				}
+				logError(`Error loading ${modelName}: ${msg}`);
 			} finally {
 				setLoading(false);
 				setQuickDownloadModel(null);
+				// Clear progress when operation is completely done
+				setDownloadProgress({ loaded: 0, total: 0, percent: 0, text: "" });
 			}
 		},
 		[
-			quickProvider,
 			setCurrent,
 			setLoading,
 			setQuickDownloadModel,
@@ -164,81 +134,60 @@ export function useModelOperations({
 
 	// Load a specific downloaded model
 	const loadDownloadedModel = useCallback(
-		async (modelId: string) => {
+		async (model: ModelInfo, provider: Provider) => {
 			setLoading(true);
+			const modelId = model.id;
 			try {
-				const model = downloadedModels.find((m) => m.id === modelId);
-				if (!model) {
-					throw new Error(`Model ${modelId} not found`);
-				}
-
-				// Determine if this is a WebLLM or Wllama model based on format
-				const isWebLLM = !model.filename && !modelId.includes("/");
-				const serviceName = isWebLLM
-					? DEFAULT_SERVICES.WEBLLM
-					: DEFAULT_SERVICES.WLLAMA;
-
-				// Ensure services are available
-				if (isWebLLM) {
-					await ensureServices();
-				}
-
+				const serviceName = provider
+					? PROVIDER_TO_SERVICE[provider]
+					: undefined;
 				// Unload previous model if any is loaded
-				const loadedModel = downloadedModels.find((m) => m.loaded);
+				const currentDownloadedModels = serviceName
+					? await serviceManager.llmService.modelsFor(serviceName)
+					: await serviceManager.llmService.models();
+				const loadedModel = currentDownloadedModels?.data.find((m) => m.loaded);
 				if (loadedModel && loadedModel.id !== modelId) {
-					const loadedModelIsWebLLM =
-						!loadedModel.filename && !loadedModel.id.includes("/");
-					const loadedModelService = loadedModelIsWebLLM
-						? DEFAULT_SERVICES.WEBLLM
-						: DEFAULT_SERVICES.WLLAMA;
-
 					try {
-						await llmService.unloadFor(loadedModelService, loadedModel.id);
+						if (serviceName) {
+							await serviceManager.llmService.unloadFor(
+								serviceName,
+								loadedModel.id,
+							);
+						} else {
+							await serviceManager.llmService.unload(loadedModel.id);
+						}
 					} catch (unloadErr) {
 						logInfo(
 							"Failed to unload from specific service, trying default:",
 							unloadErr,
 						);
-						await llmService.unload(loadedModel.id);
+						await serviceManager.llmService.unload(loadedModel.id);
 					}
 				}
 
-				await llmService.serveFor(
-					serviceName,
-					modelId,
-					(progress: { loaded: number; total: number; percent: number }) => {
+				if (serviceName) {
+					await serviceManager.llmService.serveFor(
+						serviceName,
+						modelId,
+						(progress: { loaded: number; total: number; percent: number }) => {
+							setDownloadProgress({ text: "", ...progress });
+						},
+					);
+				} else {
+					await serviceManager.llmService.serve(modelId, (progress) => {
 						setDownloadProgress({ text: "", ...progress });
-					},
-				);
+					});
+				}
 
-				// Update current state
-				const provider: "wllama" | "webllm" = isWebLLM ? "webllm" : "wllama";
-				await llmService.setCurrentModel(modelId, provider);
-				setCurrent({ modelId, provider });
-				logInfo(`${modelId} loaded successfully`);
-
-				// Refresh models list to update loaded status
-				await fetchDownloadedModels();
+				// Refresh models list to update loaded status after a brief delay
+				setTimeout(async () => {
+					await fetchDownloadedModels();
+				}, 100);
 
 				// Notify parent component
-				onModelLoaded?.(modelId, provider);
+				onModelLoaded?.(modelId, provider as Provider);
 			} catch (err) {
-				const msg = err instanceof Error ? err.message : "Unknown error";
-				if (msg.includes("already initialized")) {
-					const model = downloadedModels.find((m) => m.id === modelId);
-					const modelIsWebLLM =
-						model && !model.filename && !modelId.includes("/");
-					const provider: "wllama" | "webllm" = modelIsWebLLM
-						? "webllm"
-						: "wllama";
-					await llmService.setCurrentModel(modelId, provider);
-					setCurrent({ modelId, provider });
-					logInfo(`${modelId} was already loaded`);
-					await fetchDownloadedModels();
-					onModelLoaded?.(modelId, provider);
-				} else {
-					logError(`Error loading ${modelId}: ${msg}`);
-				}
+				logError(`Error loading ${modelId}`, err);
 			} finally {
 				setLoading(false);
 			}
@@ -256,38 +205,24 @@ export function useModelOperations({
 
 	// Unload a specific model
 	const unloadDownloadedModel = useCallback(
-		async (modelId: string) => {
+		async (model: ModelInfo, provider: Provider) => {
 			setLoading(true);
+			const modelId = model.id;
 			try {
-				const model = downloadedModels.find((m) => m.id === modelId);
-				const isWebLLM = model && !model.filename && !modelId.includes("/");
-
-				if (isWebLLM) {
-					const webllmServices = llmService
-						.list()
-						.filter((name) => name.includes("webllm"));
-					let unloaded = false;
-					for (const serviceName of webllmServices) {
-						try {
-							await llmService.unloadFor(serviceName, modelId);
-							unloaded = true;
-							break;
-						} catch (err) {
-							// Continue to next service
-						}
-					}
-					if (!unloaded) {
-						await llmService.unload(modelId);
-					}
+				const serviceName = provider
+					? PROVIDER_TO_SERVICE[provider]
+					: undefined;
+				if (serviceName) {
+					await serviceManager.llmService.unloadFor(serviceName, modelId);
 				} else {
-					await llmService.unload(modelId);
+					await serviceManager.llmService.unload(modelId);
 				}
 
 				logInfo(`${modelId} unloaded`);
 				// Clear current banner if unloading the active model
-				const currentModel = await llmService.getCurrentModel();
+				const currentModel = await serviceManager.llmService.getCurrentModel();
 				if (currentModel?.modelId === modelId) {
-					await llmService.clearCurrentModel();
+					await serviceManager.llmService.clearCurrentModel();
 					setCurrent(null);
 				}
 				await fetchDownloadedModels();

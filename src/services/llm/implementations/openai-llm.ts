@@ -78,6 +78,7 @@ export class OpenAILLM implements BaseLLM {
 					m.owned_by || (this.isLocalBase() ? "local" : "openai"),
 				),
 				loaded: true,
+				provider: "openai",
 			}));
 			return { object: "list", data: modelInfos };
 		} catch (error) {

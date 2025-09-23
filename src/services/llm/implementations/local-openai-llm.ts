@@ -10,15 +10,17 @@ import type {
 } from "@/types/openai";
 
 // Local OpenAI-compatible LLM (works for LM Studio and Ollama /v1 endpoints)
-export class LocalOpenAICompatLLM implements BaseLLM {
+export class LocalOpenAICompatibleLLM implements BaseLLM {
 	name = "local-openai";
 	private ready = false;
 	private baseURL: string;
 	private apiKey?: string; // optional for local
+	private providerType: string;
 
-	constructor(baseURL?: string, apiKey?: string) {
+	constructor(baseURL?: string, apiKey?: string, providerType?: string) {
 		this.baseURL = (baseURL || "http://localhost:1234/v1").replace(/\/$/, "");
 		this.apiKey = apiKey;
+		this.providerType = providerType || "custom";
 	}
 
 	async initialize(): Promise<void> {
@@ -238,6 +240,10 @@ export class LocalOpenAICompatLLM implements BaseLLM {
 	}
 
 	getInfo() {
-		return { name: this.name, type: "custom" as const, ready: this.ready };
+		return {
+			name: this.name,
+			type: this.providerType as "wllama" | "openai" | "custom",
+			ready: this.ready,
+		};
 	}
 }

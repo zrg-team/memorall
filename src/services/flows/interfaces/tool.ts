@@ -1,13 +1,13 @@
 import { z } from "zod";
-import type { llmService } from "../../llm";
-import type { embeddingService } from "../../embedding";
-import type { databaseService } from "../../database";
+import type { ILLMService } from "@/services/llm/interfaces/llm-service.interface";
+import type { IEmbeddingService } from "@/services/embedding/interfaces/embedding-service.interface";
+import type { DatabaseService } from "@/services/database/database-service";
 
 // All available services
 export interface AllServices {
-	llm: typeof llmService;
-	embedding: typeof embeddingService;
-	database: typeof databaseService;
+	llm: ILLMService;
+	embedding: IEmbeddingService;
+	database: DatabaseService;
 }
 
 // Base tool interface with generic services

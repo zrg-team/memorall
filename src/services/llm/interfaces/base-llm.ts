@@ -18,6 +18,7 @@ export interface ModelInfo {
 	parent?: string | null;
 	loaded: boolean;
 	size?: number;
+	provider?: string; // Added provider field
 }
 
 export interface ModelsResponse {

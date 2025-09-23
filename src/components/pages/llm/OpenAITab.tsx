@@ -11,9 +11,7 @@ import {
 	Loader2,
 	Trash2,
 } from "lucide-react";
-import { llmService } from "@/services/llm";
-import { schema } from "@/services/database/db";
-import { databaseService } from "@/services/database";
+import { serviceManager } from "@/services";
 import { eq } from "drizzle-orm";
 import { FIXED_ENCRYPTION_KEY } from "@/config/security";
 import {
@@ -60,7 +58,7 @@ export const OpenAITab: React.FC<OpenAITabProps> = ({ onModelLoaded }) => {
 		try {
 			// Check if already loaded in memory
 			if (
-				llmService.has("openai") &&
+				serviceManager.llmService.has("openai") &&
 				(await secureSession.exists("openai_ready"))
 			) {
 				setConfigState("loaded");
@@ -69,7 +67,7 @@ export const OpenAITab: React.FC<OpenAITabProps> = ({ onModelLoaded }) => {
 
 			// Check if config exists in database
 			const encryptedConfig = (
-				await databaseService.use(({ db }) => {
+				await serviceManager.databaseService.use(({ db, schema }) => {
 					return db
 						.select()
 						.from(schema.encryption)
@@ -125,7 +123,7 @@ export const OpenAITab: React.FC<OpenAITabProps> = ({ onModelLoaded }) => {
 
 			// Insert or update
 			const existing = (
-				await databaseService.use(({ db }) => {
+				await serviceManager.databaseService.use(({ db, schema }) => {
 					return db
 						.select()
 						.from(schema.encryption)
@@ -134,14 +132,14 @@ export const OpenAITab: React.FC<OpenAITabProps> = ({ onModelLoaded }) => {
 			)[0];
 
 			if (existing) {
-				await databaseService.use(({ db }) => {
+				await serviceManager.databaseService.use(({ db, schema }) => {
 					return db
 						.update(schema.encryption)
 						.set({ encryptedData, advancedSeed, updatedAt: new Date() })
 						.where(eq(schema.encryption.key, "openai_config"));
 				});
 			} else {
-				await databaseService.use(({ db }) => {
+				await serviceManager.databaseService.use(({ db, schema }) => {
 					return db.insert(schema.encryption).values({
 						key: "openai_config",
 						encryptedData,
@@ -179,7 +177,7 @@ export const OpenAITab: React.FC<OpenAITabProps> = ({ onModelLoaded }) => {
 
 		try {
 			const encryptedConfig = (
-				await databaseService.use(({ db }) => {
+				await serviceManager.databaseService.use(({ db, schema }) => {
 					return db
 						.select()
 						.from(schema.encryption)
@@ -211,7 +209,7 @@ export const OpenAITab: React.FC<OpenAITabProps> = ({ onModelLoaded }) => {
 			const config = JSON.parse(decryptedData);
 
 			// Create OpenAI service
-			await llmService.create("openai", {
+			await serviceManager.llmService.create("openai", {
 				type: "openai",
 				apiKey: config.apiKey,
 				baseURL: config.baseUrl,
@@ -252,7 +250,7 @@ export const OpenAITab: React.FC<OpenAITabProps> = ({ onModelLoaded }) => {
 		setError("");
 
 		try {
-			await databaseService.use(({ db }) => {
+			await serviceManager.databaseService.use(({ db, schema }) => {
 				return db
 					.delete(schema.encryption)
 					.where(eq(schema.encryption.key, "openai_config"));

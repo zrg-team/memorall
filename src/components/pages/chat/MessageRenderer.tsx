@@ -12,7 +12,6 @@ import dayjs from "dayjs";
 import mermaid from "mermaid";
 
 // Initialize mermaid with browser extension compatible settings
-console.log("Initializing mermaid library...");
 mermaid.initialize({
 	startOnLoad: false,
 	theme: "default",
@@ -39,29 +38,18 @@ const TaskMermaidDiagram: React.FC<{ chart: string }> = ({ chart }) => {
 	);
 	const [svgContent, setSvgContent] = React.useState<string>("");
 
-	console.log("TaskMermaidDiagram", chart);
-
 	useEffect(() => {
 		let isMounted = true;
 		let timeoutId: NodeJS.Timeout;
 
 		const renderChart = async () => {
 			const trimmedChart = chart.trim();
-
-			console.log("renderChart called:", {
-				trimmedChart,
-				isMounted,
-				uniqueId,
-			});
-
 			if (!trimmedChart) {
-				console.log("No chart content, setting error state");
 				setRenderState("error");
 				return;
 			}
 
 			if (!isMounted) {
-				console.log("Component unmounted, aborting render");
 				return;
 			}
 
@@ -69,18 +57,15 @@ const TaskMermaidDiagram: React.FC<{ chart: string }> = ({ chart }) => {
 				// Add timeout to prevent infinite loading
 				timeoutId = setTimeout(() => {
 					if (isMounted) {
-						console.log("Timeout reached, setting error state");
 						setRenderState("error");
 					}
 				}, 5000);
 
-				console.log("Parsing chart:", trimmedChart);
 				// Try to parse first to catch syntax errors
 				await mermaid.parse(trimmedChart);
 
 				if (!isMounted) return;
 
-				console.log("Rendering chart with mermaid.render");
 				// Render the diagram
 				const { svg } = await mermaid.render(uniqueId, trimmedChart);
 
@@ -88,22 +73,13 @@ const TaskMermaidDiagram: React.FC<{ chart: string }> = ({ chart }) => {
 
 				clearTimeout(timeoutId);
 
-				console.log("Mermaid render result:", {
-					hasSvg: !!svg,
-					svgLength: svg?.length,
-					containsSvgTag: svg?.includes("<svg"),
-					containsError: svg?.includes("Syntax error"),
-				});
-
 				if (svg && svg.includes("<svg") && !svg.includes("Syntax error")) {
 					setSvgContent(svg);
 					setRenderState("success");
 				} else {
-					console.log("Invalid SVG result");
 					setRenderState("error");
 				}
 			} catch (error) {
-				console.error("Mermaid rendering error:", error);
 				if (!isMounted) return;
 				clearTimeout(timeoutId);
 				setRenderState("error");
@@ -144,7 +120,6 @@ const isMermaidOnly = (content: string): boolean => {
 	const trimmed = content.trim();
 	const mermaidRegex = /^```mermaid\s*\n([\s\S]*?)\n```$/;
 	const result = mermaidRegex.test(trimmed);
-	console.log("isMermaidOnly check:", { content: trimmed, result });
 	return result;
 };
 
@@ -154,7 +129,6 @@ const extractMermaidContent = (content: string): string => {
 	const mermaidRegex = /^```mermaid\s*\n([\s\S]*?)\n```$/;
 	const match = trimmed.match(mermaidRegex);
 	const extracted = match ? match[1].trim() : "";
-	console.log("extractMermaidContent:", { content: trimmed, extracted });
 	return extracted;
 };
 
@@ -222,20 +196,12 @@ export const MessageRenderer: React.FC<MessageRendererProps> = ({
 									<TaskContent>
 										<TaskItem>
 											{(() => {
-												console.log("TaskItem processing (first):", {
-													name: item.name,
-													description: item.description,
-												});
 												const trimmedDesc = item.description
 													? item.description.trim()
 													: "";
 												const isMermaid = isMermaidOnly(trimmedDesc);
 												if (isMermaid) {
 													const chart = extractMermaidContent(item.description);
-													console.log(
-														"Rendering TaskMermaidDiagram with chart (first):",
-														chart,
-													);
 													return <TaskMermaidDiagram chart={chart} />;
 												}
 												return item.description;
@@ -269,20 +235,12 @@ export const MessageRenderer: React.FC<MessageRendererProps> = ({
 								<TaskContent>
 									<TaskItem>
 										{(() => {
-											console.log("TaskItem processing (second):", {
-												name: item.name,
-												description: item.description,
-											});
 											const trimmedDesc = item.description
 												? item.description.trim()
 												: "";
 											const isMermaid = isMermaidOnly(trimmedDesc);
 											if (isMermaid) {
 												const chart = extractMermaidContent(item.description);
-												console.log(
-													"Rendering TaskMermaidDiagram with chart (second):",
-													chart,
-												);
 												return <TaskMermaidDiagram chart={chart} />;
 											}
 											return item.description;

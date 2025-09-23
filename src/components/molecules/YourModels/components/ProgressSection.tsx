@@ -13,7 +13,11 @@ export const ProgressSection: React.FC<ProgressSectionProps> = ({
 	quickDownloadModel,
 	downloadProgress,
 }) => {
-	if (!loading || (!quickDownloadModel && downloadProgress.percent === 0)) {
+	// Show progress only during active loading, not when complete
+	const shouldShowProgress =
+		loading || (downloadProgress.percent > 0 && downloadProgress.percent < 100);
+
+	if (!shouldShowProgress) {
 		return null;
 	}
 

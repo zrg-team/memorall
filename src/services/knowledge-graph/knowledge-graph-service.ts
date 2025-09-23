@@ -1,8 +1,6 @@
 import { eq, and } from "drizzle-orm";
-import { databaseService } from "@/services/database/database-service";
 import { flowsService } from "@/services/flows/flows-service";
-import { llmService } from "@/services/llm/llm-service";
-import { embeddingService } from "@/services/embedding/embedding-service";
+import { serviceManager } from "@/services";
 import { logError, logInfo } from "@/utils/logger";
 import type { RememberedContent } from "@/services/database/db";
 import type {
@@ -52,112 +50,114 @@ export class KnowledgeGraphService {
 		pageId: string,
 	): Promise<KnowledgeGraphData | null> {
 		try {
-			const result = await databaseService.use(async ({ db, schema }) => {
-				// Find source by remembered page URL
-				const rememberedContent = await db
-					.select()
-					.from(schema.rememberedContent)
-					.where(eq(schema.rememberedContent.id, pageId))
-					.limit(1);
-
-				if (rememberedContent.length === 0) {
-					return null;
-				}
-
-				// Find sources created from this page
-				const sources = await db
-					.select()
-					.from(schema.sources)
-					.where(
-						and(
-							eq(schema.sources.targetType, "remembered_pages"),
-							eq(schema.sources.targetId, pageId),
-						),
-					);
-
-				if (sources.length === 0) {
-					return null;
-				}
-
-				const source = sources[0];
-
-				// Get all nodes created from this source
-				const sourceNodesResult = await db
-					.select({
-						node: schema.nodes,
-						sourceNode: schema.sourceNodes,
-					})
-					.from(schema.sourceNodes)
-					.leftJoin(
-						schema.nodes,
-						eq(schema.sourceNodes.nodeId, schema.nodes.id),
-					)
-					.where(eq(schema.sourceNodes.sourceId, source.id));
-
-				const entities: KnowledgeGraphEntity[] = sourceNodesResult
-					.filter((result) => result.node)
-					.map((result) => ({
-						id: result.node!.id,
-						name: result.node!.name,
-						summary: result.node!.summary || undefined,
-						nodeType: result.node!.nodeType,
-						createdAt: result.node!.createdAt,
-					}));
-
-				// Get edges from source
-				const sourceEdgesResult = await db
-					.select({
-						edge: schema.edges,
-						sourceEdge: schema.sourceEdges,
-					})
-					.from(schema.sourceEdges)
-					.leftJoin(
-						schema.edges,
-						eq(schema.sourceEdges.edgeId, schema.edges.id),
-					)
-					.where(eq(schema.sourceEdges.sourceId, source.id));
-
-				// Get relations with node names
-				const relations: KnowledgeGraphRelation[] = [];
-
-				for (const result of sourceEdgesResult) {
-					if (!result.edge) continue;
-
-					// Get source and destination node names
-					const sourceNode = await db
+			const result = await serviceManager.databaseService.use(
+				async ({ db, schema }) => {
+					// Find source by remembered page URL
+					const rememberedContent = await db
 						.select()
-						.from(schema.nodes)
-						.where(eq(schema.nodes.id, result.edge.sourceId))
+						.from(schema.rememberedContent)
+						.where(eq(schema.rememberedContent.id, pageId))
 						.limit(1);
 
-					const destinationNode = await db
-						.select()
-						.from(schema.nodes)
-						.where(eq(schema.nodes.id, result.edge.destinationId))
-						.limit(1);
-
-					if (sourceNode.length > 0 && destinationNode.length > 0) {
-						relations.push({
-							id: result.edge.id,
-							sourceNodeId: result.edge.sourceId,
-							destinationNodeId: result.edge.destinationId,
-							sourceName: sourceNode[0].name,
-							destinationName: destinationNode[0].name,
-							edgeType: result.edge.edgeType,
-							factText: result.edge.factText || undefined,
-							validAt: result.edge.validAt || undefined,
-							invalidAt: result.edge.invalidAt || undefined,
-							createdAt: result.edge.createdAt,
-						});
+					if (rememberedContent.length === 0) {
+						return null;
 					}
-				}
 
-				return {
-					source,
-					entities,
-					relations,
-				};
-			});
+					// Find sources created from this page
+					const sources = await db
+						.select()
+						.from(schema.sources)
+						.where(
+							and(
+								eq(schema.sources.targetType, "remembered_pages"),
+								eq(schema.sources.targetId, pageId),
+							),
+						);
+
+					if (sources.length === 0) {
+						return null;
+					}
+
+					const source = sources[0];
+
+					// Get all nodes created from this source
+					const sourceNodesResult = await db
+						.select({
+							node: schema.nodes,
+							sourceNode: schema.sourceNodes,
+						})
+						.from(schema.sourceNodes)
+						.leftJoin(
+							schema.nodes,
+							eq(schema.sourceNodes.nodeId, schema.nodes.id),
+						)
+						.where(eq(schema.sourceNodes.sourceId, source.id));
+
+					const entities: KnowledgeGraphEntity[] = sourceNodesResult
+						.filter((result) => result.node)
+						.map((result) => ({
+							id: result.node!.id,
+							name: result.node!.name,
+							summary: result.node!.summary || undefined,
+							nodeType: result.node!.nodeType,
+							createdAt: result.node!.createdAt,
+						}));
+
+					// Get edges from source
+					const sourceEdgesResult = await db
+						.select({
+							edge: schema.edges,
+							sourceEdge: schema.sourceEdges,
+						})
+						.from(schema.sourceEdges)
+						.leftJoin(
+							schema.edges,
+							eq(schema.sourceEdges.edgeId, schema.edges.id),
+						)
+						.where(eq(schema.sourceEdges.sourceId, source.id));
+
+					// Get relations with node names
+					const relations: KnowledgeGraphRelation[] = [];
+
+					for (const result of sourceEdgesResult) {
+						if (!result.edge) continue;
+
+						// Get source and destination node names
+						const sourceNode = await db
+							.select()
+							.from(schema.nodes)
+							.where(eq(schema.nodes.id, result.edge.sourceId))
+							.limit(1);
+
+						const destinationNode = await db
+							.select()
+							.from(schema.nodes)
+							.where(eq(schema.nodes.id, result.edge.destinationId))
+							.limit(1);
+
+						if (sourceNode.length > 0 && destinationNode.length > 0) {
+							relations.push({
+								id: result.edge.id,
+								sourceNodeId: result.edge.sourceId,
+								destinationNodeId: result.edge.destinationId,
+								sourceName: sourceNode[0].name,
+								destinationName: destinationNode[0].name,
+								edgeType: result.edge.edgeType,
+								factText: result.edge.factText || undefined,
+								validAt: result.edge.validAt || undefined,
+								invalidAt: result.edge.invalidAt || undefined,
+								createdAt: result.edge.createdAt,
+							});
+						}
+					}
+
+					return {
+						source,
+						entities,
+						relations,
+					};
+				},
+			);
 
 			return result;
 		} catch (error) {
@@ -184,7 +184,7 @@ export class KnowledgeGraphService {
 
 		try {
 			// Check if LLM service is ready
-			if (!llmService.isReady()) {
+			if (!serviceManager.getLLMService().isReady()) {
 				throw new Error("LLM service not ready");
 			}
 
@@ -199,9 +199,9 @@ export class KnowledgeGraphService {
 
 			// Create knowledge graph flow
 			const knowledgeGraph = flowsService.createGraph("knowledge", {
-				llm: llmService,
-				embedding: embeddingService,
-				database: databaseService,
+				llm: serviceManager.getLLMService(),
+				embedding: serviceManager.getEmbeddingService(),
+				database: serviceManager.getDatabaseService(),
 			});
 
 			// Prepare input state
@@ -330,9 +330,6 @@ export class KnowledgeGraphService {
 				});
 			}
 
-			// Fetch the created knowledge graph
-			const knowledgeGraphData = await this.getKnowledgeGraphForPage(page.id);
-
 			// Update source status to completed
 			await this.updateSourceStatus(page.id, "completed");
 
@@ -341,7 +338,6 @@ export class KnowledgeGraphService {
 				stage: "Completed successfully",
 				progress: 100,
 				completedAt: new Date(),
-				knowledgeGraph: knowledgeGraphData || undefined,
 				stats,
 			});
 
@@ -370,7 +366,7 @@ export class KnowledgeGraphService {
 		status: "pending" | "processing" | "completed" | "failed",
 	): Promise<void> {
 		try {
-			await databaseService.use(async ({ db, schema }) => {
+			await serviceManager.databaseService.use(async ({ db, schema }) => {
 				const now = new Date();
 				await db
 					.update(schema.sources)

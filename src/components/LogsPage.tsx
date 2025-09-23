@@ -25,17 +25,13 @@ import {
 	Grid,
 } from "lucide-react";
 import {
-	persistentLogger,
-	type LogEntry,
-	type LogFilter,
-	type LogLevel,
-} from "@/services/logging";
-import {
 	Tooltip,
 	TooltipContent,
 	TooltipProvider,
 	TooltipTrigger,
 } from "./ui/tooltip";
+import { logger, type LogEntry, type LogLevel } from "@/utils/logger";
+import type { LogFilter } from "@/utils/indexeddb-storage";
 
 interface LogsPageProps {}
 
@@ -69,8 +65,8 @@ export const LogsPage: React.FC<LogsPageProps> = () => {
 				endTime: filters.timeRange?.end.getTime(),
 			};
 
-			const logsResult = await persistentLogger.getLogs(filter);
-			const logCount = await persistentLogger.getLogCount();
+			const logsResult = await logger.getLogs(filter);
+			const logCount = await logger.getLogCount();
 
 			// Calculate stats from logs
 			const byLevel = { debug: 0, info: 0, warn: 0, error: 0 };
@@ -104,11 +100,6 @@ export const LogsPage: React.FC<LogsPageProps> = () => {
 
 	useEffect(() => {
 		const initializeAndLoadLogs = async () => {
-			try {
-				await persistentLogger.initialize();
-			} catch (error) {
-				console.error("Failed to initialize persistent logger:", error);
-			}
 			loadLogs();
 		};
 		initializeAndLoadLogs();
@@ -130,7 +121,7 @@ export const LogsPage: React.FC<LogsPageProps> = () => {
 				startTime: filters.timeRange?.start.getTime(),
 				endTime: filters.timeRange?.end.getTime(),
 			};
-			const exportData = await persistentLogger.exportLogs(filter);
+			const exportData = await logger.exportLogs(filter);
 			const blob = new Blob([exportData], { type: "application/json" });
 			const url = URL.createObjectURL(blob);
 			const a = document.createElement("a");
@@ -152,7 +143,7 @@ export const LogsPage: React.FC<LogsPageProps> = () => {
 			)
 		) {
 			try {
-				await persistentLogger.clearLogs();
+				await logger.clearLogs();
 				await loadLogs();
 			} catch (error) {
 				console.error("Failed to clear logs:", error);

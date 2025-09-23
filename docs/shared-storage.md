@@ -10,7 +10,7 @@ The Shared Storage Service provides a unified, type-safe wrapper around `chrome.
 
 ```mermaid
 graph TD
-    BG[Background Script] --> S[SharedStorageService (Singleton)]
+    BG[Background Script] --> S[SharedStorageService-Singleton]
     OF[Offscreen Document] --> S
     UI[Popup / Options / UI] --> S
 

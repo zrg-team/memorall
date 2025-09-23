@@ -116,15 +116,15 @@ Traditional AI conversations are stateless - each interaction starts fresh. Know
 ### 2. 📊 Load Existing Entities
 **Purpose**: Find related entities already stored in the knowledge graph
 
-**What it does**: Before deciding if an entity is new, the system searches existing knowledge using both exact name matching and semantic similarity to find potentially related entities.
+**What it does**: Before deciding if an entity is new, the system searches existing knowledge using a sophisticated three-tier hybrid search approach to find potentially related entities with high precision and recall.
 
 **Why it matters**: Prevents duplicate entities and enables linking new information to existing knowledge. Without this step, "John Smith" and "John" might be treated as different people.
 
 **Process**:
-- SQL pattern matching for exact and partial name matches
-- Vector similarity search for semantically related entities
-- Weighted combination of results (60% SQL, 40% vector)
-- Deduplication to avoid processing the same entity multiple times
+- **SQL Search (60%)**: Fast exact pattern matching using database indexes
+- **Trigram Search (40%)**: Database-level fuzzy text matching using PostgreSQL's `pg_trgm` extension
+- **Vector Fallback**: Semantic similarity search when combined SQL + trigram results < 50% of target
+- Deduplication using `combineSearchResultsWithTrigram()` for optimal result merging
 
 ### 3. 🔗 Entity Resolution
 **Purpose**: Determine which extracted entities match existing knowledge
@@ -155,15 +155,16 @@ Traditional AI conversations are stateless - each interaction starts fresh. Know
 ### 5. 📈 Load Existing Facts
 **Purpose**: Find related relationships already stored in the knowledge graph
 
-**What it does**: Searches for existing edges (relationships) that might be related to the newly extracted facts, using multiple strategies to find relevant connections.
+**What it does**: Searches for existing edges (relationships) that might be related to the newly extracted facts, using a sophisticated hybrid search approach to find relevant connections with high accuracy.
 
 **Why it matters**: Prevents duplicate relationships and helps identify when new information updates or contradicts existing knowledge.
 
 **Process**:
-- Entity-based search for relationships involving resolved entities
-- Vector similarity search using fact text and relationship types
-- Relationship pattern search for connections between multiple entities
-- Dynamic allocation of search resources based on results
+- **SQL Search (60%)**: Entity-based search for relationships involving resolved entities
+- **Trigram Search (40%)**: Database-level fuzzy matching on fact text and edge types
+- **Vector Fallback**: Semantic similarity search when combined SQL + trigram results < 50% of target
+- **Relationship Expansion**: Additional search for entity interconnections within remaining capacity
+- Dynamic resource allocation and intelligent deduplication
 
 ### 6. 🔄 Fact Resolution
 **Purpose**: Determine which extracted facts match existing relationships
@@ -275,13 +276,15 @@ temperature: 0.0
 // Entity Search Limits
 totalLimit: 200
 sqlPercentage: 60
-vectorPercentage: 40
+trigramPercentage: 40
+vectorPercentage: 0 (fallback only)
 
 // Fact Search Limits
 totalLimit: 500
-sqlPercentage: 50
-vectorPercentage: 30
-relationPercentage: 20
+sqlPercentage: 60
+trigramPercentage: 40
+vectorPercentage: 0 (fallback only)
+relationExpansion: dynamic
 ```
 
 ### ⚡ Processing Parameters
@@ -328,7 +331,8 @@ temporalChunkSize: 4
 - [ ] **Error Propagation**: Fix silent date validation failures in `temporal-extraction.ts:112-122`
 
 ### Performance Improvements
-- [ ] **Database Optimization**: Implement full-text search indexes for 5-10x speedup
+- [x] **Database Optimization**: ~~Implement full-text search indexes for 5-10x speedup~~ **COMPLETED**: Implemented hybrid search with trigram indexes
+- [x] **Trigram Search**: ~~Add PostgreSQL pg_trgm for fuzzy text matching~~ **COMPLETED**: Database-level trigram search with GIN indexes
 - [ ] **Embedding Batching**: Batch multiple texts for 80-90% API call reduction
 - [ ] **Response Caching**: Implement LLM response caching for similar content
 - [ ] **Adaptive Chunking**: Dynamic chunk sizing based on content complexity

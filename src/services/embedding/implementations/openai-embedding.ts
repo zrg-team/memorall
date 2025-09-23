@@ -14,7 +14,10 @@ export class OpenAIEmbedding implements BaseEmbedding {
 		baseUrl?: string,
 	) {
 		this.name = modelName;
-		this.apiKey = apiKey || process.env.OPENAI_API_KEY || "";
+		this.apiKey =
+			apiKey ||
+			(typeof process !== "undefined" && process.env?.OPENAI_API_KEY) ||
+			"";
 		if (baseUrl) this.baseUrl = baseUrl;
 
 		// Set dimensions based on model

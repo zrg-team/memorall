@@ -7,9 +7,9 @@ import type {
 	ChatCompletionChunk,
 	ChatCompletionRequest,
 	ChatCompletionResponse,
-	ChatMessage,
 } from "@/types/openai";
 import { LLM_RUNNER_URLS } from "@/config/llm-runner";
+import { waitForDOMReady } from "@/utils/dom";
 
 interface ServeRequest {
 	model: string;
@@ -86,6 +86,8 @@ export class WllamaLLM implements BaseLLM {
 		}
 		this.loading = true;
 		try {
+			// Wait for DOM to be ready before accessing document
+			await waitForDOMReady();
 			this.iframe = document.createElement("iframe");
 			this.iframe.src = this.url;
 			this.iframe.style.display = "none";
@@ -121,8 +123,11 @@ export class WllamaLLM implements BaseLLM {
 
 	async models(): Promise<ModelsResponse> {
 		if (!this.ready) await this.initialize();
-		const response = await this.send("models");
-		return response as ModelsResponse;
+		const response = (await this.send("models")) as ModelsResponse;
+		response.data.forEach((model) => {
+			model.provider = "wllama";
+		});
+		return response;
 	}
 
 	chatCompletions(
@@ -270,6 +275,22 @@ export class WllamaLLM implements BaseLLM {
 		const parts = model.split("/");
 		if (parts.length < 3) {
 			throw new Error('Model must be in format "username/repo/filename"');
+		}
+
+		// Avoid reloading a model that's already active inside the runner
+		const existingModels = await this.models();
+		const existingModel = existingModels.data.find(
+			(m) => m.loaded && m.id.toLowerCase() === model.toLowerCase(),
+		);
+		if (existingModel) {
+			if (onProgress) {
+				onProgress({
+					loaded: existingModel.size ?? 0,
+					total: existingModel.size ?? 0,
+					percent: 100,
+				});
+			}
+			return existingModel;
 		}
 		const request: ServeRequest = { model };
 		const response = await this.send("serve", request, { onProgress });

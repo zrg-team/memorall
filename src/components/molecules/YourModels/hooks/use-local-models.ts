@@ -1,9 +1,8 @@
 import { useState, useEffect } from "react";
-import { llmService, type ModelInfo } from "@/services/llm";
-import { databaseService } from "@/services/database";
-import { schema } from "@/services/database/db";
+import { type ModelInfo } from "@/services/llm";
 import { eq } from "drizzle-orm";
 import { logError } from "@/utils/logger";
+import { serviceManager } from "@/services";
 import type { Provider } from "./use-provider-config";
 
 export function useLocalModels(
@@ -28,8 +27,8 @@ export function useLocalModels(
 			try {
 				// For local providers, the service is created as "openai" but with local config
 				// We need to check if the "openai" service exists and has the right provider type
-				if (llmService.has("openai")) {
-					const response = await llmService.modelsFor("openai");
+				if (serviceManager.llmService.has("openai")) {
+					const response = await serviceManager.llmService.modelsFor("openai");
 					setLocalModels(response.data);
 				} else {
 					// Try to create the service from saved configuration
@@ -37,7 +36,7 @@ export function useLocalModels(
 						quickProvider === "lmstudio" ? "lmstudio_config" : "ollama_config";
 					try {
 						const row = (
-							await databaseService.use(({ db }) =>
+							await serviceManager.databaseService.use(({ db, schema }) =>
 								db
 									.select()
 									.from(schema.configurations)
@@ -47,13 +46,14 @@ export function useLocalModels(
 
 						if (row?.data) {
 							// Create the service with the saved configuration
-							await llmService.create("openai", {
+							await serviceManager.llmService.create("openai", {
 								type: quickProvider,
 								baseURL: row.data.baseUrl,
 							} as any);
 
 							// Now fetch models
-							const response = await llmService.modelsFor("openai");
+							const response =
+								await serviceManager.llmService.modelsFor("openai");
 							setLocalModels(response.data);
 						} else {
 							setLocalModels([]);

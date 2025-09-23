@@ -4,7 +4,12 @@ import type { NewSource } from "@/services/database/entities/sources";
 import type { NewNode } from "@/services/database/entities/nodes";
 import type { NewEdge } from "@/services/database/entities/edges";
 import { or, and, ilike, inArray } from "drizzle-orm";
-import { combineSearchResults, vectorSearchNodes } from "@/utils/vector-search";
+import { vectorSearchNodes, vectorSearchEdges } from "@/utils/vector-search";
+import {
+	trigramSearchNodes,
+	trigramSearchEdges,
+	combineSearchResultsWithTrigram,
+} from "@/utils/trigram-search";
 
 import { KnowledgeGraphAnnotation, type KnowledgeGraphState } from "./state";
 import { EntityExtractionFlow } from "./entity-extraction";
@@ -14,6 +19,24 @@ import { FactResolutionFlow } from "./fact-resolution";
 import { TemporalExtractionFlow } from "./temporal-extraction";
 import { GraphBase } from "../../interfaces/graph.base";
 import type { AllServices } from "../../interfaces/tool";
+
+// Safe embedding generation that continues storage even on failure
+async function safeTextToVector(
+	embeddingService: any,
+	text: string,
+	context: string,
+): Promise<number[] | null> {
+	try {
+		if (!text || text.trim().length === 0) return null;
+		return await embeddingService.textToVector(text);
+	} catch (error) {
+		logError(`[${context}] Embedding failed, continuing without vector:`, {
+			error: error instanceof Error ? error.message : String(error),
+			textLength: text.length,
+		});
+		return null;
+	}
+}
 
 export class KnowledgeGraphFlow extends GraphBase<
 	| "load_entities"
@@ -92,7 +115,11 @@ export class KnowledgeGraphFlow extends GraphBase<
 			}
 
 			const TOTAL_LIMIT = 200;
-			const WEIGHTS = { sqlPercentage: 60, vectorPercentage: 40 };
+			const WEIGHTS = {
+				sqlPercentage: 60,
+				trigramPercentage: 40,
+				vectorPercentage: 0,
+			};
 
 			// Perform SQL search (existing logic)
 			const sqlResults = await databaseService.use(async ({ db, schema }) => {
@@ -114,38 +141,59 @@ export class KnowledgeGraphFlow extends GraphBase<
 				return nodes;
 			});
 
-			// Perform vector search if embedding service is available
+			// Perform trigram search for fuzzy text matching
+			let trigramResults: Awaited<ReturnType<typeof trigramSearchNodes>> = [];
+			try {
+				trigramResults = await trigramSearchNodes(
+					databaseService,
+					names,
+					Math.floor((TOTAL_LIMIT * WEIGHTS.trigramPercentage) / 100),
+					{ threshold: 0.1 },
+				);
+			} catch (error) {
+				logError("[LOAD_ENTITIES] Trigram search failed:", error);
+			}
+
+			// Fallback to vector search if both SQL and trigram fail or have insufficient results
 			let vectorResults: {
 				item: (typeof sqlResults)[0];
 				similarity: number;
 			}[] = [];
-			if (embeddingService) {
+			const combinedResults = sqlResults.length + trigramResults.length;
+
+			if (combinedResults < TOTAL_LIMIT * 0.5 && embeddingService) {
+				// Less than 50% of desired results
 				try {
 					const defaultEmbedding = await embeddingService.get("default");
 					if (defaultEmbedding && defaultEmbedding.isReady()) {
+						const vectorLimit = Math.min(
+							TOTAL_LIMIT - combinedResults,
+							Math.floor(TOTAL_LIMIT * 0.4),
+						);
 						vectorResults = await vectorSearchNodes(
 							databaseService,
 							defaultEmbedding,
 							names,
-							Math.floor((TOTAL_LIMIT * WEIGHTS.vectorPercentage) / 100),
+							vectorLimit,
 						);
 					}
 				} catch (error) {
-					logError("[LOAD_ENTITIES] Vector search failed:", error);
+					logError("[LOAD_ENTITIES] Vector search fallback failed:", error);
 				}
 			}
 
-			// Combine results with deduplication
-			const related = combineSearchResults(
+			// Combine results with deduplication - use new trigram combiner
+			const related = combineSearchResultsWithTrigram(
 				sqlResults,
 				vectorResults,
+				trigramResults,
 				WEIGHTS,
 				TOTAL_LIMIT,
 				(node) => node.id,
 			);
 
 			logInfo(
-				`[LOAD_ENTITIES] Loaded ${related.length} related nodes (${sqlResults.length} SQL, ${vectorResults.length} vector)`,
+				`[LOAD_ENTITIES] Loaded ${related.length} related nodes (${sqlResults.length} SQL, ${trigramResults.length} trigram, ${vectorResults.length} vector)`,
 			);
 
 			return {
@@ -156,10 +204,11 @@ export class KnowledgeGraphFlow extends GraphBase<
 					{
 						id: crypto.randomUUID(),
 						name: "Related Nodes Loaded",
-						description: `Loaded ${related.length} related nodes for entity resolution (${sqlResults.length} SQL + ${vectorResults.length} vector)`,
+						description: `Loaded ${related.length} related nodes for entity resolution (${sqlResults.length} SQL + ${trigramResults.length} trigram + ${vectorResults.length} vector)`,
 						metadata: {
 							nodeCount: related.length,
 							sqlCount: sqlResults.length,
+							trigramCount: trigramResults.length,
 							vectorCount: vectorResults.length,
 						},
 					},
@@ -195,13 +244,12 @@ export class KnowledgeGraphFlow extends GraphBase<
 				return { existingEdges: [] };
 			}
 
-			// Import vector search utilities
-			const { vectorSearchEdges, combineSearchResults } = await import(
-				"../../../../utils/vector-search"
-			);
-
 			const TOTAL_LIMIT = 500;
-			const WEIGHTS = { sqlPercentage: 50, vectorPercentage: 30 }; // 20% reserved for relations
+			const WEIGHTS = {
+				sqlPercentage: 60,
+				trigramPercentage: 40,
+				vectorPercentage: 0,
+			};
 
 			// Collect candidate node IDs from resolved entities
 			const candidateIds = new Set<string>();
@@ -252,12 +300,40 @@ export class KnowledgeGraphFlow extends GraphBase<
 				});
 			}
 
-			// 2. Vector search based on extracted facts
+			// 2. Trigram search based on extracted facts
+			let trigramResults: Awaited<ReturnType<typeof trigramSearchEdges>> = [];
+			if (state.extractedFacts.length > 0) {
+				try {
+					// Create search terms from extracted facts
+					const factSearchTerms = state.extractedFacts
+						.map((f) => `${f.relationType} ${f.factText || ""}`.trim())
+						.filter((term) => term.length > 0);
+
+					if (factSearchTerms.length > 0) {
+						trigramResults = await trigramSearchEdges(
+							databaseService,
+							factSearchTerms,
+							Math.floor((TOTAL_LIMIT * WEIGHTS.trigramPercentage) / 100),
+							{ threshold: 0.1 },
+						);
+					}
+				} catch (error) {
+					logError("[LOAD_FACTS] Trigram search failed:", error);
+				}
+			}
+
+			// 3. Fallback to vector search if both SQL and trigram fail or have insufficient results
 			let vectorResults: {
 				item: (typeof sqlResults)[0];
 				similarity: number;
 			}[] = [];
-			if (embeddingService && state.extractedFacts.length > 0) {
+			const combinedResults = sqlResults.length + trigramResults.length;
+
+			if (
+				combinedResults < TOTAL_LIMIT * 0.5 &&
+				embeddingService &&
+				state.extractedFacts.length > 0
+			) {
 				try {
 					const defaultEmbedding = await embeddingService.get("default");
 					if (defaultEmbedding && defaultEmbedding.isReady()) {
@@ -267,22 +343,27 @@ export class KnowledgeGraphFlow extends GraphBase<
 							.filter((term) => term.length > 0);
 
 						if (factSearchTerms.length > 0) {
+							const vectorLimit = Math.min(
+								TOTAL_LIMIT - combinedResults,
+								Math.floor(TOTAL_LIMIT * 0.4),
+							);
 							vectorResults = await vectorSearchEdges(
 								databaseService,
 								defaultEmbedding,
 								factSearchTerms,
-								Math.floor((TOTAL_LIMIT * WEIGHTS.vectorPercentage) / 100),
+								vectorLimit,
 							);
 						}
 					}
 				} catch (error) {
-					logError("[LOAD_FACTS] Vector search failed:", error);
+					logError("[LOAD_FACTS] Vector search fallback failed:", error);
 				}
 			}
 
-			// 3. Additional relations from resolved entity connections (if space available)
+			// 4. Additional relations from resolved entity connections (if space available)
 			let relationResults: typeof sqlResults = [];
-			const usedSpace = sqlResults.length + vectorResults.length;
+			const usedSpace =
+				sqlResults.length + trigramResults.length + vectorResults.length;
 			const remainingSpace = TOTAL_LIMIT - usedSpace;
 
 			if (remainingSpace > 0 && idList.length > 0) {
@@ -302,16 +383,12 @@ export class KnowledgeGraphFlow extends GraphBase<
 				});
 			}
 
-			// Combine all results with deduplication
-			const allEdgeResults = [
-				...sqlResults,
-				...vectorResults.map((r) => r.item),
-				...relationResults,
-			];
-			const edges = combineSearchResults(
-				allEdgeResults,
-				[], // Vector results already incorporated above
-				{ sqlPercentage: 100, vectorPercentage: 0 },
+			// Combine all results with deduplication using trigram combiner
+			const edges = combineSearchResultsWithTrigram(
+				[...sqlResults, ...relationResults], // Combine SQL and relation results
+				vectorResults,
+				trigramResults,
+				WEIGHTS,
 				TOTAL_LIMIT,
 				(edge) => edge.id,
 			);
@@ -334,7 +411,7 @@ export class KnowledgeGraphFlow extends GraphBase<
 			}
 
 			logInfo(
-				`[LOAD_FACTS] Loaded ${edges.length} related edges (${sqlResults.length} SQL, ${vectorResults.length} vector, ${relationResults.length} relations)`,
+				`[LOAD_FACTS] Loaded ${edges.length} related edges (${sqlResults.length} SQL, ${trigramResults.length} trigram, ${vectorResults.length} vector, ${relationResults.length} relations)`,
 			);
 
 			return {
@@ -344,10 +421,11 @@ export class KnowledgeGraphFlow extends GraphBase<
 					{
 						id: crypto.randomUUID(),
 						name: "Related Edges Loaded",
-						description: `Loaded ${edges.length} related edges for fact resolution (${sqlResults.length} SQL + ${vectorResults.length} vector + ${relationResults.length} relations)`,
+						description: `Loaded ${edges.length} related edges for fact resolution (${sqlResults.length} SQL + ${trigramResults.length} trigram + ${vectorResults.length} vector + ${relationResults.length} relations)`,
 						metadata: {
 							edgeCount: edges.length,
 							sqlCount: sqlResults.length,
+							trigramCount: trigramResults.length,
 							vectorCount: vectorResults.length,
 							relationCount: relationResults.length,
 						},
@@ -465,29 +543,13 @@ export class KnowledgeGraphFlow extends GraphBase<
 					weight: 1.0,
 				};
 
-				// Generate embedding for source
-				if (embeddingService) {
-					try {
-						const embeddingText = `${state.title}\n\n${state.content.substring(0, 2000)}`;
-						const embedding =
-							await embeddingService.textToVector(embeddingText);
-						(sourceData as NewSource & { embedding?: number[] }).embedding =
-							embedding;
-					} catch (embeddingError) {
-						logError(
-							"[SAVE_TO_DATABASE] Failed to generate source embedding:",
-							embeddingError,
-						);
-					}
-				}
-
 				const [createdSource] = await db
 					.insert(schema.sources)
 					.values(sourceData)
 					.returning();
 
 				// Create new nodes
-				const createdNodes = [];
+				const createdNodes: (typeof schema.nodes.$inferSelect)[] = [];
 				const newEntities = state.resolvedEntities.filter((e) => !e.isExisting);
 
 				for (const entity of newEntities) {
@@ -500,18 +562,13 @@ export class KnowledgeGraphFlow extends GraphBase<
 
 					// Generate embedding for node name
 					if (embeddingService) {
-						try {
-							const nameEmbedding = await embeddingService.textToVector(
-								entity.finalName,
-							);
-							(
-								nodeData as NewNode & { nameEmbedding?: number[] }
-							).nameEmbedding = nameEmbedding;
-						} catch (embeddingError) {
-							logError(
-								`[SAVE_TO_DATABASE] Failed to generate embedding for node "${entity.finalName}":`,
-								embeddingError,
-							);
+						const nameEmbedding = await safeTextToVector(
+							embeddingService,
+							entity.finalName,
+							`NODE_EMBEDDING:${entity.finalName.substring(0, 50)}`,
+						);
+						if (nameEmbedding) {
+							nodeData.nameEmbedding = nameEmbedding;
 						}
 					}
 
@@ -566,7 +623,7 @@ export class KnowledgeGraphFlow extends GraphBase<
 							);
 							continue;
 						}
-						sourceNodeId = newNode.id;
+						sourceNodeId = `${newNode.id}`;
 					}
 
 					if (destEntity.isExisting && destEntity.existingId) {
@@ -581,7 +638,7 @@ export class KnowledgeGraphFlow extends GraphBase<
 							);
 							continue;
 						}
-						destNodeId = newNode.id;
+						destNodeId = `${newNode.id}`;
 					}
 
 					const edgeData: NewEdge = {
@@ -600,30 +657,22 @@ export class KnowledgeGraphFlow extends GraphBase<
 
 					// Generate embedding for fact
 					if (embeddingService) {
-						try {
-							const factEmbedding = await embeddingService.textToVector(
-								fact.factText,
-							);
-							const typeEmbedding = await embeddingService.textToVector(
-								fact.relationType,
-							);
-							(
-								edgeData as NewEdge & {
-									factEmbedding?: number[];
-									typeEmbedding?: number[];
-								}
-							).factEmbedding = factEmbedding;
-							(
-								edgeData as NewEdge & {
-									factEmbedding?: number[];
-									typeEmbedding?: number[];
-								}
-							).typeEmbedding = typeEmbedding;
-						} catch (embeddingError) {
-							logError(
-								`[SAVE_TO_DATABASE] Failed to generate embedding for edge "${fact.factText}":`,
-								embeddingError,
-							);
+						const factEmbedding = await safeTextToVector(
+							embeddingService,
+							fact.factText,
+							`FACT_EMBEDDING:${fact.factText.substring(0, 50)}`,
+						);
+						const typeEmbedding = await safeTextToVector(
+							embeddingService,
+							fact.relationType,
+							`TYPE_EMBEDDING:${fact.relationType}`,
+						);
+
+						if (factEmbedding) {
+							edgeData.factEmbedding = factEmbedding;
+						}
+						if (typeEmbedding) {
+							edgeData.typeEmbedding = typeEmbedding;
 						}
 					}
 
@@ -649,6 +698,58 @@ export class KnowledgeGraphFlow extends GraphBase<
 			logInfo(
 				`[SAVE_TO_DATABASE] Successfully saved ${result.createdNodes.length} nodes and ${result.createdEdges.length} edges`,
 			);
+
+			// Extra success logs with names/details
+			try {
+				if (result.createdNodes?.length) {
+					const nodeNames = result.createdNodes
+						.map((n) => n.name)
+						.filter((n) => typeof n === "string" && n.trim().length > 0);
+					logInfo("[SAVE_TO_DATABASE] New nodes created", {
+						count: result.createdNodes.length,
+						names: nodeNames,
+					});
+				}
+
+				if (result.createdEdges?.length) {
+					// Build an id->name map from existing + newly created nodes
+					const idToName = new Map<string, string>();
+					for (const n of state.existingNodes || []) {
+						if (n?.id) idToName.set(String(n.id), n.name ?? String(n.id));
+					}
+					for (const n of result.createdNodes || []) {
+						if (n?.id) idToName.set(String(n.id), n.name ?? String(n.id));
+					}
+
+					const edges = result.createdEdges.map((e) => ({
+						type: e.edgeType,
+						fact: e.factText,
+						source: idToName.get(String(e.sourceId)) ?? String(e.sourceId),
+						destination:
+							idToName.get(String(e.destinationId)) ?? String(e.destinationId),
+					}));
+
+					logInfo("[SAVE_TO_DATABASE] New edges created", {
+						count: result.createdEdges.length,
+						edges,
+					});
+
+					const factNames = result.createdEdges
+						.map((e) => e.factText)
+						.filter(
+							(t): t is string => typeof t === "string" && t.trim().length > 0,
+						);
+					if (factNames.length) {
+						logInfo("[SAVE_TO_DATABASE] Facts stored", {
+							count: factNames.length,
+							facts: factNames,
+						});
+					}
+				}
+			} catch (e) {
+				// Non-fatal logging error; continue
+				logError("[SAVE_TO_DATABASE] Post-save logging failed", e);
+			}
 
 			return {
 				createdSource: result.createdSource,

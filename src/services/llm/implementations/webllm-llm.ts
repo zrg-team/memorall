@@ -9,6 +9,7 @@ import type {
 	ChatCompletionResponse,
 } from "@/types/openai";
 import { LLM_RUNNER_URLS } from "@/config/llm-runner";
+import { waitForDOMReady } from "@/utils/dom";
 
 interface ServeRequest {
 	model: string;
@@ -85,6 +86,7 @@ export class WebLLMLLM implements BaseLLM {
 		}
 		this.loading = true;
 		try {
+			await waitForDOMReady();
 			this.iframe = document.createElement("iframe");
 			this.iframe.src = this.url;
 			this.iframe.style.display = "none";
@@ -135,8 +137,11 @@ export class WebLLMLLM implements BaseLLM {
 
 	async models(): Promise<ModelsResponse> {
 		if (!this.ready) await this.initialize();
-		const response = await this.send("models");
-		return response as ModelsResponse;
+		const response = (await this.send("models")) as ModelsResponse;
+		response.data.forEach((model) => {
+			model.provider = "webllm";
+		});
+		return response;
 	}
 
 	chatCompletions(

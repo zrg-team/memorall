@@ -2,423 +2,814 @@
 
 ## 📋 Overview
 
-The LLM Service is a core component of Memorall that provides large language model capabilities for chat completions, text generation, and AI-powered assistance. It supports multiple LLM providers through a unified OpenAI-compatible interface and includes a registry system for managing multiple language models simultaneously.
+The LLM Service provides a dual-mode architecture for large language model capabilities, supporting both **Main Mode** with direct model access and **Proxy Mode** for cross-context communication. It enables chat completions, text generation, and AI-powered assistance through multiple LLM providers with a unified OpenAI-compatible interface.
 
-## 🏗️ Architecture
+## 🏗️ Dual-Mode Architecture
 
-### 🔧 Service Architecture
+### 🔧 Architecture Overview
 
 ```mermaid
 graph TD
-    A[Application] --> B[LLMService Registry]
-    B --> C[LLM Registry]
-    C --> D[WllamaLLM]
-    C --> E[OpenAI LLM]
-    C --> F[Custom LLM]
-    
-    D --> G[WebAssembly Runner]
-    E --> H[OpenAI API]
-    F --> I[Custom Implementation]
-    
-    G --> J[Local AI Models]
-    H --> K[External API]
-    I --> L[Custom Backend]
+  %% UI Context (Proxy Mode)
+  UI[UI Surfaces<br/>popup.html, standalone.html] -->|Proxy Mode| PLS[Proxy LLM Service]
+  PLS -->|Background Jobs| BJ[Background Job Queue]
+
+  %% Offscreen Context (Main Mode)
+  OFF[Offscreen Document] -->|Main Mode| MLS[Main LLM Service]
+  MLS -->|Direct Access| LLM[LLM Implementations]
+
+  %% Background Jobs Processing
+  BJ -->|llm operation jobs| OFF
+  BJ -->|chat completions| LLM
+
+  %% LLM Implementations
+  LLM --> WL[WllamaLLM<br/>WebAssembly Models]
+  LLM --> WE[WebLLMLLM<br/>Browser-based AI]
+  LLM --> OA[OpenAI LLM<br/>API-based]
+  LLM --> LO[Local OpenAI<br/>LM Studio/Ollama]
+
+  %% Model Sources
+  WL --> HF[HuggingFace Models]
+  WE --> ML[WebLLM Models]
+  OA --> API[OpenAI API]
+  LO --> LS[Local Servers]
 ```
 
-The LLM Service follows a registry pattern with multiple implementation types:
-- **WllamaLLM**: Browser-based WebAssembly execution
-- **OpenAI LLM**: API-based integration
-- **Local OpenAI-Compatible LLM**: Unified local client for LM Studio and Ollama
-- **Custom LLM**: Extensible for additional providers
+### 🎯 Mode Characteristics
 
-## 🛠️ Implementation Types
+| Aspect | **Main Mode** | **Proxy Mode** |
+|--------|---------------|----------------|
+| **Context** | Offscreen Document | UI Surfaces (popup, standalone) |
+| **Model Access** | Direct LLM instances | Background job forwarding |
+| **Performance** | Fast (direct) | Slight latency (job queue) |
+| **Memory Usage** | Very High (loaded models) | Low (lightweight proxies) |
+| **Model Loading** | Handles model downloads | No model responsibility |
+| **Model Serving** | Direct model management | Background job delegation |
+| **Chat Completions** | Direct inference | Job queue processing |
 
-### 💻 WllamaLLM (Browser-based)
+## 🔄 Service Modes
 
-Uses WebAssembly-based language models that run entirely in the browser through an iframe runner system.
+### 🖥️ Main Mode (Offscreen Document)
+
+Full LLM service with direct access to models and heavy AI processing capabilities.
+
+```typescript
+// Initialize in main mode (offscreen document)
+import { LLMServiceMain } from '@/services/llm';
+
+const llmService = new LLMServiceMain();
+await llmService.initialize();
+
+// Direct model access
+const response = await llmService.chatCompletions({
+  messages: [{ role: 'user', content: 'Hello!' }]
+});
+```
+
+**Features:**
+- ✅ **Real Models**: Direct access to Wllama, WebLLM, OpenAI, Local implementations
+- ✅ **Model Management**: Loading, serving, unloading, and memory management
+- ✅ **Full Performance**: No job queue overhead
+- ✅ **Streaming Support**: Real-time response streaming
+- ✅ **Resource Control**: Direct model lifecycle management
+
+### 🎨 Proxy Mode (UI Contexts)
+
+Lightweight service that forwards LLM operations to the main service via background jobs.
+
+```typescript
+// Initialize in proxy mode (UI contexts)
+import { LLMServiceProxy } from '@/services/llm';
+
+const llmService = new LLMServiceProxy();
+await llmService.initialize();
+
+// Same interface, background job forwarding
+const response = await llmService.chatCompletions({
+  messages: [{ role: 'user', content: 'Hello!' }]
+});
+```
+
+**Features:**
+- 🚀 **Lightweight**: Minimal resource usage
+- 🔄 **Job Forwarding**: Transparent operation delegation
+- 🎯 **Same Interface**: Identical API to main mode
+- ⚡ **Responsive UI**: Non-blocking AI operations
+- 🔗 **Auto-Management**: Background job handling
+
+## 🛠️ LLM Implementations
+
+### 💻 WllamaLLM (WebAssembly-based)
+
+Uses WebAssembly to run language models directly in the browser through an iframe runner system.
+
+**Availability:**
+- ✅ **Main Mode**: Full implementation with iframe management
+- ❌ **Proxy Mode**: Not available (too heavy for UI contexts)
+
+```typescript
+// Main mode only
+const llm = await llmService.create('wllama-model', {
+  type: 'wllama',
+  url: 'https://your-runner-url.com'
+});
+
+// Serve a model from HuggingFace
+await llmService.serveFor('wllama-model', 'microsoft/Phi-3-mini-4k-instruct-gguf');
+```
 
 **Key Features:**
 - Fully offline operation after model download
 - No API costs or usage limits
 - Complete privacy (no data transmission)
-- Supports HuggingFace model loading
 - WebAssembly-based execution
+- Very high memory usage (models loaded in memory)
+- Progress tracking for model downloads
 
-**How it works:**
-1. **Initialize** - Create iframe with Wllama runner
-2. **Serve** - Load model from HuggingFace with progress tracking
-3. **Chat** - Send messages and receive AI responses
-4. **Stream** - Support real-time response streaming
+### 🌐 WebLLMLLM (Browser-based AI)
+
+Advanced browser-based language models using WebLLM for efficient in-browser inference.
+
+**Availability:**
+- ✅ **Main Mode**: Full implementation with WebGPU acceleration
+- ❌ **Proxy Mode**: Not available (complex GPU resource management)
+
+```typescript
+// Main mode only
+const llm = await llmService.create('webllm-model', {
+  type: 'webllm',
+  modelId: 'Llama-3-8B-Instruct-q4f32_1'
+});
+```
+
+**Key Features:**
+- WebGPU acceleration for faster inference
+- Optimized for browser environments
+- Advanced model caching
+- Lower memory usage than Wllama
+- Modern browser requirements
 
 ### 🌐 OpenAI LLM (API-based)
 
 Integrates with OpenAI's API for high-quality language model capabilities with minimal setup.
 
+**Availability:**
+- ✅ **Main Mode**: Full implementation
+- ✅ **Proxy Mode**: Lightweight local version (API calls directly)
+
+```typescript
+// Available in both modes
+const llm = await llmService.create('openai-gpt', {
+  type: 'openai',
+  apiKey: 'your-api-key',
+  baseURL: 'https://api.openai.com/v1'
+});
+```
+
 **Key Features:**
 - High-quality responses
 - Fast processing
 - Latest model access
+- Low memory usage
 - Requires API key and internet
 - Pay-per-use model
 
-#### Using Local OpenAI-Compatible Servers (LM Studio, Ollama)
-- You can point the OpenAI provider to a local server by setting `baseURL` to your local endpoint and (optionally) leaving the API key empty.
-- Examples:
-  - LM Studio: `http://localhost:1234/v1`
-  - Ollama (OpenAI-compatible): `http://localhost:11434/v1`
-- Streaming and non-streaming chat completions are supported via SSE.
-- If `baseURL` is the default `https://api.openai.com/v1`, an API key is required; for local hosts (`localhost`, `127.0.0.1`, `0.0.0.0`) the API key may be omitted.
-
-### 🧩 Local OpenAI-Compatible (LM Studio & Ollama)
+### 🏠 Local OpenAI Compatible (LM Studio & Ollama)
 
 Single implementation for both LM Studio and Ollama via their OpenAI-compatible endpoints.
 
+**Availability:**
+- ✅ **Main Mode**: Full implementation
+- ✅ **Proxy Mode**: Lightweight local version (direct HTTP calls)
+
 ```typescript
-import { llmService } from '@/services/llm';
-
+// Available in both modes
 // LM Studio
-await llmService.create('lmstudio', { type: 'lmstudio', baseURL: 'http://localhost:1234/v1' });
-
-// Ollama (ensure OpenAI-compatible API is enabled, e.g., http://localhost:11434/v1)
-await llmService.create('ollama', { type: 'ollama', baseURL: 'http://localhost:11434/v1' });
-
-const resp = await llmService.chatCompletionsFor('lmstudio', {
-  model: 'your-model-id',
-  messages: [{ role: 'user', content: 'Hello local LLM!' }],
+const lmStudio = await llmService.create('lm-studio', {
+  type: 'lmstudio',
+  baseURL: 'http://localhost:1234/v1'
 });
 
-// Streaming
-const stream = llmService.chatCompletionsFor('ollama', {
-  model: 'llama3',
-  messages: [{ role: 'user', content: 'Stream a story' }],
-  stream: true,
+// Ollama
+const ollama = await llmService.create('ollama', {
+  type: 'ollama',
+  baseURL: 'http://localhost:11434/v1'
 });
-for await (const chunk of stream) process.stdout.write(chunk.choices[0]?.delta?.content || '');
 ```
 
-### 🔧 Custom LLM (Extensible)
+**Key Features:**
+- Local server integration
+- OpenAI-compatible API
+- No API costs
+- Privacy-focused (local processing)
+- Requires local server setup
+- Low memory usage (server handles models)
 
-Placeholder for custom LLM implementations that can be added to the registry.
+### 🔄 LLMProxy (Background Job Forwarder)
+
+Proxy implementation that forwards all operations to background jobs for processing in main mode.
+
+**Availability:**
+- ❌ **Main Mode**: Not used (direct implementations available)
+- ✅ **Proxy Mode**: Used for heavy operations
+
+```typescript
+// Automatically used in proxy mode for heavy operations
+const llmProxy = new LLMProxy('heavy-model', 'wllama');
+const response = await llmProxy.chatCompletions({
+  messages: [{ role: 'user', content: 'Process this' }]
+});
+```
 
 **Key Features:**
-- Extensible architecture
-- Custom backend integration
-- Flexible configuration
-- Maintains OpenAI-compatible interface
-
-## 📚 Service Registry System
-
-The LLMService manages multiple LLM instances through a registry pattern:
-1. **Create** - Instantiate new LLM with configuration
-2. **Initialize** - Set up the language model
-3. **Register** - Store in the LLMs Map
-4. **Retrieve** - Get existing LLMs by name
-
-## ⚙️ Configuration Types
-
-### 💻 WllamaLLM Configuration
-- **url**: Runner URL (defaults to WLLAMA_RUNNER_URL)
-- **type**: 'wllama'
-
-### 🌐 OpenAI Configuration
-- **apiKey**: Your OpenAI API key
-- **baseURL**: API endpoint (defaults to OpenAI)
-- **type**: 'openai'
-
-### 🔧 Custom Configuration
-- **type**: 'custom'
-- **[key: string]**: Any custom properties needed
-
-## 🔗 Integration with Memorall
-
-The LLM service integrates with Memorall's conversation system and memory retrieval to provide contextual AI assistance based on stored knowledge and chat history.
-
-## 📊 Performance Characteristics
-
-| Implementation | Initialization Time | Response Speed | Memory Usage | Network Required | Cost |
-|----------------|-------------------|----------------|--------------|------------------|------|
-| WllamaLLM | 30-120s (first time) | Medium | Very High | Download only | Free |
-| OpenAI LLM | <1s | Very Fast | Low | Always | Pay per use |
-| Custom LLM | Varies | Varies | Varies | Depends | Varies |
-
-## ⚠️ Error Handling
-
-The service implements comprehensive error handling:
-
-1. **Auto-initialization**: If LLM not ready, automatically initializes
-2. **Retry Logic**: Failed requests are retried with exponential backoff
-3. **Graceful Degradation**: Falls back to alternative LLMs if available
-4. **Clear Error Messages**: Descriptive errors with available alternatives
-
-## 🔒 Thread Safety & Concurrency
-
-The service handles concurrent requests through:
-- Loading state management (prevents multiple initializations)
-- Request queuing for chat completions
-- Singleton pattern for service instance
-- Thread-safe LLM operations
+- Zero local processing
+- Background job delegation
+- Same interface as real LLMs
+- Automatic error handling
+- No memory overhead
+- Streaming support via job queue
 
 ## 📚 Usage Examples
 
-### 🚀 Basic Usage
+### 🚀 Cross-Context Operations
 
 ```typescript
-import { LLMService } from '@/services/llm/llm-service';
+// UI Component (Proxy Mode)
+import { serviceManager } from '@/services';
 
-const llmService = new LLMService();
+// Initialize with proxy mode
+await serviceManager.initialize({ proxy: true });
+const llmService = serviceManager.getLLMService();
 
-// Create a Wllama LLM instance
-const llm = await llmService.create('my-local', 'wllama', {
-  type: 'wllama'
-});
-
-// Serve a model from HuggingFace
-await llmService.serve('my-local', {
-  username: 'microsoft',
-  repo: 'Phi-3-mini-4k-instruct-gguf'
-});
-
-// Chat completion
-const response = await llmService.chatCompletions('my-local', {
-  messages: [
-    { role: 'user', content: 'Hello, how are you?' }
-  ]
-});
-
-console.log(response.choices[0].message.content);
-```
-
-### ⭐ Using Default LLM
-
-```typescript
-// The service can create a default LLM automatically
-const response = await llmService.chatCompletions({
-  messages: [
-    { role: 'system', content: 'You are a helpful assistant.' },
-    { role: 'user', content: 'Explain quantum computing briefly.' }
-  ]
-});
-```
-
-### 🔄 Multiple LLM Providers
-
-```typescript
-// Create different LLM types
-await llmService.create('local-phi', 'wllama', {
-  type: 'wllama'
-});
-
-await llmService.create('openai-gpt', 'openai', {
+// OpenAI works directly in proxy mode
+await llmService.create('ui-openai', {
   type: 'openai',
-  apiKey: 'your-api-key'
+  apiKey: process.env.OPENAI_API_KEY
 });
 
-// Use different LLMs for different purposes
-const localResponse = await llmService.chatCompletionsFor('local-phi', {
-  messages: [{ role: 'user', content: 'Quick question' }]
-});
-
-const qualityResponse = await llmService.chatCompletionsFor('openai-gpt', {
-  messages: [{ role: 'user', content: 'Complex reasoning task' }]
+// Heavy operations forwarded to background
+const response = await llmService.chatCompletions({
+  messages: [{ role: 'user', content: 'UI chat message' }]
 });
 ```
 
-### 🌊 Streaming Responses
-
 ```typescript
-// Stream chat completions
-const stream = llmService.chatCompletions('my-local', {
+// Offscreen Document (Main Mode)
+import { serviceManager } from '@/services';
+
+// Initialize with main mode
+await serviceManager.initialize({ proxy: false });
+const llmService = serviceManager.getLLMService();
+
+// All implementations available
+await llmService.create('main-wllama', {
+  type: 'wllama'
+});
+
+await llmService.create('main-webllm', {
+  type: 'webllm',
+  modelId: 'Llama-3-8B-Instruct-q4f32_1'
+});
+
+// Direct processing with streaming
+const stream = llmService.chatCompletions({
   messages: [{ role: 'user', content: 'Tell me a story' }],
   stream: true
 });
 
 for await (const chunk of stream) {
-  if (chunk.choices[0]?.delta?.content) {
-    process.stdout.write(chunk.choices[0].delta.content);
+  console.log(chunk.choices[0]?.delta?.content || '');
+}
+```
+
+### 🔄 Mode-Aware Development
+
+```typescript
+// Check service capabilities
+const llmService = serviceManager.getLLMService();
+
+if (llmService instanceof LLMServiceMain) {
+  // Main mode - all implementations available
+  console.log('Running in main mode - full model access');
+
+  // Create heavy local models
+  await llmService.create('heavy-wllama', {
+    type: 'wllama'
+  });
+
+  // Serve a model with progress tracking
+  await llmService.serveFor('heavy-wllama', 'microsoft/Phi-3-mini-4k-instruct-gguf',
+    (progress) => console.log(`Loading: ${progress.percent}%`)
+  );
+} else {
+  // Proxy mode - lightweight operations only
+  console.log('Running in proxy mode - background job forwarding');
+
+  // Use lightweight OpenAI for direct operations
+  await llmService.create('light-openai', {
+    type: 'openai',
+    apiKey: process.env.OPENAI_API_KEY
+  });
+}
+```
+
+### 📊 Performance Optimization
+
+```typescript
+// Context-aware chat completions
+async function optimizedChatCompletion(messages: any[], streaming = false) {
+  const llmService = serviceManager.getLLMService();
+
+  if (llmService instanceof LLMServiceMain) {
+    // Main mode - use local models for privacy/speed
+    const localModel = await llmService.get('local-wllama') ||
+      await llmService.create('local-wllama', { type: 'wllama' });
+
+    if (streaming) {
+      return llmService.chatCompletions({ messages, stream: true });
+    }
+    return llmService.chatCompletions({ messages });
+  } else {
+    // Proxy mode - use API for faster response
+    const apiModel = await llmService.get('api-openai') ||
+      await llmService.create('api-openai', {
+        type: 'openai',
+        apiKey: process.env.OPENAI_API_KEY
+      });
+
+    // Note: Streaming in proxy mode goes through job queue
+    return llmService.chatCompletions({ messages, stream: streaming });
   }
 }
 ```
 
-### ⚠️ Error Handling
+### 🌉 Background Job Integration
 
 ```typescript
-try {
-  const llm = await llmService.getRequired('non-existent');
-} catch (error) {
-  console.error('LLM not found:', error.message);
-  // Error: LLM 'non-existent' not found. Available: default, my-local
+// Direct background job usage (advanced)
+import { backgroundJob } from '@/services/background-jobs/background-job';
+
+// Serve model in background
+const serveResult = await backgroundJob.execute('serve-model', {
+  serviceName: 'background-wllama',
+  modelRepo: 'microsoft/Phi-3-mini-4k-instruct-gguf'
+}, { stream: true });
+
+// Monitor progress
+for await (const progress of serveResult.stream) {
+  if (progress.type === 'progress') {
+    console.log(`Model loading: ${progress.progress}%`);
+  } else if (progress.type === 'completed') {
+    console.log('Model ready:', progress.result);
+    break;
+  }
 }
 
-try {
-  await llmService.create('invalid', 'openai', {
-    type: 'openai',
-    apiKey: 'invalid-key'
+// Chat completion via background job
+const chatResult = await backgroundJob.execute('get-all-models', {
+  serviceName: 'background-wllama'
+}, { stream: false });
+
+const models = await chatResult.promise;
+```
+
+### 🔄 Implementation Selection
+
+```typescript
+// Smart implementation selection based on requirements
+class LLMManager {
+  private llmService: ILLMService;
+
+  constructor(llmService: ILLMService) {
+    this.llmService = llmService;
+  }
+
+  async createOptimalLLM(
+    requiresPrivacy: boolean,
+    needsSpeed: boolean,
+    allowsAPIUsage: boolean
+  ) {
+    if (this.llmService instanceof LLMServiceMain) {
+      if (requiresPrivacy && !allowsAPIUsage) {
+        // Use local Wllama for complete privacy
+        return await this.llmService.create('private-wllama', {
+          type: 'wllama'
+        });
+      } else if (needsSpeed && allowsAPIUsage) {
+        // Use OpenAI for speed
+        return await this.llmService.create('fast-openai', {
+          type: 'openai',
+          apiKey: process.env.OPENAI_API_KEY
+        });
+      } else {
+        // Use WebLLM for balance
+        return await this.llmService.create('balanced-webllm', {
+          type: 'webllm',
+          modelId: 'Llama-3-8B-Instruct-q4f32_1'
+        });
+      }
+    } else {
+      // Proxy mode - limited to API-based solutions
+      if (allowsAPIUsage) {
+        return await this.llmService.create('proxy-openai', {
+          type: 'openai',
+          apiKey: process.env.OPENAI_API_KEY
+        });
+      } else {
+        // Use local server if available
+        return await this.llmService.create('proxy-local', {
+          type: 'lmstudio',
+          baseURL: 'http://localhost:1234/v1'
+        });
+      }
+    }
+  }
+}
+```
+
+### 🌊 Streaming Support
+
+```typescript
+// Streaming works across both modes
+async function streamingChat(message: string) {
+  const llmService = serviceManager.getLLMService();
+
+  const stream = llmService.chatCompletions({
+    messages: [{ role: 'user', content: message }],
+    stream: true
   });
-} catch (error) {
-  console.error('Failed to create LLM:', error.message);
+
+  let fullResponse = '';
+
+  if (llmService instanceof LLMServiceMain) {
+    // Main mode - direct streaming
+    for await (const chunk of stream) {
+      const content = chunk.choices[0]?.delta?.content || '';
+      fullResponse += content;
+      process.stdout.write(content);
+    }
+  } else {
+    // Proxy mode - streaming via background jobs
+    for await (const chunk of stream) {
+      const content = chunk.choices[0]?.delta?.content || '';
+      fullResponse += content;
+      process.stdout.write(content);
+    }
+  }
+
+  return fullResponse;
 }
 ```
 
-### 📦 Model Management
+## 📊 Implementation Comparison
 
-```typescript
-// Load a model from HuggingFace with progress tracking
-await llmService.serve('my-local', {
-  username: 'microsoft',
-  repo: 'Phi-3-mini-4k-instruct-gguf'
-}, (progress) => {
-  console.log(`Loading: ${progress.percent}%`);
-});
+| Implementation | **Main Mode** | **Proxy Mode** | **Privacy** | **Speed** | **Memory** | **Cost** | **Setup** |
+|----------------|---------------|-----------------|-------------|-----------|------------|----------|-----------|
+| **WllamaLLM** | ✅ Full | ❌ Via Jobs | 🔒 High | ⚡ Medium | 💾 Very High | 💰 Free | 🔧 Easy |
+| **WebLLMLLM** | ✅ Full | ❌ Via Jobs | 🔒 High | ⚡ Fast | 💾 High | 💰 Free | 🔧 Medium |
+| **OpenAI LLM** | ✅ Full | ✅ Direct | ⚠️ API | ⚡ Very Fast | 💾 Low | 💰 Pay-per-use | 🔧 Easy |
+| **Local OpenAI** | ✅ Full | ✅ Direct | 🔒 High | ⚡ Fast | 💾 Low | 💰 Free | 🔧 Hard |
+| **LLMProxy** | ❌ N/A | ✅ Jobs Only | 🔒 Depends | ⚡ Slow | 💾 None | 💰 Depends | 🔧 Auto |
 
-// List available models
-const models = await llmService.models('my-local');
-console.log('Available models:', models.data);
+### 🎯 Selection Guidelines
 
-// Unload a model to free memory
-await llmService.unload('my-local', 'microsoft/Phi-3-mini-4k-instruct-gguf');
+**Use WllamaLLM when:**
+- Complete privacy required
+- Offline operation needed
+- No API costs acceptable
+- Running in main mode
+- Don't mind longer initialization
 
-// Delete a model permanently
-await llmService.delete('my-local', 'microsoft/Phi-3-mini-4k-instruct-gguf');
-```
+**Use WebLLMLLM when:**
+- Need good performance with privacy
+- Want modern browser features
+- WebGPU acceleration available
+- Main mode only
 
-### 🗄️ Integration with Memory
+**Use OpenAI LLM when:**
+- High quality needed
+- Fast processing required
+- API costs acceptable
+- Available in both modes
 
-```typescript
-import { getDB } from '@/services/database/db';
-import { embeddingService } from '@/services/embedding/embedding-service';
+**Use Local OpenAI when:**
+- Want local control with API interface
+- Have local server setup
+- Need privacy with good performance
+- Available in both modes
 
-async function chatWithMemory(query: string, llmName: string = 'default') {
-  const db = getDB();
-  
-  // Search for relevant memories
-  const queryVector = await embeddingService.textToVector(query);
-  const relevantMemories = await db
-    .select()
-    .from(schema.messages)
-    .orderBy(sql`embedding <=> ${queryVector}`)
-    .limit(5);
-  
-  // Build context from memories
-  const context = relevantMemories
-    .map(memory => memory.content)
-    .join('\n');
-  
-  // Generate response with context
-  const response = await llmService.chatCompletions(llmName, {
-    messages: [
-      { role: 'system', content: `Use this context: ${context}` },
-      { role: 'user', content: query }
-    ]
-  });
-  
-  return response.choices[0].message.content;
-}
-```
+**Use LLMProxy when:**
+- Running in proxy mode
+- Heavy local models needed
+- Background processing acceptable
 
 ## 📝 API Reference
 
-### 🏢 LLMService
+### 🏢 ILLMService Interface
 
-#### 🛠️ LLM Management
 ```typescript
-async create<K extends keyof LLMRegistry>(
-  name: string,
-  llmType: K,
-  config: LLMRegistry[K]['config']
-): Promise<LLMRegistry[K]['llm']>
+interface ILLMService {
+  // Initialization
+  initialize(): Promise<void>;
 
-async get(name: string): Promise<BaseLLM | undefined>
-async getRequired(name: string): Promise<BaseLLM>
-has(name: string): boolean
-remove(name: string): boolean
+  // LLM management
+  create<K extends string>(name: string, config: any): Promise<BaseLLM>;
+  get(name: string): Promise<BaseLLM | undefined>;
+  has(name: string): boolean;
+  remove(name: string): boolean;
+  list(): string[];
+  clear(): void;
+
+  // Current model management
+  getCurrentModel(): Promise<CurrentModelInfo | null>;
+  setCurrentModel(modelId: string, provider: ServiceProvider, serviceName: string): Promise<void>;
+  clearCurrentModel(): Promise<void>;
+  onCurrentModelChange(listener: (model: CurrentModelInfo | null) => void): () => void;
+
+  // Status checking
+  isReady(): boolean;
+  isReadyByName(name: string): boolean;
+  getInfo(): { name: string; type: string; ready: boolean };
+  getInfoFor(name: string): { name: string; type: string; ready: boolean };
+
+  // Cleanup
+  destroy(): void;
+
+  // Model operations
+  models(): Promise<{ object: "list"; data: ModelInfo[] }>;
+  modelsFor(name: string): Promise<{ object: "list"; data: ModelInfo[] }>;
+
+  // Chat completions
+  chatCompletions(request: ChatCompletionRequest): Promise<ChatCompletionResponse> | AsyncIterableIterator<ChatCompletionChunk>;
+  chatCompletionsFor(name: string, request: ChatCompletionRequest): Promise<ChatCompletionResponse> | AsyncIterableIterator<ChatCompletionChunk>;
+
+  // Model serving
+  serve(model: string, onProgress?: (progress: ProgressEvent) => void): Promise<ModelInfo>;
+  serveFor(name: string, model: string, onProgress?: (progress: ProgressEvent) => void): Promise<ModelInfo>;
+
+  // Model lifecycle
+  unload(modelId: string): Promise<void>;
+  unloadFor(name: string, modelId: string): Promise<void>;
+  deleteModel(modelId: string): Promise<void>;
+  deleteModelFor(name: string, modelId: string): Promise<void>;
+}
 ```
 
-#### ℹ️ Information Methods
+### 🛠️ Implementation-Specific Configs
+
 ```typescript
-getNames(): string[]
-getAll(): Map<string, BaseLLM>
-async getInfo(name: string): Promise<LLMInfo | undefined>
-async getAllInfo(): Promise<Record<string, LLMInfo>>
+// Wllama Configuration
+interface WllamaConfig {
+  type: 'wllama';
+  url?: string; // Runner URL
+}
+
+// WebLLM Configuration
+interface WebLLMConfig {
+  type: 'webllm';
+  modelId: string; // WebLLM model identifier
+}
+
+// OpenAI Configuration
+interface OpenAIConfig {
+  type: 'openai';
+  apiKey: string;
+  baseURL?: string; // Default: 'https://api.openai.com/v1'
+}
+
+// LM Studio Configuration
+interface LMStudioConfig {
+  type: 'lmstudio';
+  baseURL: string; // e.g., 'http://localhost:1234/v1'
+  apiKey?: string; // Optional for local servers
+}
+
+// Ollama Configuration
+interface OllamaConfig {
+  type: 'ollama';
+  baseURL: string; // e.g., 'http://localhost:11434/v1'
+  apiKey?: string; // Optional for local servers
+}
 ```
 
-#### ⚡ Convenience Methods
+### 🔄 Service Mode Classes
+
 ```typescript
-async chatCompletions(request: ChatCompletionRequest): Promise<ChatCompletionResponse>
-async chatCompletions(request: ChatCompletionRequest & {stream: true}): AsyncIterableIterator<ChatCompletionChunk>
-async chatCompletionsFor(llmName: string, request: ChatCompletionRequest): Promise<ChatCompletionResponse>
-async serve(llmName: string, request: ServeRequest, onProgress?: (progress: ProgressEvent) => void): Promise<ModelInfo>
-async models(llmName: string): Promise<ModelsResponse>
-async unload(llmName: string, modelId: string): Promise<void>
-async delete(llmName: string, modelId: string): Promise<void>
+// Main Mode Service
+class LLMServiceMain extends LLMServiceCore implements ILLMService {
+  // Full implementation with direct model access
+}
+
+// Proxy Mode Service
+class LLMServiceProxy extends LLMServiceCore implements ILLMService {
+  // Lightweight implementation with background job forwarding
+}
+```
+
+## ⚠️ Error Handling & Recovery
+
+### 🛡️ Mode-Specific Error Handling
+
+```typescript
+// Handle mode-specific LLM issues
+async function robustChatCompletion(messages: any[]) {
+  const llmService = serviceManager.getLLMService();
+
+  try {
+    return await llmService.chatCompletions({ messages });
+  } catch (error) {
+    if (llmService instanceof LLMServiceProxy) {
+      // Proxy mode - check for job queue issues
+      if (error.message.includes('job')) {
+        console.error('Background job failed:', error);
+        // Retry with direct API if available
+        try {
+          return await llmService.chatCompletionsFor('openai-fallback', { messages });
+        } catch (fallbackError) {
+          throw new Error('All LLM methods failed');
+        }
+      }
+    } else {
+      // Main mode - handle model loading issues
+      if (error.message.includes('model')) {
+        console.error('Model loading failed:', error);
+        // Try alternative implementation
+        await llmService.create('fallback', { type: 'openai', /* config */ });
+        return await llmService.chatCompletionsFor('fallback', { messages });
+      }
+    }
+    throw error;
+  }
+}
+```
+
+### 🔧 Model Management Recovery
+
+```typescript
+// Robust model serving with fallbacks
+async function serveModelWithFallback(modelRepo: string) {
+  const llmService = serviceManager.getLLMService();
+
+  if (llmService instanceof LLMServiceMain) {
+    try {
+      // Try Wllama first
+      const wllama = await llmService.get('wllama') ||
+        await llmService.create('wllama', { type: 'wllama' });
+
+      return await llmService.serveFor('wllama', modelRepo);
+    } catch (error) {
+      console.warn('Wllama failed, trying WebLLM:', error);
+
+      try {
+        // Fallback to WebLLM
+        const webllm = await llmService.create('webllm-fallback', {
+          type: 'webllm',
+          modelId: 'Llama-3-8B-Instruct-q4f32_1'
+        });
+
+        return { modelId: 'Llama-3-8B-Instruct-q4f32_1' };
+      } catch (webllmError) {
+        console.error('All local models failed:', webllmError);
+        throw new Error('No local models available');
+      }
+    }
+  } else {
+    // Proxy mode - delegate to background
+    throw new Error('Model serving not directly available in proxy mode');
+  }
+}
 ```
 
 ## 🏆 Best Practices
 
-### 1. 🚀 Initialization Strategy
+### 1. 🎯 Mode-Aware Architecture
+
 ```typescript
-// Initialize LLMs at application startup
-async function initializeLLMs() {
-  const llmService = new LLMService();
-  
-  // Create default for general use
-  await llmService.create('default', 'wllama', {
-    type: 'wllama'
-  });
-  
-  // Load a model
-  await llmService.serve('default', {
-    username: 'microsoft',
-    repo: 'Phi-3-mini-4k-instruct-gguf'
-  });
-  
-  // Create specialized LLMs if needed
-  if (hasOpenAIKey()) {
-    await llmService.create('high-quality', 'openai', {
-      type: 'openai',
-      apiKey: process.env.OPENAI_API_KEY
+// Design components to work optimally in both modes
+class AIAssistant {
+  constructor(private llmService: ILLMService) {}
+
+  async initialize() {
+    if (this.llmService instanceof LLMServiceMain) {
+      // Main mode - use local model for privacy
+      await this.llmService.create('assistant', { type: 'wllama' });
+      await this.llmService.serveFor('assistant', 'microsoft/Phi-3-mini-4k-instruct-gguf');
+    } else {
+      // Proxy mode - use fast API
+      await this.llmService.create('assistant', {
+        type: 'openai',
+        apiKey: process.env.OPENAI_API_KEY
+      });
+    }
+  }
+
+  async chat(message: string) {
+    const response = await this.llmService.chatCompletionsFor('assistant', {
+      messages: [{ role: 'user', content: message }]
     });
-  }
-}
-```
 
-### 2. 🎯 Model Selection
-- **For privacy & offline**: Wllama with Phi-3-mini (3.8B parameters)
-- **For quality**: OpenAI GPT-4 or Claude via API
-- **For speed**: Smaller quantized models (Q4_K_M)
-- **For reasoning**: Larger models like Phi-3-medium
-
-### 3. 💾 Memory Management
-```typescript
-// Clean up LLMs when not needed
-llmService.remove('temporary-llm');
-
-// Unload models to free memory
-await llmService.unload('default', 'large-model-id');
-
-// Monitor LLM usage
-const activeLLMs = llmService.getNames();
-console.log('Active LLMs:', activeLLMs);
-```
-
-### 4. 🔄 Error Recovery
-```typescript
-async function robustChatCompletion(messages: ChatMessage[]): Promise<string> {
-  try {
-    const response = await llmService.chatCompletions({ messages });
-    return response.choices[0].message.content;
-  } catch (error) {
-    console.warn('Default LLM failed, trying fallback:', error);
-    
-    // Fallback to a different LLM
-    const fallback = await llmService.get('fallback') || 
-                     await llmService.create('fallback', 'wllama', {
-                       type: 'wllama'
-                     });
-    
-    const response = await fallback.chatCompletions({ messages });
     return response.choices[0].message.content;
   }
 }
 ```
 
-This documentation provides a comprehensive overview of the LLM service architecture, implementation details, and integration patterns used in Memorall.
+### 2. ⚡ Resource Management
+
+```typescript
+// Proper model lifecycle management
+class ModelManager {
+  private llmService: ILLMService;
+
+  async initialize(isOffscreen: boolean) {
+    this.llmService = isOffscreen
+      ? new LLMServiceMain()
+      : new LLMServiceProxy();
+
+    await this.llmService.initialize();
+  }
+
+  async loadModel(modelType: string, config: any) {
+    const llm = await this.llmService.create('active-model', config);
+
+    if (this.llmService instanceof LLMServiceMain && modelType === 'wllama') {
+      // Only serve models in main mode
+      await this.llmService.serveFor('active-model', config.modelRepo);
+    }
+
+    return llm;
+  }
+
+  async cleanup() {
+    if (this.llmService instanceof LLMServiceMain) {
+      // Unload models to free memory
+      try {
+        await this.llmService.unload('active-model');
+      } catch (error) {
+        console.warn('Model unload failed:', error);
+      }
+    }
+
+    this.llmService.clear();
+  }
+}
+```
+
+### 3. 🔄 Context Detection
+
+```typescript
+// Automatic mode detection and service creation
+function createLLMService(): ILLMService {
+  // Detect context based on environment
+  const isOffscreen = typeof window !== 'undefined' &&
+                     window.location.pathname.includes('offscreen');
+
+  if (isOffscreen) {
+    console.log('Creating main LLM service for offscreen context');
+    return new LLMServiceMain();
+  } else {
+    console.log('Creating proxy LLM service for UI context');
+    return new LLMServiceProxy();
+  }
+}
+```
+
+### 4. 📊 Performance Monitoring
+
+```typescript
+// Monitor LLM performance across modes
+class LLMPerformanceMonitor {
+  constructor(private llmService: ILLMService) {}
+
+  async measureChatCompletion(messages: any[]) {
+    const startTime = performance.now();
+
+    try {
+      const response = await this.llmService.chatCompletions({ messages });
+      const endTime = performance.now();
+
+      const metrics = {
+        duration: endTime - startTime,
+        mode: this.llmService instanceof LLMServiceMain ? 'main' : 'proxy',
+        success: true,
+        tokenCount: response.usage?.total_tokens || 0
+      };
+
+      console.log('LLM Performance:', metrics);
+      return response;
+    } catch (error) {
+      const endTime = performance.now();
+
+      console.error('LLM Performance Error:', {
+        duration: endTime - startTime,
+        mode: this.llmService instanceof LLMServiceMain ? 'main' : 'proxy',
+        success: false,
+        error: error.message
+      });
+
+      throw error;
+    }
+  }
+}
+```
+
+This documentation provides comprehensive coverage of the dual-mode LLM architecture, implementation details, and best practices for building robust cross-context AI applications with Memorall.

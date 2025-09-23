@@ -80,7 +80,6 @@ export const YourModels: React.FC<YourModelsProps> = ({
 
 	const { handleQuickDownload, loadDownloadedModel, unloadDownloadedModel } =
 		useModelOperations({
-			quickProvider,
 			setCurrent,
 			setLoading,
 			setQuickDownloadModel,

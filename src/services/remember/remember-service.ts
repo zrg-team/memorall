@@ -1,9 +1,7 @@
 import { desc, eq, like, and, or } from "drizzle-orm";
 import { logError, logInfo } from "@/utils/logger";
-import { persistentLogger } from "@/services/logging/persistent-logger";
-import { databaseService } from "@/services/database/database-service";
-import { embeddingService } from "@/services/embedding/embedding-service";
-import { llmService } from "@/services/llm/llm-service";
+import { logger } from "@/utils/logger";
+import { serviceManager } from "@/services";
 import { flowsService } from "@/services/flows/flows-service";
 import type { RememberedContent } from "@/services/database/db";
 import type {
@@ -75,8 +73,6 @@ export class RememberService {
 		if (this.initialized) return;
 
 		try {
-			await databaseService.initialize();
-			// EmbeddingService will auto-initialize when used
 			this.initialized = true;
 			logInfo("✅ RememberService initialized successfully");
 		} catch (error) {
@@ -162,7 +158,8 @@ export class RememberService {
 			if (!isServiceWorker) {
 				try {
 					const embeddingText = `${data.title}\n\n${data.textContent}`;
-					embedding = await embeddingService.textToVector(embeddingText);
+					embedding =
+						await serviceManager.embeddingService.textToVector(embeddingText);
 				} catch (embeddingError) {
 					logError(
 						"⚠️ Failed to generate embedding, continuing without it:",
@@ -210,13 +207,15 @@ export class RememberService {
 			};
 
 			// Save to database
-			const result = await databaseService.use(async ({ db, schema }) => {
-				const [savedContent] = await db
-					.insert(schema.rememberedContent)
-					.values(newContent)
-					.returning();
-				return savedContent;
-			});
+			const result = await serviceManager.databaseService.use(
+				async ({ db, schema }) => {
+					const [savedContent] = await db
+						.insert(schema.rememberedContent)
+						.values(newContent)
+						.returning();
+					return savedContent;
+				},
+			);
 
 			logInfo("✅ Content saved successfully:", result.id);
 
@@ -300,7 +299,8 @@ export class RememberService {
 			if (!isServiceWorker) {
 				try {
 					const embeddingText = `${contentData.title}\n\n${contentData.textContent}`;
-					embedding = await embeddingService.textToVector(embeddingText);
+					embedding =
+						await serviceManager.embeddingService.textToVector(embeddingText);
 				} catch (embeddingError) {
 					logError(
 						"⚠️ Failed to generate embedding for update:",
@@ -321,29 +321,31 @@ export class RememberService {
 				contentData.sourceMetadata,
 			);
 
-			const result = await databaseService.use(async ({ db, schema }) => {
-				const [updatedPage] = await db
-					.update(schema.rememberedContent)
-					.set({
-						sourceType: contentData.sourceType,
-						sourceUrl: contentData.sourceUrl,
-						originalUrl: contentData.originalUrl,
-						title: contentData.title,
-						rawContent: contentData.rawContent,
-						cleanContent: contentData.cleanContent,
-						textContent: contentData.textContent,
-						sourceMetadata: contentData.sourceMetadata as any,
-						extractionMetadata: contentData.extractionMetadata as any,
-						embedding,
-						searchVector,
-						contentLength,
-						readabilityScore,
-						updatedAt: new Date(),
-					})
-					.where(eq(schema.rememberedContent.id, pageId))
-					.returning();
-				return updatedPage;
-			});
+			const result = await serviceManager.databaseService.use(
+				async ({ db, schema }) => {
+					const [updatedPage] = await db
+						.update(schema.rememberedContent)
+						.set({
+							sourceType: contentData.sourceType,
+							sourceUrl: contentData.sourceUrl,
+							originalUrl: contentData.originalUrl,
+							title: contentData.title,
+							rawContent: contentData.rawContent,
+							cleanContent: contentData.cleanContent,
+							textContent: contentData.textContent,
+							sourceMetadata: contentData.sourceMetadata as any,
+							extractionMetadata: contentData.extractionMetadata as any,
+							embedding,
+							searchVector,
+							contentLength,
+							readabilityScore,
+							updatedAt: new Date(),
+						})
+						.where(eq(schema.rememberedContent.id, pageId))
+						.returning();
+					return updatedPage;
+				},
+			);
 
 			logInfo("✅ Page updated successfully:", pageId);
 
@@ -369,14 +371,16 @@ export class RememberService {
 				await this.initialize();
 			}
 
-			const result = await databaseService.use(async ({ db, schema }) => {
-				const pages = await db
-					.select()
-					.from(schema.rememberedContent)
-					.where(eq(schema.rememberedContent.sourceUrl, url))
-					.limit(1);
-				return pages[0] || null;
-			});
+			const result = await serviceManager.databaseService.use(
+				async ({ db, schema }) => {
+					const pages = await db
+						.select()
+						.from(schema.rememberedContent)
+						.where(eq(schema.rememberedContent.sourceUrl, url))
+						.limit(1);
+					return pages[0] || null;
+				},
+			);
 
 			return result;
 		} catch (error) {
@@ -405,68 +409,74 @@ export class RememberService {
 				sortOrder = "desc",
 			} = options;
 
-			const result = await databaseService.use(async ({ db, schema }) => {
-				// Build where conditions
-				const conditions = [];
+			const result = await serviceManager.databaseService.use(
+				async ({ db, schema }) => {
+					// Build where conditions
+					const conditions = [];
 
-				if (query.trim()) {
-					conditions.push(
-						or(
-							like(schema.rememberedContent.title, `%${query}%`),
-							like(schema.rememberedContent.textContent, `%${query}%`),
-							like(schema.rememberedContent.searchVector, `%${query}%`),
-						),
-					);
-				}
+					if (query.trim()) {
+						conditions.push(
+							or(
+								like(schema.rememberedContent.title, `%${query}%`),
+								like(schema.rememberedContent.textContent, `%${query}%`),
+								like(schema.rememberedContent.searchVector, `%${query}%`),
+							),
+						);
+					}
 
-				if (tags.length > 0) {
-					// PostgreSQL JSONB array contains check
-					conditions.push(
-						// This would need proper JSONB query syntax in production
-						like(schema.rememberedContent.tags as any, `%${tags[0]}%`),
-					);
-				}
+					if (tags.length > 0) {
+						// PostgreSQL JSONB array contains check
+						conditions.push(
+							// This would need proper JSONB query syntax in production
+							like(schema.rememberedContent.tags as any, `%${tags[0]}%`),
+						);
+					}
 
-				if (isArchived !== undefined) {
-					conditions.push(eq(schema.rememberedContent.isArchived, isArchived));
-				}
+					if (isArchived !== undefined) {
+						conditions.push(
+							eq(schema.rememberedContent.isArchived, isArchived),
+						);
+					}
 
-				if (isFavorite !== undefined) {
-					conditions.push(eq(schema.rememberedContent.isFavorite, isFavorite));
-				}
+					if (isFavorite !== undefined) {
+						conditions.push(
+							eq(schema.rememberedContent.isFavorite, isFavorite),
+						);
+					}
 
-				const whereClause =
-					conditions.length > 0 ? and(...conditions) : undefined;
+					const whereClause =
+						conditions.length > 0 ? and(...conditions) : undefined;
 
-				// Build order by
-				const column = schema.rememberedContent[sortBy];
-				const orderBy = sortOrder === "desc" ? desc(column) : column;
+					// Build order by
+					const column = schema.rememberedContent[sortBy];
+					const orderBy = sortOrder === "desc" ? desc(column) : column;
 
-				// Get total count
-				const totalQuery = db
-					.select({ count: schema.rememberedContent.id })
-					.from(schema.rememberedContent);
-				if (whereClause) {
-					totalQuery.where(whereClause);
-				}
+					// Get total count
+					const totalQuery = db
+						.select({ count: schema.rememberedContent.id })
+						.from(schema.rememberedContent);
+					if (whereClause) {
+						totalQuery.where(whereClause);
+					}
 
-				// Get pages
-				const pagesQuery = db.select().from(schema.rememberedContent);
-				if (whereClause) {
-					pagesQuery.where(whereClause);
-				}
-				pagesQuery.orderBy(orderBy).limit(limit).offset(offset);
+					// Get pages
+					const pagesQuery = db.select().from(schema.rememberedContent);
+					if (whereClause) {
+						pagesQuery.where(whereClause);
+					}
+					pagesQuery.orderBy(orderBy).limit(limit).offset(offset);
 
-				const [totalResult, pages] = await Promise.all([
-					totalQuery,
-					pagesQuery,
-				]);
+					const [totalResult, pages] = await Promise.all([
+						totalQuery,
+						pagesQuery,
+					]);
 
-				const total = totalResult.length;
-				const hasMore = offset + limit < total;
+					const total = totalResult.length;
+					const hasMore = offset + limit < total;
 
-				return { pages, total, hasMore };
-			});
+					return { pages, total, hasMore };
+				},
+			);
 
 			return result;
 		} catch (error) {
@@ -484,14 +494,16 @@ export class RememberService {
 				await this.initialize();
 			}
 
-			const result = await databaseService.use(async ({ db, schema }) => {
-				const pages = await db
-					.select()
-					.from(schema.rememberedContent)
-					.where(eq(schema.rememberedContent.id, id))
-					.limit(1);
-				return pages[0] || null;
-			});
+			const result = await serviceManager.databaseService.use(
+				async ({ db, schema }) => {
+					const pages = await db
+						.select()
+						.from(schema.rememberedContent)
+						.where(eq(schema.rememberedContent.id, id))
+						.limit(1);
+					return pages[0] || null;
+				},
+			);
 
 			return result;
 		} catch (error) {
@@ -509,7 +521,7 @@ export class RememberService {
 				await this.initialize();
 			}
 
-			await databaseService.use(async ({ db, schema }) => {
+			await serviceManager.databaseService.use(async ({ db, schema }) => {
 				await db
 					.delete(schema.rememberedContent)
 					.where(eq(schema.rememberedContent.id, id));
@@ -535,7 +547,7 @@ export class RememberService {
 			const page = await this.getPageById(id);
 			if (!page) return false;
 
-			await databaseService.use(async ({ db, schema }) => {
+			await serviceManager.databaseService.use(async ({ db, schema }) => {
 				await db
 					.update(schema.rememberedContent)
 					.set({
@@ -564,7 +576,7 @@ export class RememberService {
 			const page = await this.getPageById(id);
 			if (!page) return false;
 
-			await databaseService.use(async ({ db, schema }) => {
+			await serviceManager.databaseService.use(async ({ db, schema }) => {
 				await db
 					.update(schema.rememberedContent)
 					.set({
@@ -596,7 +608,7 @@ export class RememberService {
 			const currentTags = Array.isArray(page.tags) ? page.tags : [];
 			const updatedTags = [...new Set([...currentTags, ...newTags])];
 
-			await databaseService.use(async ({ db, schema }) => {
+			await serviceManager.databaseService.use(async ({ db, schema }) => {
 				await db
 					.update(schema.rememberedContent)
 					.set({
@@ -701,29 +713,21 @@ export class RememberService {
 		pageId: string,
 	): Promise<void> {
 		try {
-			await persistentLogger.info(
-				"🧠 Starting knowledge graph processing",
-				{
-					url: data.url,
-					title: data.title,
-					pageId: pageId,
-					contentLength: data.article.textContent.length,
-				},
-				"background",
-			);
+			await logger.info("background", "knowledge-graph", "🧠 Starting knowledge graph processing", {
+				url: data.url,
+				title: data.title,
+				pageId: pageId,
+				contentLength: data.article.textContent.length,
+			});
 
 			logInfo("🧠 Processing content through knowledge graph flow");
 
 			// Check if LLM service is ready
-			if (!llmService.isReady()) {
-				await persistentLogger.warn(
-					"❌ LLM service not ready, skipping knowledge graph processing",
-					{
-						url: data.url,
-						llmReady: llmService.isReady(),
-					},
-					"background",
-				);
+			if (!serviceManager.llmService.isReady()) {
+				await logger.warn("background", "knowledge-graph", "❌ LLM service not ready, skipping knowledge graph processing", {
+					url: data.url,
+					llmReady: serviceManager.llmService.isReady(),
+				});
 
 				logError(
 					"❌ LLM service not ready, skipping knowledge graph processing",
@@ -731,29 +735,21 @@ export class RememberService {
 				return;
 			}
 
-			await persistentLogger.info(
-				"✅ LLM service ready, proceeding with knowledge graph",
-				{
-					url: data.url,
-					llmReady: llmService.isReady(),
-				},
-				"background",
-			);
+			await logger.info("background", "knowledge-graph", "✅ LLM service ready, proceeding with knowledge graph", {
+				url: data.url,
+				llmReady: serviceManager.llmService.isReady(),
+			});
 
 			// Create knowledge graph flow
 			const knowledgeGraph = flowsService.createGraph("knowledge", {
-				llm: llmService,
-				embedding: embeddingService,
-				database: databaseService,
+				llm: serviceManager.llmService,
+				embedding: serviceManager.embeddingService,
+				database: serviceManager.databaseService,
 			});
 
-			await persistentLogger.info(
-				"🔧 Knowledge graph flow created",
-				{
-					url: data.url,
-				},
-				"background",
-			);
+			await logger.info("background", "knowledge-graph", "🔧 Knowledge graph flow created", {
+				url: data.url,
+			});
 
 			// Prepare input state
 			const initialState: Partial<KnowledgeGraphState> = {
@@ -773,14 +769,10 @@ export class RememberService {
 				hasPageId: !!pageId,
 			});
 
-			await persistentLogger.info(
-				"🚀 Executing knowledge graph flow",
-				{
-					url: data.url,
-					contentPreview: data.article.textContent.substring(0, 200) + "...",
-				},
-				"background",
-			);
+			await logger.info("background", "knowledge-graph", "🚀 Executing knowledge graph flow", {
+				url: data.url,
+				contentPreview: data.article.textContent.substring(0, 200) + "...",
+			});
 
 			if (!pageId) {
 				throw new Error("Error");
@@ -807,36 +799,24 @@ export class RememberService {
 					: 0,
 			};
 
-			await persistentLogger.info(
-				"✅ Knowledge graph processing completed successfully",
-				stats,
-				"background",
-			);
+			await logger.info("background", "knowledge-graph", "✅ Knowledge graph processing completed successfully", stats);
 
 			logInfo("✅ Knowledge graph processing completed:", stats);
 
 			if (Array.isArray(result.errors) && result.errors.length > 0) {
-				await persistentLogger.warn(
-					"⚠️ Knowledge graph processing had errors",
-					{
-						url: data.url,
-						errors: result.errors,
-					},
-					"background",
-				);
+				await logger.warn("background", "knowledge-graph", "⚠️ Knowledge graph processing had errors", {
+					url: data.url,
+					errors: result.errors,
+				});
 
 				logError("⚠️ Knowledge graph processing had errors:", result.errors);
 			}
 		} catch (error) {
-			await persistentLogger.error(
-				"❌ Failed to process knowledge graph",
-				{
-					url: data.url,
-					error: error instanceof Error ? error.message : "Unknown error",
-					stack: error instanceof Error ? error.stack : undefined,
-				},
-				"background",
-			);
+			await logger.error("background", "knowledge-graph", "❌ Failed to process knowledge graph", {
+				url: data.url,
+				error: error instanceof Error ? error.message : "Unknown error",
+				stack: error instanceof Error ? error.stack : undefined,
+			});
 
 			logError("❌ Failed to process knowledge graph:", error);
 			// Don't throw error - knowledge graph processing is optional
@@ -853,7 +833,7 @@ export class RememberService {
 		try {
 			logInfo("🧠 Processing generic content through knowledge graph flow");
 
-			if (!llmService.isReady()) {
+			if (!serviceManager.llmService.isReady()) {
 				logError(
 					"❌ LLM service not ready, skipping knowledge graph processing",
 				);
@@ -862,9 +842,9 @@ export class RememberService {
 
 			// Create knowledge graph flow
 			const knowledgeGraph = flowsService.createGraph("knowledge", {
-				llm: llmService,
-				embedding: embeddingService,
-				database: databaseService,
+				llm: serviceManager.llmService,
+				embedding: serviceManager.embeddingService,
+				database: serviceManager.databaseService,
 			});
 
 			// Prepare input state for generic content

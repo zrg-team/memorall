@@ -2,14 +2,14 @@
 // Handles context menu registration and message routing only.
 
 import { logInfo, logError } from "./utils/logger";
-import { backgroundJobQueue } from "./services/background-jobs/background-job-queue";
+import { backgroundJob } from "./services/background-jobs/background-job";
 import { sharedStorageService } from "./services/shared-storage";
-import { llmService } from "./services/llm/llm-service";
+import { CONTENT_BACKGROUND_EVENTS } from "./constants/content-background";
 
-const CONTEXT_MENU_ID = "remember-this-page";
-const REMEMBER_CONTENT_ID = "remember-content";
-const LET_REMEMBER_ID = "let-remember";
-const OPEN_FULL_PAGE = "open-full-page";
+const REMEMBER_THIS_PAGE_CONTEXT_MENU_ID = "remember-this-page";
+const REMEMBER_CONTENT_CONTEXT_MENU_ID = "remember-content";
+const LET_REMEMBER_CONTEXT_MENU_ID = "let-remember";
+const OPEN_FULL_PAGE_CONTEXT_MENU_ID = "open-full-page";
 
 // Offscreen document management
 let offscreenCreated = false;
@@ -150,44 +150,48 @@ async function ensureOffscreenDocument(): Promise<void> {
 	return offscreenInitPromise;
 }
 
-// Initialize offscreen document immediately when Service Worker loads
-logInfo("🔄 Service Worker loaded, attempting immediate offscreen creation...");
-ensureOffscreenDocument()
-	.then(() => {
-		logInfo("✅ Immediate offscreen document initialization completed");
-	})
-	.catch((error) => {
-		logError("❌ Failed immediate offscreen document initialization:", error);
-	});
+// Initialize shared services immediately when Service Worker loads
+logInfo("🔄 Service Worker loaded, initializing core services...");
+
+(async () => {
+	try {
+		// Initialize shared storage service early
+		await sharedStorageService.initialize();
+		logInfo("✅ Shared storage service initialized");
+
+		// Initialize background job queue
+		await backgroundJob.initialize();
+		logInfo("✅ Background job queue initialized");
+
+		// Initialize offscreen document
+		await ensureOffscreenDocument();
+		logInfo("✅ Immediate initialization completed");
+	} catch (error) {
+		logError("❌ Failed immediate initialization:", error);
+	}
+})();
 
 // Create context menus on install
 chrome.runtime.onInstalled.addListener(async () => {
 	try {
-		// Initialize shared storage service
-		await sharedStorageService.initialize();
-
-		// Initialize background job queue
-		await backgroundJobQueue.initialize();
-
-		await llmService.initialize();
 
 		// Create main "Remember this" menu for full page
 		chrome.contextMenus.create({
-			id: CONTEXT_MENU_ID,
+			id: REMEMBER_THIS_PAGE_CONTEXT_MENU_ID,
 			title: "Remember this page",
 			contexts: ["page", "link"],
 		});
 
 		// Create "Remember now" menu for selected content
 		chrome.contextMenus.create({
-			id: REMEMBER_CONTENT_ID,
+			id: REMEMBER_CONTENT_CONTEXT_MENU_ID,
 			title: "Remember this selection",
 			contexts: ["selection"],
 		});
 
 		// Create "Let remember" menu that opens chat input
 		chrome.contextMenus.create({
-			id: LET_REMEMBER_ID,
+			id: LET_REMEMBER_CONTEXT_MENU_ID,
 			title: "Remember ...",
 			contexts: ["page", "selection"],
 		});
@@ -199,7 +203,7 @@ chrome.runtime.onInstalled.addListener(async () => {
 
 		// Create "Open full page" menu that opens full page
 		chrome.contextMenus.create({
-			id: OPEN_FULL_PAGE,
+			id: OPEN_FULL_PAGE_CONTEXT_MENU_ID,
 			title: "Open platform",
 			contexts: ["page", "link"],
 		});
@@ -221,17 +225,15 @@ chrome.runtime.onInstalled.addListener(async () => {
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 	// Open the action popup immediately only for remember-related items
 	if (
-		info.menuItemId === CONTEXT_MENU_ID ||
-		info.menuItemId === REMEMBER_CONTENT_ID ||
-		info.menuItemId === LET_REMEMBER_ID
+		info.menuItemId === REMEMBER_THIS_PAGE_CONTEXT_MENU_ID ||
+		info.menuItemId === REMEMBER_CONTENT_CONTEXT_MENU_ID ||
+		info.menuItemId === LET_REMEMBER_CONTEXT_MENU_ID
 	) {
 		try {
-			// Check if user has configured an LLM (only check configuration, not readiness)
-			const currentModel = await llmService.getCurrentModel();
-			const hasConfiguredLLM = !!currentModel;
+			const hasConfiguredLLM = false;
 
 			// For LET_REMEMBER specifically, always open popup and navigate to remember page
-			if (info.menuItemId === LET_REMEMBER_ID) {
+			if (info.menuItemId === LET_REMEMBER_CONTEXT_MENU_ID) {
 				try {
 					chrome.storage?.session?.set?.({ navigateTo: "remember" });
 				} catch (_) {}
@@ -273,7 +275,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 			return;
 		}
 
-		if (info.menuItemId === OPEN_FULL_PAGE) {
+		if (info.menuItemId === OPEN_FULL_PAGE_CONTEXT_MENU_ID) {
 			logInfo("🧭 Open full page clicked");
 			try {
 				await chrome.runtime.openOptionsPage?.();
@@ -295,26 +297,26 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 					logError("❌ Failed to open options/standalone page:", e2);
 				}
 			}
-		} else if (info.menuItemId === CONTEXT_MENU_ID) {
+		} else if (info.menuItemId === REMEMBER_THIS_PAGE_CONTEXT_MENU_ID) {
 			logInfo(
 				`🔄 Remember this page clicked for tab: ${tab.id}, URL: ${tab.url}`,
 			);
 
 			// Send message to content script to extract full page content
 			const contentResponse = await chrome.tabs.sendMessage(tab.id, {
-				type: "REMEMBER_THIS",
+				type: CONTENT_BACKGROUND_EVENTS.REMEMBER_THIS,
 				tabId: tab.id,
 				url: tab.url,
 			});
 			logInfo("📨 Content script response to REMEMBER_THIS:", contentResponse);
-		} else if (info.menuItemId === REMEMBER_CONTENT_ID) {
+		} else if (info.menuItemId === REMEMBER_CONTENT_CONTEXT_MENU_ID) {
 			logInfo(
 				`🔄 Remember now clicked for tab: ${tab.id}, selection: "${info.selectionText}"`,
 			);
 
 			// Send message to content script to extract selected content
 			const selectionResponse = await chrome.tabs.sendMessage(tab.id, {
-				type: "REMEMBER_CONTENT",
+				type: CONTENT_BACKGROUND_EVENTS.REMEMBER_CONTENT,
 				tabId: tab.id,
 				url: tab.url,
 				selectedText: info.selectionText || "",
@@ -323,12 +325,12 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 				"📨 Content script response to REMEMBER_CONTENT:",
 				selectionResponse,
 			);
-		} else if (info.menuItemId === LET_REMEMBER_ID) {
+		} else if (info.menuItemId === LET_REMEMBER_CONTEXT_MENU_ID) {
 			logInfo(`🔄 Let remember clicked for tab: ${tab.id}`);
 
 			// Send message to content script to store context data
 			const chatResponse = await chrome.tabs.sendMessage(tab.id, {
-				type: "LET_REMEMBER",
+				type: CONTENT_BACKGROUND_EVENTS.LET_REMEMBER,
 				tabId: tab.id,
 				url: tab.url,
 				context: info.selectionText || "",
@@ -354,87 +356,21 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 
 // Handle messages from content scripts and UI
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-	if (message.type === "GET_BACKGROUND_JOBS") {
-		// Handle request for job status from popup
-		(async () => {
-			try {
-				const jobs = await backgroundJobQueue.getAllJobs();
-				sendResponse({ success: true, jobs });
-			} catch (error) {
-				logError("Failed to get background jobs:", error);
-				sendResponse({
-					success: false,
-					error: error instanceof Error ? error.message : "Unknown error",
-				});
-			}
-		})();
-
-		return true;
-	} else if (message.type === "CLEAR_COMPLETED_JOBS") {
-		// Handle request to clear completed jobs
-		(async () => {
-			try {
-				await backgroundJobQueue.clearCompletedJobs();
-				sendResponse({ success: true });
-			} catch (error) {
-				logError("Failed to clear completed jobs:", error);
-				sendResponse({
-					success: false,
-					error: error instanceof Error ? error.message : "Unknown error",
-				});
-			}
-		})();
-
-		return true;
-	} else if (message.type === "ADD_KNOWLEDGE_GRAPH_JOB") {
-		// Handle request to add knowledge graph job
-		(async () => {
-			try {
-				const { pageData } = message;
-				startLoading(); // Show loading indicator
-				const jobId = await backgroundJobQueue.addKnowledgeGraphJob(pageData);
-				sendResponse({ success: true, jobId });
-			} catch (error) {
-				logError("Failed to add knowledge graph job:", error);
-				sendResponse({
-					success: false,
-					error: error instanceof Error ? error.message : "Unknown error",
-				});
-			}
-		})();
-
-		return true;
-	} else if (message.type === "CONTENT_EXTRACTED") {
+	if (message.type === CONTENT_BACKGROUND_EVENTS.CONTENT_EXTRACTED) {
 		// Handle async processing
 		(async () => {
 			try {
 				// Queue the page for background save (offscreen will process)
 				startLoading(); // Show loading indicator
-				const jobId = await backgroundJobQueue.addRememberSaveJob(message.data);
+				const result = await backgroundJob.createJob(
+					"remember-save",
+					message.data,
+					{ stream: false },
+				);
+				const jobId = result.jobId;
 				logInfo("📨 Queued page for background save:", { jobId });
 
 				// Notify offscreen about job queue update with retry mechanism
-				try {
-					await chrome.runtime.sendMessage({
-						type: "JOB_QUEUE_UPDATED",
-						jobId,
-					});
-					logInfo("📢 JOB_QUEUE_UPDATED message sent to offscreen");
-				} catch (updateErr) {
-					logError("⚠️ Failed to send JOB_QUEUE_UPDATED message:", updateErr);
-					// Try again after a short delay
-					setTimeout(async () => {
-						try {
-							await chrome.runtime.sendMessage({
-								type: "JOB_QUEUE_UPDATED",
-								jobId,
-							});
-							logInfo("📢 JOB_QUEUE_UPDATED retry message sent");
-						} catch (retryErr) {
-							logError("❌ JOB_QUEUE_UPDATED retry also failed:", retryErr);
-						}
-					}, 500);
-				}
 				sendResponse({ success: true, jobId });
 			} catch (error) {
 				logError("❌ Failed to process extracted content:", error);
@@ -450,7 +386,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
 		// Return true to indicate async response
 		return true;
-	} else if (message.type === "SELECTION_EXTRACTED") {
+	} else if (message.type === CONTENT_BACKGROUND_EVENTS.SELECTION_EXTRACTED) {
 		// Handle async processing for selected content
 		(async () => {
 			try {
@@ -471,11 +407,12 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 					},
 				};
 				startLoading(); // Show loading indicator
-				const jobId =
-					await backgroundJobQueue.addRememberSaveJob(selectionData);
-				try {
-					chrome.runtime.sendMessage({ type: "JOB_QUEUE_UPDATED" });
-				} catch (_) {}
+				const result = await backgroundJob.createJob(
+					"remember-save",
+					selectionData,
+					{ stream: false },
+				);
+				const jobId = result.jobId;
 				sendResponse({ success: true, jobId });
 			} catch (error) {
 				logError("❌ Failed to process selection:", error);
@@ -493,160 +430,17 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 		})();
 
 		return true;
-	} else if (message.type === "CLAIM_JOB_FOR_OFFSCREEN") {
-		// Handle request from offscreen to claim a specific job
-		(async () => {
-			try {
-				const { jobId } = message;
-				logInfo(`🎯 Offscreen requesting to claim job: ${jobId}`);
-
-				// Use the background job queue to claim the job
-				const claimedJob = await backgroundJobQueue.claimNextPendingJob();
-
-				if (claimedJob && claimedJob.id === jobId) {
-					logInfo(`✅ Successfully claimed job for offscreen: ${jobId}`);
-					sendResponse({ success: true, job: claimedJob });
-				} else if (claimedJob) {
-					// Wrong job claimed, this shouldn't happen but handle it
-					logError(
-						`⚠️ Claimed wrong job. Expected: ${jobId}, Got: ${claimedJob.id}`,
-					);
-					sendResponse({
-						success: false,
-						error: `Expected job ${jobId} but claimed ${claimedJob.id}`,
-					});
-				} else {
-					logInfo(`❌ No job available to claim for: ${jobId}`);
-					sendResponse({ success: false, error: "No pending jobs available" });
-				}
-			} catch (error) {
-				logError("❌ Failed to claim job for offscreen:", error);
-				sendResponse({
-					success: false,
-					error: error instanceof Error ? error.message : "Unknown error",
-				});
-			}
-		})();
-
-		return true;
-	} else if (message.type === "UPDATE_JOB_PROGRESS") {
-		// Handle job progress update from offscreen
-		(async () => {
-			try {
-				const { jobId, progress } = message;
-				await backgroundJobQueue.updateJobProgress(jobId, progress);
-				sendResponse({ success: true });
-			} catch (error) {
-				logError("❌ Failed to update job progress:", error);
-				sendResponse({
-					success: false,
-					error: error instanceof Error ? error.message : "Unknown error",
-				});
-			}
-		})();
-
-		return true;
-	} else if (message.type === "COMPLETE_JOB") {
-		// Handle job completion from offscreen
-		(async () => {
-			try {
-				const { jobId, result } = message;
-				await backgroundJobQueue.completeJob(jobId, result);
-				sendResponse({ success: true });
-			} catch (error) {
-				logError("❌ Failed to complete job:", error);
-				sendResponse({
-					success: false,
-					error: error instanceof Error ? error.message : "Unknown error",
-				});
-			}
-		})();
-
-		return true;
-	} else if (message.type === "USER_INPUT_EXTRACTED") {
-		console.log("📥 Background received USER_INPUT_EXTRACTED:", message);
-		// Handle async processing for user input content
-		(async () => {
-			try {
-				// Enqueue user input for background save
-				const userInputData = {
-					sourceType: "user" as const,
-					sourceUrl: undefined,
-					originalUrl: undefined,
-					title: `User Note: ${message.data.userInput.substring(0, 50)}${message.data.userInput.length > 50 ? "..." : ""}`,
-					rawContent: message.data.userInput,
-					cleanContent: message.data.userInput,
-					textContent: message.data.userInput,
-					sourceMetadata: {
-						inputMethod: message.data.inputMethod || "chat",
-						timestamp: new Date().toISOString(),
-						prompt: message.data.prompt,
-						context: message.data.context,
-					},
-					extractionMetadata: {
-						inputLength: message.data.userInput.length,
-						hasPrompt: !!message.data.prompt,
-						hasContext: !!message.data.context,
-						extractedAt: new Date().toISOString(),
-					},
-				};
-				startLoading(); // Show loading indicator
-				const jobId =
-					await backgroundJobQueue.addRememberSaveJob(userInputData);
-				try {
-					chrome.runtime.sendMessage({ type: "JOB_QUEUE_UPDATED" });
-				} catch (_) {}
-				console.log("📤 Background sending success response, jobId:", jobId);
-				sendResponse({ success: true, jobId });
-			} catch (error) {
-				logError("❌ Failed to process user input:", error);
-
-				const errorResponse = {
-					success: false,
-					error:
-						error instanceof Error
-							? error.message
-							: "Failed to remember user input",
-				};
-
-				console.log("📤 Background sending error response:", errorResponse);
-				sendResponse(errorResponse);
-			}
-		})();
-
-		return true;
-	} else if (message.type === "JOB_COMPLETED") {
-		// Handle job completion notification from offscreen
-		stopLoading();
-		logInfo("📝 Job completed, updated loading state");
-		return false;
 	}
 });
 
 // Handle extension startup
 chrome.runtime.onStartup.addListener(async () => {
 	try {
-		logInfo("🚀 Memorall extension starting up...");
-
-		// Initialize shared storage service
-		await sharedStorageService.initialize();
-
-		// Initialize background job queue on startup
-		await backgroundJobQueue.initialize();
-
-		// Initialize LLM service to load current model selection on startup
-		logInfo("🦙 Initializing LLM service in background context on startup...");
-		await llmService.initialize();
-		logInfo("✅ LLM service initialized in background context on startup");
-
-		// Ensure offscreen document on startup (non-blocking)
-		ensureOffscreenDocument().catch((error) => {
-			logError("⚠️ Failed to create offscreen document during startup:", error);
-		});
-
-		logInfo("🚀 Memorall extension startup complete");
+		logInfo("🚀 Memorall extension startup - services already initialized");
+		// Note: Core services are initialized immediately when Service Worker loads
+		// This event is just for startup-specific tasks if needed in the future
 	} catch (error) {
-		logError("❌ Startup initialization error:", error);
+		logError("❌ Startup error:", error);
 	}
 });
 
@@ -676,70 +470,4 @@ async function openExtensionPopup(): Promise<void> {
 			message: "Click the Memorall toolbar icon to open the popup.",
 		});
 	}
-}
-
-// Signal the popup to navigate to Knowledge Graph when it is ready
-function triggerNavigateKnowledgeGraph(): void {
-	// Option 1: If popup signals readiness, react to it once.
-	let done = false;
-	const onReady = (message: { type: string }) => {
-		if (message?.type === "POPUP_READY" && !done) {
-			done = true;
-			chrome.runtime.onMessage.removeListener(onReady);
-			chrome.runtime.sendMessage({ type: "OPEN_KNOWLEDGE_GRAPH" }).catch(() => {
-				// Best-effort; background may not have an awaitable catch in MV3
-			});
-		}
-	};
-	chrome.runtime.onMessage.addListener(onReady);
-
-	// Option 2: Fallback — try sending after a short delay in case
-	// the popup doesn't emit readiness (older versions) but is open.
-	setTimeout(() => {
-		if (!done) {
-			chrome.runtime
-				.sendMessage({ type: "OPEN_KNOWLEDGE_GRAPH" })
-				.catch(() => {});
-		}
-	}, 200);
-
-	// Safety timer to remove listener after a while
-	setTimeout(() => {
-		if (!done) {
-			chrome.runtime.onMessage.removeListener(onReady);
-		}
-	}, 5000);
-}
-
-// Signal the popup to navigate to Remember page when it is ready
-function triggerNavigateToRemember(): void {
-	// Option 1: If popup signals readiness, react to it once.
-	let done = false;
-	const onReady = (message: { type: string }) => {
-		if (message?.type === "POPUP_READY" && !done) {
-			done = true;
-			chrome.runtime.onMessage.removeListener(onReady);
-			chrome.runtime.sendMessage({ type: "OPEN_REMEMBER_PAGE" }).catch(() => {
-				// Best-effort; background may not have an awaitable catch in MV3
-			});
-		}
-	};
-	chrome.runtime.onMessage.addListener(onReady);
-
-	// Option 2: Fallback — try sending after a short delay in case
-	// the popup doesn't emit readiness (older versions) but is open.
-	setTimeout(() => {
-		if (!done) {
-			chrome.runtime
-				.sendMessage({ type: "OPEN_REMEMBER_PAGE" })
-				.catch(() => {});
-		}
-	}, 200);
-
-	// Safety timer to remove listener after a while
-	setTimeout(() => {
-		if (!done) {
-			chrome.runtime.onMessage.removeListener(onReady);
-		}
-	}, 5000);
 }

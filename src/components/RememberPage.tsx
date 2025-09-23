@@ -6,6 +6,8 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Brain, Clock, Globe, Send, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { logError, logWarn } from "@/utils/logger";
+import { backgroundJob } from "@/services/background-jobs/background-job";
 
 interface RememberContext {
 	context?: string;
@@ -41,53 +43,58 @@ export const RememberPage: React.FC = () => {
 
 	const handleSubmit = async () => {
 		if (!userInput.trim()) {
-			console.log("⚠️ No user input provided");
 			return;
 		}
 
-		console.log("🚀 RememberPage handleSubmit called");
 		setIsSubmitting(true);
 
 		try {
-			console.log("🔄 Submitting user input:", userInput.trim());
-			console.log("🔄 Context:", rememberContext?.context);
-			console.log("🔄 Chrome runtime available:", !!chrome.runtime);
-
-			const messageData = {
-				type: "USER_INPUT_EXTRACTED",
-				data: {
-					userInput: userInput.trim(),
-					context: rememberContext?.context,
+			// Create user input data payload for remember-save job
+			const userInputData = {
+				sourceType: "user_input" as const,
+				sourceUrl: undefined,
+				originalUrl: rememberContext?.pageUrl,
+				title: `User Note: ${userInput.trim().substring(0, 50)}${userInput.trim().length > 50 ? "..." : ""}`,
+				rawContent: userInput.trim(),
+				cleanContent: userInput.trim(),
+				textContent: userInput.trim(),
+				sourceMetadata: {
 					inputMethod: "popup",
 					timestamp: new Date().toISOString(),
+					context: rememberContext?.context,
+					pageTitle: rememberContext?.pageTitle,
+					pageUrl: rememberContext?.pageUrl,
+				},
+				extractionMetadata: {
+					inputLength: userInput.trim().length,
+					hasContext: !!rememberContext?.context,
+					hasPageUrl: !!rememberContext?.pageUrl,
+					extractedAt: new Date().toISOString(),
 				},
 			};
-			console.log("📤 Sending message:", messageData);
 
-			// Send user input to background script
-			const response = await chrome.runtime.sendMessage(messageData);
+			// Use background-jobs service instead of direct background script message
+			const result = await backgroundJob.execute(
+				"remember-save",
+				userInputData,
+				{ stream: false }
+			);
 
-			console.log("📦 Response from background:", response);
+			if (result?.jobId && 'promise' in result) {
+				// Wait for job completion
+				const jobResult = await result.promise;
 
-			if (response?.success) {
-				console.log(
-					"✅ Successfully submitted, clearing context and navigating",
-				);
 				// Clear the context data from storage
 				await chrome.storage?.session?.remove?.(["rememberContext"]);
 
 				// Navigate to knowledge graph to see the result
 				navigate("/knowledge-graph");
 			} else {
-				console.error("❌ Failed to process user input:", response?.error);
-				alert(`Failed to save: ${response?.error || "Unknown error"}`);
+				logWarn("Failed to create remember-save job");
 				setIsSubmitting(false);
 			}
 		} catch (error) {
-			console.error("❌ Failed to process user input:", error);
-			alert(
-				`Error: ${error instanceof Error ? error.message : "Unknown error"}`,
-			);
+			logError("❌ Failed to process user input:", error);
 			setIsSubmitting(false);
 		}
 	};

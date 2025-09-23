@@ -1,15 +1,15 @@
 import React, { useEffect, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { llmService } from "@/services/llm";
-import { databaseService } from "@/services/database";
-import { schema } from "@/services/database/db";
+import { serviceManager } from "@/services";
 import { eq } from "drizzle-orm";
 import { Loader2, Shield, CheckCircle, Trash2 } from "lucide-react";
+import { LOCAL_SERVER_LLM_CONFIG_KEYS } from "@/config/local-server-llm";
+import { logWarn } from "@/utils/logger";
 
 interface LocalOpenAITabProps {
 	providerKind: "lmstudio" | "ollama";
-	onModelLoaded?: (modelId: string, provider: "openai") => void;
+	onModelLoaded?: (modelId: string, provider: "lmstudio" | "ollama") => void;
 }
 
 export const LocalOpenAITab: React.FC<LocalOpenAITabProps> = ({
@@ -34,7 +34,9 @@ export const LocalOpenAITab: React.FC<LocalOpenAITabProps> = ({
 	const [existingModelId, setExistingModelId] = useState("");
 
 	const configKey =
-		providerKind === "lmstudio" ? "lmstudio_config" : "ollama_config";
+		providerKind === "lmstudio"
+			? LOCAL_SERVER_LLM_CONFIG_KEYS.LLM_STUDIO
+			: LOCAL_SERVER_LLM_CONFIG_KEYS.OLLAMA;
 
 	useEffect(() => {
 		setBaseUrl(defaultBase);
@@ -48,11 +50,12 @@ export const LocalOpenAITab: React.FC<LocalOpenAITabProps> = ({
 		setError("");
 		try {
 			const row = (
-				await databaseService.use(({ db }) => {
+				await serviceManager.databaseService.use(({ db, schema }) => {
 					return db
 						.select()
 						.from(schema.configurations)
-						.where(eq(schema.configurations.key, configKey));
+						.where(eq(schema.configurations.key, configKey))
+						.limit(1);
 				})
 			)[0] as unknown as { data?: any; updatedAt?: Date } | undefined;
 			if (row?.data) {
@@ -77,7 +80,7 @@ export const LocalOpenAITab: React.FC<LocalOpenAITabProps> = ({
 		setError("");
 		try {
 			const existing = (
-				await databaseService.use(({ db }) => {
+				await serviceManager.databaseService.use(({ db, schema }) => {
 					return db
 						.select()
 						.from(schema.configurations)
@@ -85,7 +88,7 @@ export const LocalOpenAITab: React.FC<LocalOpenAITabProps> = ({
 				})
 			)[0];
 			if (existing) {
-				await databaseService.use(({ db }) => {
+				await serviceManager.databaseService.use(({ db, schema }) => {
 					return db
 						.update(schema.configurations)
 						.set({
@@ -95,7 +98,7 @@ export const LocalOpenAITab: React.FC<LocalOpenAITabProps> = ({
 						.where(eq(schema.configurations.key, configKey));
 				});
 			} else {
-				await databaseService.use(({ db }) => {
+				await serviceManager.databaseService.use(({ db, schema }) => {
 					return db.insert(schema.configurations).values({
 						key: configKey,
 						data: { baseUrl: baseUrl.trim(), modelId: modelId.trim() },
@@ -119,23 +122,42 @@ export const LocalOpenAITab: React.FC<LocalOpenAITabProps> = ({
 		try {
 			// Use correct service name instead of hardcoded "openai"
 			const serviceName = providerKind;
-			if (llmService.has(serviceName)) llmService.remove(serviceName);
+			if (serviceManager.llmService.has(serviceName)) {
+				serviceManager.llmService.remove(serviceName);
+			}
 
 			const serviceConfig = {
 				type: providerKind,
 				baseURL: existingBaseUrl,
-			} as any;
+			};
 
 			// Create service in current context
-			await llmService.create(serviceName, serviceConfig);
+			await serviceManager.llmService.create(serviceName, serviceConfig);
 
-			// CRITICAL: Sync service to offscreen context
-			await llmService.ensureServiceInOffscreen(serviceName, serviceConfig);
+			let modelExists = false;
+			try {
+				const response = await serviceManager.llmService.modelsFor(serviceName);
+				modelExists = !!response?.data?.length;
+			} catch (modelsError) {
+				logWarn(
+					`Failed to fetch models for ${serviceName} after connect:`,
+					modelsError,
+				);
+			}
 
-			const mid = existingModelId || "local-model";
-			await llmService.setCurrentModel(mid, providerKind as any);
-			setView("loaded");
-			onModelLoaded?.(mid, "openai");
+			const trimmedModelId = existingModelId.trim();
+			if (trimmedModelId) {
+				await serviceManager.llmService.setCurrentModel(
+					trimmedModelId,
+					providerKind,
+					providerKind,
+				);
+				onModelLoaded?.(trimmedModelId, providerKind);
+			}
+			if (trimmedModelId || modelExists) {
+				onModelLoaded?.(trimmedModelId, providerKind);
+			}
+			setView(trimmedModelId || modelExists ? "loaded" : "has-config");
 		} catch (e) {
 			const msg = e instanceof Error ? e.message : "Unknown error";
 			setError(`Failed to connect: ${msg}`);
@@ -149,12 +171,16 @@ export const LocalOpenAITab: React.FC<LocalOpenAITabProps> = ({
 		setBusy(true);
 		setError("");
 		try {
-			await databaseService.use(({ db }) => {
+			await serviceManager.databaseService.use(({ db, schema }) => {
 				return db
 					.delete(schema.configurations)
 					.where(eq(schema.configurations.key, configKey));
 			});
-			if (llmService.has("openai")) llmService.remove("openai");
+			const serviceName = providerKind;
+			if (serviceManager.llmService.has(serviceName)) {
+				serviceManager.llmService.remove(serviceName);
+			}
+
 			setView("no-config");
 		} catch (e) {
 			const msg = e instanceof Error ? e.message : "Unknown error";

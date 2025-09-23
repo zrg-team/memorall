@@ -2,511 +2,532 @@
 
 ## 📋 Overview
 
-The Database Service is a core component of Memorall that provides persistent storage for conversations, knowledge graphs, and vector embeddings. It uses PGlite (PostgreSQL in the browser) with vector extensions to enable semantic search, relationship tracking, and AI-powered memory retrieval. The service is designed for complete offline operation with IndexedDB persistence.
+The Database Service provides a dual-mode architecture for persistent storage using PGlite (PostgreSQL in the browser) with RPC bridge capabilities. It supports both **Main Mode** with direct database access and **Proxy Mode** for cross-context communication, enabling complete offline operation with seamless integration across extension contexts.
 
-## 🏗️ Architecture
+## 🏗️ Dual-Mode Architecture
 
-### 🔧 Database Architecture
+### 🔧 Architecture Overview
 
 ```mermaid
 graph TD
-    A[Application] --> B[Database Service]
-    B --> C[PGlite Instance]
-    C --> D[Drizzle ORM]
-    
-    D --> E[Conversations Table]
-    D --> F[Messages Table]
-    D --> G[Knowledge Graph]
-    
-    G --> H[Sources Table]
-    G --> I[Nodes Table]
-    G --> J[Edges Table]
-    G --> K[Junction Tables]
-    
-    C --> L[Vector Extensions]
-    L --> M[pgvector]
-    L --> N[uuid-ossp]
-    
-    C --> O[IndexedDB Storage]
-    O --> P[Browser Persistence]
+  %% UI Context (Proxy Mode)
+  UI[UI Surfaces<br/>popup.html, standalone.html] -->|Proxy Mode| PDB[Proxy Database Service]
+  PDB -->|RPC Messages| RPT[RPC Transport<br/>Chrome Port]
+
+  %% Offscreen Context (Main Mode)
+  OFF[Offscreen Document] -->|Main Mode| MDB[Main Database Service]
+  MDB -->|Direct Access| PG[PGlite Instance]
+
+  %% RPC Communication
+  RPT -->|Chrome Runtime| RPC[RPC Handler]
+  RPC -->|Forward Queries| PG
+
+  %% Database Layer
+  PG --> D[Drizzle ORM]
+  D --> E[Database Tables]
+
+  %% Storage
+  E --> IDB[(IndexedDB<br/>Browser Storage)]
+
+  %% Extensions
+  PG --> VE[Vector Extensions<br/>pgvector, uuid-ossp, pg_trgm]
 ```
 
-The Database Service provides:
-- **PGlite**: PostgreSQL running in the browser via WebAssembly
-- **Drizzle ORM**: Type-safe database operations
-- **Vector Extensions**: Semantic search capabilities
-- **Knowledge Graph**: Structured relationship storage
+### 🎯 Mode Characteristics
 
-## 🛠️ Database Entities
+| Aspect | **Main Mode** | **Proxy Mode** |
+|--------|---------------|----------------|
+| **Context** | Offscreen Document | UI Surfaces (popup, standalone) |
+| **Database Access** | Direct PGlite instance | RPC forwarding |
+| **Performance** | Fast (direct) | Slight latency (RPC overhead) |
+| **Features** | Full functionality | Same interface via proxy |
+| **Migrations** | Handles migrations | No migration responsibility |
+| **Resource Usage** | High (loaded models/DB) | Low (lightweight proxy) |
 
-### 💬 Conversations & Messages
+## 🔄 Service Modes
 
-Stores chat history and user interactions with AI agents.
+### 🖥️ Main Mode (Offscreen Document)
 
-**Key Features:**
-- Conversation threading and organization
-- Message embeddings for semantic search
-- JSONB metadata for flexible data storage
-- Timestamp tracking for conversation history
-
-**Entities:**
-- **Conversations**: Chat sessions with titles and metadata
-- **Messages**: Individual messages with role, content, and embeddings
-
-### 🕸️ Knowledge Graph
-
-Represents structured knowledge as interconnected nodes and relationships.
-
-**Key Features:**
-- Entity-relationship modeling
-- Temporal data with validity periods  
-- Provenance tracking and weight caching
-- Vector embeddings for semantic similarity
-- Flexible attributes via JSONB
-
-**Entities:**
-- **Sources**: External references (webpages, documents, etc.)
-- **Nodes**: Knowledge entities (concepts, people, objects)
-- **Edges**: Relationships between nodes with temporal validity
-- **Junction Tables**: Many-to-many relationships between sources and graph entities
-
-### 🔍 Vector Search
-
-Enables semantic search across all stored content using embeddings.
-
-**Key Features:**
-- 768-dimensional vector storage
-- Cosine similarity search
-- Multi-table vector queries
-- Integration with embedding service
-
-## 📚 Entity Details
-
-### 🗣️ Conversations Configuration
-- **id**: Auto-incrementing primary key
-- **title**: Optional conversation title
-- **metadata**: JSONB for flexible data
-- **timestamps**: Creation and update tracking
-
-### 📝 Messages Configuration  
-- **id**: Auto-incrementing primary key
-- **conversationId**: Foreign key to conversations
-- **role**: 'system', 'user', 'assistant', 'developer'
-- **content**: Message text content
-- **embedding**: 768-dimensional vector for semantic search
-- **metadata**: JSONB for additional data
-
-### 📚 Sources Configuration
-- **id**: UUID primary key
-- **targetType**: Type of external source
-- **targetId**: External identifier
-- **name**: Human-readable source name
-- **weight**: Importance/relevance weight
-- **embedding**: Vector representation of source
-
-### 🔘 Nodes Configuration
-- **id**: UUID primary key  
-- **nodeType**: Category of knowledge entity
-- **name**: Entity name
-- **summary**: Optional description
-- **attributes**: JSONB for flexible properties
-- **embedding**: Vector representation
-
-### 🔗 Edges Configuration
-- **id**: UUID primary key
-- **sourceId/destinationId**: Node references
-- **edgeType**: Relationship type
-- **factText**: Natural language description
-- **temporal fields**: validAt, invalidAt, recordedAt
-- **embeddings**: Separate vectors for facts and types
-
-## 🔗 Integration with Memorall
-
-The database service integrates with other Memorall services to provide persistent storage for AI conversations, knowledge extraction, and semantic memory retrieval.
-
-## 📊 Performance Characteristics
-
-| Component | Initialization Time | Query Speed | Storage | Network Required | Persistence |
-|-----------|-------------------|-------------|---------|------------------|-------------|
-| PGlite | 2-5s (first time) | Fast | Browser IndexedDB | No | Local |
-| Vector Search | <100ms | Medium | Memory + Disk | No | Persistent |
-| Knowledge Graph | <50ms | Fast | Disk | No | Persistent |
-| Conversations | <10ms | Very Fast | Disk | No | Persistent |
-
-## ⚠️ Error Handling
-
-The database service implements comprehensive error handling:
-
-1. **Auto-initialization**: Database and tables created automatically on first use
-2. **Transaction Safety**: Atomic operations with rollback on failure  
-3. **Schema Migration**: Automatic table creation and index management
-4. **Error Recovery**: Graceful handling of connection and query failures
-
-## 🔒 Data Safety & Persistence
-
-The service ensures data integrity through:
-- **Local Storage**: All data stays in browser IndexedDB
-- **Transaction Management**: ACID compliance for data operations
-- **Backup Ready**: Easy export/import capabilities  
-- **Privacy First**: No data transmission to external servers
-
-## 📚 Usage Examples
-
-### 🚀 Basic Database Operations
+The authoritative database instance with full functionality.
 
 ```typescript
-import { databaseService } from '@/services/database/database-service';
+// Initialize in main mode (offscreen document)
+await databaseService.initialize({ mode: DatabaseMode.MAIN });
 
-// Using the recommended 'use' function
-const conversation = await databaseService.use(async ({ db, schema }) => {
-  // Create a conversation
-  const [conversation] = await db.insert(schema.conversations).values({
-    title: 'Learning React Hooks',
-    metadata: { topic: 'development', difficulty: 'intermediate' }
-  }).returning();
-
-  // Add messages to conversation
-  await db.insert(schema.messages).values({
-    conversationId: conversation.id,
-    role: 'user',
-    content: 'What are React hooks?',
-    metadata: { timestamp: new Date() }
-  });
-  
-  return conversation;
+// Direct database access
+const result = await databaseService.use(async ({ db, schema }) => {
+  return await db.select().from(schema.conversations);
 });
 ```
 
-### ⭐ Vector Search Operations
+**Features:**
+- ✅ **Real PGlite Instance**: Direct PostgreSQL access
+- ✅ **Migration Handling**: Automatic schema updates
+- ✅ **Full Performance**: No RPC overhead
+- ✅ **Vector Operations**: Direct embedding storage/retrieval
+- ✅ **Transaction Support**: Full ACID compliance
+
+### 🎨 Proxy Mode (UI Contexts)
+
+Lightweight proxy that forwards operations to the main instance.
 
 ```typescript
-import { embeddingService } from '@/services/embedding/embedding-service';
-import { sql } from 'drizzle-orm';
+// Initialize in proxy mode (UI contexts)
+await databaseService.initialize({ mode: DatabaseMode.PROXY });
 
-// Store message with embedding
-async function storeMessageWithEmbedding(conversationId: number, content: string) {
-  const embedding = await embeddingService.textToVector(content);
-  
-  return await databaseService.use(async ({ db, schema }) => {
-    return await db.insert(schema.messages).values({
-      conversationId,
-      role: 'user', 
-      content,
-      embedding
-    }).returning();
-  });
+// Same interface, RPC forwarding
+const result = await databaseService.use(async ({ db, schema }) => {
+  return await db.select().from(schema.conversations);
+});
+```
+
+**Features:**
+- 🚀 **Lightweight**: Minimal resource usage
+- 🔄 **RPC Forwarding**: Transparent operation forwarding
+- 🎯 **Same Interface**: Identical API to main mode
+- ⚡ **Responsive UI**: Non-blocking database operations
+- 🔗 **Auto-Connection**: Handles RPC connection management
+
+## 🌉 Bridge System
+
+### 🔧 RPC Bridge Architecture
+
+The bridge system enables seamless communication between proxy and main database instances.
+
+```mermaid
+sequenceDiagram
+  participant UI as UI Component
+  participant PS as Proxy Service
+  participant RT as RPC Transport
+  participant RH as RPC Handler
+  participant MS as Main Service
+  participant DB as PGlite Database
+
+  UI->>PS: db.select().from(schema.conversations)
+  PS->>RT: RPC Request (query operation)
+  RT->>RH: Chrome Runtime Message
+  RH->>MS: Forward to Main Service
+  MS->>DB: Execute Query
+  DB->>MS: Return Results
+  MS->>RH: Send Response
+  RH->>RT: RPC Response
+  RT->>PS: Return Data
+  PS->>UI: Query Results
+```
+
+### 📡 RPC Transport Layer
+
+**Chrome Port Transport** (`src/services/database/bridges/chrome-port-rpc.ts`):
+- High-performance structured cloning
+- Automatic reconnection with exponential backoff
+- Connection pooling and message queuing
+- Type-safe request/response handling
+
+**Proxy Driver** (`src/services/database/bridges/proxy-driver.ts`):
+- PGlite-compatible interface
+- Request timeout management
+- Transaction wrapper support
+- Progress tracking for long operations
+
+### 🛠️ RPC Operations
+
+| Operation | Description | Payload | Response |
+|-----------|-------------|---------|----------|
+| `health` | Database health check | None | `{ status: "ok" }` |
+| `query` | SELECT/INSERT/UPDATE operations | `{ sql, params, rowMode }` | `{ rows, rowCount }` |
+| `exec` | DDL operations | `{ sql }` | None |
+| `transaction` | Transaction wrapper | `{ stmts[] }` | Results array |
+| `close` | Connection cleanup | None | None |
+
+## 🗄️ Database Entities
+
+### 💬 Conversations & Messages
+- **Conversations**: Chat sessions with metadata
+- **Messages**: Individual messages with embeddings and role information
+
+### 🧠 Remembered Content
+- **RememberedContent**: Captured information from various sources
+- Supports: `webpage`, `selection`, `user_input`, `raw_text`
+- Vector embeddings for semantic search
+- Flexible metadata storage via JSONB
+
+### 🕸️ Knowledge Graph
+- **Sources**: External references and provenance
+- **Nodes**: Knowledge entities (concepts, people, objects)
+- **Edges**: Relationships with temporal validity
+- **Junction Tables**: Many-to-many relationships
+
+### 🔐 Security & Configuration
+- **Encryption**: Sensitive data encryption
+- **Configurations**: Application settings and preferences
+
+## 📚 Usage Examples
+
+### 🚀 Cross-Context Operations
+
+```typescript
+// UI Component (Proxy Mode)
+import { serviceManager } from '@/services';
+
+// Initialize with proxy mode
+await serviceManager.initialize({ proxy: true });
+const databaseService = serviceManager.getDatabaseService();
+
+// Same interface works transparently
+const conversations = await databaseService.use(async ({ db, schema }) => {
+  return await db
+    .select()
+    .from(schema.conversations)
+    .orderBy(desc(schema.conversations.createdAt))
+    .limit(10);
+});
+```
+
+```typescript
+// Offscreen Document (Main Mode)
+import { serviceManager } from '@/services';
+
+// Initialize with main mode
+await serviceManager.initialize({ proxy: false });
+const databaseService = serviceManager.getDatabaseService();
+
+// Direct database access
+const result = await databaseService.use(async ({ db, schema }) => {
+  // This runs directly on PGlite
+  return await db.insert(schema.conversations).values({
+    title: 'New Conversation',
+    metadata: { source: 'offscreen' }
+  }).returning();
+});
+```
+
+### 🔄 Mode-Aware Development
+
+```typescript
+// Check current mode
+const config = databaseService.getConfig();
+if (config?.mode === DatabaseMode.MAIN) {
+  console.log('Running in main mode - direct database access');
+} else {
+  console.log('Running in proxy mode - RPC forwarding');
 }
 
-// Search similar messages
-async function findSimilarMessages(query: string, limit: number = 10) {
+// Mode-specific optimizations
+if (databaseService.isMainMode()) {
+  // Heavy operations only in main mode
+  await performBulkVectorOperations();
+} else {
+  // Lightweight operations in proxy mode
+  await fetchSummaryData();
+}
+```
+
+### 🌉 Bridge Configuration
+
+```typescript
+// Custom proxy configuration
+await databaseService.initialize({
+  mode: DatabaseMode.PROXY,
+  proxyOptions: {
+    channelName: 'custom-db-rpc',  // Custom RPC channel
+  }
+});
+
+// Main mode with custom data directory
+await databaseService.initialize({
+  mode: DatabaseMode.MAIN,
+  dataDir: 'idb://custom-memorall-db'
+});
+```
+
+### 📊 Vector Operations Across Modes
+
+```typescript
+// Vector search works identically in both modes
+async function semanticSearch(query: string, limit: number = 5) {
   const queryVector = await embeddingService.textToVector(query);
-  
+
   return await databaseService.use(async ({ db, schema }) => {
     return await db
       .select()
-      .from(schema.messages)
+      .from(schema.rememberedContent)
       .orderBy(sql`embedding <=> ${queryVector}`)
       .limit(limit);
   });
 }
+
+// Works in UI (proxy mode)
+const resultsFromUI = await semanticSearch('AI concepts');
+
+// Works in offscreen (main mode)
+const resultsFromOffscreen = await semanticSearch('machine learning');
 ```
 
-### 🕸️ Knowledge Graph Operations
+### 🔄 Transaction Handling
 
 ```typescript
-// Create knowledge nodes and relationships
-const result = await databaseService.use(async ({ db, schema }) => {
-  // Create knowledge nodes
-  const [personNode] = await db.insert(schema.nodes).values({
-    nodeType: 'person',
-    name: 'Alan Turing',
-    summary: 'British mathematician and computer scientist',
-    attributes: { 
-      birthYear: 1912, 
-      field: 'computer science',
-      nationality: 'British' 
-    }
-  }).returning();
-
-  const [conceptNode] = await db.insert(schema.nodes).values({
-    nodeType: 'concept',
-    name: 'Turing Machine',
-    summary: 'Abstract computational model'
-  }).returning();
-
-  // Create relationship edge
-  const [edge] = await db.insert(schema.edges).values({
-    sourceId: personNode.id,
-    destinationId: conceptNode.id,
-    edgeType: 'invented',
-    factText: 'Alan Turing invented the concept of Turing Machine',
-    validAt: new Date('1936-01-01'),
-    attributes: { confidence: 0.95 }
-  }).returning();
-  
-  return { personNode, conceptNode, edge };
-});
-```
-
-### 🔍 Complex Queries
-
-```typescript
-import { eq } from 'drizzle-orm';
-
-// Find conversations about specific topics
-async function findConversationsByTopic(topic: string) {
+// Transactions work across both modes
+async function createConversationWithInitialMessage(title: string, content: string) {
   return await databaseService.use(async ({ db, schema }) => {
-    return await db
-      .select({
-        conversation: schema.conversations,
-        messageCount: sql<number>`count(${schema.messages.id})`.as('message_count')
-      })
-      .from(schema.conversations)
-      .leftJoin(schema.messages, eq(schema.conversations.id, schema.messages.conversationId))
-      .where(sql`${schema.conversations.metadata}->>'topic' = ${topic}`)
-      .groupBy(schema.conversations.id);
-  });
-}
+    return await db.transaction(async (tx) => {
+      // Create conversation
+      const [conversation] = await tx
+        .insert(schema.conversations)
+        .values({ title })
+        .returning();
 
-// Knowledge graph traversal
-async function findRelatedConcepts(nodeId: string, edgeType?: string) {
-  return await databaseService.use(async ({ db, schema }) => {
-    let query = db
-      .select({
-        node: schema.nodes,
-        edge: schema.edges,
-        relationship: sql<string>`${schema.edges.edgeType}`.as('relationship')
-      })
-      .from(schema.edges)
-      .innerJoin(schema.nodes, eq(schema.nodes.id, schema.edges.destinationId))
-      .where(eq(schema.edges.sourceId, nodeId));
-      
-    if (edgeType) {
-      query = query.where(eq(schema.edges.edgeType, edgeType));
-    }
-    
-    return await query;
-  });
-}
-```
-
-### 📊 Analytics and Insights
-
-```typescript
-// Conversation analytics
-async function getConversationStats() {
-  return await databaseService.use(async ({ db, schema }) => {
-    return await db
-      .select({
-        totalConversations: sql<number>`count(*)`.as('total'),
-        avgMessagesPerConversation: sql<number>`avg(message_counts.count)`.as('avg_messages'),
-        mostActiveDay: sql<string>`date_trunc('day', created_at)`.as('day')
-      })
-      .from(schema.conversations)
-      .leftJoin(
-        db.select({
-          conversationId: schema.messages.conversationId,
-          count: sql<number>`count(*)`.as('count')
-        }).from(schema.messages).groupBy(schema.messages.conversationId).as('message_counts'),
-        eq(schema.conversations.id, sql`message_counts.conversation_id`)
-      );
-  });
-}
-
-// Knowledge graph metrics
-async function getKnowledgeGraphStats() {
-  return await databaseService.use(async ({ db, schema }) => {
-    const nodeStats = await db
-      .select({
-        nodeType: schema.nodes.nodeType,
-        count: sql<number>`count(*)`.as('count')
-      })
-      .from(schema.nodes)
-      .groupBy(schema.nodes.nodeType);
-      
-    const edgeStats = await db
-      .select({
-        edgeType: schema.edges.edgeType,
-        count: sql<number>`count(*)`.as('count')
-      })
-      .from(schema.edges)
-      .where(eq(schema.edges.isCurrent, true))
-      .groupBy(schema.edges.edgeType);
-      
-    return { nodeStats, edgeStats };
-  });
-}
-```
-
-### ⚠️ Error Handling
-
-```typescript
-// Robust database operations with transactions
-async function safeCreateConversation(title: string, metadata: any) {
-  try {
-    return await databaseService.use(async ({ transaction }) => {
-      return await transaction(async ({ db, schema }) => {
-        const [conversation] = await db.insert(schema.conversations).values({
-          title,
-          metadata
-        }).returning();
-        
-        // Initialize with system message
-        await db.insert(schema.messages).values({
+      // Add initial message
+      const [message] = await tx
+        .insert(schema.messages)
+        .values({
           conversationId: conversation.id,
-          role: 'system',
-          content: 'How can I help you today?'
-        });
-        
-        return conversation;
-      });
+          role: 'user',
+          content
+        })
+        .returning();
+
+      return { conversation, message };
     });
-  } catch (error) {
-    console.error('Failed to create conversation:', error);
-    throw new Error(`Conversation creation failed: ${error.message}`);
+  }, { transaction: true });
+}
+```
+
+## 🎯 Bridge Development
+
+### 📋 Custom Transport Implementation
+
+```typescript
+// Create custom RPC transport
+import type { RpcTransport, RpcRequest, RpcResponse } from './bridges/types';
+
+class CustomTransport implements RpcTransport {
+  post(msg: RpcRequest): void {
+    // Send message via custom channel
+    customChannel.send(msg);
+  }
+
+  subscribe(handler: (msg: RpcResponse) => void): () => void {
+    // Subscribe to responses
+    customChannel.onMessage(handler);
+    return () => customChannel.offMessage(handler);
   }
 }
 
-// Health check using service
-async function checkDatabaseHealth() {
-  try {
-    const isHealthy = await databaseService.healthCheck();
-    return { healthy: isHealthy, message: isHealthy ? 'Database operational' : 'Database not healthy' };
-  } catch (error) {
-    return { healthy: false, error: error.message };
+// Use custom transport
+const customProxy = new PGliteSharedProxy(new CustomTransport());
+```
+
+### 🔧 RPC Handler Extension
+
+```typescript
+// Extend RPC handler for custom operations
+class CustomDatabaseRpcHandler extends DatabaseRpcHandler {
+  protected async handleMessage(request: RpcRequest): Promise<void> {
+    // Handle custom operations
+    if (request.op === 'custom-bulk-insert') {
+      await this.handleBulkInsert(request.payload);
+      return;
+    }
+
+    // Delegate to parent for standard operations
+    return super.handleMessage(request);
+  }
+
+  private async handleBulkInsert(payload: any): Promise<void> {
+    // Custom bulk insert logic
+    const pglite = getPGLite();
+    await pglite.transaction(async (tx) => {
+      // Bulk operation
+    });
   }
 }
 ```
 
 ## 📝 API Reference
 
-### 🏢 DatabaseService
+### 🏢 DatabaseService Core
 
-#### 🔧 Core Methods
 ```typescript
-// Singleton access
-static getInstance(): DatabaseService
+// Initialization with mode
+async initialize(config?: DatabaseConfig): Promise<void>
 
-// Initialization
-async initialize(): Promise<void>
-isReady(): boolean
+interface DatabaseConfig {
+  mode: DatabaseMode;
+  dataDir?: string;
+  proxyOptions?: {
+    channelName?: string;
+  };
+}
 
-// Main usage method
-async use<T>(
-  fn: (ctx: {
-    db: ReturnType<typeof getDB>;
-    query: ReturnType<typeof getDB>['query'];
-    schema: typeof schema;
-    raw: (sql: string, params?: any[]) => Promise<any>;
-    transaction: <R>(cb: (ctx: {...}) => Promise<R>) => Promise<R>;
-  }) => Promise<T> | T,
-  options?: { transactional?: boolean }
-): Promise<T>
+// Mode checking
+getMode(): DatabaseMode | null
+isMainMode(): boolean
+isProxyMode(): boolean
+getConfig(): DatabaseConfig | null
 ```
 
-#### ℹ️ Utility Methods
+### 🌉 Bridge Components
+
 ```typescript
-async getDatabase(): Promise<ReturnType<typeof getDB>>
-async getPGLiteInstance(): Promise<PGlite>
-async getTable<K>(tableName: K): Promise<TableRegistry[K]['table']>
-async getStatus(): Promise<DatabaseStatus>
-async healthCheck(): Promise<boolean>
-async close(): Promise<void>
+// RPC Transport Interface
+interface RpcTransport {
+  post(msg: RpcRequest): void;
+  subscribe(handler: (msg: RpcResponse) => void): () => void;
+}
+
+// Proxy Driver Interface
+interface PGliteLike {
+  query<R>(sql: string, params?: unknown[], options?: QueryOptions): Promise<QueryResult<R>>;
+  exec(sql: string): Promise<void>;
+  transaction<T>(fn: TransactionFn<T>): Promise<T>;
+  waitReady: Promise<void>;
+  close(): Promise<void>;
+}
 ```
 
 ### 📊 Type Definitions
 
-All entities export both select and insert types:
-- `Conversation` / `NewConversation`
-- `Message` / `NewMessage`  
-- `Source` / `NewSource`
-- `Node` / `NewNode`
-- `Edge` / `NewEdge`
-- `SourceNode` / `NewSourceNode`
-- `SourceEdge` / `NewSourceEdge`
-
-## 🏆 Best Practices
-
-### 1. 🚀 Initialization Strategy
 ```typescript
-// Initialize database service at app startup
-async function initializeApp() {
+// Database modes
+enum DatabaseMode {
+  MAIN = "main",
+  PROXY = "proxy"
+}
+
+// RPC operation types
+type RpcOp = 'health' | 'query' | 'exec' | 'transaction' | 'close';
+
+// All entity types support both modes
+type Conversation = typeof schema.conversations.$inferSelect;
+type NewConversation = typeof schema.conversations.$inferInsert;
+// ... (all other entity types)
+```
+
+## ⚠️ Error Handling & Recovery
+
+### 🛡️ Connection Recovery
+
+```typescript
+// Automatic reconnection handling
+try {
+  const result = await databaseService.use(async ({ db, schema }) => {
+    return await db.select().from(schema.conversations);
+  });
+} catch (error) {
+  if (error.message.includes('RPC timeout')) {
+    // Connection lost - proxy will auto-reconnect
+    console.log('Connection lost, retrying...');
+    // Retry logic here
+  }
+}
+```
+
+### 🔧 Mode-Specific Error Handling
+
+```typescript
+// Handle mode-specific issues
+async function robustDatabaseOperation() {
   try {
-    await databaseService.initialize();
-    console.log('✅ Database service initialized successfully');
-    
-    // Run health check
-    const isHealthy = await databaseService.healthCheck();
-    if (!isHealthy) {
-      throw new Error('Database health check failed');
-    }
-    
-    return databaseService;
+    return await databaseService.use(async ({ db, schema }) => {
+      return await db.select().from(schema.conversations);
+    });
   } catch (error) {
-    console.error('❌ Database initialization failed:', error);
+    if (databaseService.isProxyMode() && error.message.includes('RPC')) {
+      // RPC-specific error handling
+      console.error('Proxy communication failed:', error);
+      throw new Error('Database communication error');
+    } else if (databaseService.isMainMode()) {
+      // Direct database error handling
+      console.error('Database operation failed:', error);
+      throw new Error('Database operation error');
+    }
     throw error;
   }
 }
 ```
 
-### 2. 🔍 Efficient Queries
+## 🏆 Best Practices
+
+### 1. 🎯 Mode Selection Guidelines
+
 ```typescript
-import { eq, desc } from 'drizzle-orm';
+// Use Main Mode for:
+// - Offscreen document contexts
+// - Heavy data processing
+// - Migration handling
+// - Bulk operations
 
-// Use indexes for better performance
-const messages = await databaseService.use(async ({ db, schema }) => {
-  return await db
-    .select()
-    .from(schema.messages)
-    .where(eq(schema.messages.conversationId, conversationId)) // Uses index
-    .orderBy(desc(schema.messages.createdAt));
-});
-
-// Batch operations when possible
-const newMessages = await databaseService.use(async ({ db, schema }) => {
-  return await db.insert(schema.messages).values([
-    { conversationId, role: 'user', content: 'First message' },
-    { conversationId, role: 'assistant', content: 'Response' }
-  ]).returning();
-});
+// Use Proxy Mode for:
+// - UI contexts (popup, standalone)
+// - Interactive operations
+// - Real-time queries
+// - User-facing features
 ```
 
-### 3. 💾 Transaction Management
+### 2. ⚡ Performance Optimization
+
 ```typescript
-// Use transactions for related operations
-async function createConversationWithMessages(title: string, initialMessages: any[]) {
-  return await databaseService.use(async ({ transaction }) => {
-    return await transaction(async ({ db, schema }) => {
-      const [conversation] = await db.insert(schema.conversations)
-        .values({ title }).returning();
-        
-      await db.insert(schema.messages).values(
-        initialMessages.map(msg => ({ 
-          ...msg, 
-          conversationId: conversation.id 
-        }))
-      );
-      
-      return conversation;
-    });
+// Batch operations in main mode
+if (databaseService.isMainMode()) {
+  // Efficient bulk operations
+  await databaseService.use(async ({ db, schema }) => {
+    return await db.insert(schema.messages).values(bulkMessages);
   });
-}
-```
-
-### 4. 🔍 Vector Search Optimization
-```typescript
-// Pre-compute embeddings for better performance
-const embeddingCache = new Map<string, number[]>();
-
-async function cachedTextToVector(text: string): Promise<number[]> {
-  if (embeddingCache.has(text)) {
-    return embeddingCache.get(text)!;
+} else {
+  // Smaller operations in proxy mode
+  for (const message of messages) {
+    await databaseService.use(async ({ db, schema }) => {
+      return await db.insert(schema.messages).values(message);
+    });
   }
-  
-  const vector = await embeddingService.textToVector(text);
-  embeddingCache.set(text, vector);
-  return vector;
 }
 ```
 
-This documentation provides a comprehensive overview of the database service architecture, entities, and usage patterns for building persistent, offline-capable applications with Memorall.
+### 3. 🔄 Context Awareness
+
+```typescript
+// Design components to work in both modes
+class ConversationManager {
+  async createConversation(title: string) {
+    // This works in both main and proxy modes
+    return await databaseService.use(async ({ db, schema }) => {
+      return await db.insert(schema.conversations)
+        .values({ title })
+        .returning();
+    });
+  }
+
+  async getOptimizedData() {
+    if (databaseService.isMainMode()) {
+      // Complex queries in main mode
+      return await this.getDetailedAnalytics();
+    } else {
+      // Simplified data for UI
+      return await this.getSummaryData();
+    }
+  }
+}
+```
+
+### 4. 🛡️ Resource Management
+
+```typescript
+// Proper cleanup in both modes
+class DatabaseManager {
+  async initialize() {
+    const isOffscreen = typeof window !== 'undefined' &&
+                       window.location.pathname.includes('offscreen');
+
+    await databaseService.initialize({
+      mode: isOffscreen ? DatabaseMode.MAIN : DatabaseMode.PROXY
+    });
+  }
+
+  async cleanup() {
+    // Cleanup works in both modes
+    await databaseService.close();
+  }
+}
+```
+
+This documentation provides comprehensive coverage of the dual-mode database architecture, bridge system, and best practices for building robust cross-context database applications with Memorall.

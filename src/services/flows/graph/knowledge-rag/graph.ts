@@ -6,6 +6,11 @@ import type { ChatCompletionResponse, ChatMessage } from "@/types/openai";
 import { logError, logInfo } from "@/utils/logger";
 import { eq, or, like, desc } from "drizzle-orm";
 import type { Node, Edge } from "@/services/database/db";
+import {
+	trigramSearchNodes,
+	trigramSearchEdges,
+	combineSearchResultsWithTrigram,
+} from "@/utils/trigram-search";
 
 // Types for vector search results with similarity scores
 interface NodeWithSimilarity extends Node {
@@ -159,7 +164,15 @@ export class KnowledgeRAGFlow extends GraphBase<
 			let relevantNodes: KnowledgeRAGState["relevantNodes"] = [];
 			let relevantEdges: KnowledgeRAGState["relevantEdges"] = [];
 
-			// 1. First query: Direct entity name/fact search using SQL
+			const TOTAL_NODE_LIMIT = 15;
+			const TOTAL_EDGE_LIMIT = 20;
+			const WEIGHTS = {
+				sqlPercentage: 60,
+				trigramPercentage: 40,
+				vectorPercentage: 0,
+			};
+
+			// 1. SQL search for nodes
 			const sqlNodes = await database.use(async ({ db, schema }) => {
 				if (state.extractedEntities.length === 0) return [];
 
@@ -185,9 +198,10 @@ export class KnowledgeRAGFlow extends GraphBase<
 					.from(schema.nodes)
 					.where(or(...entitySearchConditions))
 					.orderBy(desc(schema.nodes.createdAt))
-					.limit(15);
+					.limit(Math.floor((TOTAL_NODE_LIMIT * WEIGHTS.sqlPercentage) / 100));
 			});
 
+			// 2. SQL search for edges
 			const sqlEdges = await database.use(async ({ db, schema }) => {
 				if (state.extractedEntities.length === 0) return [];
 
@@ -219,16 +233,54 @@ export class KnowledgeRAGFlow extends GraphBase<
 					.from(schema.edges)
 					.where(or(...factSearchConditions))
 					.orderBy(desc(schema.edges.createdAt))
-					.limit(15);
+					.limit(Math.floor((TOTAL_EDGE_LIMIT * WEIGHTS.sqlPercentage) / 100));
 			});
 
-			// 2. If direct search yields few results, fallback to vector search
+			// 3. Trigram search for nodes
+			let trigramNodeResults: Awaited<ReturnType<typeof trigramSearchNodes>> =
+				[];
+			if (state.extractedEntities.length > 0) {
+				try {
+					trigramNodeResults = await trigramSearchNodes(
+						database,
+						state.extractedEntities,
+						Math.floor((TOTAL_NODE_LIMIT * WEIGHTS.trigramPercentage) / 100),
+						{ threshold: 0.1 },
+					);
+				} catch (error) {
+					logError("[KNOWLEDGE_RAG] Trigram search for nodes failed:", error);
+				}
+			}
+
+			// 4. Trigram search for edges
+			let trigramEdgeResults: Awaited<ReturnType<typeof trigramSearchEdges>> =
+				[];
+			if (state.extractedEntities.length > 0) {
+				try {
+					trigramEdgeResults = await trigramSearchEdges(
+						database,
+						state.extractedEntities,
+						Math.floor((TOTAL_EDGE_LIMIT * WEIGHTS.trigramPercentage) / 100),
+						{ threshold: 0.1 },
+					);
+				} catch (error) {
+					logError("[KNOWLEDGE_RAG] Trigram search for edges failed:", error);
+				}
+			}
+
+			// 5. Fallback to vector search if both SQL and trigram fail or have insufficient results
 			let vectorNodes: Node[] = [];
 			let vectorEdges: Edge[] = [];
+			const combinedNodeResults = sqlNodes.length + trigramNodeResults.length;
+			const combinedEdgeResults = sqlEdges.length + trigramEdgeResults.length;
 
-			if (sqlNodes.length < 5 || sqlEdges.length < 5) {
+			if (
+				(combinedNodeResults < TOTAL_NODE_LIMIT * 0.5 ||
+					combinedEdgeResults < TOTAL_EDGE_LIMIT * 0.5) &&
+				embedding
+			) {
 				logInfo(
-					"[KNOWLEDGE_RAG] Low direct results, falling back to vector search",
+					"[KNOWLEDGE_RAG] Insufficient results from SQL/trigram, falling back to vector search",
 				);
 
 				try {
@@ -236,68 +288,85 @@ export class KnowledgeRAGFlow extends GraphBase<
 					const searchText = state.extractedEntities.join(" ");
 					const searchEmbedding = await embedding.textToVector(searchText);
 
-					// Use database direct vector search instead of utils functions
-					const vectorNodeResults = await database.use(async ({ raw }) => {
-						const query = `
-							SELECT *,
-								1 - (name_embedding <=> $1::vector) as similarity
-							FROM nodes
-							WHERE name_embedding IS NOT NULL
-							ORDER BY similarity DESC
-							LIMIT $2
-						`;
-						const result = await raw(query, [
-							JSON.stringify(searchEmbedding),
-							10,
-						]);
-						return (result as { rows: NodeWithSimilarity[] })?.rows || [];
-					});
+					// Vector search for nodes
+					if (combinedNodeResults < TOTAL_NODE_LIMIT * 0.5) {
+						const vectorNodeResults = await database.use(async ({ raw }) => {
+							const query = `
+								SELECT *,
+									1 - (name_embedding <=> $1::vector) as similarity
+								FROM nodes
+								WHERE name_embedding IS NOT NULL
+								ORDER BY similarity DESC
+								LIMIT $2
+							`;
+							const nodeLimit = Math.min(
+								TOTAL_NODE_LIMIT - combinedNodeResults,
+								Math.floor(TOTAL_NODE_LIMIT * 0.4),
+							);
+							const result = await raw(query, [
+								JSON.stringify(searchEmbedding),
+								nodeLimit,
+							]);
+							return (result as { rows: NodeWithSimilarity[] })?.rows || [];
+						});
+						vectorNodes = vectorNodeResults;
+					}
 
-					const vectorEdgeResults = await database.use(async ({ raw }) => {
-						const query = `
-							SELECT *,
-								1 - (fact_embedding <=> $1::vector) as similarity
-							FROM edges
-							WHERE fact_embedding IS NOT NULL
-							ORDER BY similarity DESC
-							LIMIT $2
-						`;
-						const result = await raw(query, [
-							JSON.stringify(searchEmbedding),
-							15,
-						]);
-						return (result as { rows: EdgeWithSimilarity[] })?.rows || [];
-					});
-
-					vectorNodes = vectorNodeResults;
-					vectorEdges = vectorEdgeResults;
+					// Vector search for edges
+					if (combinedEdgeResults < TOTAL_EDGE_LIMIT * 0.5) {
+						const vectorEdgeResults = await database.use(async ({ raw }) => {
+							const query = `
+								SELECT *,
+									1 - (fact_embedding <=> $1::vector) as similarity
+								FROM edges
+								WHERE fact_embedding IS NOT NULL
+								ORDER BY similarity DESC
+								LIMIT $2
+							`;
+							const edgeLimit = Math.min(
+								TOTAL_EDGE_LIMIT - combinedEdgeResults,
+								Math.floor(TOTAL_EDGE_LIMIT * 0.4),
+							);
+							const result = await raw(query, [
+								JSON.stringify(searchEmbedding),
+								edgeLimit,
+							]);
+							return (result as { rows: EdgeWithSimilarity[] })?.rows || [];
+						});
+						vectorEdges = vectorEdgeResults;
+					}
 				} catch (embeddingError) {
-					logError("[KNOWLEDGE_RAG] Vector search failed:", embeddingError);
+					logError(
+						"[KNOWLEDGE_RAG] Vector search fallback failed:",
+						embeddingError,
+					);
 				}
 			}
 
-			// 3. Combine results (simple concatenation since we already have the right data)
-			const nodeMap = new Map();
-			const edgeMap = new Map();
+			// 6. Combine results using trigram combiner
+			const combinedNodes = combineSearchResultsWithTrigram(
+				sqlNodes,
+				vectorNodes.map((node) => ({
+					item: node,
+					similarity: (node as any).similarity || 0,
+				})),
+				trigramNodeResults,
+				WEIGHTS,
+				TOTAL_NODE_LIMIT,
+				(node) => node.id,
+			);
 
-			// Add SQL results first (higher priority)
-			sqlNodes.forEach((node) => nodeMap.set(node.id, node));
-			sqlEdges.forEach((edge) => edgeMap.set(edge.id, edge));
-
-			// Add vector results if not already present
-			vectorNodes.forEach((node) => {
-				if (!nodeMap.has(node.id)) {
-					nodeMap.set(node.id, node);
-				}
-			});
-			vectorEdges.forEach((edge) => {
-				if (!edgeMap.has(edge.id)) {
-					edgeMap.set(edge.id, edge);
-				}
-			});
-
-			const combinedNodes = Array.from(nodeMap.values()).slice(0, 15);
-			const combinedEdges = Array.from(edgeMap.values()).slice(0, 20);
+			const combinedEdges = combineSearchResultsWithTrigram(
+				sqlEdges,
+				vectorEdges.map((edge) => ({
+					item: edge,
+					similarity: (edge as any).similarity || 0,
+				})),
+				trigramEdgeResults,
+				WEIGHTS,
+				TOTAL_EDGE_LIMIT,
+				(edge) => edge.id,
+			);
 
 			// 4. Process and score nodes
 			relevantNodes = combinedNodes.map((node) => {
@@ -401,6 +470,12 @@ export class KnowledgeRAGFlow extends GraphBase<
 			logInfo("[KNOWLEDGE_RAG] Retrieved knowledge:", {
 				nodes: relevantNodes.length,
 				edges: relevantEdges.length,
+				sqlNodes: sqlNodes.length,
+				trigramNodes: trigramNodeResults.length,
+				vectorNodes: vectorNodes.length,
+				sqlEdges: sqlEdges.length,
+				trigramEdges: trigramEdgeResults.length,
+				vectorEdges: vectorEdges.length,
 			});
 
 			return {
@@ -411,10 +486,16 @@ export class KnowledgeRAGFlow extends GraphBase<
 					{
 						id: crypto.randomUUID(),
 						name: "Knowledge Retrieval",
-						description: `Found ${relevantNodes.length} nodes and ${relevantEdges.length} relationships`,
+						description: `Found ${relevantNodes.length} nodes and ${relevantEdges.length} relationships (${sqlNodes.length}+${trigramNodeResults.length}+${vectorNodes.length} nodes, ${sqlEdges.length}+${trigramEdgeResults.length}+${vectorEdges.length} edges)`,
 						metadata: {
 							nodeCount: relevantNodes.length,
 							edgeCount: relevantEdges.length,
+							sqlNodeCount: sqlNodes.length,
+							trigramNodeCount: trigramNodeResults.length,
+							vectorNodeCount: vectorNodes.length,
+							sqlEdgeCount: sqlEdges.length,
+							trigramEdgeCount: trigramEdgeResults.length,
+							vectorEdgeCount: vectorEdges.length,
 						},
 					},
 				],

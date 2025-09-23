@@ -1,30 +1,15 @@
 import { SimpleGraph } from "./graph/simple/graph";
 import { KnowledgeGraphFlow } from "./graph/knowledge/graph";
 import { KnowledgeRAGFlow } from "./graph/knowledge-rag/graph";
-import type { llmService } from "../llm";
-import type { embeddingService } from "../embedding";
-import type { databaseService } from "../database";
 import { logInfo } from "@/utils/logger";
 import type { AllServices } from "./interfaces/tool";
 
 // Type mapping for graph types and their required services
-interface SimpleGraphServices {
-	llm: typeof llmService;
-	embedding: typeof embeddingService;
-	database: typeof databaseService;
-}
+interface SimpleGraphServices extends AllServices {}
 
-interface KnowledgeGraphServices extends AllServices {
-	llm: typeof llmService;
-	embedding: typeof embeddingService;
-	database: typeof databaseService;
-}
+interface KnowledgeGraphServices extends AllServices {}
 
-interface KnowledgeRAGServices extends AllServices {
-	llm: typeof llmService;
-	embedding: typeof embeddingService;
-	database: typeof databaseService;
-}
+interface KnowledgeRAGServices extends AllServices {}
 
 // Graph registry with proper type mapping
 interface GraphRegistry {
