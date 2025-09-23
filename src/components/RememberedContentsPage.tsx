@@ -223,7 +223,7 @@ export const RememberedContentsPage: React.FC<
 								>
 									<div className="space-y-2">
 										<div className="flex items-start justify-between">
-											<h3 className="font-medium text-sm line-clamp-2 text-foreground">
+											<h3 className="font-medium text-sm line-clamp-2 text-foreground line-clamp-2">
 												{content.title}
 											</h3>
 											<div className="flex items-center gap-1 ml-2">
@@ -271,7 +271,7 @@ export const RememberedContentsPage: React.FC<
 										>
 											<ArrowLeft className="h-4 w-4" />
 										</Button>
-										<h1 className="text-xl font-semibold text-foreground">
+										<h1 className="text-xl font-semibold text-foreground line-clamp-2">
 											{selectedContent.title}
 										</h1>
 									</div>

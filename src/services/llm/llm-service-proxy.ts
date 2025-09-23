@@ -6,9 +6,7 @@ import type {
 import { logWarn, logInfo, logError } from "@/utils/logger";
 import { backgroundJob } from "@/services/background-jobs/background-job";
 import type { BaseLLM, ProgressEvent, ModelInfo } from "./interfaces/base-llm";
-import type {
-	ILLMService,
-} from "./interfaces/llm-service.interface";
+import type { ILLMService } from "./interfaces/llm-service.interface";
 import { OpenAILLM } from "./implementations/openai-llm";
 import { LocalOpenAICompatibleLLM } from "./implementations/local-openai-llm";
 import { LLMProxy } from "./implementations/llm-proxy";

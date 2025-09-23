@@ -77,10 +77,10 @@ export const RememberPage: React.FC = () => {
 			const result = await backgroundJob.execute(
 				"remember-save",
 				userInputData,
-				{ stream: false }
+				{ stream: false },
 			);
 
-			if (result?.jobId && 'promise' in result) {
+			if (result?.jobId && "promise" in result) {
 				// Wait for job completion
 				const jobResult = await result.promise;
 

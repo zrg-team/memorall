@@ -713,21 +713,31 @@ export class RememberService {
 		pageId: string,
 	): Promise<void> {
 		try {
-			await logger.info("background", "knowledge-graph", "🧠 Starting knowledge graph processing", {
-				url: data.url,
-				title: data.title,
-				pageId: pageId,
-				contentLength: data.article.textContent.length,
-			});
+			await logger.info(
+				"background",
+				"knowledge-graph",
+				"🧠 Starting knowledge graph processing",
+				{
+					url: data.url,
+					title: data.title,
+					pageId: pageId,
+					contentLength: data.article.textContent.length,
+				},
+			);
 
 			logInfo("🧠 Processing content through knowledge graph flow");
 
 			// Check if LLM service is ready
 			if (!serviceManager.llmService.isReady()) {
-				await logger.warn("background", "knowledge-graph", "❌ LLM service not ready, skipping knowledge graph processing", {
-					url: data.url,
-					llmReady: serviceManager.llmService.isReady(),
-				});
+				await logger.warn(
+					"background",
+					"knowledge-graph",
+					"❌ LLM service not ready, skipping knowledge graph processing",
+					{
+						url: data.url,
+						llmReady: serviceManager.llmService.isReady(),
+					},
+				);
 
 				logError(
 					"❌ LLM service not ready, skipping knowledge graph processing",
@@ -735,10 +745,15 @@ export class RememberService {
 				return;
 			}
 
-			await logger.info("background", "knowledge-graph", "✅ LLM service ready, proceeding with knowledge graph", {
-				url: data.url,
-				llmReady: serviceManager.llmService.isReady(),
-			});
+			await logger.info(
+				"background",
+				"knowledge-graph",
+				"✅ LLM service ready, proceeding with knowledge graph",
+				{
+					url: data.url,
+					llmReady: serviceManager.llmService.isReady(),
+				},
+			);
 
 			// Create knowledge graph flow
 			const knowledgeGraph = flowsService.createGraph("knowledge", {
@@ -747,9 +762,14 @@ export class RememberService {
 				database: serviceManager.databaseService,
 			});
 
-			await logger.info("background", "knowledge-graph", "🔧 Knowledge graph flow created", {
-				url: data.url,
-			});
+			await logger.info(
+				"background",
+				"knowledge-graph",
+				"🔧 Knowledge graph flow created",
+				{
+					url: data.url,
+				},
+			);
 
 			// Prepare input state
 			const initialState: Partial<KnowledgeGraphState> = {
@@ -769,10 +789,15 @@ export class RememberService {
 				hasPageId: !!pageId,
 			});
 
-			await logger.info("background", "knowledge-graph", "🚀 Executing knowledge graph flow", {
-				url: data.url,
-				contentPreview: data.article.textContent.substring(0, 200) + "...",
-			});
+			await logger.info(
+				"background",
+				"knowledge-graph",
+				"🚀 Executing knowledge graph flow",
+				{
+					url: data.url,
+					contentPreview: data.article.textContent.substring(0, 200) + "...",
+				},
+			);
 
 			if (!pageId) {
 				throw new Error("Error");
@@ -799,24 +824,39 @@ export class RememberService {
 					: 0,
 			};
 
-			await logger.info("background", "knowledge-graph", "✅ Knowledge graph processing completed successfully", stats);
+			await logger.info(
+				"background",
+				"knowledge-graph",
+				"✅ Knowledge graph processing completed successfully",
+				stats,
+			);
 
 			logInfo("✅ Knowledge graph processing completed:", stats);
 
 			if (Array.isArray(result.errors) && result.errors.length > 0) {
-				await logger.warn("background", "knowledge-graph", "⚠️ Knowledge graph processing had errors", {
-					url: data.url,
-					errors: result.errors,
-				});
+				await logger.warn(
+					"background",
+					"knowledge-graph",
+					"⚠️ Knowledge graph processing had errors",
+					{
+						url: data.url,
+						errors: result.errors,
+					},
+				);
 
 				logError("⚠️ Knowledge graph processing had errors:", result.errors);
 			}
 		} catch (error) {
-			await logger.error("background", "knowledge-graph", "❌ Failed to process knowledge graph", {
-				url: data.url,
-				error: error instanceof Error ? error.message : "Unknown error",
-				stack: error instanceof Error ? error.stack : undefined,
-			});
+			await logger.error(
+				"background",
+				"knowledge-graph",
+				"❌ Failed to process knowledge graph",
+				{
+					url: data.url,
+					error: error instanceof Error ? error.message : "Unknown error",
+					stack: error instanceof Error ? error.stack : undefined,
+				},
+			);
 
 			logError("❌ Failed to process knowledge graph:", error);
 			// Don't throw error - knowledge graph processing is optional

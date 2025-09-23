@@ -83,9 +83,7 @@ export async function runMigrations(db: PGlite): Promise<void> {
 	// Run pending migrations in order
 	for (const migration of migrations) {
 		if (!appliedMigrations.includes(migration.id)) {
-			logDebug(
-				`Running migration: ${migration.id} - ${migration.description}`,
-			);
+			logDebug(`Running migration: ${migration.id} - ${migration.description}`);
 
 			try {
 				await migration.up(db);

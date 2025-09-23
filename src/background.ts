@@ -99,54 +99,7 @@ async function ensureOffscreenDocument(): Promise<void> {
 				throw err;
 			}
 		}
-
-		// Wait for offscreen to be ready (idempotent)
-		await new Promise<void>(async (resolve, reject) => {
-			const timeout = setTimeout(() => {
-				reject(new Error("Offscreen document did not become ready"));
-			}, 30000);
-
-			const done = () => {
-				clearTimeout(timeout);
-				try {
-					chrome.runtime.onMessage.removeListener(listener);
-				} catch (_) {}
-				logInfo("✅ Offscreen document is ready");
-				resolve();
-			};
-
-			const listener = (message: any) => {
-				if (message?.type === "OFFSCREEN_READY") {
-					done();
-				}
-			};
-			chrome.runtime.onMessage.addListener(listener);
-
-			// Also check contexts periodically in case READY was already sent
-			const check = async () => {
-				try {
-					const ctx = await chrome.runtime.getContexts({
-						contextTypes: [chrome.runtime.ContextType.OFFSCREEN_DOCUMENT],
-					});
-					if (ctx.length > 0) {
-						// Heuristic: if offscreen page has been alive for a bit, assume ready
-						setTimeout(done, 200); // small grace period
-					}
-				} catch {}
-			};
-			// Kick off an immediate check
-			void check();
-		});
-	})()
-		.catch((error) => {
-			logError("❌ Failed to create offscreen document:", error);
-			offscreenCreated = false;
-			throw error;
-		})
-		.finally(() => {
-			offscreenInitPromise = null;
-		});
-
+	})();
 	return offscreenInitPromise;
 }
 
@@ -174,7 +127,6 @@ logInfo("🔄 Service Worker loaded, initializing core services...");
 // Create context menus on install
 chrome.runtime.onInstalled.addListener(async () => {
 	try {
-
 		// Create main "Remember this" menu for full page
 		chrome.contextMenus.create({
 			id: REMEMBER_THIS_PAGE_CONTEXT_MENU_ID,
@@ -381,6 +333,8 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 				};
 				logInfo("📨 Sending error response to content script:", errorResponse);
 				sendResponse(errorResponse);
+			} finally {
+				stopLoading(); // Hide loading indicator
 			}
 		})();
 
@@ -426,6 +380,8 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 				};
 
 				sendResponse(errorResponse);
+			} finally {
+				stopLoading(); // Hide loading indicator
 			}
 		})();
 

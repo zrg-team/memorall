@@ -2,30 +2,84 @@ import type { KnowledgeGraphState, ExtractedFact } from "./state";
 import { logInfo, logError } from "@/utils/logger";
 import { mapRefine } from "@/utils/map-refine";
 import type { AllServices } from "@/services/flows/interfaces/tool";
+import type { ILLMService } from "@/services/llm/interfaces/llm-service.interface";
 
-const FACT_EXTRACTION_SYSTEM_PROMPT = `Extract all factual relationships between the provided ENTITIES from the given CONTENT.
+const FACT_EXTRACTION_SYSTEM_PROMPT = `Extract ALL possible factual relationships between the provided ENTITIES from the given CONTENT. Your goal is to generate as many edges as possible for the knowledge graph.
 
-Guidelines:
-1. Extract facts only between entities that appear in the provided ENTITIES list.
-2. Each fact should represent a clear relationship between two DISTINCT entities.
-3. The relation_type should be a concise, all-caps description of the relationship (e.g., WORKS_FOR, CREATED_BY, LOCATED_IN, FOUNDED, ACQUIRED, COLLABORATED_WITH).
-4. The fact_text should contain the complete factual description including relevant context and details.
-5. For web pages/documents: Extract authorship, organizational relationships, creation relationships, ownership, etc.
-6. For conversations: Extract social relationships, professional connections, opinions expressed, etc.
-7. For selected text: Focus on relationships explicitly mentioned in the selection.
-8. Include temporal context when mentioned (this will be processed separately for precise dates).
-9. Avoid creating relationships based on mere co-occurrence - ensure there's an actual stated relationship.
+CRITICAL ENTITY MATCHING RULES:
+1. The "source_entity" and "destination_entity" fields MUST contain the EXACT entity names from the ENTITIES list below.
+2. Do NOT modify, abbreviate, or paraphrase entity names - use them EXACTLY as they appear in the ENTITIES list.
+3. If you're uncertain about an entity name, choose the closest EXACT match from the provided list.
+
+RELATIONSHIP EXTRACTION GUIDELINES:
+1. Extract facts ONLY between entities that appear in the provided ENTITIES list.
+2. Generate as many relationships as possible - be comprehensive and thorough.
+3. Each fact should represent a clear relationship between two DISTINCT entities.
+4. Look for DIRECT relationships (explicit connections) AND INDIRECT relationships (implied by context).
+5. The relation_type should be a concise, all-caps description (e.g., WORKS_FOR, CREATED_BY, LOCATED_IN, FOUNDED, ACQUIRED, COLLABORATED_WITH, MENTIONED_WITH, RELATED_TO).
+6. The fact_text should contain the complete factual description including relevant context and details.
+7. Include temporal context when mentioned (this will be processed separately for precise dates).
+
+COMPREHENSIVE EXTRACTION STRATEGY:
+- For web pages/documents: Extract authorship, organizational relationships, creation relationships, ownership, mentions, citations, etc.
+- For conversations: Extract social relationships, professional connections, opinions expressed, co-mentions, etc.
+- For any content: Look for co-occurrence relationships, hierarchical relationships, temporal relationships, causal relationships.
+- Create "MENTIONED_WITH" or "RELATED_TO" relationships for entities that appear together even without explicit connection.
+- Don't miss subtle relationships - if two entities appear in the same context, there's likely some relationship.
+
+ENTITY NAME MATCHING EXAMPLES:
+✅ Correct: If entity list contains "Apple Inc.", use "Apple Inc." exactly
+❌ Wrong: Using "Apple", "Apple Corporation", or "apple inc."
+
+✅ Correct: If entity list contains "John Smith", use "John Smith" exactly
+❌ Wrong: Using "John", "Smith", or "john smith"
 
 Return your response as a valid JSON array of objects with the following structure:
 [
   {
-    "source_entity": "Entity Name 1",
-    "destination_entity": "Entity Name 2",
+    "source_entity": "Exact Entity Name From List",
+    "destination_entity": "Exact Entity Name From List",
     "relation_type": "RELATION_TYPE",
     "fact_text": "Complete factual description of the relationship with context",
     "attributes": {}
   }
-]`;
+]
+
+REMEMBER: Use entity names EXACTLY as they appear in the ENTITIES list, and extract as many relationships as possible!`;
+
+const UNCONNECTED_EXTRACTION_PROMPT = `You previously extracted relationships, but some entities still have NO connections. Your task is to find ANY possible relationships for these unconnected entities.
+
+UNCONNECTED ENTITIES (find relationships for these):
+{{nodes}}
+
+CRITICAL REQUIREMENTS:
+1. Focus SPECIFICALLY on the unconnected entities listed above
+2. Use EXACT entity names from the ENTITIES list below
+3. Look for ANY type of relationship: explicit, implicit, contextual, or co-occurrence
+4. Generate relationships between unconnected entities and ANY other entities in the list
+5. Be creative but accurate - if entities appear in the same context, create "MENTIONED_WITH" or "RELATED_TO" relationships
+6. Don't leave ANY entity without at least one connection if possible
+
+RELATIONSHIP STRATEGIES:
+- Direct relationships (explicit connections)
+- Contextual relationships (appear in same paragraph/section)
+- Hierarchical relationships (part of same category/domain)
+- Temporal relationships (mentioned in same time context)
+- Topical relationships (related to same subject matter)
+- Co-occurrence relationships (mentioned together)
+
+Return your response as a valid JSON array of objects with the following structure:
+[
+  {
+    "source_entity": "Exact Entity Name From List",
+    "destination_entity": "Exact Entity Name From List",
+    "relation_type": "RELATION_TYPE",
+    "fact_text": "Complete factual description of the relationship with context",
+    "attributes": {}
+  }
+]
+
+REMEMBER: Use entity names EXACTLY as they appear in the ENTITIES list, and focus on creating connections for the unconnected entities listed above!`;
 
 export class FactExtractionFlow {
 	constructor(private services: AllServices) {}
@@ -248,10 +302,11 @@ export class FactExtractionFlow {
 							return `${sourceEntity} ${p.relationType} ${destEntity}`;
 						})
 						.join(", ");
-					let prompt = `<PREVIOUS RESULT>\n${prevSummary}\n</PREVIOUS RESULT>\n<CHUNK>\n${chunk}\n</CHUNK>`;
+
+					let prompt = `<PREVIOUS RESULT>\n${prevSummary}\n</PREVIOUS RESULT>\n<CHUNK>\n${chunk}\n</CHUNK>\n\n<ENTITIES>\n${entitiesText}\n</ENTITIES>\n\nREMINDER: Use entity names EXACTLY as they appear in the ENTITIES list above. Extract as many relationships as possible between these entities.`;
 
 					if (errorContext) {
-						prompt += `\n\n<ERROR_CONTEXT>\n${errorContext}\nPlease fix the JSON format and ensure all facts are properly extracted with correct entity relationships.\n</ERROR_CONTEXT>`;
+						prompt += `\n\n<ERROR_CONTEXT>\n${errorContext}\nPlease fix the JSON format and ensure all facts are properly extracted with EXACT entity name matching from the ENTITIES list.\n</ERROR_CONTEXT>`;
 					}
 
 					return prompt;
@@ -265,7 +320,7 @@ export class FactExtractionFlow {
 					maxRetries: 2,
 					dedupeBy: (f) =>
 						`${f.sourceEntityId}|${f.relationType}|${f.destinationEntityId}|${f.factText.toLowerCase()}`,
-					onError: (error, attempt, chunk) => {
+					onError: (error, attempt) => {
 						logError(
 							`[FACT_EXTRACTION] Parse error on attempt ${attempt}:`,
 							error,
@@ -283,6 +338,42 @@ export class FactExtractionFlow {
 
 			logInfo("[FACT_EXTRACTION] Extracted facts:", extractedFacts);
 
+			// Find entities without any connections
+			const connectedEntityIds = new Set<string>();
+			extractedFacts.forEach(fact => {
+				connectedEntityIds.add(fact.sourceEntityId);
+				connectedEntityIds.add(fact.destinationEntityId);
+			});
+
+			const unconnectedEntities = state.resolvedEntities.filter(
+				entity => !connectedEntityIds.has(entity.uuid)
+			);
+
+			logInfo(`[FACT_EXTRACTION] Found ${unconnectedEntities.length} entities without connections:`,
+				unconnectedEntities.map(e => e.finalName)
+			);
+
+			// Generate additional facts for unconnected entities
+			let additionalFacts: ExtractedFact[] = [];
+			if (unconnectedEntities.length > 0) {
+				additionalFacts = await this.generateFactsForUnconnectedEntities(
+					unconnectedEntities,
+					state,
+					llm,
+					fullText,
+					entitiesText,
+					parseFacts
+				);
+
+				// Merge additional facts with existing ones
+				extractedFacts.push(...additionalFacts);
+
+				logInfo(`[FACT_EXTRACTION] Generated ${additionalFacts.length} additional facts for unconnected entities`);
+			}
+
+			const totalFacts = extractedFacts.length;
+			logInfo(`[FACT_EXTRACTION] Total extracted facts: ${totalFacts} (${totalFacts - additionalFacts.length} initial + ${additionalFacts.length} additional)`);
+
 			return {
 				extractedFacts,
 				processingStage: "fact_resolution",
@@ -290,8 +381,13 @@ export class FactExtractionFlow {
 					{
 						id: crypto.randomUUID(),
 						name: "Fact Extraction Complete",
-						description: `Extracted ${extractedFacts.length} facts from content`,
-						metadata: { factCount: extractedFacts.length },
+						description: `Extracted ${totalFacts} facts from content (${additionalFacts.length} additional for unconnected entities)`,
+						metadata: {
+							factCount: totalFacts,
+							initialFacts: totalFacts - additionalFacts.length,
+							additionalFacts: additionalFacts.length,
+							unconnectedEntitiesFound: unconnectedEntities.length
+						},
 					},
 				],
 			};
@@ -312,6 +408,66 @@ export class FactExtractionFlow {
 					},
 				],
 			};
+		}
+	}
+
+	private async generateFactsForUnconnectedEntities(
+		unconnectedEntities: Array<{ uuid: string; finalName: string; summary?: string; nodeType: string }>,
+		state: KnowledgeGraphState,
+		llm: ILLMService,
+		fullText: string,
+		entitiesText: string,
+		parseFacts: (content: string) => ExtractedFact[]
+	): Promise<ExtractedFact[]> {
+		if (unconnectedEntities.length === 0) return [];
+
+		const unconnectedNames = unconnectedEntities.map(e => e.finalName).join(", ");
+
+		try {
+			const additionalFacts = await mapRefine<ExtractedFact>(
+				llm,
+				UNCONNECTED_EXTRACTION_PROMPT.replace(
+					'{{nodes}}',
+					unconnectedEntities.map(e => `- ${e.finalName}: ${e.summary || "No description"}`).join("\n")
+				),
+				(chunk, prev, errorContext) => {
+					let prompt = `Focus on finding relationships for these unconnected entities: ${unconnectedNames}\n\n<CONTENT>\n${chunk}\n</CONTENT>\n\n<ENTITIES>\n${entitiesText}\n</ENTITIES>\n\nREMINDER: Create connections specifically for the unconnected entities listed above using EXACT entity names.`;
+
+					if (errorContext) {
+						prompt += `\n\n<ERROR_CONTEXT>\n${errorContext}\nPlease fix the JSON format and focus on the unconnected entities.\n</ERROR_CONTEXT>`;
+					}
+
+					return prompt;
+				},
+				parseFacts,
+				fullText,
+				{
+					maxModelTokens: 8000,
+					maxResponseTokens: 3000,
+					temperature: 0.2, // Slightly higher creativity for finding implicit relationships
+					maxRetries: 2,
+					dedupeBy: (f) => `${f.sourceEntityId}|${f.relationType}|${f.destinationEntityId}`,
+					onError: (error, attempt) => {
+						logError(`[UNCONNECTED_EXTRACTION] Parse error on attempt ${attempt}:`, error);
+						return `Extraction failed: ${error.message}. Please ensure valid JSON format and focus on unconnected entities.`;
+					},
+				},
+			);
+
+			// Filter to only include facts that involve at least one unconnected entity
+			const unconnectedEntityIds = new Set(unconnectedEntities.map(e => e.uuid));
+			const filteredFacts = additionalFacts.filter(fact =>
+				unconnectedEntityIds.has(fact.sourceEntityId) ||
+				unconnectedEntityIds.has(fact.destinationEntityId)
+			);
+
+			logInfo(`[UNCONNECTED_EXTRACTION] Generated ${filteredFacts.length} relationships for unconnected entities`);
+
+			return filteredFacts;
+
+		} catch (error) {
+			logError("[UNCONNECTED_EXTRACTION] Error generating facts for unconnected entities:", error);
+			return [];
 		}
 	}
 }

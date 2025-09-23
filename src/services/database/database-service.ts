@@ -342,4 +342,16 @@ export class DatabaseService {
 
 		return fn(ctx);
 	}
+
+	// Dedicated transaction method with same interface as use()
+	async transaction<T>(
+		fn: (ctx: {
+			db: DatabaseWithSchema;
+			query: DatabaseWithSchema["query"];
+			schema: typeof schema;
+			raw: (sql: string, params?: unknown[]) => Promise<unknown>;
+		}) => Promise<T> | T,
+	): Promise<T> {
+		return this.use(fn, { transaction: true });
+	}
 }

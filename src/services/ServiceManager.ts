@@ -82,10 +82,7 @@
 
 import { logError, logInfo, logWarn } from "@/utils/logger";
 import type { IEmbeddingService } from "./embedding";
-import {
-	EmbeddingServiceMain,
-	EmbeddingServiceProxy,
-} from "./embedding";
+import { EmbeddingServiceMain, EmbeddingServiceProxy } from "./embedding";
 import type { ILLMService } from "./llm/interfaces/llm-service.interface";
 import { LLMServiceProxy, LLMServiceMain } from "./llm";
 import { flowsService } from "./flows/flows-service";

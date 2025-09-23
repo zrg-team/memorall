@@ -1,5 +1,9 @@
 import chalk from "chalk";
-import { IndexedDBLogStorage, type LogEntry, type LogLevel } from "./indexeddb-storage";
+import {
+	IndexedDBLogStorage,
+	type LogEntry,
+	type LogLevel,
+} from "./indexeddb-storage";
 
 interface LoggerConfig {
 	maxEntries: number;
@@ -71,7 +75,7 @@ class Logger {
 		message: string,
 		data?: any,
 		context?: string,
-		source?: string
+		source?: string,
 	): Promise<void> {
 		if (!this.config.enablePersistence || !this.storage.isAvailable()) {
 			return;
@@ -100,7 +104,12 @@ class Logger {
 	private logToConsole(
 		prefix: string,
 		colorFunc: (...text: unknown[]) => string,
-		logFunc: typeof console.log | typeof console.debug | typeof console.warn | typeof console.error | undefined,
+		logFunc:
+			| typeof console.log
+			| typeof console.debug
+			| typeof console.warn
+			| typeof console.error
+			| undefined,
 		...args: unknown[]
 	): void {
 		if (!this.config.enableConsoleOutput || !logFunc) {
@@ -113,7 +122,9 @@ class Logger {
 
 		logFunc(
 			`${colorFunc(`${prefix} ${messageKey}`)}`,
-			...[isKeyString ? undefined : key, ...(rest?.length ? rest : [])].filter(Boolean)
+			...[isKeyString ? undefined : key, ...(rest?.length ? rest : [])].filter(
+				Boolean,
+			),
 		);
 	}
 
@@ -121,7 +132,12 @@ class Logger {
 		level: LogLevel,
 		prefix: string,
 		colorFunc: (...text: unknown[]) => string,
-		logFunc: typeof console.log | typeof console.debug | typeof console.warn | typeof console.error | undefined,
+		logFunc:
+			| typeof console.log
+			| typeof console.debug
+			| typeof console.warn
+			| typeof console.error
+			| undefined,
 		context?: string,
 		source?: string,
 		...args: unknown[]
@@ -130,16 +146,20 @@ class Logger {
 		this.logToConsole(prefix, colorFunc, logFunc, ...args);
 
 		// Persistence
-		const message = args.map(arg =>
-			typeof arg === "string" ? arg : JSON.stringify(arg)
-		).join(" ");
+		const message = args
+			.map((arg) => (typeof arg === "string" ? arg : JSON.stringify(arg)))
+			.join(" ");
 
 		const data = args.length > 1 ? args.slice(1) : undefined;
 
 		await this.persistLog(level, message, data, context, source);
 	}
 
-	async info(context?: string, source?: string, ...args: unknown[]): Promise<void> {
+	async info(
+		context?: string,
+		source?: string,
+		...args: unknown[]
+	): Promise<void> {
 		await this.log(
 			"info",
 			"🔵 INFO:",
@@ -147,11 +167,15 @@ class Logger {
 			this.isDevelopment ? console.log : undefined,
 			context,
 			source,
-			...args
+			...args,
 		);
 	}
 
-	async error(context?: string, source?: string, ...args: unknown[]): Promise<void> {
+	async error(
+		context?: string,
+		source?: string,
+		...args: unknown[]
+	): Promise<void> {
 		await this.log(
 			"error",
 			"🔴 ERROR:",
@@ -159,11 +183,15 @@ class Logger {
 			console.error,
 			context,
 			source,
-			...args
+			...args,
 		);
 	}
 
-	async warn(context?: string, source?: string, ...args: unknown[]): Promise<void> {
+	async warn(
+		context?: string,
+		source?: string,
+		...args: unknown[]
+	): Promise<void> {
 		await this.log(
 			"warn",
 			"🔶 WARN:",
@@ -171,11 +199,15 @@ class Logger {
 			console.warn,
 			context,
 			source,
-			...args
+			...args,
 		);
 	}
 
-	async debug(context?: string, source?: string, ...args: unknown[]): Promise<void> {
+	async debug(
+		context?: string,
+		source?: string,
+		...args: unknown[]
+	): Promise<void> {
 		await this.log(
 			"debug",
 			"⚪ DEBUG:",
@@ -183,7 +215,7 @@ class Logger {
 			this.isDevelopment ? console.debug : undefined,
 			context,
 			source,
-			...args
+			...args,
 		);
 	}
 
@@ -254,7 +286,7 @@ class Logger {
 				exportedAt: new Date().toISOString(),
 				totalLogs: logs.length,
 				filter: filter || {},
-				logs: logs
+				logs: logs,
 			};
 			return JSON.stringify(exportData, null, 2);
 		} catch (error) {
@@ -285,13 +317,18 @@ class Logger {
 const logger = new Logger();
 
 // Export convenience functions that maintain backward compatibility
-export const logInfo = (...args: unknown[]) => logger.info(undefined, undefined, ...args);
-export const logError = (...args: unknown[]) => logger.error(undefined, undefined, ...args);
-export const logWarn = (...args: unknown[]) => logger.warn(undefined, undefined, ...args);
-export const logDebug = (...args: unknown[]) => logger.debug(undefined, undefined, ...args);
+export const logInfo = (...args: unknown[]) =>
+	logger.info(undefined, undefined, ...args);
+export const logError = (...args: unknown[]) =>
+	logger.error(undefined, undefined, ...args);
+export const logWarn = (...args: unknown[]) =>
+	logger.warn(undefined, undefined, ...args);
+export const logDebug = (...args: unknown[]) =>
+	logger.debug(undefined, undefined, ...args);
 
 // Keep logSilent for backward compatibility (maps to info level)
-export const logSilent = (...args: unknown[]) => logger.info(undefined, undefined, ...args);
+export const logSilent = (...args: unknown[]) =>
+	logger.info(undefined, undefined, ...args);
 
 // Export logger instance for advanced usage
 export { logger };

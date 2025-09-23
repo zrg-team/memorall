@@ -226,10 +226,7 @@ export const KnowledgeGraphPage: React.FC<KnowledgeGraphPageProps> = () => {
 				stream: false,
 			});
 		} catch (error) {
-			logError(
-				"❌ KnowledgeGraphPage: Failed to start background job:",
-				error,
-			);
+			logError("❌ KnowledgeGraphPage: Failed to start background job:", error);
 		}
 	};
 
@@ -583,7 +580,7 @@ export const KnowledgeGraphPage: React.FC<KnowledgeGraphPageProps> = () => {
 									>
 										<div className="space-y-2">
 											<div className="flex items-start justify-between">
-												<h3 className="font-medium text-sm line-clamp-2 text-foreground">
+												<h3 className="font-medium text-sm line-clamp-2 text-foreground line-clamp-2">
 													{page.title}
 												</h3>
 												<div className="flex items-center gap-1 ml-2">
@@ -685,7 +682,7 @@ export const KnowledgeGraphPage: React.FC<KnowledgeGraphPageProps> = () => {
 										>
 											<ArrowLeft className="h-4 w-4" />
 										</Button>
-										<h1 className="text-xl font-semibold text-foreground">
+										<h1 className="text-xl font-semibold text-foreground line-clamp-2">
 											{selectedPage.title}
 										</h1>
 									</div>

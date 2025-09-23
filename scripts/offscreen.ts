@@ -139,14 +139,18 @@ class OffscreenProcessor {
 			logger.info(
 				"offscreen",
 				"SharedStorageService",
-				"🔄 Initializing SharedStorageService..."
+				"🔄 Initializing SharedStorageService...",
 			);
 			this.currentProgress.progress = 10;
 			this.currentProgress.status = "Initializing SharedStorageService...";
 			this.reportProgress();
 
 			await sharedStorageService.initialize();
-			logger.info("offscreen", "SharedStorageService", "✅ SharedStorageService initialized");
+			logger.info(
+				"offscreen",
+				"SharedStorageService",
+				"✅ SharedStorageService initialized",
+			);
 			this.currentProgress.services.push("SharedStorageService");
 			this.currentProgress.progress = 30;
 			this.currentProgress.status = "Initializing ServiceManager...";
@@ -154,7 +158,11 @@ class OffscreenProcessor {
 
 			// Initialize all services via ServiceManager (centralized)
 			// ServiceManager handles all service initialization - no need for manual initialization
-			logger.info("offscreen", "ServiceManager", "🔄 Initializing all services via ServiceManager...");
+			logger.info(
+				"offscreen",
+				"ServiceManager",
+				"🔄 Initializing all services via ServiceManager...",
+			);
 			await serviceManager.initialize({
 				proxy: false,
 				callback: (service: string, progress) => {
@@ -163,7 +171,11 @@ class OffscreenProcessor {
 					this.reportProgress();
 				},
 			});
-			logger.info("offscreen", "ServiceManager", "✅ All services initialized via ServiceManager");
+			logger.info(
+				"offscreen",
+				"ServiceManager",
+				"✅ All services initialized via ServiceManager",
+			);
 
 			this.currentProgress.progress = 90;
 			this.currentProgress.status = "Starting job queue processing...";
@@ -179,7 +191,11 @@ class OffscreenProcessor {
 			this.reportProgress();
 
 			this.updateStatus("Ready");
-			logger.info("offscreen", "initialization", "🎉 All services initialized - ready for background processing");
+			logger.info(
+				"offscreen",
+				"initialization",
+				"🎉 All services initialized - ready for background processing",
+			);
 
 			// Notify background that offscreen is ready once handlers are registered
 			try {
@@ -191,7 +207,12 @@ class OffscreenProcessor {
 			this.currentProgress.status = "Failed";
 			this.currentProgress.done = true;
 			this.reportProgress();
-			logger.error("offscreen", "initialization", "❌ Initialization failed", error);
+			logger.error(
+				"offscreen",
+				"initialization",
+				"❌ Initialization failed",
+				error,
+			);
 		}
 	}
 	private async startQueueProcessing(): Promise<void> {
@@ -237,13 +258,22 @@ class OffscreenProcessor {
 			void processQueueJobs();
 		}, 120000);
 
-		logger.info("offscreen", "queue", "✅ Event-driven job processing system initialized");
+		logger.info(
+			"offscreen",
+			"queue",
+			"✅ Event-driven job processing system initialized",
+		);
 	}
 
 	private updateInitialProgress() {}
 
 	private async processQueueJobs(): Promise<void> {
-		logger.info("offscreen", "queue", "🔄 Queue processing: Reading from IndexedDB storage", { timestamp: new Date().toISOString() });
+		logger.info(
+			"offscreen",
+			"queue",
+			"🔄 Queue processing: Reading from IndexedDB storage",
+			{ timestamp: new Date().toISOString() },
+		);
 
 		try {
 			// Get jobs from IndexedDB storage for heavy processing
@@ -255,10 +285,17 @@ class OffscreenProcessor {
 				// Process jobs from response
 				for (const job of response.jobs) {
 					if (!job || job.status !== "pending") {
-						logger.debug("offscreen", "queue", "⏭️ Skipping non-pending job from storage", { jobId: job?.id, status: job?.status });
+						logger.debug(
+							"offscreen",
+							"queue",
+							"⏭️ Skipping non-pending job from storage",
+							{ jobId: job?.id, status: job?.status },
+						);
 						continue;
 					}
-					logger.info("offscreen", "queue", "📋 Processing job from storage", { jobId: job.id });
+					logger.info("offscreen", "queue", "📋 Processing job from storage", {
+						jobId: job.id,
+					});
 
 					// Process jobs ONE BY ONE sequentially for heavy processes
 					await this.processClaimedJob(job);
@@ -322,7 +359,12 @@ class OffscreenProcessor {
 					// Only trigger queue processing when a pending job update arrives
 					const jobStatus = message.job?.status;
 					if (jobStatus && jobStatus !== "pending") {
-						logger.debug("offscreen", "queue", "⏭️ Ignoring JOB_UPDATED for non-pending job", { jobId: message.jobId, jobStatus });
+						logger.debug(
+							"offscreen",
+							"queue",
+							"⏭️ Ignoring JOB_UPDATED for non-pending job",
+							{ jobId: message.jobId, jobStatus },
+						);
 						return;
 					}
 
@@ -357,7 +399,12 @@ class OffscreenProcessor {
 				progress,
 			});
 		} catch (error) {
-			logger.error("offscreen", "queue", `❌ Failed to send job progress update: ${jobId}`, error);
+			logger.error(
+				"offscreen",
+				"queue",
+				`❌ Failed to send job progress update: ${jobId}`,
+				error,
+			);
 		}
 	}
 
@@ -370,7 +417,12 @@ class OffscreenProcessor {
 			// Send completion via jobNotificationChannel to background context
 			jobNotificationChannel.notifyJobCompleted(jobId, result, "all");
 		} catch (error) {
-			logger.error("offscreen", "queue", `❌ Failed to send job completion: ${jobId}`, error);
+			logger.error(
+				"offscreen",
+				"queue",
+				`❌ Failed to send job completion: ${jobId}`,
+				error,
+			);
 		}
 	}
 
@@ -421,12 +473,14 @@ if (!offscreenGlobal.__memorallOffscreenSetupDone__) {
 		offscreenGlobal.__memorallOffscreenStartLogged__ = true;
 		void (async () => {
 			try {
-				logger.info("offscreen", "startup", "🚀 Offscreen document script started", { timestamp: new Date().toISOString() });
-			} catch (error) {
-				logWarn(
-					"Failed to initialize logger for offscreen start log:",
-					error,
+				logger.info(
+					"offscreen",
+					"startup",
+					"🚀 Offscreen document script started",
+					{ timestamp: new Date().toISOString() },
 				);
+			} catch (error) {
+				logWarn("Failed to initialize logger for offscreen start log:", error);
 			}
 		})();
 	}

@@ -213,6 +213,7 @@ export class KnowledgeGraphService {
 				referenceTimestamp: new Date().toISOString(),
 				metadata: (page.sourceMetadata || {}) as Record<string, unknown>,
 				currentMessage: `Title: ${page.title}\n\nContent:\n${page.textContent}`,
+				sourceType: page.sourceType,
 				previousMessages: undefined,
 			};
 

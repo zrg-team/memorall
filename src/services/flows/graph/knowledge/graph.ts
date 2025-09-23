@@ -1,8 +1,5 @@
 import { END, START, StateGraph } from "@langchain/langgraph/web";
 import { logInfo, logError } from "@/utils/logger";
-import type { NewSource } from "@/services/database/entities/sources";
-import type { NewNode } from "@/services/database/entities/nodes";
-import type { NewEdge } from "@/services/database/entities/edges";
 import { or, and, ilike, inArray } from "drizzle-orm";
 import { vectorSearchNodes, vectorSearchEdges } from "@/utils/vector-search";
 import {
@@ -17,25 +14,12 @@ import { EntityResolutionFlow } from "./entity-resolution";
 import { FactExtractionFlow } from "./fact-extraction";
 import { FactResolutionFlow } from "./fact-resolution";
 import { TemporalExtractionFlow } from "./temporal-extraction";
+import { DatabaseSaveFlow } from "./database-save";
 import { GraphBase } from "../../interfaces/graph.base";
 import type { AllServices } from "../../interfaces/tool";
 
-// Safe embedding generation that continues storage even on failure
-async function safeTextToVector(
-	embeddingService: any,
-	text: string,
-	context: string,
-): Promise<number[] | null> {
-	try {
-		if (!text || text.trim().length === 0) return null;
-		return await embeddingService.textToVector(text);
-	} catch (error) {
-		logError(`[${context}] Embedding failed, continuing without vector:`, {
-			error: error instanceof Error ? error.message : String(error),
-			textLength: text.length,
-		});
-		return null;
-	}
+export interface KnowledgeGraphConfig {
+	enableTemporalExtraction?: boolean;
 }
 
 export class KnowledgeGraphFlow extends GraphBase<
@@ -55,9 +39,15 @@ export class KnowledgeGraphFlow extends GraphBase<
 	private factExtraction: FactExtractionFlow;
 	private factResolution: FactResolutionFlow;
 	private temporalExtraction: TemporalExtractionFlow;
+	private databaseSave: DatabaseSaveFlow;
+	private config: KnowledgeGraphConfig;
 
-	constructor(services: AllServices) {
+	constructor(services: AllServices, config: KnowledgeGraphConfig = {}) {
 		super(services);
+		this.config = {
+			enableTemporalExtraction: false, // Disabled by default
+			...config
+		};
 		this.workflow = new StateGraph(KnowledgeGraphAnnotation);
 
 		// Initialize sub-flows
@@ -66,6 +56,7 @@ export class KnowledgeGraphFlow extends GraphBase<
 		this.factExtraction = new FactExtractionFlow(services);
 		this.factResolution = new FactResolutionFlow(services);
 		this.temporalExtraction = new TemporalExtractionFlow(services);
+		this.databaseSave = new DatabaseSaveFlow(services);
 
 		// Add nodes
 		this.workflow.addNode("load_entities", this.loadExistingEntitiesNode);
@@ -74,19 +65,30 @@ export class KnowledgeGraphFlow extends GraphBase<
 		this.workflow.addNode("resolve_entities", this.resolveEntitiesNode);
 		this.workflow.addNode("extract_facts", this.extractFactsNode);
 		this.workflow.addNode("resolve_facts", this.resolveFactsNode);
-		this.workflow.addNode("extract_temporal", this.extractTemporalNode);
 		this.workflow.addNode("save_to_database", this.saveToDatabaseNode);
 
-		// Define the flow
-		// Ordering: extract -> load entities -> resolve -> extract facts -> load facts -> resolve
+		// Conditionally add temporal extraction
+		if (this.config.enableTemporalExtraction) {
+			this.workflow.addNode("extract_temporal", this.extractTemporalNode);
+		}
+
+		// Define the flow based on configuration
 		this.workflow.addEdge(START, "extract_entities");
 		this.workflow.addEdge("extract_entities", "load_entities");
 		this.workflow.addEdge("load_entities", "resolve_entities");
 		this.workflow.addEdge("resolve_entities", "extract_facts");
 		this.workflow.addEdge("extract_facts", "load_facts");
 		this.workflow.addEdge("load_facts", "resolve_facts");
-		this.workflow.addEdge("resolve_facts", "extract_temporal");
-		this.workflow.addEdge("extract_temporal", "save_to_database");
+
+		if (this.config.enableTemporalExtraction) {
+			// With temporal extraction: resolve_facts -> extract_temporal -> save_to_database
+			this.workflow.addEdge("resolve_facts", "extract_temporal");
+			this.workflow.addEdge("extract_temporal", "save_to_database");
+		} else {
+			// Without temporal extraction: resolve_facts -> save_to_database
+			this.workflow.addEdge("resolve_facts", "save_to_database");
+		}
+
 		this.workflow.addEdge("save_to_database", END);
 
 		// Compile the workflow
@@ -487,308 +489,6 @@ export class KnowledgeGraphFlow extends GraphBase<
 	saveToDatabaseNode = async (
 		state: KnowledgeGraphState,
 	): Promise<Partial<KnowledgeGraphState>> => {
-		try {
-			logInfo("[SAVE_TO_DATABASE] Saving knowledge graph to database");
-			logInfo("[SAVE_TO_DATABASE] State debug:", {
-				hasPageId: !!state.pageId,
-				pageId: state.pageId,
-				url: state.url,
-				title: state.title,
-				processingStage: state.processingStage,
-			});
-
-			const databaseService = this.services.database;
-			if (!databaseService) {
-				throw new Error("Database service not available");
-			}
-
-			const embeddingService = this.services.embedding;
-
-			const result = await databaseService.use(async ({ db, schema }) => {
-				// Validate required fields
-				if (
-					!state.pageId ||
-					typeof state.pageId !== "string" ||
-					state.pageId.trim().length === 0
-				) {
-					throw new Error(
-						"Invalid or missing pageId - cannot create source without valid target ID",
-					);
-				}
-
-				if (
-					!state.title ||
-					typeof state.title !== "string" ||
-					state.title.trim().length === 0
-				) {
-					throw new Error(
-						"Invalid or missing title - cannot create source without name",
-					);
-				}
-
-				// Create source first
-				logInfo("💾 Creating source with polymorphic relation", {
-					targetType: "remembered_pages",
-					targetId: state.pageId,
-					hasPageId: !!state.pageId,
-					title: state.title,
-				});
-
-				const sourceData: NewSource = {
-					targetType: "remembered_pages",
-					targetId: state.pageId.trim(),
-					name: state.title.trim(),
-					metadata: state.metadata || {},
-					referenceTime: new Date(state.referenceTimestamp),
-					weight: 1.0,
-				};
-
-				const [createdSource] = await db
-					.insert(schema.sources)
-					.values(sourceData)
-					.returning();
-
-				// Create new nodes
-				const createdNodes: (typeof schema.nodes.$inferSelect)[] = [];
-				const newEntities = state.resolvedEntities.filter((e) => !e.isExisting);
-
-				for (const entity of newEntities) {
-					const nodeData: NewNode = {
-						nodeType: entity.nodeType,
-						name: entity.finalName,
-						summary: entity.summary,
-						attributes: entity.attributes || {},
-					};
-
-					// Generate embedding for node name
-					if (embeddingService) {
-						const nameEmbedding = await safeTextToVector(
-							embeddingService,
-							entity.finalName,
-							`NODE_EMBEDDING:${entity.finalName.substring(0, 50)}`,
-						);
-						if (nameEmbedding) {
-							nodeData.nameEmbedding = nameEmbedding;
-						}
-					}
-
-					const [createdNode] = await db
-						.insert(schema.nodes)
-						.values(nodeData)
-						.returning();
-
-					createdNodes.push(createdNode);
-
-					// Create source-node relationship
-					await db.insert(schema.sourceNodes).values({
-						sourceId: createdSource.id,
-						nodeId: createdNode.id,
-						relation: "MENTIONED_IN",
-					});
-				}
-
-				// Create new edges
-				const createdEdges = [];
-				const newFacts = state.enrichedFacts.filter((f) => !f.isExisting);
-
-				for (const fact of newFacts) {
-					// Map entity UUIDs to actual node IDs
-					const sourceEntity = state.resolvedEntities.find(
-						(e) => e.uuid === fact.sourceEntityId,
-					);
-					const destEntity = state.resolvedEntities.find(
-						(e) => e.uuid === fact.destinationEntityId,
-					);
-
-					if (!sourceEntity || !destEntity) {
-						logError(
-							`[SAVE_TO_DATABASE] Could not find entities for fact: ${fact.sourceEntityId} -> ${fact.destinationEntityId}`,
-						);
-						continue;
-					}
-
-					// Get actual node IDs
-					let sourceNodeId: string;
-					let destNodeId: string;
-
-					if (sourceEntity.isExisting && sourceEntity.existingId) {
-						sourceNodeId = sourceEntity.existingId;
-					} else {
-						const newNode = createdNodes.find(
-							(n) => n.name === sourceEntity.finalName,
-						);
-						if (!newNode) {
-							logError(
-								`[SAVE_TO_DATABASE] Could not find created node for entity: ${sourceEntity.finalName}`,
-							);
-							continue;
-						}
-						sourceNodeId = `${newNode.id}`;
-					}
-
-					if (destEntity.isExisting && destEntity.existingId) {
-						destNodeId = destEntity.existingId;
-					} else {
-						const newNode = createdNodes.find(
-							(n) => n.name === destEntity.finalName,
-						);
-						if (!newNode) {
-							logError(
-								`[SAVE_TO_DATABASE] Could not find created node for entity: ${destEntity.finalName}`,
-							);
-							continue;
-						}
-						destNodeId = `${newNode.id}`;
-					}
-
-					const edgeData: NewEdge = {
-						sourceId: sourceNodeId,
-						destinationId: destNodeId,
-						edgeType: fact.relationType,
-						factText: fact.factText,
-						validAt: fact.temporal.validAt
-							? new Date(fact.temporal.validAt)
-							: undefined,
-						invalidAt: fact.temporal.invalidAt
-							? new Date(fact.temporal.invalidAt)
-							: undefined,
-						attributes: fact.attributes || {},
-					};
-
-					// Generate embedding for fact
-					if (embeddingService) {
-						const factEmbedding = await safeTextToVector(
-							embeddingService,
-							fact.factText,
-							`FACT_EMBEDDING:${fact.factText.substring(0, 50)}`,
-						);
-						const typeEmbedding = await safeTextToVector(
-							embeddingService,
-							fact.relationType,
-							`TYPE_EMBEDDING:${fact.relationType}`,
-						);
-
-						if (factEmbedding) {
-							edgeData.factEmbedding = factEmbedding;
-						}
-						if (typeEmbedding) {
-							edgeData.typeEmbedding = typeEmbedding;
-						}
-					}
-
-					const [createdEdge] = await db
-						.insert(schema.edges)
-						.values(edgeData)
-						.returning();
-
-					createdEdges.push(createdEdge);
-
-					// Create source-edge relationship
-					await db.insert(schema.sourceEdges).values({
-						sourceId: createdSource.id,
-						edgeId: createdEdge.id,
-						relation: "EXTRACTED_FROM",
-						linkWeight: 1.0,
-					});
-				}
-
-				return { createdSource, createdNodes, createdEdges };
-			});
-
-			logInfo(
-				`[SAVE_TO_DATABASE] Successfully saved ${result.createdNodes.length} nodes and ${result.createdEdges.length} edges`,
-			);
-
-			// Extra success logs with names/details
-			try {
-				if (result.createdNodes?.length) {
-					const nodeNames = result.createdNodes
-						.map((n) => n.name)
-						.filter((n) => typeof n === "string" && n.trim().length > 0);
-					logInfo("[SAVE_TO_DATABASE] New nodes created", {
-						count: result.createdNodes.length,
-						names: nodeNames,
-					});
-				}
-
-				if (result.createdEdges?.length) {
-					// Build an id->name map from existing + newly created nodes
-					const idToName = new Map<string, string>();
-					for (const n of state.existingNodes || []) {
-						if (n?.id) idToName.set(String(n.id), n.name ?? String(n.id));
-					}
-					for (const n of result.createdNodes || []) {
-						if (n?.id) idToName.set(String(n.id), n.name ?? String(n.id));
-					}
-
-					const edges = result.createdEdges.map((e) => ({
-						type: e.edgeType,
-						fact: e.factText,
-						source: idToName.get(String(e.sourceId)) ?? String(e.sourceId),
-						destination:
-							idToName.get(String(e.destinationId)) ?? String(e.destinationId),
-					}));
-
-					logInfo("[SAVE_TO_DATABASE] New edges created", {
-						count: result.createdEdges.length,
-						edges,
-					});
-
-					const factNames = result.createdEdges
-						.map((e) => e.factText)
-						.filter(
-							(t): t is string => typeof t === "string" && t.trim().length > 0,
-						);
-					if (factNames.length) {
-						logInfo("[SAVE_TO_DATABASE] Facts stored", {
-							count: factNames.length,
-							facts: factNames,
-						});
-					}
-				}
-			} catch (e) {
-				// Non-fatal logging error; continue
-				logError("[SAVE_TO_DATABASE] Post-save logging failed", e);
-			}
-
-			return {
-				createdSource: result.createdSource,
-				createdNodes: result.createdNodes,
-				createdEdges: result.createdEdges,
-				processingStage: "completed",
-				finalMessage: `Knowledge graph creation completed. Created ${result.createdNodes.length} new nodes and ${result.createdEdges.length} new edges from "${state.title}".`,
-				actions: [
-					{
-						id: crypto.randomUUID(),
-						name: "Knowledge Graph Saved",
-						description: `Successfully created knowledge graph with ${result.createdNodes.length} nodes and ${result.createdEdges.length} edges`,
-						metadata: {
-							sourceId: result.createdSource.id,
-							nodeCount: result.createdNodes.length,
-							edgeCount: result.createdEdges.length,
-						},
-					},
-				],
-			};
-		} catch (error) {
-			logError("[SAVE_TO_DATABASE] Error:", error);
-
-			return {
-				errors: [
-					error instanceof Error ? error.message : "Failed to save to database",
-				],
-				finalMessage:
-					"Knowledge graph creation failed during database save operation.",
-				actions: [
-					{
-						id: crypto.randomUUID(),
-						name: "Database Save Failed",
-						description:
-							error instanceof Error ? error.message : "Unknown error",
-						metadata: {},
-					},
-				],
-			};
-		}
+		return await this.databaseSave.saveToDatabaseNode(state);
 	};
 }

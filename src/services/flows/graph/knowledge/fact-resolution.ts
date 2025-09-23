@@ -1,6 +1,6 @@
 import type { KnowledgeGraphState, ResolvedFact, ExtractedFact } from "./state";
 import type { AllServices } from "@/services/flows/interfaces/tool";
-import { logInfo, logError } from "@/utils/logger";
+import { logInfo, logError, logWarn } from "@/utils/logger";
 import { mapRefine } from "@/utils/map-refine";
 
 const FACT_RESOLUTION_SYSTEM_PROMPT = `Given the context, determine for EACH NEW EDGE whether it represents any of the edges in the list of Existing Edges.
@@ -31,9 +31,8 @@ export class FactResolutionFlow {
 		state: KnowledgeGraphState,
 	): Promise<Partial<KnowledgeGraphState>> {
 		try {
-			logInfo("[FACT_RESOLUTION] Starting fact resolution with mapRefine");
-
 			if (!state.extractedFacts || state.extractedFacts.length === 0) {
+				logWarn("[FACT_RESOLUTION] No extracted facts to resolve");
 				return {
 					resolvedFacts: [],
 					processingStage: "temporal_extraction",
@@ -235,7 +234,10 @@ ${factsText}
 
 			const allResolvedFacts = [...resolvedValidFacts, ...invalidFacts];
 
-			logInfo(`[FACT_RESOLUTION] Resolved ${allResolvedFacts.length} facts`);
+			logInfo(
+				`[FACT_RESOLUTION] Resolved ${allResolvedFacts.length} facts`,
+				resolvedValidFacts,
+			);
 
 			return {
 				resolvedFacts: allResolvedFacts,

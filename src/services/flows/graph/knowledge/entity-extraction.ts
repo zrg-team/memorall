@@ -59,6 +59,60 @@ Return a valid JSON array with this exact structure:
 
 The nodeType should be a descriptive category that best represents what this entity is, following the naming conventions above.`;
 
+const USER_INPUT_ENTITY_EXTRACTION_PROMPT = `You are an expert entity extraction specialist focused on PERSONAL KNOWLEDGE extraction. This content represents what a user wants to remember, so extract as much knowledge as possible to build a comprehensive personal knowledge graph.
+
+CRITICAL USER INPUT HANDLING:
+1. Convert first-person pronouns to represent the user:
+   - "I", "me", "my", "myself" → "Memorall User"
+   - Always create a "Memorall User" entity for user references
+   - Use nodeType "USER" for the main user entity
+
+2. Extract MAXIMUM entities - be extremely comprehensive:
+   - Every person, organization, place, concept, technology, tool, method mentioned
+   - Abstract concepts, ideas, feelings, opinions, preferences
+   - Temporal references (dates, events, periods)
+   - Skills, experiences, achievements, goals
+   - Objects, products, brands, services used or mentioned
+   - Activities, hobbies, interests, projects
+
+PERSONAL KNOWLEDGE FOCUS:
+- Treat this as building the user's personal knowledge base
+- Extract entities that help understand the user's life, work, interests, and experiences
+- Include subjective entities: preferences, opinions, feelings, attitudes
+- Extract contextual entities: situations, environments, circumstances
+- Be generous with entity extraction - err on the side of including more rather than less
+
+SPECIAL ENTITY TYPES FOR USER INPUT:
+- USER: The memorall user (for "I", "me", "my" references)
+- PREFERENCE: Things the user likes/dislikes
+- EXPERIENCE: User's experiences or events they participated in
+- SKILL: Abilities, competencies, knowledge areas
+- GOAL: Objectives, aspirations, targets
+- OPINION: User's views, thoughts, beliefs
+- MEMORY: Specific memories or recollections
+- RELATIONSHIP: Connections with other people
+
+EXTRACTION GUIDELINES:
+1. Extract ALL entities - be maximally comprehensive
+2. Always include "Memorall User" for any first-person references
+3. Focus on building a rich personal knowledge graph
+4. Include both concrete and abstract entities
+5. Extract implicit entities (things implied but not directly stated)
+6. Use descriptive summaries that capture personal context
+7. Include emotional and subjective content as entities
+
+Return a valid JSON array with this exact structure:
+[
+  {
+    "name": "Clean Entity Name",
+    "summary": "Brief description with personal context and relevance to the user",
+    "nodeType": "DESCRIPTIVE_CATEGORY_TYPE",
+    "attributes": {}
+  }
+]
+
+REMEMBER: This is personal knowledge - extract comprehensively to build the user's complete knowledge graph!`;
+
 export class EntityExtractionFlow {
 	constructor(private services: AllServices) {}
 
@@ -72,7 +126,11 @@ export class EntityExtractionFlow {
 				throw new Error("LLM service is not ready");
 			}
 
-			logInfo("[ENTITY_EXTRACTION] Starting entity extraction");
+			// Determine if this is user input that should be remembered
+			const isUserInput = state.sourceType === "user_input";
+			const promptToUse = isUserInput ? USER_INPUT_ENTITY_EXTRACTION_PROMPT : ENTITY_EXTRACTION_SYSTEM_PROMPT;
+
+			logInfo(`[ENTITY_EXTRACTION] Starting entity extraction (${isUserInput ? 'USER_INPUT' : 'STANDARD'} mode)`);
 
 			// Format content based on available information
 			let formattedContent = `<CONTENT>\n${state.currentMessage}\n</CONTENT>`;
@@ -90,6 +148,11 @@ export class EntityExtractionFlow {
 				formattedContent = `<METADATA>\n${metadata.join("\n")}\n</METADATA>\n\n${formattedContent}`;
 			}
 
+			// Add special instruction for user input
+			if (isUserInput) {
+				formattedContent += `\n\n<INSTRUCTION>\nThis is user input that the user wants to remember. Extract maximum knowledge and convert "I/me/my" references to "Memorall User".\n</INSTRUCTION>`;
+			}
+
 			interface ParsedEntity {
 				name: string;
 				summary?: string;
@@ -99,6 +162,18 @@ export class EntityExtractionFlow {
 
 			const cleanEntityName = (name: string): string => {
 				let cleaned = name.trim();
+
+				// Special handling for user input - convert first-person pronouns
+				if (isUserInput) {
+					// Convert first-person pronouns to "Memorall User"
+					if (/^(i|me|my|myself)$/i.test(cleaned)) {
+						return "Memorall User";
+					}
+					// Handle possessive forms
+					if (/^(my|mine)$/i.test(cleaned)) {
+						return "Memorall User";
+					}
+				}
 
 				// Generic pattern-based cleaning without fixed lists
 				// Remove common articles
@@ -198,13 +273,20 @@ export class EntityExtractionFlow {
 
 			const extractedEntities = await mapRefine<ExtractedEntity>(
 				llm,
-				ENTITY_EXTRACTION_SYSTEM_PROMPT,
+				promptToUse,
 				(chunk, prev, errorContext) => {
 					const prevNames = prev.map((p) => ` * ${p.name}`);
 					let prompt = `<PREVIOUS RESULT>\n${prevNames.join("\n")}\n</PREVIOUS RESULT>\n<CHUNK>\n${chunk}\n</CHUNK>`;
 
+					if (isUserInput) {
+						prompt += `\n\nREMINDER: This is user input - extract maximum entities and convert "I/me/my" to "Memorall User".`;
+					}
+
 					if (errorContext) {
-						prompt += `\n\n<ERROR_CONTEXT>\n${errorContext}\nPlease fix the JSON format and ensure all entities are properly extracted.\n</ERROR_CONTEXT>`;
+						const errorMsg = isUserInput
+							? "Please fix the JSON format and ensure all entities are properly extracted. Remember to convert first-person pronouns to 'Memorall User'."
+							: "Please fix the JSON format and ensure all entities are properly extracted.";
+						prompt += `\n\n<ERROR_CONTEXT>\n${errorContext}\n${errorMsg}\n</ERROR_CONTEXT>`;
 					}
 
 					return prompt;
@@ -214,7 +296,7 @@ export class EntityExtractionFlow {
 				{
 					maxModelTokens: 10000,
 					maxResponseTokens: 4096,
-					temperature: 0.1,
+					temperature: isUserInput ? 0.2 : 0.1, // Higher creativity for user input
 					maxRetries: 2,
 					dedupeBy: (e) => e.name.toLowerCase(),
 					onError: (error, attempt, chunk) => {

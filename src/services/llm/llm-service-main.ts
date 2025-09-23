@@ -345,16 +345,23 @@ export class LLMServiceMain extends LLMServiceCore implements ILLMService {
 						return db
 							.select()
 							.from(schema.configurations)
-							.where(eq(schema.configurations.key, LOCAL_SERVER_LLM_CONFIG_KEYS.LLM_STUDIO));
+							.where(
+								eq(
+									schema.configurations.key,
+									LOCAL_SERVER_LLM_CONFIG_KEYS.LLM_STUDIO,
+								),
+							);
 					},
 				);
 
-				const lmstudioConfig = lmstudioRows[0]
+				const lmstudioConfig = lmstudioRows[0];
 				if (lmstudioConfig?.data?.baseUrl) {
 					configs.lmstudio = {
 						type: "lmstudio",
 						baseURL: `${lmstudioConfig.data.baseUrl}`,
-						modelId: lmstudioConfig.data.modelId ? `${lmstudioConfig.data.modelId}` : undefined,
+						modelId: lmstudioConfig.data.modelId
+							? `${lmstudioConfig.data.modelId}`
+							: undefined,
 					};
 					logInfo(
 						"🔍 Loaded LMStudio config from database:",
@@ -372,16 +379,23 @@ export class LLMServiceMain extends LLMServiceCore implements ILLMService {
 						return db
 							.select()
 							.from(schema.configurations)
-							.where(eq(schema.configurations.key, LOCAL_SERVER_LLM_CONFIG_KEYS.OLLAMA));
+							.where(
+								eq(
+									schema.configurations.key,
+									LOCAL_SERVER_LLM_CONFIG_KEYS.OLLAMA,
+								),
+							);
 					},
 				);
 
-				const ollamaConfig = ollamaRows[0]
+				const ollamaConfig = ollamaRows[0];
 				if (ollamaConfig?.data?.baseUrl) {
 					configs.ollama = {
 						type: "ollama",
 						baseURL: `${ollamaConfig.data.baseUrl}`,
-						modelId: ollamaConfig.data.modelId ? `${ollamaConfig.data.modelId}` : undefined,
+						modelId: ollamaConfig.data.modelId
+							? `${ollamaConfig.data.modelId}`
+							: undefined,
 					};
 					logInfo(
 						"🔍 Loaded Ollama config from database:",

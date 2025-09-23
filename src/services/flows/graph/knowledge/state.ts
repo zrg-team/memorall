@@ -50,6 +50,7 @@ export interface KnowledgeGraphState extends BaseStateBase {
 	title: string;
 	url: string;
 	pageId: string;
+	sourceType: string;
 	referenceTimestamp: string;
 	metadata?: Record<string, unknown>;
 

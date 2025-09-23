@@ -86,24 +86,22 @@ export class KnowledgeGraphHandler extends BaseProcessHandler<KnowledgeGraphJob>
 			});
 
 			// Subscribe to knowledge graph service progress for detailed logging
-			const unsubscribe = knowledgeGraphService.subscribe(
-				(conversions) => {
-					const conversion = conversions.get(pageData.id);
-					if (!conversion) return;
+			const unsubscribe = knowledgeGraphService.subscribe((conversions) => {
+				const conversion = conversions.get(pageData.id);
+				if (!conversion) return;
 
-					const progressUpdate = this.mapConversionToJobProgress(conversion);
-					void dependencies.updateJobProgress(jobId, progressUpdate);
-					dependencies.logger.info(
-						`📊 Job ${jobId} progress: ${conversion.stage}`,
-						{
-							status: conversion.status,
-							progress: conversion.progress,
-							stage: conversion.stage,
-						},
-						"offscreen",
-					);
-				},
-			);
+				const progressUpdate = this.mapConversionToJobProgress(conversion);
+				void dependencies.updateJobProgress(jobId, progressUpdate);
+				dependencies.logger.info(
+					`📊 Job ${jobId} progress: ${conversion.stage}`,
+					{
+						status: conversion.status,
+						progress: conversion.progress,
+						stage: conversion.stage,
+					},
+					"offscreen",
+				);
+			});
 
 			try {
 				await dependencies.logger.info(
