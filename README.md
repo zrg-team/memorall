@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="images/origin.png" alt="Memorall Icon" width="128"/>
+
 # Memorall 🧠
 
 ### AI-Powered Personal Knowledge Assistant
@@ -70,19 +72,23 @@ See Memorall in action! The extension seamlessly integrates with your browsing e
 
 ### 📷 Screenshots
 
-![Main Interface](docs/assets/1.png)
-
-![Knowledge Graph](docs/assets/2.png)
-
-![Memory Recall](docs/assets/3.png)
-
-![Page Summary](docs/assets/4.png)
-
-![Entity Recognition](docs/assets/5.png)
-
-![Knowledge Building](docs/assets/6.png)
-
-![Context Awareness](docs/assets/7.png)
+<table>
+<tr>
+<td><img src="docs/assets/1.png" alt="Main Interface" width="200"/></td>
+<td><img src="docs/assets/2.png" alt="Knowledge Graph" width="200"/></td>
+<td><img src="docs/assets/3.png" alt="Memory Recall" width="200"/></td>
+</tr>
+<tr>
+<td><img src="docs/assets/4.png" alt="Page Summary" width="200"/></td>
+<td><img src="docs/assets/5.png" alt="Entity Recognition" width="200"/></td>
+<td><img src="docs/assets/6.png" alt="Knowledge Building" width="200"/></td>
+</tr>
+<tr>
+<td><img src="docs/assets/7.png" alt="Context Awareness" width="200"/></td>
+<td></td>
+<td></td>
+</tr>
+</table>
 
 ## 🎯 Use Cases
 

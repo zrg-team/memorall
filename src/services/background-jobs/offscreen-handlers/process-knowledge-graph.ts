@@ -40,16 +40,8 @@ export type KnowledgeGraphJob = BaseJob & {
 };
 
 export class KnowledgeGraphHandler extends BaseProcessHandler<KnowledgeGraphJob> {
-	private llmService: ILLMService;
-	private knowledgeGraphService: typeof knowledgeGraphService;
-
-	constructor(
-		llmServiceInstance = serviceManager.getLLMService(),
-		knowledgeGraphServiceInstance = knowledgeGraphService,
-	) {
+	constructor() {
 		super();
-		this.llmService = llmServiceInstance;
-		this.knowledgeGraphService = knowledgeGraphServiceInstance;
 	}
 
 	async process(
@@ -68,15 +60,16 @@ export class KnowledgeGraphHandler extends BaseProcessHandler<KnowledgeGraphJob>
 			},
 			"offscreen",
 		);
+		const llmService = serviceManager.llmService as ILLMService;
 
 		// DEBUG: Check what services we have before processing
-		const availableServices = this.llmService.list();
+		const availableServices = llmService.list();
 		await dependencies.logger.info(
 			"🔍 DEBUG: Before knowledge graph processing:",
 			{
 				availableServices,
-				hasLmstudio: this.llmService.has("lmstudio"),
-				hasOpenai: this.llmService.has("openai"),
+				hasLmstudio: llmService.has("lmstudio"),
+				hasOpenai: llmService.has("openai"),
 			},
 			"offscreen",
 		);
@@ -93,7 +86,7 @@ export class KnowledgeGraphHandler extends BaseProcessHandler<KnowledgeGraphJob>
 			});
 
 			// Subscribe to knowledge graph service progress for detailed logging
-			const unsubscribe = this.knowledgeGraphService.subscribe(
+			const unsubscribe = knowledgeGraphService.subscribe(
 				(conversions) => {
 					const conversion = conversions.get(pageData.id);
 					if (!conversion) return;
@@ -123,7 +116,7 @@ export class KnowledgeGraphHandler extends BaseProcessHandler<KnowledgeGraphJob>
 					"offscreen",
 				);
 
-				await this.knowledgeGraphService.convertPageToKnowledgeGraph(pageData);
+				await knowledgeGraphService.convertPageToKnowledgeGraph(pageData);
 
 				await dependencies.logger.info(
 					`✅ Knowledge graph job completed successfully: ${jobId}`,
