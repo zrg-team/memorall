@@ -241,7 +241,7 @@ chrome.runtime.onMessage.addListener(async (message, _sender, sendResponse) => {
 				},
 			};
 
-			let response: any;
+			let response;
 			try {
 				response = await chrome.runtime.sendMessage(payload);
 			} catch (err) {

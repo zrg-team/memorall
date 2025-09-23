@@ -46,7 +46,7 @@ export class KnowledgeGraphFlow extends GraphBase<
 		super(services);
 		this.config = {
 			enableTemporalExtraction: false, // Disabled by default
-			...config
+			...config,
 		};
 		this.workflow = new StateGraph(KnowledgeGraphAnnotation);
 

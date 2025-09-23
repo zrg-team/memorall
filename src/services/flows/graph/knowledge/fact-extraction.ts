@@ -340,17 +340,18 @@ export class FactExtractionFlow {
 
 			// Find entities without any connections
 			const connectedEntityIds = new Set<string>();
-			extractedFacts.forEach(fact => {
+			extractedFacts.forEach((fact) => {
 				connectedEntityIds.add(fact.sourceEntityId);
 				connectedEntityIds.add(fact.destinationEntityId);
 			});
 
 			const unconnectedEntities = state.resolvedEntities.filter(
-				entity => !connectedEntityIds.has(entity.uuid)
+				(entity) => !connectedEntityIds.has(entity.uuid),
 			);
 
-			logInfo(`[FACT_EXTRACTION] Found ${unconnectedEntities.length} entities without connections:`,
-				unconnectedEntities.map(e => e.finalName)
+			logInfo(
+				`[FACT_EXTRACTION] Found ${unconnectedEntities.length} entities without connections:`,
+				unconnectedEntities.map((e) => e.finalName),
 			);
 
 			// Generate additional facts for unconnected entities
@@ -362,17 +363,21 @@ export class FactExtractionFlow {
 					llm,
 					fullText,
 					entitiesText,
-					parseFacts
+					parseFacts,
 				);
 
 				// Merge additional facts with existing ones
 				extractedFacts.push(...additionalFacts);
 
-				logInfo(`[FACT_EXTRACTION] Generated ${additionalFacts.length} additional facts for unconnected entities`);
+				logInfo(
+					`[FACT_EXTRACTION] Generated ${additionalFacts.length} additional facts for unconnected entities`,
+				);
 			}
 
 			const totalFacts = extractedFacts.length;
-			logInfo(`[FACT_EXTRACTION] Total extracted facts: ${totalFacts} (${totalFacts - additionalFacts.length} initial + ${additionalFacts.length} additional)`);
+			logInfo(
+				`[FACT_EXTRACTION] Total extracted facts: ${totalFacts} (${totalFacts - additionalFacts.length} initial + ${additionalFacts.length} additional)`,
+			);
 
 			return {
 				extractedFacts,
@@ -386,7 +391,7 @@ export class FactExtractionFlow {
 							factCount: totalFacts,
 							initialFacts: totalFacts - additionalFacts.length,
 							additionalFacts: additionalFacts.length,
-							unconnectedEntitiesFound: unconnectedEntities.length
+							unconnectedEntitiesFound: unconnectedEntities.length,
 						},
 					},
 				],
@@ -412,23 +417,32 @@ export class FactExtractionFlow {
 	}
 
 	private async generateFactsForUnconnectedEntities(
-		unconnectedEntities: Array<{ uuid: string; finalName: string; summary?: string; nodeType: string }>,
+		unconnectedEntities: Array<{
+			uuid: string;
+			finalName: string;
+			summary?: string;
+			nodeType: string;
+		}>,
 		state: KnowledgeGraphState,
 		llm: ILLMService,
 		fullText: string,
 		entitiesText: string,
-		parseFacts: (content: string) => ExtractedFact[]
+		parseFacts: (content: string) => ExtractedFact[],
 	): Promise<ExtractedFact[]> {
 		if (unconnectedEntities.length === 0) return [];
 
-		const unconnectedNames = unconnectedEntities.map(e => e.finalName).join(", ");
+		const unconnectedNames = unconnectedEntities
+			.map((e) => e.finalName)
+			.join(", ");
 
 		try {
 			const additionalFacts = await mapRefine<ExtractedFact>(
 				llm,
 				UNCONNECTED_EXTRACTION_PROMPT.replace(
-					'{{nodes}}',
-					unconnectedEntities.map(e => `- ${e.finalName}: ${e.summary || "No description"}`).join("\n")
+					"{{nodes}}",
+					unconnectedEntities
+						.map((e) => `- ${e.finalName}: ${e.summary || "No description"}`)
+						.join("\n"),
 				),
 				(chunk, prev, errorContext) => {
 					let prompt = `Focus on finding relationships for these unconnected entities: ${unconnectedNames}\n\n<CONTENT>\n${chunk}\n</CONTENT>\n\n<ENTITIES>\n${entitiesText}\n</ENTITIES>\n\nREMINDER: Create connections specifically for the unconnected entities listed above using EXACT entity names.`;
@@ -446,27 +460,38 @@ export class FactExtractionFlow {
 					maxResponseTokens: 3000,
 					temperature: 0.2, // Slightly higher creativity for finding implicit relationships
 					maxRetries: 2,
-					dedupeBy: (f) => `${f.sourceEntityId}|${f.relationType}|${f.destinationEntityId}`,
+					dedupeBy: (f) =>
+						`${f.sourceEntityId}|${f.relationType}|${f.destinationEntityId}`,
 					onError: (error, attempt) => {
-						logError(`[UNCONNECTED_EXTRACTION] Parse error on attempt ${attempt}:`, error);
+						logError(
+							`[UNCONNECTED_EXTRACTION] Parse error on attempt ${attempt}:`,
+							error,
+						);
 						return `Extraction failed: ${error.message}. Please ensure valid JSON format and focus on unconnected entities.`;
 					},
 				},
 			);
 
 			// Filter to only include facts that involve at least one unconnected entity
-			const unconnectedEntityIds = new Set(unconnectedEntities.map(e => e.uuid));
-			const filteredFacts = additionalFacts.filter(fact =>
-				unconnectedEntityIds.has(fact.sourceEntityId) ||
-				unconnectedEntityIds.has(fact.destinationEntityId)
+			const unconnectedEntityIds = new Set(
+				unconnectedEntities.map((e) => e.uuid),
+			);
+			const filteredFacts = additionalFacts.filter(
+				(fact) =>
+					unconnectedEntityIds.has(fact.sourceEntityId) ||
+					unconnectedEntityIds.has(fact.destinationEntityId),
 			);
 
-			logInfo(`[UNCONNECTED_EXTRACTION] Generated ${filteredFacts.length} relationships for unconnected entities`);
+			logInfo(
+				`[UNCONNECTED_EXTRACTION] Generated ${filteredFacts.length} relationships for unconnected entities`,
+			);
 
 			return filteredFacts;
-
 		} catch (error) {
-			logError("[UNCONNECTED_EXTRACTION] Error generating facts for unconnected entities:", error);
+			logError(
+				"[UNCONNECTED_EXTRACTION] Error generating facts for unconnected entities:",
+				error,
+			);
 			return [];
 		}
 	}

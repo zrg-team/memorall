@@ -128,9 +128,13 @@ export class EntityExtractionFlow {
 
 			// Determine if this is user input that should be remembered
 			const isUserInput = state.sourceType === "user_input";
-			const promptToUse = isUserInput ? USER_INPUT_ENTITY_EXTRACTION_PROMPT : ENTITY_EXTRACTION_SYSTEM_PROMPT;
+			const promptToUse = isUserInput
+				? USER_INPUT_ENTITY_EXTRACTION_PROMPT
+				: ENTITY_EXTRACTION_SYSTEM_PROMPT;
 
-			logInfo(`[ENTITY_EXTRACTION] Starting entity extraction (${isUserInput ? 'USER_INPUT' : 'STANDARD'} mode)`);
+			logInfo(
+				`[ENTITY_EXTRACTION] Starting entity extraction (${isUserInput ? "USER_INPUT" : "STANDARD"} mode)`,
+			);
 
 			// Format content based on available information
 			let formattedContent = `<CONTENT>\n${state.currentMessage}\n</CONTENT>`;
