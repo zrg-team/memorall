@@ -5,7 +5,7 @@ import {
 	type LogLevel,
 } from "./indexeddb-storage";
 
-const IS_DEVELOPMENT = true
+const IS_DEVELOPMENT = true;
 
 interface LoggerConfig {
 	maxEntries: number;
@@ -26,8 +26,7 @@ class Logger {
 			...config,
 		};
 
-		this.isDevelopment = IS_DEVELOPMENT
-			
+		this.isDevelopment = IS_DEVELOPMENT;
 
 		this.storage = new IndexedDBLogStorage();
 

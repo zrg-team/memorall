@@ -19,13 +19,14 @@ import { RememberedContentsPage } from "./components/RememberedContentsPage";
 import { LogsPage } from "./components/LogsPage";
 import { KnowledgeGraphPage } from "./components/KnowledgeGraphPage";
 import { RememberPage } from "./components/RememberPage";
+import { TopicsPage } from "./components/TopicsPage";
 import { AppLoadingScreen } from "./components/atoms/AppLoadingScreen";
 import {
 	Cursor,
 	CursorFollow,
 	CursorProvider,
 } from "./components/ui/shadcn-io/animated-cursor";
-import { ThemeProvider } from "./components/molecules/contexts/ThemeContext";
+import { ThemeProvider } from "./components/molecules/Copilot/ThemeContext";
 import { CopilotProvider, Copilot } from "./components/atoms/copilot";
 
 const App: React.FC = () => {
@@ -168,6 +169,7 @@ const App: React.FC = () => {
 									element={<KnowledgeGraphPage />}
 								/>
 								<Route path="/remember" element={<RememberPage />} />
+								<Route path="/topics" element={<TopicsPage />} />
 								<Route path="/logs" element={<LogsPage />} />
 							</Routes>
 						</Layout>

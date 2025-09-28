@@ -10,6 +10,11 @@ import type {
 	WorkerQueryPayload,
 	WorkerQueryResult,
 } from "./types";
+import {
+	serializeForRpc,
+	deserializeFromRpc,
+	deserializeQueryResult,
+} from "./serialization";
 
 /* PGliteSharedProxy.ts
  * Strictly-typed proxy that mimics a PGlite client but talks over an
@@ -103,7 +108,11 @@ export class PGliteSharedProxy implements PGliteLike {
 			rowMode: options?.rowMode ?? this.defaultRowMode,
 		};
 		const res = await this.call<WorkerQueryResult<R>>("query", payload);
-		return { rows: res?.rows ?? [], rowCount: res?.rowCount };
+		// Use specialized deserializer for query results to ensure proper Date handling
+		return deserializeQueryResult<R>({
+			rows: res?.rows ?? [],
+			rowCount: res?.rowCount,
+		});
 	}
 
 	/** DDL or statements where you don't care about returned rows */
@@ -164,7 +173,9 @@ export class PGliteSharedProxy implements PGliteLike {
 		this.clearTimer(waiter);
 
 		if (resp.ok) {
-			waiter.resolve(resp.data);
+			// Deserialize response data (handles Date objects from main thread)
+			const deserializedData = deserializeFromRpc(resp.data);
+			waiter.resolve(deserializedData);
 		} else {
 			// resp is RpcResponseErr when ok is false
 			const errorResp = resp as { ok: false; error: string };
@@ -200,7 +211,9 @@ export class PGliteSharedProxy implements PGliteLike {
 			}
 
 			this.pending.set(id, waiter);
-			const req: RpcRequest = { id, op, payload };
+			// Serialize payload before sending (handles Date objects to main thread)
+			const serializedPayload = serializeForRpc(payload);
+			const req: RpcRequest = { id, op, payload: serializedPayload };
 			this.transport.post(req);
 		});
 

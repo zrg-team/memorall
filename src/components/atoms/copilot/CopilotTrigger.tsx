@@ -1,6 +1,6 @@
 import React from "react";
 import { Button } from "@/components/ui/button";
-import { useCopilot } from "@/components/molecules/contexts/CopilotContext";
+import { useCopilot } from "@/components/molecules/Copilot/CopilotContext";
 import { HelpCircle } from "lucide-react";
 
 interface CopilotTriggerProps {
@@ -36,7 +36,7 @@ export const CopilotTrigger: React.FC<CopilotTriggerProps> = ({
 			className={`${className}`}
 		>
 			{showIcon && <HelpCircle size={16} className="mr-1" />}
-			{children || "Help"}
+			{children}
 		</Button>
 	);
 };

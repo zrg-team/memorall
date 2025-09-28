@@ -53,6 +53,7 @@ export interface KnowledgeGraphState extends BaseStateBase {
 	sourceType: string;
 	referenceTimestamp: string;
 	metadata?: Record<string, unknown>;
+	topicId?: string; // Optional topic for scoped content
 
 	// Processing state
 	previousMessages?: string;
@@ -110,6 +111,10 @@ export const KnowledgeGraphAnnotation = Annotation.Root({
 	metadata: Annotation<Record<string, unknown> | undefined>({
 		value: (x, y) => y ?? x,
 		default: () => ({}),
+	}),
+	topicId: Annotation<string | undefined>({
+		value: (x, y) => y ?? x,
+		default: () => undefined,
 	}),
 	previousMessages: Annotation<string | undefined>({
 		value: (x, y) => y ?? x,

@@ -65,7 +65,6 @@ export const up = async (pg: PGlite) => {
     ${rememberedContentTable.table}
     ${rememberedContentTable.indexes.join("\n")}
 
-
     ${configurationsTable.table}
     ${configurationsTable.indexes.join("\n")}
 
@@ -183,6 +182,5 @@ export const up = async (pg: PGlite) => {
     END;
     $$ LANGUAGE plpgsql;
   `;
-	console.log(`Executing migration 000_initial SQL: ${sql}`);
 	await pg.exec(sql);
 };

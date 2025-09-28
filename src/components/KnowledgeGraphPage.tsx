@@ -35,7 +35,12 @@ import {
 } from "@/services/remember/remember-service";
 import { knowledgeGraphService } from "@/services/knowledge-graph/knowledge-graph-service";
 import { backgroundJob } from "@/services/background-jobs/background-job";
-import type { RememberedContent, Node, Edge } from "@/services/database/db";
+import type {
+	RememberedContent,
+	Node,
+	Edge,
+	Topic,
+} from "@/services/database/db";
 import { serviceManager } from "@/services";
 
 // Helper function to get URL from the new data structure
@@ -93,6 +98,7 @@ export const KnowledgeGraphPage: React.FC<KnowledgeGraphPageProps> = () => {
 	const [pages, setPages] = useState<RememberedContent[]>([]);
 	const [loading, setLoading] = useState(true);
 	const [searchQuery, setSearchQuery] = useState("");
+	const [pageTopics, setPageTopics] = useState<Map<string, Topic>>(new Map());
 	const [selectedPage, setSelectedPage] = useState<RememberedContent | null>(
 		null,
 	);
@@ -101,7 +107,7 @@ export const KnowledgeGraphPage: React.FC<KnowledgeGraphPageProps> = () => {
 	const [conversions, setConversions] = useState<
 		Map<string, ConversionProgress>
 	>(new Map());
-	const [backgroundJobs, setBackgroundJobs] = useState<any[]>([]);
+	const [backgroundJobs, setBackgroundJobs] = useState<unknown[]>([]);
 
 	const [filterType, setFilterType] = useState<
 		"all" | "converted" | "inProgress"
@@ -133,7 +139,7 @@ export const KnowledgeGraphPage: React.FC<KnowledgeGraphPageProps> = () => {
 
 	// Subscribe to background job updates
 	useEffect(() => {
-		const unsubscribe = backgroundJob.subscribe((state: any) => {
+		const unsubscribe = backgroundJob.subscribe((state) => {
 			setBackgroundJobs(Object.values(state.jobs));
 
 			// Reload source statuses when jobs complete
@@ -195,6 +201,24 @@ export const KnowledgeGraphPage: React.FC<KnowledgeGraphPageProps> = () => {
 			if (filteredPages.length > 0) {
 				const pageIds = filteredPages.map((p) => p.id);
 				await loadSourceStatuses(pageIds);
+
+				// Load topics for pages that have topicId
+				const topicsMap = new Map();
+				for (const page of filteredPages) {
+					if (page.topicId) {
+						try {
+							const topic = await rememberService.getTopicForContent(
+								page.topicId,
+							);
+							if (topic) {
+								topicsMap.set(page.id, topic);
+							}
+						} catch (error) {
+							logError("Failed to load topic for page:", error);
+						}
+					}
+				}
+				setPageTopics(topicsMap);
 			}
 		} catch (error) {
 			logError("Failed to load remembered pages:", error);
@@ -240,7 +264,9 @@ export const KnowledgeGraphPage: React.FC<KnowledgeGraphPageProps> = () => {
 		const unconvertedPages = pages.filter(
 			(page) =>
 				!conversions.has(page.id) &&
-				!backgroundJobs.some((job) => job.pageId === page.id),
+				!backgroundJobs.some(
+					(job) => (job as { pageId: string }).pageId === page.id,
+				),
 		);
 		if (unconvertedPages.length > 0) {
 			// Add multiple pages to background queue (limit to 10 at a time)
@@ -407,9 +433,11 @@ export const KnowledgeGraphPage: React.FC<KnowledgeGraphPageProps> = () => {
 
 	const getConversionForPage = (pageId: string): ConversionProgress | null => {
 		// First check background jobs
-		const backgroundJob = backgroundJobs.find((job) => job.pageId === pageId);
+		const backgroundJob = backgroundJobs.find(
+			(job) => (job as { pageId: string }).pageId === pageId,
+		);
 		if (backgroundJob) {
-			return backgroundJob.progress;
+			return (backgroundJob as { progress: ConversionProgress }).progress;
 		}
 
 		// Check in-memory conversions
@@ -476,7 +504,9 @@ export const KnowledgeGraphPage: React.FC<KnowledgeGraphPageProps> = () => {
 			(c) => c.status !== "completed" && c.status !== "failed",
 		) ||
 		backgroundJobs.some(
-			(job) => job.status === "running" || job.status === "pending",
+			(job) =>
+				(job as { status: string }).status === "running" ||
+				(job as { status: string }).status === "pending",
 		);
 
 	return (
@@ -568,6 +598,7 @@ export const KnowledgeGraphPage: React.FC<KnowledgeGraphPageProps> = () => {
 						<div className="divide-y divide-border">
 							{pages.map((page) => {
 								const conversion = getConversionForPage(page.id);
+								const topic = pageTopics.get(page.id);
 								return (
 									<div
 										key={page.id}
@@ -614,7 +645,14 @@ export const KnowledgeGraphPage: React.FC<KnowledgeGraphPageProps> = () => {
 											</p>
 
 											<div className="flex items-center justify-between text-xs text-muted-foreground">
-												<span>{formatDomain(getContentUrl(page))}</span>
+												<div className="flex items-center gap-2">
+													<span>{formatDomain(getContentUrl(page))}</span>
+													{topic && (
+														<Badge variant="secondary" className="text-xs">
+															{topic.name}
+														</Badge>
+													)}
+												</div>
 												<span>{formatDate(page.createdAt)}</span>
 											</div>
 										</div>

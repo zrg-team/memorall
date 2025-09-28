@@ -44,7 +44,7 @@ function extractSelection(selectedText: string) {
 }
 
 // Store context data for the remember page
-function storeRememberContext(context?: string) {
+function storeRememberContext(context?: string, showTopicSelector?: boolean) {
 	const contextData = {
 		context,
 		pageUrl: window.location.href,
@@ -54,7 +54,11 @@ function storeRememberContext(context?: string) {
 
 	// Store in session storage for the popup to access
 	try {
-		chrome.storage?.session?.set?.({ rememberContext: contextData });
+		const storageData: any = { rememberContext: contextData };
+		if (showTopicSelector) {
+			storageData.showTopicSelector = true;
+		}
+		chrome.storage?.session?.set?.(storageData);
 	} catch (error) {
 		console.error("Failed to store remember context:", error);
 	}
@@ -180,6 +184,7 @@ async function extractPageContent() {
 				...metadata,
 				title: article.title || metadata.title,
 			},
+			topicId: null,
 			article,
 		};
 		return data;
@@ -194,6 +199,11 @@ chrome.runtime.onMessage.addListener(async (message, _sender, sendResponse) => {
 		try {
 			// Extract page content
 			const extractedData = await extractPageContent();
+
+			// Include topicId if provided
+			if (message.topicId) {
+				extractedData.topicId = message.topicId;
+			}
 
 			// Send extracted content back to background script
 			const payload = {
@@ -269,7 +279,7 @@ chrome.runtime.onMessage.addListener(async (message, _sender, sendResponse) => {
 	} else if (message.type === CONTENT_BACKGROUND_EVENTS.LET_REMEMBER) {
 		try {
 			// Store context data for the popup to access
-			storeRememberContext(message.context);
+			storeRememberContext(message.context, message.showTopicSelector);
 
 			// Response handled immediately - no UI shown in content script
 			sendResponse({ success: true });
@@ -282,7 +292,196 @@ chrome.runtime.onMessage.addListener(async (message, _sender, sendResponse) => {
 		}
 
 		return true;
+	} else if (message.type === CONTENT_BACKGROUND_EVENTS.SHOW_TOPIC_SELECTOR) {
+		try {
+			// Show topic selector UI on the page
+			createTopicSelectorUI(
+				message.context || "",
+				window.location.href,
+				document.title,
+			);
+
+			sendResponse({ success: true });
+		} catch (error) {
+			sendResponse({
+				success: false,
+				error:
+					error instanceof Error
+						? error.message
+						: "Failed to show topic selector",
+			});
+		}
+
+		return true;
 	}
+});
+
+// Create compact topic selector UI
+function createTopicSelectorUI(
+	context: string,
+	pageUrl: string,
+	pageTitle: string,
+) {
+	// Remove any existing selector
+	const existingSelector = document.getElementById("memorall-topic-selector");
+	if (existingSelector) {
+		existingSelector.remove();
+	}
+
+	// Calculate position near mouse, ensuring it stays within viewport
+	const viewportWidth = window.innerWidth;
+	const viewportHeight = window.innerHeight;
+	const selectorWidth = 200;
+	const selectorHeight = 80; // Approximate height
+
+	let x = lastMouseX + 10; // Small offset from mouse
+	let y = lastMouseY + 10;
+
+	// Adjust if it would go off screen
+	if (x + selectorWidth > viewportWidth) {
+		x = lastMouseX - selectorWidth - 10;
+	}
+	if (y + selectorHeight > viewportHeight) {
+		y = lastMouseY - selectorHeight - 10;
+	}
+
+	// Ensure minimum distance from edges
+	x = Math.max(10, Math.min(x, viewportWidth - selectorWidth - 10));
+	y = Math.max(10, Math.min(y, viewportHeight - selectorHeight - 10));
+
+	// Create compact topic selector container
+	const selectorContainer = document.createElement("div");
+	selectorContainer.id = "memorall-topic-selector";
+	selectorContainer.style.cssText = `
+		position: fixed;
+		top: ${y}px;
+		left: ${x}px;
+		background: white;
+		border: 1px solid #d1d5db;
+		border-radius: 8px;
+		box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+		padding: 12px;
+		z-index: 999999;
+		min-width: 200px;
+		font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+		font-size: 13px;
+	`;
+
+	// Create content
+	selectorContainer.innerHTML = `
+		<label style="display: block; margin-bottom: 6px; font-weight: 500; color: #374151;">
+			Select Topic:
+		</label>
+		<select id="memorall-topic-select" style="
+			width: 100%;
+			padding: 6px 8px;
+			border: 1px solid #d1d5db;
+			border-radius: 4px;
+			font-size: 13px;
+			background: white;
+		">
+			<option value="">Loading topics...</option>
+		</select>
+	`;
+
+	const select = selectorContainer.querySelector(
+		"#memorall-topic-select",
+	) as HTMLSelectElement;
+
+	// Auto-select and save when topic is chosen
+	select.addEventListener("change", async () => {
+		const selectedTopicId = select.value;
+		if (!selectedTopicId) return;
+
+		// Send context data with selected topic directly to background script for saving
+		try {
+			console.log("🔍 Content script sending topicId:", selectedTopicId);
+			await chrome.runtime.sendMessage({
+				type: "REMEMBER_CONTENT_WITH_TOPIC",
+				context,
+				pageUrl,
+				pageTitle,
+				timestamp: new Date().toISOString(),
+				topicId: selectedTopicId,
+			});
+
+			// Show brief success message
+			selectorContainer.innerHTML = `
+				<div style="color: #16a34a; font-weight: 500; text-align: center;">
+					✓ Saved to topic
+				</div>
+			`;
+
+			// Remove after 2 seconds
+			setTimeout(() => {
+				selectorContainer.remove();
+			}, 2000);
+		} catch (error) {
+			console.error("Failed to save content with topic:", error);
+
+			// Show error message
+			selectorContainer.innerHTML = `
+				<div style="color: #dc2626; font-weight: 500; text-align: center;">
+					✗ Failed to save
+				</div>
+			`;
+
+			setTimeout(() => {
+				selectorContainer.remove();
+			}, 3000);
+		}
+	});
+
+	// Load topics
+	loadTopicsForSelector(select);
+
+	// Add to page
+	document.body.appendChild(selectorContainer);
+
+	// Auto-remove after 30 seconds if no selection
+	setTimeout(() => {
+		if (document.getElementById("memorall-topic-selector")) {
+			selectorContainer.remove();
+		}
+	}, 30000);
+}
+
+// Load topics from background
+async function loadTopicsForSelector(select: HTMLSelectElement) {
+	try {
+		// Request topics from background script
+		const response = await chrome.runtime.sendMessage({
+			type: "GET_TOPICS_FOR_SELECTOR",
+		});
+
+		if (response?.success && response?.topics) {
+			// Clear loading option
+			select.innerHTML = '<option value="">Choose a topic...</option>';
+
+			// Add topic options
+			response.topics.forEach((topic: any) => {
+				const option = document.createElement("option");
+				option.value = topic.id;
+				option.textContent = topic.name;
+				select.appendChild(option);
+			});
+		} else {
+			select.innerHTML = '<option value="">No topics available</option>';
+		}
+	} catch (error) {
+		console.error("Failed to load topics:", error);
+		select.innerHTML = '<option value="">Failed to load topics</option>';
+	}
+}
+
+// Track last mouse position for context menu
+let lastMouseX = 0;
+let lastMouseY = 0;
+
+// Track mouse position for context menu positioning
+document.addEventListener("contextmenu", (e) => {
+	lastMouseX = e.clientX;
+	lastMouseY = e.clientY;
 });
 
 // Initialize content script

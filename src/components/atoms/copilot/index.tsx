@@ -7,5 +7,5 @@ export { CopilotDebugger } from "./CopilotDebugger";
 export {
 	CopilotProvider,
 	useCopilot,
-} from "@/components/molecules/contexts/CopilotContext";
-export type { CopilotStep } from "@/components/molecules/contexts/CopilotContext";
+} from "@/components/molecules/Copilot/CopilotContext";
+export type { CopilotStep } from "@/components/molecules/Copilot/CopilotContext";

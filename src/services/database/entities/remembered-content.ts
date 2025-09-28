@@ -10,8 +10,9 @@ import {
 } from "drizzle-orm/pg-core";
 import { topic } from "./topics";
 
+const tableName = "remembered_contents";
 export const rememberedContent = pgTable(
-	"remembered_contents",
+	tableName,
 	{
 		id: uuid("id").primaryKey().defaultRandom(),
 
@@ -75,5 +76,3 @@ export const rememberedContent = pgTable(
 // TypeScript types
 export type RememberedContent = typeof rememberedContent.$inferSelect;
 export type NewRememberedContent = typeof rememberedContent.$inferInsert;
-
-// Types are already exported above via the type declarations

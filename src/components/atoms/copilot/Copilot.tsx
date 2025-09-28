@@ -1,6 +1,6 @@
 import React, { useEffect } from "react";
 import { CopilotOverlay } from "./CopilotOverlay";
-import { useCopilot } from "@/components/molecules/contexts/CopilotContext";
+import { useCopilot } from "@/components/molecules/Copilot/CopilotContext";
 
 interface CopilotProps {
 	autoStart?: boolean;

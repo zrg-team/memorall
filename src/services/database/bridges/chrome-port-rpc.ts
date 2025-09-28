@@ -3,6 +3,7 @@
 // chrome.runtime Port messaging (best performance for MV3 extensions).
 
 import type { RpcRequest, RpcResponse, RpcTransport } from "./types";
+import { serializeForRpc, deserializeFromRpc } from "./serialization";
 
 export interface ChromePortTransportOptions {
 	/** Port name; must match on the server side. Default: "pglite-rpc". */
@@ -63,8 +64,9 @@ export async function createChromePortTransport(
 	let backoff = backoffInit;
 
 	const handleMessage = (msg: unknown): void => {
-		if (!isRpcResponse(msg)) return;
-		subscribers.forEach((fn) => fn(msg));
+		const deserializedMsg = deserializeFromRpc(msg);
+		if (!isRpcResponse(deserializedMsg)) return;
+		subscribers.forEach((fn) => fn(deserializedMsg));
 	};
 
 	const handleDisconnect = (): void => {
@@ -102,7 +104,8 @@ export async function createChromePortTransport(
 			// Flush queued messages
 			while (queue.length > 0 && port) {
 				const m = queue.shift()!;
-				port.postMessage(m);
+				const serializedM = serializeForRpc(m);
+				port.postMessage(serializedM);
 			}
 
 			backoff = backoffInit;
@@ -117,9 +120,10 @@ export async function createChromePortTransport(
 	const transport: RpcTransport = {
 		post(msg: RpcRequest): void {
 			if (disposed) return;
+			const serializedMsg = serializeForRpc(msg);
 			if (port) {
 				try {
-					port.postMessage(msg);
+					port.postMessage(serializedMsg);
 				} catch {
 					// If posting fails due to a race with disconnect, enqueue and reconnect.
 					queue.push(msg);

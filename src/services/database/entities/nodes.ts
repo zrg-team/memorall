@@ -8,8 +8,9 @@ import {
 	vector,
 } from "drizzle-orm/pg-core";
 
+const tableName = "nodes";
 export const node = pgTable(
-	"nodes",
+	tableName,
 	{
 		id: uuid("id").primaryKey().defaultRandom(),
 		nodeType: text("node_type").notNull(),
@@ -35,6 +36,6 @@ export type NewNode = typeof node.$inferInsert;
 // Manual indexes that can't be auto-generated
 export const nodeManualIndexes = [
 	// Full-text search indexes using GIN for trigram search (used by search_nodes_trigram function)
-	"CREATE INDEX IF NOT EXISTS nodes_name_trgm_idx ON nodes USING GIN (name gin_trgm_ops);",
-	"CREATE INDEX IF NOT EXISTS nodes_summary_trgm_idx ON nodes USING GIN (summary gin_trgm_ops);",
+	`CREATE INDEX IF NOT EXISTS ${tableName}_name_trgm_idx ON ${tableName} USING GIN (name gin_trgm_ops);`,
+	`CREATE INDEX IF NOT EXISTS ${tableName}_summary_trgm_idx ON ${tableName} USING GIN (summary gin_trgm_ops);`,
 ];

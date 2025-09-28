@@ -99,6 +99,17 @@ const defaultSteps: CopilotStep[] = [
 		showProgress: true,
 	},
 	{
+		id: "topics-tab-quick",
+		title: "🏷️ Topics Tab",
+		content:
+			"Categorize your remembered pages and knowledge graph by topics. This helps organize your knowledge around focused areas instead of random information, making it easier to find and connect related content.",
+		target: '[href="/topics"]',
+		placement: "bottom",
+		action: "navigate",
+		navigationPath: "/topics",
+		showProgress: true,
+	},
+	{
 		id: "models-tab-intro",
 		title: "🤖 Models Tab - Setup Required!",
 		content:

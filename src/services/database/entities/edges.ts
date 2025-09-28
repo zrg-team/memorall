@@ -12,8 +12,9 @@ import {
 } from "drizzle-orm/pg-core";
 import { node } from "./nodes";
 
+const tableName = "edges";
 export const edge = pgTable(
-	"edges",
+	tableName,
 	{
 		id: uuid("id").primaryKey().defaultRandom(),
 		sourceId: uuid("source_id")
@@ -55,6 +56,6 @@ export type NewEdge = typeof edge.$inferInsert;
 // Manual indexes that can't be auto-generated
 export const edgeManualIndexes = [
 	// Full-text search indexes using GIN for trigram search (used by search_edges_trigram function)
-	"CREATE INDEX IF NOT EXISTS edges_fact_text_trgm_idx ON edges USING GIN (fact_text gin_trgm_ops);",
-	"CREATE INDEX IF NOT EXISTS edges_edge_type_trgm_idx ON edges USING GIN (edge_type gin_trgm_ops);",
+	`CREATE INDEX IF NOT EXISTS ${tableName}_fact_text_trgm_idx ON ${tableName} USING GIN (fact_text gin_trgm_ops);`,
+	`CREATE INDEX IF NOT EXISTS ${tableName}_edge_type_trgm_idx ON ${tableName} USING GIN (edge_type gin_trgm_ops);`,
 ];

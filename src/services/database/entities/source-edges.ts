@@ -11,8 +11,9 @@ import {
 import { source } from "./sources";
 import { edge } from "./edges";
 
+const tableName = "source_edges";
 export const sourceEdge = pgTable(
-	"source_edges",
+	tableName,
 	{
 		sourceId: uuid("source_id")
 			.notNull()

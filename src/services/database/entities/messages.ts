@@ -11,8 +11,9 @@ import {
 import { conversation } from "./conversations";
 import { topic } from "./topics";
 
+const tableName = "messages";
 export const message = pgTable(
-	"messages",
+	tableName,
 	{
 		id: uuid("uuid").primaryKey().defaultRandom(),
 		conversationId: uuid("conversation_id")

@@ -9,6 +9,7 @@ import { CONTENT_BACKGROUND_EVENTS } from "./constants/content-background";
 const REMEMBER_THIS_PAGE_CONTEXT_MENU_ID = "remember-this-page";
 const REMEMBER_CONTENT_CONTEXT_MENU_ID = "remember-content";
 const LET_REMEMBER_CONTEXT_MENU_ID = "let-remember";
+const REMEMBER_TO_TOPIC_CONTEXT_MENU_ID = "remember-to-topic";
 const OPEN_FULL_PAGE_CONTEXT_MENU_ID = "open-full-page";
 
 // Offscreen document management
@@ -148,6 +149,13 @@ chrome.runtime.onInstalled.addListener(async () => {
 			contexts: ["page", "selection"],
 		});
 
+		// Create "Remember to topic" menu for topic-specific content
+		chrome.contextMenus.create({
+			id: REMEMBER_TO_TOPIC_CONTEXT_MENU_ID,
+			title: "Remember to topic ...",
+			contexts: ["page", "selection"],
+		});
+
 		chrome.contextMenus.create({
 			id: "divider",
 			type: "separator",
@@ -179,18 +187,84 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 	if (
 		info.menuItemId === REMEMBER_THIS_PAGE_CONTEXT_MENU_ID ||
 		info.menuItemId === REMEMBER_CONTENT_CONTEXT_MENU_ID ||
-		info.menuItemId === LET_REMEMBER_CONTEXT_MENU_ID
+		info.menuItemId === LET_REMEMBER_CONTEXT_MENU_ID ||
+		info.menuItemId === REMEMBER_TO_TOPIC_CONTEXT_MENU_ID
 	) {
 		try {
 			const hasConfiguredLLM = false;
 
-			// For LET_REMEMBER specifically, always open popup and navigate to remember page
+			// Handle different menu actions
 			if (info.menuItemId === LET_REMEMBER_CONTEXT_MENU_ID) {
 				try {
 					chrome.storage?.session?.set?.({ navigateTo: "remember" });
 				} catch (_) {}
 				openExtensionPopup();
 				// No need for message-based navigation since popup.tsx handles session storage
+			} else if (info.menuItemId === REMEMBER_TO_TOPIC_CONTEXT_MENU_ID) {
+				try {
+					logInfo("🏷️ Remember to topic clicked - checking topics existence");
+
+					// Check if topics exist before deciding UI approach
+					await ensureOffscreenDocument();
+					logInfo("🏷️ About to execute check-topics-exist job");
+					const jobTopicsExistResponse = await backgroundJob.execute(
+						"check-topics-exist",
+						{},
+						{ stream: false },
+					);
+					logInfo("🏷️ Job execution response:", jobTopicsExistResponse);
+
+					if ("promise" in jobTopicsExistResponse && tab?.id) {
+						const jobTopicsExistResult = await jobTopicsExistResponse.promise;
+						logInfo("🏷️ Topic existence check result:", jobTopicsExistResult);
+
+						if (jobTopicsExistResult?.result?.hasTopics) {
+							// Topics exist - show content script topic selector UI
+							logInfo(
+								"🏷️ Topics exist - sending message to show content script topic selector",
+							);
+
+							// Send message to content script to show topic selector
+							const topicSelectorResponse = await chrome.tabs.sendMessage(
+								tab.id,
+								{
+									type: CONTENT_BACKGROUND_EVENTS.SHOW_TOPIC_SELECTOR,
+									tabId: tab.id,
+									url: tab.url,
+									context: info.selectionText || "",
+								},
+							);
+							logInfo(
+								"📨 Content script response to SHOW_TOPIC_SELECTOR:",
+								topicSelectorResponse,
+							);
+						} else {
+							// No topics exist - open popup to create topics
+							logInfo("🏷️ No topics exist - opening popup to create topics");
+							logInfo("🏷️ Topic check result details:", {
+								hasTopics: jobTopicsExistResult?.result?.hasTopics,
+								fullResult: jobTopicsExistResult,
+							});
+							chrome.storage?.session?.set?.({
+								navigateTo: "topics",
+							});
+							openExtensionPopup();
+						}
+					} else {
+						logError(
+							"🏷️ Failed job response structure:",
+							jobTopicsExistResponse,
+						);
+						throw new Error("Failed to check topics existence");
+					}
+				} catch (error) {
+					logError("❌ Failed to check topics existence:", error);
+					// Fallback to topics page in popup
+					chrome.storage?.session?.set?.({
+						navigateTo: "topics",
+					});
+					openExtensionPopup();
+				}
 			} else {
 				// For other remember actions, open popup and navigate based on LLM config
 				if (hasConfiguredLLM) {
@@ -288,6 +362,21 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 				context: info.selectionText || "",
 			});
 			logInfo("📨 Content script response to LET_REMEMBER:", chatResponse);
+		} else if (info.menuItemId === REMEMBER_TO_TOPIC_CONTEXT_MENU_ID) {
+			logInfo(`🔄 Remember to topic clicked for tab: ${tab.id}`);
+
+			// Send message to content script to store context data with topic selector flag
+			const topicResponse = await chrome.tabs.sendMessage(tab.id, {
+				type: CONTENT_BACKGROUND_EVENTS.LET_REMEMBER,
+				tabId: tab.id,
+				url: tab.url,
+				context: info.selectionText || "",
+				showTopicSelector: true,
+			});
+			logInfo(
+				"📨 Content script response to REMEMBER_TO_TOPIC:",
+				topicResponse,
+			);
 		}
 	} catch (error) {
 		logError("❌ Failed to process remember request:", error);
@@ -307,8 +396,105 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 });
 
 // Handle messages from content scripts and UI
-chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-	if (message.type === CONTENT_BACKGROUND_EVENTS.CONTENT_EXTRACTED) {
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+	if (message.type === "GET_TOPICS_FOR_SELECTOR") {
+		// Handle async topic loading for content script
+		(async () => {
+			try {
+				await ensureOffscreenDocument();
+				const getTopicJobResponse = await backgroundJob.execute(
+					"get-topics",
+					{},
+					{ stream: false },
+				);
+
+				if ("promise" in getTopicJobResponse) {
+					const result = await getTopicJobResponse.promise;
+					if (result?.result?.topics) {
+						sendResponse({ success: true, topics: result.result.topics });
+					} else {
+						sendResponse({ success: false, error: "No topics found" });
+					}
+				}
+			} catch (error) {
+				logError("❌ Failed to get topics for selector:", error);
+				sendResponse({
+					success: false,
+					error:
+						error instanceof Error ? error.message : "Failed to load topics",
+				});
+			}
+		})();
+		return true;
+	} else if (message.type === "OPEN_REMEMBER_PAGE") {
+		// Handle opening remember page from content script
+		try {
+			chrome.storage?.session?.set?.({ navigateTo: "remember" });
+			openExtensionPopup();
+			sendResponse({ success: true });
+		} catch (error) {
+			logError("❌ Failed to open remember page:", error);
+			sendResponse({ success: false, error: "Failed to open remember page" });
+		}
+		return true;
+	} else if (message.type === "TOPIC_SELECTED_FOR_REMEMBER") {
+		// Handle topic selection from content script
+		try {
+			chrome.storage?.session?.set?.({
+				rememberContext: message.contextData,
+				showTopicSelector: true,
+				navigateTo: "remember",
+			});
+			openExtensionPopup();
+			sendResponse({ success: true });
+		} catch (error) {
+			logError("❌ Failed to handle topic selection:", error);
+			sendResponse({
+				success: false,
+				error: "Failed to handle topic selection",
+			});
+		}
+		return true;
+	} else if (message.type === "REMEMBER_CONTENT_WITH_TOPIC") {
+		// Handle direct content saving with topic (bypasses remember page)
+		(async () => {
+			try {
+				logInfo("🔍 Background received topicId:", message.topicId);
+
+				// Extract page content from the current tab
+				if (!sender.tab?.id) {
+					sendResponse({ success: false, error: "No active tab" });
+					return;
+				}
+
+				// Send message to content script to extract page content with topicId
+				const extractionResponse = await chrome.tabs.sendMessage(
+					sender.tab.id,
+					{
+						type: CONTENT_BACKGROUND_EVENTS.REMEMBER_THIS,
+						tabId: sender.tab.id,
+						topicId: message.topicId,
+					},
+				);
+
+				if (extractionResponse?.success) {
+					sendResponse({ success: true });
+				} else {
+					sendResponse({
+						success: false,
+						error: "Failed to extract page content",
+					});
+				}
+			} catch (error) {
+				logError("❌ Failed to save content with topic:", error);
+				sendResponse({
+					success: false,
+					error: "Failed to save content with topic",
+				});
+			}
+		})();
+		return true;
+	} else if (message.type === CONTENT_BACKGROUND_EVENTS.CONTENT_EXTRACTED) {
 		// Handle async processing
 		(async () => {
 			try {

@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from "react";
 import { createPortal } from "react-dom";
-import { useCopilot } from "@/components/molecules/contexts/CopilotContext";
+import { useCopilot } from "@/components/molecules/Copilot/CopilotContext";
 import { CopilotTooltip } from "./CopilotTooltip";
 import { motion, AnimatePresence } from "motion/react";
 

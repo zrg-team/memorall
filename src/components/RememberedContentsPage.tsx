@@ -45,6 +45,7 @@ export const RememberedContentsPage: React.FC<
 	const [searchQuery, setSearchQuery] = useState("");
 	const [selectedContent, setSelectedContent] =
 		useState<RememberedContent | null>(null);
+	const [selectedContentTopic, setSelectedContentTopic] = useState<any>(null);
 	const [showMobileDetail, setShowMobileDetail] = useState(false);
 	const [filters, setFilters] = useState({
 		showArchived: false,
@@ -120,9 +121,22 @@ export const RememberedContentsPage: React.FC<
 		}
 	};
 
-	const handleContentSelect = (content: RememberedContent) => {
+	const handleContentSelect = async (content: RememberedContent) => {
 		setSelectedContent(content);
 		setShowMobileDetail(true);
+
+		// Fetch topic information if content has a topicId
+		if (content.topicId) {
+			try {
+				const topic = await rememberService.getTopicForContent(content.topicId);
+				setSelectedContentTopic(topic);
+			} catch (error) {
+				logError("Failed to load topic:", error);
+				setSelectedContentTopic(null);
+			}
+		} else {
+			setSelectedContentTopic(null);
+		}
 	};
 
 	const handleBackToList = () => {
@@ -275,7 +289,7 @@ export const RememberedContentsPage: React.FC<
 											{selectedContent.title}
 										</h1>
 									</div>
-									<div className="flex items-center gap-3 text-sm text-muted-foreground">
+									<div className="flex items-center gap-3 text-sm text-muted-foreground flex-wrap">
 										<span className="flex items-center gap-1">
 											<ExternalLink className="h-4 w-4" />
 											<a
@@ -296,6 +310,11 @@ export const RememberedContentsPage: React.FC<
 											{Math.round((selectedContent.content.length || 0) / 250)}{" "}
 											min read
 										</span>
+										{selectedContentTopic && (
+											<Badge variant="outline" className="text-xs">
+												{selectedContentTopic.name}
+											</Badge>
+										)}
 									</div>
 								</div>
 

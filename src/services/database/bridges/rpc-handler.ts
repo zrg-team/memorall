@@ -3,6 +3,7 @@
 
 import { logError, logInfo } from "@/utils/logger";
 import { getPGLite, isMainMode } from "../db";
+import { serializeForRpc, deserializeFromRpc } from "./serialization";
 import type {
 	RpcRequest,
 	RpcResponse,
@@ -45,6 +46,9 @@ export class DatabaseRpcHandler {
 	private async handleMessage(request: RpcRequest): Promise<void> {
 		const { id, op, payload } = request;
 
+		// Deserialize payload (handles Date objects from proxy)
+		const deserializedPayload = deserializeFromRpc(payload);
+
 		try {
 			let result: unknown = null;
 
@@ -54,11 +58,13 @@ export class DatabaseRpcHandler {
 					break;
 
 				case "query":
-					result = await this.handleQuery(payload as WorkerQueryPayload);
+					result = await this.handleQuery(
+						deserializedPayload as WorkerQueryPayload,
+					);
 					break;
 
 				case "exec":
-					await this.handleExec(payload as WorkerExecPayload);
+					await this.handleExec(deserializedPayload as WorkerExecPayload);
 					result = null;
 					break;
 
@@ -78,7 +84,9 @@ export class DatabaseRpcHandler {
 					throw new Error(`Unsupported RPC operation: ${op}`);
 			}
 
-			this.sendResponse({ id, ok: true, data: result });
+			// Serialize result before sending (handles Date objects to proxy)
+			const serializedResult = serializeForRpc(result);
+			this.sendResponse({ id, ok: true, data: serializedResult });
 		} catch (error) {
 			const errorMessage =
 				error instanceof Error ? error.message : "Unknown error";

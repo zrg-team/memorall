@@ -46,23 +46,6 @@ Memorall is an AI-powered browser extension that transforms how you manage digit
 
 - **🔒 Offline Privacy & Free**: Runs entirely in your browser with no server dependencies. Your data stays local, works offline after initial setup, and has zero ongoing costs - no API fees or subscriptions required.
 
-## 🚀 Quick Start
-
-Get started with Memorall in just a few steps:
-
-1. **📥 Install**: Clone the repository and run `npm install`
-2. **🔧 Build**: Run `npm run build` to create the extension
-3. **🌐 Load**: Add the built extension to your browser in developer mode
-4. **🎉 Use**: Click the extension icon and start building your knowledge base!
-
-```bash
-git clone <repository-url>
-cd memorall
-npm install
-npm run build
-# Load the 'dist' folder in your browser's extension manager
-```
-
 ## 📸 Demo
 
 See Memorall in action! The extension seamlessly integrates with your browsing experience to build a personal knowledge base.
@@ -256,7 +239,7 @@ npm install
 
 1. **📥 Install the Extension**: Load the built extension in your browser's developer mode
 2. **🚀 First Launch**: The extension will download and initialize AI models (one-time setup)
-3. **📊 Summarize Pages**: Click the extension icon and ask "Summarize this page"
+3. **📊 Remember Pages**: Click the extension icon and ask "Remember this page"
 4. **💾 Store Memories**: Tell the AI "Remember that [important information]"
 5. **🔍 Recall Information**: Ask "What did I learn about [topic]?" or "Remind me about [context]"
 
@@ -265,9 +248,27 @@ npm install
 - **💾 Local Storage**: Data stored in IndexedDB, never transmitted
 - **🔐 Content Security**: Strict CSP policies for secure operation
 
-## 🤝 Contributing
+## 🤝 Development
 
 We welcome contributions to Memorall! Here's how you can help:
+
+
+### 🚀 Quick Start
+
+Get started with Memorall in just a few steps:
+
+1. **📥 Install**: Clone the repository and run `npm install`
+2. **🔧 Build**: Run `npm run build` to create the extension
+3. **🌐 Load**: Add the built extension to your browser in developer mode
+4. **🎉 Use**: Click the extension icon and start building your knowledge base!
+
+```bash
+git clone <repository-url>
+cd memorall
+npm install
+npm run build
+# Load the 'dist' folder in your browser's extension manager
+```
 
 ### 🐛 Bug Reports
 - Use GitHub Issues to report bugs

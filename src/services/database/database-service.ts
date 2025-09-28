@@ -202,13 +202,13 @@ export class DatabaseService {
 			tableCount: Object.keys(schema).length,
 			availableTables: this.getTableNames(),
 			healthy: false,
-			healthCheck: null as any,
+			healthCheck: null as unknown,
 		};
 
 		if (this.initialized) {
 			try {
 				status.healthCheck = await healthCheck();
-				status.healthy = status.healthCheck.healthy;
+				status.healthy = (status.healthCheck as { healthy: boolean }).healthy;
 			} catch (error) {
 				status.healthCheck = {
 					healthy: false,

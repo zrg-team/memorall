@@ -5,6 +5,7 @@ import "./process-embedding-operations";
 import "./process-knowledge-graph";
 import "./process-llm-operations";
 import "./process-restore-local-services";
+import "./process-topic-operations";
 
 export { backgroundProcessFactory, ProcessFactory } from "./process-factory";
 export { handlerRegistry } from "./handler-registry";

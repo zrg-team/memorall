@@ -84,11 +84,21 @@ export class RememberSaveHandler extends BaseProcessHandler<RememberSaveJob> {
 
 			let result;
 			if ("html" in payload && "article" in payload) {
-				result = await this.rememberService.savePage(payload as SavePageData);
-			} else {
-				result = await this.rememberService.saveContentDirect(
-					payload as SaveContentData,
+				const savePageData = payload as SavePageData;
+				await dependencies.logger.info(
+					`🔍 Process-remember-save: calling savePage with topicId: ${savePageData.topicId}`,
+					{},
+					"offscreen",
 				);
+				result = await this.rememberService.savePage(savePageData);
+			} else {
+				const saveContentData = payload as SaveContentData;
+				await dependencies.logger.info(
+					`🔍 Process-remember-save: calling saveContentDirect with topicId: ${saveContentData.topicId}`,
+					{},
+					"offscreen",
+				);
+				result = await this.rememberService.saveContentDirect(saveContentData);
 			}
 
 			if (result.success) {

@@ -10,8 +10,9 @@ import {
 import { source } from "./sources";
 import { node } from "./nodes";
 
+const tableName = "source_nodes";
 export const sourceNode = pgTable(
-	"source_nodes",
+	tableName,
 	{
 		sourceId: uuid("source_id")
 			.notNull()

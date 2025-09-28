@@ -193,7 +193,10 @@ export class DatabaseSaveFlow {
 			targetType: "remembered_pages",
 			targetId: state.pageId!.trim(),
 			name: state.title!.trim(),
-			metadata: state.metadata || {},
+			metadata: {
+				...(state.metadata || {}),
+				topicId: state.topicId, // Include topic information in source metadata
+			},
 			referenceTime: new Date(state.referenceTimestamp),
 			weight: 1.0,
 		};
@@ -282,12 +285,15 @@ export class DatabaseSaveFlow {
 		const createdEdges: EdgeSelectType[] = [];
 
 		// Handle both enrichedFacts (with temporal extraction) and resolvedFacts (without temporal extraction)
-		const factsToProcess = state.enrichedFacts?.length > 0
-			? state.enrichedFacts.filter((f) => !f.isExisting)
-			: (state.resolvedFacts || []).filter((f) => !f.isExisting).map(fact => ({
-				...fact,
-				temporal: { validAt: undefined, invalidAt: undefined } as TemporalInfo
-			}));
+		const factsToProcess =
+			state.enrichedFacts?.length > 0
+				? state.enrichedFacts.filter((f) => !f.isExisting)
+				: (state.resolvedFacts || [])
+						.filter((f) => !f.isExisting)
+						.map((fact) => ({
+							...fact,
+							temporal: { validAt: undefined, invalidAt: undefined },
+						}));
 
 		logInfo(`[SAVE_TO_DATABASE] Processing facts:`, {
 			enrichedFactsCount: state.enrichedFacts?.length || 0,
@@ -296,7 +302,7 @@ export class DatabaseSaveFlow {
 			usingEnrichedFacts: state.enrichedFacts?.length > 0,
 		});
 
-		const skippedEdges: (EnrichedFact | typeof factsToProcess[0])[] = [];
+		const skippedEdges: (EnrichedFact | (typeof factsToProcess)[0])[] = [];
 
 		// Create a lookup map for better performance
 		const nodeNameToId = new Map<string, string>();

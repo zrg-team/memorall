@@ -4,10 +4,13 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { Brain, Clock, Globe, Send, X } from "lucide-react";
+import { Brain, Clock, Globe, Send, X, BookOpen, Tag } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { logError, logWarn } from "@/utils/logger";
 import { backgroundJob } from "@/services/background-jobs/background-job";
+import NiceModal from "@ebay/nice-modal-react";
+import TopicSelectorModal from "@/components/modals/TopicSelectorModal";
+import type { Topic } from "@/services/database/entities/topics";
 
 interface RememberContext {
 	context?: string;
@@ -22,6 +25,8 @@ export const RememberPage: React.FC = () => {
 	const [isSubmitting, setIsSubmitting] = useState(false);
 	const [rememberContext, setRememberContext] =
 		useState<RememberContext | null>(null);
+	const [selectedTopic, setSelectedTopic] = useState<Topic | null>(null);
+	const [showTopicSelector, setShowTopicSelector] = useState(false);
 
 	// Load context data from session storage
 	useEffect(() => {
@@ -29,9 +34,15 @@ export const RememberPage: React.FC = () => {
 			try {
 				const result = await chrome.storage?.session?.get?.([
 					"rememberContext",
+					"showTopicSelector",
 				]);
 				if (result?.rememberContext) {
 					setRememberContext(result.rememberContext);
+				}
+				if (result?.showTopicSelector) {
+					setShowTopicSelector(true);
+					// Clear the flag after reading
+					chrome.storage?.session?.remove?.("showTopicSelector");
 				}
 			} catch (error) {
 				console.error("Failed to load remember context:", error);
@@ -58,17 +69,20 @@ export const RememberPage: React.FC = () => {
 				rawContent: userInput.trim(),
 				cleanContent: userInput.trim(),
 				textContent: userInput.trim(),
+				topicId: selectedTopic?.id, // Include topic ID if selected
 				sourceMetadata: {
 					inputMethod: "popup",
 					timestamp: new Date().toISOString(),
 					context: rememberContext?.context,
 					pageTitle: rememberContext?.pageTitle,
 					pageUrl: rememberContext?.pageUrl,
+					topicName: selectedTopic?.name, // Include topic name for metadata
 				},
 				extractionMetadata: {
 					inputLength: userInput.trim().length,
 					hasContext: !!rememberContext?.context,
 					hasPageUrl: !!rememberContext?.pageUrl,
+					hasTopic: !!selectedTopic,
 					extractedAt: new Date().toISOString(),
 				},
 			};
@@ -104,6 +118,35 @@ export const RememberPage: React.FC = () => {
 		chrome.storage?.session?.remove?.(["rememberContext"]);
 		navigate("/");
 	};
+
+	const handleTopicSelector = async () => {
+		try {
+			const topic = await NiceModal.show(TopicSelectorModal, {
+				title: "Select Topic",
+				description: "Choose a topic to organize this content",
+				allowCreateNew: true,
+				selectedTopicId: selectedTopic?.id,
+			});
+
+			if (topic) {
+				setSelectedTopic(topic as Topic);
+			}
+		} catch (error) {
+			// User cancelled
+		}
+	};
+
+	const handleRemoveTopic = () => {
+		setSelectedTopic(null);
+	};
+
+	// Auto-show topic selector if requested from context menu
+	useEffect(() => {
+		if (showTopicSelector) {
+			handleTopicSelector();
+			setShowTopicSelector(false);
+		}
+	}, [showTopicSelector]);
 
 	const formatTimestamp = (timestamp: string) => {
 		try {
@@ -209,6 +252,69 @@ export const RememberPage: React.FC = () => {
 								disabled={isSubmitting}
 								autoFocus
 							/>
+						</div>
+
+						{/* Topic Selection */}
+						<div className="space-y-3">
+							<div className="flex items-center justify-between">
+								<h4 className="text-sm font-medium flex items-center gap-2">
+									<BookOpen className="w-4 h-4" />
+									Topic (Optional)
+								</h4>
+								{!selectedTopic && (
+									<Button
+										variant="outline"
+										size="sm"
+										onClick={handleTopicSelector}
+										disabled={isSubmitting}
+									>
+										<Tag className="w-4 h-4 mr-2" />
+										Select Topic
+									</Button>
+								)}
+							</div>
+
+							{selectedTopic ? (
+								<div className="bg-primary/5 border border-primary/20 rounded-lg p-3">
+									<div className="flex items-center justify-between">
+										<div className="flex items-center gap-2 min-w-0 flex-1">
+											<BookOpen className="w-4 h-4 text-primary flex-shrink-0" />
+											<div className="min-w-0 flex-1">
+												<p className="font-medium text-sm truncate">
+													{selectedTopic.name}
+												</p>
+												{selectedTopic.description && (
+													<p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+														{selectedTopic.description}
+													</p>
+												)}
+											</div>
+										</div>
+										<div className="flex gap-1">
+											<Button
+												variant="ghost"
+												size="sm"
+												onClick={handleTopicSelector}
+												disabled={isSubmitting}
+											>
+												Change
+											</Button>
+											<Button
+												variant="ghost"
+												size="sm"
+												onClick={handleRemoveTopic}
+												disabled={isSubmitting}
+											>
+												<X className="w-4 h-4" />
+											</Button>
+										</div>
+									</div>
+								</div>
+							) : (
+								<p className="text-xs text-muted-foreground">
+									Select a topic to organize this content with related materials
+								</p>
+							)}
 						</div>
 
 						{/* Actions */}

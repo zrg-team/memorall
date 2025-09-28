@@ -8,8 +8,9 @@ import {
 	index,
 } from "drizzle-orm/pg-core";
 
+const tableName = "sources";
 export const source = pgTable(
-	"sources",
+	tableName,
 	{
 		id: uuid("id").primaryKey().defaultRandom(),
 		type: text("type").notNull().default("page"),

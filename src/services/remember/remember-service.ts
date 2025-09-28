@@ -3,7 +3,7 @@ import { logError, logInfo } from "@/utils/logger";
 import { logger } from "@/utils/logger";
 import { serviceManager } from "@/services";
 import { flowsService } from "@/services/flows/flows-service";
-import type { RememberedContent } from "@/services/database/db";
+import type { RememberedContent, Source } from "@/services/database/db";
 import type {
 	PageMetadata,
 	ReadabilityArticle,
@@ -19,6 +19,7 @@ export interface SavePageData {
 	title: string;
 	metadata: PageMetadata;
 	article: ReadabilityArticle;
+	topicId?: string;
 }
 
 export interface SaveContentData {
@@ -37,6 +38,7 @@ export interface SaveContentData {
 	textContent: string;
 	sourceMetadata: PageMetadata | SelectionMetadata | UserInputMetadata;
 	extractionMetadata: ReadabilityArticle | Record<string, unknown>;
+	topicId?: string;
 }
 
 export interface SearchOptions {
@@ -148,7 +150,12 @@ export class RememberService {
 				await this.initialize();
 			}
 
-			logInfo("🔄 Saving content directly:", data.sourceType, data);
+			logInfo(
+				"🔄 Saving content directly with topicId:",
+				data.topicId,
+				"sourceType:",
+				data.sourceType,
+			);
 
 			// Prepare data for insertion using new schema
 			const newContent = {
@@ -162,7 +169,10 @@ export class RememberService {
 				tags: [],
 				isArchived: false,
 				isFavorite: false,
+				topicId: data.topicId,
 			};
+
+			logInfo("🔍 newContent object topicId:", newContent.topicId);
 
 			// Save to database
 			const result = await serviceManager.databaseService.use(
@@ -214,6 +224,7 @@ export class RememberService {
 			textContent: data.article.textContent,
 			sourceMetadata: data.metadata,
 			extractionMetadata: data.article,
+			topicId: data.topicId,
 		};
 	}
 
@@ -222,8 +233,10 @@ export class RememberService {
 	 */
 	async savePageBasic(data: SavePageData): Promise<RememberThisResponse> {
 		try {
+			logInfo("🔍 savePageBasic received topicId:", data.topicId);
 			// Transform legacy data to new format and delegate to saveContentDirect
 			const contentData = this.transformLegacyData(data);
+			logInfo("🔍 savePageBasic after transform topicId:", contentData.topicId);
 			return await this.saveContentDirect(contentData);
 		} catch (error) {
 			logError("❌ Failed to save remembered page:", error);
@@ -349,7 +362,7 @@ export class RememberService {
 						// PostgreSQL JSONB array contains check
 						conditions.push(
 							// This would need proper JSONB query syntax in production
-							like(schema.rememberedContent.tags as any, `%${tags[0]}%`),
+							like(schema.rememberedContent.tags, `%${tags[0]}%`),
 						);
 					}
 
@@ -383,6 +396,7 @@ export class RememberService {
 
 					// Get pages
 					const pagesQuery = db.select().from(schema.rememberedContent);
+
 					if (whereClause) {
 						pagesQuery.where(whereClause);
 					}
@@ -404,6 +418,29 @@ export class RememberService {
 		} catch (error) {
 			logError("❌ Failed to search pages:", error);
 			return { pages: [], total: 0, hasMore: false };
+		}
+	}
+
+	async getTopicForContent(topicId: string) {
+		try {
+			if (!topicId) return null;
+
+			const result = await serviceManager.databaseService.use(
+				async ({ db, schema }) => {
+					const topics = await db
+						.select()
+						.from(schema.topics)
+						.where(eq(schema.topics.id, topicId))
+						.limit(1);
+
+					return topics[0] || null;
+				},
+			);
+
+			return result;
+		} catch (error) {
+			logError("❌ Failed to get topic:", error);
+			return null;
 		}
 	}
 
@@ -534,7 +571,7 @@ export class RememberService {
 				await db
 					.update(schema.rememberedContent)
 					.set({
-						tags: updatedTags as any,
+						tags: updatedTags,
 						updatedAt: new Date(),
 					})
 					.where(eq(schema.rememberedContent.id, id));
@@ -656,7 +693,7 @@ export class RememberService {
 				edgesCreated: Array.isArray(result.createdEdges)
 					? result.createdEdges.length
 					: 0,
-				sourceId: (result.createdSource as any)?.id || "unknown",
+				sourceId: (result.createdSource as Source)?.id || "unknown",
 				errors: Array.isArray(result.errors) ? result.errors.length : 0,
 				entitiesExtracted: Array.isArray(result.extractedEntities)
 					? result.extractedEntities.length
@@ -765,7 +802,7 @@ export class RememberService {
 				edgesCreated: Array.isArray(result.createdEdges)
 					? result.createdEdges.length
 					: 0,
-				sourceId: (result.createdSource as any)?.id || "unknown",
+				sourceId: (result.createdSource as Source)?.id || "unknown",
 				errors: Array.isArray(result.errors) ? result.errors.length : 0,
 				entitiesExtracted: Array.isArray(result.extractedEntities)
 					? result.extractedEntities.length

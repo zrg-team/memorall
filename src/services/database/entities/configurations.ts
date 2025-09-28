@@ -1,6 +1,7 @@
 import { pgTable, uuid, text, timestamp, jsonb } from "drizzle-orm/pg-core";
 
-export const configuration = pgTable("configurations", {
+const tableName = "configurations";
+export const configuration = pgTable(tableName, {
 	id: uuid("id").primaryKey().defaultRandom(),
 	key: text("key").notNull().unique(),
 	data: jsonb("data").$type<Record<string, unknown>>().notNull().default({}),

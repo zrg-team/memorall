@@ -1,6 +1,7 @@
 import { pgTable, text, timestamp, jsonb, uuid } from "drizzle-orm/pg-core";
 
-export const conversation = pgTable("conversations", {
+const tableName = "conversations";
+export const conversation = pgTable(tableName, {
 	id: uuid("id").primaryKey().defaultRandom(),
 	title: text("title"),
 	metadata: jsonb("metadata").default({}),

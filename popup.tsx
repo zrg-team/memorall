@@ -54,6 +54,11 @@ if (container) {
               history.replaceState({}, '', '/llm');
             }
             area?.remove?.('navigateTo');
+          } else if (target === 'topics') {
+            if (location.pathname !== '/topics') {
+              history.replaceState({}, '', '/topics');
+            }
+            area?.remove?.('navigateTo');
           }
         } catch {}
         render();

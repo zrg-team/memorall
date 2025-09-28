@@ -1,6 +1,7 @@
 import { pgTable, uuid, text, timestamp } from "drizzle-orm/pg-core";
 
-export const encryption = pgTable("encryptions", {
+const tableName = "encryptions";
+export const encryption = pgTable(tableName, {
 	id: uuid("id").primaryKey().defaultRandom(),
 	key: text("key").notNull().unique(), // unique key like "openai_config"
 	advancedSeed: text("advanced_seed"), // advanced key for AES encryption

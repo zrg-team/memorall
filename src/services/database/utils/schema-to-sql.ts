@@ -97,33 +97,64 @@ export function toCreateTableSQL(table: PgTable): string {
 				(col.generated as { type?: string })?.type === "always" ||
 				col.autoIncrement;
 
-			// Check for defaultRandom() and defaultNow() functions
-			// Debug: log the column structure to understand Drizzle's internal format
-			if (process.env.NODE_ENV === "development") {
-				console.log(`Column ${columnName}:`, {
-					columnType,
-					hasDefault,
-					defaultValue,
-					defaultValueType: typeof defaultValue,
-					defaultValueString: String(defaultValue),
-				});
-			}
-
 			// More robust detection of Drizzle defaults
 			let hasDefaultRandom = false;
 			let hasDefaultNow = false;
 
 			if (hasDefault && defaultValue) {
-				const defaultStr = String(defaultValue);
-				// Check for various patterns that indicate defaultRandom/defaultNow
-				hasDefaultRandom =
-					defaultStr.includes("defaultRandom") ||
-					defaultStr.includes("gen_random_uuid") ||
-					defaultStr.includes("random");
-				hasDefaultNow =
-					defaultStr.includes("defaultNow") ||
-					defaultStr.includes("NOW") ||
-					defaultStr.includes("now");
+				// Check the internal Drizzle structure for default functions
+				// Drizzle stores defaults as objects with specific structures
+				if (typeof defaultValue === "object" && defaultValue !== null) {
+					const defaultObj = defaultValue as Record<string, unknown>;
+
+					// Check for sql object that contains the actual SQL function
+					if (defaultObj.sql && typeof defaultObj.sql === "object") {
+						const sqlObj = defaultObj.sql as Record<string, unknown>;
+						const sqlString = String(sqlObj.sql || "");
+
+						hasDefaultRandom =
+							sqlString.includes("gen_random_uuid") ||
+							sqlString.includes("uuid_generate_v4");
+						hasDefaultNow =
+							sqlString.includes("now()") ||
+							sqlString.includes("NOW()") ||
+							sqlString.includes("CURRENT_TIMESTAMP");
+					}
+
+					// Fallback: check if the object itself contains function indicators
+					const objString = String(defaultValue);
+					if (!hasDefaultRandom && !hasDefaultNow) {
+						hasDefaultRandom =
+							objString.includes("defaultRandom") ||
+							objString.includes("gen_random_uuid") ||
+							objString.includes("random");
+						hasDefaultNow =
+							objString.includes("defaultNow") ||
+							objString.includes("NOW") ||
+							objString.includes("now");
+					}
+				} else if (typeof defaultValue === "function") {
+					// Handle function defaults
+					const funcStr = defaultValue.toString();
+					hasDefaultRandom =
+						funcStr.includes("gen_random_uuid") ||
+						funcStr.includes("defaultRandom");
+					hasDefaultNow =
+						funcStr.includes("now") ||
+						funcStr.includes("defaultNow") ||
+						funcStr.includes("NOW");
+				} else {
+					// Handle string defaults
+					const defaultStr = String(defaultValue);
+					hasDefaultRandom =
+						defaultStr.includes("defaultRandom") ||
+						defaultStr.includes("gen_random_uuid") ||
+						defaultStr.includes("random");
+					hasDefaultNow =
+						defaultStr.includes("defaultNow") ||
+						defaultStr.includes("NOW") ||
+						defaultStr.includes("now");
+				}
 			}
 
 			// Special handling for UUID columns that should have random defaults
@@ -133,10 +164,10 @@ export function toCreateTableSQL(table: PgTable): string {
 			}
 
 			// Special handling for timestamp columns that should have now defaults
+			// Force NOW() default for any timestamp column with "created" or "updated" in the name
 			if (
 				columnType === "PgTimestamp" &&
-				(columnName.includes("created") || columnName.includes("updated")) &&
-				!hasDefaultNow
+				(columnName.includes("created") || columnName.includes("updated"))
 			) {
 				hasDefaultNow = true;
 			}

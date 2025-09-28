@@ -1,6 +1,6 @@
 import React from "react";
 import { Button } from "@/components/ui/button";
-import { useCopilot } from "@/components/molecules/contexts/CopilotContext";
+import { useCopilot } from "@/components/molecules/Copilot/CopilotContext";
 import { X, RotateCcw, Play } from "lucide-react";
 
 export const CopilotDebugger: React.FC = () => {
