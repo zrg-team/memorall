@@ -84,27 +84,27 @@ export class KnowledgeRAGFlow extends GraphBase<
 	constructor(services: AllServices, config: KnowledgeRAGConfig = {}) {
 		super(services);
 		this.config = {
-			quickMode: false,
+			quickMode: true,
 			maxGrowthLevels: 3,
 			searchLimit: 50,
 			...config,
 		};
 		this.workflow = new StateGraph(KnowledgeRAGAnnotation);
 
-		// Add nodes
-		this.workflow.addNode("analyze_query", this.analyzeQueryNode);
-		this.workflow.addNode("retrieve_knowledge", this.retrieveKnowledgeNode);
-		this.workflow.addNode("quick_retrieve", this.quickRetrieveNode);
+		// Add common nodes
 		this.workflow.addNode("build_context", this.buildContextNode);
 		this.workflow.addNode("generate_response", this.generateResponseNode);
 
-		// Add edges based on configuration
+		// Add nodes and edges based on configuration
 		if (this.config.quickMode) {
 			// Quick mode: skip query analysis and go straight to semantic search
+			this.workflow.addNode("quick_retrieve", this.quickRetrieveNode);
 			this.workflow.addEdge(START, "quick_retrieve");
 			this.workflow.addEdge("quick_retrieve", "build_context");
 		} else {
 			// Standard mode: use LLM analysis
+			this.workflow.addNode("analyze_query", this.analyzeQueryNode);
+			this.workflow.addNode("retrieve_knowledge", this.retrieveKnowledgeNode);
 			this.workflow.addEdge(START, "analyze_query");
 			this.workflow.addEdge("analyze_query", "retrieve_knowledge");
 			this.workflow.addEdge("retrieve_knowledge", "build_context");

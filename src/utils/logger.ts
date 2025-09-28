@@ -5,6 +5,8 @@ import {
 	type LogLevel,
 } from "./indexeddb-storage";
 
+const IS_DEVELOPMENT = true
+
 interface LoggerConfig {
 	maxEntries: number;
 	enableConsoleOutput: boolean;
@@ -24,8 +26,8 @@ class Logger {
 			...config,
 		};
 
-		this.isDevelopment =
-			typeof process !== "undefined" && process.env?.NODE_ENV === "development";
+		this.isDevelopment = IS_DEVELOPMENT
+			
 
 		this.storage = new IndexedDBLogStorage();
 

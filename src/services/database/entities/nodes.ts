@@ -37,8 +37,4 @@ export const nodeManualIndexes = [
 	// Full-text search indexes using GIN for trigram search (used by search_nodes_trigram function)
 	"CREATE INDEX IF NOT EXISTS nodes_name_trgm_idx ON nodes USING GIN (name gin_trgm_ops);",
 	"CREATE INDEX IF NOT EXISTS nodes_summary_trgm_idx ON nodes USING GIN (summary gin_trgm_ops);",
-
-	// Composite indexes for complex queries
-	"CREATE INDEX IF NOT EXISTS nodes_type_name_idx ON nodes(node_type, name);",
-	"CREATE INDEX IF NOT EXISTS nodes_group_type_idx ON nodes(group_id, node_type);",
 ];

@@ -280,8 +280,23 @@ export class DatabaseSaveFlow {
 		{ db, schema }: DatabaseContext,
 	): Promise<EdgeSelectType[]> {
 		const createdEdges: EdgeSelectType[] = [];
-		const newFacts = state.enrichedFacts.filter((f) => !f.isExisting);
-		const skippedEdges: EnrichedFact[] = [];
+
+		// Handle both enrichedFacts (with temporal extraction) and resolvedFacts (without temporal extraction)
+		const factsToProcess = state.enrichedFacts?.length > 0
+			? state.enrichedFacts.filter((f) => !f.isExisting)
+			: (state.resolvedFacts || []).filter((f) => !f.isExisting).map(fact => ({
+				...fact,
+				temporal: { validAt: undefined, invalidAt: undefined } as TemporalInfo
+			}));
+
+		logInfo(`[SAVE_TO_DATABASE] Processing facts:`, {
+			enrichedFactsCount: state.enrichedFacts?.length || 0,
+			resolvedFactsCount: state.resolvedFacts?.length || 0,
+			factsToProcessCount: factsToProcess.length,
+			usingEnrichedFacts: state.enrichedFacts?.length > 0,
+		});
+
+		const skippedEdges: (EnrichedFact | typeof factsToProcess[0])[] = [];
 
 		// Create a lookup map for better performance
 		const nodeNameToId = new Map<string, string>();
@@ -291,7 +306,7 @@ export class DatabaseSaveFlow {
 			}
 		}
 
-		for (const fact of newFacts) {
+		for (const fact of factsToProcess) {
 			try {
 				// Map entity UUIDs to actual node IDs
 				const sourceEntity = state.resolvedEntities.find(
@@ -334,10 +349,10 @@ export class DatabaseSaveFlow {
 					destinationId: destNodeId,
 					edgeType: fact.relationType,
 					factText: fact.factText,
-					validAt: fact.temporal.validAt
+					validAt: fact.temporal?.validAt
 						? new Date(fact.temporal.validAt)
 						: undefined,
-					invalidAt: fact.temporal.invalidAt
+					invalidAt: fact.temporal?.invalidAt
 						? new Date(fact.temporal.invalidAt)
 						: undefined,
 					attributes: fact.attributes || {},
