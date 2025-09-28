@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { serviceManager } from "@/services";
 import type { InitializationProgress } from "@/services/service-manager";
+import TypingText from "../ui/shadcn-io/typing-text";
 
 interface LoadingStep {
 	id: string;
@@ -176,12 +177,20 @@ export const AppLoadingScreen: React.FC<AppLoadingScreenProps> = ({
 							<div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gradient-to-br from-primary to-primary/60 flex items-center justify-center">
 								<Brain className="w-8 h-8 text-primary-foreground animate-pulse" />
 							</div>
-							<TextGenerateEffect
-								words="Initializing Memorall..."
-								duration={0.6}
-								staggerDelay={0.1}
-								className="text-2xl font-bold text-foreground mb-2"
-								filter={true}
+							<TypingText
+								text={[
+									"Initializing Memorall...",
+									"Setting up your AI-powered knowledge assistant",
+									"Your knowledge evolves with you",
+									"As you remember, it remembers for you",
+								]}
+								typingSpeed={60}
+								pauseDuration={200}
+								showCursor={true}
+								cursorCharacter="|"
+								className="text-4xl font-bold"
+								textColors={["#3b82f6", "#8b5cf6", "#06b6d4"]}
+								variableSpeed={{ min: 50, max: 120 }}
 							/>
 							<p className="text-sm text-muted-foreground">
 								Setting up your AI-powered knowledge assistant

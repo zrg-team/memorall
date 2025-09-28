@@ -10,6 +10,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { conversation } from "./conversations";
 import { topic } from "./topics";
+import { defaultNowToTrigger } from "../utils/default-now-to-trigger";
 
 const tableName = "messages";
 export const message = pgTable(
@@ -38,3 +39,6 @@ export const message = pgTable(
 
 export type Message = typeof message.$inferSelect;
 export type NewMessage = typeof message.$inferInsert;
+
+// Database trigger commands to automatically set timestamps
+export const messageTriggers = [defaultNowToTrigger(tableName)];

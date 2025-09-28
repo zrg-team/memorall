@@ -1,4 +1,5 @@
 import { pgTable, uuid, text, timestamp } from "drizzle-orm/pg-core";
+import { defaultNowToTrigger } from "../utils/default-now-to-trigger";
 
 const tableName = "encryptions";
 export const encryption = pgTable(tableName, {
@@ -12,3 +13,6 @@ export const encryption = pgTable(tableName, {
 
 export type Encryption = typeof encryption.$inferSelect;
 export type NewEncryption = typeof encryption.$inferInsert;
+
+// Database trigger commands to automatically set timestamps
+export const encryptionTriggers = [defaultNowToTrigger(tableName)];

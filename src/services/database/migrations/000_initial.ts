@@ -14,6 +14,17 @@ import {
 	rememberedContent,
 	nodeManualIndexes,
 	edgeManualIndexes,
+	configurationTriggers,
+	conversationTriggers,
+	edgeTriggers,
+	encryptionTriggers,
+	messageTriggers,
+	nodeTriggers,
+	rememberedContentTriggers,
+	sourceEdgeTriggers,
+	sourceNodeTriggers,
+	topicTriggers,
+	sourceTriggers,
 } from "../entities";
 
 export const up = async (pg: PGlite) => {
@@ -34,6 +45,25 @@ export const up = async (pg: PGlite) => {
     CREATE EXTENSION IF NOT EXISTS vector;
     CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
     CREATE EXTENSION IF NOT EXISTS pg_trgm;
+
+    CREATE OR REPLACE FUNCTION update_updated_at_column()
+    RETURNS TRIGGER AS $$
+    BEGIN
+      NEW.updated_at = CURRENT_TIMESTAMP;
+      RETURN NEW;
+    END;
+    $$ language 'plpgsql';
+
+    CREATE OR REPLACE FUNCTION set_created_updated_timestamps()
+    RETURNS TRIGGER AS $$
+    BEGIN
+      IF NEW.created_at IS NULL THEN
+        NEW.created_at = CURRENT_TIMESTAMP;
+      END IF;
+      NEW.updated_at = CURRENT_TIMESTAMP;
+      RETURN NEW;
+    END;
+    $$ language 'plpgsql';
 
     ${conversationTable.table}
     ${conversationTable.indexes.join("\n")}
@@ -71,11 +101,17 @@ export const up = async (pg: PGlite) => {
     ${nodeManualIndexes.join("\n")}
     ${edgeManualIndexes.join("\n")}
 
-    -- Trigram indexes for similarity search
-    CREATE INDEX IF NOT EXISTS nodes_name_trgm_idx ON nodes USING GIN (name gin_trgm_ops);
-    CREATE INDEX IF NOT EXISTS nodes_summary_trgm_idx ON nodes USING GIN (summary gin_trgm_ops);
-    CREATE INDEX IF NOT EXISTS edges_fact_text_trgm_idx ON edges USING GIN (fact_text gin_trgm_ops);
-    CREATE INDEX IF NOT EXISTS edges_edge_type_trgm_idx ON edges USING GIN (edge_type gin_trgm_ops);
+    ${configurationTriggers.join("\n")}
+    ${conversationTriggers.join("\n")}
+    ${edgeTriggers.join("\n")}
+    ${encryptionTriggers.join("\n")}
+    ${messageTriggers.join("\n")}
+    ${nodeTriggers.join("\n")}
+    ${rememberedContentTriggers.join("\n")}
+    ${sourceEdgeTriggers.join("\n")}
+    ${sourceNodeTriggers.join("\n")}
+    ${sourceTriggers.join("\n")}
+    ${topicTriggers.join("\n")}
 
     -- SQL Functions for trigram search
     CREATE OR REPLACE FUNCTION search_nodes_trigram(
@@ -142,7 +178,6 @@ export const up = async (pg: PGlite) => {
       provenance_count_cache INTEGER,
       fact_embedding VECTOR(768),
       type_embedding VECTOR(768),
-      search_vector TEXT,
       created_at TIMESTAMP,
       updated_at TIMESTAMP,
       similarity_score REAL
@@ -165,7 +200,6 @@ export const up = async (pg: PGlite) => {
         e.provenance_count_cache,
         e.fact_embedding,
         e.type_embedding,
-        e.search_vector,
         e.created_at,
         e.updated_at,
         GREATEST(

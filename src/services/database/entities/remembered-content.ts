@@ -9,6 +9,7 @@ import {
 	index,
 } from "drizzle-orm/pg-core";
 import { topic } from "./topics";
+import { defaultNowToTrigger } from "../utils/default-now-to-trigger";
 
 const tableName = "remembered_contents";
 export const rememberedContent = pgTable(
@@ -76,3 +77,6 @@ export const rememberedContent = pgTable(
 // TypeScript types
 export type RememberedContent = typeof rememberedContent.$inferSelect;
 export type NewRememberedContent = typeof rememberedContent.$inferInsert;
+
+// Database trigger commands to automatically set timestamps
+export const rememberedContentTriggers = [defaultNowToTrigger(tableName)];

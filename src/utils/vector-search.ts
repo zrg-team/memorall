@@ -33,6 +33,7 @@ export async function vectorSearchNodes(
 	embeddingService: BaseEmbedding,
 	searchTerms: string[],
 	limit: number,
+	graphFilter?: string,
 ): Promise<VectorSearchResult<Node>[]> {
 	if (searchTerms.length === 0) return [];
 
@@ -43,19 +44,25 @@ export async function vectorSearchNodes(
 
 		const results = await databaseService.use(async ({ db, raw }) => {
 			// Use cosine similarity for vector search
-			const query = `
+			let query = `
 				SELECT *,
 					1 - (name_embedding <=> $1::vector) as similarity
 				FROM nodes
-				WHERE name_embedding IS NOT NULL
-				ORDER BY similarity DESC
-				LIMIT $2
-			`;
+				WHERE name_embedding IS NOT NULL`;
 
-			const queryResult = await raw(query, [
-				JSON.stringify(searchEmbedding),
-				limit,
-			]);
+			const params: (string | number)[] = [JSON.stringify(searchEmbedding)];
+
+			if (graphFilter) {
+				query += ` AND graph = $${params.length + 1}`;
+				params.push(graphFilter);
+			}
+
+			query += `
+				ORDER BY similarity DESC
+				LIMIT $${params.length + 1}`;
+			params.push(limit);
+
+			const queryResult = await raw(query, params);
 			// PGlite returns { rows: [...] } structure
 			const rows = (queryResult as { rows: [] })?.rows || [];
 			return rows as Array<Node & { similarity: number }>;
@@ -71,6 +78,7 @@ export async function vectorSearchNodes(
 					attributes: row.attributes,
 					groupId: row.groupId,
 					nameEmbedding: row.nameEmbedding,
+					graph: row.graph,
 					createdAt: row.createdAt,
 					updatedAt: row.updatedAt,
 				},
@@ -91,6 +99,7 @@ export async function vectorSearchEdges(
 	embeddingService: BaseEmbedding,
 	searchTerms: string[],
 	limit: number,
+	graphFilter?: string,
 ): Promise<VectorSearchResult<Edge>[]> {
 	if (searchTerms.length === 0) return [];
 
@@ -101,22 +110,28 @@ export async function vectorSearchEdges(
 
 		const results = await databaseService.use(async ({ db, raw }) => {
 			// Use cosine similarity for vector search on both fact and type embeddings
-			const query = `
+			let query = `
 				SELECT *,
 					GREATEST(
 						1 - (fact_embedding <=> $1::vector),
 						1 - (type_embedding <=> $1::vector)
 					) as similarity
 				FROM edges
-				WHERE fact_embedding IS NOT NULL OR type_embedding IS NOT NULL
-				ORDER BY similarity DESC
-				LIMIT $2
-			`;
+				WHERE fact_embedding IS NOT NULL OR type_embedding IS NOT NULL`;
 
-			const queryResult = await raw(query, [
-				JSON.stringify(searchEmbedding),
-				limit,
-			]);
+			const params: (string | number)[] = [JSON.stringify(searchEmbedding)];
+
+			if (graphFilter) {
+				query += ` AND graph = $${params.length + 1}`;
+				params.push(graphFilter);
+			}
+
+			query += `
+				ORDER BY similarity DESC
+				LIMIT $${params.length + 1}`;
+			params.push(limit);
+
+			const queryResult = await raw(query, params);
 			// PGlite returns { rows: [...] } structure
 			const rows = (queryResult as { rows: [] })?.rows || [];
 			return rows as Array<Edge & { similarity: number }>;
@@ -140,7 +155,7 @@ export async function vectorSearchEdges(
 					provenanceCountCache: row.provenanceCountCache,
 					factEmbedding: row.factEmbedding,
 					typeEmbedding: row.typeEmbedding,
-					searchVector: row.searchVector,
+					graph: row.graph,
 					createdAt: row.createdAt,
 					updatedAt: row.updatedAt,
 				},

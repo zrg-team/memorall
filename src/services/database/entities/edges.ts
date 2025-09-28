@@ -11,6 +11,7 @@ import {
 	vector,
 } from "drizzle-orm/pg-core";
 import { node } from "./nodes";
+import { defaultNowToTrigger } from "../utils/default-now-to-trigger";
 
 const tableName = "edges";
 export const edge = pgTable(
@@ -27,7 +28,6 @@ export const edge = pgTable(
 		factText: text("fact_text"),
 		validAt: timestamp("valid_at"),
 		invalidAt: timestamp("invalid_at"),
-		recordedAt: timestamp("recorded_at").defaultNow().notNull(),
 		attributes: jsonb("attributes").default({}),
 		groupId: uuid("group_id"),
 		isCurrent: boolean("is_current").default(true),
@@ -35,7 +35,8 @@ export const edge = pgTable(
 		provenanceCountCache: integer("provenance_count_cache"),
 		factEmbedding: vector("fact_embedding", { dimensions: 768 }),
 		typeEmbedding: vector("type_embedding", { dimensions: 768 }),
-		searchVector: text("search_vector"), // TSVECTOR as text (PGlite doesn't support tsvector)
+		graph: text("graph").notNull().default(""),
+		recordedAt: timestamp("recorded_at").defaultNow().notNull(),
 		createdAt: timestamp("created_at").defaultNow().notNull(),
 		updatedAt: timestamp("updated_at").defaultNow().notNull(),
 	},
@@ -47,6 +48,7 @@ export const edge = pgTable(
 		index("edges_is_current_idx").on(table.isCurrent),
 		index("edges_valid_at_idx").on(table.validAt),
 		index("edges_recorded_at_idx").on(table.recordedAt),
+		index("edges_graph_idx").on(table.graph),
 	],
 );
 
@@ -59,3 +61,6 @@ export const edgeManualIndexes = [
 	`CREATE INDEX IF NOT EXISTS ${tableName}_fact_text_trgm_idx ON ${tableName} USING GIN (fact_text gin_trgm_ops);`,
 	`CREATE INDEX IF NOT EXISTS ${tableName}_edge_type_trgm_idx ON ${tableName} USING GIN (edge_type gin_trgm_ops);`,
 ];
+
+// Database trigger commands to automatically set timestamps
+export const edgeTriggers = [defaultNowToTrigger(tableName)];

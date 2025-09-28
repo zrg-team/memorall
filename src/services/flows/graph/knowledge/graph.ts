@@ -1,6 +1,6 @@
 import { END, START, StateGraph } from "@langchain/langgraph/web";
 import { logInfo, logError } from "@/utils/logger";
-import { or, and, ilike, inArray } from "drizzle-orm";
+import { or, and, ilike, inArray, eq } from "drizzle-orm";
 import { vectorSearchNodes, vectorSearchEdges } from "@/utils/vector-search";
 import {
 	trigramSearchNodes,
@@ -41,6 +41,19 @@ export class KnowledgeGraphFlow extends GraphBase<
 	private temporalExtraction: TemporalExtractionFlow;
 	private databaseSave: DatabaseSaveFlow;
 	private config: KnowledgeGraphConfig;
+
+	// Helper function to determine the graph field value based on topicId
+	private getGraphValue(state: KnowledgeGraphState): string {
+		if (state.topicId && state.topicId.trim().length > 0) {
+			return `topic_${state.topicId.trim()}`;
+		}
+		return "";
+	}
+
+	// Helper function to determine if we should filter by graph field
+	private shouldFilterByGraph(state: KnowledgeGraphState): boolean {
+		return !!state.topicId && state.topicId.trim().length > 0;
+	}
 
 	constructor(services: AllServices, config: KnowledgeGraphConfig = {}) {
 		super(services);
@@ -134,7 +147,15 @@ export class KnowledgeGraphFlow extends GraphBase<
 				});
 				if (conditions.length === 0)
 					return [] as (typeof schema.nodes.$inferSelect)[];
-				const where = or(...conditions);
+
+				let where = or(...conditions);
+
+				// Only filter by graph if topicId is specified
+				if (this.shouldFilterByGraph(state)) {
+					const graphValue = this.getGraphValue(state);
+					where = and(where, eq(schema.nodes.graph, graphValue));
+				}
+
 				const nodes = await db
 					.select()
 					.from(schema.nodes)
@@ -146,12 +167,25 @@ export class KnowledgeGraphFlow extends GraphBase<
 			// Perform trigram search for fuzzy text matching
 			let trigramResults: Awaited<ReturnType<typeof trigramSearchNodes>> = [];
 			try {
-				trigramResults = await trigramSearchNodes(
+				const resultLimit = Math.floor(
+					(TOTAL_LIMIT * WEIGHTS.trigramPercentage) / 100,
+				);
+				const allTrigramResults = await trigramSearchNodes(
 					databaseService,
 					names,
-					Math.floor((TOTAL_LIMIT * WEIGHTS.trigramPercentage) / 100),
+					this.shouldFilterByGraph(state) ? resultLimit * 2 : resultLimit, // Get more results only if we need to filter
 					{ threshold: 0.1 },
 				);
+
+				// Filter by graph field only if topicId is specified
+				if (this.shouldFilterByGraph(state)) {
+					const graphValue = this.getGraphValue(state);
+					trigramResults = allTrigramResults.filter(
+						(result) => result.item.graph === graphValue,
+					);
+				} else {
+					trigramResults = allTrigramResults;
+				}
 			} catch (error) {
 				logError("[LOAD_ENTITIES] Trigram search failed:", error);
 			}
@@ -172,11 +206,14 @@ export class KnowledgeGraphFlow extends GraphBase<
 							TOTAL_LIMIT - combinedResults,
 							Math.floor(TOTAL_LIMIT * 0.4),
 						);
-						vectorResults = await vectorSearchNodes(
+						const vectorResults = await vectorSearchNodes(
 							databaseService,
 							defaultEmbedding,
 							names,
 							vectorLimit,
+							this.shouldFilterByGraph(state)
+								? this.getGraphValue(state)
+								: undefined,
 						);
 					}
 				} catch (error) {
@@ -273,10 +310,19 @@ export class KnowledgeGraphFlow extends GraphBase<
 						];
 					});
 					if (conditions.length === 0) return [] as { id: string }[];
+
+					let where = or(...conditions);
+
+					// Only filter by graph if topicId is specified
+					if (this.shouldFilterByGraph(state)) {
+						const graphValue = this.getGraphValue(state);
+						where = and(where, eq(schema.nodes.graph, graphValue));
+					}
+
 					const rows = await db
 						.select({ id: schema.nodes.id })
 						.from(schema.nodes)
-						.where(or(...conditions)!)
+						.where(where!)
 						.limit(200);
 					return rows;
 				});
@@ -289,15 +335,21 @@ export class KnowledgeGraphFlow extends GraphBase<
 			let sqlResults: typeof state.existingEdges = [];
 			if (idList.length > 0) {
 				sqlResults = await databaseService.use(async ({ db, schema }) => {
+					let where = or(
+						inArray(schema.edges.sourceId, idList),
+						inArray(schema.edges.destinationId, idList),
+					);
+
+					// Only filter by graph if topicId is specified
+					if (this.shouldFilterByGraph(state)) {
+						const graphValue = this.getGraphValue(state);
+						where = and(where, eq(schema.edges.graph, graphValue));
+					}
+
 					return db
 						.select()
 						.from(schema.edges)
-						.where(
-							or(
-								inArray(schema.edges.sourceId, idList),
-								inArray(schema.edges.destinationId, idList),
-							)!,
-						)
+						.where(where!)
 						.limit(Math.floor((TOTAL_LIMIT * WEIGHTS.sqlPercentage) / 100));
 				});
 			}
@@ -312,12 +364,25 @@ export class KnowledgeGraphFlow extends GraphBase<
 						.filter((term) => term.length > 0);
 
 					if (factSearchTerms.length > 0) {
-						trigramResults = await trigramSearchEdges(
+						const resultLimit = Math.floor(
+							(TOTAL_LIMIT * WEIGHTS.trigramPercentage) / 100,
+						);
+						const allTrigramResults = await trigramSearchEdges(
 							databaseService,
 							factSearchTerms,
-							Math.floor((TOTAL_LIMIT * WEIGHTS.trigramPercentage) / 100),
+							this.shouldFilterByGraph(state) ? resultLimit * 2 : resultLimit, // Get more results only if we need to filter
 							{ threshold: 0.1 },
 						);
+
+						// Filter by graph field only if topicId is specified
+						if (this.shouldFilterByGraph(state)) {
+							const graphValue = this.getGraphValue(state);
+							trigramResults = allTrigramResults.filter(
+								(result) => result.item.graph === graphValue,
+							);
+						} else {
+							trigramResults = allTrigramResults;
+						}
 					}
 				} catch (error) {
 					logError("[LOAD_FACTS] Trigram search failed:", error);
@@ -349,11 +414,14 @@ export class KnowledgeGraphFlow extends GraphBase<
 								TOTAL_LIMIT - combinedResults,
 								Math.floor(TOTAL_LIMIT * 0.4),
 							);
-							vectorResults = await vectorSearchEdges(
+							const vectorResults = await vectorSearchEdges(
 								databaseService,
 								defaultEmbedding,
 								factSearchTerms,
 								vectorLimit,
+								this.shouldFilterByGraph(state)
+									? this.getGraphValue(state)
+									: undefined,
 							);
 						}
 					}
@@ -372,15 +440,21 @@ export class KnowledgeGraphFlow extends GraphBase<
 				// Find edges that connect any of our resolved entities to other entities
 				relationResults = await databaseService.use(async ({ db, schema }) => {
 					// Find edges where both source and destination are in our candidate list
+					let where = and(
+						inArray(schema.edges.sourceId, idList),
+						inArray(schema.edges.destinationId, idList),
+					);
+
+					// Only filter by graph if topicId is specified
+					if (this.shouldFilterByGraph(state)) {
+						const graphValue = this.getGraphValue(state);
+						where = and(where, eq(schema.edges.graph, graphValue));
+					}
+
 					return db
 						.select()
 						.from(schema.edges)
-						.where(
-							and(
-								inArray(schema.edges.sourceId, idList),
-								inArray(schema.edges.destinationId, idList),
-							)!,
-						)
+						.where(where!)
 						.limit(remainingSpace);
 				});
 			}
@@ -405,10 +479,15 @@ export class KnowledgeGraphFlow extends GraphBase<
 			let newNodes: KnowledgeGraphState["existingNodes"] = [];
 			if (missingNodeIds.length > 0) {
 				newNodes = await databaseService.use(async ({ db, schema }) => {
-					return db
-						.select()
-						.from(schema.nodes)
-						.where(inArray(schema.nodes.id, missingNodeIds));
+					let where = inArray(schema.nodes.id, missingNodeIds);
+
+					// Only filter by graph if topicId is specified
+					if (this.shouldFilterByGraph(state)) {
+						const graphValue = this.getGraphValue(state);
+						where = and(where, eq(schema.nodes.graph, graphValue)) as typeof where;
+					}
+
+					return db.select().from(schema.nodes).where(where);
 				});
 			}
 

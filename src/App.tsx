@@ -40,7 +40,7 @@ const App: React.FC = () => {
 	const NavigatorBridge: React.FC = () => {
 		const navigate = useNavigate();
 		useEffect(() => {
-			const handler = (message: any) => {
+			const handler = (message: { type: string }) => {
 				if (message?.type === "OPEN_KNOWLEDGE_GRAPH") {
 					navigate("/knowledge-graph");
 				} else if (message?.type === "OPEN_REMEMBER_PAGE") {

@@ -1,4 +1,5 @@
 import { pgTable, text, timestamp, jsonb, uuid } from "drizzle-orm/pg-core";
+import { defaultNowToTrigger } from "../utils/default-now-to-trigger";
 
 const tableName = "conversations";
 export const conversation = pgTable(tableName, {
@@ -11,3 +12,6 @@ export const conversation = pgTable(tableName, {
 
 export type Conversation = typeof conversation.$inferSelect;
 export type NewConversation = typeof conversation.$inferInsert;
+
+// Database trigger commands to automatically set timestamps
+export const conversationTriggers = [defaultNowToTrigger(tableName)];

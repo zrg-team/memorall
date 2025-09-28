@@ -77,6 +77,17 @@ const defaultSteps: CopilotStep[] = [
 		showProgress: true,
 	},
 	{
+		id: "topics-tab-quick",
+		title: "🏷️ Topics Tab",
+		content:
+			"Categorize your remembered pages and knowledge graph by topics. This helps organize your knowledge around focused areas instead of random information, making it easier to find and connect related content.",
+		target: '[href="/topics"]',
+		placement: "bottom",
+		action: "navigate",
+		navigationPath: "/topics",
+		showProgress: true,
+	},
+	{
 		id: "remembered-tab-quick",
 		title: "📚 Remembered Tab",
 		content:
@@ -96,17 +107,6 @@ const defaultSteps: CopilotStep[] = [
 		placement: "bottom",
 		action: "navigate",
 		navigationPath: "/knowledge-graph",
-		showProgress: true,
-	},
-	{
-		id: "topics-tab-quick",
-		title: "🏷️ Topics Tab",
-		content:
-			"Categorize your remembered pages and knowledge graph by topics. This helps organize your knowledge around focused areas instead of random information, making it easier to find and connect related content.",
-		target: '[href="/topics"]',
-		placement: "bottom",
-		action: "navigate",
-		navigationPath: "/topics",
 		showProgress: true,
 	},
 	{

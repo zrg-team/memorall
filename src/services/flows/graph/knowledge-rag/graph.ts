@@ -264,7 +264,7 @@ export class KnowledgeRAGFlow extends GraphBase<
 						provenanceCountCache: schema.edges.provenanceCountCache,
 						factEmbedding: schema.edges.factEmbedding,
 						typeEmbedding: schema.edges.typeEmbedding,
-						searchVector: schema.edges.searchVector,
+						graph: schema.edges.graph,
 						createdAt: schema.edges.createdAt,
 						updatedAt: schema.edges.updatedAt,
 					})

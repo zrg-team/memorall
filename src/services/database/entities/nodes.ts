@@ -7,6 +7,7 @@ import {
 	index,
 	vector,
 } from "drizzle-orm/pg-core";
+import { defaultNowToTrigger } from "../utils/default-now-to-trigger";
 
 const tableName = "nodes";
 export const node = pgTable(
@@ -19,6 +20,7 @@ export const node = pgTable(
 		attributes: jsonb("attributes").default({}),
 		groupId: uuid("group_id"),
 		nameEmbedding: vector("name_embedding", { dimensions: 768 }),
+		graph: text("graph").notNull().default(""),
 		createdAt: timestamp("created_at").defaultNow().notNull(),
 		updatedAt: timestamp("updated_at").defaultNow().notNull(),
 	},
@@ -27,6 +29,7 @@ export const node = pgTable(
 		index("nodes_name_idx").on(table.name),
 		index("nodes_group_id_idx").on(table.groupId),
 		index("nodes_summary_idx").on(table.summary),
+		index("nodes_graph_idx").on(table.graph),
 	],
 );
 
@@ -39,3 +42,6 @@ export const nodeManualIndexes = [
 	`CREATE INDEX IF NOT EXISTS ${tableName}_name_trgm_idx ON ${tableName} USING GIN (name gin_trgm_ops);`,
 	`CREATE INDEX IF NOT EXISTS ${tableName}_summary_trgm_idx ON ${tableName} USING GIN (summary gin_trgm_ops);`,
 ];
+
+// Database trigger commands to automatically set timestamps
+export const nodeTriggers = [defaultNowToTrigger(tableName)];
