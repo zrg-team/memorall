@@ -369,7 +369,8 @@ export class RememberService {
 						conditions.length > 0 ? and(...conditions) : undefined;
 
 					// Build order by
-					const column = schema.rememberedContent[sortBy as keyof RememberedContent];
+					const column =
+						schema.rememberedContent[sortBy as keyof RememberedContent];
 					const orderBy = sortOrder === "desc" ? desc(column) : column;
 
 					// Get total count

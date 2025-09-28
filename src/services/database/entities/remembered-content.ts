@@ -46,31 +46,21 @@ export const rememberedContent = pgTable(
 		createdAt: timestamp("created_at").defaultNow().notNull(),
 		updatedAt: timestamp("updated_at").defaultNow().notNull(),
 	},
-	(table) => ([
+	(table) => [
 		// Indexes for efficient queries
-		index("remembered_content_source_type_idx").on(
-			table.sourceType,
-		),
-		index("remembered_content_source_url_idx").on(
-			table.sourceUrl,
-		),
+		index("remembered_content_source_type_idx").on(table.sourceType),
+		index("remembered_content_source_url_idx").on(table.sourceUrl),
 		index("remembered_content_title_idx").on(table.title),
-		index("remembered_content_created_at_idx").on(
-			table.createdAt,
-		),
-		index("remembered_content_updated_at_idx").on(
-			table.updatedAt,
-		),
-		index("remembered_content_is_archived_idx").on(
-			table.isArchived,
-		),
-		index("remembered_content_is_favorite_idx").on(
-			table.isFavorite,
-		),
+		index("remembered_content_created_at_idx").on(table.createdAt),
+		index("remembered_content_updated_at_idx").on(table.updatedAt),
+		index("remembered_content_is_archived_idx").on(table.isArchived),
+		index("remembered_content_is_favorite_idx").on(table.isFavorite),
 		index("remembered_content_topic_idx").on(table.topicId),
 		// Composite indexes for common queries
 		index("remembered_content_source_type_created_idx").on(
-			table.sourceType, table.createdAt),
+			table.sourceType,
+			table.createdAt,
+		),
 		index("remembered_content_status_created_idx").on(
 			table.isArchived,
 			table.createdAt,
@@ -79,7 +69,7 @@ export const rememberedContent = pgTable(
 			table.isFavorite,
 			table.createdAt,
 		),
-	]),
+	],
 );
 
 // TypeScript types

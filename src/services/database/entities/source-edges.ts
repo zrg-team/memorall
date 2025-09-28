@@ -25,13 +25,13 @@ export const sourceEdge = pgTable(
 		attributes: jsonb("attributes").default({}),
 		createdAt: timestamp("created_at").defaultNow().notNull(),
 	},
-	(table) => ([
+	(table) => [
 		primaryKey({ columns: [table.sourceId, table.edgeId] }),
 		index("source_edges_source_id_idx").on(table.sourceId),
 		index("source_edges_edge_id_idx").on(table.edgeId),
 		index("source_edges_relation_idx").on(table.relation),
 		index("source_edges_link_weight_idx").on(table.linkWeight),
-	]),
+	],
 );
 
 export type SourceEdge = typeof sourceEdge.$inferSelect;

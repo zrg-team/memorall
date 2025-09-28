@@ -26,17 +26,15 @@ export const source = pgTable(
 		createdAt: timestamp("created_at").defaultNow().notNull(),
 		updatedAt: timestamp("updated_at").defaultNow().notNull(),
 	},
-	(table) => ([
+	(table) => [
 		index("sources_target_type_idx").on(table.targetType),
 		index("sources_target_id_idx").on(table.targetId),
 		index("sources_name_idx").on(table.name),
 		index("sources_group_id_idx").on(table.groupId),
-		index("sources_reference_time_idx").on(
-			table.referenceTime,
-		),
+		index("sources_reference_time_idx").on(table.referenceTime),
 		index("sources_weight_idx").on(table.weight),
 		index("sources_status_idx").on(table.status),
-	]),
+	],
 );
 
 export type Source = typeof source.$inferSelect;

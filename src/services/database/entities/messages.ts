@@ -28,11 +28,11 @@ export const message = pgTable(
 		createdAt: timestamp("created_at").defaultNow().notNull(),
 		updatedAt: timestamp("updated_at").defaultNow().notNull(),
 	},
-	(table) => ([
+	(table) => [
 		index("messages_conversation_idx").on(table.conversationId),
 		index("messages_role_idx").on(table.role),
 		index("messages_topic_idx").on(table.topicId),
-	]),
+	],
 );
 
 export type Message = typeof message.$inferSelect;

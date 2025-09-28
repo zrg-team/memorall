@@ -293,9 +293,7 @@ export const RememberedContentsPage: React.FC<
 										</span>
 										<span className="flex items-center gap-1">
 											<BookOpen className="h-4 w-4" />
-											{Math.round(
-												(selectedContent.content.length || 0) / 250,
-											)}{" "}
+											{Math.round((selectedContent.content.length || 0) / 250)}{" "}
 											min read
 										</span>
 									</div>

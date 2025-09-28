@@ -1,21 +1,35 @@
 import type { PGlite } from "@electric-sql/pglite";
 import { toFullTableSQL } from "../utils/schema-to-sql";
-import { conversation, edge, message, node, source, sourceEdge, sourceNode, topic, encryption, configuration, rememberedContent, nodeManualIndexes, edgeManualIndexes } from "../entities";
+import {
+	conversation,
+	edge,
+	message,
+	node,
+	source,
+	sourceEdge,
+	sourceNode,
+	topic,
+	encryption,
+	configuration,
+	rememberedContent,
+	nodeManualIndexes,
+	edgeManualIndexes,
+} from "../entities";
 
 export const up = async (pg: PGlite) => {
-  const conversationTable = toFullTableSQL(conversation);
-  const messagesTable = toFullTableSQL(message);
-  const topicsTable = toFullTableSQL(topic);
-  const sourcesTable = toFullTableSQL(source);
-  const nodesTable = toFullTableSQL(node);
-  const edgesTable = toFullTableSQL(edge);
-  const sourceNodesTable = toFullTableSQL(sourceNode);
-  const sourceEdgesTable = toFullTableSQL(sourceEdge);
-  const encryptionTable = toFullTableSQL(encryption);
-  const configurationsTable = toFullTableSQL(configuration);
-  const rememberedContentTable = toFullTableSQL(rememberedContent);
+	const conversationTable = toFullTableSQL(conversation);
+	const messagesTable = toFullTableSQL(message);
+	const topicsTable = toFullTableSQL(topic);
+	const sourcesTable = toFullTableSQL(source);
+	const nodesTable = toFullTableSQL(node);
+	const edgesTable = toFullTableSQL(edge);
+	const sourceNodesTable = toFullTableSQL(sourceNode);
+	const sourceEdgesTable = toFullTableSQL(sourceEdge);
+	const encryptionTable = toFullTableSQL(encryption);
+	const configurationsTable = toFullTableSQL(configuration);
+	const rememberedContentTable = toFullTableSQL(rememberedContent);
 
-  const sql = `
+	const sql = `
     -- Enable extensions
     CREATE EXTENSION IF NOT EXISTS vector;
     CREATE EXTENSION IF NOT EXISTS "uuid-ossp";

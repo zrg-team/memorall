@@ -56,7 +56,9 @@ export async function getAppliedMigrations(db: PGlite): Promise<string[]> {
     SELECT id FROM _migrations
     ORDER BY version ASC
   `);
-	return result.rows.map((row) => typeof row === 'object' && row && 'id' in row ? `${row.id}` : '');
+	return result.rows.map((row) =>
+		typeof row === "object" && row && "id" in row ? `${row.id}` : "",
+	);
 }
 
 export async function markMigrationApplied(
