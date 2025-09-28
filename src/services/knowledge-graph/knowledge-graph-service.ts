@@ -206,13 +206,13 @@ export class KnowledgeGraphService {
 
 			// Prepare input state
 			const initialState: Partial<KnowledgeGraphState> = {
-				content: page.textContent,
+				content: page.content,
 				title: page.title,
 				url: getContentUrl(page),
 				pageId: page.id,
 				referenceTimestamp: new Date().toISOString(),
 				metadata: (page.sourceMetadata || {}) as Record<string, unknown>,
-				currentMessage: `Title: ${page.title}\n\nContent:\n${page.textContent}`,
+				currentMessage: `Title: ${page.title}\n\nContent:\n${page.content}`,
 				sourceType: page.sourceType,
 				previousMessages: undefined,
 			};

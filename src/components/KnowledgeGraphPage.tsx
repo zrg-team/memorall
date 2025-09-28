@@ -610,7 +610,7 @@ export const KnowledgeGraphPage: React.FC<KnowledgeGraphPageProps> = () => {
 											)}
 
 											<p className="text-xs text-muted-foreground line-clamp-2">
-												{page.textContent.substring(0, 100)}...
+												{page.content.substring(0, 100)}...
 											</p>
 
 											<div className="flex items-center justify-between text-xs text-muted-foreground">

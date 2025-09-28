@@ -237,7 +237,7 @@ export const RememberedContentsPage: React.FC<
 										</div>
 
 										<p className="text-xs text-muted-foreground line-clamp-2">
-											{content.textContent.substring(0, 100)}...
+											{content.content.substring(0, 100)}...
 										</p>
 
 										<div className="flex items-center justify-between text-xs text-muted-foreground">
@@ -294,7 +294,7 @@ export const RememberedContentsPage: React.FC<
 										<span className="flex items-center gap-1">
 											<BookOpen className="h-4 w-4" />
 											{Math.round(
-												(selectedContent.textContent.length || 0) / 250,
+												(selectedContent.content.length || 0) / 250,
 											)}{" "}
 											min read
 										</span>
@@ -383,7 +383,7 @@ export const RememberedContentsPage: React.FC<
 							<div
 								className="prose max-w-none prose-headings:text-foreground prose-p:text-foreground prose-strong:text-foreground prose-a:text-primary prose-code:text-foreground prose-pre:bg-muted prose-blockquote:text-muted-foreground prose-li:text-foreground"
 								dangerouslySetInnerHTML={{
-									__html: selectedContent.cleanContent,
+									__html: selectedContent.content,
 								}}
 							/>
 						</ScrollArea>

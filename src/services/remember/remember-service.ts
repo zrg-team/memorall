@@ -148,43 +148,7 @@ export class RememberService {
 				await this.initialize();
 			}
 
-			logInfo("🔄 Saving content directly:", data.sourceType);
-
-			// Generate embedding for semantic search (skip in Service Worker context)
-			let embedding: number[] | undefined;
-			// Check if we're in Service Worker context (no DOM access)
-			const isServiceWorker =
-				typeof window === "undefined" && typeof document === "undefined";
-			if (!isServiceWorker) {
-				try {
-					const embeddingText = `${data.title}\n\n${data.textContent}`;
-					embedding =
-						await serviceManager.embeddingService.textToVector(embeddingText);
-				} catch (embeddingError) {
-					logError(
-						"⚠️ Failed to generate embedding, continuing without it:",
-						embeddingError,
-					);
-				}
-			} else {
-				logInfo("ℹ️ Skipping embedding generation in Service Worker context");
-			}
-
-			// Calculate content quality metrics
-			const contentLength = data.textContent.length;
-			const readabilityScore =
-				data.sourceType === "webpage"
-					? this.calculateReadabilityScore(
-							data.extractionMetadata as ReadabilityArticle,
-						)
-					: this.calculateBasicScore(data.textContent);
-
-			// Create search vector for full-text search
-			const searchVector = this.createSearchVectorGeneric(
-				data.title,
-				data.textContent,
-				data.sourceMetadata,
-			);
+			logInfo("🔄 Saving content directly:", data.sourceType, data);
 
 			// Prepare data for insertion using new schema
 			const newContent = {
@@ -192,16 +156,10 @@ export class RememberService {
 				sourceUrl: data.sourceUrl,
 				originalUrl: data.originalUrl,
 				title: data.title,
-				rawContent: data.rawContent,
-				cleanContent: data.cleanContent,
-				textContent: data.textContent,
-				sourceMetadata: data.sourceMetadata as any,
-				extractionMetadata: data.extractionMetadata as any,
-				embedding,
-				searchVector,
+				content: data.textContent,
+				sourceMetadata: data.sourceMetadata as unknown,
+				extractionMetadata: data.extractionMetadata as unknown,
 				tags: [],
-				contentLength,
-				readabilityScore,
 				isArchived: false,
 				isFavorite: false,
 			};
@@ -291,36 +249,6 @@ export class RememberService {
 			// Transform legacy data to new format
 			const contentData = this.transformLegacyData(data);
 
-			// Generate new embedding if content changed (skip in Service Worker context)
-			let embedding: number[] | undefined;
-			// Check if we're in Service Worker context (no DOM access)
-			const isServiceWorker =
-				typeof window === "undefined" && typeof document === "undefined";
-			if (!isServiceWorker) {
-				try {
-					const embeddingText = `${contentData.title}\n\n${contentData.textContent}`;
-					embedding =
-						await serviceManager.embeddingService.textToVector(embeddingText);
-				} catch (embeddingError) {
-					logError(
-						"⚠️ Failed to generate embedding for update:",
-						embeddingError,
-					);
-				}
-			} else {
-				logInfo(
-					"ℹ️ Skipping embedding generation in Service Worker context for update",
-				);
-			}
-
-			const contentLength = contentData.textContent.length;
-			const readabilityScore = this.calculateReadabilityScore(data.article);
-			const searchVector = this.createSearchVectorGeneric(
-				contentData.title,
-				contentData.textContent,
-				contentData.sourceMetadata,
-			);
-
 			const result = await serviceManager.databaseService.use(
 				async ({ db, schema }) => {
 					const [updatedPage] = await db
@@ -330,15 +258,9 @@ export class RememberService {
 							sourceUrl: contentData.sourceUrl,
 							originalUrl: contentData.originalUrl,
 							title: contentData.title,
-							rawContent: contentData.rawContent,
-							cleanContent: contentData.cleanContent,
-							textContent: contentData.textContent,
-							sourceMetadata: contentData.sourceMetadata as any,
-							extractionMetadata: contentData.extractionMetadata as any,
-							embedding,
-							searchVector,
-							contentLength,
-							readabilityScore,
+							content: contentData.textContent,
+							sourceMetadata: contentData.sourceMetadata as unknown,
+							extractionMetadata: contentData.extractionMetadata as unknown,
 							updatedAt: new Date(),
 						})
 						.where(eq(schema.rememberedContent.id, pageId))
@@ -418,8 +340,7 @@ export class RememberService {
 						conditions.push(
 							or(
 								like(schema.rememberedContent.title, `%${query}%`),
-								like(schema.rememberedContent.textContent, `%${query}%`),
-								like(schema.rememberedContent.searchVector, `%${query}%`),
+								like(schema.rememberedContent.content, `%${query}%`),
 							),
 						);
 					}
@@ -448,7 +369,7 @@ export class RememberService {
 						conditions.length > 0 ? and(...conditions) : undefined;
 
 					// Build order by
-					const column = schema.rememberedContent[sortBy];
+					const column = schema.rememberedContent[sortBy as keyof RememberedContent];
 					const orderBy = sortOrder === "desc" ? desc(column) : column;
 
 					// Get total count
@@ -623,86 +544,6 @@ export class RememberService {
 			logError("❌ Failed to add tags:", error);
 			return false;
 		}
-	}
-
-	/**
-	 * Calculate a simple readability score
-	 */
-	private calculateReadabilityScore(article: ReadabilityArticle): number {
-		const textLength = article.textContent.length;
-		const contentLength = article.content.length;
-
-		if (textLength === 0) return 0;
-
-		// Simple heuristic: ratio of text to HTML, adjusted by length
-		const textToHtmlRatio = textLength / Math.max(contentLength, 1);
-		const lengthScore = Math.min(textLength / 5000, 1); // Normalize to 5k chars
-
-		return Math.round((textToHtmlRatio * 0.7 + lengthScore * 0.3) * 100) / 100;
-	}
-
-	/**
-	 * Create a search vector for full-text search
-	 */
-	private createSearchVector(
-		title: string,
-		textContent: string,
-		metadata: PageMetadata,
-	): string {
-		const parts = [
-			title,
-			textContent.substring(0, 1000), // First 1k chars
-			metadata.description || "",
-			metadata.domain,
-		];
-
-		return parts
-			.join(" ")
-			.toLowerCase()
-			.replace(/[^\w\s]/g, " ");
-	}
-
-	/**
-	 * Create a search vector for any content type
-	 */
-	private createSearchVectorGeneric(
-		title: string,
-		textContent: string,
-		metadata: any,
-	): string {
-		const parts = [
-			title,
-			textContent.substring(0, 1000), // First 1k chars
-		];
-
-		// Add metadata-specific searchable content
-		if (metadata.description) parts.push(metadata.description);
-		if (metadata.domain) parts.push(metadata.domain);
-		if (metadata.pageTitle && metadata.pageTitle !== title)
-			parts.push(metadata.pageTitle);
-		if (metadata.context) parts.push(metadata.context);
-
-		return parts
-			.join(" ")
-			.toLowerCase()
-			.replace(/[^\w\s]/g, " ");
-	}
-
-	/**
-	 * Calculate a basic score for non-webpage content
-	 */
-	private calculateBasicScore(textContent: string): number {
-		const length = textContent.length;
-		if (length === 0) return 0;
-
-		// Simple scoring based on length and structure
-		const lengthScore = Math.min(length / 1000, 1); // Normalize to 1k chars
-		const hasStructure = textContent.includes("\n") ? 0.2 : 0;
-		const hasVariety = /[.,!?]/.test(textContent) ? 0.3 : 0;
-
-		return (
-			Math.round((lengthScore * 0.5 + hasStructure + hasVariety) * 100) / 100
-		);
 	}
 
 	/**

@@ -109,7 +109,7 @@ export class KnowledgeGraphHandler extends BaseProcessHandler<KnowledgeGraphJob>
 					{
 						jobId,
 						pageId: pageData.id,
-						contentLength: pageData.textContent.length,
+						contentLength: pageData.content.length,
 					},
 					"offscreen",
 				);

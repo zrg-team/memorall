@@ -24,48 +24,51 @@ export interface DatabaseConfig {
 }
 
 // Import all schemas
-import * as conversationSchema from "./entities/conversation";
-import * as messageSchema from "./entities/message";
+import * as conversationSchema from "./entities/conversations";
+import * as messageSchema from "./entities/messages";
 import * as sourcesSchema from "./entities/sources";
 import * as nodesSchema from "./entities/nodes";
 import * as edgesSchema from "./entities/edges";
 import * as sourceNodesSchema from "./entities/source-nodes";
 import * as sourceEdgesSchema from "./entities/source-edges";
-import * as encryptionSchema from "./entities/encryption";
-import * as configurationSchema from "./entities/configuration";
-import * as rememberedContentSchema from "./entities/remembered-contents";
+import * as encryptionSchema from "./entities/encryptions";
+import * as configurationSchema from "./entities/configurations";
+import * as rememberedContentSchema from "./entities/remembered-content";
+import * as topicSchema from "./entities/topics";
 
 import { runMigrations } from "./migrations";
 
 // Export schemas for direct access
 export const schema = {
 	// Conversation entities
-	conversations: conversationSchema.conversations,
-	messages: messageSchema.messages,
+	conversations: conversationSchema.conversation,
+	messages: messageSchema.message,
 	// Knowledge graph entities
-	sources: sourcesSchema.sources,
-	nodes: nodesSchema.nodes,
-	edges: edgesSchema.edges,
-	sourceNodes: sourceNodesSchema.sourceNodes,
-	sourceEdges: sourceEdgesSchema.sourceEdges,
+	sources: sourcesSchema.source,
+	nodes: nodesSchema.node,
+	edges: edgesSchema.edge,
+	sourceNodes: sourceNodesSchema.sourceNode,
+	sourceEdges: sourceEdgesSchema.sourceEdge,
 	// Encryption entities
 	encryption: encryptionSchema.encryption,
 	// Generic configurations (JSONB)
-	configurations: configurationSchema.configurations,
+	configurations: configurationSchema.configuration,
 	// Remembered content from "Remember this" feature
 	rememberedContent: rememberedContentSchema.rememberedContent,
+	// Topic entities
+	topics: topicSchema.topic,
 };
 
 // Export types
 export type {
 	Conversation,
 	NewConversation,
-} from "./entities/conversation";
+} from "./entities/conversations";
 
 export type {
 	Message,
 	NewMessage,
-} from "./entities/message";
+} from "./entities/messages";
 
 export type {
 	Source,
@@ -95,16 +98,21 @@ export type {
 export type {
 	Encryption,
 	NewEncryption,
-} from "./entities/encryption";
+} from "./entities/encryptions";
 export type {
 	Configuration,
 	NewConfiguration,
-} from "./entities/configuration";
+} from "./entities/configurations";
 
 export type {
 	RememberedContent,
 	NewRememberedContent,
-} from "./entities/remembered-contents";
+} from "./entities/remembered-content";
+
+export type {
+	Topic,
+	NewTopic,
+} from "./entities/topics";
 
 // Database instances - support both main and proxy modes
 let pgliteInstance: PGliteLike | PGlite | null = null;

@@ -8,7 +8,7 @@ import {
 	vector,
 } from "drizzle-orm/pg-core";
 
-export const nodes = pgTable(
+export const node = pgTable(
 	"nodes",
 	{
 		id: uuid("id").primaryKey().defaultRandom(),
@@ -21,13 +21,24 @@ export const nodes = pgTable(
 		createdAt: timestamp("created_at").defaultNow().notNull(),
 		updatedAt: timestamp("updated_at").defaultNow().notNull(),
 	},
-	(table) => ({
-		nodeTypeIdx: index("nodes_node_type_idx").on(table.nodeType),
-		nameIdx: index("nodes_name_idx").on(table.name),
-		groupIdIdx: index("nodes_group_id_idx").on(table.groupId),
-		summaryIdx: index("nodes_summary_idx").on(table.summary),
-	}),
+	(table) => ([
+		index("nodes_node_type_idx").on(table.nodeType),
+		index("nodes_name_idx").on(table.name),
+		index("nodes_group_id_idx").on(table.groupId),
+		index("nodes_summary_idx").on(table.summary),
+	]),
 );
 
-export type Node = typeof nodes.$inferSelect;
-export type NewNode = typeof nodes.$inferInsert;
+export type Node = typeof node.$inferSelect;
+export type NewNode = typeof node.$inferInsert;
+
+// Manual indexes that can't be auto-generated
+export const nodeManualIndexes = [
+  // Full-text search indexes using GIN for trigram search (used by search_nodes_trigram function)
+  "CREATE INDEX IF NOT EXISTS nodes_name_trgm_idx ON nodes USING GIN (name gin_trgm_ops);",
+  "CREATE INDEX IF NOT EXISTS nodes_summary_trgm_idx ON nodes USING GIN (summary gin_trgm_ops);",
+
+  // Composite indexes for complex queries
+  "CREATE INDEX IF NOT EXISTS nodes_type_name_idx ON nodes(node_type, name);",
+  "CREATE INDEX IF NOT EXISTS nodes_group_type_idx ON nodes(group_id, node_type);",
+];

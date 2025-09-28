@@ -1,7 +1,7 @@
 import type { PGlite } from "@electric-sql/pglite";
-import { up as initialMigration } from "./initial";
 import { logDebug, logError } from "@/utils/logger";
-// import { up as futureExampleUp, down as futureExampleDown } from './002_example_future_migration';
+import { up as initialMigration } from "./000_initial";
+// import { up as futureExampleUp, down as futureExampleDown } from './001_example_future_migration';
 
 export interface Migration {
 	id: string;
@@ -56,7 +56,7 @@ export async function getAppliedMigrations(db: PGlite): Promise<string[]> {
     SELECT id FROM _migrations
     ORDER BY version ASC
   `);
-	return result.rows.map((row: any) => row.id);
+	return result.rows.map((row) => typeof row === 'object' && row && 'id' in row ? `${row.id}` : '');
 }
 
 export async function markMigrationApplied(

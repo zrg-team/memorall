@@ -1,6 +1,6 @@
 import { pgTable, text, timestamp, jsonb, uuid } from "drizzle-orm/pg-core";
 
-export const conversations = pgTable("conversations", {
+export const conversation = pgTable("conversations", {
 	id: uuid("id").primaryKey().defaultRandom(),
 	title: text("title"),
 	metadata: jsonb("metadata").default({}),
@@ -8,5 +8,5 @@ export const conversations = pgTable("conversations", {
 	updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
-export type Conversation = typeof conversations.$inferSelect;
-export type NewConversation = typeof conversations.$inferInsert;
+export type Conversation = typeof conversation.$inferSelect;
+export type NewConversation = typeof conversation.$inferInsert;
