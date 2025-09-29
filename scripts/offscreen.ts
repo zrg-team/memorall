@@ -5,8 +5,8 @@ import {
 	backgroundProcessFactory,
 	ProcessFactory,
 } from "@/services/background-jobs/offscreen-handlers";
-import { jobNotificationChannel } from "@/services/background-jobs/job-notification-channel";
-import type { JobNotificationMessage } from "@/services/background-jobs/job-notification-channel";
+import { backgroundJob } from "@/services/background-jobs/background-job";
+import type { JobNotificationMessage } from "@/services/background-jobs/bridges";
 import type { BaseJob } from "@/services/background-jobs/offscreen-handlers/types";
 
 // Import process handlers and factory
@@ -344,22 +344,21 @@ class OffscreenProcessor {
 	): Promise<void> {
 		try {
 			// Subscribe only to JOB_ENQUEUED messages intended for offscreen processing
-			jobNotificationChannel.subscribe(
-				"JOB_ENQUEUED",
-				async (message: JobNotificationMessage) => {
+			backgroundJob
+				.getNotificationBridge()
+				.subscribe("JOB_ENQUEUED", async (message: JobNotificationMessage) => {
 					// FAST: Direct processing
 					logInfo("⚡ Fast processing: Direct communication channel", {
 						jobId: message.jobId,
 						jobType: message.job?.jobType,
 					});
 					await processFastMessage(message);
-				},
-			);
+				});
 
 			// Subscribe to other job events that might trigger queue processing
-			jobNotificationChannel.subscribe(
-				"JOB_UPDATED",
-				async (message: JobNotificationMessage) => {
+			backgroundJob
+				.getNotificationBridge()
+				.subscribe("JOB_UPDATED", async (message: JobNotificationMessage) => {
 					// Only trigger queue processing when a pending job update arrives
 					const jobStatus = message.job?.status;
 					if (jobStatus && jobStatus !== "pending") {
@@ -374,8 +373,7 @@ class OffscreenProcessor {
 
 					// QUEUE: Trigger queue processing for updates
 					void processQueueJobs();
-				},
-			);
+				});
 
 			logInfo(
 				"🎧 JobNotificationChannel handlers registered for offscreen",
@@ -412,14 +410,16 @@ class OffscreenProcessor {
 		}
 	}
 
-	// Helper method to complete job via jobNotificationChannel
+	// Helper method to complete job via backgroundJob's notification bridge
 	private async completeJobViaMessage(
 		jobId: string,
 		result: JobResult,
 	): Promise<void> {
 		try {
-			// Send completion via jobNotificationChannel to background context
-			jobNotificationChannel.notifyJobCompleted(jobId, result, "all");
+			// Send completion via backgroundJob's notification bridge to background context
+			backgroundJob
+				.getNotificationBridge()
+				.notifyJobCompleted(jobId, result, "all");
 		} catch (error) {
 			logger.error(
 				"offscreen",

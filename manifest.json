@@ -48,6 +48,7 @@
         "vendors/transformers/*",
         "vendors/mozilla-readability/Readability.js",
         "offscreen.html",
+        "logo.png",
         "*.js",
         "*.css"
       ],

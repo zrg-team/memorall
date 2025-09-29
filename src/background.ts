@@ -3,6 +3,7 @@
 
 import { logInfo, logError } from "./utils/logger";
 import { backgroundJob } from "./services/background-jobs/background-job";
+import { backgroundJobMessageForwarder } from "./background/message-forwarder";
 import { sharedStorageService } from "./services/shared-storage";
 import { CONTENT_BACKGROUND_EVENTS } from "./constants/content-background";
 
@@ -118,6 +119,10 @@ logInfo("🔄 Service Worker loaded, initializing core services...");
 		// Initialize background job queue
 		await backgroundJob.initialize();
 		logInfo("✅ Background job queue initialized");
+
+		// Initialize message relay for job notifications
+		backgroundJobMessageForwarder.initialize();
+		logInfo("✅ Background job message relay initialized");
 
 		// Initialize offscreen document
 		await ensureOffscreenDocument();

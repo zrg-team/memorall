@@ -78,7 +78,7 @@ const App: React.FC = () => {
 						setTimeout(() => {
 							setServicesStatus("ready");
 							logInfo("✅ App initialization complete");
-						}, 300);
+						}, 100);
 						break;
 					}
 				}

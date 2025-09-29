@@ -1,50 +1,39 @@
 import { logInfo, logError } from "@/utils/logger";
 import type {
+	IJobNotificationBridge,
+	JobNotificationMessage,
+	ContextType,
+	DestinationType,
+	BridgeStatus,
+} from "./types";
+import type {
 	BaseJob,
 	JobProgressEvent,
 	JobResult,
-} from "./offscreen-handlers/types";
-
-export interface JobNotificationMessage {
-	type:
-		| "JOB_ENQUEUED"
-		| "JOB_UPDATED"
-		| "JOB_COMPLETED"
-		| "QUEUE_UPDATED"
-		| "JOB_PROGRESS";
-	jobId?: string;
-	job?: BaseJob;
-	result?: JobResult;
-	progress?: JobProgressEvent;
-	timestamp: number;
-	sender: "background" | "offscreen" | "ui" | "embedded";
-	destination?: "background" | "offscreen" | "ui" | "all" | "embedded";
-}
+} from "../offscreen-handlers/types";
 
 /**
+ * BroadcastChannel-based job notification bridge
  * High-performance job notification system using BroadcastChannel API
  * for immediate (<50ms) cross-context communication within the same origin.
- *
- * This replaces polling mechanisms with event-driven notifications.
  */
-export class JobNotificationChannel {
-	private static instance: JobNotificationChannel;
+export class BroadcastChannelBridge implements IJobNotificationBridge {
 	private channel: BroadcastChannel;
 	private listeners = new Map<
 		string,
 		Set<(message: JobNotificationMessage) => void>
 	>();
 	private isInitialized = false;
-	private contextType: "background" | "offscreen" | "ui" | "embedded";
+	private contextType: ContextType;
 
-	private constructor() {
+	constructor() {
 		this.channel = new BroadcastChannel("memorall-job-queue");
 		this.contextType = this.detectContextType();
-		logInfo(`[JobNotificationChannel] initialized for ${this.contextType}`);
+		logInfo(`[BroadcastChannelBridge] initialized for ${this.contextType}`);
 		this.setupEventListeners();
 	}
 
-	private detectContextType(): "background" | "offscreen" | "ui" | "embedded" {
+	private detectContextType(): ContextType {
 		if (typeof chrome !== "undefined" && chrome.runtime) {
 			if (typeof document !== "undefined") {
 				try {
@@ -68,17 +57,13 @@ export class JobNotificationChannel {
 				return "background";
 			}
 		}
-		if (typeof document !== "undefined" && document.URL.startsWith("https://")) {
+		if (
+			typeof document !== "undefined" &&
+			document.URL.startsWith("https://")
+		) {
 			return "embedded";
 		}
 		return "background";
-	}
-
-	static getInstance(): JobNotificationChannel {
-		if (!JobNotificationChannel.instance) {
-			JobNotificationChannel.instance = new JobNotificationChannel();
-		}
-		return JobNotificationChannel.instance;
 	}
 
 	private setupEventListeners(): void {
@@ -101,31 +86,7 @@ export class JobNotificationChannel {
 				}
 
 				// Notify all subscribers for this message type
-				const typeListeners = this.listeners.get(message.type);
-				if (typeListeners) {
-					typeListeners.forEach((listener) => {
-						try {
-							listener(message);
-						} catch (error) {
-							logError(
-								`Error in job notification listener for ${message.type}:`,
-								error,
-							);
-						}
-					});
-				}
-
-				// Notify wildcard listeners
-				const wildcardListeners = this.listeners.get("*");
-				if (wildcardListeners) {
-					wildcardListeners.forEach((listener) => {
-						try {
-							listener(message);
-						} catch (error) {
-							logError("Error in wildcard job notification listener:", error);
-						}
-					});
-				}
+				this.notifyLocalListeners(message);
 			} catch (error) {
 				logError("Error processing job notification message:", error);
 			}
@@ -133,16 +94,39 @@ export class JobNotificationChannel {
 
 		this.isInitialized = true;
 		logInfo(
-			`🚀 Job notification channel initialized for ${this.contextType} context`,
+			`🚀 BroadcastChannel bridge initialized for ${this.contextType} context`,
 		);
 	}
 
-	/**
-	 * Subscribe to job notifications
-	 * @param messageType - Specific message type or '*' for all messages
-	 * @param listener - Callback function
-	 * @returns Unsubscribe function
-	 */
+	private notifyLocalListeners(message: JobNotificationMessage): void {
+		// Notify all subscribers for this message type
+		const typeListeners = this.listeners.get(message.type);
+		if (typeListeners) {
+			typeListeners.forEach((listener) => {
+				try {
+					listener(message);
+				} catch (error) {
+					logError(
+						`Error in job notification listener for ${message.type}:`,
+						error,
+					);
+				}
+			});
+		}
+
+		// Notify wildcard listeners
+		const wildcardListeners = this.listeners.get("*");
+		if (wildcardListeners) {
+			wildcardListeners.forEach((listener) => {
+				try {
+					listener(message);
+				} catch (error) {
+					logError("Error in wildcard job notification listener:", error);
+				}
+			});
+		}
+	}
+
 	subscribe(
 		messageType: JobNotificationMessage["type"] | "*",
 		listener: (message: JobNotificationMessage) => void,
@@ -166,13 +150,7 @@ export class JobNotificationChannel {
 		};
 	}
 
-	/**
-	 * Notify that a new job has been enqueued (immediate notification)
-	 */
-	notifyJobEnqueued(
-		job: BaseJob,
-		destination?: "background" | "offscreen" | "ui" | "all" | "embedded",
-	): void {
+	notifyJobEnqueued(job: BaseJob, destination?: DestinationType): void {
 		this.postMessage({
 			type: "JOB_ENQUEUED",
 			jobId: job.id,
@@ -183,13 +161,10 @@ export class JobNotificationChannel {
 		});
 	}
 
-	/**
-	 * Notify that a job has been updated
-	 */
 	notifyJobUpdated(
 		jobId: string,
 		job: BaseJob,
-		destination?: "background" | "offscreen" | "ui" | "all" | "embedded",
+		destination?: DestinationType,
 	): void {
 		this.postMessage({
 			type: "JOB_UPDATED",
@@ -201,13 +176,10 @@ export class JobNotificationChannel {
 		});
 	}
 
-	/**
-	 * Notify progress for a job
-	 */
 	notifyJobProgress(
 		jobId: string,
 		progress: JobProgressEvent,
-		destination?: "background" | "offscreen" | "ui" | "all" | "embedded",
+		destination?: DestinationType,
 	): void {
 		this.postMessage({
 			type: "JOB_PROGRESS",
@@ -219,13 +191,10 @@ export class JobNotificationChannel {
 		});
 	}
 
-	/**
-	 * Notify that a job has been completed
-	 */
 	notifyJobCompleted(
 		jobId: string,
 		result?: JobResult,
-		destination?: "background" | "offscreen" | "ui" | "all" | "embedded",
+		destination?: DestinationType,
 	): void {
 		this.postMessage({
 			type: "JOB_COMPLETED",
@@ -237,12 +206,7 @@ export class JobNotificationChannel {
 		});
 	}
 
-	/**
-	 * Notify that the queue has been updated (general notification)
-	 */
-	notifyQueueUpdated(
-		destination?: "background" | "offscreen" | "ui" | "all" | "embedded",
-	): void {
+	notifyQueueUpdated(destination?: DestinationType): void {
 		this.postMessage({
 			type: "QUEUE_UPDATED",
 			timestamp: Date.now(),
@@ -253,7 +217,7 @@ export class JobNotificationChannel {
 
 	private postMessage(message: JobNotificationMessage): void {
 		if (!this.isInitialized) {
-			logError("Job notification channel not initialized");
+			logError("BroadcastChannel bridge not initialized");
 			return;
 		}
 
@@ -264,28 +228,11 @@ export class JobNotificationChannel {
 		}
 	}
 
-	/**
-	 * Close the notification channel
-	 */
-	close(): void {
-		try {
-			this.channel.close();
-			this.listeners.clear();
-			this.isInitialized = false;
-			logInfo("📡 Job notification channel closed");
-		} catch (error) {
-			logError("Error closing job notification channel:", error);
-		}
+	getContextType(): ContextType {
+		return this.contextType;
 	}
 
-	/**
-	 * Get channel status for debugging
-	 */
-	getStatus(): {
-		isInitialized: boolean;
-		listenerCount: number;
-		subscribedTypes: string[];
-	} {
+	getStatus(): BridgeStatus {
 		return {
 			isInitialized: this.isInitialized,
 			listenerCount: Array.from(this.listeners.values()).reduce(
@@ -293,13 +240,20 @@ export class JobNotificationChannel {
 				0,
 			),
 			subscribedTypes: Array.from(this.listeners.keys()),
+			connectionType: "BroadcastChannel",
 		};
 	}
 
-	getContextType(): "background" | "offscreen" | "ui" | "embedded" {
-		return this.contextType;
+	close(): void {
+		try {
+			this.channel.close();
+			this.listeners.clear();
+			this.isInitialized = false;
+			logInfo("📡 BroadcastChannel bridge closed");
+		} catch (error) {
+			logError("Error closing BroadcastChannel bridge:", error);
+		}
 	}
 }
 
-// Export singleton instance
-export const jobNotificationChannel = JobNotificationChannel.getInstance();
+// No singleton - use through BackgroundJob instead

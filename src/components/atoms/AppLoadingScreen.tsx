@@ -139,8 +139,12 @@ export const AppLoadingScreen: React.FC<AppLoadingScreenProps> = ({
 				<Card className="w-[480px] border-destructive">
 					<CardContent className="p-6">
 						<div className="text-center">
-							<div className="w-16 h-16 mx-auto mb-4 rounded-full bg-destructive/10 flex items-center justify-center">
-								<div className="text-destructive text-2xl">❌</div>
+							<div className="w-16 h-16 mx-auto mb-4 rounded-full bg-destructive/10 flex items-center justify-center overflow-hidden">
+								<img
+									src="/logo.png"
+									alt="Memorall Logo"
+									className="w-14 h-14 object-contain opacity-50"
+								/>
 							</div>
 							<h2 className="text-xl font-semibold text-foreground mb-2">
 								Service Initialization Failed
@@ -174,8 +178,12 @@ export const AppLoadingScreen: React.FC<AppLoadingScreenProps> = ({
 					<div className="text-center">
 						{/* Header with animated title */}
 						<div className="mb-8">
-							<div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gradient-to-br from-primary to-primary/60 flex items-center justify-center">
-								<Brain className="w-8 h-8 text-primary-foreground animate-pulse" />
+							<div className="w-20 h-20 mx-auto mb-4 rounded-full bg-gradient-to-br from-primary to-primary/60 flex items-center justify-center overflow-hidden">
+								<img
+									src="/logo.png"
+									alt="Memorall Logo"
+									className="w-14 h-14 object-contain"
+								/>
 							</div>
 							<TypingText
 								text={[

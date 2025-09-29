@@ -300,7 +300,6 @@ const RotateCcwIcon: React.FC<{ className: string }> = ({ className }) => (
 	</svg>
 );
 
-
 // Main component following your exact example structure
 // Model status component following LLMPage.tsx pattern
 const ModelStatus: React.FC<{
@@ -313,12 +312,8 @@ const ModelStatus: React.FC<{
 			<div className="flex items-center gap-2 px-3 py-2 bg-primary/10 border border-primary/20 rounded-lg">
 				<div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
 				<div className="flex-1">
-					<div className="font-semibold text-xs text-foreground">
-						{modelId}
-					</div>
-					<div className="text-xs text-muted-foreground">
-						{provider}
-					</div>
+					<div className="font-semibold text-xs text-foreground">{modelId}</div>
+					<div className="text-xs text-muted-foreground">{provider}</div>
 				</div>
 				<div className="text-xs font-medium text-primary">Active</div>
 			</div>
@@ -333,11 +328,11 @@ const ModelStatus: React.FC<{
 					<div className="font-semibold text-xs text-foreground">
 						Provider: {provider}
 					</div>
-					<div className="text-xs text-muted-foreground">
-						No model selected
-					</div>
+					<div className="text-xs text-muted-foreground">No model selected</div>
 				</div>
-				<div className="text-xs font-medium text-orange-600 dark:text-orange-400">Configured</div>
+				<div className="text-xs font-medium text-orange-600 dark:text-orange-400">
+					Configured
+				</div>
 			</div>
 		);
 	}
@@ -358,6 +353,29 @@ const ModelStatus: React.FC<{
 	);
 };
 
+// Compact header version of model status
+const HeaderModelStatus: React.FC<{
+	modelId?: string;
+	provider?: string;
+	isActive: boolean;
+}> = ({ modelId, provider, isActive }) => {
+	if (isActive && modelId && provider) {
+		return (
+			<div className="flex items-center gap-1 text-xs">
+				<div className="w-1.5 h-1.5 rounded-full bg-green-500" />
+				<span className="text-foreground font-medium truncate">{modelId}</span>
+			</div>
+		);
+	}
+
+	return (
+		<div className="flex items-center gap-1 text-xs">
+			<div className="w-1.5 h-1.5 rounded-full bg-red-500" />
+			<span className="text-muted-foreground">No model</span>
+		</div>
+	);
+};
+
 const ShadcnEmbeddedChat: React.FC<ChatModalProps> = ({
 	context,
 	mode = "general",
@@ -374,41 +392,39 @@ const ShadcnEmbeddedChat: React.FC<ChatModalProps> = ({
 	const [streamingMessageId, setStreamingMessageId] = useState<string | null>(
 		null,
 	);
-	const [abortController, setAbortController] = useState<AbortController | null>(
-		null,
-	);
+	const [abortController, setAbortController] =
+		useState<AbortController | null>(null);
 
 	// Initialize model and check status
 	useEffect(() => {
 		const initializeModel = async () => {
 			try {
 				// Get current model from the service
-				const result = await backgroundJob.execute("get-current-model", {}, { stream: false });
+				const result = await backgroundJob.execute(
+					"get-current-model",
+					{},
+					{ stream: false },
+				);
 
-				console.log("result", result);
-
-				if (!('promise' in result)) {
+				if (!("promise" in result)) {
 					return;
 				}
-				console.log("result.promise", result.promise);
 				const jobResult = await result.promise;
-				console.log("jobResult", jobResult);
 
 				if (jobResult.status === "completed" && jobResult.result) {
-					const modelInfo = jobResult.result;
-					if (modelInfo && modelInfo.modelId && modelInfo.provider) {
+					const modelInfo = jobResult.result.modelInfo;
+					if (
+						modelInfo &&
+						typeof modelInfo === "object" &&
+						"modelId" in modelInfo &&
+						"provider" in modelInfo
+					) {
 						setSelectedModel(`${modelInfo.modelId}`);
 						setSelectedProvider(`${modelInfo.provider}`);
 						setModelAvailable(true);
 					} else {
 						setModelAvailable(false);
 					}
-				} else {
-					// Fallback to default model
-					const defaultModel = await embeddedChatService.getDefaultModel();
-					setSelectedModel(defaultModel);
-					setSelectedProvider("openai");
-					setModelAvailable(!!defaultModel);
 				}
 			} catch (error) {
 				console.error("Failed to initialize model:", error);
@@ -451,7 +467,8 @@ const ShadcnEmbeddedChat: React.FC<ChatModalProps> = ({
 		async (event) => {
 			event.preventDefault();
 
-			if (!inputValue.trim() || isTyping || !selectedModel) return;
+			if (!inputValue.trim() || isTyping || !modelAvailable || !selectedModel)
+				return;
 
 			const userMessageContent = inputValue.trim();
 			setInputValue("");
@@ -498,21 +515,11 @@ const ShadcnEmbeddedChat: React.FC<ChatModalProps> = ({
 										...msg,
 										content,
 										isStreaming: !isComplete,
-										...(isComplete && {
-											reasoning: (embeddedChatService as any).lastReasoning,
-											sources: (embeddedChatService as any).lastSources,
-										}),
 									};
 								}
 								return msg;
 							}),
 						);
-
-						if (isComplete) {
-							setIsTyping(false);
-							setStreamingMessageId(null);
-							setAbortController(null);
-						}
 					},
 					onError: (error: string) => {
 						console.error("Chat error:", error);
@@ -523,7 +530,8 @@ const ShadcnEmbeddedChat: React.FC<ChatModalProps> = ({
 								if (msg.id === assistantMessageId) {
 									return {
 										...msg,
-										content: "Sorry, I encountered an error while processing your request. Please try again.",
+										content:
+											"Sorry, I encountered an error while processing your request. Please try again.",
 										isStreaming: false,
 									};
 								}
@@ -545,14 +553,15 @@ const ShadcnEmbeddedChat: React.FC<ChatModalProps> = ({
 						if (msg.id === assistantMessageId) {
 							return {
 								...msg,
-								content: "Sorry, I encountered an error while processing your request. Please try again.",
+								content:
+									"Sorry, I encountered an error while processing your request. Please try again.",
 								isStreaming: false,
 							};
 						}
 						return msg;
 					}),
 				);
-
+			} finally {
 				setIsTyping(false);
 				setStreamingMessageId(null);
 				setAbortController(null);
@@ -568,13 +577,6 @@ const ShadcnEmbeddedChat: React.FC<ChatModalProps> = ({
 		setStreamingMessageId(null);
 	}, [mode]);
 
-	console.log("selectedModel", selectedModel);
-	console.log("selectedProvider", selectedProvider);
-	console.log("modelAvailable", modelAvailable);
-	console.log("isTyping", isTyping);
-	console.log("streamingMessageId", streamingMessageId);
-	console.log("abortController", abortController);
-
 	return (
 		<div
 			className="fixed inset-0 z-[999999] bg-black/30 animate-in fade-in duration-200"
@@ -586,17 +588,21 @@ const ShadcnEmbeddedChat: React.FC<ChatModalProps> = ({
 			>
 				{/* Header - compact design for right panel */}
 				<div className="flex items-center justify-between border-b bg-muted/50 px-4 py-3 flex-shrink-0">
-					<div className="flex items-center gap-2">
-						<div className="size-2 rounded-full bg-green-500" />
+					<div className="flex items-center gap-3">
 						<span className="font-medium text-sm">
 							{mode === "topic" ? "📚 Recall Topic" : "🧠 Recall"}
 						</span>
+						<HeaderModelStatus
+							modelId={selectedModel}
+							provider={selectedProvider}
+							isActive={modelAvailable && !!selectedModel}
+						/>
 					</div>
 					<Button
 						variant="ghost"
 						size="sm"
 						onClick={onClose}
-						className="h-8 w-8 p-0"
+						className="h-8 w-8 p-0 !px-0"
 					>
 						<svg
 							className="w-4 h-4"
@@ -619,8 +625,12 @@ const ShadcnEmbeddedChat: React.FC<ChatModalProps> = ({
 					<ConversationContent className="space-y-4">
 						{messages.length === 0 ? (
 							<div className="flex flex-col items-center justify-center h-full text-center py-8 px-4">
-								<div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center mb-3">
-									<span className="text-xl">🧠</span>
+								<div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center mb-3 overflow-hidden">
+									<img
+										src={chrome.runtime.getURL("logo.png")}
+										alt="Memorall Logo"
+										className="w-8 h-8 object-contain"
+									/>
 								</div>
 								<h3 className="font-medium mb-2">Recall Knowledge</h3>
 								<p className="text-muted-foreground text-xs leading-relaxed">
@@ -694,7 +704,7 @@ const ShadcnEmbeddedChat: React.FC<ChatModalProps> = ({
 									? "Ask about topics..."
 									: "Ask about your knowledge..."
 							}
-							disabled={isTyping}
+							disabled={isTyping || !modelAvailable || !selectedModel}
 						/>
 						<PromptInputToolbar>
 							<PromptInputTools>
@@ -703,7 +713,12 @@ const ShadcnEmbeddedChat: React.FC<ChatModalProps> = ({
 								</span>
 							</PromptInputTools>
 							<PromptInputSubmit
-								disabled={!inputValue.trim() || isTyping}
+								disabled={
+									!inputValue.trim() ||
+									isTyping ||
+									!modelAvailable ||
+									!selectedModel
+								}
 								status={isTyping ? "streaming" : "ready"}
 								onStop={handleStop}
 							/>

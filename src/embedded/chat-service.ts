@@ -50,7 +50,7 @@ export class EmbeddedChatService {
 		const { messages, model, mode, onProgress, onError, signal } = options;
 
 		// Convert embedded ChatMessage to background job format
-		const jobMessages = messages.map(msg => ({
+		const jobMessages = messages.map((msg) => ({
 			role: msg.role,
 			content: msg.content,
 		}));
@@ -64,25 +64,29 @@ export class EmbeddedChatService {
 		try {
 			// Handle external abort signal
 			if (signal) {
-				signal.addEventListener('abort', () => {
+				signal.addEventListener("abort", () => {
 					abortController.abort();
 					this.activeJobs.delete(jobId);
 				});
 			}
 
 			// Get the query from the last user message for knowledge mode (following use-chat.ts line 214)
-			const lastUserMessage = messages.filter(msg => msg.role === "user").pop();
-			const query = mode === "knowledge"
-				? lastUserMessage?.content
-				: undefined;
+			const lastUserMessage = messages
+				.filter((msg) => msg.role === "user")
+				.pop();
+			const query = mode === "knowledge" ? lastUserMessage?.content : undefined;
 
 			// Execute chat job with streaming
-			const result = await backgroundJob.execute("chat", {
-				messages: jobMessages,
-				model,
-				mode,
-				query,
-			}, { stream: true });
+			const result = await backgroundJob.execute(
+				"chat",
+				{
+					messages: jobMessages,
+					model,
+					mode,
+					query,
+				},
+				{ stream: true },
+			);
 
 			let finalContent = "";
 
@@ -92,31 +96,27 @@ export class EmbeddedChatService {
 					break;
 				}
 
+				if (
+					progress.status === "completed" &&
+					progress.result &&
+					"content" in progress.result
+				) {
+					finalContent = progress.result.content as string;
+				}
+
 				if (progress.status === "failed") {
 					const error = progress.error || "Chat request failed";
 					onError?.(error);
 					throw new Error(error);
 				}
-
-				if (progress.result && typeof progress.result === "object") {
-					// Type-safe check for ChatResult
-					const result = progress.result as ChatResult;
-					if (result.content && result.role === "assistant") {
-						finalContent = result.content;
-						const isComplete = progress.status === "completed";
-						onProgress?.(result.content, isComplete);
-
-						// If complete and we have metadata, store it for later retrieval
-						if (isComplete && result.metadata) {
-							this.lastMetadata = result.metadata;
-						}
-					}
-				}
 			}
+
+			onProgress?.(finalContent, true);
 
 			return finalContent;
 		} catch (error) {
-			const errorMessage = error instanceof Error ? error.message : "Unknown chat error";
+			const errorMessage =
+				error instanceof Error ? error.message : "Unknown chat error";
 			onError?.(errorMessage);
 			throw error;
 		} finally {
@@ -131,24 +131,26 @@ export class EmbeddedChatService {
 		const { messages, model, mode } = options;
 
 		// Convert embedded ChatMessage to background job format
-		const jobMessages = messages.map(msg => ({
+		const jobMessages = messages.map((msg) => ({
 			role: msg.role,
 			content: msg.content,
 		}));
 
 		// Get the query from the last user message for knowledge mode
-		const lastUserMessage = messages.filter(msg => msg.role === "user").pop();
-		const query = mode === "knowledge"
-			? lastUserMessage?.content
-			: undefined;
+		const lastUserMessage = messages.filter((msg) => msg.role === "user").pop();
+		const query = mode === "knowledge" ? lastUserMessage?.content : undefined;
 
 		try {
-			const jobResponse = await backgroundJob.execute("chat", {
-				messages: jobMessages,
-				model,
-				mode,
-				query,
-			}, { stream: false });
+			const jobResponse = await backgroundJob.execute(
+				"chat",
+				{
+					messages: jobMessages,
+					model,
+					mode,
+					query,
+				},
+				{ stream: false },
+			);
 
 			const jobResult = await jobResponse.promise;
 
@@ -171,7 +173,8 @@ export class EmbeddedChatService {
 
 			return chatResponse;
 		} catch (error) {
-			const errorMessage = error instanceof Error ? error.message : "Unknown chat error";
+			const errorMessage =
+				error instanceof Error ? error.message : "Unknown chat error";
 			throw new Error(errorMessage);
 		}
 	}

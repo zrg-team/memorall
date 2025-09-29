@@ -1,12 +1,12 @@
 import { BaseProcessHandler } from "./base-process-handler";
-import type {
-	ProcessDependencies,
-	BaseJob,
-	ItemHandlerResult,
-} from "./types";
+import type { ProcessDependencies, BaseJob, ItemHandlerResult } from "./types";
 import { serviceManager } from "@/services";
 import { flowsService } from "@/services/flows/flows-service";
-import type { ChatCompletionRequest, ChatMessage, ChatCompletionChunk } from "@/types/openai";
+import type {
+	ChatCompletionRequest,
+	ChatMessage,
+	ChatCompletionChunk,
+} from "@/types/openai";
 import { handlerRegistry } from "./handler-registry";
 
 export interface ChatPayload {
@@ -32,11 +32,11 @@ export interface ChatResult extends Record<string, unknown> {
 // Extend global registry for smart type inference
 declare global {
 	interface JobTypeRegistry {
-		"chat": ChatPayload;
+		chat: ChatPayload;
 	}
 
 	interface JobResultRegistry {
-		"chat": ChatResult;
+		chat: ChatResult;
 	}
 }
 
@@ -116,7 +116,7 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 									// Send streaming progress updates
 									await dependencies.updateJobProgress(jobId, {
 										stage: "Receiving response...",
-										progress: Math.min(80, 20 + (currentContent.length / 10)),
+										progress: Math.min(80, 20 + currentContent.length / 10),
 										result: {
 											content: currentContent,
 											role: "assistant" as const,
@@ -146,7 +146,6 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 						}
 					});
 				}
-
 			} else if (mode === "knowledge") {
 				// Use KnowledgeRAGFlow for knowledge mode (following use-chat.ts pattern)
 				const graph = flowsService.createGraph("knowledge-rag", {
@@ -176,7 +175,7 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 									// Send streaming progress updates
 									await dependencies.updateJobProgress(jobId, {
 										stage: "Receiving response...",
-										progress: Math.min(80, 20 + (currentContent.length / 10)),
+										progress: Math.min(80, 20 + currentContent.length / 10),
 										result: {
 											content: currentContent,
 											role: "assistant" as const,
@@ -206,7 +205,6 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 						}
 					});
 				}
-
 			} else {
 				// Normal mode - direct LLM call (following use-chat.ts pattern exactly)
 				const request: ChatCompletionRequest = {
@@ -238,7 +236,7 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 								// Send streaming progress updates
 								await dependencies.updateJobProgress(jobId, {
 									stage: "Receiving response...",
-									progress: Math.min(80, 20 + (currentContent.length / 10)),
+									progress: Math.min(80, 20 + currentContent.length / 10),
 									result: {
 										content: currentContent,
 										role: "assistant" as const,
@@ -268,7 +266,8 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 
 			return result;
 		} catch (error) {
-			const errorMessage = error instanceof Error ? error.message : "Unknown error";
+			const errorMessage =
+				error instanceof Error ? error.message : "Unknown error";
 			await dependencies.logger.error(
 				`❌ Chat job ${jobId} failed`,
 				error,

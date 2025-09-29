@@ -1,4 +1,8 @@
-import { jobNotificationChannel } from "./job-notification-channel";
+import { defaultJobNotificationBridge } from "./bridges/factory";
+import type {
+	IJobNotificationBridge,
+	JobNotificationMessage,
+} from "./bridges/types";
 import { IdbJobStore } from "./idb-job-store";
 import { logInfo, logError } from "@/utils/logger";
 import { v4 as nanoid } from "@/utils/uuid";
@@ -52,10 +56,14 @@ export class BackgroundJob {
 	>();
 	private jobProgressListeners = new Map<string, () => void>();
 	private store = new IdbJobStore();
+	private notificationBridge: IJobNotificationBridge;
 
 	private constructor() {
-		// Initialize immediate notification system
-		logInfo("🚀 Initializing streaming job notification system");
+		// Use the shared singleton bridge instance across all BackgroundJob instances
+		this.notificationBridge = defaultJobNotificationBridge;
+		logInfo(
+			"🚀 Initializing streaming job notification system with shared bridge",
+		);
 	}
 
 	static getInstance(): BackgroundJob {
@@ -63,6 +71,14 @@ export class BackgroundJob {
 			BackgroundJob.instance = new BackgroundJob();
 		}
 		return BackgroundJob.instance;
+	}
+
+	/**
+	 * Get the notification bridge instance for direct access
+	 * Used by offscreen.ts for job event subscriptions
+	 */
+	getNotificationBridge(): IJobNotificationBridge {
+		return this.notificationBridge;
 	}
 
 	async initialize(): Promise<void> {
@@ -143,8 +159,8 @@ export class BackgroundJob {
 		await this.saveJob(job);
 		await this.notifyListeners();
 
-		// Immediate notification via BroadcastChannel (0-50ms latency)
-		jobNotificationChannel.notifyJobEnqueued(job);
+		// Immediate notification via cross-context bridge (0-50ms latency)
+		this.notificationBridge.notifyJobEnqueued(job);
 
 		logInfo(`📋 Queued ${jobType} job: ${jobId}`);
 
@@ -213,8 +229,8 @@ export class BackgroundJob {
 		};
 
 		// Skip saveJob - send directly to offscreen for immediate processing
-		// Immediate notification via BroadcastChannel for fast processing
-		jobNotificationChannel.notifyJobEnqueued(job);
+		// Immediate notification via cross-context bridge for fast processing
+		this.notificationBridge.notifyJobEnqueued(job);
 
 		logInfo(`⚡ Executing immediate ${jobType} job: ${jobId}`);
 
@@ -229,9 +245,9 @@ export class BackgroundJob {
 				JobResultFor<T extends keyof JobResultRegistry ? T : never>
 			>((resolve, reject) => {
 				// Listen directly for job completion notifications since execute doesn't use queue
-				const unsubscribe = jobNotificationChannel.subscribe(
+				const unsubscribe = this.notificationBridge.subscribe(
 					"JOB_COMPLETED",
-					(message) => {
+					(message: JobNotificationMessage) => {
 						if (message.jobId === jobId) {
 							unsubscribe();
 							if (message.result) {
@@ -389,12 +405,12 @@ export class BackgroundJob {
 	): void {
 		if (this.jobProgressListeners.has(jobId)) return;
 
-		const localContext = jobNotificationChannel.getContextType();
+		const localContext = this.notificationBridge.getContextType();
 
 		// Listen for progress updates
-		const unsubscribeProgress = jobNotificationChannel.subscribe(
+		const unsubscribeProgress = this.notificationBridge.subscribe(
 			"JOB_PROGRESS",
-			(message) => {
+			(message: JobNotificationMessage) => {
 				if (message.jobId !== jobId || !message.progress) return;
 				if (message.sender === localContext) return;
 
@@ -425,9 +441,9 @@ export class BackgroundJob {
 		// Conditionally listen for job completion (only for execute jobs)
 		let unsubscribeCompleted: (() => void) | undefined;
 		if (handleDirectCompletion) {
-			unsubscribeCompleted = jobNotificationChannel.subscribe(
+			unsubscribeCompleted = this.notificationBridge.subscribe(
 				"JOB_COMPLETED",
-				(message) => {
+				(message: JobNotificationMessage) => {
 					if (message.jobId !== jobId) return;
 					if (message.sender === localContext) return;
 
@@ -436,12 +452,9 @@ export class BackgroundJob {
 
 					// Send final completion event to stream
 					try {
-						streamData.controller.enqueue({
-							status: "completed" as const,
-							progress: 100,
-							result: message.result,
-							timestamp: new Date(),
-						} as JobProgressEvent);
+						streamData.controller.enqueue(
+							message.result as unknown as JobProgressEvent,
+						);
 						streamData.controller.close();
 					} catch (error) {
 						logError(`Error closing progress stream for job ${jobId}`, error);
@@ -528,7 +541,7 @@ export class BackgroundJob {
 			}
 
 			// Send immediate notification for execute jobs
-			jobNotificationChannel.notifyJobProgress(jobId, event, "all");
+			this.notificationBridge.notifyJobProgress(jobId, event, "all");
 			return;
 		}
 
@@ -551,9 +564,9 @@ export class BackgroundJob {
 		}
 
 		// Immediate notification for progress updates
-		jobNotificationChannel.notifyJobUpdated(jobId, job);
-		if (jobNotificationChannel.getContextType() !== "ui") {
-			jobNotificationChannel.notifyJobProgress(jobId, event, "all");
+		this.notificationBridge.notifyJobUpdated(jobId, job);
+		if (this.notificationBridge.getContextType() !== "ui") {
+			this.notificationBridge.notifyJobProgress(jobId, event, "all");
 		}
 	}
 
@@ -584,7 +597,7 @@ export class BackgroundJob {
 		}
 
 		// Immediate notification for job completion - send to all contexts
-		jobNotificationChannel.notifyJobCompleted(jobId, result, "all");
+		this.notificationBridge.notifyJobCompleted(jobId, result, "all");
 
 		// Remove completed job from queue
 		await this.store.delete(jobId);
@@ -598,7 +611,7 @@ export class BackgroundJob {
 		await this.notifyListeners();
 
 		// Immediate notification for queue cleanup
-		jobNotificationChannel.notifyQueueUpdated();
+		this.notificationBridge.notifyQueueUpdated();
 
 		logInfo("📋 Cleared completed/failed jobs");
 	}

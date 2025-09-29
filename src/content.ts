@@ -13,7 +13,6 @@ import { createShadcnEmbeddedChatModal } from "./embedded/components/ShadcnEmbed
 import type {
 	BackgroundMessage,
 	MessageResponse,
-	ExtractedPageData,
 	ExtractedSelectionData,
 } from "./embedded/types";
 
