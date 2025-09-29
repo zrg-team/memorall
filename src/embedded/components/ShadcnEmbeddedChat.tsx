@@ -7,6 +7,8 @@ import React, {
 import { createRoot } from "react-dom/client";
 import { nanoid } from "nanoid";
 import type { ChatModalProps, ChatMessage } from "../types";
+import { embeddedChatService } from "../chat-service";
+import { backgroundJob } from "@/services/background-jobs/background-job";
 
 // Mock implementations of shadcn/ui AI components for content script context
 // These replicate the exact structure and styling from your example
@@ -209,10 +211,12 @@ const PromptInputButton: React.FC<{
 const PromptInputSubmit: React.FC<{
 	disabled: boolean;
 	status: "ready" | "streaming";
-}> = ({ disabled, status }) => (
+	onStop?: () => void;
+}> = ({ disabled, status, onStop }) => (
 	<button
-		type="submit"
+		type={status === "streaming" ? "button" : "submit"}
 		disabled={disabled}
+		onClick={status === "streaming" ? onStop : undefined}
 		className="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-8 px-3"
 	>
 		{status === "streaming" ? (
@@ -296,41 +300,64 @@ const RotateCcwIcon: React.FC<{ className: string }> = ({ className }) => (
 	</svg>
 );
 
-// Sample responses (same as your example)
-const sampleResponses = [
-	{
-		content:
-			"Based on your knowledge base, I found some relevant information about this topic. Let me share what I discovered from your saved content.",
-		reasoning:
-			"The user is asking about a topic that appears in their knowledge base. I should provide a helpful overview while referencing their saved information to give a more targeted response.",
-		sources: [
-			{ title: "Knowledge Base Entry #1", url: "#" },
-			{ title: "Related Research Notes", url: "#" },
-		],
-	},
-	{
-		content:
-			"I've searched through your knowledge base and found several related entries. Here's what I can tell you based on your previous research and saved information.",
-		reasoning:
-			"The user's query matches content in their personal knowledge collection. I should explain the relationships and highlight key insights from their stored materials.",
-		sources: [
-			{ title: "Saved Article: Topic Overview", url: "#" },
-			{ title: "Personal Notes", url: "#" },
-		],
-	},
-	{
-		content:
-			"From your personal knowledge collection, I can see you've explored this topic before. Let me compile the most relevant information for you.",
-		reasoning:
-			"This query relates to previously saved content in the user's knowledge base. I should synthesize the information while keeping the explanation accessible and relevant.",
-		sources: [
-			{ title: "Research Collection", url: "#" },
-			{ title: "Bookmarked Resources", url: "#" },
-		],
-	},
-];
 
 // Main component following your exact example structure
+// Model status component following LLMPage.tsx pattern
+const ModelStatus: React.FC<{
+	modelId?: string;
+	provider?: string;
+	isActive: boolean;
+}> = ({ modelId, provider, isActive }) => {
+	if (isActive && modelId && provider) {
+		return (
+			<div className="flex items-center gap-2 px-3 py-2 bg-primary/10 border border-primary/20 rounded-lg">
+				<div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
+				<div className="flex-1">
+					<div className="font-semibold text-xs text-foreground">
+						{modelId}
+					</div>
+					<div className="text-xs text-muted-foreground">
+						{provider}
+					</div>
+				</div>
+				<div className="text-xs font-medium text-primary">Active</div>
+			</div>
+		);
+	}
+
+	if (provider && !modelId) {
+		return (
+			<div className="flex items-center gap-2 px-3 py-2 bg-orange-50 border border-orange-200 rounded-lg dark:bg-orange-950 dark:border-orange-800">
+				<div className="w-2 h-2 rounded-full bg-orange-400 animate-pulse" />
+				<div className="flex-1">
+					<div className="font-semibold text-xs text-foreground">
+						Provider: {provider}
+					</div>
+					<div className="text-xs text-muted-foreground">
+						No model selected
+					</div>
+				</div>
+				<div className="text-xs font-medium text-orange-600 dark:text-orange-400">Configured</div>
+			</div>
+		);
+	}
+
+	return (
+		<div className="flex items-center gap-2 px-3 py-2 bg-muted/50 border border-border rounded-lg">
+			<div className="w-2 h-2 rounded-full bg-muted" />
+			<div className="flex-1">
+				<div className="font-semibold text-xs text-muted-foreground">
+					No model available
+				</div>
+				<div className="text-xs text-muted-foreground">
+					Configure a model in settings
+				</div>
+			</div>
+			<div className="text-xs font-medium text-muted-foreground">Inactive</div>
+		</div>
+	);
+};
+
 const ShadcnEmbeddedChat: React.FC<ChatModalProps> = ({
 	context,
 	mode = "general",
@@ -339,13 +366,57 @@ const ShadcnEmbeddedChat: React.FC<ChatModalProps> = ({
 	onClose,
 }) => {
 	const [messages, setMessages] = useState<ChatMessage[]>([]);
-
 	const [inputValue, setInputValue] = useState("");
-	const [selectedModel] = useState("knowledge-recall");
+	const [selectedModel, setSelectedModel] = useState<string>("");
+	const [selectedProvider, setSelectedProvider] = useState<string>("");
+	const [modelAvailable, setModelAvailable] = useState(false);
 	const [isTyping, setIsTyping] = useState(false);
 	const [streamingMessageId, setStreamingMessageId] = useState<string | null>(
 		null,
 	);
+	const [abortController, setAbortController] = useState<AbortController | null>(
+		null,
+	);
+
+	// Initialize model and check status
+	useEffect(() => {
+		const initializeModel = async () => {
+			try {
+				// Get current model from the service
+				const result = await backgroundJob.execute("get-current-model", {}, { stream: false });
+
+				console.log("result", result);
+
+				if (!('promise' in result)) {
+					return;
+				}
+				console.log("result.promise", result.promise);
+				const jobResult = await result.promise;
+				console.log("jobResult", jobResult);
+
+				if (jobResult.status === "completed" && jobResult.result) {
+					const modelInfo = jobResult.result;
+					if (modelInfo && modelInfo.modelId && modelInfo.provider) {
+						setSelectedModel(`${modelInfo.modelId}`);
+						setSelectedProvider(`${modelInfo.provider}`);
+						setModelAvailable(true);
+					} else {
+						setModelAvailable(false);
+					}
+				} else {
+					// Fallback to default model
+					const defaultModel = await embeddedChatService.getDefaultModel();
+					setSelectedModel(defaultModel);
+					setSelectedProvider("openai");
+					setModelAvailable(!!defaultModel);
+				}
+			} catch (error) {
+				console.error("Failed to initialize model:", error);
+				setModelAvailable(false);
+			}
+		};
+		initializeModel();
+	}, []);
 
 	// Add initial context if provided
 	useEffect(() => {
@@ -367,87 +438,127 @@ const ShadcnEmbeddedChat: React.FC<ChatModalProps> = ({
 		}
 	}, [context, mode]);
 
-	const simulateTyping = useCallback(
-		(
-			messageId: string,
-			content: string,
-			reasoning?: string,
-			sources?: Array<{ title: string; url: string }>,
-		) => {
-			let currentIndex = 0;
-			const typeInterval = setInterval(() => {
+	const handleStop = useCallback(() => {
+		if (abortController) {
+			abortController.abort();
+			setAbortController(null);
+			setIsTyping(false);
+			setStreamingMessageId(null);
+		}
+	}, [abortController]);
+
+	const handleSubmit: FormEventHandler<HTMLFormElement> = useCallback(
+		async (event) => {
+			event.preventDefault();
+
+			if (!inputValue.trim() || isTyping || !selectedModel) return;
+
+			const userMessageContent = inputValue.trim();
+			setInputValue("");
+			setIsTyping(true);
+
+			// Create abort controller for this request
+			const controller = new AbortController();
+			setAbortController(controller);
+
+			// Add user message
+			const userMessage: ChatMessage = {
+				id: nanoid(),
+				content: userMessageContent,
+				role: "user",
+				timestamp: new Date(),
+			};
+			setMessages((prev) => [...prev, userMessage]);
+
+			// Create assistant message placeholder
+			const assistantMessageId = nanoid();
+			const assistantMessage: ChatMessage = {
+				id: assistantMessageId,
+				content: "",
+				role: "assistant",
+				timestamp: new Date(),
+				isStreaming: true,
+			};
+			setMessages((prev) => [...prev, assistantMessage]);
+			setStreamingMessageId(assistantMessageId);
+
+			try {
+				const allMessages = [...messages, userMessage];
+
+				await embeddedChatService.chatStream({
+					messages: allMessages,
+					model: selectedModel,
+					mode: mode === "topic" ? "knowledge" : "knowledge",
+					signal: controller.signal,
+					onProgress: (content: string, isComplete: boolean) => {
+						setMessages((prev) =>
+							prev.map((msg) => {
+								if (msg.id === assistantMessageId) {
+									return {
+										...msg,
+										content,
+										isStreaming: !isComplete,
+										...(isComplete && {
+											reasoning: (embeddedChatService as any).lastReasoning,
+											sources: (embeddedChatService as any).lastSources,
+										}),
+									};
+								}
+								return msg;
+							}),
+						);
+
+						if (isComplete) {
+							setIsTyping(false);
+							setStreamingMessageId(null);
+							setAbortController(null);
+						}
+					},
+					onError: (error: string) => {
+						console.error("Chat error:", error);
+
+						// Update message with error
+						setMessages((prev) =>
+							prev.map((msg) => {
+								if (msg.id === assistantMessageId) {
+									return {
+										...msg,
+										content: "Sorry, I encountered an error while processing your request. Please try again.",
+										isStreaming: false,
+									};
+								}
+								return msg;
+							}),
+						);
+
+						setIsTyping(false);
+						setStreamingMessageId(null);
+						setAbortController(null);
+					},
+				});
+			} catch (error) {
+				console.error("Chat submission error:", error);
+
+				// Update message with error
 				setMessages((prev) =>
 					prev.map((msg) => {
-						if (msg.id === messageId) {
-							const currentContent = content.slice(0, currentIndex);
+						if (msg.id === assistantMessageId) {
 							return {
 								...msg,
-								content: currentContent,
-								isStreaming: currentIndex < content.length,
-								reasoning:
-									currentIndex >= content.length ? reasoning : undefined,
-								sources: currentIndex >= content.length ? sources : undefined,
+								content: "Sorry, I encountered an error while processing your request. Please try again.",
+								isStreaming: false,
 							};
 						}
 						return msg;
 					}),
 				);
-				currentIndex += Math.random() > 0.1 ? 1 : 0; // Simulate variable typing speed
 
-				if (currentIndex >= content.length) {
-					clearInterval(typeInterval);
-					setIsTyping(false);
-					setStreamingMessageId(null);
-				}
-			}, 50);
-			return () => clearInterval(typeInterval);
+				setIsTyping(false);
+				setStreamingMessageId(null);
+				setAbortController(null);
+			}
 		},
-		[],
-	);
-
-	const handleSubmit: FormEventHandler<HTMLFormElement> = useCallback(
-		(event) => {
-			event.preventDefault();
-
-			if (!inputValue.trim() || isTyping) return;
-
-			// Add user message
-			const userMessage: ChatMessage = {
-				id: nanoid(),
-				content: inputValue.trim(),
-				role: "user",
-				timestamp: new Date(),
-			};
-			setMessages((prev) => [...prev, userMessage]);
-			setInputValue("");
-			setIsTyping(true);
-
-			// Simulate AI response with delay
-			setTimeout(() => {
-				const responseData =
-					sampleResponses[Math.floor(Math.random() * sampleResponses.length)];
-				const assistantMessageId = nanoid();
-
-				const assistantMessage: ChatMessage = {
-					id: assistantMessageId,
-					content: "",
-					role: "assistant",
-					timestamp: new Date(),
-					isStreaming: true,
-				};
-				setMessages((prev) => [...prev, assistantMessage]);
-				setStreamingMessageId(assistantMessageId);
-
-				// Start typing simulation
-				simulateTyping(
-					assistantMessageId,
-					responseData.content,
-					responseData.reasoning,
-					responseData.sources,
-				);
-			}, 800);
-		},
-		[inputValue, isTyping, simulateTyping],
+		[inputValue, isTyping, selectedModel, messages, mode],
 	);
 
 	const handleReset = useCallback(() => {
@@ -456,6 +567,13 @@ const ShadcnEmbeddedChat: React.FC<ChatModalProps> = ({
 		setIsTyping(false);
 		setStreamingMessageId(null);
 	}, [mode]);
+
+	console.log("selectedModel", selectedModel);
+	console.log("selectedProvider", selectedProvider);
+	console.log("modelAvailable", modelAvailable);
+	console.log("isTyping", isTyping);
+	console.log("streamingMessageId", streamingMessageId);
+	console.log("abortController", abortController);
 
 	return (
 		<div
@@ -587,6 +705,7 @@ const ShadcnEmbeddedChat: React.FC<ChatModalProps> = ({
 							<PromptInputSubmit
 								disabled={!inputValue.trim() || isTyping}
 								status={isTyping ? "streaming" : "ready"}
+								onStop={handleStop}
 							/>
 						</PromptInputToolbar>
 					</PromptInput>

@@ -6,6 +6,7 @@ import "./process-knowledge-graph";
 import "./process-llm-operations";
 import "./process-restore-local-services";
 import "./process-topic-operations";
+import "./process-chat";
 
 export { backgroundProcessFactory, ProcessFactory } from "./process-factory";
 export { handlerRegistry } from "./handler-registry";

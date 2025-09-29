@@ -348,6 +348,10 @@ class OffscreenProcessor {
 				"JOB_ENQUEUED",
 				async (message: JobNotificationMessage) => {
 					// FAST: Direct processing
+					logInfo("⚡ Fast processing: Direct communication channel", {
+						jobId: message.jobId,
+						jobType: message.job?.jobType,
+					});
 					await processFastMessage(message);
 				},
 			);

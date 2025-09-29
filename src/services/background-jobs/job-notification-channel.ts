@@ -17,8 +17,8 @@ export interface JobNotificationMessage {
 	result?: JobResult;
 	progress?: JobProgressEvent;
 	timestamp: number;
-	sender: "background" | "offscreen" | "ui";
-	destination?: "background" | "offscreen" | "ui" | "all";
+	sender: "background" | "offscreen" | "ui" | "embedded";
+	destination?: "background" | "offscreen" | "ui" | "all" | "embedded";
 }
 
 /**
@@ -35,20 +35,28 @@ export class JobNotificationChannel {
 		Set<(message: JobNotificationMessage) => void>
 	>();
 	private isInitialized = false;
-	private contextType: "background" | "offscreen" | "ui";
+	private contextType: "background" | "offscreen" | "ui" | "embedded";
 
 	private constructor() {
 		this.channel = new BroadcastChannel("memorall-job-queue");
 		this.contextType = this.detectContextType();
+		logInfo(`[JobNotificationChannel] initialized for ${this.contextType}`);
 		this.setupEventListeners();
 	}
 
-	private detectContextType(): "background" | "offscreen" | "ui" {
+	private detectContextType(): "background" | "offscreen" | "ui" | "embedded" {
 		if (typeof chrome !== "undefined" && chrome.runtime) {
 			if (typeof document !== "undefined") {
 				try {
 					if (document.URL.endsWith("offscreen.html")) {
 						return "offscreen";
+					}
+				} catch {
+					// fall through to ui when document access fails
+				}
+				try {
+					if (document.URL.startsWith("https://")) {
+						return "embedded";
 					}
 				} catch {
 					// fall through to ui when document access fails
@@ -60,7 +68,10 @@ export class JobNotificationChannel {
 				return "background";
 			}
 		}
-		return "ui";
+		if (typeof document !== "undefined" && document.URL.startsWith("https://")) {
+			return "embedded";
+		}
+		return "background";
 	}
 
 	static getInstance(): JobNotificationChannel {
@@ -160,7 +171,7 @@ export class JobNotificationChannel {
 	 */
 	notifyJobEnqueued(
 		job: BaseJob,
-		destination?: "background" | "offscreen" | "ui" | "all",
+		destination?: "background" | "offscreen" | "ui" | "all" | "embedded",
 	): void {
 		this.postMessage({
 			type: "JOB_ENQUEUED",
@@ -178,7 +189,7 @@ export class JobNotificationChannel {
 	notifyJobUpdated(
 		jobId: string,
 		job: BaseJob,
-		destination?: "background" | "offscreen" | "ui" | "all",
+		destination?: "background" | "offscreen" | "ui" | "all" | "embedded",
 	): void {
 		this.postMessage({
 			type: "JOB_UPDATED",
@@ -196,7 +207,7 @@ export class JobNotificationChannel {
 	notifyJobProgress(
 		jobId: string,
 		progress: JobProgressEvent,
-		destination?: "background" | "offscreen" | "ui" | "all",
+		destination?: "background" | "offscreen" | "ui" | "all" | "embedded",
 	): void {
 		this.postMessage({
 			type: "JOB_PROGRESS",
@@ -214,7 +225,7 @@ export class JobNotificationChannel {
 	notifyJobCompleted(
 		jobId: string,
 		result?: JobResult,
-		destination?: "background" | "offscreen" | "ui" | "all",
+		destination?: "background" | "offscreen" | "ui" | "all" | "embedded",
 	): void {
 		this.postMessage({
 			type: "JOB_COMPLETED",
@@ -230,7 +241,7 @@ export class JobNotificationChannel {
 	 * Notify that the queue has been updated (general notification)
 	 */
 	notifyQueueUpdated(
-		destination?: "background" | "offscreen" | "ui" | "all",
+		destination?: "background" | "offscreen" | "ui" | "all" | "embedded",
 	): void {
 		this.postMessage({
 			type: "QUEUE_UPDATED",
@@ -285,7 +296,7 @@ export class JobNotificationChannel {
 		};
 	}
 
-	getContextType(): "background" | "offscreen" | "ui" {
+	getContextType(): "background" | "offscreen" | "ui" | "embedded" {
 		return this.contextType;
 	}
 }

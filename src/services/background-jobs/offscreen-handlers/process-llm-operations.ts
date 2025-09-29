@@ -14,6 +14,7 @@ import { backgroundProcessFactory } from "./process-factory";
 import type { ChatCompletionRequest } from "@/types/openai";
 
 const JOB_NAMES = {
+	getCurrentModel: "get-current-model",
 	getAllModels: "get-all-models",
 	getModelsForService: "get-models-for-service",
 	serveModel: "serve-model",
@@ -22,6 +23,10 @@ const JOB_NAMES = {
 	createLLMService: "create-llm-service",
 	chatCompletion: "chat-completion",
 } as const;
+
+export interface GetCurrentModelPayload {
+	// No specific payload needed - gets models from all services
+}
 
 export interface GetAllModelsPayload {
 	// No specific payload needed - gets models from all services
@@ -58,17 +63,21 @@ export interface ChatCompletionPayload {
 	request: Record<string, unknown>; // ChatCompletionRequest from @/types/openai
 }
 
+export interface GetCurrentModelResult extends Record<string, unknown> {
+	modelInfo: unknown;
+}
+
 // Define result types that handlers return
 export interface GetAllModelsResult extends Record<string, unknown> {
-	models: { object: "list"; data: any[] };
+	models: { object: "list"; data: unknown[] };
 }
 
 export interface GetModelsForServiceResult extends Record<string, unknown> {
-	models: { object: "list"; data: any[] };
+	models: { object: "list"; data: unknown[] };
 }
 
 export interface ServeModelResult extends Record<string, unknown> {
-	modelInfo: any;
+	modelInfo: unknown;
 }
 
 export interface UnloadModelResult extends Record<string, unknown> {
@@ -84,16 +93,17 @@ export interface DeleteModelResult extends Record<string, unknown> {
 }
 
 export interface CreateLLMServiceResult extends Record<string, unknown> {
-	serviceInfo: any;
+	serviceInfo: unknown;
 }
 
 export interface ChatCompletionResult extends Record<string, unknown> {
-	response: any;
+	response: unknown;
 }
 
 // Extend global registry for smart type inference
 declare global {
 	interface JobTypeRegistry {
+		"get-current-model": GetCurrentModelPayload;
 		"get-all-models": GetAllModelsPayload;
 		"get-models-for-service": GetModelsForServicePayload;
 		"serve-model": ServeModelPayload;
@@ -104,6 +114,7 @@ declare global {
 	}
 
 	interface JobResultRegistry {
+		"get-current-model": GetCurrentModelResult;
 		"get-all-models": GetAllModelsResult;
 		"get-models-for-service": GetModelsForServiceResult;
 		"serve-model": ServeModelResult;
@@ -117,6 +128,7 @@ declare global {
 export type LLMModelsJob = BaseJob & {
 	jobType: (typeof JOB_NAMES)[keyof typeof JOB_NAMES];
 	payload:
+		| GetCurrentModelPayload
 		| GetAllModelsPayload
 		| GetModelsForServicePayload
 		| ServeModelPayload
@@ -133,6 +145,8 @@ export class LLMOperationsHandler implements ProcessHandler<BaseJob> {
 		dependencies: ProcessDependencies,
 	): Promise<ItemHandlerResult> {
 		switch (job.jobType) {
+			case JOB_NAMES.getCurrentModel:
+				return await this.handleGetCurrentModel(jobId, job, dependencies);
 			case JOB_NAMES.getAllModels:
 				return await this.handleGetAllModels(jobId, job, dependencies);
 			case JOB_NAMES.getModelsForService:
@@ -150,6 +164,37 @@ export class LLMOperationsHandler implements ProcessHandler<BaseJob> {
 			default:
 				throw new Error(`Unknown LLM job type: ${job.jobType}`);
 		}
+	}
+
+	private async handleGetCurrentModel(
+		jobId: string,
+		_job: BaseJob,
+		dependencies: ProcessDependencies,
+	): Promise<ItemHandlerResult> {
+		const { logger, updateJobProgress } = dependencies;
+
+		logger.info(`[getCurrentModel] job started`, { jobId });
+
+		await updateJobProgress(jobId, {
+			stage: "Getting current model from LLM service",
+			progress: 50,
+		});
+
+		const llmService = serviceManager.getLLMService();
+
+		if (!llmService) {
+			throw new Error("LLM service not available");
+		}
+
+		// Get current model from the background LLM service
+		const modelInfo = await llmService.getCurrentModel();
+
+		logger.info(`[getCurrentModel] job completed`, {
+			jobId,
+			modelInfo,
+		});
+
+		return { modelInfo };
 	}
 
 	private async handleGetAllModels(
