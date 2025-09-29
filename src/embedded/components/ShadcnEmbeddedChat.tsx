@@ -46,30 +46,26 @@ const ConversationScrollButton: React.FC = () => (
 );
 
 const Message: React.FC<{
-	from: "user" | "assistant";
+	role: "user" | "assistant";
 	children: React.ReactNode;
-}> = ({ from, children }) => (
+}> = ({ role, children }) => (
 	<div
-		className={`flex gap-3 ${from === "user" ? "justify-end" : "justify-start"}`}
+		className={`flex flex-col gap-2 ${role === "user" ? "items-end" : "items-start"}`}
 	>
 		{children}
 	</div>
 );
 
-const MessageContent: React.FC<{ children: React.ReactNode }> = ({
-	children,
-}) => (
-	<div className="flex-1 space-y-2">
-		<div className="rounded-lg bg-muted p-3 text-sm">{children}</div>
-	</div>
-);
-
-const MessageAvatar: React.FC<{ src: string; name: string }> = ({
-	src,
-	name,
-}) => (
-	<div className="w-8 h-8 rounded-full overflow-hidden border flex-shrink-0">
-		<img src={src} alt={name} className="w-full h-full object-cover" />
+const MessageContent: React.FC<{
+	role: "user" | "assistant";
+	children: React.ReactNode;
+}> = ({ role, children }) => (
+	<div
+		className={`p-3 text-sm max-w-[85%] ${
+			role === "user" ? "ml-auto text-foreground" : "bg-muted rounded-lg"
+		}`}
+	>
+		{children}
 	</div>
 );
 
@@ -462,30 +458,41 @@ const ShadcnEmbeddedChat: React.FC<ChatModalProps> = ({
 	}, [mode]);
 
 	return (
-		<div className="fixed inset-0 z-[999999] bg-black/80 flex items-center justify-center p-4">
-			<div className="flex h-full w-full max-w-4xl max-h-[90vh] flex-col overflow-hidden rounded-xl border bg-background shadow-sm">
-				{/* Header - exact same structure as your example */}
-				<div className="flex items-center justify-between border-b bg-muted/50 px-4 py-3">
-					<div className="flex items-center gap-3">
-						<div className="flex items-center gap-2">
-							<div className="size-2 rounded-full bg-green-500" />
-							<span className="font-medium text-sm">
-								{mode === "topic" ? "📚 Recall Topic" : "🧠 Recall Knowledge"}
-							</span>
-						</div>
-						<div className="h-4 w-px bg-border" />
-						<span className="text-muted-foreground text-xs">
-							{pageTitle?.substring(0, 30) || "Knowledge Recall"}
+		<div
+			className="fixed inset-0 z-[999999] bg-black/30 animate-in fade-in duration-200"
+			onClick={onClose}
+		>
+			<div
+				className="fixed right-0 top-0 h-full w-full max-w-[30%] min-w-[400px] flex flex-col overflow-hidden bg-background shadow-2xl border-l animate-in slide-in-from-right duration-300"
+				onClick={(e) => e.stopPropagation()}
+			>
+				{/* Header - compact design for right panel */}
+				<div className="flex items-center justify-between border-b bg-muted/50 px-4 py-3 flex-shrink-0">
+					<div className="flex items-center gap-2">
+						<div className="size-2 rounded-full bg-green-500" />
+						<span className="font-medium text-sm">
+							{mode === "topic" ? "📚 Recall Topic" : "🧠 Recall"}
 						</span>
 					</div>
 					<Button
 						variant="ghost"
 						size="sm"
 						onClick={onClose}
-						className="h-8 px-2"
+						className="h-8 w-8 p-0"
 					>
-						<RotateCcwIcon className="size-4" />
-						<span className="ml-1">Close</span>
+						<svg
+							className="w-4 h-4"
+							fill="none"
+							stroke="currentColor"
+							viewBox="0 0 24 24"
+						>
+							<path
+								strokeLinecap="round"
+								strokeLinejoin="round"
+								strokeWidth={2}
+								d="M6 18L18 6M6 6l12 12"
+							/>
+						</svg>
 					</Button>
 				</div>
 
@@ -493,12 +500,12 @@ const ShadcnEmbeddedChat: React.FC<ChatModalProps> = ({
 				<Conversation className="flex-1">
 					<ConversationContent className="space-y-4">
 						{messages.length === 0 ? (
-							<div className="flex flex-col items-center justify-center h-full text-center py-12">
-								<div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mb-4">
-									<span className="text-2xl">🧠</span>
+							<div className="flex flex-col items-center justify-center h-full text-center py-8 px-4">
+								<div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center mb-3">
+									<span className="text-xl">🧠</span>
 								</div>
-								<h3 className="text-lg font-medium mb-2">Recall Knowledge</h3>
-								<p className="text-muted-foreground text-sm max-w-sm">
+								<h3 className="font-medium mb-2">Recall Knowledge</h3>
+								<p className="text-muted-foreground text-xs leading-relaxed">
 									Ask me anything about your saved knowledge and I'll help you
 									recall relevant information.
 								</p>
@@ -506,8 +513,8 @@ const ShadcnEmbeddedChat: React.FC<ChatModalProps> = ({
 						) : (
 							messages.map((message) => (
 								<div key={message.id} className="space-y-3">
-									<Message from={message.role}>
-										<MessageContent>
+									<Message role={message.role}>
+										<MessageContent role={message.role}>
 											{message.isStreaming && message.content === "" ? (
 												<div className="flex items-center gap-2">
 													<Loader size={14} />
@@ -519,18 +526,10 @@ const ShadcnEmbeddedChat: React.FC<ChatModalProps> = ({
 												message.content
 											)}
 										</MessageContent>
-										<MessageAvatar
-											src={
-												message.role === "user"
-													? "https://github.com/dovazencot.png"
-													: "https://github.com/vercel.png"
-											}
-											name={message.role === "user" ? "User" : "AI"}
-										/>
 									</Message>
-									{/* Reasoning - exact same structure */}
-									{message.reasoning && (
-										<div className="ml-10">
+									{/* Reasoning - only for AI messages */}
+									{message.reasoning && message.role === "assistant" && (
+										<div className="max-w-[85%]">
 											<Reasoning
 												isStreaming={message.isStreaming}
 												defaultOpen={false}
@@ -540,23 +539,25 @@ const ShadcnEmbeddedChat: React.FC<ChatModalProps> = ({
 											</Reasoning>
 										</div>
 									)}
-									{/* Sources - exact same structure */}
-									{message.sources && message.sources.length > 0 && (
-										<div className="ml-10">
-											<Sources>
-												<SourcesTrigger count={message.sources.length} />
-												<SourcesContent>
-													{message.sources.map((source, index) => (
-														<Source
-															key={index}
-															href={source.url}
-															title={source.title}
-														/>
-													))}
-												</SourcesContent>
-											</Sources>
-										</div>
-									)}
+									{/* Sources - only for AI messages */}
+									{message.sources &&
+										message.sources.length > 0 &&
+										message.role === "assistant" && (
+											<div className="max-w-[85%]">
+												<Sources>
+													<SourcesTrigger count={message.sources.length} />
+													<SourcesContent>
+														{message.sources.map((source, index) => (
+															<Source
+																key={index}
+																href={source.url}
+																title={source.title}
+															/>
+														))}
+													</SourcesContent>
+												</Sources>
+											</div>
+										)}
 								</div>
 							))
 						)}
@@ -564,30 +565,23 @@ const ShadcnEmbeddedChat: React.FC<ChatModalProps> = ({
 					<ConversationScrollButton />
 				</Conversation>
 
-				{/* Input Area - exact same structure as your example */}
-				<div className="border-t p-4">
+				{/* Input Area - compact design for right panel */}
+				<div className="border-t p-3 flex-shrink-0">
 					<PromptInput onSubmit={handleSubmit}>
 						<PromptInputTextarea
 							value={inputValue}
 							onChange={(e) => setInputValue(e.target.value)}
 							placeholder={
 								mode === "topic"
-									? "Ask about specific topics in your knowledge base..."
-									: "What would you like to recall from your knowledge base?"
+									? "Ask about topics..."
+									: "Ask about your knowledge..."
 							}
 							disabled={isTyping}
 						/>
 						<PromptInputToolbar>
 							<PromptInputTools>
-								<PromptInputButton disabled={isTyping}>
-									<PaperclipIcon size={16} />
-								</PromptInputButton>
-								<PromptInputButton disabled={isTyping}>
-									<MicIcon size={16} />
-									<span>Voice</span>
-								</PromptInputButton>
-								<span className="text-xs text-muted-foreground px-2">
-									{mode === "topic" ? "Topic Mode" : "Knowledge Mode"}
+								<span className="text-xs text-muted-foreground">
+									{mode === "topic" ? "Topics" : "Knowledge"}
 								</span>
 							</PromptInputTools>
 							<PromptInputSubmit
