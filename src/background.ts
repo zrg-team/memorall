@@ -10,6 +10,8 @@ const REMEMBER_THIS_PAGE_CONTEXT_MENU_ID = "remember-this-page";
 const REMEMBER_CONTENT_CONTEXT_MENU_ID = "remember-content";
 const LET_REMEMBER_CONTEXT_MENU_ID = "let-remember";
 const REMEMBER_TO_TOPIC_CONTEXT_MENU_ID = "remember-to-topic";
+const RECALL_CONTEXT_MENU_ID = "recall";
+const RECALL_TOPIC_CONTEXT_MENU_ID = "recall-topic";
 const OPEN_FULL_PAGE_CONTEXT_MENU_ID = "open-full-page";
 
 // Offscreen document management
@@ -157,7 +159,26 @@ chrome.runtime.onInstalled.addListener(async () => {
 		});
 
 		chrome.contextMenus.create({
-			id: "divider",
+			id: "divider1",
+			type: "separator",
+		});
+
+		// Create "Recall" menu that opens chat modal
+		chrome.contextMenus.create({
+			id: RECALL_CONTEXT_MENU_ID,
+			title: "Recall",
+			contexts: ["page", "selection"],
+		});
+
+		// Create "Recall topic" menu that opens chat modal with topic context
+		chrome.contextMenus.create({
+			id: RECALL_TOPIC_CONTEXT_MENU_ID,
+			title: "Recall topic",
+			contexts: ["page", "selection"],
+		});
+
+		chrome.contextMenus.create({
+			id: "divider2",
 			type: "separator",
 		});
 
@@ -183,6 +204,42 @@ chrome.runtime.onInstalled.addListener(async () => {
 
 // Handle context menu clicks
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
+	// Handle recall context menu items first
+	if (
+		info.menuItemId === RECALL_CONTEXT_MENU_ID ||
+		info.menuItemId === RECALL_TOPIC_CONTEXT_MENU_ID
+	) {
+		if (!tab?.id) return;
+
+		try {
+			// Check if we can access the tab
+			if (
+				!tab.url ||
+				tab.url.startsWith("chrome://") ||
+				tab.url.startsWith("chrome-extension://")
+			) {
+				logError("❌ Cannot access this page type");
+				return;
+			}
+
+			// Send message to content script to show chat modal
+			const chatResponse = await chrome.tabs.sendMessage(tab.id, {
+				type: CONTENT_BACKGROUND_EVENTS.SHOW_CHAT_MODAL,
+				tabId: tab.id,
+				url: tab.url,
+				context: info.selectionText || "",
+				mode:
+					info.menuItemId === RECALL_TOPIC_CONTEXT_MENU_ID
+						? "topic"
+						: "general",
+			});
+			logInfo("📨 Content script response to SHOW_CHAT_MODAL:", chatResponse);
+		} catch (error) {
+			logError("❌ Failed to show chat modal:", error);
+		}
+		return;
+	}
+
 	// Open the action popup immediately only for remember-related items
 	if (
 		info.menuItemId === REMEMBER_THIS_PAGE_CONTEXT_MENU_ID ||

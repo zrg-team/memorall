@@ -484,7 +484,10 @@ export class KnowledgeGraphFlow extends GraphBase<
 					// Only filter by graph if topicId is specified
 					if (this.shouldFilterByGraph(state)) {
 						const graphValue = this.getGraphValue(state);
-						where = and(where, eq(schema.nodes.graph, graphValue)) as typeof where;
+						where = and(
+							where,
+							eq(schema.nodes.graph, graphValue),
+						) as typeof where;
 					}
 
 					return db.select().from(schema.nodes).where(where);
