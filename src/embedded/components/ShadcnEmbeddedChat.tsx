@@ -48,7 +48,7 @@ const MessageContent: React.FC<{
 	children: React.ReactNode;
 }> = ({ role, children }) => (
 	<div
-		className={`text-sm max-w-[85%] ${
+		className={`text-sm max-w-[85%] overflow-x-hidden ${
 			role === "user"
 				? "ml-auto bg-primary text-primary-foreground p-3 rounded-lg"
 				: "text-foreground"
@@ -209,14 +209,16 @@ const Button: React.FC<{
 	onClick?: () => void;
 	className?: string;
 	children: React.ReactNode;
-}> = ({ variant, size, onClick, className, children }) => (
+	style?: React.CSSProperties;
+}> = ({ variant, size, onClick, className, children, style }) => (
 	<button
 		onClick={onClick}
+		style={style}
 		className={`inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 ${
 			variant === "ghost"
 				? "hover:bg-accent hover:text-accent-foreground"
 				: "bg-primary text-primary-foreground hover:bg-primary/90"
-		} ${size === "sm" ? "h-8 px-3" : "h-10 px-4 py-2"} ${className || ""}`}
+		} ${size === "sm" ? "h-8" : "h-10"} ${className || ""}`}
 	>
 		{children}
 	</button>
@@ -332,9 +334,7 @@ const ShadcnEmbeddedChat: React.FC<ChatModalProps> = ({
 	const [modelAvailable, setModelAvailable] = useState(false);
 	const [isTyping, setIsTyping] = useState(false);
 	const [selectedTopic, setSelectedTopic] = useState<string>("__all__");
-	const [streamingMessageId, setStreamingMessageId] = useState<string | null>(
-		null,
-	);
+	const [, setStreamingMessageId] = useState<string | null>(null);
 	const [abortController, setAbortController] =
 		useState<AbortController | null>(null);
 
@@ -448,7 +448,7 @@ const ShadcnEmbeddedChat: React.FC<ChatModalProps> = ({
 				await embeddedChatService.chatStream({
 					messages: allMessages,
 					model: selectedModel,
-					mode: mode === "topic" ? "knowledge" : "normal",
+					mode: mode === "topic" ? "knowledge" : "knowledge",
 					topicId:
 						selectedTopic && selectedTopic !== "__all__"
 							? selectedTopic
@@ -533,13 +533,6 @@ const ShadcnEmbeddedChat: React.FC<ChatModalProps> = ({
 		[inputValue, isTyping, selectedModel, messages, mode],
 	);
 
-	const handleReset = useCallback(() => {
-		setMessages([]);
-		setInputValue("");
-		setIsTyping(false);
-		setStreamingMessageId(null);
-	}, [mode]);
-
 	return (
 		<div
 			className="fixed inset-0 z-[999999] bg-black/30 animate-in fade-in duration-200"
@@ -568,9 +561,9 @@ const ShadcnEmbeddedChat: React.FC<ChatModalProps> = ({
 							variant="ghost"
 							size="sm"
 							onClick={onClose}
-							className="h-8 w-8 !p-0 !px-0"
+							className="h-8 w-8 p-2"
 						>
-							<CloseIcon className="w-4 h-4" style={{ scale: 2 }} />
+							<CloseIcon />
 						</Button>
 					</div>
 					{/* Topic Selector for Topic Mode - in header */}
@@ -616,7 +609,7 @@ const ShadcnEmbeddedChat: React.FC<ChatModalProps> = ({
 									</Message>
 									{/* Reasoning - only for AI messages */}
 									{message.reasoning && message.role === "assistant" && (
-										<div className="max-w-[85%]">
+										<div className="max-w-[85%] overflow-x-hidden">
 											<Reasoning
 												isStreaming={message.isStreaming}
 												defaultOpen={false}
@@ -630,7 +623,7 @@ const ShadcnEmbeddedChat: React.FC<ChatModalProps> = ({
 									{message.sources &&
 										message.sources.length > 0 &&
 										message.role === "assistant" && (
-											<div className="max-w-[85%]">
+											<div className="max-w-[85%] overflow-x-hidden">
 												<Sources>
 													<SourcesTrigger count={message.sources.length} />
 													<SourcesContent>

@@ -17,6 +17,7 @@ import { TemporalExtractionFlow } from "./temporal-extraction";
 import { DatabaseSaveFlow } from "./database-save";
 import { GraphBase } from "../../interfaces/graph.base";
 import type { AllServices } from "../../interfaces/tool";
+import type { Node, Edge } from "@/services/database";
 
 export interface KnowledgeGraphConfig {
 	enableTemporalExtraction?: boolean;
@@ -228,7 +229,7 @@ export class KnowledgeGraphFlow extends GraphBase<
 				trigramResults,
 				WEIGHTS,
 				TOTAL_LIMIT,
-				(node) => node.id,
+				(node) => node.id!,
 			);
 
 			logInfo(
@@ -236,7 +237,7 @@ export class KnowledgeGraphFlow extends GraphBase<
 			);
 
 			return {
-				existingNodes: related,
+				existingNodes: related as Node[],
 				// Defer edge loading; load_facts will query per facts
 				existingEdges: [],
 				actions: [
@@ -466,12 +467,14 @@ export class KnowledgeGraphFlow extends GraphBase<
 				trigramResults,
 				WEIGHTS,
 				TOTAL_LIMIT,
-				(edge) => edge.id,
+				(edge) => edge.id!,
 			);
 
 			// Ensure node data for edges
 			const nodeIds = Array.from(
-				new Set<string>(edges.flatMap((e) => [e.sourceId, e.destinationId])),
+				new Set<string>(
+					edges.flatMap((e) => [`${e.sourceId}`, `${e.destinationId}`]),
+				),
 			);
 			const missingNodeIds = nodeIds.filter(
 				(id) => !(state.existingNodes || []).some((n) => n.id === id),
@@ -499,7 +502,7 @@ export class KnowledgeGraphFlow extends GraphBase<
 			);
 
 			return {
-				existingEdges: edges,
+				existingEdges: edges as Edge[],
 				existingNodes: (state.existingNodes || []).concat(newNodes),
 				actions: [
 					{

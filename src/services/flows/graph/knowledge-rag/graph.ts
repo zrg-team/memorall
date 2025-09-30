@@ -11,13 +11,9 @@ import {
 	trigramSearchEdges,
 	combineSearchResultsWithTrigram,
 } from "@/utils/trigram-search";
-import {
-	vectorSearchNodes,
-	vectorSearchEdges,
-	type VectorSearchResult,
-} from "@/utils/vector-search";
+import { vectorSearchNodes, vectorSearchEdges } from "@/utils/vector-search";
 import type { DatabaseService } from "@/services/database/database-service";
-import type { BaseEmbedding, IEmbeddingService } from "@/services/embedding";
+import type { BaseEmbedding } from "@/services/embedding";
 
 // Types for vector search results with similarity scores
 interface NodeWithSimilarity extends Node {
@@ -135,13 +131,11 @@ export class KnowledgeRAGFlow extends GraphBase<
 
 			const llmResponse = (await llm.chatCompletions({
 				messages,
-				max_tokens: 1024,
 				temperature: 0.1,
 				stream: false,
 			})) as ChatCompletionResponse;
 
 			const responseContent = llmResponse.choices[0].message.content || "";
-			logInfo("[KNOWLEDGE_RAG] Analysis response:", responseContent);
 
 			// Parse JSON response
 			let analysisResult: { entities: string[]; intent: string } | undefined;
@@ -194,11 +188,6 @@ export class KnowledgeRAGFlow extends GraphBase<
 		const embedding = this.services.embedding;
 
 		try {
-			logInfo(
-				"[KNOWLEDGE_RAG] Retrieving knowledge for entities:",
-				state.extractedEntities,
-			);
-
 			let relevantNodes: KnowledgeRAGState["relevantNodes"] = [];
 			let relevantEdges: KnowledgeRAGState["relevantEdges"] = [];
 
@@ -336,10 +325,6 @@ export class KnowledgeRAGFlow extends GraphBase<
 					combinedEdgeResults < TOTAL_EDGE_LIMIT * 0.5) &&
 				embedding
 			) {
-				logInfo(
-					"[KNOWLEDGE_RAG] Insufficient results from SQL/trigram, falling back to vector search",
-				);
-
 				try {
 					// Generate embedding for search terms
 					const searchText = state.extractedEntities.join(" ");
@@ -415,7 +400,7 @@ export class KnowledgeRAGFlow extends GraphBase<
 				trigramNodeResults,
 				WEIGHTS,
 				TOTAL_NODE_LIMIT,
-				(node) => node.id,
+				(node) => node.id!,
 			);
 
 			const combinedEdges = combineSearchResultsWithTrigram(
@@ -430,7 +415,7 @@ export class KnowledgeRAGFlow extends GraphBase<
 				trigramEdgeResults,
 				WEIGHTS,
 				TOTAL_EDGE_LIMIT,
-				(edge) => edge.id,
+				(edge) => edge.id!,
 			);
 
 			// 4. Process and score nodes
@@ -438,21 +423,22 @@ export class KnowledgeRAGFlow extends GraphBase<
 				let relevanceScore = 0;
 
 				// Text-based relevance
+				// Text-based relevance
 				state.extractedEntities.forEach((entity) => {
 					const entityLower = entity.toLowerCase();
-					if (node.name.toLowerCase().includes(entityLower)) {
+					if (`${node.name}`.toLowerCase().includes(entityLower)) {
 						relevanceScore += 3;
 					}
-					if (node.summary?.toLowerCase().includes(entityLower)) {
+					if (`${node.summary}`.toLowerCase().includes(entityLower)) {
 						relevanceScore += 2;
 					}
 				});
 
 				return {
-					id: node.id,
-					nodeType: node.nodeType,
-					name: node.name,
-					summary: node.summary || "",
+					id: `${node.id}`,
+					nodeType: node.nodeType ? `${node.nodeType}` : "",
+					name: node.name ? `${node.name}` : "",
+					summary: node.summary ? `${node.summary}` : "",
 					attributes: (node.attributes as Record<string, unknown>) || {},
 					relevanceScore,
 				};
@@ -481,7 +467,9 @@ export class KnowledgeRAGFlow extends GraphBase<
 							attributes: schema.nodes.attributes,
 						})
 						.from(schema.nodes)
-						.where(or(...missingNodeIds.map((id) => eq(schema.nodes.id, id))));
+						.where(
+							or(...missingNodeIds.map((id) => eq(schema.nodes.id, `${id}`))),
+						);
 				});
 
 				const additionalNodes = missingNodes.map((node) => ({
@@ -509,8 +497,8 @@ export class KnowledgeRAGFlow extends GraphBase<
 
 				// Boost score if both source and destination are relevant nodes
 				const allNodeIds = relevantNodes.map((node) => node.id);
-				const sourceRelevant = allNodeIds.includes(edge.sourceId);
-				const destRelevant = allNodeIds.includes(edge.destinationId);
+				const sourceRelevant = allNodeIds.includes(`${edge.sourceId}`);
+				const destRelevant = allNodeIds.includes(`${edge.destinationId}`);
 				if (sourceRelevant && destRelevant) {
 					relevanceScore += 3;
 				} else if (sourceRelevant || destRelevant) {
@@ -518,11 +506,11 @@ export class KnowledgeRAGFlow extends GraphBase<
 				}
 
 				return {
-					id: edge.id,
-					sourceId: edge.sourceId,
-					destinationId: edge.destinationId,
-					edgeType: edge.edgeType,
-					factText: edge.factText || "",
+					id: `${edge.id}`,
+					sourceId: edge.sourceId ? `${edge.sourceId}` : "",
+					destinationId: edge.destinationId ? `${edge.destinationId}` : "",
+					edgeType: edge.edgeType ? `${edge.edgeType}` : "",
+					factText: edge.factText ? `${edge.factText}` : "",
 					attributes: (edge.attributes as Record<string, unknown>) || {},
 					relevanceScore,
 				};
@@ -581,8 +569,8 @@ export class KnowledgeRAGFlow extends GraphBase<
 
 			// 1. Build definitions section - entity names and summaries
 			const definitions = state.relevantNodes
-				.map((node) => `${node.name}: ${node.summary}`)
-				.join(", ");
+				.map((node) => `${node.name}: ${node.summary}.`)
+				.join("\n");
 
 			// 2. Build facts section - entity connections with fact text
 			const facts = state.relevantEdges
@@ -593,9 +581,9 @@ export class KnowledgeRAGFlow extends GraphBase<
 					const destName =
 						state.relevantNodes.find((n) => n.id === edge.destinationId)
 							?.name || "Unknown";
-					return `${sourceName} ${edge.edgeType} ${destName}, ${edge.factText}`;
+					return `${sourceName} ${edge.edgeType} ${destName}, ${edge.factText}.`;
 				})
-				.join(". ");
+				.join("\n");
 
 			// 3. Generate Mermaid diagram
 			const mermaidDiagram = this.generateMermaidDiagram(
@@ -622,13 +610,19 @@ export class KnowledgeRAGFlow extends GraphBase<
 				actions: [
 					{
 						id: crypto.randomUUID(),
-						name: "Context Building",
-						description: `\n\`\`\`mermaid\n${mermaidDiagram}\n\`\`\`\n`,
+						name: "Context Graph",
+						description: `\`\`\`mermaid\n${mermaidDiagram}\n\`\`\``,
 						metadata: {
 							definitionsCount: state.relevantNodes.length,
 							factsCount: state.relevantEdges.length,
 							hasMermaid: true,
 						},
+					},
+					{
+						id: crypto.randomUUID(),
+						name: "Context Knowledge",
+						description: knowledgeContext,
+						metadata: {},
 					},
 				],
 			};
@@ -709,11 +703,6 @@ export class KnowledgeRAGFlow extends GraphBase<
 					}
 				}
 			}
-
-			logInfo(
-				"[KNOWLEDGE_RAG] Generated response:",
-				responseContent.substring(0, 200) + "...",
-			);
 
 			return {
 				finalMessage: responseContent,
@@ -846,8 +835,8 @@ export class KnowledgeRAGFlow extends GraphBase<
 		const nodes: KnowledgeRAGState["relevantNodes"] = nodeResults.map(
 			(result) => ({
 				id: String(result.item.id),
-				nodeType: result.item.nodeType,
-				name: result.item.name,
+				nodeType: result.item.nodeType || "",
+				name: result.item.name || "",
 				summary: result.item.summary || "",
 				attributes: (result.item.attributes || {}) as Record<string, unknown>,
 				relevanceScore: result.similarity,
@@ -859,7 +848,7 @@ export class KnowledgeRAGFlow extends GraphBase<
 				id: String(result.item.id),
 				sourceId: String(result.item.sourceId),
 				destinationId: String(result.item.destinationId),
-				edgeType: result.item.edgeType,
+				edgeType: result.item.edgeType || "",
 				factText: result.item.factText || "",
 				attributes: (result.item.attributes || {}) as Record<string, unknown>,
 				relevanceScore: result.similarity,

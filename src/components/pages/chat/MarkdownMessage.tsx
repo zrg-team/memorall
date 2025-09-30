@@ -33,147 +33,16 @@ mermaid.initialize({
 	},
 });
 
-// Global counter for unique mermaid IDs
-let mermaidCounter = 0;
-
-// Mermaid component
-const MermaidDiagram: React.FC<{
-	chart: string;
-	fallback: () => React.ReactNode;
-	isStreaming?: boolean;
-}> = ({ chart, fallback, isStreaming = false }) => {
-	const ref = useRef<HTMLDivElement>(null);
-	const [renderState, setRenderState] = React.useState<
-		"loading" | "success" | "error"
-	>("loading");
-	const [uniqueId] = React.useState(
-		() => `mermaid-${++mermaidCounter}-${Date.now()}`,
-	);
-
-	useEffect(() => {
-		// Don't render mermaid during streaming
-		if (isStreaming) {
-			setRenderState("error");
-			return;
-		}
-
-		let isMounted = true;
-		let timeoutId: NodeJS.Timeout;
-
-		const renderChart = async () => {
-			const trimmedChart = chart.trim();
-
-			// Enhanced validation for mermaid syntax
-			const validMermaidTypes = [
-				"graph",
-				"flowchart",
-				"sequenceDiagram",
-				"classDiagram",
-				"stateDiagram",
-				"gantt",
-				"pie",
-				"journey",
-				"gitgraph",
-				"erDiagram",
-				"mindmap",
-				"timeline",
-				"quadrantChart",
-			];
-
-			const firstLine = trimmedChart.split("\n")[0].toLowerCase().trim();
-			const hasValidStart = validMermaidTypes.some(
-				(type) => firstLine.startsWith(type) || firstLine.includes(type),
-			);
-
-			if (!trimmedChart || !hasValidStart) {
-				if (isMounted) setRenderState("error");
-				return;
-			}
-
-			if (ref.current && isMounted) {
-				try {
-					// Add timeout to prevent infinite loading
-					timeoutId = setTimeout(() => {
-						if (isMounted) setRenderState("error");
-					}, 5000); // 5 second timeout
-
-					// Try to parse first to catch syntax errors before rendering
-					await mermaid.parse(trimmedChart);
-
-					if (!isMounted) return;
-
-					// Clear any previous content
-					ref.current.innerHTML = "";
-
-					// Use unique ID for each diagram to prevent conflicts
-					const { svg } = await mermaid.render(uniqueId, trimmedChart);
-
-					if (!isMounted) return;
-
-					clearTimeout(timeoutId);
-
-					// Check if we got valid SVG and no error messages
-					if (svg && svg.includes("<svg") && !svg.includes("Syntax error")) {
-						if (ref.current) {
-							ref.current.innerHTML = svg;
-						}
-						setRenderState("success");
-					} else {
-						setRenderState("error");
-					}
-				} catch (error) {
-					if (!isMounted) return;
-
-					clearTimeout(timeoutId);
-
-					// Clear any partial content that might have been rendered
-					if (ref.current) {
-						ref.current.innerHTML = "";
-					}
-					setRenderState("error");
-				}
-			}
-		};
-
-		renderChart();
-
-		// Cleanup function
-		return () => {
-			isMounted = false;
-			if (timeoutId) {
-				clearTimeout(timeoutId);
-			}
-		};
-	}, [chart, isStreaming, uniqueId]);
-
-	if (renderState === "error" || isStreaming) {
-		return <>{fallback()}</>;
-	}
-
-	if (renderState === "loading") {
-		return (
-			<div className="my-4 h-8 flex items-center text-muted-foreground text-sm">
-				Loading diagram...
-			</div>
-		);
-	}
-
-	return <div ref={ref} className="my-4" />;
-};
-
 const markdownComponents = {
 	// Custom components for better styling
-	table: ({ children, ...props }: any) => (
+	table: ({ children, ...props }: { children?: React.ReactNode }) => (
 		<div className="overflow-x-auto">
-			<table
-				className="min-w-full border-collapse border border-border"
-				{...props}
-			>
+			<table className="min-w-full border-collapse border" {...props}>
 				{children}
 			</table>
 		</div>
 	),
-	th: ({ children, ...props }: any) => (
+	th: ({ children, ...props }: { children?: React.ReactNode }) => (
 		<th
 			className="border border-border bg-muted px-2 py-1 text-left font-semibold"
 			{...props}
@@ -181,18 +50,18 @@ const markdownComponents = {
 			{children}
 		</th>
 	),
-	td: ({ children, ...props }: any) => (
+	td: ({ children, ...props }: { children?: React.ReactNode }) => (
 		<td className="border border-border px-2 py-1" {...props}>
 			{children}
 		</td>
 	),
-	pre: ({ children, ...props }: any) => (
+	pre: ({ children, ...props }: { children?: React.ReactNode }) => (
 		<pre className="rounded bg-muted p-3 overflow-x-auto" {...props}>
 			{children}
 		</pre>
 	),
 	// Style other elements
-	blockquote: ({ children, ...props }: any) => (
+	blockquote: ({ children, ...props }: { children?: React.ReactNode }) => (
 		<blockquote
 			className="border-l-4 border-primary pl-4 italic text-muted-foreground"
 			{...props}
@@ -200,18 +69,18 @@ const markdownComponents = {
 			{children}
 		</blockquote>
 	),
-	hr: ({ ...props }: any) => <hr className="my-4 border-border" {...props} />,
-	ul: ({ children, ...props }: any) => (
+	hr: ({ ...props }) => <hr className="my-4 border-border" {...props} />,
+	ul: ({ children, ...props }: { children?: React.ReactNode }) => (
 		<ul className="list-disc list-inside space-y-1" {...props}>
 			{children}
 		</ul>
 	),
-	ol: ({ children, ...props }: any) => (
+	ol: ({ children, ...props }: { children?: React.ReactNode }) => (
 		<ol className="list-decimal list-inside space-y-1" {...props}>
 			{children}
 		</ol>
 	),
-	li: ({ children, ...props }: any) => (
+	li: ({ children, ...props }: { children?: React.ReactNode }) => (
 		<li className="text-sm" {...props}>
 			{children}
 		</li>

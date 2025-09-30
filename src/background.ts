@@ -149,17 +149,17 @@ chrome.runtime.onInstalled.addListener(async () => {
 			contexts: ["selection"],
 		});
 
-		// Create "Let remember" menu that opens chat input
-		chrome.contextMenus.create({
-			id: LET_REMEMBER_CONTEXT_MENU_ID,
-			title: "Remember ...",
-			contexts: ["page", "selection"],
-		});
-
 		// Create "Remember to topic" menu for topic-specific content
 		chrome.contextMenus.create({
 			id: REMEMBER_TO_TOPIC_CONTEXT_MENU_ID,
-			title: "Remember to topic ...",
+			title: "Remember to topic",
+			contexts: ["page", "link"],
+		});
+
+		// Create "Let remember" menu that opens chat input
+		chrome.contextMenus.create({
+			id: LET_REMEMBER_CONTEXT_MENU_ID,
+			title: "Let remember",
 			contexts: ["page", "selection"],
 		});
 
@@ -330,10 +330,10 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 			} else {
 				// For other remember actions, open popup and navigate based on LLM config
 				if (hasConfiguredLLM) {
-					try {
-						chrome.storage?.session?.set?.({ navigateTo: "knowledge-graph" });
-					} catch (_) {}
-					openExtensionPopup();
+					// try {
+					// 	chrome.storage?.session?.set?.({ navigateTo: "knowledge-graph" });
+					// } catch (_) {}
+					// openExtensionPopup();
 					// Session storage navigation handled by popup.tsx
 				} else {
 					// No LLM configured, guide user to LLM setup

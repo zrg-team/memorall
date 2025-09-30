@@ -56,7 +56,7 @@ export class FactResolutionFlow {
 			// Build node name lookup
 			const nodeNameById = new Map<string, string>();
 			for (const n of state.existingNodes || []) {
-				nodeNameById.set(n.id, n.name);
+				nodeNameById.set(n.id!, n.name!);
 			}
 
 			// Filter facts that have valid entity references
@@ -80,8 +80,9 @@ export class FactResolutionFlow {
 			// Prepare existing edges text
 			const existingEdgesText = (state.existingEdges || [])
 				.map((edge) => {
-					const sourceName = nodeNameById.get(edge.sourceId) || "Unknown";
-					const destName = nodeNameById.get(edge.destinationId) || "Unknown";
+					const sourceName = nodeNameById.get(`${edge.sourceId}`) || "Unknown";
+					const destName =
+						nodeNameById.get(`${edge.destinationId}`) || "Unknown";
 					return `ID: ${edge.id}, Source: ${sourceName}, Destination: ${destName}, Type: ${edge.edgeType}, Fact: ${edge.factText}`;
 				})
 				.join("\n");

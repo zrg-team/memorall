@@ -34,7 +34,7 @@ export async function vectorSearchNodes(
 	searchTerms: string[],
 	limit: number,
 	graphFilter?: string,
-): Promise<VectorSearchResult<Node>[]> {
+): Promise<VectorSearchResult<Partial<Node>>[]> {
 	if (searchTerms.length === 0) return [];
 
 	try {
@@ -45,7 +45,13 @@ export async function vectorSearchNodes(
 		const results = await databaseService.use(async ({ db, raw }) => {
 			// Use cosine similarity for vector search
 			let query = `
-				SELECT *,
+				SELECT id,
+					name,
+					summary,
+					attributes,
+					graph,
+					created_at,
+					updated_at,
 					1 - (name_embedding <=> $1::vector) as similarity
 				FROM nodes
 				WHERE name_embedding IS NOT NULL`;
@@ -65,21 +71,27 @@ export async function vectorSearchNodes(
 			const queryResult = await raw(query, params);
 			// PGlite returns { rows: [...] } structure
 			const rows = (queryResult as { rows: [] })?.rows || [];
-			return rows as Array<Node & { similarity: number }>;
+			return rows as Array<
+				Node & {
+					similarity: number;
+					node_type: string;
+					created_at: string;
+					updated_at: string;
+				}
+			>;
 		});
 
 		return (
 			results?.map((row) => ({
 				item: {
 					id: row.id,
-					nodeType: row.nodeType,
+					nodeType: row.node_type,
 					name: row.name,
 					summary: row.summary,
 					attributes: row.attributes,
 					graph: row.graph,
-					nameEmbedding: row.nameEmbedding,
-					createdAt: row.createdAt,
-					updatedAt: row.updatedAt,
+					createdAt: new Date(row.created_at),
+					updatedAt: new Date(row.updated_at),
 				},
 				similarity: row.similarity,
 			})) || []
@@ -99,7 +111,7 @@ export async function vectorSearchEdges(
 	searchTerms: string[],
 	limit: number,
 	graphFilter?: string,
-): Promise<VectorSearchResult<Edge>[]> {
+): Promise<VectorSearchResult<Partial<Edge>>[]> {
 	if (searchTerms.length === 0) return [];
 
 	try {
@@ -107,10 +119,20 @@ export async function vectorSearchEdges(
 		const searchText = searchTerms.join(" ");
 		const searchEmbedding = await embeddingService.textToVector(searchText);
 
-		const results = await databaseService.use(async ({ db, raw }) => {
+		const results = await databaseService.use(async ({ raw }) => {
 			// Use cosine similarity for vector search on both fact and type embeddings
 			let query = `
-				SELECT *,
+				SELECT id,
+					source_id,
+					destination_id,
+					edge_type,
+					fact_text,
+					valid_at,
+					invalid_at,
+					attributes,
+					graph,
+					created_at,
+					updated_at,
 					GREATEST(
 						1 - (fact_embedding <=> $1::vector),
 						1 - (type_embedding <=> $1::vector)
@@ -133,29 +155,37 @@ export async function vectorSearchEdges(
 			const queryResult = await raw(query, params);
 			// PGlite returns { rows: [...] } structure
 			const rows = (queryResult as { rows: [] })?.rows || [];
-			return rows as Array<Edge & { similarity: number }>;
+			return rows as Array<
+				Edge & {
+					source_id: string;
+					destination_id: string;
+					edge_type: string;
+					fact_text: string;
+					valid_at: string;
+					invalid_at: string;
+					fact_embedding: number[];
+					type_embedding: number[];
+					created_at: string;
+					updated_at: string;
+					similarity: number;
+				}
+			>;
 		});
 
 		return (
 			results?.map((row) => ({
 				item: {
 					id: row.id,
-					sourceId: row.sourceId,
-					destinationId: row.destinationId,
-					edgeType: row.edgeType,
-					factText: row.factText,
-					validAt: row.validAt,
-					invalidAt: row.invalidAt,
-					recordedAt: row.recordedAt,
+					sourceId: row.source_id,
+					destinationId: row.destination_id,
+					edgeType: row.edge_type,
+					factText: row.fact_text,
+					validAt: new Date(row.valid_at),
+					invalidAt: new Date(row.invalid_at),
 					attributes: row.attributes,
 					graph: row.graph,
-					isCurrent: row.isCurrent,
-					provenanceWeightCache: row.provenanceWeightCache,
-					provenanceCountCache: row.provenanceCountCache,
-					factEmbedding: row.factEmbedding,
-					typeEmbedding: row.typeEmbedding,
-					createdAt: row.createdAt,
-					updatedAt: row.updatedAt,
+					createdAt: new Date(row.created_at),
+					updatedAt: new Date(row.updated_at),
 				},
 				similarity: row.similarity,
 			})) || []

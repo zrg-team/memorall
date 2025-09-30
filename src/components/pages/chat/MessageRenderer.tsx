@@ -8,6 +8,7 @@ import {
 	TaskTrigger,
 } from "@/components/ui/shadcn-io/ai/task";
 import { MarkdownMessage } from "@/components/pages/chat/MarkdownMessage";
+import type { Message as DBMessage } from "@/services/database";
 import dayjs from "dayjs";
 import mermaid from "mermaid";
 
@@ -28,17 +29,26 @@ mermaid.initialize({
 // Global counter for unique mermaid IDs
 let mermaidCounter = 0;
 
-// Direct Mermaid component for task descriptions
-const TaskMermaidDiagram: React.FC<{ chart: string }> = ({ chart }) => {
+// Direct Mermaid component for task descriptions - only renders when visible
+const TaskMermaidDiagram: React.FC<{ chart: string; isOpen: boolean }> = ({
+	chart,
+	isOpen,
+}) => {
 	const [renderState, setRenderState] = React.useState<
-		"loading" | "success" | "error"
-	>("loading");
+		"idle" | "loading" | "success" | "error"
+	>("idle");
 	const [uniqueId] = React.useState(
 		() => `task-mermaid-${++mermaidCounter}-${Date.now()}`,
 	);
 	const [svgContent, setSvgContent] = React.useState<string>("");
+	const hasRendered = useRef(false);
 
 	useEffect(() => {
+		// Only render when open and hasn't been rendered yet
+		if (!isOpen || hasRendered.current) {
+			return;
+		}
+
 		let isMounted = true;
 		let timeoutId: NodeJS.Timeout;
 
@@ -52,6 +62,8 @@ const TaskMermaidDiagram: React.FC<{ chart: string }> = ({ chart }) => {
 			if (!isMounted) {
 				return;
 			}
+
+			setRenderState("loading");
 
 			try {
 				// Add timeout to prevent infinite loading
@@ -76,6 +88,7 @@ const TaskMermaidDiagram: React.FC<{ chart: string }> = ({ chart }) => {
 				if (svg && svg.includes("<svg") && !svg.includes("Syntax error")) {
 					setSvgContent(svg);
 					setRenderState("success");
+					hasRendered.current = true;
 				} else {
 					setRenderState("error");
 				}
@@ -94,7 +107,11 @@ const TaskMermaidDiagram: React.FC<{ chart: string }> = ({ chart }) => {
 				clearTimeout(timeoutId);
 			}
 		};
-	}, [chart, uniqueId]);
+	}, [chart, uniqueId, isOpen]);
+
+	if (renderState === "idle") {
+		return null;
+	}
 
 	if (renderState === "error") {
 		return (
@@ -132,17 +149,57 @@ const extractMermaidContent = (content: string): string => {
 	return extracted;
 };
 
-interface MessageData {
-	id: string;
-	role: string;
-	content: string;
-	type?: string;
-	createdAt: Date;
-	metadata?: any;
+// Type definitions
+interface ActionItem {
+	name: string;
+	description: string;
+	metadata?: Record<string, unknown>;
 }
 
+// TaskItemRenderer component to properly manage state per task
+interface TaskItemRendererProps {
+	item: ActionItem;
+	index: number;
+}
+
+const TaskItemRenderer: React.FC<TaskItemRendererProps> = React.memo(
+	({ item, index }) => {
+		const [isOpen, setIsOpen] = React.useState(false);
+
+		const trimmedDesc = item.description ? item.description.trim() : "";
+		const isMermaid = isMermaidOnly(trimmedDesc);
+
+		return (
+			<Task
+				key={`${item.name}_${index}`}
+				className="w-full"
+				defaultOpen={false}
+				onOpenChange={setIsOpen}
+			>
+				<TaskTrigger title={item.name} />
+				<TaskContent>
+					<TaskItem>
+						{isOpen ? (
+							isMermaid ? (
+								<TaskMermaidDiagram
+									chart={extractMermaidContent(item.description)}
+									isOpen={isOpen}
+								/>
+							) : (
+								<div className="w-full overflow-hidden whitespace-pre-wrap break-words">
+									{item.description}
+								</div>
+							)
+						) : undefined}
+					</TaskItem>
+				</TaskContent>
+			</Task>
+		);
+	},
+);
+
 interface MessageRendererProps {
-	message: MessageData;
+	message: DBMessage;
 	index: number;
 	isLastMessage: boolean;
 	isLoading: boolean;
@@ -167,12 +224,12 @@ export const MessageRenderer: React.FC<MessageRendererProps> = ({
 		);
 	}
 
-	const actions =
+	const actions: ActionItem[] =
 		message.metadata &&
 		typeof message.metadata === "object" &&
 		"actions" in message.metadata &&
-		Array.isArray(message.metadata?.actions) &&
-		message.metadata.actions.length > 0
+		message.metadata?.actions &&
+		Array.isArray(message.metadata.actions)
 			? message.metadata.actions
 			: [];
 
@@ -184,34 +241,14 @@ export const MessageRenderer: React.FC<MessageRendererProps> = ({
 	) {
 		return (
 			<div key={message.id} className="flex flex-col gap-4">
-				{actions?.length
-					? actions.map((item: any, index: number) => {
-							return (
-								<Task
-									key={`${item.name}_${index}`}
-									className="w-full"
-									defaultOpen={false}
-								>
-									<TaskTrigger title={item.name} />
-									<TaskContent>
-										<TaskItem>
-											{(() => {
-												const trimmedDesc = item.description
-													? item.description.trim()
-													: "";
-												const isMermaid = isMermaidOnly(trimmedDesc);
-												if (isMermaid) {
-													const chart = extractMermaidContent(item.description);
-													return <TaskMermaidDiagram chart={chart} />;
-												}
-												return item.description;
-											})()}
-										</TaskItem>
-									</TaskContent>
-								</Task>
-							);
-						})
-					: undefined}
+				{actions.length > 0 &&
+					actions.map((item, index) => (
+						<TaskItemRenderer
+							key={`${item.name}_${index}`}
+							item={item}
+							index={index}
+						/>
+					))}
 				<Message from="assistant">
 					<MessageContent>
 						<Loader2 className="w-4 h-4 animate-spin" />
@@ -223,34 +260,14 @@ export const MessageRenderer: React.FC<MessageRendererProps> = ({
 
 	return (
 		<div key={message.id} className="flex flex-col gap-4">
-			{actions?.length
-				? actions.map((item: any, index: number) => {
-						return (
-							<Task
-								key={`${item.name}_${index}`}
-								className="w-full"
-								defaultOpen={false}
-							>
-								<TaskTrigger title={item.name} />
-								<TaskContent>
-									<TaskItem>
-										{(() => {
-											const trimmedDesc = item.description
-												? item.description.trim()
-												: "";
-											const isMermaid = isMermaidOnly(trimmedDesc);
-											if (isMermaid) {
-												const chart = extractMermaidContent(item.description);
-												return <TaskMermaidDiagram chart={chart} />;
-											}
-											return item.description;
-										})()}
-									</TaskItem>
-								</TaskContent>
-							</Task>
-						);
-					})
-				: undefined}
+			{actions.length > 0 &&
+				actions.map((item, index) => (
+					<TaskItemRenderer
+						key={`${item.name}_${index}`}
+						item={item}
+						index={index}
+					/>
+				))}
 			<Message key={message.id} from={message.role}>
 				<MessageContent>
 					<MarkdownMessage

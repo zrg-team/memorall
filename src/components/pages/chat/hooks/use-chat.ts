@@ -159,7 +159,6 @@ export const useChat = (model: string) => {
 					}[] = [];
 
 					for await (const partial of stream) {
-						logInfo("Graph partial output:", partial);
 						const keys = Object.keys(partial);
 						keys.forEach((key) => {
 							const paratialValue = partial[key];
@@ -238,11 +237,10 @@ export const useChat = (model: string) => {
 						id: string;
 						name: string;
 						description: string;
-						metadata: Record<string, any>;
+						metadata: Record<string, unknown>;
 					}[] = [];
 
 					for await (const partial of stream) {
-						logInfo("Knowledge RAG partial output:", partial);
 						const keys = Object.keys(partial);
 						keys.forEach((key) => {
 							const partialValue = partial[key];
@@ -281,7 +279,6 @@ export const useChat = (model: string) => {
 				const request: ChatCompletionRequest = {
 					messages: sendMessages,
 					model: model,
-					max_tokens: 4096,
 					temperature: 0.3,
 					stream: true,
 					signal: controller.signal,
@@ -301,7 +298,6 @@ export const useChat = (model: string) => {
 						) as AsyncIterableIterator<ChatCompletionChunk>;
 						for await (const chunk of stream) {
 							const content = chunk.choices[0]?.delta?.content;
-							console.log("[Chat] content", content);
 							if (content) {
 								currentContent += content;
 								// Update the message in real-time

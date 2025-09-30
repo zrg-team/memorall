@@ -2,7 +2,7 @@ import type { DatabaseService } from "@/services/database/database-service";
 import type { Node, Edge } from "@/services/database/db";
 
 export interface TrigramSearchResult<T> {
-	item: T;
+	item: Partial<T>;
 	score: number;
 }
 
@@ -25,7 +25,7 @@ export async function trigramSearchNodes(
 	searchTerms: string[],
 	limit: number,
 	params: TrigramSearchParams = {},
-): Promise<TrigramSearchResult<Node>[]> {
+): Promise<TrigramSearchResult<Omit<Node, "nameEmbedding">>[]> {
 	if (searchTerms.length === 0) return [];
 
 	try {
@@ -36,25 +36,41 @@ export async function trigramSearchNodes(
 
 		const results = await databaseService.use(async ({ raw }) => {
 			const queryResult = await raw(
-				"SELECT * FROM search_nodes_trigram($1, $2, $3)",
+				`SELECT
+					id,
+					node_type,
+					name,
+					summary,
+					attributes,
+					graph,
+					created_at,
+					updated_at,
+					similarity_score
+				FROM search_nodes_trigram($1, $2, $3)`,
 				[searchText, threshold, limit],
 			);
 			const rows = (queryResult as { rows: [] })?.rows || [];
-			return rows as Array<Node & { similarity_score: number }>;
+			return rows as Array<
+				Node & {
+					similarity_score: number;
+					created_at: string;
+					updated_at: string;
+					node_type: string;
+				}
+			>;
 		});
 
 		return (
-			results?.map((row: any) => ({
+			results?.map((row) => ({
 				item: {
 					id: row.id,
 					nodeType: row.node_type,
 					name: row.name,
 					summary: row.summary,
 					attributes: row.attributes,
-					nameEmbedding: row.name_embedding,
 					graph: row.graph,
-					createdAt: row.created_at,
-					updatedAt: row.updated_at,
+					createdAt: new Date(row.created_at),
+					updatedAt: new Date(row.updated_at),
 				},
 				score: row.similarity_score,
 			})) || []
@@ -76,7 +92,19 @@ export async function trigramSearchEdges(
 	searchTerms: string[],
 	limit: number,
 	params: TrigramSearchParams = {},
-): Promise<TrigramSearchResult<Edge>[]> {
+): Promise<
+	TrigramSearchResult<
+		Omit<
+			Edge,
+			| "factEmbedding"
+			| "typeEmbedding"
+			| "provenanceWeightCache"
+			| "provenanceCountCache"
+			| "isCurrent"
+			| "recordedAt"
+		>
+	>[]
+> {
 	if (searchTerms.length === 0) return [];
 
 	try {
@@ -87,33 +115,53 @@ export async function trigramSearchEdges(
 
 		const results = await databaseService.use(async ({ raw }) => {
 			const queryResult = await raw(
-				"SELECT * FROM search_edges_trigram($1, $2, $3)",
+				`SELECT
+					id,
+					source_id,
+					destination_id,
+					edge_type,
+					fact_text,
+					valid_at,
+					invalid_at,
+					attributes,
+					graph,
+					created_at,
+					updated_at,
+					similarity_score
+				FROM search_edges_trigram($1, $2, $3)`,
 				[searchText, threshold, limit],
 			);
 			const rows = (queryResult as { rows: [] })?.rows || [];
-			return rows as Array<Edge & { similarity_score: number }>;
+			return rows as Array<
+				Edge & {
+					similarity_score: number;
+					created_at: string;
+					updated_at: string;
+					source_id: string;
+					destination_id: string;
+					edge_type: string;
+					fact_text: string;
+					valid_at: string;
+					invalid_at: string;
+					graph?: string;
+				}
+			>;
 		});
 
 		return (
-			results?.map((row: any) => ({
+			results?.map((row) => ({
 				item: {
 					id: row.id,
 					sourceId: row.source_id,
 					destinationId: row.destination_id,
 					edgeType: row.edge_type,
 					factText: row.fact_text,
-					validAt: row.valid_at,
-					invalidAt: row.invalid_at,
-					recordedAt: row.recorded_at,
+					validAt: new Date(row.valid_at),
+					invalidAt: new Date(row.invalid_at),
 					attributes: row.attributes,
-					isCurrent: row.is_current,
-					provenanceWeightCache: row.provenance_weight_cache,
-					provenanceCountCache: row.provenance_count_cache,
-					factEmbedding: row.fact_embedding,
-					typeEmbedding: row.type_embedding,
 					graph: row.graph,
-					createdAt: row.created_at,
-					updatedAt: row.updated_at,
+					createdAt: new Date(row.created_at),
+					updatedAt: new Date(row.updated_at),
 				},
 				score: row.similarity_score,
 			})) || []
@@ -140,8 +188,8 @@ export function combineSearchResultsWithTrigram<T>(
 		trigramPercentage: number;
 	},
 	totalLimit: number,
-	getKey: (item: T) => string,
-): T[] {
+	getKey: (item: Partial<T>) => string,
+): Partial<T>[] {
 	// Normalize weights to 100%
 	const totalWeight =
 		weights.sqlPercentage +
@@ -197,7 +245,7 @@ export function combineSearchResultsWithTrigram<T>(
 		.map((r) => r.item);
 
 	// Combine and deduplicate based on key function
-	const combined = new Map<string, T>();
+	const combined = new Map<string, Partial<T>>();
 
 	// Add results in order of priority (SQL first, then vector, then trigram)
 	for (const result of selectedSqlResults) {

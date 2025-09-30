@@ -6,24 +6,17 @@ import type {
 import type { AllServices } from "../../interfaces/tool";
 import { logInfo, logError, logWarn } from "@/utils/logger";
 import type { NewSource } from "@/services/database/entities/sources";
-import type { NewNode } from "@/services/database/entities/nodes";
-import type { NewEdge } from "@/services/database/entities/edges";
-import type { DatabaseService } from "@/services/database/database-service";
+import type { Node, NewNode } from "@/services/database/entities/nodes";
+import type { Edge, NewEdge } from "@/services/database/entities/edges";
 import type { IEmbeddingService } from "@/services/embedding/interfaces/embedding-service.interface";
-import { schema } from "@/services/database/db";
-import type { InferSelectModel, InferInsertModel } from "drizzle-orm";
+import { getDB, schema } from "@/services/database/db";
+import type { InferSelectModel } from "drizzle-orm";
 import { eq, or } from "drizzle-orm";
 
 // Inferred database types
-type DatabaseInstance = ReturnType<
-	typeof import("@/services/database/db").getDB
->;
+type DatabaseInstance = ReturnType<typeof getDB>;
 type SchemaType = typeof schema;
 type SourceSelectType = InferSelectModel<typeof schema.sources>;
-type NodeSelectType = InferSelectModel<typeof schema.nodes>;
-type EdgeSelectType = InferSelectModel<typeof schema.edges>;
-type SourceNodeSelectType = InferSelectModel<typeof schema.sourceNodes>;
-type SourceEdgeSelectType = InferSelectModel<typeof schema.sourceEdges>;
 
 // Database transaction context type
 type DatabaseContext = {
@@ -34,12 +27,9 @@ type DatabaseContext = {
 // Database operation result types
 type DatabaseSaveResult = {
 	createdSource: SourceSelectType;
-	createdNodes: NodeSelectType[];
-	createdEdges: EdgeSelectType[];
+	createdNodes: Partial<Node>[];
+	createdEdges: Partial<Edge>[];
 };
-
-type NodeWithId = NodeSelectType;
-type EdgeWithId = EdgeSelectType;
 
 // Safe embedding generation that continues storage even on failure
 async function safeTextToVector(
@@ -244,8 +234,8 @@ export class DatabaseSaveFlow {
 		createdSource: SourceSelectType,
 		embeddingService: IEmbeddingService | undefined,
 		{ db, schema }: DatabaseContext,
-	): Promise<NodeSelectType[]> {
-		const createdNodes: NodeSelectType[] = [];
+	): Promise<Node[]> {
+		const createdNodes: Node[] = [];
 		const newEntities = state.resolvedEntities.filter((e) => !e.isExisting);
 		const skippedNodes: ResolvedEntity[] = [];
 
@@ -312,12 +302,12 @@ export class DatabaseSaveFlow {
 
 	private async createEdges(
 		state: KnowledgeGraphState,
-		createdNodes: NodeSelectType[],
+		createdNodes: Node[],
 		createdSource: SourceSelectType,
 		embeddingService: IEmbeddingService | undefined,
 		{ db, schema }: DatabaseContext,
-	): Promise<EdgeSelectType[]> {
-		const createdEdges: EdgeSelectType[] = [];
+	): Promise<Edge[]> {
+		const createdEdges: Edge[] = [];
 
 		// Handle both enrichedFacts (with temporal extraction) and resolvedFacts (without temporal extraction)
 		const factsToProcess =
@@ -549,7 +539,7 @@ export class DatabaseSaveFlow {
 					edgeData.typeEmbedding = typeEmbedding;
 				}
 
-				let createdEdge: EdgeSelectType;
+				let createdEdge: Edge;
 				try {
 					const [edge] = await db
 						.insert(schema.edges)
@@ -631,7 +621,7 @@ export class DatabaseSaveFlow {
 	private getNodeId(
 		entity: ResolvedEntity,
 		nodeNameToId: Map<string, string>,
-		createdNodes: NodeSelectType[],
+		createdNodes: Node[],
 	): string | null {
 		if (entity.isExisting && entity.existingId) {
 			// Ensure consistent string format for existing nodes
@@ -665,7 +655,7 @@ export class DatabaseSaveFlow {
 	private findNodeByMultipleStrategies(
 		entity: ResolvedEntity,
 		nodeNameToId: Map<string, string>,
-		createdNodes: NodeSelectType[],
+		createdNodes: Node[],
 	): string | null {
 		const normalizedEntityName = this.normalizeString(entity.finalName);
 
@@ -838,8 +828,8 @@ export class DatabaseSaveFlow {
 		try {
 			if (result.createdNodes?.length) {
 				const nodeNames = result.createdNodes
-					.map((n: NodeSelectType) => n.name)
-					.filter((n: string) => typeof n === "string" && n.trim().length > 0);
+					.map((n) => (n?.name ? `${n.name}` : undefined))
+					.filter((n) => n && n.trim().length > 0);
 				logInfo("[SAVE_TO_DATABASE] New nodes created", {
 					count: result.createdNodes.length,
 					names: nodeNames,
@@ -856,7 +846,7 @@ export class DatabaseSaveFlow {
 					if (n?.id) idToName.set(String(n.id), n.name ?? String(n.id));
 				}
 
-				const edges = result.createdEdges.map((e: EdgeSelectType) => ({
+				const edges = result.createdEdges.map((e) => ({
 					type: e.edgeType,
 					fact: e.factText,
 					source: idToName.get(String(e.sourceId)) ?? String(e.sourceId),
@@ -870,10 +860,9 @@ export class DatabaseSaveFlow {
 				});
 
 				const factNames = result.createdEdges
-					.map((e: EdgeSelectType) => e.factText)
+					.map((e) => e.factText)
 					.filter(
-						(t: string | null): t is string =>
-							typeof t === "string" && t.trim().length > 0,
+						(t): t is string => typeof t === "string" && t.trim().length > 0,
 					);
 				if (factNames.length) {
 					logInfo("[SAVE_TO_DATABASE] Facts stored", {

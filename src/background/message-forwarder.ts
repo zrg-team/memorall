@@ -205,8 +205,6 @@ export class BackgroundJobMessageForwarder {
 						return;
 					}
 					await chrome.tabs.sendMessage(tab.id, message);
-
-					logInfo(`📨 Relayed job message to tab ${tab.id}:`, message);
 				} catch (error) {
 					// Tab might not have content script injected - this is normal
 					// Only log as debug, not error
