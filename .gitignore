@@ -169,3 +169,5 @@ yarn-error.log*
 
 # extension.js
 extension-env.d.ts
+
+publish

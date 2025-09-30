@@ -26,6 +26,7 @@
   ],
   "host_permissions": [
     "https://huggingface.co/*",
+    "https://zrg-team.github.io/memorall/",
     "<all_urls>"
   ],
   "background": {
@@ -56,6 +57,6 @@
     }
   ],
   "content_security_policy": {
-    "extension_pages": "script-src 'self' 'wasm-unsafe-eval' http://localhost:* http://127.0.0.1:*; worker-src 'self'; object-src 'self'; frame-src http://localhost:* http://127.0.0.1:* https: data: blob:;"
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; object-src 'self'; frame-src https: data: blob:;"
   }
 }
