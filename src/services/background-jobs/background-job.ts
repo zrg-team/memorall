@@ -167,7 +167,7 @@ export class BackgroundJob {
 		if (options.stream) {
 			// Create progress stream
 			const stream = this.createJobProgressStream(jobId);
-			this.attachProgressForwarder(jobId, false); // createJob uses queue-based completion
+			this.attachProgressForwarder(jobId, true); // createJob uses queue-based completion
 			return { jobId, stream };
 		} else {
 			// Create promise that resolves on completion
@@ -251,7 +251,11 @@ export class BackgroundJob {
 						if (message.jobId === jobId) {
 							unsubscribe();
 							if (message.result) {
-								resolve(message.result as any);
+								resolve(
+									message.result as JobResultFor<
+										T extends keyof JobResultRegistry ? T : never
+									>,
+								);
 							} else {
 								reject(new Error("Job completed without result"));
 							}
@@ -407,70 +411,48 @@ export class BackgroundJob {
 
 		const localContext = this.notificationBridge.getContextType();
 
-		// Listen for progress updates
-		const unsubscribeProgress = this.notificationBridge.subscribe(
-			"JOB_PROGRESS",
+		const listener = this.notificationBridge.subscribe(
+			"*",
 			(message: JobNotificationMessage) => {
-				if (message.jobId !== jobId || !message.progress) return;
+				if (message.jobId !== jobId) return;
 				if (message.sender === localContext) return;
 
 				const streamData = this.jobProgressStreams.get(jobId);
 				if (!streamData) return;
 
-				try {
-					streamData.controller.enqueue(message.progress);
-				} catch (error) {
-					logError(`Error enqueuing progress event for job ${jobId}`, error);
-				}
-
-				if (
-					message.progress.status === "completed" ||
-					message.progress.status === "failed"
-				) {
-					try {
-						streamData.controller.close();
-					} catch (error) {
-						logError(`Error closing progress stream for job ${jobId}`, error);
-					} finally {
-						this.cleanupProgressStream(jobId);
-					}
+				switch (message.type) {
+					case "JOB_PROGRESS":
+						try {
+							streamData.controller.enqueue(message.progress);
+						} catch (error) {
+							logError(
+								`Error enqueuing progress event for job ${jobId}`,
+								error,
+							);
+						}
+						break;
+					case "JOB_COMPLETED":
+						if (!handleDirectCompletion) {
+							return;
+						}
+						try {
+							streamData.controller.enqueue(
+								message.result as unknown as JobProgressEvent,
+							);
+							streamData.controller.close();
+						} catch (error) {
+							logError(`Error closing progress stream for job ${jobId}`, error);
+						} finally {
+							this.cleanupProgressStream(jobId);
+						}
+						break;
 				}
 			},
 		);
 
-		// Conditionally listen for job completion (only for execute jobs)
-		let unsubscribeCompleted: (() => void) | undefined;
-		if (handleDirectCompletion) {
-			unsubscribeCompleted = this.notificationBridge.subscribe(
-				"JOB_COMPLETED",
-				(message: JobNotificationMessage) => {
-					if (message.jobId !== jobId) return;
-					if (message.sender === localContext) return;
-
-					const streamData = this.jobProgressStreams.get(jobId);
-					if (!streamData) return;
-
-					// Send final completion event to stream
-					try {
-						streamData.controller.enqueue(
-							message.result as unknown as JobProgressEvent,
-						);
-						streamData.controller.close();
-					} catch (error) {
-						logError(`Error closing progress stream for job ${jobId}`, error);
-					} finally {
-						this.cleanupProgressStream(jobId);
-					}
-				},
-			);
-		}
-
 		// Store unsubscribe functions
 		this.jobProgressListeners.set(jobId, () => {
-			unsubscribeProgress();
-			if (unsubscribeCompleted) {
-				unsubscribeCompleted();
-			}
+			listener();
 		});
 	}
 

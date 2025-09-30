@@ -37,8 +37,8 @@ const navigation = [
 	{ name: "Chat", path: "/", icon: MessageCircle },
 	{ name: "Models", path: "/llm", icon: Bot },
 	{ name: "Topics", path: "/topics", icon: Tags },
-	{ name: "Remembered", path: "/remembered", icon: BookOpen },
 	{ name: "Knowledge Graph", path: "/knowledge-graph", icon: Network },
+	{ name: "Remembered", path: "/remembered", icon: BookOpen },
 ];
 
 const debugItems = [

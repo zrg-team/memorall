@@ -60,7 +60,6 @@ export const up = async (pg: PGlite) => {
       IF NEW.created_at IS NULL THEN
         NEW.created_at = CURRENT_TIMESTAMP;
       END IF;
-      NEW.updated_at = CURRENT_TIMESTAMP;
       RETURN NEW;
     END;
     $$ language 'plpgsql';

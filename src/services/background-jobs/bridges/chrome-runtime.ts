@@ -143,15 +143,12 @@ export class ChromeRuntimeBridge implements IJobNotificationBridge {
 		const typeListeners = this.listeners.get(messageType)!;
 		typeListeners.add(listener);
 
-		logInfo(`📝 Subscribed to job notifications: ${messageType}`);
-
 		// Return unsubscribe function
 		return () => {
 			typeListeners.delete(listener);
 			if (typeListeners.size === 0) {
 				this.listeners.delete(messageType);
 			}
-			logInfo(`📝 Unsubscribed from job notifications: ${messageType}`);
 		};
 	}
 

@@ -296,6 +296,7 @@ export const useChat = (model: string) => {
 						) as AsyncIterableIterator<ChatCompletionChunk>;
 						for await (const chunk of stream) {
 							const content = chunk.choices[0]?.delta?.content;
+							console.log("[Chat] content", content);
 							if (content) {
 								currentContent += content;
 								// Update the message in real-time

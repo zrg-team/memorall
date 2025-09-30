@@ -62,7 +62,6 @@ export class RememberSaveHandler extends BaseProcessHandler<RememberSaveJob> {
 		try {
 			const title =
 				"title" in payload ? (payload as { title: string }).title : "content";
-			dependencies.updateStatus(`Saving: ${title.substring(0, 30)}...`);
 
 			await dependencies.logger.info(
 				`💾 Processing remember-save job: ${jobId}`,

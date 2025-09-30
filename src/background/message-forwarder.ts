@@ -64,34 +64,33 @@ export class BackgroundJobMessageForwarder {
 
 	/**
 	 * Handle incoming chrome.runtime messages
-	 * Relays JOB_NOTIFICATION_BRIDGE messages to content scripts
+	 * Relays JOB_NOTIFICATION_BRIDGE messages and JOB_PROGRESS messages to content scripts
 	 */
 	private handleRuntimeMessage(
 		message: unknown,
 		sender: chrome.runtime.MessageSender,
 		sendResponse: (response?: unknown) => void,
 	): void {
-		// Type guard for message structure
-		if (!this.isJobNotificationBridgeMessage(message)) {
+		// Handle JOB_NOTIFICATION_BRIDGE messages
+		if (this.isJobNotificationBridgeMessage(message)) {
+			const { jobMessage } = message;
+
+			// Only relay messages that should go to content scripts
+			if (!this.shouldRelayToContentScripts(jobMessage, sender)) {
+				return;
+			}
+
+			// Relay the entire JOB_NOTIFICATION_BRIDGE message to content scripts
+			this.relayToContentScripts(message)
+				.then(() => {
+					sendResponse({ success: true });
+				})
+				.catch((error) => {
+					logError("Failed to relay message to content scripts:", error);
+					sendResponse({ success: false, error: error.message });
+				});
 			return;
 		}
-
-		const { jobMessage } = message;
-
-		// Only relay messages that should go to content scripts
-		if (!this.shouldRelayToContentScripts(jobMessage, sender)) {
-			return;
-		}
-
-		// Relay the entire JOB_NOTIFICATION_BRIDGE message to content scripts
-		this.relayToContentScripts(message)
-			.then(() => {
-				sendResponse({ success: true });
-			})
-			.catch((error) => {
-				logError("Failed to relay message to content scripts:", error);
-				sendResponse({ success: false, error: error.message });
-			});
 	}
 
 	/**
@@ -109,6 +108,25 @@ export class BackgroundJobMessageForwarder {
 			"jobMessage" in message &&
 			typeof message.jobMessage === "object" &&
 			message.jobMessage !== null
+		);
+	}
+
+	/**
+	 * Type guard to check if message is an JOB_PROGRESS message
+	 */
+	private isUpdateJobProgressMessage(message: unknown): message is {
+		type: "JOB_PROGRESS";
+		jobId: string;
+		progress: any;
+	} {
+		return (
+			typeof message === "object" &&
+			message !== null &&
+			"type" in message &&
+			message.type === "JOB_PROGRESS" &&
+			"jobId" in message &&
+			typeof (message as any).jobId === "string" &&
+			"progress" in message
 		);
 	}
 
@@ -137,13 +155,19 @@ export class BackgroundJobMessageForwarder {
 	}
 
 	/**
-	 * Relay job notification bridge message to all content scripts
+	 * Relay job notification bridge message or JOB_PROGRESS message to all content scripts
 	 */
 	private async relayToContentScripts(
-		bridgeMessage: {
-			type: "JOB_NOTIFICATION_BRIDGE";
-			jobMessage: JobNotificationMessage;
-		},
+		message:
+			| {
+					type: "JOB_NOTIFICATION_BRIDGE";
+					jobMessage: JobNotificationMessage;
+			  }
+			| {
+					type: "JOB_PROGRESS";
+					jobId: string;
+					progress: unknown;
+			  },
 		options: MessageRelayOptions = {},
 	): Promise<void> {
 		const { tabFilter } = options;
@@ -180,12 +204,9 @@ export class BackgroundJobMessageForwarder {
 					if (!tab.id) {
 						return;
 					}
-					await chrome.tabs.sendMessage(tab.id, bridgeMessage);
-					logInfo(`📨 Relayed job message to tab ${tab.id}:`, {
-						jobId: bridgeMessage.jobMessage.jobId,
-						messageType: bridgeMessage.jobMessage.type,
-						tabUrl: tab.url,
-					});
+					await chrome.tabs.sendMessage(tab.id, message);
+
+					logInfo(`📨 Relayed job message to tab ${tab.id}:`, message);
 				} catch (error) {
 					// Tab might not have content script injected - this is normal
 					// Only log as debug, not error

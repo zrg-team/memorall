@@ -74,10 +74,6 @@ export class KnowledgeGraphHandler extends BaseProcessHandler<KnowledgeGraphJob>
 			"offscreen",
 		);
 
-		dependencies.updateStatus(
-			`Processing: ${pageData.title.substring(0, 30)}...`,
-		);
-
 		try {
 			// Send initial progress update
 			await dependencies.updateJobProgress(jobId, {

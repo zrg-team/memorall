@@ -13,7 +13,6 @@ import type { BaseJob } from "@/services/background-jobs/offscreen-handlers/type
 import type { ProcessDependencies } from "@/services/background-jobs/offscreen-handlers/types";
 import type {
 	JobProgressUpdate,
-	ChromeMessage,
 	JobResult,
 } from "@/services/background-jobs/offscreen-handlers/types";
 
@@ -89,10 +88,8 @@ class OffscreenProcessor {
 	constructor() {
 		// Initialize dependencies for dependency injection
 		this.dependencies = ProcessFactory.createDependencies(
-			this.updateJobProgressViaMessage.bind(this),
-			this.completeJobViaMessage.bind(this),
-			this.updateStatus.bind(this),
-			this.sendChromeMessage.bind(this),
+			this.updateJobProgress.bind(this),
+			this.completeJob.bind(this),
 		);
 		this.processFactory = backgroundProcessFactory;
 		this.processFactory.setDependencies(this.dependencies);
@@ -126,7 +123,6 @@ class OffscreenProcessor {
 
 	private async initialize(): Promise<void> {
 		try {
-			this.updateStatus("Initializing...");
 			this.reportProgress();
 
 			logger.info(
@@ -190,7 +186,6 @@ class OffscreenProcessor {
 			this.currentProgress.done = true;
 			this.reportProgress();
 
-			this.updateStatus("Ready");
 			logger.info(
 				"offscreen",
 				"initialization",
@@ -203,7 +198,6 @@ class OffscreenProcessor {
 			} catch (_) {}
 		} catch (error) {
 			logError("Failed to initialize offscreen processor:", error);
-			this.updateStatus("Failed");
 			this.currentProgress.status = "Failed";
 			this.currentProgress.done = true;
 			this.reportProgress();
@@ -390,16 +384,19 @@ class OffscreenProcessor {
 	}
 
 	// Helper method to update job progress via background script message
-	private async updateJobProgressViaMessage(
+	private async updateJobProgress(
 		jobId: string,
 		progress: JobProgressUpdate,
 	): Promise<void> {
 		try {
-			const response = await chrome.runtime.sendMessage({
-				type: "UPDATE_JOB_PROGRESS",
+			await backgroundJob.getNotificationBridge().notifyJobProgress(
 				jobId,
-				progress,
-			});
+				{
+					...progress,
+					status: "pending",
+				},
+				"all",
+			);
 		} catch (error) {
 			logger.error(
 				"offscreen",
@@ -411,10 +408,7 @@ class OffscreenProcessor {
 	}
 
 	// Helper method to complete job via backgroundJob's notification bridge
-	private async completeJobViaMessage(
-		jobId: string,
-		result: JobResult,
-	): Promise<void> {
+	private async completeJob(jobId: string, result: JobResult): Promise<void> {
 		try {
 			// Send completion via backgroundJob's notification bridge to background context
 			backgroundJob
@@ -430,11 +424,6 @@ class OffscreenProcessor {
 		}
 	}
 
-	// Simple status indicator for debugging
-	private updateStatus(message: string): void {
-		// NONE
-	}
-
 	// Report current progress to UI thread
 	reportProgress(): void {
 		logInfo("📤 Sending INITIAL_PROGRESS:", this.currentProgress);
@@ -446,15 +435,6 @@ class OffscreenProcessor {
 			logInfo("✅ INITIAL_PROGRESS message sent successfully");
 		} catch (error) {
 			logError("❌ Failed to send INITIAL_PROGRESS:", error);
-		}
-	}
-
-	// Helper method to send chrome messages
-	private async sendChromeMessage(message: ChromeMessage): Promise<void> {
-		try {
-			await chrome.runtime.sendMessage(message);
-		} catch (_) {
-			// Ignore chrome message errors
 		}
 	}
 }

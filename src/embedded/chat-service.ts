@@ -25,6 +25,7 @@ export interface ChatResponse {
 
 export interface ChatStreamOptions extends ChatServiceOptions {
 	onProgress?: (content: string, isComplete: boolean) => void;
+	onAction?: (actions: ChatAction[]) => void;
 	onError?: (error: string) => void;
 	signal?: AbortSignal;
 }
@@ -47,7 +48,8 @@ export class EmbeddedChatService {
 	 * Send a chat request and get streaming response
 	 */
 	async chatStream(options: ChatStreamOptions): Promise<string> {
-		const { messages, model, mode, onProgress, onError, signal } = options;
+		const { messages, model, mode, onProgress, onAction, onError, signal } =
+			options;
 
 		// Convert embedded ChatMessage to background job format
 		const jobMessages = messages.map((msg) => ({
@@ -89,6 +91,7 @@ export class EmbeddedChatService {
 			);
 
 			let finalContent = "";
+			let finalActions: ChatAction[] = [];
 
 			// Process streaming results
 			for await (const progress of result.stream) {
@@ -96,12 +99,48 @@ export class EmbeddedChatService {
 					break;
 				}
 
-				if (
-					progress.status === "completed" &&
-					progress.result &&
-					"content" in progress.result
-				) {
-					finalContent = progress.result.content as string;
+				// Handle streaming progress updates with ChatResult types
+				if (progress.status === "in_progress" && progress.result) {
+					const chatResult = progress.result as ChatResult;
+
+					if (chatResult.type === "chunk" && chatResult.chunk) {
+						// Handle streaming content chunks
+						const content = chatResult.chunk.choices[0]?.delta?.content;
+						if (content) {
+							finalContent += content;
+							// Send real-time streaming update
+							onProgress?.(finalContent, false);
+						}
+					} else if (chatResult.type === "action" && chatResult.actions) {
+						// Handle action updates
+						chatResult.actions.forEach((action) => {
+							if (!finalActions.find((a) => a.id === action.id)) {
+								finalActions.push(action);
+							}
+						});
+						onAction?.(finalActions);
+					}
+				}
+
+				// Handle completion
+				if (progress.status === "completed" && progress.result) {
+					const chatResult = progress.result as ChatResult;
+					if (chatResult.type === "final") {
+						// Use accumulated content if we have it, otherwise use final content
+						if (finalContent) {
+							// We've been streaming, just mark as complete
+							onProgress?.(finalContent, true);
+						} else {
+							// No streaming happened, use final content
+							finalContent = chatResult.content;
+							onProgress?.(finalContent, true);
+						}
+
+						if (chatResult.metadata?.actions) {
+							finalActions = chatResult.metadata.actions;
+							onAction?.(finalActions);
+						}
+					}
 				}
 
 				if (progress.status === "failed") {
@@ -111,7 +150,11 @@ export class EmbeddedChatService {
 				}
 			}
 
+			// Final progress update
 			onProgress?.(finalContent, true);
+
+			// Store actions for later retrieval
+			this.lastMetadata = { actions: finalActions };
 
 			return finalContent;
 		} catch (error) {

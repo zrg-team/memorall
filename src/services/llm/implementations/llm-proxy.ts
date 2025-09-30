@@ -104,21 +104,6 @@ export class LLMProxy implements BaseLLM {
 						if (progressEvent.status === "failed") {
 							throw new Error(progressEvent.error || "Job failed");
 						}
-
-						if (progressEvent.status === "completed") {
-							// Handle any final chunks in the result
-							if (progressEvent.result && "response" in progressEvent.result) {
-								const responseData = progressEvent.result as {
-									response: { chunks: ChatCompletionChunk[] };
-								};
-								if (responseData.response?.chunks) {
-									for (const chunk of responseData.response.chunks) {
-										yield chunk;
-									}
-								}
-							}
-							break;
-						}
 					}
 				} catch (error) {
 					throw new Error(`Background job failed: ${error}`);

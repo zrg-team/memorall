@@ -78,8 +78,6 @@ export interface ProcessDependencies {
 		progress: JobProgressUpdate,
 	) => Promise<void>;
 	completeJob: (jobId: string, result: JobResult) => Promise<void>;
-	updateStatus: (message: string) => void;
-	sendMessage: (message: ChromeMessage) => Promise<void>;
 }
 
 // Handler return interface - simplified to just return the result data

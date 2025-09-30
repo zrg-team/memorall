@@ -16,18 +16,32 @@ export interface ChatPayload {
 	query?: string; // For knowledge mode
 }
 
-export interface ChatResult extends Record<string, unknown> {
-	content: string;
-	role: "assistant";
-	metadata?: {
-		actions?: Array<{
-			id: string;
-			name: string;
-			description: string;
-			metadata: Record<string, any>;
-		}>;
-	};
-}
+export type ChatResult =
+	| {
+			type: "chunk";
+			chunk?: ChatCompletionChunk;
+	  }
+	| {
+			type: "final";
+			content: string;
+			metadata?: {
+				actions?: Array<{
+					id: string;
+					name: string;
+					description: string;
+					metadata: Record<string, any>;
+				}>;
+			};
+	  }
+	| {
+			type: "action";
+			actions?: Array<{
+				id: string;
+				name: string;
+				description: string;
+				metadata: Record<string, unknown>;
+			}>;
+	  };
 
 // Extend global registry for smart type inference
 declare global {
@@ -70,8 +84,6 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 			},
 			"offscreen",
 		);
-
-		dependencies.updateStatus(`Processing chat with ${model}...`);
 
 		let currentContent = "";
 		const actions: Array<{
@@ -118,9 +130,8 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 										stage: "Receiving response...",
 										progress: Math.min(80, 20 + currentContent.length / 10),
 										result: {
-											content: currentContent,
-											role: "assistant" as const,
-											metadata: { actions },
+											type: "chunk",
+											chunk,
 										} as ChatResult,
 									});
 								}
@@ -142,6 +153,14 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 								if (!actions.find((a) => a.id === action.id)) {
 									actions.push(action);
 								}
+							});
+							dependencies.updateJobProgress(jobId, {
+								stage: "Receiving response...",
+								progress: 10,
+								result: {
+									type: "action",
+									actions,
+								} as ChatResult,
 							});
 						}
 					});
@@ -171,18 +190,15 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 								const content = chunk.choices[0]?.delta?.content;
 								if (content) {
 									currentContent += content;
-
-									// Send streaming progress updates
-									await dependencies.updateJobProgress(jobId, {
-										stage: "Receiving response...",
-										progress: Math.min(80, 20 + currentContent.length / 10),
-										result: {
-											content: currentContent,
-											role: "assistant" as const,
-											metadata: { actions },
-										} as ChatResult,
-									});
 								}
+								await dependencies.updateJobProgress(jobId, {
+									stage: "Receiving response...",
+									progress: 10,
+									result: {
+										type: "chunk",
+										chunk: chunk,
+									} as ChatResult,
+								});
 							},
 						},
 					},
@@ -201,6 +217,14 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 								if (!actions.find((a) => a.id === action.id)) {
 									actions.push(action);
 								}
+							});
+							dependencies.updateJobProgress(jobId, {
+								stage: "Receiving response...",
+								progress: 10,
+								result: {
+									type: "action",
+									actions,
+								} as ChatResult,
 							});
 						}
 					});
@@ -238,9 +262,8 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 									stage: "Receiving response...",
 									progress: Math.min(80, 20 + currentContent.length / 10),
 									result: {
-										content: currentContent,
-										role: "assistant" as const,
-										metadata: { actions },
+										type: "chunk",
+										chunk,
 									} as ChatResult,
 								});
 							}
@@ -251,20 +274,11 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 				}
 			}
 
-			// Final result
-			const result: ChatResult = {
+			return {
+				type: "final",
 				content: currentContent,
-				role: "assistant",
 				metadata: { actions },
 			};
-
-			await dependencies.updateJobProgress(jobId, {
-				stage: "Chat completed",
-				progress: 100,
-				result,
-			});
-
-			return result;
 		} catch (error) {
 			const errorMessage =
 				error instanceof Error ? error.message : "Unknown error";

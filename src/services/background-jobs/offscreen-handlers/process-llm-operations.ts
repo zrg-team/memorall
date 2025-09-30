@@ -329,7 +329,7 @@ export class LLMOperationsHandler implements ProcessHandler<BaseJob> {
 						async (progress) => {
 							// Forward wllama progress to job progress
 							await updateJobProgress(jobId, {
-								stage: `Loading model... ${progress.percent.toFixed(1)}%`,
+								stage: `Loading model... ${progress.percent.toFixed(2)}%`,
 								progress: 50 + progress.percent * 0.4, // 50% to 90%
 							});
 						},

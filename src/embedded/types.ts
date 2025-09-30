@@ -1,3 +1,10 @@
+export interface ChatAction {
+	id: string;
+	name: string;
+	description: string;
+	metadata: Record<string, unknown>;
+}
+
 export interface ChatMessage {
 	id: string;
 	content: string;
@@ -6,6 +13,9 @@ export interface ChatMessage {
 	reasoning?: string;
 	sources?: Array<{ title: string; url: string }>;
 	isStreaming?: boolean;
+	metadata?: {
+		actions?: ChatAction[];
+	};
 }
 
 export interface SelectionData {

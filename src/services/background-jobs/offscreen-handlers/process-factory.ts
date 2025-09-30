@@ -97,13 +97,6 @@ export class ProcessFactory {
 				{ jobType: job.jobType, result: handlerResult },
 				"offscreen",
 			);
-
-			// Notify completion
-			await this.dependencies.sendMessage({
-				type: "JOB_COMPLETED",
-				jobId,
-				result: jobResult,
-			});
 		} catch (error) {
 			// Handle unexpected errors
 			const errorMessage =
@@ -136,12 +129,6 @@ export class ProcessFactory {
 			};
 
 			await this.dependencies.completeJob(jobId, jobResult);
-
-			await this.dependencies.sendMessage({
-				type: "JOB_COMPLETED",
-				jobId,
-				result: jobResult,
-			});
 		}
 	}
 
@@ -151,8 +138,6 @@ export class ProcessFactory {
 			progress: JobProgressUpdate,
 		) => Promise<void>,
 		completeJob: (jobId: string, result: JobResult) => Promise<void>,
-		updateStatus: (message: string) => void,
-		sendMessage: (message: ChromeMessage) => Promise<void>,
 	): ProcessDependencies {
 		return {
 			logger: {
@@ -179,8 +164,6 @@ export class ProcessFactory {
 			},
 			updateJobProgress,
 			completeJob,
-			updateStatus,
-			sendMessage,
 		};
 	}
 }

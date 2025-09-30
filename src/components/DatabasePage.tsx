@@ -339,8 +339,6 @@ export const DatabasePage: React.FC = () => {
 					.limit(queryParams.limit)
 					.offset(queryParams.offset);
 
-				console.log("======================================>", results);
-
 				setItems(results as DatabaseRecord[]);
 			});
 		} catch (error) {
