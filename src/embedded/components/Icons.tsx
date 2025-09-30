@@ -41,7 +41,10 @@ export const ChevronRightIcon: React.FC<{ className?: string }> = ({
 );
 
 // Close/X Icon
-export const CloseIcon: React.FC<{ className?: string }> = ({ className }) => (
+export const CloseIcon: React.FC<{
+	className?: string;
+	style?: React.CSSProperties;
+}> = ({ className, style }) => (
 	<svg
 		className={className}
 		fill="none"
@@ -49,6 +52,7 @@ export const CloseIcon: React.FC<{ className?: string }> = ({ className }) => (
 		viewBox="0 0 24 24"
 	>
 		<path
+			style={style}
 			strokeLinecap="round"
 			strokeLinejoin="round"
 			strokeWidth={2}

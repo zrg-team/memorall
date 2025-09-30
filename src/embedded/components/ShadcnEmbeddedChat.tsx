@@ -223,6 +223,77 @@ const Button: React.FC<{
 );
 
 // Compact header version of model status
+// Topic Selector Component
+const TopicSelector: React.FC<{
+	selectedTopic: string;
+	onTopicChange: (topicId: string) => void;
+}> = ({ selectedTopic, onTopicChange }) => {
+	const [topics, setTopics] = useState<Array<{ id: string; name: string }>>([]);
+	const [isLoading, setIsLoading] = useState(true);
+
+	useEffect(() => {
+		const fetchTopics = async () => {
+			try {
+				setIsLoading(true);
+				// Fetch topics using background job
+				const result = await backgroundJob.execute(
+					"get-topics",
+					{},
+					{ stream: false },
+				);
+
+				if ("promise" in result) {
+					const jobResult = await result.promise;
+					if (jobResult.status === "completed" && jobResult.result) {
+						// Topics should be available in the result.topics array
+						if (
+							jobResult.result.topics &&
+							Array.isArray(jobResult.result.topics)
+						) {
+							setTopics(
+								jobResult.result.topics.map((topic: any) => ({
+									id: topic.id,
+									name: topic.name,
+								})),
+							);
+						}
+					}
+				}
+			} catch (error) {
+				console.error("Failed to fetch topics:", error);
+			} finally {
+				setIsLoading(false);
+			}
+		};
+
+		fetchTopics();
+	}, []);
+
+	if (isLoading) {
+		return (
+			<div className="flex items-center gap-2 text-xs text-muted-foreground">
+				<Loader size={12} />
+				<span>Loading topics...</span>
+			</div>
+		);
+	}
+
+	return (
+		<select
+			value={selectedTopic}
+			onChange={(e) => onTopicChange(e.target.value)}
+			className="text-xs p-1 rounded border bg-background text-foreground border-border min-w-24 flex-1"
+		>
+			<option value="__all__">All topics</option>
+			{topics.map((topic) => (
+				<option key={topic.id} value={topic.id}>
+					{topic.name}
+				</option>
+			))}
+		</select>
+	);
+};
+
 const HeaderModelStatus: React.FC<{
 	modelId?: string;
 	provider?: string;
@@ -260,6 +331,7 @@ const ShadcnEmbeddedChat: React.FC<ChatModalProps> = ({
 	const [selectedProvider, setSelectedProvider] = useState<string>("");
 	const [modelAvailable, setModelAvailable] = useState(false);
 	const [isTyping, setIsTyping] = useState(false);
+	const [selectedTopic, setSelectedTopic] = useState<string>("__all__");
 	const [streamingMessageId, setStreamingMessageId] = useState<string | null>(
 		null,
 	);
@@ -376,7 +448,11 @@ const ShadcnEmbeddedChat: React.FC<ChatModalProps> = ({
 				await embeddedChatService.chatStream({
 					messages: allMessages,
 					model: selectedModel,
-					mode: mode === "topic" ? "knowledge" : "knowledge",
+					mode: mode === "topic" ? "knowledge" : "normal",
+					topicId:
+						selectedTopic && selectedTopic !== "__all__"
+							? selectedTopic
+							: undefined,
 					signal: controller.signal,
 					onProgress: (content: string, isComplete: boolean) => {
 						setMessages((prev) =>
@@ -474,27 +550,39 @@ const ShadcnEmbeddedChat: React.FC<ChatModalProps> = ({
 				onClick={(e) => e.stopPropagation()}
 			>
 				{/* Header - compact design for right panel */}
-				<div className="flex items-center justify-between border-b bg-muted/50 px-4 py-3 flex-shrink-0">
-					<div className="flex items-center gap-3 min-w-0 flex-1">
-						<span className="font-medium text-sm flex-shrink-0">
-							{mode === "topic" ? "📚 Recall Topic" : "🧠 Recall"}
-						</span>
-						<div className="min-w-0 flex-1">
-							<HeaderModelStatus
-								modelId={selectedModel}
-								provider={selectedProvider}
-								isActive={modelAvailable && !!selectedModel}
+				<div className="border-b bg-muted/50 px-4 py-3 flex-shrink-0">
+					<div className="flex items-center justify-between">
+						<div className="flex items-center gap-3 min-w-0 flex-1">
+							<span className="font-medium text-sm flex-shrink-0">
+								{mode === "topic" ? "📚 Recall Topic" : "🧠 Recall"}
+							</span>
+							<div className="min-w-0 flex-1">
+								<HeaderModelStatus
+									modelId={selectedModel}
+									provider={selectedProvider}
+									isActive={modelAvailable && !!selectedModel}
+								/>
+							</div>
+						</div>
+						<Button
+							variant="ghost"
+							size="sm"
+							onClick={onClose}
+							className="h-8 w-8 !p-0 !px-0"
+						>
+							<CloseIcon className="w-4 h-4" style={{ scale: 2 }} />
+						</Button>
+					</div>
+					{/* Topic Selector for Topic Mode - in header */}
+					{mode === "topic" && (
+						<div className="mt-2 flex items-center gap-2">
+							<span className="text-xs text-muted-foreground">Topic:</span>
+							<TopicSelector
+								selectedTopic={selectedTopic}
+								onTopicChange={setSelectedTopic}
 							/>
 						</div>
-					</div>
-					<Button
-						variant="ghost"
-						size="sm"
-						onClick={onClose}
-						className="h-8 w-8 p-0 !px-0"
-					>
-						<CloseIcon className="w-4 h-4" />
-					</Button>
+					)}
 				</div>
 
 				{/* Conversation Area - exact same structure as your example */}

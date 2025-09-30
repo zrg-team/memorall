@@ -14,6 +14,7 @@ export interface ChatPayload {
 	model: string;
 	mode: "normal" | "agent" | "knowledge";
 	query?: string; // For knowledge mode
+	topicId?: string; // For topic filtering in knowledge mode
 }
 
 export type ChatResult =
@@ -73,7 +74,7 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 		job: ChatJob,
 		dependencies: ProcessDependencies,
 	): Promise<ItemHandlerResult> {
-		const { messages, model, mode, query } = job.payload;
+		const { messages, model, mode, query, topicId } = job.payload;
 
 		await dependencies.logger.info(
 			`🤖 Starting chat job: ${jobId}`,
@@ -182,6 +183,7 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 					{
 						messages: messages,
 						query: query || messages[messages.length - 1]?.content || "",
+						topicId: topicId,
 						steps: [],
 					},
 					{

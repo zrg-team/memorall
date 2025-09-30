@@ -24,6 +24,8 @@ export const ChatPage: React.FC = () => {
 		status,
 		chatMode,
 		setChatMode,
+		selectedTopic,
+		setSelectedTopic,
 		messages,
 		isLoading,
 		abortController,
@@ -80,6 +82,8 @@ export const ChatPage: React.FC = () => {
 				status={status}
 				chatMode={chatMode}
 				setChatMode={setChatMode}
+				selectedTopic={selectedTopic}
+				setSelectedTopic={setSelectedTopic}
 				onInsertSeparator={insertSeparator}
 				onStop={handleStop}
 				abortController={abortController}

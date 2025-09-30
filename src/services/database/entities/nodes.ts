@@ -18,7 +18,6 @@ export const node = pgTable(
 		name: text("name").notNull(),
 		summary: text("summary"),
 		attributes: jsonb("attributes").default({}),
-		groupId: uuid("group_id"),
 		nameEmbedding: vector("name_embedding", { dimensions: 768 }),
 		graph: text("graph").notNull().default(""),
 		createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -27,7 +26,6 @@ export const node = pgTable(
 	(table) => [
 		index("nodes_node_type_idx").on(table.nodeType),
 		index("nodes_name_idx").on(table.name),
-		index("nodes_group_id_idx").on(table.groupId),
 		index("nodes_summary_idx").on(table.summary),
 		index("nodes_graph_idx").on(table.graph),
 	],

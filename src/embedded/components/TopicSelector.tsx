@@ -1,19 +1,108 @@
 import React, { useState, useEffect } from "react";
 import { createRoot } from "react-dom/client";
-import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Badge } from "@/components/ui/badge";
-import { Loader } from "@/components/ui/shadcn-io/ai/loader";
-import { BookOpen, Check, X } from "lucide-react";
-import { cn } from "@/lib/utils";
 import type { TopicSelectorProps } from "../types";
 import { getTopicsForSelector, sendContentWithTopic } from "../messaging";
+import { customStyles } from "./styles/customStyles";
 
 interface Topic {
 	id: string;
 	name: string;
 	description?: string;
 }
+
+// Simple icon components to match ShadcnEmbeddedChat style
+const BookOpenIcon: React.FC<{ className?: string }> = ({ className }) => (
+	<svg
+		className={className || "w-4 h-4"}
+		fill="currentColor"
+		viewBox="0 0 20 20"
+	>
+		<path
+			fillRule="evenodd"
+			d="M3 5a2 2 0 012-2h10a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V5zm5.707 7.707a1 1 0 001.414-1.414L8.414 9.5l1.707-1.793a1 1 0 00-1.414-1.414L7 8.086 5.293 6.293a1 1 0 00-1.414 1.414L5.586 9.5 3.879 11.207a1 1 0 001.414 1.414L7 10.914l1.707 1.793z"
+			clipRule="evenodd"
+		/>
+	</svg>
+);
+
+const CheckIcon: React.FC<{ className?: string }> = ({ className }) => (
+	<svg
+		className={className || "w-4 h-4"}
+		fill="currentColor"
+		viewBox="0 0 20 20"
+	>
+		<path
+			fillRule="evenodd"
+			d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+			clipRule="evenodd"
+		/>
+	</svg>
+);
+
+const CloseIcon: React.FC<{
+	className?: string;
+	style?: React.CSSProperties;
+}> = ({ className, style }) => (
+	<svg
+		className={className || "w-4 h-4"}
+		fill="currentColor"
+		viewBox="0 0 20 20"
+		style={style}
+	>
+		<path
+			fillRule="evenodd"
+			d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+			clipRule="evenodd"
+		/>
+	</svg>
+);
+
+const Loader: React.FC<{ size?: number; className?: string }> = ({
+	size = 16,
+	className,
+}) => (
+	<svg
+		className={className || ""}
+		width={size}
+		height={size}
+		viewBox="0 0 24 24"
+		fill="none"
+	>
+		<circle
+			className="opacity-25"
+			cx="12"
+			cy="12"
+			r="10"
+			stroke="currentColor"
+			strokeWidth="4"
+		></circle>
+		<path
+			className="opacity-75"
+			fill="currentColor"
+			d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+		></path>
+	</svg>
+);
+
+// Button component to match ShadcnEmbeddedChat style
+const Button: React.FC<{
+	variant?: "ghost";
+	size?: "sm";
+	onClick?: () => void;
+	className?: string;
+	children: React.ReactNode;
+}> = ({ variant, size, onClick, className, children }) => (
+	<button
+		onClick={onClick}
+		className={`inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 ${
+			variant === "ghost"
+				? "hover:bg-accent hover:text-accent-foreground"
+				: "bg-primary text-primary-foreground hover:bg-primary/90"
+		} ${size === "sm" ? "h-8 px-3" : "h-10 px-4 py-2"} ${className || ""}`}
+	>
+		{children}
+	</button>
+);
 
 const TopicSelector: React.FC<TopicSelectorProps> = ({
 	context,
@@ -63,30 +152,23 @@ const TopicSelector: React.FC<TopicSelectorProps> = ({
 		}
 	};
 
-	// Calculate position near mouse cursor but ensure it stays within viewport
+	// Center the modal properly with compact sizing
 	const getPositionStyle = () => {
-		const viewportWidth = window.innerWidth;
-		const viewportHeight = window.innerHeight;
-		const selectorWidth = 280;
-		const selectorHeight = 350;
-
-		// Use center if mouse position is not available
-		let x = Math.max(50, (viewportWidth - selectorWidth) / 2);
-		let y = Math.max(50, (viewportHeight - selectorHeight) / 2);
-
 		return {
 			position: "fixed" as const,
-			left: `${x}px`,
-			top: `${y}px`,
-			width: `${selectorWidth}px`,
-			maxHeight: `${selectorHeight}px`,
+			left: "50%",
+			top: "50%",
+			transform: "translate(-50%, -50%)",
+			width: "280px",
+			maxHeight: "320px",
+			maxWidth: "90vw",
 		};
 	};
 
 	if (saving && selectedTopic) {
 		return (
 			<div
-				className="fixed inset-0 z-[999999] bg-black/50 flex items-center justify-center"
+				className="fixed inset-0 z-[999999] bg-black/70 animate-in fade-in duration-200"
 				onClick={(e) => {
 					if (e.target === e.currentTarget) {
 						onClose();
@@ -95,10 +177,10 @@ const TopicSelector: React.FC<TopicSelectorProps> = ({
 			>
 				<div
 					style={getPositionStyle()}
-					className="bg-background border border-border rounded-lg shadow-xl p-6 flex flex-col items-center gap-3"
+					className="bg-background border border-border rounded-lg shadow-2xl p-6 flex flex-col items-center gap-3 animate-in zoom-in-95 duration-200"
 				>
 					<div className="text-green-600">
-						<Check className="w-8 h-8" />
+						<CheckIcon className="w-8 h-8" />
 					</div>
 					<div className="text-center">
 						<h3 className="font-semibold text-sm">Saved to Topic</h3>
@@ -113,103 +195,70 @@ const TopicSelector: React.FC<TopicSelectorProps> = ({
 
 	return (
 		<div
-			className="fixed inset-0 z-[999999] bg-black/50 flex items-center justify-center"
-			onClick={(e) => {
-				if (e.target === e.currentTarget) {
-					onClose();
-				}
+			style={{
+				position: "fixed",
+				top: "0",
+				left: "0",
+				right: "0",
+				bottom: "0",
+				backgroundColor: "rgba(0, 0, 0, 0.5)",
+				zIndex: "999999",
+				display: "flex",
+				alignItems: "center",
+				justifyContent: "center",
 			}}
+			onClick={onClose}
 		>
-			<div
-				style={getPositionStyle()}
-				className="bg-background border border-border rounded-lg shadow-xl overflow-hidden"
-				onClick={(e) => e.stopPropagation()}
-			>
-				{/* Header */}
-				<div className="flex items-center justify-between p-4 border-b bg-muted/50">
-					<div className="flex items-center gap-2">
-						<BookOpen className="w-4 h-4" />
-						<span className="font-medium text-sm">Select Topic</span>
-					</div>
-					<Button
-						variant="ghost"
-						size="sm"
-						onClick={onClose}
-						className="h-6 w-6 p-0"
-					>
-						<X className="size-3" />
-					</Button>
+			{loading ? (
+				<div
+					style={{
+						color: "white",
+						fontSize: "16px",
+						backgroundColor: "rgba(0, 0, 0, 0.8)",
+						padding: "10px 20px",
+						borderRadius: "6px",
+					}}
+				>
+					Loading...
 				</div>
-
-				{/* Content */}
-				<div className="p-4">
-					{context && (
-						<div className="mb-3 p-2 bg-muted/50 rounded text-xs">
-							<span className="font-medium">Context:</span>{" "}
-							{context.substring(0, 100)}
-							{context.length > 100 && "..."}
-						</div>
-					)}
-
-					{loading ? (
-						<div className="flex items-center justify-center py-8">
-							<Loader size={16} />
-							<span className="ml-2 text-sm">Loading topics...</span>
-						</div>
-					) : topics.length === 0 ? (
-						<div className="text-center py-8 text-muted-foreground">
-							<BookOpen className="w-8 h-8 mx-auto mb-2 opacity-50" />
-							<p className="text-sm">No topics available</p>
-						</div>
-					) : (
-						<ScrollArea className="max-h-48">
-							<div className="space-y-1">
-								{topics.map((topic) => (
-									<div
-										key={topic.id}
-										className={cn(
-											"p-3 rounded-lg cursor-pointer transition-colors border hover:bg-muted/50",
-											selectedTopic?.id === topic.id &&
-												"bg-primary/10 border-primary",
-										)}
-										onClick={() => handleTopicSelect(topic)}
-									>
-										<div className="flex items-start justify-between">
-											<div className="flex-1 min-w-0">
-												<div className="flex items-center gap-2">
-													<h4 className="font-medium text-sm truncate">
-														{topic.name}
-													</h4>
-													{selectedTopic?.id === topic.id && saving && (
-														<Loader size={12} />
-													)}
-												</div>
-												{topic.description && (
-													<p className="text-xs text-muted-foreground mt-1 line-clamp-2">
-														{topic.description}
-													</p>
-												)}
-											</div>
-										</div>
-									</div>
-								))}
-							</div>
-						</ScrollArea>
-					)}
-				</div>
-
-				{/* Footer */}
-				<div className="border-t p-3 bg-muted/30">
-					<p className="text-xs text-muted-foreground">
-						Select a topic to save this content
-					</p>
-				</div>
-			</div>
+			) : (
+				<select
+					style={{
+						padding: "12px 16px",
+						fontSize: "16px",
+						border: "2px solid #007bff",
+						borderRadius: "8px",
+						backgroundColor: "white",
+						color: "#333",
+						minWidth: "200px",
+						boxShadow: "0 4px 12px rgba(0, 0, 0, 0.3)",
+						outline: "none",
+						cursor: "pointer",
+					}}
+					onChange={(e) => {
+						const topic = topics.find((t) => t.id === e.target.value);
+						if (topic) {
+							handleTopicSelect(topic);
+						}
+					}}
+					onClick={(e) => e.stopPropagation()}
+					defaultValue=""
+				>
+					<option value="" disabled style={{ color: "#999" }}>
+						Choose a topic...
+					</option>
+					{topics.map((topic) => (
+						<option key={topic.id} value={topic.id} style={{ color: "#333" }}>
+							{topic.name}
+						</option>
+					))}
+				</select>
+			)}
 		</div>
 	);
 };
 
-// Function to create and mount the topic selector
+// Function to create and mount the topic selector with Shadow DOM isolation
 export function createEmbeddedTopicSelector(
 	props: TopicSelectorProps,
 ): () => void {
@@ -217,26 +266,29 @@ export function createEmbeddedTopicSelector(
 	const container = document.createElement("div");
 	container.id = "memorall-embedded-topic-selector";
 
-	// Add classes for proper styling
-	container.className = "memorall-topic-selector-container";
+	// Create Shadow DOM for complete CSS isolation
+	const shadowRoot = container.attachShadow({ mode: "closed" });
 
-	// Inject basic styles instead of full Tailwind
-	if (!document.querySelector("#memorall-embedded-styles")) {
-		const style = document.createElement("style");
-		style.id = "memorall-embedded-styles";
-		style.textContent = `
-			.memorall-topic-selector-container * {
-				box-sizing: border-box;
-			}
-			.memorall-topic-selector-container {
-				font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-			}
-		`;
-		document.head.appendChild(style);
-	}
+	// Create the actual content container inside shadow DOM
+	const shadowContainer = document.createElement("div");
+	shadowContainer.className = "memorall-topic-selector-container";
 
-	// Create root and render
-	const root = createRoot(container);
+	// Inject Tailwind CSS only within the Shadow DOM
+	const tailwindStyle = document.createElement("link");
+	tailwindStyle.rel = "stylesheet";
+	tailwindStyle.href = chrome.runtime.getURL("action/default_popup.css");
+
+	// Add CSS custom properties for proper theming within Shadow DOM
+	const customPropsStyle = document.createElement("style");
+	customPropsStyle.textContent = customStyles;
+
+	// Add styles to shadow DOM in correct order
+	shadowRoot.appendChild(customPropsStyle);
+	shadowRoot.appendChild(tailwindStyle);
+	shadowRoot.appendChild(shadowContainer);
+
+	// Create root and render inside shadow DOM
+	const root = createRoot(shadowContainer);
 
 	const cleanupModal = () => {
 		root.unmount();

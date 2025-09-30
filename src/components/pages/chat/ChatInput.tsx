@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import {
 	PaperclipIcon,
 	MicIcon,
@@ -23,6 +23,14 @@ import {
 	DropdownMenuItem,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "@/components/ui/select";
+import { serviceManager } from "@/services";
 import type { ChatStatus } from "ai";
 import type { ChatMode } from "./hooks/use-chat";
 
@@ -35,6 +43,8 @@ interface ChatInputProps {
 	status: ChatStatus;
 	chatMode: ChatMode;
 	setChatMode: (mode: ChatMode) => void;
+	selectedTopic: string;
+	setSelectedTopic: (topicId: string) => void;
 	onInsertSeparator: () => void;
 	onStop: () => void;
 	abortController: AbortController | null;
@@ -49,10 +59,40 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 	status,
 	chatMode,
 	setChatMode,
+	selectedTopic,
+	setSelectedTopic,
 	onInsertSeparator,
 	onStop,
 	abortController,
 }) => {
+	const [topics, setTopics] = useState<Array<{ id: string; name: string }>>([]);
+	const [isLoadingTopics, setIsLoadingTopics] = useState(false);
+
+	// Fetch topics when knowledge mode is selected
+	useEffect(() => {
+		if (chatMode === "knowledge") {
+			const fetchTopics = async () => {
+				try {
+					setIsLoadingTopics(true);
+					const result = await serviceManager.topicService.getTopics();
+					setTopics(
+						result.map((topic) => ({
+							id: topic.id,
+							name: topic.name,
+						})),
+					);
+				} catch (error) {
+					console.error("Failed to fetch topics:", error);
+					setTopics([]);
+				} finally {
+					setIsLoadingTopics(false);
+				}
+			};
+
+			fetchTopics();
+		}
+	}, [chatMode]);
+
 	const getModeIcon = (mode: ChatMode) => {
 		switch (mode) {
 			case "normal":
@@ -132,6 +172,28 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 									</DropdownMenuItem>
 								</DropdownMenuContent>
 							</DropdownMenu>
+							{/* Topic Selector - inline with mode selector */}
+							{chatMode === "knowledge" && (
+								<Select
+									value={selectedTopic}
+									onValueChange={setSelectedTopic}
+									disabled={isLoadingTopics}
+								>
+									<SelectTrigger className="w-32 h-8">
+										<SelectValue
+											placeholder={isLoadingTopics ? "..." : "All"}
+										/>
+									</SelectTrigger>
+									<SelectContent>
+										<SelectItem value="__all__">All topics</SelectItem>
+										{topics.map((topic) => (
+											<SelectItem key={topic.id} value={topic.id}>
+												{topic.name}
+											</SelectItem>
+										))}
+									</SelectContent>
+								</Select>
+							)}
 						</PromptInputTools>
 						<div className="flex items-center gap-2">
 							<PromptInputButton>

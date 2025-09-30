@@ -16,6 +16,7 @@ export const useChat = (model: string) => {
 	const [inputValue, setInputValue] = useState("");
 	const [status, setStatus] = useState<ChatStatus>("ready");
 	const [chatMode, setChatMode] = useState<ChatMode>("knowledge");
+	const [selectedTopic, setSelectedTopic] = useState<string>("__all__");
 	const [abortController, setAbortController] =
 		useState<AbortController | null>(null);
 
@@ -212,6 +213,10 @@ export const useChat = (model: string) => {
 						{
 							messages: sendMessages,
 							query: userMessageContent,
+							topicId:
+								selectedTopic && selectedTopic !== "__all__"
+									? selectedTopic
+									: undefined,
 							steps: [],
 						},
 						{
@@ -361,6 +366,8 @@ export const useChat = (model: string) => {
 		status,
 		chatMode,
 		setChatMode,
+		selectedTopic,
+		setSelectedTopic,
 		messages,
 		isLoading,
 		abortController,

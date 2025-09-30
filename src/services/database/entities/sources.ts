@@ -21,7 +21,6 @@ export const source = pgTable(
 		name: text("name").notNull(),
 		metadata: jsonb("metadata").default({}),
 		referenceTime: timestamp("reference_time"),
-		groupId: uuid("group_id"),
 		weight: real("weight").default(1.0),
 		status: text("status").default("pending"), // Status: pending, processing, completed, failed
 		statusValidFrom: timestamp("status_valid_from"), // When current status started (for timeout calculation)
@@ -33,7 +32,6 @@ export const source = pgTable(
 		index("sources_target_type_idx").on(table.targetType),
 		index("sources_target_id_idx").on(table.targetId),
 		index("sources_name_idx").on(table.name),
-		index("sources_group_id_idx").on(table.groupId),
 		index("sources_reference_time_idx").on(table.referenceTime),
 		index("sources_weight_idx").on(table.weight),
 		index("sources_status_idx").on(table.status),
