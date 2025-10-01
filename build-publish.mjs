@@ -2,6 +2,7 @@
 import { execSync } from 'child_process';
 import { existsSync, mkdirSync, cpSync, rmSync, writeFileSync, readFileSync } from 'fs';
 import { join } from 'path';
+import AdmZip from 'adm-zip';
 
 /**
  * Build and package everything for store submission
@@ -41,6 +42,7 @@ if (!existsSync(manifestPath)) {
 
 try {
   const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+  const distDir = join('dist', 'chrome');
 
   // Remove localhost from CSP
   if (manifest.content_security_policy?.extension_pages) {
@@ -50,6 +52,28 @@ try {
       .replace(/http:\/\/127\.0\.0\.1:\*/g, '')
       .replace(/\s+/g, ' ')
       .trim();
+  }
+
+  // Clean up web_accessible_resources - remove non-existent files
+  if (manifest.web_accessible_resources) {
+    for (const resource of manifest.web_accessible_resources) {
+      if (resource.resources) {
+        resource.resources = resource.resources.filter(res => {
+          // Keep wildcards
+          if (res.includes('*')) return true;
+
+          // Check if specific file exists
+          const filePath = join(distDir, res);
+          const exists = existsSync(filePath);
+
+          if (!exists) {
+            console.log(`  ⚠ Removing non-existent: ${res}`);
+          }
+
+          return exists;
+        });
+      }
+    }
   }
 
   writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
@@ -76,15 +100,17 @@ console.log('🗜️  Creating ZIP archives...');
 
 try {
   // Chrome ZIP
-  process.chdir(chromeDir);
-  execSync('tar -a -c -f ../memorall-chrome.zip *', { stdio: 'inherit' });
-  process.chdir('../..');
+  console.log('  📦 Creating Chrome ZIP...');
+  const chromeZip = new AdmZip();
+  chromeZip.addLocalFolder(chromeDir);
+  chromeZip.writeZip(join(publishDir, 'memorall-chrome.zip'));
   console.log('  ✅ memorall-chrome.zip created');
 
   // Edge ZIP
-  process.chdir(edgeDir);
-  execSync('tar -a -c -f ../memorall-edge.zip *', { stdio: 'inherit' });
-  process.chdir('../..');
+  console.log('  📦 Creating Edge ZIP...');
+  const edgeZip = new AdmZip();
+  edgeZip.addLocalFolder(edgeDir);
+  edgeZip.writeZip(join(publishDir, 'memorall-edge.zip'));
   console.log('  ✅ memorall-edge.zip created');
 } catch (error) {
   console.error('❌ Error creating ZIP files:', error.message);

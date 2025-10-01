@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Memorall - Privacy Policy</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      line-height: 1.6;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+      color: #333;
+      background: #f5f5f5;
+    }
+    .container {
+      background: white;
+      padding: 40px;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    h1 { 
+      color: #2c3e50; 
+      border-bottom: 3px solid #3498db; 
+      padding-bottom: 10px;
+      margin-top: 0;
+    }
+    h2 { 
+      color: #34495e; 
+      margin-top: 30px;
+      border-bottom: 1px solid #ecf0f1;
+      padding-bottom: 5px;
+    }
+    h3 { color: #7f8c8d; }
+    ul { padding-left: 20px; }
+    li { margin: 8px 0; }
+    code { 
+      background: #f4f4f4; 
+      padding: 2px 6px; 
+      border-radius: 3px;
+      font-family: 'Courier New', monospace;
+    }
+    a { 
+      color: #3498db; 
+      text-decoration: none;
+    }
+    a:hover { text-decoration: underline; }
+    .last-updated {
+      color: #7f8c8d;
+      font-style: italic;
+      margin-top: 40px;
+      padding-top: 20px;
+      border-top: 1px solid #ecf0f1;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Privacy Policy</h1>
+    
+    <p><strong>Effective Date:</strong> January 2025</p>
+    
+    <h2>Overview</h2>
+    <p>Memorall is committed to protecting your privacy. This extension operates entirely locally in your browser with no server dependencies or data transmission.</p>
+    
+    <h2>Data Collection</h2>
+    <p>Memorall collects and stores the following data <strong>locally on your device only</strong>:</p>
+    <ul>
+      <li><strong>Web page content:</strong> When you choose to "Remember" a page, the extension extracts and stores page content locally</li>
+      <li><strong>Chat conversations:</strong> Your conversations with the AI assistant are stored locally</li>
+      <li><strong>Knowledge graph:</strong> Extracted entities and relationships are stored in a local database</li>
+      <li><strong>AI model files:</strong> Language models and embeddings are downloaded once and cached locally</li>
+    </ul>
+    
+    <h2>Data Storage</h2>
+    <ul>
+      <li>All data is stored locally using browser storage APIs (IndexedDB, OPFS)</li>
+      <li>No data is transmitted to external servers</li>
+      <li>No cloud sync or backup services are used</li>
+      <li>Data remains on your device and under your control</li>
+    </ul>
+    
+    <h2>Data Processing</h2>
+    <ul>
+      <li>All AI processing happens locally in your browser using WebAssembly</li>
+      <li>No API calls are made to external AI services</li>
+      <li>No data is sent to third parties for processing</li>
+    </ul>
+    
+    <h2>Model Downloads</h2>
+    <p>The extension downloads AI model files from HuggingFace.co during initial setup:</p>
+    <ul>
+      <li>These are binary data files (.gguf, .bin), not executable code</li>
+      <li>Downloads occur only when you explicitly choose to use a model</li>
+      <li>Models are cached locally and reused</li>
+      <li>No usage data is sent back to HuggingFace</li>
+    </ul>
+    
+    <h2>Permissions Used</h2>
+    <ul>
+      <li><strong>activeTab:</strong> Access current tab content when you click "Remember this page"</li>
+      <li><strong>storage:</strong> Store your knowledge base locally in the browser</li>
+      <li><strong>contextMenus:</strong> Add right-click menu options for quick access</li>
+      <li><strong>notifications:</strong> Show status notifications for save operations</li>
+      <li><strong>offscreen:</strong> Run AI processing in background for better performance</li>
+      <li><strong>&lt;all_urls&gt;:</strong> Allow content capture from any website you visit</li>
+    </ul>
+    
+    <h2>Third-Party Services</h2>
+    <p>The only external connection is to HuggingFace.co to download model files. No analytics, tracking, or telemetry services are used.</p>
+    
+    <h2>Data Deletion</h2>
+    <p>You can delete all extension data at any time:</p>
+    <ul>
+      <li>Use browser settings to clear extension data</li>
+      <li>Uninstalling the extension removes all stored data</li>
+      <li>No data persists after uninstallation</li>
+    </ul>
+    
+    <h2>Changes to This Policy</h2>
+    <p>We may update this privacy policy as the extension evolves. Changes will be posted on this page with an updated effective date.</p>
+    
+    <h2>Contact</h2>
+    <p>For questions about privacy, please open an issue on our <a href="https://github.com/zrg-team/memorall/issues" target="_blank">GitHub repository</a>.</p>
+    
+    <div class="last-updated">
+      Last updated: January 2025
+    </div>
+  </div>
+</body>
+</html>

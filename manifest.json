@@ -20,7 +20,6 @@
     "activeTab",
     "storage",
     "contextMenus",
-    "scripting",
     "notifications",
     "offscreen"
   ],
@@ -49,6 +48,11 @@
         "vendors/mozilla-readability/Readability.js",
         "offscreen.html",
         "logo.png",
+        "runner/index.html",
+        "runner/main.js",
+        "runner/runner.js",
+        "runner/modes/*.js",
+        "runner/utils/*.js",
         "*.js",
         "*.css"
       ],
@@ -56,6 +60,6 @@
     }
   ],
   "content_security_policy": {
-    "extension_pages": "script-src 'self' 'wasm-unsafe-eval' http://localhost:* http://127.0.0.1:*; worker-src 'self'; object-src 'self'; frame-src http://localhost:* http://127.0.0.1:* https: data: blob:;"
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval' http://localhost:* http://127.0.0.1:*; worker-src 'self'; object-src 'self'; frame-src 'self' http://localhost:* http://127.0.0.1:* https: data: blob:;"
   }
 }

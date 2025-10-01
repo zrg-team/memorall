@@ -36,16 +36,6 @@ Memorall is an AI-powered browser extension that transforms how you manage digit
 - [📚 Documentation](#-documentation)
 - [📄 License](#-license)
 
-## ✨ Key Features
-
-- **🔗 Universal Context Collection**: Seamlessly integrates with webpages, documents, and external tools through MCP (Model Context Protocol). Automatically captures and organizes information from your browsing, research, and workflow to build your personal knowledge base.
-
-- **🤖 Proactive AI Agent**: Actively engages with you to gather information, ask clarifying questions, and suggest connections between your memories. The agent doesn't just wait for queries - it helps you organize thoughts, surfaces relevant context, and proactively assists based on your current activity.
-
-- **🧠 Intelligent Memory Recall**: AI agent provides smart answers based on your accumulated context and memories. Ask natural questions like "What did I learn about that React project?" and get contextual responses from your personal knowledge graph with relevant connections and insights.
-
-- **🔒 Offline Privacy & Free**: Runs entirely in your browser with no server dependencies. Your data stays local, works offline after initial setup, and has zero ongoing costs - no API fees or subscriptions required.
-
 ## 📸 Demo
 
 See Memorall in action! The extension seamlessly integrates with your browsing experience to build a personal knowledge base.

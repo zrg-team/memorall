@@ -1,7 +1,13 @@
 // LLM Runner URLs - supports different modes via query params
-const BASE_RUNNER_URL: string =
-	import.meta.env.EXTENSION_PUBLIC_LLM_RUNNER_URL ||
-	"http://localhost:34115/index.html";
+// Always use bundled runner from extension package
+const BASE_RUNNER_URL: string = (() => {
+	try {
+		return chrome.runtime.getURL("runner/index.html");
+	} catch {
+		// Fallback for environments where chrome API is not available
+		return "runner/index.html";
+	}
+})();
 
 export type LLMRunnerMode = "wllama" | "webllm" | "embedding";
 
