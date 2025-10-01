@@ -32,7 +32,7 @@
     "type-check": "tsc --noEmit",
     "clean": "extension clean",
     "lint": "extension lint",
-    "format": "npx @biomejs/biome format --write ./src ./scripts ./public",
+    "format": "npx @biomejs/biome format --write ./src ./scripts",
     "assets:bundled": "node public/tools/copy-bundled-assets.mjs"
   },
   "dependencies": {

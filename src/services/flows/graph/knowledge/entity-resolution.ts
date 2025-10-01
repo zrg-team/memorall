@@ -175,6 +175,8 @@ ${entitiesText}
 				}
 			};
 
+			const maxModelTokens = await this.services.llm.getMaxModelTokens();
+
 			const resolvedEntities = await mapRefine<ResolvedEntity>(
 				llm,
 				ENTITY_RESOLUTION_SYSTEM_PROMPT,
@@ -200,7 +202,7 @@ ${entitiesText}
 				parseResolutions,
 				fullText,
 				{
-					maxModelTokens: 10000,
+					maxModelTokens,
 					maxResponseTokens: 4096,
 					temperature: 0.0,
 					maxRetries: 2,

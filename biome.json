@@ -1,4 +1,7 @@
 {
+  "files": {
+    "maxSize": 1048576
+  },
   "formatter": {
     "enabled": true,
     "formatWithErrors": false,

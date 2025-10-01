@@ -17,6 +17,7 @@ const JOB_NAMES = {
 	getCurrentModel: "get-current-model",
 	getAllModels: "get-all-models",
 	getModelsForService: "get-models-for-service",
+	getMaxModelTokens: "get-max-model-tokens",
 	serveModel: "serve-model",
 	unloadModel: "unload-model",
 	deleteModel: "delete-model",
@@ -33,6 +34,10 @@ export interface GetAllModelsPayload {
 }
 
 export interface GetModelsForServicePayload {
+	serviceName: string;
+}
+
+export interface GetMaxModelTokensPayload {
 	serviceName: string;
 }
 
@@ -76,6 +81,10 @@ export interface GetModelsForServiceResult extends Record<string, unknown> {
 	models: { object: "list"; data: unknown[] };
 }
 
+export interface GetMaxModelTokensResult extends Record<string, unknown> {
+	maxModelTokens: number;
+}
+
 export interface ServeModelResult extends Record<string, unknown> {
 	modelInfo: unknown;
 }
@@ -106,6 +115,7 @@ declare global {
 		"get-current-model": GetCurrentModelPayload;
 		"get-all-models": GetAllModelsPayload;
 		"get-models-for-service": GetModelsForServicePayload;
+		"get-max-model-tokens": GetMaxModelTokensPayload;
 		"serve-model": ServeModelPayload;
 		"unload-model": UnloadModelPayload;
 		"delete-model": DeleteModelPayload;
@@ -117,6 +127,7 @@ declare global {
 		"get-current-model": GetCurrentModelResult;
 		"get-all-models": GetAllModelsResult;
 		"get-models-for-service": GetModelsForServiceResult;
+		"get-max-model-tokens": GetMaxModelTokensResult;
 		"serve-model": ServeModelResult;
 		"unload-model": UnloadModelResult;
 		"delete-model": DeleteModelResult;
@@ -131,6 +142,7 @@ export type LLMModelsJob = BaseJob & {
 		| GetCurrentModelPayload
 		| GetAllModelsPayload
 		| GetModelsForServicePayload
+		| GetMaxModelTokensPayload
 		| ServeModelPayload
 		| UnloadModelPayload
 		| DeleteModelPayload
@@ -151,6 +163,8 @@ export class LLMOperationsHandler implements ProcessHandler<BaseJob> {
 				return await this.handleGetAllModels(jobId, job, dependencies);
 			case JOB_NAMES.getModelsForService:
 				return await this.handleGetModelsForService(jobId, job, dependencies);
+			case JOB_NAMES.getMaxModelTokens:
+				return await this.handleGetMaxModelTokens(jobId, job, dependencies);
 			case JOB_NAMES.serveModel:
 				return await this.handleServeModel(jobId, job, dependencies);
 			case JOB_NAMES.unloadModel:
@@ -262,6 +276,48 @@ export class LLMOperationsHandler implements ProcessHandler<BaseJob> {
 		});
 
 		return { models };
+	}
+
+	private async handleGetMaxModelTokens(
+		jobId: string,
+		job: BaseJob,
+		dependencies: ProcessDependencies,
+	): Promise<ItemHandlerResult> {
+		const { logger, updateJobProgress } = dependencies;
+		const payload = job.payload as GetMaxModelTokensPayload;
+
+		await logger.info(
+			`Starting get-max-model-tokens job for: ${payload.serviceName}`,
+			{ jobId },
+		);
+
+		await updateJobProgress(jobId, {
+			stage: `Getting max model tokens for ${payload.serviceName}`,
+			progress: 50,
+		});
+
+		const llmService = serviceManager.getLLMService();
+
+		if (!llmService) {
+			throw new Error("LLM service not available");
+		}
+
+		// Get the LLM service instance
+		const llm = await llmService.get(payload.serviceName);
+		if (!llm) {
+			throw new Error(`LLM service "${payload.serviceName}" not found`);
+		}
+
+		// Get max model tokens from the LLM instance
+		const maxModelTokens = await llm.getMaxModelTokens();
+
+		await logger.info(`Get-max-model-tokens job completed`, {
+			jobId,
+			serviceName: payload.serviceName,
+			maxModelTokens,
+		});
+
+		return { maxModelTokens };
 	}
 
 	private async handleServeModel(

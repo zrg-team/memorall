@@ -135,6 +135,10 @@ export class WebLLMLLM implements BaseLLM {
 		return this.ready;
 	}
 
+	async getMaxModelTokens(): Promise<number> {
+		return 4096;
+	}
+
 	async models(): Promise<ModelsResponse> {
 		if (!this.ready) await this.initialize();
 		const response = (await this.send("models")) as ModelsResponse;

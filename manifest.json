@@ -24,8 +24,7 @@
     "offscreen"
   ],
   "host_permissions": [
-    "https://huggingface.co/*",
-    "<all_urls>"
+    "https://huggingface.co/*"
   ],
   "background": {
     "service_worker": "src/background.ts",

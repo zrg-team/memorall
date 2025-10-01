@@ -58,6 +58,10 @@ export class OpenAILLM implements BaseLLM {
 		return this.ready;
 	}
 
+	async getMaxModelTokens(): Promise<number> {
+		return 10000;
+	}
+
 	async models(): Promise<ModelsResponse> {
 		// GET {baseURL}/models (OpenAI-compatible). Some local servers may not implement this.
 		try {

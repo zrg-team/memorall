@@ -1,0 +1,19 @@
+# Dependencies
+node_modules
+dist
+
+# Build outputs
+build
+*.tsbuildinfo
+
+# Runner files (large bundled files)
+public/runner
+
+# Lock files
+package-lock.json
+pnpm-lock.yaml
+yarn.lock
+
+# Cache
+.cache
+.turbo

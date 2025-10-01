@@ -1,7 +1,7 @@
 import type { KnowledgeGraphState, ExtractedEntity } from "./state";
-import type { AllServices } from "../../interfaces/tool";
 import { logInfo, logError } from "@/utils/logger";
-import { mapRefine } from "../../../../utils/map-refine";
+import { mapRefine } from "@/utils/map-refine";
+import type { AllServices } from "../../interfaces/tool";
 
 const ENTITY_EXTRACTION_SYSTEM_PROMPT = `You are an expert entity extraction specialist. Extract clean, precise entity nodes from the provided CONTENT.
 
@@ -275,6 +275,8 @@ export class EntityExtractionFlow {
 				return [];
 			};
 
+			const maxModelTokens = await this.services.llm.getMaxModelTokens();
+
 			const extractedEntities = await mapRefine<ExtractedEntity>(
 				llm,
 				promptToUse,
@@ -298,7 +300,7 @@ export class EntityExtractionFlow {
 				parseEntities,
 				formattedContent,
 				{
-					maxModelTokens: 10000,
+					maxModelTokens,
 					maxResponseTokens: 4096,
 					temperature: isUserInput ? 0.2 : 0.1, // Higher creativity for user input
 					maxRetries: 2,

@@ -33,6 +33,10 @@ export class LocalOpenAICompatibleLLM implements BaseLLM {
 		return this.ready;
 	}
 
+	async getMaxModelTokens(): Promise<number> {
+		return 10000;
+	}
+
 	private headers(): HeadersInit {
 		const h: HeadersInit = { "Content-Type": "application/json" };
 		if (this.apiKey) h["Authorization"] = `Bearer ${this.apiKey}`;

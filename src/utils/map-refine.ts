@@ -1,5 +1,6 @@
 import type { ChatMessage } from "@/types/openai";
 import type { ILLMService } from "@/services/llm/interfaces/llm-service.interface";
+import { logError } from "./logger";
 
 // Simple token estimator: ~4 chars per token heuristic
 function estimateTokens(text: string): number {
@@ -319,6 +320,7 @@ async function processChunkWithRetry<T>(
 				break;
 			}
 
+			logError(`[FACT_EXTRACTION] Parse error on attempt ${attempt}:`, error);
 			// Call onError handler if provided
 			if (onError && currentChunk) {
 				errorContext = onError(lastError, attempt, currentChunk);

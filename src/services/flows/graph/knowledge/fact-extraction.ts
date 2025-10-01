@@ -1,5 +1,5 @@
 import type { KnowledgeGraphState, ExtractedFact } from "./state";
-import { logInfo, logError } from "@/utils/logger";
+import { logInfo, logError, logWarn } from "@/utils/logger";
 import { mapRefine } from "@/utils/map-refine";
 import type { AllServices } from "@/services/flows/interfaces/tool";
 import type { ILLMService } from "@/services/llm/interfaces/llm-service.interface";
@@ -283,8 +283,11 @@ export class FactExtractionFlow {
 					allAccumulatedFacts.push(...newFacts);
 					return [...allAccumulatedFacts];
 				}
+				logWarn("[FACT_EXTRACTION] Failed to parse facts", content);
 				return [];
 			};
+
+			const maxModelTokens = await this.services.llm.getMaxModelTokens();
 
 			const extractedFacts = await mapRefine<ExtractedFact>(
 				llm,
@@ -314,17 +317,13 @@ export class FactExtractionFlow {
 				parseFacts,
 				fullText,
 				{
-					maxModelTokens: 10000,
+					maxModelTokens,
 					maxResponseTokens: 4096,
 					temperature: 0.1,
 					maxRetries: 2,
 					dedupeBy: (f) =>
 						`${f.sourceEntityId}|${f.relationType}|${f.destinationEntityId}|${f.factText.toLowerCase()}`,
 					onError: (error, attempt) => {
-						logError(
-							`[FACT_EXTRACTION] Parse error on attempt ${attempt}:`,
-							error,
-						);
 						if (
 							error.message.includes("JSON") ||
 							error.message.includes("parse")
@@ -436,6 +435,8 @@ export class FactExtractionFlow {
 			.join(", ");
 
 		try {
+			const maxModelTokens = await this.services.llm.getMaxModelTokens();
+
 			const additionalFacts = await mapRefine<ExtractedFact>(
 				llm,
 				UNCONNECTED_EXTRACTION_PROMPT.replace(
@@ -456,7 +457,7 @@ export class FactExtractionFlow {
 				parseFacts,
 				fullText,
 				{
-					maxModelTokens: 8000,
+					maxModelTokens: Math.floor(maxModelTokens * 0.8),
 					maxResponseTokens: 3000,
 					temperature: 0.2, // Slightly higher creativity for finding implicit relationships
 					maxRetries: 2,

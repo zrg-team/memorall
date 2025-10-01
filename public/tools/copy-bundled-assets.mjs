@@ -47,7 +47,10 @@ function main() {
 	console.log("📦 Copying AI library assets...\n");
 
 	// 1. Copy ONNX Runtime assets
-	const ortSrcDir = path.resolve(process.cwd(), "node_modules/onnxruntime-web/dist");
+	const ortSrcDir = path.resolve(
+		process.cwd(),
+		"node_modules/onnxruntime-web/dist",
+	);
 	const ortDestDir = path.resolve(process.cwd(), "public/vendors/transformers");
 
 	if (!fs.existsSync(ortSrcDir)) {
@@ -61,13 +64,18 @@ function main() {
 	const wanted = entries.filter((f) => /\.jsep\.(wasm|mjs)$/.test(f));
 
 	if (wanted.length === 0) {
-		console.warn("No JSEP assets found in onnxruntime-web/dist; copying simd-threaded pair if present.");
+		console.warn(
+			"No JSEP assets found in onnxruntime-web/dist; copying simd-threaded pair if present.",
+		);
 	}
 
-	const filesToCopy = wanted.length > 0
-		? wanted
-		: ["ort-wasm-simd-threaded.jsep.mjs", "ort-wasm-simd-threaded.jsep.wasm"]
-			.filter((f) => fs.existsSync(path.join(ortSrcDir, f)));
+	const filesToCopy =
+		wanted.length > 0
+			? wanted
+			: [
+					"ort-wasm-simd-threaded.jsep.mjs",
+					"ort-wasm-simd-threaded.jsep.wasm",
+				].filter((f) => fs.existsSync(path.join(ortSrcDir, f)));
 
 	if (filesToCopy.length === 0) {
 		console.error("Required ORT wasm assets not found.");
@@ -81,14 +89,17 @@ function main() {
 	console.log("✅ ONNX Runtime assets prepared.\n");
 
 	// 2. Copy Wllama library and WASM files
-	const wllamaSrc = path.resolve(process.cwd(), "node_modules/@wllama/wllama/esm");
+	const wllamaSrc = path.resolve(
+		process.cwd(),
+		"node_modules/@wllama/wllama/esm",
+	);
 	const wllamaDestLibs = path.resolve(process.cwd(), "public/runner/libs");
 
 	if (fs.existsSync(wllamaSrc)) {
 		// Copy main library
 		copyFile(
 			path.join(wllamaSrc, "index.js"),
-			path.join(wllamaDestLibs, "wllama.js")
+			path.join(wllamaDestLibs, "wllama.js"),
 		);
 
 		// Copy WASM files (single-thread and multi-thread)
@@ -107,8 +118,14 @@ function main() {
 	}
 
 	// 3. Copy WebLLM library
-	const webllmSrc = path.resolve(process.cwd(), "node_modules/@mlc-ai/web-llm/lib/index.js");
-	const webllmDest = path.resolve(process.cwd(), "public/runner/libs/web-llm.js");
+	const webllmSrc = path.resolve(
+		process.cwd(),
+		"node_modules/@mlc-ai/web-llm/lib/index.js",
+	);
+	const webllmDest = path.resolve(
+		process.cwd(),
+		"public/runner/libs/web-llm.js",
+	);
 
 	if (fs.existsSync(webllmSrc)) {
 		copyFile(webllmSrc, webllmDest);

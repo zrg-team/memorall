@@ -170,6 +170,8 @@ ${factsText}
 				}
 			};
 
+			const maxModelTokens = await this.services.llm.getMaxModelTokens();
+
 			const resolvedValidFacts = await mapRefine<ResolvedFact>(
 				llm,
 				FACT_RESOLUTION_SYSTEM_PROMPT,
@@ -195,7 +197,7 @@ ${factsText}
 				parseFactResolutions,
 				fullText,
 				{
-					maxModelTokens: 10000,
+					maxModelTokens,
 					maxResponseTokens: 6144,
 					temperature: 0.0,
 					maxRetries: 2,

@@ -107,6 +107,20 @@ export class LLMServiceMain extends LLMServiceCore implements ILLMService {
 		return llm.models();
 	}
 
+	async getMaxModelTokens(): Promise<number> {
+		if (!this.currentModel) {
+			throw new Error("No current model selected");
+		}
+
+		return this.getMaxModelTokensFor(this.currentModel.serviceName);
+	}
+
+	async getMaxModelTokensFor(name: string): Promise<number> {
+		const llm = await this.get(name);
+		if (!llm) throw new Error(`LLM "${name}" not found`);
+		return await llm.getMaxModelTokens();
+	}
+
 	chatCompletionsFor(
 		name: string,
 		request: ChatCompletionRequest,

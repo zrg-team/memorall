@@ -35,6 +35,27 @@ export class LLMProxy implements BaseLLM {
 		return true;
 	}
 
+	async getMaxModelTokens(): Promise<number> {
+		try {
+			const { promise } = await backgroundJob.execute(
+				"get-max-model-tokens",
+				{
+					serviceName: this.name,
+				},
+				{ stream: false },
+			);
+
+			const result = await promise;
+
+			if (result.status === "completed" && result.result) {
+				return result.result.maxModelTokens as number;
+			}
+			throw new Error(result.error || "Failed to get max model tokens");
+		} catch (error) {
+			throw new Error(`Background job failed: ${error}`);
+		}
+	}
+
 	async models(): Promise<ModelsResponse> {
 		try {
 			const { promise } = await backgroundJob.execute(

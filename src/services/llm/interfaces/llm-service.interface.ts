@@ -55,6 +55,10 @@ export interface ILLMService {
 	models(): Promise<{ object: "list"; data: ModelInfo[] }>;
 	modelsFor(name: string): Promise<{ object: "list"; data: ModelInfo[] }>;
 
+	// Get max model tokens - Implementation specific
+	getMaxModelTokens(): Promise<number>;
+	getMaxModelTokensFor(name: string): Promise<number>;
+
 	// Chat completions - Implementation specific
 	chatCompletions(
 		request: ChatCompletionRequest,
