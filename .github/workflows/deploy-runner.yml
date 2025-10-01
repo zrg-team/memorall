@@ -4,7 +4,7 @@ on:
   push:
     branches: ["main"]
     paths:
-      - "runner/**"
+      - "runner/privacy_policy.html"
       - ".github/workflows/deploy-runner.yml"
   workflow_dispatch:
 
