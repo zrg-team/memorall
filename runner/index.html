@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Memorall - AI-Powered Personal Knowledge Assistant</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      line-height: 1.6;
+      color: #333;
+      overflow-x: hidden;
+    }
+
+    .hero {
+      min-height: 100vh;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 2rem;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .hero::before {
+      content: '';
+      position: absolute;
+      width: 200%;
+      height: 200%;
+      background: radial-gradient(circle, rgba(255,255,255,0.1) 1px, transparent 1px);
+      background-size: 50px 50px;
+      animation: drift 20s linear infinite;
+    }
+
+    @keyframes drift {
+      from { transform: translate(0, 0); }
+      to { transform: translate(50px, 50px); }
+    }
+
+    .hero-content {
+      position: relative;
+      z-index: 1;
+      max-width: 800px;
+    }
+
+    .logo {
+      margin-bottom: 1rem;
+      animation: float 3s ease-in-out infinite;
+    }
+
+    .logo img {
+      width: 120px;
+      height: 120px;
+      filter: drop-shadow(0 4px 8px rgba(0,0,0,0.2));
+    }
+
+    @keyframes float {
+      0%, 100% { transform: translateY(0px); }
+      50% { transform: translateY(-20px); }
+    }
+
+    h1 {
+      font-size: 3.5rem;
+      color: white;
+      margin-bottom: 1rem;
+      font-weight: 700;
+      text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+    }
+
+    .tagline {
+      font-size: 1.5rem;
+      color: rgba(255,255,255,0.95);
+      margin-bottom: 2rem;
+      font-weight: 300;
+    }
+
+    .cta-buttons {
+      display: flex;
+      gap: 1rem;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin-bottom: 3rem;
+    }
+
+    .btn {
+      padding: 1rem 2rem;
+      font-size: 1.1rem;
+      border: none;
+      border-radius: 50px;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-block;
+      transition: all 0.3s ease;
+      font-weight: 600;
+    }
+
+    .btn-primary {
+      background: white;
+      color: #667eea;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 6px 20px rgba(0,0,0,0.3);
+    }
+
+    .btn-secondary {
+      background: rgba(255,255,255,0.2);
+      color: white;
+      backdrop-filter: blur(10px);
+      border: 2px solid rgba(255,255,255,0.3);
+    }
+
+    .btn-secondary:hover {
+      background: rgba(255,255,255,0.3);
+      transform: translateY(-3px);
+    }
+
+    .badges {
+      display: flex;
+      gap: 0.5rem;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    .badges img {
+      height: 20px;
+    }
+
+    .features {
+      padding: 5rem 2rem;
+      background: #f8f9fa;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    .section-title {
+      text-align: center;
+      font-size: 2.5rem;
+      color: #2c3e50;
+      margin-bottom: 1rem;
+    }
+
+    .section-subtitle {
+      text-align: center;
+      font-size: 1.2rem;
+      color: #7f8c8d;
+      margin-bottom: 3rem;
+    }
+
+    .feature-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 2rem;
+      margin-bottom: 3rem;
+    }
+
+    .feature-card {
+      background: white;
+      padding: 2rem;
+      border-radius: 15px;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+
+    .feature-card:hover {
+      transform: translateY(-10px);
+      box-shadow: 0 8px 12px rgba(0,0,0,0.15);
+    }
+
+    .feature-icon {
+      font-size: 3rem;
+      margin-bottom: 1rem;
+    }
+
+    .feature-title {
+      font-size: 1.5rem;
+      color: #2c3e50;
+      margin-bottom: 1rem;
+    }
+
+    .feature-description {
+      color: #7f8c8d;
+      line-height: 1.6;
+    }
+
+    .use-cases {
+      padding: 5rem 2rem;
+      background: white;
+    }
+
+    .use-case-list {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 1.5rem;
+    }
+
+    .use-case-item {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 1.5rem;
+      border-radius: 10px;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+
+    .use-case-item strong {
+      display: block;
+      font-size: 1.2rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .tech-stack {
+      padding: 5rem 2rem;
+      background: #f8f9fa;
+      color: #333;
+    }
+
+    .tech-stack .section-title {
+      color: #2c3e50;
+    }
+
+    .tech-stack .section-subtitle {
+      color: #7f8c8d;
+    }
+
+    .tech-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 2rem;
+    }
+
+    .tech-item {
+      text-align: center;
+      padding: 1.5rem;
+      background: white;
+      border-radius: 10px;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+
+    .tech-item:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 6px 10px rgba(0,0,0,0.15);
+    }
+
+    .tech-item-icon {
+      font-size: 2rem;
+      margin-bottom: 0.5rem;
+    }
+
+    footer {
+      background: #1a1a1a;
+      color: white;
+      padding: 3rem 2rem;
+      text-align: center;
+    }
+
+    .footer-links {
+      display: flex;
+      gap: 2rem;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin-bottom: 2rem;
+    }
+
+    .footer-links a {
+      color: white;
+      text-decoration: none;
+      transition: color 0.3s ease;
+    }
+
+    .footer-links a:hover {
+      color: #667eea;
+    }
+
+    @media (max-width: 768px) {
+      h1 {
+        font-size: 2.5rem;
+      }
+
+      .tagline {
+        font-size: 1.2rem;
+      }
+
+      .logo img {
+        width: 80px;
+        height: 80px;
+      }
+
+      .section-title {
+        font-size: 2rem;
+      }
+
+      .feature-grid,
+      .use-case-list,
+      .tech-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <section class="hero">
+    <div class="hero-content">
+      <div class="logo"><img src="images/origin.png" alt="Memorall Logo"></div>
+      <h1>Memorall</h1>
+      <p class="tagline">AI-Powered Personal Knowledge Assistant</p>
+      <p style="color: rgba(255,255,255,0.9); font-size: 1.1rem; margin-bottom: 2rem;">
+        Build your digital memory with AI that runs entirely in your browser
+      </p>
+
+      <div class="cta-buttons">
+        <a href="https://github.com/zrg-team/memorall" class="btn btn-primary">
+          View on GitHub
+        </a>
+        <a href="./privacy_policy.html" class="btn btn-secondary">
+          Privacy Policy
+        </a>
+      </div>
+
+      <div class="badges">
+        <img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="MIT License">
+        <img src="https://img.shields.io/badge/TypeScript-007ACC?logo=typescript&logoColor=white" alt="TypeScript">
+        <img src="https://img.shields.io/badge/React-20232A?logo=react&logoColor=61DAFB" alt="React">
+        <img src="https://img.shields.io/badge/Privacy-First-green" alt="Privacy First">
+      </div>
+    </div>
+  </section>
+
+  <section class="features">
+    <div class="container">
+      <h2 class="section-title">✨ Key Features</h2>
+      <p class="section-subtitle">Everything you need for intelligent knowledge management</p>
+
+      <div class="feature-grid">
+        <div class="feature-card">
+          <div class="feature-icon">🔗</div>
+          <h3 class="feature-title">Universal Context Collection</h3>
+          <p class="feature-description">
+            Seamlessly integrates with webpages, documents, and external tools through MCP.
+            Automatically captures and organizes information from your browsing to build your personal knowledge base.
+          </p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">🧠</div>
+          <h3 class="feature-title">Intelligent Memory Recall</h3>
+          <p class="feature-description">
+            AI agent provides smart answers based on your accumulated context.
+            Ask natural questions and get contextual responses from your personal knowledge graph.
+          </p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">🔒</div>
+          <h3 class="feature-title">Offline Privacy & Free</h3>
+          <p class="feature-description">
+            Runs entirely in your browser with no server dependencies.
+            Your data stays local, works offline, and has zero ongoing costs.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="use-cases">
+    <div class="container">
+      <h2 class="section-title">🎯 Use Cases</h2>
+      <p class="section-subtitle">Designed for knowledge workers and learners</p>
+
+      <div class="use-case-list">
+        <div class="use-case-item">
+          <strong>📚 Research & Learning</strong>
+          <p>Summarize articles, papers, and documentation while browsing</p>
+        </div>
+
+        <div class="use-case-item">
+          <strong>📝 Note Taking</strong>
+          <p>Ask AI to remember key points from meetings, videos, or conversations</p>
+        </div>
+
+        <div class="use-case-item">
+          <strong>🏗️ Knowledge Building</strong>
+          <p>Build a personal knowledge base that grows with your browsing</p>
+        </div>
+
+        <div class="use-case-item">
+          <strong>🔄 Context Switching</strong>
+          <p>Quickly recall what you were working on across different projects</p>
+        </div>
+
+        <div class="use-case-item">
+          <strong>🔗 Information Synthesis</strong>
+          <p>Let AI help connect related memories and insights</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="tech-stack">
+    <div class="container">
+      <h2 class="section-title">🛠️ Technical Architecture</h2>
+      <p class="section-subtitle">Built with modern web technologies</p>
+
+      <div class="tech-grid">
+        <div class="tech-item">
+          <div class="tech-item-icon">⚛️</div>
+          <strong>Frontend</strong>
+          <p>React + TypeScript</p>
+        </div>
+
+        <div class="tech-item">
+          <div class="tech-item-icon">🧠</div>
+          <strong>AI Engine</strong>
+          <p>Wllama + HuggingFace</p>
+        </div>
+
+        <div class="tech-item">
+          <div class="tech-item-icon">🗄️</div>
+          <strong>Database</strong>
+          <p>PGlite (PostgreSQL)</p>
+        </div>
+
+        <div class="tech-item">
+          <div class="tech-item-icon">🔧</div>
+          <strong>Framework</strong>
+          <p>Extension.js</p>
+        </div>
+
+        <div class="tech-item">
+          <div class="tech-item-icon">🎨</div>
+          <strong>Styling</strong>
+          <p>Tailwind CSS</p>
+        </div>
+
+        <div class="tech-item">
+          <div class="tech-item-icon">🕸️</div>
+          <strong>Knowledge Graph</strong>
+          <p>Entity & Relationship Extraction</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <div class="container">
+      <div class="footer-links">
+        <a href="https://github.com/zrg-team/memorall">GitHub</a>
+        <a href="https://github.com/zrg-team/memorall/issues">Issues</a>
+        <a href="./privacy_policy.html">Privacy Policy</a>
+        <a href="https://github.com/zrg-team/memorall/blob/main/LICENSE">License</a>
+      </div>
+      <p style="color: rgba(255,255,255,0.6);">
+        Built with ❤️ for privacy-conscious knowledge workers
+      </p>
+      <p style="color: rgba(255,255,255,0.4); margin-top: 1rem;">
+        © 2025 Memorall. All rights reserved.
+      </p>
+    </div>
+  </footer>
+</body>
+</html>
