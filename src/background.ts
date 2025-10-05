@@ -260,7 +260,6 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 				try {
 					chrome.storage?.session?.set?.({ navigateTo: "remember" });
 				} catch (_) {}
-				openExtensionPopup();
 				// No need for message-based navigation since popup.tsx handles session storage
 			} else if (info.menuItemId === REMEMBER_TO_TOPIC_CONTEXT_MENU_ID) {
 				try {

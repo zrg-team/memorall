@@ -1,5 +1,4 @@
 import { eq, and } from "drizzle-orm";
-import { flowsService } from "@/services/flows/flows-service";
 import { serviceManager } from "@/services";
 import { logError, logInfo } from "@/utils/logger";
 import type { RememberedContent } from "@/services/database/db";
@@ -198,11 +197,14 @@ export class KnowledgeGraphService {
 			});
 
 			// Create knowledge graph flow
-			const knowledgeGraph = flowsService.createGraph("knowledge", {
-				llm: serviceManager.getLLMService(),
-				embedding: serviceManager.getEmbeddingService(),
-				database: serviceManager.getDatabaseService(),
-			});
+			const knowledgeGraph = serviceManager.flowsService.createGraph(
+				"knowledge",
+				{
+					llm: serviceManager.getLLMService(),
+					embedding: serviceManager.getEmbeddingService(),
+					database: serviceManager.getDatabaseService(),
+				},
+			);
 
 			// Prepare input state
 			const initialState: Partial<KnowledgeGraphState> = {

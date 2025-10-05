@@ -1,7 +1,6 @@
 import { BaseProcessHandler } from "./base-process-handler";
 import type { ProcessDependencies, BaseJob, ItemHandlerResult } from "./types";
 import { serviceManager } from "@/services";
-import { flowsService } from "@/services/flows/flows-service";
 import type {
 	ChatCompletionRequest,
 	ChatMessage,
@@ -92,7 +91,7 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 
 			if (mode === "agent") {
 				// Use SimpleGraph for agent mode (following use-chat.ts pattern)
-				const graph = flowsService.createGraph("simple", {
+				const graph = serviceManager.flowsService.createGraph("simple", {
 					llm: serviceManager.llmService,
 					embedding: serviceManager.embeddingService,
 					database: serviceManager.databaseService,
@@ -157,7 +156,7 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 				}
 			} else if (mode === "knowledge") {
 				// Use KnowledgeRAGFlow for knowledge mode (following use-chat.ts pattern)
-				const graph = flowsService.createGraph("knowledge-rag", {
+				const graph = serviceManager.flowsService.createGraph("knowledge-rag", {
 					llm: serviceManager.llmService,
 					embedding: serviceManager.embeddingService,
 					database: serviceManager.databaseService,

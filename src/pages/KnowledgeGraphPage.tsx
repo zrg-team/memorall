@@ -55,9 +55,9 @@ import type {
 	ConversionStatus,
 } from "@/types/knowledge-graph";
 import { logError } from "@/utils/logger";
-import { D3KnowledgeGraph } from "./D3KnowledgeGraph";
 import { eq, and, inArray } from "drizzle-orm";
 import { getEffectiveSourceStatus } from "@/services/database/entities/sources";
+import { D3KnowledgeGraph } from "@/modules/knowledge/components/D3KnowledgeGraph";
 
 interface KnowledgeGraphPageProps {}
 

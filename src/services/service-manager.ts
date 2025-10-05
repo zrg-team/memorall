@@ -88,7 +88,7 @@ import {
 } from "@/services/embedding";
 import type { ILLMService } from "@/services/llm/interfaces/llm-service.interface";
 import { LLMServiceProxy, LLMServiceMain } from "@/services/llm";
-import { flowsService } from "./flows/flows-service";
+import { FlowsService } from "./flows";
 import { DatabaseMode, DatabaseService } from "./database";
 import {
 	createTopicService,
@@ -118,6 +118,7 @@ export class ServiceManager {
 	public embeddingService!: IEmbeddingService;
 	public llmService!: ILLMService;
 	public databaseService!: DatabaseService;
+	public flowsService!: FlowsService;
 	public topicService!: TopicService;
 
 	// Progress tracking
@@ -207,12 +208,14 @@ export class ServiceManager {
 				await this.initializeDatabase({ mode: DatabaseMode.PROXY });
 				this.embeddingService = new EmbeddingServiceProxy();
 				this.llmService = new LLMServiceProxy();
+				this.flowsService = new FlowsService();
 			} else {
 				logInfo("🔧 Creating full service implementations");
 				this.databaseService = DatabaseService.getInstance();
 				await this.initializeDatabase({ mode: DatabaseMode.MAIN });
 				this.embeddingService = new EmbeddingServiceMain();
 				this.llmService = new LLMServiceMain();
+				this.flowsService = new FlowsService();
 			}
 
 			options.callback?.("database", 0);
@@ -358,7 +361,7 @@ export class ServiceManager {
 				90,
 				"flows",
 			);
-			await flowsService.initialize();
+			await this.flowsService.initialize();
 			this.serviceStatus.flows = true;
 			logInfo("✅ Flows service initialized");
 		} catch (error) {
@@ -439,7 +442,7 @@ export class ServiceManager {
 	}
 
 	getFlowsService() {
-		return flowsService;
+		return this.flowsService;
 	}
 
 	getTopicService() {
@@ -458,7 +461,7 @@ export class ServiceManager {
 			case "llm":
 				return this.llmService as ServiceRegistry[K];
 			case "flows":
-				return flowsService as ServiceRegistry[K];
+				return this.flowsService as ServiceRegistry[K];
 			case "topic":
 				return this.topicService as ServiceRegistry[K];
 			default:
@@ -472,6 +475,6 @@ interface ServiceRegistry {
 	database: DatabaseService;
 	embedding: IEmbeddingService;
 	llm: ILLMService;
-	flows: typeof flowsService;
+	flows: FlowsService;
 	topic: TopicService;
 }

@@ -1,45 +1,81 @@
-Documentation Overview
+# Documentation Overview
 
-This folder contains the core service documentation for Memorall. Each document provides architecture, APIs, usage, and best practices for a specific subsystem. Start here for a quick summary, then open the full documents below.
+This folder contains architecture documentation for Memorall's services and modules.
 
-Documents
+## 🏗️ Architecture
 
-- Database Service
-  - What: Local-first relational store (conversations, messages, sources, graph, vectors) built on PGlite.
-  - Why: Persist chats, embeddings, and knowledge-graph data efficiently in the browser.
-  - Read: ./database-service.md
+**Services** (`src/services/`)
+- Shared infrastructure managed by ServiceManager
+- Singleton instances providing core capabilities (database, LLM, embedding, flows)
+- Cross-module dependencies
 
-- Embedding Service
-  - What: Pluggable text embedding providers (local ONNX/transformers, iframe runner, API-based).
-  - Why: Turn text into vectors for semantic search and graph features.
-  - Read: ./embedding-service.md
+**Modules** (`src/modules/`)
+- Domain-specific business logic (chat, knowledge, remember, topics)
+- Services and components organized by feature
+- Consume shared services from ServiceManager
 
-- LLM Service
-  - What: Pluggable LLM providers (Wllama in-browser GGUF, WebLLM via runner, API-ready design).
-  - Why: Uniform chat completions with streaming and model management.
-  - Read: ./llm-service.md
+---
 
-- Flows Service
-  - What: Agent graphs (LangGraph Web) with a typed base, tools, and a reference SimpleGraph to decide tool use vs direct answers.
-  - Why: Orchestrate multi-step reasoning, tool usage, and streaming outputs from LLMs.
-  - Read: ./flows-service.md
+## 📦 Services (Shared Infrastructure)
 
-- Shared Storage Service
-  - What: Unified, type-safe wrapper over chrome.storage with cross-context change broadcasting and per-key subscriptions.
-  - Why: Keep Background, Offscreen, and UI contexts reliably in sync for persisted state.
-  - Read: ./shared-storage.md
+### Database Service
+- **What:** Local-first PGlite database (conversations, messages, sources, nodes, edges, vectors)
+- **Why:** Persist all application data efficiently in-browser
+- **Doc:** [database-service.md](./database-service.md)
 
-- Background Jobs
-  - What: Lightweight job queue persisted in IndexedDB for saving content and knowledge-graph conversions with progress tracking.
-  - Why: Offload long-running work, provide resilient progress, and keep UIs responsive.
-  - Read: ./background-jobs.md
+### Embedding Service
+- **What:** Pluggable text embedding providers (local ONNX, API-based)
+- **Why:** Convert text to vectors for semantic search
+- **Doc:** [embedding-service.md](./embedding-service.md)
 
-- Remember Service
-  - What: Ingest and persist content (pages, selections, user input) with search vectors/embeddings and optional knowledge-graph processing.
-  - Why: Capture and organize knowledge for later retrieval, tagging, and analysis.
-  - Read: ./remember-service.md
+### LLM Service
+- **What:** Pluggable LLM providers (Wllama, WebLLM, API-based)
+- **Why:** Uniform chat completions with streaming and model management
+- **Doc:** [llm-service.md](./llm-service.md)
 
-- Knowledge Graph Service
-  - What: Converts remembered content into entities and relations via streaming flows, persisting nodes/edges and exposing progress.
-  - Why: Structure knowledge for retrieval, reasoning, and visualization.
-  - Read: ./knowledge-graph-service.md
+### Flows Service
+- **What:** Self-registering flow graphs (knowledge, simple, knowledge-rag) with type-safe creation
+- **Why:** Orchestrate multi-step reasoning (entity extraction, RAG, tool usage)
+- **Doc:** [flows-service.md](./flows-service.md)
+
+### Shared Storage Service
+- **What:** Type-safe wrapper over chrome.storage with cross-context sync
+- **Why:** Keep Background, Offscreen, and UI contexts in sync
+- **Doc:** [shared-storage.md](./shared-storage.md)
+
+### Background Jobs
+- **What:** Job queue persisted in IndexedDB with progress tracking
+- **Why:** Offload long-running work (content processing, knowledge graphs)
+- **Doc:** [background-jobs.md](./background-jobs.md)
+
+---
+
+## 🧩 Modules (Domain-Specific)
+
+### Chat Module (`src/modules/chat/`)
+- Chat UI, conversation management, hooks (use-chat)
+- Uses: LLM Service, Flows Service (SimpleGraph, KnowledgeRAGFlow)
+
+### Knowledge Module (`src/modules/knowledge/`)
+- Knowledge graph visualization and processing service
+- Uses: Flows Service (KnowledgeGraphFlow), Database Service
+
+### Remember Module (`src/modules/remember/`)
+- Content ingestion (pages, selections, user input)
+- Uses: Database Service, Flows Service (knowledge graph processing)
+
+### Topics Module (`src/modules/topics/`)
+- Topic management and content categorization
+- Uses: Database Service
+
+### Embedding Module (`src/modules/embedding/`)
+- Vector search UI and table configuration
+- Uses: Embedding Service, Database Service
+
+### Database Module (`src/modules/database/`)
+- Database query UI and schema exploration
+- Uses: Database Service
+
+### LLM Module (`src/modules/llm/`)
+- LLM model configuration UI
+- Uses: LLM Service

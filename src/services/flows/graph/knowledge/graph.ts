@@ -18,6 +18,7 @@ import { DatabaseSaveFlow } from "./database-save";
 import { GraphBase } from "../../interfaces/graph.base";
 import type { AllServices } from "../../interfaces/tool";
 import type { Node, Edge } from "@/services/database";
+import { flowRegistry } from "../../flow-registry";
 
 export interface KnowledgeGraphConfig {
 	enableTemporalExtraction?: boolean;
@@ -579,8 +580,6 @@ export class KnowledgeGraphFlow extends GraphBase<
 }
 
 // Self-register the flow
-import { flowRegistry } from "../../flow-registry";
-
 flowRegistry.register({
 	flowType: "knowledge",
 	factory: (services) => new KnowledgeGraphFlow(services),

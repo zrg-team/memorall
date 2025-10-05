@@ -12,109 +12,101 @@ export const EmbeddedMarkdown: React.FC<EmbeddedMarkdownProps> = ({
 }) => {
 	// Helper function to process tables
 	const processProcessTables = (text: string) => {
-		// Match table patterns with more robust regex
-		// This pattern looks for: header row, separator row, then body rows
-		const tableRegex =
-			/(\|.*?\|)\s*\n(\|[\s\-:]+?\|)\s*\n((?:\|.*?\|\s*\n?)+)/gm;
+		// Match table patterns - simpler, more permissive regex
+		const tableRegex = /\|(.+)\|\s*\n\|[\s\-:]+\|\s*\n((?:\|.+\|\s*\n?)+)/gm;
 
-		return text.replace(
-			tableRegex,
-			(match, headerRow, separatorRow, bodyRows) => {
-				// Process header
-				const headers = headerRow
-					.split("|")
-					.map((h: string) => h.trim())
-					.filter((h: string) => h !== ""); // Remove empty cells
+		return text.replace(tableRegex, (match, headerRow, bodyRows) => {
+			// Process header
+			const headers = headerRow
+				.split("|")
+				.map((h: string) => h.trim())
+				.filter((h: string) => h.length > 0);
 
-				// Process alignment from separator row
-				const alignments = separatorRow
-					.split("|")
-					.map((sep: string) => sep.trim())
-					.filter((sep: string) => sep !== "")
-					.map((sep: string) => {
-						if (sep.startsWith(":") && sep.endsWith(":")) return "center";
-						if (sep.endsWith(":")) return "right";
-						return "left";
-					});
+			// Process body rows
+			const rows = bodyRows
+				.trim()
+				.split("\n")
+				.filter((row: string) => row.trim() && row.includes("|"))
+				.map((row: string) => {
+					return row
+						.split("|")
+						.map((cell: string) => cell.trim())
+						.filter((cell: string) => cell.length > 0);
+				})
+				.filter((row: string[]) => row.length > 0);
 
-				// Process body rows
-				const rows = bodyRows
-					.trim()
-					.split("\n")
-					.filter((row: string) => row.trim())
-					.map((row: string) => {
-						return row
-							.split("|")
-							.map((cell: string) => cell.trim())
-							.filter((cell: string) => cell !== ""); // Remove empty cells
-					})
-					.filter((row: string[]) => row.length > 0);
+			// Detect dark mode
+			const isDark = document.documentElement.classList.contains("dark");
 
-				// Generate table HTML
-				const tableStyle = `
-				width: 100%;
-				border-collapse: collapse;
-				font-size: 0.875rem;
-				border: 1px solid hsl(var(--border));
-				border-radius: 0.375rem;
-				overflow: hidden;
-			`;
+			// Border colors
+			const borderColor = isDark ? "#d1d5db" : "#374151";
+			const headerBg = isDark ? "#1f2937" : "#f3f4f6";
 
-				const headerStyle = `
-				background-color: hsl(var(--muted));
-				padding: 0.5rem 0.75rem;
-				text-align: left;
-				font-weight: 600;
-				border-bottom: 1px solid hsl(var(--border));
-				color: hsl(var(--foreground));
-			`;
+			// Ensure we have valid data
+			if (headers.length === 0 || rows.length === 0) {
+				return match; // Return original text if table parsing failed
+			}
 
-				const cellStyle = `
-				padding: 0.5rem 0.75rem;
-				border-bottom: 1px solid hsl(var(--border));
-				color: hsl(var(--foreground));
-			`;
+			let tableHtml = '<div style="overflow-x: auto; border-radius: 0.25rem;">';
+			tableHtml +=
+				'<table style="width: 100%; border-collapse: separate; border-spacing: 0;">';
 
-				let tableHtml = `<div style="overflow-x: auto;"><table style="${tableStyle}">`;
+			// Add header
+			tableHtml += "<thead><tr>";
+			headers.forEach((header: string, i: number) => {
+				const isFirst = i === 0;
+				const isLast = i === headers.length - 1;
+				const styles = [
+					`border: 1px solid ${borderColor}`,
+					`background-color: ${headerBg}`,
+					"padding: 0.125rem 0.375rem",
+					"text-align: left",
+					"font-weight: 600",
+					"font-size: 0.75rem",
+				];
+				if (isFirst) styles.push("border-top-left-radius: 0.25rem");
+				if (isLast) styles.push("border-top-right-radius: 0.25rem");
+				if (!isFirst) styles.push("border-left: none");
 
-				// Ensure we have valid data
-				if (headers.length === 0 || rows.length === 0) {
-					return match; // Return original text if table parsing failed
-				}
+				tableHtml += `<th style="${styles.join("; ")};">${header}</th>`;
+			});
+			tableHtml += "</tr></thead>";
 
-				// Add header
-				tableHtml += "<thead><tr>";
-				headers.forEach((header: string, i: number) => {
-					const align = alignments[i] || "left";
-					tableHtml += `<th style="${headerStyle} text-align: ${align};">${header}</th>`;
-				});
-				tableHtml += "</tr></thead>";
+			// Add body
+			tableHtml += "<tbody>";
+			rows.forEach((row: string[], rowIndex: number) => {
+				tableHtml += "<tr>";
+				const isLastRow = rowIndex === rows.length - 1;
 
-				// Add body
-				tableHtml += "<tbody>";
-				rows.forEach((row: string[], rowIndex: number) => {
-					tableHtml += "<tr>";
-					// Ensure each row has the same number of cells as headers
-					const maxCells = Math.max(headers.length, row.length);
-					for (let i = 0; i < maxCells; i++) {
-						const cell = row[i] || ""; // Use empty string if cell is missing
-						const align = alignments[i] || "left";
-						const isLastRow = rowIndex === rows.length - 1;
-						const cellStyleWithBorder = isLastRow
-							? cellStyle.replace(
-									"border-bottom: 1px solid hsl(var(--border));",
-									"",
-								)
-							: cellStyle;
-						tableHtml += `<td style="${cellStyleWithBorder} text-align: ${align};">${cell}</td>`;
+				for (let i = 0; i < headers.length; i++) {
+					const cell = row[i] || "";
+					const isFirst = i === 0;
+					const isLast = i === headers.length - 1;
+
+					const styles = [
+						`border-bottom: 1px solid ${borderColor}`,
+						`border-right: 1px solid ${borderColor}`,
+						"padding: 0.125rem 0.375rem",
+						"font-size: 0.75rem",
+					];
+					if (isFirst) {
+						styles.push(`border-left: 1px solid ${borderColor}`);
+						if (isLastRow) styles.push("border-bottom-left-radius: 0.25rem");
+					} else {
+						styles.push("border-left: none");
 					}
-					tableHtml += "</tr>";
-				});
-				tableHtml += "</tbody></table></div>";
+					if (isLast && isLastRow) {
+						styles.push("border-bottom-right-radius: 0.25rem");
+					}
 
-				return tableHtml;
-			},
-		);
+					tableHtml += `<td style="${styles.join("; ")};">${cell}</td>`;
+				}
+				tableHtml += "</tr>";
+			});
+			tableHtml += "</tbody></table></div>";
+
+			return tableHtml;
+		});
 	};
 
 	// Enhanced markdown rendering for embedded context
@@ -161,42 +153,31 @@ export const EmbeddedMarkdown: React.FC<EmbeddedMarkdownProps> = ({
 		// Process each part
 		const processedParts = parts.map((part) => {
 			if (part.type === "code") {
-				const codeStyle = `
-					background-color: hsl(var(--muted));
-					border: 1px solid hsl(var(--border));
-					border-radius: 0.375rem;
-					padding: 0.75rem;
-					font-family: "SF Mono", "Monaco", "Inconsolata", "Fira Code", "Fira Mono", "Droid Sans Mono", "Consolas", monospace;
-					font-size: 0.875rem;
-					line-height: 1.5;
-					overflow-x: auto;
-					white-space: pre;
-					display: block;
-				`;
-				return `<pre style="${codeStyle}"><code>${escapeHtml(part.content)}</code></pre>`;
+				// Code blocks don't need extra styling - SyntaxHighlighter handles it
+				return `<pre style="overflow-x: auto;"><code>${escapeHtml(part.content)}</code></pre>`;
 			}
 
 			let processedText = part.content;
 
-			// Headers (### ## #)
+			// Headers (### ## #) - matching MarkdownMessage
 			processedText = processedText.replace(
 				/^### (.*$)/gm,
-				'<h3 style="font-size: 1rem; font-weight: 600; color: hsl(var(--foreground));">$1</h3>',
+				'<h3 style="font-size: 0.875rem; font-weight: 600;">$1</h3>',
 			);
 			processedText = processedText.replace(
 				/^## (.*$)/gm,
-				'<h2 style="font-size: 1.125rem; font-weight: 600; color: hsl(var(--foreground));">$1</h2>',
+				'<h2 style="font-size: 1rem; font-weight: 600;">$1</h2>',
 			);
 			processedText = processedText.replace(
 				/^# (.*$)/gm,
-				'<h1 style="font-size: 1.25rem; font-weight: 700; color: hsl(var(--foreground));">$1</h1>',
+				'<h1 style="font-size: 1.125rem; font-weight: 700;">$1</h1>',
 			);
 
-			// Lists (handle before other processing)
+			// Lists - matching MarkdownMessage
 			// Unordered lists
 			processedText = processedText.replace(
 				/^[\s]*[-*+] (.*)$/gm,
-				'<li style="padding-left: 0.5rem;">$1</li>',
+				'<li style="font-size: 0.875rem;">$1</li>',
 			);
 			// Wrap consecutive <li> elements in <ul>
 			processedText = processedText.replace(
@@ -207,7 +188,7 @@ export const EmbeddedMarkdown: React.FC<EmbeddedMarkdownProps> = ({
 			// Ordered lists
 			processedText = processedText.replace(
 				/^[\s]*\d+\. (.*)$/gm,
-				'<li style="padding-left: 0.5rem;">$1</li>',
+				'<li style="font-size: 0.875rem;">$1</li>',
 			);
 			// Note: This is a simplified approach for ordered lists
 
@@ -231,10 +212,12 @@ export const EmbeddedMarkdown: React.FC<EmbeddedMarkdownProps> = ({
 				'<em style="font-style: italic;">$1</em>',
 			);
 
-			// Inline code (`code`)
+			// Inline code (`code`) - matching MarkdownMessage
+			const isDark = document.documentElement.classList.contains("dark");
+			const codeBg = isDark ? "#374151" : "#e5e7eb";
 			processedText = processedText.replace(
 				/`([^`]+)`/g,
-				'<code style="background-color: hsl(var(--muted)); padding: 0.125rem 0.25rem; border-radius: 0.25rem; font-family: monospace; font-size: 0.875em;">$1</code>',
+				`<code style="background-color: ${codeBg}; padding: 0 0.125rem; border-radius: 0.25rem; font-family: monospace; font-size: 0.75rem;">$1</code>`,
 			);
 
 			// Links [text](url)
@@ -243,16 +226,21 @@ export const EmbeddedMarkdown: React.FC<EmbeddedMarkdownProps> = ({
 				'<a href="$2" style="color: hsl(var(--primary)); text-decoration: underline;" target="_blank" rel="noopener noreferrer">$1</a>',
 			);
 
-			// Blockquotes (> text)
+			// Blockquotes (> text) - matching MarkdownMessage
+			const isDarkBlockquote =
+				document.documentElement.classList.contains("dark");
+			const blockquoteBorder = isDarkBlockquote ? "#d1d5db" : "#374151";
 			processedText = processedText.replace(
 				/^> (.*)$/gm,
-				'<blockquote style="border-left: 4px solid hsl(var(--primary)); padding-left: 1rem; font-style: italic; color: hsl(var(--muted-foreground));">$1</blockquote>',
+				`<blockquote style="border-left: 2px solid ${blockquoteBorder}; padding-left: 0.5rem; font-style: italic; opacity: 0.8; font-size: 0.875rem;">$1</blockquote>`,
 			);
 
-			// Horizontal rules (--- or ***)
+			// Horizontal rules (--- or ***) - matching MarkdownMessage
+			const isDarkHr = document.documentElement.classList.contains("dark");
+			const hrBorder = isDarkHr ? "#d1d5db" : "#374151";
 			processedText = processedText.replace(
 				/^(?:---|\*\*\*)\s*$/gm,
-				'<hr style="border: none; border-top: 1px solid hsl(var(--border));">',
+				`<hr style="border: none; border-top: 1px solid ${hrBorder};">`,
 			);
 
 			// Strikethrough (~~text~~)
@@ -269,11 +257,12 @@ export const EmbeddedMarkdown: React.FC<EmbeddedMarkdownProps> = ({
 			processedText = processedText.replace(/\n/g, "<br>");
 
 			// Wrap in paragraph if not empty and doesn't start with a block element
+			// No vertical spacing - matching MarkdownMessage
 			if (
 				processedText.trim() &&
 				!processedText.match(/^<(?:h[1-6]|ul|ol|blockquote|hr|pre|div)/)
 			) {
-				processedText = `<p>${processedText}</p>`;
+				processedText = `<p style="margin: 0;">${processedText}</p>`;
 			}
 
 			return processedText;

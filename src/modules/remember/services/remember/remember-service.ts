@@ -2,7 +2,6 @@ import { desc, eq, like, and, or } from "drizzle-orm";
 import { logError, logInfo } from "@/utils/logger";
 import { logger } from "@/utils/logger";
 import { serviceManager } from "@/services";
-import { flowsService } from "@/services/flows/flows-service";
 import type { RememberedContent, Source } from "@/services/database/db";
 import type {
 	PageMetadata,
@@ -635,11 +634,14 @@ export class RememberService {
 			);
 
 			// Create knowledge graph flow
-			const knowledgeGraph = flowsService.createGraph("knowledge", {
-				llm: serviceManager.llmService,
-				embedding: serviceManager.embeddingService,
-				database: serviceManager.databaseService,
-			});
+			const knowledgeGraph = serviceManager.flowsService.createGraph(
+				"knowledge",
+				{
+					llm: serviceManager.llmService,
+					embedding: serviceManager.embeddingService,
+					database: serviceManager.databaseService,
+				},
+			);
 
 			await logger.info(
 				"background",
@@ -760,11 +762,14 @@ export class RememberService {
 			}
 
 			// Create knowledge graph flow
-			const knowledgeGraph = flowsService.createGraph("knowledge", {
-				llm: serviceManager.llmService,
-				embedding: serviceManager.embeddingService,
-				database: serviceManager.databaseService,
-			});
+			const knowledgeGraph = serviceManager.flowsService.createGraph(
+				"knowledge",
+				{
+					llm: serviceManager.llmService,
+					embedding: serviceManager.embeddingService,
+					database: serviceManager.databaseService,
+				},
+			);
 
 			// Prepare input state for generic content
 			const initialState: Partial<KnowledgeGraphState> = {

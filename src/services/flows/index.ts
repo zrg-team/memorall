@@ -3,4 +3,4 @@ import "./graph/knowledge/graph";
 import "./graph/simple/graph";
 import "./graph/knowledge-rag/graph";
 
-export * from "./flows-service";
+export { FlowsService } from "./flows-service";

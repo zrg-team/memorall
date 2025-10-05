@@ -14,6 +14,7 @@ import {
 import { vectorSearchNodes, vectorSearchEdges } from "@/utils/vector-search";
 import type { DatabaseService } from "@/services/database/database-service";
 import type { BaseEmbedding } from "@/services/embedding";
+import { flowRegistry } from "../../flow-registry";
 
 // Types for vector search results with similarity scores
 interface NodeWithSimilarity extends Node {
@@ -1009,8 +1010,6 @@ export class KnowledgeRAGFlow extends GraphBase<
 }
 
 // Self-register the flow
-import { flowRegistry } from "../../flow-registry";
-
 flowRegistry.register({
 	flowType: "knowledge-rag",
 	factory: (services) => new KnowledgeRAGFlow(services),

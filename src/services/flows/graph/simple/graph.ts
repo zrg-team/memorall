@@ -12,6 +12,7 @@ import {
 import type { AllServices } from "../../interfaces/tool";
 import type { ChatCompletionResponse, ChatMessage } from "@/types/openai";
 import { logError, logInfo } from "@/utils/logger";
+import { flowRegistry } from "../../flow-registry";
 
 const TOOLS = {
 	current_time: availableTools.current_time,
@@ -372,8 +373,6 @@ export class SimpleGraph extends GraphBase<
 }
 
 // Self-register the flow
-import { flowRegistry } from "../../flow-registry";
-
 flowRegistry.register({
 	flowType: "simple",
 	factory: (services) => new SimpleGraph(services),

@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
 import { serviceManager } from "@/services";
-import { flowsService } from "@/services/flows/flows-service";
 import type {
 	ChatCompletionRequest,
 	ChatCompletionChunk,
@@ -118,7 +117,7 @@ export const useChat = (model: string) => {
 
 			if (chatMode === "agent") {
 				// Use SimpleGraph for agent mode
-				const graph = flowsService.createGraph("simple", {
+				const graph = serviceManager.flowsService.createGraph("simple", {
 					llm: serviceManager.llmService,
 					embedding: serviceManager.embeddingService,
 					database: serviceManager.databaseService,
@@ -195,7 +194,7 @@ export const useChat = (model: string) => {
 				}
 			} else if (chatMode === "knowledge") {
 				// Use KnowledgeRAGFlow for knowledge mode
-				const graph = flowsService.createGraph("knowledge-rag", {
+				const graph = serviceManager.flowsService.createGraph("knowledge-rag", {
 					llm: serviceManager.llmService,
 					embedding: serviceManager.embeddingService,
 					database: serviceManager.databaseService,

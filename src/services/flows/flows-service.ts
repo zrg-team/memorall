@@ -2,17 +2,6 @@ import { logInfo } from "@/utils/logger";
 import { flowRegistry } from "./flow-registry";
 
 export class FlowsService {
-	private static instance: FlowsService;
-
-	private constructor() {}
-
-	static getInstance(): FlowsService {
-		if (!FlowsService.instance) {
-			FlowsService.instance = new FlowsService();
-		}
-		return FlowsService.instance;
-	}
-
 	async initialize(): Promise<void> {
 		logInfo("🔄 Initializing Flows service...");
 		logInfo("✅ Flows service initialized");
@@ -43,5 +32,3 @@ export class FlowsService {
 		return flowRegistry.hasFlow(flowType);
 	}
 }
-
-export const flowsService = FlowsService.getInstance();
