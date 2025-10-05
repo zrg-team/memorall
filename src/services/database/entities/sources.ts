@@ -42,5 +42,25 @@ export const source = pgTable(
 export type Source = typeof source.$inferSelect;
 export type NewSource = typeof source.$inferInsert;
 
+/**
+ * Helper function to get the effective status of a source, accounting for timeout
+ * @param source The source object
+ * @param timeoutMinutes Timeout in minutes (default 30)
+ * @returns The effective status (may convert "processing" to "failed" if timed out)
+ */
+export function getEffectiveSourceStatus(
+	source: Source,
+	timeoutMinutes: number = 30,
+): string {
+	if (source.status === "processing" && source.statusValidFrom) {
+		const now = new Date();
+		const timeoutAgo = new Date(now.getTime() - timeoutMinutes * 60 * 1000);
+		if (source.statusValidFrom < timeoutAgo) {
+			return "failed";
+		}
+	}
+	return source.status || "pending";
+}
+
 // Database trigger commands to automatically set timestamps
 export const sourceTriggers = [defaultNowToTrigger(tableName)];

@@ -75,6 +75,9 @@ export class KnowledgeGraphHandler extends BaseProcessHandler<KnowledgeGraphJob>
 		);
 
 		try {
+			// Update source status to processing at the start
+			await this.updateSourceStatus(pageData.id, "processing");
+
 			// Send initial progress update
 			await dependencies.updateJobProgress(jobId, {
 				stage: "Starting background processing...",
@@ -120,11 +123,43 @@ export class KnowledgeGraphHandler extends BaseProcessHandler<KnowledgeGraphJob>
 					"offscreen",
 				);
 
+				// Source status is already updated by knowledgeGraphService.convertPageToKnowledgeGraph
 				return { pageTitle: pageData.title };
 			} finally {
 				unsubscribe();
 			}
-		} finally {
+		} catch (error) {
+			// Update source status to failed on error
+			await this.updateSourceStatus(pageData.id, "failed");
+			throw error;
+		}
+	}
+
+	private async updateSourceStatus(
+		pageId: string,
+		status: "pending" | "processing" | "completed" | "failed",
+	): Promise<void> {
+		try {
+			await serviceManager.databaseService.use(async ({ db, schema }) => {
+				const { and, eq } = await import("drizzle-orm");
+				const now = new Date();
+				await db
+					.update(schema.sources)
+					.set({
+						status,
+						statusValidFrom: now,
+						updatedAt: now,
+					})
+					.where(
+						and(
+							eq(schema.sources.targetType, "remembered_pages"),
+							eq(schema.sources.targetId, pageId),
+						),
+					);
+			});
+		} catch (error) {
+			// Log but don't fail the job
+			console.error(`Failed to update source status for page ${pageId}:`, error);
 		}
 	}
 

@@ -57,6 +57,7 @@ import type {
 import { logError } from "@/utils/logger";
 import { D3KnowledgeGraph } from "./D3KnowledgeGraph";
 import { eq, and, inArray } from "drizzle-orm";
+import { getEffectiveSourceStatus } from "@/services/database/entities/sources";
 
 interface KnowledgeGraphPageProps {}
 
@@ -107,7 +108,6 @@ export const KnowledgeGraphPage: React.FC<KnowledgeGraphPageProps> = () => {
 	const [conversions, setConversions] = useState<
 		Map<string, ConversionProgress>
 	>(new Map());
-	const [backgroundJobs, setBackgroundJobs] = useState<unknown[]>([]);
 
 	const [filterType, setFilterType] = useState<
 		"all" | "converted" | "inProgress"
@@ -117,9 +117,8 @@ export const KnowledgeGraphPage: React.FC<KnowledgeGraphPageProps> = () => {
 		nodes: Node[];
 		edges: Edge[];
 	} | null>(null);
-	const [loadingGraph, setLoadingGraph] = useState(false);
 	const [sourceStatuses, setSourceStatuses] = useState<
-		Map<string, { status: string; validFrom: Date | null }>
+		Map<string, { status: string; validFrom: Date | null; effectiveStatus: string }>
 	>(new Map());
 
 	// Subscribe to conversion updates
@@ -127,35 +126,25 @@ export const KnowledgeGraphPage: React.FC<KnowledgeGraphPageProps> = () => {
 		const unsubscribe = knowledgeGraphService.subscribe((newConversions) => {
 			setConversions(new Map(newConversions));
 
-			// Reload source statuses when conversions complete
-			const pageIds = pages.map((p) => p.id);
-			if (pageIds.length > 0) {
-				loadSourceStatuses(pageIds);
+			// Reload source statuses when conversions change
+			const changedPageIds = Array.from(newConversions.values())
+				.filter(
+					(conv) => conv.status === "completed" || conv.status === "failed",
+				)
+				.map((conv) => conv.pageId);
+
+			if (changedPageIds.length > 0) {
+				loadSourceStatuses(changedPageIds);
 			}
 		});
 
 		return unsubscribe;
-	}, [pages]);
+	}, []);
 
-	// Subscribe to background job updates
+	// Initialize background job queue
 	useEffect(() => {
-		const unsubscribe = backgroundJob.subscribe((state) => {
-			setBackgroundJobs(Object.values(state.jobs));
-
-			// Reload source statuses when jobs complete
-			const pageIds = pages.map((p) => p.id);
-			if (pageIds.length > 0) {
-				loadSourceStatuses(pageIds);
-			}
-		});
-
-		// Initialize background job queue
 		backgroundJob.initialize();
-
-		return () => {
-			unsubscribe();
-		};
-	}, [pages]);
+	}, []);
 
 	const loadPages = async (searchOptions?: Partial<SearchOptions>) => {
 		try {
@@ -249,6 +238,8 @@ export const KnowledgeGraphPage: React.FC<KnowledgeGraphPageProps> = () => {
 			await backgroundJob.createJob("knowledge-graph", page, {
 				stream: false,
 			});
+			// Reload source status after job is created
+			await loadSourceStatuses([page.id]);
 		} catch (error) {
 			logError("❌ KnowledgeGraphPage: Failed to start background job:", error);
 		}
@@ -261,13 +252,17 @@ export const KnowledgeGraphPage: React.FC<KnowledgeGraphPageProps> = () => {
 	};
 
 	const handleBatchConvert = async () => {
-		const unconvertedPages = pages.filter(
-			(page) =>
-				!conversions.has(page.id) &&
-				!backgroundJobs.some(
-					(job) => (job as { pageId: string }).pageId === page.id,
-				),
-		);
+		const unconvertedPages = pages.filter((page) => {
+			const sourceData = sourceStatuses.get(page.id);
+			// Only convert pages that are not processing or completed
+			if (!sourceData) return true;
+			const effectiveStatus = sourceData.effectiveStatus;
+			return (
+				effectiveStatus === "pending" ||
+				effectiveStatus === "failed"
+			);
+		});
+
 		if (unconvertedPages.length > 0) {
 			// Add multiple pages to background queue (limit to 10 at a time)
 			const pagesToConvert = unconvertedPages.slice(0, 10);
@@ -276,6 +271,9 @@ export const KnowledgeGraphPage: React.FC<KnowledgeGraphPageProps> = () => {
 					stream: false,
 				});
 			}
+			// Reload source statuses after creating jobs
+			const pageIds = pagesToConvert.map((p) => p.id);
+			await loadSourceStatuses(pageIds);
 		}
 	};
 
@@ -286,7 +284,6 @@ export const KnowledgeGraphPage: React.FC<KnowledgeGraphPageProps> = () => {
 	};
 
 	const loadGraphDataForPage = async (pageId: string) => {
-		setLoadingGraph(true);
 		try {
 			await serviceManager.databaseService.use(async ({ db, schema }) => {
 				// Step 1: Find sources related to this page using polymorphic relationship
@@ -344,8 +341,6 @@ export const KnowledgeGraphPage: React.FC<KnowledgeGraphPageProps> = () => {
 		} catch (error) {
 			logError("Failed to load graph data for page:", error);
 			setGraphData({ nodes: [], edges: [] });
-		} finally {
-			setLoadingGraph(false);
 		}
 	};
 
@@ -399,15 +394,11 @@ export const KnowledgeGraphPage: React.FC<KnowledgeGraphPageProps> = () => {
 		try {
 			const statusMap = new Map<
 				string,
-				{ status: string; validFrom: Date | null }
+				{ status: string; validFrom: Date | null; effectiveStatus: string }
 			>();
 			await serviceManager.databaseService.use(async ({ db, schema }) => {
 				const sources = await db
-					.select({
-						targetId: schema.sources.targetId,
-						status: schema.sources.status,
-						statusValidFrom: schema.sources.statusValidFrom,
-					})
+					.select()
 					.from(schema.sources)
 					.where(
 						and(
@@ -417,12 +408,12 @@ export const KnowledgeGraphPage: React.FC<KnowledgeGraphPageProps> = () => {
 					);
 
 				sources.forEach((source) => {
-					if (source.status) {
-						statusMap.set(source.targetId, {
-							status: source.status,
-							validFrom: source.statusValidFrom,
-						});
-					}
+					const effectiveStatus = getEffectiveSourceStatus(source);
+					statusMap.set(source.targetId, {
+						status: source.status || "pending",
+						validFrom: source.statusValidFrom,
+						effectiveStatus,
+					});
 				});
 			});
 			setSourceStatuses(statusMap);
@@ -432,33 +423,10 @@ export const KnowledgeGraphPage: React.FC<KnowledgeGraphPageProps> = () => {
 	};
 
 	const getConversionForPage = (pageId: string): ConversionProgress | null => {
-		// First check background jobs
-		const backgroundJob = backgroundJobs.find(
-			(job) => (job as { pageId: string }).pageId === pageId,
-		);
-		if (backgroundJob) {
-			return (backgroundJob as { progress: ConversionProgress }).progress;
-		}
-
-		// Check in-memory conversions
-		const memoryConversion = conversions.get(pageId);
-		if (memoryConversion) {
-			return memoryConversion;
-		}
-
-		// Check source status from database
+		// Check source status from database first
 		const sourceData = sourceStatuses.get(pageId);
 		if (sourceData && sourceData.status !== "pending") {
-			let effectiveStatus = sourceData.status;
-
-			// Check if processing status is expired (30 minutes)
-			if (sourceData.status === "processing" && sourceData.validFrom) {
-				const now = new Date();
-				const thirtyMinutesAgo = new Date(now.getTime() - 30 * 60 * 1000);
-				if (sourceData.validFrom < thirtyMinutesAgo) {
-					effectiveStatus = "failed";
-				}
-			}
+			const effectiveStatus = sourceData.effectiveStatus;
 
 			// Create a conversion progress object from source status
 			const page = pages.find((p) => p.id === pageId);
@@ -496,18 +464,18 @@ export const KnowledgeGraphPage: React.FC<KnowledgeGraphPageProps> = () => {
 			};
 		}
 
+		// Fall back to in-memory conversions for real-time progress updates
+		const memoryConversion = conversions.get(pageId);
+		if (memoryConversion) {
+			return memoryConversion;
+		}
+
 		return null;
 	};
 
-	const isConverting =
-		Array.from(conversions.values()).some(
-			(c) => c.status !== "completed" && c.status !== "failed",
-		) ||
-		backgroundJobs.some(
-			(job) =>
-				(job as { status: string }).status === "running" ||
-				(job as { status: string }).status === "pending",
-		);
+	const isConverting = Array.from(sourceStatuses.values()).some(
+		(sourceData) => sourceData.effectiveStatus === "processing",
+	);
 
 	return (
 		<div className="flex flex-col sm:flex-row h-full overflow-hidden bg-background">
@@ -771,21 +739,30 @@ export const KnowledgeGraphPage: React.FC<KnowledgeGraphPageProps> = () => {
 
 						{/* Content */}
 						<div className="flex-1 overflow-hidden p-3 bg-background">
-							{loadingGraph ? (
-								<div className="flex items-center justify-center h-full">
-									<Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-									<span className="ml-2 text-muted-foreground">
-										Loading knowledge graph...
-									</span>
-								</div>
-							) : (
-								<D3KnowledgeGraph
-									selectedPageId={selectedPage.id}
-									graphData={graphData || undefined}
-									width={800}
-									height={600}
-								/>
-							)}
+							{(() => {
+								const sourceData = sourceStatuses.get(selectedPage.id);
+								const isLoading = sourceData?.effectiveStatus === "processing";
+
+								if (isLoading) {
+									return (
+										<div className="flex items-center justify-center h-full">
+											<Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+											<span className="ml-2 text-muted-foreground">
+												Loading knowledge graph...
+											</span>
+										</div>
+									);
+								}
+
+								return (
+									<D3KnowledgeGraph
+										selectedPageId={selectedPage.id}
+										graphData={graphData || undefined}
+										width={800}
+										height={600}
+									/>
+								);
+							})()}
 						</div>
 					</div>
 				) : (
