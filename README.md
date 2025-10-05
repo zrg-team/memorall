@@ -201,12 +201,14 @@ graph TD
 
 ## 📋 Installation & Development
 
-### 🛠️ Development Setup
+### 🚀 Quick Start
 
 ```bash
 git clone <repository-url>
 cd memorall
 npm install
+npm run build
+# Load the 'dist' folder in your browser's extension manager
 ```
 
 ### 🔧 Available Commands
@@ -218,47 +220,14 @@ npm install
 | `npm run preview` | 👀 Preview built extension |
 | `npm run type-check` | 🔍 TypeScript type checking |
 
-### 🌐 Browser Installation
+### 🌐 Load Extension in Browser
 
-1. Build the extension: `npm run build`
-2. Open your browser's extension management page
-3. Enable "Developer mode"
-4. Click "Load unpacked" and select the `dist` folder
+1. Open your browser's extension management page
+2. Enable "Developer mode"
+3. Click "Load unpacked" and select the `dist` folder
+4. First launch will download and initialize AI models (one-time setup)
 
-## 🎮 Usage
-
-1. **📥 Install the Extension**: Load the built extension in your browser's developer mode
-2. **🚀 First Launch**: The extension will download and initialize AI models (one-time setup)
-3. **📊 Remember Pages**: Click the extension icon and ask "Remember this page"
-4. **💾 Store Memories**: Tell the AI "Remember that [important information]"
-5. **🔍 Recall Information**: Ask "What did I learn about [topic]?" or "Remind me about [context]"
-
-### 🔒 Privacy & Security
-- **💻 No Server Dependencies**: Everything runs in your browser
-- **💾 Local Storage**: Data stored in IndexedDB, never transmitted
-- **🔐 Content Security**: Strict CSP policies for secure operation
-
-## 🤝 Development
-
-We welcome contributions to Memorall! Here's how you can help:
-
-
-### 🚀 Quick Start
-
-Get started with Memorall in just a few steps:
-
-1. **📥 Install**: Clone the repository and run `npm install`
-2. **🔧 Build**: Run `npm run build` to create the extension
-3. **🌐 Load**: Add the built extension to your browser in developer mode
-4. **🎉 Use**: Click the extension icon and start building your knowledge base!
-
-```bash
-git clone <repository-url>
-cd memorall
-npm install
-npm run build
-# Load the 'dist' folder in your browser's extension manager
-```
+## 🤝 Contributing
 
 ### 🐛 Bug Reports
 - Use GitHub Issues to report bugs
@@ -266,19 +235,19 @@ npm run build
 - Provide browser and extension version information
 
 ### 💡 Feature Requests
-- Open a GitHub Issue with the "enhancement" label
+- Open a GitHub Issue with "enhancement" label
 - Describe the feature and its benefits
-- Consider submitting a pull request!
+- Consider submitting a pull request
 
-### 🔧 Development
-- Fork the repository
-- Create a feature branch: `git checkout -b feature/amazing-feature`
-- Make your changes following the existing code style
-- Test your changes thoroughly
-- Submit a pull request with a clear description
+### 🔧 Development Workflow
+1. Fork the repository
+2. Create feature branch: `git checkout -b feature/amazing-feature`
+3. Make changes following existing code style
+4. Test thoroughly
+5. Submit pull request with clear description
 
 ### 📝 Documentation
-- Help improve documentation and examples
+- Improve documentation and examples
 - Fix typos and clarify instructions
 - Add tutorials or guides
 
