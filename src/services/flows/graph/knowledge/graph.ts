@@ -577,3 +577,21 @@ export class KnowledgeGraphFlow extends GraphBase<
 		return await this.databaseSave.saveToDatabaseNode(state);
 	};
 }
+
+// Self-register the flow
+import { flowRegistry } from "../../flow-registry";
+
+flowRegistry.register({
+	flowType: "knowledge",
+	factory: (services) => new KnowledgeGraphFlow(services),
+});
+
+// Extend global FlowTypeRegistry for type-safe flow creation
+declare global {
+	interface FlowTypeRegistry {
+		knowledge: {
+			services: AllServices;
+			flow: KnowledgeGraphFlow;
+		};
+	}
+}

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { knowledgeGraphService } from "@/services/knowledge-graph/knowledge-graph-service";
+import { knowledgeGraphService } from "@/modules/knowledge/services/knowledge-graph/knowledge-graph-service";
 import type {
 	ConversionProgress,
 	KnowledgeGraphData,

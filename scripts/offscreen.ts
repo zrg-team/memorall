@@ -4,17 +4,17 @@ import { logError, logInfo, logWarn } from "@/utils/logger";
 import {
 	backgroundProcessFactory,
 	ProcessFactory,
-} from "@/services/background-jobs/offscreen-handlers";
+} from "@/services/background-jobs/handlers";
 import { backgroundJob } from "@/services/background-jobs/background-job";
 import type { JobNotificationMessage } from "@/services/background-jobs/bridges";
-import type { BaseJob } from "@/services/background-jobs/offscreen-handlers/types";
+import type { BaseJob } from "@/services/background-jobs/handlers/types";
 
 // Import process handlers and factory
-import type { ProcessDependencies } from "@/services/background-jobs/offscreen-handlers/types";
+import type { ProcessDependencies } from "@/services/background-jobs/handlers/types";
 import type {
 	JobProgressUpdate,
 	JobResult,
-} from "@/services/background-jobs/offscreen-handlers/types";
+} from "@/services/background-jobs/handlers/types";
 
 import { serviceManager } from "@/services";
 import { sharedStorageService } from "@/services/shared-storage";

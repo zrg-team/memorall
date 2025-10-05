@@ -6,11 +6,7 @@ import type {
 	DestinationType,
 	BridgeStatus,
 } from "./types";
-import type {
-	BaseJob,
-	JobProgressEvent,
-	JobResult,
-} from "../offscreen-handlers/types";
+import type { BaseJob, JobProgressEvent, JobResult } from "../handlers/types";
 
 /**
  * BroadcastChannel-based job notification bridge

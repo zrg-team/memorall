@@ -7,19 +7,19 @@ import {
 } from "react-router-dom";
 import NiceModal from "@ebay/nice-modal-react";
 
-import { Layout } from "./components/Layout";
-import { ChatPage } from "./components/ChatPage";
-import { EmbeddingPage } from "./components/EmbeddingPage";
-import { LLMPage } from "./components/LLMPage";
+import { Layout } from "./pages/Layout";
+import { ChatPage } from "./pages/ChatPage";
+import { EmbeddingPage } from "./pages/EmbeddingPage";
+import { LLMPage } from "./pages/LLMPage";
 import { backgroundJob } from "./services/background-jobs/background-job";
 import { serviceManager } from "./services";
 import { logError, logInfo } from "./utils/logger";
-import { DatabasePage } from "./components/DatabasePage";
-import { RememberedContentsPage } from "./components/RememberedContentsPage";
-import { LogsPage } from "./components/LogsPage";
-import { KnowledgeGraphPage } from "./components/KnowledgeGraphPage";
-import { RememberPage } from "./components/RememberPage";
-import { TopicsPage } from "./components/TopicsPage";
+import { DatabasePage } from "./pages/DatabasePage";
+import { RememberedContentsPage } from "./pages/RememberedContentsPage";
+import { LogsPage } from "./pages/LogsPage";
+import { KnowledgeGraphPage } from "./pages/KnowledgeGraphPage";
+import { RememberPage } from "./pages/RememberPage";
+import { TopicsPage } from "./pages/TopicsPage";
 import { AppLoadingScreen } from "./components/atoms/AppLoadingScreen";
 import {
 	Cursor,

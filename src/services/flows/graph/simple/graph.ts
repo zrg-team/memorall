@@ -370,3 +370,21 @@ export class SimpleGraph extends GraphBase<
 		};
 	}
 }
+
+// Self-register the flow
+import { flowRegistry } from "../../flow-registry";
+
+flowRegistry.register({
+	flowType: "simple",
+	factory: (services) => new SimpleGraph(services),
+});
+
+// Extend global FlowTypeRegistry for type-safe flow creation
+declare global {
+	interface FlowTypeRegistry {
+		simple: {
+			services: AllServices;
+			flow: SimpleGraph;
+		};
+	}
+}

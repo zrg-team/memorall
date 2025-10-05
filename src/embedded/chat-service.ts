@@ -1,6 +1,6 @@
 import { backgroundJob } from "@/services/background-jobs/background-job";
 import type { ChatMessage } from "./types";
-import type { ChatResult } from "@/services/background-jobs/offscreen-handlers/process-chat";
+import type { ChatResult } from "@/services/background-jobs/handlers/process-chat";
 
 export interface ChatServiceOptions {
 	messages: ChatMessage[];

@@ -13,7 +13,7 @@ import type {
 	JobResult,
 	JobResultFor,
 	JobStatus,
-} from "./offscreen-handlers/types";
+} from "./handlers/types";
 export type { BaseJob };
 
 export interface JobQueueState {

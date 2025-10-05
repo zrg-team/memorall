@@ -1,4 +1,4 @@
-import type { BaseJob } from "./offscreen-handlers/types";
+import type { BaseJob } from "./handlers/types";
 
 const DB_NAME = "memorall-bg-jobs";
 const DB_VERSION = 1;

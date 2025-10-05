@@ -15,7 +15,7 @@ import type {
 import type {
 	ItemHandlerResult,
 	JobProgressEvent,
-} from "@/services/background-jobs/offscreen-handlers/types";
+} from "@/services/background-jobs/handlers/types";
 
 // Proxy class for LLMs that exist in background jobs
 export class LLMProxy implements BaseLLM {

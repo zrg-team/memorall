@@ -1007,3 +1007,21 @@ export class KnowledgeRAGFlow extends GraphBase<
 		};
 	}
 }
+
+// Self-register the flow
+import { flowRegistry } from "../../flow-registry";
+
+flowRegistry.register({
+	flowType: "knowledge-rag",
+	factory: (services) => new KnowledgeRAGFlow(services),
+});
+
+// Extend global FlowTypeRegistry for type-safe flow creation
+declare global {
+	interface FlowTypeRegistry {
+		"knowledge-rag": {
+			services: AllServices;
+			flow: KnowledgeRAGFlow;
+		};
+	}
+}

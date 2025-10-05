@@ -1,8 +1,4 @@
-import type {
-	BaseJob,
-	JobProgressEvent,
-	JobResult,
-} from "../offscreen-handlers/types";
+import type { BaseJob, JobProgressEvent, JobResult } from "../handlers/types";
 
 export interface JobNotificationMessage {
 	type:

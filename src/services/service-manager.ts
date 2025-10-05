@@ -81,13 +81,19 @@
  */
 
 import { logError, logInfo, logWarn } from "@/utils/logger";
-import type { IEmbeddingService } from "./embedding";
-import { EmbeddingServiceMain, EmbeddingServiceProxy } from "./embedding";
-import type { ILLMService } from "./llm/interfaces/llm-service.interface";
-import { LLMServiceProxy, LLMServiceMain } from "./llm";
+import type { IEmbeddingService } from "@/services/embedding";
+import {
+	EmbeddingServiceMain,
+	EmbeddingServiceProxy,
+} from "@/services/embedding";
+import type { ILLMService } from "@/services/llm/interfaces/llm-service.interface";
+import { LLMServiceProxy, LLMServiceMain } from "@/services/llm";
 import { flowsService } from "./flows/flows-service";
 import { DatabaseMode, DatabaseService } from "./database";
-import { createTopicService, type TopicService } from "./topic/topic-service";
+import {
+	createTopicService,
+	type TopicService,
+} from "@/modules/topics/services/topic/topic-service";
 
 export interface InitializationProgress {
 	step: string;
