@@ -4,8 +4,6 @@ import type {
 	ChatCompletionChunk,
 } from "@/types/openai";
 import { logWarn, logInfo } from "@/utils/logger";
-import { eq } from "drizzle-orm";
-import { serviceManager } from "@/services";
 import type { BaseLLM, ProgressEvent, ModelInfo } from "./interfaces/base-llm";
 import { WllamaLLM } from "./implementations/wllama-llm";
 import { WebLLMLLM } from "./implementations/webllm-llm";
@@ -22,15 +20,16 @@ import type {
 	WllamaConfig,
 } from "./interfaces/service";
 import { LLMServiceCore } from "./llm-service-core";
-import { LOCAL_SERVER_LLM_CONFIG_KEYS } from "@/config/local-server-llm";
 
 export class LLMServiceMain extends LLMServiceCore implements ILLMService {
+	private isEnsuringServices = false;
+
 	async initialize(): Promise<void> {
 		logInfo(
 			"🚀 LLM service initializing in main mode - all operations available",
 		);
 		await super.initialize();
-		await this.ensureAllServices();
+		// Note: super.initialize() already calls ensureAllServices(), no need to call again
 	}
 
 	async create<K extends keyof LLMRegistry>(
@@ -213,7 +212,7 @@ export class LLMServiceMain extends LLMServiceCore implements ILLMService {
 	}
 
 	async models() {
-		await this.ensureAllServices();
+		// Note: ensureAllServices() is called during initialization, no need to call here
 		const results: ModelInfo[] = [];
 		try {
 			const w = await this.modelsFor(DEFAULT_SERVICES.WLLAMA);
@@ -281,7 +280,7 @@ export class LLMServiceMain extends LLMServiceCore implements ILLMService {
 			throw new Error("No current model selected");
 		}
 
-		await this.ensureAllServices();
+		// Note: ensureAllServices() is called during initialization, no need to call here
 		return this.serveFor(this.currentModel.serviceName, model, onProgress);
 	}
 
@@ -310,120 +309,67 @@ export class LLMServiceMain extends LLMServiceCore implements ILLMService {
 	}
 
 	async ensureAllServices(): Promise<void> {
-		// Main mode: Create all services including heavy ones
-		if (!this.has(DEFAULT_SERVICES.WLLAMA)) {
-			try {
-				await this.create(DEFAULT_SERVICES.WLLAMA, { type: "wllama" });
-			} catch (error) {
-				logWarn("Failed to create Wllama service:", error);
-			}
-		}
-		if (!this.has(DEFAULT_SERVICES.WEBLLM)) {
-			try {
-				await this.create(DEFAULT_SERVICES.WEBLLM, { type: "webllm" });
-			} catch (error) {
-				logWarn("Failed to create WebLLM service:", error);
-			}
+		// Prevent re-entry to avoid infinite loops
+		if (this.isEnsuringServices) {
+			return;
 		}
 
-		await this.restoreLocalServices();
+		this.isEnsuringServices = true;
+		try {
+			// Main mode: Create all services including heavy ones
+			if (!this.has(DEFAULT_SERVICES.WLLAMA)) {
+				try {
+					await this.create(DEFAULT_SERVICES.WLLAMA, { type: "wllama" });
+				} catch (error) {
+					logWarn("Failed to create Wllama service:", error);
+				}
+			}
+			if (!this.has(DEFAULT_SERVICES.WEBLLM)) {
+				try {
+					await this.create(DEFAULT_SERVICES.WEBLLM, { type: "webllm" });
+				} catch (error) {
+					logWarn("Failed to create WebLLM service:", error);
+				}
+			}
+
+			await this.restoreLocalServices();
+
+			// Serve models if current model is DEFAULT_SERVICES.WLLAMA or DEFAULT_SERVICES.WEBLLM
+			console.log('[this.currentModel] ====> this.currentModel', this.currentModel)
+			if (
+				this.currentModel?.modelId &&
+				(this.currentModel.serviceName === DEFAULT_SERVICES.WLLAMA ||
+					this.currentModel.serviceName === DEFAULT_SERVICES.WEBLLM)
+			) {
+				try {
+					const models = await this.modelsFor(this.currentModel.serviceName);
+					console.log('[this.currentModel] ====> models', models)
+					const isLoaded = models.data.some((m) => m.id === this.currentModel?.modelId);
+					console.log('[this.currentModel] ====> isLoaded', isLoaded)
+					if (!isLoaded) {
+						await this.serve(this.currentModel.modelId);
+					}
+				} catch (error) {
+					logWarn(
+						`Failed to load models for ${this.currentModel.serviceName}:`,
+						error,
+					);
+				}
+			}
+		} finally {
+			this.isEnsuringServices = false;
+		}
 	}
 
 	async restoreLocalServices(): Promise<void> {
 		try {
-			// Main service handles local service restoration directly from storage
+			// Use shared method from LLMServiceCore
 			const serviceConfigs = await this.loadLocalServiceConfigs();
 			if (serviceConfigs) {
 				await this.createLocalServicesFromConfigs(serviceConfigs);
 			}
 		} catch (error) {
 			logWarn("Failed to restore local services from storage:", error);
-		}
-	}
-
-	private async loadLocalServiceConfigs(): Promise<Record<
-		string,
-		{ type: string; baseURL: string; modelId?: string }
-	> | null> {
-		try {
-			// Load configurations from database (same pattern as LocalOpenAITab)
-			const configs: Record<
-				string,
-				{ type: string; baseURL: string; modelId?: string }
-			> = {};
-
-			// Check for LMStudio config
-			try {
-				const lmstudioRows = await serviceManager.databaseService.use(
-					({ db, schema }) => {
-						return db
-							.select()
-							.from(schema.configurations)
-							.where(
-								eq(
-									schema.configurations.key,
-									LOCAL_SERVER_LLM_CONFIG_KEYS.LLM_STUDIO,
-								),
-							);
-					},
-				);
-
-				const lmstudioConfig = lmstudioRows[0];
-				if (lmstudioConfig?.data?.baseUrl) {
-					configs.lmstudio = {
-						type: "lmstudio",
-						baseURL: `${lmstudioConfig.data.baseUrl}`,
-						modelId: lmstudioConfig.data.modelId
-							? `${lmstudioConfig.data.modelId}`
-							: undefined,
-					};
-					logInfo(
-						"🔍 Loaded LMStudio config from database:",
-						lmstudioConfig.data.baseUrl,
-					);
-				}
-			} catch (error) {
-				logWarn("Failed to load LMStudio config from database:", error);
-			}
-
-			// Check for Ollama config
-			try {
-				const ollamaRows = await serviceManager.databaseService.use(
-					({ db, schema }) => {
-						return db
-							.select()
-							.from(schema.configurations)
-							.where(
-								eq(
-									schema.configurations.key,
-									LOCAL_SERVER_LLM_CONFIG_KEYS.OLLAMA,
-								),
-							);
-					},
-				);
-
-				const ollamaConfig = ollamaRows[0];
-				if (ollamaConfig?.data?.baseUrl) {
-					configs.ollama = {
-						type: "ollama",
-						baseURL: `${ollamaConfig.data.baseUrl}`,
-						modelId: ollamaConfig.data.modelId
-							? `${ollamaConfig.data.modelId}`
-							: undefined,
-					};
-					logInfo(
-						"🔍 Loaded Ollama config from database:",
-						ollamaConfig.data.baseUrl,
-					);
-				}
-			} catch (error) {
-				logWarn("Failed to load Ollama config from database:", error);
-			}
-
-			return Object.keys(configs).length > 0 ? configs : null;
-		} catch (error) {
-			logWarn("Failed to load local service configs from database:", error);
-			return null;
 		}
 	}
 

@@ -1,4 +1,4 @@
-import { knowledgeGraphService } from "@/modules/knowledge/services/knowledge-graph/knowledge-graph-service";
+import { knowledgeGraphService } from "@/modules/knowledge/services/knowledge-graph-service";
 import type { RememberedContent } from "@/services/database/db";
 import type { ConversionProgress } from "@/types/knowledge-graph";
 import { BaseProcessHandler } from "./base-process-handler";

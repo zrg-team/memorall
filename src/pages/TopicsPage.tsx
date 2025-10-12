@@ -4,8 +4,6 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
 import {
 	Dialog,
 	DialogContent,
@@ -29,9 +27,9 @@ import {
 	Loader2,
 	Tags,
 } from "lucide-react";
-import { serviceManager } from "@/services";
 import type { Topic } from "@/services/database/entities/topics";
 import { logError, logInfo } from "@/utils/logger";
+import { topicService } from "@/modules/topics/services/topic-service";
 
 interface TopicWithCount extends Topic {
 	contentCount?: number;
@@ -71,10 +69,6 @@ export const TopicsPage: React.FC = () => {
 	const loadTopics = async () => {
 		try {
 			setLoading(true);
-			const topicService = serviceManager.getService("topic");
-			if (!topicService) {
-				throw new Error("Topic service not available");
-			}
 
 			const topicsWithCount = await topicService.getTopicsWithContentCount();
 			setTopics(topicsWithCount);
@@ -91,11 +85,6 @@ export const TopicsPage: React.FC = () => {
 
 		try {
 			setCreateLoading(true);
-			const topicService = serviceManager.getService("topic");
-			if (!topicService) {
-				throw new Error("Topic service not available");
-			}
-
 			const newTopic = await topicService.createTopic({
 				name: newTopicName.trim(),
 				description: newTopicDescription.trim(),
@@ -122,11 +111,6 @@ export const TopicsPage: React.FC = () => {
 
 		try {
 			setEditLoading(true);
-			const topicService = serviceManager.getService("topic");
-			if (!topicService) {
-				throw new Error("Topic service not available");
-			}
-
 			const updatedTopic = await topicService.updateTopic(editingTopic.id, {
 				name: editName.trim(),
 				description: editDescription.trim(),
@@ -164,11 +148,6 @@ export const TopicsPage: React.FC = () => {
 		}
 
 		try {
-			const topicService = serviceManager.getService("topic");
-			if (!topicService) {
-				throw new Error("Topic service not available");
-			}
-
 			await topicService.deleteTopic(topic.id);
 
 			// Remove from topics list

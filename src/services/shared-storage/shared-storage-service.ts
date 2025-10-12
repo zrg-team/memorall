@@ -13,13 +13,16 @@ export type StorageChangeListener<T = any> = (
 ) => void;
 
 /**
- * Shared Storage Service - Handles chrome.storage with proper event notifications
- * Ensures all contexts (background, offscreen, popup) stay in sync
+ * Shared Storage Service - Universal storage + cross-context notifications
+ * Uses IndexedDB (works in all contexts) + messaging for synchronization
  */
 export class SharedStorageService {
 	private static instance: SharedStorageService;
 	private listeners = new Map<string, Set<StorageChangeListener>>();
 	private initialized = false;
+	private db: IDBDatabase | null = null;
+	private readonly DB_NAME = "memorall-shared-storage";
+	private readonly STORE_NAME = "kvstore";
 
 	private constructor() {}
 
@@ -34,18 +37,10 @@ export class SharedStorageService {
 		if (this.initialized) return;
 
 		try {
-			// Listen for storage changes from chrome
-			if (globalThis.chrome?.storage?.onChanged) {
-				chrome.storage.onChanged.addListener((changes, areaName) => {
-					if (areaName !== "local") return;
+			// Open IndexedDB (works in all contexts including offscreen)
+			await this.openDatabase();
 
-					for (const [key, change] of Object.entries(changes)) {
-						this.notifyListeners(key, change.oldValue, change.newValue);
-					}
-				});
-			}
-
-			// Listen for custom storage change messages
+			// Listen for custom storage change messages (works in all contexts)
 			if (globalThis.chrome?.runtime?.onMessage) {
 				chrome.runtime.onMessage.addListener((message) => {
 					if (message.type === "STORAGE_CHANGED") {
@@ -56,11 +51,30 @@ export class SharedStorageService {
 			}
 
 			this.initialized = true;
-			logInfo("📦 SharedStorageService initialized successfully");
+			logInfo("📦 SharedStorageService initialized successfully (IndexedDB + messaging)");
 		} catch (error) {
 			logError("Failed to initialize SharedStorageService:", error);
 			throw error;
 		}
+	}
+
+	private async openDatabase(): Promise<void> {
+		return new Promise((resolve, reject) => {
+			const request = indexedDB.open(this.DB_NAME, 1);
+
+			request.onerror = () => reject(request.error);
+			request.onsuccess = () => {
+				this.db = request.result;
+				resolve();
+			};
+
+			request.onupgradeneeded = (event) => {
+				const db = (event.target as IDBOpenDBRequest).result;
+				if (!db.objectStoreNames.contains(this.STORE_NAME)) {
+					db.createObjectStore(this.STORE_NAME);
+				}
+			};
+		});
 	}
 
 	/**
@@ -68,16 +82,27 @@ export class SharedStorageService {
 	 */
 	async get<T = any>(key: string): Promise<T | null> {
 		try {
-			if (!globalThis.chrome?.storage?.local) {
-				logWarn(`📦 Chrome storage not available for get: ${key}`);
+			if (!this.db) {
+				logWarn(`📦 Database not initialized for get: ${key}`);
 				return null;
 			}
 
-			const result = await chrome.storage.local.get([key]);
-			const value = result[key] ?? null;
+			return new Promise((resolve, reject) => {
+				const transaction = this.db!.transaction([this.STORE_NAME], "readonly");
+				const store = transaction.objectStore(this.STORE_NAME);
+				const request = store.get(key);
 
-			logInfo(`📦 Storage get: ${key} has value ${value !== null}`);
-			return value;
+				request.onsuccess = () => {
+					const value = request.result ?? null;
+					logInfo(`📦 Storage get: ${key} has value ${value !== null}`);
+					resolve(value);
+				};
+
+				request.onerror = () => {
+					logError(`Failed to get storage key: ${key}`, request.error);
+					reject(request.error);
+				};
+			});
 		} catch (error) {
 			logError(`Failed to get storage key: ${key}`, error);
 			return null;
@@ -89,20 +114,25 @@ export class SharedStorageService {
 	 */
 	async set<T = any>(key: string, value: T): Promise<void> {
 		try {
-			if (!globalThis.chrome?.storage?.local) {
-				logWarn(`📦 Chrome storage not available for set: ${key}`);
+			if (!this.db) {
+				logWarn(`📦 Database not initialized for set: ${key}`);
 				return;
 			}
 
 			// Get old value for change event
 			const oldValue = await this.get(key);
 
-			// Set new value
-			await chrome.storage.local.set({ [key]: value });
+			// Store in IndexedDB
+			await new Promise<void>((resolve, reject) => {
+				const transaction = this.db!.transaction([this.STORE_NAME], "readwrite");
+				const store = transaction.objectStore(this.STORE_NAME);
+				const request = store.put(value, key);
 
-			logInfo(
-				`📦 Storage set: ${key} had old value ${oldValue !== null}, has new value ${value !== null}`,
-			);
+				request.onsuccess = () => resolve();
+				request.onerror = () => reject(request.error);
+			});
+
+			logInfo(`📦 Storage set: ${key}`);
 
 			// Notify other contexts via message
 			this.broadcastStorageChange(key, oldValue, value);
@@ -117,18 +147,25 @@ export class SharedStorageService {
 	 */
 	async remove(key: string): Promise<void> {
 		try {
-			if (!globalThis.chrome?.storage?.local) {
-				logWarn(`📦 Chrome storage not available for remove: ${key}`);
+			if (!this.db) {
+				logWarn(`📦 Database not initialized for remove: ${key}`);
 				return;
 			}
 
 			// Get old value for change event
 			const oldValue = await this.get(key);
 
-			// Remove key
-			await chrome.storage.local.remove([key]);
+			// Remove from IndexedDB
+			await new Promise<void>((resolve, reject) => {
+				const transaction = this.db!.transaction([this.STORE_NAME], "readwrite");
+				const store = transaction.objectStore(this.STORE_NAME);
+				const request = store.delete(key);
 
-			logInfo(`📦 Storage remove: ${key} had value ${oldValue !== null}`);
+				request.onsuccess = () => resolve();
+				request.onerror = () => reject(request.error);
+			});
+
+			logInfo(`📦 Storage remove: ${key}`);
 
 			// Notify other contexts via message
 			this.broadcastStorageChange(key, oldValue, null);
@@ -224,7 +261,7 @@ export class SharedStorageService {
 	 * Check if storage is available
 	 */
 	isAvailable(): boolean {
-		return !!globalThis.chrome?.storage?.local;
+		return !!this.db;
 	}
 
 	/**
@@ -232,10 +269,19 @@ export class SharedStorageService {
 	 */
 	async getAllKeys(): Promise<string[]> {
 		try {
-			if (!globalThis.chrome?.storage?.local) return [];
+			if (!this.db) return [];
 
-			const result = await chrome.storage.local.get();
-			return Object.keys(result);
+			return new Promise((resolve, reject) => {
+				const transaction = this.db!.transaction([this.STORE_NAME], "readonly");
+				const store = transaction.objectStore(this.STORE_NAME);
+				const request = store.getAllKeys();
+
+				request.onsuccess = () => resolve(request.result as string[]);
+				request.onerror = () => {
+					logError("Failed to get all storage keys:", request.error);
+					reject(request.error);
+				};
+			});
 		} catch (error) {
 			logError("Failed to get all storage keys:", error);
 			return [];
@@ -247,14 +293,19 @@ export class SharedStorageService {
 	 */
 	async clear(): Promise<void> {
 		try {
-			if (!globalThis.chrome?.storage?.local) return;
+			if (!this.db) return;
 
-			const keys = await this.getAllKeys();
-			for (const key of keys) {
-				await this.remove(key);
-			}
+			await new Promise<void>((resolve, reject) => {
+				const transaction = this.db!.transaction([this.STORE_NAME], "readwrite");
+				const store = transaction.objectStore(this.STORE_NAME);
+				const request = store.clear();
 
-			logInfo("📦 Cleared all storage");
+				request.onsuccess = () => {
+					logInfo("📦 Cleared all storage");
+					resolve();
+				};
+				request.onerror = () => reject(request.error);
+			});
 		} catch (error) {
 			logError("Failed to clear storage:", error);
 			throw error;

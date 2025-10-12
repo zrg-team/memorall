@@ -32,8 +32,8 @@ import {
 import {
 	rememberService,
 	type SearchOptions,
-} from "@/modules/remember/services/remember/remember-service";
-import { knowledgeGraphService } from "@/modules/knowledge/services/knowledge-graph/knowledge-graph-service";
+} from "@/modules/remember/services/remember-service";
+import { knowledgeGraphService } from "@/modules/knowledge/services/knowledge-graph-service";
 import { backgroundJob } from "@/services/background-jobs/background-job";
 import type {
 	RememberedContent,

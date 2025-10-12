@@ -4,7 +4,6 @@ import "./process-basic";
 import "./process-embedding-operations";
 import "./process-knowledge-graph";
 import "./process-llm-operations";
-import "./process-restore-local-services";
 import "./process-topic-operations";
 import "./process-chat";
 

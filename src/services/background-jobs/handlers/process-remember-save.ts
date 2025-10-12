@@ -3,7 +3,7 @@ import {
 	rememberService,
 	type SaveContentData,
 	type SavePageData,
-} from "@/modules/remember/services/remember/remember-service";
+} from "@/modules/remember/services/remember-service";
 import type { DatabaseService } from "@/services/database/database-service";
 import { serviceManager } from "@/services";
 import { BaseProcessHandler } from "./base-process-handler";

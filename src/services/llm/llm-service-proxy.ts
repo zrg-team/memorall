@@ -271,11 +271,9 @@ export class LLMServiceProxy extends LLMServiceCore implements ILLMService {
 			);
 		}
 
+		await this.setCurrentModel(model, this.currentModel?.provider!, name);
+
 		const result = await llmWithServe.serve(model, onProgress);
-		if (!this.currentModel) {
-			throw new Error("Cannot determine provider - no current model set");
-		}
-		await this.setCurrentModel(model, this.currentModel.provider, name);
 		return result;
 	}
 
@@ -332,27 +330,13 @@ export class LLMServiceProxy extends LLMServiceCore implements ILLMService {
 
 	async restoreLocalServices(): Promise<void> {
 		try {
-			const { promise } = await backgroundJob.execute(
-				"restore-local-services",
-				{},
-				{ stream: false },
-			);
-			const response = await promise;
-			if (
-				response?.result &&
-				response?.result.serviceConfigs &&
-				Object.keys(response.result.serviceConfigs).length
-			) {
-				await this.createLocalServicesFromConfigs(
-					response.result.serviceConfigs,
-				);
+			// Use shared method from LLMServiceCore
+			const serviceConfigs = await this.loadLocalServiceConfigs();
+			if (serviceConfigs) {
+				await this.createLocalServicesFromConfigs(serviceConfigs);
 			}
 		} catch (error) {
-			logWarn(
-				"Failed to restore local services via background job (continuing anyway):",
-				error,
-			);
-			// Continue without local services - they can be configured later
+			logWarn("Failed to restore local services from database:", error);
 		}
 	}
 

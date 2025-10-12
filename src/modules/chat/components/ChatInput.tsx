@@ -30,9 +30,9 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@/components/ui/select";
-import { serviceManager } from "@/services";
 import type { ChatStatus } from "ai";
 import type { ChatMode } from "./hooks/use-chat";
+import { topicService } from "@/modules/topics/services/topic-service";
 
 interface ChatInputProps {
 	inputValue: string;
@@ -74,7 +74,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 			const fetchTopics = async () => {
 				try {
 					setIsLoadingTopics(true);
-					const result = await serviceManager.topicService.getTopics();
+					const result = await topicService.getTopics();
 					setTopics(
 						result.map((topic) => ({
 							id: topic.id,

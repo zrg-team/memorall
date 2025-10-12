@@ -1,7 +1,7 @@
 import { eq, like, desc } from "drizzle-orm";
-import type { DatabaseService } from "@/services/database/database-service";
 import type { Topic, NewTopic } from "@/services/database/entities/topics";
 import { logInfo, logError } from "@/utils/logger";
+import { serviceManager } from "@/services";
 
 export interface TopicSearchOptions {
 	searchTerm?: string;
@@ -10,8 +10,6 @@ export interface TopicSearchOptions {
 }
 
 export class TopicService {
-	constructor(private database: DatabaseService) {}
-
 	/**
 	 * Create a new topic
 	 */
@@ -21,7 +19,7 @@ export class TopicService {
 		try {
 			logInfo("[TOPIC_SERVICE] Creating new topic:", topicData);
 
-			const result = await this.database.use(async ({ db, schema }) => {
+			const result = await serviceManager.databaseService.use(async ({ db, schema }) => {
 				const [createdTopic] = await db
 					.insert(schema.topics)
 					.values({
@@ -50,7 +48,7 @@ export class TopicService {
 
 			logInfo("[TOPIC_SERVICE] Fetching topics:", options);
 
-			const result = await this.database.use(async ({ db, schema }) => {
+			const result = await serviceManager.databaseService.use(async ({ db, schema }) => {
 				let query = db.select().from(schema.topics);
 
 				// Add search filter if provided
@@ -85,7 +83,7 @@ export class TopicService {
 		try {
 			logInfo("[TOPIC_SERVICE] Fetching topic by ID:", topicId);
 
-			const result = await this.database.use(async ({ db, schema }) => {
+			const result = await serviceManager.databaseService.use(async ({ db, schema }) => {
 				const topics = await db
 					.select()
 					.from(schema.topics)
@@ -113,7 +111,7 @@ export class TopicService {
 		try {
 			logInfo("[TOPIC_SERVICE] Updating topic:", { topicId, updates });
 
-			const result = await this.database.use(async ({ db, schema }) => {
+			const result = await serviceManager.databaseService.use(async ({ db, schema }) => {
 				const [updatedTopic] = await db
 					.update(schema.topics)
 					.set({
@@ -145,7 +143,7 @@ export class TopicService {
 		try {
 			logInfo("[TOPIC_SERVICE] Deleting topic:", topicId);
 
-			await this.database.use(async ({ db, schema }) => {
+			await serviceManager.databaseService.use(async ({ db, schema }) => {
 				const deletedRows = await db
 					.delete(schema.topics)
 					.where(eq(schema.topics.id, topicId));
@@ -165,7 +163,7 @@ export class TopicService {
 		try {
 			logInfo("[TOPIC_SERVICE] Fetching topics with content count");
 
-			const result = await this.database.use(async ({ db, schema }) => {
+			const result = await serviceManager.databaseService.use(async ({ db, schema }) => {
 				const query = `
 					SELECT
 						t.*,
@@ -203,14 +201,6 @@ export class TopicService {
 	}
 }
 
-// Create a singleton instance that will be initialized by the service manager
-let topicServiceInstance: TopicService | null = null;
-
-export function createTopicService(database: DatabaseService): TopicService {
-	if (!topicServiceInstance) {
-		topicServiceInstance = new TopicService(database);
-	}
-	return topicServiceInstance;
-}
+const topicServiceInstance = new TopicService();
 
 export { topicServiceInstance as topicService };

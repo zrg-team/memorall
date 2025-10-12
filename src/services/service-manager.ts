@@ -90,10 +90,6 @@ import type { ILLMService } from "@/services/llm/interfaces/llm-service.interfac
 import { LLMServiceProxy, LLMServiceMain } from "@/services/llm";
 import { FlowsService } from "./flows";
 import { DatabaseMode, DatabaseService } from "./database";
-import {
-	createTopicService,
-	type TopicService,
-} from "@/modules/topics/services/topic/topic-service";
 
 export interface InitializationProgress {
 	step: string;
@@ -119,7 +115,6 @@ export class ServiceManager {
 	public llmService!: ILLMService;
 	public databaseService!: DatabaseService;
 	public flowsService!: FlowsService;
-	public topicService!: TopicService;
 
 	// Progress tracking
 	private progressListeners = new Set<
@@ -246,10 +241,7 @@ export class ServiceManager {
 
 			options.callback?.("flow", 0);
 			await this.initializeFlowsService();
-			options.callback?.("flow", 100);
 
-			// Initialize topic service
-			await this.initializeTopicService();
 			this.updateProgress("All services ready", 100, "flows");
 
 			logInfo(`✅ All services initialized successfully in ${mode}`);
@@ -372,23 +364,6 @@ export class ServiceManager {
 		}
 	}
 
-	private async initializeTopicService(): Promise<void> {
-		try {
-			logInfo("📚 Initializing topic service...");
-
-			// Create topic service with database dependency
-			this.topicService = createTopicService(this.databaseService);
-			this.serviceStatus.topic = true;
-
-			logInfo("✅ Topic service ready");
-		} catch (error) {
-			logError("❌ Topic service initialization failed:", error);
-			this.serviceStatus.topic = false;
-			// Don't throw - Topic service failure shouldn't block the app
-			logWarn("⚠️ Continuing without Topic service");
-		}
-	}
-
 	isInitialized(): boolean {
 		return this.initialized;
 	}
@@ -416,10 +391,6 @@ export class ServiceManager {
 		return this.serviceStatus.flows;
 	}
 
-	isTopicServiceReady(): boolean {
-		return this.serviceStatus.topic && !!this.topicService;
-	}
-
 	// Get overall service status
 	getServiceStatus() {
 		return {
@@ -445,10 +416,6 @@ export class ServiceManager {
 		return this.flowsService;
 	}
 
-	getTopicService() {
-		return this.topicService;
-	}
-
 	// Generic service getter for dynamic access
 	getService<K extends keyof ServiceRegistry>(
 		serviceName: K,
@@ -462,8 +429,6 @@ export class ServiceManager {
 				return this.llmService as ServiceRegistry[K];
 			case "flows":
 				return this.flowsService as ServiceRegistry[K];
-			case "topic":
-				return this.topicService as ServiceRegistry[K];
 			default:
 				return undefined;
 		}
@@ -476,5 +441,4 @@ interface ServiceRegistry {
 	embedding: IEmbeddingService;
 	llm: ILLMService;
 	flows: FlowsService;
-	topic: TopicService;
 }

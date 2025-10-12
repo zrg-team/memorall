@@ -24,7 +24,7 @@ import {
 import {
 	rememberService,
 	type SearchOptions,
-} from "@/modules/remember/services/remember/remember-service";
+} from "@/modules/remember/services/remember-service";
 import type { RememberedContent } from "@/services/database/db";
 import { logError } from "@/utils/logger";
 
