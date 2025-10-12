@@ -13,6 +13,7 @@ import { EntityExtractionFlow } from "./entity-extraction";
 import { EntityResolutionFlow } from "./entity-resolution";
 import { FactExtractionFlow } from "./fact-extraction";
 import { FactResolutionFlow } from "./fact-resolution";
+import { EdgeEnrichmentFlow } from "./edge-enrichment";
 import { TemporalExtractionFlow } from "./temporal-extraction";
 import { DatabaseSaveFlow } from "./database-save";
 import { GraphBase } from "../../interfaces/graph.base";
@@ -31,6 +32,7 @@ export class KnowledgeGraphFlow extends GraphBase<
 	| "extract_facts"
 	| "load_facts"
 	| "resolve_facts"
+	| "enrich_edges"
 	| "extract_temporal"
 	| "save_to_database",
 	KnowledgeGraphState,
@@ -40,6 +42,7 @@ export class KnowledgeGraphFlow extends GraphBase<
 	private entityResolution: EntityResolutionFlow;
 	private factExtraction: FactExtractionFlow;
 	private factResolution: FactResolutionFlow;
+	private edgeEnrichment: EdgeEnrichmentFlow;
 	private temporalExtraction: TemporalExtractionFlow;
 	private databaseSave: DatabaseSaveFlow;
 	private config: KnowledgeGraphConfig;
@@ -70,6 +73,7 @@ export class KnowledgeGraphFlow extends GraphBase<
 		this.entityResolution = new EntityResolutionFlow(services);
 		this.factExtraction = new FactExtractionFlow(services);
 		this.factResolution = new FactResolutionFlow(services);
+		this.edgeEnrichment = new EdgeEnrichmentFlow(services);
 		this.temporalExtraction = new TemporalExtractionFlow(services);
 		this.databaseSave = new DatabaseSaveFlow(services);
 
@@ -80,6 +84,7 @@ export class KnowledgeGraphFlow extends GraphBase<
 		this.workflow.addNode("resolve_entities", this.resolveEntitiesNode);
 		this.workflow.addNode("extract_facts", this.extractFactsNode);
 		this.workflow.addNode("resolve_facts", this.resolveFactsNode);
+		this.workflow.addNode("enrich_edges", this.enrichEdgesNode);
 		this.workflow.addNode("save_to_database", this.saveToDatabaseNode);
 
 		// Conditionally add temporal extraction
@@ -94,14 +99,15 @@ export class KnowledgeGraphFlow extends GraphBase<
 		this.workflow.addEdge("resolve_entities", "extract_facts");
 		this.workflow.addEdge("extract_facts", "load_facts");
 		this.workflow.addEdge("load_facts", "resolve_facts");
+		this.workflow.addEdge("resolve_facts", "enrich_edges");
 
 		if (this.config.enableTemporalExtraction) {
-			// With temporal extraction: resolve_facts -> extract_temporal -> save_to_database
-			this.workflow.addEdge("resolve_facts", "extract_temporal");
+			// With temporal extraction: enrich_edges -> extract_temporal -> save_to_database
+			this.workflow.addEdge("enrich_edges", "extract_temporal");
 			this.workflow.addEdge("extract_temporal", "save_to_database");
 		} else {
-			// Without temporal extraction: resolve_facts -> save_to_database
-			this.workflow.addEdge("resolve_facts", "save_to_database");
+			// Without temporal extraction: enrich_edges -> save_to_database
+			this.workflow.addEdge("enrich_edges", "save_to_database");
 		}
 
 		this.workflow.addEdge("save_to_database", END);
@@ -564,6 +570,12 @@ export class KnowledgeGraphFlow extends GraphBase<
 		state: KnowledgeGraphState,
 	): Promise<Partial<KnowledgeGraphState>> => {
 		return await this.factResolution.resolveFacts(state);
+	};
+
+	enrichEdgesNode = async (
+		state: KnowledgeGraphState,
+	): Promise<Partial<KnowledgeGraphState>> => {
+		return await this.edgeEnrichment.enrichEdges(state);
 	};
 
 	extractTemporalNode = async (

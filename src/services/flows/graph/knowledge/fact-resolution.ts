@@ -1,3 +1,4 @@
+import type { Edge } from "@/services/database";
 import type { KnowledgeGraphState, ResolvedFact, ExtractedFact } from "./state";
 import type { AllServices } from "@/services/flows/interfaces/tool";
 import { logInfo, logError, logWarn } from "@/utils/logger";
@@ -47,16 +48,19 @@ export class FactResolutionFlow {
 				};
 			}
 
-			const llm = this.services.llm;
-
-			if (!llm.isReady()) {
-				throw new Error("LLM service is not ready");
-			}
-
-			// Build node name lookup
+			// Build node name lookup and resolve entity IDs to actual node IDs
 			const nodeNameById = new Map<string, string>();
+			const nodeIdByEntityId = new Map<string, string>();
+
 			for (const n of state.existingNodes || []) {
 				nodeNameById.set(n.id!, n.name!);
+			}
+
+			// Map entity UUIDs to actual node IDs
+			for (const entity of state.resolvedEntities || []) {
+				if (entity.isExisting && entity.existingId) {
+					nodeIdByEntityId.set(entity.uuid, entity.existingId);
+				}
 			}
 
 			// Filter facts that have valid entity references
@@ -77,6 +81,102 @@ export class FactResolutionFlow {
 				return true;
 			});
 
+			// Step 1: Manual resolution - check for duplicate edges
+			const manuallyResolved: ResolvedFact[] = [];
+			const needsAIResolution: ExtractedFact[] = [];
+
+			// Build a map of existing edges for quick lookup
+			// Key format: "sourceId|destinationId|relationType"
+			const existingEdgeMap = new Map<string, Edge>();
+			for (const edge of state.existingEdges || []) {
+				const key = `${edge.sourceId}|${edge.destinationId}|${edge.edgeType}`;
+				existingEdgeMap.set(key, edge);
+
+				// Also add reverse direction for bidirectional relationships
+				const reverseKey = `${edge.destinationId}|${edge.sourceId}|${edge.edgeType}`;
+				if (!existingEdgeMap.has(reverseKey)) {
+					existingEdgeMap.set(reverseKey, edge);
+				}
+			}
+
+			for (const fact of validFacts) {
+				// Get resolved node IDs for source and destination
+				const sourceNodeId = nodeIdByEntityId.get(fact.sourceEntityId);
+				const destNodeId = nodeIdByEntityId.get(fact.destinationEntityId);
+
+				// Check if both entities are resolved to existing nodes
+				if (sourceNodeId && destNodeId) {
+					const edgeKey = `${sourceNodeId}|${destNodeId}|${fact.relationType}`;
+					const existingEdge = existingEdgeMap.get(edgeKey);
+
+					if (existingEdge) {
+						// Duplicate edge found - mark as existing
+						manuallyResolved.push({
+							...fact,
+							isExisting: true,
+							existingId: existingEdge.id,
+						});
+						logInfo(
+							`[FACT_RESOLUTION] Manual duplicate detected: ${sourceNodeId} -[${fact.relationType}]-> ${destNodeId} (edge ${existingEdge.id})`,
+						);
+						continue;
+					}
+				}
+
+				// No duplicate found - needs AI resolution
+				needsAIResolution.push(fact);
+			}
+
+			logInfo(
+				`[FACT_RESOLUTION] Manual resolution: ${manuallyResolved.length} duplicates found, ${needsAIResolution.length} need AI`,
+			);
+
+			// If all facts were manually resolved, return early
+			if (needsAIResolution.length === 0) {
+				// Add back any invalid facts as not duplicates
+				const invalidFacts = state.extractedFacts
+					.filter((fact) => {
+						const sourceEntity = state.resolvedEntities?.find(
+							(e) => e.uuid === fact.sourceEntityId,
+						);
+						const destEntity = state.resolvedEntities?.find(
+							(e) => e.uuid === fact.destinationEntityId,
+						);
+						return !sourceEntity || !destEntity;
+					})
+					.map((fact) => ({
+						...fact,
+						isExisting: false,
+					}));
+
+				const allResolvedFacts = [...manuallyResolved, ...invalidFacts];
+
+				return {
+					resolvedFacts: allResolvedFacts,
+					processingStage: "temporal_extraction",
+					actions: [
+						{
+							id: crypto.randomUUID(),
+							name: "Fact Resolution Complete (Manual Only)",
+							description: `Resolved ${allResolvedFacts.length} facts via manual duplicate detection`,
+							metadata: {
+								totalFacts: allResolvedFacts.length,
+								manualDuplicates: manuallyResolved.length,
+								aiResolved: 0,
+								invalidFacts: invalidFacts.length,
+							},
+						},
+					],
+				};
+			}
+
+			// Step 2: AI resolution for remaining facts
+			const llm = this.services.llm;
+
+			if (!llm.isReady()) {
+				throw new Error("LLM service is not ready");
+			}
+
 			// Prepare existing edges text
 			const existingEdgesText = (state.existingEdges || [])
 				.map((edge) => {
@@ -87,8 +187,8 @@ export class FactResolutionFlow {
 				})
 				.join("\n");
 
-			// Prepare facts text for processing
-			const factsText = validFacts
+			// Prepare facts text for processing (only facts needing AI resolution)
+			const factsText = needsAIResolution
 				.map((fact, index) => {
 					const sourceEntity = state.resolvedEntities?.find(
 						(e) => e.uuid === fact.sourceEntityId,
@@ -127,14 +227,14 @@ ${factsText}
 						throw new Error("Response is not an array");
 					}
 
-					// Map parsed resolutions to resolved facts
+					// Map parsed resolutions to resolved facts (only for AI-resolved facts)
 					const results: ResolvedFact[] = [];
 					for (
 						let i = 0;
-						i < Math.min(parsedArray.length, validFacts.length);
+						i < Math.min(parsedArray.length, needsAIResolution.length);
 						i++
 					) {
-						const fact = validFacts[i];
+						const fact = needsAIResolution[i];
 						const resolution = parsedArray[i] || {
 							is_duplicate: false,
 						};
@@ -147,8 +247,8 @@ ${factsText}
 					}
 
 					// Handle any remaining facts that weren't in the response
-					for (let i = parsedArray.length; i < validFacts.length; i++) {
-						const fact = validFacts[i];
+					for (let i = parsedArray.length; i < needsAIResolution.length; i++) {
+						const fact = needsAIResolution[i];
 						results.push({
 							...fact,
 							isExisting: false,
@@ -162,8 +262,8 @@ ${factsText}
 						parseError,
 					);
 
-					// Fallback: assume all facts are new
-					return validFacts.map((fact) => ({
+					// Fallback: assume all AI-resolution facts are new
+					return needsAIResolution.map((fact) => ({
 						...fact,
 						isExisting: false,
 					}));
@@ -172,7 +272,7 @@ ${factsText}
 
 			const maxModelTokens = await this.services.llm.getMaxModelTokens();
 
-			const resolvedValidFacts = await mapRefine<ResolvedFact>(
+			const aiResolvedFacts = await mapRefine<ResolvedFact>(
 				llm,
 				FACT_RESOLUTION_SYSTEM_PROMPT,
 				(chunk, prev, errorContext) => {
@@ -235,11 +335,15 @@ ${factsText}
 					isExisting: false,
 				}));
 
-			const allResolvedFacts = [...resolvedValidFacts, ...invalidFacts];
+			// Combine manual, AI-resolved, and invalid facts
+			const allResolvedFacts = [
+				...manuallyResolved,
+				...aiResolvedFacts,
+				...invalidFacts,
+			];
 
 			logInfo(
-				`[FACT_RESOLUTION] Resolved ${allResolvedFacts.length} facts`,
-				resolvedValidFacts,
+				`[FACT_RESOLUTION] Resolved ${allResolvedFacts.length} facts (${manuallyResolved.length} manual, ${aiResolvedFacts.length} AI, ${invalidFacts.length} invalid)`,
 			);
 
 			return {
@@ -249,12 +353,13 @@ ${factsText}
 					{
 						id: crypto.randomUUID(),
 						name: "Fact Resolution Complete",
-						description: `Resolved ${allResolvedFacts.length} facts. ${allResolvedFacts.filter((f) => f.isExisting).length} existing, ${allResolvedFacts.filter((f) => !f.isExisting).length} new`,
+						description: `Resolved ${allResolvedFacts.length} facts. ${allResolvedFacts.filter((f) => f.isExisting).length} existing, ${allResolvedFacts.filter((f) => !f.isExisting).length} new (${manuallyResolved.length} manual, ${aiResolvedFacts.length} AI, ${invalidFacts.length} invalid)`,
 						metadata: {
 							totalFacts: allResolvedFacts.length,
-							existingFacts: allResolvedFacts.filter((f) => f.isExisting)
-								.length,
+							existingFacts: allResolvedFacts.filter((f) => f.isExisting).length,
 							newFacts: allResolvedFacts.filter((f) => !f.isExisting).length,
+							manualDuplicates: manuallyResolved.length,
+							aiResolved: aiResolvedFacts.length,
 							invalidFacts: invalidFacts.length,
 						},
 					},

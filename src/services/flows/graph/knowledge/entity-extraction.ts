@@ -7,8 +7,8 @@ const ENTITY_EXTRACTION_SYSTEM_PROMPT = `You are an expert entity extraction spe
 
 CRITICAL NAMING RULES:
 1. Entity names MUST be clean, pure identifiers without any descriptive wrapper text
-   ❌ Bad: "the company Apple", "a person named John", "repository called MyProject"
-   ✅ Good: "Apple", "John Smith", "MyProject"
+   Bad: "the company Apple", "a person named John", "repository called MyProject"
+   Good: "Apple", "John Smith", "MyProject"
 
 2. Extract only the core subject name by removing:
    - Articles: "the", "a", "an"

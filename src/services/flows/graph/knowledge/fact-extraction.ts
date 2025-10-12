@@ -28,11 +28,11 @@ COMPREHENSIVE EXTRACTION STRATEGY:
 - Don't miss subtle relationships - if two entities appear in the same context, there's likely some relationship.
 
 ENTITY NAME MATCHING EXAMPLES:
-✅ Correct: If entity list contains "Apple Inc.", use "Apple Inc." exactly
-❌ Wrong: Using "Apple", "Apple Corporation", or "apple inc."
+Correct: If entity list contains "Apple Inc.", use "Apple Inc." exactly
+Wrong: Using "Apple", "Apple Corporation", or "apple inc."
 
-✅ Correct: If entity list contains "John Smith", use "John Smith" exactly
-❌ Wrong: Using "John", "Smith", or "john smith"
+Correct: If entity list contains "John Smith", use "John Smith" exactly
+Wrong: Using "John", "Smith", or "john smith"
 
 Return your response as a valid JSON array of objects with the following structure:
 [

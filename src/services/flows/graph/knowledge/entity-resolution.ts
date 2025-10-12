@@ -1,5 +1,6 @@
-import type { KnowledgeGraphState, ResolvedEntity } from "./state";
+import type { ExtractedEntity, KnowledgeGraphState, ResolvedEntity } from "./state";
 import type { AllServices } from "@/services/flows/interfaces/tool";
+import type { Node } from "@/services/database/entities/nodes";
 import { logInfo, logError } from "@/utils/logger";
 import { mapRefine } from "@/utils/map-refine";
 
@@ -39,7 +40,7 @@ export class EntityResolutionFlow {
 		state: KnowledgeGraphState,
 	): Promise<Partial<KnowledgeGraphState>> {
 		try {
-			logInfo("[ENTITY_RESOLUTION] Starting entity resolution with mapRefine");
+			logInfo("[ENTITY_RESOLUTION] Starting entity resolution with manual + AI");
 
 			if (!state.extractedEntities || state.extractedEntities.length === 0) {
 				return {
@@ -56,6 +57,62 @@ export class EntityResolutionFlow {
 				};
 			}
 
+			// Step 1: Manual resolution - check for exact name matches
+			const manuallyResolved: ResolvedEntity[] = [];
+			const needsAIResolution: ExtractedEntity[] = [];
+
+			const existingNodesByName = new Map<string, Node>();
+			for (const node of state.existingNodes) {
+				const normalizedName = node.name.toLowerCase().trim();
+				existingNodesByName.set(normalizedName, node);
+			}
+
+			for (const entity of state.extractedEntities) {
+				const normalizedEntityName = entity.name.toLowerCase().trim();
+				const existingNode = existingNodesByName.get(normalizedEntityName);
+
+				if (existingNode) {
+					// Exact match found - reuse existing node
+					manuallyResolved.push({
+						...entity,
+						isExisting: true,
+						existingId: existingNode.id,
+						finalName: existingNode.name, // Use existing node's name
+					});
+					logInfo(
+						`[ENTITY_RESOLUTION] Manual match: "${entity.name}" -> existing node "${existingNode.name}" (${existingNode.id})`,
+					);
+				} else {
+					// No exact match - needs AI resolution
+					needsAIResolution.push(entity);
+				}
+			}
+
+			logInfo(
+				`[ENTITY_RESOLUTION] Manual resolution: ${manuallyResolved.length} exact matches, ${needsAIResolution.length} need AI`,
+			);
+
+			// If all entities were manually resolved, return early
+			if (needsAIResolution.length === 0) {
+				return {
+					resolvedEntities: manuallyResolved,
+					processingStage: "fact_extraction",
+					actions: [
+						{
+							id: crypto.randomUUID(),
+							name: "Entity Resolution Complete (Manual Only)",
+							description: `Resolved ${manuallyResolved.length} entities via exact name matching`,
+							metadata: {
+								totalEntities: manuallyResolved.length,
+								manualMatches: manuallyResolved.length,
+								aiResolved: 0,
+							},
+						},
+					],
+				};
+			}
+
+			// Step 2: AI resolution for remaining entities
 			const llm = this.services.llm;
 
 			if (!llm.isReady()) {
@@ -86,8 +143,8 @@ export class EntityResolutionFlow {
 				contentSection = `<METADATA>\n${metadata.join("\n")}\n</METADATA>\n\n${contentSection}`;
 			}
 
-			// Prepare entities text for processing
-			const entitiesText = state.extractedEntities
+			// Prepare entities text for processing (only entities needing AI resolution)
+			const entitiesText = needsAIResolution
 				.map(
 					(entity, index) =>
 						`${index + 1}. Name: ${entity.name}, Summary: ${entity.summary || "No summary"}, Type: ${entity.nodeType}`,
@@ -124,14 +181,14 @@ ${entitiesText}
 						throw new Error("Response is not an array");
 					}
 
-					// Map parsed resolutions to resolved entities
+					// Map parsed resolutions to resolved entities (only for AI-resolved entities)
 					const results: ResolvedEntity[] = [];
 					for (
 						let i = 0;
-						i < Math.min(parsedArray.length, state.extractedEntities.length);
+						i < Math.min(parsedArray.length, needsAIResolution.length);
 						i++
 					) {
-						const entity = state.extractedEntities[i];
+						const entity = needsAIResolution[i];
 						const resolution = parsedArray[i] || {
 							is_duplicate: false,
 							final_name: entity.name,
@@ -148,10 +205,10 @@ ${entitiesText}
 					// Handle any remaining entities that weren't in the response
 					for (
 						let i = parsedArray.length;
-						i < state.extractedEntities.length;
+						i < needsAIResolution.length;
 						i++
 					) {
-						const entity = state.extractedEntities[i];
+						const entity = needsAIResolution[i];
 						results.push({
 							...entity,
 							isExisting: false,
@@ -166,8 +223,8 @@ ${entitiesText}
 						parseError,
 					);
 
-					// Fallback: assume all entities are new
-					return state.extractedEntities.map((entity) => ({
+					// Fallback: assume all AI-resolution entities are new
+					return needsAIResolution.map((entity) => ({
 						...entity,
 						isExisting: false,
 						finalName: entity.name,
@@ -177,7 +234,7 @@ ${entitiesText}
 
 			const maxModelTokens = await this.services.llm.getMaxModelTokens();
 
-			const resolvedEntities = await mapRefine<ResolvedEntity>(
+			const aiResolvedEntities = await mapRefine<ResolvedEntity>(
 				llm,
 				ENTITY_RESOLUTION_SYSTEM_PROMPT,
 				(chunk, prev, errorContext) => {
@@ -223,23 +280,29 @@ ${entitiesText}
 				},
 			);
 
+			// Combine manual and AI-resolved entities
+			const allResolvedEntities = [...manuallyResolved, ...aiResolvedEntities];
+
 			logInfo(
-				`[ENTITY_RESOLUTION] Resolved ${resolvedEntities.length} entities`,
+				`[ENTITY_RESOLUTION] Resolved ${allResolvedEntities.length} entities (${manuallyResolved.length} manual, ${aiResolvedEntities.length} AI)`,
 			);
 
 			return {
-				resolvedEntities,
+				resolvedEntities: allResolvedEntities,
 				processingStage: "fact_extraction",
 				actions: [
 					{
 						id: crypto.randomUUID(),
 						name: "Entity Resolution Complete",
-						description: `Resolved ${resolvedEntities.length} entities. ${resolvedEntities.filter((e) => e.isExisting).length} existing, ${resolvedEntities.filter((e) => !e.isExisting).length} new`,
+						description: `Resolved ${allResolvedEntities.length} entities. ${allResolvedEntities.filter((e) => e.isExisting).length} existing, ${allResolvedEntities.filter((e) => !e.isExisting).length} new (${manuallyResolved.length} manual matches, ${aiResolvedEntities.length} AI resolved)`,
 						metadata: {
-							totalEntities: resolvedEntities.length,
-							existingEntities: resolvedEntities.filter((e) => e.isExisting)
+							totalEntities: allResolvedEntities.length,
+							existingEntities: allResolvedEntities.filter((e) => e.isExisting)
 								.length,
-							newEntities: resolvedEntities.filter((e) => !e.isExisting).length,
+							newEntities: allResolvedEntities.filter((e) => !e.isExisting)
+								.length,
+							manualMatches: manuallyResolved.length,
+							aiResolved: aiResolvedEntities.length,
 						},
 					},
 				],
