@@ -1,7 +1,5 @@
 import type { ChatAction } from "@/modules/chat/services/chat-service";
 
-export { ChatAction };
-
 export interface ChatMessage {
 	id: string;
 	content: string;
