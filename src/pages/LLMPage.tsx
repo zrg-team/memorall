@@ -16,9 +16,9 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Home, Brain, CheckCircle2 } from "lucide-react";
-import { useCurrentModel } from "@/modules/llm/components/YourModels/hooks/use-current-model";
-import { useProviderConfig } from "@/modules/llm/components/YourModels/hooks/use-provider-config";
-import { useDownloadedModels } from "@/modules/llm/components/YourModels/hooks/use-downloaded-models";
+import { useCurrentModel } from "@/hooks/use-current-model";
+import { useProviderConfig } from "@/hooks/use-provider-config";
+import { useDownloadedModels } from "@/modules/llm/hooks/use-downloaded-models";
 
 // No local quick-connect card; configuration handled in AdvancedSection
 

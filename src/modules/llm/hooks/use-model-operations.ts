@@ -5,8 +5,8 @@ import { QUICK_WALLAMA_LLMS } from "@/constants/wllama";
 import { QUICK_WEBLLM_LLMS } from "@/constants/webllm";
 import { QUICK_OPENAI_LLMS } from "@/constants/openai";
 import { logError, logInfo } from "@/utils/logger";
-import type { Provider } from "./use-provider-config";
-import type { CurrentModel } from "./use-current-model";
+import type { Provider } from "../../../hooks/use-provider-config";
+import type { CurrentModel } from "../../../hooks/use-current-model";
 import type { DownloadProgress } from "./use-download-progress";
 import { PROVIDER_TO_SERVICE } from "@/services/llm/constants";
 

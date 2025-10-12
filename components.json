@@ -16,7 +16,8 @@
     "ui": "@/components/ui",
     "lib": "@/lib",
     "hooks": "@/hooks",
-    "services": "@/services"
+    "services": "@/services",
+    "modules": "@/modules"
   },
   "iconLibrary": "@radix-ui/react-icons"
 }

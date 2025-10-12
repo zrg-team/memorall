@@ -3,7 +3,7 @@ import { type ModelInfo } from "@/services/llm";
 import { eq } from "drizzle-orm";
 import { logError } from "@/utils/logger";
 import { serviceManager } from "@/services";
-import type { Provider } from "./use-provider-config";
+import type { Provider } from "../../../hooks/use-provider-config";
 
 export function useLocalModels(
 	quickProvider: Provider,

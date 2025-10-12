@@ -1,8 +1,8 @@
 import { logInfo, logError } from "@/utils/logger";
-import { serviceManager } from "@/services";
 import { handlerRegistry } from "./handler-registry";
 import type { BaseJob, ProcessHandler, ItemHandlerResult } from "./types";
 import type { Topic } from "@/services/database";
+import { topicService } from "@/modules/topics/services/topic-service";
 
 const JOB_NAMES = {
 	checkTopicsExist: "check-topics-exist",
@@ -42,11 +42,6 @@ class TopicOperationsHandler implements ProcessHandler<BaseJob> {
 				job,
 			});
 
-			const topicService = serviceManager.getService("topic");
-			if (!topicService) {
-				throw new Error("Topic service not available");
-			}
-
 			switch (job.jobType) {
 				case JOB_NAMES.checkTopicsExist:
 					return this.handleCheckTopicsExist(jobId, job);
@@ -70,11 +65,6 @@ class TopicOperationsHandler implements ProcessHandler<BaseJob> {
 	): Promise<ItemHandlerResult> {
 		logInfo("[TOPIC_OPERATIONS_HANDLER] Checking if topics exist");
 
-		const topicService = serviceManager.getService("topic");
-		if (!topicService) {
-			throw new Error("Topic service not available");
-		}
-
 		const topics = await topicService.getTopics({ limit: 1 });
 		const hasTopics = topics.length > 0;
 
@@ -91,11 +81,6 @@ class TopicOperationsHandler implements ProcessHandler<BaseJob> {
 		job: BaseJob,
 	): Promise<ItemHandlerResult> {
 		logInfo("[TOPIC_OPERATIONS_HANDLER] Getting all topics");
-
-		const topicService = serviceManager.getService("topic");
-		if (!topicService) {
-			throw new Error("Topic service not available");
-		}
 
 		const payload = job.payload as GetTopicsPayload;
 		const topics = await topicService.getTopics({

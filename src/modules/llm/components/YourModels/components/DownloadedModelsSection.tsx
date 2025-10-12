@@ -3,8 +3,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, Download, Play, Square, Bot } from "lucide-react";
 import type { ModelInfo } from "@/services/llm";
-import type { CurrentModel } from "../hooks/use-current-model";
-import type { Provider } from "../hooks/use-provider-config";
+import type { CurrentModel } from "../../../../../hooks/use-current-model";
+import type { Provider } from "../../../../../hooks/use-provider-config";
 
 interface DownloadedModelsSectionProps {
 	downloadedOnly: ModelInfo[];

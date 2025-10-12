@@ -1,5 +1,5 @@
 import React from "react";
-import type { Provider } from "../hooks/use-provider-config";
+import type { Provider } from "../../../../../hooks/use-provider-config";
 
 interface ProviderSelectorProps {
 	quickProvider: Provider;

@@ -24,7 +24,8 @@
       "@/lib/*": ["./src/lib/*"],
       "@/utils/*": ["./src/utils/*"],
       "@/ui/*": ["./src/components/ui/*"],
-      "@/hooks/*": ["./src/hooks/*"]
+      "@/hooks/*": ["./src/hooks/*"],
+      "@/modules/*": ["./src/modules/*"],
     }
   },
   "include": ["./"],

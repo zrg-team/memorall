@@ -4,12 +4,12 @@ import { OpenAITab } from "@/modules/llm/components/OpenAITab";
 import { LocalOpenAITab } from "@/modules/llm/components/LocalOpenAITab";
 
 // Hooks
-import { useProviderConfig, type Provider } from "./hooks/use-provider-config";
-import { useCurrentModel } from "./hooks/use-current-model";
-import { useLocalModels } from "./hooks/use-local-models";
-import { useDownloadProgress } from "./hooks/use-download-progress";
-import { useDownloadedModels } from "./hooks/use-downloaded-models";
-import { useModelOperations } from "./hooks/use-model-operations";
+import { useProviderConfig, type Provider } from "@/hooks/use-provider-config";
+import { useCurrentModel } from "@/hooks/use-current-model";
+import { useLocalModels } from "@/modules/llm/hooks/use-local-models";
+import { useDownloadProgress } from "@/modules/llm/hooks/use-download-progress";
+import { useDownloadedModels } from "@/modules/llm/hooks/use-downloaded-models";
+import { useModelOperations } from "@/modules/llm/hooks/use-model-operations";
 
 // Components
 import { ProgressSection } from "./components/ProgressSection";

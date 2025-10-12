@@ -1,6 +1,6 @@
 import React from "react";
 import { Progress } from "@/components/ui/progress";
-import type { DownloadProgress } from "../hooks/use-download-progress";
+import type { DownloadProgress } from "../../../hooks/use-download-progress";
 
 interface ProgressSectionProps {
 	loading: boolean;
