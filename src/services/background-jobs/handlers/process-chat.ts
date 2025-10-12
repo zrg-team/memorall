@@ -8,12 +8,20 @@ import type {
 } from "@/types/openai";
 import { handlerRegistry } from "./handler-registry";
 
+export interface ChatStreamConfig {
+	/** Minimum number of words to buffer before streaming (default: 5) */
+	minWordsToStream?: number;
+	/** Whether to stream tool calls immediately (default: true) */
+	streamToolCallsImmediately?: boolean;
+}
+
 export interface ChatPayload {
 	messages: ChatMessage[];
 	model: string;
 	mode: "normal" | "agent" | "knowledge";
 	query?: string; // For knowledge mode
 	topicId?: string; // For topic filtering in knowledge mode
+	streamConfig?: ChatStreamConfig;
 }
 
 export type ChatResult =
@@ -52,6 +60,55 @@ export type ChatJob = BaseJob & {
 	payload: ChatPayload;
 };
 
+/**
+ * Helper class to buffer streaming content and emit when threshold is reached
+ */
+class StreamBuffer {
+	private buffer: string = "";
+	private wordCount: number = 0;
+	private readonly minWords: number;
+	private onEmit: (content: string) => void;
+
+	constructor(minWords: number, onEmit: (content: string) => void) {
+		this.minWords = minWords;
+		this.onEmit = onEmit;
+	}
+
+	/**
+	 * Add content to buffer and emit if word threshold reached
+	 */
+	add(content: string): void {
+		this.buffer += content;
+
+		// Count words by splitting on whitespace
+		const words = this.buffer.trim().split(/\s+/);
+		this.wordCount = words.length;
+
+		// Emit if we've reached the minimum word count
+		if (this.wordCount >= this.minWords) {
+			this.flush();
+		}
+	}
+
+	/**
+	 * Force emit all buffered content
+	 */
+	flush(): void {
+		if (this.buffer) {
+			this.onEmit(this.buffer);
+			this.buffer = "";
+			this.wordCount = 0;
+		}
+	}
+
+	/**
+	 * Get current buffer without flushing
+	 */
+	peek(): string {
+		return this.buffer;
+	}
+}
+
 export class ChatHandler extends BaseProcessHandler<ChatJob> {
 	constructor() {
 		super();
@@ -62,7 +119,14 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 		job: ChatJob,
 		dependencies: ProcessDependencies,
 	): Promise<ItemHandlerResult> {
-		const { messages, model, mode, query, topicId } = job.payload;
+		const { messages, model, mode, query, topicId, streamConfig } = job.payload;
+
+		// Apply default stream config
+		const config: Required<ChatStreamConfig> = {
+			minWordsToStream: streamConfig?.minWordsToStream ?? 5,
+			streamToolCallsImmediately:
+				streamConfig?.streamToolCallsImmediately ?? true,
+		};
 
 		await dependencies.logger.info(
 			`🤖 Starting chat job: ${jobId}`,
@@ -70,6 +134,7 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 				messageCount: messages.length,
 				model,
 				mode,
+				streamConfig: config,
 			},
 			"offscreen",
 		);
@@ -81,6 +146,35 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 			description: string;
 			metadata: Record<string, any>;
 		}> = [];
+
+		// Create stream buffer for content
+		const streamBuffer = new StreamBuffer(
+			config.minWordsToStream,
+			(bufferedContent) => {
+				currentContent += bufferedContent;
+				// Emit buffered content as chunk
+				dependencies.updateJobProgress(jobId, {
+					stage: "Receiving response...",
+					progress: Math.min(80, 20 + currentContent.length / 10),
+					result: {
+						type: "chunk",
+						chunk: {
+							id: `chunk-${Date.now()}`,
+							object: "chat.completion.chunk",
+							created: Math.floor(Date.now() / 1000),
+							model: model,
+							choices: [
+								{
+									index: 0,
+									delta: { content: bufferedContent, role: "assistant" },
+									finish_reason: null,
+								},
+							],
+						},
+					} as ChatResult,
+				});
+			},
+		);
 
 		try {
 			// Send initial progress update
@@ -110,11 +204,35 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 					{
 						callbacks: {
 							onNewChunk: async (chunk: ChatCompletionChunk) => {
+								// Stream all chunk types immediately if it's a tool call
+								const hasToolCalls =
+									chunk.choices[0]?.delta &&
+									"tool_calls" in chunk.choices[0]?.delta &&
+									Array.isArray(chunk.choices[0]?.delta?.tool_calls) &&
+									chunk.choices[0]?.delta?.tool_calls?.length > 0;
+								if (hasToolCalls && config.streamToolCallsImmediately) {
+									await dependencies.updateJobProgress(jobId, {
+										stage: "Tool call in progress...",
+										progress: Math.min(80, 20 + currentContent.length / 10),
+										result: {
+											type: "chunk",
+											chunk,
+										} as ChatResult,
+									});
+									return;
+								}
+
+								// Buffer content chunks
 								const content = chunk.choices[0]?.delta?.content;
 								if (content) {
-									currentContent += content;
+									streamBuffer.add(content);
+								}
 
-									// Send streaming progress updates
+								// Stream other chunk types immediately (role, finish_reason, etc)
+								if (
+									chunk.choices[0]?.delta?.role ||
+									chunk.choices[0]?.finish_reason
+								) {
 									await dependencies.updateJobProgress(jobId, {
 										stage: "Receiving response...",
 										progress: Math.min(80, 20 + currentContent.length / 10),
@@ -154,6 +272,9 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 						}
 					});
 				}
+
+				// Flush any remaining buffered content
+				streamBuffer.flush();
 			} else if (mode === "knowledge") {
 				// Use KnowledgeRAGFlow for knowledge mode (following use-chat.ts pattern)
 				const graph = serviceManager.flowsService.createGraph("knowledge-rag", {
@@ -177,18 +298,44 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 					{
 						callbacks: {
 							onNewChunk: async (chunk: ChatCompletionChunk) => {
+								// Stream all chunk types immediately if it's a tool call
+								const hasToolCalls =
+									chunk.choices[0]?.delta &&
+									"tool_calls" in chunk.choices[0]?.delta &&
+									Array.isArray(chunk.choices[0]?.delta?.tool_calls) &&
+									chunk.choices[0]?.delta?.tool_calls?.length > 0;
+								if (hasToolCalls && config.streamToolCallsImmediately) {
+									await dependencies.updateJobProgress(jobId, {
+										stage: "Tool call in progress...",
+										progress: Math.min(80, 20 + currentContent.length / 10),
+										result: {
+											type: "chunk",
+											chunk,
+										} as ChatResult,
+									});
+									return;
+								}
+
+								// Buffer content chunks
 								const content = chunk.choices[0]?.delta?.content;
 								if (content) {
-									currentContent += content;
+									streamBuffer.add(content);
 								}
-								await dependencies.updateJobProgress(jobId, {
-									stage: "Receiving response...",
-									progress: 10,
-									result: {
-										type: "chunk",
-										chunk: chunk,
-									} as ChatResult,
-								});
+
+								// Stream other chunk types immediately (role, finish_reason, etc)
+								if (
+									chunk.choices[0]?.delta?.role ||
+									chunk.choices[0]?.finish_reason
+								) {
+									await dependencies.updateJobProgress(jobId, {
+										stage: "Receiving response...",
+										progress: Math.min(80, 20 + currentContent.length / 10),
+										result: {
+											type: "chunk",
+											chunk,
+										} as ChatResult,
+									});
+								}
 							},
 						},
 					},
@@ -219,6 +366,9 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 						}
 					});
 				}
+
+				// Flush any remaining buffered content
+				streamBuffer.flush();
 			} else {
 				// Normal mode - direct LLM call (following use-chat.ts pattern exactly)
 				const request: ChatCompletionRequest = {
@@ -243,11 +393,35 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 						) as AsyncIterableIterator<ChatCompletionChunk>;
 
 						for await (const chunk of stream) {
+							// Stream all chunk types immediately if it's a tool call
+							const hasToolCalls =
+								chunk.choices[0]?.delta &&
+								"tool_calls" in chunk.choices[0]?.delta &&
+								Array.isArray(chunk.choices[0]?.delta?.tool_calls) &&
+								chunk.choices[0]?.delta?.tool_calls?.length > 0;
+							if (hasToolCalls && config.streamToolCallsImmediately) {
+								await dependencies.updateJobProgress(jobId, {
+									stage: "Tool call in progress...",
+									progress: Math.min(80, 20 + currentContent.length / 10),
+									result: {
+										type: "chunk",
+										chunk,
+									} as ChatResult,
+								});
+								continue;
+							}
+
+							// Buffer content chunks
 							const content = chunk.choices[0]?.delta?.content;
 							if (content) {
-								currentContent += content;
+								streamBuffer.add(content);
+							}
 
-								// Send streaming progress updates
+							// Stream other chunk types immediately (role, finish_reason, etc)
+							if (
+								chunk.choices[0]?.delta?.role ||
+								chunk.choices[0]?.finish_reason
+							) {
 								await dependencies.updateJobProgress(jobId, {
 									stage: "Receiving response...",
 									progress: Math.min(80, 20 + currentContent.length / 10),
@@ -262,6 +436,9 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 				} catch (streamError) {
 					throw streamError;
 				}
+
+				// Flush any remaining buffered content
+				streamBuffer.flush();
 			}
 
 			return {

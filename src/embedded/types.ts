@@ -1,9 +1,6 @@
-export interface ChatAction {
-	id: string;
-	name: string;
-	description: string;
-	metadata: Record<string, unknown>;
-}
+import type { ChatAction } from "@/modules/chat/services/chat-service";
+
+export { ChatAction };
 
 export interface ChatMessage {
 	id: string;

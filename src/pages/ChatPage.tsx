@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import {
 	Conversation,
@@ -32,11 +32,60 @@ export const ChatPage: React.FC = () => {
 		messages,
 		isLoading,
 		abortController,
+		inProgressMessage,
 		handleSubmit,
 		handleStop,
 		insertSeparator,
 		deleteMessages,
 	} = useChat(model);
+
+	// Memoized completed messages - only re-renders when messages array changes
+	const completedMessages = useMemo(() => {
+		return messages.map((message, index) => {
+			// Skip the last placeholder message if we're loading
+			if (isLoading && index === messages.length - 1) {
+				return null;
+			}
+			return (
+				<MessageRenderer
+					key={message.id}
+					message={message}
+					index={index}
+					isLastMessage={false}
+					isLoading={false}
+				/>
+			);
+		});
+	}, [messages, isLoading]);
+
+	// In-progress message - only this re-renders during streaming
+	const inProgressMessageElement = useMemo(() => {
+		if (!inProgressMessage || !isLoading) return null;
+
+		const message = messages.find((m) => m.id === inProgressMessage.id);
+		if (!message) return null;
+
+		const updatedMessage = {
+			...message,
+			content: inProgressMessage.content,
+			metadata: {
+				...("metadata" in message && typeof message.metadata === "object"
+					? message.metadata
+					: {}),
+				actions: inProgressMessage.actions,
+			},
+		};
+
+		return (
+			<MessageRenderer
+				key={message.id}
+				message={updatedMessage}
+				index={0}
+				isLastMessage={true}
+				isLoading={true}
+			/>
+		);
+	}, [inProgressMessage, messages, isLoading]);
 
 	// Fetch topics when knowledge mode is selected
 	useEffect(() => {
@@ -86,18 +135,8 @@ export const ChatPage: React.FC = () => {
 		<div className="flex flex-col h-full bg-background">
 			<Conversation className="flex-1 min-h-0">
 				<ConversationContent className="max-w-3xl mx-auto space-y-4">
-					{messages.map((message, index) => {
-						const isLastMessage = index === messages.length - 1;
-						return (
-							<MessageRenderer
-								key={message.id}
-								message={message}
-								index={index}
-								isLastMessage={isLastMessage}
-								isLoading={isLoading}
-							/>
-						);
-					})}
+					{completedMessages}
+					{inProgressMessageElement}
 				</ConversationContent>
 				<ConversationScrollButton />
 			</Conversation>

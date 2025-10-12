@@ -25,7 +25,7 @@ import {
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import type { ChatStatus } from "ai";
-import type { ChatMode } from "../hooks/use-chat";
+import type { ChatMode } from "@/modules/chat/services/chat-service";
 
 interface ChatInputProps {
 	inputValue: string;

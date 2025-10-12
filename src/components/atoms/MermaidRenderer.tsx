@@ -174,11 +174,7 @@ export const MermaidRenderer: React.FC<MermaidRendererProps> = ({
 				onClick={() => setShowCode(!showCode)}
 				title={showCode ? "Show diagram" : "Show code"}
 			>
-				{showCode ? (
-					<Eye className="h-4 w-4" />
-				) : (
-					<Code2 className="h-4 w-4" />
-				)}
+				{showCode ? <Eye className="h-4 w-4" /> : <Code2 className="h-4 w-4" />}
 			</Button>
 
 			{showCode ? (

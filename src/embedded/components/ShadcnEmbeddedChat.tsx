@@ -6,8 +6,9 @@ import React, {
 } from "react";
 import { createRoot } from "react-dom/client";
 import { nanoid } from "nanoid";
-import type { ChatModalProps, ChatMessage, ChatAction } from "../types";
-import { embeddedChatService } from "../chat-service";
+import type { ChatModalProps, ChatMessage } from "../types";
+import { chatService } from "@/modules/chat/services/chat-service";
+import type { ChatAction } from "@/modules/chat/services/chat-service";
 import { backgroundJob } from "@/services/background-jobs/background-job";
 import { customStyles } from "./styles/customStyles";
 import { EmbeddedMessageRenderer } from "./EmbeddedMessageRenderer";
@@ -445,68 +446,92 @@ const ShadcnEmbeddedChat: React.FC<ChatModalProps> = ({
 			try {
 				const allMessages = [...messages, userMessage];
 
-				await embeddedChatService.chatStream({
-					messages: allMessages,
-					model: selectedModel,
-					mode: mode === "topic" ? "knowledge" : "knowledge",
-					topicId:
-						selectedTopic && selectedTopic !== "__all__"
-							? selectedTopic
-							: undefined,
-					signal: controller.signal,
-					onProgress: (content: string, isComplete: boolean) => {
-						setMessages((prev) =>
-							prev.map((msg) => {
-								if (msg.id === assistantMessageId) {
-									return {
-										...msg,
-										content,
-										isStreaming: !isComplete,
-									};
-								}
-								return msg;
-							}),
-						);
-					},
-					onAction: (actions: ChatAction[]) => {
-						setMessages((prev) =>
-							prev.map((msg) => {
-								if (msg.id === assistantMessageId) {
-									return {
-										...msg,
-										metadata: {
-											...msg.metadata,
-											actions,
-										},
-									};
-								}
-								return msg;
-							}),
-						);
-					},
-					onError: (error: string) => {
-						console.error("Chat error:", error);
+				// Convert to core message format
+				const coreMessages = allMessages.map((msg) => ({
+					role: msg.role,
+					content: msg.content,
+				}));
 
-						// Update message with error
-						setMessages((prev) =>
-							prev.map((msg) => {
-								if (msg.id === assistantMessageId) {
-									return {
-										...msg,
-										content:
-											"Sorry, I encountered an error while processing your request. Please try again.",
-										isStreaming: false,
-									};
-								}
-								return msg;
-							}),
-						);
-
-						setIsTyping(false);
-						setStreamingMessageId(null);
-						setAbortController(null);
+				const result = await chatService.chatStream(
+					{
+						messages: coreMessages,
+						model: selectedModel,
+						mode: mode === "topic" ? "knowledge" : "knowledge",
+						topicId:
+							selectedTopic && selectedTopic !== "__all__"
+								? selectedTopic
+								: undefined,
 					},
-				});
+					{
+						onContent: (content: string) => {
+							setMessages((prev) =>
+								prev.map((msg) => {
+									if (msg.id === assistantMessageId) {
+										return {
+											...msg,
+											content,
+											isStreaming: true,
+										};
+									}
+									return msg;
+								}),
+							);
+						},
+						onAction: (actions: ChatAction[]) => {
+							setMessages((prev) =>
+								prev.map((msg) => {
+									if (msg.id === assistantMessageId) {
+										return {
+											...msg,
+											metadata: {
+												...msg.metadata,
+												actions,
+											},
+										};
+									}
+									return msg;
+								}),
+							);
+						},
+						onError: (error: string) => {
+							console.error("Chat error:", error);
+						},
+					},
+					controller.signal,
+				);
+
+				// Handle result after streaming completes
+				if (result.failed) {
+					setMessages((prev) =>
+						prev.map((msg) => {
+							if (msg.id === assistantMessageId) {
+								return {
+									...msg,
+									content: `${result.content}\n\n---\n\n❌ **Error:** ${result.error}`,
+									isStreaming: false,
+								};
+							}
+							return msg;
+						}),
+					);
+				} else {
+					setMessages((prev) =>
+						prev.map((msg) => {
+							if (msg.id === assistantMessageId) {
+								return {
+									...msg,
+									content: result.content,
+									isStreaming: false,
+									metadata: {
+										...msg.metadata,
+										actions: result.actions,
+									},
+								};
+							}
+							return msg;
+						}),
+					);
+				}
 			} catch (error) {
 				console.error("Chat submission error:", error);
 

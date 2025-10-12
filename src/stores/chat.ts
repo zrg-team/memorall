@@ -91,21 +91,31 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 				"",
 			);
 
+			const updatedMessage = {
+				...message,
+				...inputMessage,
+				role: inputMessage.role || message?.role || "user",
+				content: cleanContent,
+				metadata: {
+					...(message?.metadata || {}),
+					...(inputMessage?.metadata || {}),
+				},
+			};
+
+			// Update database
 			await serviceManager.databaseService.use(({ db, schema }) =>
 				db
 					.update(schema.messages)
-					.set({
-						...message,
-						...inputMessage,
-						role: inputMessage.role || message?.role || "user",
-						content: cleanContent,
-						metadata: {
-							...(message?.metadata || {}),
-							...(inputMessage?.metadata || {}),
-						},
-					})
+					.set(updatedMessage)
 					.where(eq(schema.messages.id, id)),
 			);
+
+			// Update store state
+			set((state) => ({
+				messages: state.messages.map((msg) =>
+					msg.id === id ? { ...msg, ...updatedMessage } : msg,
+				),
+			}));
 		} catch (error) {
 			logError("Failed to finalize message in database:", error);
 		}

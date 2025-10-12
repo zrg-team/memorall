@@ -1,15 +1,21 @@
 import { useState, useEffect } from "react";
-import { serviceManager } from "@/services";
-import type {
-	ChatCompletionRequest,
-	ChatCompletionChunk,
-	ChatMessage,
-} from "@/types/openai";
+import { chatService } from "@/modules/chat/services/chat-service";
+import type { ChatMode } from "@/modules/chat/services/chat-service";
+import type { ChatMessage } from "@/types/openai";
 import { useChatStore } from "@/stores/chat";
 import type { ChatStatus } from "ai";
 import { logError, logInfo } from "@/utils/logger";
 
-export type ChatMode = "normal" | "agent" | "knowledge";
+export interface InProgressMessage {
+	id: string;
+	content: string;
+	actions: Array<{
+		id: string;
+		name: string;
+		description: string;
+		metadata: Record<string, unknown>;
+	}>;
+}
 
 export const useChat = (model: string) => {
 	const [inputValue, setInputValue] = useState("");
@@ -18,12 +24,13 @@ export const useChat = (model: string) => {
 	const [selectedTopic, setSelectedTopic] = useState<string>("__all__");
 	const [abortController, setAbortController] =
 		useState<AbortController | null>(null);
+	const [inProgressMessage, setInProgressMessage] =
+		useState<InProgressMessage | null>(null);
 
 	const {
 		messages,
 		isLoading,
 		addMessage,
-		updateMessage,
 		finalizeMessage,
 		setLoading,
 		ensureMainConversation,
@@ -116,131 +123,74 @@ export const useChat = (model: string) => {
 					content: msg.content,
 				}));
 
-			if (chatMode === "knowledge") {
-				// Use KnowledgeRAGFlow for knowledge mode
-				const graph = serviceManager.flowsService.createGraph("knowledge-rag", {
-					llm: serviceManager.llmService,
-					embedding: serviceManager.embeddingService,
-					database: serviceManager.databaseService,
-				});
+			// Create assistant message placeholder
+			assistantMessage = await addMessage({
+				role: "assistant",
+				content: "",
+			});
 
-				// Create assistant message placeholder
-				assistantMessage = await addMessage({
-					role: "assistant",
-					content: "",
-				});
+			// Set in-progress message for real-time updates
+			setInProgressMessage({
+				id: assistantMessage.id,
+				content: "",
+				actions: [],
+			});
 
-				try {
-					const stream = await graph.stream(
-						{
-							messages: sendMessages,
-							query: userMessageContent,
-							topicId:
-								selectedTopic && selectedTopic !== "__all__"
-									? selectedTopic
-									: undefined,
-							steps: [],
-						},
-						{
-							callbacks: {
-								onNewChunk: (chunk: ChatCompletionChunk) => {
-									const content = chunk.choices[0]?.delta?.content;
-									if (content) {
-										currentContent += content;
-										updateMessage(assistantMessage.id, {
-											content: currentContent,
-										});
-									}
-								},
-							},
-						},
-					);
-
-					const actions: {
-						id: string;
-						name: string;
-						description: string;
-						metadata: Record<string, unknown>;
-					}[] = [];
-
-					for await (const partial of stream) {
-						const keys = Object.keys(partial);
-						keys.forEach((key) => {
-							const partialValue = partial[key];
-							if (
-								"actions" in partialValue &&
-								Array.isArray(partialValue.actions) &&
-								partialValue.actions?.length
-							) {
-								partialValue.actions.forEach((action) => {
-									if (!actions.find((a) => a.id === action.id)) {
-										actions.push(action);
-									}
-								});
-								updateMessage(assistantMessage.id, { metadata: { actions } });
-							}
-						});
-					}
-
-					// Update and finalize the assistant message
-					updateMessage(assistantMessage.id, {
-						content: currentContent,
-						metadata: { actions },
-					});
-					await finalizeMessage(assistantMessage.id, {
-						content: currentContent,
-						metadata: { actions },
-					});
-				} catch (graphError) {
-					logError("Knowledge RAG execution error:", graphError);
-					const errorContent =
-						"Sorry, I encountered an error processing your request with knowledge mode.";
-					updateMessage(assistantMessage.id, { content: errorContent });
-					await finalizeMessage(assistantMessage.id, { content: errorContent });
-				}
-			} else {
-				const request: ChatCompletionRequest = {
+			// Execute chat via chat service
+			const result = await chatService.chatStream(
+				{
 					messages: sendMessages,
 					model: model,
-					temperature: 0.3,
-					stream: true,
-					signal: controller.signal,
-				};
+					mode: chatMode,
+					topicId:
+						selectedTopic && selectedTopic !== "__all__"
+							? selectedTopic
+							: undefined,
+					streamConfig: {
+						minWordsToStream: 5,
+						streamToolCallsImmediately: true,
+					},
+				},
+				{
+					onContent: (content) => {
+						currentContent = content;
+						// Only update in-progress message, not the store
+						setInProgressMessage((prev) =>
+							prev ? { ...prev, content } : null,
+						);
+					},
+					onAction: (actions) => {
+						// Only update in-progress message, not the store
+						setInProgressMessage((prev) =>
+							prev ? { ...prev, actions } : null,
+						);
+					},
+					onError: (error) => {
+						logError("Chat streaming error:", error);
+					},
+				},
+				controller.signal,
+			);
 
-				// Create assistant message placeholder for streaming
-				assistantMessage = await addMessage({
-					role: "assistant",
-					content: "",
+			// Handle completion or failure after stream finishes
+			if (result.failed) {
+				// Keep streamed content and append error message
+				const errorContent = `${result.content}\n\n---\n\n❌ **Error:** ${result.error}`;
+				await finalizeMessage(assistantMessage.id, {
+					content: errorContent,
+					metadata: { actions: result.actions },
 				});
-
-				try {
-					if (request.stream) {
-						// For streaming, the result should be an AsyncIterableIterator
-						const stream = serviceManager.llmService.chatCompletions(
-							request,
-						) as AsyncIterableIterator<ChatCompletionChunk>;
-						for await (const chunk of stream) {
-							const content = chunk.choices[0]?.delta?.content;
-							if (content) {
-								currentContent += content;
-								// Update the message in real-time
-								updateMessage(assistantMessage.id, { content: currentContent });
-							}
-						}
-					}
-				} catch (streamError) {
-					throw streamError;
-				}
-
-				// Finalize message in database after streaming is complete
-				if (currentContent) {
-					await finalizeMessage(assistantMessage.id, {
-						content: currentContent,
-						metadata: { actions: [] },
-					});
-				}
+				throw new Error(result.error || "Chat failed");
+			} else {
+				// Success - finalize with current content and actions
+				await finalizeMessage(assistantMessage.id, {
+					content: result.content,
+					metadata: { actions: result.actions },
+				});
 			}
 
+			// Clear in-progress message
+			setInProgressMessage(null);
 			setStatus("ready");
 		} catch (error) {
 			// Check if error is due to user aborting the request
@@ -253,7 +203,7 @@ export const useChat = (model: string) => {
 					try {
 						await finalizeMessage(assistantMessage.id, {
 							content: currentContent,
-							metadata: { actions: [] },
+							metadata: { actions: inProgressMessage?.actions || [] },
 						});
 						logInfo("Saved partial content from stopped generation");
 					} catch (saveError) {
@@ -261,17 +211,27 @@ export const useChat = (model: string) => {
 					}
 				}
 
+				// Clear in-progress message
+				setInProgressMessage(null);
 				return; // Don't show error message for user-initiated stops
 			}
 
 			logError("Chat error:", error);
 
-			// Add error message to store and database
-			await addMessage({
-				role: "assistant",
-				content: "Sorry, I encountered an error processing your message.",
-			});
+			// Update error message if assistant message exists, otherwise create new one
+			if (assistantMessage) {
+				const errorContent =
+					"Sorry, I encountered an error processing your message.";
+				await finalizeMessage(assistantMessage.id, { content: errorContent });
+			} else {
+				await addMessage({
+					role: "assistant",
+					content: "Sorry, I encountered an error processing your message.",
+				});
+			}
 
+			// Clear in-progress message
+			setInProgressMessage(null);
 			setStatus("error");
 		} finally {
 			setLoading(false);
@@ -290,6 +250,7 @@ export const useChat = (model: string) => {
 		messages,
 		isLoading,
 		abortController,
+		inProgressMessage,
 		handleSubmit,
 		handleStop,
 		insertSeparator,
