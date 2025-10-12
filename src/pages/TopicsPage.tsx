@@ -165,54 +165,122 @@ export const TopicsPage: React.FC = () => {
 		setEditDescription(topic.description || "");
 	};
 
-	const TopicItem: React.FC<{ topic: TopicWithCount }> = ({ topic }) => (
-		<div className="group p-3 cursor-pointer hover:bg-muted/50 transition-colors">
-			<div className="space-y-2">
-				<div className="flex items-start justify-between">
-					<div className="flex-1 min-w-0">
-						<div className="flex items-center gap-2">
-							<Tags className="w-4 h-4 text-primary flex-shrink-0" />
-							<h3 className="font-medium text-sm truncate">{topic.name}</h3>
-						</div>
-						<p className="text-xs text-muted-foreground mt-1 line-clamp-2">
-							{topic.description}
-						</p>
+	// Sticky note colors (rotating through pastel colors)
+	const stickyColors = [
+		"bg-yellow-100 dark:bg-yellow-900/30 border-yellow-200 dark:border-yellow-800",
+		"bg-pink-100 dark:bg-pink-900/30 border-pink-200 dark:border-pink-800",
+		"bg-blue-100 dark:bg-blue-900/30 border-blue-200 dark:border-blue-800",
+		"bg-green-100 dark:bg-green-900/30 border-green-200 dark:border-green-800",
+		"bg-purple-100 dark:bg-purple-900/30 border-purple-200 dark:border-purple-800",
+		"bg-orange-100 dark:bg-orange-900/30 border-orange-200 dark:border-orange-800",
+	];
+
+	const getColorForTopic = (topicId: string) => {
+		const hash = topicId
+			.split("")
+			.reduce((acc, char) => acc + char.charCodeAt(0), 0);
+		return stickyColors[hash % stickyColors.length];
+	};
+
+	const TopicCard: React.FC<{ topic: TopicWithCount }> = ({ topic }) => (
+		<div
+			className={`group relative p-4 rounded-lg border-2 transition-all hover:shadow-lg hover:scale-105 cursor-pointer min-h-[180px] flex flex-col ${getColorForTopic(topic.id)}`}
+		>
+			{/* More Menu - Top Right */}
+			<div className="absolute top-2 right-2">
+				<DropdownMenu>
+					<DropdownMenuTrigger asChild>
+						<Button
+							variant="ghost"
+							size="sm"
+							className="opacity-0 group-hover:opacity-100 transition-opacity h-7 w-7 p-0 hover:bg-black/10 dark:hover:bg-white/10"
+						>
+							<MoreVertical className="w-4 h-4" />
+						</Button>
+					</DropdownMenuTrigger>
+					<DropdownMenuContent align="end">
+						<DropdownMenuItem onClick={() => startEditTopic(topic)}>
+							<Edit2 className="w-4 h-4 mr-2" />
+							Edit
+						</DropdownMenuItem>
+						<DropdownMenuItem
+							onClick={() => handleDeleteTopic(topic)}
+							className="text-destructive"
+						>
+							<Trash2 className="w-4 h-4 mr-2" />
+							Delete
+						</DropdownMenuItem>
+					</DropdownMenuContent>
+				</DropdownMenu>
+			</div>
+
+			{/* Content */}
+			<div className="flex-1 flex flex-col gap-2">
+				<div className="flex items-start gap-2 pr-8">
+					<Tags className="w-5 h-5 text-foreground flex-shrink-0 mt-0.5" />
+					<h3 className="font-semibold text-base text-foreground leading-tight break-words">
+						{topic.name}
+					</h3>
+				</div>
+				<p className="text-sm text-muted-foreground line-clamp-3 flex-1">
+					{topic.description}
+				</p>
+			</div>
+
+			{/* Footer */}
+			<div className="flex items-center justify-between pt-3 border-t border-current/10 text-xs text-muted-foreground">
+				<Badge variant="secondary" className="text-xs">
+					<FileText className="w-3 h-3 mr-1" />
+					{topic.contentCount || 0}
+				</Badge>
+				<span>{new Date(topic.createdAt).toLocaleDateString()}</span>
+			</div>
+		</div>
+	);
+
+	const TopicListItem: React.FC<{ topic: TopicWithCount }> = ({ topic }) => (
+		<div className="group p-3 hover:bg-muted/50 transition-colors border-b border-border">
+			<div className="flex items-start justify-between gap-2">
+				<div className="flex-1 min-w-0">
+					<div className="flex items-center gap-2 mb-1">
+						<Tags className="w-4 h-4 text-primary flex-shrink-0" />
+						<h3 className="font-medium text-sm truncate">{topic.name}</h3>
 					</div>
-					<div className="flex items-center gap-1 ml-2">
-						<DropdownMenu>
-							<DropdownMenuTrigger asChild>
-								<Button
-									variant="ghost"
-									size="sm"
-									className="opacity-0 group-hover:opacity-100 transition-opacity h-6 w-6 p-0"
-								>
-									<MoreVertical className="w-3 h-3" />
-								</Button>
-							</DropdownMenuTrigger>
-							<DropdownMenuContent align="end">
-								<DropdownMenuItem onClick={() => startEditTopic(topic)}>
-									<Edit2 className="w-4 h-4 mr-2" />
-									Edit
-								</DropdownMenuItem>
-								<DropdownMenuItem
-									onClick={() => handleDeleteTopic(topic)}
-									className="text-destructive"
-								>
-									<Trash2 className="w-4 h-4 mr-2" />
-									Delete
-								</DropdownMenuItem>
-							</DropdownMenuContent>
-						</DropdownMenu>
+					<p className="text-xs text-muted-foreground line-clamp-2">
+						{topic.description}
+					</p>
+					<div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">
+						<Badge variant="secondary" className="text-xs">
+							<FileText className="w-3 h-3 mr-1" />
+							{topic.contentCount || 0}
+						</Badge>
+						<span>{new Date(topic.createdAt).toLocaleDateString()}</span>
 					</div>
 				</div>
-				<div className="flex items-center justify-between text-xs text-muted-foreground">
-					<Badge variant="secondary" className="text-xs">
-						<FileText className="w-3 h-3 mr-1" />
-						{topic.contentCount || 0} content
-						{(topic.contentCount || 0) !== 1 ? "s" : ""}
-					</Badge>
-					<span>{new Date(topic.createdAt).toLocaleDateString()}</span>
-				</div>
+				<DropdownMenu>
+					<DropdownMenuTrigger asChild>
+						<Button
+							variant="ghost"
+							size="sm"
+							className="opacity-0 group-hover:opacity-100 transition-opacity h-7 w-7 p-0"
+						>
+							<MoreVertical className="w-4 h-4" />
+						</Button>
+					</DropdownMenuTrigger>
+					<DropdownMenuContent align="end">
+						<DropdownMenuItem onClick={() => startEditTopic(topic)}>
+							<Edit2 className="w-4 h-4 mr-2" />
+							Edit
+						</DropdownMenuItem>
+						<DropdownMenuItem
+							onClick={() => handleDeleteTopic(topic)}
+							className="text-destructive"
+						>
+							<Trash2 className="w-4 h-4 mr-2" />
+							Delete
+						</DropdownMenuItem>
+					</DropdownMenuContent>
+				</DropdownMenu>
 			</div>
 		</div>
 	);
@@ -271,17 +339,35 @@ export const TopicsPage: React.FC = () => {
 			{/* Content */}
 			<ScrollArea className="h-full">
 				{filteredTopics.length === 0 ? (
-					<div className="p-3 text-center text-muted-foreground">
-						{searchTerm
-							? "No topics match your search"
-							: "No topics created yet"}
+					<div className="p-8 text-center text-muted-foreground">
+						<Tags className="w-12 h-12 mx-auto mb-3 opacity-50" />
+						<p className="text-lg font-medium">
+							{searchTerm
+								? "No topics match your search"
+								: "No topics created yet"}
+						</p>
+						{!searchTerm && (
+							<p className="text-sm mt-1">
+								Create your first topic to start organizing knowledge
+							</p>
+						)}
 					</div>
 				) : (
-					<div className="divide-y divide-border">
-						{filteredTopics.map((topic) => (
-							<TopicItem key={topic.id} topic={topic} />
-						))}
-					</div>
+					<>
+						{/* Card Grid Layout - Large Screens */}
+						<div className="hidden sm:grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 p-4">
+							{filteredTopics.map((topic) => (
+								<TopicCard key={topic.id} topic={topic} />
+							))}
+						</div>
+
+						{/* List Layout - Small Screens */}
+						<div className="sm:hidden">
+							{filteredTopics.map((topic) => (
+								<TopicListItem key={topic.id} topic={topic} />
+							))}
+						</div>
+					</>
 				)}
 			</ScrollArea>
 

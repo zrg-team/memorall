@@ -145,10 +145,7 @@ export abstract class LLMServiceCore {
 
 	protected async ensureCurrentModelService(): Promise<void> {
 		const currentModel = await this.getCurrentModel();
-		if (
-			currentModel &&
-			this.ensureAllServices
-		) {
+		if (currentModel && this.ensureAllServices) {
 			try {
 				await this.ensureAllServices();
 			} catch (error) {
@@ -335,7 +332,10 @@ export abstract class LLMServiceCore {
 							.select()
 							.from(schema.configurations)
 							.where(
-								eq(schema.configurations.key, LOCAL_SERVER_LLM_CONFIG_KEYS.OLLAMA),
+								eq(
+									schema.configurations.key,
+									LOCAL_SERVER_LLM_CONFIG_KEYS.OLLAMA,
+								),
 							);
 					},
 				);

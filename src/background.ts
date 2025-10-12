@@ -329,11 +329,6 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 			} else {
 				// For other remember actions, open popup and navigate based on LLM config
 				if (hasConfiguredLLM) {
-					// try {
-					// 	chrome.storage?.session?.set?.({ navigateTo: "knowledge-graph" });
-					// } catch (_) {}
-					// openExtensionPopup();
-					// Session storage navigation handled by popup.tsx
 				} else {
 					// No LLM configured, guide user to LLM setup
 					try {

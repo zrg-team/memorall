@@ -61,6 +61,7 @@ interface ConnectedEdge {
 
 interface D3KnowledgeGraphProps {
 	selectedPageId?: string;
+	selectedNodeId?: string;
 	graphData?: {
 		nodes: Node[];
 		edges: Edge[];
@@ -103,6 +104,7 @@ const NODE_RADIUS: Record<string, number> = {
 
 export const D3KnowledgeGraph: React.FC<D3KnowledgeGraphProps> = ({
 	selectedPageId,
+	selectedNodeId,
 	graphData: externalGraphData,
 	width = 800,
 	height = 600,
@@ -121,6 +123,55 @@ export const D3KnowledgeGraph: React.FC<D3KnowledgeGraphProps> = ({
 	useEffect(() => {
 		loadGraphData();
 	}, [selectedPageId, externalGraphData]);
+
+	// Handle external selectedNodeId changes
+	useEffect(() => {
+		if (selectedNodeId && graphData.nodes.length > 0) {
+			const node = graphData.nodes.find((n) => n.id === selectedNodeId);
+			if (node) {
+				setSelectedNode(node);
+			}
+		} else if (!selectedNodeId) {
+			setSelectedNode(null);
+			setConnectedEdges([]);
+		}
+	}, [selectedNodeId, graphData.nodes]);
+
+	// Update connected edges when selectedNode changes
+	useEffect(() => {
+		if (selectedNode && graphData.edges.length > 0) {
+			const connections: ConnectedEdge[] = [];
+			graphData.edges.forEach((edge) => {
+				const sourceNode = graphData.nodes.find(
+					(n) =>
+						n.id ===
+						(typeof edge.source === "string" ? edge.source : edge.source.id),
+				);
+				const targetNode = graphData.nodes.find(
+					(n) =>
+						n.id ===
+						(typeof edge.target === "string" ? edge.target : edge.target.id),
+				);
+
+				if (sourceNode?.id === selectedNode.id && targetNode) {
+					connections.push({
+						edge,
+						connectedNode: targetNode,
+						direction: "outgoing",
+					});
+				} else if (targetNode?.id === selectedNode.id && sourceNode) {
+					connections.push({
+						edge,
+						connectedNode: sourceNode,
+						direction: "incoming",
+					});
+				}
+			});
+			setConnectedEdges(connections);
+		} else {
+			setConnectedEdges([]);
+		}
+	}, [selectedNode, graphData.edges, graphData.nodes]);
 
 	useEffect(() => {
 		if (graphData.nodes.length > 0) {
@@ -580,7 +631,7 @@ export const D3KnowledgeGraph: React.FC<D3KnowledgeGraphProps> = ({
 
 			{selectedNode && (
 				<Card
-					className={`absolute top-4 left-4 w-96 max-h-96 shadow-lg overflow-hidden ${
+					className={`absolute top-2 left-2 right-2 w-auto max-w-96 max-h-96 shadow-lg overflow-hidden ${
 						isDark ? "bg-slate-800 border-gray-600" : "bg-white border-gray-200"
 					}`}
 				>

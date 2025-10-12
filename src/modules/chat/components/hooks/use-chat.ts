@@ -27,6 +27,7 @@ export const useChat = (model: string) => {
 		finalizeMessage,
 		setLoading,
 		ensureMainConversation,
+		deleteMessages,
 	} = useChatStore();
 
 	// Initialize conversation
@@ -369,5 +370,6 @@ export const useChat = (model: string) => {
 		handleSubmit,
 		handleStop,
 		insertSeparator,
+		deleteMessages,
 	};
 };

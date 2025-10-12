@@ -51,7 +51,9 @@ export class SharedStorageService {
 			}
 
 			this.initialized = true;
-			logInfo("📦 SharedStorageService initialized successfully (IndexedDB + messaging)");
+			logInfo(
+				"📦 SharedStorageService initialized successfully (IndexedDB + messaging)",
+			);
 		} catch (error) {
 			logError("Failed to initialize SharedStorageService:", error);
 			throw error;
@@ -124,7 +126,10 @@ export class SharedStorageService {
 
 			// Store in IndexedDB
 			await new Promise<void>((resolve, reject) => {
-				const transaction = this.db!.transaction([this.STORE_NAME], "readwrite");
+				const transaction = this.db!.transaction(
+					[this.STORE_NAME],
+					"readwrite",
+				);
 				const store = transaction.objectStore(this.STORE_NAME);
 				const request = store.put(value, key);
 
@@ -157,7 +162,10 @@ export class SharedStorageService {
 
 			// Remove from IndexedDB
 			await new Promise<void>((resolve, reject) => {
-				const transaction = this.db!.transaction([this.STORE_NAME], "readwrite");
+				const transaction = this.db!.transaction(
+					[this.STORE_NAME],
+					"readwrite",
+				);
 				const store = transaction.objectStore(this.STORE_NAME);
 				const request = store.delete(key);
 
@@ -296,7 +304,10 @@ export class SharedStorageService {
 			if (!this.db) return;
 
 			await new Promise<void>((resolve, reject) => {
-				const transaction = this.db!.transaction([this.STORE_NAME], "readwrite");
+				const transaction = this.db!.transaction(
+					[this.STORE_NAME],
+					"readwrite",
+				);
 				const store = transaction.objectStore(this.STORE_NAME);
 				const request = store.clear();
 

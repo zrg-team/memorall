@@ -1,5 +1,5 @@
 "use client";
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
 	Conversation,
@@ -14,10 +14,13 @@ import {
 	useCurrentModel,
 	useChat,
 } from "@/modules/chat/components";
+import { topicService } from "@/modules/topics/services/topic-service";
 
 export const ChatPage: React.FC = () => {
 	const navigate = useNavigate();
 	const { model, isInitialized, handleModelLoaded } = useCurrentModel();
+	const [topics, setTopics] = useState<Array<{ id: string; name: string }>>([]);
+	const [isLoadingTopics, setIsLoadingTopics] = useState(false);
 	const {
 		inputValue,
 		setInputValue,
@@ -32,7 +35,33 @@ export const ChatPage: React.FC = () => {
 		handleSubmit,
 		handleStop,
 		insertSeparator,
+		deleteMessages,
 	} = useChat(model);
+
+	// Fetch topics when knowledge mode is selected
+	useEffect(() => {
+		if (chatMode === "knowledge") {
+			const fetchTopics = async () => {
+				try {
+					setIsLoadingTopics(true);
+					const result = await topicService.getTopics();
+					setTopics(
+						result.map((topic) => ({
+							id: topic.id,
+							name: topic.name,
+						})),
+					);
+				} catch (error) {
+					console.error("Failed to fetch topics:", error);
+					setTopics([]);
+				} finally {
+					setIsLoadingTopics(false);
+				}
+			};
+
+			fetchTopics();
+		}
+	}, [chatMode]);
 
 	// Navigate to models tab
 	const navigateToModels = () => {
@@ -86,7 +115,10 @@ export const ChatPage: React.FC = () => {
 				setSelectedTopic={setSelectedTopic}
 				onInsertSeparator={insertSeparator}
 				onStop={handleStop}
+				onDeleteChat={deleteMessages}
 				abortController={abortController}
+				isLoadingTopics={isLoadingTopics}
+				topics={topics}
 			/>
 		</div>
 	);

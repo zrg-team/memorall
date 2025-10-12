@@ -19,17 +19,19 @@ export class TopicService {
 		try {
 			logInfo("[TOPIC_SERVICE] Creating new topic:", topicData);
 
-			const result = await serviceManager.databaseService.use(async ({ db, schema }) => {
-				const [createdTopic] = await db
-					.insert(schema.topics)
-					.values({
-						name: topicData.name,
-						description: topicData.description || "",
-					})
-					.returning();
+			const result = await serviceManager.databaseService.use(
+				async ({ db, schema }) => {
+					const [createdTopic] = await db
+						.insert(schema.topics)
+						.values({
+							name: topicData.name,
+							description: topicData.description || "",
+						})
+						.returning();
 
-				return createdTopic;
-			});
+					return createdTopic;
+				},
+			);
 
 			logInfo("[TOPIC_SERVICE] Successfully created topic:", result);
 			return result;
@@ -48,25 +50,27 @@ export class TopicService {
 
 			logInfo("[TOPIC_SERVICE] Fetching topics:", options);
 
-			const result = await serviceManager.databaseService.use(async ({ db, schema }) => {
-				let query = db.select().from(schema.topics);
+			const result = await serviceManager.databaseService.use(
+				async ({ db, schema }) => {
+					let query = db.select().from(schema.topics);
 
-				// Add search filter if provided
-				if (searchTerm && searchTerm.trim()) {
-					const searchPattern = `%${searchTerm.trim()}%`;
-					query = query.where(
-						like(schema.topics.name, searchPattern),
-					) as typeof query;
-				}
+					// Add search filter if provided
+					if (searchTerm && searchTerm.trim()) {
+						const searchPattern = `%${searchTerm.trim()}%`;
+						query = query.where(
+							like(schema.topics.name, searchPattern),
+						) as typeof query;
+					}
 
-				// Add ordering and pagination
-				query = query
-					.orderBy(desc(schema.topics.createdAt))
-					.limit(limit)
-					.offset(offset) as typeof query;
+					// Add ordering and pagination
+					query = query
+						.orderBy(desc(schema.topics.createdAt))
+						.limit(limit)
+						.offset(offset) as typeof query;
 
-				return await query;
-			});
+					return await query;
+				},
+			);
 
 			logInfo(`[TOPIC_SERVICE] Retrieved ${result.length} topics`);
 			return result;
@@ -83,15 +87,17 @@ export class TopicService {
 		try {
 			logInfo("[TOPIC_SERVICE] Fetching topic by ID:", topicId);
 
-			const result = await serviceManager.databaseService.use(async ({ db, schema }) => {
-				const topics = await db
-					.select()
-					.from(schema.topics)
-					.where(eq(schema.topics.id, topicId))
-					.limit(1);
+			const result = await serviceManager.databaseService.use(
+				async ({ db, schema }) => {
+					const topics = await db
+						.select()
+						.from(schema.topics)
+						.where(eq(schema.topics.id, topicId))
+						.limit(1);
 
-				return topics[0] || null;
-			});
+					return topics[0] || null;
+				},
+			);
 
 			logInfo("[TOPIC_SERVICE] Retrieved topic:", result);
 			return result;
@@ -111,22 +117,24 @@ export class TopicService {
 		try {
 			logInfo("[TOPIC_SERVICE] Updating topic:", { topicId, updates });
 
-			const result = await serviceManager.databaseService.use(async ({ db, schema }) => {
-				const [updatedTopic] = await db
-					.update(schema.topics)
-					.set({
-						...updates,
-						updatedAt: new Date(),
-					})
-					.where(eq(schema.topics.id, topicId))
-					.returning();
+			const result = await serviceManager.databaseService.use(
+				async ({ db, schema }) => {
+					const [updatedTopic] = await db
+						.update(schema.topics)
+						.set({
+							...updates,
+							updatedAt: new Date(),
+						})
+						.where(eq(schema.topics.id, topicId))
+						.returning();
 
-				if (!updatedTopic) {
-					throw new Error(`Topic with ID ${topicId} not found`);
-				}
+					if (!updatedTopic) {
+						throw new Error(`Topic with ID ${topicId} not found`);
+					}
 
-				return updatedTopic;
-			});
+					return updatedTopic;
+				},
+			);
 
 			logInfo("[TOPIC_SERVICE] Successfully updated topic:", result);
 			return result;
@@ -163,8 +171,9 @@ export class TopicService {
 		try {
 			logInfo("[TOPIC_SERVICE] Fetching topics with content count");
 
-			const result = await serviceManager.databaseService.use(async ({ db, schema }) => {
-				const query = `
+			const result = await serviceManager.databaseService.use(
+				async ({ db, schema }) => {
+					const query = `
 					SELECT
 						t.*,
 						COALESCE(content_counts.count, 0)::integer as content_count
@@ -180,12 +189,13 @@ export class TopicService {
 					ORDER BY t.created_at DESC
 				`;
 
-				const rawResult = await db.query.topics.findMany();
+					const rawResult = await db.query.topics.findMany();
 
-				return rawResult.map((row) => ({
-					...row,
-				}));
-			});
+					return rawResult.map((row) => ({
+						...row,
+					}));
+				},
+			);
 
 			logInfo(
 				`[TOPIC_SERVICE] Retrieved ${result.length} topics with content count`,

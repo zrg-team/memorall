@@ -17,6 +17,7 @@ import { Plus, Search, BookOpen, FileText, Loader2, Check } from "lucide-react";
 import { serviceManager } from "@/services";
 import type { Topic } from "@/services/database/entities/topics";
 import { logError, logInfo } from "@/utils/logger";
+import { topicService } from "@/modules/topics/services/topic-service";
 
 export interface TopicSelectorModalProps {
 	title?: string;
@@ -71,10 +72,6 @@ const TopicSelectorModal = create<TopicSelectorModalProps>(
 		const loadTopics = async () => {
 			try {
 				setLoading(true);
-				const topicService = serviceManager.getService("topic");
-				if (!topicService) {
-					throw new Error("Topic service not available");
-				}
 
 				const topicsWithCount = await topicService.getTopicsWithContentCount();
 				setTopics(topicsWithCount);
@@ -91,11 +88,6 @@ const TopicSelectorModal = create<TopicSelectorModalProps>(
 
 			try {
 				setCreating(true);
-				const topicService = serviceManager.getService("topic");
-				if (!topicService) {
-					throw new Error("Topic service not available");
-				}
-
 				const newTopic = await topicService.createTopic({
 					name: newTopicName.trim(),
 					description: newTopicDescription.trim(),

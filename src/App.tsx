@@ -17,7 +17,6 @@ import { logError, logInfo } from "./utils/logger";
 import { DatabasePage } from "./pages/DatabasePage";
 import { RememberedContentsPage } from "./pages/RememberedContentsPage";
 import { LogsPage } from "./pages/LogsPage";
-import { KnowledgeGraphPage } from "./pages/KnowledgeGraphPage";
 import { RememberPage } from "./pages/RememberPage";
 import { TopicsPage } from "./pages/TopicsPage";
 import { AppLoadingScreen } from "./components/atoms/AppLoadingScreen";
@@ -28,6 +27,7 @@ import {
 } from "./components/ui/shadcn-io/animated-cursor";
 import { ThemeProvider } from "./components/molecules/Copilot/ThemeContext";
 import { CopilotProvider, Copilot } from "./components/atoms/copilot";
+import { KnowledgeGraphPage } from "./pages/KnowledgeGraphPage";
 
 const App: React.FC = () => {
 	const [servicesStatus, setServicesStatus] = useState<

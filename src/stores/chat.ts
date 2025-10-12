@@ -23,6 +23,7 @@ interface ChatStore {
 	createNewConversation: (title?: string) => Promise<Conversation>;
 	ensureMainConversation: () => Promise<Conversation>;
 	clearMessages: () => void;
+	deleteMessages: () => void;
 	setLoading: (loading: boolean) => void;
 
 	// Database sync
@@ -207,6 +208,16 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 	},
 
 	clearMessages: () => {
+		set({
+			messages: [],
+			currentConversation: null,
+		});
+	},
+
+	deleteMessages: async () => {
+		await serviceManager.databaseService.use(({ db, schema }) =>
+			db.delete(schema.messages),
+		);
 		set({
 			messages: [],
 			currentConversation: null,
