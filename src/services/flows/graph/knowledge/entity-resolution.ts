@@ -1,4 +1,8 @@
-import type { ExtractedEntity, KnowledgeGraphState, ResolvedEntity } from "./state";
+import type {
+	ExtractedEntity,
+	KnowledgeGraphState,
+	ResolvedEntity,
+} from "./state";
 import type { AllServices } from "@/services/flows/interfaces/tool";
 import type { Node } from "@/services/database/entities/nodes";
 import { logInfo, logError } from "@/utils/logger";
@@ -40,7 +44,9 @@ export class EntityResolutionFlow {
 		state: KnowledgeGraphState,
 	): Promise<Partial<KnowledgeGraphState>> {
 		try {
-			logInfo("[ENTITY_RESOLUTION] Starting entity resolution with manual + AI");
+			logInfo(
+				"[ENTITY_RESOLUTION] Starting entity resolution with manual + AI",
+			);
 
 			if (!state.extractedEntities || state.extractedEntities.length === 0) {
 				return {
@@ -203,11 +209,7 @@ ${entitiesText}
 					}
 
 					// Handle any remaining entities that weren't in the response
-					for (
-						let i = parsedArray.length;
-						i < needsAIResolution.length;
-						i++
-					) {
+					for (let i = parsedArray.length; i < needsAIResolution.length; i++) {
 						const entity = needsAIResolution[i];
 						results.push({
 							...entity,

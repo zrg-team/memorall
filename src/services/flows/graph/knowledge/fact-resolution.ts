@@ -356,7 +356,8 @@ ${factsText}
 						description: `Resolved ${allResolvedFacts.length} facts. ${allResolvedFacts.filter((f) => f.isExisting).length} existing, ${allResolvedFacts.filter((f) => !f.isExisting).length} new (${manuallyResolved.length} manual, ${aiResolvedFacts.length} AI, ${invalidFacts.length} invalid)`,
 						metadata: {
 							totalFacts: allResolvedFacts.length,
-							existingFacts: allResolvedFacts.filter((f) => f.isExisting).length,
+							existingFacts: allResolvedFacts.filter((f) => f.isExisting)
+								.length,
 							newFacts: allResolvedFacts.filter((f) => !f.isExisting).length,
 							manualDuplicates: manuallyResolved.length,
 							aiResolved: aiResolvedFacts.length,

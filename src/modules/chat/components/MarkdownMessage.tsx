@@ -48,7 +48,7 @@ const markdownComponents = {
 	),
 	th: ({ children, ...props }: { children?: React.ReactNode }) => (
 		<th
-			className="border border-gray-700 dark:border-gray-300 bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 text-left font-semibold text-xs first:rounded-tl last:rounded-tr first:border-l last:border-r border-t"
+			className="border border-gray-700 dark:border-gray-300 bg-gray-100 dark:bg-gray-800 px-2 py-1 text-left font-semibold first:rounded-tl last:rounded-tr first:border-l last:border-r border-t"
 			{...props}
 		>
 			{children}
@@ -62,7 +62,7 @@ const markdownComponents = {
 	),
 	td: ({ children, ...props }: { children?: React.ReactNode }) => (
 		<td
-			className="border-b border-gray-700 dark:border-gray-300 px-1.5 py-0.5 text-xs first:border-l last:border-r [tr:last-child_&]:first:rounded-bl [tr:last-child_&]:last:rounded-br"
+			className="border-b border-gray-700 dark:border-gray-300 px-2 py-1 first:border-l last:border-r [tr:last-child_&]:first:rounded-bl [tr:last-child_&]:last:rounded-br"
 			{...props}
 		>
 			{children}
@@ -84,39 +84,6 @@ const markdownComponents = {
 	),
 	hr: ({ ...props }) => (
 		<hr className="border-gray-700 dark:border-gray-300" {...props} />
-	),
-	ul: ({ children, ...props }: { children?: React.ReactNode }) => (
-		<ul className="list-disc list-inside" {...props}>
-			{children}
-		</ul>
-	),
-	ol: ({ children, ...props }: { children?: React.ReactNode }) => (
-		<ol className="list-decimal list-inside" {...props}>
-			{children}
-		</ol>
-	),
-	li: ({ children, ...props }: { children?: React.ReactNode }) => (
-		<li className="text-sm" {...props}>
-			{children}
-		</li>
-	),
-	p: ({ children, ...props }: { children?: React.ReactNode }) => (
-		<p {...props}>{children}</p>
-	),
-	h1: ({ children, ...props }: { children?: React.ReactNode }) => (
-		<h1 className="text-lg font-bold first:mt-0" {...props}>
-			{children}
-		</h1>
-	),
-	h2: ({ children, ...props }: { children?: React.ReactNode }) => (
-		<h2 className="text-base font-semibold first:mt-0" {...props}>
-			{children}
-		</h2>
-	),
-	h3: ({ children, ...props }: { children?: React.ReactNode }) => (
-		<h3 className="text-sm font-semibold first:mt-0" {...props}>
-			{children}
-		</h3>
 	),
 };
 
@@ -217,7 +184,7 @@ export const MarkdownMessage: React.FC<MarkdownMessageProps> = ({
 	return (
 		<div
 			className={cn(
-				"prose prose-sm max-w-none dark:prose-invert",
+				"markdown-body",
 				"[&>*:first-child]:mt-0 [&>*:last-child]:mb-0",
 				className,
 			)}

@@ -80,7 +80,10 @@ export class EdgeEnrichmentFlow {
 					});
 				} else {
 					// For new nodes, use UUID as temporary ID
-					allNodes.set(entity.uuid, { id: entity.uuid, name: entity.finalName });
+					allNodes.set(entity.uuid, {
+						id: entity.uuid,
+						name: entity.finalName,
+					});
 				}
 			}
 
@@ -145,7 +148,9 @@ export class EdgeEnrichmentFlow {
 				nodeIdWithEdges.has(node.id || ""),
 			);
 			const allNodesText = connectedNodes
-				.map((node, index) => `${index + 1}. ID: ${node.id}, Name: ${node.name}`)
+				.map(
+					(node, index) => `${index + 1}. ID: ${node.id}, Name: ${node.name}`,
+				)
 				.join("\n");
 
 			// Combine all content for processing
@@ -240,9 +245,7 @@ ${allNodesText || "No connected nodes"}
 					// Include previous results summary to maintain context
 					const prevSummary =
 						prev.length > 0
-							? prev
-									.map((p, idx) => `${idx + 1}. ${p.relationType}`)
-									.join(", ")
+							? prev.map((p, idx) => `${idx + 1}. ${p.relationType}`).join(", ")
 							: "No previous results";
 					let prompt = `<PREVIOUS RESULTS>\n${prevSummary}\n</PREVIOUS RESULTS>\n\n<CHUNK>\n${chunk}\n</CHUNK>`;
 
