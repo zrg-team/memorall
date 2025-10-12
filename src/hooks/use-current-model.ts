@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { serviceManager } from "@/services";
+import { logError } from "@/utils/logger";
 import type { Provider } from "./use-provider-config";
 
 export interface CurrentModel {
@@ -7,61 +8,103 @@ export interface CurrentModel {
 	provider: Provider;
 }
 
+/**
+ * Unified hook for managing current model state
+ * Supports both simple usage (no params) and advanced usage (with params)
+ */
 export function useCurrentModel(
-	openaiReady: boolean,
-	downloadedModelsLength: number,
+	openaiReady?: boolean,
+	downloadedModelsLength?: number,
 ) {
+	const [model, setModel] = useState<string>("");
 	const [current, setCurrent] = useState<CurrentModel | null>(null);
+	const [isInitialized, setIsInitialized] = useState(false);
 
 	// Update current model state based on LLMService model info
 	const updateCurrentModel = (modelInfo: any) => {
 		if (!modelInfo) {
+			setModel("");
 			setCurrent(null);
 			return;
 		}
 
 		if (!modelInfo.modelId || !modelInfo.provider) {
+			setModel("");
 			setCurrent(null);
 			return;
 		}
 
-		if (
-			["lmstudio", "ollama"].includes(modelInfo.provider) &&
-			modelInfo.modelId === "local-model"
-		) {
-			setCurrent(null);
-			return;
+		// Apply filters only if parameters are provided (advanced mode)
+		if (openaiReady !== undefined) {
+			if (
+				["lmstudio", "ollama"].includes(modelInfo.provider) &&
+				modelInfo.modelId === "local-model"
+			) {
+				setModel("");
+				setCurrent(null);
+				return;
+			}
+			if (modelInfo.provider === "openai" && !openaiReady) {
+				setModel("");
+				setCurrent(null);
+				return;
+			}
 		}
-		if (modelInfo.provider === "openai" && !openaiReady) {
-			setCurrent(null);
-			return;
-		}
+
+		setModel(modelInfo.modelId);
 		setCurrent({ modelId: modelInfo.modelId, provider: modelInfo.provider });
 	};
 
-	// Initial load when dependencies change
+	// Initial load
 	useEffect(() => {
-		const loadCurrentModel = async () => {
+		const loadInitialModel = async () => {
 			try {
-				const cm = await serviceManager.llmService.getCurrentModel();
-				updateCurrentModel(cm);
-			} catch (_) {
+				const currentModel = await serviceManager.llmService.getCurrentModel();
+				updateCurrentModel(currentModel);
+				setIsInitialized(true);
+			} catch (error) {
+				logError("Failed to get current model:", error);
+				setModel("");
 				setCurrent(null);
+				setIsInitialized(true);
 			}
 		};
-		loadCurrentModel();
+
+		loadInitialModel();
 	}, [openaiReady, downloadedModelsLength]);
 
-	// PROPER ARCHITECTURE: Listen to LLMService events, not SharedStorage directly
+	// Subscribe to model changes
 	useEffect(() => {
 		const unsubscribe = serviceManager.llmService.onCurrentModelChange(
 			(modelInfo) => {
+				setIsInitialized(true);
 				updateCurrentModel(modelInfo);
 			},
 		);
 
 		return unsubscribe;
-	}, [openaiReady]); // Re-subscribe when openaiReady changes
+	}, [openaiReady]);
 
-	return { current, setCurrent };
+	// Handle model loaded callback - refresh current model state
+	const handleModelLoaded = () => {
+		const refreshCurrentModel = async () => {
+			try {
+				const currentModel = await serviceManager.llmService.getCurrentModel();
+				updateCurrentModel(currentModel);
+			} catch (error) {
+				logError("Failed to get current model:", error);
+				setModel("");
+				setCurrent(null);
+			}
+		};
+		refreshCurrentModel();
+	};
+
+	return {
+		model,
+		current,
+		isInitialized,
+		handleModelLoaded,
+		setCurrent,
+	};
 }
