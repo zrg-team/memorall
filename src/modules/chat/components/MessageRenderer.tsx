@@ -8,128 +8,27 @@ import {
 	TaskTrigger,
 } from "@/components/ui/shadcn-io/ai/task";
 import { MarkdownMessage } from "@/modules/chat/components/MarkdownMessage";
+import { MermaidRenderer } from "@/components/atoms/MermaidRenderer";
 import type { Message as DBMessage } from "@/services/database";
 import dayjs from "dayjs";
-import mermaid from "mermaid";
-
-// Initialize mermaid with browser extension compatible settings
-mermaid.initialize({
-	startOnLoad: false,
-	theme: "default",
-	securityLevel: "loose", // Important for browser extensions
-	flowchart: {
-		useMaxWidth: true,
-		htmlLabels: true,
-	},
-	// Disable workers which can cause issues in browser extensions
-	suppressErrorRendering: false,
-	logLevel: "debug", // Enable debug logging
-});
-
-// Global counter for unique mermaid IDs
-let mermaidCounter = 0;
 
 // Direct Mermaid component for task descriptions - only renders when visible
 const TaskMermaidDiagram: React.FC<{ chart: string; isOpen: boolean }> = ({
 	chart,
 	isOpen,
 }) => {
-	const [renderState, setRenderState] = React.useState<
-		"idle" | "loading" | "success" | "error"
-	>("idle");
-	const [uniqueId] = React.useState(
-		() => `task-mermaid-${++mermaidCounter}-${Date.now()}`,
-	);
-	const [svgContent, setSvgContent] = React.useState<string>("");
 	const hasRendered = useRef(false);
 
-	useEffect(() => {
-		// Only render when open and hasn't been rendered yet
-		if (!isOpen || hasRendered.current) {
-			return;
-		}
-
-		let isMounted = true;
-		let timeoutId: NodeJS.Timeout;
-
-		const renderChart = async () => {
-			const trimmedChart = chart.trim();
-			if (!trimmedChart) {
-				setRenderState("error");
-				return;
-			}
-
-			if (!isMounted) {
-				return;
-			}
-
-			setRenderState("loading");
-
-			try {
-				// Add timeout to prevent infinite loading
-				timeoutId = setTimeout(() => {
-					if (isMounted) {
-						setRenderState("error");
-					}
-				}, 5000);
-
-				// Try to parse first to catch syntax errors
-				await mermaid.parse(trimmedChart);
-
-				if (!isMounted) return;
-
-				// Render the diagram
-				const { svg } = await mermaid.render(uniqueId, trimmedChart);
-
-				if (!isMounted) return;
-
-				clearTimeout(timeoutId);
-
-				if (svg && svg.includes("<svg") && !svg.includes("Syntax error")) {
-					setSvgContent(svg);
-					setRenderState("success");
-					hasRendered.current = true;
-				} else {
-					setRenderState("error");
-				}
-			} catch (error) {
-				if (!isMounted) return;
-				clearTimeout(timeoutId);
-				setRenderState("error");
-			}
-		};
-
-		renderChart();
-
-		return () => {
-			isMounted = false;
-			if (timeoutId) {
-				clearTimeout(timeoutId);
-			}
-		};
-	}, [chart, uniqueId, isOpen]);
-
-	if (renderState === "idle") {
+	// Only render once when opened
+	if (!isOpen) {
 		return null;
 	}
 
-	if (renderState === "error") {
-		return (
-			<div className="text-sm text-muted-foreground">
-				Failed to render diagram
-			</div>
-		);
+	if (!hasRendered.current) {
+		hasRendered.current = true;
 	}
 
-	if (renderState === "loading") {
-		return (
-			<div className="text-sm text-muted-foreground">Loading diagram...</div>
-		);
-	}
-
-	return (
-		<div className="my-2" dangerouslySetInnerHTML={{ __html: svgContent }} />
-	);
+	return <MermaidRenderer chart={chart} />;
 };
 
 // Helper function to detect if content is only a mermaid code block

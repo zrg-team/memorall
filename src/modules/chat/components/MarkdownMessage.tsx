@@ -8,30 +8,13 @@ import {
 	oneDark,
 	oneLight,
 } from "react-syntax-highlighter/dist/esm/styles/prism";
-import mermaid from "mermaid";
+import { MermaidRenderer } from "@/components/atoms/MermaidRenderer";
 import "katex/dist/katex.min.css";
 import { cn } from "@/lib/utils";
 
 // Performance optimization: Define plugins and components outside component
 const remarkPlugins = [remarkGfm, remarkMath];
 const rehypePlugins = [rehypeKatex];
-
-// Initialize mermaid with better settings for multiple diagrams
-mermaid.initialize({
-	startOnLoad: false, // Disable auto-start to manually control rendering
-	theme: "default",
-	securityLevel: "loose",
-	flowchart: {
-		useMaxWidth: true,
-		htmlLabels: true,
-	},
-	sequence: {
-		useMaxWidth: true,
-	},
-	gantt: {
-		useMaxWidth: true,
-	},
-});
 
 const markdownComponents = {
 	// Custom components for better styling
@@ -141,24 +124,10 @@ export const MarkdownMessage: React.FC<MarkdownMessageProps> = ({
 				);
 			}
 
-			// Handle mermaid diagrams - DISABLED: render as code block for now
+			// Handle mermaid diagrams
 			if (language === "mermaid") {
 				const chartContent = String(children).replace(/\n$/, "");
-				return (
-					<SyntaxHighlighter
-						style={isDark ? oneDark : oneLight}
-						language="text"
-						PreTag="div"
-						className="rounded-md text-sm"
-						customStyle={{
-							margin: 0,
-							padding: "1rem",
-							backgroundColor: isDark ? "hsl(220 13% 18%)" : "hsl(210 40% 98%)",
-						}}
-					>
-						{chartContent}
-					</SyntaxHighlighter>
-				);
+				return <MermaidRenderer chart={chartContent} />;
 			}
 
 			// Use syntax highlighter for code blocks with theme-aware styling
