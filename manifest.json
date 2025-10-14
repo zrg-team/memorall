@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/chrome-manifest.json",
   "manifest_version": 3,
-  "version": "0.0.2",
+  "version": "0.0.4",
   "name": "Memorall",
   "description": "Memorall - AI-powered memory and knowledge management browser extension",
   "icons": {
@@ -21,10 +21,12 @@
     "storage",
     "contextMenus",
     "notifications",
-    "offscreen"
+    "offscreen",
+    "downloads"
   ],
   "host_permissions": [
-    "https://huggingface.co/*"
+    "https://huggingface.co/*",
+    "*://*/*.pdf"
   ],
   "background": {
     "service_worker": "src/background.ts",
@@ -44,14 +46,10 @@
         "src/workers/*.worker.ts",
         "example.worker.js",
         "vendors/transformers/*",
+        "vendors/pdfjs/*",
         "vendors/mozilla-readability/Readability.js",
         "offscreen.html",
         "logo.png",
-        "runner/index.html",
-        "runner/main.js",
-        "runner/runner.js",
-        "runner/modes/*.js",
-        "runner/utils/*.js",
         "*.js",
         "*.css"
       ],

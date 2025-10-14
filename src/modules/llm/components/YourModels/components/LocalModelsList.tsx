@@ -5,15 +5,15 @@ import { type ModelInfo } from "@/services/llm";
 import { serviceManager } from "@/services";
 import { DEFAULT_SERVICES } from "@/services/llm/constants";
 import { logInfo } from "@/utils/logger";
-import type { Provider } from "../../../../../hooks/use-provider-config";
-import type { CurrentModel } from "../../../../../hooks/use-current-model";
+import type { ServiceProvider } from "@/services/llm/interfaces/llm-service.interface";
+import type { CurrentModel } from "@/hooks/use-current-model";
 
 interface LocalModelsListProps {
 	localModels: ModelInfo[];
-	quickProvider: Provider;
+	quickProvider: ServiceProvider;
 	loading: boolean;
 	current: CurrentModel | null;
-	onModelLoaded?: (modelId: string, provider: Provider) => void;
+	onModelLoaded?: (modelId: string, provider: ServiceProvider) => void;
 }
 
 export const LocalModelsList: React.FC<LocalModelsListProps> = ({

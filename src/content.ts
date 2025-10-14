@@ -10,6 +10,7 @@ import {
 	createEmbeddedTopicSelector,
 } from "./embedded";
 import { createShadcnEmbeddedChatModal } from "./embedded/components/ShadcnEmbeddedChat";
+import { handlePDFMessage } from "./embedded/pdf-content-handler";
 import type {
 	BackgroundMessage,
 	MessageResponse,
@@ -49,6 +50,15 @@ chrome.runtime.onMessage.addListener(
 
 				case CONTENT_BACKGROUND_EVENTS.SHOW_CHAT_MODAL:
 					handleShowChatModal(message, sendResponse);
+					return true;
+
+				// PDF-specific handlers
+				case CONTENT_BACKGROUND_EVENTS.PDF_EXTRACT_PDF:
+				case CONTENT_BACKGROUND_EVENTS.PDF_EXTRACT_PDF_PAGES:
+				case CONTENT_BACKGROUND_EVENTS.PDF_SEARCH_PDF:
+				case CONTENT_BACKGROUND_EVENTS.PDF_EXPORT_PDF_TEXT:
+				case CONTENT_BACKGROUND_EVENTS.PDF_EXPORT_PDF_MARKDOWN:
+					handlePDFOperation(message, sendResponse);
 					return true;
 
 				default:
@@ -242,6 +252,27 @@ function handleShowChatModal(
 				error instanceof Error ? error.message : "Failed to show chat modal",
 		});
 	}
+}
+
+// Handle PDF operations
+function handlePDFOperation(
+	message: BackgroundMessage,
+	sendResponse: (response: MessageResponse) => void,
+): void {
+	(async () => {
+		try {
+			const result = await handlePDFMessage({
+				type: message.type,
+				url: message.url || window.location.href,
+			});
+			sendResponse(result);
+		} catch (error) {
+			sendResponse({
+				success: false,
+				error: error instanceof Error ? error.message : "Failed PDF operation",
+			});
+		}
+	})();
 }
 
 // Initialize content script

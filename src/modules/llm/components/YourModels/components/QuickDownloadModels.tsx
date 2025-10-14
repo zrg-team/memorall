@@ -6,11 +6,11 @@ import { QUICK_WEBLLM_LLMS } from "@/constants/webllm";
 import { QUICK_OPENAI_LLMS } from "@/constants/openai";
 import { type ModelInfo } from "@/services/llm";
 import { serviceManager } from "@/services";
-import type { Provider } from "../../../../../hooks/use-provider-config";
-import type { CurrentModel } from "../../../../../hooks/use-current-model";
+import type { CurrentModel } from "@/hooks/use-current-model";
+import type { ServiceProvider } from "@/services/llm/interfaces/llm-service.interface";
 
 interface QuickDownloadModelsProps {
-	quickProvider: Provider;
+	quickProvider: ServiceProvider;
 	downloadedOnly: ModelInfo[];
 	localModels: ModelInfo[];
 	loading: boolean;
@@ -21,7 +21,7 @@ interface QuickDownloadModelsProps {
 			| (typeof QUICK_WALLAMA_LLMS)[0]
 			| (typeof QUICK_WEBLLM_LLMS)[0]
 			| (typeof QUICK_OPENAI_LLMS)[0],
-		provider: Provider,
+		provider: ServiceProvider,
 	) => Promise<void>;
 }
 

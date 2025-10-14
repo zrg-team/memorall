@@ -4,7 +4,7 @@ import { OpenAITab } from "@/modules/llm/components/OpenAITab";
 import { LocalOpenAITab } from "@/modules/llm/components/LocalOpenAITab";
 
 // Hooks
-import { useProviderConfig, type Provider } from "@/hooks/use-provider-config";
+import { useProviderConfig } from "@/hooks/use-provider-config";
 import { useCurrentModel } from "@/hooks/use-current-model";
 import { useLocalModels } from "@/modules/llm/hooks/use-local-models";
 import { useDownloadProgress } from "@/modules/llm/hooks/use-download-progress";
@@ -17,10 +17,11 @@ import { DownloadedModelsSection } from "./components/DownloadedModelsSection";
 import { ProviderSelector } from "./components/ProviderSelector";
 import { LocalModelsList } from "./components/LocalModelsList";
 import { QuickDownloadModels } from "./components/QuickDownloadModels";
+import type { ServiceProvider } from "@/services/llm/interfaces/llm-service.interface";
 
 interface YourModelsProps {
 	/** Optional callback when a model is loaded successfully */
-	onModelLoaded?: (modelId: string, provider: Provider) => void;
+	onModelLoaded?: (modelId: string, provider: ServiceProvider) => void;
 	/** Whether to show the download more models button */
 	showDownloadMoreButton?: boolean;
 	/** Callback for download more models button */
@@ -43,11 +44,9 @@ export const YourModels: React.FC<YourModelsProps> = ({
 
 	// Custom hooks
 	const {
-		openaiReady,
-		setOpenaiReady,
-		openaiPasskeyExists,
-		setOpenaiPasskeyExists,
-		openaiConfigExists,
+		getState,
+		setStateReady,
+		setPasskeyExists,
 		localConfigExists,
 		setLocalConfigExists,
 		quickProvider,
@@ -61,10 +60,10 @@ export const YourModels: React.FC<YourModelsProps> = ({
 		fetchDownloadedModels,
 	} = useDownloadedModels();
 
-	const { current, setCurrent } = useCurrentModel(
-		openaiReady,
-		downloadedModels.length,
-	);
+	const { current, setCurrent } = useCurrentModel();
+
+	// Get provider-specific states
+	const openaiState = getState("openai");
 
 	const { localModels, localModelsLoading } = useLocalModels(
 		quickProvider,
@@ -129,15 +128,15 @@ export const YourModels: React.FC<YourModelsProps> = ({
 
 					{/* Config gating for OpenAI and Local providers */}
 					{(quickProvider === "openai" &&
-						(!openaiConfigExists || !openaiPasskeyExists)) ||
+						(!openaiState.configExists || !openaiState.passkeyExists)) ||
 					((quickProvider === "lmstudio" || quickProvider === "ollama") &&
 						!localConfigExists) ? (
 						<div className="border rounded-lg p-4">
 							{quickProvider === "openai" ? (
 								<OpenAITab
 									onModelLoaded={(modelId) => {
-										setOpenaiReady(true);
-										setOpenaiPasskeyExists(true);
+										setStateReady("openai", true);
+										setPasskeyExists("openai", true);
 										onModelLoaded?.(modelId, "openai");
 									}}
 								/>

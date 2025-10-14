@@ -13,6 +13,7 @@ import {
 	Moon,
 	Monitor,
 	Tags,
+	FileText,
 } from "lucide-react";
 import {
 	Tooltip,
@@ -38,6 +39,7 @@ const navigation = [
 	{ name: "Models", path: "/llm", icon: Bot },
 	{ name: "Topics", path: "/topics", icon: Tags },
 	{ name: "Knowledge Graph", path: "/knowledge-graph", icon: Network },
+	{ name: "Documents", path: "/documents", icon: FileText },
 	{ name: "Remembered", path: "/remembered", icon: BookOpen },
 ];
 

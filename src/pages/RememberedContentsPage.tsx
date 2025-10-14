@@ -52,6 +52,7 @@ import { logError } from "@/utils/logger";
 import { eq, and, inArray } from "drizzle-orm";
 import { getEffectiveSourceStatus } from "@/services/database/entities/sources";
 import { D3KnowledgeGraph } from "@/modules/knowledge/components/D3KnowledgeGraph";
+import { backgroundJob } from "@/services/background-jobs/background-job";
 
 // Helper function to get URL from the new data structure
 function getContentUrl(content: RememberedContent): string {
@@ -126,6 +127,9 @@ export const RememberedContentsPage: React.FC<
 			{ status: string; validFrom: Date | null; effectiveStatus: string }
 		>
 	>(new Map());
+	const [convertingContentId, setConvertingContentId] = useState<string | null>(
+		null,
+	);
 
 	// Subscribe to conversion updates
 	useEffect(() => {
@@ -239,15 +243,15 @@ export const RememberedContentsPage: React.FC<
 
 	const handleConvertToGraph = async (page: RememberedContent) => {
 		try {
-			const { backgroundJob } = await import(
-				"@/services/background-jobs/background-job"
-			);
+			setConvertingContentId(page.id);
 			await backgroundJob.createJob("knowledge-graph", page, {
 				stream: false,
 			});
 			await loadSourceStatuses([page.id]);
 		} catch (error) {
 			logError("Failed to start knowledge graph conversion:", error);
+		} finally {
+			setConvertingContentId(null);
 		}
 	};
 
@@ -599,12 +603,14 @@ export const RememberedContentsPage: React.FC<
 														onClick={() =>
 															handleConvertToGraph(selectedContent)
 														}
-														disabled={isConverting}
+														disabled={
+															convertingContentId === selectedContent.id
+														}
 													>
-														{isConverting ? (
+														{convertingContentId === selectedContent.id ? (
 															<>
 																<Loader2 className="h-4 w-4 mr-2 animate-spin" />
-																Converting...
+																Generating...
 															</>
 														) : (
 															<>
@@ -735,14 +741,21 @@ export const RememberedContentsPage: React.FC<
 														onClick={() =>
 															handleConvertToGraph(selectedContent)
 														}
-														disabled={isConverting}
+														disabled={
+															convertingContentId === selectedContent.id
+														}
 													>
-														{isConverting ? (
-															<Loader2 className="h-4 w-4 mr-1 animate-spin" />
+														{convertingContentId === selectedContent.id ? (
+															<>
+																<Loader2 className="h-4 w-4 mr-2 animate-spin" />
+																Generating...
+															</>
 														) : (
-															<Brain className="h-4 w-4 mr-1" />
+															<>
+																<Brain className="h-4 w-4 mr-2" />
+																Convert to Knowledge Graph
+															</>
 														)}
-														Convert to Knowledge Graph
 													</Button>
 												</div>
 											);

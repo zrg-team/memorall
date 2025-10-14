@@ -2,10 +2,11 @@ import React, { useEffect, useRef, useState } from "react";
 import * as d3 from "d3";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, ArrowRight, X } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Loader2, ArrowRight, X, Trash2 } from "lucide-react";
 import { serviceManager } from "@/services";
 import type { Node, Edge } from "@/services/database/db";
-import { logError } from "@/utils/logger";
+import { logError, logInfo } from "@/utils/logger";
 import { inArray, eq, and } from "drizzle-orm";
 
 // Hook to detect theme
@@ -68,6 +69,7 @@ interface D3KnowledgeGraphProps {
 	};
 	width?: number;
 	height?: number;
+	onNodeDeleted?: () => void;
 }
 
 // Theme-aware color functions
@@ -108,6 +110,7 @@ export const D3KnowledgeGraph: React.FC<D3KnowledgeGraphProps> = ({
 	graphData: externalGraphData,
 	width = 800,
 	height = 600,
+	onNodeDeleted,
 }) => {
 	const svgRef = useRef<SVGSVGElement>(null);
 	const [loading, setLoading] = useState(true);
@@ -118,6 +121,7 @@ export const D3KnowledgeGraph: React.FC<D3KnowledgeGraphProps> = ({
 	const [error, setError] = useState<string | null>(null);
 	const [selectedNode, setSelectedNode] = useState<D3Node | null>(null);
 	const [connectedEdges, setConnectedEdges] = useState<ConnectedEdge[]>([]);
+	const [deleting, setDeleting] = useState(false);
 	const isDark = useTheme();
 
 	useEffect(() => {
@@ -579,6 +583,73 @@ export const D3KnowledgeGraph: React.FC<D3KnowledgeGraphProps> = ({
 		return connections;
 	};
 
+	const handleDeleteNode = async () => {
+		if (!selectedNode) return;
+
+		const confirmDelete = confirm(
+			`Are you sure you want to delete the node "${selectedNode.name}"?\n\nThis will also delete:\n- All edges connected to this node\n- All source relationships for this node\n\nThis action cannot be undone.`,
+		);
+
+		if (!confirmDelete) return;
+
+		try {
+			setDeleting(true);
+			logInfo(`Deleting node: ${selectedNode.name} (${selectedNode.id})`);
+
+			await serviceManager.databaseService.use(async ({ db, schema }) => {
+				// Delete all edges where this node is source or destination
+				await db
+					.delete(schema.edges)
+					.where(eq(schema.edges.sourceId, selectedNode.id));
+
+				await db
+					.delete(schema.edges)
+					.where(eq(schema.edges.destinationId, selectedNode.id));
+
+				// Delete all source_nodes relationships
+				await db
+					.delete(schema.sourceNodes)
+					.where(eq(schema.sourceNodes.nodeId, selectedNode.id));
+
+				// Delete the node itself
+				await db
+					.delete(schema.nodes)
+					.where(eq(schema.nodes.id, selectedNode.id));
+			});
+
+			logInfo(`Successfully deleted node: ${selectedNode.name}`);
+
+			// Update local state immediately to remove node from visualization
+			const nodeIdToDelete = selectedNode.id;
+			setGraphData((prevData) => ({
+				nodes: prevData.nodes.filter((n) => n.id !== nodeIdToDelete),
+				edges: prevData.edges.filter((e) => {
+					const sourceId =
+						typeof e.source === "string" ? e.source : e.source.id;
+					const targetId =
+						typeof e.target === "string" ? e.target : e.target.id;
+					return sourceId !== nodeIdToDelete && targetId !== nodeIdToDelete;
+				}),
+			}));
+
+			// Clear selection
+			setSelectedNode(null);
+			setConnectedEdges([]);
+
+			// Notify parent if callback provided (for external data updates)
+			if (onNodeDeleted) {
+				onNodeDeleted();
+			}
+		} catch (error) {
+			logError("Failed to delete node:", error);
+			alert(
+				`Failed to delete node: ${error instanceof Error ? error.message : "Unknown error"}`,
+			);
+		} finally {
+			setDeleting(false);
+		}
+	};
+
 	const hash = (str: string): number => {
 		let hash = 0;
 		for (let i = 0; i < str.length; i++) {
@@ -657,20 +728,36 @@ export const D3KnowledgeGraph: React.FC<D3KnowledgeGraphProps> = ({
 									{selectedNode.name}
 								</h3>
 							</div>
-							<button
-								onClick={() => {
-									setSelectedNode(null);
-									setConnectedEdges([]);
-								}}
-								className={`${
-									isDark
-										? "text-gray-400 hover:text-gray-200"
-										: "text-gray-400 hover:text-gray-600"
-								}`}
-								title="Close"
-							>
-								<X className="h-4 w-4" />
-							</button>
+							<div className="flex items-center gap-1">
+								<Button
+									variant="ghost"
+									size="sm"
+									onClick={handleDeleteNode}
+									disabled={deleting}
+									className="h-7 px-2 text-destructive hover:text-destructive hover:bg-destructive/10"
+									title="Delete node"
+								>
+									{deleting ? (
+										<Loader2 className="h-4 w-4 animate-spin" />
+									) : (
+										<Trash2 className="h-4 w-4" />
+									)}
+								</Button>
+								<button
+									onClick={() => {
+										setSelectedNode(null);
+										setConnectedEdges([]);
+									}}
+									className={`${
+										isDark
+											? "text-gray-400 hover:text-gray-200"
+											: "text-gray-400 hover:text-gray-600"
+									}`}
+									title="Close"
+								>
+									<X className="h-4 w-4" />
+								</button>
+							</div>
 						</div>
 						<div className="mt-2 space-y-1">
 							<Badge variant="outline" className="text-xs">

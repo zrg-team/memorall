@@ -5,10 +5,10 @@ import { QUICK_WALLAMA_LLMS } from "@/constants/wllama";
 import { QUICK_WEBLLM_LLMS } from "@/constants/webllm";
 import { QUICK_OPENAI_LLMS } from "@/constants/openai";
 import { logError, logInfo } from "@/utils/logger";
-import type { Provider } from "../../../hooks/use-provider-config";
-import type { CurrentModel } from "../../../hooks/use-current-model";
 import type { DownloadProgress } from "./use-download-progress";
 import { PROVIDER_TO_SERVICE } from "@/services/llm/constants";
+import type { CurrentModel } from "@/hooks/use-current-model";
+import type { ServiceProvider } from "@/services/llm/interfaces/llm-service.interface";
 
 interface UseModelOperationsProps {
 	setCurrent: (current: CurrentModel | null) => void;
@@ -17,7 +17,7 @@ interface UseModelOperationsProps {
 	setDownloadProgress: (progress: DownloadProgress) => void;
 	fetchDownloadedModels: () => Promise<void>;
 	downloadedModels: ModelInfo[];
-	onModelLoaded?: (modelId: string, provider: Provider) => void;
+	onModelLoaded?: (modelId: string, provider: ServiceProvider) => void;
 }
 
 export function useModelOperations({
@@ -39,7 +39,7 @@ export function useModelOperations({
 				| (typeof QUICK_WALLAMA_LLMS)[0]
 				| (typeof QUICK_WEBLLM_LLMS)[0]
 				| (typeof QUICK_OPENAI_LLMS)[0],
-			provider: Provider,
+			provider: ServiceProvider,
 		) => {
 			setLoading(true);
 			const modelName = "repo" in model ? model.repo : model.model;
@@ -134,7 +134,7 @@ export function useModelOperations({
 
 	// Load a specific downloaded model
 	const loadDownloadedModel = useCallback(
-		async (model: ModelInfo, provider: Provider) => {
+		async (model: ModelInfo, provider: ServiceProvider) => {
 			setLoading(true);
 			const modelId = model.id;
 			try {
@@ -185,7 +185,7 @@ export function useModelOperations({
 				}, 100);
 
 				// Notify parent component
-				onModelLoaded?.(modelId, provider as Provider);
+				onModelLoaded?.(modelId, provider as ServiceProvider);
 			} catch (err) {
 				logError(`Error loading ${modelId}`, err);
 			} finally {
@@ -205,7 +205,7 @@ export function useModelOperations({
 
 	// Unload a specific model
 	const unloadDownloadedModel = useCallback(
-		async (model: ModelInfo, provider: Provider) => {
+		async (model: ModelInfo, provider: ServiceProvider) => {
 			setLoading(true);
 			const modelId = model.id;
 			try {

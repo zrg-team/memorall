@@ -12,6 +12,10 @@
  3. WebLLM library
     - Source: node_modules/@mlc-ai/web-llm/lib
     - Dest:   public/runner/libs
+
+ 4. PDF.js worker
+    - Source: node_modules/pdfjs-dist/build
+    - Dest:   public/vendors/pdfjs
 */
 
 import fs from "node:fs";
@@ -132,6 +136,21 @@ function main() {
 		console.log("✅ WebLLM library copied.\n");
 	} else {
 		console.warn("⚠️  @mlc-ai/web-llm not found, skipping.\n");
+	}
+
+	// 4. Copy PDF.js worker
+	const pdfjsSrc = path.resolve(
+		process.cwd(),
+		"node_modules/pdfjs-dist/build/pdf.worker.min.mjs",
+	);
+	const pdfjsDestDir = path.resolve(process.cwd(), "public/vendors/pdfjs");
+	const pdfjsDest = path.join(pdfjsDestDir, "pdf.worker.min.mjs");
+
+	if (fs.existsSync(pdfjsSrc)) {
+		copyFile(pdfjsSrc, pdfjsDest);
+		console.log("✅ PDF.js worker copied.\n");
+	} else {
+		console.warn("⚠️  pdfjs-dist worker not found, skipping.\n");
 	}
 
 	console.log("🎉 All AI library assets prepared successfully!");

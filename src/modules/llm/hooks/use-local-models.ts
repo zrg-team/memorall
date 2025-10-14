@@ -3,10 +3,10 @@ import { type ModelInfo } from "@/services/llm";
 import { eq } from "drizzle-orm";
 import { logError } from "@/utils/logger";
 import { serviceManager } from "@/services";
-import type { Provider } from "../../../hooks/use-provider-config";
+import type { ServiceProvider } from "@/services/llm/interfaces/llm-service.interface";
 
 export function useLocalModels(
-	quickProvider: Provider,
+	quickProvider: ServiceProvider,
 	localConfigExists: boolean | null,
 ) {
 	const [localModels, setLocalModels] = useState<ModelInfo[]>([]);

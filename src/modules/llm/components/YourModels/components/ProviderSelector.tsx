@@ -1,9 +1,9 @@
+import type { ServiceProvider } from "@/services/llm/interfaces/llm-service.interface";
 import React from "react";
-import type { Provider } from "../../../../../hooks/use-provider-config";
 
 interface ProviderSelectorProps {
-	quickProvider: Provider;
-	setQuickProvider: (provider: Provider) => void;
+	quickProvider: ServiceProvider;
+	setQuickProvider: (provider: ServiceProvider) => void;
 	loading: boolean;
 }
 
@@ -16,7 +16,7 @@ export const ProviderSelector: React.FC<ProviderSelectorProps> = ({
 		<div className="flex items-center gap-2">
 			<select
 				value={quickProvider}
-				onChange={(e) => setQuickProvider(e.target.value as Provider)}
+				onChange={(e) => setQuickProvider(e.target.value as ServiceProvider)}
 				className="text-xs border rounded px-2 py-1 bg-background"
 				disabled={loading}
 			>

@@ -17,8 +17,6 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Home, Brain, CheckCircle2 } from "lucide-react";
 import { useCurrentModel } from "@/hooks/use-current-model";
-import { useProviderConfig } from "@/hooks/use-provider-config";
-import { useDownloadedModels } from "@/modules/llm/hooks/use-downloaded-models";
 
 // No local quick-connect card; configuration handled in AdvancedSection
 
@@ -29,9 +27,7 @@ export const LLMPage: React.FC = () => {
 	});
 
 	// Hooks for current model display
-	const { openaiReady } = useProviderConfig();
-	const { downloadedModels } = useDownloadedModels();
-	const { current } = useCurrentModel(openaiReady, downloadedModels.length);
+	const { current } = useCurrentModel();
 
 	// Setup event listeners and effects
 	useProgressListener({

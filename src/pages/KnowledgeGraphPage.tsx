@@ -38,6 +38,13 @@ export const KnowledgeGraphPage: React.FC<KnowledgeGraphPageProps> = () => {
 		}
 	};
 
+	const handleNodeDeleted = () => {
+		// Reload graph data immediately after deletion
+		loadGraphData();
+		// Clear selection
+		setSelectedNodeId(null);
+	};
+
 	const filteredNodes = nodes.filter((node) =>
 		node.name.toLowerCase().includes(searchQuery.toLowerCase()),
 	);
@@ -45,7 +52,7 @@ export const KnowledgeGraphPage: React.FC<KnowledgeGraphPageProps> = () => {
 	return (
 		<div className="flex flex-col sm:flex-row h-full overflow-hidden bg-background">
 			{/* Sidebar with node list - hidden on small screens */}
-			<div className="hidden sm:block sm:w-64 border-r border-border bg-card">
+			<div className="hidden sm:block sm:w-72 border-r border-border bg-card">
 				<div className="p-3 border-b border-border">
 					<div className="relative">
 						<Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
@@ -124,6 +131,7 @@ export const KnowledgeGraphPage: React.FC<KnowledgeGraphPageProps> = () => {
 						selectedNodeId={selectedNodeId || undefined}
 						width={800}
 						height={600}
+						onNodeDeleted={handleNodeDeleted}
 					/>
 				)}
 			</div>

@@ -15,6 +15,19 @@ const RECALL_CONTEXT_MENU_ID = "recall";
 const RECALL_TOPIC_CONTEXT_MENU_ID = "recall-topic";
 const OPEN_FULL_PAGE_CONTEXT_MENU_ID = "open-full-page";
 
+// PDF context menu IDs
+const DOCUMENTS_CONTEXT_MENU_ID = "documents";
+
+// Helper to create notifications with proper icon
+function createNotification(title: string, message: string): void {
+	chrome.notifications?.create({
+		type: "basic" as const,
+		title,
+		message,
+		iconUrl: chrome.runtime.getURL("icons/extension_48.png"), // Use extension icon (build transforms images/ to icons/)
+	});
+}
+
 // Offscreen document management
 let offscreenCreated = false;
 let offscreenInitPromise: Promise<void> | null = null;
@@ -194,6 +207,18 @@ chrome.runtime.onInstalled.addListener(async () => {
 			contexts: ["page", "link"],
 		});
 
+		chrome.contextMenus.create({
+			id: "divider3",
+			type: "separator",
+		});
+
+		// Create PDF context menu item
+		chrome.contextMenus.create({
+			id: DOCUMENTS_CONTEXT_MENU_ID,
+			title: "📄 Documents",
+			contexts: ["page"],
+		});
+
 		ensureOffscreenDocument().catch((error) => {
 			logError(
 				"⚠️ Failed to create offscreen document during initialization:",
@@ -209,7 +234,29 @@ chrome.runtime.onInstalled.addListener(async () => {
 
 // Handle context menu clicks
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
-	// Handle recall context menu items first
+	logInfo("📋 Context menu clicked:", {
+		menuItemId: info.menuItemId,
+		tabUrl: tab?.url,
+		tabId: tab?.id,
+		pageUrl: info.pageUrl, // The actual page URL where context menu was clicked
+		linkUrl: info.linkUrl,
+	});
+
+	// Handle PDF Tools context menu item
+	if (info.menuItemId === DOCUMENTS_CONTEXT_MENU_ID) {
+		logInfo("📄 PDF Tools menu item clicked");
+
+		// Open the PDF Tools page in the extension
+		try {
+			chrome.storage?.session?.set?.({ navigateTo: "documents" });
+			openExtensionPopup();
+		} catch (error) {
+			logError("❌ Failed to open PDF Tools page:", error);
+		}
+		return;
+	}
+
+	// Handle recall context menu items
 	if (
 		info.menuItemId === RECALL_CONTEXT_MENU_ID ||
 		info.menuItemId === RECALL_TOPIC_CONTEXT_MENU_ID
@@ -439,12 +486,10 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 
 		// Try to show error notification if possible
 		try {
-			chrome.notifications?.create({
-				type: "basic",
-				iconUrl: chrome.runtime.getURL("images/extension_48.png"),
-				title: "Memorall",
-				message: "Failed to process remember request. Please try again.",
-			});
+			createNotification(
+				"Memorall",
+				"Failed to process remember request. Please try again.",
+			);
 		} catch (notificationError) {
 			logError("❌ Failed to show error notification:", notificationError);
 		}
@@ -642,6 +687,10 @@ chrome.runtime.onStartup.addListener(async () => {
 	}
 });
 
+// ============================================================================
+// EXTENSION POPUP HANDLER
+// ============================================================================
+
 // Open the extension's action popup (if allowed)
 // Notes:
 // - chrome.action.openPopup() can only be called in response to a user gesture.
@@ -661,11 +710,9 @@ async function openExtensionPopup(): Promise<void> {
 			logError("❌ Failed to open action popup:", error);
 		}
 		// Avoid opening chrome-extension:// URLs directly. Inform the user instead.
-		chrome.notifications?.create({
-			type: "basic",
-			iconUrl: chrome.runtime.getURL("images/extension_48.png"),
-			title: "Memorall",
-			message: "Click the Memorall toolbar icon to open the popup.",
-		});
+		createNotification(
+			"Memorall",
+			"Click the Memorall toolbar icon to open the popup.",
+		);
 	}
 }

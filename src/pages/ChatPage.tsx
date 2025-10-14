@@ -121,6 +121,8 @@ export const ChatPage: React.FC = () => {
 		return <LoadingScreen />;
 	}
 
+	console.log("model", model);
+
 	// Show YourModels component if no loaded models available
 	if (!model) {
 		return (

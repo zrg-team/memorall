@@ -28,6 +28,7 @@ import {
 import { ThemeProvider } from "./components/molecules/Copilot/ThemeContext";
 import { CopilotProvider, Copilot } from "./components/atoms/copilot";
 import { KnowledgeGraphPage } from "./pages/KnowledgeGraphPage";
+import { DocumentLibraryPage } from "./pages/DocumentLibraryPage";
 
 const App: React.FC = () => {
 	const [servicesStatus, setServicesStatus] = useState<
@@ -170,6 +171,7 @@ const App: React.FC = () => {
 								/>
 								<Route path="/remember" element={<RememberPage />} />
 								<Route path="/topics" element={<TopicsPage />} />
+								<Route path="/documents" element={<DocumentLibraryPage />} />
 								<Route path="/logs" element={<LogsPage />} />
 							</Routes>
 						</Layout>

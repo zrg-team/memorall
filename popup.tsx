@@ -34,7 +34,7 @@ if (container) {
   };
 
   try {
-    const area: any = (chrome.storage)?.session ?? (chrome.storage)?.local;
+    const area = (chrome.storage)?.session ?? (chrome.storage)?.local;
     if (area?.get) {
       area.get(['navigateTo'], (data: { navigateTo?: string }) => {
         try {
@@ -57,6 +57,11 @@ if (container) {
           } else if (target === 'topics') {
             if (location.pathname !== '/topics') {
               history.replaceState({}, '', '/topics');
+            }
+            area?.remove?.('navigateTo');
+          } else if (target === 'documents') {
+            if (location.pathname !== '/documents') {
+              history.replaceState({}, '', '/documents');
             }
             area?.remove?.('navigateTo');
           }

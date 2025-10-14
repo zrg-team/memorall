@@ -1,4 +1,5 @@
 import { Readability } from "@mozilla/readability";
+import { isPDFUrl, readPDFFromUrl } from "./pdf-extraction";
 import type {
 	SelectionData,
 	PageMetadata,
@@ -91,9 +92,48 @@ export function extractPageMetadata(): PageMetadata {
 	};
 }
 
+// Extract PDF content
+export async function extractPDFContent(url: string): Promise<ReadableContent> {
+	try {
+		const pdfContent = await readPDFFromUrl(url);
+
+		// Create a formatted content with page numbers
+		const formattedContent = pdfContent.pages
+			.map(
+				(page) => `<div class="pdf-page" data-page="${page.pageNumber}">
+				<h3>Page ${page.pageNumber}</h3>
+				<p>${page.text}</p>
+			</div>`,
+			)
+			.join("\n");
+
+		return {
+			title: pdfContent.title || document.title || "PDF Document",
+			content: formattedContent,
+			textContent: pdfContent.fullText,
+			length: pdfContent.fullText.length,
+			excerpt:
+				pdfContent.fullText.substring(0, 300) +
+				(pdfContent.fullText.length > 300 ? "..." : ""),
+			byline: pdfContent.author || "",
+			dir: "ltr",
+			lang: "en",
+			siteName: window.location.hostname,
+		};
+	} catch (error) {
+		console.error("Failed to extract PDF content:", error);
+		throw error;
+	}
+}
+
 // Clean and extract readable content using Readability
 export async function extractReadableContent(): Promise<ReadableContent> {
 	try {
+		// Check if current page is a PDF
+		if (isPDFUrl(window.location.href)) {
+			return await extractPDFContent(window.location.href);
+		}
+
 		// Clone the document for Readability processing
 		const documentClone = document.cloneNode(true) as Document;
 
