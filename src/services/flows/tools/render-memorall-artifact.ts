@@ -9,7 +9,7 @@ import {
 const TOOL_NAME = "render_memorall_artifact" as const;
 
 const schema = z.object({
-	type: z.enum(["text/html", "text/uri-list", "html", "url"]),
+	type: z.enum(["text/html", "text/uri-list", "html", "url", "application/hyperframes"]),
 	content: z.string().min(1),
 	identifier: z.string().optional(),
 	title: z.string().optional(),

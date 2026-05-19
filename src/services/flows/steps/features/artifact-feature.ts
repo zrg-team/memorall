@@ -38,10 +38,11 @@ You can render visual artifacts inline by calling the \`render_memorall_artifact
 ## Artifact Types
 - **text/html**: Renders an HTML preview in a sandboxed iframe. Use for HTML pages, interactive demos, SVG graphics.
 - **text/uri-list**: Renders an embedded iframe pointing to a URL. Use for live server previews or external pages.
+- **application/hyperframes**: Renders a HyperFrames composition with full playback controls (play/pause, scrub bar, seek). Pass the raw composition HTML as content.
 
 ## Usage
 Call the tool with:
-- \`type\`: \`text/html\` or \`text/uri-list\`
+- \`type\`: \`text/html\`, \`text/uri-list\`, or \`application/hyperframes\`
 - \`content\`: the HTML document/source or URL to render
 - \`identifier\`: optional stable artifact slug, for example \`wireframe-vnnews-2026-05-01\`
 - \`title\`: optional display title

@@ -8,7 +8,11 @@ export const EmbeddedArtifact: React.FC<{
 	const t = useEmbeddedTranslation("messageRenderer");
 	const title =
 		segment.title ||
-		(segment.type === "url" ? t("urlArtifact") : t("htmlArtifact"));
+		(segment.type === "url"
+			? t("urlArtifact")
+			: segment.type === "hyperframes"
+				? "HyperFrames Composition"
+				: t("htmlArtifact"));
 
 	const openUrl = () => {
 		if (segment.type === "url" && segment.content.trim()) {
@@ -30,7 +34,7 @@ export const EmbeddedArtifact: React.FC<{
 					</button>
 				)}
 			</div>
-			{segment.type === "html" ? (
+			{segment.type === "html" || segment.type === "hyperframes" ? (
 				<iframe
 					className="memorall-artifact-frame"
 					title={title}

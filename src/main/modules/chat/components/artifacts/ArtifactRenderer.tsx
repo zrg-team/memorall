@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import "@hyperframes/player";
 import { useTranslation } from "react-i18next";
 import { Save, Check, ExternalLink, MoreHorizontal } from "lucide-react";
 import { Button } from "@/main/components/ui/button";
@@ -378,6 +379,40 @@ export const UrlArtifact: React.FC<ArtifactProps> = ({ content, title }) => {
 	);
 };
 
+const HyperframesArtifact: React.FC<ArtifactProps> = ({ content, title }) => {
+	const containerRef = useRef<HTMLDivElement>(null);
+
+	useEffect(() => {
+		const container = containerRef.current;
+		if (!container) return;
+
+		const blob = new Blob([content], { type: "text/html" });
+		const blobUrl = URL.createObjectURL(blob);
+
+		const player = document.createElement("hyperframes-player");
+		player.setAttribute("src", blobUrl);
+		player.setAttribute("controls", "");
+		player.setAttribute("autoplay", "");
+		player.setAttribute("muted", "");
+		player.style.cssText = "display:block;width:100%;height:100%";
+		container.appendChild(player);
+
+		return () => {
+			player.remove();
+			URL.revokeObjectURL(blobUrl);
+		};
+	}, [content]);
+
+	return (
+		<div
+			ref={containerRef}
+			className="my-2 overflow-hidden rounded-md bg-black"
+			style={{ height: "60vh" }}
+			aria-label={title || "HyperFrames composition"}
+		/>
+	);
+};
+
 interface ArtifactRendererProps {
 	type: ArtifactType;
 	content: string;
@@ -398,6 +433,14 @@ export const ArtifactRenderer: React.FC<ArtifactRendererProps> = ({
 			);
 		case "url":
 			return <UrlArtifact content={content} title={title} />;
+		case "hyperframes":
+			return (
+				<HyperframesArtifact
+					content={content}
+					identifier={identifier}
+					title={title}
+				/>
+			);
 		case "markdown":
 			return (
 				<div className="my-2 rounded-md border border-border/70 bg-muted/10 p-3">

@@ -71,3 +71,10 @@ import "./fs/fs-ls";
 import "./planner";
 import "./load-skill";
 import "./send-message-to-agent";
+
+import "./hyperframes/hyperframes-write";
+import "./hyperframes/hyperframes-read";
+import "./hyperframes/hyperframes-show";
+import "./hyperframes/hyperframes-validate";
+import "./hyperframes/hyperframes-capture-frame";
+import "./hyperframes/hyperframes-export-video";

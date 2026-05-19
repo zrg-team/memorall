@@ -5,7 +5,7 @@ export const STANDARD_ARTIFACT_TAG = "artifact";
 export const STANDARD_ARTIFACT_OPEN = `<${STANDARD_ARTIFACT_TAG}`;
 export const STANDARD_ARTIFACT_CLOSE = `</${STANDARD_ARTIFACT_TAG}>`;
 
-export const ARTIFACT_TYPES = ["html", "url", "markdown", "text"] as const;
+export const ARTIFACT_TYPES = ["html", "url", "markdown", "text", "hyperframes"] as const;
 export type ArtifactType = (typeof ARTIFACT_TYPES)[number];
 
 export type MessageContentSegment =
@@ -75,6 +75,9 @@ const normalizeArtifactType = (value: string | undefined): ArtifactType => {
 		case "text/uri-list":
 		case "url":
 			return "url";
+		case "application/hyperframes":
+		case "hyperframes":
+			return "hyperframes";
 		default:
 			return isArtifactType(value) ? value : DEFAULT_ARTIFACT_TYPE;
 	}
