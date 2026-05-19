@@ -85,6 +85,11 @@ export type WebContentCommandRequest =
 			timeoutMs: number;
 			intervalMs: number;
 			maxHtmlChars: number;
+	  }
+	| {
+			source: typeof WEB_CONTENT_COMMAND_SOURCE;
+			type: "web-tool:fetch-image";
+			url: string;
 	  };
 
 export type WebContentCommandResponse =
@@ -117,11 +122,19 @@ export type WebContentCommandResponse =
 	  }
 	| {
 			source: typeof WEB_CONTENT_COMMAND_SOURCE;
+			type: "web-tool:fetch-image-result";
+			success: true;
+			base64: string;
+			mimeType: string;
+	  }
+	| {
+			source: typeof WEB_CONTENT_COMMAND_SOURCE;
 			type:
 				| "web-tool:snapshot-result"
 				| "web-tool:dom-query-result"
 				| "web-tool:dom-action-result"
-				| "web-tool:wait-selector-result";
+				| "web-tool:wait-selector-result"
+				| "web-tool:fetch-image-result";
 			success: false;
 			error: string;
 	  };
@@ -190,6 +203,13 @@ export type WebBrowserCommandRequest =
 			sessionId: string;
 			tabId: number;
 			windowId?: number;
+	  }
+	| {
+			source: typeof WEB_BROWSER_COMMAND_SOURCE;
+			command: "fetch-image";
+			sessionId: string;
+			url: string;
+			tabId: number;
 	  };
 
 export type WebBrowserCommandResponse =
@@ -249,6 +269,14 @@ export type WebBrowserCommandResponse =
 	  }
 	| {
 			source: typeof WEB_BROWSER_COMMAND_SOURCE;
+			command: "fetch-image";
+			success: true;
+			sessionId: string;
+			base64: string;
+			mimeType: string;
+	  }
+	| {
+			source: typeof WEB_BROWSER_COMMAND_SOURCE;
 			command:
 				| "open"
 				| "snapshot"
@@ -256,7 +284,8 @@ export type WebBrowserCommandResponse =
 				| "dom-action"
 				| "wait-selector"
 				| "close"
-				| "screenshot";
+				| "screenshot"
+				| "fetch-image";
 			success: false;
 			sessionId: string;
 			error: string;
@@ -295,6 +324,8 @@ export const isWebContentCommandRequest = (
 				typeof value.intervalMs === "number" &&
 				typeof value.maxHtmlChars === "number"
 			);
+		case "web-tool:fetch-image":
+			return typeof value.url === "string";
 		default:
 			return false;
 	}
@@ -325,6 +356,8 @@ export const isWebContentCommandResponse = (
 			return isRecord(value.result) && isRecord(value.snapshot);
 		case "web-tool:wait-selector-result":
 			return typeof value.matched === "boolean" && isRecord(value.snapshot);
+		case "web-tool:fetch-image-result":
+			return typeof value.base64 === "string" && typeof value.mimeType === "string";
 		default:
 			return false;
 	}
@@ -387,6 +420,12 @@ export const isWebBrowserCommandRequest = (
 			return (
 				typeof value.sessionId === "string" && typeof value.tabId === "number"
 			);
+		case "fetch-image":
+			return (
+				typeof value.sessionId === "string" &&
+				typeof value.url === "string" &&
+				typeof value.tabId === "number"
+			);
 		default:
 			return false;
 	}
@@ -427,6 +466,10 @@ export const isWebBrowserCommandResponse = (
 				typeof value.dataUrl === "string" &&
 				typeof value.width === "number" &&
 				typeof value.height === "number"
+			);
+		case "fetch-image":
+			return (
+				typeof value.base64 === "string" && typeof value.mimeType === "string"
 			);
 		default:
 			return false;

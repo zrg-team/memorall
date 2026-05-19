@@ -46,6 +46,7 @@ import "./web/web-search";
 import "./web/web-dom";
 import "./web/web-wait";
 import "./web/web-screenshot";
+import "./web/web-fetch-image";
 
 import "./co-agent";
 

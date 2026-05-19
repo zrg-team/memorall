@@ -611,6 +611,31 @@ const handleScreenshotCommand = async (
 	}
 };
 
+const handleFetchImageCommand = async (
+	request: Extract<WebBrowserCommandRequest, { command: "fetch-image" }>,
+): Promise<WebBrowserCommandResponse> => {
+	try {
+		const response = await sendContentCommand(
+			request.tabId,
+			{ source: WEB_CONTENT_COMMAND_SOURCE, type: "web-tool:fetch-image", url: request.url },
+			15_000,
+		);
+		if (response.type !== "web-tool:fetch-image-result") {
+			throw new Error("Invalid fetch-image response from content script.");
+		}
+		return {
+			source: WEB_BROWSER_COMMAND_SOURCE,
+			command: "fetch-image",
+			success: true,
+			sessionId: request.sessionId,
+			base64: response.base64,
+			mimeType: response.mimeType,
+		};
+	} catch (error) {
+		return createErrorResponse(request, error);
+	}
+};
+
 const handleCloseCommand = async (
 	request: Extract<WebBrowserCommandRequest, { command: "close" }>,
 ): Promise<WebBrowserCommandResponse> => {
@@ -656,6 +681,8 @@ const handleCommand = async (
 			return handleCloseCommand(request);
 		case "screenshot":
 			return handleScreenshotCommand(request);
+		case "fetch-image":
+			return handleFetchImageCommand(request);
 	}
 };
 

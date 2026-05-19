@@ -1443,6 +1443,58 @@ export const captureWebSessionScreenshot = async (
 	};
 };
 
+export const fetchImageFromSession = async (
+	sessionId: string,
+	url: string,
+): Promise<{ base64: string; mimeType: string }> => {
+	const session =
+		WEB_SESSIONS.get(sessionId) ?? (await recoverSession(sessionId));
+	if (!session) {
+		throw new Error(`No active web session: ${sessionId}`);
+	}
+
+	if (session.mode === "iframe") {
+		throw new Error(
+			"Fetching images via iframe sessions is not supported. Open a tab or window session instead.",
+		);
+	}
+
+	if (typeof session.tabId !== "number") {
+		throw new Error("Web session has no associated browser tab.");
+	}
+
+	const response = await sendWebBrowserCommand({
+		source: WEB_BROWSER_COMMAND_SOURCE,
+		command: "fetch-image",
+		sessionId,
+		url,
+		tabId: session.tabId,
+	});
+
+	if (response.command !== "fetch-image") {
+		throw new Error("Invalid fetch-image response from background.");
+	}
+
+	return { base64: response.base64, mimeType: response.mimeType };
+};
+
+export const getLatestTabSession = ():
+	| { sessionId: string; tabId: number }
+	| undefined => {
+	let latest: WebSessionState | undefined;
+	for (const session of WEB_SESSIONS.values()) {
+		if (
+			typeof session.tabId === "number" &&
+			session.mode !== "iframe" &&
+			(!latest || session.lastAccessedAt > latest.lastAccessedAt)
+		) {
+			latest = session;
+		}
+	}
+	if (!latest || typeof latest.tabId !== "number") return undefined;
+	return { sessionId: latest.id, tabId: latest.tabId };
+};
+
 export const createDefaultWebErrorResult = (error: unknown): string => {
 	return JSON.stringify(
 		{

@@ -135,6 +135,7 @@ export const WEB_FEATURE_TOOLS = [
 	"web_find_in_page",
 	"web_dom_action",
 	"web_wait",
+	"web_fetch_image",
 ] as const;
 
 export const WEB_FEATURE_DESCRIPTION =
