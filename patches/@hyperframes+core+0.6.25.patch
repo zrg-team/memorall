@@ -1,0 +1,110 @@
+diff --git a/node_modules/@hyperframes/core/dist/lint/index.d.ts b/node_modules/@hyperframes/core/dist/lint/index.d.ts
+index 7e656f4..73e9f09 100644
+--- a/node_modules/@hyperframes/core/dist/lint/index.d.ts
++++ b/node_modules/@hyperframes/core/dist/lint/index.d.ts
+@@ -1,3 +1,3 @@
+ export type { HyperframeLintSeverity, HyperframeLintFinding, HyperframeLintResult, HyperframeLinterOptions, } from "./types";
+-export { lintHyperframeHtml, lintMediaUrls } from "./hyperframeLinter";
++export { lintHyperframeHtml, lintMediaUrls } from "./hyperframeLinter.js";
+ //# sourceMappingURL=index.d.ts.map
+diff --git a/node_modules/@hyperframes/core/dist/lint/index.js b/node_modules/@hyperframes/core/dist/lint/index.js
+index 1eef111..42abef8 100644
+--- a/node_modules/@hyperframes/core/dist/lint/index.js
++++ b/node_modules/@hyperframes/core/dist/lint/index.js
+@@ -1,2 +1,2 @@
+-export { lintHyperframeHtml, lintMediaUrls } from "./hyperframeLinter";
++export { lintHyperframeHtml, lintMediaUrls } from "./hyperframeLinter.js";
+ //# sourceMappingURL=index.js.map
+diff --git a/node_modules/@hyperframes/core/dist/lint/context.js b/node_modules/@hyperframes/core/dist/lint/context.js
+--- a/node_modules/@hyperframes/core/dist/lint/context.js
++++ b/node_modules/@hyperframes/core/dist/lint/context.js
+@@ -1,4 +1,4 @@
+-import { extractBlocks, extractOpenTags, findRootTag, collectCompositionIds, readAttr, STYLE_BLOCK_PATTERN, SCRIPT_BLOCK_PATTERN, } from "./utils";
++import { extractBlocks, extractOpenTags, findRootTag, collectCompositionIds, readAttr, STYLE_BLOCK_PATTERN, SCRIPT_BLOCK_PATTERN, } from "./utils.js";
+ export function buildLintContext(html, options = {}) {
+     const rawSource = html || "";
+     let source = rawSource;
+diff --git a/node_modules/@hyperframes/core/dist/lint/hyperframeLinter.js b/node_modules/@hyperframes/core/dist/lint/hyperframeLinter.js
+--- a/node_modules/@hyperframes/core/dist/lint/hyperframeLinter.js
++++ b/node_modules/@hyperframes/core/dist/lint/hyperframeLinter.js
+@@ -1,12 +1,12 @@
+-import { buildLintContext } from "./context";
+-import { readAttr, truncateSnippet } from "./utils";
+-import { coreRules } from "./rules/core";
+-import { mediaRules } from "./rules/media";
+-import { gsapRules } from "./rules/gsap";
+-import { captionRules } from "./rules/captions";
+-import { compositionRules } from "./rules/composition";
+-import { adapterRules } from "./rules/adapters";
+-import { textureRules } from "./rules/textures";
++import { buildLintContext } from "./context.js";
++import { readAttr, truncateSnippet } from "./utils.js";
++import { coreRules } from "./rules/core.js";
++import { mediaRules } from "./rules/media.js";
++import { gsapRules } from "./rules/gsap.js";
++import { captionRules } from "./rules/captions.js";
++import { compositionRules } from "./rules/composition.js";
++import { adapterRules } from "./rules/adapters.js";
++import { textureRules } from "./rules/textures.js";
+ const ALL_RULES = [
+     ...coreRules,
+     ...mediaRules,
+diff --git a/node_modules/@hyperframes/core/dist/lint/rules/adapters.js b/node_modules/@hyperframes/core/dist/lint/rules/adapters.js
+--- a/node_modules/@hyperframes/core/dist/lint/rules/adapters.js
++++ b/node_modules/@hyperframes/core/dist/lint/rules/adapters.js
+@@ -1,4 +1,4 @@
+-import { readAttr } from "../utils";
++import { readAttr } from "../utils.js";
+ export const adapterRules = [
+     // missing_lottie_script
+     ({ tags, scripts }) => {
+diff --git a/node_modules/@hyperframes/core/dist/lint/rules/composition.js b/node_modules/@hyperframes/core/dist/lint/rules/composition.js
+--- a/node_modules/@hyperframes/core/dist/lint/rules/composition.js
++++ b/node_modules/@hyperframes/core/dist/lint/rules/composition.js
+@@ -1,5 +1,5 @@
+-import { findHtmlTag, readAttr, readJsonAttr, truncateSnippet } from "../utils";
+-import { COMPOSITION_VARIABLE_TYPES } from "../../core.types";
++import { findHtmlTag, readAttr, readJsonAttr, truncateSnippet } from "../utils.js";
++import { COMPOSITION_VARIABLE_TYPES } from "../../core.types.js";
+ // Agent guidance thresholds: warning-only nudges for files/tracks that become hard
+ // to inspect and revise reliably in a single composition.
+ const MAX_COMPOSITION_LINES = 300;
+diff --git a/node_modules/@hyperframes/core/dist/lint/rules/core.js b/node_modules/@hyperframes/core/dist/lint/rules/core.js
+--- a/node_modules/@hyperframes/core/dist/lint/rules/core.js
++++ b/node_modules/@hyperframes/core/dist/lint/rules/core.js
+@@ -1,5 +1,5 @@
+ import postcss from "postcss";
+-import { readAttr, truncateSnippet, extractCompositionIdsFromCss, getInlineScriptSyntaxError, TIMELINE_REGISTRY_INIT_PATTERN, TIMELINE_REGISTRY_ASSIGN_PATTERN, INVALID_SCRIPT_CLOSE_PATTERN, } from "../utils";
++import { readAttr, truncateSnippet, extractCompositionIdsFromCss, getInlineScriptSyntaxError, TIMELINE_REGISTRY_INIT_PATTERN, TIMELINE_REGISTRY_ASSIGN_PATTERN, INVALID_SCRIPT_CLOSE_PATTERN, } from "../utils.js";
+ function escapeRegExp(value) {
+     return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+ }
+diff --git a/node_modules/@hyperframes/core/dist/lint/rules/gsap.js b/node_modules/@hyperframes/core/dist/lint/rules/gsap.js
+--- a/node_modules/@hyperframes/core/dist/lint/rules/gsap.js
++++ b/node_modules/@hyperframes/core/dist/lint/rules/gsap.js
+@@ -1,4 +1,4 @@
+-import { parseGsapScript } from "../../parsers/gsapParser";
+-import { readAttr, truncateSnippet, WINDOW_TIMELINE_ASSIGN_PATTERN } from "../utils";
++import { parseGsapScript } from "../../parsers/gsapParser.js";
++import { readAttr, truncateSnippet, WINDOW_TIMELINE_ASSIGN_PATTERN } from "../utils.js";
+ const META_GSAP_KEYS = new Set(["duration", "ease", "repeat", "yoyo", "overwrite", "delay"]);
+ const SCENE_BOUNDARY_EPSILON_SECONDS = 0.05;
+diff --git a/node_modules/@hyperframes/core/dist/lint/rules/media.js b/node_modules/@hyperframes/core/dist/lint/rules/media.js
+--- a/node_modules/@hyperframes/core/dist/lint/rules/media.js
++++ b/node_modules/@hyperframes/core/dist/lint/rules/media.js
+@@ -1,4 +1,4 @@
+-import { readAttr, truncateSnippet, isMediaTag } from "../utils";
++import { readAttr, truncateSnippet, isMediaTag } from "../utils.js";
+ function escapeRegExp(value) {
+     return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+ }
+diff --git a/node_modules/@hyperframes/core/dist/lint/rules/textures.js b/node_modules/@hyperframes/core/dist/lint/rules/textures.js
+--- a/node_modules/@hyperframes/core/dist/lint/rules/textures.js
++++ b/node_modules/@hyperframes/core/dist/lint/rules/textures.js
+@@ -1,5 +1,5 @@
+ import postcss from "postcss";
+-import { readAttr, truncateSnippet } from "../utils";
++import { readAttr, truncateSnippet } from "../utils.js";
+ const TEXTURE_BASE_CLASS = "hf-texture-text";
+ const TEXTURE_CLASS_PREFIX = "hf-texture-";
+ function classNames(tag) {
