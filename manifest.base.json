@@ -66,8 +66,7 @@
   "sandbox": {
     "pages": [
       "sandbox/pages/js-execute.html",
-      "sandbox/pages/sandbox-container-runtime.html",
-      "sandbox/pages/hyperframes-preview.html"
+      "sandbox/pages/sandbox-container-runtime.html"
     ]
   }
 }
