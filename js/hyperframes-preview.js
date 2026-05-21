@@ -8,13 +8,16 @@
 // before loading, so GSAP and the HyperFrames runtime load from jsDelivr.
 //
 // LOAD ORDER (guaranteed by renderComposition):
-//   1. GSAP + shader-transitions  — external CDN scripts
-//   2. inline animation script    — sets window.__timelines["main"] = tl
-//   3. hyperframe.runtime         — go() reads __timelines on load
+//   1. GSAP + shader-transitions + Lucide — external CDN scripts
+//   2. Lucide icon replacement            — <i data-lucide="...">
+//   3. inline animation script            — sets window.__timelines["main"] = tl
+//   4. hyperframe.runtime                 — go() reads __timelines on load
 
 const DEFAULT_EXPORT_FPS = 30;
 const MEDIABUNNY_ESM_URL =
 	"https://cdn.jsdelivr.net/npm/mediabunny@1.45.2/+esm";
+const LUCIDE_UMD_URL =
+	"https://cdn.jsdelivr.net/npm/lucide@0.542.0/dist/umd/lucide.js";
 
 // ── CDN fallback map for extension-local script URLs ─────────────────────────
 // Mirrors the CDN_TO_LOCAL map in composition-preprocessor.ts (reversed).
@@ -27,6 +30,7 @@ const CDN_MAP = {
 		"https://cdn.jsdelivr.net/npm/@hyperframes/shader-transitions/dist/index.global.js",
 	"html2canvas.min.js":
 		"https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js",
+	"lucide.js": LUCIDE_UMD_URL,
 };
 
 function resolveSrc(src) {
@@ -160,6 +164,38 @@ function runInline(code) {
 	const s = document.createElement("script");
 	s.textContent = code;
 	document.body.appendChild(s);
+}
+
+function isLucideScript(src) {
+	return /(?:^|\/)lucide(?:@|\/)|\/lucide\.js(?:\?|$)|\/lucide(?:\.min)?\.js(?:\?|$)/i.test(
+		src,
+	);
+}
+
+function hasLucidePlaceholders(root = document) {
+	return Boolean(
+		root.querySelector?.("[data-lucide], .lucide-icon[data-icon]"),
+	);
+}
+
+function normalizeLucidePlaceholders(root = document) {
+	for (const el of root.querySelectorAll?.(".lucide-icon[data-icon]") ?? []) {
+		if (!el.hasAttribute("data-lucide")) {
+			el.setAttribute("data-lucide", el.getAttribute("data-icon") || "");
+		}
+	}
+}
+
+function renderLucideIcons() {
+	normalizeLucidePlaceholders(document);
+	if (!hasLucidePlaceholders(document)) return;
+	if (typeof window.lucide?.createIcons !== "function") return;
+	window.lucide.createIcons({
+		attrs: {
+			"aria-hidden": "true",
+			focusable: "false",
+		},
+	});
 }
 
 function sanitizeFilename(value) {
@@ -419,6 +455,8 @@ async function renderComposition(html, inlineScripts, options = {}) {
 	document.body.innerHTML = "";
 	while (bodyClone.firstChild) document.body.appendChild(bodyClone.firstChild);
 
+	normalizeLucidePlaceholders(document);
+
 	// Collect all external script srcs, converting chrome-extension:// to CDN.
 	const RUNTIME_RE = /hyperframe\.runtime/i;
 	const rawSrcs = [
@@ -431,17 +469,27 @@ async function renderComposition(html, inlineScripts, options = {}) {
 
 	const runtimeSrcs = rawSrcs.filter((s) => RUNTIME_RE.test(s));
 	const otherSrcs = rawSrcs.filter((s) => !RUNTIME_RE.test(s));
+	if (
+		hasLucidePlaceholders(document) &&
+		!otherSrcs.some(isLucideScript) &&
+		!runtimeSrcs.some(isLucideScript)
+	) {
+		otherSrcs.unshift(LUCIDE_UMD_URL);
+	}
 
 	const scripts =
 		inlineScripts.length > 0 ? inlineScripts : extractFromHtml(html);
 
-	// Step 1: GSAP, shader-transitions
+	// Step 1: GSAP, shader-transitions, Lucide
 	for (const src of otherSrcs) await loadExternal(src);
 
-	// Step 2: inline animation — sets window.__timelines["main"] = tl
+	// Step 2: replace simple Lucide placeholders before animations target them.
+	renderLucideIcons();
+
+	// Step 3: inline animation — sets window.__timelines["main"] = tl
 	for (const code of scripts) runInline(code);
 
-	// Step 3: hyperframe.runtime — go() now finds __timelines populated
+	// Step 4: hyperframe.runtime — go() now finds __timelines populated
 	for (const src of runtimeSrcs) await loadExternal(src);
 	currentFilenameBase = options.filenameBase || currentFilenameBase;
 	postExportStatus({ status: "idle" });
