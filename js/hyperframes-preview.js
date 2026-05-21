@@ -308,21 +308,32 @@ function mountExportButton(options = {}) {
 	control.appendChild(button);
 	document.body.appendChild(control);
 
+	let pendingDownload = null;
+
 	const setButton = (label, disabled = false) => {
 		button.textContent = label;
 		button.disabled = disabled;
 	};
 
 	button.addEventListener("click", async () => {
+		if (pendingDownload) {
+			const link = document.createElement("a");
+			link.href = pendingDownload.url;
+			link.download = pendingDownload.filename;
+			document.body.appendChild(link);
+			link.click();
+			link.remove();
+			return;
+		}
+
 		try {
 			setButton("Preparing...", true);
-			await exportMp4({
+			pendingDownload = await exportMp4({
 				filenameBase: options.filenameBase || "hyperframes-composition",
 				onProgress: (frame, total) =>
 					setButton(`Exporting ${frame}/${total}`, true),
 			});
-			setButton("Downloaded", false);
-			setTimeout(() => setButton("Download MP4", false), 3000);
+			setButton("Download MP4", false);
 		} catch (error) {
 			console.error(error);
 			setButton("Export failed", false);
@@ -408,13 +419,10 @@ async function exportMp4({ filenameBase, onProgress }) {
 
 	const blob = new Blob([buffer], { type: "video/mp4" });
 	const url = URL.createObjectURL(blob);
-	const link = document.createElement("a");
-	link.href = url;
-	link.download = `${sanitizeFilename(filenameBase)}.mp4`;
-	document.body.appendChild(link);
-	link.click();
-	link.remove();
-	setTimeout(() => URL.revokeObjectURL(url), 30000);
+	return {
+		url,
+		filename: `${sanitizeFilename(filenameBase)}.mp4`,
+	};
 }
 
 // ── Main render ───────────────────────────────────────────────────────────────
