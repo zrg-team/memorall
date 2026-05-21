@@ -48,6 +48,8 @@ const keyFromLocation = () =>
 const key = keyFromLocation();
 let html2CanvasLoad = null;
 let mediabunnyLoad = null;
+let currentFilenameBase = "hyperframes-composition";
+let exportInProgress = false;
 
 document.documentElement.style.cssText =
 	"width:100%;height:100%;margin:0;overflow:hidden;background:#000";
@@ -70,9 +72,19 @@ if (!key) {
 
 	window.addEventListener("message", (event) => {
 		const msg = event.data;
+		if (msg?.key !== key) return;
+
+		if (msg?.type === "memorall:hyperframes-export-mp4") {
+			const filenameBase =
+				typeof msg.filenameBase === "string"
+					? sanitizeFilename(msg.filenameBase)
+					: currentFilenameBase;
+			void handleExportRequest(filenameBase);
+			return;
+		}
+
 		if (
 			msg?.type !== "memorall:hyperframes-composition" ||
-			msg.key !== key ||
 			typeof msg.html !== "string"
 		)
 			return;
@@ -87,6 +99,7 @@ if (!key) {
 			typeof msg.filenameBase === "string"
 				? sanitizeFilename(msg.filenameBase)
 				: "hyperframes-composition";
+		currentFilenameBase = filenameBase;
 
 		renderComposition(msg.html, inlineScripts, { filenameBase }).catch(
 			console.error,
@@ -261,85 +274,45 @@ function hasExportRuntime() {
 	return getDuration() > 0 && (window.__player || getRootTimeline());
 }
 
-function injectExportStyles() {
-	const style = document.createElement("style");
-	style.textContent = `
-.hf-export-control {
-	position: fixed;
-	top: 16px;
-	right: 16px;
-	z-index: 2147483647;
-	font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-}
-.hf-export-button {
-	min-width: 132px;
-	height: 38px;
-	border: 1px solid rgba(255,255,255,0.22);
-	border-radius: 8px;
-	background: rgba(12,12,16,0.82);
-	color: #fff;
-	box-shadow: 0 10px 30px rgba(0,0,0,0.28);
-	backdrop-filter: blur(12px);
-	font: 600 13px/1 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-	cursor: pointer;
-}
-.hf-export-button:hover:not(:disabled) {
-	background: rgba(28,28,34,0.9);
-}
-.hf-export-button:disabled {
-	cursor: progress;
-	opacity: 0.78;
-}
-`;
-	document.head.appendChild(style);
+function postExportStatus(payload) {
+	window.parent.postMessage(
+		{
+			type: "memorall:hyperframes-export-status",
+			key,
+			...payload,
+		},
+		"*",
+	);
 }
 
-function mountExportButton(options = {}) {
-	injectExportStyles();
+async function handleExportRequest(filenameBase) {
+	if (exportInProgress) {
+		postExportStatus({ status: "busy" });
+		return;
+	}
 
-	const control = document.createElement("div");
-	control.className = "hf-export-control";
-	control.setAttribute("data-html2canvas-ignore", "true");
-
-	const button = document.createElement("button");
-	button.type = "button";
-	button.className = "hf-export-button";
-	button.textContent = "Download MP4";
-	control.appendChild(button);
-	document.body.appendChild(control);
-
-	let pendingDownload = null;
-
-	const setButton = (label, disabled = false) => {
-		button.textContent = label;
-		button.disabled = disabled;
-	};
-
-	button.addEventListener("click", async () => {
-		if (pendingDownload) {
-			const link = document.createElement("a");
-			link.href = pendingDownload.url;
-			link.download = pendingDownload.filename;
-			document.body.appendChild(link);
-			link.click();
-			link.remove();
-			return;
-		}
-
-		try {
-			setButton("Preparing...", true);
-			pendingDownload = await exportMp4({
-				filenameBase: options.filenameBase || "hyperframes-composition",
-				onProgress: (frame, total) =>
-					setButton(`Exporting ${frame}/${total}`, true),
-			});
-			setButton("Download MP4", false);
-		} catch (error) {
-			console.error(error);
-			setButton("Export failed", false);
-			setTimeout(() => setButton("Download MP4", false), 4000);
-		}
-	});
+	exportInProgress = true;
+	try {
+		postExportStatus({ status: "preparing" });
+		const result = await exportMp4({
+			filenameBase,
+			onProgress: (frame, total) =>
+				postExportStatus({ status: "exporting", frame, total }),
+		});
+		postExportStatus({
+			status: "complete",
+			blob: result.blob,
+			filename: result.filename,
+		});
+	} catch (error) {
+		console.error(error);
+		postExportStatus({
+			status: "failed",
+			error: error instanceof Error ? error.message : "Export failed",
+		});
+	} finally {
+		exportInProgress = false;
+	}
 }
 
 async function exportMp4({ filenameBase, onProgress }) {
@@ -418,9 +391,8 @@ async function exportMp4({ filenameBase, onProgress }) {
 	if (!buffer) throw new Error("No MP4 buffer produced");
 
 	const blob = new Blob([buffer], { type: "video/mp4" });
-	const url = URL.createObjectURL(blob);
 	return {
-		url,
+		blob,
 		filename: `${sanitizeFilename(filenameBase)}.mp4`,
 	};
 }
@@ -471,6 +443,6 @@ async function renderComposition(html, inlineScripts, options = {}) {
 
 	// Step 3: hyperframe.runtime — go() now finds __timelines populated
 	for (const src of runtimeSrcs) await loadExternal(src);
-
-	mountExportButton(options);
+	currentFilenameBase = options.filenameBase || currentFilenameBase;
+	postExportStatus({ status: "idle" });
 }
