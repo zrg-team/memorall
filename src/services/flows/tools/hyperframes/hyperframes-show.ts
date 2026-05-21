@@ -6,6 +6,7 @@ import {
 	type BaseStateBase,
 } from "@/services/flows/graph/graph.base";
 import { compositionFile } from "./util";
+import { preprocessComposition } from "./composition-preprocessor";
 
 const TOOL_NAME = "hyperframes_show" as const;
 
@@ -43,7 +44,9 @@ export const createHyperframesShowTool: ToolFactory<Input, Services> = (
 			return `Error: ${file} not found. Use hyperframes_write to create the project first.`;
 		}
 
-		const html = new TextDecoder().decode(raw);
+		const raw_html = new TextDecoder().decode(raw);
+		// Preprocess CDN scripts and local document images before previewing.
+		const html = await preprocessComposition(raw_html, dfs);
 		// Derive a display name from the last path segment
 		const name = input.project_path.split("/").filter(Boolean).pop() ?? "composition";
 

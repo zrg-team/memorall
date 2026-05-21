@@ -20,6 +20,12 @@
  4. PDF.js worker
     - Source: node_modules/pdfjs-dist/build
     - Dest:   public/vendors/pdfjs
+
+ 5-6. Sandbox runtime and HyperFrames vendor assets (see inline comments)
+
+ 7. Patch @hyperframes/player CDN fallback
+    - Replaces the jsdelivr CDN URL in _injectRuntime() with chrome.runtime.getURL()
+      so the extension CSP is never violated on runtime injection.
 */
 
 import fs from "node:fs";
@@ -442,6 +448,216 @@ async function main() {
 	} else {
 		console.warn("⚠️  public/sandbox not found, skipping.\n");
 	}
+
+	// 6. Copy HyperFrames runtime scripts (CSP-safe local copies of CDN scripts)
+	const hfVendorDest = path.resolve(process.cwd(), "public/vendors/hyperframes");
+	const hfFiles = [
+		{
+			src: path.resolve(process.cwd(), "node_modules/gsap/dist/gsap.min.js"),
+			dest: path.join(hfVendorDest, "gsap.min.js"),
+		},
+		{
+			src: path.resolve(process.cwd(), "node_modules/@hyperframes/core/dist/hyperframe.runtime.iife.js"),
+			dest: path.join(hfVendorDest, "hyperframe.runtime.iife.js"),
+		},
+		{
+			src: path.resolve(process.cwd(), "node_modules/@hyperframes/shader-transitions/dist/index.global.js"),
+			dest: path.join(hfVendorDest, "shader-transitions.global.js"),
+		},
+		{
+			src: path.resolve(process.cwd(), "node_modules/html2canvas/dist/html2canvas.min.js"),
+			dest: path.join(hfVendorDest, "html2canvas.min.js"),
+		},
+		{
+			src: path.resolve(process.cwd(), "node_modules/@hyperframes/player/dist/hyperframes-player.global.js"),
+			dest: path.join(hfVendorDest, "hyperframes-player.global.js"),
+		},
+	];
+
+	let hfCopied = 0;
+	for (const { src, dest } of hfFiles) {
+		if (fs.existsSync(src)) {
+			copyFile(src, dest);
+			hfCopied++;
+		} else {
+			console.warn(`⚠️  HyperFrames asset not found, skipping: ${src}`);
+		}
+	}
+	if (hfCopied > 0) console.log("✅ HyperFrames runtime assets copied.\n");
+
+	// 7. Patch @hyperframes/player CDN fallback URL
+	// _injectRuntime() falls back to loading the HF runtime from jsdelivr CDN when
+	// the runtime isn't auto-detected. Replace with the local extension copy so
+	// the extension CSP is never violated.
+	const playerDistFiles = [
+		path.resolve(process.cwd(), "node_modules/@hyperframes/player/dist/hyperframes-player.js"),
+		path.resolve(process.cwd(), "node_modules/@hyperframes/player/dist/hyperframes-player.cjs"),
+		path.resolve(process.cwd(), "node_modules/@hyperframes/player/dist/hyperframes-player.global.js"),
+		path.resolve(process.cwd(), "public/vendors/hyperframes/hyperframes-player.global.js"),
+	];
+	const hfRuntimeCdnStr = `"https://cdn.jsdelivr.net/npm/@hyperframes/core/dist/hyperframe.runtime.iife.js"`;
+	const hfRuntimeOldLocalExpr = `typeof chrome<"u"&&chrome.runtime?.getURL?chrome.runtime.getURL("vendors/hyperframes/hyperframe.runtime.iife.js"):"https://cdn.jsdelivr.net/npm/@hyperframes/core/dist/hyperframe.runtime.iife.js"`;
+	const hfRuntimeLocalExpr = `typeof chrome<"u"&&chrome.runtime?.getURL?chrome.runtime.getURL("vendors/hyperframes/hyperframe.runtime.iife.js"):new URL("/vendors/hyperframes/hyperframe.runtime.iife.js",location.href).href`;
+	const hfRuntimeNestedLocalExpr = `${hfRuntimeOldLocalExpr.replace(hfRuntimeCdnStr, `(${hfRuntimeLocalExpr})`)}`;
+	const hfIframeSandboxExpr = `e.sandbox.add("allow-scripts","allow-same-origin"),`;
+	const hfIframeSandboxNoop = `e.src.includes("/sandbox/")||e.sandbox.add("allow-scripts","allow-same-origin"),`;
+	const hfSandboxDocReadPatches = [
+		[
+			`o=!!this._iframe.contentDocument?.querySelector("[data-composition-src]")`,
+			`o=!this._iframe.src.includes("/sandbox/")&&!!this._iframe.contentDocument?.querySelector("[data-composition-src]")`,
+		],
+		[
+			`let l=this._iframe.contentDocument,p=null,c=l?.querySelector("[data-composition-id]");`,
+			`let l=this._iframe.src.includes("/sandbox/")?null:this._iframe.contentDocument,p=null,c=l?.querySelector("[data-composition-id]");`,
+		],
+		[
+			`let e=this._iframe.contentDocument;if(!e)return;`,
+			`if(location.pathname.startsWith("/sandbox/"))return;let e=this._iframe.contentDocument;if(!e)return;`,
+		],
+		[
+			`let n=this._iframe.contentDocument?.querySelector("[data-composition-id]")?.getAttribute("data-composition-id")`,
+			`let n=this._iframe.src.includes("/sandbox/")?null:this._iframe.contentDocument?.querySelector("[data-composition-id]")?.getAttribute("data-composition-id")`,
+		],
+		[
+			`getIframeDoc:()=>this.iframe.contentDocument`,
+			`getIframeDoc:()=>location.pathname.startsWith("/sandbox/")?null:this.iframe.contentDocument`,
+		],
+		[
+			`try{let n=this.iframe.contentDocument;n&&this._media.setupFromIframe(n)}catch{}`,
+			`try{let n=location.pathname.startsWith("/sandbox/")?null:this.iframe.contentDocument;n&&this._media.setupFromIframe(n)}catch{}`,
+		],
+		[
+			`_promoteToParentProxy(){let e=null;try{e=this.iframe.contentDocument}catch{}`,
+			`_promoteToParentProxy(){let e=null;try{e=location.pathname.startsWith("/sandbox/")?null:this.iframe.contentDocument}catch{}`,
+		],
+		[
+			`_resolveDirectTimelineAdapterFromWindow(e){if(this.hasRuntimeBridge(e))return null;let t=Reflect.get(e,"__timelines");`,
+			`_resolveDirectTimelineAdapterFromWindow(e){if(this._iframe.src.includes("/sandbox/")||this.hasRuntimeBridge(e))return null;let t=Reflect.get(e,"__timelines");`,
+		],
+		[
+			`_resolveDirectTimelineAdapterFromWindow(e){if(location.pathname.startsWith("/sandbox/")||this.hasRuntimeBridge(e))return null;let t=Reflect.get(e,"__timelines");`,
+			`_resolveDirectTimelineAdapterFromWindow(e){if(this._iframe.src.includes("/sandbox/")||this.hasRuntimeBridge(e))return null;let t=Reflect.get(e,"__timelines");`,
+		],
+		[
+			`_resolveDirectTimelineAdapterFromWindow(e){if(!location.pathname.startsWith("/sandbox/")&&this.hasRuntimeBridge(e))return null;let t=Reflect.get(e,"__timelines");`,
+			`_resolveDirectTimelineAdapterFromWindow(e){if(this._iframe.src.includes("/sandbox/")||this.hasRuntimeBridge(e))return null;let t=Reflect.get(e,"__timelines");`,
+		],
+		[
+			`_resolvePlaybackDurationAdapter(e){let t=Reflect.get(e,"__player");if(ce(t))return{kind:"runtime",getDuration:()=>t.getDuration()};let i=this._resolveDirectTimelineAdapterFromWindow(e);return i?{kind:"direct-timeline",timeline:i,getDuration:()=>i.duration()}:null}`,
+			`_resolvePlaybackDurationAdapter(e){let t=Reflect.get(e,"__player");if(ce(t))return{kind:"runtime",getDuration:()=>t.getDuration()};let i=this._resolveDirectTimelineAdapterFromWindow(e);return i?{kind:"direct-timeline",timeline:i,getDuration:()=>i.duration()}:null}`,
+		],
+		[
+			`_resolvePlaybackDurationAdapter(e){let i=location.pathname.startsWith("/sandbox/")?this._resolveDirectTimelineAdapterFromWindow(e):null;if(i)return{kind:"direct-timeline",timeline:i,getDuration:()=>i.duration()};let t=Reflect.get(e,"__player");if(ce(t))return{kind:"runtime",getDuration:()=>t.getDuration()};i=this._resolveDirectTimelineAdapterFromWindow(e);return i?{kind:"direct-timeline",timeline:i,getDuration:()=>i.duration()}:null}`,
+			`_resolvePlaybackDurationAdapter(e){let t=Reflect.get(e,"__player");if(ce(t))return{kind:"runtime",getDuration:()=>t.getDuration()};let i=this._resolveDirectTimelineAdapterFromWindow(e);return i?{kind:"direct-timeline",timeline:i,getDuration:()=>i.duration()}:null}`,
+		],
+		[
+			`start(){this.stop(),this._runtimeInjected=!1;let e=0;this._interval=setInterval(()=>{`,
+			`start(){this.stop(),this._runtimeInjected=!1;if(this._iframe.src.includes("/sandbox/"))return;let e=0;this._interval=setInterval(()=>{`,
+		],
+		[
+			`start(){this.stop(),this._runtimeInjected=!1;if(location.pathname.startsWith("/sandbox/"))return;let e=0;this._interval=setInterval(()=>{`,
+			`start(){this.stop(),this._runtimeInjected=!1;if(this._iframe.src.includes("/sandbox/"))return;let e=0;this._interval=setInterval(()=>{`,
+		],
+		[
+			`_trySyncSeek(e){if(location.pathname.startsWith("/sandbox/"))return!1;try{let i=this.iframe.contentWindow?.__player;`,
+			`_trySyncSeek(e){if(this.iframe.src.includes("/sandbox/"))return!1;try{let i=this.iframe.contentWindow?.__player;`,
+		],
+		[
+			`_trySyncSeek(e){try{let i=this.iframe.contentWindow?.__player;`,
+			`_trySyncSeek(e){if(this.iframe.src.includes("/sandbox/"))return!1;try{let i=this.iframe.contentWindow?.__player;`,
+		],
+		[
+			`_withDirectTimeline(e){if(location.pathname.startsWith("/sandbox/"))return!1;let t=this._directTimelineAdapter||this.probe.resolveDirectTimelineAdapter();`,
+			`_withDirectTimeline(e){if(this.iframe.src.includes("/sandbox/"))return!1;let t=this._directTimelineAdapter||this.probe.resolveDirectTimelineAdapter();`,
+		],
+		[
+			`_withDirectTimeline(e){let t=this._directTimelineAdapter||this.probe.resolveDirectTimelineAdapter();`,
+			`_withDirectTimeline(e){if(this.iframe.src.includes("/sandbox/"))return!1;let t=this._directTimelineAdapter||this.probe.resolveDirectTimelineAdapter();`,
+		],
+		[
+			`_onMessage(e){Ce(e,location.pathname.startsWith("/sandbox/")?e.source:this.iframe.contentWindow,{`,
+			`_onMessage(e){Ce(e,this.iframe.src.includes("/sandbox/")?e.source:this.iframe.contentWindow,{`,
+		],
+		[
+			`_onMessage(e){Ce(e,this.iframe.contentWindow,{`,
+			`_onMessage(e){Ce(e,this.iframe.src.includes("/sandbox/")?e.source:this.iframe.contentWindow,{`,
+		],
+		[
+			`getIframeDoc:()=>location.pathname.startsWith("/sandbox/")?null:this.iframe.contentDocument`,
+			`getIframeDoc:()=>this.iframe.src.includes("/sandbox/")?null:this.iframe.contentDocument`,
+		],
+		[
+			`getIframeDoc:()=>this.iframe.contentDocument`,
+			`getIframeDoc:()=>this.iframe.src.includes("/sandbox/")?null:this.iframe.contentDocument`,
+		],
+		[
+			`try{let n=location.pathname.startsWith("/sandbox/")?null:this.iframe.contentDocument;n&&this._media.setupFromIframe(n)}catch{}`,
+			`try{let n=this.iframe.src.includes("/sandbox/")?null:this.iframe.contentDocument;n&&this._media.setupFromIframe(n)}catch{}`,
+		],
+		[
+			`try{let n=this.iframe.contentDocument;n&&this._media.setupFromIframe(n)}catch{}`,
+			`try{let n=this.iframe.src.includes("/sandbox/")?null:this.iframe.contentDocument;n&&this._media.setupFromIframe(n)}catch{}`,
+		],
+		[
+			`_promoteToParentProxy(){let e=null;try{e=location.pathname.startsWith("/sandbox/")?null:this.iframe.contentDocument}catch{}`,
+			`_promoteToParentProxy(){let e=null;try{e=this.iframe.src.includes("/sandbox/")?null:this.iframe.contentDocument}catch{}`,
+		],
+		[
+			`_promoteToParentProxy(){let e=null;try{e=this.iframe.contentDocument}catch{}`,
+			`_promoteToParentProxy(){let e=null;try{e=this.iframe.src.includes("/sandbox/")?null:this.iframe.contentDocument}catch{}`,
+		],
+		[
+			`this.hasAttribute("src")&&(this.iframe.src=j(this,this.getAttribute("src")))`,
+			`this.hasAttribute("src")&&(()=>{let e=j(this,this.getAttribute("src"));e.includes("/sandbox/")?this.iframe.removeAttribute("sandbox"):this["iframe"].sandbox.add("allow-scripts","allow-same-origin"),this.iframe.src=e})()`,
+		],
+		[
+			`case"src":i&&(this._ready=!1,this.iframe.src=j(this,i));break;`,
+			`case"src":i&&(this._ready=!1,(()=>{let e=j(this,i);e.includes("/sandbox/")?this.iframe.removeAttribute("sandbox"):this["iframe"].sandbox.add("allow-scripts","allow-same-origin"),this.iframe.src=e})());break;`,
+		],
+		[
+			`this.hasAttribute("src")&&(this.iframe.src=j(this,this.getAttribute("src")||""))`,
+			`this.hasAttribute("src")&&(()=>{let e=j(this,this.getAttribute("src")||"");e.includes("/sandbox/")?this.iframe.removeAttribute("sandbox"):this["iframe"].sandbox.add("allow-scripts","allow-same-origin"),this.iframe.src=e})()`,
+		],
+	];
+
+	let playerPatchCount = 0;
+	for (const playerFile of playerDistFiles) {
+		if (!fs.existsSync(playerFile)) continue;
+		const src = fs.readFileSync(playerFile, "utf8");
+		let patched = src
+			.replaceAll(hfRuntimeNestedLocalExpr, hfRuntimeLocalExpr)
+			.replaceAll(hfRuntimeOldLocalExpr, hfRuntimeLocalExpr)
+			.replaceAll(hfRuntimeCdnStr, hfRuntimeLocalExpr)
+			.replaceAll(hfIframeSandboxExpr, hfIframeSandboxNoop);
+		for (const [from, to] of hfSandboxDocReadPatches) {
+			patched = patched.replaceAll(from, to);
+		}
+		patched = patched
+			.replace(
+				/(?:(?:location\.pathname\.startsWith\("\/sandbox\/"\)|e\.src\.includes\("\/sandbox\/"\))\|\|)+e\.sandbox\.add\("allow-scripts","allow-same-origin"\),/g,
+				hfIframeSandboxNoop,
+			)
+			.replace(
+				/(?:if\(location\.pathname\.startsWith\("\/sandbox\/"\)\)return;)+let e=this\._iframe\.contentDocument;if\(!e\)return;/g,
+				`if(location.pathname.startsWith("/sandbox/"))return;let e=this._iframe.contentDocument;if(!e)return;`,
+			)
+			.replaceAll(
+				`:this.iframe.src.includes("/sandbox/")||e.sandbox.add("allow-scripts","allow-same-origin"),this.iframe.src=e`,
+				`:this["iframe"].sandbox.add("allow-scripts","allow-same-origin"),this.iframe.src=e`,
+			)
+			.replaceAll(
+				`:this.iframe.src.includes("/sandbox/")||this.iframe.sandbox.add("allow-scripts","allow-same-origin"),this.iframe.src=e`,
+				`:this["iframe"].sandbox.add("allow-scripts","allow-same-origin"),this.iframe.src=e`,
+			);
+		if (patched === src && src.includes(hfRuntimeLocalExpr)) {
+			playerPatchCount++; // already patched
+			continue;
+		}
+		if (patched === src) continue;
+		fs.writeFileSync(playerFile, patched);
+		playerPatchCount++;
+	}
+	if (playerPatchCount > 0) console.log("✅ @hyperframes/player CDN fallback patched.\n");
 
 	console.log("🎉 All AI library assets prepared successfully!");
 }

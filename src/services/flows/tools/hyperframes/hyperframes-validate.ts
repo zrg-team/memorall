@@ -19,6 +19,23 @@ const schema = z.object({
 type Input = z.infer<typeof schema>;
 type Services = Pick<AllServices, "documentFileSystem">;
 
+// Codes that are always noise in the extension context:
+// - external_script_dependency: fix hint says "no action needed" for CDN-based compositions
+// - invalid_inline_script_syntax: CSP eval() false-positive; our preprocessor handles this
+// - pointer_events_none: intentional for .grain overlay elements
+const SUPPRESSED_CODES = new Set([
+	"external_script_dependency",
+	"invalid_inline_script_syntax",
+	"pointer_events_none",
+]);
+
+const filterFindings = (result: HyperframeLintResult): HyperframeLintResult => {
+	const findings = result.findings.filter((f) => !SUPPRESSED_CODES.has(f.code ?? ""));
+	const errorCount = findings.filter((f) => f.severity === "error").length;
+	const warningCount = findings.filter((f) => f.severity === "warning").length;
+	return { ...result, findings, ok: errorCount === 0, errorCount, warningCount };
+};
+
 const formatResult = (result: HyperframeLintResult, file: string): string => {
 	const errPart = result.errorCount > 0
 		? `${result.errorCount} error${result.errorCount === 1 ? "" : "s"}`
@@ -65,7 +82,7 @@ export const createHyperframesValidateTool: ToolFactory<Input, Services> = (
 
 		const html = new TextDecoder().decode(raw);
 		try {
-			return formatResult(lintHyperframeHtml(html), file);
+			return formatResult(filterFindings(lintHyperframeHtml(html)), file);
 		} catch (error) {
 			return `Linter error: ${error instanceof Error ? error.message : String(error)}`;
 		}

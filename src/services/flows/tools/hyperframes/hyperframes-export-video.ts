@@ -11,6 +11,7 @@ import {
 import "@hyperframes/player";
 import { compositionFile } from "./util";
 import { stripDocumentsPrefix } from "../fs/util";
+import { preprocessComposition } from "./composition-preprocessor";
 
 const TOOL_NAME = "hyperframes_export_video" as const;
 
@@ -100,11 +101,12 @@ export const createHyperframesExportVideoTool: ToolFactory<Input, Services> = (
 			return `Error: ${file} not found. Use hyperframes_write to create the project first.`;
 		}
 
-		const html = new TextDecoder().decode(raw);
-		const { width, height } = parseDimensions(html);
+		const rawHtml = new TextDecoder().decode(raw);
+		const { width, height } = parseDimensions(rawHtml);
 		const fps = input.fps ?? DEFAULT_FPS;
-
-		const modifiedHtml = withCaptureScript(html);
+		// Preprocess first, then add html2canvas
+		const processedHtml = await preprocessComposition(rawHtml, dfs);
+		const modifiedHtml = withCaptureScript(processedHtml);
 		const blobUrl = URL.createObjectURL(
 			new Blob([modifiedHtml], { type: "text/html" }),
 		);

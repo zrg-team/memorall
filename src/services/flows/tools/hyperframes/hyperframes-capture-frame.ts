@@ -7,6 +7,7 @@ import {
 } from "@/services/flows/graph/graph.base";
 import "@hyperframes/player";
 import { compositionFile } from "./util";
+import { preprocessComposition } from "./composition-preprocessor";
 
 const TOOL_NAME = "hyperframes_capture_frame" as const;
 
@@ -90,10 +91,11 @@ export const createHyperframesCaptureFrameTool: ToolFactory<Input, Services> = (
 			return `Error: ${file} not found. Use hyperframes_write to create the project first.`;
 		}
 
-		const html = new TextDecoder().decode(raw);
-		const { width, height } = parseDimensions(html);
-
-		const modifiedHtml = withCaptureScript(html);
+		const rawHtml = new TextDecoder().decode(raw);
+		const { width, height } = parseDimensions(rawHtml);
+		// Preprocess first, then add html2canvas (order matters: capture script must come last)
+		const processedHtml = await preprocessComposition(rawHtml, dfs);
+		const modifiedHtml = withCaptureScript(processedHtml);
 		const blobUrl = URL.createObjectURL(
 			new Blob([modifiedHtml], { type: "text/html" }),
 		);

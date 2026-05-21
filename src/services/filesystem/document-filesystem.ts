@@ -1352,7 +1352,22 @@ export class DocumentFileSystem {
 		const fsPath = this.toWorkspaceFsPath(sandboxPath);
 		const dirPath = fsPath.substring(0, fsPath.lastIndexOf("/"));
 		await this.ensureDirectory(dirPath);
-		await fs.promises.writeFile(fsPath, new TextEncoder().encode(content));
+		try {
+			await fs.promises.writeFile(fsPath, content, {
+				encoding: "utf8",
+				flag: "w",
+			});
+		} catch (error) {
+			if (!this.isNotFoundError(error)) throw error;
+
+			// IndexedDB-backed ZenFS can briefly miss a newly-created parent in
+			// another context. Re-check the directory path and retry once.
+			await this.ensureDirectory(dirPath);
+			await fs.promises.writeFile(fsPath, content, {
+				encoding: "utf8",
+				flag: "w",
+			});
+		}
 		this.notifyFilesystemChanged({
 			scope: "workspace",
 			operation: "write",

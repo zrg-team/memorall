@@ -49,12 +49,13 @@ Everything runs in the browser — no CLI, no Node.js required.
 
 | Tool | Purpose |
 |---|---|
-| \`hyperframes_write(project_path, content)\` | Save / overwrite the composition |
+| \`hyperframes_init(project_path)\` | Create a new project with a starter scaffold (\`force: true\` to overwrite) |
+| \`hyperframes_write(project_path, content)\` | Save / overwrite the composition HTML |
 | \`hyperframes_read(project_path)\` | Read the current composition HTML |
 | \`hyperframes_validate(project_path)\` | Lint for structural errors |
 | \`hyperframes_show(project_path)\` | Preview with play/pause + scrub bar |
-| \`hyperframes_capture_frame(project_path, time)\` | Capture a frame at a specific timestamp |
-| \`hyperframes_export_video(project_path, output_path)\` | Render to MP4 and save to /documents |
+| \`hyperframes_capture_frame(project_path, time)\` | Capture a single frame as an image at a specific timestamp |
+| \`hyperframes_export_video(project_path, output_path)\` | Render to MP4 and save to any /documents path |
 
 All tools use \`project_path\` — a workspace path like \`/workspaces/product-launch\`.
 The composition file is always \`{project_path}/index.html\`.
@@ -63,9 +64,9 @@ The composition file is always \`{project_path}/index.html\`.
 
 | Goal | Steps |
 |---|---|
-| **Start a project** | write → validate → show |
-| **Update / edit** | read (current HTML) → edit → write → validate → show |
-| **Verify a scene** | capture_frame(time) → inspect visually |
+| **Start a project** | init → write (full composition) → validate → show |
+| **Update / edit** | read → write (updated HTML) → validate → show |
+| **Verify a scene** | capture_frame(project_path, time) → inspect visually |
 | **Show the user** | show |
 | **Build to MP4** | export_video(project_path, output_path) |
 
@@ -454,6 +455,7 @@ tl.to("#s5-headline",{backgroundSize:"100% 30%",duration:0.6,ease:"power2.out"},
 export const HYPERFRAMES_FEATURE_SYSTEM_PROMPT = SYSTEM_PROMPT_INSTRUCTION.trim();
 
 export const HYPERFRAMES_FEATURE_TOOLS = [
+	"hyperframes_init",
 	"hyperframes_write",
 	"hyperframes_read",
 	"hyperframes_validate",

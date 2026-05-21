@@ -1643,6 +1643,15 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@hyperframes/shader-transitions@npm:^0.6.25":
+  version: 0.6.25
+  resolution: "@hyperframes/shader-transitions@npm:0.6.25"
+  dependencies:
+    html2canvas: "npm:^1.4.1"
+  checksum: 10c0/44d830adab73dc8a35987920234e3b6eb83702d748d89627b73afb73b5ad14d60399fc7b20b8a88e57a9048811d3a1a0725560eb4882816100cc2b5ec6ce6365
+  languageName: node
+  linkType: hard
+
 "@iconify/types@npm:^2.0.0":
   version: 2.0.0
   resolution: "@iconify/types@npm:2.0.0"
@@ -11702,6 +11711,7 @@ __metadata:
     "@huggingface/transformers": "npm:^4.2.0"
     "@hyperframes/core": "npm:^0.6.25"
     "@hyperframes/player": "npm:^0.6.25"
+    "@hyperframes/shader-transitions": "npm:^0.6.25"
     "@icons-pack/react-simple-icons": "npm:^13.7.0"
     "@langchain/community": "npm:^1.1.28"
     "@langchain/core": "npm:^1.1.44"

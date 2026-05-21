@@ -72,6 +72,7 @@ import "./planner";
 import "./load-skill";
 import "./send-message-to-agent";
 
+import "./hyperframes/hyperframes-init";
 import "./hyperframes/hyperframes-write";
 import "./hyperframes/hyperframes-read";
 import "./hyperframes/hyperframes-show";

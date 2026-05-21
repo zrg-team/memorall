@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/chrome-manifest.json",
   "manifest_version": 3,
-  "version": "0.3.6",
+  "version": "0.3.7",
   "name": "Memorall",
   "description": "Memorall - AI-powered memory and knowledge management browser extension",
   "icons": {
@@ -52,6 +52,7 @@
         "src/workers/*.worker.ts",
         "vendors/transformers/*",
         "vendors/pdfjs/*",
+        "vendors/hyperframes/*",
         "offscreen.html",
         "logo.png",
         "*.js",
@@ -66,12 +67,13 @@
   ],
   "content_security_policy": {
     "extension_pages": "script-src 'self' 'wasm-unsafe-eval' http://localhost:* http://127.0.0.1:*; worker-src 'self'; object-src 'self'; frame-src 'self' http://localhost:* http://127.0.0.1:* https: data: blob:;",
-    "sandbox": "sandbox allow-scripts; script-src 'self' 'unsafe-eval'; worker-src 'self' blob:; child-src 'self' blob:; object-src 'self';"
+    "sandbox": "sandbox allow-scripts; script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: data: chrome-extension:; worker-src 'self' blob:; child-src 'self' blob: data: chrome-extension:; frame-src 'self' blob: data: chrome-extension:; img-src * data: blob: chrome-extension:; media-src * data: blob: chrome-extension:; style-src * 'unsafe-inline'; font-src * data:; object-src 'self';"
   },
   "sandbox": {
     "pages": [
       "sandbox/pages/js-execute.html",
-      "sandbox/pages/sandbox-container-runtime.html"
+      "sandbox/pages/sandbox-container-runtime.html",
+      "sandbox/pages/hyperframes-preview.html"
     ]
   }
 }

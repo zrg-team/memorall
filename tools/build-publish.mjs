@@ -136,6 +136,8 @@ function prepareProductionDist(distDir) {
   console.log(`✅ Content scripts ready: ${distDir}\n`);
 }
 
+const noZip = process.argv.includes('--nozip');
+
 console.log('🚀 Building Memorall for store submission...\n');
 
 // Step 1: Clean publish directory
@@ -177,28 +179,32 @@ cpSync(edgeDistDir, edgeDir, { recursive: true });
 console.log('✅ Edge package ready\n');
 
 // Step 6: Create ZIP files
-console.log('🗜️  Creating ZIP archives...');
+if (noZip) {
+  console.log('⏭️  Skipping ZIP creation (--nozip)\n');
+} else {
+  console.log('🗜️  Creating ZIP archives...');
 
-try {
-  // Chrome ZIP
-  console.log('  📦 Creating Chrome ZIP...');
-  const chromeZip = new AdmZip();
-  chromeZip.addLocalFolder(chromeDir);
-  chromeZip.writeZip(join(publishDir, 'memorall-chrome.zip'));
-  console.log('  ✅ memorall-chrome.zip created');
+  try {
+    // Chrome ZIP
+    console.log('  📦 Creating Chrome ZIP...');
+    const chromeZip = new AdmZip();
+    chromeZip.addLocalFolder(chromeDir);
+    chromeZip.writeZip(join(publishDir, 'memorall-chrome.zip'));
+    console.log('  ✅ memorall-chrome.zip created');
 
-  // Edge ZIP
-  console.log('  📦 Creating Edge ZIP...');
-  const edgeZip = new AdmZip();
-  edgeZip.addLocalFolder(edgeDir);
-  edgeZip.writeZip(join(publishDir, 'memorall-edge.zip'));
-  console.log('  ✅ memorall-edge.zip created');
-} catch (error) {
-  console.error('❌ Error creating ZIP files:', error.message);
-  process.exit(1);
+    // Edge ZIP
+    console.log('  📦 Creating Edge ZIP...');
+    const edgeZip = new AdmZip();
+    edgeZip.addLocalFolder(edgeDir);
+    edgeZip.writeZip(join(publishDir, 'memorall-edge.zip'));
+    console.log('  ✅ memorall-edge.zip created');
+  } catch (error) {
+    console.error('❌ Error creating ZIP files:', error.message);
+    process.exit(1);
+  }
+
+  console.log('\n✅ All packages created successfully!\n');
 }
-
-console.log('\n✅ All packages created successfully!\n');
 
 // Step 7: Create submission info file
 console.log('📄 Creating submission info...');
@@ -260,8 +266,10 @@ console.log('📦 Packages created in: publish/');
 console.log('');
 console.log('  📁 Chrome:  publish/chrome/');
 console.log('  📁 Edge:    publish/edge/');
-console.log('  🗜️  Chrome:  publish/memorall-chrome.zip');
-console.log('  🗜️  Edge:    publish/memorall-edge.zip');
+if (!noZip) {
+  console.log('  🗜️  Chrome:  publish/memorall-chrome.zip');
+  console.log('  🗜️  Edge:    publish/memorall-edge.zip');
+}
 console.log('');
 console.log('Next steps:');
 console.log('  1. Test: Load publish/chrome/ as unpacked extension');

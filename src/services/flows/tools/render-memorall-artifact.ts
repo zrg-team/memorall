@@ -5,6 +5,8 @@ import {
 	appendAssistantOutputToState,
 	type BaseStateBase,
 } from "@/services/flows/graph/graph.base";
+import { documentFileSystemService } from "@/services/filesystem/document-filesystem";
+import { preprocessComposition } from "./hyperframes/composition-preprocessor";
 
 const TOOL_NAME = "render_memorall_artifact" as const;
 
@@ -64,6 +66,17 @@ const buildArtifactMessageContent = ({
 	return `\n\n<artifact${identifierAttr}${typeAttr}${titleAttr}>${content}</artifact>\n\n`;
 };
 
+const preprocessArtifactContent = async (input: Input): Promise<Input> => {
+	if (toStandardArtifactType(input.type) !== "application/hyperframes") {
+		return input;
+	}
+
+	return {
+		...input,
+		content: await preprocessComposition(input.content, documentFileSystemService),
+	};
+};
+
 export const createRenderMemorallArtifactTool: ToolFactory<
 	Input
 > = (): Tool<Input> => ({
@@ -76,9 +89,11 @@ export const createRenderMemorallArtifactTool: ToolFactory<
 			return "Artifact was not rendered because graph state context is unavailable.";
 		}
 
+		const artifact = await preprocessArtifactContent(input);
+
 		appendAssistantOutputToState(
 			context.state as BaseStateBase,
-			buildArtifactMessageContent(input),
+			buildArtifactMessageContent(artifact),
 		);
 
 		return [
