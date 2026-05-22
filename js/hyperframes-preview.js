@@ -8,29 +8,39 @@
 // before loading, so GSAP and the HyperFrames runtime load from jsDelivr.
 //
 // LOAD ORDER (guaranteed by renderComposition):
-//   1. GSAP + shader-transitions + Lucide — external CDN scripts
-//   2. Lucide icon replacement            — <i data-lucide="...">
-//   3. inline animation script            — sets window.__timelines["main"] = tl
-//   4. hyperframe.runtime                 — go() reads __timelines on load
+//   1. GSAP + shader-transitions + Lucide + D3 + Three — external CDN scripts
+//   2. Lucide icon replacement                         — <i data-lucide="...">
+//   3. inline animation script                         — sets window.__timelines["main"] = tl
+//   4. hyperframe.runtime                              — go() reads __timelines on load
 
 const DEFAULT_EXPORT_FPS = 30;
 const MEDIABUNNY_ESM_URL =
 	"https://cdn.jsdelivr.net/npm/mediabunny@1.45.2/+esm";
 const LUCIDE_UMD_URL =
 	"https://cdn.jsdelivr.net/npm/lucide@0.542.0/dist/umd/lucide.js";
+const D3_UMD_URL = "https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js";
+const THREE_GLOBAL_URL =
+	"https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.min.js";
+const GSAP_URL = "https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js";
+const HYPERFRAMES_RUNTIME_URL =
+	"https://cdn.jsdelivr.net/npm/@hyperframes/core/dist/hyperframe.runtime.iife.js";
+const HYPERFRAMES_SHADER_URL =
+	"https://cdn.jsdelivr.net/npm/@hyperframes/shader-transitions/dist/index.global.js";
+const HTML2CANVAS_URL =
+	"https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js";
 
 // ── CDN fallback map for extension-local script URLs ─────────────────────────
 // Mirrors the CDN_TO_LOCAL map in composition-preprocessor.ts (reversed).
 const CDN_MAP = {
-	"gsap.min.js":
-		"https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js",
-	"hyperframe.runtime.iife.js":
-		"https://cdn.jsdelivr.net/npm/@hyperframes/core/dist/hyperframe.runtime.iife.js",
-	"shader-transitions.global.js":
-		"https://cdn.jsdelivr.net/npm/@hyperframes/shader-transitions/dist/index.global.js",
-	"html2canvas.min.js":
-		"https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js",
+	"gsap.min.js": GSAP_URL,
+	"hyperframe.runtime.iife.js": HYPERFRAMES_RUNTIME_URL,
+	"shader-transitions.global.js": HYPERFRAMES_SHADER_URL,
+	"html2canvas.min.js": HTML2CANVAS_URL,
 	"lucide.js": LUCIDE_UMD_URL,
+	"d3.min.js": D3_UMD_URL,
+	"d3.js": D3_UMD_URL,
+	"three.min.js": THREE_GLOBAL_URL,
+	"three.js": THREE_GLOBAL_URL,
 };
 
 function resolveSrc(src) {
@@ -115,13 +125,25 @@ if (!key) {
 
 const INLINE_SCRIPT_RE = /<script(?![^>]*\bsrc\s*=)[^>]*>([\s\S]*?)<\/script>/gi;
 const ANIMATION_PAT =
-	/(?:window\.__timelines|__timelines\s*=|gsap\.timeline|HyperShader\.init)/;
+	/(?:window\.__timelines|__timelines\s*=|gsap\.timeline|HyperShader\.init|window\.__hfD3|window\.__hfThree|\bd3\.|\bTHREE\.)/;
 
 function extractFromHtml(html) {
 	const out = [];
 	for (const m of html.matchAll(INLINE_SCRIPT_RE)) {
 		const code = (m[1] || "").trim();
 		if (code && ANIMATION_PAT.test(code)) out.push(code);
+	}
+	return out;
+}
+
+function mergeInlineScripts(primary, fallback) {
+	const seen = new Set();
+	const out = [];
+	for (const code of [...primary, ...fallback]) {
+		const normalized = String(code || "").trim();
+		if (!normalized || seen.has(normalized)) continue;
+		seen.add(normalized);
+		out.push(normalized);
 	}
 	return out;
 }
@@ -148,7 +170,7 @@ function loadScriptOnce(src, test) {
 }
 
 function loadHtml2Canvas() {
-	html2CanvasLoad ??= loadScriptOnce(CDN_MAP["html2canvas.min.js"], () => {
+	html2CanvasLoad ??= loadScriptOnce(HTML2CANVAS_URL, () => {
 		return typeof window.html2canvas === "function";
 	});
 	return html2CanvasLoad.then(() => window.html2canvas);
@@ -166,16 +188,126 @@ function runInline(code) {
 	document.body.appendChild(s);
 }
 
-function isLucideScript(src) {
-	return /(?:^|\/)lucide(?:@|\/)|\/lucide\.js(?:\?|$)|\/lucide(?:\.min)?\.js(?:\?|$)/i.test(
+function isGsapScript(src) {
+	return /(?:^|\/)gsap(?:@|\/)|\/gsap(?:\.min)?\.js(?:\?|$)/i.test(src);
+}
+
+function isHyperframesRuntimeScript(src) {
+	return /@hyperframes\/core|hyperframe\.runtime\.iife\.js/i.test(src);
+}
+
+function isShaderTransitionScript(src) {
+	return /@hyperframes\/shader-transitions|shader-transitions\.global\.js|\/shader-transitions(?:\.min)?\.js/i.test(
 		src,
 	);
+}
+
+function isLucideScript(src) {
+	return /(?:^|\/)lucide(?:@|\/)|\/lucide(?:\.min)?\.js(?:\?|$)/i.test(src);
+}
+
+function isD3Script(src) {
+	return /(?:^|\/)d3(?:@|\/)|\/d3(?:\.v\d+)?(?:\.min)?\.js(?:\?|$)/i.test(
+		src,
+	);
+}
+
+function isThreeScript(src) {
+	return /(?:^|\/)three(?:@|\/)|\/three(?:\.min)?\.js(?:\?|$)/i.test(src);
 }
 
 function hasLucidePlaceholders(root = document) {
 	return Boolean(
 		root.querySelector?.("[data-lucide], .lucide-icon[data-icon]"),
 	);
+}
+
+function usesD3(html) {
+	return /(?:\bd3\.|window\.__hfD3|data-hf-d3|class=["'][^"']*\bhf-d3\b)/i.test(
+		html,
+	);
+}
+
+function usesThree(html) {
+	return /(?:\bTHREE\.|window\.__hfThree|data-hf-three|class=["'][^"']*\bhf-three\b)/i.test(
+		html,
+	);
+}
+
+function usesGsap(html) {
+	return /\bgsap\.|window\.__timelines|__timelines\s*=/.test(html);
+}
+
+function usesShaderTransitions(html) {
+	return /\bHyperShader\.|@hyperframes\/shader-transitions|shader-transitions/i.test(
+		html,
+	);
+}
+
+const MANAGED_SCRIPT_TESTS = [
+	isGsapScript,
+	isShaderTransitionScript,
+	isHyperframesRuntimeScript,
+	isLucideScript,
+	isD3Script,
+	isThreeScript,
+];
+
+function isManagedScript(src) {
+	return MANAGED_SCRIPT_TESTS.some((test) => test(src));
+}
+
+function pushUniqueScript(list, src) {
+	if (!src || list.includes(src)) return;
+	list.push(src);
+}
+
+function getScriptSources(compDoc) {
+	return [
+		...Array.from(compDoc.head.querySelectorAll("script[src]")),
+		...Array.from(compDoc.body.querySelectorAll("script[src]")),
+	]
+		.map((s) => s.getAttribute("src"))
+		.map(resolveSrc)
+		.filter(Boolean);
+}
+
+function getManagedScriptPlan(html, scriptSources) {
+	const external = [];
+	const runtime = [];
+
+	if (usesGsap(html) || scriptSources.some(isGsapScript)) {
+		pushUniqueScript(external, GSAP_URL);
+	}
+	if (usesShaderTransitions(html) || scriptSources.some(isShaderTransitionScript)) {
+		pushUniqueScript(external, HYPERFRAMES_SHADER_URL);
+	}
+	if (
+		hasLucidePlaceholders(document) ||
+		/(?:\blucide\.|data-lucide)/i.test(html) ||
+		scriptSources.some(isLucideScript)
+	) {
+		pushUniqueScript(external, LUCIDE_UMD_URL);
+	}
+	if (usesD3(html) || scriptSources.some(isD3Script)) {
+		pushUniqueScript(external, D3_UMD_URL);
+	}
+	if (usesThree(html) || scriptSources.some(isThreeScript)) {
+		pushUniqueScript(external, THREE_GLOBAL_URL);
+	}
+
+	// The HyperFrames runtime must always load after authored timelines.
+	pushUniqueScript(runtime, HYPERFRAMES_RUNTIME_URL);
+
+	return { external, runtime };
+}
+
+function getUnmanagedScriptSources(scriptSources) {
+	const unmanaged = [];
+	for (const src of scriptSources) {
+		if (!isManagedScript(src)) pushUniqueScript(unmanaged, src);
+	}
+	return unmanaged;
 }
 
 function normalizeLucidePlaceholders(root = document) {
@@ -457,31 +589,16 @@ async function renderComposition(html, inlineScripts, options = {}) {
 
 	normalizeLucidePlaceholders(document);
 
-	// Collect all external script srcs, converting chrome-extension:// to CDN.
-	const RUNTIME_RE = /hyperframe\.runtime/i;
-	const rawSrcs = [
-		...Array.from(compDoc.head.querySelectorAll("script[src]")),
-		...Array.from(compDoc.body.querySelectorAll("script[src]")),
-	]
-		.map((s) => s.getAttribute("src"))
-		.map(resolveSrc)
-		.filter(Boolean);
+	const scriptSources = getScriptSources(compDoc);
+	const unmanagedSrcs = getUnmanagedScriptSources(scriptSources);
+	const managedScripts = getManagedScriptPlan(html, scriptSources);
 
-	const runtimeSrcs = rawSrcs.filter((s) => RUNTIME_RE.test(s));
-	const otherSrcs = rawSrcs.filter((s) => !RUNTIME_RE.test(s));
-	if (
-		hasLucidePlaceholders(document) &&
-		!otherSrcs.some(isLucideScript) &&
-		!runtimeSrcs.some(isLucideScript)
-	) {
-		otherSrcs.unshift(LUCIDE_UMD_URL);
+	const scripts = mergeInlineScripts(inlineScripts, extractFromHtml(html));
+
+	// Step 1: GSAP, shader-transitions, Lucide, D3, Three
+	for (const src of [...managedScripts.external, ...unmanagedSrcs]) {
+		await loadExternal(src);
 	}
-
-	const scripts =
-		inlineScripts.length > 0 ? inlineScripts : extractFromHtml(html);
-
-	// Step 1: GSAP, shader-transitions, Lucide
-	for (const src of otherSrcs) await loadExternal(src);
 
 	// Step 2: replace simple Lucide placeholders before animations target them.
 	renderLucideIcons();
@@ -490,7 +607,7 @@ async function renderComposition(html, inlineScripts, options = {}) {
 	for (const code of scripts) runInline(code);
 
 	// Step 4: hyperframe.runtime — go() now finds __timelines populated
-	for (const src of runtimeSrcs) await loadExternal(src);
+	for (const src of managedScripts.runtime) await loadExternal(src);
 	currentFilenameBase = options.filenameBase || currentFilenameBase;
 	postExportStatus({ status: "idle" });
 }
