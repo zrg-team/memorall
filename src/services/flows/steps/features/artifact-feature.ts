@@ -137,6 +137,8 @@ featureCatalogRegistry.register({
 		customizable: false,
 		icon: { name: "AppWindow", type: "lucide" },
 		accentColor: "#6366f1",
+		section: "core",
+		sectionOrder: 6,
 	} satisfies FeatureCatalogMetadata,
 });
 

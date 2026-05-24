@@ -6,12 +6,14 @@ import {
 	type AgentFeatureDefinition,
 	type GraphType,
 } from "@/main/stores/agent-config";
-import type { FoundationPredefinedConfig } from "@/services/flows/graph/foundation/state";
 import { DEFAULT_CONTEXT_SYSTEM_PROMPT } from "@/services/flows/steps/common/context-to-system";
-import { MULTI_AGENT_FEATURE_NAME } from "@/services/flows/steps/features/multi-agent-feature";
 import type { Flow } from "@/services/database/types";
+import type { FoundationPredefinedConfig } from "@/services/flows/graph/foundation/state";
 import { coerceDate, type AgentConfigSummary } from "../types";
 import { getAgentFeatureDisplayName } from "../utils/feature-display";
+
+const hasToolPickerSlot = (feature: AgentFeatureDefinition): boolean =>
+	feature.detailView?.some((s) => s.component === "ToolPicker") ?? false;
 
 type UseAgentConfigSummaryOptions = {
 	availableTools: string[];
@@ -37,31 +39,23 @@ export const useAgentConfigSummary = ({
 	return React.useMemo<AgentConfigSummary | null>(() => {
 		if (!selectedPreset) return null;
 		const graphMeta = GRAPH_REGISTRY.find((g) => g.id === currentGraphType);
+
 		const enabledFeatureLabels = featureDefinitions.flatMap((feature) => {
-			if (feature.type === "config") {
-				if (feature.configKey === "tools") return [];
-				return draftConfig[feature.configKey]
-					? [t(feature.nameKey, { ns: "chat" })]
-					: [];
-			}
+			if (hasToolPickerSlot(feature)) return [];
 			if (!draftFeatures[feature.name]) return [];
 			return [getAgentFeatureDisplayName(feature, t)];
 		});
+
+		// Seed with explicitly selected tools (agent-node / ToolPicker features)
 		const enabledToolSet = new Set(draftConfig.tools);
 		for (const feature of featureDefinitions) {
-			if (feature.type === "config") {
-				if (feature.configKey === "tools" || !draftConfig[feature.configKey])
-					continue;
-			} else if (!draftFeatures[feature.name]) {
+			if (hasToolPickerSlot(feature)) continue;
+			if (!draftFeatures[feature.name]) continue;
+			if (feature.requiresAccessibleAgents && draftMultiAgentAccessibleAgentIds.length === 0)
 				continue;
-			} else if (
-				feature.name === MULTI_AGENT_FEATURE_NAME &&
-				draftMultiAgentAccessibleAgentIds.length === 0
-			) {
-				continue;
-			}
 			for (const tool of feature.tools) enabledToolSet.add(tool);
 		}
+
 		const availableToolSet = new Set(availableTools);
 		const enabledToolNames = [
 			...availableTools.filter((toolName) => enabledToolSet.has(toolName)),
@@ -69,9 +63,9 @@ export const useAgentConfigSummary = ({
 				(toolName) => !availableToolSet.has(toolName),
 			),
 		];
+
 		const systemPromptPreview =
-			draftConfig.systemPrompt ||
-			getDefaultSystemPromptForGraph(currentGraphType);
+			draftConfig.systemPrompt || getDefaultSystemPromptForGraph(currentGraphType);
 		const contextPromptPreview =
 			draftConfig.contextPrompt || DEFAULT_CONTEXT_SYSTEM_PROMPT;
 
@@ -94,11 +88,7 @@ export const useAgentConfigSummary = ({
 	}, [
 		availableTools,
 		currentGraphType,
-		draftConfig.contextPrompt,
-		draftConfig.enableCitations,
-		draftConfig.enableContextRetrieval,
-		draftConfig.systemPrompt,
-		draftConfig.tools,
+		draftConfig,
 		draftFeatures,
 		draftMultiAgentAccessibleAgentIds,
 		featureDefinitions,

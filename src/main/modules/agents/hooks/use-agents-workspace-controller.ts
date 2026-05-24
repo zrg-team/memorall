@@ -257,15 +257,6 @@ export const useAgentsWorkspaceController = () => {
 			nextState.updateField("systemPrompt", draft.systemPrompt);
 			nextState.updateField("contextPrompt", draft.contextPrompt);
 			nextState.updateField("tools", draft.enabledToolNames);
-			nextState.updateField(
-				"enableContextRetrieval",
-				draft.enabledFeatureNames.includes("knowledge-retrieval") ||
-					Boolean(draft.contextPrompt.trim()),
-			);
-			nextState.updateField(
-				"enableCitations",
-				draft.enabledFeatureNames.includes("citations"),
-			);
 			nextState.updateField("retrievalMode", draft.recallType);
 			setDraftMemoryOptions({
 				growType: draft.growType,
@@ -286,7 +277,7 @@ export const useAgentsWorkspaceController = () => {
 
 			const enabledFeatures = new Set(draft.enabledFeatureNames);
 			for (const feature of useAgentConfigStore.getState().featureDefinitions) {
-				if (feature.type !== "catalog") continue;
+				if (feature.detailView?.some((s) => s.component === "ToolPicker")) continue;
 				const shouldEnable = enabledFeatures.has(feature.name);
 				if (
 					Boolean(
@@ -312,23 +303,14 @@ export const useAgentsWorkspaceController = () => {
 	const buildCurrentAgentWizardDraft =
 		React.useCallback((): AgentWizardDraft => {
 			const enabledFeatureNames = new Set<string>();
-			if (
-				draftConfig.enableContextRetrieval ||
-				draftConfig.contextPrompt.trim()
-			) {
-				enabledFeatureNames.add("knowledge-retrieval");
-			}
-			if (draftConfig.enableCitations) {
-				enabledFeatureNames.add("citations");
-			}
-			if (
-				draftConfig.tools.length > 0 ||
-				draftMultiAgentAccessibleAgentIds.length > 0
-			) {
-				enabledFeatureNames.add("agent-node");
-			}
-			for (const [featureName, enabled] of Object.entries(draftFeatures)) {
-				if (enabled) enabledFeatureNames.add(featureName);
+			for (const feature of featureDefinitions) {
+				if (feature.detailView?.some((s) => s.component === "ToolPicker")) {
+					if (draftConfig.tools.length > 0 || draftMultiAgentAccessibleAgentIds.length > 0) {
+						enabledFeatureNames.add(feature.name);
+					}
+				} else if (draftFeatures[feature.name]) {
+					enabledFeatureNames.add(feature.name);
+				}
 			}
 
 			return {
@@ -353,8 +335,6 @@ export const useAgentsWorkspaceController = () => {
 			agentCronJobs.drafts,
 			currentGraphType,
 			draftConfig.contextPrompt,
-			draftConfig.enableCitations,
-			draftConfig.enableContextRetrieval,
 			draftConfig.systemPrompt,
 			draftConfig.tools,
 			draftEnabledSkillNames,
@@ -363,6 +343,7 @@ export const useAgentsWorkspaceController = () => {
 			draftMemoryOptions.growType,
 			draftMemoryOptions.recallType,
 			draftMultiAgentAccessibleAgentIds,
+			featureDefinitions,
 			metadataDraft.description,
 			metadataDraft.iconScreen,
 			metadataDraft.name,

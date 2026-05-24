@@ -88,9 +88,15 @@ function buildStepInstance(
 function resolveStepOrder(graphType: FlowGraphType): string[] {
 	const slots = flowRegistry.getStepOrder(graphType);
 
-	const featureNames = getFeatureCatalogSteps()
-		.filter((s) => !s.graphTypes || s.graphTypes.includes(graphType))
-		.map((s) => s.name);
+	// Volatile features (e.g. current-time) go last so the stable prefix
+	// before them can be reused by the LLM provider's prompt cache.
+	const featureSteps = getFeatureCatalogSteps().filter(
+		(s) => !s.graphTypes || s.graphTypes.includes(graphType),
+	);
+	const featureNames = [
+		...featureSteps.filter((s) => !(s.metadata as { volatile?: boolean }).volatile).map((s) => s.name),
+		...featureSteps.filter((s) => (s.metadata as { volatile?: boolean }).volatile).map((s) => s.name),
+	];
 
 	const injectableMap = stepRegistry.getInjectableSteps();
 

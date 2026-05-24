@@ -141,6 +141,9 @@ featureCatalogRegistry.register({
 		customizable: false,
 		icon: { name: "PanelsTopLeft", type: "lucide" },
 		accentColor: "#0ea5e9",
+		section: "core",
+		sectionOrder: 8,
+		detailView: [{ component: "VisualizeResponseConfig" }],
 	} satisfies FeatureCatalogMetadata,
 });
 

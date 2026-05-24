@@ -126,6 +126,7 @@ featureCatalogRegistry.register({
 		customizable: false,
 		icon: { name: "Clock", type: "lucide" },
 		accentColor: "#f59e0b",
+		volatile: true,
 	} satisfies FeatureCatalogMetadata,
 });
 

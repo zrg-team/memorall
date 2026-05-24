@@ -221,6 +221,8 @@ featureCatalogRegistry.register({
 		customizable: false,
 		icon: { name: "Globe", type: "lucide" },
 		accentColor: "#0ea5e9",
+		section: "core",
+		sectionOrder: 3,
 	} satisfies FeatureCatalogMetadata,
 });
 

@@ -1,4 +1,7 @@
 // Import feature steps for side-effect registration (stepRegistry + featureCatalogRegistry)
+// Built-in config-surface features — no runtime step, UI only (order: built-ins first, agent-node last)
+import "./knowledge-retrieval-feature";
+import "./citations-feature";
 import "./artifact-feature";
 import "./context-quick-retrieve";
 import "./context-smart-retrieve";
@@ -27,3 +30,4 @@ import "./auto-compact";
 import "./active-memory-feature";
 import "./hyperframes-feature";
 import "./visualize-response";
+import "./agent-node-feature";

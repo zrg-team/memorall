@@ -38,7 +38,7 @@ import type { AgentFeatureDefinition } from "@/main/stores/agent-config";
 // ---------------------------------------------------------------------------
 // Lucide icon lookup — add names here as new features register them
 // ---------------------------------------------------------------------------
-const LUCIDE_MAP: Record<
+export const LUCIDE_MAP: Record<
 	string,
 	React.ComponentType<{ size?: number; className?: string }>
 > = {
@@ -67,21 +67,17 @@ const LUCIDE_MAP: Record<
 };
 
 const getFeatureAccent = (feature: AgentFeatureDefinition): string =>
-	"accentColor" in feature && typeof feature.accentColor === "string"
-		? feature.accentColor
-		: "#64748b";
+	typeof feature.accentColor === "string" ? feature.accentColor : "#64748b";
 
 // ---------------------------------------------------------------------------
 // FeatureIcon renderer
 // ---------------------------------------------------------------------------
-const FeatureIconDisplay: React.FC<{
+export const FeatureIconDisplay: React.FC<{
 	icon: FeatureIcon | undefined;
 	size?: number;
 	className?: string;
 }> = ({ icon, size = 16, className }) => {
-	if (!icon) {
-		return <Shapes size={size} className={className} />;
-	}
+	if (!icon) return <Shapes size={size} className={className} />;
 	if (icon.type === "emoji") {
 		return (
 			<span
@@ -94,10 +90,11 @@ const FeatureIconDisplay: React.FC<{
 		);
 	}
 	const LucideIcon = LUCIDE_MAP[icon.name];
-	if (!LucideIcon) {
-		return <Shapes size={size} className={className} />;
-	}
-	return <LucideIcon size={size} className={className} />;
+	return LucideIcon ? (
+		<LucideIcon size={size} className={className} />
+	) : (
+		<Shapes size={size} className={className} />
+	);
 };
 
 // ---------------------------------------------------------------------------
@@ -106,7 +103,7 @@ const FeatureIconDisplay: React.FC<{
 export interface FeatureCardProps {
 	feature: AgentFeatureDefinition;
 	enabled?: boolean;
-	onToggle?: (checked: boolean) => void;
+	onToggle?: () => void;
 	toolCount?: number;
 	totalToolCount?: number;
 	hasDetail?: boolean;
@@ -128,32 +125,30 @@ export const FeatureCard: React.FC<FeatureCardProps> = ({
 	displayDesc,
 }) => {
 	const { t } = useTranslation("chat");
-	const icon =
-		"icon" in feature ? (feature.icon as FeatureIcon | undefined) : undefined;
 	const accent = getFeatureAccent(feature);
-
-	const showToolsBadge =
-		toolCount !== undefined && totalToolCount !== undefined;
-	const showDetailBtn = hasDetail && feature.name !== "mcp-feature";
+	const legacy = Boolean(feature.legacy);
+	const showToolsBadge = toolCount !== undefined && totalToolCount !== undefined;
+	const showDetailBtn = hasDetail;
 
 	return (
 		<div
 			style={
 				{
 					"--feature-accent": accent,
-					borderColor: enabled ? `${accent}55` : undefined,
+					borderColor: enabled && !legacy ? `${accent}55` : undefined,
 				} as React.CSSProperties
 			}
 			className={cn(
 				"group relative h-full flex flex-col justify-between gap-3 overflow-hidden rounded-2xl border bg-card p-4 transition-colors hover:border-[color:var(--feature-accent)]/50 pb-3",
-				enabled
+				enabled && !legacy
 					? "bg-[linear-gradient(135deg,color-mix(in_srgb,var(--feature-accent)_10%,transparent),transparent_55%)]"
 					: "border-border/30 bg-card/50",
+				legacy && "opacity-50 cursor-not-allowed pointer-events-none select-none",
 			)}
 		>
 			{/* Header row: icon + name/desc + toggle */}
 			<div className="flex items-start gap-3">
-				{/* Icon box */}
+				{/* Icon */}
 				<div
 					className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border transition-colors"
 					style={{
@@ -163,7 +158,7 @@ export const FeatureCard: React.FC<FeatureCardProps> = ({
 					}}
 				>
 					<FeatureIconDisplay
-						icon={icon}
+						icon={feature.icon as FeatureIcon | undefined}
 						size={16}
 						className="text-[color:var(--feature-accent)]"
 					/>
@@ -187,37 +182,30 @@ export const FeatureCard: React.FC<FeatureCardProps> = ({
 					</p>
 				</div>
 
-				{/* Toggle (only for toggleable features) */}
-				{onToggle && feature.type !== "config" && (
+				{/* Toggle — absent for legacy features and ToolPicker features (no onToggle passed) */}
+				{onToggle && !legacy && (
 					<Switch
 						checked={enabled}
 						onCheckedChange={onToggle}
 						className="shrink-0"
 					/>
 				)}
-				{onToggle &&
-					feature.type === "config" &&
-					feature.configKey !== "tools" && (
-						<Switch
-							checked={enabled}
-							onCheckedChange={onToggle}
-							className="shrink-0"
-						/>
-					)}
 			</div>
 
-			{/* Footer row: badge + detail — always rendered for consistent card height */}
+			{/* Footer row: badge + detail */}
 			<div className="flex items-center justify-between gap-2">
-				{showToolsBadge ? (
+				{legacy ? (
+					<Badge variant="outline" className="text-[10px] text-muted-foreground">
+						Deprecated
+					</Badge>
+				) : showToolsBadge ? (
 					<Badge variant="secondary" className="text-[10px]">
 						{toolCount}/{totalToolCount}
 					</Badge>
-				) : feature.type === "catalog" ? (
+				) : (
 					<Badge variant="secondary" className="text-[10px]">
 						{t("agentSettings.toolCount", { count: feature.tools.length })}
 					</Badge>
-				) : (
-					<span />
 				)}
 				{showDetailBtn && (
 					<Button

@@ -8,7 +8,7 @@ import {
 	type StepIOField,
 } from "./feature-catalog-registry";
 
-export type { FeatureCatalogMetadata, FeatureIcon, StepIOField };
+export type { FeatureCatalogMetadata, FeatureDetailViewSlot, FeatureIcon, StepIOField };
 
 /**
  * Flow Builder Catalog

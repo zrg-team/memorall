@@ -4,31 +4,15 @@ import type { AgentFeatureDefinition } from "@/main/stores/agent-config";
 export const getAgentFeatureDisplayName = (
 	feature: AgentFeatureDefinition,
 	t: TFunction,
-) => {
-	if (feature.type === "config") {
-		return t(feature.nameKey, { ns: "chat" });
-	}
-
-	return feature.nameKey
-		? t(feature.nameKey, {
-				ns: "common",
-				defaultValue: feature.displayName,
-			})
+): string =>
+	feature.nameKey
+		? t(feature.nameKey, { ns: "chat", defaultValue: feature.displayName })
 		: feature.displayName;
-};
 
 export const getAgentFeatureDescription = (
 	feature: AgentFeatureDefinition,
 	t: TFunction,
-) => {
-	if (feature.type === "config") {
-		return t(feature.descKey, { ns: "chat" });
-	}
-
-	return feature.descriptionKey
-		? t(feature.descriptionKey, {
-				ns: "common",
-				defaultValue: feature.description,
-			})
+): string =>
+	feature.descriptionKey
+		? t(feature.descriptionKey, { ns: "chat", defaultValue: feature.description })
 		: feature.description;
-};

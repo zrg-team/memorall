@@ -503,6 +503,7 @@
 		"core": "Core",
 		"other": "Other",
 		"showMore": "Show {{count}} more",
-		"showLess": "Show less"
+		"showLess": "Show less",
+		"noneEnabled": "No features enabled"
 	}
 }

@@ -51,25 +51,18 @@ interface UseAgentWizardOptions {
 	initialAssistantMessage?: string;
 }
 
-const BUILTIN_FEATURE_NAMES = [
-	"knowledge-retrieval",
-	"citations",
-	"agent-node",
-];
 const MAX_AGENT_WIZARD_TOOL_ROUNDS = 6;
 
 const getCatalog = (): AgentWizardCatalog => {
 	const flowCatalog = serviceManager.flowBuilderService.getCatalog();
-	const featureNames = [
-		...BUILTIN_FEATURE_NAMES,
-		...flowCatalog.steps
-			.filter(
-				(step) =>
-					step.type === "feature" &&
-					(step.graphTypes?.includes("foundation") ?? false),
-			)
-			.map((step) => step.name),
-	];
+	const featureNames = flowCatalog.steps
+		.filter(
+			(step) =>
+				step.type === "feature" &&
+				(step.graphTypes?.includes("foundation") ?? false) &&
+				!(step.metadata as { legacy?: boolean }).legacy,
+		)
+		.map((step) => step.name);
 	const toolNames = new Set<string>();
 	for (const step of flowCatalog.steps) {
 		const metadata = step.metadata as { tools?: unknown } | undefined;
@@ -172,16 +165,6 @@ const setFeatureEnabled = (
 	enabled: boolean,
 ): void => {
 	const state = useAgentConfigStore.getState();
-	if (feature.type === "config") {
-		if (feature.configKey === "enableContextRetrieval") {
-			state.updateField("enableContextRetrieval", enabled);
-		}
-		if (feature.configKey === "enableCitations") {
-			state.updateField("enableCitations", enabled);
-		}
-		return;
-	}
-
 	if (Boolean(state.draftFeatures[feature.name]) !== enabled) {
 		state.toggleFeature(feature.name);
 	}
@@ -203,11 +186,6 @@ const persistDraftToFlow = async (
 	state.updateField("systemPrompt", draft.systemPrompt);
 	state.updateField("contextPrompt", draft.contextPrompt);
 	state.updateField("tools", draft.enabledToolNames);
-	state.updateField(
-		"enableContextRetrieval",
-		draft.enabledFeatureNames.includes("knowledge-retrieval") ||
-			Boolean(draft.contextPrompt.trim()),
-	);
 	state.updateField("retrievalMode", draft.recallType);
 	state.setEnabledSkills(draft.enabledSkillNames);
 	state.setMCPServers(draft.mcpServers);
@@ -215,7 +193,7 @@ const persistDraftToFlow = async (
 
 	const enabledFeatures = new Set(draft.enabledFeatureNames);
 	for (const feature of useAgentConfigStore.getState().featureDefinitions) {
-		if (feature.name === "agent-node") continue;
+		if (feature.detailView?.some((s) => s.component === "ToolPicker")) continue;
 		setFeatureEnabled(feature, enabledFeatures.has(feature.name));
 	}
 

@@ -460,7 +460,6 @@ export const applyAgentWizardToolPatch = (
 				patch.name,
 			]);
 			if (patch.name === "knowledge-retrieval") next.contextPrompt = "";
-			if (patch.name === "agent-node") next.multiAgentAccessibleAgentIds = [];
 			break;
 		case "update_instruction": {
 			const systemPrompt = truncatePrompt(patch.systemPrompt);

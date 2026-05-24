@@ -1,18 +1,22 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
-import { ChevronDown, Sparkles } from "lucide-react";
+import { ChevronDown, ChevronUp, Sparkles } from "lucide-react";
 import { Button } from "@/main/components/ui/button";
 import { Badge } from "@/main/components/ui/badge";
+import {
+	Tooltip,
+	TooltipContent,
+	TooltipProvider,
+	TooltipTrigger,
+} from "@/main/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import type { FoundationPredefinedConfig } from "@/services/flows/graph/foundation/state";
-import { MULTI_AGENT_FEATURE_NAME } from "@/services/flows/steps/features/multi-agent-feature";
-import { MCP_FEATURE_NAME } from "@/services/flows/steps/features/mcp-feature";
 import {
 	useAgentConfigStore,
 	type AgentFeatureDefinition,
 } from "@/main/stores/agent-config";
+import type { FeatureIcon } from "@/services/flows/flow-builder-catalog";
 import { HoverBadgeList } from "./AgentHoverInfo";
-import { FeatureCard } from "./FeatureCard";
+import { FeatureCard, FeatureIconDisplay } from "./FeatureCard";
 import {
 	getAgentFeatureDescription,
 	getAgentFeatureDisplayName,
@@ -22,51 +26,12 @@ import { AGENT_WIZARD_CURSOR_KEYS } from "@/main/modules/agent-wizard";
 import type { AgentConfigSummary } from "../types";
 
 const FEATURES_DEFAULT_VISIBLE = 4;
-const BOTTOM_FEATURE_NAMES = new Set([
-	"documents-feature",
-	"documents-fs-feature",
-]);
-const TOP_OTHER_FEATURE_ORDER = ["hyperframes-feature"] as const;
-const CORE_FEATURE_ORDER = [
-	"knowledge-retrieval",
-	"fs-feature",
-	"nodejs-sandbox-feature",
-	"web-feature",
-	MULTI_AGENT_FEATURE_NAME,
-	"agent-node",
-	"artifact-feature",
-	"citations",
-	"visualize-response",
-] as const;
-const CORE_FEATURE_NAMES = new Set<string>(CORE_FEATURE_ORDER);
-const CORE_FEATURE_RANK = new Map<string, number>(
-	CORE_FEATURE_ORDER.map((name, index) => [name, index]),
-);
-const TOP_OTHER_FEATURE_RANK = new Map<string, number>(
-	TOP_OTHER_FEATURE_ORDER.map((name, index) => [name, index]),
-);
 
-const getFeatureEnabled = (
-	feature: ReturnType<
-		typeof useAgentConfigStore.getState
-	>["featureDefinitions"][number],
-	draftConfig: ReturnType<typeof useAgentConfigStore.getState>["draftConfig"],
-	draftFeatures: ReturnType<
-		typeof useAgentConfigStore.getState
-	>["draftFeatures"],
-): boolean => {
-	if (feature.type === "config") {
-		if (feature.configKey === "tools") {
-			return draftConfig.tools.length > 0;
-		}
+const hasToolPickerSlot = (feature: AgentFeatureDefinition): boolean =>
+	feature.detailView?.some((s) => s.component === "ToolPicker") ?? false;
 
-		return Boolean(
-			draftConfig[feature.configKey as keyof FoundationPredefinedConfig],
-		);
-	}
-
-	return Boolean(draftFeatures[feature.name]);
-};
+const hasDetailContent = (feature: AgentFeatureDefinition): boolean =>
+	!!(feature.detailView?.length || feature.tools.length || feature.systemPrompt.trim());
 
 interface FeaturesGridProps {
 	summary?: AgentConfigSummary | null;
@@ -83,20 +48,16 @@ export const FeaturesGrid: React.FC<FeaturesGridProps> = ({ summary }) => {
 		draftMultiAgentAccessibleAgentIds,
 		featureDefinitions,
 		availableTools,
-		updateField,
 		toggleFeature,
 	} = useAgentConfigStore();
 
 	const [showAll, setShowAll] = React.useState(false);
+	const [collapsed, setCollapsed] = React.useState(false);
 
 	const claimedToolSet = React.useMemo(() => {
 		const set = new Set<string>();
 		for (const feature of featureDefinitions) {
-			if (feature.type === "catalog") {
-				for (const tool of feature.tools) {
-					set.add(tool);
-				}
-			}
+			for (const tool of feature.tools) set.add(tool);
 		}
 		return set;
 	}, [featureDefinitions]);
@@ -104,99 +65,82 @@ export const FeaturesGrid: React.FC<FeaturesGridProps> = ({ summary }) => {
 	const fallbackEnabledToolNames = React.useMemo(() => {
 		const enabledToolSet = new Set(draftConfig.tools);
 		for (const feature of featureDefinitions) {
-			if (feature.type === "config") {
-				if (feature.configKey === "tools" || !draftConfig[feature.configKey]) {
-					continue;
-				}
-			} else if (!draftFeatures[feature.name]) {
+			if (hasToolPickerSlot(feature)) continue;
+			if (!draftFeatures[feature.name]) continue;
+			if (feature.requiresAccessibleAgents && draftMultiAgentAccessibleAgentIds.length === 0)
 				continue;
-			} else if (
-				feature.name === MULTI_AGENT_FEATURE_NAME &&
-				draftMultiAgentAccessibleAgentIds.length === 0
-			) {
-				continue;
-			}
-			for (const tool of feature.tools) {
-				enabledToolSet.add(tool);
-			}
+			for (const tool of feature.tools) enabledToolSet.add(tool);
 		}
 		const availableToolSet = new Set(availableTools);
 		return [
 			...availableTools.filter((tool) => enabledToolSet.has(tool)),
-			...Array.from(enabledToolSet).filter(
-				(tool) => !availableToolSet.has(tool),
-			),
+			...Array.from(enabledToolSet).filter((tool) => !availableToolSet.has(tool)),
 		];
 	}, [
 		availableTools,
-		draftConfig,
+		draftConfig.tools,
 		draftFeatures,
 		draftMultiAgentAccessibleAgentIds,
 		featureDefinitions,
 	]);
 
-	const enabledToolNames =
-		summary?.enabledToolNames ?? fallbackEnabledToolNames;
+	const enabledToolNames = summary?.enabledToolNames ?? fallbackEnabledToolNames;
 	const enabledToolCount = summary?.enabledToolCount ?? enabledToolNames.length;
 
 	const filteredFeatures = React.useMemo(
-		() =>
-			featureDefinitions
-				.filter((f) => f.name !== MCP_FEATURE_NAME)
-				.slice()
-				.sort((a, b) => {
-					const aBottom = BOTTOM_FEATURE_NAMES.has(a.name);
-					const bBottom = BOTTOM_FEATURE_NAMES.has(b.name);
-
-					if (aBottom === bBottom) {
-						const aEnabled = getFeatureEnabled(a, draftConfig, draftFeatures);
-						const bEnabled = getFeatureEnabled(b, draftConfig, draftFeatures);
-
-						if (aEnabled !== bEnabled) {
-							return aEnabled ? -1 : 1;
-						}
-
-						return 0;
-					}
-
-					return aBottom ? 1 : -1;
-				}),
-		[featureDefinitions, draftConfig, draftFeatures],
+		() => featureDefinitions.filter((f) => !f.hideInGrid),
+		[featureDefinitions],
 	);
+
 	const coreFeatures = filteredFeatures
-		.filter((feature) => CORE_FEATURE_NAMES.has(feature.name))
+		.filter((f) => f.section === "core")
+		.slice()
 		.sort(
 			(a, b) =>
-				(CORE_FEATURE_RANK.get(a.name) ?? Number.MAX_SAFE_INTEGER) -
-				(CORE_FEATURE_RANK.get(b.name) ?? Number.MAX_SAFE_INTEGER),
+				(a.sectionOrder ?? Number.MAX_SAFE_INTEGER) -
+				(b.sectionOrder ?? Number.MAX_SAFE_INTEGER),
 		);
+
 	const otherFeatures = filteredFeatures
-		.filter((feature) => !CORE_FEATURE_NAMES.has(feature.name))
+		.filter((f) => f.section !== "core")
+		.slice()
 		.sort((a, b) => {
-			const aRank = TOP_OTHER_FEATURE_RANK.get(a.name);
-			const bRank = TOP_OTHER_FEATURE_RANK.get(b.name);
+			const aLegacy = Boolean(a.legacy);
+			const bLegacy = Boolean(b.legacy);
+			if (aLegacy !== bLegacy) return aLegacy ? 1 : -1;
 
-			if (aRank !== undefined || bRank !== undefined) {
-				return (
-					(aRank ?? Number.MAX_SAFE_INTEGER) -
-					(bRank ?? Number.MAX_SAFE_INTEGER)
-				);
-			}
+			const aEnabled = Boolean(draftFeatures[a.name]);
+			const bEnabled = Boolean(draftFeatures[b.name]);
+			if (aEnabled !== bEnabled) return aEnabled ? -1 : 1;
 
-			return 0;
+			return (
+				(a.sectionOrder ?? Number.MAX_SAFE_INTEGER) -
+				(b.sectionOrder ?? Number.MAX_SAFE_INTEGER)
+			);
 		});
+
 	const visibleOtherFeatures = showAll
 		? otherFeatures
 		: otherFeatures.slice(0, FEATURES_DEFAULT_VISIBLE);
 	const hiddenCount = otherFeatures.length - FEATURES_DEFAULT_VISIBLE;
 
+	const isFeatureEffectivelyEnabled = (feature: AgentFeatureDefinition): boolean => {
+		if (hasToolPickerSlot(feature)) {
+			return draftConfig.tools.length > 0 || draftMultiAgentAccessibleAgentIds.length > 0;
+		}
+		return Boolean(draftFeatures[feature.name]);
+	};
+
+	const enabledFeatures = filteredFeatures.filter(isFeatureEffectivelyEnabled);
+
 	const renderFeatureCard = (feature: AgentFeatureDefinition) => {
 		const displayName = getAgentFeatureDisplayName(feature, t);
 		const displayDesc = getAgentFeatureDescription(feature, t);
 
-		if (feature.type === "config" && feature.configKey === "tools") {
+		if (hasToolPickerSlot(feature)) {
+			const slot = feature.detailView!.find((s) => s.component === "ToolPicker")!;
 			const toolsToShow =
-				feature.toolScope === "all"
+				slot.scope === "all"
 					? availableTools
 					: availableTools.filter((tool) => !claimedToolSet.has(tool));
 			const enabledCount = toolsToShow.filter((tool) =>
@@ -220,20 +164,6 @@ export const FeaturesGrid: React.FC<FeaturesGridProps> = ({ summary }) => {
 			);
 		}
 
-		const enabled = getFeatureEnabled(feature, draftConfig, draftFeatures);
-
-		const onToggle =
-			feature.type === "config"
-				? (checked: boolean) =>
-						updateField(
-							feature.configKey as keyof FoundationPredefinedConfig,
-							checked as never,
-						)
-				: () => toggleFeature(feature.name);
-
-		const hasDetail =
-			feature.type === "config" ? Boolean(feature.promptField) : true;
-
 		return (
 			<CursorPoint
 				key={feature.name}
@@ -241,11 +171,11 @@ export const FeaturesGrid: React.FC<FeaturesGridProps> = ({ summary }) => {
 			>
 				<FeatureCard
 					feature={feature}
-					enabled={enabled}
-					onToggle={onToggle}
+					enabled={Boolean(draftFeatures[feature.name])}
+					onToggle={() => toggleFeature(feature.name)}
 					displayName={displayName}
 					displayDesc={displayDesc}
-					hasDetail={hasDetail}
+					hasDetail={hasDetailContent(feature)}
 				/>
 			</CursorPoint>
 		);
@@ -255,12 +185,21 @@ export const FeaturesGrid: React.FC<FeaturesGridProps> = ({ summary }) => {
 		<div className="space-y-3">
 			{/* Header */}
 			<div className="flex items-center justify-between">
-				<div className="flex items-center gap-2">
-					<Sparkles size={13} className="text-muted-foreground" />
-					<span className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+				<button
+					type="button"
+					onClick={() => setCollapsed((v) => !v)}
+					className="flex items-center gap-2 rounded-md px-0.5 py-0.5 text-muted-foreground transition-colors hover:text-foreground"
+				>
+					<Sparkles size={13} />
+					<span className="text-xs font-medium uppercase tracking-[0.18em]">
 						{t("summary.features", { ns: "agents" })}
 					</span>
-				</div>
+					{collapsed ? (
+						<ChevronDown size={11} className="opacity-60" />
+					) : (
+						<ChevronUp size={11} className="opacity-60" />
+					)}
+				</button>
 				<HoverBadgeList
 					title={t("summary.tools", { ns: "agents" })}
 					items={enabledToolNames}
@@ -281,48 +220,92 @@ export const FeaturesGrid: React.FC<FeaturesGridProps> = ({ summary }) => {
 				</HoverBadgeList>
 			</div>
 
-			{coreFeatures.length > 0 ? (
-				<div className="space-y-2">
-					<p className="text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
-						{ta("featuresSection.core")}
-					</p>
-					<div className="grid grid-cols-1 gap-3 min-[520px]:grid-cols-2 auto-rows-[136px]">
-						{coreFeatures.map(renderFeatureCard)}
-					</div>
-				</div>
-			) : null}
-
-			{otherFeatures.length > 0 ? (
-				<div className="space-y-2">
-					<p className="text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
-						{ta("featuresSection.other")}
-					</p>
-					<div className="grid grid-cols-1 gap-3 min-[520px]:grid-cols-2 auto-rows-[136px]">
-						{visibleOtherFeatures.map(renderFeatureCard)}
-					</div>
-				</div>
-			) : null}
-
-			{/* Show more / less */}
-			{hiddenCount > 0 && (
-				<Button
-					type="button"
-					variant="ghost"
-					size="sm"
-					className="h-7 w-full rounded-xl text-xs text-muted-foreground hover:text-foreground"
-					onClick={() => setShowAll((v) => !v)}
-				>
-					<ChevronDown
-						size={12}
-						className={cn(
-							"mr-1.5 transition-transform",
-							showAll ? "rotate-180" : "",
+			{collapsed ? (
+				/* Compact strip — enabled feature icons only */
+				<TooltipProvider delayDuration={300}>
+					<div className="flex flex-wrap gap-1.5">
+						{enabledFeatures.length === 0 ? (
+							<p className="text-[11px] text-muted-foreground/60">
+								{ta("featuresSection.noneEnabled")}
+							</p>
+						) : (
+							enabledFeatures.map((feature) => {
+								const displayName = getAgentFeatureDisplayName(feature, t);
+								const accent =
+									typeof feature.accentColor === "string"
+										? feature.accentColor
+										: "#64748b";
+								return (
+									<Tooltip key={feature.name}>
+										<TooltipTrigger asChild>
+											<div
+												className="flex h-7 w-7 shrink-0 cursor-default items-center justify-center rounded-lg border transition-colors"
+												style={{
+													backgroundColor: `${accent}24`,
+													borderColor: `${accent}33`,
+													color: accent,
+												}}
+											>
+												<FeatureIconDisplay
+													icon={feature.icon as FeatureIcon | undefined}
+													size={14}
+												/>
+											</div>
+										</TooltipTrigger>
+										<TooltipContent side="top" className="text-xs">
+											{displayName}
+										</TooltipContent>
+									</Tooltip>
+								);
+							})
 						)}
-					/>
-					{showAll
-						? ta("featuresSection.showLess")
-						: ta("featuresSection.showMore", { count: hiddenCount })}
-				</Button>
+					</div>
+				</TooltipProvider>
+			) : (
+				<>
+					{coreFeatures.length > 0 && (
+						<div className="space-y-2">
+							<p className="text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
+								{ta("featuresSection.core")}
+							</p>
+							<div className="grid grid-cols-1 gap-3 min-[520px]:grid-cols-2 auto-rows-[136px]">
+								{coreFeatures.map(renderFeatureCard)}
+							</div>
+						</div>
+					)}
+
+					{otherFeatures.length > 0 && (
+						<div className="space-y-2">
+							<p className="text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
+								{ta("featuresSection.other")}
+							</p>
+							<div className="grid grid-cols-1 gap-3 min-[520px]:grid-cols-2 auto-rows-[136px]">
+								{visibleOtherFeatures.map(renderFeatureCard)}
+							</div>
+						</div>
+					)}
+
+					{hiddenCount > 0 && (
+						<Button
+							type="button"
+							variant="ghost"
+							size="sm"
+							className="h-7 w-full rounded-xl text-xs text-muted-foreground hover:text-foreground"
+							onClick={() => setShowAll((v) => !v)}
+						>
+							<ChevronDown
+								size={12}
+								className={cn(
+									"mr-1.5 transition-transform",
+									showAll ? "rotate-180" : "",
+								)}
+							/>
+							{showAll
+								? ta("featuresSection.showLess")
+								: ta("featuresSection.showMore", { count: hiddenCount })}
+						</Button>
+					)}
+				</>
 			)}
 		</div>
 	);

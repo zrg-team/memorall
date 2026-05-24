@@ -499,6 +499,7 @@
 		"core": "Cốt lõi",
 		"other": "Khác",
 		"showMore": "Hiện thêm {{count}}",
-		"showLess": "Thu gọn"
+		"showLess": "Thu gọn",
+		"noneEnabled": "Chưa bật tính năng nào"
 	}
 }

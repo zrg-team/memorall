@@ -322,6 +322,8 @@ featureCatalogRegistry.register({
 		customizable: false,
 		icon: { name: "Terminal", type: "lucide" },
 		accentColor: "#f97316",
+		section: "core",
+		sectionOrder: 2,
 	} satisfies FeatureCatalogMetadata,
 });
 

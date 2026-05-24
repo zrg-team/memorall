@@ -20,6 +20,7 @@ import { ADD_SKILL_CONTEXT_STEP_NAME } from "@/services/flows/steps/common/add-s
 import { logError } from "@/utils/logger";
 import type {
 	FeatureCatalogMetadata,
+	FeatureDetailViewSlot,
 	FeatureIcon,
 } from "@/services/flows/flow-builder-catalog";
 import type { Flow } from "@/services/database/types";
@@ -28,57 +29,32 @@ import type { Flow } from "@/services/database/types";
 // Feature definition types
 // ---------------------------------------------------------------------------
 
-/**
- * A built-in config feature maps to a field in FoundationPredefinedConfig.
- *
- * configKey "enableContextRetrieval" | "enableCitations" → boolean toggle.
- *   May expose a secondary promptField config.
- *
- * configKey "tools" → the agent-node feature.
- *   No boolean toggle; renders the tool list.
- *   toolScope "unclaimed" = tools not owned by any catalog feature step.
- *   toolScope "all"       = all registered tools.
- */
-export interface ConfigFeatureDefinition {
-	type: "config";
+/** Unified feature definition — all features are catalog entries. */
+export interface AgentFeatureDefinition {
 	name: string;
-	nameKey: string;
-	descKey: string;
-	configKey: "enableContextRetrieval" | "enableCitations" | "tools";
-	icon?: FeatureIcon;
-	accentColor?: string;
-	promptField?: {
-		field: "contextPrompt";
-		labelKey: string;
-		hintKey: string;
-		defaultValue: string;
-	};
-	toolScope?: "all" | "unclaimed";
-	tools: string[];
-	systemPrompt: string;
-}
-
-/** A catalog feature step. Toggle state lives in draftFeatures[name]. */
-export interface CatalogFeatureDefinition {
-	type: "catalog";
-	name: string;
-	/** Human-readable display name (English fallback). */
 	displayName: string;
-	/** i18n key for the display name. */
 	nameKey?: string;
 	description: string;
-	/** i18n key for the description. */
 	descriptionKey?: string;
 	icon?: FeatureIcon;
 	accentColor?: string;
 	tools: string[];
 	systemPrompt: string;
 	customizable: boolean;
+	/** Legacy features are shown but cannot be toggled and render as deprecated. */
+	legacy?: boolean;
+	/** Which section of the feature grid to display this feature in. */
+	section?: "core" | "other";
+	/** Sort order within the feature grid section. Lower numbers appear first. */
+	sectionOrder?: number;
+	/** Exclude this feature from the feature grid (e.g. features with their own dedicated UI). */
+	hideInGrid?: boolean;
+	/** Tools from this feature only count toward the summary when accessible agents are configured. */
+	requiresAccessibleAgents?: boolean;
+	/** Slot declarations that drive AgentFeatureDetailModal rendering.
+	 *  undefined → standard view. A ToolPicker slot suppresses the toggle. */
+	detailView?: FeatureDetailViewSlot[];
 }
-
-export type AgentFeatureDefinition =
-	| ConfigFeatureDefinition
-	| CatalogFeatureDefinition;
 
 // ---------------------------------------------------------------------------
 // Graph registry — exported so the component can render the selector without
@@ -148,99 +124,13 @@ const cloneUnifiedConfig = (config: UnifiedFlowConfig): UnifiedFlowConfig => ({
 });
 
 // ---------------------------------------------------------------------------
-// Per-graph built-in feature definitions.
-// The last entry with configKey "tools" is the agent-node feature and will
-// be placed after catalog features in buildFeatureDefinitions.
-// ---------------------------------------------------------------------------
-type GraphBuiltinConfig = {
-	configFeatures: ConfigFeatureDefinition[];
-};
-
-const GRAPH_BUILTIN_CONFIGS: Record<string, GraphBuiltinConfig> = {
-	foundation: {
-		configFeatures: [
-			{
-				type: "config",
-				name: "knowledge-retrieval",
-				nameKey: "agentSettings.contextRetrieval",
-				descKey: "agentSettings.contextRetrievalDesc",
-				configKey: "enableContextRetrieval",
-				icon: { name: "Database", type: "lucide" },
-				accentColor: "#22c55e",
-				promptField: {
-					field: "contextPrompt",
-					labelKey: "agentSettings.contextPrompt",
-					hintKey: "agentSettings.contextPromptHint",
-					defaultValue: DEFAULT_CONTEXT_SYSTEM_PROMPT,
-				},
-				tools: [],
-				systemPrompt: "",
-			},
-			{
-				type: "config",
-				name: "citations",
-				nameKey: "agentSettings.citations",
-				descKey: "agentSettings.citationsDesc",
-				configKey: "enableCitations",
-				icon: { name: "Quote", type: "lucide" },
-				accentColor: "#a855f7",
-				tools: [],
-				systemPrompt: "",
-			},
-			{
-				type: "config",
-				name: "agent-node",
-				nameKey: "agentSettings.agentTools",
-				descKey: "agentSettings.agentToolsDesc",
-				configKey: "tools",
-				icon: { name: "Wrench", type: "lucide" },
-				accentColor: "#f59e0b",
-				toolScope: "all",
-				tools: [],
-				systemPrompt: "",
-			},
-		],
-	},
-	agent: {
-		configFeatures: [
-			{
-				type: "config",
-				name: "agent-node",
-				nameKey: "agentSettings.agentTools",
-				descKey: "agentSettings.agentToolsDesc",
-				configKey: "tools",
-				icon: { name: "Wrench", type: "lucide" },
-				accentColor: "#f59e0b",
-				toolScope: "all",
-				tools: [],
-				systemPrompt: "",
-			},
-		],
-	},
-};
-
-// ---------------------------------------------------------------------------
-// Build the full ordered featureDefinitions for a graph type:
-//   non-tools configFeatures → catalog steps → tools configFeature (agent-node)
+// Build the full ordered featureDefinitions for a graph type.
+// Ordering is determined by registration order in steps/features/index.ts:
+// built-ins (knowledge-retrieval, citations) first, catalog features, agent-node last.
 // ---------------------------------------------------------------------------
 function buildFeatureDefinitions(graphType: string): AgentFeatureDefinition[] {
-	const { configFeatures } = GRAPH_BUILTIN_CONFIGS[graphType] ?? {
-		configFeatures: [
-			{
-				type: "config" as const,
-				name: "agent-node",
-				nameKey: "agentSettings.agentNode",
-				descKey: "agentSettings.agentNodeDesc",
-				configKey: "tools" as const,
-				toolScope: "all" as const,
-				tools: [],
-				systemPrompt: "",
-			},
-		],
-	};
-
 	const catalog = serviceManager.flowBuilderService.getCatalog();
-	const catalogFeatures: CatalogFeatureDefinition[] = catalog.steps
+	return catalog.steps
 		.filter(
 			(step) =>
 				step.type === "feature" &&
@@ -249,7 +139,6 @@ function buildFeatureDefinitions(graphType: string): AgentFeatureDefinition[] {
 		.map((step) => {
 			const meta = step.metadata as Partial<FeatureCatalogMetadata>;
 			return {
-				type: "catalog" as const,
 				name: step.name,
 				displayName:
 					typeof meta.displayName === "string" ? meta.displayName : step.name,
@@ -272,20 +161,20 @@ function buildFeatureDefinitions(graphType: string): AgentFeatureDefinition[] {
 						: undefined,
 				accentColor:
 					typeof meta.accentColor === "string" ? meta.accentColor : undefined,
+				legacy: Boolean(meta.legacy),
+				section:
+					meta.section === "core" || meta.section === "other"
+						? meta.section
+						: undefined,
+				sectionOrder:
+					typeof meta.sectionOrder === "number" ? meta.sectionOrder : undefined,
+				hideInGrid: Boolean(meta.hideInGrid),
+				requiresAccessibleAgents: Boolean(meta.requiresAccessibleAgents),
+				detailView: Array.isArray(meta.detailView)
+					? (meta.detailView as FeatureDetailViewSlot[])
+					: undefined,
 			};
 		});
-
-	// agent-node (configKey "tools") always renders last, after catalog features
-	const toolsFeature = configFeatures.find((f) => f.configKey === "tools");
-	const otherConfigFeatures = configFeatures.filter(
-		(f) => f.configKey !== "tools",
-	);
-
-	return [
-		...otherConfigFeatures,
-		...catalogFeatures,
-		...(toolsFeature ? [toolsFeature] : []),
-	];
 }
 
 // ---------------------------------------------------------------------------
@@ -299,8 +188,7 @@ const createDefaultFeatureFlags = (names: string[]): FeatureFlags =>
 
 const getCatalogFeatureNames = (
 	featureDefinitions: AgentFeatureDefinition[],
-): string[] =>
-	featureDefinitions.filter((f) => f.type === "catalog").map((f) => f.name);
+): string[] => featureDefinitions.map((f) => f.name);
 
 const getMultiAgentAccessibleAgentIds = (
 	unifiedConfig: UnifiedFlowConfig,
@@ -366,6 +254,12 @@ const deriveLegacyStateFromUnified = (unifiedConfig: UnifiedFlowConfig) => {
 			unifiedConfig.steps.find((step) => step.name === featureName)?.enabled,
 		);
 	}
+
+	// Built-in features have no matching runtime step name — derive from the
+	// actual steps they control. These overrides must come after the loop above.
+	features["knowledge-retrieval"] = retrievalSteps.some((step) => step.enabled);
+	features["citations"] = citationStep?.enabled ?? true;
+	features["agent-node"] = false; // config panel only — no toggle state
 
 	return {
 		graphType,
@@ -436,7 +330,7 @@ const applyLegacyDraftToUnified = (
 		getCatalogFeatureNames(buildFeatureDefinitions(graphType)),
 	);
 
-	if (draftConfig.enableContextRetrieval && enabledRetrievalNames.size === 0) {
+	if (draftFeatures["knowledge-retrieval"] && enabledRetrievalNames.size === 0) {
 		enabledRetrievalNames.add(
 			defaultEnabledRetrievalNames.has(selectedRetrievalStepName)
 				? selectedRetrievalStepName
@@ -468,7 +362,7 @@ const applyLegacyDraftToUnified = (
 
 			if (RETRIEVAL_STEP_NAMES.has(step.name)) {
 				nextStep.enabled =
-					draftConfig.enableContextRetrieval &&
+					Boolean(draftFeatures["knowledge-retrieval"]) &&
 					step.name === selectedRetrievalStepName;
 				nextStep.config = { ...(nextStep.config ?? {}) };
 				if (draftConfig.contextPrompt.trim()) {
@@ -479,7 +373,7 @@ const applyLegacyDraftToUnified = (
 			}
 
 			if (step.name === "entities-facts-citation") {
-				nextStep.enabled = draftConfig.enableCitations;
+				nextStep.enabled = Boolean(draftFeatures["citations"]);
 			}
 
 			if (featureNames.has(step.name)) {
@@ -805,18 +699,16 @@ export const useAgentConfigStore = create<AgentConfigState>((set, get) => {
 		},
 
 		setKnowledgeRetrievalMode: (mode) => {
-			const draft = {
-				...get().draftConfig,
-				retrievalMode: mode,
-				enableContextRetrieval: true,
-			};
+			const draft = { ...get().draftConfig, retrievalMode: mode };
+			const draftFeatures = { ...get().draftFeatures, "knowledge-retrieval": true };
 			set({
 				draftConfig: draft,
+				draftFeatures,
 				isDirty: computeDirty(
 					get().savedConfig,
 					draft,
 					get().savedFeatures,
-					get().draftFeatures,
+					draftFeatures,
 					get().savedMultiAgentAccessibleAgentIds,
 					get().draftMultiAgentAccessibleAgentIds,
 					get().savedMCPServers,
@@ -829,9 +721,7 @@ export const useAgentConfigStore = create<AgentConfigState>((set, get) => {
 
 		setGraphType: (graphType) => {
 			const featureDefinitions = buildFeatureDefinitions(graphType);
-			const catalogNames = featureDefinitions
-				.filter((f) => f.type === "catalog")
-				.map((f) => f.name);
+			const catalogNames = getCatalogFeatureNames(featureDefinitions);
 			const defaultFeatures = createDefaultFeatureFlags(catalogNames);
 			const draft = { ...get().draftConfig, graphType };
 			const draftMultiAgentAccessibleAgentIds =

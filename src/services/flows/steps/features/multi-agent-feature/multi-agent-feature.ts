@@ -235,6 +235,10 @@ featureCatalogRegistry.register({
 		customizable: true,
 		icon: { name: "GitFork", type: "lucide" },
 		accentColor: "#818cf8",
+		section: "core",
+		sectionOrder: 4,
+		requiresAccessibleAgents: true,
+		detailView: [{ component: "AgentPicker" }],
 	} satisfies FeatureCatalogMetadata,
 });
 

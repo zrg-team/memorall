@@ -12,6 +12,24 @@ export interface FeatureIcon {
 	type: "emoji" | "lucide";
 }
 
+/**
+ * Declarative slot system for the feature detail modal.
+ * Add a new variant here to introduce a new detail view component.
+ * The modal maps each `component` name to a self-contained renderer.
+ */
+export type FeatureDetailViewSlot =
+	| { component: "ToolPicker"; configName: "tools"; scope: "all" | "unclaimed" }
+	| {
+			component: "PromptInput";
+			configName: "contextPrompt";
+			labelKey: string;
+			hintKey: string;
+			defaultValue: string;
+	  }
+	| { component: "RetrievalModeSelect"; configName: "retrievalMode" }
+	| { component: "AgentPicker" }
+	| { component: "VisualizeResponseConfig" };
+
 export interface FeatureCatalogMetadata extends Record<string, unknown> {
 	description: string;
 	/** i18n key for the description. UI prefers this over `description`. */
@@ -31,6 +49,24 @@ export interface FeatureCatalogMetadata extends Record<string, unknown> {
 	recommended?: boolean;
 	/** Mark this feature as legacy — prefer a newer alternative. */
 	legacy?: boolean;
+	/** Which section of the feature grid to display this feature in. */
+	section?: "core" | "other";
+	/** Sort order within the feature grid section. Lower numbers appear first. */
+	sectionOrder?: number;
+	/** Hide this feature from the feature grid (e.g. features with their own dedicated UI). */
+	hideInGrid?: boolean;
+	/** Feature tools only count toward the summary when accessible agents are configured. */
+	requiresAccessibleAgents?: boolean;
+	/**
+	 * Mark this step as volatile — its output changes on every run (e.g. current timestamp).
+	 * Volatile steps are sorted to the end of the feature slot so the stable prefix
+	 * before them can be reused by the LLM provider's prompt cache.
+	 */
+	volatile?: boolean;
+	/** Slot declarations that drive AgentFeatureDetailModal rendering.
+	 *  undefined → standard view (tools badge + system prompt textarea).
+	 *  A slot with component "ToolPicker" also suppresses the toggle switch. */
+	detailView?: FeatureDetailViewSlot[];
 }
 
 export interface FeatureCatalogStep {

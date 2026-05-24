@@ -699,6 +699,8 @@ featureCatalogRegistry.register({
 		recommended: false,
 		icon: { name: "Film", type: "lucide" },
 		accentColor: "#8b5cf6",
+		section: "other",
+		sectionOrder: 0,
 	} satisfies FeatureCatalogMetadata,
 });
 
