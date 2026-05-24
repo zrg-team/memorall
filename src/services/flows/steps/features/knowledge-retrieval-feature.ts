@@ -3,8 +3,8 @@ import {
 	FEATURE_DEFAULT_INPUTS,
 	FEATURE_DEFAULT_OUTPUTS,
 	type FeatureCatalogMetadata,
-} from "@/services/flows/feature-catalog-registry";
-import { DEFAULT_CONTEXT_SYSTEM_PROMPT } from "@/services/flows/steps/common/context-to-system";
+} from "../../feature-catalog-registry";
+import { DEFAULT_CONTEXT_SYSTEM_PROMPT } from "../common/context-to-system";
 
 const STEP_NAME = "knowledge-retrieval" as const;
 

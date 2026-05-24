@@ -1,17 +1,17 @@
-import { logError } from "@/utils/logger";
-import { defineStep, bindStep } from "@/services/flows/interfaces/step";
+import { logError } from "../../interfaces/logger";
+import { defineStep, bindStep } from "../../interfaces/step";
 import type {
 	StepFactoryFromSpec,
 	StepSpecFromDefinition,
-} from "@/services/flows/interfaces/step";
-import { stepRegistry } from "@/services/flows/step-registry";
+} from "../../interfaces/step";
+import { stepRegistry } from "../../step-registry";
 import {
 	featureCatalogRegistry,
 	FEATURE_DEFAULT_INPUTS,
 	type FeatureCatalogMetadata,
-} from "@/services/flows/feature-catalog-registry";
-import { GraphBase, type GraphTool } from "@/services/flows/graph/graph.base";
-import type { ChatCompletionMessageParam } from "@/types/openai";
+} from "../../feature-catalog-registry";
+import { GraphBase, type GraphTool } from "../../graph/graph.base";
+import type { ChatCompletionMessageParam } from "../../interfaces/messages";
 
 const STEP_NAME = "fs-feature" as const;
 export const FS_FEATURE_NAME = STEP_NAME;
@@ -90,13 +90,32 @@ All paths are absolute. Always prefix paths with the appropriate namespace root:
 - Use \`glob\` to restrict the search to specific file types (e.g. \`"*.ts"\`, \`"**/*.md"\`).
 - Use \`context\` (number of surrounding lines) to get more context around each match.
 - Use \`output_mode: "files_with_matches"\` to get only file paths, or \`"count"\` for match counts.
+- For ambiguous content searches, combine likely terms in one regex and likely file types in one glob:
+  - \`fs_grep pattern="memorall|icon|logo|brand" glob="**/*.{ts,tsx,js,jsx,json,md,svg,html,css}" path="/workspaces"\`
+- Prefer \`output_mode: "files_with_matches"\` first when you only need candidate paths, then read the best matching files.
+- Do not repeat several \`fs_grep\` calls that only vary one word or one extension; use regex alternatives and glob alternatives.
 
 ### Finding files by name/pattern
 - \`fs_glob\` accepts glob syntax:
   - \`*\` matches anything in a single directory segment.
   - \`**\` matches across any number of directory levels.
   - \`?\` matches any single character.
+  - \`{a,b}\` matches alternatives; use it to combine likely names or extensions in one call.
+  - \`[abc]\` and \`[!abc]\` match character sets.
+  - \`@(a|b)\` matches one of the alternatives.
 - Example: \`fs_glob pattern="**/*.ts" path="/workspaces/myproject"\`
+
+### Efficient file discovery
+- When the user asks for a file by concept, name fragment, brand, logo, icon, asset, image, or extension, do not repeat many narrow \`fs_glob\` calls.
+- Combine likely filename terms and likely extensions in a single glob per namespace. Example for finding an icon/logo:
+  - \`fs_glob pattern="**/*{memorall,icon,logo,brand}*.{png,jpg,jpeg,svg,webp,ico}" path="/documents"\`
+  - \`fs_glob pattern="**/*{memorall,icon,logo,brand}*.{png,jpg,jpeg,svg,webp,ico}" path="/workspaces"\`
+- If a combined glob returns no matches, broaden once by changing one dimension at a time:
+  1. Broaden names: \`**/*{memorall,icon,logo,brand,image,asset}*.{png,jpg,jpeg,svg,webp,ico}\`
+  2. Broaden extensions: \`**/*{memorall,icon,logo,brand}*.*\`
+  3. List nearby directories with \`fs_ls\` only when glob results suggest a likely folder.
+- Do not search only one extension such as \`.svg\` unless the user explicitly asked for that extension.
+- Do not retry the same failed pattern in another wording; change the namespace, name alternatives, extension alternatives, or use \`fs_ls\` for structure.
 
 ### Organizing files
 - \`fs_mkdir\` creates a directory (recursive by default — parent dirs are created automatically).

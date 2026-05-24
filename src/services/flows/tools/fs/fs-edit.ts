@@ -1,17 +1,7 @@
 import z from "zod";
-import type {
-	Tool,
-	ToolFactory,
-	AllServices,
-} from "@/services/flows/interfaces/tool";
-import { toolRegistry } from "@/services/flows/tool-registry";
-import {
-	normalizeFsPath,
-	flattenTree,
-	isWorkspacePath,
-	wsDisplayToLogicalPath,
-	stripDocumentsPrefix,
-} from "./util";
+import type { Tool, ToolFactory, AllServices } from "../../interfaces/tool";
+import { toolRegistry } from "../../tool-registry";
+import { normalizeFsPath, readFileBytes, writeFileBytes } from "./util";
 
 const TOOL_NAME = "fs_edit" as const;
 
@@ -30,7 +20,7 @@ const schema = z.object({
 });
 
 type Input = z.infer<typeof schema>;
-type Services = Pick<AllServices, "documentFileSystem">;
+type Services = Pick<AllServices, "fs">;
 
 export const createFsEditTool: ToolFactory<Input, Services> = (
 	services,
@@ -42,8 +32,8 @@ export const createFsEditTool: ToolFactory<Input, Services> = (
 	execute: async (input) => {
 		const { file_path, old_string, new_string, replace_all = false } = input;
 
-		const dfs = services.documentFileSystem;
-		if (!dfs) return "Error: documentFileSystem service not available.";
+		const dfs = services.fs;
+		if (!dfs) return "Error: fs service not available.";
 
 		const filePath = normalizeFsPath(file_path);
 
@@ -58,42 +48,12 @@ export const createFsEditTool: ToolFactory<Input, Services> = (
 			return { newText: text.replace(old_string, new_string), count: 1 };
 		};
 
-		if (isWorkspacePath(filePath)) {
-			const wsLogical = wsDisplayToLogicalPath(filePath);
-			const tree = await dfs.getWorkspaceTree();
-			const allNodes = flattenTree(tree);
-			const node = allNodes.find(
-				(n) => n.path === wsLogical && n.type === "file",
-			);
-
-			if (!node) return `Error: File not found: ${file_path}`;
-
-			const raw = await dfs.getWorkspaceFileContent(filePath);
-			const text = new TextDecoder().decode(raw);
-
-			let result: { newText: string; count: number };
-			try {
-				result = applyEdit(text);
-			} catch (e) {
-				return `Error: ${e instanceof Error ? e.message : String(e)}`;
-			}
-
-			await dfs.writeWorkspaceFile(filePath, result.newText);
-			return `Edited ${filePath}: ${result.count} replacement${result.count !== 1 ? "s" : ""} made`;
-		}
-
-		// Document namespace
-		const docPath = stripDocumentsPrefix(filePath);
-		const tree = await dfs.getTree();
-		const allNodes = flattenTree(tree);
-		const node = allNodes.find((n) => n.path === docPath && n.type === "file");
-
-		if (!node || !node.file) {
+		let text: string;
+		try {
+			text = new TextDecoder().decode(await readFileBytes(dfs, filePath));
+		} catch {
 			return `Error: File not found: ${file_path}`;
 		}
-
-		const raw = await dfs.getFileContent(docPath);
-		const text = new TextDecoder().decode(raw);
 
 		let result: { newText: string; count: number };
 		try {
@@ -102,10 +62,9 @@ export const createFsEditTool: ToolFactory<Input, Services> = (
 			return `Error: ${e instanceof Error ? e.message : String(e)}`;
 		}
 
-		const encoded = new TextEncoder().encode(result.newText);
-		await dfs.updateFileContent(docPath, encoded);
+		await writeFileBytes(dfs, filePath, result.newText);
 
-		return `Edited ${docPath}: ${result.count} replacement${result.count !== 1 ? "s" : ""} made`;
+		return `Edited ${filePath}: ${result.count} replacement${result.count !== 1 ? "s" : ""} made`;
 	},
 });
 

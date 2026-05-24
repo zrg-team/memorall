@@ -33,6 +33,15 @@ import {
 	type ToolCallAccumulator,
 } from "@/services/chat/tool-call-accumulator";
 import { chatFlowRegistry } from "@/services/flows/chat-flow-registry";
+import { consoleFlowLogger } from "@/services/flows/interfaces/logger";
+import {
+	toFlowDatabase,
+	toFlowEmbedding,
+	toFlowFileSystem,
+	toFlowLLM,
+	toFlowSandbox,
+	toFlowWebBrowser,
+} from "@/services/flow-service-adapters";
 import type { UnifiedFlowConfig } from "@/services/flows/interfaces/flow-config";
 import { buildDefaultFlowConfig } from "@/services/flows/build-flow-config";
 import { mergeWithDefaultConfig } from "@/services/flows/build-flow-config";
@@ -41,7 +50,7 @@ import {
 	withFlowRuntimeVars,
 } from "@/services/flows/runtime/runtime-context";
 import { eq, sql } from "drizzle-orm";
-import { documentFileSystemService } from "@/services/filesystem/document-filesystem";
+import { documentFileSystemService as fsService } from "@/services/filesystem/document-filesystem";
 import {
 	getValidRecallTypes,
 	isRecallTypeValidForGrow,
@@ -569,12 +578,15 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 
 	private static getFlowServices(): FlowServices {
 		return {
-			llm: serviceManager.llmService,
-			embedding: serviceManager.embeddingService,
-			database: serviceManager.databaseService,
-			sandboxContainer: serviceManager.getSandboxContainerService(),
-			webBrowser: serviceManager.getWebBrowserService(),
-			documentFileSystem: documentFileSystemService,
+			llm: toFlowLLM(serviceManager.llmService),
+			embedding: toFlowEmbedding(serviceManager.embeddingService),
+			database: toFlowDatabase(serviceManager.databaseService),
+			logger: consoleFlowLogger,
+			sandboxContainer: toFlowSandbox(
+				serviceManager.getSandboxContainerService(),
+			),
+			webBrowser: toFlowWebBrowser(serviceManager.getWebBrowserService()),
+			fs: toFlowFileSystem(fsService),
 		};
 	}
 

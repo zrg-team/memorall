@@ -3,7 +3,7 @@ import {
 	FEATURE_DEFAULT_INPUTS,
 	FEATURE_DEFAULT_OUTPUTS,
 	type FeatureCatalogMetadata,
-} from "@/services/flows/feature-catalog-registry";
+} from "../../feature-catalog-registry";
 
 const STEP_NAME = "citations" as const;
 

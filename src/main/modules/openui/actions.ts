@@ -13,6 +13,7 @@ import {
 
 export const MEMORALL_OPENUI_ACTION_TYPE = "memorall_openui_action";
 export const MEMORALL_OPENUI_ACTION_EVENT = "memorall:openui-action";
+export const OPENUI_FORM_FIELD_METADATA_KEY = "__memorall_field_metadata";
 
 export const openUIActionSchema = z.discriminatedUnion("type", [
 	z.object({
@@ -92,17 +93,59 @@ const TEMPLATE_PATTERN = /\{\{\s*([A-Za-z0-9_.-]+)\s*\}\}/g;
 const isRecord = (value: unknown): value is Record<string, unknown> =>
 	typeof value === "object" && value !== null && !Array.isArray(value);
 
+type OpenUIFormFieldMetadata = {
+	label?: string;
+	options?: Record<string, string>;
+};
+
+const getCurrentFormSource = (
+	formState: Record<string, unknown> | undefined,
+	formName: string | undefined,
+): Record<string, unknown> =>
+	formState && formName && isRecord(formState[formName])
+		? (formState[formName] as Record<string, unknown>)
+		: (formState ?? {});
+
+const unwrapFormEntry = (value: unknown): unknown =>
+	isRecord(value) && "value" in value ? value.value : value;
+
+function getCurrentFormFieldMetadata(
+	formState: Record<string, unknown> | undefined,
+	formName: string | undefined,
+): Record<string, OpenUIFormFieldMetadata> {
+	const source = getCurrentFormSource(formState, formName);
+	const rawMetadata = unwrapFormEntry(source[OPENUI_FORM_FIELD_METADATA_KEY]);
+	if (!isRecord(rawMetadata)) return {};
+
+	const metadata: Record<string, OpenUIFormFieldMetadata> = {};
+	for (const [fieldName, rawFieldMetadata] of Object.entries(rawMetadata)) {
+		if (!isRecord(rawFieldMetadata)) continue;
+		const fieldMetadata: OpenUIFormFieldMetadata = {};
+		if (typeof rawFieldMetadata.label === "string") {
+			fieldMetadata.label = rawFieldMetadata.label;
+		}
+		if (isRecord(rawFieldMetadata.options)) {
+			fieldMetadata.options = Object.fromEntries(
+				Object.entries(rawFieldMetadata.options).filter(
+					(entry): entry is [string, string] => typeof entry[1] === "string",
+				),
+			);
+		}
+		metadata[fieldName] = fieldMetadata;
+	}
+
+	return metadata;
+}
+
 export function getCurrentFormValues(
 	formState: Record<string, unknown> | undefined,
 	formName: string | undefined,
 ): Record<string, unknown> {
-	const source =
-		formState && formName && isRecord(formState[formName])
-			? (formState[formName] as Record<string, unknown>)
-			: (formState ?? {});
+	const source = getCurrentFormSource(formState, formName);
 	const values: Record<string, unknown> = {};
 	for (const [key, value] of Object.entries(source)) {
-		values[key] = isRecord(value) && "value" in value ? value.value : value;
+		if (key === OPENUI_FORM_FIELD_METADATA_KEY) continue;
+		values[key] = unwrapFormEntry(value);
 	}
 	return values;
 }
@@ -150,18 +193,51 @@ const stringifyOpenUIValue = (value: unknown): string => {
 	return JSON.stringify(value);
 };
 
+const humanizeOpenUIFieldName = (fieldName: string): string =>
+	fieldName
+		.replace(/[_-]+/g, " ")
+		.replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+		.replace(/\s+/g, " ")
+		.trim()
+		.replace(/^./, (char) => char.toUpperCase()) || fieldName;
+
+function formatOpenUIFormValues(
+	values: Record<string, unknown>,
+	metadata: Record<string, OpenUIFormFieldMetadata>,
+): string {
+	return Object.entries(values)
+		.map(([fieldName, value]) => {
+			const fieldMetadata = metadata[fieldName];
+			const rawValue = stringifyOpenUIValue(value).trim();
+			if (!rawValue) return "";
+			const displayValue =
+				typeof value === "string" && fieldMetadata?.options?.[value]
+					? fieldMetadata.options[value]
+					: rawValue;
+			const label =
+				fieldMetadata?.label?.trim() || humanizeOpenUIFieldName(fieldName);
+			return `${label}: ${displayValue}`;
+		})
+		.filter(Boolean)
+		.join("\n");
+}
+
 export function getOpenUISendMessageText(
 	action: Extract<MemorallOpenUIAction, { type: "send_message" }>,
 	formState: Record<string, unknown> | undefined,
 	formName: string | undefined,
 	humanFriendlyMessage: string | undefined,
 ): string {
+	const values = getCurrentFormValues(formState, formName);
+	const metadata = getCurrentFormFieldMetadata(formState, formName);
+	const formValues = formatOpenUIFormValues(values, metadata);
+	if (action.includeFormState && formValues) return formValues;
+
 	const explicitTemplate = action.message ?? action.text;
 	if (explicitTemplate !== undefined) {
 		return resolveOpenUITemplate(explicitTemplate, formState, formName).trim();
 	}
 
-	const values = getCurrentFormValues(formState, formName);
 	if (action.valueInput) {
 		const value = stringifyOpenUIValue(values[action.valueInput]).trim();
 		if (value) return value;
@@ -172,10 +248,7 @@ export function getOpenUISendMessageText(
 		if (value) return value;
 	}
 
-	const formValues = Object.values(values)
-		.map((value) => stringifyOpenUIValue(value).trim())
-		.filter(Boolean);
-	if (formValues.length > 0) return formValues.join("\n").trim();
+	if (formValues) return formValues;
 
 	return (humanFriendlyMessage ?? "").trim();
 }

@@ -1,17 +1,22 @@
-import { logInfo, logError } from "@/utils/logger";
+import { getKnowledgeDatabase } from "../../interfaces/knowledge";
+import { logInfo, logError } from "../../interfaces/logger";
 import { and, or, inArray } from "drizzle-orm";
-import { vectorSearchEdges, vectorSearchNodes } from "@/utils/vector-search";
-import type { IDatabaseService } from "@/services/database";
-import { getScopedGraphWhere } from "@/utils/scoped-graph-query";
-import type { BaseEmbedding } from "@/services/embedding";
+import {
+	vectorSearchEdges,
+	vectorSearchNodes,
+	type FlowEmbeddingLike,
+} from "../../utils/vector-search";
+import type { IDatabaseService } from "../../interfaces/database";
+import type { Edge, Node } from "../../interfaces/knowledge";
+import { getScopedGraphWhere } from "../../utils/graph-query";
 
-import { defineStep, bindStep } from "@/services/flows/interfaces/step";
+import { defineStep, bindStep } from "../../interfaces/step";
 import type {
 	StepFactoryFromSpec,
 	StepSpecFromDefinition,
-} from "@/services/flows/interfaces/step";
-import { stepRegistry } from "@/services/flows/step-registry";
-import type { AllServices } from "@/services/flows/interfaces/tool";
+} from "../../interfaces/step";
+import { stepRegistry } from "../../step-registry";
+import type { AllServices } from "../../interfaces/tool";
 
 const STEP_NAME = "quick-retrieve" as const;
 
@@ -71,7 +76,7 @@ export type QuickRetrieveSerices = Pick<AllServices, "database" | "embedding">;
 
 async function performSemanticSearch(
 	databaseService: IDatabaseService,
-	embeddingService: BaseEmbedding,
+	embeddingService: FlowEmbeddingLike,
 	query: string,
 	limit: number,
 	graphId?: string,
@@ -137,9 +142,13 @@ async function expandGraphLevel(
 		return { newNodes: [], newEdges: [], nextLevelNodeIds: new Set() };
 	}
 
-	const result = await databaseService.use(async ({ db, schema }) => {
+	const result = await getKnowledgeDatabase(databaseService).query<{
+		connectedEdges: Edge[];
+		connectedNodes: Node[];
+		newNodeIds: Set<string>;
+	}>(async ({ db, schema }) => {
 		// Find all edges connected to current nodes
-		const connectedEdges = await db
+		const connectedEdges: Edge[] = await db
 			.select()
 			.from(schema.edges)
 			.where(
@@ -187,7 +196,7 @@ async function expandGraphLevel(
 	// Convert to state format
 	const newNodes: RelevantNode[] = result.connectedNodes.map((node) => ({
 		id: String(node.id),
-		nodeType: node.nodeType,
+		nodeType: node.nodeType || "Entity",
 		name: node.name,
 		summary: node.summary || "",
 		attributes: (node.attributes || {}) as Record<string, unknown>,

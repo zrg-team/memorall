@@ -2,18 +2,18 @@ import {
 	MultiServerMCPClient,
 	type StreamableHTTPConnection,
 } from "@/lib/langchain-mcp-adapter";
-import { logError } from "@/utils/logger";
-import { defineStep, bindStep } from "@/services/flows/interfaces/step";
-import type { StepSpecFromDefinition } from "@/services/flows/interfaces/step";
-import type { BoundStep } from "@/services/flows/interfaces/step";
-import { stepRegistry } from "@/services/flows/step-registry";
+import { logError } from "../../../interfaces/logger";
+import { defineStep, bindStep } from "../../../interfaces/step";
+import type { StepSpecFromDefinition } from "../../../interfaces/step";
+import type { BoundStep } from "../../../interfaces/step";
+import { stepRegistry } from "../../../step-registry";
 import {
 	featureCatalogRegistry,
 	FEATURE_DEFAULT_INPUTS,
 	type FeatureCatalogMetadata,
-} from "@/services/flows/feature-catalog-registry";
-import { GraphBase, type GraphTool } from "@/services/flows/graph/graph.base";
-import type { ChatCompletionMessageParam } from "@/types/openai";
+} from "../../../feature-catalog-registry";
+import { GraphBase, type GraphTool } from "../../../graph/graph.base";
+import type { ChatCompletionMessageParam } from "../../../interfaces/messages";
 import { adaptMCPTool } from "./mcp-tool-adapter";
 import type { MCPFeatureConfig, MCPServerConfig } from "./types";
 

@@ -316,5 +316,13 @@
 		"revert": "Hoàn tác",
 		"resetDefaults": "Khôi phục mặc định",
 		"resetConfirm": "Thao tác này sẽ đặt lại tất cả cài đặt tác nhân về giá trị mặc định. Bản nháp hiện tại sẽ bị thay thế."
+	},
+	"openui": {
+		"rendering": "Đang tạo giao diện trực quan",
+		"copied": "Đã sao chép",
+		"renderFailed": {
+			"title": "Không thể hiển thị phản hồi trực quan.",
+			"description": "Mã OpenUI được tạo ra không hợp lệ. Phản hồi gốc được hiển thị bên dưới."
+		}
 	}
 }

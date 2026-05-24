@@ -1,11 +1,6 @@
 import z from "zod";
-import type {
-	Tool,
-	ToolFactory,
-	AllServices,
-} from "@/services/flows/interfaces/tool";
-import { toolRegistry } from "@/services/flows/tool-registry";
-import type { DocumentTreeNode } from "@/types/document-library";
+import type { Tool, ToolFactory, AllServices } from "../../interfaces/tool";
+import { toolRegistry } from "../../tool-registry";
 import {
 	parseExcelFile,
 	workbookToMarkdown,
@@ -13,7 +8,8 @@ import {
 	sheetToCsv,
 } from "@/main/modules/documents/handlers/excel-extraction";
 import { normalizeDocumentPath } from "./util";
-import { ensureFolderExists } from "@/services/filesystem/document-fs-utils";
+import { ensureFolderExists } from "../../utils/document-fs-utils";
+import { pathExists, readFileBytes, writeFileBytes } from "../fs/util";
 
 const TOOL_NAME = "excel_to_text" as const;
 
@@ -44,16 +40,7 @@ const schema = z.object({
 });
 
 type Input = z.infer<typeof schema>;
-type Services = Pick<AllServices, "documentFileSystem">;
-
-function flattenTree(nodes: DocumentTreeNode[]): DocumentTreeNode[] {
-	const result: DocumentTreeNode[] = [];
-	for (const node of nodes) {
-		result.push(node);
-		if (node.children?.length) result.push(...flattenTree(node.children));
-	}
-	return result;
-}
+type Services = Pick<AllServices, "fs">;
 
 function isExcelPath(p: string): boolean {
 	const lower = p.toLowerCase();
@@ -70,7 +57,7 @@ export const createExcelToTextTool: ToolFactory<Input, Services> = (
 		"Extract text from an Excel file in /documents and return it or save it to a new file. Supports Markdown table or CSV output with optional sheet filtering.",
 	schema,
 	execute: async (input) => {
-		const dfs = services.documentFileSystem;
+		const dfs = services.fs;
 		if (!dfs) {
 			return JSON.stringify({
 				actionType: "excel_to_text",
@@ -89,13 +76,7 @@ export const createExcelToTextTool: ToolFactory<Input, Services> = (
 		}
 
 		try {
-			const tree = await dfs.getTree();
-			const allNodes = flattenTree(tree);
-			const node = allNodes.find(
-				(n) => n.path === sourcePath && n.type === "file",
-			);
-
-			if (!node || !node.file) {
+			if (!(await pathExists(dfs, sourcePath))) {
 				return JSON.stringify({
 					actionType: "excel_to_text",
 					success: false,
@@ -103,7 +84,7 @@ export const createExcelToTextTool: ToolFactory<Input, Services> = (
 				});
 			}
 
-			const content = await dfs.getFileContent(sourcePath);
+			const content = await readFileBytes(dfs, sourcePath);
 			const workbook = await parseExcelFile(content);
 
 			const targetSheets = input.sheets?.length
@@ -171,18 +152,7 @@ export const createExcelToTextTool: ToolFactory<Input, Services> = (
 			}
 
 			await ensureFolderExists(dfs, parentPath);
-
-			const existingNode = allNodes.find(
-				(n) => n.path === outputPath && n.type === "file",
-			);
-			if (existingNode) {
-				const encoded = new TextEncoder().encode(extractedText);
-				await dfs.updateFileContent(outputPath, encoded);
-			} else {
-				const mimeType = fmt === "csv" ? "text/csv" : "text/markdown";
-				const file = new File([extractedText], fileName, { type: mimeType });
-				await dfs.uploadFile(file, parentPath);
-			}
+			await writeFileBytes(dfs, outputPath, extractedText);
 
 			return JSON.stringify(
 				{

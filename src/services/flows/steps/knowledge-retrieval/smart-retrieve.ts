@@ -1,3 +1,4 @@
+import { getKnowledgeDatabase } from "../../interfaces/knowledge";
 /**
  * Smart Hybrid Retrieval Step for Knowledge RAG
  *
@@ -13,19 +14,22 @@
  * 7. Post-Expansion - Connect standalone nodes and edges
  */
 
-import { logInfo, logError } from "@/utils/logger";
-import { vectorSearchNodes, vectorSearchEdges } from "@/utils/vector-search";
+import { logInfo, logError } from "../../interfaces/logger";
+import {
+	vectorSearchNodes,
+	vectorSearchEdges,
+} from "../../utils/vector-search";
 import { and, or, inArray } from "drizzle-orm";
-import { getScopedGraphWhere } from "@/utils/scoped-graph-query";
-import type { Node, Edge } from "@/services/database/types";
+import { getScopedGraphWhere } from "../../utils/graph-query";
+import type { Node, Edge } from "../../interfaces/knowledge";
 
-import { defineStep, bindStep } from "@/services/flows/interfaces/step";
+import { defineStep, bindStep } from "../../interfaces/step";
 import type {
 	StepFactoryFromSpec,
 	StepSpecFromDefinition,
-} from "@/services/flows/interfaces/step";
-import { stepRegistry } from "@/services/flows/step-registry";
-import type { AllServices } from "@/services/flows/interfaces/tool";
+} from "../../interfaces/step";
+import { stepRegistry } from "../../step-registry";
+import type { AllServices } from "../../interfaces/tool";
 
 const STEP_NAME = "smart-retrieve" as const;
 
@@ -285,7 +289,7 @@ function toEnhancedNode(
 ): EnhancedNode {
 	return {
 		id: node.id,
-		nodeType: node.nodeType,
+		nodeType: node.nodeType ?? "",
 		name: node.name,
 		summary: node.summary ?? "",
 		attributes: (node.attributes as Record<string, unknown>) ?? {},
@@ -731,8 +735,11 @@ const definition = defineStep<
 
 				const nodeIds = currentLevelNodes.map((n) => n.id);
 
-				const expansionResult = await database.use(async ({ db, schema }) => {
-					const connectedEdges = await db
+				const expansionResult = await getKnowledgeDatabase(database).query<{
+					connectedEdges: Edge[];
+					connectedNodes: Node[];
+				}>(async ({ db, schema }) => {
+					const connectedEdges: Edge[] = await db
 						.select()
 						.from(schema.edges)
 						.where(
@@ -932,8 +939,11 @@ const definition = defineStep<
 
 					if (standaloneNodeIds.length === 0) break;
 
-					const expansionResult = await database.use(async ({ db, schema }) => {
-						const connectedEdges = await db
+					const expansionResult = await getKnowledgeDatabase(database).query<{
+						connectedEdges: Edge[];
+						missingNodes: Node[];
+					}>(async ({ db, schema }) => {
+						const connectedEdges: Edge[] = await db
 							.select()
 							.from(schema.edges)
 							.where(

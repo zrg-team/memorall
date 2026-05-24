@@ -1,4 +1,33 @@
-import type { DocumentTreeNode } from "@/types/document-library";
+import { makeRe, minimatch } from "minimatch";
+import type { IFlowFileSystem } from "../../interfaces/filesystem";
+
+export interface FsEntry {
+	name: string;
+	path: string;
+	type: "file" | "folder";
+	size?: number;
+}
+
+export interface GrepFileNode {
+	path: string;
+	displayPath: string;
+}
+
+export type GrepOutputMode = "content" | "files_with_matches" | "count";
+
+export interface GrepOptions {
+	pattern: string;
+	targetPath: string;
+	glob?: string;
+	caseSensitive?: boolean;
+	context?: number;
+	maxResults?: number;
+	outputMode?: GrepOutputMode;
+}
+
+export type ResolvedGrepOptions = Omit<Required<GrepOptions>, "glob"> & {
+	glob?: string;
+};
 
 /**
  * Normalize a logical document path (same rules as the documents/ util,
@@ -23,47 +52,26 @@ export function normalizeFsPath(inputPath: string): string {
 	return normalized;
 }
 
-/** Flatten the recursive document tree into a single list of nodes. */
-export function flattenTree(nodes: DocumentTreeNode[]): DocumentTreeNode[] {
-	const result: DocumentTreeNode[] = [];
-	for (const node of nodes) {
-		result.push(node);
-		if (node.children?.length) {
-			result.push(...flattenTree(node.children));
-		}
-	}
-	return result;
-}
+const REGEX_SPECIAL_CHARS = /[\\^$.*+?()[\]{}|]/g;
+
+const escapeRegex = (value: string): string =>
+	value.replace(REGEX_SPECIAL_CHARS, "\\$&");
 
 /**
- * Convert a glob pattern to a RegExp.
- * - `**` matches any path segment including `/`
- * - `*`  matches any character except `/`
- * - `?`  matches any single character except `/`
+ * Match with minimatch semantics so tool behavior stays aligned with common
+ * npm glob APIs instead of a partial hand-rolled glob parser.
  */
-export function globToRegex(pattern: string): RegExp {
-	const specialChars = /[.+^${}()|[\]\\]/g;
-	let regexStr = "";
-	let i = 0;
-	while (i < pattern.length) {
-		const ch = pattern[i];
-		if (ch === "*" && pattern[i + 1] === "*") {
-			regexStr += ".*";
-			i += 2;
-			if (pattern[i] === "/") i++;
-		} else if (ch === "*") {
-			regexStr += "[^/]*";
-			i++;
-		} else if (ch === "?") {
-			regexStr += "[^/]";
-			i++;
-		} else {
-			regexStr += ch.replace(specialChars, "\\$&");
-			i++;
-		}
-	}
-	return new RegExp(`^${regexStr}$`, "i");
+export function globMatches(pattern: string, value: string): boolean {
+	return minimatch(value, pattern);
 }
+
+export function globToRegex(pattern: string): RegExp {
+	const regex = makeRe(pattern);
+	return regex === false ? /^$/ : regex;
+}
+
+export const literalToRegex = (value: string, flags: string): RegExp =>
+	new RegExp(escapeRegex(value), flags);
 
 export function formatFileSize(bytes: number): string {
 	if (bytes < 1024) return `${bytes} B`;
@@ -81,6 +89,7 @@ export function isInScope(nodePath: string, scopePath: string): boolean {
 
 export const WORKSPACE_PREFIX = "/workspaces";
 const DOCUMENTS_PREFIX = "/documents";
+const WORKSPACE_FS_ROOT = "/home/workspace";
 
 /** True when path addresses the workspace namespace (/workspaces or /workspaces/...). */
 export function isWorkspacePath(path: string): boolean {
@@ -108,7 +117,7 @@ export function wsDisplayToLogicalPath(displayPath: string): string {
 }
 
 /**
- * Strip /documents prefix from a document path so it can be used with dfs.getTree().
+ * Strip /documents prefix so callers can address either namespace form.
  *   /documents/notes/todo.md → /notes/todo.md
  *   /documents               → /
  *   /notes/todo.md           → /notes/todo.md  (bare path, unchanged)
@@ -118,4 +127,247 @@ export function stripDocumentsPrefix(path: string): string {
 	if (path.startsWith(DOCUMENTS_PREFIX + "/"))
 		return path.slice(DOCUMENTS_PREFIX.length);
 	return path;
+}
+
+export function displayPathToFsPath(path: string): string {
+	const normalized = normalizeFsPath(path);
+	if (isWorkspacePath(normalized)) {
+		const logical = wsDisplayToLogicalPath(normalized);
+		return logical === "/"
+			? WORKSPACE_FS_ROOT
+			: `${WORKSPACE_FS_ROOT}${logical}`;
+	}
+	return stripDocumentsPrefix(normalized);
+}
+
+export async function pathExists(
+	fs: IFlowFileSystem,
+	path: string,
+): Promise<boolean> {
+	try {
+		await fs.access(displayPathToFsPath(path));
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+export async function ensureParentDir(
+	fs: IFlowFileSystem,
+	filePath: string,
+): Promise<void> {
+	const fsPath = displayPathToFsPath(filePath);
+	const slash = fsPath.lastIndexOf("/");
+	const parent = slash > 0 ? fsPath.slice(0, slash) : "/";
+	await fs.mkdir(parent, { recursive: true });
+}
+
+export async function readFileBytes(
+	fs: IFlowFileSystem,
+	path: string,
+): Promise<Uint8Array> {
+	return fs.readFile(displayPathToFsPath(path));
+}
+
+export async function writeFileBytes(
+	fs: IFlowFileSystem,
+	path: string,
+	data: string | Uint8Array,
+	createDirs = true,
+): Promise<void> {
+	if (createDirs) {
+		await ensureParentDir(fs, path);
+	}
+	await fs.writeFile(displayPathToFsPath(path), data);
+}
+
+export async function mkdirPath(
+	fs: IFlowFileSystem,
+	path: string,
+	recursive = true,
+): Promise<void> {
+	await fs.mkdir(displayPathToFsPath(path), { recursive });
+}
+
+export async function removePath(
+	fs: IFlowFileSystem,
+	path: string,
+	recursive = false,
+): Promise<void> {
+	await fs.rm(displayPathToFsPath(path), { recursive, force: false });
+}
+
+export async function listEntries(
+	fs: IFlowFileSystem,
+	dirPath: string,
+	recursive = false,
+): Promise<FsEntry[]> {
+	const displayRoot = normalizeFsPath(dirPath);
+	const fsRoot = displayPathToFsPath(displayRoot);
+	const entries: FsEntry[] = [];
+
+	const visit = async (currentFsPath: string, currentDisplayPath: string) => {
+		const dirents = await fs.readdir(currentFsPath, { withFileTypes: true });
+		for (const dirent of dirents) {
+			const childFsPath =
+				currentFsPath === "/"
+					? `/${dirent.name}`
+					: `${currentFsPath}/${dirent.name}`;
+			const childDisplayPath =
+				currentDisplayPath === "/"
+					? `/${dirent.name}`
+					: `${currentDisplayPath}/${dirent.name}`;
+			const isDirectory = dirent.isDirectory();
+			const entry: FsEntry = {
+				name: dirent.name,
+				path: childDisplayPath,
+				type: isDirectory ? "folder" : "file",
+			};
+			if (!isDirectory) {
+				try {
+					entry.size = (await fs.stat(childFsPath)).size;
+				} catch {
+					// Size is optional; listing should still work if stat is unavailable.
+				}
+			}
+			entries.push(entry);
+			if (recursive && isDirectory) {
+				await visit(childFsPath, childDisplayPath);
+			}
+		}
+	};
+
+	await visit(fsRoot, displayRoot);
+	return entries;
+}
+
+export async function collectGrepFileNodes(
+	fs: IFlowFileSystem,
+	targetPath: string,
+	glob?: string,
+): Promise<GrepFileNode[]> {
+	let entries = await listEntries(fs, targetPath, true).catch(() => []);
+	if (entries.length === 0) {
+		try {
+			const stat = await fs.stat(displayPathToFsPath(targetPath));
+			if (stat.isFile()) {
+				entries = [
+					{
+						name: targetPath.split("/").pop() ?? targetPath,
+						path: targetPath,
+						type: "file",
+						size: stat.size,
+					},
+				];
+			}
+		} catch {
+			// Keep empty entries; caller will report no files found.
+		}
+	}
+
+	return entries
+		.filter((entry) => {
+			if (entry.type !== "file") return false;
+			if (glob) {
+				const rel =
+					targetPath === "/"
+						? entry.path.slice(1)
+						: entry.path.slice(targetPath.length + 1);
+				const testStr = glob?.includes("/") ? rel : entry.name;
+				if (!globMatches(glob, testStr)) return false;
+			}
+			return true;
+		})
+		.map((entry) => ({ path: entry.path, displayPath: entry.path }));
+}
+
+export async function runGrep(
+	fileNodes: GrepFileNode[],
+	readFile: (displayPath: string) => Promise<Uint8Array>,
+	options: ResolvedGrepOptions,
+): Promise<string> {
+	let contentRegex: RegExp;
+	const flags = options.caseSensitive ? "g" : "gi";
+	try {
+		contentRegex = new RegExp(options.pattern, flags);
+	} catch {
+		contentRegex = literalToRegex(options.pattern, flags);
+	}
+
+	const outputLines: string[] = [];
+	let totalMatches = 0;
+	let filesWithMatches = 0;
+
+	for (const node of fileNodes) {
+		if (totalMatches >= options.maxResults) break;
+
+		let text: string;
+		try {
+			const raw = await readFile(node.displayPath);
+			text = new TextDecoder("utf-8", { fatal: false }).decode(raw);
+		} catch {
+			continue;
+		}
+
+		const lines = text.split(/\r?\n/);
+		const matchingLineNums: number[] = [];
+
+		for (let i = 0; i < lines.length; i++) {
+			contentRegex.lastIndex = 0;
+			if (contentRegex.test(lines[i])) {
+				matchingLineNums.push(i);
+			}
+		}
+
+		if (matchingLineNums.length === 0) continue;
+
+		filesWithMatches++;
+
+		if (options.outputMode === "files_with_matches") {
+			outputLines.push(node.displayPath);
+			totalMatches++;
+			continue;
+		}
+
+		if (options.outputMode === "count") {
+			outputLines.push(`${node.displayPath}:${matchingLineNums.length}`);
+			totalMatches++;
+			continue;
+		}
+
+		const emitted = new Set<number>();
+		let previousEnd = -1;
+		for (const matchLine of matchingLineNums) {
+			if (totalMatches >= options.maxResults) break;
+			const start = Math.max(0, matchLine - options.context);
+			const end = Math.min(lines.length - 1, matchLine + options.context);
+
+			if (options.context > 0 && previousEnd >= 0 && start > previousEnd + 1) {
+				outputLines.push("--");
+			}
+
+			for (let lineIndex = start; lineIndex <= end; lineIndex++) {
+				if (emitted.has(lineIndex)) continue;
+				emitted.add(lineIndex);
+				const sep = lineIndex === matchLine ? ":" : "-";
+				outputLines.push(
+					`${node.displayPath}:${lineIndex + 1}${sep}${lines[lineIndex]}`,
+				);
+			}
+
+			previousEnd = Math.max(previousEnd, end);
+			totalMatches++;
+		}
+	}
+
+	if (outputLines.length === 0) {
+		return `No matches found for "${options.pattern}"${options.glob ? ` in files matching "${options.glob}"` : ""} under "${options.targetPath}"`;
+	}
+
+	const summary =
+		options.outputMode === "content"
+			? `\n\n${totalMatches} match${totalMatches !== 1 ? "es" : ""} in ${filesWithMatches} file${filesWithMatches !== 1 ? "s" : ""}`
+			: "";
+
+	return `${outputLines.join("\n")}${summary}`;
 }

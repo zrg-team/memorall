@@ -1,14 +1,14 @@
-import { logInfo, logError } from "@/utils/logger";
-import { mapRefine } from "@/utils/map-refine";
+import { logInfo, logError } from "../../../interfaces/logger";
+import { mapRefine } from "../../../utils/map-refine";
 
-import { defineStep, bindStep } from "@/services/flows/interfaces/step";
+import { defineStep, bindStep } from "../../../interfaces/step";
 import type {
 	StepFactoryFromSpec,
 	StepSpecFromDefinition,
-} from "@/services/flows/interfaces/step";
-import { stepRegistry } from "@/services/flows/step-registry";
-import type { AllServices } from "@/services/flows/interfaces/tool";
-import { UuidMapper } from "@/services/flows/utils/uuid-mapping";
+} from "../../../interfaces/step";
+import { stepRegistry } from "../../../step-registry";
+import type { AllServices } from "../../../interfaces/tool";
+import { UuidMapper } from "../../../utils/uuid-mapping";
 
 const STEP_NAME = "entity-resolution" as const;
 

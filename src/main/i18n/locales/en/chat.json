@@ -316,5 +316,13 @@
 		"revert": "Revert",
 		"resetDefaults": "Reset to Defaults",
 		"resetConfirm": "This will reset all agent settings to their default values. Your current draft will be replaced."
+	},
+	"openui": {
+		"rendering": "Rendering visual response",
+		"copied": "Copied",
+		"renderFailed": {
+			"title": "Unable to render visual response.",
+			"description": "The generated OpenUI markup is invalid. The original response is shown below."
+		}
 	}
 }

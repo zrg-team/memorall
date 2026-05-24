@@ -119,6 +119,7 @@
     "marked": "^17.0.1",
     "mediabunny": "^1.45.2",
     "mermaid": "^11.11.0",
+    "minimatch": "^10.1.2",
     "motion": "^12.23.22",
     "nanoid": "^5.1.5",
     "openai": "^5.20.2",

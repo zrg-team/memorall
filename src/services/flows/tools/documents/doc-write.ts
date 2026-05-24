@@ -1,12 +1,8 @@
 import z from "zod";
-import type {
-	Tool,
-	ToolFactory,
-	AllServices,
-} from "@/services/flows/interfaces/tool";
-import { toolRegistry } from "@/services/flows/tool-registry";
-import type { DocumentTreeNode } from "@/types/document-library";
+import type { Tool, ToolFactory, AllServices } from "../../interfaces/tool";
+import { toolRegistry } from "../../tool-registry";
 import { normalizeDocumentPath } from "./util";
+import { pathExists, writeFileBytes } from "../fs/util";
 
 const TOOL_NAME = "doc_write" as const;
 
@@ -20,18 +16,7 @@ const schema = z.object({
 });
 
 type Input = z.infer<typeof schema>;
-type Services = Pick<AllServices, "documentFileSystem">;
-
-function flattenTree(nodes: DocumentTreeNode[]): DocumentTreeNode[] {
-	const result: DocumentTreeNode[] = [];
-	for (const node of nodes) {
-		result.push(node);
-		if (node.children?.length) {
-			result.push(...flattenTree(node.children));
-		}
-	}
-	return result;
-}
+type Services = Pick<AllServices, "fs">;
 
 export const createDocWriteTool: ToolFactory<Input, Services> = (
 	services,
@@ -44,15 +29,10 @@ export const createDocWriteTool: ToolFactory<Input, Services> = (
 		const { file_path, content, create_folders = true } = input;
 		const filePath = normalizeDocumentPath(file_path);
 
-		const dfs = services.documentFileSystem;
+		const dfs = services.fs;
 		if (!dfs) {
 			return "Documents not existe.";
 		}
-		const tree = await dfs.getTree();
-		const allNodes = flattenTree(tree);
-		const existingNode = allNodes.find(
-			(n) => n.path === filePath && n.type === "file",
-		);
 
 		const lowerPath = filePath.toLowerCase();
 		const isPdfPath = lowerPath.endsWith(".pdf");
@@ -60,17 +40,6 @@ export const createDocWriteTool: ToolFactory<Input, Services> = (
 			lowerPath.endsWith(".xls") ||
 			lowerPath.endsWith(".xlsx") ||
 			lowerPath.endsWith(".xlsm");
-
-		if (existingNode) {
-			const fileType = existingNode.file?.type;
-			if (fileType === "pdf" || fileType === "excel") {
-				return `Error: Writing ${fileType.toUpperCase()} files is not supported yet: ${file_path}`;
-			}
-			// Update existing file
-			const encoded = new TextEncoder().encode(content);
-			await dfs.updateFileContent(filePath, encoded);
-			return `Updated file: ${filePath} (${content.length} characters)`;
-		}
 
 		if (isPdfPath || isExcelPath) {
 			return `Error: Writing PDF/Excel files is not supported yet: ${file_path}`;
@@ -85,27 +54,10 @@ export const createDocWriteTool: ToolFactory<Input, Services> = (
 			return "Error: Invalid file path - no filename provided";
 		}
 
-		// Create parent folders if needed
-		if (create_folders && parentPath !== "/") {
-			const segments = parentPath.split("/").filter(Boolean);
-			let currentPath = "/";
-			for (const segment of segments) {
-				const folderPath =
-					currentPath === "/" ? `/${segment}` : `${currentPath}/${segment}`;
-				const folderExists = allNodes.some(
-					(n) => n.path === folderPath && n.type === "folder",
-				);
-				if (!folderExists) {
-					await dfs.createFolder(segment, currentPath);
-				}
-				currentPath = folderPath;
-			}
-		}
+		const existed = await pathExists(dfs, filePath);
+		await writeFileBytes(dfs, filePath, content, create_folders);
 
-		const file = new File([content], fileName, { type: "text/plain" });
-		await dfs.uploadFile(file, parentPath);
-
-		return `Created file: ${filePath} (${content.length} characters)`;
+		return `${existed ? "Updated" : "Created"} file: ${filePath} (${content.length} characters)`;
 	},
 });
 

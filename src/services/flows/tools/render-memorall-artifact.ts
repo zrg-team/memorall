@@ -1,11 +1,10 @@
 import z from "zod";
-import type { Tool, ToolFactory } from "@/services/flows/interfaces/tool";
-import { toolRegistry } from "@/services/flows/tool-registry";
+import type { AllServices, Tool, ToolFactory } from "../interfaces/tool";
+import { toolRegistry } from "../tool-registry";
 import {
 	appendAssistantOutputToState,
 	type BaseStateBase,
-} from "@/services/flows/graph/graph.base";
-import { documentFileSystemService } from "@/services/filesystem/document-filesystem";
+} from "../graph/graph.base";
 import { preprocessComposition } from "./hyperframes/composition-preprocessor";
 
 const TOOL_NAME = "render_memorall_artifact" as const;
@@ -24,6 +23,7 @@ const schema = z.object({
 });
 
 type Input = z.infer<typeof schema>;
+type Services = Pick<AllServices, "fs">;
 
 const escapeAttribute = (value: string): string =>
 	value
@@ -72,23 +72,26 @@ const buildArtifactMessageContent = ({
 	return `\n\n<artifact${identifierAttr}${typeAttr}${titleAttr}>${content}</artifact>\n\n`;
 };
 
-const preprocessArtifactContent = async (input: Input): Promise<Input> => {
+const preprocessArtifactContent = async (
+	input: Input,
+	services: Services,
+): Promise<Input> => {
 	if (toStandardArtifactType(input.type) !== "application/hyperframes") {
 		return input;
+	}
+	if (!services.fs) {
+		throw new Error("Filesystem service is not available.");
 	}
 
 	return {
 		...input,
-		content: await preprocessComposition(
-			input.content,
-			documentFileSystemService,
-		),
+		content: await preprocessComposition(input.content, services.fs),
 	};
 };
 
-export const createRenderMemorallArtifactTool: ToolFactory<
-	Input
-> = (): Tool<Input> => ({
+export const createRenderMemorallArtifactTool: ToolFactory<Input, Services> = (
+	services,
+): Tool<Input> => ({
 	name: TOOL_NAME,
 	description:
 		"Append a standard artifact to the graph output as an assistant message. The tool result is only a normal OpenAI tool message; the artifact itself is added to graph state.",
@@ -98,7 +101,7 @@ export const createRenderMemorallArtifactTool: ToolFactory<
 			return "Artifact was not rendered because graph state context is unavailable.";
 		}
 
-		const artifact = await preprocessArtifactContent(input);
+		const artifact = await preprocessArtifactContent(input, services);
 
 		appendAssistantOutputToState(
 			context.state as BaseStateBase,
@@ -120,7 +123,7 @@ declare global {
 	interface ToolTypeRegistry {
 		[TOOL_NAME]: {
 			input: Input;
-			services: undefined;
+			services: Services;
 		};
 	}
 }

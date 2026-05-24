@@ -7,7 +7,7 @@ import type {
 	ToolResultValue,
 } from "./interfaces/tool";
 import { isJsonToolSchema, parseToolInput } from "./interfaces/tool";
-import type { ChatCompletionTool } from "@/types/openai";
+import type { ChatCompletionTool } from "./interfaces/messages";
 
 // Global tool type registry for smart type inference
 // Tool modules extend this interface to register their tool types and required services

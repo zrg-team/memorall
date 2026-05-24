@@ -1,12 +1,12 @@
 import z from "zod";
-import type { Tool, ToolFactory } from "@/services/flows/interfaces/tool";
-import { toolRegistry } from "@/services/flows/tool-registry";
+import type { Tool, ToolFactory } from "../../interfaces/tool";
+import { toolRegistry } from "../../tool-registry";
 import {
 	CO_AGENT_CONTENT_COMMAND_SOURCE,
 	type CoAgentContentCommandResponse,
 	type CoAgentElementInfo,
 } from "@/services/co-agent";
-import { createCleanHtmlWithSelectors } from "@/services/flows/tools/web/web-tool-utils";
+import { createCleanHtmlWithSelectors } from "../web/web-tool-utils";
 import {
 	createDefaultErrorResult,
 	normalizeIndex,

@@ -1,15 +1,11 @@
 import z from "zod";
-import type {
-	Tool,
-	ToolFactory,
-	AllServices,
-} from "@/services/flows/interfaces/tool";
-import { toolRegistry } from "@/services/flows/tool-registry";
-import type { DocumentTreeNode } from "@/types/document-library";
+import type { Tool, ToolFactory, AllServices } from "../../interfaces/tool";
+import { toolRegistry } from "../../tool-registry";
 import { readPDFFile } from "@/main/modules/documents/handlers/pdf-extraction";
 import { formatPDFAsText, formatPDFAsMarkdown } from "@/lib/pdf-utils";
 import { normalizeDocumentPath } from "./util";
-import { ensureFolderExists } from "@/services/filesystem/document-fs-utils";
+import { ensureFolderExists } from "../../utils/document-fs-utils";
+import { pathExists, readFileBytes, writeFileBytes } from "../fs/util";
 
 const TOOL_NAME = "pdf_to_text" as const;
 
@@ -39,16 +35,7 @@ const schema = z.object({
 });
 
 type Input = z.infer<typeof schema>;
-type Services = Pick<AllServices, "documentFileSystem">;
-
-function flattenTree(nodes: DocumentTreeNode[]): DocumentTreeNode[] {
-	const result: DocumentTreeNode[] = [];
-	for (const node of nodes) {
-		result.push(node);
-		if (node.children?.length) result.push(...flattenTree(node.children));
-	}
-	return result;
-}
+type Services = Pick<AllServices, "fs">;
 
 function toArrayBuffer(content: Uint8Array): ArrayBuffer {
 	if (content.buffer instanceof ArrayBuffer) {
@@ -70,7 +57,7 @@ export const createPdfToTextTool: ToolFactory<Input, Services> = (
 		"Extract text from a PDF file in /documents and return it or save it to a new file. Supports plain text or Markdown output and optional page range extraction.",
 	schema,
 	execute: async (input) => {
-		const dfs = services.documentFileSystem;
+		const dfs = services.fs;
 		if (!dfs) {
 			return "PDF text extraction error: Document filesystem service is not available.";
 		}
@@ -81,17 +68,11 @@ export const createPdfToTextTool: ToolFactory<Input, Services> = (
 		}
 
 		try {
-			const tree = await dfs.getTree();
-			const allNodes = flattenTree(tree);
-			const node = allNodes.find(
-				(n) => n.path === sourcePath && n.type === "file",
-			);
-
-			if (!node || !node.file) {
+			if (!(await pathExists(dfs, sourcePath))) {
 				return `PDF text extraction error: File not found: ${input.source_path}`;
 			}
 
-			const content = await dfs.getFileContent(sourcePath);
+			const content = await readFileBytes(dfs, sourcePath);
 			const pdfData = await readPDFFile(toArrayBuffer(content));
 
 			const fmt = input.format ?? "text";
@@ -140,18 +121,7 @@ export const createPdfToTextTool: ToolFactory<Input, Services> = (
 			}
 
 			await ensureFolderExists(dfs, parentPath);
-
-			const existingNode = allNodes.find(
-				(n) => n.path === outputPath && n.type === "file",
-			);
-			if (existingNode) {
-				const encoded = new TextEncoder().encode(extractedText);
-				await dfs.updateFileContent(outputPath, encoded);
-			} else {
-				const mimeType = fmt === "markdown" ? "text/markdown" : "text/plain";
-				const file = new File([extractedText], fileName, { type: mimeType });
-				await dfs.uploadFile(file, parentPath);
-			}
+			await writeFileBytes(dfs, outputPath, extractedText);
 
 			return [
 				"PDF text extraction saved",

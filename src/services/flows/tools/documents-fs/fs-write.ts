@@ -1,11 +1,7 @@
 import z from "zod";
-import type {
-	Tool,
-	ToolFactory,
-	AllServices,
-} from "@/services/flows/interfaces/tool";
-import { toolRegistry } from "@/services/flows/tool-registry";
-import { normalizeFsPath, flattenTree } from "./util";
+import type { Tool, ToolFactory, AllServices } from "../../interfaces/tool";
+import { toolRegistry } from "../../tool-registry";
+import { normalizeFsPath, pathExists, writeFileBytes } from "./util";
 
 const TOOL_NAME = "document_fs_write" as const;
 
@@ -21,7 +17,7 @@ const schema = z.object({
 });
 
 type Input = z.infer<typeof schema>;
-type Services = Pick<AllServices, "documentFileSystem">;
+type Services = Pick<AllServices, "fs">;
 
 export const createFsWriteTool: ToolFactory<Input, Services> = (
 	services,
@@ -33,52 +29,19 @@ export const createFsWriteTool: ToolFactory<Input, Services> = (
 	execute: async (input) => {
 		const { file_path, content, create_dirs = true } = input;
 
-		const dfs = services.documentFileSystem;
-		if (!dfs) return "Error: documentFileSystem service not available.";
+		const dfs = services.fs;
+		if (!dfs) return "Error: fs service not available.";
 
 		const filePath = normalizeFsPath(file_path);
-		const lastSlash = filePath.lastIndexOf("/");
-		const parentPath = lastSlash > 0 ? filePath.slice(0, lastSlash) : "/";
-		const fileName = filePath.slice(lastSlash + 1);
 
-		if (!fileName) {
+		if (filePath.endsWith("/")) {
 			return `Error: Invalid file path — no filename provided: ${file_path}`;
 		}
 
-		const tree = await dfs.getTree();
-		const allNodes = flattenTree(tree);
-		const existingNode = allNodes.find(
-			(n) => n.path === filePath && n.type === "file",
-		);
+		const existed = await pathExists(dfs, filePath);
+		await writeFileBytes(dfs, filePath, content, create_dirs);
 
-		const encoded = new TextEncoder().encode(content);
-
-		if (existingNode) {
-			await dfs.updateFileContent(filePath, encoded);
-			return `Updated file: ${filePath} (${content.length} characters)`;
-		}
-
-		// Create parent folders if needed
-		if (create_dirs && parentPath !== "/") {
-			const segments = parentPath.split("/").filter(Boolean);
-			let currentPath = "/";
-			for (const segment of segments) {
-				const folderPath =
-					currentPath === "/" ? `/${segment}` : `${currentPath}/${segment}`;
-				const folderExists = allNodes.some(
-					(n) => n.path === folderPath && n.type === "folder",
-				);
-				if (!folderExists) {
-					await dfs.createFolder(segment, currentPath);
-				}
-				currentPath = folderPath;
-			}
-		}
-
-		const file = new File([content], fileName, { type: "text/plain" });
-		await dfs.uploadFile(file, parentPath);
-
-		return `Created file: ${filePath} (${content.length} characters)`;
+		return `${existed ? "Updated" : "Created"} file: ${filePath} (${content.length} characters)`;
 	},
 });
 

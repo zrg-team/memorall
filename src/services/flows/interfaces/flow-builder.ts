@@ -1,12 +1,70 @@
-import type {
-	Flow,
-	FlowState,
-	FlowStep,
-	FlowConnection,
-	FlowService,
-	FlowConfig,
-} from "@/services/database/types";
 import type { CatalogService, CatalogStep } from "../flow-builder-catalog";
+
+export interface Flow {
+	id: string;
+	name: string;
+	description: string | null;
+	status: string;
+	predefinedFlow: string | null;
+	serviceKeys: string[];
+	metadata: Record<string, unknown> | null;
+	createdAt: Date;
+	updatedAt: Date;
+}
+
+export interface FlowState {
+	id: string;
+	flowId: string;
+	name: string;
+	type: string;
+	metadata: Record<string, unknown> | null;
+	createdAt: Date;
+	updatedAt: Date;
+}
+
+export interface FlowStep {
+	id: string;
+	flowId: string;
+	catalogStepId?: string | null;
+	name: string;
+	type: string;
+	isStart: boolean;
+	isEnd: boolean;
+	metadata: Record<string, unknown> | null;
+	createdAt: Date;
+	updatedAt: Date;
+}
+
+export interface FlowConnection {
+	id: string;
+	flowId: string;
+	sourceStepId: string;
+	targetStepId: string;
+	metadata: Record<string, unknown> | null;
+	createdAt: Date;
+	updatedAt: Date;
+}
+
+export interface FlowService {
+	id?: string;
+	flowId: string;
+	name: string;
+	type: string;
+	serviceKey: string;
+	metadata: Record<string, unknown> | null;
+	createdAt?: Date;
+	updatedAt?: Date;
+}
+
+export interface FlowConfig {
+	id: string;
+	flowId: string;
+	name: string;
+	value: unknown;
+	type: string;
+	createdAt: Date;
+	updatedAt: Date;
+}
 
 export interface FlowLayoutNode {
 	stepId: string;

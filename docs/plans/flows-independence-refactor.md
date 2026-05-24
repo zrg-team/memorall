@@ -62,7 +62,7 @@ No registration via import side-effects. Every feature, step, tool, and graph de
 
 ## Current Flow Architecture
 
-`src/services/flows` is a complete **agent harness**. The model is a pluggable component (`IFlowLLMService`). The harness manages everything else: execution loop, tool dispatch, memory, context engineering, lifecycle hooks, and extensibility.
+`src/services/flows` is a complete **Flow Harness**. The model is a pluggable component (`IFlowLLMService`). The harness manages everything else: execution loop, tool dispatch, memory, context engineering, lifecycle hooks, and extensibility.
 
 ---
 
@@ -160,7 +160,7 @@ The model contributes reasoning and generation. The harness contributes all stru
 │  llm              ILLMService         model calls               │
 │  embedding        IEmbeddingService   vector search             │
 │  database         IDatabaseService    knowledge + flow storage  │
-│  documentFileSystem  DocumentFileSystem  file R/W               │
+│  fs               IFlowFileSystem     file R/W                  │
 │  webBrowser       IWebBrowserService  web tools                 │
 │  sandboxContainer ISandboxContainerService  code execution      │
 └─────────────────────────────────────────────────────────────────┘
@@ -747,7 +747,7 @@ export interface AllServices {
   logger: IFlowLogger;
   sandboxContainer?: IFlowSandboxService;
   webBrowser?: IFlowWebBrowserService;
-  documentFileSystem?: IFlowFileSystem;
+  fs?: IFlowFileSystem;
   documentProcessor?: IDocumentProcessor;
 }
 

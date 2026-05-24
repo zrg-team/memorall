@@ -127,7 +127,8 @@ export const FeatureCard: React.FC<FeatureCardProps> = ({
 	const { t } = useTranslation("chat");
 	const accent = getFeatureAccent(feature);
 	const legacy = Boolean(feature.legacy);
-	const showToolsBadge = toolCount !== undefined && totalToolCount !== undefined;
+	const showToolsBadge =
+		toolCount !== undefined && totalToolCount !== undefined;
 	const showDetailBtn = hasDetail;
 
 	return (
@@ -143,7 +144,8 @@ export const FeatureCard: React.FC<FeatureCardProps> = ({
 				enabled && !legacy
 					? "bg-[linear-gradient(135deg,color-mix(in_srgb,var(--feature-accent)_10%,transparent),transparent_55%)]"
 					: "border-border/30 bg-card/50",
-				legacy && "opacity-50 cursor-not-allowed pointer-events-none select-none",
+				legacy &&
+					"opacity-50 cursor-not-allowed pointer-events-none select-none",
 			)}
 		>
 			{/* Header row: icon + name/desc + toggle */}
@@ -195,7 +197,10 @@ export const FeatureCard: React.FC<FeatureCardProps> = ({
 			{/* Footer row: badge + detail */}
 			<div className="flex items-center justify-between gap-2">
 				{legacy ? (
-					<Badge variant="outline" className="text-[10px] text-muted-foreground">
+					<Badge
+						variant="outline"
+						className="text-[10px] text-muted-foreground"
+					>
 						Deprecated
 					</Badge>
 				) : showToolsBadge ? (

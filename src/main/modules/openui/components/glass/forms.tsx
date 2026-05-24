@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useMemo } from "react";
 import {
 	FormNameContext,
 	defineComponent,
@@ -9,12 +9,73 @@ import {
 	useSetFieldValue,
 } from "@openuidev/react-lang";
 import { z } from "zod";
+import { OPENUI_FORM_FIELD_METADATA_KEY } from "@/main/modules/openui/actions";
 
 const fieldId = (formName: string | undefined, name: string) =>
 	`openui-glass-${formName ?? "form"}-${name}`;
 
 const inputClass =
 	"w-full rounded-lg border border-white/20 bg-white/10 px-3 py-2 text-sm outline-none placeholder:text-foreground/30 backdrop-blur-sm transition-colors focus:border-white/40 focus:bg-white/15 disabled:opacity-50";
+
+type FieldMetadata = { label: string; options?: Record<string, string> };
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+	typeof value === "object" && value !== null && !Array.isArray(value);
+
+const sameOptions = (
+	left: Record<string, string> | undefined,
+	right: Record<string, string> | undefined,
+) => JSON.stringify(left ?? {}) === JSON.stringify(right ?? {});
+
+const useRegisterFieldMetadata = ({
+	formName,
+	name,
+	label,
+	options,
+}: {
+	formName: string | undefined;
+	name: string;
+	label: string;
+	options?: Record<string, string>;
+}) => {
+	const isStreaming = useIsStreaming();
+	const getFieldValue = useGetFieldValue();
+	const setFieldValue = useSetFieldValue();
+	const metadataValue = getFieldValue(formName, OPENUI_FORM_FIELD_METADATA_KEY);
+
+	useEffect(() => {
+		if (isStreaming) return;
+		const current = isRecord(metadataValue)
+			? (metadataValue as Record<string, FieldMetadata>)
+			: {};
+		const nextFieldMetadata: FieldMetadata = options
+			? { label, options }
+			: { label };
+		const currentFieldMetadata = current[name];
+		if (
+			currentFieldMetadata?.label === nextFieldMetadata.label &&
+			sameOptions(currentFieldMetadata.options, nextFieldMetadata.options)
+		) {
+			return;
+		}
+
+		setFieldValue(
+			formName,
+			"MemorallFormMetadata",
+			OPENUI_FORM_FIELD_METADATA_KEY,
+			{ ...current, [name]: nextFieldMetadata },
+			false,
+		);
+	}, [
+		formName,
+		isStreaming,
+		label,
+		metadataValue,
+		name,
+		options,
+		setFieldValue,
+	]);
+};
 
 export const FormBlock = defineComponent({
 	name: "FormBlock",
@@ -48,6 +109,11 @@ export const InputBlock = defineComponent({
 		const setFieldValue = useSetFieldValue();
 		const value =
 			getFieldValue(formName, props.name) ?? props.defaultValue ?? "";
+		useRegisterFieldMetadata({
+			formName,
+			name: props.name,
+			label: props.label,
+		});
 		useSetDefaultValue({
 			formName,
 			componentType: "InputBlock",
@@ -101,6 +167,19 @@ export const SelectBlock = defineComponent({
 		const getFieldValue = useGetFieldValue();
 		const setFieldValue = useSetFieldValue();
 		const value = getFieldValue(formName, props.name) ?? props.defaultValue;
+		const options = useMemo(
+			() =>
+				Object.fromEntries(
+					props.items.map((item) => [item.props.value, item.props.label]),
+				),
+			[props.items],
+		);
+		useRegisterFieldMetadata({
+			formName,
+			name: props.name,
+			label: props.label,
+			options,
+		});
 		useSetDefaultValue({
 			formName,
 			componentType: "SelectBlock",
@@ -147,6 +226,11 @@ export const SwitchBlock = defineComponent({
 		const existingValue = getFieldValue(formName, props.name);
 		const checked =
 			typeof existingValue === "boolean" ? existingValue : props.defaultChecked;
+		useRegisterFieldMetadata({
+			formName,
+			name: props.name,
+			label: props.label,
+		});
 		useSetDefaultValue({
 			formName,
 			componentType: "SwitchBlock",
@@ -191,6 +275,11 @@ export const CheckboxBlock = defineComponent({
 		const existingValue = getFieldValue(formName, props.name);
 		const checked =
 			typeof existingValue === "boolean" ? existingValue : props.defaultChecked;
+		useRegisterFieldMetadata({
+			formName,
+			name: props.name,
+			label: props.label,
+		});
 		useSetDefaultValue({
 			formName,
 			componentType: "CheckboxBlock",
@@ -243,6 +332,19 @@ export const RadioGroupBlock = defineComponent({
 		const setFieldValue = useSetFieldValue();
 		const value =
 			getFieldValue(formName, props.name) ?? props.defaultValue ?? "";
+		const options = useMemo(
+			() =>
+				Object.fromEntries(
+					props.items.map((item) => [item.props.value, item.props.label]),
+				),
+			[props.items],
+		);
+		useRegisterFieldMetadata({
+			formName,
+			name: props.name,
+			label: props.label,
+			options,
+		});
 		useSetDefaultValue({
 			formName,
 			componentType: "RadioGroupBlock",
@@ -300,6 +402,11 @@ export const TextareaBlock = defineComponent({
 		const setFieldValue = useSetFieldValue();
 		const value =
 			getFieldValue(formName, props.name) ?? props.defaultValue ?? "";
+		useRegisterFieldMetadata({
+			formName,
+			name: props.name,
+			label: props.label,
+		});
 		useSetDefaultValue({
 			formName,
 			componentType: "TextareaBlock",

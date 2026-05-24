@@ -1,7 +1,7 @@
 import z from "zod";
-import type { Tool, ToolFactory } from "@/services/flows/interfaces/tool";
-import type { WebDomElementInfo } from "@/services/web-browser";
-import { toolRegistry } from "@/services/flows/tool-registry";
+import type { Tool, ToolFactory } from "../../interfaces/tool";
+import type { WebDomElementInfo } from "../../interfaces/web-browser";
+import { toolRegistry } from "../../tool-registry";
 import {
 	createDefaultWebErrorResult,
 	createWebResult,
@@ -42,7 +42,7 @@ const schema = z.object({
 
 type Input = z.infer<typeof schema>;
 
-const isButtonLikeType = (value: string | null): boolean =>
+const isButtonLikeType = (value: string | null | undefined): boolean =>
 	["button", "submit", "reset", "checkbox", "radio", "image"].includes(
 		(value || "").toLowerCase(),
 	);
@@ -109,7 +109,7 @@ export const createWebDomActionTool: ToolFactory<Input, WebToolServices> = (
 					.sort(
 						(a, b) =>
 							getDomQueryPriority(b) - getDomQueryPriority(a) ||
-							a.index - b.index,
+							(a.index ?? 0) - (b.index ?? 0),
 					)
 					.map((record) => ({
 						index: record.index,

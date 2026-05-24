@@ -1,12 +1,12 @@
-import type { Node } from "@/services/database/entities/nodes";
-import type { IEmbeddingService } from "@/services/embedding/interfaces/embedding-service.interface";
-import type { ChatCompletionResponse } from "@/types/openai";
-import { getCurrentEmbeddingFields } from "@/utils/embedding-size-config";
-import { logError, logWarn } from "@/utils/logger";
+import type { Node } from "../../interfaces/knowledge";
+import type { IEmbeddingService } from "../../interfaces/embedding";
+import type { ChatCompletionResponse } from "../../interfaces/messages";
+import { getCurrentEmbeddingFields } from "../../utils/embedding-size-config";
+import { logError, logWarn } from "../../interfaces/logger";
 import type {
 	StructMemEntry,
 	StructMemEntryKind,
-} from "@/services/flows/graph/structmem/state";
+} from "../../graph/structmem/state";
 
 export interface StructMemNodeRow {
 	id: string;

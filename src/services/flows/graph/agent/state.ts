@@ -1,4 +1,4 @@
-import { Annotation } from "@langchain/langgraph/web";
+import { Annotation } from "@langchain/langgraph";
 import { BaseAnnotation, type BaseStateBase } from "../graph.base";
 
 export const DEFAULT_AGENT_SYSTEM_PROMPT =

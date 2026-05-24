@@ -1,8 +1,5 @@
-import { Annotation } from "@langchain/langgraph/web";
-import {
-	type BaseStateBase,
-	BaseAnnotation,
-} from "@/services/flows/graph/graph.base";
+import { Annotation } from "@langchain/langgraph";
+import { type BaseStateBase, BaseAnnotation } from "../graph.base";
 
 export const DEFAULT_FOUNDATION_SYSTEM_PROMPT = `
 # Role

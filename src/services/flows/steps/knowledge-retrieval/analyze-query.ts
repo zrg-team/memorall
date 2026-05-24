@@ -1,13 +1,16 @@
-import { logInfo, logError } from "@/utils/logger";
+import { logInfo, logError } from "../../interfaces/logger";
 
-import { defineStep, bindStep } from "@/services/flows/interfaces/step";
+import { defineStep, bindStep } from "../../interfaces/step";
 import type {
 	StepFactoryFromSpec,
 	StepSpecFromDefinition,
-} from "@/services/flows/interfaces/step";
-import { stepRegistry } from "@/services/flows/step-registry";
-import type { AllServices } from "@/services/flows/interfaces/tool";
-import type { ChatCompletionResponse, ChatMessage } from "@/types/openai";
+} from "../../interfaces/step";
+import { stepRegistry } from "../../step-registry";
+import type { AllServices } from "../../interfaces/tool";
+import type {
+	ChatCompletionResponse,
+	ChatMessage,
+} from "../../interfaces/messages";
 
 const STEP_NAME = "analyze-query" as const;
 

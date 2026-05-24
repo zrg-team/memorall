@@ -14,5 +14,8 @@ export const getAgentFeatureDescription = (
 	t: TFunction,
 ): string =>
 	feature.descriptionKey
-		? t(feature.descriptionKey, { ns: "chat", defaultValue: feature.description })
+		? t(feature.descriptionKey, {
+				ns: "chat",
+				defaultValue: feature.description,
+			})
 		: feature.description;

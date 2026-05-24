@@ -1,18 +1,7 @@
 import z from "zod";
-import type {
-	Tool,
-	ToolFactory,
-	AllServices,
-} from "@/services/flows/interfaces/tool";
-import { toolRegistry } from "@/services/flows/tool-registry";
-import {
-	normalizeFsPath,
-	flattenTree,
-	isWorkspacePath,
-	wsNodeToDisplayPath,
-	wsDisplayToLogicalPath,
-	stripDocumentsPrefix,
-} from "./util";
+import type { Tool, ToolFactory, AllServices } from "../../interfaces/tool";
+import { toolRegistry } from "../../tool-registry";
+import { normalizeFsPath, readFileBytes } from "./util";
 
 const TOOL_NAME = "fs_read" as const;
 
@@ -26,7 +15,7 @@ const schema = z.object({
 });
 
 type Input = z.infer<typeof schema>;
-type Services = Pick<AllServices, "documentFileSystem">;
+type Services = Pick<AllServices, "fs">;
 
 export const createFsReadTool: ToolFactory<Input, Services> = (
 	services,
@@ -38,8 +27,8 @@ export const createFsReadTool: ToolFactory<Input, Services> = (
 	execute: async (input) => {
 		const { file_path, offset = 1, limit } = input;
 
-		const dfs = services.documentFileSystem;
-		if (!dfs) return "Error: documentFileSystem service not available.";
+		const dfs = services.fs;
+		if (!dfs) return "Error: fs service not available.";
 
 		const filePath = normalizeFsPath(file_path);
 
@@ -68,32 +57,12 @@ export const createFsReadTool: ToolFactory<Input, Services> = (
 			return `File: ${displayPath} (${totalLines} lines)${rangeInfo}\n${numberedLines.join("\n")}`;
 		};
 
-		if (isWorkspacePath(filePath)) {
-			const wsLogical = wsDisplayToLogicalPath(filePath);
-			const tree = await dfs.getWorkspaceTree();
-			const allNodes = flattenTree(tree);
-			const node = allNodes.find(
-				(n) => n.path === wsLogical && n.type === "file",
-			);
-
-			if (!node) return `Error: File not found: ${file_path}`;
-
-			const raw = await dfs.getWorkspaceFileContent(filePath);
-			return readAndFormat(raw, wsNodeToDisplayPath(wsLogical));
-		}
-
-		// Document namespace
-		const docPath = stripDocumentsPrefix(filePath);
-		const tree = await dfs.getTree();
-		const allNodes = flattenTree(tree);
-		const node = allNodes.find((n) => n.path === docPath && n.type === "file");
-
-		if (!node || !node.file) {
+		try {
+			const raw = await readFileBytes(dfs, filePath);
+			return readAndFormat(raw, filePath);
+		} catch {
 			return `Error: File not found: ${file_path}`;
 		}
-
-		const raw = await dfs.getFileContent(docPath);
-		return readAndFormat(raw, docPath);
 	},
 });
 

@@ -1,11 +1,11 @@
-import { logInfo, logError, logWarn } from "@/utils/logger";
+import { logInfo, logError, logWarn } from "../../interfaces/logger";
 
-import { defineStep, bindStep } from "@/services/flows/interfaces/step";
+import { defineStep, bindStep } from "../../interfaces/step";
 import type {
 	StepFactoryFromSpec,
 	StepSpecFromDefinition,
-} from "@/services/flows/interfaces/step";
-import { stepRegistry } from "@/services/flows/step-registry";
+} from "../../interfaces/step";
+import { stepRegistry } from "../../step-registry";
 
 const STEP_NAME = "entities-facts-to-context" as const;
 

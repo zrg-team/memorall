@@ -51,7 +51,10 @@ export const useAgentConfigSummary = ({
 		for (const feature of featureDefinitions) {
 			if (hasToolPickerSlot(feature)) continue;
 			if (!draftFeatures[feature.name]) continue;
-			if (feature.requiresAccessibleAgents && draftMultiAgentAccessibleAgentIds.length === 0)
+			if (
+				feature.requiresAccessibleAgents &&
+				draftMultiAgentAccessibleAgentIds.length === 0
+			)
 				continue;
 			for (const tool of feature.tools) enabledToolSet.add(tool);
 		}
@@ -65,7 +68,8 @@ export const useAgentConfigSummary = ({
 		];
 
 		const systemPromptPreview =
-			draftConfig.systemPrompt || getDefaultSystemPromptForGraph(currentGraphType);
+			draftConfig.systemPrompt ||
+			getDefaultSystemPromptForGraph(currentGraphType);
 		const contextPromptPreview =
 			draftConfig.contextPrompt || DEFAULT_CONTEXT_SYSTEM_PROMPT;
 

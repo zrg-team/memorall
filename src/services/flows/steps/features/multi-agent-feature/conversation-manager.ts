@@ -1,11 +1,12 @@
+import { getKnowledgeDatabase } from "../../../interfaces/knowledge";
 import { sql } from "drizzle-orm";
 import { serviceManager } from "@/services";
-import { chatFlowRegistry } from "@/services/flows/chat-flow-registry";
-import type { UnifiedFlowConfig } from "@/services/flows/interfaces/flow-config";
-import type { AllServices } from "@/services/flows/interfaces/tool";
-import { normalizeLangGraphStreamChunk } from "@/services/flows/utils/langgraph-stream";
-import type { ChatCompletionMessageParam } from "@/types/openai";
-import { logInfo, logWarn } from "@/utils/logger";
+import { chatFlowRegistry } from "../../../chat-flow-registry";
+import type { UnifiedFlowConfig } from "../../../interfaces/flow-config";
+import type { AllServices } from "../../../interfaces/tool";
+import { normalizeLangGraphStreamChunk } from "../../../utils/langgraph-stream";
+import type { ChatCompletionMessageParam } from "../../../interfaces/messages";
+import { logInfo, logWarn } from "../../../interfaces/logger";
 
 export interface MultiAgentChildAgent {
 	id: string;
@@ -56,22 +57,24 @@ const loadTopicContextQueries = async (
 	}
 
 	try {
-		const topicInfo = await database.use(async ({ db, schema }) => {
-			const rows = await db
-				.select()
-				.from(schema.topics)
-				.where(sql`${schema.topics.id} = ${topicId}`)
-				.limit(1);
+		const topicInfo = await getKnowledgeDatabase(database).query(
+			async ({ db, schema }) => {
+				const rows = await db
+					.select()
+					.from(schema.topics)
+					.where(sql`${schema.topics.id} = ${topicId}`)
+					.limit(1);
 
-			if (rows.length === 0) {
-				return undefined;
-			}
+				if (rows.length === 0) {
+					return undefined;
+				}
 
-			const row = rows[0];
-			const name = row.name || "Unknown Topic";
-			const description = row.description || row.name || "";
-			return description ? `${name}: ${description}` : name;
-		});
+				const row = rows[0];
+				const name = row.name || "Unknown Topic";
+				const description = row.description || row.name || "";
+				return description ? `${name}: ${description}` : name;
+			},
+		);
 
 		return topicInfo ? [topicInfo] : [];
 	} catch {

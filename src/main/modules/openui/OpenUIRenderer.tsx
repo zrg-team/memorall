@@ -1,7 +1,15 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, {
+	useCallback,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
 import { Renderer, type ActionEvent } from "@openuidev/react-lang";
 import { createComponentLibrary } from "./index";
 import { MarkdownMessage } from "@/main/modules/chat/components/MarkdownMessage";
+import { ThreeDotsLoader } from "@/main/components/atoms/ThreeDotsLoader";
+import { useTranslation } from "react-i18next";
 import { logError, logWarn } from "@/utils/logger";
 import type { OpenUITheme } from "@/services/flows/steps/features/visualize-response";
 import {
@@ -52,6 +60,33 @@ class OpenUIErrorBoundary extends React.Component<
 	}
 }
 
+const OpenUIRenderFallback = ({
+	content,
+	title,
+	description,
+}: {
+	content: string;
+	title: string;
+	description: string;
+}) => (
+	<div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm">
+		<div className="font-medium text-destructive">{title}</div>
+		<div className="mt-1 text-muted-foreground">{description}</div>
+		<div className="mt-3 rounded border border-border/60 bg-background/70 p-3">
+			<MarkdownMessage>{content}</MarkdownMessage>
+		</div>
+	</div>
+);
+
+const OpenUIStreamingPlaceholder = ({ label }: { label: string }) => (
+	<div className="flex min-h-24 items-center justify-center rounded border border-dashed border-border/60 bg-background/50">
+		<div className="flex items-center p-3 gap-2 text-xs text-muted-foreground">
+			<ThreeDotsLoader size="sm" />
+			<span>{label}</span>
+		</div>
+	</div>
+);
+
 const showOpenUINotice = (message: string) => {
 	const existing = document.querySelector("[data-openui-notice]");
 	existing?.remove();
@@ -71,9 +106,25 @@ export function OpenUIRenderer({
 	content: string;
 	streaming: boolean;
 }) {
+	const { t } = useTranslation("chat");
 	const theme = useMemo(() => detectTheme(content), [content]);
 	const library = useMemo(() => createComponentLibrary(theme), [theme]);
 	const [resetKey, setResetKey] = useState(0);
+	const [renderFailed, setRenderFailed] = useState(false);
+	const [streamingRenderFailed, setStreamingRenderFailed] = useState(false);
+	const prevStreaming = useRef(streaming);
+
+	useEffect(() => {
+		setRenderFailed(false);
+		setStreamingRenderFailed(false);
+	}, [content]);
+
+	useEffect(() => {
+		if (prevStreaming.current && !streaming) {
+			setStreamingRenderFailed(false);
+		}
+		prevStreaming.current = streaming;
+	}, [streaming]);
 
 	const handleOpenUIAction = useCallback((event: ActionEvent) => {
 		const detail = parseMemorallOpenUIAction(event);
@@ -105,7 +156,7 @@ export function OpenUIRenderer({
 				detail.formName,
 			);
 			void navigator.clipboard?.writeText(text).then(
-				() => showOpenUINotice("Copied"),
+				() => showOpenUINotice(t("openui.copied")),
 				(error) => logWarn("[OpenUIRenderer] Clipboard copy failed:", error),
 			);
 			return;
@@ -156,6 +207,34 @@ export function OpenUIRenderer({
 		dispatchMemorallOpenUIAction(detail);
 	}, []);
 
+	const handleRendererError = useCallback(
+		(errors: unknown[]) => {
+			if (errors.length > 0) {
+				logWarn("[OpenUIRenderer] Parse/runtime errors:", errors);
+				if (streaming) {
+					setStreamingRenderFailed(true);
+				} else {
+					setRenderFailed(true);
+				}
+			}
+		},
+		[streaming],
+	);
+
+	if (renderFailed && !streaming) {
+		return (
+			<OpenUIRenderFallback
+				content={content}
+				title={t("openui.renderFailed.title")}
+				description={t("openui.renderFailed.description")}
+			/>
+		);
+	}
+
+	if (streamingRenderFailed && streaming) {
+		return <OpenUIStreamingPlaceholder label={t("openui.rendering")} />;
+	}
+
 	return (
 		<OpenUIErrorBoundary content={content}>
 			<Renderer
@@ -164,11 +243,7 @@ export function OpenUIRenderer({
 				library={library}
 				isStreaming={streaming}
 				onAction={handleOpenUIAction}
-				onError={(errors) => {
-					if (errors.length > 0) {
-						logWarn("[OpenUIRenderer] Parse/runtime errors:", errors);
-					}
-				}}
+				onError={handleRendererError}
 			/>
 		</OpenUIErrorBoundary>
 	);

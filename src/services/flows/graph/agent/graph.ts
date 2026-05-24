@@ -1,5 +1,5 @@
-import { END, START, StateGraph } from "@langchain/langgraph/web";
-import type { LangGraphRunnableConfig } from "@langchain/langgraph/web";
+import { END, START, StateGraph } from "@langchain/langgraph";
+import type { LangGraphRunnableConfig } from "@langchain/langgraph";
 import {
 	AgentAnnotation,
 	DEFAULT_AGENT_SYSTEM_PROMPT,
@@ -11,19 +11,16 @@ import {
 	GraphBase,
 	type CombinedTool,
 	type GraphTool,
-} from "@/services/flows/graph/graph.base";
-import type { CombinedServices } from "@/services/flows/interfaces/tool";
-import {
-	extractToolResult,
-	parseToolInput,
-} from "@/services/flows/interfaces/tool";
-import { getFlowRuntimeVars } from "@/services/flows/runtime/runtime-context";
-import type { ChatCompletionChunk } from "@/types/openai";
-import { logError, logInfo } from "@/utils/logger";
-import { flowRegistry, FEATURE_SLOT } from "@/services/flows/flow-registry";
-import type { BaseFlow } from "@/services/flows/flow-registry";
-import { chatFlowRegistry } from "@/services/flows/chat-flow-registry";
-import { findEnabledStepByName } from "@/services/flows/interfaces/flow-config";
+} from "../graph.base";
+import type { CombinedServices } from "../../interfaces/tool";
+import { extractToolResult, parseToolInput } from "../../interfaces/tool";
+import { getFlowRuntimeVars } from "../../runtime/runtime-context";
+import type { ChatCompletionChunk } from "../../interfaces/messages";
+import { logError, logInfo } from "../../interfaces/logger";
+import { flowRegistry, FEATURE_SLOT } from "../../flow-registry";
+import type { BaseFlow } from "../../flow-registry";
+import { chatFlowRegistry } from "../../chat-flow-registry";
+import { findEnabledStepByName } from "../../interfaces/flow-config";
 
 // Tool names available to the agent
 const DEFAULT_TOOL_NAMES = ["current_time"] as const;

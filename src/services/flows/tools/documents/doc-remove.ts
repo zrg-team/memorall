@@ -1,12 +1,8 @@
 import z from "zod";
-import type {
-	Tool,
-	ToolFactory,
-	AllServices,
-} from "@/services/flows/interfaces/tool";
-import { toolRegistry } from "@/services/flows/tool-registry";
-import type { DocumentTreeNode } from "@/types/document-library";
+import type { Tool, ToolFactory, AllServices } from "../../interfaces/tool";
+import { toolRegistry } from "../../tool-registry";
 import { normalizeDocumentPath } from "./util";
+import { displayPathToFsPath, removePath } from "../fs/util";
 
 const TOOL_NAME = "doc_remove" as const;
 
@@ -15,18 +11,7 @@ const schema = z.object({
 });
 
 type Input = z.infer<typeof schema>;
-type Services = Pick<AllServices, "documentFileSystem">;
-
-function flattenTree(nodes: DocumentTreeNode[]): DocumentTreeNode[] {
-	const result: DocumentTreeNode[] = [];
-	for (const node of nodes) {
-		result.push(node);
-		if (node.children?.length) {
-			result.push(...flattenTree(node.children));
-		}
-	}
-	return result;
-}
+type Services = Pick<AllServices, "fs">;
 
 export const createDocRemoveTool: ToolFactory<Input, Services> = (
 	services,
@@ -39,25 +24,21 @@ export const createDocRemoveTool: ToolFactory<Input, Services> = (
 		const { path } = input;
 		const filePath = normalizeDocumentPath(path);
 
-		const dfs = services.documentFileSystem;
+		const dfs = services.fs;
 		if (!dfs) {
 			return "Documents not existe.";
 		}
-		const tree = await dfs.getTree();
-		const allNodes = flattenTree(tree);
-		const node = allNodes.find((n) => n.path === filePath);
+		if (displayPathToFsPath(filePath) === "/") {
+			return "Error: Cannot delete the root directory.";
+		}
 
-		if (!node) {
+		try {
+			const stat = await dfs.stat(displayPathToFsPath(filePath));
+			await removePath(dfs, filePath, true);
+			return `Deleted ${stat.isDirectory() ? "folder" : "file"}: ${filePath}`;
+		} catch {
 			return `Error: Path not found: ${filePath}`;
 		}
-
-		if (node.type === "file") {
-			await dfs.deleteFile(node.path);
-			return `Deleted file: ${filePath}`;
-		}
-
-		await dfs.deleteFolder(node.path);
-		return `Deleted folder: ${filePath}`;
 	},
 });
 

@@ -1,6 +1,6 @@
 import z from "zod";
-import type { Tool, ToolFactory } from "@/services/flows/interfaces/tool";
-import { toolRegistry } from "@/services/flows/tool-registry";
+import type { Tool, ToolFactory } from "../interfaces/tool";
+import { toolRegistry } from "../tool-registry";
 import { skillFileSystemService } from "@/services/filesystem/skill-filesystem";
 
 const TOOL_NAME = "load_skill" as const;

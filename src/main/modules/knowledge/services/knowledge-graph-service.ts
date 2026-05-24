@@ -15,6 +15,13 @@ import {
 	type GrowType,
 } from "@/services/database/entities/topic-types";
 import { isUuid } from "@/utils/uuid";
+import { consoleFlowLogger } from "@/services/flows/interfaces/logger";
+import {
+	toFlowDatabase,
+	toFlowEmbedding,
+	toFlowLLM,
+	toFlowSandbox,
+} from "@/services/flow-service-adapters";
 
 export type KnowledgeGrowMode = "knowledge" | "structmem";
 
@@ -246,10 +253,13 @@ export class KnowledgeGraphService {
 			});
 
 			const services = {
-				llm: serviceManager.getLLMService(),
-				embedding: serviceManager.getEmbeddingService(),
-				database: serviceManager.getDatabaseService(),
-				sandboxContainer: serviceManager.getSandboxContainerService(),
+				llm: toFlowLLM(serviceManager.getLLMService()),
+				embedding: toFlowEmbedding(serviceManager.getEmbeddingService()),
+				database: toFlowDatabase(serviceManager.getDatabaseService()),
+				logger: consoleFlowLogger,
+				sandboxContainer: toFlowSandbox(
+					serviceManager.getSandboxContainerService(),
+				),
 			};
 
 			const baseState = {

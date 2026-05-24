@@ -1,11 +1,16 @@
+import { getKnowledgeDatabase } from "../interfaces/knowledge";
 import z from "zod";
 import { eq } from "drizzle-orm";
 import type { Tool, ToolFactory, AllServices } from "../interfaces/tool";
 import { toolRegistry } from "../tool-registry";
-import { getCurrentEmbeddingFields } from "@/utils/embedding-size-config";
-import type { IEmbeddingService } from "@/services/embedding/interfaces/embedding-service.interface";
-import type { NewNode } from "@/services/database/entities/nodes";
-import type { NewEdge } from "@/services/database/entities/edges";
+import { getCurrentEmbeddingFields } from "../utils/embedding-size-config";
+import type { IEmbeddingService } from "../interfaces/embedding";
+import type {
+	KnowledgeDatabaseClient,
+	KnowledgeDatabaseTables,
+} from "../interfaces/knowledge";
+import type { NewNode } from "../interfaces/knowledge";
+import type { NewEdge } from "../interfaces/knowledge";
 
 const TOOL_NAME = "knowledge_graph_write" as const;
 
@@ -80,41 +85,43 @@ export const createKnowledgeGraphWriteTool: ToolFactory<Input, Services> = (
 
 		for (const node of input.node ? [input.node] : []) {
 			try {
-				await services.database.use(async ({ db, schema: s }) => {
-					const nameVec = await toVector(services.embedding, node.name);
+				await getKnowledgeDatabase(services.database).query(
+					async ({ db, schema: s }) => {
+						const nameVec = await toVector(services.embedding, node.name);
 
-					const data: NewNode = {
-						nodeType: node.nodeType,
-						name: node.name,
-						summary: node.summary ?? null,
-						attributes: node.attributes ?? {},
-						graph: graphId,
-					};
-					if (nameVec)
-						(data as Record<string, unknown>)[fields.nameEmbedding] = nameVec;
+						const data: NewNode = {
+							nodeType: node.nodeType,
+							name: node.name,
+							summary: node.summary ?? null,
+							attributes: node.attributes ?? {},
+							graph: graphId,
+						};
+						if (nameVec)
+							(data as Record<string, unknown>)[fields.nameEmbedding] = nameVec;
 
-					const existing = await db
-						.select({ id: s.nodes.id })
-						.from(s.nodes)
-						.where(eq(s.nodes.name, node.name))
-						.limit(1);
+						const existing = await db
+							.select({ id: s.nodes.id })
+							.from(s.nodes)
+							.where(eq(s.nodes.name, node.name))
+							.limit(1);
 
-					if (existing.length > 0) {
-						await db
-							.update(s.nodes)
-							.set(data)
-							.where(eq(s.nodes.id, existing[0].id));
-						nameToId.set(node.name, existing[0].id);
-						results.push(`Updated node "${node.name}"`);
-					} else {
-						const [created] = await db
-							.insert(s.nodes)
-							.values(data)
-							.returning({ id: s.nodes.id });
-						nameToId.set(node.name, created.id);
-						results.push(`Created node "${node.name}"`);
-					}
-				});
+						if (existing.length > 0) {
+							await db
+								.update(s.nodes)
+								.set(data)
+								.where(eq(s.nodes.id, existing[0].id));
+							nameToId.set(node.name, existing[0].id);
+							results.push(`Updated node "${node.name}"`);
+						} else {
+							const [created] = await db
+								.insert(s.nodes)
+								.values(data)
+								.returning({ id: s.nodes.id });
+							nameToId.set(node.name, created.id);
+							results.push(`Created node "${node.name}"`);
+						}
+					},
+				);
 			} catch (e) {
 				errors.push(
 					`Node "${node.name}": ${e instanceof Error ? e.message : e}`,
@@ -125,8 +132,8 @@ export const createKnowledgeGraphWriteTool: ToolFactory<Input, Services> = (
 		// ── Edges ────────────────────────────────────────────────────────────────
 		const resolveNodeId = async (
 			name: string,
-			db: Parameters<Parameters<typeof services.database.use>[0]>[0]["db"],
-			s: Parameters<Parameters<typeof services.database.use>[0]>[0]["schema"],
+			db: KnowledgeDatabaseClient,
+			s: KnowledgeDatabaseTables,
 		): Promise<string | undefined> => {
 			const cached = nameToId.get(name);
 			if (cached) return cached;
@@ -140,48 +147,50 @@ export const createKnowledgeGraphWriteTool: ToolFactory<Input, Services> = (
 
 		for (const edge of input.edges ?? []) {
 			try {
-				await services.database.use(async ({ db, schema: s }) => {
-					const sourceName = edge.sourceName ?? input.node?.name;
-					const destName = edge.destinationName ?? input.node?.name;
+				await getKnowledgeDatabase(services.database).query(
+					async ({ db, schema: s }) => {
+						const sourceName = edge.sourceName ?? input.node?.name;
+						const destName = edge.destinationName ?? input.node?.name;
 
-					if (!sourceName)
-						throw new Error(
-							"sourceName is required when no input node is provided",
+						if (!sourceName)
+							throw new Error(
+								"sourceName is required when no input node is provided",
+							);
+						if (!destName)
+							throw new Error(
+								"destinationName is required when no input node is provided",
+							);
+
+						const sourceId = await resolveNodeId(sourceName, db, s);
+						if (!sourceId) throw new Error(`Node not found: "${sourceName}"`);
+
+						const destId = await resolveNodeId(destName, db, s);
+						if (!destId) throw new Error(`Node not found: "${destName}"`);
+
+						const factVec = edge.factText
+							? await toVector(services.embedding, edge.factText)
+							: null;
+						const typeVec = await toVector(services.embedding, edge.edgeType);
+
+						const data: NewEdge = {
+							sourceId,
+							destinationId: destId,
+							edgeType: edge.edgeType,
+							factText: edge.factText ?? null,
+							graph: graphId,
+							recordedAt: new Date(),
+						};
+						if (factVec)
+							(data as Record<string, unknown>)[fields.factEmbedding] = factVec;
+						if (typeVec)
+							(data as Record<string, unknown>)[fields.typeEmbedding] = typeVec;
+
+						await db.insert(s.edges).values(data);
+						results.push(
+							`Created edge "${sourceName}" -[${edge.edgeType}]-> "${destName}"`,
 						);
-					if (!destName)
-						throw new Error(
-							"destinationName is required when no input node is provided",
-						);
-
-					const sourceId = await resolveNodeId(sourceName, db, s);
-					if (!sourceId) throw new Error(`Node not found: "${sourceName}"`);
-
-					const destId = await resolveNodeId(destName, db, s);
-					if (!destId) throw new Error(`Node not found: "${destName}"`);
-
-					const factVec = edge.factText
-						? await toVector(services.embedding, edge.factText)
-						: null;
-					const typeVec = await toVector(services.embedding, edge.edgeType);
-
-					const data: NewEdge = {
-						sourceId,
-						destinationId: destId,
-						edgeType: edge.edgeType,
-						factText: edge.factText ?? null,
-						graph: graphId,
-						recordedAt: new Date(),
-					};
-					if (factVec)
-						(data as Record<string, unknown>)[fields.factEmbedding] = factVec;
-					if (typeVec)
-						(data as Record<string, unknown>)[fields.typeEmbedding] = typeVec;
-
-					await db.insert(s.edges).values(data);
-					results.push(
-						`Created edge "${sourceName}" -[${edge.edgeType}]-> "${destName}"`,
-					);
-				});
+					},
+				);
 			} catch (e) {
 				errors.push(
 					`Edge ${edge.sourceName ?? input.node?.name} → ${edge.destinationName ?? input.node?.name}: ${e instanceof Error ? e.message : e}`,

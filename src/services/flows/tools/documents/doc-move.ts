@@ -1,12 +1,8 @@
 import z from "zod";
-import type {
-	Tool,
-	ToolFactory,
-	AllServices,
-} from "@/services/flows/interfaces/tool";
-import { toolRegistry } from "@/services/flows/tool-registry";
-import type { DocumentTreeNode } from "@/types/document-library";
+import type { Tool, ToolFactory, AllServices } from "../../interfaces/tool";
+import { toolRegistry } from "../../tool-registry";
 import { normalizeDocumentPath } from "./util";
+import { displayPathToFsPath } from "../fs/util";
 
 const TOOL_NAME = "doc_move" as const;
 
@@ -24,18 +20,7 @@ const schema = z
 	});
 
 type Input = z.infer<typeof schema>;
-type Services = Pick<AllServices, "documentFileSystem">;
-
-function flattenTree(nodes: DocumentTreeNode[]): DocumentTreeNode[] {
-	const result: DocumentTreeNode[] = [];
-	for (const node of nodes) {
-		result.push(node);
-		if (node.children?.length) {
-			result.push(...flattenTree(node.children));
-		}
-	}
-	return result;
-}
+type Services = Pick<AllServices, "fs">;
 
 export const createDocMoveTool: ToolFactory<Input, Services> = (
 	services,
@@ -52,43 +37,44 @@ export const createDocMoveTool: ToolFactory<Input, Services> = (
 				? normalizeDocumentPath(target_folder)
 				: undefined;
 
-		const dfs = services.documentFileSystem;
+		const dfs = services.fs;
 		if (!dfs) {
 			return "Documents not existe.";
 		}
-		const tree = await dfs.getTree();
-		const allNodes = flattenTree(tree);
-		const node = allNodes.find((n) => n.path === sourcePath);
 
-		if (!node) {
+		let isFile = true;
+		try {
+			const stat = await dfs.stat(displayPathToFsPath(sourcePath));
+			isFile = stat.isFile();
+		} catch {
 			return `Error: Path not found: ${sourcePath}`;
 		}
-
-		const isFile = node.type === "file";
 		let currentPath = sourcePath;
 		const actions: string[] = [];
 
 		// Move first (if targetFolder provided)
 		if (targetFolder) {
-			if (isFile) {
-				const result = await dfs.moveFile(currentPath, targetFolder);
-				currentPath = result.path;
-			} else {
-				const result = await dfs.moveFolder(currentPath, targetFolder);
-				currentPath = result.path;
-			}
+			const name = currentPath.split("/").filter(Boolean).at(-1);
+			if (!name) return `Error: Invalid source path: ${sourcePath}`;
+			const targetPath = `${targetFolder.replace(/\/+$/, "")}/${name}`;
+			await dfs.rename(
+				displayPathToFsPath(currentPath),
+				displayPathToFsPath(targetPath),
+			);
+			currentPath = targetPath;
 			actions.push(`moved to ${targetFolder}`);
 		}
 
 		// Then rename (if new_name provided)
 		if (new_name) {
-			if (isFile) {
-				const result = await dfs.renameFile(currentPath, new_name);
-				currentPath = result.path;
-			} else {
-				const result = await dfs.renameFolder(currentPath, new_name);
-				currentPath = result.path;
-			}
+			const parent = currentPath.slice(0, currentPath.lastIndexOf("/")) || "/";
+			const targetPath =
+				parent === "/" ? `/${new_name}` : `${parent}/${new_name}`;
+			await dfs.rename(
+				displayPathToFsPath(currentPath),
+				displayPathToFsPath(targetPath),
+			);
+			currentPath = targetPath;
 			actions.push(`renamed to "${new_name}"`);
 		}
 

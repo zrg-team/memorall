@@ -1,11 +1,7 @@
 import z from "zod";
-import type {
-	Tool,
-	ToolFactory,
-	AllServices,
-} from "@/services/flows/interfaces/tool";
-import { toolRegistry } from "@/services/flows/tool-registry";
-import { normalizeFsPath, flattenTree } from "./util";
+import type { Tool, ToolFactory, AllServices } from "../../interfaces/tool";
+import { toolRegistry } from "../../tool-registry";
+import { normalizeFsPath, readFileBytes, writeFileBytes } from "./util";
 
 const TOOL_NAME = "document_fs_edit" as const;
 
@@ -24,7 +20,7 @@ const schema = z.object({
 });
 
 type Input = z.infer<typeof schema>;
-type Services = Pick<AllServices, "documentFileSystem">;
+type Services = Pick<AllServices, "fs">;
 
 export const createFsEditTool: ToolFactory<Input, Services> = (
 	services,
@@ -36,20 +32,16 @@ export const createFsEditTool: ToolFactory<Input, Services> = (
 	execute: async (input) => {
 		const { file_path, old_string, new_string, replace_all = false } = input;
 
-		const dfs = services.documentFileSystem;
-		if (!dfs) return "Error: documentFileSystem service not available.";
+		const dfs = services.fs;
+		if (!dfs) return "Error: fs service not available.";
 
 		const filePath = normalizeFsPath(file_path);
-		const tree = await dfs.getTree();
-		const allNodes = flattenTree(tree);
-		const node = allNodes.find((n) => n.path === filePath && n.type === "file");
-
-		if (!node || !node.file) {
+		let text: string;
+		try {
+			text = new TextDecoder().decode(await readFileBytes(dfs, filePath));
+		} catch {
 			return `Error: File not found: ${file_path}`;
 		}
-
-		const raw = await dfs.getFileContent(filePath);
-		const text = new TextDecoder().decode(raw);
 
 		if (!text.includes(old_string)) {
 			return `Error: old_string not found in ${filePath}`;
@@ -66,8 +58,7 @@ export const createFsEditTool: ToolFactory<Input, Services> = (
 			newText = text.replace(old_string, new_string);
 		}
 
-		const encoded = new TextEncoder().encode(newText);
-		await dfs.updateFileContent(filePath, encoded);
+		await writeFileBytes(dfs, filePath, newText);
 
 		return `Edited ${filePath}: ${count} replacement${count !== 1 ? "s" : ""} made`;
 	},

@@ -1,3 +1,4 @@
+import { getKnowledgeDatabase } from "../interfaces/knowledge";
 import z from "zod";
 import { and, eq, inArray, like, or } from "drizzle-orm";
 import type { Tool, ToolFactory, AllServices } from "../interfaces/tool";
@@ -6,9 +7,9 @@ import {
 	combineSearchResults,
 	vectorSearchEdges,
 	vectorSearchNodes,
-} from "@/utils/vector-search";
-import { getScopedGraphWhere } from "@/utils/scoped-graph-query";
-import type { Edge, Node } from "@/services/database/types";
+} from "../utils/vector-search";
+import { getScopedGraphWhere } from "../utils/graph-query";
+import type { Edge, Node } from "../interfaces/knowledge";
 
 const TOOL_NAME = "knowledge_graph" as const;
 
@@ -126,47 +127,49 @@ export const createKnowledgeGraphTool: ToolFactory<Input, Services> = (
 			);
 		}
 
-		const sqlResult = await services.database.use(async ({ db, schema }) => {
-			const nodeTextClauses = queries.flatMap((term) => [
-				like(schema.nodes.name, `%${term}%`),
-				like(schema.nodes.summary, `%${term}%`),
-			]);
+		const sqlResult = await getKnowledgeDatabase(services.database).query(
+			async ({ db, schema }) => {
+				const nodeTextClauses = queries.flatMap((term) => [
+					like(schema.nodes.name, `%${term}%`),
+					like(schema.nodes.summary, `%${term}%`),
+				]);
 
-			const edgeTextClauses = queries.flatMap((term) => [
-				like(schema.edges.edgeType, `%${term}%`),
-				like(schema.edges.factText, `%${term}%`),
-			]);
+				const edgeTextClauses = queries.flatMap((term) => [
+					like(schema.edges.edgeType, `%${term}%`),
+					like(schema.edges.factText, `%${term}%`),
+				]);
 
-			const nodeWhere = and(
-				getScopedGraphWhere({ graphId }, schema.nodes.graph),
-				or(...nodeTextClauses),
-			);
+				const nodeWhere = and(
+					getScopedGraphWhere({ graphId }, schema.nodes.graph),
+					or(...nodeTextClauses),
+				);
 
-			const edgeWhere = relationship
-				? and(
-						getScopedGraphWhere({ graphId }, schema.edges.graph),
-						eq(schema.edges.edgeType, relationship),
-						or(...edgeTextClauses),
-					)
-				: and(
-						getScopedGraphWhere({ graphId }, schema.edges.graph),
-						or(...edgeTextClauses),
-					);
+				const edgeWhere = relationship
+					? and(
+							getScopedGraphWhere({ graphId }, schema.edges.graph),
+							eq(schema.edges.edgeType, relationship),
+							or(...edgeTextClauses),
+						)
+					: and(
+							getScopedGraphWhere({ graphId }, schema.edges.graph),
+							or(...edgeTextClauses),
+						);
 
-			const sqlNodes = await db
-				.select()
-				.from(schema.nodes)
-				.where(nodeWhere)
-				.limit(limit);
+				const sqlNodes = await db
+					.select()
+					.from(schema.nodes)
+					.where(nodeWhere)
+					.limit(limit);
 
-			const sqlEdges = await db
-				.select()
-				.from(schema.edges)
-				.where(edgeWhere)
-				.limit(limit);
+				const sqlEdges = await db
+					.select()
+					.from(schema.edges)
+					.where(edgeWhere)
+					.limit(limit);
 
-			return { sqlNodes, sqlEdges };
-		});
+				return { sqlNodes, sqlEdges };
+			},
+		);
 
 		const mergedNodes = combineSearchResults(
 			sqlResult.sqlNodes,
@@ -200,11 +203,12 @@ export const createKnowledgeGraphTool: ToolFactory<Input, Services> = (
 		);
 
 		const relatedNodes = relatedNodeIds.length
-			? await services.database.use(async ({ db, schema }) =>
-					db
-						.select()
-						.from(schema.nodes)
-						.where(inArray(schema.nodes.id, relatedNodeIds)),
+			? await getKnowledgeDatabase(services.database).query<Node[]>(
+					async ({ db, schema }) =>
+						db
+							.select()
+							.from(schema.nodes)
+							.where(inArray(schema.nodes.id, relatedNodeIds)),
 				)
 			: [];
 

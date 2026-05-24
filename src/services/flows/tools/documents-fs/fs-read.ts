@@ -1,11 +1,7 @@
 import z from "zod";
-import type {
-	Tool,
-	ToolFactory,
-	AllServices,
-} from "@/services/flows/interfaces/tool";
-import { toolRegistry } from "@/services/flows/tool-registry";
-import { normalizeFsPath, flattenTree } from "./util";
+import type { Tool, ToolFactory, AllServices } from "../../interfaces/tool";
+import { toolRegistry } from "../../tool-registry";
+import { normalizeFsPath, readFileBytes } from "./util";
 
 const TOOL_NAME = "document_fs_read" as const;
 
@@ -19,7 +15,7 @@ const schema = z.object({
 });
 
 type Input = z.infer<typeof schema>;
-type Services = Pick<AllServices, "documentFileSystem">;
+type Services = Pick<AllServices, "fs">;
 
 export const createFsReadTool: ToolFactory<Input, Services> = (
 	services,
@@ -31,19 +27,17 @@ export const createFsReadTool: ToolFactory<Input, Services> = (
 	execute: async (input) => {
 		const { file_path, offset = 1, limit } = input;
 
-		const dfs = services.documentFileSystem;
-		if (!dfs) return "Error: documentFileSystem service not available.";
+		const dfs = services.fs;
+		if (!dfs) return "Error: fs service not available.";
 
 		const filePath = normalizeFsPath(file_path);
-		const tree = await dfs.getTree();
-		const allNodes = flattenTree(tree);
-		const node = allNodes.find((n) => n.path === filePath && n.type === "file");
-
-		if (!node || !node.file) {
+		let raw: Uint8Array;
+		try {
+			raw = await readFileBytes(dfs, filePath);
+		} catch {
 			return `Error: File not found: ${file_path}`;
 		}
 
-		const raw = await dfs.getFileContent(filePath);
 		const text = new TextDecoder().decode(raw);
 		const allLines = text.split("\n");
 		const totalLines = allLines.length;

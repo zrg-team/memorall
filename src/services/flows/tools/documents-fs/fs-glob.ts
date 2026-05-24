@@ -1,11 +1,7 @@
 import z from "zod";
-import type {
-	Tool,
-	ToolFactory,
-	AllServices,
-} from "@/services/flows/interfaces/tool";
-import { toolRegistry } from "@/services/flows/tool-registry";
-import { normalizeFsPath, flattenTree, globToRegex, isInScope } from "./util";
+import type { Tool, ToolFactory, AllServices } from "../../interfaces/tool";
+import { toolRegistry } from "../../tool-registry";
+import { normalizeFsPath, globMatches, listEntries } from "./util";
 
 const TOOL_NAME = "document_fs_glob" as const;
 
@@ -13,7 +9,7 @@ const schema = z.object({
 	pattern: z
 		.string()
 		.describe(
-			'Glob pattern to match file paths (e.g. "**/*.md", "notes/**/*.txt", "*.json")',
+			'Glob pattern to match paths (e.g. "**/*.md", "notes/**/*.txt", "*.json")',
 		),
 	path: z
 		.string()
@@ -22,55 +18,36 @@ const schema = z.object({
 });
 
 type Input = z.infer<typeof schema>;
-type Services = Pick<AllServices, "documentFileSystem">;
+type Services = Pick<AllServices, "fs">;
 
 export const createFsGlobTool: ToolFactory<Input, Services> = (
 	services,
 ): Tool<Input> => ({
 	name: TOOL_NAME,
 	description:
-		"Find files whose paths match a glob pattern. Supports ** (recursive), * (single-level wildcard), ? (single character). Returns matching paths sorted by modification time (newest first).",
+		"Find paths that match a glob pattern. Supports common glob syntax including **, *, ?, {a,b}, [abc], [!abc], and extglob groups like @(a|b). For ambiguous asset/name searches, combine likely names and extensions in one pattern, e.g. **/*{icon,logo,brand}*.{png,jpg,jpeg,svg,webp,ico}, instead of making repeated narrow calls. Returns matching paths.",
 	schema,
 	execute: async (input) => {
 		const { pattern, path = "/" } = input;
 
-		const dfs = services.documentFileSystem;
-		if (!dfs) return "Error: documentFileSystem service not available.";
+		const dfs = services.fs;
+		if (!dfs) return "Error: fs service not available.";
 
 		const basePath = normalizeFsPath(path);
-		const tree = await dfs.getTree();
-		const allNodes = flattenTree(tree);
-
-		// Only files, scoped to the requested directory
-		const fileNodes = allNodes.filter(
-			(n) => n.type === "file" && isInScope(n.path, basePath),
-		);
-
-		const regex = globToRegex(pattern);
-
-		// Match only against the relative path from basePath.
-		// Do NOT fall back to testing n.name — that would make "*.md" match
-		// deep/nested/file.md, breaking single-level glob semantics.
-		const matches = fileNodes.filter((n) => {
+		const entries = await listEntries(dfs, basePath, true);
+		const matches = entries.filter((entry) => {
 			const rel =
 				basePath === "/"
-					? n.path.slice(1) // strip leading "/"
-					: n.path.slice(basePath.length + 1);
-			return regex.test(rel);
+					? entry.path.slice(1)
+					: entry.path.slice(basePath.length + 1);
+			return globMatches(pattern, rel);
 		});
 
 		if (matches.length === 0) {
 			return `No files found matching "${pattern}" under "${basePath}"`;
 		}
 
-		// Sort by modification time, newest first (fall back to path order)
-		matches.sort((a, b) => {
-			const ta = a.file?.modifiedAt?.getTime() ?? 0;
-			const tb = b.file?.modifiedAt?.getTime() ?? 0;
-			return tb - ta;
-		});
-
-		return matches.map((n) => n.path).join("\n");
+		return matches.map((entry) => entry.path).join("\n");
 	},
 });
 

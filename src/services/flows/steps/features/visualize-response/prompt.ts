@@ -35,6 +35,11 @@ Syntax rules:
 - Use positional arguments in the exact order shown below.
 - Strings must use double quotes.
 - Arrays use square brackets.
+- Use null, not undefined, when you need to skip an optional positional
+  argument before a later argument. Example:
+  SelectBlock("choice", "Select Box", "Choose an option", null, [
+    SelectItemBlock("Option 1", "option1")
+  ])
 - Do not invent components or props.
 - ButtonBlock can use a prompt string or a safe action object as its second
   argument.

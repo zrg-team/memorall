@@ -3,7 +3,7 @@ import {
 	jsonToolSchema,
 	type BaseTool,
 	type ToolResultValue,
-} from "@/services/flows/interfaces/tool";
+} from "../../../interfaces/tool";
 import { z } from "zod";
 
 type MCPToolRuntimeMetadata = {

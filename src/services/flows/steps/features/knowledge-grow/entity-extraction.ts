@@ -1,13 +1,13 @@
-import { logInfo, logError } from "@/utils/logger";
-import { mapRefine } from "@/utils/map-refine";
+import { logInfo, logError } from "../../../interfaces/logger";
+import { mapRefine } from "../../../utils/map-refine";
 
-import { defineStep, bindStep } from "@/services/flows/interfaces/step";
+import { defineStep, bindStep } from "../../../interfaces/step";
 import type {
 	StepFactoryFromSpec,
 	StepSpecFromDefinition,
-} from "@/services/flows/interfaces/step";
-import { stepRegistry } from "@/services/flows/step-registry";
-import type { AllServices } from "@/services/flows/interfaces/tool";
+} from "../../../interfaces/step";
+import { stepRegistry } from "../../../step-registry";
+import type { AllServices } from "../../../interfaces/tool";
 
 const STEP_NAME = "entity-extraction" as const;
 

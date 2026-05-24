@@ -1,6 +1,6 @@
 import sanitizeHtml from "sanitize-html";
-import type { AllServices } from "@/services/flows/interfaces/tool";
-import type { IWebBrowserService } from "@/services/web-browser";
+import type { AllServices } from "../../interfaces/tool";
+import type { IWebBrowserService } from "../../interfaces/web-browser";
 
 export type WebToolServices = Pick<AllServices, "webBrowser">;
 

@@ -65,12 +65,18 @@ const prettifyToolName = (toolName: string) =>
 		.join(" ");
 
 const getToolFallbackDescription = (toolName: string) => {
-	if (toolName.startsWith("container_")) return "Run or inspect sandbox container operations.";
-	if (toolName.startsWith("web_")) return "Open, read, inspect, or interact with browser pages.";
-	if (toolName.startsWith("fs_")) return "Read, search, edit, or manage workspace files.";
-	if (toolName.startsWith("doc_")) return "Read, search, edit, or manage document files.";
-	if (toolName.startsWith("memory_")) return "Manage durable memory in the selected topic graph.";
-	if (toolName.startsWith("co_agent_")) return "Observe or interact with the current page through Co-agent.";
+	if (toolName.startsWith("container_"))
+		return "Run or inspect sandbox container operations.";
+	if (toolName.startsWith("web_"))
+		return "Open, read, inspect, or interact with browser pages.";
+	if (toolName.startsWith("fs_"))
+		return "Read, search, edit, or manage workspace files.";
+	if (toolName.startsWith("doc_"))
+		return "Read, search, edit, or manage document files.";
+	if (toolName.startsWith("memory_"))
+		return "Manage durable memory in the selected topic graph.";
+	if (toolName.startsWith("co_agent_"))
+		return "Observe or interact with the current page through Co-agent.";
 	return "Tool available to this agent during response generation.";
 };
 
@@ -83,8 +89,14 @@ const ToolPickerSlot: React.FC<{
 	claimedToolSet: Set<string>;
 }> = ({ slot, claimedToolSet }) => {
 	const { t } = useTranslation("chat");
-	const { draftConfig, draftFeatures, featureDefinitions, availableTools, updateField, toggleTool } =
-		useAgentConfigStore();
+	const {
+		draftConfig,
+		draftFeatures,
+		featureDefinitions,
+		availableTools,
+		updateField,
+		toggleTool,
+	} = useAgentConfigStore();
 	const [toolSearch, setToolSearch] = React.useState("");
 
 	const toolsToShow =
@@ -96,7 +108,8 @@ const ToolPickerSlot: React.FC<{
 	const featureEnabledTools = React.useMemo(() => {
 		const set = new Set<string>();
 		for (const feature of featureDefinitions) {
-			if (feature.detailView?.some((s) => s.component === "ToolPicker")) continue;
+			if (feature.detailView?.some((s) => s.component === "ToolPicker"))
+				continue;
 			if (!draftFeatures[feature.name]) continue;
 			for (const tool of feature.tools) set.add(tool);
 		}
@@ -148,7 +161,12 @@ const ToolPickerSlot: React.FC<{
 						onClick={() =>
 							updateField(
 								"tools",
-								mergeToolSelection(draftConfig.tools, visibleTools, availableTools, "enable"),
+								mergeToolSelection(
+									draftConfig.tools,
+									visibleTools,
+									availableTools,
+									"enable",
+								),
 							)
 						}
 					>
@@ -163,7 +181,12 @@ const ToolPickerSlot: React.FC<{
 						onClick={() =>
 							updateField(
 								"tools",
-								mergeToolSelection(draftConfig.tools, visibleTools, availableTools, "disable"),
+								mergeToolSelection(
+									draftConfig.tools,
+									visibleTools,
+									availableTools,
+									"disable",
+								),
 							)
 						}
 					>
@@ -204,9 +227,10 @@ const ToolPickerSlot: React.FC<{
 								locked
 									? "cursor-default border-border/40 bg-muted/20"
 									: "cursor-pointer",
-								!locked && (enabled
-									? "border-primary/25 bg-primary/5 hover:bg-primary/8"
-									: "border-border/50 bg-background/50 hover:bg-muted/40"),
+								!locked &&
+									(enabled
+										? "border-primary/25 bg-primary/5 hover:bg-primary/8"
+										: "border-border/50 bg-background/50 hover:bg-muted/40"),
 							)}
 						>
 							<div className="min-w-0 flex-1">
@@ -235,7 +259,10 @@ const ToolPickerSlot: React.FC<{
 								onCheckedChange={() => !locked && toggleTool(toolName)}
 								onClick={(e) => e.stopPropagation()}
 								disabled={locked}
-								className={cn("shrink-0 scale-[0.8]", locked ? "opacity-50" : "pointer-events-none")}
+								className={cn(
+									"shrink-0 scale-[0.8]",
+									locked ? "opacity-50" : "pointer-events-none",
+								)}
 							/>
 						</div>
 					);
@@ -370,7 +397,9 @@ const AgentPickerSlot: React.FC = () => {
 			) : (
 				<div className="grid grid-cols-1 gap-1.5">
 					{selectableAgents.map((agent) => {
-						const isEnabled = draftMultiAgentAccessibleAgentIds.includes(agent.id);
+						const isEnabled = draftMultiAgentAccessibleAgentIds.includes(
+							agent.id,
+						);
 						return (
 							<div
 								key={agent.id}
@@ -425,10 +454,16 @@ const StandardFeatureDetailView: React.FC<{
 	return (
 		<div className="space-y-4">
 			<div className="space-y-2">
-				<p className="text-sm font-semibold">{t("agentSettings.featureTools")}</p>
+				<p className="text-sm font-semibold">
+					{t("agentSettings.featureTools")}
+				</p>
 				<div className="flex flex-wrap gap-2">
 					{feature.tools.map((tool) => (
-						<Badge key={tool} variant="outline" className="font-mono text-[10px]">
+						<Badge
+							key={tool}
+							variant="outline"
+							className="font-mono text-[10px]"
+						>
 							{tool}
 						</Badge>
 					))}
@@ -470,14 +505,24 @@ export const AgentFeatureDetailModal =
 
 		if (!feature) {
 			return (
-				<Dialog open={modal.visible} onOpenChange={(open) => !open && modal.hide()}>
+				<Dialog
+					open={modal.visible}
+					onOpenChange={(open) => !open && modal.hide()}
+				>
 					<DialogContent className="sm:max-w-[540px]">
 						<DialogHeader>
 							<DialogTitle>{t("agentSettings.detail")}</DialogTitle>
-							<DialogDescription>Feature detail is not available.</DialogDescription>
+							<DialogDescription>
+								Feature detail is not available.
+							</DialogDescription>
 						</DialogHeader>
 						<DialogFooter className="flex-row justify-end gap-2">
-							<Button type="button" variant="outline" size="sm" onClick={() => modal.hide()}>
+							<Button
+								type="button"
+								variant="outline"
+								size="sm"
+								onClick={() => modal.hide()}
+							>
 								{t("agentSettings.cancel")}
 							</Button>
 						</DialogFooter>
@@ -488,9 +533,8 @@ export const AgentFeatureDetailModal =
 
 		const title = getAgentFeatureDisplayName(feature, t);
 		const description = getAgentFeatureDescription(feature, t);
-		const hasToolPicker = feature.detailView?.some(
-			(s) => s.component === "ToolPicker",
-		) ?? false;
+		const hasToolPicker =
+			feature.detailView?.some((s) => s.component === "ToolPicker") ?? false;
 
 		const renderDetailView = () => {
 			if (!feature.detailView?.length) {
@@ -501,7 +545,11 @@ export const AgentFeatureDetailModal =
 					{feature.detailView.map((slot, index) => {
 						if (slot.component === "ToolPicker") {
 							return (
-								<ToolPickerSlot key={index} slot={slot} claimedToolSet={claimedToolSet} />
+								<ToolPickerSlot
+									key={index}
+									slot={slot}
+									claimedToolSet={claimedToolSet}
+								/>
 							);
 						}
 						if (slot.component === "RetrievalModeSelect") {
@@ -542,7 +590,9 @@ export const AgentFeatureDetailModal =
 										variant="secondary"
 										className="rounded-full px-1.5 py-0 text-[10px] font-normal"
 									>
-										{t("agentSettings.toolCount", { count: feature.tools.length })}
+										{t("agentSettings.toolCount", {
+											count: feature.tools.length,
+										})}
 									</Badge>
 								</div>
 								<DialogDescription className="text-xs text-muted-foreground">

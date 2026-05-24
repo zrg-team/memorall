@@ -1,7 +1,7 @@
 import z from "zod";
-import type { Tool, ToolFactory } from "@/services/flows/interfaces/tool";
-import { toolRegistry } from "@/services/flows/tool-registry";
-import type { WebSearchMatch } from "@/services/web-browser";
+import type { Tool, ToolFactory } from "../../interfaces/tool";
+import { toolRegistry } from "../../tool-registry";
+import type { WebSearchMatch } from "../../interfaces/web-browser";
 import {
 	createDefaultWebErrorResult,
 	createWebResult,

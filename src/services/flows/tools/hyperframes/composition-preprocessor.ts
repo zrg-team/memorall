@@ -1,4 +1,4 @@
-import type { DocumentFileSystem } from "@/services/filesystem/document-filesystem";
+import type { IFlowFileSystem } from "../../interfaces/filesystem";
 
 // ── Local image → data URL ────────────────────────────────────────────────────
 // Images referenced as src="/documents/..." can't load inside the player iframe
@@ -38,7 +38,7 @@ const documentPathCandidates = (docPath: string): string[] => {
 
 const injectLocalImages = async (
 	html: string,
-	dfs: DocumentFileSystem,
+	dfs: IFlowFileSystem,
 ): Promise<string> => {
 	// Match src="..." or src='...' where the path starts with /documents/
 	const PATTERN = /\bsrc=(["'])(\/documents\/[^"']+)\1/gi;
@@ -49,7 +49,7 @@ const injectLocalImages = async (
 	for (const [full, , docPath] of matches) {
 		for (const fsPath of documentPathCandidates(docPath)) {
 			try {
-				const bytes = await dfs.getFileContent(fsPath);
+				const bytes = await dfs.readFile(fsPath);
 				const dataUrl = `data:${mimeFor(docPath)};base64,${toBase64(bytes)}`;
 				result = result.replace(full, `src="${dataUrl}"`);
 				break;
@@ -79,7 +79,7 @@ const injectLocalImages = async (
  */
 export const preprocessComposition = async (
 	html: string,
-	dfs: DocumentFileSystem,
+	dfs: IFlowFileSystem,
 ): Promise<string> => {
 	const processed = await injectLocalImages(html, dfs);
 	return processed;

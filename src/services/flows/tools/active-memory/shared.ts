@@ -1,10 +1,11 @@
+import { getKnowledgeDatabase } from "../../interfaces/knowledge";
 import { and, desc, eq, inArray, like, or, sql } from "drizzle-orm";
 import type { AllServices, ToolExecutionContext } from "../../interfaces/tool";
-import type { Edge, NewEdge, NewNode, Node } from "@/services/database/types";
-import type { IEmbeddingService } from "@/services/embedding/interfaces/embedding-service.interface";
-import { getRuntimeGraphId } from "@/services/flows/runtime/runtime-context";
-import { getScopedGraphWhere } from "@/utils/scoped-graph-query";
-import { getCurrentEmbeddingFields } from "@/utils/embedding-size-config";
+import type { Edge, NewEdge, NewNode, Node } from "../../interfaces/knowledge";
+import type { IEmbeddingService } from "../../interfaces/embedding";
+import { getRuntimeGraphId } from "../../runtime/runtime-context";
+import { getScopedGraphWhere } from "../../utils/graph-query";
+import { getCurrentEmbeddingFields } from "../../utils/embedding-size-config";
 
 export const ACTIVE_MEMORY_ORIGIN = "active_memory";
 
@@ -88,40 +89,42 @@ export async function upsertMemoryNode(
 	const name = normalizeNodeName(input.name);
 	const nodeType = input.nodeType.trim() || "entity";
 
-	return services.database.use(async ({ db, schema }) => {
-		const existing = await db
-			.select()
-			.from(schema.nodes)
-			.where(
-				and(
-					getScopedGraphWhere({ graphId: input.graphId }, schema.nodes.graph),
-					eq(schema.nodes.name, name),
-					eq(schema.nodes.nodeType, nodeType),
-				),
-			)
-			.limit(1);
+	return getKnowledgeDatabase(services.database).query(
+		async ({ db, schema }) => {
+			const existing = await db
+				.select()
+				.from(schema.nodes)
+				.where(
+					and(
+						getScopedGraphWhere({ graphId: input.graphId }, schema.nodes.graph),
+						eq(schema.nodes.name, name),
+						eq(schema.nodes.nodeType, nodeType),
+					),
+				)
+				.limit(1);
 
-		if (existing[0]) {
-			return existing[0];
-		}
+			if (existing[0]) {
+				return existing[0];
+			}
 
-		const data: NewNode = {
-			name,
-			nodeType,
-			summary: input.summary ?? null,
-			attributes: input.attributes ?? {},
-			graph: input.graphId ?? "",
-		};
+			const data: NewNode = {
+				name,
+				nodeType,
+				summary: input.summary ?? null,
+				attributes: input.attributes ?? {},
+				graph: input.graphId ?? "",
+			};
 
-		const vector = await textToVector(services.embedding, name);
-		if (vector) {
-			const fields = await getCurrentEmbeddingFields();
-			(data as Record<string, unknown>)[fields.nameEmbedding] = vector;
-		}
+			const vector = await textToVector(services.embedding, name);
+			if (vector) {
+				const fields = await getCurrentEmbeddingFields();
+				(data as Record<string, unknown>)[fields.nameEmbedding] = vector;
+			}
 
-		const [created] = await db.insert(schema.nodes).values(data).returning();
-		return created;
-	});
+			const [created] = await db.insert(schema.nodes).values(data).returning();
+			return created;
+		},
+	);
 }
 
 export async function createMemoryEdge(
@@ -179,10 +182,12 @@ export async function createMemoryEdge(
 		}
 	}
 
-	return services.database.use(async ({ db, schema }) => {
-		const [created] = await db.insert(schema.edges).values(data).returning();
-		return created;
-	});
+	return getKnowledgeDatabase(services.database).query(
+		async ({ db, schema }) => {
+			const [created] = await db.insert(schema.edges).values(data).returning();
+			return created;
+		},
+	);
 }
 
 export async function findMemoryFacts(
@@ -199,39 +204,40 @@ export async function findMemoryFacts(
 	const query = input.query?.trim();
 	const limit = Math.max(1, Math.min(input.limit ?? 10, 50));
 
-	const edges = await services.database.use(async ({ db, schema }) => {
-		const clauses = [
-			getScopedGraphWhere({ graphId: input.graphId }, schema.edges.graph),
-			sql`${schema.edges.attributes}->>'origin' = ${ACTIVE_MEMORY_ORIGIN}`,
-		];
+	const edges = await getKnowledgeDatabase(services.database).query<Edge[]>(
+		async ({ db, schema }) => {
+			const clauses = [
+				getScopedGraphWhere({ graphId: input.graphId }, schema.edges.graph),
+				sql`${schema.edges.attributes}->>'origin' = ${ACTIVE_MEMORY_ORIGIN}`,
+			];
 
-		if (!input.includeInactive) {
-			clauses.push(eq(schema.edges.isCurrent, true));
-		}
-		if (input.edgeId) {
-			clauses.push(eq(schema.edges.id, input.edgeId));
-		}
-		if (input.memoryKind) {
-			clauses.push(
-				sql`${schema.edges.attributes}->>'memoryKind' = ${input.memoryKind}`,
-			);
-		}
-		if (query) {
-			clauses.push(
-				or(
+			if (!input.includeInactive) {
+				clauses.push(eq(schema.edges.isCurrent, true));
+			}
+			if (input.edgeId) {
+				clauses.push(eq(schema.edges.id, input.edgeId));
+			}
+			if (input.memoryKind) {
+				clauses.push(
+					sql`${schema.edges.attributes}->>'memoryKind' = ${input.memoryKind}`,
+				);
+			}
+			if (query) {
+				const queryClause = or(
 					like(schema.edges.factText, `%${query}%`),
 					like(schema.edges.edgeType, `%${query}%`),
-				),
-			);
-		}
+				);
+				if (queryClause) clauses.push(queryClause);
+			}
 
-		return db
-			.select()
-			.from(schema.edges)
-			.where(and(...clauses))
-			.orderBy(desc(schema.edges.recordedAt))
-			.limit(limit);
-	});
+			return db
+				.select()
+				.from(schema.edges)
+				.where(and(...clauses))
+				.orderBy(desc(schema.edges.recordedAt))
+				.limit(limit);
+		},
+	);
 
 	const nodeIds = Array.from(
 		new Set(
@@ -242,8 +248,9 @@ export async function findMemoryFacts(
 	);
 	if (!nodeIds.length) return [];
 
-	const nodes = await services.database.use(async ({ db, schema }) =>
-		db.select().from(schema.nodes).where(inArray(schema.nodes.id, nodeIds)),
+	const nodes = await getKnowledgeDatabase(services.database).query<Node[]>(
+		async ({ db, schema }) =>
+			db.select().from(schema.nodes).where(inArray(schema.nodes.id, nodeIds)),
 	);
 	const nodeMap = new Map(nodes.map((node) => [node.id, node]));
 
@@ -267,28 +274,32 @@ export async function invalidateMemoryEdges(
 	const now = new Date();
 	const ids = facts.map((fact) => fact.edge.id);
 
-	await services.database.use(async ({ db, schema }) => {
-		for (const fact of facts) {
-			const currentAttributes =
-				(fact.edge.attributes as Record<string, unknown> | null) ?? {};
-			const nextAttributes = {
-				...currentAttributes,
-				removedAt: now.toISOString(),
-				...(input.reason?.trim() ? { removedReason: input.reason.trim() } : {}),
-				...(input.replacedByEdgeId
-					? { replacedByEdgeId: input.replacedByEdgeId }
-					: {}),
-			};
-			await db
-				.update(schema.edges)
-				.set({
-					isCurrent: false,
-					invalidAt: now,
-					attributes: nextAttributes,
-				})
-				.where(eq(schema.edges.id, fact.edge.id));
-		}
-	});
+	await getKnowledgeDatabase(services.database).query(
+		async ({ db, schema }) => {
+			for (const fact of facts) {
+				const currentAttributes =
+					(fact.edge.attributes as Record<string, unknown> | null) ?? {};
+				const nextAttributes = {
+					...currentAttributes,
+					removedAt: now.toISOString(),
+					...(input.reason?.trim()
+						? { removedReason: input.reason.trim() }
+						: {}),
+					...(input.replacedByEdgeId
+						? { replacedByEdgeId: input.replacedByEdgeId }
+						: {}),
+				};
+				await db
+					.update(schema.edges)
+					.set({
+						isCurrent: false,
+						invalidAt: now,
+						attributes: nextAttributes,
+					})
+					.where(eq(schema.edges.id, fact.edge.id));
+			}
+		},
+	);
 
 	return ids.length;
 }

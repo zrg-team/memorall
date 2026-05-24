@@ -1,20 +1,17 @@
-import { defineStep, bindStep } from "@/services/flows/interfaces/step";
+import { defineStep, bindStep } from "../../interfaces/step";
 import type {
 	StepFactoryFromSpec,
 	StepSpecFromDefinition,
-} from "@/services/flows/interfaces/step";
-import { stepRegistry } from "@/services/flows/step-registry";
+} from "../../interfaces/step";
+import { stepRegistry } from "../../step-registry";
 import type {
 	ChatMessage,
 	ChatCompletionUserMessageParam,
-} from "@/types/openai";
-import {
-	messageContentToText,
-	GraphBase,
-} from "@/services/flows/graph/graph.base";
-import type { GraphTool, ToolName } from "@/services/flows/graph/graph.base";
+} from "../../interfaces/messages";
+import { messageContentToText, GraphBase } from "../../graph/graph.base";
+import type { GraphTool, ToolName } from "../../graph/graph.base";
 import { skillFileSystemService } from "@/services/filesystem/skill-filesystem";
-import { logInfo } from "@/utils/logger";
+import { logInfo } from "../../interfaces/logger";
 
 export const ADD_SKILL_CONTEXT_STEP_NAME = "add-skill-context" as const;
 

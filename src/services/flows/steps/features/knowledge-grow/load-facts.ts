@@ -1,20 +1,21 @@
-import { logInfo, logError } from "@/utils/logger";
+import { getKnowledgeDatabase } from "../../../interfaces/knowledge";
+import { logInfo, logError } from "../../../interfaces/logger";
 import { and, or, inArray, ilike } from "drizzle-orm";
-import { vectorSearchEdges } from "@/utils/vector-search";
-import type { Edge, Node } from "@/services/database";
-import { getScopedGraphWhere } from "@/utils/scoped-graph-query";
+import { vectorSearchEdges } from "../../../utils/vector-search";
+import type { Edge, Node } from "../../../interfaces/knowledge";
+import { getScopedGraphWhere } from "../../../utils/graph-query";
 
-import { defineStep, bindStep } from "@/services/flows/interfaces/step";
+import { defineStep, bindStep } from "../../../interfaces/step";
 import type {
 	StepFactoryFromSpec,
 	StepSpecFromDefinition,
-} from "@/services/flows/interfaces/step";
-import { stepRegistry } from "@/services/flows/step-registry";
-import type { AllServices } from "@/services/flows/interfaces/tool";
+} from "../../../interfaces/step";
+import { stepRegistry } from "../../../step-registry";
+import type { AllServices } from "../../../interfaces/tool";
 import {
 	combineSearchResultsWithTrigram,
 	trigramSearchEdges,
-} from "@/utils/trigram-search";
+} from "../../../utils/trigram-search";
 
 const STEP_NAME = "load-facts" as const;
 
@@ -100,7 +101,9 @@ const definition = defineStep<
 
 			// Find additional nodes for unresolved entities
 			if (unresolvedNames.length > 0) {
-				const found = await databaseService.use(async ({ db, schema }) => {
+				const found: { id: string }[] = await getKnowledgeDatabase(
+					databaseService,
+				).query(async ({ db, schema }) => {
 					const conditions = unresolvedNames.flatMap((n) => {
 						const pat = `%${n}%`;
 						return [
@@ -128,23 +131,25 @@ const definition = defineStep<
 			const idList = Array.from(candidateIds);
 
 			// 1. SQL-based edge search (relations from resolved entities)
-			let sqlResults: typeof input.existingEdges = [];
+			let sqlResults: Edge[] = [];
 			if (idList.length > 0) {
-				sqlResults = await databaseService.use(async ({ db, schema }) => {
-					const where = and(
-						or(
-							inArray(schema.edges.sourceId, idList),
-							inArray(schema.edges.destinationId, idList),
-						),
-						getScopedGraphWhere(input, schema.edges.graph),
-					);
+				sqlResults = await getKnowledgeDatabase(databaseService).query(
+					async ({ db, schema }) => {
+						const where = and(
+							or(
+								inArray(schema.edges.sourceId, idList),
+								inArray(schema.edges.destinationId, idList),
+							),
+							getScopedGraphWhere(input, schema.edges.graph),
+						);
 
-					return db
-						.select()
-						.from(schema.edges)
-						.where(where!)
-						.limit(Math.floor((TOTAL_LIMIT * WEIGHTS.sqlPercentage) / 100));
-				});
+						return db
+							.select()
+							.from(schema.edges)
+							.where(where!)
+							.limit(Math.floor((TOTAL_LIMIT * WEIGHTS.sqlPercentage) / 100));
+					},
+				);
 			}
 
 			// 2. Trigram search based on extracted facts
@@ -174,10 +179,7 @@ const definition = defineStep<
 			}
 
 			// 3. Fallback to vector search if both SQL and trigram fail or have insufficient results
-			let vectorResults: {
-				item: (typeof sqlResults)[0];
-				similarity: number;
-			}[] = [];
+			let vectorResults: { item: Edge; similarity: number }[] = [];
 			const combinedResults = sqlResults.length + trigramResults.length;
 
 			if (
@@ -213,37 +215,39 @@ const definition = defineStep<
 			}
 
 			// 4. Additional relations from resolved entity connections (if space available)
-			let relationResults: typeof sqlResults = [];
+			let relationResults: Edge[] = [];
 			const usedSpace =
 				sqlResults.length + trigramResults.length + vectorResults.length;
 			const remainingSpace = TOTAL_LIMIT - usedSpace;
 
 			if (remainingSpace > 0 && idList.length > 0) {
 				// Find edges that connect any of our resolved entities to other entities
-				relationResults = await databaseService.use(async ({ db, schema }) => {
-					// Find edges where both source and destination are in our candidate list
-					const where = and(
-						inArray(schema.edges.sourceId, idList),
-						inArray(schema.edges.destinationId, idList),
-						getScopedGraphWhere(input, schema.edges.graph),
-					);
+				relationResults = await getKnowledgeDatabase(databaseService).query(
+					async ({ db, schema }) => {
+						// Find edges where both source and destination are in our candidate list
+						const where = and(
+							inArray(schema.edges.sourceId, idList),
+							inArray(schema.edges.destinationId, idList),
+							getScopedGraphWhere(input, schema.edges.graph),
+						);
 
-					return db
-						.select()
-						.from(schema.edges)
-						.where(where!)
-						.limit(remainingSpace);
-				});
+						return db
+							.select()
+							.from(schema.edges)
+							.where(where!)
+							.limit(remainingSpace);
+					},
+				);
 			}
 
 			// Combine all results with deduplication using trigram combiner
-			const edges = combineSearchResultsWithTrigram(
+			const edges = combineSearchResultsWithTrigram<Edge>(
 				[...sqlResults, ...relationResults], // Combine SQL and relation results
 				vectorResults,
 				trigramResults,
 				WEIGHTS,
 				TOTAL_LIMIT,
-				(edge) => edge.id!,
+				(edge) => String(edge.id ?? ""),
 			);
 
 			// Ensure node data for edges
@@ -257,14 +261,16 @@ const definition = defineStep<
 			);
 			let newNodes: Node[] = [];
 			if (missingNodeIds.length > 0) {
-				newNodes = await databaseService.use(async ({ db, schema }) => {
-					const where = and(
-						inArray(schema.nodes.id, missingNodeIds),
-						getScopedGraphWhere(input, schema.nodes.graph),
-					);
+				newNodes = await getKnowledgeDatabase(databaseService).query(
+					async ({ db, schema }) => {
+						const where = and(
+							inArray(schema.nodes.id, missingNodeIds),
+							getScopedGraphWhere(input, schema.nodes.graph),
+						);
 
-					return db.select().from(schema.nodes).where(where);
-				});
+						return db.select().from(schema.nodes).where(where);
+					},
+				);
 			}
 
 			logInfo(

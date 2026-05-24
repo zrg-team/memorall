@@ -1,10 +1,10 @@
 import z from "zod";
-import type { Tool, ToolFactory } from "@/services/flows/interfaces/tool";
-import { toolRegistry } from "@/services/flows/tool-registry";
+import type { Tool, ToolFactory } from "../interfaces/tool";
+import { toolRegistry } from "../tool-registry";
 import {
 	SEND_MESSAGE_TO_AGENT_TOOL_NAME,
 	type SendMessageToAgentToolConfig,
-} from "@/services/flows/steps/features/multi-agent-feature/tool-contract";
+} from "../steps/features/multi-agent-feature/tool-contract";
 
 const schema = z.object({
 	agentId: z.string().min(1).describe("Target child agent flow ID."),

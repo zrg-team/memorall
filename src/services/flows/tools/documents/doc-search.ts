@@ -1,17 +1,19 @@
 import z from "zod";
-import type {
-	Tool,
-	ToolFactory,
-	AllServices,
-} from "@/services/flows/interfaces/tool";
-import { toolRegistry } from "@/services/flows/tool-registry";
-import type { DocumentTreeNode, DocumentType } from "@/types/document-library";
+import type { Tool, ToolFactory, AllServices } from "../../interfaces/tool";
+import { toolRegistry } from "../../tool-registry";
 import { readPDFFile } from "@/main/modules/documents/handlers/pdf-extraction";
 import {
 	parseExcelFile,
 	workbookToMarkdown,
 } from "@/main/modules/documents/handlers/excel-extraction";
 import { normalizeDocumentPath } from "./util";
+import {
+	formatFileSize,
+	globMatches,
+	listEntries,
+	readFileBytes,
+	type FsEntry,
+} from "../fs/util";
 
 const TOOL_NAME = "doc_search" as const;
 
@@ -38,22 +40,7 @@ const schema = z.object({
 });
 
 type Input = z.infer<typeof schema>;
-type Services = Pick<AllServices, "documentFileSystem">;
-
-function flattenTree(nodes: DocumentTreeNode[]): DocumentTreeNode[] {
-	const result: DocumentTreeNode[] = [];
-	for (const node of nodes) {
-		result.push(node);
-		if (node.children?.length) {
-			result.push(...flattenTree(node.children));
-		}
-	}
-	return result;
-}
-
-function isTextFile(type: DocumentType): boolean {
-	return type === "text" || type === "markdown" || type === "other";
-}
+type Services = Pick<AllServices, "fs">;
 
 const MAX_PDF_SEARCH_BYTES = 5 * 1024 * 1024; // 5MB
 const MAX_EXCEL_SEARCH_BYTES = 3 * 1024 * 1024; // 3MB
@@ -83,23 +70,20 @@ async function extractExcelText(content: Uint8Array): Promise<string> {
 	return workbookToMarkdown(workbook);
 }
 
-function globToRegex(pattern: string): RegExp {
-	const escaped = pattern
-		.replace(/[.+^${}()|[\]\\]/g, "\\$&")
-		.replace(/\*/g, ".*")
-		.replace(/\?/g, ".");
-	return new RegExp(`^${escaped}$`, "i");
-}
-
-function formatFileSize(bytes: number): string {
-	if (bytes < 1024) return `${bytes} B`;
-	if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-	return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-function isInScope(nodePath: string, scopePath: string): boolean {
-	if (scopePath === "/") return true;
-	return nodePath === scopePath || nodePath.startsWith(`${scopePath}/`);
+function inferFileType(path: string): "pdf" | "excel" | "text" | "binary" {
+	const lower = path.toLowerCase();
+	if (lower.endsWith(".pdf")) return "pdf";
+	if (
+		lower.endsWith(".xls") ||
+		lower.endsWith(".xlsx") ||
+		lower.endsWith(".xlsm")
+	) {
+		return "excel";
+	}
+	if (/\.(png|jpe?g|gif|webp|ico|zip|tar|gz|7z|mp4|mov|mp3)$/i.test(lower)) {
+		return "binary";
+	}
+	return "text";
 }
 
 export const createDocSearchTool: ToolFactory<Input, Services> = (
@@ -118,41 +102,33 @@ export const createDocSearchTool: ToolFactory<Input, Services> = (
 			max_results = 50,
 		} = input;
 
-		const dfs = services.documentFileSystem;
+		const dfs = services.fs;
 		if (!dfs) {
 			return "Documents not existe.";
 		}
 		const normalizedPath = normalizeDocumentPath(path);
 
-		const tree = await dfs.getTree();
-		const allNodes = flattenTree(tree);
-
-		// Filter by path scope
-		const scopedNodes = allNodes.filter((n) =>
-			isInScope(n.path, normalizedPath),
-		);
+		const scopedNodes = await listEntries(dfs, normalizedPath, true);
 
 		// Filter by file_pattern glob
-		const filePatternRegex = file_pattern ? globToRegex(file_pattern) : null;
 		const filteredNodes = scopedNodes.filter((n) => {
-			if (!filePatternRegex) return true;
-			return filePatternRegex.test(n.name);
+			if (!file_pattern) return true;
+			return globMatches(file_pattern, n.name);
 		});
 
 		// List mode (no pattern)
 		if (!pattern) {
-			const files = filteredNodes.filter((n) => n.type === "file" && n.file);
-			const folders = filteredNodes.filter(
-				(n) => n.type === "folder" && n.folder,
-			);
+			const files = filteredNodes.filter((n) => n.type === "file");
+			const folders = filteredNodes.filter((n) => n.type === "folder");
 
 			const lines: string[] = [];
 			for (const f of folders) {
 				lines.push(`${f.path}/`);
 			}
 			for (const f of files) {
-				const file = f.file!;
-				lines.push(`${f.path}  (${file.type}, ${formatFileSize(file.size)})`);
+				lines.push(
+					`${f.path}  (${inferFileType(f.path)}, ${formatFileSize(f.size ?? 0)})`,
+				);
 			}
 
 			if (lines.length === 0) {
@@ -172,7 +148,9 @@ export const createDocSearchTool: ToolFactory<Input, Services> = (
 			regex = new RegExp(escaped, case_sensitive ? "g" : "gi");
 		}
 
-		const fileNodes = filteredNodes.filter((n) => n.type === "file" && n.file);
+		const fileNodes = filteredNodes.filter(
+			(n): n is FsEntry & { type: "file" } => n.type === "file",
+		);
 
 		const matches: string[] = [];
 		let matchCount = 0;
@@ -183,27 +161,27 @@ export const createDocSearchTool: ToolFactory<Input, Services> = (
 			if (matchCount >= max_results) break;
 
 			try {
-				const file = node.file!;
-				const content = await dfs.getFileContent(node.path);
+				const fileType = inferFileType(node.path);
+				const content = await readFileBytes(dfs, node.path);
 				let text: string | null = null;
 				let pathOnlyFallback = false;
 
-				if (isTextFile(file.type)) {
+				if (fileType === "text") {
 					text = new TextDecoder().decode(content);
-				} else if (file.type === "pdf") {
-					if (file.size > MAX_PDF_SEARCH_BYTES) {
+				} else if (fileType === "pdf") {
+					if ((node.size ?? content.length) > MAX_PDF_SEARCH_BYTES) {
 						pathOnlyFallback = true;
 						skippedContent.push(
-							`${node.path} (pdf too large: ${formatFileSize(file.size)})`,
+							`${node.path} (pdf too large: ${formatFileSize(node.size ?? content.length)})`,
 						);
 					} else {
 						text = await extractPdfText(content);
 					}
-				} else if (file.type === "excel") {
-					if (file.size > MAX_EXCEL_SEARCH_BYTES) {
+				} else if (fileType === "excel") {
+					if ((node.size ?? content.length) > MAX_EXCEL_SEARCH_BYTES) {
 						pathOnlyFallback = true;
 						skippedContent.push(
-							`${node.path} (excel too large: ${formatFileSize(file.size)})`,
+							`${node.path} (excel too large: ${formatFileSize(node.size ?? content.length)})`,
 						);
 					} else {
 						text = await extractExcelText(content);
@@ -211,7 +189,7 @@ export const createDocSearchTool: ToolFactory<Input, Services> = (
 				} else {
 					pathOnlyFallback = true;
 					skippedContent.push(
-						`${node.path} (${file.type} content search not supported)`,
+						`${node.path} (${fileType} content search not supported)`,
 					);
 				}
 

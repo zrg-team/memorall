@@ -94,8 +94,12 @@ function resolveStepOrder(graphType: FlowGraphType): string[] {
 		(s) => !s.graphTypes || s.graphTypes.includes(graphType),
 	);
 	const featureNames = [
-		...featureSteps.filter((s) => !(s.metadata as { volatile?: boolean }).volatile).map((s) => s.name),
-		...featureSteps.filter((s) => (s.metadata as { volatile?: boolean }).volatile).map((s) => s.name),
+		...featureSteps
+			.filter((s) => !(s.metadata as { volatile?: boolean }).volatile)
+			.map((s) => s.name),
+		...featureSteps
+			.filter((s) => (s.metadata as { volatile?: boolean }).volatile)
+			.map((s) => s.name),
 	];
 
 	const injectableMap = stepRegistry.getInjectableSteps();

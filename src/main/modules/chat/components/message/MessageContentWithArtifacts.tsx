@@ -1,6 +1,5 @@
 import type React from "react";
 import { lazy, useMemo } from "react";
-import { ThreeDotsLoader } from "@/main/components/atoms/ThreeDotsLoader";
 import { OpenUIRenderer } from "@/main/modules/openui/OpenUIRenderer";
 import { splitOpenUIContent } from "@/utils/openui";
 import { ArtifactRenderer } from "../artifacts/ArtifactRenderer";
@@ -68,21 +67,6 @@ export const MessageContentWithArtifacts: React.FC<{
 		<>
 			{segments.map((seg) => {
 				if (seg.kind === "openui") {
-					if (!seg.complete && isStreaming) {
-						return (
-							<div
-								key={`openui-${seg.start}-${seg.end}`}
-								className="rounded-md border border-border/60 bg-muted/20 p-3"
-							>
-								<OpenUIRenderer content={seg.content} streaming={true} />
-								<div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
-									<ThreeDotsLoader size="sm" />
-									<span>Rendering visual response</span>
-								</div>
-							</div>
-						);
-					}
-
 					return (
 						<OpenUIRenderer
 							key={`openui-${seg.start}-${seg.end}`}

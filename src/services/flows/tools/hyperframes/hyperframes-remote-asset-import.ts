@@ -1,7 +1,7 @@
 import z from "zod";
-import type { Tool, ToolFactory } from "@/services/flows/interfaces/tool";
-import { toolRegistry } from "@/services/flows/tool-registry";
-import { writeWorkspaceFileBytes } from "@/services/filesystem/document-fs-utils";
+import type { AllServices, Tool, ToolFactory } from "../../interfaces/tool";
+import { toolRegistry } from "../../tool-registry";
+import { writeFlowFileBytes } from "../../utils/document-fs-utils";
 import {
 	createDefaultWebErrorResult,
 	createWebResult,
@@ -68,10 +68,12 @@ const normalizeResourceAssetPath = (
 		.join("/");
 };
 
+type Services = Pick<AllServices, "fs">;
+
 export const createHyperframesRemoteAssetImportTool: ToolFactory<
 	Input,
-	undefined
-> = (): Tool<Input> => ({
+	Services
+> = (services): Tool<Input> => ({
 	name: TOOL_NAME,
 	description:
 		"Import a remote image/SVG into a HyperFrames project's resources folder. Takes project_path and saves under {project_path}/resources/..., returning the relative ./resources/... src to use in index.html.",
@@ -89,7 +91,10 @@ export const createHyperframesRemoteAssetImportTool: ToolFactory<
 				defaultFilename,
 			);
 			const filePath = `${projectPath}/resources/${assetPath}`;
-			await writeWorkspaceFileBytes(filePath, bytes);
+			if (!services.fs) {
+				throw new Error("Filesystem service is not available.");
+			}
+			await writeFlowFileBytes(services.fs, filePath, bytes);
 
 			return createWebResult({
 				actionType: TOOL_NAME,
@@ -112,6 +117,6 @@ toolRegistry.register(TOOL_NAME, createHyperframesRemoteAssetImportTool);
 
 declare global {
 	interface ToolTypeRegistry {
-		[TOOL_NAME]: { input: Input; services: undefined };
+		[TOOL_NAME]: { input: Input; services: Services };
 	}
 }

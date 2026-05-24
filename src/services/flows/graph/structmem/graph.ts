@@ -1,11 +1,11 @@
-import { END, START, StateGraph } from "@langchain/langgraph/web";
-import { logInfo } from "@/utils/logger";
+import { END, START, StateGraph } from "@langchain/langgraph";
+import { logInfo } from "../../interfaces/logger";
 
 import { StructMemAnnotation, type StructMemState } from "./state";
-import { GraphBase } from "@/services/flows/graph/graph.base";
-import type { AllServices } from "@/services/flows/interfaces/tool";
-import { flowRegistry } from "@/services/flows/flow-registry";
-import { stepRegistry } from "@/services/flows/step-registry";
+import { GraphBase } from "../graph.base";
+import type { AllServices } from "../../interfaces/tool";
+import { flowRegistry } from "../../flow-registry";
+import { stepRegistry } from "../../step-registry";
 
 export interface StructMemGraphConfig {
 	consolidationWindowMs?: number;

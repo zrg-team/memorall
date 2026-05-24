@@ -3,7 +3,7 @@ import {
 	FEATURE_DEFAULT_INPUTS,
 	FEATURE_DEFAULT_OUTPUTS,
 	type FeatureCatalogMetadata,
-} from "@/services/flows/feature-catalog-registry";
+} from "../../feature-catalog-registry";
 
 const STEP_NAME = "agent-node" as const;
 
@@ -15,7 +15,8 @@ featureCatalogRegistry.register({
 	inputs: FEATURE_DEFAULT_INPUTS,
 	outputs: FEATURE_DEFAULT_OUTPUTS,
 	metadata: {
-		description: "Select which tools this agent can use during response generation.",
+		description:
+			"Select which tools this agent can use during response generation.",
 		descriptionKey: "agentSettings.agentToolsDesc",
 		displayName: "Agent Tools",
 		nameKey: "agentSettings.agentTools",

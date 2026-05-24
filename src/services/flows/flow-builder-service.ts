@@ -7,7 +7,7 @@ import type {
 	FlowConnection,
 	FlowService,
 	FlowConfig,
-} from "@/services/database/types";
+} from "./interfaces/flow-builder";
 import type { PredefinedFlowKey } from "@/services/database/entities/flows";
 import type {
 	FlowCatalog,
@@ -24,7 +24,7 @@ import {
 	FOUNDATION_CONFIG_KEYS,
 	type FoundationPredefinedConfig,
 } from "./graph/foundation/state";
-import { logError, logInfo } from "@/utils/logger";
+import { logError, logInfo } from "./interfaces/logger";
 import { getFeatureCatalogSteps, getFlowCatalog } from "./flow-builder-catalog";
 import type { UnifiedFlowConfig } from "./interfaces/flow-config";
 import {

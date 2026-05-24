@@ -1,20 +1,7 @@
 import z from "zod";
-import type {
-	Tool,
-	ToolFactory,
-	AllServices,
-} from "@/services/flows/interfaces/tool";
-import { toolRegistry } from "@/services/flows/tool-registry";
-import {
-	normalizeFsPath,
-	flattenTree,
-	globToRegex,
-	isInScope,
-	isWorkspacePath,
-	wsNodeToDisplayPath,
-	wsDisplayToLogicalPath,
-	stripDocumentsPrefix,
-} from "./util";
+import type { Tool, ToolFactory, AllServices } from "../../interfaces/tool";
+import { toolRegistry } from "../../tool-registry";
+import { normalizeFsPath, globMatches, listEntries } from "./util";
 
 const TOOL_NAME = "fs_glob" as const;
 
@@ -22,7 +9,7 @@ const schema = z.object({
 	pattern: z
 		.string()
 		.describe(
-			'Glob pattern to match file paths (e.g. "**/*.md", "notes/**/*.txt", "*.json")',
+			'Glob pattern to match paths (e.g. "**/*.md", "notes/**/*.txt", "*.json")',
 		),
 	path: z
 		.string()
@@ -31,78 +18,37 @@ const schema = z.object({
 });
 
 type Input = z.infer<typeof schema>;
-type Services = Pick<AllServices, "documentFileSystem">;
+type Services = Pick<AllServices, "fs">;
 
 export const createFsGlobTool: ToolFactory<Input, Services> = (
 	services,
 ): Tool<Input> => ({
 	name: TOOL_NAME,
 	description:
-		"Find files whose paths match a glob pattern. Supports ** (recursive), * (single-level wildcard), ? (single character). Returns matching paths sorted by modification time (newest first).",
+		"Find paths that match a glob pattern. Supports common glob syntax including **, *, ?, {a,b}, [abc], [!abc], and extglob groups like @(a|b). For ambiguous asset/name searches, combine likely names and extensions in one pattern, e.g. **/*{icon,logo,brand}*.{png,jpg,jpeg,svg,webp,ico}, instead of making repeated narrow calls. Returns matching paths.",
 	schema,
 	execute: async (input) => {
 		const { pattern, path = "/" } = input;
 
-		const dfs = services.documentFileSystem;
-		if (!dfs) return "Error: documentFileSystem service not available.";
+		const dfs = services.fs;
+		if (!dfs) return "Error: fs service not available.";
 
 		const basePath = normalizeFsPath(path);
-		const regex = globToRegex(pattern);
 
-		if (isWorkspacePath(basePath)) {
-			const wsLogical = wsDisplayToLogicalPath(basePath);
-			const tree = await dfs.getWorkspaceTree();
-			const allNodes = flattenTree(tree);
-
-			const candidates = allNodes.filter((n) => isInScope(n.path, wsLogical));
-
-			const matches = candidates.filter((n) => {
-				const rel =
-					wsLogical === "/"
-						? n.path.slice(1)
-						: n.path.slice(wsLogical.length + 1);
-				return rel.length > 0 && regex.test(rel);
-			});
-
-			if (matches.length === 0) {
-				return `No files found matching "${pattern}" under "${basePath}"`;
-			}
-
-			matches.sort((a, b) => {
-				const ta = a.file?.modifiedAt?.getTime() ?? 0;
-				const tb = b.file?.modifiedAt?.getTime() ?? 0;
-				return tb - ta;
-			});
-
-			return matches.map((n) => wsNodeToDisplayPath(n.path)).join("\n");
-		}
-
-		// Document namespace
-		const docBasePath = stripDocumentsPrefix(basePath);
-		const tree = await dfs.getTree();
-		const allNodes = flattenTree(tree);
-
-		const candidates = allNodes.filter((n) => isInScope(n.path, docBasePath));
-
-		const matches = candidates.filter((n) => {
+		const entries = await listEntries(dfs, basePath, true);
+		const matches = entries.filter((entry) => {
 			const rel =
-				docBasePath === "/"
-					? n.path.slice(1)
-					: n.path.slice(docBasePath.length + 1);
-			return rel.length > 0 && regex.test(rel);
+				basePath === "/"
+					? entry.path.slice(1)
+					: entry.path.slice(basePath.length + 1);
+			return rel.length > 0 && globMatches(pattern, rel);
 		});
 
 		if (matches.length === 0) {
 			return `No files found matching "${pattern}" under "${basePath}"`;
 		}
 
-		matches.sort((a, b) => {
-			const ta = a.file?.modifiedAt?.getTime() ?? 0;
-			const tb = b.file?.modifiedAt?.getTime() ?? 0;
-			return tb - ta;
-		});
-
-		return matches.map((n) => n.path).join("\n");
+		return matches.map((entry) => entry.path).join("\n");
 	},
 });
 

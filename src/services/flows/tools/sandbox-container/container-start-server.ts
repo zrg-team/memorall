@@ -1,11 +1,7 @@
 import z from "zod";
-import type {
-	AllServices,
-	Tool,
-	ToolFactory,
-} from "@/services/flows/interfaces/tool";
-import { toolRegistry } from "@/services/flows/tool-registry";
-import type { SandboxServerKind } from "@/services/sandbox-container";
+import type { AllServices, Tool, ToolFactory } from "../../interfaces/tool";
+import { toolRegistry } from "../../tool-registry";
+import type { SandboxServerKind } from "../../interfaces/sandbox";
 
 const TOOL_NAME = "container_start_server" as const;
 

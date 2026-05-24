@@ -1,17 +1,17 @@
-import { logError } from "@/utils/logger";
-import { defineStep, bindStep } from "@/services/flows/interfaces/step";
+import { logError } from "../../interfaces/logger";
+import { defineStep, bindStep } from "../../interfaces/step";
 import type {
 	StepFactoryFromSpec,
 	StepSpecFromDefinition,
-} from "@/services/flows/interfaces/step";
-import { stepRegistry } from "@/services/flows/step-registry";
+} from "../../interfaces/step";
+import { stepRegistry } from "../../step-registry";
 import {
 	featureCatalogRegistry,
 	FEATURE_DEFAULT_INPUTS,
 	type FeatureCatalogMetadata,
-} from "@/services/flows/feature-catalog-registry";
-import { GraphBase, type GraphTool } from "@/services/flows/graph/graph.base";
-import type { ChatCompletionMessageParam } from "@/types/openai";
+} from "../../feature-catalog-registry";
+import { GraphBase, type GraphTool } from "../../graph/graph.base";
+import type { ChatCompletionMessageParam } from "../../interfaces/messages";
 
 const STEP_NAME = "artifact-feature" as const;
 export const ARTIFACT_FEATURE_NAME = STEP_NAME;

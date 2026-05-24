@@ -1,4 +1,4 @@
-import type { LangGraphRunnableConfig } from "@langchain/langgraph/web";
+import type { LangGraphRunnableConfig } from "@langchain/langgraph";
 
 export const FLOW_RUNTIME_VARS_CONFIG_KEY = "__memorallFlowRuntimeVars";
 

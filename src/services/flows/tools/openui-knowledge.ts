@@ -1,3 +1,4 @@
+import { getKnowledgeDatabase } from "../interfaces/knowledge";
 import { and, desc, eq, inArray, like, or } from "drizzle-orm";
 import { z } from "zod";
 import type {
@@ -5,11 +6,11 @@ import type {
 	Tool,
 	ToolExecutionContext,
 	ToolFactory,
-} from "@/services/flows/interfaces/tool";
-import { toolRegistry } from "@/services/flows/tool-registry";
-import { getRuntimeGraphId } from "@/services/flows/runtime/runtime-context";
-import { getScopedGraphWhere } from "@/utils/scoped-graph-query";
-import type { Edge, Node } from "@/services/database/types";
+} from "../interfaces/tool";
+import { toolRegistry } from "../tool-registry";
+import { getRuntimeGraphId } from "../runtime/runtime-context";
+import { getScopedGraphWhere } from "../utils/graph-query";
+import type { Edge, Node } from "../interfaces/knowledge";
 
 export const OPENUI_KNOWLEDGE_TOOLS = [
 	"search_knowledge",
@@ -46,8 +47,9 @@ const fetchNodesByIds = async (
 	nodeIds: string[],
 ) => {
 	if (!nodeIds.length) return new Map<string, Node>();
-	const nodes = await services.database.use(async ({ db, schema }) =>
-		db.select().from(schema.nodes).where(inArray(schema.nodes.id, nodeIds)),
+	const nodes = await getKnowledgeDatabase(services.database).query<Node[]>(
+		async ({ db, schema }) =>
+			db.select().from(schema.nodes).where(inArray(schema.nodes.id, nodeIds)),
 	);
 	return new Map(nodes.map((node) => [node.id, node]));
 };
@@ -88,22 +90,23 @@ export const createSearchKnowledgeTool: ToolFactory<
 	execute: async (input, context) => {
 		const query = input.query.trim();
 		const graphId = resolveGraphId(input.graphId, context);
-		const nodes = await services.database.use(async ({ db, schema }) =>
-			db
-				.select()
-				.from(schema.nodes)
-				.where(
-					and(
-						getScopedGraphWhere({ graphId }, schema.nodes.graph),
-						or(
-							like(schema.nodes.name, `%${query}%`),
-							like(schema.nodes.nodeType, `%${query}%`),
-							like(schema.nodes.summary, `%${query}%`),
+		const nodes = await getKnowledgeDatabase(services.database).query<Node[]>(
+			async ({ db, schema }) =>
+				db
+					.select()
+					.from(schema.nodes)
+					.where(
+						and(
+							getScopedGraphWhere({ graphId }, schema.nodes.graph),
+							or(
+								like(schema.nodes.name, `%${query}%`),
+								like(schema.nodes.nodeType, `%${query}%`),
+								like(schema.nodes.summary, `%${query}%`),
+							),
 						),
-					),
-				)
-				.orderBy(desc(schema.nodes.updatedAt))
-				.limit(input.limit),
+					)
+					.orderBy(desc(schema.nodes.updatedAt))
+					.limit(input.limit),
 		);
 
 		return toJson(
@@ -139,41 +142,43 @@ export const createGetEntityTool: ToolFactory<
 	schema: getEntitySchema,
 	execute: async (input, context) => {
 		const graphId = resolveGraphId(input.graphId, context);
-		const [node] = await services.database.use(async ({ db, schema }) =>
-			db
-				.select()
-				.from(schema.nodes)
-				.where(
-					and(
-						getScopedGraphWhere({ graphId }, schema.nodes.graph),
-						input.id?.trim()
-							? eq(schema.nodes.id, input.id.trim())
-							: eq(schema.nodes.name, input.name?.trim() ?? ""),
-					),
-				)
-				.limit(1),
+		const [node] = await getKnowledgeDatabase(services.database).query<Node[]>(
+			async ({ db, schema }) =>
+				db
+					.select()
+					.from(schema.nodes)
+					.where(
+						and(
+							getScopedGraphWhere({ graphId }, schema.nodes.graph),
+							input.id?.trim()
+								? eq(schema.nodes.id, input.id.trim())
+								: eq(schema.nodes.name, input.name?.trim() ?? ""),
+						),
+					)
+					.limit(1),
 		);
 
 		if (!node) {
 			return toJson({ error: "Entity not found" });
 		}
 
-		const edges = await services.database.use(async ({ db, schema }) =>
-			db
-				.select()
-				.from(schema.edges)
-				.where(
-					and(
-						getScopedGraphWhere({ graphId }, schema.edges.graph),
-						eq(schema.edges.isCurrent, true),
-						or(
-							eq(schema.edges.sourceId, node.id),
-							eq(schema.edges.destinationId, node.id),
+		const edges = await getKnowledgeDatabase(services.database).query<Edge[]>(
+			async ({ db, schema }) =>
+				db
+					.select()
+					.from(schema.edges)
+					.where(
+						and(
+							getScopedGraphWhere({ graphId }, schema.edges.graph),
+							eq(schema.edges.isCurrent, true),
+							or(
+								eq(schema.edges.sourceId, node.id),
+								eq(schema.edges.destinationId, node.id),
+							),
 						),
-					),
-				)
-				.orderBy(desc(schema.edges.recordedAt))
-				.limit(50),
+					)
+					.orderBy(desc(schema.edges.recordedAt))
+					.limit(50),
 		);
 
 		const relatedIds = Array.from(
@@ -234,48 +239,51 @@ export const createGetTopicFactsTool: ToolFactory<
 		const graphId = resolveGraphId(input.graphId, context);
 		const topic = input.topic?.trim();
 		const matchingNodeIds = topic
-			? await services.database.use(async ({ db, schema }) => {
-					const nodes = await db
-						.select({ id: schema.nodes.id })
-						.from(schema.nodes)
-						.where(
-							and(
-								getScopedGraphWhere({ graphId }, schema.nodes.graph),
-								or(
-									like(schema.nodes.name, `%${topic}%`),
-									like(schema.nodes.summary, `%${topic}%`),
+			? await getKnowledgeDatabase(services.database).query<string[]>(
+					async ({ db, schema }) => {
+						const nodes: Array<{ id: string }> = await db
+							.select({ id: schema.nodes.id })
+							.from(schema.nodes)
+							.where(
+								and(
+									getScopedGraphWhere({ graphId }, schema.nodes.graph),
+									or(
+										like(schema.nodes.name, `%${topic}%`),
+										like(schema.nodes.summary, `%${topic}%`),
+									),
 								),
-							),
-						)
-						.limit(50);
-					return nodes.map((node) => node.id);
-				})
+							)
+							.limit(50);
+						return nodes.map((node) => node.id);
+					},
+				)
 			: [];
 
-		const edges = await services.database.use(async ({ db, schema }) =>
-			db
-				.select()
-				.from(schema.edges)
-				.where(
-					and(
-						getScopedGraphWhere({ graphId }, schema.edges.graph),
-						eq(schema.edges.isCurrent, true),
-						topic
-							? or(
-									like(schema.edges.factText, `%${topic}%`),
-									like(schema.edges.edgeType, `%${topic}%`),
-									...(matchingNodeIds.length
-										? [
-												inArray(schema.edges.sourceId, matchingNodeIds),
-												inArray(schema.edges.destinationId, matchingNodeIds),
-											]
-										: []),
-								)
-							: undefined,
-					),
-				)
-				.orderBy(desc(schema.edges.recordedAt))
-				.limit(input.limit),
+		const edges = await getKnowledgeDatabase(services.database).query<Edge[]>(
+			async ({ db, schema }) =>
+				db
+					.select()
+					.from(schema.edges)
+					.where(
+						and(
+							getScopedGraphWhere({ graphId }, schema.edges.graph),
+							eq(schema.edges.isCurrent, true),
+							topic
+								? or(
+										like(schema.edges.factText, `%${topic}%`),
+										like(schema.edges.edgeType, `%${topic}%`),
+										...(matchingNodeIds.length
+											? [
+													inArray(schema.edges.sourceId, matchingNodeIds),
+													inArray(schema.edges.destinationId, matchingNodeIds),
+												]
+											: []),
+									)
+								: undefined,
+						),
+					)
+					.orderBy(desc(schema.edges.recordedAt))
+					.limit(input.limit),
 		);
 
 		const nodeIds = Array.from(
@@ -314,13 +322,14 @@ export const createGetRecentEntitiesTool: ToolFactory<
 	schema: getRecentEntitiesSchema,
 	execute: async (input, context) => {
 		const graphId = resolveGraphId(input.graphId, context);
-		const nodes = await services.database.use(async ({ db, schema }) =>
-			db
-				.select()
-				.from(schema.nodes)
-				.where(getScopedGraphWhere({ graphId }, schema.nodes.graph))
-				.orderBy(desc(schema.nodes.updatedAt))
-				.limit(input.limit),
+		const nodes = await getKnowledgeDatabase(services.database).query<Node[]>(
+			async ({ db, schema }) =>
+				db
+					.select()
+					.from(schema.nodes)
+					.where(getScopedGraphWhere({ graphId }, schema.nodes.graph))
+					.orderBy(desc(schema.nodes.updatedAt))
+					.limit(input.limit),
 		);
 
 		return toJson(

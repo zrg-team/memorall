@@ -1,11 +1,8 @@
 import z from "zod";
-import type {
-	Tool,
-	ToolFactory,
-	AllServices,
-} from "@/services/flows/interfaces/tool";
-import { toolRegistry } from "@/services/flows/tool-registry";
+import type { Tool, ToolFactory, AllServices } from "../../interfaces/tool";
+import { toolRegistry } from "../../tool-registry";
 import { compositionFile } from "./util";
+import { readFileBytes, writeFileBytes } from "../fs/util";
 
 const TOOL_NAME = "hyperframes_init" as const;
 
@@ -606,7 +603,7 @@ const schema = z.object({
 });
 
 type Input = z.infer<typeof schema>;
-type Services = Pick<AllServices, "documentFileSystem">;
+type Services = Pick<AllServices, "fs">;
 
 export const createHyperframesInitTool: ToolFactory<Input, Services> = (
 	services,
@@ -615,14 +612,14 @@ export const createHyperframesInitTool: ToolFactory<Input, Services> = (
 	description: `Initialise a new HyperFrames project. Writes index.html using the chosen template and creates templates/ with all 5 ready-made video promo designs. Available templates: ${TEMPLATES.map((t) => `${t.filename.replace(".html", "")} (${t.description})`).join(" | ")}. Use force: true to overwrite an existing project.`,
 	schema,
 	execute: async (input) => {
-		const dfs = services.documentFileSystem;
-		if (!dfs) return "Error: documentFileSystem service not available.";
+		const dfs = services.fs;
+		if (!dfs) return "Error: fs service not available.";
 
 		const indexFile = compositionFile(input.project_path);
 
 		if (!input.force) {
 			try {
-				await dfs.getWorkspaceFileContent(indexFile);
+				await readFileBytes(dfs, indexFile);
 				return `Error: ${indexFile} already exists. Use force: true to overwrite.`;
 			} catch {
 				// Does not exist — proceed
@@ -633,7 +630,7 @@ export const createHyperframesInitTool: ToolFactory<Input, Services> = (
 			TEMPLATES.find((t) => t.filename === `${input.template}.html`) ??
 			TEMPLATES[0];
 
-		await dfs.writeWorkspaceFile(indexFile, chosen.html);
+		await writeFileBytes(dfs, indexFile, chosen.html);
 
 		return `Initialised: ${indexFile} with template "${chosen.name}" (${chosen.description}). Edit with hyperframes_write, then hyperframes_validate and hyperframes_show.`;
 	},

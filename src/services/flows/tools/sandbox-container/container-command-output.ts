@@ -1,7 +1,7 @@
 import type {
 	SandboxCommandInfo,
 	SandboxCommandResult,
-} from "@/services/sandbox-container";
+} from "../../interfaces/sandbox";
 
 const formatTimestamp = (value: number): string =>
 	new Date(value).toISOString();

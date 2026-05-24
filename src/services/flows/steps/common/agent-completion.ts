@@ -1,17 +1,17 @@
-import { defineStep, bindStep } from "@/services/flows/interfaces/step";
+import { defineStep, bindStep } from "../../interfaces/step";
 import type {
 	StepFactoryFromSpec,
 	StepSpecFromDefinition,
-} from "@/services/flows/interfaces/step";
-import { stepRegistry } from "@/services/flows/step-registry";
-import type { AllServices } from "@/services/flows/interfaces/tool";
-import type { ChatMessage } from "@/types/openai";
-import { AgentGraph } from "@/services/flows/graph/agent";
-import { logInfo } from "@/utils/logger";
+} from "../../interfaces/step";
+import { stepRegistry } from "../../step-registry";
+import type { AllServices } from "../../interfaces/tool";
+import type { ChatMessage } from "../../interfaces/messages";
+import { AgentGraph } from "../../graph/agent";
+import { logInfo } from "../../interfaces/logger";
 import {
 	isCustomChunkPayload,
 	normalizeLangGraphStreamChunk,
-} from "@/services/flows/utils/langgraph-stream";
+} from "../../utils/langgraph-stream";
 import { GraphBase, type GraphTool } from "../../graph/graph.base";
 
 export const AGENT_COMPLETION_STEP_NAME = "agent-completion" as const;

@@ -1,15 +1,15 @@
-import { END, START, StateGraph } from "@langchain/langgraph/web";
+import { END, START, StateGraph } from "@langchain/langgraph";
 import {
 	DEFAULT_FOUNDATION_SYSTEM_PROMPT,
 	FoundationAnnotation,
 	type FoundationState,
 } from "./state";
-import { GraphBase } from "@/services/flows/graph/graph.base";
-import type { AllServices } from "@/services/flows/interfaces/tool";
-import { logInfo } from "@/utils/logger";
-import { flowRegistry, FEATURE_SLOT } from "@/services/flows/flow-registry";
-import { chatFlowRegistry } from "@/services/flows/chat-flow-registry";
-import type { UnifiedFlowConfig } from "@/services/flows/interfaces/flow-config";
+import { GraphBase } from "../graph.base";
+import type { AllServices } from "../../interfaces/tool";
+import { logInfo } from "../../interfaces/logger";
+import { flowRegistry, FEATURE_SLOT } from "../../flow-registry";
+import { chatFlowRegistry } from "../../chat-flow-registry";
+import type { UnifiedFlowConfig } from "../../interfaces/flow-config";
 
 /**
  * Foundation Flow

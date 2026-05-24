@@ -1,15 +1,15 @@
-import { defineStep, bindStep } from "@/services/flows/interfaces/step";
+import { defineStep, bindStep } from "../../interfaces/step";
 import type {
 	StepFactoryFromSpec,
 	StepSpecFromDefinition,
-} from "@/services/flows/interfaces/step";
-import { stepRegistry } from "@/services/flows/step-registry";
+} from "../../interfaces/step";
+import { stepRegistry } from "../../step-registry";
 import {
 	featureCatalogRegistry,
 	type FeatureCatalogMetadata,
-} from "@/services/flows/feature-catalog-registry";
-import type { ChatMessage } from "@/types/openai";
-import { GraphBase } from "@/services/flows/graph/graph.base";
+} from "../../feature-catalog-registry";
+import type { ChatMessage } from "../../interfaces/messages";
+import { GraphBase } from "../../graph/graph.base";
 
 export const CURRENT_TIME_STEP_NAME = "current-time" as const;
 

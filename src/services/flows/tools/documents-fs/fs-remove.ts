@@ -1,11 +1,7 @@
 import z from "zod";
-import type {
-	Tool,
-	ToolFactory,
-	AllServices,
-} from "@/services/flows/interfaces/tool";
-import { toolRegistry } from "@/services/flows/tool-registry";
-import { normalizeFsPath, flattenTree } from "./util";
+import type { Tool, ToolFactory, AllServices } from "../../interfaces/tool";
+import { toolRegistry } from "../../tool-registry";
+import { displayPathToFsPath, normalizeFsPath, removePath } from "./util";
 
 const TOOL_NAME = "document_fs_remove" as const;
 
@@ -20,7 +16,7 @@ const schema = z.object({
 });
 
 type Input = z.infer<typeof schema>;
-type Services = Pick<AllServices, "documentFileSystem">;
+type Services = Pick<AllServices, "fs">;
 
 export const createFsRemoveTool: ToolFactory<Input, Services> = (
 	services,
@@ -32,38 +28,21 @@ export const createFsRemoveTool: ToolFactory<Input, Services> = (
 	execute: async (input) => {
 		const { path, recursive = false } = input;
 
-		const dfs = services.documentFileSystem;
-		if (!dfs) return "Error: documentFileSystem service not available.";
+		const dfs = services.fs;
+		if (!dfs) return "Error: fs service not available.";
 
 		const targetPath = normalizeFsPath(path);
-		const tree = await dfs.getTree();
-		const allNodes = flattenTree(tree);
-		const node = allNodes.find((n) => n.path === targetPath);
-
-		if (!node) {
-			return `Error: Path not found: ${path}`;
+		if (displayPathToFsPath(targetPath) === "/") {
+			return "Error: Cannot delete the root directory.";
 		}
 
-		if (node.type === "file") {
-			await dfs.deleteFile(targetPath);
-			return `Deleted file: ${targetPath}`;
+		try {
+			const stat = await dfs.stat(displayPathToFsPath(targetPath));
+			await removePath(dfs, targetPath, recursive);
+			return `Deleted ${stat.isDirectory() ? "directory" : "file"}${recursive ? " (recursive)" : ""}: ${targetPath}`;
+		} catch (error) {
+			return `Error: Failed to delete ${targetPath}: ${error instanceof Error ? error.message : String(error)}`;
 		}
-
-		if (node.type === "folder") {
-			// Check for children if non-recursive
-			if (!recursive) {
-				const hasChildren = allNodes.some(
-					(n) => n.path !== targetPath && n.path.startsWith(`${targetPath}/`),
-				);
-				if (hasChildren) {
-					return `Error: Directory is not empty — use recursive: true to delete it: ${targetPath}`;
-				}
-			}
-			await dfs.deleteFolder(targetPath);
-			return `Deleted directory${recursive ? " (recursive)" : ""}: ${targetPath}`;
-		}
-
-		return `Error: Unknown node type at: ${targetPath}`;
 	},
 });
 

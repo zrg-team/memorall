@@ -1,8 +1,8 @@
-import { Annotation } from "@langchain/langgraph/web";
+import { Annotation } from "@langchain/langgraph";
 import { BaseAnnotation, type BaseStateBase } from "../graph.base";
-import type { Node } from "@/services/database/entities/nodes";
-import type { Edge } from "@/services/database/entities/edges";
-import type { Source } from "@/services/database/entities/sources";
+import type { Node } from "../../interfaces/knowledge";
+import type { Edge } from "../../interfaces/knowledge";
+import type { Source } from "../../interfaces/knowledge";
 
 export type StructMemEntryKind = "factual" | "relational";
 

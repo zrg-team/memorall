@@ -1,18 +1,18 @@
-import { logError } from "@/utils/logger";
-import { defineStep, bindStep } from "@/services/flows/interfaces/step";
+import { logError } from "../../interfaces/logger";
+import { defineStep, bindStep } from "../../interfaces/step";
 import type {
 	StepFactoryFromSpec,
 	StepSpecFromDefinition,
-} from "@/services/flows/interfaces/step";
-import { stepRegistry } from "@/services/flows/step-registry";
+} from "../../interfaces/step";
+import { stepRegistry } from "../../step-registry";
 import {
 	featureCatalogRegistry,
 	FEATURE_DEFAULT_INPUTS,
 	type FeatureCatalogMetadata,
-} from "@/services/flows/feature-catalog-registry";
-import { GraphBase, type GraphTool } from "@/services/flows/graph/graph.base";
-import type { ChatCompletionMessageParam } from "@/types/openai";
-import { CO_AGENT_TOOLS } from "@/services/flows/tools/co-agent";
+} from "../../feature-catalog-registry";
+import { GraphBase, type GraphTool } from "../../graph/graph.base";
+import type { ChatCompletionMessageParam } from "../../interfaces/messages";
+import { CO_AGENT_TOOLS } from "../../tools/co-agent";
 
 export const CO_AGENT_FEATURE_STEP_NAME = "co-agent-feature" as const;
 

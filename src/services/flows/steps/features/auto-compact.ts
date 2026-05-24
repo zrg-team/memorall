@@ -1,14 +1,15 @@
-import { logError } from "@/utils/logger";
-import { defineStep, bindStep } from "@/services/flows/interfaces/step";
+import { logError } from "../../interfaces/logger";
+import { defineStep, bindStep } from "../../interfaces/step";
 import type {
 	StepFactoryFromSpec,
 	StepSpecFromDefinition,
-} from "@/services/flows/interfaces/step";
-import { stepRegistry } from "@/services/flows/step-registry";
-import type { ChatCompletionMessageParam } from "@/types/openai";
-import type { BaseLLM } from "@/services/llm/interfaces/base-llm";
-import type { BaseStateBase } from "@/services/flows/graph/graph.base";
-import { estimatePromptTokens } from "@/services/llm/utils/token-usage";
+} from "../../interfaces/step";
+import { stepRegistry } from "../../step-registry";
+import type { ChatCompletionMessageParam } from "../../interfaces/messages";
+import type { ChatCompletionResponse } from "../../interfaces/messages";
+import type { BaseLLM } from "../../interfaces/llm";
+import type { BaseStateBase } from "../../graph/graph.base";
+import { estimatePromptTokens } from "../../utils/token-usage";
 
 const STEP_NAME = "auto-compact" as const;
 const COMPACT_THRESHOLD_RATIO = 0.75;
@@ -53,10 +54,10 @@ async function compactOutputMessages(
 	const toSummarize = outputMessages.slice(0, -KEEP_RECENT_COUNT);
 	const toKeep = outputMessages.slice(-KEEP_RECENT_COUNT);
 
-	const response = await llm.chatCompletions({
+	const response = (await llm.chatCompletions({
 		messages: buildSummarizationPrompt(toSummarize),
 		stream: false,
-	});
+	})) as ChatCompletionResponse;
 
 	const summary = response.choices[0]?.message?.content ?? "";
 

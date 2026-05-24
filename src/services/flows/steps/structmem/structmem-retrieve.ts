@@ -1,18 +1,19 @@
-import { logError, logInfo, logWarn } from "@/utils/logger";
-import { getCurrentEmbeddingColumns } from "@/utils/embedding-size-config";
-import { extractRetrievalTextFromMessages } from "@/services/flows/utils/message-query";
-import { defineStep, bindStep } from "@/services/flows/interfaces/step";
+import { getKnowledgeDatabase } from "../../interfaces/knowledge";
+import { logError, logInfo, logWarn } from "../../interfaces/logger";
+import { getCurrentEmbeddingColumns } from "../../utils/embedding-size-config";
+import { extractRetrievalTextFromMessages } from "../../utils/message-query";
+import { defineStep, bindStep } from "../../interfaces/step";
 import type {
 	StepFactoryFromSpec,
 	StepSpecFromDefinition,
-} from "@/services/flows/interfaces/step";
-import { stepRegistry } from "@/services/flows/step-registry";
-import type { AllServices } from "@/services/flows/interfaces/tool";
+} from "../../interfaces/step";
+import { stepRegistry } from "../../step-registry";
+import type { AllServices } from "../../interfaces/tool";
 import type {
 	ContextToSystemConfig,
 	ContextToSystemInput,
 	ContextToSystemOutput,
-} from "@/services/flows/steps/common/context-to-system";
+} from "../common/context-to-system";
 import { asRecord, type StructMemNodeRow } from "./structmem-utils";
 
 const STEP_NAME = "structmem-retrieve" as const;
@@ -92,9 +93,10 @@ async function vectorSearchStructMemNodes(
 		nodeType === "entry"
 			? "node_type IN ('structmem_entry', 'structmem_factual_entry', 'structmem_relational_entry')"
 			: "node_type = 'structmem_summary'";
-	const rows = await services.database.use(async ({ raw }) => {
-		const queryResult = await raw(
-			`SELECT id, node_type, name, summary, attributes, graph, created_at, updated_at,
+	const rows = await getKnowledgeDatabase(services.database).query(
+		async ({ raw }) => {
+			const queryResult = await raw(
+				`SELECT id, node_type, name, summary, attributes, graph, created_at, updated_at,
 			        1 - (${columns.nameEmbedding} <=> $1::vector) AS similarity
 			 FROM nodes
 			 WHERE ${nodeTypeClause}
@@ -103,11 +105,12 @@ async function vectorSearchStructMemNodes(
 			   AND ${columns.nameEmbedding} IS NOT NULL
 			 ORDER BY similarity DESC
 			 LIMIT $3`,
-			[JSON.stringify(queryEmbedding), graphId, limit],
-		);
-		return ((queryResult as { rows?: StructMemNodeRow[] }).rows ??
-			[]) as StructMemNodeRow[];
-	});
+				[JSON.stringify(queryEmbedding), graphId, limit],
+			);
+			return ((queryResult as { rows?: StructMemNodeRow[] }).rows ??
+				[]) as StructMemNodeRow[];
+		},
+	);
 
 	return rows.map((row) => ({
 		id: row.id,

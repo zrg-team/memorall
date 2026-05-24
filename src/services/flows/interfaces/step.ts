@@ -1,8 +1,8 @@
-import type { LangGraphRunnableConfig } from "@langchain/langgraph/web";
+import type { LangGraphRunnableConfig } from "@langchain/langgraph";
 import {
 	getFlowRunLifecycle,
 	type FlowRunLifecycle,
-} from "@/services/flows/runtime/run-lifecycle";
+} from "../runtime/run-lifecycle";
 
 // ============================================================================
 // Core Step Types

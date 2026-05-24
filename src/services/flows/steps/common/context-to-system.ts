@@ -1,11 +1,11 @@
-import { defineStep, bindStep } from "@/services/flows/interfaces/step";
+import { defineStep, bindStep } from "../../interfaces/step";
 import type {
 	StepFactoryFromSpec,
 	StepSpecFromDefinition,
-} from "@/services/flows/interfaces/step";
-import { stepRegistry } from "@/services/flows/step-registry";
-import type { ChatMessage } from "@/types/openai";
-import { GraphBase } from "@/services/flows/graph/graph.base";
+} from "../../interfaces/step";
+import { stepRegistry } from "../../step-registry";
+import type { ChatMessage } from "../../interfaces/messages";
+import { GraphBase } from "../../graph/graph.base";
 
 const STEP_NAME = "context-to-system" as const;
 

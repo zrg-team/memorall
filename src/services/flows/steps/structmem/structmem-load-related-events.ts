@@ -1,23 +1,24 @@
-import { defineStep, bindStep } from "@/services/flows/interfaces/step";
+import { getKnowledgeDatabase } from "../../interfaces/knowledge";
+import { defineStep, bindStep } from "../../interfaces/step";
 import type {
 	StepFactoryFromSpec,
 	StepSpecFromDefinition,
-} from "@/services/flows/interfaces/step";
-import { stepRegistry } from "@/services/flows/step-registry";
-import type { AllServices } from "@/services/flows/interfaces/tool";
+} from "../../interfaces/step";
+import { stepRegistry } from "../../step-registry";
+import type { AllServices } from "../../interfaces/tool";
 import type {
 	StructMemEntry,
 	StructMemEvent,
 	StructMemState,
-} from "@/services/flows/graph/structmem/state";
-import { getCurrentEmbeddingColumns } from "@/utils/embedding-size-config";
+} from "../../graph/structmem/state";
+import { getCurrentEmbeddingColumns } from "../../utils/embedding-size-config";
 import {
 	dedupeEntries,
 	groupEntriesByEvent,
 	nodeRowToStructMemEntry,
 	type StructMemNodeRow,
 } from "./structmem-utils";
-import { logError, logInfo, logWarn } from "@/utils/logger";
+import { logError, logInfo, logWarn } from "../../interfaces/logger";
 
 const STEP_NAME = "structmem-load-related-events" as const;
 
@@ -82,9 +83,10 @@ async function loadSeedEntries(
 	}
 
 	params.push(limit);
-	const rows = await services.database.use(async ({ raw }) => {
-		const queryResult = await raw(
-			`SELECT id, node_type, name, summary, attributes, graph, created_at, updated_at,
+	const rows = await getKnowledgeDatabase(services.database).query(
+		async ({ raw }) => {
+			const queryResult = await raw(
+				`SELECT id, node_type, name, summary, attributes, graph, created_at, updated_at,
 			        1 - (${columns.nameEmbedding} <=> $1::vector) AS similarity
 			 FROM nodes
 			 WHERE node_type IN ('structmem_entry', 'structmem_factual_entry', 'structmem_relational_entry')
@@ -94,11 +96,12 @@ async function loadSeedEntries(
 			   ${excludeClause}
 			 ORDER BY similarity DESC
 			 LIMIT $${params.length}`,
-			params,
-		);
-		return ((queryResult as { rows?: StructMemNodeRow[] }).rows ??
-			[]) as StructMemNodeRow[];
-	});
+				params,
+			);
+			return ((queryResult as { rows?: StructMemNodeRow[] }).rows ??
+				[]) as StructMemNodeRow[];
+		},
+	);
 
 	return dedupeEntries(rows.map(nodeRowToStructMemEntry));
 }
@@ -116,20 +119,22 @@ async function reconstructEventsByIds(
 		return `$${params.length}`;
 	});
 
-	const rows = await services.database.use(async ({ raw }) => {
-		const queryResult = await raw(
-			`SELECT id, node_type, name, summary, attributes, graph, created_at, updated_at
+	const rows = await getKnowledgeDatabase(services.database).query(
+		async ({ raw }) => {
+			const queryResult = await raw(
+				`SELECT id, node_type, name, summary, attributes, graph, created_at, updated_at
 			 FROM nodes
 			 WHERE node_type IN ('structmem_entry', 'structmem_factual_entry', 'structmem_relational_entry')
 			   AND graph = $1
 			   AND attributes->>'structmem' = 'true'
 			   AND attributes->>'eventId' IN (${placeholders.join(", ")})
 			 ORDER BY created_at ASC`,
-			params,
-		);
-		return ((queryResult as { rows?: StructMemNodeRow[] }).rows ??
-			[]) as StructMemNodeRow[];
-	});
+				params,
+			);
+			return ((queryResult as { rows?: StructMemNodeRow[] }).rows ??
+				[]) as StructMemNodeRow[];
+		},
+	);
 
 	return dedupeEntries(rows.map(nodeRowToStructMemEntry));
 }

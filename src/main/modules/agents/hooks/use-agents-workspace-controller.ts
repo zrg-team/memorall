@@ -277,7 +277,8 @@ export const useAgentsWorkspaceController = () => {
 
 			const enabledFeatures = new Set(draft.enabledFeatureNames);
 			for (const feature of useAgentConfigStore.getState().featureDefinitions) {
-				if (feature.detailView?.some((s) => s.component === "ToolPicker")) continue;
+				if (feature.detailView?.some((s) => s.component === "ToolPicker"))
+					continue;
 				const shouldEnable = enabledFeatures.has(feature.name);
 				if (
 					Boolean(
@@ -305,7 +306,10 @@ export const useAgentsWorkspaceController = () => {
 			const enabledFeatureNames = new Set<string>();
 			for (const feature of featureDefinitions) {
 				if (feature.detailView?.some((s) => s.component === "ToolPicker")) {
-					if (draftConfig.tools.length > 0 || draftMultiAgentAccessibleAgentIds.length > 0) {
+					if (
+						draftConfig.tools.length > 0 ||
+						draftMultiAgentAccessibleAgentIds.length > 0
+					) {
 						enabledFeatureNames.add(feature.name);
 					}
 				} else if (draftFeatures[feature.name]) {

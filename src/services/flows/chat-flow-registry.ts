@@ -12,7 +12,7 @@
 
 import type { AllServices } from "./interfaces/tool";
 import type { BaseFlow } from "./flow-registry";
-import type { ChatCompletionMessageParam } from "@/types/openai";
+import type { ChatCompletionMessageParam } from "./interfaces/messages";
 import type { UnifiedFlowConfig } from "./interfaces/flow-config";
 
 // Re-export so callers that already import from here don't need to change

@@ -5,17 +5,13 @@
  * Output: "context" string ready for LLM consumption.
  */
 
-import { logInfo, logError } from "@/utils/logger";
-import {
-	defineStep,
-	bindStep,
-	type StepOutput,
-} from "@/services/flows/interfaces/step";
+import { logInfo, logError } from "../../interfaces/logger";
+import { defineStep, bindStep, type StepOutput } from "../../interfaces/step";
 import type {
 	StepFactoryFromSpec,
 	StepSpecFromDefinition,
-} from "@/services/flows/interfaces/step";
-import { stepRegistry } from "@/services/flows/step-registry";
+} from "../../interfaces/step";
+import { stepRegistry } from "../../step-registry";
 import type {
 	QuickRetrieveInput,
 	QuickRetrieveOutput,
@@ -26,7 +22,7 @@ import type {
 	EntitiesFactsToContextOutput,
 	EntitiesFactsToContextServices,
 } from "../knowledge-retrieval/entities-facts-to-context";
-import { extractRetrievalTextFromMessages } from "@/services/flows/utils/message-query";
+import { extractRetrievalTextFromMessages } from "../../utils/message-query";
 import type {
 	ContextToSystemConfig,
 	ContextToSystemInput,

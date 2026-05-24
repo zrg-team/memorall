@@ -1,11 +1,8 @@
 import z from "zod";
-import type {
-	Tool,
-	ToolFactory,
-	AllServices,
-} from "@/services/flows/interfaces/tool";
-import { toolRegistry } from "@/services/flows/tool-registry";
+import type { Tool, ToolFactory, AllServices } from "../../interfaces/tool";
+import { toolRegistry } from "../../tool-registry";
 import { normalizeDocumentPath } from "../documents/util";
+import { writeFileBytes } from "../fs/util";
 import { captureWebSessionScreenshot } from "./web-tool-registry";
 import {
 	createDefaultWebErrorResult,
@@ -47,25 +44,7 @@ const schema = z.object({
 });
 
 type Input = z.infer<typeof schema>;
-type Services = Pick<AllServices, "webBrowser" | "documentFileSystem">;
-
-const ensureFolderExists = async (
-	dfs: NonNullable<AllServices["documentFileSystem"]>,
-	folderPath: string,
-): Promise<void> => {
-	if (folderPath === "/" || !folderPath) return;
-	const segments = folderPath.split("/").filter(Boolean);
-	let currentPath = "/";
-	for (const segment of segments) {
-		const nextPath = `${currentPath === "/" ? "" : currentPath}/${segment}`;
-		try {
-			await dfs.createFolder(segment, currentPath);
-		} catch {
-			// Folder likely already exists — continue.
-		}
-		currentPath = nextPath;
-	}
-};
+type Services = Pick<AllServices, "webBrowser" | "fs">;
 
 export const createWebScreenshotTool: ToolFactory<Input, Services> = (
 	services,
@@ -76,7 +55,7 @@ export const createWebScreenshotTool: ToolFactory<Input, Services> = (
 	schema,
 	execute: async (input) => {
 		const webBrowser = requireWebBrowserService(services);
-		const dfs = services.documentFileSystem;
+		const dfs = services.fs;
 		if (!dfs) {
 			return createDefaultWebErrorResult(
 				new Error("Document filesystem service is not available."),
@@ -113,15 +92,7 @@ export const createWebScreenshotTool: ToolFactory<Input, Services> = (
 			const rawPath =
 				input.file_path ?? `/screenshots/screenshot-${Date.now()}.png`;
 			const filePath = normalizeDocumentPath(rawPath);
-			const lastSlash = filePath.lastIndexOf("/");
-			const parentPath = lastSlash > 0 ? filePath.substring(0, lastSlash) : "/";
-			const fileName =
-				filePath.substring(lastSlash + 1) || `screenshot-${Date.now()}.png`;
-
-			await ensureFolderExists(dfs, parentPath);
-
-			const file = new File([bytes], fileName, { type: "image/png" });
-			await dfs.uploadFile(file, parentPath);
+			await writeFileBytes(dfs, filePath, bytes);
 
 			return createWebResult({
 				actionType: "web_screenshot",

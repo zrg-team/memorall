@@ -3,12 +3,18 @@ import "./steps/features";
 
 import {
 	featureCatalogRegistry,
+	type FeatureDetailViewSlot,
 	type FeatureCatalogMetadata,
 	type FeatureIcon,
 	type StepIOField,
 } from "./feature-catalog-registry";
 
-export type { FeatureCatalogMetadata, FeatureDetailViewSlot, FeatureIcon, StepIOField };
+export type {
+	FeatureCatalogMetadata,
+	FeatureDetailViewSlot,
+	FeatureIcon,
+	StepIOField,
+};
 
 /**
  * Flow Builder Catalog

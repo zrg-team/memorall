@@ -1,11 +1,12 @@
 import z from "zod";
-import type {
-	Tool,
-	ToolFactory,
-	AllServices,
-} from "@/services/flows/interfaces/tool";
-import { toolRegistry } from "@/services/flows/tool-registry";
-import { normalizeFsPath, flattenTree, globToRegex, isInScope } from "./util";
+import type { Tool, ToolFactory, AllServices } from "../../interfaces/tool";
+import { toolRegistry } from "../../tool-registry";
+import {
+	normalizeFsPath,
+	collectGrepFileNodes,
+	readFileBytes,
+	runGrep,
+} from "./util";
 
 const TOOL_NAME = "document_fs_grep" as const;
 
@@ -44,14 +45,14 @@ const schema = z.object({
 });
 
 type Input = z.infer<typeof schema>;
-type Services = Pick<AllServices, "documentFileSystem">;
+type Services = Pick<AllServices, "fs">;
 
 export const createFsGrepTool: ToolFactory<Input, Services> = (
 	services,
 ): Tool<Input> => ({
 	name: TOOL_NAME,
 	description:
-		'Search file content with a regex pattern. Returns results in "file:line:content" ripgrep format. Supports context lines, file-glob filtering, and multiple output modes.',
+		'Search file content with a JavaScript regex pattern. Returns results in grep-style "file:line:content" format. Supports context lines, minimatch glob filtering, and output modes. Use one broad regex and one broad glob when possible, e.g. pattern="memorall|icon|logo" glob="**/*.{md,json,svg,png,jpg}".',
 	schema,
 	execute: async (input) => {
 		const {
@@ -64,126 +65,29 @@ export const createFsGrepTool: ToolFactory<Input, Services> = (
 			output_mode = "content",
 		} = input;
 
-		const dfs = services.documentFileSystem;
-		if (!dfs) return "Error: documentFileSystem service not available.";
+		const dfs = services.fs;
+		if (!dfs) return "Error: fs service not available.";
 
 		const targetPath = normalizeFsPath(path);
-		const tree = await dfs.getTree();
-		const allNodes = flattenTree(tree);
-
-		// Build content regex
-		let contentRegex: RegExp;
-		try {
-			contentRegex = new RegExp(pattern, case_sensitive ? "g" : "gi");
-		} catch {
-			const escaped = pattern.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-			contentRegex = new RegExp(escaped, case_sensitive ? "g" : "gi");
-		}
-
-		// Determine the set of file nodes to search
-		const fileGlobRegex = glob ? globToRegex(glob) : null;
-		const targetNode = allNodes.find((n) => n.path === targetPath);
-		const isSingleFile = targetNode?.type === "file";
-
-		const fileNodes = allNodes.filter((n) => {
-			if (n.type !== "file") return false;
-			if (isSingleFile) return n.path === targetPath;
-			if (!isInScope(n.path, targetPath)) return false;
-			if (fileGlobRegex) {
-				// Test the relative path from targetPath so patterns like
-				// "src/**/*.ts" or "*.md" respect directory depth correctly.
-				const rel =
-					targetPath === "/"
-						? n.path.slice(1)
-						: n.path.slice(targetPath.length + 1);
-				if (!fileGlobRegex.test(rel)) return false;
-			}
-			return true;
-		});
+		const fileNodes = await collectGrepFileNodes(dfs, targetPath, glob);
 
 		if (fileNodes.length === 0) {
 			return `No files found to search under "${targetPath}"${glob ? ` matching glob "${glob}"` : ""}`;
 		}
 
-		const outputLines: string[] = [];
-		let totalMatches = 0;
-		let filesWithMatches = 0;
-
-		for (const node of fileNodes) {
-			if (totalMatches >= max_results) break;
-
-			let text: string;
-			try {
-				const raw = await dfs.getFileContent(node.path);
-				text = new TextDecoder().decode(raw);
-			} catch {
-				continue;
-			}
-
-			const lines = text.split("\n");
-			const matchingLineNums: number[] = [];
-
-			for (let i = 0; i < lines.length; i++) {
-				contentRegex.lastIndex = 0;
-				if (contentRegex.test(lines[i])) {
-					matchingLineNums.push(i);
-				}
-			}
-
-			if (matchingLineNums.length === 0) continue;
-
-			filesWithMatches++;
-
-			if (output_mode === "files_with_matches") {
-				outputLines.push(node.path);
-				totalMatches++;
-				continue;
-			}
-
-			if (output_mode === "count") {
-				outputLines.push(`${node.path}:${matchingLineNums.length}`);
-				totalMatches++;
-				continue;
-			}
-
-			// content mode — emit lines with optional context
-			const emitted = new Set<number>();
-			for (let mi = 0; mi < matchingLineNums.length; mi++) {
-				if (totalMatches >= max_results) break;
-				const matchLine = matchingLineNums[mi];
-				const start = Math.max(0, matchLine - context);
-				const end = Math.min(lines.length - 1, matchLine + context);
-
-				for (let l = start; l <= end; l++) {
-					if (emitted.has(l)) continue;
-					emitted.add(l);
-					const sep = l === matchLine ? ":" : "-";
-					outputLines.push(`${node.path}:${l + 1}${sep}${lines[l]}`);
-				}
-
-				// Separator between non-adjacent match groups
-				if (
-					context > 0 &&
-					mi < matchingLineNums.length - 1 &&
-					matchingLineNums[mi + 1] > matchLine + context + 1
-				) {
-					outputLines.push("--");
-				}
-
-				totalMatches++;
-			}
-		}
-
-		if (outputLines.length === 0) {
-			return `No matches found for "${pattern}"${glob ? ` in files matching "${glob}"` : ""} under "${targetPath}"`;
-		}
-
-		const summary =
-			output_mode === "content"
-				? `\n\n${totalMatches} match${totalMatches !== 1 ? "es" : ""} in ${filesWithMatches} file${filesWithMatches !== 1 ? "s" : ""}`
-				: "";
-
-		return `${outputLines.join("\n")}${summary}`;
+		return runGrep(
+			fileNodes,
+			(displayPath) => readFileBytes(dfs, displayPath),
+			{
+				pattern,
+				targetPath,
+				glob,
+				caseSensitive: case_sensitive,
+				context,
+				maxResults: max_results,
+				outputMode: output_mode,
+			},
+		);
 	},
 });
 

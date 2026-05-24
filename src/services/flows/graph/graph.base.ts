@@ -4,7 +4,7 @@ import {
 	START,
 	StateGraph,
 	type LangGraphRunnableConfig,
-} from "@langchain/langgraph/web";
+} from "@langchain/langgraph";
 import type {
 	ChatCompletionContentPart,
 	ChatCompletionChunk,
@@ -12,16 +12,13 @@ import type {
 	ChatCompletionMessageToolCall,
 	ChatCompletionToolMessageParam,
 	ChatCompletionTool,
-} from "@/types/openai";
-import {
-	toolRegistry,
-	convertToolsToOpenAI,
-} from "@/services/flows/tool-registry";
-import type { BaseTool, ToolBinding } from "@/services/flows/interfaces/tool";
+} from "../interfaces/messages";
+import { toolRegistry, convertToolsToOpenAI } from "../tool-registry";
+import type { BaseTool, ToolBinding } from "../interfaces/tool";
 
 const isRawBaseTool = (tool: unknown): tool is BaseTool =>
 	typeof tool === "object" && tool !== null && "execute" in tool;
-import { logWarn } from "@/utils/logger";
+import { logWarn } from "../interfaces/logger";
 import {
 	FLOW_RUN_LIFECYCLE_CONFIG_KEY,
 	createFlowRunLifecycle,
@@ -29,9 +26,9 @@ import {
 	toNode,
 	type FlowRunFinishCallback,
 	type FlowRunLifecycle,
-} from "@/services/flows/runtime/run-lifecycle";
-import { stepRegistry } from "@/services/flows/step-registry";
-import type { UnifiedFlowConfig } from "@/services/flows/interfaces/flow-config";
+} from "../runtime/run-lifecycle";
+import { stepRegistry } from "../step-registry";
+import type { UnifiedFlowConfig } from "../interfaces/flow-config";
 
 export type ToolName = `${keyof ToolTypeRegistry & string}`;
 

@@ -1,21 +1,22 @@
-import { logInfo, logError } from "@/utils/logger";
+import { getKnowledgeDatabase } from "../../../interfaces/knowledge";
+import { logInfo, logError } from "../../../interfaces/logger";
 import { and, or, ilike } from "drizzle-orm";
-import { vectorSearchNodes } from "@/utils/vector-search";
-import type { Edge, Node } from "@/services/database";
-import { getScopedGraphWhere } from "@/utils/scoped-graph-query";
+import { vectorSearchNodes } from "../../../utils/vector-search";
+import type { Edge, Node } from "../../../interfaces/knowledge";
+import { getScopedGraphWhere } from "../../../utils/graph-query";
 
-import { defineStep, bindStep } from "@/services/flows/interfaces/step";
+import { defineStep, bindStep } from "../../../interfaces/step";
 import type {
 	StepFactoryFromSpec,
 	StepSpecFromDefinition,
-} from "@/services/flows/interfaces/step";
-import { stepRegistry } from "@/services/flows/step-registry";
-import type { AllServices } from "@/services/flows/interfaces/tool";
+} from "../../../interfaces/step";
+import { stepRegistry } from "../../../step-registry";
+import type { AllServices } from "../../../interfaces/tool";
 import {
 	combineSearchResultsWithTrigram,
 	trigramSearchEdges,
 	trigramSearchNodes,
-} from "@/utils/trigram-search";
+} from "../../../utils/trigram-search";
 
 const STEP_NAME = "load-entities" as const;
 
@@ -78,7 +79,9 @@ const definition = defineStep<
 			};
 
 			// Perform SQL search (existing logic)
-			const sqlResults = await databaseService.use(async ({ db, schema }) => {
+			const sqlResults: Node[] = await getKnowledgeDatabase(
+				databaseService,
+			).query(async ({ db, schema }) => {
 				const conditions = names.flatMap((n) => {
 					const pat = `%${n}%`;
 					return [
@@ -120,10 +123,7 @@ const definition = defineStep<
 			}
 
 			// Fallback to vector search if both SQL and trigram fail or have insufficient results
-			let vectorResults: {
-				item: (typeof sqlResults)[0];
-				similarity: number;
-			}[] = [];
+			let vectorResults: { item: Node; similarity: number }[] = [];
 			const combinedResults = sqlResults.length + trigramResults.length;
 
 			if (combinedResults < TOTAL_LIMIT * 0.5 && embeddingService) {
@@ -149,13 +149,13 @@ const definition = defineStep<
 			}
 
 			// Combine results with deduplication - use new trigram combiner
-			const related = combineSearchResultsWithTrigram(
+			const related = combineSearchResultsWithTrigram<Node>(
 				sqlResults,
 				vectorResults,
 				trigramResults,
 				WEIGHTS,
 				TOTAL_LIMIT,
-				(node) => node.id!,
+				(node) => String(node.id ?? ""),
 			);
 
 			logInfo(

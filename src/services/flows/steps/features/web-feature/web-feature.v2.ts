@@ -1,14 +1,14 @@
-import { logError } from "@/utils/logger";
-import { defineStep, bindStep } from "@/services/flows/interfaces/step";
+import { logError } from "../../../interfaces/logger";
+import { defineStep, bindStep } from "../../../interfaces/step";
 import type {
 	StepFactoryFromSpec,
 	StepSpecFromDefinition,
-} from "@/services/flows/interfaces/step";
-import { stepRegistry } from "@/services/flows/step-registry";
-import { GraphBase, type GraphTool } from "@/services/flows/graph/graph.base";
-import type { ChatCompletionMessageParam } from "@/types/openai";
-import type { ActiveWebSessionInfo } from "@/services/web-browser";
-import type { AllServices } from "@/services/flows/interfaces/tool";
+} from "../../../interfaces/step";
+import { stepRegistry } from "../../../step-registry";
+import { GraphBase, type GraphTool } from "../../../graph/graph.base";
+import type { ChatCompletionMessageParam } from "../../../interfaces/messages";
+import type { ActiveWebSessionInfo } from "../../../interfaces/web-browser";
+import type { AllServices } from "../../../interfaces/tool";
 
 const STEP_NAME = "web-feature" as const;
 export const WEB_FEATURE_NAME = STEP_NAME;

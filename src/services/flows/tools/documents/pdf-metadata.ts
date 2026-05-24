@@ -1,13 +1,9 @@
 import z from "zod";
 import * as pdfjsLib from "pdfjs-dist";
-import type {
-	Tool,
-	ToolFactory,
-	AllServices,
-} from "@/services/flows/interfaces/tool";
-import { toolRegistry } from "@/services/flows/tool-registry";
-import type { DocumentTreeNode } from "@/types/document-library";
+import type { Tool, ToolFactory, AllServices } from "../../interfaces/tool";
+import { toolRegistry } from "../../tool-registry";
 import { normalizeDocumentPath } from "./util";
+import { pathExists, readFileBytes } from "../fs/util";
 
 const TOOL_NAME = "pdf_metadata" as const;
 
@@ -26,16 +22,7 @@ const schema = z.object({
 });
 
 type Input = z.infer<typeof schema>;
-type Services = Pick<AllServices, "documentFileSystem">;
-
-function flattenTree(nodes: DocumentTreeNode[]): DocumentTreeNode[] {
-	const result: DocumentTreeNode[] = [];
-	for (const node of nodes) {
-		result.push(node);
-		if (node.children?.length) result.push(...flattenTree(node.children));
-	}
-	return result;
-}
+type Services = Pick<AllServices, "fs">;
 
 function toArrayBuffer(content: Uint8Array): ArrayBuffer {
 	if (content.buffer instanceof ArrayBuffer) {
@@ -70,7 +57,7 @@ export const createPdfMetadataTool: ToolFactory<Input, Services> = (
 		"Read PDF metadata from a file in /documents, including total pages and whether image content appears on each page.",
 	schema,
 	execute: async (input) => {
-		const dfs = services.documentFileSystem;
+		const dfs = services.fs;
 		if (!dfs) {
 			return "PDF metadata error: Document filesystem service is not available.";
 		}
@@ -81,17 +68,11 @@ export const createPdfMetadataTool: ToolFactory<Input, Services> = (
 		}
 
 		try {
-			const tree = await dfs.getTree();
-			const allNodes = flattenTree(tree);
-			const node = allNodes.find(
-				(n) => n.path === sourcePath && n.type === "file",
-			);
-
-			if (!node || !node.file) {
+			if (!(await pathExists(dfs, sourcePath))) {
 				return `PDF metadata error: File not found: ${input.source_path}`;
 			}
 
-			const content = await dfs.getFileContent(sourcePath);
+			const content = await readFileBytes(dfs, sourcePath);
 			const loadingTask = pdfjsLib.getDocument({
 				data: toArrayBuffer(content),
 			});

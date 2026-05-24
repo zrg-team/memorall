@@ -1,21 +1,27 @@
 import { z } from "zod";
-import type { ILLMService } from "@/services/llm/interfaces/llm-service.interface";
-import type { IEmbeddingService } from "@/services/embedding/interfaces/embedding-service.interface";
-import type { IDatabaseService } from "@/services/database";
-import type { ISandboxContainerService } from "@/services/sandbox-container";
-import type { IWebBrowserService } from "@/services/web-browser";
-import type { DocumentFileSystem } from "@/services/filesystem/document-filesystem";
-import type { ChatCompletionToolMessageParam } from "@/types/openai";
-import type { FlowRuntimeVars } from "@/services/flows/runtime/runtime-context";
+import type { IFlowLLMService } from "./llm";
+import type { IFlowEmbeddingService } from "./embedding";
+import type { IFlowDatabase } from "./database";
+import type { IFlowLogger } from "./logger";
+import type { IFlowFileSystem } from "./filesystem";
+import type { IFlowWebBrowserService } from "./web-browser";
+import type { IFlowSandboxService } from "./sandbox";
+import type { IDocumentProcessor } from "./document-processor";
+import type { IFlowCoAgentService } from "./co-agent";
+import type { ChatCompletionToolMessageParam } from "./messages";
+import type { FlowRuntimeVars } from "../runtime/runtime-context";
 
 // All available services
 export interface AllServices {
-	llm: ILLMService;
-	embedding: IEmbeddingService;
-	database: IDatabaseService;
-	sandboxContainer?: ISandboxContainerService;
-	webBrowser?: IWebBrowserService;
-	documentFileSystem?: DocumentFileSystem;
+	llm: IFlowLLMService;
+	embedding: IFlowEmbeddingService;
+	database: IFlowDatabase;
+	logger: IFlowLogger;
+	sandboxContainer?: IFlowSandboxService;
+	webBrowser?: IFlowWebBrowserService;
+	fs?: IFlowFileSystem;
+	documentProcessor?: IDocumentProcessor;
+	coAgent?: IFlowCoAgentService;
 }
 
 /**

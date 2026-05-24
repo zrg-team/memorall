@@ -25,6 +25,10 @@ export function extractOpenUILang(content: string): string | null {
 	return openUISegment?.content ?? null;
 }
 
+export function normalizeOpenUILang(content: string): string {
+	return replaceBareIdentifier(content, "undefined", "null");
+}
+
 export function splitOpenUIContent(
 	content: string,
 	options: SplitOpenUIContentOptions = {},
@@ -56,7 +60,10 @@ export function splitOpenUIContent(
 
 		segments.push({
 			kind: "openui",
-			content: content.slice(start, end).trim(),
+			content:
+				expressionEnd === -1
+					? ""
+					: normalizeOpenUILang(content.slice(start, end).trim()),
 			start,
 			end,
 			complete: expressionEnd !== -1,
@@ -78,6 +85,57 @@ export function splitOpenUIContent(
 	return segments.length > 0
 		? segments
 		: [{ kind: "text", text: content, start: 0, end: content.length }];
+}
+
+function replaceBareIdentifier(
+	content: string,
+	identifier: string,
+	replacement: string,
+): string {
+	let result = "";
+	let cursor = 0;
+	let inString = false;
+	let escaped = false;
+
+	for (let i = 0; i < content.length; i += 1) {
+		const char = content[i];
+
+		if (inString) {
+			if (escaped) {
+				escaped = false;
+				continue;
+			}
+			if (char === "\\") {
+				escaped = true;
+				continue;
+			}
+			if (char === '"') {
+				inString = false;
+			}
+			continue;
+		}
+
+		if (char === '"') {
+			inString = true;
+			continue;
+		}
+
+		if (
+			content.startsWith(identifier, i) &&
+			!isIdentifierChar(content[i - 1]) &&
+			!isIdentifierChar(content[i + identifier.length])
+		) {
+			result += content.slice(cursor, i) + replacement;
+			i += identifier.length - 1;
+			cursor = i + 1;
+		}
+	}
+
+	return result + content.slice(cursor);
+}
+
+function isIdentifierChar(char: string | undefined): boolean {
+	return !!char && /[A-Za-z0-9_$]/.test(char);
 }
 
 function findRootExpressionEnd(content: string, start: number): number {

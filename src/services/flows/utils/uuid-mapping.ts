@@ -1,4 +1,4 @@
-import { logInfo, logError } from "@/utils/logger";
+import { consoleFlowLogger, type IFlowLogger } from "../interfaces/logger";
 import { nanoid } from "nanoid";
 
 // UUID validation regex (supports both standard UUIDs and nanoid format)
@@ -46,6 +46,8 @@ export interface MinimalEdge {
 export class UuidMapper {
 	private llmToCorrectMap = new Map<string, UuidMappingResult>();
 
+	constructor(private logger: IFlowLogger = consoleFlowLogger) {}
+
 	/**
 	 * Map entity UUID from LLM to correct node UUID
 	 */
@@ -84,7 +86,7 @@ export class UuidMapper {
 				isExisting: true,
 				finalName: existingNode.name,
 			};
-			logInfo(`[UUID_MAPPER] Valid UUID from LLM: ${llmProvidedUuid}`);
+			this.logger.info(`[UUID_MAPPER] Valid UUID from LLM: ${llmProvidedUuid}`);
 		}
 		// Strategy 2: Try to find by final_name (exact match, case-insensitive)
 		else {
@@ -98,7 +100,7 @@ export class UuidMapper {
 					finalName: nodeByFinalName.name,
 				};
 				if (llmProvidedUuid) {
-					logInfo(
+					this.logger.info(
 						`[UUID_MAPPER] Corrected entity UUID for "${entityName}": ${llmProvidedUuid} -> ${nodeByFinalName.id} (matched by final_name)`,
 					);
 					// Cache the mapping
@@ -117,7 +119,7 @@ export class UuidMapper {
 						finalName: nodeByEntityName.name,
 					};
 					if (llmProvidedUuid) {
-						logInfo(
+						this.logger.info(
 							`[UUID_MAPPER] Corrected entity UUID for "${entityName}": ${llmProvidedUuid} -> ${nodeByEntityName.id} (matched by entity name)`,
 						);
 						// Cache the mapping
@@ -138,18 +140,18 @@ export class UuidMapper {
 							!UUID_REGEX.test(llmProvidedUuid) &&
 							!NANOID_REGEX.test(llmProvidedUuid)
 						) {
-							logError(
+							this.logger.error(
 								`[UUID_MAPPER] Invalid ID format from LLM for entity "${entityName}": ${llmProvidedUuid}. Generated new ID: ${newId}`,
 							);
 						} else {
-							logError(
+							this.logger.error(
 								`[UUID_MAPPER] Non-existent ID from LLM for entity "${entityName}": ${llmProvidedUuid}. Generated new ID: ${newId}`,
 							);
 						}
 						// Cache the mapping
 						this.llmToCorrectMap.set(llmProvidedUuid, result);
 					} else {
-						logInfo(
+						this.logger.info(
 							`[UUID_MAPPER] No ID provided for new entity "${entityName}". Generated: ${newId}`,
 						);
 					}
@@ -208,7 +210,9 @@ export class UuidMapper {
 				correctUuid: llmProvidedUuid,
 				isExisting: true,
 			};
-			logInfo(`[UUID_MAPPER] Valid edge UUID from LLM: ${llmProvidedUuid}`);
+			this.logger.info(
+				`[UUID_MAPPER] Valid edge UUID from LLM: ${llmProvidedUuid}`,
+			);
 		}
 		// Strategy 2: Try to find by matching source, destination, and relation type
 		else {
@@ -229,7 +233,7 @@ export class UuidMapper {
 						isExisting: true,
 					};
 					if (llmProvidedUuid) {
-						logInfo(
+						this.logger.info(
 							`[UUID_MAPPER] Corrected edge UUID: ${llmProvidedUuid} -> ${matchingEdge.id} (matched by source/dest/type)`,
 						);
 						// Cache the mapping
@@ -248,18 +252,18 @@ export class UuidMapper {
 							!UUID_REGEX.test(llmProvidedUuid) &&
 							!NANOID_REGEX.test(llmProvidedUuid)
 						) {
-							logError(
+							this.logger.error(
 								`[UUID_MAPPER] Invalid ID format from LLM for fact "${relationType}": ${llmProvidedUuid}. Generated new ID: ${newId}`,
 							);
 						} else {
-							logError(
+							this.logger.error(
 								`[UUID_MAPPER] Non-existent ID from LLM for fact "${relationType}": ${llmProvidedUuid}. Generated new ID: ${newId}`,
 							);
 						}
 						// Cache the mapping
 						this.llmToCorrectMap.set(llmProvidedUuid, result);
 					} else {
-						logInfo(
+						this.logger.info(
 							`[UUID_MAPPER] No ID provided for new fact "${relationType}". Generated: ${newId}`,
 						);
 					}
@@ -273,7 +277,7 @@ export class UuidMapper {
 				};
 
 				if (llmProvidedUuid) {
-					logInfo(
+					this.logger.info(
 						`[UUID_MAPPER] Entities are new, generated new edge ID for fact "${relationType}": ${newId}`,
 					);
 					// Cache the mapping

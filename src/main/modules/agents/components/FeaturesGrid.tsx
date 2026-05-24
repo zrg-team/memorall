@@ -31,7 +31,11 @@ const hasToolPickerSlot = (feature: AgentFeatureDefinition): boolean =>
 	feature.detailView?.some((s) => s.component === "ToolPicker") ?? false;
 
 const hasDetailContent = (feature: AgentFeatureDefinition): boolean =>
-	!!(feature.detailView?.length || feature.tools.length || feature.systemPrompt.trim());
+	!!(
+		feature.detailView?.length ||
+		feature.tools.length ||
+		feature.systemPrompt.trim()
+	);
 
 interface FeaturesGridProps {
 	summary?: AgentConfigSummary | null;
@@ -67,14 +71,19 @@ export const FeaturesGrid: React.FC<FeaturesGridProps> = ({ summary }) => {
 		for (const feature of featureDefinitions) {
 			if (hasToolPickerSlot(feature)) continue;
 			if (!draftFeatures[feature.name]) continue;
-			if (feature.requiresAccessibleAgents && draftMultiAgentAccessibleAgentIds.length === 0)
+			if (
+				feature.requiresAccessibleAgents &&
+				draftMultiAgentAccessibleAgentIds.length === 0
+			)
 				continue;
 			for (const tool of feature.tools) enabledToolSet.add(tool);
 		}
 		const availableToolSet = new Set(availableTools);
 		return [
 			...availableTools.filter((tool) => enabledToolSet.has(tool)),
-			...Array.from(enabledToolSet).filter((tool) => !availableToolSet.has(tool)),
+			...Array.from(enabledToolSet).filter(
+				(tool) => !availableToolSet.has(tool),
+			),
 		];
 	}, [
 		availableTools,
@@ -84,7 +93,8 @@ export const FeaturesGrid: React.FC<FeaturesGridProps> = ({ summary }) => {
 		featureDefinitions,
 	]);
 
-	const enabledToolNames = summary?.enabledToolNames ?? fallbackEnabledToolNames;
+	const enabledToolNames =
+		summary?.enabledToolNames ?? fallbackEnabledToolNames;
 	const enabledToolCount = summary?.enabledToolCount ?? enabledToolNames.length;
 
 	const filteredFeatures = React.useMemo(
@@ -124,9 +134,14 @@ export const FeaturesGrid: React.FC<FeaturesGridProps> = ({ summary }) => {
 		: otherFeatures.slice(0, FEATURES_DEFAULT_VISIBLE);
 	const hiddenCount = otherFeatures.length - FEATURES_DEFAULT_VISIBLE;
 
-	const isFeatureEffectivelyEnabled = (feature: AgentFeatureDefinition): boolean => {
+	const isFeatureEffectivelyEnabled = (
+		feature: AgentFeatureDefinition,
+	): boolean => {
 		if (hasToolPickerSlot(feature)) {
-			return draftConfig.tools.length > 0 || draftMultiAgentAccessibleAgentIds.length > 0;
+			return (
+				draftConfig.tools.length > 0 ||
+				draftMultiAgentAccessibleAgentIds.length > 0
+			);
 		}
 		return Boolean(draftFeatures[feature.name]);
 	};
@@ -138,7 +153,9 @@ export const FeaturesGrid: React.FC<FeaturesGridProps> = ({ summary }) => {
 		const displayDesc = getAgentFeatureDescription(feature, t);
 
 		if (hasToolPickerSlot(feature)) {
-			const slot = feature.detailView!.find((s) => s.component === "ToolPicker")!;
+			const slot = feature.detailView!.find(
+				(s) => s.component === "ToolPicker",
+			)!;
 			const toolsToShow =
 				slot.scope === "all"
 					? availableTools

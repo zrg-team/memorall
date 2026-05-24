@@ -1,17 +1,13 @@
 import z from "zod";
-import type {
-	Tool,
-	ToolFactory,
-	AllServices,
-} from "@/services/flows/interfaces/tool";
-import { toolRegistry } from "@/services/flows/tool-registry";
-import type { DocumentTreeNode, DocumentType } from "@/types/document-library";
+import type { Tool, ToolFactory, AllServices } from "../../interfaces/tool";
+import { toolRegistry } from "../../tool-registry";
 import { readPDFFile } from "@/main/modules/documents/handlers/pdf-extraction";
 import {
 	parseExcelFile,
 	workbookToMarkdown,
 } from "@/main/modules/documents/handlers/excel-extraction";
 import { normalizeDocumentPath } from "./util";
+import { readFileBytes } from "../fs/util";
 
 const TOOL_NAME = "doc_read" as const;
 
@@ -22,21 +18,21 @@ const schema = z.object({
 });
 
 type Input = z.infer<typeof schema>;
-type Services = Pick<AllServices, "documentFileSystem">;
+type Services = Pick<AllServices, "fs">;
 
-function flattenTree(nodes: DocumentTreeNode[]): DocumentTreeNode[] {
-	const result: DocumentTreeNode[] = [];
-	for (const node of nodes) {
-		result.push(node);
-		if (node.children?.length) {
-			result.push(...flattenTree(node.children));
-		}
+type ReadableFileType = "pdf" | "excel" | "text";
+
+function inferFileType(path: string): ReadableFileType {
+	const lower = path.toLowerCase();
+	if (lower.endsWith(".pdf")) return "pdf";
+	if (
+		lower.endsWith(".xls") ||
+		lower.endsWith(".xlsx") ||
+		lower.endsWith(".xlsm")
+	) {
+		return "excel";
 	}
-	return result;
-}
-
-function isTextFile(type: DocumentType): boolean {
-	return type === "text" || type === "markdown" || type === "other";
+	return "text";
 }
 
 function toArrayBuffer(content: Uint8Array): ArrayBuffer {
@@ -52,10 +48,10 @@ function toArrayBuffer(content: Uint8Array): ArrayBuffer {
 }
 
 async function extractReadableText(
-	fileType: DocumentType,
+	fileType: ReadableFileType,
 	content: Uint8Array,
 ): Promise<string | null> {
-	if (isTextFile(fileType)) {
+	if (fileType === "text") {
 		return new TextDecoder().decode(content);
 	}
 
@@ -85,23 +81,22 @@ export const createDocReadTool: ToolFactory<Input, Services> = (
 		const { offset = 1, limit } = input;
 		const filePath = normalizeDocumentPath(input.file_path);
 
-		const dfs = services.documentFileSystem;
+		const dfs = services.fs;
 		if (!dfs) {
 			return "Documents not existe.";
 		}
-		const tree = await dfs.getTree();
-		const allNodes = flattenTree(tree);
-		const node = allNodes.find((n) => n.path === filePath && n.type === "file");
-
-		if (!node || !node.file) {
+		let content: Uint8Array;
+		try {
+			content = await readFileBytes(dfs, filePath);
+		} catch {
 			return `Error: File not found: ${input.file_path}`;
 		}
 
-		const content = await dfs.getFileContent(filePath);
-		const text = await extractReadableText(node.file.type, content);
+		const fileType = inferFileType(filePath);
+		const text = await extractReadableText(fileType, content);
 
 		if (!text) {
-			return `Error: Cannot read binary file (${node.file.type}): ${input.file_path}. Only text, markdown, excel, and pdf files can be read.`;
+			return `Error: Cannot read binary file (${fileType}): ${input.file_path}. Only text, markdown, excel, and pdf files can be read.`;
 		}
 		const allLines = text.split("\n");
 		const totalLines = allLines.length;

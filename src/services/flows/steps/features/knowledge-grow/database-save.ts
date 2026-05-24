@@ -1,19 +1,18 @@
-import type { InferSelectModel } from "drizzle-orm";
+import { getKnowledgeDatabase } from "../../../interfaces/knowledge";
 import { eq, or } from "drizzle-orm";
-import { logInfo, logError, logWarn } from "@/utils/logger";
-import type { Node, NewNode } from "@/services/database/entities/nodes";
-import type { Edge, NewEdge } from "@/services/database/entities/edges";
-import type { IEmbeddingService } from "@/services/embedding/interfaces/embedding-service.interface";
-import { schema } from "@/services/database/schema";
-import { getCurrentEmbeddingFields } from "@/utils/embedding-size-config";
+import { logInfo, logError, logWarn } from "../../../interfaces/logger";
+import type { Node, NewNode, Source } from "../../../interfaces/knowledge";
+import type { Edge, NewEdge } from "../../../interfaces/knowledge";
+import type { IEmbeddingService } from "../../../interfaces/embedding";
+import { getCurrentEmbeddingFields } from "../../../utils/embedding-size-config";
 
-import { defineStep, bindStep } from "@/services/flows/interfaces/step";
+import { defineStep, bindStep } from "../../../interfaces/step";
 import type {
 	StepFactoryFromSpec,
 	StepSpecFromDefinition,
-} from "@/services/flows/interfaces/step";
-import { stepRegistry } from "@/services/flows/step-registry";
-import type { AllServices } from "@/services/flows/interfaces/tool";
+} from "../../../interfaces/step";
+import { stepRegistry } from "../../../step-registry";
+import type { AllServices } from "../../../interfaces/tool";
 
 const STEP_NAME = "knowledge-database-save" as const;
 
@@ -75,8 +74,7 @@ export type KnowledgeDatabaseSaveServices = Pick<
 	"database" | "embedding"
 >;
 
-// Inferred database types
-type SourceSelectType = InferSelectModel<typeof schema.sources>;
+type SourceSelectType = Source;
 
 /** Output from database save step */
 export interface KnowledgeDatabaseSaveOutput {
@@ -248,66 +246,68 @@ async function createNodes(
 	const newEntities = input.resolvedEntities.filter((e) => !e.isExisting);
 	const skippedNodes: ResolvedEntity[] = [];
 
-	return await services.database.use(async ({ db, schema }) => {
-		for (const entity of newEntities) {
-			try {
-				const nodeData: NewNode = {
-					nodeType: entity.nodeType,
-					name: entity.finalName,
-					summary: entity.summary,
-					attributes: entity.attributes || {},
-					graph: graphId,
-				};
+	return await getKnowledgeDatabase(services.database).query(
+		async ({ db, schema }) => {
+			for (const entity of newEntities) {
+				try {
+					const nodeData: NewNode = {
+						nodeType: entity.nodeType,
+						name: entity.finalName,
+						summary: entity.summary,
+						attributes: (entity.attributes || {}) as Record<string, unknown>,
+						graph: graphId,
+					};
 
-				const nameEmbedding = await safeTextToVector(
-					services.embedding,
-					entity.finalName,
-					`NODE_EMBEDDING:${entity.finalName.substring(0, 50)}`,
-				);
-				if (nameEmbedding) {
-					const fields = await getCurrentEmbeddingFields();
-					(nodeData as Record<string, unknown>)[fields.nameEmbedding] =
-						nameEmbedding;
+					const nameEmbedding = await safeTextToVector(
+						services.embedding,
+						entity.finalName,
+						`NODE_EMBEDDING:${entity.finalName.substring(0, 50)}`,
+					);
+					if (nameEmbedding) {
+						const fields = await getCurrentEmbeddingFields();
+						(nodeData as Record<string, unknown>)[fields.nameEmbedding] =
+							nameEmbedding;
+					}
+
+					const [createdNode] = await db
+						.insert(schema.nodes)
+						.values(nodeData)
+						.returning();
+
+					logInfo(
+						`[DATABASE_SAVE] Created node with ID: ${createdNode.id} for entity: ${entity.finalName}`,
+					);
+					createdNodes.push(createdNode);
+
+					await db.insert(schema.sourceNodes).values({
+						sourceId: createdSource.id,
+						nodeId: createdNode.id,
+						relation: "MENTIONED_IN",
+						graph: graphId,
+					});
+				} catch (error) {
+					skippedNodes.push(entity);
+					logError(
+						`[DATABASE_SAVE] Failed to create node for entity: ${entity.finalName}`,
+						error,
+					);
 				}
-
-				const [createdNode] = await db
-					.insert(schema.nodes)
-					.values(nodeData)
-					.returning();
-
-				logInfo(
-					`[DATABASE_SAVE] Created node with ID: ${createdNode.id} for entity: ${entity.finalName}`,
-				);
-				createdNodes.push(createdNode);
-
-				await db.insert(schema.sourceNodes).values({
-					sourceId: createdSource.id,
-					nodeId: createdNode.id,
-					relation: "MENTIONED_IN",
-					graph: graphId,
-				});
-			} catch (error) {
-				skippedNodes.push(entity);
-				logError(
-					`[DATABASE_SAVE] Failed to create node for entity: ${entity.finalName}`,
-					error,
-				);
 			}
-		}
 
-		if (skippedNodes.length > 0) {
-			logWarn("[DATABASE_SAVE] Skipped nodes that could not be stored:", {
-				count: skippedNodes.length,
-				skippedNodes: skippedNodes.map((entity) => ({
-					name: entity.finalName,
-					type: entity.nodeType,
-					uuid: entity.uuid,
-				})),
-			});
-		}
+			if (skippedNodes.length > 0) {
+				logWarn("[DATABASE_SAVE] Skipped nodes that could not be stored:", {
+					count: skippedNodes.length,
+					skippedNodes: skippedNodes.map((entity) => ({
+						name: entity.finalName,
+						type: entity.nodeType,
+						uuid: entity.uuid,
+					})),
+				});
+			}
 
-		return createdNodes;
-	});
+			return createdNodes;
+		},
+	);
 }
 
 // ============================================================================
@@ -321,185 +321,189 @@ async function createEdges(
 	createdSource: SourceSelectType,
 	services: KnowledgeDatabaseSaveServices,
 ): Promise<Edge[]> {
-	return await services.database.use(async ({ db, schema }) => {
-		const createdEdges: Edge[] = [];
+	return await getKnowledgeDatabase(services.database).query(
+		async ({ db, schema }) => {
+			const createdEdges: Edge[] = [];
 
-		const factsToProcess =
-			input.enrichedFacts && input.enrichedFacts.length > 0
-				? input.enrichedFacts.filter((f) => !f.isExisting)
-				: (input.resolvedFacts || [])
-						.filter((f) => !f.isExisting)
-						.map((fact) => ({
-							...fact,
-							temporal: { validAt: undefined, invalidAt: undefined },
-						}));
+			const factsToProcess =
+				input.enrichedFacts && input.enrichedFacts.length > 0
+					? input.enrichedFacts.filter((f) => !f.isExisting)
+					: (input.resolvedFacts || [])
+							.filter((f) => !f.isExisting)
+							.map((fact) => ({
+								...fact,
+								temporal: { validAt: undefined, invalidAt: undefined },
+							}));
 
-		logInfo(`[DATABASE_SAVE] Processing facts:`, {
-			enrichedFactsCount: input.enrichedFacts?.length || 0,
-			resolvedFactsCount: input.resolvedFacts?.length || 0,
-			factsToProcessCount: factsToProcess.length,
-		});
-
-		const skippedEdges: EnrichedFact[] = [];
-
-		// Build lookup map for node names to IDs
-		const nodeNameToId = new Map<string, string>();
-
-		for (const node of createdNodes) {
-			if (node.name && node.id) {
-				nodeNameToId.set(node.name, String(node.id));
-			}
-		}
-
-		for (const node of input.existingNodes || []) {
-			if (node.name && node.id) {
-				nodeNameToId.set(node.name, String(node.id));
-			}
-		}
-
-		logInfo(
-			`[DATABASE_SAVE] Built nodeNameToId map with ${nodeNameToId.size} entries`,
-		);
-
-		for (const fact of factsToProcess) {
-			try {
-				const sourceEntity = input.resolvedEntities.find(
-					(e) => e.uuid === fact.sourceEntityId,
-				);
-				const destEntity = input.resolvedEntities.find(
-					(e) => e.uuid === fact.destinationEntityId,
-				);
-
-				if (!sourceEntity || !destEntity) {
-					skippedEdges.push(fact);
-					logError(
-						`[DATABASE_SAVE] Could not find entities for fact: ${fact.sourceEntityId} -> ${fact.destinationEntityId}`,
-					);
-					continue;
-				}
-
-				const allNodes = [
-					...createdNodes,
-					...(input.existingNodes || []),
-				] as Node[];
-				const sourceNodeId = getNodeId(sourceEntity, nodeNameToId, allNodes);
-				const destNodeId = getNodeId(destEntity, nodeNameToId, allNodes);
-
-				if (!sourceNodeId || !destNodeId) {
-					skippedEdges.push(fact);
-					logError(
-						`[DATABASE_SAVE] Could not resolve node IDs for: ${sourceEntity.finalName} -> ${destEntity.finalName}`,
-					);
-					continue;
-				}
-
-				// Validate UUID format
-				const uuidRegex =
-					/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-				if (!uuidRegex.test(sourceNodeId) || !uuidRegex.test(destNodeId)) {
-					skippedEdges.push(fact);
-					logError(
-						`[DATABASE_SAVE] Invalid UUID format: source=${sourceNodeId}, dest=${destNodeId}`,
-					);
-					continue;
-				}
-
-				// Validate node existence
-				const nodeExistenceCheck = await db
-					.select({ id: schema.nodes.id })
-					.from(schema.nodes)
-					.where(
-						or(
-							eq(schema.nodes.id, sourceNodeId),
-							eq(schema.nodes.id, destNodeId),
-						),
-					);
-
-				const existingIds = new Set(nodeExistenceCheck.map((n) => n.id));
-
-				if (!existingIds.has(sourceNodeId) || !existingIds.has(destNodeId)) {
-					skippedEdges.push(fact);
-					logError(`[DATABASE_SAVE] Node(s) do not exist in database`);
-					continue;
-				}
-
-				const edgeData: NewEdge = {
-					sourceId: sourceNodeId,
-					destinationId: destNodeId,
-					edgeType: fact.relationType,
-					factText: fact.factText,
-					validAt: fact.temporal?.validAt
-						? new Date(fact.temporal.validAt)
-						: undefined,
-					invalidAt: fact.temporal?.invalidAt
-						? new Date(fact.temporal.invalidAt)
-						: undefined,
-					recordedAt: new Date(),
-					attributes: fact.attributes || {},
-					graph: graphId,
-				};
-
-				// Generate embeddings
-				const factEmbedding = await safeTextToVector(
-					services.embedding,
-					fact.factText,
-					`FACT_EMBEDDING:${fact.factText.substring(0, 50)}`,
-				);
-				const typeEmbedding = await safeTextToVector(
-					services.embedding,
-					fact.relationType,
-					`TYPE_EMBEDDING:${fact.relationType}`,
-				);
-
-				if (factEmbedding || typeEmbedding) {
-					const fields = await getCurrentEmbeddingFields();
-					if (factEmbedding) {
-						(edgeData as Record<string, unknown>)[fields.factEmbedding] =
-							factEmbedding;
-					}
-					if (typeEmbedding) {
-						(edgeData as Record<string, unknown>)[fields.typeEmbedding] =
-							typeEmbedding;
-					}
-				}
-
-				try {
-					const [edge] = await db
-						.insert(schema.edges)
-						.values(edgeData)
-						.returning();
-
-					createdEdges.push(edge);
-
-					await db.insert(schema.sourceEdges).values({
-						sourceId: createdSource.id,
-						edgeId: edge.id,
-						relation: "EXTRACTED_FROM",
-						linkWeight: 1.0,
-						graph: graphId,
-					});
-				} catch (edgeError) {
-					skippedEdges.push(fact);
-					logError(`[DATABASE_SAVE] Failed to create edge`, edgeError);
-				}
-			} catch (error) {
-				skippedEdges.push(fact);
-				logError(`[DATABASE_SAVE] Unexpected error processing fact`, error);
-			}
-		}
-
-		if (skippedEdges.length > 0) {
-			logWarn("[DATABASE_SAVE] Skipped edges:", {
-				count: skippedEdges.length,
-				skippedEdges: skippedEdges.map((fact) => ({
-					relationType: fact.relationType,
-					factText: fact.factText,
-				})),
+			logInfo(`[DATABASE_SAVE] Processing facts:`, {
+				enrichedFactsCount: input.enrichedFacts?.length || 0,
+				resolvedFactsCount: input.resolvedFacts?.length || 0,
+				factsToProcessCount: factsToProcess.length,
 			});
-		}
 
-		return createdEdges;
-	});
+			const skippedEdges: EnrichedFact[] = [];
+
+			// Build lookup map for node names to IDs
+			const nodeNameToId = new Map<string, string>();
+
+			for (const node of createdNodes) {
+				if (node.name && node.id) {
+					nodeNameToId.set(node.name, String(node.id));
+				}
+			}
+
+			for (const node of input.existingNodes || []) {
+				if (node.name && node.id) {
+					nodeNameToId.set(node.name, String(node.id));
+				}
+			}
+
+			logInfo(
+				`[DATABASE_SAVE] Built nodeNameToId map with ${nodeNameToId.size} entries`,
+			);
+
+			for (const fact of factsToProcess) {
+				try {
+					const sourceEntity = input.resolvedEntities.find(
+						(e) => e.uuid === fact.sourceEntityId,
+					);
+					const destEntity = input.resolvedEntities.find(
+						(e) => e.uuid === fact.destinationEntityId,
+					);
+
+					if (!sourceEntity || !destEntity) {
+						skippedEdges.push(fact);
+						logError(
+							`[DATABASE_SAVE] Could not find entities for fact: ${fact.sourceEntityId} -> ${fact.destinationEntityId}`,
+						);
+						continue;
+					}
+
+					const allNodes = [
+						...createdNodes,
+						...(input.existingNodes || []),
+					] as Node[];
+					const sourceNodeId = getNodeId(sourceEntity, nodeNameToId, allNodes);
+					const destNodeId = getNodeId(destEntity, nodeNameToId, allNodes);
+
+					if (!sourceNodeId || !destNodeId) {
+						skippedEdges.push(fact);
+						logError(
+							`[DATABASE_SAVE] Could not resolve node IDs for: ${sourceEntity.finalName} -> ${destEntity.finalName}`,
+						);
+						continue;
+					}
+
+					// Validate UUID format
+					const uuidRegex =
+						/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+					if (!uuidRegex.test(sourceNodeId) || !uuidRegex.test(destNodeId)) {
+						skippedEdges.push(fact);
+						logError(
+							`[DATABASE_SAVE] Invalid UUID format: source=${sourceNodeId}, dest=${destNodeId}`,
+						);
+						continue;
+					}
+
+					// Validate node existence
+					const nodeExistenceCheck = await db
+						.select({ id: schema.nodes.id })
+						.from(schema.nodes)
+						.where(
+							or(
+								eq(schema.nodes.id, sourceNodeId),
+								eq(schema.nodes.id, destNodeId),
+							),
+						);
+
+					const existingIds = new Set(
+						nodeExistenceCheck.map((n: { id: string }) => n.id),
+					);
+
+					if (!existingIds.has(sourceNodeId) || !existingIds.has(destNodeId)) {
+						skippedEdges.push(fact);
+						logError(`[DATABASE_SAVE] Node(s) do not exist in database`);
+						continue;
+					}
+
+					const edgeData: NewEdge = {
+						sourceId: sourceNodeId,
+						destinationId: destNodeId,
+						edgeType: fact.relationType,
+						factText: fact.factText,
+						validAt: fact.temporal?.validAt
+							? new Date(fact.temporal.validAt)
+							: undefined,
+						invalidAt: fact.temporal?.invalidAt
+							? new Date(fact.temporal.invalidAt)
+							: undefined,
+						recordedAt: new Date(),
+						attributes: (fact.attributes || {}) as Record<string, unknown>,
+						graph: graphId,
+					};
+
+					// Generate embeddings
+					const factEmbedding = await safeTextToVector(
+						services.embedding,
+						fact.factText,
+						`FACT_EMBEDDING:${fact.factText.substring(0, 50)}`,
+					);
+					const typeEmbedding = await safeTextToVector(
+						services.embedding,
+						fact.relationType,
+						`TYPE_EMBEDDING:${fact.relationType}`,
+					);
+
+					if (factEmbedding || typeEmbedding) {
+						const fields = await getCurrentEmbeddingFields();
+						if (factEmbedding) {
+							(edgeData as Record<string, unknown>)[fields.factEmbedding] =
+								factEmbedding;
+						}
+						if (typeEmbedding) {
+							(edgeData as Record<string, unknown>)[fields.typeEmbedding] =
+								typeEmbedding;
+						}
+					}
+
+					try {
+						const [edge] = await db
+							.insert(schema.edges)
+							.values(edgeData)
+							.returning();
+
+						createdEdges.push(edge);
+
+						await db.insert(schema.sourceEdges).values({
+							sourceId: createdSource.id,
+							edgeId: edge.id,
+							relation: "EXTRACTED_FROM",
+							linkWeight: 1.0,
+							graph: graphId,
+						});
+					} catch (edgeError) {
+						skippedEdges.push(fact);
+						logError(`[DATABASE_SAVE] Failed to create edge`, edgeError);
+					}
+				} catch (error) {
+					skippedEdges.push(fact);
+					logError(`[DATABASE_SAVE] Unexpected error processing fact`, error);
+				}
+			}
+
+			if (skippedEdges.length > 0) {
+				logWarn("[DATABASE_SAVE] Skipped edges:", {
+					count: skippedEdges.length,
+					skippedEdges: skippedEdges.map((fact) => ({
+						relationType: fact.relationType,
+						factText: fact.factText,
+					})),
+				});
+			}
+
+			return createdEdges;
+		},
+	);
 }
 
 // ============================================================================
@@ -533,7 +537,7 @@ const definition = defineStep<
 			}
 
 			// Get source from database
-			const createdSource = await databaseService.use(
+			const createdSource = await getKnowledgeDatabase(databaseService).query(
 				async ({ db, schema }) => {
 					const sources = await db
 						.select()

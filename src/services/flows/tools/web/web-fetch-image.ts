@@ -1,11 +1,8 @@
 import z from "zod";
-import type {
-	Tool,
-	ToolFactory,
-	AllServices,
-} from "@/services/flows/interfaces/tool";
-import { toolRegistry } from "@/services/flows/tool-registry";
+import type { Tool, ToolFactory, AllServices } from "../../interfaces/tool";
+import { toolRegistry } from "../../tool-registry";
 import { normalizeDocumentPath } from "../documents/util";
+import { writeFileBytes } from "../fs/util";
 import {
 	fetchImageFromSession,
 	getLatestTabSession,
@@ -71,24 +68,6 @@ export const fetchImageBytesFromBrowserSession = async (
 	return { sessionId: resolvedSessionId, bytes, mimeType };
 };
 
-const ensureFolderExists = async (
-	dfs: NonNullable<AllServices["documentFileSystem"]>,
-	folderPath: string,
-): Promise<void> => {
-	if (folderPath === "/" || !folderPath) return;
-	const segments = folderPath.split("/").filter(Boolean);
-	let currentPath = "/";
-	for (const segment of segments) {
-		const nextPath = `${currentPath === "/" ? "" : currentPath}/${segment}`;
-		try {
-			await dfs.createFolder(segment, currentPath);
-		} catch {
-			// folder already exists — continue
-		}
-		currentPath = nextPath;
-	}
-};
-
 const schema = z.object({
 	url: z.string().url().describe("Image URL to fetch and store in /documents."),
 	sessionId: z
@@ -106,7 +85,7 @@ const schema = z.object({
 });
 
 type Input = z.infer<typeof schema>;
-type Services = Pick<AllServices, "documentFileSystem">;
+type Services = Pick<AllServices, "fs">;
 
 export const createWebFetchImageTool: ToolFactory<Input, Services> = (
 	services,
@@ -116,7 +95,7 @@ export const createWebFetchImageTool: ToolFactory<Input, Services> = (
 		"Fetch an image from a URL via the active web session's browser tab and save it to /documents. Returns the stored file path. Requires an open web session (tab or window mode).",
 	schema,
 	execute: async (input) => {
-		const dfs = services.documentFileSystem;
+		const dfs = services.fs;
 		if (!dfs) {
 			return createDefaultWebErrorResult(
 				new Error("Document filesystem service is not available."),
@@ -133,18 +112,7 @@ export const createWebFetchImageTool: ToolFactory<Input, Services> = (
 			const filename = filenameFromUrl(input.url, mimeType);
 			const rawPath = input.file_path ?? `/resources/images/${filename}`;
 			const filePath = normalizeDocumentPath(rawPath);
-			const lastSlash = filePath.lastIndexOf("/");
-			const parentPath = lastSlash > 0 ? filePath.substring(0, lastSlash) : "/";
-			const fileName = filePath.substring(lastSlash + 1) || filename;
-
-			await ensureFolderExists(dfs, parentPath);
-
-			const fileBytes = bytes.buffer.slice(
-				bytes.byteOffset,
-				bytes.byteOffset + bytes.byteLength,
-			) as ArrayBuffer;
-			const file = new File([fileBytes], fileName, { type: mimeType });
-			await dfs.uploadFile(file, parentPath);
+			await writeFileBytes(dfs, filePath, bytes);
 
 			return createWebResult({
 				actionType: "web_fetch_image",

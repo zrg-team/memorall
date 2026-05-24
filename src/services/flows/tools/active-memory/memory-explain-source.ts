@@ -1,7 +1,8 @@
+import { getKnowledgeDatabase } from "../../interfaces/knowledge";
 import z from "zod";
 import { eq } from "drizzle-orm";
-import type { Tool, ToolFactory } from "@/services/flows/interfaces/tool";
-import { toolRegistry } from "@/services/flows/tool-registry";
+import type { Tool, ToolFactory } from "../../interfaces/tool";
+import { toolRegistry } from "../../tool-registry";
 import {
 	findMemoryFacts,
 	resolveRuntimeGraphId,
@@ -34,8 +35,8 @@ export const createMemoryExplainSourceTool: ToolFactory<
 		const fact = facts[0];
 		if (!fact) return "Memory not found.";
 
-		const linkedSources = await services.database
-			.use(async ({ db, schema }) =>
+		const linkedSources = await getKnowledgeDatabase(services.database)
+			.query(async ({ db, schema }) =>
 				db
 					.select({
 						sourceId: schema.sources.id,

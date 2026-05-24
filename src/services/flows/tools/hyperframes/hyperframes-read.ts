@@ -1,11 +1,8 @@
 import z from "zod";
-import type {
-	Tool,
-	ToolFactory,
-	AllServices,
-} from "@/services/flows/interfaces/tool";
-import { toolRegistry } from "@/services/flows/tool-registry";
+import type { Tool, ToolFactory, AllServices } from "../../interfaces/tool";
+import { toolRegistry } from "../../tool-registry";
 import { compositionFile } from "./util";
+import { readFileBytes } from "../fs/util";
 
 const TOOL_NAME = "hyperframes_read" as const;
 
@@ -19,7 +16,7 @@ const schema = z.object({
 });
 
 type Input = z.infer<typeof schema>;
-type Services = Pick<AllServices, "documentFileSystem">;
+type Services = Pick<AllServices, "fs">;
 
 export const createHyperframesReadTool: ToolFactory<Input, Services> = (
 	services,
@@ -29,13 +26,13 @@ export const createHyperframesReadTool: ToolFactory<Input, Services> = (
 		"Read the current composition HTML for a HyperFrames project. Use this to inspect the current state before editing, or to verify the content after writing.",
 	schema,
 	execute: async (input) => {
-		const dfs = services.documentFileSystem;
-		if (!dfs) return "Error: documentFileSystem service not available.";
+		const dfs = services.fs;
+		if (!dfs) return "Error: fs service not available.";
 
 		const file = compositionFile(input.project_path);
 		let raw: Uint8Array;
 		try {
-			raw = await dfs.getWorkspaceFileContent(file);
+			raw = await readFileBytes(dfs, file);
 		} catch {
 			return `Error: ${file} not found. Use hyperframes_write to create the project first.`;
 		}

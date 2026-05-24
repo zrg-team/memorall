@@ -1,11 +1,8 @@
 import z from "zod";
-import type {
-	Tool,
-	ToolFactory,
-	AllServices,
-} from "@/services/flows/interfaces/tool";
-import { toolRegistry } from "@/services/flows/tool-registry";
+import type { Tool, ToolFactory, AllServices } from "../../interfaces/tool";
+import { toolRegistry } from "../../tool-registry";
 import { compositionFile } from "./util";
+import { writeFileBytes } from "../fs/util";
 
 const TOOL_NAME = "hyperframes_write" as const;
 
@@ -20,7 +17,7 @@ const schema = z.object({
 });
 
 type Input = z.infer<typeof schema>;
-type Services = Pick<AllServices, "documentFileSystem">;
+type Services = Pick<AllServices, "fs">;
 
 export const createHyperframesWriteTool: ToolFactory<Input, Services> = (
 	services,
@@ -30,11 +27,11 @@ export const createHyperframesWriteTool: ToolFactory<Input, Services> = (
 		"Create or overwrite the composition HTML for a HyperFrames project. The file is always saved as index.html inside the project directory.",
 	schema,
 	execute: async (input) => {
-		const dfs = services.documentFileSystem;
-		if (!dfs) return "Error: documentFileSystem service not available.";
+		const dfs = services.fs;
+		if (!dfs) return "Error: fs service not available.";
 
 		const file = compositionFile(input.project_path);
-		await dfs.writeWorkspaceFile(file, input.content);
+		await writeFileBytes(dfs, file, input.content);
 		return `Saved: ${file}`;
 	},
 });

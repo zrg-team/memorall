@@ -3,7 +3,7 @@ export type LangGraphStreamChunk =
 	| [string[], string, unknown]
 	| unknown;
 
-import type { ChatCompletionChunk } from "@/types/openai";
+import type { ChatCompletionChunk } from "../interfaces/messages";
 
 export type FlowAction = {
 	id: string;

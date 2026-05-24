@@ -330,7 +330,10 @@ const applyLegacyDraftToUnified = (
 		getCatalogFeatureNames(buildFeatureDefinitions(graphType)),
 	);
 
-	if (draftFeatures["knowledge-retrieval"] && enabledRetrievalNames.size === 0) {
+	if (
+		draftFeatures["knowledge-retrieval"] &&
+		enabledRetrievalNames.size === 0
+	) {
 		enabledRetrievalNames.add(
 			defaultEnabledRetrievalNames.has(selectedRetrievalStepName)
 				? selectedRetrievalStepName
@@ -700,7 +703,10 @@ export const useAgentConfigStore = create<AgentConfigState>((set, get) => {
 
 		setKnowledgeRetrievalMode: (mode) => {
 			const draft = { ...get().draftConfig, retrievalMode: mode };
-			const draftFeatures = { ...get().draftFeatures, "knowledge-retrieval": true };
+			const draftFeatures = {
+				...get().draftFeatures,
+				"knowledge-retrieval": true,
+			};
 			set({
 				draftConfig: draft,
 				draftFeatures,

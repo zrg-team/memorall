@@ -1,15 +1,12 @@
 import z from "zod";
-import type {
-	Tool,
-	ToolFactory,
-	AllServices,
-} from "@/services/flows/interfaces/tool";
-import { toolRegistry } from "@/services/flows/tool-registry";
+import type { Tool, ToolFactory, AllServices } from "../../interfaces/tool";
+import { toolRegistry } from "../../tool-registry";
 import {
 	lintHyperframeHtml,
 	type HyperframeLintResult,
 } from "@hyperframes/core/lint";
 import { compositionFile } from "./util";
+import { readFileBytes } from "../fs/util";
 
 const TOOL_NAME = "hyperframes_validate" as const;
 
@@ -23,7 +20,7 @@ const schema = z.object({
 });
 
 type Input = z.infer<typeof schema>;
-type Services = Pick<AllServices, "documentFileSystem">;
+type Services = Pick<AllServices, "fs">;
 
 // Codes that are always noise in the extension context:
 // - external_script_dependency: fix hint says "no action needed" for CDN-based compositions
@@ -85,13 +82,13 @@ export const createHyperframesValidateTool: ToolFactory<Input, Services> = (
 		"Lint a HyperFrames composition for structural errors (missing timeline, broken scene windows, invalid attributes). Run after hyperframes_write and before hyperframes_show.",
 	schema,
 	execute: async (input) => {
-		const dfs = services.documentFileSystem;
-		if (!dfs) return "Error: documentFileSystem service not available.";
+		const dfs = services.fs;
+		if (!dfs) return "Error: fs service not available.";
 
 		const file = compositionFile(input.project_path);
 		let raw: Uint8Array;
 		try {
-			raw = await dfs.getWorkspaceFileContent(file);
+			raw = await readFileBytes(dfs, file);
 		} catch {
 			return `Error: ${file} not found. Use hyperframes_write to create the project first.`;
 		}

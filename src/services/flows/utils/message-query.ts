@@ -1,4 +1,4 @@
-import type { ChatCompletionMessageParam } from "@/types/openai";
+import type { ChatCompletionMessageParam } from "../interfaces/messages";
 
 const contentToText = (
 	content: ChatCompletionMessageParam["content"],

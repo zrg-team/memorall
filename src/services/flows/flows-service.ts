@@ -1,4 +1,4 @@
-import { logInfo } from "@/utils/logger";
+import { logInfo } from "./interfaces/logger";
 import { flowRegistry } from "./flow-registry";
 
 export class FlowsService {

@@ -1,11 +1,11 @@
 import z from "zod";
-import type { Tool, ToolFactory } from "@/services/flows/interfaces/tool";
-import { toolRegistry } from "@/services/flows/tool-registry";
+import type { Tool, ToolFactory } from "../../interfaces/tool";
+import { toolRegistry } from "../../tool-registry";
 import {
 	MAX_WEB_MAX_HTML_CHARS,
 	MIN_WEB_MAX_HTML_CHARS,
 	normalizeWebMaxHtmlChars,
-} from "@/services/web-browser/max-html-chars";
+} from "../../utils/max-html-chars";
 import {
 	createCleanHtml,
 	createDefaultWebErrorResult,

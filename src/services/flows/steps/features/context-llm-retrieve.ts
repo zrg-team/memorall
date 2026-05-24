@@ -5,36 +5,32 @@
  * Output: "context" string ready for LLM consumption, plus relevantNodes/relevantEdges for citation.
  */
 
-import { logInfo, logError } from "@/utils/logger";
-import {
-	defineStep,
-	bindStep,
-	type StepOutput,
-} from "@/services/flows/interfaces/step";
+import { logInfo, logError } from "../../interfaces/logger";
+import { defineStep, bindStep, type StepOutput } from "../../interfaces/step";
 import type {
 	StepFactoryFromSpec,
 	StepSpecFromDefinition,
-} from "@/services/flows/interfaces/step";
-import { stepRegistry } from "@/services/flows/step-registry";
+} from "../../interfaces/step";
+import { stepRegistry } from "../../step-registry";
 import type {
 	LLMRetrieveInput,
 	LLMRetrieveOutput,
 	RelevantNode,
 	RelevantEdge,
 	LLMRetrieveServices,
-} from "@/services/flows/steps/knowledge-retrieval/llm-retrieve";
-import type { AnalyzeQueryOutput } from "@/services/flows/steps/knowledge-retrieval/analyze-query";
+} from "../knowledge-retrieval/llm-retrieve";
+import type { AnalyzeQueryOutput } from "../knowledge-retrieval/analyze-query";
 import type {
 	EntitiesFactsToContextOutput,
 	EntitiesFactsToContextServices,
-} from "@/services/flows/steps/knowledge-retrieval/entities-facts-to-context";
+} from "../knowledge-retrieval/entities-facts-to-context";
 import type {
 	ContextToSystemConfig,
 	ContextToSystemInput,
 	ContextToSystemOutput,
-} from "@/services/flows/steps/common/context-to-system";
-import type { ChatCompletionMessageParam } from "@/types/openai";
-import { extractRetrievalTextFromMessages } from "@/services/flows/utils/message-query";
+} from "../common/context-to-system";
+import type { ChatCompletionMessageParam } from "../../interfaces/messages";
+import { extractRetrievalTextFromMessages } from "../../utils/message-query";
 
 const STEP_NAME = "context-llm-retrieve" as const;
 

@@ -1,11 +1,7 @@
 import z from "zod";
-import type {
-	AllServices,
-	Tool,
-	ToolFactory,
-} from "@/services/flows/interfaces/tool";
-import { toolRegistry } from "@/services/flows/tool-registry";
-import type { SandboxHandleSwRequestResult } from "@/services/sandbox-container";
+import type { AllServices, Tool, ToolFactory } from "../../../interfaces/tool";
+import { toolRegistry } from "../../../tool-registry";
+import type { SandboxHandleSwRequestResult } from "../../../interfaces/sandbox";
 
 const TOOL_NAME = "container_web_access_v2" as const;
 const DEFAULT_TIMEOUT_MS = 120_000;
@@ -234,6 +230,10 @@ const renderSandboxPage = async (
 			}
 
 			if (!isSwRelayRequestMessage(eventData)) {
+				return;
+			}
+
+			if (!sandboxContainer.handleSwRequestWithRetry) {
 				return;
 			}
 

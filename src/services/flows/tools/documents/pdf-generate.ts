@@ -1,14 +1,11 @@
 import z from "zod";
 import { marked } from "marked";
-import type {
-	Tool,
-	ToolFactory,
-	AllServices,
-} from "@/services/flows/interfaces/tool";
-import { toolRegistry } from "@/services/flows/tool-registry";
+import type { Tool, ToolFactory, AllServices } from "../../interfaces/tool";
+import { toolRegistry } from "../../tool-registry";
 import { normalizeDocumentPath } from "./util";
 import type { WebToolServices } from "../web/web-tool-utils";
-import { ensureFolderExists } from "@/services/filesystem/document-fs-utils";
+import { ensureFolderExists } from "../../utils/document-fs-utils";
+import { writeFileBytes } from "../fs/util";
 
 const TOOL_NAME = "pdf_generate" as const;
 
@@ -45,7 +42,7 @@ const schema = z.object({
 });
 
 type Input = z.infer<typeof schema>;
-type Services = Pick<AllServices, "webBrowser" | "documentFileSystem">;
+type Services = Pick<AllServices, "webBrowser" | "fs">;
 
 const wrapHtml = (body: string): string => `<!DOCTYPE html>
 <html>
@@ -108,7 +105,7 @@ export const createPdfGenerateTool: ToolFactory<Input, Services> = (
 		"Generate a PDF from a web URL, markdown text, or HTML string and save it to /documents. Returns the saved file path and page count.",
 	schema,
 	execute: async (input) => {
-		const dfs = services.documentFileSystem;
+		const dfs = services.fs;
 		if (!dfs) {
 			return JSON.stringify({
 				actionType: "pdf_generate",
@@ -160,12 +157,9 @@ export const createPdfGenerateTool: ToolFactory<Input, Services> = (
 
 			const lastSlash = filePath.lastIndexOf("/");
 			const parentPath = lastSlash > 0 ? filePath.substring(0, lastSlash) : "/";
-			const fileName = filePath.substring(lastSlash + 1);
 
 			await ensureFolderExists(dfs, parentPath);
-
-			const file = new File([pdfBytes], fileName, { type: "application/pdf" });
-			await dfs.uploadFile(file, parentPath);
+			await writeFileBytes(dfs, filePath, pdfBytes);
 
 			return JSON.stringify(
 				{

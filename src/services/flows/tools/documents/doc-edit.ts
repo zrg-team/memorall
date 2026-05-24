@@ -1,12 +1,8 @@
 import z from "zod";
-import type {
-	Tool,
-	ToolFactory,
-	AllServices,
-} from "@/services/flows/interfaces/tool";
-import { toolRegistry } from "@/services/flows/tool-registry";
-import type { DocumentTreeNode, DocumentType } from "@/types/document-library";
+import type { Tool, ToolFactory, AllServices } from "../../interfaces/tool";
+import { toolRegistry } from "../../tool-registry";
 import { normalizeDocumentPath } from "./util";
+import { readFileBytes, writeFileBytes } from "../fs/util";
 
 const TOOL_NAME = "doc_edit" as const;
 
@@ -21,22 +17,7 @@ const schema = z.object({
 });
 
 type Input = z.infer<typeof schema>;
-type Services = Pick<AllServices, "documentFileSystem">;
-
-function flattenTree(nodes: DocumentTreeNode[]): DocumentTreeNode[] {
-	const result: DocumentTreeNode[] = [];
-	for (const node of nodes) {
-		result.push(node);
-		if (node.children?.length) {
-			result.push(...flattenTree(node.children));
-		}
-	}
-	return result;
-}
-
-function isTextFile(type: DocumentType): boolean {
-	return type === "text" || type === "markdown" || type === "other";
-}
+type Services = Pick<AllServices, "fs">;
 
 export const createDocEditTool: ToolFactory<Input, Services> = (
 	services,
@@ -49,24 +30,20 @@ export const createDocEditTool: ToolFactory<Input, Services> = (
 		const { file_path, old_string, new_string, replace_all = false } = input;
 		const filePath = normalizeDocumentPath(file_path);
 
-		const dfs = services.documentFileSystem;
+		const dfs = services.fs;
 		if (!dfs) {
 			return "Documents not existe.";
 		}
-		const tree = await dfs.getTree();
-		const allNodes = flattenTree(tree);
-		const node = allNodes.find((n) => n.path === filePath && n.type === "file");
+		if (/\.(pdf|xls|xlsx|xlsm)$/i.test(filePath)) {
+			return `Error: Cannot edit binary file: ${file_path}. Only text, markdown, and other text-based files can be edited.`;
+		}
 
-		if (!node || !node.file) {
+		let text: string;
+		try {
+			text = new TextDecoder().decode(await readFileBytes(dfs, filePath));
+		} catch {
 			return `Error: File not found: ${filePath}`;
 		}
-
-		if (!isTextFile(node.file.type)) {
-			return `Error: Cannot edit binary file (${node.file.type}): ${file_path}. Only text, markdown, and other text-based files can be edited.`;
-		}
-
-		const content = await dfs.getFileContent(filePath);
-		const text = new TextDecoder().decode(content);
 
 		if (!text.includes(old_string)) {
 			return `Error: old_string not found in ${filePath}`;
@@ -84,8 +61,7 @@ export const createDocEditTool: ToolFactory<Input, Services> = (
 			newText = text.replace(old_string, new_string);
 		}
 
-		const encoded = new TextEncoder().encode(newText);
-		await dfs.updateFileContent(filePath, encoded);
+		await writeFileBytes(dfs, filePath, newText);
 
 		return `Edited ${filePath}: ${count} replacement${count !== 1 ? "s" : ""} made`;
 	},

@@ -1,22 +1,22 @@
-import { defineStep, bindStep } from "@/services/flows/interfaces/step";
+import { defineStep, bindStep } from "../../interfaces/step";
 import type {
 	StepFactoryFromSpec,
 	StepSpecFromDefinition,
-} from "@/services/flows/interfaces/step";
-import { stepRegistry } from "@/services/flows/step-registry";
-import type { AllServices } from "@/services/flows/interfaces/tool";
-import type { ChatCompletionResponse } from "@/types/openai";
+} from "../../interfaces/step";
+import { stepRegistry } from "../../step-registry";
+import type { AllServices } from "../../interfaces/tool";
+import type { ChatCompletionResponse } from "../../interfaces/messages";
 import type {
 	StructMemEntry,
 	StructMemState,
-} from "@/services/flows/graph/structmem/state";
+} from "../../graph/structmem/state";
 import {
 	createEntry,
 	getChatResponseText,
 	parseJsonObject,
 	warnParseFailure,
 } from "./structmem-utils";
-import { logError, logInfo } from "@/utils/logger";
+import { logError, logInfo } from "../../interfaces/logger";
 
 const STEP_NAME = "structmem-event-extraction" as const;
 

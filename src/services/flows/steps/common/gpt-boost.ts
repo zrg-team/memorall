@@ -1,16 +1,16 @@
-import { defineStep, bindStep } from "@/services/flows/interfaces/step";
+import { defineStep, bindStep } from "../../interfaces/step";
 import type {
 	StepFactoryFromSpec,
 	StepSpecFromDefinition,
-} from "@/services/flows/interfaces/step";
-import { stepRegistry } from "@/services/flows/step-registry";
+} from "../../interfaces/step";
+import { stepRegistry } from "../../step-registry";
 import {
 	featureCatalogRegistry,
 	type FeatureCatalogMetadata,
-} from "@/services/flows/feature-catalog-registry";
-import type { ChatMessage } from "@/types/openai";
-import type { AllServices } from "@/services/flows/interfaces/tool";
-import { GraphBase } from "@/services/flows/graph/graph.base";
+} from "../../feature-catalog-registry";
+import type { ChatMessage } from "../../interfaces/messages";
+import type { AllServices } from "../../interfaces/tool";
+import { GraphBase } from "../../graph/graph.base";
 
 export const GPT_BOOST_STEP_NAME = "gpt-boost" as const;
 
@@ -47,7 +47,7 @@ const definition = defineStep<Input, Output, Services>({
 	execute: async ({ input, services }) => {
 		const modelInfo = await services.llm.getCurrentModel();
 
-		if (!modelInfo || !isGptModel(modelInfo.modelId)) {
+		if (!modelInfo?.modelId || !isGptModel(modelInfo.modelId)) {
 			return { output: {} };
 		}
 

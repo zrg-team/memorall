@@ -3,19 +3,19 @@ import {
 	type ConfiguredGraphTool,
 	GraphBase,
 	type GraphTool,
-} from "@/services/flows/graph/graph.base";
-import { defineStep, bindStep } from "@/services/flows/interfaces/step";
+} from "../../../graph/graph.base";
+import { defineStep, bindStep } from "../../../interfaces/step";
 import type {
 	StepFactoryFromSpec,
 	StepSpecFromDefinition,
-} from "@/services/flows/interfaces/step";
-import type { AllServices } from "@/services/flows/interfaces/tool";
-import { stepRegistry } from "@/services/flows/step-registry";
+} from "../../../interfaces/step";
+import type { AllServices } from "../../../interfaces/tool";
+import { stepRegistry } from "../../../step-registry";
 import {
 	featureCatalogRegistry,
 	FEATURE_DEFAULT_INPUTS,
 	type FeatureCatalogMetadata,
-} from "@/services/flows/feature-catalog-registry";
+} from "../../../feature-catalog-registry";
 import {
 	MultiAgentManager,
 	type MultiAgentChildAgent,
@@ -24,8 +24,8 @@ import {
 	SEND_MESSAGE_TO_AGENT_TOOL_NAME,
 	type SendMessageToAgentToolConfig,
 } from "./tool-contract";
-import type { ChatCompletionMessageParam } from "@/types/openai";
-import { logError } from "@/utils/logger";
+import type { ChatCompletionMessageParam } from "../../../interfaces/messages";
+import { logError } from "../../../interfaces/logger";
 
 const STEP_NAME = "multi-agent-feature" as const;
 export const MULTI_AGENT_FEATURE_NAME = STEP_NAME;

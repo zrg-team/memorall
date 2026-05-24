@@ -5,11 +5,11 @@ import type {
 	ToolFactory,
 	AllServices,
 	ToolResultValue,
-} from "@/services/flows/interfaces/tool";
-import { toolRegistry } from "@/services/flows/tool-registry";
-import type { DocumentTreeNode } from "@/types/document-library";
-import type { ChatCompletionContentPart } from "@/types/openai";
+} from "../../interfaces/tool";
+import { toolRegistry } from "../../tool-registry";
+import type { ChatCompletionContentPart } from "../../interfaces/messages";
 import { normalizeDocumentPath } from "./util";
+import { pathExists, readFileBytes } from "../fs/util";
 
 const TOOL_NAME = "pdf_to_image" as const;
 
@@ -57,7 +57,7 @@ const schema = z.object({
 });
 
 type Input = z.infer<typeof schema>;
-type Services = Pick<AllServices, "documentFileSystem">;
+type Services = Pick<AllServices, "fs">;
 type PdfImageData = {
 	width: number;
 	height: number;
@@ -71,15 +71,6 @@ const IMAGE_OPERATORS = new Set<number>([
 	pdfjsLib.OPS.paintInlineImageXObject,
 	pdfjsLib.OPS.paintInlineImageXObjectGroup,
 ]);
-
-function flattenTree(nodes: DocumentTreeNode[]): DocumentTreeNode[] {
-	const result: DocumentTreeNode[] = [];
-	for (const node of nodes) {
-		result.push(node);
-		if (node.children?.length) result.push(...flattenTree(node.children));
-	}
-	return result;
-}
 
 function toArrayBuffer(content: Uint8Array): ArrayBuffer {
 	if (content.buffer instanceof ArrayBuffer) {
@@ -298,7 +289,7 @@ export const createPdfToImageTool: ToolFactory<Input, Services> = (
 		"Render PDF pages or extract embedded page images from /documents as PNG base64 data URLs and provide them to the model as OpenAI-compatible image message content.",
 	schema,
 	execute: async (input) => {
-		const dfs = services.documentFileSystem;
+		const dfs = services.fs;
 		if (!dfs) {
 			return JSON.stringify({
 				actionType: "pdf_to_image",
@@ -317,13 +308,7 @@ export const createPdfToImageTool: ToolFactory<Input, Services> = (
 		}
 
 		try {
-			const tree = await dfs.getTree();
-			const allNodes = flattenTree(tree);
-			const node = allNodes.find(
-				(n) => n.path === sourcePath && n.type === "file",
-			);
-
-			if (!node || !node.file) {
+			if (!(await pathExists(dfs, sourcePath))) {
 				return JSON.stringify({
 					actionType: "pdf_to_image",
 					success: false,
@@ -331,7 +316,7 @@ export const createPdfToImageTool: ToolFactory<Input, Services> = (
 				});
 			}
 
-			const content = await dfs.getFileContent(sourcePath);
+			const content = await readFileBytes(dfs, sourcePath);
 			const loadingTask = pdfjsLib.getDocument({
 				data: toArrayBuffer(content),
 			});

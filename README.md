@@ -17,7 +17,7 @@ Memorall turns your browser into a local-first agent workspace with memory, tool
 [![Agent Tools](https://img.shields.io/badge/Agent-Sandbox%20%2B%20Browser-c05621)](https://github.com/zrg-team/memorall)
 [![Custom Flows](https://img.shields.io/badge/Flows-Customizable-7c3aed)](https://github.com/zrg-team/memorall)
 
-[Quick Start](#quick-start) • [Agent Power](#agent-power) • [Custom Agents](#custom-agents) • [Architecture](#architecture-at-a-glance) • [Documentation](#documentation-map) • [GitHub](https://github.com/zrg-team/memorall)
+[Quick Start](#quick-start) • [Flow Engine](#flow-engine) • [Agent Power](#agent-power) • [Custom Agents](#custom-agents) • [Architecture](#architecture-at-a-glance) • [Documentation](#documentation-map) • [GitHub](https://github.com/zrg-team/memorall)
 
 </div>
 
@@ -30,17 +30,41 @@ What makes the current app distinctive:
 - 🏠 Local-first by default. The app can run with in-browser runtimes such as Wllama, WebLLM, and Transformers, while still supporting OpenAI, OpenRouter, LM Studio, and Ollama when you want external or local server-backed models.
 - 🤖 More than a chat window. The shipped UI includes a document library, topic system, knowledge graph explorer, model manager, debug tools, and advanced flow/activity surfaces.
 - 🌐 Embedded where work happens. The content script can open a page-aware assistant, capture selected text, visible content, page HTML, and screenshots, and route saved content into a topic.
-- ⚙️ Built for long-running work. Heavy operations are moved off the UI thread through background jobs, offscreen/runtime services, and proxy/main service pairs.
+- ⚙️ Backed by a real agent harness. The Flow Engine turns the model into a composable runtime — graph-based flows, middleware steps, tool execution, memory retrieval, and streaming activity — all running off-thread so the UI stays fast and responsive.
 - 🔐 Privacy-aware. Supabase auth is optional, the core app can run local-only, and encrypted provider credentials are restored through the app's passkey flow.
+
+<a id="flow-engine"></a>
+## 🔁 Flow Engine
+
+Memorall's agent behavior is built on the **Flow Engine** in [`src/services/flows`](./src/services/flows). This is the harness system around the LLM: it turns a model from a text predictor into a scalable agent runtime that can run graphs, apply middleware, call tools, retrieve memory, stream activity, and adapt to different host environments.
+
+The Flow Engine is important because Memorall is not meant to be one fixed prompt loop. It is designed to stay:
+
+- **Scalable** - capabilities are split into graphs, steps, tools, feature bundles, services, and adapters instead of one monolithic agent.
+- **Explorable** - registries and catalogs expose available flows, steps, tools, and features so builder UIs and host code can inspect what exists.
+- **Portable** - browser, backend, CLI, sandbox, worker, edge, and test environments can provide their own adapters while the harness stays stable.
+- **Composable** - chat, tool agents, RAG, memory agents, extraction flows, and deterministic test flows are assembled from the same building blocks.
+- **Testable** - LLMs, embeddings, databases, filesystems, browser sessions, and sandbox services can be swapped for fakes.
+- **Streamable** - clients receive OpenAI-compatible chunks plus harness events for progress, tool execution, retrieval, memory, and graph state.
+
+At a high level:
+
+```text
+LLM alone          -> text prediction
+LLM + Flow Engine  -> explorable agent system
+
+Flow Engine = runtime + graph + middleware + tools + memory + knowledge + adapters
+```
+
+Full architecture notes: [Flow Engine README](./src/services/flows/README.md)
 
 <a id="agent-power"></a>
 ## ⚡ Agent Power
 
-Memorall's agent is designed to be powerful on your machine, not just impressive in a demo.
+While the Flow Engine defines *how* the agent runs, these are the runtime capabilities it can reach out to from your machine.
 
 - 🧪 Sandbox container access. The agent can use the browser-hosted sandbox runtime to execute Node.js code, install pnpm packages, work with files, start backend servers, and render UI/server output for iterative workflows such as Vite-style app work.
 - 🌐 Browser access. The agent can open pages, keep an active browser session, inspect DOM state, search rendered HTML, wait for selectors, and perform DOM actions instead of working from raw text alone.
-- 🧩 Custom flows and agents. The flow layer is not fixed to one canned assistant. Memorall ships configurable graph-based flows, feature steps, and a visual flow builder for custom agent behavior.
 - 📁 Workspace access. The agent is not isolated from your knowledge base. It can work across the document library and writable workspace trees, giving it access to documents, notes, and workspace files.
 - 🛠️ MCP integration is WIP. The repository already includes MCP adapter groundwork, but this should be treated as in-progress rather than a stable, documented feature today.
 
@@ -209,6 +233,7 @@ These are the current docs that match the codebase today:
 - [Embedding service](./docs/embedding-service.md)
 - [LLM service](./docs/llm-service.md)
 - [Flows service](./docs/flows-service.md)
+- [Flow Engine README](./src/services/flows/README.md)
 - [Customize agents](./docs/customize-agents.md)
 
 ### Knowledge system
