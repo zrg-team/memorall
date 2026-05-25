@@ -197,6 +197,7 @@ export class AgentGraph extends GraphBase<
 		if (toolCalls.length > 0) {
 			return {
 				outputMessages: [
+					...state.outputMessages,
 					{
 						role: "assistant" as const,
 						content: content || null,
@@ -315,7 +316,7 @@ export class AgentGraph extends GraphBase<
 		}
 
 		// Only update working memory — messages stays intact until agentNode finishes
-		return { outputMessages };
+		return { outputMessages: [...state.outputMessages, ...outputMessages] };
 	};
 }
 
