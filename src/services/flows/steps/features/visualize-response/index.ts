@@ -13,7 +13,6 @@ import {
 import { GraphBase, type GraphTool } from "../../../graph/graph.base";
 import type { ChatCompletionMessageParam } from "../../../interfaces/messages";
 import { getFlowRuntimeVars } from "../../../runtime/runtime-context";
-import { OPENUI_KNOWLEDGE_TOOLS } from "../../../tools/openui-knowledge";
 import {
 	OPENUI_SYSTEM_PROMPT,
 	OPENUI_WIREFRAME_THEME_INSTRUCTION,
@@ -23,8 +22,6 @@ import { logError } from "../../../interfaces/logger";
 
 const STEP_NAME = "visualize-response" as const;
 export const VISUALIZE_RESPONSE_FEATURE_NAME = STEP_NAME;
-
-const OPENUI_KNOWLEDGE_GRAPH_TOOLS: GraphTool[] = [...OPENUI_KNOWLEDGE_TOOLS];
 
 export interface VisualizeResponseInput {
 	messages: ChatCompletionMessageParam[];
@@ -80,10 +77,7 @@ const definition = defineStep<
 				? `${OPENUI_SYSTEM_PROMPT}\n\n${themeInstruction}`
 				: OPENUI_SYSTEM_PROMPT;
 
-			const tools = GraphBase.chat.addTool(
-				input.tools ?? [],
-				...OPENUI_KNOWLEDGE_GRAPH_TOOLS,
-			);
+			const tools = input.tools ?? [];
 			const messages = GraphBase.chat.systemMessage(
 				input.messages ?? [],
 				systemPrompt,
@@ -136,7 +130,7 @@ featureCatalogRegistry.register({
 		descriptionKey: "flowBuilder.features.visualizeResponse.description",
 		displayName: "Visualize Response",
 		nameKey: "flowBuilder.features.visualizeResponse.name",
-		tools: [...OPENUI_KNOWLEDGE_TOOLS],
+		tools: [],
 		systemPrompt: OPENUI_SYSTEM_PROMPT,
 		customizable: false,
 		icon: { name: "PanelsTopLeft", type: "lucide" },

@@ -16,8 +16,6 @@ import type {
 import { toolRegistry, convertToolsToOpenAI } from "../tool-registry";
 import type { BaseTool, ToolBinding } from "../interfaces/tool";
 
-const isRawBaseTool = (tool: unknown): tool is BaseTool =>
-	typeof tool === "object" && tool !== null && "execute" in tool;
 import { logWarn } from "../interfaces/logger";
 import {
 	FLOW_RUN_LIFECYCLE_CONFIG_KEY,
@@ -29,6 +27,9 @@ import {
 } from "../runtime/run-lifecycle";
 import { stepRegistry } from "../step-registry";
 import type { UnifiedFlowConfig } from "../interfaces/flow-config";
+
+const isRawBaseTool = (tool: unknown): tool is BaseTool =>
+	typeof tool === "object" && tool !== null && "execute" in tool;
 
 export type ToolName = `${keyof ToolTypeRegistry & string}`;
 
@@ -259,7 +260,7 @@ export const BaseAnnotation = {
 		default: () => "",
 	}),
 	outputMessages: Annotation<ChatCompletionMessageParam[]>({
-		value: (x, y) => [...(x ?? []), ...(y ?? [])],
+		value: (x, y) => y ?? x,
 		default: () => [],
 	}),
 	tools: Annotation<GraphTool[]>({

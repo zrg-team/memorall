@@ -12,6 +12,12 @@ export type NodeAfterEndCallback<TState = Record<string, unknown>> = (
 	result: Partial<TState>,
 ) => Promise<Partial<TState> | void> | Partial<TState> | void;
 
+export type NodeCatchCallback<TState = Record<string, unknown>> = (
+	nodeName: string,
+	error: unknown,
+	state: TState,
+) => Promise<Partial<TState> | void> | Partial<TState> | void;
+
 interface NodeListeners {
 	beforeStart: Map<string, NodeBeforeStartCallback>;
 	afterEnd: Map<string, NodeAfterEndCallback>;
@@ -29,9 +35,11 @@ export interface FlowRunLifecycle {
 		nodeName: string,
 		callback: NodeAfterEndCallback,
 	) => void;
+	onCatch: (key: string, callback: NodeCatchCallback) => void;
 	has: (key: string) => boolean;
 	drain: () => Promise<void>;
 	getNodeListeners: (nodeName: string) => NodeListeners | undefined;
+	getCatchCallbacks: () => Map<string, NodeCatchCallback>;
 }
 
 export const FLOW_RUN_LIFECYCLE_CONFIG_KEY = "__memorallFlowRunLifecycle";
@@ -39,6 +47,7 @@ export const FLOW_RUN_LIFECYCLE_CONFIG_KEY = "__memorallFlowRunLifecycle";
 class DefaultFlowRunLifecycle implements FlowRunLifecycle {
 	private readonly finishCallbacks = new Map<string, FlowRunFinishCallback>();
 	private readonly nodeListeners = new Map<string, NodeListeners>();
+	private readonly catchCallbacks = new Map<string, NodeCatchCallback>();
 	private isDraining = false;
 
 	onFinish(key: string, callback: FlowRunFinishCallback): void {
@@ -68,6 +77,15 @@ class DefaultFlowRunLifecycle implements FlowRunLifecycle {
 		const listeners = this.getOrCreateNodeListeners(nodeName);
 		if (listeners.afterEnd.has(key)) return;
 		listeners.afterEnd.set(key, callback);
+	}
+
+	onCatch(key: string, callback: NodeCatchCallback): void {
+		if (this.isDraining || this.catchCallbacks.has(key)) return;
+		this.catchCallbacks.set(key, callback);
+	}
+
+	getCatchCallbacks(): Map<string, NodeCatchCallback> {
+		return this.catchCallbacks;
 	}
 
 	has(key: string): boolean {
@@ -119,7 +137,9 @@ const isFlowRunLifecycle = (value: unknown): value is FlowRunLifecycle => {
 		typeof candidate.drain === "function" &&
 		typeof candidate.onBeforeStart === "function" &&
 		typeof candidate.onAfterEnd === "function" &&
-		typeof candidate.getNodeListeners === "function"
+		typeof candidate.onCatch === "function" &&
+		typeof candidate.getNodeListeners === "function" &&
+		typeof candidate.getCatchCallbacks === "function"
 	);
 };
 
@@ -163,7 +183,30 @@ export function toNode<TState extends Record<string, unknown>>(
 			}
 		}
 
-		const result = await fn(current, runConfig);
+		let result: Partial<TState>;
+		try {
+			result = await fn(current, runConfig);
+		} catch (error) {
+			const catchCallbacks = lifecycle?.getCatchCallbacks();
+			if (catchCallbacks?.size) {
+				for (const cb of catchCallbacks.values()) {
+					try {
+						const recovery = await (cb as NodeCatchCallback<TState>)(
+							nodeName,
+							error,
+							current,
+						);
+						if (recovery != null) return recovery;
+					} catch (cbError) {
+						logError(
+							`[LIFECYCLE] onCatch callback failed for node "${nodeName}":`,
+							cbError,
+						);
+					}
+				}
+			}
+			throw error;
+		}
 
 		let finalResult = result;
 		if (listeners?.afterEnd.size) {
