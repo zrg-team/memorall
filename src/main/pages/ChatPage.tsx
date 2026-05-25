@@ -473,7 +473,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
 		let cancelled = false;
 
 		const loadSelectedAgentFeatures = async () => {
-			if (!selectedAgentFlowId) {
+			if (!selectedAgentFlowId || selectedAgentFlowId === "chat") {
 				setSelectedAgentFeatureNames([]);
 				setSelectedAgentFeatureLabels([]);
 				return;
