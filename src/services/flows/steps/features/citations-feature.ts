@@ -26,8 +26,8 @@ featureCatalogRegistry.register({
 		icon: { name: "Quote", type: "lucide" },
 		accentColor: "#a855f7",
 		recommended: true,
-		section: "core",
-		sectionOrder: 7,
+		section: "other",
+		sectionOrder: 1,
 	} satisfies FeatureCatalogMetadata,
 });
 

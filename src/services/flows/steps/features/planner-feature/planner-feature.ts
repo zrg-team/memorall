@@ -189,6 +189,8 @@ featureCatalogRegistry.register({
 		customizable: false,
 		icon: { name: "ListChecks", type: "lucide" },
 		accentColor: "#14b8a6",
+		section: "core",
+		sectionOrder: 7,
 	} satisfies FeatureCatalogMetadata,
 });
 
