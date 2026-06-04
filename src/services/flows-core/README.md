@@ -1,428 +1,273 @@
-# ⚡ Flow Engine
+# ⚡ flows-core — Agent Harness Engine
 
-![Flow Engine](../../../docs/assets/flows-engine.png)
+> The infrastructure that turns a stateless LLM into a system that **plans**, **acts**, **remembers**, and **recovers** — across any topology, any environment, any scale.
 
-Flow Engine: a portable harness system for building LLM applications that can reason, use tools, retrieve memory, stream progress, and run across many host environments.
+---
 
-The important idea is that the LLM is not the application. The Flow Engine is the harness around the LLM. It owns the repeatable system behavior: graph execution, middleware, tool calling, memory, knowledge retrieval, streaming, lifecycle hooks, and host adapters.
+## Why flows-core is the Agent Harness
 
-```text
-LLM alone          -> text prediction
-LLM + Flow Engine  -> explorable agent system
+An LLM alone predicts tokens. It has no memory, no tools, no control flow, no awareness of the real world. `flows-core` wraps every one of those missing corners with a dedicated layer. Together, those layers form the **agent harness** — the infrastructure between the model and reality.
 
-Flow Engine = runtime + graph + middleware + tools + memory + knowledge + adapters
+```
+╔═══════════════════════════════════════════════════════════════╗
+║                      flows-core harness                       ║
+║                                                               ║
+║  🕸️  graph      ──  any execution topology you define         ║
+║  🔗  steps      ──  any context, feature, or transform        ║
+║  🪝  lifecycle  ──  any side-effect around any node           ║
+║  🔧  tools      ──  any action the LLM can invoke             ║
+║  🌐  services   ──  any real-world system, swappable          ║
+║                                                               ║
+║                        ┌─────────┐                            ║
+║                        │   LLM   │                            ║
+║                        └─────────┘                            ║
+╚═══════════════════════════════════════════════════════════════╝
 ```
 
-## 💡 Why This Exists
+Every layer is a **registry**. You register into it from anywhere. The engine discovers and wires everything at runtime. No layer knows about any other layer — only the registries connect them.
 
-The Flow Engine is built for agent systems that need to grow without turning into one large, hard-coded prompt loop.
+---
 
-| Goal | How the Flow Engine supports it |
-|---|---|
-| 📈 **Scalable** | Capabilities are split into graphs, steps, tools, features, adapters, and services instead of one monolithic agent |
-| 🔍 **Explorable** | Registries and catalogs make available graphs, steps, tools, and feature bundles discoverable by code and UI |
-| 🧳 **Portable** | Hosts provide adapters; the harness stays independent of Electron, browser APIs, server APIs, and concrete databases |
-| 🧩 **Composable** | Middleware steps can be rearranged to build chat, tool agents, RAG, memory agents, extraction flows, and test flows |
-| 🧪 **Testable** | LLMs, embeddings, filesystems, databases, browser sessions, and sandboxes can be replaced with fakes |
-| 📡 **Streamable** | Output is OpenAI-compatible chunks plus richer harness events for progress, tools, retrieval, and graph state |
+## 🕸️ Graph — any execution topology
 
-## 👁️ At A Glance
+**What corner it covers:** when the LLM fires, where its output goes, whether it loops, how many agents run.
 
-| | What it means |
-|---:|---|
-| 🤖 **LLM harness** | Wraps the model with runtime logic, memory, tools, streaming, and lifecycle behavior |
-| ⚙️ **Workflow engine** | Runs graph-based flows, middleware chains, and model/tool loops |
-| 🔌 **Standard interfaces** | Uses portable contracts for LLM, embeddings, DB, FS, browser, sandbox, logger, and documents |
-| 🌐 **Wide environment support** | Runs in browser, backend, CLI, sandbox, worker, edge, and tests through adapters |
-| 📋 **Explorable registries** | Graphs, steps, tools, and features are registered instead of hidden in one implementation |
-| 📡 **OpenAI-compatible streaming** | Streams `ChatCompletionChunk` payloads plus harness events |
-
-## 🗺️ The Big Picture
-
-```mermaid
-flowchart LR
-  L["LLM<br/>reasoning + generation"]
-  H["Flow Engine<br/>runtime + graph + middleware"]
-  T["Tools<br/>web, fs, docs, sandbox"]
-  M["Memory + Knowledge<br/>RAG, graph, structmem"]
-  A["Adapters<br/>browser, backend, CLI, tests"]
-  O["Agent System<br/>acts, retrieves, remembers, streams"]
-
-  A --> H
-  L <--> H
-  H <--> T
-  H <--> M
-  H --> O
-```
-
-The LLM is the reasoning core. The Flow Engine decides what context the model sees, which tools are available, how tool calls execute, how output streams, and what should be saved after the run.
-
-## 📐 Core Principles
-
-### 1. 🌐 Run Everywhere
-
-The engine must not be tied to Electron, a browser API, a database client, or a server framework.
-
-| Environment | Example usage |
-|---|---|
-| 🌐 **Browser** | UI agents, browser storage, web sessions, remote LLM/database adapters |
-| 🖥️ **Backend** | APIs, background jobs, server DBs, `fs/promises`, server logging |
-| 💻 **CLI** | Local automation, scripts, developer workflows |
-| 📦 **Sandbox** | Code execution, package installs, file generation, preview servers |
-| ⚡ **Worker / edge** | Fetch-based adapters and lightweight storage bindings |
-| 🧪 **Tests** | Fake LLM, in-memory DB, in-memory FS, deterministic embeddings |
-
-The host provides adapters. The Flow Engine stays portable.
-
-### 2. 🔌 Use Standard Interfaces
-
-The engine talks to the outside world through stable contracts:
-
-| Interface | Purpose | Standard shape |
-|---|---|---|
-| 🤖 `IFlowLLMService` | Chat completions and streaming | OpenAI-compatible `chat.completions.create()` |
-| 🔢 `IFlowEmbeddingService` | Embeddings | OpenAI-compatible `embeddings.create()` |
-| 📁 `IFlowFileSystem` | Files | Node `fs/promises`-style methods |
-| 🗄️ `IFlowDatabase` | General persistence | Collection/repository pattern |
-| 🧠 `IKnowledgeDatabase` | Graph knowledge | Nodes, edges, sources through an adapter |
-| 🌐 `IFlowWebBrowserService` | Web sessions | Open/read/search/action contract |
-| 📦 `IFlowSandboxService` | Isolated execution | Commands, code, files, packages, servers |
-| 📝 `IFlowLogger` | Logging | `console`-compatible methods |
-| 📄 `IDocumentProcessor` | Documents | Host-provided extraction/formatting |
-
-No application schema belongs in the harness. The application adapts its real services into these interfaces.
-
-### 3. 🎛️ Customize Every Layer
-
-The engine is not one hard-coded agent. It is a set of composable layers.
-
-| Extension point | What you customize | Example |
-|---|---|---|
-| 🕸️ **Graph** | Workflow topology | agent loop, RAG flow, knowledge extraction, custom pipeline |
-| 🔗 **Step** | Middleware behavior | add system prompt, retrieve context, enable tools, save memory |
-| 🔧 **Tool** | Model-callable action | web search, file edit, sandbox execute, memory remember |
-| 🔌 **Adapter** | Environment binding | OpenAI, local model, Postgres, in-memory DB, browser FS |
-| 🪝 **Lifecycle hook** | Side effects around a run | save citations, persist memory, cleanup resources |
-| 🎛️ **Feature** | Configurable capability bundle | web feature, sandbox feature, active-memory feature |
-
-## 📚 Layer Stack
-
-```mermaid
-flowchart TB
-  A["Host Environment<br/>Browser / Backend / CLI / Sandbox / Worker / Tests"]
-  B["Adapters<br/>convert host services into flow interfaces"]
-  C["Interfaces<br/>LLM, embedding, DB, FS, browser, sandbox, logger"]
-  D["Runtime<br/>GraphBase, streaming, run vars, lifecycle"]
-  E["Middleware Steps<br/>prompts, retrieval, memory, features, compaction"]
-  F["Agent Loop<br/>LLM to tool executor"]
-  G["Tools<br/>web, files, documents, sandbox, planner, memory"]
-  H["Memory + Knowledge<br/>RAG, graph knowledge, structmem, active memory"]
-  I["Output Stream<br/>OpenAI chunks + harness events + state"]
-
-  A --> B --> C --> D --> E --> F --> I
-  F <--> G
-  E <--> H
-  G --> C
-```
-
-## 🏗️ What You Can Build
-
-| Use case | Layers used |
-|---|---|
-| 💬 **Simple chat** | LLM interface + chat completion step + streaming |
-| 🤖 **Tool agent** | Agent graph + tool registry + tool executor |
-| 📚 **Knowledge RAG** | Retrieval steps + knowledge DB adapter + context middleware |
-| 🧠 **Memory agent** | Active memory tools + structmem steps + lifecycle save hooks |
-| 🌐 **Web agent** | Web feature + browser adapter + web tools |
-| 📁 **Workspace agent** | FS adapter + file tools + document processor |
-| 💻 **Coding sandbox agent** | Sandbox adapter + command/server/package tools |
-| 🔬 **Knowledge extraction pipeline** | Knowledge graph + entity/fact extraction steps |
-| 🧪 **Deterministic tests** | Fake LLM + in-memory DB/FS + deterministic embeddings |
-
-## ⚙️ How Execution Works
-
-```mermaid
-sequenceDiagram
-  participant Host
-  participant Registry
-  participant Graph
-  participant Steps
-  participant LLM
-  participant Tools
-  participant Lifecycle
-
-  Host->>Registry: create graph(type, services, config)
-  Registry->>Graph: instantiate registered graph
-  Host->>Graph: stream(initialState)
-  Graph->>Steps: run middleware chain
-  Steps->>Steps: prompt, context, memory, features
-  Steps->>LLM: send OpenAI-style messages + tools
-  LLM-->>Graph: stream ChatCompletionChunk
-  Graph-->>Host: emit { type: "llm", chunk }
-  LLM->>Tools: request tool call
-  Graph->>Tools: validate args and execute
-  Tools-->>Graph: tool result message
-  Graph-->>Host: emit execute-start/actions/llm chunks
-  Graph->>Lifecycle: drain finish hooks
-  Lifecycle->>Lifecycle: save memory, knowledge, citations, cleanup
-```
-
-## 🔗 Middleware Steps
-
-Steps are middleware nodes. They shape the run before, during, or after model calls.
-
-```text
-input state -> step -> updated state -> next step
-```
-
-Examples of what a step can do:
-
-| Step kind | What it does |
-|---|---|
-| 📝 Prompt step | Add, replace, or compose system prompts |
-| 🔍 Retrieval step | Load relevant facts, nodes, edges, citations, documents |
-| 🧠 Memory step | Retrieve structured memory or register memory save hooks |
-| 🎛️ Feature step | Enable tool bundles such as web, FS, sandbox, planner |
-| 🗜️ Compaction step | Reduce long history before the LLM call |
-| ⚡ Runtime step | Read/write run-scoped variables |
-| 🔄 Lifecycle step | Save knowledge, memory, or citations after streaming finishes |
-| 🤖 LLM step | Call the model directly or delegate to the agent loop |
-
-Steps make behavior composable. You can build a new agent by rearranging middleware instead of rewriting the runtime.
-
-## 🔧 Tools
-
-Tools are model-callable capabilities.
-
-```text
-tool = name + description + Zod schema + executor + injected services
-```
-
-The Flow Engine handles the hard parts:
-
-1. Convert tool schemas to OpenAI tool definitions.
-2. Send tools to the model.
-3. Receive streamed tool-call deltas.
-4. Parse and validate arguments.
-5. Execute the tool with injected services.
-6. Stream progress and result chunks.
-7. Append the result as a tool message.
-8. Continue the model/tool loop.
-
-Tool families:
-
-| Family | Examples |
-|---|---|
-| 🌐 Web | search, open, read, wait, DOM action, screenshot |
-| 📁 Filesystem | read, write, edit, grep, glob, list, mkdir, remove |
-| 📄 Documents | PDF text, metadata, conversion, extraction |
-| 📦 Sandbox | run code, execute command, install package, start server, logs |
-| 🧠 Knowledge | read graph, write graph, explain source |
-| 💾 Memory | remember, retrieve, update, remove |
-| 📋 Planner | create plan, add item, check item |
-| 🤝 Co-agent | click, input, observe, query, scroll |
-
-## 📡 Streaming Output
-
-The Flow Engine streams **OpenAI-compatible LLM chunks** and **harness events** through the same graph stream.
-
-```mermaid
-flowchart LR
-  A["LLM provider"] --> B["ChatCompletionChunk"]
-  B --> C["{ type: 'llm', chunk }"]
-  D["Steps + tools"] --> E["execute-start / actions"]
-  C --> F["Consumer UI / API"]
-  E --> F
-```
-
-### Stream Event Types
+Extend `GraphBase`. Define any `StateGraph` topology — nodes, conditional edges, loops, sub-graphs, multi-agent DAGs. `GraphBase` provides lifecycle wrapping, streaming, and service injection. The shape of the flow is entirely yours.
 
 ```ts
-type FlowCustomChunk =
-  | { type: "llm"; chunk: ChatCompletionChunk }
-  | { type: "actions"; actions: FlowAction[] }
-  | {
-      type: "execute-start";
-      node: string;
-      metadata?: Record<string, unknown>;
-    }
-  | { type: string };
-```
+class PlannerFlow extends GraphBase<"plan" | "execute" | "reflect", PlannerState, Services> {
+  constructor(services: Services) {
+    super(services);
+    this.workflow = new StateGraph(PlannerAnnotation);
 
-| Event | Use it for |
-|---|---|
-| 🤖 `llm` | Assistant text, tool-call deltas, assistant/tool messages |
-| ▶️ `execute-start` | Show which step or tool just started |
-| ⚡ `actions` | Show retrieval, memory, knowledge, or feature activity |
-| 📊 `values` mode | Read graph state snapshots when enabled |
-| 🔄 `updates` mode | Read node-level state updates when enabled |
+    this.addNode("plan",    this.planNode);      // ← lifecycle hooks injected automatically
+    this.addNode("execute", this.executeNode);
+    this.addNode("reflect", this.reflectNode);
 
-The result: a simple client can read only `llm` chunks. A rich client can also render progress, tool execution, retrieval breadcrumbs, and graph state.
+    this.workflow.addEdge(START, "plan");
+    this.workflow.addEdge("plan", "execute");
+    this.workflow.addConditionalEdges("execute", (state) => {
+      if (state.failed)   return "plan";         // ← replan on failure
+      if (state.needsQA)  return "reflect";      // ← QA pass before done
+      return END;
+    });
+    this.workflow.addEdge("reflect", END);
+    this.compile();
+  }
+}
 
-## 🤝 OpenAI Compatibility
-
-The model boundary is OpenAI-shaped:
-
-```ts
-services.llm.chatCompletions({
-  messages,
-  tools,
-  tool_choice: "auto",
-  stream: true,
-});
-```
-
-Preferred provider shape:
-
-```ts
-services.llm.chat?.completions.create({
-  messages,
-  tools,
-  stream: true,
-});
-```
-
-The harness uses OpenAI-style types:
-
-- `ChatCompletionMessageParam`
-- `ChatCompletionRequest`
-- `ChatCompletionResponse`
-- `ChatCompletionChunk`
-- `ChatCompletionTool`
-- `ChatCompletionMessageToolCall`
-
-That makes it compatible with OpenAI, OpenAI-compatible proxies, local model servers, hosted gateways, and deterministic test fakes.
-
-## 🧠 Memory And Knowledge
-
-The harness supports more than chat history.
-
-```mermaid
-flowchart LR
-  CH["Chat history"]
-  WM["Working messages"]
-  RV["Runtime vars"]
-  KG["Knowledge graph"]
-  SM["Structured memory"]
-  AM["Active memory"]
-  CTX["Context builder"]
-  LLM["LLM"]
-  SAVE["Lifecycle save"]
-
-  CH --> CTX
-  WM --> CTX
-  RV --> CTX
-  KG --> CTX
-  SM --> CTX
-  AM --> CTX
-  CTX --> LLM
-  LLM --> SAVE
-  SAVE --> KG
-  SAVE --> SM
-  SAVE --> AM
-```
-
-| Memory layer | Purpose |
-|---|---|
-| 💬 Chat history | Stable committed conversation messages |
-| 📝 Working messages | In-progress assistant/tool messages during a loop |
-| ⚡ Runtime vars | Per-run transient data |
-| 🕸️ Knowledge graph | Durable entity/fact graph scoped by graph id |
-| 🗂️ Structured memory | Event-style memory and consolidation |
-| 💾 Active memory | Tool-accessible remembered facts |
-| 🔍 Retrieval context | Selected facts, nodes, edges, citations, and summaries |
-
-## 📋 Explorable Registries
-
-The Flow Engine is designed so hosts and builder UIs can inspect what exists instead of relying on hidden code paths.
-
-| Registry / catalog | What it exposes |
-|---|---|
-| 🕸️ `graph-registry.ts` | Available graph implementations, including chat-capable graph config |
-| 🔗 `step-registry.ts` | Middleware steps that can shape a run |
-| 🔧 `tool-registry.ts` | Model-callable tools and their schemas |
-| 🎛️ `step-registry.ts` metadata | Configurable feature bundles consumed by the app feature catalog service |
-| 🏗️ `flow-builder-catalog.ts` | Builder-facing metadata for constructing flows |
-
-This is what makes the harness explorable: a host can show available capabilities, validate configs, and build flows without hard-coding every option into the UI.
-
-## 🗺️ Customization Map
-
-```mermaid
-flowchart TB
-  A["Need a new model?"] --> B["Implement IFlowLLMService"]
-  C["Need new storage?"] --> D["Implement IFlowDatabase / IKnowledgeDatabase"]
-  E["Need a new capability?"] --> F["Register a tool"]
-  G["Need new middleware?"] --> H["Register a step"]
-  I["Need a new workflow?"] --> J["Register a graph"]
-  K["Need a new host app?"] --> L["Write adapters outside flows"]
-```
-
-| Goal | Extension point |
-|---|---|
-| 🤖 Change model provider | `IFlowLLMService` adapter |
-| 🔢 Change embedding provider | `IFlowEmbeddingService` adapter |
-| 📁 Change filesystem | `IFlowFileSystem` adapter |
-| 🗄️ Change database | `IFlowDatabase` / `IKnowledgeDatabase` adapter |
-| 🌐 Add web/browser ability | `IFlowWebBrowserService` adapter + web tools |
-| 📦 Add sandbox ability | `IFlowSandboxService` adapter + sandbox tools |
-| 🔧 Add model-callable action | Tool registry |
-| 📝 Add prompt/context/memory behavior | Step registry |
-| 🕸️ Add a new workflow topology | Flow graph registry |
-| 🎛️ Add configurable feature bundle | Feature catalog registry |
-
-## ⚡ Quick Usage Shape
-
-```ts
-import {
-  register,
-  graphRegistry,
-  consoleFlowLogger,
-  type AllServices,
-} from "@memorall/flows";
-
-register();
-
-const services: AllServices = {
-  llm,
-  embedding,
-  database,
-  logger: consoleFlowLogger,
-  fs,
-  webBrowser,
-  sandboxContainer,
-};
-
-const { graph, getInitialState } = graphRegistry.createChatGraph("agent", services, {
-  graphType: "agent",
-  steps: [],
-});
-
-const stream = await graph.stream(
-  getInitialState({
-    messages,
-    contextQueries: [],
-  }),
-  {
-    streamMode: ["custom", "values"],
+graphRegistry.register("planner", {
+  id:      "planner",
+  factory: (services, config, ctx) => new PlannerFlow(services),
+  config: {
+    stepOrder: ["add-system", "__features__", "agent-completion"],
+    chat: (services, config) => ({
+      graph: new PlannerFlow(services),
+      getInitialState: (ctx) => ({ messages: ctx.messages, tools: [] }),
+    }),
   },
-);
+});
 ```
 
-## 🛡️ Boundary Rules
+A planner-executor-critic loop, a knowledge extraction DAG, a multi-agent coordinator, a document pipeline, a RAG flow — **any `StateGraph` topology, registered once, discovered by the engine**.
 
-These rules keep the Flow Engine reusable:
+> **Scales by:** one new class + one `graphRegistry.register`. Nothing else changes.
 
-| Rule | Why it matters |
-|---|---|
-| 🔌 Interfaces stay standard | Any host can implement them |
-| 🔄 App services enter through adapters | `flows` stays independent |
-| 🚫 App schemas stay outside `flows` | No product-specific lock-in |
-| 🔧 Tools and steps use `AllServices` | Dependencies stay explicit |
-| 📁 Filesystem APIs follow `fs/promises` | Works in Node and virtual FS implementations |
-| 🧠 Knowledge uses `IKnowledgeDatabase` | Graph behavior is typed without importing app DB code |
-| 📋 New behavior is registered | The runtime stays modular |
+---
 
-## ✨ One-Line Definition
+## 🔗 Steps — construct what the LLM needs to solve a problem
 
-**Flow Engine is a scalable, explorable, portable harness system that wraps an LLM with graph execution, middleware, tools, memory, knowledge, OpenAI-compatible streaming, lifecycle hooks, and environment adapters.**
+**What corner it covers:** every piece of information the LLM receives — tools, system prompts, messages, context, runtime vars — assembled independently per business domain.
+
+A step is an independent unit that constructs the LLM's input for a specific problem. Each step owns its slice: it reads graph state, builds what it needs — tools to enable, instructions to inject, messages to prepend, runtime vars to set — and writes back. Steps don't know about each other. The LLM receives everything assembled.
+
+```
+step A  →  adds domain system prompt to messages
+step B  →  pushes relevant tools into state.tools
+step C  →  injects retrieved context into messages
+step D  →  sets runtime vars the graph will use downstream
+               ↓
+           LLM sees the full assembled picture
+```
+
+Any business capability is a step: a coding sandbox, a job application assistant, a daily briefing agent, a UI renderer, a travel planner. Each one constructs exactly the tools, prompts, and context that domain needs — nothing more. Register it, and any graph that has the `__features__` slot picks it up:
+
+```ts
+stepRegistry.register("my-feature", factory, {
+  injectAfter: "__features__",
+  feature: { type: "feature", graphTypes: ["foundation", "agent"] },
+});
+```
+
+> **Scales by:** one `stepRegistry.register` call. A new business domain is a new step — no graph changes, no changes to any other step.
+
+---
+
+## 🪝 Lifecycle Hooks — any side-effect around any node
+
+**What corner it covers:** everything that needs to happen at the boundaries of node execution — injecting context, patching results, recovering from errors, persisting state after the stream ends.
+
+Every node added via `GraphBase.addNode` is wrapped by `toNode()`. A step registers callbacks during its own execution — the harness fires them at the right moment without the node knowing:
+
+```ts
+// inside any step's execute():
+const lifecycle = getFlowRunLifecycle(runConfig);
+
+// inject extra context right before the model fires
+lifecycle?.onBeforeStart("enrich", "agent-completion", async (state) => {
+  const extra = await services.db.retrieve(state.messages);
+  return { messages: [...state.messages, extra] };       // ← patches local state
+});
+
+// recover from errors without polluting the node
+lifecycle?.onCatch("guard", async (nodeName, error, state) => {
+  logError(nodeName, error);
+  return { response: "Something went wrong, please try again." };  // ← recovery
+});
+
+// save knowledge after the entire stream is consumed
+lifecycle?.onFinish("persist", async () => {
+  await services.database.saveKnowledge(extractedFacts);  // ← runs after last chunk
+});
+```
+
+| 🪝 Hook | ⏱️ Fires | 💡 Can do |
+|---|---|---|
+| `onBeforeStart` | Before node fn | Patch local state going in |
+| `onCatch` | On any node error | Return recovery, suppress rethrow |
+| `onAfterEnd` | After node fn returns | Patch node result |
+| `onFinish` | After stream fully consumed | Save, persist, cleanup |
+
+> **Scales by:** any step attaches any callback to any node. The node is untouched. Post-run work grows without changing graph topology.
+
+---
+
+## 🔧 Tools — any action the LLM can invoke
+
+**What corner it covers:** everything the LLM is allowed to call — validated with Zod, executed against real services, streamed back as context.
+
+Register a factory that returns a name, description, schema, and executor. The harness handles everything else: converting to `ChatCompletionTool`, sending to the model, receiving streamed call deltas, validating arguments, executing, streaming the result, and feeding the tool message back into the next LLM turn.
+
+```ts
+toolRegistry.register("knowledge-search", {
+  factory: (services) => ({
+    name:        "knowledge-search",
+    description: "Search the knowledge graph for facts about a topic",
+    schema: z.object({
+      query:  z.string().describe("The search query"),
+      limit:  z.number().optional().default(10),
+    }),
+    async execute({ query, limit }) {
+      const results = await services.database.searchKnowledge(query, limit);
+      return { type: "text", value: JSON.stringify(results) };
+    },
+  }),
+});
+```
+
+The LLM calls it. The harness runs it. The result flows back as a `tool` message. The model continues with full context of what the tool returned.
+
+> **Scales by:** one `toolRegistry.register` call. No graph changes. No step changes. The tool is available to any graph that exposes it.
+
+---
+
+## 🌐 Services — any real-world system
+
+**What corner it covers:** every external system the harness touches — the LLM provider itself, databases, filesystems, browsers, sandboxes, and anything else.
+
+Services implement standard interfaces. Nothing inside `flows-core` ever imports a concrete adapter — only the interface. Swap the real system without changing a single tool or step.
+
+```
+tool.execute(args)
+      │
+      services.webBrowser.search(query)
+      │
+      IFlowWebBrowserService        ← interface inside flows-core
+            │
+            ├── Playwright adapter  ← desktop app
+            ├── Fetch adapter       ← edge / serverless
+            └── Fake adapter        ← deterministic tests
+```
+
+The LLM itself is a service — called through the same contract as everything else:
+
+```ts
+// graph/agent/graph.ts — agentNode
+const stream = llm.chatCompletions({
+  messages:    [...state.messages, ...state.outputMessages],
+  tools:       this.combinedTools.map(t => t.tool),
+  tool_choice: "auto",
+  stream:      true,
+});
+for await (const chunk of stream) {
+  runConfig?.writer?.({ type: "llm", chunk });   // every chunk streams to the host
+}
+```
+
+Register at boot, resolve at runtime:
+
+```ts
+serviceRegistry.registerInstance("llm",       openAIAdapter);
+serviceRegistry.registerInstance("webBrowser", playwrightAdapter);
+serviceRegistry.registerInstance("database",   postgresAdapter);
+serviceRegistry.registerInstance("fs",         nodeFs);
+
+// engine materializes all instances into graph and tool factories
+const services = engine.resolveServices();
+```
+
+> **Scales by:** one new interface implementation + one `registerInstance`. Every tool and step that uses that interface keeps working unchanged.
+
+---
+
+## 🔁 Everything wired together
+
+```
+── boot ──────────────────────────────────────────────────────────────
+
+serviceRegistry.registerInstance("llm",       openAIAdapter)
+serviceRegistry.registerInstance("webBrowser", playwrightAdapter)
+
+toolRegistry.register("web-search", { factory: ... })
+toolRegistry.register("web-read",   { factory: ... })
+
+stepRegistry.register("web-feature", factory, { injectAfter: "__features__" })
+
+graphRegistry.register("foundation", factory, {
+  stepOrder: ["add-system", "__features__", "agent-completion"]
+})
+
+── runtime ───────────────────────────────────────────────────────────
+
+engine.createChatGraph("foundation", services, config)
+  └─ filterConfig: strips steps/tools absent from this engine's registry
+  └─ graphRegistry["foundation"].factory(services, config, { registries })
+  └─ FoundationFlow: chains enabled steps as nodes
+
+graph.stream(initialState, { configurable: { lifecycle } })
+  │
+  add-system     ──► writes system prompt into state.messages
+  web-feature    ──► pushes [web_search, web_read] into state.tools
+                     registers lifecycle.onFinish("close-sessions", ...)
+  agent-loop     ──► merges all tools, calls LLM, loops on tool calls
+       │
+       LLM ──► tool call "web_search" ──► execute ──► result ──► LLM continues
+       │
+       final response streamed to host
+  │
+  last chunk consumed ──► lifecycle.drain()
+    onFinish "close-sessions" ──► webBrowser.closeSessions()
+    onFinish "save-knowledge" ──► database.saveExtracted()
+```
+
+---
+
+## 📐 The scalability contract
+
+| To add... | Do this | Everything else... |
+|---|---|---|
+| A new flow topology | `graphRegistry.register` | stays unchanged |
+| A new context, feature, or transform | `stepRegistry.register` | stays unchanged |
+| A side-effect around any node | `lifecycle.onBeforeStart / onAfterEnd / onFinish` | stays unchanged |
+| A new LLM-callable action | `toolRegistry.register` | stays unchanged |
+| A new real-world system | implement interface → `serviceRegistry.registerInstance` | stays unchanged |
