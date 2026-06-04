@@ -6,9 +6,9 @@ import {
 	type AgentFeatureDefinition,
 	type GraphType,
 } from "@/main/stores/agent-config";
-import { DEFAULT_CONTEXT_SYSTEM_PROMPT } from "@/services/flows/steps/common/context-to-system";
+import { DEFAULT_CONTEXT_SYSTEM_PROMPT } from "@/services/flows-core/steps/common/context-to-system";
 import type { Flow } from "@/services/database/types";
-import type { FoundationPredefinedConfig } from "@/services/flows/graph/foundation/state";
+import type { FoundationPredefinedConfig } from "@/services/flows-core/graph/foundation/state";
 import { coerceDate, type AgentConfigSummary } from "../types";
 import { getAgentFeatureDisplayName } from "../utils/feature-display";
 

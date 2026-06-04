@@ -12,7 +12,7 @@ import { useAgentConfigStore } from "@/main/stores/agent-config";
 import {
 	VISUALIZE_RESPONSE_FEATURE_NAME,
 	type OpenUITheme,
-} from "@/services/flows/steps/features/visualize-response";
+} from "@/services/flows-core/steps/features/visualize-response";
 
 const THEMES: { value: OpenUITheme; labelKey: string }[] = [
 	{ value: "shadcn", labelKey: "agentSettings.visualizeThemeShadcn" },

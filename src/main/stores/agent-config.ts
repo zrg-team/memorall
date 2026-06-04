@@ -1,28 +1,28 @@
 import { create } from "zustand";
 import { serviceManager } from "@/services";
-import { toolRegistry } from "@/services/flows/tool-registry";
-import { buildDefaultFlowConfig } from "@/services/flows/build-flow-config";
-import { mergeWithDefaultConfig } from "@/services/flows/build-flow-config";
+import { toolRegistry } from "@/services/flows-core/registries/tool-registry";
+import { buildDefaultFlowConfig } from "@/services/flows-core/utils/flow-config";
+import { mergeWithDefaultConfig } from "@/services/flows-core/utils/flow-config";
 import {
 	DEFAULT_FOUNDATION_PREDEFINED_CONFIG,
 	type FoundationPredefinedConfig,
-} from "@/services/flows/graph/foundation/state";
-import { DEFAULT_AGENT_SYSTEM_PROMPT } from "@/services/flows/graph/agent/state";
-import { DEFAULT_FOUNDATION_SYSTEM_PROMPT } from "@/services/flows/graph/foundation/state";
-import type { UnifiedFlowConfig } from "@/services/flows/interfaces/flow-config";
-import { DEFAULT_CONTEXT_SYSTEM_PROMPT } from "@/services/flows/steps/common/context-to-system";
-import { MULTI_AGENT_FEATURE_NAME } from "@/services/flows/steps/features/multi-agent-feature";
+} from "@/services/flows-core/graph/foundation/state";
+import { DEFAULT_AGENT_SYSTEM_PROMPT } from "@/services/flows-core/graph/agent/state";
+import { DEFAULT_FOUNDATION_SYSTEM_PROMPT } from "@/services/flows-core/graph/foundation/state";
+import type { UnifiedFlowConfig } from "@/services/flows-core/interfaces/config/flow-config";
+import { DEFAULT_CONTEXT_SYSTEM_PROMPT } from "@/services/flows-core/steps/common/context-to-system";
+import { MULTI_AGENT_FEATURE_NAME } from "@/services/flows-core/steps/features/multi-agent-feature";
 import {
 	MCP_FEATURE_NAME,
 	type MCPServerConfig,
-} from "@/services/flows/steps/features/mcp-feature";
-import { ADD_SKILL_CONTEXT_STEP_NAME } from "@/services/flows/steps/common/add-skill-context";
+} from "@/services/flows-core/steps/features/mcp-feature";
+import { ADD_SKILL_CONTEXT_STEP_NAME } from "@/services/flows-core/steps/common/add-skill-context";
 import { logError } from "@/utils/logger";
 import type {
 	FeatureCatalogMetadata,
 	FeatureDetailViewSlot,
 	FeatureIcon,
-} from "@/services/flows/flow-builder-catalog";
+} from "@/services/flow-feature-catalog-service";
 import type { Flow } from "@/services/database/types";
 
 // ---------------------------------------------------------------------------

@@ -1,5 +1,5 @@
 import React, { createContext, useContext } from "react";
-import type { OpenUITheme } from "@/services/flows/steps/features/visualize-response";
+import type { OpenUITheme } from "@/services/flows-core/steps/features/visualize-response";
 
 const OpenUIThemeContext = createContext<OpenUITheme>("shadcn");
 

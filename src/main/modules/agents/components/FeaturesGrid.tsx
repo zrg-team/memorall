@@ -14,7 +14,7 @@ import {
 	useAgentConfigStore,
 	type AgentFeatureDefinition,
 } from "@/main/stores/agent-config";
-import type { FeatureIcon } from "@/services/flows/flow-builder-catalog";
+import type { FeatureIcon } from "@/services/flow-feature-catalog-service";
 import { HoverBadgeList } from "./AgentHoverInfo";
 import { FeatureCard, FeatureIconDisplay } from "./FeatureCard";
 import {

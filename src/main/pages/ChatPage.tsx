@@ -47,7 +47,7 @@ import { useRuntimeSessionsStore } from "@/main/stores/runtime-sessions";
 import { useShellLayoutStore } from "@/main/stores/shell-layout";
 import { isPopupSurface } from "@/utils/dom";
 import { getAgentIconScreenFromMetadata } from "@/main/modules/agents/types";
-import type { FeatureCatalogMetadata } from "@/services/flows/feature-catalog-registry";
+import type { FeatureCatalogMetadata } from "@/services/flow-feature-catalog-service";
 import {
 	formatOpenUIFormStateContext,
 	getOpenUISendMessageText,

@@ -1,3 +1,7 @@
+import "@/services/flows-core";
+import "@/services/flows-memory";
+import "@/services/flows-integrations";
+import "@/services/flows-features";
 import { ServiceManager } from "./service-manager";
 
 // Export singleton instance

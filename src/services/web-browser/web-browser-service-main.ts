@@ -39,7 +39,7 @@ import {
 	searchInSessionHtml,
 	waitForDomSelector,
 	waitForPageRender,
-} from "@/services/flows/tools/web/web-tool-registry";
+} from "@/services/flows-integrations/tools/web/web-tool-registry";
 
 export class WebBrowserServiceMain implements IWebBrowserService {
 	private static instance: WebBrowserServiceMain;

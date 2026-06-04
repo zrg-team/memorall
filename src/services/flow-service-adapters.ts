@@ -38,39 +38,52 @@ import type {
 	WebWaitForRenderArgs,
 	WebWaitForSelectorArgs,
 } from "@/services/web-browser";
-import type { IFlowDatabase } from "./flows/interfaces/database";
-import type { IFlowEmbeddingService } from "./flows/interfaces/embedding";
+import type { IFlowDatabase } from "./flows-memory/interfaces/database";
+import type { IFlowEmbeddingService } from "./flows-memory/interfaces/embedding";
 import type {
 	DirEntry,
 	FileStat,
 	IFlowFileSystem,
-} from "./flows/interfaces/filesystem";
-import type { IFlowLLMService } from "./flows/interfaces/llm";
+} from "./flows-core/interfaces/services/filesystem";
+import type { IFlowLLMService } from "./flows-core/interfaces/services/llm";
 import type {
 	IFlowSandboxService,
 	SandboxRequest,
-} from "./flows/interfaces/sandbox";
-import type { SandboxCommandResult } from "./flows/interfaces/sandbox";
+} from "./flows-core/interfaces/services/sandbox";
+import type { SandboxCommandResult } from "./flows-core/interfaces/services/sandbox";
 import type {
 	IFlowWebBrowserService,
 	WebOpenSessionResult as FlowWebOpenSessionResult,
 	WebRefreshSessionArgs as FlowWebRefreshSessionArgs,
 	WebRenderedFallbackResult as FlowWebRenderedFallbackResult,
-} from "./flows/interfaces/web-browser";
+} from "./flows-core/interfaces/services/web-browser";
+import type { IFlowLogger } from "./flows-core/utils/logger";
+import { setFlowLogger } from "./flows-core/utils/logger";
+import { serviceRegistry } from "./flows-core/registries/service-registry";
 import type {
 	ChatCompletionChunk,
 	ChatCompletionRequest,
 	ChatCompletionResponse,
-} from "./flows/interfaces/messages";
+} from "./flows-core/interfaces/engine/messages";
 import { schema as appDatabaseSchema } from "@/services/database/schema";
 import type {
 	IKnowledgeDatabase,
 	KnowledgeDatabaseContext,
-} from "./flows/interfaces/knowledge";
+} from "./flows-memory/interfaces/knowledge";
 
 type FlowChatCreate = NonNullable<
 	IFlowLLMService["chat"]
 >["completions"]["create"];
+
+export const consoleFlowLogger: IFlowLogger = {
+	info: (msg, ...args) => console.info(msg, ...args),
+	error: (msg, ...args) => console.error(msg, ...args),
+	warn: (msg, ...args) => console.warn(msg, ...args),
+	debug: (msg, ...args) => console.debug(msg, ...args),
+};
+
+setFlowLogger(consoleFlowLogger);
+serviceRegistry.registerInstance("logger", consoleFlowLogger);
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
 	typeof value === "object" && value !== null;
@@ -492,6 +505,15 @@ export const toFlowWebBrowser = (
 	service: IWebBrowserService,
 ): IFlowWebBrowserService => ({
 	isReady: () => service.isReady(),
+	getCapabilities: () => ({
+		canOpenSession: true,
+		canQueryDom: true,
+		canPerformDomAction: true,
+		canWaitForDom: true,
+		canWaitForRender: true,
+		canFetchRenderedFallback: true,
+		canManageMultipleSessions: true,
+	}),
 	openSession: async (args) =>
 		normalizeWebOpenResult(
 			await service.openSession(args as WebOpenSessionArgs),
@@ -664,3 +686,27 @@ export const toFlowSandbox = (
 			args as unknown as SandboxHandleSwRequestPayload,
 		),
 });
+
+// ---------------------------------------------------------------------------
+// Registration helpers — adapt + register in one call.
+// Call these at app startup; then use serviceRegistry.resolveAll() instead of
+// assembling AllServices manually.
+// ---------------------------------------------------------------------------
+
+export const registerFlowLLM = (service: ILLMService): void =>
+	serviceRegistry.registerInstance("llm", toFlowLLM(service));
+
+export const registerFlowFileSystem = (service: DocumentFileSystem): void =>
+	serviceRegistry.registerInstance("fs", toFlowFileSystem(service));
+
+export const registerFlowDatabase = (service: IDatabaseService): void =>
+	serviceRegistry.registerInstance("database", toFlowDatabase(service));
+
+export const registerFlowEmbedding = (service: IEmbeddingService): void =>
+	serviceRegistry.registerInstance("embedding", toFlowEmbedding(service));
+
+export const registerFlowWebBrowser = (service: IWebBrowserService): void =>
+	serviceRegistry.registerInstance("webBrowser", toFlowWebBrowser(service));
+
+export const registerFlowSandbox = (service: ISandboxContainerService): void =>
+	serviceRegistry.registerInstance("sandboxContainer", toFlowSandbox(service));

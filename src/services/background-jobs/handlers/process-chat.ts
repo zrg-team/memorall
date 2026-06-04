@@ -14,7 +14,7 @@ import {
 	isCustomChunkPayload,
 	normalizeLangGraphStreamChunk,
 	type FlowAction,
-} from "@/services/flows/utils/langgraph-stream";
+} from "@/services/flows-core/utils/langgraph-stream";
 import type {
 	AssistantExecutionPart,
 	ComplexContent,
@@ -22,7 +22,7 @@ import type {
 	MessageParts,
 } from "@/types/chat";
 import { handlerRegistry } from "./handler-registry";
-import type { FoundationState } from "@/services/flows/graph/foundation/state";
+import type { FoundationState } from "@/services/flows-core/graph/foundation/state";
 import {
 	MessagePartsAccumulator,
 	resolveMessageParts,
@@ -32,9 +32,9 @@ import {
 	createToolCallAccumulator,
 	type ToolCallAccumulator,
 } from "@/services/chat/tool-call-accumulator";
-import { chatFlowRegistry } from "@/services/flows/chat-flow-registry";
-import { consoleFlowLogger } from "@/services/flows/interfaces/logger";
+import { graphRegistry } from "@/services/flows-core/registries/graph-registry";
 import {
+	consoleFlowLogger,
 	toFlowDatabase,
 	toFlowEmbedding,
 	toFlowFileSystem,
@@ -42,13 +42,13 @@ import {
 	toFlowSandbox,
 	toFlowWebBrowser,
 } from "@/services/flow-service-adapters";
-import type { UnifiedFlowConfig } from "@/services/flows/interfaces/flow-config";
-import { buildDefaultFlowConfig } from "@/services/flows/build-flow-config";
-import { mergeWithDefaultConfig } from "@/services/flows/build-flow-config";
+import type { UnifiedFlowConfig } from "@/services/flows-core/interfaces/config/flow-config";
+import { buildDefaultFlowConfig } from "@/services/flows-core/utils/flow-config";
+import { mergeWithDefaultConfig } from "@/services/flows-core/utils/flow-config";
 import {
 	createFlowRuntimeVars,
 	withFlowRuntimeVars,
-} from "@/services/flows/runtime/runtime-context";
+} from "@/services/flows-core/runtime/runtime-context";
 import { eq, sql } from "drizzle-orm";
 import { documentFileSystemService as fsService } from "@/services/filesystem/document-filesystem";
 import {
@@ -274,7 +274,7 @@ type FlowCustomPayloadDeps = {
 	executeStage: string;
 };
 
-type FlowServices = Parameters<typeof chatFlowRegistry.create>[1];
+type FlowServices = Parameters<typeof graphRegistry.createChatGraph>[1];
 
 type FlowRuntimeDeps = {
 	jobId: string;
@@ -845,7 +845,7 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 					resolvedConfig,
 					job.payload.flowConfigPrefix,
 				);
-				const { graph, getInitialState } = chatFlowRegistry.create(
+				const { graph, getInitialState } = graphRegistry.createChatGraph(
 					resolvedConfigWithPrefix.graphType ?? "agent",
 					ChatHandler.getFlowServices(),
 					resolvedConfigWithPrefix,
@@ -975,8 +975,8 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 				const graphType = resolvedConfig.graphType ?? "foundation";
 
 				// Resolve the chat flow via registry — no graph-type branching here.
-				// Each graph module self-registers its adapter in chat-flow-registry.ts.
-				const { graph, getInitialState } = chatFlowRegistry.create(
+				// Each chat-capable graph self-registers its adapter in graphRegistry config.
+				const { graph, getInitialState } = graphRegistry.createChatGraph(
 					graphType,
 					ChatHandler.getFlowServices(),
 					resolvedConfig,

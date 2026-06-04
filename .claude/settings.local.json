@@ -9,7 +9,9 @@
       "WebFetch(domain:github.com)",
       "Bash(yarn add i18next react-i18next i18next-browser-languagedetector)",
       "Bash(yarn tsc:*)",
-      "Bash(test:*)"
+      "Bash(test:*)",
+      "Bash(Remove-Item -Recurse -Force \"c:\\\\Users\\\\zerg\\\\Projects\\\\personal\\\\memorall\\\\src\\\\services\\\\flows\\\\tools\\\\co-agent\")",
+      "PowerShell(Get-ChildItem -Path \"c:\\\\Users\\\\zerg\\\\Projects\\\\personal\\\\memorall\\\\src\\\\services\\\\flows-core\" -Recurse -Force | Select-Object FullName, @{Name='Type'; Expression={if\\($_.PSIsContainer\\){'DIR'}else{'FILE'}}} | Sort-Object FullName | Format-Table -AutoSize)"
     ],
     "deny": [],
     "ask": []

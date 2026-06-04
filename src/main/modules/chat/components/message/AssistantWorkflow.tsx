@@ -16,7 +16,7 @@ import type {
 	ComplexContentPartExecution,
 	ComplexContentPartTool,
 } from "@/types/chat";
-import { DEFAULT_FLOW_STEPS } from "@/services/flows/flow-builder-catalog";
+import { DEFAULT_FLOW_STEPS } from "@/services/flow-builder-catalog";
 import { cn } from "@/lib/utils";
 import { ToolActionDetails } from "../MessageActions";
 import { translateCommonKey } from "../../utils/i18n-helpers";

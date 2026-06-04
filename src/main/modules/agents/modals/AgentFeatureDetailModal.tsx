@@ -26,8 +26,8 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@/main/components/ui/select";
-import type { FeatureDetailViewSlot } from "@/services/flows/flow-builder-catalog";
-import { DEFAULT_CONTEXT_SYSTEM_PROMPT } from "@/services/flows/steps/common/context-to-system";
+import type { FeatureDetailViewSlot } from "@/services/flow-feature-catalog-service";
+import { DEFAULT_CONTEXT_SYSTEM_PROMPT } from "@/services/flows-core/steps/common/context-to-system";
 import {
 	getAgentFeatureDescription,
 	getAgentFeatureDisplayName,

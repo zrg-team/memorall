@@ -8,15 +8,15 @@ import type {
 	KnowledgeGraphEntity,
 	KnowledgeGraphRelation,
 } from "@/types/knowledge-graph";
-import type { KnowledgeGraphState } from "@/services/flows/graph/knowledge/state";
-import type { StructMemState } from "@/services/flows/graph/structmem/state";
+import type { KnowledgeGraphState } from "@/services/flows-memory/graph/knowledge/state";
+import type { StructMemState } from "@/services/flows-memory/graph/structmem/state";
 import {
 	DEFAULT_GROW_TYPE,
 	type GrowType,
 } from "@/services/database/entities/topic-types";
 import { isUuid } from "@/utils/uuid";
-import { consoleFlowLogger } from "@/services/flows/interfaces/logger";
 import {
+	consoleFlowLogger,
 	toFlowDatabase,
 	toFlowEmbedding,
 	toFlowLLM,
