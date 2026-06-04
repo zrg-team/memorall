@@ -4,8 +4,8 @@ import type { ISandboxContainerService } from "@/services/sandbox-container";
 import type { IWebBrowserService } from "@/services/web-browser";
 import type { ILLMService } from "@/services/llm/interfaces/llm-service.interface";
 import type { ICronJobService } from "@/services/cron-jobs";
-import { FlowsService } from "./flows";
-import { FlowBuilderService } from "./flows/flow-builder-service";
+import { FlowsService } from "./flows-service";
+import { FlowBuilderService } from "./flow-builder-service";
 import { DatabaseMode } from "./database/constants";
 import type { IDatabaseService } from "./database/interfaces/database-service.interface";
 import {

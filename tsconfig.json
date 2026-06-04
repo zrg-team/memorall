@@ -19,6 +19,10 @@
     "types": ["node", "chrome"],
     "paths": {
       "@/*": ["./src/*"],
+      "flow-core/*": ["./src/services/flows-core/*"],
+      "flow-features/*": ["./src/services/flows-features/*"],
+      "flow-integrations/*": ["./src/services/flows-integrations/*"],
+      "flow-memory/*": ["./src/services/flows-memory/*"],
       "@/main/*": ["./src/main/*"],
       "@/lib/*": ["./src/lib/*"],
       "@/utils/*": ["./src/utils/*"],

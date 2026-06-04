@@ -17,11 +17,11 @@ import type {
 	FlowLayout,
 	FlowStateInput,
 	FlowStepInput,
-} from "@/services/flows/interfaces/flow-builder";
+} from "@/services/flows-core/interfaces/config/flow-builder";
 import { logError } from "@/utils/logger";
-import { validateFlowGraph } from "@/services/flows/flow-builder-validation";
+import { validateFlowGraph } from "@/main/modules/flow-builder/flow-builder-validation";
 import { v4 } from "@/utils/uuid";
-import type { CatalogStep } from "@/services/flows/flow-builder-catalog";
+import type { CatalogStep } from "@/services/flow-builder-catalog";
 
 export interface FlowNodeData extends Record<string, unknown> {
 	catalogStepId: string;

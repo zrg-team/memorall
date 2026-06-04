@@ -14,10 +14,7 @@ import {
 	TooltipTrigger,
 } from "@/main/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import type {
-	CatalogStep,
-	StepIOField,
-} from "@/services/flows/flow-builder-catalog";
+import type { CatalogStep, StepIOField } from "@/services/flow-builder-catalog";
 
 interface FlowBuilderStepsPanelProps {
 	steps: CatalogStep[];

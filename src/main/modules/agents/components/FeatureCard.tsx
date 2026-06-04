@@ -33,7 +33,7 @@ import { Button } from "@/main/components/ui/button";
 import { Badge } from "@/main/components/ui/badge";
 import { Switch } from "@/main/components/ui/switch";
 import { cn } from "@/lib/utils";
-import type { FeatureIcon } from "@/services/flows/flow-builder-catalog";
+import type { FeatureIcon } from "@/services/flow-feature-catalog-service";
 import type { AgentFeatureDefinition } from "@/main/stores/agent-config";
 
 // ---------------------------------------------------------------------------

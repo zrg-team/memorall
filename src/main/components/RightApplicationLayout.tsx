@@ -186,7 +186,7 @@ export const RightApplicationLayout: React.FC<RightApplicationLayoutProps> = ({
 
 	const renderRuntimeBadge = (count: number) =>
 		count > 0 ? (
-			<span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-blue-500 px-1 text-[10px] font-semibold leading-none text-white shadow-sm">
+			<span className="absolute -right-1 top-0 flex h-4 min-w-4 items-center justify-center rounded-full bg-blue-500 px-1 text-[10px] font-semibold leading-none text-white shadow-sm">
 				{count > 9 ? "9+" : count}
 			</span>
 		) : null;

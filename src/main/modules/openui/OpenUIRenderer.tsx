@@ -11,7 +11,7 @@ import { MarkdownMessage } from "@/main/modules/chat/components/MarkdownMessage"
 import { ThreeDotsLoader } from "@/main/components/atoms/ThreeDotsLoader";
 import { useTranslation } from "react-i18next";
 import { logError, logWarn } from "@/utils/logger";
-import type { OpenUITheme } from "@/services/flows/steps/features/visualize-response";
+import type { OpenUITheme } from "@/services/flows-core/steps/features/visualize-response";
 import {
 	dispatchMemorallOpenUIAction,
 	isSafeOpenUIUrl,
