@@ -2,7 +2,14 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Download, Loader2 } from "lucide-react";
 import { documentFileSystemService } from "@/services/filesystem/document-filesystem";
 import {
-	FILESYSTEM_MOUNT_PATH,
+	toWorkspacesSandboxPath,
+	toDocumentsLogicalPath,
+	isDocumentsSandboxPath,
+	isWorkspacesSandboxPath,
+	DOCUMENTS_SANDBOX_ROOT,
+	WORKSPACES_SANDBOX_ROOT,
+} from "@/services/filesystem/sandbox-paths";
+import {
 	FILESYSTEM_SCOPE,
 	type FilesystemScope,
 } from "@/services/filesystem/filesystem-paths";
@@ -107,27 +114,18 @@ const imageReferenceCandidates = (src: string): ImageReferenceCandidate[] => {
 	if (!path) return [];
 
 	const mimeType = imageMimeType(path);
-	if (
-		path === FILESYSTEM_MOUNT_PATH.DOCUMENTS ||
-		path.startsWith(`${FILESYSTEM_MOUNT_PATH.DOCUMENTS}/`)
-	) {
+	if (isDocumentsSandboxPath(path)) {
 		return [
 			{
 				scope: FILESYSTEM_SCOPE.DOCUMENTS,
-				path: path.slice(FILESYSTEM_MOUNT_PATH.DOCUMENTS.length) || "/",
+				path: toDocumentsLogicalPath(path) ?? "/",
 				mimeType,
 			},
 		];
 	}
 
-	const workspaceMounts = [
-		FILESYSTEM_MOUNT_PATH.WORKSPACES,
-		FILESYSTEM_MOUNT_PATH.WORKSPACE_LEGACY,
-	];
-	for (const mount of workspaceMounts) {
-		if (path === mount || path.startsWith(`${mount}/`)) {
-			return [{ scope: FILESYSTEM_SCOPE.WORKSPACE, path, mimeType }];
-		}
+	if (isWorkspacesSandboxPath(path)) {
+		return [{ scope: FILESYSTEM_SCOPE.WORKSPACE, path, mimeType }];
 	}
 
 	if (path.startsWith("/")) {
@@ -142,8 +140,8 @@ const readImageReferenceCandidate = async (
 ): Promise<string | null> => {
 	try {
 		if (candidate.scope === FILESYSTEM_SCOPE.WORKSPACE) {
-			const bytes = await documentFileSystemService.getWorkspaceFileContent(
-				candidate.path,
+			const bytes = await documentFileSystemService.readFile(
+				toWorkspacesSandboxPath(candidate.path),
 			);
 			return bytesToDataUrl(bytes, candidate.mimeType);
 		}
@@ -182,8 +180,8 @@ const findImageReferenceByRelativePath = async (
 	src: string,
 ): Promise<FilesystemImageReference | null> => {
 	const [documentTree, workspaceTree] = await Promise.all([
-		documentFileSystemService.getTree(),
-		documentFileSystemService.getWorkspaceTree(),
+		documentFileSystemService.getTree(DOCUMENTS_SANDBOX_ROOT),
+		documentFileSystemService.getTree(WORKSPACES_SANDBOX_ROOT),
 	]);
 	const images = [
 		...collectImageReferences(documentTree, FILESYSTEM_SCOPE.DOCUMENTS),
@@ -220,7 +218,7 @@ const resolveImageReference = async (src: string): Promise<string | null> => {
 
 	const path =
 		image.scope === FILESYSTEM_SCOPE.WORKSPACE
-			? `${FILESYSTEM_MOUNT_PATH.WORKSPACES}${image.path}`
+			? toWorkspacesSandboxPath(image.path)
 			: image.path;
 	return readImageReferenceCandidate({ ...image, path });
 };

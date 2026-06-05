@@ -1,6 +1,6 @@
 import type { LangGraphRunnableConfig } from "@langchain/langgraph";
 
-export const FLOW_RUNTIME_VARS_CONFIG_KEY = "__memorallFlowRuntimeVars";
+export const FLOW_RUNTIME_VARS_CONFIG_KEY = "__flowRuntimeVars";
 
 export type FlowRuntimeInitialValues = Record<string, unknown>;
 

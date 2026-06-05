@@ -28,7 +28,7 @@ const schema = z.object({
 	projectDir: z
 		.string()
 		.describe(
-			'VFS path to the project folder — must be under /workspaces/, e.g. "/workspaces/my-react-app". ' +
+			'VFS path to the project folder, e.g. "/projects/my-react-app". ' +
 				"Each app must have its own unique directory. Files here persist across restarts.",
 		),
 	template: z

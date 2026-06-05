@@ -44,7 +44,7 @@ export const AssistantToolTimelinePart: React.FC<{
 
 	return (
 		<div className="grid w-full min-w-0 max-w-full grid-cols-[0.875rem_minmax(0,1fr)] gap-2 sm:grid-cols-[1rem_minmax(0,1fr)] sm:gap-2.5 animate-in fade-in-0 slide-in-from-top-1 duration-200 ease-out">
-			<div className="relative flex h-11 justify-center">
+			<div className="relative flex h-full justify-center">
 				{connectsToPrevious ? (
 					<div className="absolute left-1/2 top-0 h-[1.25rem] w-px -translate-x-1/2 bg-border/70 transition-colors duration-200" />
 				) : null}

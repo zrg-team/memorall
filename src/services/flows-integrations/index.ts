@@ -12,6 +12,9 @@
 // Service registry augmentation (must be first)
 import "./services";
 
+// Configure flows-core hyperframes utilities with Memorall path conventions
+import "./hyperframes-config";
+
 let registered = false;
 
 export function register(): void {
@@ -63,6 +66,9 @@ import "./tools/documents-fs/fs-edit";
 import "./tools/documents-fs/fs-mkdir";
 import "./tools/documents-fs/fs-remove";
 import "./tools/documents-fs/fs-ls";
+
+// Feature step overrides — must come after core features are registered
+import "./steps/features/hyperframes-feature";
 
 // Document feature steps
 import "./steps/features/fs-feature";

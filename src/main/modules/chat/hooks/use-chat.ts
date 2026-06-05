@@ -21,6 +21,7 @@ import {
 } from "@/main/modules/chat/utils/context-manager";
 import { estimatePromptTokens } from "@/services/llm/utils/token-usage";
 import { documentFileSystemService } from "@/services/filesystem/document-filesystem";
+import { toDocumentsSandboxPath } from "@/services/filesystem/sandbox-paths";
 import { createJobErrorMetadata } from "@/services/background-jobs/handlers/error-metadata";
 import {
 	extractDocumentText,
@@ -278,8 +279,8 @@ export const useChat = (model: string) => {
 				const blocks = await Promise.all(
 					docRefs.map(async (ref) => {
 						try {
-							const bytes = await documentFileSystemService.getFileContent(
-								ref.path,
+							const bytes = await documentFileSystemService.readFile(
+								toDocumentsSandboxPath(ref.path),
 							);
 							const text = await extractDocumentText(ref.docType, bytes);
 							return text ? formatDocumentBlock(ref.path, text) : null;

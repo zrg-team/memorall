@@ -13,7 +13,6 @@ export {
 	readFileBytes,
 	removePath,
 	runGrep,
-	stripDocumentsPrefix,
 	writeFileBytes,
 	type FsEntry,
 	type GrepFileNode,

@@ -553,7 +553,7 @@ const schema = z.object({
 		.string()
 		.min(1)
 		.describe(
-			"Workspace path for the new project, e.g. /workspaces/product-launch",
+			"Absolute path for the new project, e.g. /projects/product-launch",
 		),
 	template: z
 		.enum(TEMPLATE_NAMES)

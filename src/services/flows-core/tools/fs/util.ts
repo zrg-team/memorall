@@ -97,8 +97,6 @@ export function displayPathToFsPath(path: string): string {
 	return fsPathResolver(normalizeFsPath(path));
 }
 
-export const stripDocumentsPrefix = normalizeFsPath;
-
 export async function pathExists(
 	fs: IFlowFileSystem,
 	path: string,

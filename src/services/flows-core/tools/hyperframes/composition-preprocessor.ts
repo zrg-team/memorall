@@ -1,8 +1,26 @@
 import type { IFlowFileSystem } from "flow-core/interfaces/services/filesystem";
 
+// ── Configurable document roots ───────────────────────────────────────────────
+
+let _documentRoots: string[] = [];
+
+/**
+ * Configure which virtual path prefixes count as "local document" roots whose
+ * image `src` attributes should be rewritten to data URLs before the
+ * composition is rendered in an iframe.
+ *
+ * Call this during host app initialisation:
+ *   setCompositionDocumentRoots(["/documents"])
+ *
+ * When empty (the default), no image rewriting is performed.
+ */
+export function setCompositionDocumentRoots(roots: string[]): void {
+	_documentRoots = roots.map((r) => r.replace(/\/+$/, ""));
+}
+
 // ── Local image → data URL ────────────────────────────────────────────────────
-// Images referenced as src="/documents/..." can't load inside the player iframe
-// because the /documents/ path isn't a real URL. Read the file from FS and
+// Images referenced as src="<documentRoot>/..." can't load inside the player
+// iframe because those paths aren't real URLs. Read each file from the FS and
 // replace it with a data URL that survives across frames and execution contexts.
 
 const EXT_MIME: Record<string, string> = {
@@ -29,32 +47,48 @@ const toBase64 = (bytes: Uint8Array): string => {
 	return btoa(binary);
 };
 
-const documentPathCandidates = (docPath: string): string[] => {
-	const stripped = docPath.replace(/^\/documents/, "") || "/";
+const fsPathCandidates = (docPath: string, root: string): string[] => {
+	const stripped = docPath.startsWith(root)
+		? docPath.slice(root.length) || "/"
+		: docPath;
 	return [stripped, docPath].filter(
 		(path, index, paths) => path && paths.indexOf(path) === index,
 	);
+};
+
+const buildLocalImagePattern = (): RegExp | null => {
+	if (_documentRoots.length === 0) return null;
+	const escaped = _documentRoots.map((r) =>
+		r.replace(/[\\^$.*+?()[\]{}|]/g, "\\$&"),
+	);
+	return new RegExp(`\\bsrc=(["'])((?:${escaped.join("|")})/[^"']+)\\1`, "gi");
 };
 
 const injectLocalImages = async (
 	html: string,
 	dfs: IFlowFileSystem,
 ): Promise<string> => {
-	// Match src="..." or src='...' where the path starts with /documents/
-	const PATTERN = /\bsrc=(["'])(\/documents\/[^"']+)\1/gi;
-	const matches = [...html.matchAll(PATTERN)];
+	const pattern = buildLocalImagePattern();
+	if (!pattern) return html;
+
+	const matches = [...html.matchAll(pattern)];
 	if (matches.length === 0) return html;
 
 	let result = html;
 	for (const [full, , docPath] of matches) {
-		for (const fsPath of documentPathCandidates(docPath)) {
+		const matchingRoot =
+			_documentRoots.find(
+				(r) => docPath === r || docPath.startsWith(`${r}/`),
+			) ?? "";
+
+		for (const fsPath of fsPathCandidates(docPath, matchingRoot)) {
 			try {
 				const bytes = await dfs.readFile(fsPath);
 				const dataUrl = `data:${mimeFor(docPath)};base64,${toBase64(bytes)}`;
 				result = result.replace(full, `src="${dataUrl}"`);
 				break;
 			} catch {
-				// Try the next document path candidate.
+				// Try the next candidate.
 			}
 		}
 	}
@@ -64,23 +98,18 @@ const injectLocalImages = async (
 // ── Public API ─────────────────────────────────────────────────────────────────
 
 /**
- * Preprocess a HyperFrames composition HTML for safe rendering inside the
- * browser extension:
+ * Preprocess a HyperFrames composition HTML for safe rendering inside an
+ * iframe:
  *
- * 1. CDN script URLs → local extension URLs (chrome.runtime.getURL).
- *    Fixes: CSP blocks external CDN; local copies covered by `'self'`.
- *
- * 2. `/documents/...` image src paths → data URLs.
+ * 1. Local image src paths (under configured document roots) → data URLs.
  *    Fixes: local document images don't load as bare paths in the iframe.
  *
- * Inline scripts are left as-is. Extension preview rendering must run in the
- * manifest-declared sandbox page so generated animation code is not blocked by
- * extension-page CSP.
+ * Configure document roots with setCompositionDocumentRoots before use.
+ * Inline scripts are left as-is.
  */
 export const preprocessComposition = async (
 	html: string,
 	dfs: IFlowFileSystem,
 ): Promise<string> => {
-	const processed = await injectLocalImages(html, dfs);
-	return processed;
+	return injectLocalImages(html, dfs);
 };

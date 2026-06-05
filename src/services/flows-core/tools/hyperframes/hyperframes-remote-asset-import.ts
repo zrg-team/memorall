@@ -2,7 +2,7 @@ import z from "zod";
 import type { Tool, ToolFactory } from "flow-core/interfaces/engine/tool";
 import type { AllServices } from "flow-core/interfaces/services/services";
 import { toolRegistry } from "flow-core/registries/tool-registry";
-import { writeFlowFileBytes } from "flow-core/utils/fs-utils";
+import { writeFileBytes } from "flow-core/tools/fs/util";
 import {
 	createDefaultWebErrorResult,
 	createWebResult,
@@ -19,9 +19,7 @@ const schema = z.object({
 	project_path: z
 		.string()
 		.min(1)
-		.describe(
-			"HyperFrames project directory, e.g. /workspaces/product-launch.",
-		),
+		.describe("HyperFrames project directory, e.g. /projects/product-launch."),
 	url: z.string().url().describe("Remote image or SVG URL to import."),
 	sessionId: z
 		.string()
@@ -97,7 +95,7 @@ export const createHyperframesRemoteAssetImportTool: ToolFactory<
 			if (!services.fs) {
 				throw new Error("Filesystem service is not available.");
 			}
-			await writeFlowFileBytes(services.fs, filePath, bytes);
+			await writeFileBytes(services.fs, filePath, bytes);
 
 			return createWebResult({
 				actionType: TOOL_NAME,

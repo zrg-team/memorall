@@ -17,24 +17,3 @@ export const ensureFolderExists = async (
 		currentPath = nextPath;
 	}
 };
-
-export const workspaceSandboxPathToFsPath = (sandboxPath: string): string => {
-	const normalized = sandboxPath.replace(/\\/g, "/");
-	const base =
-		normalized === "workspace" || normalized.startsWith("workspace/")
-			? "workspace"
-			: "workspaces";
-	const logical = normalized === base ? "" : normalized.slice(base.length);
-	return `/home/workspace${logical}`;
-};
-
-export const writeFlowFileBytes = async (
-	fs: IFlowFileSystem,
-	sandboxPath: string,
-	bytes: Uint8Array,
-): Promise<void> => {
-	const fsPath = workspaceSandboxPathToFsPath(sandboxPath);
-	const dirPath = fsPath.substring(0, fsPath.lastIndexOf("/"));
-	await fs.mkdir(dirPath, { recursive: true });
-	await fs.writeFile(fsPath, bytes);
-};

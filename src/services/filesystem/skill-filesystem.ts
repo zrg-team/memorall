@@ -3,11 +3,14 @@ import {
 	listDefaultSkills,
 	readDefaultSkill,
 } from "@/services/filesystem/default-skills";
-import { documentFileSystemService } from "@/services/filesystem/document-filesystem";
+import {
+	documentFileSystemService,
+	SANDBOX_DOCUMENTS_ROOT,
+} from "@/services/filesystem/document-filesystem";
 import { logError, logInfo } from "@/utils/logger";
 
 const SKILLS_FS_ROOT = "/home/documents/skills";
-const SKILLS_LOGICAL_ROOT = "/skills";
+const SKILLS_SANDBOX_ROOT = `${SANDBOX_DOCUMENTS_ROOT}/skills` as const;
 
 export interface SkillSummary {
 	name: string;
@@ -113,7 +116,7 @@ export class SkillFileSystem {
 
 	private async initialize(): Promise<void> {
 		if (this.initialized) return;
-		await documentFileSystemService.ensureFolderPath(SKILLS_LOGICAL_ROOT);
+		await documentFileSystemService.mkdir(SKILLS_SANDBOX_ROOT);
 		this.initialized = true;
 	}
 
@@ -121,8 +124,8 @@ export class SkillFileSystem {
 		return `${SKILLS_FS_ROOT}/${nameToFilename(name)}.md`;
 	}
 
-	private logicalPath(name: string): string {
-		return `${SKILLS_LOGICAL_ROOT}/${nameToFilename(name)}.md`;
+	private sandboxPath(name: string): string {
+		return `${SKILLS_SANDBOX_ROOT}/${nameToFilename(name)}.md`;
 	}
 
 	/**
@@ -156,7 +159,7 @@ export class SkillFileSystem {
 				results.set(name, {
 					name,
 					description: meta.description ?? "",
-					path: `${SKILLS_LOGICAL_ROOT}/${entry}`,
+					path: `${SKILLS_SANDBOX_ROOT}/${entry}`,
 					origin: "custom",
 					readOnly: false,
 				});
@@ -187,8 +190,8 @@ export class SkillFileSystem {
 		}
 
 		try {
-			const raw = await documentFileSystemService.getFileContent(
-				this.logicalPath(name),
+			const raw = await documentFileSystemService.readFile(
+				this.sandboxPath(name),
 			);
 			const text = new TextDecoder().decode(raw);
 			const { meta, body } = parseFrontmatter(text);
@@ -198,7 +201,7 @@ export class SkillFileSystem {
 				name: resolvedName,
 				description: meta.description ?? "",
 				body,
-				path: this.logicalPath(name),
+				path: this.sandboxPath(name),
 				origin: "custom",
 				readOnly: false,
 			};
@@ -224,18 +227,17 @@ export class SkillFileSystem {
 		if (!sanitized) throw new Error("Invalid skill name");
 
 		const content = buildContent(name, description, body);
-		const path = `${SKILLS_FS_ROOT}/${sanitized}.md`;
-		await documentFileSystemService.writeFileContent(
-			this.logicalPath(name),
+		await documentFileSystemService.writeFile(
+			this.sandboxPath(name),
 			new TextEncoder().encode(content),
 		);
 
-		logInfo(`Skill written: ${path}`);
+		logInfo(`Skill written: ${this.fsPath(name)}`);
 
 		return {
 			name,
 			description,
-			path: this.logicalPath(name),
+			path: this.sandboxPath(name),
 			origin: "custom",
 			readOnly: false,
 		};
@@ -249,7 +251,7 @@ export class SkillFileSystem {
 
 		const path = this.fsPath(name);
 		try {
-			await documentFileSystemService.deleteFileContent(this.logicalPath(name));
+			await documentFileSystemService.deleteFile(this.sandboxPath(name));
 			logInfo(`Skill deleted: ${path}`);
 		} catch {
 			throw new Error(`Skill not found: ${name}`);

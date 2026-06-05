@@ -69,7 +69,7 @@ export class ConnectionManager {
 
 		const client = new Client(
 			{
-				name: "memorall",
+				name: "flow-core",
 				version: "0.2.17",
 			},
 			{

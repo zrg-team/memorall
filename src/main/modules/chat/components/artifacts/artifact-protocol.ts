@@ -219,7 +219,7 @@ const isRenderArtifactToolCall = (
 	toolCall: Record<string, unknown>,
 ): boolean => {
 	const fn = toolCall.function;
-	return isRecord(fn) && fn.name === "render_memorall_artifact";
+	return isRecord(fn) && fn.name === "render_artifact";
 };
 
 const toToolArtifact = ({
@@ -333,7 +333,7 @@ const getToolArtifactsFromActions = (
 	const artifacts: RuntimeArtifact[] = [];
 	let blockIndex = blockIndexStart;
 	for (const action of message.metadata.actions) {
-		if (!isRecord(action) || action.name !== "render_memorall_artifact") {
+		if (!isRecord(action) || action.name !== "render_artifact") {
 			continue;
 		}
 

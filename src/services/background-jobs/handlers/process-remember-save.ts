@@ -26,6 +26,7 @@ export interface SaveContentData {
 	topicId?: string;
 }
 import { documentFileSystemService } from "@/services/filesystem/document-filesystem";
+import { toDocumentsSandboxPath } from "@/services/filesystem/sandbox-paths";
 import { BaseProcessHandler } from "./base-process-handler";
 import type { ProcessDependencies, BaseJob, ItemHandlerResult } from "./types";
 import { backgroundProcessFactory } from "./process-factory";
@@ -202,7 +203,7 @@ export class RememberSaveHandler extends BaseProcessHandler<RememberSaveJob> {
 			await documentFileSystemService.initialize();
 			const savedFile = await documentFileSystemService.uploadFile(
 				file,
-				folderPath,
+				toDocumentsSandboxPath(folderPath),
 			);
 
 			await dependencies.logger.info(

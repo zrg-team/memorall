@@ -55,6 +55,11 @@ export interface StepFeatureMetadata {
  * state mappings can omit them.
  */
 export interface StepMeta {
+	/**
+	 * Semantic version used when multiple modules register the same step id.
+	 * Higher versions win; missing versions are treated as 0.0.0.
+	 */
+	version?: string;
 	description?: string;
 	/**
 	 * Config params this step accepts (beyond what comes from state).
@@ -126,6 +131,73 @@ type StoredEntry = {
 	config?: StepMeta;
 };
 
+type SemverParts = {
+	major: number;
+	minor: number;
+	patch: number;
+	prerelease: string[];
+};
+
+const FALLBACK_VERSION = "0.0.0";
+
+const parseSemver = (version: string | undefined): SemverParts => {
+	const match = (version ?? FALLBACK_VERSION)
+		.trim()
+		.match(/^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/);
+
+	if (!match) {
+		return { major: 0, minor: 0, patch: 0, prerelease: [] };
+	}
+
+	return {
+		major: Number(match[1]),
+		minor: Number(match[2]),
+		patch: Number(match[3]),
+		prerelease: match[4]?.split(".") ?? [],
+	};
+};
+
+const comparePrereleaseIdentifier = (left: string, right: string): number => {
+	const leftNumber = /^\d+$/.test(left) ? Number(left) : undefined;
+	const rightNumber = /^\d+$/.test(right) ? Number(right) : undefined;
+
+	if (leftNumber !== undefined && rightNumber !== undefined) {
+		return Math.sign(leftNumber - rightNumber);
+	}
+	if (leftNumber !== undefined) return -1;
+	if (rightNumber !== undefined) return 1;
+	return left.localeCompare(right);
+};
+
+const compareSemver = (
+	leftVersion: string | undefined,
+	rightVersion: string | undefined,
+): number => {
+	const left = parseSemver(leftVersion);
+	const right = parseSemver(rightVersion);
+
+	for (const key of ["major", "minor", "patch"] as const) {
+		const diff = left[key] - right[key];
+		if (diff !== 0) return Math.sign(diff);
+	}
+
+	if (left.prerelease.length === 0 && right.prerelease.length === 0) return 0;
+	if (left.prerelease.length === 0) return 1;
+	if (right.prerelease.length === 0) return -1;
+
+	const maxLength = Math.max(left.prerelease.length, right.prerelease.length);
+	for (let index = 0; index < maxLength; index += 1) {
+		const leftPart = left.prerelease[index];
+		const rightPart = right.prerelease[index];
+		if (leftPart === undefined) return -1;
+		if (rightPart === undefined) return 1;
+		const diff = comparePrereleaseIdentifier(leftPart, rightPart);
+		if (diff !== 0) return Math.sign(diff);
+	}
+
+	return 0;
+};
+
 export interface StepRegistration<T extends keyof StepTypeRegistry & string> {
 	id: T;
 	name: string;
@@ -151,6 +223,7 @@ export type StepRegistryPredicate = (entry: RegisteredStep) => boolean;
 export class StepRegistryManager {
 	private static instance: StepRegistryManager;
 	private entries = new Map<string, StoredEntry>();
+	private versionedEntries = new Map<string, Map<string, StoredEntry>>();
 	private finalized = false;
 
 	constructor() {}
@@ -234,22 +307,43 @@ export class StepRegistryManager {
 						) => BoundStep<unknown, unknown>
 					)(services, config, context)
 			: undefined;
-		const existing = this.entries.get(registration.id as string);
-		this.entries.set(registration.id as string, {
-			...existing,
-			id: registration.id as string,
-			name: registration.name ?? existing?.name ?? (registration.id as string),
-			factory: normalizedFactory ?? existing?.factory,
-			config: registration.config ?? existing?.config,
-		});
+		const id = registration.id as string;
+		const nextVersion = registration.config?.version ?? FALLBACK_VERSION;
+		const versions = this.versionedEntries.get(id) ?? new Map();
+		const existingVersionEntry = versions.get(nextVersion);
+		const nextEntry: StoredEntry = {
+			...existingVersionEntry,
+			id,
+			name: registration.name ?? existingVersionEntry?.name ?? id,
+			factory: normalizedFactory ?? existingVersionEntry?.factory,
+			config: registration.config ?? existingVersionEntry?.config,
+		};
+		versions.set(nextVersion, nextEntry);
+		this.versionedEntries.set(id, versions);
+
+		const existing = this.entries.get(id);
+		const existingVersion = existing?.config?.version ?? FALLBACK_VERSION;
+		if (!existing || compareSemver(nextVersion, existingVersion) >= 0) {
+			this.entries.set(id, nextEntry);
+		}
 	}
 
 	setEntry(entry: RegisteredStep): void {
 		this.assertMutable("set entry");
-		this.entries.set(entry.id, {
+		const version = entry.config?.version ?? FALLBACK_VERSION;
+		const versions = this.versionedEntries.get(entry.id) ?? new Map();
+		const nextEntry = {
 			...entry,
 			config: entry.config ? { ...entry.config } : undefined,
-		});
+		};
+		versions.set(version, nextEntry);
+		this.versionedEntries.set(entry.id, versions);
+
+		const existing = this.entries.get(entry.id);
+		const existingVersion = existing?.config?.version ?? FALLBACK_VERSION;
+		if (!existing || compareSemver(version, existingVersion) >= 0) {
+			this.entries.set(entry.id, nextEntry);
+		}
 	}
 
 	/**
@@ -285,6 +379,43 @@ export class StepRegistryManager {
 	}
 
 	/**
+	 * Get a specific registered version of a bound step instance.
+	 */
+	getStepVersion<T extends keyof StepTypeRegistry & string>(
+		stepName: T,
+		version: string,
+		...args: StepTypeRegistry[T] extends StepSpec
+			? StepTypeRegistry[T]["services"] extends undefined
+				? []
+				: [
+						services: StepTypeRegistry[T]["services"],
+						config?: StepTypeRegistry[T]["config"],
+					]
+			: [services?: unknown, config?: unknown]
+	): StepTypeRegistry[T] extends StepSpec
+		? BoundStep<StepTypeRegistry[T]["input"], StepTypeRegistry[T]["output"]>
+		: BoundStep<unknown, unknown> {
+		const entry = this.getVersion(stepName as string, version);
+		if (!entry) {
+			throw new Error(
+				`No step registered for name: ${String(stepName)} at version: ${version}`,
+			);
+		}
+		if (!entry.factory) {
+			throw new Error(
+				`Step has no executable factory: ${String(stepName)} at version: ${version}`,
+			);
+		}
+		const [services, config] = args as [unknown, unknown];
+		return entry.factory(
+			services,
+			config,
+		) as StepTypeRegistry[T] extends StepSpec
+			? BoundStep<StepTypeRegistry[T]["input"], StepTypeRegistry[T]["output"]>
+			: BoundStep<unknown, unknown>;
+	}
+
+	/**
 	 * Get a step by name (loose typing for dynamic/runtime access).
 	 */
 	getStepByName<TInput = unknown, TOutput = unknown>(
@@ -307,10 +438,39 @@ export class StepRegistryManager {
 	}
 
 	/**
+	 * Get a specific registered version of a step by name.
+	 */
+	getStepByNameVersion<TInput = unknown, TOutput = unknown>(
+		stepName: string,
+		version: string,
+		services?: unknown,
+		config?: unknown,
+		context?: StepFactoryContext,
+	): BoundStep<TInput, TOutput> {
+		const entry = this.getVersion(stepName, version);
+		if (!entry) {
+			throw new Error(
+				`No step registered for name: ${stepName} at version: ${version}`,
+			);
+		}
+		if (!entry.factory) {
+			throw new Error(
+				`Step has no executable factory: ${stepName} at version: ${version}`,
+			);
+		}
+		return entry.factory(services, config, context) as BoundStep<
+			TInput,
+			TOutput
+		>;
+	}
+
+	/**
 	 * Retrieve the metadata registered alongside a step, if any.
 	 */
-	getMeta(stepName: string): StepMeta | undefined {
-		return this.entries.get(stepName)?.config;
+	getMeta(stepName: string, version?: string): StepMeta | undefined {
+		return version
+			? this.getVersion(stepName, version)?.config
+			: this.entries.get(stepName)?.config;
 	}
 
 	/** Get all registered step names. */
@@ -331,8 +491,32 @@ export class StepRegistryManager {
 		return this.entries.get(id);
 	}
 
+	getVersion(id: string, version: string): RegisteredStep | undefined {
+		return this.versionedEntries.get(id)?.get(version);
+	}
+
+	getVersions(id: string): RegisteredStep[] {
+		return Array.from(this.versionedEntries.get(id)?.values() ?? []).sort(
+			(left, right) =>
+				compareSemver(
+					right.config?.version ?? FALLBACK_VERSION,
+					left.config?.version ?? FALLBACK_VERSION,
+				),
+		);
+	}
+
+	hasVersion(id: string, version: string): boolean {
+		return Boolean(this.getVersion(id, version));
+	}
+
 	getAll(): RegisteredStep[] {
 		return Array.from(this.entries.values());
+	}
+
+	getAllVersions(): RegisteredStep[] {
+		return Array.from(this.versionedEntries.values()).flatMap((versions) =>
+			Array.from(versions.values()),
+		);
 	}
 
 	has(id: string): boolean {
@@ -342,11 +526,12 @@ export class StepRegistryManager {
 	clear(): void {
 		this.assertMutable("clear registry");
 		this.entries.clear();
+		this.versionedEntries.clear();
 	}
 
 	fork(predicate?: StepRegistryPredicate): StepRegistryManager {
 		const next = new StepRegistryManager();
-		for (const entry of this.getAll()) {
+		for (const entry of this.getAllVersions()) {
 			if (!predicate || predicate(entry)) {
 				next.setEntry(entry);
 			}

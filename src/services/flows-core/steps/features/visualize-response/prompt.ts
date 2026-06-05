@@ -49,10 +49,10 @@ Syntax rules:
   { "type": "send_message", "valueInput": "prompt", "includeFormState": true }
   { "type": "add_message_to_input", "text": "...", "mode": "append" }
   { "type": "open_link", "url": "https://example.com" }
-  { "type": "open_document", "path": "/documents/report.md" }
+  { "type": "open_document", "path": "/path/to/document.md" }
   { "type": "copy_to_clipboard", "text": "..." }
   { "type": "download_text", "filename": "notes.md", "content": "..." }
-  { "type": "open_route", "route": "/documents" }
+  { "type": "open_route", "route": "/route-name" }
   { "type": "reset_form" }
   { "type": "show_toast", "message": "Copied" }
 - CRITICAL — Form rule: InputBlock, TextareaBlock, and any other data-entry
@@ -77,7 +77,7 @@ Syntax rules:
   ButtonBlock("Submit", { "type": "send_message", "valueInput": "prompt", "includeFormState": true })
   when the form has InputBlock("prompt", ...). You can also use
   message: "{{field1}} {{field2}}" for templated text combining multiple fields.
-  If a form send_message omits both message and valueInput, Memorall sends the
+  If a form send_message omits both message and valueInput, the host sends the
   first non-empty field named prompt, message, input, query, text, content, or value.
 - Put fetched tool data directly into the OpenUI markup.
 - Tools are only for data fetching. Rendering is done by the final text.

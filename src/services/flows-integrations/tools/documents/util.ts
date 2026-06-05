@@ -1,3 +1,5 @@
+import { toDocumentsLogicalPath } from "@/services/filesystem/sandbox-paths";
+
 export function normalizeDocumentPath(inputPath: string): string {
 	const raw = inputPath.trim().replace(/\\/g, "/");
 	if (!raw) return "/";
@@ -12,10 +14,6 @@ export function normalizeDocumentPath(inputPath: string): string {
 		}
 		resolved.push(part);
 	}
-	let normalized = resolved.length ? `/${resolved.join("/")}` : "/";
-	if (normalized === "/documents") return "/";
-	if (normalized.startsWith("/documents/")) {
-		normalized = normalized.slice("/documents".length) || "/";
-	}
-	return normalized;
+	const normalized = resolved.length ? `/${resolved.join("/")}` : "/";
+	return toDocumentsLogicalPath(normalized) ?? normalized;
 }
