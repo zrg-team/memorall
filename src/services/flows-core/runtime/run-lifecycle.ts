@@ -42,7 +42,7 @@ export interface FlowRunLifecycle {
 	getCatchCallbacks: () => Map<string, NodeCatchCallback>;
 }
 
-export const FLOW_RUN_LIFECYCLE_CONFIG_KEY = "__memorallFlowRunLifecycle";
+export const FLOW_RUN_LIFECYCLE_CONFIG_KEY = "__flowRunLifecycle";
 
 class DefaultFlowRunLifecycle implements FlowRunLifecycle {
 	private readonly finishCallbacks = new Map<string, FlowRunFinishCallback>();

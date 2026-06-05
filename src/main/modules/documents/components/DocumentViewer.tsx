@@ -39,6 +39,10 @@ import {
 	PopoverTrigger,
 } from "@/main/components/ui/popover";
 import { documentFileSystemService } from "@/services/filesystem/document-filesystem";
+import {
+	toDocumentsSandboxPath,
+	toWorkspacesSandboxPath,
+} from "@/services/filesystem/sandbox-paths";
 
 import { PDFPageSelector } from "./PDFPageSelector";
 import { ExcelViewer } from "./ExcelViewer";
@@ -94,8 +98,9 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({
 
 	// Use prop topics if provided, otherwise use loaded topics
 	const fileTopics = propFileTopics || loadedFileTopics;
-	const workspacePath =
-		file.path === "/" ? "/workspaces" : `/workspaces${file.path}`;
+	const sandboxPath = isWorkspaceFile
+		? toWorkspacesSandboxPath(file.path)
+		: toDocumentsSandboxPath(file.id);
 
 	useEffect(() => {
 		// Reset content state when file changes
@@ -105,23 +110,14 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({
 
 		// Load preview for supported file types
 		const loadPreview = async () => {
-			const loadContent = async (): Promise<Uint8Array> => {
-				if (isWorkspaceFile) {
-					return documentFileSystemService.getWorkspaceFileContent(
-						workspacePath,
-					);
-				}
-				return documentFileSystemService.getFileContent(file.id);
-			};
+			const loadContent = async (): Promise<Uint8Array> =>
+				documentFileSystemService.readFile(sandboxPath);
 
 			if (file.type === "pdf" || file.type === "image") {
 				setLoading(true);
 				try {
 					const content = await loadContent();
-					// Create blob directly from Uint8Array
-					const blob = new Blob([content] as unknown as BlobPart[], {
-						type: file.mimeType,
-					});
+					const blob = new Blob([content.slice()], { type: file.mimeType });
 					const url = URL.createObjectURL(blob);
 					setPreviewUrl(url);
 				} catch (error) {
@@ -226,19 +222,13 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({
 
 	const handleSaveContent = async (content: string): Promise<void> => {
 		try {
-			if (isWorkspaceFile) {
-				await documentFileSystemService.writeWorkspaceFile(
-					workspacePath,
-					content,
-				);
-			} else {
-				const encoder = new TextEncoder();
-				const contentArray = encoder.encode(content);
-				await documentFileSystemService.updateFileContent(
-					file.id,
-					contentArray,
-				);
-			}
+			// Workspace saves notify (may update composition previews).
+			// Document saves are silent (notify=false) so the editor doesn't reset.
+			await documentFileSystemService.writeFile(
+				sandboxPath,
+				isWorkspaceFile ? content : new TextEncoder().encode(content),
+				isWorkspaceFile,
+			);
 
 			// Update local state after successful save
 			setTextContent(content);

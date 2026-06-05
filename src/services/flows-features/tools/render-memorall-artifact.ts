@@ -8,7 +8,7 @@ import {
 } from "flow-core/graph/graph.base";
 import { preprocessComposition } from "flow-core/tools/hyperframes/composition-preprocessor";
 
-const TOOL_NAME = "render_memorall_artifact" as const;
+const TOOL_NAME = "render_artifact" as const;
 
 const schema = z.object({
 	type: z.enum([
@@ -90,7 +90,7 @@ const preprocessArtifactContent = async (
 	};
 };
 
-export const createRenderMemorallArtifactTool: ToolFactory<Input, Services> = (
+export const createRenderArtifactTool: ToolFactory<Input, Services> = (
 	services,
 ): Tool<Input> => ({
 	name: TOOL_NAME,
@@ -118,7 +118,7 @@ export const createRenderMemorallArtifactTool: ToolFactory<Input, Services> = (
 	},
 });
 
-toolRegistry.register(TOOL_NAME, createRenderMemorallArtifactTool);
+toolRegistry.register(TOOL_NAME, createRenderArtifactTool);
 
 declare global {
 	interface ToolTypeRegistry {

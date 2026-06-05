@@ -11,7 +11,7 @@ import type { ChatCompletionMessageParam } from "flow-core/interfaces/engine/mes
 
 const STEP_NAME = "artifact-feature" as const;
 export const ARTIFACT_FEATURE_NAME = STEP_NAME;
-export const ARTIFACT_FEATURE_TOOLS = ["render_memorall_artifact"] as const;
+export const ARTIFACT_FEATURE_TOOLS = ["render_artifact"] as const;
 
 export interface ArtifactFeatureInput {
 	messages: ChatCompletionMessageParam[];
@@ -29,7 +29,7 @@ type ArtifactFeatureServices = Record<string, never>;
 
 const SYSTEM_PROMPT_INSTRUCTION = `
 # ARTIFACT RENDERING
-You can render visual artifacts inline by calling the \`render_memorall_artifact\` tool.
+You can render visual artifacts inline by calling the \`render_artifact\` tool.
 
 ## Artifact Types
 - **text/html**: Renders an HTML preview in a sandboxed iframe. Use for HTML pages, interactive demos, SVG graphics.

@@ -9,5 +9,4 @@ export type FilesystemScope =
 export const FILESYSTEM_MOUNT_PATH = {
 	DOCUMENTS: "/documents",
 	WORKSPACES: "/workspaces",
-	WORKSPACE_LEGACY: "/workspace",
 } as const;

@@ -38,15 +38,10 @@ If user require to write code, execute code please use this actively to write an
 - The sandbox runs on almostnode in the browser (not OS Node.js), but it provides broad built-in API shims including \`fs\`, \`path\`, \`url\`, \`util\`, \`events\`, \`os\`, \`crypto\`, and more.
 - \`require()\` is available for built-in shims, installed npm packages, and files in the virtual filesystem.
 - \`require("fs")\` operates on the virtual filesystem.
-- Filesystem mounts:
-  - \`/documents\`: read-only mirror from document storage.
-  - \`/workspaces\`: read/write persistent workspace backed by document filesystem workspace storage.
-  - \`/temp\`: in-memory temporary files only.
+- Filesystem mounts are provided by the host runtime. Use \`/temp\` for in-memory scratch artifacts.
 - Always install packages with container_install_package BEFORE using require() in container_run_code.
 - Use browser APIs (fetch, URL, TextEncoder, crypto, etc.) instead of Node.js built-ins.
 - Prefer container filesystem tools (container_write_file, container_read_file, etc.) for deterministic file operations and mutations.
-- Use \`/workspaces\` for files that should persist, and \`/temp\` for scratch artifacts.
-- Never attempt writes under \`/documents\`.
 
 ## WHEN TO USE THIS FEATURE
 - Use container tools when the user asks to:

@@ -33,7 +33,7 @@ export const createContainerRunCodeTool: ToolFactory<Input, Services> = (
 ): Tool<Input> => ({
 	name: TOOL_NAME,
 	description:
-		"Run JavaScript/TypeScript code in the sandbox container. The runtime is browser-based with `console` and `require` available. Use `require()` for installed packages (install via container_install_package first) or virtual filesystem modules. A limited `require('fs')` shim is available for virtual filesystem access (including read-only /documents listing), but native Node.js built-ins are not fully supported.",
+		"Run JavaScript/TypeScript code in the sandbox container. The runtime is browser-based with `console` and `require` available. Use `require()` for installed packages (install via container_install_package first) or virtual filesystem modules. A limited `require('fs')` shim is available for virtual filesystem access, but native Node.js built-ins are not fully supported.",
 	schema,
 	execute: async (input) => {
 		if (!services.sandboxContainer) {

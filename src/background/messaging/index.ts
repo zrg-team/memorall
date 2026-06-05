@@ -4,6 +4,10 @@ import { activityTrackingManager } from "@/background/activity-tracking-manager"
 import { BACKGROUND_EVENTS } from "@/constants/events";
 import { documentFileSystemService } from "@/services/filesystem/document-filesystem";
 import {
+	DOCUMENTS_SANDBOX_ROOT,
+	toDocumentsSandboxPath,
+} from "@/services/filesystem/sandbox-paths";
+import {
 	isJobNotificationMessage,
 	type JobNotificationMessage,
 } from "@/services/background-jobs/bridges/types";
@@ -271,7 +275,9 @@ function handleGetDocumentFolders(sendResponse: SendResponse): true {
 	(async () => {
 		try {
 			await documentFileSystemService.initialize();
-			const tree = await documentFileSystemService.getTree();
+			const tree = await documentFileSystemService.getTree(
+				DOCUMENTS_SANDBOX_ROOT,
+			);
 			sendResponse({
 				success: true,
 				folders: collectDocumentFolderPaths(tree),
@@ -296,10 +302,11 @@ function handleSaveEmbeddedContextPreview(
 ): true {
 	(async () => {
 		try {
-			const folderPath =
+			const logicalFolder =
 				typeof message.folderPath === "string" && message.folderPath.trim()
 					? message.folderPath
 					: "/";
+			const folderPath = toDocumentsSandboxPath(logicalFolder);
 			const fileName =
 				typeof message.fileName === "string" && message.fileName.trim()
 					? message.fileName.trim()

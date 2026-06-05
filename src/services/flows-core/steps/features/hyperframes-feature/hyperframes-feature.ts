@@ -56,7 +56,7 @@ Run \`hyperframes_validate\` before every \`hyperframes_show\`. If it reports er
 
 Use these **before** inventing visuals or reaching for remote assets. Always check local first:
 
-1. **\`fs_ls\`** — orient yourself: list \`/documents\`, \`/workspaces\`, or the target \`project_path\` to see what exists.
+1. **\`fs_ls\`** — orient yourself: list the target \`project_path\` or available root paths to see what exists.
 2. **\`fs_glob\`** — hunt for images, logos, or brand files by pattern (e.g. \`**/*.{png,jpg,svg}\`, \`**/*logo*\`). Use this before \`fs_read\` to avoid reading entire directories blind.
 3. **\`fs_grep\`** — find a specific string inside files: brand hex codes, color tokens, product names, or asset references. Much faster than reading every file.
 4. **\`fs_read\`** — open a specific text file (brief, markdown, CSS, SVG, brand notes) only after \`fs_glob\`/\`fs_grep\` have identified it. Never use it on binary images.
@@ -68,37 +68,16 @@ Use remote assets only when local/user assets are missing or too weak. Always a 
 1. **\`hyperframes_remote_assets_explore(query, kind?)\`** — searches free image sources (CleanPNG first, then Openverse, Pexels, Unsplash; SVG Repo first for vectors). Returns scored candidates with a \`sessionId\`. Use \`kind\` to steer: \`"image"\`/\`"photo"\` for backgrounds, \`"svg"\`/\`"icon"\` for vectors, \`"any"\` for best available.
 2. **\`hyperframes_remote_asset_import(project_path, url, sessionId, asset_path)\`** — downloads the chosen candidate into \`{project_path}/resources/\` and returns the \`html_src\` path to reference in HTML.
 
-All tools target a workspace path like \`/workspaces/product-launch\`.
 The composition file is always \`{project_path}/index.html\`.
 
-### Folder structure and preview runtime
+### Asset path rules
 
-exposes two mounted filesystem roots to HyperFrames tools and previews:
-
-| Root | Meaning | Use |
-|---|---|---|
-| \`/documents\` | User document library. In the UI this may appear as "Documents". | Read existing user assets such as \`/documents/images/logo.png\`. Do not write here. |
-| \`/workspaces\` | Persistent project/workspace storage. | Create HyperFrames projects here, e.g. \`/workspaces/product-launch\`, and store project resources under that folder. |
-
-Asset path rules for this app:
-
-- **Always include the mount prefix.** Use paths exactly as returned by tools: \`/documents/...\` for the user document library, \`/workspaces/...\` for project workspace files, or legacy \`/workspace/...\`. Never drop or shorten the prefix — \`/images/logo.png\` is always wrong; \`/documents/images/logo.png\` is right.
-- **Prefer full workspace paths for project assets.** \`hyperframes_remote_asset_import\` returns an \`html_src\` like \`./resources/images/bg.jpg\` — prefer the full form \`/workspaces/{project}/resources/images/bg.jpg\`. The relative form works only in static HTML \`<img src>\` via fuzzy filename matching when the filename is unique; it is never resolved in JavaScript.
-- **Never invent paths.** Prove every asset exists with \`fs_ls\`/\`fs_glob\` or import it with \`hyperframes_remote_asset_import\`. Never write \`/images/foo.png\`, \`resources/icons/foo.svg\`, or any path a tool did not return.
-- **Static HTML only.** Memorall converts \`<img src>\`, SVG \`<image href>\`, \`video poster\`, and CSS \`url(...)\` to base64 — only static HTML attributes, never JavaScript-assigned values.
-- **No JS asset loading of any kind.** Never build, assemble, fetch, or assign an image path in JavaScript. Helper functions (\`fixIconPath\`, \`getAssetUrl\`), path concatenation (\`'./resources/' + name\`), \`fetch()\`, \`new Image()\`, and \`img.src = anyPath\` are all forbidden. If JavaScript must reference an asset: declare it once as \`<img id="pre" src="/documents/..." hidden>\` in HTML, then read \`document.getElementById('pre').src\` in JS — Memorall has already replaced it with base64 by that point. For repeated icons, prefer inline SVG markup.
-- **No remote hotlinks.** Import remote media with \`hyperframes_remote_asset_import\` first; use the returned workspace path.
+- **Use paths exactly as returned by tools.** Never invent or shorten paths — prove every asset exists with \`fs_ls\`/\`fs_glob\` or import it with \`hyperframes_remote_asset_import\`.
+- **Prefer full absolute paths for project assets.** \`hyperframes_remote_asset_import\` returns an \`html_src\` like \`./resources/images/bg.jpg\` — prefer the full absolute form. The relative form works only in static HTML \`<img src>\` via fuzzy filename matching when the filename is unique; it is never resolved in JavaScript.
+- **Static HTML only.** The host runtime converts \`<img src>\`, SVG \`<image href>\`, \`video poster\`, and CSS \`url(...)\` to base64 — only static HTML attributes, never JavaScript-assigned values.
+- **No JS asset loading of any kind.** Never build, assemble, fetch, or assign an image path in JavaScript. Helper functions (\`fixIconPath\`, \`getAssetUrl\`), path concatenation (\`'./resources/' + name\`), \`fetch()\`, \`new Image()\`, and \`img.src = anyPath\` are all forbidden. If JavaScript must reference an asset: declare it once as \`<img id="pre" src="<absolute-path>" hidden>\` in HTML, then read \`document.getElementById('pre').src\` in JS — the host has already replaced it with base64 by that point. For repeated icons, prefer inline SVG markup.
+- **No remote hotlinks.** Import remote media with \`hyperframes_remote_asset_import\` first; use the returned path.
 - **No manual \`<script>\` tags or external \`<link>\` tags.** GSAP, HyperFrames runtime, shader-transitions, Lucide, D3, and Three.js are auto-injected by the runner based on usage detection. Never include CDN script tags or Google Fonts link tags in compositions — the runner handles all of this automatically.
-
-**Path quick-reference — wrong vs right:**
-
-| Wrong | Right |
-|---|---|
-| \`<img src="/images/logo.png">\` | \`<img src="/documents/images/logo.png">\` |
-| \`<img src="resources/bg.jpg">\` | \`<img src="/workspaces/my-project/resources/images/bg.jpg">\` |
-| \`<img src="./resources/images/bg.jpg">\` | \`<img src="/workspaces/my-project/resources/images/bg.jpg">\` |
-| \`function fixIconPath(n){ return './resources/icons/'+n; }\` | Forbidden — inline SVG in HTML, or \`<img hidden>\` + read \`.src\` in JS |
-| \`img.src = './resources/icons/' + name\` | \`img.src = document.getElementById('pre').src\` |
 
 ## Agent goals
 
@@ -149,7 +128,7 @@ If the prompt has none of: an attachment, hex code, named typeface, named aesthe
 
 Before inventing visuals, look for existing assets when the user mentions a product, brand, logo, screenshot, app, file, folder, or prior project:
 
-1. Use \`fs_ls\` on likely roots such as \`/documents\`, \`/workspaces\`, and the target \`project_path\`.
+1. Use \`fs_ls\` on likely roots and the target \`project_path\`.
 2. Use \`fs_glob\` for assets:
    - \`**/*.{png,jpg,jpeg,webp,gif,svg,ico}\`
    - \`**/*{logo,icon,brand,mark,screenshot,hero,asset}*\`
@@ -157,12 +136,7 @@ Before inventing visuals, look for existing assets when the user mentions a prod
 3. Use \`fs_grep\` for product names, color variables, slogans, image filenames, or CSS tokens before reading large files.
 4. Use \`fs_read\` only for text-like files. Do not read binary images with \`fs_read\`.
 
-Use discovered images directly in the composition:
-
-\`\`\`html
-<img src="/documents/brand/logo.png" alt="Brand logo" />
-<img src="/workspaces/product-launch/assets/screenshot.webp" alt="Product screenshot" />
-\`\`\`
+Use discovered images directly in the composition with the exact absolute path returned by the filesystem tools.
 
 Image rules:
 
@@ -228,7 +202,7 @@ Icon rules:
 
 Use D3 and Three.js as optional visual power tools. GSAP remains the timeline owner.
 
-Both libraries are auto-injected by the Memorall runner when your code uses \`d3\` or \`THREE\` — do not add \`<script>\` tags for them. Never add alternate CDN versions, module imports, or import maps.
+Both libraries are auto-injected by the runner when your code uses \`d3\` or \`THREE\` — do not add \`<script>\` tags for them. Never add alternate CDN versions, module imports, or import maps.
 
 Runtime choice:
 
@@ -392,7 +366,7 @@ After showing, write one short sentence to the user: what the composition covers
 | \`video.play()\`, \`audio.play()\` | Framework owns playback |
 | \`<video>\` without \`muted\` | \`muted playsinline\` always |
 | Audio on \`<video>\` | Separate \`<audio>\` element |
-| Any JS function that assigns \`img.src\` to a path string | \`<img id="pre" src="/documents/..." hidden>\` in HTML; read \`document.getElementById('pre').src\` in JS |
+| Any JS function that assigns \`img.src\` to a path string | \`<img id="pre" src="<absolute-path>" hidden>\` in HTML; read \`document.getElementById('pre').src\` in JS |
 | \`fetch()\`, \`XMLHttpRequest\`, \`new Image()\` to load assets at runtime | Inline the asset as a static \`<img src>\` in HTML |
 | \`'./resources/' + variable\` or any path concatenation in JS | Inline SVG markup in HTML, or preloaded \`<img hidden>\` |
 | Helper functions like \`fixIconPath(name)\`, \`getAssetUrl(n)\` | Forbidden entirely — no JS function may build, load, or return an image path |
@@ -415,11 +389,12 @@ After showing, write one short sentence to the user: what the composition covers
 - [ ] First anchor per shader group has explicit \`tl.set({ opacity:1 }, startTime)\`
 - [ ] Scene windows tile end-to-end (no gaps)
 - [ ] No transition < 0.3s, no exit tweens except final scene
+- [ ] \`HyperShader.init()\` scenes.length === transitions.length + 1 (2 scenes → 1 transition, 3 scenes → 2 transitions)
 - [ ] \`window.__timelines["main"] = tl\` matches \`data-composition-id\`
 - [ ] Lucide icons use \`<i data-lucide="...">\`, \`lucide.createIcons()\` runs before GSAP tweens, and no invented SVG icon paths are present
 - [ ] D3, if used, generates geometry only; no \`d3.transition()\`, timers, or independent animation clocks
 - [ ] Three.js, if used, is procedural, asset-free, and rendered from GSAP/HyperFrames time; no \`requestAnimationFrame\` loop
-- [ ] No JavaScript assigns, builds, fetches, or loads image paths — every asset is a static \`<img src="/documents/...">\` or \`<img src="/workspaces/...">\` in HTML, or inline SVG markup; no helper functions like \`fixIconPath\`, \`getAssetUrl\`, \`new Image()\`, or \`fetch()\` for images
+- [ ] No JavaScript assigns, builds, fetches, or loads image paths — every asset is a static \`<img src="<absolute-path>">\` in HTML, or inline SVG markup; no helper functions like \`fixIconPath\`, \`getAssetUrl\`, \`new Image()\`, or \`fetch()\` for images
 
 ---
 
@@ -681,6 +656,7 @@ export const createHyperframesFeatureStep: StepFactoryFromSpec<
 	bindStep(definition, services, config);
 
 stepRegistry.register(STEP_NAME, createHyperframesFeatureStep, {
+	version: "1.0.0",
 	description: HYPERFRAMES_FEATURE_DESCRIPTION,
 	defaultStateMapping: { messages: "messages", tools: "tools" },
 	enabledByDefault: false,

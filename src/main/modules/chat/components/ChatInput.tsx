@@ -10,6 +10,7 @@ import { TooltipProvider } from "@/main/components/ui/tooltip";
 import type { ChatStatus, AttachedDocumentRef } from "@/types/chat";
 import type { DocumentFile } from "@/types/document-library";
 import { documentFileSystemService } from "@/services/filesystem/document-filesystem";
+import { DOCUMENTS_SANDBOX_ROOT } from "@/services/filesystem/sandbox-paths";
 import { skillFileSystemService } from "@/services/filesystem/skill-filesystem";
 import { AttachmentList } from "@/main/modules/chat/components/input/AttachmentList";
 import {
@@ -102,7 +103,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 	useEffect(() => {
 		if (!isMentionOpen) return;
 		Promise.all([
-			documentFileSystemService.getTree().catch(() => []),
+			documentFileSystemService.getTree(DOCUMENTS_SANDBOX_ROOT).catch(() => []),
 			skillFileSystemService.listSkills().catch(() => []),
 		]).then(([tree, skills]) => {
 			setMentionDocFiles(collectFiles(tree));

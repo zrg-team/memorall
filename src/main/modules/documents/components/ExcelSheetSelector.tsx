@@ -29,6 +29,7 @@ import {
 import { Badge } from "@/main/components/ui/badge";
 import type { DocumentFile } from "@/types/document-library";
 import { documentFileSystemService } from "@/services/filesystem/document-filesystem";
+import { toDocumentsSandboxPath } from "@/services/filesystem/sandbox-paths";
 import {
 	parseExcelFile,
 	sheetToMarkdown,
@@ -89,7 +90,9 @@ export const ExcelSheetSelector: React.FC<ExcelSheetSelectorProps> = ({
 	const loadExcelSheets = async () => {
 		try {
 			setLoading(true);
-			const content = await documentFileSystemService.getFileContent(file.id);
+			const content = await documentFileSystemService.readFile(
+				toDocumentsSandboxPath(file.id),
+			);
 
 			// Parse Excel file
 			const wb = await parseExcelFile(content);

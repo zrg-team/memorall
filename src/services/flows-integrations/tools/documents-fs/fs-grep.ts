@@ -53,7 +53,7 @@ export const createFsGrepTool: ToolFactory<Input, Services> = (
 ): Tool<Input> => ({
 	name: TOOL_NAME,
 	description:
-		'Search file content with a JavaScript regex pattern. Returns results in grep-style "file:line:content" format. Supports context lines, minimatch glob filtering, and output modes. Use one broad regex and one broad glob when possible, e.g. pattern="memorall|icon|logo" glob="**/*.{md,json,svg,png,jpg}".',
+		'Search file content with a JavaScript regex pattern. Returns results in grep-style "file:line:content" format. Supports context lines, minimatch glob filtering, and output modes. Use one broad regex and one broad glob when possible, e.g. pattern="icon|logo|brand" glob="**/*.{md,json,svg,png,jpg}".',
 	schema,
 	execute: async (input) => {
 		const {

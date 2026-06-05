@@ -145,7 +145,7 @@ export const defaultActionRenderer: ActionRenderer = (item, isOpen) => {
 
 	const trimmedDesc = item.description?.trim() || "";
 	const mcpMetadata = getMCPActionMetadata(item);
-	if (item.name === "render_memorall_artifact") {
+	if (item.name === "render_artifact") {
 		return <RenderArtifactSummary item={item} />;
 	}
 

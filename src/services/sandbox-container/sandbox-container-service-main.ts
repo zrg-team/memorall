@@ -3,6 +3,13 @@ import {
 	documentFileSystemService,
 	type FilesystemChangeEvent,
 } from "@/services/filesystem/document-filesystem";
+import {
+	DOCUMENTS_SANDBOX_ROOT,
+	WORKSPACES_SANDBOX_ROOT,
+	isDocumentsSandboxPath,
+	isWorkspacesSandboxPath,
+	toDocumentsLogicalPath,
+} from "@/services/filesystem/sandbox-paths";
 import type { ISandboxContainerService } from "./interfaces/sandbox-container-service.interface";
 import {
 	decodeSwResponseBodyPreview,
@@ -85,8 +92,6 @@ const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
 const DEFAULT_COMMAND_WAIT_TIMEOUT_MS = 10_000;
 const COMMAND_REQUEST_TIMEOUT_BUFFER_MS = 5_000;
 const EMPTY_LOCAL_BUILD_RETRY_ATTEMPTS = 20;
-const WORKSPACES_ROOT = "/workspaces";
-const WORKSPACE_LEGACY_ROOT = "/workspace";
 const SANDBOX_RUNTIME_WORKSPACE_SYNC = "memorall-sandbox-workspace-sync";
 
 interface RuntimeWorkspaceChange {
@@ -586,22 +591,19 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 			case "fs.readFile": {
 				if (this.isWorkspacePath(path)) {
 					await this.syncWorkspaceMount();
-					const bytes =
-						await documentFileSystemService.getWorkspaceFileContent(path);
+					const bytes = await documentFileSystemService.readFile(path);
 					return { content: new TextDecoder().decode(bytes) };
 				}
 				if (this.isDocumentsPath(path)) {
 					await this.syncDocumentsMount();
-					const logicalPath = this.toDocumentsLogicalPath(path) ?? "/";
-					const bytes =
-						await documentFileSystemService.getFileContent(logicalPath);
+					const bytes = await documentFileSystemService.readFile(path);
 					return { content: new TextDecoder().decode(bytes) };
 				}
 				throw new Error(`Path not in workspace or documents: ${path}`);
 			}
 			case "fs.writeFile": {
 				if (this.isWorkspacePath(path)) {
-					await documentFileSystemService.writeWorkspaceFile(
+					await documentFileSystemService.writeFile(
 						path,
 						String(payload["content"] ?? ""),
 					);
@@ -610,13 +612,13 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 			}
 			case "fs.mkdir": {
 				if (this.isWorkspacePath(path)) {
-					await documentFileSystemService.mkdirWorkspace(path);
+					await documentFileSystemService.mkdir(path);
 				}
 				return { path };
 			}
 			case "fs.unlink": {
 				if (this.isWorkspacePath(path)) {
-					await documentFileSystemService.deleteWorkspaceFile(path);
+					await documentFileSystemService.deleteFile(path);
 				}
 				return { path };
 			}
@@ -626,7 +628,7 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 				);
 				if (this.isWorkspacePath(path)) {
 					const newName = newPath.split("/").pop()!;
-					await documentFileSystemService.renameWorkspaceFile(path, newName);
+					await documentFileSystemService.rename(path, newName);
 				}
 				return { oldPath: path, newPath };
 			}
@@ -735,8 +737,7 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 				let content: string | undefined;
 				if (knownFiles.has(newPath)) {
 					try {
-						const bytes =
-							await documentFileSystemService.getWorkspaceFileContent(newPath);
+						const bytes = await documentFileSystemService.readFile(newPath);
 						content = new TextDecoder().decode(bytes);
 					} catch {
 						content = undefined;
@@ -765,8 +766,7 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 			if (change.operation === "write") {
 				let content = "";
 				try {
-					const bytes =
-						await documentFileSystemService.getWorkspaceFileContent(path);
+					const bytes = await documentFileSystemService.readFile(path);
 					content = new TextDecoder().decode(bytes);
 				} catch {
 					continue;
@@ -1012,22 +1012,17 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 		const workspacePath = this.toWorkspaceCanonicalPath(normalizedPath);
 		if (this.isDocumentsPath(normalizedPath)) {
 			await this.syncDocumentsMount();
-			const logicalPath = this.toDocumentsLogicalPath(normalizedPath);
-			if (logicalPath) {
-				const bytes =
-					await documentFileSystemService.getFileContent(logicalPath);
-				const content = new TextDecoder().decode(bytes);
-				await this.request("fs.materializeDocumentFile", {
-					path: normalizedPath,
-					content,
-				});
-				return this.request("fs.readFile", { path: normalizedPath });
-			}
+			const bytes = await documentFileSystemService.readFile(normalizedPath);
+			const content = new TextDecoder().decode(bytes);
+			await this.request("fs.materializeDocumentFile", {
+				path: normalizedPath,
+				content,
+			});
+			return this.request("fs.readFile", { path: normalizedPath });
 		}
 		if (this.isWorkspacePath(normalizedPath)) {
 			await this.syncWorkspaceMount();
-			const bytes =
-				await documentFileSystemService.getWorkspaceFileContent(workspacePath);
+			const bytes = await documentFileSystemService.readFile(workspacePath);
 			const content = new TextDecoder().decode(bytes);
 			await this.request("fs.materializeWorkspaceFile", {
 				path: workspacePath,
@@ -1098,15 +1093,11 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 	}
 
 	private isDocumentsPath(path: string): boolean {
-		return path === "/documents" || path.startsWith("/documents/");
+		return isDocumentsSandboxPath(path);
 	}
 
 	private toDocumentsLogicalPath(normalizedPath: string): string | null {
-		if (normalizedPath === "/documents") return "/";
-		if (normalizedPath.startsWith("/documents/")) {
-			return normalizedPath.slice("/documents".length) || "/";
-		}
-		return null;
+		return toDocumentsLogicalPath(normalizedPath);
 	}
 
 	private normalizeVirtualPath(inputPath: string): string {
@@ -1162,12 +1153,15 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 	private async materializeMountedDocumentFile(
 		sandboxPath: string,
 	): Promise<boolean> {
-		const logicalPath = this.toDocumentsLogicalPath(sandboxPath);
-		if (!logicalPath || logicalPath === "/") {
+		if (
+			!this.isDocumentsPath(sandboxPath) ||
+			sandboxPath === DOCUMENTS_SANDBOX_ROOT
+		) {
 			return false;
 		}
+		const logicalPath = toDocumentsLogicalPath(sandboxPath) ?? sandboxPath;
 		try {
-			const bytes = await documentFileSystemService.getFileContent(logicalPath);
+			const bytes = await documentFileSystemService.readFile(sandboxPath);
 			const content = new TextDecoder().decode(bytes);
 			await this.request("fs.materializeDocumentFile", {
 				path: sandboxPath,
@@ -1187,19 +1181,10 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 	// ── Workspace helpers ────────────────────────────────────────────────────
 
 	private isWorkspacePath(path: string): boolean {
-		return (
-			path === WORKSPACES_ROOT ||
-			path.startsWith(`${WORKSPACES_ROOT}/`) ||
-			path === WORKSPACE_LEGACY_ROOT ||
-			path.startsWith(`${WORKSPACE_LEGACY_ROOT}/`)
-		);
+		return isWorkspacesSandboxPath(path);
 	}
 
 	private toWorkspaceCanonicalPath(path: string): string {
-		if (path === WORKSPACE_LEGACY_ROOT) return WORKSPACES_ROOT;
-		if (path.startsWith(`${WORKSPACE_LEGACY_ROOT}/`)) {
-			return `${WORKSPACES_ROOT}${path.slice(WORKSPACE_LEGACY_ROOT.length)}`;
-		}
 		return path;
 	}
 
@@ -1225,8 +1210,7 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 		sandboxPath: string,
 	): Promise<boolean> {
 		try {
-			const bytes =
-				await documentFileSystemService.getWorkspaceFileContent(sandboxPath);
+			const bytes = await documentFileSystemService.readFile(sandboxPath);
 			const content = new TextDecoder().decode(bytes);
 			await this.request("fs.materializeWorkspaceFile", {
 				path: sandboxPath,
@@ -1278,8 +1262,7 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 		}
 
 		try {
-			const bytes =
-				await documentFileSystemService.getWorkspaceFileContent(sandboxPath);
+			const bytes = await documentFileSystemService.readFile(sandboxPath);
 			logInfo(
 				`[SW relay] serving ${sandboxPath} directly from workspace storage after materialization miss`,
 			);
@@ -1326,20 +1309,14 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 		for (const op of ops) {
 			try {
 				if (op.op === "write") {
-					await documentFileSystemService.writeWorkspaceFile(
-						op.path,
-						op.content,
-					);
+					await documentFileSystemService.writeFile(op.path, op.content);
 				} else if (op.op === "mkdir") {
-					await documentFileSystemService.mkdirWorkspace(op.path);
+					await documentFileSystemService.mkdir(op.path);
 				} else if (op.op === "delete") {
-					await documentFileSystemService.deleteWorkspaceFile(op.path);
+					await documentFileSystemService.deleteFile(op.path);
 				} else if (op.op === "rename") {
 					const newName = op.newPath.split("/").pop()!;
-					await documentFileSystemService.renameWorkspaceFile(
-						op.oldPath,
-						newName,
-					);
+					await documentFileSystemService.rename(op.oldPath, newName);
 				}
 			} catch (error) {
 				logWarn("Failed to flush workspace op", { op, error });

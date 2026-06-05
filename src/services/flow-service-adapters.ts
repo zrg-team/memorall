@@ -108,28 +108,44 @@ const normalizeRowArray = <T>(value: unknown): T[] => {
 	return Array.isArray(normalized) ? normalized : (normalized.rows ?? []);
 };
 
-const WORKSPACE_FS_ROOT = "/home/workspace";
-const WORKSPACE_SANDBOX_ROOT = "/workspaces";
-const DOCUMENTS_FS_ROOT = "/home/documents";
+import {
+	DOCUMENTS_SANDBOX_ROOT,
+	WORKSPACES_SANDBOX_ROOT,
+	isWorkspacesSandboxPath,
+	toWorkspacesLogicalPath,
+	toDocumentsSandboxPath,
+	toDocumentsLogicalPath,
+	sandboxPathToFsPath,
+} from "@/services/filesystem/sandbox-paths";
+
+const DOCUMENTS_FS_ROOT = sandboxPathToFsPath(DOCUMENTS_SANDBOX_ROOT);
+const WORKSPACES_FS_ROOT = sandboxPathToFsPath(WORKSPACES_SANDBOX_ROOT);
 
 const normalizeFsPath = (path: string): string => {
 	const normalized = path.replace(/\\/g, "/").replace(/\/+$/, "");
 	return normalized || "/";
 };
 
+/** Convert an internal FS path or sandbox path to its workspace sandbox path. */
 const workspaceFsPathToSandboxPath = (path: string): string => {
 	const normalized = normalizeFsPath(path);
-	if (normalized === WORKSPACE_FS_ROOT) return WORKSPACE_SANDBOX_ROOT;
-	if (normalized.startsWith(`${WORKSPACE_FS_ROOT}/`)) {
-		return `${WORKSPACE_SANDBOX_ROOT}${normalized.slice(WORKSPACE_FS_ROOT.length)}`;
+	// Already a sandbox path
+	if (isWorkspacesSandboxPath(normalized)) return normalized;
+	// Internal FS path: /home/workspaces/... → /workspaces/...
+	if (normalized === WORKSPACES_FS_ROOT) return WORKSPACES_SANDBOX_ROOT;
+	if (normalized.startsWith(`${WORKSPACES_FS_ROOT}/`)) {
+		return `${WORKSPACES_SANDBOX_ROOT}${normalized.slice(WORKSPACES_FS_ROOT.length)}`;
 	}
-	return normalized.startsWith(WORKSPACE_SANDBOX_ROOT)
-		? normalized
-		: `${WORKSPACE_SANDBOX_ROOT}${normalized.startsWith("/") ? normalized : `/${normalized}`}`;
+	return `${WORKSPACES_SANDBOX_ROOT}${normalized.startsWith("/") ? normalized : `/${normalized}`}`;
 };
 
+/** Convert an internal FS path or sandbox path to its documents logical path. */
 const documentFsPathToLogicalPath = (path: string): string => {
 	const normalized = normalizeFsPath(path);
+	// Sandbox path: strip /documents prefix
+	const fromSandbox = toDocumentsLogicalPath(normalized);
+	if (fromSandbox !== null) return fromSandbox;
+	// Internal FS path: /home/documents/... → /...
 	if (normalized === DOCUMENTS_FS_ROOT) return "/";
 	if (normalized.startsWith(`${DOCUMENTS_FS_ROOT}/`)) {
 		return normalized.slice(DOCUMENTS_FS_ROOT.length);
@@ -137,13 +153,20 @@ const documentFsPathToLogicalPath = (path: string): string => {
 	return normalized;
 };
 
+const documentFsPathToSandboxPath = (path: string): string =>
+	toDocumentsSandboxPath(documentFsPathToLogicalPath(path));
+
+const flowFsPathToSandboxPath = (path: string): string =>
+	isWorkspaceFsPath(path)
+		? workspaceFsPathToSandboxPath(path)
+		: documentFsPathToSandboxPath(path);
+
 const isWorkspaceFsPath = (path: string): boolean => {
 	const normalized = normalizeFsPath(path);
 	return (
-		normalized === WORKSPACE_FS_ROOT ||
-		normalized.startsWith(`${WORKSPACE_FS_ROOT}/`) ||
-		normalized === WORKSPACE_SANDBOX_ROOT ||
-		normalized.startsWith(`${WORKSPACE_SANDBOX_ROOT}/`)
+		isWorkspacesSandboxPath(normalized) ||
+		normalized === WORKSPACES_FS_ROOT ||
+		normalized.startsWith(`${WORKSPACES_FS_ROOT}/`)
 	);
 };
 
@@ -165,16 +188,17 @@ const getTreeNode = async (
 	path: string,
 ): Promise<DocumentTreeNode> => {
 	const workspace = isWorkspaceFsPath(path);
-	const logicalPath = workspace
-		? normalizeFsPath(
-				workspaceFsPathToSandboxPath(path).slice(
-					WORKSPACE_SANDBOX_ROOT.length,
-				) || "/",
-			)
+	const sandboxPath = workspace
+		? workspaceFsPathToSandboxPath(path)
 		: documentFsPathToLogicalPath(path);
+	const logicalPath = workspace
+		? (toWorkspacesLogicalPath(sandboxPath) ?? normalizeFsPath(sandboxPath))
+		: typeof sandboxPath === "string"
+			? sandboxPath
+			: "/";
 	const tree = workspace
-		? await service.getWorkspaceTree()
-		: await service.getTree();
+		? await service.getTree(WORKSPACES_SANDBOX_ROOT)
+		: await service.getTree(DOCUMENTS_SANDBOX_ROOT);
 	if (logicalPath === "/") {
 		return {
 			id: "/",
@@ -333,10 +357,8 @@ export const toFlowFileSystem = (
 	service: DocumentFileSystem,
 ): IFlowFileSystem => ({
 	readFile: ((path: string, options?: { encoding: string }) => {
-		const read = isWorkspaceFsPath(path)
-			? service.getWorkspaceFileContent(workspaceFsPathToSandboxPath(path))
-			: service.getFileContent(documentFsPathToLogicalPath(path));
-		return read.then((bytes) =>
+		const read = service.readFile(flowFsPathToSandboxPath(path));
+		return read.then((bytes: Uint8Array) =>
 			options?.encoding
 				? new TextDecoder(options.encoding).decode(bytes)
 				: bytes,
@@ -345,142 +367,56 @@ export const toFlowFileSystem = (
 	writeFile: async (path, data) => {
 		const bytes =
 			typeof data === "string" ? new TextEncoder().encode(data) : data;
-		if (isWorkspaceFsPath(path)) {
-			await service.writeWorkspaceFile(
-				workspaceFsPathToSandboxPath(path),
-				new TextDecoder().decode(bytes),
-			);
-			return;
-		}
-		await service.writeFileContent(documentFsPathToLogicalPath(path), bytes);
+		await service.writeFile(flowFsPathToSandboxPath(path), bytes);
 	},
 	appendFile: async (path, data) => {
-		const existing = isWorkspaceFsPath(path)
-			? await service.getWorkspaceFileContent(
-					workspaceFsPathToSandboxPath(path),
-				)
-			: await service.getFileContent(documentFsPathToLogicalPath(path));
+		const sandboxPath = flowFsPathToSandboxPath(path);
+		const existing = await service.readFile(sandboxPath);
 		const suffix =
 			typeof data === "string" ? new TextEncoder().encode(data) : data;
 		const merged = new Uint8Array(existing.length + suffix.length);
 		merged.set(existing);
 		merged.set(suffix, existing.length);
-		if (isWorkspaceFsPath(path)) {
-			await service.writeWorkspaceFile(
-				workspaceFsPathToSandboxPath(path),
-				new TextDecoder().decode(merged),
-			);
-			return;
-		}
-		await service.writeFileContent(documentFsPathToLogicalPath(path), merged);
+		await service.writeFile(sandboxPath, merged);
 	},
-	unlink: (path) =>
-		isWorkspaceFsPath(path)
-			? service.deleteWorkspaceFile(workspaceFsPathToSandboxPath(path))
-			: service.deleteFileContent(documentFsPathToLogicalPath(path)),
+	unlink: (path) => service.deleteFile(flowFsPathToSandboxPath(path)),
 	rename: async (oldPath, newPath) => {
-		if (isWorkspaceFsPath(oldPath) || isWorkspaceFsPath(newPath)) {
-			const oldSandboxPath = workspaceFsPathToSandboxPath(oldPath);
-			const newSandboxPath = workspaceFsPathToSandboxPath(newPath);
-			const { parent: oldParent } = splitParentAndName(oldSandboxPath);
-			const { parent: newParent, name } = splitParentAndName(newSandboxPath);
-			if (oldParent !== newParent) {
-				throw new Error("Workspace move across folders is not supported.");
-			}
-			await service.renameWorkspaceFile(oldSandboxPath, name);
-			return;
-		}
-
-		const oldLogicalPath = documentFsPathToLogicalPath(oldPath);
-		const newLogicalPath = documentFsPathToLogicalPath(newPath);
-		const node = await getTreeNode(service, oldLogicalPath);
-		const { parent: oldParent } = splitParentAndName(oldLogicalPath);
-		const { parent: newParent, name } = splitParentAndName(newLogicalPath);
+		const oldSandboxPath = flowFsPathToSandboxPath(oldPath);
+		const newSandboxPath = flowFsPathToSandboxPath(newPath);
+		const node = await getTreeNode(service, oldPath);
+		const { parent: oldParent } = splitParentAndName(oldSandboxPath);
+		const { parent: newParent, name } = splitParentAndName(newSandboxPath);
+		let currentSandboxPath = oldSandboxPath;
 
 		if (oldParent !== newParent) {
-			if (node.type === "folder") {
-				await service.moveFolder(oldLogicalPath, newParent);
-			} else {
-				await service.moveFile(oldLogicalPath, newParent);
-			}
+			currentSandboxPath = await service.move(oldSandboxPath, newParent);
 		}
 
-		if (name !== node.name || oldParent !== newParent) {
-			const movedPath =
-				oldParent === newParent
-					? oldLogicalPath
-					: newParent === "/"
-						? `/${node.name}`
-						: `${newParent}/${node.name}`;
-			if (name !== node.name) {
-				if (node.type === "folder") {
-					await service.renameFolder(movedPath, name);
-				} else {
-					await service.renameFile(movedPath, name);
-				}
-			}
+		if (name !== node.name) {
+			await service.rename(currentSandboxPath, name);
 		}
 	},
 	copyFile: async (src, dest) => {
-		const bytes = isWorkspaceFsPath(src)
-			? await service.getWorkspaceFileContent(workspaceFsPathToSandboxPath(src))
-			: await service.getFileContent(documentFsPathToLogicalPath(src));
-		if (isWorkspaceFsPath(dest)) {
-			await service.writeWorkspaceFile(
-				workspaceFsPathToSandboxPath(dest),
-				new TextDecoder().decode(bytes),
-			);
-			return;
-		}
-		await service.writeFileContent(documentFsPathToLogicalPath(dest), bytes);
+		const bytes = await service.readFile(flowFsPathToSandboxPath(src));
+		await service.writeFile(flowFsPathToSandboxPath(dest), bytes);
 	},
 	mkdir: async (path) => {
-		if (isWorkspaceFsPath(path)) {
-			await service.mkdirWorkspace(workspaceFsPathToSandboxPath(path));
-			return undefined;
-		}
-		const logicalPath = documentFsPathToLogicalPath(path);
-		if (logicalPath === "/") return undefined;
-		try {
-			const existing = await getTreeNode(service, logicalPath);
-			if (existing.type !== "folder") {
-				throw new Error(`Path exists and is not a directory: ${path}`);
-			}
-			return undefined;
-		} catch (error) {
-			if (
-				!(error instanceof Error) ||
-				!error.message.startsWith("Path not found:")
-			) {
-				throw error;
-			}
-		}
-		const { parent, name } = splitParentAndName(logicalPath);
-		await service.createFolder(name, parent);
+		await service.mkdir(flowFsPathToSandboxPath(path));
 		return undefined;
 	},
-	rmdir: (path) =>
-		isWorkspaceFsPath(path)
-			? service.deleteWorkspaceFolder(workspaceFsPathToSandboxPath(path))
-			: service.deleteFolder(documentFsPathToLogicalPath(path)),
+	rmdir: (path) => service.deleteFolder(flowFsPathToSandboxPath(path)),
 	rm: async (path, options) => {
 		const node = await getTreeNode(service, path);
 		if (options?.recursive) {
-			if (isWorkspaceFsPath(path)) {
-				await service.deleteWorkspaceFolder(workspaceFsPathToSandboxPath(path));
-			} else if (node.type === "folder") {
-				await service.deleteFolder(documentFsPathToLogicalPath(path));
-			} else {
-				await service.deleteFile(documentFsPathToLogicalPath(path));
-			}
+			await (node.type === "folder"
+				? service.deleteFolder(flowFsPathToSandboxPath(path))
+				: service.deleteFile(flowFsPathToSandboxPath(path)));
 			return;
 		}
 		if (node.type === "folder") {
 			throw new Error(`Path is a directory: ${path}`);
 		}
-		await (isWorkspaceFsPath(path)
-			? service.deleteWorkspaceFile(workspaceFsPathToSandboxPath(path))
-			: service.deleteFileContent(documentFsPathToLogicalPath(path)));
+		await service.deleteFile(flowFsPathToSandboxPath(path));
 	},
 	readdir: (async (path: string, options?: { withFileTypes: true }) => {
 		const node = await getTreeNode(service, path);

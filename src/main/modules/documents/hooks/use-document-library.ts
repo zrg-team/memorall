@@ -2,6 +2,12 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import NiceModal from "@ebay/nice-modal-react";
 import { documentFileSystemService } from "@/services/filesystem/document-filesystem";
+import {
+	toSandboxPath,
+	toDocumentsSandboxPath,
+	DOCUMENTS_SANDBOX_ROOT,
+	WORKSPACES_SANDBOX_ROOT,
+} from "@/services/filesystem/sandbox-paths";
 import { topicService } from "@/main/modules/topics/services/topic-service";
 import { TopicSelectorDialog } from "@/main/modules/topics/modals";
 import { useKnowledgeConversion } from "./use-knowledge-conversion";
@@ -26,19 +32,7 @@ import {
 
 // ── Module-level helpers ──────────────────────────────────────────────────────
 
-/** Convert logical workspace path → sandbox path (/workspaces/...). */
-function toWsPath(logicalPath: string): string {
-	const normalized = logicalPath.replace(/\\/g, "/");
-	if (normalized === "/workspace" || normalized.startsWith("/workspace/")) {
-		return normalized === "/workspace"
-			? "/workspaces"
-			: `/workspaces${normalized.slice("/workspace".length)}`;
-	}
-	if (normalized === "/workspaces" || normalized.startsWith("/workspaces/")) {
-		return normalized;
-	}
-	return normalized === "/" ? "/workspaces" : `/workspaces${normalized}`;
-}
+// toSandboxPath is imported from @/services/filesystem/sandbox-paths
 
 /** Build the virtual workspace-root DocumentTreeNode that wraps workspace items. */
 function makeWorkspaceRoot(items: DocumentTreeNode[]): DocumentTreeNode {
@@ -189,7 +183,9 @@ export function useDocumentLibrary() {
 
 	const loadTree = useCallback(async () => {
 		try {
-			const treeData = await documentFileSystemService.getTree();
+			const treeData = await documentFileSystemService.getTree(
+				DOCUMENTS_SANDBOX_ROOT,
+			);
 			setTree(treeData);
 			setSelectedNode((prev) => {
 				if (!prev || prev.id === "__docs_root__") return makeDocsRoot(treeData);
@@ -208,7 +204,9 @@ export function useDocumentLibrary() {
 
 	const loadWorkspaceTree = useCallback(async () => {
 		try {
-			const treeData = await documentFileSystemService.getWorkspaceTree();
+			const treeData = await documentFileSystemService.getTree(
+				WORKSPACES_SANDBOX_ROOT,
+			);
 			setWorkspaceTree(treeData);
 			// Keep selectedNode in sync if it belongs to workspace
 			setSelectedNode((prev) => {
@@ -414,35 +412,9 @@ export function useDocumentLibrary() {
 			setUploadProgress(newProgress);
 			NiceModal.show(UploadProgressDialog, { uploadProgress: newProgress });
 
-			// Workspace upload: read file text and write via workspace API
-			if (isWorkspaceSectionRef.current) {
-				const basePath = currentPathRef.current;
-				for (const file of fileArray) {
-					const id = `${Date.now()}-${file.name}`;
-					try {
-						updateProgress(id, 10, "uploading");
-						const text = await file.text();
-						const newPath =
-							basePath === "/" ? `/${file.name}` : `${basePath}/${file.name}`;
-						updateProgress(id, 70, "uploading");
-						await documentFileSystemService.writeWorkspaceFile(
-							toWsPath(newPath),
-							text,
-						);
-						updateProgress(id, 100, "completed");
-						logInfo(`Uploaded workspace file: ${file.name}`);
-					} catch (err) {
-						logError(`Failed to upload workspace file ${file.name}:`, err);
-						updateProgress(id, 0, "error", String(err));
-					}
-				}
-				await loadWorkspaceTree();
-				setTimeout(() => {
-					NiceModal.hide(UploadProgressDialog);
-					setUploadProgress(new Map());
-				}, 2000);
-				return;
-			}
+			const isWorkspace = isWorkspaceSectionRef.current;
+			const section = isWorkspace ? "workspace" : "documents";
+			const targetSandboxPath = toSandboxPath(currentPathRef.current, section);
 
 			for (const file of fileArray) {
 				const id = `${Date.now()}-${file.name}`;
@@ -450,42 +422,44 @@ export function useDocumentLibrary() {
 					updateProgress(id, 10, "uploading");
 					let metadata: DocumentFile["metadata"] | undefined;
 
-					if (file.type === "application/pdf") {
-						try {
-							updateProgress(id, 30, "processing");
-							const pdfContent = await readPDFFile(file);
-							metadata = {
-								title: pdfContent.title,
-								author: pdfContent.author,
-								subject: pdfContent.subject,
-								pageCount: pdfContent.numPages,
-							};
-						} catch (err) {
-							logError("Failed to extract PDF metadata:", err);
-						}
-					} else if (
-						file.type === "application/vnd.ms-excel" ||
-						file.type ===
-							"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ||
-						file.type === "application/vnd.ms-excel.sheet.macroEnabled.12"
-					) {
-						try {
-							updateProgress(id, 30, "processing");
-							const excelContent = await readExcelFile(file);
-							metadata = {
-								title: excelContent.title,
-								sheetCount: excelContent.sheetCount,
-								sheetNames: excelContent.sheetNames,
-							};
-						} catch (err) {
-							logError("Failed to extract Excel metadata:", err);
+					if (!isWorkspace) {
+						if (file.type === "application/pdf") {
+							try {
+								updateProgress(id, 30, "processing");
+								const pdfContent = await readPDFFile(file);
+								metadata = {
+									title: pdfContent.title,
+									author: pdfContent.author,
+									subject: pdfContent.subject,
+									pageCount: pdfContent.numPages,
+								};
+							} catch (err) {
+								logError("Failed to extract PDF metadata:", err);
+							}
+						} else if (
+							file.type === "application/vnd.ms-excel" ||
+							file.type ===
+								"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ||
+							file.type === "application/vnd.ms-excel.sheet.macroEnabled.12"
+						) {
+							try {
+								updateProgress(id, 30, "processing");
+								const excelContent = await readExcelFile(file);
+								metadata = {
+									title: excelContent.title,
+									sheetCount: excelContent.sheetCount,
+									sheetNames: excelContent.sheetNames,
+								};
+							} catch (err) {
+								logError("Failed to extract Excel metadata:", err);
+							}
 						}
 					}
 
 					updateProgress(id, 70, "uploading");
 					await documentFileSystemService.uploadFile(
 						file,
-						currentPathRef.current,
+						targetSandboxPath,
 						metadata,
 					);
 					updateProgress(id, 100, "completed");
@@ -496,7 +470,11 @@ export function useDocumentLibrary() {
 				}
 			}
 
-			await loadTree();
+			if (isWorkspace) {
+				await loadWorkspaceTree();
+			} else {
+				await loadTree();
+			}
 			setTimeout(() => {
 				NiceModal.hide(UploadProgressDialog);
 				setUploadProgress(new Map());
@@ -523,17 +501,19 @@ export function useDocumentLibrary() {
 			try {
 				const node = selectedNodeRef.current;
 				const targetPath = node?.type === "folder" ? node.path : "/";
+				const section = isWorkspaceSectionRef.current
+					? "workspace"
+					: "documents";
+				const logicalNew =
+					targetPath === "/" ? `/${folderName}` : `${targetPath}/${folderName}`;
+				await documentFileSystemService.mkdir(
+					toSandboxPath(logicalNew, section),
+				);
 				if (isWorkspaceSectionRef.current) {
-					const newPath =
-						targetPath === "/"
-							? `/${folderName}`
-							: `${targetPath}/${folderName}`;
-					await documentFileSystemService.mkdirWorkspace(toWsPath(newPath));
 					await loadWorkspaceTree();
-					return;
+				} else {
+					await loadTree();
 				}
-				await documentFileSystemService.createFolder(folderName, targetPath);
-				await loadTree();
 			} catch (err) {
 				logError("Failed to create folder:", err);
 				setError(t("library.createFolderError"));
@@ -554,14 +534,15 @@ export function useDocumentLibrary() {
 			const node = selectedNodeRef.current;
 			const targetPath = node?.type === "folder" ? node.path : "/";
 			const fullFileName = `${result.name}${result.extension}`;
+			const section = isWorkspaceSectionRef.current ? "workspace" : "documents";
+			const logicalNew =
+				targetPath === "/"
+					? `/${fullFileName}`
+					: `${targetPath}/${fullFileName}`;
 
 			if (isWorkspaceSectionRef.current) {
-				const newPath =
-					targetPath === "/"
-						? `/${fullFileName}`
-						: `${targetPath}/${fullFileName}`;
-				await documentFileSystemService.writeWorkspaceFile(
-					toWsPath(newPath),
+				await documentFileSystemService.writeFile(
+					toSandboxPath(logicalNew, "workspace"),
 					"",
 				);
 				await loadWorkspaceTree();
@@ -573,13 +554,12 @@ export function useDocumentLibrary() {
 				fullFileName,
 				{ type: "text/markdown" },
 			);
-			await documentFileSystemService.uploadFile(file, targetPath);
+			await documentFileSystemService.uploadFile(
+				file,
+				toSandboxPath(targetPath, section),
+			);
 			const newTree = await loadTree();
-			const newFilePath =
-				targetPath === "/"
-					? `/${fullFileName}`
-					: `${targetPath}/${fullFileName}`;
-			const newNode = findNodeByPath(newTree, newFilePath);
+			const newNode = findNodeByPath(newTree, logicalNew);
 			if (newNode) setSelectedNode(newNode);
 		} catch (err) {
 			logError("Failed to create document:", err);
@@ -604,34 +584,30 @@ export function useDocumentLibrary() {
 				return;
 
 			try {
+				const section = isWorkspaceSectionRef.current
+					? "workspace"
+					: "documents";
+				const sp = toSandboxPath(item.item.path, section);
+				if (item.type === "file") {
+					await documentFileSystemService.deleteFile(sp);
+				} else {
+					await documentFileSystemService.deleteFolder(sp);
+				}
 				if (isWorkspaceSectionRef.current) {
-					const sandboxPath = toWsPath(item.item.path);
-					if (item.type === "file") {
-						await documentFileSystemService.deleteWorkspaceFile(sandboxPath);
-					} else {
-						await documentFileSystemService.deleteWorkspaceFolder(sandboxPath);
-					}
 					await loadWorkspaceTree();
 					if (selectedNodeRef.current?.id === item.item.id)
 						setSelectedNode(null);
-					return;
-				}
-
-				if (item.type === "file") {
-					await documentFileSystemService.deleteFile(item.item.id);
 				} else {
-					await documentFileSystemService.deleteFolder(item.item.id);
-				}
-
-				const newTree = await loadTree();
-				if (selectedNodeRef.current?.id === item.item.id) {
-					const curPath = currentPathRef.current;
-					const parentPath =
-						curPath.substring(0, curPath.lastIndexOf("/")) || "/";
-					const parentNode = findNodeByPath(newTree, parentPath);
-					setSelectedNode(
-						parentNode ?? (newTree.length > 0 ? newTree[0] : null),
-					);
+					const newTree = await loadTree();
+					if (selectedNodeRef.current?.id === item.item.id) {
+						const curPath = currentPathRef.current;
+						const parentPath =
+							curPath.substring(0, curPath.lastIndexOf("/")) || "/";
+						const parentNode = findNodeByPath(newTree, parentPath);
+						setSelectedNode(
+							parentNode ?? (newTree.length > 0 ? newTree[0] : null),
+						);
+					}
 				}
 			} catch (err) {
 				logError("Failed to delete item:", err);
@@ -644,26 +620,25 @@ export function useDocumentLibrary() {
 	const handleRenameItem = useCallback(
 		async (item: DocumentLibraryItem, newName: string) => {
 			try {
+				const section = isWorkspaceSectionRef.current
+					? "workspace"
+					: "documents";
+				const newSandboxPath = await documentFileSystemService.rename(
+					toSandboxPath(item.item.path, section),
+					newName,
+				);
 				if (isWorkspaceSectionRef.current) {
-					const sandboxPath = toWsPath(item.item.path);
-					await documentFileSystemService.renameWorkspaceFile(
-						sandboxPath,
-						newName,
-					);
 					await loadWorkspaceTree();
-					return;
-				}
-
-				if (item.type === "file") {
-					await documentFileSystemService.renameFile(item.item.id, newName);
 				} else {
-					await documentFileSystemService.renameFolder(item.item.id, newName);
-				}
-
-				const newTree = await loadTree();
-				if (selectedNodeRef.current?.id === item.item.id) {
-					const updatedNode = findNodeById(newTree, item.item.id);
-					if (updatedNode) setSelectedNode(updatedNode);
+					const newTree = await loadTree();
+					if (selectedNodeRef.current?.id === item.item.id) {
+						// After rename the logical path changes — find by the new path
+						const newLogicalPath = newSandboxPath.slice(
+							DOCUMENTS_SANDBOX_ROOT.length,
+						);
+						const updatedNode = findNodeByPath(newTree, newLogicalPath);
+						if (updatedNode) setSelectedNode(updatedNode);
+					}
 				}
 				logInfo(`Renamed ${item.type}: ${item.item.name} -> ${newName}`);
 			} catch (err) {
@@ -680,21 +655,21 @@ export function useDocumentLibrary() {
 		if (!confirm(t("library.deleteConfirm", { name: node.name }))) return;
 
 		try {
+			const section = isWorkspaceSectionRef.current ? "workspace" : "documents";
+			await documentFileSystemService.deleteFile(
+				toSandboxPath(node.path, section),
+			);
 			if (isWorkspaceSectionRef.current) {
-				await documentFileSystemService.deleteWorkspaceFile(
-					toWsPath(node.path),
-				);
 				await loadWorkspaceTree();
 				setSelectedNode(null);
-				return;
+			} else {
+				const newTree = await loadTree();
+				const curPath = currentPathRef.current;
+				const parentPath =
+					curPath.substring(0, curPath.lastIndexOf("/")) || "/";
+				const parentNode = findNodeByPath(newTree, parentPath);
+				setSelectedNode(parentNode ?? (newTree.length > 0 ? newTree[0] : null));
 			}
-
-			await documentFileSystemService.deleteFile(node.id);
-			const newTree = await loadTree();
-			const curPath = currentPathRef.current;
-			const parentPath = curPath.substring(0, curPath.lastIndexOf("/")) || "/";
-			const parentNode = findNodeByPath(newTree, parentPath);
-			setSelectedNode(parentNode ?? (newTree.length > 0 ? newTree[0] : null));
 		} catch (err) {
 			logError("Failed to delete file:", err);
 			setError(t("library.deleteFileError"));
@@ -702,10 +677,14 @@ export function useDocumentLibrary() {
 	}, [loadWorkspaceTree, loadTree, t]);
 
 	// ── Download ─────────────────────────────────────────────────────────────
+
+	/** Download a documents-scope file by its logical path (used externally). */
 	const handleDownloadFile = useCallback(
 		async (fileId: string) => {
 			try {
-				const content = await documentFileSystemService.getFileContent(fileId);
+				const content = await documentFileSystemService.readFile(
+					toDocumentsSandboxPath(fileId),
+				);
 				const findFile = (nodes: DocumentTreeNode[]): DocumentFile | null => {
 					for (const node of nodes) {
 						if (node.type === "file" && node.id === fileId && node.file)
@@ -719,12 +698,7 @@ export function useDocumentLibrary() {
 				};
 				const file = findFile(treeRef.current);
 				if (!file) return;
-
-				const arrayBuffer =
-					content.buffer instanceof ArrayBuffer
-						? content.buffer
-						: new ArrayBuffer(content.byteLength);
-				const blob = new Blob([arrayBuffer], { type: file.mimeType });
+				const blob = new Blob([content.slice()], { type: file.mimeType });
 				const url = URL.createObjectURL(blob);
 				const a = document.createElement("a");
 				a.href = url;
@@ -744,51 +718,53 @@ export function useDocumentLibrary() {
 	const handleDownloadSelectedFile = useCallback(async () => {
 		const node = selectedNodeRef.current;
 		if (!node || node.type !== "file") return;
-
-		if (isWorkspaceSectionRef.current) {
-			try {
-				const sandboxPath = toWsPath(node.path);
-				const content =
-					await documentFileSystemService.getWorkspaceFileContent(sandboxPath);
-				const blob = new Blob([content.buffer as ArrayBuffer]);
-				const url = URL.createObjectURL(blob);
-				const a = document.createElement("a");
-				a.href = url;
-				a.download = node.name;
-				document.body.appendChild(a);
-				a.click();
-				document.body.removeChild(a);
-				URL.revokeObjectURL(url);
-			} catch (err) {
-				logError("Failed to download workspace file:", err);
-				setError(t("library.downloadFileError"));
-			}
-			return;
+		try {
+			const section = isWorkspaceSectionRef.current ? "workspace" : "documents";
+			const content = await documentFileSystemService.readFile(
+				toSandboxPath(node.path, section),
+			);
+			const mimeType = node.file?.mimeType ?? "application/octet-stream";
+			const blob = new Blob([content.slice()], { type: mimeType });
+			const url = URL.createObjectURL(blob);
+			const a = document.createElement("a");
+			a.href = url;
+			a.download = node.name;
+			document.body.appendChild(a);
+			a.click();
+			document.body.removeChild(a);
+			URL.revokeObjectURL(url);
+		} catch (err) {
+			logError("Failed to download file:", err);
+			setError(t("library.downloadFileError"));
 		}
-
-		await handleDownloadFile(node.id);
-	}, [handleDownloadFile, t]);
+	}, [t]);
 
 	// ── Move ─────────────────────────────────────────────────────────────────
 	const handleMove = useCallback(
 		async (
 			nodeId: string,
 			targetFolderId: string,
-			nodeType: "file" | "folder",
+			_nodeType: "file" | "folder",
 		) => {
 			try {
-				if (nodeType === "file") {
-					await documentFileSystemService.moveFile(nodeId, targetFolderId);
+				const section = isWorkspaceSectionRef.current
+					? "workspace"
+					: "documents";
+				await documentFileSystemService.move(
+					toSandboxPath(nodeId, section),
+					toSandboxPath(targetFolderId, section),
+				);
+				if (isWorkspaceSectionRef.current) {
+					await loadWorkspaceTree();
 				} else {
-					await documentFileSystemService.moveFolder(nodeId, targetFolderId);
+					await loadTree();
 				}
-				await loadTree();
 			} catch (err) {
 				logError("[DOCUMENT_LIBRARY] Failed to move item:", err);
 				setError("Failed to move item");
 			}
 		},
-		[loadTree],
+		[loadWorkspaceTree, loadTree],
 	);
 
 	// ── Topic handlers ────────────────────────────────────────────────────────

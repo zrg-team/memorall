@@ -12,7 +12,7 @@ const schema = z.object({
 		.string()
 		.min(1)
 		.describe(
-			"Workspace path to the project directory, e.g. /workspaces/product-launch",
+			"Absolute path to the project directory, e.g. /projects/product-launch",
 		),
 });
 

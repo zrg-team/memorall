@@ -20,6 +20,10 @@ import {
 	SelectValue,
 } from "@/main/components/ui/select";
 import { documentFileSystemService } from "@/services/filesystem/document-filesystem";
+import {
+	DOCUMENTS_SANDBOX_ROOT,
+	toDocumentsSandboxPath,
+} from "@/services/filesystem/sandbox-paths";
 import type { DocumentTreeNode } from "@/types/document-library";
 
 interface DocumentSaveFolderDialogProps {
@@ -70,7 +74,7 @@ export const DocumentSaveFolderDialog: React.FC<
 		setError(null);
 		void documentFileSystemService
 			.initialize()
-			.then(() => documentFileSystemService.getTree())
+			.then(() => documentFileSystemService.getTree(DOCUMENTS_SANDBOX_ROOT))
 			.then((tree) => {
 				if (cancelled) return;
 				const nextFolders = collectFolderPaths(tree);
@@ -99,7 +103,10 @@ export const DocumentSaveFolderDialog: React.FC<
 		setError(null);
 		try {
 			const file = new File([content], trimmedName, { type: mimeType });
-			await documentFileSystemService.uploadFile(file, selectedFolder);
+			await documentFileSystemService.uploadFile(
+				file,
+				toDocumentsSandboxPath(selectedFolder),
+			);
 			onSaved?.();
 			onOpenChange(false);
 		} catch (err) {

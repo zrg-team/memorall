@@ -1,42 +1,41 @@
-/** Strip trailing slashes for consistent path handling. */
-const normalize = (p: string): string =>
-	p.trim().replace(/\\/g, "/").replace(/\/+$/, "");
+let _projectsRoot = "";
 
-const WORKSPACE_LEGACY_PATH = "workspace";
-const WORKSPACES_PATH = "workspaces";
+/**
+ * Configure the root path under which HyperFrames projects are stored.
+ * Call this during host app initialisation before any hyperframes tools run.
+ * Example: setHyperframesProjectsRoot("/workspaces")
+ */
+export function setHyperframesProjectsRoot(root: string): void {
+	_projectsRoot = root.replace(/\/+$/, "");
+}
 
-const INTERNAL_WORKSPACE_LEGACY_PREFIX = `/home/${WORKSPACE_LEGACY_PATH}`;
-const INTERNAL_WORKSPACE_PREFIX = `/home/${WORKSPACES_PATH}`;
-
-/** Normalize project paths into the public workspace namespace. */
+/**
+ * Normalize any project path input to a canonical absolute path.
+ * Accepts: full absolute paths, bare project names (no leading slash).
+ * When a projects root is configured (via setHyperframesProjectsRoot),
+ * bare names are placed under that root.
+ */
 export const normalizeProjectPath = (projectPath: string): string => {
-	const normalized = normalize(projectPath);
-	if (!normalized) return WORKSPACES_PATH;
-	if (normalized === INTERNAL_WORKSPACE_PREFIX) return WORKSPACES_PATH;
-	if (normalized.startsWith(`${INTERNAL_WORKSPACE_PREFIX}/`)) {
-		return `${WORKSPACES_PATH}${normalized.slice(
-			INTERNAL_WORKSPACE_PREFIX.length,
-		)}`;
+	const normalized = projectPath.trim().replace(/\\/g, "/").replace(/\/+$/, "");
+
+	// Empty input → return the configured root or "/"
+	if (!normalized) return _projectsRoot || "/";
+
+	// Already under configured root (exact match or prefix)
+	if (
+		_projectsRoot &&
+		(normalized === _projectsRoot || normalized.startsWith(`${_projectsRoot}/`))
+	) {
+		return normalized;
 	}
 
-	if (normalized === INTERNAL_WORKSPACE_LEGACY_PREFIX)
-		return WORKSPACE_LEGACY_PATH;
-	if (normalized.startsWith(`${INTERNAL_WORKSPACE_LEGACY_PREFIX}/`)) {
-		return `${WORKSPACE_LEGACY_PATH}${normalized.slice(
-			INTERNAL_WORKSPACE_LEGACY_PREFIX.length,
-		)}`;
+	// Bare name without leading slash → place under configured root
+	if (!normalized.startsWith("/")) {
+		return _projectsRoot ? `${_projectsRoot}/${normalized}` : `/${normalized}`;
 	}
 
-	if (normalized === WORKSPACE_LEGACY_PATH) return WORKSPACE_LEGACY_PATH;
-	if (normalized.startsWith(`${WORKSPACE_LEGACY_PATH}/`)) {
-		return `${WORKSPACE_LEGACY_PATH}${normalized.slice(
-			WORKSPACE_LEGACY_PATH.length,
-		)}`;
-	}
-	if (normalized === WORKSPACES_PATH) return WORKSPACES_PATH;
-	if (normalized.startsWith(`${WORKSPACES_PATH}/`))
-		return `${WORKSPACES_PATH}${normalized.slice(WORKSPACES_PATH.length)}`;
-	return `${WORKSPACES_PATH}/${normalized.replace(/^\/+/, "")}`;
+	// Absolute path → return as-is
+	return normalized;
 };
 
 /** The composition HTML file inside a project directory. */

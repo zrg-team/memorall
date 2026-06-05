@@ -1,6 +1,9 @@
 import type { DocumentFileSystem } from "@/services/filesystem/document-filesystem";
 import fs, { initializeFs } from "@/services/filesystem/fs";
-import { FILESYSTEM_MOUNT_PATH } from "@/services/filesystem/filesystem-paths";
+import {
+	sandboxPathToFsPath,
+	toWorkspacesSandboxPath,
+} from "@/services/filesystem/sandbox-paths";
 
 export const ensureFolderExists = async (
 	dfs: DocumentFileSystem,
@@ -12,23 +15,12 @@ export const ensureFolderExists = async (
 	for (const segment of segments) {
 		const nextPath = `${currentPath === "/" ? "" : currentPath}/${segment}`;
 		try {
-			await dfs.createFolder(segment, currentPath);
+			await dfs.mkdir(toWorkspacesSandboxPath(nextPath));
 		} catch {
 			// Folder likely already exists — continue.
 		}
 		currentPath = nextPath;
 	}
-};
-
-export const workspaceSandboxPathToFsPath = (sandboxPath: string): string => {
-	const normalized = sandboxPath.replace(/\\/g, "/");
-	const base =
-		normalized === FILESYSTEM_MOUNT_PATH.WORKSPACE_LEGACY ||
-		normalized.startsWith(`${FILESYSTEM_MOUNT_PATH.WORKSPACE_LEGACY}/`)
-			? FILESYSTEM_MOUNT_PATH.WORKSPACE_LEGACY
-			: FILESYSTEM_MOUNT_PATH.WORKSPACES;
-	const logical = normalized === base ? "" : normalized.slice(base.length);
-	return `/home/workspace${logical}`;
 };
 
 export const ensureFsDirectory = async (
@@ -63,7 +55,7 @@ export const writeWorkspaceFileBytes = async (
 	bytes: Uint8Array,
 ): Promise<void> => {
 	await initializeFs();
-	const fsPath = workspaceSandboxPathToFsPath(sandboxPath);
+	const fsPath = sandboxPathToFsPath(sandboxPath);
 	const dirPath = fsPath.substring(0, fsPath.lastIndexOf("/"));
 	await ensureFsDirectory(dirPath);
 	await fs.promises.writeFile(fsPath, bytes);

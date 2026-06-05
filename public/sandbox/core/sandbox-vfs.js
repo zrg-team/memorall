@@ -5,7 +5,6 @@
 
 export const DOCUMENTS_MOUNT_ROOT = "/documents";
 export const WORKSPACES_MOUNT_ROOT = "/workspaces";
-export const WORKSPACE_LEGACY_MOUNT_ROOT = "/workspace";
 export const VFS_DOCUMENTS_OVERLAY_FLAG = "__documentsOverlayInstalled";
 export const VFS_WORKSPACE_MATERIALIZE_SYNC = "__memorallMaterializeWorkspaceFileSync";
 
@@ -57,25 +56,13 @@ export const dirname = (inputPath) => {
 	return normalized.slice(0, idx);
 };
 
-export const toCanonicalWorkspacePath = (inputPath) => {
-	const path = normalizePath(inputPath);
-	if (path === WORKSPACE_LEGACY_MOUNT_ROOT) return WORKSPACES_MOUNT_ROOT;
-	if (path.startsWith(`${WORKSPACE_LEGACY_MOUNT_ROOT}/`)) {
-		return `${WORKSPACES_MOUNT_ROOT}${path.slice(WORKSPACE_LEGACY_MOUNT_ROOT.length)}`;
-	}
-	return path;
-};
-
-export const toCanonicalMountedPath = (inputPath) => toCanonicalWorkspacePath(normalizePath(inputPath));
+export const toCanonicalMountedPath = (inputPath) => normalizePath(inputPath);
 
 export const isDocumentsPath = (path) =>
 	path === DOCUMENTS_MOUNT_ROOT || path.startsWith(`${DOCUMENTS_MOUNT_ROOT}/`);
 
 export const isWorkspacePath = (path) =>
-	path === WORKSPACES_MOUNT_ROOT ||
-	path.startsWith(`${WORKSPACES_MOUNT_ROOT}/`) ||
-	path === WORKSPACE_LEGACY_MOUNT_ROOT ||
-	path.startsWith(`${WORKSPACE_LEGACY_MOUNT_ROOT}/`);
+	path === WORKSPACES_MOUNT_ROOT || path.startsWith(`${WORKSPACES_MOUNT_ROOT}/`);
 
 export const assertDocumentsMountLoaded = () => {
 	if (!vfsBoolState.documentsMountLoaded) {

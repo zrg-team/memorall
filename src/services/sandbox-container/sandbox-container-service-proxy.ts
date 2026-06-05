@@ -350,10 +350,7 @@ export class SandboxContainerServiceProxy implements ISandboxContainerService {
 				if (missingPath && !retriedMissingPaths.has(missingPath)) {
 					retriedMissingPaths.add(missingPath);
 					try {
-						const bytes =
-							await documentFileSystemService.getWorkspaceFileContent(
-								missingPath,
-							);
+						const bytes = await documentFileSystemService.readFile(missingPath);
 						const content = new TextDecoder().decode(bytes);
 						await this.request("fs.materializeWorkspaceFile", {
 							path: missingPath,
@@ -431,7 +428,7 @@ export class SandboxContainerServiceProxy implements ISandboxContainerService {
 		}
 
 		try {
-			const bytes = await documentFileSystemService.getWorkspaceFileContent(
+			const bytes = await documentFileSystemService.readFile(
 				params.missingPath,
 			);
 			logInfo(

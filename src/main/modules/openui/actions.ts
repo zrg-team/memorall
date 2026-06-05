@@ -5,6 +5,7 @@ import {
 } from "@openuidev/react-lang";
 import { z } from "zod";
 import { logWarn } from "@/utils/logger";
+import { toDocumentsLogicalPath } from "@/services/filesystem/sandbox-paths";
 import {
 	chatNavigationItem,
 	debugNavigationItems,
@@ -256,10 +257,8 @@ export function getOpenUISendMessageText(
 export function normalizeOpenUIDocumentPath(path: string): string | null {
 	const normalized = path.trim().replace(/\\/g, "/");
 	if (!normalized) return null;
-	if (normalized === "/documents") return "/";
-	if (normalized.startsWith("/documents/")) {
-		return normalized.slice("/documents".length) || "/";
-	}
+	const logical = toDocumentsLogicalPath(normalized);
+	if (logical !== null) return logical;
 	if (normalized.startsWith("/")) return normalized;
 	return `/${normalized}`;
 }

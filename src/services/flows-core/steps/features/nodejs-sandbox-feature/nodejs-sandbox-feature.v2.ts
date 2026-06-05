@@ -49,15 +49,10 @@ If user require to write code, execute code please use this actively to write an
 - It may also fail with very heavy frameworks, complicated Vite customization, advanced plugin chains, or packages that depend on non-browser worker/native behavior.
 - \`require()\` is available for built-in shims, installed npm packages, and files in the virtual filesystem.
 - \`require("fs")\` operates on the virtual filesystem.
-- Filesystem mounts:
-  - \`/documents\`: read-only mirror from document storage.
-  - \`/workspaces\`: read/write persistent workspace backed by document filesystem workspace storage.
-  - \`/temp\`: in-memory temporary files only.
+- Filesystem mounts are provided by the host runtime. Use \`/temp\` for in-memory scratch artifacts.
 - Install dependencies with \`container_install_package\` or with \`npm install\` via \`container_execute_command\` before using them in \`container_run_code\`.
 - Use browser APIs (fetch, URL, TextEncoder, crypto, etc.) instead of Node.js built-ins.
 - Prefer container filesystem tools (container_write_file, container_read_file, etc.) for deterministic file operations and mutations.
-- Use \`/workspaces\` for files that should persist, and \`/temp\` for scratch artifacts.
-- Never attempt writes under \`/documents\`.
 
 ## WHEN TO USE THIS FEATURE
 - Use container tools when the user asks to:
@@ -87,7 +82,7 @@ If user require to write code, execute code please use this actively to write an
 3) Execute and verify:
 - "container_run_code"
 4) Start a server:
-- "container_start_server" with projectDir="/workspaces/<app-name>"
+- "container_start_server" with projectDir="<project-directory>"
   - New project: add template="vite-react"|"next-pages"|"next-app"|"express" → scaffolds + installs + starts
   - Existing project: omit template → kind auto-detected from config files
 5) After modifying any file in a running server: **ALWAYS restart**:
@@ -155,7 +150,7 @@ The server does NOT hot-reload automatically — you must restart it for changes
 ## SHOWING SERVER PREVIEWS IN THE CHAT
 When a server is running and you want to embed a live preview directly in the chat:
 1. Call \`container_list_servers\` to get the actual server URL.
-2. Call \`render_memorall_artifact\` with \`type="url"\` and \`content=<server url>\`.
+2. Call \`render_artifact\` with \`type="url"\` and \`content=<server url>\`.
 
 This renders an embedded iframe inside the chat message so the user can interact with the running server without leaving the conversation.
 

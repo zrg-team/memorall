@@ -77,7 +77,7 @@ The workspace root is "/" — all paths are absolute virtual paths (e.g. "/notes
 - Use \`context\` (number of surrounding lines) to get more context around each match.
 - Use \`output_mode: "files_with_matches"\` to get only file paths, or \`"count"\` for match counts per file.
 - For ambiguous content searches, combine likely terms in one regex and likely file types in one glob:
-  - \`document_fs_grep pattern="memorall|icon|logo|brand" glob="**/*.{md,json,svg,html,css,txt}" path="/"\`
+  - \`document_fs_grep pattern="icon|logo|brand" glob="**/*.{md,json,svg,html,css,txt}" path="/"\`
 - Prefer \`output_mode: "files_with_matches"\` first when you only need candidate paths, then read the best matching files.
 - Do not repeat several \`document_fs_grep\` calls that only vary one word or one extension; use regex alternatives and glob alternatives.
 
@@ -94,10 +94,10 @@ The workspace root is "/" — all paths are absolute virtual paths (e.g. "/notes
 ### Efficient file discovery
 - When the user asks for a file by concept, name fragment, brand, logo, icon, asset, image, or extension, do not repeat many narrow \`document_fs_glob\` calls.
 - Combine likely filename terms and likely extensions in a single glob. Example for finding an icon/logo:
-  - \`document_fs_glob pattern="**/*{memorall,icon,logo,brand}*.{png,jpg,jpeg,svg,webp,ico}" path="/"\`
+  - \`document_fs_glob pattern="**/*{icon,logo,brand}*.{png,jpg,jpeg,svg,webp,ico}" path="/"\`
 - If a combined glob returns no matches, broaden once by changing one dimension at a time:
-  1. Broaden names: \`**/*{memorall,icon,logo,brand,image,asset}*.{png,jpg,jpeg,svg,webp,ico}\`
-  2. Broaden extensions: \`**/*{memorall,icon,logo,brand}*.*\`
+  1. Broaden names: \`**/*{icon,logo,brand,image,asset}*.{png,jpg,jpeg,svg,webp,ico}\`
+  2. Broaden extensions: \`**/*{icon,logo,brand}*.*\`
   3. List nearby directories with \`document_fs_ls\` only when glob results suggest a likely folder.
 - Do not search only one extension such as \`.svg\` unless the user explicitly asked for that extension.
 - Do not retry the same failed pattern in another wording; change the name alternatives, extension alternatives, or use \`document_fs_ls\` for structure.
