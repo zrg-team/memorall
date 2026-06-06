@@ -4,7 +4,10 @@ import type {
 	FileStat,
 	IFlowFileSystem,
 } from "flow-core/interfaces/services/filesystem";
-import { createHyperframesFeatureStep } from "flow-core/steps/features/hyperframes-feature/hyperframes-feature";
+import {
+	createHyperframesFeatureStep,
+	HYPERFRAMES_FEATURE_SYSTEM_PROMPT,
+} from "flow-core/steps/features/hyperframes-feature/hyperframes-feature";
 import { preprocessComposition } from "flow-core/tools/hyperframes/composition-preprocessor";
 import { lintHyperframesComposition } from "flow-core/tools/hyperframes/hyperframes-validate";
 import { createHyperframesWriteTool } from "flow-core/tools/hyperframes/hyperframes-write";
@@ -248,6 +251,17 @@ describe("HyperFrames tool config", () => {
 });
 
 describe("HyperFrames feature config", () => {
+	it("routes video generation language to HyperFrames instead of refusal", () => {
+		expect(HYPERFRAMES_FEATURE_SYSTEM_PROMPT).toContain(
+			"Video request interpretation",
+		);
+		expect(HYPERFRAMES_FEATURE_SYSTEM_PROMPT).toContain("generate video");
+		expect(HYPERFRAMES_FEATURE_SYSTEM_PROMPT).toContain("MP4 export/download");
+		expect(HYPERFRAMES_FEATURE_SYSTEM_PROMPT).toContain(
+			"Do **not** answer that you cannot generate, render, export, or download video",
+		);
+	});
+
 	it("attaches feature config to HyperFrames tool bindings", async () => {
 		const step = createHyperframesFeatureStep(
 			{},

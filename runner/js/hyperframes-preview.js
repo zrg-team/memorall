@@ -470,6 +470,43 @@ function getCompositionDimensions() {
 	};
 }
 
+function withCompositionExportViewport(width, height) {
+	const root = getRootComposition();
+	const targets = [document.documentElement, document.body, root].filter(Boolean);
+	const snapshots = targets.map((el) => ({
+		el,
+		style: el.getAttribute("style"),
+	}));
+
+	document.documentElement.style.width = `${width}px`;
+	document.documentElement.style.height = `${height}px`;
+	document.documentElement.style.margin = "0";
+	document.documentElement.style.overflow = "hidden";
+	document.documentElement.style.background = "#000";
+
+	document.body.style.width = `${width}px`;
+	document.body.style.height = `${height}px`;
+	document.body.style.margin = "0";
+	document.body.style.overflow = "hidden";
+	document.body.style.background = "#000";
+
+	if (root) {
+		root.style.width = `${width}px`;
+		root.style.height = `${height}px`;
+		if (getComputedStyle(root).position === "static") {
+			root.style.position = "relative";
+		}
+		root.style.overflow = "hidden";
+	}
+
+	return () => {
+		for (const { el, style } of snapshots) {
+			if (style === null) el.removeAttribute("style");
+			else el.setAttribute("style", style);
+		}
+	};
+}
+
 function getRootTimeline() {
 	const timelines = window.__timelines;
 	if (!timelines || typeof timelines !== "object") return null;
@@ -616,31 +653,38 @@ async function exportMp4({ filenameBase, onProgress }) {
 
 	const totalFrames = Math.ceil(duration * DEFAULT_EXPORT_FPS);
 	const frameDuration = 1 / DEFAULT_EXPORT_FPS;
+	const restoreViewport = withCompositionExportViewport(width, height);
 
-	for (let i = 0; i < totalFrames; i++) {
-		const timestamp = i * frameDuration;
-		seekComposition(timestamp);
-		await waitForRaf();
+	try {
+		for (let i = 0; i < totalFrames; i++) {
+			const timestamp = i * frameDuration;
+			seekComposition(timestamp);
+			await waitForRaf();
 
-		const frameCanvas = await html2canvas(document.body, {
-			useCORS: true,
-			allowTaint: false,
-			scale: 1,
-			width,
-			height,
-			scrollX: 0,
-			scrollY: 0,
-			x: 0,
-			y: 0,
-			ignoreElements: (el) =>
-				el.hasAttribute("data-html2canvas-ignore") ||
-				Boolean(el.closest?.("[data-html2canvas-ignore]")),
-		});
+			const frameCanvas = await html2canvas(document.body, {
+				useCORS: true,
+				allowTaint: false,
+				scale: 1,
+				width,
+				height,
+				windowWidth: width,
+				windowHeight: height,
+				scrollX: 0,
+				scrollY: 0,
+				x: 0,
+				y: 0,
+				ignoreElements: (el) =>
+					el.hasAttribute("data-html2canvas-ignore") ||
+					Boolean(el.closest?.("[data-html2canvas-ignore]")),
+			});
 
-		ctx.clearRect(0, 0, width, height);
-		ctx.drawImage(frameCanvas, 0, 0, width, height);
-		await videoSource.add(timestamp, frameDuration);
-		onProgress?.(i + 1, totalFrames);
+			ctx.clearRect(0, 0, width, height);
+			ctx.drawImage(frameCanvas, 0, 0, width, height);
+			await videoSource.add(timestamp, frameDuration);
+			onProgress?.(i + 1, totalFrames);
+		}
+	} finally {
+		restoreViewport();
 	}
 
 	videoSource.close();
