@@ -23,9 +23,9 @@ const THREE_GLOBAL_URL =
 	"https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.min.js";
 const GSAP_URL = "https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js";
 const HYPERFRAMES_RUNTIME_URL =
-	"https://cdn.jsdelivr.net/npm/@hyperframes/core/dist/hyperframe.runtime.iife.js";
+	"https://cdn.jsdelivr.net/npm/@hyperframes/core@0.6.33/dist/hyperframe.runtime.iife.js";
 const HYPERFRAMES_SHADER_URL =
-	"https://cdn.jsdelivr.net/npm/@hyperframes/shader-transitions/dist/index.global.js";
+	"https://cdn.jsdelivr.net/npm/@hyperframes/shader-transitions@0.6.33/dist/index.global.js";
 const HTML2CANVAS_URL =
 	"https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js";
 
@@ -64,6 +64,7 @@ let html2CanvasLoad = null;
 let mediabunnyLoad = null;
 let currentFilenameBase = "hyperframes-composition";
 let exportInProgress = false;
+const reportedRuntimeErrors = new Set();
 
 document.documentElement.style.cssText =
 	"width:100%;height:100%;margin:0;overflow:hidden;background:#000";
@@ -115,13 +116,97 @@ if (!key) {
 				: "hyperframes-composition";
 		currentFilenameBase = filenameBase;
 
-		renderComposition(msg.html, inlineScripts, { filenameBase }).catch(
-			console.error,
-		);
+		renderComposition(msg.html, inlineScripts, { filenameBase }).catch((error) => {
+			reportRuntimeError("runtime", formatErrorMessage(error), {
+				source: "renderComposition",
+			});
+			console.error(error);
+		});
 	});
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+function serializeErrorDetails(details = {}) {
+	return Object.fromEntries(
+		Object.entries(details).filter(([, value]) => value !== undefined),
+	);
+}
+
+function formatErrorMessage(error) {
+	if (error instanceof Error) return error.message;
+	if (typeof error === "string") return error;
+	return "HyperFrames preview error";
+}
+
+function reportRuntimeError(kind, message, details = {}) {
+	if (!key || !message) return;
+
+	const payload = {
+		kind,
+		message: String(message),
+		details: serializeErrorDetails(details),
+	};
+	const dedupeKey = JSON.stringify(payload);
+	if (reportedRuntimeErrors.has(dedupeKey)) return;
+	reportedRuntimeErrors.add(dedupeKey);
+
+	window.parent.postMessage(
+		{
+			type: "memorall:hyperframes-preview-event",
+			key,
+			event: {
+				type: "preview.error",
+				component: "hyperframes-preview",
+				payload,
+			},
+		},
+		"*",
+	);
+}
+
+function describeResourceTarget(target) {
+	if (!target || target === window) return null;
+	const tagName = target.tagName?.toLowerCase?.();
+	const source =
+		target.currentSrc ||
+		target.src ||
+		target.href ||
+		target.getAttribute?.("src") ||
+		target.getAttribute?.("href");
+	if (!source && !tagName) return null;
+	return {
+		tagName,
+		source,
+	};
+}
+
+window.addEventListener("error", (event) => {
+	const resource = describeResourceTarget(event.target);
+	if (resource) {
+		reportRuntimeError(
+			"resource",
+			`Failed to load ${resource.tagName || "resource"}${resource.source ? `: ${resource.source}` : ""}`,
+			resource,
+		);
+		return;
+	}
+
+	reportRuntimeError("runtime", event.message || "Unhandled runtime error", {
+		source: event.filename,
+		line: event.lineno,
+		column: event.colno,
+		stack: event.error?.stack,
+	});
+});
+
+window.addEventListener("unhandledrejection", (event) => {
+	const reason = event.reason;
+	reportRuntimeError("runtime", formatErrorMessage(reason), {
+		source: "unhandledrejection",
+		stack: reason instanceof Error ? reason.stack : undefined,
+	});
+});
 
 const INLINE_SCRIPT_RE = /<script(?![^>]*\bsrc\s*=)[^>]*>([\s\S]*?)<\/script>/gi;
 const ANIMATION_PAT =
@@ -153,7 +238,13 @@ function loadExternal(src) {
 		const s = document.createElement("script");
 		s.src = src;
 		s.onload = resolve;
-		s.onerror = resolve;
+		s.onerror = () => {
+			reportRuntimeError("resource", `Failed to load script: ${src}`, {
+				tagName: "script",
+				source: src,
+			});
+			resolve();
+		};
 		document.body.appendChild(s);
 	});
 }
@@ -379,6 +470,43 @@ function getCompositionDimensions() {
 	};
 }
 
+function withCompositionExportViewport(width, height) {
+	const root = getRootComposition();
+	const targets = [document.documentElement, document.body, root].filter(Boolean);
+	const snapshots = targets.map((el) => ({
+		el,
+		style: el.getAttribute("style"),
+	}));
+
+	document.documentElement.style.width = `${width}px`;
+	document.documentElement.style.height = `${height}px`;
+	document.documentElement.style.margin = "0";
+	document.documentElement.style.overflow = "hidden";
+	document.documentElement.style.background = "#000";
+
+	document.body.style.width = `${width}px`;
+	document.body.style.height = `${height}px`;
+	document.body.style.margin = "0";
+	document.body.style.overflow = "hidden";
+	document.body.style.background = "#000";
+
+	if (root) {
+		root.style.width = `${width}px`;
+		root.style.height = `${height}px`;
+		if (getComputedStyle(root).position === "static") {
+			root.style.position = "relative";
+		}
+		root.style.overflow = "hidden";
+	}
+
+	return () => {
+		for (const { el, style } of snapshots) {
+			if (style === null) el.removeAttribute("style");
+			else el.setAttribute("style", style);
+		}
+	};
+}
+
 function getRootTimeline() {
 	const timelines = window.__timelines;
 	if (!timelines || typeof timelines !== "object") return null;
@@ -525,31 +653,38 @@ async function exportMp4({ filenameBase, onProgress }) {
 
 	const totalFrames = Math.ceil(duration * DEFAULT_EXPORT_FPS);
 	const frameDuration = 1 / DEFAULT_EXPORT_FPS;
+	const restoreViewport = withCompositionExportViewport(width, height);
 
-	for (let i = 0; i < totalFrames; i++) {
-		const timestamp = i * frameDuration;
-		seekComposition(timestamp);
-		await waitForRaf();
+	try {
+		for (let i = 0; i < totalFrames; i++) {
+			const timestamp = i * frameDuration;
+			seekComposition(timestamp);
+			await waitForRaf();
 
-		const frameCanvas = await html2canvas(document.body, {
-			useCORS: true,
-			allowTaint: false,
-			scale: 1,
-			width,
-			height,
-			scrollX: 0,
-			scrollY: 0,
-			x: 0,
-			y: 0,
-			ignoreElements: (el) =>
-				el.hasAttribute("data-html2canvas-ignore") ||
-				Boolean(el.closest?.("[data-html2canvas-ignore]")),
-		});
+			const frameCanvas = await html2canvas(document.body, {
+				useCORS: true,
+				allowTaint: false,
+				scale: 1,
+				width,
+				height,
+				windowWidth: width,
+				windowHeight: height,
+				scrollX: 0,
+				scrollY: 0,
+				x: 0,
+				y: 0,
+				ignoreElements: (el) =>
+					el.hasAttribute("data-html2canvas-ignore") ||
+					Boolean(el.closest?.("[data-html2canvas-ignore]")),
+			});
 
-		ctx.clearRect(0, 0, width, height);
-		ctx.drawImage(frameCanvas, 0, 0, width, height);
-		await videoSource.add(timestamp, frameDuration);
-		onProgress?.(i + 1, totalFrames);
+			ctx.clearRect(0, 0, width, height);
+			ctx.drawImage(frameCanvas, 0, 0, width, height);
+			await videoSource.add(timestamp, frameDuration);
+			onProgress?.(i + 1, totalFrames);
+		}
+	} finally {
+		restoreViewport();
 	}
 
 	videoSource.close();
