@@ -4,7 +4,7 @@ import {
 	FoundationAnnotation,
 	type FoundationState,
 } from "flow-core/graph/foundation/state";
-import { GraphBase } from "flow-core/graph/graph.base";
+import { GraphBase, normalizeChatMessages } from "flow-core/graph/graph.base";
 import type {} from "flow-core/interfaces/engine/tool";
 import type { AllServices } from "flow-core/interfaces/services/services";
 import { logInfo } from "flow-core/utils/logger";
@@ -98,7 +98,7 @@ graphRegistry.register(
 			return {
 				graph,
 				getInitialState: (ctx) => ({
-					messages: ctx.messages,
+					messages: normalizeChatMessages(ctx.messages),
 					graphId: ctx.topicId,
 					contextQueries: ctx.contextQueries,
 					tools: [],

@@ -12,6 +12,7 @@ import {
 	filenameFromUrl,
 } from "flow-core/utils/download-resource";
 import { normalizeProjectPath } from "flow-core/tools/hyperframes/util";
+import type { HyperframesToolConfig } from "flow-core/tools/hyperframes/config";
 
 const TOOL_NAME = "hyperframes_remote_asset_import" as const;
 
@@ -71,15 +72,19 @@ type Services = Pick<AllServices, "fs">;
 
 export const createHyperframesRemoteAssetImportTool: ToolFactory<
 	Input,
-	Services
-> = (services): Tool<Input> => ({
+	Services,
+	HyperframesToolConfig
+> = (services, config): Tool<Input> => ({
 	name: TOOL_NAME,
 	description:
 		"Import a remote image/SVG into a HyperFrames project's resources folder. Takes project_path and saves under {project_path}/resources/..., returning the relative ./resources/... src to use in index.html.",
 	schema,
 	execute: async (input) => {
 		try {
-			const projectPath = normalizeProjectPath(input.project_path);
+			const projectPath = normalizeProjectPath(
+				input.project_path,
+				config?.rootPath,
+			);
 			const { bytes, mimeType, finalUrl } = await downloadResourceBytes({
 				url: input.url,
 				allowedMimeTypes: ["image/*"],
@@ -95,7 +100,7 @@ export const createHyperframesRemoteAssetImportTool: ToolFactory<
 			if (!services.fs) {
 				throw new Error("Filesystem service is not available.");
 			}
-			await writeFileBytes(services.fs, filePath, bytes);
+			await writeFileBytes(services.fs, filePath, bytes, true, config);
 
 			return createWebResult({
 				actionType: TOOL_NAME,
@@ -118,6 +123,10 @@ toolRegistry.register(TOOL_NAME, createHyperframesRemoteAssetImportTool);
 
 declare global {
 	interface ToolTypeRegistry {
-		[TOOL_NAME]: { input: Input; services: Services };
+		[TOOL_NAME]: {
+			input: Input;
+			services: Services;
+			config: HyperframesToolConfig;
+		};
 	}
 }

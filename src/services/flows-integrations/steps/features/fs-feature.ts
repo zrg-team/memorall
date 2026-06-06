@@ -3,14 +3,20 @@ import type {
 	StepFactoryFromSpec,
 	StepSpecFromDefinition,
 } from "flow-core/interfaces/engine/step";
-import { GraphBase, type GraphTool } from "flow-core/graph/graph.base";
+import {
+	GraphBase,
+	type ConfiguredGraphTool,
+	type GraphTool,
+} from "flow-core/graph/graph.base";
 import type { ChatCompletionMessageParam } from "flow-core/interfaces/engine/messages";
 import { stepRegistry } from "flow-core/registries/step-registry";
 import { logError } from "flow-core/utils/logger";
+import type { FsToolConfig } from "flow-core/tools/fs/config";
 import {
 	FS_FEATURE_SYSTEM_PROMPT as CORE_FS_FEATURE_SYSTEM_PROMPT,
 	FS_FEATURE_TOOLS,
 } from "flow-core/steps/features/fs-feature";
+import { memorallFsToolConfig } from "flow-integrations/tools/fs/memorall-fs-path-policy";
 
 const STEP_NAME = "fs-feature" as const;
 
@@ -24,7 +30,7 @@ export interface FsFeatureOutput {
 	messages?: ChatCompletionMessageParam[];
 }
 
-export interface FsFeatureConfig {}
+export interface FsFeatureConfig extends FsToolConfig {}
 
 export type FsFeatureServices = {};
 
@@ -63,9 +69,19 @@ const definition = defineStep<
 	FsFeatureConfig
 >({
 	name: STEP_NAME,
-	execute: async ({ input }) => {
+	execute: async ({ input, config }) => {
 		try {
-			const tools = GraphBase.chat.addTool(input.tools, ...FS_FEATURE_TOOLS);
+			const toolConfig: FsToolConfig = {
+				...memorallFsToolConfig,
+				...config,
+			};
+			const configuredTools = FS_FEATURE_TOOLS.map(
+				(name): ConfiguredGraphTool<FsToolConfig> => ({
+					name,
+					config: toolConfig,
+				}),
+			);
+			const tools = GraphBase.chat.addTool(input.tools, ...configuredTools);
 			const messages = GraphBase.chat.systemMessage(
 				input.messages,
 				FS_FEATURE_SYSTEM_PROMPT,

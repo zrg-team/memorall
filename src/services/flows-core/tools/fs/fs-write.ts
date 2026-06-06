@@ -2,6 +2,7 @@ import z from "zod";
 import type { Tool, ToolFactory } from "flow-core/interfaces/engine/tool";
 import type { AllServices } from "flow-core/interfaces/services/services";
 import { toolRegistry } from "flow-core/registries/tool-registry";
+import type { FsToolConfig } from "flow-core/tools/fs/config";
 import {
 	normalizeFsPath,
 	pathExists,
@@ -24,8 +25,9 @@ const schema = z.object({
 type Input = z.infer<typeof schema>;
 type Services = Pick<AllServices, "fs">;
 
-export const createFsWriteTool: ToolFactory<Input, Services> = (
+export const createFsWriteTool: ToolFactory<Input, Services, FsToolConfig> = (
 	services,
+	config,
 ): Tool<Input> => ({
 	name: TOOL_NAME,
 	description:
@@ -43,8 +45,8 @@ export const createFsWriteTool: ToolFactory<Input, Services> = (
 			return `Error: Invalid file path — no filename provided: ${file_path}`;
 		}
 
-		const existed = await pathExists(dfs, filePath);
-		await writeFileBytes(dfs, filePath, content, create_dirs);
+		const existed = await pathExists(dfs, filePath, config);
+		await writeFileBytes(dfs, filePath, content, create_dirs, config);
 
 		return `${existed ? "Updated" : "Created"} file: ${filePath} (${content.length} characters)`;
 	},
@@ -57,6 +59,7 @@ declare global {
 		[TOOL_NAME]: {
 			input: Input;
 			services: Services;
+			config: FsToolConfig;
 		};
 	}
 }

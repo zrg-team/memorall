@@ -2,6 +2,7 @@ import z from "zod";
 import type { Tool, ToolFactory } from "flow-core/interfaces/engine/tool";
 import type { AllServices } from "flow-core/interfaces/services/services";
 import { toolRegistry } from "flow-core/registries/tool-registry";
+import type { HyperframesToolConfig } from "flow-core/tools/hyperframes/config";
 import {
 	createDefaultWebErrorResult,
 	createWebResult,
@@ -316,8 +317,9 @@ const extractCandidates = ({
 
 export const createHyperframesRemoteAssetsExploreTool: ToolFactory<
 	Input,
-	Services
-> = (services): Tool<Input> => ({
+	Services,
+	HyperframesToolConfig
+> = (services, _config): Tool<Input> => ({
 	name: TOOL_NAME,
 	description:
 		"Explore free remote visual assets for HyperFrames. Tries supported sources in best order (CleanPNG first, then Openverse, Pexels, Unsplash; SVG Repo first for vectors), falls back when a source is blocked or has too few candidates, and returns candidate image/SVG URLs to import with hyperframes_remote_asset_import.",
@@ -488,6 +490,10 @@ toolRegistry.register(TOOL_NAME, createHyperframesRemoteAssetsExploreTool);
 
 declare global {
 	interface ToolTypeRegistry {
-		[TOOL_NAME]: { input: Input; services: Services };
+		[TOOL_NAME]: {
+			input: Input;
+			services: Services;
+			config: HyperframesToolConfig;
+		};
 	}
 }

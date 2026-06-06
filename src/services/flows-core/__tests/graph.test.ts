@@ -3,6 +3,10 @@ import { z } from "zod";
 import type { BaseTool } from "flow-core/interfaces/engine/tool";
 import type { AgentState } from "flow-core/graph/agent/state";
 import { AgentGraph, mergeStreamedToolCall } from "flow-core/graph/agent/graph";
+import {
+	MISSING_TOOL_CALL_RESULT_CONTENT,
+	normalizeChatMessages,
+} from "flow-core/graph/graph.base";
 
 const baseState = (
 	outputMessages: AgentState["outputMessages"],
@@ -84,6 +88,90 @@ describe("mergeStreamedToolCall", () => {
 				id: "call_2",
 				type: "function",
 				function: { name: "beta", arguments: '{"b":2}' },
+			},
+		]);
+	});
+});
+
+describe("normalizeChatMessages tool cleanup", () => {
+	it("removes an assistant tool-call message when no tool result exists", () => {
+		const messages = normalizeChatMessages([
+			{ role: "user", content: "Please show me" },
+			{
+				role: "assistant",
+				content: "",
+				tool_calls: [
+					{
+						id: "call_missing",
+						type: "function",
+						function: { name: "hyperframes_show", arguments: "{}" },
+					},
+				],
+			},
+			{ role: "user", content: "Please show me again" },
+		]);
+
+		expect(messages).toEqual([
+			{ role: "user", content: "Please show me" },
+			{ role: "user", content: "Please show me again" },
+		]);
+	});
+
+	it("removes tool messages without a matching assistant tool call", () => {
+		const messages = normalizeChatMessages([
+			{ role: "user", content: "hello" },
+			{
+				role: "tool",
+				content: "orphan result",
+				tool_call_id: "call_orphan",
+			},
+			{ role: "assistant", content: "done" },
+		]);
+
+		expect(messages).toEqual([
+			{ role: "user", content: "hello" },
+			{ role: "assistant", content: "done" },
+		]);
+	});
+
+	it("fills a missing result in a partially resolved multi-tool-call message", () => {
+		const messages = normalizeChatMessages([
+			{
+				role: "assistant",
+				content: "",
+				tool_calls: [
+					{
+						id: "call_ok",
+						type: "function",
+						function: { name: "one", arguments: "{}" },
+					},
+					{
+						id: "call_missing",
+						type: "function",
+						function: { name: "two", arguments: "{}" },
+					},
+				],
+			},
+			{
+				role: "tool",
+				content: "ok",
+				tool_call_id: "call_ok",
+			},
+		]);
+
+		expect(messages).toEqual([
+			expect.objectContaining({
+				role: "assistant",
+				tool_calls: expect.arrayContaining([
+					expect.objectContaining({ id: "call_ok" }),
+					expect.objectContaining({ id: "call_missing" }),
+				]),
+			}),
+			{ role: "tool", content: "ok", tool_call_id: "call_ok" },
+			{
+				role: "tool",
+				content: MISSING_TOOL_CALL_RESULT_CONTENT,
+				tool_call_id: "call_missing",
 			},
 		]);
 	});

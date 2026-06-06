@@ -2,6 +2,7 @@ import z from "zod";
 import type { Tool, ToolFactory } from "flow-core/interfaces/engine/tool";
 import type { AllServices } from "flow-core/interfaces/services/services";
 import { toolRegistry } from "flow-core/registries/tool-registry";
+import type { FsToolConfig } from "flow-core/tools/fs/config";
 import { normalizeFsPath, readFileBytes } from "flow-core/tools/fs/util";
 
 const TOOL_NAME = "fs_read" as const;
@@ -18,8 +19,9 @@ const schema = z.object({
 type Input = z.infer<typeof schema>;
 type Services = Pick<AllServices, "fs">;
 
-export const createFsReadTool: ToolFactory<Input, Services> = (
+export const createFsReadTool: ToolFactory<Input, Services, FsToolConfig> = (
 	services,
+	config,
 ): Tool<Input> => ({
 	name: TOOL_NAME,
 	description:
@@ -59,7 +61,7 @@ export const createFsReadTool: ToolFactory<Input, Services> = (
 		};
 
 		try {
-			const raw = await readFileBytes(dfs, filePath);
+			const raw = await readFileBytes(dfs, filePath, config);
 			return readAndFormat(raw, filePath);
 		} catch {
 			return `Error: File not found: ${file_path}`;
@@ -74,6 +76,7 @@ declare global {
 		[TOOL_NAME]: {
 			input: Input;
 			services: Services;
+			config: FsToolConfig;
 		};
 	}
 }

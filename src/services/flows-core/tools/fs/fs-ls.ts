@@ -2,6 +2,7 @@ import z from "zod";
 import type { Tool, ToolFactory } from "flow-core/interfaces/engine/tool";
 import type { AllServices } from "flow-core/interfaces/services/services";
 import { toolRegistry } from "flow-core/registries/tool-registry";
+import type { FsToolConfig } from "flow-core/tools/fs/config";
 import {
 	normalizeFsPath,
 	formatFileSize,
@@ -21,8 +22,9 @@ const schema = z.object({
 type Input = z.infer<typeof schema>;
 type Services = Pick<AllServices, "fs">;
 
-export const createFsLsTool: ToolFactory<Input, Services> = (
+export const createFsLsTool: ToolFactory<Input, Services, FsToolConfig> = (
 	services,
+	config,
 ): Tool<Input> => ({
 	name: TOOL_NAME,
 	description:
@@ -37,7 +39,7 @@ export const createFsLsTool: ToolFactory<Input, Services> = (
 		const dirPath = normalizeFsPath(path);
 
 		try {
-			const items = await listEntries(dfs, dirPath, recursive);
+			const items = await listEntries(dfs, dirPath, recursive, config);
 			if (items.length === 0) {
 				return `Empty directory: ${dirPath}`;
 			}
@@ -63,6 +65,7 @@ declare global {
 		[TOOL_NAME]: {
 			input: Input;
 			services: Services;
+			config: FsToolConfig;
 		};
 	}
 }

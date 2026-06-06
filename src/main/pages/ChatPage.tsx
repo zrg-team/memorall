@@ -48,6 +48,7 @@ import { useShellLayoutStore } from "@/main/stores/shell-layout";
 import { isPopupSurface } from "@/utils/dom";
 import { getAgentIconScreenFromMetadata } from "@/main/modules/agents/types";
 import type { FeatureCatalogMetadata } from "@/services/flow-feature-catalog-service";
+import type { MessageActionRequest } from "@/main/modules/chat/components/artifacts/ArtifactActionsMenu";
 import {
 	formatOpenUIFormStateContext,
 	getOpenUISendMessageText,
@@ -166,6 +167,40 @@ export const ChatPage: React.FC<ChatPageProps> = ({
 		setAttachedImages([]);
 		setAttachedDocumentRefs([]);
 	};
+
+	const handleMessageAction = React.useCallback(
+		async (action: MessageActionRequest) => {
+			if (action.type !== "artifact.preview.error.report") return;
+
+			const errors = Array.isArray(action.payload?.errors)
+				? action.payload.errors.filter(
+						(error): error is string => typeof error === "string",
+					)
+				: [];
+			const title = action.title?.trim() || action.identifier?.trim();
+			const errorLines = errors
+				.slice(0, 12)
+				.map((error, index) => `${index + 1}. ${error}`)
+				.join("\n");
+			const prompt = [
+				`Please update the latest ${action.component} artifact to resolve the preview errors.`,
+				title ? `Artifact: ${title}` : null,
+				"",
+				"Errors from the preview iframe:",
+				errorLines || "- No error details were captured.",
+				"",
+				"Return an updated artifact that resolves these runtime/resource errors.",
+			]
+				.filter((part): part is string => part !== null)
+				.join("\n");
+
+			await submitMessage({
+				inputText: prompt,
+				clearComposer: false,
+			});
+		},
+		[submitMessage],
+	);
 
 	useEffect(() => {
 		onCompactChatListOpenChange?.(isCompactSidePanelOpen);
@@ -326,6 +361,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
 						latestGroup?.previousSeparator?.id === group.separator?.id
 					}
 					onLoadMessages={loadMessageGroup}
+					onMessageAction={handleMessageAction}
 				/>
 			</div>
 		));
@@ -339,6 +375,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
 		setCompletedGroupRef,
 		expandedMessageGroupId,
 		showPreviousGroups,
+		handleMessageAction,
 	]);
 
 	const scrollToPreviousGroups = React.useCallback(() => {
@@ -869,6 +906,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
 								defaultCollapsed={false}
 								selectedTopic={selectedTopic}
 								onLoadMessages={loadMessageGroup}
+								onMessageAction={handleMessageAction}
 							/>
 						) : undefined}
 					</ConversationContent>

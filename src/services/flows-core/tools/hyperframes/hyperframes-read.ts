@@ -4,6 +4,7 @@ import type { AllServices } from "flow-core/interfaces/services/services";
 import { toolRegistry } from "flow-core/registries/tool-registry";
 import { compositionFile } from "flow-core/tools/hyperframes/util";
 import { readFileBytes } from "flow-core/tools/fs/util";
+import type { HyperframesToolConfig } from "flow-core/tools/hyperframes/config";
 
 const TOOL_NAME = "hyperframes_read" as const;
 
@@ -19,9 +20,11 @@ const schema = z.object({
 type Input = z.infer<typeof schema>;
 type Services = Pick<AllServices, "fs">;
 
-export const createHyperframesReadTool: ToolFactory<Input, Services> = (
-	services,
-): Tool<Input> => ({
+export const createHyperframesReadTool: ToolFactory<
+	Input,
+	Services,
+	HyperframesToolConfig
+> = (services, config): Tool<Input> => ({
 	name: TOOL_NAME,
 	description:
 		"Read the current composition HTML for a HyperFrames project. Use this to inspect the current state before editing, or to verify the content after writing.",
@@ -30,10 +33,10 @@ export const createHyperframesReadTool: ToolFactory<Input, Services> = (
 		const dfs = services.fs;
 		if (!dfs) return "Error: fs service not available.";
 
-		const file = compositionFile(input.project_path);
+		const file = compositionFile(input.project_path, config?.rootPath);
 		let raw: Uint8Array;
 		try {
-			raw = await readFileBytes(dfs, file);
+			raw = await readFileBytes(dfs, file, config);
 		} catch {
 			return `Error: ${file} not found. Use hyperframes_write to create the project first.`;
 		}
@@ -47,6 +50,10 @@ toolRegistry.register(TOOL_NAME, createHyperframesReadTool);
 
 declare global {
 	interface ToolTypeRegistry {
-		[TOOL_NAME]: { input: Input; services: Services };
+		[TOOL_NAME]: {
+			input: Input;
+			services: Services;
+			config: HyperframesToolConfig;
+		};
 	}
 }

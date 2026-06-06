@@ -12,6 +12,15 @@ export interface ArtifactProps {
 	content: string;
 	identifier?: string;
 	title?: string;
+	onMessageAction?: (action: MessageActionRequest) => void | Promise<void>;
+}
+
+export interface MessageActionRequest {
+	type: string;
+	component: string;
+	title?: string;
+	identifier?: string;
+	payload?: Record<string, unknown>;
 }
 
 export interface ArtifactAction {

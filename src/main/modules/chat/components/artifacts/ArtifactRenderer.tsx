@@ -1,5 +1,6 @@
 import React from "react";
 import type { ArtifactType } from "./artifact-protocol";
+import type { MessageActionRequest } from "./ArtifactActionsMenu";
 import { HtmlArtifact } from "./HtmlArtifact";
 import { UrlArtifact } from "./UrlArtifact";
 import { HyperframesArtifact } from "./HyperframesArtifact";
@@ -11,6 +12,7 @@ interface ArtifactRendererProps {
 	content: string;
 	identifier?: string;
 	title?: string;
+	onMessageAction?: (action: MessageActionRequest) => void | Promise<void>;
 }
 
 export const ArtifactRenderer: React.FC<ArtifactRendererProps> = ({
@@ -18,6 +20,7 @@ export const ArtifactRenderer: React.FC<ArtifactRendererProps> = ({
 	content,
 	identifier,
 	title,
+	onMessageAction,
 }) => {
 	switch (type) {
 		case "html":
@@ -32,6 +35,7 @@ export const ArtifactRenderer: React.FC<ArtifactRendererProps> = ({
 					content={content}
 					identifier={identifier}
 					title={title}
+					onMessageAction={onMessageAction}
 				/>
 			);
 		case "markdown":

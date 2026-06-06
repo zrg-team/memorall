@@ -61,6 +61,8 @@ export interface NormalizeChatMessageOptions {
 	placement?: SystemPlacement;
 }
 
+export const MISSING_TOOL_CALL_RESULT_CONTENT = "Error: Tool call error.";
+
 const getSystemContent = (message: ChatCompletionMessageParam): string => {
 	if (typeof message.content === "string") {
 		return message.content.trim();
@@ -106,6 +108,80 @@ export const buildResponseFromOutputMessages = (
 	nextMessages: ChatCompletionMessageParam[],
 ): string =>
 	outputMessagesToText([...(currentMessages ?? []), ...nextMessages]);
+
+const normalizeAssistantMessage = (
+	message: Extract<ChatCompletionMessageParam, { role: "assistant" }>,
+): ChatCompletionMessageParam => {
+	if (message.tool_calls?.length) {
+		return message;
+	}
+
+	const { tool_calls: _toolCalls, ...messageWithoutToolCalls } = message;
+	return messageWithoutToolCalls;
+};
+
+export const cleanToolMessageSequence = (
+	messages: ChatCompletionMessageParam[],
+): ChatCompletionMessageParam[] => {
+	const toolById = new Map<string, ChatCompletionToolMessageParam[]>();
+
+	for (const message of messages) {
+		if (message.role !== "tool") continue;
+		if (!message.tool_call_id) continue;
+		const bucket = toolById.get(message.tool_call_id) ?? [];
+		bucket.push(message);
+		toolById.set(message.tool_call_id, bucket);
+	}
+
+	const ordered: ChatCompletionMessageParam[] = [];
+	for (const message of messages) {
+		if (message.role === "tool") {
+			continue;
+		}
+
+		if (message.role !== "assistant" || !message.tool_calls?.length) {
+			ordered.push(
+				message.role === "assistant"
+					? normalizeAssistantMessage(message)
+					: message,
+			);
+			continue;
+		}
+
+		const resolvedToolCallIds = new Set(
+			message.tool_calls
+				.filter(({ id }) => (toolById.get(id)?.length ?? 0) > 0)
+				.map(({ id }) => id),
+		);
+
+		if (resolvedToolCallIds.size === 0) {
+			continue;
+		}
+
+		ordered.push(message);
+		for (const toolCall of message.tool_calls) {
+			const bucket = toolById.get(toolCall.id);
+			const toolMessage = bucket?.shift();
+			if (toolMessage) {
+				ordered.push(toolMessage);
+				if (bucket?.length === 0) {
+					toolById.delete(toolCall.id);
+				}
+				continue;
+			}
+
+			if (message.tool_calls.length > 1) {
+				ordered.push({
+					role: "tool",
+					content: MISSING_TOOL_CALL_RESULT_CONTENT,
+					tool_call_id: toolCall.id,
+				});
+			}
+		}
+	}
+
+	return ordered;
+};
 
 export const appendOutputMessagesToState = <TState extends BaseStateBase>(
 	state: TState,
@@ -187,49 +263,7 @@ export const normalizeChatMessages = (
 	const systemMessages = list.filter((m) => m.role === "system");
 	const nonSystem = list.filter((m) => m.role !== "system");
 	const placement = options?.placement ?? "append";
-
-	// Pre-collect all tool messages by tool_call_id so assistant messages
-	// can pull them regardless of ordering in the input array.
-	const toolById = new Map<string, ChatCompletionMessageParam[]>();
-	const orphanTools: ChatCompletionMessageParam[] = [];
-
-	for (const message of nonSystem) {
-		if (message.role === "tool") {
-			const bucket = message.tool_call_id
-				? (toolById.get(message.tool_call_id) ?? [])
-				: orphanTools;
-			bucket.push(message);
-			if (message.tool_call_id) toolById.set(message.tool_call_id, bucket);
-		}
-	}
-
-	// Second pass: order non-tool messages and insert tool results after their assistant
-	const ordered = nonSystem.reduce<ChatCompletionMessageParam[]>(
-		(acc, message) => {
-			if (message.role === "tool") {
-				return acc; // handled via buckets above
-			}
-
-			acc.push(message);
-			if (message.role === "assistant" && message.tool_calls?.length) {
-				message.tool_calls.forEach(({ id }) => {
-					const bucket = toolById.get(id);
-					if (bucket?.length) {
-						acc.push(...bucket);
-						toolById.delete(id);
-					}
-				});
-			}
-			return acc;
-		},
-		[],
-	);
-
-	// Append any remaining tool messages that didn't match an assistant
-	toolById.forEach((bucket) => ordered.push(...bucket));
-	if (orphanTools?.length) {
-		logWarn("[NormalizeChatMessages] orphanTools", orphanTools);
-	}
+	const ordered = cleanToolMessageSequence(nonSystem);
 
 	const existingSystemParts = systemMessages
 		.map((message) => getSystemContent(message))
