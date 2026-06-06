@@ -2,6 +2,7 @@ import z from "zod";
 import type { Tool, ToolFactory } from "flow-core/interfaces/engine/tool";
 import type { AllServices } from "flow-core/interfaces/services/services";
 import { toolRegistry } from "flow-core/registries/tool-registry";
+import type { FsToolConfig } from "flow-core/tools/fs/config";
 import {
 	normalizeFsPath,
 	collectGrepFileNodes,
@@ -48,8 +49,9 @@ const schema = z.object({
 type Input = z.infer<typeof schema>;
 type Services = Pick<AllServices, "fs">;
 
-export const createFsGrepTool: ToolFactory<Input, Services> = (
+export const createFsGrepTool: ToolFactory<Input, Services, FsToolConfig> = (
 	services,
+	config,
 ): Tool<Input> => ({
 	name: TOOL_NAME,
 	description:
@@ -70,7 +72,7 @@ export const createFsGrepTool: ToolFactory<Input, Services> = (
 		if (!dfs) return "Error: fs service not available.";
 
 		const targetPath = normalizeFsPath(path);
-		const fileNodes = await collectGrepFileNodes(dfs, targetPath, glob);
+		const fileNodes = await collectGrepFileNodes(dfs, targetPath, glob, config);
 
 		if (fileNodes.length === 0) {
 			return `No files found to search under "${targetPath}"${glob ? ` matching glob "${glob}"` : ""}`;
@@ -78,7 +80,7 @@ export const createFsGrepTool: ToolFactory<Input, Services> = (
 
 		return runGrep(
 			fileNodes,
-			(displayPath) => readFileBytes(dfs, displayPath),
+			(displayPath) => readFileBytes(dfs, displayPath, config),
 			{
 				pattern,
 				targetPath,
@@ -99,6 +101,7 @@ declare global {
 		[TOOL_NAME]: {
 			input: Input;
 			services: Services;
+			config: FsToolConfig;
 		};
 	}
 }

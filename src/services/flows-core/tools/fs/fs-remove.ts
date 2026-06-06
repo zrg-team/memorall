@@ -2,6 +2,7 @@ import z from "zod";
 import type { Tool, ToolFactory } from "flow-core/interfaces/engine/tool";
 import type { AllServices } from "flow-core/interfaces/services/services";
 import { toolRegistry } from "flow-core/registries/tool-registry";
+import type { FsToolConfig } from "flow-core/tools/fs/config";
 import {
 	normalizeFsPath,
 	displayPathToFsPath,
@@ -23,8 +24,9 @@ const schema = z.object({
 type Input = z.infer<typeof schema>;
 type Services = Pick<AllServices, "fs">;
 
-export const createFsRemoveTool: ToolFactory<Input, Services> = (
+export const createFsRemoveTool: ToolFactory<Input, Services, FsToolConfig> = (
 	services,
+	config,
 ): Tool<Input> => ({
 	name: TOOL_NAME,
 	description:
@@ -38,13 +40,13 @@ export const createFsRemoveTool: ToolFactory<Input, Services> = (
 
 		const targetPath = normalizeFsPath(path);
 
-		if (displayPathToFsPath(targetPath) === "/") {
+		if (displayPathToFsPath(targetPath, config) === "/") {
 			return "Error: Cannot delete the root directory.";
 		}
 
 		try {
-			const stat = await dfs.stat(displayPathToFsPath(targetPath));
-			await removePath(dfs, targetPath, recursive);
+			const stat = await dfs.stat(displayPathToFsPath(targetPath, config));
+			await removePath(dfs, targetPath, recursive, config);
 			return `Deleted ${stat.isDirectory() ? "directory" : "file"}${recursive ? " (recursive)" : ""}: ${targetPath}`;
 		} catch (error) {
 			return `Error: Failed to delete ${targetPath}: ${error instanceof Error ? error.message : String(error)}`;
@@ -59,6 +61,7 @@ declare global {
 		[TOOL_NAME]: {
 			input: Input;
 			services: Services;
+			config: FsToolConfig;
 		};
 	}
 }

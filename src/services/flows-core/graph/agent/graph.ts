@@ -9,6 +9,7 @@ import {
 	buildResponseFromOutputMessages,
 	createOutputMessageChunks,
 	GraphBase,
+	normalizeChatMessages,
 	type CombinedTool,
 	type GraphTool,
 } from "flow-core/graph/graph.base";
@@ -379,7 +380,7 @@ graphRegistry.register(
 			return {
 				graph: graph as BaseGraph,
 				getInitialState: (ctx) => ({
-					messages: ctx.messages,
+					messages: normalizeChatMessages(ctx.messages),
 				}),
 			};
 		},

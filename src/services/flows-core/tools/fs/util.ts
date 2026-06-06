@@ -1,5 +1,6 @@
 import { makeRe, minimatch } from "minimatch";
 import type { IFlowFileSystem } from "flow-core/interfaces/services/filesystem";
+import type { FsToolConfig } from "flow-core/tools/fs/config";
 
 export interface FsEntry {
 	name: string;
@@ -83,26 +84,21 @@ export function isInScope(nodePath: string, scopePath: string): boolean {
 
 export type FsPathResolver = (normalizedDisplayPath: string) => string;
 
-let fsPathResolver: FsPathResolver = (path) => path;
-
-export function setFsPathResolver(resolver: FsPathResolver): void {
-	fsPathResolver = resolver;
-}
-
-export function resetFsPathResolver(): void {
-	fsPathResolver = (path) => path;
-}
-
-export function displayPathToFsPath(path: string): string {
-	return fsPathResolver(normalizeFsPath(path));
+export function displayPathToFsPath(
+	path: string,
+	config?: FsToolConfig,
+): string {
+	const normalized = normalizeFsPath(path);
+	return config?.pathResolver?.(normalized) ?? normalized;
 }
 
 export async function pathExists(
 	fs: IFlowFileSystem,
 	path: string,
+	config?: FsToolConfig,
 ): Promise<boolean> {
 	try {
-		await fs.access(displayPathToFsPath(path));
+		await fs.access(displayPathToFsPath(path, config));
 		return true;
 	} catch {
 		return false;
@@ -112,8 +108,9 @@ export async function pathExists(
 export async function ensureParentDir(
 	fs: IFlowFileSystem,
 	filePath: string,
+	config?: FsToolConfig,
 ): Promise<void> {
-	const fsPath = displayPathToFsPath(filePath);
+	const fsPath = displayPathToFsPath(filePath, config);
 	const slash = fsPath.lastIndexOf("/");
 	const parent = slash > 0 ? fsPath.slice(0, slash) : "/";
 	await fs.mkdir(parent, { recursive: true });
@@ -122,8 +119,9 @@ export async function ensureParentDir(
 export async function readFileBytes(
 	fs: IFlowFileSystem,
 	path: string,
+	config?: FsToolConfig,
 ): Promise<Uint8Array> {
-	return fs.readFile(displayPathToFsPath(path));
+	return fs.readFile(displayPathToFsPath(path, config));
 }
 
 export async function writeFileBytes(
@@ -131,36 +129,40 @@ export async function writeFileBytes(
 	path: string,
 	data: string | Uint8Array,
 	createDirs = true,
+	config?: FsToolConfig,
 ): Promise<void> {
 	if (createDirs) {
-		await ensureParentDir(fs, path);
+		await ensureParentDir(fs, path, config);
 	}
-	await fs.writeFile(displayPathToFsPath(path), data);
+	await fs.writeFile(displayPathToFsPath(path, config), data);
 }
 
 export async function mkdirPath(
 	fs: IFlowFileSystem,
 	path: string,
 	recursive = true,
+	config?: FsToolConfig,
 ): Promise<void> {
-	await fs.mkdir(displayPathToFsPath(path), { recursive });
+	await fs.mkdir(displayPathToFsPath(path, config), { recursive });
 }
 
 export async function removePath(
 	fs: IFlowFileSystem,
 	path: string,
 	recursive = false,
+	config?: FsToolConfig,
 ): Promise<void> {
-	await fs.rm(displayPathToFsPath(path), { recursive, force: false });
+	await fs.rm(displayPathToFsPath(path, config), { recursive, force: false });
 }
 
 export async function listEntries(
 	fs: IFlowFileSystem,
 	dirPath: string,
 	recursive = false,
+	config?: FsToolConfig,
 ): Promise<FsEntry[]> {
 	const displayRoot = normalizeFsPath(dirPath);
-	const fsRoot = displayPathToFsPath(displayRoot);
+	const fsRoot = displayPathToFsPath(displayRoot, config);
 	const entries: FsEntry[] = [];
 
 	const visit = async (currentFsPath: string, currentDisplayPath: string) => {
@@ -202,11 +204,12 @@ export async function collectGrepFileNodes(
 	fs: IFlowFileSystem,
 	targetPath: string,
 	glob?: string,
+	config?: FsToolConfig,
 ): Promise<GrepFileNode[]> {
-	let entries = await listEntries(fs, targetPath, true).catch(() => []);
+	let entries = await listEntries(fs, targetPath, true, config).catch(() => []);
 	if (entries.length === 0) {
 		try {
-			const stat = await fs.stat(displayPathToFsPath(targetPath));
+			const stat = await fs.stat(displayPathToFsPath(targetPath, config));
 			if (stat.isFile()) {
 				entries = [
 					{

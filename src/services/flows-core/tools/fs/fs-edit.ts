@@ -2,6 +2,7 @@ import z from "zod";
 import type { Tool, ToolFactory } from "flow-core/interfaces/engine/tool";
 import type { AllServices } from "flow-core/interfaces/services/services";
 import { toolRegistry } from "flow-core/registries/tool-registry";
+import type { FsToolConfig } from "flow-core/tools/fs/config";
 import {
 	normalizeFsPath,
 	readFileBytes,
@@ -27,8 +28,9 @@ const schema = z.object({
 type Input = z.infer<typeof schema>;
 type Services = Pick<AllServices, "fs">;
 
-export const createFsEditTool: ToolFactory<Input, Services> = (
+export const createFsEditTool: ToolFactory<Input, Services, FsToolConfig> = (
 	services,
+	config,
 ): Tool<Input> => ({
 	name: TOOL_NAME,
 	description:
@@ -55,7 +57,9 @@ export const createFsEditTool: ToolFactory<Input, Services> = (
 
 		let text: string;
 		try {
-			text = new TextDecoder().decode(await readFileBytes(dfs, filePath));
+			text = new TextDecoder().decode(
+				await readFileBytes(dfs, filePath, config),
+			);
 		} catch {
 			return `Error: File not found: ${file_path}`;
 		}
@@ -67,7 +71,7 @@ export const createFsEditTool: ToolFactory<Input, Services> = (
 			return `Error: ${e instanceof Error ? e.message : String(e)}`;
 		}
 
-		await writeFileBytes(dfs, filePath, result.newText);
+		await writeFileBytes(dfs, filePath, result.newText, true, config);
 
 		return `Edited ${filePath}: ${result.count} replacement${result.count !== 1 ? "s" : ""} made`;
 	},
@@ -80,6 +84,7 @@ declare global {
 		[TOOL_NAME]: {
 			input: Input;
 			services: Services;
+			config: FsToolConfig;
 		};
 	}
 }

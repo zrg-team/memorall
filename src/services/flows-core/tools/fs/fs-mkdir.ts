@@ -2,6 +2,7 @@ import z from "zod";
 import type { Tool, ToolFactory } from "flow-core/interfaces/engine/tool";
 import type { AllServices } from "flow-core/interfaces/services/services";
 import { toolRegistry } from "flow-core/registries/tool-registry";
+import type { FsToolConfig } from "flow-core/tools/fs/config";
 import {
 	normalizeFsPath,
 	mkdirPath,
@@ -23,8 +24,9 @@ const schema = z.object({
 type Input = z.infer<typeof schema>;
 type Services = Pick<AllServices, "fs">;
 
-export const createFsMkdirTool: ToolFactory<Input, Services> = (
+export const createFsMkdirTool: ToolFactory<Input, Services, FsToolConfig> = (
 	services,
+	config,
 ): Tool<Input> => ({
 	name: TOOL_NAME,
 	description:
@@ -42,12 +44,12 @@ export const createFsMkdirTool: ToolFactory<Input, Services> = (
 			return "Error: Cannot create the root directory.";
 		}
 
-		if (await pathExists(dfs, dirPath)) {
+		if (await pathExists(dfs, dirPath, config)) {
 			return `Directory already exists: ${dirPath}`;
 		}
 
 		try {
-			await mkdirPath(dfs, dirPath, recursive);
+			await mkdirPath(dfs, dirPath, recursive, config);
 			return `Created directory: ${dirPath}`;
 		} catch (error) {
 			return `Error: Failed to create directory ${dirPath}: ${error instanceof Error ? error.message : String(error)}`;
@@ -62,6 +64,7 @@ declare global {
 		[TOOL_NAME]: {
 			input: Input;
 			services: Services;
+			config: FsToolConfig;
 		};
 	}
 }

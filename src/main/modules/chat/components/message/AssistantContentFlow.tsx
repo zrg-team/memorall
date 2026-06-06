@@ -9,6 +9,7 @@ import {
 	isWorkflowEvidencePart,
 } from "./AssistantWorkflow";
 import { AssistantToolTimelinePart } from "./AssistantToolTimelinePart";
+import type { MessageActionRequest } from "../artifacts/ArtifactActionsMenu";
 import { MessageContentWithArtifacts } from "./MessageContentWithArtifacts";
 
 export type AssistantContentPart =
@@ -40,7 +41,13 @@ export const AssistantContentFlow: React.FC<{
 	parts: AssistantContentPart[];
 	isStreaming: boolean;
 	suppressArtifactPreviews?: boolean;
-}> = ({ parts, isStreaming, suppressArtifactPreviews = false }) => {
+	onMessageAction?: (action: MessageActionRequest) => void | Promise<void>;
+}> = ({
+	parts,
+	isStreaming,
+	suppressArtifactPreviews = false,
+	onMessageAction,
+}) => {
 	const latestWorkflowIndex = parts.findLastIndex(
 		(part) => part.type === "execution",
 	);
@@ -68,6 +75,7 @@ export const AssistantContentFlow: React.FC<{
 							content={part.text}
 							isStreaming={isStreaming}
 							suppressArtifactPreviews={suppressArtifactPreviews}
+							onMessageAction={onMessageAction}
 						/>
 					);
 				}

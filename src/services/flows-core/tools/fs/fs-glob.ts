@@ -2,6 +2,7 @@ import z from "zod";
 import type { Tool, ToolFactory } from "flow-core/interfaces/engine/tool";
 import type { AllServices } from "flow-core/interfaces/services/services";
 import { toolRegistry } from "flow-core/registries/tool-registry";
+import type { FsToolConfig } from "flow-core/tools/fs/config";
 import {
 	normalizeFsPath,
 	globMatches,
@@ -25,8 +26,9 @@ const schema = z.object({
 type Input = z.infer<typeof schema>;
 type Services = Pick<AllServices, "fs">;
 
-export const createFsGlobTool: ToolFactory<Input, Services> = (
+export const createFsGlobTool: ToolFactory<Input, Services, FsToolConfig> = (
 	services,
+	config,
 ): Tool<Input> => ({
 	name: TOOL_NAME,
 	description:
@@ -40,7 +42,7 @@ export const createFsGlobTool: ToolFactory<Input, Services> = (
 
 		const basePath = normalizeFsPath(path);
 
-		const entries = await listEntries(dfs, basePath, true);
+		const entries = await listEntries(dfs, basePath, true, config);
 		const matches = entries.filter((entry) => {
 			const rel =
 				basePath === "/"
@@ -64,6 +66,7 @@ declare global {
 		[TOOL_NAME]: {
 			input: Input;
 			services: Services;
+			config: FsToolConfig;
 		};
 	}
 }

@@ -4,6 +4,7 @@ import { OpenUIRenderer } from "@/main/modules/openui/OpenUIRenderer";
 import { splitOpenUIContent } from "@/utils/openui";
 import { ArtifactRenderer } from "../artifacts/ArtifactRenderer";
 import { parseArtifactSegments } from "../artifacts/artifact-protocol";
+import type { MessageActionRequest } from "../artifacts/ArtifactActionsMenu";
 import { CompactArtifactReference } from "./CompactArtifactReference";
 
 const USE_STREAMDOWN = false;
@@ -15,7 +16,13 @@ export const MessageContentWithArtifacts: React.FC<{
 	content: string;
 	isStreaming: boolean;
 	suppressArtifactPreviews?: boolean;
-}> = ({ content, isStreaming, suppressArtifactPreviews = false }) => {
+	onMessageAction?: (action: MessageActionRequest) => void | Promise<void>;
+}> = ({
+	content,
+	isStreaming,
+	suppressArtifactPreviews = false,
+	onMessageAction,
+}) => {
 	const segments = useMemo(
 		() => splitOpenUIContent(content, { includeIncomplete: isStreaming }),
 		[content, isStreaming],
@@ -45,6 +52,7 @@ export const MessageContentWithArtifacts: React.FC<{
 							content={seg.content}
 							identifier={seg.identifier}
 							title={seg.title}
+							onMessageAction={onMessageAction}
 						/>
 						<div className="border-t border-border/40" />
 					</div>

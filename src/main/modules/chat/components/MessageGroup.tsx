@@ -6,6 +6,7 @@ import { AgentIcon } from "@/components/AgentIcon";
 import { MessageRenderer } from "./MessageRenderer";
 import type { InProgressMessage } from "../hooks/use-chat";
 import type { ChatMessageGroup } from "@/main/stores/chat";
+import type { MessageActionRequest } from "./artifacts/ArtifactActionsMenu";
 
 const hasRenderableMessageContent = (
 	message: ChatMessageGroup["messages"][number],
@@ -30,6 +31,7 @@ interface MessageGroupProps {
 	suppressSeparator?: boolean;
 	forceExpanded?: boolean;
 	onLoadMessages?: (groupId: string) => Promise<void>;
+	onMessageAction?: (action: MessageActionRequest) => void | Promise<void>;
 }
 
 export const MessageGroup: React.FC<MessageGroupProps> = React.memo(
@@ -41,6 +43,7 @@ export const MessageGroup: React.FC<MessageGroupProps> = React.memo(
 		suppressSeparator = false,
 		forceExpanded = false,
 		onLoadMessages,
+		onMessageAction,
 	}) => {
 		const { t } = useTranslation("chat");
 		const [isCollapsed, setIsCollapsed] = useState(
@@ -112,10 +115,11 @@ export const MessageGroup: React.FC<MessageGroupProps> = React.memo(
 						isStreaming={false}
 						groupMessages={group.messages}
 						selectedTopic={selectedTopic}
+						onMessageAction={onMessageAction}
 					/>
 				) : undefined,
 			);
-		}, [group.messages, selectedTopic]);
+		}, [group.messages, selectedTopic, onMessageAction]);
 
 		const inProgressMessageData = useMemo(() => {
 			if (!inProgressMessage) return null;
@@ -151,9 +155,10 @@ export const MessageGroup: React.FC<MessageGroupProps> = React.memo(
 					index={0}
 					isLastMessage={true}
 					isStreaming={true}
+					onMessageAction={onMessageAction}
 				/>
 			) : undefined;
-		}, [inProgressMessageData]);
+		}, [inProgressMessageData, onMessageAction]);
 
 		return (
 			<div className="message-group">

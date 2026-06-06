@@ -2,11 +2,15 @@ import z from "zod";
 import type { Tool, ToolFactory } from "flow-core/interfaces/engine/tool";
 import type { AllServices } from "flow-core/interfaces/services/services";
 import { toolRegistry } from "flow-core/registries/tool-registry";
+import type { HyperframesToolConfig } from "flow-core/tools/hyperframes/config";
 import {
 	appendAssistantOutputToState,
 	type BaseStateBase,
 } from "flow-core/graph/graph.base";
-import { compositionFile } from "flow-core/tools/hyperframes/util";
+import {
+	compositionFile,
+	normalizeProjectPath,
+} from "flow-core/tools/hyperframes/util";
 import { preprocessComposition } from "flow-core/tools/hyperframes/composition-preprocessor";
 import { readFileBytes } from "flow-core/tools/fs/util";
 
@@ -31,9 +35,11 @@ const escapeAttr = (v: string): string =>
 		.replace(/</g, "&lt;")
 		.replace(/>/g, "&gt;");
 
-export const createHyperframesShowTool: ToolFactory<Input, Services> = (
-	services,
-): Tool<Input> => ({
+export const createHyperframesShowTool: ToolFactory<
+	Input,
+	Services,
+	HyperframesToolConfig
+> = (services, config): Tool<Input> => ({
 	name: TOOL_NAME,
 	description:
 		"Preview a HyperFrames composition with full player controls (play/pause, scrub bar). Reads the saved composition and renders it as an interactive player in chat.",
@@ -44,17 +50,25 @@ export const createHyperframesShowTool: ToolFactory<Input, Services> = (
 		const dfs = services.fs;
 		if (!dfs) return "Error: fs service not available.";
 
-		const file = compositionFile(input.project_path);
+		const file = compositionFile(input.project_path, config?.rootPath);
 		let raw: Uint8Array;
 		try {
-			raw = await readFileBytes(dfs, file);
+			raw = await readFileBytes(dfs, file, config);
 		} catch {
 			return `Error: ${file} not found. Use hyperframes_write to create the project first.`;
 		}
 
 		const raw_html = new TextDecoder().decode(raw);
-		// Preprocess CDN scripts and local document images before previewing.
-		const html = await preprocessComposition(raw_html, dfs);
+		const projectPath = normalizeProjectPath(
+			input.project_path,
+			config?.rootPath,
+		);
+		const html = await preprocessComposition(raw_html, dfs, {
+			projectPath,
+			rootPath: config?.rootPath,
+			resourceRoots: config?.resourceRoots,
+			fs: config,
+		});
 		// Derive a display name from the last path segment
 		const name =
 			input.project_path.split("/").filter(Boolean).pop() ?? "composition";
@@ -77,6 +91,10 @@ toolRegistry.register(TOOL_NAME, createHyperframesShowTool);
 
 declare global {
 	interface ToolTypeRegistry {
-		[TOOL_NAME]: { input: Input; services: Services };
+		[TOOL_NAME]: {
+			input: Input;
+			services: Services;
+			config: HyperframesToolConfig;
+		};
 	}
 }

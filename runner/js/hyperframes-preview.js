@@ -64,6 +64,7 @@ let html2CanvasLoad = null;
 let mediabunnyLoad = null;
 let currentFilenameBase = "hyperframes-composition";
 let exportInProgress = false;
+const reportedRuntimeErrors = new Set();
 
 document.documentElement.style.cssText =
 	"width:100%;height:100%;margin:0;overflow:hidden;background:#000";
@@ -115,13 +116,97 @@ if (!key) {
 				: "hyperframes-composition";
 		currentFilenameBase = filenameBase;
 
-		renderComposition(msg.html, inlineScripts, { filenameBase }).catch(
-			console.error,
-		);
+		renderComposition(msg.html, inlineScripts, { filenameBase }).catch((error) => {
+			reportRuntimeError("runtime", formatErrorMessage(error), {
+				source: "renderComposition",
+			});
+			console.error(error);
+		});
 	});
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+function serializeErrorDetails(details = {}) {
+	return Object.fromEntries(
+		Object.entries(details).filter(([, value]) => value !== undefined),
+	);
+}
+
+function formatErrorMessage(error) {
+	if (error instanceof Error) return error.message;
+	if (typeof error === "string") return error;
+	return "HyperFrames preview error";
+}
+
+function reportRuntimeError(kind, message, details = {}) {
+	if (!key || !message) return;
+
+	const payload = {
+		kind,
+		message: String(message),
+		details: serializeErrorDetails(details),
+	};
+	const dedupeKey = JSON.stringify(payload);
+	if (reportedRuntimeErrors.has(dedupeKey)) return;
+	reportedRuntimeErrors.add(dedupeKey);
+
+	window.parent.postMessage(
+		{
+			type: "memorall:hyperframes-preview-event",
+			key,
+			event: {
+				type: "preview.error",
+				component: "hyperframes-preview",
+				payload,
+			},
+		},
+		"*",
+	);
+}
+
+function describeResourceTarget(target) {
+	if (!target || target === window) return null;
+	const tagName = target.tagName?.toLowerCase?.();
+	const source =
+		target.currentSrc ||
+		target.src ||
+		target.href ||
+		target.getAttribute?.("src") ||
+		target.getAttribute?.("href");
+	if (!source && !tagName) return null;
+	return {
+		tagName,
+		source,
+	};
+}
+
+window.addEventListener("error", (event) => {
+	const resource = describeResourceTarget(event.target);
+	if (resource) {
+		reportRuntimeError(
+			"resource",
+			`Failed to load ${resource.tagName || "resource"}${resource.source ? `: ${resource.source}` : ""}`,
+			resource,
+		);
+		return;
+	}
+
+	reportRuntimeError("runtime", event.message || "Unhandled runtime error", {
+		source: event.filename,
+		line: event.lineno,
+		column: event.colno,
+		stack: event.error?.stack,
+	});
+});
+
+window.addEventListener("unhandledrejection", (event) => {
+	const reason = event.reason;
+	reportRuntimeError("runtime", formatErrorMessage(reason), {
+		source: "unhandledrejection",
+		stack: reason instanceof Error ? reason.stack : undefined,
+	});
+});
 
 const INLINE_SCRIPT_RE = /<script(?![^>]*\bsrc\s*=)[^>]*>([\s\S]*?)<\/script>/gi;
 const ANIMATION_PAT =
@@ -153,7 +238,13 @@ function loadExternal(src) {
 		const s = document.createElement("script");
 		s.src = src;
 		s.onload = resolve;
-		s.onerror = resolve;
+		s.onerror = () => {
+			reportRuntimeError("resource", `Failed to load script: ${src}`, {
+				tagName: "script",
+				source: src,
+			});
+			resolve();
+		};
 		document.body.appendChild(s);
 	});
 }

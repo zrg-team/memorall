@@ -23,6 +23,7 @@ import { MessageComplexImages } from "./message/ChatImagePart";
 import { MessageAttachedDocuments } from "./message/MessageAttachedDocuments";
 import { UserMessageContent } from "./message/UserMessageContent";
 import { MessageContentWithArtifacts } from "./message/MessageContentWithArtifacts";
+import type { MessageActionRequest } from "./artifacts/ArtifactActionsMenu";
 import {
 	AssistantContentFlow,
 	isAssistantContentPart,
@@ -60,6 +61,7 @@ interface MessageRendererProps {
 	groupMessages?: DBMessage[];
 	selectedTopic?: string;
 	showMessageControls?: boolean;
+	onMessageAction?: (action: MessageActionRequest) => void | Promise<void>;
 }
 
 export const MessageRenderer: React.FC<MessageRendererProps> = React.memo(
@@ -70,6 +72,7 @@ export const MessageRenderer: React.FC<MessageRendererProps> = React.memo(
 		groupMessages,
 		selectedTopic,
 		showMessageControls = true,
+		onMessageAction,
 	}) => {
 		const location = useLocation();
 		const formattedDate = useMemo(
@@ -253,6 +256,7 @@ export const MessageRenderer: React.FC<MessageRendererProps> = React.memo(
 													suppressArtifactPreviews={
 														location.pathname === "/runtime"
 													}
+													onMessageAction={onMessageAction}
 												/>
 												{messageError ? (
 													<MessageErrorNotice error={messageError} />
@@ -266,6 +270,7 @@ export const MessageRenderer: React.FC<MessageRendererProps> = React.memo(
 													suppressArtifactPreviews={
 														location.pathname === "/runtime"
 													}
+													onMessageAction={onMessageAction}
 												/>
 												{messageError ? (
 													<MessageErrorNotice error={messageError} />
@@ -325,7 +330,8 @@ export const MessageRenderer: React.FC<MessageRendererProps> = React.memo(
 			prev.message.metadata === next.message.metadata &&
 			prev.isLastMessage === next.isLastMessage &&
 			prev.isStreaming === next.isStreaming &&
-			prev.showMessageControls === next.showMessageControls
+			prev.showMessageControls === next.showMessageControls &&
+			prev.onMessageAction === next.onMessageAction
 		);
 	},
 );

@@ -4,6 +4,7 @@ import type { AllServices } from "flow-core/interfaces/services/services";
 import { toolRegistry } from "flow-core/registries/tool-registry";
 import { compositionFile } from "flow-core/tools/hyperframes/util";
 import { readFileBytes, writeFileBytes } from "flow-core/tools/fs/util";
+import type { HyperframesToolConfig } from "flow-core/tools/hyperframes/config";
 
 const TOOL_NAME = "hyperframes_init" as const;
 
@@ -570,9 +571,11 @@ const schema = z.object({
 type Input = z.infer<typeof schema>;
 type Services = Pick<AllServices, "fs">;
 
-export const createHyperframesInitTool: ToolFactory<Input, Services> = (
-	services,
-): Tool<Input> => ({
+export const createHyperframesInitTool: ToolFactory<
+	Input,
+	Services,
+	HyperframesToolConfig
+> = (services, config): Tool<Input> => ({
 	name: TOOL_NAME,
 	description: `Initialise a new HyperFrames project. Writes index.html using the chosen template and creates templates/ with all 5 ready-made video promo designs. Available templates: ${TEMPLATES.map((t) => `${t.filename.replace(".html", "")} (${t.description})`).join(" | ")}. Use force: true to overwrite an existing project.`,
 	schema,
@@ -580,11 +583,11 @@ export const createHyperframesInitTool: ToolFactory<Input, Services> = (
 		const dfs = services.fs;
 		if (!dfs) return "Error: fs service not available.";
 
-		const indexFile = compositionFile(input.project_path);
+		const indexFile = compositionFile(input.project_path, config?.rootPath);
 
 		if (!input.force) {
 			try {
-				await readFileBytes(dfs, indexFile);
+				await readFileBytes(dfs, indexFile, config);
 				return `Error: ${indexFile} already exists. Use force: true to overwrite.`;
 			} catch {
 				// Does not exist — proceed
@@ -595,7 +598,7 @@ export const createHyperframesInitTool: ToolFactory<Input, Services> = (
 			TEMPLATES.find((t) => t.filename === `${input.template}.html`) ??
 			TEMPLATES[0];
 
-		await writeFileBytes(dfs, indexFile, chosen.html);
+		await writeFileBytes(dfs, indexFile, chosen.html, true, config);
 
 		return `Initialised: ${indexFile} with template "${chosen.name}" (${chosen.description}). Edit with hyperframes_write, then hyperframes_validate and hyperframes_show.`;
 	},
@@ -605,6 +608,10 @@ toolRegistry.register(TOOL_NAME, createHyperframesInitTool);
 
 declare global {
 	interface ToolTypeRegistry {
-		[TOOL_NAME]: { input: Input; services: Services };
+		[TOOL_NAME]: {
+			input: Input;
+			services: Services;
+			config: HyperframesToolConfig;
+		};
 	}
 }

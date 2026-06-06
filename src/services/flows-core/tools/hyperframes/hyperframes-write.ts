@@ -4,6 +4,7 @@ import type { AllServices } from "flow-core/interfaces/services/services";
 import { toolRegistry } from "flow-core/registries/tool-registry";
 import { compositionFile } from "flow-core/tools/hyperframes/util";
 import { writeFileBytes } from "flow-core/tools/fs/util";
+import type { HyperframesToolConfig } from "flow-core/tools/hyperframes/config";
 
 const TOOL_NAME = "hyperframes_write" as const;
 
@@ -20,9 +21,11 @@ const schema = z.object({
 type Input = z.infer<typeof schema>;
 type Services = Pick<AllServices, "fs">;
 
-export const createHyperframesWriteTool: ToolFactory<Input, Services> = (
-	services,
-): Tool<Input> => ({
+export const createHyperframesWriteTool: ToolFactory<
+	Input,
+	Services,
+	HyperframesToolConfig
+> = (services, config): Tool<Input> => ({
 	name: TOOL_NAME,
 	description:
 		"Create or overwrite the composition HTML for a HyperFrames project. The file is always saved as index.html inside the project directory.",
@@ -31,8 +34,8 @@ export const createHyperframesWriteTool: ToolFactory<Input, Services> = (
 		const dfs = services.fs;
 		if (!dfs) return "Error: fs service not available.";
 
-		const file = compositionFile(input.project_path);
-		await writeFileBytes(dfs, file, input.content);
+		const file = compositionFile(input.project_path, config?.rootPath);
+		await writeFileBytes(dfs, file, input.content, true, config);
 		return `Saved: ${file}`;
 	},
 });
@@ -41,6 +44,10 @@ toolRegistry.register(TOOL_NAME, createHyperframesWriteTool);
 
 declare global {
 	interface ToolTypeRegistry {
-		[TOOL_NAME]: { input: Input; services: Services };
+		[TOOL_NAME]: {
+			input: Input;
+			services: Services;
+			config: HyperframesToolConfig;
+		};
 	}
 }

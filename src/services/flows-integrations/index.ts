@@ -12,9 +12,6 @@
 // Service registry augmentation (must be first)
 import "./services";
 
-// Configure flows-core hyperframes utilities with Memorall path conventions
-import "./hyperframes-config";
-
 let registered = false;
 
 export function register(): void {
@@ -53,9 +50,6 @@ import "./tools/web/web-screenshot";
 
 // Browser/virtual-server access tools
 import "./tools/sandbox-container/container-web-access";
-
-// Memorall filesystem namespace policy for fs_* tools
-import "./tools/fs/memorall-fs-path-policy";
 
 // Document filesystem tools (moved from flows-core)
 import "./tools/documents-fs/fs-glob";

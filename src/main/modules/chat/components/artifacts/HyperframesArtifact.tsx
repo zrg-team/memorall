@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Download, Loader2 } from "lucide-react";
+import { AlertTriangle, Download, Loader2, Send } from "lucide-react";
 import { documentFileSystemService } from "@/services/filesystem/document-filesystem";
 import {
 	toWorkspacesSandboxPath,
@@ -396,6 +396,37 @@ type PendingDownload = {
 	filename: string;
 };
 
+type PreviewIssue = {
+	kind: string;
+	message: string;
+	details?: Record<string, unknown>;
+};
+
+const MAX_PREVIEW_ISSUES = 8;
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+	!!value && typeof value === "object" && !Array.isArray(value);
+
+const toPreviewIssue = (value: unknown): PreviewIssue | null => {
+	if (!isRecord(value)) return null;
+	const message = typeof value.message === "string" ? value.message : "";
+	if (!message.trim()) return null;
+	return {
+		kind: typeof value.kind === "string" ? value.kind : "runtime",
+		message,
+		details: isRecord(value.details) ? value.details : undefined,
+	};
+};
+
+const formatPreviewIssue = (issue: PreviewIssue): string => {
+	const source =
+		typeof issue.details?.source === "string" ? issue.details.source : "";
+	const line =
+		typeof issue.details?.line === "number" ? `:${issue.details.line}` : "";
+	const location = source ? ` (${source}${line})` : "";
+	return `[${issue.kind}] ${issue.message}${location}`;
+};
+
 let hyperframesPlayerLoad: Promise<void> | null = null;
 
 const ensureHyperframesPlayer = (): Promise<void> => {
@@ -417,6 +448,7 @@ export const HyperframesArtifact: React.FC<ArtifactProps> = ({
 	content,
 	identifier,
 	title,
+	onMessageAction,
 }) => {
 	const containerRef = useRef<HTMLDivElement>(null);
 	const playerRef = useRef<HyperframesPlayerElement | null>(null);
@@ -429,7 +461,7 @@ export const HyperframesArtifact: React.FC<ArtifactProps> = ({
 	// contentDocument probing for this URL, keeping cross-origin postMessage as
 	// the only communication channel (which works fine).
 	const previewUrl =
-		"https://zrg-team.github.io/memorall/hyperframes-preview.html?v=20260522-hyperframes-0-6-33-1";
+		"https://zrg-team.github.io/memorall/hyperframes-preview.html?v=20260606-preview-events";
 	const [previewHtml, setPreviewHtml] = useState<NormalizedComposition | null>(
 		null,
 	);
@@ -438,6 +470,7 @@ export const HyperframesArtifact: React.FC<ArtifactProps> = ({
 	});
 	const [pendingDownload, setPendingDownload] =
 		useState<PendingDownload | null>(null);
+	const [previewIssues, setPreviewIssues] = useState<PreviewIssue[]>([]);
 
 	const clearPendingDownload = useCallback(() => {
 		const pending = pendingDownloadRef.current;
@@ -451,6 +484,7 @@ export const HyperframesArtifact: React.FC<ArtifactProps> = ({
 		let cancelled = false;
 		clearPendingDownload();
 		setExportState({ phase: "idle" });
+		setPreviewIssues([]);
 		setPreviewHtml(null);
 		void normalizeHyperframesHtml(content).then((result) => {
 			if (!cancelled) setPreviewHtml(result);
@@ -499,6 +533,7 @@ export const HyperframesArtifact: React.FC<ArtifactProps> = ({
 		let removeMessageListener: (() => void) | null = null;
 		clearPendingDownload();
 		setExportState({ phase: "idle" });
+		setPreviewIssues([]);
 		const key = `memorall-hyperframes:${Date.now()}:${Math.random()
 			.toString(36)
 			.slice(2)}`;
@@ -533,6 +568,28 @@ export const HyperframesArtifact: React.FC<ArtifactProps> = ({
 					event.data.key === key
 				) {
 					postComposition(player, key, composition, filenameBase);
+					return;
+				}
+
+				if (
+					event.data?.type === "memorall:hyperframes-preview-event" &&
+					event.data.key === key
+				) {
+					const previewEvent = isRecord(event.data.event)
+						? event.data.event
+						: null;
+					if (previewEvent?.type === "preview.error") {
+						const issue = toPreviewIssue(previewEvent.payload);
+						if (issue) {
+							setPreviewIssues((prev) => {
+								const nextKey = formatPreviewIssue(issue);
+								if (prev.some((item) => formatPreviewIssue(item) === nextKey)) {
+									return prev;
+								}
+								return [...prev, issue].slice(-MAX_PREVIEW_ISSUES);
+							});
+						}
+					}
 					return;
 				}
 
@@ -643,6 +700,19 @@ export const HyperframesArtifact: React.FC<ArtifactProps> = ({
 		);
 	}, [clearPendingDownload]);
 
+	const handleSendPreviewReport = useCallback(() => {
+		if (previewIssues.length === 0) return;
+		void onMessageAction?.({
+			type: "artifact.preview.error.report",
+			component: "hyperframes",
+			title,
+			identifier,
+			payload: {
+				errors: previewIssues.map(formatPreviewIssue),
+			},
+		});
+	}, [identifier, onMessageAction, previewIssues, title]);
+
 	const exportBusy =
 		exportState.phase === "preparing" || exportState.phase === "exporting";
 	const exportLabel =
@@ -681,11 +751,49 @@ export const HyperframesArtifact: React.FC<ArtifactProps> = ({
 					<span>{exportLabel}</span>
 				</button>
 			</div>
-			<div
-				ref={containerRef}
-				style={{ display: "block", width: "100%", height: "60vh" }}
-				aria-label={title || "HyperFrames composition"}
-			/>
+			<div className="relative" style={{ height: "60vh" }}>
+				<div
+					ref={containerRef}
+					style={{ display: "block", width: "100%", height: "100%" }}
+					aria-label={title || "HyperFrames composition"}
+				/>
+				{previewIssues.length > 0 ? (
+					<div
+						className="absolute bottom-3 left-3 right-3 z-10 rounded-md border border-red-400/35 bg-black/85 p-3 text-white shadow-lg backdrop-blur"
+						data-html2canvas-ignore="true"
+					>
+						<div className="flex items-start gap-3">
+							<AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-red-300" />
+							<div className="min-w-0 flex-1">
+								<div className="text-xs font-semibold text-red-100">
+									Preview reported {previewIssues.length} issue
+									{previewIssues.length === 1 ? "" : "s"}
+								</div>
+								<div className="mt-1 max-h-20 space-y-1 overflow-auto font-mono text-[11px] leading-snug text-red-100/85">
+									{previewIssues.slice(-3).map((issue) => (
+										<div
+											key={formatPreviewIssue(issue)}
+											className="truncate"
+											title={formatPreviewIssue(issue)}
+										>
+											{formatPreviewIssue(issue)}
+										</div>
+									))}
+								</div>
+							</div>
+							<button
+								type="button"
+								onClick={handleSendPreviewReport}
+								className="inline-flex h-8 shrink-0 items-center gap-2 rounded-md border border-red-200/25 bg-red-500/20 px-3 text-xs font-medium text-red-50 hover:bg-red-500/30"
+								title="Send preview issue details to the agent"
+							>
+								<Send className="h-3.5 w-3.5" />
+								<span>Send to agent</span>
+							</button>
+						</div>
+					</div>
+				) : null}
+			</div>
 		</div>
 	);
 };

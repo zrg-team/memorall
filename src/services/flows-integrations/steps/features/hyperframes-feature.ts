@@ -5,13 +5,19 @@ import type {
 } from "flow-core/interfaces/engine/step";
 import { logError } from "flow-core/utils/logger";
 import { stepRegistry } from "flow-core/registries/step-registry";
-import { GraphBase, type GraphTool } from "flow-core/graph/graph.base";
+import {
+	GraphBase,
+	type ConfiguredGraphTool,
+	type GraphTool,
+} from "flow-core/graph/graph.base";
 import type { ChatCompletionMessageParam } from "flow-core/interfaces/engine/messages";
 import {
 	HYPERFRAMES_FEATURE_SYSTEM_PROMPT,
 	HYPERFRAMES_FEATURE_TOOLS,
 	HYPERFRAMES_FEATURE_DESCRIPTION,
 } from "flow-core/steps/features/hyperframes-feature/hyperframes-feature";
+import type { HyperframesToolConfig } from "flow-core/tools/hyperframes/config";
+import { memorallFsToolConfig } from "flow-integrations/tools/fs/memorall-fs-path-policy";
 
 const STEP_NAME = "hyperframes-feature" as const;
 
@@ -25,7 +31,7 @@ export interface HyperframesFeatureOutput {
 	messages?: ChatCompletionMessageParam[];
 }
 
-export interface HyperframesFeatureConfig {}
+export interface HyperframesFeatureConfig extends HyperframesToolConfig {}
 
 export type HyperframesFeatureServices = Record<string, never>;
 
@@ -84,12 +90,20 @@ const definition = defineStep<
 	HyperframesFeatureConfig
 >({
 	name: STEP_NAME,
-	execute: async ({ input }) => {
+	execute: async ({ input, config }) => {
 		try {
-			const tools = GraphBase.chat.addTool(
-				input.tools,
-				...HYPERFRAMES_FEATURE_TOOLS,
+			const toolConfig: HyperframesToolConfig = {
+				...memorallFsToolConfig,
+				rootPath: config?.rootPath,
+				resourceRoots: config?.resourceRoots,
+			};
+			const configuredTools = HYPERFRAMES_FEATURE_TOOLS.map(
+				(name): ConfiguredGraphTool<HyperframesToolConfig> => ({
+					name,
+					config: toolConfig,
+				}),
 			);
+			const tools = GraphBase.chat.addTool(input.tools, ...configuredTools);
 			const messages = GraphBase.chat.systemMessage(
 				input.messages,
 				MEMORALL_HYPERFRAMES_SYSTEM_PROMPT,
@@ -126,6 +140,21 @@ stepRegistry.register(STEP_NAME, createHyperframesFeatureStep, {
 	description: HYPERFRAMES_FEATURE_DESCRIPTION,
 	defaultStateMapping: { messages: "messages", tools: "tools" },
 	enabledByDefault: false,
+	configParams: [
+		{
+			key: "rootPath",
+			type: "string",
+			default: "/workspaces",
+			description: "Root path under which HyperFrames projects are stored.",
+		},
+		{
+			key: "resourceRoots",
+			type: "array",
+			default: ["/documents", "/workspaces"],
+			description:
+				"Root path prefixes searched when rewriting local image references to data URLs for iframe rendering.",
+		},
+	],
 	feature: {
 		id: "step-hyperframes-feature",
 		type: "feature",
