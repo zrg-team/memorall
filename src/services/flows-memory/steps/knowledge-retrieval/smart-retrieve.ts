@@ -23,6 +23,7 @@ import {
 import { and, or, inArray } from "drizzle-orm";
 import { getScopedGraphWhere } from "../../utils/graph-query";
 import type { Node, Edge } from "../../interfaces/knowledge";
+import { compactQueryIfNeeded } from "../../utils/query-compaction";
 
 import type {
 	StepFactoryFromSpec,
@@ -131,6 +132,13 @@ export interface SmartRetrievalConfig {
 		mmrMode: MMRMode;
 		relevanceWeight: number;
 	};
+	compaction?: {
+		enabled: boolean;
+		maxTokens: number;
+		estimatedCharsPerToken: number;
+		triggerThreshold: number;
+		minCompressionRatio: number;
+	};
 }
 
 const MMR_MODE_LAMBDAS: Record<Exclude<MMRMode, "custom">, number> = {
@@ -189,6 +197,13 @@ const DEFAULT_SMART_CONFIG: SmartRetrievalConfig = {
 		edgeLimit: 15,
 		mmrMode: "explore",
 		relevanceWeight: 0.3,
+	},
+	compaction: {
+		enabled: true,
+		maxTokens: 512,
+		estimatedCharsPerToken: 4,
+		triggerThreshold: 0.8,
+		minCompressionRatio: 0.05,
 	},
 };
 
@@ -581,8 +596,21 @@ const definition = defineStep<
 			logInfo(`[SMART_RETRIEVE] Starting for graphId: ${input.graphId}`);
 			const baseQuery = input.query.trim();
 
+			// Apply query compaction if enabled and needed
+			let processedQuery = baseQuery;
+			if (config.compaction?.enabled !== false) {
+				const compactionResult = compactQueryIfNeeded(baseQuery, config.compaction);
+				if (compactionResult.wasCompacted) {
+					processedQuery = compactionResult.compacted;
+					logInfo(
+						`[SMART_RETRIEVE] Query compacted: ${baseQuery.length} → ${processedQuery.length} chars ` +
+							`(${compactionResult.compressionRatio.toFixed(2)}x) using [${compactionResult.levelsApplied.join(" → ")}]`,
+					);
+				}
+			}
+
 			// Phase 1: Primary Query Seed Retrieval
-			const queryEmbedding = await defaultEmbedding.textToVector(baseQuery);
+			const queryEmbedding = await defaultEmbedding.textToVector(processedQuery);
 
 			const mmrConfig = config.seed.mmr ?? DEFAULT_MMR_CONFIG;
 			const candidateMultiplier = mmrConfig.enabled
