@@ -1,6 +1,6 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
-import { FileText } from "lucide-react";
+import { FileText, ChevronDown, ChevronUp } from "lucide-react";
 import {
 	HoverCard,
 	HoverCardContent,
@@ -43,10 +43,20 @@ const PromptPill: React.FC<{
 	</HoverCard>
 );
 
+const FEATURE_PROMPTS_DEFAULT_VISIBLE = 5;
+
 export const AgentPromptPills: React.FC<{
 	configSummary?: AgentConfigSummary | null;
 }> = ({ configSummary }) => {
 	const { t } = useTranslation("agents");
+	const [showAll, setShowAll] = React.useState(false);
+
+	const featurePrompts = configSummary?.featurePrompts ?? [];
+	const hiddenCount = featurePrompts.length - FEATURE_PROMPTS_DEFAULT_VISIBLE;
+	const visibleFeaturePrompts =
+		showAll || hiddenCount <= 0
+			? featurePrompts
+			: featurePrompts.slice(0, FEATURE_PROMPTS_DEFAULT_VISIBLE);
 
 	return (
 		<CursorPoint
@@ -67,20 +77,32 @@ export const AgentPromptPills: React.FC<{
 				}
 				preview={configSummary?.systemPromptPreview ?? t("state.loading")}
 			/>
-			<PromptPill
-				label={t("summary.contextPrompt")}
-				value={
-					configSummary
-						? t("summary.contextPromptValue", {
-								count: configSummary.contextPromptLength,
-								mode: configSummary.hasCustomContextPrompt
-									? t("summary.custom")
-									: t("summary.default"),
-							})
-						: t("state.loading")
-				}
-				preview={configSummary?.contextPromptPreview ?? t("state.loading")}
-			/>
+			{visibleFeaturePrompts.map((fp) => (
+				<PromptPill
+					key={fp.name}
+					label={fp.displayName}
+					value={t("summary.featurePromptValue", { count: fp.length })}
+					preview={fp.preview}
+				/>
+			))}
+			{hiddenCount > 0 && (
+				<button
+					type="button"
+					onClick={() => setShowAll((v) => !v)}
+					className="inline-flex items-center gap-1 rounded-md bg-muted/40 px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground"
+				>
+					{showAll ? (
+						<>
+							<ChevronUp size={11} />
+							{t("summary.showLess")}
+						</>
+					) : (
+						<>
+							<ChevronDown size={11} />+{hiddenCount} more
+						</>
+					)}
+				</button>
+			)}
 		</CursorPoint>
 	);
 };

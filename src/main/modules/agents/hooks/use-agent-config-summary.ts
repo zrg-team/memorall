@@ -9,7 +9,11 @@ import {
 import { DEFAULT_CONTEXT_SYSTEM_PROMPT } from "@/services/flows-core/steps/common/context-to-system";
 import type { Flow } from "@/services/database/types";
 import type { FoundationPredefinedConfig } from "@/services/flows-core/graph/foundation/state";
-import { coerceDate, type AgentConfigSummary } from "../types";
+import {
+	coerceDate,
+	type AgentConfigSummary,
+	type FeaturePromptSummary,
+} from "../types";
 import { getAgentFeatureDisplayName } from "../utils/feature-display";
 
 const hasToolPickerSlot = (feature: AgentFeatureDefinition): boolean =>
@@ -73,6 +77,38 @@ export const useAgentConfigSummary = ({
 		const contextPromptPreview =
 			draftConfig.contextPrompt || DEFAULT_CONTEXT_SYSTEM_PROMPT;
 
+		const knowledgeRetrievalFeature = featureDefinitions.find(
+			(f) => f.name === "step-knowledge-retrieval",
+		);
+		const featurePrompts: FeaturePromptSummary[] = [
+			...(knowledgeRetrievalFeature && draftFeatures["step-knowledge-retrieval"]
+				? [
+						{
+							name: "step-knowledge-retrieval",
+							displayName: getAgentFeatureDisplayName(
+								knowledgeRetrievalFeature,
+								t,
+							),
+							length: contextPromptPreview.length,
+							preview: contextPromptPreview,
+						},
+					]
+				: []),
+			...featureDefinitions
+				.filter(
+					(f) =>
+						f.name !== "step-knowledge-retrieval" &&
+						f.systemPrompt.trim().length > 0 &&
+						draftFeatures[f.name],
+				)
+				.map((f) => ({
+					name: f.name,
+					displayName: getAgentFeatureDisplayName(f, t),
+					length: f.systemPrompt.length,
+					preview: f.systemPrompt,
+				})),
+		];
+
 		return {
 			graphLabel: graphMeta
 				? t(graphMeta.nameKey, { ns: "chat" })
@@ -87,6 +123,7 @@ export const useAgentConfigSummary = ({
 			contextPromptLength: contextPromptPreview.length,
 			hasCustomSystemPrompt: draftConfig.systemPrompt.trim().length > 0,
 			hasCustomContextPrompt: draftConfig.contextPrompt.trim().length > 0,
+			featurePrompts,
 			lastUpdatedAt: coerceDate(selectedPreset.updatedAt),
 		};
 	}, [

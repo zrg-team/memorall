@@ -5,6 +5,7 @@ import {
 	Code2,
 	Eye,
 	FileText,
+	Play,
 	Save,
 	Server,
 } from "lucide-react";
@@ -16,12 +17,15 @@ import { useRuntimeSessionsStore } from "@/main/stores/runtime-sessions";
 import { useChatStore } from "@/main/stores/chat";
 import MarkdownMessage from "@/main/modules/chat/components/MarkdownMessage";
 import { UrlArtifact } from "@/main/modules/chat/components/artifacts/ArtifactRenderer";
+import { HyperframesArtifact } from "@/main/modules/chat/components/artifacts/HyperframesArtifact";
 import {
 	collectRuntimeArtifacts,
 	replaceArtifactContent,
 	type RuntimeArtifact,
 } from "@/main/modules/chat/components/artifacts/artifact-protocol";
 import { cn } from "@/lib/utils";
+
+const HTML_LAZY_RENDER_THRESHOLD = 500_000;
 
 type RuntimeSection = "artifacts" | "runtime";
 type ArtifactMode = "preview" | "code" | "edit";
@@ -47,6 +51,8 @@ const getArtifactTypeLabel = (type: RuntimeArtifact["type"]) => {
 			return "Text note";
 		case "url":
 			return "Web preview";
+		case "hyperframes":
+			return "HyperFrames";
 		default:
 			return "Artifact";
 	}
@@ -58,19 +64,31 @@ const RuntimeArtifactViewer: React.FC<{
 	onSave: (artifact: RuntimeArtifact, content: string) => Promise<void>;
 }> = ({ artifact, index, onSave }) => {
 	const [mode, setMode] = useState<ArtifactMode>(
-		artifact.type === "html" || artifact.type === "url" ? "preview" : "edit",
+		artifact.type === "html" ||
+			artifact.type === "url" ||
+			artifact.type === "hyperframes"
+			? "preview"
+			: "edit",
 	);
 	const [draft, setDraft] = useState(artifact.content);
 	const [saveState, setSaveState] = useState<SaveState>("idle");
+	const [renderConfirmed, setRenderConfirmed] = useState(
+		artifact.type !== "html" ||
+			artifact.content.length <= HTML_LAZY_RENDER_THRESHOLD,
+	);
 	const isEditable = artifact.type !== "url" && artifact.source === "content";
 	const isDirty = draft !== artifact.content;
 
 	useEffect(() => {
 		setDraft(artifact.content);
 		setSaveState("idle");
+		setRenderConfirmed(
+			artifact.type !== "html" ||
+				artifact.content.length <= HTML_LAZY_RENDER_THRESHOLD,
+		);
 		setMode((current) => {
 			if (artifact.type === "url") return "preview";
-			if (artifact.type === "html") {
+			if (artifact.type === "html" || artifact.type === "hyperframes") {
 				return current === "code" ? "code" : "preview";
 			}
 			return current === "preview" ? "preview" : "edit";
@@ -103,7 +121,7 @@ const RuntimeArtifactViewer: React.FC<{
 					</div>
 				</div>
 				<div className="flex flex-shrink-0 items-center gap-2">
-					{artifact.type === "html" ? (
+					{artifact.type === "html" || artifact.type === "hyperframes" ? (
 						<div className="flex rounded-lg border border-border/70 bg-background/70 p-0.5 shadow-sm">
 							<Button
 								type="button"
@@ -176,11 +194,43 @@ const RuntimeArtifactViewer: React.FC<{
 						<UrlArtifact content={artifact.content} title={title} />
 					</div>
 				) : artifact.type === "html" && mode === "preview" ? (
-					<iframe
-						srcDoc={draft}
-						sandbox="allow-scripts allow-same-origin"
-						className="h-full min-h-[420px] w-full bg-white"
-						style={{ border: "none" }}
+					renderConfirmed ? (
+						<iframe
+							srcDoc={draft}
+							sandbox="allow-scripts allow-same-origin"
+							className="h-full min-h-[420px] w-full bg-white"
+							style={{ border: "none" }}
+							title={title}
+						/>
+					) : (
+						<div className="flex h-full min-h-[420px] flex-col items-center justify-center gap-4 p-8 text-center">
+							<div className="flex h-12 w-12 items-center justify-center rounded-xl border border-border/70 bg-muted/30">
+								<Eye size={22} className="text-muted-foreground" />
+							</div>
+							<div>
+								<p className="text-sm font-medium text-foreground">
+									Large HTML document
+								</p>
+								<p className="mt-1 text-xs text-muted-foreground">
+									{(draft.length / 1024).toFixed(0)} KB — click to render the
+									preview
+								</p>
+							</div>
+							<Button
+								type="button"
+								size="sm"
+								className="gap-1.5"
+								onClick={() => setRenderConfirmed(true)}
+							>
+								<Play size={13} />
+								Render preview
+							</Button>
+						</div>
+					)
+				) : artifact.type === "hyperframes" && mode === "preview" ? (
+					<HyperframesArtifact
+						content={draft}
+						identifier={artifact.identifier}
 						title={title}
 					/>
 				) : artifact.type === "markdown" && mode === "preview" ? (

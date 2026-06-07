@@ -328,7 +328,10 @@ const googleImgresInfoFromUrl = (
 		const parsed = new URL(resolved);
 		if (
 			parsed.pathname !== "/imgres" ||
-			!(parsed.hostname === "www.google.com" || parsed.hostname.endsWith(".google.com"))
+			!(
+				parsed.hostname === "www.google.com" ||
+				parsed.hostname.endsWith(".google.com")
+			)
 		) {
 			return null;
 		}
@@ -385,8 +388,7 @@ export const extractGoogleImageCandidates = ({
 		const info = googleImgresInfoFromUrl(href, baseUrl);
 		if (!info || seen.has(info.url)) return;
 		seen.add(info.url);
-		const imgAlt =
-			alt ?? attrFromHtml(innerHtml ?? "", "alt") ?? "";
+		const imgAlt = alt ?? attrFromHtml(innerHtml ?? "", "alt") ?? "";
 		const imgWidth =
 			width ?? toNumber(attrFromHtml(innerHtml ?? "", "width") ?? null);
 		const imgHeight =

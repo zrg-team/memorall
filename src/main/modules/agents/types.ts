@@ -16,6 +16,13 @@ export interface AgentPresetDraft {
 	iconScreen: AgentPresetIconScreen | null;
 }
 
+export interface FeaturePromptSummary {
+	name: string;
+	displayName: string;
+	length: number;
+	preview: string;
+}
+
 export interface AgentConfigSummary {
 	graphLabel: string;
 	enabledFeatureCount: number;
@@ -28,6 +35,7 @@ export interface AgentConfigSummary {
 	contextPromptLength: number;
 	hasCustomSystemPrompt: boolean;
 	hasCustomContextPrompt: boolean;
+	featurePrompts: FeaturePromptSummary[];
 	lastUpdatedAt: Date | null;
 }
 

@@ -404,11 +404,13 @@ describe("HyperFrames remote asset Google Images support", () => {
 			{ rootPath: "/projects" },
 		);
 		const result = JSON.parse(
-			String(await tool.execute({
-				project_path: "demo",
-				url: googleUrl,
-				asset_path: "images/logo.png",
-			})),
+			String(
+				await tool.execute({
+					project_path: "demo",
+					url: googleUrl,
+					asset_path: "images/logo.png",
+				}),
+			),
 		);
 
 		expect(result).toEqual(
@@ -457,11 +459,13 @@ describe("HyperFrames remote asset Google Images support", () => {
 		);
 
 		const result = JSON.parse(
-			String(await tool.execute({
-				query: "sample logo",
-				max_results: 2,
-				min_results: 2,
-			})),
+			String(
+				await tool.execute({
+					query: "sample logo",
+					max_results: 2,
+					min_results: 2,
+				}),
+			),
 		);
 
 		expect(openedUrls[0]).toContain("https://www.google.com/search?");
@@ -487,15 +491,16 @@ describe("HyperFrames remote asset Google Images support", () => {
 		});
 		vi.stubGlobal("fetch", fetchMock);
 
-		const tool = createHyperframesRemoteAssetImportTool(
-			{ fs } as never,
-			{ rootPath: "/projects" },
-		);
+		const tool = createHyperframesRemoteAssetImportTool({ fs } as never, {
+			rootPath: "/projects",
+		});
 		const result = JSON.parse(
-			String(await tool.execute({
-				project_path: "demo",
-				url: "https://example.com/direct.png",
-			})),
+			String(
+				await tool.execute({
+					project_path: "demo",
+					url: "https://example.com/direct.png",
+				}),
+			),
 		);
 
 		expect(result).toEqual(

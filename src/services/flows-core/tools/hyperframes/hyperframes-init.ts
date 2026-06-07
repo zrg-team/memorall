@@ -56,7 +56,8 @@ const makeTailwindTemplate = (options: TailwindTemplateOptions): string => {
 			: "scene-content relative z-[1] flex h-full w-full flex-col justify-center gap-[28px] px-[80px] py-[140px]";
 	const displaySize =
 		options.width > options.height ? "text-[112px]" : "text-[132px]";
-	const supportSize = options.width > options.height ? "text-[40px]" : "text-[52px]";
+	const supportSize =
+		options.width > options.height ? "text-[40px]" : "text-[52px]";
 	const titleText = options.title.replace(/\n/g, "<br/>");
 	const problemText = options.problem.replace(/\n/g, "<br/>");
 	const solutionText = options.solution.replace(/\n/g, "<br/>");
@@ -412,7 +413,16 @@ const SCAFFOLD_LAUNCH_TEASER = makeScaffoldHTML({
 	width: 1920,
 	height: 1080,
 	durations: [3, 3, 3, 3.5, 3, 3, 3, 3.5],
-	fills: ["hook", "context", "problem", "pivot", "solution", "proof", "momentum", "CTA"],
+	fills: [
+		"hook",
+		"context",
+		"problem",
+		"pivot",
+		"solution",
+		"proof",
+		"momentum",
+		"CTA",
+	],
 	shaderGroups: [
 		{ indices: [3, 4], shader: "cinematic-zoom" },
 		{ indices: [6, 7], shader: "light-leak" },
@@ -424,8 +434,18 @@ const SCAFFOLD_EXPLAINER = makeScaffoldHTML({
 	height: 1080,
 	durations: [3, 3, 4, 3.5, 4, 5, 3.5, 4, 3.5, 4, 4, 3.5],
 	fills: [
-		"hook", "context", "problem-1", "problem-2", "pivot",
-		"solution-1", "solution-2", "proof-1", "proof-2", "momentum", "vision", "CTA",
+		"hook",
+		"context",
+		"problem-1",
+		"problem-2",
+		"pivot",
+		"solution-1",
+		"solution-2",
+		"proof-1",
+		"proof-2",
+		"momentum",
+		"vision",
+		"CTA",
 	],
 	shaderGroups: [
 		{ indices: [2, 3], shader: "cinematic-zoom" },
@@ -437,7 +457,15 @@ const SCAFFOLD_CINEMATIC = makeScaffoldHTML({
 	width: 1920,
 	height: 1080,
 	durations: [8, 7, 8, 10, 9, 10, 8],
-	fills: ["title", "world", "tension", "revelation", "transformation", "consequence", "resolve"],
+	fills: [
+		"title",
+		"world",
+		"tension",
+		"revelation",
+		"transformation",
+		"consequence",
+		"resolve",
+	],
 	shaderGroups: [
 		{ indices: [2, 3], shader: "cross-warp-morph" },
 		{ indices: [5, 6], shader: "thermal-distortion" },
@@ -486,25 +514,29 @@ const TEMPLATES: TemplateEntry[] = [
 	},
 	{
 		name: "Scaffold Social Reel",
-		description: "Structural scaffold: 1080x1920, 15s, 6 scenes, 1 shader group",
+		description:
+			"Structural scaffold: 1080x1920, 15s, 6 scenes, 1 shader group",
 		filename: "scaffold-social-reel.html",
 		html: SCAFFOLD_SOCIAL_REEL,
 	},
 	{
 		name: "Scaffold Launch Teaser",
-		description: "Structural scaffold: 1920x1080, 25s, 8 scenes, 2 shader groups",
+		description:
+			"Structural scaffold: 1920x1080, 25s, 8 scenes, 2 shader groups",
 		filename: "scaffold-launch-teaser.html",
 		html: SCAFFOLD_LAUNCH_TEASER,
 	},
 	{
 		name: "Scaffold Explainer",
-		description: "Structural scaffold: 1920x1080, 45s, 12 scenes, 2 shader groups",
+		description:
+			"Structural scaffold: 1920x1080, 45s, 12 scenes, 2 shader groups",
 		filename: "scaffold-explainer.html",
 		html: SCAFFOLD_EXPLAINER,
 	},
 	{
 		name: "Scaffold Cinematic",
-		description: "Structural scaffold: 1920x1080, 60s, 7 scenes, 2 shader groups, long durations",
+		description:
+			"Structural scaffold: 1920x1080, 60s, 7 scenes, 2 shader groups, long durations",
 		filename: "scaffold-cinematic.html",
 		html: SCAFFOLD_CINEMATIC,
 	},
@@ -521,7 +553,7 @@ const schema = z.object({
 		.string()
 		.min(1)
 		.describe(
-			"Absolute path for the new project, e.g. /projects/product-launch",
+			"Absolute path for the new project. Choose a meaningful slug that reflects the content (e.g. /workspaces/vietnam-travel or /workspaces/product-launch). Never use generic names like 'default', 'project', or 'untitled'.",
 		),
 	template: z
 		.enum(TEMPLATE_NAMES)

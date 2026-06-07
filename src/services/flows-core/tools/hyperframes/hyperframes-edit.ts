@@ -13,13 +13,11 @@ const schema = z.object({
 		.string()
 		.min(1)
 		.describe(
-			"Absolute path to the project directory, e.g. /projects/product-launch",
+			"Absolute path to the project directory. Call hyperframes_list first if you do not already know this path — never guess values like 'default'.",
 		),
 	old_string: z
 		.string()
-		.describe(
-			"Exact text to find and replace. Must be present in index.html.",
-		),
+		.describe("Exact text to find and replace. Must be present in index.html."),
 	new_string: z.string().describe("Replacement text"),
 	replace_all: z
 		.boolean()

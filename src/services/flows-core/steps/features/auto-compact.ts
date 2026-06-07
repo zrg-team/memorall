@@ -4,7 +4,7 @@ import type {
 	StepFactoryFromSpec,
 	StepSpecFromDefinition,
 } from "flow-core/interfaces/engine/step";
-import { logError } from "flow-core/utils/logger";
+import { logError, logInfo } from "flow-core/utils/logger";
 import { stepRegistry } from "flow-core/registries/step-registry";
 import type { ChatCompletionMessageParam } from "flow-core/interfaces/engine/messages";
 import type { ChatCompletionResponse } from "flow-core/interfaces/engine/messages";
@@ -17,15 +17,128 @@ const DEFAULT_COMPACT_THRESHOLD_RATIO = 0.75;
 const DEFAULT_SAFE_THRESHOLD_RATIO = 0.65;
 const TRIMMED_TOOL_RESULT_CONTENT =
 	"[Tool result trimmed to reduce context. The assistant tool call is preserved.]";
+const CHUNKED_TOOL_RESULT_MARKER = "[... chunked tool result:";
 // Number of complete tool-call flows to keep verbatim in outputMessages
 const KEEP_RECENT_FLOWS = 2;
+const DEFAULT_TOOL_RESULT_TRIM_CONFIG = {
+	stepPercent: 20,
+	maxPercent: 100,
+	chunkHeadChars: 1000,
+	chunkTailChars: 1000,
+};
+const DEFAULT_TOOL_CALL_FLOW_TRIM_CONFIG = {
+	stepPercent: 20,
+	maxPercent: 80,
+};
+const DEFAULT_CHAT_MESSAGE_TRIM_CONFIG = {
+	stepPercent: 10,
+	maxPercent: 80,
+};
+const DEFAULT_MAX_ROUND_PERCENT_STEPS = [50, 100];
 
 type AutoCompactState = Pick<BaseStateBase, "messages" | "outputMessages">;
+type AutoCompactStateKey = keyof AutoCompactState;
+type PercentTrimConfig = {
+	stepPercent: number;
+	maxPercent: number;
+};
+type ToolResultTrimConfig = PercentTrimConfig & {
+	chunkHeadChars: number;
+	chunkTailChars: number;
+};
 
 type ResolvedAutoCompactConfig = {
 	compactThresholdRatio: number;
 	safeThresholdRatio: number;
+	toolResultTrim: ToolResultTrimConfig;
+	toolCallFlowTrim: PercentTrimConfig;
+	chatMessageTrim: PercentTrimConfig;
+	maxRoundPercentSteps: number[];
 };
+
+function getContentCharLength(message: ChatCompletionMessageParam): number {
+	return extractText(message).length;
+}
+
+function summarizeMessage(
+	message: ChatCompletionMessageParam,
+): Record<string, unknown> {
+	if (message.role === "assistant") {
+		return {
+			role: message.role,
+			contentChars: getContentCharLength(message),
+			toolCalls: message.tool_calls?.map((toolCall) => ({
+				id: toolCall.id,
+				name: toolCall.function.name,
+				argumentChars: toolCall.function.arguments.length,
+			})),
+		};
+	}
+
+	if (message.role === "tool") {
+		return {
+			role: message.role,
+			toolCallId: message.tool_call_id,
+			contentChars: getContentCharLength(message),
+			trimmed:
+				isChunkedToolResult(message) || isLegacyTrimmedToolResult(message),
+		};
+	}
+
+	return {
+		role: message.role,
+		contentChars: getContentCharLength(message),
+	};
+}
+
+function summarizeMessageList(
+	messages: ChatCompletionMessageParam[],
+): Record<string, number> {
+	return messages.reduce(
+		(counts, message) => {
+			counts.total++;
+			counts[message.role]++;
+			if (message.role === "assistant" && message.tool_calls?.length) {
+				counts.assistantToolCalls += message.tool_calls?.length ?? 0;
+			}
+			if (message.role === "tool") {
+				counts.toolResults++;
+				if (
+					isChunkedToolResult(message) ||
+					isLegacyTrimmedToolResult(message)
+				) {
+					counts.trimmedToolResults++;
+				}
+			}
+			return counts;
+		},
+		{
+			total: 0,
+			system: 0,
+			user: 0,
+			assistant: 0,
+			tool: 0,
+			assistantToolCalls: 0,
+			toolResults: 0,
+			trimmedToolResults: 0,
+		},
+	);
+}
+
+function summarizeState(state: AutoCompactState): Record<string, unknown> {
+	return {
+		estimatedTokens: estimateStateTokens(state),
+		messages: summarizeMessageList(state.messages),
+		outputMessages: summarizeMessageList(state.outputMessages),
+	};
+}
+
+function logAutoCompact(
+	event: string,
+	details?: Record<string, unknown>,
+): void {
+	logInfo(`[AUTO_COMPACT] ${event}`, details);
+}
 
 const clampRatio = (value: unknown, fallback: number): number => {
 	if (typeof value !== "number" || !Number.isFinite(value)) {
@@ -33,6 +146,66 @@ const clampRatio = (value: unknown, fallback: number): number => {
 	}
 	return Math.min(0.95, Math.max(0.05, value));
 };
+
+const clampPercent = (value: unknown, fallback: number): number => {
+	if (typeof value !== "number" || !Number.isFinite(value)) {
+		return fallback;
+	}
+	return Math.min(100, Math.max(0, value));
+};
+
+const clampPositiveStepPercent = (value: unknown, fallback: number): number => {
+	const percent = clampPercent(value, fallback);
+	return percent > 0 ? percent : fallback;
+};
+
+const clampNonNegativeInteger = (value: unknown, fallback: number): number => {
+	if (typeof value !== "number" || !Number.isFinite(value)) {
+		return fallback;
+	}
+	return Math.max(0, Math.floor(value));
+};
+
+function resolvePercentTrimConfig(
+	config: Partial<PercentTrimConfig> | undefined,
+	defaultConfig: PercentTrimConfig,
+): PercentTrimConfig {
+	const stepPercent = clampPositiveStepPercent(
+		config?.stepPercent,
+		defaultConfig.stepPercent,
+	);
+	const maxPercent = clampPercent(config?.maxPercent, defaultConfig.maxPercent);
+	return { stepPercent, maxPercent };
+}
+
+function resolveToolResultTrimConfig(
+	config: AutoCompactConfig["toolResultTrim"],
+): ToolResultTrimConfig {
+	return {
+		...resolvePercentTrimConfig(config, DEFAULT_TOOL_RESULT_TRIM_CONFIG),
+		chunkHeadChars: clampNonNegativeInteger(
+			config?.chunkHeadChars,
+			DEFAULT_TOOL_RESULT_TRIM_CONFIG.chunkHeadChars,
+		),
+		chunkTailChars: clampNonNegativeInteger(
+			config?.chunkTailChars,
+			DEFAULT_TOOL_RESULT_TRIM_CONFIG.chunkTailChars,
+		),
+	};
+}
+
+function resolveMaxRoundPercentSteps(steps: unknown): number[] {
+	if (!Array.isArray(steps) || steps.length === 0) {
+		return DEFAULT_MAX_ROUND_PERCENT_STEPS;
+	}
+	const valid = steps
+		.filter((v) => typeof v === "number" && Number.isFinite(v))
+		.map((v) => clampPercent(v, 100))
+		.filter((v): v is number => v > 0)
+		.filter((v, i, arr) => arr.indexOf(v) === i)
+		.sort((a, b) => a - b);
+	return valid.length > 0 ? valid : DEFAULT_MAX_ROUND_PERCENT_STEPS;
+}
 
 function resolveAutoCompactConfig(
 	config?: AutoCompactConfig,
@@ -45,7 +218,22 @@ function resolveAutoCompactConfig(
 		clampRatio(config?.safeThresholdRatio, DEFAULT_SAFE_THRESHOLD_RATIO),
 		compactThresholdRatio,
 	);
-	return { compactThresholdRatio, safeThresholdRatio };
+	return {
+		compactThresholdRatio,
+		safeThresholdRatio,
+		toolResultTrim: resolveToolResultTrimConfig(config?.toolResultTrim),
+		toolCallFlowTrim: resolvePercentTrimConfig(
+			config?.toolCallFlowTrim,
+			DEFAULT_TOOL_CALL_FLOW_TRIM_CONFIG,
+		),
+		chatMessageTrim: resolvePercentTrimConfig(
+			config?.chatMessageTrim,
+			DEFAULT_CHAT_MESSAGE_TRIM_CONFIG,
+		),
+		maxRoundPercentSteps: resolveMaxRoundPercentSteps(
+			config?.maxRoundPercentSteps,
+		),
+	};
 }
 
 function estimateStateTokens(state: AutoCompactState): number {
@@ -129,74 +317,170 @@ function groupIntoFlows(
 const hasToolCalls = (message: ChatCompletionMessageParam): boolean =>
 	message.role === "assistant" && !!message.tool_calls?.length;
 
-function trimOldestToolResult(
-	state: AutoCompactState,
-): AutoCompactState | undefined {
-	for (const key of ["messages", "outputMessages"] as const) {
-		const index = state[key].findIndex(
-			(message) =>
-				message.role === "tool" &&
-				extractText(message).trim() !== TRIMMED_TOOL_RESULT_CONTENT,
-		);
-		if (index === -1) continue;
-
-		return {
-			...state,
-			[key]: state[key].map((message, messageIndex) =>
-				messageIndex === index && message.role === "tool"
-					? {
-							...message,
-							content: TRIMMED_TOOL_RESULT_CONTENT,
-						}
-					: message,
-			),
-		};
-	}
-
-	return undefined;
+function isLegacyTrimmedToolResult(
+	message: ChatCompletionMessageParam,
+): boolean {
+	return (
+		message.role === "tool" &&
+		extractText(message).trim() === TRIMMED_TOOL_RESULT_CONTENT
+	);
 }
 
-function removeOldestToolCallFlow(
+function isChunkedToolResult(message: ChatCompletionMessageParam): boolean {
+	return (
+		message.role === "tool" &&
+		typeof message.content === "string" &&
+		message.content.includes(CHUNKED_TOOL_RESULT_MARKER)
+	);
+}
+
+function isChunkableToolResult(
+	message: ChatCompletionMessageParam,
+	config: ToolResultTrimConfig,
+): boolean {
+	if (
+		message.role !== "tool" ||
+		isChunkedToolResult(message) ||
+		isLegacyTrimmedToolResult(message)
+	) {
+		return false;
+	}
+	return (
+		extractText(message).length > config.chunkHeadChars + config.chunkTailChars
+	);
+}
+
+function chunkToolResultContent(
+	content: string,
+	config: ToolResultTrimConfig,
+): string {
+	const head = content.slice(0, config.chunkHeadChars);
+	const tail =
+		config.chunkTailChars > 0 ? content.slice(-config.chunkTailChars) : "";
+	const omittedChars = Math.max(0, content.length - head.length - tail.length);
+	return `${head}\n\n${CHUNKED_TOOL_RESULT_MARKER} originalChars=${content.length}, omittedChars=${omittedChars} ...]\n\n${tail}`;
+}
+
+function countForPercent(total: number, percent: number): number {
+	if (total <= 0 || percent <= 0) {
+		return 0;
+	}
+	return Math.min(total, Math.max(1, Math.ceil((total * percent) / 100)));
+}
+
+function countChunkableToolResults(
 	state: AutoCompactState,
-): AutoCompactState | undefined {
-	for (const key of ["messages", "outputMessages"] as const) {
-		const index = state[key].findIndex(hasToolCalls);
-		if (index === -1) continue;
+	config: ToolResultTrimConfig,
+	key: AutoCompactStateKey,
+): number {
+	return state[key].filter((message) => isChunkableToolResult(message, config))
+		.length;
+}
 
-		const assistantMessage = state[key][index];
-		if (
-			assistantMessage.role !== "assistant" ||
-			!assistantMessage.tool_calls?.length
-		) {
-			continue;
-		}
-
-		const toolCallIds = new Set(
-			assistantMessage.tool_calls.map((toolCall) => toolCall.id),
-		);
-		return {
-			messages: state.messages.filter(
-				(message, messageIndex) =>
-					!(
-						key === "messages" &&
-						messageIndex === index &&
-						message.role === "assistant"
-					) &&
-					!(message.role === "tool" && toolCallIds.has(message.tool_call_id)),
-			),
-			outputMessages: state.outputMessages.filter(
-				(message, messageIndex) =>
-					!(
-						key === "outputMessages" &&
-						messageIndex === index &&
-						message.role === "assistant"
-					) &&
-					!(message.role === "tool" && toolCallIds.has(message.tool_call_id)),
-			),
-		};
+function chunkOldestToolResults(
+	state: AutoCompactState,
+	count: number,
+	config: ToolResultTrimConfig,
+	key: AutoCompactStateKey,
+): { state: AutoCompactState; affectedCount: number } {
+	if (count <= 0) {
+		return { state, affectedCount: 0 };
 	}
 
-	return undefined;
+	let remaining = count;
+	let affectedCount = 0;
+	const nextState: AutoCompactState = {
+		...state,
+		messages: state.messages,
+		outputMessages: state.outputMessages,
+	};
+
+	nextState[key] = nextState[key].map((message) => {
+		if (remaining <= 0 || !isChunkableToolResult(message, config)) {
+			return message;
+		}
+
+		remaining--;
+		affectedCount++;
+		return {
+			...message,
+			content: chunkToolResultContent(extractText(message), config),
+		};
+	});
+
+	return { state: nextState, affectedCount };
+}
+
+function countToolCallFlows(
+	state: AutoCompactState,
+	key: AutoCompactStateKey,
+): number {
+	return state[key].filter(hasToolCalls).length;
+}
+
+function removeOldestToolCallFlowOnce(
+	state: AutoCompactState,
+	key: AutoCompactStateKey,
+): {
+	state: AutoCompactState;
+	affectedCount: number;
+} {
+	const index = state[key].findIndex(hasToolCalls);
+	if (index === -1) return { state, affectedCount: 0 };
+
+	const assistantMessage = state[key][index];
+	if (
+		assistantMessage.role !== "assistant" ||
+		!assistantMessage.tool_calls?.length
+	) {
+		return { state, affectedCount: 0 };
+	}
+
+	const toolCallIds = new Set(
+		assistantMessage.tool_calls.map((toolCall) => toolCall.id),
+	);
+	const nextMessages = state.messages.filter(
+		(message, messageIndex) =>
+			!(
+				key === "messages" &&
+				messageIndex === index &&
+				message.role === "assistant"
+			) && !(message.role === "tool" && toolCallIds.has(message.tool_call_id)),
+	);
+	const nextOutputMessages = state.outputMessages.filter(
+		(message, messageIndex) =>
+			!(
+				key === "outputMessages" &&
+				messageIndex === index &&
+				message.role === "assistant"
+			) && !(message.role === "tool" && toolCallIds.has(message.tool_call_id)),
+	);
+
+	return {
+		state: {
+			messages: nextMessages,
+			outputMessages: nextOutputMessages,
+		},
+		affectedCount: 1,
+	};
+}
+
+function removeOldestToolCallFlows(
+	state: AutoCompactState,
+	count: number,
+	key: AutoCompactStateKey,
+): { state: AutoCompactState; affectedCount: number } {
+	let nextState = state;
+	let affectedCount = 0;
+
+	for (let i = 0; i < count; i++) {
+		const result = removeOldestToolCallFlowOnce(nextState, key);
+		if (result.affectedCount === 0) break;
+		nextState = result.state;
+		affectedCount += result.affectedCount;
+	}
+
+	return { state: nextState, affectedCount };
 }
 
 function getLatestUserRef(
@@ -214,49 +498,207 @@ function getLatestUserRef(
 
 function trimOldestChatMessage(
 	state: AutoCompactState,
-): AutoCompactState | undefined {
+	key: AutoCompactStateKey,
+): {
+	state: AutoCompactState;
+	affectedCount: number;
+} {
 	const latestUserRef = getLatestUserRef(state);
 
-	for (const key of ["messages", "outputMessages"] as const) {
-		const index = state[key].findIndex((message, messageIndex) => {
-			if (message.role === "user") {
-				return !(
-					latestUserRef?.key === key && latestUserRef.index === messageIndex
-				);
-			}
-			return message.role === "assistant" && !message.tool_calls?.length;
-		});
-		if (index === -1) continue;
+	const index = state[key].findIndex((message, messageIndex) => {
+		if (message.role === "user") {
+			return !(
+				latestUserRef?.key === key && latestUserRef.index === messageIndex
+			);
+		}
+		return message.role === "assistant" && !message.tool_calls?.length;
+	});
+	if (index === -1) return { state, affectedCount: 0 };
 
-		return {
+	return {
+		state: {
 			...state,
 			[key]: state[key].filter((_, messageIndex) => messageIndex !== index),
-		};
+		},
+		affectedCount: 1,
+	};
+}
+
+function countChatMessages(
+	state: AutoCompactState,
+	key: AutoCompactStateKey,
+): number {
+	const latestUserRef = getLatestUserRef(state);
+
+	return state[key].filter((message, messageIndex) => {
+		if (message.role === "user") {
+			return !(
+				latestUserRef?.key === key && latestUserRef.index === messageIndex
+			);
+		}
+		return message.role === "assistant" && !message.tool_calls?.length;
+	}).length;
+}
+
+function removeOldestChatMessages(
+	state: AutoCompactState,
+	count: number,
+	key: AutoCompactStateKey,
+): { state: AutoCompactState; affectedCount: number } {
+	let nextState = state;
+	let affectedCount = 0;
+
+	for (let i = 0; i < count; i++) {
+		const result = trimOldestChatMessage(nextState, key);
+		if (result.affectedCount === 0) break;
+		nextState = result.state;
+		affectedCount += result.affectedCount;
 	}
 
-	return undefined;
+	return { state: nextState, affectedCount };
+}
+
+type PercentTrimStage = {
+	name: string;
+	logEvent: string;
+	config: PercentTrimConfig;
+	key: AutoCompactStateKey;
+	getEligibleCount: (state: AutoCompactState) => number;
+	applyCount: (
+		state: AutoCompactState,
+		count: number,
+	) => { state: AutoCompactState; affectedCount: number };
+};
+
+function runPercentTrimStage(
+	state: AutoCompactState,
+	safeTokenThreshold: number,
+	stage: PercentTrimStage,
+): { state: AutoCompactState; reachedSafeThreshold: boolean } {
+	let nextState = state;
+	const eligibleCount = stage.getEligibleCount(nextState);
+	let affectedTotal = 0;
+	// Start at stepPercent clamped to maxPercent — no initialPercent needed since
+	// rounds provide the coarse escalation and stepPercent gives within-round precision.
+	let activePercent = Math.min(stage.config.stepPercent, stage.config.maxPercent);
+
+	while (true) {
+		const beforeTokens = estimateStateTokens(nextState);
+		const targetCount = countForPercent(eligibleCount, activePercent);
+		const countToApply = Math.max(0, targetCount - affectedTotal);
+		const result = stage.applyCount(nextState, countToApply);
+		nextState = result.state;
+		affectedTotal += result.affectedCount;
+		const afterTokens = estimateStateTokens(nextState);
+
+		logAutoCompact(stage.logEvent, {
+			category: stage.name,
+			key: stage.key,
+			activePercent,
+			maxPercent: stage.config.maxPercent,
+			eligibleCount,
+			affectedCount: result.affectedCount,
+			affectedTotal,
+			beforeTokens,
+			afterTokens,
+			safeTokenThreshold,
+		});
+
+		if (afterTokens <= safeTokenThreshold) {
+			return { state: nextState, reachedSafeThreshold: true };
+		}
+
+		if (
+			activePercent >= stage.config.maxPercent ||
+			eligibleCount === 0 ||
+			affectedTotal >= eligibleCount
+		) {
+			break;
+		}
+
+		activePercent = Math.min(
+			stage.config.maxPercent,
+			activePercent + stage.config.stepPercent,
+		);
+	}
+
+	return { state: nextState, reachedSafeThreshold: false };
 }
 
 function trimToSafeThreshold(
 	state: AutoCompactState,
 	safeTokenThreshold: number,
+	config: ResolvedAutoCompactConfig,
 ): AutoCompactState {
 	let nextState = state;
-	const trimmers = [
-		trimOldestToolResult,
-		removeOldestToolCallFlow,
-		trimOldestChatMessage,
-	];
-	let iterations = 0;
 
-	for (const trim of trimmers) {
-		while (estimateStateTokens(nextState) > safeTokenThreshold) {
-			const trimmedState = trim(nextState);
-			if (!trimmedState) break;
-			nextState = trimmedState;
-			iterations++;
-			if (iterations > 10000) return nextState;
+	function isSafe(): boolean {
+		return estimateStateTokens(nextState) <= safeTokenThreshold;
+	}
+
+	function runStage(stage: PercentTrimStage): boolean {
+		if (isSafe()) return true;
+		const result = runPercentTrimStage(nextState, safeTokenThreshold, stage);
+		nextState = result.state;
+		return result.reachedSafeThreshold;
+	}
+
+	// Override maxPercent with the round cap. Each round restarts fresh so
+	// eligibleCount is re-read from current state and affectedTotal resets to 0.
+	function runCapped(stage: PercentTrimStage, roundCap: number): boolean {
+		return runStage({
+			...stage,
+			config: {
+				...stage.config,
+				maxPercent: Math.min(stage.config.maxPercent, roundCap),
+			},
+		});
+	}
+
+	function makeToolResultStage(key: AutoCompactStateKey): PercentTrimStage {
+		return {
+			name: "tool_result",
+			logEvent: "trim_tool_result_percent",
+			config: config.toolResultTrim,
+			key,
+			getEligibleCount: (s) =>
+				countChunkableToolResults(s, config.toolResultTrim, key),
+			applyCount: (s, count) =>
+				chunkOldestToolResults(s, count, config.toolResultTrim, key),
+		};
+	}
+
+	function makeToolCallFlowStage(key: AutoCompactStateKey): PercentTrimStage {
+		return {
+			name: "tool_call_flow",
+			logEvent: "remove_tool_call_flow_percent",
+			config: config.toolCallFlowTrim,
+			key,
+			getEligibleCount: (s) => countToolCallFlows(s, key),
+			applyCount: (s, count) => removeOldestToolCallFlows(s, count, key),
+		};
+	}
+
+	function makeChatStage(key: AutoCompactStateKey): PercentTrimStage {
+		return {
+			name: "chat_message",
+			logEvent: "remove_chat_message_percent",
+			config: config.chatMessageTrim,
+			key,
+			getEligibleCount: (s) => countChatMessages(s, key),
+			applyCount: (s, count) => removeOldestChatMessages(s, count, key),
+		};
+	}
+
+	// Process messages fully before touching outputMessages.
+	// Within each key: escalating rounds of toolResult+toolCallFlow (least destructive),
+	// then chatMessage as last resort only after all rounds are exhausted.
+	for (const key of ["messages", "outputMessages"] as const) {
+		for (const roundCap of config.maxRoundPercentSteps) {
+			if (runCapped(makeToolResultStage(key), roundCap)) return nextState;
+			if (runCapped(makeToolCallFlowStage(key), roundCap)) return nextState;
 		}
+		if (runStage(makeChatStage(key))) return nextState;
 	}
 
 	return nextState;
@@ -285,7 +727,16 @@ async function compactHistory(
 	const lastUserMessage = nonSystem[lastUserIdx];
 
 	try {
+		logAutoCompact("compact_history_start", {
+			inputMessages: summarizeMessageList(messages),
+			toSummarize: summarizeMessageList(toSummarize),
+			preservedLastUser: summarizeMessage(lastUserMessage),
+		});
 		const summary = await summarize(toSummarize, llm);
+		logAutoCompact("compact_history_done", {
+			summaryChars: summary.length,
+			outputMessages: systemMessages.length + 2,
+		});
 		return [
 			...systemMessages,
 			{
@@ -317,7 +768,18 @@ async function compactOutputMessages(
 	const toKeep = flows.slice(-KEEP_RECENT_FLOWS).flat();
 
 	try {
+		logAutoCompact("compact_output_start", {
+			flows: flows.length,
+			flowsSummarized: flows.length - KEEP_RECENT_FLOWS,
+			flowsKept: KEEP_RECENT_FLOWS,
+			toSummarize: summarizeMessageList(toSummarize),
+			toKeep: summarizeMessageList(toKeep),
+		});
 		const summary = await summarize(toSummarize, llm);
+		logAutoCompact("compact_output_done", {
+			summaryChars: summary.length,
+			outputMessages: toKeep.length + 1,
+		});
 		return [
 			{ role: "assistant", content: `[Earlier steps summary]\n${summary}` },
 			...toKeep,
@@ -345,20 +807,55 @@ export async function applyAutoCompactPolicy(
 	const compactTokenThreshold =
 		maxTokens * resolvedConfig.compactThresholdRatio;
 	const safeTokenThreshold = maxTokens * resolvedConfig.safeThresholdRatio;
+	const initialTokens = estimateStateTokens(state);
 
-	if (estimateStateTokens(state) <= compactTokenThreshold) {
+	if (initialTokens <= compactTokenThreshold) {
 		return undefined;
 	}
 
-	let compactedState = trimToSafeThreshold(state, safeTokenThreshold);
-	if (estimateStateTokens(compactedState) <= safeTokenThreshold) {
+	logAutoCompact("policy_triggered", {
+		estimatedTokens: initialTokens,
+		compactTokenThreshold,
+		safeTokenThreshold,
+	});
+
+	let compactedState = trimToSafeThreshold(
+		state,
+		safeTokenThreshold,
+		resolvedConfig,
+	);
+	const afterDirectTrimTokens = estimateStateTokens(compactedState);
+	logAutoCompact("after_direct_trim", {
+		beforeTokens: initialTokens,
+		afterTokens: afterDirectTrimTokens,
+		safeTokenThreshold,
+		state: summarizeState(compactedState),
+	});
+
+	if (afterDirectTrimTokens <= safeTokenThreshold) {
+		logAutoCompact("policy_done_after_direct_trim", {
+			beforeTokens: initialTokens,
+			afterTokens: afterDirectTrimTokens,
+			state: summarizeState(compactedState),
+		});
 		return compactedState;
 	}
+
+	logAutoCompact("summarization_required", {
+		estimatedTokens: afterDirectTrimTokens,
+		safeTokenThreshold,
+		state: summarizeState(compactedState),
+	});
 
 	const [compactedMessages, compactedOutput] = await Promise.all([
 		compactHistory(compactedState.messages, llm),
 		compactOutputMessages(compactedState.outputMessages, llm),
 	]);
+
+	logAutoCompact("after_summarization", {
+		messages: summarizeMessageList(compactedMessages),
+		outputMessages: summarizeMessageList(compactedOutput),
+	});
 
 	compactedState = trimToSafeThreshold(
 		{
@@ -366,7 +863,14 @@ export async function applyAutoCompactPolicy(
 			outputMessages: compactedOutput,
 		},
 		safeTokenThreshold,
+		resolvedConfig,
 	);
+
+	logAutoCompact("policy_done", {
+		beforeTokens: initialTokens,
+		afterTokens: estimateStateTokens(compactedState),
+		state: summarizeState(compactedState),
+	});
 
 	return compactedState;
 }
@@ -385,6 +889,10 @@ export interface AutoCompactServices {
 export interface AutoCompactConfig {
 	compactThresholdRatio?: number;
 	safeThresholdRatio?: number;
+	toolResultTrim?: Partial<ToolResultTrimConfig>;
+	toolCallFlowTrim?: Partial<PercentTrimConfig>;
+	chatMessageTrim?: Partial<PercentTrimConfig>;
+	maxRoundPercentSteps?: number[];
 }
 
 const definition = defineStep<
@@ -445,6 +953,13 @@ stepRegistry.register(STEP_NAME, createAutoCompactStep, {
 			default: DEFAULT_SAFE_THRESHOLD_RATIO,
 			description:
 				"Prompt-token budget ratio that compaction tries to reduce history below.",
+		},
+		{
+			key: "maxRoundPercentSteps",
+			type: "array",
+			default: DEFAULT_MAX_ROUND_PERCENT_STEPS,
+			description:
+				"Escalation caps per round. Each round runs toolResult then toolCallFlow up to that cap before moving to the next round. Chat messages are only trimmed after all rounds are exhausted.",
 		},
 	],
 	defaultStateMapping: {
