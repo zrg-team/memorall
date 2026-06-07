@@ -210,6 +210,7 @@ export const CopilotOverlay: React.FC<CopilotOverlayProps> = ({
 	const isLargeTarget =
 		targetRect.width > window.innerWidth * 0.45 &&
 		targetRect.height > window.innerHeight * 0.7;
+	const shouldUseSpotlight = !isBodyTarget && !isLargeTarget;
 
 	return createPortal(
 		<AnimatePresence>
@@ -229,11 +230,9 @@ export const CopilotOverlay: React.FC<CopilotOverlayProps> = ({
 					e.stopPropagation();
 				}}
 			>
-				{/* Backdrop — solid for body target, spotlight cutout for specific elements */}
+				{/* Backdrop — solid for full-screen targets, spotlight cutout for specific elements */}
 				<div className="absolute inset-0 pointer-events-auto">
-					{isBodyTarget ? (
-						<div className="absolute inset-0 bg-black/60" />
-					) : (
+					{shouldUseSpotlight ? (
 						<svg
 							width="100%"
 							height="100%"
@@ -256,15 +255,17 @@ export const CopilotOverlay: React.FC<CopilotOverlayProps> = ({
 							<rect
 								width="100%"
 								height="100%"
-								fill="rgba(0, 0, 0, 0.5)"
+								fill="rgba(0, 0, 0, 0.55)"
 								mask="url(#copilot-mask)"
 							/>
 						</svg>
+					) : (
+						<div className="absolute inset-0 bg-black/60 backdrop-blur-[1px]" />
 					)}
 				</div>
 
 				{/* Highlight ring — only for specific element targets */}
-				{!isBodyTarget && !isLargeTarget && (
+				{shouldUseSpotlight && (
 					<motion.div
 						initial={{ scale: 0.8, opacity: 0 }}
 						animate={{ scale: 1, opacity: 1 }}
@@ -281,7 +282,7 @@ export const CopilotOverlay: React.FC<CopilotOverlayProps> = ({
 				)}
 
 				{/* Pulsing beacon — only for specific element targets */}
-				{!isBodyTarget && !isLargeTarget && !currentStep.disableBeacon && (
+				{shouldUseSpotlight && !currentStep.disableBeacon && (
 					<motion.div
 						className="absolute w-4 h-4 bg-blue-500 rounded-full"
 						style={{

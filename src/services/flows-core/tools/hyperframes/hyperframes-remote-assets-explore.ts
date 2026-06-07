@@ -12,6 +12,7 @@ import {
 const TOOL_NAME = "hyperframes_remote_assets_explore" as const;
 
 const PROVIDERS = [
+	"google_images",
 	"cleanpng",
 	"openverse",
 	"pexels",
@@ -25,6 +26,7 @@ interface Candidate {
 	provider: Provider;
 	url: string;
 	sourceUrl: string;
+	imageUrlPreview?: string;
 	title?: string;
 	alt?: string;
 	width?: number;
@@ -97,6 +99,8 @@ const normalizeQueryForPath = (query: string): string =>
 const providerSearchUrl = (provider: Provider, query: string): string => {
 	const q = query.trim();
 	switch (provider) {
+		case "google_images":
+			return `https://www.google.com/search?udm=2&q=${encodeURIComponent(q)}`;
 		case "cleanpng":
 			return `https://www.cleanpng.com/free/${normalizeQueryForPath(q)}.html`;
 		case "openverse":
@@ -112,9 +116,23 @@ const providerSearchUrl = (provider: Provider, query: string): string => {
 
 const defaultProvidersForKind = (kind: AssetKind): Provider[] => {
 	if (kind === "svg" || kind === "icon" || kind === "illustration") {
-		return ["svgrepo", "cleanpng", "openverse", "pexels", "unsplash"];
+		return [
+			"google_images",
+			"svgrepo",
+			"cleanpng",
+			"openverse",
+			"pexels",
+			"unsplash",
+		];
 	}
-	return ["cleanpng", "openverse", "pexels", "unsplash", "svgrepo"];
+	return [
+		"google_images",
+		"cleanpng",
+		"openverse",
+		"pexels",
+		"unsplash",
+		"svgrepo",
+	];
 };
 
 const toNumber = (value: string | null): number | undefined => {
@@ -149,6 +167,14 @@ const resolveUrl = (value: string | null, baseUrl: string): string | null => {
 	}
 };
 
+const decodeHtmlEntities = (value: string): string =>
+	value
+		.replace(/&amp;/g, "&")
+		.replace(/&quot;/g, '"')
+		.replace(/&#39;/g, "'")
+		.replace(/&lt;/g, "<")
+		.replace(/&gt;/g, ">");
+
 const normalizeAssetUrl = (url: string, provider: Provider): string => {
 	try {
 		const parsed = new URL(url);
@@ -174,6 +200,21 @@ const isRobotOrBlockedPage = (html: string, text: string): string | null => {
 	const haystack = `${html}\n${text}`.toLowerCase();
 	if (haystack.includes("please respect our robot policy")) {
 		return "robot_policy";
+	}
+	if (
+		haystack.includes("our systems have detected unusual traffic") ||
+		haystack.includes("unusual traffic from your computer network")
+	) {
+		return "unusual_traffic";
+	}
+	if (haystack.includes("captcha") || haystack.includes("not a robot")) {
+		return "captcha";
+	}
+	if (
+		haystack.includes("before you continue to google") ||
+		haystack.includes("consent.google.com")
+	) {
+		return "google_consent";
 	}
 	if (haystack.includes("performing security verification")) {
 		return "security_verification";
@@ -204,6 +245,12 @@ const providerAllowsUrl = (
 		const host = parsed.hostname;
 		const path = parsed.pathname;
 
+		if (provider === "google_images") {
+			return (
+				(host === "www.google.com" || host.endsWith(".google.com")) &&
+				path === "/imgres"
+			);
+		}
 		if (provider === "cleanpng") {
 			return host === "icon2.cleanpng.com";
 		}
@@ -252,6 +299,7 @@ const scoreCandidate = ({
 }): number => {
 	let score = 0;
 	if (provider === "cleanpng") score += 35;
+	if (provider === "google_images") score += 32;
 	if (provider === "openverse") score += 30;
 	if (provider === "pexels") score += 25;
 	if (provider === "unsplash") score += 22;
@@ -262,6 +310,136 @@ const scoreCandidate = ({
 	if (/thumb|w=40|h=40|w=80|h=80/.test(url.toLowerCase())) score -= 15;
 	if (/premium|plus\.unsplash/.test(url.toLowerCase())) score -= 50;
 	return score;
+};
+
+const googleImgresInfoFromUrl = (
+	url: string,
+	baseUrl: string,
+): {
+	url: string;
+	sourceUrl: string;
+	imageUrlPreview?: string;
+	width?: number;
+	height?: number;
+} | null => {
+	const resolved = resolveUrl(decodeHtmlEntities(url), baseUrl);
+	if (!resolved) return null;
+	try {
+		const parsed = new URL(resolved);
+		if (
+			parsed.pathname !== "/imgres" ||
+			!(parsed.hostname === "www.google.com" || parsed.hostname.endsWith(".google.com"))
+		) {
+			return null;
+		}
+		const imageUrlPreview = parsed.searchParams.get("imgurl") ?? undefined;
+		const sourceUrl =
+			parsed.searchParams.get("imgrefurl") ?? imageUrlPreview ?? baseUrl;
+		return {
+			url: parsed.toString(),
+			sourceUrl,
+			imageUrlPreview,
+			width: toNumber(parsed.searchParams.get("w")),
+			height: toNumber(parsed.searchParams.get("h")),
+		};
+	} catch {
+		return null;
+	}
+};
+
+const titleFromHtml = (html: string): string | undefined => {
+	const title = /<title[^>]*>([\s\S]*?)<\/title>/i.exec(html)?.[1];
+	return title ? decodeHtmlEntities(title).trim() || undefined : undefined;
+};
+
+const attrFromHtml = (html: string, attr: string): string | undefined => {
+	const match = new RegExp(`\\b${attr}=([\"'])(.*?)\\1`, "i").exec(html);
+	return match ? decodeHtmlEntities(match[2]) : undefined;
+};
+
+export const extractGoogleImageCandidates = ({
+	html,
+	baseUrl,
+	maxResults,
+}: {
+	html: string;
+	baseUrl: string;
+	maxResults: number;
+}): Candidate[] => {
+	const seen = new Set<string>();
+	const candidates: Candidate[] = [];
+	const title = titleFromHtml(html);
+	const pushCandidate = ({
+		href,
+		innerHtml,
+		alt,
+		width,
+		height,
+	}: {
+		href: string;
+		innerHtml?: string;
+		alt?: string;
+		width?: number;
+		height?: number;
+	}) => {
+		const info = googleImgresInfoFromUrl(href, baseUrl);
+		if (!info || seen.has(info.url)) return;
+		seen.add(info.url);
+		const imgAlt =
+			alt ?? attrFromHtml(innerHtml ?? "", "alt") ?? "";
+		const imgWidth =
+			width ?? toNumber(attrFromHtml(innerHtml ?? "", "width") ?? null);
+		const imgHeight =
+			height ?? toNumber(attrFromHtml(innerHtml ?? "", "height") ?? null);
+		candidates.push({
+			provider: "google_images",
+			url: info.url,
+			sourceUrl: info.sourceUrl,
+			imageUrlPreview: info.imageUrlPreview,
+			title,
+			alt: imgAlt || undefined,
+			width: info.width ?? imgWidth,
+			height: info.height ?? imgHeight,
+			score: scoreCandidate({
+				url: info.url,
+				alt: imgAlt,
+				width: info.width ?? imgWidth,
+				height: info.height ?? imgHeight,
+				provider: "google_images",
+			}),
+		});
+	};
+
+	if (typeof DOMParser !== "undefined") {
+		const document = new DOMParser().parseFromString(html, "text/html");
+		for (const anchor of Array.from(
+			document.querySelectorAll(
+				'a[href*="/imgres"], a[href*="google.com/imgres"]',
+			),
+		)) {
+			const img = anchor.querySelector("img");
+			pushCandidate({
+				href: anchor.getAttribute("href") ?? "",
+				alt: img?.getAttribute("alt") ?? undefined,
+				width: toNumber(img?.getAttribute("width") ?? null),
+				height: toNumber(img?.getAttribute("height") ?? null),
+			});
+			if (candidates.length >= maxResults) break;
+		}
+	} else {
+		const anchorPattern =
+			/<a\b[^>]*\bhref=(["'])([^"']*(?:\/imgres|google\.com\/imgres)[^"']*)\1[^>]*>([\s\S]*?)<\/a>/gi;
+		for (const match of html.matchAll(anchorPattern)) {
+			pushCandidate({
+				href: match[2],
+				innerHtml: match[3],
+			});
+			if (candidates.length >= maxResults) break;
+		}
+	}
+
+	candidates.sort((a, b) => b.score - a.score);
+	return candidates.slice(0, maxResults);
 };
 
 const extractCandidates = ({
@@ -277,6 +455,10 @@ const extractCandidates = ({
 	kind: AssetKind;
 	maxResults: number;
 }): Candidate[] => {
+	if (provider === "google_images") {
+		return extractGoogleImageCandidates({ html, baseUrl, maxResults });
+	}
+
 	const document = new DOMParser().parseFromString(html, "text/html");
 	const seen = new Set<string>();
 	const candidates: Candidate[] = [];

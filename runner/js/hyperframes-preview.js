@@ -8,12 +8,14 @@
 // before loading, so GSAP and the HyperFrames runtime load from jsDelivr.
 //
 // LOAD ORDER (guaranteed by renderComposition):
-//   1. GSAP + shader-transitions + Lucide + D3 + Three — external CDN scripts
-//   2. Lucide icon replacement                         — <i data-lucide="...">
-//   3. inline animation script                         — sets window.__timelines["main"] = tl
-//   4. hyperframe.runtime                              — go() reads __timelines on load
+//   1. Tailwind browser compiler, with preflight disabled
+//   2. GSAP + shader-transitions + Lucide + D3 + Three — external CDN scripts
+//   3. Lucide icon replacement                         — <i data-lucide="...">
+//   4. inline animation script                         — sets window.__timelines["main"] = tl
+//   5. hyperframe.runtime                              — go() reads __timelines on load
 
 const DEFAULT_EXPORT_FPS = 30;
+const TAILWIND_BROWSER_URL = "https://cdn.tailwindcss.com";
 const MEDIABUNNY_ESM_URL =
 	"https://cdn.jsdelivr.net/npm/mediabunny@1.45.2/+esm";
 const LUCIDE_UMD_URL =
@@ -28,6 +30,8 @@ const HYPERFRAMES_SHADER_URL =
 	"https://cdn.jsdelivr.net/npm/@hyperframes/shader-transitions@0.6.33/dist/index.global.js";
 const HTML2CANVAS_URL =
 	"https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js";
+const TRANSPARENT_IMAGE_URL =
+	"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1' height='1'%3E%3C/svg%3E";
 
 // ── CDN fallback map for extension-local script URLs ─────────────────────────
 // Mirrors the CDN_TO_LOCAL map in composition-preprocessor.ts (reversed).
@@ -41,6 +45,7 @@ const CDN_MAP = {
 	"d3.js": D3_UMD_URL,
 	"three.min.js": THREE_GLOBAL_URL,
 	"three.js": THREE_GLOBAL_URL,
+	"tailwind.js": TAILWIND_BROWSER_URL,
 };
 
 function resolveSrc(src) {
@@ -62,6 +67,7 @@ const keyFromLocation = () =>
 const key = keyFromLocation();
 let html2CanvasLoad = null;
 let mediabunnyLoad = null;
+let tailwindLoad = null;
 let currentFilenameBase = "hyperframes-composition";
 let exportInProgress = false;
 const reportedRuntimeErrors = new Set();
@@ -272,6 +278,75 @@ function loadMediabunny() {
 	return mediabunnyLoad;
 }
 
+function configureTailwindRuntime() {
+	window.tailwind = window.tailwind || {};
+	window.tailwind.config = {
+		...(window.tailwind.config || {}),
+		corePlugins: {
+			...window.tailwind.config?.corePlugins,
+			preflight: false,
+		},
+		theme: {
+			...window.tailwind.config?.theme,
+			extend: {
+				...window.tailwind.config?.theme?.extend,
+				colors: {
+					...window.tailwind.config?.theme?.extend?.colors,
+					"hf-bg": "var(--bg)",
+					"hf-ink": "var(--ink)",
+					"hf-accent": "var(--accent)",
+					"hf-accent-2": "var(--accent2)",
+					"hf-muted": "var(--muted)",
+				},
+				fontFamily: {
+					...window.tailwind.config?.theme?.extend?.fontFamily,
+					"hf-display": "var(--font-display)",
+					"hf-data": "var(--font-data)",
+				},
+			},
+		},
+	};
+}
+
+function loadTailwindRuntime() {
+	configureTailwindRuntime();
+	if (document.querySelector(`script[src="${TAILWIND_BROWSER_URL}"]`)) {
+		return Promise.resolve();
+	}
+	tailwindLoad ??= loadScriptOnce(TAILWIND_BROWSER_URL, () =>
+		Boolean(document.querySelector("style[data-tailwind]")),
+	).catch((error) => {
+		reportRuntimeError("resource", formatErrorMessage(error), {
+			tagName: "script",
+			source: TAILWIND_BROWSER_URL,
+		});
+	});
+	return tailwindLoad;
+}
+
+async function waitForTailwindReady() {
+	await waitForRaf();
+	const probe = document.createElement("div");
+	probe.className =
+		"hf-tailwind-probe pointer-events-none absolute w-[13px] h-[7px] bg-[#123456]";
+	probe.setAttribute("data-html2canvas-ignore", "true");
+	probe.style.left = "-9999px";
+	probe.style.top = "-9999px";
+	document.body.appendChild(probe);
+	await waitForRaf();
+	const style = getComputedStyle(probe);
+	const widthOk = Math.round(parseFloat(style.width)) === 13;
+	const colorOk = style.backgroundColor === "rgb(18, 52, 86)";
+	probe.remove();
+	if (!widthOk || !colorOk) {
+		reportRuntimeError(
+			"runtime",
+			"Tailwind styles did not become ready before HyperFrames preview.",
+			{ source: TAILWIND_BROWSER_URL },
+		);
+	}
+}
+
 function runInline(code) {
 	if (!code || !code.trim()) return;
 	const s = document.createElement("script");
@@ -305,6 +380,10 @@ function isD3Script(src) {
 
 function isThreeScript(src) {
 	return /(?:^|\/)three(?:@|\/)|\/three(?:\.min)?\.js(?:\?|$)/i.test(src);
+}
+
+function isTailwindScript(src) {
+	return /cdn\.tailwindcss\.com|tailwind(?:\.browser|\.min)?\.js/i.test(src);
 }
 
 function hasLucidePlaceholders(root = document) {
@@ -342,6 +421,7 @@ const MANAGED_SCRIPT_TESTS = [
 	isLucideScript,
 	isD3Script,
 	isThreeScript,
+	isTailwindScript,
 ];
 
 function isManagedScript(src) {
@@ -505,6 +585,48 @@ function withCompositionExportViewport(width, height) {
 			else el.setAttribute("style", style);
 		}
 	};
+}
+
+function toCssUrl(value) {
+	return `url("${String(value).replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\a ")}")`;
+}
+
+function objectFitToBackgroundSize(objectFit) {
+	switch (objectFit) {
+		case "cover":
+			return "cover";
+		case "contain":
+		case "scale-down":
+			return "contain";
+		case "none":
+			return "auto";
+		default:
+			return null;
+	}
+}
+
+function preserveObjectFitImagesForHtml2Canvas(clonedDocument) {
+	const clonedWindow = clonedDocument.defaultView;
+	if (!clonedWindow) return;
+
+	for (const img of clonedDocument.querySelectorAll("img")) {
+		const style = clonedWindow.getComputedStyle(img);
+		const backgroundSize = objectFitToBackgroundSize(style.objectFit);
+		if (!backgroundSize) continue;
+
+		const src =
+			img.currentSrc || img.getAttribute("src") || img.getAttribute("data-src");
+		if (!src) continue;
+
+		img.style.backgroundImage = toCssUrl(src);
+		img.style.backgroundSize = backgroundSize;
+		img.style.backgroundPosition = style.objectPosition || "50% 50%";
+		img.style.backgroundRepeat = "no-repeat";
+		img.style.backgroundClip = "padding-box";
+		img.removeAttribute("srcset");
+		img.removeAttribute("sizes");
+		img.setAttribute("src", TRANSPARENT_IMAGE_URL);
+	}
 }
 
 function getRootTimeline() {
@@ -676,6 +798,7 @@ async function exportMp4({ filenameBase, onProgress }) {
 				ignoreElements: (el) =>
 					el.hasAttribute("data-html2canvas-ignore") ||
 					Boolean(el.closest?.("[data-html2canvas-ignore]")),
+				onclone: preserveObjectFitImagesForHtml2Canvas,
 			});
 
 			ctx.clearRect(0, 0, width, height);
@@ -730,18 +853,23 @@ async function renderComposition(html, inlineScripts, options = {}) {
 
 	const scripts = mergeInlineScripts(inlineScripts, extractFromHtml(html));
 
-	// Step 1: GSAP, shader-transitions, Lucide, D3, Three
+	// Step 1: Tailwind browser compiler. Preflight is disabled so existing
+	// direct-CSS compositions do not receive Tailwind base resets.
+	await loadTailwindRuntime();
+	await waitForTailwindReady();
+
+	// Step 2: GSAP, shader-transitions, Lucide, D3, Three
 	for (const src of [...managedScripts.external, ...unmanagedSrcs]) {
 		await loadExternal(src);
 	}
 
-	// Step 2: replace simple Lucide placeholders before animations target them.
+	// Step 3: replace simple Lucide placeholders before animations target them.
 	renderLucideIcons();
 
-	// Step 3: inline animation — sets window.__timelines["main"] = tl
+	// Step 4: inline animation — sets window.__timelines["main"] = tl
 	for (const code of scripts) runInline(code);
 
-	// Step 4: hyperframe.runtime — go() now finds __timelines populated
+	// Step 5: hyperframe.runtime — go() now finds __timelines populated
 	for (const src of managedScripts.runtime) await loadExternal(src);
 	currentFilenameBase = options.filenameBase || currentFilenameBase;
 	postExportStatus({ status: "idle" });
