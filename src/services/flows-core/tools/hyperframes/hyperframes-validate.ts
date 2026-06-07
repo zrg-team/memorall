@@ -30,10 +30,12 @@ type Services = Pick<AllServices, "fs">;
 
 // Codes that are always noise in the extension context:
 // - external_script_dependency: fix hint says "no action needed" for CDN-based compositions
+// - missing_gsap_script: runner auto-injects GSAP based on usage detection
 // - invalid_inline_script_syntax: CSP eval() false-positive; our preprocessor handles this
 // - pointer_events_none: intentional for .grain overlay elements
 const SUPPRESSED_CODES = new Set([
 	"external_script_dependency",
+	"missing_gsap_script",
 	"invalid_inline_script_syntax",
 	"pointer_events_none",
 ]);
@@ -197,6 +199,66 @@ const hyperShaderFindings = (html: string): HyperframeFinding[] => {
 	return findings;
 };
 
+const tailwindSafetyFindings = (html: string): HyperframeFinding[] => {
+	const findings: HyperframeFinding[] = [];
+
+	if (
+		/<script\b[^>]*\bsrc=["'][^"']*cdn\.tailwindcss\.com[^"']*["'][^>]*>/i.test(
+			html,
+		) ||
+		/<link\b[^>]*\bhref=["'][^"']*tailwind(?:\.min)?\.css[^"']*["'][^>]*>/i.test(
+			html,
+		)
+	) {
+		findings.push({
+			severity: "warning",
+			code: "manual_tailwind_loader",
+			message:
+				"Tailwind should be authored as classes only; the HyperFrames runner loads Tailwind for preview.",
+			fixHint:
+				"Remove manual Tailwind script/link tags; the preview runner always loads Tailwind with preflight disabled.",
+		});
+	}
+
+	if (
+		/(?:className|classList\s*\.\s*add|setAttribute\s*\(\s*["']class["'])[\s\S]{0,160}(?:\+|`[\s\S]*\$\{)/i.test(
+			html,
+		)
+	) {
+		findings.push({
+			severity: "warning",
+			code: "dynamic_tailwind_class",
+			message:
+				"Dynamic class construction is unreliable with Tailwind browser compilation.",
+			fixHint:
+				"Use literal class strings in HTML so Tailwind can discover every utility before preview/export.",
+		});
+	}
+
+	if (/\bclass=["'][^"']*\banimate-[^\s"']+/i.test(html)) {
+		findings.push({
+			severity: "warning",
+			code: "tailwind_animation_class",
+			message:
+				"Tailwind animation utilities are not deterministic for HyperFrames seeking and MP4 export.",
+			fixHint: "Use GSAP timeline tweens for all scene animation.",
+		});
+	}
+
+	if (/<style\b[\s\S]*?\banimation\s*:[\s\S]*?<\/style>/i.test(html)) {
+		findings.push({
+			severity: "warning",
+			code: "css_animation_property",
+			message:
+				"CSS animation properties are not controlled by the HyperFrames timeline.",
+			fixHint:
+				"Move time-based motion into GSAP so preview scrubbing and export remain deterministic.",
+		});
+	}
+
+	return findings;
+};
+
 const assetFindings = async (
 	html: string,
 	dfs: NonNullable<Services["fs"]>,
@@ -235,6 +297,7 @@ export const lintHyperframesComposition = async (
 	const findings = [
 		...base.findings,
 		...hyperShaderFindings(html),
+		...tailwindSafetyFindings(html),
 		...(await assetFindings(
 			html,
 			dfs,

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
 	DirEntry,
 	FileStat,
@@ -9,6 +9,14 @@ import {
 	HYPERFRAMES_FEATURE_SYSTEM_PROMPT,
 } from "flow-core/steps/features/hyperframes-feature/hyperframes-feature";
 import { preprocessComposition } from "flow-core/tools/hyperframes/composition-preprocessor";
+import {
+	createHyperframesRemoteAssetImportTool,
+	extractGoogleResolvedImageUrl,
+} from "flow-core/tools/hyperframes/hyperframes-remote-asset-import";
+import {
+	createHyperframesRemoteAssetsExploreTool,
+	extractGoogleImageCandidates,
+} from "flow-core/tools/hyperframes/hyperframes-remote-assets-explore";
 import { lintHyperframesComposition } from "flow-core/tools/hyperframes/hyperframes-validate";
 import { createHyperframesWriteTool } from "flow-core/tools/hyperframes/hyperframes-write";
 import { stepRegistry } from "flow-core/registries/step-registry";
@@ -151,6 +159,11 @@ class MemoryFs implements IFlowFileSystem {
 		await this.stat(path);
 	}
 }
+
+afterEach(() => {
+	vi.restoreAllMocks();
+	vi.unstubAllGlobals();
+});
 
 describe("HyperFrames composition preprocessing", () => {
 	it("inlines project resource images referenced from HTML, CSS, and JavaScript", async () => {
@@ -301,7 +314,237 @@ describe("HyperFrames feature config", () => {
 	});
 });
 
+describe("HyperFrames remote asset Google Images support", () => {
+	const googleHref =
+		"/imgres?q=anh%20trai%20vuot%20ngan%20chong%20gai%202024%20logo%20png&amp;imgurl=https%3A%2F%2Fatvncgwiki.wiki.gg%2Fvi%2Fimages%2FSite-logo.png%3F7ec62e&amp;imgrefurl=https%3A%2F%2Fatvncgwiki.wiki.gg%2F&amp;docid=nd3gVdWcnqg3vM&amp;tbnid=nCRrGu_3WlNDmM&amp;w=287&amp;h=287";
+
+	it("extracts Google Images /imgres candidates with alt text and metadata", () => {
+		const candidates = extractGoogleImageCandidates({
+			baseUrl: "https://www.google.com/search?udm=2&q=logo",
+			maxResults: 5,
+			html: `
+				<html><head><title>Google Images</title></head><body>
+					<a href="${googleHref}">
+						<div>
+							<img src="data:image/jpeg;base64,abc" alt="Anh Trai Vượt Ngàn Chông Gai Wiki" height="225" width="225">
+						</div>
+					</a>
+				</body></html>
+			`,
+		});
+
+		expect(candidates).toHaveLength(1);
+		expect(candidates[0]).toEqual(
+			expect.objectContaining({
+				provider: "google_images",
+				url: expect.stringContaining("https://www.google.com/imgres?"),
+				sourceUrl: "https://atvncgwiki.wiki.gg/",
+				imageUrlPreview:
+					"https://atvncgwiki.wiki.gg/vi/images/Site-logo.png?7ec62e",
+				alt: "Anh Trai Vượt Ngàn Chông Gai Wiki",
+				width: 287,
+				height: 287,
+			}),
+		);
+	});
+
+	it("resolves the actual image URL from rendered Google imgres HTML", () => {
+		const resolved = extractGoogleResolvedImageUrl({
+			baseUrl: "https://www.google.com/imgres?q=logo",
+			googleResultUrl:
+				"https://www.google.com/imgres?q=logo&imgurl=https%3A%2F%2Fexample.com%2Ffallback.png",
+			html: `
+				<div jsname="figiqf">
+					<a href="https://atvncgwiki.wiki.gg/">
+						<img src="https://atvncgwiki.wiki.gg/vi/images/Site-logo.png?7ec62e" class="sFlh5c FyHeAf iPVvYb" alt="Anh Trai Vượt Ngàn Chông Gai Wiki" jsname="kn3ccd">
+						<img src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRIlMqiapZK41p7VOqsTeg3QQYVUH-0s3-ixQ&amp;s" class="sFlh5c FyHeAf" alt="thumbnail">
+					</a>
+				</div>
+			`,
+		});
+
+		expect(resolved).toBe(
+			"https://atvncgwiki.wiki.gg/vi/images/Site-logo.png?7ec62e",
+		);
+	});
+
+	it("falls back to the decoded imgurl query parameter during Google import", async () => {
+		const fs = new MemoryFs({});
+		const googleUrl =
+			"https://www.google.com/imgres?q=logo&imgurl=https%3A%2F%2Fexample.com%2Flogo.png&imgrefurl=https%3A%2F%2Fexample.com%2F&w=287&h=287";
+		const webBrowser = {
+			openSession: vi.fn(async () => ({
+				session: {
+					id: "google-session",
+					currentUrl: googleUrl,
+					html: "<html><body>No usable image yet</body></html>",
+					text: "",
+				},
+			})),
+			waitForPageRender: vi.fn(async () => ({ matched: true })),
+			refreshSession: vi.fn(async () => ({
+				id: "google-session",
+				currentUrl: googleUrl,
+				html: "<html><body>No usable image yet</body></html>",
+				text: "",
+			})),
+			closeSession: vi.fn(async () => undefined),
+		};
+		const fetchMock = vi.fn(async (url: string) => {
+			expect(url).toBe("https://example.com/logo.png");
+			return new Response(new Uint8Array([1, 2, 3]), {
+				status: 200,
+				headers: { "content-type": "image/png" },
+			});
+		});
+		vi.stubGlobal("fetch", fetchMock);
+
+		const tool = createHyperframesRemoteAssetImportTool(
+			{ fs, webBrowser } as never,
+			{ rootPath: "/projects" },
+		);
+		const result = JSON.parse(
+			String(await tool.execute({
+				project_path: "demo",
+				url: googleUrl,
+				asset_path: "images/logo.png",
+			})),
+		);
+
+		expect(result).toEqual(
+			expect.objectContaining({
+				success: true,
+				file_path: "/projects/demo/resources/images/logo.png",
+				html_src: "./resources/images/logo.png",
+				resolvedImageUrl: "https://example.com/logo.png",
+				mimeType: "image/png",
+			}),
+		);
+		await expect(
+			fs.readFile("/projects/demo/resources/images/logo.png"),
+		).resolves.toEqual(new Uint8Array([1, 2, 3]));
+	});
+
+	it("continues to fallback providers when Google is blocked", async () => {
+		const openedUrls: string[] = [];
+		const webBrowser = {
+			openSession: vi.fn(async ({ url }: { url: string }) => {
+				openedUrls.push(url);
+				if (openedUrls.length === 1) {
+					return {
+						session: {
+							id: "google-session",
+							currentUrl: url,
+							html: "Our systems have detected unusual traffic",
+							text: "Our systems have detected unusual traffic",
+						},
+					};
+				}
+				throw new Error("stop after proving fallback");
+			}),
+			waitForPageRender: vi.fn(async () => ({ matched: true })),
+			refreshSession: vi.fn(async () => ({
+				id: "google-session",
+				currentUrl: openedUrls[0],
+				html: "Our systems have detected unusual traffic",
+				text: "Our systems have detected unusual traffic",
+			})),
+			closeSession: vi.fn(async () => undefined),
+		};
+		const tool = createHyperframesRemoteAssetsExploreTool(
+			{ webBrowser } as never,
+			{},
+		);
+
+		const result = JSON.parse(
+			String(await tool.execute({
+				query: "sample logo",
+				max_results: 2,
+				min_results: 2,
+			})),
+		);
+
+		expect(openedUrls[0]).toContain("https://www.google.com/search?");
+		expect(openedUrls[0]).toContain("udm=2");
+		expect(openedUrls[1]).toContain("https://www.cleanpng.com/free/");
+		expect(result.attempts[0]).toEqual(
+			expect.objectContaining({
+				provider: "google_images",
+				success: false,
+				reason: "unusual_traffic",
+			}),
+		);
+	});
+
+	it("keeps direct image imports working without a browser service", async () => {
+		const fs = new MemoryFs({});
+		const fetchMock = vi.fn(async (url: string) => {
+			expect(url).toBe("https://example.com/direct.png");
+			return new Response(new Uint8Array([9, 8, 7]), {
+				status: 200,
+				headers: { "content-type": "image/png" },
+			});
+		});
+		vi.stubGlobal("fetch", fetchMock);
+
+		const tool = createHyperframesRemoteAssetImportTool(
+			{ fs } as never,
+			{ rootPath: "/projects" },
+		);
+		const result = JSON.parse(
+			String(await tool.execute({
+				project_path: "demo",
+				url: "https://example.com/direct.png",
+			})),
+		);
+
+		expect(result).toEqual(
+			expect.objectContaining({
+				success: true,
+				url: "https://example.com/direct.png",
+				finalUrl: "https://example.com/direct.png",
+			}),
+		);
+		expect(result).not.toHaveProperty("resolvedImageUrl");
+	});
+});
+
 describe("HyperFrames validation", () => {
+	it("accepts Tailwind-authored static classes including arbitrary values", async () => {
+		const fs = new MemoryFs({});
+		const result = await lintHyperframesComposition(
+			`
+				<!doctype html>
+				<html lang="en">
+					<head><meta charset="UTF-8" /></head>
+					<body>
+						<div id="main" data-composition-id="main" data-width="1920" data-height="1080" data-start="0" data-duration="3">
+							<div id="s1" class="scene clip absolute inset-0 w-[1920px] h-[1080px] bg-[#08080f] grid grid-cols-[1fr_480px]" data-start="0" data-duration="3" data-track-index="0">
+								<div class="flex items-center justify-center text-hf-ink">Tailwind scene</div>
+							</div>
+						</div>
+						<script>
+							window.__timelines = window.__timelines || {};
+							var tl = gsap.timeline({ paused: true });
+							window.__timelines["main"] = tl;
+						</script>
+					</body>
+				</html>
+			`,
+			fs,
+			"/projects/demo",
+		);
+
+		expect(result.ok).toBe(true);
+		expect(result.findings).not.toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					code: expect.stringMatching(/^tailwind_|^manual_tailwind/),
+				}),
+			]),
+		);
+	});
+
 	it("reports HyperShader scene and transition count mismatches", async () => {
 		const fs = new MemoryFs({});
 		const result = await lintHyperframesComposition(
@@ -343,6 +586,67 @@ describe("HyperFrames validation", () => {
 				expect.objectContaining({
 					code: "missing_local_image_asset",
 					message: expect.stringContaining("temple-sign-buddha.jpeg"),
+				}),
+			]),
+		);
+	});
+
+	it("warns when a composition includes a manual Tailwind loader", async () => {
+		const fs = new MemoryFs({});
+		const result = await lintHyperframesComposition(
+			`<script src="https://cdn.tailwindcss.com"></script>`,
+			fs,
+			"/projects/demo",
+		);
+
+		expect(result.findings).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					code: "manual_tailwind_loader",
+					severity: "warning",
+				}),
+			]),
+		);
+	});
+
+	it("warns when JavaScript builds Tailwind classes dynamically", async () => {
+		const fs = new MemoryFs({});
+		const result = await lintHyperframesComposition(
+			`<script>el.className = "bg-" + color;</script>`,
+			fs,
+			"/projects/demo",
+		);
+
+		expect(result.findings).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					code: "dynamic_tailwind_class",
+					severity: "warning",
+				}),
+			]),
+		);
+	});
+
+	it("warns on Tailwind and CSS animation utilities", async () => {
+		const fs = new MemoryFs({});
+		const result = await lintHyperframesComposition(
+			`
+				<style>.pulse{animation:pulse 1s infinite}</style>
+				<div class="animate-pulse"></div>
+			`,
+			fs,
+			"/projects/demo",
+		);
+
+		expect(result.findings).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					code: "tailwind_animation_class",
+					severity: "warning",
+				}),
+				expect.objectContaining({
+					code: "css_animation_property",
+					severity: "warning",
 				}),
 			]),
 		);

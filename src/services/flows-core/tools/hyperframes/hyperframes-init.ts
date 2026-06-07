@@ -10,69 +10,124 @@ const TOOL_NAME = "hyperframes_init" as const;
 
 // ── Templates ────────────────────────────────────────────────────────────────
 
-// 1. Neon Launch — dark purple/pink, 1920×1080, 18s, 5 scenes
-const TPL_NEON_LAUNCH = `<!doctype html>
-<html lang="en"><head>
-  <meta charset="UTF-8" /><meta name="viewport" content="width=1920, height=1080" />
+interface TailwindTemplateOptions {
+	width: number;
+	height: number;
+	duration: number;
+	durations: [number, number, number, number, number];
+	bg: string;
+	ink: string;
+	accent: string;
+	accent2: string;
+	muted: string;
+	fontDisplay: string;
+	fontData: string;
+	eyebrow: string;
+	title: string;
+	subtitle: string;
+	problem: string;
+	solution: string;
+	statLabel: string;
+	statValue: number;
+	statSuffix: string;
+	statCaption: string;
+	cta: string;
+	formatStat?: "integer" | "percent" | "decimal";
+	includeGrid?: boolean;
+	includeVignette?: boolean;
+}
+
+const sumBefore = (values: number[], index: number): number =>
+	values.slice(0, index).reduce((sum, value) => sum + value, 0);
+
+const makeTailwindTemplate = (options: TailwindTemplateOptions): string => {
+	const [d1, d2, d3, d4, d5] = options.durations;
+	const s1 = 0;
+	const s2 = sumBefore(options.durations, 1);
+	const s3 = sumBefore(options.durations, 2);
+	const s4 = sumBefore(options.durations, 3);
+	const s5 = sumBefore(options.durations, 4);
+	const transition1 = s4 - 0.25;
+	const transition2 = s5 - 0.25;
+	const sceneClass = `scene clip absolute left-0 top-0 h-[${options.height}px] w-[${options.width}px] overflow-hidden`;
+	const contentClass =
+		options.width > options.height
+			? "scene-content relative z-[1] flex h-full w-full flex-col justify-center gap-[32px] px-[160px] py-[100px]"
+			: "scene-content relative z-[1] flex h-full w-full flex-col justify-center gap-[28px] px-[80px] py-[140px]";
+	const displaySize =
+		options.width > options.height ? "text-[112px]" : "text-[132px]";
+	const supportSize = options.width > options.height ? "text-[40px]" : "text-[52px]";
+	const titleText = options.title.replace(/\n/g, "<br/>");
+	const problemText = options.problem.replace(/\n/g, "<br/>");
+	const solutionText = options.solution.replace(/\n/g, "<br/>");
+	const gridDecor = options.includeGrid
+		? '<div class="grid-bg absolute inset-0 z-[0]"></div>'
+		: "";
+	const vignetteDecor = options.includeVignette
+		? '<div class="vignette absolute inset-0 z-[49] pointer-events-none"></div>'
+		: "";
+
+	return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=${options.width}, height=${options.height}" />
   <style>
-    :root{--bg:#08080f;--ink:#f0eeff;--accent:#c840f0;--accent2:#7c6cff;--muted:#6b6880;--font-display:"Space Grotesk",sans-serif;--font-data:"JetBrains Mono",monospace}
-    *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
-    html,body{width:1920px;height:1080px;overflow:hidden;background:var(--bg);color:var(--ink)}
-    .scene{position:absolute;top:0;left:0;width:1920px;height:1080px;overflow:hidden}
-    .scene-content{width:100%;height:100%;padding:100px 160px;display:flex;flex-direction:column;justify-content:center;gap:32px;box-sizing:border-box;position:relative;z-index:1}
-    .display{font-family:var(--font-display);font-weight:900;font-size:120px;line-height:1.05;letter-spacing:-2px}
-    .sub{font-family:var(--font-display);font-weight:300;font-size:42px;line-height:1.4;color:var(--muted)}
-    .label{font-family:var(--font-data);font-size:18px;color:var(--accent);text-transform:uppercase;letter-spacing:4px}
-    .stat{font-family:var(--font-display);font-weight:900;font-size:160px;color:var(--accent2);line-height:1}
-    .grain{position:absolute;inset:0;pointer-events:none;z-index:50;opacity:0.15;background-image:radial-gradient(rgba(255,255,255,0.08) 1px,transparent 1.2px),radial-gradient(rgba(0,0,0,0.18) 1px,transparent 1.2px);background-size:3px 3px,5px 5px;background-position:0 0,1px 2px;mix-blend-mode:overlay}
-    .glow{position:absolute;border-radius:50%;filter:blur(140px);pointer-events:none;z-index:0}
+    :root{--bg:${options.bg};--ink:${options.ink};--accent:${options.accent};--accent2:${options.accent2};--muted:${options.muted};--font-display:${options.fontDisplay};--font-data:${options.fontData}}
+    *,*::before,*::after{box-sizing:border-box}
+    html,body{width:${options.width}px;height:${options.height}px;margin:0;overflow:hidden;background:var(--bg);color:var(--ink)}
+    .grain{position:absolute;inset:0;pointer-events:none;z-index:50;opacity:.15;background-image:radial-gradient(rgba(255,255,255,.08) 1px,transparent 1.2px),radial-gradient(rgba(0,0,0,.18) 1px,transparent 1.2px);background-size:3px 3px,5px 5px;background-position:0 0,1px 2px;mix-blend-mode:overlay}
+    .glow{position:absolute;border-radius:9999px;filter:blur(140px);pointer-events:none;z-index:0}
+    .grid-bg{background-image:linear-gradient(rgba(255,255,255,.055) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.055) 1px,transparent 1px);background-size:60px 60px}
+    .vignette{background:radial-gradient(ellipse at center,transparent 42%,rgba(0,0,0,.58) 100%)}
   </style>
-</head><body>
-  <div id="main" data-composition-id="main" data-width="1920" data-height="1080" data-start="0" data-duration="18">
-    <div class="scene clip" id="s1" data-start="0" data-duration="3.5" data-track-index="0">
-      <div class="grain"></div>
-      <div class="glow" style="width:700px;height:700px;background:var(--accent);opacity:0.12;top:-200px;right:100px;"></div>
-      <div class="scene-content">
-        <p class="label" id="s1-label">INTRODUCING</p>
-        <h1 class="display" id="s1-title">Your Product<br/>Name Here</h1>
-        <p class="sub" id="s1-sub">The tagline that changes everything.</p>
+</head>
+<body>
+  <div id="main" data-composition-id="main" data-width="${options.width}" data-height="${options.height}" data-start="0" data-duration="${options.duration}" class="relative h-[${options.height}px] w-[${options.width}px] overflow-hidden bg-hf-bg text-hf-ink">
+    <div id="s1" class="${sceneClass}" data-start="${s1}" data-duration="${d1}" data-track-index="0">
+      ${gridDecor}<div class="grain"></div>
+      <div class="glow h-[620px] w-[620px] bg-hf-accent opacity-[0.12] -right-[120px] -top-[180px]"></div>
+      <div class="${contentClass}">
+        <p id="s1-label" class="font-hf-data text-[18px] uppercase tracking-[5px] text-hf-accent">${options.eyebrow}</p>
+        <h1 id="s1-title" class="font-hf-display ${displaySize} font-black leading-[1.02] text-hf-ink">${titleText}</h1>
+        <p id="s1-sub" class="max-w-[940px] font-hf-display ${supportSize} font-light leading-[1.32] text-hf-muted">${options.subtitle}</p>
       </div>
     </div>
-    <div class="scene clip" id="s2" data-start="3.5" data-duration="3.5" data-track-index="0" style="visibility:hidden;">
-      <div class="grain"></div>
-      <div class="scene-content">
-        <p class="label" id="s2-label">THE PROBLEM</p>
-        <h2 class="display" id="s2-title" style="font-size:88px">What frustrates<br/>your customers</h2>
-        <p class="sub" id="s2-sub">One sentence on the pain point.</p>
+    <div id="s2" class="${sceneClass}" data-start="${s2}" data-duration="${d2}" data-track-index="0" style="visibility:hidden;">
+      ${gridDecor}<div class="grain"></div>
+      <div class="${contentClass}">
+        <p id="s2-label" class="font-hf-data text-[18px] uppercase tracking-[5px] text-hf-accent">THE FRICTION</p>
+        <h2 id="s2-title" class="font-hf-display text-[88px] font-black leading-[1.05] text-hf-ink">${problemText}</h2>
+        <p id="s2-sub" class="max-w-[820px] font-hf-display text-[36px] font-light leading-[1.38] text-hf-muted">Name the customer pain clearly, then make the next scene feel inevitable.</p>
       </div>
     </div>
-    <div class="scene clip" id="s3" data-start="7" data-duration="3.5" data-track-index="0" style="opacity:0;">
-      <div class="grain"></div>
-      <div class="glow" style="width:900px;height:450px;background:var(--accent2);opacity:0.14;bottom:-100px;left:300px;"></div>
-      <div class="scene-content">
-        <p class="label" id="s3-label">THE SOLUTION</p>
-        <h2 class="display" id="s3-title" style="font-size:88px">Your product<br/>fixes it</h2>
-        <p class="sub" id="s3-sub">One clear sentence on how.</p>
+    <div id="s3" class="${sceneClass}" data-start="${s3}" data-duration="${d3}" data-track-index="0" style="opacity:0;">
+      ${vignetteDecor}<div class="grain"></div>
+      <div class="glow h-[520px] w-[900px] bg-hf-accent-2 opacity-[0.14] bottom-[-120px] left-[260px]"></div>
+      <div class="${contentClass}">
+        <p id="s3-label" class="font-hf-data text-[18px] uppercase tracking-[5px] text-hf-accent">THE SOLUTION</p>
+        <h2 id="s3-title" class="font-hf-display text-[92px] font-black leading-[1.04] text-hf-ink">${solutionText}</h2>
+        <p id="s3-sub" class="max-w-[900px] font-hf-display text-[36px] font-light leading-[1.38] text-hf-muted">Replace this line with the product promise or launch message.</p>
       </div>
     </div>
-    <div class="scene clip" id="s4" data-start="10.5" data-duration="4" data-track-index="0" style="opacity:0;">
-      <div class="grain"></div>
-      <div class="scene-content" style="flex-direction:row;align-items:center;gap:120px">
-        <div>
-          <p class="label" id="s4-label">TRACTION</p>
-          <div class="stat" id="s4-stat">0</div>
-          <p class="sub" style="font-size:32px">users in 30 days</p>
+    <div id="s4" class="${sceneClass}" data-start="${s4}" data-duration="${d4}" data-track-index="0" style="opacity:0;">
+      ${gridDecor}<div class="grain"></div>
+      <div class="${contentClass} flex-row items-center gap-[120px]">
+        <div class="min-w-[520px]">
+          <p id="s4-label" class="font-hf-data text-[18px] uppercase tracking-[5px] text-hf-accent">${options.statLabel}</p>
+          <div id="s4-stat" class="font-hf-display text-[160px] font-black leading-none text-hf-accent-2">0${options.statSuffix}</div>
+          <p class="font-hf-display text-[32px] font-light text-hf-muted">${options.statCaption}</p>
         </div>
-        <div style="flex:1"><p class="sub" id="s4-copy">The proof point that makes investors lean in.</p></div>
+        <p id="s4-copy" class="max-w-[760px] font-hf-display text-[42px] font-light leading-[1.28] text-hf-ink">A proof point, customer quote, or metric makes the story credible.</p>
       </div>
     </div>
-    <div class="scene clip" id="s5" data-start="14.5" data-duration="3.5" data-track-index="0" style="opacity:0;">
-      <div class="grain"></div>
-      <div class="glow" style="width:1100px;height:550px;background:var(--accent);opacity:0.09;bottom:-200px;left:50%;transform:translateX(-50%);"></div>
-      <div class="scene-content" style="align-items:center;text-align:center">
-        <p class="label" id="s5-label">GET STARTED</p>
-        <h2 class="display" id="s5-cta" style="font-size:100px">yourproduct.com</h2>
-        <p class="sub" id="s5-sub">Free to try. No credit card required.</p>
+    <div id="s5" class="${sceneClass}" data-start="${s5}" data-duration="${d5}" data-track-index="0" style="opacity:0;">
+      ${vignetteDecor}<div class="grain"></div>
+      <div class="glow h-[560px] w-[1180px] bg-hf-accent opacity-[0.1] bottom-[-220px] left-1/2 -translate-x-1/2"></div>
+      <div class="${contentClass} items-center text-center">
+        <p id="s5-label" class="font-hf-data text-[18px] uppercase tracking-[5px] text-hf-accent">GET STARTED</p>
+        <h2 id="s5-cta" class="font-hf-display text-[104px] font-black leading-[1.03] text-hf-ink">${options.cta}</h2>
+        <p id="s5-sub" class="font-hf-display text-[34px] font-light text-hf-muted">Free to try. Replace with your best next action.</p>
       </div>
     </div>
   </div>
@@ -82,423 +137,312 @@ const TPL_NEON_LAUNCH = `<!doctype html>
     var tl = gsap.timeline({ paused: true });
     tl.from("#s1-label", { y:20, autoAlpha:0, duration:0.4, ease:"power2.out" }, 0.1);
     tl.from("#s1-title", { y:50, autoAlpha:0, duration:0.7, ease:"power4.out" }, 0.3);
-    tl.from("#s1-sub",   { y:30, autoAlpha:0, duration:0.5, ease:"power2.out" }, 0.7);
-    tl.to("#s1-title",   { y:-6, duration:1.5, ease:"sine.inOut", yoyo:true, repeat:1 }, 1.0);
-    tl.set("#s1", { autoAlpha:0 }, 3.5);
-    tl.set("#s2", { autoAlpha:1 }, 3.5);
-    tl.from("#s2-label", { x:-30, autoAlpha:0, duration:0.4, ease:"power2.out" }, 3.7);
-    tl.from("#s2-title", { y:60,  autoAlpha:0, duration:0.7, ease:"power4.out" }, 3.9);
-    tl.from("#s2-sub",   { y:30,  autoAlpha:0, duration:0.5, ease:"power2.out" }, 4.3);
-    tl.set("#s2", { autoAlpha:0 }, 7.0);
-    tl.set("#s3", { opacity:1 },   7.0);
-    tl.from("#s3-label", { x:-30, autoAlpha:0, duration:0.4, ease:"power2.out" }, 7.2);
-    tl.from("#s3-title", { y:60,  autoAlpha:0, duration:0.7, ease:"power4.out" }, 7.4);
-    tl.from("#s3-sub",   { y:30,  autoAlpha:0, duration:0.5, ease:"power2.out" }, 7.8);
-    tl.set("#s4", { opacity:1 }, 10.5);
-    tl.from("#s4-label", { x:-30, autoAlpha:0, duration:0.4, ease:"power2.out" }, 10.7);
-    var c={v:0}; tl.to(c, { v:12000, duration:2.0, ease:"power2.out", onUpdate:function(){ document.getElementById("s4-stat").textContent=c.v.toLocaleString(); }}, 11.0);
-    tl.from("#s4-copy",  { y:30,  autoAlpha:0, duration:0.5, ease:"power2.out" }, 11.3);
-    tl.set("#s5", { opacity:1 }, 14.5);
-    tl.from("#s5-label", { y:20,  autoAlpha:0, duration:0.4, ease:"power2.out" }, 14.7);
-    tl.from("#s5-cta",   { y:50,  autoAlpha:0, duration:0.7, ease:"power4.out" }, 14.9);
-    tl.from("#s5-sub",   { y:30,  autoAlpha:0, duration:0.5, ease:"power2.out" }, 15.3);
+    tl.from("#s1-sub", { y:30, autoAlpha:0, duration:0.5, ease:"power2.out" }, 0.7);
+    tl.to("#s1-title", { y:-6, duration:1.5, ease:"sine.inOut", yoyo:true, repeat:1 }, 1.0);
+    tl.set("#s1", { autoAlpha:0 }, ${s2});
+    tl.set("#s2", { autoAlpha:1 }, ${s2});
+    tl.from("#s2-label", { x:-30, autoAlpha:0, duration:0.4, ease:"power2.out" }, ${s2 + 0.2});
+    tl.from("#s2-title", { y:60, autoAlpha:0, duration:0.7, ease:"power4.out" }, ${s2 + 0.4});
+    tl.from("#s2-sub", { y:30, autoAlpha:0, duration:0.5, ease:"power2.out" }, ${s2 + 0.8});
+    tl.set("#s2", { autoAlpha:0 }, ${s3});
+    tl.set("#s3", { opacity:1 }, ${s3});
+    tl.from("#s3-label", { x:-30, autoAlpha:0, duration:0.4, ease:"power2.out" }, ${s3 + 0.2});
+    tl.from("#s3-title", { y:60, autoAlpha:0, duration:0.7, ease:"power4.out" }, ${s3 + 0.4});
+    tl.from("#s3-sub", { y:30, autoAlpha:0, duration:0.5, ease:"power2.out" }, ${s3 + 0.8});
+    tl.set("#s4", { opacity:1 }, ${s4});
+    tl.from("#s4-label", { x:-30, autoAlpha:0, duration:0.4, ease:"power2.out" }, ${s4 + 0.2});
+    var c={v:0};
+    tl.to(c, { v:${options.statValue}, duration:2.0, ease:"power2.out", onUpdate:function(){
+      var value = ${options.formatStat === "decimal" ? "c.v.toFixed(1)" : "Math.round(c.v).toLocaleString()"};
+      document.getElementById("s4-stat").textContent = value + "${options.statSuffix}";
+    }}, ${s4 + 0.5});
+    tl.from("#s4-copy", { y:30, autoAlpha:0, duration:0.5, ease:"power2.out" }, ${s4 + 0.8});
+    tl.set("#s5", { opacity:1 }, ${s5});
+    tl.from("#s5-label", { y:20, autoAlpha:0, duration:0.4, ease:"power2.out" }, ${s5 + 0.2});
+    tl.from("#s5-cta", { y:50, autoAlpha:0, duration:0.7, ease:"power4.out" }, ${s5 + 0.4});
+    tl.from("#s5-sub", { y:30, autoAlpha:0, duration:0.5, ease:"power2.out" }, ${s5 + 0.8});
     window.HyperShader.init({
-      bgColor:"#08080f", scenes:["s3","s4","s5"], timeline:tl,
-      transitions:[{time:10.25,shader:"cinematic-zoom",duration:0.5},{time:14.25,shader:"light-leak",duration:0.5}],
+      bgColor:"${options.bg}", scenes:["s3","s4","s5"], timeline:tl,
+      transitions:[{time:${transition1},shader:"cinematic-zoom",duration:0.5},{time:${transition2},shader:"light-leak",duration:0.5}],
     });
     window.__timelines["main"] = tl;
   </script>
-</body></html>`;
+</body>
+</html>`;
+};
 
-// 2. Social Reel — vertical 1080×1920, bold/punchy, 15s, 5 scenes
-const TPL_SOCIAL_REEL = `<!doctype html>
-<html lang="en"><head>
-  <meta charset="UTF-8" /><meta name="viewport" content="width=1080, height=1920" />
-  <style>
-    :root{--bg:#0d0d0d;--ink:#ffffff;--accent:#ff3c3c;--muted:#888;--font-display:"Barlow Condensed",sans-serif;--font-data:"JetBrains Mono",monospace}
-    *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
-    html,body{width:1080px;height:1920px;overflow:hidden;background:var(--bg);color:var(--ink)}
-    .scene{position:absolute;top:0;left:0;width:1080px;height:1920px;overflow:hidden}
-    .scene-content{width:100%;height:100%;padding:140px 80px;display:flex;flex-direction:column;justify-content:center;gap:28px;box-sizing:border-box;position:relative;z-index:1}
-    .display{font-family:var(--font-display);font-weight:900;font-size:140px;line-height:0.95;text-transform:uppercase;letter-spacing:-1px}
-    .sub{font-family:var(--font-display);font-weight:300;font-size:52px;line-height:1.3;color:var(--muted)}
-    .label{font-family:var(--font-data);font-size:22px;color:var(--accent);text-transform:uppercase;letter-spacing:5px}
-    .accent-bar{width:80px;height:8px;background:var(--accent);border-radius:4px}
-    .grain{position:absolute;inset:0;pointer-events:none;z-index:50;opacity:0.12;background-image:radial-gradient(rgba(255,255,255,0.08) 1px,transparent 1.2px),radial-gradient(rgba(0,0,0,0.18) 1px,transparent 1.2px);background-size:3px 3px,5px 5px;background-position:0 0,1px 2px;mix-blend-mode:overlay}
-  </style>
-</head><body>
-  <div id="main" data-composition-id="main" data-width="1080" data-height="1920" data-start="0" data-duration="15">
-    <div class="scene clip" id="s1" data-start="0" data-duration="3" data-track-index="0">
-      <div class="grain"></div>
-      <div class="scene-content">
-        <div class="accent-bar" id="s1-bar"></div>
-        <h1 class="display" id="s1-title">STOP<br/>SCROLLING</h1>
-        <p class="sub" id="s1-sub">This changes how you work.</p>
-      </div>
-    </div>
-    <div class="scene clip" id="s2" data-start="3" data-duration="2.5" data-track-index="0" style="visibility:hidden;">
-      <div class="grain"></div>
-      <div class="scene-content">
-        <p class="label" id="s2-label">THE OLD WAY</p>
-        <h2 class="display" id="s2-title" style="font-size:110px">SLOW.<br/>PAINFUL.<br/>BROKEN.</h2>
-      </div>
-    </div>
-    <div class="scene clip" id="s3" data-start="5.5" data-duration="3" data-track-index="0" style="opacity:0;">
-      <div class="grain"></div>
-      <div class="scene-content" style="background:var(--accent)">
-        <p class="label" id="s3-label" style="color:#fff">THE NEW WAY</p>
-        <h2 class="display" id="s3-title">YOUR<br/>PRODUCT<br/>NAME</h2>
-        <p class="sub" id="s3-sub" style="color:rgba(255,255,255,0.7)">One sentence. What it does.</p>
-      </div>
-    </div>
-    <div class="scene clip" id="s4" data-start="8.5" data-duration="3" data-track-index="0" style="opacity:0;">
-      <div class="grain"></div>
-      <div class="scene-content">
-        <p class="label" id="s4-label">RESULTS</p>
-        <div class="display" id="s4-stat" style="font-size:200px;color:var(--accent)">0<span style="font-size:80px">%</span></div>
-        <p class="sub" id="s4-copy">faster than anything else.</p>
-      </div>
-    </div>
-    <div class="scene clip" id="s5" data-start="11.5" data-duration="3.5" data-track-index="0" style="opacity:0;">
-      <div class="grain"></div>
-      <div class="scene-content" style="align-items:center;text-align:center">
-        <p class="label" id="s5-label">TRY IT FREE</p>
-        <h2 class="display" id="s5-cta" style="font-size:110px">LINK IN<br/>BIO</h2>
-        <div class="accent-bar" id="s5-bar" style="margin:0 auto"></div>
-      </div>
-    </div>
-  </div>
-  <script>
-    window.__timelines = window.__timelines || {};
-    if (window.lucide) window.lucide.createIcons();
-    var tl = gsap.timeline({ paused: true });
-    tl.from("#s1-bar",   { scaleX:0, transformOrigin:"left", duration:0.4, ease:"power2.out" }, 0.1);
-    tl.from("#s1-title", { y:80, autoAlpha:0, duration:0.6, ease:"power4.out" }, 0.3);
-    tl.from("#s1-sub",   { y:30, autoAlpha:0, duration:0.5, ease:"power2.out" }, 0.7);
-    tl.set("#s1", { autoAlpha:0 }, 3.0);
-    tl.set("#s2", { autoAlpha:1 }, 3.0);
-    tl.from("#s2-label", { y:20, autoAlpha:0, duration:0.3, ease:"power2.out" }, 3.2);
-    tl.from("#s2-title", { y:80, autoAlpha:0, duration:0.5, ease:"power4.out", stagger:0.12 }, 3.4);
-    tl.set("#s2", { autoAlpha:0 }, 5.5);
-    tl.set("#s3", { opacity:1 },  5.5);
-    tl.from("#s3-label", { y:20, autoAlpha:0, duration:0.3, ease:"power2.out" }, 5.7);
-    tl.from("#s3-title", { y:80, autoAlpha:0, duration:0.6, ease:"power4.out" }, 5.9);
-    tl.from("#s3-sub",   { y:30, autoAlpha:0, duration:0.4, ease:"power2.out" }, 6.3);
-    tl.set("#s4", { opacity:1 }, 8.5);
-    tl.from("#s4-label", { y:20, autoAlpha:0, duration:0.3, ease:"power2.out" }, 8.7);
-    var c={v:0}; tl.to(c, { v:87, duration:1.5, ease:"power2.out", onUpdate:function(){ document.getElementById("s4-stat").firstChild.textContent=Math.round(c.v); }}, 9.0);
-    tl.from("#s4-copy",  { y:30, autoAlpha:0, duration:0.4, ease:"power2.out" }, 9.8);
-    tl.set("#s5", { opacity:1 }, 11.5);
-    tl.from("#s5-label", { y:20, autoAlpha:0, duration:0.3, ease:"power2.out" }, 11.7);
-    tl.from("#s5-cta",   { y:60, autoAlpha:0, duration:0.6, ease:"power4.out" }, 11.9);
-    tl.from("#s5-bar",   { scaleX:0, transformOrigin:"center", duration:0.5, ease:"expo.out" }, 12.5);
-    window.HyperShader.init({
-      bgColor:"#0d0d0d", scenes:["s3","s4","s5"], timeline:tl,
-      transitions:[{time:8.25,shader:"glitch",duration:0.4},{time:11.25,shader:"cinematic-zoom",duration:0.4}],
-    });
-    window.__timelines["main"] = tl;
-  </script>
-</body></html>`;
+const TPL_NEON_LAUNCH = makeTailwindTemplate({
+	width: 1920,
+	height: 1080,
+	duration: 18,
+	durations: [3.5, 3.5, 3.5, 4, 3.5],
+	bg: "#08080f",
+	ink: "#f0eeff",
+	accent: "#c840f0",
+	accent2: "#7c6cff",
+	muted: "#8a86a4",
+	fontDisplay: '"Space Grotesk",sans-serif',
+	fontData: '"JetBrains Mono",monospace',
+	eyebrow: "INTRODUCING",
+	title: "Your Product\nName Here",
+	subtitle: "The tagline that changes everything.",
+	problem: "What frustrates\nyour customers",
+	solution: "Your product\nfixes it",
+	statLabel: "TRACTION",
+	statValue: 12000,
+	statSuffix: "",
+	statCaption: "users in 30 days",
+	cta: "yourproduct.com",
+	includeVignette: true,
+});
 
-// 3. Clean Minimal — light editorial, 1920×1080, 15s, 4 scenes
-const TPL_CLEAN_MINIMAL = `<!doctype html>
-<html lang="en"><head>
-  <meta charset="UTF-8" /><meta name="viewport" content="width=1920, height=1080" />
-  <style>
-    :root{--bg:#f7f5f0;--ink:#1a1814;--accent:#d97b2a;--muted:#8a8278;--font-display:"DM Serif Display",serif;--font-body:"DM Sans",sans-serif}
-    *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
-    html,body{width:1920px;height:1080px;overflow:hidden;background:var(--bg);color:var(--ink)}
-    .scene{position:absolute;top:0;left:0;width:1920px;height:1080px;overflow:hidden}
-    .scene-content{width:100%;height:100%;padding:120px 200px;display:flex;flex-direction:column;justify-content:center;gap:36px;box-sizing:border-box;position:relative;z-index:1}
-    .display{font-family:var(--font-display);font-weight:400;font-size:110px;line-height:1.05;color:var(--ink)}
-    .sub{font-family:var(--font-body);font-weight:300;font-size:36px;line-height:1.6;color:var(--muted);max-width:900px}
-    .label{font-family:var(--font-body);font-size:16px;color:var(--accent);text-transform:uppercase;letter-spacing:6px;font-weight:400}
-    .rule{width:60px;height:2px;background:var(--accent)}
-  </style>
-</head><body>
-  <div id="main" data-composition-id="main" data-width="1920" data-height="1080" data-start="0" data-duration="15">
-    <div class="scene clip" id="s1" data-start="0" data-duration="4" data-track-index="0">
-      <div class="scene-content">
-        <div class="rule" id="s1-rule"></div>
-        <h1 class="display" id="s1-title">Beautiful products<br/>deserve a beautiful story.</h1>
-        <p class="sub" id="s1-sub">Replace this with your opening statement.</p>
-      </div>
-    </div>
-    <div class="scene clip" id="s2" data-start="4" data-duration="3.5" data-track-index="0" style="visibility:hidden;">
-      <div class="scene-content">
-        <p class="label" id="s2-label">WHAT WE DO</p>
-        <h2 class="display" id="s2-title" style="font-size:90px">Your core<br/>value prop.</h2>
-        <p class="sub" id="s2-sub">Describe in one or two clear sentences.</p>
-      </div>
-    </div>
-    <div class="scene clip" id="s3" data-start="7.5" data-duration="4" data-track-index="0" style="opacity:0;">
-      <div class="scene-content" style="flex-direction:row;align-items:flex-end;gap:160px">
-        <div style="flex:1">
-          <p class="label" id="s3-label">THE RESULT</p>
-          <h2 class="display" id="s3-num" style="font-size:180px;color:var(--accent)">0</h2>
-          <p class="sub" id="s3-metric" style="font-size:28px">hours saved per week</p>
-        </div>
-        <div style="flex:1.2"><p class="sub" id="s3-copy" style="font-size:40px">Supporting context that frames the number and makes it credible.</p></div>
-      </div>
-    </div>
-    <div class="scene clip" id="s4" data-start="11.5" data-duration="3.5" data-track-index="0" style="opacity:0;">
-      <div class="scene-content" style="align-items:flex-start">
-        <div class="rule" id="s4-rule"></div>
-        <h2 class="display" id="s4-cta" style="font-style:italic">Start for free today.</h2>
-        <p class="sub" id="s4-url" style="font-size:32px;color:var(--accent)">yourproduct.com</p>
-      </div>
-    </div>
-  </div>
-  <script>
-    window.__timelines = window.__timelines || {};
-    if (window.lucide) window.lucide.createIcons();
-    var tl = gsap.timeline({ paused: true });
-    tl.from("#s1-rule",  { scaleX:0, transformOrigin:"left", duration:0.5, ease:"power2.out" }, 0.2);
-    tl.from("#s1-title", { y:40, autoAlpha:0, duration:0.8, ease:"power3.out" }, 0.5);
-    tl.from("#s1-sub",   { y:20, autoAlpha:0, duration:0.6, ease:"power2.out" }, 1.0);
-    tl.set("#s1", { autoAlpha:0 }, 4.0);
-    tl.set("#s2", { autoAlpha:1 }, 4.0);
-    tl.from("#s2-label", { x:-20, autoAlpha:0, duration:0.4, ease:"power2.out" }, 4.2);
-    tl.from("#s2-title", { y:40,  autoAlpha:0, duration:0.7, ease:"power3.out" }, 4.5);
-    tl.from("#s2-sub",   { y:20,  autoAlpha:0, duration:0.5, ease:"power2.out" }, 5.0);
-    tl.set("#s2", { autoAlpha:0 }, 7.5);
-    tl.set("#s3", { opacity:1 },  7.5);
-    tl.from("#s3-label",  { x:-20, autoAlpha:0, duration:0.4, ease:"power2.out" }, 7.7);
-    var c={v:0}; tl.to(c, { v:40, duration:2.0, ease:"power2.out", onUpdate:function(){ document.getElementById("s3-num").textContent=Math.round(c.v); }}, 8.0);
-    tl.from("#s3-metric", { y:20,  autoAlpha:0, duration:0.5, ease:"power2.out" }, 8.3);
-    tl.from("#s3-copy",   { y:20,  autoAlpha:0, duration:0.6, ease:"power2.out" }, 8.6);
-    tl.set("#s4", { opacity:1 }, 11.5);
-    tl.from("#s4-rule",  { scaleX:0, transformOrigin:"left", duration:0.5, ease:"power2.out" }, 11.7);
-    tl.from("#s4-cta",   { y:40,  autoAlpha:0, duration:0.7, ease:"power3.out" }, 12.0);
-    tl.from("#s4-url",   { y:20,  autoAlpha:0, duration:0.5, ease:"power2.out" }, 12.5);
-    window.HyperShader.init({
-      bgColor:"#f7f5f0", scenes:["s3","s4"], timeline:tl,
-      transitions:[{time:11.25,shader:"cross-warp-morph",duration:0.5}],
-    });
-    window.__timelines["main"] = tl;
-  </script>
-</body></html>`;
+const TPL_SOCIAL_REEL = makeTailwindTemplate({
+	width: 1080,
+	height: 1920,
+	duration: 15,
+	durations: [3, 2.5, 3, 3, 3.5],
+	bg: "#0d0d0d",
+	ink: "#ffffff",
+	accent: "#ff3c3c",
+	accent2: "#ffffff",
+	muted: "#8d8d8d",
+	fontDisplay: '"Barlow Condensed",sans-serif',
+	fontData: '"JetBrains Mono",monospace',
+	eyebrow: "STOP SCROLLING",
+	title: "This changes\nhow you work",
+	subtitle: "A fast vertical draft for social launch posts.",
+	problem: "Slow.\nPainful.\nBroken.",
+	solution: "The new way\nstarts here",
+	statLabel: "RESULTS",
+	statValue: 87,
+	statSuffix: "%",
+	statCaption: "faster than the old workflow",
+	cta: "LINK IN BIO",
+});
 
-// 4. Tech Data — dark/teal, metrics-driven with D3 bars, 1920×1080, 20s, 5 scenes
-const TPL_TECH_DATA = `<!doctype html>
-<html lang="en"><head>
-  <meta charset="UTF-8" /><meta name="viewport" content="width=1920, height=1080" />
-  <style>
-    :root{--bg:#040d0f;--ink:#e8f8f5;--accent:#00e5c0;--accent2:#0066ff;--muted:#3d6b64;--font-display:"Space Grotesk",sans-serif;--font-data:"JetBrains Mono",monospace}
-    *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
-    html,body{width:1920px;height:1080px;overflow:hidden;background:var(--bg);color:var(--ink)}
-    .scene{position:absolute;top:0;left:0;width:1920px;height:1080px;overflow:hidden}
-    .scene-content{width:100%;height:100%;padding:80px 140px;display:flex;flex-direction:column;justify-content:center;gap:28px;box-sizing:border-box;position:relative;z-index:1}
-    .display{font-family:var(--font-display);font-weight:900;font-size:100px;line-height:1.05}
-    .sub{font-family:var(--font-display);font-weight:300;font-size:36px;line-height:1.4;color:var(--muted)}
-    .label{font-family:var(--font-data);font-size:16px;color:var(--accent);text-transform:uppercase;letter-spacing:4px}
-    .mono{font-family:var(--font-data);font-size:28px;color:var(--accent)}
-    .stat-big{font-family:var(--font-data);font-weight:700;font-size:140px;color:var(--accent);line-height:1}
-    .grid-bg{position:absolute;inset:0;background-image:linear-gradient(rgba(0,229,192,0.04) 1px,transparent 1px),linear-gradient(90deg,rgba(0,229,192,0.04) 1px,transparent 1px);background-size:60px 60px;pointer-events:none;z-index:0}
-    .grain{position:absolute;inset:0;pointer-events:none;z-index:50;opacity:0.12;background-image:radial-gradient(rgba(255,255,255,0.08) 1px,transparent 1.2px),radial-gradient(rgba(0,0,0,0.18) 1px,transparent 1.2px);background-size:3px 3px,5px 5px;background-position:0 0,1px 2px;mix-blend-mode:overlay}
-  </style>
-</head><body>
-  <div id="main" data-composition-id="main" data-width="1920" data-height="1080" data-start="0" data-duration="20">
-    <div class="scene clip" id="s1" data-start="0" data-duration="4" data-track-index="0">
-      <div class="grid-bg"></div><div class="grain"></div>
-      <div class="scene-content">
-        <p class="label" id="s1-label">// PRODUCT.LAUNCH</p>
-        <h1 class="display" id="s1-title">Built for teams<br/>who ship fast.</h1>
-        <p class="sub" id="s1-sub">Your product description in one line.</p>
-        <p class="mono" id="s1-mono">v2.0.0 — now available</p>
-      </div>
-    </div>
-    <div class="scene clip" id="s2" data-start="4" data-duration="4" data-track-index="0" style="visibility:hidden;">
-      <div class="grid-bg"></div><div class="grain"></div>
-      <div class="scene-content" style="flex-direction:row;align-items:center;gap:100px">
-        <div style="flex:1">
-          <p class="label" id="s2-label">PERFORMANCE</p>
-          <div class="stat-big" id="s2-stat">0<span style="font-size:60px">ms</span></div>
-          <p class="sub" id="s2-sub">average response time</p>
-        </div>
-        <div style="flex:1">
-          <svg id="s2-chart" width="700" height="320" viewBox="0 0 700 320"></svg>
-        </div>
-      </div>
-    </div>
-    <div class="scene clip" id="s3" data-start="8" data-duration="4" data-track-index="0" style="opacity:0;">
-      <div class="grid-bg"></div><div class="grain"></div>
-      <div class="scene-content">
-        <p class="label" id="s3-label">KEY FEATURES</p>
-        <div style="display:flex;gap:60px;margin-top:20px">
-          <div id="s3-f1"><i data-lucide="zap" style="width:48px;height:48px;color:var(--accent);stroke-width:2"></i><h3 style="font-family:var(--font-display);font-size:42px;font-weight:700;margin-top:16px">Feature One</h3><p class="sub" style="font-size:28px;margin-top:8px">Short benefit.</p></div>
-          <div id="s3-f2"><i data-lucide="shield-check" style="width:48px;height:48px;color:var(--accent);stroke-width:2"></i><h3 style="font-family:var(--font-display);font-size:42px;font-weight:700;margin-top:16px">Feature Two</h3><p class="sub" style="font-size:28px;margin-top:8px">Short benefit.</p></div>
-          <div id="s3-f3"><i data-lucide="chart-no-axes-combined" style="width:48px;height:48px;color:var(--accent);stroke-width:2"></i><h3 style="font-family:var(--font-display);font-size:42px;font-weight:700;margin-top:16px">Feature Three</h3><p class="sub" style="font-size:28px;margin-top:8px">Short benefit.</p></div>
-        </div>
-      </div>
-    </div>
-    <div class="scene clip" id="s4" data-start="12" data-duration="4" data-track-index="0" style="opacity:0;">
-      <div class="grid-bg"></div><div class="grain"></div>
-      <div class="scene-content" style="flex-direction:row;gap:120px;align-items:center">
-        <div style="flex:1"><p class="label" id="s4-label">USED BY</p><div class="stat-big" id="s4-stat2">0</div><p class="sub">teams worldwide</p></div>
-        <div style="flex:1.5"><p class="sub" id="s4-quote" style="font-size:42px;font-style:italic;color:var(--ink)">"Replace with a real customer quote that validates your product."</p><p class="mono" style="font-size:22px;margin-top:24px">— Customer Name, Role</p></div>
-      </div>
-    </div>
-    <div class="scene clip" id="s5" data-start="16" data-duration="4" data-track-index="0" style="opacity:0;">
-      <div class="grid-bg"></div><div class="grain"></div>
-      <div class="scene-content" style="align-items:center;text-align:center">
-        <p class="label" id="s5-label">// START.FREE</p>
-        <h2 class="display" id="s5-cta" style="font-size:120px">yourproduct.com</h2>
-        <p class="sub" id="s5-sub">14-day free trial. No card required.</p>
-      </div>
-    </div>
-  </div>
-  <script>
-    window.__timelines = window.__timelines || {};
-    if (window.lucide) window.lucide.createIcons();
-    var bars=[55,80,65,95,75,100,88]; var svg=d3.select("#s2-chart");
-    svg.selectAll("rect").data(bars).join("rect").attr("x",function(d,i){return i*90+20}).attr("y",function(d){return 280-d*2.6}).attr("width",60).attr("height",function(d){return d*2.6}).attr("rx",6).attr("fill","var(--accent)").attr("opacity",0.85);
-    var tl = gsap.timeline({ paused: true });
-    tl.from("#s1-label", { y:20, autoAlpha:0, duration:0.4, ease:"power2.out" }, 0.1);
-    tl.from("#s1-title", { y:50, autoAlpha:0, duration:0.7, ease:"power4.out" }, 0.3);
-    tl.from("#s1-sub",   { y:30, autoAlpha:0, duration:0.5, ease:"power2.out" }, 0.7);
-    tl.from("#s1-mono",  { y:20, autoAlpha:0, duration:0.4, ease:"power2.out" }, 1.0);
-    tl.set("#s1", { autoAlpha:0 }, 4.0);
-    tl.set("#s2", { autoAlpha:1 }, 4.0);
-    tl.from("#s2-label", { x:-20, autoAlpha:0, duration:0.4, ease:"power2.out" }, 4.2);
-    var c1={v:0}; tl.to(c1, { v:12, duration:1.5, ease:"power2.out", onUpdate:function(){ document.getElementById("s2-stat").firstChild.textContent=Math.round(c1.v); }}, 4.5);
-    tl.from("#s2-sub",   { y:20, autoAlpha:0, duration:0.4, ease:"power2.out" }, 4.8);
-    tl.from("#s2-chart rect", { scaleY:0, transformOrigin:"bottom", duration:0.6, ease:"expo.out", stagger:0.08 }, 5.0);
-    tl.set("#s2", { autoAlpha:0 }, 8.0);
-    tl.set("#s3", { opacity:1 },  8.0);
-    tl.from("#s3-label", { x:-20, autoAlpha:0, duration:0.4, ease:"power2.out" }, 8.2);
-    tl.from("#s3-f1",    { y:40,  autoAlpha:0, duration:0.5, ease:"power3.out" }, 8.5);
-    tl.from("#s3-f2",    { y:40,  autoAlpha:0, duration:0.5, ease:"power3.out" }, 8.7);
-    tl.from("#s3-f3",    { y:40,  autoAlpha:0, duration:0.5, ease:"power3.out" }, 8.9);
-    tl.set("#s4", { opacity:1 }, 12.0);
-    tl.from("#s4-label", { x:-20, autoAlpha:0, duration:0.4, ease:"power2.out" }, 12.2);
-    var c2={v:0}; tl.to(c2, { v:4200, duration:2.0, ease:"power2.out", onUpdate:function(){ document.getElementById("s4-stat2").textContent=c2.v.toLocaleString(); }}, 12.5);
-    tl.from("#s4-quote",  { y:30, autoAlpha:0, duration:0.6, ease:"power2.out" }, 13.0);
-    tl.set("#s5", { opacity:1 }, 16.0);
-    tl.from("#s5-label", { y:20, autoAlpha:0, duration:0.4, ease:"power2.out" }, 16.2);
-    tl.from("#s5-cta",   { y:50, autoAlpha:0, duration:0.7, ease:"power4.out" }, 16.4);
-    tl.from("#s5-sub",   { y:30, autoAlpha:0, duration:0.5, ease:"power2.out" }, 16.8);
-    window.HyperShader.init({
-      bgColor:"#040d0f", scenes:["s3","s4","s5"], timeline:tl,
-      transitions:[{time:11.75,shader:"cinematic-zoom",duration:0.5},{time:15.75,shader:"chromatic-split",duration:0.4}],
-    });
-    window.__timelines["main"] = tl;
-  </script>
-</body></html>`;
+const TPL_CLEAN_MINIMAL = makeTailwindTemplate({
+	width: 1920,
+	height: 1080,
+	duration: 15,
+	durations: [3.5, 3, 3, 3, 2.5],
+	bg: "#f7f5f0",
+	ink: "#1a1814",
+	accent: "#d97b2a",
+	accent2: "#1a1814",
+	muted: "#8a8278",
+	fontDisplay: '"DM Serif Display",serif',
+	fontData: '"Space Grotesk",sans-serif',
+	eyebrow: "EDITORIAL STORY",
+	title: "Beautiful products\ndeserve a story",
+	subtitle: "A restrained template for premium announcements.",
+	problem: "Too much noise\nnot enough clarity",
+	solution: "A cleaner way\nto explain value",
+	statLabel: "THE RESULT",
+	statValue: 40,
+	statSuffix: "",
+	statCaption: "hours saved per week",
+	cta: "Start for free today.",
+});
 
-// 5. Warm Cinema — amber/gold tones, storytelling, 1920×1080, 18s, 5 scenes
-const TPL_WARM_CINEMA = `<!doctype html>
-<html lang="en"><head>
-  <meta charset="UTF-8" /><meta name="viewport" content="width=1920, height=1080" />
-  <style>
-    :root{--bg:#100c07;--ink:#f5ead6;--accent:#c9892a;--accent2:#e8b86d;--muted:#7a6a52;--font-display:"Cormorant",serif;--font-body:"Space Grotesk",sans-serif}
-    *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
-    html,body{width:1920px;height:1080px;overflow:hidden;background:var(--bg);color:var(--ink)}
-    .scene{position:absolute;top:0;left:0;width:1920px;height:1080px;overflow:hidden}
-    .scene-content{width:100%;height:100%;padding:120px 200px;display:flex;flex-direction:column;justify-content:center;gap:28px;box-sizing:border-box;position:relative;z-index:1}
-    .display{font-family:var(--font-display);font-weight:600;font-size:120px;line-height:1.05}
-    .italic{font-style:italic;font-weight:300}
-    .sub{font-family:var(--font-body);font-weight:400;font-size:32px;line-height:1.6;color:var(--muted);max-width:880px}
-    .label{font-family:var(--font-body);font-size:15px;color:var(--accent);text-transform:uppercase;letter-spacing:6px}
-    .divider{width:100px;height:1px;background:var(--accent);opacity:0.6}
-    .warm-glow{position:absolute;border-radius:50%;filter:blur(180px);pointer-events:none;z-index:0}
-    .vignette{position:absolute;inset:0;pointer-events:none;z-index:49;background:radial-gradient(ellipse at center,transparent 40%,rgba(0,0,0,0.6) 100%)}
-    .grain{position:absolute;inset:0;pointer-events:none;z-index:50;opacity:0.18;background-image:radial-gradient(rgba(255,255,255,0.08) 1px,transparent 1.2px),radial-gradient(rgba(0,0,0,0.18) 1px,transparent 1.2px);background-size:3px 3px,5px 5px;background-position:0 0,1px 2px;mix-blend-mode:overlay}
-  </style>
-</head><body>
-  <div id="main" data-composition-id="main" data-width="1920" data-height="1080" data-start="0" data-duration="18">
-    <div class="scene clip" id="s1" data-start="0" data-duration="4" data-track-index="0">
-      <div class="warm-glow" style="width:800px;height:400px;background:var(--accent);opacity:0.08;bottom:-100px;right:-100px;"></div>
-      <div class="vignette"></div><div class="grain"></div>
-      <div class="scene-content">
-        <p class="label" id="s1-label">EST. 2024</p>
-        <div class="divider" id="s1-div"></div>
-        <h1 class="display italic" id="s1-title">Every great product<br/>begins with a story.</h1>
-      </div>
+const TPL_TECH_DATA = makeTailwindTemplate({
+	width: 1920,
+	height: 1080,
+	duration: 20,
+	durations: [4, 4, 4, 4, 4],
+	bg: "#040d0f",
+	ink: "#e8f8f5",
+	accent: "#00e5c0",
+	accent2: "#0066ff",
+	muted: "#5b807b",
+	fontDisplay: '"Space Grotesk",sans-serif',
+	fontData: '"JetBrains Mono",monospace',
+	eyebrow: "// PRODUCT.LAUNCH",
+	title: "Built for teams\nwho ship fast",
+	subtitle: "A metrics-forward launch draft with technical energy.",
+	problem: "Latency hides\ninside every workflow",
+	solution: "Ship decisions\nat product speed",
+	statLabel: "PERFORMANCE",
+	statValue: 12,
+	statSuffix: "ms",
+	statCaption: "average response time",
+	cta: "yourproduct.com",
+	includeGrid: true,
+});
+
+const TPL_WARM_CINEMA = makeTailwindTemplate({
+	width: 1920,
+	height: 1080,
+	duration: 18,
+	durations: [4, 3.5, 3.5, 3.5, 3.5],
+	bg: "#100c07",
+	ink: "#f5ead6",
+	accent: "#c9892a",
+	accent2: "#e8b86d",
+	muted: "#9a8460",
+	fontDisplay: '"Cormorant",serif',
+	fontData: '"Space Grotesk",sans-serif',
+	eyebrow: "EST. 2024",
+	title: "Every great product\nbegins with a story",
+	subtitle: "A warm cinematic structure for founder-led launches.",
+	problem: "What if it was\njust easier?",
+	solution: "Introducing\nProduct Name",
+	statLabel: "IN NUMBERS",
+	statValue: 4.9,
+	statSuffix: "/5",
+	statCaption: "average customer rating",
+	cta: "Begin your story.",
+	formatStat: "decimal",
+	includeVignette: true,
+});
+
+// ── Scaffold templates ────────────────────────────────────────────────────────
+
+interface ScaffoldOptions {
+	width: number;
+	height: number;
+	durations: number[];
+	fills: string[];
+	shaderGroups: Array<{ indices: [number, number]; shader: string }>;
+}
+
+const makeScaffoldHTML = ({
+	width,
+	height,
+	durations,
+	fills,
+	shaderGroups,
+}: ScaffoldOptions): string => {
+	let t = 0;
+	const starts = durations.map((d) => {
+		const s = t;
+		t += d;
+		return s;
+	});
+	const total = t;
+
+	const firstAnchors = new Set(shaderGroups.map((g) => g.indices[0]));
+	const secondAnchors = new Set(shaderGroups.map((g) => g.indices[1]));
+	const pad = height > width ? "120px 80px" : "80px 160px";
+
+	const scenesHtml = durations
+		.map((d, i) => {
+			const id = `s${i + 1}`;
+			const style =
+				i === 0
+					? ""
+					: firstAnchors.has(i) || secondAnchors.has(i)
+						? ` style="opacity:0;"`
+						: ` style="visibility:hidden;"`;
+			return `      <div class="scene clip" id="${id}" data-start="${starts[i]}" data-duration="${d}" data-track-index="0"${style}>\n        <div class="grain"></div><div class="scene-content"><!-- FILL: ${fills[i] ?? `scene ${i + 1}`} --></div>\n      </div>`;
+		})
+		.join("\n");
+
+	const js: string[] = [
+		"      window.__timelines = window.__timelines || {};",
+		"      if (window.lucide) window.lucide.createIcons();",
+		"      var tl = gsap.timeline({ paused: true });",
+		`      tl.set("#s1", { autoAlpha:0 }, ${starts[1]});`,
+	];
+
+	for (let i = 1; i < durations.length; i++) {
+		const id = `#s${i + 1}`;
+		const isLast = i === durations.length - 1;
+		if (firstAnchors.has(i)) {
+			js.push(
+				`      tl.set("${id}", { opacity:1 }, ${starts[i]}); // first anchor`,
+			);
+		} else if (!secondAnchors.has(i)) {
+			if (isLast) {
+				js.push(`      tl.set("${id}", { autoAlpha:1 }, ${starts[i]});`);
+			} else {
+				js.push(
+					`      tl.set("${id}", { autoAlpha:1 }, ${starts[i]}); tl.set("${id}", { autoAlpha:0 }, ${starts[i] + durations[i]});`,
+				);
+			}
+		}
+		// second anchors: HyperShader handles visibility — no explicit toggle needed
+	}
+
+	js.push("      // === FILL: scene animations ===");
+
+	for (const g of shaderGroups) {
+		const [a, b] = g.indices;
+		const transTime = +(starts[b] - 0.25).toFixed(2);
+		js.push(
+			`      window.HyperShader.init({ bgColor: getComputedStyle(document.documentElement).getPropertyValue("--bg").trim() || "#0a0a0d", scenes: ["s${a + 1}", "s${b + 1}"], timeline: tl, transitions: [{ time: ${transTime}, shader: "${g.shader}", duration: 0.5 }] });`,
+		);
+	}
+
+	js.push('      window.__timelines["main"] = tl;');
+
+	return `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=${width}, height=${height}" />
+    <style>
+      :root { --bg:#0a0a0d; --ink:#f5f5f7; --accent:#7c6cff; --muted:#5a6270; --accent-dim:#3d3680; --font-display:"Space Grotesk",sans-serif; --font-data:"JetBrains Mono",monospace; }
+      *,*::before,*::after { margin:0; padding:0; box-sizing:border-box }
+      html,body { width:${width}px; height:${height}px; overflow:hidden; background:var(--bg); color:var(--ink) }
+      .scene { position:absolute; top:0; left:0; width:${width}px; height:${height}px; overflow:hidden }
+      .scene-content { width:100%; height:100%; padding:${pad}; display:flex; flex-direction:column; justify-content:center; gap:24px; box-sizing:border-box; position:relative; z-index:1 }
+      .grain { position:absolute; inset:0; pointer-events:none; z-index:50; opacity:0.18; background-image:radial-gradient(rgba(255,255,255,0.08) 1px,transparent 1.2px),radial-gradient(rgba(0,0,0,0.18) 1px,transparent 1.2px); background-size:3px 3px,5px 5px; background-position:0 0,1px 2px; mix-blend-mode:overlay }
+    </style>
+  </head>
+  <body>
+    <div id="main" data-composition-id="main" data-width="${width}" data-height="${height}" data-start="0" data-duration="${total}">
+${scenesHtml}
     </div>
-    <div class="scene clip" id="s2" data-start="4" data-duration="3.5" data-track-index="0" style="visibility:hidden;">
-      <div class="warm-glow" style="width:600px;height:600px;background:var(--accent2);opacity:0.06;top:-200px;left:200px;"></div>
-      <div class="vignette"></div><div class="grain"></div>
-      <div class="scene-content">
-        <p class="label" id="s2-label">THE VISION</p>
-        <h2 class="display" id="s2-title" style="font-size:90px">What if it was<br/><span class="italic">just easier?</span></h2>
-        <p class="sub" id="s2-sub">Replace with your mission or founding insight.</p>
-      </div>
-    </div>
-    <div class="scene clip" id="s3" data-start="7.5" data-duration="3.5" data-track-index="0" style="opacity:0;">
-      <div class="warm-glow" style="width:900px;height:450px;background:var(--accent);opacity:0.1;bottom:-150px;left:50%;transform:translateX(-50%);"></div>
-      <div class="vignette"></div><div class="grain"></div>
-      <div class="scene-content" style="align-items:center;text-align:center">
-        <p class="label" id="s3-label">INTRODUCING</p>
-        <h2 class="display" id="s3-title" style="font-size:160px">Product<br/>Name</h2>
-        <p class="sub" id="s3-sub" style="text-align:center;margin:0 auto">Your tagline in one beautiful sentence.</p>
-      </div>
-    </div>
-    <div class="scene clip" id="s4" data-start="11" data-duration="3.5" data-track-index="0" style="opacity:0;">
-      <div class="vignette"></div><div class="grain"></div>
-      <div class="scene-content" style="flex-direction:row;align-items:center;gap:160px">
-        <div style="flex:1">
-          <p class="label" id="s4-label">IN NUMBERS</p>
-          <h3 class="display" id="s4-n1" style="font-size:100px;color:var(--accent2)">0K+</h3>
-          <p class="sub" style="font-size:26px">happy customers</p>
-        </div>
-        <div style="flex:1">
-          <h3 class="display" id="s4-n2" style="font-size:100px;color:var(--accent2)">0★</h3>
-          <p class="sub" style="font-size:26px">average rating</p>
-        </div>
-        <div style="flex:1">
-          <h3 class="display" id="s4-n3" style="font-size:100px;color:var(--accent2)">0x</h3>
-          <p class="sub" style="font-size:26px">faster results</p>
-        </div>
-      </div>
-    </div>
-    <div class="scene clip" id="s5" data-start="14.5" data-duration="3.5" data-track-index="0" style="opacity:0;">
-      <div class="warm-glow" style="width:1200px;height:600px;background:var(--accent);opacity:0.07;bottom:-200px;left:50%;transform:translateX(-50%);"></div>
-      <div class="vignette"></div><div class="grain"></div>
-      <div class="scene-content" style="align-items:center;text-align:center">
-        <div class="divider" id="s5-div" style="margin:0 auto"></div>
-        <h2 class="display italic" id="s5-cta" style="font-size:100px">Begin your story.</h2>
-        <p class="sub" id="s5-url" style="color:var(--accent2);text-align:center">yourproduct.com</p>
-      </div>
-    </div>
-  </div>
-  <script>
-    window.__timelines = window.__timelines || {};
-    if (window.lucide) window.lucide.createIcons();
-    var tl = gsap.timeline({ paused: true });
-    tl.from("#s1-label", { y:20, autoAlpha:0, duration:0.5, ease:"power2.out" }, 0.2);
-    tl.from("#s1-div",   { scaleX:0, transformOrigin:"left", duration:0.6, ease:"power2.out" }, 0.5);
-    tl.from("#s1-title", { y:40, autoAlpha:0, duration:1.0, ease:"power3.out" }, 0.7);
-    tl.to("#s1-title",   { y:-5, duration:2.0, ease:"sine.inOut", yoyo:true, repeat:1 }, 1.5);
-    tl.set("#s1", { autoAlpha:0 }, 4.0);
-    tl.set("#s2", { autoAlpha:1 }, 4.0);
-    tl.from("#s2-label", { y:20, autoAlpha:0, duration:0.4, ease:"power2.out" }, 4.2);
-    tl.from("#s2-title", { y:40, autoAlpha:0, duration:0.8, ease:"power3.out" }, 4.5);
-    tl.from("#s2-sub",   { y:20, autoAlpha:0, duration:0.6, ease:"power2.out" }, 5.0);
-    tl.set("#s2", { autoAlpha:0 }, 7.5);
-    tl.set("#s3", { opacity:1 },  7.5);
-    tl.from("#s3-label", { y:20, autoAlpha:0, duration:0.4, ease:"power2.out" }, 7.7);
-    tl.from("#s3-title", { scale:0.92, autoAlpha:0, duration:1.0, ease:"power3.out" }, 7.9);
-    tl.from("#s3-sub",   { y:20, autoAlpha:0, duration:0.6, ease:"power2.out" }, 8.6);
-    tl.set("#s4", { opacity:1 }, 11.0);
-    tl.from("#s4-label", { y:20, autoAlpha:0, duration:0.4, ease:"power2.out" }, 11.2);
-    tl.from("#s4-n1",    { y:40, autoAlpha:0, duration:0.6, ease:"power3.out" }, 11.4);
-    tl.from("#s4-n2",    { y:40, autoAlpha:0, duration:0.6, ease:"power3.out" }, 11.6);
-    tl.from("#s4-n3",    { y:40, autoAlpha:0, duration:0.6, ease:"power3.out" }, 11.8);
-    var c1={v:0}; tl.to(c1, {v:50,duration:1.5,ease:"power2.out",onUpdate:function(){document.getElementById("s4-n1").textContent=Math.round(c1.v)+"K+";}},11.5);
-    var c2={v:0}; tl.to(c2, {v:4.9,duration:1.5,ease:"power2.out",onUpdate:function(){document.getElementById("s4-n2").textContent=c2.v.toFixed(1)+"★";}},11.7);
-    var c3={v:0}; tl.to(c3, {v:10,duration:1.5,ease:"power2.out",onUpdate:function(){document.getElementById("s4-n3").textContent=Math.round(c3.v)+"x";}},11.9);
-    tl.set("#s5", { opacity:1 }, 14.5);
-    tl.from("#s5-div",  { scaleX:0, transformOrigin:"center", duration:0.5, ease:"power2.out" }, 14.7);
-    tl.from("#s5-cta",  { y:40,  autoAlpha:0, duration:0.8, ease:"power3.out" }, 15.0);
-    tl.from("#s5-url",  { y:20,  autoAlpha:0, duration:0.6, ease:"power2.out" }, 15.5);
-    window.HyperShader.init({
-      bgColor:"#100c07", scenes:["s3","s4","s5"], timeline:tl,
-      transitions:[{time:11.0,shader:"thermal-distortion",duration:0.5},{time:14.25,shader:"light-leak",duration:0.5}],
-    });
-    window.__timelines["main"] = tl;
-  </script>
-</body></html>`;
+    <script>
+${js.join("\n")}
+    </script>
+  </body>
+</html>`;
+};
+
+const SCAFFOLD_SOCIAL_REEL = makeScaffoldHTML({
+	width: 1080,
+	height: 1920,
+	durations: [2.5, 2.5, 2.5, 2.5, 2.5, 2.5],
+	fills: ["hook", "context", "build-up", "hero", "proof", "CTA"],
+	shaderGroups: [{ indices: [2, 3], shader: "cinematic-zoom" }],
+});
+
+const SCAFFOLD_LAUNCH_TEASER = makeScaffoldHTML({
+	width: 1920,
+	height: 1080,
+	durations: [3, 3, 3, 3.5, 3, 3, 3, 3.5],
+	fills: ["hook", "context", "problem", "pivot", "solution", "proof", "momentum", "CTA"],
+	shaderGroups: [
+		{ indices: [3, 4], shader: "cinematic-zoom" },
+		{ indices: [6, 7], shader: "light-leak" },
+	],
+});
+
+const SCAFFOLD_EXPLAINER = makeScaffoldHTML({
+	width: 1920,
+	height: 1080,
+	durations: [3, 3, 4, 3.5, 4, 5, 3.5, 4, 3.5, 4, 4, 3.5],
+	fills: [
+		"hook", "context", "problem-1", "problem-2", "pivot",
+		"solution-1", "solution-2", "proof-1", "proof-2", "momentum", "vision", "CTA",
+	],
+	shaderGroups: [
+		{ indices: [2, 3], shader: "cinematic-zoom" },
+		{ indices: [8, 9], shader: "domain-warp" },
+	],
+});
+
+const SCAFFOLD_CINEMATIC = makeScaffoldHTML({
+	width: 1920,
+	height: 1080,
+	durations: [8, 7, 8, 10, 9, 10, 8],
+	fills: ["title", "world", "tension", "revelation", "transformation", "consequence", "resolve"],
+	shaderGroups: [
+		{ indices: [2, 3], shader: "cross-warp-morph" },
+		{ indices: [5, 6], shader: "thermal-distortion" },
+	],
+});
 
 // ── Template registry ─────────────────────────────────────────────────────────
 
@@ -512,34 +456,57 @@ interface TemplateEntry {
 const TEMPLATES: TemplateEntry[] = [
 	{
 		name: "Neon Launch",
-		description: "Dark purple/pink, 1920×1080, 18s — dramatic product launch",
+		description: "Dark purple/pink, 1920x1080, 18s - dramatic product launch",
 		filename: "neon-launch.html",
 		html: TPL_NEON_LAUNCH,
 	},
 	{
 		name: "Social Reel",
-		description: "Bold vertical, 1080×1920, 15s — punchy social promo",
+		description: "Bold vertical, 1080x1920, 15s - punchy social promo",
 		filename: "social-reel.html",
 		html: TPL_SOCIAL_REEL,
 	},
 	{
 		name: "Clean Minimal",
-		description: "Light editorial, 1920×1080, 15s — serif typography-forward",
+		description: "Light editorial, 1920x1080, 15s - typography-forward",
 		filename: "clean-minimal.html",
 		html: TPL_CLEAN_MINIMAL,
 	},
 	{
 		name: "Tech Data",
-		description:
-			"Dark/teal, 1920×1080, 20s — metrics and D3 chart visualisation",
+		description: "Dark/teal, 1920x1080, 20s - metrics and product proof",
 		filename: "tech-data.html",
 		html: TPL_TECH_DATA,
 	},
 	{
 		name: "Warm Cinema",
-		description: "Amber/gold, 1920×1080, 18s — cinematic storytelling",
+		description: "Amber/gold, 1920x1080, 18s - cinematic storytelling",
 		filename: "warm-cinema.html",
 		html: TPL_WARM_CINEMA,
+	},
+	{
+		name: "Scaffold Social Reel",
+		description: "Structural scaffold: 1080x1920, 15s, 6 scenes, 1 shader group",
+		filename: "scaffold-social-reel.html",
+		html: SCAFFOLD_SOCIAL_REEL,
+	},
+	{
+		name: "Scaffold Launch Teaser",
+		description: "Structural scaffold: 1920x1080, 25s, 8 scenes, 2 shader groups",
+		filename: "scaffold-launch-teaser.html",
+		html: SCAFFOLD_LAUNCH_TEASER,
+	},
+	{
+		name: "Scaffold Explainer",
+		description: "Structural scaffold: 1920x1080, 45s, 12 scenes, 2 shader groups",
+		filename: "scaffold-explainer.html",
+		html: SCAFFOLD_EXPLAINER,
+	},
+	{
+		name: "Scaffold Cinematic",
+		description: "Structural scaffold: 1920x1080, 60s, 7 scenes, 2 shader groups, long durations",
+		filename: "scaffold-cinematic.html",
+		html: SCAFFOLD_CINEMATIC,
 	},
 ];
 
@@ -577,7 +544,7 @@ export const createHyperframesInitTool: ToolFactory<
 	HyperframesToolConfig
 > = (services, config): Tool<Input> => ({
 	name: TOOL_NAME,
-	description: `Initialise a new HyperFrames project. Writes index.html using the chosen template and creates templates/ with all 5 ready-made video promo designs. Available templates: ${TEMPLATES.map((t) => `${t.filename.replace(".html", "")} (${t.description})`).join(" | ")}. Use force: true to overwrite an existing project.`,
+	description: `Initialise a new HyperFrames project. Writes index.html using the chosen Tailwind-first template. Available templates: ${TEMPLATES.map((t) => `${t.filename.replace(".html", "")} (${t.description})`).join(" | ")}. Use force: true to overwrite an existing project.`,
 	schema,
 	execute: async (input) => {
 		const dfs = services.fs;
@@ -590,7 +557,7 @@ export const createHyperframesInitTool: ToolFactory<
 				await readFileBytes(dfs, indexFile, config);
 				return `Error: ${indexFile} already exists. Use force: true to overwrite.`;
 			} catch {
-				// Does not exist — proceed
+				// Does not exist - proceed
 			}
 		}
 
@@ -600,7 +567,7 @@ export const createHyperframesInitTool: ToolFactory<
 
 		await writeFileBytes(dfs, indexFile, chosen.html, true, config);
 
-		return `Initialised: ${indexFile} with template "${chosen.name}" (${chosen.description}). Edit with hyperframes_write, then hyperframes_validate and hyperframes_show.`;
+		return `Initialised: ${indexFile} with Tailwind template "${chosen.name}" (${chosen.description}). Edit with hyperframes_write, then hyperframes_validate and hyperframes_show.`;
 	},
 });
 

@@ -244,7 +244,7 @@ export const CopilotTooltip: React.FC<CopilotTooltipProps> = ({
 			}}
 		>
 			<Card
-				className="w-[22.5rem] max-w-[calc(100vw-1rem)] shadow-2xl border border-blue-400/40 bg-background/95 relative pointer-events-auto backdrop-blur-xl"
+				className="w-[22.5rem] max-w-[calc(100vw-1rem)] shadow-2xl border border-blue-400/40 bg-background relative pointer-events-auto"
 				style={{ zIndex: 9500 }}
 			>
 				{/* Arrow */}
