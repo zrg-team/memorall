@@ -293,6 +293,8 @@
 		"systemPromptValue": "{{count}} characters · {{mode}}",
 		"contextPrompt": "Context prompt",
 		"contextPromptValue": "{{count}} characters · {{mode}}",
+		"featurePromptValue": "{{count}} characters",
+		"showLess": "Show less",
 		"openMemoryGraph": "Knowledge graph memory",
 		"default": "Default",
 		"custom": "Custom",

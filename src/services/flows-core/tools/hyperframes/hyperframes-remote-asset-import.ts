@@ -71,7 +71,10 @@ const normalizeResourceAssetPath = (
 		.join("/");
 };
 
-const resolveUrl = (value: string | null | undefined, baseUrl: string): string | null => {
+const resolveUrl = (
+	value: string | null | undefined,
+	baseUrl: string,
+): string | null => {
 	if (!value) return null;
 	if (value.startsWith("data:") || value.startsWith("blob:")) return null;
 	try {

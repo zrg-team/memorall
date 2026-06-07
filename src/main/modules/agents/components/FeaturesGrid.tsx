@@ -66,6 +66,17 @@ export const FeaturesGrid: React.FC<FeaturesGridProps> = ({ summary }) => {
 		return set;
 	}, [featureDefinitions]);
 
+	const featureEnabledTools = React.useMemo(() => {
+		const set = new Set<string>();
+		for (const feature of featureDefinitions) {
+			if (feature.detailView?.some((s) => s.component === "ToolPicker"))
+				continue;
+			if (!draftFeatures[feature.name]) continue;
+			for (const tool of feature.tools) set.add(tool);
+		}
+		return set;
+	}, [featureDefinitions, draftFeatures]);
+
 	const fallbackEnabledToolNames = React.useMemo(() => {
 		const enabledToolSet = new Set(draftConfig.tools);
 		for (const feature of featureDefinitions) {
@@ -160,8 +171,9 @@ export const FeaturesGrid: React.FC<FeaturesGridProps> = ({ summary }) => {
 				slot.scope === "all"
 					? availableTools
 					: availableTools.filter((tool) => !claimedToolSet.has(tool));
-			const enabledCount = toolsToShow.filter((tool) =>
-				draftConfig.tools.includes(tool),
+			const enabledCount = toolsToShow.filter(
+				(tool) =>
+					draftConfig.tools.includes(tool) || featureEnabledTools.has(tool),
 			).length;
 
 			return (

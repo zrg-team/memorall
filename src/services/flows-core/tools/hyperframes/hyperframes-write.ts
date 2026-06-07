@@ -13,7 +13,7 @@ const schema = z.object({
 		.string()
 		.min(1)
 		.describe(
-			"Absolute path to the project directory, e.g. /projects/product-launch",
+			"Absolute path to the project directory. For new projects choose a meaningful name under the workspace root. For existing projects, call hyperframes_list first — never guess values like 'default'.",
 		),
 	content: z.string().min(1).describe("Full HyperFrames composition HTML"),
 });

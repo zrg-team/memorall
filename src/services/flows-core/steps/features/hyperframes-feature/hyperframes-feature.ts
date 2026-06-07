@@ -62,9 +62,21 @@ Execute tool sequences immediately — never describe, explain, or ask first.
 |---|---|
 | **Start a project (known topic/place/brand)** | web_search (research) → remote_assets_explore → init (Step 2 template) → write → validate → show |
 | **Start a project (assets provided)** | init (Step 2 template) → write → validate → show |
-| **Update / edit / fix** | read → write → validate → show |
+| **Update / edit / fix** | **list** (discover path) → read → write → validate → show |
 | **Verify a scene** | capture_frame → inspect visually |
 | **Show the user** | show |
+
+### Project path rules
+
+**Always identify the correct project path before reading or editing.** If the user has not specified a project path in this conversation:
+
+1. Call \`hyperframes_list\` to see all existing projects and their paths.
+2. Pick the project that matches what the user is referring to.
+3. If multiple projects exist and it is ambiguous, ask the user which one.
+
+**Never guess** \`project_path\` values. Names like \`default\`, \`project\`, \`untitled\`, \`my-project\`, or any invented slug are forbidden when working on an existing project. Use only paths returned by \`hyperframes_list\` or paths the user has explicitly stated.
+
+When **creating** a new project with \`hyperframes_init\`, choose a meaningful slug based on the content (e.g. \`vietnam-travel\`, \`product-launch-q3\`) — not a generic placeholder.
 
 Never write without reading first on an existing project. Never show without validating first.
 Run \`hyperframes_validate\` before every \`hyperframes_show\`. If it reports errors, fix them and re-write before showing — never show a broken composition.
@@ -523,6 +535,7 @@ export const HYPERFRAMES_FEATURE_SYSTEM_PROMPT =
 	SYSTEM_PROMPT_INSTRUCTION.trim();
 
 export const HYPERFRAMES_FEATURE_TOOLS = [
+	"hyperframes_list",
 	"hyperframes_init",
 	"hyperframes_write",
 	"hyperframes_edit",

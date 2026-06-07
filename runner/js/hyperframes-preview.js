@@ -15,6 +15,9 @@
 //   5. hyperframe.runtime                              — go() reads __timelines on load
 
 const DEFAULT_EXPORT_FPS = 30;
+const EXPORT_MIN_BITRATE = 12_000_000;
+const EXPORT_MAX_BITRATE = 40_000_000;
+const EXPORT_BITS_PER_PIXEL_FRAME = 0.35;
 const TAILWIND_BROWSER_URL = "https://cdn.tailwindcss.com";
 const MEDIABUNNY_ESM_URL =
 	"https://cdn.jsdelivr.net/npm/mediabunny@1.45.2/+esm";
@@ -605,6 +608,35 @@ function objectFitToBackgroundSize(objectFit) {
 	}
 }
 
+function clamp(value, min, max) {
+	return Math.min(max, Math.max(min, value));
+}
+
+function getExportBitrate(width, height) {
+	return Math.ceil(
+		clamp(
+			width * height * DEFAULT_EXPORT_FPS * EXPORT_BITS_PER_PIXEL_FRAME,
+			EXPORT_MIN_BITRATE,
+			EXPORT_MAX_BITRATE,
+		),
+	);
+}
+
+function getColorAlpha(color) {
+	if (!color || color === "transparent") return 0;
+	const match = color.match(/^rgba?\((.*)\)$/i);
+	if (!match) return 1;
+
+	const parts = match[1]
+		.split(/[,\s/]+/)
+		.map((part) => part.trim())
+		.filter(Boolean);
+	if (parts.length < 4) return 1;
+
+	const alpha = Number.parseFloat(parts[3]);
+	return Number.isFinite(alpha) ? alpha : 1;
+}
+
 function preserveObjectFitImagesForHtml2Canvas(clonedDocument) {
 	const clonedWindow = clonedDocument.defaultView;
 	if (!clonedWindow) return;
@@ -615,7 +647,10 @@ function preserveObjectFitImagesForHtml2Canvas(clonedDocument) {
 		if (!backgroundSize) continue;
 
 		const src =
-			img.currentSrc || img.getAttribute("src") || img.getAttribute("data-src");
+			img.currentSrc ||
+			img.src ||
+			img.getAttribute("src") ||
+			img.getAttribute("data-src");
 		if (!src) continue;
 
 		img.style.backgroundImage = toCssUrl(src);
@@ -626,6 +661,163 @@ function preserveObjectFitImagesForHtml2Canvas(clonedDocument) {
 		img.removeAttribute("srcset");
 		img.removeAttribute("sizes");
 		img.setAttribute("src", TRANSPARENT_IMAGE_URL);
+	}
+}
+
+function normalizeBackdropFiltersForHtml2Canvas(clonedDocument) {
+	const clonedWindow = clonedDocument.defaultView;
+	if (!clonedWindow) return;
+
+	for (const el of clonedDocument.querySelectorAll("*")) {
+		const style = clonedWindow.getComputedStyle(el);
+		const backdropFilter =
+			style.backdropFilter || style.webkitBackdropFilter || "";
+		if (!backdropFilter || backdropFilter === "none") continue;
+
+		const htmlEl = el;
+		htmlEl.style.backdropFilter = "none";
+		htmlEl.style.webkitBackdropFilter = "none";
+
+		if (getColorAlpha(style.backgroundColor) < 0.18) {
+			htmlEl.style.backgroundColor = "rgba(18, 16, 28, 0.72)";
+		}
+
+		const hasBorder =
+			Number.parseFloat(style.borderTopWidth || "0") > 0 ||
+			Number.parseFloat(style.borderRightWidth || "0") > 0 ||
+			Number.parseFloat(style.borderBottomWidth || "0") > 0 ||
+			Number.parseFloat(style.borderLeftWidth || "0") > 0;
+		if (hasBorder && getColorAlpha(style.borderTopColor) < 0.12) {
+			htmlEl.style.borderColor = "rgba(255, 255, 255, 0.18)";
+		}
+	}
+}
+
+function prepareFallbackHtml2CanvasClone(clonedDocument) {
+	preserveObjectFitImagesForHtml2Canvas(clonedDocument);
+	normalizeBackdropFiltersForHtml2Canvas(clonedDocument);
+}
+
+function getHtml2CanvasCaptureOptions(width, height, overrides = {}) {
+	return {
+		useCORS: true,
+		allowTaint: false,
+		backgroundColor: "#000",
+		scale: 1,
+		width,
+		height,
+		windowWidth: width,
+		windowHeight: height,
+		scrollX: 0,
+		scrollY: 0,
+		x: 0,
+		y: 0,
+		ignoreElements: (el) =>
+			el.hasAttribute("data-html2canvas-ignore") ||
+			Boolean(el.closest?.("[data-html2canvas-ignore]")),
+		...overrides,
+	};
+}
+
+function assertCaptureDimensions(canvas, width, height, rendererName) {
+	if (canvas.width !== width || canvas.height !== height) {
+		throw new Error(
+			`${rendererName} produced ${canvas.width}x${canvas.height}; expected ${width}x${height}`,
+		);
+	}
+}
+
+async function captureCompositionCanvas(html2canvas, width, height) {
+	try {
+		const canvas = await html2canvas(
+			document.body,
+			getHtml2CanvasCaptureOptions(width, height, {
+				foreignObjectRendering: true,
+			}),
+		);
+		assertCaptureDimensions(canvas, width, height, "foreignObject html2canvas");
+		return canvas;
+	} catch (error) {
+		reportRuntimeError(
+			"runtime",
+			"Foreign-object export capture failed; using compatibility capture.",
+			{
+				source: "exportMp4",
+				error: formatErrorMessage(error),
+			},
+		);
+	}
+
+	const fallbackCanvas = await html2canvas(
+		document.body,
+		getHtml2CanvasCaptureOptions(width, height, {
+			onclone: prepareFallbackHtml2CanvasClone,
+		}),
+	);
+	assertCaptureDimensions(fallbackCanvas, width, height, "fallback html2canvas");
+	return fallbackCanvas;
+}
+
+async function waitForFontsReady() {
+	try {
+		await document.fonts?.ready;
+	} catch {
+		// Font readiness is best effort. Capture still proceeds with browser fallback.
+	}
+}
+
+function waitForImageReady(img) {
+	if (img.complete && img.naturalWidth > 0) return Promise.resolve();
+
+	const decoded = typeof img.decode === "function" ? img.decode() : null;
+	if (decoded) {
+		return decoded.catch(() => undefined);
+	}
+
+	return new Promise((resolve) => {
+		const done = () => resolve();
+		img.addEventListener("load", done, { once: true });
+		img.addEventListener("error", done, { once: true });
+	});
+}
+
+async function waitForImagesReady(root = document) {
+	await Promise.all(
+		Array.from(root.querySelectorAll("img")).map((img) => waitForImageReady(img)),
+	);
+}
+
+async function prepareExportFrame(timestamp) {
+	seekComposition(timestamp);
+	await waitForRaf();
+	await waitForFontsReady();
+	await waitForImagesReady(document);
+	await waitForRaf();
+}
+
+function reportUndersizedImagesForExport() {
+	for (const img of document.querySelectorAll("img")) {
+		if (!img.naturalWidth || !img.naturalHeight) continue;
+		const rect = img.getBoundingClientRect();
+		if (rect.width <= 1 || rect.height <= 1) continue;
+
+		const widthScale = rect.width / img.naturalWidth;
+		const heightScale = rect.height / img.naturalHeight;
+		const maxScale = Math.max(widthScale, heightScale);
+		if (maxScale <= 1.15) continue;
+
+		reportRuntimeError(
+			"runtime",
+			"Image asset is smaller than its export display box; MP4 may look soft.",
+			{
+				source: "exportMp4",
+				displayWidth: Math.round(rect.width),
+				displayHeight: Math.round(rect.height),
+				naturalWidth: img.naturalWidth,
+				naturalHeight: img.naturalHeight,
+				src: img.currentSrc || img.src || img.getAttribute("src") || "",
+			},
+		);
 	}
 }
 
@@ -740,13 +932,7 @@ async function exportMp4({ filenameBase, onProgress }) {
 		loadHtml2Canvas(),
 		loadMediabunny(),
 	]);
-	const {
-		Output,
-		Mp4OutputFormat,
-		BufferTarget,
-		CanvasSource,
-		QUALITY_HIGH,
-	} = mediabunny;
+	const { Output, Mp4OutputFormat, BufferTarget, CanvasSource } = mediabunny;
 
 	const { width, height } = getCompositionDimensions();
 	const duration = getDuration();
@@ -759,11 +945,15 @@ async function exportMp4({ filenameBase, onProgress }) {
 	captureCanvas.height = height;
 	const ctx = captureCanvas.getContext("2d", { willReadFrequently: true });
 	if (!ctx) throw new Error("Could not create capture canvas");
+	ctx.imageSmoothingEnabled = true;
+	ctx.imageSmoothingQuality = "high";
 
 	const bufferTarget = new BufferTarget();
 	const videoSource = new CanvasSource(captureCanvas, {
 		codec: "avc",
-		bitrate: QUALITY_HIGH,
+		bitrate: getExportBitrate(width, height),
+		bitrateMode: "variable",
+		latencyMode: "quality",
 		keyFrameInterval: 2,
 	});
 	const output = new Output({
@@ -778,28 +968,14 @@ async function exportMp4({ filenameBase, onProgress }) {
 	const restoreViewport = withCompositionExportViewport(width, height);
 
 	try {
+		await prepareExportFrame(0);
+		reportUndersizedImagesForExport();
+
 		for (let i = 0; i < totalFrames; i++) {
 			const timestamp = i * frameDuration;
-			seekComposition(timestamp);
-			await waitForRaf();
+			await prepareExportFrame(timestamp);
 
-			const frameCanvas = await html2canvas(document.body, {
-				useCORS: true,
-				allowTaint: false,
-				scale: 1,
-				width,
-				height,
-				windowWidth: width,
-				windowHeight: height,
-				scrollX: 0,
-				scrollY: 0,
-				x: 0,
-				y: 0,
-				ignoreElements: (el) =>
-					el.hasAttribute("data-html2canvas-ignore") ||
-					Boolean(el.closest?.("[data-html2canvas-ignore]")),
-				onclone: preserveObjectFitImagesForHtml2Canvas,
-			});
+			const frameCanvas = await captureCompositionCanvas(html2canvas, width, height);
 
 			ctx.clearRect(0, 0, width, height);
 			ctx.drawImage(frameCanvas, 0, 0, width, height);

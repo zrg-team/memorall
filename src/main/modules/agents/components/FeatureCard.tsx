@@ -71,6 +71,13 @@ export const LUCIDE_MAP: Record<
 const getFeatureAccent = (feature: AgentFeatureDefinition): string =>
 	typeof feature.accentColor === "string" ? feature.accentColor : "#64748b";
 
+const estimateCtxTokens = (text: string): string => {
+	const tokens = Math.round(text.length / 4);
+	if (tokens === 0) return "0 tok";
+	if (tokens >= 1000) return `~${(tokens / 1000).toFixed(1)}k tok`;
+	return `~${tokens} tok`;
+};
+
 // ---------------------------------------------------------------------------
 // FeatureIcon renderer
 // ---------------------------------------------------------------------------
@@ -198,22 +205,32 @@ export const FeatureCard: React.FC<FeatureCardProps> = ({
 
 			{/* Footer row: badge + detail */}
 			<div className="flex items-center justify-between gap-2">
-				{legacy ? (
-					<Badge
-						variant="outline"
-						className="text-[10px] text-muted-foreground"
-					>
-						Deprecated
-					</Badge>
-				) : showToolsBadge ? (
-					<Badge variant="secondary" className="text-[10px]">
-						{toolCount}/{totalToolCount}
-					</Badge>
-				) : (
-					<Badge variant="secondary" className="text-[10px]">
-						{t("agentSettings.toolCount", { count: feature.tools.length })}
-					</Badge>
-				)}
+				<div className="flex items-center gap-1.5">
+					{legacy ? (
+						<Badge
+							variant="outline"
+							className="text-[10px] text-muted-foreground"
+						>
+							Deprecated
+						</Badge>
+					) : showToolsBadge ? (
+						<Badge variant="secondary" className="text-[10px]">
+							{toolCount}/{totalToolCount}
+						</Badge>
+					) : (
+						<Badge variant="secondary" className="text-[10px]">
+							{t("agentSettings.toolCount", { count: feature.tools.length })}
+						</Badge>
+					)}
+					{!legacy && feature.systemPrompt && (
+						<Badge
+							variant="outline"
+							className="text-[10px] text-muted-foreground"
+						>
+							{estimateCtxTokens(feature.systemPrompt)}
+						</Badge>
+					)}
+				</div>
 				{showDetailBtn && (
 					<Button
 						type="button"

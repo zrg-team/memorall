@@ -40,8 +40,10 @@ import "flow-core/tools/web/web-wait";
 
 import "flow-core/tools/planner/index";
 
+import "flow-core/tools/hyperframes/hyperframes-list";
 import "flow-core/tools/hyperframes/hyperframes-init";
 import "flow-core/tools/hyperframes/hyperframes-write";
+import "flow-core/tools/hyperframes/hyperframes-edit";
 import "flow-core/tools/hyperframes/hyperframes-read";
 import "flow-core/tools/hyperframes/hyperframes-show";
 import "flow-core/tools/hyperframes/hyperframes-validate";
