@@ -10,6 +10,7 @@ import {
 import type { IDatabaseService } from "../../interfaces/database";
 import type { Edge, Node } from "../../interfaces/knowledge";
 import { getScopedGraphWhere } from "../../utils/graph-query";
+import { compactQueryIfNeeded } from "../../utils/query-compaction";
 
 import type {
 	StepFactoryFromSpec,
@@ -53,6 +54,13 @@ export interface GraphGrowthConfig {
 export interface QuickRetrieveConfig {
 	maxGrowthLevels?: number;
 	searchLimit?: number;
+	compaction?: {
+		enabled: boolean;
+		maxTokens: number;
+		estimatedCharsPerToken: number;
+		triggerThreshold: number;
+		minCompressionRatio: number;
+	};
 }
 
 export interface QuickRetrieveInput {
@@ -329,11 +337,24 @@ const definition = defineStep<
 				throw new Error("Default embedding not ready");
 			}
 
+			// Apply query compaction if enabled and needed
+			let processedQuery = input.query;
+			if (config?.compaction?.enabled !== false) {
+				const compactionResult = compactQueryIfNeeded(input.query, config?.compaction);
+				if (compactionResult.wasCompacted) {
+					processedQuery = compactionResult.compacted;
+					logInfo(
+						`[QUICK_RETRIEVE] Query compacted: ${input.query.length} → ${processedQuery.length} chars ` +
+							`(${compactionResult.compressionRatio.toFixed(2)}x) using [${compactionResult.levelsApplied.join(" → ")}]`,
+					);
+				}
+			}
+
 			// Step 1: Semantic search for initial nodes and edges
 			const initialResults = await performSemanticSearch(
 				databaseService,
 				defaultEmbedding,
-				input.query,
+				processedQuery,
 				effectiveConfig.searchLimit,
 				input.graphId,
 			);
