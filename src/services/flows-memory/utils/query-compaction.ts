@@ -50,12 +50,49 @@ export const DEFAULT_COMPACTION_CONFIG: CompactionConfig = {
 };
 
 // ============================================================================
+// LEVEL 0: PRE-PROCESSING (Remove Non-Semantic Blobs)
+// ============================================================================
+
+function stripNonSemanticBlobs(text: string): string {
+	let result = text;
+
+	// Base64 data URIs — always long, pure binary (images, fonts, etc.)
+	result = result.replace(/data:[^;]+;base64,[A-Za-z0-9+/=]+/g, "[data-uri]");
+
+	// SVG path data — strip only when the coordinate string is long (> 50 chars)
+	result = result.replace(/\bd="([^"]{50,})"/g, 'd="[svg-path]"');
+
+	// JWT tokens — eyJ header guarantees it's a JWT, always non-semantic
+	result = result.replace(
+		/eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]*/g,
+		"[jwt]",
+	);
+
+	// Long hex hashes — 40+ hex chars (SHA-1 and longer; skips short color codes)
+	result = result.replace(/\b[0-9a-fA-F]{40,}\b/g, "[hash]");
+
+	// URL-encoded blobs — 10+ consecutive %xx sequences (~30 chars minimum)
+	result = result.replace(/(%[0-9A-Fa-f]{2}){10,}/g, "[url-encoded]");
+
+	// Minified <script> or <style> — single-line content longer than 200 chars
+	result = result.replace(
+		/<(script|style)([^>]*)>[^\n<]{200,}<\/\1>/gi,
+		"<$1$2>[minified]</$1>",
+	);
+
+	// Blob URLs — object URLs have no semantic content
+	result = result.replace(/blob:https?:\/\/[^\s"']+/g, "[blob-url]");
+
+	return result;
+}
+
+// ============================================================================
 // LEVEL 1: SAFE METHODS (Zero Semantic Loss)
 // ============================================================================
 
 function normalizeWhitespace(text: string): string {
 	return text
-		.replace(/[ \t]+/g, " ") // Multiple spaces/tabs → single space  
+		.replace(/[ \t]+/g, " ") // Multiple spaces/tabs → single space
 		.replace(/\n+/g, "\n") // Multiple newlines → single newline
 		.replace(/\n /g, "\n") // Remove space after newline
 		.replace(/ \n/g, "\n") // Remove space before newline
@@ -118,12 +155,14 @@ function extractCodeKeywords(text: string): string {
 		// Extract identifiers (function/class/variable names)
 		const identifierRegex = /\b[a-zA-Z_][a-zA-Z0-9_]*\b/g;
 		const identifiers = block.original.match(identifierRegex) || [];
-		
+
 		for (const id of identifiers) {
 			// Skip common keywords and short words
 			if (
 				id.length > 2 &&
-				!/^(function|class|const|let|var|if|else|for|while|return|import|export|from|true|false|null|undefined|this|new|typeof|void)$/.test(id)
+				!/^(function|class|const|let|var|if|else|for|while|return|import|export|from|true|false|null|undefined|this|new|typeof|void)$/.test(
+					id,
+				)
 			) {
 				keywords.add(id);
 			}
@@ -132,10 +171,15 @@ function extractCodeKeywords(text: string): string {
 		// Replace code block with extracted keywords
 		if (keywords.size > 0) {
 			const compacted = Array.from(keywords).slice(0, 20).join(" ");
-			result = result.substring(0, block.start) + compacted + result.substring(block.start + block.original.length);
+			result =
+				result.substring(0, block.start) +
+				compacted +
+				result.substring(block.start + block.original.length);
 		} else {
 			// Remove the code block entirely if no keywords
-			result = result.substring(0, block.start) + result.substring(block.start + block.original.length);
+			result =
+				result.substring(0, block.start) +
+				result.substring(block.start + block.original.length);
 		}
 	}
 
@@ -399,6 +443,13 @@ function hardTruncate(text: string, maxChars: number = 0): string {
 
 export class QueryCompactor {
 	private levels: CompactionLevel[] = [
+		// Level 0: Pre-processing
+		{
+			name: "strip-non-semantic-blobs",
+			risk: "safe",
+			apply: stripNonSemanticBlobs,
+		},
+
 		// Level 1: Safe
 		{
 			name: "normalize-whitespace",

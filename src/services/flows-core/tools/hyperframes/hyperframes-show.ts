@@ -11,7 +11,6 @@ import {
 	compositionFile,
 	normalizeProjectPath,
 } from "flow-core/tools/hyperframes/util";
-import { preprocessComposition } from "flow-core/tools/hyperframes/composition-preprocessor";
 import { readFileBytes } from "flow-core/tools/fs/util";
 
 const TOOL_NAME = "hyperframes_show" as const;
@@ -63,12 +62,6 @@ export const createHyperframesShowTool: ToolFactory<
 			input.project_path,
 			config?.rootPath,
 		);
-		const html = await preprocessComposition(raw_html, dfs, {
-			projectPath,
-			rootPath: config?.rootPath,
-			resourceRoots: config?.resourceRoots,
-			fs: config,
-		});
 		// Derive a display name from the last path segment
 		const name =
 			input.project_path.split("/").filter(Boolean).pop() ?? "composition";
@@ -77,8 +70,9 @@ export const createHyperframesShowTool: ToolFactory<
 			`\n\n<artifact`,
 			` identifier="${escapeAttr(`hf-${name}`)}"`,
 			` type="application/hyperframes"`,
-			` title="${escapeAttr(name)}">`,
-			html,
+			` title="${escapeAttr(name)}"`,
+			` project-path="${escapeAttr(projectPath)}">`,
+			raw_html,
 			`</artifact>\n\n`,
 		].join("");
 

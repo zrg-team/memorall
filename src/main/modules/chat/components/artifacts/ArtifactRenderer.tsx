@@ -12,6 +12,7 @@ interface ArtifactRendererProps {
 	content: string;
 	identifier?: string;
 	title?: string;
+	projectPath?: string;
 	onMessageAction?: (action: MessageActionRequest) => void | Promise<void>;
 }
 
@@ -20,6 +21,7 @@ export const ArtifactRenderer: React.FC<ArtifactRendererProps> = ({
 	content,
 	identifier,
 	title,
+	projectPath,
 	onMessageAction,
 }) => {
 	switch (type) {
@@ -35,6 +37,7 @@ export const ArtifactRenderer: React.FC<ArtifactRendererProps> = ({
 					content={content}
 					identifier={identifier}
 					title={title}
+					projectPath={projectPath}
 					onMessageAction={onMessageAction}
 				/>
 			);

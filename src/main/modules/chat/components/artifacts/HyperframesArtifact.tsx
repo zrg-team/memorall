@@ -1,9 +1,16 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { AlertTriangle, Download, Loader2, Send } from "lucide-react";
+import {
+	AlertTriangle,
+	Download,
+	Loader2,
+	Send,
+	SlidersHorizontal,
+	X,
+} from "lucide-react";
 import { documentFileSystemService } from "@/services/filesystem/document-filesystem";
 import {
 	toWorkspacesSandboxPath,
-	toDocumentsLogicalPath,
+	toDocumentsSandboxPath,
 	isDocumentsSandboxPath,
 	isWorkspacesSandboxPath,
 	DOCUMENTS_SANDBOX_ROOT,
@@ -16,14 +23,19 @@ import {
 import type { DocumentTreeNode } from "@/types/document-library";
 import type { ArtifactProps } from "./ArtifactActionsMenu";
 
+// All resolved candidates carry a full sandbox path (/documents/... or /workspaces/...).
+// readFile accepts both directly — no stripping or re-prefixing needed.
 type ImageReferenceCandidate = {
-	scope: FilesystemScope;
-	path: string;
+	path: string; // full sandbox path
 	mimeType: string;
 };
 
-type FilesystemImageReference = ImageReferenceCandidate & {
+// Fuzzy-match result from the document tree. path is a logical path (no scope prefix).
+type FilesystemImageReference = {
+	scope: FilesystemScope;
 	name: string;
+	path: string;
+	mimeType: string;
 };
 
 const safeFilenameBase = (value?: string): string => {
@@ -109,46 +121,65 @@ const normalizeImageLookupPath = (value: string): string => {
 	return segments.join("/").toLowerCase();
 };
 
-const imageReferenceCandidates = (src: string): ImageReferenceCandidate[] => {
+// Build full sandbox path candidates for an image src.
+// All returned paths start with /documents/... or /workspaces/... so readFile
+// can accept them directly without any further transformation.
+const imageReferenceCandidates = (
+	src: string,
+	projectPath?: string,
+): ImageReferenceCandidate[] => {
 	const path = src.split(/[?#]/)[0]?.replace(/\\/g, "/") ?? src;
 	if (!path) return [];
 
 	const mimeType = imageMimeType(path);
-	if (isDocumentsSandboxPath(path)) {
-		return [
-			{
-				scope: FILESYSTEM_SCOPE.DOCUMENTS,
-				path: toDocumentsLogicalPath(path) ?? "/",
-				mimeType,
-			},
-		];
+
+	// Already a sandbox path — use as-is
+	if (isDocumentsSandboxPath(path) || isWorkspacesSandboxPath(path)) {
+		return [{ path, mimeType }];
 	}
 
-	if (isWorkspacesSandboxPath(path)) {
-		return [{ scope: FILESYSTEM_SCOPE.WORKSPACE, path, mimeType }];
-	}
-
+	// Absolute non-sandbox path — default to documents scope
 	if (path.startsWith("/")) {
-		return [{ scope: FILESYSTEM_SCOPE.DOCUMENTS, path, mimeType }];
+		return [{ path: toDocumentsSandboxPath(path), mimeType }];
+	}
+
+	// Relative path — resolve against projectPath (which may be a workspace or
+	// documents path). Convert to sandbox once here so readFile gets a valid path.
+	if (projectPath) {
+		const base = projectPath.replace(/\/+$/, "");
+		const sandboxBase = isWorkspacesSandboxPath(base)
+			? base
+			: toDocumentsSandboxPath(base);
+		const cleanRef = path.replace(/^\.\/+/, "");
+		const filename = cleanRef.split("/").pop();
+		const candidates: ImageReferenceCandidate[] = [
+			{ path: `${sandboxBase}/${cleanRef}`, mimeType },
+		];
+		if (!cleanRef.startsWith("resources/")) {
+			candidates.push({
+				path: `${sandboxBase}/resources/${cleanRef}`,
+				mimeType,
+			});
+			if (filename) {
+				candidates.push({
+					path: `${sandboxBase}/resources/images/${filename}`,
+					mimeType,
+				});
+			}
+		}
+		return candidates;
 	}
 
 	return [];
 };
 
+// Single read path: candidate.path is always a full sandbox path.
 const readImageReferenceCandidate = async (
 	candidate: ImageReferenceCandidate,
 ): Promise<string | null> => {
 	try {
-		if (candidate.scope === FILESYSTEM_SCOPE.WORKSPACE) {
-			const bytes = await documentFileSystemService.readFile(
-				toWorkspacesSandboxPath(candidate.path),
-			);
-			return bytesToDataUrl(bytes, candidate.mimeType);
-		}
-		return await documentFileSystemService.readFileAsBase64(
-			candidate.path,
-			candidate.mimeType,
-		);
+		const bytes = await documentFileSystemService.readFile(candidate.path);
+		return bytesToDataUrl(bytes, candidate.mimeType);
 	} catch {
 		return null;
 	}
@@ -201,12 +232,15 @@ const findImageReferenceByRelativePath = async (
 	return matches.length === 1 ? matches[0] : null;
 };
 
-const resolveImageReference = async (src: string): Promise<string | null> => {
+const resolveImageReference = async (
+	src: string,
+	projectPath?: string,
+): Promise<string | null> => {
 	if (isExternalOrEmbeddedReference(src) || !isLikelyImagePath(src)) {
 		return null;
 	}
 
-	for (const candidate of imageReferenceCandidates(src)) {
+	for (const candidate of imageReferenceCandidates(src, projectPath)) {
 		const dataUrl = await readImageReferenceCandidate(candidate);
 		if (dataUrl) return dataUrl;
 	}
@@ -216,14 +250,21 @@ const resolveImageReference = async (src: string): Promise<string | null> => {
 	const image = await findImageReferenceByRelativePath(src);
 	if (!image) return null;
 
-	const path =
+	// Tree paths are logical (no scope prefix) — convert to sandbox before readFile
+	const sandboxPath =
 		image.scope === FILESYSTEM_SCOPE.WORKSPACE
 			? toWorkspacesSandboxPath(image.path)
-			: image.path;
-	return readImageReferenceCandidate({ ...image, path });
+			: toDocumentsSandboxPath(image.path);
+	return readImageReferenceCandidate({
+		path: sandboxPath,
+		mimeType: image.mimeType,
+	});
 };
 
-const replaceCssImageUrls = async (css: string): Promise<string> => {
+const replaceCssImageUrls = async (
+	css: string,
+	projectPath?: string,
+): Promise<string> => {
 	const URL_PATTERN = /url\(\s*(["']?)([^"')]+)\1\s*\)/gi;
 	const matches = Array.from(css.matchAll(URL_PATTERN));
 	if (matches.length === 0) return css;
@@ -234,7 +275,7 @@ const replaceCssImageUrls = async (css: string): Promise<string> => {
 		const src = match[2]?.trim();
 		if (!src) continue;
 
-		const dataUrl = await resolveImageReference(src);
+		const dataUrl = await resolveImageReference(src, projectPath);
 		if (!dataUrl) continue;
 		next = next.replace(full, `url("${dataUrl}")`);
 	}
@@ -244,11 +285,12 @@ const replaceCssImageUrls = async (css: string): Promise<string> => {
 const replaceImageAttribute = async (
 	el: Element,
 	attributeName: string,
+	projectPath?: string,
 ): Promise<void> => {
 	const src = el.getAttribute(attributeName);
 	if (!src) return;
 
-	const dataUrl = await resolveImageReference(src);
+	const dataUrl = await resolveImageReference(src, projectPath);
 	if (dataUrl) el.setAttribute(attributeName, dataUrl);
 };
 
@@ -279,6 +321,7 @@ type NormalizedComposition = { html: string; inlineScripts: string[] };
  */
 const normalizeHyperframesHtml = async (
 	html: string,
+	projectPath?: string,
 ): Promise<NormalizedComposition> => {
 	const authoredInlineScripts = extractAuthoredInlineScripts(html);
 	const doc = new DOMParser().parseFromString(html, "text/html");
@@ -317,9 +360,11 @@ const normalizeHyperframesHtml = async (
 					.then((dataUrl) => {
 						if (dataUrl) img.setAttribute("src", dataUrl);
 						else if (isExtensionBlobUrl(src)) {
-							return resolveImageReference(src).then((recovered) => {
-								if (recovered) img.setAttribute("src", recovered);
-							});
+							return resolveImageReference(src, projectPath).then(
+								(recovered) => {
+									if (recovered) img.setAttribute("src", recovered);
+								},
+							);
 						}
 					})
 					.catch(() => undefined),
@@ -327,26 +372,26 @@ const normalizeHyperframesHtml = async (
 		}
 
 		jobs.push(
-			resolveImageReference(src).then((dataUrl) => {
+			resolveImageReference(src, projectPath).then((dataUrl) => {
 				if (dataUrl) img.setAttribute("src", dataUrl);
 			}),
 		);
 	}
 
 	for (const svgImage of Array.from(doc.querySelectorAll("image"))) {
-		jobs.push(replaceImageAttribute(svgImage, "href"));
-		jobs.push(replaceImageAttribute(svgImage, "xlink:href"));
+		jobs.push(replaceImageAttribute(svgImage, "href", projectPath));
+		jobs.push(replaceImageAttribute(svgImage, "xlink:href", projectPath));
 	}
 
 	for (const video of Array.from(doc.querySelectorAll("video[poster]"))) {
-		jobs.push(replaceImageAttribute(video, "poster"));
+		jobs.push(replaceImageAttribute(video, "poster", projectPath));
 	}
 
 	for (const el of Array.from(doc.querySelectorAll<HTMLElement>("[style]"))) {
 		const style = el.getAttribute("style");
 		if (!style || !/url\(/i.test(style)) continue;
 		jobs.push(
-			replaceCssImageUrls(style).then((nextStyle) => {
+			replaceCssImageUrls(style, projectPath).then((nextStyle) => {
 				if (nextStyle !== style) el.setAttribute("style", nextStyle);
 			}),
 		);
@@ -358,7 +403,7 @@ const normalizeHyperframesHtml = async (
 		const css = styleEl.textContent ?? "";
 		if (!/url\(/i.test(css)) continue;
 		jobs.push(
-			replaceCssImageUrls(css).then((nextCss) => {
+			replaceCssImageUrls(css, projectPath).then((nextCss) => {
 				if (nextCss !== css) styleEl.textContent = nextCss;
 			}),
 		);
@@ -391,6 +436,16 @@ type ExportState = {
 	error?: string;
 };
 
+type ExportFps = 24 | 25 | 30;
+type ExportQuality = "standard" | "high" | "max";
+type ExportSize = "native" | "720p" | "1080p" | "1440p" | "2160p";
+
+type ExportSettings = {
+	fps: ExportFps;
+	quality: ExportQuality;
+	size: ExportSize;
+};
+
 type PendingDownload = {
 	url: string;
 	filename: string;
@@ -403,6 +458,24 @@ type PreviewIssue = {
 };
 
 const MAX_PREVIEW_ISSUES = 8;
+const DEFAULT_EXPORT_SETTINGS: ExportSettings = {
+	fps: 30,
+	quality: "max",
+	size: "native",
+};
+const EXPORT_FPS_OPTIONS: ExportFps[] = [24, 25, 30];
+const EXPORT_QUALITY_OPTIONS: { value: ExportQuality; label: string }[] = [
+	{ value: "max", label: "Max" },
+	{ value: "high", label: "High" },
+	{ value: "standard", label: "Standard" },
+];
+const EXPORT_SIZE_OPTIONS: { value: ExportSize; label: string }[] = [
+	{ value: "native", label: "Native" },
+	{ value: "720p", label: "720p" },
+	{ value: "1080p", label: "1080p" },
+	{ value: "1440p", label: "1440p" },
+	{ value: "2160p", label: "2160p" },
+];
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
 	!!value && typeof value === "object" && !Array.isArray(value);
@@ -448,6 +521,7 @@ export const HyperframesArtifact: React.FC<ArtifactProps> = ({
 	content,
 	identifier,
 	title,
+	projectPath,
 	onMessageAction,
 }) => {
 	const containerRef = useRef<HTMLDivElement>(null);
@@ -461,7 +535,7 @@ export const HyperframesArtifact: React.FC<ArtifactProps> = ({
 	// contentDocument probing for this URL, keeping cross-origin postMessage as
 	// the only communication channel (which works fine).
 	const previewUrl =
-		"https://zrg-team.github.io/memorall/hyperframes-preview.html?v=20260607-export-parity";
+		"https://zrg-team.github.io/memorall/hyperframes-preview.html?v=20260608-export-options";
 	const [previewHtml, setPreviewHtml] = useState<NormalizedComposition | null>(
 		null,
 	);
@@ -471,6 +545,10 @@ export const HyperframesArtifact: React.FC<ArtifactProps> = ({
 	const [pendingDownload, setPendingDownload] =
 		useState<PendingDownload | null>(null);
 	const [previewIssues, setPreviewIssues] = useState<PreviewIssue[]>([]);
+	const [showExportSettings, setShowExportSettings] = useState(false);
+	const [exportSettings, setExportSettings] = useState<ExportSettings>(
+		DEFAULT_EXPORT_SETTINGS,
+	);
 
 	const clearPendingDownload = useCallback(() => {
 		const pending = pendingDownloadRef.current;
@@ -485,14 +563,15 @@ export const HyperframesArtifact: React.FC<ArtifactProps> = ({
 		clearPendingDownload();
 		setExportState({ phase: "idle" });
 		setPreviewIssues([]);
+		setShowExportSettings(false);
 		setPreviewHtml(null);
-		void normalizeHyperframesHtml(content).then((result) => {
+		void normalizeHyperframesHtml(content, projectPath).then((result) => {
 			if (!cancelled) setPreviewHtml(result);
 		});
 		return () => {
 			cancelled = true;
 		};
-	}, [clearPendingDownload, content]);
+	}, [clearPendingDownload, content, projectPath]);
 
 	// Deliver the composition to the GitHub Pages runner via postMessage.
 	//
@@ -631,6 +710,7 @@ export const HyperframesArtifact: React.FC<ArtifactProps> = ({
 							pendingDownloadRef.current = next;
 							setPendingDownload(next);
 							setExportState({ phase: "complete" });
+							setShowExportSettings(false);
 						}
 					} else if (status === "failed") {
 						setExportState({
@@ -684,21 +764,27 @@ export const HyperframesArtifact: React.FC<ArtifactProps> = ({
 			return;
 		}
 
+		setShowExportSettings((open) => !open);
+	}, []);
+
+	const handleStartExportClick = useCallback(() => {
 		const key = compositionKeyRef.current;
 		const target = playerRef.current?.iframeElement?.contentWindow;
 		if (!key || !target) return;
 
 		clearPendingDownload();
+		setShowExportSettings(false);
 		setExportState({ phase: "preparing" });
 		target.postMessage(
 			{
 				type: "memorall:hyperframes-export-mp4",
 				key,
 				filenameBase: filenameBaseRef.current,
+				options: exportSettings,
 			},
 			"*",
 		);
-	}, [clearPendingDownload]);
+	}, [clearPendingDownload, exportSettings]);
 
 	const handleSendPreviewReport = useCallback(() => {
 		if (previewIssues.length === 0) return;
@@ -731,25 +817,111 @@ export const HyperframesArtifact: React.FC<ArtifactProps> = ({
 	return (
 		<div className="my-2 overflow-hidden rounded-md bg-black">
 			<div
-				className="flex items-center justify-end border-b border-white/10 bg-black px-3 py-2"
+				className="border-b border-white/10 bg-black"
 				data-html2canvas-ignore="true"
 			>
-				<button
-					type="button"
-					onClick={handleExportClick}
-					disabled={exportBusy || !previewHtml}
-					className="inline-flex h-8 items-center gap-2 rounded-md border border-white/15 bg-white/10 px-3 text-xs font-medium text-white hover:bg-white/15 disabled:cursor-progress disabled:opacity-60"
-					title={
-						exportState.error || "Export this HyperFrames composition as MP4"
-					}
-				>
-					{exportBusy ? (
-						<Loader2 className="h-3.5 w-3.5 animate-spin" />
-					) : (
-						<Download className="h-3.5 w-3.5" />
-					)}
-					<span>{exportLabel}</span>
-				</button>
+				<div className="flex items-center justify-end px-3 py-2">
+					<button
+						type="button"
+						onClick={handleExportClick}
+						disabled={exportBusy || !previewHtml}
+						className="inline-flex h-8 items-center gap-2 rounded-md border border-white/15 bg-white/10 px-3 text-xs font-medium text-white hover:bg-white/15 disabled:cursor-progress disabled:opacity-60"
+						title={
+							exportState.error || "Export this HyperFrames composition as MP4"
+						}
+					>
+						{exportBusy ? (
+							<Loader2 className="h-3.5 w-3.5 animate-spin" />
+						) : pendingDownload || exportState.phase === "complete" ? (
+							<Download className="h-3.5 w-3.5" />
+						) : (
+							<SlidersHorizontal className="h-3.5 w-3.5" />
+						)}
+						<span>{exportLabel}</span>
+					</button>
+				</div>
+				{showExportSettings && !pendingDownload ? (
+					<div className="grid gap-2 border-t border-white/10 px-3 pb-3 pt-1 text-xs text-white sm:grid-cols-[1fr_1fr_1fr_auto_auto] sm:items-end">
+						<label className="grid gap-1">
+							<span className="font-medium text-white/70">FPS</span>
+							<select
+								value={exportSettings.fps}
+								onChange={(event) =>
+									setExportSettings((settings) => ({
+										...settings,
+										fps: Number(event.target.value) as ExportFps,
+									}))
+								}
+								className="h-8 rounded-md border border-white/15 bg-black px-2 text-white outline-none focus:border-white/35"
+							>
+								{EXPORT_FPS_OPTIONS.map((fps) => (
+									<option key={fps} value={fps}>
+										{fps} fps
+									</option>
+								))}
+							</select>
+						</label>
+						<label className="grid gap-1">
+							<span className="font-medium text-white/70">Image quality</span>
+							<select
+								value={exportSettings.quality}
+								onChange={(event) =>
+									setExportSettings((settings) => ({
+										...settings,
+										quality: event.target.value as ExportQuality,
+									}))
+								}
+								className="h-8 rounded-md border border-white/15 bg-black px-2 text-white outline-none focus:border-white/35"
+							>
+								{EXPORT_QUALITY_OPTIONS.map((quality) => (
+									<option key={quality.value} value={quality.value}>
+										{quality.label}
+									</option>
+								))}
+							</select>
+						</label>
+						<label className="grid gap-1">
+							<span className="font-medium text-white/70">Video size</span>
+							<select
+								value={exportSettings.size}
+								onChange={(event) =>
+									setExportSettings((settings) => ({
+										...settings,
+										size: event.target.value as ExportSize,
+									}))
+								}
+								className="h-8 rounded-md border border-white/15 bg-black px-2 text-white outline-none focus:border-white/35"
+							>
+								{EXPORT_SIZE_OPTIONS.map((size) => (
+									<option key={size.value} value={size.value}>
+										{size.label}
+									</option>
+								))}
+							</select>
+						</label>
+						<button
+							type="button"
+							onClick={handleStartExportClick}
+							disabled={exportBusy || !previewHtml}
+							className="inline-flex h-8 items-center justify-center gap-2 rounded-md border border-white/15 bg-white px-3 font-medium text-black hover:bg-white/90 disabled:cursor-progress disabled:opacity-60"
+						>
+							{exportBusy ? (
+								<Loader2 className="h-3.5 w-3.5 animate-spin" />
+							) : (
+								<Download className="h-3.5 w-3.5" />
+							)}
+							<span>Start MP4</span>
+						</button>
+						<button
+							type="button"
+							onClick={() => setShowExportSettings(false)}
+							className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-white/15 bg-white/10 text-white hover:bg-white/15"
+							title="Close export settings"
+						>
+							<X className="h-3.5 w-3.5" />
+						</button>
+					</div>
+				) : null}
 			</div>
 			<div className="relative" style={{ height: "60vh" }}>
 				<div

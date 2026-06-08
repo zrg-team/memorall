@@ -16,8 +16,31 @@
 
 const DEFAULT_EXPORT_FPS = 30;
 const EXPORT_MIN_BITRATE = 12_000_000;
-const EXPORT_MAX_BITRATE = 40_000_000;
-const EXPORT_BITS_PER_PIXEL_FRAME = 0.35;
+const EXPORT_QUALITY_PRESETS = {
+	standard: {
+		captureScale: 1,
+		bitsPerPixelFrame: 0.32,
+		maxBitrate: 40_000_000,
+	},
+	high: {
+		captureScale: 1.25,
+		bitsPerPixelFrame: 0.55,
+		maxBitrate: 90_000_000,
+	},
+	max: {
+		captureScale: 1.5,
+		bitsPerPixelFrame: 0.85,
+		maxBitrate: 160_000_000,
+	},
+};
+const DEFAULT_EXPORT_QUALITY = "max";
+const EXPORT_SIZE_PRESETS = {
+	native: null,
+	"720p": 720,
+	"1080p": 1080,
+	"1440p": 1440,
+	"2160p": 2160,
+};
 const TAILWIND_BROWSER_URL = "https://cdn.tailwindcss.com";
 const MEDIABUNNY_ESM_URL =
 	"https://cdn.jsdelivr.net/npm/mediabunny@1.45.2/+esm";
@@ -103,7 +126,7 @@ if (!key) {
 				typeof msg.filenameBase === "string"
 					? sanitizeFilename(msg.filenameBase)
 					: currentFilenameBase;
-			void handleExportRequest(filenameBase);
+			void handleExportRequest(filenameBase, msg.options);
 			return;
 		}
 
@@ -553,6 +576,53 @@ function getCompositionDimensions() {
 	};
 }
 
+function normalizeExportOptions(options = {}) {
+	const fps = Number(options?.fps);
+	const quality =
+		typeof options?.quality === "string" &&
+		EXPORT_QUALITY_PRESETS[options.quality]
+			? options.quality
+			: DEFAULT_EXPORT_QUALITY;
+	const size =
+		typeof options?.size === "string" && options.size in EXPORT_SIZE_PRESETS
+			? options.size
+			: "native";
+
+	return {
+		fps: Number.isFinite(fps) ? Math.round(clamp(fps, 24, 30)) : DEFAULT_EXPORT_FPS,
+		quality,
+		size,
+	};
+}
+
+function roundToEven(value) {
+	const rounded = Math.max(2, Math.round(value));
+	return rounded % 2 === 0 ? rounded : rounded + 1;
+}
+
+function getExportOutputDimensions(sourceWidth, sourceHeight, size) {
+	const longEdge = EXPORT_SIZE_PRESETS[size];
+	if (!longEdge) {
+		return {
+			width: roundToEven(sourceWidth),
+			height: roundToEven(sourceHeight),
+		};
+	}
+
+	const aspect = sourceWidth / sourceHeight;
+	if (sourceWidth >= sourceHeight) {
+		return {
+			width: roundToEven(longEdge),
+			height: roundToEven(longEdge / aspect),
+		};
+	}
+
+	return {
+		width: roundToEven(longEdge * aspect),
+		height: roundToEven(longEdge),
+	};
+}
+
 function withCompositionExportViewport(width, height) {
 	const root = getRootComposition();
 	const targets = [document.documentElement, document.body, root].filter(Boolean);
@@ -612,12 +682,14 @@ function clamp(value, min, max) {
 	return Math.min(max, Math.max(min, value));
 }
 
-function getExportBitrate(width, height) {
+function getExportBitrate(width, height, fps, quality) {
+	const preset =
+		EXPORT_QUALITY_PRESETS[quality] ?? EXPORT_QUALITY_PRESETS[DEFAULT_EXPORT_QUALITY];
 	return Math.ceil(
 		clamp(
-			width * height * DEFAULT_EXPORT_FPS * EXPORT_BITS_PER_PIXEL_FRAME,
+			width * height * fps * preset.bitsPerPixelFrame,
 			EXPORT_MIN_BITRATE,
-			EXPORT_MAX_BITRATE,
+			preset.maxBitrate,
 		),
 	);
 }
@@ -693,17 +765,78 @@ function normalizeBackdropFiltersForHtml2Canvas(clonedDocument) {
 	}
 }
 
+function normalizeTextSpacingForHtml2Canvas(clonedDocument) {
+	const clonedWindow = clonedDocument.defaultView;
+	const root = clonedDocument.body;
+	if (!clonedWindow || !root) return;
+
+	const style = clonedDocument.createElement("style");
+	style.setAttribute("data-html2canvas-ignore", "true");
+	style.textContent = `
+[data-hf-html2canvas-text-shift] {
+	position: relative !important;
+	top: -0.28em !important;
+}
+`;
+	clonedDocument.head.appendChild(style);
+
+	const skipTags = new Set([
+		"SCRIPT",
+		"STYLE",
+		"NOSCRIPT",
+		"TEXTAREA",
+		"OPTION",
+		"SELECT",
+		"SVG",
+		"CANVAS",
+		"VIDEO",
+		"AUDIO",
+	]);
+	const walker = clonedDocument.createTreeWalker(
+		root,
+		clonedWindow.NodeFilter.SHOW_TEXT,
+		{
+			acceptNode: (node) => {
+				if (!node.nodeValue?.trim()) return clonedWindow.NodeFilter.FILTER_REJECT;
+
+				const parent = node.parentElement;
+				if (!parent) return clonedWindow.NodeFilter.FILTER_REJECT;
+				if (parent.hasAttribute("data-hf-html2canvas-text-shift")) {
+					return clonedWindow.NodeFilter.FILTER_REJECT;
+				}
+				if (skipTags.has(parent.tagName)) {
+					return clonedWindow.NodeFilter.FILTER_REJECT;
+				}
+				if (parent.closest("[data-html2canvas-ignore]")) {
+					return clonedWindow.NodeFilter.FILTER_REJECT;
+				}
+				return clonedWindow.NodeFilter.FILTER_ACCEPT;
+			},
+		},
+	);
+	const textNodes = [];
+	while (walker.nextNode()) textNodes.push(walker.currentNode);
+
+	for (const textNode of textNodes) {
+		const wrapper = clonedDocument.createElement("span");
+		wrapper.setAttribute("data-hf-html2canvas-text-shift", "true");
+		textNode.parentNode?.insertBefore(wrapper, textNode);
+		wrapper.appendChild(textNode);
+	}
+}
+
 function prepareFallbackHtml2CanvasClone(clonedDocument) {
 	preserveObjectFitImagesForHtml2Canvas(clonedDocument);
 	normalizeBackdropFiltersForHtml2Canvas(clonedDocument);
+	normalizeTextSpacingForHtml2Canvas(clonedDocument);
 }
 
-function getHtml2CanvasCaptureOptions(width, height, overrides = {}) {
+function getHtml2CanvasCaptureOptions(width, height, scale = 1, overrides = {}) {
 	return {
 		useCORS: true,
 		allowTaint: false,
 		backgroundColor: "#000",
-		scale: 1,
+		scale,
 		width,
 		height,
 		windowWidth: width,
@@ -719,23 +852,37 @@ function getHtml2CanvasCaptureOptions(width, height, overrides = {}) {
 	};
 }
 
-function assertCaptureDimensions(canvas, width, height, rendererName) {
-	if (canvas.width !== width || canvas.height !== height) {
+function assertCaptureDimensions(
+	canvas,
+	width,
+	height,
+	scale,
+	rendererName,
+) {
+	const expectedWidth = Math.round(width * scale);
+	const expectedHeight = Math.round(height * scale);
+	if (canvas.width !== expectedWidth || canvas.height !== expectedHeight) {
 		throw new Error(
-			`${rendererName} produced ${canvas.width}x${canvas.height}; expected ${width}x${height}`,
+			`${rendererName} produced ${canvas.width}x${canvas.height}; expected ${expectedWidth}x${expectedHeight}`,
 		);
 	}
 }
 
-async function captureCompositionCanvas(html2canvas, width, height) {
+async function captureCompositionCanvas(html2canvas, width, height, scale) {
 	try {
 		const canvas = await html2canvas(
 			document.body,
-			getHtml2CanvasCaptureOptions(width, height, {
+			getHtml2CanvasCaptureOptions(width, height, scale, {
 				foreignObjectRendering: true,
 			}),
 		);
-		assertCaptureDimensions(canvas, width, height, "foreignObject html2canvas");
+		assertCaptureDimensions(
+			canvas,
+			width,
+			height,
+			scale,
+			"foreignObject html2canvas",
+		);
 		return canvas;
 	} catch (error) {
 		reportRuntimeError(
@@ -750,11 +897,17 @@ async function captureCompositionCanvas(html2canvas, width, height) {
 
 	const fallbackCanvas = await html2canvas(
 		document.body,
-		getHtml2CanvasCaptureOptions(width, height, {
+		getHtml2CanvasCaptureOptions(width, height, scale, {
 			onclone: prepareFallbackHtml2CanvasClone,
 		}),
 	);
-	assertCaptureDimensions(fallbackCanvas, width, height, "fallback html2canvas");
+	assertCaptureDimensions(
+		fallbackCanvas,
+		width,
+		height,
+		scale,
+		"fallback html2canvas",
+	);
 	return fallbackCanvas;
 }
 
@@ -895,7 +1048,7 @@ function postExportStatus(payload) {
 	);
 }
 
-async function handleExportRequest(filenameBase) {
+async function handleExportRequest(filenameBase, options) {
 	if (exportInProgress) {
 		postExportStatus({ status: "busy" });
 		return;
@@ -906,6 +1059,7 @@ async function handleExportRequest(filenameBase) {
 		postExportStatus({ status: "preparing" });
 		const result = await exportMp4({
 			filenameBase,
+			options,
 			onProgress: (frame, total) =>
 				postExportStatus({ status: "exporting", frame, total }),
 		});
@@ -925,7 +1079,7 @@ async function handleExportRequest(filenameBase) {
 	}
 }
 
-async function exportMp4({ filenameBase, onProgress }) {
+async function exportMp4({ filenameBase, options, onProgress }) {
 	await pollUntil(hasExportRuntime, 20000);
 
 	const [html2canvas, mediabunny] = await Promise.all([
@@ -934,15 +1088,22 @@ async function exportMp4({ filenameBase, onProgress }) {
 	]);
 	const { Output, Mp4OutputFormat, BufferTarget, CanvasSource } = mediabunny;
 
-	const { width, height } = getCompositionDimensions();
+	const exportOptions = normalizeExportOptions(options);
+	const sourceDimensions = getCompositionDimensions();
+	const outputDimensions = getExportOutputDimensions(
+		sourceDimensions.width,
+		sourceDimensions.height,
+		exportOptions.size,
+	);
+	const qualityPreset = EXPORT_QUALITY_PRESETS[exportOptions.quality];
 	const duration = getDuration();
 	if (!duration || duration <= 0) {
 		throw new Error("Could not read composition duration");
 	}
 
 	const captureCanvas = document.createElement("canvas");
-	captureCanvas.width = width;
-	captureCanvas.height = height;
+	captureCanvas.width = outputDimensions.width;
+	captureCanvas.height = outputDimensions.height;
 	const ctx = captureCanvas.getContext("2d", { willReadFrequently: true });
 	if (!ctx) throw new Error("Could not create capture canvas");
 	ctx.imageSmoothingEnabled = true;
@@ -951,7 +1112,12 @@ async function exportMp4({ filenameBase, onProgress }) {
 	const bufferTarget = new BufferTarget();
 	const videoSource = new CanvasSource(captureCanvas, {
 		codec: "avc",
-		bitrate: getExportBitrate(width, height),
+		bitrate: getExportBitrate(
+			outputDimensions.width,
+			outputDimensions.height,
+			exportOptions.fps,
+			exportOptions.quality,
+		),
 		bitrateMode: "variable",
 		latencyMode: "quality",
 		keyFrameInterval: 2,
@@ -963,9 +1129,12 @@ async function exportMp4({ filenameBase, onProgress }) {
 	output.addVideoTrack(videoSource);
 	await output.start();
 
-	const totalFrames = Math.ceil(duration * DEFAULT_EXPORT_FPS);
-	const frameDuration = 1 / DEFAULT_EXPORT_FPS;
-	const restoreViewport = withCompositionExportViewport(width, height);
+	const totalFrames = Math.ceil(duration * exportOptions.fps);
+	const frameDuration = 1 / exportOptions.fps;
+	const restoreViewport = withCompositionExportViewport(
+		sourceDimensions.width,
+		sourceDimensions.height,
+	);
 
 	try {
 		await prepareExportFrame(0);
@@ -975,10 +1144,21 @@ async function exportMp4({ filenameBase, onProgress }) {
 			const timestamp = i * frameDuration;
 			await prepareExportFrame(timestamp);
 
-			const frameCanvas = await captureCompositionCanvas(html2canvas, width, height);
+			const frameCanvas = await captureCompositionCanvas(
+				html2canvas,
+				sourceDimensions.width,
+				sourceDimensions.height,
+				qualityPreset.captureScale,
+			);
 
-			ctx.clearRect(0, 0, width, height);
-			ctx.drawImage(frameCanvas, 0, 0, width, height);
+			ctx.clearRect(0, 0, outputDimensions.width, outputDimensions.height);
+			ctx.drawImage(
+				frameCanvas,
+				0,
+				0,
+				outputDimensions.width,
+				outputDimensions.height,
+			);
 			await videoSource.add(timestamp, frameDuration);
 			onProgress?.(i + 1, totalFrames);
 		}

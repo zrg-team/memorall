@@ -1,16 +1,17 @@
 import { defineStep, bindStep } from "flow-core/interfaces/engine/step";
 import type {
-	BoundStep,
 	StepFactoryFromSpec,
 	StepSpecFromDefinition,
 } from "flow-core/interfaces/engine/step";
 import { logError, logInfo } from "flow-core/utils/logger";
 import { stepRegistry } from "flow-core/registries/step-registry";
 import type { ChatCompletionMessageParam } from "flow-core/interfaces/engine/messages";
-import type { ChatCompletionResponse } from "flow-core/interfaces/engine/messages";
 import type { BaseLLM } from "flow-core/interfaces/services/llm";
 import type { BaseStateBase } from "flow-core/graph/graph.base";
-import { estimatePromptTokens } from "flow-core/utils/token-usage";
+import {
+	estimatePromptTokens,
+	estimateMessageTokens,
+} from "flow-core/utils/token-usage";
 
 const STEP_NAME = "auto-compact" as const;
 const DEFAULT_COMPACT_THRESHOLD_RATIO = 0.75;
@@ -30,11 +31,18 @@ const DEFAULT_TOOL_CALL_FLOW_TRIM_CONFIG = {
 	stepPercent: 20,
 	maxPercent: 80,
 };
+const DEFAULT_KEEP_RECENT_OUTPUT_FLOWS = KEEP_RECENT_FLOWS;
 const DEFAULT_CHAT_MESSAGE_TRIM_CONFIG = {
 	stepPercent: 10,
 	maxPercent: 80,
 };
+const DEFAULT_SMART_TRIM_CONFIG: PercentTrimConfig = {
+	stepPercent: 100,
+	maxPercent: 100,
+};
 const DEFAULT_MAX_ROUND_PERCENT_STEPS = [50, 100];
+// Minimum base64 data length (chars) before we bother stripping it
+const MIN_STRIP_BASE64_CHARS = 100;
 
 type AutoCompactState = Pick<BaseStateBase, "messages" | "outputMessages">;
 type AutoCompactStateKey = keyof AutoCompactState;
@@ -52,44 +60,11 @@ type ResolvedAutoCompactConfig = {
 	safeThresholdRatio: number;
 	toolResultTrim: ToolResultTrimConfig;
 	toolCallFlowTrim: PercentTrimConfig;
+	smartTrim: PercentTrimConfig;
 	chatMessageTrim: PercentTrimConfig;
 	maxRoundPercentSteps: number[];
+	keepRecentOutputFlows: number;
 };
-
-function getContentCharLength(message: ChatCompletionMessageParam): number {
-	return extractText(message).length;
-}
-
-function summarizeMessage(
-	message: ChatCompletionMessageParam,
-): Record<string, unknown> {
-	if (message.role === "assistant") {
-		return {
-			role: message.role,
-			contentChars: getContentCharLength(message),
-			toolCalls: message.tool_calls?.map((toolCall) => ({
-				id: toolCall.id,
-				name: toolCall.function.name,
-				argumentChars: toolCall.function.arguments.length,
-			})),
-		};
-	}
-
-	if (message.role === "tool") {
-		return {
-			role: message.role,
-			toolCallId: message.tool_call_id,
-			contentChars: getContentCharLength(message),
-			trimmed:
-				isChunkedToolResult(message) || isLegacyTrimmedToolResult(message),
-		};
-	}
-
-	return {
-		role: message.role,
-		contentChars: getContentCharLength(message),
-	};
-}
 
 function summarizeMessageList(
 	messages: ChatCompletionMessageParam[],
@@ -226,6 +201,10 @@ function resolveAutoCompactConfig(
 			config?.toolCallFlowTrim,
 			DEFAULT_TOOL_CALL_FLOW_TRIM_CONFIG,
 		),
+		smartTrim: resolvePercentTrimConfig(
+			config?.smartTrim,
+			DEFAULT_SMART_TRIM_CONFIG,
+		),
 		chatMessageTrim: resolvePercentTrimConfig(
 			config?.chatMessageTrim,
 			DEFAULT_CHAT_MESSAGE_TRIM_CONFIG,
@@ -233,11 +212,70 @@ function resolveAutoCompactConfig(
 		maxRoundPercentSteps: resolveMaxRoundPercentSteps(
 			config?.maxRoundPercentSteps,
 		),
+		keepRecentOutputFlows: clampNonNegativeInteger(
+			config?.keepRecentOutputFlows,
+			DEFAULT_KEEP_RECENT_OUTPUT_FLOWS,
+		),
 	};
 }
 
 function estimateStateTokens(state: AutoCompactState): number {
 	return estimatePromptTokens([...state.messages, ...state.outputMessages]);
+}
+
+function logTokenBreakdown(state: AutoCompactState): void {
+	const rows: Array<{
+		key: string;
+		i: number;
+		role: string;
+		label: string;
+		contentChars: number;
+		toolCallArgChars: number;
+		tokens: number;
+	}> = [];
+
+	for (const [key, msgs] of [
+		["messages", state.messages],
+		["outputMessages", state.outputMessages],
+	] as const) {
+		for (let i = 0; i < msgs.length; i++) {
+			const m = msgs[i];
+			const contentChars =
+				typeof m.content === "string"
+					? m.content.length
+					: Array.isArray(m.content)
+						? m.content
+								.map((p) => ("text" in p ? (p as { text: string }).text : ""))
+								.join("").length
+						: 0;
+			const toolCallArgChars =
+				"tool_calls" in m && Array.isArray(m.tool_calls)
+					? JSON.stringify(m.tool_calls).length
+					: 0;
+			const label =
+				"tool_calls" in m && m.tool_calls?.[0]
+					? `assistant→${m.tool_calls.map((tc) => tc.function.name).join(",")}`
+					: "tool_call_id" in m
+						? `tool[${(m as { tool_call_id: string }).tool_call_id}]`
+						: m.role;
+			rows.push({
+				key,
+				i,
+				role: m.role,
+				label,
+				contentChars,
+				toolCallArgChars,
+				tokens: estimateMessageTokens(m),
+			});
+		}
+	}
+
+	logAutoCompact("token_breakdown", {
+		totalTokens: estimateStateTokens(state),
+		messageCount: state.messages.length,
+		outputMessageCount: state.outputMessages.length,
+		rows,
+	});
 }
 
 function extractText(m: ChatCompletionMessageParam): string {
@@ -259,40 +297,6 @@ function extractText(m: ChatCompletionMessageParam): string {
 		return content ? `${content} [calls: ${names}]` : `[calls: ${names}]`;
 	}
 	return content;
-}
-
-function buildSummarizationPrompt(
-	messages: ChatCompletionMessageParam[],
-): ChatCompletionMessageParam[] {
-	const formatted = messages
-		.map(
-			(m) =>
-				`[${m.role === "tool" ? "tool-result" : m.role}]: ${extractText(m)}`,
-		)
-		.join("\n\n");
-
-	return [
-		{
-			role: "system",
-			content:
-				"You are a summarization assistant. Summarize the following agent steps concisely, preserving key facts, tool results, and decisions made. Be brief.",
-		},
-		{
-			role: "user",
-			content: `Summarize these steps:\n\n${formatted}`,
-		},
-	];
-}
-
-async function summarize(
-	messages: ChatCompletionMessageParam[],
-	llm: BaseLLM,
-): Promise<string> {
-	const response = (await llm.chatCompletions({
-		messages: buildSummarizationPrompt(messages),
-		stream: false,
-	})) as ChatCompletionResponse;
-	return response.choices[0]?.message?.content ?? "";
 }
 
 // Groups outputMessages into complete tool-call flows.
@@ -348,6 +352,115 @@ function isChunkableToolResult(
 	return (
 		extractText(message).length > config.chunkHeadChars + config.chunkTailChars
 	);
+}
+
+// Returns true if `text` contains a base64 data URI long enough to be worth stripping.
+function hasBase64DataUri(text: string): boolean {
+	return new RegExp(
+		`data:[^;,"'\\s\\\\]+;base64,[A-Za-z0-9+/]{${MIN_STRIP_BASE64_CHARS},}`,
+	).test(text);
+}
+
+// Replaces base64 data URIs in `text` with compact placeholders.
+function stripBase64DataUris(text: string): string {
+	return text.replace(
+		/data:([^;,"'\s\\]+);base64,([A-Za-z0-9+/]+=*)/g,
+		(_, mime: string, data: string) =>
+			data.length >= MIN_STRIP_BASE64_CHARS
+				? `data:${mime};base64,[~${data.length}chars]`
+				: `data:${mime};base64,${data}`,
+	);
+}
+
+function isBase64Strippable(message: ChatCompletionMessageParam): boolean {
+	if (typeof message.content === "string" && hasBase64DataUri(message.content))
+		return true;
+	if (Array.isArray(message.content)) {
+		for (const part of message.content) {
+			if (part.type === "text" && hasBase64DataUri(part.text)) return true;
+			if (
+				part.type === "image_url" &&
+				part.image_url?.url &&
+				hasBase64DataUri(part.image_url.url)
+			)
+				return true;
+		}
+	}
+	if ("tool_calls" in message && message.tool_calls?.length) {
+		for (const tc of message.tool_calls) {
+			if (hasBase64DataUri(tc.function.arguments)) return true;
+		}
+	}
+	return false;
+}
+
+function stripBase64FromMessage(
+	message: ChatCompletionMessageParam,
+): ChatCompletionMessageParam {
+	let m = message;
+	if (typeof m.content === "string" && hasBase64DataUri(m.content)) {
+		m = { ...m, content: stripBase64DataUris(m.content) };
+	}
+	if (Array.isArray(m.content)) {
+		const newParts = m.content.map((part) => {
+			if (part.type === "text" && hasBase64DataUri(part.text)) {
+				return { ...part, text: stripBase64DataUris(part.text) };
+			}
+			if (
+				part.type === "image_url" &&
+				part.image_url?.url &&
+				hasBase64DataUri(part.image_url.url)
+			) {
+				return {
+					...part,
+					image_url: {
+						...part.image_url,
+						url: stripBase64DataUris(part.image_url.url),
+					},
+				};
+			}
+			return part;
+		});
+		m = { ...m, content: newParts } as ChatCompletionMessageParam;
+	}
+	if ("tool_calls" in m && m.tool_calls?.length) {
+		const newToolCalls = m.tool_calls.map((tc) => {
+			if (!hasBase64DataUri(tc.function.arguments)) return tc;
+			return {
+				...tc,
+				function: {
+					...tc.function,
+					arguments: stripBase64DataUris(tc.function.arguments),
+				},
+			};
+		});
+		m = { ...m, tool_calls: newToolCalls } as typeof m;
+	}
+	return m;
+}
+
+function countBase64StrippableMessages(
+	state: AutoCompactState,
+	key: AutoCompactStateKey,
+): number {
+	return state[key].filter(isBase64Strippable).length;
+}
+
+function stripOldestBase64Messages(
+	state: AutoCompactState,
+	count: number,
+	key: AutoCompactStateKey,
+): { state: AutoCompactState; affectedCount: number } {
+	if (count <= 0) return { state, affectedCount: 0 };
+	let remaining = count;
+	let affectedCount = 0;
+	const nextMessages = state[key].map((m) => {
+		if (remaining <= 0 || !isBase64Strippable(m)) return m;
+		remaining--;
+		affectedCount++;
+		return stripBase64FromMessage(m);
+	});
+	return { state: { ...state, [key]: nextMessages }, affectedCount };
 }
 
 function chunkToolResultContent(
@@ -580,7 +693,10 @@ function runPercentTrimStage(
 	let affectedTotal = 0;
 	// Start at stepPercent clamped to maxPercent — no initialPercent needed since
 	// rounds provide the coarse escalation and stepPercent gives within-round precision.
-	let activePercent = Math.min(stage.config.stepPercent, stage.config.maxPercent);
+	let activePercent = Math.min(
+		stage.config.stepPercent,
+		stage.config.maxPercent,
+	);
 
 	while (true) {
 		const beforeTokens = estimateStateTokens(nextState);
@@ -669,13 +785,27 @@ function trimToSafeThreshold(
 	}
 
 	function makeToolCallFlowStage(key: AutoCompactStateKey): PercentTrimStage {
+		const keepRecent =
+			key === "outputMessages" ? config.keepRecentOutputFlows : 0;
 		return {
 			name: "tool_call_flow",
 			logEvent: "remove_tool_call_flow_percent",
 			config: config.toolCallFlowTrim,
 			key,
-			getEligibleCount: (s) => countToolCallFlows(s, key),
+			getEligibleCount: (s) =>
+				Math.max(0, countToolCallFlows(s, key) - keepRecent),
 			applyCount: (s, count) => removeOldestToolCallFlows(s, count, key),
+		};
+	}
+
+	function makeSmartTrimStage(key: AutoCompactStateKey): PercentTrimStage {
+		return {
+			name: "smart_trim_base64",
+			logEvent: "smart_trim_base64_percent",
+			config: config.smartTrim,
+			key,
+			getEligibleCount: (s) => countBase64StrippableMessages(s, key),
+			applyCount: (s, count) => stripOldestBase64Messages(s, count, key),
 		};
 	}
 
@@ -691,12 +821,14 @@ function trimToSafeThreshold(
 	}
 
 	// Process messages fully before touching outputMessages.
-	// Within each key: escalating rounds of toolResult+toolCallFlow (least destructive),
-	// then chatMessage as last resort only after all rounds are exhausted.
+	// Within each key: escalating rounds of toolResult → toolCallFlow → smartTrim
+	// (least destructive first), then chatMessage as last resort only after all
+	// rounds are exhausted.
 	for (const key of ["messages", "outputMessages"] as const) {
 		for (const roundCap of config.maxRoundPercentSteps) {
 			if (runCapped(makeToolResultStage(key), roundCap)) return nextState;
 			if (runCapped(makeToolCallFlowStage(key), roundCap)) return nextState;
+			if (runCapped(makeSmartTrimStage(key), roundCap)) return nextState;
 		}
 		if (runStage(makeChatStage(key))) return nextState;
 	}
@@ -704,101 +836,11 @@ function trimToSafeThreshold(
 	return nextState;
 }
 
-// Compacts conversation history: keeps system messages + last user message (goal),
-// summarizes everything in between into a single assistant message.
-async function compactHistory(
-	messages: ChatCompletionMessageParam[],
-	llm: BaseLLM,
-): Promise<ChatCompletionMessageParam[]> {
-	const systemMessages = messages.filter((m) => m.role === "system");
-	const nonSystem = messages.filter((m) => m.role !== "system");
-
-	let lastUserIdx = -1;
-	for (let i = nonSystem.length - 1; i >= 0; i--) {
-		if (nonSystem[i].role === "user") {
-			lastUserIdx = i;
-			break;
-		}
-	}
-
-	if (lastUserIdx <= 0) return messages;
-
-	const toSummarize = nonSystem.slice(0, lastUserIdx);
-	const lastUserMessage = nonSystem[lastUserIdx];
-
-	try {
-		logAutoCompact("compact_history_start", {
-			inputMessages: summarizeMessageList(messages),
-			toSummarize: summarizeMessageList(toSummarize),
-			preservedLastUser: summarizeMessage(lastUserMessage),
-		});
-		const summary = await summarize(toSummarize, llm);
-		logAutoCompact("compact_history_done", {
-			summaryChars: summary.length,
-			outputMessages: systemMessages.length + 2,
-		});
-		return [
-			...systemMessages,
-			{
-				role: "assistant",
-				content: `[Conversation history summary]\n${summary}`,
-			},
-			lastUserMessage,
-		];
-	} catch (error) {
-		logError(
-			"[AUTO_COMPACT] History compaction failed, keeping original:",
-			error,
-		);
-		return messages;
-	}
-}
-
-// Compacts tool-call flows in outputMessages: groups messages into complete
-// assistant+tool flows, keeps the most recent KEEP_RECENT_FLOWS flows verbatim,
-// and summarizes the older ones into a single assistant message.
-async function compactOutputMessages(
-	outputMessages: ChatCompletionMessageParam[],
-	llm: BaseLLM,
-): Promise<ChatCompletionMessageParam[]> {
-	const flows = groupIntoFlows(outputMessages);
-	if (flows.length <= KEEP_RECENT_FLOWS) return outputMessages;
-
-	const toSummarize = flows.slice(0, -KEEP_RECENT_FLOWS).flat();
-	const toKeep = flows.slice(-KEEP_RECENT_FLOWS).flat();
-
-	try {
-		logAutoCompact("compact_output_start", {
-			flows: flows.length,
-			flowsSummarized: flows.length - KEEP_RECENT_FLOWS,
-			flowsKept: KEEP_RECENT_FLOWS,
-			toSummarize: summarizeMessageList(toSummarize),
-			toKeep: summarizeMessageList(toKeep),
-		});
-		const summary = await summarize(toSummarize, llm);
-		logAutoCompact("compact_output_done", {
-			summaryChars: summary.length,
-			outputMessages: toKeep.length + 1,
-		});
-		return [
-			{ role: "assistant", content: `[Earlier steps summary]\n${summary}` },
-			...toKeep,
-		];
-	} catch (error) {
-		logError(
-			"[AUTO_COMPACT] Output compaction failed, keeping original:",
-			error,
-		);
-		return outputMessages;
-	}
-}
-
-export async function applyAutoCompactPolicy(
+export function applyAutoCompactPolicy(
 	state: AutoCompactState,
-	llm: BaseLLM,
 	config: AutoCompactConfig | undefined,
 	maxTokens: number,
-): Promise<AutoCompactState | undefined> {
+): AutoCompactState | undefined {
 	if (!Number.isFinite(maxTokens) || maxTokens <= 0) {
 		return undefined;
 	}
@@ -818,57 +860,31 @@ export async function applyAutoCompactPolicy(
 		compactTokenThreshold,
 		safeTokenThreshold,
 	});
+	logTokenBreakdown(state);
 
-	let compactedState = trimToSafeThreshold(
+	const compactedState = trimToSafeThreshold(
 		state,
 		safeTokenThreshold,
 		resolvedConfig,
 	);
-	const afterDirectTrimTokens = estimateStateTokens(compactedState);
-	logAutoCompact("after_direct_trim", {
+	const afterTrimTokens = estimateStateTokens(compactedState);
+
+	logAutoCompact("after_trim", {
 		beforeTokens: initialTokens,
-		afterTokens: afterDirectTrimTokens,
+		afterTokens: afterTrimTokens,
 		safeTokenThreshold,
 		state: summarizeState(compactedState),
 	});
 
-	if (afterDirectTrimTokens <= safeTokenThreshold) {
-		logAutoCompact("policy_done_after_direct_trim", {
-			beforeTokens: initialTokens,
-			afterTokens: afterDirectTrimTokens,
-			state: summarizeState(compactedState),
-		});
-		return compactedState;
+	if (afterTrimTokens > safeTokenThreshold) {
+		throw new Error(
+			`[AUTO_COMPACT] Context still exceeds budget after full trim: ${afterTrimTokens} tokens > ${safeTokenThreshold} safe limit. Reduce conversation size or increase model context window.`,
+		);
 	}
-
-	logAutoCompact("summarization_required", {
-		estimatedTokens: afterDirectTrimTokens,
-		safeTokenThreshold,
-		state: summarizeState(compactedState),
-	});
-
-	const [compactedMessages, compactedOutput] = await Promise.all([
-		compactHistory(compactedState.messages, llm),
-		compactOutputMessages(compactedState.outputMessages, llm),
-	]);
-
-	logAutoCompact("after_summarization", {
-		messages: summarizeMessageList(compactedMessages),
-		outputMessages: summarizeMessageList(compactedOutput),
-	});
-
-	compactedState = trimToSafeThreshold(
-		{
-			messages: compactedMessages,
-			outputMessages: compactedOutput,
-		},
-		safeTokenThreshold,
-		resolvedConfig,
-	);
 
 	logAutoCompact("policy_done", {
 		beforeTokens: initialTokens,
-		afterTokens: estimateStateTokens(compactedState),
+		afterTokens: afterTrimTokens,
 		state: summarizeState(compactedState),
 	});
 
@@ -893,6 +909,8 @@ export interface AutoCompactConfig {
 	toolCallFlowTrim?: Partial<PercentTrimConfig>;
 	chatMessageTrim?: Partial<PercentTrimConfig>;
 	maxRoundPercentSteps?: number[];
+	keepRecentOutputFlows?: number;
+	smartTrim?: Partial<PercentTrimConfig>;
 }
 
 const definition = defineStep<
@@ -910,12 +928,11 @@ const definition = defineStep<
 				async (state: Record<string, unknown>) => {
 					const agentState = state as unknown as BaseStateBase;
 					const maxTokens = await services.llm.getMaxModelTokens();
-					return await applyAutoCompactPolicy(
+					return applyAutoCompactPolicy(
 						{
 							messages: agentState.messages,
 							outputMessages: agentState.outputMessages,
 						},
-						services.llm,
 						config,
 						maxTokens,
 					);
@@ -960,6 +977,13 @@ stepRegistry.register(STEP_NAME, createAutoCompactStep, {
 			default: DEFAULT_MAX_ROUND_PERCENT_STEPS,
 			description:
 				"Escalation caps per round. Each round runs toolResult then toolCallFlow up to that cap before moving to the next round. Chat messages are only trimmed after all rounds are exhausted.",
+		},
+		{
+			key: "keepRecentOutputFlows",
+			type: "number",
+			default: DEFAULT_KEEP_RECENT_OUTPUT_FLOWS,
+			description:
+				"Number of most-recent tool-call flows in outputMessages to protect from direct removal. Mirrors the KEEP_RECENT_FLOWS guard in the LLM summarization path.",
 		},
 	],
 	defaultStateMapping: {

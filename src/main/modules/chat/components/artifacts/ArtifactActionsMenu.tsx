@@ -12,6 +12,7 @@ export interface ArtifactProps {
 	content: string;
 	identifier?: string;
 	title?: string;
+	projectPath?: string;
 	onMessageAction?: (action: MessageActionRequest) => void | Promise<void>;
 }
 

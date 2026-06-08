@@ -3,19 +3,27 @@ import type {
 	ChatCompletionMessageParam,
 	ChatCompletionResponse,
 } from "flow-core/interfaces/engine/messages";
+import { encode } from "gpt-tokenizer/encoding/o200k_base";
 
 export type TokenUsage = NonNullable<ChatCompletionResponse["usage"]>;
 
-const ESTIMATED_CHARS_PER_TOKEN = 4;
+const DISABLE_LIBRARY_TOKEN_COUNT_ESTIMATION = true;
 const MESSAGE_OVERHEAD_TOKENS = 4;
 const CONVERSATION_OVERHEAD_TOKENS = 2;
+const DEFAULT_TOKEN_MULTIPLIER = 3;
 
 function estimateTokensFromText(text: string): number {
 	if (!text) {
 		return 0;
 	}
-
-	return Math.max(1, Math.ceil(text.length / ESTIMATED_CHARS_PER_TOKEN));
+	try {
+		if (DISABLE_LIBRARY_TOKEN_COUNT_ESTIMATION) {
+			return Math.max(1, Math.ceil(text.length / DEFAULT_TOKEN_MULTIPLIER));
+		}
+		return Math.max(1, encode(text).length);
+	} catch {
+		return Math.max(1, Math.ceil(text.length / DEFAULT_TOKEN_MULTIPLIER));
+	}
 }
 
 function stringifyMessageContent(
@@ -103,6 +111,14 @@ export function normalizeTokenUsage(
 	};
 }
 
+export function estimateMessageTokens(
+	message: ChatCompletionMessageParam,
+): number {
+	return (
+		MESSAGE_OVERHEAD_TOKENS + estimateTokensFromText(stringifyMessage(message))
+	);
+}
+
 export function estimatePromptTokens(
 	messages: ChatCompletionMessageParam[],
 ): number {
@@ -111,11 +127,7 @@ export function estimatePromptTokens(
 	}
 
 	return messages.reduce((total, message) => {
-		return (
-			total +
-			MESSAGE_OVERHEAD_TOKENS +
-			estimateTokensFromText(stringifyMessage(message))
-		);
+		return total + estimateMessageTokens(message);
 	}, CONVERSATION_OVERHEAD_TOKENS);
 }
 

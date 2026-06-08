@@ -20,7 +20,9 @@ function estimateTokens(text: string, charsPerToken = 4): number {
 	return Math.ceil(text.length / charsPerToken);
 }
 
-function createConfig(overrides: Partial<CompactionConfig> = {}): CompactionConfig {
+function createConfig(
+	overrides: Partial<CompactionConfig> = {},
+): CompactionConfig {
 	return {
 		...DEFAULT_COMPACTION_CONFIG,
 		...overrides,
@@ -77,7 +79,8 @@ describe("QueryCompactor - Basic Functionality", () => {
 describe("QueryCompactor - Level 1: Safe Methods", () => {
 	it("should normalize whitespace", () => {
 		const compactor = new QueryCompactor();
-		const query = "Hello    world    please    help    me    understand    this    concept    better    I    need    detailed    explanations";
+		const query =
+			"Hello    world    please    help    me    understand    this    concept    better    I    need    detailed    explanations";
 		const config = createConfig({ maxTokens: 20, triggerThreshold: 0.5 });
 
 		const result = compactor.compact(query, config);
@@ -113,7 +116,8 @@ describe("QueryCompactor - Level 1: Safe Methods", () => {
 
 	it("should deduplicate exact phrases", () => {
 		const compactor = new QueryCompactor();
-		const query = "How do I fix this error?\nHow do I fix this error?\nThe error message shows timeout.\nHow do I fix this error?\nI tried restarting the server.\nHow do I fix this error?";
+		const query =
+			"How do I fix this error?\nHow do I fix this error?\nThe error message shows timeout.\nHow do I fix this error?\nI tried restarting the server.\nHow do I fix this error?";
 		const config = createConfig({ maxTokens: 20, triggerThreshold: 0.5 });
 
 		const result = compactor.compact(query, config);
@@ -209,7 +213,8 @@ describe("QueryCompactor - Level 2: Conservative Methods", () => {
 describe("QueryCompactor - Level 3: Moderate Methods", () => {
 	it("should deduplicate semantically similar sentences", () => {
 		const compactor = new QueryCompactor();
-		const query = "Machine learning is artificial intelligence. AI uses machine learning. Deep learning is machine learning. Neural networks are deep learning. ML is AI. Artificial intelligence is machine learning.";
+		const query =
+			"Machine learning is artificial intelligence. AI uses machine learning. Deep learning is machine learning. Neural networks are deep learning. ML is AI. Artificial intelligence is machine learning.";
 		const config = createConfig({ maxTokens: 25, triggerThreshold: 0.5 });
 
 		const result = compactor.compact(query, config);
@@ -221,7 +226,8 @@ describe("QueryCompactor - Level 3: Moderate Methods", () => {
 
 	it("should reduce keyword density", () => {
 		const compactor = new QueryCompactor();
-		const query = "I need help with Python programming. My Python code has Python errors. The Python script won't run. Can you debug my Python function? Python is throwing Python exceptions. Fix this Python issue please.";
+		const query =
+			"I need help with Python programming. My Python code has Python errors. The Python script won't run. Can you debug my Python function? Python is throwing Python exceptions. Fix this Python issue please.";
 		const config = createConfig({ maxTokens: 30, triggerThreshold: 0.5 });
 
 		const result = compactor.compact(query, config);
@@ -233,7 +239,8 @@ describe("QueryCompactor - Level 3: Moderate Methods", () => {
 
 	it("should extract technical terms", () => {
 		const compactor = new QueryCompactor();
-		const query = "Please help me understand how the basic simple common regular standard typical normal usual UserAuthentication and database_connection_pool work in modern web applications.";
+		const query =
+			"Please help me understand how the basic simple common regular standard typical normal usual UserAuthentication and database_connection_pool work in modern web applications.";
 		const config = createConfig({ maxTokens: 20, triggerThreshold: 0.5 });
 
 		const result = compactor.compact(query, config);
@@ -245,7 +252,8 @@ describe("QueryCompactor - Level 3: Moderate Methods", () => {
 
 	it("should preserve CamelCase and snake_case identifiers", () => {
 		const compactor = new QueryCompactor();
-		const query = "Please help me with the basic simple UserAuthentication and user_session_manager functions in the regular standard code that handles requests.";
+		const query =
+			"Please help me with the basic simple UserAuthentication and user_session_manager functions in the regular standard code that handles requests.";
 		const config = createConfig({ maxTokens: 20, triggerThreshold: 0.5 });
 
 		const result = compactor.compact(query, config);
@@ -263,7 +271,8 @@ describe("QueryCompactor - Level 3: Moderate Methods", () => {
 describe("QueryCompactor - Level 4: Aggressive Methods", () => {
 	it("should perform extractive summarization", () => {
 		const compactor = new QueryCompactor();
-		const query = "This is the opening statement about machine learning concepts. " +
+		const query =
+			"This is the opening statement about machine learning concepts. " +
 			"In the middle sections we discuss various technical implementations and detailed specifications. " +
 			"There are many supporting examples with code snippets and demonstrations. " +
 			"Additional context provides further elaboration on advanced topics. " +
@@ -282,7 +291,11 @@ describe("QueryCompactor - Level 4: Aggressive Methods", () => {
 		// Test that hard-truncate function works correctly by calling it through the pipeline
 		// Use a very long query that requires aggressive truncation
 		const longText = "a".repeat(50000);
-		const config = createConfig({ maxTokens: 10, estimatedCharsPerToken: 4, triggerThreshold: 0.01 });
+		const config = createConfig({
+			maxTokens: 10,
+			estimatedCharsPerToken: 4,
+			triggerThreshold: 0.01,
+		});
 
 		const result = compactor.compact(longText, config);
 
@@ -290,15 +303,17 @@ describe("QueryCompactor - Level 4: Aggressive Methods", () => {
 		// Should be truncated to approximately maxTokens * estimatedCharsPerToken = 40 chars
 		expect(result.compacted.length).toBeLessThanOrEqual(45);
 		// At least one aggressive method should be applied for such extreme compression
-		const hasAggressiveMethod = result.levelsApplied.some(level => 
-			level === "hard-truncate" || level === "extractive-summary"
+		const hasAggressiveMethod = result.levelsApplied.some(
+			(level) => level === "hard-truncate" || level === "extractive-summary",
 		);
 		expect(hasAggressiveMethod).toBe(true);
 	});
 
 	it("should truncate at word boundaries", () => {
 		const compactor = new QueryCompactor();
-		const query = "word1 word2 word3 word4 word5 " + "verylongwordwithoutspaces".repeat(100);
+		const query =
+			"word1 word2 word3 word4 word5 " +
+			"verylongwordwithoutspaces".repeat(100);
 		const config = createConfig({ maxTokens: 15, triggerThreshold: 0.3 });
 
 		const result = compactor.compact(query, config);
@@ -452,10 +467,19 @@ describe("QueryCompactor - Edge Cases", () => {
 describe("QueryCompactor - Configuration", () => {
 	it("should respect custom token limits", () => {
 		const compactor = new QueryCompactor();
-		const query = "This is a test query with multiple words that need to be compacted properly. ".repeat(20); // ~1600 chars
+		const query =
+			"This is a test query with multiple words that need to be compacted properly. ".repeat(
+				20,
+			); // ~1600 chars
 
-		const result1 = compactor.compact(query, createConfig({ maxTokens: 200, triggerThreshold: 0.5 })); // 800 chars limit
-		const result2 = compactor.compact(query, createConfig({ maxTokens: 50, triggerThreshold: 0.5 })); // 200 chars limit
+		const result1 = compactor.compact(
+			query,
+			createConfig({ maxTokens: 200, triggerThreshold: 0.5 }),
+		); // 800 chars limit
+		const result2 = compactor.compact(
+			query,
+			createConfig({ maxTokens: 50, triggerThreshold: 0.5 }),
+		); // 200 chars limit
 
 		expect(result1.wasCompacted).toBe(true);
 		expect(result2.wasCompacted).toBe(true);

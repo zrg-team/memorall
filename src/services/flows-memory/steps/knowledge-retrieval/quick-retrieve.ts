@@ -340,7 +340,10 @@ const definition = defineStep<
 			// Apply query compaction if enabled and needed
 			let processedQuery = input.query;
 			if (config?.compaction?.enabled !== false) {
-				const compactionResult = compactQueryIfNeeded(input.query, config?.compaction);
+				const compactionResult = compactQueryIfNeeded(
+					input.query,
+					config?.compaction,
+				);
 				if (compactionResult.wasCompacted) {
 					processedQuery = compactionResult.compacted;
 					logInfo(

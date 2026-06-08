@@ -599,7 +599,10 @@ const definition = defineStep<
 			// Apply query compaction if enabled and needed
 			let processedQuery = baseQuery;
 			if (config.compaction?.enabled !== false) {
-				const compactionResult = compactQueryIfNeeded(baseQuery, config.compaction);
+				const compactionResult = compactQueryIfNeeded(
+					baseQuery,
+					config.compaction,
+				);
 				if (compactionResult.wasCompacted) {
 					processedQuery = compactionResult.compacted;
 					logInfo(
@@ -610,7 +613,8 @@ const definition = defineStep<
 			}
 
 			// Phase 1: Primary Query Seed Retrieval
-			const queryEmbedding = await defaultEmbedding.textToVector(processedQuery);
+			const queryEmbedding =
+				await defaultEmbedding.textToVector(processedQuery);
 
 			const mmrConfig = config.seed.mmr ?? DEFAULT_MMR_CONFIG;
 			const candidateMultiplier = mmrConfig.enabled

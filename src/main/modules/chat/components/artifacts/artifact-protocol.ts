@@ -22,6 +22,7 @@ export type MessageContentSegment =
 			content: string;
 			identifier?: string;
 			title?: string;
+			projectPath?: string;
 			blockIndex: number;
 			start: number;
 			openEnd: number;
@@ -36,6 +37,7 @@ export interface RuntimeArtifact {
 	content: string;
 	identifier?: string;
 	title?: string;
+	projectPath?: string;
 	source: "content" | "tool";
 	messageId: string;
 	messageContent: string;
@@ -166,6 +168,7 @@ export const parseArtifactSegments = (
 			content: content.slice(openEnd + 1, closeIdx),
 			identifier: attrs.identifier,
 			title: attrs.title,
+			projectPath: attrs["project-path"] || undefined,
 			blockIndex,
 			start: openIdx,
 			openEnd,
@@ -377,6 +380,7 @@ export const collectRuntimeArtifacts = (
 				content: segment.content,
 				identifier: segment.identifier,
 				title: segment.title,
+				projectPath: segment.projectPath,
 				source: "content" as const,
 				messageId: message.id,
 				messageContent: message.content,

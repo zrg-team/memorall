@@ -36,7 +36,11 @@ const fakeLLM = createFakeLLM();
 
 import type { ChatCompletionMessageParam } from "flow-core/interfaces/engine/messages";
 
-function makeFlow(id: string, resultContent: string, argContent = "{}"): ChatCompletionMessageParam[] {
+function makeFlow(
+	id: string,
+	resultContent: string,
+	argContent = "{}",
+): ChatCompletionMessageParam[] {
 	return [
 		{
 			role: "assistant",
@@ -78,7 +82,12 @@ describe("tool result chunking", () => {
 				compactThresholdRatio: 0.5,
 				safeThresholdRatio: 0.5,
 				maxRoundPercentSteps: [100],
-				toolResultTrim: { stepPercent: 100, maxPercent: 100, chunkHeadChars: 10, chunkTailChars: 10 },
+				toolResultTrim: {
+					stepPercent: 100,
+					maxPercent: 100,
+					chunkHeadChars: 10,
+					chunkTailChars: 10,
+				},
 				toolCallFlowTrim: disabledTrim,
 				chatMessageTrim: disabledTrim,
 			},
@@ -92,7 +101,10 @@ describe("tool result chunking", () => {
 		expect(toolMsg?.content).toContain("[... chunked tool result:");
 		// assistant side untouched
 		expect(result?.outputMessages[0]).toEqual(
-			expect.objectContaining({ role: "assistant", tool_calls: expect.any(Array) }),
+			expect.objectContaining({
+				role: "assistant",
+				tool_calls: expect.any(Array),
+			}),
 		);
 	});
 
@@ -108,18 +120,24 @@ describe("tool result chunking", () => {
 				compactThresholdRatio: 0.5,
 				safeThresholdRatio: 0.5,
 				maxRoundPercentSteps: [100],
-				toolResultTrim: { stepPercent: 100, maxPercent: 100, chunkHeadChars: 100, chunkTailChars: 100 },
+				toolResultTrim: {
+					stepPercent: 100,
+					maxPercent: 100,
+					chunkHeadChars: 100,
+					chunkTailChars: 100,
+				},
 				toolCallFlowTrim: disabledTrim,
 				chatMessageTrim: disabledTrim,
 			},
-			200,
+			120,
 		);
 
 		expect(result?.outputMessages[1]?.content).toBe(short);
 	});
 
 	it("does not re-chunk an already chunked tool result", async () => {
-		const already = "start\n\n[... chunked tool result: originalChars=500, omittedChars=400 ...]\n\nend";
+		const already =
+			"start\n\n[... chunked tool result: originalChars=500, omittedChars=400 ...]\n\nend";
 		const result = await applyAutoCompactPolicy(
 			{
 				messages: [{ role: "user", content: "go" }],
@@ -127,7 +145,13 @@ describe("tool result chunking", () => {
 					{
 						role: "assistant",
 						content: "",
-						tool_calls: [{ id: "c1", type: "function", function: { name: "t", arguments: "{}" } }],
+						tool_calls: [
+							{
+								id: "c1",
+								type: "function",
+								function: { name: "t", arguments: "{}" },
+							},
+						],
 					},
 					{ role: "tool", tool_call_id: "c1", content: already },
 				],
@@ -137,7 +161,12 @@ describe("tool result chunking", () => {
 				compactThresholdRatio: 0.5,
 				safeThresholdRatio: 0.5,
 				maxRoundPercentSteps: [100],
-				toolResultTrim: { stepPercent: 100, maxPercent: 100, chunkHeadChars: 1, chunkTailChars: 1 },
+				toolResultTrim: {
+					stepPercent: 100,
+					maxPercent: 100,
+					chunkHeadChars: 1,
+					chunkTailChars: 1,
+				},
 				toolCallFlowTrim: disabledTrim,
 				chatMessageTrim: disabledTrim,
 			},
@@ -175,7 +204,9 @@ describe("chat message trimming", () => {
 			120,
 		);
 
-		expect(result?.messages).toEqual([{ role: "user", content: "latest question" }]);
+		expect(result?.messages).toEqual([
+			{ role: "user", content: "latest question" },
+		]);
 		expect(result?.outputMessages).toEqual([]);
 	});
 });
@@ -197,13 +228,23 @@ describe("policy guard rails", () => {
 
 	it("returns undefined for maxTokens=0", async () => {
 		expect(
-			await applyAutoCompactPolicy({ messages: [], outputMessages: [] }, fakeLLM, {}, 0),
+			await applyAutoCompactPolicy(
+				{ messages: [], outputMessages: [] },
+				fakeLLM,
+				{},
+				0,
+			),
 		).toBeUndefined();
 	});
 
 	it("returns undefined for maxTokens=NaN", async () => {
 		expect(
-			await applyAutoCompactPolicy({ messages: [], outputMessages: [] }, fakeLLM, {}, NaN),
+			await applyAutoCompactPolicy(
+				{ messages: [], outputMessages: [] },
+				fakeLLM,
+				{},
+				NaN,
+			),
 		).toBeUndefined();
 	});
 });
@@ -225,7 +266,12 @@ describe("LLM summarization", () => {
 				compactThresholdRatio: 0.5,
 				safeThresholdRatio: 0.5,
 				maxRoundPercentSteps: [100],
-				toolResultTrim: { stepPercent: 100, maxPercent: 100, chunkHeadChars: 10, chunkTailChars: 10 },
+				toolResultTrim: {
+					stepPercent: 100,
+					maxPercent: 100,
+					chunkHeadChars: 10,
+					chunkTailChars: 10,
+				},
 				toolCallFlowTrim: disabledTrim,
 				chatMessageTrim: disabledTrim,
 			},
@@ -252,7 +298,12 @@ describe("LLM summarization", () => {
 				compactThresholdRatio: 0.5,
 				safeThresholdRatio: 0.01,
 				maxRoundPercentSteps: [100],
-				toolResultTrim: { stepPercent: 100, maxPercent: 0, chunkHeadChars: 10, chunkTailChars: 10 },
+				toolResultTrim: {
+					stepPercent: 100,
+					maxPercent: 0,
+					chunkHeadChars: 10,
+					chunkTailChars: 10,
+				},
 				toolCallFlowTrim: disabledTrim,
 				chatMessageTrim: disabledTrim,
 			},
@@ -261,7 +312,9 @@ describe("LLM summarization", () => {
 		expect(llm.chatCompletions).toHaveBeenCalled();
 		expect(result?.messages).toEqual(
 			expect.arrayContaining([
-				expect.objectContaining({ content: expect.stringContaining("[Conversation history summary]") }),
+				expect.objectContaining({
+					content: expect.stringContaining("[Conversation history summary]"),
+				}),
 				{ role: "user", content: "latest question" },
 			]),
 		);
@@ -286,7 +339,12 @@ describe("tool result chunking — snapshot", () => {
 				compactThresholdRatio: 0.5,
 				safeThresholdRatio: 0.5,
 				maxRoundPercentSteps: [100],
-				toolResultTrim: { stepPercent: 20, maxPercent: 20, chunkHeadChars: 4, chunkTailChars: 4 },
+				toolResultTrim: {
+					stepPercent: 20,
+					maxPercent: 20,
+					chunkHeadChars: 4,
+					chunkTailChars: 4,
+				},
 				toolCallFlowTrim: disabledTrim,
 				chatMessageTrim: disabledTrim,
 			},
@@ -331,11 +389,16 @@ describe("tool call flow removal — snapshot", () => {
 				compactThresholdRatio: 0.5,
 				safeThresholdRatio: 0.1,
 				maxRoundPercentSteps: [100],
-				toolResultTrim: { stepPercent: 100, maxPercent: 0, chunkHeadChars: 10, chunkTailChars: 10 },
+				toolResultTrim: {
+					stepPercent: 100,
+					maxPercent: 0,
+					chunkHeadChars: 10,
+					chunkTailChars: 10,
+				},
 				toolCallFlowTrim: fullTrim,
 				chatMessageTrim: disabledTrim,
 			},
-			200,
+			150,
 		);
 		expect(result?.outputMessages).toMatchSnapshot();
 	});
@@ -355,7 +418,12 @@ describe("round-based escalation — snapshot", () => {
 				compactThresholdRatio: 0.5,
 				safeThresholdRatio: 0.01,
 				maxRoundPercentSteps: [50, 100],
-				toolResultTrim: { stepPercent: 50, maxPercent: 100, chunkHeadChars: 5, chunkTailChars: 5 },
+				toolResultTrim: {
+					stepPercent: 50,
+					maxPercent: 100,
+					chunkHeadChars: 5,
+					chunkTailChars: 5,
+				},
 				toolCallFlowTrim: { stepPercent: 50, maxPercent: 100 },
 				chatMessageTrim: disabledTrim,
 			},
@@ -377,7 +445,12 @@ describe("round-based escalation — snapshot", () => {
 				compactThresholdRatio: 0.5,
 				safeThresholdRatio: 0.49,
 				maxRoundPercentSteps: [100],
-				toolResultTrim: { stepPercent: 20, maxPercent: 100, chunkHeadChars: 5, chunkTailChars: 5 },
+				toolResultTrim: {
+					stepPercent: 20,
+					maxPercent: 100,
+					chunkHeadChars: 5,
+					chunkTailChars: 5,
+				},
 				toolCallFlowTrim: fullTrim,
 				chatMessageTrim: disabledTrim,
 			},
@@ -399,7 +472,12 @@ describe("round-based escalation — snapshot", () => {
 				compactThresholdRatio: 0.5,
 				safeThresholdRatio: 0.01,
 				maxRoundPercentSteps: [50, 100],
-				toolResultTrim: { stepPercent: 100, maxPercent: 100, chunkHeadChars: 5, chunkTailChars: 5 },
+				toolResultTrim: {
+					stepPercent: 100,
+					maxPercent: 100,
+					chunkHeadChars: 5,
+					chunkTailChars: 5,
+				},
 				toolCallFlowTrim: disabledTrim,
 				chatMessageTrim: disabledTrim,
 			},
@@ -421,7 +499,12 @@ describe("round-based escalation — snapshot", () => {
 				compactThresholdRatio: 0.5,
 				safeThresholdRatio: 0.01,
 				maxRoundPercentSteps: [30],
-				toolResultTrim: { stepPercent: 100, maxPercent: 100, chunkHeadChars: 5, chunkTailChars: 5 },
+				toolResultTrim: {
+					stepPercent: 100,
+					maxPercent: 100,
+					chunkHeadChars: 5,
+					chunkTailChars: 5,
+				},
 				toolCallFlowTrim: disabledTrim,
 				chatMessageTrim: disabledTrim,
 			},
@@ -443,7 +526,12 @@ describe("round-based escalation — snapshot", () => {
 				compactThresholdRatio: 0.5,
 				safeThresholdRatio: 0.01,
 				maxRoundPercentSteps: [100],
-				toolResultTrim: { stepPercent: 100, maxPercent: 30, chunkHeadChars: 5, chunkTailChars: 5 },
+				toolResultTrim: {
+					stepPercent: 100,
+					maxPercent: 30,
+					chunkHeadChars: 5,
+					chunkTailChars: 5,
+				},
 				toolCallFlowTrim: disabledTrim,
 				chatMessageTrim: disabledTrim,
 			},
@@ -470,7 +558,12 @@ describe("messages processed before outputMessages — snapshot", () => {
 				compactThresholdRatio: 0.5,
 				safeThresholdRatio: 0.5,
 				maxRoundPercentSteps: [100],
-				toolResultTrim: { stepPercent: 100, maxPercent: 100, chunkHeadChars: 5, chunkTailChars: 5 },
+				toolResultTrim: {
+					stepPercent: 100,
+					maxPercent: 100,
+					chunkHeadChars: 5,
+					chunkTailChars: 5,
+				},
 				toolCallFlowTrim: fullTrim,
 				chatMessageTrim: fullTrim,
 			},
@@ -542,11 +635,16 @@ describe("chatMessage is last resort — snapshot", () => {
 				compactThresholdRatio: 0.5,
 				safeThresholdRatio: 0.5,
 				maxRoundPercentSteps: [100],
-				toolResultTrim: { stepPercent: 100, maxPercent: 100, chunkHeadChars: 5, chunkTailChars: 5 },
+				toolResultTrim: {
+					stepPercent: 100,
+					maxPercent: 100,
+					chunkHeadChars: 5,
+					chunkTailChars: 5,
+				},
 				toolCallFlowTrim: disabledTrim,
 				chatMessageTrim: fullTrim,
 			},
-			400,
+			280,
 		);
 		expect(result).toMatchSnapshot();
 	});
@@ -570,7 +668,7 @@ describe("chatMessage is last resort — snapshot", () => {
 				toolCallFlowTrim: fullTrim,
 				chatMessageTrim: fullTrim,
 			},
-			300,
+			260,
 		);
 		expect(result).toMatchSnapshot();
 	});
@@ -615,7 +713,12 @@ describe("config resolution — snapshot", () => {
 			{
 				compactThresholdRatio: 0.5,
 				safeThresholdRatio: 0.01,
-				toolResultTrim: { stepPercent: 100, maxPercent: 100, chunkHeadChars: 5, chunkTailChars: 5 },
+				toolResultTrim: {
+					stepPercent: 100,
+					maxPercent: 100,
+					chunkHeadChars: 5,
+					chunkTailChars: 5,
+				},
 				toolCallFlowTrim: disabledTrim,
 				chatMessageTrim: disabledTrim,
 			},
@@ -637,7 +740,12 @@ describe("config resolution — snapshot", () => {
 				compactThresholdRatio: 0.5,
 				safeThresholdRatio: 0.01,
 				maxRoundPercentSteps: [100, 50, 50, -10, NaN, 100] as number[],
-				toolResultTrim: { stepPercent: 100, maxPercent: 100, chunkHeadChars: 5, chunkTailChars: 5 },
+				toolResultTrim: {
+					stepPercent: 100,
+					maxPercent: 100,
+					chunkHeadChars: 5,
+					chunkTailChars: 5,
+				},
 				toolCallFlowTrim: disabledTrim,
 				chatMessageTrim: disabledTrim,
 			},
@@ -659,7 +767,12 @@ describe("config resolution — snapshot", () => {
 				compactThresholdRatio: 0.5,
 				safeThresholdRatio: 0.01,
 				maxRoundPercentSteps: [],
-				toolResultTrim: { stepPercent: 100, maxPercent: 100, chunkHeadChars: 5, chunkTailChars: 5 },
+				toolResultTrim: {
+					stepPercent: 100,
+					maxPercent: 100,
+					chunkHeadChars: 5,
+					chunkTailChars: 5,
+				},
 				toolCallFlowTrim: disabledTrim,
 				chatMessageTrim: disabledTrim,
 			},

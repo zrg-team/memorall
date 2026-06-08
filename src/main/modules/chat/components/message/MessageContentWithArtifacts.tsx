@@ -52,6 +52,7 @@ export const MessageContentWithArtifacts: React.FC<{
 							content={seg.content}
 							identifier={seg.identifier}
 							title={seg.title}
+							projectPath={seg.projectPath}
 							onMessageAction={onMessageAction}
 						/>
 						<div className="border-t border-border/40" />

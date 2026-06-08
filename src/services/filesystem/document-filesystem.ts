@@ -21,7 +21,6 @@ import type {
 } from "@/types/document-library";
 import { BACKGROUND_EVENTS } from "@/constants/events";
 import {
-	isDocumentsSandboxPath,
 	isWorkspacesSandboxPath,
 	sandboxPathToFsPath,
 	toDocumentsSandboxPath,
