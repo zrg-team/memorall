@@ -1,4 +1,4 @@
-const OPENUI_ASSIGNMENT_SEARCH_PATTERN = /\b\w+\s*=\s*CardBlock\s*\(/g;
+const OPENUI_ASSIGNMENT_SEARCH_PATTERN = /\b(?:\w+\s*=\s*)?CardBlock\s*\(/g;
 
 export type OpenUIContentSegment =
 	| { kind: "text"; text: string; start: number; end: number }
@@ -58,12 +58,16 @@ export function splitOpenUIContent(
 			});
 		}
 
+		const rawSlice =
+			expressionEnd === -1 ? "" : content.slice(start, end).trim();
+		const normalized = normalizeOpenUILang(rawSlice);
+		const openUIContent =
+			rawSlice && !/^\w+\s*=/.test(normalized)
+				? `root = ${normalized}`
+				: normalized;
 		segments.push({
 			kind: "openui",
-			content:
-				expressionEnd === -1
-					? ""
-					: normalizeOpenUILang(content.slice(start, end).trim()),
+			content: openUIContent,
 			start,
 			end,
 			complete: expressionEnd !== -1,

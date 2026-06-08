@@ -535,7 +535,7 @@ export const HyperframesArtifact: React.FC<ArtifactProps> = ({
 	// contentDocument probing for this URL, keeping cross-origin postMessage as
 	// the only communication channel (which works fine).
 	const previewUrl =
-		"https://zrg-team.github.io/memorall/hyperframes-preview.html?v=20260608-export-options";
+		"https://zrg-team.github.io/memorall/hyperframes-preview.html?v=20260608-native-export-capture";
 	const [previewHtml, setPreviewHtml] = useState<NormalizedComposition | null>(
 		null,
 	);

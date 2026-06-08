@@ -56,8 +56,6 @@ const HYPERFRAMES_SHADER_URL =
 	"https://cdn.jsdelivr.net/npm/@hyperframes/shader-transitions@0.6.33/dist/index.global.js";
 const HTML2CANVAS_URL =
 	"https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js";
-const TRANSPARENT_IMAGE_URL =
-	"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1' height='1'%3E%3C/svg%3E";
 
 // ── CDN fallback map for extension-local script URLs ─────────────────────────
 // Mirrors the CDN_TO_LOCAL map in composition-preprocessor.ts (reversed).
@@ -660,24 +658,6 @@ function withCompositionExportViewport(width, height) {
 	};
 }
 
-function toCssUrl(value) {
-	return `url("${String(value).replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\a ")}")`;
-}
-
-function objectFitToBackgroundSize(objectFit) {
-	switch (objectFit) {
-		case "cover":
-			return "cover";
-		case "contain":
-		case "scale-down":
-			return "contain";
-		case "none":
-			return "auto";
-		default:
-			return null;
-	}
-}
-
 function clamp(value, min, max) {
 	return Math.min(max, Math.max(min, value));
 }
@@ -692,143 +672,6 @@ function getExportBitrate(width, height, fps, quality) {
 			preset.maxBitrate,
 		),
 	);
-}
-
-function getColorAlpha(color) {
-	if (!color || color === "transparent") return 0;
-	const match = color.match(/^rgba?\((.*)\)$/i);
-	if (!match) return 1;
-
-	const parts = match[1]
-		.split(/[,\s/]+/)
-		.map((part) => part.trim())
-		.filter(Boolean);
-	if (parts.length < 4) return 1;
-
-	const alpha = Number.parseFloat(parts[3]);
-	return Number.isFinite(alpha) ? alpha : 1;
-}
-
-function preserveObjectFitImagesForHtml2Canvas(clonedDocument) {
-	const clonedWindow = clonedDocument.defaultView;
-	if (!clonedWindow) return;
-
-	for (const img of clonedDocument.querySelectorAll("img")) {
-		const style = clonedWindow.getComputedStyle(img);
-		const backgroundSize = objectFitToBackgroundSize(style.objectFit);
-		if (!backgroundSize) continue;
-
-		const src =
-			img.currentSrc ||
-			img.src ||
-			img.getAttribute("src") ||
-			img.getAttribute("data-src");
-		if (!src) continue;
-
-		img.style.backgroundImage = toCssUrl(src);
-		img.style.backgroundSize = backgroundSize;
-		img.style.backgroundPosition = style.objectPosition || "50% 50%";
-		img.style.backgroundRepeat = "no-repeat";
-		img.style.backgroundClip = "padding-box";
-		img.removeAttribute("srcset");
-		img.removeAttribute("sizes");
-		img.setAttribute("src", TRANSPARENT_IMAGE_URL);
-	}
-}
-
-function normalizeBackdropFiltersForHtml2Canvas(clonedDocument) {
-	const clonedWindow = clonedDocument.defaultView;
-	if (!clonedWindow) return;
-
-	for (const el of clonedDocument.querySelectorAll("*")) {
-		const style = clonedWindow.getComputedStyle(el);
-		const backdropFilter =
-			style.backdropFilter || style.webkitBackdropFilter || "";
-		if (!backdropFilter || backdropFilter === "none") continue;
-
-		const htmlEl = el;
-		htmlEl.style.backdropFilter = "none";
-		htmlEl.style.webkitBackdropFilter = "none";
-
-		if (getColorAlpha(style.backgroundColor) < 0.18) {
-			htmlEl.style.backgroundColor = "rgba(18, 16, 28, 0.72)";
-		}
-
-		const hasBorder =
-			Number.parseFloat(style.borderTopWidth || "0") > 0 ||
-			Number.parseFloat(style.borderRightWidth || "0") > 0 ||
-			Number.parseFloat(style.borderBottomWidth || "0") > 0 ||
-			Number.parseFloat(style.borderLeftWidth || "0") > 0;
-		if (hasBorder && getColorAlpha(style.borderTopColor) < 0.12) {
-			htmlEl.style.borderColor = "rgba(255, 255, 255, 0.18)";
-		}
-	}
-}
-
-function normalizeTextSpacingForHtml2Canvas(clonedDocument) {
-	const clonedWindow = clonedDocument.defaultView;
-	const root = clonedDocument.body;
-	if (!clonedWindow || !root) return;
-
-	const style = clonedDocument.createElement("style");
-	style.setAttribute("data-html2canvas-ignore", "true");
-	style.textContent = `
-[data-hf-html2canvas-text-shift] {
-	position: relative !important;
-	top: -0.28em !important;
-}
-`;
-	clonedDocument.head.appendChild(style);
-
-	const skipTags = new Set([
-		"SCRIPT",
-		"STYLE",
-		"NOSCRIPT",
-		"TEXTAREA",
-		"OPTION",
-		"SELECT",
-		"SVG",
-		"CANVAS",
-		"VIDEO",
-		"AUDIO",
-	]);
-	const walker = clonedDocument.createTreeWalker(
-		root,
-		clonedWindow.NodeFilter.SHOW_TEXT,
-		{
-			acceptNode: (node) => {
-				if (!node.nodeValue?.trim()) return clonedWindow.NodeFilter.FILTER_REJECT;
-
-				const parent = node.parentElement;
-				if (!parent) return clonedWindow.NodeFilter.FILTER_REJECT;
-				if (parent.hasAttribute("data-hf-html2canvas-text-shift")) {
-					return clonedWindow.NodeFilter.FILTER_REJECT;
-				}
-				if (skipTags.has(parent.tagName)) {
-					return clonedWindow.NodeFilter.FILTER_REJECT;
-				}
-				if (parent.closest("[data-html2canvas-ignore]")) {
-					return clonedWindow.NodeFilter.FILTER_REJECT;
-				}
-				return clonedWindow.NodeFilter.FILTER_ACCEPT;
-			},
-		},
-	);
-	const textNodes = [];
-	while (walker.nextNode()) textNodes.push(walker.currentNode);
-
-	for (const textNode of textNodes) {
-		const wrapper = clonedDocument.createElement("span");
-		wrapper.setAttribute("data-hf-html2canvas-text-shift", "true");
-		textNode.parentNode?.insertBefore(wrapper, textNode);
-		wrapper.appendChild(textNode);
-	}
-}
-
-function prepareFallbackHtml2CanvasClone(clonedDocument) {
-	preserveObjectFitImagesForHtml2Canvas(clonedDocument);
-	normalizeBackdropFiltersForHtml2Canvas(clonedDocument);
-	normalizeTextSpacingForHtml2Canvas(clonedDocument);
 }
 
 function getHtml2CanvasCaptureOptions(width, height, scale = 1, overrides = {}) {
@@ -869,46 +712,20 @@ function assertCaptureDimensions(
 }
 
 async function captureCompositionCanvas(html2canvas, width, height, scale) {
-	try {
-		const canvas = await html2canvas(
-			document.body,
-			getHtml2CanvasCaptureOptions(width, height, scale, {
-				foreignObjectRendering: true,
-			}),
-		);
-		assertCaptureDimensions(
-			canvas,
-			width,
-			height,
-			scale,
-			"foreignObject html2canvas",
-		);
-		return canvas;
-	} catch (error) {
-		reportRuntimeError(
-			"runtime",
-			"Foreign-object export capture failed; using compatibility capture.",
-			{
-				source: "exportMp4",
-				error: formatErrorMessage(error),
-			},
-		);
-	}
-
-	const fallbackCanvas = await html2canvas(
+	const canvas = await html2canvas(
 		document.body,
 		getHtml2CanvasCaptureOptions(width, height, scale, {
-			onclone: prepareFallbackHtml2CanvasClone,
+			foreignObjectRendering: true,
 		}),
 	);
 	assertCaptureDimensions(
-		fallbackCanvas,
+		canvas,
 		width,
 		height,
 		scale,
-		"fallback html2canvas",
+		"foreignObject html2canvas",
 	);
-	return fallbackCanvas;
+	return canvas;
 }
 
 async function waitForFontsReady() {
