@@ -13,7 +13,6 @@ import {
 } from "@/main/components/app-navigation";
 
 export const MEMORALL_OPENUI_ACTION_TYPE = "memorall_openui_action";
-export const MEMORALL_OPENUI_ACTION_EVENT = "memorall:openui-action";
 export const OPENUI_FORM_FIELD_METADATA_KEY = "__memorall_field_metadata";
 
 export const openUIActionSchema = z.discriminatedUnion("type", [
@@ -371,12 +370,4 @@ export function parseMemorallOpenUIAction(
 		formState: event.formState,
 		humanFriendlyMessage: event.humanFriendlyMessage,
 	};
-}
-
-export function dispatchMemorallOpenUIAction(
-	detail: MemorallOpenUIActionDetail,
-) {
-	window.dispatchEvent(
-		new CustomEvent(MEMORALL_OPENUI_ACTION_EVENT, { detail }),
-	);
 }

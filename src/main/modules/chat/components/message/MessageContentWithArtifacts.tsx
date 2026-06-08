@@ -81,6 +81,7 @@ export const MessageContentWithArtifacts: React.FC<{
 							key={`openui-${seg.start}-${seg.end}`}
 							content={seg.content}
 							streaming={isStreaming}
+							onMessageAction={onMessageAction}
 						/>
 					);
 				}

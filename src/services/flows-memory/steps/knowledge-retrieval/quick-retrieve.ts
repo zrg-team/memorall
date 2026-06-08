@@ -314,6 +314,13 @@ const definition = defineStep<
 			const effectiveConfig: Required<QuickRetrieveConfig> = {
 				maxGrowthLevels: config?.maxGrowthLevels ?? 3,
 				searchLimit: config?.searchLimit ?? 50,
+				compaction: config?.compaction ?? {
+					enabled: false,
+					maxTokens: 4096,
+					estimatedCharsPerToken: 4,
+					triggerThreshold: 0.8,
+					minCompressionRatio: 0.5,
+				},
 			};
 
 			logInfo(

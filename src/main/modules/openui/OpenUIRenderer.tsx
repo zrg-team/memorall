@@ -13,11 +13,11 @@ import { useTranslation } from "react-i18next";
 import { logError, logWarn } from "@/utils/logger";
 import type { OpenUITheme } from "@/services/flows-core/steps/features/visualize-response";
 import {
-	dispatchMemorallOpenUIAction,
 	isSafeOpenUIUrl,
 	parseMemorallOpenUIAction,
 	resolveOpenUITemplate,
 } from "./actions";
+import type { MessageActionRequest } from "@/main/modules/chat/components/artifacts/ArtifactActionsMenu";
 
 // Theme is the 4th positional arg in: CardBlock("title", "desc", [...], "theme")
 const THEME_PATTERN = /\bCardBlock\s*\([\s\S]*?\]\s*,\s*"([^"]+)"\s*\)/;
@@ -102,9 +102,11 @@ const showOpenUINotice = (message: string) => {
 export function OpenUIRenderer({
 	content,
 	streaming,
+	onMessageAction,
 }: {
 	content: string;
 	streaming: boolean;
+	onMessageAction?: (action: MessageActionRequest) => void | Promise<void>;
 }) {
 	const { t } = useTranslation("chat");
 	const theme = useMemo(() => detectTheme(content), [content]);
@@ -126,86 +128,101 @@ export function OpenUIRenderer({
 		prevStreaming.current = streaming;
 	}, [streaming]);
 
-	const handleOpenUIAction = useCallback((event: ActionEvent) => {
-		const detail = parseMemorallOpenUIAction(event);
-		if (!detail) {
-			logWarn("[OpenUIRenderer] Unhandled action:", event);
-			return;
-		}
-
-		const action = detail.action;
-
-		if (action.type === "open_link") {
-			const url = resolveOpenUITemplate(
-				action.url,
-				detail.formState,
-				detail.formName,
-			).trim();
-			if (isSafeOpenUIUrl(url)) {
-				window.open(url, "_blank", "noopener,noreferrer");
-			} else {
-				logWarn("[OpenUIRenderer] Blocked unsafe URL:", url);
+	const handleOpenUIAction = useCallback(
+		(event: ActionEvent) => {
+			const detail = parseMemorallOpenUIAction(event);
+			if (!detail) {
+				logWarn("[OpenUIRenderer] Unhandled action:", event);
+				return;
 			}
-			return;
-		}
 
-		if (action.type === "copy_to_clipboard") {
-			const text = resolveOpenUITemplate(
-				action.text,
-				detail.formState,
-				detail.formName,
-			);
-			void navigator.clipboard?.writeText(text).then(
-				() => showOpenUINotice(t("openui.copied")),
-				(error) => logWarn("[OpenUIRenderer] Clipboard copy failed:", error),
-			);
-			return;
-		}
+			const action = detail.action;
 
-		if (action.type === "download_text") {
-			const filename =
-				resolveOpenUITemplate(
-					action.filename,
+			if (action.type === "open_link") {
+				const url = resolveOpenUITemplate(
+					action.url,
 					detail.formState,
 					detail.formName,
-				).trim() || "download.txt";
-			const blob = new Blob(
-				[
+				).trim();
+				if (isSafeOpenUIUrl(url)) {
+					window.open(url, "_blank", "noopener,noreferrer");
+				} else {
+					logWarn("[OpenUIRenderer] Blocked unsafe URL:", url);
+				}
+				return;
+			}
+
+			if (action.type === "copy_to_clipboard") {
+				const text = resolveOpenUITemplate(
+					action.text,
+					detail.formState,
+					detail.formName,
+				);
+				void navigator.clipboard?.writeText(text).then(
+					() => showOpenUINotice(t("openui.copied")),
+					(error) => logWarn("[OpenUIRenderer] Clipboard copy failed:", error),
+				);
+				return;
+			}
+
+			if (action.type === "download_text") {
+				const filename =
 					resolveOpenUITemplate(
-						action.content,
+						action.filename,
+						detail.formState,
+						detail.formName,
+					).trim() || "download.txt";
+				const blob = new Blob(
+					[
+						resolveOpenUITemplate(
+							action.content,
+							detail.formState,
+							detail.formName,
+						),
+					],
+					{ type: "text/plain;charset=utf-8" },
+				);
+				const url = URL.createObjectURL(blob);
+				const link = document.createElement("a");
+				link.href = url;
+				link.download = filename;
+				link.click();
+				URL.revokeObjectURL(url);
+				return;
+			}
+
+			if (action.type === "reset_form") {
+				setResetKey((value) => value + 1);
+				return;
+			}
+
+			if (action.type === "show_toast") {
+				showOpenUINotice(
+					resolveOpenUITemplate(
+						action.message,
 						detail.formState,
 						detail.formName,
 					),
-				],
-				{ type: "text/plain;charset=utf-8" },
-			);
-			const url = URL.createObjectURL(blob);
-			const link = document.createElement("a");
-			link.href = url;
-			link.download = filename;
-			link.click();
-			URL.revokeObjectURL(url);
-			return;
-		}
+				);
+				return;
+			}
 
-		if (action.type === "reset_form") {
-			setResetKey((value) => value + 1);
-			return;
-		}
+			const routesToParent =
+				detail.action.type === "send_message" ||
+				detail.action.type === "add_message_to_input" ||
+				detail.action.type === "open_document" ||
+				detail.action.type === "open_route";
 
-		if (action.type === "show_toast") {
-			showOpenUINotice(
-				resolveOpenUITemplate(
-					action.message,
-					detail.formState,
-					detail.formName,
-				),
-			);
-			return;
-		}
-
-		dispatchMemorallOpenUIAction(detail);
-	}, []);
+			if (onMessageAction && routesToParent) {
+				onMessageAction({
+					type: "openui_action",
+					component: "OpenUIRenderer",
+					payload: { detail },
+				});
+			}
+		},
+		[onMessageAction],
+	);
 
 	const handleRendererError = useCallback(
 		(errors: unknown[]) => {

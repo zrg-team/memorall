@@ -1,40 +1,10 @@
-import { describe, expect, it, vi } from "vitest";
-import {
-	applyAutoCompactPolicy,
-	type AutoCompactConfig,
-} from "flow-core/steps/features/auto-compact";
-import type { ChatCompletionResponse } from "flow-core/interfaces/engine/messages";
-import type { BaseLLM } from "flow-core/interfaces/services/llm";
+import { describe, expect, it } from "vitest";
+import { applyAutoCompactPolicy } from "flow-core/steps/features/auto-compact";
+import type { ChatCompletionMessageParam } from "flow-core/interfaces/engine/messages";
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-const createFakeLLM = (summary = "summary"): BaseLLM => ({
-	isReady: () => true,
-	getCurrentModel: async () => ({ modelId: "test-model" }),
-	getMaxModelTokens: async () => 4096,
-	getMaxResponseTokens: async () => 1024,
-	chatCompletions: vi.fn(
-		async (): Promise<ChatCompletionResponse> => ({
-			id: "summary",
-			object: "chat.completion",
-			created: 1,
-			model: "test-model",
-			choices: [
-				{
-					index: 0,
-					message: { role: "assistant", content: summary },
-					finish_reason: "stop",
-				},
-			],
-		}),
-	),
-});
-
-const fakeLLM = createFakeLLM();
-
-import type { ChatCompletionMessageParam } from "flow-core/interfaces/engine/messages";
 
 function makeFlow(
 	id: string,
@@ -69,15 +39,14 @@ const fullTrim = { stepPercent: 100, maxPercent: 100 };
 // ---------------------------------------------------------------------------
 
 describe("tool result chunking", () => {
-	it("chunks a large tool result preserving head and tail content", async () => {
-		const result = await applyAutoCompactPolicy(
+	it("chunks a large tool result preserving head and tail content", () => {
+		const result = applyAutoCompactPolicy(
 			{
 				messages: [{ role: "user", content: "go" }],
 				outputMessages: [
 					...makeFlow("c1", `${"a".repeat(120)}MIDDLE${"z".repeat(120)}`),
 				],
 			},
-			fakeLLM,
 			{
 				compactThresholdRatio: 0.5,
 				safeThresholdRatio: 0.5,
@@ -108,14 +77,13 @@ describe("tool result chunking", () => {
 		);
 	});
 
-	it("does not chunk a result that fits within head+tail chars", async () => {
+	it("does not chunk a result that fits within head+tail chars", () => {
 		const short = "tiny";
-		const result = await applyAutoCompactPolicy(
+		const result = applyAutoCompactPolicy(
 			{
 				messages: [{ role: "user", content: "x".repeat(300) }],
 				outputMessages: [...makeFlow("c1", short)],
 			},
-			fakeLLM,
 			{
 				compactThresholdRatio: 0.5,
 				safeThresholdRatio: 0.5,
@@ -135,10 +103,10 @@ describe("tool result chunking", () => {
 		expect(result?.outputMessages[1]?.content).toBe(short);
 	});
 
-	it("does not re-chunk an already chunked tool result", async () => {
+	it("does not re-chunk an already chunked tool result", () => {
 		const already =
 			"start\n\n[... chunked tool result: originalChars=500, omittedChars=400 ...]\n\nend";
-		const result = await applyAutoCompactPolicy(
+		const result = applyAutoCompactPolicy(
 			{
 				messages: [{ role: "user", content: "go" }],
 				outputMessages: [
@@ -156,7 +124,6 @@ describe("tool result chunking", () => {
 					{ role: "tool", tool_call_id: "c1", content: already },
 				],
 			},
-			fakeLLM,
 			{
 				compactThresholdRatio: 0.5,
 				safeThresholdRatio: 0.5,
@@ -182,8 +149,8 @@ describe("tool result chunking", () => {
 // ---------------------------------------------------------------------------
 
 describe("chat message trimming", () => {
-	it("removes old chat messages while preserving the latest user message", async () => {
-		const result = await applyAutoCompactPolicy(
+	it("removes old chat messages while preserving the latest user message", () => {
+		const result = applyAutoCompactPolicy(
 			{
 				messages: [
 					{ role: "user", content: "old question ".repeat(30) },
@@ -192,7 +159,6 @@ describe("chat message trimming", () => {
 				],
 				outputMessages: [],
 			},
-			fakeLLM,
 			{
 				compactThresholdRatio: 0.5,
 				safeThresholdRatio: 0.5,
@@ -216,108 +182,25 @@ describe("chat message trimming", () => {
 // ---------------------------------------------------------------------------
 
 describe("policy guard rails", () => {
-	it("returns undefined when below compact threshold", async () => {
-		const result = await applyAutoCompactPolicy(
+	it("returns undefined when below compact threshold", () => {
+		const result = applyAutoCompactPolicy(
 			{ messages: [{ role: "user", content: "small" }], outputMessages: [] },
-			fakeLLM,
 			{ compactThresholdRatio: 0.9, safeThresholdRatio: 0.5 },
 			10000,
 		);
 		expect(result).toBeUndefined();
 	});
 
-	it("returns undefined for maxTokens=0", async () => {
+	it("returns undefined for maxTokens=0", () => {
 		expect(
-			await applyAutoCompactPolicy(
-				{ messages: [], outputMessages: [] },
-				fakeLLM,
-				{},
-				0,
-			),
+			applyAutoCompactPolicy({ messages: [], outputMessages: [] }, {}, 0),
 		).toBeUndefined();
 	});
 
-	it("returns undefined for maxTokens=NaN", async () => {
+	it("returns undefined for maxTokens=NaN", () => {
 		expect(
-			await applyAutoCompactPolicy(
-				{ messages: [], outputMessages: [] },
-				fakeLLM,
-				{},
-				NaN,
-			),
+			applyAutoCompactPolicy({ messages: [], outputMessages: [] }, {}, NaN),
 		).toBeUndefined();
-	});
-});
-
-// ---------------------------------------------------------------------------
-// LLM summarization — structural assertions
-// ---------------------------------------------------------------------------
-
-describe("LLM summarization", () => {
-	it("does not call LLM when direct trim reaches safe threshold", async () => {
-		const llm = createFakeLLM();
-		await applyAutoCompactPolicy(
-			{
-				messages: [{ role: "user", content: "go" }],
-				outputMessages: [...makeFlow("c1", "x".repeat(400))],
-			},
-			llm,
-			{
-				compactThresholdRatio: 0.5,
-				safeThresholdRatio: 0.5,
-				maxRoundPercentSteps: [100],
-				toolResultTrim: {
-					stepPercent: 100,
-					maxPercent: 100,
-					chunkHeadChars: 10,
-					chunkTailChars: 10,
-				},
-				toolCallFlowTrim: disabledTrim,
-				chatMessageTrim: disabledTrim,
-			},
-			200,
-		);
-		expect(llm.chatCompletions).not.toHaveBeenCalled();
-	});
-
-	it("calls LLM when direct trims cannot reach safe threshold", async () => {
-		const llm = createFakeLLM("short summary");
-		const result = await applyAutoCompactPolicy(
-			{
-				messages: [
-					{ role: "user", content: "old question ".repeat(30) },
-					{ role: "assistant", content: "old answer ".repeat(30) },
-					{ role: "user", content: "latest question" },
-				],
-				outputMessages: Array.from({ length: 4 }, (_, i) =>
-					makeFlow(`c${i}`, "x".repeat(300)),
-				).flat(),
-			},
-			llm,
-			{
-				compactThresholdRatio: 0.5,
-				safeThresholdRatio: 0.01,
-				maxRoundPercentSteps: [100],
-				toolResultTrim: {
-					stepPercent: 100,
-					maxPercent: 0,
-					chunkHeadChars: 10,
-					chunkTailChars: 10,
-				},
-				toolCallFlowTrim: disabledTrim,
-				chatMessageTrim: disabledTrim,
-			},
-			200,
-		);
-		expect(llm.chatCompletions).toHaveBeenCalled();
-		expect(result?.messages).toEqual(
-			expect.arrayContaining([
-				expect.objectContaining({
-					content: expect.stringContaining("[Conversation history summary]"),
-				}),
-				{ role: "user", content: "latest question" },
-			]),
-		);
 	});
 });
 
@@ -326,15 +209,14 @@ describe("LLM summarization", () => {
 // ---------------------------------------------------------------------------
 
 describe("tool result chunking — snapshot", () => {
-	it("chunks oldest results first, stepPercent controls how many per step", async () => {
-		const result = await applyAutoCompactPolicy(
+	it("chunks oldest results first, stepPercent controls how many per step", () => {
+		const result = applyAutoCompactPolicy(
 			{
 				messages: [{ role: "user", content: "go" }],
 				outputMessages: Array.from({ length: 5 }, (_, i) =>
 					makeFlow(`c${i}`, `${"x".repeat(100)}[${i}]${"x".repeat(100)}`),
 				).flat(),
 			},
-			fakeLLM,
 			{
 				compactThresholdRatio: 0.5,
 				safeThresholdRatio: 0.5,
@@ -355,8 +237,8 @@ describe("tool result chunking — snapshot", () => {
 });
 
 describe("tool call flow removal — snapshot", () => {
-	it("removes oldest flow first, preserves newer flows", async () => {
-		const result = await applyAutoCompactPolicy(
+	it("removes oldest flow first, preserves newer flows", () => {
+		const result = applyAutoCompactPolicy(
 			{
 				messages: [{ role: "user", content: "go" }],
 				outputMessages: [
@@ -364,7 +246,6 @@ describe("tool call flow removal — snapshot", () => {
 					...makeFlow("new", "y".repeat(400)),
 				],
 			},
-			fakeLLM,
 			{
 				compactThresholdRatio: 0.5,
 				safeThresholdRatio: 0.1,
@@ -378,13 +259,12 @@ describe("tool call flow removal — snapshot", () => {
 		expect(result?.outputMessages).toMatchSnapshot();
 	});
 
-	it("escalates to flow removal when tool result chunking is disabled", async () => {
-		const result = await applyAutoCompactPolicy(
+	it("escalates to flow removal when tool result chunking is disabled", () => {
+		const result = applyAutoCompactPolicy(
 			{
 				messages: [{ role: "user", content: "go" }],
 				outputMessages: [...makeFlow("c1", "x".repeat(400))],
 			},
-			fakeLLM,
 			{
 				compactThresholdRatio: 0.5,
 				safeThresholdRatio: 0.1,
@@ -405,15 +285,14 @@ describe("tool call flow removal — snapshot", () => {
 });
 
 describe("round-based escalation — snapshot", () => {
-	it("interleaves toolResult and toolCallFlow per round across two rounds", async () => {
-		const result = await applyAutoCompactPolicy(
+	it("interleaves toolResult and toolCallFlow per round across two rounds", () => {
+		const result = applyAutoCompactPolicy(
 			{
 				messages: [{ role: "user", content: "go" }],
 				outputMessages: Array.from({ length: 4 }, (_, i) =>
 					makeFlow(`c${i}`, "x".repeat(200)),
 				).flat(),
 			},
-			fakeLLM,
 			{
 				compactThresholdRatio: 0.5,
 				safeThresholdRatio: 0.01,
@@ -432,15 +311,14 @@ describe("round-based escalation — snapshot", () => {
 		expect(result?.outputMessages).toMatchSnapshot();
 	});
 
-	it("stops mid-round when safe threshold is reached — remaining items untouched", async () => {
-		const result = await applyAutoCompactPolicy(
+	it("stops mid-round when safe threshold is reached — remaining items untouched", () => {
+		const result = applyAutoCompactPolicy(
 			{
 				messages: [{ role: "user", content: "go" }],
 				outputMessages: Array.from({ length: 5 }, (_, i) =>
 					makeFlow(`c${i}`, "x".repeat(200)),
 				).flat(),
 			},
-			fakeLLM,
 			{
 				compactThresholdRatio: 0.5,
 				safeThresholdRatio: 0.49,
@@ -459,15 +337,14 @@ describe("round-based escalation — snapshot", () => {
 		expect(result?.outputMessages).toMatchSnapshot();
 	});
 
-	it("round 2 restarts with only items remaining after round 1", async () => {
-		const result = await applyAutoCompactPolicy(
+	it("round 2 restarts with only items remaining after round 1", () => {
+		const result = applyAutoCompactPolicy(
 			{
 				messages: [{ role: "user", content: "go" }],
 				outputMessages: Array.from({ length: 4 }, (_, i) =>
 					makeFlow(`c${i}`, "x".repeat(200)),
 				).flat(),
 			},
-			fakeLLM,
 			{
 				compactThresholdRatio: 0.5,
 				safeThresholdRatio: 0.01,
@@ -486,15 +363,14 @@ describe("round-based escalation — snapshot", () => {
 		expect(result?.outputMessages).toMatchSnapshot();
 	});
 
-	it("roundCap limits items processed even when stage maxPercent is higher", async () => {
-		const result = await applyAutoCompactPolicy(
+	it("roundCap limits items processed even when stage maxPercent is higher", () => {
+		const result = applyAutoCompactPolicy(
 			{
 				messages: [{ role: "user", content: "go" }],
 				outputMessages: Array.from({ length: 10 }, (_, i) =>
 					makeFlow(`c${i}`, "x".repeat(200)),
 				).flat(),
 			},
-			fakeLLM,
 			{
 				compactThresholdRatio: 0.5,
 				safeThresholdRatio: 0.01,
@@ -513,15 +389,14 @@ describe("round-based escalation — snapshot", () => {
 		expect(result?.outputMessages).toMatchSnapshot();
 	});
 
-	it("stage maxPercent caps items even when roundCap is higher", async () => {
-		const result = await applyAutoCompactPolicy(
+	it("stage maxPercent caps items even when roundCap is higher", () => {
+		const result = applyAutoCompactPolicy(
 			{
 				messages: [{ role: "user", content: "go" }],
 				outputMessages: Array.from({ length: 10 }, (_, i) =>
 					makeFlow(`c${i}`, "x".repeat(200)),
 				).flat(),
 			},
-			fakeLLM,
 			{
 				compactThresholdRatio: 0.5,
 				safeThresholdRatio: 0.01,
@@ -542,8 +417,8 @@ describe("round-based escalation — snapshot", () => {
 });
 
 describe("messages processed before outputMessages — snapshot", () => {
-	it("fully exhausts messages stages before touching outputMessages", async () => {
-		const result = await applyAutoCompactPolicy(
+	it("fully exhausts messages stages before touching outputMessages", () => {
+		const result = applyAutoCompactPolicy(
 			{
 				messages: [
 					...makeFlow("hist", "h".repeat(400)),
@@ -553,7 +428,6 @@ describe("messages processed before outputMessages — snapshot", () => {
 				],
 				outputMessages: [...makeFlow("curr", "small")],
 			},
-			fakeLLM,
 			{
 				compactThresholdRatio: 0.5,
 				safeThresholdRatio: 0.5,
@@ -572,13 +446,12 @@ describe("messages processed before outputMessages — snapshot", () => {
 		expect(result).toMatchSnapshot();
 	});
 
-	it("only trims outputMessages after messages stages cannot reach safe threshold", async () => {
-		const result = await applyAutoCompactPolicy(
+	it("only trims outputMessages after messages stages cannot reach safe threshold", () => {
+		const result = applyAutoCompactPolicy(
 			{
 				messages: [{ role: "user", content: "latest" }],
 				outputMessages: [...makeFlow("big", "x".repeat(600))],
 			},
-			fakeLLM,
 			{
 				compactThresholdRatio: 0.5,
 				safeThresholdRatio: 0.1,
@@ -592,8 +465,8 @@ describe("messages processed before outputMessages — snapshot", () => {
 		expect(result).toMatchSnapshot();
 	});
 
-	it("removes outputMessages tool flows before trimming messages chat messages", async () => {
-		const result = await applyAutoCompactPolicy(
+	it("removes outputMessages tool flows before trimming messages chat messages", () => {
+		const result = applyAutoCompactPolicy(
 			{
 				messages: [
 					{ role: "user", content: "q1 ".repeat(20) },
@@ -604,7 +477,6 @@ describe("messages processed before outputMessages — snapshot", () => {
 				],
 				outputMessages: [...makeFlow("big", "x".repeat(500))],
 			},
-			fakeLLM,
 			{
 				compactThresholdRatio: 0.5,
 				safeThresholdRatio: 0.5,
@@ -620,8 +492,8 @@ describe("messages processed before outputMessages — snapshot", () => {
 });
 
 describe("chatMessage is last resort — snapshot", () => {
-	it("does not trim chat messages when tool result chunking is sufficient", async () => {
-		const result = await applyAutoCompactPolicy(
+	it("does not trim chat messages when tool result chunking is sufficient", () => {
+		const result = applyAutoCompactPolicy(
 			{
 				messages: [
 					{ role: "user", content: "question" },
@@ -630,7 +502,6 @@ describe("chatMessage is last resort — snapshot", () => {
 				],
 				outputMessages: [...makeFlow("c1", "x".repeat(800))],
 			},
-			fakeLLM,
 			{
 				compactThresholdRatio: 0.5,
 				safeThresholdRatio: 0.5,
@@ -649,8 +520,8 @@ describe("chatMessage is last resort — snapshot", () => {
 		expect(result).toMatchSnapshot();
 	});
 
-	it("does not trim chat messages when flow removal is sufficient", async () => {
-		const result = await applyAutoCompactPolicy(
+	it("does not trim chat messages when flow removal is sufficient", () => {
+		const result = applyAutoCompactPolicy(
 			{
 				messages: [
 					{ role: "user", content: "question ".repeat(5) },
@@ -659,7 +530,6 @@ describe("chatMessage is last resort — snapshot", () => {
 				],
 				outputMessages: [...makeFlow("c1", "x".repeat(600))],
 			},
-			fakeLLM,
 			{
 				compactThresholdRatio: 0.5,
 				safeThresholdRatio: 0.5,
@@ -673,8 +543,8 @@ describe("chatMessage is last resort — snapshot", () => {
 		expect(result).toMatchSnapshot();
 	});
 
-	it("trims chat messages only after all tool trim rounds exhausted", async () => {
-		const result = await applyAutoCompactPolicy(
+	it("trims chat messages only after all tool trim rounds exhausted", () => {
+		const result = applyAutoCompactPolicy(
 			{
 				messages: [
 					...makeFlow("h1", "x".repeat(200)),
@@ -685,7 +555,6 @@ describe("chatMessage is last resort — snapshot", () => {
 				],
 				outputMessages: [],
 			},
-			fakeLLM,
 			{
 				compactThresholdRatio: 0.5,
 				safeThresholdRatio: 0.01,
@@ -701,15 +570,14 @@ describe("chatMessage is last resort — snapshot", () => {
 });
 
 describe("config resolution — snapshot", () => {
-	it("default maxRoundPercentSteps [50, 100] applied when not provided", async () => {
-		const result = await applyAutoCompactPolicy(
+	it("default maxRoundPercentSteps [50, 100] applied when not provided", () => {
+		const result = applyAutoCompactPolicy(
 			{
 				messages: [{ role: "user", content: "go" }],
 				outputMessages: Array.from({ length: 4 }, (_, i) =>
 					makeFlow(`c${i}`, "x".repeat(200)),
 				).flat(),
 			},
-			fakeLLM,
 			{
 				compactThresholdRatio: 0.5,
 				safeThresholdRatio: 0.01,
@@ -727,15 +595,14 @@ describe("config resolution — snapshot", () => {
 		expect(result?.outputMessages).toMatchSnapshot();
 	});
 
-	it("deduplicates and sorts invalid maxRoundPercentSteps, behaves as [50, 100]", async () => {
-		const result = await applyAutoCompactPolicy(
+	it("deduplicates and sorts invalid maxRoundPercentSteps, behaves as [50, 100]", () => {
+		const result = applyAutoCompactPolicy(
 			{
 				messages: [{ role: "user", content: "go" }],
 				outputMessages: Array.from({ length: 4 }, (_, i) =>
 					makeFlow(`c${i}`, "x".repeat(200)),
 				).flat(),
 			},
-			fakeLLM,
 			{
 				compactThresholdRatio: 0.5,
 				safeThresholdRatio: 0.01,
@@ -754,15 +621,14 @@ describe("config resolution — snapshot", () => {
 		expect(result?.outputMessages).toMatchSnapshot();
 	});
 
-	it("empty maxRoundPercentSteps falls back to default [50, 100]", async () => {
-		const result = await applyAutoCompactPolicy(
+	it("empty maxRoundPercentSteps falls back to default [50, 100]", () => {
+		const result = applyAutoCompactPolicy(
 			{
 				messages: [{ role: "user", content: "go" }],
 				outputMessages: Array.from({ length: 4 }, (_, i) =>
 					makeFlow(`c${i}`, "x".repeat(200)),
 				).flat(),
 			},
-			fakeLLM,
 			{
 				compactThresholdRatio: 0.5,
 				safeThresholdRatio: 0.01,

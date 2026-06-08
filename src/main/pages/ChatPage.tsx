@@ -53,7 +53,6 @@ import {
 	formatOpenUIFormStateContext,
 	getOpenUISendMessageText,
 	isAllowedOpenUIRoute,
-	MEMORALL_OPENUI_ACTION_EVENT,
 	normalizeOpenUIDocumentPath,
 	resolveOpenUITemplate,
 	type MemorallOpenUIActionDetail,
@@ -170,36 +169,98 @@ export const ChatPage: React.FC<ChatPageProps> = ({
 
 	const handleMessageAction = React.useCallback(
 		async (action: MessageActionRequest) => {
-			if (action.type !== "artifact.preview.error.report") return;
+			if (action.type === "openui_action") {
+				const detail = action.payload?.detail as MemorallOpenUIActionDetail;
+				if (!detail?.action) return;
+				const { action: openUIAction } = detail;
 
-			const errors = Array.isArray(action.payload?.errors)
-				? action.payload.errors.filter(
-						(error): error is string => typeof error === "string",
-					)
-				: [];
-			const title = action.title?.trim() || action.identifier?.trim();
-			const errorLines = errors
-				.slice(0, 12)
-				.map((error, index) => `${index + 1}. ${error}`)
-				.join("\n");
-			const prompt = [
-				`Please update the latest ${action.component} artifact to resolve the preview errors.`,
-				title ? `Artifact: ${title}` : null,
-				"",
-				"Errors from the preview iframe:",
-				errorLines || "- No error details were captured.",
-				"",
-				"Return an updated artifact that resolves these runtime/resource errors.",
-			]
-				.filter((part): part is string => part !== null)
-				.join("\n");
+				if (openUIAction.type === "send_message") {
+					const message = getOpenUISendMessageText(
+						openUIAction,
+						detail.formState,
+						detail.formName,
+						detail.humanFriendlyMessage,
+					);
+					const shouldIncludeFormState =
+						openUIAction.includeFormState ?? Boolean(detail.formName);
+					const formContext = shouldIncludeFormState
+						? formatOpenUIFormStateContext(detail.formState, detail.formName)
+						: undefined;
+					await submitMessage({
+						inputText: message,
+						contextPrefix: formContext,
+						clearComposer: false,
+					});
+					return;
+				}
 
-			await submitMessage({
-				inputText: prompt,
-				clearComposer: false,
-			});
+				if (openUIAction.type === "add_message_to_input") {
+					const text = resolveOpenUITemplate(
+						openUIAction.text,
+						detail.formState,
+						detail.formName,
+					);
+					setInputValue(
+						openUIAction.mode === "replace"
+							? text
+							: inputValue.trim()
+								? `${inputValue}\n${text}`
+								: text,
+					);
+					return;
+				}
+
+				if (openUIAction.type === "open_document") {
+					const path = normalizeOpenUIDocumentPath(
+						resolveOpenUITemplate(
+							openUIAction.path,
+							detail.formState,
+							detail.formName,
+						),
+					);
+					if (path)
+						navigate("/documents", { state: { openDocumentPath: path } });
+					return;
+				}
+
+				if (openUIAction.type === "open_route") {
+					const route = resolveOpenUITemplate(
+						openUIAction.route,
+						detail.formState,
+						detail.formName,
+					).trim();
+					if (isAllowedOpenUIRoute(route)) navigate(route);
+				}
+				return;
+			}
+
+			if (action.type === "artifact.preview.error.report") {
+				const errors = Array.isArray(action.payload?.errors)
+					? action.payload.errors.filter(
+							(error): error is string => typeof error === "string",
+						)
+					: [];
+				const title = action.title?.trim() || action.identifier?.trim();
+				const errorLines = errors
+					.slice(0, 12)
+					.map((error, index) => `${index + 1}. ${error}`)
+					.join("\n");
+				const prompt = [
+					`Please update the latest ${action.component} artifact to resolve the preview errors.`,
+					title ? `Artifact: ${title}` : null,
+					"",
+					"Errors from the preview iframe:",
+					errorLines || "- No error details were captured.",
+					"",
+					"Return an updated artifact that resolves these runtime/resource errors.",
+				]
+					.filter((part): part is string => part !== null)
+					.join("\n");
+
+				await submitMessage({ inputText: prompt, clearComposer: false });
+			}
 		},
-		[submitMessage],
+		[inputValue, navigate, setInputValue, submitMessage],
 	);
 
 	useEffect(() => {
@@ -211,77 +272,6 @@ export const ChatPage: React.FC<ChatPageProps> = ({
 			setIsCompactSidePanelOpen(false);
 		}
 	}, [isCompactSidePanelOpen, isNarrowChatPanel]);
-
-	useEffect(() => {
-		const handleOpenUIAction = (event: Event) => {
-			const detail = (event as CustomEvent<MemorallOpenUIActionDetail>).detail;
-			if (!detail?.action) return;
-
-			const action = detail.action;
-			if (action.type === "send_message") {
-				const message = getOpenUISendMessageText(
-					action,
-					detail.formState,
-					detail.formName,
-					detail.humanFriendlyMessage,
-				);
-				const shouldIncludeFormState =
-					action.includeFormState ?? Boolean(detail.formName);
-				const formContext = shouldIncludeFormState
-					? formatOpenUIFormStateContext(detail.formState, detail.formName)
-					: undefined;
-				submitMessage({
-					inputText: message,
-					contextPrefix: formContext,
-					clearComposer: false,
-				});
-				return;
-			}
-
-			if (action.type === "add_message_to_input") {
-				const text = resolveOpenUITemplate(
-					action.text,
-					detail.formState,
-					detail.formName,
-				);
-				if (action.mode === "replace") {
-					setInputValue(text);
-					return;
-				}
-				setInputValue(inputValue.trim() ? `${inputValue}\n${text}` : text);
-				return;
-			}
-
-			if (action.type === "open_document") {
-				const path = normalizeOpenUIDocumentPath(
-					resolveOpenUITemplate(action.path, detail.formState, detail.formName),
-				);
-				if (!path) return;
-				navigate("/documents", {
-					state: { openDocumentPath: path },
-				});
-				return;
-			}
-
-			if (action.type === "open_route") {
-				const route = resolveOpenUITemplate(
-					action.route,
-					detail.formState,
-					detail.formName,
-				).trim();
-				if (isAllowedOpenUIRoute(route)) {
-					navigate(route);
-				}
-			}
-		};
-
-		window.addEventListener(MEMORALL_OPENUI_ACTION_EVENT, handleOpenUIAction);
-		return () =>
-			window.removeEventListener(
-				MEMORALL_OPENUI_ACTION_EVENT,
-				handleOpenUIAction,
-			);
-	}, [inputValue, navigate, setInputValue, submitMessage]);
 
 	// Refresh after each assistant response finishes
 	const wasInProgressRef = useRef(false);

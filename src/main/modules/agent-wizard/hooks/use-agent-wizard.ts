@@ -12,11 +12,6 @@ import type { Flow } from "@/services/database/types";
 import type { ChatMessage } from "@/types/openai";
 import { logError } from "@/utils/logger";
 import { isUuid } from "@/utils/uuid";
-import {
-	MEMORALL_OPENUI_ACTION_EVENT,
-	getOpenUISendMessageText,
-	type MemorallOpenUIActionDetail,
-} from "@/main/modules/openui/actions";
 import type {
 	AgentWizardCatalog,
 	AgentWizardDraft,
@@ -483,45 +478,6 @@ export const useAgentWizard = ({
 		abortControllerRef.current?.abort();
 		setIsStreaming(false);
 	}, []);
-
-	React.useEffect(() => {
-		if (!open) return;
-
-		const handleOpenUIAction = (event: Event) => {
-			const detail = (event as CustomEvent<MemorallOpenUIActionDetail>).detail;
-			if (!detail?.action) return;
-
-			if (detail.action.type === "send_message") {
-				const message = getOpenUISendMessageText(
-					detail.action,
-					detail.formState,
-					detail.formName,
-					detail.humanFriendlyMessage,
-				);
-				if (message.trim()) {
-					void submitMessage(message.trim());
-				}
-				return;
-			}
-
-			if (detail.action.type === "add_message_to_input") {
-				const text = detail.action.text ?? "";
-				setInputValue((prev) =>
-					detail.action.type === "add_message_to_input" &&
-					detail.action.mode === "replace"
-						? text
-						: `${prev}${text}`.trim(),
-				);
-			}
-		};
-
-		window.addEventListener(MEMORALL_OPENUI_ACTION_EVENT, handleOpenUIAction);
-		return () =>
-			window.removeEventListener(
-				MEMORALL_OPENUI_ACTION_EVENT,
-				handleOpenUIAction,
-			);
-	}, [open, submitMessage]);
 
 	const createAgent = React.useCallback(async () => {
 		if (!draft.name.trim() || isCreating) return;

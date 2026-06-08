@@ -1,5 +1,5 @@
 import React from "react";
-import { ArrowLeft, Bot, Send, Square } from "lucide-react";
+import { ArrowLeft, Send, Square } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/main/components/ui/button";
 import {
@@ -14,6 +14,11 @@ import {
 	PromptInputToolbar,
 } from "@/main/components/ui/shadcn-io/ai/prompt-input";
 import { MessageRenderer } from "@/main/modules/chat/components/MessageRenderer";
+import type { MessageActionRequest } from "@/main/modules/chat/components/artifacts/ArtifactActionsMenu";
+import {
+	getOpenUISendMessageText,
+	type MemorallOpenUIActionDetail,
+} from "@/main/modules/openui/actions";
 import type { Message as DBMessage } from "@/services/database/types";
 import type { AgentWizardMessage } from "../types";
 import { cn } from "@/lib/utils";
@@ -22,7 +27,7 @@ interface AgentWizardChatPanelProps {
 	messages: AgentWizardMessage[];
 	inputValue: string;
 	onInputChange: (value: string) => void;
-	onSubmit: (event?: React.FormEvent) => void;
+	onSubmit: (contentOrEvent?: string | React.FormEvent) => void;
 	onStop: () => void;
 	onBack?: () => void;
 	isStreaming: boolean;
@@ -61,6 +66,35 @@ export const AgentWizardChatPanel: React.FC<AgentWizardChatPanelProps> = ({
 	const dbMessages = React.useMemo(() => messages.map(toDbMessage), [messages]);
 	const canSubmit = Boolean(inputValue.trim()) && !isStreaming && isModelReady;
 
+	const handleMessageAction = React.useCallback(
+		(action: MessageActionRequest) => {
+			if (action.type !== "openui_action") return;
+			const detail = action.payload?.detail as MemorallOpenUIActionDetail;
+			if (!detail?.action) return;
+
+			if (detail.action.type === "send_message") {
+				const message = getOpenUISendMessageText(
+					detail.action,
+					detail.formState,
+					detail.formName,
+					detail.humanFriendlyMessage,
+				);
+				if (message.trim()) onSubmit(message.trim());
+				return;
+			}
+
+			if (detail.action.type === "add_message_to_input") {
+				const text = detail.action.text ?? "";
+				onInputChange(
+					detail.action.mode === "replace"
+						? text
+						: `${inputValue}${text}`.trim(),
+				);
+			}
+		},
+		[inputValue, onInputChange, onSubmit],
+	);
+
 	return (
 		<section className="flex h-full max-h-full min-h-0 flex-col overflow-hidden bg-background">
 			<div className="flex h-14 shrink-0 items-center gap-2 border-b px-4">
@@ -98,6 +132,7 @@ export const AgentWizardChatPanel: React.FC<AgentWizardChatPanelProps> = ({
 							}
 							groupMessages={dbMessages}
 							showMessageControls={false}
+							onMessageAction={handleMessageAction}
 						/>
 					))}
 				</ConversationContent>
