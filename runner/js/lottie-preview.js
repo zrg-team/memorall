@@ -1,7 +1,6 @@
 const LOTTIE_CDN_URL =
   "https://cdn.jsdelivr.net/npm/lottie-web@5.12.2/build/player/lottie_canvas.min.js";
-const GIF_CDN_URL = "https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.js";
-const GIF_WORKER_URL = "https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.worker.js";
+const GIF_ENCODER_URL = "./js/gif-encoder.js";
 
 let anim = null;
 let parentTarget = null;
@@ -54,11 +53,11 @@ function loadLottieScript() {
   });
 }
 
-function loadGifScript() {
+function loadGifEncoderScript() {
   return new Promise((resolve, reject) => {
-    if (window.GIF) return resolve();
+    if (window.GIFEncoder) return resolve();
     const script = document.createElement("script");
-    script.src = GIF_CDN_URL;
+    script.src = GIF_ENCODER_URL;
     script.onload = resolve;
     script.onerror = reject;
     document.head.appendChild(script);
@@ -100,7 +99,7 @@ async function exportGif() {
   setStatus("Preparing GIF...");
 
   try {
-    await loadGifScript();
+    await loadGifEncoderScript();
   } catch {
     setStatus("Failed to load GIF encoder");
     setBusy(false);
@@ -114,34 +113,29 @@ async function exportGif() {
   const totalFrames = Math.max(Math.round(anim.totalFrames), 1);
   const frameRate = anim.frameRate || 30;
   const delay = Math.round(1000 / frameRate);
+  const ctx = canvas.getContext("2d");
 
-  const gif = new window.GIF({
-    workers: 2,
-    quality: 10,
-    width: canvas.width,
-    height: canvas.height,
-    workerScript: GIF_WORKER_URL,
-  });
-
-  gif.on("progress", (ratio) => {
-    setStatus(`Rendering GIF... ${Math.round(ratio * 100)}%`);
-  });
-
-  gif.on("finished", (blob) => {
-    downloadBlob(blob, "animation.gif");
-    anim.goToAndStop(startFrame, true);
-    if (wasPlaying) anim.play();
-    setStatus("");
-    setBusy(false);
-  });
+  const encoder = new window.GIFEncoder(canvas.width, canvas.height);
+  encoder.setRepeat(0);
+  encoder.setDelay(delay);
+  encoder.setQuality(10);
+  encoder.writeHeader();
 
   for (let frame = 0; frame < totalFrames; frame++) {
     anim.goToAndStop(frame, true);
-    gif.addFrame(canvas, { copy: true, delay });
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    encoder.addFrame(imageData.data);
+    setStatus(`Rendering GIF... ${Math.round(((frame + 1) / totalFrames) * 100)}%`);
+    await new Promise((resolve) => setTimeout(resolve, 0));
   }
 
-  setStatus("Rendering GIF...");
-  gif.render();
+  encoder.finish();
+  downloadBlob(encoder.toBlob(), "animation.gif");
+
+  anim.goToAndStop(startFrame, true);
+  if (wasPlaying) anim.play();
+  setStatus("");
+  setBusy(false);
 }
 
 if (pngButton) pngButton.addEventListener("click", downloadPng);
