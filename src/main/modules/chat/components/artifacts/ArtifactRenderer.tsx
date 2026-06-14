@@ -44,7 +44,12 @@ export const ArtifactRenderer: React.FC<ArtifactRendererProps> = ({
 			);
 		case "lottie":
 			return (
-				<LottieArtifact content={content} identifier={identifier} title={title} />
+				<LottieArtifact
+					content={content}
+					identifier={identifier}
+					title={title}
+					onMessageAction={onMessageAction}
+				/>
 			);
 		case "markdown":
 			return <MarkdownArtifact content={content} />;

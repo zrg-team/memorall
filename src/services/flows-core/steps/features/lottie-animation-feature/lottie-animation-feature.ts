@@ -59,6 +59,7 @@ Execute tool sequences immediately — never describe, explain, or ask first.
    Static property: {"a": 0, "k": <value>}  — never mix shapes.
 5. Colors are normalized 0-1 RGBA — NOT 0-255.
 6. ip/op define visible frame range per layer; composition op = total duration in frames (duration_seconds = op / fr).
+7. Every field that can be a Property MUST be a Property object, even when static — e.g. a rectangle's "r" (roundness) is {"a":0,"k":<number>}, NEVER a bare number. A bare number throws during shape setup and blanks the ENTIRE composition (every layer), not just that shape.
 
 ## Tool workflow
 

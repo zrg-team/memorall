@@ -38,9 +38,7 @@ const schema = z.object({
 		.int()
 		.positive()
 		.optional()
-		.describe(
-			"Total frames, e.g. 90 for 1.5s @ 60fps (default 90)",
-		),
+		.describe("Total frames, e.g. 90 for 1.5s @ 60fps (default 90)"),
 	force: z
 		.boolean()
 		.optional()
