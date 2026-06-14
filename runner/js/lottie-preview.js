@@ -4,6 +4,31 @@ const GIF_CDN_URL = "https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.js";
 const GIF_WORKER_URL = "https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.worker.js";
 
 let anim = null;
+let parentTarget = null;
+let parentOrigin = "*";
+
+function reportError(message, details) {
+  if (!parentTarget) return;
+  parentTarget.postMessage(
+    { type: "lottie:error", message: String(message), details },
+    parentOrigin,
+  );
+}
+
+window.addEventListener("error", (event) => {
+  reportError(event.message || "Unknown error", {
+    source: event.filename,
+    line: event.lineno,
+  });
+});
+
+window.addEventListener("unhandledrejection", (event) => {
+  const reason = event.reason;
+  reportError(
+    reason instanceof Error ? reason.message : String(reason),
+    { source: "promise" },
+  );
+});
 
 const statusEl = document.getElementById("status");
 const pngButton = document.getElementById("btn-png");
@@ -126,15 +151,32 @@ window.addEventListener("message", async (event) => {
   const { type, animationData, frame } = event.data || {};
 
   if (type === "lottie:load") {
-    await loadLottieScript();
-    anim?.destroy();
-    anim = window.lottie.loadAnimation({
-      container: document.getElementById("lottie-container"),
-      renderer: "canvas",
-      loop: true,
-      autoplay: true,
-      animationData,
-    });
+    parentTarget = event.source;
+    parentOrigin = event.origin;
+
+    try {
+      await loadLottieScript();
+      anim?.destroy();
+      anim = window.lottie.loadAnimation({
+        container: document.getElementById("lottie-container"),
+        renderer: "canvas",
+        loop: true,
+        autoplay: true,
+        animationData,
+      });
+    } catch (error) {
+      reportError(
+        error instanceof Error ? error.message : String(error),
+        { source: "loadAnimation" },
+      );
+      return;
+    }
+
+    anim.addEventListener("data_failed", () =>
+      reportError("Lottie failed to parse the animation data.", {
+        source: "data_failed",
+      }),
+    );
     anim.addEventListener("enterFrame", () =>
       event.source.postMessage(
         { type: "lottie:frame", frame: Math.round(anim.currentFrame), totalFrames: Math.round(anim.totalFrames) },
