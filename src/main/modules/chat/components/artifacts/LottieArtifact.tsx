@@ -3,7 +3,7 @@ import { Pause, Play, Download } from "lucide-react";
 import type { ArtifactProps } from "./ArtifactActionsMenu";
 
 // Use the GitHub Pages runner, same origin as the HyperFrames preview.
-const RUNNER_URL = "https://zrg-team.github.io/memorall/lottie-preview.html?v=1";
+const RUNNER_URL = "https://zrg-team.github.io/memorall/lottie-preview.html?v=2";
 
 export const LottieArtifact: React.FC<ArtifactProps> = ({
 	content,
