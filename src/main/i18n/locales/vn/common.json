@@ -337,7 +337,7 @@
 				"description": "Tạo bản nháp video hoạt họa chạy trong trình duyệt với bố cục cảnh, xem trước và xuất MP4."
 			},
 			"lottieAnimationFeature": {
-				"name": "Lottie Animator",
+				"name": "Animation Creator",
 				"description": "Soạn, kiểm tra và xem trước hoạt ảnh vector Lottie/Bodymovin được lưu dưới dạng file workspace."
 			},
 			"visualizeResponse": {

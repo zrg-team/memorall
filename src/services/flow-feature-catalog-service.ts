@@ -408,7 +408,7 @@ const FEATURE_UI_METADATA: Record<string, FeatureCatalogMetadata> = {
 		description:
 			"Author, validate, and preview Lottie/Bodymovin vector animations stored as workspace files.",
 		descriptionKey: "flowBuilder.features.lottieAnimationFeature.description",
-		displayName: "Lottie Animator",
+		displayName: "Animation Creator",
 		nameKey: "flowBuilder.features.lottieAnimationFeature.name",
 		tools: [
 			"lottie_list",
