@@ -49,3 +49,11 @@ import "flow-core/tools/hyperframes/hyperframes-show";
 import "flow-core/tools/hyperframes/hyperframes-validate";
 import "flow-core/tools/hyperframes/hyperframes-remote-assets-explore";
 import "flow-core/tools/hyperframes/hyperframes-remote-asset-import";
+
+import "flow-core/tools/lottie/lottie-list";
+import "flow-core/tools/lottie/lottie-init";
+import "flow-core/tools/lottie/lottie-write";
+import "flow-core/tools/lottie/lottie-edit";
+import "flow-core/tools/lottie/lottie-read";
+import "flow-core/tools/lottie/lottie-validate";
+import "flow-core/tools/lottie/lottie-show";

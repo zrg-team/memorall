@@ -336,6 +336,10 @@
 				"name": "Tạo video",
 				"description": "Tạo bản nháp video hoạt họa chạy trong trình duyệt với bố cục cảnh, xem trước và xuất MP4."
 			},
+			"lottieAnimationFeature": {
+				"name": "Lottie Animator",
+				"description": "Soạn, kiểm tra và xem trước hoạt ảnh vector Lottie/Bodymovin được lưu dưới dạng file workspace."
+			},
 			"visualizeResponse": {
 				"name": "Trực quan hóa phản hồi",
 				"description": "Tạo trực quan OpenUI tương tác dựa trên công cụ dữ liệu đồ thị tri thức."

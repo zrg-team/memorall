@@ -5,6 +5,7 @@ import {
 	type StepIOField,
 } from "@/services/flows-core/registries/step-registry";
 import { HYPERFRAMES_FEATURE_SYSTEM_PROMPT } from "@/services/flows-core/steps/features/hyperframes-feature/hyperframes-feature";
+import { LOTTIE_ANIMATION_FEATURE_SYSTEM_PROMPT } from "@/services/flows-core/steps/features/lottie-animation-feature/lottie-animation-feature";
 
 export type { StepIOField };
 
@@ -402,6 +403,36 @@ const FEATURE_UI_METADATA: Record<string, FeatureCatalogMetadata> = {
 		accentColor: "#8b5cf6",
 		section: "other",
 		sectionOrder: 0,
+	},
+	"step-lottie-animation-feature": {
+		description:
+			"Author, validate, and preview Lottie/Bodymovin vector animations stored as workspace files.",
+		descriptionKey: "flowBuilder.features.lottieAnimationFeature.description",
+		displayName: "Lottie Animator",
+		nameKey: "flowBuilder.features.lottieAnimationFeature.name",
+		tools: [
+			"lottie_list",
+			"lottie_init",
+			"lottie_write",
+			"lottie_edit",
+			"lottie_read",
+			"lottie_validate",
+			"lottie_show",
+			"fs_ls",
+			"fs_glob",
+			"fs_grep",
+			"fs_read",
+		],
+		systemPrompt: LOTTIE_ANIMATION_FEATURE_SYSTEM_PROMPT,
+		customizable: false,
+		recommended: false,
+		icon: {
+			name: "Sparkles",
+			type: "lucide",
+		},
+		accentColor: "#f59e0b",
+		section: "other",
+		sectionOrder: 1,
 	},
 	"step-job-application-feature": {
 		description:
