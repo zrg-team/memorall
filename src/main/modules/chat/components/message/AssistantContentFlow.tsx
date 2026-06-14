@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import type {
 	ComplexContentPartExecution,
 	ComplexContentPartTool,
@@ -48,6 +48,11 @@ export const AssistantContentFlow: React.FC<{
 	suppressArtifactPreviews = false,
 	onMessageAction,
 }) => {
+	// Some flows re-emit the same assistant text (and its artifact tags) across
+	// multiple content parts (e.g. one per agent iteration). Share a dedupe set
+	// across all text parts so a single artifact only renders once.
+	const seenArtifactKeys = useMemo(() => new Set<string>(), [parts]);
+
 	const latestWorkflowIndex = parts.findLastIndex(
 		(part) => part.type === "execution",
 	);
@@ -76,6 +81,7 @@ export const AssistantContentFlow: React.FC<{
 							isStreaming={isStreaming}
 							suppressArtifactPreviews={suppressArtifactPreviews}
 							onMessageAction={onMessageAction}
+							seenArtifactKeys={seenArtifactKeys}
 						/>
 					);
 				}

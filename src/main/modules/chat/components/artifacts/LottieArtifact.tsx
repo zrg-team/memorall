@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { AlertTriangle, Pause, Play, Download, Send } from "lucide-react";
 import type { ArtifactProps } from "./ArtifactActionsMenu";
 
@@ -14,6 +15,7 @@ export const LottieArtifact: React.FC<ArtifactProps> = ({
 	title,
 	onMessageAction,
 }) => {
+	const { t } = useTranslation("chat");
 	const iframeRef = useRef<HTMLIFrameElement>(null);
 	const [playing, setPlaying] = useState(true);
 	const [frame, setFrame] = useState(0);
@@ -115,7 +117,7 @@ export const LottieArtifact: React.FC<ArtifactProps> = ({
 	if (parseError) {
 		return (
 			<div className="p-4 text-sm text-destructive">
-				Invalid Lottie JSON: {parseError}
+				{t("lottiePreview.invalidJson", { error: parseError })}
 			</div>
 		);
 	}
@@ -129,7 +131,7 @@ export const LottieArtifact: React.FC<ArtifactProps> = ({
 					sandbox="allow-scripts"
 					className="w-full"
 					style={{ height: "60vh", border: "none" }}
-					title={title || identifier || "Lottie preview"}
+					title={title || identifier || t("lottiePreview.title")}
 				/>
 				{previewIssues.length > 0 ? (
 					<div className="absolute bottom-3 left-3 right-3 z-10 rounded-md border border-destructive/35 bg-background/95 p-3 shadow-lg backdrop-blur">
@@ -137,8 +139,9 @@ export const LottieArtifact: React.FC<ArtifactProps> = ({
 							<AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
 							<div className="min-w-0 flex-1">
 								<div className="text-xs font-semibold text-destructive">
-									Preview reported {previewIssues.length} issue
-									{previewIssues.length === 1 ? "" : "s"}
+									{t("lottiePreview.previewIssue", {
+										count: previewIssues.length,
+									})}
 								</div>
 								<div className="mt-1 max-h-20 space-y-1 overflow-auto font-mono text-[11px] leading-snug text-muted-foreground">
 									{previewIssues.slice(-3).map((issue) => (
@@ -152,10 +155,10 @@ export const LottieArtifact: React.FC<ArtifactProps> = ({
 								type="button"
 								onClick={handleSendPreviewReport}
 								className="inline-flex h-8 shrink-0 items-center gap-2 rounded-md border border-destructive/25 bg-destructive/10 px-3 text-xs font-medium text-destructive hover:bg-destructive/20"
-								title="Send preview issue details to the agent"
+								title={t("lottiePreview.sendToAgentTitle")}
 							>
 								<Send className="h-3.5 w-3.5" />
-								<span>Send to agent</span>
+								<span>{t("lottiePreview.sendToAgent")}</span>
 							</button>
 						</div>
 					</div>
@@ -181,7 +184,7 @@ export const LottieArtifact: React.FC<ArtifactProps> = ({
 				</span>
 				<button
 					onClick={handleDownload}
-					title="Download JSON"
+					title={t("lottiePreview.downloadJson")}
 					className="inline-flex h-8 w-8 items-center justify-center rounded-md border"
 				>
 					<Download size={14} />

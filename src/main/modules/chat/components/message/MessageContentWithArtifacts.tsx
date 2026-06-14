@@ -17,11 +17,13 @@ export const MessageContentWithArtifacts: React.FC<{
 	isStreaming: boolean;
 	suppressArtifactPreviews?: boolean;
 	onMessageAction?: (action: MessageActionRequest) => void | Promise<void>;
+	seenArtifactKeys?: Set<string>;
 }> = ({
 	content,
 	isStreaming,
 	suppressArtifactPreviews = false,
 	onMessageAction,
+	seenArtifactKeys,
 }) => {
 	const segments = useMemo(
 		() => splitOpenUIContent(content, { includeIncomplete: isStreaming }),
@@ -34,6 +36,11 @@ export const MessageContentWithArtifacts: React.FC<{
 		return artifactSegments.map((seg) => {
 			if (seg.kind === "artifact") {
 				const key = `${keyPrefix}-artifact-${seg.type}-${seg.identifier ?? seg.blockIndex}`;
+				if (seenArtifactKeys) {
+					const dedupeKey = `${seg.type}:${seg.identifier ?? ""}:${seg.title ?? ""}:${seg.content}`;
+					if (seenArtifactKeys.has(dedupeKey)) return null;
+					seenArtifactKeys.add(dedupeKey);
+				}
 				if (suppressArtifactPreviews) {
 					return (
 						<CompactArtifactReference

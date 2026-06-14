@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
 	AlertTriangle,
 	Download,
@@ -464,13 +465,17 @@ const DEFAULT_EXPORT_SETTINGS: ExportSettings = {
 	size: "native",
 };
 const EXPORT_FPS_OPTIONS: ExportFps[] = [24, 25, 30];
-const EXPORT_QUALITY_OPTIONS: { value: ExportQuality; label: string }[] = [
-	{ value: "max", label: "Max" },
-	{ value: "high", label: "High" },
-	{ value: "standard", label: "Standard" },
+const EXPORT_QUALITY_OPTIONS: { value: ExportQuality; labelKey: string }[] = [
+	{ value: "max", labelKey: "qualityMax" },
+	{ value: "high", labelKey: "qualityHigh" },
+	{ value: "standard", labelKey: "qualityStandard" },
 ];
-const EXPORT_SIZE_OPTIONS: { value: ExportSize; label: string }[] = [
-	{ value: "native", label: "Native" },
+const EXPORT_SIZE_OPTIONS: {
+	value: ExportSize;
+	label: string;
+	labelKey?: string;
+}[] = [
+	{ value: "native", label: "Native", labelKey: "sizeNative" },
 	{ value: "720p", label: "720p" },
 	{ value: "1080p", label: "1080p" },
 	{ value: "1440p", label: "1440p" },
@@ -524,6 +529,7 @@ export const HyperframesArtifact: React.FC<ArtifactProps> = ({
 	projectPath,
 	onMessageAction,
 }) => {
+	const { t } = useTranslation("chat");
 	const containerRef = useRef<HTMLDivElement>(null);
 	const playerRef = useRef<HyperframesPlayerElement | null>(null);
 	const compositionKeyRef = useRef<string | null>(null);
@@ -803,16 +809,19 @@ export const HyperframesArtifact: React.FC<ArtifactProps> = ({
 		exportState.phase === "preparing" || exportState.phase === "exporting";
 	const exportLabel =
 		exportState.phase === "preparing"
-			? "Preparing MP4"
+			? t("hyperframesPreview.exportPreparing")
 			: exportState.phase === "exporting"
 				? exportState.total
-					? `Exporting ${exportState.frame ?? 0}/${exportState.total}`
-					: "Exporting MP4"
+					? t("hyperframesPreview.exportProgress", {
+							frame: exportState.frame ?? 0,
+							total: exportState.total,
+						})
+					: t("hyperframesPreview.exportRunning")
 				: exportState.phase === "failed"
-					? "Export failed"
+					? t("hyperframesPreview.exportFailed")
 					: pendingDownload || exportState.phase === "complete"
-						? "Download MP4"
-						: "Export MP4";
+						? t("hyperframesPreview.downloadMp4")
+						: t("hyperframesPreview.exportMp4");
 
 	return (
 		<div className="my-2 overflow-hidden rounded-md bg-black">
@@ -827,7 +836,7 @@ export const HyperframesArtifact: React.FC<ArtifactProps> = ({
 						disabled={exportBusy || !previewHtml}
 						className="inline-flex h-8 items-center gap-2 rounded-md border border-white/15 bg-white/10 px-3 text-xs font-medium text-white hover:bg-white/15 disabled:cursor-progress disabled:opacity-60"
 						title={
-							exportState.error || "Export this HyperFrames composition as MP4"
+							exportState.error || t("hyperframesPreview.exportTitle")
 						}
 					>
 						{exportBusy ? (
@@ -843,7 +852,9 @@ export const HyperframesArtifact: React.FC<ArtifactProps> = ({
 				{showExportSettings && !pendingDownload ? (
 					<div className="grid gap-2 border-t border-white/10 px-3 pb-3 pt-1 text-xs text-white sm:grid-cols-[1fr_1fr_1fr_auto_auto] sm:items-end">
 						<label className="grid gap-1">
-							<span className="font-medium text-white/70">FPS</span>
+							<span className="font-medium text-white/70">
+								{t("hyperframesPreview.fps")}
+							</span>
 							<select
 								value={exportSettings.fps}
 								onChange={(event) =>
@@ -856,13 +867,15 @@ export const HyperframesArtifact: React.FC<ArtifactProps> = ({
 							>
 								{EXPORT_FPS_OPTIONS.map((fps) => (
 									<option key={fps} value={fps}>
-										{fps} fps
+										{t("hyperframesPreview.fpsOption", { fps })}
 									</option>
 								))}
 							</select>
 						</label>
 						<label className="grid gap-1">
-							<span className="font-medium text-white/70">Image quality</span>
+							<span className="font-medium text-white/70">
+								{t("hyperframesPreview.imageQuality")}
+							</span>
 							<select
 								value={exportSettings.quality}
 								onChange={(event) =>
@@ -875,13 +888,15 @@ export const HyperframesArtifact: React.FC<ArtifactProps> = ({
 							>
 								{EXPORT_QUALITY_OPTIONS.map((quality) => (
 									<option key={quality.value} value={quality.value}>
-										{quality.label}
+										{t(`hyperframesPreview.${quality.labelKey}`)}
 									</option>
 								))}
 							</select>
 						</label>
 						<label className="grid gap-1">
-							<span className="font-medium text-white/70">Video size</span>
+							<span className="font-medium text-white/70">
+								{t("hyperframesPreview.videoSize")}
+							</span>
 							<select
 								value={exportSettings.size}
 								onChange={(event) =>
@@ -894,7 +909,9 @@ export const HyperframesArtifact: React.FC<ArtifactProps> = ({
 							>
 								{EXPORT_SIZE_OPTIONS.map((size) => (
 									<option key={size.value} value={size.value}>
-										{size.label}
+										{size.labelKey
+											? t(`hyperframesPreview.${size.labelKey}`)
+											: size.label}
 									</option>
 								))}
 							</select>
@@ -910,13 +927,13 @@ export const HyperframesArtifact: React.FC<ArtifactProps> = ({
 							) : (
 								<Download className="h-3.5 w-3.5" />
 							)}
-							<span>Start MP4</span>
+							<span>{t("hyperframesPreview.startMp4")}</span>
 						</button>
 						<button
 							type="button"
 							onClick={() => setShowExportSettings(false)}
 							className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-white/15 bg-white/10 text-white hover:bg-white/15"
-							title="Close export settings"
+							title={t("hyperframesPreview.closeExportSettings")}
 						>
 							<X className="h-3.5 w-3.5" />
 						</button>
@@ -927,7 +944,7 @@ export const HyperframesArtifact: React.FC<ArtifactProps> = ({
 				<div
 					ref={containerRef}
 					style={{ display: "block", width: "100%", height: "100%" }}
-					aria-label={title || "HyperFrames composition"}
+					aria-label={title || t("hyperframesPreview.compositionAriaLabel")}
 				/>
 				{previewIssues.length > 0 ? (
 					<div
@@ -938,8 +955,9 @@ export const HyperframesArtifact: React.FC<ArtifactProps> = ({
 							<AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-red-300" />
 							<div className="min-w-0 flex-1">
 								<div className="text-xs font-semibold text-red-100">
-									Preview reported {previewIssues.length} issue
-									{previewIssues.length === 1 ? "" : "s"}
+									{t("hyperframesPreview.previewIssue", {
+										count: previewIssues.length,
+									})}
 								</div>
 								<div className="mt-1 max-h-20 space-y-1 overflow-auto font-mono text-[11px] leading-snug text-red-100/85">
 									{previewIssues.slice(-3).map((issue) => (
@@ -957,10 +975,10 @@ export const HyperframesArtifact: React.FC<ArtifactProps> = ({
 								type="button"
 								onClick={handleSendPreviewReport}
 								className="inline-flex h-8 shrink-0 items-center gap-2 rounded-md border border-red-200/25 bg-red-500/20 px-3 text-xs font-medium text-red-50 hover:bg-red-500/30"
-								title="Send preview issue details to the agent"
+								title={t("hyperframesPreview.sendToAgentTitle")}
 							>
 								<Send className="h-3.5 w-3.5" />
-								<span>Send to agent</span>
+								<span>{t("hyperframesPreview.sendToAgent")}</span>
 							</button>
 						</div>
 					</div>
