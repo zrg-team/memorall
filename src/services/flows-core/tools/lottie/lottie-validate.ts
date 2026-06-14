@@ -64,7 +64,11 @@ const validateAnimatableProperty = (
 			}
 		}
 	} else if (isStaticProp(value)) {
-		if (Array.isArray(value.k) && isRecord(value.k[0]) && "t" in (value.k[0] as Record<string, unknown>)) {
+		if (
+			Array.isArray(value.k) &&
+			isRecord(value.k[0]) &&
+			"t" in (value.k[0] as Record<string, unknown>)
+		) {
 			findings.push({
 				severity: "error",
 				code: "static_prop_has_keyframes",
@@ -133,7 +137,23 @@ const validateGroupItem = (
 			if (isRecord(sub)) {
 				for (const [key, propValue] of Object.entries(sub)) {
 					if (key === "ty") continue;
-					validateAnimatableProperty(propValue, `${path}.it[${i}].${key}`, findings);
+					validateAnimatableProperty(
+						propValue,
+						`${path}.it[${i}].${key}`,
+						findings,
+					);
+				}
+				if (
+					sub.ty === "rc" &&
+					"r" in sub &&
+					!(isRecord(sub.r) && "k" in sub.r)
+				) {
+					findings.push({
+						severity: "error",
+						code: "rect_roundness_not_property",
+						message: `Rectangle "r" (roundness) must be a Property object like {"a":0,"k":<number>}, not a bare number. A bare number breaks PropertyFactory and silently blanks the whole composition.`,
+						path: `${path}.it[${i}].r`,
+					});
 				}
 			}
 		}
@@ -211,7 +231,7 @@ const validateLayer = (
 		}
 		validateGroupItem(shape, shapePath, findings);
 	}
-}
+};
 
 const validateLottieJson = (doc: unknown): LottieFinding[] => {
 	const findings: LottieFinding[] = [];
@@ -248,7 +268,11 @@ const validateLottieJson = (doc: unknown): LottieFinding[] => {
 	const ip = typeof doc.ip === "number" ? doc.ip : 0;
 	const op = typeof doc.op === "number" ? doc.op : Number.MAX_SAFE_INTEGER;
 
-	if (typeof doc.ip === "number" && typeof doc.op === "number" && doc.op <= doc.ip) {
+	if (
+		typeof doc.ip === "number" &&
+		typeof doc.op === "number" &&
+		doc.op <= doc.ip
+	) {
 		findings.push({
 			severity: "error",
 			code: "composition_ip_op_order",

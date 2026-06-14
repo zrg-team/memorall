@@ -1,14 +1,18 @@
-import React, { useEffect, useRef, useState } from "react";
-import { Pause, Play, Download } from "lucide-react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { AlertTriangle, Pause, Play, Download, Send } from "lucide-react";
 import type { ArtifactProps } from "./ArtifactActionsMenu";
 
 // Use the GitHub Pages runner, same origin as the HyperFrames preview.
-const RUNNER_URL = "https://zrg-team.github.io/memorall/lottie-preview.html?v=2";
+const RUNNER_URL =
+	"https://zrg-team.github.io/memorall/lottie-preview.html?v=3";
+
+const MAX_PREVIEW_ISSUES = 8;
 
 export const LottieArtifact: React.FC<ArtifactProps> = ({
 	content,
 	identifier,
 	title,
+	onMessageAction,
 }) => {
 	const iframeRef = useRef<HTMLIFrameElement>(null);
 	const [playing, setPlaying] = useState(true);
@@ -16,6 +20,7 @@ export const LottieArtifact: React.FC<ArtifactProps> = ({
 	const [totalFrames, setTotalFrames] = useState(0);
 	const [parseError, setParseError] = useState<string | null>(null);
 	const [ready, setReady] = useState(false);
+	const [previewIssues, setPreviewIssues] = useState<string[]>([]);
 
 	useEffect(() => {
 		let animationData: unknown;
@@ -26,6 +31,7 @@ export const LottieArtifact: React.FC<ArtifactProps> = ({
 			return;
 		}
 		setParseError(null);
+		setPreviewIssues([]);
 
 		const handleMessage = (event: MessageEvent) => {
 			if (event.source !== iframeRef.current?.contentWindow) return;
@@ -37,6 +43,16 @@ export const LottieArtifact: React.FC<ArtifactProps> = ({
 			}
 			if (event.data?.type === "lottie:frame") {
 				setFrame(event.data.frame ?? 0);
+			}
+			if (event.data?.type === "lottie:error") {
+				const message =
+					typeof event.data.message === "string"
+						? event.data.message
+						: "Unknown preview error";
+				setPreviewIssues((prev) => {
+					if (prev.includes(message)) return prev;
+					return [...prev, message].slice(-MAX_PREVIEW_ISSUES);
+				});
 			}
 		};
 		window.addEventListener("message", handleMessage);
@@ -83,6 +99,19 @@ export const LottieArtifact: React.FC<ArtifactProps> = ({
 		URL.revokeObjectURL(url);
 	};
 
+	const handleSendPreviewReport = useCallback(() => {
+		if (previewIssues.length === 0) return;
+		void onMessageAction?.({
+			type: "artifact.preview.error.report",
+			component: "lottie",
+			title,
+			identifier,
+			payload: {
+				errors: previewIssues,
+			},
+		});
+	}, [identifier, onMessageAction, previewIssues, title]);
+
 	if (parseError) {
 		return (
 			<div className="p-4 text-sm text-destructive">
@@ -93,14 +122,45 @@ export const LottieArtifact: React.FC<ArtifactProps> = ({
 
 	return (
 		<div className="my-2 overflow-hidden rounded-md border bg-muted/20">
-			<iframe
-				ref={iframeRef}
-				src={RUNNER_URL}
-				sandbox="allow-scripts"
-				className="w-full"
-				style={{ height: "60vh", border: "none" }}
-				title={title || identifier || "Lottie preview"}
-			/>
+			<div className="relative">
+				<iframe
+					ref={iframeRef}
+					src={RUNNER_URL}
+					sandbox="allow-scripts"
+					className="w-full"
+					style={{ height: "60vh", border: "none" }}
+					title={title || identifier || "Lottie preview"}
+				/>
+				{previewIssues.length > 0 ? (
+					<div className="absolute bottom-3 left-3 right-3 z-10 rounded-md border border-destructive/35 bg-background/95 p-3 shadow-lg backdrop-blur">
+						<div className="flex items-start gap-3">
+							<AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+							<div className="min-w-0 flex-1">
+								<div className="text-xs font-semibold text-destructive">
+									Preview reported {previewIssues.length} issue
+									{previewIssues.length === 1 ? "" : "s"}
+								</div>
+								<div className="mt-1 max-h-20 space-y-1 overflow-auto font-mono text-[11px] leading-snug text-muted-foreground">
+									{previewIssues.slice(-3).map((issue) => (
+										<div key={issue} className="truncate" title={issue}>
+											{issue}
+										</div>
+									))}
+								</div>
+							</div>
+							<button
+								type="button"
+								onClick={handleSendPreviewReport}
+								className="inline-flex h-8 shrink-0 items-center gap-2 rounded-md border border-destructive/25 bg-destructive/10 px-3 text-xs font-medium text-destructive hover:bg-destructive/20"
+								title="Send preview issue details to the agent"
+							>
+								<Send className="h-3.5 w-3.5" />
+								<span>Send to agent</span>
+							</button>
+						</div>
+					</div>
+				) : null}
+			</div>
 			<div className="flex items-center gap-3 border-t bg-background px-3 py-2">
 				<button
 					onClick={togglePlay}
