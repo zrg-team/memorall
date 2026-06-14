@@ -4,6 +4,7 @@ import type { MessageActionRequest } from "./ArtifactActionsMenu";
 import { HtmlArtifact } from "./HtmlArtifact";
 import { UrlArtifact } from "./UrlArtifact";
 import { HyperframesArtifact } from "./HyperframesArtifact";
+import { LottieArtifact } from "./LottieArtifact";
 import { MarkdownArtifact } from "./MarkdownArtifact";
 import { TextArtifact } from "./TextArtifact";
 
@@ -40,6 +41,10 @@ export const ArtifactRenderer: React.FC<ArtifactRendererProps> = ({
 					projectPath={projectPath}
 					onMessageAction={onMessageAction}
 				/>
+			);
+		case "lottie":
+			return (
+				<LottieArtifact content={content} identifier={identifier} title={title} />
 			);
 		case "markdown":
 			return <MarkdownArtifact content={content} />;

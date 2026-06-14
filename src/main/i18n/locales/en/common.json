@@ -337,6 +337,10 @@
 				"name": "Video Creator",
 				"description": "Create animated browser-rendered video drafts with scene composition, preview playback, and MP4 export."
 			},
+			"lottieAnimationFeature": {
+				"name": "Lottie Animator",
+				"description": "Author, validate, and preview Lottie/Bodymovin vector animations stored as workspace files."
+			},
 			"visualizeResponse": {
 				"name": "Visualize Response",
 				"description": "Generate interactive OpenUI visualizations backed by knowledge graph data tools."

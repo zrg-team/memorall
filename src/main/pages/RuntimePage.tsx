@@ -18,6 +18,7 @@ import { useChatStore } from "@/main/stores/chat";
 import MarkdownMessage from "@/main/modules/chat/components/MarkdownMessage";
 import { UrlArtifact } from "@/main/modules/chat/components/artifacts/ArtifactRenderer";
 import { HyperframesArtifact } from "@/main/modules/chat/components/artifacts/HyperframesArtifact";
+import { LottieArtifact } from "@/main/modules/chat/components/artifacts/LottieArtifact";
 import {
 	collectRuntimeArtifacts,
 	replaceArtifactContent,
@@ -53,6 +54,8 @@ const getArtifactTypeLabel = (type: RuntimeArtifact["type"]) => {
 			return "Web preview";
 		case "hyperframes":
 			return "HyperFrames";
+		case "lottie":
+			return "Lottie animation";
 		default:
 			return "Artifact";
 	}
@@ -66,7 +69,8 @@ const RuntimeArtifactViewer: React.FC<{
 	const [mode, setMode] = useState<ArtifactMode>(
 		artifact.type === "html" ||
 			artifact.type === "url" ||
-			artifact.type === "hyperframes"
+			artifact.type === "hyperframes" ||
+			artifact.type === "lottie"
 			? "preview"
 			: "edit",
 	);
@@ -90,6 +94,9 @@ const RuntimeArtifactViewer: React.FC<{
 			if (artifact.type === "url") return "preview";
 			if (artifact.type === "html" || artifact.type === "hyperframes") {
 				return current === "code" ? "code" : "preview";
+			}
+			if (artifact.type === "lottie") {
+				return current === "edit" ? "edit" : "preview";
 			}
 			return current === "preview" ? "preview" : "edit";
 		});
@@ -145,7 +152,7 @@ const RuntimeArtifactViewer: React.FC<{
 							</Button>
 						</div>
 					) : null}
-					{artifact.type === "markdown" ? (
+					{artifact.type === "markdown" || artifact.type === "lottie" ? (
 						<div className="flex rounded-lg border border-border/70 bg-background/70 p-0.5 shadow-sm">
 							<Button
 								type="button"
@@ -229,6 +236,12 @@ const RuntimeArtifactViewer: React.FC<{
 					)
 				) : artifact.type === "hyperframes" && mode === "preview" ? (
 					<HyperframesArtifact
+						content={draft}
+						identifier={artifact.identifier}
+						title={title}
+					/>
+				) : artifact.type === "lottie" && mode === "preview" ? (
+					<LottieArtifact
 						content={draft}
 						identifier={artifact.identifier}
 						title={title}

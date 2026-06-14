@@ -11,6 +11,7 @@ export const ARTIFACT_TYPES = [
 	"markdown",
 	"text",
 	"hyperframes",
+	"lottie",
 ] as const;
 export type ArtifactType = (typeof ARTIFACT_TYPES)[number];
 
@@ -86,6 +87,10 @@ const normalizeArtifactType = (value: string | undefined): ArtifactType => {
 		case "application/hyperframes":
 		case "hyperframes":
 			return "hyperframes";
+		case "application/lottie":
+		case "lottie":
+		case "bodymovin":
+			return "lottie";
 		default:
 			return isArtifactType(value) ? value : DEFAULT_ARTIFACT_TYPE;
 	}
