@@ -1,0 +1,1310 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`flows-integrations registered contracts > registers every integrations step contract 1`] = `
+[
+  "co-agent-feature",
+  "document-convert-feature",
+  "documents-feature",
+  "documents-fs-feature",
+  "embedded-chat-feature",
+  "fs-feature",
+  "hyperframes-feature",
+  "pdf-generate-feature",
+]
+`;
+
+exports[`flows-integrations registered contracts > registers every integrations step contract 2`] = `
+[
+  {
+    "config": {
+      "defaultStateMapping": {
+        "messages": "messages",
+        "tools": "tools",
+      },
+      "description": "Enable current-tab co-agent browser tooling and co-agent instructions.",
+      "enabledByDefault": false,
+      "feature": {
+        "graphTypes": [
+          "foundation",
+          "agent",
+        ],
+        "id": "step-co-agent-feature",
+        "inputs": [
+          {
+            "description": "Current chat messages",
+            "name": "messages",
+            "required": true,
+            "type": "Message[]",
+          },
+          {
+            "description": "Current available tools",
+            "name": "tools",
+            "required": true,
+            "type": "Tool[]",
+          },
+        ],
+        "outputs": [
+          {
+            "description": "Messages with co-agent instructions.",
+            "name": "messages",
+            "type": "Message[]",
+          },
+          {
+            "description": "Tools extended with current-tab co-agent controls.",
+            "name": "tools",
+            "type": "Tool[]",
+          },
+        ],
+        "type": "feature",
+      },
+    },
+    "executable": true,
+    "id": "co-agent-feature",
+    "name": "co-agent-feature",
+  },
+  {
+    "config": {
+      "defaultStateMapping": {
+        "messages": "messages",
+        "tools": "tools",
+      },
+      "description": "Enable document conversion tools: inspect PDF metadata, extract text from PDFs, render PDFs as images, and extract text or tables from Excel files.",
+      "enabledByDefault": false,
+      "feature": {
+        "graphTypes": [
+          "foundation",
+        ],
+        "id": "step-document-convert-feature",
+        "inputs": [
+          {
+            "description": "Current chat messages",
+            "name": "messages",
+            "required": true,
+            "type": "Message[]",
+          },
+          {
+            "description": "Current available tools",
+            "name": "tools",
+            "required": true,
+            "type": "Tool[]",
+          },
+        ],
+        "outputs": [
+          {
+            "description": "Messages with document conversion instructions",
+            "name": "messages",
+            "type": "Message[]",
+          },
+          {
+            "description": "Tools extended with pdf_metadata, pdf_to_text, pdf_to_image, and excel_to_text",
+            "name": "tools",
+            "type": "Tool[]",
+          },
+        ],
+        "type": "feature",
+      },
+    },
+    "executable": true,
+    "id": "document-convert-feature",
+    "name": "document-convert-feature",
+  },
+  {
+    "config": {
+      "defaultStateMapping": {
+        "messages": "messages",
+        "tools": "tools",
+      },
+      "description": "[Legacy] Enable document workspace tools for searching, reading, writing, editing, moving, and removing documents. Prefer documents-fs-feature.",
+      "enabledByDefault": false,
+      "feature": {
+        "graphTypes": [
+          "foundation",
+        ],
+        "id": "step-documents-feature",
+        "inputs": [
+          {
+            "description": "Current chat messages",
+            "name": "messages",
+            "required": true,
+            "type": "Message[]",
+          },
+          {
+            "description": "Current available tools",
+            "name": "tools",
+            "required": true,
+            "type": "Tool[]",
+          },
+        ],
+        "outputs": [
+          {
+            "description": "Messages with documents feature instruction",
+            "name": "messages",
+            "type": "Message[]",
+          },
+          {
+            "description": "Tools extended with documents toolset",
+            "name": "tools",
+            "type": "Tool[]",
+          },
+        ],
+        "type": "feature",
+      },
+    },
+    "executable": true,
+    "id": "documents-feature",
+    "name": "documents-feature",
+  },
+  {
+    "config": {
+      "defaultStateMapping": {
+        "messages": "messages",
+        "tools": "tools",
+      },
+      "description": "Enable filesystem-style document tools (v2): glob, grep, read, write, edit, mkdir, remove, ls — modeled after Claude Code's file tools.",
+      "enabledByDefault": false,
+      "feature": {
+        "graphTypes": [
+          "foundation",
+        ],
+        "id": "step-documents-fs-feature",
+        "inputs": [
+          {
+            "description": "Current chat messages",
+            "name": "messages",
+            "required": true,
+            "type": "Message[]",
+          },
+          {
+            "description": "Current available tools",
+            "name": "tools",
+            "required": true,
+            "type": "Tool[]",
+          },
+        ],
+        "outputs": [
+          {
+            "description": "Messages with document filesystem instructions",
+            "name": "messages",
+            "type": "Message[]",
+          },
+          {
+            "description": "Tools extended with fs toolset (v2)",
+            "name": "tools",
+            "type": "Tool[]",
+          },
+        ],
+        "type": "feature",
+      },
+    },
+    "executable": true,
+    "id": "documents-fs-feature",
+    "name": "documents-fs-feature",
+  },
+  {
+    "config": {
+      "defaultStateMapping": {
+        "messages": "messages",
+        "tools": "tools",
+      },
+      "description": "Enable EmbeddedChat current-page browser tools and concise page-chat instructions.",
+      "enabledByDefault": false,
+      "feature": {
+        "graphTypes": [
+          "foundation",
+          "agent",
+        ],
+        "id": "step-embedded-chat-feature",
+        "inputs": [
+          {
+            "description": "Current chat messages",
+            "name": "messages",
+            "required": true,
+            "type": "Message[]",
+          },
+          {
+            "description": "Current available tools",
+            "name": "tools",
+            "required": true,
+            "type": "Tool[]",
+          },
+        ],
+        "outputs": [
+          {
+            "description": "Messages with EmbeddedChat browser instructions.",
+            "name": "messages",
+            "type": "Message[]",
+          },
+          {
+            "description": "Tools extended with current-page browser controls.",
+            "name": "tools",
+            "type": "Tool[]",
+          },
+        ],
+        "type": "feature",
+      },
+    },
+    "executable": true,
+    "id": "embedded-chat-feature",
+    "name": "embedded-chat-feature",
+  },
+  {
+    "config": {
+      "defaultStateMapping": {
+        "messages": "messages",
+        "tools": "tools",
+      },
+      "description": "Enable filesystem tools with access to both /documents and /workspaces namespaces: glob, grep, read, write, edit, mkdir, remove, ls.",
+      "enabledByDefault": true,
+      "feature": {
+        "graphTypes": [
+          "foundation",
+        ],
+        "id": "step-fs-feature",
+        "inputs": [
+          {
+            "description": "Current chat messages",
+            "name": "messages",
+            "required": true,
+            "type": "Message[]",
+          },
+          {
+            "description": "Current available tools",
+            "name": "tools",
+            "required": true,
+            "type": "Tool[]",
+          },
+        ],
+        "outputs": [
+          {
+            "description": "Messages with filesystem namespace instructions",
+            "name": "messages",
+            "type": "Message[]",
+          },
+          {
+            "description": "Tools extended with fs toolset (/documents + /workspaces)",
+            "name": "tools",
+            "type": "Tool[]",
+          },
+        ],
+        "type": "feature",
+      },
+      "version": "2.0.0",
+    },
+    "executable": true,
+    "id": "fs-feature",
+    "name": "fs-feature",
+  },
+  {
+    "config": {
+      "defaultStateMapping": {
+        "messages": "messages",
+        "tools": "tools",
+      },
+      "description": "Enable filesystem tools: glob, grep, read, write, edit, mkdir, remove, ls.",
+      "enabledByDefault": false,
+      "version": "1.0.0",
+    },
+    "executable": true,
+    "id": "fs-feature",
+    "name": "fs-feature",
+  },
+  {
+    "config": {
+      "configParams": [
+        {
+          "default": "/workspaces",
+          "description": "Root path under which HyperFrames projects are stored.",
+          "key": "rootPath",
+          "type": "string",
+        },
+        {
+          "default": [
+            "/documents",
+            "/workspaces",
+          ],
+          "description": "Root path prefixes searched when rewriting local image references to data URLs for iframe rendering.",
+          "key": "resourceRoots",
+          "type": "array",
+        },
+      ],
+      "defaultStateMapping": {
+        "messages": "messages",
+        "tools": "tools",
+      },
+      "description": "Create browser-rendered video drafts with animated scenes and previews using HyperFrames compositions.",
+      "enabledByDefault": false,
+      "feature": {
+        "graphTypes": [
+          "foundation",
+        ],
+        "id": "step-hyperframes-feature",
+        "inputs": [
+          {
+            "description": "Current chat messages",
+            "name": "messages",
+            "required": true,
+            "type": "Message[]",
+          },
+          {
+            "description": "Current available tools",
+            "name": "tools",
+            "required": true,
+            "type": "Tool[]",
+          },
+        ],
+        "outputs": [
+          {
+            "description": "Messages with HyperFrames composition instructions and Memorall path context.",
+            "name": "messages",
+            "type": "Message[]",
+          },
+          {
+            "description": "HyperFrames tools: write, validate, show, capture.",
+            "name": "tools",
+            "type": "Tool[]",
+          },
+        ],
+        "type": "feature",
+      },
+      "version": "2.0.0",
+    },
+    "executable": true,
+    "id": "hyperframes-feature",
+    "name": "hyperframes-feature",
+  },
+  {
+    "config": {
+      "configParams": [
+        {
+          "description": "Root path under which HyperFrames projects are stored.",
+          "key": "rootPath",
+          "type": "string",
+        },
+        {
+          "description": "Root path prefixes searched when rewriting local image references to data URLs for iframe rendering.",
+          "key": "resourceRoots",
+          "type": "array",
+        },
+      ],
+      "defaultStateMapping": {
+        "messages": "messages",
+        "tools": "tools",
+      },
+      "description": "Create browser-rendered video drafts with animated scenes and previews using HyperFrames compositions.",
+      "enabledByDefault": false,
+      "feature": {
+        "graphTypes": [
+          "foundation",
+        ],
+        "id": "step-hyperframes-feature",
+        "inputs": [
+          {
+            "description": "Current chat messages",
+            "name": "messages",
+            "required": true,
+            "type": "Message[]",
+          },
+          {
+            "description": "Current available tools",
+            "name": "tools",
+            "required": true,
+            "type": "Tool[]",
+          },
+        ],
+        "outputs": [
+          {
+            "description": "Messages with HyperFrames composition instructions.",
+            "name": "messages",
+            "type": "Message[]",
+          },
+          {
+            "description": "HyperFrames tools: write, validate, show, capture.",
+            "name": "tools",
+            "type": "Tool[]",
+          },
+        ],
+        "type": "feature",
+      },
+      "version": "1.0.0",
+    },
+    "executable": true,
+    "id": "hyperframes-feature",
+    "name": "hyperframes-feature",
+  },
+  {
+    "config": {
+      "defaultStateMapping": {
+        "messages": "messages",
+        "tools": "tools",
+      },
+      "description": "Enable PDF generation tool: create a PDF from a URL, Markdown text, or HTML and save it to /documents.",
+      "enabledByDefault": false,
+      "feature": {
+        "graphTypes": [
+          "foundation",
+        ],
+        "id": "step-pdf-generate-feature",
+        "inputs": [
+          {
+            "description": "Current chat messages",
+            "name": "messages",
+            "required": true,
+            "type": "Message[]",
+          },
+          {
+            "description": "Current available tools",
+            "name": "tools",
+            "required": true,
+            "type": "Tool[]",
+          },
+        ],
+        "outputs": [
+          {
+            "description": "Messages with PDF generation instructions",
+            "name": "messages",
+            "type": "Message[]",
+          },
+          {
+            "description": "Tools extended with pdf_generate",
+            "name": "tools",
+            "type": "Tool[]",
+          },
+        ],
+        "type": "feature",
+      },
+    },
+    "executable": true,
+    "id": "pdf-generate-feature",
+    "name": "pdf-generate-feature",
+  },
+]
+`;
+
+exports[`flows-integrations registered contracts > registers every integrations tool contract 1`] = `
+[
+  "co_agent_click",
+  "co_agent_input",
+  "co_agent_move",
+  "co_agent_observe",
+  "co_agent_query",
+  "co_agent_scroll",
+  "container_web_access",
+  "container_web_access_v2",
+  "doc_edit",
+  "doc_move",
+  "doc_read",
+  "doc_remove",
+  "doc_search",
+  "doc_write",
+  "document_fs_edit",
+  "document_fs_glob",
+  "document_fs_grep",
+  "document_fs_ls",
+  "document_fs_mkdir",
+  "document_fs_read",
+  "document_fs_remove",
+  "document_fs_write",
+  "excel_to_text",
+  "js_execute",
+  "pdf_generate",
+  "pdf_metadata",
+  "pdf_to_image",
+  "pdf_to_text",
+  "web_fetch_image",
+  "web_screenshot",
+]
+`;
+
+exports[`flows-integrations registered contracts > registers every integrations tool contract 2`] = `
+[
+  {
+    "description": "Safely click a selected element in the active co-agent tab. High-impact or sensitive targets are blocked and require user action.",
+    "name": "co_agent_click",
+    "parameters": {
+      "properties": {
+        "index": {
+          "type": "number",
+        },
+        "message": {
+          "type": "string",
+        },
+        "selector": {
+          "type": "string",
+        },
+      },
+      "type": "object",
+    },
+  },
+  {
+    "description": "Safely type text into a selected text input or textarea in the active co-agent tab. Sensitive fields are blocked.",
+    "name": "co_agent_input",
+    "parameters": {
+      "properties": {
+        "index": {
+          "type": "number",
+        },
+        "message": {
+          "type": "string",
+        },
+        "selector": {
+          "type": "string",
+        },
+        "value": {
+          "type": "string",
+        },
+      },
+      "type": "object",
+    },
+  },
+  {
+    "description": "Move the visible co-agent cursor to a selector/index or viewport coordinates. Optionally scroll the element into view.",
+    "name": "co_agent_move",
+    "parameters": {
+      "properties": {
+        "index": {
+          "type": "number",
+        },
+        "message": {
+          "type": "string",
+        },
+        "mode": {
+          "type": "string",
+        },
+        "scrollIntoView": {
+          "type": "boolean",
+        },
+        "selector": {
+          "type": "string",
+        },
+        "x": {
+          "type": "number",
+        },
+        "y": {
+          "type": "number",
+        },
+      },
+      "type": "object",
+    },
+  },
+  {
+    "description": "Read page context with a simple scope. Default metadata is cheap. Use selector for hovered/focused targets, selection for selected text, viewport for current screen, and page only for whole-page questions. Set outputFormat:'html' to get elements with embedded data-selector attributes — use those selector values directly with co_agent_move to visually point the cursor at matching elements.",
+    "name": "co_agent_observe",
+    "parameters": {
+      "properties": {
+        "from": {
+          "type": "number",
+        },
+        "index": {
+          "type": "number",
+        },
+        "maxChars": {
+          "type": "number",
+        },
+        "outputFormat": {
+          "type": "string",
+        },
+        "scope": {
+          "type": "string",
+        },
+        "selector": {
+          "type": "string",
+        },
+      },
+      "type": "object",
+    },
+  },
+  {
+    "description": "Query DOM elements in the active co-agent tab. Returns visible state, rects, stable selectors, text/value, and input capability.",
+    "name": "co_agent_query",
+    "parameters": {
+      "properties": {
+        "maxResults": {
+          "type": "number",
+        },
+        "selector": {
+          "type": "string",
+        },
+      },
+      "type": "object",
+    },
+  },
+  {
+    "description": "Scroll the active co-agent tab window or a selected scrollable element.",
+    "name": "co_agent_scroll",
+    "parameters": {
+      "properties": {
+        "behavior": {
+          "type": "string",
+        },
+        "deltaX": {
+          "type": "number",
+        },
+        "deltaY": {
+          "type": "number",
+        },
+        "index": {
+          "type": "number",
+        },
+        "left": {
+          "type": "number",
+        },
+        "message": {
+          "type": "string",
+        },
+        "selector": {
+          "type": "string",
+        },
+        "top": {
+          "type": "number",
+        },
+      },
+      "type": "object",
+    },
+  },
+  {
+    "description": "Access a running sandbox container server. Set useIframe=true to render web UI pages and return the rendered HTML. Omit useIframe (or set false) to call API endpoints and return their response body.",
+    "name": "container_web_access",
+    "parameters": {
+      "properties": {
+        "body": {
+          "type": "string",
+        },
+        "headers": {
+          "additionalProperties": {
+            "type": "string",
+          },
+          "type": "object",
+        },
+        "method": {
+          "enum": [
+            "GET",
+            "POST",
+            "PUT",
+            "PATCH",
+            "DELETE",
+            "HEAD",
+            "OPTIONS",
+          ],
+          "type": "string",
+        },
+        "url": {
+          "type": "string",
+        },
+        "useIframe": {
+          "type": "boolean",
+        },
+      },
+      "required": [
+        "url",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "Access a running sandbox container server. Set useIframe=true to render web UI pages in the current thread and return rendered HTML. Omit useIframe (or set false) only for API-style endpoints and return the API response body.",
+    "name": "container_web_access_v2",
+    "parameters": {
+      "properties": {
+        "body": {
+          "type": "string",
+        },
+        "headers": {
+          "additionalProperties": {
+            "type": "string",
+          },
+          "type": "object",
+        },
+        "method": {
+          "enum": [
+            "GET",
+            "POST",
+            "PUT",
+            "PATCH",
+            "DELETE",
+            "HEAD",
+            "OPTIONS",
+          ],
+          "type": "string",
+        },
+        "timeoutMs": {
+          "type": "number",
+        },
+        "url": {
+          "type": "string",
+        },
+        "useIframe": {
+          "type": "boolean",
+        },
+      },
+      "required": [
+        "url",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "Edit a document file by replacing text. Finds old_string in the file and replaces it with new_string. Only works on text-based files.",
+    "name": "doc_edit",
+    "parameters": {
+      "properties": {
+        "file_path": {
+          "type": "string",
+        },
+        "new_string": {
+          "type": "string",
+        },
+        "old_string": {
+          "type": "string",
+        },
+        "replace_all": {
+          "type": "boolean",
+        },
+      },
+      "required": [
+        "file_path",
+        "old_string",
+        "new_string",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "Move or rename a document file or folder. Provide new_name to rename, target_folder to move, or both to move and rename.",
+    "name": "doc_move",
+    "parameters": {
+      "properties": {
+        "new_name": {
+          "type": "string",
+        },
+        "source_path": {
+          "type": "string",
+        },
+        "target_folder": {
+          "type": "string",
+        },
+      },
+      "required": [
+        "source_path",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "Read document file content with line numbers. Returns cat -n style output with a header showing total lines and range. Supports text/markdown/other and best-effort text extraction for PDF/Excel.",
+    "name": "doc_read",
+    "parameters": {
+      "properties": {
+        "file_path": {
+          "type": "string",
+        },
+        "limit": {
+          "type": "number",
+        },
+        "offset": {
+          "type": "number",
+        },
+      },
+      "required": [
+        "file_path",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "Delete a document file or folder. Folders are deleted recursively.",
+    "name": "doc_remove",
+    "parameters": {
+      "properties": {
+        "path": {
+          "type": "string",
+        },
+      },
+      "required": [
+        "path",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "Search document files and content. Without a pattern, lists files with size/type info. With a pattern, searches text/PDF/Excel content (best-effort) and returns matching lines in ripgrep format. Large or unsupported binaries fall back to path-only matching with a note.",
+    "name": "doc_search",
+    "parameters": {
+      "properties": {
+        "case_sensitive": {
+          "type": "boolean",
+        },
+        "file_pattern": {
+          "type": "string",
+        },
+        "max_results": {
+          "type": "number",
+        },
+        "path": {
+          "type": "string",
+        },
+        "pattern": {
+          "type": "string",
+        },
+      },
+      "type": "object",
+    },
+  },
+  {
+    "description": "Create or overwrite a document file. If the file exists, updates its content. If new, creates it (with parent folders by default). Only supports text-based files; PDF/Excel are not supported for writing. After using this tool, assistant messages should mention only the created or updated file path, not the file content.",
+    "name": "doc_write",
+    "parameters": {
+      "properties": {
+        "content": {
+          "type": "string",
+        },
+        "create_folders": {
+          "type": "boolean",
+        },
+        "file_path": {
+          "type": "string",
+        },
+      },
+      "required": [
+        "file_path",
+        "content",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "Edit a text file by replacing old_string with new_string. By default only the first occurrence is replaced; set replace_all to true to replace every occurrence. Fails if old_string is not found.",
+    "name": "document_fs_edit",
+    "parameters": {
+      "properties": {
+        "file_path": {
+          "type": "string",
+        },
+        "new_string": {
+          "type": "string",
+        },
+        "old_string": {
+          "type": "string",
+        },
+        "replace_all": {
+          "type": "boolean",
+        },
+      },
+      "required": [
+        "file_path",
+        "old_string",
+        "new_string",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "Find paths that match a glob pattern. Supports common glob syntax including **, *, ?, {a,b}, [abc], [!abc], and extglob groups like @(a|b). For ambiguous asset/name searches, combine likely names and extensions in one pattern, e.g. **/*{icon,logo,brand}*.{png,jpg,jpeg,svg,webp,ico}, instead of making repeated narrow calls. Returns matching paths.",
+    "name": "document_fs_glob",
+    "parameters": {
+      "properties": {
+        "path": {
+          "type": "string",
+        },
+        "pattern": {
+          "type": "string",
+        },
+      },
+      "required": [
+        "pattern",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "Search file content with a JavaScript regex pattern. Returns results in grep-style "file:line:content" format. Supports context lines, minimatch glob filtering, and output modes. Use one broad regex and one broad glob when possible, e.g. pattern="icon|logo|brand" glob="**/*.{md,json,svg,png,jpg}".",
+    "name": "document_fs_grep",
+    "parameters": {
+      "properties": {
+        "case_sensitive": {
+          "type": "boolean",
+        },
+        "context": {
+          "type": "number",
+        },
+        "glob": {
+          "type": "string",
+        },
+        "max_results": {
+          "type": "number",
+        },
+        "output_mode": {
+          "enum": [
+            "content",
+            "files_with_matches",
+            "count",
+          ],
+          "type": "string",
+        },
+        "path": {
+          "type": "string",
+        },
+        "pattern": {
+          "type": "string",
+        },
+      },
+      "required": [
+        "pattern",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "List files and directories. Without recursive, shows only immediate children. With recursive: true, shows the full subtree.",
+    "name": "document_fs_ls",
+    "parameters": {
+      "properties": {
+        "path": {
+          "type": "string",
+        },
+        "recursive": {
+          "type": "boolean",
+        },
+      },
+      "type": "object",
+    },
+  },
+  {
+    "description": "Create a directory. By default creates all missing parent directories. Does nothing if the directory already exists.",
+    "name": "document_fs_mkdir",
+    "parameters": {
+      "properties": {
+        "path": {
+          "type": "string",
+        },
+        "recursive": {
+          "type": "boolean",
+        },
+      },
+      "required": [
+        "path",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "Read a file with line numbers (cat -n style). Returns a header with total lines and the selected range. Use offset and limit to read large files in chunks.",
+    "name": "document_fs_read",
+    "parameters": {
+      "properties": {
+        "file_path": {
+          "type": "string",
+        },
+        "limit": {
+          "type": "number",
+        },
+        "offset": {
+          "type": "number",
+        },
+      },
+      "required": [
+        "file_path",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "Delete a file or directory. For non-empty directories, set recursive: true to delete all contents.",
+    "name": "document_fs_remove",
+    "parameters": {
+      "properties": {
+        "path": {
+          "type": "string",
+        },
+        "recursive": {
+          "type": "boolean",
+        },
+      },
+      "required": [
+        "path",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "Create or overwrite a text file. If the file exists its content is replaced. Parent directories are created automatically by default. After using this tool, assistant messages should mention only the created or updated file path, not the file content.",
+    "name": "document_fs_write",
+    "parameters": {
+      "properties": {
+        "content": {
+          "type": "string",
+        },
+        "create_dirs": {
+          "type": "boolean",
+        },
+        "file_path": {
+          "type": "string",
+        },
+      },
+      "required": [
+        "file_path",
+        "content",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "Extract text from an Excel file in /documents and return it or save it to a new file. Supports Markdown table or CSV output with optional sheet filtering.",
+    "name": "excel_to_text",
+    "parameters": {
+      "properties": {
+        "format": {
+          "enum": [
+            "markdown",
+            "csv",
+          ],
+          "type": "string",
+        },
+        "output_path": {
+          "type": "string",
+        },
+        "sheets": {
+          "items": {
+            "type": "string",
+          },
+          "type": "array",
+        },
+        "source_path": {
+          "type": "string",
+        },
+      },
+      "required": [
+        "source_path",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "Execute JavaScript from \`code\` in an extension sandbox page (CSP-safe). Allowed APIs: console (log/info/warn/error/debug), Math/Number/String/Boolean/Array/Object/Date/JSON/RegExp/Promise, in-memory cookie/localStorage/sessionStorage, fetch/XMLHttpRequest with credentials blocked (credentials forced to omit, Cookie/Authorization headers stripped). Returns JSON: status (ok|error|timeout), result (string on ok), logs [{level,message}] (keeps latest 20 by default), durationMs, truncatedLogs, and error/stack when status=error. IMPORTANT: Always use console.log(...) to report progress and the final answer so it appears in logs; also \`return String(...)\` for a definitive result value.",
+    "name": "js_execute",
+    "parameters": {
+      "properties": {
+        "code": {
+          "type": "string",
+        },
+        "maxLogEntries": {
+          "type": "number",
+        },
+        "timeoutMs": {
+          "type": "number",
+        },
+      },
+      "required": [
+        "code",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "Generate a PDF from a web URL, markdown text, or HTML string and save it to /documents. Returns the saved file path and page count.",
+    "name": "pdf_generate",
+    "parameters": {
+      "properties": {
+        "content": {
+          "type": "string",
+        },
+        "options": {
+          "properties": {
+            "margin_mm": {
+              "type": "number",
+            },
+            "orientation": {
+              "enum": [
+                "portrait",
+                "landscape",
+              ],
+              "type": "string",
+            },
+            "page_size": {
+              "enum": [
+                "a4",
+                "letter",
+                "legal",
+              ],
+              "type": "string",
+            },
+          },
+          "type": "object",
+        },
+        "output_path": {
+          "type": "string",
+        },
+        "source_type": {
+          "enum": [
+            "url",
+            "markdown",
+            "html",
+          ],
+          "type": "string",
+        },
+      },
+      "required": [
+        "source_type",
+        "content",
+        "output_path",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "Read PDF metadata from a file in /documents, including total pages and whether image content appears on each page.",
+    "name": "pdf_metadata",
+    "parameters": {
+      "properties": {
+        "source_path": {
+          "type": "string",
+        },
+      },
+      "required": [
+        "source_path",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "Render PDF pages or extract embedded page images from /documents as PNG base64 data URLs and provide them to the model as OpenAI-compatible image message content.",
+    "name": "pdf_to_image",
+    "parameters": {
+      "properties": {
+        "detail": {
+          "enum": [
+            "auto",
+            "low",
+            "high",
+          ],
+          "type": "string",
+        },
+        "mode": {
+          "enum": [
+            "page",
+            "images",
+          ],
+          "type": "string",
+        },
+        "page_range": {
+          "properties": {
+            "end": {
+              "type": "number",
+            },
+            "start": {
+              "type": "number",
+            },
+          },
+          "required": [
+            "start",
+            "end",
+          ],
+          "type": "object",
+        },
+        "prompt": {
+          "type": "string",
+        },
+        "scale": {
+          "type": "number",
+        },
+        "source_path": {
+          "type": "string",
+        },
+      },
+      "required": [
+        "source_path",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "Extract text from a PDF file in /documents and return it or save it to a new file. Supports plain text or Markdown output and optional page range extraction.",
+    "name": "pdf_to_text",
+    "parameters": {
+      "properties": {
+        "format": {
+          "enum": [
+            "text",
+            "markdown",
+          ],
+          "type": "string",
+        },
+        "output_path": {
+          "type": "string",
+        },
+        "page_range": {
+          "properties": {
+            "end": {
+              "type": "number",
+            },
+            "start": {
+              "type": "number",
+            },
+          },
+          "required": [
+            "start",
+            "end",
+          ],
+          "type": "object",
+        },
+        "source_path": {
+          "type": "string",
+        },
+      },
+      "required": [
+        "source_path",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "Fetch an image from a URL and save it to /documents. Uses an active web session when available, otherwise downloads directly. Returns the stored file path.",
+    "name": "web_fetch_image",
+    "parameters": {
+      "properties": {
+        "file_path": {
+          "type": "string",
+        },
+        "sessionId": {
+          "type": "string",
+        },
+        "url": {
+          "type": "string",
+        },
+      },
+      "required": [
+        "url",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "Capture a PNG screenshot of an active web session or a URL and save it to /documents. Returns the saved file path and image dimensions.",
+    "name": "web_screenshot",
+    "parameters": {
+      "properties": {
+        "browserMode": {
+          "enum": [
+            "iframe",
+            "tab",
+            "window",
+          ],
+          "type": "string",
+        },
+        "file_path": {
+          "type": "string",
+        },
+        "sessionId": {
+          "type": "string",
+        },
+        "timeoutMs": {
+          "type": "number",
+        },
+        "url": {
+          "type": "string",
+        },
+      },
+      "type": "object",
+    },
+  },
+]
+`;

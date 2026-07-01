@@ -2,10 +2,11 @@
 import {
 	existsSync,
 	mkdirSync,
+	readdirSync,
 	readFileSync,
 	writeFileSync,
 } from 'fs';
-import { dirname, join } from 'path';
+import { dirname, join, relative } from 'path';
 
 const defaultDistDirs = [
 	'dist/chromium',
@@ -17,6 +18,8 @@ const defaultDistDirs = [
 const distDirs = process.argv.slice(2);
 const targets = distDirs.length > 0 ? distDirs : defaultDistDirs;
 const contentScriptCssPattern = 'content_scripts/*.css';
+const unicodeNoncharacterPattern =
+	/[\uFDD0-\uFDEF\uFFFE\uFFFF]|[\uD83F\uD87F\uD8BF\uD8FF\uD93F\uD97F\uD9BF\uD9FF\uDA3F\uDA7F\uDABF\uDAFF\uDB3F\uDB7F\uDBBF\uDBFF][\uDFFE\uDFFF]/g;
 
 function addWebAccessibleContentScriptCss(manifest) {
 	if (manifest.manifest_version === 3) {
@@ -76,6 +79,67 @@ function expectedContentScriptCssRefs(manifest) {
 	return [...refs].sort();
 }
 
+function unicodeEscapeForCodePoint(codePoint) {
+	if (codePoint <= 0xffff) {
+		return `\\u${codePoint.toString(16).toUpperCase().padStart(4, '0')}`;
+	}
+
+	const offset = codePoint - 0x10000;
+	const high = 0xd800 + (offset >> 10);
+	const low = 0xdc00 + (offset & 0x3ff);
+
+	return `\\u${high.toString(16).toUpperCase()}\\u${low.toString(16).toUpperCase()}`;
+}
+
+function escapeJavaScriptNoncharacters(source) {
+	let escapedCount = 0;
+
+	const escaped = source.replace(unicodeNoncharacterPattern, (char) => {
+		escapedCount++;
+		return unicodeEscapeForCodePoint(char.codePointAt(0));
+	});
+
+	return { escaped, escapedCount };
+}
+
+function builtJsRefs(distDir, dir = distDir) {
+	const refs = [];
+
+	for (const entry of readdirSync(dir, { withFileTypes: true })) {
+		const entryPath = join(dir, entry.name);
+
+		if (entry.isDirectory()) {
+			refs.push(...builtJsRefs(distDir, entryPath));
+			continue;
+		}
+
+		if (entry.isFile() && entry.name.endsWith('.js')) {
+			refs.push(relative(distDir, entryPath).replaceAll('\\', '/'));
+		}
+	}
+
+	return refs.sort();
+}
+
+function sanitizeExtensionJs(distDir) {
+	let escapedCount = 0;
+	const sanitizedRefs = [];
+
+	for (const jsRef of builtJsRefs(distDir)) {
+		const jsPath = join(distDir, ...jsRef.split('/'));
+
+		const source = readFileSync(jsPath, 'utf8');
+		const result = escapeJavaScriptNoncharacters(source);
+		if (result.escapedCount === 0) continue;
+
+		writeFileSync(jsPath, result.escaped, 'utf8');
+		escapedCount += result.escapedCount;
+		sanitizedRefs.push(`${jsRef} (${result.escapedCount})`);
+	}
+
+	return { escapedCount, sanitizedRefs };
+}
+
 function ensureContentScriptAssets(distDir) {
 	const manifestPath = join(distDir, 'manifest.json');
 	if (!existsSync(manifestPath)) return false;
@@ -104,10 +168,24 @@ function ensureContentScriptAssets(distDir) {
 		writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + '\n');
 	}
 
-	if (createdCount > 0 || manifestChanged) {
+	const jsSanitization = sanitizeExtensionJs(distDir);
+
+	if (
+		createdCount > 0 ||
+		manifestChanged ||
+		jsSanitization.escapedCount > 0
+	) {
 		console.log(
-			`✅ Content script assets ready in ${distDir} (${createdCount} CSS sidecar${createdCount === 1 ? '' : 's'} created)`,
+			`✅ Content script assets ready in ${distDir} (${createdCount} CSS sidecar${createdCount === 1 ? '' : 's'} created, ${jsSanitization.escapedCount} JS noncharacter${jsSanitization.escapedCount === 1 ? '' : 's'} escaped)`,
 		);
+		if (jsSanitization.sanitizedRefs.length > 0) {
+			const listedRefs = jsSanitization.sanitizedRefs.slice(0, 8);
+			const remainingCount =
+				jsSanitization.sanitizedRefs.length - listedRefs.length;
+			console.log(
+				`   Escaped noncharacters in ${jsSanitization.sanitizedRefs.length} JS file${jsSanitization.sanitizedRefs.length === 1 ? '' : 's'}: ${listedRefs.join(', ')}${remainingCount > 0 ? `, ...and ${remainingCount} more` : ''}`,
+			);
+		}
 	} else {
 		console.log(`✅ Content script assets already ready in ${distDir}`);
 	}

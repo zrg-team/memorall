@@ -1,0 +1,762 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`flows-memory registered contracts > registers every memory step contract 1`] = `
+[
+  "active-memory-feature",
+  "analyze-query",
+  "citations",
+  "context-llm-retrieve",
+  "context-quick-retrieve",
+  "context-smart-retrieve",
+  "context-to-system",
+  "edge-enrichment",
+  "entities-facts-citation",
+  "entities-facts-to-context",
+  "entity-extraction",
+  "entity-resolution",
+  "fact-extraction",
+  "fact-extraction-v2",
+  "fact-resolution",
+  "knowledge-database-save",
+  "knowledge-retrieval",
+  "llm-retrieve",
+  "load-entities",
+  "load-facts",
+  "quick-retrieve",
+  "smart-retrieve",
+  "structmem-consolidation",
+  "structmem-event-extraction",
+  "structmem-load-related-events",
+  "structmem-retrieve",
+  "structmem-save-consolidation",
+  "structmem-save-event",
+  "temporal-extraction",
+]
+`;
+
+exports[`flows-memory registered contracts > registers every memory step contract 2`] = `
+[
+  {
+    "config": {
+      "defaultStateMapping": {
+        "graphId": "graphId",
+        "messages": "messages",
+        "tools": "tools",
+      },
+      "description": "Enable typed active-memory tools for remembering, retrieving, updating, removing, and explaining durable memories in the current topic graph.",
+      "enabledByDefault": false,
+      "feature": {
+        "graphTypes": [
+          "foundation",
+          "agent",
+        ],
+        "id": "step-active-memory-feature",
+        "inputs": [
+          {
+            "description": "Current chat messages",
+            "name": "messages",
+            "required": true,
+            "type": "Message[]",
+          },
+          {
+            "description": "Current available tools",
+            "name": "tools",
+            "required": true,
+            "type": "Tool[]",
+          },
+        ],
+        "outputs": [
+          {
+            "description": "Messages with active-memory instructions.",
+            "name": "messages",
+            "type": "Message[]",
+          },
+          {
+            "description": "Tools extended with active-memory operations.",
+            "name": "tools",
+            "type": "Tool[]",
+          },
+        ],
+        "type": "feature",
+      },
+    },
+    "executable": true,
+    "id": "active-memory-feature",
+    "name": "active-memory-feature",
+  },
+  {
+    "config": undefined,
+    "executable": true,
+    "id": "analyze-query",
+    "name": "analyze-query",
+  },
+  {
+    "config": {
+      "feature": {
+        "graphTypes": [
+          "foundation",
+        ],
+        "id": "step-citations",
+        "inputs": [
+          {
+            "description": "Current chat messages",
+            "name": "messages",
+            "required": true,
+            "type": "Message[]",
+          },
+          {
+            "description": "Current available tools",
+            "name": "tools",
+            "required": true,
+            "type": "Tool[]",
+          },
+        ],
+        "outputs": [
+          {
+            "description": "Messages updated by the feature.",
+            "name": "messages",
+            "type": "Message[]",
+          },
+          {
+            "description": "Tools extended by the feature.",
+            "name": "tools",
+            "type": "Tool[]",
+          },
+        ],
+        "type": "feature",
+      },
+    },
+    "executable": false,
+    "id": "citations",
+    "name": "citations",
+  },
+  {
+    "config": {
+      "defaultStateMapping": {
+        "graphId": "graphId",
+        "messages": "messages",
+      },
+      "description": "LLM-guided entity extraction + graph traversal retrieval (high accuracy, slower)",
+      "enabledByDefault": false,
+      "stateAnnotation": {
+        "context": {
+          "UpdateType": undefined,
+          "ValueType": undefined,
+          "initialValueFactory": "[Function default]",
+          "lc_graph_name": "BinaryOperatorAggregate",
+          "lg_is_channel": true,
+          "operator": "[Function value]",
+          "value": "",
+        },
+        "relevantEdges": {
+          "UpdateType": undefined,
+          "ValueType": undefined,
+          "initialValueFactory": "[Function default]",
+          "lc_graph_name": "BinaryOperatorAggregate",
+          "lg_is_channel": true,
+          "operator": "[Function value]",
+          "value": [],
+        },
+        "relevantNodes": {
+          "UpdateType": undefined,
+          "ValueType": undefined,
+          "initialValueFactory": "[Function default]",
+          "lc_graph_name": "BinaryOperatorAggregate",
+          "lg_is_channel": true,
+          "operator": "[Function value]",
+          "value": [],
+        },
+      },
+    },
+    "executable": true,
+    "id": "context-llm-retrieve",
+    "name": "context-llm-retrieve",
+  },
+  {
+    "config": {
+      "configParams": [
+        {
+          "default": 2,
+          "description": "Graph expansion depth from seed nodes",
+          "key": "maxGrowthLevels",
+          "type": "number",
+        },
+        {
+          "default": 10,
+          "description": "Maximum number of seed nodes returned by semantic search",
+          "key": "searchLimit",
+          "type": "number",
+        },
+      ],
+      "defaultStateMapping": {
+        "graphId": "graphId",
+        "messages": "messages",
+      },
+      "description": "Fast semantic-search + graph-growth retrieval",
+      "enabledByDefault": false,
+      "stateAnnotation": {
+        "context": {
+          "UpdateType": undefined,
+          "ValueType": undefined,
+          "initialValueFactory": "[Function default]",
+          "lc_graph_name": "BinaryOperatorAggregate",
+          "lg_is_channel": true,
+          "operator": "[Function value]",
+          "value": "",
+        },
+        "relevantEdges": {
+          "UpdateType": undefined,
+          "ValueType": undefined,
+          "initialValueFactory": "[Function default]",
+          "lc_graph_name": "BinaryOperatorAggregate",
+          "lg_is_channel": true,
+          "operator": "[Function value]",
+          "value": [],
+        },
+        "relevantNodes": {
+          "UpdateType": undefined,
+          "ValueType": undefined,
+          "initialValueFactory": "[Function default]",
+          "lc_graph_name": "BinaryOperatorAggregate",
+          "lg_is_channel": true,
+          "operator": "[Function value]",
+          "value": [],
+        },
+      },
+    },
+    "executable": true,
+    "id": "context-quick-retrieve",
+    "name": "context-quick-retrieve",
+  },
+  {
+    "config": {
+      "defaultStateMapping": {
+        "contextQueries": "contextQueries",
+        "graphId": "graphId",
+        "messages": "messages",
+      },
+      "description": "Hybrid semantic-search + graph-expansion retrieval (recommended default)",
+      "enabledByDefault": true,
+      "stateAnnotation": {
+        "context": {
+          "UpdateType": undefined,
+          "ValueType": undefined,
+          "initialValueFactory": "[Function default]",
+          "lc_graph_name": "BinaryOperatorAggregate",
+          "lg_is_channel": true,
+          "operator": "[Function value]",
+          "value": "",
+        },
+        "relevantEdges": {
+          "UpdateType": undefined,
+          "ValueType": undefined,
+          "initialValueFactory": "[Function default]",
+          "lc_graph_name": "BinaryOperatorAggregate",
+          "lg_is_channel": true,
+          "operator": "[Function value]",
+          "value": [],
+        },
+        "relevantNodes": {
+          "UpdateType": undefined,
+          "ValueType": undefined,
+          "initialValueFactory": "[Function default]",
+          "lc_graph_name": "BinaryOperatorAggregate",
+          "lg_is_channel": true,
+          "operator": "[Function value]",
+          "value": [],
+        },
+      },
+    },
+    "executable": true,
+    "id": "context-smart-retrieve",
+    "name": "context-smart-retrieve",
+  },
+  {
+    "config": undefined,
+    "executable": true,
+    "id": "context-to-system",
+    "name": "context-to-system",
+  },
+  {
+    "config": undefined,
+    "executable": true,
+    "id": "edge-enrichment",
+    "name": "edge-enrichment",
+  },
+  {
+    "config": {
+      "defaultStateMapping": {
+        "messages": "messages",
+        "relevantEdges": "relevantEdges",
+        "relevantNodes": "relevantNodes",
+        "response": "response",
+      },
+      "description": "Append knowledge-graph citations to the final response",
+      "enabledByDefault": false,
+    },
+    "executable": true,
+    "id": "entities-facts-citation",
+    "name": "entities-facts-citation",
+  },
+  {
+    "config": undefined,
+    "executable": true,
+    "id": "entities-facts-to-context",
+    "name": "entities-facts-to-context",
+  },
+  {
+    "config": undefined,
+    "executable": true,
+    "id": "entity-extraction",
+    "name": "entity-extraction",
+  },
+  {
+    "config": undefined,
+    "executable": true,
+    "id": "entity-resolution",
+    "name": "entity-resolution",
+  },
+  {
+    "config": undefined,
+    "executable": true,
+    "id": "fact-extraction",
+    "name": "fact-extraction",
+  },
+  {
+    "config": undefined,
+    "executable": true,
+    "id": "fact-extraction-v2",
+    "name": "fact-extraction-v2",
+  },
+  {
+    "config": undefined,
+    "executable": true,
+    "id": "fact-resolution",
+    "name": "fact-resolution",
+  },
+  {
+    "config": undefined,
+    "executable": true,
+    "id": "knowledge-database-save",
+    "name": "knowledge-database-save",
+  },
+  {
+    "config": {
+      "feature": {
+        "graphTypes": [
+          "foundation",
+        ],
+        "id": "step-knowledge-retrieval",
+        "inputs": [
+          {
+            "description": "Current chat messages",
+            "name": "messages",
+            "required": true,
+            "type": "Message[]",
+          },
+          {
+            "description": "Current available tools",
+            "name": "tools",
+            "required": true,
+            "type": "Tool[]",
+          },
+        ],
+        "outputs": [
+          {
+            "description": "Messages updated by the feature.",
+            "name": "messages",
+            "type": "Message[]",
+          },
+          {
+            "description": "Tools extended by the feature.",
+            "name": "tools",
+            "type": "Tool[]",
+          },
+        ],
+        "type": "feature",
+      },
+    },
+    "executable": false,
+    "id": "knowledge-retrieval",
+    "name": "knowledge-retrieval",
+  },
+  {
+    "config": undefined,
+    "executable": true,
+    "id": "llm-retrieve",
+    "name": "llm-retrieve",
+  },
+  {
+    "config": undefined,
+    "executable": true,
+    "id": "load-entities",
+    "name": "load-entities",
+  },
+  {
+    "config": undefined,
+    "executable": true,
+    "id": "load-facts",
+    "name": "load-facts",
+  },
+  {
+    "config": undefined,
+    "executable": true,
+    "id": "quick-retrieve",
+    "name": "quick-retrieve",
+  },
+  {
+    "config": undefined,
+    "executable": true,
+    "id": "smart-retrieve",
+    "name": "smart-retrieve",
+  },
+  {
+    "config": undefined,
+    "executable": true,
+    "id": "structmem-consolidation",
+    "name": "structmem-consolidation",
+  },
+  {
+    "config": undefined,
+    "executable": true,
+    "id": "structmem-event-extraction",
+    "name": "structmem-event-extraction",
+  },
+  {
+    "config": undefined,
+    "executable": true,
+    "id": "structmem-load-related-events",
+    "name": "structmem-load-related-events",
+  },
+  {
+    "config": {
+      "configParams": [
+        {
+          "default": 60,
+          "description": "Number of atomic event memories to retrieve",
+          "key": "entryLimit",
+          "type": "number",
+        },
+        {
+          "default": 5,
+          "description": "Number of consolidated synthesis memories to retrieve",
+          "key": "synthesisLimit",
+          "type": "number",
+        },
+      ],
+      "defaultStateMapping": {
+        "contextQueries": "contextQueries",
+        "graphId": "graphId",
+        "messages": "messages",
+      },
+      "description": "StructMem dual-circuit Knowledge Retrieval over event and synthesis memories",
+      "enabledByDefault": false,
+    },
+    "executable": true,
+    "id": "structmem-retrieve",
+    "name": "structmem-retrieve",
+  },
+  {
+    "config": undefined,
+    "executable": true,
+    "id": "structmem-save-consolidation",
+    "name": "structmem-save-consolidation",
+  },
+  {
+    "config": undefined,
+    "executable": true,
+    "id": "structmem-save-event",
+    "name": "structmem-save-event",
+  },
+  {
+    "config": undefined,
+    "executable": true,
+    "id": "temporal-extraction",
+    "name": "temporal-extraction",
+  },
+]
+`;
+
+exports[`flows-memory registered contracts > registers every memory tool contract 1`] = `
+[
+  "knowledge_graph",
+  "knowledge_graph_write",
+  "memory_explain_source",
+  "memory_remember",
+  "memory_remove",
+  "memory_retrieve",
+  "memory_update",
+]
+`;
+
+exports[`flows-memory registered contracts > registers every memory tool contract 2`] = `
+[
+  {
+    "description": "Retrieve nodes and edges from the knowledge graph using one or more queries, optionally scoped by graphId",
+    "name": "knowledge_graph",
+    "parameters": {
+      "properties": {
+        "entity": {
+          "type": "string",
+        },
+        "graphId": {
+          "type": "string",
+        },
+        "limit": {
+          "type": "number",
+        },
+        "queries": {
+          "items": {
+            "type": "string",
+          },
+          "type": "array",
+        },
+        "query": {
+          "type": "string",
+        },
+        "relationship": {
+          "type": "string",
+        },
+      },
+      "type": "object",
+    },
+  },
+  {
+    "description": "Write nodes and edges to the knowledge graph. Nodes are upserted by name. Edges link two nodes by name.",
+    "name": "knowledge_graph_write",
+    "parameters": {
+      "properties": {
+        "edges": {
+          "items": {
+            "properties": {
+              "destinationName": {
+                "type": "string",
+              },
+              "edgeType": {
+                "type": "string",
+              },
+              "factText": {
+                "type": "string",
+              },
+              "sourceName": {
+                "type": "string",
+              },
+            },
+            "required": [
+              "edgeType",
+            ],
+            "type": "object",
+          },
+          "type": "array",
+        },
+        "graphId": {
+          "type": "string",
+        },
+        "node": {
+          "properties": {
+            "attributes": {
+              "additionalProperties": {},
+              "type": "object",
+            },
+            "name": {
+              "type": "string",
+            },
+            "nodeType": {
+              "type": "string",
+            },
+            "summary": {
+              "type": "string",
+            },
+          },
+          "required": [
+            "name",
+            "nodeType",
+          ],
+          "type": "object",
+        },
+      },
+      "type": "object",
+    },
+  },
+  {
+    "description": "Explain where a memory came from using its stored attributes and any source links available in the graph.",
+    "name": "memory_explain_source",
+    "parameters": {
+      "properties": {
+        "edgeId": {
+          "type": "string",
+        },
+      },
+      "required": [
+        "edgeId",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "Remember a durable user fact, preference, or project-context item in the currently selected memory graph.",
+    "name": "memory_remember",
+    "parameters": {
+      "properties": {
+        "confidence": {
+          "type": "number",
+        },
+        "factText": {
+          "type": "string",
+        },
+        "memoryKind": {
+          "enum": [
+            "fact",
+            "preference",
+            "project_context",
+          ],
+          "type": "string",
+        },
+        "object": {
+          "type": "string",
+        },
+        "objectType": {
+          "type": "string",
+        },
+        "reason": {
+          "type": "string",
+        },
+        "relation": {
+          "type": "string",
+        },
+        "subject": {
+          "type": "string",
+        },
+        "subjectType": {
+          "type": "string",
+        },
+        "tags": {
+          "items": {
+            "type": "string",
+          },
+          "type": "array",
+        },
+        "validAt": {
+          "type": "string",
+        },
+      },
+      "required": [
+        "subject",
+        "relation",
+        "object",
+        "factText",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "Forget active memories in the currently selected memory graph by temporally invalidating them, not by deleting rows.",
+    "name": "memory_remove",
+    "parameters": {
+      "properties": {
+        "edgeId": {
+          "type": "string",
+        },
+        "limit": {
+          "type": "number",
+        },
+        "query": {
+          "type": "string",
+        },
+        "reason": {
+          "type": "string",
+        },
+      },
+      "type": "object",
+    },
+  },
+  {
+    "description": "Retrieve active memories from the currently selected memory graph. Inactive/forgotten memories are excluded unless includeInactive is true.",
+    "name": "memory_retrieve",
+    "parameters": {
+      "properties": {
+        "includeInactive": {
+          "type": "boolean",
+        },
+        "limit": {
+          "type": "number",
+        },
+        "memoryKind": {
+          "enum": [
+            "fact",
+            "preference",
+            "project_context",
+          ],
+          "type": "string",
+        },
+        "query": {
+          "type": "string",
+        },
+      },
+      "required": [
+        "query",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "Update a memory in the currently selected memory graph by invalidating the old fact and creating a replacement.",
+    "name": "memory_update",
+    "parameters": {
+      "properties": {
+        "confidence": {
+          "type": "number",
+        },
+        "edgeId": {
+          "type": "string",
+        },
+        "factText": {
+          "type": "string",
+        },
+        "memoryKind": {
+          "enum": [
+            "fact",
+            "preference",
+            "project_context",
+          ],
+          "type": "string",
+        },
+        "object": {
+          "type": "string",
+        },
+        "objectType": {
+          "type": "string",
+        },
+        "query": {
+          "type": "string",
+        },
+        "reason": {
+          "type": "string",
+        },
+        "relation": {
+          "type": "string",
+        },
+        "subject": {
+          "type": "string",
+        },
+        "subjectType": {
+          "type": "string",
+        },
+        "tags": {
+          "items": {
+            "type": "string",
+          },
+          "type": "array",
+        },
+      },
+      "required": [
+        "subject",
+        "relation",
+        "object",
+        "factText",
+      ],
+      "type": "object",
+    },
+  },
+]
+`;

@@ -1,15 +1,5 @@
-import React, { useMemo } from "react";
-import ReactMarkdown from "react-markdown";
-import "katex/dist/katex.min.css";
-import { cn } from "@/lib/utils";
-import { useTheme } from "@/main/components/molecules/ThemeContext";
-import {
-	createMarkdownComponents,
-	rehypePlugins,
-	remarkPlugins,
-} from "./message/markdownComponents";
-import { parseThinkTags } from "./message/parseThinkTags";
-import { ThinkingSections } from "./message/ThinkingSections";
+import React, { Suspense, lazy } from "react";
+import { MarkdownMessageBody } from "./message/MarkdownMessageBody";
 
 interface MarkdownMessageProps {
 	className?: string;
@@ -17,48 +7,43 @@ interface MarkdownMessageProps {
 	children?: string;
 }
 
+const MarkdownMathMessageBody = lazy(
+	() => import("./message/MarkdownMathMessageBody"),
+);
+
+const MATH_PATTERN = /(^|[^\\])(?:\$\$[\s\S]+?\$\$|\$[^$\n]+?\$|\\\(|\\\[)/;
+
+export const hasMath = (content: string | undefined): boolean =>
+	typeof content === "string" && MATH_PATTERN.test(content);
+
 const MarkdownMessageComponent: React.FC<MarkdownMessageProps> = ({
 	className,
 	children,
 	isStreaming = false,
 }) => {
-	const { actualTheme } = useTheme();
-	const isDark = actualTheme === "dark";
+	if (hasMath(children)) {
+		const fallback = (
+			<MarkdownMessageBody className={className} isStreaming={isStreaming}>
+				{children}
+			</MarkdownMessageBody>
+		);
 
-	const { thinking, content, hasIncompleteThinking } = useMemo(() => {
-		if (!children)
-			return { thinking: [], content: "", hasIncompleteThinking: false };
-		return parseThinkTags(children, isStreaming);
-	}, [children, isStreaming]);
-
-	const themeAwareComponents = useMemo(
-		() => createMarkdownComponents({ isDark, isStreaming }),
-		[isDark, isStreaming],
-	);
+		return (
+			<Suspense fallback={fallback}>
+				<MarkdownMathMessageBody
+					className={className}
+					isStreaming={isStreaming}
+				>
+					{children}
+				</MarkdownMathMessageBody>
+			</Suspense>
+		);
+	}
 
 	return (
-		<div
-			className={cn(
-				"markdown-body",
-				"[&>*:first-child]:mt-0 [&>*:last-child]:mb-0",
-				className,
-			)}
-		>
-			<ThinkingSections
-				thinking={thinking}
-				hasIncompleteThinking={hasIncompleteThinking}
-				isStreaming={isStreaming}
-				components={themeAwareComponents}
-			/>
-
-			<ReactMarkdown
-				remarkPlugins={remarkPlugins}
-				rehypePlugins={rehypePlugins}
-				components={themeAwareComponents}
-			>
-				{content || ""}
-			</ReactMarkdown>
-		</div>
+		<MarkdownMessageBody className={className} isStreaming={isStreaming}>
+			{children}
+		</MarkdownMessageBody>
 	);
 };
 

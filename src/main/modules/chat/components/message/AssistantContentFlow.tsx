@@ -11,6 +11,7 @@ import {
 import { AssistantToolTimelinePart } from "./AssistantToolTimelinePart";
 import type { MessageActionRequest } from "../artifacts/ArtifactActionsMenu";
 import { MessageContentWithArtifacts } from "./MessageContentWithArtifacts";
+import { assignAssistantPartKeys } from "./stable-part-keys";
 
 export type AssistantContentPart =
 	| { type: "text"; text: string }
@@ -71,66 +72,57 @@ export const AssistantContentFlow: React.FC<{
 				parts={completedWorkflowParts}
 				evidenceParts={workflowEvidenceParts}
 			/>
-			{(() => {
-				// Key text parts by ordinal-among-text-parts, not global array index.
-				// While streaming, execution/tool parts are appended/reordered around the
-				// text, so a global-index key shifted every token and remounted the text's
-				// whole subtree (incl. the OpenUI tree + component library). The n-th text
-				// part is always `text-n`, so it stays mounted and reconciles.
-				let textPartCount = 0;
-				return parts.map((part, index) => {
-					if (part.type === "text") {
-						if (!part.text.trim()) return null;
-						const textKey = `text-${textPartCount++}`;
-						return (
-							<MessageContentWithArtifacts
-								key={textKey}
-								content={part.text}
-								isStreaming={isStreaming}
-								suppressArtifactPreviews={suppressArtifactPreviews}
-								onMessageAction={onMessageAction}
-								seenArtifactKeys={seenArtifactKeys}
-							/>
-						);
-					}
-
-					if (part.type === "execution") {
-						if (part.state === "complete") return null;
-						if (index !== latestWorkflowIndex) return null;
-						return (
-							<AssistantWorkflowPart key={`workflow-${part.id}`} part={part} />
-						);
-					}
-					if (isWorkflowEvidencePart(part)) return null;
-
+			{assignAssistantPartKeys(parts).map(({ part, index, key }) => {
+				if (part.type === "text") {
+					if (!part.text.trim()) return null;
 					return (
-						<AssistantToolTimelinePart
-							key={`${part.type}-${part.id}-${index}`}
-							part={part}
-							connectsToPrevious={parts
-								.slice(0, index)
-								.some((previous, previousIndex) =>
-									isVisibleTimelinePart(
-										previous,
-										previousIndex,
-										latestWorkflowIndex,
-									),
-								)}
-							isLast={
-								!parts
-									.slice(index + 1)
-									.some((next, nextOffset) =>
-										isVisibleTimelinePart(
-											next,
-											index + nextOffset + 1,
-											latestWorkflowIndex,
-										),
-									)
-							}
+						<MessageContentWithArtifacts
+							key={key}
+							content={part.text}
+							isStreaming={isStreaming}
+							suppressArtifactPreviews={suppressArtifactPreviews}
+							onMessageAction={onMessageAction}
+							seenArtifactKeys={seenArtifactKeys}
 						/>
 					);
-				});
-			})()}
+				}
+
+				if (part.type === "execution") {
+					if (part.state === "complete") return null;
+					if (index !== latestWorkflowIndex) return null;
+					return (
+						<AssistantWorkflowPart key={`workflow-${part.id}`} part={part} />
+					);
+				}
+				if (isWorkflowEvidencePart(part)) return null;
+
+				return (
+					<AssistantToolTimelinePart
+						key={key}
+						part={part}
+						connectsToPrevious={parts
+							.slice(0, index)
+							.some((previous, previousIndex) =>
+								isVisibleTimelinePart(
+									previous,
+									previousIndex,
+									latestWorkflowIndex,
+								),
+							)}
+						isLast={
+							!parts
+								.slice(index + 1)
+								.some((next, nextOffset) =>
+									isVisibleTimelinePart(
+										next,
+										index + nextOffset + 1,
+										latestWorkflowIndex,
+									),
+								)
+						}
+					/>
+				);
+			})}
 		</div>
 	);
 };

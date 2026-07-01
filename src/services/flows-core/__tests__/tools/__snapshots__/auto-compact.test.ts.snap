@@ -83,9 +83,50 @@ exports[`chatMessage is last resort — snapshot > trims chat messages only afte
 exports[`config resolution — snapshot > deduplicates and sorts invalid maxRoundPercentSteps, behaves as [50, 100] 1`] = `
 [
   {
-    "content": "[Earlier steps summary]
-summary",
+    "content": "",
     "role": "assistant",
+    "tool_calls": [
+      {
+        "function": {
+          "arguments": "{}",
+          "name": "tool",
+        },
+        "id": "c0",
+        "type": "function",
+      },
+    ],
+  },
+  {
+    "content": "xxxxx
+
+[... chunked tool result: originalChars=200, omittedChars=190 ...]
+
+xxxxx",
+    "role": "tool",
+    "tool_call_id": "c0",
+  },
+  {
+    "content": "",
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "function": {
+          "arguments": "{}",
+          "name": "tool",
+        },
+        "id": "c1",
+        "type": "function",
+      },
+    ],
+  },
+  {
+    "content": "xxxxx
+
+[... chunked tool result: originalChars=200, omittedChars=190 ...]
+
+xxxxx",
+    "role": "tool",
+    "tool_call_id": "c1",
   },
   {
     "content": "",
@@ -139,9 +180,50 @@ xxxxx",
 exports[`config resolution — snapshot > default maxRoundPercentSteps [50, 100] applied when not provided 1`] = `
 [
   {
-    "content": "[Earlier steps summary]
-summary",
+    "content": "",
     "role": "assistant",
+    "tool_calls": [
+      {
+        "function": {
+          "arguments": "{}",
+          "name": "tool",
+        },
+        "id": "c0",
+        "type": "function",
+      },
+    ],
+  },
+  {
+    "content": "xxxxx
+
+[... chunked tool result: originalChars=200, omittedChars=190 ...]
+
+xxxxx",
+    "role": "tool",
+    "tool_call_id": "c0",
+  },
+  {
+    "content": "",
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "function": {
+          "arguments": "{}",
+          "name": "tool",
+        },
+        "id": "c1",
+        "type": "function",
+      },
+    ],
+  },
+  {
+    "content": "xxxxx
+
+[... chunked tool result: originalChars=200, omittedChars=190 ...]
+
+xxxxx",
+    "role": "tool",
+    "tool_call_id": "c1",
   },
   {
     "content": "",
@@ -195,9 +277,50 @@ xxxxx",
 exports[`config resolution — snapshot > empty maxRoundPercentSteps falls back to default [50, 100] 1`] = `
 [
   {
-    "content": "[Earlier steps summary]
-summary",
+    "content": "",
     "role": "assistant",
+    "tool_calls": [
+      {
+        "function": {
+          "arguments": "{}",
+          "name": "tool",
+        },
+        "id": "c0",
+        "type": "function",
+      },
+    ],
+  },
+  {
+    "content": "xxxxx
+
+[... chunked tool result: originalChars=200, omittedChars=190 ...]
+
+xxxxx",
+    "role": "tool",
+    "tool_call_id": "c0",
+  },
+  {
+    "content": "",
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "function": {
+          "arguments": "{}",
+          "name": "tool",
+        },
+        "id": "c1",
+        "type": "function",
+      },
+    ],
+  },
+  {
+    "content": "xxxxx
+
+[... chunked tool result: originalChars=200, omittedChars=190 ...]
+
+xxxxx",
+    "role": "tool",
+    "tool_call_id": "c1",
   },
   {
     "content": "",
@@ -406,9 +529,50 @@ xxxxx",
 exports[`round-based escalation — snapshot > round 2 restarts with only items remaining after round 1 1`] = `
 [
   {
-    "content": "[Earlier steps summary]
-summary",
+    "content": "",
     "role": "assistant",
+    "tool_calls": [
+      {
+        "function": {
+          "arguments": "{}",
+          "name": "tool",
+        },
+        "id": "c0",
+        "type": "function",
+      },
+    ],
+  },
+  {
+    "content": "xxxxx
+
+[... chunked tool result: originalChars=200, omittedChars=190 ...]
+
+xxxxx",
+    "role": "tool",
+    "tool_call_id": "c0",
+  },
+  {
+    "content": "",
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "function": {
+          "arguments": "{}",
+          "name": "tool",
+        },
+        "id": "c1",
+        "type": "function",
+      },
+    ],
+  },
+  {
+    "content": "xxxxx
+
+[... chunked tool result: originalChars=200, omittedChars=190 ...]
+
+xxxxx",
+    "role": "tool",
+    "tool_call_id": "c1",
   },
   {
     "content": "",
@@ -462,9 +626,168 @@ xxxxx",
 exports[`round-based escalation — snapshot > roundCap limits items processed even when stage maxPercent is higher 1`] = `
 [
   {
-    "content": "[Earlier steps summary]
-summary",
+    "content": "",
     "role": "assistant",
+    "tool_calls": [
+      {
+        "function": {
+          "arguments": "{}",
+          "name": "tool",
+        },
+        "id": "c0",
+        "type": "function",
+      },
+    ],
+  },
+  {
+    "content": "xxxxx
+
+[... chunked tool result: originalChars=200, omittedChars=190 ...]
+
+xxxxx",
+    "role": "tool",
+    "tool_call_id": "c0",
+  },
+  {
+    "content": "",
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "function": {
+          "arguments": "{}",
+          "name": "tool",
+        },
+        "id": "c1",
+        "type": "function",
+      },
+    ],
+  },
+  {
+    "content": "xxxxx
+
+[... chunked tool result: originalChars=200, omittedChars=190 ...]
+
+xxxxx",
+    "role": "tool",
+    "tool_call_id": "c1",
+  },
+  {
+    "content": "",
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "function": {
+          "arguments": "{}",
+          "name": "tool",
+        },
+        "id": "c2",
+        "type": "function",
+      },
+    ],
+  },
+  {
+    "content": "xxxxx
+
+[... chunked tool result: originalChars=200, omittedChars=190 ...]
+
+xxxxx",
+    "role": "tool",
+    "tool_call_id": "c2",
+  },
+  {
+    "content": "",
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "function": {
+          "arguments": "{}",
+          "name": "tool",
+        },
+        "id": "c3",
+        "type": "function",
+      },
+    ],
+  },
+  {
+    "content": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "role": "tool",
+    "tool_call_id": "c3",
+  },
+  {
+    "content": "",
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "function": {
+          "arguments": "{}",
+          "name": "tool",
+        },
+        "id": "c4",
+        "type": "function",
+      },
+    ],
+  },
+  {
+    "content": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "role": "tool",
+    "tool_call_id": "c4",
+  },
+  {
+    "content": "",
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "function": {
+          "arguments": "{}",
+          "name": "tool",
+        },
+        "id": "c5",
+        "type": "function",
+      },
+    ],
+  },
+  {
+    "content": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "role": "tool",
+    "tool_call_id": "c5",
+  },
+  {
+    "content": "",
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "function": {
+          "arguments": "{}",
+          "name": "tool",
+        },
+        "id": "c6",
+        "type": "function",
+      },
+    ],
+  },
+  {
+    "content": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "role": "tool",
+    "tool_call_id": "c6",
+  },
+  {
+    "content": "",
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "function": {
+          "arguments": "{}",
+          "name": "tool",
+        },
+        "id": "c7",
+        "type": "function",
+      },
+    ],
+  },
+  {
+    "content": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "role": "tool",
+    "tool_call_id": "c7",
   },
   {
     "content": "",
@@ -481,11 +804,7 @@ summary",
     ],
   },
   {
-    "content": "xxxxx
-
-[... chunked tool result: originalChars=200, omittedChars=190 ...]
-
-xxxxx",
+    "content": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
     "role": "tool",
     "tool_call_id": "c8",
   },
@@ -514,9 +833,168 @@ xxxxx",
 exports[`round-based escalation — snapshot > stage maxPercent caps items even when roundCap is higher 1`] = `
 [
   {
-    "content": "[Earlier steps summary]
-summary",
+    "content": "",
     "role": "assistant",
+    "tool_calls": [
+      {
+        "function": {
+          "arguments": "{}",
+          "name": "tool",
+        },
+        "id": "c0",
+        "type": "function",
+      },
+    ],
+  },
+  {
+    "content": "xxxxx
+
+[... chunked tool result: originalChars=200, omittedChars=190 ...]
+
+xxxxx",
+    "role": "tool",
+    "tool_call_id": "c0",
+  },
+  {
+    "content": "",
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "function": {
+          "arguments": "{}",
+          "name": "tool",
+        },
+        "id": "c1",
+        "type": "function",
+      },
+    ],
+  },
+  {
+    "content": "xxxxx
+
+[... chunked tool result: originalChars=200, omittedChars=190 ...]
+
+xxxxx",
+    "role": "tool",
+    "tool_call_id": "c1",
+  },
+  {
+    "content": "",
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "function": {
+          "arguments": "{}",
+          "name": "tool",
+        },
+        "id": "c2",
+        "type": "function",
+      },
+    ],
+  },
+  {
+    "content": "xxxxx
+
+[... chunked tool result: originalChars=200, omittedChars=190 ...]
+
+xxxxx",
+    "role": "tool",
+    "tool_call_id": "c2",
+  },
+  {
+    "content": "",
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "function": {
+          "arguments": "{}",
+          "name": "tool",
+        },
+        "id": "c3",
+        "type": "function",
+      },
+    ],
+  },
+  {
+    "content": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "role": "tool",
+    "tool_call_id": "c3",
+  },
+  {
+    "content": "",
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "function": {
+          "arguments": "{}",
+          "name": "tool",
+        },
+        "id": "c4",
+        "type": "function",
+      },
+    ],
+  },
+  {
+    "content": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "role": "tool",
+    "tool_call_id": "c4",
+  },
+  {
+    "content": "",
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "function": {
+          "arguments": "{}",
+          "name": "tool",
+        },
+        "id": "c5",
+        "type": "function",
+      },
+    ],
+  },
+  {
+    "content": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "role": "tool",
+    "tool_call_id": "c5",
+  },
+  {
+    "content": "",
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "function": {
+          "arguments": "{}",
+          "name": "tool",
+        },
+        "id": "c6",
+        "type": "function",
+      },
+    ],
+  },
+  {
+    "content": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "role": "tool",
+    "tool_call_id": "c6",
+  },
+  {
+    "content": "",
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "function": {
+          "arguments": "{}",
+          "name": "tool",
+        },
+        "id": "c7",
+        "type": "function",
+      },
+    ],
+  },
+  {
+    "content": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "role": "tool",
+    "tool_call_id": "c7",
   },
   {
     "content": "",
@@ -533,11 +1011,7 @@ summary",
     ],
   },
   {
-    "content": "xxxxx
-
-[... chunked tool result: originalChars=200, omittedChars=190 ...]
-
-xxxxx",
+    "content": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
     "role": "tool",
     "tool_call_id": "c8",
   },
@@ -684,9 +1158,65 @@ exports[`tool call flow removal — snapshot > removes oldest flow first, preser
 exports[`tool result chunking — snapshot > chunks oldest results first, stepPercent controls how many per step 1`] = `
 [
   {
-    "content": "[Earlier steps summary]
-summary",
+    "content": "",
     "role": "assistant",
+    "tool_calls": [
+      {
+        "function": {
+          "arguments": "{}",
+          "name": "tool",
+        },
+        "id": "c0",
+        "type": "function",
+      },
+    ],
+  },
+  {
+    "content": "xxxx
+
+[... chunked tool result: originalChars=203, omittedChars=195 ...]
+
+xxxx",
+    "role": "tool",
+    "tool_call_id": "c0",
+  },
+  {
+    "content": "",
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "function": {
+          "arguments": "{}",
+          "name": "tool",
+        },
+        "id": "c1",
+        "type": "function",
+      },
+    ],
+  },
+  {
+    "content": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx[1]xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "role": "tool",
+    "tool_call_id": "c1",
+  },
+  {
+    "content": "",
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "function": {
+          "arguments": "{}",
+          "name": "tool",
+        },
+        "id": "c2",
+        "type": "function",
+      },
+    ],
+  },
+  {
+    "content": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx[2]xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "role": "tool",
+    "tool_call_id": "c2",
   },
   {
     "content": "",
@@ -703,11 +1233,7 @@ summary",
     ],
   },
   {
-    "content": "xxxx
-
-[... chunked tool result: originalChars=203, omittedChars=195 ...]
-
-xxxx",
+    "content": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx[3]xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
     "role": "tool",
     "tool_call_id": "c3",
   },

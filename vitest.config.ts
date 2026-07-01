@@ -2,25 +2,70 @@ import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 
 const root = fileURLToPath(new URL(".", import.meta.url));
+const alias = {
+	"@": fileURLToPath(new URL("./src", import.meta.url)),
+	"flow-core": fileURLToPath(
+		new URL("./src/services/flows-core", import.meta.url),
+	),
+	"flow-memory": fileURLToPath(
+		new URL("./src/services/flows-memory", import.meta.url),
+	),
+	"flow-features": fileURLToPath(
+		new URL("./src/services/flows-features", import.meta.url),
+	),
+	"flow-integrations": fileURLToPath(
+		new URL("./src/services/flows-integrations", import.meta.url),
+	),
+};
 
 export default defineConfig({
 	test: {
-		environment: "node",
-		include: [
-			"src/services/flows-core/**/*.test.ts",
-			"src/services/flows-memory/**/*.test.ts",
+		coverage: {
+			provider: "v8",
+			reporter: ["text-summary", "html"],
+			all: true,
+			include: ["src/**/*.{ts,tsx}"],
+			exclude: [
+				"src/**/*.test.*",
+				"src/**/__tests__/**",
+				"src/test/**",
+				"src/**/__snapshots__/**",
+				"src/**/*.d.ts",
+			],
+		} as any,
+		projects: [
+			{
+				extends: true,
+				test: {
+					name: "node",
+					environment: "node",
+					setupFiles: ["src/test/setup-node.ts"],
+					include: [
+						"src/utils/**/*.test.ts",
+						"src/services/__tests__/**/*.test.ts",
+						"src/services/flows-core/**/*.test.ts",
+						"src/services/flows-features/**/*.test.ts",
+						"src/services/flows-integrations/**/*.test.ts",
+						"src/services/flows-memory/**/*.test.ts",
+						"src/services/background-jobs/**/*.test.ts",
+						"src/**/*.logic.test.ts",
+					],
+				},
+			},
+			{
+				extends: true,
+				test: {
+					name: "jsdom",
+					environment: "jsdom",
+					include: ["src/main/**/*.test.tsx", "src/services/**/*.dom.test.ts"],
+					setupFiles: ["src/test/setup.ts"],
+					globals: true,
+				},
+			},
 		],
 	},
 	resolve: {
-		alias: {
-			"@": fileURLToPath(new URL("./src", import.meta.url)),
-			"flow-core": fileURLToPath(
-				new URL("./src/services/flows-core", import.meta.url),
-			),
-			"flow-memory": fileURLToPath(
-				new URL("./src/services/flows-memory", import.meta.url),
-			),
-		},
+		alias,
 	},
 	root,
 });

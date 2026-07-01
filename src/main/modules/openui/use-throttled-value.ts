@@ -10,7 +10,7 @@ import { useEffect, useRef, useState } from "react";
  */
 export function useThrottledValue<T>(value: T, active: boolean, ms: number): T {
 	const [throttled, setThrottled] = useState(value);
-	const lastEmitRef = useRef(0);
+	const lastEmitRef = useRef<number | null>(null);
 	const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 	const valueRef = useRef(value);
 	valueRef.current = value;
@@ -26,7 +26,10 @@ export function useThrottledValue<T>(value: T, active: boolean, ms: number): T {
 		}
 
 		const now = Date.now();
-		const elapsed = now - lastEmitRef.current;
+		const elapsed =
+			lastEmitRef.current === null
+				? Number.POSITIVE_INFINITY
+				: now - lastEmitRef.current;
 		if (elapsed >= ms) {
 			lastEmitRef.current = now;
 			setThrottled(value);

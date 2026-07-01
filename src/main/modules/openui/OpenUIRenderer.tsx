@@ -12,7 +12,6 @@ import { MarkdownMessage } from "@/main/modules/chat/components/MarkdownMessage"
 import { ThreeDotsLoader } from "@/main/components/atoms/ThreeDotsLoader";
 import { useTranslation } from "react-i18next";
 import { logError, logWarn } from "@/utils/logger";
-import type { OpenUITheme } from "@/services/flows-core/steps/features/visualize-response";
 import {
 	isSafeOpenUIUrl,
 	parseMemorallOpenUIAction,
@@ -20,19 +19,7 @@ import {
 } from "./actions";
 import { useThrottledValue } from "./use-throttled-value";
 import type { MessageActionRequest } from "@/main/modules/chat/components/artifacts/ArtifactActionsMenu";
-
-// Theme is the 4th positional arg in: CardBlock("title", "desc", [...], "theme")
-const THEME_PATTERN = /\bCardBlock\s*\([\s\S]*?\]\s*,\s*"([^"]+)"\s*\)/;
-const KNOWN_THEMES = new Set<OpenUITheme>(["shadcn", "wireframe", "glass"]);
-
-function detectTheme(content: string): OpenUITheme {
-	const match = THEME_PATTERN.exec(content);
-	if (match) {
-		const t = match[1] as OpenUITheme;
-		if (KNOWN_THEMES.has(t)) return t;
-	}
-	return "shadcn";
-}
+import { detectTheme } from "./detect-theme";
 
 class OpenUIErrorBoundary extends React.Component<
 	{ content: string; children: React.ReactNode },

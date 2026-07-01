@@ -31,8 +31,8 @@ class Logger {
 
 		this.storage = new IndexedDBLogStorage();
 
-		// Initialize storage if persistence is enabled
-		if (this.config.enablePersistence) {
+		// Initialize storage if persistence is enabled and available in this runtime.
+		if (this.config.enablePersistence && this.storage.isAvailable()) {
 			this.initializeStorage();
 		}
 	}
@@ -364,7 +364,7 @@ class Logger {
 
 		// Reinitialize storage if persistence settings changed
 		if (newConfig.enablePersistence !== undefined) {
-			if (this.config.enablePersistence) {
+			if (this.config.enablePersistence && this.storage.isAvailable()) {
 				this.initializeStorage();
 			}
 		}

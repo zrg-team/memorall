@@ -2,6 +2,7 @@ import React, { useRef, useEffect } from "react";
 import { Code2, Eye } from "lucide-react";
 import mermaid from "mermaid";
 import { Button } from "@/main/components/ui/button";
+import { DeferredMount } from "@/main/modules/chat/components/message/DeferredMount";
 
 // Initialize mermaid with browser extension compatible settings
 mermaid.initialize({
@@ -18,6 +19,7 @@ mermaid.initialize({
 
 // Global counter for unique mermaid IDs
 let mermaidCounter = 0;
+const mermaidRenderCache = new Map<string, Promise<string>>();
 
 interface MermaidRendererProps {
 	chart: string;
@@ -25,6 +27,15 @@ interface MermaidRendererProps {
 }
 
 type RenderState = "idle" | "loading" | "success" | "error";
+
+const renderMermaid = (id: string, chart: string): Promise<string> => {
+	const cached = mermaidRenderCache.get(chart);
+	if (cached) return cached;
+
+	const next = mermaid.render(id, chart).then(({ svg }) => svg);
+	mermaidRenderCache.set(chart, next);
+	return next;
+};
 
 class MermaidErrorBoundary extends React.Component<
 	{ children: React.ReactNode; fallback: React.ReactNode },
@@ -50,7 +61,7 @@ class MermaidErrorBoundary extends React.Component<
 	}
 }
 
-export const MermaidRenderer: React.FC<MermaidRendererProps> = ({
+const MermaidRendererInner: React.FC<MermaidRendererProps> = ({
 	chart,
 	className = "",
 }) => {
@@ -61,10 +72,10 @@ export const MermaidRenderer: React.FC<MermaidRendererProps> = ({
 	const [svgContent, setSvgContent] = React.useState<string>("");
 	const [errorMessage, setErrorMessage] = React.useState<string>("");
 	const [showCode, setShowCode] = React.useState(false);
-	const hasRendered = useRef(false);
+	const renderedChartRef = useRef<string | null>(null);
 
 	useEffect(() => {
-		if (hasRendered.current) {
+		if (renderedChartRef.current === chart) {
 			return;
 		}
 
@@ -84,6 +95,8 @@ export const MermaidRenderer: React.FC<MermaidRendererProps> = ({
 			}
 
 			setRenderState("loading");
+			setSvgContent("");
+			setErrorMessage("");
 
 			try {
 				// Add timeout to prevent infinite loading
@@ -94,13 +107,7 @@ export const MermaidRenderer: React.FC<MermaidRendererProps> = ({
 					}
 				}, 5000);
 
-				// Try to parse first to catch syntax errors
-				await mermaid.parse(trimmedChart);
-
-				if (!isMounted) return;
-
-				// Render the diagram
-				const { svg } = await mermaid.render(uniqueId, trimmedChart);
+				const svg = await renderMermaid(uniqueId, trimmedChart);
 
 				if (!isMounted) return;
 
@@ -109,7 +116,7 @@ export const MermaidRenderer: React.FC<MermaidRendererProps> = ({
 				if (svg && svg.includes("<svg") && !svg.includes("Syntax error")) {
 					setSvgContent(svg);
 					setRenderState("success");
-					hasRendered.current = true;
+					renderedChartRef.current = chart;
 				} else {
 					setRenderState("error");
 					setErrorMessage("Invalid SVG output");
@@ -188,3 +195,9 @@ export const MermaidRenderer: React.FC<MermaidRendererProps> = ({
 		</div>
 	);
 };
+
+export const MermaidRenderer: React.FC<MermaidRendererProps> = (props) => (
+	<DeferredMount minHeight={120}>
+		<MermaidRendererInner {...props} />
+	</DeferredMount>
+);

@@ -1,0 +1,27 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`src/utils module coverage > imports every utility module without requiring browser storage 1`] = `
+[
+  "../abort.ts",
+  "../aes.ts",
+  "../auth-provider-restore.ts",
+  "../chunking.ts",
+  "../dom.ts",
+  "../embedding-size-config.ts",
+  "../indexeddb-storage.ts",
+  "../logger.ts",
+  "../map-refine.ts",
+  "../master-key.ts",
+  "../open-standalone.ts",
+  "../openui.ts",
+  "../provider-passkey-unlock.ts",
+  "../sanitize-json.ts",
+  "../scoped-graph-query.ts",
+  "../secure-session.ts",
+  "../trigram-search.ts",
+  "../uuid.ts",
+  "../vector-search.ts",
+  "../webgpu.ts",
+  "../yaml.ts",
+]
+`;

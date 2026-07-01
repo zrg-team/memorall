@@ -66,7 +66,9 @@ const DEFAULT_ARTIFACT_TYPE: ArtifactType = "html";
 const isArtifactType = (value: string | undefined): value is ArtifactType =>
 	ARTIFACT_TYPES.includes(value as ArtifactType);
 
-const normalizeArtifactType = (value: string | undefined): ArtifactType => {
+export const normalizeArtifactType = (
+	value: string | undefined,
+): ArtifactType => {
 	switch (value) {
 		case "text/html":
 		case "html":
@@ -173,7 +175,7 @@ export const parseArtifactSegments = (
 			content: content.slice(openEnd + 1, closeIdx),
 			identifier: attrs.identifier,
 			title: attrs.title,
-			projectPath: attrs["project-path"] || undefined,
+			projectPath: attrs["project-path"] || attrs.projectPath || undefined,
 			blockIndex,
 			start: openIdx,
 			openEnd,

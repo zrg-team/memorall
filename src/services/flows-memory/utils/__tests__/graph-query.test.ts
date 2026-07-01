@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import { edge } from "@/services/database/entities/edges";
 import { node } from "@/services/database/entities/nodes";
-import { getScopedGraphWhere } from "./graph-query";
+import { getScopedGraphWhere } from "../graph-query";
 
 describe("getScopedGraphWhere", () => {
 	it("returns a Drizzle SQL predicate for an explicit graph", () => {

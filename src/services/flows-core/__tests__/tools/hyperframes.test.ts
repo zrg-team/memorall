@@ -161,7 +161,7 @@ class MemoryFs implements IFlowFileSystem {
 }
 
 afterEach(() => {
-	vi.restoreAllMocks();
+	vi.clearAllMocks();
 	vi.unstubAllGlobals();
 });
 

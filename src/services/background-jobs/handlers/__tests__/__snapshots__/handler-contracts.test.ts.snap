@@ -1,0 +1,174 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`background job handler registry > registers every background job handler by job type 1`] = `
+[
+  {
+    "handler": "ActivityTrackingHandler",
+    "jobType": "activity-delete-session",
+  },
+  {
+    "handler": "ActivityTrackingHandler",
+    "jobType": "activity-get-activities",
+  },
+  {
+    "handler": "ActivityTrackingHandler",
+    "jobType": "activity-get-sessions",
+  },
+  {
+    "handler": "ActivityTrackingHandler",
+    "jobType": "activity-get-stats",
+  },
+  {
+    "handler": "ActivityTrackingHandler",
+    "jobType": "activity-record",
+  },
+  {
+    "handler": "ActivityTrackingHandler",
+    "jobType": "activity-start-session",
+  },
+  {
+    "handler": "ActivityTrackingHandler",
+    "jobType": "activity-stop-session",
+  },
+  {
+    "handler": "BasicHandler",
+    "jobType": "basic-async",
+  },
+  {
+    "handler": "BasicHandler",
+    "jobType": "basic-stream",
+  },
+  {
+    "handler": "ChatHandler",
+    "jobType": "chat",
+  },
+  {
+    "handler": "LLMOperationsHandler",
+    "jobType": "chat-completion",
+  },
+  {
+    "handler": "LLMOperationsHandler",
+    "jobType": "check-provider-needs-restore",
+  },
+  {
+    "handler": "TopicOperationsHandler",
+    "jobType": "check-topics-exist",
+  },
+  {
+    "handler": "EmbeddingOperationsHandler",
+    "jobType": "create-embedding",
+  },
+  {
+    "handler": "LLMOperationsHandler",
+    "jobType": "create-llm-service",
+  },
+  {
+    "handler": "CronOperationHandler",
+    "jobType": "cron-operation",
+  },
+  {
+    "handler": "CronTriggerHandler",
+    "jobType": "cron-trigger",
+  },
+  {
+    "handler": "LLMOperationsHandler",
+    "jobType": "delete-model",
+  },
+  {
+    "handler": "LLMOperationsHandler",
+    "jobType": "detect-system-specs",
+  },
+  {
+    "handler": "EmbeddedChatHistoryHandler",
+    "jobType": "embedded-chat-history",
+  },
+  {
+    "handler": "LLMOperationsHandler",
+    "jobType": "get-all-models",
+  },
+  {
+    "handler": "LLMOperationsHandler",
+    "jobType": "get-current-model",
+  },
+  {
+    "handler": "EmbeddingOperationsHandler",
+    "jobType": "get-embedding",
+  },
+  {
+    "handler": "LLMOperationsHandler",
+    "jobType": "get-max-model-tokens",
+  },
+  {
+    "handler": "LLMOperationsHandler",
+    "jobType": "get-max-response-tokens",
+  },
+  {
+    "handler": "LLMOperationsHandler",
+    "jobType": "get-models-for-service",
+  },
+  {
+    "handler": "FlowOperationsHandler",
+    "jobType": "get-predefined-flows",
+  },
+  {
+    "handler": "TopicOperationsHandler",
+    "jobType": "get-topics",
+  },
+  {
+    "handler": "EmbeddingOperationsHandler",
+    "jobType": "initialize-embedding-service",
+  },
+  {
+    "handler": "KnowledgeGraphHandler",
+    "jobType": "knowledge-graph",
+  },
+  {
+    "handler": "EmbeddingOperationsHandler",
+    "jobType": "reload-embedding-model",
+  },
+  {
+    "handler": "RememberSaveHandler",
+    "jobType": "remember-save",
+  },
+  {
+    "handler": "LLMOperationsHandler",
+    "jobType": "remove-auth-provider",
+  },
+  {
+    "handler": "LLMOperationsHandler",
+    "jobType": "restore-all-providers",
+  },
+  {
+    "handler": "LLMOperationsHandler",
+    "jobType": "restore-auth-provider",
+  },
+  {
+    "handler": "SandboxOperationsHandler",
+    "jobType": "sandbox-operation",
+  },
+  {
+    "handler": "LLMOperationsHandler",
+    "jobType": "serve-model",
+  },
+  {
+    "handler": "EmbeddingOperationsHandler",
+    "jobType": "text-to-vector",
+  },
+  {
+    "handler": "EmbeddingOperationsHandler",
+    "jobType": "texts-to-vectors",
+  },
+  {
+    "handler": "LLMOperationsHandler",
+    "jobType": "unload-model",
+  },
+  {
+    "handler": "LLMOperationsHandler",
+    "jobType": "unlock-and-restore-all-providers",
+  },
+  {
+    "handler": "WebBrowserOperationsHandler",
+    "jobType": "web-browser-operation",
+  },
+]
+`;

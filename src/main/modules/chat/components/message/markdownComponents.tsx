@@ -1,15 +1,13 @@
 import React from "react";
 import remarkGfm from "remark-gfm";
-import remarkMath from "remark-math";
-import rehypeKatex from "rehype-katex";
 import { MermaidRenderer } from "@/main/components/atoms/MermaidRenderer";
 import { CodeBlockWithSave } from "./CodeBlockWithSave";
 import { Citation } from "./Citation";
 import { HtmlCodePreview } from "./HtmlCodePreview";
 import { MemorallToolCallCard } from "./MemorallToolCallCard";
 
-export const remarkPlugins = [remarkGfm, remarkMath];
-export const rehypePlugins = [rehypeKatex];
+export const remarkPlugins = [remarkGfm];
+export const rehypePlugins = [];
 
 const SEPARATE_RENDER_STREAM = false;
 

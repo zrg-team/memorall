@@ -63,6 +63,8 @@ import {
 } from "./error-metadata";
 import { sanitizeForJson } from "@/utils/sanitize-json";
 import { isAbortError } from "@/utils/abort";
+import { StreamBuffer } from "./stream-buffer";
+export { StreamBuffer } from "./stream-buffer";
 
 export interface ChatStreamConfig {
 	/** Minimum number of words to buffer before streaming (default: 5) */
@@ -141,55 +143,6 @@ export type ChatJob = BaseJob & {
 	jobType: typeof JOB_NAMES.chat;
 	payload: ChatPayload;
 };
-
-/**
- * Helper class to buffer streaming content and emit when threshold is reached
- */
-class StreamBuffer {
-	private buffer: string = "";
-	private wordCount: number = 0;
-	private readonly minWords: number;
-	private onEmit: (content: string) => void;
-
-	constructor(minWords: number, onEmit: (content: string) => void) {
-		this.minWords = minWords;
-		this.onEmit = onEmit;
-	}
-
-	/**
-	 * Add content to buffer and emit if word threshold reached
-	 */
-	add(content: string): void {
-		this.buffer += content;
-
-		// Count words by splitting on whitespace
-		const words = this.buffer.trim().split(/\s+/);
-		this.wordCount = words.length;
-
-		// Emit if we've reached the minimum word count
-		if (this.wordCount >= this.minWords) {
-			this.flush();
-		}
-	}
-
-	/**
-	 * Force emit all buffered content
-	 */
-	flush(): void {
-		if (this.buffer) {
-			this.onEmit(this.buffer);
-			this.buffer = "";
-			this.wordCount = 0;
-		}
-	}
-
-	/**
-	 * Get current buffer without flushing
-	 */
-	peek(): string {
-		return this.buffer;
-	}
-}
 
 type TokenUsage = {
 	prompt_tokens: number;

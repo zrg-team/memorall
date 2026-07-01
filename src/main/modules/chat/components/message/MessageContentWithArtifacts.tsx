@@ -7,6 +7,7 @@ import { parseArtifactSegments } from "../artifacts/artifact-protocol";
 import type { MessageActionRequest } from "../artifacts/ArtifactActionsMenu";
 import { CompactArtifactReference } from "./CompactArtifactReference";
 import { DeferredMount } from "./DeferredMount";
+import { assignContentSegmentKeys } from "./stable-part-keys";
 
 const USE_STREAMDOWN = false;
 const Streamdown = lazy(() => import("../MessageStreamDown"));
@@ -86,18 +87,10 @@ export const MessageContentWithArtifacts: React.FC<{
 		});
 	};
 
-	// Key by ordinal-within-kind, NOT array position. While streaming, a leading
-	// text segment can appear/disappear as tokens arrive, which would shift the
-	// array index of the OpenUI block and remount its whole tree (rebuilding the
-	// component library + reparsing) every time. The k-th OpenUI block is always
-	// `openui-k` regardless of surrounding text, so it stays mounted and reconciles.
-	let openuiCount = 0;
-	let textCount = 0;
 	return (
 		<>
-			{segments.map((seg) => {
+			{assignContentSegmentKeys(segments).map(({ segment: seg, key }) => {
 				if (seg.kind === "openui") {
-					const key = `openui-${openuiCount++}`;
 					return (
 						<DeferredMount key={key} enabled={!isStreaming}>
 							<OpenUIRenderer
@@ -109,7 +102,7 @@ export const MessageContentWithArtifacts: React.FC<{
 					);
 				}
 
-				return renderTextWithArtifacts(seg.text, `segment-${textCount++}`);
+				return renderTextWithArtifacts(seg.text, key);
 			})}
 		</>
 	);

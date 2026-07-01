@@ -104,7 +104,11 @@ export const MessageGroup: React.FC<MessageGroupProps> = React.memo(
 			[displaySeparator],
 		);
 
+		const shouldRenderMessages = !isCollapsed && group.isLoaded;
+
 		const messageComponents = useMemo(() => {
+			if (!shouldRenderMessages) return null;
+
 			return group.messages.map((message, index) =>
 				hasRenderableMessageContent(message) ? (
 					<MessageRenderer
@@ -119,17 +123,28 @@ export const MessageGroup: React.FC<MessageGroupProps> = React.memo(
 					/>
 				) : undefined,
 			);
-		}, [group.messages, selectedTopic, onMessageAction]);
+		}, [group.messages, onMessageAction, selectedTopic, shouldRenderMessages]);
+
+		const inProgressMetadata = useMemo(() => {
+			if (!inProgressMessage) return null;
+
+			return {
+				actions: inProgressMessage.actions,
+				executeState: inProgressMessage.executeState,
+				executions: inProgressMessage.executions,
+			};
+		}, [
+			Boolean(inProgressMessage),
+			inProgressMessage?.actions,
+			inProgressMessage?.executeState,
+			inProgressMessage?.executions,
+		]);
 
 		const inProgressMessageData = useMemo(() => {
 			if (!inProgressMessage) return null;
 
 			return {
-				metadata: {
-					actions: inProgressMessage.actions,
-					executeState: inProgressMessage.executeState,
-					executions: inProgressMessage.executions,
-				},
+				metadata: inProgressMetadata,
 				createdAt: new Date(),
 				updatedAt: new Date(),
 				...inProgressMessage,
@@ -145,7 +160,7 @@ export const MessageGroup: React.FC<MessageGroupProps> = React.memo(
 				embeddingSmall: null,
 				embeddingLarge: null,
 			};
-		}, [inProgressMessage]);
+		}, [inProgressMessage, inProgressMetadata]);
 
 		const inProgressMessageComponent = useMemo(() => {
 			return inProgressMessageData ? (
@@ -193,7 +208,7 @@ export const MessageGroup: React.FC<MessageGroupProps> = React.memo(
 					</div>
 				)}
 
-				{!isCollapsed && group.isLoaded && (
+				{shouldRenderMessages && (
 					<div className="space-y-5">
 						{messageComponents}
 						{inProgressMessageComponent}

@@ -3,7 +3,7 @@ import type {
 	StepFactoryFromSpec,
 	StepSpecFromDefinition,
 } from "flow-core/interfaces/engine/step";
-import { logError, logInfo } from "flow-core/utils/logger";
+import { logError, logInfo, logWarn } from "flow-core/utils/logger";
 import { stepRegistry } from "flow-core/registries/step-registry";
 import type { ChatCompletionMessageParam } from "flow-core/interfaces/engine/messages";
 import type { BaseLLM } from "flow-core/interfaces/services/llm";
@@ -877,8 +877,8 @@ export function applyAutoCompactPolicy(
 	});
 
 	if (afterTrimTokens > safeTokenThreshold) {
-		throw new Error(
-			`[AUTO_COMPACT] Context still exceeds budget after full trim: ${afterTrimTokens} tokens > ${safeTokenThreshold} safe limit. Reduce conversation size or increase model context window.`,
+		logWarn(
+			`[AUTO_COMPACT] Context still exceeds budget after full trim: ${afterTrimTokens} tokens > ${safeTokenThreshold} safe limit. Returning best-effort compacted state.`,
 		);
 	}
 

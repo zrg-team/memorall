@@ -1,0 +1,430 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`flows-features registered contracts > registers every features step contract 1`] = `
+[
+  "daily-briefing-feature",
+  "finance-tracker-feature",
+  "job-application-feature",
+  "language-tutor-feature",
+  "meal-planner-feature",
+  "news-collection-feature",
+  "shopping-assistant-feature",
+  "travel-planner-feature",
+]
+`;
+
+exports[`flows-features registered contracts > registers every features step contract 2`] = `
+[
+  {
+    "config": {
+      "defaultStateMapping": {
+        "messages": "messages",
+        "tools": "tools",
+      },
+      "description": "Generate a personalized daily news briefing combining web news with the user's personal knowledge graph context.",
+      "enabledByDefault": false,
+      "feature": {
+        "graphTypes": [
+          "foundation",
+        ],
+        "id": "step-daily-briefing-feature",
+        "inputs": [
+          {
+            "description": "Current chat messages",
+            "name": "messages",
+            "required": true,
+            "type": "Message[]",
+          },
+          {
+            "description": "Current available tools",
+            "name": "tools",
+            "required": true,
+            "type": "Tool[]",
+          },
+        ],
+        "outputs": [
+          {
+            "description": "Messages with daily briefing instructions and open sessions.",
+            "name": "messages",
+            "type": "Message[]",
+          },
+          {
+            "description": "Tools extended with web + knowledge_graph toolset for news research.",
+            "name": "tools",
+            "type": "Tool[]",
+          },
+        ],
+        "type": "feature",
+      },
+    },
+    "executable": true,
+    "id": "daily-briefing-feature",
+    "name": "daily-briefing-feature",
+  },
+  {
+    "config": {
+      "defaultStateMapping": {
+        "messages": "messages",
+        "tools": "tools",
+      },
+      "description": "Deep financial research agent: researches stocks and companies across the web, produces reports with Mermaid diagrams and ASCII charts, saved to /documents/finance/.",
+      "enabledByDefault": false,
+      "feature": {
+        "graphTypes": [
+          "foundation",
+        ],
+        "id": "step-finance-tracker-feature",
+        "inputs": [
+          {
+            "description": "Current chat messages",
+            "name": "messages",
+            "required": true,
+            "type": "Message[]",
+          },
+          {
+            "description": "Current available tools",
+            "name": "tools",
+            "required": true,
+            "type": "Tool[]",
+          },
+        ],
+        "outputs": [
+          {
+            "description": "Messages with financial research instructions and open sessions.",
+            "name": "messages",
+            "type": "Message[]",
+          },
+          {
+            "description": "Tools extended with web + doc toolset for stock/company research.",
+            "name": "tools",
+            "type": "Tool[]",
+          },
+        ],
+        "type": "feature",
+      },
+    },
+    "executable": true,
+    "id": "finance-tracker-feature",
+    "name": "finance-tracker-feature",
+  },
+  {
+    "config": {
+      "defaultStateMapping": {
+        "messages": "messages",
+        "tools": "tools",
+      },
+      "description": "Generate a tailored cover letter and resume suggestions for a specific job application, saved to /documents/job-applications/.",
+      "enabledByDefault": false,
+      "feature": {
+        "graphTypes": [
+          "foundation",
+        ],
+        "id": "step-job-application-feature",
+        "inputs": [
+          {
+            "description": "Current chat messages",
+            "name": "messages",
+            "required": true,
+            "type": "Message[]",
+          },
+          {
+            "description": "Current available tools",
+            "name": "tools",
+            "required": true,
+            "type": "Tool[]",
+          },
+        ],
+        "outputs": [
+          {
+            "description": "Messages with job application instructions and open sessions.",
+            "name": "messages",
+            "type": "Message[]",
+          },
+          {
+            "description": "Tools extended with doc + web toolset for resume and job research.",
+            "name": "tools",
+            "type": "Tool[]",
+          },
+        ],
+        "type": "feature",
+      },
+    },
+    "executable": true,
+    "id": "job-application-feature",
+    "name": "job-application-feature",
+  },
+  {
+    "config": {
+      "defaultStateMapping": {
+        "messages": "messages",
+        "tools": "tools",
+      },
+      "description": "Interactive language tutor that builds a learner profile, runs structured lessons with Q&A, scores answers, and tracks progress in the knowledge graph.",
+      "enabledByDefault": false,
+      "feature": {
+        "graphTypes": [
+          "foundation",
+        ],
+        "id": "step-language-tutor-feature",
+        "inputs": [
+          {
+            "description": "Current chat messages",
+            "name": "messages",
+            "required": true,
+            "type": "Message[]",
+          },
+          {
+            "description": "Current available tools",
+            "name": "tools",
+            "required": true,
+            "type": "Tool[]",
+          },
+        ],
+        "outputs": [
+          {
+            "description": "Messages with language tutor instructions.",
+            "name": "messages",
+            "type": "Message[]",
+          },
+          {
+            "description": "Tools extended with knowledge_graph and current_time toolset.",
+            "name": "tools",
+            "type": "Tool[]",
+          },
+        ],
+        "type": "feature",
+      },
+    },
+    "executable": true,
+    "id": "language-tutor-feature",
+    "name": "language-tutor-feature",
+  },
+  {
+    "config": {
+      "defaultStateMapping": {
+        "messages": "messages",
+        "tools": "tools",
+      },
+      "description": "Generate a weekly meal plan with a shopping list from real web recipes, saved to /documents/meals/.",
+      "enabledByDefault": false,
+      "feature": {
+        "graphTypes": [
+          "foundation",
+        ],
+        "id": "step-meal-planner-feature",
+        "inputs": [
+          {
+            "description": "Current chat messages",
+            "name": "messages",
+            "required": true,
+            "type": "Message[]",
+          },
+          {
+            "description": "Current available tools",
+            "name": "tools",
+            "required": true,
+            "type": "Tool[]",
+          },
+        ],
+        "outputs": [
+          {
+            "description": "Messages with meal planning instructions and open sessions.",
+            "name": "messages",
+            "type": "Message[]",
+          },
+          {
+            "description": "Tools extended with web + doc toolset for recipe research.",
+            "name": "tools",
+            "type": "Tool[]",
+          },
+        ],
+        "type": "feature",
+      },
+    },
+    "executable": true,
+    "id": "meal-planner-feature",
+    "name": "meal-planner-feature",
+  },
+  {
+    "config": {
+      "defaultStateMapping": {
+        "messages": "messages",
+        "tools": "tools",
+      },
+      "description": "Research and summarize news on a topic by searching the web and reading 3-5 news articles.",
+      "enabledByDefault": false,
+      "feature": {
+        "graphTypes": [
+          "foundation",
+        ],
+        "id": "step-news-collection-feature",
+        "inputs": [
+          {
+            "description": "Current chat messages",
+            "name": "messages",
+            "required": true,
+            "type": "Message[]",
+          },
+          {
+            "description": "Current available tools",
+            "name": "tools",
+            "required": true,
+            "type": "Tool[]",
+          },
+        ],
+        "outputs": [
+          {
+            "description": "Messages with news research instructions and open sessions.",
+            "name": "messages",
+            "type": "Message[]",
+          },
+          {
+            "description": "Tools extended with web toolset for news browsing.",
+            "name": "tools",
+            "type": "Tool[]",
+          },
+        ],
+        "type": "feature",
+      },
+    },
+    "executable": true,
+    "id": "news-collection-feature",
+    "name": "news-collection-feature",
+  },
+  {
+    "config": {
+      "defaultStateMapping": {
+        "messages": "messages",
+        "tools": "tools",
+      },
+      "description": "Deep product research agent: searches multiple sources, reads prices/specs/reviews, compares alternatives, and saves a full report to /documents/shopping-assistant/.",
+      "enabledByDefault": false,
+      "feature": {
+        "graphTypes": [
+          "foundation",
+        ],
+        "id": "step-shopping-assistant-feature",
+        "inputs": [
+          {
+            "description": "Current chat messages",
+            "name": "messages",
+            "required": true,
+            "type": "Message[]",
+          },
+          {
+            "description": "Current available tools",
+            "name": "tools",
+            "required": true,
+            "type": "Tool[]",
+          },
+        ],
+        "outputs": [
+          {
+            "description": "Messages with shopping research instructions and open sessions.",
+            "name": "messages",
+            "type": "Message[]",
+          },
+          {
+            "description": "Tools extended with web + doc toolset for product research.",
+            "name": "tools",
+            "type": "Tool[]",
+          },
+        ],
+        "type": "feature",
+      },
+    },
+    "executable": true,
+    "id": "shopping-assistant-feature",
+    "name": "shopping-assistant-feature",
+  },
+  {
+    "config": {
+      "defaultStateMapping": {
+        "messages": "messages",
+        "tools": "tools",
+      },
+      "description": "Research and generate a detailed day-by-day travel itinerary saved to /documents/travel/.",
+      "enabledByDefault": false,
+      "feature": {
+        "graphTypes": [
+          "foundation",
+        ],
+        "id": "step-travel-planner-feature",
+        "inputs": [
+          {
+            "description": "Current chat messages",
+            "name": "messages",
+            "required": true,
+            "type": "Message[]",
+          },
+          {
+            "description": "Current available tools",
+            "name": "tools",
+            "required": true,
+            "type": "Tool[]",
+          },
+        ],
+        "outputs": [
+          {
+            "description": "Messages with travel planning instructions and open sessions.",
+            "name": "messages",
+            "type": "Message[]",
+          },
+          {
+            "description": "Tools extended with web + doc toolset for travel research.",
+            "name": "tools",
+            "type": "Tool[]",
+          },
+        ],
+        "type": "feature",
+      },
+    },
+    "executable": true,
+    "id": "travel-planner-feature",
+    "name": "travel-planner-feature",
+  },
+]
+`;
+
+exports[`flows-features registered contracts > registers every features tool contract 1`] = `
+[
+  "render_artifact",
+]
+`;
+
+exports[`flows-features registered contracts > registers every features tool contract 2`] = `
+[
+  {
+    "description": "Append a standard artifact to the graph output as an assistant message. The tool result is only a normal OpenAI tool message; the artifact itself is added to graph state.",
+    "name": "render_artifact",
+    "parameters": {
+      "properties": {
+        "content": {
+          "type": "string",
+        },
+        "identifier": {
+          "type": "string",
+        },
+        "title": {
+          "type": "string",
+        },
+        "type": {
+          "enum": [
+            "text/html",
+            "text/uri-list",
+            "html",
+            "url",
+            "application/hyperframes",
+          ],
+          "type": "string",
+        },
+      },
+      "required": [
+        "type",
+        "content",
+      ],
+      "type": "object",
+    },
+  },
+]
+`;
