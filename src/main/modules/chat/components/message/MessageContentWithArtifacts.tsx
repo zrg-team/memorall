@@ -6,6 +6,7 @@ import { ArtifactRenderer } from "../artifacts/ArtifactRenderer";
 import { parseArtifactSegments } from "../artifacts/artifact-protocol";
 import type { MessageActionRequest } from "../artifacts/ArtifactActionsMenu";
 import { CompactArtifactReference } from "./CompactArtifactReference";
+import { DeferredMount } from "./DeferredMount";
 
 const USE_STREAMDOWN = false;
 const Streamdown = lazy(() => import("../MessageStreamDown"));
@@ -33,9 +34,12 @@ export const MessageContentWithArtifacts: React.FC<{
 	const renderTextWithArtifacts = (text: string, keyPrefix: string) => {
 		const artifactSegments = parseArtifactSegments(text);
 
-		return artifactSegments.map((seg) => {
+		return artifactSegments.map((seg, i) => {
 			if (seg.kind === "artifact") {
-				const key = `${keyPrefix}-artifact-${seg.type}-${seg.identifier ?? seg.blockIndex}`;
+				// Key by ordinal position, not mutable offsets. Streaming only appends,
+				// so the ordinal is stable for a given block and avoids remounting the
+				// artifact iframe on every token.
+				const key = `${keyPrefix}-artifact-${i}-${seg.type}`;
 				if (seenArtifactKeys) {
 					const dedupeKey = `${seg.type}:${seg.identifier ?? ""}:${seg.title ?? ""}:${seg.content}`;
 					if (seenArtifactKeys.has(dedupeKey)) return null;
@@ -53,7 +57,7 @@ export const MessageContentWithArtifacts: React.FC<{
 				}
 
 				return (
-					<div key={key} className="space-y-3">
+					<DeferredMount key={key} enabled={!isStreaming} className="space-y-3">
 						<ArtifactRenderer
 							type={seg.type}
 							content={seg.content}
@@ -63,40 +67,46 @@ export const MessageContentWithArtifacts: React.FC<{
 							onMessageAction={onMessageAction}
 						/>
 						<div className="border-t border-border/40" />
-					</div>
+					</DeferredMount>
 				);
 			}
 			const text = seg.text;
 			if (!text.trim()) return null;
+			// Key by ordinal position so the streamed markdown block reconciles in place
+			// instead of unmounting+remounting (which re-parsed the whole block) on every
+			// token as its length changed.
 			return (
-				<ContentComponent
-					key={`${keyPrefix}-text-${text.length}-${text.slice(0, 32)}`}
-					isStreaming={isStreaming}
-				>
+				<ContentComponent key={`${keyPrefix}-text-${i}`} isStreaming={isStreaming}>
 					{text}
 				</ContentComponent>
 			);
 		});
 	};
 
+	// Key by ordinal-within-kind, NOT array position. While streaming, a leading
+	// text segment can appear/disappear as tokens arrive, which would shift the
+	// array index of the OpenUI block and remount its whole tree (rebuilding the
+	// component library + reparsing) every time. The k-th OpenUI block is always
+	// `openui-k` regardless of surrounding text, so it stays mounted and reconciles.
+	let openuiCount = 0;
+	let textCount = 0;
 	return (
 		<>
 			{segments.map((seg) => {
 				if (seg.kind === "openui") {
+					const key = `openui-${openuiCount++}`;
 					return (
-						<OpenUIRenderer
-							key={`openui-${seg.start}-${seg.end}`}
-							content={seg.content}
-							streaming={isStreaming}
-							onMessageAction={onMessageAction}
-						/>
+						<DeferredMount key={key} enabled={!isStreaming}>
+							<OpenUIRenderer
+								content={seg.content}
+								streaming={isStreaming}
+								onMessageAction={onMessageAction}
+							/>
+						</DeferredMount>
 					);
 				}
 
-				return renderTextWithArtifacts(
-					seg.text,
-					`segment-${seg.start}-${seg.end}`,
-				);
+				return renderTextWithArtifacts(seg.text, `segment-${textCount++}`);
 			})}
 		</>
 	);
