@@ -3,6 +3,7 @@ import {
 	useEffect,
 	useState,
 	type Dispatch,
+	type FormEvent,
 	type FormEventHandler,
 	type SetStateAction,
 } from "react";
@@ -40,6 +41,13 @@ interface UseEmbeddedChatSessionOptions {
 	selectedTopic: string;
 	scrollToBottom: (behavior?: ScrollBehavior) => void;
 	setShouldAutoScroll: Dispatch<SetStateAction<boolean>>;
+}
+
+interface SubmitEmbeddedChatMessageOptions {
+	event?: FormEvent<HTMLFormElement>;
+	inputText: string;
+	contextPrefix?: string;
+	clearComposer: boolean;
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -237,23 +245,33 @@ export const useEmbeddedChatSession = ({
 		void newChat();
 	}, [newChat]);
 
-	const submit: FormEventHandler<HTMLFormElement> = useCallback(
-		async (event) => {
-			event.preventDefault();
+	const submitMessage = useCallback(
+		async ({
+			event,
+			inputText,
+			contextPrefix,
+			clearComposer,
+		}: SubmitEmbeddedChatMessageOptions) => {
+			event?.preventDefault();
 
-			if (!inputValue.trim() || isTyping || !modelAvailable) {
+			if (!inputText.trim() || isTyping || !modelAvailable) {
 				return;
 			}
 
-			const userMessageContent = inputValue.trim();
+			const userMessageContent = inputText.trim();
+			const effectiveUserMessageContent = contextPrefix
+				? `${contextPrefix}\n\n---\n\n${userMessageContent}`
+				: userMessageContent;
 			const composedUserContent = buildEmbeddedContextMessageContent({
-				userMessage: userMessageContent,
+				userMessage: effectiveUserMessageContent,
 				contexts: attachedContexts,
 				pageTitle,
 				pageUrl,
 			});
 
-			setInputValue("");
+			if (clearComposer) {
+				setInputValue("");
+			}
 			resetContexts();
 			setIsTyping(true);
 			setShouldAutoScroll(true);
@@ -494,7 +512,6 @@ export const useEmbeddedChatSession = ({
 			}
 		},
 		[
-			inputValue,
 			isTyping,
 			modelAvailable,
 			attachedContexts,
@@ -512,11 +529,21 @@ export const useEmbeddedChatSession = ({
 			scrollToBottom,
 		],
 	);
+	const submit: FormEventHandler<HTMLFormElement> = useCallback(
+		(event) =>
+			void submitMessage({
+				event,
+				inputText: inputValue,
+				clearComposer: true,
+			}),
+		[inputValue, submitMessage],
+	);
 
 	return {
 		messages,
 		isTyping: isTyping || isLoadingHistory,
 		submit,
+		submitMessage,
 		stop,
 		deleteChat,
 		newChat,

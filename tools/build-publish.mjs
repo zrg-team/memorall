@@ -153,6 +153,7 @@ console.log('🔨 Building production extension...');
 try {
   execSync('node tools/copy-bundled-assets.mjs', { stdio: 'inherit' });
   execSync('cross-env NODE_ENV=production extension build --browser=chrome,edge', { stdio: 'inherit' });
+  execSync('node tools/ensure-content-script-assets.mjs', { stdio: 'inherit' });
   console.log('✅ Production build complete\n');
 } catch (error) {
   console.error('❌ Build failed:', error.message);

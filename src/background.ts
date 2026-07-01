@@ -42,14 +42,18 @@ listenForLanguageChanges((language) => {
 	void updateContextMenuText(language);
 });
 
+async function ensureContextMenusReady(): Promise<void> {
+	await loadCurrentLanguage();
+	await createContextMenus(getCurrentLanguage());
+}
+
 // ── Lifecycle events ──────────────────────────────────────────────────────────
 
 chrome.runtime.onInstalled.addListener(async (details) => {
 	try {
 		logInfo(`🎉 Extension installed/updated: ${details.reason}`);
+		await ensureContextMenusReady();
 		await init();
-		await loadCurrentLanguage();
-		createContextMenus(getCurrentLanguage());
 	} catch (error) {
 		logError("❌ Failed to initialize extension:", error);
 	}
@@ -58,6 +62,7 @@ chrome.runtime.onInstalled.addListener(async (details) => {
 chrome.runtime.onStartup.addListener(async () => {
 	try {
 		logInfo("🚀 Browser startup detected - initializing extension");
+		await ensureContextMenusReady();
 		await init();
 		logInfo("✅ Extension ready for browser session");
 	} catch (error) {

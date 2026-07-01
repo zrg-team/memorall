@@ -17,6 +17,16 @@ import { useEmbeddedTranslation } from "@/embedded/hooks/use-embedded-language";
 import { customStyles } from "@/embedded/styles/customStyles";
 import type { ChatModalProps } from "@/embedded/types";
 import { createShadowPage } from "@/embedded/utils/create-shadow-page";
+import { BACKGROUND_EVENTS } from "@/constants/events";
+import type { MessageActionRequest } from "@/main/modules/chat/components/artifacts/ArtifactActionsMenu";
+import {
+	formatOpenUIFormStateContext,
+	getOpenUISendMessageText,
+	isAllowedOpenUIRoute,
+	normalizeOpenUIDocumentPath,
+	resolveOpenUITemplate,
+	type MemorallOpenUIActionDetail,
+} from "@/main/modules/openui/actions";
 import { backgroundJob } from "@/services/background-jobs/background-job";
 
 export const EMBEDDED_CHAT_MODAL_STATE_EVENT =
@@ -30,10 +40,19 @@ const getPageHost = (pageUrl: string): string => {
 	}
 };
 
-const openFullPage = () => {
-	chrome.runtime.sendMessage({
-		type: "OPEN_FULL_PAGE",
-	});
+const openFullPage = async (navigationState?: {
+	navigateTo: string;
+	openDocumentPath?: string;
+}) => {
+	try {
+		if (navigationState) {
+			await chrome.storage?.session?.set?.(navigationState);
+		}
+	} finally {
+		await chrome.runtime.sendMessage({
+			type: BACKGROUND_EVENTS.OPEN_FULL_PAGE,
+		});
+	}
 };
 
 const EmbeddedChat: React.FC<ChatModalProps> = ({
@@ -117,24 +136,31 @@ const EmbeddedChat: React.FC<ChatModalProps> = ({
 		handleWheel,
 		setShouldAutoScroll,
 	} = useConversationAutoScroll();
-	const { messages, isTyping, submit, stop, deleteChat, newChat } =
-		useEmbeddedChatSession({
-			context,
-			mode,
-			pageTitle,
-			pageUrl,
-			inputValue,
-			setInputValue,
-			attachedContexts,
-			resetContexts,
-			modelAvailable,
-			selectedModel,
-			selectedAgentFlowId,
-			coAgentEnabled,
-			selectedTopic,
-			scrollToBottom,
-			setShouldAutoScroll,
-		});
+	const {
+		messages,
+		isTyping,
+		submit,
+		submitMessage,
+		stop,
+		deleteChat,
+		newChat,
+	} = useEmbeddedChatSession({
+		context,
+		mode,
+		pageTitle,
+		pageUrl,
+		inputValue,
+		setInputValue,
+		attachedContexts,
+		resetContexts,
+		modelAvailable,
+		selectedModel,
+		selectedAgentFlowId,
+		coAgentEnabled,
+		selectedTopic,
+		scrollToBottom,
+		setShouldAutoScroll,
+	});
 	const { isSmartSelectMode, startSmartSelect, cancelSmartSelect } =
 		useEmbeddedSmartSelect({
 			onAttachContext: attachSmartContext,
@@ -195,9 +221,85 @@ const EmbeddedChat: React.FC<ChatModalProps> = ({
 	}, []);
 
 	const handleOpenFullPageAndClose = useCallback(() => {
-		openFullPage();
+		void openFullPage();
 		onClose();
 	}, [onClose]);
+
+	const handleMessageAction = useCallback(
+		async (action: MessageActionRequest) => {
+			if (action.type !== "openui_action") return;
+			const detail = action.payload?.detail as
+				| MemorallOpenUIActionDetail
+				| undefined;
+			if (!detail?.action) return;
+			const { action: openUIAction } = detail;
+
+			if (openUIAction.type === "send_message") {
+				const message = getOpenUISendMessageText(
+					openUIAction,
+					detail.formState,
+					detail.formName,
+					detail.humanFriendlyMessage,
+				);
+				const shouldIncludeFormState =
+					openUIAction.includeFormState ?? Boolean(detail.formName);
+				const formContext = shouldIncludeFormState
+					? formatOpenUIFormStateContext(detail.formState, detail.formName)
+					: undefined;
+				await submitMessage({
+					inputText: message,
+					contextPrefix: formContext,
+					clearComposer: false,
+				});
+				return;
+			}
+
+			if (openUIAction.type === "add_message_to_input") {
+				const text = resolveOpenUITemplate(
+					openUIAction.text,
+					detail.formState,
+					detail.formName,
+				);
+				setInputValue((current) =>
+					openUIAction.mode === "replace"
+						? text
+						: current.trim()
+							? `${current}\n${text}`
+							: text,
+				);
+				return;
+			}
+
+			if (openUIAction.type === "open_document") {
+				const path = normalizeOpenUIDocumentPath(
+					resolveOpenUITemplate(
+						openUIAction.path,
+						detail.formState,
+						detail.formName,
+					),
+				);
+				if (path) {
+					await openFullPage({
+						navigateTo: "/documents",
+						openDocumentPath: path,
+					});
+				}
+				return;
+			}
+
+			if (openUIAction.type === "open_route") {
+				const route = resolveOpenUITemplate(
+					openUIAction.route,
+					detail.formState,
+					detail.formName,
+				).trim();
+				if (isAllowedOpenUIRoute(route)) {
+					await openFullPage({ navigateTo: route });
+				}
+			}
+		},
+		[setInputValue, submitMessage],
+	);
 
 	const handlePasskeySubmit = useCallback(
 		async (passkey: string) => {
@@ -269,7 +371,7 @@ const EmbeddedChat: React.FC<ChatModalProps> = ({
 						onToggleDisplayMode={toggleDisplayMode}
 						onNewChat={newChat}
 						onMinimize={() => setIsMinimized(true)}
-						onOpenFullVersion={openFullPage}
+						onOpenFullVersion={() => void openFullPage()}
 						onClose={closeWithConfirmation}
 						coAgentEnabled={coAgentEnabled}
 						onToggleCoAgent={toggleCoAgent}
@@ -298,6 +400,7 @@ const EmbeddedChat: React.FC<ChatModalProps> = ({
 							onSelectPrompt={setInputValue}
 							onOpenMainApp={handleOpenFullPageAndClose}
 							onPasskeySubmit={handlePasskeySubmit}
+							onMessageAction={handleMessageAction}
 						/>
 					)}
 

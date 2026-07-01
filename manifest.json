@@ -57,6 +57,7 @@
         "logo.png",
         "*.js",
         "*.css",
+        "content_scripts/*.css",
         "action/*.css",
         "action/*.js"
       ],

@@ -1,9 +1,12 @@
 import type { WhereClause } from "../interfaces/database";
+import { eq, or, sql, type SQL } from "drizzle-orm";
+import type { PgColumn } from "drizzle-orm/pg-core";
 
 export function scopedGraphFilter(
 	graphId: string | undefined,
 ): WhereClause<{ graphId: string }> {
-	if (graphId?.trim()) return { graphId: { $eq: graphId } };
+	const normalizedGraphId = graphId?.trim();
+	if (normalizedGraphId) return { graphId: { $eq: normalizedGraphId } };
 	return { graphId: { $null: true } };
 }
 
@@ -11,9 +14,12 @@ export const getScopedGraphWhere = (
 	state: {
 		graphId?: string;
 	},
-	_graphColumn?: unknown,
-): never => {
+	graphColumn: PgColumn,
+): SQL => {
 	const graphId = state.graphId?.trim();
-	if (graphId) return { graph: { $eq: graphId } } as never;
-	return { graph: { $null: true } } as never;
+	if (graphId) {
+		return eq(graphColumn, graphId);
+	}
+
+	return or(eq(graphColumn, ""), sql`${graphColumn} IS NULL`)!;
 };
