@@ -76,7 +76,10 @@ export const MessageContentWithArtifacts: React.FC<{
 			// instead of unmounting+remounting (which re-parsed the whole block) on every
 			// token as its length changed.
 			return (
-				<ContentComponent key={`${keyPrefix}-text-${i}`} isStreaming={isStreaming}>
+				<ContentComponent
+					key={`${keyPrefix}-text-${i}`}
+					isStreaming={isStreaming}
+				>
 					{text}
 				</ContentComponent>
 			);

@@ -678,7 +678,10 @@ export class KnowledgeGraphService {
 			try {
 				await this.convertPageToKnowledgeGraph(file.filePath, file.content);
 			} catch (error) {
-				logError(`Knowledge graph conversion failed for ${file.filePath}:`, error);
+				logError(
+					`Knowledge graph conversion failed for ${file.filePath}:`,
+					error,
+				);
 			}
 			// Small delay between conversions
 			await new Promise((resolve) => setTimeout(resolve, 1000));
