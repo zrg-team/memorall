@@ -71,13 +71,21 @@ export const AssistantContentFlow: React.FC<{
 				parts={completedWorkflowParts}
 				evidenceParts={workflowEvidenceParts}
 			/>
-			{parts.map((part, index) => {
-				if (part.type === "text") {
-					if (!part.text.trim()) return null;
-					return (
-						<MessageContentWithArtifacts
-							key={`text-${index}`}
-							content={part.text}
+			{(() => {
+				// Key text parts by ordinal-among-text-parts, not global array index.
+				// While streaming, execution/tool parts are appended/reordered around the
+				// text, so a global-index key shifted every token and remounted the text's
+				// whole subtree (incl. the OpenUI tree + component library). The n-th text
+				// part is always `text-n`, so it stays mounted and reconciles.
+				let textPartCount = 0;
+				return parts.map((part, index) => {
+					if (part.type === "text") {
+						if (!part.text.trim()) return null;
+						const textKey = `text-${textPartCount++}`;
+						return (
+							<MessageContentWithArtifacts
+								key={textKey}
+								content={part.text}
 							isStreaming={isStreaming}
 							suppressArtifactPreviews={suppressArtifactPreviews}
 							onMessageAction={onMessageAction}
@@ -121,7 +129,8 @@ export const AssistantContentFlow: React.FC<{
 						}
 					/>
 				);
-			})}
+				});
+			})()}
 		</div>
 	);
 };

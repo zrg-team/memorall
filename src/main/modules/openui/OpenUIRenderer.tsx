@@ -5,6 +5,7 @@ import React, {
 	useRef,
 	useState,
 } from "react";
+import "@/main/i18n/config";
 import { Renderer, type ActionEvent } from "@openuidev/react-lang";
 import { createComponentLibrary } from "./index";
 import { MarkdownMessage } from "@/main/modules/chat/components/MarkdownMessage";
@@ -17,6 +18,7 @@ import {
 	parseMemorallOpenUIAction,
 	resolveOpenUITemplate,
 } from "./actions";
+import { useThrottledValue } from "./use-throttled-value";
 import type { MessageActionRequest } from "@/main/modules/chat/components/artifacts/ArtifactActionsMenu";
 
 // Theme is the 4th positional arg in: CardBlock("title", "desc", [...], "theme")
@@ -109,12 +111,25 @@ export function OpenUIRenderer({
 	onMessageAction?: (action: MessageActionRequest) => void | Promise<void>;
 }) {
 	const { t } = useTranslation("chat");
-	const theme = useMemo(() => detectTheme(content), [content]);
+	// While streaming, re-parse at most ~every 120ms instead of on every token.
+	// The final value is returned synchronously once streaming ends.
+	const renderContent = useThrottledValue(content, streaming, 120);
+	const theme = useMemo(() => detectTheme(renderContent), [renderContent]);
 	const library = useMemo(() => createComponentLibrary(theme), [theme]);
 	const [resetKey, setResetKey] = useState(0);
 	const [renderFailed, setRenderFailed] = useState(false);
 	const [streamingRenderFailed, setStreamingRenderFailed] = useState(false);
 	const prevStreaming = useRef(streaming);
+
+	// Dev/harness-only remount counter: proves the OpenUI tree no longer mounts
+	// once per streamed token. No-op unless the perf harness sets window.__openuiPerf.
+	useEffect(() => {
+		const w = window as typeof window & {
+			__openuiPerf?: boolean;
+			__openuiMounts?: number;
+		};
+		if (w.__openuiPerf) w.__openuiMounts = (w.__openuiMounts ?? 0) + 1;
+	}, []);
 
 	useEffect(() => {
 		setRenderFailed(false);
@@ -256,7 +271,7 @@ export function OpenUIRenderer({
 		<OpenUIErrorBoundary content={content}>
 			<Renderer
 				key={resetKey}
-				response={content}
+				response={renderContent}
 				library={library}
 				isStreaming={streaming}
 				onAction={handleOpenUIAction}
