@@ -519,7 +519,7 @@ const definition = defineStep<
 	name: STEP_NAME,
 	execute: async ({ input, services, runConfig }) => {
 		try {
-			const graphId = input.graphId?.trim() || "default";
+			const graphId = input.graphId?.trim() || "";
 
 			logInfo("[DATABASE_SAVE] Saving knowledge graph to database:", {
 				url: input.url,

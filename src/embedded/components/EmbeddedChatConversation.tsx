@@ -14,6 +14,7 @@ import {
 } from "@/embedded/components/MessageControl";
 import { EmbeddedMessageRenderer } from "@/embedded/components/EmbeddedMessageRenderer";
 import { useEmbeddedTranslation } from "@/embedded/hooks/use-embedded-language";
+import type { MessageActionRequest } from "@/main/modules/chat/components/artifacts/ArtifactActionsMenu";
 import type { ChatMessage, EmbeddedContextItem } from "@/embedded/types";
 
 interface EmbeddedChatConversationProps {
@@ -33,6 +34,7 @@ interface EmbeddedChatConversationProps {
 	onSelectPrompt: (prompt: string) => void;
 	onOpenMainApp: () => void;
 	onPasskeySubmit: (passkey: string) => Promise<void>;
+	onMessageAction?: (action: MessageActionRequest) => void | Promise<void>;
 }
 
 const formatProviderLabel = (provider: string): string =>
@@ -262,10 +264,12 @@ const ChatMessageItem = ({
 	message,
 	messages,
 	selectedTopic,
+	onMessageAction,
 }: {
 	message: ChatMessage;
 	messages: ChatMessage[];
 	selectedTopic: string;
+	onMessageAction?: (action: MessageActionRequest) => void | Promise<void>;
 }) => (
 	<div className="space-y-3 overflow-x-hidden">
 		<Message role={message.role}>
@@ -275,6 +279,7 @@ const ChatMessageItem = ({
 					isLoading={message.isStreaming || false}
 					allMessages={messages}
 					selectedTopic={selectedTopic}
+					onMessageAction={onMessageAction}
 				/>
 			</MessageContent>
 		</Message>
@@ -324,6 +329,7 @@ export const EmbeddedChatConversation = ({
 	onSelectPrompt,
 	onOpenMainApp,
 	onPasskeySubmit,
+	onMessageAction,
 }: EmbeddedChatConversationProps) => (
 	<Conversation
 		ref={conversationRef}
@@ -355,6 +361,7 @@ export const EmbeddedChatConversation = ({
 						message={message}
 						messages={messages}
 						selectedTopic={selectedTopic}
+						onMessageAction={onMessageAction}
 					/>
 				))
 			)}

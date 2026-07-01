@@ -184,6 +184,9 @@ export const AgentsWorkspace: React.FC = () => {
 			onCollapseSidebar={collapseSidebar}
 			onCompactTabChange={setActiveCompactTab}
 			onExpandSidebar={expandSidebar}
+			onOpenAgentWizard={() => {
+				void handleOpenAgentWizard();
+			}}
 			onResizeStart={handleResizeStart}
 			sidebarOverlayWidth={sidebarOverlayWidth}
 		>

@@ -28,6 +28,27 @@ export type KnowledgeGrowMode = "knowledge" | "structmem";
 const growTypeToMode = (growType: GrowType): KnowledgeGrowMode =>
 	growType === "structmem" ? "structmem" : "knowledge";
 
+const getStepErrors = (stepOutput: unknown): string[] => {
+	if (!stepOutput || typeof stepOutput !== "object") return [];
+
+	const output = stepOutput as Record<string, unknown>;
+	const errors = output.errors;
+	if (Array.isArray(errors)) {
+		return errors
+			.map((error) =>
+				error instanceof Error ? error.message : String(error ?? ""),
+			)
+			.filter((error) => error.trim().length > 0);
+	}
+
+	const error = output.error;
+	if (typeof error === "string" && error.trim().length > 0) {
+		return [error.trim()];
+	}
+
+	return [];
+};
+
 export class KnowledgeGraphService {
 	private static instance: KnowledgeGraphService;
 	private conversions = new Map<string, ConversionProgress>();
@@ -305,6 +326,15 @@ export class KnowledgeGraphService {
 			};
 			for await (const partial of stream) {
 				const stepName = Object.keys(partial)[0];
+				const stepOutput = stepName
+					? (partial as Record<string, unknown>)[stepName]
+					: undefined;
+				const stepErrors = getStepErrors(stepOutput);
+				if (stepErrors.length > 0) {
+					throw new Error(
+						`Knowledge graph step "${stepName}" failed: ${stepErrors.join("; ")}`,
+					);
+				}
 
 				if (
 					"extract_entities" in partial &&
@@ -330,16 +360,28 @@ export class KnowledgeGraphService {
 					stats.factsResolved = partial.resolve_facts.resolvedFacts.length;
 				} else if (
 					"save_to_database" in partial &&
-					typeof partial.save_to_database === "object" &&
-					partial.save_to_database.entitiesCreated
+					typeof partial.save_to_database === "object"
 				) {
-					if (Array.isArray(partial.save_to_database.entitiesCreated)) {
-						stats.entitiesCreated =
-							partial.save_to_database.entitiesCreated.length;
+					const saveOutput = partial.save_to_database as Record<
+						string,
+						unknown
+					>;
+					const createdNodes = Array.isArray(saveOutput.createdNodes)
+						? saveOutput.createdNodes
+						: Array.isArray(saveOutput.entitiesCreated)
+							? saveOutput.entitiesCreated
+							: undefined;
+					const createdEdges = Array.isArray(saveOutput.createdEdges)
+						? saveOutput.createdEdges
+						: Array.isArray(saveOutput.relationsCreated)
+							? saveOutput.relationsCreated
+							: undefined;
+
+					if (createdNodes) {
+						stats.entitiesCreated = createdNodes.length;
 					}
-					if (Array.isArray(partial.save_to_database.relationsCreated)) {
-						stats.relationsCreated =
-							partial.save_to_database.relationsCreated.length;
+					if (createdEdges) {
+						stats.relationsCreated = createdEdges.length;
 					}
 				}
 
@@ -454,6 +496,8 @@ export class KnowledgeGraphService {
 				completedAt: new Date(),
 				error: error instanceof Error ? error.message : "Unknown error",
 			});
+
+			throw error;
 		}
 	}
 
@@ -631,7 +675,11 @@ export class KnowledgeGraphService {
 
 		// Process files sequentially to avoid overwhelming the LLM service
 		for (const file of files) {
-			await this.convertPageToKnowledgeGraph(file.filePath, file.content);
+			try {
+				await this.convertPageToKnowledgeGraph(file.filePath, file.content);
+			} catch (error) {
+				logError(`Knowledge graph conversion failed for ${file.filePath}:`, error);
+			}
 			// Small delay between conversions
 			await new Promise((resolve) => setTimeout(resolve, 1000));
 		}

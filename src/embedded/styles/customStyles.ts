@@ -1230,6 +1230,36 @@ export const customStyles = `
     background: hsl(var(--muted)) !important;
   }
 
+  .memorall-chat-container .memorall-openui-content {
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow: hidden !important;
+    color: hsl(var(--foreground)) !important;
+  }
+
+  .memorall-chat-container .memorall-openui-content input,
+  .memorall-chat-container .memorall-openui-content textarea,
+  .memorall-chat-container .memorall-openui-content select {
+    border: 1px solid hsl(var(--input)) !important;
+    background-color: hsl(var(--background)) !important;
+    color: hsl(var(--foreground)) !important;
+    outline: none !important;
+  }
+
+  .memorall-chat-container .memorall-openui-content textarea {
+    min-height: 80px !important;
+    resize: vertical !important;
+  }
+
+  .memorall-chat-container .memorall-openui-content input[type="checkbox"],
+  .memorall-chat-container .memorall-openui-content input[type="radio"] {
+    width: 1rem !important;
+    height: 1rem !important;
+    flex-shrink: 0 !important;
+    border: 1px solid hsl(var(--border)) !important;
+    accent-color: hsl(var(--primary)) !important;
+  }
+
   .memorall-chat-container .memorall-markdown {
     color: hsl(var(--foreground)) !important;
     font-size: 14px !important;

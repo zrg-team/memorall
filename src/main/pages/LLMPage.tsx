@@ -37,6 +37,7 @@ import { useResponsiveWorkspacePanels } from "@/main/hooks/use-responsive-worksp
 import { useTranslation } from "react-i18next";
 import { getModel } from "@/services/llm/registry/model-registry";
 import { PageHeader } from "@/main/components/ui/page-header";
+import { WorkspaceCollapsedSidebarItem } from "@/main/components/molecules/WorkspaceCollapsedSidebarItem";
 
 // No local quick-connect card; configuration handled in AdvancedSection
 
@@ -118,7 +119,8 @@ export const LLMPage: React.FC = () => {
 					className={
 						isDesktop
 							? `relative z-20 flex min-h-0 flex-col border-r bg-background transition-[width] ${
-									isCompactSplitLayout && !isSidebarCollapsed
+									(isCompactSplitLayout && !isSidebarCollapsed) ||
+									isSidebarCollapsed
 										? "overflow-visible"
 										: "overflow-hidden"
 								}`
@@ -127,23 +129,28 @@ export const LLMPage: React.FC = () => {
 				>
 					{isDesktop && isSidebarCollapsed ? (
 						<div className="flex h-full flex-col items-center gap-2 py-3">
-							<Button
-								type="button"
-								variant="outline"
-								size="icon"
-								className="h-9 w-9"
-								onClick={() => {
-									expandSidebar();
-								}}
-								aria-label={t("sidebar.show")}
-								title={t("sidebar.show")}
-							>
-								<PanelLeftOpen className="h-4 w-4" />
-							</Button>
-							<div className="mt-2 flex flex-col gap-2 text-muted-foreground">
-								<Brain className="h-5 w-5" />
-								<Cpu className="h-5 w-5" />
-								<Database className="h-5 w-5" />
+							<WorkspaceCollapsedSidebarItem
+								icon={<PanelLeftOpen className="h-4 w-4" />}
+								label={t("sidebar.show")}
+								onClick={expandSidebar}
+								className="border border-input bg-background hover:bg-accent"
+							/>
+							<div className="mt-2 flex flex-col gap-2">
+								<WorkspaceCollapsedSidebarItem
+									icon={<Brain className="h-5 w-5" />}
+									label={t("currentModel.title")}
+									onClick={expandSidebar}
+								/>
+								<WorkspaceCollapsedSidebarItem
+									icon={<Cpu className="h-5 w-5" />}
+									label={t("offscreenServices.title")}
+									onClick={expandSidebar}
+								/>
+								<WorkspaceCollapsedSidebarItem
+									icon={<Database className="h-5 w-5" />}
+									label={t("yourModels.title")}
+									onClick={expandSidebar}
+								/>
 							</div>
 						</div>
 					) : (

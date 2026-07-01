@@ -96,15 +96,64 @@ const App: React.FC = () => {
 		useEffect(() => {
 			const checkSessionNavigation = async () => {
 				try {
-					const result = await chrome.storage?.session?.get?.("navigateTo");
-					if (result?.navigateTo === "activities") {
-						navigate("/activities");
-						// Clear the flag
-						await chrome.storage?.session?.remove?.("navigateTo");
+					const result = await chrome.storage?.session?.get?.([
+						"navigateTo",
+						"openDocumentPath",
+					]);
+					const target =
+						typeof result?.navigateTo === "string"
+							? result.navigateTo
+							: undefined;
+					const namedRoutes: Record<string, string> = {
+						activities: "/activities",
+						"knowledge-graph": "/knowledge-graph",
+						remember: "/remember",
+						llm: "/llm",
+						topics: "/topics",
+						documents: "/documents",
+					};
+					const route = target
+						? (namedRoutes[target] ?? (target.startsWith("/") ? target : null))
+						: null;
+					if (route) {
+						const openDocumentPath =
+							route === "/documents" &&
+							typeof result?.openDocumentPath === "string"
+								? result.openDocumentPath
+								: undefined;
+						navigate(route, {
+							state: openDocumentPath ? { openDocumentPath } : undefined,
+						});
+						await chrome.storage?.session?.remove?.([
+							"navigateTo",
+							"openDocumentPath",
+						]);
 					}
 				} catch (_) {}
 			};
-			checkSessionNavigation();
+			void checkSessionNavigation();
+
+			const handleStorageChange = (
+				changes: Record<string, chrome.storage.StorageChange>,
+				areaName: string,
+			) => {
+				if (
+					areaName === "session" &&
+					("navigateTo" in changes || "openDocumentPath" in changes)
+				) {
+					void checkSessionNavigation();
+				}
+			};
+
+			try {
+				chrome.storage?.onChanged?.addListener(handleStorageChange);
+			} catch (_) {}
+
+			return () => {
+				try {
+					chrome.storage?.onChanged?.removeListener(handleStorageChange);
+				} catch (_) {}
+			};
 		}, [navigate]);
 
 		return null;

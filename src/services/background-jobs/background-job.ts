@@ -54,6 +54,22 @@ export interface JobOptions {
 	stream: boolean;
 }
 
+const isFailedJobResult = (result: unknown): result is JobResult => {
+	return (
+		typeof result === "object" &&
+		result !== null &&
+		(result as Partial<JobResult>).status === "failed"
+	);
+};
+
+const jobResultToError = (result: JobResult): Error => {
+	const message =
+		typeof result.error === "string" && result.error.trim().length > 0
+			? result.error
+			: "Job failed";
+	return new Error(message);
+};
+
 // Smart type inference using global JobTypeRegistry
 // Handlers extend the global interface to register their types
 // This provides perfect IntelliSense for job types and payload structures
@@ -195,21 +211,26 @@ export class BackgroundJob {
 				JobResultFor<T extends keyof JobResultRegistry ? T : never>
 			>((resolve, reject) => {
 				let settled = false;
-				const settle = (
-					result: JobResultFor<T extends keyof JobResultRegistry ? T : never>,
-				) => {
-					if (settled) return;
-					settled = true;
-					this.jobCompletionListeners.delete(jobId);
-					unsubscribeBridge();
-					resolve(result);
-				};
 				const fail = (error: Error) => {
 					if (settled) return;
 					settled = true;
 					this.jobCompletionListeners.delete(jobId);
 					unsubscribeBridge();
 					reject(error);
+				};
+
+				const settle = (
+					result: JobResultFor<T extends keyof JobResultRegistry ? T : never>,
+				) => {
+					if (settled) return;
+					if (isFailedJobResult(result)) {
+						fail(jobResultToError(result));
+						return;
+					}
+					settled = true;
+					this.jobCompletionListeners.delete(jobId);
+					unsubscribeBridge();
+					resolve(result);
 				};
 
 				this.subscribeToJobCompletion(jobId, settle);
@@ -222,6 +243,10 @@ export class BackgroundJob {
 						}
 						if (!message.result) {
 							fail(new Error("Job completed without result"));
+							return;
+						}
+						if (isFailedJobResult(message.result)) {
+							fail(jobResultToError(message.result));
 							return;
 						}
 						settle(
@@ -307,6 +332,10 @@ export class BackgroundJob {
 						if (message.jobId === jobId) {
 							unsubscribe();
 							if (message.result) {
+								if (isFailedJobResult(message.result)) {
+									reject(jobResultToError(message.result));
+									return;
+								}
 								resolve(
 									message.result as JobResultFor<
 										T extends keyof JobResultRegistry ? T : never

@@ -16,6 +16,7 @@ import type {
 	MessageParts,
 } from "@/types/chat";
 import type { ChatCompletionMessageToolCall } from "@/types/openai";
+import type { MessageActionRequest } from "@/main/modules/chat/components/artifacts/ArtifactActionsMenu";
 import {
 	EmbeddedToolSummaries,
 	AssistantMessageContent,
@@ -40,6 +41,7 @@ export interface EmbeddedMessageRendererProps {
 	isLoading: boolean;
 	allMessages: ChatMessage[];
 	selectedTopic?: string;
+	onMessageAction?: (action: MessageActionRequest) => void | Promise<void>;
 }
 
 const contentToText = (
@@ -237,7 +239,8 @@ const EmbeddedExecutionPart: React.FC<{
 const EmbeddedAssistantPartsFlow: React.FC<{
 	parts: EmbeddedAssistantPart[];
 	isStreaming: boolean;
-}> = ({ parts, isStreaming }) => {
+	onMessageAction?: (action: MessageActionRequest) => void | Promise<void>;
+}> = ({ parts, isStreaming, onMessageAction }) => {
 	const t = useEmbeddedTranslation("messageRenderer");
 	const { actions } = getEmbeddedTranslation("messageRenderer");
 
@@ -249,6 +252,7 @@ const EmbeddedAssistantPartsFlow: React.FC<{
 						<AssistantMessageContent
 							content={part.text}
 							isStreaming={isStreaming && index === parts.length - 1}
+							onMessageAction={onMessageAction}
 							key={part.id}
 						/>
 					);
@@ -272,7 +276,7 @@ const EmbeddedAssistantPartsFlow: React.FC<{
 
 export const EmbeddedMessageRenderer: React.FC<
 	EmbeddedMessageRendererProps
-> = ({ message, isLoading, allMessages, selectedTopic }) => {
+> = ({ message, isLoading, allMessages, selectedTopic, onMessageAction }) => {
 	const t = useEmbeddedTranslation("messageRenderer");
 	const metadata = message.metadata;
 	const executionParts = useMemo<AssistantExecutionPart[]>(
@@ -333,6 +337,7 @@ export const EmbeddedMessageRenderer: React.FC<
 					<EmbeddedAssistantPartsFlow
 						parts={assistantParts}
 						isStreaming={isLoading}
+						onMessageAction={onMessageAction}
 					/>
 					{!isLoading && (
 						<MessageActions
@@ -352,6 +357,7 @@ export const EmbeddedMessageRenderer: React.FC<
 								<AssistantMessageContent
 									content={getTextContent(message.content)}
 									isStreaming={isLoading && message.role === "assistant"}
+									onMessageAction={onMessageAction}
 								/>
 								{!isLoading && (
 									<MessageActions

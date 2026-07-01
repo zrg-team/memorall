@@ -1,53 +1,59 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { EmbeddedMarkdown } from "@/embedded/components/EmbeddedMarkdown";
-import { useEmbeddedTranslation } from "@/embedded/hooks/use-embedded-language";
 import { parseArtifactSegments } from "@/main/modules/chat/components/artifacts/artifact-protocol";
 import { EmbeddedArtifact } from "./EmbeddedArtifact";
-import { openStandalonePage } from "@/utils/open-standalone";
-import { isOpenUILang } from "@/utils/openui";
+import type { MessageActionRequest } from "@/main/modules/chat/components/artifacts/ArtifactActionsMenu";
+import { OpenUIRenderer } from "@/main/modules/openui/OpenUIRenderer";
+import { splitOpenUIContent } from "@/utils/openui";
 
 export const AssistantMessageContent: React.FC<{
 	content: string;
 	isStreaming: boolean;
-}> = ({ content, isStreaming }) => {
-	const t = useEmbeddedTranslation("messageContent");
+	onMessageAction?: (action: MessageActionRequest) => void | Promise<void>;
+}> = ({ content, isStreaming, onMessageAction }) => {
+	const segments = useMemo(
+		() => splitOpenUIContent(content, { includeIncomplete: isStreaming }),
+		[content, isStreaming],
+	);
 
-	if (isOpenUILang(content)) {
-		return (
-			<div className="memorall-openui-notice">
-				<span className="memorall-openui-notice__icon">+</span>
-				<span className="memorall-openui-notice__text">
-					{t("openUINotice")}
-				</span>
-				<button
-					type="button"
-					className="memorall-openui-notice__button"
-					onClick={() => void openStandalonePage()}
-				>
-					{t("openFullView")}
-				</button>
-			</div>
+	const renderTextSegment = (text: string, keyPrefix: string) =>
+		parseArtifactSegments(text).map((segment, index) =>
+			segment.kind === "artifact" ? (
+				<EmbeddedArtifact
+					key={`${keyPrefix}-artifact-${segment.identifier ?? index}`}
+					segment={segment}
+				/>
+			) : segment.text.trim() ? (
+				<EmbeddedMarkdown
+					key={`${keyPrefix}-text-${index}`}
+					content={segment.text}
+					isStreaming={isStreaming}
+				/>
+			) : null,
 		);
-	}
 
-	const segments = parseArtifactSegments(content);
-
+	let openuiCount = 0;
+	let textCount = 0;
 	return (
 		<div className="memorall-assistant-content">
-			{segments.map((segment, index) =>
-				segment.kind === "artifact" ? (
-					<EmbeddedArtifact
-						key={`artifact-${segment.identifier ?? index}`}
-						segment={segment}
-					/>
-				) : segment.text.trim() ? (
-					<EmbeddedMarkdown
-						key={`text-${index}`}
-						content={segment.text}
-						isStreaming={isStreaming}
-					/>
-				) : null,
-			)}
+			{segments.map((segment) => {
+				if (segment.kind === "openui") {
+					return (
+						<div
+							key={`openui-${openuiCount++}`}
+							className="memorall-openui-content"
+						>
+							<OpenUIRenderer
+								content={segment.content}
+								streaming={isStreaming}
+								onMessageAction={onMessageAction}
+							/>
+						</div>
+					);
+				}
+
+				return renderTextSegment(segment.text, `segment-${textCount++}`);
+			})}
 		</div>
 	);
 };

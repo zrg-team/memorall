@@ -39,60 +39,101 @@ const TEXTS: Record<Language, MenuTexts> = {
 
 // ── Create / Update ───────────────────────────────────────────────────────────
 
-export function createContextMenus(language: Language): void {
+function getMenuDefinitions(
+	language: Language,
+): chrome.contextMenus.CreateProperties[] {
 	const t = TEXTS[language];
 
-	// Save section
-	chrome.contextMenus.create({
-		id: MENU_IDS.SAVE_PAGE,
-		title: t.savePage,
-		contexts: ["page", "selection"],
-	});
-	chrome.contextMenus.create({
-		id: MENU_IDS.CONVERT_TO_KNOWLEDGE,
-		title: t.convertToKnowledge,
-		contexts: ["selection"],
-	});
-	chrome.contextMenus.create({ id: MENU_IDS.SAVE_DIVIDER, type: "separator" });
+	return [
+		{
+			id: MENU_IDS.SAVE_PAGE,
+			title: t.savePage,
+			contexts: ["page", "selection"],
+		},
+		{
+			id: MENU_IDS.CONVERT_TO_KNOWLEDGE,
+			title: t.convertToKnowledge,
+			contexts: ["selection"],
+		},
+		{ id: MENU_IDS.SAVE_DIVIDER, type: "separator" },
+		{
+			id: MENU_IDS.RECALL,
+			title: t.recall,
+			contexts: ["page", "selection"],
+		},
+		{
+			id: MENU_IDS.CO_AGENT,
+			title: t.coAgent,
+			contexts: ["page", "selection"],
+		},
+		{
+			id: MENU_IDS.SMART_SELECTOR,
+			title: t.smartSelector,
+			contexts: ["page", "selection"],
+		},
+		{
+			id: MENU_IDS.RECALL_DIVIDER,
+			type: "separator",
+		},
+		{
+			id: MENU_IDS.ACTIVITY_DIVIDER,
+			type: "separator",
+		},
+		{
+			id: MENU_IDS.OPEN_PLATFORM,
+			title: t.openPlatform,
+			contexts: ["page", "link"],
+		},
+		{
+			id: MENU_IDS.OPEN_DOCUMENTS,
+			title: t.openDocuments,
+			contexts: ["page"],
+		},
+	];
+}
 
-	// Recall section
-	chrome.contextMenus.create({
-		id: MENU_IDS.RECALL,
-		title: t.recall,
-		contexts: ["page", "selection"],
-	});
-	chrome.contextMenus.create({
-		id: MENU_IDS.CO_AGENT,
-		title: t.coAgent,
-		contexts: ["page", "selection"],
-	});
-	chrome.contextMenus.create({
-		id: MENU_IDS.SMART_SELECTOR,
-		title: t.smartSelector,
-		contexts: ["page", "selection"],
-	});
-	chrome.contextMenus.create({
-		id: MENU_IDS.RECALL_DIVIDER,
-		type: "separator",
-	});
+function getLastErrorMessage(): string | undefined {
+	return chrome.runtime.lastError?.message;
+}
 
-	// Activity tracking section (currently hidden — divider kept for future use)
-	chrome.contextMenus.create({
-		id: MENU_IDS.ACTIVITY_DIVIDER,
-		type: "separator",
-	});
+function removeAllContextMenus(): Promise<void> {
+	return new Promise((resolve, reject) => {
+		chrome.contextMenus.removeAll(() => {
+			const error = getLastErrorMessage();
+			if (error) {
+				reject(new Error(error));
+				return;
+			}
 
-	// Open section
-	chrome.contextMenus.create({
-		id: MENU_IDS.OPEN_PLATFORM,
-		title: t.openPlatform,
-		contexts: ["page", "link"],
+			resolve();
+		});
 	});
-	chrome.contextMenus.create({
-		id: MENU_IDS.OPEN_DOCUMENTS,
-		title: t.openDocuments,
-		contexts: ["page"],
+}
+
+function createContextMenu(
+	properties: chrome.contextMenus.CreateProperties,
+): Promise<void> {
+	return new Promise((resolve, reject) => {
+		chrome.contextMenus.create(properties, () => {
+			const error = getLastErrorMessage();
+			if (error) {
+				reject(new Error(error));
+				return;
+			}
+
+			resolve();
+		});
 	});
+}
+
+export async function createContextMenus(language: Language): Promise<void> {
+	await removeAllContextMenus();
+
+	for (const definition of getMenuDefinitions(language)) {
+		await createContextMenu(definition);
+	}
+
+	logInfo(`✅ Context menus registered for ${language}`);
 }
 
 export async function updateContextMenuText(language: Language): Promise<void> {
@@ -118,5 +159,10 @@ export async function updateContextMenuText(language: Language): Promise<void> {
 		logInfo(`✅ Context menu text updated to ${language}`);
 	} catch (error) {
 		logError("❌ Failed to update context menu text:", error);
+		try {
+			await createContextMenus(language);
+		} catch (rebuildError) {
+			logError("❌ Failed to rebuild context menus:", rebuildError);
+		}
 	}
 }
