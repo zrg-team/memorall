@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/chrome-manifest.json",
   "manifest_version": 3,
-  "version": "0.4.6",
+  "version": "0.4.7",
   "name": "Memorall",
   "description": "Memorall - AI-powered memory and knowledge management browser extension",
   "icons": {
@@ -12,7 +12,6 @@
   },
   "author": "Zergling",
   "action": {
-    "default_popup": "popup.html",
     "default_title": "Memorall Extension"
   },
   "options_page": "standalone.html",

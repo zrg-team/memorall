@@ -18,6 +18,7 @@ import { registerContextMenuHandler } from "@/background/context-menu/handler";
 import { registerMessageHandler } from "@/background/messaging";
 import { registerWebToolBrowserHandler } from "@/background/web-tool-browser-handler";
 import { registerCoAgentBrowserHandler } from "@/background/co-agent-browser-handler";
+import { openStandalonePage } from "@/utils/open-standalone";
 
 // ── CRITICAL: synchronous setup at module load time ───────────────────────────
 // Chrome extensions require onConnect listeners to be registered before any
@@ -36,6 +37,13 @@ registerMessageHandler(() => {
 	if (!isInitializing()) {
 		void offscreenWatchdogCheck();
 	}
+});
+
+// The action has no popup — clicking the toolbar icon opens the standalone page.
+// (With a default_popup set, onClicked would never fire, so the manifest omits it.)
+chrome.action.onClicked.addListener(() => {
+	void offscreenWatchdogCheck();
+	void openStandalonePage();
 });
 
 listenForLanguageChanges((language) => {

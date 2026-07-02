@@ -399,6 +399,28 @@ describe("useAgentConfigStore", () => {
 		);
 	});
 
+	type Store = ReturnType<typeof useAgentConfigStore.getState>;
+	const dirtySlices: Array<[string, (store: Store) => void]> = [
+		["config field", (store) => store.updateField("systemPrompt", "Changed")],
+		["feature toggle", (store) => store.toggleFeature("custom-feature")],
+		["accessible agents", (store) => store.setAccessibleAgents(["agent-2"])],
+		["MCP servers", (store) => store.setMCPServers([])],
+		["skills", (store) => store.setEnabledSkills(["different-skill"])],
+	];
+
+	it.each(
+		dirtySlices,
+	)("marks isDirty on %s edits and clears it on revert", async (_label, edit) => {
+		await initializeUnifiedStore();
+		expect(useAgentConfigStore.getState().isDirty).toBe(false);
+
+		edit(useAgentConfigStore.getState());
+		expect(useAgentConfigStore.getState().isDirty).toBe(true);
+
+		useAgentConfigStore.getState().revert();
+		expect(useAgentConfigStore.getState().isDirty).toBe(false);
+	});
+
 	it("saves draft state as unified config", async () => {
 		await initializeUnifiedStore();
 		const store = useAgentConfigStore.getState();

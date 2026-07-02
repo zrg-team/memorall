@@ -123,5 +123,8 @@ describe("requested main module coverage", () => {
 
 		expect(failures).toEqual([]);
 		expect(loaded).toMatchSnapshot();
-	}, 30000);
+		// This eagerly imports the entire chat/documents/agents/llm module trees
+		// (univer, tiptap, transformers, …), which legitimately takes >30s under
+		// full-suite CPU contention; give it headroom so it isn't a flaky timeout.
+	}, 60000);
 });

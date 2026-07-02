@@ -42,13 +42,19 @@ const FILE_COLORS: Record<DocumentType, string> = {
 	other: "text-gray-400",
 };
 
-export const DocumentTree: React.FC<DocumentTreeProps> = ({
-	tree,
-	selectedId,
-	onSelectNode,
-	onToggleExpand,
-}) => {
-	const renderNode = (node: DocumentTreeNode, level: number = 0) => {
+interface TreeNodeProps {
+	node: DocumentTreeNode;
+	level: number;
+	selectedId: string | null;
+	onSelectNode: (node: DocumentTreeNode) => void;
+	onToggleExpand?: (node: DocumentTreeNode) => void;
+}
+
+// Memoized row so an unchanged subtree is skipped when the tree re-renders (e.g.
+// expanding one folder or a parent re-rendering with the same props). Recursion
+// is a real component instead of an inline function recreated on every render.
+const TreeNode: React.FC<TreeNodeProps> = React.memo(
+	({ node, level, selectedId, onSelectNode, onToggleExpand }) => {
 		const isSelected = node.id === selectedId;
 		const hasChildren =
 			node.type === "folder" && node.children && node.children.length > 0;
@@ -68,7 +74,7 @@ export const DocumentTree: React.FC<DocumentTreeProps> = ({
 		}
 
 		return (
-			<div key={node.id}>
+			<div>
 				<div
 					className={`flex items-center gap-1 px-2 py-1 cursor-pointer hover:bg-accent rounded-sm transition-colors ${
 						isSelected ? "bg-accent text-accent-foreground font-medium" : ""
@@ -107,16 +113,40 @@ export const DocumentTree: React.FC<DocumentTreeProps> = ({
 				{/* Render Children (only if folder is expanded) */}
 				{isFolder && hasChildren && node.isExpanded && (
 					<div>
-						{node.children.map((child) => renderNode(child, level + 1))}
+						{node.children.map((child) => (
+							<TreeNode
+								key={child.id}
+								node={child}
+								level={level + 1}
+								selectedId={selectedId}
+								onSelectNode={onSelectNode}
+								onToggleExpand={onToggleExpand}
+							/>
+						))}
 					</div>
 				)}
 			</div>
 		);
-	};
+	},
+);
+TreeNode.displayName = "TreeNode";
 
-	return (
+export const DocumentTree: React.FC<DocumentTreeProps> = React.memo(
+	({ tree, selectedId, onSelectNode, onToggleExpand }) => (
 		<ScrollArea className="h-full">
-			<div className="py-2 px-1">{tree.map((node) => renderNode(node))}</div>
+			<div className="py-2 px-1">
+				{tree.map((node) => (
+					<TreeNode
+						key={node.id}
+						node={node}
+						level={0}
+						selectedId={selectedId}
+						onSelectNode={onSelectNode}
+						onToggleExpand={onToggleExpand}
+					/>
+				))}
+			</div>
 		</ScrollArea>
-	);
-};
+	),
+);
+DocumentTree.displayName = "DocumentTree";

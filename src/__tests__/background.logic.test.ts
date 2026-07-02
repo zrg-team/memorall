@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
 	registerMessageHandler: vi.fn(),
 	registerWebToolBrowserHandler: vi.fn(),
 	registerCoAgentBrowserHandler: vi.fn(),
+	openStandalonePage: vi.fn(async () => undefined),
 	logInfo: vi.fn(),
 	logError: vi.fn(),
 }));
@@ -57,10 +58,14 @@ vi.mock("@/background/web-tool-browser-handler", () => ({
 vi.mock("@/background/co-agent-browser-handler", () => ({
 	registerCoAgentBrowserHandler: mocks.registerCoAgentBrowserHandler,
 }));
+vi.mock("@/utils/open-standalone", () => ({
+	openStandalonePage: mocks.openStandalonePage,
+}));
 
 const installChrome = () => {
 	const installedListeners: Function[] = [];
 	const startupListeners: Function[] = [];
+	const actionClickedListeners: Function[] = [];
 	const chrome = {
 		runtime: {
 			onInstalled: {
@@ -74,12 +79,24 @@ const installChrome = () => {
 				}),
 			},
 		},
+		action: {
+			onClicked: {
+				addListener: vi.fn((listener: Function) => {
+					actionClickedListeners.push(listener);
+				}),
+			},
+		},
 	};
 	Object.defineProperty(globalThis, "chrome", {
 		configurable: true,
 		value: chrome,
 	});
-	return { chrome, installedListeners, startupListeners };
+	return {
+		chrome,
+		installedListeners,
+		startupListeners,
+		actionClickedListeners,
+	};
 };
 
 const importBackground = async () => {
@@ -124,7 +141,24 @@ describe("background service worker entrypoint", () => {
 		expect(chrome.runtime.onStartup.addListener).toHaveBeenCalledWith(
 			expect.any(Function),
 		);
+		expect(chrome.action.onClicked.addListener).toHaveBeenCalledWith(
+			expect.any(Function),
+		);
 		expect(setIntervalSpy).toHaveBeenCalledWith(expect.any(Function), 60_000);
+	});
+
+	it("opens the standalone page when the toolbar action is clicked", async () => {
+		const { actionClickedListeners } = installChrome();
+		await importBackground();
+
+		expect(actionClickedListeners).toHaveLength(1);
+		actionClickedListeners[0]();
+
+		await vi.waitFor(() =>
+			expect(mocks.openStandalonePage).toHaveBeenCalledTimes(1),
+		);
+		// Clicking the icon is also a good moment to verify the offscreen doc.
+		expect(mocks.offscreenWatchdogCheck).toHaveBeenCalled();
 	});
 
 	it("runs offscreen watchdog when popup messaging fires and initialization is idle", async () => {

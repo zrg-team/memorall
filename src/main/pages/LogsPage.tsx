@@ -33,6 +33,7 @@ import {
 } from "@/main/components/ui/tooltip";
 import { logError, logger, type LogEntry, type LogLevel } from "@/utils/logger";
 import type { LogFilter } from "@/utils/indexeddb-storage";
+import { contentVisibilityAuto } from "@/main/components/atoms/content-visibility";
 
 interface LogsPageProps {}
 
@@ -430,6 +431,7 @@ export const LogsPage: React.FC<LogsPageProps> = () => {
 								<Card
 									key={log.id}
 									className="hover:shadow-md transition-shadow"
+									style={contentVisibilityAuto(96)}
 								>
 									<CardContent className="p-4">
 										<div className="flex items-start space-x-3">

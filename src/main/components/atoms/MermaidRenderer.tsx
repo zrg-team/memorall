@@ -1,21 +1,34 @@
 import React, { useRef, useEffect } from "react";
 import { Code2, Eye } from "lucide-react";
-import mermaid from "mermaid";
+import type { Mermaid } from "mermaid";
 import { Button } from "@/main/components/ui/button";
 import { DeferredMount } from "@/main/modules/chat/components/message/DeferredMount";
 
-// Initialize mermaid with browser extension compatible settings
-mermaid.initialize({
-	startOnLoad: false,
-	theme: "default",
-	securityLevel: "loose",
-	flowchart: {
-		useMaxWidth: true,
-		htmlLabels: true,
-	},
-	suppressErrorRendering: false,
-	logLevel: "debug",
-});
+// mermaid (+ its d3 dependency) is heavy, so it is loaded lazily on first render
+// instead of at module scope — this keeps it out of the entry bundle for pages
+// that never render a diagram. The initialized instance is cached and reused.
+let mermaidPromise: Promise<Mermaid> | null = null;
+
+const getMermaid = (): Promise<Mermaid> => {
+	if (!mermaidPromise) {
+		mermaidPromise = import("mermaid").then(({ default: mermaid }) => {
+			// Initialize with browser extension compatible settings (once).
+			mermaid.initialize({
+				startOnLoad: false,
+				theme: "default",
+				securityLevel: "loose",
+				flowchart: {
+					useMaxWidth: true,
+					htmlLabels: true,
+				},
+				suppressErrorRendering: false,
+				logLevel: "debug",
+			});
+			return mermaid;
+		});
+	}
+	return mermaidPromise;
+};
 
 // Global counter for unique mermaid IDs
 let mermaidCounter = 0;
@@ -32,7 +45,9 @@ const renderMermaid = (id: string, chart: string): Promise<string> => {
 	const cached = mermaidRenderCache.get(chart);
 	if (cached) return cached;
 
-	const next = mermaid.render(id, chart).then(({ svg }) => svg);
+	const next = getMermaid()
+		.then((mermaid) => mermaid.render(id, chart))
+		.then(({ svg }) => svg);
 	mermaidRenderCache.set(chart, next);
 	return next;
 };

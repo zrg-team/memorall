@@ -5,10 +5,12 @@
 
 export * from "./types";
 export * from "./registry";
-export { MarkdownEditor } from "./MarkdownEditor";
+export { LazyMarkdownEditor } from "./LazyMarkdownEditor";
 
-// Import editors and registry
-import { MarkdownEditor } from "./MarkdownEditor";
+// Import editors and registry. The markdown editor is registered via its lazy
+// wrapper so its heavy dependencies (TipTap, marked, turndown, …) are code-split
+// out of the entry bundle and only loaded when a document is opened.
+import { LazyMarkdownEditor } from "./LazyMarkdownEditor";
 import { editorRegistry } from "./registry";
 
 /**
@@ -16,10 +18,10 @@ import { editorRegistry } from "./registry";
  * Call this once during app initialization
  */
 export function registerAllEditors(): void {
-	// Register Markdown Editor
+	// Register Markdown Editor (lazily loaded)
 	editorRegistry.register({
 		type: "markdown",
-		component: MarkdownEditor,
+		component: LazyMarkdownEditor,
 		name: "Markdown Editor",
 		supportsCreate: true,
 		defaultExtension: ".md",

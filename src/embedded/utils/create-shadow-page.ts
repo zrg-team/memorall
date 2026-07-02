@@ -40,8 +40,10 @@ export const createShadowPage = ({
 	customPropsStyle.textContent = customStyles;
 	shadowRoot.appendChild(customPropsStyle);
 
-	// Inject Tailwind CSS with fallback
-	createStylesheet("action/index.css", shadowRoot, "action/default_popup.css");
+	// Inject Tailwind CSS with fallback. The toolbar action no longer builds a
+	// popup entry (it opens the standalone page), so the standalone build's CSS
+	// is the primary source; keep the old action path as a fallback.
+	createStylesheet("options/index.css", shadowRoot, "action/index.css");
 
 	shadowRoot.appendChild(shadowContainer);
 

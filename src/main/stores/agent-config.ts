@@ -18,6 +18,7 @@ import {
 } from "@/services/flows-core/steps/features/mcp-feature";
 import { ADD_SKILL_CONTEXT_STEP_NAME } from "@/services/flows-core/steps/common/add-skill-context";
 import { logError } from "@/utils/logger";
+import { deepEqual } from "@/utils/deep-equal";
 import type {
 	FeatureCatalogMetadata,
 	FeatureDetailViewSlot,
@@ -462,6 +463,10 @@ interface AgentConfigState {
 	resetToDefaults: () => void;
 }
 
+// Recomputed on every draft mutation (incl. each keystroke in the prompt
+// editors), so this uses a short-circuiting structural compare instead of
+// serializing every slice with JSON.stringify — comparing a long prompt string
+// is now a single `===` that bails on the first differing slice.
 const computeDirty = (
 	saved: FoundationPredefinedConfig,
 	draft: FoundationPredefinedConfig,
@@ -474,13 +479,14 @@ const computeDirty = (
 	savedEnabledSkillNames: string[],
 	draftEnabledSkillNames: string[],
 ): boolean =>
-	JSON.stringify(saved) !== JSON.stringify(draft) ||
-	JSON.stringify(savedFeatures) !== JSON.stringify(draftFeatures) ||
-	JSON.stringify(savedMultiAgentAccessibleAgentIds) !==
-		JSON.stringify(draftMultiAgentAccessibleAgentIds) ||
-	JSON.stringify(savedMCPServers) !== JSON.stringify(draftMCPServers) ||
-	JSON.stringify(savedEnabledSkillNames) !==
-		JSON.stringify(draftEnabledSkillNames);
+	!deepEqual(saved, draft) ||
+	!deepEqual(savedFeatures, draftFeatures) ||
+	!deepEqual(
+		savedMultiAgentAccessibleAgentIds,
+		draftMultiAgentAccessibleAgentIds,
+	) ||
+	!deepEqual(savedMCPServers, draftMCPServers) ||
+	!deepEqual(savedEnabledSkillNames, draftEnabledSkillNames);
 
 export const useAgentConfigStore = create<AgentConfigState>((set, get) => {
 	const persistUnifiedConfig = async () => {

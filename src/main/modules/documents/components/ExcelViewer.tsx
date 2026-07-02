@@ -52,7 +52,7 @@ import * as XLSX from "xlsx";
 import { parseExcelFile } from "@/main/modules/documents/handlers/excel-extraction";
 import { logError, logInfo } from "@/utils/logger";
 
-interface ExcelViewerProps {
+export interface ExcelViewerProps {
 	fileData: Uint8Array;
 	fileName: string;
 	className?: string;

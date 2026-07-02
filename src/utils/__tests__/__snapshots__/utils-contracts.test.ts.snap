@@ -6,6 +6,7 @@ exports[`src/utils module coverage > imports every utility module without requir
   "../aes.ts",
   "../auth-provider-restore.ts",
   "../chunking.ts",
+  "../deep-equal.ts",
   "../dom.ts",
   "../embedding-size-config.ts",
   "../indexeddb-storage.ts",

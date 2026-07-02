@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, Suspense } from "react";
 import {
 	BrowserRouter as Router,
 	Routes,
@@ -35,19 +35,22 @@ import { backgroundJob } from "@/services/background-jobs/background-job";
 import { sharedStorageService } from "@/services/shared-storage/shared-storage-service";
 import { CopilotProvider, Copilot } from "./components/atoms/copilot";
 import { AppShell } from "./components/AppShell";
-// pages
-import { EmbeddingPage } from "./pages/EmbeddingPage";
-import { LLMPage } from "./pages/LLMPage";
-import { DatabasePage } from "./pages/DatabasePage";
-import { LogsPage } from "./pages/LogsPage";
 import { AppLoadingScreen } from "./components/atoms/AppLoadingScreen";
-import { KnowledgeGraphPage } from "./pages/KnowledgeGraphPage";
-import { DocumentLibraryPage } from "./pages/DocumentLibraryPage";
-import { ActivityTimelinePage } from "./pages/ActivityTimelinePage";
-import { AgentsPage } from "./pages/AgentsPage";
-import { RuntimePage } from "./pages/RuntimePage";
+// AuthPage renders before the app shell, so it stays eager (not code-split).
 import { AuthPage } from "./pages/AuthPage";
-import { FlowBuilderPage } from "./pages/FlowBuilderPage/FlowBuilderPage";
+// pages — route-level code splitting (see ./pages/lazy-pages)
+import {
+	EmbeddingPage,
+	LLMPage,
+	DatabasePage,
+	LogsPage,
+	KnowledgeGraphPage,
+	DocumentLibraryPage,
+	ActivityTimelinePage,
+	AgentsPage,
+	RuntimePage,
+	FlowBuilderPage,
+} from "./pages/lazy-pages";
 import { registerAllEditors } from "@/main/modules/documents/editors";
 import { useAuthInit } from "@/main/modules/supabase";
 import {
@@ -397,32 +400,40 @@ const App: React.FC = () => {
 								path="*"
 								element={
 									<AppShell>
-										<Routes>
-											<Route path="/" element={<DocumentLibraryPage />} />
-											<Route path="/llm" element={<LLMPage />} />
-											<Route path="/runtime" element={<RuntimePage />} />
-											<Route path="/embeddings" element={<EmbeddingPage />} />
-											<Route path="/database" element={<DatabasePage />} />
-											<Route
-												path="/knowledge-graph"
-												element={<KnowledgeGraphPage />}
-											/>
-											<Route
-												path="/documents"
-												element={<DocumentLibraryPage />}
-											/>
-											<Route path="/agents" element={<AgentsPage />} />
-											<Route
-												path="/activities"
-												element={<ActivityTimelinePage />}
-											/>
-											<Route
-												path="/flow-builder"
-												element={<FlowBuilderPage />}
-											/>
-											<Route path="/logs" element={<LogsPage />} />
-											<Route path="*" element={<DocumentLibraryPage />} />
-										</Routes>
+										<Suspense
+											fallback={
+												<div className="flex h-full w-full items-center justify-center p-8 text-sm text-muted-foreground">
+													…
+												</div>
+											}
+										>
+											<Routes>
+												<Route path="/" element={<DocumentLibraryPage />} />
+												<Route path="/llm" element={<LLMPage />} />
+												<Route path="/runtime" element={<RuntimePage />} />
+												<Route path="/embeddings" element={<EmbeddingPage />} />
+												<Route path="/database" element={<DatabasePage />} />
+												<Route
+													path="/knowledge-graph"
+													element={<KnowledgeGraphPage />}
+												/>
+												<Route
+													path="/documents"
+													element={<DocumentLibraryPage />}
+												/>
+												<Route path="/agents" element={<AgentsPage />} />
+												<Route
+													path="/activities"
+													element={<ActivityTimelinePage />}
+												/>
+												<Route
+													path="/flow-builder"
+													element={<FlowBuilderPage />}
+												/>
+												<Route path="/logs" element={<LogsPage />} />
+												<Route path="*" element={<DocumentLibraryPage />} />
+											</Routes>
+										</Suspense>
 									</AppShell>
 								}
 							/>

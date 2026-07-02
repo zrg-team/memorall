@@ -12,7 +12,6 @@
   },
   "author": "Zergling",
   "action": {
-    "default_popup": "popup.html",
     "default_title": "Memorall Extension"
   },
   "options_page": "standalone.html",

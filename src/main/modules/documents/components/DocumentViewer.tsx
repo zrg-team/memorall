@@ -45,7 +45,7 @@ import {
 } from "@/services/filesystem/sandbox-paths";
 
 import { PDFPageSelector } from "./PDFPageSelector";
-import { ExcelViewer } from "./ExcelViewer";
+import { LazyExcelViewer } from "./LazyExcelViewer";
 import { ExcelSheetSelector } from "./ExcelSheetSelector";
 import { useModalSelector } from "../hooks/use-modal-selector";
 import { useSourceStatus } from "../hooks/use-source-status";
@@ -623,7 +623,7 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({
 				{file.type === "excel" && excelData && (
 					<div className="flex-1 overflow-hidden p-3 sm:p-4">
 						<div className="border rounded-lg overflow-hidden h-full">
-							<ExcelViewer
+							<LazyExcelViewer
 								fileData={excelData}
 								fileName={file.name}
 								className="h-full"

@@ -22,6 +22,7 @@ import { PlayCircle, CheckCircle } from "lucide-react";
 import type { Activity, ActivityType } from "@/types/activity-tracking";
 import { ActivityCard } from "./ActivityCard";
 import { formatTimestamp } from "../utils";
+import { contentVisibilityAuto } from "@/main/components/atoms/content-visibility";
 
 interface ActivityTimelineProps {
 	activities: Activity[];
@@ -118,11 +119,9 @@ export const ActivityTimeline: React.FC<ActivityTimelineProps> = ({
 						{/* Timeline items */}
 						<div className="space-y-5">
 							{activities.map((activity) => (
-								<ActivityCard
-									key={activity.id}
-									activity={activity}
-									onClick={onActivityClick}
-								/>
+								<div key={activity.id} style={contentVisibilityAuto(88)}>
+									<ActivityCard activity={activity} onClick={onActivityClick} />
+								</div>
 							))}
 
 							{activities.length === 0 && (
