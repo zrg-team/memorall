@@ -107,7 +107,9 @@ export const AssistantToolTimelinePart: React.FC<{
 					</CollapsibleTrigger>
 					<CollapsibleContent
 						className={cn(
-							"overflow-hidden text-sm outline-none data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:slide-out-to-top-1 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:slide-in-from-top-1 duration-200 ease-out",
+							// Animate height (not just opacity) so the surrounding layout
+							// expands/collapses smoothly instead of snapping to full height.
+							"overflow-hidden text-sm outline-none data-[state=open]:animate-collapsible-down data-[state=closed]:animate-collapsible-up",
 						)}
 					>
 						<div className="mt-2 min-w-0 overflow-hidden rounded-lg border border-border/60 bg-background/80 p-2 shadow-sm sm:p-3">

@@ -42,14 +42,7 @@ export const Task = ({
 	className,
 	...props
 }: TaskProps) => (
-	<Collapsible
-		className={cn(
-			"data-[state=closed]:fade-out-0 data-[state=closed]:slide-out-to-top-2 data-[state=open]:slide-in-from-top-2 data-[state=closed]:animate-out data-[state=open]:animate-in",
-			className,
-		)}
-		defaultOpen={defaultOpen}
-		{...props}
-	/>
+	<Collapsible className={className} defaultOpen={defaultOpen} {...props} />
 );
 
 export type TaskTriggerProps = ComponentProps<typeof CollapsibleTrigger> & {
@@ -82,7 +75,8 @@ export const TaskContent = ({
 }: TaskContentProps) => (
 	<CollapsibleContent
 		className={cn(
-			"data-[state=closed]:fade-out-0 data-[state=closed]:slide-out-to-top-2 data-[state=open]:slide-in-from-top-2 text-popover-foreground outline-none data-[state=closed]:animate-out data-[state=open]:animate-in",
+			// Smooth height (accordion) animation instead of an abrupt height jump.
+			"overflow-hidden text-popover-foreground outline-none data-[state=open]:animate-collapsible-down data-[state=closed]:animate-collapsible-up",
 			className,
 		)}
 		{...props}

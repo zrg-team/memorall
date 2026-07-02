@@ -18,6 +18,11 @@ import type {
 } from "@/types/chat";
 import { DEFAULT_FLOW_STEPS } from "@/services/flow-builder-catalog";
 import { cn } from "@/lib/utils";
+import {
+	Collapsible,
+	CollapsibleContent,
+	CollapsibleTrigger,
+} from "@/main/components/ui/collapsible";
 import { ToolActionDetails } from "../MessageActions";
 import { translateCommonKey } from "../../utils/i18n-helpers";
 
@@ -214,25 +219,26 @@ export const AssistantWorkflowSummary: React.FC<{
 	const totalCount = parts.length + evidence.length;
 
 	return (
-		<div className="mb-1">
-			<button
-				type="button"
-				className="inline-flex items-center gap-1.5 rounded-md px-1 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted/20 hover:text-foreground"
-				onClick={() => setIsOpen((value) => !value)}
-			>
-				<Settings2 className="h-3.5 w-3.5" />
-				<span>
-					{isOpen ? t("workflow.hideDetails") : t("workflow.showDetails")}
-				</span>
-				<span className="text-muted-foreground/70">({totalCount})</span>
-				<ChevronDown
-					className={cn(
-						"h-3.5 w-3.5 transition-transform",
-						isOpen && "rotate-180",
-					)}
-				/>
-			</button>
-			{isOpen ? (
+		<Collapsible open={isOpen} onOpenChange={setIsOpen} className="mb-1">
+			<CollapsibleTrigger asChild>
+				<button
+					type="button"
+					className="inline-flex items-center gap-1.5 rounded-md px-1 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted/20 hover:text-foreground"
+				>
+					<Settings2 className="h-3.5 w-3.5" />
+					<span>
+						{isOpen ? t("workflow.hideDetails") : t("workflow.showDetails")}
+					</span>
+					<span className="text-muted-foreground/70">({totalCount})</span>
+					<ChevronDown
+						className={cn(
+							"h-3.5 w-3.5 transition-transform",
+							isOpen && "rotate-180",
+						)}
+					/>
+				</button>
+			</CollapsibleTrigger>
+			<CollapsibleContent className="overflow-hidden data-[state=open]:animate-collapsible-down data-[state=closed]:animate-collapsible-up">
 				<div className="mt-2 min-w-0 space-y-2 pl-1 sm:pl-3">
 					{parts.map((part, index) => (
 						<div
@@ -294,8 +300,8 @@ export const AssistantWorkflowSummary: React.FC<{
 						);
 					})}
 				</div>
-			) : null}
-		</div>
+			</CollapsibleContent>
+		</Collapsible>
 	);
 };
 
