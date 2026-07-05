@@ -100,7 +100,7 @@ export const AgentCompactStatsRow: React.FC<{
 				<>
 					<span className="text-border select-none">·</span>
 					<Link
-						to={`/knowledge-graph?topicId=${encodeURIComponent(memoryTopic.id)}`}
+						to={`/memory?topicId=${encodeURIComponent(memoryTopic.id)}`}
 						className="inline-flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
 					>
 						<Network size={12} />

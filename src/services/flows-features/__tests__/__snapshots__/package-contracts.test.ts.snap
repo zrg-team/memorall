@@ -67,7 +67,7 @@ exports[`flows-features registered contracts > registers every features step con
         "messages": "messages",
         "tools": "tools",
       },
-      "description": "Deep financial research agent: researches stocks and companies across the web, produces reports with Mermaid diagrams and ASCII charts, saved to /documents/finance/.",
+      "description": "Deep financial research agent: researches stocks and companies across the web, produces reports with Mermaid diagrams and ASCII charts, saved to /finance/.",
       "enabledByDefault": false,
       "feature": {
         "graphTypes": [
@@ -113,7 +113,7 @@ exports[`flows-features registered contracts > registers every features step con
         "messages": "messages",
         "tools": "tools",
       },
-      "description": "Generate a tailored cover letter and resume suggestions for a specific job application, saved to /documents/job-applications/.",
+      "description": "Generate a tailored cover letter and resume suggestions for a specific job application, saved to /job-applications/.",
       "enabledByDefault": false,
       "feature": {
         "graphTypes": [
@@ -205,7 +205,7 @@ exports[`flows-features registered contracts > registers every features step con
         "messages": "messages",
         "tools": "tools",
       },
-      "description": "Generate a weekly meal plan with a shopping list from real web recipes, saved to /documents/meals/.",
+      "description": "Generate a weekly meal plan with a shopping list from real web recipes, saved to /meals/.",
       "enabledByDefault": false,
       "feature": {
         "graphTypes": [
@@ -297,7 +297,7 @@ exports[`flows-features registered contracts > registers every features step con
         "messages": "messages",
         "tools": "tools",
       },
-      "description": "Deep product research agent: searches multiple sources, reads prices/specs/reviews, compares alternatives, and saves a full report to /documents/shopping-assistant/.",
+      "description": "Deep product research agent: searches multiple sources, reads prices/specs/reviews, compares alternatives, and saves a full report to /shopping-assistant/.",
       "enabledByDefault": false,
       "feature": {
         "graphTypes": [
@@ -343,7 +343,7 @@ exports[`flows-features registered contracts > registers every features step con
         "messages": "messages",
         "tools": "tools",
       },
-      "description": "Research and generate a detailed day-by-day travel itinerary saved to /documents/travel/.",
+      "description": "Research and generate a detailed day-by-day travel itinerary saved to /travel/.",
       "enabledByDefault": false,
       "feature": {
         "graphTypes": [

@@ -34,7 +34,7 @@ export type FinanceTrackerFeatureServices =
 const SYSTEM_PROMPT_INSTRUCTION = `
 # FINANCE TRACKER FEATURE
 
-You are a professional financial research analyst. When the user asks about a stock, company, ETF, or market sector, you conduct deep web research and produce a comprehensive, visually rich financial report — with Mermaid diagrams, ASCII charts, and data tables — saved to /documents/finance/.
+You are a professional financial research analyst. When the user asks about a stock, company, ETF, or market sector, you conduct deep web research and produce a comprehensive, visually rich financial report — with Mermaid diagrams, ASCII charts, and data tables — saved to /finance/.
 
 ---
 
@@ -56,7 +56,7 @@ Given a ticker symbol or company name, you will:
 3. Research recent news and events that affect the stock.
 4. Produce Mermaid diagrams for business structure, revenue breakdown, and financial trends.
 5. Produce ASCII bar/line charts for price performance and key metrics.
-6. Save a full report to /documents/finance/<TICKER>-report.md.
+6. Save a full report to /finance/<TICKER>-report.md.
 
 ---
 
@@ -151,7 +151,7 @@ Sector Avg    ██████████████████ 25.0
 
 ### Step 6 — Save report
   doc_write {
-    file_path: "/documents/finance/<TICKER>-report.md",
+    file_path: "/finance/<TICKER>-report.md",
     content: "<full markdown>",
     create_folders: true
   }
@@ -370,7 +370,7 @@ export const FINANCE_TRACKER_FEATURE_TOOLS = [
 ] as const;
 
 export const FINANCE_TRACKER_FEATURE_DESCRIPTION =
-	"Deep financial research agent: researches stocks and companies across the web, produces reports with Mermaid diagrams and ASCII charts, saved to /documents/finance/.";
+	"Deep financial research agent: researches stocks and companies across the web, produces reports with Mermaid diagrams and ASCII charts, saved to /finance/.";
 
 const definition = defineStep<
 	FinanceTrackerFeatureInput,

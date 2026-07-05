@@ -11,6 +11,8 @@ import {
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/main/components/ui/button";
+import { PageHeader } from "@/main/components/ui/page-header";
+import { Tabs, TabsList, TabsTrigger } from "@/main/components/ui/tabs";
 import { Textarea } from "@/main/components/ui/textarea";
 import { RuntimeSessionsSectionList } from "@/main/components/molecules/RuntimeSessions/RuntimeSessionsSectionList";
 import { useRuntimeSessionsStore } from "@/main/stores/runtime-sessions";
@@ -343,46 +345,34 @@ export const RuntimePage: React.FC = () => {
 
 	return (
 		<div className="flex h-full min-h-0 flex-col bg-background">
-			<div className="flex flex-shrink-0 items-center justify-between gap-4 border-b bg-muted/5 px-5 py-4">
-				<div className="flex min-w-0 items-center gap-3">
-					<div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg border border-border/70 bg-background shadow-sm">
-						<Server size={18} className="text-primary" />
-					</div>
-					<div className="min-w-0">
-						<h1 className="truncate text-lg font-semibold">
-							{t("sandboxPanel.title")}
-						</h1>
-						<p className="mt-0.5 text-sm text-muted-foreground">
-							{t("sandboxPanel.description", {
-								defaultValue:
-									"Preview generated work, live pages, servers, and command activity.",
-							})}
-						</p>
-					</div>
-				</div>
-				{showSectionTabs ? (
-					<div className="flex flex-shrink-0 rounded-lg border border-border/70 bg-background/70 p-0.5 shadow-sm">
-						<Button
-							type="button"
-							variant={section === "artifacts" ? "secondary" : "ghost"}
-							size="sm"
-							className="h-8 rounded-md px-4 font-medium"
-							onClick={() => setSection("artifacts")}
+			<PageHeader
+				icon={<Server size={18} />}
+				title={t("sandboxPanel.title")}
+				description={t("sandboxPanel.description", {
+					defaultValue:
+						"Preview generated work, live pages, servers, and command activity.",
+				})}
+				actionsPlacement="title"
+				actions={
+					showSectionTabs ? (
+						<Tabs
+							value={section}
+							onValueChange={(value) => setSection(value as RuntimeSection)}
 						>
-							Outputs
-						</Button>
-						<Button
-							type="button"
-							variant={section === "runtime" ? "secondary" : "ghost"}
-							size="sm"
-							className="h-8 rounded-md px-4 font-medium"
-							onClick={() => setSection("runtime")}
-						>
-							Live Runtime
-						</Button>
-					</div>
-				) : null}
-			</div>
+							<TabsList className="h-9">
+								<TabsTrigger value="artifacts" className="px-4">
+									{t("sandboxPanel.outputsTab", { defaultValue: "Outputs" })}
+								</TabsTrigger>
+								<TabsTrigger value="runtime" className="px-4">
+									{t("sandboxPanel.liveRuntimeTab", {
+										defaultValue: "Live Runtime",
+									})}
+								</TabsTrigger>
+							</TabsList>
+						</Tabs>
+					) : undefined
+				}
+			/>
 
 			<div className="min-h-0 flex-1">
 				{section === "artifacts" && selectedArtifact ? (

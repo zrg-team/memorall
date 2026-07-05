@@ -37,42 +37,39 @@ export type HyperframesFeatureServices = Record<string, never>;
 
 // ── Memorall-specific path context ────────────────────────────────────────────
 // Appended to the generic core system prompt. Instructs the model about the
-// two persistent filesystem roots exposed by the Memorall host runtime.
+// single persistent filesystem root exposed by the Memorall host runtime.
 
 const MEMORALL_PATH_CONTEXT = `
 # MEMORALL FILESYSTEM PATHS
 
-The Memorall host exposes two persistent virtual filesystem roots to HyperFrames tools and previews:
+The Memorall host exposes one persistent virtual filesystem root to HyperFrames tools and previews.
 
-| Root | Meaning | Use |
-|---|---|---|
-| \`/documents\` | User document library. In the UI this appears as "Documents". | Read existing user assets such as \`/documents/images/logo.png\`. Do not write here. |
-| \`/workspaces\` | Persistent project/workspace storage. | Create HyperFrames projects here, e.g. \`/workspaces/product-launch\`. |
-
-All tools target a workspace path like \`/workspaces/product-launch\`.
+Use normal absolute paths. Read existing user assets such as \`/resources/images/logo.png\`.
+Create HyperFrames projects under \`/projects/<slug>\`, e.g. \`/projects/product-launch\`.
+All tools target a project path like \`/projects/product-launch\`.
 The composition file is always \`{project_path}/index.html\`.
 
 ## Path rules
 
-- **Always include the mount prefix.** Use paths exactly as returned by tools: \`/documents/...\` for the user document library, \`/workspaces/...\` for project workspace files. Never drop or shorten the prefix — \`/images/logo.png\` is always wrong; \`/documents/images/logo.png\` is right.
-- **Prefer full workspace paths for project assets.** \`hyperframes_remote_asset_import\` returns an \`html_src\` like \`./resources/images/bg.jpg\` — prefer the full form \`/workspaces/{project}/resources/images/bg.jpg\`. The relative form works only in static HTML \`<img src>\` via fuzzy filename matching; it is never resolved in JavaScript.
+- **Use absolute root paths.** Use paths exactly as returned by tools. \`/images/logo.png\` is wrong unless that file exists; \`/resources/images/logo.png\` is right when that is the returned path.
+- **Prefer full workspace paths for project assets.** \`hyperframes_remote_asset_import\` returns an \`html_src\` like \`./resources/images/bg.jpg\` — prefer the full form \`/projects/{project}/resources/images/bg.jpg\`. The relative form works only in static HTML \`<img src>\` via fuzzy filename matching; it is never resolved in JavaScript.
 - **Never invent paths.** Prove every asset exists with \`fs_ls\`/\`fs_glob\` or import it with \`hyperframes_remote_asset_import\`.
 - **Static HTML only.** Memorall converts \`<img src>\`, SVG \`<image href>\`, \`video poster\`, and CSS \`url(...)\` to base64 — only static HTML attributes, never JavaScript-assigned values.
-- **No JS asset loading of any kind.** If JavaScript must reference an asset: declare it once as \`<img id="pre" src="/documents/..." hidden>\` in HTML, then read \`document.getElementById('pre').src\` in JS — Memorall has already replaced it with base64 by that point.
+- **No JS asset loading of any kind.** If JavaScript must reference an asset: declare it once as \`<img id="pre" src="/resources/images/logo.png" hidden>\` in HTML, then read \`document.getElementById('pre').src\` in JS — Memorall has already replaced it with base64 by that point.
 
 **Path quick-reference — wrong vs right:**
 
 | Wrong | Right |
 |---|---|
-| \`<img src="/images/logo.png">\` | \`<img src="/documents/images/logo.png">\` |
-| \`<img src="resources/bg.jpg">\` | \`<img src="/workspaces/my-project/resources/images/bg.jpg">\` |
-| \`<img src="./resources/images/bg.jpg">\` | \`<img src="/workspaces/my-project/resources/images/bg.jpg">\` |
+| \`<img src="/images/logo.png">\` | \`<img src="/resources/images/logo.png">\` |
+| \`<img src="resources/bg.jpg">\` | \`<img src="/projects/my-project/resources/images/bg.jpg">\` |
+| \`<img src="./resources/images/bg.jpg">\` | \`<img src="/projects/my-project/resources/images/bg.jpg">\` |
 | \`function fixIconPath(n){ return './resources/icons/'+n; }\` | Forbidden — inline SVG in HTML, or \`<img hidden>\` + read \`.src\` in JS |
 | \`img.src = './resources/icons/' + name\` | \`img.src = document.getElementById('pre').src\` |
 
 ## Discovering local assets in Memorall
 
-1. **\`fs_ls\`** — list \`/documents\`, \`/workspaces\`, or the target \`project_path\` to see what exists.
+1. **\`fs_ls\`** — list \`/\`, \`/projects\`, or the target \`project_path\` to see what exists.
 2. **\`fs_glob\`** — hunt for images, logos, or brand files by pattern (e.g. \`**/*.{png,jpg,svg}\`, \`**/*logo*\`).
 3. **\`fs_grep\`** — find brand hex codes, color tokens, product names, or asset references inside files.
 4. **\`fs_read\`** — open a specific text file only after \`fs_glob\`/\`fs_grep\` have identified it. Never use it on binary images.
@@ -144,13 +141,13 @@ stepRegistry.register(STEP_NAME, createHyperframesFeatureStep, {
 		{
 			key: "rootPath",
 			type: "string",
-			default: "/workspaces",
+			default: "/projects",
 			description: "Root path under which HyperFrames projects are stored.",
 		},
 		{
 			key: "resourceRoots",
 			type: "array",
-			default: ["/documents", "/workspaces"],
+			default: ["/", "/projects"],
 			description:
 				"Root path prefixes searched when rewriting local image references to data URLs for iframe rendering.",
 		},

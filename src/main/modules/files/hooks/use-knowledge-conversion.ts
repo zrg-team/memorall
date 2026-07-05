@@ -117,7 +117,7 @@ export async function convertToKnowledge(
 				// Update progress while processing
 				updateProcess(file.path, {
 					progress: 50,
-					stage: "Processing knowledge graph...",
+					stage: "Processing semantic memory...",
 				});
 
 				await result.promise;

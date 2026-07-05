@@ -32,17 +32,17 @@ import "./steps/features/co-agent-feature";
 import "./steps/features/embedded-chat-feature";
 
 // Document tools
-import "./tools/documents/doc-edit";
-import "./tools/documents/doc-move";
-import "./tools/documents/doc-read";
-import "./tools/documents/doc-remove";
-import "./tools/documents/doc-search";
-import "./tools/documents/doc-write";
-import "./tools/documents/excel-to-text";
-import "./tools/documents/pdf-generate";
-import "./tools/documents/pdf-metadata";
-import "./tools/documents/pdf-to-image";
-import "./tools/documents/pdf-to-text";
+import "./tools/files/doc-edit";
+import "./tools/files/doc-move";
+import "./tools/files/doc-read";
+import "./tools/files/doc-remove";
+import "./tools/files/doc-search";
+import "./tools/files/doc-write";
+import "./tools/files/excel-to-text";
+import "./tools/files/pdf-generate";
+import "./tools/files/pdf-metadata";
+import "./tools/files/pdf-to-image";
+import "./tools/files/pdf-to-text";
 
 // Web tools that save to the document filesystem
 import "./tools/web/web-fetch-image";
@@ -52,21 +52,21 @@ import "./tools/web/web-screenshot";
 import "./tools/sandbox-container/container-web-access";
 
 // Document filesystem tools (moved from flows-core)
-import "./tools/documents-fs/fs-glob";
-import "./tools/documents-fs/fs-grep";
-import "./tools/documents-fs/fs-read";
-import "./tools/documents-fs/fs-write";
-import "./tools/documents-fs/fs-edit";
-import "./tools/documents-fs/fs-mkdir";
-import "./tools/documents-fs/fs-remove";
-import "./tools/documents-fs/fs-ls";
+import "./tools/files-fs/fs-glob";
+import "./tools/files-fs/fs-grep";
+import "./tools/files-fs/fs-read";
+import "./tools/files-fs/fs-write";
+import "./tools/files-fs/fs-edit";
+import "./tools/files-fs/fs-mkdir";
+import "./tools/files-fs/fs-remove";
+import "./tools/files-fs/fs-ls";
 
 // Feature step overrides — must come after core features are registered
 import "./steps/features/hyperframes-feature";
 
 // Document feature steps
 import "./steps/features/fs-feature";
-import "./steps/features/documents-feature";
-import "./steps/features/documents-fs-feature";
+import "./steps/features/files-legacy-feature";
+import "./steps/features/files-fs-feature";
 import "./steps/features/document-convert-feature";
 import "./steps/features/pdf-generate-feature";

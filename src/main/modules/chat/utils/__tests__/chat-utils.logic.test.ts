@@ -67,7 +67,7 @@ describe("buildSendMessages", () => {
 					{
 						type: "image_url",
 						image_url: {
-							url: "/documents/image.png",
+							url: "/resources/images/image.png",
 							mimeType: "image/png",
 							detail: "low",
 						},
@@ -96,7 +96,7 @@ describe("buildSendMessages", () => {
 		] as any);
 
 		expect(readFileAsBase64).toHaveBeenCalledWith(
-			"/documents/image.png",
+			"/resources/images/image.png",
 			"image/png",
 		);
 		expect(messages).toEqual([

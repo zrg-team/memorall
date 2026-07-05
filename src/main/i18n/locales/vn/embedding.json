@@ -23,7 +23,7 @@
 	"reloading": "Đang tải lại mô hình nhúng",
 	"downloadingModel": "Đang tải mô hình...",
 	"pleaseWait": "Vui lòng chờ, không đóng cửa sổ này...",
-	"changeWarning": "Thay đổi kích thước nhúng sẽ xóa các nhúng hiện có trong nodes và edges. Bạn có muốn tiếp tục?",
+	"changeWarning": "Thay đổi kích thước nhúng đồng nghĩa với việc các ký ức bạn đã tạo (nodes và edges) sẽ không còn xuất hiện trong tìm kiếm ngữ nghĩa cho đến khi bạn tạo lại chúng ở kích thước mới. Dữ liệu vẫn được giữ lại, và chuyển về kích thước hiện tại sẽ khôi phục chúng. Tiếp tục?",
 	"clearError": "Không thể xóa nhúng. Vui lòng thử lại.",
 	"sizes": {
 		"small": "Nhỏ (384d)",

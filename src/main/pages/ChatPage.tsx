@@ -109,9 +109,6 @@ export const ChatPage: React.FC<ChatPageProps> = ({
 	const setRightPanelCollapsed = useShellLayoutStore(
 		(state) => state.setRightPanelCollapsed,
 	);
-	const setRightWorkspaceTab = useShellLayoutStore(
-		(state) => state.setRightWorkspaceTab,
-	);
 	const [attachedImages, setAttachedImages] = React.useState<File[]>([]);
 	const [attachedDocumentRefs, setAttachedDocumentRefs] = React.useState<
 		AttachedDocumentRef[]
@@ -218,8 +215,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
 							detail.formName,
 						),
 					);
-					if (path)
-						navigate("/documents", { state: { openDocumentPath: path } });
+					if (path) navigate("/files", { state: { openDocumentPath: path } });
 					return;
 				}
 
@@ -280,11 +276,15 @@ export const ChatPage: React.FC<ChatPageProps> = ({
 		if (!isNow && wasInProgressRef.current) {
 			void (async () => {
 				await refreshRuntimeSessions();
-				const hasSandboxServer =
-					useRuntimeSessionsStore.getState().servers.length > 0;
-				if (hasSandboxServer) {
+				const hasRuntimeActivity =
+					useRuntimeSessionsStore.getState().servers.length > 0 ||
+					useRuntimeSessionsStore.getState().commands.length > 0 ||
+					useRuntimeSessionsStore.getState().activeWebSession.isOpen;
+				if (
+					hasRuntimeActivity &&
+					!["/agents", "/llm", "/memory", "/files"].includes(location.pathname)
+				) {
 					setRightPanelCollapsed(false);
-					setRightWorkspaceTab("page");
 					navigate("/runtime");
 				}
 			})();
@@ -295,7 +295,6 @@ export const ChatPage: React.FC<ChatPageProps> = ({
 		navigate,
 		refreshRuntimeSessions,
 		setRightPanelCollapsed,
-		setRightWorkspaceTab,
 	]);
 
 	const completedGroups = useMemo(
@@ -953,7 +952,6 @@ export const ChatPage: React.FC<ChatPageProps> = ({
 					onOpenAgentSettings={() => {
 						open(selectedAgentFlowId);
 						setRightPanelCollapsed(false);
-						setRightWorkspaceTab("agent");
 						onOpenAgentWorkspace?.();
 						navigate("/agents", {
 							state: { selectedAgentFlowId },

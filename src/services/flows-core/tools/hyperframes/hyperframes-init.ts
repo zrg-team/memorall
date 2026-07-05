@@ -553,7 +553,7 @@ const schema = z.object({
 		.string()
 		.min(1)
 		.describe(
-			"Absolute path for the new project. Choose a meaningful slug that reflects the content (e.g. /workspaces/vietnam-travel or /workspaces/product-launch). Never use generic names like 'default', 'project', or 'untitled'.",
+			"Absolute path for the new project. Choose a meaningful slug that reflects the content (e.g. /projects/vietnam-travel or /projects/product-launch). Never use generic names like 'default', 'project', or 'untitled'.",
 		),
 	template: z
 		.enum(TEMPLATE_NAMES)

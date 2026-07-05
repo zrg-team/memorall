@@ -33,7 +33,7 @@ import { toDocumentsSandboxPath } from "@/services/filesystem/sandbox-paths";
 import {
 	parseExcelFile,
 	sheetToMarkdown,
-} from "@/main/modules/documents/handlers/excel-extraction";
+} from "@/main/modules/files/handlers/excel-extraction";
 import { topicService } from "@/main/modules/topics/services/topic-service";
 import type { KnowledgeGrowMode } from "@/main/modules/knowledge/services/knowledge-graph-service";
 import { backgroundJob } from "@/services/background-jobs/background-job";
@@ -51,7 +51,7 @@ interface ExcelSheetSelectorProps {
 const DEFAULT_TOPIC_VALUE = "__default__";
 
 const GROW_LABELS: Record<GrowType, string> = {
-	"knowledge-graph": "Knowledge Graph",
+	"knowledge-graph": "Semantic Graph",
 	structmem: "StructMem",
 };
 

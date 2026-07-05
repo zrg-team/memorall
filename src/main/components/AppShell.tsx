@@ -31,11 +31,11 @@ const MOBILE_WORKSPACE_QUERY = "(max-width: 640px)";
 
 const getCopilotNavigationId = (path: string) => {
 	switch (path) {
-		case "/documents":
+		case "/files":
 			return "documents";
 		case "/agents":
 			return "agents";
-		case "/knowledge-graph":
+		case "/memory":
 			return "knowledge";
 		case "/llm":
 			return "models";
@@ -64,9 +64,6 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
 	);
 	const setRightPanelCollapsed = useShellLayoutStore(
 		(state) => state.setRightPanelCollapsed,
-	);
-	const setRightWorkspaceTab = useShellLayoutStore(
-		(state) => state.setRightWorkspaceTab,
 	);
 	const isDraggingRef = React.useRef(false);
 	const startXRef = React.useRef(0);
@@ -253,7 +250,6 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
 							hideWideSidePanelCollapsedToggle={effectiveChatShellCollapsed}
 							isNarrowChatPanel={isNarrowChatPanel}
 							onCompactChatListOpenChange={setIsCompactChatListOpen}
-							onOpenAgentWorkspace={() => setRightWorkspaceTab("agent")}
 							useIconOnlyHistoryButton={isNarrow && !isMobileWorkspaceOpen}
 						/>
 					)}

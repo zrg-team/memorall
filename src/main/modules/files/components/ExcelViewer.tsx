@@ -49,7 +49,7 @@ import "@univerjs/sheets-formula/facade";
 import "@univerjs/sheets-numfmt/facade";
 
 import * as XLSX from "xlsx";
-import { parseExcelFile } from "@/main/modules/documents/handlers/excel-extraction";
+import { parseExcelFile } from "@/main/modules/files/handlers/excel-extraction";
 import { logError, logInfo } from "@/utils/logger";
 
 export interface ExcelViewerProps {

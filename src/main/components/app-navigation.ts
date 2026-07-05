@@ -1,11 +1,11 @@
 import {
 	Bot,
-	BrainCircuit,
+	Brain,
 	Bug,
+	Cpu,
 	Database,
 	FileText,
 	MessageCircle,
-	Network,
 	Server,
 	VectorSquareIcon,
 	type LucideIcon,
@@ -27,9 +27,9 @@ export const chatNavigationItem: AppNavigationItem = {
 export const workspaceNavigationItems: AppNavigationItem[] = [
 	{
 		nameKey: "navigation.documents",
-		path: "/documents",
+		path: "/files",
 		icon: FileText,
-		mobileLabel: "Documents",
+		mobileLabel: "Files",
 	},
 	{
 		nameKey: "navigation.agents",
@@ -39,21 +39,21 @@ export const workspaceNavigationItems: AppNavigationItem[] = [
 	},
 	{
 		nameKey: "navigation.knowledgeGraph",
-		path: "/knowledge-graph",
-		icon: Network,
-		mobileLabel: "Knowledge",
+		path: "/memory",
+		icon: Brain,
+		mobileLabel: "Memory",
 	},
 	{
 		nameKey: "navigation.models",
 		path: "/llm",
-		icon: BrainCircuit,
+		icon: Cpu,
 		mobileLabel: "Models",
 	},
 	{
 		nameKey: "sandboxPanel.title",
 		path: "/runtime",
 		icon: Server,
-		mobileLabel: "Runtime",
+		mobileLabel: "Workspace",
 	},
 ];
 

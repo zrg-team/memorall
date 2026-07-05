@@ -7,7 +7,7 @@ import {
 	workbookToMarkdown,
 	sheetToMarkdown,
 	sheetToCsv,
-} from "@/main/modules/documents/handlers/excel-extraction";
+} from "@/main/modules/files/handlers/excel-extraction";
 import { normalizeDocumentPath } from "./util";
 import { ensureFolderExists } from "flow-core/utils/fs-utils";
 import {
@@ -22,13 +22,13 @@ const schema = z.object({
 	source_path: z
 		.string()
 		.describe(
-			"Path to the Excel file in /documents. Must end with .xls, .xlsx, or .xlsm.",
+			"Path to the Excel file in the root filesystem. Must end with .xls, .xlsx, or .xlsm.",
 		),
 	output_path: z
 		.string()
 		.optional()
 		.describe(
-			"Optional path to save the extracted text in /documents. If omitted, the text is returned directly.",
+			"Optional path to save the extracted text in the root filesystem. If omitted, the text is returned directly.",
 		),
 	format: z
 		.enum(["markdown", "csv"])
@@ -59,7 +59,7 @@ export const createExcelToTextTool: ToolFactory<Input, Services> = (
 ): Tool<Input> => ({
 	name: TOOL_NAME,
 	description:
-		"Extract text from an Excel file in /documents and return it or save it to a new file. Supports Markdown table or CSV output with optional sheet filtering.",
+		"Extract text from an Excel file in the root filesystem and return it or save it to a new file. Supports Markdown table or CSV output with optional sheet filtering.",
 	schema,
 	execute: async (input) => {
 		const dfs = services.fs;

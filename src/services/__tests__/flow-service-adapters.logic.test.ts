@@ -19,7 +19,7 @@ const text = new TextEncoder();
 
 function makeFileSystemService() {
 	const files = new Map<string, Uint8Array>([
-		["/documents/notes/a.txt", text.encode("hello")],
+		["/notes/a.txt", text.encode("hello")],
 	]);
 	return {
 		readFile: vi.fn(async (path: string) => files.get(path) ?? text.encode("")),
@@ -161,16 +161,13 @@ describe("flow service adapters", () => {
 		await fs.rename("/notes/a.txt", "/archive/renamed.txt");
 
 		expect(service.writeFile).toHaveBeenCalledWith(
-			"/documents/notes/b.txt",
+			"/notes/b.txt",
 			expect.any(Uint8Array),
 		);
-		expect(service.deleteFolder).toHaveBeenCalledWith("/documents/notes");
-		expect(service.move).toHaveBeenCalledWith(
-			"/documents/notes/a.txt",
-			"/documents/archive",
-		);
+		expect(service.deleteFolder).toHaveBeenCalledWith("/notes");
+		expect(service.move).toHaveBeenCalledWith("/notes/a.txt", "/archive");
 		expect(service.rename).toHaveBeenCalledWith(
-			"/documents/archive/a.txt",
+			"/archive/a.txt",
 			"renamed.txt",
 		);
 	});

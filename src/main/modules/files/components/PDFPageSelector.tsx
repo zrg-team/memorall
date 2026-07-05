@@ -33,7 +33,7 @@ import { toDocumentsSandboxPath } from "@/services/filesystem/sandbox-paths";
 import {
 	readPDFFile,
 	type PDFPageContent,
-} from "@/main/modules/documents/handlers/pdf-extraction";
+} from "@/main/modules/files/handlers/pdf-extraction";
 import { topicService } from "@/main/modules/topics/services/topic-service";
 import type { KnowledgeGrowMode } from "@/main/modules/knowledge/services/knowledge-graph-service";
 import { backgroundJob } from "@/services/background-jobs/background-job";
@@ -51,7 +51,7 @@ interface PDFPageSelectorProps {
 const DEFAULT_TOPIC_VALUE = "__default__";
 
 const GROW_LABELS: Record<GrowType, string> = {
-	"knowledge-graph": "Knowledge Graph",
+	"knowledge-graph": "Semantic Graph",
 	structmem: "StructMem",
 };
 
@@ -169,9 +169,7 @@ export const PDFPageSelector: React.FC<PDFPageSelectorProps> = ({
 			setConverting(true);
 
 			// Get file content from storage and convert to text in main thread
-			const fileContent = await documentFileSystemService.readFile(
-				`/documents${file.id}`,
-			);
+			const fileContent = await documentFileSystemService.readFile(file.id);
 			const pageNumbers = Array.from(selectedPages).sort((a, b) => a - b);
 
 			logInfo(

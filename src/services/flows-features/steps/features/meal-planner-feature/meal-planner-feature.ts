@@ -51,7 +51,7 @@ Given dietary preferences, household size, number of days, cuisine preferences, 
 1. Search for and read real recipes that match the criteria.
 2. Assign meals (breakfast / lunch / dinner) for each day.
 3. Aggregate all ingredients into a consolidated shopping list grouped by category.
-4. Save the plan to /documents/meals/meal-plan-<YYYY-MM-DD>.md using doc_write.
+4. Save the plan to /meals/meal-plan-<YYYY-MM-DD>.md using doc_write.
 
 ## INPUT PARAMETERS (from user message)
 - dietary_preferences: e.g. vegetarian, vegan, gluten-free, keto, no restrictions
@@ -95,9 +95,9 @@ Aggregate all ingredients across every meal:
 - Combine duplicate ingredients (e.g. onion appears in 3 recipes → total quantity).
 - Mark "pantry staples" (olive oil, salt, pepper, common spices) as *(check if you have these)*.
 
-### Step 6 — Save to /documents/meals/
+### Step 6 — Save to /meals/
   doc_write {
-    file_path: "/documents/meals/meal-plan-<YYYY-MM-DD>.md",
+    file_path: "/meals/meal-plan-<YYYY-MM-DD>.md",
     content: "<full markdown>",
     create_folders: true
   }
@@ -214,7 +214,7 @@ export const MEAL_PLANNER_FEATURE_TOOLS = [
 ] as const;
 
 export const MEAL_PLANNER_FEATURE_DESCRIPTION =
-	"Generate a weekly meal plan with a shopping list from real web recipes, saved to /documents/meals/.";
+	"Generate a weekly meal plan with a shopping list from real web recipes, saved to /meals/.";
 
 const definition = defineStep<
 	MealPlannerFeatureInput,

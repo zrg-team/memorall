@@ -24,7 +24,9 @@ if (typeof chrome !== "undefined" && chrome.runtime?.getURL) {
 const schema = z.object({
 	source_path: z
 		.string()
-		.describe("Path to the PDF file in /documents. Must end with .pdf."),
+		.describe(
+			"Path to the PDF file in the root filesystem. Must end with .pdf.",
+		),
 	mode: z
 		.enum(["page", "images"])
 		.optional()
@@ -286,7 +288,7 @@ export const createPdfToImageTool: ToolFactory<Input, Services> = (
 ): Tool<Input> => ({
 	name: TOOL_NAME,
 	description:
-		"Render PDF pages or extract embedded page images from /documents as PNG base64 data URLs and provide them to the model as OpenAI-compatible image message content.",
+		"Render PDF pages or extract embedded page images from the root filesystem as PNG base64 data URLs and provide them to the model as OpenAI-compatible image message content.",
 	schema,
 	execute: async (input) => {
 		const dfs = services.fs;

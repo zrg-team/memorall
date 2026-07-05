@@ -23,7 +23,9 @@ import { useTranslation } from "react-i18next";
 import { ProcessMonitor } from "@/main/components/molecules/ProcessMonitor";
 import { openStandalonePage } from "@/utils/open-standalone";
 import { isPopupSurface } from "@/utils/dom";
+import { useIsWideViewport } from "@/main/hooks/use-viewport";
 import { SettingPanel } from "@/main/components/molecules/SettingPanel";
+import { HarnessStatusBar } from "@/main/components/molecules/HarnessStatusBar";
 import { Button } from "@/main/components/ui/button";
 import { useRuntimeSessionsStore } from "@/main/stores/runtime-sessions";
 import {
@@ -43,11 +45,11 @@ type SettingsPanelStateProps = Pick<
 
 const getCopilotNavigationId = (path: string) => {
 	switch (path) {
-		case "/documents":
+		case "/files":
 			return "documents";
 		case "/agents":
 			return "agents";
-		case "/knowledge-graph":
+		case "/memory":
 			return "knowledge";
 		case "/llm":
 			return "models";
@@ -142,6 +144,10 @@ export const RightApplicationLayout: React.FC<RightApplicationLayoutProps> = ({
 }) => {
 	const location = useLocation();
 	const { t } = useTranslation();
+	const isWideViewport = useIsWideViewport();
+	// In standalone (non-popup) wide mode we have room to show text labels next
+	// to the nav icons; the popup stays icon-only to conserve horizontal space.
+	const showNavLabels = !isPopupSurface() && isWideViewport;
 
 	const [isReloadingModel, setIsReloadingModel] = React.useState(false);
 	const [reloadProgress, setReloadProgress] = React.useState({
@@ -287,7 +293,9 @@ export const RightApplicationLayout: React.FC<RightApplicationLayoutProps> = ({
 														isSelected
 															? "bg-blue-500/10 text-blue-500 border border-blue-500/30 shadow-[0_0_0_1px_rgba(59,130,246,0.28),0_4px_20px_rgba(59,130,246,0.12)]"
 															: "text-muted-foreground hover:text-foreground hover:bg-white/5"
-													} relative flex items-center rounded-md p-2 text-sm font-medium transition-all duration-200 ease-in-out`}
+													} relative flex items-center rounded-md text-sm font-medium transition-all duration-200 ease-in-out ${
+														showNavLabels ? "gap-2 px-2.5 py-2" : "p-2"
+													}`}
 												>
 													<IconComponent
 														size={16}
@@ -295,14 +303,21 @@ export const RightApplicationLayout: React.FC<RightApplicationLayoutProps> = ({
 															isSelected ? "scale-110" : "hover:scale-110"
 														}`}
 													/>
+													{showNavLabels ? (
+														<span className="whitespace-nowrap">
+															{t(item.nameKey)}
+														</span>
+													) : null}
 													{item.path === "/runtime"
 														? renderRuntimeBadge(runtimeCount)
 														: null}
 												</Link>
 											</TooltipTrigger>
-											<TooltipContent side="bottom">
-												<p>{t(item.nameKey)}</p>
-											</TooltipContent>
+											{showNavLabels ? null : (
+												<TooltipContent side="bottom">
+													<p>{t(item.nameKey)}</p>
+												</TooltipContent>
+											)}
 										</Tooltip>
 									);
 								})}
@@ -316,7 +331,9 @@ export const RightApplicationLayout: React.FC<RightApplicationLayoutProps> = ({
 														isDebugSelected
 															? "bg-blue-500/10 text-blue-500 border border-blue-500/30 shadow-[0_0_0_1px_rgba(59,130,246,0.28),0_4px_20px_rgba(59,130,246,0.12)]"
 															: "text-muted-foreground hover:text-foreground hover:bg-white/5"
-													} flex items-center rounded-md p-2 text-sm font-medium transition-all duration-200 ease-in-out`}
+													} flex items-center rounded-md text-sm font-medium transition-all duration-200 ease-in-out ${
+														showNavLabels ? "gap-1.5 px-2.5 py-2" : "p-2"
+													}`}
 												>
 													<Bug
 														size={16}
@@ -324,13 +341,20 @@ export const RightApplicationLayout: React.FC<RightApplicationLayoutProps> = ({
 															isDebugSelected ? "scale-110" : "hover:scale-110"
 														}`}
 													/>
+													{showNavLabels ? (
+														<span className="whitespace-nowrap">
+															{t("navigation.debug")}
+														</span>
+													) : null}
 													<ChevronDown size={12} className="ml-1" />
 												</button>
 											</DropdownMenuTrigger>
 										</TooltipTrigger>
-										<TooltipContent side="bottom">
-											<p>{t("navigation.debug")}</p>
-										</TooltipContent>
+										{showNavLabels ? null : (
+											<TooltipContent side="bottom">
+												<p>{t("navigation.debug")}</p>
+											</TooltipContent>
+										)}
 									</Tooltip>
 									<DropdownMenuContent align="start">
 										{debugNavigationItems.map((item) => {
@@ -382,6 +406,8 @@ export const RightApplicationLayout: React.FC<RightApplicationLayoutProps> = ({
 					</div>
 				</div>
 			</nav>
+
+			<HarnessStatusBar />
 
 			<div className="flex min-h-0 flex-1 flex-col overflow-hidden">
 				{children}

@@ -343,7 +343,7 @@ export class SandboxContainerServiceProxy implements ISandboxContainerService {
 				const bodyText = decodeSwResponseBodyPreview(result, 1200);
 
 				const match = bodyText.match(
-					/Workspace file not materialized: (\/workspaces\/[^\s]+|\/workspace\/[^\s]+)/,
+					/(?:Workspace file not materialized|Mounted file is not materialized in sandbox runtime): (\/[^\s]+)/,
 				);
 				const missingPath = match?.[1] ?? null;
 
@@ -352,7 +352,7 @@ export class SandboxContainerServiceProxy implements ISandboxContainerService {
 					try {
 						const bytes = await documentFileSystemService.readFile(missingPath);
 						const content = new TextDecoder().decode(bytes);
-						await this.request("fs.materializeWorkspaceFile", {
+						await this.request("fs.materializeDocumentFile", {
 							path: missingPath,
 							content,
 						});

@@ -2,7 +2,7 @@
 	"title": "Bộ nhớ",
 	"create": {
 		"title": "Tạo bộ nhớ mới",
-		"description": "Tổ chức tài liệu của bạn bằng cách tạo các vùng bộ nhớ tập trung cho các lĩnh vực kiến thức khác nhau.",
+		"description": "Tổ chức tệp của bạn bằng cách tạo các vùng bộ nhớ tập trung cho các lĩnh vực kiến thức khác nhau.",
 		"topicName": "Tên bộ nhớ",
 		"goalPurpose": "Mục tiêu & Mục đích",
 		"namePlaceholder": "ví dụ: Học máy, Phát triển React...",

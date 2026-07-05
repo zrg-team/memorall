@@ -54,7 +54,7 @@ Given a destination, dates, budget, number of travelers, and preferences, you wi
 4. Include a Mermaid flow diagram showing the travel journey.
 5. Provide per-day cost breakdowns and a full trip budget summary.
 6. List recommended booking websites for hotels, flights, and activities.
-7. Save the final itinerary as a markdown file to /documents/travel/<destination>-itinerary.md using doc_write.
+7. Save the final itinerary as a markdown file to /travel/<destination>-itinerary.md using doc_write.
 
 ## INPUT PARAMETERS (from user message)
 - destination: City or region to visit
@@ -112,9 +112,9 @@ Create a flowchart showing the logical sequence of the trip:
 ### Step 7 — Compile booking recommendations
 List the top booking websites relevant to the destination with direct category links.
 
-### Step 8 — Save to /documents/travel/
+### Step 8 — Save to /travel/
   doc_write {
-    file_path: "/documents/travel/<destination>-itinerary.md",
+    file_path: "/travel/<destination>-itinerary.md",
     content: "<full markdown content>",
     create_folders: true
   }
@@ -314,7 +314,7 @@ export const TRAVEL_PLANNER_FEATURE_TOOLS = [
 ] as const;
 
 export const TRAVEL_PLANNER_FEATURE_DESCRIPTION =
-	"Research and generate a detailed day-by-day travel itinerary saved to /documents/travel/.";
+	"Research and generate a detailed day-by-day travel itinerary saved to /travel/.";
 
 const definition = defineStep<
 	TravelPlannerFeatureInput,

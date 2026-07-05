@@ -35,21 +35,18 @@ export interface FsFeatureConfig extends FsToolConfig {}
 export type FsFeatureServices = {};
 
 const MEMORALL_NAMESPACE_PROMPT = `
-## MEMORALL FILESYSTEM NAMESPACES
+## MEMORALL FILESYSTEM ROOT
 These rules are specific to the Memorall host runtime and override generic path guidance above.
 
-| Namespace | Root path | Backing path | Purpose |
-|---|---|---|---|
-| Documents | \`/documents\` | \`/home/documents\` | User documents, notes, PDFs, and other files |
-| Workspaces | \`/workspaces\` | \`/home/workspaces\` | Code projects, scripts, and workspace files |
+Memorall exposes one persistent filesystem rooted at \`/\`.
 
-Always prefix paths with the appropriate namespace root:
-- Documents: \`/documents/notes/todo.md\`
-- Workspaces: \`/workspaces/myproject/src/index.ts\`
+Use normal absolute paths:
+- Documents, notes, PDFs, and reports: \`/notes/todo.md\`, \`/finance/report.md\`
+- Code projects and generated apps: \`/projects/myproject/src/index.ts\`
 
-Start exploration with \`fs_ls\` on \`/documents\` or \`/workspaces\`.
-Scope broad searches and globs to a namespace root whenever possible.
-Both namespaces are persistent. When unsure, prefer \`/documents\` for user content and \`/workspaces\` for code.
+Start exploration with \`fs_ls\` on \`/\`.
+Scope broad searches and globs to the most relevant folder whenever possible.
+All paths are persistent. When creating code projects, prefer \`/projects/<slug>\`.
 `;
 
 export const FS_FEATURE_SYSTEM_PROMPT = [
@@ -60,7 +57,7 @@ export const FS_FEATURE_SYSTEM_PROMPT = [
 export { FS_FEATURE_TOOLS };
 
 export const FS_FEATURE_DESCRIPTION =
-	"Enable filesystem tools with access to both /documents and /workspaces namespaces: glob, grep, read, write, edit, mkdir, remove, ls.";
+	"Enable filesystem tools with root access: glob, grep, read, write, edit, mkdir, remove, ls.";
 
 const definition = defineStep<
 	FsFeatureInput,
@@ -150,8 +147,7 @@ stepRegistry.register(STEP_NAME, createFsFeatureStep, {
 			{
 				name: "tools",
 				type: "Tool[]",
-				description:
-					"Tools extended with fs toolset (/documents + /workspaces)",
+				description: "Tools extended with root filesystem toolset",
 			},
 		],
 	},

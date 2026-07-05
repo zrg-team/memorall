@@ -1,76 +1,48 @@
 import React, { useCallback } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { Loader2, PanelLeftOpen } from "lucide-react";
-import { useDocumentLibrary } from "@/main/modules/documents/hooks/use-document-library";
-import { DocumentLibraryHeader } from "@/main/modules/documents/components/DocumentLibraryHeader";
-import { DocumentLibrarySidebar } from "@/main/modules/documents/components/DocumentLibrarySidebar";
-import { DocumentLibraryContent } from "@/main/modules/documents/components/DocumentLibraryContent";
-import { DocumentLibraryCompactNavigator } from "@/main/modules/documents/components/DocumentLibraryCompactNavigator";
+import {
+	FileText,
+	FolderTree,
+	Loader2,
+	PanelLeftClose,
+	PanelLeftOpen,
+} from "lucide-react";
+import { useDocumentLibrary } from "@/main/modules/files/hooks/use-document-library";
+import { DocumentLibraryHeader } from "@/main/modules/files/components/DocumentLibraryHeader";
+import { DocumentLibrarySidebar } from "@/main/modules/files/components/DocumentLibrarySidebar";
+import { DocumentLibraryContent } from "@/main/modules/files/components/DocumentLibraryContent";
+import { DocumentLibraryCompactNavigator } from "@/main/modules/files/components/DocumentLibraryCompactNavigator";
 import { Button } from "@/main/components/ui/button";
+import { useResponsiveWorkspacePanels } from "@/main/hooks/use-responsive-workspace-panels";
+import { WorkspaceCollapsedSidebarItem } from "@/main/components/molecules/WorkspaceCollapsedSidebarItem";
 import type { DocumentTreeNode } from "@/types/document-library";
 
-const PANEL_STORAGE_KEY = "memorall.documents.workspace-panels.v1";
-const DEFAULT_PANEL_SIZES = [22, 78] as const;
-const MIN_PANEL_SIZES = [16, 36] as const;
-const MAX_PRIMARY_PANEL_SIZE = 28;
-const DESKTOP_BREAKPOINT = 700;
-const DESKTOP_SEPARATOR_TRACK = 2;
-
-const clampPair = (
-	nextPrimary: number,
-	total: number,
-	minPrimary: number,
-	minSecondary: number,
-	maxPrimary = total - minSecondary,
-): [number, number] => {
-	const upperPrimary = Math.min(total - minSecondary, maxPrimary);
-	const clampedPrimary = Math.min(
-		upperPrimary,
-		Math.max(minPrimary, nextPrimary),
-	);
-	return [clampedPrimary, total - clampedPrimary];
-};
-
-const readStoredPanelSizes = (): [number, number] => {
-	if (typeof window === "undefined") return [...DEFAULT_PANEL_SIZES];
-	try {
-		const raw = window.localStorage.getItem(PANEL_STORAGE_KEY);
-		if (!raw) return [...DEFAULT_PANEL_SIZES];
-		const parsed = JSON.parse(raw);
-		if (
-			Array.isArray(parsed) &&
-			parsed.length === 2 &&
-			parsed.every((value) => typeof value === "number")
-		) {
-			const total = parsed[0] + parsed[1];
-			return clampPair(
-				parsed[0],
-				total,
-				MIN_PANEL_SIZES[0],
-				MIN_PANEL_SIZES[1],
-				MAX_PRIMARY_PANEL_SIZE,
-			);
-		}
-	} catch {
-		// Fall back to defaults when localStorage is unavailable or corrupt.
-	}
-	return [...DEFAULT_PANEL_SIZES];
-};
+const PANEL_STORAGE_KEY = "memorall.documents.workspace-panels.v2";
 
 export const DocumentLibraryPage: React.FC = () => {
 	const { t } = useTranslation("documents");
 	const location = useLocation();
 	const navigate = useNavigate();
 	const lib = useDocumentLibrary();
-	const [panelSizes, setPanelSizes] =
-		React.useState<[number, number]>(readStoredPanelSizes);
-	const [isDesktop, setIsDesktop] = React.useState(false);
 	const [compactNavigatorCollapsed, setCompactNavigatorCollapsed] =
 		React.useState(false);
-	const outerRef = React.useRef<HTMLDivElement | null>(null);
-	const containerRef = React.useRef<HTMLDivElement | null>(null);
-	const activeTree = lib.isWorkspaceSection ? lib.workspaceTree : lib.tree;
+	const {
+		collapseSidebar,
+		containerRef,
+		expandSidebar,
+		gridTemplateColumns,
+		handleResizeStart,
+		isCompactSplitLayout,
+		isSidebarCollapsed,
+		isSplitLayout,
+		sidebarOverlayWidth,
+	} = useResponsiveWorkspacePanels({
+		storageKey: PANEL_STORAGE_KEY,
+		splitBreakpoint: 700,
+		collapseBreakpoint: 1180,
+	});
+	const activeTree = lib.tree;
 	const compactNavigatorExpandButton = compactNavigatorCollapsed ? (
 		<Button
 			variant="ghost"
@@ -83,18 +55,7 @@ export const DocumentLibraryPage: React.FC = () => {
 			<PanelLeftOpen className="h-4 w-4" />
 		</Button>
 	) : null;
-	const homeOptions = [
-		{
-			label: t("title"),
-			isActive: lib.selectedSection === "documents",
-			onSelect: lib.handleSelectDocumentsSection,
-		},
-		{
-			label: t("sidebar.workspace"),
-			isActive: lib.selectedSection === "workspace",
-			onSelect: lib.handleSelectWorkspaceSection,
-		},
-	];
+	const homeOptions = undefined;
 
 	React.useEffect(() => {
 		const documentPath = (
@@ -115,63 +76,9 @@ export const DocumentLibraryPage: React.FC = () => {
 		navigate,
 	]);
 
-	const handleResizeStart = React.useCallback(
-		(event: React.MouseEvent<HTMLDivElement>) => {
-			if (!isDesktop || !containerRef.current) return;
-			event.preventDefault();
-			const startX = event.clientX;
-			const startSizes = panelSizes;
-			const containerWidth = containerRef.current.getBoundingClientRect().width;
-			document.body.style.cursor = "col-resize";
-			document.body.style.userSelect = "none";
-			const handlePointerMove = (pointerEvent: MouseEvent) => {
-				const deltaInFr =
-					((pointerEvent.clientX - startX) / containerWidth) *
-					(startSizes[0] + startSizes[1]);
-				setPanelSizes(() => {
-					const [left, right] = clampPair(
-						startSizes[0] + deltaInFr,
-						startSizes[0] + startSizes[1],
-						MIN_PANEL_SIZES[0],
-						MIN_PANEL_SIZES[1],
-						MAX_PRIMARY_PANEL_SIZE,
-					);
-					return [left, right];
-				});
-			};
-			const handlePointerUp = () => {
-				document.body.style.cursor = "";
-				document.body.style.userSelect = "";
-				window.removeEventListener("mousemove", handlePointerMove);
-				window.removeEventListener("mouseup", handlePointerUp);
-			};
-			window.addEventListener("mousemove", handlePointerMove);
-			window.addEventListener("mouseup", handlePointerUp);
-		},
-		[isDesktop, panelSizes],
-	);
-
 	React.useEffect(() => {
-		if (typeof window === "undefined") return;
-		const el = outerRef.current;
-		if (!el) return;
-		const isPopup = document.documentElement.dataset.uiSurface === "popup";
-		const observer = new ResizeObserver((entries) => {
-			const width = entries[0]?.contentRect.width ?? 0;
-			setIsDesktop(!isPopup && width >= DESKTOP_BREAKPOINT);
-		});
-		observer.observe(el);
-		return () => observer.disconnect();
-	}, []);
-
-	React.useEffect(() => {
-		if (typeof window === "undefined") return;
-		window.localStorage.setItem(PANEL_STORAGE_KEY, JSON.stringify(panelSizes));
-	}, [panelSizes]);
-
-	React.useEffect(() => {
-		if (isDesktop) setCompactNavigatorCollapsed(false);
-	}, [isDesktop]);
+		if (isSplitLayout) setCompactNavigatorCollapsed(false);
+	}, [isSplitLayout]);
 
 	const handleTreeRename = useCallback(
 		(node: DocumentTreeNode, newName: string) => {
@@ -204,40 +111,107 @@ export const DocumentLibraryPage: React.FC = () => {
 	}
 
 	return (
-		<div
-			ref={outerRef}
-			className="flex h-full min-h-0 flex-col overflow-hidden bg-background"
-		>
-			{isDesktop ? (
+		<div className="flex h-full min-h-0 flex-col overflow-hidden bg-background">
+			{isSplitLayout ? (
 				<div
 					ref={containerRef}
 					className="grid min-h-0 min-w-0 flex-1 overflow-hidden bg-background"
 					style={{
-						gridTemplateColumns: `${panelSizes[0]}fr ${DESKTOP_SEPARATOR_TRACK}px ${panelSizes[1]}fr`,
+						gridTemplateColumns,
 					}}
 				>
-					<div className="min-h-0 overflow-hidden">
-						<DocumentLibrarySidebar
-							tree={lib.tree}
-							workspaceTree={lib.workspaceTree}
-							selectedSection={lib.selectedSection}
-							selectedNodeId={lib.selectedNode?.id ?? null}
-							docsTitle={t("title")}
-							onSelectDocumentsRoot={lib.handleSelectDocumentsSection}
-							onSelectDocNode={lib.handleSelectDocNode}
-							onSelectWorkspaceNode={lib.handleSelectWorkspaceNode}
-							onSelectWorkspaceRoot={lib.handleSelectWorkspaceSection}
-							onToggleExpand={lib.handleToggleExpand}
-							onToggleExpandWorkspace={lib.handleToggleExpandWorkspace}
-							onMove={lib.handleMove}
-							onRenameNode={handleTreeRename}
-							onDeleteNode={handleTreeDelete}
-						/>
+					<div
+						className={`relative z-20 min-h-0 border-r bg-background ${
+							isSidebarCollapsed ||
+							(isCompactSplitLayout && !isSidebarCollapsed)
+								? "overflow-visible"
+								: "overflow-hidden"
+						}`}
+					>
+						{isSidebarCollapsed ? (
+							<div className="flex h-full flex-col items-center gap-2 py-3">
+								<WorkspaceCollapsedSidebarItem
+									icon={<PanelLeftOpen className="h-4 w-4" />}
+									label={t("navigator.expand")}
+									onClick={expandSidebar}
+									className="border border-input bg-background hover:bg-accent"
+								/>
+								<div className="mt-2 flex flex-col gap-2">
+									<WorkspaceCollapsedSidebarItem
+										icon={<FileText className="h-5 w-5" />}
+										label={t("title")}
+										active={lib.selectedSection === "documents"}
+										onClick={() => {
+											expandSidebar();
+											lib.handleSelectDocumentsSection();
+										}}
+									/>
+									{lib.workspaceTree.length > 0 ? (
+										<WorkspaceCollapsedSidebarItem
+											icon={<FolderTree className="h-5 w-5" />}
+											label={t("sidebar.workspace")}
+											active={lib.selectedSection === "workspace"}
+											onClick={() => {
+												expandSidebar();
+												lib.handleSelectWorkspaceSection();
+											}}
+										/>
+									) : null}
+								</div>
+							</div>
+						) : (
+							<div
+								className={
+									isCompactSplitLayout
+										? "absolute left-0 top-0 flex h-full min-h-0 flex-col overflow-hidden border-r bg-background shadow-2xl"
+										: "h-full min-h-0 overflow-hidden"
+								}
+								style={
+									isCompactSplitLayout
+										? { width: sidebarOverlayWidth }
+										: undefined
+								}
+							>
+								<DocumentLibrarySidebar
+									tree={lib.tree}
+									workspaceTree={lib.workspaceTree}
+									selectedSection={lib.selectedSection}
+									selectedNodeId={lib.selectedNode?.id ?? null}
+									docsTitle={t("title")}
+									collapseButton={
+										<Button
+											type="button"
+											variant="ghost"
+											size="icon"
+											className="h-8 w-8"
+											onClick={collapseSidebar}
+											aria-label={t("navigator.collapse")}
+											title={t("navigator.collapse")}
+										>
+											<PanelLeftClose className="h-4 w-4" />
+										</Button>
+									}
+									onSelectDocumentsRoot={lib.handleSelectDocumentsSection}
+									onSelectDocNode={lib.handleSelectDocNode}
+									onSelectWorkspaceNode={lib.handleSelectWorkspaceNode}
+									onSelectWorkspaceRoot={lib.handleSelectWorkspaceSection}
+									onToggleExpand={lib.handleToggleExpand}
+									onToggleExpandWorkspace={lib.handleToggleExpandWorkspace}
+									onMove={lib.handleMove}
+									onRenameNode={handleTreeRename}
+									onDeleteNode={handleTreeDelete}
+								/>
+							</div>
+						)}
 					</div>
 					<div
 						role="separator"
 						aria-orientation="vertical"
-						className="group relative z-10 -mx-[5px] flex w-3 cursor-col-resize items-center justify-center bg-transparent"
+						className={
+							!isSidebarCollapsed && !isCompactSplitLayout
+								? "group relative z-10 -mx-[5px] flex w-3 cursor-col-resize items-center justify-center bg-transparent"
+								: "hidden"
+						}
 						onMouseDown={handleResizeStart}
 					>
 						<div className="h-full w-px bg-border/80 transition-all group-hover:w-[2px] group-hover:bg-foreground/20" />
@@ -247,9 +221,7 @@ export const DocumentLibraryPage: React.FC = () => {
 							<DocumentLibraryHeader
 								currentPath={lib.currentPath}
 								activeTree={activeTree}
-								homeTitle={
-									lib.isWorkspaceSection ? t("sidebar.workspace") : t("title")
-								}
+								homeTitle={t("title")}
 								isWorkspaceSection={lib.isWorkspaceSection}
 								viewMode={lib.viewMode}
 								searchQuery={lib.searchQuery}
@@ -298,9 +270,7 @@ export const DocumentLibraryPage: React.FC = () => {
 					<DocumentLibraryHeader
 						currentPath={lib.currentPath}
 						activeTree={activeTree}
-						homeTitle={
-							lib.isWorkspaceSection ? t("sidebar.workspace") : t("title")
-						}
+						homeTitle={t("title")}
 						isWorkspaceSection={lib.isWorkspaceSection}
 						compact
 						compactLeading={

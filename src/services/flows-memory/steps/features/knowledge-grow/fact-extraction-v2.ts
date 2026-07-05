@@ -82,7 +82,7 @@ RELATIONSHIP EXTRACTION GUIDELINES:
 7. Include temporal context when mentioned (this will be processed separately for precise dates).
 
 COMPREHENSIVE EXTRACTION STRATEGY:
-- For web pages/documents: Extract authorship, organizational relationships, creation relationships, ownership, mentions, citations, etc.
+- For web pages/files: Extract authorship, organizational relationships, creation relationships, ownership, mentions, citations, etc.
 - For conversations: Extract social relationships, professional connections, opinions expressed, co-mentions, etc.
 - For any content: Look for co-occurrence relationships, hierarchical relationships, temporal relationships, causal relationships.
 - Create "MENTIONED_WITH" or "RELATED_TO" relationships for entities that appear together even without explicit connection.

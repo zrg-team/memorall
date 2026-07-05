@@ -312,6 +312,7 @@ function toEnhancedNode(
 		embedding:
 			(node.nameEmbedding as number[]) ??
 			(node.nameEmbeddingSmall as number[]) ??
+			(node.nameEmbeddingLarge as number[]) ??
 			null,
 		semanticScore,
 		level,
@@ -336,7 +337,11 @@ function toEnhancedEdge(
 		edgeType: edge.edgeType,
 		factText: edge.factText ?? "",
 		attributes: (edge.attributes as Record<string, unknown>) ?? {},
-		embedding: (edge.factEmbedding as number[]) ?? null,
+		embedding:
+			(edge.factEmbedding as number[]) ??
+			(edge.factEmbeddingSmall as number[]) ??
+			(edge.factEmbeddingLarge as number[]) ??
+			null,
 		semanticScore,
 		level,
 		source,

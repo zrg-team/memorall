@@ -253,7 +253,7 @@ exports[`flows-integrations registered contracts > registers every integrations 
         "messages": "messages",
         "tools": "tools",
       },
-      "description": "Enable filesystem tools with access to both /documents and /workspaces namespaces: glob, grep, read, write, edit, mkdir, remove, ls.",
+      "description": "Enable filesystem tools with root access: glob, grep, read, write, edit, mkdir, remove, ls.",
       "enabledByDefault": true,
       "feature": {
         "graphTypes": [
@@ -281,7 +281,7 @@ exports[`flows-integrations registered contracts > registers every integrations 
             "type": "Message[]",
           },
           {
-            "description": "Tools extended with fs toolset (/documents + /workspaces)",
+            "description": "Tools extended with root filesystem toolset",
             "name": "tools",
             "type": "Tool[]",
           },
@@ -312,15 +312,15 @@ exports[`flows-integrations registered contracts > registers every integrations 
     "config": {
       "configParams": [
         {
-          "default": "/workspaces",
+          "default": "/projects",
           "description": "Root path under which HyperFrames projects are stored.",
           "key": "rootPath",
           "type": "string",
         },
         {
           "default": [
-            "/documents",
-            "/workspaces",
+            "/",
+            "/projects",
           ],
           "description": "Root path prefixes searched when rewriting local image references to data URLs for iframe rendering.",
           "key": "resourceRoots",
@@ -437,7 +437,7 @@ exports[`flows-integrations registered contracts > registers every integrations 
         "messages": "messages",
         "tools": "tools",
       },
-      "description": "Enable PDF generation tool: create a PDF from a URL, Markdown text, or HTML and save it to /documents.",
+      "description": "Enable PDF generation tool: create a PDF from a URL, Markdown text, or HTML and save it to the root filesystem.",
       "enabledByDefault": false,
       "feature": {
         "graphTypes": [
@@ -1048,7 +1048,7 @@ exports[`flows-integrations registered contracts > registers every integrations 
     },
   },
   {
-    "description": "Extract text from an Excel file in /documents and return it or save it to a new file. Supports Markdown table or CSV output with optional sheet filtering.",
+    "description": "Extract text from an Excel file in the root filesystem and return it or save it to a new file. Supports Markdown table or CSV output with optional sheet filtering.",
     "name": "excel_to_text",
     "parameters": {
       "properties": {
@@ -1100,7 +1100,7 @@ exports[`flows-integrations registered contracts > registers every integrations 
     },
   },
   {
-    "description": "Generate a PDF from a web URL, markdown text, or HTML string and save it to /documents. Returns the saved file path and page count.",
+    "description": "Generate a PDF from a web URL, markdown text, or HTML string and save it to the root filesystem. Returns the saved file path and page count.",
     "name": "pdf_generate",
     "parameters": {
       "properties": {
@@ -1151,7 +1151,7 @@ exports[`flows-integrations registered contracts > registers every integrations 
     },
   },
   {
-    "description": "Read PDF metadata from a file in /documents, including total pages and whether image content appears on each page.",
+    "description": "Read PDF metadata from a file in the root filesystem, including total pages and whether image content appears on each page.",
     "name": "pdf_metadata",
     "parameters": {
       "properties": {
@@ -1166,7 +1166,7 @@ exports[`flows-integrations registered contracts > registers every integrations 
     },
   },
   {
-    "description": "Render PDF pages or extract embedded page images from /documents as PNG base64 data URLs and provide them to the model as OpenAI-compatible image message content.",
+    "description": "Render PDF pages or extract embedded page images from the root filesystem as PNG base64 data URLs and provide them to the model as OpenAI-compatible image message content.",
     "name": "pdf_to_image",
     "parameters": {
       "properties": {
@@ -1217,7 +1217,7 @@ exports[`flows-integrations registered contracts > registers every integrations 
     },
   },
   {
-    "description": "Extract text from a PDF file in /documents and return it or save it to a new file. Supports plain text or Markdown output and optional page range extraction.",
+    "description": "Extract text from a PDF file in the root filesystem and return it or save it to a new file. Supports plain text or Markdown output and optional page range extraction.",
     "name": "pdf_to_text",
     "parameters": {
       "properties": {
@@ -1257,7 +1257,7 @@ exports[`flows-integrations registered contracts > registers every integrations 
     },
   },
   {
-    "description": "Fetch an image from a URL and save it to /documents. Uses an active web session when available, otherwise downloads directly. Returns the stored file path.",
+    "description": "Fetch an image from a URL and save it to the root filesystem. Uses an active web session when available, otherwise downloads directly. Returns the stored file path.",
     "name": "web_fetch_image",
     "parameters": {
       "properties": {
@@ -1278,7 +1278,7 @@ exports[`flows-integrations registered contracts > registers every integrations 
     },
   },
   {
-    "description": "Capture a PNG screenshot of an active web session or a URL and save it to /documents. Returns the saved file path and image dimensions.",
+    "description": "Capture a PNG screenshot of an active web session or a URL and save it to the root filesystem. Returns the saved file path and image dimensions.",
     "name": "web_screenshot",
     "parameters": {
       "properties": {

@@ -19,7 +19,9 @@ if (typeof chrome !== "undefined" && chrome.runtime?.getURL) {
 const schema = z.object({
 	source_path: z
 		.string()
-		.describe("Path to the PDF file in /documents. Must end with .pdf."),
+		.describe(
+			"Path to the PDF file in the root filesystem. Must end with .pdf.",
+		),
 });
 
 type Input = z.infer<typeof schema>;
@@ -55,7 +57,7 @@ export const createPdfMetadataTool: ToolFactory<Input, Services> = (
 ): Tool<Input> => ({
 	name: TOOL_NAME,
 	description:
-		"Read PDF metadata from a file in /documents, including total pages and whether image content appears on each page.",
+		"Read PDF metadata from a file in the root filesystem, including total pages and whether image content appears on each page.",
 	schema,
 	execute: async (input) => {
 		const dfs = services.fs;

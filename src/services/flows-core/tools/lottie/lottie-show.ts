@@ -20,7 +20,7 @@ const schema = z.object({
 		.string()
 		.min(1)
 		.describe(
-			"Absolute path to the project directory, e.g. /workspaces/loading-spinner",
+			"Absolute path to the project directory, e.g. /projects/loading-spinner",
 		),
 });
 

@@ -53,6 +53,7 @@ export const DocumentLibraryCompactNavigator = memo(
 		onDeleteNode,
 	}: DocumentLibraryCompactNavigatorProps) {
 		const { t } = useTranslation("documents");
+		const showWorkspaceSection = workspaceTree.length > 0;
 		const renderSection = (
 			section: "documents" | "workspace",
 			label: string,
@@ -123,11 +124,13 @@ export const DocumentLibraryCompactNavigator = memo(
 				</button>
 				<div className="flex min-h-0 flex-1 flex-col gap-1 overflow-hidden p-2">
 					{renderSection("documents", docsTitle, onSelectDocumentsRoot)}
-					{renderSection(
-						"workspace",
-						t("sidebar.workspace"),
-						onSelectWorkspaceRoot,
-					)}
+					{showWorkspaceSection
+						? renderSection(
+								"workspace",
+								t("sidebar.workspace"),
+								onSelectWorkspaceRoot,
+							)
+						: null}
 				</div>
 			</aside>
 		);

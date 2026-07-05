@@ -2,7 +2,7 @@ import { beforeAll, describe, expect, it, vi } from "vitest";
 
 const memoryStore = new Map<string, unknown>();
 
-vi.mock("@/main/modules/documents/handlers/pdf-extraction", () => ({
+vi.mock("@/main/modules/files/handlers/pdf-extraction", () => ({
 	readPDFFile: vi.fn(async () => ""),
 }));
 

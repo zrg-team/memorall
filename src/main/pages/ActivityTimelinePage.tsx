@@ -5,7 +5,8 @@
 
 import React, { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import { Sparkles } from "lucide-react";
+import { Sparkles, Activity as ActivityIcon } from "lucide-react";
+import { PageHeader } from "@/main/components/ui/page-header";
 
 import { logError } from "@/utils/logger";
 import { activityTrackingService } from "@/main/modules/activity-tracking/activity-tracking-service";
@@ -250,45 +251,50 @@ Provide a natural language explanation that a non-technical user would understan
 	const currentSession = sessions.find((s) => s.id === selectedSession);
 
 	return (
-		<div className="container mx-auto p-6 space-y-6">
-			<div className="flex items-center justify-between">
-				<div>
-					<h1 className="text-3xl font-bold">{t("title")}</h1>
-					<p className="text-muted-foreground">{t("description")}</p>
-				</div>
-				{currentSession && activities.length > 0 && (
-					<Button
-						onClick={handleAnalyzeSession}
-						variant="default"
-						className="gap-2"
-					>
-						<Sparkles size={18} />
-						{t("analyzeSession")}
-					</Button>
-				)}
-			</div>
+		<div className="flex h-full min-h-0 flex-col bg-background">
+			<PageHeader
+				icon={<ActivityIcon size={18} />}
+				title={t("title")}
+				description={t("description")}
+				actionsPlacement="title"
+				actions={
+					currentSession && activities.length > 0 ? (
+						<Button
+							onClick={handleAnalyzeSession}
+							variant="default"
+							size="sm"
+							className="gap-2"
+						>
+							<Sparkles size={16} />
+							{t("analyzeSession")}
+						</Button>
+					) : undefined
+				}
+			/>
 
-			<div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-				{/* Sessions List */}
-				<ActivitySessionList
-					sessions={sessions}
-					selectedSession={selectedSession}
-					onSelectSession={setSelectedSession}
-					onDeleteSession={handleDeleteSession}
-				/>
-
-				{/* Session Details & Activities */}
-				<div className="md:col-span-2 space-y-6">
-					{currentSession && sessionStats && (
-						<ActivitySessionStats stats={sessionStats} />
-					)}
-
-					<ActivityTimeline
-						activities={activities}
-						filterType={filterType}
-						onFilterChange={setFilterType}
-						onActivityClick={handleActivityClick}
+			<div className="min-h-0 flex-1 overflow-auto p-6">
+				<div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+					{/* Sessions List */}
+					<ActivitySessionList
+						sessions={sessions}
+						selectedSession={selectedSession}
+						onSelectSession={setSelectedSession}
+						onDeleteSession={handleDeleteSession}
 					/>
+
+					{/* Session Details & Activities */}
+					<div className="md:col-span-2 space-y-6">
+						{currentSession && sessionStats && (
+							<ActivitySessionStats stats={sessionStats} />
+						)}
+
+						<ActivityTimeline
+							activities={activities}
+							filterType={filterType}
+							onFilterChange={setFilterType}
+							onActivityClick={handleActivityClick}
+						/>
+					</div>
 				</div>
 			</div>
 

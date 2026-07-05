@@ -27,13 +27,13 @@ export const TOOL_DISPLAY_INFO: Record<
 		descriptionKey: "agentSettings.toolDescriptions.calculator",
 	},
 	knowledge_graph: {
-		name: "Knowledge Graph Search",
-		description: "Query the knowledge graph for relationships and entities",
+		name: "Semantic Memory Search",
+		description: "Query semantic memory for relationships and entities",
 		descriptionKey: "agentSettings.toolDescriptions.knowledge_graph",
 	},
 	knowledge_graph_write: {
-		name: "Knowledge Graph Write",
-		description: "Write nodes and facts to the knowledge graph",
+		name: "Semantic Memory Write",
+		description: "Write nodes and facts to semantic memory",
 		descriptionKey: "agentSettings.toolDescriptions.knowledge_graph_write",
 	},
 	structmem_knowledge_retrieval: {

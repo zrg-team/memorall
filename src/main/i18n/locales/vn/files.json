@@ -1,8 +1,8 @@
 {
-	"title": "Tài liệu",
+	"title": "Tệp",
 	"description": "Quản lý tệp, thư mục, không gian làm việc và chuyển đổi tri thức.",
 	"library": {
-		"title": "Thư viện tài liệu",
+		"title": "Tệp",
 		"home": "Trang chủ",
 		"searchPlaceholder": "Tìm kiếm tệp...",
 		"add": "Thêm",
@@ -10,7 +10,7 @@
 		"listView": "Xem danh sách",
 		"gridView": "Xem lưới",
 		"emptyState": "Chọn một thư mục hoặc tệp để xem",
-		"initializationError": "Không thể khởi tạo thư viện tài liệu",
+		"initializationError": "Không thể khởi tạo thư viện tệp",
 		"deleteConfirm": "Bạn có chắc chắn muốn xóa \"{{name}}\" không?",
 		"deleteConfirmFolder": "Bạn có chắc chắn muốn xóa \"{{name}}\" không? Tất cả nội dung sẽ bị xóa.",
 		"createFolderError": "Không thể tạo thư mục",
@@ -24,7 +24,7 @@
 		"createFolder": "Tạo thư mục",
 		"success": "Tải tệp thành công",
 		"error": "Không thể tải tệp",
-		"createDocument": "Tài liệu mới"
+		"createDocument": "Tệp mới"
 	},
 	"list": {
 		"items": "{{count}} mục",
@@ -50,7 +50,7 @@
 		"delete": "Xóa",
 		"close": "Đóng",
 		"loadingPreview": "Đang tải xem trước...",
-		"documentInformation": "Thông tin tài liệu",
+		"documentInformation": "Thông tin tệp",
 		"title": "Tiêu đề",
 		"author": "Tác giả",
 		"sheetsLabel": "Bảng tính",
@@ -118,7 +118,7 @@
 		"workspace": "Không gian"
 	},
 	"create": {
-		"title": "Tạo tài liệu mới",
+		"title": "Tạo tệp mới",
 		"nameLabel": "Tên",
 		"namePlaceholder": "tên-tệp",
 		"extensionLabel": "Phần mở rộng",
@@ -163,7 +163,7 @@
 		"cancel": "Hủy",
 		"convert": "Chuyển đổi",
 		"growTypes": {
-			"knowledge-graph": "Đồ thị tri thức",
+			"knowledge-graph": "Đồ thị ngữ nghĩa",
 			"structmem": "StructMem"
 		}
 	}

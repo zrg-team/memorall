@@ -24,7 +24,7 @@ import {
 import type { DocumentTreeNode } from "@/types/document-library";
 import type { ArtifactProps } from "./ArtifactActionsMenu";
 
-// All resolved candidates carry a full sandbox path (/documents/... or /workspaces/...).
+// All resolved candidates carry a full root filesystem path.
 // readFile accepts both directly — no stripping or re-prefixing needed.
 type ImageReferenceCandidate = {
 	path: string; // full sandbox path
@@ -123,7 +123,7 @@ const normalizeImageLookupPath = (value: string): string => {
 };
 
 // Build full sandbox path candidates for an image src.
-// All returned paths start with /documents/... or /workspaces/... so readFile
+// All returned paths are normalized root filesystem paths so readFile
 // can accept them directly without any further transformation.
 const imageReferenceCandidates = (
 	src: string,

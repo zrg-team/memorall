@@ -8,6 +8,7 @@ import {
 	WORKSPACES_SANDBOX_ROOT,
 	isDocumentsSandboxPath,
 	isWorkspacesSandboxPath,
+	normalizeSandboxPath,
 	toDocumentsLogicalPath,
 } from "@/services/filesystem/sandbox-paths";
 import type { ISandboxContainerService } from "./interfaces/sandbox-container-service.interface";
@@ -430,7 +431,9 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 					logInfo(
 						`[SW relay] materializing ${missingPath} and retrying ${params.method} ${params.path}`,
 					);
-					await this.materializeMountedWorkspaceFile(missingPath);
+					await this.materializeMountedDocumentFile(
+						this.toWorkspaceCanonicalPath(missingPath),
+					);
 					continue;
 				}
 				if (missingPath && retriedMissingPaths.has(missingPath)) {
@@ -589,47 +592,31 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 		);
 		switch (operation) {
 			case "fs.readFile": {
-				if (this.isWorkspacePath(path)) {
-					await this.syncWorkspaceMount();
-					const bytes = await documentFileSystemService.readFile(path);
-					return { content: new TextDecoder().decode(bytes) };
-				}
-				if (this.isDocumentsPath(path)) {
-					await this.syncDocumentsMount();
-					const bytes = await documentFileSystemService.readFile(path);
-					return { content: new TextDecoder().decode(bytes) };
-				}
-				throw new Error(`Path not in workspace or documents: ${path}`);
+				await this.syncDocumentsMount();
+				const bytes = await documentFileSystemService.readFile(path);
+				return { content: new TextDecoder().decode(bytes) };
 			}
 			case "fs.writeFile": {
-				if (this.isWorkspacePath(path)) {
-					await documentFileSystemService.writeFile(
-						path,
-						String(payload["content"] ?? ""),
-					);
-				}
+				await documentFileSystemService.writeFile(
+					path,
+					String(payload["content"] ?? ""),
+				);
 				return { path };
 			}
 			case "fs.mkdir": {
-				if (this.isWorkspacePath(path)) {
-					await documentFileSystemService.mkdir(path);
-				}
+				await documentFileSystemService.mkdir(path);
 				return { path };
 			}
 			case "fs.unlink": {
-				if (this.isWorkspacePath(path)) {
-					await documentFileSystemService.deleteFile(path);
-				}
+				await documentFileSystemService.deleteFile(path);
 				return { path };
 			}
 			case "fs.rename": {
 				const newPath = this.toWorkspaceCanonicalPath(
 					this.normalizeVirtualPath(String(payload["newPath"] ?? "")),
 				);
-				if (this.isWorkspacePath(path)) {
-					const newName = newPath.split("/").pop()!;
-					await documentFileSystemService.rename(path, newName);
-				}
+				const newName = newPath.split("/").pop()!;
+				await documentFileSystemService.rename(path, newName);
 				return { oldPath: path, newPath };
 			}
 			default:
@@ -996,9 +983,7 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 	): Promise<{ path: string }> {
 		const normalizedPath = this.normalizeVirtualPath(request.path);
 		const workspacePath = this.toWorkspaceCanonicalPath(normalizedPath);
-		if (this.isWorkspacePath(normalizedPath)) {
-			await this.syncWorkspaceMount();
-		}
+		await this.syncDocumentsMount();
 		return this.request("fs.writeFile", {
 			...request,
 			path: workspacePath,
@@ -1010,35 +995,20 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 	): Promise<SandboxFsReadFileResult> {
 		const normalizedPath = this.normalizeVirtualPath(request.path);
 		const workspacePath = this.toWorkspaceCanonicalPath(normalizedPath);
-		if (this.isDocumentsPath(normalizedPath)) {
-			await this.syncDocumentsMount();
-			const bytes = await documentFileSystemService.readFile(normalizedPath);
-			const content = new TextDecoder().decode(bytes);
-			await this.request("fs.materializeDocumentFile", {
-				path: normalizedPath,
-				content,
-			});
-			return this.request("fs.readFile", { path: normalizedPath });
-		}
-		if (this.isWorkspacePath(normalizedPath)) {
-			await this.syncWorkspaceMount();
-			const bytes = await documentFileSystemService.readFile(workspacePath);
-			const content = new TextDecoder().decode(bytes);
-			await this.request("fs.materializeWorkspaceFile", {
-				path: workspacePath,
-				content,
-			});
-			return this.request("fs.readFile", { path: workspacePath });
-		}
+		await this.syncDocumentsMount();
+		const bytes = await documentFileSystemService.readFile(workspacePath);
+		const content = new TextDecoder().decode(bytes);
+		await this.request("fs.materializeDocumentFile", {
+			path: workspacePath,
+			content,
+		});
 		return this.request("fs.readFile", { path: workspacePath });
 	}
 
 	async mkdir(request: SandboxFsMkdirRequest): Promise<{ path: string }> {
 		const normalizedPath = this.normalizeVirtualPath(request.path);
 		const workspacePath = this.toWorkspaceCanonicalPath(normalizedPath);
-		if (this.isWorkspacePath(normalizedPath)) {
-			await this.syncWorkspaceMount();
-		}
+		await this.syncDocumentsMount();
 		return this.request("fs.mkdir", { ...request, path: workspacePath });
 	}
 
@@ -1047,20 +1017,14 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 	): Promise<SandboxFsReaddirResult> {
 		const normalizedPath = this.normalizeVirtualPath(request.path);
 		const workspacePath = this.toWorkspaceCanonicalPath(normalizedPath);
-		if (this.isDocumentsPath(normalizedPath)) {
-			await this.syncDocumentsMount();
-		} else if (this.isWorkspacePath(normalizedPath)) {
-			await this.syncWorkspaceMount();
-		}
+		await this.syncDocumentsMount();
 		return this.request("fs.readdir", { path: workspacePath });
 	}
 
 	async unlink(request: SandboxFsUnlinkRequest): Promise<{ path: string }> {
 		const normalizedPath = this.normalizeVirtualPath(request.path);
 		const workspacePath = this.toWorkspaceCanonicalPath(normalizedPath);
-		if (this.isWorkspacePath(normalizedPath)) {
-			await this.syncWorkspaceMount();
-		}
+		await this.syncDocumentsMount();
 		return this.request("fs.unlink", { ...request, path: workspacePath });
 	}
 
@@ -1073,9 +1037,7 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 		const newPath = this.toWorkspaceCanonicalPath(
 			this.normalizeVirtualPath(request.newPath),
 		);
-		if (this.isWorkspacePath(oldPath)) {
-			await this.syncWorkspaceMount();
-		}
+		await this.syncDocumentsMount();
 		return this.request("fs.rename", { oldPath, newPath });
 	}
 
@@ -1084,11 +1046,7 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 	): Promise<SandboxFsExistsResult> {
 		const normalizedPath = this.normalizeVirtualPath(request.path);
 		const workspacePath = this.toWorkspaceCanonicalPath(normalizedPath);
-		if (this.isDocumentsPath(normalizedPath)) {
-			await this.syncDocumentsMount();
-		} else if (this.isWorkspacePath(normalizedPath)) {
-			await this.syncWorkspaceMount();
-		}
+		await this.syncDocumentsMount();
 		return this.request("fs.exists", { path: workspacePath });
 	}
 
@@ -1138,7 +1096,7 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 	): string | null {
 		if (!errorMessage) return null;
 		const match = errorMessage.match(
-			/Mounted file is not materialized in sandbox runtime: (\/documents\/[^\s]+)/,
+			/Mounted file is not materialized in sandbox runtime: (\/[^\s]+)/,
 		);
 		return match?.[1] ?? null;
 	}
@@ -1185,7 +1143,7 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 	}
 
 	private toWorkspaceCanonicalPath(path: string): string {
-		return path;
+		return normalizeSandboxPath(path);
 	}
 
 	private async syncWorkspaceMount(): Promise<void> {
@@ -1291,7 +1249,7 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 	): string | null {
 		if (!errorMessage) return null;
 		const match = errorMessage.match(
-			/Workspace file not materialized: (\/workspaces\/[^\s]+|\/workspace\/[^\s]+)/,
+			/(?:Workspace file not materialized|Mounted file is not materialized in sandbox runtime): (\/[^\s]+)/,
 		);
 		return match?.[1] ? this.toWorkspaceCanonicalPath(match[1]) : null;
 	}
@@ -1376,8 +1334,9 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 			);
 			if (missingWsPath && !retriedPaths.has(missingWsPath)) {
 				retriedPaths.add(missingWsPath);
-				const materialized =
-					await this.materializeMountedWorkspaceFile(missingWsPath);
+				const materialized = await this.materializeMountedDocumentFile(
+					this.toWorkspaceCanonicalPath(missingWsPath),
+				);
 				if (materialized) continue;
 				return result;
 			}
@@ -1552,12 +1511,14 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 			request.entryPath,
 		);
 
-		if (request.rootDir && this.isWorkspacePath(request.rootDir)) {
-			await this.syncWorkspaceMount();
+		if (request.rootDir) {
+			await this.syncDocumentsMount();
 		}
 
-		if (resolvedEntryPath && this.isWorkspacePath(resolvedEntryPath)) {
-			await this.materializeMountedWorkspaceFile(resolvedEntryPath);
+		if (resolvedEntryPath) {
+			await this.materializeMountedDocumentFile(
+				this.toWorkspaceCanonicalPath(resolvedEntryPath),
+			);
 		}
 
 		// Allow extra time when a template will be scaffolded + npm-installed.
@@ -1566,7 +1527,12 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 			"server.start",
 			{
 				...request,
-				entryPath: resolvedEntryPath,
+				rootDir: request.rootDir
+					? this.toWorkspaceCanonicalPath(request.rootDir)
+					: request.rootDir,
+				entryPath: resolvedEntryPath
+					? this.toWorkspaceCanonicalPath(resolvedEntryPath)
+					: resolvedEntryPath,
 			},
 			timeoutMs,
 		);

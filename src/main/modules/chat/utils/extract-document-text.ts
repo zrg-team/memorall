@@ -1,8 +1,8 @@
-import { readPDFFile } from "@/main/modules/documents/handlers/pdf-extraction";
+import { readPDFFile } from "@/main/modules/files/handlers/pdf-extraction";
 import {
 	parseExcelFile,
 	workbookToMarkdown,
-} from "@/main/modules/documents/handlers/excel-extraction";
+} from "@/main/modules/files/handlers/excel-extraction";
 import type { DocumentType } from "@/types/document-library";
 
 function toArrayBuffer(content: Uint8Array): ArrayBuffer {

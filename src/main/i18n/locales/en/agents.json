@@ -133,14 +133,14 @@
 				"I can make the output easier to inspect."
 			],
 			"documents": [
-				"I can read and work with your documents.",
-				"I will use document context when it helps.",
+				"I can read and work with your files.",
+				"I will use file context when it helps.",
 				"I can help draft, edit, or summarize files."
 			],
 			"documentsFs": [
-				"I can organize document files for you.",
-				"I can save useful work into the document library.",
-				"I will keep document outputs easy to find."
+				"I can organize files for you.",
+				"I can save useful work into the file library.",
+				"I will keep file outputs easy to find."
 			],
 			"fileSystem": [
 				"I can work with files when the task needs it.",
@@ -295,7 +295,7 @@
 		"contextPromptValue": "{{count}} characters · {{mode}}",
 		"featurePromptValue": "{{count}} characters",
 		"showLess": "Show less",
-		"openMemoryGraph": "Knowledge graph memory",
+		"openMemoryGraph": "Open memory",
 		"default": "Default",
 		"custom": "Custom",
 		"unknownGraph": "Unknown graph"
@@ -333,6 +333,7 @@
 	},
 	"skills": {
 		"label": "Skills",
+		"memoryHint": "Procedural memory — what this agent knows how to do",
 		"addSkill": "Add skill",
 		"manageAction": "Browse",
 		"enableAction": "Enable",
@@ -491,7 +492,7 @@
 			"description": "Choose how this agent should store and recall memory before submitting it."
 		},
 		"growType": {
-			"knowledgeGraph": "Knowledge Graph",
+			"knowledgeGraph": "Semantic Graph",
 			"structmem": "StructMem"
 		},
 		"recallType": {

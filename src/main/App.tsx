@@ -4,6 +4,7 @@ import {
 	Routes,
 	Route,
 	useNavigate,
+	Navigate,
 } from "react-router-dom";
 import NiceModal from "@ebay/nice-modal-react";
 
@@ -51,7 +52,7 @@ import {
 	RuntimePage,
 	FlowBuilderPage,
 } from "./pages/lazy-pages";
-import { registerAllEditors } from "@/main/modules/documents/editors";
+import { registerAllEditors } from "@/main/modules/files/editors";
 import { useAuthInit } from "@/main/modules/supabase";
 import {
 	AgentCursorBadge,
@@ -80,7 +81,7 @@ const App: React.FC = () => {
 		useEffect(() => {
 			const handler = (message: { type: string }) => {
 				if (message?.type === "OPEN_KNOWLEDGE_GRAPH") {
-					navigate("/knowledge-graph");
+					navigate("/memory");
 				} else if (message?.type === "OPEN_REMEMBER_PAGE") {
 					navigate("/remember");
 				}
@@ -109,19 +110,20 @@ const App: React.FC = () => {
 							: undefined;
 					const namedRoutes: Record<string, string> = {
 						activities: "/activities",
-						"knowledge-graph": "/knowledge-graph",
+						"knowledge-graph": "/memory",
+						memory: "/memory",
 						remember: "/remember",
 						llm: "/llm",
 						topics: "/topics",
-						documents: "/documents",
+						documents: "/files",
+						files: "/files",
 					};
 					const route = target
 						? (namedRoutes[target] ?? (target.startsWith("/") ? target : null))
 						: null;
 					if (route) {
 						const openDocumentPath =
-							route === "/documents" &&
-							typeof result?.openDocumentPath === "string"
+							route === "/files" && typeof result?.openDocumentPath === "string"
 								? result.openDocumentPath
 								: undefined;
 						navigate(route, {
@@ -414,11 +416,15 @@ const App: React.FC = () => {
 												<Route path="/embeddings" element={<EmbeddingPage />} />
 												<Route path="/database" element={<DatabasePage />} />
 												<Route
-													path="/knowledge-graph"
+													path="/memory"
 													element={<KnowledgeGraphPage />}
 												/>
 												<Route
-													path="/documents"
+													path="/knowledge-graph"
+													element={<Navigate to="/memory" replace />}
+												/>
+												<Route
+													path="/files"
 													element={<DocumentLibraryPage />}
 												/>
 												<Route path="/agents" element={<AgentsPage />} />

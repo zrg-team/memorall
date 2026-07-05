@@ -171,7 +171,7 @@ export const LLMPage: React.FC = () => {
 									icon={<Brain size={20} />}
 									title={t("title")}
 									description={t("yourModels.description")}
-									actions={
+									collapseButton={
 										isDesktop ? (
 											<Button
 												type="button"

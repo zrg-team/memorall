@@ -77,7 +77,7 @@ Guidelines:
 1. Use ISO 8601 format (YYYY-MM-DDTHH:MM:SS.SSSSSSZ) for all datetimes.
 2. Use the reference timestamp as the current time when calculating relative time references.
 3. For content stating present relationships without explicit dates, use the reference timestamp for valid_at.
-4. For web pages/documents: Extract publication dates, creation dates, when events occurred.
+4. For web pages/files: Extract publication dates, creation dates, when events occurred.
 5. For conversations: Extract when relationships were formed, changed, or mentioned.
 6. For selected text: Focus on temporal information within the selection.
 7. Only set dates that are explicitly stated in relation to the relationship itself.

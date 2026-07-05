@@ -133,14 +133,14 @@
 				"Mình có thể làm đầu ra dễ kiểm tra hơn."
 			],
 			"documents": [
-				"Mình có thể đọc và làm việc với tài liệu của bạn.",
-				"Mình sẽ dùng ngữ cảnh tài liệu khi hữu ích.",
+				"Mình có thể đọc và làm việc với tệp của bạn.",
+				"Mình sẽ dùng ngữ cảnh tệp khi hữu ích.",
 				"Mình có thể giúp soạn, sửa hoặc tóm tắt tệp."
 			],
 			"documentsFs": [
-				"Mình có thể sắp xếp tệp tài liệu cho bạn.",
-				"Mình có thể lưu phần việc hữu ích vào thư viện tài liệu.",
-				"Mình sẽ giữ đầu ra tài liệu dễ tìm."
+				"Mình có thể sắp xếp tệp cho bạn.",
+				"Mình có thể lưu phần việc hữu ích vào thư viện tệp.",
+				"Mình sẽ giữ đầu ra tệp dễ tìm."
 			],
 			"fileSystem": [
 				"Mình có thể làm việc với tệp khi nhiệm vụ cần.",
@@ -158,7 +158,7 @@
 				"Mình có thể biến nghiên cứu tài chính thành báo cáo dễ đọc."
 			],
 			"jobApplication": [
-				"Mình có thể chỉnh tài liệu ứng tuyển theo vị trí.",
+				"Mình có thể chỉnh hồ sơ ứng tuyển theo vị trí.",
 				"Mình sẽ giúp khớp CV với yêu cầu công việc.",
 				"Mình có thể làm chi tiết ứng tuyển sắc nét hơn."
 			],
@@ -293,7 +293,7 @@
 		"systemPromptValue": "{{count}} ký tự · {{mode}}",
 		"contextPrompt": "Context prompt",
 		"contextPromptValue": "{{count}} ký tự · {{mode}}",
-		"openMemoryGraph": "Bộ nhớ đồ thị tri thức",
+		"openMemoryGraph": "Mở bộ nhớ",
 		"default": "Mặc định",
 		"custom": "Tùy chỉnh",
 		"unknownGraph": "Đồ thị không xác định"
@@ -327,6 +327,7 @@
 	},
 	"skills": {
 		"label": "Kỹ năng",
+		"memoryHint": "Bộ nhớ thủ tục — những gì tác nhân này biết cách làm",
 		"addSkill": "Thêm kỹ năng",
 		"manageAction": "Duyệt",
 		"enableAction": "Bật",
@@ -485,7 +486,7 @@
 			"description": "Chọn cách tác nhân này lưu trữ và truy hồi bộ nhớ trước khi gửi."
 		},
 		"growType": {
-			"knowledgeGraph": "Đồ thị tri thức",
+			"knowledgeGraph": "Đồ thị ngữ nghĩa",
 			"structmem": "StructMem"
 		},
 		"recallType": {

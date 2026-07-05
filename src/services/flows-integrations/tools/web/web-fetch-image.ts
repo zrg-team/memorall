@@ -2,7 +2,7 @@ import z from "zod";
 import type { Tool, ToolFactory } from "flow-core/interfaces/engine/tool";
 import type { AllServices } from "flow-core/interfaces/services/services";
 import { toolRegistry } from "flow-core/registries/tool-registry";
-import { normalizeDocumentPath } from "../documents/util";
+import { normalizeDocumentPath } from "../files/util";
 import { writeFileBytes } from "flow-core/tools/fs/util";
 import {
 	fetchImageFromSession,
@@ -52,7 +52,10 @@ export const fetchImageBytesFromBrowserSession = async (
 };
 
 const schema = z.object({
-	url: z.string().url().describe("Image URL to fetch and store in /documents."),
+	url: z
+		.string()
+		.url()
+		.describe("Image URL to fetch and store in the root filesystem."),
 	sessionId: z
 		.string()
 		.optional()
@@ -63,7 +66,7 @@ const schema = z.object({
 		.string()
 		.optional()
 		.describe(
-			"Where to save the image inside /documents. Default: /resources/images/<filename>",
+			"Where to save the image inside the root filesystem. Default: /resources/images/<filename>",
 		),
 });
 
@@ -75,7 +78,7 @@ export const createWebFetchImageTool: ToolFactory<Input, Services> = (
 ): Tool<Input> => ({
 	name: TOOL_NAME,
 	description:
-		"Fetch an image from a URL and save it to /documents. Uses an active web session when available, otherwise downloads directly. Returns the stored file path.",
+		"Fetch an image from a URL and save it to the root filesystem. Uses an active web session when available, otherwise downloads directly. Returns the stored file path.",
 	schema,
 	execute: async (input) => {
 		const dfs = services.fs;

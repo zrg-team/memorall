@@ -1,9 +1,9 @@
 {
-	"title": "Đồ thị tri thức",
-	"description": "Khám phá bộ nhớ đã lưu dưới dạng chủ đề, thực thể và mối quan hệ được kết nối.",
+	"title": "Bộ nhớ",
+	"description": "Bộ nhớ ngữ nghĩa của bạn — được lưu dưới dạng chủ đề, thực thể và mối quan hệ được kết nối.",
 	"sidebar": {
-		"show": "Hiển thị thanh bên đồ thị tri thức",
-		"hide": "Ẩn thanh bên đồ thị tri thức"
+		"show": "Hiển thị không gian bộ nhớ",
+		"hide": "Ẩn không gian bộ nhớ"
 	},
 	"topic": {
 		"label": "Bộ nhớ",
@@ -47,18 +47,19 @@
 		"nodeTypes": "Loại nút"
 	},
 	"empty": {
-		"title": "Không có đồ thị tri thức",
-		"description": "Chuyển đổi một số nội dung để tạo nút đồ thị tri thức",
-		"noNodes": "Không tìm thấy nút nào cho đồ thị tri thức"
+		"title": "Bộ nhớ ngữ nghĩa của bạn đang trống",
+		"description": "Bộ nhớ lớn dần khi bạn thêm tệp. Chuyển đổi một tệp để bắt đầu xây dựng đồ thị ngữ nghĩa.",
+		"action": "Thêm tệp",
+		"noNodes": "Không tìm thấy nút nào cho bộ nhớ ngữ nghĩa"
 	},
-	"loading": "Đang tải đồ thị tri thức...",
+	"loading": "Đang tải bộ nhớ ngữ nghĩa...",
 	"error": "Lỗi khi tải đồ thị: {{error}}",
 	"actions": {
 		"close": "Đóng"
 	},
 	"topics": {
-		"title": "Bộ nhớ",
+		"title": "Không gian bộ nhớ",
 		"noTopics": "Chưa có bộ nhớ",
-		"deleteConfirm": "Xóa \"{{name}}\"? Thao tác này sẽ xóa bộ nhớ khỏi tất cả tài liệu liên quan và không thể hoàn tác."
+		"deleteConfirm": "Xóa \"{{name}}\"? Thao tác này sẽ xóa bộ nhớ khỏi tất cả tệp liên quan và không thể hoàn tác."
 	}
 }

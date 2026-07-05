@@ -34,7 +34,7 @@ export type ShoppingAssistantFeatureServices =
 const SYSTEM_PROMPT_INSTRUCTION = `
 # SHOPPING ASSISTANT FEATURE
 
-You are a thorough product research agent. When the user asks about any product, you deeply research it across the internet — prices, specs, reviews, comparisons — and produce a comprehensive report saved to /documents/shopping-assistant/.
+You are a thorough product research agent. When the user asks about any product, you deeply research it across the internet — prices, specs, reviews, comparisons — and produce a comprehensive report saved to /shopping-assistant/.
 
 ---
 
@@ -55,7 +55,7 @@ Given a product name or description, you will:
 2. Open and deeply read each source page — extract real prices, specs, pros/cons, and user reviews.
 3. Compare variants, models, or competing products side by side.
 4. Find the best available deals and trusted purchase links.
-5. Save a complete report to /documents/shopping-assistant/<product-slug>.md.
+5. Save a complete report to /shopping-assistant/<product-slug>.md.
 
 ---
 
@@ -104,7 +104,7 @@ Check for:
 
 ### Step 7 — Save report
   doc_write {
-    file_path: "/documents/shopping-assistant/<product-slug>.md",
+    file_path: "/shopping-assistant/<product-slug>.md",
     content: "<full markdown>",
     create_folders: true
   }
@@ -274,7 +274,7 @@ export const SHOPPING_ASSISTANT_FEATURE_TOOLS = [
 ] as const;
 
 export const SHOPPING_ASSISTANT_FEATURE_DESCRIPTION =
-	"Deep product research agent: searches multiple sources, reads prices/specs/reviews, compares alternatives, and saves a full report to /documents/shopping-assistant/.";
+	"Deep product research agent: searches multiple sources, reads prices/specs/reviews, compares alternatives, and saves a full report to /shopping-assistant/.";
 
 const definition = defineStep<
 	ShoppingAssistantFeatureInput,

@@ -53,7 +53,7 @@ interface SkillEditorDialogProps {
 	onSave: (name: string, description: string, body: string) => Promise<void>;
 }
 
-const SkillEditorDialog: React.FC<SkillEditorDialogProps> = ({
+export const SkillEditorDialog: React.FC<SkillEditorDialogProps> = ({
 	open,
 	onOpenChange,
 	initial,
@@ -184,7 +184,7 @@ interface GithubImportDialogProps {
 	onImport: (url: string) => Promise<void>;
 }
 
-const GithubImportDialog: React.FC<GithubImportDialogProps> = ({
+export const GithubImportDialog: React.FC<GithubImportDialogProps> = ({
 	open,
 	onOpenChange,
 	onImport,
@@ -278,7 +278,7 @@ interface SkillPreviewDialogProps {
 	skill: SkillSummary | null;
 }
 
-const SkillPreviewDialog: React.FC<SkillPreviewDialogProps> = ({
+export const SkillPreviewDialog: React.FC<SkillPreviewDialogProps> = ({
 	open,
 	onOpenChange,
 	skill,
@@ -491,7 +491,7 @@ const getSkillCategoryBadgeClassName = (collection: string): string => {
 	return "border-border/70 bg-muted/40 text-muted-foreground";
 };
 
-const SkillCategoryBadge: React.FC<{ collection: string }> = ({
+export const SkillCategoryBadge: React.FC<{ collection: string }> = ({
 	collection,
 }) => (
 	<Badge
@@ -886,7 +886,10 @@ export const SkillsSection: React.FC = () => {
 				cursorKey={AGENT_WIZARD_CURSOR_KEYS.skills}
 				className="flex min-h-[32px] items-center gap-3"
 			>
-				<span className="w-20 shrink-0 text-sm text-muted-foreground">
+				<span
+					className="w-20 shrink-0 text-sm text-muted-foreground"
+					title={t("skills.memoryHint", { ns: "agents" })}
+				>
 					{t("skills.label", { ns: "agents" })}
 				</span>
 

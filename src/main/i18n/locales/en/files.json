@@ -1,8 +1,8 @@
 {
-	"title": "Documents",
-	"description": "Manage files, folders, workspaces, and knowledge conversion.",
+	"title": "Files",
+	"description": "Manage files, folders, resources, and knowledge conversion.",
 	"library": {
-		"title": "Document Library",
+		"title": "Files",
 		"home": "Home",
 		"searchPlaceholder": "Search files...",
 		"add": "Add",
@@ -10,7 +10,7 @@
 		"listView": "List view",
 		"gridView": "Grid view",
 		"emptyState": "Select a folder or file to view",
-		"initializationError": "Failed to initialize document library",
+		"initializationError": "Failed to initialize file library",
 		"deleteConfirm": "Are you sure you want to delete \"{{name}}\"?",
 		"deleteConfirmFolder": "Are you sure you want to delete \"{{name}}\"? All contents will be deleted.",
 		"createFolderError": "Failed to create folder",
@@ -24,7 +24,7 @@
 		"createFolder": "Create Folder",
 		"success": "File uploaded successfully",
 		"error": "Failed to upload file",
-		"createDocument": "New Document"
+		"createDocument": "New File"
 	},
 	"list": {
 		"items": "{{count}} items",
@@ -50,7 +50,7 @@
 		"delete": "Delete",
 		"close": "Close",
 		"loadingPreview": "Loading preview...",
-		"documentInformation": "Document Information",
+		"documentInformation": "File Information",
 		"title": "Title",
 		"author": "Author",
 		"sheetsLabel": "Sheets",
@@ -126,7 +126,7 @@
 		"workspace": "Workspace"
 	},
 	"create": {
-		"title": "Create New Document",
+		"title": "Create New File",
 		"nameLabel": "Name",
 		"namePlaceholder": "my-file",
 		"extensionLabel": "Extension",
@@ -171,7 +171,7 @@
 		"cancel": "Cancel",
 		"convert": "Convert",
 		"growTypes": {
-			"knowledge-graph": "Knowledge Graph",
+			"knowledge-graph": "Semantic Graph",
 			"structmem": "StructMem"
 		}
 	}

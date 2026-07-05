@@ -3,14 +3,25 @@
 		"chat": "Trò chuyện",
 		"agents": "Tác nhân",
 		"models": "Mô hình",
-		"knowledgeGraph": "Đồ thị tri thức",
+		"knowledgeGraph": "Bộ nhớ",
 		"flowBuilder": "Trình xây dựng luồng",
-		"documents": "Tài liệu",
+		"documents": "Tệp",
 		"debug": "Gỡ lỗi",
 		"embeddings": "Nhúng",
 		"database": "Cơ sở dữ liệu",
 		"activities": "Hoạt động",
 		"logs": "Nhật ký"
+	},
+	"harness": {
+		"label": "khung tác nhân",
+		"defaultAgentName": "Tác nhân",
+		"status": {
+			"idle": "Rảnh",
+			"working": "Đang làm việc…",
+			"running": "{{count}} đang chạy",
+			"processing": "{{count}} đang xử lý",
+			"done": "Xong"
+		}
 	},
 	"theme": {
 		"label": "Giao diện",
@@ -205,7 +216,7 @@
 		"activeProcesses": "Tiến trình đang hoạt động",
 		"recentHistory": "Lịch sử gần đây",
 		"noActivity": "Chưa có hoạt động xử lý nào",
-		"noActivityHelp": "Chuyển đổi tài liệu thành đồ thị tri thức để xem hoạt động tại đây",
+		"noActivityHelp": "Chuyển đổi tệp thành đồ thị tri thức để xem hoạt động tại đây",
 		"loadingMore": "Đang tải thêm...",
 		"noMoreHistory": "Không còn lịch sử để tải",
 		"started": "Bắt đầu: {{time}}",
@@ -270,15 +281,15 @@
 		"features": {
 			"fsFeature": {
 				"name": "Hệ thống tệp",
-				"description": "Truy cập tệp trong /documents và /workspaces với đầy đủ tính năng đọc, ghi và tìm kiếm."
+				"description": "Truy cập tệp trong / và /projects với đầy đủ tính năng đọc, ghi và tìm kiếm."
 			},
 			"documentsFsFeature": {
-				"name": "Hệ thống tệp tài liệu",
-				"description": "Truy cập và quản lý tệp trong /documents với các thao tác đọc, ghi, tìm kiếm và thư mục."
+				"name": "Tệp",
+				"description": "Truy cập và quản lý tệp trong / với các thao tác đọc, ghi, tìm kiếm và thư mục."
 			},
 			"documentsFeature": {
-				"name": "Tài liệu (Cũ)",
-				"description": "[Cũ] Công cụ tài liệu cơ bản. Nên dùng documents-fs-feature thay thế."
+				"name": "Tệp (Cũ)",
+				"description": "[Cũ] Công cụ tệp cơ bản. Nên dùng documents-fs-feature thay thế."
 			},
 			"nodejsSandboxFeature": {
 				"name": "Môi trường Node.js",
@@ -294,11 +305,11 @@
 			},
 			"travelPlannerFeature": {
 				"name": "Lập kế hoạch du lịch",
-				"description": "Nghiên cứu điểm đến và tạo lịch trình du lịch chi tiết theo từng ngày, lưu vào /documents/travel/."
+				"description": "Nghiên cứu điểm đến và tạo lịch trình du lịch chi tiết theo từng ngày, lưu vào /travel/."
 			},
 			"mealPlannerFeature": {
 				"name": "Lập thực đơn",
-				"description": "Tìm công thức nấu ăn thực tế và tạo thực đơn tuần kèm danh sách mua sắm, lưu vào /documents/meals/."
+				"description": "Tìm công thức nấu ăn thực tế và tạo thực đơn tuần kèm danh sách mua sắm, lưu vào /meals/."
 			},
 			"dailyBriefingFeature": {
 				"name": "Bản tin hàng ngày",
@@ -322,11 +333,11 @@
 			},
 			"shoppingAssistantFeature": {
 				"name": "Trợ lý mua sắm",
-				"description": "Nghiên cứu sản phẩm chuyên sâu: tìm kiếm nhiều nguồn, đọc giá, thông số và đánh giá, so sánh các lựa chọn thay thế và lưu báo cáo đầy đủ vào /documents/shopping-assistant/."
+				"description": "Nghiên cứu sản phẩm chuyên sâu: tìm kiếm nhiều nguồn, đọc giá, thông số và đánh giá, so sánh các lựa chọn thay thế và lưu báo cáo đầy đủ vào /shopping-assistant/."
 			},
 			"financeTrackerFeature": {
 				"name": "Theo dõi tài chính",
-				"description": "Nghiên cứu cổ phiếu và công ty chuyên sâu với biểu đồ Mermaid và ASCII bao gồm tài chính, định giá, ý kiến chuyên gia và tin tức. Lưu báo cáo vào /documents/finance/."
+				"description": "Nghiên cứu cổ phiếu và công ty chuyên sâu với biểu đồ Mermaid và ASCII bao gồm tài chính, định giá, ý kiến chuyên gia và tin tức. Lưu báo cáo vào /finance/."
 			},
 			"activeMemoryFeature": {
 				"name": "Bộ nhớ chủ động",
@@ -347,8 +358,10 @@
 		}
 	},
 	"sandboxPanel": {
-		"title": "Không gian làm việc trực tiếp",
+		"title": "Không gian làm việc",
 		"description": "Xem trước nội dung đã tạo, trang đang mở, server và hoạt động lệnh.",
+		"outputsTab": "Kết quả",
+		"liveRuntimeTab": "Chạy trực tiếp",
 		"commandsTitle": "Lệnh đang chạy",
 		"commandsShort": "Lệnh",
 		"serversTitle": "Máy chủ Sandbox",
@@ -392,7 +405,7 @@
 		"steps": {
 			"welcome": {
 				"title": "Chào mừng đến với Memorall",
-				"content": "Memorall là không gian làm việc AI ưu tiên cục bộ cho trò chuyện, tài liệu, agent, tri thức và mô hình.\n\nHướng dẫn này hoạt động trước khi bạn chọn mô hình, để bạn hiểu workspace trước rồi chọn cách thiết lập ở cuối.",
+				"content": "Memorall là không gian làm việc AI ưu tiên cục bộ cho trò chuyện, tệp, agent, tri thức và mô hình.\n\nHướng dẫn này hoạt động trước khi bạn chọn mô hình, để bạn hiểu workspace trước rồi chọn cách thiết lập ở cuối.",
 				"cursor": "Bắt đầu ở đây",
 				"agent": "Tôi sẽ hướng dẫn."
 			},
@@ -404,20 +417,20 @@
 			},
 			"layoutExplain": {
 				"title": "Bố cục chia đôi",
-				"content": "Memorall dùng bố cục chia vùng.\n\nTrái: chat và thiết lập.\nGiữa: hội thoại hiện tại và vùng nhập.\nPhải: các trang workspace như Tài liệu, Đồ thị tri thức, Agent, Mô hình và Runtime.",
+				"content": "Memorall dùng bố cục chia vùng.\n\nTrái: chat và thiết lập.\nGiữa: hội thoại hiện tại và vùng nhập.\nPhải: các trang workspace như Tệp, Đồ thị tri thức, Agent, Mô hình và Runtime.",
 				"cursor": "Trái, giữa và phải",
 				"agent": "Ba vùng làm việc."
 			},
 			"documentsNavigate": {
-				"title": "Tài liệu",
-				"content": "Tiếp theo: Tài liệu, thư viện tệp và workspace tài liệu của bạn.\n\nNhấn Tiếp theo để mở ở panel bên phải.",
-				"cursor": "Mở Tài liệu",
+				"title": "Tệp",
+				"content": "Tiếp theo: Tệp, thư viện tài nguyên và workspace tệp của bạn.\n\nNhấn Tiếp theo để mở ở panel bên phải.",
+				"cursor": "Mở Tệp",
 				"agent": "Bắt đầu từ tệp."
 			},
 			"documentsExplain": {
-				"title": "Thư viện tài liệu",
-				"content": "Dùng Tài liệu để tải lên, tạo, sắp xếp và xem trước tệp.\n\nTài liệu có thể trở thành dữ liệu Đồ thị tri thức, giúp agent có bộ nhớ hữu ích cho các cuộc trò chuyện sau.",
-				"cursor": "Workspace tài liệu",
+				"title": "Tệp",
+				"content": "Dùng Tệp để tải lên, tạo, sắp xếp và xem trước tài nguyên.\n\nTệp có thể trở thành dữ liệu Đồ thị tri thức, giúp agent có bộ nhớ hữu ích cho các cuộc trò chuyện sau.",
+				"cursor": "Workspace tệp",
 				"agent": "Tri thức bắt đầu ở đây."
 			},
 			"agentsNavigate": {

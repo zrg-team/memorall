@@ -30,8 +30,8 @@
 		"attachImage": "Đính kèm ảnh"
 	},
 	"mention": {
-		"documents": "Tài liệu",
-		"searchDocuments": "Tìm tài liệu...",
+		"documents": "Tệp",
+		"searchDocuments": "Tìm tệp...",
 		"noMatches": "Không có kết quả"
 	},
 	"mode": {
@@ -239,7 +239,7 @@
 		"folder": "Thư mục",
 		"fileName": "Tên tệp",
 		"cancel": "Hủy",
-		"save": "Lưu vào tài liệu",
+		"save": "Lưu vào tệp",
 		"saving": "Đang lưu...",
 		"failed": "Không thể lưu"
 	},
@@ -320,12 +320,12 @@
 			"knowledge_graph": "Truy vấn đồ thị tri thức để tìm quan hệ và thực thể",
 			"knowledge_graph_write": "Ghi node và sự kiện vào đồ thị tri thức",
 			"structmem_knowledge_retrieval": "Truy xuất ký ức sự kiện và tổng hợp StructMem làm ngữ cảnh có căn cứ",
-			"doc_read": "Đọc tệp tài liệu từ hệ thống tệp",
-			"doc_write": "Ghi nội dung vào tệp tài liệu",
-			"doc_edit": "Chỉnh sửa tệp tài liệu hiện có",
-			"doc_search": "Tìm kiếm nội dung trong tài liệu",
-			"doc_move": "Di chuyển hoặc đổi tên tệp tài liệu",
-			"doc_remove": "Xóa tệp tài liệu khỏi hệ thống tệp",
+			"doc_read": "Đọc tệp từ hệ thống tệp",
+			"doc_write": "Ghi nội dung vào tệp",
+			"doc_edit": "Chỉnh sửa tệp hiện có",
+			"doc_search": "Tìm kiếm nội dung trong tệp",
+			"doc_move": "Di chuyển hoặc đổi tên tệp",
+			"doc_remove": "Xóa tệp khỏi hệ thống tệp",
 			"send_message_to_agent": "Gửi một tin nhắn tập trung tới tác nhân con đã chọn",
 			"memory_remember": "Lưu một sự kiện, sở thích hoặc ngữ cảnh dự án lâu dài",
 			"memory_retrieve": "Tìm kiếm bộ nhớ đang hoạt động trong đồ thị chủ đề đã chọn",

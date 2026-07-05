@@ -1,13 +1,12 @@
 /**
  * Document Storage Service
- * Unified filesystem API for both document and workspace scopes.
+ * Unified filesystem API for the agent filesystem.
  *
  * Path convention (sandbox paths):
- *   /documents/...  →  /home/documents/...  (scope: "documents")
- *   /workspaces/... →  /home/workspaces/... (scope: "workspace")
+ *   /...  →  /home/files/...
  *
- * All public methods accept full sandbox paths. Callers are responsible
- * for prefixing logical paths with the correct scope root.
+ * Legacy prefixed inputs are accepted and normalized
+ * to the root filesystem before storage access.
  */
 
 import fs, { initializeFs, refreshFsCache } from "@/services/filesystem/fs";
@@ -22,17 +21,23 @@ import type {
 import { BACKGROUND_EVENTS } from "@/constants/events";
 import {
 	isWorkspacesSandboxPath,
+	normalizeSandboxPath,
 	sandboxPathToFsPath,
 	toDocumentsSandboxPath,
-	toWorkspacesSandboxPath,
 	DOCUMENTS_SANDBOX_ROOT,
 	WORKSPACES_SANDBOX_ROOT,
+	FILESYSTEM_SANDBOX_ROOT,
+	LEGACY_DOCUMENTS_FS_ROOT,
+	LEGACY_WORKSPACES_FS_ROOT,
+	SANDBOX_FS_PREFIX,
 	type SandboxScope,
 } from "@/services/filesystem/sandbox-paths";
 
 // Re-export so existing callers that import from this module continue to work.
 export { DOCUMENTS_SANDBOX_ROOT as SANDBOX_DOCUMENTS_ROOT };
 export { WORKSPACES_SANDBOX_ROOT as SANDBOX_WORKSPACE_ROOT };
+
+const ROOT_MIGRATION_STORAGE_KEY = "memorall.filesystem.rootMigration.v1";
 
 // ── Event types ───────────────────────────────────────────────────────────────
 
@@ -64,7 +69,12 @@ const isFilesystemChangeEvent = (
 ): value is FilesystemChangeEvent => {
 	if (!value || typeof value !== "object") return false;
 	const event = value as Record<string, unknown>;
-	if (event.scope !== "documents" && event.scope !== "workspace") return false;
+	if (
+		event.scope !== "root" &&
+		event.scope !== "documents" &&
+		event.scope !== "workspace"
+	)
+		return false;
 	if (typeof event.operation !== "string") return false;
 	return true;
 };
@@ -84,7 +94,7 @@ export class DocumentFileSystem {
 	private readonly processedFilesystemEventIds = new Set<string>();
 	private static readonly MAX_PROCESSED_EVENT_IDS = 256;
 
-	// Keyed by sandbox root (e.g. "/documents", "/workspaces").
+	// Keyed by sandbox root. Root filesystem uses "/".
 	// Cleared entirely on any filesystem change — simpler and always correct.
 	private readonly treeCache = new Map<string, DocumentTreeNode[]>();
 
@@ -102,17 +112,11 @@ export class DocumentFileSystem {
 	// ── Path helpers (delegate to sandbox-paths utility) ─────────────────────
 
 	private toFsPath(sandboxPath: string): string {
-		return sandboxPathToFsPath(sandboxPath.replace(/\/+$/, ""));
+		return sandboxPathToFsPath(sandboxPath.replace(/\/+$/, "") || "/");
 	}
 
 	private scopeFromPath(sandboxPath: string): SandboxScope {
-		return isWorkspacesSandboxPath(sandboxPath) ? "workspace" : "documents";
-	}
-
-	private sandboxRootOf(sandboxPath: string): string {
-		return isWorkspacesSandboxPath(sandboxPath)
-			? WORKSPACES_SANDBOX_ROOT
-			: DOCUMENTS_SANDBOX_ROOT;
+		return isWorkspacesSandboxPath(sandboxPath) ? "workspace" : "root";
 	}
 
 	// ── Infrastructure ────────────────────────────────────────────────────────
@@ -274,14 +278,143 @@ export class DocumentFileSystem {
 		if (this.initialized) return;
 		try {
 			await initializeFs();
-			await this.ensureDirectory(sandboxPathToFsPath(DOCUMENTS_SANDBOX_ROOT));
-			await this.ensureDirectory(sandboxPathToFsPath(WORKSPACES_SANDBOX_ROOT));
+			await this.ensureDirectory(SANDBOX_FS_PREFIX);
+			await this.migrateLegacyRootsToRoot();
 			this.initialized = true;
 			logInfo("📚 Document storage initialized");
 		} catch (error) {
 			logError("Failed to initialize document storage:", error);
 			throw error;
 		}
+	}
+
+	private async isRootMigrationComplete(): Promise<boolean> {
+		try {
+			if (typeof chrome === "undefined" || !chrome.storage?.local) {
+				return false;
+			}
+			const result = await chrome.storage?.local?.get?.(
+				ROOT_MIGRATION_STORAGE_KEY,
+			);
+			return result?.[ROOT_MIGRATION_STORAGE_KEY] === true;
+		} catch {
+			return false;
+		}
+	}
+
+	private async markRootMigrationComplete(): Promise<void> {
+		try {
+			if (typeof chrome === "undefined" || !chrome.storage?.local) {
+				return;
+			}
+			await chrome.storage?.local?.set?.({
+				[ROOT_MIGRATION_STORAGE_KEY]: true,
+			});
+		} catch {
+			// Non-extension test/runtime contexts can still use the migrated root.
+		}
+	}
+
+	private async pathExists(path: string): Promise<boolean> {
+		try {
+			await fs.promises.stat(path);
+			return true;
+		} catch (error) {
+			return !this.isNotFoundError(error);
+		}
+	}
+
+	private async filesAreEqual(pathA: string, pathB: string): Promise<boolean> {
+		const [a, b] = await Promise.all([
+			fs.promises.readFile(pathA),
+			fs.promises.readFile(pathB),
+		]);
+		if (a.length !== b.length) return false;
+		for (let index = 0; index < a.length; index++) {
+			if (a[index] !== b[index]) return false;
+		}
+		return true;
+	}
+
+	private async moveLegacyEntryIntoRoot(
+		sourcePath: string,
+		destinationPath: string,
+		fromWorkspace: boolean,
+	): Promise<void> {
+		const sourceStat = await fs.promises.stat(sourcePath);
+		if (sourceStat.isDirectory()) {
+			await this.ensureDirectory(destinationPath);
+			const entries = await fs.promises.readdir(sourcePath, {
+				withFileTypes: true,
+			});
+			for (const entry of entries) {
+				await this.moveLegacyEntryIntoRoot(
+					`${sourcePath}/${entry.name}`,
+					`${destinationPath}/${entry.name}`,
+					fromWorkspace,
+				);
+			}
+			await fs.promises.rmdir(sourcePath).catch(() => undefined);
+			return;
+		}
+
+		if (!(await this.pathExists(destinationPath))) {
+			await this.ensureDirectory(
+				destinationPath.substring(0, destinationPath.lastIndexOf("/")),
+			);
+			await fs.promises.rename(sourcePath, destinationPath);
+			return;
+		}
+
+		if (await this.filesAreEqual(sourcePath, destinationPath)) {
+			await fs.promises.unlink(sourcePath);
+			return;
+		}
+
+		const dirPath = destinationPath.substring(
+			0,
+			destinationPath.lastIndexOf("/"),
+		);
+		const fileName = destinationPath.slice(
+			destinationPath.lastIndexOf("/") + 1,
+		);
+		const conflictName = fromWorkspace
+			? fileName.replace(/(\.[^.]*)?$/, " (from workspace)$1")
+			: fileName.replace(/(\.[^.]*)?$/, " (from documents)$1");
+		const dedupedName = await this.deduplicateName(dirPath, conflictName);
+		await fs.promises.rename(sourcePath, `${dirPath}/${dedupedName}`);
+	}
+
+	private async migrateLegacyRoot(
+		legacyRoot: string,
+		fromWorkspace: boolean,
+	): Promise<void> {
+		try {
+			const stat = await fs.promises.stat(legacyRoot);
+			if (!stat.isDirectory()) return;
+		} catch (error) {
+			if (this.isNotFoundError(error)) return;
+			throw error;
+		}
+
+		const entries = await fs.promises.readdir(legacyRoot, {
+			withFileTypes: true,
+		});
+		for (const entry of entries) {
+			await this.moveLegacyEntryIntoRoot(
+				`${legacyRoot}/${entry.name}`,
+				`${SANDBOX_FS_PREFIX}/${entry.name}`,
+				fromWorkspace,
+			);
+		}
+		await fs.promises.rmdir(legacyRoot).catch(() => undefined);
+	}
+
+	private async migrateLegacyRootsToRoot(): Promise<void> {
+		if (await this.isRootMigrationComplete()) return;
+		await this.migrateLegacyRoot(LEGACY_DOCUMENTS_FS_ROOT, false);
+		await this.migrateLegacyRoot(LEGACY_WORKSPACES_FS_ROOT, true);
+		await this.markRootMigrationComplete();
 	}
 
 	// ── Private filesystem helpers ────────────────────────────────────────────
@@ -538,7 +671,8 @@ export class DocumentFileSystem {
 	// ── Unified public API ────────────────────────────────────────────────────
 
 	/**
-	 * Read a file. sandboxPath must start with /documents or /workspaces.
+	 * Read a file. Public paths are rooted at "/"; legacy namespace prefixes are
+	 * normalized before access.
 	 */
 	async readFile(sandboxPath: string): Promise<Uint8Array> {
 		await this.initialize();
@@ -608,7 +742,7 @@ export class DocumentFileSystem {
 	 * Always reads as binary (arrayBuffer) — correct for all file types.
 	 * Deduplicates the filename if a file already exists at the target.
 	 *
-	 * @param sandboxPath  Target folder sandbox path (default: /documents root).
+	 * @param sandboxPath  Target folder path (default: filesystem root).
 	 * @param metadata     Optional metadata to attach to the returned DocumentFile.
 	 */
 	async uploadFile(
@@ -639,8 +773,8 @@ export class DocumentFileSystem {
 			}
 		}
 
-		const sandboxRoot = this.sandboxRootOf(sandboxPath);
-		const logicalFolder = sandboxPath.slice(sandboxRoot.length) || "/";
+		const normalizedSandboxPath = normalizeSandboxPath(sandboxPath);
+		const logicalFolder = normalizedSandboxPath;
 		const logicalFilePath =
 			logicalFolder === "/" ? `/${fileName}` : `${logicalFolder}/${fileName}`;
 
@@ -722,11 +856,16 @@ export class DocumentFileSystem {
 
 		await fs.promises.rename(oldFsPath, newFsPath);
 
-		const parentSandboxPath = sandboxPath.substring(
-			0,
-			sandboxPath.lastIndexOf("/"),
-		);
-		const newSandboxPath = `${parentSandboxPath}/${newName}`;
+		const normalizedSandboxPath = normalizeSandboxPath(sandboxPath);
+		const parentSandboxPath =
+			normalizedSandboxPath.substring(
+				0,
+				normalizedSandboxPath.lastIndexOf("/"),
+			) || "/";
+		const newSandboxPath =
+			parentSandboxPath === "/"
+				? `/${newName}`
+				: `${parentSandboxPath}/${newName}`;
 		logInfo(`📝 Renamed: ${sandboxPath} → ${newSandboxPath}`);
 		this.notifyFilesystemChanged({
 			scope: this.scopeFromPath(sandboxPath),
@@ -773,7 +912,13 @@ export class DocumentFileSystem {
 			await fs.promises.unlink(srcFsPath);
 		}
 
-		const newSandboxPath = `${targetFolderSandboxPath}/${finalName}`;
+		const normalizedTargetFolder = normalizeSandboxPath(
+			targetFolderSandboxPath,
+		);
+		const newSandboxPath =
+			normalizedTargetFolder === "/"
+				? `/${finalName}`
+				: `${normalizedTargetFolder}/${finalName}`;
 		logInfo(`✅ Moved: ${sandboxPath} → ${newSandboxPath}`);
 		this.notifyFilesystemChanged({
 			scope: this.scopeFromPath(sandboxPath),
@@ -800,16 +945,17 @@ export class DocumentFileSystem {
 
 	/**
 	 * Scan the filesystem under sandboxRoot and return a tree of DocumentTreeNode.
-	 * sandboxRoot must be "/documents" or "/workspaces".
+	 * sandboxRoot is normalized to the single root filesystem.
 	 * Tree node paths are logical (relative to the root, starting with "/").
 	 * Results are cached until the next filesystem change.
 	 */
 	async getTree(sandboxRoot: string): Promise<DocumentTreeNode[]> {
 		await this.initialize();
-		const fsRoot = this.toFsPath(sandboxRoot);
+		const normalizedRoot = normalizeSandboxPath(sandboxRoot);
+		const fsRoot = this.toFsPath(normalizedRoot);
 		await this.ensureDirectory(fsRoot);
 
-		const cached = this.treeCache.get(sandboxRoot);
+		const cached = this.treeCache.get(FILESYSTEM_SANDBOX_ROOT);
 		if (cached !== undefined) {
 			logInfo("📦 Returning cached tree data");
 			return cached;
@@ -817,7 +963,7 @@ export class DocumentFileSystem {
 
 		logInfo("🔄 Fetching fresh tree data");
 		const fresh = await this.scanDirectory(fsRoot, "/");
-		this.treeCache.set(sandboxRoot, fresh);
+		this.treeCache.set(FILESYSTEM_SANDBOX_ROOT, fresh);
 		return fresh;
 	}
 
@@ -825,7 +971,7 @@ export class DocumentFileSystem {
 
 	/**
 	 * Upload an image from the chat input.
-	 * Stores under /documents/resources/images/ with a UUID filename.
+	 * Stores under /resources/images/ with a UUID filename.
 	 * Returns the logical path (e.g. /resources/images/<uuid>.png).
 	 */
 	async uploadChatImage(file: File): Promise<string> {
@@ -838,7 +984,7 @@ export class DocumentFileSystem {
 				? crypto.randomUUID()
 				: `img-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 		const fileName = `${uuid}${ext}`;
-		const targetDir = `${sandboxPathToFsPath(DOCUMENTS_SANDBOX_ROOT)}/resources/images`;
+		const targetDir = `${SANDBOX_FS_PREFIX}/resources/images`;
 		await this.ensureDirectory(targetDir);
 		const fullPath = `${targetDir}/${fileName}`;
 		const arrayBuffer = await file.arrayBuffer();
@@ -848,8 +994,8 @@ export class DocumentFileSystem {
 	}
 
 	/**
-	 * Read a documents file by its logical path and return a base64 data URI.
-	 * @param logicalPath  Logical documents path (e.g. /resources/images/uuid.png).
+	 * Read a filesystem file by its logical path and return a base64 data URI.
+	 * @param logicalPath  Root path (e.g. /resources/images/uuid.png).
 	 * @param mimeType     MIME type for the data URI.
 	 */
 	async readFileAsBase64(
@@ -865,14 +1011,13 @@ export class DocumentFileSystem {
 	}
 
 	/**
-	 * Build a read-only document mount snapshot for the sandbox runtime.
-	 * Paths are projected from logical paths ("/...") to "/documents/...".
+	 * Build a root mount snapshot for the sandbox runtime.
 	 */
 	async getSandboxMountSnapshot(): Promise<SandboxDocumentsMountSnapshot> {
 		await this.initialize();
-		const directories = new Set<string>([DOCUMENTS_SANDBOX_ROOT]);
+		const directories = new Set<string>([FILESYSTEM_SANDBOX_ROOT]);
 		const files = new Set<string>();
-		const tree = await this.getTree(DOCUMENTS_SANDBOX_ROOT);
+		const tree = await this.getTree(FILESYSTEM_SANDBOX_ROOT);
 
 		const toMountSandboxPath = (logicalPath: string): string | null => {
 			if (!logicalPath.startsWith("/")) return null;
@@ -920,59 +1065,11 @@ export class DocumentFileSystem {
 	}
 
 	/**
-	 * Build a read-write workspace mount snapshot for the sandbox runtime.
-	 * Paths are projected from logical paths ("/...") to "/workspaces/...".
+	 * Compatibility wrapper for callers that still ask for the old workspace
+	 * mount. The sandbox now receives the same single root snapshot.
 	 */
 	async getSandboxWorkspaceMountSnapshot(): Promise<SandboxDocumentsMountSnapshot> {
-		await this.initialize();
-		await this.ensureDirectory(sandboxPathToFsPath(WORKSPACES_SANDBOX_ROOT));
-		const directories = new Set<string>([WORKSPACES_SANDBOX_ROOT]);
-		const files = new Set<string>();
-		const tree = await this.getTree(WORKSPACES_SANDBOX_ROOT);
-
-		const toMountSandboxPath = (logicalPath: string): string | null => {
-			if (!logicalPath.startsWith("/")) return null;
-			const segments = logicalPath
-				.replace(/\\/g, "/")
-				.split("/")
-				.filter(Boolean);
-			for (const segment of segments) {
-				if (segment === "." || segment === ".." || segment.includes("\0"))
-					return null;
-			}
-			return toWorkspacesSandboxPath(
-				segments.length === 0 ? "/" : `/${segments.join("/")}`,
-			);
-		};
-
-		const ensureParentDirectories = (fullPath: string): void => {
-			const segments = fullPath.split("/").filter(Boolean);
-			let current = "";
-			for (let i = 0; i < segments.length - 1; i++) {
-				current += `/${segments[i]}`;
-				directories.add(current);
-			}
-		};
-
-		const walk = (nodes: DocumentTreeNode[]): void => {
-			for (const node of nodes) {
-				const sp = toMountSandboxPath(node.path);
-				if (!sp) continue;
-				if (node.type === "folder") {
-					directories.add(sp);
-				} else if (node.type === "file") {
-					files.add(sp);
-					ensureParentDirectories(sp);
-				}
-				if (node.children?.length) walk(node.children);
-			}
-		};
-
-		walk(tree);
-		return {
-			directories: Array.from(directories).sort(),
-			files: Array.from(files).sort(),
-		};
+		return this.getSandboxMountSnapshot();
 	}
 }
 

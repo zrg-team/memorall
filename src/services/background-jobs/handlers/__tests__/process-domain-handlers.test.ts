@@ -143,7 +143,7 @@ const {
 		documentFileSystemService: {
 			initialize: vi.fn(async () => undefined),
 			uploadFile: vi.fn(async () => ({
-				path: "/documents/notes/Test.txt",
+				path: "/notes/Test.txt",
 				name: "Test.txt",
 			})),
 		},
@@ -430,19 +430,19 @@ describe("knowledge, remember-save, and embedded chat handlers", () => {
 				deps(),
 			),
 		).resolves.toEqual({
-			filePath: "/documents/notes/Test.txt",
+			filePath: "/notes/Test.txt",
 			fileName: "Test.txt",
 		});
 		expect(documentFileSystemService.initialize).toHaveBeenCalled();
 		expect(documentFileSystemService.uploadFile).toHaveBeenCalledWith(
 			expect.any(File),
-			"/documents/notes",
+			"/notes",
 		);
 		expect(dbState.inserted).toEqual(
 			expect.arrayContaining([
 				expect.objectContaining({
 					topicId: "topic-1",
-					filePath: "/documents/notes/Test.txt",
+					filePath: "/notes/Test.txt",
 				}),
 			]),
 		);

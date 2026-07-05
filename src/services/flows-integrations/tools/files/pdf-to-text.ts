@@ -2,7 +2,7 @@ import z from "zod";
 import type { Tool, ToolFactory } from "flow-core/interfaces/engine/tool";
 import type { AllServices } from "flow-core/interfaces/services/services";
 import { toolRegistry } from "flow-core/registries/tool-registry";
-import { readPDFFile } from "@/main/modules/documents/handlers/pdf-extraction";
+import { readPDFFile } from "@/main/modules/files/handlers/pdf-extraction";
 import { formatPDFAsText, formatPDFAsMarkdown } from "@/lib/pdf-utils";
 import { normalizeDocumentPath } from "./util";
 import { ensureFolderExists } from "flow-core/utils/fs-utils";
@@ -17,12 +17,14 @@ const TOOL_NAME = "pdf_to_text" as const;
 const schema = z.object({
 	source_path: z
 		.string()
-		.describe("Path to the PDF file in /documents. Must end with .pdf."),
+		.describe(
+			"Path to the PDF file in the root filesystem. Must end with .pdf.",
+		),
 	output_path: z
 		.string()
 		.optional()
 		.describe(
-			"Optional path to save the extracted text in /documents. If omitted, the text is returned directly.",
+			"Optional path to save the extracted text in the root filesystem. If omitted, the text is returned directly.",
 		),
 	format: z
 		.enum(["text", "markdown"])
@@ -59,7 +61,7 @@ export const createPdfToTextTool: ToolFactory<Input, Services> = (
 ): Tool<Input> => ({
 	name: TOOL_NAME,
 	description:
-		"Extract text from a PDF file in /documents and return it or save it to a new file. Supports plain text or Markdown output and optional page range extraction.",
+		"Extract text from a PDF file in the root filesystem and return it or save it to a new file. Supports plain text or Markdown output and optional page range extraction.",
 	schema,
 	execute: async (input) => {
 		const dfs = services.fs;

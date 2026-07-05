@@ -2,7 +2,7 @@
 	"title": "Memory",
 	"create": {
 		"title": "Create New Memory",
-		"description": "Organize your documents by creating focused memory zones for different areas of knowledge.",
+		"description": "Organize your files by creating focused memory zones for different areas of knowledge.",
 		"topicName": "Memory Name",
 		"goalPurpose": "Goal & Purpose",
 		"namePlaceholder": "e.g., Machine Learning, React Development...",

@@ -58,7 +58,11 @@ export const CopilotProvider: React.FC<{ children: React.ReactNode }> = ({
 }) => {
 	const { t } = useTranslation("common");
 
-	// Create default steps with translations
+	// Create default steps with translations.
+	// Kept intentionally short — a calm escort, not a 14-step wall — that walks the
+	// workspace once and lands back on the chat panel so the user can pick a model.
+	// Detailed per-page "explain" steps and per-card setup steps were removed to
+	// avoid competing with the setup gate on first load.
 	const defaultSteps: CopilotStep[] = [
 		{
 			id: "welcome",
@@ -78,22 +82,11 @@ export const CopilotProvider: React.FC<{ children: React.ReactNode }> = ({
 			target: '[data-copilot~="header-nav-documents"]',
 			placement: "bottom",
 			action: "navigate",
-			navigationPath: "/documents",
+			navigationPath: "/files",
 			showProgress: true,
 			cursorTarget: "copilot-header-nav-documents",
 			cursorMessage: t("copilot.steps.documentsNavigate.cursor"),
 			agentMessage: t("copilot.steps.documentsNavigate.agent"),
-			layoutMode: "workspace-focus",
-		},
-		{
-			id: "documents-explain",
-			title: t("copilot.steps.documentsExplain.title"),
-			content: t("copilot.steps.documentsExplain.content"),
-			target: '[data-copilot~="right-panel"]',
-			placement: "center",
-			showProgress: true,
-			cursorMessage: t("copilot.steps.documentsExplain.cursor"),
-			agentMessage: t("copilot.steps.documentsExplain.agent"),
 			layoutMode: "workspace-focus",
 		},
 		{
@@ -111,39 +104,17 @@ export const CopilotProvider: React.FC<{ children: React.ReactNode }> = ({
 			layoutMode: "workspace-focus",
 		},
 		{
-			id: "agents-explain",
-			title: t("copilot.steps.agentsExplain.title"),
-			content: t("copilot.steps.agentsExplain.content"),
-			target: '[data-copilot~="right-panel"]',
-			placement: "center",
-			showProgress: true,
-			cursorMessage: t("copilot.steps.agentsExplain.cursor"),
-			agentMessage: t("copilot.steps.agentsExplain.agent"),
-			layoutMode: "workspace-focus",
-		},
-		{
 			id: "knowledge-navigate",
 			title: t("copilot.steps.knowledgeNavigate.title"),
 			content: t("copilot.steps.knowledgeNavigate.content"),
 			target: '[data-copilot~="header-nav-knowledge"]',
 			placement: "bottom",
 			action: "navigate",
-			navigationPath: "/knowledge-graph",
+			navigationPath: "/memory",
 			showProgress: true,
 			cursorTarget: "copilot-header-nav-knowledge",
 			cursorMessage: t("copilot.steps.knowledgeNavigate.cursor"),
 			agentMessage: t("copilot.steps.knowledgeNavigate.agent"),
-			layoutMode: "workspace-focus",
-		},
-		{
-			id: "knowledge-explain",
-			title: t("copilot.steps.knowledgeExplain.title"),
-			content: t("copilot.steps.knowledgeExplain.content"),
-			target: '[data-copilot~="right-panel"]',
-			placement: "center",
-			showProgress: true,
-			cursorMessage: t("copilot.steps.knowledgeExplain.cursor"),
-			agentMessage: t("copilot.steps.knowledgeExplain.agent"),
 			layoutMode: "workspace-focus",
 		},
 		{
@@ -161,17 +132,6 @@ export const CopilotProvider: React.FC<{ children: React.ReactNode }> = ({
 			layoutMode: "workspace-focus",
 		},
 		{
-			id: "models-explain",
-			title: t("copilot.steps.modelsExplain.title"),
-			content: t("copilot.steps.modelsExplain.content"),
-			target: '[data-copilot~="right-panel"]',
-			placement: "center",
-			showProgress: true,
-			cursorMessage: t("copilot.steps.modelsExplain.cursor"),
-			agentMessage: t("copilot.steps.modelsExplain.agent"),
-			layoutMode: "workspace-focus",
-		},
-		{
 			id: "chat-final-navigate",
 			title: t("copilot.steps.chatFinalNavigate.title"),
 			content: t("copilot.steps.chatFinalNavigate.content"),
@@ -184,50 +144,6 @@ export const CopilotProvider: React.FC<{ children: React.ReactNode }> = ({
 			cursorMessage: t("copilot.steps.chatFinalNavigate.cursor"),
 			agentMessage: t("copilot.steps.chatFinalNavigate.agent"),
 			layoutMode: "setup-focus",
-		},
-		{
-			id: "chat-setup",
-			title: t("copilot.steps.chatSetup.title"),
-			content: t("copilot.steps.chatSetup.content"),
-			target: '[data-copilot~="no-models-screen"]',
-			placement: "bottom",
-			showProgress: true,
-			cursorTarget: "copilot-no-models-screen",
-			cursorMessage: t("copilot.steps.chatSetup.cursor"),
-			agentMessage: t("copilot.steps.chatSetup.agent"),
-		},
-		{
-			id: "setup-managed",
-			title: t("copilot.steps.setupManaged.title"),
-			content: t("copilot.steps.setupManaged.content"),
-			target: '[data-copilot~="setup-managed"]',
-			placement: "top",
-			showProgress: true,
-			cursorTarget: "copilot-setup-managed",
-			cursorMessage: t("copilot.steps.setupManaged.cursor"),
-			agentMessage: t("copilot.steps.setupManaged.agent"),
-		},
-		{
-			id: "setup-local",
-			title: t("copilot.steps.setupLocal.title"),
-			content: t("copilot.steps.setupLocal.content"),
-			target: '[data-copilot~="setup-local"]',
-			placement: "top",
-			showProgress: true,
-			cursorTarget: "copilot-setup-local",
-			cursorMessage: t("copilot.steps.setupLocal.cursor"),
-			agentMessage: t("copilot.steps.setupLocal.agent"),
-		},
-		{
-			id: "setup-keys",
-			title: t("copilot.steps.setupKeys.title"),
-			content: t("copilot.steps.setupKeys.content"),
-			target: '[data-copilot~="setup-keys"]',
-			placement: "top",
-			showProgress: true,
-			cursorTarget: "copilot-setup-keys",
-			cursorMessage: t("copilot.steps.setupKeys.cursor"),
-			agentMessage: t("copilot.steps.setupKeys.agent"),
 		},
 	];
 

@@ -13,7 +13,7 @@ const schema = z.object({
 		.string()
 		.min(1)
 		.describe(
-			"Absolute path for the new project under the workspace root, e.g. /workspaces/loading-spinner. " +
+			"Absolute path for the new project under the workspace root, e.g. /projects/loading-spinner. " +
 				"Choose a meaningful slug. Never use generic names like 'default' or 'untitled'.",
 		),
 	width: z

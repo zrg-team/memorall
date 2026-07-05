@@ -280,7 +280,7 @@ const EmbeddedChat: React.FC<ChatModalProps> = ({
 				);
 				if (path) {
 					await openFullPage({
-						navigateTo: "/documents",
+						navigateTo: "/files",
 						openDocumentPath: path,
 					});
 				}

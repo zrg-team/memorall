@@ -93,7 +93,7 @@ const commandResult = (
 ): SandboxCommandResult => ({
 	commandId: "cmd-1",
 	command: "npm test",
-	cwd: "/workspaces/app",
+	cwd: "/app",
 	status: "completed",
 	completed: true,
 	stdout: "",
@@ -140,14 +140,14 @@ describe("SandboxContainerServiceMain", () => {
 		vi.mocked(
 			documentFileSystemService.getSandboxMountSnapshot,
 		).mockResolvedValue({
-			directories: ["/documents"],
-			files: ["/documents/note.md"],
+			directories: ["/"],
+			files: ["/note.md"],
 		});
 		vi.mocked(
 			documentFileSystemService.getSandboxWorkspaceMountSnapshot,
 		).mockResolvedValue({
-			directories: ["/workspaces"],
-			files: ["/workspaces/app/index.js"],
+			directories: ["/"],
+			files: ["/app/index.js"],
 		});
 		vi.mocked(documentFileSystemService.readFile).mockResolvedValue(
 			encoded("file contents"),
@@ -236,7 +236,7 @@ describe("SandboxContainerServiceMain", () => {
 					case "runtime.runFile":
 						return {
 							...executionResult(),
-							path: "/workspaces/app/main.ts",
+							path: "/app/main.ts",
 						} as never;
 					case "runtime.executeCommand":
 					case "runtime.listenCommand":
@@ -302,8 +302,8 @@ describe("SandboxContainerServiceMain", () => {
 			},
 		);
 		await expect(
-			service.runFile({ path: "workspaces/../workspaces/app/main.ts" }),
-		).resolves.toMatchObject({ path: "/workspaces/app/main.ts" });
+			service.runFile({ path: "workspaces/../app/main.ts" }),
+		).resolves.toMatchObject({ path: "/app/main.ts" });
 		await service.executeCommand({
 			command: "npm test",
 			cwd: "workspaces/app",
@@ -328,11 +328,11 @@ describe("SandboxContainerServiceMain", () => {
 		await service.restoreSnapshot({ snapshot: { files: [] } });
 
 		expect(request).toHaveBeenCalledWith("runtime.runFile", {
-			path: "/workspaces/app/main.ts",
+			path: "/app/main.ts",
 		});
 		expect(request).toHaveBeenCalledWith(
 			"runtime.executeCommand",
-			expect.objectContaining({ cwd: "/workspaces/app" }),
+			expect.objectContaining({ cwd: "/app" }),
 			5075,
 		);
 		expect(request).toHaveBeenCalledWith(
@@ -380,32 +380,32 @@ describe("SandboxContainerServiceMain", () => {
 			path: "workspaces/app/../app/index.ts",
 			content: "ts",
 		});
-		await service.readFile({ path: "/documents/note.md" });
-		await service.readFile({ path: "/workspaces/app/index.ts" });
-		await service.mkdir({ path: "/workspaces/app/src", recursive: true });
-		await service.readdir({ path: "/documents" });
-		await service.unlink({ path: "/workspaces/app/old.ts" });
+		await service.readFile({ path: "/note.md" });
+		await service.readFile({ path: "/app/index.ts" });
+		await service.mkdir({ path: "/app/src", recursive: true });
+		await service.readdir({ path: "/" });
+		await service.unlink({ path: "/app/old.ts" });
 		await service.rename({
-			oldPath: "/workspaces/app/old.ts",
+			oldPath: "/app/old.ts",
 			newPath: "workspaces/app/new.ts",
 		});
-		await service.exists({ path: "/workspaces/app/new.ts" });
+		await service.exists({ path: "/app/new.ts" });
 
 		expect(request).toHaveBeenCalledWith("fs.writeFile", {
-			path: "/workspaces/app/index.ts",
+			path: "/app/index.ts",
 			content: "ts",
 		});
 		expect(request).toHaveBeenCalledWith("fs.materializeDocumentFile", {
-			path: "/documents/note.md",
+			path: "/note.md",
 			content: "file contents",
 		});
-		expect(request).toHaveBeenCalledWith("fs.materializeWorkspaceFile", {
-			path: "/workspaces/app/index.ts",
+		expect(request).toHaveBeenCalledWith("fs.materializeDocumentFile", {
+			path: "/app/index.ts",
 			content: "file contents",
 		});
 		expect(request).toHaveBeenCalledWith("fs.rename", {
-			oldPath: "/workspaces/app/old.ts",
-			newPath: "/workspaces/app/new.ts",
+			oldPath: "/app/old.ts",
+			newPath: "/app/new.ts",
 		});
 	});
 
@@ -418,8 +418,7 @@ describe("SandboxContainerServiceMain", () => {
 			}),
 			executionResult({
 				status: "error",
-				error:
-					"Mounted file is not materialized in sandbox runtime: /documents/note.md",
+				error: "Mounted file is not materialized in sandbox runtime: /note.md",
 			}),
 			executionResult({ status: "ok", result: "loaded" }),
 		];
@@ -432,21 +431,21 @@ describe("SandboxContainerServiceMain", () => {
 					case "fs.mountDocuments":
 						return { mounted: true, directoryCount: 1, fileCount: 1 } as never;
 					case "fs.materializeDocumentFile":
-						return { path: "/documents/note.md", materialized: true } as never;
+						return { path: "/note.md", materialized: true } as never;
 					case "fs.flushWorkspaceWrites":
 						return {
 							ops: [
 								{
 									op: "write",
-									path: "/workspaces/app/out.txt",
+									path: "/app/out.txt",
 									content: "out",
 								},
-								{ op: "mkdir", path: "/workspaces/app/generated" },
-								{ op: "delete", path: "/workspaces/app/old.txt" },
+								{ op: "mkdir", path: "/app/generated" },
+								{ op: "delete", path: "/app/old.txt" },
 								{
 									op: "rename",
-									oldPath: "/workspaces/app/tmp.txt",
-									newPath: "/workspaces/app/final.txt",
+									oldPath: "/app/tmp.txt",
+									newPath: "/app/final.txt",
 								},
 							],
 						} as never;
@@ -456,25 +455,25 @@ describe("SandboxContainerServiceMain", () => {
 			});
 
 		await expect(
-			service.executeCode({ code: "read('/documents/note.md')" }),
+			service.executeCode({ code: "read('/note.md')" }),
 		).resolves.toMatchObject({ status: "ok", result: "loaded" });
 
 		expect(request).toHaveBeenCalledWith("fs.mountDocuments", {
-			directories: ["/documents"],
-			files: ["/documents/note.md"],
+			directories: ["/"],
+			files: ["/note.md"],
 		});
 		expect(documentFileSystemService.writeFile).toHaveBeenCalledWith(
-			"/workspaces/app/out.txt",
+			"/app/out.txt",
 			"out",
 		);
 		expect(documentFileSystemService.mkdir).toHaveBeenCalledWith(
-			"/workspaces/app/generated",
+			"/app/generated",
 		);
 		expect(documentFileSystemService.deleteFile).toHaveBeenCalledWith(
-			"/workspaces/app/old.txt",
+			"/app/old.txt",
 		);
 		expect(documentFileSystemService.rename).toHaveBeenCalledWith(
-			"/workspaces/app/tmp.txt",
+			"/app/tmp.txt",
 			"final.txt",
 		);
 	});
@@ -482,13 +481,13 @@ describe("SandboxContainerServiceMain", () => {
 	it("retries SW requests by materializing missing workspace files and serving direct fallbacks", async () => {
 		const service = createService();
 		const missingBody = btoa(
-			"Workspace file not materialized: /workspaces/app.js",
+			"Mounted file is not materialized in sandbox runtime: /app.js",
 		);
 		let swAttempts = 0;
 		const request = vi
 			.spyOn(service, "request")
 			.mockImplementation(async (operation: unknown, payload: unknown) => {
-				if ((operation as SandboxOperation) === "fs.materializeWorkspaceFile") {
+				if ((operation as SandboxOperation) === "fs.materializeDocumentFile") {
 					return {
 						path: (payload as { path: string }).path,
 						materialized: true,
@@ -516,8 +515,8 @@ describe("SandboxContainerServiceMain", () => {
 		});
 
 		expect(swAttempts).toBe(2);
-		expect(request).toHaveBeenCalledWith("fs.materializeWorkspaceFile", {
-			path: "/workspaces/app.js",
+		expect(request).toHaveBeenCalledWith("fs.materializeDocumentFile", {
+			path: "/app.js",
 			content: "console.log('direct')",
 		});
 		expect(result).toMatchObject({
@@ -545,13 +544,13 @@ describe("SandboxContainerServiceMain", () => {
 									port: 5173,
 									url: "http://localhost:5173",
 									renderUrl: "/sandbox/__virtual__/5173/",
-									rootDir: "/workspaces/app",
+									rootDir: "/app",
 								},
 							],
 						} as never;
 					case "fs.readFile":
 						return {
-							path: "/workspaces/app/package.json",
+							path: "/app/package.json",
 							content: JSON.stringify({
 								dependencies: { react: "^19.1.1" },
 								devDependencies: { "react-dom": "~19.1.1" },
@@ -563,7 +562,7 @@ describe("SandboxContainerServiceMain", () => {
 							port: 5173,
 							url: "http://localhost:5173",
 							renderUrl: "/sandbox/__virtual__/5173/",
-							rootDir: "/workspaces/app",
+							rootDir: "/app",
 						} as never;
 					case "fs.flushWorkspaceWrites":
 						return { ops: [] } as never;
@@ -582,7 +581,7 @@ describe("SandboxContainerServiceMain", () => {
 		});
 		const server = await service.startServer({
 			port: 5173,
-			rootDir: "/workspaces/app",
+			rootDir: "/app",
 			entryPath: "src/main.tsx",
 		});
 
@@ -591,7 +590,7 @@ describe("SandboxContainerServiceMain", () => {
 		expect(request).toHaveBeenCalledWith(
 			"server.start",
 			expect.objectContaining({
-				entryPath: "/workspaces/app/src/main.tsx",
+				entryPath: "/app/src/main.tsx",
 			}),
 			60_000,
 		);
@@ -615,7 +614,7 @@ describe("SandboxContainerServiceMain", () => {
 				channel: "memorall-sandbox-fs-req",
 				requestId: "fs-1",
 				operation: "fs.readFile",
-				payload: { path: "/workspaces/app/index.ts" },
+				payload: { path: "/app/index.ts" },
 			},
 		});
 		await vi.waitFor(() =>
@@ -635,12 +634,12 @@ describe("SandboxContainerServiceMain", () => {
 			data: {
 				channel: "memorall-sandbox-fs-notify",
 				operation: "fs.writeFile",
-				payload: { path: "/workspaces/app/out.txt", content: "saved" },
+				payload: { path: "/app/out.txt", content: "saved" },
 			},
 		});
 		await vi.waitFor(() =>
 			expect(documentFileSystemService.writeFile).toHaveBeenCalledWith(
-				"/workspaces/app/out.txt",
+				"/app/out.txt",
 				"saved",
 			),
 		);

@@ -12,6 +12,7 @@ interface DocumentLibrarySidebarProps {
 	selectedSection: "documents" | "workspace";
 	selectedNodeId: string | null;
 	docsTitle: string;
+	collapseButton?: React.ReactNode;
 	onSelectDocumentsRoot: () => void;
 	onSelectDocNode: (node: DocumentTreeNode) => void;
 	onSelectWorkspaceNode: (node: DocumentTreeNode) => void;
@@ -34,6 +35,7 @@ export const DocumentLibrarySidebar = memo(function DocumentLibrarySidebar({
 	selectedSection,
 	selectedNodeId,
 	docsTitle,
+	collapseButton,
 	onSelectDocumentsRoot,
 	onSelectDocNode,
 	onSelectWorkspaceNode,
@@ -47,6 +49,7 @@ export const DocumentLibrarySidebar = memo(function DocumentLibrarySidebar({
 	const { t } = useTranslation("documents");
 	const [docsExpanded, setDocsExpanded] = useState(true);
 	const [workspaceExpanded, setWorkspaceExpanded] = useState(true);
+	const showWorkspaceSection = workspaceTree.length > 0;
 
 	useEffect(() => {
 		setDocsExpanded(selectedSection === "documents");
@@ -59,6 +62,7 @@ export const DocumentLibrarySidebar = memo(function DocumentLibrarySidebar({
 				icon={<FileText size={20} />}
 				title={docsTitle}
 				description={t("description")}
+				collapseButton={collapseButton}
 				className="h-[102px]"
 			/>
 
@@ -104,46 +108,52 @@ export const DocumentLibrarySidebar = memo(function DocumentLibrarySidebar({
 				</div>
 			)}
 
-			{/* Workspace Section */}
-			<button
-				className={cn(
-					"flex items-center gap-1.5 px-2 py-2 text-xs font-semibold uppercase tracking-wide transition-colors flex-shrink-0 text-left w-full border-t",
-					selectedSection === "workspace"
-						? "text-foreground"
-						: "text-muted-foreground hover:text-foreground",
-				)}
-				onClick={() => {
-					if (selectedSection === "workspace") {
-						setWorkspaceExpanded((v) => !v);
-						return;
-					}
-					onSelectWorkspaceRoot();
-				}}
-			>
-				{workspaceExpanded ? (
-					<ChevronDown className="h-3 w-3 flex-shrink-0" />
-				) : (
-					<ChevronRight className="h-3 w-3 flex-shrink-0" />
-				)}
-				{t("sidebar.workspace")}
-			</button>
-
-			{workspaceExpanded && (
-				<div className="flex-1 overflow-hidden min-h-0">
-					<DocumentTreeDraggable
-						tree={workspaceTree}
-						selectedId={selectedSection === "workspace" ? selectedNodeId : null}
-						onSelectNode={(node) => {
-							setWorkspaceExpanded(true);
-							setDocsExpanded(false);
-							onSelectWorkspaceNode(node);
+			{showWorkspaceSection ? (
+				<>
+					{/* Legacy workspace section, hidden once the root migration is active. */}
+					<button
+						className={cn(
+							"flex items-center gap-1.5 px-2 py-2 text-xs font-semibold uppercase tracking-wide transition-colors flex-shrink-0 text-left w-full border-t",
+							selectedSection === "workspace"
+								? "text-foreground"
+								: "text-muted-foreground hover:text-foreground",
+						)}
+						onClick={() => {
+							if (selectedSection === "workspace") {
+								setWorkspaceExpanded((v) => !v);
+								return;
+							}
+							onSelectWorkspaceRoot();
 						}}
-						onToggleExpand={onToggleExpandWorkspace}
-						onRename={onRenameNode}
-						onDelete={onDeleteNode}
-					/>
-				</div>
-			)}
+					>
+						{workspaceExpanded ? (
+							<ChevronDown className="h-3 w-3 flex-shrink-0" />
+						) : (
+							<ChevronRight className="h-3 w-3 flex-shrink-0" />
+						)}
+						{t("sidebar.workspace")}
+					</button>
+
+					{workspaceExpanded && (
+						<div className="flex-1 overflow-hidden min-h-0">
+							<DocumentTreeDraggable
+								tree={workspaceTree}
+								selectedId={
+									selectedSection === "workspace" ? selectedNodeId : null
+								}
+								onSelectNode={(node) => {
+									setWorkspaceExpanded(true);
+									setDocsExpanded(false);
+									onSelectWorkspaceNode(node);
+								}}
+								onToggleExpand={onToggleExpandWorkspace}
+								onRename={onRenameNode}
+								onDelete={onDeleteNode}
+							/>
+						</div>
+					)}
+				</>
+			) : null}
 		</div>
 	);
 });

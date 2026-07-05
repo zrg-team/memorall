@@ -36,16 +36,16 @@ export type DocumentConvertFeatureServices = {};
 
 const SYSTEM_PROMPT_INSTRUCTION = `
 # DOCUMENT CONVERSION TOOLS
-You have access to tools for extracting text from PDF and Excel files, and rendering PDF pages as images, stored in /documents.
+You have access to tools for extracting text from PDF and Excel files, and rendering PDF pages as images, stored in the root filesystem.
 
 ## TOOLS OVERVIEW
 
 | Tool | Purpose |
 |---|---|
 | \`pdf_metadata\` | Read PDF page count, document metadata, and image-page detection |
-| \`pdf_to_text\` | Extract text from a PDF in /documents |
+| \`pdf_to_text\` | Extract text from a PDF in the root filesystem |
 | \`pdf_to_image\` | Render PDF pages as PNG base64 images and pass them back to the model as image inputs |
-| \`excel_to_text\` | Extract text or tables from an Excel file in /documents |
+| \`excel_to_text\` | Extract text or tables from an Excel file in the root filesystem |
 
 ## pdf_metadata
 
@@ -56,7 +56,7 @@ Reads metadata from a PDF at \`source_path\` (must end with \`.pdf\`).
 ## pdf_to_text
 
 Extracts text from a PDF at \`source_path\` (must end with \`.pdf\`).
-- \`output_path\`: optional — save extracted text to this path in /documents. If omitted, text is returned directly.
+- \`output_path\`: optional — save extracted text to this path in the root filesystem. If omitted, text is returned directly.
 - \`format\`: \`"text"\` (default, with page separators) | \`"markdown"\` (with frontmatter and page headings)
 - \`page_range\`: optional \`{ start, end }\` (1-based) to extract a specific page range only.
 - Parent folders are created automatically when \`output_path\` is set.
@@ -78,7 +78,7 @@ Renders PDF pages at \`source_path\` (must end with \`.pdf\`) as PNG images.
 ## excel_to_text
 
 Extracts text from an Excel file at \`source_path\` (must end with \`.xls\`, \`.xlsx\`, or \`.xlsm\`).
-- \`output_path\`: optional — save extracted text to this path in /documents. If omitted, text is returned directly.
+- \`output_path\`: optional — save extracted text to this path in the root filesystem. If omitted, text is returned directly.
 - \`format\`: \`"markdown"\` (default, each sheet as a Markdown table) | \`"csv"\` (each sheet as CSV rows)
 - \`sheets\`: optional array of sheet names to include. Defaults to all sheets.
 - Parent folders are created automatically when \`output_path\` is set.

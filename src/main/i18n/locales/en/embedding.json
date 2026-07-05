@@ -49,7 +49,7 @@
 	"reloading": "Reloading Embedding Model",
 	"downloadingModel": "Downloading model...",
 	"pleaseWait": "Please wait, do not close this window...",
-	"changeWarning": "Changing embedding size will require clearing existing embeddings in nodes and edges. Do you want to continue?",
+	"changeWarning": "Changing the embedding size means memories you've already grown (nodes and edges) will stop appearing in semantic search until you re-grow them at the new size. Their data is kept, and switching back to the current size restores them. Continue?",
 	"clearError": "Failed to clear embeddings. Please try again.",
 	"sizes": {
 		"small": "Small (384d)",

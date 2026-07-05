@@ -2,11 +2,11 @@ import z from "zod";
 import type { Tool, ToolFactory } from "flow-core/interfaces/engine/tool";
 import type { AllServices } from "flow-core/interfaces/services/services";
 import { toolRegistry } from "flow-core/registries/tool-registry";
-import { readPDFFile } from "@/main/modules/documents/handlers/pdf-extraction";
+import { readPDFFile } from "@/main/modules/files/handlers/pdf-extraction";
 import {
 	parseExcelFile,
 	workbookToMarkdown,
-} from "@/main/modules/documents/handlers/excel-extraction";
+} from "@/main/modules/files/handlers/excel-extraction";
 import { normalizeDocumentPath } from "./util";
 import {
 	formatFileSize,

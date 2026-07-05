@@ -23,7 +23,7 @@ vi.mock("@/utils/secure-session", () => ({
 	},
 }));
 
-vi.mock("@/main/modules/documents/handlers/pdf-extraction", () => ({
+vi.mock("@/main/modules/files/handlers/pdf-extraction", () => ({
 	readPDFFile: vi.fn(async () => ""),
 }));
 

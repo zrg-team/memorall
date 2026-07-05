@@ -1,9 +1,9 @@
 {
-	"title": "Knowledge Graph",
-	"description": "Explore saved memory as connected topics, entities, and relationships.",
+	"title": "Memory",
+	"description": "Your semantic memory — saved as connected topics, entities, and relationships.",
 	"sidebar": {
-		"show": "Show knowledge graph sidebar",
-		"hide": "Hide knowledge graph sidebar"
+		"show": "Show memory spaces",
+		"hide": "Hide memory spaces"
 	},
 	"topic": {
 		"label": "Memory",
@@ -47,17 +47,18 @@
 		"nodeTypes": "Node Types"
 	},
 	"empty": {
-		"title": "No knowledge graph available",
-		"description": "Convert some content to generate knowledge graph nodes",
-		"noNodes": "No nodes found for knowledge graph"
+		"title": "Your semantic memory is empty",
+		"description": "Memory grows as you add files. Convert a file to start building your semantic graph.",
+		"action": "Add a file",
+		"noNodes": "No nodes found for semantic memory"
 	},
-	"loading": "Loading knowledge graph...",
+	"loading": "Loading semantic memory...",
 	"error": "Error loading graph: {{error}}",
 	"actions": {
 		"close": "Close"
 	},
 	"topics": {
-		"title": "Memory",
+		"title": "Memory Spaces",
 		"noTopics": "No memories yet",
 		"deleteConfirm": "Delete \"{{name}}\"? This will remove it from all associated files and cannot be undone."
 	}

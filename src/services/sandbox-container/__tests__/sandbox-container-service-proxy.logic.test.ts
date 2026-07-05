@@ -44,7 +44,7 @@ const commandResult = (
 ): SandboxCommandResult => ({
 	commandId: "cmd-1",
 	command: "npm test",
-	cwd: "/workspaces/app",
+	cwd: "/app",
 	status: "completed",
 	completed: true,
 	stdout: "",
@@ -152,7 +152,7 @@ describe("SandboxContainerServiceProxy", () => {
 					case "runtime.runFile":
 						return {
 							...executionResult(),
-							path: "/workspaces/app/main.ts",
+							path: "/app/main.ts",
 						} as never;
 					case "runtime.executeCommand":
 					case "runtime.listenCommand":
@@ -181,18 +181,18 @@ describe("SandboxContainerServiceProxy", () => {
 					case "fs.writeFile":
 					case "fs.mkdir":
 					case "fs.unlink":
-						return { path: "/workspaces/app/file.ts" } as never;
+						return { path: "/app/file.ts" } as never;
 					case "fs.readFile":
-						return { path: "/workspaces/app/file.ts", content: "ok" } as never;
+						return { path: "/app/file.ts", content: "ok" } as never;
 					case "fs.readdir":
-						return { path: "/workspaces/app", entries: ["file.ts"] } as never;
+						return { path: "/app", entries: ["file.ts"] } as never;
 					case "fs.rename":
 						return {
-							oldPath: "/workspaces/app/old.ts",
-							newPath: "/workspaces/app/new.ts",
+							oldPath: "/app/old.ts",
+							newPath: "/app/new.ts",
 						} as never;
 					case "fs.exists":
-						return { path: "/workspaces/app/file.ts", exists: true } as never;
+						return { path: "/app/file.ts", exists: true } as never;
 					case "npm.install":
 					case "npm.installFromPackageJson":
 						return { success: true, installed: { react: "19.1.1" } } as never;
@@ -234,7 +234,7 @@ describe("SandboxContainerServiceProxy", () => {
 		await service.health();
 		await service.resetRuntime();
 		await service.executeCode({ code: "1 + 1" });
-		await service.runFile({ path: "/workspaces/app/main.ts" });
+		await service.runFile({ path: "/app/main.ts" });
 		await service.executeCommand({ command: "npm test" });
 		await service.listenCommand({ commandId: "cmd-1" });
 		await service.sendCommandInput({ commandId: "cmd-1", input: "q" });
@@ -245,16 +245,16 @@ describe("SandboxContainerServiceProxy", () => {
 		await service.getLogs({ limit: 5 });
 		await service.clearLogs();
 		await service.fetchResource({ url: "https://example.test" });
-		await service.writeFile({ path: "/workspaces/app/file.ts", content: "ts" });
-		await service.readFile({ path: "/workspaces/app/file.ts" });
-		await service.mkdir({ path: "/workspaces/app" });
-		await service.readdir({ path: "/workspaces/app" });
-		await service.unlink({ path: "/workspaces/app/file.ts" });
+		await service.writeFile({ path: "/app/file.ts", content: "ts" });
+		await service.readFile({ path: "/app/file.ts" });
+		await service.mkdir({ path: "/app" });
+		await service.readdir({ path: "/app" });
+		await service.unlink({ path: "/app/file.ts" });
 		await service.rename({
-			oldPath: "/workspaces/app/old.ts",
-			newPath: "/workspaces/app/new.ts",
+			oldPath: "/app/old.ts",
+			newPath: "/app/new.ts",
 		});
-		await service.exists({ path: "/workspaces/app/file.ts" });
+		await service.exists({ path: "/app/file.ts" });
 		await service.installPackage({ packageSpec: "react" });
 		await service.installFromPackageJson();
 		await service.listInstalledPackages();
@@ -277,13 +277,13 @@ describe("SandboxContainerServiceProxy", () => {
 	it("materializes missing workspace files and returns a direct GET fallback", async () => {
 		const service = new SandboxContainerServiceProxy();
 		const missingBody = btoa(
-			"Workspace file not materialized: /workspaces/app.js",
+			"Mounted file is not materialized in sandbox runtime: /app.js",
 		);
 		let handleAttempts = 0;
 		const request = vi
 			.spyOn(service, "request")
 			.mockImplementation(async (operation: SandboxOperation, payload) => {
-				if (operation === "fs.materializeWorkspaceFile") {
+				if (operation === "fs.materializeDocumentFile") {
 					return {
 						path: (payload as { path: string }).path,
 						materialized: true,
@@ -311,8 +311,8 @@ describe("SandboxContainerServiceProxy", () => {
 		});
 
 		expect(handleAttempts).toBe(2);
-		expect(request).toHaveBeenCalledWith("fs.materializeWorkspaceFile", {
-			path: "/workspaces/app.js",
+		expect(request).toHaveBeenCalledWith("fs.materializeDocumentFile", {
+			path: "/app.js",
 			content: "console.log('proxy')",
 		});
 		expect(result).toMatchObject({

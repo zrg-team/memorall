@@ -1,10 +1,10 @@
 // ---------------------------------------------------------------------------
-// sandbox-vfs.js — Virtual filesystem overlay for the sandbox container
-// Handles /documents (read-only) and /workspaces (read-write) mount points.
+// sandbox-vfs.js — Virtual filesystem overlay for the sandbox container.
+// Handles the single root filesystem mount.
 // ---------------------------------------------------------------------------
 
-export const DOCUMENTS_MOUNT_ROOT = "/documents";
-export const WORKSPACES_MOUNT_ROOT = "/workspaces";
+export const DOCUMENTS_MOUNT_ROOT = "/";
+export const WORKSPACES_MOUNT_ROOT = "/";
 export const VFS_DOCUMENTS_OVERLAY_FLAG = "__documentsOverlayInstalled";
 export const VFS_WORKSPACE_MATERIALIZE_SYNC = "__memorallMaterializeWorkspaceFileSync";
 
@@ -257,7 +257,7 @@ export const moveMountedWorkspacePath = (oldInputPath, newInputPath) => {
 
 // ---------------------------------------------------------------------------
 // VFS overlay — patches vfs.readFileSync / writeFileSync / etc. to intercept
-// /documents and /workspaces paths.
+// mounted root filesystem paths.
 // ---------------------------------------------------------------------------
 
 export const installDocumentsVfsOverlay = (vfs) => {

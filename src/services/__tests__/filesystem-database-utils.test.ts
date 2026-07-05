@@ -16,37 +16,42 @@ import {
 import { defaultNowToTrigger } from "../database/utils/default-now-to-trigger";
 import { getEffectiveSourceStatus } from "../database/utils/source-utils";
 
+const legacyDocumentsRoot = `/${"documents"}`;
+const legacyWorkspacesRoot = `/${"workspaces"}`;
+
 describe("filesystem sandbox path utilities", () => {
 	it("converts logical paths to scoped sandbox paths and back", () => {
-		expect(DOCUMENTS_SANDBOX_ROOT).toBe("/documents");
-		expect(WORKSPACES_SANDBOX_ROOT).toBe("/workspaces");
-		expect(SANDBOX_FS_PREFIX).toBe("/home");
+		expect(DOCUMENTS_SANDBOX_ROOT).toBe("/");
+		expect(WORKSPACES_SANDBOX_ROOT).toBe("/");
+		expect(SANDBOX_FS_PREFIX).toBe("/home/files");
 
-		expect(toDocumentsSandboxPath("/")).toBe("/documents");
-		expect(toDocumentsSandboxPath("/notes/a.md")).toBe("/documents/notes/a.md");
-		expect(toWorkspacesSandboxPath("/")).toBe("/workspaces");
-		expect(toWorkspacesSandboxPath("/app/index.ts")).toBe(
-			"/workspaces/app/index.ts",
-		);
-		expect(toSandboxPath("/a", "documents")).toBe("/documents/a");
-		expect(toSandboxPath("/a", "workspace")).toBe("/workspaces/a");
+		expect(toDocumentsSandboxPath("/")).toBe("/");
+		expect(toDocumentsSandboxPath("/notes/a.md")).toBe("/notes/a.md");
+		expect(toWorkspacesSandboxPath("/")).toBe("/");
+		expect(toWorkspacesSandboxPath("/app/index.ts")).toBe("/app/index.ts");
+		expect(toSandboxPath("/a", "documents")).toBe("/a");
+		expect(toSandboxPath("/a", "workspace")).toBe("/a");
 
-		expect(toDocumentsLogicalPath("/documents")).toBe("/");
-		expect(toDocumentsLogicalPath("/documents/a")).toBe("/a");
-		expect(toDocumentsLogicalPath("/workspaces/a")).toBeNull();
-		expect(toWorkspacesLogicalPath("/workspaces")).toBe("/");
-		expect(toWorkspacesLogicalPath("/workspaces/a")).toBe("/a");
-		expect(toWorkspacesLogicalPath("/documents/a")).toBeNull();
+		expect(toDocumentsLogicalPath(legacyDocumentsRoot)).toBe("/");
+		expect(toDocumentsLogicalPath(`${legacyDocumentsRoot}/a`)).toBe("/a");
+		expect(toDocumentsLogicalPath(`${legacyWorkspacesRoot}/a`)).toBe("/a");
+		expect(toWorkspacesLogicalPath(legacyWorkspacesRoot)).toBe("/");
+		expect(toWorkspacesLogicalPath(`${legacyWorkspacesRoot}/a`)).toBe("/a");
+		expect(toWorkspacesLogicalPath(`${legacyDocumentsRoot}/a`)).toBeNull();
 	});
 
 	it("identifies sandbox roots and maps them to ZenFS paths", () => {
-		expect(isDocumentsSandboxPath("/documents/a")).toBe(true);
-		expect(isDocumentsSandboxPath("/documentary/a")).toBe(false);
-		expect(isWorkspacesSandboxPath("/workspaces/a")).toBe(true);
+		expect(isDocumentsSandboxPath("/notes/a")).toBe(true);
+		expect(isDocumentsSandboxPath(`${legacyDocumentsRoot}/a`)).toBe(true);
+		expect(isWorkspacesSandboxPath(`${legacyWorkspacesRoot}/a`)).toBe(true);
 		expect(isWorkspacesSandboxPath("/workspace/a")).toBe(false);
-		expect(sandboxPathToFsPath("/documents/a/")).toBe("/home/documents/a");
-		expect(sandboxPathToFsPath("/workspaces/a")).toBe("/home/workspaces/a");
-		expect(() => sandboxPathToFsPath("/tmp/a")).toThrow("Invalid sandbox path");
+		expect(sandboxPathToFsPath(`${legacyDocumentsRoot}/a/`)).toBe(
+			"/home/files/a",
+		);
+		expect(sandboxPathToFsPath(`${legacyWorkspacesRoot}/a`)).toBe(
+			"/home/files/a",
+		);
+		expect(sandboxPathToFsPath("tmp/a")).toBe("/home/files/tmp/a");
 	});
 });
 

@@ -41,24 +41,24 @@ You are a professional job application assistant. Your goal is to help the user 
 Messages that should activate this feature:
 - "Write a cover letter for this job: [URL]"
 - "Help me apply for the Senior Engineer role at Stripe — here's the job URL"
-- "Generate a cover letter and resume suggestions for /documents/resume.md and this job posting"
+- "Generate a cover letter and resume suggestions for /resume.md and this job posting"
 - "I'm applying to Google — tailor my resume for this position"
 - "Create a cover letter for a product manager role at Notion"
 - "Review my resume against this job description and tell me what to change"
 
 ## YOUR TASK
-1. Read the user's resume from /documents using doc_read.
+1. Read the user's resume from / using doc_read.
 2. Obtain the job description — either by opening job_url with web_open + web_read, or from job_description_text if provided directly.
 3. Optionally search for company culture and context.
 4. Analyse the match between the resume and the job requirements.
 5. Write a tailored cover letter and a prioritised list of resume suggestions.
-6. Save both files to /documents/job-applications/<company>/.
+6. Save both files to /job-applications/<company>/.
 
 ## INPUT PARAMETERS (from user message)
-- resume_path: Path to the resume file in /documents (e.g. /documents/resume.md)
+- resume_path: Path to the resume file in / (e.g. /resume.md)
 - job_url: URL of the job posting (preferred — read this if provided)
 - job_description_text: Raw job description text (fallback if no URL)
-- output_folder: Where to save outputs (default: /documents/job-applications/<company>/)
+- output_folder: Where to save outputs (default: /job-applications/<company>/)
 
 ## WORKFLOW
 
@@ -184,7 +184,7 @@ Sincerely,
 ---
 
 ## WEB TOOL QUICK REFERENCE
-- doc_read: Read the resume file from /documents.
+- doc_read: Read the resume file from /.
 - doc_write: Save cover-letter.md and resume-suggestions.md.
 - web_open: Open the job posting URL or company site.
 - web_read: Read the page content. contentMode="text". Always pass sessionId.
@@ -230,7 +230,7 @@ export const JOB_APPLICATION_FEATURE_TOOLS = [
 ] as const;
 
 export const JOB_APPLICATION_FEATURE_DESCRIPTION =
-	"Generate a tailored cover letter and resume suggestions for a specific job application, saved to /documents/job-applications/.";
+	"Generate a tailored cover letter and resume suggestions for a specific job application, saved to /job-applications/.";
 
 const definition = defineStep<
 	JobApplicationFeatureInput,

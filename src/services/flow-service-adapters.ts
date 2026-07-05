@@ -110,65 +110,34 @@ const normalizeRowArray = <T>(value: unknown): T[] => {
 
 import {
 	DOCUMENTS_SANDBOX_ROOT,
-	WORKSPACES_SANDBOX_ROOT,
-	isWorkspacesSandboxPath,
-	toWorkspacesLogicalPath,
+	FILESYSTEM_SANDBOX_ROOT,
 	toDocumentsSandboxPath,
-	toDocumentsLogicalPath,
+	normalizeSandboxPath,
 	sandboxPathToFsPath,
 } from "@/services/filesystem/sandbox-paths";
 
 const DOCUMENTS_FS_ROOT = sandboxPathToFsPath(DOCUMENTS_SANDBOX_ROOT);
-const WORKSPACES_FS_ROOT = sandboxPathToFsPath(WORKSPACES_SANDBOX_ROOT);
 
 const normalizeFsPath = (path: string): string => {
 	const normalized = path.replace(/\\/g, "/").replace(/\/+$/, "");
 	return normalized || "/";
 };
 
-/** Convert an internal FS path or sandbox path to its workspace sandbox path. */
-const workspaceFsPathToSandboxPath = (path: string): string => {
-	const normalized = normalizeFsPath(path);
-	// Already a sandbox path
-	if (isWorkspacesSandboxPath(normalized)) return normalized;
-	// Internal FS path: /home/workspaces/... → /workspaces/...
-	if (normalized === WORKSPACES_FS_ROOT) return WORKSPACES_SANDBOX_ROOT;
-	if (normalized.startsWith(`${WORKSPACES_FS_ROOT}/`)) {
-		return `${WORKSPACES_SANDBOX_ROOT}${normalized.slice(WORKSPACES_FS_ROOT.length)}`;
-	}
-	return `${WORKSPACES_SANDBOX_ROOT}${normalized.startsWith("/") ? normalized : `/${normalized}`}`;
-};
-
-/** Convert an internal FS path or sandbox path to its documents logical path. */
+/** Convert an internal FS path or public path to its root logical path. */
 const documentFsPathToLogicalPath = (path: string): string => {
 	const normalized = normalizeFsPath(path);
-	// Sandbox path: strip /documents prefix
-	const fromSandbox = toDocumentsLogicalPath(normalized);
-	if (fromSandbox !== null) return fromSandbox;
-	// Internal FS path: /home/documents/... → /...
 	if (normalized === DOCUMENTS_FS_ROOT) return "/";
 	if (normalized.startsWith(`${DOCUMENTS_FS_ROOT}/`)) {
 		return normalized.slice(DOCUMENTS_FS_ROOT.length);
 	}
-	return normalized;
+	return normalizeSandboxPath(normalized);
 };
 
 const documentFsPathToSandboxPath = (path: string): string =>
 	toDocumentsSandboxPath(documentFsPathToLogicalPath(path));
 
 const flowFsPathToSandboxPath = (path: string): string =>
-	isWorkspaceFsPath(path)
-		? workspaceFsPathToSandboxPath(path)
-		: documentFsPathToSandboxPath(path);
-
-const isWorkspaceFsPath = (path: string): boolean => {
-	const normalized = normalizeFsPath(path);
-	return (
-		isWorkspacesSandboxPath(normalized) ||
-		normalized === WORKSPACES_FS_ROOT ||
-		normalized.startsWith(`${WORKSPACES_FS_ROOT}/`)
-	);
-};
+	documentFsPathToSandboxPath(path);
 
 const findTreeNode = (
 	nodes: DocumentTreeNode[],
@@ -187,18 +156,8 @@ const getTreeNode = async (
 	service: DocumentFileSystem,
 	path: string,
 ): Promise<DocumentTreeNode> => {
-	const workspace = isWorkspaceFsPath(path);
-	const sandboxPath = workspace
-		? workspaceFsPathToSandboxPath(path)
-		: documentFsPathToLogicalPath(path);
-	const logicalPath = workspace
-		? (toWorkspacesLogicalPath(sandboxPath) ?? normalizeFsPath(sandboxPath))
-		: typeof sandboxPath === "string"
-			? sandboxPath
-			: "/";
-	const tree = workspace
-		? await service.getTree(WORKSPACES_SANDBOX_ROOT)
-		: await service.getTree(DOCUMENTS_SANDBOX_ROOT);
+	const logicalPath = documentFsPathToLogicalPath(path);
+	const tree = await service.getTree(FILESYSTEM_SANDBOX_ROOT);
 	if (logicalPath === "/") {
 		return {
 			id: "/",

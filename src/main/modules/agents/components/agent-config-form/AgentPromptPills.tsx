@@ -22,9 +22,7 @@ const PromptPill: React.FC<{
 				className="inline-flex items-center gap-1.5 rounded-md bg-muted/40 px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground"
 			>
 				<FileText size={11} />
-				<span>
-					{label} · {value}
-				</span>
+				<span>{label}</span>
 			</button>
 		</HoverCardTrigger>
 		<HoverCardContent
@@ -32,9 +30,12 @@ const PromptPill: React.FC<{
 			className="w-[min(42rem,calc(100vw-2rem))] p-3"
 		>
 			<div className="space-y-2">
-				<p className="text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
-					{label}
-				</p>
+				<div className="flex items-baseline justify-between gap-3">
+					<p className="text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
+						{label}
+					</p>
+					<span className="text-[11px] text-muted-foreground/80">{value}</span>
+				</div>
 				<pre className="max-h-80 overflow-auto whitespace-pre-wrap break-words rounded-lg border bg-muted/20 p-3 font-mono text-xs leading-relaxed text-foreground">
 					{preview}
 				</pre>

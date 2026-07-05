@@ -3,14 +3,25 @@
 		"chat": "Chat",
 		"agents": "Agents",
 		"models": "Models",
-		"knowledgeGraph": "Knowledge Graph",
+		"knowledgeGraph": "Memory",
 		"flowBuilder": "Flow Builder",
-		"documents": "Documents",
+		"documents": "Files",
 		"debug": "Debug",
 		"embeddings": "Embeddings",
 		"database": "Database",
 		"activities": "Activities",
 		"logs": "Logs"
+	},
+	"harness": {
+		"label": "harness",
+		"defaultAgentName": "Agent",
+		"status": {
+			"idle": "Idle",
+			"working": "Working…",
+			"running": "{{count}} running",
+			"processing": "{{count}} processing",
+			"done": "Done"
+		}
 	},
 	"theme": {
 		"label": "Theme",
@@ -88,7 +99,7 @@
 		"steps": {
 			"database": {
 				"title": "Database Setup",
-				"description": "Setting up knowledge graph database with vector extensions"
+				"description": "Setting up semantic memory database with vector extensions"
 			},
 			"embedding": {
 				"title": "Embedding Models",
@@ -206,7 +217,7 @@
 		"activeProcesses": "Active Processes",
 		"recentHistory": "Recent History",
 		"noActivity": "No processing activity yet",
-		"noActivityHelp": "Convert documents to knowledge graphs to see activity here",
+		"noActivityHelp": "Convert files to semantic memory to see activity here",
 		"loadingMore": "Loading more...",
 		"noMoreHistory": "No more history to load",
 		"started": "Started: {{time}}",
@@ -271,15 +282,15 @@
 		"features": {
 			"fsFeature": {
 				"name": "File System",
-				"description": "Access files across /documents and /workspaces with full read/write/search capabilities."
+				"description": "Access files across / with full read/write/search capabilities."
 			},
 			"documentsFsFeature": {
-				"name": "Documents File System",
-				"description": "Access and manage files in /documents with read, write, search, and folder operations."
+				"name": "Files",
+				"description": "Access and manage files in / with read, write, search, and folder operations."
 			},
 			"documentsFeature": {
-				"name": "Documents (Legacy)",
-				"description": "[Legacy] Basic document tools. Use documents-fs-feature instead."
+				"name": "Files (Legacy)",
+				"description": "[Legacy] Basic file tools. Use documents-fs-feature instead."
 			},
 			"nodejsSandboxFeature": {
 				"name": "Node.js Sandbox",
@@ -295,15 +306,15 @@
 			},
 			"travelPlannerFeature": {
 				"name": "Travel Planner",
-				"description": "Research destinations and generate a day-by-day travel itinerary saved to /documents/travel/."
+				"description": "Research destinations and generate a day-by-day travel itinerary saved to /travel/."
 			},
 			"mealPlannerFeature": {
 				"name": "Meal Planner",
-				"description": "Find real recipes and generate a weekly meal plan with a consolidated shopping list saved to /documents/meals/."
+				"description": "Find real recipes and generate a weekly meal plan with a consolidated shopping list saved to /meals/."
 			},
 			"dailyBriefingFeature": {
 				"name": "Daily Briefing",
-				"description": "Generate a personalized morning briefing combining today's news with your personal knowledge graph."
+				"description": "Generate a personalized morning briefing combining today's news with your personal memory."
 			},
 			"jobApplicationFeature": {
 				"name": "Job Application Assistant",
@@ -319,15 +330,15 @@
 			},
 			"languageTutorFeature": {
 				"name": "Language Tutor",
-				"description": "Interactive language tutor that builds a learner profile, runs structured lessons with Q&A, scores answers, and tracks progress in the knowledge graph."
+				"description": "Interactive language tutor that builds a learner profile, runs structured lessons with Q&A, scores answers, and tracks progress in memory."
 			},
 			"shoppingAssistantFeature": {
 				"name": "Shopping Assistant",
-				"description": "Deep product research: searches multiple sources, reads prices, specs and reviews, compares alternatives, and saves a full report to /documents/shopping-assistant/."
+				"description": "Deep product research: searches multiple sources, reads prices, specs and reviews, compares alternatives, and saves a full report to /shopping-assistant/."
 			},
 			"financeTrackerFeature": {
 				"name": "Finance Tracker",
-				"description": "Deep stock and company research with Mermaid diagrams and ASCII charts covering financials, valuation, analyst opinions, and news. Saves reports to /documents/finance/."
+				"description": "Deep stock and company research with Mermaid diagrams and ASCII charts covering financials, valuation, analyst opinions, and news. Saves reports to /finance/."
 			},
 			"activeMemoryFeature": {
 				"name": "Active Memory",
@@ -343,13 +354,15 @@
 			},
 			"visualizeResponse": {
 				"name": "Visualize Response",
-				"description": "Generate interactive OpenUI visualizations backed by knowledge graph data tools."
+				"description": "Generate interactive OpenUI visualizations backed by semantic memory data tools."
 			}
 		}
 	},
 	"sandboxPanel": {
-		"title": "Live Workspace",
+		"title": "Workspace",
 		"description": "Preview generated work, live pages, servers, and command activity.",
+		"outputsTab": "Outputs",
+		"liveRuntimeTab": "Live Runtime",
 		"commandsTitle": "Running Commands",
 		"commandsShort": "Commands",
 		"serversTitle": "Sandbox Servers",
@@ -393,7 +406,7 @@
 		"steps": {
 			"welcome": {
 				"title": "Welcome to Memorall",
-				"content": "Memorall is a local-first AI workspace for chat, documents, agents, knowledge, and models.\n\nThis tour works before you choose a model, so you can understand the workspace first and pick your setup at the end.",
+				"content": "Memorall is a local-first AI workspace for chat, files, agents, knowledge, and models.\n\nThis tour works before you choose a model, so you can understand the workspace first and pick your setup at the end.",
 				"cursor": "Start here",
 				"agent": "I'll guide you."
 			},
@@ -405,20 +418,20 @@
 			},
 			"layoutExplain": {
 				"title": "Split Workspace Layout",
-				"content": "Memorall uses a split layout.\n\nLeft: chat and setup.\nCenter: the current conversation and input area.\nRight: workspace pages like Documents, Knowledge Graph, Agents, Models, and Runtime.",
+				"content": "Memorall uses a split layout.\n\nLeft: chat and setup.\nCenter: the current conversation and input area.\nRight: workspace pages like Files, Memory, Agents, Models, and Runtime.",
 				"cursor": "Left, center, and right",
 				"agent": "Three work zones."
 			},
 			"documentsNavigate": {
-				"title": "Documents",
-				"content": "Next stop: Documents, your file library and document workspace.\n\nClick Next to open it in the right panel.",
-				"cursor": "Open Documents",
+				"title": "Files",
+				"content": "Next stop: Files, your resource library and file workspace.\n\nClick Next to open it in the right panel.",
+				"cursor": "Open Files",
 				"agent": "Files first."
 			},
 			"documentsExplain": {
-				"title": "Document Library",
-				"content": "Use Documents to upload, create, organize, and preview files.\n\nDocuments can become Knowledge Graph data, which gives agents useful memory for later conversations.",
-				"cursor": "Document workspace",
+				"title": "Files",
+				"content": "Use Files to upload, create, organize, and preview resources.\n\nFiles can become semantic memory, which gives agents useful context for later conversations.",
+				"cursor": "File workspace",
 				"agent": "Knowledge starts here."
 			},
 			"agentsNavigate": {
@@ -434,14 +447,14 @@
 				"agent": "Specialized work."
 			},
 			"knowledgeNavigate": {
-				"title": "Knowledge Graph",
-				"content": "Next: Knowledge Graph, where Memorall shows stored memory as connected topics, entities, and facts.\n\nClick Next to open it.",
-				"cursor": "Open Knowledge Graph",
+				"title": "Memory",
+				"content": "Next: Memory, where Memorall shows semantic facts and procedural skills together.\n\nClick Next to open it.",
+				"cursor": "Open Memory",
 				"agent": "Memory map."
 			},
 			"knowledgeExplain": {
 				"title": "Memory as a Graph",
-				"content": "The Knowledge Graph helps you inspect what Memorall knows.\n\nSearch concepts, review relationships, filter by topic, and curate the connections agents can use later.",
+				"content": "Memory helps you inspect what Memorall knows and what workflows it can reuse.\n\nSearch concepts, review relationships, filter by memory space, and curate the skills agents can use later.",
 				"cursor": "Graph workspace",
 				"agent": "See connections."
 			},

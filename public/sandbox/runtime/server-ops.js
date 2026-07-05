@@ -1407,7 +1407,7 @@ export const startServerOperation = async (payload) => {
 	const containerInstance = await ensureContainer();
 	const port = payload.port;
 	const hostname = payload.hostname;
-	const rootDir = normalizePath(payload.rootDir || "/workspaces/app");
+	const rootDir = normalizePath(payload.rootDir || "/projects/app");
 
 	let createdFiles = [];
 	if (isFolderEmpty(containerInstance, rootDir) && payload.template) {

@@ -56,8 +56,8 @@ if (container) {
 						}
 						area?.remove?.("navigateTo");
 					} else if (target === "documents") {
-						if (location.pathname !== "/documents") {
-							history.replaceState({}, "", "/documents");
+						if (location.pathname !== "/files") {
+							history.replaceState({}, "", "/files");
 						}
 						area?.remove?.("navigateTo");
 					}

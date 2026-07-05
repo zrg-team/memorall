@@ -27,7 +27,7 @@ vi.mock("@zenfs/dom", () => ({
 	IndexedDB: {},
 }));
 
-vi.mock("@/main/modules/documents/handlers/pdf-extraction", () => ({
+vi.mock("@/main/modules/files/handlers/pdf-extraction", () => ({
 	readPDFFile: vi.fn(async () => ""),
 }));
 
@@ -61,8 +61,8 @@ vi.mock("pdfjs-dist", () => ({
 }));
 
 vi.mock("@/services/filesystem/document-filesystem", () => ({
-	SANDBOX_DOCUMENTS_ROOT: "/documents",
-	SANDBOX_WORKSPACE_ROOT: "/workspaces",
+	SANDBOX_DOCUMENTS_ROOT: "/",
+	SANDBOX_WORKSPACE_ROOT: "/",
 	documentFileSystemService: {
 		initialize: vi.fn(async () => undefined),
 		onFilesystemChanged: vi.fn(() => vi.fn()),
@@ -113,7 +113,7 @@ describe("requested main module coverage", () => {
 	it("imports chat, documents, agents, agent wizard, and llm modules", async () => {
 		const modules = {
 			...import.meta.glob("../modules/chat/**/*.{ts,tsx}"),
-			...import.meta.glob("../modules/documents/**/*.{ts,tsx}"),
+			...import.meta.glob("../modules/files/**/*.{ts,tsx}"),
 			...import.meta.glob("../modules/agents/**/*.{ts,tsx}"),
 			...import.meta.glob("../modules/agent-wizard/**/*.{ts,tsx}"),
 			...import.meta.glob("../modules/llm/**/*.{ts,tsx}"),
@@ -123,7 +123,7 @@ describe("requested main module coverage", () => {
 
 		expect(failures).toEqual([]);
 		expect(loaded).toMatchSnapshot();
-		// This eagerly imports the entire chat/documents/agents/llm module trees
+		// This eagerly imports the entire chat/files/agents/llm module trees
 		// (univer, tiptap, transformers, …), which legitimately takes >30s under
 		// full-suite CPU contention; give it headroom so it isn't a flaky timeout.
 	}, 60000);

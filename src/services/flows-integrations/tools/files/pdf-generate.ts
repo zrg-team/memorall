@@ -23,7 +23,9 @@ const schema = z.object({
 		),
 	output_path: z
 		.string()
-		.describe("Where to save the PDF in /documents. Must end with .pdf."),
+		.describe(
+			"Where to save the PDF in the root filesystem. Must end with .pdf.",
+		),
 	options: z
 		.object({
 			page_size: z
@@ -103,7 +105,7 @@ export const createPdfGenerateTool: ToolFactory<Input, Services> = (
 ): Tool<Input> => ({
 	name: TOOL_NAME,
 	description:
-		"Generate a PDF from a web URL, markdown text, or HTML string and save it to /documents. Returns the saved file path and page count.",
+		"Generate a PDF from a web URL, markdown text, or HTML string and save it to the root filesystem. Returns the saved file path and page count.",
 	schema,
 	execute: async (input) => {
 		const dfs = services.fs;

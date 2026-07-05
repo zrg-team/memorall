@@ -13,10 +13,10 @@ vi.mock("@/utils/logger", () => ({
 }));
 
 vi.mock("@/services/filesystem/document-filesystem", () => ({
-	DOCUMENTS_SANDBOX_ROOT: "/documents",
-	WORKSPACES_SANDBOX_ROOT: "/workspaces",
-	SANDBOX_DOCUMENTS_ROOT: "/documents",
-	SANDBOX_WORKSPACE_ROOT: "/workspaces",
+	DOCUMENTS_SANDBOX_ROOT: "/",
+	WORKSPACES_SANDBOX_ROOT: "/",
+	SANDBOX_DOCUMENTS_ROOT: "/",
+	SANDBOX_WORKSPACE_ROOT: "/",
 	documentFileSystemService: {
 		initialize: vi.fn(async () => undefined),
 		onFilesystemChanged: vi.fn(() => vi.fn()),

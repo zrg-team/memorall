@@ -7,6 +7,12 @@ interface PageHeaderProps {
 	description: React.ReactNode;
 	actions?: React.ReactNode;
 	actionsPlacement?: "inline" | "bottom" | "title";
+	/**
+	 * Optional sidebar collapse/expand control. Rendered in a standardized
+	 * position (top-right of the title row) so every harness view places its
+	 * collapse affordance identically.
+	 */
+	collapseButton?: React.ReactNode;
 	className?: string;
 }
 
@@ -16,6 +22,7 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
 	description,
 	actions,
 	actionsPlacement = "inline",
+	collapseButton,
 	className,
 }) => (
 	<div
@@ -33,9 +40,12 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
 							{title}
 						</h1>
 					</div>
-					{actions && actionsPlacement === "title" ? (
-						<div className="shrink-0">{actions}</div>
-					) : null}
+					{(collapseButton || (actions && actionsPlacement === "title")) && (
+						<div className="flex shrink-0 items-center gap-1">
+							{actions && actionsPlacement === "title" ? actions : null}
+							{collapseButton}
+						</div>
+					)}
 				</div>
 				<p className="mt-1 line-clamp-2 text-sm leading-relaxed text-muted-foreground">
 					{description}

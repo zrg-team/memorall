@@ -2,7 +2,7 @@ import z from "zod";
 import type { Tool, ToolFactory } from "flow-core/interfaces/engine/tool";
 import type { AllServices } from "flow-core/interfaces/services/services";
 import { toolRegistry } from "flow-core/registries/tool-registry";
-import { normalizeDocumentPath } from "../documents/util";
+import { normalizeDocumentPath } from "../files/util";
 import { writeFileBytes } from "flow-core/tools/fs/util";
 import { captureWebSessionScreenshot } from "./web-tool-registry";
 import {
@@ -35,7 +35,7 @@ const schema = z.object({
 		.string()
 		.optional()
 		.describe(
-			"Where to save the PNG in /documents. Default: /screenshots/screenshot-<timestamp>.png",
+			"Where to save the PNG in the root filesystem. Default: /screenshots/screenshot-<timestamp>.png",
 		),
 	timeoutMs: z
 		.number()
@@ -52,7 +52,7 @@ export const createWebScreenshotTool: ToolFactory<Input, Services> = (
 ): Tool<Input> => ({
 	name: TOOL_NAME,
 	description:
-		"Capture a PNG screenshot of an active web session or a URL and save it to /documents. Returns the saved file path and image dimensions.",
+		"Capture a PNG screenshot of an active web session or a URL and save it to the root filesystem. Returns the saved file path and image dimensions.",
 	schema,
 	execute: async (input) => {
 		const webBrowser = requireWebBrowserService(services);

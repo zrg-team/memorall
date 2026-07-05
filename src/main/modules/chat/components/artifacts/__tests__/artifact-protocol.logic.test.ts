@@ -9,7 +9,7 @@ import {
 describe("artifact protocol parsing", () => {
 	it("splits text and complete artifact blocks", () => {
 		const segments = parseArtifactSegments(
-			'Intro <artifact type="text/html" title="Demo" identifier="demo" projectPath="/workspaces/app">HTML</artifact> Outro',
+			'Intro <artifact type="text/html" title="Demo" identifier="demo" projectPath="/projects/app">HTML</artifact> Outro',
 		);
 
 		expect(segments).toEqual([
@@ -19,7 +19,7 @@ describe("artifact protocol parsing", () => {
 				type: "html",
 				title: "Demo",
 				identifier: "demo",
-				projectPath: "/workspaces/app",
+				projectPath: "/projects/app",
 				content: "HTML",
 				blockIndex: 0,
 			}),

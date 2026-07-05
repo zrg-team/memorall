@@ -39,7 +39,7 @@ import {
 import { logError, logInfo } from "@/utils/logger";
 
 const GROW_LABELS: Record<GrowType, string> = {
-	"knowledge-graph": "Knowledge Graph",
+	"knowledge-graph": "Semantic Graph",
 	structmem: "StructMem",
 };
 

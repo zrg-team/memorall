@@ -36,19 +36,19 @@ export type PdfGenerateFeatureServices = {};
 
 const SYSTEM_PROMPT_INSTRUCTION = `
 # PDF GENERATION
-You can generate PDF files and save them to /documents using the \`pdf_generate\` tool.
+You can generate PDF files and save them to the root filesystem using the \`pdf_generate\` tool.
 
 ## TOOL OVERVIEW
 
 | Tool | Purpose |
 |---|---|
-| \`pdf_generate\` | Generate a PDF from a URL, Markdown text, or HTML and save it to /documents |
+| \`pdf_generate\` | Generate a PDF from a URL, Markdown text, or HTML and save it to the root filesystem |
 
 ## USAGE
 
 - \`source_type\`: \`"url"\` | \`"markdown"\` | \`"html"\`
 - \`content\`: the URL, Markdown string, or HTML string to render
-- \`output_path\`: where to save the PDF in /documents (must end with \`.pdf\`)
+- \`output_path\`: where to save the PDF in the root filesystem (must end with \`.pdf\`)
 - \`options\`: optional \`page_size\` (a4/letter/legal), \`orientation\` (portrait/landscape), \`margin_mm\`
 - Parent folders are created automatically.
 
@@ -62,7 +62,7 @@ export const PDF_GENERATE_FEATURE_SYSTEM_PROMPT =
 export const PDF_GENERATE_FEATURE_TOOLS = ["pdf_generate"] as const;
 
 export const PDF_GENERATE_FEATURE_DESCRIPTION =
-	"Enable PDF generation tool: create a PDF from a URL, Markdown text, or HTML and save it to /documents.";
+	"Enable PDF generation tool: create a PDF from a URL, Markdown text, or HTML and save it to the root filesystem.";
 
 // ============================================================================
 // STEP IMPLEMENTATION

@@ -2,7 +2,7 @@ import { Readability } from "@mozilla/readability";
 import {
 	isPDFUrl,
 	readPDFFromUrl,
-} from "@/main/modules/documents/handlers/pdf-extraction";
+} from "@/main/modules/files/handlers/pdf-extraction";
 import type {
 	SelectionData,
 	PageMetadata,

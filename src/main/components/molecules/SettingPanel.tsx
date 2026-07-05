@@ -40,8 +40,6 @@ import {
 	type EmbeddingSize,
 	getAvailableSizes,
 } from "@/config/embedding-models";
-import { clearAllEmbeddings } from "@/services/database/utils/embedding-cleanup";
-import { serviceManager } from "@/services";
 import { useCopilot } from "@/main/components/atoms/copilot";
 import { getCurrentEmbeddingSize } from "@/utils/embedding-size-config";
 import { VietnamFlag, USFlag } from "@/main/components/atoms/flags";
@@ -111,29 +109,18 @@ export const SettingPanel: React.FC<{
 
 	const handleEmbeddingSizeChange = async (newSize: EmbeddingSize) => {
 		if (hasExistingData && newSize !== embeddingSize) {
+			// Embeddings are stored in per-size columns, so switching does not
+			// delete anything — existing nodes/edges simply won't appear in
+			// semantic recall at the new size until they are re-grown. Their data
+			// is preserved and switching back to this size restores them.
 			const confirmed = window.confirm(
 				t("embedding.changeWarning", {
 					defaultValue:
-						"Changing embedding size will require clearing existing embeddings in nodes and edges. Do you want to continue?",
+						"Changing the embedding size means memories you've already grown (nodes and edges) will stop appearing in semantic search until you re-grow them at the new size. Their data is kept, and switching back to the current size restores them. Continue?",
 				}),
 			);
 
 			if (!confirmed) {
-				return;
-			}
-
-			try {
-				// Clear all embeddings from database
-				const result = await clearAllEmbeddings(serviceManager.databaseService);
-				logInfo(
-					`Cleared ${result.total} embeddings (${result.nodes} nodes, ${result.edges} edges, ${result.messages} messages)`,
-				);
-			} catch (error) {
-				alert(
-					t("embedding.clearError", {
-						defaultValue: "Failed to clear embeddings. Please try again.",
-					}),
-				);
 				return;
 			}
 		}

@@ -9,7 +9,7 @@ import {
 } from "@/services/filesystem/document-filesystem";
 import { logError, logInfo } from "@/utils/logger";
 
-const SKILLS_FS_ROOT = "/home/documents/skills";
+const SKILLS_FS_ROOT = "/home/files/skills";
 const SKILLS_SANDBOX_ROOT = `${SANDBOX_DOCUMENTS_ROOT}/skills` as const;
 
 export interface SkillSummary {

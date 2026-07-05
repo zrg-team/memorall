@@ -1,7 +1,7 @@
 import {
 	readPDFFile,
 	type PDFDocumentContent,
-} from "@/main/modules/documents/handlers/pdf-extraction";
+} from "@/main/modules/files/handlers/pdf-extraction";
 
 /**
  * Create a file input element and prompt user to select a PDF file
