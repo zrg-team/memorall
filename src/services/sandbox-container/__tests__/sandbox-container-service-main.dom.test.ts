@@ -33,6 +33,7 @@ vi.mock("@/services/filesystem/document-filesystem", () => ({
 		onFilesystemChanged: vi.fn(),
 		readFile: vi.fn(),
 		rename: vi.fn(),
+		renamePath: vi.fn(),
 		writeFile: vi.fn(),
 	},
 }));
@@ -343,10 +344,10 @@ describe("SandboxContainerServiceMain", () => {
 			},
 			120_000,
 		);
-		expect(service.flushWorkspaceWrites).toHaveBeenCalledTimes(5);
+		expect(service.flushWorkspaceWrites).toHaveBeenCalledTimes(8);
 	});
 
-	it("normalizes filesystem operations and materializes mounted files before reads", async () => {
+	it("normalizes filesystem operations and materializes workspace files before reads", async () => {
 		const service = createService();
 		const request = vi
 			.spyOn(service, "request")
@@ -395,14 +396,16 @@ describe("SandboxContainerServiceMain", () => {
 			path: "/app/index.ts",
 			content: "ts",
 		});
-		expect(request).toHaveBeenCalledWith("fs.materializeDocumentFile", {
+		expect(request).toHaveBeenCalledWith("fs.materializeWorkspaceFile", {
 			path: "/note.md",
 			content: "file contents",
 		});
-		expect(request).toHaveBeenCalledWith("fs.materializeDocumentFile", {
+		expect(request).toHaveBeenCalledWith("fs.materializeWorkspaceFile", {
 			path: "/app/index.ts",
 			content: "file contents",
 		});
+		expect(service.syncWorkspaceMount).toHaveBeenCalled();
+		expect(service.syncDocumentsMount).not.toHaveBeenCalled();
 		expect(request).toHaveBeenCalledWith("fs.rename", {
 			oldPath: "/app/old.ts",
 			newPath: "/app/new.ts",
@@ -642,6 +645,24 @@ describe("SandboxContainerServiceMain", () => {
 				"/app/out.txt",
 				"saved",
 			),
+		);
+	});
+
+	it("bridges rename with exact source and destination paths", async () => {
+		const service = createService();
+
+		await expect(
+			service.dispatchFsToDocumentService("fs.rename", {
+				oldPath: "/app/src/old.ts",
+				newPath: "/app/generated/new.ts",
+			}),
+		).resolves.toEqual({
+			oldPath: "/app/src/old.ts",
+			newPath: "/app/generated/new.ts",
+		});
+		expect(documentFileSystemService.renamePath).toHaveBeenCalledWith(
+			"/app/src/old.ts",
+			"/app/generated/new.ts",
 		);
 	});
 

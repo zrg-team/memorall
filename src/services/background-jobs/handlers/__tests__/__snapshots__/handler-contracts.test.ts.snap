@@ -39,6 +39,10 @@ exports[`background job handler registry > registers every background job handle
     "jobType": "basic-stream",
   },
   {
+    "handler": "LLMOperationsHandler",
+    "jobType": "cancel-chat-completion",
+  },
+  {
     "handler": "ChatHandler",
     "jobType": "chat",
   },

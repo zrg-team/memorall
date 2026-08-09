@@ -359,7 +359,7 @@
 		}
 	},
 	"sandboxPanel": {
-		"title": "Workspace",
+		"title": "Runtime Sessions",
 		"description": "Preview generated work, live pages, servers, and command activity.",
 		"outputsTab": "Outputs",
 		"liveRuntimeTab": "Live Runtime",

@@ -47,6 +47,7 @@ export default defineConfig({
 						"src/services/flows-features/**/*.test.ts",
 						"src/services/flows-integrations/**/*.test.ts",
 						"src/services/flows-memory/**/*.test.ts",
+						"src/services/agent-sandbox/**/*.test.ts",
 						"src/services/background-jobs/**/*.test.ts",
 						"src/**/*.logic.test.ts",
 					],

@@ -17,11 +17,34 @@ export type ToolComplexResult = Exclude<
 	string
 >;
 
+export type ToolMessageContent = ChatCompletionToolMessageParam["content"];
+
+export interface ToolExecutionMeta {
+	operationId?: string;
+	sessionId?: string;
+	processId?: string;
+	previewId?: string;
+	snapshotId?: string;
+	nextCursor?: string;
+	durationMs?: number;
+	truncated?: boolean;
+	warnings?: string[];
+	[key: string]: unknown;
+}
+
+export interface ToolExecutionResult<TStructured = unknown> {
+	content: ToolMessageContent;
+	structuredContent?: TStructured;
+	isError?: boolean;
+	meta?: ToolExecutionMeta;
+}
+
 /**
- * Tools return exactly the content shape accepted by an OpenAI role:tool
- * message: a string or an array of text content parts.
+ * Legacy tools may return message content directly. Rich tools return an
+ * MCP-compatible envelope while the graph still emits compatible role:tool
+ * message content to the model.
  */
-export type ToolResultValue = ChatCompletionToolMessageParam["content"];
+export type ToolResultValue = ToolMessageContent | ToolExecutionResult;
 
 export interface ToolExecutionContext<TState = unknown> {
 	state: TState;
@@ -37,19 +60,58 @@ export const toolMessageContentToText = (
 	return content.map((part) => part.text).join("\n");
 };
 
+export const isToolExecutionResult = (
+	value: ToolResultValue,
+): value is ToolExecutionResult =>
+	typeof value === "object" &&
+	value !== null &&
+	!Array.isArray(value) &&
+	"content" in value;
+
+const serializeStructuredContent = (value: unknown): string => {
+	try {
+		return JSON.stringify(value, null, 2);
+	} catch {
+		return JSON.stringify({ error: "Tool returned non-serializable data" });
+	}
+};
+
 /** Normalise a ToolResultValue to its two components. */
 export const extractToolResult = (
 	value: ToolResultValue,
 ): {
 	content: ChatCompletionToolMessageParam["content"];
 	contentText: string;
+	structuredContent?: unknown;
+	isError: boolean;
+	meta?: ToolExecutionMeta;
 } => {
+	if (isToolExecutionResult(value)) {
+		const contentText = toolMessageContentToText(value.content);
+		const structuredText =
+			value.structuredContent === undefined
+				? undefined
+				: serializeStructuredContent(value.structuredContent);
+		const modelText = structuredText
+			? contentText.trim() && contentText.trim() !== structuredText.trim()
+				? `${contentText}\n\n${structuredText}`
+				: structuredText
+			: contentText;
+		return {
+			content: modelText,
+			contentText: modelText,
+			structuredContent: value.structuredContent,
+			isError: value.isError ?? false,
+			meta: value.meta,
+		};
+	}
 	if (typeof value === "string") {
-		return { content: value, contentText: value };
+		return { content: value, contentText: value, isError: false };
 	}
 	return {
 		content: value,
 		contentText: toolMessageContentToText(value),
+		isError: false,
 	};
 };
 
@@ -86,8 +148,21 @@ export const parseToolInput = <T>(schema: ToolSchema, input: unknown): T =>
 // Base tool interface for runtime storage (no generic constraints)
 export interface BaseTool {
 	name: string;
+	title?: string;
 	description: string;
 	schema: ToolSchema;
+	outputSchema?: JsonSchema;
+	icons?: Array<{
+		src: string;
+		mimeType?: string;
+		sizes?: string[];
+	}>;
+	annotations?: {
+		readOnlyHint?: boolean;
+		destructiveHint?: boolean;
+		idempotentHint?: boolean;
+		openWorldHint?: boolean;
+	};
 	metadata?: Record<string, unknown>;
 	execute: (
 		input: unknown,

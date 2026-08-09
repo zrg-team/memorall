@@ -5,6 +5,7 @@ export * from "flow-core/interfaces/services/filesystem";
 export * from "flow-core/interfaces/services/flow-catalog";
 export * from "flow-core/interfaces/services/llm";
 export * from "flow-core/interfaces/services/logger";
+export * from "flow-core/interfaces/services/agent-sandbox";
 export * from "flow-core/interfaces/services/sandbox";
 export * from "flow-core/interfaces/services/skill";
 export * from "flow-core/interfaces/services/web-browser";

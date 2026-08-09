@@ -6,6 +6,7 @@
  *   - logger.ts     → ServiceRegistry.logger
  *   - filesystem.ts → ServiceRegistry.fs?
  *   - web-browser.ts → ServiceRegistry.webBrowser?
+ *   - agent-sandbox.ts → ServiceRegistry.sandboxRuntime?
  *   - sandbox.ts    → ServiceRegistry.sandboxContainer?
  *   - skill.ts      → ServiceRegistry.skillService?
  *   - flow-catalog.ts  → ServiceRegistry.flowCatalog?

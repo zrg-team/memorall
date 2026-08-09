@@ -157,6 +157,41 @@ function base64ToBytes(base64) {
   return bytes;
 }
 
+const previewRelayChannel = typeof BroadcastChannel === 'undefined'
+  ? null
+  : new BroadcastChannel('memorall-sandbox-preview-relay');
+if (previewRelayChannel) {
+  previewRelayChannel.onmessage = handleMainMessage;
+}
+
+function sendRequestThroughBroadcastRelay(port, method, url, headers, body) {
+  if (!previewRelayChannel) {
+    return Promise.reject(new Error('Sandbox preview BroadcastChannel is unavailable'));
+  }
+  return new Promise((resolve, reject) => {
+    const id = ++requestId;
+    const timeoutId = setTimeout(() => {
+      pendingRequests.delete(id);
+      reject(new Error(`Sandbox preview request timed out: ${method} ${url}`));
+    }, 120000);
+    pendingRequests.set(id, {
+      resolve: (data) => {
+        clearTimeout(timeoutId);
+        resolve(data);
+      },
+      reject: (error) => {
+        clearTimeout(timeoutId);
+        reject(error);
+      },
+    });
+    previewRelayChannel.postMessage({
+      type: 'request',
+      id,
+      data: { port, method, url, headers, body },
+    });
+  });
+}
+
 /**
  * Handle messages from main thread
  */
@@ -170,6 +205,8 @@ self.addEventListener('message', (event) => {
     // Initialize communication channel
     mainPort = event.ports[0];
     mainPort.onmessage = handleMainMessage;
+	mainPort.start();
+	mainPort.postMessage({ type: 'relay-ready' });
     DEBUG && console.log('[SW] Initialized communication channel with transferred port');
     // Re-claim clients so that pages opened after SW activation get controlled.
     // Without this, controllerchange never fires for late-arriving pages.
@@ -294,15 +331,7 @@ async function sendRequest(port, method, url, headers, body) {
     for (const client of allClients) {
       client.postMessage({ type: 'sw-needs-init' });
     }
-    // Wait up to 5s for a client to re-initialize the port
-    // (main thread may be busy with heavy operations like CLI execution)
-    await new Promise(resolve => {
-      const check = setInterval(() => { if (mainPort) { clearInterval(check); resolve(); } }, 50);
-      setTimeout(() => { clearInterval(check); resolve(); }, 5000);
-    });
-    if (!mainPort) {
-      throw new Error('Service Worker not initialized - no connection to main thread');
-    }
+    return sendRequestThroughBroadcastRelay(port, method, url, headers, body);
   }
 
   const id = ++requestId;
@@ -340,13 +369,27 @@ async function sendStreamingRequest(port, method, url, headers, body) {
     for (const client of allClients) {
       client.postMessage({ type: 'sw-needs-init' });
     }
-    await new Promise(resolve => {
-      const check = setInterval(() => { if (mainPort) { clearInterval(check); resolve(); } }, 50);
-      setTimeout(() => { clearInterval(check); resolve(); }, 5000);
+    const result = await sendRequestThroughBroadcastRelay(
+      port,
+      method,
+      url,
+      headers,
+      body,
+    );
+    const bytes = result.bodyBase64
+      ? base64ToBytes(result.bodyBase64)
+      : new TextEncoder().encode(result.body || '');
+    const stream = new ReadableStream({
+      start(controller) {
+        if (bytes.length > 0) controller.enqueue(bytes);
+        controller.close();
+      },
     });
-    if (!mainPort) {
-      throw new Error('Service Worker not initialized');
-    }
+    return {
+      stream,
+      headersPromise: Promise.resolve(result),
+      id: requestId,
+    };
   }
 
   const id = ++requestId;

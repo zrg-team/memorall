@@ -1,4 +1,5 @@
 // Core tools — register on import
+import { toolRegistry } from "flow-core/registries/tool-registry";
 import "flow-core/tools/calculator";
 import "flow-core/tools/current-time";
 import "flow-core/tools/load-skill";
@@ -31,6 +32,8 @@ import "flow-core/tools/sandbox-container/container-fetch-resource";
 import "flow-core/tools/sandbox-container/container-request-server";
 import "flow-core/tools/sandbox-container/container-render-server";
 
+import "flow-core/tools/agent-sandbox";
+
 import "flow-core/tools/web/web-search-engine";
 import "flow-core/tools/web/web-open";
 import "flow-core/tools/web/web-read";
@@ -57,3 +60,5 @@ import "flow-core/tools/lottie/lottie-edit";
 import "flow-core/tools/lottie/lottie-read";
 import "flow-core/tools/lottie/lottie-validate";
 import "flow-core/tools/lottie/lottie-show";
+
+toolRegistry.markDeprecatedByPrefix("container_", "sandbox_* grouped tools");

@@ -616,7 +616,7 @@ exports[`flows-core registered contracts > registers every core step contract 2`
         "messages": "messages",
         "tools": "tools",
       },
-      "description": "Enable isolated Node.js container tools for runtime execution, command execution/listening, npm, filesystem, server lifecycle, logs, and resource fetch.",
+      "description": "Run code, commands, npm packages, and web previews in a reusable browser sandbox session.",
       "enabledByDefault": false,
       "feature": {
         "graphTypes": [
@@ -639,12 +639,12 @@ exports[`flows-core registered contracts > registers every core step contract 2`
         ],
         "outputs": [
           {
-            "description": "Messages with Node.js sandbox usage instruction",
+            "description": "Messages with Browser Sandbox instructions",
             "name": "messages",
             "type": "Message[]",
           },
           {
-            "description": "Tools extended with container toolset",
+            "description": "Tools extended with the selected sandbox profile",
             "name": "tools",
             "type": "Tool[]",
           },
@@ -850,6 +850,13 @@ exports[`flows-core registered contracts > registers every core tool contract 1`
   "planner_create",
   "planner_get",
   "planner_remove_item",
+  "sandbox_inspect",
+  "sandbox_network",
+  "sandbox_packages",
+  "sandbox_preview",
+  "sandbox_process",
+  "sandbox_run",
+  "sandbox_snapshot",
   "send_message_to_agent",
   "web_dom_action",
   "web_find_in_page",
@@ -1921,6 +1928,343 @@ exports[`flows-core registered contracts > registers every core tool contract 2`
       },
       "required": [
         "item_id",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "Inspect sandbox status or logs, clear logs, or reset the active session.",
+    "name": "sandbox_inspect",
+    "parameters": {
+      "properties": {
+        "level": {
+          "enum": [
+            "log",
+            "info",
+            "warn",
+            "error",
+            "debug",
+          ],
+          "type": "string",
+        },
+        "limit": {
+          "type": "number",
+        },
+        "operation": {
+          "enum": [
+            "status",
+            "logs",
+            "clear_logs",
+            "reset",
+          ],
+          "type": "string",
+        },
+      },
+      "required": [
+        "operation",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "Fetch an HTTP or HTTPS resource from inside the active sandbox runtime.",
+    "name": "sandbox_network",
+    "parameters": {
+      "properties": {
+        "body": {
+          "type": "string",
+        },
+        "headers": {
+          "additionalProperties": {
+            "type": "string",
+          },
+          "type": "object",
+        },
+        "maxChars": {
+          "type": "number",
+        },
+        "method": {
+          "enum": [
+            "GET",
+            "POST",
+            "PUT",
+            "PATCH",
+            "DELETE",
+            "HEAD",
+            "OPTIONS",
+          ],
+          "type": "string",
+        },
+        "operation": {
+          "enum": [
+            "fetch",
+          ],
+          "type": "string",
+        },
+        "responseType": {
+          "enum": [
+            "auto",
+            "json",
+            "text",
+            "html",
+          ],
+          "type": "string",
+        },
+        "timeoutMs": {
+          "type": "number",
+        },
+        "url": {
+          "type": "string",
+        },
+      },
+      "required": [
+        "operation",
+        "url",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "Install npm packages, install a workspace package.json, or list installed packages.",
+    "name": "sandbox_packages",
+    "parameters": {
+      "properties": {
+        "operation": {
+          "enum": [
+            "install",
+            "install_from_package_json",
+            "list",
+          ],
+          "type": "string",
+        },
+        "packageSpec": {
+          "type": "string",
+        },
+        "save": {
+          "type": "boolean",
+        },
+        "saveDev": {
+          "type": "boolean",
+        },
+      },
+      "required": [
+        "operation",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "Start, restart, stop, list, request, or render browser sandbox web previews.",
+    "name": "sandbox_preview",
+    "parameters": {
+      "properties": {
+        "body": {
+          "type": "string",
+        },
+        "entryPath": {
+          "type": "string",
+        },
+        "headers": {
+          "additionalProperties": {
+            "type": "string",
+          },
+          "type": "object",
+        },
+        "hostname": {
+          "type": "string",
+        },
+        "kind": {
+          "enum": [
+            "express",
+            "vite",
+            "next",
+            "auto",
+          ],
+          "type": "string",
+        },
+        "maxChars": {
+          "type": "number",
+        },
+        "method": {
+          "enum": [
+            "GET",
+            "POST",
+            "PUT",
+            "PATCH",
+            "DELETE",
+            "HEAD",
+            "OPTIONS",
+          ],
+          "type": "string",
+        },
+        "operation": {
+          "enum": [
+            "start",
+            "restart",
+            "stop",
+            "list",
+            "request",
+            "render",
+          ],
+          "type": "string",
+        },
+        "path": {
+          "type": "string",
+        },
+        "port": {
+          "type": "number",
+        },
+        "previewId": {
+          "type": "string",
+        },
+        "projectDir": {
+          "type": "string",
+        },
+        "responseType": {
+          "enum": [
+            "auto",
+            "json",
+            "text",
+            "html",
+          ],
+          "type": "string",
+        },
+        "template": {
+          "enum": [
+            "express",
+            "vite-react",
+            "next-pages",
+            "next-app",
+          ],
+          "type": "string",
+        },
+        "timeoutMs": {
+          "type": "number",
+        },
+      },
+      "required": [
+        "operation",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "List, read with an opaque cursor, write stdin to, or stop sandbox processes.",
+    "name": "sandbox_process",
+    "parameters": {
+      "properties": {
+        "appendNewline": {
+          "type": "boolean",
+        },
+        "cursor": {
+          "type": "string",
+        },
+        "input": {
+          "type": "string",
+        },
+        "maxChars": {
+          "type": "number",
+        },
+        "operation": {
+          "enum": [
+            "list",
+            "read",
+            "stdin",
+            "stop",
+          ],
+          "type": "string",
+        },
+        "processId": {
+          "type": "string",
+        },
+        "waitMs": {
+          "type": "number",
+        },
+      },
+      "required": [
+        "operation",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "Run inline code, a workspace file, a command, or persistent REPL code in the active sandbox.",
+    "name": "sandbox_run",
+    "parameters": {
+      "properties": {
+        "code": {
+          "type": "string",
+        },
+        "command": {
+          "type": "string",
+        },
+        "commandTimeoutMs": {
+          "type": "number",
+        },
+        "cwd": {
+          "type": "string",
+        },
+        "env": {
+          "additionalProperties": {
+            "type": "string",
+          },
+          "type": "object",
+        },
+        "filename": {
+          "type": "string",
+        },
+        "maxLogEntries": {
+          "type": "number",
+        },
+        "operation": {
+          "enum": [
+            "code",
+            "file",
+            "command",
+            "repl",
+          ],
+          "type": "string",
+        },
+        "path": {
+          "type": "string",
+        },
+        "replId": {
+          "type": "string",
+        },
+        "timeoutMs": {
+          "type": "number",
+        },
+        "waitTimeoutMs": {
+          "type": "number",
+        },
+      },
+      "required": [
+        "operation",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "Capture or restore an opaque snapshot of the active sandbox session.",
+    "name": "sandbox_snapshot",
+    "parameters": {
+      "properties": {
+        "label": {
+          "type": "string",
+        },
+        "operation": {
+          "enum": [
+            "create",
+            "restore",
+          ],
+          "type": "string",
+        },
+        "snapshotId": {
+          "type": "string",
+        },
+      },
+      "required": [
+        "operation",
       ],
       "type": "object",
     },

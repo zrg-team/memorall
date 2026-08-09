@@ -60,7 +60,8 @@
 	const swController = navigator.serviceWorker?.controller;
 	console.log('[renderer] swController=', swController);
 
-	if (swController) {
+	const isEmbeddedRenderer = window.parent !== window;
+	if (swController && isEmbeddedRenderer) {
 		const channel = new MessageChannel();
 
 		window._swRelayPort = channel.port1;
@@ -110,8 +111,17 @@
 		}
 
 		await new Promise((r) => setTimeout(r, 100));
-	} else {
+	} else if (!swController) {
 		console.warn('[renderer] NO swController — SW requests will timeout!');
+	} else {
+		console.log('[renderer] using the existing top-level sandbox relay');
+		if (rendererImportMap) {
+			swController.postMessage({
+				type: 'set-import-map',
+				data: { port: Number(port), importMap: rendererImportMap },
+			});
+		}
+		await new Promise((resolve) => setTimeout(resolve, 50));
 	}
 
 	// ── Fetch virtual server HTML ─────────────────────────────────────────────

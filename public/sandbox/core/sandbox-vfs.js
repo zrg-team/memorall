@@ -25,6 +25,10 @@ export const mountedWorkspaceDirectories = new Set();
 export const materializedWorkspaceFiles = new Map();
 export const pendingWorkspaceOps = [];
 
+// Dependency trees are runtime state. Persisting them through the host workspace
+// bridge is both expensive and incorrect; package manifests remain workspace files.
+const SANDBOX_LOCAL_ROOTS = ["/node_modules"];
+
 // ---------------------------------------------------------------------------
 // Path utilities
 // ---------------------------------------------------------------------------
@@ -59,10 +63,17 @@ export const dirname = (inputPath) => {
 export const toCanonicalMountedPath = (inputPath) => normalizePath(inputPath);
 
 export const isDocumentsPath = (path) =>
-	path === DOCUMENTS_MOUNT_ROOT || path.startsWith(`${DOCUMENTS_MOUNT_ROOT}/`);
+	DOCUMENTS_MOUNT_ROOT !== WORKSPACES_MOUNT_ROOT &&
+	(path === DOCUMENTS_MOUNT_ROOT || path.startsWith(`${DOCUMENTS_MOUNT_ROOT}/`));
 
 export const isWorkspacePath = (path) =>
-	path === WORKSPACES_MOUNT_ROOT || path.startsWith(`${WORKSPACES_MOUNT_ROOT}/`);
+	WORKSPACES_MOUNT_ROOT === "/"
+		? path.startsWith("/") &&
+			!SANDBOX_LOCAL_ROOTS.some(
+				(root) => path === root || path.startsWith(`${root}/`),
+			)
+		: path === WORKSPACES_MOUNT_ROOT ||
+			path.startsWith(`${WORKSPACES_MOUNT_ROOT}/`);
 
 export const assertDocumentsMountLoaded = () => {
 	if (!vfsBoolState.documentsMountLoaded) {

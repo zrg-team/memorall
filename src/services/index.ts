@@ -8,5 +8,6 @@ import { ServiceManager } from "./service-manager";
 export const serviceManager = ServiceManager.getInstance();
 
 export * from "./sandbox-container";
+export * from "./agent-sandbox";
 export * from "./web-browser";
 export * from "./cron-jobs";

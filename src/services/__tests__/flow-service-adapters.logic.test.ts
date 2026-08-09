@@ -277,6 +277,10 @@ describe("flow service adapters", () => {
 			"sandboxContainer",
 			expect.any(Object),
 		);
+		expect(register).toHaveBeenCalledWith(
+			"sandboxRuntime",
+			expect.any(Object),
+		);
 		register.mockRestore();
 	});
 });

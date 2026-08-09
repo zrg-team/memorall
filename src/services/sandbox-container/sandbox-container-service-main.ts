@@ -94,6 +94,7 @@ const DEFAULT_COMMAND_WAIT_TIMEOUT_MS = 10_000;
 const COMMAND_REQUEST_TIMEOUT_BUFFER_MS = 5_000;
 const EMPTY_LOCAL_BUILD_RETRY_ATTEMPTS = 20;
 const SANDBOX_RUNTIME_WORKSPACE_SYNC = "memorall-sandbox-workspace-sync";
+const SANDBOX_PREVIEW_RELAY_CHANNEL = "memorall-sandbox-preview-relay";
 
 interface RuntimeWorkspaceChange {
 	operation: "write" | "delete" | "rename" | "mkdir";
@@ -158,6 +159,8 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 	>();
 	/** Relay channel: port1 stays here, port2 is transferred to the SW as mainPort. */
 	private swRelayChannel: MessageChannel | null = null;
+	private swRelayReady: Promise<void> | null = null;
+	private swBroadcastChannel: BroadcastChannel | null = null;
 	/** Last known active service worker — used to re-init relay if SW restarts. */
 	private swInstance: ServiceWorker | null = null;
 	/** Keepalive timer — sends a periodic ping to prevent Chrome from killing the SW. */
@@ -216,6 +219,8 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 			);
 		}
 
+		this.ensureSwBroadcastRelay();
+
 		// Register the AlmostNode service worker from this outer (non-sandboxed)
 		// page so it can control the sandbox iframe context. Manifest sandbox pages
 		// have null origin and cannot register service workers themselves.
@@ -231,7 +236,23 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 
 		const iframe = document.createElement("iframe");
 		iframe.style.display = "none";
-		iframe.src = chrome.runtime.getURL(this.options.frameUrl);
+		const runtime = chrome.runtime as typeof chrome.runtime & {
+			getManifest?: () => chrome.runtime.Manifest;
+		};
+		const manifest = (typeof runtime.getManifest === "function"
+			? runtime.getManifest()
+			: await fetch(chrome.runtime.getURL("manifest.json")).then((response) => {
+					if (!response.ok) {
+						throw new Error(`Failed to read extension manifest: ${response.status}`);
+					}
+					return response.json();
+				})) as chrome.runtime.Manifest & { sandbox?: { pages?: string[] } };
+		const manifestSandboxPages = manifest.sandbox?.pages ?? [];
+		const runtimePage =
+			manifestSandboxPages.find((page) =>
+				page.includes("sandbox-container-runtime"),
+			) ?? manifestSandboxPages.at(-1);
+		iframe.src = chrome.runtime.getURL(runtimePage ?? this.options.frameUrl);
 
 		const loaded = new Promise<void>((resolve, reject) => {
 			const timeoutId = window.setTimeout(() => {
@@ -319,14 +340,16 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 				return;
 			}
 
-			this.initSwRelay(sw);
+			await this.initSwRelay(sw);
 
 			// Re-init relay if the SW updates or regains control.
 			navigator.serviceWorker.addEventListener("controllerchange", () => {
 				const newSw = navigator.serviceWorker.controller;
 				if (newSw) {
 					logInfo("[SW] Controller changed — re-initialising relay");
-					this.initSwRelay(newSw);
+					void this.initSwRelay(newSw, true).catch((error) =>
+						logWarn("[SW] Failed to re-initialise relay", error),
+					);
 				}
 			});
 
@@ -340,7 +363,11 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 					if (event.data?.type === "sw-needs-init") {
 						const activeSw =
 							this.swInstance ?? navigator.serviceWorker.controller;
-						if (activeSw) this.initSwRelay(activeSw);
+						if (activeSw) {
+							void this.initSwRelay(activeSw, true).catch((error) =>
+								logWarn("[SW] Failed to recover relay", error),
+							);
+						}
 					}
 				},
 			);
@@ -349,7 +376,10 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 		}
 	}
 
-	private initSwRelay(sw: ServiceWorker): void {
+	private initSwRelay(sw: ServiceWorker, force = false): Promise<void> {
+		if (!force && this.swInstance === sw && this.swRelayReady) {
+			return this.swRelayReady;
+		}
 		this.swInstance = sw;
 		// Close any previous relay channel.
 		if (this.swRelayChannel) {
@@ -357,14 +387,24 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 		}
 		this.swRelayChannel = new MessageChannel();
 
+		const ready = new Promise<void>((resolve, reject) => {
+			const timeoutId = window.setTimeout(
+				() => reject(new Error("Sandbox service-worker relay handshake timed out.")),
+				5_000,
+			);
+			this.swRelayChannel!.port1.onmessage = (event: MessageEvent) => {
+				if (event.data?.type === "relay-ready") {
+					window.clearTimeout(timeoutId);
+					resolve();
+					return;
+				}
+				void this.relaySwMessage(event.data);
+			};
+		});
+		this.swRelayChannel.port1.start();
+
 		// Send port2 to SW — it becomes mainPort inside __sw__.js.
 		sw.postMessage({ type: "init" }, [this.swRelayChannel.port2]);
-
-		// Relay SW request messages to the sandbox iframe.
-		this.swRelayChannel.port1.onmessage = (event: MessageEvent) => {
-			void this.relaySwMessage(event.data);
-		};
-		this.swRelayChannel.port1.start();
 		logInfo("[SW] Relay channel initialised");
 
 		// Keep the SW alive with a periodic ping so Chrome doesn't kill it and
@@ -374,6 +414,23 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 		this.swKeepaliveTimer = setInterval(() => {
 			sw.postMessage({ type: "keepalive" });
 		}, 20_000);
+		this.swRelayReady = ready;
+		void ready.catch(() => {
+			if (this.swRelayReady === ready) {
+				this.swRelayReady = null;
+			}
+		});
+		return ready;
+	}
+
+	private ensureSwBroadcastRelay(): void {
+		if (this.swBroadcastChannel || typeof BroadcastChannel === "undefined") return;
+		this.swBroadcastChannel = new BroadcastChannel(SANDBOX_PREVIEW_RELAY_CHANNEL);
+		this.swBroadcastChannel.onmessage = (event: MessageEvent) => {
+			void this.relaySwMessage(event.data, (message) =>
+				this.swBroadcastChannel?.postMessage(message),
+			);
+		};
 	}
 
 	/**
@@ -472,7 +529,8 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 		return lastResult ?? makeRequest();
 	}
 
-	private async relaySwMessage(msg: {
+	private async relaySwMessage(
+		msg: {
 		type: string;
 		id: number;
 		data: {
@@ -482,8 +540,11 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 			headers: Record<string, string>;
 			body: ArrayBuffer | null;
 		};
-	}): Promise<void> {
-		if (msg.type !== "request" || !this.swRelayChannel) return;
+		},
+		reply: (message: unknown) => void = (message) =>
+			this.swRelayChannel?.port1.postMessage(message),
+	): Promise<void> {
+		if (msg.type !== "request") return;
 		const { id, data } = msg;
 		try {
 			const result = await this.handleSwRequestWithRetry({
@@ -494,14 +555,14 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 				headers: data.headers ?? {},
 				body: data.body ?? null,
 			});
-			this.swRelayChannel.port1.postMessage({
+			reply({
 				type: "response",
 				id,
 				data: result,
 			});
 		} catch (err) {
 			logError(`[SW relay] ${data.method} ${data.url} → error`, err);
-			this.swRelayChannel.port1.postMessage({
+			reply({
 				type: "response",
 				id,
 				error: err instanceof Error ? err.message : String(err),
@@ -587,8 +648,10 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 		operation: string,
 		payload: Record<string, unknown>,
 	): Promise<unknown> {
+		const rawPath =
+			operation === "fs.rename" ? payload["oldPath"] : payload["path"];
 		const path = this.toWorkspaceCanonicalPath(
-			this.normalizeVirtualPath(String(payload["path"] ?? "")),
+			this.normalizeVirtualPath(String(rawPath ?? "")),
 		);
 		switch (operation) {
 			case "fs.readFile": {
@@ -615,8 +678,7 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 				const newPath = this.toWorkspaceCanonicalPath(
 					this.normalizeVirtualPath(String(payload["newPath"] ?? "")),
 				);
-				const newName = newPath.split("/").pop()!;
-				await documentFileSystemService.rename(path, newName);
+				await documentFileSystemService.renamePath(path, newPath);
 				return { oldPath: path, newPath };
 			}
 			default:
@@ -850,6 +912,16 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 			window.clearTimeout(this.workspaceHotReloadTimer);
 			this.workspaceHotReloadTimer = null;
 		}
+		if (this.swKeepaliveTimer !== null) {
+			clearInterval(this.swKeepaliveTimer);
+			this.swKeepaliveTimer = null;
+		}
+		this.swRelayChannel?.port1.close();
+		this.swRelayChannel = null;
+		this.swRelayReady = null;
+		this.swInstance = null;
+		this.swBroadcastChannel?.close();
+		this.swBroadcastChannel = null;
 		this.workspaceMountSynced = false;
 		if (this.fsChangeUnsubscribe) {
 			this.fsChangeUnsubscribe();
@@ -983,7 +1055,7 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 	): Promise<{ path: string }> {
 		const normalizedPath = this.normalizeVirtualPath(request.path);
 		const workspacePath = this.toWorkspaceCanonicalPath(normalizedPath);
-		await this.syncDocumentsMount();
+		await this.syncWorkspaceMount();
 		return this.request("fs.writeFile", {
 			...request,
 			path: workspacePath,
@@ -995,10 +1067,10 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 	): Promise<SandboxFsReadFileResult> {
 		const normalizedPath = this.normalizeVirtualPath(request.path);
 		const workspacePath = this.toWorkspaceCanonicalPath(normalizedPath);
-		await this.syncDocumentsMount();
+		await this.syncWorkspaceMount();
 		const bytes = await documentFileSystemService.readFile(workspacePath);
 		const content = new TextDecoder().decode(bytes);
-		await this.request("fs.materializeDocumentFile", {
+		await this.request("fs.materializeWorkspaceFile", {
 			path: workspacePath,
 			content,
 		});
@@ -1008,7 +1080,7 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 	async mkdir(request: SandboxFsMkdirRequest): Promise<{ path: string }> {
 		const normalizedPath = this.normalizeVirtualPath(request.path);
 		const workspacePath = this.toWorkspaceCanonicalPath(normalizedPath);
-		await this.syncDocumentsMount();
+		await this.syncWorkspaceMount();
 		return this.request("fs.mkdir", { ...request, path: workspacePath });
 	}
 
@@ -1017,14 +1089,14 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 	): Promise<SandboxFsReaddirResult> {
 		const normalizedPath = this.normalizeVirtualPath(request.path);
 		const workspacePath = this.toWorkspaceCanonicalPath(normalizedPath);
-		await this.syncDocumentsMount();
+		await this.syncWorkspaceMount();
 		return this.request("fs.readdir", { path: workspacePath });
 	}
 
 	async unlink(request: SandboxFsUnlinkRequest): Promise<{ path: string }> {
 		const normalizedPath = this.normalizeVirtualPath(request.path);
 		const workspacePath = this.toWorkspaceCanonicalPath(normalizedPath);
-		await this.syncDocumentsMount();
+		await this.syncWorkspaceMount();
 		return this.request("fs.unlink", { ...request, path: workspacePath });
 	}
 
@@ -1037,7 +1109,7 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 		const newPath = this.toWorkspaceCanonicalPath(
 			this.normalizeVirtualPath(request.newPath),
 		);
-		await this.syncDocumentsMount();
+		await this.syncWorkspaceMount();
 		return this.request("fs.rename", { oldPath, newPath });
 	}
 
@@ -1046,7 +1118,7 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 	): Promise<SandboxFsExistsResult> {
 		const normalizedPath = this.normalizeVirtualPath(request.path);
 		const workspacePath = this.toWorkspaceCanonicalPath(normalizedPath);
-		await this.syncDocumentsMount();
+		await this.syncWorkspaceMount();
 		return this.request("fs.exists", { path: workspacePath });
 	}
 
@@ -1334,7 +1406,7 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 			);
 			if (missingWsPath && !retriedPaths.has(missingWsPath)) {
 				retriedPaths.add(missingWsPath);
-				const materialized = await this.materializeMountedDocumentFile(
+				const materialized = await this.materializeMountedWorkspaceFile(
 					this.toWorkspaceCanonicalPath(missingWsPath),
 				);
 				if (materialized) continue;
@@ -1350,16 +1422,23 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 	async installPackage(
 		request: SandboxNpmInstallRequest,
 	): Promise<SandboxNpmInstallResult> {
-		return this.request("npm.install", request);
+		await this.syncWorkspaceMount();
+		const result = await this.request("npm.install", request);
+		await this.flushWorkspaceWrites();
+		return result;
 	}
 
 	async installFromPackageJson(
 		request: SandboxNpmInstallFromPackageJsonRequest = {},
 	): Promise<SandboxNpmInstallResult> {
-		return this.request("npm.installFromPackageJson", request);
+		await this.syncWorkspaceMount();
+		const result = await this.request("npm.installFromPackageJson", request);
+		await this.flushWorkspaceWrites();
+		return result;
 	}
 
 	async listInstalledPackages(): Promise<SandboxNpmListResult> {
+		await this.syncWorkspaceMount();
 		return this.request("npm.list", undefined);
 	}
 
@@ -1586,10 +1665,9 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 			navigator.serviceWorker.controller ??
 			(await navigator.serviceWorker.ready).active;
 		if (sw) {
-			this.initSwRelay(sw);
-			// Wait for the SW to wake up, receive the port message, and set
-			// mainPort before the renderer iframe makes its first fetch.
-			await new Promise<void>((r) => setTimeout(r, 200));
+			await this.initSwRelay(sw).catch((error) =>
+				logWarn("[SW] Falling back to the extension job bridge", error),
+			);
 		}
 
 		const previewConfig = await this.buildRendererPreviewConfig(
@@ -1711,6 +1789,15 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 	async getServerRenderUrl(
 		request: SandboxServerRenderUrlRequest,
 	): Promise<SandboxServerRenderUrlResult> {
+		const serviceWorker = navigator.serviceWorker;
+		const sw = serviceWorker
+			? (this.swInstance ?? serviceWorker.controller ?? (await serviceWorker.ready).active)
+			: null;
+		if (sw) {
+			await this.initSwRelay(sw).catch((error) =>
+				logWarn("[SW] Render URL will use the extension job bridge", error),
+			);
+		}
 		const previewConfig = await this.buildRendererPreviewConfig(
 			request.port,
 			request.path,
@@ -1725,7 +1812,10 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 	async restoreSnapshot(
 		request: SandboxRestoreSnapshotRequest,
 	): Promise<{ restored: true }> {
-		return this.request("snapshot.restore", request, 60_000);
+		const result = await this.request("snapshot.restore", request, 60_000);
+		this.workspaceMountSynced = true;
+		await this.flushWorkspaceWrites();
+		return result;
 	}
 }
 

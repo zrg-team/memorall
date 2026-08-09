@@ -145,6 +145,9 @@ node_modules
 
 # testing
 coverage
+playwright-report/
+test-results/
+.playwright-cli/
 
 # production
 dist
@@ -171,6 +174,8 @@ sandbox
 !public/sandbox/
 !public/sandbox/runtime/
 !public/sandbox/runtime/*.js
+!e2e/sandbox/
+!e2e/sandbox/**
 
 .claude
 

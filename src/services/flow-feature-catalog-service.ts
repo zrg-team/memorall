@@ -6,6 +6,11 @@ import {
 } from "@/services/flows-core/registries/step-registry";
 import { HYPERFRAMES_FEATURE_SYSTEM_PROMPT } from "@/services/flows-core/steps/features/hyperframes-feature/hyperframes-feature";
 import { LOTTIE_ANIMATION_FEATURE_SYSTEM_PROMPT } from "@/services/flows-core/steps/features/lottie-animation-feature/lottie-animation-feature";
+import {
+	BROWSER_SANDBOX_FEATURE_DESCRIPTION,
+	BROWSER_SANDBOX_FEATURE_SYSTEM_PROMPT,
+	BROWSER_SANDBOX_FEATURE_TOOLS,
+} from "@/services/flows-core/steps/features/nodejs-sandbox-feature";
 
 export type { StepIOField };
 
@@ -753,6 +758,18 @@ const FEATURE_UI_METADATA: Record<string, FeatureCatalogMetadata> = {
 		sectionOrder: 3,
 	},
 } satisfies Record<string, FeatureCatalogMetadata>;
+
+// The persisted catalog key remains unchanged, but runtime metadata comes from
+// the feature descriptor so tool lists and instructions cannot drift.
+FEATURE_UI_METADATA["step-nodejs-sandbox-feature"] = {
+	...FEATURE_UI_METADATA["step-nodejs-sandbox-feature"],
+	description: BROWSER_SANDBOX_FEATURE_DESCRIPTION,
+	displayName: "Browser Sandbox",
+	tools: [...BROWSER_SANDBOX_FEATURE_TOOLS],
+	systemPrompt: BROWSER_SANDBOX_FEATURE_SYSTEM_PROMPT,
+	icon: { name: "SquareTerminal", type: "lucide" },
+	accentColor: "#16a34a",
+};
 
 const isFeatureMetadata = (
 	value: StepFeatureMetadata | undefined,

@@ -243,6 +243,21 @@ export class ToolRegistryManager {
 		});
 	}
 
+	markDeprecatedByPrefix(prefix: string, replacement?: string): void {
+		this.assertMutable("mark tools deprecated");
+		for (const [id, entry] of this.entries) {
+			if (!id.startsWith(prefix)) continue;
+			this.entries.set(id, {
+				...entry,
+				metadata: {
+					...entry.metadata,
+					deprecated: true,
+					...(replacement ? { replacement } : {}),
+				},
+			});
+		}
+	}
+
 	/**
 	 * Get a tool instance with services bound (type-safe version)
 	 */

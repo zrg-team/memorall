@@ -10,8 +10,12 @@ type JsonSchema = Record<string, unknown>;
 
 type MCPToolDefinition = {
 	name: string;
+	title?: string;
 	description?: string;
 	inputSchema: JsonSchema;
+	outputSchema?: JsonSchema;
+	icons?: Array<{ src: string; mimeType?: string; sizes?: string[] }>;
+	annotations?: Record<string, unknown>;
 };
 
 type MCPToolMetadata = {
@@ -19,6 +23,10 @@ type MCPToolMetadata = {
 	mcp: {
 		serverName: string;
 		originalToolName: string;
+		title?: string;
+		outputSchema?: JsonSchema;
+		icons?: Array<{ src: string; mimeType?: string; sizes?: string[] }>;
+		annotations?: Record<string, unknown>;
 	};
 };
 
@@ -576,6 +584,10 @@ export async function loadMcpTools(
 						mcp: {
 							serverName,
 							originalToolName: tool.name,
+							title: tool.title,
+							outputSchema: tool.outputSchema,
+							icons: tool.icons,
+							annotations: tool.annotations,
 						},
 					};
 					return dynamicTool;

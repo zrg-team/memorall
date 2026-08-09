@@ -37,12 +37,18 @@ export const runtimeState = {
 let almostNodeLibPromise = null;
 let almostNodeLibModule = null;
 
+const sandboxAssetUrl = (path) => {
+	const normalizedPath = String(path).replace(/^\/+/, "");
+	return new URL(`/sandbox/${normalizedPath}`, globalThis.location.href).href;
+};
+
 export const loadAlmostNodeLib = async () => {
 	if (almostNodeLibModule) {
 		return almostNodeLibModule;
 	}
 	if (!almostNodeLibPromise) {
-		almostNodeLibPromise = import("../vendors/almostnode.bundle.js")
+		const moduleUrl = sandboxAssetUrl("vendors/almostnode.bundle.js");
+		almostNodeLibPromise = import(/* webpackIgnore: true */ moduleUrl)
 			.then((module) => {
 				almostNodeLibModule = module;
 				return module;
@@ -99,10 +105,23 @@ export const pushRuntimeLog = (level, message) => {
 };
 
 export const rememberInstalledPackages = (installed) => {
-	if (!installed || typeof installed !== "object") return;
-	for (const [name, version] of Object.entries(installed)) {
-		runtimeState.installedPackages.set(name, String(version));
+	if (!installed || typeof installed !== "object") return {};
+	const packages = "installed" in installed ? installed.installed : installed;
+	const entries =
+		packages instanceof Map
+			? packages.entries()
+			: Object.entries(packages && typeof packages === "object" ? packages : {});
+	const normalized = {};
+	for (const [name, metadata] of entries) {
+		const version =
+			metadata && typeof metadata === "object" && "version" in metadata
+				? metadata.version
+				: metadata;
+		if (typeof version !== "string" && typeof version !== "number") continue;
+		normalized[name] = String(version);
+		runtimeState.installedPackages.set(name, normalized[name]);
 	}
+	return normalized;
 };
 
 export const normalizeClientUrl = (rawUrl) => {
@@ -283,6 +302,9 @@ const beginExecutionCapture = (maxLogEntries) => {
 const currentTruncatedLogCount = () =>
 	runtimeState.currentExecutionContext?.truncated ?? 0;
 
+const flushForwardedConsoleEvents = () =>
+	new Promise((resolve) => setTimeout(resolve, 0));
+
 const unwrapExecutionValue = (value) =>
 	value && typeof value === "object" && "exports" in value ? value.exports : value;
 
@@ -297,7 +319,11 @@ const runTimedExecution = async ({
 	const startedAt = Date.now();
 	const logs = beginExecutionCapture(maxLogEntries);
 	try {
-		const { timedOut, value } = await withTimeout(task, timeoutMs);
+		const { timedOut, value } = await withTimeout(
+			Promise.resolve().then(task),
+			timeoutMs,
+		);
+		await flushForwardedConsoleEvents();
 		const durationMs = Date.now() - startedAt;
 		if (timedOut) {
 			return {
@@ -317,6 +343,7 @@ const runTimedExecution = async ({
 			...successMeta,
 		};
 	} catch (error) {
+		await flushForwardedConsoleEvents();
 		const durationMs = Date.now() - startedAt;
 		return {
 			status: "error",
@@ -340,9 +367,8 @@ export const executeCode = async (
 ) => {
 	const containerInstance = await ensureContainer();
 	return runTimedExecution({
-		task: Promise.resolve(
+		task: () =>
 			containerInstance.execute(String(code), filename || "/index.js"),
-		),
 		timeoutMs,
 		maxLogEntries,
 		successMeta: { filename },
@@ -361,7 +387,7 @@ export const runFile = async (path, timeoutMs, maxLogEntries) => {
 		throw new Error(`File not found: ${normalized}`);
 	}
 	return runTimedExecution({
-		task: Promise.resolve(containerInstance.runFile(normalized)),
+		task: () => containerInstance.runFile(normalized),
 		timeoutMs,
 		maxLogEntries,
 		successMeta: { path: normalized },
@@ -632,6 +658,7 @@ const buildCommandResult = (commandSession, offset = 0) => {
 		completed: commandSession.completed,
 		stdout: chunks.map((chunk) => chunk.stdout).join(""),
 		stderr: chunks.map((chunk) => chunk.stderr).join(""),
+		chunks,
 		nextOffset: commandSession.nextOffset,
 		exitCode: commandSession.exitCode,
 		startedAt: commandSession.startedAt,

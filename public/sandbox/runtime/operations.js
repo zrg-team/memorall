@@ -8,6 +8,7 @@ import {
 	moveMountedWorkspacePath,
 	mountedWorkspaceDirectories,
 	mountedWorkspaceFiles,
+	pendingWorkspaceOps,
 	removeMountedWorkspacePath,
 	ensureMountedParentDirectories,
 	toCanonicalMountedPath,
@@ -26,6 +27,7 @@ import {
 	listCommandSessions,
 	listenToCommandSession,
 	normalizeClientUrl,
+	pushRuntimeLog,
 	rememberInstalledPackages,
 	resetRuntime,
 	resolveResponseType,
@@ -130,11 +132,12 @@ const handleNetworkFetchOperation = async (payload) => {
 };
 
 const handleNpmInstallOperation = async (containerInstance, payload) => {
-	const installed = await containerInstance.npm.install(payload.packageSpec, {
+	const result = await containerInstance.npm.install(payload.packageSpec, {
 		save: payload.save,
 		saveDev: payload.saveDev,
+		onProgress: (message) => pushRuntimeLog("info", `[npm] ${message}`),
 	});
-	rememberInstalledPackages(installed);
+	const installed = rememberInstalledPackages(result);
 	return { success: true, installed };
 };
 
@@ -142,11 +145,12 @@ const handleNpmInstallFromPackageJsonOperation = async (
 	containerInstance,
 	payload,
 ) => {
-	const installed = await containerInstance.npm.installFromPackageJson({
+	const result = await containerInstance.npm.installFromPackageJson({
 		save: payload.save,
 		saveDev: payload.saveDev,
+		onProgress: (message) => pushRuntimeLog("info", `[npm] ${message}`),
 	});
-	rememberInstalledPackages(installed);
+	const installed = rememberInstalledPackages(result);
 	return { success: true, installed };
 };
 
@@ -170,6 +174,83 @@ const handleSnapshotGetOperation = (containerInstance) => {
 			installedPackages: Object.fromEntries(runtimeState.installedPackages),
 		},
 	};
+};
+
+const decodeSnapshotContent = (content) => {
+	if (!content) return new Uint8Array(0);
+	const binary = atob(content);
+	const bytes = new Uint8Array(binary.length);
+	for (let index = 0; index < binary.length; index++) {
+		bytes[index] = binary.charCodeAt(index);
+	}
+	return bytes;
+};
+
+const validateSnapshotFiles = (snapshot) => {
+	if (!snapshot || typeof snapshot !== "object" || !Array.isArray(snapshot.files)) {
+		throw new Error("Invalid sandbox snapshot: files must be an array");
+	}
+	return snapshot.files.map((entry) => {
+		if (
+			!entry ||
+			typeof entry.path !== "string" ||
+			(entry.type !== "file" && entry.type !== "directory") ||
+			(entry.type === "file" && typeof entry.content !== "string")
+		) {
+			throw new Error("Invalid sandbox snapshot file entry");
+		}
+		return {
+			path: toCanonicalMountedPath(entry.path),
+			type: entry.type,
+			content: entry.content,
+		};
+	});
+};
+
+const handleSnapshotRestoreOperation = async (containerInstance, payload) => {
+	const snapshot = payload?.snapshot;
+	const entries = validateSnapshotFiles(snapshot);
+	const restoredFilePaths = new Set(
+		entries.filter((entry) => entry.type === "file").map((entry) => entry.path),
+	);
+	const previousSnapshot =
+		typeof containerInstance.vfs.toSnapshot === "function"
+			? containerInstance.vfs.toSnapshot()
+			: { files: [] };
+	const removedFilePaths = previousSnapshot.files
+		.filter((entry) => entry.type === "file")
+		.map((entry) => toCanonicalMountedPath(entry.path))
+		.filter((path) => !restoredFilePaths.has(path));
+
+	await resetRuntime();
+	const restoredContainer = await ensureContainer();
+	vfsBoolState.workspaceMountLoaded = true;
+	mountedWorkspaceDirectories.add(WORKSPACES_MOUNT_ROOT);
+	for (const path of removedFilePaths) {
+		pendingWorkspaceOps.push({ op: "delete", path });
+	}
+
+	const sortedEntries = entries
+		.map((entry, index) => ({
+			entry,
+			index,
+			depth: entry.path.split("/").length,
+		}))
+		.sort((left, right) => left.depth - right.depth || left.index - right.index)
+		.map(({ entry }) => entry);
+	for (const entry of sortedEntries) {
+		if (entry.path === "/") continue;
+		if (entry.type === "directory") {
+			restoredContainer.vfs.mkdirSync(entry.path, { recursive: true });
+			continue;
+		}
+		restoredContainer.vfs.writeFileSync(
+			entry.path,
+			decodeSnapshotContent(entry.content),
+		);
+	}
+	rememberInstalledPackages(snapshot.installedPackages);
+	return { restored: true };
 };
 
 const collectWorkspaceSnapshotState = (snapshot) => {
@@ -350,8 +431,7 @@ export const handleOperation = async (request) => {
 		case "snapshot.get":
 			return handleSnapshotGetOperation(containerInstance);
 		case "snapshot.restore":
-			await resetRuntime();
-			return { restored: true };
+			return handleSnapshotRestoreOperation(containerInstance, payload);
 		case "runtime.reset":
 			await resetRuntime();
 			return { reset: true };

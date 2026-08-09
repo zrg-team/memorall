@@ -358,7 +358,7 @@
 		}
 	},
 	"sandboxPanel": {
-		"title": "Không gian làm việc",
+		"title": "Phiên chạy",
 		"description": "Xem trước nội dung đã tạo, trang đang mở, server và hoạt động lệnh.",
 		"outputsTab": "Kết quả",
 		"liveRuntimeTab": "Chạy trực tiếp",

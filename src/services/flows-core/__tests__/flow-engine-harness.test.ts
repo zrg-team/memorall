@@ -189,6 +189,19 @@ describe("FlowEngine harness behavior", () => {
 				}),
 			]),
 		);
+		expect(events).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					type: "tool-result",
+					node: "tool_executor",
+					metadata: expect.objectContaining({
+						tool: "event_tool",
+						tool_call_id: "call_event",
+						isError: false,
+					}),
+				}),
+			]),
+		);
 		expect(
 			events.some(
 				(event) =>

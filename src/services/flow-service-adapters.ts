@@ -4,6 +4,8 @@ import type { DocumentFileSystem } from "@/services/filesystem/document-filesyst
 import type { DocumentTreeNode } from "@/types/document-library";
 import type { ILLMService } from "@/services/llm/interfaces/llm-service.interface";
 import type { ISandboxContainerService } from "@/services/sandbox-container";
+import { createAgentSandboxService } from "@/services/agent-sandbox";
+import type { IAgentSandboxService } from "./flows-core/interfaces/services/agent-sandbox";
 import type {
 	SandboxExecuteCommandRequest,
 	SandboxExecutionRequest,
@@ -582,6 +584,11 @@ export const toFlowSandbox = (
 		),
 });
 
+export const toAgentSandbox = (
+	service: ISandboxContainerService,
+	fileSystem?: IFlowFileSystem,
+): IAgentSandboxService => createAgentSandboxService(service, fileSystem);
+
 // ---------------------------------------------------------------------------
 // Registration helpers — adapt + register in one call.
 // Call these at app startup; then use serviceRegistry.resolveAll() instead of
@@ -603,5 +610,10 @@ export const registerFlowEmbedding = (service: IEmbeddingService): void =>
 export const registerFlowWebBrowser = (service: IWebBrowserService): void =>
 	serviceRegistry.registerInstance("webBrowser", toFlowWebBrowser(service));
 
-export const registerFlowSandbox = (service: ISandboxContainerService): void =>
+export const registerFlowSandbox = (service: ISandboxContainerService): void => {
 	serviceRegistry.registerInstance("sandboxContainer", toFlowSandbox(service));
+	serviceRegistry.registerInstance(
+		"sandboxRuntime",
+		toAgentSandbox(service, serviceRegistry.resolve("fs")),
+	);
+};

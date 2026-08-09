@@ -21,6 +21,7 @@ import {
 	toFlowEmbedding,
 	toFlowLLM,
 	toFlowSandbox,
+	toAgentSandbox,
 } from "@/services/flow-service-adapters";
 
 export type KnowledgeGrowMode = "knowledge" | "structmem";
@@ -273,14 +274,14 @@ export class KnowledgeGraphService {
 				progress: 10,
 			});
 
+			const sandboxService = serviceManager.getSandboxContainerService();
 			const services = {
 				llm: toFlowLLM(serviceManager.getLLMService()),
 				embedding: toFlowEmbedding(serviceManager.getEmbeddingService()),
 				database: toFlowDatabase(serviceManager.getDatabaseService()),
 				logger: consoleFlowLogger,
-				sandboxContainer: toFlowSandbox(
-					serviceManager.getSandboxContainerService(),
-				),
+				sandboxContainer: toFlowSandbox(sandboxService),
+				sandboxRuntime: toAgentSandbox(sandboxService),
 			};
 
 			const baseState = {

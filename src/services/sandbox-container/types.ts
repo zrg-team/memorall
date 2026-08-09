@@ -71,6 +71,7 @@ export interface SandboxCommandResult {
 	completed: boolean;
 	stdout: string;
 	stderr: string;
+	chunks?: Array<{ stdout: string; stderr: string }>;
 	nextOffset: number;
 	exitCode?: number;
 	startedAt: number;

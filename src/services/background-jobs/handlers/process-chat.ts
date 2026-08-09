@@ -41,6 +41,7 @@ import {
 	toFlowLLM,
 	toFlowSandbox,
 	toFlowWebBrowser,
+	toAgentSandbox,
 } from "@/services/flow-service-adapters";
 import type { UnifiedFlowConfig } from "@/services/flows-core/interfaces/config/flow-config";
 import { buildDefaultFlowConfig } from "@/services/flows-core/utils/flow-config";
@@ -530,16 +531,17 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 	}
 
 	private static getFlowServices(): FlowServices {
+		const sandboxService = serviceManager.getSandboxContainerService();
+		const fileSystem = toFlowFileSystem(fsService);
 		return {
 			llm: toFlowLLM(serviceManager.llmService),
 			embedding: toFlowEmbedding(serviceManager.embeddingService),
 			database: toFlowDatabase(serviceManager.databaseService),
 			logger: consoleFlowLogger,
-			sandboxContainer: toFlowSandbox(
-				serviceManager.getSandboxContainerService(),
-			),
+			sandboxContainer: toFlowSandbox(sandboxService),
+			sandboxRuntime: toAgentSandbox(sandboxService, fileSystem),
 			webBrowser: toFlowWebBrowser(serviceManager.getWebBrowserService()),
-			fs: toFlowFileSystem(fsService),
+			fs: fileSystem,
 		};
 	}
 

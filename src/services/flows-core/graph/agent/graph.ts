@@ -299,7 +299,24 @@ export class AgentGraph extends GraphBase<
 					state: toolState,
 					runtime: getFlowRuntimeVars(runConfig),
 				});
-				const { content, contentText } = extractToolResult(rawResult);
+				const {
+					content,
+					contentText,
+					structuredContent,
+					isError,
+					meta,
+				} = extractToolResult(rawResult);
+				runConfig?.writer?.({
+					type: "tool-result",
+					node: "tool_executor",
+					metadata: {
+						tool: toolName,
+						tool_call_id: toolCall.id,
+						structuredContent,
+						isError,
+						meta,
+					},
+				});
 
 				// Collect any messages the tool executor pushed to its local working copy
 				const executorMessages =

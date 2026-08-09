@@ -5,21 +5,30 @@ import type {
 	StepSpecFromDefinition,
 	StepFactoryContext,
 } from "flow-core/interfaces/engine/step";
-import { logError } from "flow-core/utils/logger";
-import { stepRegistry } from "flow-core/registries/step-registry";
-import { toolRegistry } from "flow-core/registries/tool-registry";
-import { GraphBase, type GraphTool } from "flow-core/graph/graph.base";
-import type {} from "flow-core/interfaces/engine/tool";
-import type { AllServices } from "flow-core/interfaces/services/services";
 import type { ChatCompletionMessageParam } from "flow-core/interfaces/engine/messages";
+import type { AllServices } from "flow-core/interfaces/services/services";
+import { GraphBase, type GraphTool } from "flow-core/graph/graph.base";
+import { stepRegistry } from "flow-core/registries/step-registry";
+import { logError } from "flow-core/utils/logger";
+import {
+	getSandboxToolsForProfile,
+	SANDBOX_WEB_APP_TOOLS,
+	type SandboxToolProfile,
+} from "flow-core/tools/agent-sandbox/profiles";
+import {
+	getFlowRuntimeVars,
+	getRuntimeGraphId,
+} from "flow-core/runtime/runtime-context";
 import {
 	ARTIFACT_FEATURE_SYSTEM_PROMPT,
 	ARTIFACT_FEATURE_TOOLS,
 } from "flow-core/steps/features/artifact-feature";
 
 const STEP_NAME = "nodejs-sandbox-feature" as const;
-export const NODEJS_SANDBOX_FEATURE_NAME = STEP_NAME;
-const CONTAINER_WEB_ACCESS_TOOL = "container_web_access_v2" as const;
+
+// Keep the persisted identifier while exposing browser-oriented names to new code.
+export const BROWSER_SANDBOX_FEATURE_NAME = STEP_NAME;
+export const NODEJS_SANDBOX_FEATURE_NAME = BROWSER_SANDBOX_FEATURE_NAME;
 
 export interface NodejsSandboxFeatureInput {
 	messages: ChatCompletionMessageParam[];
@@ -31,221 +40,46 @@ export interface NodejsSandboxFeatureOutput {
 	messages?: ChatCompletionMessageParam[];
 }
 
-export interface NodejsSandboxFeatureConfig {}
+export interface NodejsSandboxFeatureConfig {
+	profile?: SandboxToolProfile;
+}
 
 export type NodejsSandboxFeatureServices =
-	| Pick<AllServices, "sandboxContainer">
+	| Pick<AllServices, "sandboxRuntime">
 	| undefined;
 
-const SYSTEM_PROMPT_INSTRUCTION = `
-# NODEJS SANDBOX FEATURE
-You have access to a lightweight browser-based sandbox container with virtual filesystem, npm package management (loaded from CDN), runtime execution, shell-style command execution, and HTTP resource access.
-If user require to write code, execute code please use this actively to write and run code.
+export const BROWSER_SANDBOX_FEATURE_DESCRIPTION =
+	"Run code, commands, npm packages, and web previews in a reusable browser sandbox session.";
+export const NODEJS_SANDBOX_FEATURE_DESCRIPTION =
+	BROWSER_SANDBOX_FEATURE_DESCRIPTION;
 
-## IMPORTANT RUNTIME CONSTRAINTS
-- The sandbox runs on almostnode in the browser (not OS Node.js), but it provides broad built-in API shims including \`fs\`, \`path\`, \`url\`, \`util\`, \`events\`, \`os\`, \`crypto\`, and more.
-- This is a lightweight sandbox intended for simple HTTP/Express/Vite/Next.js demos, small code execution tasks, and basic package usage.
-- It will NOT reliably work with native Node.js addons, packages that require OS/native bindings, or libraries that expect real system processes.
-- It may also fail with very heavy frameworks, complicated Vite customization, advanced plugin chains, or packages that depend on non-browser worker/native behavior.
-- \`require()\` is available for built-in shims, installed npm packages, and files in the virtual filesystem.
-- \`require("fs")\` operates on the virtual filesystem.
-- Filesystem mounts are provided by the host runtime. Use \`/temp\` for in-memory scratch artifacts.
-- Install dependencies with \`container_install_package\` or with \`npm install\` via \`container_execute_command\` before using them in \`container_run_code\`.
-- Use browser APIs (fetch, URL, TextEncoder, crypto, etc.) instead of Node.js built-ins.
-- Prefer container filesystem tools (container_write_file, container_read_file, etc.) for deterministic file operations and mutations.
+export const buildBrowserSandboxPrompt = (
+	tools: readonly string[],
+): string => `# BROWSER SANDBOX
+Use the active browser sandbox when code must be executed, packages tested, commands run, or a web app previewed.
 
-## WHEN TO USE THIS FEATURE
-- Use container tools when the user asks to:
-  - run or test code in isolation
-  - run arbitrary CLI / shell commands inside the sandbox
-  - install npm packages
-  - create/update/read project files
-  - fetch API/HTML resources from within the container runtime context
-- Prefer container tools for multi-step coding tasks where reproducible runtime state matters.
-- To start any server (HTTP, Express, Vite, Next.js, etc.), always use "container_start_server".
-- After writing or modifying any file in a running server's project, always call "container_restart_server" so changes take effect.
-- Never use "container_run_code" to start or host a long-running server.
+Available sandbox tools: ${tools.join(", ")}.
 
-## WHEN NOT TO USE THIS FEATURE
-- Do not use container tools for simple factual Q&A that needs no execution.
-- Do not start servers unless the user asks for running/preview/testing behavior.
-- Do not install packages unless required by the task.
+- The runtime is AlmostNode in the browser, not OS Node.js. Browser-compatible JavaScript, TypeScript, npm packages, and common Node shims are supported; native addons and OS process assumptions are not.
+- Use the existing fs_read, fs_write, fs_edit, fs_ls, fs_glob, fs_grep, fs_mkdir, and fs_remove tools for workspace files. The harness synchronizes those files with the sandbox.
+- Use sandbox_run for code, workspace files, commands, and REPL evaluation. For a running command, continue with sandbox_process read and its returned nextCursor; never invent or alter opaque IDs and cursors.
+- Use sandbox_packages only when a dependency is required.
+- Use sandbox_preview for web server lifecycle. Use request for APIs and render for visible web pages. Always use the returned preview URL or render result; never construct localhost URLs.
+- After changing files used by a running preview, call sandbox_preview with restart before checking the result.
+- Use sandbox_inspect for status and diagnostics. Reset only when session state must be discarded.
+- Output, logs, and response bodies are bounded. Continue process reads with nextCursor when output is truncated or the process is still running.`;
 
-## RECOMMENDED TOOL WORKFLOW
-1) For arbitrary CLI / shell commands:
-- "container_execute_command"
-  - waits up to 10000ms by default
-  - if the result has completed=false, continue with "container_listen_command" using the returned commandId and nextOffset until completed=true
-2) Install dependencies only when needed:
-- "container_install_package"
-- or \`npm install\` through "container_execute_command" when the task specifically needs command-based installation
-3) Execute and verify:
-- "container_run_code"
-4) Start a server:
-- "container_start_server" with projectDir="<project-directory>"
-  - New project: add template="vite-react"|"next-pages"|"next-app"|"express" → scaffolds + installs + starts
-  - Existing project: omit template → kind auto-detected from config files
-5) After modifying any file in a running server: **ALWAYS restart**:
-- "container_restart_server" with port + projectDir
-  Call this immediately after every container_write_file / container_run_code that changes server files.
-6) Access a started server:
-- ALWAYS call "container_list_servers" first to confirm the running server port.
-- Use "container_render_server" for web UI pages (Vite, Next.js, React SPA, Express HTML page).
-- Use "container_request_server" for API-style endpoints (JSON / plain text response).
-7) Diagnostics:
-- "container_get_logs", then optionally "container_clear_logs"
-
-## COMMAND TOOL RULES
-- Only use command tools when you intentionally want to run commands inside the sandbox container.
-- Do NOT use raw command tools to host preview servers when the server lifecycle tools are available. Use "container_start_server", "container_restart_server", and related server tools for Vite, Next.js, Express, or any preview flow.
-- To continue a previously started command, use "container_listen_command".
-- If a command result returns completed=false, keep listening with "container_listen_command" instead of assuming the command is finished.
-
-## SERVER SETUP GUIDE
-
-### container_start_server — CRITICAL: "kind" vs "template" are DIFFERENT parameters
-
-**"kind"** = the server framework used to RUN the server. Values: "express" | "vite" | "next" | "auto"
-**"template"** = a scaffold preset applied ONLY when "projectDir" is EMPTY. Values: "express" | "vite-react" | "next-pages" | "next-app"
-
-**RULES — read carefully:**
-1. "kind" controls HOW the server starts. ALWAYS set it explicitly or use "auto" to detect from config files.
-2. **If you cannot determine the correct "kind", you MUST use "auto". Do NOT guess or assume any other kind value.**
-3. **If you have NO information about what files exist inside the project folder (e.g. you haven't listed or read its contents), you MUST use "kind": "auto". NEVER assume a kind without confirmed file evidence.**
-4. "template" ONLY scaffolds an empty folder — it does NOT set the server type.
-5. **NEVER assume "template" implies a specific "kind".** They are independent.
-6. When a project already has files, NEVER pass "template" — it is for empty folders only.
-7. When you pass "template", you MUST also set "kind" explicitly (e.g. "express", "vite", "next") so the runtime knows how to start the server. Passing "kind" "auto" with "template" is allowed only if you want runtime detection from generated config files.
-
-**Correct usage:**
-- New Express project (empty folder): "template": "express", kind: "express"
-- New Vite+React project (empty folder): "template": "vite-react", kind: "vite"
-- New Next.js project (empty folder): "template": "next-app", "kind": "next"
-- Existing project (files already present): omit "template"; set "kind": "auto" or explicit kind
-
-**WRONG — do NOT do this:**
-- "template": "express", kind: "auto" → runtime cannot detect kind from an empty folder; will fail
-- "template": "vite-react" with no "kind" → same problem
-
-### MANDATORY: Restart after every file change
-After ANY write to a server's project files, call "container_restart_server" immediately.
-The server does NOT hot-reload automatically — you must restart it for changes to take effect.
-
-### After the server is running — CRITICAL: choose the right tool
-| Goal | Tool to call |
-|------|-------------|
-| Show web UI page (Vite, Next.js, Express HTML, React SPA) | **container_render_server** |
-| Call an API endpoint (JSON, text response) | **container_request_server** |
-
-**NEVER** use \`container_request_server\` to preview a web UI page. Use \`container_render_server\` so the browser can execute the app and return rendered HTML.
-
-### Template → kind mapping reference
-| template      | required kind | default port | use case                    |
-|---------------|---------------|-------------|------------------------------|
-| express       | express       | 3000        | REST API, HTML pages         |
-| vite-react    | vite          | 5173        | React SPA with HMR + shadcn UI |
-| next-pages    | next          | 3000        | Next.js Pages Router         |
-| next-app      | next          | 3000        | Next.js App Router           |
-
-## SHOWING SERVER PREVIEWS IN THE CHAT
-When a server is running and you want to embed a live preview directly in the chat:
-1. Call \`container_list_servers\` to get the actual server URL.
-2. Call \`render_artifact\` with \`type="url"\` and \`content=<server url>\`.
-
-This renders an embedded iframe inside the chat message so the user can interact with the running server without leaving the conversation.
-
-> **Do not construct URLs manually.** Always use the \`url\` field from \`container_list_servers\`.
-`;
-const WEB_ACCESS_INTEGRATION_PROMPT = `
-## INTEGRATION SERVER ACCESS
-When the integration tool "${CONTAINER_WEB_ACCESS_TOOL}" is available:
-- Pass the \`url\` field from "container_list_servers" to "${CONTAINER_WEB_ACCESS_TOOL}" — NEVER construct a URL manually.
-- Use "${CONTAINER_WEB_ACCESS_TOOL}" with useIframe=true for web UI pages (Vite, Next.js, React SPA, Express HTML page).
-- Use "${CONTAINER_WEB_ACCESS_TOOL}" with useIframe=false for API-style endpoints (JSON / plain text response).
-
-| Goal | Tool to call |
-|------|-------------|
-| Show web UI page (Vite, Next.js, Express HTML, React SPA) | **${CONTAINER_WEB_ACCESS_TOOL}** with \`useIframe: true\` |
-| Call an API endpoint (JSON, text response) | **${CONTAINER_WEB_ACCESS_TOOL}** with \`useIframe: false\` |
-
-**NEVER** use \`${CONTAINER_WEB_ACCESS_TOOL}\` with \`useIframe: false\` to preview a web UI page. Use \`useIframe: true\` so the browser can execute the app and return rendered HTML.
-`.trim();
+export const BROWSER_SANDBOX_FEATURE_SYSTEM_PROMPT =
+	buildBrowserSandboxPrompt(SANDBOX_WEB_APP_TOOLS);
 export const NODEJS_SANDBOX_FEATURE_SYSTEM_PROMPT =
-	SYSTEM_PROMPT_INSTRUCTION.trim();
-const CORE_NODEJS_SANDBOX_FEATURE_TOOLS = [
-	"container_run_code",
-	"container_execute_command",
-	"container_listen_command",
-	"container_install_package",
-	"container_start_server",
-	"container_restart_server",
-	"container_stop_server",
-	"container_list_servers",
-	"container_get_logs",
-	"container_clear_logs",
-	"container_render_server",
-	"container_request_server",
+	BROWSER_SANDBOX_FEATURE_SYSTEM_PROMPT;
+
+export const BROWSER_SANDBOX_FEATURE_TOOLS = [
+	...SANDBOX_WEB_APP_TOOLS,
 	...ARTIFACT_FEATURE_TOOLS,
 ] as const;
-export const NODEJS_SANDBOX_FEATURE_TOOLS = [
-	...CORE_NODEJS_SANDBOX_FEATURE_TOOLS,
-	CONTAINER_WEB_ACCESS_TOOL,
-] as const;
-export const NODEJS_SANDBOX_FEATURE_DESCRIPTION =
-	"Enable isolated Node.js container tools for runtime execution, command execution/listening, npm, filesystem, server lifecycle, logs, and resource fetch.";
-
-const buildRunningServersPrompt = async (
-	services: NodejsSandboxFeatureServices,
-	useWebAccessIntegration: boolean,
-): Promise<string> => {
-	const sandboxContainer = services?.sandboxContainer;
-	if (!sandboxContainer) {
-		return "";
-	}
-
-	try {
-		const result = await sandboxContainer.listServers();
-		if (result.servers.length === 0) {
-			return "";
-		}
-
-		const lines = result.servers.map(
-			(server) =>
-				`- kind=${server.kind}, port=${server.port}, url=${server.url}, rootDir=${server.rootDir ?? "unknown"}`,
-		);
-
-		return useWebAccessIntegration
-			? `## CURRENT RUNNING SANDBOX SERVERS\nIMPORTANT: When calling ${CONTAINER_WEB_ACCESS_TOOL}, you MUST use the url listed below. NEVER use localhost or 127.0.0.1.\n${lines.join("\n")}\n`
-			: `## CURRENT RUNNING SANDBOX SERVERS\nUse the listed port with container_render_server for UI pages or container_request_server for API endpoints. NEVER use localhost or 127.0.0.1.\n${lines.join("\n")}\n`;
-	} catch {
-		return "";
-	}
-};
-
-const buildRunningCommandsPrompt = async (
-	services: NodejsSandboxFeatureServices,
-): Promise<string> => {
-	const sandboxContainer = services?.sandboxContainer;
-	if (!sandboxContainer) {
-		return "";
-	}
-
-	try {
-		const result = await sandboxContainer.listCommands();
-		if (result.commands.length === 0) {
-			return "";
-		}
-
-		const lines = result.commands.map(
-			(command) =>
-				`- commandId=${command.commandId}, cwd=${command.cwd}, nextOffset=${command.nextOffset}, updatedAt=${new Date(command.updatedAt).toISOString()}, command=${command.command}`,
-		);
-
-		return `## CURRENT RUNNING SANDBOX COMMANDS\nIf you need more output from one of these commands, continue with container_listen_command using its commandId and the last nextOffset you have.\n${lines.join("\n")}\n`;
-	} catch {
-		return "";
-	}
-};
+export const NODEJS_SANDBOX_FEATURE_TOOLS =
+	BROWSER_SANDBOX_FEATURE_TOOLS;
 
 const definition = defineStep<
 	NodejsSandboxFeatureInput,
@@ -254,36 +88,34 @@ const definition = defineStep<
 	NodejsSandboxFeatureConfig
 >({
 	name: STEP_NAME,
-	execute: async ({ input, services, registries }) => {
+	execute: async ({ input, services, config, runConfig }) => {
 		try {
-			const useWebAccessIntegration = (
-				registries?.tools ?? toolRegistry
-			).hasToolName(CONTAINER_WEB_ACCESS_TOOL);
-			const featureTools = useWebAccessIntegration
-				? NODEJS_SANDBOX_FEATURE_TOOLS
-				: CORE_NODEJS_SANDBOX_FEATURE_TOOLS;
-			const tools = GraphBase.chat.addTool(input.tools, ...featureTools);
-			const runningCommandsPrompt = await buildRunningCommandsPrompt(services);
-			const runningServersPrompt = await buildRunningServersPrompt(
-				services,
-				useWebAccessIntegration,
+			const profile = config?.profile ?? "web_app";
+			const runtimeVars = getFlowRuntimeVars(runConfig);
+			const sessionKey = getRuntimeGraphId(runtimeVars);
+			const capabilities = services?.sandboxRuntime
+				? await services.sandboxRuntime.getCapabilities({
+						operationId: "browser-sandbox-feature:capabilities",
+						sessionKey,
+					})
+				: undefined;
+			const sandboxTools = getSandboxToolsForProfile(
+				profile,
+				capabilities?.supported,
+			);
+			const tools = GraphBase.chat.addTool(
+				input.tools,
+				...sandboxTools,
+				...ARTIFACT_FEATURE_TOOLS,
 			);
 			const messages = GraphBase.chat.systemMessage(
 				input.messages,
-				`${NODEJS_SANDBOX_FEATURE_SYSTEM_PROMPT}${
-					useWebAccessIntegration ? `\n\n${WEB_ACCESS_INTEGRATION_PROMPT}` : ""
-				}\n\n${ARTIFACT_FEATURE_SYSTEM_PROMPT}\n\n${runningCommandsPrompt}${runningServersPrompt}`,
+				`${buildBrowserSandboxPrompt(sandboxTools)}\n\n${ARTIFACT_FEATURE_SYSTEM_PROMPT}`,
 			);
 
-			return {
-				output: {
-					tools,
-					messages,
-				},
-			};
+			return { output: { tools, messages } };
 		} catch (error) {
-			logError("[NODEJS_SANDBOX_FEATURE] Failed:", error);
-
+			logError("[BROWSER_SANDBOX_FEATURE] Failed:", error);
 			return {
 				output: {
 					tools: input.tools,
@@ -291,7 +123,7 @@ const definition = defineStep<
 					errors: [
 						error instanceof Error
 							? error.message
-							: "Node.js sandbox feature step failed",
+							: "Browser sandbox feature step failed",
 					],
 				},
 			};
@@ -307,10 +139,14 @@ export const createNodejsSandboxFeatureStep: StepFactoryFromSpec<
 	services: NodejsSandboxFeatureServices,
 	config?: NodejsSandboxFeatureConfig,
 	context?: StepFactoryContext,
-) => bindStep(definition, services, config, context);
+): BoundStep<NodejsSandboxFeatureInput, NodejsSandboxFeatureOutput> =>
+	bindStep(definition, services, config, context);
+
+export const createBrowserSandboxFeatureStep =
+	createNodejsSandboxFeatureStep;
 
 stepRegistry.register(STEP_NAME, createNodejsSandboxFeatureStep, {
-	description: NODEJS_SANDBOX_FEATURE_DESCRIPTION,
+	description: BROWSER_SANDBOX_FEATURE_DESCRIPTION,
 	defaultStateMapping: { messages: "messages", tools: "tools" },
 	enabledByDefault: false,
 	feature: {
@@ -335,12 +171,12 @@ stepRegistry.register(STEP_NAME, createNodejsSandboxFeatureStep, {
 			{
 				name: "messages",
 				type: "Message[]",
-				description: "Messages with Node.js sandbox usage instruction",
+				description: "Messages with Browser Sandbox instructions",
 			},
 			{
 				name: "tools",
 				type: "Tool[]",
-				description: "Tools extended with container toolset",
+				description: "Tools extended with the selected sandbox profile",
 			},
 		],
 	},

@@ -835,27 +835,46 @@ export class DocumentFileSystem {
 	}
 
 	/**
+	 * Rename or move a file or folder to an exact sandbox path.
+	 * Returns the normalized destination path.
+	 */
+	async renamePath(
+		sandboxPath: string,
+		newSandboxPath: string,
+	): Promise<string> {
+		await this.initialize();
+		const normalizedSourcePath = normalizeSandboxPath(sandboxPath);
+		const normalizedDestinationPath = normalizeSandboxPath(newSandboxPath);
+		const oldFsPath = this.toFsPath(normalizedSourcePath);
+		const newFsPath = this.toFsPath(normalizedDestinationPath);
+
+		try {
+			await fs.promises.stat(newFsPath);
+			throw new Error(`"${normalizedDestinationPath}" already exists`);
+		} catch (err) {
+			if (err instanceof Error && err.message.includes("already exists")) {
+				throw err;
+			}
+		}
+
+		await fs.promises.rename(oldFsPath, newFsPath);
+		logInfo(
+			`📝 Renamed: ${normalizedSourcePath} → ${normalizedDestinationPath}`,
+		);
+		this.notifyFilesystemChanged({
+			scope: this.scopeFromPath(normalizedSourcePath),
+			operation: "rename",
+			oldPath: normalizedSourcePath,
+			newPath: normalizedDestinationPath,
+		});
+		return normalizedDestinationPath;
+	}
+
+	/**
 	 * Rename a file or folder. Works for both.
 	 * Returns the new sandbox path.
 	 */
 	async rename(sandboxPath: string, newName: string): Promise<string> {
-		await this.initialize();
-		const oldFsPath = this.toFsPath(sandboxPath);
-		const parentFsPath = oldFsPath.substring(0, oldFsPath.lastIndexOf("/"));
-		const newFsPath = `${parentFsPath}/${newName}`;
-
-		// Conflict check
-		try {
-			await fs.promises.stat(newFsPath);
-			throw new Error(`"${newName}" already exists`);
-		} catch (err) {
-			if (err instanceof Error && err.message.includes("already exists"))
-				throw err;
-			// ENOENT is expected — proceed.
-		}
-
-		await fs.promises.rename(oldFsPath, newFsPath);
-
 		const normalizedSandboxPath = normalizeSandboxPath(sandboxPath);
 		const parentSandboxPath =
 			normalizedSandboxPath.substring(
@@ -866,14 +885,7 @@ export class DocumentFileSystem {
 			parentSandboxPath === "/"
 				? `/${newName}`
 				: `${parentSandboxPath}/${newName}`;
-		logInfo(`📝 Renamed: ${sandboxPath} → ${newSandboxPath}`);
-		this.notifyFilesystemChanged({
-			scope: this.scopeFromPath(sandboxPath),
-			operation: "rename",
-			oldPath: sandboxPath,
-			newPath: newSandboxPath,
-		});
-		return newSandboxPath;
+		return this.renamePath(normalizedSandboxPath, newSandboxPath);
 	}
 
 	/**
