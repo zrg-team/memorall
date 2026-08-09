@@ -32,6 +32,7 @@ const JOB_NAMES = {
 	deleteModel: "delete-model",
 	createLLMService: "create-llm-service",
 	chatCompletion: "chat-completion",
+	cancelChatCompletion: "cancel-chat-completion",
 	restoreAuthProvider: "restore-auth-provider",
 	restoreAllProviders: "restore-all-providers",
 	unlockAndRestoreAllProviders: "unlock-and-restore-all-providers",
@@ -87,6 +88,10 @@ export interface CreateLLMServicePayload {
 export interface ChatCompletionPayload {
 	serviceName: string;
 	request: Record<string, unknown>; // ChatCompletionRequest from @/types/openai
+}
+
+export interface CancelChatCompletionPayload {
+	targetJobId: string;
 }
 
 export interface RestoreAuthProviderPayload {
@@ -155,6 +160,10 @@ export interface ChatCompletionResult extends Record<string, unknown> {
 	response: unknown;
 }
 
+export interface CancelChatCompletionResult extends Record<string, unknown> {
+	canceled: boolean;
+}
+
 export interface RestoreAuthProviderResult extends Record<string, unknown> {
 	restored: boolean;
 	provider: string;
@@ -212,6 +221,7 @@ export type LLMModelsJob = BaseJob & {
 		| DeleteModelPayload
 		| CreateLLMServicePayload
 		| ChatCompletionPayload
+		| CancelChatCompletionPayload
 		| RestoreAuthProviderPayload
 		| RestoreAllProvidersPayload
 		| UnlockAndRestoreAllProvidersPayload
@@ -222,6 +232,9 @@ export type LLMModelsJob = BaseJob & {
 };
 
 export class LLMOperationsHandler implements ProcessHandler<BaseJob> {
+	private activeChatAbortControllers = new Map<string, AbortController>();
+	private cancelledChatJobIds = new Set<string>();
+
 	async process(
 		jobId: string,
 		job: BaseJob,
@@ -246,6 +259,8 @@ export class LLMOperationsHandler implements ProcessHandler<BaseJob> {
 				return await this.handleCreateLLMService(jobId, job, dependencies);
 			case JOB_NAMES.chatCompletion:
 				return await this.handleChatCompletion(jobId, job, dependencies);
+			case JOB_NAMES.cancelChatCompletion:
+				return await this.handleCancelChatCompletion(jobId, job, dependencies);
 			case JOB_NAMES.restoreAuthProvider:
 				return await this.handleRestoreAuthProvider(jobId, job, dependencies);
 			case JOB_NAMES.restoreAllProviders:
@@ -769,87 +784,119 @@ export class LLMOperationsHandler implements ProcessHandler<BaseJob> {
 	): Promise<ItemHandlerResult> {
 		const { logger, updateJobProgress } = dependencies;
 		const payload = job.payload as ChatCompletionPayload;
+		const abortController = new AbortController();
+		const wasCancelledBeforeStart = this.cancelledChatJobIds.delete(jobId);
+		this.activeChatAbortControllers.set(jobId, abortController);
 
-		await logger.info(
-			`Starting chat-completion job for service: ${payload.serviceName}`,
-			{ jobId },
-		);
+		try {
+			if (wasCancelledBeforeStart) {
+				abortController.abort();
+				throw new Error("Operation aborted");
+			}
 
-		await updateJobProgress(jobId, {
-			stage: `Processing chat completion via ${payload.serviceName}`,
-			progress: 30,
-		});
-
-		const llmService = serviceManager.getLLMService();
-
-		if (!llmService) {
-			throw new Error("LLM service not available");
-		}
-
-		await updateJobProgress(jobId, {
-			stage: "Generating response",
-			progress: 60,
-		});
-
-		// Handle both streaming and non-streaming requests
-		let response;
-		if (payload.request.stream) {
-			// For streaming, we should yield chunks as they come, not collect them all
-			// But since background jobs can't stream back directly, we still need to collect
-			// TODO: Implement proper streaming via progress updates or different mechanism
-			const chunks: any[] = [];
 			await logger.info(
-				`Getting streaming response for ${payload.serviceName}`,
+				`Starting chat-completion job for service: ${payload.serviceName}`,
 				{ jobId },
 			);
 
-			const streamResponse = llmService.chatCompletionsFor(
-				payload.serviceName,
-				payload.request as unknown as ChatCompletionRequest,
-			);
-
-			await logger.info(`Got stream response, starting to iterate chunks`, {
-				jobId,
+			await updateJobProgress(jobId, {
+				stage: `Processing chat completion via ${payload.serviceName}`,
+				progress: 30,
 			});
-			let chunkCount = 0;
 
-			for await (const chunk of streamResponse as AsyncIterableIterator<any>) {
-				chunkCount++;
-				await logger.info(`Received chunk ${chunkCount}`, { jobId });
-				chunks.push(chunk);
+			const llmService = serviceManager.getLLMService();
 
-				// Try to send chunk via progress update for real-time streaming
-				await updateJobProgress(jobId, {
-					stage: `Streaming token ${chunkCount}...`,
-					progress: 60 + Math.min(30, chunkCount * 0.1), // Progress from 60% to 90%
-					// Include chunk in metadata for real-time streaming
-					metadata: {
-						chunk: chunk,
-					},
-				});
+			if (!llmService) {
+				throw new Error("LLM service not available");
 			}
 
-			await logger.info(`Collected ${chunks.length} chunks total`, { jobId });
-			response = { chunks };
-		} else {
-			// Non-streaming response
-			response = await llmService.chatCompletionsFor(
-				payload.serviceName,
-				payload.request as unknown as ChatCompletionRequest,
-			);
+			await updateJobProgress(jobId, {
+				stage: "Generating response",
+				progress: 60,
+			});
+
+			// Stream chunks through job progress; only the caller's stream buffers them.
+			let response;
+			if (payload.request.stream) {
+				await logger.info(
+					`Getting streaming response for ${payload.serviceName}`,
+					{ jobId },
+				);
+
+				const streamResponse = llmService.chatCompletionsFor(
+					payload.serviceName,
+					{
+						...payload.request,
+						signal: abortController.signal,
+					} as ChatCompletionRequest,
+				);
+
+				await logger.info(`Got stream response, starting to iterate chunks`, {
+					jobId,
+				});
+				let chunkCount = 0;
+
+				for await (const chunk of streamResponse as AsyncIterableIterator<any>) {
+					if (abortController.signal.aborted) {
+						throw new Error("Operation aborted");
+					}
+
+					chunkCount++;
+					await logger.info(`Received chunk ${chunkCount}`, { jobId });
+
+					// Send each chunk immediately; do not retain a second copy in offscreen memory.
+					await updateJobProgress(jobId, {
+						stage: `Streaming token ${chunkCount}...`,
+						progress: 60 + Math.min(30, chunkCount * 0.1),
+						metadata: {
+							chunk: chunk,
+						},
+					});
+				}
+
+				response = { streamed: true };
+			} else {
+				response = await llmService.chatCompletionsFor(
+					payload.serviceName,
+					{
+						...payload.request,
+						signal: abortController.signal,
+					} as ChatCompletionRequest,
+				);
+			}
+
+			await updateJobProgress(jobId, {
+				stage: "Chat completion finished",
+				progress: 90,
+			});
+
+			await logger.info(`Chat-completion job completed`, {
+				jobId,
+				serviceName: payload.serviceName,
+			});
+
+			return { response };
+		} finally {
+			this.activeChatAbortControllers.delete(jobId);
+			this.cancelledChatJobIds.delete(jobId);
 		}
+	}
 
-		await updateJobProgress(jobId, {
-			stage: "Chat completion finished",
-			progress: 90,
-		});
+	private async handleCancelChatCompletion(
+		jobId: string,
+		job: BaseJob,
+		dependencies: ProcessDependencies,
+	): Promise<ItemHandlerResult> {
+		const payload = job.payload as CancelChatCompletionPayload;
+		this.cancelledChatJobIds.add(payload.targetJobId);
+		this.activeChatAbortControllers.get(payload.targetJobId)?.abort();
 
-		await logger.info(`Chat-completion job completed`, {
-			jobId,
-			serviceName: payload.serviceName,
-		});
+		await dependencies.logger.info(
+			`Cancellation requested for chat-completion job: ${payload.targetJobId}`,
+			{ jobId, targetJobId: payload.targetJobId },
+		);
 
-		return { response };
+		return { canceled: true };
 	}
 
 	private async handleRestoreAuthProvider(
@@ -1105,6 +1152,7 @@ declare global {
 		"delete-model": DeleteModelPayload;
 		"create-llm-service": CreateLLMServicePayload;
 		"chat-completion": ChatCompletionPayload;
+		"cancel-chat-completion": CancelChatCompletionPayload;
 		"restore-auth-provider": RestoreAuthProviderPayload;
 		"restore-all-providers": RestoreAllProvidersPayload;
 		"unlock-and-restore-all-providers": UnlockAndRestoreAllProvidersPayload;
@@ -1124,6 +1172,7 @@ declare global {
 		"delete-model": DeleteModelResult;
 		"create-llm-service": CreateLLMServiceResult;
 		"chat-completion": ChatCompletionResult;
+		"cancel-chat-completion": CancelChatCompletionResult;
 		"restore-auth-provider": RestoreAuthProviderResult;
 		"restore-all-providers": RestoreAllProvidersResult;
 		"unlock-and-restore-all-providers": UnlockAndRestoreAllProvidersResult;

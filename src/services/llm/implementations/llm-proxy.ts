@@ -27,15 +27,57 @@ import {
 	resolveTokenUsage,
 } from "../utils/token-usage";
 import { resolveToolCapabilitiesForLLM } from "../tools/tool-capability-resolver";
+import { isAbortError } from "@/utils/abort";
 
 // Proxy class for LLMs that exist in background jobs
 export class LLMProxy implements BaseLLM {
-	private signalMap = new Map<string, AbortSignal>();
-
 	constructor(
 		public readonly name: string,
 		public readonly llmType: string,
 	) {}
+
+	private requestCancellation(jobId: string): void {
+		void backgroundJob
+			.execute(
+				"cancel-chat-completion",
+				{ targetJobId: jobId },
+				{ stream: false },
+			)
+			.then(({ promise }) => promise.catch(() => undefined))
+			.catch(() => undefined);
+	}
+
+	private bindAbortSignal(
+		signal: AbortSignal | undefined,
+		jobId: string,
+	): () => void {
+		if (!signal) return () => undefined;
+
+		let cancellationRequested = false;
+		const requestCancellation = () => {
+			if (cancellationRequested) return;
+			cancellationRequested = true;
+			this.requestCancellation(jobId);
+		};
+
+		if (signal.aborted) {
+			requestCancellation();
+		} else {
+			signal.addEventListener("abort", requestCancellation, { once: true });
+		}
+
+		return () => signal.removeEventListener("abort", requestCancellation);
+	}
+
+	private toBackgroundJobError(error: unknown): Error {
+		if (isAbortError(error)) {
+			return error instanceof Error
+				? error
+				: new DOMException("Operation aborted", "AbortError");
+		}
+
+		return new Error(`Background job failed: ${error}`);
+	}
 
 	async initialize(): Promise<void> {
 		// Already initialized in background job
@@ -127,16 +169,6 @@ export class LLMProxy implements BaseLLM {
 		| AsyncIterableIterator<ChatCompletionChunk> {
 		// Extract signal from request (can't serialize AbortSignal)
 		const { signal, ...requestPayload } = request;
-		let signalId: string | undefined;
-		if (signal) {
-			signalId = Math.random().toString(36).slice(2);
-			this.signalMap.set(signalId, signal);
-
-			// Clean up signal from map when aborted or completed
-			signal.addEventListener("abort", () => {
-				this.signalMap.delete(signalId!);
-			});
-		}
 
 		if (request.stream) {
 			// Use execute with stream: true to get real-time streaming
@@ -146,98 +178,98 @@ export class LLMProxy implements BaseLLM {
 				let finalUsage = normalizeTokenUsage(undefined);
 
 				try {
-					const { stream } = await backgroundJob.execute(
+					const { jobId, stream } = await backgroundJob.execute(
 						"chat-completion",
 						{
 							serviceName: self.name,
-							request: { ...requestPayload, stream: true, signalId },
+							request: { ...requestPayload, stream: true },
 						},
 						{ stream: true },
 					);
+					const removeAbortListener = self.bindAbortSignal(signal, jobId);
 
-					// Stream chunks as they come from progress updates
-					for await (const progressEvent of stream) {
-						// If progress contains a chunk in metadata, yield it immediately
-						if (progressEvent.metadata?.chunk) {
-							const incomingChunk = progressEvent.metadata
-								.chunk as ChatCompletionChunk;
-							const usage = normalizeTokenUsage(incomingChunk.usage);
-							if (usage) {
-								finalUsage = usage;
+					try {
+						// Stream chunks as they come from progress updates
+						for await (const progressEvent of stream) {
+							// If progress contains a chunk in metadata, yield it immediately
+							if (progressEvent.metadata?.chunk) {
+								const incomingChunk = progressEvent.metadata
+									.chunk as ChatCompletionChunk;
+								const usage = normalizeTokenUsage(incomingChunk.usage);
+								if (usage) {
+									finalUsage = usage;
+								}
+
+								completionOutput += extractChunkOutputText(incomingChunk);
+
+								const chunk =
+									!usage && !finalUsage && chunkHasFinishReason(incomingChunk)
+										? {
+												...incomingChunk,
+												usage: resolveTokenUsage(
+													undefined,
+													request.messages,
+													completionOutput,
+												),
+											}
+										: usage
+											? { ...incomingChunk, usage }
+											: incomingChunk;
+
+								yield chunk;
 							}
 
-							completionOutput += extractChunkOutputText(incomingChunk);
-
-							const chunk =
-								!usage && !finalUsage && chunkHasFinishReason(incomingChunk)
-									? {
-											...incomingChunk,
-											usage: resolveTokenUsage(
-												undefined,
-												request.messages,
-												completionOutput,
-											),
-										}
-									: usage
-										? { ...incomingChunk, usage }
-										: incomingChunk;
-
-							yield chunk;
+							if (progressEvent.status === "failed") {
+								throw new Error(progressEvent.error || "Job failed");
+							}
 						}
-
-						if (progressEvent.status === "failed") {
-							throw new Error(progressEvent.error || "Job failed");
-						}
+					} finally {
+						removeAbortListener();
 					}
 				} catch (error) {
-					throw new Error(`Background job failed: ${error}`);
-				} finally {
-					// Clean up signal from map
-					if (signalId) {
-						self.signalMap.delete(signalId);
-					}
+					throw self.toBackgroundJobError(error);
 				}
 			})();
 		} else {
 			// Non-streaming request
 			return (async () => {
 				try {
-					const { promise } = await backgroundJob.execute(
+					const { jobId, promise } = await backgroundJob.execute(
 						"chat-completion",
 						{
 							serviceName: this.name,
-							request: { ...requestPayload, signalId },
+							request: requestPayload,
 						},
 						{ stream: false },
 					);
+					const removeAbortListener = this.bindAbortSignal(signal, jobId);
 
-					const result = await promise;
+					try {
+						const result = await promise;
 
-					if (
-						result.status === "completed" &&
-						result.result &&
-						"response" in result.result
-					) {
-						const responseData = result.result as {
-							response: ChatCompletionResponse;
-						};
-						return {
-							...responseData.response,
-							usage: resolveTokenUsage(
-								responseData.response.usage,
-								request.messages,
-								extractResponseOutputText(responseData.response),
-							),
-						};
+						if (
+							result.status === "completed" &&
+							result.result &&
+							"response" in result.result
+						) {
+							const responseData = result.result as {
+								response: ChatCompletionResponse;
+							};
+							return {
+								...responseData.response,
+								usage: resolveTokenUsage(
+									responseData.response.usage,
+									request.messages,
+									extractResponseOutputText(responseData.response),
+								),
+							};
+						}
+						throw new Error(result.error || "Failed to process chat completion");
+					} finally {
+						removeAbortListener();
 					}
-					throw new Error(result.error || "Failed to process chat completion");
 				} catch (error) {
-					throw new Error(`Background job failed: ${error}`);
-				} finally {
-					// Clean up signal from map
-					if (signalId) {
-						this.signalMap.delete(signalId);
-					}
+					throw this.toBackgroundJobError(error);
 				}
 			})();
 		}

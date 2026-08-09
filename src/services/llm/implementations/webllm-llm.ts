@@ -512,45 +512,33 @@ export class WebLLMLLM implements BaseLLM {
 			return;
 		}
 
+		if (!messageId) return;
+
+		const pendingRequest = this.pending.get(messageId);
+		if (!pendingRequest) return;
+
 		if (type === "progress") {
 			const progressData = payload as ProgressEvent;
+			pendingRequest.onProgress?.(progressData);
 			window.dispatchEvent(
 				new CustomEvent("webllm:progress", { detail: progressData }),
 			);
-
-			for (const [, request] of this.pending.entries()) {
-				if (request.onProgress) {
-					request.onProgress(progressData);
-				}
-			}
 			return;
 		}
 
 		if (type === "chunk") {
 			const chunk = payload as ChatCompletionChunk;
-			for (const [, request] of this.pending.entries()) {
-				if (request.onStreamChunk) {
-					request.onStreamChunk(chunk);
-				}
-			}
+			pendingRequest.onStreamChunk?.(chunk);
 			return;
 		}
 
 		if (type === "end") {
 			const chunk = payload as ChatCompletionChunk;
-			for (const [, request] of this.pending.entries()) {
-				if (request.onStreamChunk) {
-					request.onStreamChunk(chunk);
-					request.resolve(undefined);
-				}
-			}
+			this.pending.delete(messageId);
+			pendingRequest.onStreamChunk?.(chunk);
+			pendingRequest.resolve(undefined);
 			return;
 		}
-
-		if (!messageId) return;
-
-		const pendingRequest = this.pending.get(messageId);
-		if (!pendingRequest) return;
 
 		this.pending.delete(messageId);
 
@@ -564,6 +552,20 @@ export class WebLLMLLM implements BaseLLM {
 	};
 
 	private send(
+		type: OutgoingMessage["type"],
+		payload?: unknown,
+		options?: {
+			onProgress?: (progress: ProgressEvent) => void;
+			onStreamChunk?: (chunk: ChatCompletionChunk) => void;
+			signalId?: string;
+		},
+	): Promise<unknown> {
+		return this.iframeRuntime.serialize(() =>
+			this.sendToRunner(type, payload, options),
+		);
+	}
+
+	private sendToRunner(
 		type: OutgoingMessage["type"],
 		payload?: unknown,
 		options?: {

@@ -353,12 +353,7 @@ describe("LLMOperationsHandler", () => {
 				dependencies,
 			),
 		).resolves.toEqual({
-			response: {
-				chunks: [
-					{ choices: [{ delta: { content: "a" } }] },
-					{ choices: [{ delta: { content: "b" } }] },
-				],
-			},
+			response: { streamed: true },
 		});
 		expect(dependencies.updateJobProgress).toHaveBeenCalledWith(
 			"j15",
@@ -417,6 +412,66 @@ describe("LLMOperationsHandler", () => {
 				deps(),
 			),
 		).resolves.toEqual({ needsRestore: true, provider: "openai" });
+	});
+
+	it("cancels active and not-yet-started chat completions", async () => {
+		const handler = new LLMOperationsHandler();
+		let receivedSignal: AbortSignal | undefined;
+		let markStarted: (() => void) | undefined;
+		const started = new Promise<void>((resolve) => {
+			markStarted = resolve;
+		});
+
+		llmService.chatCompletionsFor.mockImplementationOnce(
+			(...args: unknown[]) => {
+				const request = args[1] as { signal?: AbortSignal };
+				receivedSignal = request.signal;
+				markStarted?.();
+				return new Promise((_, reject) => {
+					request.signal?.addEventListener(
+						"abort",
+						() => reject(new Error("Operation aborted")),
+						{ once: true },
+					);
+				});
+			},
+		);
+
+		const activeCompletion = handler.process(
+			"active-chat",
+			job("chat-completion", {
+				serviceName: "openai",
+				request: { messages: [], stream: false },
+			}),
+			deps(),
+		);
+		await started;
+
+		await expect(
+			handler.process(
+				"cancel-active-chat",
+				job("cancel-chat-completion", { targetJobId: "active-chat" }),
+				deps(),
+			),
+		).resolves.toEqual({ canceled: true });
+		expect(receivedSignal?.aborted).toBe(true);
+		await expect(activeCompletion).rejects.toThrow("Operation aborted");
+
+		await handler.process(
+			"cancel-queued-chat",
+			job("cancel-chat-completion", { targetJobId: "queued-chat" }),
+			deps(),
+		);
+		await expect(
+			handler.process(
+				"queued-chat",
+				job("chat-completion", {
+					serviceName: "openai",
+					request: { messages: [], stream: false },
+				}),
+				deps(),
+			),
+		).rejects.toThrow("Operation aborted");
 	});
 
 	it("rejects missing services and unknown LLM jobs", async () => {

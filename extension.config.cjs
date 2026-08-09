@@ -6,6 +6,11 @@ const path = require('path');
 const EMPTY_MODULE = path.resolve(__dirname, 'src/utils/empty-module.cjs');
 
 module.exports = {
+  output: {
+    // Extension pages and lazy chunks are always served from the extension root.
+    // Avoid runtime public-path inference from injected browser automation scripts.
+    publicPath: '/',
+  },
   commands: {
     dev: {
       chromiumBinary: process.env.CHROME_PATH,

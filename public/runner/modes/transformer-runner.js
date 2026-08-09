@@ -21,6 +21,7 @@ import {
 import { toRunnerErrorPayload } from "./transformmers/responses.js";
 
 const loadedModelsCache = new Map();
+const activeOperations = new Map();
 let currentMessageContext = null;
 
 const transformerManager = new ModelLifecycleManager({
@@ -168,7 +169,13 @@ async function handleServe(src, origin, messageId, payload) {
 	}
 }
 
-async function handleChatCompletions(src, origin, messageId, payload) {
+async function handleChatCompletions(
+	src,
+	origin,
+	messageId,
+	payload,
+	signal,
+) {
 	const { messages, model, stream = false } = payload || {};
 	if (!messages) throw new Error("Messages are required");
 
@@ -185,6 +192,7 @@ async function handleChatCompletions(src, origin, messageId, payload) {
 			origin,
 			messageId,
 			payload,
+			signal,
 		});
 
 	try {
@@ -302,6 +310,14 @@ window.addEventListener("message", async (event) => {
 
 	try {
 		switch (type) {
+			case "abort": {
+				const operation = activeOperations.get(messageId);
+				if (operation?.abortController) {
+					operation.abortController.abort();
+				}
+				return;
+			}
+
 			case "init":
 				await ensureTransformerRunnerCatalog();
 				reply(src, origin, messageId, "complete", {
@@ -318,9 +334,22 @@ window.addEventListener("message", async (event) => {
 				await handleServe(src, origin, messageId, payload);
 				break;
 
-			case "chat/completions":
-				await handleChatCompletions(src, origin, messageId, payload);
+			case "chat/completions": {
+				const abortController = new AbortController();
+				activeOperations.set(messageId, { abortController });
+				try {
+					await handleChatCompletions(
+						src,
+						origin,
+						messageId,
+						payload,
+						abortController.signal,
+					);
+				} finally {
+					activeOperations.delete(messageId);
+				}
 				break;
+			}
 
 			case "unload":
 				await handleUnload(src, origin, messageId, payload);

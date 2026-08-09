@@ -15,6 +15,7 @@ interface IframeRuntimeOptions {
 export class IframeRuntime {
 	private modelsCache: ModelsResponse | null = null;
 	private activeOperations = 0;
+	private operationQueue: Promise<void> = Promise.resolve();
 	private idleDestroyTimer: ReturnType<typeof setTimeout> | null = null;
 	private readonly provider: string;
 	private readonly ensureReady: () => Promise<void>;
@@ -50,6 +51,15 @@ export class IframeRuntime {
 		} finally {
 			await this.finishOperation(options);
 		}
+	}
+
+	serialize<T>(operation: () => Promise<T>): Promise<T> {
+		const queuedOperation = this.operationQueue.then(operation, operation);
+		this.operationQueue = queuedOperation.then(
+			() => undefined,
+			() => undefined,
+		);
+		return queuedOperation;
 	}
 
 	async refreshModels(): Promise<ModelsResponse> {

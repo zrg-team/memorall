@@ -134,6 +134,38 @@ function resolveEffectiveMaxTokens({
 	return effectiveMaxNewTokens;
 }
 
+function throwIfAborted(signal) {
+	if (!signal?.aborted) return;
+	const error = new Error("Operation aborted");
+	error.name = "AbortError";
+	throw error;
+}
+
+function createInterruptableStoppingCriteria(signal) {
+	if (!signal) {
+		return { criteria: undefined, dispose: () => {} };
+	}
+
+	const InterruptableStoppingCriteria =
+		getTransformersContext().transformers?.InterruptableStoppingCriteria;
+	if (!InterruptableStoppingCriteria) {
+		return { criteria: undefined, dispose: () => {} };
+	}
+
+	const criterion = new InterruptableStoppingCriteria();
+	const interrupt = () => criterion.interrupt();
+	if (signal.aborted) {
+		interrupt();
+	} else {
+		signal.addEventListener("abort", interrupt, { once: true });
+	}
+
+	return {
+		criteria: [criterion],
+		dispose: () => signal.removeEventListener("abort", interrupt),
+	};
+}
+
 async function runGeneration({
 	bundle,
 	targetModel,
@@ -149,6 +181,7 @@ async function runGeneration({
 	tools,
 	toolChoice,
 	memoryHint,
+	signal,
 }) {
 	const { TextStreamer } = getTransformersContext();
 	const {
@@ -189,13 +222,23 @@ async function runGeneration({
 		webgpuMaxContext,
 		memoryHint,
 	});
+	const interruptableStoppingCriteria = createInterruptableStoppingCriteria(
+		signal,
+	);
+	const generationAbortOptions = interruptableStoppingCriteria.criteria
+		? { stopping_criteria: interruptableStoppingCriteria.criteria }
+		: {};
 
-	if (stream) {
+	try {
+		throwIfAborted(signal);
+
+		if (stream) {
 		if (runtime === "text_generation_pipeline") {
 			const streamer = new TextStreamer(currentTokenizer, {
 				skip_prompt: true,
 				skip_special_tokens: true,
 				callback_function: (token) => {
+					throwIfAborted(signal);
 					reply(
 						src,
 						origin,
@@ -212,10 +255,11 @@ async function runGeneration({
 					: {}),
 				do_sample: temperature > 0,
 				streamer,
-				temperature,
-				top_p: topP,
-				top_k: topK,
-			});
+					temperature,
+					top_p: topP,
+					top_k: topK,
+					...generationAbortOptions,
+				});
 		} else {
 			const postprocessState = {
 				rawText: "",
@@ -225,6 +269,7 @@ async function runGeneration({
 				skip_prompt: true,
 				skip_special_tokens: bundle.postprocess !== "gemma_clean",
 				callback_function: (token) => {
+					throwIfAborted(signal);
 					if (bundle.postprocess && bundle.postprocess !== "none") {
 						emitPostprocessedDelta(
 							targetModel,
@@ -256,12 +301,14 @@ async function runGeneration({
 				do_sample: temperature > 0,
 				streamer,
 				return_dict_in_generate: true,
-				temperature,
-				top_p: topP,
-				top_k: topK,
-			});
+					temperature,
+					top_p: topP,
+					top_k: topK,
+					...generationAbortOptions,
+				});
 		}
 
+		throwIfAborted(signal);
 		reply(src, origin, messageId, "stream_end", createStreamEndChunk(targetModel));
 		return;
 	}
@@ -279,6 +326,7 @@ async function runGeneration({
 			skip_prompt: true,
 			skip_special_tokens: true,
 			callback_function: (token) => {
+				throwIfAborted(signal);
 				outputText += token;
 			},
 		});
@@ -292,7 +340,9 @@ async function runGeneration({
 			temperature,
 			top_p: topP,
 			top_k: topK,
+			...generationAbortOptions,
 		});
+		throwIfAborted(signal);
 
 		decoded = postprocessGeneratedText(outputText, bundle);
 	} else if (bundle.postprocess && bundle.postprocess !== "none") {
@@ -301,6 +351,7 @@ async function runGeneration({
 			skip_prompt: true,
 			skip_special_tokens: false,
 			callback_function: (token) => {
+				throwIfAborted(signal);
 				outputText += token;
 			},
 		});
@@ -315,7 +366,9 @@ async function runGeneration({
 			temperature,
 			top_p: topP,
 			top_k: topK,
+			...generationAbortOptions,
 		});
+		throwIfAborted(signal);
 
 		decoded = postprocessGeneratedText(outputText, bundle);
 	} else {
@@ -329,7 +382,9 @@ async function runGeneration({
 			temperature,
 			top_p: topP,
 			top_k: topK,
+			...generationAbortOptions,
 		});
+		throwIfAborted(signal);
 
 		const trimmedSeq = trimSequences(generationResult.sequences, promptLength);
 		decoded = postprocessGeneratedText(
@@ -352,6 +407,9 @@ async function runGeneration({
 		"complete",
 		createCompletionResponse(targetModel, decoded, usage),
 	);
+	} finally {
+		interruptableStoppingCriteria.dispose();
+	}
 }
 
 export async function executeChatCompletion({
@@ -361,6 +419,7 @@ export async function executeChatCompletion({
 	origin,
 	messageId,
 	payload,
+	signal,
 }) {
 	const {
 		messages,
@@ -391,6 +450,7 @@ export async function executeChatCompletion({
 				tools,
 				toolChoice: tool_choice,
 				memoryHint: _memoryHint,
+				signal,
 			});
 		});
 	});

@@ -321,6 +321,87 @@ describe("LLM service main classes", () => {
 		).resolves.toMatchObject({ object: "chat.completion" });
 	});
 
+	it("creates every supported provider with its configured client", async () => {
+		const { LLMServiceMain } = await import("@/services/llm/llm-service-main");
+		const [
+			{ WllamaLLM },
+			{ WebLLMLLM },
+			{ TransformerLLM },
+			{ OpenAILLM },
+			{ LocalOpenAICompatibleLLM },
+		] = await Promise.all([
+			import("@/services/llm/implementations/wllama-llm"),
+			import("@/services/llm/implementations/webllm-llm"),
+			import("@/services/llm/implementations/transformer-llm"),
+			import("@/services/llm/implementations/openai-llm"),
+			import("@/services/llm/implementations/local-openai-llm"),
+		]);
+		vi.clearAllMocks();
+
+		const service = new LLMServiceMain();
+		await service.create("wllama-contract", {
+			type: "wllama",
+			url: "wllama-runner.html",
+		});
+		await service.create("webllm-contract", {
+			type: "webllm",
+			url: "webllm-runner.html",
+		});
+		await service.create("transformer-contract", { type: "transformer" });
+		await service.create("openai-contract", {
+			type: "openai",
+			apiKey: "openai-key",
+			baseURL: "https://openai.test/v1",
+		});
+		await service.create("openrouter-contract", {
+			type: "openrouter",
+			apiKey: "openrouter-key",
+		});
+		await service.create("lmstudio-contract", {
+			type: "lmstudio",
+			baseURL: "http://lmstudio.test/v1",
+		});
+		await service.create("ollama-contract", {
+			type: "ollama",
+			baseURL: "http://ollama.test/v1",
+		});
+
+		expect(WllamaLLM).toHaveBeenCalledWith("wllama-runner.html");
+		expect(WebLLMLLM).toHaveBeenCalledWith("webllm-runner.html");
+		expect(TransformerLLM).toHaveBeenCalledWith();
+		expect(OpenAILLM).toHaveBeenNthCalledWith(
+			1,
+			"openai-key",
+			"https://openai.test/v1",
+		);
+		expect(OpenAILLM).toHaveBeenNthCalledWith(
+			2,
+			"openrouter-key",
+			"https://openrouter.ai/api/v1",
+		);
+		expect(LocalOpenAICompatibleLLM).toHaveBeenNthCalledWith(
+			1,
+			"http://lmstudio.test/v1",
+			undefined,
+			"lmstudio",
+		);
+		expect(LocalOpenAICompatibleLLM).toHaveBeenNthCalledWith(
+			2,
+			"http://ollama.test/v1",
+			undefined,
+			"ollama",
+		);
+		expect(service.list()).toEqual([
+			"wllama-contract",
+			"webllm-contract",
+			"transformer-contract",
+			"openai-contract",
+			"openrouter-contract",
+			"lmstudio-contract",
+			"ollama-contract",
+		]);
+	});
+
 	it("creates heavy LLM proxies through background jobs in proxy mode", async () => {
 		const { LLMServiceProxy } = await import(
 			"@/services/llm/llm-service-proxy"

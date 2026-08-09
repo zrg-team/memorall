@@ -508,10 +508,10 @@ if (!offscreenGlobal.__memorallOffscreenSetupDone__) {
 		logWarn("Failed to add message listener:", error);
 	}
 
-	// Keep the offscreen document alive
+	// Keep the offscreen document alive without recurring logs.
 	setInterval(() => {
-		// This prevents the offscreen document from being terminated
-		logInfo("Offscreen document heartbeat");
+		// The timer tick itself is enough to keep the offscreen document active.
+		void offscreenGlobal.__memorallOffscreenSetupDone__;
 	}, 30000); // Every 30 seconds
 }
 
