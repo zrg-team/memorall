@@ -91,7 +91,7 @@ Runtime-specific code also exists under `src/background/` and `src/embedded/`, b
 
 ### Filesystem Service
 - **Path:** `src/services/filesystem/`
-- **What:** ZenFS-backed document/workspace storage with tree caching, cross-context invalidation, workspace persistence, and sandbox mount snapshot support for `/documents` and `/workspaces`.
+- **What:** ZenFS-backed document/workspace storage with tree caching, cross-context invalidation, workspace persistence, and sandbox mount snapshot support for the root filesystem.
 - **Key files:** `document-filesystem.ts`, `fs.ts`
 - **Why:** Persists the document library and writable workspace outside the in-memory sandbox runtime.
 - **Doc:** Summary only on this page
@@ -136,7 +136,7 @@ Top-level folders:
 - **Uses:** Database and embedding-related diagnostics
 
 ### Documents Module
-- **Path:** `src/main/modules/documents/`
+- **Path:** `src/main/modules/files/`
 - **What:** Document library UI, workspace tree UI, editors, upload/extraction flows, topic assignment, and knowledge-conversion hooks.
 - **Key areas:** `components/`, `editors/`, `handlers/`, `hooks/`, `modals/`, `services/`
 - **Uses:** Filesystem Service, Topics Module, Knowledge Module

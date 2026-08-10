@@ -102,7 +102,7 @@ The model contributes reasoning and generation. The harness contributes all stru
 │  STEP MIDDLEWARE     │   │  TOOL / CAPABILITY LAYER            │
 │  LAYER               │   │                                     │
 │  Nodes in the graph  │   │  tools/web/     tools/fs/           │
-│  Execute in sequence │   │  tools/documents/  tools/sandbox/   │
+│  Execute in sequence │   │  tools/files/  tools/sandbox/   │
 │  or loop             │   │  tools/planner/    tools/co-agent/  │
 │                      │   │  tools/active-memory/               │
 │  steps/common/       │   │  tools/knowledge-graph.ts           │
@@ -277,7 +277,7 @@ The model contributes reasoning and generation. The harness contributes all stru
 | 3 | `@/utils/logger` imported in 50+ files | Every step and tool |
 | 4 | `@/utils/vector-search`, `@/utils/scoped-graph-query`, `@/utils/embedding-size-config` used in steps | Knowledge steps |
 | 5 | `serviceManager` directly imported in `multi-agent-feature.ts` | DI container leak |
-| 6 | `@/main/modules/documents/handlers/pdf-extraction` imported in tools | UI-layer → service-layer violation |
+| 6 | `@/main/modules/files/handlers/pdf-extraction` imported in tools | UI-layer → service-layer violation |
 | 7 | `interfaces/flow-builder.ts` imports ORM entity types from `@/services/database/types` | Interface file polluted |
 | 8 | `@langchain/langgraph/web` used instead of `@langchain/langgraph` | Browser-only, blocks Node.js |
 | 9 | `drizzle-orm` operators used directly in step files | ORM leaked into business logic |
@@ -698,7 +698,7 @@ export interface IFlowSandboxService {
 
 ### 1.9 `interfaces/document-processor.ts`
 
-Breaks the layer violation where tools import directly from `@/main/modules/documents/handlers/pdf-extraction`.
+Breaks the layer violation where tools import directly from `@/main/modules/files/handlers/pdf-extraction`.
 
 ```typescript
 export interface DocumentPage {
@@ -844,11 +844,11 @@ coAgent?: IFlowCoAgentService;
 
 ### 3.2 PDF extraction layer violation — document tools
 
-Document/PDF tools import from `@/main/modules/documents/handlers/pdf-extraction` (a UI-layer module). These are replaced with `services.documentProcessor`:
+Document/PDF tools import from `@/main/modules/files/handlers/pdf-extraction` (a UI-layer module). These are replaced with `services.documentProcessor`:
 
 ```typescript
 // Before
-import { extractPDF, formatPDFAsText } from "@/main/modules/documents/handlers/pdf-extraction";
+import { extractPDF, formatPDFAsText } from "@/main/modules/files/handlers/pdf-extraction";
 const result = formatPDFAsText(await extractPDF(buffer));
 
 // After

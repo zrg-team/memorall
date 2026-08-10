@@ -131,7 +131,7 @@ Offline-first in Memorall is architectural, not decorative. The product is fully
 Routes currently wired in [`src/main/App.tsx`](./src/main/App.tsx):
 
 - `/` - chat workspace
-- `/documents` - document and workspace library
+- `/files` - file and resource library
 - `/knowledge-graph` - graph explorer
 - `/llm` - model and provider management
 - `/embeddings` - vector search/debug view
