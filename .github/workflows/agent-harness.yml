@@ -66,6 +66,7 @@ jobs:
       - run: corepack enable
       - run: yarn install --immutable
       - run: yarn playwright install --with-deps chromium
+      - run: yarn harness:pack
       - run: yarn harness:smoke
       - run: yarn type-check
       - run: yarn test
