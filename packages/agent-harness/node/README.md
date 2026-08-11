@@ -79,3 +79,14 @@ filesystem or persistence adapters.
 - ESM
 - host-managed filesystem permissions and process lifecycle
 - explicit service/plugin composition through core
+
+## 🛠️ Develop Node Adapters
+
+```bash
+yarn workspace @memorall/agent-harness-node dev
+yarn workspace @memorall/agent-harness-node test
+yarn workspace @memorall/agent-harness-node build
+```
+
+Build mode compiles Core, Standard, Sandbox, and MCP references in dependency
+order before emitting Node adapter output.

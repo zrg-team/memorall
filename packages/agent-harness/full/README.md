@@ -80,3 +80,15 @@ exceptions.
 - Read [`standard`](../standard/README.md) to select tools precisely.
 - Read [`sandbox`](../sandbox/README.md) before binding a runtime provider.
 - Use [`browser`](../browser/README.md) or [`node`](../node/README.md) for host adapters.
+
+## 🛠️ Develop The Facade
+
+```bash
+yarn workspace @memorall/agent-harness dev
+yarn workspace @memorall/agent-harness test
+yarn workspace @memorall/agent-harness build
+```
+
+The facade watcher follows every referenced universal package, making it the
+focused alternative to the umbrella watcher when platform adapters are not
+being changed.

@@ -21,6 +21,9 @@
   },
   "scripts": {
     "build": "tsc -b",
+    "clean": "tsc -b --clean",
+    "dev": "tsc -b --watch --preserveWatchOutput --pretty",
+    "watch": "yarn dev",
     "typecheck": "tsc -b --pretty false",
     "test": "vitest run --config ../vitest.config.ts full",
     "pack": "yarn pack"

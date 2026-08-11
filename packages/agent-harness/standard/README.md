@@ -68,3 +68,14 @@ plugin factory and pass the result to `createHarness()`.
 This package owns domain-neutral agent abilities only. Concrete browser tabs,
 Chrome extension APIs, document databases, prompts, credentials, and UI policy
 remain outside the workspace.
+
+## 🛠️ Develop Standard Capabilities
+
+```bash
+yarn workspace @memorall/agent-harness-standard dev
+yarn workspace @memorall/agent-harness-standard test
+yarn workspace @memorall/agent-harness-standard build
+```
+
+The watcher builds referenced harness packages first and then incrementally
+refreshes the capability package's `dist/` exports.

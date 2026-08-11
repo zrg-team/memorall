@@ -60,6 +60,8 @@ import {
 } from "@/main/components/ui/tabs";
 import { useResponsiveWorkspacePanels } from "@/main/hooks/use-responsive-workspace-panels";
 import { WorkspaceCollapsedSidebarDataItem } from "@/main/components/molecules/WorkspaceCollapsedSidebarDataItem";
+import { WorkspaceCollapsedSidebarItem } from "@/main/components/molecules/WorkspaceCollapsedSidebarItem";
+import { WorkspaceCollapsedSidebarSection } from "@/main/components/molecules/WorkspaceCollapsedSidebarSection";
 
 import { D3KnowledgeGraph } from "@/main/modules/knowledge/components/D3KnowledgeGraph";
 import {
@@ -850,56 +852,55 @@ export const KnowledgeGraphPage: React.FC<KnowledgeGraphPageProps> = () => {
 			>
 				{isSidebarCollapsed ? (
 					<div className="flex h-full min-h-0 flex-col items-center py-3">
-						<Button
-							type="button"
-							variant="outline"
-							size="icon"
-							className="h-10 w-10 shrink-0"
-							onClick={expandSidebar}
-							aria-label={t("sidebar.show")}
-							title={t("sidebar.show")}
-						>
-							<PanelLeftOpen className="h-4 w-4" />
-						</Button>
-						<div className="mt-3 flex min-h-0 w-full flex-1 flex-col items-center gap-1.5 overflow-y-auto px-1">
-							<WorkspaceCollapsedSidebarDataItem
-								label={t("topic.defaultNoTopic")}
-								badge={topics.length + 1}
-								active={selectedTopicId === DEFAULT_TOPIC_ID}
-								description={`${nodes.length} nodes`}
-								onClick={() => handleTopicSelect(DEFAULT_TOPIC_ID)}
+						<section aria-label="Actions" className="flex w-full flex-col items-center gap-1">
+							<WorkspaceCollapsedSidebarSection label="Actions" />
+							<WorkspaceCollapsedSidebarItem
+								icon={<PanelLeftOpen className="h-4 w-4" />}
+								label={t("sidebar.show")}
+								onClick={expandSidebar}
+								className="border border-input bg-background hover:bg-accent"
 							/>
-							{topics.map((topic) => (
-								<WorkspaceCollapsedSidebarDataItem
-									key={topic.id}
-									label={topic.name}
-									badge={topic.fileCount}
-									active={selectedTopicId === topic.id}
-									onClick={() => handleTopicSelect(topic.id)}
-								/>
-							))}
-							<div className="my-1 w-6 border-t" />
-							{filteredNodes.map((node) => (
-								<WorkspaceCollapsedSidebarDataItem
-									key={node.id}
-									label={node.name}
-									description={node.nodeType}
-									active={selectedNodeId === node.id}
-									onClick={() => setSelectedNodeId(node.id)}
-								/>
-							))}
-						</div>
-						<Button
-							type="button"
-							variant="outline"
-							size="icon"
-							className="mt-3 h-10 w-10 shrink-0 border-dashed"
-							onClick={() => void handleCreateTopic()}
-							aria-label={tTopics("manage.newTopic")}
-							title={tTopics("manage.newTopic")}
+							<WorkspaceCollapsedSidebarItem
+								icon={<Plus className="h-4 w-4" />}
+								label={tTopics("manage.newTopic")}
+								onClick={() => void handleCreateTopic()}
+								className="border border-dashed border-input hover:bg-muted/60"
+							/>
+						</section>
+						<section
+							aria-label="Lists"
+							className="mt-3 flex min-h-0 w-full flex-1 flex-col items-center"
 						>
-							<Plus className="h-4 w-4" />
-						</Button>
+							<WorkspaceCollapsedSidebarSection label="Lists" />
+							<div className="mt-1 flex min-h-0 w-full flex-1 flex-col items-center gap-1.5 overflow-y-auto px-1">
+								<WorkspaceCollapsedSidebarDataItem
+									label={t("topic.defaultNoTopic")}
+									badge={topics.length + 1}
+									active={selectedTopicId === DEFAULT_TOPIC_ID}
+									description={`${nodes.length} nodes`}
+									onClick={() => handleTopicSelect(DEFAULT_TOPIC_ID)}
+								/>
+								{topics.map((topic) => (
+									<WorkspaceCollapsedSidebarDataItem
+										key={topic.id}
+										label={topic.name}
+										badge={topic.fileCount}
+										active={selectedTopicId === topic.id}
+										onClick={() => handleTopicSelect(topic.id)}
+									/>
+								))}
+								<div className="my-1 w-6 border-t" />
+								{filteredNodes.map((node) => (
+									<WorkspaceCollapsedSidebarDataItem
+										key={node.id}
+										label={node.name}
+										description={node.nodeType}
+										active={selectedNodeId === node.id}
+										onClick={() => setSelectedNodeId(node.id)}
+									/>
+								))}
+							</div>
+						</section>
 					</div>
 				) : (
 					<div

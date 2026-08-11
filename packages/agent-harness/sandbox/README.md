@@ -80,3 +80,14 @@ result parsing stay unchanged.
 The `@memorall/agent-harness-sandbox/testing` subpath exports a fake remote
 provider and reusable conformance helpers. Every provider should pass the same
 suite before it is advertised to agents.
+
+## 🛠️ Develop Sandbox Capabilities
+
+```bash
+yarn workspace @memorall/agent-harness-sandbox dev
+yarn workspace @memorall/agent-harness-sandbox test
+yarn workspace @memorall/agent-harness-sandbox build
+```
+
+Use the root `yarn dev` workflow when validating a provider through Memorall;
+it runs this watcher beside the extension's hot-reload server.

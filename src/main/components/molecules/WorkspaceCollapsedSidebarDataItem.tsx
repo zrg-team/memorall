@@ -27,21 +27,16 @@ export const WorkspaceCollapsedSidebarDataItem: React.FC<
 		aria-label={description ? `${label}, ${description}` : label}
 		title={description ? `${label} · ${description}` : label}
 		className={cn(
-			"relative flex min-h-11 w-10 shrink-0 flex-col items-center justify-center rounded-md border px-1 py-1 text-center transition-colors",
+			"relative flex h-9 w-9 shrink-0 items-center justify-center rounded-md border text-center transition-colors",
 			"focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
 			active
 				? "border-primary/50 bg-primary/10 text-primary"
 				: "border-transparent text-foreground hover:border-border hover:bg-muted/60",
 		)}
 	>
-		<span className="line-clamp-3 max-w-full break-words text-[9px] font-semibold leading-3">
-			{label}
+		<span className="text-xs font-semibold leading-none">
+			{label.trim().charAt(0).toUpperCase() || "?"}
 		</span>
-		{description ? (
-			<span className="mt-0.5 line-clamp-1 max-w-full break-all text-[8px] leading-3 text-muted-foreground">
-				{description}
-			</span>
-		) : null}
 		{badge !== undefined && badge !== null ? (
 			<span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full border border-background bg-muted px-1 text-[9px] font-semibold leading-none text-muted-foreground shadow-sm">
 				{badge}

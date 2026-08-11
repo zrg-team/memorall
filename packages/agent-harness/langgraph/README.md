@@ -80,3 +80,14 @@ services fail before partial pipeline execution can silently continue.
 
 The package works in browsers, workers, and Node.js. It depends on LangGraph and
 core only; provider SDKs and application policy belong in host adapters.
+
+## 🛠️ Develop The Graph Driver
+
+```bash
+yarn workspace @memorall/agent-harness-langgraph dev
+yarn workspace @memorall/agent-harness-langgraph test
+yarn workspace @memorall/agent-harness-langgraph build
+```
+
+Build mode follows project references, so changes in Core are compiled before
+the graph driver. The `dev` watcher keeps package exports ready for consumers.
