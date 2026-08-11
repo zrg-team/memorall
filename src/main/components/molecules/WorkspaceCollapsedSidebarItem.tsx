@@ -5,19 +5,21 @@ interface WorkspaceCollapsedSidebarItemProps {
 	icon: React.ReactNode;
 	label: string;
 	active?: boolean;
+	disabled?: boolean;
 	onClick: () => void;
 	className?: string;
 }
 
 export const WorkspaceCollapsedSidebarItem: React.FC<
 	WorkspaceCollapsedSidebarItemProps
-> = ({ icon, label, active = false, onClick, className }) => (
+> = ({ icon, label, active = false, disabled = false, onClick, className }) => (
 	<button
 		type="button"
 		onClick={onClick}
+		disabled={disabled}
 		aria-label={label}
 		className={cn(
-			"group relative inline-flex h-9 w-9 items-center justify-center rounded-md transition-colors",
+			"group relative inline-flex h-9 w-9 items-center justify-center rounded-md transition-colors disabled:pointer-events-none disabled:opacity-50",
 			"focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
 			active
 				? "border border-primary/25 bg-primary/10 text-primary"

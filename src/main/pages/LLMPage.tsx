@@ -36,6 +36,8 @@ import { useTranslation } from "react-i18next";
 import { getModel } from "@/services/llm/registry/model-registry";
 import { PageHeader } from "@/main/components/ui/page-header";
 import { WorkspaceCollapsedSidebarDataItem } from "@/main/components/molecules/WorkspaceCollapsedSidebarDataItem";
+import { WorkspaceCollapsedSidebarItem } from "@/main/components/molecules/WorkspaceCollapsedSidebarItem";
+import { WorkspaceCollapsedSidebarSection } from "@/main/components/molecules/WorkspaceCollapsedSidebarSection";
 
 // No local quick-connect card; configuration handled in AdvancedSection
 
@@ -137,35 +139,39 @@ export const LLMPage: React.FC = () => {
 				>
 					{isDesktop && isSidebarCollapsed ? (
 						<div className="flex h-full min-h-0 flex-col items-center py-3">
-							<Button
-								type="button"
-								variant="outline"
-								size="icon"
-								className="h-10 w-10 shrink-0"
-								onClick={expandSidebar}
-								aria-label={t("sidebar.show")}
-								title={t("sidebar.show")}
-							>
-								<PanelLeftOpen className="h-4 w-4" />
-							</Button>
-							<div className="mt-3 flex min-h-0 w-full flex-1 flex-col items-center gap-1.5 overflow-y-auto px-1">
-								<WorkspaceCollapsedSidebarDataItem
-									label={currentModelLabel}
-									description={
-										current?.provider
-											? `${current.provider} · ${currentModelStatus}`
-											: currentModelStatus
-									}
-									indicatorClassName={
-										current?.modelId?.trim()
-											? "bg-emerald-500"
-											: current?.provider
-												? "bg-amber-500"
-												: "bg-muted-foreground/50"
-									}
+							<section aria-label="Actions" className="flex w-full flex-col items-center gap-1">
+								<WorkspaceCollapsedSidebarSection label="Actions" />
+								<WorkspaceCollapsedSidebarItem
+									icon={<PanelLeftOpen className="h-4 w-4" />}
+									label={t("sidebar.show")}
 									onClick={expandSidebar}
+									className="border border-input bg-background hover:bg-accent"
 								/>
-							</div>
+							</section>
+							<section
+								aria-label="Lists"
+								className="mt-3 flex min-h-0 w-full flex-1 flex-col items-center"
+							>
+								<WorkspaceCollapsedSidebarSection label="Lists" />
+								<div className="mt-1 flex min-h-0 w-full flex-1 flex-col items-center gap-1.5 overflow-y-auto px-1">
+									<WorkspaceCollapsedSidebarDataItem
+										label={currentModelLabel}
+										description={
+											current?.provider
+												? `${current.provider} · ${currentModelStatus}`
+												: currentModelStatus
+										}
+										indicatorClassName={
+											current?.modelId?.trim()
+												? "bg-emerald-500"
+												: current?.provider
+													? "bg-amber-500"
+													: "bg-muted-foreground/50"
+										}
+										onClick={expandSidebar}
+									/>
+								</div>
+							</section>
 						</div>
 					) : (
 						<div

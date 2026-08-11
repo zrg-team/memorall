@@ -53,3 +53,14 @@ IDs are unavailable by design.
 It is not a global registry, automatic data migration, provider adapter, or
 application compatibility layer. The host remains responsible for supplying and
 eventually retiring each legacy implementation.
+
+## 🛠️ Develop Compatibility Bridges
+
+```bash
+yarn workspace @memorall/agent-harness-compat dev
+yarn workspace @memorall/agent-harness-compat test
+yarn workspace @memorall/agent-harness-compat build
+```
+
+Keep compatibility changes isolated here and run the root stored-flow tests
+before removing or redirecting any legacy ID.

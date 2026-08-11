@@ -60,3 +60,14 @@ inject another `HtmlContentProcessor` or leave DOM extraction unadvertised.
 Browser extension tabs, service-worker messaging, offscreen documents, and
 AlmostNode transports are host adapters, not responsibilities of this package.
 That separation keeps the same harness usable in a normal web app.
+
+## 🛠️ Develop Browser Adapters
+
+```bash
+yarn workspace @memorall/agent-harness-browser dev
+yarn workspace @memorall/agent-harness-browser test
+yarn workspace @memorall/agent-harness-browser build
+```
+
+For end-to-end extension work, use root `yarn dev`; it starts the complete
+harness watcher before launching Extension.js hot reload.

@@ -48,6 +48,43 @@ const packageNameOf = (specifier) =>
 const errors = [];
 const versions = new Set();
 
+const rootManifest = JSON.parse(await readFile(path.join(root, "package.json"), "utf8"));
+const umbrellaManifest = JSON.parse(await readFile(path.join(harnessRoot, "package.json"), "utf8"));
+const requireScript = (manifest, owner, name, fragments = []) => {
+  const script = manifest.scripts?.[name];
+  if (typeof script !== "string" || script.length === 0) {
+    errors.push(`${owner}: missing ${name} script`);
+    return;
+  }
+  for (const fragment of fragments) {
+    if (!script.includes(fragment)) errors.push(`${owner}: ${name} must include ${fragment}`);
+  }
+};
+
+for (const workspacePath of ["packages/agent-harness", "packages/agent-harness/*"]) {
+  if (!rootManifest.workspaces?.includes(workspacePath)) {
+    errors.push(`root: missing Yarn workspace ${workspacePath}`);
+  }
+}
+requireScript(rootManifest, "root", "prepare:dev", ["harness:build"]);
+requireScript(rootManifest, "root", "dev", ["prepare:dev", "harness:watch", "extension:dev"]);
+requireScript(rootManifest, "root", "dev:no-reload", [
+  "prepare:dev",
+  "harness:watch",
+  "extension:dev:no-reload",
+]);
+requireScript(rootManifest, "root", "harness:watch", ["tsc -b", "--watch"]);
+requireScript(rootManifest, "root", "watch", ["yarn dev"]);
+requireScript(rootManifest, "root", "package", ["harness:build"]);
+for (const name of ["build", "build:prod", "build:chrome", "build:edge", "build:firefox", "build:all"]) {
+  requireScript(rootManifest, "root", name, ["prepare:build"]);
+}
+for (const name of ["build", "clean", "dev", "watch", "typecheck", "test"]) {
+  requireScript(umbrellaManifest, "agent-harness workspace", name);
+}
+requireScript(umbrellaManifest, "agent-harness workspace", "dev", ["tsc -b", "--watch"]);
+requireScript(umbrellaManifest, "agent-harness workspace", "watch", ["yarn dev"]);
+
 const isRuntimeGlobalUse = (node) => {
   const parent = node.parent;
   if (!parent) return false;
@@ -68,6 +105,11 @@ for (const workspace of packageNames) {
   if (manifest.sideEffects !== false) errors.push(`${workspace}: sideEffects must be false`);
   if (manifest.type !== "module") errors.push(`${workspace}: package must be ESM`);
   if (!manifest.exports?.["."]) errors.push(`${workspace}: missing explicit root export`);
+  for (const name of ["build", "clean", "dev", "watch", "typecheck", "test", "pack"]) {
+    requireScript(manifest, workspace, name);
+  }
+  requireScript(manifest, workspace, "dev", ["tsc -b", "--watch"]);
+  requireScript(manifest, workspace, "watch", ["yarn dev"]);
   for (const [subpath, conditions] of Object.entries(manifest.exports ?? {})) {
     if (!conditions || typeof conditions !== "object") {
       errors.push(`${workspace}: export ${subpath} must use an explicit condition map`);
@@ -156,5 +198,5 @@ if (errors.length) {
   console.error(errors.join("\n"));
   process.exitCode = 1;
 } else {
-  console.log(`Agent harness boundaries passed for ${packageNames.length} workspaces.`);
+  console.log(`Agent harness boundaries and development scripts passed for ${packageNames.length} packages.`);
 }

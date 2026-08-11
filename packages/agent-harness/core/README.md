@@ -88,3 +88,14 @@ Core uses ES modules and portable Web Platform primitives. It does not import
 LangGraph, React, DOM APIs, Chrome APIs, Node built-ins, provider SDKs, or
 application code. Choose [`browser`](../browser/README.md) or
 [`node`](../node/README.md) for concrete platform adapters.
+
+## 🛠️ Develop Core
+
+```bash
+yarn workspace @memorall/agent-harness-core dev
+yarn workspace @memorall/agent-harness-core test
+yarn workspace @memorall/agent-harness-core build
+```
+
+`dev` keeps `dist/` current with TypeScript build-mode watch. Use `clean` before
+a from-scratch package build when validating project-reference output.

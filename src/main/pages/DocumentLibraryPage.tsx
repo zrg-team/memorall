@@ -10,6 +10,8 @@ import { DocumentLibraryCompactNavigator } from "@/main/modules/files/components
 import { Button } from "@/main/components/ui/button";
 import { useResponsiveWorkspacePanels } from "@/main/hooks/use-responsive-workspace-panels";
 import { WorkspaceCollapsedSidebarDataItem } from "@/main/components/molecules/WorkspaceCollapsedSidebarDataItem";
+import { WorkspaceCollapsedSidebarItem } from "@/main/components/molecules/WorkspaceCollapsedSidebarItem";
+import { WorkspaceCollapsedSidebarSection } from "@/main/components/molecules/WorkspaceCollapsedSidebarSection";
 import type { DocumentTreeNode } from "@/types/document-library";
 
 const PANEL_STORAGE_KEY = "memorall.documents.workspace-panels.v2";
@@ -132,44 +134,45 @@ export const DocumentLibraryPage: React.FC = () => {
 					>
 						{isSidebarCollapsed ? (
 							<div className="flex h-full min-h-0 flex-col items-center py-3">
-								<Button
-									type="button"
-									variant="outline"
-									size="icon"
-									className="h-10 w-10 shrink-0"
-									onClick={expandSidebar}
-									aria-label={t("navigator.expand")}
-									title={t("navigator.expand")}
+								<section aria-label="Actions" className="flex w-full flex-col items-center gap-1">
+									<WorkspaceCollapsedSidebarSection label="Actions" />
+									<WorkspaceCollapsedSidebarItem
+										icon={<PanelLeftOpen className="h-4 w-4" />}
+										label={t("navigator.expand")}
+										onClick={expandSidebar}
+										className="border border-input bg-background hover:bg-accent"
+									/>
+								</section>
+								<section
+									aria-label="Lists"
+									className="mt-3 flex min-h-0 w-full flex-1 flex-col items-center"
 								>
-									<PanelLeftOpen className="h-4 w-4" />
-								</Button>
-								<div className="mt-3 flex min-h-0 w-full flex-1 flex-col items-center gap-1.5 overflow-y-auto px-1">
-									<div className="flex h-4 min-w-4 items-center justify-center rounded-full bg-muted px-1 text-[9px] font-semibold tabular-nums text-muted-foreground">
-										{visibleDocumentNodes.length + visibleWorkspaceNodes.length}
+									<WorkspaceCollapsedSidebarSection label="Lists" />
+									<div className="mt-1 flex min-h-0 w-full flex-1 flex-col items-center gap-1.5 overflow-y-auto px-1">
+										{visibleDocumentNodes.map((node) => (
+											<WorkspaceCollapsedSidebarDataItem
+												key={node.id}
+												label={node.name}
+												active={
+													lib.selectedSection === "documents" &&
+													lib.selectedNode?.id === node.id
+												}
+												onClick={() => lib.handleSelectDocNode(node)}
+											/>
+										))}
+										{visibleWorkspaceNodes.map((node) => (
+											<WorkspaceCollapsedSidebarDataItem
+												key={node.id}
+												label={node.name}
+												active={
+													lib.selectedSection === "workspace" &&
+													lib.selectedNode?.id === node.id
+												}
+												onClick={() => lib.handleSelectWorkspaceNode(node)}
+											/>
+										))}
 									</div>
-									{visibleDocumentNodes.map((node) => (
-										<WorkspaceCollapsedSidebarDataItem
-											key={node.id}
-											label={node.name}
-											active={
-												lib.selectedSection === "documents" &&
-												lib.selectedNode?.id === node.id
-											}
-											onClick={() => lib.handleSelectDocNode(node)}
-										/>
-									))}
-									{visibleWorkspaceNodes.map((node) => (
-										<WorkspaceCollapsedSidebarDataItem
-											key={node.id}
-											label={node.name}
-											active={
-												lib.selectedSection === "workspace" &&
-												lib.selectedNode?.id === node.id
-											}
-											onClick={() => lib.handleSelectWorkspaceNode(node)}
-										/>
-									))}
-								</div>
+								</section>
 							</div>
 						) : (
 							<div

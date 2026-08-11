@@ -290,8 +290,11 @@ yarn run dev
 
 | Command | Purpose |
 | --- | --- |
-| `yarn run dev` | Hot-reload development build for Chromium (`CHROME_PATH` required). |
-| `yarn run build` | Default production build. |
+| `yarn run dev` | Build Agent Harness once, then watch it alongside the hot-reloading Chromium extension (`CHROME_PATH` required). |
+| `yarn run dev:no-reload` | Use both watchers without injecting the content-script reload runtime; reload tabs manually. |
+| `yarn run watch` | Alias for the complete `dev` workflow. |
+| `yarn run harness:watch` | Watch only the standalone Agent Harness package family. |
+| `yarn run build` | Build Agent Harness and the default production extension. |
 | `yarn run build:chrome` | Build Chrome output in `dist/chrome`. |
 | `yarn run build:edge` | Build Edge output in `dist/edge`. |
 | `yarn run build:firefox` | Build Firefox MV3 output. |
@@ -300,6 +303,10 @@ yarn run dev
 | `yarn run lint` | Run the Extension.js lint step. |
 | `yarn run format` | Format `src` and `scripts` with Biome. |
 | `yarn run package` | Build the publish/package output. |
+
+Extension build and package commands compile the standalone workspaces first.
+Their ignored `dist/` exports are therefore never expected to come from an
+older checkout or an earlier developer session.
 
 ## 🤝 Contributing
 

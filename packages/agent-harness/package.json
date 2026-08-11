@@ -13,5 +13,17 @@
     "node",
     "compatibility",
     "full"
-  ]
+  ],
+  "scripts": {
+    "build": "tsc -b tsconfig.json --pretty false",
+    "clean": "tsc -b tsconfig.json --clean",
+    "dev": "tsc -b tsconfig.json --watch --preserveWatchOutput --pretty",
+    "watch": "yarn dev",
+    "typecheck": "tsc -b tsconfig.json --pretty false",
+    "test": "vitest run --config vitest.config.ts"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.2",
+    "vitest": "^4.1.8"
+  }
 }

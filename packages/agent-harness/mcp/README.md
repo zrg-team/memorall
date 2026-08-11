@@ -61,3 +61,14 @@ Discovery is asynchronous, so build descriptors before constructing the
 immutable harness. The host owns authentication, server configuration, connect,
 reconnect, and close behavior. Importing this package opens no connections and
 registers no tools.
+
+## 🛠️ Develop MCP Support
+
+```bash
+yarn workspace @memorall/agent-harness-mcp dev
+yarn workspace @memorall/agent-harness-mcp test
+yarn workspace @memorall/agent-harness-mcp build
+```
+
+The package watcher follows Core project references and continuously refreshes
+the ESM and declaration outputs consumed by browser and Node adapters.

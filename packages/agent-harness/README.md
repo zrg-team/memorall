@@ -158,6 +158,8 @@ Run these commands from the repository root:
 ```bash
 corepack enable
 yarn install --immutable
+yarn dev                 # Harness watch + extension hot reload
+yarn harness:watch       # Harness packages only
 yarn harness:boundaries
 yarn harness:typecheck
 yarn harness:test
@@ -169,6 +171,24 @@ yarn harness:smoke
 smoke tests install generated tarballs into clean Node, Vite, Web Worker, and
 Service Worker fixtures, so repository aliases or undeclared dependencies cannot
 hide packaging defects.
+
+For focused package work, start the solution watcher from the umbrella:
+
+```bash
+yarn --cwd packages/agent-harness dev
+```
+
+Or watch a single package and its TypeScript project references:
+
+```bash
+yarn workspace @memorall/agent-harness-sandbox dev
+```
+
+Every package provides `build`, `clean`, `dev`, `watch`, `typecheck`, `test`, and
+`pack` scripts. `dev` performs an incremental TypeScript project build and keeps
+its published `dist/` exports current. The root extension `dev`, `build`, and
+`package` workflows always create an initial harness build before consuming
+those exports.
 
 ## 📚 More Documentation
 
