@@ -171,6 +171,9 @@ extension-env.d.ts
 
 publish
 sandbox
+!packages/agent-harness/sandbox/
+!packages/agent-harness/sandbox/**
+packages/agent-harness/sandbox/dist/
 !public/sandbox/
 !public/sandbox/runtime/
 !public/sandbox/runtime/*.js
