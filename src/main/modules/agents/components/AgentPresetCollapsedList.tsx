@@ -34,7 +34,10 @@ export const AgentPresetCollapsedList: React.FC<
 	statusLabels,
 }) => (
 	<aside className="flex h-full max-h-full min-h-0 flex-col items-center border-r bg-background py-3">
-		<section aria-label="Actions" className="flex w-full flex-col items-center gap-1">
+		<section
+			aria-label="Actions"
+			className="flex w-full flex-col items-center gap-1"
+		>
 			<WorkspaceCollapsedSidebarSection label="Actions" />
 			<WorkspaceCollapsedSidebarItem
 				icon={<PanelLeftOpen className="h-4 w-4" />}

@@ -139,7 +139,10 @@ export const LLMPage: React.FC = () => {
 				>
 					{isDesktop && isSidebarCollapsed ? (
 						<div className="flex h-full min-h-0 flex-col items-center py-3">
-							<section aria-label="Actions" className="flex w-full flex-col items-center gap-1">
+							<section
+								aria-label="Actions"
+								className="flex w-full flex-col items-center gap-1"
+							>
 								<WorkspaceCollapsedSidebarSection label="Actions" />
 								<WorkspaceCollapsedSidebarItem
 									icon={<PanelLeftOpen className="h-4 w-4" />}
