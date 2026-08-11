@@ -42,15 +42,16 @@ const cases: Array<[string, React.LazyExoticComponent<React.ComponentType>]> = [
 ];
 
 describe("lazy-pages", () => {
-	it.each(
-		cases,
-	)("lazily resolves %s past the Suspense fallback", async (name, Page) => {
-		render(
-			<Suspense fallback={<div data-testid="page-fallback" />}>
-				<Page />
-			</Suspense>,
-		);
+	it.each(cases)(
+		"lazily resolves %s past the Suspense fallback",
+		async (name, Page) => {
+			render(
+				<Suspense fallback={<div data-testid="page-fallback" />}>
+					<Page />
+				</Suspense>,
+			);
 
-		expect(await screen.findByTestId(name)).toBeInTheDocument();
-	});
+			expect(await screen.findByTestId(name)).toBeInTheDocument();
+		},
+	);
 });

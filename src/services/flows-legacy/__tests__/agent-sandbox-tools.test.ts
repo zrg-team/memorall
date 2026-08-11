@@ -53,7 +53,8 @@ const service = (): IAgentSandboxService => ({
 		body: "ok",
 	})),
 	snapshot: vi.fn(async (request) => ({
-		snapshotId: request.operation === "restore" ? request.snapshotId : "snapshot-1",
+		snapshotId:
+			request.operation === "restore" ? request.snapshotId : "snapshot-1",
 		restored: request.operation === "restore" ? (true as const) : undefined,
 	})),
 });
@@ -162,25 +163,46 @@ describe("agent sandbox tools", () => {
 	it("rejects missing and irrelevant fields for grouped operations", () => {
 		const sandboxRuntime = service();
 		const invalidCases = [
-			[createSandboxInspectTool({ sandboxRuntime }), { operation: "status", limit: 5 }],
+			[
+				createSandboxInspectTool({ sandboxRuntime }),
+				{ operation: "status", limit: 5 },
+			],
 			[createSandboxRunTool({ sandboxRuntime }), { operation: "code" }],
 			[createSandboxRunTool({ sandboxRuntime }), { operation: "file" }],
 			[createSandboxRunTool({ sandboxRuntime }), { operation: "command" }],
 			[createSandboxRunTool({ sandboxRuntime }), { operation: "repl" }],
-			[createSandboxProcessTool({ sandboxRuntime }), { operation: "list", processId: "p" }],
+			[
+				createSandboxProcessTool({ sandboxRuntime }),
+				{ operation: "list", processId: "p" },
+			],
 			[createSandboxProcessTool({ sandboxRuntime }), { operation: "read" }],
-			[createSandboxProcessTool({ sandboxRuntime }), { operation: "stdin", processId: "p" }],
+			[
+				createSandboxProcessTool({ sandboxRuntime }),
+				{ operation: "stdin", processId: "p" },
+			],
 			[createSandboxProcessTool({ sandboxRuntime }), { operation: "stop" }],
 			[createSandboxPackagesTool({ sandboxRuntime }), { operation: "install" }],
-			[createSandboxPackagesTool({ sandboxRuntime }), { operation: "list", save: true }],
+			[
+				createSandboxPackagesTool({ sandboxRuntime }),
+				{ operation: "list", save: true },
+			],
 			[createSandboxPreviewTool({ sandboxRuntime }), { operation: "start" }],
 			[createSandboxPreviewTool({ sandboxRuntime }), { operation: "stop" }],
 			[createSandboxPreviewTool({ sandboxRuntime }), { operation: "request" }],
 			[createSandboxPreviewTool({ sandboxRuntime }), { operation: "render" }],
-			[createSandboxPreviewTool({ sandboxRuntime }), { operation: "list", port: 5173 }],
-			[createSandboxNetworkTool({ sandboxRuntime }), { operation: "fetch", url: "not-a-url" }],
+			[
+				createSandboxPreviewTool({ sandboxRuntime }),
+				{ operation: "list", port: 5173 },
+			],
+			[
+				createSandboxNetworkTool({ sandboxRuntime }),
+				{ operation: "fetch", url: "not-a-url" },
+			],
 			[createSandboxSnapshotTool({ sandboxRuntime }), { operation: "restore" }],
-			[createSandboxSnapshotTool({ sandboxRuntime }), { operation: "create", snapshotId: "x" }],
+			[
+				createSandboxSnapshotTool({ sandboxRuntime }),
+				{ operation: "create", snapshotId: "x" },
+			],
 		] as const;
 
 		for (const [tool, input] of invalidCases) {
@@ -204,13 +226,17 @@ describe("agent sandbox tools", () => {
 		);
 		expect(sandboxRuntime.run).toHaveBeenCalledWith(
 			{ operation: "code", code: "6 * 7" },
-			expect.objectContaining({ operationId: expect.stringContaining("sandbox_run:") }),
+			expect.objectContaining({
+				operationId: expect.stringContaining("sandbox_run:"),
+			}),
 		);
 	});
 
 	it("returns expected operational failures as structured error results", async () => {
 		const sandboxRuntime = service();
-		vi.mocked(sandboxRuntime.run).mockRejectedValueOnce(new Error("transport lost"));
+		vi.mocked(sandboxRuntime.run).mockRejectedValueOnce(
+			new Error("transport lost"),
+		);
 		const tool = createSandboxRunTool({ sandboxRuntime });
 		const extracted = extractToolResult(
 			await tool.execute({ operation: "code", code: "1" }),
@@ -272,7 +298,9 @@ describe("sandbox tool profiles", () => {
 	it("exposes six sandbox tools by default and snapshots only when stateful", () => {
 		expect(SANDBOX_EXECUTION_TOOLS).toHaveLength(4);
 		expect(SANDBOX_WEB_APP_TOOLS).toHaveLength(6);
-		expect(getSandboxToolsForProfile("web_app")).not.toContain("sandbox_snapshot");
+		expect(getSandboxToolsForProfile("web_app")).not.toContain(
+			"sandbox_snapshot",
+		);
 		expect(getSandboxToolsForProfile("stateful")).toContain("sandbox_snapshot");
 	});
 

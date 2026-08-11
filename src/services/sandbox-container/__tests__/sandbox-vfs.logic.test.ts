@@ -29,6 +29,8 @@ describe("sandbox package result normalization", () => {
 		});
 
 		expect(normalized).toEqual({ lodash: "4.17.21", nanoid: "5.1.5" });
-		expect(Object.fromEntries(runtimeState.installedPackages)).toEqual(normalized);
+		expect(Object.fromEntries(runtimeState.installedPackages)).toEqual(
+			normalized,
+		);
 	});
 });

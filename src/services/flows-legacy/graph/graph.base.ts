@@ -14,7 +14,10 @@ import type {
 	ChatCompletionTool,
 } from "@/services/flows-legacy/interfaces/engine/messages";
 import { convertToolsToOpenAI } from "@/services/flows-legacy/registries/tool-registry";
-import type { BaseTool, ToolBinding } from "@/services/flows-legacy/interfaces/engine/tool";
+import type {
+	BaseTool,
+	ToolBinding,
+} from "@/services/flows-legacy/interfaces/engine/tool";
 import {
 	defaultRegistries,
 	type FlowRegistrySet,

@@ -1,5 +1,8 @@
 import { z } from "zod";
-import type { Tool, ToolFactory } from "@/services/flows-legacy/interfaces/engine/tool";
+import type {
+	Tool,
+	ToolFactory,
+} from "@/services/flows-legacy/interfaces/engine/tool";
 import type { SandboxRunRequest } from "@/services/flows-legacy/interfaces/services/agent-sandbox";
 import type { AllServices } from "@/services/flows-legacy/interfaces/services/services";
 import { toolRegistry } from "@/services/flows-legacy/registries/tool-registry";
@@ -28,9 +31,18 @@ const schema = z
 	.strict()
 	.superRefine((data, ctx) => {
 		const rules = {
-			code: { allowed: ["code", "filename", "timeoutMs", "maxLogEntries"], required: ["code"] },
-			file: { allowed: ["path", "timeoutMs", "maxLogEntries"], required: ["path"] },
-			command: { allowed: ["command", "cwd", "env", "waitTimeoutMs", "commandTimeoutMs"], required: ["command"] },
+			code: {
+				allowed: ["code", "filename", "timeoutMs", "maxLogEntries"],
+				required: ["code"],
+			},
+			file: {
+				allowed: ["path", "timeoutMs", "maxLogEntries"],
+				required: ["path"],
+			},
+			command: {
+				allowed: ["command", "cwd", "env", "waitTimeoutMs", "commandTimeoutMs"],
+				required: ["command"],
+			},
 			repl: { allowed: ["code", "replId", "timeoutMs"], required: ["code"] },
 		} as const;
 		const rule = rules[data.operation];
@@ -44,7 +56,8 @@ export const createSandboxRunTool: ToolFactory<Input, Services> = (
 ): Tool<Input> => ({
 	name: TOOL_NAME,
 	title: "Run in sandbox",
-	description: "Run inline code, a workspace file, a command, or persistent REPL code in the active sandbox.",
+	description:
+		"Run inline code, a workspace file, a command, or persistent REPL code in the active sandbox.",
 	schema,
 	outputSchema: SANDBOX_TOOL_OUTPUT_SCHEMA,
 	annotations: { readOnlyHint: false, idempotentHint: false },

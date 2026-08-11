@@ -4,7 +4,10 @@ import {
 	FoundationAnnotation,
 	type FoundationState,
 } from "@/services/flows-legacy/graph/foundation/state";
-import { GraphBase, normalizeChatMessages } from "@/services/flows-legacy/graph/graph.base";
+import {
+	GraphBase,
+	normalizeChatMessages,
+} from "@/services/flows-legacy/graph/graph.base";
 import type {} from "@/services/flows-legacy/interfaces/engine/tool";
 import type { AllServices } from "@/services/flows-legacy/interfaces/services/services";
 import { logInfo } from "@/services/flows-legacy/utils/logger";

@@ -1,4 +1,7 @@
-import { defineStep, bindStep } from "@/services/flows-legacy/interfaces/engine/step";
+import {
+	defineStep,
+	bindStep,
+} from "@/services/flows-legacy/interfaces/engine/step";
 import { getKnowledgeDatabase } from "../../interfaces/knowledge";
 import type {
 	StepFactoryFromSpec,
@@ -19,7 +22,11 @@ import {
 	nodeRowToStructMemEntry,
 	type StructMemNodeRow,
 } from "./structmem-utils";
-import { logError, logInfo, logWarn } from "@/services/flows-legacy/utils/logger";
+import {
+	logError,
+	logInfo,
+	logWarn,
+} from "@/services/flows-legacy/utils/logger";
 
 const STEP_NAME = "structmem-load-related-events" as const;
 

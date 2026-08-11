@@ -1,5 +1,8 @@
 import { z } from "zod";
-import type { Tool, ToolFactory } from "@/services/flows-legacy/interfaces/engine/tool";
+import type {
+	Tool,
+	ToolFactory,
+} from "@/services/flows-legacy/interfaces/engine/tool";
 import type { AllServices } from "@/services/flows-legacy/interfaces/services/services";
 import { toolRegistry } from "@/services/flows-legacy/registries/tool-registry";
 import {
@@ -31,7 +34,8 @@ export const createSandboxInspectTool: ToolFactory<Input, Services> = (
 ): Tool<Input> => ({
 	name: TOOL_NAME,
 	title: "Inspect sandbox",
-	description: "Inspect sandbox status or logs, clear logs, or reset the active session.",
+	description:
+		"Inspect sandbox status or logs, clear logs, or reset the active session.",
 	schema,
 	outputSchema: SANDBOX_TOOL_OUTPUT_SCHEMA,
 	annotations: { readOnlyHint: false, idempotentHint: false },

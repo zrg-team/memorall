@@ -1,9 +1,15 @@
 import z from "zod";
-import type { Tool, ToolFactory } from "@/services/flows-legacy/interfaces/engine/tool";
+import type {
+	Tool,
+	ToolFactory,
+} from "@/services/flows-legacy/interfaces/engine/tool";
 import type { AllServices } from "@/services/flows-legacy/interfaces/services/services";
 import { toolRegistry } from "@/services/flows-legacy/registries/tool-registry";
 import { animationFile } from "@/services/flows-legacy/tools/lottie/util";
-import { readFileBytes, writeFileBytes } from "@/services/flows-legacy/tools/fs/util";
+import {
+	readFileBytes,
+	writeFileBytes,
+} from "@/services/flows-legacy/tools/fs/util";
 import type { LottieToolConfig } from "@/services/flows-legacy/tools/lottie/config";
 
 const TOOL_NAME = "lottie_init" as const;

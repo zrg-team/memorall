@@ -856,13 +856,10 @@ export class LLMOperationsHandler implements ProcessHandler<BaseJob> {
 
 				response = { streamed: true };
 			} else {
-				response = await llmService.chatCompletionsFor(
-					payload.serviceName,
-					{
-						...payload.request,
-						signal: abortController.signal,
-					} as ChatCompletionRequest,
-				);
+				response = await llmService.chatCompletionsFor(payload.serviceName, {
+					...payload.request,
+					signal: abortController.signal,
+				} as ChatCompletionRequest);
 			}
 
 			await updateJobProgress(jobId, {

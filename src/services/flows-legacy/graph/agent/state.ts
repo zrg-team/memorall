@@ -1,5 +1,8 @@
 import { Annotation } from "@langchain/langgraph";
-import { BaseAnnotation, type BaseStateBase } from "@/services/flows-legacy/graph/graph.base";
+import {
+	BaseAnnotation,
+	type BaseStateBase,
+} from "@/services/flows-legacy/graph/graph.base";
 
 export const DEFAULT_AGENT_SYSTEM_PROMPT =
 	"You are an intelligent assistant that can use tools to help answer user questions. Use tools when needed to provide accurate answers.";

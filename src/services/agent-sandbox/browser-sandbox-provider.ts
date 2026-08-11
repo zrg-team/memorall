@@ -109,13 +109,14 @@ const normalizeError = (error: unknown, operation: string): SandboxError => {
 	if (error instanceof SandboxError) return error;
 	const message = error instanceof Error ? error.message : String(error);
 	const lower = message.toLowerCase();
-	const code = lower.includes("command") && lower.includes("not found")
-		? "process_not_found"
-		: lower.includes("server") && lower.includes("not found")
-			? "preview_not_found"
-			: lower.includes("timeout")
-				? "timeout"
-				: "provider_error";
+	const code =
+		lower.includes("command") && lower.includes("not found")
+			? "process_not_found"
+			: lower.includes("server") && lower.includes("not found")
+				? "preview_not_found"
+				: lower.includes("timeout")
+					? "timeout"
+					: "provider_error";
 	return new SandboxError(code, message, {
 		providerId: BROWSER_SANDBOX_PROVIDER_ID,
 		operation,
@@ -130,15 +131,22 @@ interface BrowserProcessCursor {
 }
 
 const parseCursor = (cursor: string | undefined): BrowserProcessCursor => {
-	if (cursor === undefined || cursor === "") return { offset: 0, charOffset: 0 };
+	if (cursor === undefined || cursor === "")
+		return { offset: 0, charOffset: 0 };
 	const match = /^(\d+)(?::(\d+))?$/.exec(cursor);
 	if (!match) {
-		throw new SandboxError("invalid_request", `Invalid process cursor: ${cursor}`);
+		throw new SandboxError(
+			"invalid_request",
+			`Invalid process cursor: ${cursor}`,
+		);
 	}
 	const offset = Number(match[1]);
 	const charOffset = Number(match[2] ?? 0);
 	if (!Number.isSafeInteger(offset) || !Number.isSafeInteger(charOffset)) {
-		throw new SandboxError("invalid_request", `Invalid process cursor: ${cursor}`);
+		throw new SandboxError(
+			"invalid_request",
+			`Invalid process cursor: ${cursor}`,
+		);
 	}
 	return { offset, charOffset };
 };
@@ -164,11 +172,17 @@ const readCommandOutput = (
 			{ type: "stdout" as const, text: chunk.stdout },
 			{ type: "stderr" as const, text: chunk.stderr },
 		].filter((segment) => segment.text.length > 0);
-		const totalLength = segments.reduce((total, segment) => total + segment.text.length, 0);
+		const totalLength = segments.reduce(
+			(total, segment) => total + segment.text.length,
+			0,
+		);
 		let consumedInChunk = index === 0 ? cursor.charOffset : 0;
 
 		if (consumedInChunk > totalLength) {
-			throw new SandboxError("invalid_request", "Process cursor is outside the output chunk");
+			throw new SandboxError(
+				"invalid_request",
+				"Process cursor is outside the output chunk",
+			);
 		}
 
 		for (const segment of segments) {
@@ -202,14 +216,21 @@ const readCommandOutput = (
 		if (remaining === 0 && index < chunks.length - 1) {
 			return {
 				events,
-				nextCursor: formatCursor({ offset: cursor.offset + index + 1, charOffset: 0 }),
+				nextCursor: formatCursor({
+					offset: cursor.offset + index + 1,
+					charOffset: 0,
+				}),
 				truncated: true,
 			};
 		}
 	}
 
 	if (result.status !== "running") {
-		events.push({ type: "status", text: result.status, timestamp: result.updatedAt });
+		events.push({
+			type: "status",
+			text: result.status,
+			timestamp: result.updatedAt,
+		});
 	}
 	return { events, nextCursor: String(result.nextOffset), truncated: false };
 };
@@ -218,7 +239,11 @@ const commandResult = (
 	result: ContainerCommandResult,
 	maxChars: number,
 ): SandboxCommandRunResult => {
-	const output = readCommandOutput(result, { offset: 0, charOffset: 0 }, maxChars);
+	const output = readCommandOutput(
+		result,
+		{ offset: 0, charOffset: 0 },
+		maxChars,
+	);
 	return {
 		kind: "command",
 		processId: result.commandId,
@@ -264,7 +289,10 @@ class BrowserSandboxSession implements SandboxProviderSession {
 	private assertOpen(context: SandboxCallContext): void {
 		checkContext(context);
 		if (this.closed) {
-			throw new SandboxError("session_not_found", "Browser sandbox session is closed");
+			throw new SandboxError(
+				"session_not_found",
+				"Browser sandbox session is closed",
+			);
 		}
 	}
 
@@ -290,7 +318,9 @@ class BrowserSandboxSession implements SandboxProviderSession {
 		throw new SandboxError("invalid_request", "previewId or port is required");
 	}
 
-	private previewDescriptor(server: ContainerServerInfo): SandboxPreviewDescriptor {
+	private previewDescriptor(
+		server: ContainerServerInfo,
+	): SandboxPreviewDescriptor {
 		return {
 			previewId: this.previewId(server.port),
 			kind: server.kind,
@@ -339,7 +369,8 @@ class BrowserSandboxSession implements SandboxProviderSession {
 							this.capabilities.limits.maxOutputChars,
 						);
 					case "repl": {
-						const replId = request.replId ?? (await this.service.createRepl()).replId;
+						const replId =
+							request.replId ?? (await this.service.createRepl()).replId;
 						const result = await this.service.replEval({
 							replId,
 							code: request.code,
@@ -364,15 +395,17 @@ class BrowserSandboxSession implements SandboxProviderSession {
 				switch (request.operation) {
 					case "list": {
 						const result = await this.service.listCommands();
-						const processes: SandboxProcessInfo[] = result.commands.map((item) => ({
-							processId: item.commandId,
-							command: item.command,
-							cwd: item.cwd,
-							status: item.status,
-							outputTail: item.outputTail,
-							nextCursor: String(item.nextOffset),
-							updatedAt: item.updatedAt,
-						}));
+						const processes: SandboxProcessInfo[] = result.commands.map(
+							(item) => ({
+								processId: item.commandId,
+								command: item.command,
+								cwd: item.cwd,
+								status: item.status,
+								outputTail: item.outputTail,
+								nextCursor: String(item.nextOffset),
+								updatedAt: item.updatedAt,
+							}),
+						);
 						return { processes };
 					}
 					case "read": {
@@ -456,7 +489,9 @@ class BrowserSandboxSession implements SandboxProviderSession {
 				throw normalizeError(error, context.operationId);
 			}
 		},
-		flush: async (context: SandboxCallContext): Promise<SandboxWorkspaceSyncResult> => {
+		flush: async (
+			context: SandboxCallContext,
+		): Promise<SandboxWorkspaceSyncResult> => {
 			this.assertOpen(context);
 			try {
 				const result = await this.service.request(
@@ -471,7 +506,11 @@ class BrowserSandboxSession implements SandboxProviderSession {
 					changes: result.ops.map((op) => {
 						switch (op.op) {
 							case "write":
-								return { operation: "write" as const, path: op.path, content: op.content };
+								return {
+									operation: "write" as const,
+									path: op.path,
+									content: op.content,
+								};
 							case "mkdir":
 								return { operation: "mkdir" as const, path: op.path };
 							case "delete":
@@ -580,9 +619,7 @@ class BrowserSandboxSession implements SandboxProviderSession {
 							body: request.body,
 							timeoutMs: request.timeoutMs,
 							responseType:
-								request.operation === "render"
-									? "html"
-									: request.responseType,
+								request.operation === "render" ? "html" : request.responseType,
 							useIframe: request.operation === "render",
 						});
 						const maxChars = Math.min(
@@ -695,7 +732,12 @@ class BrowserSandboxSession implements SandboxProviderSession {
 					return asJson(state);
 				}
 				case "logs":
-					return asJson(await this.service.getLogs({ limit: request.limit, level: request.level }));
+					return asJson(
+						await this.service.getLogs({
+							limit: request.limit,
+							level: request.level,
+						}),
+					);
 				case "clear_logs":
 					return asJson(await this.service.clearLogs());
 				case "reset":
@@ -771,6 +813,9 @@ export class BrowserSandboxProvider implements SandboxProvider {
 				`Browser sandbox session not found: ${providerSessionId}`,
 			);
 		}
-		return this.createSession({ sessionKey: context.sessionKey ?? "default" }, context);
+		return this.createSession(
+			{ sessionKey: context.sessionKey ?? "default" },
+			context,
+		);
 	}
 }

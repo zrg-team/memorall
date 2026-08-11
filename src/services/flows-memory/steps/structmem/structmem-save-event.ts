@@ -1,4 +1,7 @@
-import { defineStep, bindStep } from "@/services/flows-legacy/interfaces/engine/step";
+import {
+	defineStep,
+	bindStep,
+} from "@/services/flows-legacy/interfaces/engine/step";
 import { getKnowledgeDatabase } from "../../interfaces/knowledge";
 import { eq } from "drizzle-orm";
 import type {

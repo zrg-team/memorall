@@ -1,6 +1,13 @@
-import { defineStep, bindStep } from "@/services/flows-legacy/interfaces/engine/step";
+import {
+	defineStep,
+	bindStep,
+} from "@/services/flows-legacy/interfaces/engine/step";
 import { getKnowledgeDatabase } from "../../interfaces/knowledge";
-import { logError, logInfo, logWarn } from "@/services/flows-legacy/utils/logger";
+import {
+	logError,
+	logInfo,
+	logWarn,
+} from "@/services/flows-legacy/utils/logger";
 import { getCurrentEmbeddingColumns } from "../../utils/embedding-size-config";
 import { extractRetrievalTextFromMessages } from "@/services/flows-legacy/utils/message-query";
 import type {

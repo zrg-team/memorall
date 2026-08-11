@@ -1,4 +1,7 @@
-import { getFlowLogger, type IFlowLogger } from "@/services/flows-legacy/utils/logger";
+import {
+	getFlowLogger,
+	type IFlowLogger,
+} from "@/services/flows-legacy/utils/logger";
 import { nanoid } from "nanoid";
 
 // UUID validation regex (supports both standard UUIDs and nanoid format)

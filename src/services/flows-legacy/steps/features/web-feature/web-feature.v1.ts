@@ -1,11 +1,17 @@
 import { logError } from "@/services/flows-legacy/utils/logger";
-import { defineStep, bindStep } from "@/services/flows-legacy/interfaces/engine/step";
+import {
+	defineStep,
+	bindStep,
+} from "@/services/flows-legacy/interfaces/engine/step";
 import type {
 	StepFactoryFromSpec,
 	StepSpecFromDefinition,
 } from "@/services/flows-legacy/interfaces/engine/step";
 import { stepRegistry } from "@/services/flows-legacy/registries/step-registry";
-import { GraphBase, type GraphTool } from "@/services/flows-legacy/graph/graph.base";
+import {
+	GraphBase,
+	type GraphTool,
+} from "@/services/flows-legacy/graph/graph.base";
 import type { ChatCompletionMessageParam } from "@/services/flows-legacy/interfaces/engine/messages";
 import type { ActiveWebSessionInfo } from "@/services/flows-legacy/interfaces/services/web-browser";
 import type {} from "@/services/flows-legacy/interfaces/engine/tool";

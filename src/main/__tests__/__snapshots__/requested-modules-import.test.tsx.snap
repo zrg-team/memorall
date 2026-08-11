@@ -18,6 +18,7 @@ exports[`requested main module coverage > imports chat, documents, agents, agent
   "../modules/agents/components/AgentHoverInfo.tsx",
   "../modules/agents/components/AgentIconScreenPicker.tsx",
   "../modules/agents/components/AgentMemoryTypeControls.tsx",
+  "../modules/agents/components/AgentPresetCollapsedList.tsx",
   "../modules/agents/components/AgentPresetList.tsx",
   "../modules/agents/components/AgentsWorkspace.tsx",
   "../modules/agents/components/AgentsWorkspaceLayout.tsx",

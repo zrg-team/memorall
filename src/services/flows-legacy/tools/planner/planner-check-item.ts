@@ -5,7 +5,11 @@ import type {
 	ToolExecutionContext,
 } from "@/services/flows-legacy/interfaces/engine/tool";
 import { toolRegistry } from "@/services/flows-legacy/registries/tool-registry";
-import { getPlan, setPlan, formatPlan } from "@/services/flows-legacy/tools/planner/store";
+import {
+	getPlan,
+	setPlan,
+	formatPlan,
+} from "@/services/flows-legacy/tools/planner/store";
 
 const TOOL_NAME = "planner_check_item" as const;
 

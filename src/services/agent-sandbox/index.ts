@@ -35,10 +35,15 @@ export const createAgentSandboxService = (
 		new BrowserSandboxProvider(containerService),
 	);
 	const workspaces = new SandboxWorkspaceCoordinator(fileSystem);
-	const service = new SandboxManager(providers, {
-		providerId: BROWSER_SANDBOX_PROVIDER_ID,
-		sessionPolicy: "reuse-conversation",
-	}, createBrowserPlatform({ runtime: "extension-worker" }), workspaces);
+	const service = new SandboxManager(
+		providers,
+		{
+			providerId: BROWSER_SANDBOX_PROVIDER_ID,
+			sessionPolicy: "reuse-conversation",
+		},
+		createBrowserPlatform({ runtime: "extension-worker" }),
+		workspaces,
+	);
 	serviceCache.set(containerService, { service, workspaces });
 	return service;
 };

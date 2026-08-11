@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import type { BoundStep, StepFactory } from "@/services/flows-legacy/interfaces/engine/step";
+import type {
+	BoundStep,
+	StepFactory,
+} from "@/services/flows-legacy/interfaces/engine/step";
 import {
 	StepRegistryManager,
 	type StepSpec,

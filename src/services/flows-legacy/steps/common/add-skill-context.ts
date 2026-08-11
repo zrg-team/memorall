@@ -1,4 +1,7 @@
-import { defineStep, bindStep } from "@/services/flows-legacy/interfaces/engine/step";
+import {
+	defineStep,
+	bindStep,
+} from "@/services/flows-legacy/interfaces/engine/step";
 import type {
 	StepFactoryFromSpec,
 	StepSpecFromDefinition,
@@ -8,8 +11,14 @@ import type {
 	ChatMessage,
 	ChatCompletionUserMessageParam,
 } from "@/services/flows-legacy/interfaces/engine/messages";
-import { messageContentToText, GraphBase } from "@/services/flows-legacy/graph/graph.base";
-import type { GraphTool, ToolName } from "@/services/flows-legacy/graph/graph.base";
+import {
+	messageContentToText,
+	GraphBase,
+} from "@/services/flows-legacy/graph/graph.base";
+import type {
+	GraphTool,
+	ToolName,
+} from "@/services/flows-legacy/graph/graph.base";
 import type {} from "@/services/flows-legacy/interfaces/engine/tool";
 import type { AllServices } from "@/services/flows-legacy/interfaces/services/services";
 import { logInfo } from "@/services/flows-legacy/utils/logger";

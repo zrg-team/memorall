@@ -26,8 +26,6 @@ import { Button } from "@/main/components/ui/button";
 import {
 	Brain,
 	CheckCircle2,
-	Cpu,
-	Database,
 	Info,
 	PanelLeftClose,
 	PanelLeftOpen,
@@ -37,7 +35,7 @@ import { useResponsiveWorkspacePanels } from "@/main/hooks/use-responsive-worksp
 import { useTranslation } from "react-i18next";
 import { getModel } from "@/services/llm/registry/model-registry";
 import { PageHeader } from "@/main/components/ui/page-header";
-import { WorkspaceCollapsedSidebarItem } from "@/main/components/molecules/WorkspaceCollapsedSidebarItem";
+import { WorkspaceCollapsedSidebarDataItem } from "@/main/components/molecules/WorkspaceCollapsedSidebarDataItem";
 
 // No local quick-connect card; configuration handled in AdvancedSection
 
@@ -82,6 +80,16 @@ export const LLMPage: React.FC = () => {
 
 		return getModel(current.modelId, current.provider) ?? null;
 	}, [current]);
+	const currentModelLabel =
+		currentLocalModel?.displayName ??
+		(current?.modelId?.trim()
+			? current.modelId
+			: t("currentModel.noModelSelected"));
+	const currentModelStatus = current?.modelId?.trim()
+		? t("currentModel.status.active")
+		: current?.provider
+			? t("currentModel.status.configured")
+			: t("currentModel.status.inactive");
 
 	// Setup event listeners and effects
 	useProgressListener({
@@ -128,27 +136,33 @@ export const LLMPage: React.FC = () => {
 					}
 				>
 					{isDesktop && isSidebarCollapsed ? (
-						<div className="flex h-full flex-col items-center gap-2 py-3">
-							<WorkspaceCollapsedSidebarItem
-								icon={<PanelLeftOpen className="h-4 w-4" />}
-								label={t("sidebar.show")}
+						<div className="flex h-full min-h-0 flex-col items-center py-3">
+							<Button
+								type="button"
+								variant="outline"
+								size="icon"
+								className="h-10 w-10 shrink-0"
 								onClick={expandSidebar}
-								className="border border-input bg-background hover:bg-accent"
-							/>
-							<div className="mt-2 flex flex-col gap-2">
-								<WorkspaceCollapsedSidebarItem
-									icon={<Brain className="h-5 w-5" />}
-									label={t("currentModel.title")}
-									onClick={expandSidebar}
-								/>
-								<WorkspaceCollapsedSidebarItem
-									icon={<Cpu className="h-5 w-5" />}
-									label={t("offscreenServices.title")}
-									onClick={expandSidebar}
-								/>
-								<WorkspaceCollapsedSidebarItem
-									icon={<Database className="h-5 w-5" />}
-									label={t("yourModels.title")}
+								aria-label={t("sidebar.show")}
+								title={t("sidebar.show")}
+							>
+								<PanelLeftOpen className="h-4 w-4" />
+							</Button>
+							<div className="mt-3 flex min-h-0 w-full flex-1 flex-col items-center gap-1.5 overflow-y-auto px-1">
+								<WorkspaceCollapsedSidebarDataItem
+									label={currentModelLabel}
+									description={
+										current?.provider
+											? `${current.provider} · ${currentModelStatus}`
+											: currentModelStatus
+									}
+									indicatorClassName={
+										current?.modelId?.trim()
+											? "bg-emerald-500"
+											: current?.provider
+												? "bg-amber-500"
+												: "bg-muted-foreground/50"
+									}
 									onClick={expandSidebar}
 								/>
 							</div>

@@ -408,18 +408,19 @@ describe("useAgentConfigStore", () => {
 		["skills", (store) => store.setEnabledSkills(["different-skill"])],
 	];
 
-	it.each(
-		dirtySlices,
-	)("marks isDirty on %s edits and clears it on revert", async (_label, edit) => {
-		await initializeUnifiedStore();
-		expect(useAgentConfigStore.getState().isDirty).toBe(false);
+	it.each(dirtySlices)(
+		"marks isDirty on %s edits and clears it on revert",
+		async (_label, edit) => {
+			await initializeUnifiedStore();
+			expect(useAgentConfigStore.getState().isDirty).toBe(false);
 
-		edit(useAgentConfigStore.getState());
-		expect(useAgentConfigStore.getState().isDirty).toBe(true);
+			edit(useAgentConfigStore.getState());
+			expect(useAgentConfigStore.getState().isDirty).toBe(true);
 
-		useAgentConfigStore.getState().revert();
-		expect(useAgentConfigStore.getState().isDirty).toBe(false);
-	});
+			useAgentConfigStore.getState().revert();
+			expect(useAgentConfigStore.getState().isDirty).toBe(false);
+		},
+	);
 
 	it("saves draft state as unified config", async () => {
 		await initializeUnifiedStore();

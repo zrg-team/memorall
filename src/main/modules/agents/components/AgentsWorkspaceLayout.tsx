@@ -7,9 +7,10 @@ import {
 	TabsTrigger,
 } from "@/main/components/ui/tabs";
 import { Button } from "@/main/components/ui/button";
-import { Bot, PanelLeftClose, PanelLeftOpen, Sparkles } from "lucide-react";
+import { PanelLeftClose } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { WorkspaceCollapsedSidebarItem } from "@/main/components/molecules/WorkspaceCollapsedSidebarItem";
+import { AgentPresetCollapsedList } from "./AgentPresetCollapsedList";
+import type { Flow } from "@/services/database/types";
 
 type AgentsWorkspaceLayoutProps = {
 	activeCompactTab: string;
@@ -24,8 +25,13 @@ type AgentsWorkspaceLayoutProps = {
 	onCollapseSidebar: () => void;
 	onCompactTabChange: (value: string) => void;
 	onExpandSidebar: () => void;
-	onOpenAgentWizard: () => void;
+	onCreatePreset: () => void;
 	onResizeStart: (event: React.MouseEvent<HTMLDivElement>) => void;
+	onSelectPreset: (presetId: string) => void;
+	presets: Flow[];
+	isPresetListLoading: boolean;
+	isCreating: boolean;
+	selectedPresetId: string | null;
 	sidebarOverlayWidth: string;
 };
 
@@ -42,8 +48,13 @@ export const AgentsWorkspaceLayout: React.FC<AgentsWorkspaceLayoutProps> = ({
 	onCollapseSidebar,
 	onCompactTabChange,
 	onExpandSidebar,
-	onOpenAgentWizard,
+	onCreatePreset,
 	onResizeStart,
+	onSelectPreset,
+	presets,
+	isPresetListLoading,
+	isCreating,
+	selectedPresetId,
 	sidebarOverlayWidth,
 }) => {
 	const { t } = useTranslation(["agents"]);
@@ -71,26 +82,21 @@ export const AgentsWorkspaceLayout: React.FC<AgentsWorkspaceLayoutProps> = ({
 						}}
 					>
 						{isSidebarCollapsed ? (
-							<aside className="flex h-full max-h-full min-h-0 flex-col items-center gap-2 overflow-visible border-r bg-background py-3">
-								<WorkspaceCollapsedSidebarItem
-									icon={<PanelLeftOpen className="h-4 w-4" />}
-									label={t("workspace.sidebar.show")}
-									onClick={onExpandSidebar}
-									className="border border-input bg-background hover:bg-accent"
-								/>
-								<div className="mt-2 flex flex-col gap-2">
-									<WorkspaceCollapsedSidebarItem
-										icon={<Bot className="h-5 w-5" />}
-										label={t("list.title")}
-										onClick={onExpandSidebar}
-									/>
-									<WorkspaceCollapsedSidebarItem
-										icon={<Sparkles className="h-5 w-5" />}
-										label={t("wizard.chatPanel.title")}
-										onClick={onOpenAgentWizard}
-									/>
-								</div>
-							</aside>
+							<AgentPresetCollapsedList
+								createLabel={t("actions.create")}
+								expandLabel={t("workspace.sidebar.show")}
+								isCreating={isCreating}
+								isLoading={isPresetListLoading}
+								onCreatePreset={onCreatePreset}
+								onExpand={onExpandSidebar}
+								onSelectPreset={onSelectPreset}
+								presets={presets}
+								selectedPresetId={selectedPresetId}
+								statusLabels={{
+									active: t("status.active"),
+									draft: t("status.draft"),
+								}}
+							/>
 						) : (
 							<div
 								className={cn(

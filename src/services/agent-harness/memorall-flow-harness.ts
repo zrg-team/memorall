@@ -36,10 +36,12 @@ export interface MemorallFlowRunInput {
 	readonly streamModes: readonly ("custom" | "updates" | "values")[];
 }
 
-export const MEMORALL_FLOW_SERVICES =
-	createServiceToken<MemorallFlowServices>("memorall.flow-services", {
+export const MEMORALL_FLOW_SERVICES = createServiceToken<MemorallFlowServices>(
+	"memorall.flow-services",
+	{
 		description: "Memorall-owned legacy flow service bindings",
-	});
+	},
+);
 
 const asJsonValue = (value: unknown, label: string): JsonValue => {
 	const sanitized = sanitizeForJson(value);

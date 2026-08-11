@@ -40,7 +40,9 @@ const createContainerService = () => ({
 		truncatedLogs: 0,
 		path: "/projects/app/main.js",
 	})),
-	executeCommand: vi.fn(async () => command({ status: "running", completed: false })),
+	executeCommand: vi.fn(async () =>
+		command({ status: "running", completed: false }),
+	),
 	createRepl: vi.fn(async () => ({ replId: "repl-1" })),
 	replEval: vi.fn(async () => ({
 		status: "ok" as const,
@@ -64,15 +66,26 @@ const createContainerService = () => ({
 	})),
 	listenCommand: vi.fn(async ({ offset }: { offset: number }) =>
 		offset === 0
-			? command({ stdout: "abc", nextOffset: 3, status: "running", completed: false })
+			? command({
+					stdout: "abc",
+					nextOffset: 3,
+					status: "running",
+					completed: false,
+				})
 			: command({ stdout: "def", nextOffset: 6 }),
 	),
 	sendCommandInput: vi.fn(async () => ({ commandId: "command-1" })),
 	stopCommand: vi.fn(async () => ({ commandId: "command-1" })),
 	mkdir: vi.fn(async ({ path }: { path: string }) => ({ path })),
 	unlink: vi.fn(async ({ path }: { path: string }) => ({ path })),
-	installPackage: vi.fn(async () => ({ success: true, installed: { zod: "4.1.5" } })),
-	installFromPackageJson: vi.fn(async () => ({ success: true, installed: { zod: "4.1.5" } })),
+	installPackage: vi.fn(async () => ({
+		success: true,
+		installed: { zod: "4.1.5" },
+	})),
+	installFromPackageJson: vi.fn(async () => ({
+		success: true,
+		installed: { zod: "4.1.5" },
+	})),
 	listInstalledPackages: vi.fn(async () => ({ packages: { zod: "4.1.5" } })),
 	startServer: vi.fn(async () => ({
 		port: 5173,
@@ -119,7 +132,11 @@ const createContainerService = () => ({
 		operation === "fs.flushWorkspaceWrites"
 			? {
 					ops: [
-						{ op: "write", path: "/projects/app/out.txt", content: "generated" },
+						{
+							op: "write",
+							path: "/projects/app/out.txt",
+							content: "generated",
+						},
 						{
 							op: "rename",
 							oldPath: "/projects/app/a.txt",
@@ -203,10 +220,9 @@ describe("BrowserSandboxProvider", () => {
 		expect(second).toMatchObject({ nextCursor: "6" });
 		expect("events" in first && first.events[0]?.text).toBe("abc");
 		expect("events" in second && second.events[0]?.text).toBe("def");
-		expect(service.listenCommand.mock.calls.map(([request]) => request.offset)).toEqual([
-			0,
-			3,
-		]);
+		expect(
+			service.listenCommand.mock.calls.map(([request]) => request.offset),
+		).toEqual([0, 3]);
 		await expect(
 			session.processes.manage(
 				{ operation: "read", processId: "command-1", cursor: "invalid" },
@@ -221,7 +237,10 @@ describe("BrowserSandboxProvider", () => {
 			{ operation: "start", projectDir: "/projects/app", kind: "vite" },
 			context,
 		);
-		expect(preview).toMatchObject({ previewId: expect.any(String), port: 5173 });
+		expect(preview).toMatchObject({
+			previewId: expect.any(String),
+			port: 5173,
+		});
 		await expect(
 			session.network?.fetch(
 				{ url: "https://example.test/data", maxChars: 3 },
@@ -265,23 +284,24 @@ describe("BrowserSandboxProvider", () => {
 
 	it("continues truncated process output without duplicates or gaps", async () => {
 		const service = createContainerService();
-		service.listenCommand.mockImplementation(async ({ offset }: { offset: number }) =>
-			offset === 0
-				? command({
-						stdout: "abc",
-						stderr: "def",
-						chunks: [
-							{ stdout: "abc", stderr: "" },
-							{ stdout: "", stderr: "def" },
-						],
-						nextOffset: 2,
-					})
-				: command({
-						stdout: "",
-						stderr: "def",
-						chunks: [{ stdout: "", stderr: "def" }],
-						nextOffset: 2,
-					}),
+		service.listenCommand.mockImplementation(
+			async ({ offset }: { offset: number }) =>
+				offset === 0
+					? command({
+							stdout: "abc",
+							stderr: "def",
+							chunks: [
+								{ stdout: "abc", stderr: "" },
+								{ stdout: "", stderr: "def" },
+							],
+							nextOffset: 2,
+						})
+					: command({
+							stdout: "",
+							stderr: "def",
+							chunks: [{ stdout: "", stderr: "def" }],
+							nextOffset: 2,
+						}),
 		);
 		const session = await new BrowserSandboxProvider(
 			service as never,
@@ -309,10 +329,9 @@ describe("BrowserSandboxProvider", () => {
 			.map((event) => event.text)
 			.join("");
 		expect(text).toBe("abcdef");
-		expect(service.listenCommand.mock.calls.map(([request]) => request.offset)).toEqual([
-			0,
-			1,
-		]);
+		expect(
+			service.listenCommand.mock.calls.map(([request]) => request.offset),
+		).toEqual([0, 1]);
 	});
 
 	it("maps every remaining runtime, process, package, preview, and inspect operation", async () => {
@@ -366,13 +385,19 @@ describe("BrowserSandboxProvider", () => {
 		expect(previewId).not.toBe("");
 		await expect(
 			session.previews!.manage({ operation: "list" }, context),
-		).resolves.toMatchObject({ previews: [expect.objectContaining({ previewId })] });
+		).resolves.toMatchObject({
+			previews: [expect.objectContaining({ previewId })],
+		});
 		await expect(
 			session.previews!.manage(
 				{ operation: "request", previewId, path: "/api" },
 				context,
 			),
-		).resolves.toMatchObject({ previewId, status: 200, body: "<main>preview</main>" });
+		).resolves.toMatchObject({
+			previewId,
+			status: 200,
+			body: "<main>preview</main>",
+		});
 		await expect(
 			session.previews!.manage(
 				{ operation: "render", previewId, path: "/" },
@@ -384,7 +409,12 @@ describe("BrowserSandboxProvider", () => {
 		);
 		await expect(
 			session.previews!.manage(
-				{ operation: "restart", projectDir: "/projects/app", kind: "vite", port: 5173 },
+				{
+					operation: "restart",
+					projectDir: "/projects/app",
+					kind: "vite",
+					port: 5173,
+				},
 				context,
 			),
 		).resolves.toMatchObject({ previewId, port: 5173 });
@@ -395,7 +425,11 @@ describe("BrowserSandboxProvider", () => {
 
 		await expect(
 			session.inspect({ operation: "status" }, context),
-		).resolves.toMatchObject({ status: "ready", processCount: 1, previewCount: 1 });
+		).resolves.toMatchObject({
+			status: "ready",
+			processCount: 1,
+			previewCount: 1,
+		});
 		await expect(
 			session.inspect({ operation: "logs", limit: 10 }, context),
 		).resolves.toEqual({ logs: [] });
@@ -419,7 +453,9 @@ describe("BrowserSandboxProvider", () => {
 			context,
 		);
 		expect(service.mkdir).toHaveBeenCalledWith({ path: "/projects/app/new" });
-		expect(service.unlink).toHaveBeenCalledWith({ path: "/projects/app/old.js" });
+		expect(service.unlink).toHaveBeenCalledWith({
+			path: "/projects/app/old.js",
+		});
 
 		await expect(
 			session.snapshots!.manage(

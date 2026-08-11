@@ -1,4 +1,7 @@
-import { defineStep, bindStep } from "@/services/flows-legacy/interfaces/engine/step";
+import {
+	defineStep,
+	bindStep,
+} from "@/services/flows-legacy/interfaces/engine/step";
 import type {
 	BoundStep,
 	StepFactoryFromSpec,
@@ -6,7 +9,10 @@ import type {
 } from "@/services/flows-legacy/interfaces/engine/step";
 import { logError } from "@/services/flows-legacy/utils/logger";
 import { stepRegistry } from "@/services/flows-legacy/registries/step-registry";
-import { GraphBase, type GraphTool } from "@/services/flows-legacy/graph/graph.base";
+import {
+	GraphBase,
+	type GraphTool,
+} from "@/services/flows-legacy/graph/graph.base";
 import type { ChatCompletionMessageParam } from "@/services/flows-legacy/interfaces/engine/messages";
 
 const STEP_NAME = "pdf-generate-feature" as const;

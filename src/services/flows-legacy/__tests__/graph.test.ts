@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import type { BaseTool } from "@/services/flows-legacy/interfaces/engine/tool";
 import type { AgentState } from "@/services/flows-legacy/graph/agent/state";
-import { AgentGraph, mergeStreamedToolCall } from "@/services/flows-legacy/graph/agent/graph";
+import {
+	AgentGraph,
+	mergeStreamedToolCall,
+} from "@/services/flows-legacy/graph/agent/graph";
 import {
 	MISSING_TOOL_CALL_RESULT_CONTENT,
 	normalizeChatMessages,

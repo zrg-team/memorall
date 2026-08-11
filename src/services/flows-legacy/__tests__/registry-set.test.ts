@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { GraphBase, type BaseStateBase } from "@/services/flows-legacy/graph/graph.base";
+import {
+	GraphBase,
+	type BaseStateBase,
+} from "@/services/flows-legacy/graph/graph.base";
 import type { BaseGraph } from "@/services/flows-legacy/registries/graph-registry";
 import type { ChatCompletionChunk } from "@/services/flows-legacy/interfaces/engine/messages";
 import { FEATURE_SLOT } from "@/services/flows-legacy/registries/graph-registry";

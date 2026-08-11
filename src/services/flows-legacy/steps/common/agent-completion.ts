@@ -1,4 +1,7 @@
-import { defineStep, bindStep } from "@/services/flows-legacy/interfaces/engine/step";
+import {
+	defineStep,
+	bindStep,
+} from "@/services/flows-legacy/interfaces/engine/step";
 import type {
 	StepFactoryFromSpec,
 	StepSpecFromDefinition,
@@ -13,7 +16,10 @@ import {
 	isCustomChunkPayload,
 	normalizeLangGraphStreamChunk,
 } from "@/services/flows-legacy/utils/langgraph-stream";
-import { GraphBase, type GraphTool } from "@/services/flows-legacy/graph/graph.base";
+import {
+	GraphBase,
+	type GraphTool,
+} from "@/services/flows-legacy/graph/graph.base";
 import type { StepFactoryContext } from "@/services/flows-legacy/interfaces/engine/step";
 
 export const AGENT_COMPLETION_STEP_NAME = "agent-completion" as const;

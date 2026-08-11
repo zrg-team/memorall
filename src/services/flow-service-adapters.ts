@@ -616,7 +616,9 @@ export const registerFlowEmbedding = (service: IEmbeddingService): void =>
 export const registerFlowWebBrowser = (service: IWebBrowserService): void =>
 	serviceRegistry.registerInstance("webBrowser", toFlowWebBrowser(service));
 
-export const registerFlowSandbox = (service: ISandboxContainerService): void => {
+export const registerFlowSandbox = (
+	service: ISandboxContainerService,
+): void => {
 	serviceRegistry.registerInstance("sandboxContainer", toFlowSandbox(service));
 	serviceRegistry.registerInstance(
 		"sandboxRuntime",

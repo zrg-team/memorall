@@ -20,7 +20,10 @@ describe("LLMProxy cancellation", () => {
 			.mockResolvedValueOnce({ jobId: "chat-job", promise: chatPromise })
 			.mockResolvedValueOnce({
 				jobId: "cancel-job",
-				promise: Promise.resolve({ status: "completed", result: { canceled: true } }),
+				promise: Promise.resolve({
+					status: "completed",
+					result: { canceled: true },
+				}),
 			});
 
 		const proxy = new LLMProxy("local", "wllama");

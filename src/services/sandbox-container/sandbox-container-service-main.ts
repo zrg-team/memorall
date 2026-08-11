@@ -239,14 +239,20 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 		const runtime = chrome.runtime as typeof chrome.runtime & {
 			getManifest?: () => chrome.runtime.Manifest;
 		};
-		const manifest = (typeof runtime.getManifest === "function"
-			? runtime.getManifest()
-			: await fetch(chrome.runtime.getURL("manifest.json")).then((response) => {
-					if (!response.ok) {
-						throw new Error(`Failed to read extension manifest: ${response.status}`);
-					}
-					return response.json();
-				})) as chrome.runtime.Manifest & { sandbox?: { pages?: string[] } };
+		const manifest = (
+			typeof runtime.getManifest === "function"
+				? runtime.getManifest()
+				: await fetch(chrome.runtime.getURL("manifest.json")).then(
+						(response) => {
+							if (!response.ok) {
+								throw new Error(
+									`Failed to read extension manifest: ${response.status}`,
+								);
+							}
+							return response.json();
+						},
+					)
+		) as chrome.runtime.Manifest & { sandbox?: { pages?: string[] } };
 		const manifestSandboxPages = manifest.sandbox?.pages ?? [];
 		const runtimePage =
 			manifestSandboxPages.find((page) =>
@@ -389,7 +395,10 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 
 		const ready = new Promise<void>((resolve, reject) => {
 			const timeoutId = window.setTimeout(
-				() => reject(new Error("Sandbox service-worker relay handshake timed out.")),
+				() =>
+					reject(
+						new Error("Sandbox service-worker relay handshake timed out."),
+					),
 				5_000,
 			);
 			this.swRelayChannel!.port1.onmessage = (event: MessageEvent) => {
@@ -424,8 +433,11 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 	}
 
 	private ensureSwBroadcastRelay(): void {
-		if (this.swBroadcastChannel || typeof BroadcastChannel === "undefined") return;
-		this.swBroadcastChannel = new BroadcastChannel(SANDBOX_PREVIEW_RELAY_CHANNEL);
+		if (this.swBroadcastChannel || typeof BroadcastChannel === "undefined")
+			return;
+		this.swBroadcastChannel = new BroadcastChannel(
+			SANDBOX_PREVIEW_RELAY_CHANNEL,
+		);
 		this.swBroadcastChannel.onmessage = (event: MessageEvent) => {
 			void this.relaySwMessage(event.data, (message) =>
 				this.swBroadcastChannel?.postMessage(message),
@@ -531,15 +543,15 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 
 	private async relaySwMessage(
 		msg: {
-		type: string;
-		id: number;
-		data: {
-			port: number;
-			method: string;
-			url: string;
-			headers: Record<string, string>;
-			body: ArrayBuffer | null;
-		};
+			type: string;
+			id: number;
+			data: {
+				port: number;
+				method: string;
+				url: string;
+				headers: Record<string, string>;
+				body: ArrayBuffer | null;
+			};
 		},
 		reply: (message: unknown) => void = (message) =>
 			this.swRelayChannel?.port1.postMessage(message),
@@ -1791,7 +1803,9 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 	): Promise<SandboxServerRenderUrlResult> {
 		const serviceWorker = navigator.serviceWorker;
 		const sw = serviceWorker
-			? (this.swInstance ?? serviceWorker.controller ?? (await serviceWorker.ready).active)
+			? (this.swInstance ??
+				serviceWorker.controller ??
+				(await serviceWorker.ready).active)
 			: null;
 		if (sw) {
 			await this.initSwRelay(sw).catch((error) =>

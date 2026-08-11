@@ -37,6 +37,7 @@ import { sharedStorageService } from "@/services/shared-storage/shared-storage-s
 import { CopilotProvider, Copilot } from "./components/atoms/copilot";
 import { AppShell } from "./components/AppShell";
 import { AppLoadingScreen } from "./components/atoms/AppLoadingScreen";
+import { LazyRouteErrorBoundary } from "./components/molecules/LazyRouteErrorBoundary";
 // AuthPage renders before the app shell, so it stays eager (not code-split).
 import { AuthPage } from "./pages/AuthPage";
 // pages — route-level code splitting (see ./pages/lazy-pages)
@@ -402,44 +403,49 @@ const App: React.FC = () => {
 								path="*"
 								element={
 									<AppShell>
-										<Suspense
-											fallback={
-												<div className="flex h-full w-full items-center justify-center p-8 text-sm text-muted-foreground">
-													…
-												</div>
-											}
-										>
-											<Routes>
-												<Route path="/" element={<DocumentLibraryPage />} />
-												<Route path="/llm" element={<LLMPage />} />
-												<Route path="/runtime" element={<RuntimePage />} />
-												<Route path="/embeddings" element={<EmbeddingPage />} />
-												<Route path="/database" element={<DatabasePage />} />
-												<Route
-													path="/memory"
-													element={<KnowledgeGraphPage />}
-												/>
-												<Route
-													path="/knowledge-graph"
-													element={<Navigate to="/memory" replace />}
-												/>
-												<Route
-													path="/files"
-													element={<DocumentLibraryPage />}
-												/>
-												<Route path="/agents" element={<AgentsPage />} />
-												<Route
-													path="/activities"
-													element={<ActivityTimelinePage />}
-												/>
-												<Route
-													path="/flow-builder"
-													element={<FlowBuilderPage />}
-												/>
-												<Route path="/logs" element={<LogsPage />} />
-												<Route path="*" element={<DocumentLibraryPage />} />
-											</Routes>
-										</Suspense>
+										<LazyRouteErrorBoundary>
+											<Suspense
+												fallback={
+													<div className="flex h-full w-full items-center justify-center p-8 text-sm text-muted-foreground">
+														…
+													</div>
+												}
+											>
+												<Routes>
+													<Route path="/" element={<DocumentLibraryPage />} />
+													<Route path="/llm" element={<LLMPage />} />
+													<Route path="/runtime" element={<RuntimePage />} />
+													<Route
+														path="/embeddings"
+														element={<EmbeddingPage />}
+													/>
+													<Route path="/database" element={<DatabasePage />} />
+													<Route
+														path="/memory"
+														element={<KnowledgeGraphPage />}
+													/>
+													<Route
+														path="/knowledge-graph"
+														element={<Navigate to="/memory" replace />}
+													/>
+													<Route
+														path="/files"
+														element={<DocumentLibraryPage />}
+													/>
+													<Route path="/agents" element={<AgentsPage />} />
+													<Route
+														path="/activities"
+														element={<ActivityTimelinePage />}
+													/>
+													<Route
+														path="/flow-builder"
+														element={<FlowBuilderPage />}
+													/>
+													<Route path="/logs" element={<LogsPage />} />
+													<Route path="*" element={<DocumentLibraryPage />} />
+												</Routes>
+											</Suspense>
+										</LazyRouteErrorBoundary>
 									</AppShell>
 								}
 							/>

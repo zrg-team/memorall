@@ -2,7 +2,10 @@ import type {} from "@/services/flows-legacy/interfaces/engine/tool";
 import type { ChatCompletionMessageParam } from "@/services/flows-legacy/interfaces/engine/messages";
 import type { UnifiedFlowConfig } from "@/services/flows-legacy/interfaces/config/flow-config";
 import type { AllServices } from "@/services/flows-legacy/interfaces/services/services";
-import type { GraphBase, BaseStateBase } from "@/services/flows-legacy/graph/graph.base";
+import type {
+	GraphBase,
+	BaseStateBase,
+} from "@/services/flows-legacy/graph/graph.base";
 import type { FlowRegistrySet } from "@/services/flows-legacy/registries/registry-set";
 
 export type BaseGraph = GraphBase<any, any, unknown>;

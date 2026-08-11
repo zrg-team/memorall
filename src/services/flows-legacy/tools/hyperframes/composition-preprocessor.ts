@@ -1,6 +1,9 @@
 import type { IFlowFileSystem } from "@/services/flows-legacy/interfaces/services/filesystem";
 import type { FsToolConfig } from "@/services/flows-legacy/tools/fs/config";
-import { listEntries, readFileBytes } from "@/services/flows-legacy/tools/fs/util";
+import {
+	listEntries,
+	readFileBytes,
+} from "@/services/flows-legacy/tools/fs/util";
 import { normalizeProjectPath } from "@/services/flows-legacy/tools/hyperframes/util";
 
 // ── Local image → data URL ────────────────────────────────────────────────────

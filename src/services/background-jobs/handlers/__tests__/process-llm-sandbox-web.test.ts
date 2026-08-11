@@ -521,21 +521,22 @@ describe("SandboxOperationsHandler", () => {
 		["snapshot.restore", "restoreSnapshot", {}],
 	];
 
-	it.each(
-		cases,
-	)("dispatches %s to sandbox service", async (operation, method, payload) => {
-		await expect(
-			new SandboxOperationsHandler().process(
-				`sandbox-${operation}`,
-				job("sandbox-operation", { operation, payload }),
-				deps(),
-			),
-		).resolves.toEqual({
-			operation,
-			result: expect.anything(),
-		});
-		expect(sandboxService[method]).toHaveBeenCalled();
-	});
+	it.each(cases)(
+		"dispatches %s to sandbox service",
+		async (operation, method, payload) => {
+			await expect(
+				new SandboxOperationsHandler().process(
+					`sandbox-${operation}`,
+					job("sandbox-operation", { operation, payload }),
+					deps(),
+				),
+			).resolves.toEqual({
+				operation,
+				result: expect.anything(),
+			});
+			expect(sandboxService[method]).toHaveBeenCalled();
+		},
+	);
 
 	it("dispatches generic request-backed sandbox operations and rejects invalid payloads", async () => {
 		const handler = new SandboxOperationsHandler();
@@ -604,21 +605,22 @@ describe("WebBrowserOperationsHandler", () => {
 		["wait.render", "waitForPageRender", {}, undefined],
 	];
 
-	it.each(
-		cases,
-	)("dispatches %s to web browser service", async (operation, method, payload, fixedResult) => {
-		const result = await new WebBrowserOperationsHandler().process(
-			`web-${operation}`,
-			job("web-browser-operation", { operation, payload }),
-			deps(),
-		);
+	it.each(cases)(
+		"dispatches %s to web browser service",
+		async (operation, method, payload, fixedResult) => {
+			const result = await new WebBrowserOperationsHandler().process(
+				`web-${operation}`,
+				job("web-browser-operation", { operation, payload }),
+				deps(),
+			);
 
-		expect(result).toEqual({
-			operation,
-			result: fixedResult ?? expect.anything(),
-		});
-		expect(webBrowserService[method]).toHaveBeenCalled();
-	});
+			expect(result).toEqual({
+				operation,
+				result: fixedResult ?? expect.anything(),
+			});
+			expect(webBrowserService[method]).toHaveBeenCalled();
+		},
+	);
 
 	it("rejects invalid web-browser payloads and unsupported operations", async () => {
 		const handler = new WebBrowserOperationsHandler();

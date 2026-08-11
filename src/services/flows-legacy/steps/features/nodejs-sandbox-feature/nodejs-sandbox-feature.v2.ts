@@ -1,4 +1,7 @@
-import { defineStep, bindStep } from "@/services/flows-legacy/interfaces/engine/step";
+import {
+	defineStep,
+	bindStep,
+} from "@/services/flows-legacy/interfaces/engine/step";
 import type {
 	BoundStep,
 	StepFactoryFromSpec,
@@ -7,7 +10,10 @@ import type {
 } from "@/services/flows-legacy/interfaces/engine/step";
 import type { ChatCompletionMessageParam } from "@/services/flows-legacy/interfaces/engine/messages";
 import type { AllServices } from "@/services/flows-legacy/interfaces/services/services";
-import { GraphBase, type GraphTool } from "@/services/flows-legacy/graph/graph.base";
+import {
+	GraphBase,
+	type GraphTool,
+} from "@/services/flows-legacy/graph/graph.base";
 import { stepRegistry } from "@/services/flows-legacy/registries/step-registry";
 import { logError } from "@/services/flows-legacy/utils/logger";
 import {
@@ -69,8 +75,9 @@ Available sandbox tools: ${tools.join(", ")}.
 - Use sandbox_inspect for status and diagnostics. Reset only when session state must be discarded.
 - Output, logs, and response bodies are bounded. Continue process reads with nextCursor when output is truncated or the process is still running.`;
 
-export const BROWSER_SANDBOX_FEATURE_SYSTEM_PROMPT =
-	buildBrowserSandboxPrompt(SANDBOX_WEB_APP_TOOLS);
+export const BROWSER_SANDBOX_FEATURE_SYSTEM_PROMPT = buildBrowserSandboxPrompt(
+	SANDBOX_WEB_APP_TOOLS,
+);
 export const NODEJS_SANDBOX_FEATURE_SYSTEM_PROMPT =
 	BROWSER_SANDBOX_FEATURE_SYSTEM_PROMPT;
 
@@ -78,8 +85,7 @@ export const BROWSER_SANDBOX_FEATURE_TOOLS = [
 	...SANDBOX_WEB_APP_TOOLS,
 	...ARTIFACT_FEATURE_TOOLS,
 ] as const;
-export const NODEJS_SANDBOX_FEATURE_TOOLS =
-	BROWSER_SANDBOX_FEATURE_TOOLS;
+export const NODEJS_SANDBOX_FEATURE_TOOLS = BROWSER_SANDBOX_FEATURE_TOOLS;
 
 const definition = defineStep<
 	NodejsSandboxFeatureInput,
@@ -142,8 +148,7 @@ export const createNodejsSandboxFeatureStep: StepFactoryFromSpec<
 ): BoundStep<NodejsSandboxFeatureInput, NodejsSandboxFeatureOutput> =>
 	bindStep(definition, services, config, context);
 
-export const createBrowserSandboxFeatureStep =
-	createNodejsSandboxFeatureStep;
+export const createBrowserSandboxFeatureStep = createNodejsSandboxFeatureStep;
 
 stepRegistry.register(STEP_NAME, createNodejsSandboxFeatureStep, {
 	description: BROWSER_SANDBOX_FEATURE_DESCRIPTION,

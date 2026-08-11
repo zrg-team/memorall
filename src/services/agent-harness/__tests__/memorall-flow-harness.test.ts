@@ -124,9 +124,7 @@ describe("Memorall agent harness composition", () => {
 			collect(toLegacyFlowStream(second)),
 		]);
 		expect(firstEvents).toEqual([["values", { response: "agent" }]]);
-		expect(secondEvents).toEqual([
-			["values", { response: "foundation" }],
-		]);
+		expect(secondEvents).toEqual([["values", { response: "foundation" }]]);
 	});
 
 	it("propagates harness cancellation into the legacy graph signal", async () => {

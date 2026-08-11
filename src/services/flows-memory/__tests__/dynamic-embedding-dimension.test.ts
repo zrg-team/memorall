@@ -28,17 +28,20 @@ vi.mock("@/services/shared-storage/shared-storage-service", () => ({
 }));
 
 import { getDimensions, type EmbeddingSize } from "@/config/embedding-models";
-import { node, edge, source, sourceNode, sourceEdge } from "@/services/database/entities";
+import {
+	node,
+	edge,
+	source,
+	sourceNode,
+	sourceEdge,
+} from "@/services/database/entities";
 
 import {
 	getCurrentEmbeddingColumns,
 	getCurrentEmbeddingFields,
 } from "../utils/embedding-size-config";
 import { createDatabaseSaveStep } from "../steps/features/knowledge-grow/database-save";
-import {
-	vectorSearchEdges,
-	vectorSearchNodes,
-} from "../utils/vector-search";
+import { vectorSearchEdges, vectorSearchNodes } from "../utils/vector-search";
 
 const SIZES: EmbeddingSize[] = ["small", "medium", "large"];
 

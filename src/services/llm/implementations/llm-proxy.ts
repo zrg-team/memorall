@@ -264,7 +264,9 @@ export class LLMProxy implements BaseLLM {
 								),
 							};
 						}
-						throw new Error(result.error || "Failed to process chat completion");
+						throw new Error(
+							result.error || "Failed to process chat completion",
+						);
 					} finally {
 						removeAbortListener();
 					}

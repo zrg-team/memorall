@@ -59,7 +59,7 @@ import {
 	TabsTrigger,
 } from "@/main/components/ui/tabs";
 import { useResponsiveWorkspacePanels } from "@/main/hooks/use-responsive-workspace-panels";
-import { WorkspaceCollapsedSidebarItem } from "@/main/components/molecules/WorkspaceCollapsedSidebarItem";
+import { WorkspaceCollapsedSidebarDataItem } from "@/main/components/molecules/WorkspaceCollapsedSidebarDataItem";
 
 import { D3KnowledgeGraph } from "@/main/modules/knowledge/components/D3KnowledgeGraph";
 import {
@@ -619,13 +619,6 @@ export const KnowledgeGraphPage: React.FC<KnowledgeGraphPageProps> = () => {
 		sidebarOverlayWidth,
 	} = useResponsiveWorkspacePanels({ storageKey: PANEL_STORAGE_KEY });
 
-	const expandSidebarAndFocusSearch = React.useCallback(() => {
-		expandSidebar();
-		window.requestAnimationFrame(() => {
-			searchInputRef.current?.focus();
-		});
-	}, [expandSidebar]);
-
 	useEffect(() => {
 		loadTopics();
 	}, []);
@@ -784,7 +777,6 @@ export const KnowledgeGraphPage: React.FC<KnowledgeGraphPageProps> = () => {
 		`${edges.length} semantic relationships available`,
 		`${skills.length} procedural skills available`,
 	].filter(Boolean);
-
 	const renderSemanticGraphView = () => (
 		<div className="h-full overflow-hidden">
 			{loading ? (
@@ -857,30 +849,57 @@ export const KnowledgeGraphPage: React.FC<KnowledgeGraphPageProps> = () => {
 				}
 			>
 				{isSidebarCollapsed ? (
-					<div className="flex h-full flex-col items-center gap-2 py-3">
-						<WorkspaceCollapsedSidebarItem
-							icon={<PanelLeftOpen className="h-4 w-4" />}
-							label={t("sidebar.show")}
+					<div className="flex h-full min-h-0 flex-col items-center py-3">
+						<Button
+							type="button"
+							variant="outline"
+							size="icon"
+							className="h-10 w-10 shrink-0"
 							onClick={expandSidebar}
-							className="border border-input bg-background hover:bg-accent"
-						/>
-						<div className="mt-2 flex flex-col gap-2">
-							<WorkspaceCollapsedSidebarItem
-								icon={<Network className="h-5 w-5" />}
-								label={t("title")}
-								onClick={expandSidebar}
+							aria-label={t("sidebar.show")}
+							title={t("sidebar.show")}
+						>
+							<PanelLeftOpen className="h-4 w-4" />
+						</Button>
+						<div className="mt-3 flex min-h-0 w-full flex-1 flex-col items-center gap-1.5 overflow-y-auto px-1">
+							<WorkspaceCollapsedSidebarDataItem
+								label={t("topic.defaultNoTopic")}
+								badge={topics.length + 1}
+								active={selectedTopicId === DEFAULT_TOPIC_ID}
+								description={`${nodes.length} nodes`}
+								onClick={() => handleTopicSelect(DEFAULT_TOPIC_ID)}
 							/>
-							<WorkspaceCollapsedSidebarItem
-								icon={<Tags className="h-5 w-5" />}
-								label={t("topics.title")}
-								onClick={expandSidebar}
-							/>
-							<WorkspaceCollapsedSidebarItem
-								icon={<Search className="h-5 w-5" />}
-								label={t("search.placeholder")}
-								onClick={expandSidebarAndFocusSearch}
-							/>
+							{topics.map((topic) => (
+								<WorkspaceCollapsedSidebarDataItem
+									key={topic.id}
+									label={topic.name}
+									badge={topic.fileCount}
+									active={selectedTopicId === topic.id}
+									onClick={() => handleTopicSelect(topic.id)}
+								/>
+							))}
+							<div className="my-1 w-6 border-t" />
+							{filteredNodes.map((node) => (
+								<WorkspaceCollapsedSidebarDataItem
+									key={node.id}
+									label={node.name}
+									description={node.nodeType}
+									active={selectedNodeId === node.id}
+									onClick={() => setSelectedNodeId(node.id)}
+								/>
+							))}
 						</div>
+						<Button
+							type="button"
+							variant="outline"
+							size="icon"
+							className="mt-3 h-10 w-10 shrink-0 border-dashed"
+							onClick={() => void handleCreateTopic()}
+							aria-label={tTopics("manage.newTopic")}
+							title={tTopics("manage.newTopic")}
+						>
+							<Plus className="h-4 w-4" />
+						</Button>
 					</div>
 				) : (
 					<div

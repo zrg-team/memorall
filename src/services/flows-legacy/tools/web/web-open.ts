@@ -1,5 +1,8 @@
 import z from "zod";
-import type { Tool, ToolFactory } from "@/services/flows-legacy/interfaces/engine/tool";
+import type {
+	Tool,
+	ToolFactory,
+} from "@/services/flows-legacy/interfaces/engine/tool";
 import { toolRegistry } from "@/services/flows-legacy/registries/tool-registry";
 import {
 	MAX_WEB_MAX_HTML_CHARS,

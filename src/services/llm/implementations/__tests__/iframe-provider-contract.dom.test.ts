@@ -42,83 +42,87 @@ function installRunner(
 ) {
 	const localAdapter = adapter as any;
 	const runnerWindow = {
-		postMessage: vi.fn((message: { messageId: string; type: string; payload?: any }) => {
-			if (message.type !== "chat/completions") return;
-			if (!respond) return;
+		postMessage: vi.fn(
+			(message: { messageId: string; type: string; payload?: any }) => {
+				if (message.type !== "chat/completions") return;
+				if (!respond) return;
 
-			queueMicrotask(() => {
-				if (message.payload?.stream) {
-					localAdapter.onMessage({
-						source: runnerWindow,
-						data: {
-							messageId: message.messageId,
-							type: chunkType,
-							payload: {
-								id: "stream-chunk",
-								object: "chat.completion.chunk",
-								created: 1,
-								model: "contract-model",
-								choices: [
-									{
-										index: 0,
-										delta: { content: "streamed" },
-										finish_reason: null,
-									},
-								],
+				queueMicrotask(() => {
+					if (message.payload?.stream) {
+						localAdapter.onMessage({
+							source: runnerWindow,
+							data: {
+								messageId: message.messageId,
+								type: chunkType,
+								payload: {
+									id: "stream-chunk",
+									object: "chat.completion.chunk",
+									created: 1,
+									model: "contract-model",
+									choices: [
+										{
+											index: 0,
+											delta: { content: "streamed" },
+											finish_reason: null,
+										},
+									],
+								},
 							},
-						},
-					} as unknown as MessageEvent);
+						} as unknown as MessageEvent);
+						localAdapter.onMessage({
+							source: runnerWindow,
+							data: {
+								messageId: message.messageId,
+								type: endType,
+								payload: {
+									id: "stream-end",
+									object: "chat.completion.chunk",
+									created: 1,
+									model: "contract-model",
+									choices: [
+										{
+											index: 0,
+											delta: {},
+											finish_reason: "stop",
+										},
+									],
+								},
+							},
+						} as unknown as MessageEvent);
+						return;
+					}
+
 					localAdapter.onMessage({
 						source: runnerWindow,
 						data: {
 							messageId: message.messageId,
-							type: endType,
+							type: "complete",
 							payload: {
-								id: "stream-end",
-								object: "chat.completion.chunk",
+								id: "completion",
+								object: "chat.completion",
 								created: 1,
 								model: "contract-model",
 								choices: [
 									{
 										index: 0,
-										delta: {},
+										message: { role: "assistant", content: "completed" },
 										finish_reason: "stop",
 									},
 								],
 							},
 						},
 					} as unknown as MessageEvent);
-					return;
-				}
-
-				localAdapter.onMessage({
-					source: runnerWindow,
-					data: {
-						messageId: message.messageId,
-						type: "complete",
-						payload: {
-							id: "completion",
-							object: "chat.completion",
-							created: 1,
-							model: "contract-model",
-							choices: [
-								{
-									index: 0,
-									message: { role: "assistant", content: "completed" },
-									finish_reason: "stop",
-								},
-							],
-						},
-					},
-				} as unknown as MessageEvent);
-			});
-		}),
+				});
+			},
+		),
 	};
 
 	localAdapter.ready = true;
 	localAdapter.iframe = { contentWindow: runnerWindow };
 	localAdapter.getToolCapabilities = vi.fn(async () => NATIVE_TOOL_SUPPORT);
-	localAdapter.withRunnerMemoryHint = vi.fn(async (payload: unknown) => payload);
+	localAdapter.withRunnerMemoryHint = vi.fn(
+		async (payload: unknown) => payload,
+	);
 
 	return runnerWindow;
 }
@@ -151,7 +155,7 @@ describe("local iframe provider contracts", () => {
 			expect(chunks.at(-1)?.choices[0]?.finish_reason).toBe("stop");
 			expect(runnerWindow.postMessage).toHaveBeenCalledWith(
 				expect.objectContaining({ type: "chat/completions" }),
-			"*",
+				"*",
 			);
 		},
 	);
@@ -180,7 +184,7 @@ describe("local iframe provider contracts", () => {
 			await expect(completion).rejects.toThrow("Operation aborted");
 			expect(runnerWindow.postMessage).toHaveBeenCalledWith(
 				expect.objectContaining({ type: "abort" }),
-			"*",
+				"*",
 			);
 		},
 	);

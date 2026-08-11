@@ -1,10 +1,16 @@
 import z from "zod";
 import * as pdfjsLib from "pdfjs-dist";
-import type { Tool, ToolFactory } from "@/services/flows-legacy/interfaces/engine/tool";
+import type {
+	Tool,
+	ToolFactory,
+} from "@/services/flows-legacy/interfaces/engine/tool";
 import type { AllServices } from "@/services/flows-legacy/interfaces/services/services";
 import { toolRegistry } from "@/services/flows-legacy/registries/tool-registry";
 import { normalizeDocumentPath } from "./util";
-import { pathExists, readFileBytes } from "@/services/flows-legacy/tools/fs/util";
+import {
+	pathExists,
+	readFileBytes,
+} from "@/services/flows-legacy/tools/fs/util";
 
 const TOOL_NAME = "pdf_metadata" as const;
 

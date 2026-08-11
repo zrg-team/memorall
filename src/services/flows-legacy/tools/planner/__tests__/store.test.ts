@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { createFlowRuntimeVars } from "@/services/flows-legacy/runtime/runtime-context";
 import { createPlannerCreateTool } from "@/services/flows-legacy/tools/planner/planner-create";
-import { clearPlan, getPlan } from "@/services/flows-legacy/tools/planner/store";
+import {
+	clearPlan,
+	getPlan,
+} from "@/services/flows-legacy/tools/planner/store";
 
 describe("planner runtime storage", () => {
 	it("keeps planner state isolated per runtime vars instance", async () => {

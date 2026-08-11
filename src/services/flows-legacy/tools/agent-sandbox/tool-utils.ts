@@ -149,7 +149,13 @@ export const executeSandboxOperation = async (
 
 export const validateOperationFields = (
 	data: Record<string, unknown>,
-	ctx: { addIssue: (issue: { code: "custom"; path: string[]; message: string }) => void },
+	ctx: {
+		addIssue: (issue: {
+			code: "custom";
+			path: string[];
+			message: string;
+		}) => void;
+	},
 	allowed: readonly string[],
 	required: readonly string[] = [],
 ): void => {
@@ -163,7 +169,11 @@ export const validateOperationFields = (
 		}
 	}
 	for (const [field, value] of Object.entries(data)) {
-		if (field !== "operation" && value !== undefined && !allowed.includes(field)) {
+		if (
+			field !== "operation" &&
+			value !== undefined &&
+			!allowed.includes(field)
+		) {
 			ctx.addIssue({
 				code: "custom",
 				path: [field],

@@ -50,7 +50,9 @@ const createMemoryFileSystem = (initial: Record<string, string>) => {
 		writeFile: vi.fn(async (path: string, content: string | Uint8Array) => {
 			files.set(
 				path,
-				typeof content === "string" ? content : new TextDecoder().decode(content),
+				typeof content === "string"
+					? content
+					: new TextDecoder().decode(content),
 			);
 		}),
 		mkdir: vi.fn(async (path: string) => {
@@ -86,13 +88,18 @@ const createMemoryFileSystem = (initial: Record<string, string>) => {
 				isDirectory: () => type === "directory",
 				isSymbolicLink: () => false,
 			}));
-			return options?.withFileTypes ? entries : entries.map((entry) => entry.name);
+			return options?.withFileTypes
+				? entries
+				: entries.map((entry) => entry.name);
 		}),
 	} as unknown as IFlowFileSystem;
 	return { fs, files };
 };
 
-const makeSession = (providerId: string, index: number): SandboxProviderSession => {
+const makeSession = (
+	providerId: string,
+	index: number,
+): SandboxProviderSession => {
 	const now = Date.now();
 	const descriptor = {
 		sessionId: `session-${index}`,
@@ -249,9 +256,12 @@ describe("SandboxManager", () => {
 		const registry = new SandboxProviderRegistry()
 			.register(firstProvider)
 			.register(secondProvider);
-		const manager = new SandboxManager(registry, { providerId: firstProvider.id });
+		const manager = new SandboxManager(registry, {
+			providerId: firstProvider.id,
+		});
 		await manager.acquire({ sessionKey: "conversation" });
-		const firstSession = await firstProvider.createSession.mock.results[0].value;
+		const firstSession =
+			await firstProvider.createSession.mock.results[0].value;
 
 		const result = await manager.acquire({
 			sessionKey: "conversation",
@@ -274,15 +284,18 @@ describe("SandboxManager", () => {
 			workspaceId: "workspace-1",
 			root: "/projects/app",
 			directories: ["/projects/app"],
-			files: [
-				{ path: "/projects/app/main.js", content: "1", revision: "r1" },
-			],
+			files: [{ path: "/projects/app/main.js", content: "1", revision: "r1" }],
 		};
-		const lease = await manager.acquire({ sessionKey: "c1", workspace: manifest });
+		const lease = await manager.acquire({
+			sessionKey: "c1",
+			workspace: manifest,
+		});
 
-		expect(coordinator.getBinding(lease.session.sessionId)?.revisions.get(
-			"/projects/app/main.js",
-		)).toBe("r1");
+		expect(
+			coordinator
+				.getBinding(lease.session.sessionId)
+				?.revisions.get("/projects/app/main.js"),
+		).toBe("r1");
 		await manager.run(
 			{ operation: "code", code: "1 + 1" },
 			{ sessionKey: "c1" },
@@ -299,7 +312,9 @@ describe("SandboxManager", () => {
 		);
 		await manager.acquire({ sessionKey: "conversation-1" });
 		const session = await provider.createSession.mock.results[0].value;
-		vi.mocked(session.runtime.run).mockRejectedValueOnce(new Error("execution failed"));
+		vi.mocked(session.runtime.run).mockRejectedValueOnce(
+			new Error("execution failed"),
+		);
 
 		await expect(
 			manager.run(
@@ -316,9 +331,9 @@ describe("SandboxManager", () => {
 			new SandboxProviderRegistry().register(provider),
 			{ providerId: provider.id },
 		);
-		await expect(
-			manager.packages({ operation: "list" }),
-		).rejects.toMatchObject({ code: "capability_unavailable" });
+		await expect(manager.packages({ operation: "list" })).rejects.toMatchObject(
+			{ code: "capability_unavailable" },
+		);
 
 		const controller = new AbortController();
 		controller.abort();
@@ -402,7 +417,8 @@ describe("SandboxManager", () => {
 			expect.any(Object),
 		);
 
-		const resumedSession = await provider.reconnectSession.mock.results[0].value;
+		const resumedSession =
+			await provider.reconnectSession.mock.results[0].value;
 		(resumedSession.descriptor as { status: string }).status = "stopped";
 		const replaced = await manager.acquire({ sessionKey: "conversation" });
 		expect(replaced.session.sessionId).not.toBe(resumed.session.sessionId);
@@ -461,8 +477,16 @@ describe("SandboxManager", () => {
 			changedPaths: [],
 			conflicts: [],
 			changes: [
-				{ operation: "write", path: "/project/generated.txt", content: "generated" },
-				{ operation: "rename", oldPath: "/project/added.txt", newPath: "/project/renamed.txt" },
+				{
+					operation: "write",
+					path: "/project/generated.txt",
+					content: "generated",
+				},
+				{
+					operation: "rename",
+					oldPath: "/project/added.txt",
+					newPath: "/project/renamed.txt",
+				},
 				{ operation: "delete", path: "/project/main.js" },
 			],
 		});
@@ -484,7 +508,11 @@ describe("SandboxManager", () => {
 			changedPaths: ["/project/main.js"],
 			conflicts: [],
 			changes: [
-				{ operation: "write", path: "/project/main.js", content: "provider edit" },
+				{
+					operation: "write",
+					path: "/project/main.js",
+					content: "provider edit",
+				},
 			],
 		});
 

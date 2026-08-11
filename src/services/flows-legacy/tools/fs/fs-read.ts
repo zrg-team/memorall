@@ -1,9 +1,15 @@
 import z from "zod";
-import type { Tool, ToolFactory } from "@/services/flows-legacy/interfaces/engine/tool";
+import type {
+	Tool,
+	ToolFactory,
+} from "@/services/flows-legacy/interfaces/engine/tool";
 import type { AllServices } from "@/services/flows-legacy/interfaces/services/services";
 import { toolRegistry } from "@/services/flows-legacy/registries/tool-registry";
 import type { FsToolConfig } from "@/services/flows-legacy/tools/fs/config";
-import { normalizeFsPath, readFileBytes } from "@/services/flows-legacy/tools/fs/util";
+import {
+	normalizeFsPath,
+	readFileBytes,
+} from "@/services/flows-legacy/tools/fs/util";
 
 const TOOL_NAME = "fs_read" as const;
 

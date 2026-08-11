@@ -1,9 +1,15 @@
 import z from "zod";
-import type { Tool, ToolFactory } from "@/services/flows-legacy/interfaces/engine/tool";
+import type {
+	Tool,
+	ToolFactory,
+} from "@/services/flows-legacy/interfaces/engine/tool";
 import type { AllServices } from "@/services/flows-legacy/interfaces/services/services";
 import { toolRegistry } from "@/services/flows-legacy/registries/tool-registry";
 import { normalizeProjectPath } from "@/services/flows-legacy/tools/hyperframes/util";
-import { listEntries, displayPathToFsPath } from "@/services/flows-legacy/tools/fs/util";
+import {
+	listEntries,
+	displayPathToFsPath,
+} from "@/services/flows-legacy/tools/fs/util";
 import type { HyperframesToolConfig } from "@/services/flows-legacy/tools/hyperframes/config";
 
 const TOOL_NAME = "hyperframes_list" as const;

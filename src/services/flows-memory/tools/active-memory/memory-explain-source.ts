@@ -1,7 +1,10 @@
 import { getKnowledgeDatabase } from "../../interfaces/knowledge";
 import z from "zod";
 import { eq } from "drizzle-orm";
-import type { Tool, ToolFactory } from "@/services/flows-legacy/interfaces/engine/tool";
+import type {
+	Tool,
+	ToolFactory,
+} from "@/services/flows-legacy/interfaces/engine/tool";
 import { toolRegistry } from "@/services/flows-legacy/registries/tool-registry";
 import {
 	findMemoryFacts,

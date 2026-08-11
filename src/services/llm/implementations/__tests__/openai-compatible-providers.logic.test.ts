@@ -31,14 +31,22 @@ const providers: ProviderCase[] = [
 	{
 		name: "LM Studio",
 		create: () =>
-			new LocalOpenAICompatibleLLM("http://lmstudio.test/v1", undefined, "lmstudio"),
+			new LocalOpenAICompatibleLLM(
+				"http://lmstudio.test/v1",
+				undefined,
+				"lmstudio",
+			),
 		baseURL: "http://lmstudio.test/v1",
 		expectedInfoType: "lmstudio",
 	},
 	{
 		name: "Ollama",
 		create: () =>
-			new LocalOpenAICompatibleLLM("http://ollama.test/v1", undefined, "ollama"),
+			new LocalOpenAICompatibleLLM(
+				"http://ollama.test/v1",
+				undefined,
+				"ollama",
+			),
 		baseURL: "http://ollama.test/v1",
 		expectedInfoType: "ollama",
 	},

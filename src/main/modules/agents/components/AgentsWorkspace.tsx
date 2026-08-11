@@ -183,11 +183,14 @@ export const AgentsWorkspace: React.FC = () => {
 			listSection={listSection}
 			onCollapseSidebar={collapseSidebar}
 			onCompactTabChange={setActiveCompactTab}
+			onCreatePreset={() => setIsCreateDialogOpen(true)}
 			onExpandSidebar={expandSidebar}
-			onOpenAgentWizard={() => {
-				void handleOpenAgentWizard();
-			}}
 			onResizeStart={handleResizeStart}
+			onSelectPreset={handlePresetSelection}
+			presets={filteredPresets}
+			isPresetListLoading={isPresetListLoading}
+			isCreating={isCreating}
+			selectedPresetId={selectedPresetId}
 			sidebarOverlayWidth={sidebarOverlayWidth}
 		>
 			<CreateFlowDialog<CreateAgentTopicOptions>

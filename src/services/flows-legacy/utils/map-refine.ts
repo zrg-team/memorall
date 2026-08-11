@@ -1,6 +1,10 @@
 import type { ChatMessage } from "@/services/flows-legacy/interfaces/engine/messages";
 import type { IFlowLLMService } from "@/services/flows-legacy/interfaces/services/llm";
-import { logDebug, logError, logInfo } from "@/services/flows-legacy/utils/logger";
+import {
+	logDebug,
+	logError,
+	logInfo,
+} from "@/services/flows-legacy/utils/logger";
 
 // Simple token estimator: ~4 chars per token heuristic
 function estimateTokens(text: string): number {

@@ -5,7 +5,10 @@ import type {
 	ToolExecutionContext,
 } from "@/services/flows-legacy/interfaces/engine/tool";
 import { toolRegistry } from "@/services/flows-legacy/registries/tool-registry";
-import { setPlan, formatPlan } from "@/services/flows-legacy/tools/planner/store";
+import {
+	setPlan,
+	formatPlan,
+} from "@/services/flows-legacy/tools/planner/store";
 import type { Plan } from "@/services/flows-legacy/tools/planner/store";
 
 const TOOL_NAME = "planner_create" as const;
