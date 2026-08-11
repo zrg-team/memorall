@@ -42,7 +42,7 @@
     "harness:clean": "tsc -b packages/agent-harness/tsconfig.json --clean",
     "harness:test": "vitest run --config packages/agent-harness/vitest.config.ts",
     "harness:boundaries": "node tools/check-agent-harness-boundaries.mjs",
-    "harness:pack": "node tools/pack-agent-harness.mjs",
+    "harness:pack": "yarn harness:build && node tools/pack-agent-harness.mjs",
     "harness:smoke": "node tools/smoke-agent-harness-consumers.mjs",
     "check:agent-harness": "yarn harness:boundaries && yarn harness:typecheck && yarn harness:test && yarn harness:pack && yarn harness:smoke",
     "test:sandbox:unit": "vitest run src/services/agent-sandbox/__tests__ src/services/sandbox-container/__tests__ src/services/flows-legacy/__tests__/agent-sandbox-tools.test.ts src/services/flows-legacy/__tests__/tool-registry.test.ts src/services/flows-legacy/__tests__/flow-engine-harness.test.ts src/services/__tests__/flow-service-adapters.logic.test.ts",
