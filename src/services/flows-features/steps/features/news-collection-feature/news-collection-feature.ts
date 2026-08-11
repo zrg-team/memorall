@@ -1,16 +1,16 @@
-import { defineStep, bindStep } from "flow-core/interfaces/engine/step";
+import { defineStep, bindStep } from "@/services/flows-legacy/interfaces/engine/step";
 import type {
 	BoundStep,
 	StepFactoryFromSpec,
 	StepSpecFromDefinition,
-} from "flow-core/interfaces/engine/step";
-import { logError } from "flow-core/utils/logger";
-import { stepRegistry } from "flow-core/registries/step-registry";
-import { GraphBase, type GraphTool } from "flow-core/graph/graph.base";
-import type { ChatCompletionMessageParam } from "flow-core/interfaces/engine/messages";
-import type { ActiveWebSessionInfo } from "flow-core/interfaces/services/web-browser";
-import type {} from "flow-core/interfaces/engine/tool";
-import type { AllServices } from "flow-core/interfaces/services/services";
+} from "@/services/flows-legacy/interfaces/engine/step";
+import { logError } from "@/services/flows-legacy/utils/logger";
+import { stepRegistry } from "@/services/flows-legacy/registries/step-registry";
+import { GraphBase, type GraphTool } from "@/services/flows-legacy/graph/graph.base";
+import type { ChatCompletionMessageParam } from "@/services/flows-legacy/interfaces/engine/messages";
+import type { ActiveWebSessionInfo } from "@/services/flows-legacy/interfaces/services/web-browser";
+import type {} from "@/services/flows-legacy/interfaces/engine/tool";
+import type { AllServices } from "@/services/flows-legacy/interfaces/services/services";
 
 const STEP_NAME = "news-collection-feature" as const;
 export const NEWS_COLLECTION_FEATURE_NAME = STEP_NAME;

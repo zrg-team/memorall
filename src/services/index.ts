@@ -1,8 +1,11 @@
-import "@/services/flows-core";
+import "@/services/flows-legacy";
 import "@/services/flows-memory";
 import "@/services/flows-integrations";
 import "@/services/flows-features";
 import { ServiceManager } from "./service-manager";
+import { registerLegacyFlowLogger } from "./flow-service-adapters";
+
+registerLegacyFlowLogger();
 
 // Export singleton instance
 export const serviceManager = ServiceManager.getInstance();

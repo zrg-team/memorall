@@ -40,7 +40,7 @@ import { cn } from "@/lib/utils";
 import type {
 	FlowStateInput,
 	FlowCatalog,
-} from "@/services/flows-core/interfaces/config/flow-builder";
+} from "@/services/flows-legacy/interfaces/config/flow-builder";
 import type { CatalogStep } from "@/services/flow-builder-catalog";
 
 const STATE_TYPES = [

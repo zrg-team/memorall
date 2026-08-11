@@ -1,5 +1,5 @@
 // Side-effect: triggers stepRegistry registration for all feature steps.
-import "@/services/flows-core/steps/features";
+import "@/services/flows-legacy/steps/features";
 // App integrations override selected core feature steps (fs, HyperFrames).
 import "@/services/flows-integrations";
 
@@ -7,7 +7,7 @@ import {
 	featureCatalogService,
 	type StepIOField,
 } from "@/services/flow-feature-catalog-service";
-import { serviceRegistry } from "@/services/flows-core/registries/service-registry";
+import { serviceRegistry } from "@/services/flows-legacy/registries/service-registry";
 
 /**
  * Flow Builder Catalog

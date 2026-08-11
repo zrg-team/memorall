@@ -1,12 +1,12 @@
 import { END, START, StateGraph } from "@langchain/langgraph";
-import { logInfo } from "flow-core/utils/logger";
+import { logInfo } from "@/services/flows-legacy/utils/logger";
 
 import { StructMemAnnotation, type StructMemState } from "./state";
-import { GraphBase } from "flow-core/graph/graph.base";
-import type {} from "flow-core/interfaces/engine/tool";
-import type { AllServices } from "flow-core/interfaces/services/services";
-import { graphRegistry } from "flow-core/registries/graph-registry";
-import type { FlowRegistrySet } from "flow-core/registries/registry-set";
+import { GraphBase } from "@/services/flows-legacy/graph/graph.base";
+import type {} from "@/services/flows-legacy/interfaces/engine/tool";
+import type { AllServices } from "@/services/flows-legacy/interfaces/services/services";
+import { graphRegistry } from "@/services/flows-legacy/registries/graph-registry";
+import type { FlowRegistrySet } from "@/services/flows-legacy/registries/registry-set";
 
 export interface StructMemGraphConfig {
 	consolidationWindowMs?: number;

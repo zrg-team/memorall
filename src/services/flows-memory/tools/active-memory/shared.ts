@@ -1,10 +1,10 @@
 import { getKnowledgeDatabase } from "../../interfaces/knowledge";
 import { and, desc, eq, inArray, like, or, sql } from "drizzle-orm";
-import type { ToolExecutionContext } from "flow-core/interfaces/engine/tool";
-import type { AllServices } from "flow-core/interfaces/services/services";
+import type { ToolExecutionContext } from "@/services/flows-legacy/interfaces/engine/tool";
+import type { AllServices } from "@/services/flows-legacy/interfaces/services/services";
 import type { Edge, NewEdge, NewNode, Node } from "../../interfaces/knowledge";
 import type { IEmbeddingService } from "../../interfaces/embedding";
-import { getRuntimeGraphId } from "flow-core/runtime/runtime-context";
+import { getRuntimeGraphId } from "@/services/flows-legacy/runtime/runtime-context";
 import { getScopedGraphWhere } from "../../utils/graph-query";
 import { getCurrentEmbeddingFields } from "../../utils/embedding-size-config";
 

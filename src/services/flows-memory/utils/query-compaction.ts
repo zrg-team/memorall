@@ -5,7 +5,7 @@
  * methods until the query fits within embedding token limits.
  */
 
-import { logInfo, logWarn } from "flow-core/utils/logger";
+import { logInfo, logWarn } from "@/services/flows-legacy/utils/logger";
 
 // ============================================================================
 // TYPES

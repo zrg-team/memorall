@@ -1,0 +1,2530 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`Memorall legacy flow registered contracts > registers every core step contract 1`] = `
+[
+  "add-skill-context",
+  "add-system",
+  "agent-completion",
+  "agent-node",
+  "artifact-feature",
+  "auto-compact",
+  "chat-completion",
+  "context-to-system",
+  "current-time",
+  "fs-feature",
+  "gpt-boost",
+  "hyperframes-feature",
+  "lottie-animation-feature",
+  "mcp-feature",
+  "multi-agent-feature",
+  "nodejs-sandbox-feature",
+  "planner-feature",
+  "visualize-response",
+  "web-feature",
+]
+`;
+
+exports[`Memorall legacy flow registered contracts > registers every core step contract 2`] = `
+[
+  {
+    "config": {
+      "configParams": [
+        {
+          "default": [],
+          "description": "Skill names enabled for this flow. Only these skills are exposed to the agent.",
+          "key": "enabledSkillNames",
+          "type": "array",
+        },
+      ],
+      "defaultStateMapping": {
+        "messages": "messages",
+        "tools": "tools",
+      },
+      "description": "Inject @mentioned skills into the user message and append available skill names to the system prompt for lazy loading",
+      "enabledByDefault": true,
+      "injectAfter": "add-system",
+    },
+    "executable": true,
+    "id": "add-skill-context",
+    "name": "add-skill-context",
+  },
+  {
+    "config": {
+      "configParams": [
+        {
+          "default": "",
+          "description": "System prompt text to prepend",
+          "key": "content",
+          "type": "string",
+        },
+      ],
+      "defaultStateMapping": {
+        "messages": "messages",
+      },
+      "description": "Prepend a system message to the conversation",
+      "enabledByDefault": true,
+    },
+    "executable": true,
+    "id": "add-system",
+    "name": "add-system",
+  },
+  {
+    "config": {
+      "configParams": [
+        {
+          "default": [],
+          "description": "Base tool names always available to the agent",
+          "key": "tools",
+          "type": "array",
+        },
+      ],
+      "defaultStateMapping": {
+        "maxIterations": "maxIterations",
+        "messages": "messages",
+        "tools": "tools",
+      },
+      "description": "Run an agentic tool-calling loop and produce a final response",
+      "enabledByDefault": true,
+    },
+    "executable": true,
+    "id": "agent-completion",
+    "name": "agent-completion",
+  },
+  {
+    "config": {
+      "feature": {
+        "graphTypes": [
+          "foundation",
+          "agent",
+        ],
+        "id": "step-agent-node",
+        "inputs": [
+          {
+            "description": "Current chat messages",
+            "name": "messages",
+            "required": true,
+            "type": "Message[]",
+          },
+          {
+            "description": "Current available tools",
+            "name": "tools",
+            "required": true,
+            "type": "Tool[]",
+          },
+        ],
+        "outputs": [
+          {
+            "description": "Messages updated by the feature.",
+            "name": "messages",
+            "type": "Message[]",
+          },
+          {
+            "description": "Tools extended by the feature.",
+            "name": "tools",
+            "type": "Tool[]",
+          },
+        ],
+        "type": "feature",
+      },
+    },
+    "executable": false,
+    "id": "agent-node",
+    "name": "agent-node",
+  },
+  {
+    "config": {
+      "defaultStateMapping": {
+        "messages": "messages",
+        "tools": "tools",
+      },
+      "description": "Enable inline artifact rendering (HTML preview, URL iframe) directly in chat messages.",
+      "enabledByDefault": true,
+      "feature": {
+        "graphTypes": [
+          "foundation",
+        ],
+        "id": "step-artifact-feature",
+        "inputs": [
+          {
+            "description": "Current chat messages",
+            "name": "messages",
+            "required": true,
+            "type": "Message[]",
+          },
+          {
+            "description": "Current available tools",
+            "name": "tools",
+            "required": true,
+            "type": "Tool[]",
+          },
+        ],
+        "outputs": [
+          {
+            "description": "Messages with artifact rendering instructions.",
+            "name": "messages",
+            "type": "Message[]",
+          },
+          {
+            "description": "Tools extended with artifact rendering toolset.",
+            "name": "tools",
+            "type": "Tool[]",
+          },
+        ],
+        "type": "feature",
+      },
+    },
+    "executable": true,
+    "id": "artifact-feature",
+    "name": "artifact-feature",
+  },
+  {
+    "config": {
+      "configParams": [
+        {
+          "default": 0.75,
+          "description": "Prompt-token budget ratio that triggers automatic compaction.",
+          "key": "compactThresholdRatio",
+          "type": "number",
+        },
+        {
+          "default": 0.65,
+          "description": "Prompt-token budget ratio that compaction tries to reduce history below.",
+          "key": "safeThresholdRatio",
+          "type": "number",
+        },
+        {
+          "default": [
+            50,
+            100,
+          ],
+          "description": "Escalation caps per round. Each round runs toolResult then toolCallFlow up to that cap before moving to the next round. Chat messages are only trimmed after all rounds are exhausted.",
+          "key": "maxRoundPercentSteps",
+          "type": "array",
+        },
+        {
+          "default": 2,
+          "description": "Number of most-recent tool-call flows in outputMessages to protect from direct removal. Mirrors the KEEP_RECENT_FLOWS guard in the LLM summarization path.",
+          "key": "keepRecentOutputFlows",
+          "type": "number",
+        },
+      ],
+      "defaultStateMapping": {
+        "messages": "messages",
+        "outputMessages": "outputMessages",
+      },
+      "description": "Automatically compact agent working memory when context budget is exceeded",
+      "enabledByDefault": true,
+      "feature": {
+        "graphTypes": [
+          "foundation",
+          "agent",
+        ],
+        "id": "step-auto-compact",
+        "inputs": [
+          {
+            "description": "Current chat messages",
+            "name": "messages",
+            "required": true,
+            "type": "Message[]",
+          },
+          {
+            "description": "Current agent working memory messages",
+            "name": "outputMessages",
+            "required": true,
+            "type": "Message[]",
+          },
+        ],
+        "outputs": [
+          {
+            "description": "Messages updated by the feature.",
+            "name": "messages",
+            "type": "Message[]",
+          },
+          {
+            "description": "Working memory updated by the feature.",
+            "name": "outputMessages",
+            "type": "Message[]",
+          },
+        ],
+        "type": "feature",
+      },
+    },
+    "executable": true,
+    "id": "auto-compact",
+    "name": "auto-compact",
+  },
+  {
+    "config": {
+      "configParams": [
+        {
+          "default": 0.2,
+          "description": "Sampling temperature",
+          "key": "temperature",
+          "type": "number",
+        },
+        {
+          "default": true,
+          "description": "Stream tokens as they are generated",
+          "key": "stream",
+          "type": "boolean",
+        },
+      ],
+      "defaultStateMapping": {
+        "messages": "messages",
+      },
+      "description": "Single-turn LLM chat completion (no tool-calling loop)",
+      "enabledByDefault": false,
+    },
+    "executable": true,
+    "id": "chat-completion",
+    "name": "chat-completion",
+  },
+  {
+    "config": undefined,
+    "executable": true,
+    "id": "context-to-system",
+    "name": "context-to-system",
+  },
+  {
+    "config": {
+      "configParams": [
+        {
+          "default": "",
+          "description": "IANA timezone (e.g. "Asia/Ho_Chi_Minh"). Defaults to system local timezone.",
+          "key": "timezone",
+          "type": "string",
+        },
+      ],
+      "defaultStateMapping": {
+        "messages": "messages",
+      },
+      "description": "Inject the current date and time into the system prompt automatically",
+      "enabledByDefault": true,
+      "feature": {
+        "graphTypes": [
+          "foundation",
+        ],
+        "id": "step-current-time",
+        "inputs": [
+          {
+            "description": "Current chat messages",
+            "name": "messages",
+            "required": true,
+            "type": "Message[]",
+          },
+        ],
+        "outputs": [
+          {
+            "description": "Messages with current date & time injected into the system prompt.",
+            "name": "messages",
+            "type": "Message[]",
+          },
+        ],
+        "type": "feature",
+        "volatile": true,
+      },
+    },
+    "executable": true,
+    "id": "current-time",
+    "name": "current-time",
+  },
+  {
+    "config": {
+      "defaultStateMapping": {
+        "messages": "messages",
+        "tools": "tools",
+      },
+      "description": "Enable filesystem tools: glob, grep, read, write, edit, mkdir, remove, ls.",
+      "enabledByDefault": false,
+      "version": "1.0.0",
+    },
+    "executable": true,
+    "id": "fs-feature",
+    "name": "fs-feature",
+  },
+  {
+    "config": {
+      "configParams": [],
+      "defaultStateMapping": {
+        "messages": "messages",
+      },
+      "description": "Injects a structured-reasoning system prompt when the current model is GPT (gpt-4.1 / gpt-5)",
+      "enabledByDefault": true,
+      "feature": {
+        "graphTypes": [
+          "foundation",
+        ],
+        "id": "step-gpt-boost",
+        "inputs": [
+          {
+            "description": "Current chat messages",
+            "name": "messages",
+            "required": true,
+            "type": "Message[]",
+          },
+        ],
+        "outputs": [
+          {
+            "description": "Messages with GPT structured-reasoning instructions prepended.",
+            "name": "messages",
+            "type": "Message[]",
+          },
+        ],
+        "type": "feature",
+      },
+    },
+    "executable": true,
+    "id": "gpt-boost",
+    "name": "gpt-boost",
+  },
+  {
+    "config": {
+      "configParams": [
+        {
+          "description": "Root path under which HyperFrames projects are stored.",
+          "key": "rootPath",
+          "type": "string",
+        },
+        {
+          "description": "Root path prefixes searched when rewriting local image references to data URLs for iframe rendering.",
+          "key": "resourceRoots",
+          "type": "array",
+        },
+      ],
+      "defaultStateMapping": {
+        "messages": "messages",
+        "tools": "tools",
+      },
+      "description": "Create browser-rendered video drafts with animated scenes and previews using HyperFrames compositions.",
+      "enabledByDefault": false,
+      "feature": {
+        "graphTypes": [
+          "foundation",
+        ],
+        "id": "step-hyperframes-feature",
+        "inputs": [
+          {
+            "description": "Current chat messages",
+            "name": "messages",
+            "required": true,
+            "type": "Message[]",
+          },
+          {
+            "description": "Current available tools",
+            "name": "tools",
+            "required": true,
+            "type": "Tool[]",
+          },
+        ],
+        "outputs": [
+          {
+            "description": "Messages with HyperFrames composition instructions.",
+            "name": "messages",
+            "type": "Message[]",
+          },
+          {
+            "description": "HyperFrames tools: write, validate, show, capture.",
+            "name": "tools",
+            "type": "Tool[]",
+          },
+        ],
+        "type": "feature",
+      },
+      "version": "1.0.0",
+    },
+    "executable": true,
+    "id": "hyperframes-feature",
+    "name": "hyperframes-feature",
+  },
+  {
+    "config": {
+      "configParams": [
+        {
+          "description": "Root path under which Lottie projects are stored.",
+          "key": "rootPath",
+          "type": "string",
+        },
+        {
+          "description": "Root path prefixes searched when resolving local asset references.",
+          "key": "resourceRoots",
+          "type": "array",
+        },
+      ],
+      "defaultStateMapping": {
+        "messages": "messages",
+        "tools": "tools",
+      },
+      "description": "Author, validate, and preview Lottie/Bodymovin vector animations stored as workspace files.",
+      "enabledByDefault": false,
+      "feature": {
+        "graphTypes": [
+          "foundation",
+        ],
+        "id": "step-lottie-animation-feature",
+        "inputs": [
+          {
+            "description": "Current chat messages",
+            "name": "messages",
+            "required": true,
+            "type": "Message[]",
+          },
+          {
+            "description": "Current available tools",
+            "name": "tools",
+            "required": true,
+            "type": "Tool[]",
+          },
+        ],
+        "outputs": [
+          {
+            "description": "Messages with Lottie authoring instructions.",
+            "name": "messages",
+            "type": "Message[]",
+          },
+          {
+            "description": "Lottie tools: init, write, validate, show.",
+            "name": "tools",
+            "type": "Tool[]",
+          },
+        ],
+        "type": "feature",
+      },
+      "version": "1.0.0",
+    },
+    "executable": true,
+    "id": "lottie-animation-feature",
+    "name": "lottie-animation-feature",
+  },
+  {
+    "config": {
+      "configParams": [
+        {
+          "default": [],
+          "description": "MCP server configurations",
+          "key": "servers",
+          "type": "array",
+        },
+      ],
+      "defaultStateMapping": {
+        "messages": "messages",
+        "tools": "tools",
+      },
+      "description": "Connect external MCP (Model Context Protocol) servers and expose their tools to the agent.",
+      "enabledByDefault": false,
+      "feature": {
+        "graphTypes": [
+          "foundation",
+        ],
+        "id": "step-mcp-feature",
+        "inputs": [
+          {
+            "description": "Current chat messages",
+            "name": "messages",
+            "required": true,
+            "type": "Message[]",
+          },
+          {
+            "description": "Current available tools",
+            "name": "tools",
+            "required": true,
+            "type": "Tool[]",
+          },
+        ],
+        "outputs": [
+          {
+            "description": "Messages with MCP tool instructions.",
+            "name": "messages",
+            "type": "Message[]",
+          },
+          {
+            "description": "Tools extended with dynamically loaded MCP tools.",
+            "name": "tools",
+            "type": "Tool[]",
+          },
+        ],
+        "type": "feature",
+      },
+    },
+    "executable": true,
+    "id": "mcp-feature",
+    "name": "mcp-feature",
+  },
+  {
+    "config": {
+      "configParams": [
+        {
+          "default": [],
+          "description": "Predefined child agent flow IDs that this agent may access",
+          "key": "accessibleAgentIds",
+          "type": "array",
+        },
+      ],
+      "defaultStateMapping": {
+        "messages": "messages",
+        "tools": "tools",
+        "topicId": "graphId",
+      },
+      "description": "Allow this agent to send focused messages to selected child agents with per-agent in-memory conversation history.",
+      "enabledByDefault": false,
+      "feature": {
+        "graphTypes": [
+          "foundation",
+        ],
+        "id": "step-multi-agent-feature",
+        "inputs": [
+          {
+            "description": "Current chat messages",
+            "name": "messages",
+            "required": true,
+            "type": "Message[]",
+          },
+          {
+            "description": "Current available tools",
+            "name": "tools",
+            "required": true,
+            "type": "Tool[]",
+          },
+          {
+            "description": "Current topic ID passed to delegated child agents",
+            "name": "topicId",
+            "required": false,
+            "type": "string",
+          },
+        ],
+        "outputs": [
+          {
+            "description": "Messages with multi-agent delegation instructions.",
+            "name": "messages",
+            "type": "Message[]",
+          },
+          {
+            "description": "Tools extended with configured child-agent delegation.",
+            "name": "tools",
+            "type": "Tool[]",
+          },
+        ],
+        "type": "feature",
+      },
+    },
+    "executable": true,
+    "id": "multi-agent-feature",
+    "name": "multi-agent-feature",
+  },
+  {
+    "config": {
+      "defaultStateMapping": {
+        "messages": "messages",
+        "tools": "tools",
+      },
+      "description": "Run code, commands, npm packages, and web previews in a reusable browser sandbox session.",
+      "enabledByDefault": false,
+      "feature": {
+        "graphTypes": [
+          "foundation",
+        ],
+        "id": "step-nodejs-sandbox-feature",
+        "inputs": [
+          {
+            "description": "Current chat messages",
+            "name": "messages",
+            "required": true,
+            "type": "Message[]",
+          },
+          {
+            "description": "Current available tools",
+            "name": "tools",
+            "required": true,
+            "type": "Tool[]",
+          },
+        ],
+        "outputs": [
+          {
+            "description": "Messages with Browser Sandbox instructions",
+            "name": "messages",
+            "type": "Message[]",
+          },
+          {
+            "description": "Tools extended with the selected sandbox profile",
+            "name": "tools",
+            "type": "Tool[]",
+          },
+        ],
+        "type": "feature",
+      },
+    },
+    "executable": true,
+    "id": "nodejs-sandbox-feature",
+    "name": "nodejs-sandbox-feature",
+  },
+  {
+    "config": {
+      "defaultStateMapping": {
+        "messages": "messages",
+        "tools": "tools",
+      },
+      "description": "Forces structured planning with item-by-item completion tracking. Agent must check all items before finishing.",
+      "enabledByDefault": false,
+      "feature": {
+        "graphTypes": [
+          "foundation",
+        ],
+        "id": "step-planner-feature",
+        "inputs": [
+          {
+            "description": "Current chat messages",
+            "name": "messages",
+            "required": true,
+            "type": "Message[]",
+          },
+          {
+            "description": "Current available tools",
+            "name": "tools",
+            "required": true,
+            "type": "Tool[]",
+          },
+        ],
+        "outputs": [
+          {
+            "description": "Messages with planner mode instructions.",
+            "name": "messages",
+            "type": "Message[]",
+          },
+          {
+            "description": "Tools extended with planner toolset.",
+            "name": "tools",
+            "type": "Tool[]",
+          },
+        ],
+        "type": "feature",
+      },
+    },
+    "executable": true,
+    "id": "planner-feature",
+    "name": "planner-feature",
+  },
+  {
+    "config": {
+      "defaultStateMapping": {
+        "graphId": "graphId",
+        "messages": "messages",
+        "tools": "tools",
+      },
+      "description": "Enables OpenUI Lang responses with interactive components and knowledge graph data tools.",
+      "enabledByDefault": false,
+      "feature": {
+        "graphTypes": [
+          "foundation",
+          "agent",
+        ],
+        "id": "step-visualize-response",
+        "inputs": [
+          {
+            "description": "Current chat messages",
+            "name": "messages",
+            "required": true,
+            "type": "Message[]",
+          },
+          {
+            "description": "Current available tools",
+            "name": "tools",
+            "required": true,
+            "type": "Tool[]",
+          },
+        ],
+        "outputs": [
+          {
+            "description": "Messages updated by the feature.",
+            "name": "messages",
+            "type": "Message[]",
+          },
+          {
+            "description": "Tools extended by the feature.",
+            "name": "tools",
+            "type": "Tool[]",
+          },
+        ],
+        "type": "feature",
+      },
+    },
+    "executable": true,
+    "id": "visualize-response",
+    "name": "visualize-response",
+  },
+  {
+    "config": {
+      "defaultStateMapping": {
+        "messages": "messages",
+        "tools": "tools",
+      },
+      "description": "Enable browser-backed and offscreen web tooling with search engine integration, open, read, DOM actions, and waits.",
+      "enabledByDefault": true,
+      "feature": {
+        "graphTypes": [
+          "foundation",
+        ],
+        "id": "step-web-feature",
+        "inputs": [
+          {
+            "description": "Current chat messages",
+            "name": "messages",
+            "required": true,
+            "type": "Message[]",
+          },
+          {
+            "description": "Current available tools",
+            "name": "tools",
+            "required": true,
+            "type": "Tool[]",
+          },
+        ],
+        "outputs": [
+          {
+            "description": "Messages with web feature instructions.",
+            "name": "messages",
+            "type": "Message[]",
+          },
+          {
+            "description": "Tools extended with web toolset.",
+            "name": "tools",
+            "type": "Tool[]",
+          },
+        ],
+        "type": "feature",
+      },
+    },
+    "executable": true,
+    "id": "web-feature",
+    "name": "web-feature",
+  },
+]
+`;
+
+exports[`Memorall legacy flow registered contracts > registers every core tool contract 1`] = `
+[
+  "calculator",
+  "container_clear_logs",
+  "container_execute_command",
+  "container_exists",
+  "container_fetch_resource",
+  "container_get_logs",
+  "container_install_package",
+  "container_list_commands",
+  "container_list_servers",
+  "container_listen_command",
+  "container_render_server",
+  "container_request_server",
+  "container_restart_server",
+  "container_run_code",
+  "container_send_command_input",
+  "container_start_server",
+  "container_stop_command",
+  "container_stop_server",
+  "current_time",
+  "fs_edit",
+  "fs_glob",
+  "fs_grep",
+  "fs_ls",
+  "fs_mkdir",
+  "fs_read",
+  "fs_remove",
+  "fs_write",
+  "hyperframes_edit",
+  "hyperframes_init",
+  "hyperframes_list",
+  "hyperframes_read",
+  "hyperframes_remote_asset_import",
+  "hyperframes_remote_assets_explore",
+  "hyperframes_show",
+  "hyperframes_validate",
+  "hyperframes_write",
+  "load_skill",
+  "lottie_edit",
+  "lottie_init",
+  "lottie_list",
+  "lottie_read",
+  "lottie_show",
+  "lottie_validate",
+  "lottie_write",
+  "planner_add_item",
+  "planner_check_item",
+  "planner_create",
+  "planner_get",
+  "planner_remove_item",
+  "sandbox_inspect",
+  "sandbox_network",
+  "sandbox_packages",
+  "sandbox_preview",
+  "sandbox_process",
+  "sandbox_run",
+  "sandbox_snapshot",
+  "send_message_to_agent",
+  "web_dom_action",
+  "web_find_in_page",
+  "web_open",
+  "web_read",
+  "web_search",
+  "web_wait",
+]
+`;
+
+exports[`Memorall legacy flow registered contracts > registers every core tool contract 2`] = `
+[
+  {
+    "description": "Perform advanced mathematical calculations across arithmetic, statistics, and scientific operations",
+    "name": "calculator",
+    "parameters": {
+      "properties": {
+        "a": {
+          "type": "number",
+        },
+        "b": {
+          "type": "number",
+        },
+        "operation": {
+          "enum": [
+            "add",
+            "subtract",
+            "multiply",
+            "divide",
+            "power",
+            "modulo",
+            "nth_root",
+            "sqrt",
+            "abs",
+            "negate",
+            "percentage",
+            "sum",
+            "average",
+            "min",
+            "max",
+            "round",
+            "floor",
+            "ceil",
+            "ln",
+            "log10",
+            "log",
+            "sin",
+            "cos",
+            "tan",
+            "factorial",
+            "gcd",
+            "lcm",
+          ],
+          "type": "string",
+        },
+        "precision": {
+          "type": "number",
+        },
+        "values": {
+          "items": {
+            "type": "number",
+          },
+          "type": "array",
+        },
+      },
+      "required": [
+        "operation",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "Clear sandbox container logs.",
+    "name": "container_clear_logs",
+    "parameters": {
+      "properties": {},
+      "type": "object",
+    },
+  },
+  {
+    "description": "Run an arbitrary sandbox shell command. The call waits up to waitTimeoutMs (default 10000). If the result has completed=false, continue with container_listen_command using the returned commandId and nextOffset.",
+    "name": "container_execute_command",
+    "parameters": {
+      "properties": {
+        "command": {
+          "type": "string",
+        },
+        "commandTimeoutMs": {
+          "type": "number",
+        },
+        "cwd": {
+          "type": "string",
+        },
+        "env": {
+          "additionalProperties": {
+            "type": "string",
+          },
+          "type": "object",
+        },
+        "waitTimeoutMs": {
+          "type": "number",
+        },
+      },
+      "required": [
+        "command",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "Check whether a file or directory exists in container FS.",
+    "name": "container_exists",
+    "parameters": {
+      "properties": {
+        "path": {
+          "type": "string",
+        },
+      },
+      "required": [
+        "path",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "Fetch API/UI resources through container runtime. Auto-detects JSON vs HTML/text and returns status + body.",
+    "name": "container_fetch_resource",
+    "parameters": {
+      "properties": {
+        "body": {
+          "type": "string",
+        },
+        "headers": {
+          "additionalProperties": {
+            "type": "string",
+          },
+          "type": "object",
+        },
+        "method": {
+          "enum": [
+            "GET",
+            "POST",
+            "PUT",
+            "PATCH",
+            "DELETE",
+            "HEAD",
+            "OPTIONS",
+          ],
+          "type": "string",
+        },
+        "responseType": {
+          "enum": [
+            "auto",
+            "json",
+            "text",
+            "html",
+          ],
+          "type": "string",
+        },
+        "timeoutMs": {
+          "type": "number",
+        },
+        "url": {
+          "type": "string",
+        },
+      },
+      "required": [
+        "url",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "Get recent sandbox container logs.",
+    "name": "container_get_logs",
+    "parameters": {
+      "properties": {
+        "level": {
+          "enum": [
+            "log",
+            "info",
+            "warn",
+            "error",
+            "debug",
+          ],
+          "type": "string",
+        },
+        "limit": {
+          "type": "number",
+        },
+      },
+      "type": "object",
+    },
+  },
+  {
+    "description": "Install an npm package in the sandbox container.",
+    "name": "container_install_package",
+    "parameters": {
+      "properties": {
+        "packageSpec": {
+          "type": "string",
+        },
+        "save": {
+          "type": "boolean",
+        },
+        "saveDev": {
+          "type": "boolean",
+        },
+      },
+      "required": [
+        "packageSpec",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "List currently running sandbox commands.",
+    "name": "container_list_commands",
+    "parameters": {
+      "properties": {},
+      "type": "object",
+    },
+  },
+  {
+    "description": "List all running sandbox servers.",
+    "name": "container_list_servers",
+    "parameters": {
+      "properties": {},
+      "type": "object",
+    },
+  },
+  {
+    "description": "Continue listening to a previously started sandbox command. Returns only new stdout/stderr since the supplied offset.",
+    "name": "container_listen_command",
+    "parameters": {
+      "properties": {
+        "commandId": {
+          "type": "string",
+        },
+        "offset": {
+          "type": "number",
+        },
+        "waitTimeoutMs": {
+          "type": "number",
+        },
+      },
+      "required": [
+        "commandId",
+        "offset",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "Render a running sandbox web server page (Vite, Next.js, Express HTML) via an iframe and return the fully rendered HTML. Use this for ALL web UI page previews — never use container_request_server for this purpose.",
+    "name": "container_render_server",
+    "parameters": {
+      "properties": {
+        "maxHtmlChars": {
+          "type": "number",
+        },
+        "path": {
+          "type": "string",
+        },
+        "port": {
+          "type": "number",
+        },
+        "timeoutMs": {
+          "type": "number",
+        },
+      },
+      "required": [
+        "port",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "Request a started sandbox server endpoint and return structured API/HTML response details.",
+    "name": "container_request_server",
+    "parameters": {
+      "properties": {
+        "body": {
+          "type": "string",
+        },
+        "headers": {
+          "additionalProperties": {
+            "type": "string",
+          },
+          "type": "object",
+        },
+        "maxBodyChars": {
+          "type": "number",
+        },
+        "method": {
+          "enum": [
+            "GET",
+            "POST",
+            "PUT",
+            "PATCH",
+            "DELETE",
+            "HEAD",
+            "OPTIONS",
+          ],
+          "type": "string",
+        },
+        "path": {
+          "type": "string",
+        },
+        "port": {
+          "type": "number",
+        },
+        "responseType": {
+          "enum": [
+            "auto",
+            "json",
+            "text",
+            "html",
+          ],
+          "type": "string",
+        },
+        "timeoutMs": {
+          "type": "number",
+        },
+      },
+      "required": [
+        "port",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "Restart a sandbox server after code changes. Call this after every file write to a running server. Returns { success, kind, port, projectDir, url, renderUrl }.",
+    "name": "container_restart_server",
+    "parameters": {
+      "properties": {
+        "port": {
+          "type": "number",
+        },
+      },
+      "required": [
+        "port",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "Run JavaScript/TypeScript code in the sandbox container. The runtime is browser-based with \`console\` and \`require\` available. Use \`require()\` for installed packages (install via container_install_package first) or virtual filesystem modules. A limited \`require('fs')\` shim is available for virtual filesystem access, but native Node.js built-ins are not fully supported.",
+    "name": "container_run_code",
+    "parameters": {
+      "properties": {
+        "code": {
+          "type": "string",
+        },
+        "filename": {
+          "type": "string",
+        },
+        "maxLogEntries": {
+          "type": "number",
+        },
+        "timeoutMs": {
+          "type": "number",
+        },
+      },
+      "required": [
+        "code",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "Send stdin to a running sandbox command. Use this only when the command is waiting for interactive input.",
+    "name": "container_send_command_input",
+    "parameters": {
+      "properties": {
+        "appendNewline": {
+          "type": "boolean",
+        },
+        "commandId": {
+          "type": "string",
+        },
+        "input": {
+          "type": "string",
+        },
+      },
+      "required": [
+        "commandId",
+        "input",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "Start a sandbox server (Express, Vite, or Next.js). If \`template\` is provided and \`projectDir\` is empty, scaffolds starter files and installs packages first. If the server is already running on the same port, it is stopped and restarted automatically. \`kind\` is auto-detected from config files when omitted. Returns { success, kind, port, projectDir, url, renderUrl, createdFiles }. Use the returned port with container_render_server or container_request_server to access the server afterwards.",
+    "name": "container_start_server",
+    "parameters": {
+      "properties": {
+        "entryPath": {
+          "type": "string",
+        },
+        "hostname": {
+          "type": "string",
+        },
+        "kind": {
+          "enum": [
+            "auto",
+            "express",
+            "vite",
+            "next",
+          ],
+          "type": "string",
+        },
+        "port": {
+          "type": "number",
+        },
+        "projectDir": {
+          "type": "string",
+        },
+        "template": {
+          "enum": [
+            "express",
+            "vite-react",
+            "next-pages",
+            "next-app",
+          ],
+          "type": "string",
+        },
+      },
+      "required": [
+        "projectDir",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "Stop a running sandbox command session.",
+    "name": "container_stop_command",
+    "parameters": {
+      "properties": {
+        "commandId": {
+          "type": "string",
+        },
+      },
+      "required": [
+        "commandId",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "Stop a running sandbox server by port.",
+    "name": "container_stop_server",
+    "parameters": {
+      "properties": {
+        "port": {
+          "type": "number",
+        },
+      },
+      "required": [
+        "port",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "Get the current date and time",
+    "name": "current_time",
+    "parameters": {
+      "properties": {
+        "timezone": {
+          "type": "string",
+        },
+      },
+      "type": "object",
+    },
+  },
+  {
+    "description": "Edit a text file by replacing old_string with new_string. By default only the first occurrence is replaced; set replace_all to true to replace every occurrence. Fails if old_string is not found.",
+    "name": "fs_edit",
+    "parameters": {
+      "properties": {
+        "file_path": {
+          "type": "string",
+        },
+        "new_string": {
+          "type": "string",
+        },
+        "old_string": {
+          "type": "string",
+        },
+        "replace_all": {
+          "type": "boolean",
+        },
+      },
+      "required": [
+        "file_path",
+        "old_string",
+        "new_string",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "Find paths that match a glob pattern. Supports common glob syntax including **, *, ?, {a,b}, [abc], [!abc], and extglob groups like @(a|b). For ambiguous asset/name searches, combine likely names and extensions in one pattern, e.g. **/*{icon,logo,brand}*.{png,jpg,jpeg,svg,webp,ico}, instead of making repeated narrow calls. Returns matching paths.",
+    "name": "fs_glob",
+    "parameters": {
+      "properties": {
+        "path": {
+          "type": "string",
+        },
+        "pattern": {
+          "type": "string",
+        },
+      },
+      "required": [
+        "pattern",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "Search file content with a JavaScript regex pattern. Returns results in grep-style "file:line:content" format. Supports context lines, minimatch glob filtering, and output modes. Use one broad regex and one broad glob when possible, e.g. pattern="icon|logo|brand" glob="**/*.{ts,tsx,md,json,svg,png}".",
+    "name": "fs_grep",
+    "parameters": {
+      "properties": {
+        "case_sensitive": {
+          "type": "boolean",
+        },
+        "context": {
+          "type": "number",
+        },
+        "glob": {
+          "type": "string",
+        },
+        "max_results": {
+          "type": "number",
+        },
+        "output_mode": {
+          "enum": [
+            "content",
+            "files_with_matches",
+            "count",
+          ],
+          "type": "string",
+        },
+        "path": {
+          "type": "string",
+        },
+        "pattern": {
+          "type": "string",
+        },
+      },
+      "required": [
+        "pattern",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "List files and directories. Without recursive, shows only immediate children. With recursive: true, shows the full subtree.",
+    "name": "fs_ls",
+    "parameters": {
+      "properties": {
+        "path": {
+          "type": "string",
+        },
+        "recursive": {
+          "type": "boolean",
+        },
+      },
+      "type": "object",
+    },
+  },
+  {
+    "description": "Create a directory. By default creates all missing parent directories. Does nothing if the directory already exists.",
+    "name": "fs_mkdir",
+    "parameters": {
+      "properties": {
+        "path": {
+          "type": "string",
+        },
+        "recursive": {
+          "type": "boolean",
+        },
+      },
+      "required": [
+        "path",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "Read a file with line numbers (cat -n style). Returns a header with total lines and the selected range. Use offset and limit to read large files in chunks.",
+    "name": "fs_read",
+    "parameters": {
+      "properties": {
+        "file_path": {
+          "type": "string",
+        },
+        "limit": {
+          "type": "number",
+        },
+        "offset": {
+          "type": "number",
+        },
+      },
+      "required": [
+        "file_path",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "Delete a file or directory. For non-empty directories, set recursive: true to delete all contents.",
+    "name": "fs_remove",
+    "parameters": {
+      "properties": {
+        "path": {
+          "type": "string",
+        },
+        "recursive": {
+          "type": "boolean",
+        },
+      },
+      "required": [
+        "path",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "Create or overwrite a text file. If the file exists its content is replaced. Parent directories are created automatically by default. After using this tool, assistant messages should mention only the created or updated file path, not the file content.",
+    "name": "fs_write",
+    "parameters": {
+      "properties": {
+        "content": {
+          "type": "string",
+        },
+        "create_dirs": {
+          "type": "boolean",
+        },
+        "file_path": {
+          "type": "string",
+        },
+      },
+      "required": [
+        "file_path",
+        "content",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "Edit the composition HTML by replacing old_string with new_string inside index.html. Prefer this over hyperframes_write when changing a small portion of a large composition. By default only the first occurrence is replaced; set replace_all to true to replace every occurrence. Fails if old_string is not found.",
+    "name": "hyperframes_edit",
+    "parameters": {
+      "properties": {
+        "new_string": {
+          "type": "string",
+        },
+        "old_string": {
+          "type": "string",
+        },
+        "project_path": {
+          "type": "string",
+        },
+        "replace_all": {
+          "type": "boolean",
+        },
+      },
+      "required": [
+        "project_path",
+        "old_string",
+        "new_string",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "Initialise a new HyperFrames project. Writes index.html using the chosen Tailwind-first template. Available templates: neon-launch (Dark purple/pink, 1920x1080, 18s - dramatic product launch) | social-reel (Bold vertical, 1080x1920, 15s - punchy social promo) | clean-minimal (Light editorial, 1920x1080, 15s - typography-forward) | tech-data (Dark/teal, 1920x1080, 20s - metrics and product proof) | warm-cinema (Amber/gold, 1920x1080, 18s - cinematic storytelling) | scaffold-social-reel (Structural scaffold: 1080x1920, 15s, 6 scenes, 1 shader group) | scaffold-launch-teaser (Structural scaffold: 1920x1080, 25s, 8 scenes, 2 shader groups) | scaffold-explainer (Structural scaffold: 1920x1080, 45s, 12 scenes, 2 shader groups) | scaffold-cinematic (Structural scaffold: 1920x1080, 60s, 7 scenes, 2 shader groups, long durations). Use force: true to overwrite an existing project.",
+    "name": "hyperframes_init",
+    "parameters": {
+      "properties": {
+        "force": {
+          "type": "boolean",
+        },
+        "project_path": {
+          "type": "string",
+        },
+        "template": {
+          "enum": [
+            "neon-launch",
+            "social-reel",
+            "clean-minimal",
+            "tech-data",
+            "warm-cinema",
+            "scaffold-social-reel",
+            "scaffold-launch-teaser",
+            "scaffold-explainer",
+            "scaffold-cinematic",
+          ],
+          "type": "string",
+        },
+      },
+      "required": [
+        "project_path",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "List all existing HyperFrames projects. Returns project paths and composition sizes. Call this before hyperframes_read or hyperframes_edit when you do not already know the project_path — never guess a path like 'default'.",
+    "name": "hyperframes_list",
+    "parameters": {
+      "properties": {},
+      "type": "object",
+    },
+  },
+  {
+    "description": "Read the current composition HTML for a HyperFrames project. Use this to inspect the current state before editing, or to verify the content after writing.",
+    "name": "hyperframes_read",
+    "parameters": {
+      "properties": {
+        "project_path": {
+          "type": "string",
+        },
+      },
+      "required": [
+        "project_path",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "Import a remote image/SVG into a HyperFrames project's resources folder. Takes project_path and saves under {project_path}/resources/..., returning the relative ./resources/... src to use in index.html.",
+    "name": "hyperframes_remote_asset_import",
+    "parameters": {
+      "properties": {
+        "asset_path": {
+          "type": "string",
+        },
+        "project_path": {
+          "type": "string",
+        },
+        "sessionId": {
+          "type": "string",
+        },
+        "url": {
+          "type": "string",
+        },
+      },
+      "required": [
+        "project_path",
+        "url",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "Explore free remote visual assets for HyperFrames. Tries supported sources in best order (CleanPNG first, then Openverse, Pexels, Unsplash; SVG Repo first for vectors), falls back when a source is blocked or has too few candidates, and returns candidate image/SVG URLs to import with hyperframes_remote_asset_import.",
+    "name": "hyperframes_remote_assets_explore",
+    "parameters": {
+      "properties": {
+        "kind": {
+          "enum": [
+            "image",
+            "photo",
+            "svg",
+            "icon",
+            "illustration",
+            "any",
+          ],
+          "type": "string",
+        },
+        "max_results": {
+          "type": "number",
+        },
+        "min_results": {
+          "type": "number",
+        },
+        "providers": {
+          "items": {
+            "enum": [
+              "google_images",
+              "cleanpng",
+              "openverse",
+              "pexels",
+              "unsplash",
+              "svgrepo",
+            ],
+            "type": "string",
+          },
+          "type": "array",
+        },
+        "query": {
+          "type": "string",
+        },
+      },
+      "required": [
+        "query",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "Preview a HyperFrames composition with full player controls (play/pause, scrub bar). Reads the saved composition and renders it as an interactive player in chat.",
+    "name": "hyperframes_show",
+    "parameters": {
+      "properties": {
+        "project_path": {
+          "type": "string",
+        },
+      },
+      "required": [
+        "project_path",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "Lint a HyperFrames composition for structural errors (missing timeline, broken scene windows, invalid attributes). Run after hyperframes_write and before hyperframes_show.",
+    "name": "hyperframes_validate",
+    "parameters": {
+      "properties": {
+        "project_path": {
+          "type": "string",
+        },
+      },
+      "required": [
+        "project_path",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "Create or overwrite the composition HTML for a HyperFrames project. The file is always saved as index.html inside the project directory.",
+    "name": "hyperframes_write",
+    "parameters": {
+      "properties": {
+        "content": {
+          "type": "string",
+        },
+        "project_path": {
+          "type": "string",
+        },
+      },
+      "required": [
+        "project_path",
+        "content",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "Load a skill by name to get specialized instructions for a task. Check the available skills list in the system prompt, then call this tool with the exact skill name before performing the related task.",
+    "name": "load_skill",
+    "parameters": {
+      "properties": {
+        "skill_name": {
+          "type": "string",
+        },
+      },
+      "required": [
+        "skill_name",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "Edit animation.json by replacing old_string with new_string. Prefer this over lottie_write when changing a small portion of an existing animation (e.g. a color, keyframe value, or single property). By default only the first occurrence is replaced; set replace_all to true to replace every occurrence. Fails if old_string is not found or if the result would not be valid JSON.",
+    "name": "lottie_edit",
+    "parameters": {
+      "properties": {
+        "new_string": {
+          "type": "string",
+        },
+        "old_string": {
+          "type": "string",
+        },
+        "project_path": {
+          "type": "string",
+        },
+        "replace_all": {
+          "type": "boolean",
+        },
+      },
+      "required": [
+        "project_path",
+        "old_string",
+        "new_string",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "Initialise a new Lottie/Bodymovin animation project. Writes animation.json with a minimal valid skeleton (background layer wrapped in a shape group). Use force: true to overwrite an existing project.",
+    "name": "lottie_init",
+    "parameters": {
+      "properties": {
+        "duration_frames": {
+          "type": "number",
+        },
+        "force": {
+          "type": "boolean",
+        },
+        "frame_rate": {
+          "type": "number",
+        },
+        "height": {
+          "type": "number",
+        },
+        "project_path": {
+          "type": "string",
+        },
+        "width": {
+          "type": "number",
+        },
+      },
+      "required": [
+        "project_path",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "List all existing Lottie animation projects. Returns project paths and file sizes. Call this before lottie_read or lottie_write when you do not already know the project_path — never guess a path like 'default'.",
+    "name": "lottie_list",
+    "parameters": {
+      "properties": {},
+      "type": "object",
+    },
+  },
+  {
+    "description": "Read the current Lottie/Bodymovin JSON for an animation project. Use this to inspect the current state before editing, or to verify the content after writing.",
+    "name": "lottie_read",
+    "parameters": {
+      "properties": {
+        "project_path": {
+          "type": "string",
+        },
+      },
+      "required": [
+        "project_path",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "Preview a Lottie/Bodymovin animation with full player controls (play/pause, scrub bar). Reads the saved animation.json and renders it as an interactive player in chat.",
+    "name": "lottie_show",
+    "parameters": {
+      "properties": {
+        "project_path": {
+          "type": "string",
+        },
+      },
+      "required": [
+        "project_path",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "Lint a Lottie/Bodymovin animation for structural errors (missing shape groups, missing transforms, malformed keyframes, unnormalized colors). Run after lottie_write and before lottie_show.",
+    "name": "lottie_validate",
+    "parameters": {
+      "properties": {
+        "project_path": {
+          "type": "string",
+        },
+      },
+      "required": [
+        "project_path",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "Create or overwrite the Lottie/Bodymovin JSON for an animation project. The file is always saved as animation.json inside the project directory. Rejects malformed JSON.",
+    "name": "lottie_write",
+    "parameters": {
+      "properties": {
+        "content": {
+          "type": "string",
+        },
+        "project_path": {
+          "type": "string",
+        },
+      },
+      "required": [
+        "project_path",
+        "content",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "Add a new unchecked item to the current plan. Use this when you discover additional work that needs to be done.",
+    "name": "planner_add_item",
+    "parameters": {
+      "properties": {
+        "description": {
+          "type": "string",
+        },
+      },
+      "required": [
+        "description",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "Mark a plan item as done or not done, optionally adding notes. Call this after completing each task.",
+    "name": "planner_check_item",
+    "parameters": {
+      "properties": {
+        "checked": {
+          "type": "boolean",
+        },
+        "item_id": {
+          "type": "string",
+        },
+        "notes": {
+          "type": "string",
+        },
+      },
+      "required": [
+        "item_id",
+        "checked",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "Create a new plan with a title and semicolon-separated items string. Replaces any existing plan. Always call this first before starting work.",
+    "name": "planner_create",
+    "parameters": {
+      "properties": {
+        "items": {
+          "type": "string",
+        },
+        "title": {
+          "type": "string",
+        },
+      },
+      "required": [
+        "title",
+        "items",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "Get the current plan and its completion status. Call this before giving any final response to verify all items are complete.",
+    "name": "planner_get",
+    "parameters": {
+      "properties": {},
+      "type": "object",
+    },
+  },
+  {
+    "description": "Remove an item from the current plan. Use this when a task is no longer relevant.",
+    "name": "planner_remove_item",
+    "parameters": {
+      "properties": {
+        "item_id": {
+          "type": "string",
+        },
+      },
+      "required": [
+        "item_id",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "Inspect sandbox status or logs, clear logs, or reset the active session.",
+    "name": "sandbox_inspect",
+    "parameters": {
+      "properties": {
+        "level": {
+          "enum": [
+            "log",
+            "info",
+            "warn",
+            "error",
+            "debug",
+          ],
+          "type": "string",
+        },
+        "limit": {
+          "type": "number",
+        },
+        "operation": {
+          "enum": [
+            "status",
+            "logs",
+            "clear_logs",
+            "reset",
+          ],
+          "type": "string",
+        },
+      },
+      "required": [
+        "operation",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "Fetch an HTTP or HTTPS resource from inside the active sandbox runtime.",
+    "name": "sandbox_network",
+    "parameters": {
+      "properties": {
+        "body": {
+          "type": "string",
+        },
+        "headers": {
+          "additionalProperties": {
+            "type": "string",
+          },
+          "type": "object",
+        },
+        "maxChars": {
+          "type": "number",
+        },
+        "method": {
+          "enum": [
+            "GET",
+            "POST",
+            "PUT",
+            "PATCH",
+            "DELETE",
+            "HEAD",
+            "OPTIONS",
+          ],
+          "type": "string",
+        },
+        "operation": {
+          "enum": [
+            "fetch",
+          ],
+          "type": "string",
+        },
+        "responseType": {
+          "enum": [
+            "auto",
+            "json",
+            "text",
+            "html",
+          ],
+          "type": "string",
+        },
+        "timeoutMs": {
+          "type": "number",
+        },
+        "url": {
+          "type": "string",
+        },
+      },
+      "required": [
+        "operation",
+        "url",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "Install npm packages, install a workspace package.json, or list installed packages.",
+    "name": "sandbox_packages",
+    "parameters": {
+      "properties": {
+        "operation": {
+          "enum": [
+            "install",
+            "install_from_package_json",
+            "list",
+          ],
+          "type": "string",
+        },
+        "packageSpec": {
+          "type": "string",
+        },
+        "save": {
+          "type": "boolean",
+        },
+        "saveDev": {
+          "type": "boolean",
+        },
+      },
+      "required": [
+        "operation",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "Start, restart, stop, list, request, or render browser sandbox web previews.",
+    "name": "sandbox_preview",
+    "parameters": {
+      "properties": {
+        "body": {
+          "type": "string",
+        },
+        "entryPath": {
+          "type": "string",
+        },
+        "headers": {
+          "additionalProperties": {
+            "type": "string",
+          },
+          "type": "object",
+        },
+        "hostname": {
+          "type": "string",
+        },
+        "kind": {
+          "enum": [
+            "express",
+            "vite",
+            "next",
+            "auto",
+          ],
+          "type": "string",
+        },
+        "maxChars": {
+          "type": "number",
+        },
+        "method": {
+          "enum": [
+            "GET",
+            "POST",
+            "PUT",
+            "PATCH",
+            "DELETE",
+            "HEAD",
+            "OPTIONS",
+          ],
+          "type": "string",
+        },
+        "operation": {
+          "enum": [
+            "start",
+            "restart",
+            "stop",
+            "list",
+            "request",
+            "render",
+          ],
+          "type": "string",
+        },
+        "path": {
+          "type": "string",
+        },
+        "port": {
+          "type": "number",
+        },
+        "previewId": {
+          "type": "string",
+        },
+        "projectDir": {
+          "type": "string",
+        },
+        "responseType": {
+          "enum": [
+            "auto",
+            "json",
+            "text",
+            "html",
+          ],
+          "type": "string",
+        },
+        "template": {
+          "enum": [
+            "express",
+            "vite-react",
+            "next-pages",
+            "next-app",
+          ],
+          "type": "string",
+        },
+        "timeoutMs": {
+          "type": "number",
+        },
+      },
+      "required": [
+        "operation",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "List, read with an opaque cursor, write stdin to, or stop sandbox processes.",
+    "name": "sandbox_process",
+    "parameters": {
+      "properties": {
+        "appendNewline": {
+          "type": "boolean",
+        },
+        "cursor": {
+          "type": "string",
+        },
+        "input": {
+          "type": "string",
+        },
+        "maxChars": {
+          "type": "number",
+        },
+        "operation": {
+          "enum": [
+            "list",
+            "read",
+            "stdin",
+            "stop",
+          ],
+          "type": "string",
+        },
+        "processId": {
+          "type": "string",
+        },
+        "waitMs": {
+          "type": "number",
+        },
+      },
+      "required": [
+        "operation",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "Run inline code, a workspace file, a command, or persistent REPL code in the active sandbox.",
+    "name": "sandbox_run",
+    "parameters": {
+      "properties": {
+        "code": {
+          "type": "string",
+        },
+        "command": {
+          "type": "string",
+        },
+        "commandTimeoutMs": {
+          "type": "number",
+        },
+        "cwd": {
+          "type": "string",
+        },
+        "env": {
+          "additionalProperties": {
+            "type": "string",
+          },
+          "type": "object",
+        },
+        "filename": {
+          "type": "string",
+        },
+        "maxLogEntries": {
+          "type": "number",
+        },
+        "operation": {
+          "enum": [
+            "code",
+            "file",
+            "command",
+            "repl",
+          ],
+          "type": "string",
+        },
+        "path": {
+          "type": "string",
+        },
+        "replId": {
+          "type": "string",
+        },
+        "timeoutMs": {
+          "type": "number",
+        },
+        "waitTimeoutMs": {
+          "type": "number",
+        },
+      },
+      "required": [
+        "operation",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "Capture or restore an opaque snapshot of the active sandbox session.",
+    "name": "sandbox_snapshot",
+    "parameters": {
+      "properties": {
+        "label": {
+          "type": "string",
+        },
+        "operation": {
+          "enum": [
+            "create",
+            "restore",
+          ],
+          "type": "string",
+        },
+        "snapshotId": {
+          "type": "string",
+        },
+      },
+      "required": [
+        "operation",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "Send a focused message to a selected child agent. The child agent keeps its own conversation history for the current run.",
+    "name": "send_message_to_agent",
+    "parameters": {
+      "properties": {
+        "agentId": {
+          "type": "string",
+        },
+        "message": {
+          "type": "string",
+        },
+      },
+      "required": [
+        "agentId",
+        "message",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "Interact with or inspect DOM of an active web session via selectors (\`click\`, \`input\`, \`read\`, \`query\`, \`focus\`, \`scroll*\`).",
+    "name": "web_dom_action",
+    "parameters": {
+      "properties": {
+        "action": {
+          "enum": [
+            "query",
+            "read",
+            "click",
+            "input",
+            "focus",
+            "scrollTop",
+            "scrollBottom",
+          ],
+          "type": "string",
+        },
+        "index": {
+          "type": "number",
+        },
+        "maxResults": {
+          "type": "number",
+        },
+        "selector": {
+          "type": "string",
+        },
+        "sessionId": {
+          "type": "string",
+        },
+        "value": {
+          "type": "string",
+        },
+      },
+      "required": [
+        "sessionId",
+        "selector",
+        "action",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "Find text or regex matches within the currently opened rendered page. This does not search the web or a search engine.",
+    "name": "web_find_in_page",
+    "parameters": {
+      "properties": {
+        "browserMode": {
+          "enum": [
+            "iframe",
+            "tab",
+            "window",
+          ],
+          "type": "string",
+        },
+        "caseSensitive": {
+          "type": "boolean",
+        },
+        "isRegex": {
+          "type": "boolean",
+        },
+        "maxMatches": {
+          "type": "number",
+        },
+        "maxSnippetChars": {
+          "type": "number",
+        },
+        "pattern": {
+          "type": "string",
+        },
+        "query": {
+          "type": "string",
+        },
+        "selector": {
+          "type": "string",
+        },
+        "sessionId": {
+          "type": "string",
+        },
+        "timeoutMs": {
+          "type": "number",
+        },
+        "url": {
+          "type": "string",
+        },
+      },
+      "type": "object",
+    },
+  },
+  {
+    "description": "Open a web URL in \`iframe\` or browser-backed \`tab\`/\`window\` mode, wait for the initial navigation load, and expose \`sessionId\` for follow-up actions. When \`renderReady\` is false the page timed out but partial content is included — inspect \`partialContent\` to decide whether to call \`web_wait\` then \`web_read\`, or skip this page.",
+    "name": "web_open",
+    "parameters": {
+      "properties": {
+        "browserMode": {
+          "enum": [
+            "iframe",
+            "tab",
+            "window",
+          ],
+          "type": "string",
+        },
+        "keepSession": {
+          "type": "boolean",
+        },
+        "maxHtmlChars": {
+          "type": "number",
+        },
+        "timeoutMs": {
+          "type": "number",
+        },
+        "url": {
+          "type": "string",
+        },
+      },
+      "required": [
+        "url",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "Read rendered page content from an active web session or directly from a URL. Default output is readable text.",
+    "name": "web_read",
+    "parameters": {
+      "properties": {
+        "browserMode": {
+          "enum": [
+            "iframe",
+            "tab",
+            "window",
+          ],
+          "type": "string",
+        },
+        "contentMode": {
+          "enum": [
+            "text",
+            "structure_text",
+            "html",
+            "clean_html",
+          ],
+          "type": "string",
+        },
+        "maxHtmlChars": {
+          "type": "number",
+        },
+        "selector": {
+          "type": "string",
+        },
+        "sessionId": {
+          "type": "string",
+        },
+        "timeoutMs": {
+          "type": "number",
+        },
+        "url": {
+          "type": "string",
+        },
+      },
+      "type": "object",
+    },
+  },
+  {
+    "description": "Search one or more search engines (Google, Bing, DuckDuckGo, Yahoo, Brave) with a single query and get structured results — title, URL, snippet — per engine. Use this instead of manually opening a search engine URL and reading the page. Engines are queried sequentially.",
+    "name": "web_search",
+    "parameters": {
+      "properties": {
+        "engines": {
+          "type": "string",
+        },
+        "maxResultsPerEngine": {
+          "type": "number",
+        },
+        "query": {
+          "type": "string",
+        },
+        "timeoutMs": {
+          "type": "number",
+        },
+      },
+      "required": [
+        "query",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "Wait for page render stability, selector state, or a fixed time in a web session.",
+    "name": "web_wait",
+    "parameters": {
+      "properties": {
+        "browserMode": {
+          "enum": [
+            "iframe",
+            "tab",
+            "window",
+          ],
+          "type": "string",
+        },
+        "delayMs": {
+          "type": "number",
+        },
+        "intervalMs": {
+          "type": "number",
+        },
+        "selector": {
+          "type": "string",
+        },
+        "sessionId": {
+          "type": "string",
+        },
+        "stabilityMs": {
+          "type": "number",
+        },
+        "state": {
+          "enum": [
+            "present",
+            "absent",
+          ],
+          "type": "string",
+        },
+        "timeoutMs": {
+          "type": "number",
+        },
+        "url": {
+          "type": "string",
+        },
+        "waitMode": {
+          "enum": [
+            "render",
+            "selector",
+            "time",
+          ],
+          "type": "string",
+        },
+      },
+      "type": "object",
+    },
+  },
+]
+`;

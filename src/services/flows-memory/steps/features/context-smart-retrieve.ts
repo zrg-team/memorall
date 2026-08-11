@@ -7,17 +7,17 @@
 
 import { Annotation } from "@langchain/langgraph";
 import type { RetrievalPipelineState } from "flow-memory/interfaces/retrieval-state";
-import { logInfo, logError } from "flow-core/utils/logger";
+import { logInfo, logError } from "@/services/flows-legacy/utils/logger";
 import {
 	defineStep,
 	bindStep,
 	type StepOutput,
-} from "flow-core/interfaces/engine/step";
+} from "@/services/flows-legacy/interfaces/engine/step";
 import type {
 	StepFactoryFromSpec,
 	StepSpecFromDefinition,
-} from "flow-core/interfaces/engine/step";
-import { stepRegistry } from "flow-core/registries/step-registry";
+} from "@/services/flows-legacy/interfaces/engine/step";
+import { stepRegistry } from "@/services/flows-legacy/registries/step-registry";
 import type {
 	SmartRetrieveOutput,
 	SmartRetrieveServices,
@@ -25,12 +25,12 @@ import type {
 	SmartRetrievalConfig,
 } from "../knowledge-retrieval/smart-retrieve";
 import type { EntitiesFactsToContextOutput } from "../knowledge-retrieval/entities-facts-to-context";
-import { extractRetrievalTextFromMessages } from "flow-core/utils/message-query";
+import { extractRetrievalTextFromMessages } from "@/services/flows-legacy/utils/message-query";
 import type {
 	ContextToSystemConfig,
 	ContextToSystemInput,
 	ContextToSystemOutput,
-} from "flow-core/steps/common/context-to-system";
+} from "@/services/flows-legacy/steps/common/context-to-system";
 
 const STEP_NAME = "context-smart-retrieve" as const;
 

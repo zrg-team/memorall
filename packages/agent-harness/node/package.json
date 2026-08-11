@@ -1,0 +1,54 @@
+{
+  "name": "@memorall/agent-harness-node",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "engines": {
+    "node": ">=22"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./playwright": {
+      "types": "./dist/playwright.d.ts",
+      "import": "./dist/playwright.js",
+      "default": "./dist/playwright.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc -b --pretty false",
+    "test": "vitest run --config ../vitest.config.ts node",
+    "pack": "yarn pack"
+  },
+  "dependencies": {
+    "@memorall/agent-harness-core": "workspace:^",
+    "@memorall/agent-harness-mcp": "workspace:^",
+    "@memorall/agent-harness-sandbox": "workspace:^",
+    "@memorall/agent-harness-standard": "workspace:^",
+    "@modelcontextprotocol/sdk": "^1.29.0"
+  },
+  "peerDependencies": {
+    "playwright-core": ">=1.55.0"
+  },
+  "peerDependenciesMeta": {
+    "playwright-core": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.1",
+    "playwright-core": "^1.62.1",
+    "typescript": "^5.9.2",
+    "vitest": "^4.1.8"
+  }
+}

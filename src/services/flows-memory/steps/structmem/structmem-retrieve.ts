@@ -1,20 +1,20 @@
-import { defineStep, bindStep } from "flow-core/interfaces/engine/step";
+import { defineStep, bindStep } from "@/services/flows-legacy/interfaces/engine/step";
 import { getKnowledgeDatabase } from "../../interfaces/knowledge";
-import { logError, logInfo, logWarn } from "flow-core/utils/logger";
+import { logError, logInfo, logWarn } from "@/services/flows-legacy/utils/logger";
 import { getCurrentEmbeddingColumns } from "../../utils/embedding-size-config";
-import { extractRetrievalTextFromMessages } from "flow-core/utils/message-query";
+import { extractRetrievalTextFromMessages } from "@/services/flows-legacy/utils/message-query";
 import type {
 	StepFactoryFromSpec,
 	StepSpecFromDefinition,
-} from "flow-core/interfaces/engine/step";
-import { stepRegistry } from "flow-core/registries/step-registry";
-import type {} from "flow-core/interfaces/engine/tool";
-import type { AllServices } from "flow-core/interfaces/services/services";
+} from "@/services/flows-legacy/interfaces/engine/step";
+import { stepRegistry } from "@/services/flows-legacy/registries/step-registry";
+import type {} from "@/services/flows-legacy/interfaces/engine/tool";
+import type { AllServices } from "@/services/flows-legacy/interfaces/services/services";
 import type {
 	ContextToSystemConfig,
 	ContextToSystemInput,
 	ContextToSystemOutput,
-} from "flow-core/steps/common/context-to-system";
+} from "@/services/flows-legacy/steps/common/context-to-system";
 import { asRecord, type StructMemNodeRow } from "./structmem-utils";
 
 const STEP_NAME = "structmem-retrieve" as const;

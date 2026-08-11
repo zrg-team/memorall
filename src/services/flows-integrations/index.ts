@@ -4,8 +4,8 @@
  * import, so the main app only needs to import this file once.
  *
  * Architecture:
- *   - All interfaces are imported from flow-core/interfaces/*
- *   - All registrations go through flow-core/{tool,step}-registry
+ *   - All interfaces are imported from @/services/flows-legacy/interfaces/*
+ *   - All registrations go through @/services/flows-legacy/{tool,step}-registry
  *   - This package has no outward exports consumed by the engine itself
  */
 
@@ -51,7 +51,7 @@ import "./tools/web/web-screenshot";
 // Browser/virtual-server access tools
 import "./tools/sandbox-container/container-web-access";
 
-// Document filesystem tools (moved from flows-core)
+// Memorall document filesystem tools retained in the app integration layer.
 import "./tools/files-fs/fs-glob";
 import "./tools/files-fs/fs-grep";
 import "./tools/files-fs/fs-read";

@@ -1,0 +1,14 @@
+{
+  "files": [],
+  "references": [
+    { "path": "./core" },
+    { "path": "./langgraph" },
+    { "path": "./standard" },
+    { "path": "./sandbox" },
+    { "path": "./mcp" },
+    { "path": "./browser" },
+    { "path": "./node" },
+    { "path": "./compatibility" },
+    { "path": "./full" }
+  ]
+}

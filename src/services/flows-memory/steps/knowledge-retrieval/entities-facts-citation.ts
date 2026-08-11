@@ -1,14 +1,14 @@
-import { defineStep, bindStep } from "flow-core/interfaces/engine/step";
-import { logInfo, logError } from "flow-core/utils/logger";
+import { defineStep, bindStep } from "@/services/flows-legacy/interfaces/engine/step";
+import { logInfo, logError } from "@/services/flows-legacy/utils/logger";
 
 import type {
 	StepFactoryFromSpec,
 	StepSpecFromDefinition,
-} from "flow-core/interfaces/engine/step";
-import { stepRegistry } from "flow-core/registries/step-registry";
-import type {} from "flow-core/interfaces/engine/tool";
-import type { AllServices } from "flow-core/interfaces/services/services";
-import type { ChatMessage } from "flow-core/interfaces/engine/messages";
+} from "@/services/flows-legacy/interfaces/engine/step";
+import { stepRegistry } from "@/services/flows-legacy/registries/step-registry";
+import type {} from "@/services/flows-legacy/interfaces/engine/tool";
+import type { AllServices } from "@/services/flows-legacy/interfaces/services/services";
+import type { ChatMessage } from "@/services/flows-legacy/interfaces/engine/messages";
 
 const STEP_NAME = "entities-facts-citation" as const;
 

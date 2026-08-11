@@ -1,6 +1,6 @@
 import type { ChatMessage } from "@/types/openai";
-import type {} from "@/services/flows-core/interfaces/engine/tool";
-import type { AllServices } from "@/services/flows-core/interfaces/services/services";
+import type {} from "@/services/flows-legacy/interfaces/engine/tool";
+import type { AllServices } from "@/services/flows-legacy/interfaces/services/services";
 import { logInfo, logError } from "@/utils/logger";
 
 /**

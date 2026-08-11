@@ -1,8 +1,8 @@
 import type { Node } from "../../interfaces/knowledge";
 import type { IEmbeddingService } from "../../interfaces/embedding";
-import type { ChatCompletionResponse } from "flow-core/interfaces/engine/messages";
+import type { ChatCompletionResponse } from "@/services/flows-legacy/interfaces/engine/messages";
 import { getCurrentEmbeddingFields } from "../../utils/embedding-size-config";
-import { logError, logWarn } from "flow-core/utils/logger";
+import { logError, logWarn } from "@/services/flows-legacy/utils/logger";
 import type {
 	StructMemEntry,
 	StructMemEntryKind,

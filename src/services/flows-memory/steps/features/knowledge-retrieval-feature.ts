@@ -1,5 +1,5 @@
-import { stepRegistry } from "flow-core/registries/step-registry";
-import { DEFAULT_CONTEXT_SYSTEM_PROMPT } from "flow-core/steps/common/context-to-system";
+import { stepRegistry } from "@/services/flows-legacy/registries/step-registry";
+import { DEFAULT_CONTEXT_SYSTEM_PROMPT } from "@/services/flows-legacy/steps/common/context-to-system";
 
 const STEP_NAME = "knowledge-retrieval" as const;
 

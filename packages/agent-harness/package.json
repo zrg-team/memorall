@@ -1,0 +1,17 @@
+{
+  "name": "@memorall/agent-harness-workspace",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "yarn@4.14.1",
+  "workspaces": [
+    "core",
+    "langgraph",
+    "standard",
+    "sandbox",
+    "mcp",
+    "browser",
+    "node",
+    "compatibility",
+    "full"
+  ]
+}

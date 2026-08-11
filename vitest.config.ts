@@ -4,9 +4,6 @@ import { defineConfig } from "vitest/config";
 const root = fileURLToPath(new URL(".", import.meta.url));
 const alias = {
 	"@": fileURLToPath(new URL("./src", import.meta.url)),
-	"flow-core": fileURLToPath(
-		new URL("./src/services/flows-core", import.meta.url),
-	),
 	"flow-memory": fileURLToPath(
 		new URL("./src/services/flows-memory", import.meta.url),
 	),
@@ -39,15 +36,17 @@ export default defineConfig({
 				test: {
 					name: "node",
 					environment: "node",
+					hookTimeout: 30_000,
 					setupFiles: ["src/test/setup-node.ts"],
 					include: [
 						"src/utils/**/*.test.ts",
 						"src/services/__tests__/**/*.test.ts",
-						"src/services/flows-core/**/*.test.ts",
+						"src/services/flows-legacy/**/*.test.ts",
 						"src/services/flows-features/**/*.test.ts",
 						"src/services/flows-integrations/**/*.test.ts",
 						"src/services/flows-memory/**/*.test.ts",
 						"src/services/agent-sandbox/**/*.test.ts",
+						"src/services/agent-harness/**/*.test.ts",
 						"src/services/background-jobs/**/*.test.ts",
 						"src/**/*.logic.test.ts",
 					],
@@ -59,8 +58,28 @@ export default defineConfig({
 					name: "jsdom",
 					environment: "jsdom",
 					include: ["src/main/**/*.test.tsx", "src/services/**/*.dom.test.ts"],
+					exclude: [
+						"src/main/__tests__/component-smoke.test.tsx",
+						"src/main/__tests__/requested-modules-import.test.tsx",
+					],
 					setupFiles: ["src/test/setup.ts"],
 					globals: true,
+				},
+			},
+			{
+				extends: true,
+				test: {
+					name: "jsdom-import-smoke",
+					environment: "jsdom",
+					include: [
+						"src/main/__tests__/component-smoke.test.tsx",
+						"src/main/__tests__/requested-modules-import.test.tsx",
+					],
+					setupFiles: ["src/test/setup.ts"],
+					globals: true,
+					fileParallelism: false,
+					maxWorkers: 1,
+					testTimeout: 120_000,
 				},
 			},
 		],

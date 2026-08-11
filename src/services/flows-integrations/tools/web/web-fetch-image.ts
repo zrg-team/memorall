@@ -1,9 +1,9 @@
 import z from "zod";
-import type { Tool, ToolFactory } from "flow-core/interfaces/engine/tool";
-import type { AllServices } from "flow-core/interfaces/services/services";
-import { toolRegistry } from "flow-core/registries/tool-registry";
+import type { Tool, ToolFactory } from "@/services/flows-legacy/interfaces/engine/tool";
+import type { AllServices } from "@/services/flows-legacy/interfaces/services/services";
+import { toolRegistry } from "@/services/flows-legacy/registries/tool-registry";
 import { normalizeDocumentPath } from "../files/util";
-import { writeFileBytes } from "flow-core/tools/fs/util";
+import { writeFileBytes } from "@/services/flows-legacy/tools/fs/util";
 import {
 	fetchImageFromSession,
 	getLatestTabSession,
@@ -14,7 +14,7 @@ import {
 	decodeBase64Bytes,
 	downloadResourceBytes,
 	filenameFromUrl,
-} from "flow-core/utils/download-resource";
+} from "@/services/flows-legacy/utils/download-resource";
 
 const TOOL_NAME = "web_fetch_image" as const;
 

@@ -1,4 +1,5 @@
 import { v4 as nanoid } from "@/utils/uuid";
+import { assertJsonValue, type JsonValue } from "@memorall/agent-harness-core";
 import type { ISandboxContainerService } from "@/services/sandbox-container";
 import type {
 	SandboxCommandResult as ContainerCommandResult,
@@ -31,8 +32,8 @@ import type {
 	SandboxSnapshotResult,
 	SandboxWorkspaceManifest,
 	SandboxWorkspaceSyncResult,
-} from "flow-core/interfaces/services/agent-sandbox";
-import { SandboxError } from "flow-core/interfaces/services/agent-sandbox";
+} from "@memorall/agent-harness-sandbox";
+import { SandboxError } from "@memorall/agent-harness-sandbox";
 
 export const BROWSER_SANDBOX_PROVIDER_ID = "browser";
 
@@ -97,6 +98,11 @@ const checkContext = (context: SandboxCallContext): void => {
 			retryable: true,
 		});
 	}
+};
+
+const asJson = (value: unknown): JsonValue => {
+	assertJsonValue(value, "Browser sandbox result");
+	return value;
 };
 
 const normalizeError = (error: unknown, operation: string): SandboxError => {
@@ -668,7 +674,7 @@ class BrowserSandboxSession implements SandboxProviderSession {
 	async inspect(
 		request: SandboxInspectRequest,
 		context: SandboxCallContext,
-	): Promise<unknown> {
+	): Promise<JsonValue> {
 		this.assertOpen(context);
 		try {
 			switch (request.operation) {
@@ -686,15 +692,15 @@ class BrowserSandboxSession implements SandboxProviderSession {
 						processCount: commands.commands.length,
 						previewCount: servers.servers.length,
 					};
-					return state;
+					return asJson(state);
 				}
 				case "logs":
-					return this.service.getLogs({ limit: request.limit, level: request.level });
+					return asJson(await this.service.getLogs({ limit: request.limit, level: request.level }));
 				case "clear_logs":
-					return this.service.clearLogs();
+					return asJson(await this.service.clearLogs());
 				case "reset":
 					await this.service.resetRuntime();
-					return { reset: true };
+					return asJson({ reset: true });
 			}
 		} catch (error) {
 			throw normalizeError(error, context.operationId);

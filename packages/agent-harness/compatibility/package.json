@@ -1,0 +1,35 @@
+{
+  "name": "@memorall/agent-harness-compat",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "engines": {
+    "node": ">=22"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc -b --pretty false",
+    "test": "vitest run --config ../vitest.config.ts compatibility",
+    "pack": "yarn pack"
+  },
+  "dependencies": {
+    "@memorall/agent-harness-core": "workspace:^"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.2",
+    "vitest": "^4.1.8"
+  }
+}

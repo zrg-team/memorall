@@ -1,0 +1,73 @@
+{
+  "name": "@memorall/agent-harness-standard",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "engines": {
+    "node": ">=22"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./chat": {
+      "types": "./dist/chat/index.d.ts",
+      "import": "./dist/chat/index.js",
+      "default": "./dist/chat/index.js"
+    },
+    "./filesystem": {
+      "types": "./dist/filesystem/index.d.ts",
+      "import": "./dist/filesystem/index.js",
+      "default": "./dist/filesystem/index.js"
+    },
+    "./web": {
+      "types": "./dist/web/index.d.ts",
+      "import": "./dist/web/index.js",
+      "default": "./dist/web/index.js"
+    },
+    "./planner": {
+      "types": "./dist/planner/index.d.ts",
+      "import": "./dist/planner/index.js",
+      "default": "./dist/planner/index.js"
+    },
+    "./skills": {
+      "types": "./dist/skills/index.d.ts",
+      "import": "./dist/skills/index.js",
+      "default": "./dist/skills/index.js"
+    },
+    "./compaction": {
+      "types": "./dist/compaction/index.d.ts",
+      "import": "./dist/compaction/index.js",
+      "default": "./dist/compaction/index.js"
+    },
+    "./multi-agent": {
+      "types": "./dist/multi-agent/index.d.ts",
+      "import": "./dist/multi-agent/index.js",
+      "default": "./dist/multi-agent/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc -b --pretty false",
+    "test": "vitest run --config ../vitest.config.ts standard",
+    "pack": "yarn pack"
+  },
+  "dependencies": {
+    "@memorall/agent-harness-core": "workspace:^",
+    "minimatch": "^10.1.2",
+    "zod": "^4.1.5"
+  },
+  "devDependencies": {
+    "@memorall/agent-harness-langgraph": "workspace:^",
+    "typescript": "^5.9.2",
+    "vitest": "^4.1.8"
+  }
+}

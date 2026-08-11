@@ -4,12 +4,12 @@ import type {
 	Tool,
 	ToolFactory,
 	ToolResultValue,
-} from "flow-core/interfaces/engine/tool";
-import type { AllServices } from "flow-core/interfaces/services/services";
-import { toolRegistry } from "flow-core/registries/tool-registry";
-import type { ChatCompletionContentPart } from "flow-core/interfaces/engine/messages";
+} from "@/services/flows-legacy/interfaces/engine/tool";
+import type { AllServices } from "@/services/flows-legacy/interfaces/services/services";
+import { toolRegistry } from "@/services/flows-legacy/registries/tool-registry";
+import type { ChatCompletionContentPart } from "@/services/flows-legacy/interfaces/engine/messages";
 import { normalizeDocumentPath } from "./util";
-import { pathExists, readFileBytes } from "flow-core/tools/fs/util";
+import { pathExists, readFileBytes } from "@/services/flows-legacy/tools/fs/util";
 
 const TOOL_NAME = "pdf_to_image" as const;
 

@@ -14,7 +14,7 @@ import {
 	isCustomChunkPayload,
 	normalizeLangGraphStreamChunk,
 	type FlowAction,
-} from "@/services/flows-core/utils/langgraph-stream";
+} from "@/services/flows-legacy/utils/langgraph-stream";
 import type {
 	AssistantExecutionPart,
 	ComplexContent,
@@ -22,7 +22,7 @@ import type {
 	MessageParts,
 } from "@/types/chat";
 import { handlerRegistry } from "./handler-registry";
-import type { FoundationState } from "@/services/flows-core/graph/foundation/state";
+import type { FoundationState } from "@/services/flows-legacy/graph/foundation/state";
 import {
 	MessagePartsAccumulator,
 	resolveMessageParts,
@@ -32,7 +32,6 @@ import {
 	createToolCallAccumulator,
 	type ToolCallAccumulator,
 } from "@/services/chat/tool-call-accumulator";
-import { graphRegistry } from "@/services/flows-core/registries/graph-registry";
 import {
 	consoleFlowLogger,
 	toFlowDatabase,
@@ -43,13 +42,14 @@ import {
 	toFlowWebBrowser,
 	toAgentSandbox,
 } from "@/services/flow-service-adapters";
-import type { UnifiedFlowConfig } from "@/services/flows-core/interfaces/config/flow-config";
-import { buildDefaultFlowConfig } from "@/services/flows-core/utils/flow-config";
-import { mergeWithDefaultConfig } from "@/services/flows-core/utils/flow-config";
 import {
-	createFlowRuntimeVars,
-	withFlowRuntimeVars,
-} from "@/services/flows-core/runtime/runtime-context";
+	createMemorallFlowRun,
+	toLegacyFlowStream,
+	type MemorallFlowServices,
+} from "@/services/agent-harness";
+import type { UnifiedFlowConfig } from "@/services/flows-legacy/interfaces/config/flow-config";
+import { buildDefaultFlowConfig } from "@/services/flows-legacy/utils/flow-config";
+import { mergeWithDefaultConfig } from "@/services/flows-legacy/utils/flow-config";
 import { eq, sql } from "drizzle-orm";
 import { documentFileSystemService as fsService } from "@/services/filesystem/document-filesystem";
 import {
@@ -228,7 +228,7 @@ type FlowCustomPayloadDeps = {
 	executeStage: string;
 };
 
-type FlowServices = Parameters<typeof graphRegistry.createChatGraph>[1];
+type FlowServices = MemorallFlowServices;
 
 type FlowRuntimeDeps = {
 	jobId: string;
@@ -800,20 +800,17 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 					resolvedConfig,
 					job.payload.flowConfigPrefix,
 				);
-				const { graph, getInitialState } = graphRegistry.createChatGraph(
-					resolvedConfigWithPrefix.graphType ?? "agent",
-					ChatHandler.getFlowServices(),
-					resolvedConfigWithPrefix,
-				);
-				const runtimeVars = createFlowRuntimeVars();
-				const stream = await graph.stream(
-					getInitialState({ messages, topicId, contextQueries: [] }),
-					withFlowRuntimeVars(
-						{
-							streamMode: ["custom", "values"] as ["custom", "values"],
+				const stream = toLegacyFlowStream(
+					createMemorallFlowRun({
+						runId: `chat:${jobId}`,
+						services: ChatHandler.getFlowServices(),
+						input: {
+							graphType: resolvedConfigWithPrefix.graphType ?? "agent",
+							config: resolvedConfigWithPrefix,
+							initialState: { messages, topicId, contextQueries: [] },
+							streamModes: ["custom", "values"],
 						},
-						runtimeVars,
-					),
+					}),
 				);
 
 				const finalState = await ChatHandler.runFlowStream({
@@ -929,27 +926,17 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 				resolvedConfig = applyTopicRecallType(resolvedConfig, topicRecallType);
 				const graphType = resolvedConfig.graphType ?? "foundation";
 
-				// Resolve the chat flow via registry — no graph-type branching here.
-				// Each chat-capable graph self-registers its adapter in graphRegistry config.
-				const { graph, getInitialState } = graphRegistry.createChatGraph(
-					graphType,
-					ChatHandler.getFlowServices(),
-					resolvedConfig,
-				);
-				const runtimeVars = createFlowRuntimeVars();
-
-				const stream = await graph.stream(
-					getInitialState({ messages, topicId, contextQueries }),
-					withFlowRuntimeVars(
-						{
-							streamMode: ["custom", "updates", "values"] as [
-								"custom",
-								"updates",
-								"values",
-							],
+				const stream = toLegacyFlowStream(
+					createMemorallFlowRun({
+						runId: `chat:${jobId}`,
+						services: ChatHandler.getFlowServices(),
+						input: {
+							graphType,
+							config: resolvedConfig,
+							initialState: { messages, topicId, contextQueries },
+							streamModes: ["custom", "updates", "values"],
 						},
-						runtimeVars,
-					),
+					}),
 				);
 
 				const finalState = (await ChatHandler.runFlowStream({

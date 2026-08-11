@@ -1,22 +1,22 @@
 import { create } from "zustand";
 import { serviceManager } from "@/services";
-import { toolRegistry } from "@/services/flows-core/registries/tool-registry";
-import { buildDefaultFlowConfig } from "@/services/flows-core/utils/flow-config";
-import { mergeWithDefaultConfig } from "@/services/flows-core/utils/flow-config";
+import { toolRegistry } from "@/services/flows-legacy/registries/tool-registry";
+import { buildDefaultFlowConfig } from "@/services/flows-legacy/utils/flow-config";
+import { mergeWithDefaultConfig } from "@/services/flows-legacy/utils/flow-config";
 import {
 	DEFAULT_FOUNDATION_PREDEFINED_CONFIG,
 	type FoundationPredefinedConfig,
-} from "@/services/flows-core/graph/foundation/state";
-import { DEFAULT_AGENT_SYSTEM_PROMPT } from "@/services/flows-core/graph/agent/state";
-import { DEFAULT_FOUNDATION_SYSTEM_PROMPT } from "@/services/flows-core/graph/foundation/state";
-import type { UnifiedFlowConfig } from "@/services/flows-core/interfaces/config/flow-config";
-import { DEFAULT_CONTEXT_SYSTEM_PROMPT } from "@/services/flows-core/steps/common/context-to-system";
-import { MULTI_AGENT_FEATURE_NAME } from "@/services/flows-core/steps/features/multi-agent-feature";
+} from "@/services/flows-legacy/graph/foundation/state";
+import { DEFAULT_AGENT_SYSTEM_PROMPT } from "@/services/flows-legacy/graph/agent/state";
+import { DEFAULT_FOUNDATION_SYSTEM_PROMPT } from "@/services/flows-legacy/graph/foundation/state";
+import type { UnifiedFlowConfig } from "@/services/flows-legacy/interfaces/config/flow-config";
+import { DEFAULT_CONTEXT_SYSTEM_PROMPT } from "@/services/flows-legacy/steps/common/context-to-system";
+import { MULTI_AGENT_FEATURE_NAME } from "@/services/flows-legacy/steps/features/multi-agent-feature";
 import {
 	MCP_FEATURE_NAME,
 	type MCPServerConfig,
-} from "@/services/flows-core/steps/features/mcp-feature";
-import { ADD_SKILL_CONTEXT_STEP_NAME } from "@/services/flows-core/steps/common/add-skill-context";
+} from "@/services/flows-legacy/steps/features/mcp-feature";
+import { ADD_SKILL_CONTEXT_STEP_NAME } from "@/services/flows-legacy/steps/common/add-skill-context";
 import { logError } from "@/utils/logger";
 import { deepEqual } from "@/utils/deep-equal";
 import type {

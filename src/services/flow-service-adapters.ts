@@ -5,7 +5,7 @@ import type { DocumentTreeNode } from "@/types/document-library";
 import type { ILLMService } from "@/services/llm/interfaces/llm-service.interface";
 import type { ISandboxContainerService } from "@/services/sandbox-container";
 import { createAgentSandboxService } from "@/services/agent-sandbox";
-import type { IAgentSandboxService } from "./flows-core/interfaces/services/agent-sandbox";
+import type { IAgentSandboxService } from "./flows-legacy/interfaces/services/agent-sandbox";
 import type {
 	SandboxExecuteCommandRequest,
 	SandboxExecutionRequest,
@@ -46,27 +46,27 @@ import type {
 	DirEntry,
 	FileStat,
 	IFlowFileSystem,
-} from "./flows-core/interfaces/services/filesystem";
-import type { IFlowLLMService } from "./flows-core/interfaces/services/llm";
+} from "./flows-legacy/interfaces/services/filesystem";
+import type { IFlowLLMService } from "./flows-legacy/interfaces/services/llm";
 import type {
 	IFlowSandboxService,
 	SandboxRequest,
-} from "./flows-core/interfaces/services/sandbox";
-import type { SandboxCommandResult } from "./flows-core/interfaces/services/sandbox";
+} from "./flows-legacy/interfaces/services/sandbox";
+import type { SandboxCommandResult } from "./flows-legacy/interfaces/services/sandbox";
 import type {
 	IFlowWebBrowserService,
 	WebOpenSessionResult as FlowWebOpenSessionResult,
 	WebRefreshSessionArgs as FlowWebRefreshSessionArgs,
 	WebRenderedFallbackResult as FlowWebRenderedFallbackResult,
-} from "./flows-core/interfaces/services/web-browser";
-import type { IFlowLogger } from "./flows-core/utils/logger";
-import { setFlowLogger } from "./flows-core/utils/logger";
-import { serviceRegistry } from "./flows-core/registries/service-registry";
+} from "./flows-legacy/interfaces/services/web-browser";
+import type { IFlowLogger } from "./flows-legacy/utils/logger";
+import { setFlowLogger } from "./flows-legacy/utils/logger";
+import { serviceRegistry } from "./flows-legacy/registries/service-registry";
 import type {
 	ChatCompletionChunk,
 	ChatCompletionRequest,
 	ChatCompletionResponse,
-} from "./flows-core/interfaces/engine/messages";
+} from "./flows-legacy/interfaces/engine/messages";
 import { schema as appDatabaseSchema } from "@/services/database/schema";
 import type {
 	IKnowledgeDatabase,
@@ -84,8 +84,14 @@ export const consoleFlowLogger: IFlowLogger = {
 	debug: (msg, ...args) => console.debug(msg, ...args),
 };
 
-setFlowLogger(consoleFlowLogger);
-serviceRegistry.registerInstance("logger", consoleFlowLogger);
+let legacyLoggerRegistered = false;
+
+export const registerLegacyFlowLogger = (): void => {
+	if (legacyLoggerRegistered) return;
+	legacyLoggerRegistered = true;
+	setFlowLogger(consoleFlowLogger);
+	serviceRegistry.registerInstance("logger", consoleFlowLogger);
+};
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
 	typeof value === "object" && value !== null;

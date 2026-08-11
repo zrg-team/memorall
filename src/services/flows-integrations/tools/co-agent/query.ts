@@ -1,6 +1,6 @@
 import z from "zod";
-import type { Tool, ToolFactory } from "flow-core/interfaces/engine/tool";
-import { toolRegistry } from "flow-core/registries/tool-registry";
+import type { Tool, ToolFactory } from "@/services/flows-legacy/interfaces/engine/tool";
+import { toolRegistry } from "@/services/flows-legacy/registries/tool-registry";
 import { CO_AGENT_CONTENT_COMMAND_SOURCE } from "flow-integrations/interfaces/co-agent";
 import {
 	createDefaultErrorResult,
