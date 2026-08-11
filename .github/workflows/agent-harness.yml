@@ -1,0 +1,85 @@
+name: Agent Harness
+
+on:
+  pull_request:
+    paths:
+      - "packages/agent-harness/**"
+      - "src/services/agent-harness/**"
+      - "src/services/agent-sandbox/**"
+      - "src/services/flows-legacy/**"
+      - "e2e/sandbox/**"
+      - "tools/*agent-harness*"
+      - "package.json"
+      - "yarn.lock"
+      - "tsconfig.json"
+      - "vitest.config.ts"
+      - "playwright.sandbox.config.ts"
+      - ".github/workflows/agent-harness.yml"
+  push:
+    branches: ["main"]
+    paths:
+      - "packages/agent-harness/**"
+      - "src/services/agent-harness/**"
+      - "src/services/agent-sandbox/**"
+      - "src/services/flows-legacy/**"
+      - "e2e/sandbox/**"
+      - "tools/*agent-harness*"
+      - "package.json"
+      - "yarn.lock"
+      - "tsconfig.json"
+      - "vitest.config.ts"
+      - "playwright.sandbox.config.ts"
+      - ".github/workflows/agent-harness.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  contracts:
+    name: Contracts (Node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [22, 24]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: yarn
+      - run: corepack enable
+      - run: yarn install --immutable
+      - run: yarn harness:boundaries
+      - run: yarn harness:typecheck
+      - run: yarn harness:test
+      - run: yarn harness:pack
+
+  consumers-and-extension:
+    name: Consumers and extension E2E
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: yarn
+      - run: corepack enable
+      - run: yarn install --immutable
+      - run: yarn playwright install --with-deps chromium
+      - run: yarn harness:smoke
+      - run: yarn type-check
+      - run: yarn test
+      - run: yarn test:e2e:sandbox
+      - run: yarn test:e2e:sandbox:network
+      - run: yarn build:prod
+      - name: Upload Playwright diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sandbox-playwright-diagnostics
+          path: |
+            playwright-report/sandbox
+            test-results/sandbox
+          if-no-files-found: ignore

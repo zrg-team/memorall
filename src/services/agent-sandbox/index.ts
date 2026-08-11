@@ -1,13 +1,16 @@
 import type { ISandboxContainerService } from "@/services/sandbox-container";
-import type { IFlowFileSystem } from "flow-core/interfaces/services/filesystem";
-import type { IAgentSandboxService } from "flow-core/interfaces/services/agent-sandbox";
+import type { IFlowFileSystem } from "@/services/flows-legacy/interfaces/services/filesystem";
+import { createBrowserPlatform } from "@memorall/agent-harness-browser";
+import {
+	SandboxManager,
+	SandboxProviderRegistry,
+	SandboxWorkspaceCoordinator,
+	type IAgentSandboxService,
+} from "@memorall/agent-harness-sandbox";
 import {
 	BrowserSandboxProvider,
 	BROWSER_SANDBOX_PROVIDER_ID,
 } from "./browser-sandbox-provider";
-import { SandboxManager } from "./sandbox-manager";
-import { SandboxProviderRegistry } from "./provider-registry";
-import { SandboxWorkspaceCoordinator } from "./workspace-coordinator";
 
 export * from "./browser-sandbox-provider";
 export * from "./provider-registry";
@@ -35,7 +38,7 @@ export const createAgentSandboxService = (
 	const service = new SandboxManager(providers, {
 		providerId: BROWSER_SANDBOX_PROVIDER_ID,
 		sessionPolicy: "reuse-conversation",
-	}, workspaces);
+	}, createBrowserPlatform({ runtime: "extension-worker" }), workspaces);
 	serviceCache.set(containerService, { service, workspaces });
 	return service;
 };

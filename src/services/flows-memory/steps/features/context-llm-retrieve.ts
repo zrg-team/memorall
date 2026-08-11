@@ -7,17 +7,17 @@
 
 import { Annotation } from "@langchain/langgraph";
 import type { RetrievalPipelineState } from "flow-memory/interfaces/retrieval-state";
-import { logInfo, logError } from "flow-core/utils/logger";
+import { logInfo, logError } from "@/services/flows-legacy/utils/logger";
 import {
 	defineStep,
 	bindStep,
 	type StepOutput,
-} from "flow-core/interfaces/engine/step";
+} from "@/services/flows-legacy/interfaces/engine/step";
 import type {
 	StepFactoryFromSpec,
 	StepSpecFromDefinition,
-} from "flow-core/interfaces/engine/step";
-import { stepRegistry } from "flow-core/registries/step-registry";
+} from "@/services/flows-legacy/interfaces/engine/step";
+import { stepRegistry } from "@/services/flows-legacy/registries/step-registry";
 import type {
 	LLMRetrieveInput,
 	LLMRetrieveOutput,
@@ -34,9 +34,9 @@ import type {
 	ContextToSystemConfig,
 	ContextToSystemInput,
 	ContextToSystemOutput,
-} from "flow-core/steps/common/context-to-system";
-import type { ChatCompletionMessageParam } from "flow-core/interfaces/engine/messages";
-import { extractRetrievalTextFromMessages } from "flow-core/utils/message-query";
+} from "@/services/flows-legacy/steps/common/context-to-system";
+import type { ChatCompletionMessageParam } from "@/services/flows-legacy/interfaces/engine/messages";
+import { extractRetrievalTextFromMessages } from "@/services/flows-legacy/utils/message-query";
 
 const STEP_NAME = "context-llm-retrieve" as const;
 

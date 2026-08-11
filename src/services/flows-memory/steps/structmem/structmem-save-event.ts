@@ -1,13 +1,13 @@
-import { defineStep, bindStep } from "flow-core/interfaces/engine/step";
+import { defineStep, bindStep } from "@/services/flows-legacy/interfaces/engine/step";
 import { getKnowledgeDatabase } from "../../interfaces/knowledge";
 import { eq } from "drizzle-orm";
 import type {
 	StepFactoryFromSpec,
 	StepSpecFromDefinition,
-} from "flow-core/interfaces/engine/step";
-import { stepRegistry } from "flow-core/registries/step-registry";
-import type {} from "flow-core/interfaces/engine/tool";
-import type { AllServices } from "flow-core/interfaces/services/services";
+} from "@/services/flows-legacy/interfaces/engine/step";
+import { stepRegistry } from "@/services/flows-legacy/registries/step-registry";
+import type {} from "@/services/flows-legacy/interfaces/engine/tool";
+import type { AllServices } from "@/services/flows-legacy/interfaces/services/services";
 import type { Node, NewNode } from "../../interfaces/knowledge";
 import type { Edge, NewEdge } from "../../interfaces/knowledge";
 import type {
@@ -21,7 +21,7 @@ import {
 	type StructMemNodeRow,
 	withEmbeddingField,
 } from "./structmem-utils";
-import { logError, logInfo } from "flow-core/utils/logger";
+import { logError, logInfo } from "@/services/flows-legacy/utils/logger";
 
 const STEP_NAME = "structmem-save-event" as const;
 

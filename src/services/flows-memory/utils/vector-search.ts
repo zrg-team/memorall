@@ -1,8 +1,8 @@
 import type { IFlowDatabase } from "../interfaces/database";
 import type { IFlowEmbeddingService } from "../interfaces/embedding";
 import type { Edge, Node } from "../interfaces/knowledge";
-import type { IFlowLogger } from "flow-core/utils/logger";
-import { getFlowLogger } from "flow-core/utils/logger";
+import type { IFlowLogger } from "@/services/flows-legacy/utils/logger";
+import { getFlowLogger } from "@/services/flows-legacy/utils/logger";
 import { getCurrentEmbeddingColumns } from "./embedding-size-config";
 
 export type FlowEmbeddingLike = Pick<

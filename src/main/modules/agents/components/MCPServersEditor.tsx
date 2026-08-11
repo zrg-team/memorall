@@ -32,7 +32,7 @@ import { Label } from "@/main/components/ui/label";
 import { Badge } from "@/main/components/ui/badge";
 import { Textarea } from "@/main/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import type { MCPServerConfig } from "@/services/flows-core/steps/features/mcp-feature";
+import type { MCPServerConfig } from "@/services/flows-legacy/steps/features/mcp-feature";
 
 interface MCPServersEditorProps {
 	servers: MCPServerConfig[];

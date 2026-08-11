@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { UnifiedFlowConfig } from "@/services/flows-core/interfaces/config/flow-config";
+import type { UnifiedFlowConfig } from "@/services/flows-legacy/interfaces/config/flow-config";
 import type {
 	Flow,
 	FlowConfig,
@@ -7,7 +7,7 @@ import type {
 	FlowService,
 	FlowState,
 	FlowStep,
-} from "@/services/flows-core/interfaces/config/flow-builder";
+} from "@/services/flows-legacy/interfaces/config/flow-builder";
 
 vi.mock("drizzle-orm", () => ({
 	and: vi.fn((...conditions: unknown[]) => ({ op: "and", conditions })),
@@ -15,7 +15,7 @@ vi.mock("drizzle-orm", () => ({
 	eq: vi.fn((column: unknown, value: unknown) => ({ op: "eq", column, value })),
 }));
 
-vi.mock("@/services/flows-core/utils/logger", () => ({
+vi.mock("@/services/flows-legacy/utils/logger", () => ({
 	logError: vi.fn(),
 	logInfo: vi.fn(),
 }));
@@ -49,7 +49,7 @@ vi.mock("@/services/flow-builder-catalog", () => ({
 	})),
 }));
 
-vi.mock("@/services/flows-core/utils/flow-config", () => ({
+vi.mock("@/services/flows-legacy/utils/flow-config", () => ({
 	buildDefaultFlowConfig: vi.fn(
 		(graphType = "foundation"): UnifiedFlowConfig => ({
 			graphType,

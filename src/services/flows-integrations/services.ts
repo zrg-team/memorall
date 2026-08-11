@@ -1,5 +1,5 @@
 import type { IDocumentProcessor } from "./interfaces/document-processor";
-import { serviceRegistry } from "flow-core/registries/service-registry";
+import { serviceRegistry } from "@/services/flows-legacy/registries/service-registry";
 
 serviceRegistry.registerSchema("documentProcessor", {
 	name: "Document Processor",

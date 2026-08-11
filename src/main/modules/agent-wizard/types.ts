@@ -1,6 +1,6 @@
 import type { GraphType } from "@/main/stores/agent-config";
 import type { AgentPresetStatus } from "@/main/modules/agents/types";
-import type { MCPServerConfig } from "@/services/flows-core/steps/features/mcp-feature";
+import type { MCPServerConfig } from "@/services/flows-legacy/steps/features/mcp-feature";
 import type {
 	GrowType,
 	RecallType,

@@ -2,9 +2,12 @@
   "private": true,
   "name": "memorall",
   "description": "Memorall - AI-powered memory and knowledge management browser.",
-  "version": "0.4.10",
+  "version": "0.4.11",
   "license": "MIT",
   "type": "module",
+  "workspaces": [
+    "packages/agent-harness/*"
+  ],
   "homepage": "https://zrg-team.github.io/memorall",
   "author": {
     "name": "Zergling",
@@ -34,13 +37,21 @@
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:watch": "vitest",
-    "test:sandbox:unit": "vitest run src/services/agent-sandbox/__tests__ src/services/sandbox-container/__tests__ src/services/flows-core/__tests__/agent-sandbox-tools.test.ts src/services/flows-core/__tests__/tool-registry.test.ts src/services/flows-core/__tests__/flow-engine-harness.test.ts src/services/__tests__/flow-service-adapters.logic.test.ts",
-    "test:e2e:sandbox": "npm run build && playwright test -c playwright.sandbox.config.ts --project=deterministic",
-    "test:e2e:sandbox:network": "npm run build && playwright test -c playwright.sandbox.config.ts --project=network",
-    "check:sandbox": "npm run type-check && npm run test:sandbox:unit && npm run test:e2e:sandbox",
+    "harness:typecheck": "tsc -b packages/agent-harness/tsconfig.json --pretty false",
+    "harness:build": "tsc -b packages/agent-harness/tsconfig.json --pretty false",
+    "harness:clean": "tsc -b packages/agent-harness/tsconfig.json --clean",
+    "harness:test": "vitest run --config packages/agent-harness/vitest.config.ts",
+    "harness:boundaries": "node tools/check-agent-harness-boundaries.mjs",
+    "harness:pack": "node tools/pack-agent-harness.mjs",
+    "harness:smoke": "node tools/smoke-agent-harness-consumers.mjs",
+    "check:agent-harness": "yarn harness:boundaries && yarn harness:typecheck && yarn harness:test && yarn harness:pack && yarn harness:smoke",
+    "test:sandbox:unit": "vitest run src/services/agent-sandbox/__tests__ src/services/sandbox-container/__tests__ src/services/flows-legacy/__tests__/agent-sandbox-tools.test.ts src/services/flows-legacy/__tests__/tool-registry.test.ts src/services/flows-legacy/__tests__/flow-engine-harness.test.ts src/services/__tests__/flow-service-adapters.logic.test.ts",
+    "test:e2e:sandbox": "yarn build && playwright test -c playwright.sandbox.config.ts --project=deterministic",
+    "test:e2e:sandbox:network": "yarn build && playwright test -c playwright.sandbox.config.ts --project=network",
+    "check:sandbox": "yarn type-check && yarn test:sandbox:unit && yarn test:e2e:sandbox",
     "qa:hyperframes-export": "node tools/hyperframes-export-parity-qa.mjs",
     "check": "yarn type-check && yarn test",
-    "clean": "extension clean",
+    "clean": "node tools/clean-extension-output.mjs",
     "lint": "extension lint",
     "format": "npx @biomejs/biome format --write ./src ./scripts",
     "assets:bundled": "node tools/copy-bundled-assets.mjs"
@@ -212,5 +223,6 @@
     "vitest": "^4.1.8",
     "vm-browserify": "^1.1.2",
     "worker-loader": "^3.0.8"
-  }
+  },
+  "packageManager": "yarn@4.14.1+sha512.64df448055b2d37ba269d7db535a469b8da93f8ef1140c25fd7a83c00a8fbaacb214ca0e02553b92a2c54cef78bb67d0b4817fab02001df0e24fac0faccc3b42"
 }

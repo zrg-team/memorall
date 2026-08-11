@@ -1,8 +1,8 @@
 import z from "zod";
-import type { Tool, ToolFactory } from "flow-core/interfaces/engine/tool";
-import type { AllServices } from "flow-core/interfaces/services/services";
-import { toolRegistry } from "flow-core/registries/tool-registry";
-import type { SandboxHandleSwRequestResult } from "flow-core/interfaces/services/sandbox";
+import type { Tool, ToolFactory } from "@/services/flows-legacy/interfaces/engine/tool";
+import type { AllServices } from "@/services/flows-legacy/interfaces/services/services";
+import { toolRegistry } from "@/services/flows-legacy/registries/tool-registry";
+import type { SandboxHandleSwRequestResult } from "@/services/flows-legacy/interfaces/services/sandbox";
 
 const TOOL_NAME = "container_web_access_v2" as const;
 const DEFAULT_TIMEOUT_MS = 120_000;

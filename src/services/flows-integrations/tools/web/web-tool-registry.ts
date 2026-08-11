@@ -10,7 +10,7 @@ import {
 	type WebSnapshotPayload,
 	type WebWaitSelectorState,
 } from "./web-browser-protocol";
-import { DEFAULT_WEB_MAX_HTML_CHARS } from "flow-core/tools/web/max-html-chars";
+import { DEFAULT_WEB_MAX_HTML_CHARS } from "@/services/flows-legacy/tools/web/max-html-chars";
 
 interface WebSessionState {
 	id: string;

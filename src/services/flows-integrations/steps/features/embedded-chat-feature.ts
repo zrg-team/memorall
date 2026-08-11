@@ -1,13 +1,13 @@
-import { defineStep, bindStep } from "flow-core/interfaces/engine/step";
+import { defineStep, bindStep } from "@/services/flows-legacy/interfaces/engine/step";
 import type {
 	BoundStep,
 	StepFactoryFromSpec,
 	StepSpecFromDefinition,
-} from "flow-core/interfaces/engine/step";
-import { logError } from "flow-core/utils/logger";
-import { stepRegistry } from "flow-core/registries/step-registry";
-import { GraphBase, type GraphTool } from "flow-core/graph/graph.base";
-import type { ChatCompletionMessageParam } from "flow-core/interfaces/engine/messages";
+} from "@/services/flows-legacy/interfaces/engine/step";
+import { logError } from "@/services/flows-legacy/utils/logger";
+import { stepRegistry } from "@/services/flows-legacy/registries/step-registry";
+import { GraphBase, type GraphTool } from "@/services/flows-legacy/graph/graph.base";
+import type { ChatCompletionMessageParam } from "@/services/flows-legacy/interfaces/engine/messages";
 import { CO_AGENT_TOOLS } from "../../tools/co-agent";
 
 export const EMBEDDED_CHAT_FEATURE_STEP_NAME = "embedded-chat-feature" as const;
