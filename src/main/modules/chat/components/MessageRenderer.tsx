@@ -15,6 +15,7 @@ import type {
 	AttachedDocumentRef,
 	ComplexContent,
 	MessageParts,
+	ToolExecutionRecord,
 } from "@/types/chat";
 import { cn } from "@/lib/utils";
 import { MessageActions } from "./MessageActions";
@@ -51,6 +52,7 @@ interface MessageMetadata extends MessageFooterMetadata {
 		metadata?: Record<string, unknown>;
 	};
 	executions?: AssistantExecutionPart[];
+	toolExecutions?: ToolExecutionRecord[];
 }
 
 interface MessageRendererProps {
@@ -76,7 +78,7 @@ export const MessageRenderer: React.FC<MessageRendererProps> = React.memo(
 	}) => {
 		const location = useLocation();
 		const formattedDate = useMemo(
-			() => dayjs(message.createdAt).format("MMM D, YYYY h:mm A"),
+			() => dayjs(message.createdAt).format("h:mm A"),
 			[message.createdAt],
 		);
 		const { t } = useTranslation("chat");
@@ -123,6 +125,13 @@ export const MessageRenderer: React.FC<MessageRendererProps> = React.memo(
 			() => (Array.isArray(metadata?.executions) ? metadata.executions : []),
 			[metadata],
 		);
+		const toolExecutions = useMemo<ToolExecutionRecord[]>(
+			() =>
+				Array.isArray(metadata?.toolExecutions)
+					? metadata.toolExecutions
+					: [],
+			[metadata],
+		);
 		const partsContentParts = useMemo<AssistantContentPart[]>(
 			() =>
 				message.role === "assistant"
@@ -130,9 +139,17 @@ export const MessageRenderer: React.FC<MessageRendererProps> = React.memo(
 							parts: messageParts,
 							executions: executionParts,
 							executeState: isStreaming ? executeState : undefined,
+							toolExecutions,
 						})
 					: [],
-			[executeState, executionParts, isStreaming, message.role, messageParts],
+			[
+				executeState,
+				executionParts,
+				isStreaming,
+				message.role,
+				messageParts,
+				toolExecutions,
+			],
 		);
 		const renderedAssistantContentParts =
 			partsContentParts.length > 0 ? partsContentParts : assistantContentParts;
@@ -195,7 +212,7 @@ export const MessageRenderer: React.FC<MessageRendererProps> = React.memo(
 				)}
 			>
 				{!isUserMessage ? (
-					<div className="flex items-center justify-start gap-2 px-1 text-[11px] font-medium tracking-normal text-muted-foreground/80">
+					<div className="flex items-center justify-start gap-2 px-1 text-xs font-medium tracking-normal text-muted-foreground/80">
 						<span>{agentFlowName ?? t("messages.assistant")}</span>
 						<span className="h-1 w-1 rounded-full bg-muted-foreground/35" />
 						<time dateTime={new Date(message.createdAt).toISOString()}>
@@ -317,6 +334,14 @@ export const MessageRenderer: React.FC<MessageRendererProps> = React.memo(
 							)}
 						</MessageContent>
 					</Message>
+				) : null}
+				{isUserMessage && hasRenderableContent ? (
+					<time
+						dateTime={new Date(message.createdAt).toISOString()}
+						className="px-1 text-[11px] text-muted-foreground/80"
+					>
+						{t("messages.you")} · {formattedDate}
+					</time>
 				) : null}
 			</div>
 		);

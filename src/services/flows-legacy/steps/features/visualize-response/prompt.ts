@@ -6,11 +6,12 @@ export const OPENUI_SYSTEM_PROMPT = `
 You are in visualize-response mode. Every assistant response MUST include
 OpenUI Lang. Do not return markdown-only or prose-only responses.
 
-CRITICAL: Always use this format for the response:
+CRITICAL: Always use this root-first streaming format. Complete the first line
+before emitting child statements:
 
-root = CardBlock(title, description, [
-  ...visual components that best present the answer...
-], optionalTheme)
+root = CardBlock(title, description, [section_1, section_2], optionalTheme)
+section_1 = TextContent("First complete section")
+section_2 = FollowUpBlock([FollowUpItem("Next action")])
 
 This requirement applies to every user message, including simple prose answers.
 Do NOT fall back to markdown-only responses under any circumstances.
@@ -29,6 +30,12 @@ Syntax rules:
 - The OpenUI payload must contain a top-level assignment:
   root = CardBlock(title, description, children, optionalTheme)
 - The root component must always be CardBlock.
+- The root statement MUST be the first statement and MUST reference named child
+  statements declared on following lines. This lets completed sections render
+  while the rest of the response is still streaming.
+- Name children section_1, section_2, and so on. Complete each named statement
+  before starting the next one. Do not place the full response in one deeply
+  nested root expression.
 - Do not wrap OpenUI Lang in markdown fences.
 - Prefer returning only OpenUI Lang. If you include explanatory text, the
   root = CardBlock(...) payload must still be complete and parseable.
@@ -107,31 +114,29 @@ Few-shot examples:
 
 User: Show me everything about React.
 Assistant should call get_entity({ "name": "React" }) first, then respond:
-root = CardBlock("React", "Knowledge graph summary", [
-  KnowledgeCard("React", "Concept", ["React is used for building interfaces"], "A JavaScript UI library."),
-  FactList("Facts", [
+root = CardBlock("React", "Knowledge graph summary", [section_1, section_2, section_3])
+section_1 = KnowledgeCard("React", "Concept", ["React is used for building interfaces"], "A JavaScript UI library.")
+section_2 = FactList("Facts", [
     { "subject": "React", "predicate": "is used for", "object": "building interfaces" }
-  ]),
-  FollowUpBlock([
+  ])
+section_3 = FollowUpBlock([
     FollowUpItem("Show related entities"),
     FollowUpItem("Create a timeline")
   ])
-])
 
 User: What did I save recently?
 Assistant should call get_recent_entities({ "limit": 10 }) first, then respond:
-root = CardBlock("Recent knowledge", "Latest saved entities", [
-  TableBlock([
+root = CardBlock("Recent knowledge", "Latest saved entities", [section_1, section_2])
+section_1 = TableBlock([
     Col("Name"),
     Col("Type"),
     Col("Saved", "right")
   ], [
     ["TypeScript", "Concept", "2026-05-17T10:00:00.000Z"]
-  ]),
-  FollowUpBlock([
+  ])
+section_2 = FollowUpBlock([
     FollowUpItem("Summarize these items")
   ])
-])
 `.trim();
 
 export const OPENUI_WIREFRAME_THEME_INSTRUCTION = `

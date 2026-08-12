@@ -4,6 +4,7 @@ import "@/services/flows-legacy/tools/calculator";
 import "@/services/flows-legacy/tools/current-time";
 import "@/services/flows-legacy/tools/load-skill";
 import "@/services/flows-legacy/tools/send-message-to-agent";
+import "@/services/flows-legacy/tools/thread-history";
 
 import "@/services/flows-legacy/tools/fs/fs-glob";
 import "@/services/flows-legacy/tools/fs/fs-grep";

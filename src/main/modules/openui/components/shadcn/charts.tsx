@@ -22,6 +22,10 @@ import {
 	TableHeader,
 	TableRow,
 } from "@/main/components/ui/table";
+import {
+	ProgressiveCollectionControl,
+	useProgressiveItems,
+} from "../progressive-collection";
 
 const chartColors = [
 	"hsl(var(--primary))",
@@ -49,7 +53,9 @@ export const TableBlock = defineComponent({
 		columns: z.array(Col.ref),
 		rows: z.array(z.array(z.string())),
 	}),
-	component: ({ props }) => (
+	component: ({ props }) => {
+		const rows = useProgressiveItems(props.rows);
+		return (
 		<div className="overflow-hidden rounded-lg border">
 			<Table>
 				<TableHeader>
@@ -71,7 +77,7 @@ export const TableBlock = defineComponent({
 					</TableRow>
 				</TableHeader>
 				<TableBody>
-					{props.rows.map((row, rowIndex) => (
+					{rows.items.map((row, rowIndex) => (
 						<TableRow key={rowIndex}>
 							{row.map((cell, cellIndex) => {
 								const column = props.columns[cellIndex];
@@ -94,8 +100,13 @@ export const TableBlock = defineComponent({
 					))}
 				</TableBody>
 			</Table>
+			<ProgressiveCollectionControl
+				hiddenCount={rows.hiddenCount}
+				onRenderAll={rows.renderAll}
+			/>
 		</div>
-	),
+		);
+	},
 });
 
 const chartDataSchema = z.array(

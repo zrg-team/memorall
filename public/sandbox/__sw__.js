@@ -20,31 +20,6 @@ const registeredPorts = new Set();
 // Populated via 'set-import-map' message from renderViaIframe.
 const portImportMaps = new Map();
 
-function toProxyModulePath(port, remoteUrl) {
-  return `/__virtual__/${port}/__npm_proxy__/${encodeURIComponent(remoteUrl)}`;
-}
-
-function resolveRemoteModuleSpecifier(specifier, remoteUrl) {
-  if (
-    specifier.startsWith('/__virtual__/') ||
-    specifier.startsWith('chrome-extension://') ||
-    specifier.startsWith('data:') ||
-    specifier.startsWith('blob:')
-  ) {
-    return null;
-  }
-  if (specifier.startsWith('/')) {
-    return new URL(specifier, remoteUrl).href;
-  }
-  if (specifier.startsWith('./') || specifier.startsWith('../')) {
-    return new URL(specifier, remoteUrl).href;
-  }
-  if (specifier.startsWith('https://esm.sh/')) {
-    return specifier;
-  }
-  return null;
-}
-
 function rewriteSpecifier(specifier, importMap) {
   return importMap[specifier] || specifier;
 }
@@ -102,37 +77,6 @@ function rewriteBareSpecifiers(code, importMap) {
   rewritten = rewritten.replace(
     /\bimport\s*\(\s*(['"])((?!\/|\.\/|\.\.\/|https?:\/\/)[^'"]+)\1\s*\)/g,
     (match, quote, specifier) => `import(${quote}${rewriteSpecifier(specifier, importMap)}${quote})`
-  );
-
-  return rewritten;
-}
-
-function rewriteRemoteModuleImports(code, port, remoteUrl) {
-  const rewriteResolved = (specifier) => {
-    const resolved = resolveRemoteModuleSpecifier(specifier, remoteUrl);
-    return resolved ? toProxyModulePath(port, resolved) : specifier;
-  };
-
-  let rewritten = code;
-
-  rewritten = rewritten.replace(
-    /\b(from)\s*(['"])([^'"]+)\2/g,
-    (match, keyword, quote, specifier) => `${keyword} ${quote}${rewriteResolved(specifier)}${quote}`
-  );
-
-  rewritten = rewritten.replace(
-    /\b(import)\s*(['"])([^'"]+)\2/g,
-    (match, keyword, quote, specifier) => `${keyword} ${quote}${rewriteResolved(specifier)}${quote}`
-  );
-
-  rewritten = rewritten.replace(
-    /\bimport\s*\(\s*(['"])([^'"]+)\1\s*\)/g,
-    (match, quote, specifier) => `import(${quote}${rewriteResolved(specifier)}${quote})`
-  );
-
-  rewritten = rewritten.replace(
-    /((?:import|export)[^'"\n\r]*?\bfrom)\s*(['"])([^'"]+)\2/g,
-    (match, prefix, quote, specifier) => `${prefix} ${quote}${rewriteResolved(specifier)}${quote}`
   );
 
   return rewritten;
@@ -486,7 +430,10 @@ self.addEventListener('fetch', (event) => {
 async function handleVirtualRequest(request, port, path) {
   try {
     if (path.startsWith('/__npm_proxy__/')) {
-      return handleProxyModuleRequest(port, path);
+      return new Response('Remote module loading is disabled by Manifest V3 policy.', {
+        status: 410,
+        headers: { 'Content-Type': 'text/plain' },
+      });
     }
 
     // Build headers object
@@ -580,42 +527,6 @@ async function handleVirtualRequest(request, port, path) {
     return new Response(`Service Worker Error: ${error.message}`, {
       status: 500,
       statusText: 'Internal Server Error',
-      headers: { 'Content-Type': 'text/plain' },
-    });
-  }
-}
-
-async function handleProxyModuleRequest(port, path) {
-  try {
-    const encodedUrl = path.slice('/__npm_proxy__/'.length).split('?')[0];
-    const remoteUrl = decodeURIComponent(encodedUrl);
-    const remoteResponse = await fetch(remoteUrl);
-
-    if (!remoteResponse.ok) {
-      return new Response(`Module proxy fetch failed: ${remoteResponse.status} ${remoteResponse.statusText}`, {
-        status: remoteResponse.status,
-        headers: { 'Content-Type': 'text/plain' },
-      });
-    }
-
-    const contentType = remoteResponse.headers.get('content-type') || 'application/javascript; charset=utf-8';
-    const text = await remoteResponse.text();
-    const rewritten = rewriteRemoteModuleImports(text, port, remoteUrl);
-
-    return new Response(rewritten, {
-      status: remoteResponse.status,
-      statusText: remoteResponse.statusText,
-      headers: {
-        'Content-Type': contentType,
-        'Cache-Control': 'no-cache',
-        'Cross-Origin-Embedder-Policy': 'credentialless',
-        'Cross-Origin-Opener-Policy': 'same-origin',
-        'Cross-Origin-Resource-Policy': 'cross-origin',
-      },
-    });
-  } catch (error) {
-    return new Response(`Module proxy error: ${error.message}`, {
-      status: 500,
       headers: { 'Content-Type': 'text/plain' },
     });
   }

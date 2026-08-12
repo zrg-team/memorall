@@ -1,10 +1,10 @@
 import React, { useRef, useState } from "react";
 import {
-	ChevronLeft,
-	ChevronsRight,
 	MessageSquare,
 	MessageSquarePlus,
-	RefreshCw,
+	PanelLeftClose,
+	PanelLeftOpen,
+	X,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useChatStore } from "@/main/stores/chat";
@@ -22,9 +22,25 @@ interface ChatSidePanelProps {
 	onClose?: () => void;
 }
 
+const COLLAPSED_STORAGE_KEY = "memorall.chatSidebar.collapsed";
+const WIDTH_STORAGE_KEY = "memorall.chatSidebar.width";
+
+const readStoredCollapsed = (fallback: boolean): boolean => {
+	if (typeof window === "undefined") return fallback;
+	const stored = window.localStorage.getItem(COLLAPSED_STORAGE_KEY);
+	return stored === null ? fallback : stored === "true";
+};
+
+const readStoredWidth = (): number => {
+	if (typeof window === "undefined") return 288;
+	const stored = Number(window.localStorage.getItem(WIDTH_STORAGE_KEY));
+	return Number.isFinite(stored) && stored >= 240 && stored <= 480
+		? stored
+		: 288;
+};
+
 export const ChatSidePanel: React.FC<ChatSidePanelProps> = ({
-	onShowConversationGroup = () => undefined,
-	defaultCollapsed = true,
+	defaultCollapsed = false,
 	allowCollapse = true,
 	allowResize = true,
 	showCollapsedToggle = true,
@@ -34,13 +50,15 @@ export const ChatSidePanel: React.FC<ChatSidePanelProps> = ({
 	const currentConversation = useChatStore(
 		(state) => state.currentConversation,
 	);
-	const loadConversations = useChatStore((state) => state.loadConversations);
 	const createNewConversation = useChatStore(
 		(state) => state.createNewConversation,
 	);
-	const { t } = useTranslation();
-	const [collapsed, setCollapsed] = useState(defaultCollapsed);
-	const [width, setWidth] = useState(320);
+	const loadConversations = useChatStore((state) => state.loadConversations);
+	const { t } = useTranslation("chat");
+	const [collapsed, setCollapsed] = useState(() =>
+		allowCollapse ? readStoredCollapsed(defaultCollapsed) : false,
+	);
+	const [width, setWidth] = useState(readStoredWidth);
 	const isDraggingRef = useRef(false);
 	const dragStartXRef = useRef(0);
 	const dragStartWidthRef = useRef(0);
@@ -49,29 +67,33 @@ export const ChatSidePanel: React.FC<ChatSidePanelProps> = ({
 		currentConversation ? 1 : 0,
 	);
 
-	const handleRefresh = async () => {
-		await loadConversations();
+	const updateCollapsed = (nextCollapsed: boolean) => {
+		setCollapsed(nextCollapsed);
+		window.localStorage.setItem(COLLAPSED_STORAGE_KEY, String(nextCollapsed));
+	};
+
+	const updateWidth = (nextWidth: number) => {
+		const constrained = Math.max(240, Math.min(480, nextWidth));
+		setWidth(constrained);
+		window.localStorage.setItem(WIDTH_STORAGE_KEY, String(constrained));
 	};
 
 	const handleNewConversation = async () => {
-		await createNewConversation("Main Chat");
+		await createNewConversation();
 		await loadConversations();
 	};
 
-	const handleResizeMouseDown = (e: React.MouseEvent) => {
-		e.preventDefault();
+	const handleResizeMouseDown = (event: React.MouseEvent) => {
+		event.preventDefault();
 		isDraggingRef.current = true;
-		dragStartXRef.current = e.clientX;
+		dragStartXRef.current = event.clientX;
 		dragStartWidthRef.current = width;
 
-		const onMouseMove = (ev: MouseEvent) => {
+		const onMouseMove = (moveEvent: MouseEvent) => {
 			if (!isDraggingRef.current) return;
-			const delta = ev.clientX - dragStartXRef.current;
-			const next = Math.max(
-				200,
-				Math.min(600, dragStartWidthRef.current + delta),
+			updateWidth(
+				dragStartWidthRef.current + moveEvent.clientX - dragStartXRef.current,
 			);
-			setWidth(next);
 		};
 
 		const onMouseUp = () => {
@@ -85,8 +107,8 @@ export const ChatSidePanel: React.FC<ChatSidePanelProps> = ({
 	};
 
 	return (
-		<div
-			className="relative z-10 h-full min-h-0 flex-shrink-0 transition-[width] duration-300 ease-out"
+		<aside
+			className="relative z-10 h-full min-h-0 flex-shrink-0 transition-[width] duration-200 ease-out"
 			style={
 				allowCollapse && collapsed
 					? { width: 56 }
@@ -94,107 +116,114 @@ export const ChatSidePanel: React.FC<ChatSidePanelProps> = ({
 						? { width, maxWidth: "100%" }
 						: { width: "100%" }
 			}
+			aria-label={t("sidebar.label")}
 		>
 			<div
 				className={cn(
-					"flex h-full min-h-0 flex-col border-r",
-					collapsed ? "bg-background" : "bg-card",
+					"flex h-full min-h-0 flex-col border-r border-border/70",
+					collapsed ? "bg-background" : "bg-card/80 backdrop-blur-xl",
 				)}
 			>
-				<div
+				<header
 					className={cn(
-						"flex-shrink-0",
-						collapsed
-							? "flex h-12 w-14 items-center justify-center p-0"
-							: "flex items-center gap-2 border-b bg-muted/20 px-2 py-2",
+						"flex h-[58px] flex-shrink-0 items-center border-b border-border/70",
+						collapsed ? "justify-center px-0" : "gap-2 px-3",
 					)}
 				>
-					{allowCollapse && collapsed && showCollapsedToggle ? (
-						<Button
-							type="button"
-							variant="ghost"
-							size="icon"
-							onClick={() => setCollapsed(false)}
-							className="h-8 w-8 text-muted-foreground hover:bg-muted hover:text-foreground"
-							title={t("sandboxPanel.expand")}
-							aria-label={t("sandboxPanel.expand")}
-						>
-							<ChevronsRight size={16} />
-						</Button>
-					) : allowCollapse && collapsed ? (
-						<div className="h-8 w-8" />
+					{allowCollapse && collapsed ? (
+						showCollapsedToggle ? (
+							<Button
+								type="button"
+								variant="ghost"
+								size="icon"
+								onClick={() => updateCollapsed(false)}
+								className="h-10 w-10 text-muted-foreground hover:bg-muted hover:text-foreground"
+								aria-label={t("sidebar.expand")}
+							>
+								<PanelLeftOpen size={17} />
+							</Button>
+						) : (
+							<div className="h-10 w-10" />
+						)
 					) : (
 						<>
-							<div className="min-w-0 flex items-center gap-2 text-muted-foreground">
-								<span className="inline-flex h-8 w-8 shrink-0 items-center justify-center">
-									<MessageSquare size={16} />
-								</span>
-								<span className="truncate text-xs font-semibold text-foreground">
-									Chats
-								</span>
+							<span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+								<MessageSquare size={17} />
+							</span>
+							<div className="min-w-0 flex-1">
+								<div className="truncate text-sm font-semibold text-foreground">
+									{t("sidebar.title")}
+								</div>
+								<div className="text-[11px] text-muted-foreground">
+									{t("sidebar.count", { count: conversationCount })}
+								</div>
 							</div>
-							<div className="ml-auto flex items-center gap-1">
-								<button
+							{allowCollapse ? (
+								<Button
 									type="button"
-									title={t("sandboxPanel.refresh")}
-									onClick={() => void handleRefresh()}
-									className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+									variant="ghost"
+									size="icon"
+									onClick={() => updateCollapsed(true)}
+									className="h-9 w-9 text-muted-foreground hover:bg-muted hover:text-foreground"
+									aria-label={t("sidebar.collapse")}
 								>
-									<RefreshCw size={16} />
-								</button>
-								{allowCollapse ? (
-									<button
-										type="button"
-										onClick={() => setCollapsed(true)}
-										className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-										title={t("sandboxPanel.collapse")}
-										aria-label={t("sandboxPanel.collapse")}
-									>
-										<ChevronLeft size={16} />
-									</button>
-								) : onClose ? (
-									<button
-										type="button"
-										onClick={onClose}
-										className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-										title="Close"
-										aria-label="Close chat side panel"
-									>
-										<ChevronLeft size={16} />
-									</button>
-								) : null}
-							</div>
+									<PanelLeftClose size={17} />
+								</Button>
+							) : onClose ? (
+								<Button
+									type="button"
+									variant="ghost"
+									size="icon"
+									onClick={onClose}
+									className="h-9 w-9 text-muted-foreground hover:bg-muted hover:text-foreground"
+									aria-label={t("sidebar.close")}
+								>
+									<X size={17} />
+								</Button>
+							) : null}
 						</>
 					)}
-				</div>
+				</header>
 
 				{allowCollapse && collapsed ? (
 					<div className="flex w-14 flex-1 flex-col items-center gap-1 px-0 py-2">
 						<CollapsedRailItem
 							icon={<MessageSquare size={17} />}
-							label="Conversations"
+							label={t("sidebar.expand")}
 							count={conversationCount}
 							active
-							onClick={() => setCollapsed(false)}
+							onClick={() => updateCollapsed(false)}
 						/>
 						<CollapsedRailItem
-							icon={<MessageSquarePlus size={16} />}
-							label="New chat"
+							icon={<MessageSquarePlus size={17} />}
+							label={t("sidebar.newChat")}
 							onClick={() => void handleNewConversation()}
 						/>
 					</div>
 				) : (
-					<div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-2">
-						<ConversationListSection onShowGroup={onShowConversationGroup} />
+					<div className="flex min-h-0 flex-1 flex-col p-2">
+						<ConversationListSection />
 					</div>
 				)}
 			</div>
-			{allowResize && !collapsed && (
+
+			{allowResize && !collapsed ? (
 				<div
+					role="separator"
+					aria-label={t("sidebar.resize")}
+					aria-orientation="vertical"
+					aria-valuemin={240}
+					aria-valuemax={480}
+					aria-valuenow={width}
+					tabIndex={0}
 					onMouseDown={handleResizeMouseDown}
-					className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-primary/40 transition-colors"
+					onKeyDown={(event) => {
+						if (event.key === "ArrowLeft") updateWidth(width - 16);
+						if (event.key === "ArrowRight") updateWidth(width + 16);
+					}}
+					className="absolute bottom-0 right-0 top-0 w-1 cursor-col-resize bg-transparent transition-colors hover:bg-primary/40 focus:bg-primary/40 focus:outline-none"
 				/>
-			)}
-		</div>
+			) : null}
+		</aside>
 	);
 };

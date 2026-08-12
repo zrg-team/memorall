@@ -74,6 +74,7 @@ exports[`requested service module coverage > imports requested service trees 1`]
   "../database/migrations/011_add_cron_jobs.ts",
   "../database/migrations/012_rename_knowledge_rag_to_foundation.ts",
   "../database/migrations/013_add_message_parts.ts",
+  "../database/migrations/014_add_message_history_search_index.ts",
   "../database/migrations/index.ts",
   "../database/schema.ts",
   "../database/types.ts",

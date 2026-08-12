@@ -1,15 +1,11 @@
-// HyperFrames GitHub Pages runner.
+// HyperFrames Manifest V3 sandbox runner.
 //
 // Receives a composition via postMessage from the Memorall extension and
-// renders it in this page's own DOM — no extension CSP applies here.
-//
-// Script src URLs are chrome-extension:// paths (rewritten by composition-
-// preprocessor.ts). This page converts them back to the matching CDN URLs
-// before loading, so GSAP and the HyperFrames runtime load from jsDelivr.
+// renders it in an isolated manifest sandbox using only packaged runtimes.
 //
 // LOAD ORDER (guaranteed by renderComposition):
 //   1. Tailwind browser compiler, with preflight disabled
-//   2. GSAP + shader-transitions + Lucide + D3 + Three — external CDN scripts
+//   2. GSAP + shader-transitions + Lucide + D3 + Three — packaged scripts
 //   3. Lucide icon replacement                         — <i data-lucide="...">
 //   4. inline animation script                         — sets window.__timelines["main"] = tl
 //   5. hyperframe.runtime                              — go() reads __timelines on load
@@ -41,25 +37,25 @@ const EXPORT_SIZE_PRESETS = {
 	"1440p": 1440,
 	"2160p": 2160,
 };
-const TAILWIND_BROWSER_URL = "https://cdn.tailwindcss.com";
+const TAILWIND_BROWSER_URL = "/vendors/artifacts/tailwind.js";
 const MEDIABUNNY_ESM_URL =
-	"https://cdn.jsdelivr.net/npm/mediabunny@1.45.2/+esm";
+	"/vendors/artifacts/mediabunny.min.mjs";
 const LUCIDE_UMD_URL =
-	"https://cdn.jsdelivr.net/npm/lucide@0.542.0/dist/umd/lucide.js";
-const D3_UMD_URL = "https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js";
+	"/vendors/artifacts/lucide.min.js";
+const D3_UMD_URL = "/vendors/artifacts/d3.min.js";
 const THREE_GLOBAL_URL =
-	"https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.min.js";
-const GSAP_URL = "https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js";
+	"/vendors/artifacts/three.min.js";
+const GSAP_URL = "/vendors/hyperframes/gsap.min.js";
 const HYPERFRAMES_RUNTIME_URL =
-	"https://cdn.jsdelivr.net/npm/@hyperframes/core@0.6.33/dist/hyperframe.runtime.iife.js";
+	"/vendors/hyperframes/hyperframe.runtime.iife.js";
 const HYPERFRAMES_SHADER_URL =
-	"https://cdn.jsdelivr.net/npm/@hyperframes/shader-transitions@0.6.33/dist/index.global.js";
+	"/vendors/hyperframes/shader-transitions.global.js";
 const HTML2CANVAS_URL =
-	"https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js";
+	"/vendors/hyperframes/html2canvas.min.js";
 
 // ── CDN fallback map for extension-local script URLs ─────────────────────────
 // Mirrors the CDN_TO_LOCAL map in composition-preprocessor.ts (reversed).
-const CDN_MAP = {
+const PACKAGED_RUNTIME_MAP = {
 	"gsap.min.js": GSAP_URL,
 	"hyperframe.runtime.iife.js": HYPERFRAMES_RUNTIME_URL,
 	"shader-transitions.global.js": HYPERFRAMES_SHADER_URL,
@@ -76,8 +72,9 @@ function resolveSrc(src) {
 	if (!src) return null;
 	if (src.startsWith("chrome-extension://")) {
 		const filename = src.split("/").pop()?.split("?")[0] ?? "";
-		return CDN_MAP[filename] ?? null;
+		return PACKAGED_RUNTIME_MAP[filename] ?? null;
 	}
+	if (/^https?:\/\//i.test(src)) return null;
 	return src;
 }
 

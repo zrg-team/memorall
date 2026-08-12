@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
 	AlertTriangle,
@@ -23,7 +23,15 @@ export const AssistantToolTimelinePart: React.FC<{
 	part: ComplexContentPartTool;
 	isLast: boolean;
 	connectsToPrevious?: boolean;
-}> = ({ part, isLast, connectsToPrevious = false }) => {
+	forceOpen?: boolean;
+	revealKey?: number;
+}> = ({
+	part,
+	isLast,
+	connectsToPrevious = false,
+	forceOpen = false,
+	revealKey = 0,
+}) => {
 	const { t } = useTranslation("chat");
 	const [isOpen, setIsOpen] = useState(false);
 	const actionName = part.name;
@@ -31,6 +39,30 @@ export const AssistantToolTimelinePart: React.FC<{
 	const Icon = getActionIcon(actionName);
 	const isRunning = part.state === "running";
 	const isError = part.state === "error";
+	const [nowMs, setNowMs] = useState(() => Date.now());
+	const startedAt =
+		typeof part.metadata?.startedAt === "string"
+			? new Date(part.metadata.startedAt).getTime()
+			: undefined;
+	const durationMs = isRunning
+		? startedAt
+			? Math.max(0, nowMs - startedAt)
+			: undefined
+		: typeof part.metadata?.durationMs === "number"
+			? part.metadata.durationMs
+			: undefined;
+	const effectiveOpen = forceOpen || isOpen;
+
+	useEffect(() => {
+		if (forceOpen || revealKey > 0) setIsOpen(true);
+	}, [forceOpen, revealKey]);
+
+	useEffect(() => {
+		if (!isRunning || !startedAt) return;
+		setNowMs(Date.now());
+		const timer = window.setInterval(() => setNowMs(Date.now()), 1_000);
+		return () => window.clearInterval(timer);
+	}, [isRunning, startedAt]);
 	const statusLabel = isRunning
 		? t("toolStatus.running")
 		: isError
@@ -63,13 +95,18 @@ export const AssistantToolTimelinePart: React.FC<{
 				/>
 			</div>
 			<div className="min-w-0">
-				<Collapsible open={isOpen} onOpenChange={setIsOpen}>
+				<Collapsible
+					open={effectiveOpen}
+					onOpenChange={(open) => {
+						if (!forceOpen) setIsOpen(open);
+					}}
+				>
 					<CollapsibleTrigger asChild>
 						<button
 							type="button"
 							className={cn(
 								"group/tool flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left transition-[background-color,box-shadow,transform] duration-200 ease-out hover:bg-muted/20 active:scale-[0.995]",
-								isOpen && "bg-muted/35 shadow-sm",
+								effectiveOpen && "bg-muted/35 shadow-sm",
 							)}
 						>
 							<span
@@ -96,11 +133,14 @@ export const AssistantToolTimelinePart: React.FC<{
 									<CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
 								)}
 								{statusLabel}
+								{durationMs !== undefined
+									? ` · ${durationMs < 1_000 ? `${Math.round(durationMs)}ms` : `${(durationMs / 1_000).toFixed(1)}s`}`
+									: ""}
 							</span>
 							<ChevronDown
 								className={cn(
 									"h-4 w-4 shrink-0 text-muted-foreground transition-[transform,color] duration-200 ease-out",
-									isOpen && "rotate-180 text-foreground",
+									effectiveOpen && "rotate-180 text-foreground",
 								)}
 							/>
 						</button>
@@ -113,7 +153,7 @@ export const AssistantToolTimelinePart: React.FC<{
 						)}
 					>
 						<div className="mt-2 min-w-0 overflow-hidden rounded-lg border border-border/60 bg-background/80 p-2 shadow-sm sm:p-3">
-							<ToolActionDetails item={actionItem} isOpen={isOpen} />
+							<ToolActionDetails item={actionItem} isOpen={effectiveOpen} />
 						</div>
 					</CollapsibleContent>
 				</Collapsible>

@@ -30,8 +30,8 @@ vi.mock("../AssistantWorkflow", () => ({
 	isWorkflowEvidencePart: () => false,
 }));
 
-vi.mock("../AssistantToolTimelinePart", () => ({
-	AssistantToolTimelinePart: () => <div data-testid="tool" />,
+vi.mock("../AssistantToolTimeline", () => ({
+	AssistantToolTimeline: () => <div data-testid="tool" />,
 }));
 
 describe("AssistantContentFlow", () => {

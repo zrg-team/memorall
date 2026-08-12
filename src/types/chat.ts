@@ -51,6 +51,29 @@ export interface ConversationContext {
 	id: string;
 	inProgressMessage: { id: string };
 	agentFlowName?: string;
+	historyBoundary?: {
+		separatorId: string;
+		createdAt: string;
+	};
+}
+
+export type ToolExecutionStatus =
+	| "running"
+	| "completed"
+	| "failed"
+	| "cancelled";
+
+export interface ToolExecutionRecord {
+	id: string;
+	name: string;
+	status: ToolExecutionStatus;
+	startedAt: string;
+	endedAt?: string;
+	durationMs?: number;
+	inputPreview?: string;
+	outputPreview?: string;
+	error?: string;
+	truncated?: boolean;
 }
 
 export type AssistantToolPartState = "running" | "complete" | "error";

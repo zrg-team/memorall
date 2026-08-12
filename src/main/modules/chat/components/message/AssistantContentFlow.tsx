@@ -8,7 +8,7 @@ import {
 	AssistantWorkflowSummary,
 	isWorkflowEvidencePart,
 } from "./AssistantWorkflow";
-import { AssistantToolTimelinePart } from "./AssistantToolTimelinePart";
+import { AssistantToolTimeline } from "./AssistantToolTimeline";
 import type { MessageActionRequest } from "../artifacts/ArtifactActionsMenu";
 import { MessageContentWithArtifacts } from "./MessageContentWithArtifacts";
 import { assignAssistantPartKeys } from "./stable-part-keys";
@@ -26,103 +26,85 @@ export const isAssistantContentPart = (
 	"type" in part &&
 	(part.type === "text" || part.type === "tool" || part.type === "execution");
 
-const isVisibleTimelinePart = (
-	part: AssistantContentPart,
-	index: number,
-	latestWorkflowIndex: number,
-): boolean => {
-	if (part.type === "tool") return !isWorkflowEvidencePart(part);
-	if (part.type === "execution") {
-		return part.state !== "complete" && index === latestWorkflowIndex;
-	}
-	return false;
-};
-
-export const AssistantContentFlow: React.FC<{
+interface AssistantContentFlowProps {
 	parts: AssistantContentPart[];
 	isStreaming: boolean;
 	suppressArtifactPreviews?: boolean;
 	onMessageAction?: (action: MessageActionRequest) => void | Promise<void>;
-}> = ({
-	parts,
-	isStreaming,
-	suppressArtifactPreviews = false,
-	onMessageAction,
-}) => {
-	// Some flows re-emit the same assistant text (and its artifact tags) across
-	// multiple content parts (e.g. one per agent iteration). Share a dedupe set
-	// across all text parts so a single artifact only renders once.
-	const seenArtifactKeys = useMemo(() => new Set<string>(), [parts]);
+}
 
-	const latestWorkflowIndex = parts.findLastIndex(
-		(part) => part.type === "execution",
-	);
-	const completedWorkflowParts = parts.filter(
-		(part): part is ComplexContentPartExecution =>
-			part.type === "execution" && part.state === "complete",
-	);
-	const workflowEvidenceParts = parts.filter(
-		(part): part is ComplexContentPartTool =>
-			part.type === "tool" && isWorkflowEvidencePart(part),
-	);
+export const AssistantContentFlow: React.FC<AssistantContentFlowProps> =
+	React.memo(
+		({
+			parts,
+			isStreaming,
+			suppressArtifactPreviews = false,
+			onMessageAction,
+		}) => {
+			// Some flows re-emit the same assistant text (and its artifact tags) across
+			// multiple content parts (e.g. one per agent iteration). Share a dedupe set
+			// across all text parts so a single artifact only renders once.
+			const seenArtifactKeys = useMemo(() => new Set<string>(), [parts]);
 
-	return (
-		<div className="space-y-3">
-			<AssistantWorkflowSummary
-				parts={completedWorkflowParts}
-				evidenceParts={workflowEvidenceParts}
-			/>
-			{assignAssistantPartKeys(parts).map(({ part, index, key }) => {
-				if (part.type === "text") {
-					if (!part.text.trim()) return null;
-					return (
-						<MessageContentWithArtifacts
-							key={key}
-							content={part.text}
-							isStreaming={isStreaming}
-							suppressArtifactPreviews={suppressArtifactPreviews}
-							onMessageAction={onMessageAction}
-							seenArtifactKeys={seenArtifactKeys}
-						/>
-					);
-				}
+			const latestWorkflowIndex = parts.findLastIndex(
+				(part) => part.type === "execution",
+			);
+			const completedWorkflowParts = parts.filter(
+				(part): part is ComplexContentPartExecution =>
+					part.type === "execution" && part.state === "complete",
+			);
+			const workflowEvidenceParts = parts.filter(
+				(part): part is ComplexContentPartTool =>
+					part.type === "tool" && isWorkflowEvidencePart(part),
+			);
+			const toolTimelineParts = parts.filter(
+				(part): part is ComplexContentPartTool =>
+					part.type === "tool" && !isWorkflowEvidencePart(part),
+			);
 
-				if (part.type === "execution") {
-					if (part.state === "complete") return null;
-					if (index !== latestWorkflowIndex) return null;
-					return (
-						<AssistantWorkflowPart key={`workflow-${part.id}`} part={part} />
-					);
-				}
-				if (isWorkflowEvidencePart(part)) return null;
-
-				return (
-					<AssistantToolTimelinePart
-						key={key}
-						part={part}
-						connectsToPrevious={parts
-							.slice(0, index)
-							.some((previous, previousIndex) =>
-								isVisibleTimelinePart(
-									previous,
-									previousIndex,
-									latestWorkflowIndex,
-								),
-							)}
-						isLast={
-							!parts
-								.slice(index + 1)
-								.some((next, nextOffset) =>
-									isVisibleTimelinePart(
-										next,
-										index + nextOffset + 1,
-										latestWorkflowIndex,
-									),
-								)
-						}
+			return (
+				<div className="space-y-3">
+					<AssistantWorkflowSummary
+						parts={completedWorkflowParts}
+						evidenceParts={workflowEvidenceParts}
 					/>
-				);
-			})}
-		</div>
+					{toolTimelineParts.length > 0 ? (
+						<AssistantToolTimeline
+							parts={toolTimelineParts}
+							isStreaming={isStreaming}
+						/>
+					) : null}
+					{assignAssistantPartKeys(parts).map(({ part, index, key }) => {
+						if (part.type === "text") {
+							if (!part.text.trim()) return null;
+							return (
+								<MessageContentWithArtifacts
+									key={key}
+									content={part.text}
+									isStreaming={isStreaming}
+									suppressArtifactPreviews={suppressArtifactPreviews}
+									onMessageAction={onMessageAction}
+									seenArtifactKeys={seenArtifactKeys}
+								/>
+							);
+						}
+
+						if (part.type === "execution") {
+							if (part.state === "complete") return null;
+							if (index !== latestWorkflowIndex) return null;
+							return (
+								<AssistantWorkflowPart
+									key={`workflow-${part.id}`}
+									part={part}
+								/>
+							);
+						}
+						if (isWorkflowEvidencePart(part)) return null;
+						return null;
+					})}
+				</div>
+			);
+		},
 	);
-};
+
+AssistantContentFlow.displayName = "AssistantContentFlow";

@@ -4,6 +4,10 @@ import {
 	useTriggerAction,
 } from "@openuidev/react-lang";
 import { useTranslation } from "react-i18next";
+import {
+	ProgressiveCollectionControl,
+	useProgressiveItems,
+} from "../progressive-collection";
 import { z } from "zod";
 import { Badge } from "@/main/components/ui/badge";
 import {
@@ -33,7 +37,9 @@ export const KnowledgeCard = defineComponent({
 		facts: z.array(z.string()).default([]),
 		summary: z.string().optional(),
 	}),
-	component: ({ props }) => (
+	component: ({ props }) => {
+		const facts = useProgressiveItems(props.facts);
+		return (
 		<Card className="rounded-lg border bg-card/95 shadow-sm">
 			<CardHeader className="flex-row items-center gap-2 space-y-0 p-4 pb-2">
 				<CardTitle className="text-base leading-6 tracking-normal">
@@ -49,7 +55,7 @@ export const KnowledgeCard = defineComponent({
 					<>
 						<Separator />
 						<ul className="space-y-1.5">
-							{props.facts.map((fact, index) => (
+							{facts.items.map((fact, index) => (
 								<li key={index} className="flex gap-2 text-sm leading-6">
 									<span className="text-muted-foreground">-</span>
 									<span>{fact}</span>
@@ -59,8 +65,13 @@ export const KnowledgeCard = defineComponent({
 					</>
 				) : null}
 			</CardContent>
+			<ProgressiveCollectionControl
+				hiddenCount={facts.hiddenCount}
+				onRenderAll={facts.renderAll}
+			/>
 		</Card>
-	),
+		);
+	},
 });
 
 const factSchema = z.object({
@@ -77,7 +88,9 @@ export const FactList = defineComponent({
 		title: z.string().optional(),
 		facts: z.array(factSchema),
 	}),
-	component: ({ props }) => (
+	component: ({ props }) => {
+		const facts = useProgressiveItems(props.facts);
+		return (
 		<Card className="rounded-lg border bg-card/95 shadow-sm">
 			{props.title ? (
 				<CardHeader className="p-4 pb-2">
@@ -87,7 +100,7 @@ export const FactList = defineComponent({
 				</CardHeader>
 			) : null}
 			<CardContent className="space-y-2 p-4 pt-2">
-				{props.facts.map((fact, index) => (
+				{facts.items.map((fact, index) => (
 					<div
 						key={index}
 						className="rounded-md border bg-muted/25 p-3 text-sm"
@@ -104,8 +117,13 @@ export const FactList = defineComponent({
 					</div>
 				))}
 			</CardContent>
+			<ProgressiveCollectionControl
+				hiddenCount={facts.hiddenCount}
+				onRenderAll={facts.renderAll}
+			/>
 		</Card>
-	),
+		);
+	},
 });
 
 const timelineEventSchema = z.object({
@@ -121,7 +139,9 @@ export const Timeline = defineComponent({
 		title: z.string().optional(),
 		events: z.array(timelineEventSchema),
 	}),
-	component: ({ props }) => (
+	component: ({ props }) => {
+		const events = useProgressiveItems(props.events);
+		return (
 		<Card className="rounded-lg border bg-card/95 shadow-sm">
 			{props.title ? (
 				<CardHeader className="p-4 pb-2">
@@ -131,7 +151,7 @@ export const Timeline = defineComponent({
 				</CardHeader>
 			) : null}
 			<CardContent className="space-y-4 p-4 pt-2">
-				{props.events.map((event, index) => (
+				{events.items.map((event, index) => (
 					<div key={index} className="grid grid-cols-[7rem_1fr] gap-3 text-sm">
 						<div className="text-muted-foreground">{event.date}</div>
 						<div className="border-l pl-3">
@@ -145,8 +165,13 @@ export const Timeline = defineComponent({
 					</div>
 				))}
 			</CardContent>
+			<ProgressiveCollectionControl
+				hiddenCount={events.hiddenCount}
+				onRenderAll={events.renderAll}
+			/>
 		</Card>
-	),
+		);
+	},
 });
 
 const entitySchema = z.object({
@@ -163,6 +188,7 @@ export const EntityList = defineComponent({
 	}),
 	component: ({ props }) => {
 		const { t } = useTranslation("common");
+		const entities = useProgressiveItems(props.entities);
 		return (
 			<div className="overflow-hidden rounded-lg border">
 				<Table>
@@ -174,7 +200,7 @@ export const EntityList = defineComponent({
 						</TableRow>
 					</TableHeader>
 					<TableBody>
-						{props.entities.map((entity, index) => (
+						{entities.items.map((entity, index) => (
 							<TableRow key={`${entity.name}-${index}`}>
 								<TableCell className="font-medium">{entity.name}</TableCell>
 								<TableCell>{entity.entityType}</TableCell>
@@ -185,6 +211,10 @@ export const EntityList = defineComponent({
 						))}
 					</TableBody>
 				</Table>
+				<ProgressiveCollectionControl
+					hiddenCount={entities.hiddenCount}
+					onRenderAll={entities.renderAll}
+				/>
 			</div>
 		);
 	},

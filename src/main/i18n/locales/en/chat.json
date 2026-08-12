@@ -24,10 +24,68 @@
 	},
 	"input": {
 		"placeholder": "Type your message...",
+		"messageAgent": "Message {{agent}}...",
 		"send": "Send",
 		"clearTitle": "Clear chat",
 		"clearButton": "New",
-		"attachImage": "Attach image"
+		"attachImage": "Attach files",
+		"attachFile": "Upload from computer",
+		"attachDocument": "Choose from documents"
+	},
+	"sidebar": {
+		"label": "Chat history",
+		"title": "Chats",
+		"count": "{{count}} conversations",
+		"search": "Search chats",
+		"newChat": "New",
+		"newChatTitle": "New chat",
+		"empty": "No conversations yet",
+		"emptyHint": "Start a new chat to see it here.",
+		"noSearchResults": "No matching chats",
+		"tryAnotherSearch": "Try another title or keyword.",
+		"conversationActions": "Conversation actions",
+		"rename": "Rename",
+		"renameInput": "Conversation title",
+		"saveRename": "Save conversation title",
+		"cancelRename": "Cancel rename",
+		"pin": "Pin",
+		"unpin": "Unpin",
+		"pinned": "Pinned",
+		"delete": "Delete",
+		"deleteConfirm": "Delete “{{title}}”? This cannot be undone.",
+		"expand": "Expand chat history",
+		"collapse": "Collapse chat history",
+		"close": "Close chat history",
+		"resize": "Resize chat history",
+		"groups": {
+			"pinned": "Pinned",
+			"today": "Today",
+			"yesterday": "Yesterday",
+			"earlier": "Earlier"
+		}
+	},
+	"header": {
+		"openChats": "Open chat history",
+		"conversationActions": "Conversation actions",
+		"newContext": "Start new context",
+		"expandWidth": "Expand message width",
+		"constrainWidth": "Constrain message width",
+		"clearConversation": "Clear messages",
+		"clearConfirm": "Clear every message in this conversation? This cannot be undone."
+	},
+	"emptyState": {
+		"title": "What can I help you recall?",
+		"description": "Ask about saved knowledge, attach a file, or start with one of these prompts.",
+		"prompts": {
+			"savedKnowledge": "Search my saved knowledge",
+			"summarizeDocument": "Summarize a document",
+			"brainstorm": "Brainstorm from my notes"
+		},
+		"promptText": {
+			"savedKnowledge": "What are the most relevant things I have saved recently?",
+			"summarizeDocument": "Summarize the document I attach and highlight the key decisions.",
+			"brainstorm": "Help me brainstorm ideas using my saved notes and knowledge."
+		}
 	},
 	"mention": {
 		"documents": "Files",
@@ -55,9 +113,9 @@
 		"agentPrompt": "Create an agent for the work you want to solve?"
 	},
 	"history": {
-		"scrollUp": "Scroll up to view history",
-		"showPrevious": "Show previous chats ({{count}})",
-		"hidePrevious": "Hide previous chats"
+		"scrollUp": "Scroll to earlier context",
+		"showPrevious": "Show earlier context ({{count}})",
+		"hidePrevious": "Hide earlier context"
 	},
 	"actions": {
 		"deleteChat": "Delete Chat",
@@ -80,6 +138,13 @@
 	},
 	"messages": {
 		"assistant": "Assistant",
+		"you": "You",
+		"copy": "Copy",
+		"copied": "Copied",
+		"save": "Save",
+		"saved": "Saved",
+		"saveToDocuments": "Save conversation to documents",
+		"responseDetails": "Response details",
 		"thinking": "Thinking...",
 		"thought": "Thought",
 		"error": "Failed to send message",
@@ -137,6 +202,10 @@
 		"running": "Running",
 		"error": "Error",
 		"done": "Done"
+	},
+	"toolTimeline": {
+		"running": "{{count}} agent actions · running",
+		"finished": "{{count}} agent actions · {{duration}}"
 	},
 	"workflow": {
 		"showDetails": "Show run details",

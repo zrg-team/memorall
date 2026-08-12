@@ -1479,76 +1479,12 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 	}
 
 	private async buildRendererImportMap(
-		port: number,
+		_port: number,
 	): Promise<Record<string, string>> {
-		let rendererImportMap: Record<string, string> = {};
-
-		try {
-			const { servers } = await this.request("server.list", undefined);
-			const serverInfo = servers.find((server) => server.port === port);
-			logInfo(
-				`[renderViaIframe] server rootDir=${serverInfo?.rootDir ?? "unknown"} for port=${port}`,
-			);
-			if (!serverInfo?.rootDir) {
-				return rendererImportMap;
-			}
-
-			const pkgPath = `${serverInfo.rootDir.replace(/\/$/, "")}/package.json`;
-			logInfo(`[renderViaIframe] reading package.json from ${pkgPath}`);
-
-			try {
-				const pkgResult = await this.request("fs.readFile", {
-					path: pkgPath,
-				});
-				const pkg = JSON.parse(pkgResult.content) as {
-					dependencies?: Record<string, string>;
-					devDependencies?: Record<string, string>;
-				};
-				const allDeps = { ...pkg.dependencies, ...pkg.devDependencies };
-				const imports: Record<string, string> = {};
-				const virtualPrefix = `/__virtual__/${port}`;
-				const toProxyModule = (url: string) =>
-					`${virtualPrefix}/__npm_proxy__/${encodeURIComponent(url)}`;
-
-				for (const [name, rawVer] of Object.entries(allDeps)) {
-					const ver =
-						String(rawVer)
-							.replace(/^[\^~>=<*\s]+/, "")
-							.split(/\s/)[0] || "latest";
-					imports[name] = toProxyModule(`https://esm.sh/${name}@${ver}?bundle`);
-					if (name === "react") {
-						imports["react/jsx-runtime"] = toProxyModule(
-							`https://esm.sh/react@${ver}/jsx-runtime?bundle`,
-						);
-						imports["react/jsx-dev-runtime"] = toProxyModule(
-							`https://esm.sh/react@${ver}/jsx-dev-runtime?bundle`,
-						);
-					}
-					if (name === "react-dom") {
-						imports["react-dom/client"] = toProxyModule(
-							`https://esm.sh/react-dom@${ver}/client?bundle`,
-						);
-						imports["react-dom/server"] = toProxyModule(
-							`https://esm.sh/react-dom@${ver}/server?bundle`,
-						);
-					}
-				}
-
-				rendererImportMap = imports;
-				logInfo(
-					`[renderViaIframe] import map built for: [${Object.keys(imports).join(", ")}]`,
-				);
-			} catch (fsErr) {
-				logWarn(`[renderViaIframe] could not read ${pkgPath}:`, fsErr);
-			}
-		} catch (listErr) {
-			logWarn(
-				"[renderViaIframe] could not fetch server list for import map:",
-				listErr,
-			);
-		}
-
-		return rendererImportMap;
+		// Manifest V3 forbids downloading executable modules at runtime. Package
+		// installation stays isolated in the local sandbox, but preview rendering
+		// never maps dependencies to a remote module CDN.
+		return {};
 	}
 
 	private async buildRendererPreviewConfig(

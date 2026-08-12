@@ -9,6 +9,7 @@ import type {
 	AttachedDocumentRef,
 	AssistantExecutionPart,
 	MessageParts,
+	ToolExecutionRecord,
 } from "@/types/chat";
 import { logError, logInfo } from "@/utils/logger";
 import { backgroundJob } from "@/services/background-jobs/background-job";
@@ -23,6 +24,11 @@ import {
 } from "@/main/modules/chat/utils/extract-document-text";
 import { cloneMessageParts } from "@/services/chat/message-parts";
 import { isAbortError } from "@/utils/abort";
+import { useFrameCoalescedState } from "./use-frame-coalesced-state";
+import {
+	finishRunningToolExecutions,
+	upsertToolExecution,
+} from "@/services/chat/tool-executions";
 
 export interface InProgressMessage {
 	id: string;
@@ -40,6 +46,7 @@ export interface InProgressMessage {
 		metadata?: Record<string, unknown>;
 	};
 	executions?: AssistantExecutionPart[];
+	toolExecutions?: ToolExecutionRecord[];
 }
 
 const cloneActions = (
@@ -67,6 +74,7 @@ const pickResultMetadata = (
 		"estimatedTokens",
 		"usage",
 		"executions",
+		"toolExecutions",
 	] as const;
 
 	return Object.fromEntries(
@@ -119,8 +127,12 @@ export const useChat = (model: string) => {
 	const [status, setStatus] = useState<ChatStatus>("ready");
 	const [abortController, setAbortController] =
 		useState<AbortController | null>(null);
-	const [inProgressMessage, setInProgressMessage] =
-		useState<InProgressMessage | null>(null);
+	const {
+		value: inProgressMessage,
+		latestRef: inProgressMessageRef,
+		setCoalesced: setInProgressMessage,
+		setImmediate: setInProgressMessageImmediate,
+	} = useFrameCoalescedState<InProgressMessage | null>(null);
 
 	// State selectors - only re-render when specific value changes
 	const messages = useChatStore((state) => state.messages);
@@ -389,7 +401,7 @@ export const useChat = (model: string) => {
 			});
 
 			// Set in-progress message for real-time updates
-			setInProgressMessage({
+			setInProgressMessageImmediate({
 				id: assistantMessage.id,
 				content: "",
 				complexContent: null,
@@ -398,6 +410,9 @@ export const useChat = (model: string) => {
 			});
 
 			// Execute chat via chat service
+			const historySeparator = messageGroups.find(
+				(group) => group.isLatest,
+			)?.previousSeparator;
 			const result = await chatService.chatStream(
 				{
 					messages: sendMessages,
@@ -412,6 +427,14 @@ export const useChat = (model: string) => {
 						id: currentConversation?.id ?? userMessage.conversationId,
 						inProgressMessage: { id: assistantMessage.id },
 						agentFlowName: agentFlowName ?? undefined,
+						...(historySeparator
+							? {
+									historyBoundary: {
+										separatorId: historySeparator.id,
+										createdAt: historySeparator.createdAt.toISOString(),
+									},
+								}
+							: {}),
 					},
 					streamConfig: {
 						minWordsToStream: 5,
@@ -470,6 +493,19 @@ export const useChat = (model: string) => {
 								: null,
 						);
 					},
+					onToolExecution: (execution) => {
+						setInProgressMessage((prev) =>
+							prev
+								? {
+									...prev,
+									toolExecutions: upsertToolExecution(
+										prev.toolExecutions ?? [],
+										execution,
+									),
+								}
+								: null,
+						);
+					},
 					onError: (error) => {
 						logError("Chat streaming error:", error);
 					},
@@ -499,6 +535,10 @@ export const useChat = (model: string) => {
 					metadata: {
 						...pickResultMetadata(result.metadata),
 						...actionMetadata,
+						toolExecutions: finishRunningToolExecutions(
+							inProgressMessageRef.current?.toolExecutions ?? [],
+							"failed",
+						),
 						error: result.errorMetadata ?? {
 							message: errorMessage,
 							rawMessage: result.error || errorMessage,
@@ -507,27 +547,10 @@ export const useChat = (model: string) => {
 						...(agentFlowName && { agentFlowName }),
 					},
 				});
-				setInProgressMessage(null);
+				setInProgressMessageImmediate(null);
 				setStatus("error");
 				return;
 			} else {
-				// Success - update in-progress message with final content before saving
-				// This ensures smooth transition from streaming to final
-				setInProgressMessage((prev) =>
-					prev
-						? {
-								...prev,
-								content: finalContent,
-								complexContent: finalComplexContent,
-								parts: result.parts ?? null,
-								actions: cloneActions(result.actions),
-							}
-						: null,
-				);
-
-				// Small delay to let React render the updated content
-				await new Promise((resolve) => setTimeout(resolve, 150));
-
 				updateMessage(assistantMessage.id, {
 					content: finalContent,
 					complexContent: finalComplexContent,
@@ -542,7 +565,7 @@ export const useChat = (model: string) => {
 			}
 
 			// Clear in-progress message
-			setInProgressMessage(null);
+			setInProgressMessageImmediate(null);
 			setStatus("ready");
 		} catch (error) {
 			// Check if error is due to user aborting the request
@@ -551,7 +574,11 @@ export const useChat = (model: string) => {
 				setStatus("ready");
 
 				// Save any partial content that was streamed before abort
-				if (assistantMessage && currentContent) {
+				if (
+					assistantMessage &&
+					(currentContent ||
+						(inProgressMessageRef.current?.toolExecutions?.length ?? 0) > 0)
+				) {
 					const savedParts = currentParts as MessageParts | null;
 					const hasSavedParts =
 						Array.isArray(savedParts) && savedParts.length > 0;
@@ -562,7 +589,11 @@ export const useChat = (model: string) => {
 							: cloneComplexContent(currentComplexContent),
 						parts: savedParts,
 						metadata: {
-							actions: inProgressMessage?.actions || [],
+							actions: inProgressMessageRef.current?.actions || [],
+							toolExecutions: finishRunningToolExecutions(
+								inProgressMessageRef.current?.toolExecutions ?? [],
+								"cancelled",
+							),
 							...(agentFlowName && { agentFlowName }),
 						},
 					});
@@ -570,7 +601,7 @@ export const useChat = (model: string) => {
 				}
 
 				// Clear in-progress message
-				setInProgressMessage(null);
+				setInProgressMessageImmediate(null);
 				return; // Don't show error message for user-initiated stops
 			}
 
@@ -587,6 +618,10 @@ export const useChat = (model: string) => {
 					parts: currentParts,
 					metadata: {
 						error: errorMetadata,
+						toolExecutions: finishRunningToolExecutions(
+							inProgressMessageRef.current?.toolExecutions ?? [],
+							"failed",
+						),
 						model,
 						...(agentFlowName && { agentFlowName }),
 					},
@@ -604,7 +639,7 @@ export const useChat = (model: string) => {
 			}
 
 			// Clear in-progress message
-			setInProgressMessage(null);
+			setInProgressMessageImmediate(null);
 			setStatus("error");
 		} finally {
 			setLoading(false);

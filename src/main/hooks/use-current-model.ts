@@ -1,7 +1,10 @@
 import { useState, useEffect } from "react";
 import { serviceManager } from "@/services";
 import { logError } from "@/utils/logger";
-import type { ServiceProvider } from "@/services/llm/interfaces/llm-service.interface";
+import type {
+	CurrentModelInfo,
+	ServiceProvider,
+} from "@/services/llm/interfaces/llm-service.interface";
 
 export interface CurrentModel {
 	modelId: string;
@@ -26,7 +29,7 @@ export function useCurrentModel() {
 	/**
 	 * Update current model state based on LLMService model info
 	 */
-	const updateCurrentModel = (modelInfo: CurrentModel | null) => {
+	const updateCurrentModel = (modelInfo: CurrentModelInfo | null) => {
 		if (!modelInfo || !modelInfo.modelId || !modelInfo.provider) {
 			setModel("");
 			setCurrent(null);
@@ -42,6 +45,15 @@ export function useCurrentModel() {
 		const loadInitialModel = async () => {
 			try {
 				const currentModel = await serviceManager.llmService.getCurrentModel();
+				if (
+					currentModel &&
+					!serviceManager.llmService.has(currentModel.serviceName)
+				) {
+					await serviceManager.llmService.clearCurrentModel();
+					updateCurrentModel(null);
+					setIsInitialized(true);
+					return;
+				}
 				updateCurrentModel(currentModel);
 				setIsInitialized(true);
 			} catch (error) {
@@ -60,6 +72,16 @@ export function useCurrentModel() {
 		const unsubscribe = serviceManager.llmService.onCurrentModelChange(
 			(modelInfo) => {
 				setIsInitialized(true);
+				if (
+					modelInfo &&
+					!serviceManager.llmService.has(modelInfo.serviceName)
+				) {
+					void serviceManager.llmService.clearCurrentModel().catch((error) => {
+						logError("Failed to clear unavailable current model:", error);
+					});
+					updateCurrentModel(null);
+					return;
+				}
 				updateCurrentModel(modelInfo);
 			},
 		);
@@ -75,6 +97,14 @@ export function useCurrentModel() {
 		const refreshCurrentModel = async () => {
 			try {
 				const currentModel = await serviceManager.llmService.getCurrentModel();
+				if (
+					currentModel &&
+					!serviceManager.llmService.has(currentModel.serviceName)
+				) {
+					await serviceManager.llmService.clearCurrentModel();
+					updateCurrentModel(null);
+					return;
+				}
 				updateCurrentModel(currentModel);
 			} catch (error) {
 				logError("Failed to get current model:", error);

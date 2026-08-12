@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, gt, lt, ne } from "drizzle-orm";
 import {
 	type Message,
 	type Conversation,
@@ -41,6 +41,8 @@ interface ChatStore {
 	loadConversations: () => Promise<void>;
 	loadMessageGroup: (groupId: string) => Promise<void>;
 	createNewConversation: (title?: string) => Promise<Conversation>;
+	renameConversation: (id: string, title: string) => Promise<void>;
+	toggleConversationPinned: (id: string) => Promise<void>;
 	ensureMainConversation: () => Promise<Conversation>;
 	deleteConversation: (id: string) => Promise<void>;
 	clearMessages: () => void;
@@ -53,6 +55,37 @@ interface ChatStore {
 	// Database sync
 	syncWithDB: () => Promise<void>;
 }
+
+type ConversationMetadata = Record<string, unknown>;
+
+const getConversationMetadata = (
+	conversation: Conversation,
+): ConversationMetadata =>
+	conversation.metadata && typeof conversation.metadata === "object"
+		? (conversation.metadata as ConversationMetadata)
+		: {};
+
+const normalizeMessageSummary = (content: string): string =>
+	content
+		.replace(/<context>[\s\S]*?<\/context>/gi, " ")
+		.replace(/```[\s\S]*?```/g, " ")
+		.replace(/[`*_#[\]()>-]/g, " ")
+		.replace(/\s+/g, " ")
+		.trim();
+
+const truncateSummary = (value: string, maxLength: number): string =>
+	value.length > maxLength
+		? `${value.slice(0, maxLength - 1).trimEnd()}…`
+		: value;
+
+const getAutomaticConversationTitle = (content: string): string =>
+	truncateSummary(normalizeMessageSummary(content), 58) || "New chat";
+
+const isPlaceholderConversationTitle = (title?: string | null): boolean =>
+	!title?.trim() ||
+	["main chat", "new chat", "untitled chat"].includes(
+		title.trim().toLowerCase(),
+	);
 
 const buildLatestGroupId = (previousSeparator: Message | null) =>
 	`group:latest:${previousSeparator?.id ?? "root"}`;
@@ -72,33 +105,25 @@ const createLatestGroup = (
 	isLoading: false,
 });
 
-const createGroupsFromOrderedMessages = (
-	orderedMessages: Message[],
+const createGroupsFromSeparators = (
+	separators: Message[],
+	latestMessages: Message[],
 ): ChatMessageGroup[] => {
-	const groups: ChatMessageGroup[] = [];
 	let previousSeparator: Message | null = null;
-	let currentMessages: Message[] = [];
-
-	for (const message of orderedMessages) {
-		if (message.type === "separator") {
-			groups.push({
-				id: buildCompletedGroupId(message),
-				previousSeparator,
-				separator: message,
-				messages: currentMessages,
-				isLatest: false,
-				isLoaded: true,
-				isLoading: false,
-			});
-			previousSeparator = message;
-			currentMessages = [];
-			continue;
-		}
-
-		currentMessages.push(message);
-	}
-
-	groups.push(createLatestGroup(previousSeparator, currentMessages));
+	const groups = separators.map((separator): ChatMessageGroup => {
+		const group = {
+			id: buildCompletedGroupId(separator),
+			previousSeparator,
+			separator,
+			messages: [],
+			isLatest: false,
+			isLoaded: false,
+			isLoading: false,
+		};
+		previousSeparator = separator;
+		return group;
+	});
+	groups.push(createLatestGroup(previousSeparator, latestMessages));
 	return groups;
 };
 
@@ -125,18 +150,60 @@ const replaceMessageInGroups = (
 	}));
 
 export const useChatStore = create<ChatStore>((set, get) => {
-	const queryConversationMessages = async (conversationId: string) =>
+	const groupLoads = new Map<string, Promise<void>>();
+	let hydrationVersion = 0;
+
+	const queryConversationMessages = async (
+		conversationId: string,
+		previousSeparator?: Message | null,
+		separator?: Message | null,
+	) =>
 		serviceManager.databaseService.use(({ db, schema }) =>
 			db
 				.select()
 				.from(schema.messages)
-				.where(eq(schema.messages.conversationId, conversationId))
+				.where(
+					and(
+						eq(schema.messages.conversationId, conversationId),
+						ne(schema.messages.type, "separator"),
+						...(previousSeparator
+							? [gt(schema.messages.createdAt, previousSeparator.createdAt)]
+							: []),
+						...(separator
+							? [lt(schema.messages.createdAt, separator.createdAt)]
+							: []),
+					),
+				)
+				.orderBy(asc(schema.messages.createdAt)),
+		);
+
+	const queryConversationSeparators = async (conversationId: string) =>
+		serviceManager.databaseService.use(({ db, schema }) =>
+			db
+				.select()
+				.from(schema.messages)
+				.where(
+					and(
+						eq(schema.messages.conversationId, conversationId),
+						eq(schema.messages.type, "separator"),
+					),
+				)
 				.orderBy(asc(schema.messages.createdAt)),
 		);
 
 	const hydrateConversation = async (conversation: Conversation) => {
-		const orderedMessages = await queryConversationMessages(conversation.id);
-		const messageGroups = createGroupsFromOrderedMessages(orderedMessages);
+		const version = ++hydrationVersion;
+		const separators = await queryConversationSeparators(conversation.id);
+		const latestMessages = await queryConversationMessages(
+			conversation.id,
+			separators.at(-1) ?? null,
+			null,
+		);
+		if (version !== hydrationVersion) return conversation;
+		const messageGroups = createGroupsFromSeparators(
+			separators,
+			latestMessages,
+		);
 		const latestGroup =
 			getLatestGroup(messageGroups) ?? createLatestGroup(null);
 
@@ -237,6 +304,56 @@ export const useChatStore = create<ChatStore>((set, get) => {
 				logError("Failed to save message to database:", error);
 			}
 
+			const summary = normalizeMessageSummary(message.content ?? "");
+			const currentConversation = get().currentConversation;
+			if (
+				message.type !== "separator" &&
+				summary &&
+				currentConversation?.id === message.conversationId
+			) {
+				const shouldCreateTitle =
+					message.role === "user" &&
+					isPlaceholderConversationTitle(currentConversation.title);
+				const updatedAt = new Date();
+				const conversationUpdate = {
+					...(shouldCreateTitle
+						? { title: getAutomaticConversationTitle(summary) }
+						: {}),
+					metadata: {
+						...getConversationMetadata(currentConversation),
+						lastMessagePreview: truncateSummary(summary, 96),
+						lastMessageRole: message.role,
+					},
+					updatedAt,
+				};
+
+				try {
+					await serviceManager.databaseService.use(({ db, schema }) =>
+						db
+							.update(schema.conversations)
+							.set(conversationUpdate)
+							.where(eq(schema.conversations.id, currentConversation.id)),
+					);
+
+					set((state) => {
+						const updatedConversation = {
+							...currentConversation,
+							...conversationUpdate,
+						};
+						return {
+							currentConversation: updatedConversation,
+							conversations: state.conversations.map((conversation) =>
+								conversation.id === currentConversation.id
+									? updatedConversation
+									: conversation,
+							),
+						};
+					});
+				} catch (error) {
+					logError("Failed to update conversation summary:", error);
+				}
+			}
+
 			return message;
 		},
 
@@ -325,7 +442,7 @@ export const useChatStore = create<ChatStore>((set, get) => {
 		createNewConversation: async (title?: string) => {
 			try {
 				const newConversation: NewConversation = {
-					title: title || "Main Chat",
+					title: title || "New chat",
 					metadata: {
 						createdAt: new Date().toISOString(),
 					},
@@ -357,6 +474,59 @@ export const useChatStore = create<ChatStore>((set, get) => {
 				logError("Failed to create conversation:", error);
 				throw error;
 			}
+		},
+
+		renameConversation: async (id, title) => {
+			const normalizedTitle = title.trim();
+			if (!normalizedTitle) return;
+			const updatedAt = new Date();
+
+			await serviceManager.databaseService.use(({ db, schema }) =>
+				db
+					.update(schema.conversations)
+					.set({ title: normalizedTitle, updatedAt })
+					.where(eq(schema.conversations.id, id)),
+			);
+
+			set((state) => ({
+				currentConversation:
+					state.currentConversation?.id === id
+						? {
+								...state.currentConversation,
+								title: normalizedTitle,
+								updatedAt,
+							}
+						: state.currentConversation,
+				conversations: state.conversations.map((conversation) =>
+					conversation.id === id
+						? { ...conversation, title: normalizedTitle, updatedAt }
+						: conversation,
+				),
+			}));
+		},
+
+		toggleConversationPinned: async (id) => {
+			const conversation = get().conversations.find((item) => item.id === id);
+			if (!conversation) return;
+			const metadata = getConversationMetadata(conversation);
+			const nextMetadata = { ...metadata, pinned: metadata.pinned !== true };
+
+			await serviceManager.databaseService.use(({ db, schema }) =>
+				db
+					.update(schema.conversations)
+					.set({ metadata: nextMetadata })
+					.where(eq(schema.conversations.id, id)),
+			);
+
+			set((state) => ({
+				currentConversation:
+					state.currentConversation?.id === id
+						? { ...state.currentConversation, metadata: nextMetadata }
+						: state.currentConversation,
+				conversations: state.conversations.map((item) =>
+					item.id === id ? { ...item, metadata: nextMetadata } : item,
+				),
+			}));
 		},
 
 		loadConversations: async () => {
@@ -394,7 +564,7 @@ export const useChatStore = create<ChatStore>((set, get) => {
 					return await hydrateConversation(existing[0]);
 				}
 
-				return await get().createNewConversation("Main Chat");
+				return await get().createNewConversation("New chat");
 			} catch (error) {
 				logError("Failed to ensure main conversation:", error);
 				throw error;
@@ -472,9 +642,64 @@ export const useChatStore = create<ChatStore>((set, get) => {
 			}
 		},
 
-		loadMessageGroup: async () => {},
+		loadMessageGroup: async (groupId) => {
+			const conversation = get().currentConversation;
+			const group = get().messageGroups.find((item) => item.id === groupId);
+			if (!conversation || !group || group.isLatest || group.isLoaded) return;
+
+			const loadKey = `${conversation.id}:${groupId}`;
+			const existing = groupLoads.get(loadKey);
+			if (existing) return existing;
+
+			const load = (async () => {
+				set((state) => ({
+					messageGroups: replaceGroup(state.messageGroups, groupId, (item) => ({
+						...item,
+						isLoading: true,
+					})),
+				}));
+
+				try {
+					const loadedMessages = await queryConversationMessages(
+						conversation.id,
+						group.previousSeparator,
+						group.separator,
+					);
+					if (get().currentConversation?.id !== conversation.id) return;
+					set((state) => ({
+						messageGroups: replaceGroup(
+							state.messageGroups,
+							groupId,
+							(item) => ({
+								...item,
+								messages: loadedMessages,
+								isLoaded: true,
+								isLoading: false,
+							}),
+						),
+					}));
+				} catch (error) {
+					if (get().currentConversation?.id === conversation.id) {
+						set((state) => ({
+							messageGroups: replaceGroup(
+								state.messageGroups,
+								groupId,
+								(item) => ({ ...item, isLoading: false }),
+							),
+						}));
+					}
+					logError("Failed to load message group:", error);
+					throw error;
+				} finally {
+					groupLoads.delete(loadKey);
+				}
+			})();
+			groupLoads.set(loadKey, load);
+			return load;
+		},
 
 		clearMessages: () => {
+			hydrationVersion += 1;
 			set({
 				messages: [],
 				messageGroups: [createLatestGroup(null)],
@@ -483,13 +708,18 @@ export const useChatStore = create<ChatStore>((set, get) => {
 		},
 
 		deleteMessages: async () => {
+			const currentConversation = get().currentConversation;
+			if (!currentConversation) return;
+
 			await serviceManager.databaseService.use(({ db, schema }) =>
-				db.delete(schema.messages),
+				db
+					.delete(schema.messages)
+					.where(eq(schema.messages.conversationId, currentConversation.id)),
 			);
 			set({
 				messages: [],
 				messageGroups: [createLatestGroup(null)],
-				currentConversation: null,
+				currentConversation,
 			});
 		},
 

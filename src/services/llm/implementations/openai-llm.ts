@@ -206,10 +206,12 @@ export class OpenAILLM implements BaseLLM {
 	async initialize(): Promise<void> {
 		if (this.ready) return;
 
-		// For OpenAI cloud, enforce API key; for local compat servers, skip.
-		const isDefaultOpenAI = this.baseURL === "https://api.openai.com/v1";
-		if (isDefaultOpenAI && !this.apiKey) {
-			throw new Error("OpenAI API key is required");
+		// Remote OpenAI-compatible endpoints require authentication. Local servers
+		// use LocalOpenAICompatibleLLM and may intentionally run without a key.
+		// Rejecting the invalid configuration here prevents a delayed HTTP 401 in
+		// the chat window and keeps unusable providers out of the model selector.
+		if (!this.isLocalBase() && !this.apiKey) {
+			throw new Error("API key is required for remote AI providers");
 		}
 
 		// Mark ready without probing the network to support offline/local cases.

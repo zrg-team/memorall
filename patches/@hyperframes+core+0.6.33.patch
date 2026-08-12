@@ -6,6 +6,7 @@ diff --git a/node_modules/@hyperframes/core/dist/lint/index.d.ts b/node_modules/
 -export { lintHyperframeHtml, lintMediaUrls } from "./hyperframeLinter";
 +export { lintHyperframeHtml, lintMediaUrls } from "./hyperframeLinter.js";
  //# sourceMappingURL=index.d.ts.map
+\ No newline at end of file
 diff --git a/node_modules/@hyperframes/core/dist/lint/index.js b/node_modules/@hyperframes/core/dist/lint/index.js
 --- a/node_modules/@hyperframes/core/dist/lint/index.js
 +++ b/node_modules/@hyperframes/core/dist/lint/index.js
@@ -13,6 +14,7 @@ diff --git a/node_modules/@hyperframes/core/dist/lint/index.js b/node_modules/@h
 -export { lintHyperframeHtml, lintMediaUrls } from "./hyperframeLinter";
 +export { lintHyperframeHtml, lintMediaUrls } from "./hyperframeLinter.js";
  //# sourceMappingURL=index.js.map
+\ No newline at end of file
 diff --git a/node_modules/@hyperframes/core/dist/lint/context.js b/node_modules/@hyperframes/core/dist/lint/context.js
 --- a/node_modules/@hyperframes/core/dist/lint/context.js
 +++ b/node_modules/@hyperframes/core/dist/lint/context.js
@@ -108,3 +110,81 @@ diff --git a/node_modules/@hyperframes/core/dist/lint/rules/textures.js b/node_m
  const TEXTURE_BASE_CLASS = "hf-texture-text";
  const TEXTURE_CLASS_PREFIX = "hf-texture-";
  function classNames(tag) {
+diff --git a/node_modules/@hyperframes/core/dist/lint/rules/adapters.js b/node_modules/@hyperframes/core/dist/lint/rules/adapters.js
+--- a/node_modules/@hyperframes/core/dist/lint/rules/adapters.js
++++ b/node_modules/@hyperframes/core/dist/lint/rules/adapters.js
+@@ -16,7 +16,7 @@ export const adapterRules = [
+                 code: "missing_lottie_script",
+                 severity: "error",
+                 message: "Composition uses Lottie but no Lottie script is loaded. The animation will not render.",
+-                fixHint: 'Add <script src="https://cdn.jsdelivr.net/npm/lottie-web@5/build/player/lottie.min.js"></script> before your Lottie code.',
++                fixHint: "Package Lottie with the extension and reference its local extension URL before your Lottie code.",
+             },
+         ];
+     },
+@@ -38,7 +38,7 @@ export const adapterRules = [
+                 code: "missing_three_script",
+                 severity: "error",
+                 message: "Composition uses Three.js but no Three.js script is loaded. The 3D scene will not render.",
+-                fixHint: 'Add <script src="https://cdn.jsdelivr.net/npm/three@0.160/build/three.min.js"></script> before your Three.js code.',
++                fixHint: "Package Three.js with the extension and reference its local extension URL before your Three.js code.",
+             },
+         ];
+     },
+diff --git a/node_modules/@hyperframes/core/dist/lint/rules/gsap.js b/node_modules/@hyperframes/core/dist/lint/rules/gsap.js
+--- a/node_modules/@hyperframes/core/dist/lint/rules/gsap.js
++++ b/node_modules/@hyperframes/core/dist/lint/rules/gsap.js
+@@ -631,7 +631,7 @@ export const gsapRules = [
+                 code: "missing_gsap_script",
+                 severity: "error",
+                 message: "Composition uses GSAP but no GSAP script is loaded. The animation will not run.",
+-                fixHint: 'Add <script src="https://cdn.jsdelivr.net/npm/gsap@3/dist/gsap.min.js"></script> before your animation script.',
++                fixHint: 'Add <script src="/vendors/hyperframes/gsap.min.js"></script> before your animation script.',
+             },
+         ];
+     },
+diff --git a/node_modules/@hyperframes/core/dist/templates/constants.js b/node_modules/@hyperframes/core/dist/templates/constants.js
+--- a/node_modules/@hyperframes/core/dist/templates/constants.js
++++ b/node_modules/@hyperframes/core/dist/templates/constants.js
+@@ -1,4 +1,4 @@
+-export const GSAP_CDN = "https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js";
++export const GSAP_CDN = "/vendors/hyperframes/gsap.min.js";
+ export const BASE_STYLES = `* { margin: 0; padding: 0; box-sizing: border-box; }
+ html, body { width: 100%; height: 100%; overflow: hidden; background: #000; display: flex; align-items: center; justify-content: center; }`;
+ export const ELEMENT_BASE_STYLES = `position: absolute; visibility: hidden;`;
+diff --git a/node_modules/@hyperframes/core/dist/studio-api/helpers/subComposition.js b/node_modules/@hyperframes/core/dist/studio-api/helpers/subComposition.js
+--- a/node_modules/@hyperframes/core/dist/studio-api/helpers/subComposition.js
++++ b/node_modules/@hyperframes/core/dist/studio-api/helpers/subComposition.js
+@@ -132,7 +132,7 @@ export function buildSubCompositionHtml(projectDir, compPath, runtimeUrl, baseHr
+     }
+     // Fallback: if no index.html head was found, add minimal deps
+     if (!headContent.includes("gsap")) {
+-        headContent += `\n<script src="https://cdn.jsdelivr.net/npm/gsap@3/dist/gsap.min.js"></script>`;
++        headContent += `\n<script src="/vendors/hyperframes/gsap.min.js"></script>`;
+     }
+     const htmlOpen = htmlAttrs ? `<html ${htmlAttrs}>` : "<html>";
+     const bodyOpen = bodyAttrs ? `<body ${bodyAttrs}>` : "<body>";
+diff --git a/node_modules/@hyperframes/core/dist/studio-api/routes/preview.js b/node_modules/@hyperframes/core/dist/studio-api/routes/preview.js
+--- a/node_modules/@hyperframes/core/dist/studio-api/routes/preview.js
++++ b/node_modules/@hyperframes/core/dist/studio-api/routes/preview.js
+@@ -7,9 +7,8 @@ import { buildSubCompositionHtml } from "../helpers/subComposition.js";
+ import { createProjectSignature } from "../helpers/projectSignature.js";
+ import { createStudioMotionRenderBodyScript, STUDIO_MOTION_PATH, } from "../helpers/studioMotionRenderScript.js";
+ const PROJECT_SIGNATURE_META = "hyperframes-project-signature";
+-const GSAP_CDN_VERSION = "3.15.0";
+-const GSAP_CDN_SCRIPT = `<script src="https://cdn.jsdelivr.net/npm/gsap@${GSAP_CDN_VERSION}/dist/gsap.min.js"></script>`;
+-const GSAP_CUSTOM_EASE_CDN_SCRIPT = `<script src="https://cdn.jsdelivr.net/npm/gsap@${GSAP_CDN_VERSION}/dist/CustomEase.min.js"></script>`;
++const GSAP_CDN_SCRIPT = `<script src="/vendors/hyperframes/gsap.min.js"></script>`;
++const GSAP_CUSTOM_EASE_CDN_SCRIPT = `<script src="/vendors/hyperframes/CustomEase.min.js"></script>`;
+ function resolveProjectSignature(adapter, projectDir) {
+     return adapter.getProjectSignature?.(projectDir) ?? createProjectSignature(projectDir);
+ }
+@@ -86,7 +85,7 @@ function injectStudioMotionScript(html, projectDir, activeCompositionPath) {
+ }
+ const GSAP_CDN_FALLBACK_SCRIPT = `<script data-hf-gsap-fallback>
+ (function(){
+-  var cdnBase="https://cdn.jsdelivr.net/npm/gsap@${GSAP_CDN_VERSION}/dist/";
++  var cdnBase="/vendors/hyperframes/";
+   var loaded={};
+   function loadFallback(file){
+     if(loaded[file])return loaded[file];

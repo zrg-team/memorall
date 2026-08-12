@@ -167,6 +167,17 @@ const edgeDistDir = join('dist', 'edge');
 prepareProductionDist(chromeDistDir);
 prepareProductionDist(edgeDistDir);
 
+console.log('🔒 Auditing packaged code for Manifest V3 compliance...');
+try {
+  execSync('node tools/check-mv3-remote-code.mjs dist/chrome dist/edge', {
+    stdio: 'inherit',
+  });
+  console.log('✅ Manifest V3 remote-code audit complete\n');
+} catch (error) {
+  console.error('❌ Manifest V3 remote-code audit failed:', error.message);
+  process.exit(1);
+}
+
 // Step 4: Copy Chrome build
 console.log('📦 Packaging Chrome extension...');
 const chromeDir = join(publishDir, 'chrome');

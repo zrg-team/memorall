@@ -78,7 +78,7 @@ describe("MessageGroup", () => {
 		expect(contentReads).toBe(0);
 		expect(rendererCalls.count).toBe(0);
 
-		fireEvent.click(screen.getByText("1 messages").closest("div")!);
+		fireEvent.click(screen.getByRole("button", { name: /1 messages/i }));
 
 		expect(contentReads).toBeGreaterThan(0);
 		expect(screen.getByTestId("message-renderer")).toBeInTheDocument();

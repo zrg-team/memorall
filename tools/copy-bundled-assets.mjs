@@ -61,6 +61,22 @@ function copyDirectory(src, dest) {
 	}
 }
 
+function rewriteFiles(files, replacements, label) {
+	let changed = 0;
+	for (const file of files) {
+		if (!fs.existsSync(file)) continue;
+		const source = fs.readFileSync(file, "utf8");
+		let rewritten = source;
+		for (const [pattern, replacement] of replacements) {
+			rewritten = rewritten.replace(pattern, replacement);
+		}
+		if (rewritten === source) continue;
+		fs.writeFileSync(file, rewritten);
+		changed++;
+	}
+	console.log(`✅ ${label}: ${changed} file(s) localized.\n`);
+}
+
 function removeMatchingFiles(dir, pattern) {
 	if (!fs.existsSync(dir)) {
 		return;
@@ -108,6 +124,43 @@ function rewriteAlmostnodeBundleForSandbox(bundleSource) {
 		.replace(
 			/`https:\/\/unpkg\.com\/esbuild-wasm@\$\{[^}]+\}\/esm\/browser\.min\.js`/g,
 			esbuildBrowserLocal,
+		);
+
+	// almostnode's framework shims default to remote ESM modules. Map the pinned
+	// runtimes to packaged sandbox files and send arbitrary package redirects to
+	// an explicit local error module instead of executing downloaded code.
+	rewritten = rewritten
+		.replace(
+			/https:\/\/esm\.sh\/react-dom@\$\{[^}]+\}/g,
+			"/sandbox/vendors/react-dom.mjs",
+		)
+		.replace(
+			/https:\/\/esm\.sh\/react-refresh@\$\{[^}]+\}\/runtime/g,
+			"/sandbox/vendors/react-refresh-runtime.mjs",
+		)
+		.replace(
+			/https:\/\/esm\.sh\/react@\$\{[^}]+\}/g,
+			"/sandbox/vendors/react.mjs",
+		)
+		.replace(
+			/https:\/\/esm\.sh\/@rollup\/browser@\$\{[^}]+\}/g,
+			"/sandbox/vendors/rollup-browser.mjs",
+		)
+		.replaceAll(
+			"https://cdn.tailwindcss.com",
+			"/vendors/artifacts/tailwind.js",
+		)
+		.replaceAll(
+			"https://unpkg.com/almostnode/dist/index.js",
+			"/sandbox/vendors/almostnode.bundle.js",
+		)
+		.replaceAll(
+			"https://esm.sh/",
+			"/sandbox/vendors/remote-modules-disabled.mjs#",
+		)
+		.replaceAll(
+			"https://unpkg.com/",
+			"/sandbox/vendors/remote-modules-disabled.mjs#",
 		);
 
 	// Force esbuild-wasm to run without spawning blob: workers (MV3 CSP-safe).
@@ -165,8 +218,79 @@ function rewriteAlmostnodeBundleForSandbox(bundleSource) {
 	);
 }
 
+async function bundleSandboxModule(entry, outfile, externalReact = false) {
+	await build({
+		entryPoints: [require.resolve(entry)],
+		outfile,
+		bundle: true,
+		format: "esm",
+		platform: "browser",
+		target: ["es2022"],
+		minify: true,
+		sourcemap: false,
+		define: { "process.env.NODE_ENV": '"production"' },
+		logLevel: "silent",
+		plugins: externalReact
+			? [
+					{
+						name: "sandbox-react-alias",
+						setup(buildApi) {
+							buildApi.onResolve({ filter: /^react$/ }, () => ({
+								path: "/sandbox/vendors/react.mjs",
+								external: true,
+							}));
+						},
+					},
+				]
+			: [],
+	});
+}
+
 async function main() {
 	console.log("📦 Copying AI library assets...\n");
+
+	// Dependency distributions occasionally include CDN fallbacks even when the
+	// application configures local assets. Rewrite those dormant defaults before
+	// bundling so Web Store review sees only packaged executable resources.
+	const transformersFiles = [
+		"dist/transformers.web.js",
+		"dist/transformers.js",
+		"dist/transformers.node.mjs",
+		"dist/transformers.min.js",
+		"src/backends/onnx.js",
+	].map((file) =>
+		path.resolve(process.cwd(), "node_modules/@huggingface/transformers", file),
+	);
+	rewriteFiles(
+		transformersFiles,
+		[
+			[
+				/`https:\/\/cdn\.jsdelivr\.net\/npm\/onnxruntime-web@\$\{[^}]+\}\/dist\/`/g,
+				"`/vendors/transformers/`",
+			],
+		],
+		"Transformers ONNX runtime fallback",
+	);
+
+	const chevrotainFiles = [
+		"lib/chevrotain.mjs",
+		"lib/chevrotain.min.mjs",
+		"lib/src/diagrams/render_public.js",
+	].map((file) => path.resolve(process.cwd(), "node_modules/chevrotain", file));
+	rewriteFiles(
+		chevrotainFiles,
+		[
+			[
+				/`https:\/\/unpkg\.com\/chevrotain@\$\{[^}]+\}\/diagrams\/diagrams\.css`/g,
+				"`/vendors/chevrotain/diagrams/diagrams.css`",
+			],
+			[
+				/`https:\/\/unpkg\.com\/chevrotain@\$\{[^}]+\}\/diagrams\/`/g,
+				"`/vendors/chevrotain/diagrams/`",
+			],
+		],
+		"Chevrotain diagram resources",
+	);
 
 	// 1. Copy ONNX Runtime assets
 	const ortSrcDir = path.resolve(
@@ -313,10 +437,100 @@ async function main() {
 		"public/sandbox/vendors/almostnode.bundle.js",
 	);
 	const almostnodeOutDir = path.dirname(almostnodeOut);
+	rewriteFiles(
+		[almostnodeEntry],
+		[
+			[/\$\{REACT_CDN\}&dev\/jsx-runtime/g, "/sandbox/vendors/react-jsx-runtime.mjs"],
+			[/\$\{REACT_CDN\}&dev\/jsx-dev-runtime/g, "/sandbox/vendors/react-jsx-dev-runtime.mjs"],
+			[/\$\{REACT_CDN\}\?dev/g, "/sandbox/vendors/react.mjs"],
+			[/\$\{REACT_CDN\}&dev\//g, "/sandbox/vendors/react-subpath-disabled/"],
+			[/\$\{REACT_DOM_CDN\}\/client\?dev/g, "/sandbox/vendors/react-dom-client.mjs"],
+			[/\$\{REACT_DOM_CDN\}\?dev/g, "/sandbox/vendors/react-dom.mjs"],
+			[/\$\{REACT_DOM_CDN\}&dev\//g, "/sandbox/vendors/react-dom-subpath-disabled/"],
+			[/https:\/\/esm\.sh\/react-dom@\$\{REACT_VERSION\}/g, "/sandbox/vendors/react-dom.mjs"],
+			[/https:\/\/esm\.sh\/react-refresh@\$\{REACT_REFRESH_VERSION\}\/runtime/g, "/sandbox/vendors/react-refresh-runtime.mjs"],
+			[/https:\/\/esm\.sh\/react@\$\{REACT_VERSION\}/g, "/sandbox/vendors/react.mjs"],
+			[/https:\/\/esm\.sh\/@rollup\/browser@\$\{ROLLUP_BROWSER_VERSION\}/g, "/sandbox/vendors/rollup-browser.mjs"],
+			[/https:\/\/esm\.sh\/esbuild-wasm@\$\{ESBUILD_WASM_VERSION\}/g, "/sandbox/vendors/esbuild-wasm-browser.min.js"],
+			[/https:\/\/unpkg\.com\/esbuild-wasm@\$\{ESBUILD_WASM_VERSION\}\/esbuild\.wasm/g, "/sandbox/vendors/esbuild.wasm"],
+			[/https:\/\/unpkg\.com\/esbuild-wasm@\$\{ESBUILD_WASM_VERSION\}\/esm\/browser\.min\.js/g, "/sandbox/vendors/esbuild-wasm-browser.min.js"],
+			[/https:\/\/cdn\.tailwindcss\.com/g, "/vendors/artifacts/tailwind.js"],
+			[/https:\/\/unpkg\.com\/almostnode\/dist\/index\.js/g, "/sandbox/vendors/almostnode.bundle.js"],
+			[/https:\/\/esm\.sh\//g, "/sandbox/vendors/remote-modules-disabled.mjs#"],
+			[/https:\/\/unpkg\.com\//g, "/sandbox/vendors/remote-modules-disabled.mjs#"],
+		],
+		"almostnode runtime URLs",
+	);
 
 	if (fs.existsSync(almostnodeEntry)) {
 		ensureDir(path.dirname(almostnodeOut));
 		removeMatchingFiles(almostnodeOutDir, /^runtime-worker-.*\.js$/);
+
+		// Local ESM targets used by almostnode's generated import maps.
+		const reactBase = path.join(almostnodeOutDir, "react.mjs");
+		const reactJsx = path.join(almostnodeOutDir, "react-jsx-runtime.mjs");
+		const reactJsxDev = path.join(
+			almostnodeOutDir,
+			"react-jsx-dev-runtime.mjs",
+		);
+		const reactDomBase = path.join(almostnodeOutDir, "react-dom.mjs");
+		const reactDomClient = path.join(
+			almostnodeOutDir,
+			"react-dom-client.mjs",
+		);
+		const reactRefreshRuntime = path.join(
+			almostnodeOutDir,
+			"react-refresh-runtime.mjs",
+		);
+		for (const output of [
+			reactBase,
+			reactJsx,
+			reactJsxDev,
+			reactDomBase,
+			reactDomClient,
+			reactRefreshRuntime,
+		]) {
+			ensureDir(path.dirname(output));
+		}
+		await bundleSandboxModule("react-sandbox", reactBase);
+		await bundleSandboxModule("react-sandbox/jsx-runtime", reactJsx, true);
+		await bundleSandboxModule(
+			"react-sandbox/jsx-dev-runtime",
+			reactJsxDev,
+			true,
+		);
+		await bundleSandboxModule("react-dom-sandbox", reactDomBase, true);
+		await bundleSandboxModule(
+			"react-dom-sandbox/client",
+			reactDomClient,
+			true,
+		);
+		await bundleSandboxModule(
+			"react-refresh-sandbox/runtime",
+			reactRefreshRuntime,
+		);
+		const rollupBrowserSrc = path.resolve(
+			process.cwd(),
+			"node_modules/@rollup/browser/dist/es/rollup.browser.js",
+		);
+		const rollupWasmSrc = path.resolve(
+			process.cwd(),
+			"node_modules/@rollup/browser/dist/es/bindings_wasm_bg.wasm",
+		);
+		copyFile(
+			rollupBrowserSrc,
+			path.join(almostnodeOutDir, "rollup-browser.mjs"),
+		);
+		copyFile(
+			rollupWasmSrc,
+			path.join(almostnodeOutDir, "bindings_wasm_bg.wasm"),
+		);
+		fs.writeFileSync(
+			path.join(almostnodeOutDir, "remote-modules-disabled.mjs"),
+			'throw new Error("Remote package modules are disabled by Manifest V3 policy.");\n',
+		);
+		console.log("✅ Sandbox framework modules bundled locally.\n");
+
 		await build({
 			entryPoints: [almostnodeEntry],
 			outfile: almostnodeOut,
@@ -377,7 +591,15 @@ async function main() {
 		for (const workerName of workerAssetNames) {
 			const workerSrc = path.join(almostnodeAssetsDir, workerName);
 			if (fs.existsSync(workerSrc)) {
-				copyFile(workerSrc, path.join(almostnodeOutDir, workerName));
+				const workerDest = path.join(almostnodeOutDir, workerName);
+				ensureDir(path.dirname(workerDest));
+				fs.writeFileSync(
+					workerDest,
+					rewriteAlmostnodeBundleForSandbox(
+						fs.readFileSync(workerSrc, "utf8"),
+					),
+				);
+				console.log(`Localized: ${path.relative(process.cwd(), workerDest)}`);
 			} else {
 				console.warn(
 					`⚠️  almostnode worker asset not found, skipping: ${workerSrc}`,
@@ -416,7 +638,61 @@ async function main() {
 		console.warn("⚠️  almostnode entry not found, skipping bundle.\n");
 	}
 
-	// 5b. Copy sandbox assets to extension root (for manifest sandbox.pages)
+	// 5b. Package the isolated artifact preview pages and every executable
+	// runtime they use. Nothing in these previews is loaded from a remote host.
+	const artifactVendorDest = path.resolve(
+		process.cwd(),
+		"public/vendors/artifacts",
+	);
+	const artifactRuntimeFiles = [
+		{
+			src: "node_modules/@tailwindcss/browser/dist/index.global.js",
+			dest: "tailwind.js",
+		},
+		{
+			src: "node_modules/mediabunny/dist/bundles/mediabunny.min.mjs",
+			dest: "mediabunny.min.mjs",
+		},
+		{ src: "node_modules/lucide/dist/umd/lucide.min.js", dest: "lucide.min.js" },
+		{ src: "node_modules/d3/dist/d3.min.js", dest: "d3.min.js" },
+		{ src: "node_modules/three/build/three.min.js", dest: "three.min.js" },
+		{
+			src: "node_modules/lottie-web/build/player/lottie_canvas.min.js",
+			dest: "lottie_canvas.min.js",
+		},
+	];
+	for (const asset of artifactRuntimeFiles) {
+		const src = path.resolve(process.cwd(), asset.src);
+		if (!fs.existsSync(src)) {
+			throw new Error(`Required packaged artifact runtime not found: ${src}`);
+		}
+		copyFile(src, path.join(artifactVendorDest, asset.dest));
+	}
+
+	const chevrotainDiagramsSrc = path.resolve(
+		process.cwd(),
+		"node_modules/chevrotain/diagrams",
+	);
+	if (fs.existsSync(chevrotainDiagramsSrc)) {
+		copyDirectory(
+			chevrotainDiagramsSrc,
+			path.resolve(process.cwd(), "public/vendors/chevrotain/diagrams"),
+		);
+	}
+
+	const artifactPreviewFiles = [
+		["runner/hyperframes-preview.html", "public/sandbox/pages/hyperframes-preview.html"],
+		["runner/lottie-preview.html", "public/sandbox/pages/lottie-preview.html"],
+		["runner/js/hyperframes-preview.js", "public/sandbox/pages/js/hyperframes-preview.js"],
+		["runner/js/lottie-preview.js", "public/sandbox/pages/js/lottie-preview.js"],
+		["runner/js/gif-encoder.js", "public/sandbox/pages/js/gif-encoder.js"],
+	];
+	for (const [src, dest] of artifactPreviewFiles) {
+		copyFile(path.resolve(process.cwd(), src), path.resolve(process.cwd(), dest));
+	}
+	console.log("✅ Artifact preview runtimes packaged locally.\n");
+
+	// 5c. Copy sandbox assets to extension root (for manifest sandbox.pages)
 	const sandboxSrcDir = path.resolve(process.cwd(), "public/sandbox");
 	const sandboxDestDir = path.resolve(process.cwd(), "sandbox");
 	if (fs.existsSync(sandboxSrcDir)) {
@@ -455,6 +731,13 @@ async function main() {
 		{
 			src: path.resolve(process.cwd(), "node_modules/gsap/dist/gsap.min.js"),
 			dest: path.join(hfVendorDest, "gsap.min.js"),
+		},
+		{
+			src: path.resolve(
+				process.cwd(),
+				"node_modules/gsap/dist/CustomEase.min.js",
+			),
+			dest: path.join(hfVendorDest, "CustomEase.min.js"),
 		},
 		{
 			src: path.resolve(process.cwd(), "node_modules/@hyperframes/core/dist/hyperframe.runtime.iife.js"),

@@ -132,12 +132,14 @@ export const MessageGroup: React.FC<MessageGroupProps> = React.memo(
 				actions: inProgressMessage.actions,
 				executeState: inProgressMessage.executeState,
 				executions: inProgressMessage.executions,
+				toolExecutions: inProgressMessage.toolExecutions,
 			};
 		}, [
 			Boolean(inProgressMessage),
 			inProgressMessage?.actions,
 			inProgressMessage?.executeState,
 			inProgressMessage?.executions,
+			inProgressMessage?.toolExecutions,
 		]);
 
 		const inProgressMessageData = useMemo(() => {
@@ -178,9 +180,11 @@ export const MessageGroup: React.FC<MessageGroupProps> = React.memo(
 		return (
 			<div className="message-group">
 				{showCollapseControls && (
-					<div
-						className="mb-3 flex cursor-pointer items-center gap-2 rounded-full border border-border/60 bg-background/70 px-3 py-2 shadow-sm transition-colors duration-150 hover:bg-accent/60"
-						onClick={toggleCollapsed}
+					<button
+						type="button"
+						className="mb-3 flex w-full items-center gap-2 rounded-full border border-border/60 bg-background/70 px-3 py-2 text-left shadow-sm transition-colors duration-150 hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+						onClick={() => void toggleCollapsed()}
+						aria-expanded={!isCollapsed}
 					>
 						<div className="text-muted-foreground hover:text-foreground transition-colors duration-150">
 							{isCollapsed ? (
@@ -205,7 +209,7 @@ export const MessageGroup: React.FC<MessageGroupProps> = React.memo(
 								<span className="ml-2">• {separatorHeaderDate}</span>
 							)}
 						</span>
-					</div>
+					</button>
 				)}
 
 				{shouldRenderMessages && (

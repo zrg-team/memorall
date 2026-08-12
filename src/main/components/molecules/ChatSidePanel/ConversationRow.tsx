@@ -1,86 +1,184 @@
-import React from "react";
-import { ChevronDown, ChevronRight, MessageSquare, Trash2 } from "lucide-react";
+import React, { useEffect, useRef, useState } from "react";
+import {
+	Check,
+	MoreHorizontal,
+	Pencil,
+	Pin,
+	PinOff,
+	Trash2,
+	X,
+} from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import type { Conversation } from "@/services/database/types";
 import {
 	formatConversationTime,
+	getConversationPreview,
 	getConversationTitle,
 } from "./chat-side-panel-utils";
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuSeparator,
+	DropdownMenuTrigger,
+} from "@/main/components/ui/dropdown-menu";
 
 interface ConversationRowProps {
 	conversation: Conversation;
 	isActive: boolean;
-	isExpanded: boolean;
+	isPinned: boolean;
 	onSelect: () => void;
+	onRename: (title: string) => void | Promise<void>;
+	onTogglePin: () => void | Promise<void>;
 	onDelete: () => void;
-	children?: React.ReactNode;
 }
 
 export const ConversationRow: React.FC<ConversationRowProps> = ({
 	conversation,
 	isActive,
-	isExpanded,
+	isPinned,
 	onSelect,
+	onRename,
+	onTogglePin,
 	onDelete,
-	children,
 }) => {
-	const handleDelete = (event: React.MouseEvent) => {
-		event.stopPropagation();
-		onDelete();
+	const { t } = useTranslation("chat");
+	const inputRef = useRef<HTMLInputElement>(null);
+	const [isRenaming, setIsRenaming] = useState(false);
+	const [draftTitle, setDraftTitle] = useState(
+		getConversationTitle(conversation),
+	);
+
+	useEffect(() => {
+		if (!isRenaming) {
+			setDraftTitle(getConversationTitle(conversation));
+		}
+	}, [conversation, isRenaming]);
+
+	useEffect(() => {
+		if (isRenaming) {
+			inputRef.current?.focus();
+			inputRef.current?.select();
+		}
+	}, [isRenaming]);
+
+	const finishRename = async () => {
+		const nextTitle = draftTitle.trim();
+		if (nextTitle && nextTitle !== getConversationTitle(conversation)) {
+			await onRename(nextTitle);
+		}
+		setIsRenaming(false);
 	};
 
-	return (
-		<div className="group/row">
-			<div
-				className={cn(
-					"flex items-center rounded-md transition-colors",
-					"hover:bg-muted/70",
-					isActive && "bg-muted text-foreground",
-				)}
-			>
+	if (isRenaming) {
+		return (
+			<div className="flex items-center gap-1 rounded-lg border border-primary/35 bg-background p-1 shadow-sm">
+				<input
+					ref={inputRef}
+					value={draftTitle}
+					onChange={(event) => setDraftTitle(event.target.value)}
+					onKeyDown={(event) => {
+						if (event.key === "Enter") {
+							event.preventDefault();
+							void finishRename();
+						}
+						if (event.key === "Escape") {
+							setDraftTitle(getConversationTitle(conversation));
+							setIsRenaming(false);
+						}
+					}}
+					className="h-9 min-w-0 flex-1 rounded-md border-0 bg-transparent px-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+					aria-label={t("sidebar.renameInput")}
+				/>
 				<button
 					type="button"
-					onClick={onSelect}
-					className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+					onClick={() => void finishRename()}
+					className="inline-flex h-9 w-9 items-center justify-center rounded-md text-primary hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+					aria-label={t("sidebar.saveRename")}
 				>
-					{isExpanded ? (
-						<ChevronDown size={13} className="shrink-0 text-muted-foreground" />
-					) : (
-						<ChevronRight
-							size={13}
-							className="shrink-0 text-muted-foreground"
-						/>
-					)}
-					<MessageSquare
-						size={13}
-						className={cn(
-							"shrink-0 text-muted-foreground",
-							isActive && "text-primary",
-						)}
-					/>
-					<span className="min-w-0 flex-1">
-						<span className="block truncate text-xs font-semibold">
-							{getConversationTitle(conversation)}
-						</span>
-						<span className="block truncate text-[10px] text-muted-foreground">
-							{isActive ? "Active" : formatConversationTime(conversation)}
-						</span>
-					</span>
+					<Check size={15} />
 				</button>
 				<button
 					type="button"
-					onClick={handleDelete}
-					className={cn(
-						"mr-1 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground opacity-0 transition",
-						"hover:bg-destructive/10 hover:text-destructive group-hover/row:opacity-100 focus:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-					)}
-					title="Delete chat"
-					aria-label="Delete chat"
+					onClick={() => setIsRenaming(false)}
+					className="inline-flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+					aria-label={t("sidebar.cancelRename")}
 				>
-					<Trash2 size={13} />
+					<X size={15} />
 				</button>
 			</div>
-			{isExpanded ? children : null}
+		);
+	}
+
+	return (
+		<div
+			className={cn(
+				"group/row relative flex items-stretch rounded-lg transition-colors",
+				"hover:bg-muted/65",
+				isActive &&
+					"bg-primary/10 text-foreground ring-1 ring-inset ring-primary/15",
+			)}
+		>
+			<button
+				type="button"
+				onClick={onSelect}
+				className="min-w-0 flex-1 rounded-lg px-3 py-2.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+				aria-current={isActive ? "page" : undefined}
+			>
+				<span className="flex min-w-0 items-center gap-2">
+					<span className="min-w-0 flex-1 truncate text-[13px] font-medium">
+						{getConversationTitle(conversation)}
+					</span>
+					{isPinned ? (
+						<Pin
+							size={11}
+							className="shrink-0 text-primary"
+							aria-label={t("sidebar.pinned")}
+						/>
+					) : null}
+					<time className="shrink-0 text-[11px] text-muted-foreground">
+						{formatConversationTime(conversation)}
+					</time>
+				</span>
+				<span className="mt-1 block truncate pr-5 text-xs text-muted-foreground">
+					{getConversationPreview(conversation)}
+				</span>
+			</button>
+
+			<DropdownMenu>
+				<DropdownMenuTrigger asChild>
+					<button
+						type="button"
+						className={cn(
+							"absolute bottom-1.5 right-1 inline-flex h-8 w-8 items-center justify-center rounded-md bg-background/85 text-muted-foreground opacity-0 shadow-sm backdrop-blur-sm transition",
+							"hover:bg-muted hover:text-foreground group-hover/row:opacity-100 focus:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+							isActive && "opacity-100",
+						)}
+						aria-label={t("sidebar.conversationActions")}
+					>
+						<MoreHorizontal size={15} />
+					</button>
+				</DropdownMenuTrigger>
+				<DropdownMenuContent align="end" className="w-44">
+					<DropdownMenuItem onClick={() => setIsRenaming(true)}>
+						<Pencil size={14} />
+						<span>{t("sidebar.rename")}</span>
+					</DropdownMenuItem>
+					<DropdownMenuItem onClick={() => void onTogglePin()}>
+						{isPinned ? <PinOff size={14} /> : <Pin size={14} />}
+						<span>{isPinned ? t("sidebar.unpin") : t("sidebar.pin")}</span>
+					</DropdownMenuItem>
+					<DropdownMenuSeparator />
+					<DropdownMenuItem
+						onClick={onDelete}
+						className="text-destructive focus:text-destructive"
+					>
+						<Trash2 size={14} />
+						<span>{t("sidebar.delete")}</span>
+					</DropdownMenuItem>
+				</DropdownMenuContent>
+			</DropdownMenu>
 		</div>
 	);
 };
