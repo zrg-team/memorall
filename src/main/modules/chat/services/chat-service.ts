@@ -17,6 +17,7 @@ import type {
 	ComplexContent,
 	ConversationContext,
 	MessageParts,
+	ToolExecutionRecord,
 } from "@/types/chat";
 import type {
 	ChatCompletionMessageToolCall,
@@ -58,6 +59,7 @@ export interface ChatStreamCallbacks {
 		node: string;
 		metadata?: Record<string, unknown>;
 	}) => void;
+	onToolExecution?: (execution: ToolExecutionRecord) => void;
 	onError?: (error: string) => void;
 }
 
@@ -321,6 +323,8 @@ export class ChatService {
 							metadata: chatResult.metadata,
 						};
 						callbacks?.onExecuteStart?.(event);
+					} else if (chatResult.type === "tool-execution") {
+						callbacks?.onToolExecution?.(chatResult.execution);
 					} else if (chatResult.type === "final") {
 						// Handle final content update (e.g., after citation step)
 						// This replaces the accumulated content with the final version

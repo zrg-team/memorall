@@ -533,7 +533,7 @@ describe("SandboxContainerServiceMain", () => {
 		expect(atob(result.bodyBase64)).toBe("console.log('direct')");
 	});
 
-	it("builds server render URLs from package dependencies and resolves extension URLs", async () => {
+	it("builds local server render URLs without remote dependency proxies", async () => {
 		const service = createService();
 		const request = vi
 			.spyOn(service, "request")
@@ -589,7 +589,7 @@ describe("SandboxContainerServiceMain", () => {
 		});
 
 		expect(renderUrl.url).toContain("sandbox/pages/renderer.html");
-		expect(decodeURIComponent(renderUrl.url)).toContain("react/jsx-runtime");
+		expect(decodeURIComponent(renderUrl.url)).not.toContain("__npm_proxy__");
 		expect(request).toHaveBeenCalledWith(
 			"server.start",
 			expect.objectContaining({

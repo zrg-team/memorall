@@ -42987,10 +42987,10 @@ var workerThreadsShim = /* @__PURE__ */ Object.freeze({
 });
 const ESBUILD_WASM_VERSION = "0.20.0";
 const ROLLUP_BROWSER_VERSION = "4.9.0";
-const ESBUILD_WASM_ESM_CDN = `https://esm.sh/esbuild-wasm@${ESBUILD_WASM_VERSION}`;
-const ESBUILD_WASM_BINARY_CDN = `https://unpkg.com/esbuild-wasm@${ESBUILD_WASM_VERSION}/esbuild.wasm`;
-const ESBUILD_WASM_BROWSER_CDN = `https://unpkg.com/esbuild-wasm@${ESBUILD_WASM_VERSION}/esm/browser.min.js`;
-const ROLLUP_BROWSER_CDN = `https://esm.sh/@rollup/browser@${ROLLUP_BROWSER_VERSION}`;
+const ESBUILD_WASM_ESM_CDN = "./esbuild-wasm-browser.min.js";
+const ESBUILD_WASM_BINARY_CDN = "/sandbox/vendors/esbuild.wasm";
+const ESBUILD_WASM_BROWSER_CDN = "./esbuild-wasm-browser.min.js";
+const ROLLUP_BROWSER_CDN = `/sandbox/vendors/rollup-browser.mjs`;
 const NODE_BUILTINS = /* @__PURE__ */ new Set([
   "assert",
   "buffer",

@@ -30,9 +30,15 @@ const componentGroups = [
 	{ name: "Knowledge", components: knowledgeComponents.map((c) => c.name) },
 ];
 
+const componentLibraryCache = new Map<OpenUITheme, ReturnType<typeof createLibrary>>();
+
 export function createComponentLibrary(theme: OpenUITheme = "shadcn") {
+	const cached = componentLibraryCache.get(theme);
+	if (cached) return cached;
+
+	let library: ReturnType<typeof createLibrary>;
 	if (theme === "wireframe") {
-		return createLibrary({
+		library = createLibrary({
 			root: "CardBlock",
 			components: [
 				...wireframeContentComponents,
@@ -43,10 +49,8 @@ export function createComponentLibrary(theme: OpenUITheme = "shadcn") {
 			],
 			componentGroups,
 		});
-	}
-
-	if (theme === "glass") {
-		return createLibrary({
+	} else if (theme === "glass") {
+		library = createLibrary({
 			root: "CardBlock",
 			components: [
 				...glassContentComponents,
@@ -57,19 +61,21 @@ export function createComponentLibrary(theme: OpenUITheme = "shadcn") {
 			],
 			componentGroups,
 		});
+	} else {
+		library = createLibrary({
+			root: "CardBlock",
+			components: [
+				...contentComponents,
+				...chartComponents,
+				...interactiveComponents,
+				...formComponents,
+				...knowledgeComponents,
+			],
+			componentGroups,
+		});
 	}
-
-	return createLibrary({
-		root: "CardBlock",
-		components: [
-			...contentComponents,
-			...chartComponents,
-			...interactiveComponents,
-			...formComponents,
-			...knowledgeComponents,
-		],
-		componentGroups,
-	});
+	componentLibraryCache.set(theme, library);
+	return library;
 }
 
 export const componentLibrary = createComponentLibrary("shadcn");

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React from "react";
 import { useTranslation } from "react-i18next";
 import {
 	Square,
@@ -89,7 +89,6 @@ export const ChatInputControls: React.FC<ChatInputControlsProps> = ({
 	onToggleFullWidth,
 }) => {
 	const { t } = useTranslation("chat");
-	const [isAttachMenuOpen, setIsAttachMenuOpen] = useState(false);
 	const flowOptions = [
 		{ id: "chat", name: t("flowSelector.chat") },
 		...agentFlows,
@@ -117,10 +116,7 @@ export const ChatInputControls: React.FC<ChatInputControlsProps> = ({
 			<div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-1 gap-y-1.5">
 				<div className="min-w-0 flex-1 basis-[13rem] overflow-hidden">
 					<PromptInputTools className="min-w-0 flex-wrap gap-x-1 gap-y-1">
-						<DropdownMenu
-							open={isAttachMenuOpen}
-							onOpenChange={setIsAttachMenuOpen}
-						>
+						<DropdownMenu>
 							<Tooltip>
 								<TooltipTrigger asChild>
 									<DropdownMenuTrigger asChild>
@@ -129,8 +125,7 @@ export const ChatInputControls: React.FC<ChatInputControlsProps> = ({
 											variant="ghost"
 											size="sm"
 											disabled={isLoading}
-											onMouseEnter={() => setIsAttachMenuOpen(true)}
-											className="h-8 min-w-8 rounded-xl px-2 text-xs text-muted-foreground hover:text-foreground"
+											className="h-9 min-w-9 rounded-xl px-2 text-xs text-muted-foreground hover:text-foreground"
 										>
 											<Paperclip size={12} />
 										</Button>
@@ -140,24 +135,20 @@ export const ChatInputControls: React.FC<ChatInputControlsProps> = ({
 									<p className="text-xs">{t("input.attachImage")}</p>
 								</TooltipContent>
 							</Tooltip>
-							<DropdownMenuContent
-								align="start"
-								onMouseEnter={() => setIsAttachMenuOpen(true)}
-								onMouseLeave={() => setIsAttachMenuOpen(false)}
-							>
+							<DropdownMenuContent align="start">
 								<DropdownMenuItem
 									onClick={onAttachFileClick}
 									className="flex items-center gap-2"
 								>
 									<Paperclip size={14} />
-									<span>Select From File</span>
+									<span>{t("input.attachFile")}</span>
 								</DropdownMenuItem>
 								<DropdownMenuItem
 									onClick={onAttachDocumentClick}
 									className="flex items-center gap-2"
 								>
 									<FileText size={14} />
-									<span>Select From Document</span>
+									<span>{t("input.attachDocument")}</span>
 								</DropdownMenuItem>
 							</DropdownMenuContent>
 						</DropdownMenu>
@@ -170,7 +161,7 @@ export const ChatInputControls: React.FC<ChatInputControlsProps> = ({
 											type="button"
 											variant="ghost"
 											size="sm"
-											className="h-8 min-w-0 max-w-[11rem] gap-1 rounded-xl px-2 text-xs text-muted-foreground hover:text-foreground"
+											className="h-9 min-w-0 max-w-[11rem] gap-1 rounded-xl px-2 text-xs text-muted-foreground hover:text-foreground"
 										>
 											{selectedFlow?.id === "chat" ? (
 												<MessageCircle size={12} />
@@ -224,7 +215,7 @@ export const ChatInputControls: React.FC<ChatInputControlsProps> = ({
 													variant="ghost"
 													size="sm"
 													disabled={isLoadingTopics}
-													className="h-8 min-w-0 max-w-[9rem] gap-1 rounded-xl px-2 text-xs text-muted-foreground hover:text-foreground"
+													className="h-9 min-w-0 max-w-[9rem] gap-1 rounded-xl px-2 text-xs text-muted-foreground hover:text-foreground"
 												>
 													<Tags size={12} />
 													<span className="min-w-0 max-w-20 truncate max-[420px]:max-w-12">
@@ -296,7 +287,7 @@ export const ChatInputControls: React.FC<ChatInputControlsProps> = ({
 												variant="ghost"
 												size="sm"
 												onClick={onOpenAgentSettings}
-												className="h-8 min-w-8 rounded-xl px-2 text-xs text-muted-foreground hover:text-foreground"
+												className="h-9 min-w-9 rounded-xl px-2 text-xs text-muted-foreground hover:text-foreground"
 											>
 												<Settings2 size={12} />
 											</Button>
@@ -331,7 +322,7 @@ export const ChatInputControls: React.FC<ChatInputControlsProps> = ({
 											? "Constrain chat width"
 											: "Expand chat to full width"
 									}
-									className="h-8 w-8 rounded-xl px-0 text-xs text-muted-foreground hover:text-foreground"
+									className="h-9 w-9 rounded-xl px-0 text-xs text-muted-foreground hover:text-foreground"
 								>
 									{isFullWidth ? (
 										<Minimize2 size={12} />

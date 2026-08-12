@@ -120,6 +120,19 @@ afterEach(() => {
 });
 
 describe("OpenAI-compatible provider contracts", () => {
+	it("rejects a remote provider without credentials before chat can start", async () => {
+		const fetchMock = vi.fn();
+		vi.stubGlobal("fetch", fetchMock);
+
+		const llm = new OpenAILLM(undefined, "https://openrouter.ai/api/v1");
+
+		await expect(llm.initialize()).rejects.toThrow(
+			"API key is required for remote AI providers",
+		);
+		expect(llm.getInfo().ready).toBe(false);
+		expect(fetchMock).not.toHaveBeenCalled();
+	});
+
 	it.each(providers)(
 		"$name lists models and handles completion plus streaming",
 		async ({ create, baseURL, expectedAuthorization, expectedInfoType }) => {

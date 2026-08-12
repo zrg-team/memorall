@@ -14,6 +14,11 @@ export interface SplitOpenUIContentOptions {
 	includeIncomplete?: boolean;
 }
 
+export interface AppendAwareOpenUISplitter {
+	split(content: string, options?: SplitOpenUIContentOptions): OpenUIContentSegment[];
+	reset(): void;
+}
+
 export function isOpenUILang(content: string): boolean {
 	return extractOpenUILang(content) !== null;
 }
@@ -45,7 +50,15 @@ export function splitOpenUIContent(
 		const expressionEnd = findRootExpressionEnd(content, start);
 		if (expressionEnd === -1 && !options.includeIncomplete) continue;
 
-		const end = expressionEnd === -1 ? content.length : expressionEnd;
+		const program =
+			expressionEnd === -1
+				? { end: content.length, complete: false }
+				: findOpenUIProgramEnd(
+						content,
+						expressionEnd,
+						options.includeIncomplete === true,
+					);
+		const end = program.end;
 
 		const fenceStart = findOpeningFenceStart(content, start);
 		const textEnd = fenceStart ?? start;
@@ -58,8 +71,7 @@ export function splitOpenUIContent(
 			});
 		}
 
-		const rawSlice =
-			expressionEnd === -1 ? "" : content.slice(start, end).trim();
+		const rawSlice = content.slice(start, end).trim();
 		const normalized = normalizeOpenUILang(rawSlice);
 		const openUIContent =
 			rawSlice && !/^\w+\s*=/.test(normalized)
@@ -70,10 +82,10 @@ export function splitOpenUIContent(
 			content: openUIContent,
 			start,
 			end,
-			complete: expressionEnd !== -1,
+			complete: program.complete,
 		});
 
-		cursor = expressionEnd === -1 ? end : skipClosingFence(content, end);
+		cursor = program.complete ? skipClosingFence(content, end) : end;
 		OPENUI_ASSIGNMENT_SEARCH_PATTERN.lastIndex = cursor;
 	}
 
@@ -89,6 +101,94 @@ export function splitOpenUIContent(
 	return segments.length > 0
 		? segments
 		: [{ kind: "text", text: content, start: 0, end: content.length }];
+}
+
+export function createAppendAwareOpenUISplitter(): AppendAwareOpenUISplitter {
+	let previousContent = "";
+	let openUIStart: number | null = null;
+	const streamingPattern = /\b(?:\w+\s*=\s*)?CardBlock\s*\(/;
+
+	const reset = () => {
+		previousContent = "";
+		openUIStart = null;
+	};
+
+	return {
+		reset,
+		split(content, options = {}) {
+			const isAppend = content.startsWith(previousContent);
+			if (!options.includeIncomplete || !isAppend) {
+				reset();
+				previousContent = content;
+				return splitOpenUIContent(content, options);
+			}
+
+			if (openUIStart === null) {
+				const overlapStart = Math.max(0, previousContent.length - 256);
+				const appendedWindow = content.slice(overlapStart);
+				const match = streamingPattern.exec(appendedWindow);
+				if (match) openUIStart = overlapStart + match.index;
+			}
+			previousContent = content;
+
+			if (openUIStart === null) {
+				return [{ kind: "text", text: content, start: 0, end: content.length }];
+			}
+
+			const fenceStart = findOpeningFenceStart(content, openUIStart);
+			const textEnd = fenceStart ?? openUIStart;
+			const segments: OpenUIContentSegment[] = [];
+			if (textEnd > 0) {
+				segments.push({
+					kind: "text",
+					text: content.slice(0, textEnd),
+					start: 0,
+					end: textEnd,
+				});
+			}
+			const rawSlice = content.slice(openUIStart).trim();
+			const normalized = normalizeOpenUILang(rawSlice);
+			segments.push({
+				kind: "openui",
+				content:
+					rawSlice && !/^\w+\s*=/.test(normalized)
+						? `root = ${normalized}`
+						: normalized,
+				start: openUIStart,
+				end: content.length,
+				complete: false,
+			});
+			return segments;
+		},
+	};
+}
+
+const OPENUI_STATEMENT_PATTERN = /^[ \t]*[A-Za-z_$][\w$]*\s*=\s*[A-Za-z_$][\w$]*\s*\(/;
+
+function findOpenUIProgramEnd(
+	content: string,
+	rootEnd: number,
+	includeIncomplete: boolean,
+): { end: number; complete: boolean } {
+	let end = rootEnd;
+	while (end < content.length) {
+		const remainder = content.slice(end);
+		const leadingWhitespace = /^[ \t]*(?:\r?\n[ \t]*)*/.exec(remainder)?.[0] ?? "";
+		const statementStart = end + leadingWhitespace.length;
+		const next = content.slice(statementStart);
+		if (next.startsWith("```")) break;
+		const statement = OPENUI_STATEMENT_PATTERN.exec(next);
+		if (!statement) break;
+
+		const statementEnd = findRootExpressionEnd(content, statementStart);
+		if (statementEnd === -1) {
+			return includeIncomplete
+				? { end: content.length, complete: false }
+				: { end, complete: true };
+		}
+		end = statementEnd;
+	}
+	return { end, complete: true };
 }
 
 function replaceBareIdentifier(

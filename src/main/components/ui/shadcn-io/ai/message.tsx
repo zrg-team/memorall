@@ -34,8 +34,8 @@ export const MessageContent = ({
 	<div
 		className={cn(
 			"relative flex flex-col gap-2 overflow-hidden text-sm leading-relaxed transition-colors",
-			"group-[.is-user]:rounded-2xl group-[.is-user]:rounded-br-md group-[.is-user]:border group-[.is-user]:border-border/60 group-[.is-user]:bg-background/45 group-[.is-user]:px-4 group-[.is-user]:py-3 group-[.is-user]:text-foreground group-[.is-user]:shadow-sm",
-			"group-[.is-assistant]:rounded-2xl group-[.is-assistant]:rounded-bl-md group-[.is-assistant]:border group-[.is-assistant]:border-border/70 group-[.is-assistant]:bg-card/95 group-[.is-assistant]:px-5 group-[.is-assistant]:py-4 group-[.is-assistant]:text-card-foreground group-[.is-assistant]:shadow-sm",
+			"group-[.is-user]:rounded-2xl group-[.is-user]:rounded-br-md group-[.is-user]:border group-[.is-user]:border-primary/20 group-[.is-user]:bg-primary/[0.08] group-[.is-user]:px-4 group-[.is-user]:py-3 group-[.is-user]:text-foreground group-[.is-user]:shadow-sm",
+			"group-[.is-assistant]:overflow-visible group-[.is-assistant]:rounded-none group-[.is-assistant]:border-0 group-[.is-assistant]:bg-transparent group-[.is-assistant]:px-0 group-[.is-assistant]:py-0 group-[.is-assistant]:text-foreground group-[.is-assistant]:shadow-none",
 			className,
 		)}
 		{...props}

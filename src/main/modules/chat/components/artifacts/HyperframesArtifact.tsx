@@ -535,13 +535,14 @@ export const HyperframesArtifact: React.FC<ArtifactProps> = ({
 	const compositionKeyRef = useRef<string | null>(null);
 	const filenameBaseRef = useRef<string>("hyperframes-composition");
 	const pendingDownloadRef = useRef<PendingDownload | null>(null);
-	// Use the GitHub Pages runner — no extension CSP applies there, so inline
-	// animation scripts execute without restriction. The "/sandbox/" path segment
-	// matches the player patch that removes the iframe sandbox attribute and skips
-	// contentDocument probing for this URL, keeping cross-origin postMessage as
-	// the only communication channel (which works fine).
+	// Manifest-declared sandbox page: inline composition code is isolated from the
+	// extension while every runtime it loads remains packaged and reviewable.
 	const previewUrl =
-		"https://zrg-team.github.io/memorall/hyperframes-preview.html?v=20260608-native-export-capture";
+		typeof chrome !== "undefined" && chrome.runtime?.getURL
+			? chrome.runtime.getURL(
+					"sandbox/pages/hyperframes-preview.html?v=20260812-local-runtime",
+				)
+			: "/sandbox/pages/hyperframes-preview.html?v=20260812-local-runtime";
 	const [previewHtml, setPreviewHtml] = useState<NormalizedComposition | null>(
 		null,
 	);

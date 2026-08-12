@@ -9,9 +9,13 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("drizzle-orm", () => ({
+	and: vi.fn((...conditions: unknown[]) => ({ op: "and", conditions })),
 	asc: vi.fn((column: unknown) => ({ direction: "asc", column })),
 	desc: vi.fn((column: unknown) => ({ direction: "desc", column })),
 	eq: vi.fn((column: unknown, value: unknown) => ({ column, op: "eq", value })),
+	gt: vi.fn((column: unknown, value: unknown) => ({ column, op: "gt", value })),
+	lt: vi.fn((column: unknown, value: unknown) => ({ column, op: "lt", value })),
+	ne: vi.fn((column: unknown, value: unknown) => ({ column, op: "ne", value })),
 }));
 
 vi.mock("@/services", () => ({
@@ -40,6 +44,7 @@ const schema = {
 		id: "message.id",
 		conversationId: "message.conversationId",
 		createdAt: "message.createdAt",
+		type: "message.type",
 	},
 };
 
@@ -208,7 +213,7 @@ describe("useChatStore", () => {
 			metadata: { nested: { ok: true } },
 		});
 		expect(harness.inserts).toHaveLength(4);
-		expect(harness.updates).toHaveLength(2);
+		expect(harness.updates).toHaveLength(4);
 	});
 
 	it("loads conversations and hydrates ordered messages into groups", async () => {
@@ -230,7 +235,7 @@ describe("useChatStore", () => {
 				content: "After",
 			}),
 		];
-		harness.selectQueue.push([conv], orderedMessages);
+		harness.selectQueue.push([conv], [orderedMessages[1]], [orderedMessages[2]]);
 
 		await useChatStore.getState().loadConversation("conv-load");
 
@@ -239,8 +244,9 @@ describe("useChatStore", () => {
 		expect(useChatStore.getState().messageGroups).toMatchObject([
 			{
 				id: "group:sep",
-				messages: [expect.objectContaining({ id: "m1" })],
+				messages: [],
 				isLatest: false,
+				isLoaded: false,
 			},
 			{
 				id: "group:latest:sep",
@@ -248,6 +254,14 @@ describe("useChatStore", () => {
 				isLatest: true,
 			},
 		]);
+
+		harness.selectQueue.push([orderedMessages[0]]);
+		await useChatStore.getState().loadMessageGroup("group:sep");
+		expect(useChatStore.getState().messageGroups[0]).toMatchObject({
+			messages: [expect.objectContaining({ id: "m1" })],
+			isLoaded: true,
+			isLoading: false,
+		});
 
 		harness.selectQueue.push([conv]);
 		await useChatStore.getState().loadConversations();
@@ -257,7 +271,7 @@ describe("useChatStore", () => {
 	it("ensures a main conversation or creates one when none exists", async () => {
 		const harness = createDbHarness();
 		const existing = conversation({ id: "existing" });
-		harness.selectQueue.push([existing], []);
+		harness.selectQueue.push([existing], [], []);
 
 		await expect(
 			useChatStore.getState().ensureMainConversation(),
@@ -269,11 +283,48 @@ describe("useChatStore", () => {
 		await expect(
 			useChatStore.getState().ensureMainConversation(),
 		).resolves.toMatchObject({
-			title: "Main Chat",
+			title: "New chat",
 		});
+		expect(useChatStore.getState().currentConversation?.title).toBe("New chat");
+	});
+
+	it("auto-titles new chats and supports rename and pin actions", async () => {
+		const harness = createDbHarness();
+
+		const created = await useChatStore.getState().createNewConversation();
+		expect(created.title).toBe("New chat");
+
+		await useChatStore.getState().addMessage({
+			id: "first-user-message",
+			role: "user",
+			content: "Plan the quarterly research brief from my saved notes",
+		});
+
+		expect(useChatStore.getState().currentConversation).toMatchObject({
+			title: "Plan the quarterly research brief from my saved notes",
+			metadata: {
+				lastMessagePreview:
+					"Plan the quarterly research brief from my saved notes",
+				lastMessageRole: "user",
+			},
+		});
+
+		await useChatStore
+			.getState()
+			.renameConversation(created.id, "Leadership research");
 		expect(useChatStore.getState().currentConversation?.title).toBe(
-			"Main Chat",
+			"Leadership research",
 		);
+
+		await useChatStore.getState().toggleConversationPinned(created.id);
+		expect(
+			(
+				useChatStore.getState().currentConversation?.metadata as {
+					pinned?: boolean;
+				}
+			)?.pinned,
+		).toBe(true);
+		expect(harness.updates).toHaveLength(3);
 	});
 
 	it("deletes conversations, clears messages, and updates chat preferences", async () => {
@@ -298,6 +349,7 @@ describe("useChatStore", () => {
 		});
 		harness.selectQueue.push(
 			[next],
+			[],
 			[message({ id: "m2", conversationId: next.id })],
 			[next],
 		);
@@ -309,7 +361,8 @@ describe("useChatStore", () => {
 
 		await useChatStore.getState().deleteMessages();
 		expect(useChatStore.getState().messages).toEqual([]);
-		expect(useChatStore.getState().currentConversation).toBeNull();
+		expect(useChatStore.getState().currentConversation).toBe(next);
+		expect(harness.deletes).toHaveLength(3);
 
 		useChatStore.getState().setLoading(true);
 		useChatStore.getState().setChatMode("normal");

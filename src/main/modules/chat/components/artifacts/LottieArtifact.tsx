@@ -3,9 +3,12 @@ import { useTranslation } from "react-i18next";
 import { AlertTriangle, Pause, Play, Download, Send } from "lucide-react";
 import type { ArtifactProps } from "./ArtifactActionsMenu";
 
-// Use the GitHub Pages runner, same origin as the HyperFrames preview.
+// The preview and its runtime are packaged with the extension. Keeping this URL
+// local is required by Manifest V3 and also makes previews work offline.
 const RUNNER_URL =
-	"https://zrg-team.github.io/memorall/lottie-preview.html?v=3";
+	typeof chrome !== "undefined" && chrome.runtime?.getURL
+		? chrome.runtime.getURL("sandbox/pages/lottie-preview.html?v=5")
+		: "/sandbox/pages/lottie-preview.html?v=5";
 
 const MAX_PREVIEW_ISSUES = 8;
 

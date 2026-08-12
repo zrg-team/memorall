@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { startTransition, useEffect, useRef, useState } from "react";
 
 /**
  * Trailing-throttle a value while `active` is true.
@@ -32,14 +32,14 @@ export function useThrottledValue<T>(value: T, active: boolean, ms: number): T {
 				: now - lastEmitRef.current;
 		if (elapsed >= ms) {
 			lastEmitRef.current = now;
-			setThrottled(value);
+			startTransition(() => setThrottled(value));
 			return;
 		}
 		if (!timerRef.current) {
 			timerRef.current = setTimeout(() => {
 				timerRef.current = null;
 				lastEmitRef.current = Date.now();
-				setThrottled(valueRef.current);
+				startTransition(() => setThrottled(valueRef.current));
 			}, ms - elapsed);
 		}
 	}, [value, active, ms]);

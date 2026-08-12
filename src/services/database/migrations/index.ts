@@ -49,6 +49,10 @@ import {
 	up as addMessagePartsUp,
 	down as addMessagePartsDown,
 } from "./013_add_message_parts";
+import {
+	up as addMessageHistorySearchIndexUp,
+	down as addMessageHistorySearchIndexDown,
+} from "./014_add_message_history_search_index";
 // import { up as futureExampleUp, down as futureExampleDown } from './001_example_future_migration';
 
 export interface Migration {
@@ -159,6 +163,13 @@ export const migrations: Migration[] = [
 			"Add message parts column for canonical role-based message records",
 		up: addMessagePartsUp,
 		down: addMessagePartsDown,
+	},
+	{
+		id: "add_message_history_search_index",
+		version: 14,
+		description: "Add full-text index for separator-scoped thread history search",
+		up: addMessageHistorySearchIndexUp,
+		down: addMessageHistorySearchIndexDown,
 	},
 	// Example of how to add future migrations:
 	// {

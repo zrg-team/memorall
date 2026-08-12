@@ -100,12 +100,13 @@ export const MessageFooter: React.FC<MessageFooterProps> = React.memo(
 		}, []);
 
 		return (
-			<div className="mt-3 pt-3 border-t border-border/40">
-				<div className="flex items-center justify-between gap-2 text-xs">
+			<div className="mt-3 border-t border-border/40 pt-2">
+				<div className="flex flex-wrap items-center justify-between gap-2 text-xs">
 					<div className="flex items-center gap-1">
 						<button
+							type="button"
 							onClick={handleCopy}
-							className="p-1.5 rounded hover:bg-accent transition-colors cursor-pointer"
+							className="inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
 							title={
 								copied
 									? t("messages.copied", "Copied!")
@@ -113,15 +114,21 @@ export const MessageFooter: React.FC<MessageFooterProps> = React.memo(
 							}
 						>
 							{copied ? (
-								<Check className="w-4 h-4 text-green-500" />
+								<Check className="h-3.5 w-3.5 text-green-500" />
 							) : (
-								<Copy className="w-4 h-4 text-muted-foreground hover:text-foreground" />
+								<Copy className="h-3.5 w-3.5" />
 							)}
+							<span>
+								{copied
+									? t("messages.copied", "Copied")
+									: t("messages.copy", "Copy")}
+							</span>
 						</button>
 
 						<button
+							type="button"
 							onClick={handleSaveToRemembered}
-							className="p-1.5 rounded hover:bg-accent transition-colors cursor-pointer"
+							className="inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
 							title={
 								saved
 									? t("messages.saved", "Saved!")
@@ -129,39 +136,30 @@ export const MessageFooter: React.FC<MessageFooterProps> = React.memo(
 							}
 						>
 							{saved ? (
-								<Check className="w-4 h-4 text-green-500" />
+								<Check className="h-3.5 w-3.5 text-green-500" />
 							) : (
-								<FolderOpen className="w-4 h-4 text-muted-foreground hover:text-foreground" />
+								<FolderOpen className="h-3.5 w-3.5" />
 							)}
+							<span>
+								{saved
+									? t("messages.saved", "Saved")
+									: t("messages.save", "Save")}
+							</span>
 						</button>
 					</div>
 
-					<div className="flex items-center gap-2">
-						{provider && (
-							<div
-								className={`flex items-center gap-1 px-2 py-0.5 rounded-md border text-xs font-medium ${getProviderBadgeColor()}`}
-							>
-								<Sparkles className="w-3 h-3" />
-								<span>{getProviderLabel(provider)}</span>
-							</div>
-						)}
-
-						{tokensPerSecond !== undefined && (
-							<div className="flex items-center gap-1 text-muted-foreground">
-								<Gauge className="w-3 h-3" />
-								<span>{formatTokensPerSecond(tokensPerSecond)}</span>
-							</div>
-						)}
-
+					<div className="flex items-center">
 						<button
+							type="button"
 							onClick={() => setShowFullInfo(!showFullInfo)}
-							className="p-1.5 rounded hover:bg-accent transition-colors cursor-pointer"
-							title={showFullInfo ? "Hide details" : "Show details"}
+							className="inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+							aria-expanded={showFullInfo}
 						>
+							<span>{t("messages.responseDetails", "Response details")}</span>
 							{showFullInfo ? (
-								<ChevronUp className="w-4 h-4 text-muted-foreground hover:text-foreground transition-colors" />
+								<ChevronUp className="h-3.5 w-3.5" />
 							) : (
-								<ChevronDown className="w-4 h-4 text-muted-foreground hover:text-foreground transition-colors" />
+								<ChevronDown className="h-3.5 w-3.5" />
 							)}
 						</button>
 					</div>
@@ -169,10 +167,19 @@ export const MessageFooter: React.FC<MessageFooterProps> = React.memo(
 
 				<div
 					className={`overflow-hidden transition-all duration-200 ease-in-out ${
-						showFullInfo ? "max-h-20 opacity-100 mt-2" : "max-h-0 opacity-0"
+						showFullInfo ? "max-h-28 opacity-100 mt-2" : "max-h-0 opacity-0"
 					}`}
 				>
 					<div className="pt-2 border-t border-border/40 flex flex-wrap items-center gap-2 text-xs">
+						{provider && (
+							<div
+								className={`flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs font-medium ${getProviderBadgeColor()}`}
+							>
+								<Sparkles className="h-3 w-3" />
+								<span>{getProviderLabel(provider)}</span>
+							</div>
+						)}
+
 						{model && (
 							<div
 								className={`flex items-center gap-1 px-2 py-0.5 rounded-md border text-xs font-medium ${getModelBadgeColor()}`}
@@ -186,6 +193,13 @@ export const MessageFooter: React.FC<MessageFooterProps> = React.memo(
 							<div className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-muted/50 border border-border/40 text-muted-foreground">
 								<Clock className="w-3 h-3" />
 								<span>{formatTime(timeToAnswer)}</span>
+							</div>
+						)}
+
+						{tokensPerSecond !== undefined && (
+							<div className="flex items-center gap-1.5 rounded-md border border-border/40 bg-muted/50 px-2 py-0.5 text-muted-foreground">
+								<Gauge className="h-3 w-3" />
+								<span>{formatTokensPerSecond(tokensPerSecond)}</span>
 							</div>
 						)}
 

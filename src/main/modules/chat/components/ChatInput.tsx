@@ -53,6 +53,7 @@ export interface ChatInputProps {
 	isModelReady?: boolean;
 	isFullWidth?: boolean;
 	onToggleFullWidth?: () => void;
+	placeholder?: string;
 }
 
 export const ChatInput: React.FC<ChatInputProps> = ({
@@ -83,6 +84,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 	isModelReady = true,
 	isFullWidth = false,
 	onToggleFullWidth,
+	placeholder,
 }) => {
 	const { t } = useTranslation("chat");
 	const fileInputRef = useRef<HTMLInputElement>(null);
@@ -374,10 +376,12 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 								onChange={handleInputChange}
 								onKeyDown={handleTextareaKeyDown}
 								placeholder={
-									isModelReady ? t("input.placeholder") : t("model.notLoaded")
+									isModelReady
+										? (placeholder ?? t("input.placeholder"))
+										: t("model.notLoaded")
 								}
-								disabled={isLoading || !isModelReady}
-								className="min-h-[92px] !border-0 !border-t-0 px-3 py-3 text-[15px] leading-6 !shadow-none focus:!border-0 focus:!ring-0 focus:!ring-offset-0 focus-visible:!border-0 focus-visible:!ring-0 focus-visible:!ring-offset-0 sm:px-4 sm:py-4"
+								disabled={!isModelReady}
+								className="min-h-[68px] !border-0 !border-t-0 px-3 py-3 text-[15px] leading-6 !shadow-none focus:!border-0 focus:!ring-0 focus:!ring-offset-0 focus-visible:!border-0 focus-visible:!ring-0 focus-visible:!ring-offset-0 sm:px-4"
 							/>
 						</div>
 

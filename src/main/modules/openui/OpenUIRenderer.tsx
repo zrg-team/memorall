@@ -1,6 +1,7 @@
 import React, {
 	useCallback,
 	useEffect,
+	useLayoutEffect,
 	useMemo,
 	useRef,
 	useState,
@@ -88,182 +89,252 @@ const showOpenUINotice = (message: string) => {
 	window.setTimeout(() => el.remove(), 2200);
 };
 
-export function OpenUIRenderer({
-	content,
-	streaming,
-	onMessageAction,
-}: {
+interface OpenUIRendererProps {
 	content: string;
 	streaming: boolean;
 	onMessageAction?: (action: MessageActionRequest) => void | Promise<void>;
-}) {
-	const { t } = useTranslation("chat");
-	// While streaming, re-parse at most ~every 120ms instead of on every token.
-	// The final value is returned synchronously once streaming ends.
-	const renderContent = useThrottledValue(content, streaming, 120);
-	const theme = useMemo(() => detectTheme(renderContent), [renderContent]);
-	const library = useMemo(() => createComponentLibrary(theme), [theme]);
-	const [resetKey, setResetKey] = useState(0);
-	const [renderFailed, setRenderFailed] = useState(false);
-	const [streamingRenderFailed, setStreamingRenderFailed] = useState(false);
-	const prevStreaming = useRef(streaming);
+}
 
-	// Dev/harness-only remount counter: proves the OpenUI tree no longer mounts
-	// once per streamed token. No-op unless the perf harness sets window.__openuiPerf.
-	useEffect(() => {
-		const w = window as typeof window & {
-			__openuiPerf?: boolean;
-			__openuiMounts?: number;
-		};
-		if (w.__openuiPerf) w.__openuiMounts = (w.__openuiMounts ?? 0) + 1;
-	}, []);
+const OpenUIRenderFrame: React.FC<OpenUIRendererProps> = React.memo(
+	({ content, streaming, onMessageAction }) => {
+		const { t } = useTranslation("chat");
+		const theme = useMemo(() => detectTheme(content), [content]);
+		const library = useMemo(() => createComponentLibrary(theme), [theme]);
+		const [resetKey, setResetKey] = useState(0);
+		const [renderFailed, setRenderFailed] = useState(false);
+		const [streamingRenderFailed, setStreamingRenderFailed] = useState(false);
+		const prevStreaming = useRef(streaming);
 
-	useEffect(() => {
-		setRenderFailed(false);
-		setStreamingRenderFailed(false);
-	}, [content]);
+		// Dev/harness-only remount counter: proves the OpenUI tree no longer mounts
+		// once per streamed token. No-op unless the perf harness sets window.__openuiPerf.
+		useEffect(() => {
+			const w = window as typeof window & {
+				__openuiPerf?: boolean;
+				__openuiMounts?: number;
+			};
+			if (w.__openuiPerf) w.__openuiMounts = (w.__openuiMounts ?? 0) + 1;
+		}, []);
 
-	useEffect(() => {
-		if (prevStreaming.current && !streaming) {
+		useEffect(() => {
+			setRenderFailed(false);
 			setStreamingRenderFailed(false);
-		}
-		prevStreaming.current = streaming;
-	}, [streaming]);
+		}, [content]);
 
-	const handleOpenUIAction = useCallback(
-		(event: ActionEvent) => {
-			const detail = parseMemorallOpenUIAction(event);
-			if (!detail) {
-				logWarn("[OpenUIRenderer] Unhandled action:", event);
-				return;
+		useEffect(() => {
+			if (prevStreaming.current && !streaming) {
+				setStreamingRenderFailed(false);
 			}
+			prevStreaming.current = streaming;
+		}, [streaming]);
 
-			const action = detail.action;
-
-			if (action.type === "open_link") {
-				const url = resolveOpenUITemplate(
-					action.url,
-					detail.formState,
-					detail.formName,
-				).trim();
-				if (isSafeOpenUIUrl(url)) {
-					window.open(url, "_blank", "noopener,noreferrer");
-				} else {
-					logWarn("[OpenUIRenderer] Blocked unsafe URL:", url);
+		const handleOpenUIAction = useCallback(
+			(event: ActionEvent) => {
+				const detail = parseMemorallOpenUIAction(event);
+				if (!detail) {
+					logWarn("[OpenUIRenderer] Unhandled action:", event);
+					return;
 				}
-				return;
-			}
 
-			if (action.type === "copy_to_clipboard") {
-				const text = resolveOpenUITemplate(
-					action.text,
-					detail.formState,
-					detail.formName,
-				);
-				void navigator.clipboard?.writeText(text).then(
-					() => showOpenUINotice(t("openui.copied")),
-					(error) => logWarn("[OpenUIRenderer] Clipboard copy failed:", error),
-				);
-				return;
-			}
+				const action = detail.action;
 
-			if (action.type === "download_text") {
-				const filename =
-					resolveOpenUITemplate(
-						action.filename,
+				if (action.type === "open_link") {
+					const url = resolveOpenUITemplate(
+						action.url,
 						detail.formState,
 						detail.formName,
-					).trim() || "download.txt";
-				const blob = new Blob(
-					[
+					).trim();
+					if (isSafeOpenUIUrl(url)) {
+						window.open(url, "_blank", "noopener,noreferrer");
+					} else {
+						logWarn("[OpenUIRenderer] Blocked unsafe URL:", url);
+					}
+					return;
+				}
+
+				if (action.type === "copy_to_clipboard") {
+					const text = resolveOpenUITemplate(
+						action.text,
+						detail.formState,
+						detail.formName,
+					);
+					void navigator.clipboard?.writeText(text).then(
+						() => showOpenUINotice(t("openui.copied")),
+						(error) =>
+							logWarn("[OpenUIRenderer] Clipboard copy failed:", error),
+					);
+					return;
+				}
+
+				if (action.type === "download_text") {
+					const filename =
 						resolveOpenUITemplate(
-							action.content,
+							action.filename,
+							detail.formState,
+							detail.formName,
+						).trim() || "download.txt";
+					const blob = new Blob(
+						[
+							resolveOpenUITemplate(
+								action.content,
+								detail.formState,
+								detail.formName,
+							),
+						],
+						{ type: "text/plain;charset=utf-8" },
+					);
+					const url = URL.createObjectURL(blob);
+					const link = document.createElement("a");
+					link.href = url;
+					link.download = filename;
+					link.click();
+					URL.revokeObjectURL(url);
+					return;
+				}
+
+				if (action.type === "reset_form") {
+					setResetKey((value) => value + 1);
+					return;
+				}
+
+				if (action.type === "show_toast") {
+					showOpenUINotice(
+						resolveOpenUITemplate(
+							action.message,
 							detail.formState,
 							detail.formName,
 						),
-					],
-					{ type: "text/plain;charset=utf-8" },
-				);
-				const url = URL.createObjectURL(blob);
-				const link = document.createElement("a");
-				link.href = url;
-				link.download = filename;
-				link.click();
-				URL.revokeObjectURL(url);
-				return;
-			}
-
-			if (action.type === "reset_form") {
-				setResetKey((value) => value + 1);
-				return;
-			}
-
-			if (action.type === "show_toast") {
-				showOpenUINotice(
-					resolveOpenUITemplate(
-						action.message,
-						detail.formState,
-						detail.formName,
-					),
-				);
-				return;
-			}
-
-			const routesToParent =
-				detail.action.type === "send_message" ||
-				detail.action.type === "add_message_to_input" ||
-				detail.action.type === "open_document" ||
-				detail.action.type === "open_route";
-
-			if (onMessageAction && routesToParent) {
-				onMessageAction({
-					type: "openui_action",
-					component: "OpenUIRenderer",
-					payload: { detail },
-				});
-			}
-		},
-		[onMessageAction],
-	);
-
-	const handleRendererError = useCallback(
-		(errors: unknown[]) => {
-			if (errors.length > 0) {
-				logWarn("[OpenUIRenderer] Parse/runtime errors:", errors);
-				if (streaming) {
-					setStreamingRenderFailed(true);
-				} else {
-					setRenderFailed(true);
+					);
+					return;
 				}
-			}
-		},
-		[streaming],
+
+				const routesToParent =
+					detail.action.type === "send_message" ||
+					detail.action.type === "add_message_to_input" ||
+					detail.action.type === "open_document" ||
+					detail.action.type === "open_route";
+
+				if (onMessageAction && routesToParent) {
+					onMessageAction({
+						type: "openui_action",
+						component: "OpenUIRenderer",
+						payload: { detail },
+					});
+				}
+			},
+			[onMessageAction],
+		);
+
+		const handleRendererError = useCallback(
+			(errors: unknown[]) => {
+				if (errors.length > 0) {
+					logWarn("[OpenUIRenderer] Parse/runtime errors:", errors);
+					if (streaming) {
+						setStreamingRenderFailed(true);
+					} else {
+						setRenderFailed(true);
+					}
+				}
+			},
+			[streaming],
+		);
+
+		if (renderFailed && !streaming) {
+			return (
+				<OpenUIRenderFallback
+					content={content}
+					title={t("openui.renderFailed.title")}
+					description={t("openui.renderFailed.description")}
+				/>
+			);
+		}
+
+		if (streamingRenderFailed && streaming) {
+			return <OpenUIStreamingPlaceholder label={t("openui.rendering")} />;
+		}
+
+		return (
+			<OpenUIErrorBoundary content={content}>
+				<Renderer
+					key={resetKey}
+					response={content}
+					library={library}
+					isStreaming={streaming}
+					onAction={handleOpenUIAction}
+					onError={handleRendererError}
+				/>
+			</OpenUIErrorBoundary>
+		);
+	},
+);
+
+OpenUIRenderFrame.displayName = "OpenUIRenderFrame";
+
+export const OpenUIRenderer: React.FC<OpenUIRendererProps> = ({
+	content,
+	streaming,
+	onMessageAction,
+}) => {
+	const baseInterval =
+		content.length < 32_000
+			? 64
+			: content.length < 96_000
+				? 96
+				: content.length < 256_000
+					? 160
+					: 240;
+	const [renderPenalty, setRenderPenalty] = useState(0);
+	const cheapCommitCountRef = useRef(0);
+	const renderStartedAtRef = useRef(0);
+	renderStartedAtRef.current =
+		typeof performance !== "undefined" ? performance.now() : Date.now();
+	const renderContent = useThrottledValue(
+		content,
+		streaming,
+		Math.min(300, baseInterval + renderPenalty),
 	);
 
-	if (renderFailed && !streaming) {
-		return (
-			<OpenUIRenderFallback
-				content={content}
-				title={t("openui.renderFailed.title")}
-				description={t("openui.renderFailed.description")}
-			/>
-		);
-	}
-
-	if (streamingRenderFailed && streaming) {
-		return <OpenUIStreamingPlaceholder label={t("openui.rendering")} />;
-	}
+	useLayoutEffect(() => {
+		if (!streaming) {
+			cheapCommitCountRef.current = 0;
+			setRenderPenalty(0);
+			return;
+		}
+		const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+		const duration = Math.max(0, now - renderStartedAtRef.current);
+		if (duration > 32) {
+			cheapCommitCountRef.current = 0;
+			setRenderPenalty((current) =>
+				Math.min(300 - baseInterval, current + 48),
+			);
+			return;
+		}
+		if (duration < 16) {
+			cheapCommitCountRef.current += 1;
+			if (cheapCommitCountRef.current >= 3) {
+				cheapCommitCountRef.current = 0;
+				setRenderPenalty((current) => Math.max(0, current - 32));
+			}
+		} else {
+			cheapCommitCountRef.current = 0;
+		}
+	}, [baseInterval, renderContent, streaming]);
 
 	return (
-		<OpenUIErrorBoundary content={content}>
-			<Renderer
-				key={resetKey}
-				response={renderContent}
-				library={library}
-				isStreaming={streaming}
-				onAction={handleOpenUIAction}
-				onError={handleRendererError}
+		<div
+			style={
+				streaming
+					? undefined
+					: {
+							contentVisibility: "auto",
+							containIntrinsicSize: "auto 320px",
+						}
+			}
+		>
+			<OpenUIRenderFrame
+				content={renderContent}
+				streaming={streaming}
+				onMessageAction={onMessageAction}
 			/>
-		</OpenUIErrorBoundary>
+		</div>
 	);
-}
+};

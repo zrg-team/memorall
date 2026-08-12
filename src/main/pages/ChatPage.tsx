@@ -128,7 +128,6 @@ export const ChatPage: React.FC<ChatPageProps> = ({
 	const completedGroupRefs = useRef(new Map<string, HTMLDivElement>());
 	const shouldScrollToPreviousGroupsRef = useRef(false);
 	const pendingGroupScrollRef = useRef<string | null>(null);
-
 	const {
 		inputValue,
 		setInputValue,
@@ -149,6 +148,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
 		deleteMessages,
 		submitMessage,
 	} = useChat(model);
+	const hasInProgressMessage = inProgressMessage != null;
 
 	const handleChatSubmit = (
 		e: React.FormEvent,
@@ -269,10 +269,19 @@ export const ChatPage: React.FC<ChatPageProps> = ({
 		}
 	}, [isCompactSidePanelOpen, isNarrowChatPanel]);
 
+	useEffect(() => {
+		if (!isCompactSidePanelOpen) return;
+		const handleKeyDown = (event: KeyboardEvent) => {
+			if (event.key === "Escape") setIsCompactSidePanelOpen(false);
+		};
+		window.addEventListener("keydown", handleKeyDown);
+		return () => window.removeEventListener("keydown", handleKeyDown);
+	}, [isCompactSidePanelOpen]);
+
 	// Refresh after each assistant response finishes
 	const wasInProgressRef = useRef(false);
 	useEffect(() => {
-		const isNow = inProgressMessage != null;
+		const isNow = hasInProgressMessage;
 		if (!isNow && wasInProgressRef.current) {
 			void (async () => {
 				await refreshRuntimeSessions();
@@ -291,7 +300,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
 		}
 		wasInProgressRef.current = isNow;
 	}, [
-		inProgressMessage,
+		hasInProgressMessage,
 		navigate,
 		refreshRuntimeSessions,
 		setRightPanelCollapsed,
@@ -306,7 +315,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
 		[messageGroups],
 	);
 	const latestGroupIsEmpty =
-		latestGroup?.messages.length === 0 && !inProgressMessage;
+		latestGroup?.messages.length === 0 && !hasInProgressMessage;
 	const completedGroupsIds = useMemo(
 		() =>
 			completedGroups
@@ -766,27 +775,45 @@ export const ChatPage: React.FC<ChatPageProps> = ({
 			<div className="chat-panel-container relative flex min-w-0 flex-1 flex-col overflow-hidden">
 				<AnimatePresence>
 					{isCompactSidePanelAvailable && isCompactSidePanelOpen ? (
-						<motion.div
-							initial={{ opacity: 0, x: -18 }}
-							animate={{ opacity: 1, x: 0 }}
-							exit={{ opacity: 0, x: -18 }}
-							transition={{ duration: 0.18, ease: "easeOut" }}
-							className="absolute inset-y-0 left-0 z-40 w-full max-w-full bg-background/95 shadow-xl backdrop-blur-xl"
-						>
-							<ChatSidePanel
-								defaultCollapsed={false}
-								allowCollapse={false}
-								allowResize={false}
-								onClose={() => setIsCompactSidePanelOpen(false)}
-								onShowConversationGroup={(groupId) => {
-									handleConversationGroupSelect(groupId);
-									setIsCompactSidePanelOpen(false);
-								}}
+						<>
+							<motion.button
+								type="button"
+								initial={{ opacity: 0 }}
+								animate={{ opacity: 1 }}
+								exit={{ opacity: 0 }}
+								className="absolute inset-0 z-40 bg-black/45 backdrop-blur-[1px]"
+								onClick={() => setIsCompactSidePanelOpen(false)}
+								aria-label={t("sidebar.close")}
 							/>
-						</motion.div>
+							<motion.div
+								initial={{ opacity: 0, x: -24 }}
+								animate={{ opacity: 1, x: 0 }}
+								exit={{ opacity: 0, x: -24 }}
+								transition={{ duration: 0.18, ease: "easeOut" }}
+								className="absolute inset-y-0 left-0 z-50 w-[min(88%,22rem)] max-w-full bg-background shadow-2xl"
+								role="dialog"
+								aria-modal="true"
+								aria-label={t("sidebar.label")}
+							>
+								<ChatSidePanel
+									defaultCollapsed={false}
+									allowCollapse={false}
+									allowResize={false}
+									onClose={() => setIsCompactSidePanelOpen(false)}
+									onShowConversationGroup={(groupId) => {
+										handleConversationGroupSelect(groupId);
+										setIsCompactSidePanelOpen(false);
+									}}
+								/>
+							</motion.div>
+						</>
 					) : null}
 				</AnimatePresence>
-				<Conversation className="min-h-0 flex-1 bg-transparent">
+
+				<Conversation
+					className="min-h-0 flex-1 bg-transparent"
+					resize={hasInProgressMessage ? "instant" : "smooth"}
+				>
 					{isCompactSidePanelAvailable ? (
 						<div className="absolute left-2 top-2 z-30">
 							<Button
@@ -885,6 +912,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
 								greetingContext={agentGreetingContext}
 								showAgentBuilderCallout={shouldShowAgentBuilderCallout}
 								onOpenAgentWizard={handleOpenAgentWizard}
+								onSelectPrompt={setInputValue}
 								compact={isCompactChatSurface}
 							/>
 						) : latestGroup ? (
@@ -948,6 +976,9 @@ export const ChatPage: React.FC<ChatPageProps> = ({
 					isModelReady={isChatInputModelReady}
 					isFullWidth={isChatFullWidth}
 					onToggleFullWidth={() => setIsChatFullWidth((value) => !value)}
+					placeholder={t("input.messageAgent", {
+						agent: selectedAgent?.name ?? t("flowSelector.chat"),
+					})}
 					compactControls={isNarrowChatPanel}
 					onOpenAgentSettings={() => {
 						open(selectedAgentFlowId);

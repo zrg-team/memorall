@@ -858,6 +858,8 @@ exports[`Memorall legacy flow registered contracts > registers every core tool c
   "sandbox_run",
   "sandbox_snapshot",
   "send_message_to_agent",
+  "thread_history_read",
+  "thread_history_search",
   "web_dom_action",
   "web_find_in_page",
   "web_open",
@@ -2284,6 +2286,57 @@ exports[`Memorall legacy flow registered contracts > registers every core tool c
       "required": [
         "agentId",
         "message",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "Read one or more earlier messages by ID with line numbers. Supply fromLine/toLine for a bounded range, or readAll=true for complete messages.",
+    "name": "thread_history_read",
+    "parameters": {
+      "properties": {
+        "fromLine": {
+          "type": "number",
+        },
+        "messageIds": {
+          "items": {
+            "type": "string",
+          },
+          "type": "array",
+        },
+        "readAll": {
+          "type": "boolean",
+        },
+        "toLine": {
+          "type": "number",
+        },
+      },
+      "required": [
+        "messageIds",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "Search messages before the current thread separator. Returns matched message IDs and grep-style line excerpts. Use thread_history_read with returned IDs for more context.",
+    "name": "thread_history_search",
+    "parameters": {
+      "properties": {
+        "limit": {
+          "type": "number",
+        },
+        "prefixLines": {
+          "type": "number",
+        },
+        "query": {
+          "type": "string",
+        },
+        "suffixLines": {
+          "type": "number",
+        },
+      },
+      "required": [
+        "query",
       ],
       "type": "object",
     },

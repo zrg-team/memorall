@@ -20,6 +20,7 @@ import type {
 	ComplexContent,
 	ConversationContext,
 	MessageParts,
+	ToolExecutionRecord,
 } from "@/types/chat";
 import { handlerRegistry } from "./handler-registry";
 import type { FoundationState } from "@/services/flows-legacy/graph/foundation/state";
@@ -65,6 +66,18 @@ import {
 import { sanitizeForJson } from "@/utils/sanitize-json";
 import { isAbortError } from "@/utils/abort";
 import { StreamBuffer } from "./stream-buffer";
+import {
+	createToolExecutionPreview,
+	finishRunningToolExecutions,
+	upsertToolExecution,
+} from "@/services/chat/tool-executions";
+import type { GraphTool } from "@/services/flows-legacy/graph/graph.base";
+import {
+	THREAD_HISTORY_CONVERSATION_RUNTIME_KEY,
+	THREAD_HISTORY_READ_TOOL,
+	THREAD_HISTORY_SEARCH_TOOL,
+	THREAD_HISTORY_SEPARATOR_RUNTIME_KEY,
+} from "@/services/flows-legacy/tools/thread-history";
 export { StreamBuffer } from "./stream-buffer";
 
 export interface ChatStreamConfig {
@@ -100,6 +113,10 @@ export type ChatResult =
 			metadata?: Record<string, unknown>;
 	  }
 	| {
+			type: "tool-execution";
+			execution: ToolExecutionRecord;
+	  }
+	| {
 			type: "final";
 			content: string;
 			parts?: MessageParts;
@@ -111,6 +128,7 @@ export type ChatResult =
 					metadata: Record<string, unknown>;
 				}>;
 				executions?: AssistantExecutionPart[];
+				toolExecutions?: ToolExecutionRecord[];
 				tool_calls?: ChatCompletionMessageToolCall[];
 				usage?: {
 					prompt_tokens: number;
@@ -194,6 +212,55 @@ function applyFlowConfigPrefix(
 	};
 }
 
+const hasThreadHistory = (
+	conversation: ConversationContext | undefined,
+): conversation is ConversationContext & {
+	historyBoundary: NonNullable<ConversationContext["historyBoundary"]>;
+} => Boolean(conversation?.historyBoundary?.separatorId);
+
+const withThreadHistoryTools = (
+	config: UnifiedFlowConfig,
+	conversation: ConversationContext | undefined,
+): UnifiedFlowConfig => {
+	if (!hasThreadHistory(conversation)) return config;
+	const historyTools: GraphTool[] = [
+		THREAD_HISTORY_SEARCH_TOOL,
+		THREAD_HISTORY_READ_TOOL,
+	];
+	return {
+		...config,
+		steps: config.steps.map((step) => {
+			if (step.name === "chat-completion") {
+				return { ...step, enabled: false };
+			}
+			if (step.name !== "agent-completion") return step;
+			const existing = Array.isArray(step.config?.tools)
+				? (step.config.tools as GraphTool[])
+				: [];
+			const byName = new Map<string, GraphTool>();
+			for (const tool of [...existing, ...historyTools]) {
+				byName.set(typeof tool === "string" ? tool : tool.name, tool);
+			}
+			return {
+				...step,
+				enabled: true,
+				config: { ...step.config, tools: [...byName.values()] },
+			};
+		}),
+	};
+};
+
+const getThreadHistoryRuntimeVars = (
+	conversation: ConversationContext | undefined,
+): Record<string, unknown> | undefined =>
+	hasThreadHistory(conversation)
+		? {
+				[THREAD_HISTORY_CONVERSATION_RUNTIME_KEY]: conversation.id,
+				[THREAD_HISTORY_SEPARATOR_RUNTIME_KEY]:
+					conversation.historyBoundary.separatorId,
+			}
+		: undefined;
+
 type FlowStreamDeps = {
 	jobId: string;
 	model: string;
@@ -223,6 +290,10 @@ type FlowCustomPayloadDeps = {
 		node: string;
 		metadata?: Record<string, unknown>;
 	}) => void;
+	handleToolExecution: (
+		phase: "start" | "result",
+		event: { node: string; metadata?: Record<string, unknown> },
+	) => ToolExecutionRecord | undefined;
 	dependencies: ProcessDependencies;
 	jobId: string;
 	executeStage: string;
@@ -250,6 +321,7 @@ type FlowStreamRunDeps = FlowRuntimeDeps & {
 		node: string;
 		metadata?: Record<string, unknown>;
 	}) => void;
+	handleToolExecution: FlowCustomPayloadDeps["handleToolExecution"];
 };
 
 type AssistantMessageFinalization = {
@@ -261,6 +333,7 @@ type AssistantMessageFinalization = {
 	usage?: TokenUsage;
 	actions: ChatResultFinalAction[];
 	executions: AssistantExecutionPart[];
+	toolExecutions: ToolExecutionRecord[];
 	error?: JobErrorMetadata;
 };
 
@@ -280,6 +353,7 @@ type AssistantMessageMetadata = {
 	estimatedTokens: number;
 	actions?: ChatResultFinalAction[];
 	executions?: AssistantExecutionPart[];
+	toolExecutions?: ToolExecutionRecord[];
 	usage?: TokenUsage;
 	agentFlowName?: string;
 	error?: JobErrorMetadata;
@@ -393,6 +467,7 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 		usage,
 		actions,
 		executions,
+		toolExecutions,
 		error,
 	}: AssistantMessageFinalization): AssistantMessageMetadata {
 		const timeToAnswer = (Date.now() - startTime) / 1000;
@@ -408,6 +483,7 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 			estimatedTokens: totalTokens,
 			...(actions.length > 0 ? { actions } : {}),
 			...(executions.length > 0 ? { executions } : {}),
+			...(toolExecutions.length > 0 ? { toolExecutions } : {}),
 			...(conversation?.agentFlowName
 				? { agentFlowName: conversation.agentFlowName }
 				: {}),
@@ -582,6 +658,7 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 		stream,
 		executeStage,
 		handleExecutionStart,
+		handleToolExecution,
 		...runtimeDeps
 	}: FlowStreamRunDeps): Promise<Record<string, unknown> | null> {
 		const { handleChunk, handleActions } =
@@ -597,6 +674,7 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 					handleChunk,
 					handleActions,
 					handleExecutionStart,
+					handleToolExecution,
 					dependencies: runtimeDeps.dependencies,
 					jobId: runtimeDeps.jobId,
 					executeStage,
@@ -617,6 +695,7 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 		handleChunk,
 		handleActions,
 		handleExecutionStart,
+		handleToolExecution,
 		dependencies,
 		jobId,
 		executeStage,
@@ -643,6 +722,7 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 						metadata: payload.metadata,
 					};
 					handleExecutionStart(event);
+					const execution = handleToolExecution("start", event);
 					await dependencies.updateJobProgress(jobId, {
 						stage: executeStage,
 						progress: 12,
@@ -652,6 +732,32 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 							metadata: event.metadata,
 						} as ChatResult,
 					});
+					if (execution) {
+						await dependencies.updateJobProgress(jobId, {
+							stage: executeStage,
+							progress: 12,
+							result: { type: "tool-execution", execution } as ChatResult,
+						});
+					}
+				}
+				return;
+			case "tool-result":
+				if ("node" in payload) {
+					const event = {
+						node: payload.node as string,
+						metadata:
+							"metadata" in payload
+								? (payload.metadata as Record<string, unknown> | undefined)
+								: undefined,
+					};
+					const execution = handleToolExecution("result", event);
+					if (execution) {
+						await dependencies.updateJobProgress(jobId, {
+							stage: executeStage,
+							progress: 14,
+							result: { type: "tool-execution", execution } as ChatResult,
+						});
+					}
 				}
 				return;
 			default:
@@ -713,11 +819,75 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 		let finalMessageState: Record<string, unknown> | null = null;
 		const actions: FlowAction[] = [];
 		let executions: AssistantExecutionPart[] = [];
+		let toolExecutions: ToolExecutionRecord[] = [];
 		const handleExecutionStart = (event: {
 			node: string;
 			metadata?: Record<string, unknown>;
 		}) => {
 			executions = addExecutionPart(executions, event);
+		};
+		const handleToolExecution: FlowCustomPayloadDeps["handleToolExecution"] = (
+			phase,
+			event,
+		) => {
+			const metadata = event.metadata;
+			const id =
+				typeof metadata?.tool_call_id === "string"
+					? metadata.tool_call_id
+					: undefined;
+			const name =
+				typeof metadata?.tool === "string" ? metadata.tool : undefined;
+			if (!id || !name) return undefined;
+
+			const existing = toolExecutions.find((item) => item.id === id);
+			if (phase === "start") {
+				const input = createToolExecutionPreview(metadata?.input);
+				const record: ToolExecutionRecord = {
+					id,
+					name,
+					status: "running",
+					startedAt:
+						typeof metadata?.startedAt === "string"
+							? metadata.startedAt
+							: new Date().toISOString(),
+					inputPreview: input.preview,
+					truncated: input.truncated,
+				};
+				toolExecutions = upsertToolExecution(toolExecutions, record);
+				return record;
+			}
+
+			const output = createToolExecutionPreview(
+				metadata?.content ?? metadata?.structuredContent,
+			);
+			const isError = metadata?.isError === true;
+			const endedAt =
+				typeof metadata?.endedAt === "string"
+					? metadata.endedAt
+					: new Date().toISOString();
+			const record: ToolExecutionRecord = {
+				id,
+				name,
+				status: isError ? "failed" : "completed",
+				startedAt: existing?.startedAt ?? endedAt,
+				endedAt,
+				durationMs:
+					typeof metadata?.durationMs === "number"
+						? metadata.durationMs
+						: existing
+							? Math.max(
+									0,
+									new Date(endedAt).getTime() -
+										new Date(existing.startedAt).getTime(),
+								)
+							: 0,
+				inputPreview: existing?.inputPreview,
+				outputPreview: output.preview,
+				error: isError ? output.preview : undefined,
+				truncated: Boolean(existing?.truncated || output.truncated),
+			};
+			toolExecutions = upsertToolExecution(toolExecutions, record);
+			return record;
 		};
 		const toolCallAccumulator = createToolCallAccumulator();
 		const accumulatedUsage: TokenUsage = {
@@ -770,7 +940,7 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 				progress: 5,
 			});
 
-			if (mode === "agent") {
+			if (mode === "agent" || (mode === "normal" && hasThreadHistory(conversation))) {
 				await dependencies.updateJobProgress(jobId, {
 					stage: "Running Agent...",
 					progress: 20,
@@ -778,7 +948,10 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 
 				let flowConfig: UnifiedFlowConfig | null = null;
 				try {
-					flowConfig = job.payload.flowConfig
+					flowConfig =
+						mode === "normal"
+							? buildDefaultFlowConfig("agent")
+							: job.payload.flowConfig
 						? job.payload.flowConfig
 						: agentFlowId
 							? await serviceManager.flowBuilderService.getUnifiedFlowConfig({
@@ -796,9 +969,9 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 				const resolvedConfig = flowConfig
 					? mergeWithDefaultConfig(flowConfig, flowConfig.graphType)
 					: buildDefaultFlowConfig("agent");
-				const resolvedConfigWithPrefix = applyFlowConfigPrefix(
-					resolvedConfig,
-					job.payload.flowConfigPrefix,
+				const resolvedConfigWithPrefix = withThreadHistoryTools(
+					applyFlowConfigPrefix(resolvedConfig, job.payload.flowConfigPrefix),
+					conversation,
 				);
 				const stream = toLegacyFlowStream(
 					createMemorallFlowRun({
@@ -809,6 +982,7 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 							config: resolvedConfigWithPrefix,
 							initialState: { messages, topicId, contextQueries: [] },
 							streamModes: ["custom", "values"],
+							runtimeVars: getThreadHistoryRuntimeVars(conversation),
 						},
 					}),
 				);
@@ -817,6 +991,7 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 					stream,
 					executeStage: "Executing agent action...",
 					handleExecutionStart,
+					handleToolExecution,
 					jobId,
 					model,
 					config,
@@ -923,7 +1098,10 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 					}
 				}
 
-				resolvedConfig = applyTopicRecallType(resolvedConfig, topicRecallType);
+				resolvedConfig = withThreadHistoryTools(
+					applyTopicRecallType(resolvedConfig, topicRecallType),
+					conversation,
+				);
 				const graphType = resolvedConfig.graphType ?? "foundation";
 
 				const stream = toLegacyFlowStream(
@@ -935,6 +1113,7 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 							config: resolvedConfig,
 							initialState: { messages, topicId, contextQueries },
 							streamModes: ["custom", "updates", "values"],
+							runtimeVars: getThreadHistoryRuntimeVars(conversation),
 						},
 					}),
 				);
@@ -943,6 +1122,7 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 					stream,
 					executeStage: "Executing...",
 					handleExecutionStart,
+					handleToolExecution,
 					jobId,
 					model,
 					config,
@@ -1028,6 +1208,10 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 				accumulatedParts: messagePartsAccumulator.toParts(),
 			});
 			const finalExecutions = completeExecutionParts(executions);
+			const finalToolExecutions = finishRunningToolExecutions(
+				toolExecutions,
+				"completed",
+			);
 			const finalUsage =
 				accumulatedUsage.total_tokens > 0 ? accumulatedUsage : undefined;
 			const finalMetadata = ChatHandler.buildAssistantMessageMetadata({
@@ -1039,6 +1223,7 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 				usage: finalUsage,
 				actions: finalActions,
 				executions: finalExecutions,
+				toolExecutions: finalToolExecutions,
 			});
 			const result = {
 				type: "final",
@@ -1047,6 +1232,7 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 				metadata: {
 					...finalMetadata,
 					executions: finalExecutions,
+					toolExecutions: finalToolExecutions,
 				},
 			} satisfies ChatResult;
 
@@ -1078,6 +1264,10 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 					usage: errorUsage,
 					actions: normalizeActions(actions),
 					executions: completeExecutionParts(executions),
+					toolExecutions: finishRunningToolExecutions(
+						toolExecutions,
+						isAbort ? "cancelled" : "failed",
+					),
 					error: isAbort ? undefined : errorMetadata,
 				});
 				await finalizeConversation({

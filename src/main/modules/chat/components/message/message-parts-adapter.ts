@@ -2,6 +2,7 @@ import type {
 	AssistantExecutionPart,
 	ComplexContentPartTool,
 	MessageParts,
+	ToolExecutionRecord,
 } from "@/types/chat";
 import type { ChatCompletionMessageToolCall } from "@/types/openai";
 import type { AssistantContentPart } from "./AssistantContentFlow";
@@ -107,16 +108,57 @@ const buildRunningExecutionPart = (
 	state: "running",
 });
 
+const buildPersistedToolPart = (
+	record: ToolExecutionRecord,
+): ComplexContentPartTool => ({
+	type: "tool",
+	id: record.id,
+	name: record.name,
+	description: record.outputPreview ?? record.error ?? "",
+	metadata: {
+		tool: record.name,
+		tool_call_id: record.id,
+		tool_call: {
+			id: record.id,
+			type: "function",
+			function: {
+				name: record.name,
+				arguments: record.inputPreview ?? "",
+			},
+		},
+		inputPreview: record.inputPreview,
+		outputPreview: record.outputPreview,
+		durationMs: record.durationMs,
+		startedAt: record.startedAt,
+		endedAt: record.endedAt,
+		truncated: record.truncated,
+		status: record.status,
+		...(record.error ? { error: record.error } : {}),
+	},
+	state:
+		record.status === "running"
+			? "running"
+			: record.status === "completed"
+				? "complete"
+				: "error",
+});
+
 export const buildAssistantContentParts = ({
 	parts,
 	executions,
 	executeState,
+	toolExecutions,
 }: {
 	parts: MessageParts | null | undefined;
 	executions?: AssistantExecutionPart[];
 	executeState?: ExecuteState;
+	toolExecutions?: ToolExecutionRecord[];
 }): AssistantContentPart[] => {
-	const contentParts: AssistantContentPart[] = [...(executions ?? [])];
+	const hasExecutionRecords = Boolean(toolExecutions?.length);
+	const contentParts: AssistantContentPart[] = [
+		...(executions ?? []),
+		...(toolExecutions ?? []).map(buildPersistedToolPart),
+	];
 	const toolCallsById = new Map<string, ChatCompletionMessageToolCall>();
 	const completedToolCallIds = new Set<string>();
 
@@ -133,18 +175,20 @@ export const buildAssistantContentParts = ({
 
 		if (part.role === "tool") {
 			completedToolCallIds.add(part.tool_call_id);
-			contentParts.push(
-				buildToolPart(
-					part.tool_call_id,
-					part.content,
-					findToolCall(toolCallsById, part.tool_call_id),
-				),
-			);
+			if (!hasExecutionRecords) {
+				contentParts.push(
+					buildToolPart(
+						part.tool_call_id,
+						part.content,
+						findToolCall(toolCallsById, part.tool_call_id),
+					),
+				);
+			}
 		}
 	}
 
 	if (executeState) {
-		if (isToolExecution(executeState)) {
+		if (isToolExecution(executeState) && !hasExecutionRecords) {
 			const runningTool = buildRunningToolPart(executeState);
 			if (!completedToolCallIds.has(runningTool.id)) {
 				contentParts.push(runningTool);

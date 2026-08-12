@@ -1,5 +1,4 @@
-const LOTTIE_CDN_URL =
-  "https://cdn.jsdelivr.net/npm/lottie-web@5.12.2/build/player/lottie_canvas.min.js";
+const LOTTIE_RUNTIME_URL = "/vendors/artifacts/lottie_canvas.min.js";
 const GIF_ENCODER_URL = "./js/gif-encoder.js";
 
 let anim = null;
@@ -46,7 +45,7 @@ function loadLottieScript() {
   return new Promise((resolve, reject) => {
     if (window.lottie) return resolve();
     const script = document.createElement("script");
-    script.src = LOTTIE_CDN_URL;
+    script.src = LOTTIE_RUNTIME_URL;
     script.onload = resolve;
     script.onerror = reject;
     document.head.appendChild(script);

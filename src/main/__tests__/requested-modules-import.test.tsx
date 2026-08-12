@@ -126,5 +126,5 @@ describe("requested main module coverage", () => {
 		// This eagerly imports the entire chat/files/agents/llm module trees
 		// (univer, tiptap, transformers, …), which legitimately takes >30s under
 		// full-suite CPU contention; give it headroom so it isn't a flaky timeout.
-	}, 60000);
+	}, 90000);
 });

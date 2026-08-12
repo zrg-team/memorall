@@ -24,10 +24,68 @@
 	},
 	"input": {
 		"placeholder": "Nhập tin nhắn của bạn...",
+		"messageAgent": "Nhắn cho {{agent}}...",
 		"send": "Gửi",
 		"clearTitle": "Xóa cuộc trò chuyện",
 		"clearButton": "Mới",
-		"attachImage": "Đính kèm ảnh"
+		"attachImage": "Đính kèm tệp",
+		"attachFile": "Tải lên từ máy tính",
+		"attachDocument": "Chọn từ tài liệu"
+	},
+	"sidebar": {
+		"label": "Lịch sử trò chuyện",
+		"title": "Trò chuyện",
+		"count": "{{count}} cuộc trò chuyện",
+		"search": "Tìm cuộc trò chuyện",
+		"newChat": "Mới",
+		"newChatTitle": "Cuộc trò chuyện mới",
+		"empty": "Chưa có cuộc trò chuyện",
+		"emptyHint": "Bắt đầu cuộc trò chuyện mới để xem tại đây.",
+		"noSearchResults": "Không tìm thấy cuộc trò chuyện",
+		"tryAnotherSearch": "Thử tiêu đề hoặc từ khóa khác.",
+		"conversationActions": "Hành động cuộc trò chuyện",
+		"rename": "Đổi tên",
+		"renameInput": "Tiêu đề cuộc trò chuyện",
+		"saveRename": "Lưu tiêu đề",
+		"cancelRename": "Hủy đổi tên",
+		"pin": "Ghim",
+		"unpin": "Bỏ ghim",
+		"pinned": "Đã ghim",
+		"delete": "Xóa",
+		"deleteConfirm": "Xóa “{{title}}”? Không thể hoàn tác thao tác này.",
+		"expand": "Mở rộng lịch sử trò chuyện",
+		"collapse": "Thu gọn lịch sử trò chuyện",
+		"close": "Đóng lịch sử trò chuyện",
+		"resize": "Thay đổi kích thước lịch sử trò chuyện",
+		"groups": {
+			"pinned": "Đã ghim",
+			"today": "Hôm nay",
+			"yesterday": "Hôm qua",
+			"earlier": "Trước đó"
+		}
+	},
+	"header": {
+		"openChats": "Mở lịch sử trò chuyện",
+		"conversationActions": "Hành động cuộc trò chuyện",
+		"newContext": "Bắt đầu ngữ cảnh mới",
+		"expandWidth": "Mở rộng chiều rộng tin nhắn",
+		"constrainWidth": "Thu hẹp chiều rộng tin nhắn",
+		"clearConversation": "Xóa tin nhắn",
+		"clearConfirm": "Xóa mọi tin nhắn trong cuộc trò chuyện này? Không thể hoàn tác."
+	},
+	"emptyState": {
+		"title": "Tôi có thể giúp bạn nhớ lại điều gì?",
+		"description": "Hỏi về kiến thức đã lưu, đính kèm tệp hoặc bắt đầu với một gợi ý.",
+		"prompts": {
+			"savedKnowledge": "Tìm trong kiến thức đã lưu",
+			"summarizeDocument": "Tóm tắt tài liệu",
+			"brainstorm": "Lên ý tưởng từ ghi chú"
+		},
+		"promptText": {
+			"savedKnowledge": "Những thông tin liên quan nhất mà tôi đã lưu gần đây là gì?",
+			"summarizeDocument": "Tóm tắt tài liệu tôi đính kèm và nêu bật các quyết định chính.",
+			"brainstorm": "Giúp tôi lên ý tưởng bằng các ghi chú và kiến thức đã lưu."
+		}
 	},
 	"mention": {
 		"documents": "Tệp",
@@ -55,9 +113,9 @@
 		"agentPrompt": "Tạo tác nhân cho công việc bạn muốn giải quyết?"
 	},
 	"history": {
-		"scrollUp": "Cuộn lên để xem lịch sử",
-		"showPrevious": "Hiển thị trò chuyện trước đó ({{count}})",
-		"hidePrevious": "Ẩn trò chuyện trước đó"
+		"scrollUp": "Cuộn đến ngữ cảnh trước",
+		"showPrevious": "Hiển thị ngữ cảnh trước ({{count}})",
+		"hidePrevious": "Ẩn ngữ cảnh trước"
 	},
 	"actions": {
 		"deleteChat": "Xóa cuộc trò chuyện",
@@ -80,6 +138,13 @@
 	},
 	"messages": {
 		"assistant": "Trợ lý",
+		"you": "Bạn",
+		"copy": "Sao chép",
+		"copied": "Đã sao chép",
+		"save": "Lưu",
+		"saved": "Đã lưu",
+		"saveToDocuments": "Lưu cuộc trò chuyện vào tài liệu",
+		"responseDetails": "Chi tiết phản hồi",
 		"thinking": "Đang suy nghĩ...",
 		"thought": "Suy nghĩ",
 		"error": "Không thể gửi tin nhắn",
@@ -137,6 +202,10 @@
 		"running": "Đang chạy",
 		"error": "Lỗi",
 		"done": "Hoàn tất"
+	},
+	"toolTimeline": {
+		"running": "{{count}} hành động · đang chạy",
+		"finished": "{{count}} hành động · {{duration}}"
 	},
 	"workflow": {
 		"showDetails": "Hiện chi tiết lượt chạy",

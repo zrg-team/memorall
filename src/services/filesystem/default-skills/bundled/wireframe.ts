@@ -77,7 +77,7 @@ Write a single \`wireframe/DDMM-<feature-name>/index.html\` with the following s
 #### Document head
 - \`charset UTF-8\`, viewport meta tag
 - Title: "[Feature Name] — [Project] Wireframes"
-- Tailwind CDN script: \`<script src="https://cdn.tailwindcss.com"></script>\`
+- Tailwind classes only; the extension preview supplies its packaged styling runtime
 - A \`<style type="text/tailwindcss">\` block containing:
   - Data-mode rules: \`[data-mode="clean"] .wf-note, [data-mode="polished"] .wf-note { display: none; }\`
   - All Phase 2 color variant CSS rules (appended by Task agents in Step 3e)

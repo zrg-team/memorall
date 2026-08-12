@@ -34,6 +34,7 @@ export interface MemorallFlowRunInput {
 		readonly contextQueries: string[];
 	};
 	readonly streamModes: readonly ("custom" | "updates" | "values")[];
+	readonly runtimeVars?: Readonly<Record<string, unknown>>;
 }
 
 export const MEMORALL_FLOW_SERVICES = createServiceToken<MemorallFlowServices>(
@@ -89,7 +90,9 @@ export const memorallFlowCompatibilityPlugin = (): HarnessPlugin => ({
 					services,
 					input.config,
 				);
-				const runtimeVars = createFlowRuntimeVars();
+				const runtimeVars = createFlowRuntimeVars(
+					input.runtimeVars ? { ...input.runtimeVars } : undefined,
+				);
 				const stream = await graph.stream(
 					getInitialState(input.initialState),
 					withFlowRuntimeVars(

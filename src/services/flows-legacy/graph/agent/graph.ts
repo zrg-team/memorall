@@ -272,14 +272,39 @@ export class AgentGraph extends GraphBase<
 		for (const toolCall of lastMessage.tool_calls) {
 			const toolName = toolCall.function.name;
 			const combined = this.executorMap.get(toolName);
+			const startedAtMs = Date.now();
+			let parsedInput: unknown = toolCall.function.arguments;
+			try {
+				parsedInput = JSON.parse(toolCall.function.arguments);
+			} catch {
+				// The executor will surface invalid JSON as a tool error below.
+			}
 			runConfig?.writer?.({
 				type: "execute-start",
 				node: "tool_executor",
-				metadata: { tool: toolName, tool_call_id: toolCall.id },
+				metadata: {
+					tool: toolName,
+					tool_call_id: toolCall.id,
+					input: parsedInput,
+					startedAt: new Date(startedAtMs).toISOString(),
+				},
 			});
 
 			if (!combined) {
 				const content = `Error: Tool '${toolName}' not found`;
+				const endedAtMs = Date.now();
+				runConfig?.writer?.({
+					type: "tool-result",
+					node: "tool_executor",
+					metadata: {
+						tool: toolName,
+						tool_call_id: toolCall.id,
+						content,
+						isError: true,
+						endedAt: new Date(endedAtMs).toISOString(),
+						durationMs: endedAtMs - startedAtMs,
+					},
+				});
 				const toolMessage = {
 					role: "tool" as const,
 					content,
@@ -301,6 +326,7 @@ export class AgentGraph extends GraphBase<
 				});
 				const { content, contentText, structuredContent, isError, meta } =
 					extractToolResult(rawResult);
+				const endedAtMs = Date.now();
 				runConfig?.writer?.({
 					type: "tool-result",
 					node: "tool_executor",
@@ -308,8 +334,11 @@ export class AgentGraph extends GraphBase<
 						tool: toolName,
 						tool_call_id: toolCall.id,
 						structuredContent,
+						content: contentText,
 						isError,
 						meta,
+						endedAt: new Date(endedAtMs).toISOString(),
+						durationMs: endedAtMs - startedAtMs,
 					},
 				});
 
@@ -342,6 +371,19 @@ export class AgentGraph extends GraphBase<
 				logError(`[TOOLS] Error executing ${toolName}:`, error);
 
 				const content = `Error: ${errorMessage}`;
+				const endedAtMs = Date.now();
+				runConfig?.writer?.({
+					type: "tool-result",
+					node: "tool_executor",
+					metadata: {
+						tool: toolName,
+						tool_call_id: toolCall.id,
+						content,
+						isError: true,
+						endedAt: new Date(endedAtMs).toISOString(),
+						durationMs: endedAtMs - startedAtMs,
+					},
+				});
 				const toolMessage = {
 					role: "tool" as const,
 					content,
