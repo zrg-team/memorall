@@ -16,7 +16,7 @@ interface PortPair {
 	offscreenPort: chrome.runtime.Port;
 }
 
-class PortBridge {
+export class PortBridge {
 	private activeBridges = new Map<string, PortPair>();
 
 	/**
@@ -134,19 +134,53 @@ class PortBridge {
 
 		let currentOffscreenPort = offscreenPort;
 		let popupDisconnected = false;
+		// Requests can be posted before the offscreen RPC listener is registered.
+		// Edge disconnects that temporary port, so retain every unanswered RPC and
+		// replay it on the replacement port. The offscreen handler deduplicates by
+		// request id, making replay safe even when a response races a disconnect.
+		const pendingMessages = new Map<number, unknown>();
+
+		const getMessageId = (message: unknown): number | null => {
+			if (typeof message !== "object" || message === null) return null;
+			const id = (message as { id?: unknown }).id;
+			return typeof id === "number" ? id : null;
+		};
+
+		const postToOffscreen = (
+			oPort: chrome.runtime.Port,
+			message: unknown,
+		): void => {
+			try {
+				oPort.postMessage(message);
+			} catch (error) {
+				// Keep the request buffered. The disconnect/reconnect path will retry it.
+				logWarn("Failed to relay message from popup to offscreen:", error);
+			}
+		};
+
+		const replayPendingMessages = (oPort: chrome.runtime.Port): void => {
+			if (pendingMessages.size === 0) return;
+			logInfo("🌉 Port bridge: replaying pending RPC requests", {
+				bridgeId,
+				count: pendingMessages.size,
+			});
+			for (const message of pendingMessages.values()) {
+				postToOffscreen(oPort, message);
+			}
+		};
 
 		// Relay messages from popup → current offscreen port
 		const relayToOffscreen = (message: unknown) => {
-			try {
-				currentOffscreenPort.postMessage(message);
-			} catch (error) {
-				logWarn("Failed to relay message from popup to offscreen:", error);
-			}
+			const id = getMessageId(message);
+			if (id !== null) pendingMessages.set(id, message);
+			postToOffscreen(currentOffscreenPort, message);
 		};
 		popupPort.onMessage.addListener(relayToOffscreen);
 
 		// Relay messages from offscreen → popup
 		const relayToPopup = (message: unknown) => {
+			const id = getMessageId(message);
+			if (id !== null) pendingMessages.delete(id);
 			try {
 				popupPort.postMessage(message);
 			} catch (error) {
@@ -158,6 +192,7 @@ class PortBridge {
 		popupPort.onDisconnect.addListener(() => {
 			logInfo("🌉 Port bridge: popup disconnected", { bridgeId });
 			popupDisconnected = true;
+			pendingMessages.clear();
 			try {
 				currentOffscreenPort.disconnect();
 			} catch {}
@@ -206,6 +241,7 @@ class PortBridge {
 						const newPort = chrome.runtime.connect({ name: popupPort.name });
 						currentOffscreenPort = newPort;
 						attachOffscreen(newPort, attempt + 1);
+						replayPendingMessages(newPort);
 					} catch (connectErr) {
 						logError(
 							"❌ Port bridge: failed to reconnect to offscreen:",

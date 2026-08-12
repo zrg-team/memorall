@@ -12,8 +12,19 @@ vi.mock("react-i18next", () => ({
 }));
 
 vi.mock("../AssistantToolTimelinePart", () => ({
-	AssistantToolTimelinePart: ({ part }: { part: ComplexContentPartTool }) => (
-		<div data-testid={`action-${part.id}`}>{part.description}</div>
+	AssistantToolTimelinePart: ({
+		part,
+		forceOpen,
+	}: {
+		part: ComplexContentPartTool;
+		forceOpen?: boolean;
+	}) => (
+		<div
+			data-testid={`action-${part.id}`}
+			data-force-open={String(Boolean(forceOpen))}
+		>
+			{part.description}
+		</div>
 	),
 }));
 
@@ -33,7 +44,12 @@ describe("AssistantToolTimeline", () => {
 		);
 		const trigger = screen.getByRole("button");
 		expect(trigger).toHaveAttribute("aria-expanded", "true");
+		expect(trigger).toHaveAccessibleName("Hide run details (1)");
 		expect(screen.getByTestId("action-call-1")).toBeInTheDocument();
+		expect(screen.getByTestId("action-call-1")).toHaveAttribute(
+			"data-force-open",
+			"true",
+		);
 
 		rerender(
 			<AssistantToolTimeline
@@ -44,9 +60,31 @@ describe("AssistantToolTimeline", () => {
 		await waitFor(() =>
 			expect(trigger).toHaveAttribute("aria-expanded", "false"),
 		);
+		expect(trigger).toHaveAccessibleName("Show run details (1)");
 
 		fireEvent.click(trigger);
 		expect(trigger).toHaveAttribute("aria-expanded", "true");
+		expect(trigger).toHaveAccessibleName("Hide run details (1)");
 		expect(screen.getByTestId("action-call-1")).toBeInTheDocument();
+		expect(screen.getByTestId("action-call-1")).toHaveAttribute(
+			"data-force-open",
+			"false",
+		);
+	});
+
+	it("auto-expands only the active action while an execution is running", () => {
+		const completed = { ...part, id: "call-0", state: "complete" as const };
+		render(
+			<AssistantToolTimeline parts={[completed, part]} isStreaming={true} />,
+		);
+
+		expect(screen.getByTestId("action-call-0")).toHaveAttribute(
+			"data-force-open",
+			"false",
+		);
+		expect(screen.getByTestId("action-call-1")).toHaveAttribute(
+			"data-force-open",
+			"true",
+		);
 	});
 });

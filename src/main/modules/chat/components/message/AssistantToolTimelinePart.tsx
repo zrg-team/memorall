@@ -24,14 +24,7 @@ export const AssistantToolTimelinePart: React.FC<{
 	isLast: boolean;
 	connectsToPrevious?: boolean;
 	forceOpen?: boolean;
-	revealKey?: number;
-}> = ({
-	part,
-	isLast,
-	connectsToPrevious = false,
-	forceOpen = false,
-	revealKey = 0,
-}) => {
+}> = ({ part, isLast, connectsToPrevious = false, forceOpen = false }) => {
 	const { t } = useTranslation("chat");
 	const [isOpen, setIsOpen] = useState(false);
 	const actionName = part.name;
@@ -54,10 +47,6 @@ export const AssistantToolTimelinePart: React.FC<{
 	const effectiveOpen = forceOpen || isOpen;
 
 	useEffect(() => {
-		if (forceOpen || revealKey > 0) setIsOpen(true);
-	}, [forceOpen, revealKey]);
-
-	useEffect(() => {
 		if (!isRunning || !startedAt) return;
 		setNowMs(Date.now());
 		const timer = window.setInterval(() => setNowMs(Date.now()), 1_000);
@@ -75,22 +64,22 @@ export const AssistantToolTimelinePart: React.FC<{
 	};
 
 	return (
-		<div className="grid w-full min-w-0 max-w-full grid-cols-[0.875rem_minmax(0,1fr)] gap-2 sm:grid-cols-[1rem_minmax(0,1fr)] sm:gap-2.5 animate-in fade-in-0 slide-in-from-top-1 duration-200 ease-out">
+		<div className="grid w-full min-w-0 max-w-full grid-cols-[0.75rem_minmax(0,1fr)] gap-2 animate-in fade-in-0 slide-in-from-top-1 duration-200 ease-out">
 			<div className="relative flex h-full justify-center">
 				{connectsToPrevious ? (
-					<div className="absolute left-1/2 top-0 h-[1.25rem] w-px -translate-x-1/2 bg-border/70 transition-colors duration-200" />
+					<div className="absolute left-1/2 top-0 h-4 w-px -translate-x-1/2 bg-border/60" />
 				) : null}
 				{!isLast ? (
-					<div className="absolute left-1/2 top-[1.375rem] h-[calc(100%+0.75rem)] w-px -translate-x-1/2 bg-border/70 transition-colors duration-200" />
+					<div className="absolute bottom-[-0.25rem] left-1/2 top-4 w-px -translate-x-1/2 bg-border/60" />
 				) : null}
 				<span
 					className={cn(
-						"absolute top-[1.125rem] z-10 h-2 w-2 rounded-full border bg-background transition-all duration-200 ease-out",
+						"absolute top-[0.9375rem] z-10 h-1.5 w-1.5 rounded-full ring-2 ring-background transition-colors duration-200",
 						isError
-							? "border-destructive bg-destructive"
+							? "bg-destructive"
 							: isRunning
-								? "border-primary bg-primary"
-								: "border-emerald-500 bg-emerald-500",
+								? "bg-primary"
+								: "bg-emerald-500",
 					)}
 				/>
 			</div>
@@ -105,21 +94,21 @@ export const AssistantToolTimelinePart: React.FC<{
 						<button
 							type="button"
 							className={cn(
-								"group/tool flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left transition-[background-color,box-shadow,transform] duration-200 ease-out hover:bg-muted/20 active:scale-[0.995]",
-								effectiveOpen && "bg-muted/35 shadow-sm",
+								"group/tool flex min-h-8 w-full items-center gap-2 rounded-md px-1.5 py-1 text-left transition-colors hover:bg-muted/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+								effectiveOpen && "bg-muted/10",
 							)}
 						>
 							<span
 								className={cn(
-									"flex h-7 w-7 shrink-0 items-center justify-center rounded-md border bg-background/70 transition-[background-color,border-color,color,transform] duration-200 ease-out group-hover/tool:scale-105",
+									"flex h-6 w-6 shrink-0 items-center justify-center text-muted-foreground transition-colors group-hover/tool:text-foreground",
 									isError
-										? "border-destructive/25 text-destructive"
+										? "text-destructive"
 										: isRunning
-											? "border-primary/25 text-primary"
-											: "border-border/60 text-muted-foreground",
+											? "text-primary"
+											: "text-muted-foreground",
 								)}
 							>
-								<Icon className="h-4 w-4" />
+								<Icon className="h-3.5 w-3.5" />
 							</span>
 							<span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground transition-colors duration-200">
 								{title}
@@ -139,7 +128,7 @@ export const AssistantToolTimelinePart: React.FC<{
 							</span>
 							<ChevronDown
 								className={cn(
-									"h-4 w-4 shrink-0 text-muted-foreground transition-[transform,color] duration-200 ease-out",
+									"h-3.5 w-3.5 shrink-0 text-muted-foreground transition-[transform,color] duration-200 ease-out",
 									effectiveOpen && "rotate-180 text-foreground",
 								)}
 							/>
@@ -152,7 +141,7 @@ export const AssistantToolTimelinePart: React.FC<{
 							"overflow-hidden text-sm outline-none data-[state=open]:animate-collapsible-down data-[state=closed]:animate-collapsible-up",
 						)}
 					>
-						<div className="mt-2 min-w-0 overflow-hidden rounded-lg border border-border/60 bg-background/80 p-2 shadow-sm sm:p-3">
+						<div className="min-w-0 overflow-hidden pb-3 pl-1 pr-1 pt-1">
 							<ToolActionDetails item={actionItem} isOpen={effectiveOpen} />
 						</div>
 					</CollapsibleContent>

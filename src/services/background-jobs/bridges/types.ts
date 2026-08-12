@@ -14,6 +14,7 @@ export interface OffscreenProgress {
 	progress: number;
 	status: string;
 	services?: string[];
+	error?: string;
 }
 
 // ─── Job notification message ─────────────────────────────────────────────────

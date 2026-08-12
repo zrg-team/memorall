@@ -1,14 +1,14 @@
-import type {
-	ToolExecutionRecord,
-	ToolExecutionStatus,
-} from "@/types/chat";
+import type { ToolExecutionRecord, ToolExecutionStatus } from "@/types/chat";
 import { sanitizeForJson } from "@/utils/sanitize-json";
 
 const SECRET_KEY_PATTERN =
 	/(?:api[-_]?key|authorization|cookie|credential|password|secret|token)/i;
 const PREVIEW_LIMIT = 4_000;
 
-const redactSecrets = (value: unknown, seen = new WeakSet<object>()): unknown => {
+const redactSecrets = (
+	value: unknown,
+	seen = new WeakSet<object>(),
+): unknown => {
 	if (Array.isArray(value)) {
 		if (seen.has(value)) return "[Circular]";
 		seen.add(value);

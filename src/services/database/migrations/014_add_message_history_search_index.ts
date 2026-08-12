@@ -1,13 +1,11 @@
 import type { PGlite } from "@electric-sql/pglite";
+import { buildThreadHistorySearchVectorSql } from "../thread-history-search-vector";
 
 export const up = async (pg: PGlite) => {
 	await pg.exec(`
 		CREATE INDEX IF NOT EXISTS messages_thread_history_search_idx
 			ON messages USING gin (
-				to_tsvector(
-					'simple'::regconfig,
-					coalesce(content, '') || ' ' || coalesce(parts::text, '')
-				)
+				${buildThreadHistorySearchVectorSql()}
 			);
 	`);
 };

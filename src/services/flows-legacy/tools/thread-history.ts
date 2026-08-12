@@ -7,12 +7,14 @@ import type {
 } from "@/services/flows-legacy/interfaces/engine/tool";
 import type { AllServices } from "@/services/flows-legacy/interfaces/services/services";
 import { toolRegistry } from "@/services/flows-legacy/registries/tool-registry";
+import { buildThreadHistorySearchVectorSql } from "@/services/database/thread-history-search-vector";
 
 export const THREAD_HISTORY_SEARCH_TOOL = "thread_history_search" as const;
 export const THREAD_HISTORY_READ_TOOL = "thread_history_read" as const;
 export const THREAD_HISTORY_CONVERSATION_RUNTIME_KEY =
 	"thread.history.conversationId";
-export const THREAD_HISTORY_SEPARATOR_RUNTIME_KEY = "thread.history.separatorId";
+export const THREAD_HISTORY_SEPARATOR_RUNTIME_KEY =
+	"thread.history.separatorId";
 
 const SEARCH_RESPONSE_BUDGET = 12_000;
 const READ_RESPONSE_BUDGET = 24_000;
@@ -222,8 +224,9 @@ const findMatchExcerpts = (
 			toLine: end,
 			lines: lines
 				.slice(start, end)
-				.map((line, offset) =>
-					`L${start + offset + 1}${start + offset === index ? ">" : "|"} ${line}`,
+				.map(
+					(line, offset) =>
+						`L${start + offset + 1}${start + offset === index ? ">" : "|"} ${line}`,
 				),
 		};
 	});
@@ -253,20 +256,21 @@ export const createThreadHistorySearchTool: ToolFactory<
 			const prefixLines = input.prefixLines ?? 2;
 			const suffixLines = input.suffixLines ?? 2;
 			const limit = input.limit ?? 8;
+			const searchVector = buildThreadHistorySearchVectorSql("m");
 			const candidates = await services.database.raw<HistoryRow>(
 				`${HISTORY_SELECT}
 				WHERE m.conversation_id::text = $1
 					AND m.type <> 'separator'
 					AND m.created_at < boundary.created_at
 					AND (
-						to_tsvector('simple'::regconfig, coalesce(m.content, '') || ' ' || coalesce(m.parts::text, ''))
+						${searchVector}
 							@@ websearch_to_tsquery('simple'::regconfig, $3)
 						OR coalesce(m.content, '') ILIKE '%' || $3 || '%'
 						OR coalesce(m.parts::text, '') ILIKE '%' || $3 || '%'
 					)
 				ORDER BY
 					ts_rank_cd(
-						to_tsvector('simple'::regconfig, coalesce(m.content, '') || ' ' || coalesce(m.parts::text, '')),
+						${searchVector},
 						websearch_to_tsquery('simple'::regconfig, $3)
 					) DESC,
 					m.created_at DESC
@@ -313,7 +317,8 @@ export const createThreadHistorySearchTool: ToolFactory<
 				meta: { truncated, matchedMessageIds: matchedIds },
 			};
 		} catch (error) {
-			const message = error instanceof Error ? error.message : "History search failed";
+			const message =
+				error instanceof Error ? error.message : "History search failed";
 			return { content: `Error: ${message}`, isError: true };
 		}
 	},
@@ -362,7 +367,11 @@ export const createThreadHistoryReadTool: ToolFactory<ReadInput, Services> = (
 	execute: async (input, context): Promise<ToolExecutionResult> => {
 		try {
 			const scope = getScope(context);
-			if (!input.readAll && input.toLine && input.toLine < (input.fromLine ?? 1)) {
+			if (
+				!input.readAll &&
+				input.toLine &&
+				input.toLine < (input.fromLine ?? 1)
+			) {
 				return {
 					content: "Error: toLine must be greater than or equal to fromLine.",
 					isError: true,
@@ -419,7 +428,10 @@ export const createThreadHistoryReadTool: ToolFactory<ReadInput, Services> = (
 					rendered.push(line);
 				}
 
-				if (rendered.length > 1 || used + header.length <= READ_RESPONSE_BUDGET) {
+				if (
+					rendered.length > 1 ||
+					used + header.length <= READ_RESPONSE_BUDGET
+				) {
 					const block = rendered.join("\n");
 					blocks.push(block);
 					used += block.length + 2;
@@ -428,7 +440,11 @@ export const createThreadHistoryReadTool: ToolFactory<ReadInput, Services> = (
 			}
 
 			for (const messageId of input.messageIds) {
-				if (!byId.has(messageId) || blocks.some((block) => block.includes(`messageId: ${messageId}`))) continue;
+				if (
+					!byId.has(messageId) ||
+					blocks.some((block) => block.includes(`messageId: ${messageId}`))
+				)
+					continue;
 				continuation[messageId] = input.readAll ? 1 : (input.fromLine ?? 1);
 			}
 
@@ -446,7 +462,8 @@ export const createThreadHistoryReadTool: ToolFactory<ReadInput, Services> = (
 				},
 			};
 		} catch (error) {
-			const message = error instanceof Error ? error.message : "History read failed";
+			const message =
+				error instanceof Error ? error.message : "History read failed";
 			return { content: `Error: ${message}`, isError: true };
 		}
 	},

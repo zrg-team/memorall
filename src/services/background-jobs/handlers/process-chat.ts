@@ -940,7 +940,10 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 				progress: 5,
 			});
 
-			if (mode === "agent" || (mode === "normal" && hasThreadHistory(conversation))) {
+			if (
+				mode === "agent" ||
+				(mode === "normal" && hasThreadHistory(conversation))
+			) {
 				await dependencies.updateJobProgress(jobId, {
 					stage: "Running Agent...",
 					progress: 20,
@@ -952,12 +955,14 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 						mode === "normal"
 							? buildDefaultFlowConfig("agent")
 							: job.payload.flowConfig
-						? job.payload.flowConfig
-						: agentFlowId
-							? await serviceManager.flowBuilderService.getUnifiedFlowConfig({
-									flowId: agentFlowId,
-								})
-							: buildDefaultFlowConfig("agent");
+								? job.payload.flowConfig
+								: agentFlowId
+									? await serviceManager.flowBuilderService.getUnifiedFlowConfig(
+											{
+												flowId: agentFlowId,
+											},
+										)
+									: buildDefaultFlowConfig("agent");
 				} catch (err) {
 					await dependencies.logger.warn(
 						"Failed to load agent flow config, using defaults",

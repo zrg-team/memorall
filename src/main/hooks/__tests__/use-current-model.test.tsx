@@ -33,7 +33,7 @@ describe("useCurrentModel", () => {
 		);
 	});
 
-	it("clears persisted model metadata when its authenticated service is unavailable", async () => {
+	it("keeps persisted model metadata while its authenticated service is unavailable", async () => {
 		llmService.getCurrentModel.mockResolvedValue({
 			modelId: "openrouter/model",
 			provider: "openrouter",
@@ -44,9 +44,12 @@ describe("useCurrentModel", () => {
 		const { result } = renderHook(() => useCurrentModel());
 
 		await waitFor(() => expect(result.current.isInitialized).toBe(true));
-		expect(llmService.clearCurrentModel).toHaveBeenCalledTimes(1);
-		expect(result.current.model).toBe("");
-		expect(result.current.current).toBeNull();
+		expect(llmService.clearCurrentModel).not.toHaveBeenCalled();
+		expect(result.current.model).toBe("openrouter/model");
+		expect(result.current.current).toEqual({
+			modelId: "openrouter/model",
+			provider: "openrouter",
+		});
 	});
 
 	it("keeps a restored model only when its service is ready", async () => {
@@ -67,7 +70,7 @@ describe("useCurrentModel", () => {
 		});
 	});
 
-	it("removes an unavailable model received after initialization", async () => {
+	it("keeps an unavailable model received after initialization", async () => {
 		llmService.getCurrentModel.mockResolvedValue(null);
 		llmService.has.mockReturnValue(false);
 		const { result } = renderHook(() => useCurrentModel());
@@ -81,9 +84,27 @@ describe("useCurrentModel", () => {
 			});
 		});
 
-		await waitFor(() =>
-			expect(llmService.clearCurrentModel).toHaveBeenCalledTimes(1),
-		);
-		expect(result.current.model).toBe("");
+		await waitFor(() => expect(result.current.model).toBe("remote/model"));
+		expect(llmService.clearCurrentModel).not.toHaveBeenCalled();
+		expect(result.current.current).toEqual({
+			modelId: "remote/model",
+			provider: "openrouter",
+		});
+	});
+
+	it("clears local state only when the selected model is explicitly cleared", async () => {
+		llmService.getCurrentModel.mockResolvedValue({
+			modelId: "openrouter/model",
+			provider: "openrouter",
+			serviceName: "openrouter",
+		});
+		llmService.has.mockReturnValue(false);
+		const { result } = renderHook(() => useCurrentModel());
+		await waitFor(() => expect(result.current.model).toBe("openrouter/model"));
+
+		act(() => modelListener(null));
+
+		await waitFor(() => expect(result.current.model).toBe(""));
+		expect(result.current.current).toBeNull();
 	});
 });

@@ -1,4 +1,3 @@
-import React, { useRef, useState } from "react";
 import {
 	MessageSquare,
 	MessageSquarePlus,
@@ -6,12 +5,14 @@ import {
 	PanelLeftOpen,
 	X,
 } from "lucide-react";
+import type React from "react";
+import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useChatStore } from "@/main/stores/chat";
 import { cn } from "@/lib/utils";
 import { Button } from "@/main/components/ui/button";
-import { ConversationListSection } from "./ConversationListSection";
+import { useChatStore } from "@/main/stores/chat";
 import { CollapsedRailItem } from "./CollapsedRailItem";
+import { ConversationListSection } from "./ConversationListSection";
 
 interface ChatSidePanelProps {
 	onShowConversationGroup?: (groupId: string) => void;
@@ -147,9 +148,6 @@ export const ChatSidePanel: React.FC<ChatSidePanelProps> = ({
 						)
 					) : (
 						<>
-							<span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-								<MessageSquare size={17} />
-							</span>
 							<div className="min-w-0 flex-1">
 								<div className="truncate text-sm font-semibold text-foreground">
 									{t("sidebar.title")}
@@ -208,8 +206,7 @@ export const ChatSidePanel: React.FC<ChatSidePanelProps> = ({
 			</div>
 
 			{allowResize && !collapsed ? (
-				<div
-					role="separator"
+				<hr
 					aria-label={t("sidebar.resize")}
 					aria-orientation="vertical"
 					aria-valuemin={240}
@@ -221,7 +218,7 @@ export const ChatSidePanel: React.FC<ChatSidePanelProps> = ({
 						if (event.key === "ArrowLeft") updateWidth(width - 16);
 						if (event.key === "ArrowRight") updateWidth(width + 16);
 					}}
-					className="absolute bottom-0 right-0 top-0 w-1 cursor-col-resize bg-transparent transition-colors hover:bg-primary/40 focus:bg-primary/40 focus:outline-none"
+					className="absolute bottom-0 right-0 top-0 w-1 cursor-col-resize border-0 bg-transparent transition-colors hover:bg-primary/40 focus:bg-primary/40 focus:outline-none"
 				/>
 			) : null}
 		</aside>

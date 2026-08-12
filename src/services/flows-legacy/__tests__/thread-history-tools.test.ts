@@ -51,10 +51,12 @@ describe("thread history tools", () => {
 	});
 
 	it("reads the same inclusive line range from multiple IDs in requested order", async () => {
-		const raw = vi.fn().mockResolvedValue([
-			row({ messageId: "message-2", content: "two-a\ntwo-b\ntwo-c" }),
-			row({ messageId: "message-1", content: "one-a\none-b\none-c" }),
-		]);
+		const raw = vi
+			.fn()
+			.mockResolvedValue([
+				row({ messageId: "message-2", content: "two-a\ntwo-b\ntwo-c" }),
+				row({ messageId: "message-1", content: "one-a\none-b\none-c" }),
+			]);
 		const tool = createThreadHistoryReadTool({ database: { raw } } as never);
 		const result = await tool.execute(
 			{

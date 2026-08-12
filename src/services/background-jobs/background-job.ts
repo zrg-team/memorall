@@ -393,10 +393,13 @@ export class BackgroundJob {
 		const messageListener = (rawMessage: unknown): void => {
 			if (!isInitialProgressMessage(rawMessage)) return;
 			const p = rawMessage.currentProgress;
+			const failed = p.status === "Failed" || Boolean(p.error);
 			controller.enqueue({
-				stage: p.status ?? "Initializing...",
+				stage: failed
+					? p.error || "Offscreen service initialization failed"
+					: (p.status ?? "Initializing..."),
 				progress: p.progress ?? 0,
-				status: p.done ? "completed" : "initializing",
+				status: failed ? "error" : p.done ? "completed" : "initializing",
 			});
 			if (p.done) completeStream();
 		};
@@ -410,12 +413,18 @@ export class BackgroundJob {
 				logInfo("📦 SharedStorage value:", stored);
 
 				if (stored && stored.done) {
-					// Already done - complete immediately
-					logInfo("✅ Offscreen already done - completing immediately");
+					const failed = stored.status === "Failed" || Boolean(stored.error);
+					logInfo(
+						failed
+							? "❌ Offscreen initialization previously failed"
+							: "✅ Offscreen already done - completing immediately",
+					);
 					controller.enqueue({
-						stage: stored.status || "Ready",
+						stage: failed
+							? stored.error || "Offscreen service initialization failed"
+							: stored.status || "Ready",
 						progress: stored.progress || 100,
-						status: "completed",
+						status: failed ? "error" : "completed",
 					});
 					controller.close();
 					return {
