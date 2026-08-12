@@ -6,7 +6,10 @@ import {
 	ProcessFactory,
 } from "@/services/background-jobs/handlers";
 import { backgroundJob } from "@/services/background-jobs/background-job";
-import type { JobNotificationMessage } from "@/services/background-jobs/bridges";
+import type {
+	JobNotificationMessage,
+	OffscreenProgress,
+} from "@/services/background-jobs/bridges";
 import type { BaseJob } from "@/services/background-jobs/handlers/types";
 
 // Import process handlers and factory
@@ -77,7 +80,7 @@ if (!offscreenGlobal.__memorallEmbeddingPatchDone__) {
 }
 
 class OffscreenProcessor {
-	currentProgress = {
+	currentProgress: OffscreenProgress & { services: string[] } = {
 		done: false,
 		progress: 0,
 		services: [] as string[],
@@ -190,6 +193,8 @@ class OffscreenProcessor {
 
 	private async initialize(): Promise<void> {
 		try {
+			this.currentProgress.done = false;
+			delete this.currentProgress.error;
 			this.reportProgress();
 
 			logInfo(`[OFFSCREEN] init`);
@@ -244,6 +249,12 @@ class OffscreenProcessor {
 		} catch (error) {
 			this.currentProgress.status = "Failed";
 			this.currentProgress.done = true;
+			this.currentProgress.error =
+				error instanceof Error
+					? error.message
+					: typeof error === "string"
+						? error
+						: "Unknown offscreen initialization error";
 			this.reportProgress();
 			logError("❌[OFFSCREEN] Initialization failed", error);
 		}

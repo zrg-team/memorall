@@ -45,15 +45,10 @@ export function useCurrentModel() {
 		const loadInitialModel = async () => {
 			try {
 				const currentModel = await serviceManager.llmService.getCurrentModel();
-				if (
-					currentModel &&
-					!serviceManager.llmService.has(currentModel.serviceName)
-				) {
-					await serviceManager.llmService.clearCurrentModel();
-					updateCurrentModel(null);
-					setIsInitialized(true);
-					return;
-				}
+				// A selected model remains valid while its runtime is temporarily
+				// unavailable (for example, before an encrypted provider is unlocked or
+				// before a local runner is loaded). Runtime readiness is handled by the
+				// chat prompt; it must never erase the user's persisted selection.
 				updateCurrentModel(currentModel);
 				setIsInitialized(true);
 			} catch (error) {
@@ -72,16 +67,6 @@ export function useCurrentModel() {
 		const unsubscribe = serviceManager.llmService.onCurrentModelChange(
 			(modelInfo) => {
 				setIsInitialized(true);
-				if (
-					modelInfo &&
-					!serviceManager.llmService.has(modelInfo.serviceName)
-				) {
-					void serviceManager.llmService.clearCurrentModel().catch((error) => {
-						logError("Failed to clear unavailable current model:", error);
-					});
-					updateCurrentModel(null);
-					return;
-				}
 				updateCurrentModel(modelInfo);
 			},
 		);
@@ -97,14 +82,6 @@ export function useCurrentModel() {
 		const refreshCurrentModel = async () => {
 			try {
 				const currentModel = await serviceManager.llmService.getCurrentModel();
-				if (
-					currentModel &&
-					!serviceManager.llmService.has(currentModel.serviceName)
-				) {
-					await serviceManager.llmService.clearCurrentModel();
-					updateCurrentModel(null);
-					return;
-				}
 				updateCurrentModel(currentModel);
 			} catch (error) {
 				logError("Failed to get current model:", error);

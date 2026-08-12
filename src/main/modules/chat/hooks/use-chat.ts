@@ -497,12 +497,12 @@ export const useChat = (model: string) => {
 						setInProgressMessage((prev) =>
 							prev
 								? {
-									...prev,
-									toolExecutions: upsertToolExecution(
-										prev.toolExecutions ?? [],
-										execution,
-									),
-								}
+										...prev,
+										toolExecutions: upsertToolExecution(
+											prev.toolExecutions ?? [],
+											execution,
+										),
+									}
 								: null,
 						);
 					},

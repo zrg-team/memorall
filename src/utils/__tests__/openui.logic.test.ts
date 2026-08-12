@@ -1,8 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-	createAppendAwareOpenUISplitter,
-	splitOpenUIContent,
-} from "../openui";
+import { createAppendAwareOpenUISplitter, splitOpenUIContent } from "../openui";
 
 describe("splitOpenUIContent", () => {
 	it("segments prose and OpenUI language blocks", () => {
@@ -92,9 +89,7 @@ describe("splitOpenUIContent", () => {
 			expect.objectContaining({ kind: "openui", complete: false }),
 		]);
 
-		expect(
-			splitter.split('root = CardBlock("Replacement", "", [])'),
-		).toEqual([
+		expect(splitter.split('root = CardBlock("Replacement", "", [])')).toEqual([
 			expect.objectContaining({
 				kind: "openui",
 				content: 'root = CardBlock("Replacement", "", [])',

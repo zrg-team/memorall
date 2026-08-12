@@ -235,7 +235,11 @@ describe("useChatStore", () => {
 				content: "After",
 			}),
 		];
-		harness.selectQueue.push([conv], [orderedMessages[1]], [orderedMessages[2]]);
+		harness.selectQueue.push(
+			[conv],
+			[orderedMessages[1]],
+			[orderedMessages[2]],
+		);
 
 		await useChatStore.getState().loadConversation("conv-load");
 

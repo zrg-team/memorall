@@ -47,7 +47,10 @@ describe("thread history search migration", () => {
 				afterId,
 				conversationId,
 				JSON.stringify([
-					{ role: "assistant", content: "first line\nsecret phrase\nlast line" },
+					{
+						role: "assistant",
+						content: "first line\nsecret phrase\nlast line",
+					},
 				]),
 			],
 		);
@@ -75,7 +78,43 @@ describe("thread history search migration", () => {
 			context,
 		);
 		expect((read as { content: string }).content).toContain(
-			"L2| secret phrase",
+			"L3| secret phrase",
 		);
+	});
+
+	it("builds the index when an existing AI2UI message exceeds tsvector limits", async () => {
+		database = new PGlite();
+		await database.exec(`
+			CREATE TABLE messages (
+				uuid uuid PRIMARY KEY,
+				conversation_id uuid NOT NULL,
+				type text NOT NULL,
+				role text NOT NULL,
+				content text NOT NULL,
+				parts jsonb,
+				complex_content jsonb,
+				metadata jsonb,
+				created_at timestamp NOT NULL
+			);
+		`);
+		const largeAi2Ui = Array.from(
+			{ length: 120_000 },
+			(_, index) => `node${index}`,
+		).join(" ");
+		await database.query(
+			`INSERT INTO messages VALUES
+				('20000000-0000-4000-8000-000000000001',
+				 '10000000-0000-4000-8000-000000000001',
+				 'text', 'assistant', $1, null, null, '{}'::jsonb, now())`,
+			[largeAi2Ui],
+		);
+
+		await expect(up(database)).resolves.toBeUndefined();
+		const result = await database.query<{ indexdef: string }>(`
+			SELECT indexdef FROM pg_indexes
+			WHERE indexname = 'messages_thread_history_search_idx'
+		`);
+		expect(result.rows[0]?.indexdef.toLowerCase()).toContain('"left"(');
+		expect(result.rows[0]?.indexdef).toContain("32768");
 	});
 });

@@ -40,36 +40,36 @@ export const KnowledgeCard = defineComponent({
 	component: ({ props }) => {
 		const facts = useProgressiveItems(props.facts);
 		return (
-		<Card className="rounded-lg border bg-card/95 shadow-sm">
-			<CardHeader className="flex-row items-center gap-2 space-y-0 p-4 pb-2">
-				<CardTitle className="text-base leading-6 tracking-normal">
-					{props.name}
-				</CardTitle>
-				<Badge variant="secondary">{props.entityType}</Badge>
-			</CardHeader>
-			<CardContent className="space-y-3 p-4 pt-0">
-				{props.summary ? (
-					<p className="text-sm text-muted-foreground">{props.summary}</p>
-				) : null}
-				{props.facts.length > 0 ? (
-					<>
-						<Separator />
-						<ul className="space-y-1.5">
-							{facts.items.map((fact, index) => (
-								<li key={index} className="flex gap-2 text-sm leading-6">
-									<span className="text-muted-foreground">-</span>
-									<span>{fact}</span>
-								</li>
-							))}
-						</ul>
-					</>
-				) : null}
-			</CardContent>
-			<ProgressiveCollectionControl
-				hiddenCount={facts.hiddenCount}
-				onRenderAll={facts.renderAll}
-			/>
-		</Card>
+			<Card className="rounded-lg border bg-card/95 shadow-sm">
+				<CardHeader className="flex-row items-center gap-2 space-y-0 p-4 pb-2">
+					<CardTitle className="text-base leading-6 tracking-normal">
+						{props.name}
+					</CardTitle>
+					<Badge variant="secondary">{props.entityType}</Badge>
+				</CardHeader>
+				<CardContent className="space-y-3 p-4 pt-0">
+					{props.summary ? (
+						<p className="text-sm text-muted-foreground">{props.summary}</p>
+					) : null}
+					{props.facts.length > 0 ? (
+						<>
+							<Separator />
+							<ul className="space-y-1.5">
+								{facts.items.map((fact, index) => (
+									<li key={index} className="flex gap-2 text-sm leading-6">
+										<span className="text-muted-foreground">-</span>
+										<span>{fact}</span>
+									</li>
+								))}
+							</ul>
+						</>
+					) : null}
+				</CardContent>
+				<ProgressiveCollectionControl
+					hiddenCount={facts.hiddenCount}
+					onRenderAll={facts.renderAll}
+				/>
+			</Card>
 		);
 	},
 });
@@ -91,37 +91,37 @@ export const FactList = defineComponent({
 	component: ({ props }) => {
 		const facts = useProgressiveItems(props.facts);
 		return (
-		<Card className="rounded-lg border bg-card/95 shadow-sm">
-			{props.title ? (
-				<CardHeader className="p-4 pb-2">
-					<CardTitle className="text-base tracking-normal">
-						{props.title}
-					</CardTitle>
-				</CardHeader>
-			) : null}
-			<CardContent className="space-y-2 p-4 pt-2">
-				{facts.items.map((fact, index) => (
-					<div
-						key={index}
-						className="rounded-md border bg-muted/25 p-3 text-sm"
-					>
-						<div className="font-medium">{fact.subject}</div>
-						<div className="text-muted-foreground">
-							{fact.predicate} {fact.object}
-						</div>
-						{fact.date ? (
-							<div className="mt-1 text-xs text-muted-foreground">
-								{fact.date}
+			<Card className="rounded-lg border bg-card/95 shadow-sm">
+				{props.title ? (
+					<CardHeader className="p-4 pb-2">
+						<CardTitle className="text-base tracking-normal">
+							{props.title}
+						</CardTitle>
+					</CardHeader>
+				) : null}
+				<CardContent className="space-y-2 p-4 pt-2">
+					{facts.items.map((fact, index) => (
+						<div
+							key={index}
+							className="rounded-md border bg-muted/25 p-3 text-sm"
+						>
+							<div className="font-medium">{fact.subject}</div>
+							<div className="text-muted-foreground">
+								{fact.predicate} {fact.object}
 							</div>
-						) : null}
-					</div>
-				))}
-			</CardContent>
-			<ProgressiveCollectionControl
-				hiddenCount={facts.hiddenCount}
-				onRenderAll={facts.renderAll}
-			/>
-		</Card>
+							{fact.date ? (
+								<div className="mt-1 text-xs text-muted-foreground">
+									{fact.date}
+								</div>
+							) : null}
+						</div>
+					))}
+				</CardContent>
+				<ProgressiveCollectionControl
+					hiddenCount={facts.hiddenCount}
+					onRenderAll={facts.renderAll}
+				/>
+			</Card>
 		);
 	},
 });
@@ -142,34 +142,37 @@ export const Timeline = defineComponent({
 	component: ({ props }) => {
 		const events = useProgressiveItems(props.events);
 		return (
-		<Card className="rounded-lg border bg-card/95 shadow-sm">
-			{props.title ? (
-				<CardHeader className="p-4 pb-2">
-					<CardTitle className="text-base tracking-normal">
-						{props.title}
-					</CardTitle>
-				</CardHeader>
-			) : null}
-			<CardContent className="space-y-4 p-4 pt-2">
-				{events.items.map((event, index) => (
-					<div key={index} className="grid grid-cols-[7rem_1fr] gap-3 text-sm">
-						<div className="text-muted-foreground">{event.date}</div>
-						<div className="border-l pl-3">
-							<div className="font-medium">{event.title}</div>
-							{event.description ? (
-								<div className="mt-1 text-muted-foreground">
-									{event.description}
-								</div>
-							) : null}
+			<Card className="rounded-lg border bg-card/95 shadow-sm">
+				{props.title ? (
+					<CardHeader className="p-4 pb-2">
+						<CardTitle className="text-base tracking-normal">
+							{props.title}
+						</CardTitle>
+					</CardHeader>
+				) : null}
+				<CardContent className="space-y-4 p-4 pt-2">
+					{events.items.map((event, index) => (
+						<div
+							key={index}
+							className="grid grid-cols-[7rem_1fr] gap-3 text-sm"
+						>
+							<div className="text-muted-foreground">{event.date}</div>
+							<div className="border-l pl-3">
+								<div className="font-medium">{event.title}</div>
+								{event.description ? (
+									<div className="mt-1 text-muted-foreground">
+										{event.description}
+									</div>
+								) : null}
+							</div>
 						</div>
-					</div>
-				))}
-			</CardContent>
-			<ProgressiveCollectionControl
-				hiddenCount={events.hiddenCount}
-				onRenderAll={events.renderAll}
-			/>
-		</Card>
+					))}
+				</CardContent>
+				<ProgressiveCollectionControl
+					hiddenCount={events.hiddenCount}
+					onRenderAll={events.renderAll}
+				/>
+			</Card>
 		);
 	},
 });

@@ -183,17 +183,27 @@ const App: React.FC = () => {
 				// Initialize services through offscreen with progress streaming
 				const progressStream = await backgroundJob.initializeServices();
 				let startTime = Date.now();
+				let offscreenReady = false;
 
 				// Listen to initialization progress
 				for await (const progress of progressStream) {
 					logInfo("App initialization progress:", progress);
 					setUiProgress(progress.progress);
+					if (progress.status === "error") {
+						throw new Error(progress.stage);
+					}
 
 					if (progress.status === "completed") {
 						setUiProgress(100);
+						offscreenReady = true;
 						logInfo("App initialization complete");
 						break;
 					}
+				}
+				if (!offscreenReady) {
+					throw new Error(
+						"Offscreen initialization ended before services were ready",
+					);
 				}
 				const duration = Date.now() - startTime;
 
@@ -271,20 +281,13 @@ const App: React.FC = () => {
 		}
 	};
 
-	const handlePasskeyCancel = async () => {
-		// Clear the current model since the user cancelled passkey entry
-		try {
-			await serviceManager.llmService.clearCurrentModel();
-			logInfo(
-				"Cleared current model after passkey cancellation - user will need to select a different model",
-			);
-		} catch (error) {
-			logError("Failed to clear current model:", error);
-		}
-
-		setServicesStatus("ready"); // Continue without the auth providers
+	const handlePasskeyCancel = () => {
+		// Continue into the app without unlocking providers. Keep the selected
+		// model metadata so Chat renders normally and the user can unlock or switch
+		// providers later without having to reselect their model.
+		setServicesStatus("ready");
 		logInfo(
-			"User cancelled passkey prompt - continuing without auth providers",
+			"User cancelled passkey prompt - continuing without auth providers and preserving the selected model",
 		);
 	};
 
@@ -319,9 +322,14 @@ const App: React.FC = () => {
 		// Re-run initialization
 		try {
 			const progressStream = await backgroundJob.initializeServices();
+			let offscreenReady = false;
 			for await (const progress of progressStream) {
 				setUiProgress(progress.progress);
+				if (progress.status === "error") {
+					throw new Error(progress.stage);
+				}
 				if (progress.status === "completed") {
+					offscreenReady = true;
 					setUiProgress(100);
 					await serviceManager.initialize({ proxy: true });
 
@@ -350,6 +358,11 @@ const App: React.FC = () => {
 					}, 100);
 					break;
 				}
+			}
+			if (!offscreenReady) {
+				throw new Error(
+					"Offscreen initialization ended before services were ready",
+				);
 			}
 		} catch (error) {
 			logError("App re-initialization failed:", error);

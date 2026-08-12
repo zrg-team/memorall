@@ -127,9 +127,7 @@ export const MessageRenderer: React.FC<MessageRendererProps> = React.memo(
 		);
 		const toolExecutions = useMemo<ToolExecutionRecord[]>(
 			() =>
-				Array.isArray(metadata?.toolExecutions)
-					? metadata.toolExecutions
-					: [],
+				Array.isArray(metadata?.toolExecutions) ? metadata.toolExecutions : [],
 			[metadata],
 		);
 		const partsContentParts = useMemo<AssistantContentPart[]>(

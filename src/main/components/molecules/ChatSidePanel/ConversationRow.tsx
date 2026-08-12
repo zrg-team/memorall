@@ -1,4 +1,3 @@
-import React, { useEffect, useRef, useState } from "react";
 import {
 	Check,
 	MoreHorizontal,
@@ -8,14 +7,10 @@ import {
 	Trash2,
 	X,
 } from "lucide-react";
+import type React from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
-import type { Conversation } from "@/services/database/types";
-import {
-	formatConversationTime,
-	getConversationPreview,
-	getConversationTitle,
-} from "./chat-side-panel-utils";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
@@ -23,6 +18,12 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "@/main/components/ui/dropdown-menu";
+import type { Conversation } from "@/services/database/types";
+import {
+	formatConversationTime,
+	getConversationPreview,
+	getConversationTitle,
+} from "./chat-side-panel-utils";
 
 interface ConversationRowProps {
 	conversation: Conversation;
@@ -114,10 +115,8 @@ export const ConversationRow: React.FC<ConversationRowProps> = ({
 	return (
 		<div
 			className={cn(
-				"group/row relative flex items-stretch rounded-lg transition-colors",
-				"hover:bg-muted/65",
-				isActive &&
-					"bg-primary/10 text-foreground ring-1 ring-inset ring-primary/15",
+				"group/row relative flex items-stretch rounded-lg transition-colors hover:bg-muted/50",
+				isActive && "bg-muted/60 text-foreground",
 			)}
 		>
 			<button
@@ -137,11 +136,11 @@ export const ConversationRow: React.FC<ConversationRowProps> = ({
 							aria-label={t("sidebar.pinned")}
 						/>
 					) : null}
-					<time className="shrink-0 text-[11px] text-muted-foreground">
+					<time className="shrink-0 text-[11px] text-muted-foreground transition-opacity group-hover/row:opacity-0">
 						{formatConversationTime(conversation)}
 					</time>
 				</span>
-				<span className="mt-1 block truncate pr-5 text-xs text-muted-foreground">
+				<span className="mt-0.5 block truncate text-xs text-muted-foreground">
 					{getConversationPreview(conversation)}
 				</span>
 			</button>
@@ -151,9 +150,8 @@ export const ConversationRow: React.FC<ConversationRowProps> = ({
 					<button
 						type="button"
 						className={cn(
-							"absolute bottom-1.5 right-1 inline-flex h-8 w-8 items-center justify-center rounded-md bg-background/85 text-muted-foreground opacity-0 shadow-sm backdrop-blur-sm transition",
-							"hover:bg-muted hover:text-foreground group-hover/row:opacity-100 focus:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-							isActive && "opacity-100",
+							"pointer-events-none absolute right-1.5 top-1.5 inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-[background-color,color,opacity]",
+							"hover:bg-muted hover:text-foreground group-hover/row:pointer-events-auto group-hover/row:opacity-100 focus:pointer-events-auto focus:bg-background focus:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
 						)}
 						aria-label={t("sidebar.conversationActions")}
 					>

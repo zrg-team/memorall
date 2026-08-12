@@ -15,7 +15,10 @@ export interface SplitOpenUIContentOptions {
 }
 
 export interface AppendAwareOpenUISplitter {
-	split(content: string, options?: SplitOpenUIContentOptions): OpenUIContentSegment[];
+	split(
+		content: string,
+		options?: SplitOpenUIContentOptions,
+	): OpenUIContentSegment[];
 	reset(): void;
 }
 
@@ -163,7 +166,8 @@ export function createAppendAwareOpenUISplitter(): AppendAwareOpenUISplitter {
 	};
 }
 
-const OPENUI_STATEMENT_PATTERN = /^[ \t]*[A-Za-z_$][\w$]*\s*=\s*[A-Za-z_$][\w$]*\s*\(/;
+const OPENUI_STATEMENT_PATTERN =
+	/^[ \t]*[A-Za-z_$][\w$]*\s*=\s*[A-Za-z_$][\w$]*\s*\(/;
 
 function findOpenUIProgramEnd(
 	content: string,
@@ -173,7 +177,8 @@ function findOpenUIProgramEnd(
 	let end = rootEnd;
 	while (end < content.length) {
 		const remainder = content.slice(end);
-		const leadingWhitespace = /^[ \t]*(?:\r?\n[ \t]*)*/.exec(remainder)?.[0] ?? "";
+		const leadingWhitespace =
+			/^[ \t]*(?:\r?\n[ \t]*)*/.exec(remainder)?.[0] ?? "";
 		const statementStart = end + leadingWhitespace.length;
 		const next = content.slice(statementStart);
 		if (next.startsWith("```")) break;

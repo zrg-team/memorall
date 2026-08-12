@@ -30,7 +30,10 @@ const componentGroups = [
 	{ name: "Knowledge", components: knowledgeComponents.map((c) => c.name) },
 ];
 
-const componentLibraryCache = new Map<OpenUITheme, ReturnType<typeof createLibrary>>();
+const componentLibraryCache = new Map<
+	OpenUITheme,
+	ReturnType<typeof createLibrary>
+>();
 
 export function createComponentLibrary(theme: OpenUITheme = "shadcn") {
 	const cached = componentLibraryCache.get(theme);

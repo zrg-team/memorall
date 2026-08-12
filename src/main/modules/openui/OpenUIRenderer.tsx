@@ -299,13 +299,12 @@ export const OpenUIRenderer: React.FC<OpenUIRendererProps> = ({
 			setRenderPenalty(0);
 			return;
 		}
-		const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+		const now =
+			typeof performance !== "undefined" ? performance.now() : Date.now();
 		const duration = Math.max(0, now - renderStartedAtRef.current);
 		if (duration > 32) {
 			cheapCommitCountRef.current = 0;
-			setRenderPenalty((current) =>
-				Math.min(300 - baseInterval, current + 48),
-			);
+			setRenderPenalty((current) => Math.min(300 - baseInterval, current + 48));
 			return;
 		}
 		if (duration < 16) {

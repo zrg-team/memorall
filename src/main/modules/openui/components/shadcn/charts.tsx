@@ -56,55 +56,55 @@ export const TableBlock = defineComponent({
 	component: ({ props }) => {
 		const rows = useProgressiveItems(props.rows);
 		return (
-		<div className="overflow-hidden rounded-lg border">
-			<Table>
-				<TableHeader>
-					<TableRow>
-						{props.columns.map((column, index) => (
-							<TableHead
-								key={`${column.props.header}-${index}`}
-								className={
-									column.props.align === "right"
-										? "text-right"
-										: column.props.align === "center"
-											? "text-center"
-											: undefined
-								}
-							>
-								{column.props.header}
-							</TableHead>
-						))}
-					</TableRow>
-				</TableHeader>
-				<TableBody>
-					{rows.items.map((row, rowIndex) => (
-						<TableRow key={rowIndex}>
-							{row.map((cell, cellIndex) => {
-								const column = props.columns[cellIndex];
-								return (
-									<TableCell
-										key={`${rowIndex}-${cellIndex}`}
-										className={
-											column?.props.align === "right"
-												? "text-right"
-												: column?.props.align === "center"
-													? "text-center"
-													: undefined
-										}
-									>
-										{cell}
-									</TableCell>
-								);
-							})}
+			<div className="overflow-hidden rounded-lg border">
+				<Table>
+					<TableHeader>
+						<TableRow>
+							{props.columns.map((column, index) => (
+								<TableHead
+									key={`${column.props.header}-${index}`}
+									className={
+										column.props.align === "right"
+											? "text-right"
+											: column.props.align === "center"
+												? "text-center"
+												: undefined
+									}
+								>
+									{column.props.header}
+								</TableHead>
+							))}
 						</TableRow>
-					))}
-				</TableBody>
-			</Table>
-			<ProgressiveCollectionControl
-				hiddenCount={rows.hiddenCount}
-				onRenderAll={rows.renderAll}
-			/>
-		</div>
+					</TableHeader>
+					<TableBody>
+						{rows.items.map((row, rowIndex) => (
+							<TableRow key={rowIndex}>
+								{row.map((cell, cellIndex) => {
+									const column = props.columns[cellIndex];
+									return (
+										<TableCell
+											key={`${rowIndex}-${cellIndex}`}
+											className={
+												column?.props.align === "right"
+													? "text-right"
+													: column?.props.align === "center"
+														? "text-center"
+														: undefined
+											}
+										>
+											{cell}
+										</TableCell>
+									);
+								})}
+							</TableRow>
+						))}
+					</TableBody>
+				</Table>
+				<ProgressiveCollectionControl
+					hiddenCount={rows.hiddenCount}
+					onRenderAll={rows.renderAll}
+				/>
+			</div>
 		);
 	},
 });

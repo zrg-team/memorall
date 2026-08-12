@@ -53,6 +53,10 @@ import {
 	up as addMessageHistorySearchIndexUp,
 	down as addMessageHistorySearchIndexDown,
 } from "./014_add_message_history_search_index";
+import {
+	up as boundMessageHistorySearchIndexUp,
+	down as boundMessageHistorySearchIndexDown,
+} from "./015_bound_message_history_search_index";
 // import { up as futureExampleUp, down as futureExampleDown } from './001_example_future_migration';
 
 export interface Migration {
@@ -167,9 +171,17 @@ export const migrations: Migration[] = [
 	{
 		id: "add_message_history_search_index",
 		version: 14,
-		description: "Add full-text index for separator-scoped thread history search",
+		description:
+			"Add full-text index for separator-scoped thread history search",
 		up: addMessageHistorySearchIndexUp,
 		down: addMessageHistorySearchIndexDown,
+	},
+	{
+		id: "bound_message_history_search_index",
+		version: 15,
+		description: "Bound thread history tsvector size for large AI2UI messages",
+		up: boundMessageHistorySearchIndexUp,
+		down: boundMessageHistorySearchIndexDown,
 	},
 	// Example of how to add future migrations:
 	// {
