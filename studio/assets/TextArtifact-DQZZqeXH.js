@@ -1,0 +1,1 @@
+import"./rolldown-runtime-C0FnF6B9.js";import{n as e,t}from"./jsx-runtime-CKeovgl0.js";e();var n=t(),r=({content:e})=>(0,n.jsx)(`pre`,{className:`my-2 max-h-96 overflow-auto rounded-md border border-border/70 bg-muted/10 p-3 text-xs leading-relaxed text-muted-foreground`,children:e});export{r as TextArtifact};

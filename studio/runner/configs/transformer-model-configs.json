@@ -1,0 +1,186 @@
+{
+  "models": [
+    {
+      "id": "onnx-community/granite-4.0-micro-ONNX-web",
+      "defaultMaxNewTokens": 1024,
+      "runnerConfig": {
+        "runtime": "causal_lm",
+        "dtype": "auto"
+      },
+      "unsupportedReason": null
+    },
+    {
+      "id": "onnx-community/gemma-4-E2B-it-ONNX",
+      "defaultMaxNewTokens": 512,
+      "runnerConfig": {
+        "runtime": "image_text_to_text",
+        "dtype": "auto",
+        "postprocess": "gemma_clean",
+        "webgpuMaxContextTokens": 8192
+      },
+      "unsupportedReason": null
+    },
+    {
+      "id": "LiquidAI/LFM2.5-1.2B-Thinking-ONNX",
+      "defaultMaxNewTokens": 4096,
+      "runnerConfig": {
+        "runtime": "text_generation_pipeline",
+        "dtype": "auto"
+      },
+      "unsupportedReason": null
+    },
+    {
+      "id": "LiquidAI/LFM2-8B-A1B-ONNX",
+      "defaultMaxNewTokens": 4096,
+      "runnerConfig": {
+        "runtime": "causal_lm",
+        "dtype": "auto"
+      },
+      "unsupportedReason": null
+    },
+    {
+      "id": "LiquidAI/LFM2-24B-A2B-ONNX",
+      "defaultMaxNewTokens": 4096,
+      "runnerConfig": {
+        "runtime": "causal_lm",
+        "dtype": "auto"
+      },
+      "unsupportedReason": null
+    },
+    {
+      "id": "HuggingFaceTB/SmolLM3-3B-ONNX",
+      "defaultMaxNewTokens": 512,
+      "runnerConfig": {
+        "runtime": "causal_lm",
+        "dtype": "auto"
+      },
+      "unsupportedReason": null
+    },
+    {
+      "id": "onnx-community/DeepSeek-R1-Distill-Qwen-1.5B-ONNX",
+      "defaultMaxNewTokens": 512,
+      "runnerConfig": {
+        "runtime": "causal_lm",
+        "dtype": "auto"
+      },
+      "unsupportedReason": null
+    },
+    {
+      "id": "onnx-community/Qwen3-0.6B-ONNX",
+      "defaultMaxNewTokens": 512,
+      "runnerConfig": {
+        "runtime": "causal_lm",
+        "dtype": "auto"
+      },
+      "unsupportedReason": null
+    },
+    {
+      "id": "onnx-community/Phi-4-mini-instruct-ONNX-GQA",
+      "defaultMaxNewTokens": 512,
+      "runnerConfig": {
+        "runtime": "causal_lm",
+        "dtype": "auto"
+      },
+      "unsupportedReason": null
+    },
+    {
+      "id": "onnx-community/LFM2-350M-ONNX",
+      "defaultMaxNewTokens": 512,
+      "runnerConfig": {
+        "runtime": "causal_lm",
+        "dtype": "auto"
+      },
+      "unsupportedReason": null
+    },
+    {
+      "id": "onnx-community/LFM2-700M-ONNX",
+      "defaultMaxNewTokens": 512,
+      "runnerConfig": {
+        "runtime": "causal_lm",
+        "dtype": "auto"
+      },
+      "unsupportedReason": null
+    },
+    {
+      "id": "onnx-community/LFM2-1.2B-ONNX",
+      "defaultMaxNewTokens": 512,
+      "runnerConfig": {
+        "runtime": "causal_lm",
+        "dtype": "auto"
+      },
+      "unsupportedReason": null
+    },
+    {
+      "id": "LiquidAI/LFM2.5-1.2B-Instruct-ONNX",
+      "defaultMaxNewTokens": 512,
+      "runnerConfig": {
+        "runtime": "causal_lm",
+        "dtype": "auto"
+      },
+      "unsupportedReason": null
+    },
+    {
+      "id": "onnx-community/SmolLM2-135M-Instruct",
+      "defaultMaxNewTokens": 512,
+      "runnerConfig": {
+        "runtime": "causal_lm",
+        "dtype": "auto"
+      },
+      "unsupportedReason": null
+    },
+    {
+      "id": "onnx-community/SmolLM2-360M-Instruct",
+      "defaultMaxNewTokens": 512,
+      "runnerConfig": {
+        "runtime": "causal_lm",
+        "dtype": "auto"
+      },
+      "unsupportedReason": null
+    },
+    {
+      "id": "onnx-community/SmolLM2-1.7B-Instruct",
+      "defaultMaxNewTokens": 512,
+      "runnerConfig": {
+        "runtime": "causal_lm",
+        "dtype": "auto"
+      },
+      "unsupportedReason": null
+    },
+    {
+      "id": "onnx-community/Qwen2.5-0.5B-Instruct",
+      "defaultMaxNewTokens": 512,
+      "runnerConfig": {
+        "runtime": "causal_lm",
+        "dtype": "auto"
+      },
+      "unsupportedReason": null
+    },
+    {
+      "id": "onnx-community/Qwen2.5-1.5B-Instruct",
+      "defaultMaxNewTokens": 512,
+      "runnerConfig": {
+        "runtime": "causal_lm",
+        "dtype": "auto"
+      },
+      "unsupportedReason": null
+    },
+    {
+      "id": "onnx-community/Phi-4-mini-instruct",
+      "defaultMaxNewTokens": 512,
+      "runnerConfig": null,
+      "unsupportedReason": "onnx-community/Phi-4-mini-instruct does not expose the public browser-ready ONNX tokenizer files needed by this runtime. Use onnx-community/Phi-4-mini-instruct-ONNX-GQA instead."
+    },
+    {
+      "id": "onnx-community/gemma-3-1b-it-ONNX",
+      "defaultMaxNewTokens": 512,
+      "runnerConfig": null,
+      "unsupportedReason": "onnx-community/gemma-3-1b-it-ONNX is not currently reliable in the bundled transformers.js runtime in the browser. Use another transformer model or a Wllama GGUF Gemma model instead."
+    },
+    {
+      "id": "onnx-community/gemma-3-270m-it",
+      "defaultMaxNewTokens": 512,
+      "runnerConfig": null,
+      "unsupportedReason": "onnx-community/gemma-3-270m-it is not currently compatible with the bundled transformers.js runtime in the browser. Use a Wllama GGUF Gemma model or another transformer model such as Qwen3 or LFM2 instead."
+    }
+  ]
+}

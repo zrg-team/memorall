@@ -1,0 +1,13 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8" />
+	<title>Virtual Server Renderer</title>
+</head>
+<body>
+	<!-- renderer.js fetches the virtual server HTML and rewrites this page via
+	     document.write, keeping the URL at /sandbox/pages/renderer.html so the
+	     service worker (scope /sandbox/) still controls all sub-resource fetches. -->
+	<script src="renderer.js"></script>
+</body>
+</html>

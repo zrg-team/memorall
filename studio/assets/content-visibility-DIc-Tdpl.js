@@ -1,0 +1,1 @@
+var e=e=>({contentVisibility:`auto`,containIntrinsicSize:`auto ${e}px`});export{e as t};

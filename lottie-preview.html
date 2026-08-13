@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lottie Preview</title>
+  <style>
+    html, body { margin: 0; padding: 0; height: 100%; font-family: sans-serif; }
+    #lottie-container { width: 100%; height: calc(100% - 40px); }
+    #controls {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      height: 40px;
+      padding: 0 8px;
+      box-sizing: border-box;
+      background: #1118270d;
+      border-top: 1px solid #00000014;
+    }
+    #controls button {
+      font-size: 12px;
+      padding: 4px 10px;
+      border-radius: 6px;
+      border: 1px solid #00000022;
+      background: #ffffff;
+      cursor: pointer;
+    }
+    #controls button:disabled { opacity: 0.5; cursor: default; }
+    #status { font-size: 11px; color: #666; margin-left: auto; }
+  </style>
+</head>
+<body>
+  <div id="lottie-container"></div>
+  <div id="controls">
+    <button id="btn-png" type="button">Download PNG</button>
+    <button id="btn-gif" type="button">Export GIF</button>
+    <span id="status"></span>
+  </div>
+  <script src="./js/lottie-preview.js?v=4"></script>
+</body>
+</html>
