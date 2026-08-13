@@ -87,9 +87,9 @@ through explicit, testable rollout checkpoints.
 | --- | --- | --- |
 | Chrome/Edge MV3 extension | ✅ Primary target; development and production artifacts are loaded directly in Chromium E2E | `yarn test:e2e:extension` |
 | Static web / GitHub Pages | ✅ Shared workspace and static deployment layout verified at `/memorall/studio/` | `yarn test:e2e:web` |
-| Windows desktop (Tauri 2) | ✅ Native executable, MSI, and NSIS builds verified; shared workspace opened in WebView2 | `yarn desktop:build:windows` |
-| macOS desktop (Tauri 2) | ◐ Build support present; must be compiled, opened, signed, and notarized on macOS | `yarn desktop:build:macos` |
-| Linux desktop (Tauri 2) | ◐ Build support present; must be compiled and opened on a Linux host with WebKit/GTK dependencies | `yarn desktop:build:linux` |
+| Windows desktop (Tauri 2) | ✅ Native executable, MSI, and NSIS builds verified; shared workspace opened in WebView2 | `yarn build:desktop:windows` |
+| macOS desktop (Tauri 2) | ◐ Build support present; must be compiled, opened, signed, and notarized on macOS | `yarn build:desktop:macos` |
+| Linux desktop (Tauri 2) | ◐ Build support present; must be compiled and opened on a Linux host with WebKit/GTK dependencies | `yarn build:desktop:linux` |
 
 Legend: ✅ implemented and locally verified; ◐ available as a rollout checkpoint,
 provider-dependent capability, or native-host verification requirement; — not
@@ -356,7 +356,7 @@ Then:
 Recommended Chrome build flow:
 
 ```bash
-yarn run build:chrome
+yarn build:extension:chrome
 ```
 
 Load the unpacked extension from `publish/extension/chrome`.
@@ -364,56 +364,57 @@ Load the unpacked extension from `publish/extension/chrome`.
 If you want live development:
 
 ```bash
-yarn run dev
+yarn dev:extension
 ```
 
 Run the static web application at the same path used by GitHub Pages:
 
 ```bash
-yarn web:build
-yarn web:serve:static
+yarn build:web
+yarn serve:web
 # http://127.0.0.1:4173/memorall/studio/
 ```
 
 Run the native desktop application on the current host:
 
 ```bash
-yarn desktop:dev
+yarn dev:desktop
 ```
 
 Tauri packages must be built on their native operating system. The target
 commands fail early on the wrong OS instead of claiming a cross-platform package
 was produced.
 
-## 🛠️ Development Commands
+## 🛠️ Script Families
+
+Scripts use `family:environment[:target]`. The conventional `dev`, `build`, and
+`package` aliases continue to target the extension, while explicit commands make
+cross-environment work unambiguous.
 
 | Command | Purpose |
 | --- | --- |
-| `yarn run dev` | Build Agent Harness once, then watch it alongside the hot-reloading Chromium extension (`CHROME_PATH` required). |
-| `yarn run dev:no-reload` | Use both watchers without injecting the content-script reload runtime; reload tabs manually. |
-| `yarn run watch` | Alias for the complete `dev` workflow. |
-| `yarn run harness:watch` | Watch only the standalone Agent Harness package family. |
-| `yarn run build` | Build Agent Harness and the default production extension. |
-| `yarn run build:chrome` | Build Chrome output in `publish/extension/chrome`. |
-| `yarn run build:edge` | Build Edge output in `publish/extension/edge`. |
-| `yarn run build:firefox` | Build Firefox MV3 output. |
-| `yarn run build:all` | Build Chrome and Edge outputs. |
-| `yarn run type-check` | Run TypeScript without emitting files. |
-| `yarn run lint` | Run the Extension.js lint step. |
-| `yarn run format` | Format `src` and `scripts` with Biome. |
-| `yarn run package` | Build the publish/package output. |
+| `yarn dev:extension` | Watch Agent Harness and the hot-reloading Chromium extension (`CHROME_PATH` required). |
+| `yarn dev:web` | Run the shared app through the web Vite development server. |
+| `yarn dev:desktop` | Stage Node and open the current host's Tauri development app. |
+| `yarn dev:harness` | Watch only the reusable Agent Harness package family. |
+| `yarn build:extension[:chrome|edge|firefox|all]` | Produce audited unpacked extension artifacts under `publish/extension`. |
+| `yarn build:web` | Produce the complete Pages tree in `publish/web`, preserving the landing and privacy pages and adding the app at `studio/`. |
+| `yarn build:desktop[:windows|macos|linux]` | Produce frontend, native app, sidecar, and installer artifacts for the current native host. |
+| `yarn build:all` | Build extension stores, web, and the current host's desktop target. |
+| `yarn package:extension[:chrome|edge|all]` | Build and ZIP store-ready extension packages. |
+| `yarn package:web` | Build the deployable static Pages tree. |
+| `yarn package:desktop[:windows|macos|linux]` | Build native packages on the matching host. |
+| `yarn package:all` | Package extensions, web, and the current host's desktop target. |
+| `yarn deploy:web:github-pages:dry-run` | Validate the exact Pages deployment without changing GitHub. |
+| `yarn deploy:web` | Publish `publish/web` to `gh-pages` and configure branch-based Pages deployment. |
+| `yarn typecheck` | Run shared TypeScript validation without emitting application files. |
+| `yarn lint` | Run Extension.js lint. |
+| `yarn format` | Format project TypeScript and scripts with Biome. |
 | `yarn test:e2e:extension` | Load and test both Extension.js development output and the production unpacked extension in Chromium. |
-| `yarn web:build` | Build the static web application under `publish/web/studio/` with the `/memorall/studio/` base path. |
-| `yarn web:serve:static` | Serve the production web artifact locally using the GitHub Pages project layout. |
-| `yarn test:e2e:web` | Build and test the static web application, PWA scope, assets, and route reload behavior. |
-| `yarn web:deploy:github-pages` | Manually publish `publish/web` to the `gh-pages` branch; no deployment Actions workflow is installed. |
-| `yarn desktop:dev` | Stage the host Node runtime and open the Tauri development application. |
-| `yarn desktop:build:windows` | Build Windows application and installer artifacts on Windows. |
-| `yarn desktop:build:macos` | Build the macOS application bundle on macOS. |
-| `yarn desktop:build:linux` | Build Linux application packages on Linux. |
+| `yarn test:e2e:web` | Verify `/`, `/privacy`, `/privacy_policy.html`, and `/studio/` through a plain static server. |
 | `yarn test:e2e:desktop` | Build the current native target, open the executable for a health interval, and stop only that test process. |
-| `yarn platform:boundaries` | Enforce shared-code and environment-adapter import boundaries. |
-| `yarn platform:bundles` | Scan built web/desktop artifacts for environment-specific code leakage. |
+| `yarn check:platform:boundaries` | Enforce shared-code and environment-adapter import boundaries. |
+| `yarn check:platform:bundles` | Scan built web/desktop artifacts for environment-specific code leakage. |
 
 All consumable artifacts are written under `publish/`. Extension.js may create a
 temporary internal `dist/` directory while compiling. Tauri keeps Cargo and

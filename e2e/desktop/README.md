@@ -6,8 +6,8 @@ Run the native smoke test for the current host:
 yarn test:e2e:desktop
 ```
 
-That command selects `desktop:build:windows`, `desktop:build:macos`, or
-`desktop:build:linux`, builds the shared frontend and Tauri shell, starts the
+That command selects `build:desktop:windows`, `build:desktop:macos`, or
+`build:desktop:linux`, builds the shared frontend and Tauri shell, starts the
 resulting executable for ten seconds, and then terminates the exact child process.
 To test an already-built executable, run `yarn test:e2e:desktop:built`.
 

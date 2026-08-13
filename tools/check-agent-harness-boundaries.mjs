@@ -66,18 +66,29 @@ for (const workspacePath of ["packages/agent-harness", "packages/agent-harness/*
     errors.push(`root: missing Yarn workspace ${workspacePath}`);
   }
 }
-requireScript(rootManifest, "root", "prepare:dev", ["harness:build"]);
-requireScript(rootManifest, "root", "dev", ["prepare:dev", "harness:watch", "extension:dev"]);
-requireScript(rootManifest, "root", "dev:no-reload", [
-  "prepare:dev",
-  "harness:watch",
-  "extension:dev:no-reload",
+requireScript(rootManifest, "root", "prepare:dev:extension", ["build:harness"]);
+requireScript(rootManifest, "root", "dev:extension", [
+  "prepare:dev:extension",
+  "dev:harness",
+  "dev:extension:runtime",
 ]);
-requireScript(rootManifest, "root", "harness:watch", ["tsc -b", "--watch"]);
-requireScript(rootManifest, "root", "watch", ["yarn dev"]);
-requireScript(rootManifest, "root", "package", ["harness:build"]);
-for (const name of ["build", "build:prod", "build:chrome", "build:edge", "build:firefox", "build:all"]) {
-  requireScript(rootManifest, "root", name, ["prepare:build"]);
+requireScript(rootManifest, "root", "dev:extension:no-reload", [
+  "prepare:dev:extension",
+  "dev:harness",
+  "dev:extension:runtime:no-reload",
+]);
+requireScript(rootManifest, "root", "dev:harness", ["tsc -b", "--watch"]);
+requireScript(rootManifest, "root", "package:extension:all", [
+  "build:extension:all",
+]);
+for (const name of [
+  "build:extension",
+  "build:extension:chrome",
+  "build:extension:edge",
+  "build:extension:firefox",
+  "build:extension:all",
+]) {
+  requireScript(rootManifest, "root", name, ["prepare:build:extension"]);
 }
 for (const name of ["build", "clean", "dev", "watch", "typecheck", "test"]) {
   requireScript(umbrellaManifest, "agent-harness workspace", name);

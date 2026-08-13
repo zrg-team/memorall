@@ -28,7 +28,9 @@ let extensionOrigin: string;
 
 test.beforeAll(async () => {
 	if (!existsSync(extensionPath)) {
-		throw new Error("Extension build is missing. Run yarn build before this test.");
+		throw new Error(
+			"Extension build is missing. Run yarn build:extension before this test.",
+		);
 	}
 
 	profilePath = mkdtempSync(join(tmpdir(), "memorall-extension-e2e-"));

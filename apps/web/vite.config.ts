@@ -1,8 +1,11 @@
 import { fileURLToPath } from "node:url";
-import { copyFile, mkdir, rm, writeFile } from "node:fs/promises";
+import { copyFile, cp, mkdir, readdir, rm, writeFile } from "node:fs/promises";
 import { defineConfig } from "vite";
 
 const repositoryRoot = fileURLToPath(new URL("../..", import.meta.url));
+const landingDirectory = fileURLToPath(
+	new URL("../../runner", import.meta.url),
+);
 const deploymentDirectory = fileURLToPath(
 	new URL("../../publish/web", import.meta.url),
 );
@@ -22,7 +25,16 @@ export default defineConfig({
 				await rm(deploymentDirectory, { recursive: true, force: true });
 			},
 			async closeBundle() {
+				await mkdir(deploymentDirectory, { recursive: true });
 				await mkdir(outputDirectory, { recursive: true });
+				for (const entry of await readdir(landingDirectory)) {
+					await cp(
+						`${landingDirectory}/${entry}`,
+						`${deploymentDirectory}/${entry}`,
+						{ recursive: true },
+					);
+				}
+				await mkdir(`${deploymentDirectory}/privacy`, { recursive: true });
 				await Promise.all([
 					copyFile(
 						fileURLToPath(new URL("./public/sw.js", import.meta.url)),
@@ -36,8 +48,8 @@ export default defineConfig({
 					),
 					writeFile(`${deploymentDirectory}/.nojekyll`, "", "utf8"),
 					writeFile(
-						`${deploymentDirectory}/index.html`,
-						'<!doctype html><meta charset="utf-8"><meta http-equiv="refresh" content="0;url=./studio/"><title>Memorall Studio</title><a href="./studio/">Open Memorall Studio</a>\n',
+						`${deploymentDirectory}/privacy/index.html`,
+						'<!doctype html><meta charset="utf-8"><meta http-equiv="refresh" content="0;url=../privacy_policy.html"><title>Memorall Privacy Policy</title><a href="../privacy_policy.html">Open Memorall Privacy Policy</a>\n',
 						"utf8",
 					),
 				]);

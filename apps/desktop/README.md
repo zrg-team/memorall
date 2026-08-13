@@ -6,27 +6,27 @@ This directory is intentionally a thin shell around the shared application in
 Development frontend:
 
 ```sh
-yarn web:desktop:dev
+yarn dev:desktop:frontend
 ```
 
 Native development app on the current operating system:
 
 ```sh
-yarn desktop:dev
+yarn dev:desktop
 ```
 
 Frontend production artifact:
 
 ```sh
-yarn web:desktop:build
+yarn build:desktop:frontend
 ```
 
 Build and open-smoke the native app on the current operating system:
 
 ```sh
-yarn desktop:build:windows # Windows host
-yarn desktop:build:macos   # macOS host
-yarn desktop:build:linux   # Linux host
+yarn build:desktop:windows # Windows host
+yarn build:desktop:macos   # macOS host
+yarn build:desktop:linux   # Linux host
 yarn test:e2e:desktop      # build and open-smoke the current host
 yarn test:e2e:desktop:built # open-smoke an existing build
 ```

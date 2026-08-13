@@ -15,14 +15,21 @@ first-party asset requests, and hash-route reloads.
 To inspect it manually:
 
 ```sh
-yarn web:build
-yarn web:serve:static
+yarn build:web
+yarn serve:web
 ```
 
 To publish manually to the repository's `gh-pages` branch:
 
 ```sh
-yarn web:deploy:github-pages
+yarn deploy:web:github-pages:dry-run
+yarn deploy:web:github-pages
 ```
 
-Deployment is intentionally not wired to GitHub Actions.
+The build preserves the landing page at `/memorall/`, the privacy policy at
+`/memorall/privacy_policy.html` (with `/memorall/privacy/` as an alias), and the
+shared application at `/memorall/studio/`. The deploy command force-publishes the
+complete `publish/web` tree to `gh-pages` and configures Pages to deploy from that
+branch. The dry run performs the same artifact and Git checks without changing
+the branch, repository Pages setting, or live site. Deployment is intentionally
+not wired to GitHub Actions.

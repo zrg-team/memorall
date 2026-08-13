@@ -4,9 +4,9 @@
 	"version": "0.5.1",
 	"identifier": "app.memorall.desktop",
 	"build": {
-		"beforeDevCommand": "yarn --cwd ../.. web:desktop:dev",
+		"beforeDevCommand": "yarn --cwd ../.. dev:desktop:frontend",
 		"devUrl": "http://localhost:1420",
-		"beforeBuildCommand": "yarn --cwd ../.. web:desktop:build",
+		"beforeBuildCommand": "yarn --cwd ../.. build:desktop:frontend",
 		"frontendDist": "../../../publish/desktop/frontend"
 	},
 	"app": {

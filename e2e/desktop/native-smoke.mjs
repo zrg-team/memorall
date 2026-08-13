@@ -30,7 +30,7 @@ function run(command, args) {
 }
 
 if (shouldBuild) {
-	await run(yarn, [`desktop:build:${platformName}`]);
+	await run(yarn, [`build:desktop:${platformName}`]);
 }
 
 const candidates =
@@ -45,7 +45,7 @@ const candidates =
 const executable = candidates.map((candidate) => resolve(candidate)).find(existsSync);
 if (!executable) {
 	throw new Error(
-		`No native Memorall executable found. Run yarn desktop:build:${platformName} first.`,
+		`No native Memorall executable found. Run yarn build:desktop:${platformName} first.`,
 	);
 }
 

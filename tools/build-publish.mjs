@@ -151,7 +151,7 @@ console.log('✅ Extension publish directory ready\n');
 // Step 2: Build production version
 console.log('🔨 Building production extension...');
 try {
-  execSync('yarn build:prod', { stdio: 'inherit' });
+  execSync('yarn build:extension:all', { stdio: 'inherit' });
   console.log('✅ Production build complete\n');
 } catch (error) {
   console.error('❌ Build failed:', error.message);

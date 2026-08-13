@@ -438,7 +438,7 @@ published.
 
 ### Package and static gates
 
-`yarn check:agent-harness` runs:
+`yarn check:harness` runs:
 
 1. AST-based forbidden import/global/dependency checks for all nine workspaces.
 2. Lockstep/private/ESM/side-effect/export-map validation.
@@ -532,9 +532,9 @@ A harness change is complete only when:
 - tool output is bounded and returns continuation/truncation metadata;
 - browser, worker, and Node consumers resolve public exports from tarballs;
 - provider adapters pass reusable conformance tests;
-- `yarn check:agent-harness`, `yarn type-check`, and `yarn test` pass;
+- `yarn check:harness`, `yarn typecheck`, and `yarn test:unit` pass;
 - deterministic and network sandbox E2E pass for sandbox changes;
-- `yarn build:prod` succeeds;
+- `yarn build:extension:all` succeeds;
 - stored-flow IDs remain covered whenever compatibility code changes.
 
 ## 📚 Source Map

@@ -58,7 +58,17 @@ test("serves the production app and every first-party asset below the Pages path
 	expect(await embeddingRunner.text()).toContain("import.meta.url");
 	const projectRoot = await request.get("/memorall/");
 	expect(projectRoot.status()).toBe(200);
-	expect(await projectRoot.text()).toContain("./studio/");
+	expect(await projectRoot.text()).toContain(
+		"The browser is your agent's full workspace.",
+	);
+	const landingStyles = await request.get("/memorall/css/index.css");
+	expect(landingStyles.status()).toBe(200);
+	const privacyPolicy = await request.get("/memorall/privacy_policy.html");
+	expect(privacyPolicy.status()).toBe(200);
+	expect(await privacyPolicy.text()).toContain("Memorall - Privacy Policy");
+	const privacyAlias = await request.get("/memorall/privacy/");
+	expect(privacyAlias.status()).toBe(200);
+	expect(await privacyAlias.text()).toContain("../privacy_policy.html");
 
 	const scope = await page.evaluate(async () => {
 		const registration = await navigator.serviceWorker.ready;

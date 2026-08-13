@@ -97,14 +97,19 @@ try {
 	let extensionPath = resolve(root, "publish/extension/chromium");
 
 	if (mode === "dev") {
-		await run(["prepare:dev"]);
+		await run(["prepare:dev:extension"]);
 		rmSync(readyPath, { force: true });
 		const log = createWriteStream(
 			resolve(logDirectory, `extension-${mode}-producer.log`),
 		);
 		producer = spawn(
 			yarn,
-			["extension:dev:no-reload", "--no-browser", "--logs", "error"],
+			[
+				"dev:extension:runtime:no-reload",
+				"--no-browser",
+				"--logs",
+				"error",
+			],
 			{
 				cwd: root,
 				env: { ...process.env, FORCE_COLOR: "0" },
@@ -121,7 +126,7 @@ try {
 		cpSync(internalDevelopmentPath, developmentPublishPath, { recursive: true });
 		extensionPath = developmentPublishPath;
 	} else {
-		await run(["build"]);
+		await run(["build:extension"]);
 	}
 
 	await run(
