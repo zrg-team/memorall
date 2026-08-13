@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { resolve } from "node:path";
 
@@ -12,6 +12,36 @@ const platformName =
 				? "linux"
 				: process.platform;
 const yarn = process.platform === "win32" ? "yarn.cmd" : "yarn";
+
+function assertWindowsGuiSubsystem(executablePath) {
+	const binary = readFileSync(executablePath);
+	if (binary.length < 64 || binary.toString("ascii", 0, 2) !== "MZ") {
+		throw new Error(`Desktop executable is not a valid PE file: ${executablePath}`);
+	}
+
+	const peHeaderOffset = binary.readUInt32LE(0x3c);
+	const optionalHeaderOffset = peHeaderOffset + 24;
+	if (
+		optionalHeaderOffset + 70 > binary.length ||
+		binary.toString("ascii", peHeaderOffset, peHeaderOffset + 4) !== "PE\0\0"
+	) {
+		throw new Error(`Desktop executable has an invalid PE header: ${executablePath}`);
+	}
+
+	const optionalHeaderMagic = binary.readUInt16LE(optionalHeaderOffset);
+	if (optionalHeaderMagic !== 0x10b && optionalHeaderMagic !== 0x20b) {
+		throw new Error(
+			`Desktop executable has an unsupported PE optional header: 0x${optionalHeaderMagic.toString(16)}`,
+		);
+	}
+
+	const subsystem = binary.readUInt16LE(optionalHeaderOffset + 68);
+	if (subsystem !== 2) {
+		throw new Error(
+			`Windows desktop executable uses PE subsystem ${subsystem}; expected GUI subsystem 2 so launch does not open a terminal.`,
+		);
+	}
+}
 
 function run(command, args) {
 	return new Promise((resolveRun, reject) => {
@@ -47,6 +77,11 @@ if (!executable) {
 	throw new Error(
 		`No native Memorall executable found. Run yarn build:desktop:${platformName} first.`,
 	);
+}
+
+if (process.platform === "win32") {
+	assertWindowsGuiSubsystem(executable);
+	console.log("Windows GUI subsystem check passed: launch will not allocate a terminal.");
 }
 
 const app = spawn(executable, [], { stdio: "ignore" });

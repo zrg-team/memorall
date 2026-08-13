@@ -11,6 +11,10 @@ That command selects `build:desktop:windows`, `build:desktop:macos`, or
 resulting executable for ten seconds, and then terminates the exact child process.
 To test an already-built executable, run `yarn test:e2e:desktop:built`.
 
+On Windows, the smoke test also reads the packaged PE header and requires the GUI
+subsystem. This prevents a release regression where launching Memorall opens a
+terminal window behind the WebView2 application.
+
 The test intentionally validates a real native executable, not only the shared
 Vite frontend. On Windows, a successful build also emits MSI and NSIS installers
 under `publish/desktop/windows/bundle/`. macOS and Linux artifacts use the

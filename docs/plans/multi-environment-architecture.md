@@ -386,7 +386,7 @@ Local acceptance results on 2026-08-13:
 | Extension.js development output | `yarn test:e2e:extension:dev` | Passed 3/3 tests after snapshotting Extension.js output and loading `publish/extension/dev/chromium` unpacked in headed Chromium |
 | Production extension output | `yarn test:e2e:extension:build` | MV3 audit passed and 3/3 tests passed after loading `publish/extension/chromium` unpacked in headed Chromium |
 | GitHub Pages layout | `yarn test:e2e:web` | Passed 2/2 tests with the landing page at `/memorall/`, privacy at `/memorall/privacy_policy.html` and `/memorall/privacy/`, and the shared app at `/memorall/studio/` through the checked-in static server |
-| Windows Tauri application | `yarn test:e2e:desktop` | Built the native executable, Node sidecar, MSI, and NSIS installer under `publish/desktop/windows`; the executable remained open for the smoke interval |
+| Windows Tauri application | `yarn test:e2e:desktop` | Built the native executable, Node sidecar, MSI, and NSIS installer under `publish/desktop/windows`; verified PE GUI subsystem 2 (no terminal allocation) and the executable remained open for the smoke interval |
 | Windows visual launch | local Computer Use inspection | The packaged WebView2 window reached the shared Memorall onboarding workspace |
 
 These are local/on-demand gates. Pages deployment does not consume an Actions

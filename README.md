@@ -87,7 +87,7 @@ through explicit, testable rollout checkpoints.
 | --- | --- | --- |
 | Chrome/Edge MV3 extension | ✅ Primary target; development and production artifacts are loaded directly in Chromium E2E | `yarn test:e2e:extension` |
 | Static web / GitHub Pages | ✅ Shared workspace and static deployment layout verified at `/memorall/studio/` | `yarn test:e2e:web` |
-| Windows desktop (Tauri 2) | ✅ Native executable, MSI, and NSIS builds verified; shared workspace opened in WebView2 | `yarn build:desktop:windows` |
+| Windows desktop (Tauri 2) | ✅ Native executable, MSI, and NSIS builds verified; the WebView2 release app opens without a terminal | `yarn build:desktop:windows` |
 | macOS desktop (Tauri 2) | ◐ Build support present; must be compiled, opened, signed, and notarized on macOS | `yarn build:desktop:macos` |
 | Linux desktop (Tauri 2) | ◐ Build support present; must be compiled and opened on a Linux host with WebKit/GTK dependencies | `yarn build:desktop:linux` |
 
