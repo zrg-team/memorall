@@ -306,6 +306,10 @@ export const RuntimePage: React.FC = () => {
 	);
 
 	useEffect(() => {
+		void refreshRuntimeSessions();
+	}, [refreshRuntimeSessions]);
+
+	useEffect(() => {
 		if (hasArtifacts) {
 			const selectedExists = artifacts.some(
 				(artifact) => artifact.id === selectedArtifactId,
