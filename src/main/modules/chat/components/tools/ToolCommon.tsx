@@ -2,6 +2,7 @@ import React from "react";
 import { Badge } from "@/main/components/ui/badge";
 import { cn } from "@/lib/utils";
 import type { MessageActionItem } from "@/main/modules/chat/components/types";
+import { platform } from "@/platform/current";
 
 export const isRecord = (value: unknown): value is Record<string, unknown> =>
 	typeof value === "object" && value !== null;
@@ -150,12 +151,7 @@ export const formatIsoDate = (value: string): string => {
 };
 
 export const openToolUrl = (url: string): void => {
-	if (typeof chrome !== "undefined" && chrome.tabs?.create) {
-		chrome.tabs.create({ url });
-		return;
-	}
-
-	window.open(url, "_blank", "noopener,noreferrer");
+	void platform.externalLinks.open(url);
 };
 
 export const ToolSection: React.FC<{

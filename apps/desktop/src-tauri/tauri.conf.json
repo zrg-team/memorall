@@ -1,0 +1,38 @@
+{
+	"$schema": "https://schema.tauri.app/config/2",
+	"productName": "Memorall",
+	"version": "0.5.1",
+	"identifier": "app.memorall.desktop",
+	"build": {
+		"beforeDevCommand": "yarn --cwd ../.. web:desktop:dev",
+		"devUrl": "http://localhost:1420",
+		"beforeBuildCommand": "yarn --cwd ../.. web:desktop:build",
+		"frontendDist": "../../../dist/desktop"
+	},
+	"app": {
+		"windows": [
+			{
+				"title": "Memorall",
+				"width": 1280,
+				"height": 800,
+				"minWidth": 900,
+				"minHeight": 640
+			}
+		],
+		"security": {
+			"csp": "default-src 'self'; connect-src 'self' https: http://127.0.0.1:* http://localhost:*; img-src 'self' data: blob: https:; media-src 'self' blob:; style-src 'self' 'unsafe-inline'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:"
+		}
+	},
+	"bundle": {
+		"active": true,
+		"targets": "all",
+		"icon": [
+			"icons/32x32.png",
+			"icons/128x128.png",
+			"icons/128x128@2x.png",
+			"icons/icon.icns",
+			"icons/icon.ico"
+		],
+		"externalBin": ["binaries/memorall-node"]
+	}
+}

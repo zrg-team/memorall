@@ -4,7 +4,15 @@ const DB_NAME = "memorall-bg-jobs";
 const DB_VERSION = 1;
 const STORE = "jobs";
 
-export class IdbJobStore {
+export interface JobStore {
+	put(job: BaseJob): Promise<void>;
+	get(id: string): Promise<BaseJob | null>;
+	getAll(): Promise<BaseJob[]>;
+	delete(id: string): Promise<void>;
+	clearCompleted(): Promise<void>;
+}
+
+export class IdbJobStore implements JobStore {
 	private dbPromise: Promise<IDBDatabase> | null = null;
 
 	private open(): Promise<IDBDatabase> {

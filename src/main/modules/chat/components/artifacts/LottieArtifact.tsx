@@ -2,13 +2,11 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AlertTriangle, Pause, Play, Download, Send } from "lucide-react";
 import type { ArtifactProps } from "./ArtifactActionsMenu";
+import { platform } from "@/platform/current";
 
 // The preview and its runtime are packaged with the extension. Keeping this URL
 // local is required by Manifest V3 and also makes previews work offline.
-const RUNNER_URL =
-	typeof chrome !== "undefined" && chrome.runtime?.getURL
-		? chrome.runtime.getURL("sandbox/pages/lottie-preview.html?v=5")
-		: "/sandbox/pages/lottie-preview.html?v=5";
+const RUNNER_URL = `${platform.assets.url("sandbox/pages/lottie-preview.html")}?v=5`;
 
 const MAX_PREVIEW_ISSUES = 8;
 

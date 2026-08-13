@@ -1,23 +1,24 @@
 import { logError } from "@/utils/logger";
 import { createClient } from "@supabase/supabase-js";
+import { platform } from "@/platform/current";
 
 // Supabase configuration
-// These can be overridden via environment variables or chrome.storage
+// These can be overridden via environment variables or platform storage.
 const getSupabaseConfig = async (): Promise<{
 	url: string;
 	anonKey: string;
 }> => {
 	try {
-		// Try to get config from chrome.storage
-		const stored = await chrome.storage?.local?.get?.([
-			"supabaseUrl",
-			"supabaseAnonKey",
+		// Try to get config from the active platform store.
+		const [url, anonKey] = await Promise.all([
+			platform.persistentStore.get<string>("supabaseUrl"),
+			platform.persistentStore.get<string>("supabaseAnonKey"),
 		]);
 
-		if (stored?.supabaseUrl && stored?.supabaseAnonKey) {
+		if (url && anonKey) {
 			return {
-				url: stored.supabaseUrl as string,
-				anonKey: stored.supabaseAnonKey as string,
+				url,
+				anonKey,
 			};
 		}
 	} catch (error) {
@@ -63,22 +64,21 @@ export const getSupabaseClient = async () => {
 			storage: {
 				getItem: async (key: string) => {
 					try {
-						const result = await chrome.storage?.local?.get?.(key);
-						return (result?.[key] as string) || null;
+						return await platform.persistentStore.get<string>(key);
 					} catch {
 						return null;
 					}
 				},
 				setItem: async (key: string, value: string) => {
 					try {
-						await chrome.storage?.local?.set?.({ [key]: value });
+						await platform.persistentStore.set(key, value);
 					} catch {
 						// Ignore errors
 					}
 				},
 				removeItem: async (key: string) => {
 					try {
-						await chrome.storage?.local?.remove?.(key);
+						await platform.persistentStore.remove(key);
 					} catch {
 						// Ignore errors
 					}
@@ -93,10 +93,10 @@ export const getSupabaseClient = async () => {
 // Update Supabase configuration
 export const updateSupabaseConfig = async (url: string, anonKey: string) => {
 	try {
-		await chrome.storage?.local?.set?.({
-			supabaseUrl: url,
-			supabaseAnonKey: anonKey,
-		});
+		await Promise.all([
+			platform.persistentStore.set("supabaseUrl", url),
+			platform.persistentStore.set("supabaseAnonKey", anonKey),
+		]);
 
 		// Reset client to force recreation with new config
 		supabaseClient = null;
@@ -109,7 +109,10 @@ export const updateSupabaseConfig = async (url: string, anonKey: string) => {
 // Clear Supabase configuration
 export const clearSupabaseConfig = async () => {
 	try {
-		await chrome.storage?.local?.remove?.(["supabaseUrl", "supabaseAnonKey"]);
+		await Promise.all([
+			platform.persistentStore.remove("supabaseUrl"),
+			platform.persistentStore.remove("supabaseAnonKey"),
+		]);
 		supabaseClient = null;
 	} catch (error) {
 		logError("Failed to clear Supabase config:", error);

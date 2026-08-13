@@ -13,6 +13,7 @@ import {
 	type ApiResultPayload,
 } from "@/main/modules/chat/components/tools/APIResult";
 import { ToolItemRawIO } from "./ToolCommon";
+import { platform } from "@/platform/current";
 
 interface WebAccessPayload {
 	url: string;
@@ -378,9 +379,9 @@ const WebAccessPreview: React.FC<{ payload: WebAccessPayload }> = ({
 					onClick={() => {
 						const targetUrl = livePreviewUrl ?? previewUrl;
 						const url = targetUrl.startsWith("/")
-							? chrome.runtime.getURL(targetUrl.replace(/^\//, ""))
+							? platform.assets.url(targetUrl)
 							: targetUrl;
-						chrome.tabs.create({ url });
+						void platform.externalLinks.open(url);
 					}}
 				>
 					<ExternalLink className="w-3.5 h-3.5" />

@@ -1,0 +1,15 @@
+{
+	"$schema": "../gen/schemas/desktop-schema.json",
+	"identifier": "default",
+	"description": "Least-privilege capabilities for the bundled Memorall frontend.",
+	"windows": ["main"],
+	"local": true,
+	"permissions": [
+		"core:default",
+		"dialog:allow-open",
+		"dialog:allow-save",
+		"notification:allow-is-permission-granted",
+		"notification:allow-request-permission",
+		"notification:allow-notify"
+	]
+}

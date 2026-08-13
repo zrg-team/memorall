@@ -1,0 +1,10 @@
+{
+	"name": "Memorall",
+	"short_name": "Memorall",
+	"description": "Local-first AI memory and knowledge workspace",
+	"start_url": "./#/",
+	"scope": "./",
+	"display": "standalone",
+	"background_color": "#0b0d12",
+	"theme_color": "#0b0d12"
+}

@@ -38,6 +38,20 @@ vi.mock("@/services/filesystem/document-filesystem", () => ({
 	},
 }));
 
+vi.mock("@/platform/current", () => ({
+	platform: {
+		environment: "extension",
+		assets: {
+			url: (path: string) =>
+				(
+					globalThis as typeof globalThis & {
+						chrome: { runtime: { getURL: (path: string) => string } };
+					}
+				).chrome.runtime.getURL(path.replace(/^\//, "")),
+		},
+	},
+}));
+
 type ServiceUnderTest = Record<string, any>;
 
 const encoded = (value: string): Uint8Array => new TextEncoder().encode(value);

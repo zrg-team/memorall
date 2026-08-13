@@ -18,7 +18,12 @@ import type {
 	DocumentTreeNode,
 	DocumentType,
 } from "@/types/document-library";
-import { BACKGROUND_EVENTS } from "@/constants/events";
+import { platform } from "@/platform/current";
+import { createFilesystemChangeBus } from "@/services/filesystem/change-bus/current";
+import type {
+	FilesystemChangeBus,
+	FilesystemChangeEnvelope,
+} from "./change-bus/types";
 import {
 	isWorkspacesSandboxPath,
 	normalizeSandboxPath,
@@ -93,13 +98,19 @@ export class DocumentFileSystem {
 			: `ctx-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 	private readonly processedFilesystemEventIds = new Set<string>();
 	private static readonly MAX_PROCESSED_EVENT_IDS = 256;
+	private readonly changeBus: FilesystemChangeBus;
 
 	// Keyed by sandbox root. Root filesystem uses "/".
 	// Cleared entirely on any filesystem change — simpler and always correct.
 	private readonly treeCache = new Map<string, DocumentTreeNode[]>();
 
-	private constructor() {
+	constructor(changeBus: FilesystemChangeBus = createFilesystemChangeBus()) {
+		this.changeBus = changeBus;
 		this.registerMessageListener();
+	}
+
+	static create(changeBus?: FilesystemChangeBus): DocumentFileSystem {
+		return new DocumentFileSystem(changeBus);
 	}
 
 	static getInstance(): DocumentFileSystem {
@@ -124,7 +135,7 @@ export class DocumentFileSystem {
 	private registerMessageListener(): void {
 		if (this.messageListenerRegistered) return;
 		try {
-			chrome.runtime.onMessage.addListener(this.handleFilesystemChangeMessage);
+			this.changeBus.subscribe(this.handleFilesystemChangeMessage);
 			this.messageListenerRegistered = true;
 			logInfo("📚 Document storage message listener registered");
 		} catch (error) {
@@ -162,8 +173,7 @@ export class DocumentFileSystem {
 					logError("Error in local filesystem change listener:", err);
 				}
 			});
-			const message = {
-				type: BACKGROUND_EVENTS.FILESYSTEM_CHANGED,
+			const message: FilesystemChangeEnvelope = {
 				sourceContextId: this.contextId,
 				eventId:
 					typeof crypto !== "undefined" &&
@@ -171,20 +181,8 @@ export class DocumentFileSystem {
 						? crypto.randomUUID()
 						: `evt-${Date.now()}-${Math.random().toString(36).slice(2)}`,
 				change,
-				relayedByBackground: false,
 			};
-			chrome.runtime.sendMessage(message).catch((err: Error) => {
-				if (
-					!err.message?.includes("Receiving end does not exist") &&
-					!err.message?.includes("Could not establish connection")
-				) {
-					logError("Failed to send filesystem change notification:", err);
-				} else {
-					logInfo(
-						"📭 No receivers for filesystem change notification (normal)",
-					);
-				}
-			});
+			this.changeBus.publish(message);
 			logInfo("✅ Filesystem change notifications sent");
 		} catch (error) {
 			logError("Failed to notify filesystem change:", error);
@@ -213,16 +211,9 @@ export class DocumentFileSystem {
 	}
 
 	private handleFilesystemChangeMessage = (
-		message: unknown,
-		sender: chrome.runtime.MessageSender,
-		_sendResponse: (response?: unknown) => void,
+		message: FilesystemChangeEnvelope,
 	): void => {
-		if (
-			message &&
-			typeof message === "object" &&
-			"type" in message &&
-			message.type === BACKGROUND_EVENTS.FILESYSTEM_CHANGED
-		) {
+		if (message && typeof message === "object" && "eventId" in message) {
 			const sourceContextId =
 				"sourceContextId" in message &&
 				typeof message.sourceContextId === "string"
@@ -256,7 +247,7 @@ export class DocumentFileSystem {
 				return;
 			}
 			logInfo(
-				`📢 Received FILESYSTEM_CHANGED from ${sender.id || "unknown"} (${this.changeListeners.size} listeners)`,
+				`📢 Received FILESYSTEM_CHANGED (${this.changeListeners.size} listeners)`,
 			);
 			this.invalidateCacheAndRefreshFs().catch((err) => {
 				logError("Failed to refresh FS cache:", err);
@@ -290,13 +281,11 @@ export class DocumentFileSystem {
 
 	private async isRootMigrationComplete(): Promise<boolean> {
 		try {
-			if (typeof chrome === "undefined" || !chrome.storage?.local) {
-				return false;
-			}
-			const result = await chrome.storage?.local?.get?.(
-				ROOT_MIGRATION_STORAGE_KEY,
+			return (
+				(await platform.persistentStore.get<boolean>(
+					ROOT_MIGRATION_STORAGE_KEY,
+				)) === true
 			);
-			return result?.[ROOT_MIGRATION_STORAGE_KEY] === true;
 		} catch {
 			return false;
 		}
@@ -304,12 +293,7 @@ export class DocumentFileSystem {
 
 	private async markRootMigrationComplete(): Promise<void> {
 		try {
-			if (typeof chrome === "undefined" || !chrome.storage?.local) {
-				return;
-			}
-			await chrome.storage?.local?.set?.({
-				[ROOT_MIGRATION_STORAGE_KEY]: true,
-			});
+			await platform.persistentStore.set(ROOT_MIGRATION_STORAGE_KEY, true);
 		} catch {
 			// Non-extension test/runtime contexts can still use the migrated root.
 		}

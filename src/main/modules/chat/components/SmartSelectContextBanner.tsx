@@ -10,6 +10,7 @@ import {
 	DialogTitle,
 } from "@/main/components/ui/dialog";
 import type { EmbeddedContextItem } from "@/embedded/types";
+import { platform } from "@/platform/current";
 
 export function useSmartSelectContext() {
 	const [smartSelectContext, setSmartSelectContext] =
@@ -18,12 +19,11 @@ export function useSmartSelectContext() {
 	React.useEffect(() => {
 		void (async () => {
 			try {
-				const result =
-					await chrome.storage?.session?.get?.("smartSelectContext");
-				const raw = result?.smartSelectContext as string | undefined;
+				const raw =
+					await platform.sessionStore.get<string>("smartSelectContext");
 				if (raw) {
 					setSmartSelectContext(JSON.parse(raw) as EmbeddedContextItem);
-					await chrome.storage?.session?.remove?.("smartSelectContext");
+					await platform.sessionStore.remove("smartSelectContext");
 				}
 			} catch (_) {}
 		})();

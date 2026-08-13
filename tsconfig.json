@@ -29,5 +29,11 @@
     }
   },
   "include": ["./"],
-  "exclude": ["node_modules", "dist", "public/runner", "publish"],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "public/runner",
+    "publish",
+    "apps/desktop/src-tauri/target"
+  ],
 }

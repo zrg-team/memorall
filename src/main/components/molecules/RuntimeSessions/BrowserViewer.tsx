@@ -5,6 +5,7 @@ import { serviceManager } from "@/services";
 import type { SandboxServerInfo } from "./types";
 import { isSwRelayRequestMessage } from "./types";
 import { normalizePreviewUrl } from "./utils";
+import { platform } from "@/platform/current";
 
 export const BrowserViewer: React.FC<{
 	server: SandboxServerInfo;
@@ -69,10 +70,8 @@ export const BrowserViewer: React.FC<{
 
 	const openInTab = () => {
 		const url = renderUrl ?? server.url;
-		const final = url.startsWith("/")
-			? chrome.runtime.getURL(url.replace(/^\//, ""))
-			: url;
-		chrome.tabs.create({ url: final });
+		const final = url.startsWith("/") ? platform.assets.url(url) : url;
+		void platform.externalLinks.open(final);
 	};
 
 	if (!renderUrl) {

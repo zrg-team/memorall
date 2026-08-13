@@ -5,6 +5,7 @@ import { serviceManager } from "@/services";
 import type { ActiveWebSessionInfo } from "./types";
 import { ActionIconButton } from "./SharedComponents";
 import { formatSessionTime } from "./utils";
+import { platform } from "@/platform/current";
 
 export const WebBrowserSessionCard: React.FC<{
 	session: ActiveWebSessionInfo;
@@ -29,7 +30,7 @@ export const WebBrowserSessionCard: React.FC<{
 		if (!session.currentUrl) {
 			return;
 		}
-		chrome.tabs.create({ url: session.currentUrl });
+		void platform.externalLinks.open(session.currentUrl);
 	};
 
 	const lastAccessed = formatSessionTime(session.lastAccessedAt);

@@ -19,6 +19,7 @@ import {
 import { useResizeHeight } from "./useResizeHeight";
 import { BrowserViewer } from "./BrowserViewer";
 import { PostmanTool } from "./PostmanTool";
+import { platform } from "@/platform/current";
 
 type ActiveView = "browser" | "postman" | null;
 
@@ -42,7 +43,7 @@ export const ServerCard: React.FC<{
 		setActiveView((prev) => (prev === view ? null : view));
 
 	const openServerUrl = () => {
-		chrome.tabs.create({ url: server.url });
+		void platform.externalLinks.open(server.url);
 	};
 
 	const handleRestart = async () => {

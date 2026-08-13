@@ -125,7 +125,10 @@ async function ensureHFLibrary() {
 				const wasmPath =
 					typeof chrome !== "undefined" && chrome.runtime?.getURL
 						? chrome.runtime.getURL("vendors/transformers/")
-						: "../../../vendors/transformers/";
+						: new URL(
+								"../../vendors/transformers/",
+								import.meta.url,
+							).href;
 				HF.env.backends.onnx.wasm.wasmPaths = wasmPath;
 				HF.env.backends.onnx.wasm.proxy = false;
 				console.log("[embedding-runner] configured wasmPaths", wasmPath);

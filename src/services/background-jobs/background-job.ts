@@ -1,10 +1,13 @@
-import { ChromeRuntimeBridge } from "./bridges/chrome-runtime";
 import type {
 	IJobNotificationBridge,
 	JobNotificationMessage,
-	OffscreenProgress,
 } from "./bridges/types";
-import { IdbJobStore } from "./idb-job-store";
+import type { IServiceInitializationBridge } from "./bridges/service-initialization";
+import {
+	createJobNotificationBridge,
+	createServiceInitializationBridge,
+} from "@/services/background-jobs/bridges/current-runtime";
+import { IdbJobStore, type JobStore } from "./idb-job-store";
 import { logInfo, logError } from "@/utils/logger";
 import { v4 as nanoid } from "@/utils/uuid";
 import type {
@@ -15,24 +18,7 @@ import type {
 	JobResultFor,
 	JobStatus,
 } from "./handlers/types";
-import { sharedStorageService } from "@/services/shared-storage";
 export type { BaseJob };
-
-// ─── Type guard for INITIAL_PROGRESS messages sent by offscreen ───────────────
-interface InitialProgressMessage {
-	type: "INITIAL_PROGRESS";
-	currentProgress: OffscreenProgress;
-}
-
-function isInitialProgressMessage(msg: unknown): msg is InitialProgressMessage {
-	if (typeof msg !== "object" || msg === null) return false;
-	const m = msg as Record<string, unknown>;
-	return (
-		m["type"] === "INITIAL_PROGRESS" &&
-		typeof m["currentProgress"] === "object" &&
-		m["currentProgress"] !== null
-	);
-}
 
 export interface JobQueueState {
 	jobs: Record<string, BaseJob>;
@@ -52,6 +38,12 @@ export interface JobPromiseResult<
 
 export interface JobOptions {
 	stream: boolean;
+}
+
+export interface BackgroundJobDependencies {
+	store?: JobStore;
+	notificationBridge?: IJobNotificationBridge;
+	serviceInitializationBridge?: IServiceInitializationBridge;
 }
 
 const isFailedJobResult = (result: unknown): result is JobResult => {
@@ -89,12 +81,22 @@ export class BackgroundJob {
 		}
 	>();
 	private jobProgressListeners = new Map<string, () => void>();
-	private store = new IdbJobStore();
+	private store: JobStore;
 	private notificationBridge: IJobNotificationBridge;
+	private serviceInitializationBridge: IServiceInitializationBridge;
 
-	private constructor() {
-		this.notificationBridge = new ChromeRuntimeBridge();
+	constructor(dependencies: BackgroundJobDependencies = {}) {
+		this.store = dependencies.store ?? new IdbJobStore();
+		this.notificationBridge =
+			dependencies.notificationBridge ?? createJobNotificationBridge();
+		this.serviceInitializationBridge =
+			dependencies.serviceInitializationBridge ??
+			createServiceInitializationBridge();
 		logInfo("🚀 Initializing streaming job notification system");
+	}
+
+	static create(dependencies: BackgroundJobDependencies = {}): BackgroundJob {
+		return new BackgroundJob(dependencies);
 	}
 
 	static getInstance(): BackgroundJob {
@@ -359,158 +361,7 @@ export class BackgroundJob {
 	async initializeServices(): Promise<
 		AsyncIterable<{ stage: string; progress: number; status: string }>
 	> {
-		// Create a stream for initialization progress
-		let controller!: ReadableStreamDefaultController<{
-			stage: string;
-			progress: number;
-			status: string;
-		}>;
-		const stream = new ReadableStream<{
-			stage: string;
-			progress: number;
-			status: string;
-		}>({
-			start(ctrl) {
-				controller = ctrl;
-			},
-		});
-
-		// Track if we've already completed to prevent duplicate completion
-		let completed = false;
-		const completeStream = () => {
-			if (!completed) {
-				completed = true;
-				try {
-					controller.close();
-					chrome.runtime?.onMessage.removeListener(messageListener);
-				} catch (error) {
-					// Stream might already be closed
-				}
-			}
-		};
-
-		// Set up message listener for initialization progress updates
-		const messageListener = (rawMessage: unknown): void => {
-			if (!isInitialProgressMessage(rawMessage)) return;
-			const p = rawMessage.currentProgress;
-			const failed = p.status === "Failed" || Boolean(p.error);
-			controller.enqueue({
-				stage: failed
-					? p.error || "Offscreen service initialization failed"
-					: (p.status ?? "Initializing..."),
-				progress: p.progress ?? 0,
-				status: failed ? "error" : p.done ? "completed" : "initializing",
-			});
-			if (p.done) completeStream();
-		};
-
-		try {
-			// Check if chrome API is available
-			if (typeof chrome !== "undefined" && chrome.runtime) {
-				// STEP 1: Check SharedStorage immediately for current status
-				logInfo("🔍 Checking SharedStorage for offscreen status...");
-				const stored = await sharedStorageService.get("offscreenProgress");
-				logInfo("📦 SharedStorage value:", stored);
-
-				if (stored && stored.done) {
-					const failed = stored.status === "Failed" || Boolean(stored.error);
-					logInfo(
-						failed
-							? "❌ Offscreen initialization previously failed"
-							: "✅ Offscreen already done - completing immediately",
-					);
-					controller.enqueue({
-						stage: failed
-							? stored.error || "Offscreen service initialization failed"
-							: stored.status || "Ready",
-						progress: stored.progress || 100,
-						status: failed ? "error" : "completed",
-					});
-					controller.close();
-					return {
-						async *[Symbol.asyncIterator]() {
-							const reader = stream.getReader();
-							try {
-								while (true) {
-									const { done, value } = await reader.read();
-									if (done) break;
-									yield value;
-								}
-							} finally {
-								reader.releaseLock();
-							}
-						},
-					} as AsyncIterable<{
-						stage: string;
-						progress: number;
-						status: string;
-					}>;
-				}
-
-				// STEP 2: Not done - listen for INITIAL_PROGRESS messages
-				logInfo("⏳ Offscreen initializing - listening for progress...");
-				chrome.runtime.onMessage.addListener(messageListener);
-
-				// Show current progress if we have it
-				if (stored) {
-					controller.enqueue({
-						stage: stored.status || "Initializing...",
-						progress: stored.progress || 0,
-						status: "initializing",
-					});
-				}
-			} else {
-				// If chrome API not available, simulate completion
-				logInfo("🔧 Chrome API not available, simulating completion");
-				setTimeout(() => {
-					controller.enqueue({
-						stage: "Services initialized",
-						progress: 100,
-						status: "completed",
-					});
-					controller.close();
-				}, 1000);
-			}
-		} catch (error) {
-			logError("Failed to initialize services:", error);
-			controller.enqueue({
-				stage: "Initialization failed",
-				progress: 0,
-				status: "error",
-			});
-			controller.close();
-		}
-
-		const intervalId = setInterval(() => {
-			sharedStorageService.get("offscreenProgress").then((progress) => {
-				logInfo(`🚀 App initialization status`, progress);
-				if (progress?.status === "Ready" || progress?.progress >= 100) {
-					clearInterval(intervalId);
-					try {
-						controller.close();
-					} catch {
-						// ignore
-					}
-				}
-			});
-		}, 10000);
-
-		// Convert ReadableStream to AsyncIterable
-		return {
-			async *[Symbol.asyncIterator]() {
-				const reader = stream.getReader();
-				try {
-					while (true) {
-						const { done, value } = await reader.read();
-						if (done) break;
-						yield value;
-					}
-				} finally {
-					reader.releaseLock();
-					clearInterval(intervalId);
-				}
-			},
-		};
+		return this.serviceInitializationBridge.initialize();
 	}
 
 	/**

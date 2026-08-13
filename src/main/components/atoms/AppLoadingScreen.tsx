@@ -15,6 +15,9 @@ import { serviceManager } from "@/services";
 import type { InitializationProgress } from "@/services/service-manager";
 import TypingText from "../ui/shadcn-io/typing-text";
 import { RUNTIME_PANEL_BREAKPOINT } from "@/utils/dom";
+import { platform } from "@/platform/current";
+
+const LOGO_URL = platform.assets.url("logo.png");
 
 interface LoadingStep {
 	id: string;
@@ -162,7 +165,7 @@ export const AppLoadingScreen: React.FC<AppLoadingScreenProps> = ({
 				<div className="flex h-full min-h-0 flex-col items-center justify-center gap-4 bg-background px-5 py-6 text-center">
 					<div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-destructive/10">
 						<img
-							src="/logo.png"
+							src={LOGO_URL}
 							alt="Memorall Logo"
 							className="h-9 w-9 object-contain opacity-50"
 						/>
@@ -196,7 +199,7 @@ export const AppLoadingScreen: React.FC<AppLoadingScreenProps> = ({
 						<div className="text-center">
 							<div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center overflow-hidden rounded-full bg-destructive/10 sm:h-16 sm:w-16">
 								<img
-									src="/logo.png"
+									src={LOGO_URL}
 									alt="Memorall Logo"
 									className="h-12 w-12 object-contain opacity-50 sm:h-14 sm:w-14"
 								/>
@@ -233,7 +236,7 @@ export const AppLoadingScreen: React.FC<AppLoadingScreenProps> = ({
 					{/* Logo + title row */}
 					<div className="flex items-center gap-3 mb-6">
 						<img
-							src="/logo.png"
+							src={LOGO_URL}
 							alt="Memorall Logo"
 							className="h-10 w-10 shrink-0 object-contain"
 						/>
@@ -336,7 +339,7 @@ export const AppLoadingScreen: React.FC<AppLoadingScreenProps> = ({
 						<div className="mb-5 sm:mb-8">
 							<div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-primary to-primary/60 sm:h-20 sm:w-20">
 								<img
-									src="/logo.png"
+									src={LOGO_URL}
 									alt="Memorall Logo"
 									className="h-12 w-12 object-contain sm:h-14 sm:w-14"
 								/>

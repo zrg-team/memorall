@@ -1,0 +1,11 @@
+{
+	"name": "@memorall/desktop",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"tauri": "tauri"
+	},
+	"devDependencies": {
+		"@tauri-apps/cli": "^2.11.4"
+	}
+}

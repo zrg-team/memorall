@@ -1,4 +1,5 @@
 import { logError, logInfo, logWarn } from "@/utils/logger";
+import { platform } from "@/platform/current";
 import {
 	documentFileSystemService,
 	type FilesystemChangeEvent,
@@ -213,12 +214,6 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 		if (typeof window === "undefined" || typeof document === "undefined") {
 			throw new Error("SandboxContainerService requires DOM APIs.");
 		}
-		if (typeof chrome === "undefined" || !chrome.runtime?.getURL) {
-			throw new Error(
-				"SandboxContainerService requires chrome.runtime.getURL.",
-			);
-		}
-
 		this.ensureSwBroadcastRelay();
 
 		// Register the AlmostNode service worker from this outer (non-sandboxed)
@@ -236,13 +231,9 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 
 		const iframe = document.createElement("iframe");
 		iframe.style.display = "none";
-		const runtime = chrome.runtime as typeof chrome.runtime & {
-			getManifest?: () => chrome.runtime.Manifest;
-		};
-		const manifest = (
-			typeof runtime.getManifest === "function"
-				? runtime.getManifest()
-				: await fetch(chrome.runtime.getURL("manifest.json")).then(
+		const manifest =
+			platform.environment === "extension"
+				? ((await fetch(platform.assets.url("manifest.json")).then(
 						(response) => {
 							if (!response.ok) {
 								throw new Error(
@@ -251,14 +242,14 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 							}
 							return response.json();
 						},
-					)
-		) as chrome.runtime.Manifest & { sandbox?: { pages?: string[] } };
+					)) as { sandbox?: { pages?: string[] } })
+				: { sandbox: { pages: [this.options.frameUrl] } };
 		const manifestSandboxPages = manifest.sandbox?.pages ?? [];
 		const runtimePage =
 			manifestSandboxPages.find((page) =>
 				page.includes("sandbox-container-runtime"),
 			) ?? manifestSandboxPages.at(-1);
-		iframe.src = chrome.runtime.getURL(runtimePage ?? this.options.frameUrl);
+		iframe.src = platform.assets.url(runtimePage ?? this.options.frameUrl);
 
 		const loaded = new Promise<void>((resolve, reject) => {
 			const timeoutId = window.setTimeout(() => {
@@ -323,7 +314,7 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 			return;
 		}
 		try {
-			const swUrl = chrome.runtime.getURL("sandbox/__sw__.js");
+			const swUrl = platform.assets.url("sandbox/__sw__.js");
 			const reg = await navigator.serviceWorker.register(swUrl);
 			logInfo(
 				"[SW] Registered sandbox service worker, scope:",
@@ -1460,12 +1451,8 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 	 * via the almostnode service worker.
 	 */
 	private resolveRenderUrl(rawUrl: string): string {
-		if (
-			rawUrl.startsWith("/") &&
-			typeof chrome !== "undefined" &&
-			typeof chrome.runtime?.getURL === "function"
-		) {
-			const base = chrome.runtime.getURL("").replace(/\/$/, "");
+		if (rawUrl.startsWith("/")) {
+			const base = this.assetBaseUrl().replace(/\/$/, "");
 			return base + rawUrl;
 		}
 		return rawUrl;
@@ -1473,9 +1460,14 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 
 	private buildVirtualServerUrl(port: number, path: string): string {
 		return (
-			chrome.runtime.getURL("") +
+			this.assetBaseUrl() +
 			`__virtual__/${port}${path.startsWith("/") ? path : `/${path}`}`
 		);
+	}
+
+	private assetBaseUrl(): string {
+		const sentinel = "__memorall_asset_root__";
+		return platform.assets.url(sentinel).slice(0, -sentinel.length);
 	}
 
 	private async buildRendererImportMap(
@@ -1495,7 +1487,7 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 		const virtualUrl = this.buildVirtualServerUrl(port, path);
 		const importMap = await this.buildRendererImportMap(port);
 		const rendererUrl =
-			chrome.runtime.getURL("sandbox/pages/renderer.html") +
+			platform.assets.url("sandbox/pages/renderer.html") +
 			`?port=${port}&path=${encodeURIComponent(path)}&importMap=${encodeURIComponent(JSON.stringify(importMap))}`;
 
 		return {

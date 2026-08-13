@@ -5,6 +5,7 @@ import { serviceManager } from "@/services";
 import type { SandboxHandleSwRequestResult } from "@/services/sandbox-container";
 import { logError } from "@/utils/logger";
 import { ArtifactActionsMenu, type ArtifactProps } from "./ArtifactActionsMenu";
+import { platform } from "@/platform/current";
 
 interface VirtualSandboxLocation {
 	port: number;
@@ -198,9 +199,9 @@ export const UrlArtifact: React.FC<ArtifactProps> = ({ content, title }) => {
 	const openInTab = () => {
 		if (!iframeSrc) return;
 		const tabUrl = iframeSrc.startsWith("/")
-			? chrome.runtime.getURL(iframeSrc.replace(/^\//, ""))
+			? platform.assets.url(iframeSrc)
 			: iframeSrc;
-		chrome.tabs.create({ url: tabUrl });
+		void platform.externalLinks.open(tabUrl);
 	};
 
 	return (

@@ -10,12 +10,13 @@ import {
 } from "@/main/components/ui/card";
 import { Button } from "@/main/components/ui/button";
 import { Badge } from "@/main/components/ui/badge";
-import { BACKGROUND_EVENTS } from "@/constants/events";
+import { platform } from "@/platform/current";
+import type {
+	RuntimeServiceName,
+	RuntimeServiceStatus,
+} from "@/platform/contracts/core";
 
-interface ServiceStatus {
-	registered: boolean;
-	ready: boolean;
-}
+type ServiceStatus = RuntimeServiceStatus;
 
 interface ServiceStatuses {
 	webllm: ServiceStatus;
@@ -76,23 +77,9 @@ export function OffscreenServicesCard() {
 
 	const fetchStatus = React.useCallback(async () => {
 		try {
-			const contexts = await chrome.runtime.getContexts({
-				contextTypes: [chrome.runtime.ContextType.OFFSCREEN_DOCUMENT],
-			});
-			const alive = contexts.length > 0;
-			setOffscreenAlive(alive);
-
-			if (!alive) {
-				setStatuses(DEFAULT_STATUSES);
-				return;
-			}
-
-			const response = await chrome.runtime.sendMessage({
-				type: BACKGROUND_EVENTS.GET_SERVICE_STATUS,
-			});
-			if (response?.success && response.statuses) {
-				setStatuses(response.statuses as ServiceStatuses);
-			}
+			const snapshot = await platform.runtimeDiagnostics.status();
+			setOffscreenAlive(snapshot.alive);
+			setStatuses(snapshot.statuses);
 		} catch {
 			setOffscreenAlive(false);
 			setStatuses(DEFAULT_STATUSES);
@@ -106,13 +93,10 @@ export function OffscreenServicesCard() {
 	}, [fetchStatus]);
 
 	const handleReset = React.useCallback(
-		async (serviceName: string) => {
+		async (serviceName: RuntimeServiceName) => {
 			setResetting(serviceName);
 			try {
-				await chrome.runtime.sendMessage({
-					type: BACKGROUND_EVENTS.RESET_LLM_SERVICE,
-					service: serviceName,
-				});
+				await platform.runtimeDiagnostics.reset(serviceName);
 				await fetchStatus();
 			} catch {
 				// ignore

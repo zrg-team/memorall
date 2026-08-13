@@ -66,7 +66,10 @@ export async function ensureTransformers() {
 			const wasmPath =
 				typeof chrome !== "undefined" && chrome.runtime?.getURL
 					? chrome.runtime.getURL("vendors/transformers/")
-					: "../../../vendors/transformers/";
+					: new URL(
+							"../../../vendors/transformers/",
+							import.meta.url,
+						).href;
 			transformers.env.backends.onnx.wasm.wasmPaths = wasmPath;
 			transformers.env.backends.onnx.wasm.wasmBinary = null;
 

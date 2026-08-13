@@ -23,7 +23,7 @@ import type {
 	DatabaseStatus,
 } from "./interfaces/database-service.interface";
 import { DatabaseServiceCore } from "./database-service-core";
-import { DatabaseRpcHandler } from "./bridges/rpc-handler";
+import { getDatabaseRpcServer } from "@/services/database/bridges/current-rpc-server";
 
 export class DatabaseServiceMain extends DatabaseServiceCore {
 	protected async initializeDatabase(): Promise<void> {
@@ -38,8 +38,11 @@ export class DatabaseServiceMain extends DatabaseServiceCore {
 			// db.ts handles both main and proxy modes correctly
 			await initDB(this.config!);
 
-			const rpcHandler = DatabaseRpcHandler.getInstance();
-			rpcHandler.startListening(this.config!.proxyOptions?.channelName!);
+			const channelName = this.config!.proxyOptions?.channelName;
+			if (channelName) {
+				const rpcHandler = getDatabaseRpcServer();
+				rpcHandler.startListening(channelName);
+			}
 
 			logInfo("✅ Database service initialized successfully");
 		} catch (error) {
@@ -107,8 +110,11 @@ export class DatabaseServiceMain extends DatabaseServiceCore {
 	}
 
 	async close(): Promise<void> {
-		if (this.config?.mode === DatabaseMode.MAIN) {
-			const rpcHandler = DatabaseRpcHandler.getInstance();
+		if (
+			this.config?.mode === DatabaseMode.MAIN &&
+			this.config.proxyOptions?.channelName
+		) {
+			const rpcHandler = getDatabaseRpcServer();
 			rpcHandler.stop();
 			logInfo("📡 RPC handler stopped");
 		}

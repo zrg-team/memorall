@@ -7,6 +7,7 @@ import {
 import type { BaseEmbedding } from "../interfaces/base-embedding";
 import { logError, logInfo } from "@/utils/logger";
 import { isWebGPUSupported } from "@/utils/webgpu";
+import { platform } from "@/platform/current";
 
 type ModelOptions = PretrainedModelOptions;
 type FeatureExtractionOptions = NonNullable<
@@ -83,24 +84,9 @@ export class LocalEmbedding implements BaseEmbedding {
 			);
 
 			// Route ONNX Runtime assets to local, MV3-safe URLs
-			const base =
-				typeof (
-					globalThis as unknown as {
-						chrome?: { runtime?: { getURL?: (path: string) => string } };
-					}
-				).chrome !== "undefined" &&
-				typeof (
-					globalThis as unknown as {
-						chrome: { runtime: { getURL: (path: string) => string } };
-					}
-				).chrome?.runtime?.getURL === "function"
-					? (
-							globalThis as unknown as {
-								chrome: { runtime: { getURL: (path: string) => string } };
-							}
-						).chrome.runtime.getURL("vendors/transformers/")
-					: (typeof location !== "undefined" ? location.origin + "/" : "/") +
-						"vendors/transformers/";
+			const base = `${platform.assets
+				.url("vendors/transformers/runtime")
+				.slice(0, -"runtime".length)}`;
 
 			if (env?.backends?.onnx?.wasm) {
 				env.backends.onnx.wasm.wasmPaths = base;
