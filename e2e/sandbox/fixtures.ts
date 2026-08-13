@@ -14,7 +14,10 @@ interface TestFixtures {
 export const test = base.extend<TestFixtures, WorkerFixtures>({
 	extensionContext: [
 		async ({}, use) => {
-			const extensionPath = path.resolve(process.cwd(), "dist/chromium");
+			const extensionPath = path.resolve(
+				process.cwd(),
+				"publish/extension/chromium",
+			);
 			const context = await chromium.launchPersistentContext("", {
 				channel: process.env.PLAYWRIGHT_CHANNEL ?? "chromium",
 				headless: true,

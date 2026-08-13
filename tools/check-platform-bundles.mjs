@@ -3,13 +3,13 @@ import path from "node:path";
 
 const targets = {
 	web: {
-		directory: "dist/web",
+		directory: "publish/web",
 		applicationAssetPrefixes: ["studio/assets/"],
 		maximumApplicationReferences: 2,
 		maximumReusedStaticReferences: 16,
 	},
 	desktop: {
-		directory: "dist/desktop",
+		directory: "publish/desktop/frontend",
 		applicationAssetPrefixes: ["assets/"],
 		maximumApplicationReferences: 2,
 		maximumReusedStaticReferences: 16,

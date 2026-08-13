@@ -8,11 +8,12 @@ yarn test:e2e:extension:dev
 ```
 
 The wrapper waits for Extension.js to publish
-`dist/extension-js/chromium/ready.json`, loads that exact directory, runs the
-Playwright suite, and stops only the dev process it created.
+its internal `dist/extension-js/chromium/ready.json` contract, snapshots that
+artifact to `publish/extension/dev/chromium`, runs the Playwright suite from the
+published path, and stops only the dev process it created.
 
 Build the production MV3 artifact, run the remote-code audit, and load
-`dist/chromium` directly as an unpacked extension:
+`publish/extension/chromium` directly as an unpacked extension:
 
 ```sh
 yarn test:e2e:extension:build

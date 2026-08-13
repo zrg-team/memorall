@@ -4,10 +4,10 @@ import { defineConfig } from "vite";
 
 const repositoryRoot = fileURLToPath(new URL("../..", import.meta.url));
 const deploymentDirectory = fileURLToPath(
-	new URL("../../dist/web", import.meta.url),
+	new URL("../../publish/web", import.meta.url),
 );
 const outputDirectory = fileURLToPath(
-	new URL("../../dist/web/studio", import.meta.url),
+	new URL("../../publish/web/studio", import.meta.url),
 );
 
 export default defineConfig({

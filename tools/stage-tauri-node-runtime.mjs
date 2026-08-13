@@ -16,7 +16,7 @@ if (!triple) throw new Error(`Unsupported desktop target: ${key}`);
 const extension = process.platform === "win32" ? ".exe" : "";
 const destination = resolve(
 	process.cwd(),
-	`apps/desktop/src-tauri/binaries/memorall-node-${triple}${extension}`,
+	`publish/.cache/tauri-sidecars/memorall-node-${triple}${extension}`,
 );
 await mkdir(dirname(destination), { recursive: true });
 await copyFile(process.execPath, destination);

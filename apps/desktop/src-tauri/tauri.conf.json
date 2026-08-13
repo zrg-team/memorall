@@ -7,7 +7,7 @@
 		"beforeDevCommand": "yarn --cwd ../.. web:desktop:dev",
 		"devUrl": "http://localhost:1420",
 		"beforeBuildCommand": "yarn --cwd ../.. web:desktop:build",
-		"frontendDist": "../../../dist/desktop"
+		"frontendDist": "../../../publish/desktop/frontend"
 	},
 	"app": {
 		"windows": [
@@ -33,6 +33,6 @@
 			"icons/icon.icns",
 			"icons/icon.ico"
 		],
-		"externalBin": ["binaries/memorall-node"]
+		"externalBin": ["../../../publish/.cache/tauri-sidecars/memorall-node"]
 	}
 }

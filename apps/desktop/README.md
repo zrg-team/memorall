@@ -38,14 +38,16 @@ target for the current host, starts the executable, verifies it remains alive,
 and terminates only that test process.
 
 On Windows, the build produces the standalone executable plus MSI and NSIS
-installers under `src-tauri/target/release/`. The native smoke test verifies
-process health; release acceptance should additionally inspect the real window
-on each host OS.
+installers under `../../publish/desktop/windows/`. macOS and Linux use sibling
+platform directories. Cargo intermediates stay under `../../publish/.cache/tauri/`.
+The native smoke test verifies process health; release acceptance should
+additionally inspect the real window on each host OS.
 
 The local build command stages the real Node executable running Yarn at
-`src-tauri/binaries/memorall-node-<target-triple>[.exe]`. Release packaging must
-replace that development convenience with a pinned Node 22 distribution paired
-with npm; do not replace it with a single-file JavaScript wrapper. Managed
+`../../publish/.cache/tauri-sidecars/memorall-node-<target-triple>[.exe]`.
+Release packaging must replace that development convenience with a pinned Node
+22 distribution paired with npm; do not replace it with a single-file
+JavaScript wrapper. Managed
 Chromium is not bundled here and will be downloaded into application data when
 browser automation is enabled.
 

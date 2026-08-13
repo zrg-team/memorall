@@ -4,7 +4,7 @@ import { extname, join, normalize, resolve, sep } from "node:path";
 
 const portFlag = process.argv.indexOf("--port");
 const port = Number(portFlag >= 0 ? process.argv[portFlag + 1] : 4173);
-const root = resolve(process.cwd(), "dist/web");
+const root = resolve(process.cwd(), "publish/web");
 const projectPrefix = "/memorall";
 const mimeTypes = {
 	".css": "text/css; charset=utf-8",

@@ -8,12 +8,12 @@ import { join } from 'path';
  * - Ensures production-ready settings
  */
 
-const distDirs = ['dist/chrome', 'dist/edge'].filter((distDir) =>
+const distDirs = ['publish/extension/chrome', 'publish/extension/edge'].filter((distDir) =>
   existsSync(join(distDir, 'manifest.json')),
 );
 
 if (distDirs.length === 0) {
-  console.error('❌ Error: manifest.json not found in dist/chrome/ or dist/edge/');
+  console.error('❌ Error: manifest.json not found in publish/extension/chrome/ or publish/extension/edge/');
   console.error('   Run "yarn run build:prod" first');
   process.exit(1);
 }

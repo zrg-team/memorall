@@ -1,11 +1,58 @@
 import { execFileSync, spawn } from "node:child_process";
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+	cpSync,
+	existsSync,
+	mkdirSync,
+	mkdtempSync,
+	rmSync,
+	writeFileSync,
+} from "node:fs";
 import { homedir, tmpdir } from "node:os";
-import { delimiter, join } from "node:path";
+import { delimiter, join, resolve } from "node:path";
 
 const command = process.argv[2];
 if (command !== "dev" && command !== "build") {
 	throw new Error("Usage: node tools/run-tauri.mjs <dev|build>");
+}
+
+const platformName =
+	process.platform === "win32"
+		? "windows"
+		: process.platform === "darwin"
+			? "macos"
+			: process.platform === "linux"
+				? "linux"
+				: process.platform;
+const cargoTargetDirectory = resolve(
+	"publish",
+	".cache",
+	"tauri",
+	`${platformName}-${process.arch}`,
+);
+
+function stageDesktopArtifacts() {
+	const releaseDirectory = join(cargoTargetDirectory, "release");
+	const destination = resolve("publish", "desktop", platformName);
+	const executableSuffix = process.platform === "win32" ? ".exe" : "";
+
+	if (!existsSync(releaseDirectory)) {
+		throw new Error(`Tauri release output was not found: ${releaseDirectory}`);
+	}
+
+	rmSync(destination, { recursive: true, force: true });
+	mkdirSync(destination, { recursive: true });
+	for (const file of [
+		`memorall-desktop${executableSuffix}`,
+		`memorall-node${executableSuffix}`,
+	]) {
+		const source = join(releaseDirectory, file);
+		if (existsSync(source)) cpSync(source, join(destination, file));
+	}
+	const bundleDirectory = join(releaseDirectory, "bundle");
+	if (existsSync(bundleDirectory)) {
+		cpSync(bundleDirectory, join(destination, "bundle"), { recursive: true });
+	}
+	console.log(`Published ${platformName} desktop artifacts to ${destination}`);
 }
 
 function withCargoPath(environment) {
@@ -87,6 +134,7 @@ const environment =
 	process.platform === "win32"
 		? windowsDeveloperEnvironment()
 		: withCargoPath({ ...process.env });
+environment.CARGO_TARGET_DIR = cargoTargetDirectory;
 const yarn = process.platform === "win32" ? "yarn.cmd" : "yarn";
 const child = spawn(yarn, ["--cwd", "apps/desktop", "tauri", command], {
 	cwd: process.cwd(),
@@ -99,4 +147,5 @@ const code = await new Promise((resolveExit, reject) => {
 	child.once("error", reject);
 	child.once("exit", (exitCode) => resolveExit(exitCode ?? 1));
 });
+if (code === 0 && command === "build") stageDesktopArtifacts();
 process.exitCode = code;

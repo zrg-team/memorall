@@ -363,19 +363,35 @@ repository. Completed in this checkpoint:
 - repeatable unpacked-extension E2E for both Extension.js dev output and the
   production build, static-server Pages E2E, and native-host desktop smoke tests.
 
+Generated output has one repository-level contract:
+
+```text
+publish/
+  extension/{chromium,chrome,edge,firefox,dev/chromium}
+  web/studio/
+  desktop/frontend/
+  desktop/{windows,macos,linux}/
+  .cache/{tauri,tauri-sidecars}/
+  test-logs/
+```
+
+Extension.js may use `dist/` transiently while its dev/build producer is active,
+but tests and consumers load the snapshotted artifact from `publish/`. Tauri
+Cargo output and generated sidecar inputs also remain below `publish/.cache/`.
+
 Local acceptance results on 2026-08-13:
 
 | Surface | Command | Result |
 |---|---|---|
-| Extension.js development output | `yarn test:e2e:extension:dev` | Passed 3/3 tests after loading `dist/extension-js/chromium` unpacked in headed Chromium |
-| Production extension output | `yarn test:e2e:extension:build` | MV3 audit passed and 3/3 tests passed after loading `dist/chromium` unpacked in headed Chromium |
+| Extension.js development output | `yarn test:e2e:extension:dev` | Passed 3/3 tests after snapshotting Extension.js output and loading `publish/extension/dev/chromium` unpacked in headed Chromium |
+| Production extension output | `yarn test:e2e:extension:build` | MV3 audit passed and 3/3 tests passed after loading `publish/extension/chromium` unpacked in headed Chromium |
 | GitHub Pages layout | `yarn test:e2e:web` | Passed 2/2 tests at `/memorall/studio/` through the checked-in static server, including a hash-route reload |
-| Windows Tauri application | `yarn test:e2e:desktop` | Built the native executable, MSI, and NSIS installer; the executable remained open for the smoke interval |
+| Windows Tauri application | `yarn test:e2e:desktop` | Built the native executable, Node sidecar, MSI, and NSIS installer under `publish/desktop/windows`; the executable remained open for the smoke interval |
 | Windows visual launch | local Computer Use inspection | The packaged WebView2 window reached the shared Memorall onboarding workspace |
 
-These are local/on-demand gates. No GitHub Actions workflow is installed. The
-manual Pages command publishes `dist/web` to `gh-pages`; publishing itself was
-not performed during this checkpoint.
+These are local/on-demand gates. No new platform E2E or deployment GitHub Actions
+workflow was added. The manual Pages command publishes `publish/web` to
+`gh-pages`; publishing itself was not performed during this checkpoint.
 
 The following release work remains intentionally open and must not be represented
 as production-ready:

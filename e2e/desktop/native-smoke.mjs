@@ -35,13 +35,13 @@ if (shouldBuild) {
 
 const candidates =
 	process.platform === "win32"
-		? ["apps/desktop/src-tauri/target/release/memorall-desktop.exe"]
+		? ["publish/desktop/windows/memorall-desktop.exe"]
 		: process.platform === "darwin"
 			? [
-					"apps/desktop/src-tauri/target/release/bundle/macos/Memorall.app/Contents/MacOS/Memorall",
-					"apps/desktop/src-tauri/target/release/memorall-desktop",
+					"publish/desktop/macos/bundle/macos/Memorall.app/Contents/MacOS/Memorall",
+					"publish/desktop/macos/memorall-desktop",
 				]
-			: ["apps/desktop/src-tauri/target/release/memorall-desktop"];
+			: ["publish/desktop/linux/memorall-desktop"];
 const executable = candidates.map((candidate) => resolve(candidate)).find(existsSync);
 if (!executable) {
 	throw new Error(

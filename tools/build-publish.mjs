@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { execSync } from 'child_process';
-import { existsSync, mkdirSync, cpSync, rmSync, writeFileSync, readFileSync, readdirSync, statSync, renameSync } from 'fs';
+import { existsSync, mkdirSync, rmSync, writeFileSync, readFileSync, readdirSync, statSync, renameSync } from 'fs';
 import { join, basename, dirname } from 'path';
 import AdmZip from 'adm-zip';
 
@@ -9,7 +9,7 @@ import AdmZip from 'adm-zip';
  * Output: publish/ directory with ready-to-submit packages
  */
 
-const publishDir = 'publish';
+const publishDir = join('publish', 'extension');
 
 function escapeNonAsciiJavaScript(source) {
   let escaped = '';
@@ -140,20 +140,18 @@ const noZip = process.argv.includes('--nozip');
 
 console.log('🚀 Building Memorall for store submission...\n');
 
-// Step 1: Clean publish directory
-console.log('📁 Cleaning publish directory...');
+// Step 1: Clean only extension artifacts. Web and desktop builds are independent.
+console.log('📁 Cleaning extension publish directory...');
 if (existsSync(publishDir)) {
   rmSync(publishDir, { recursive: true, force: true });
 }
 mkdirSync(publishDir, { recursive: true });
-console.log('✅ Publish directory ready\n');
+console.log('✅ Extension publish directory ready\n');
 
 // Step 2: Build production version
 console.log('🔨 Building production extension...');
 try {
-  execSync('node tools/copy-bundled-assets.mjs', { stdio: 'inherit' });
-  execSync('cross-env NODE_ENV=production extension build --browser=chrome,edge', { stdio: 'inherit' });
-  execSync('node tools/ensure-content-script-assets.mjs', { stdio: 'inherit' });
+  execSync('yarn build:prod', { stdio: 'inherit' });
   console.log('✅ Production build complete\n');
 } catch (error) {
   console.error('❌ Build failed:', error.message);
@@ -162,14 +160,14 @@ try {
 
 // Step 3: Prepare production manifests
 console.log('📝 Preparing production manifests...');
-const chromeDistDir = join('dist', 'chrome');
-const edgeDistDir = join('dist', 'edge');
+const chromeDistDir = join(publishDir, 'chrome');
+const edgeDistDir = join(publishDir, 'edge');
 prepareProductionDist(chromeDistDir);
 prepareProductionDist(edgeDistDir);
 
 console.log('🔒 Auditing packaged code for Manifest V3 compliance...');
 try {
-  execSync('node tools/check-mv3-remote-code.mjs dist/chrome dist/edge', {
+  execSync(`node tools/check-mv3-remote-code.mjs ${chromeDistDir} ${edgeDistDir}`, {
     stdio: 'inherit',
   });
   console.log('✅ Manifest V3 remote-code audit complete\n');
@@ -178,16 +176,14 @@ try {
   process.exit(1);
 }
 
-// Step 4: Copy Chrome build
+// Step 4: Confirm Chrome build
 console.log('📦 Packaging Chrome extension...');
-const chromeDir = join(publishDir, 'chrome');
-cpSync(chromeDistDir, chromeDir, { recursive: true });
+const chromeDir = chromeDistDir;
 console.log('✅ Chrome package ready\n');
 
-// Step 5: Copy Edge build
+// Step 5: Confirm Edge build
 console.log('📦 Packaging Edge extension...');
-const edgeDir = join(publishDir, 'edge');
-cpSync(edgeDistDir, edgeDir, { recursive: true });
+const edgeDir = edgeDistDir;
 console.log('✅ Edge package ready\n');
 
 // Step 6: Create ZIP files
@@ -228,20 +224,20 @@ Version: ${JSON.parse(readFileSync('package.json', 'utf8')).version}
 ## Contents
 
 ### Chrome Web Store
-- **Directory**: publish/chrome/
-- **ZIP**: publish/memorall-chrome.zip
+- **Directory**: publish/extension/chrome/
+- **ZIP**: publish/extension/memorall-chrome.zip
 - **Upload to**: https://chrome.google.com/webstore/devconsole
 
 ### Microsoft Edge Add-ons
-- **Directory**: publish/edge/
-- **ZIP**: publish/memorall-edge.zip
+- **Directory**: publish/extension/edge/
+- **ZIP**: publish/extension/memorall-edge.zip
 - **Upload to**: https://partner.microsoft.com/dashboard/microsoftedge
 
 ## Next Steps
 
 1. **Test the unpacked extensions**:
-   - Chrome: Load \`publish/chrome/\` as unpacked extension
-   - Edge: Load \`publish/edge/\` as unpacked extension
+   - Chrome: Load \`publish/extension/chrome/\` as unpacked extension
+   - Edge: Load \`publish/extension/edge/\` as unpacked extension
 
 2. **Submit to stores**:
    - Upload \`memorall-chrome.zip\` to Chrome Web Store
@@ -274,17 +270,17 @@ console.log('══════════════════════�
 console.log('🎉 Build Complete!');
 console.log('═══════════════════════════════════════════════════════════');
 console.log('');
-console.log('📦 Packages created in: publish/');
+console.log('📦 Packages created in: publish/extension/');
 console.log('');
-console.log('  📁 Chrome:  publish/chrome/');
-console.log('  📁 Edge:    publish/edge/');
+console.log('  📁 Chrome:  publish/extension/chrome/');
+console.log('  📁 Edge:    publish/extension/edge/');
 if (!noZip) {
-  console.log('  🗜️  Chrome:  publish/memorall-chrome.zip');
-  console.log('  🗜️  Edge:    publish/memorall-edge.zip');
+  console.log('  🗜️  Chrome:  publish/extension/memorall-chrome.zip');
+  console.log('  🗜️  Edge:    publish/extension/memorall-edge.zip');
 }
 console.log('');
 console.log('Next steps:');
-console.log('  1. Test: Load publish/chrome/ as unpacked extension');
+console.log('  1. Test: Load publish/extension/chrome/ as unpacked extension');
 console.log('  2. Review: Check SUBMISSION_CHECKLIST.md');
 console.log('  3. Submit: Upload ZIP files to stores');
 console.log('');

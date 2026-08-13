@@ -1,4 +1,5 @@
 import {
+	cpSync,
 	createWriteStream,
 	existsSync,
 	mkdirSync,
@@ -16,7 +17,11 @@ if (mode !== "dev" && mode !== "build") {
 const root = process.cwd();
 const yarn = process.platform === "win32" ? "yarn.cmd" : "yarn";
 const readyPath = resolve(root, "dist/extension-js/chromium/ready.json");
-const logDirectory = resolve(root, "dist/e2e-logs");
+const logDirectory = resolve(root, "publish/test-logs/extension");
+const developmentPublishPath = resolve(
+	root,
+	"publish/extension/dev/chromium",
+);
 let producer;
 
 function run(args, options = {}) {
@@ -89,7 +94,7 @@ async function stopProducer() {
 
 try {
 	mkdirSync(logDirectory, { recursive: true });
-	let extensionPath = resolve(root, "dist/chromium");
+	let extensionPath = resolve(root, "publish/extension/chromium");
 
 	if (mode === "dev") {
 		await run(["prepare:dev"]);
@@ -110,7 +115,11 @@ try {
 		);
 		producer.stdout.pipe(log, { end: false });
 		producer.stderr.pipe(log, { end: false });
-		extensionPath = await waitForReady();
+		const internalDevelopmentPath = await waitForReady();
+		rmSync(developmentPublishPath, { recursive: true, force: true });
+		mkdirSync(resolve(developmentPublishPath, ".."), { recursive: true });
+		cpSync(internalDevelopmentPath, developmentPublishPath, { recursive: true });
+		extensionPath = developmentPublishPath;
 	} else {
 		await run(["build"]);
 	}

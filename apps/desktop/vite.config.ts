@@ -75,7 +75,9 @@ export default defineConfig({
 	optimizeDeps: { exclude: ["@electric-sql/pglite"] },
 	worker: { format: "es" },
 	build: {
-		outDir: fileURLToPath(new URL("../../dist/desktop", import.meta.url)),
+		outDir: fileURLToPath(
+			new URL("../../publish/desktop/frontend", import.meta.url),
+		),
 		emptyOutDir: true,
 	},
 });

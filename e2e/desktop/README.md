@@ -13,7 +13,8 @@ To test an already-built executable, run `yarn test:e2e:desktop:built`.
 
 The test intentionally validates a real native executable, not only the shared
 Vite frontend. On Windows, a successful build also emits MSI and NSIS installers
-under `apps/desktop/src-tauri/target/release/bundle/`.
+under `publish/desktop/windows/bundle/`. macOS and Linux artifacts use the
+equivalent `publish/desktop/macos/` and `publish/desktop/linux/` roots.
 
 Native package creation is deliberately not cross-compiled by these scripts.
 Windows packages require a Windows runner and MSVC/WebView2, macOS application

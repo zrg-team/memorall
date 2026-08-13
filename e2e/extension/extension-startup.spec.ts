@@ -6,7 +6,7 @@ import { chromium, type BrowserContext } from "playwright";
 
 const extensionPath = resolve(
 	process.cwd(),
-	process.env.MEMORALL_EXTENSION_PATH ?? "dist/chromium",
+	process.env.MEMORALL_EXTENSION_PATH ?? "publish/extension/chromium",
 );
 const artifactMode = process.env.MEMORALL_EXTENSION_MODE ?? "build";
 const chromiumExecutableCandidates = [
