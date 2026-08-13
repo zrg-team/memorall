@@ -21,6 +21,13 @@ export interface InitializationProgress {
 	isComplete: boolean;
 }
 
+export interface ServiceInitializationOptions {
+	proxy?: boolean;
+	callback?: (service: string, progress: number) => void;
+	/** Expose the main database through the extension's Chrome Port RPC server. */
+	exposeDatabaseRpc?: boolean;
+}
+
 export class ServiceManager {
 	private static instance: ServiceManager;
 	private initialized = false;
@@ -57,7 +64,11 @@ export class ServiceManager {
 		isComplete: false,
 	};
 
-	private constructor() {}
+	constructor() {}
+
+	static create(): ServiceManager {
+		return new ServiceManager();
+	}
 
 	static getInstance(): ServiceManager {
 		if (!ServiceManager.instance) {
@@ -97,12 +108,10 @@ export class ServiceManager {
 	}
 
 	async initialize(
-		options: {
-			proxy?: boolean;
-			callback?: (service: string, progress: number) => void;
-		} = {
+		options: ServiceInitializationOptions = {
 			proxy: false,
 			callback: undefined,
+			exposeDatabaseRpc: true,
 		},
 	): Promise<void> {
 		if (this.initialized) return;
@@ -114,12 +123,10 @@ export class ServiceManager {
 	}
 
 	private async initializeServices(
-		options: {
-			proxy?: boolean;
-			callback?: (service: string, progress: number) => void;
-		} = {
+		options: ServiceInitializationOptions = {
 			proxy: false,
 			callback: undefined,
+			exposeDatabaseRpc: true,
 		},
 	): Promise<void> {
 		const mode = options.proxy ? "proxy mode" : "full mode";
@@ -153,7 +160,10 @@ export class ServiceManager {
 				const { CronJobServiceProxy } = await import("@/services/cron-jobs");
 
 				this.databaseService = new DatabaseServiceProxy();
-				await this.initializeDatabase({ mode: DatabaseMode.PROXY });
+				await this.initializeDatabase({
+					mode: DatabaseMode.PROXY,
+					exposeRpc: true,
+				});
 				this.flowBuilderService = new FlowBuilderService(this.databaseService);
 				this.cronJobService = new CronJobServiceProxy(this.databaseService);
 
@@ -187,7 +197,10 @@ export class ServiceManager {
 				const { CronJobServiceMain } = await import("@/services/cron-jobs");
 
 				this.databaseService = new DatabaseServiceMain();
-				await this.initializeDatabase({ mode: DatabaseMode.MAIN });
+				await this.initializeDatabase({
+					mode: DatabaseMode.MAIN,
+					exposeRpc: options.exposeDatabaseRpc ?? true,
+				});
 				this.flowBuilderService = new FlowBuilderService(this.databaseService);
 				this.cronJobService = new CronJobServiceMain(this.databaseService);
 
@@ -247,6 +260,7 @@ export class ServiceManager {
 
 	private async initializeDatabase(options: {
 		mode: DatabaseMode;
+		exposeRpc: boolean;
 	}): Promise<void> {
 		try {
 			logInfo(`📚 Database "${options.mode}" initializing...`);
@@ -256,10 +270,10 @@ export class ServiceManager {
 				"database",
 			);
 			await this.databaseService.initialize({
-				...options,
-				proxyOptions: {
-					channelName: "postgres-rpc",
-				},
+				mode: options.mode,
+				proxyOptions: options.exposeRpc
+					? { channelName: "postgres-rpc" }
+					: undefined,
 			});
 			this.serviceStatus.database = true;
 			logInfo(`✅ Database "${options.mode}" initialized`);

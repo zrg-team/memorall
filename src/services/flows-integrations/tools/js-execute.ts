@@ -4,6 +4,7 @@ import type {
 	ToolFactory,
 } from "@/services/flows-legacy/interfaces/engine/tool";
 import { toolRegistry } from "@/services/flows-legacy/registries/tool-registry";
+import { platform } from "@/platform/current";
 
 const TOOL_NAME = "js_execute" as const;
 
@@ -71,16 +72,6 @@ const executeInSandboxPage = async (
 			truncatedLogs: 0,
 		};
 	}
-	if (typeof chrome === "undefined" || !chrome.runtime?.getURL) {
-		return {
-			status: "error",
-			durationMs: 0,
-			error: "Chrome runtime is not available.",
-			logs: [],
-			truncatedLogs: 0,
-		};
-	}
-
 	const logs: LogEntry[] = [];
 	let truncatedLogs = 0;
 	const startedAt = Date.now();
@@ -90,7 +81,7 @@ const executeInSandboxPage = async (
 	const iframe = document.createElement("iframe");
 	iframe.style.display = "none";
 	iframe.sandbox.add("allow-scripts");
-	iframe.src = chrome.runtime.getURL("sandbox/pages/js-execute.html");
+	iframe.src = platform.assets.url("sandbox/pages/js-execute.html");
 	document.body.appendChild(iframe);
 
 	const finalize = (result: WorkerResult) => {

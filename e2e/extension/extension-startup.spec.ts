@@ -1,10 +1,14 @@
 import { expect, test } from "@playwright/test";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { chromium, type BrowserContext } from "playwright";
 
-const extensionPath = resolve(process.cwd(), "dist/chromium");
+const extensionPath = resolve(
+	process.cwd(),
+	process.env.MEMORALL_EXTENSION_PATH ?? "publish/extension/chromium",
+);
+const artifactMode = process.env.MEMORALL_EXTENSION_MODE ?? "build";
 const chromiumExecutableCandidates = [
 	process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH,
 	process.env.LOCALAPPDATA
@@ -24,7 +28,9 @@ let extensionOrigin: string;
 
 test.beforeAll(async () => {
 	if (!existsSync(extensionPath)) {
-		throw new Error("Extension build is missing. Run yarn build before this test.");
+		throw new Error(
+			"Extension build is missing. Run yarn build:extension before this test.",
+		);
 	}
 
 	profilePath = mkdtempSync(join(tmpdir(), "memorall-extension-e2e-"));
@@ -40,15 +46,26 @@ test.beforeAll(async () => {
 			: {}),
 	});
 
-	await new Promise((resolve) => setTimeout(resolve, 3_000));
-	const serviceWorker = context
-		.serviceWorkers()
-		.find((worker) => worker.url().startsWith("chrome-extension://"));
+	const serviceWorker =
+		context
+			.serviceWorkers()
+			.find((worker) => worker.url().startsWith("chrome-extension://")) ??
+		(await context.waitForEvent("serviceworker", { timeout: 30_000 }));
 	if (!serviceWorker) {
 		throw new Error("Memorall extension service worker did not register.");
 	}
 	const serviceWorkerUrl = new URL(serviceWorker.url());
 	extensionOrigin = `${serviceWorkerUrl.protocol}//${serviceWorkerUrl.host}`;
+});
+
+test(`loads the unpacked ${artifactMode} Manifest V3 artifact`, async () => {
+	const manifest = JSON.parse(
+		readFileSync(join(extensionPath, "manifest.json"), "utf8"),
+	) as { manifest_version?: number; name?: string };
+
+	expect(manifest.manifest_version).toBe(3);
+	expect(manifest.name).toMatch(/memorall/i);
+	expect(extensionOrigin).toMatch(/^chrome-extension:\/\/[a-z]+$/);
 });
 
 test.afterAll(async () => {
@@ -65,9 +82,9 @@ test("options application initializes without runtime errors", async () => {
 
 	await page.goto(`${extensionOrigin}/options/index.html`);
 	await expect(page.locator("#root")).toBeVisible();
-	await expect
-		.poll(async () => page.locator("body").innerText())
-		.not.toContain("Initializing Memorall");
+	await expect(
+		page.getByText("Choose how you want to get started", { exact: true }),
+	).toBeVisible();
 
 	expect(pageErrors).toEqual([]);
 });
@@ -76,12 +93,15 @@ test("LLM configuration view switches through every supported provider", async (
 	const page = await context.newPage();
 	const pageErrors: string[] = [];
 	page.on("pageerror", (error) => pageErrors.push(error.message));
+	await page.addInitScript(() => {
+		localStorage.setItem("memorall-copilot-completed", "true");
+	});
 
 	await page.goto(`${extensionOrigin}/options/index.html`);
 	await expect(page.locator("#root")).toBeVisible();
-	await expect
-		.poll(async () => page.locator("body").innerText())
-		.not.toContain("Initializing Memorall");
+	await expect(
+		page.getByText("Choose how you want to get started", { exact: true }),
+	).toBeVisible();
 
 	await page.evaluate(() => {
 		window.history.pushState({}, "", "/llm");
@@ -99,23 +119,9 @@ test("LLM configuration view switches through every supported provider", async (
 	];
 
 	for (const provider of providers) {
-		const skipTour = page.getByRole("button", {
-			name: "Skip Tour",
-			exact: true,
-		});
-		if (await skipTour.isVisible()) {
-			await skipTour.click();
-		}
-
 		const tab = page.getByRole("button", { name: provider.tab, exact: true });
 		await expect(tab).toBeVisible();
-		try {
-			await tab.click({ timeout: 3_000 });
-		} catch {
-			await expect(skipTour).toBeVisible({ timeout: 3_000 });
-			await skipTour.click();
-			await tab.click({ timeout: 3_000 });
-		}
+		await tab.click();
 		await expect(page.locator("main")).toContainText(provider.content, {
 			timeout: 10_000,
 		});

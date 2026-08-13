@@ -50,10 +50,10 @@ jobs:
           node-version: ${{ matrix.node }}
       - run: corepack enable
       - run: yarn install --immutable
-      - run: yarn harness:boundaries
-      - run: yarn harness:typecheck
-      - run: yarn harness:test
-      - run: yarn harness:pack
+      - run: yarn check:harness:boundaries
+      - run: yarn typecheck:harness
+      - run: yarn test:harness
+      - run: yarn package:harness
 
   consumers-and-extension:
     name: Consumers and extension E2E
@@ -66,13 +66,13 @@ jobs:
       - run: corepack enable
       - run: yarn install --immutable
       - run: yarn playwright install --with-deps chromium
-      - run: yarn harness:pack
-      - run: yarn harness:smoke
-      - run: yarn type-check
-      - run: yarn test
+      - run: yarn package:harness
+      - run: yarn smoke:harness:consumers
+      - run: yarn typecheck
+      - run: yarn test:unit
       - run: yarn test:e2e:sandbox
       - run: yarn test:e2e:sandbox:network
-      - run: yarn build:prod
+      - run: yarn build:extension:all
       - name: Upload Playwright diagnostics
         if: failure()
         uses: actions/upload-artifact@v4

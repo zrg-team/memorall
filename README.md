@@ -4,9 +4,11 @@
 
 # Memorall
 
-### The browser is your agent's full workspace.
+### Your local-first agent workspace, across browser, web, and desktop.
 
-Memorall turns your browser into a local-first agent workspace with memory, tools, and model choice.
+Memorall combines durable memory, agent tools, and model choice in one shared
+React application. The same product code targets the Chrome/Edge extension, a
+static web app, and Tauri applications for Windows, macOS, and Linux.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Extension.js](https://img.shields.io/badge/Built%20with-Extension.js-0971fe)](https://extension.js.org)
@@ -17,7 +19,7 @@ Memorall turns your browser into a local-first agent workspace with memory, tool
 [![Agent Tools](https://img.shields.io/badge/Agent-Sandbox%20%2B%20Browser-c05621)](https://github.com/zrg-team/memorall)
 [![Custom Flows](https://img.shields.io/badge/Flows-Customizable-7c3aed)](https://github.com/zrg-team/memorall)
 
-[Quick Start](#quick-start) • [Flow Engine](#flow-engine) • [Agent Power](#agent-power) • [Custom Agents](#custom-agents) • [Architecture](#architecture-at-a-glance) • [Documentation](#documentation-map) • [GitHub](https://github.com/zrg-team/memorall)
+[Platforms](#supported-platforms) • [Quick Start](#quick-start) • [Flow Engine](#flow-engine) • [Agent Power](#agent-power) • [Custom Agents](#custom-agents) • [Architecture](#architecture-at-a-glance) • [Documentation](#documentation-map) • [GitHub](https://github.com/zrg-team/memorall)
 
 </div>
 
@@ -73,6 +75,44 @@ While the Flow Engine defines *how* the agent runs, these are the runtime capabi
 ![Memorall demo](docs/assets/demo.gif)
 
 ![Memorall screenshot](docs/assets/screenshot.jpg)
+
+<a id="supported-platforms"></a>
+## 🖥️ Supported Platforms
+
+Memorall uses one shared product application and small platform adapters. The
+extension remains the primary production target while web and desktop progress
+through explicit, testable rollout checkpoints.
+
+| Platform | Current status | Build or run |
+| --- | --- | --- |
+| Chrome/Edge MV3 extension | ✅ Primary target; development and production artifacts are loaded directly in Chromium E2E | `yarn test:e2e:extension` |
+| Static web / GitHub Pages | ✅ Shared workspace and static deployment layout verified at `/memorall/studio/` | `yarn test:e2e:web` |
+| Windows desktop (Tauri 2) | ✅ Native executable, MSI, and NSIS builds verified; the WebView2 release app opens without a terminal | `yarn build:desktop:windows` |
+| macOS desktop (Tauri 2) | ◐ Build support present; must be compiled, opened, signed, and notarized on macOS | `yarn build:desktop:macos` |
+| Linux desktop (Tauri 2) | ◐ Build support present; must be compiled and opened on a Linux host with WebKit/GTK dependencies | `yarn build:desktop:linux` |
+
+Legend: ✅ implemented and locally verified; ◐ available as a rollout checkpoint,
+provider-dependent capability, or native-host verification requirement; — not
+available by design.
+
+| Capability | Extension | Desktop | Static web |
+| --- | :---: | :---: | :---: |
+| Shared React workspace, routes, flows, RAG, and agent UI | ✅ | ✅ | ✅ |
+| PGlite memory, topics, graph, and document workspace | ✅ | ✅ | ✅ |
+| Remote-provider chat | ✅ | ✅ | ◐ provider CORS |
+| Local CPU/WASM models and embeddings | ✅ | ✅ | ✅ single-thread baseline |
+| WebGPU acceleration | ◐ browser/device | ◐ system webview/device | ◐ browser/device |
+| In-page assistant, selection capture, and active-tab capture | ✅ | — | — |
+| Browser activity tracking | ✅ | — | — |
+| Agent browser automation | ✅ extension tabs | ◐ managed Chromium rollout | — |
+| Native folders, local commands, npm, local servers, and MCP stdio | — | ◐ native bridge rollout | — |
+| MCP HTTP/SSE | ✅ | ✅ | ✅ |
+| Native or browser notifications | ✅ | ✅ | ◐ permission |
+| Portable `.memorall` export/import | ◐ integration rollout | ◐ integration rollout | ◐ integration rollout |
+| Automatic cross-device synchronization | — | — | — |
+
+Data remains local to each installation. Cross-device cloud synchronization is
+not part of this architecture; portable export/import is the migration path.
 
 ## ✨ Core Capabilities
 
@@ -164,30 +204,59 @@ The content script and embedded pages provide two user-facing overlays:
 ## 🏗️ Architecture At A Glance
 
 ```mermaid
-graph TD
-  PAGE["Web pages"] -->|content extraction, overlays, activity tracking| CONTENT["content.ts + src/embedded/*"]
-  CONTENT -->|messages, extracted payloads, web DOM actions| BG["src/background.ts"]
+flowchart TD
+  UI["Shared React application and product modules"]
+  PORTS["Platform ports and capability registry"]
+  RUNTIME["Shared RuntimeProcessor and services"]
+  HARNESS["Reusable agent-harness packages"]
 
-  UI["Popup + standalone app"] -->|proxy services + jobs| JOBS["Background jobs"]
-  BG -->|relay, context menus, watchdog| JOBS
+  EXT["Thin MV3 extension adapter"]
+  WEB["Thin static-web adapter"]
+  DESKTOP["Thin Tauri frontend adapter"]
+  OFFSCREEN["Extension offscreen host"]
+  WORKER["Shared or dedicated worker"]
+  RUST["Tauri Rust supervisor"]
+  SIDECAR["Managed Node and Playwright sidecar"]
 
-  JOBS --> OFF["Offscreen/runtime processing"]
-  OFF --> SM["ServiceManager"]
-
-  SM --> DB["Database service: PGlite + Drizzle"]
-  SM --> EMB["Embedding service"]
-  SM --> LLM["LLM service"]
-  SM --> FLOWS["Flows + Flow Builder"]
-
-  FLOWS --> TOOLS["Documents FS, workspace FS, web browser tools, Node sandbox"]
+  UI --> PORTS
+  UI --> RUNTIME
+  RUNTIME --> HARNESS
+  PORTS --> EXT
+  PORTS --> WEB
+  PORTS --> DESKTOP
+  EXT --> OFFSCREEN
+  WEB --> WORKER
+  DESKTOP --> WORKER
+  DESKTOP --> RUST
+  RUST --> SIDECAR
 ```
 
-The runtime split in the current codebase is deliberate:
+The core rule is **share product behavior; isolate host integration**:
 
-- UI surfaces use lightweight proxy services so popup and standalone stay responsive.
-- heavy database, embedding, and LLM work runs in the runtime/offscreen side managed through [`src/services/service-manager.ts`](./src/services/service-manager.ts)
-- cross-context execution goes through [`src/services/background-jobs`](./src/services/background-jobs)
-- the MV3 background worker in [`src/background.ts`](./src/background.ts) stays thin: it registers listeners synchronously, manages context menus, relays browser work, and watches offscreen health
+- [`src/main`](./src/main) owns one React route tree for every environment.
+- [`src/services`](./src/services) owns shared database, jobs, filesystems, models,
+  flows, RAG, and business behavior.
+- [`src/platform`](./src/platform) contains injected contracts and thin extension,
+  web, and desktop adapters.
+- [`packages/agent-harness`](./packages/agent-harness) provides reusable browser,
+  Node, worker, and test execution contracts.
+- [`apps/web`](./apps/web) contains only the Vite/static-site entry and deployment
+  configuration.
+- [`apps/desktop`](./apps/desktop) contains only the Tauri entry, Rust supervisor,
+  native capabilities, and Node sidecar.
+
+Build-time aliases select exactly one platform composition, allowing unused
+extension, web, Tauri, and Node-sidecar code to be excluded from each artifact.
+Architecture and compiled-bundle checks enforce those boundaries.
+
+Runtime-heavy database, embedding, LLM, and job work is exposed through the
+shared `RuntimeProcessor` and injected transports. MV3 hosts it through the
+offscreen document, web uses worker transports, and desktop combines worker-hosted
+JS/WASM services with a narrow Tauri bridge for native operations.
+
+The full decision record, critique, security model, feature matrix, test plan,
+and rollout status live in
+[`docs/plans/multi-environment-architecture.md`](./docs/plans/multi-environment-architecture.md).
 
 ## 📦 Core `src/` Layout
 
@@ -210,6 +279,14 @@ src/
     sandbox-container/ browser-hosted execution runtime
     shared-storage/    cross-context shared state
     web-browser/       browser session and DOM automation service
+  platform/            portable contracts plus thin environment adapters
+
+apps/
+  web/                 Vite entry and GitHub Pages configuration
+  desktop/             Tauri frontend, Rust supervisor, and Node sidecar
+
+packages/
+  agent-harness/       reusable execution contracts and environment adapters
 ```
 
 If you want the shortest accurate mental model:
@@ -235,6 +312,10 @@ These are the current docs that match the codebase today:
 - [Flows service](./docs/flows-service.md)
 - [Flow Engine README](./src/services/flows/README.md)
 - [Customize agents](./docs/customize-agents.md)
+- [Multi-environment architecture and rollout](./docs/plans/multi-environment-architecture.md)
+- [Web static E2E and GitHub Pages deployment](./e2e/web/README.md)
+- [Desktop build and E2E](./e2e/desktop/README.md)
+- [Extension dev/build E2E](./e2e/extension/README.md)
 
 ### Knowledge system
 
@@ -275,34 +356,70 @@ Then:
 Recommended Chrome build flow:
 
 ```bash
-yarn run build:chrome
+yarn build:extension:chrome
 ```
 
-Load the unpacked extension from `dist/chrome`.
+Load the unpacked extension from `publish/extension/chrome`.
 
 If you want live development:
 
 ```bash
-yarn run dev
+yarn dev:extension
 ```
 
-## 🛠️ Development Commands
+Run the static web application at the same path used by GitHub Pages:
+
+```bash
+yarn build:web
+yarn serve:web
+# http://127.0.0.1:4173/memorall/studio/
+```
+
+Run the native desktop application on the current host:
+
+```bash
+yarn dev:desktop
+```
+
+Tauri packages must be built on their native operating system. The target
+commands fail early on the wrong OS instead of claiming a cross-platform package
+was produced.
+
+## 🛠️ Script Families
+
+Scripts use `family:environment[:target]`. The conventional `dev`, `build`, and
+`package` aliases continue to target the extension, while explicit commands make
+cross-environment work unambiguous.
 
 | Command | Purpose |
 | --- | --- |
-| `yarn run dev` | Build Agent Harness once, then watch it alongside the hot-reloading Chromium extension (`CHROME_PATH` required). |
-| `yarn run dev:no-reload` | Use both watchers without injecting the content-script reload runtime; reload tabs manually. |
-| `yarn run watch` | Alias for the complete `dev` workflow. |
-| `yarn run harness:watch` | Watch only the standalone Agent Harness package family. |
-| `yarn run build` | Build Agent Harness and the default production extension. |
-| `yarn run build:chrome` | Build Chrome output in `dist/chrome`. |
-| `yarn run build:edge` | Build Edge output in `dist/edge`. |
-| `yarn run build:firefox` | Build Firefox MV3 output. |
-| `yarn run build:all` | Build Chrome and Edge outputs. |
-| `yarn run type-check` | Run TypeScript without emitting files. |
-| `yarn run lint` | Run the Extension.js lint step. |
-| `yarn run format` | Format `src` and `scripts` with Biome. |
-| `yarn run package` | Build the publish/package output. |
+| `yarn dev:extension` | Watch Agent Harness and the hot-reloading Chromium extension (`CHROME_PATH` required). |
+| `yarn dev:web` | Run the shared app through the web Vite development server. |
+| `yarn dev:desktop` | Stage Node and open the current host's Tauri development app. |
+| `yarn dev:harness` | Watch only the reusable Agent Harness package family. |
+| `yarn build:extension[:chrome|edge|firefox|all]` | Produce audited unpacked extension artifacts under `publish/extension`. |
+| `yarn build:web` | Produce the complete Pages tree in `publish/web`, preserving the landing and privacy pages and adding the app at `studio/`. |
+| `yarn build:desktop[:windows|macos|linux]` | Produce frontend, native app, sidecar, and installer artifacts for the current native host. |
+| `yarn build:all` | Build extension stores, web, and the current host's desktop target. |
+| `yarn package:extension[:chrome|edge|all]` | Build and ZIP store-ready extension packages. |
+| `yarn package:web` | Build the deployable static Pages tree. |
+| `yarn package:desktop[:windows|macos|linux]` | Build native packages on the matching host. |
+| `yarn package:all` | Package extensions, web, and the current host's desktop target. |
+| `yarn deploy:web:github-pages:dry-run` | Validate the exact Pages deployment without changing GitHub. |
+| `yarn deploy:web` | Publish `publish/web` to `gh-pages` and configure branch-based Pages deployment. |
+| `yarn typecheck` | Run shared TypeScript validation without emitting application files. |
+| `yarn lint` | Run Extension.js lint. |
+| `yarn format` | Format project TypeScript and scripts with Biome. |
+| `yarn test:e2e:extension` | Load and test both Extension.js development output and the production unpacked extension in Chromium. |
+| `yarn test:e2e:web` | Verify `/`, `/privacy`, `/privacy_policy.html`, and `/studio/` through a plain static server. |
+| `yarn test:e2e:desktop` | Build the current native target, open the executable for a health interval, and stop only that test process. |
+| `yarn check:platform:boundaries` | Enforce shared-code and environment-adapter import boundaries. |
+| `yarn check:platform:bundles` | Scan built web/desktop artifacts for environment-specific code leakage. |
+
+All consumable artifacts are written under `publish/`. Extension.js may create a
+temporary internal `dist/` directory while compiling. Tauri keeps Cargo and
+sidecar staging intermediates in `publish/.cache/`; unpacked extensions, static
+web files, native executables, and installers are exposed only from `publish/`.
 
 Extension build and package commands compile the standalone workspaces first.
 Their ignored `dist/` exports are therefore never expected to come from an
@@ -324,6 +441,6 @@ Memorall is licensed under the [MIT License](LICENSE).
 
 <div align="center">
 
-Built on Extension.js, React, TypeScript, PGlite, and browser-native AI runtimes.
+Built on Extension.js, Vite, Tauri, React, TypeScript, PGlite, and local AI runtimes.
 
 </div>

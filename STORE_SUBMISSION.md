@@ -4,13 +4,15 @@
 
 ### 1. Prepare Production Build
 ```bash
-# Build for production with GitHub Pages runner URL
-yarn run build:prod
+# Build, audit, and ZIP both store targets
+yarn package:extension:all
 ```
 
 This will create production builds in:
-- `dist/chrome/` - Chrome Web Store
-- `dist/edge/` - Microsoft Edge Add-ons
+- `publish/extension/chrome/` - unpacked Chrome Web Store build
+- `publish/extension/edge/` - unpacked Microsoft Edge Add-ons build
+- `publish/extension/memorall-chrome.zip` - Chrome upload package
+- `publish/extension/memorall-edge.zip` - Edge upload package
 
 ### 2. Required Assets & Documentation
 
@@ -45,7 +47,7 @@ This will create production builds in:
 
 1. **Create New Item**
    - Click "New Item" in Chrome Web Store Developer Dashboard
-   - Upload the ZIP file from `publish/memorall-chrome.zip`
+   - Upload the ZIP file from `publish/extension/memorall-chrome.zip`
 
 2. **Store Listing**
    - Fill in:
@@ -97,7 +99,7 @@ This will create production builds in:
 1. **Create New Extension**
    - Navigate to "Extensions" in Partner Center
    - Click "New extension"
-     - Upload the ZIP file from `publish/memorall-edge.zip`
+     - Upload the ZIP file from `publish/extension/memorall-edge.zip`
 
 2. **Store Listing**
    - Fill in:
@@ -233,20 +235,18 @@ Use whichever runtime fits the job. The agent workflow stays the same regardless
 
 ---
 
-## Build Scripts to Add
+## Build And Package Scripts
 
-Add these scripts to `package.json`:
+Use the canonical extension script family:
 
-```json
-"scripts": {
-  "build:chrome": "extension build --browser=chrome",
-  "build:edge": "extension build --browser=edge",
-  "build:firefox": "extension build --browser=firefox",
-  "build:all": "yarn run build:chrome && yarn run build:edge",
-  "package:chrome": "cd dist/chrome && zip -r ../../memorall-chrome.zip .",
-  "package:edge": "cd dist/edge && zip -r ../../memorall-edge.zip .",
-  "package:all": "yarn run build:prod && yarn run package:chrome && yarn run package:edge"
-}
+```sh
+yarn build:extension:chrome
+yarn build:extension:edge
+yarn build:extension:firefox
+yarn build:extension:all
+yarn package:extension:chrome
+yarn package:extension:edge
+yarn package:extension:all
 ```
 
 ---

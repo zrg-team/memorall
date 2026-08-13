@@ -1,6 +1,7 @@
 import React, { useState, useEffect, Suspense } from "react";
 import {
-	BrowserRouter as Router,
+	BrowserRouter,
+	HashRouter,
 	Routes,
 	Route,
 	useNavigate,
@@ -33,7 +34,6 @@ import {
 import { unlockAndRestoreProvidersWithPasskey } from "@/utils/provider-passkey-unlock";
 import { serviceManager } from "@/services";
 import { backgroundJob } from "@/services/background-jobs/background-job";
-import { sharedStorageService } from "@/services/shared-storage/shared-storage-service";
 import { CopilotProvider, Copilot } from "./components/atoms/copilot";
 import { AppShell } from "./components/AppShell";
 import { AppLoadingScreen } from "./components/atoms/AppLoadingScreen";
@@ -60,8 +60,12 @@ import {
 	AgentCursorOverlay,
 	AgentCursorPointer,
 } from "@/components/AgentCursor";
+import { platform } from "@/platform/current";
+import { initializeRuntimeServices } from "./runtime-initialization";
 
 type EncryptionFormat = "master" | "legacy" | "none";
+
+const Router = platform.routerMode === "hash" ? HashRouter : BrowserRouter;
 
 const App: React.FC = () => {
 	const [servicesStatus, setServicesStatus] = useState<
@@ -80,85 +84,18 @@ const App: React.FC = () => {
 		useAuthInit();
 
 		useEffect(() => {
-			const handler = (message: { type: string }) => {
-				if (message?.type === "OPEN_KNOWLEDGE_GRAPH") {
-					navigate("/memory");
-				} else if (message?.type === "OPEN_REMEMBER_PAGE") {
-					navigate("/remember");
-				}
+			let active = true;
+			const applyNavigation = (request: { path: string; state?: unknown }) => {
+				if (active) navigate(request.path, { state: request.state });
 			};
-			try {
-				chrome.runtime?.onMessage.addListener(handler);
-			} catch (_) {}
-			return () => {
-				try {
-					chrome.runtime?.onMessage.removeListener(handler);
-				} catch (_) {}
-			};
-		}, [navigate]);
-
-		// Also handle session storage navigation
-		useEffect(() => {
-			const checkSessionNavigation = async () => {
-				try {
-					const result = await chrome.storage?.session?.get?.([
-						"navigateTo",
-						"openDocumentPath",
-					]);
-					const target =
-						typeof result?.navigateTo === "string"
-							? result.navigateTo
-							: undefined;
-					const namedRoutes: Record<string, string> = {
-						activities: "/activities",
-						"knowledge-graph": "/memory",
-						memory: "/memory",
-						remember: "/remember",
-						llm: "/llm",
-						topics: "/topics",
-						documents: "/files",
-						files: "/files",
-					};
-					const route = target
-						? (namedRoutes[target] ?? (target.startsWith("/") ? target : null))
-						: null;
-					if (route) {
-						const openDocumentPath =
-							route === "/files" && typeof result?.openDocumentPath === "string"
-								? result.openDocumentPath
-								: undefined;
-						navigate(route, {
-							state: openDocumentPath ? { openDocumentPath } : undefined,
-						});
-						await chrome.storage?.session?.remove?.([
-							"navigateTo",
-							"openDocumentPath",
-						]);
-					}
-				} catch (_) {}
-			};
-			void checkSessionNavigation();
-
-			const handleStorageChange = (
-				changes: Record<string, chrome.storage.StorageChange>,
-				areaName: string,
-			) => {
-				if (
-					areaName === "session" &&
-					("navigateTo" in changes || "openDocumentPath" in changes)
-				) {
-					void checkSessionNavigation();
-				}
-			};
-
-			try {
-				chrome.storage?.onChanged?.addListener(handleStorageChange);
-			} catch (_) {}
+			void platform.navigation.takePending().then((request) => {
+				if (request) applyNavigation(request);
+			});
+			const unsubscribe = platform.navigation.subscribe(applyNavigation);
 
 			return () => {
-				try {
-					chrome.storage?.onChanged?.removeListener(handleStorageChange);
-				} catch (_) {}
+				active = false;
+				unsubscribe();
 			};
 		}, [navigate]);
 
@@ -176,43 +113,20 @@ const App: React.FC = () => {
 				logInfo("Starting app initialization...");
 				setServicesStatus("loading");
 
-				// Initialize shared storage service first (required for cross-thread communication)
-				await sharedStorageService.initialize();
-				logInfo("Shared storage service initialized in UI thread");
-
-				// Initialize services through offscreen with progress streaming
-				const progressStream = await backgroundJob.initializeServices();
-				let startTime = Date.now();
-				let offscreenReady = false;
-
-				// Listen to initialization progress
-				for await (const progress of progressStream) {
+				const startTime = Date.now();
+				await initializeRuntimeServices((progress) => {
 					logInfo("App initialization progress:", progress);
 					setUiProgress(progress.progress);
 					if (progress.status === "error") {
 						throw new Error(progress.stage);
 					}
-
-					if (progress.status === "completed") {
-						setUiProgress(100);
-						offscreenReady = true;
-						logInfo("App initialization complete");
-						break;
-					}
-				}
-				if (!offscreenReady) {
-					throw new Error(
-						"Offscreen initialization ended before services were ready",
-					);
-				}
+				});
+				setUiProgress(100);
 				const duration = Date.now() - startTime;
 
-				if (duration < 1000) {
+				if (platform.environment === "extension" && duration < 1000) {
 					await new Promise((resolve) => setTimeout(resolve, 5000 - duration));
 				}
-
-				// Small delay before showing app
-				await serviceManager.initialize({ proxy: true });
 
 				// Register all document editors
 				registerAllEditors();
@@ -321,49 +235,39 @@ const App: React.FC = () => {
 		setUiProgress(0);
 		// Re-run initialization
 		try {
-			const progressStream = await backgroundJob.initializeServices();
-			let offscreenReady = false;
-			for await (const progress of progressStream) {
+			let runtimeReady = false;
+			await initializeRuntimeServices((progress) => {
 				setUiProgress(progress.progress);
 				if (progress.status === "error") {
 					throw new Error(progress.stage);
 				}
 				if (progress.status === "completed") {
-					offscreenReady = true;
+					runtimeReady = true;
 					setUiProgress(100);
-					await serviceManager.initialize({ proxy: true });
-
-					// Check encryption format
-					const format = await detectEncryptionFormat();
-					setEncryptionFormat(format);
-
-					if (format === "legacy") {
-						setServicesStatus("awaiting-migration");
-						return;
-					}
-
-					if (format === "master") {
-						const needsRestore = await checkAnyProviderNeedsRestore();
-						if (needsRestore) {
-							const providers = await getEncryptedProviders();
-							setEncryptedProviders(providers);
-							setServicesStatus("awaiting-passkey");
-							return;
-						}
-					}
-
-					setTimeout(() => {
-						setServicesStatus("ready");
-						logInfo("App re-initialization complete");
-					}, 100);
-					break;
 				}
-			}
-			if (!offscreenReady) {
+			});
+			if (!runtimeReady && !serviceManager.isInitialized()) {
 				throw new Error(
-					"Offscreen initialization ended before services were ready",
+					"Runtime initialization ended before services were ready",
 				);
 			}
+
+			const format = await detectEncryptionFormat();
+			setEncryptionFormat(format);
+			if (format === "legacy") {
+				setServicesStatus("awaiting-migration");
+				return;
+			}
+			if (format === "master" && (await checkAnyProviderNeedsRestore())) {
+				const providers = await getEncryptedProviders();
+				setEncryptedProviders(providers);
+				setServicesStatus("awaiting-passkey");
+				return;
+			}
+			setTimeout(() => {
+				setServicesStatus("ready");
+				logInfo("App re-initialization complete");
+			}, 100);
 		} catch (error) {
 			logError("App re-initialization failed:", error);
 			setServicesStatus("error");

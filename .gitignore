@@ -192,3 +192,10 @@ artifacts/qa/
 
 manifest.json
 
+# Target-specific Node runtime staged for local Tauri packaging.
+apps/desktop/src-tauri/binaries/memorall-node-*
+
+# Tauri/Cargo build output and generated capability schemas.
+apps/desktop/src-tauri/target/
+apps/desktop/src-tauri/gen/schemas/
+

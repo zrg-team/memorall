@@ -14,6 +14,7 @@ import {
 import { AlertCircle, Loader2, CheckCircle } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { eq } from "drizzle-orm";
+import { platform } from "@/platform/current";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/main/components/ui/button";
@@ -56,6 +57,8 @@ import { useDownloadProgress } from "@/main/modules/llm/hooks/use-download-progr
 import { useCurrentModel } from "@/main/hooks/use-current-model";
 import { serviceManager } from "@/services";
 import { logError } from "@/utils/logger";
+
+const LOGO_URL = platform.assets.url("logo.png");
 
 interface NoModelsScreenProps {
 	onModelLoaded: (modelId: string, provider: ServiceProvider) => void;
@@ -288,7 +291,7 @@ export const NoModelsScreen: React.FC<NoModelsScreenProps> = ({
 				<div className="flex-1 flex items-center justify-center">
 					<div className="text-center">
 						<img
-							src="/logo.png"
+							src={LOGO_URL}
 							alt="Memorall Logo"
 							className="w-12 h-12 mx-auto mb-4 object-contain animate-pulse"
 						/>
@@ -311,7 +314,7 @@ export const NoModelsScreen: React.FC<NoModelsScreenProps> = ({
 					{/* App Branding */}
 					<div className="text-center space-y-4 animate-in fade-in-0 slide-in-from-top-3 duration-500 ease-out">
 						<img
-							src="/logo.png"
+							src={LOGO_URL}
 							alt="Memorall Logo"
 							className="w-16 h-16 mx-auto object-contain transition-transform duration-300 ease-out hover:scale-110 hover:rotate-3"
 						/>

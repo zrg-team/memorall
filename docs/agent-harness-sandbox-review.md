@@ -380,7 +380,7 @@ npm run test:e2e:sandbox:network
 npm run check:sandbox
 ```
 
-Both E2E commands build the extension before launching Chromium, preventing stale `dist/` artifacts. `check:sandbox` requires type-check, focused sandbox unit/compatibility tests, extension build, and deterministic E2E. Network tests are intentionally separate.
+Both E2E commands build the extension before launching Chromium, preventing stale artifacts. `check:sandbox` requires `typecheck`, focused sandbox unit/compatibility tests, the extension build, and deterministic E2E. Network tests are intentionally separate.
 
 ## 🔄 Compatibility and Migration
 

@@ -1,13 +1,7 @@
-// LLM Runner URLs - supports different modes via query params
-// Always use bundled runner from extension package
-const BASE_RUNNER_URL: string = (() => {
-	try {
-		return chrome.runtime.getURL("runner/index.html");
-	} catch {
-		// Fallback for environments where chrome API is not available
-		return "runner/index.html";
-	}
-})();
+import { platform } from "@/platform/current";
+
+// LLM Runner URLs - supports different modes via query params.
+const BASE_RUNNER_URL = platform.assets.url("runner/index.html");
 
 export type LLMRunnerMode = "wllama" | "webllm" | "embedding" | "transformer";
 

@@ -11,7 +11,8 @@
 
 import { logError, logInfo } from "@/utils/logger";
 import { PGliteSharedProxy, type PGliteLike } from "./bridges/proxy-driver";
-import { createChromePortTransport } from "./bridges/chrome-port-rpc";
+import { createDatabaseProxyTransport } from "@/services/database/bridges/current-proxy-transport";
+import type { DatabaseProxyTransportFactory } from "./bridges/proxy-transport";
 import { schema } from "./schema";
 import { DatabaseMode } from "./constants";
 import type {
@@ -32,6 +33,12 @@ export class DatabaseServiceProxy extends DatabaseServiceCore {
 	private pgliteProxy: PGliteLike | null = null;
 	private db: ReturnType<typeof drizzle<typeof schema>> | null = null;
 
+	constructor(
+		private readonly transportFactory: DatabaseProxyTransportFactory = createDatabaseProxyTransport,
+	) {
+		super();
+	}
+
 	protected async initializeDatabase(): Promise<void> {
 		logInfo(
 			`📚 Initializing database service in PROXY mode. Channel: "${this.config?.proxyOptions?.channelName}"`,
@@ -39,7 +46,7 @@ export class DatabaseServiceProxy extends DatabaseServiceCore {
 
 		try {
 			// Create Chrome Port transport
-			const transport = await createChromePortTransport({
+			const transport = await this.transportFactory({
 				channelName: this.config?.proxyOptions?.channelName,
 			});
 

@@ -11,6 +11,7 @@ import {
 	type WebWaitSelectorState,
 } from "./web-browser-protocol";
 import { DEFAULT_WEB_MAX_HTML_CHARS } from "@/services/flows-legacy/tools/web/max-html-chars";
+import { platform } from "@/platform/current";
 
 interface WebSessionState {
 	id: string;
@@ -79,7 +80,7 @@ const sessionTimeouts = new Map<string, number>();
 
 // ─── Session persistence ──────────────────────────────────────────────────────
 // Browser-backed (tab/window) session identifiers are written to
-// chrome.storage.session so they can be recovered if the offscreen document
+// platform session storage so they can be recovered if the runtime host
 // is recreated (which clears the in-memory WEB_SESSIONS map).
 
 const PERSISTED_SESSIONS_KEY = "memorall.web-sessions.v1";
@@ -92,22 +93,13 @@ interface PersistedSessionEntry {
 	requestedUrl: string;
 }
 
-const getSessionStorage = (): chrome.storage.StorageArea | null => {
-	try {
-		return (typeof chrome !== "undefined" && chrome.storage?.session) || null;
-	} catch {
-		return null;
-	}
-};
-
 const loadPersistedSessionEntries = async (): Promise<
 	Map<string, PersistedSessionEntry>
 > => {
-	const storage = getSessionStorage();
-	if (!storage) return new Map();
 	try {
-		const result = await storage.get(PERSISTED_SESSIONS_KEY);
-		const raw = result[PERSISTED_SESSIONS_KEY];
+		const raw = await platform.sessionStore.get<PersistedSessionEntry[]>(
+			PERSISTED_SESSIONS_KEY,
+		);
 		const entries: PersistedSessionEntry[] = Array.isArray(raw) ? raw : [];
 		return new Map(entries.map((e) => [e.id, e]));
 	} catch {
@@ -118,14 +110,12 @@ const loadPersistedSessionEntries = async (): Promise<
 const savePersistedSessionEntries = async (
 	entries: Map<string, PersistedSessionEntry>,
 ): Promise<void> => {
-	const storage = getSessionStorage();
-	if (!storage) return;
 	try {
 		const arr = Array.from(entries.values());
 		if (arr.length === 0) {
-			await storage.remove(PERSISTED_SESSIONS_KEY);
+			await platform.sessionStore.remove(PERSISTED_SESSIONS_KEY);
 		} else {
-			await storage.set({ [PERSISTED_SESSIONS_KEY]: arr });
+			await platform.sessionStore.set(PERSISTED_SESSIONS_KEY, arr);
 		}
 	} catch {
 		// Storage write is best-effort; don't break the session flow.
@@ -156,7 +146,7 @@ const unpersistSession = (sessionId: string): void => {
 };
 
 /**
- * Attempt to recover a browser-backed session from chrome.storage.session.
+ * Attempt to recover a browser-backed session from platform session storage.
  * Called when a sessionId is not found in the in-memory WEB_SESSIONS map
  * (e.g. after the offscreen document was recreated).
  * Returns the reconstructed session (with empty cached content) or null if
@@ -170,9 +160,7 @@ const recoverSession = async (
 	if (!entry || entry.mode === "iframe") return null;
 
 	// Check that the tab still exists before reconstructing the session.
-	try {
-		await chrome.tabs.get(entry.tabId);
-	} catch {
+	if (!(await platform.browserCommands.tabExists(entry.tabId))) {
 		// Tab was closed — remove the stale persisted entry.
 		entries.delete(sessionId);
 		void savePersistedSessionEntries(entries);
@@ -373,7 +361,8 @@ const captureIframeSnapshot = (session: WebSessionState): WebSessionState => {
 const sendWebBrowserCommand = async (
 	request: WebBrowserCommandRequest,
 ): Promise<SuccessfulWebBrowserCommandResponse> => {
-	const rawResponse = await chrome.runtime.sendMessage(request);
+	const rawResponse =
+		await platform.browserCommands.request<WebBrowserCommandResponse>(request);
 	if (!isWebBrowserCommandResponse(rawResponse)) {
 		throw new Error("Invalid response from browser web handler.");
 	}

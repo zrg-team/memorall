@@ -8,13 +8,13 @@ import { join } from 'path';
  * - Ensures production-ready settings
  */
 
-const distDirs = ['dist/chrome', 'dist/edge'].filter((distDir) =>
+const distDirs = ['publish/extension/chrome', 'publish/extension/edge'].filter((distDir) =>
   existsSync(join(distDir, 'manifest.json')),
 );
 
 if (distDirs.length === 0) {
-  console.error('❌ Error: manifest.json not found in dist/chrome/ or dist/edge/');
-  console.error('   Run "yarn run build:prod" first');
+  console.error('❌ Error: manifest.json not found in publish/extension/chrome/ or publish/extension/edge/');
+  console.error('   Run "yarn build:extension:all" first');
   process.exit(1);
 }
 
@@ -60,6 +60,6 @@ console.log('Next steps:');
 for (const distDir of distDirs) {
   console.log(`  - Test: Load ${distDir}/ as unpacked extension`);
 }
-console.log('  - Package: yarn run package:all');
+console.log('  - Package: yarn package:extension:all');
 console.log('  - Submit to Chrome Web Store and Microsoft Edge Add-ons');
 console.log('');

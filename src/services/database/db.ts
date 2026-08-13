@@ -6,14 +6,12 @@ import { vector } from "@electric-sql/pglite/vector";
 import { pg_trgm } from "@electric-sql/pglite/contrib/pg_trgm";
 import { logError, logInfo } from "@/utils/logger";
 
-import { PGliteSharedProxy, type PGliteLike } from "./bridges/proxy-driver";
-import { createChromePortTransport } from "./bridges/chrome-port-rpc";
 import { runMigrations } from "./migrations";
 import { DatabaseMode, type DatabaseConfig } from "./constants";
 import { schema } from "./schema";
 
 // Database instances - support both main and proxy modes
-let pgliteInstance: PGliteLike | PGlite | null = null;
+let pgliteInstance: PGlite | null = null;
 let db: ReturnType<typeof drizzle<typeof schema>> | null = null;
 let currentMode: DatabaseMode | null = null;
 

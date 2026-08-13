@@ -6,17 +6,13 @@
 import { logError } from "@/utils/logger";
 import * as pdfjsLib from "pdfjs-dist";
 import type { TextItem } from "pdfjs-dist/types/src/display/api";
+import { platform } from "@/platform/current";
 
 // Configure PDF.js worker to use bundled worker file
 // The worker file is copied to public/vendors/pdfjs by the build script
-if (typeof chrome !== "undefined" && chrome.runtime?.getURL) {
-	pdfjsLib.GlobalWorkerOptions.workerSrc = chrome.runtime.getURL(
-		"vendors/pdfjs/pdf.worker.min.mjs",
-	);
-} else {
-	// Fallback for non-extension environments (development)
-	pdfjsLib.GlobalWorkerOptions.workerSrc = `/vendors/pdfjs/pdf.worker.min.mjs`;
-}
+pdfjsLib.GlobalWorkerOptions.workerSrc = platform.assets.url(
+	"vendors/pdfjs/pdf.worker.min.mjs",
+);
 
 export interface PDFPageContent {
 	pageNumber: number;

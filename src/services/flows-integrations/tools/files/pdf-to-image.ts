@@ -13,16 +13,13 @@ import {
 	pathExists,
 	readFileBytes,
 } from "@/services/flows-legacy/tools/fs/util";
+import { platform } from "@/platform/current";
 
 const TOOL_NAME = "pdf_to_image" as const;
 
-if (typeof chrome !== "undefined" && chrome.runtime?.getURL) {
-	pdfjsLib.GlobalWorkerOptions.workerSrc = chrome.runtime.getURL(
-		"vendors/pdfjs/pdf.worker.min.mjs",
-	);
-} else {
-	pdfjsLib.GlobalWorkerOptions.workerSrc = `/vendors/pdfjs/pdf.worker.min.mjs`;
-}
+pdfjsLib.GlobalWorkerOptions.workerSrc = platform.assets.url(
+	"vendors/pdfjs/pdf.worker.min.mjs",
+);
 
 const schema = z.object({
 	source_path: z

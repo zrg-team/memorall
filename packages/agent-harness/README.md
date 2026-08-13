@@ -159,15 +159,15 @@ Run these commands from the repository root:
 corepack enable
 yarn install --immutable
 yarn dev                 # Harness watch + extension hot reload
-yarn harness:watch       # Harness packages only
-yarn harness:boundaries
-yarn harness:typecheck
-yarn harness:test
-yarn harness:pack
-yarn harness:smoke
+yarn dev:harness       # Harness packages only
+yarn check:harness:boundaries
+yarn typecheck:harness
+yarn test:harness
+yarn package:harness
+yarn smoke:harness:consumers
 ```
 
-`yarn check:agent-harness` runs the complete package contract. Packed-consumer
+`yarn check:harness` runs the complete package contract. Packed-consumer
 smoke tests install generated tarballs into clean Node, Vite, Web Worker, and
 Service Worker fixtures, so repository aliases or undeclared dependencies cannot
 hide packaging defects.

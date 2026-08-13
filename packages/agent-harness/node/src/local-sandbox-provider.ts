@@ -27,6 +27,12 @@ export interface NodeLocalSandboxProviderOptions {
   readonly now?: () => number;
   readonly randomUUID?: () => string;
   readonly maxOutputChars?: number;
+  /** Real Node executable used for JavaScript runs (desktop bundles Node 22). */
+  readonly nodeExecutable?: string;
+  /** npm CLI executable or script path paired with the selected Node runtime. */
+  readonly npmExecutable?: string;
+  /** Explicit child environment. Callers should pass an allowlisted environment. */
+  readonly environment?: Readonly<Record<string, string | undefined>>;
 }
 
 interface LocalProcess {
@@ -141,7 +147,12 @@ export class NodeLocalSandboxProvider implements SandboxProvider {
 
     const start = (command: string, args: readonly string[], cwd: string, options: { shell?: boolean; timeoutMs?: number } = {}): LocalProcess => {
       const id = `process:${this.#options.randomUUID()}`;
-      const child = spawn(command, [...args], { cwd, shell: options.shell ?? false, env: { ...process.env }, stdio: "pipe" });
+      const child = spawn(command, [...args], {
+        cwd,
+        shell: options.shell ?? false,
+        env: { ...(this.#options.environment ?? process.env) } as NodeJS.ProcessEnv,
+        stdio: "pipe",
+      });
       const active: LocalProcess = { id, command: [command, ...args].join(" "), cwd, child, events: [], status: "running", startedAt: this.#options.now(), updatedAt: this.#options.now() };
       processes.set(id, active);
       child.stdout.on("data", (data: Uint8Array) => pushEvent(active, "stdout", new TextDecoder().decode(data)));
@@ -206,7 +217,7 @@ export class NodeLocalSandboxProvider implements SandboxProvider {
     const runForeground = async (request: Exclude<SandboxRunRequest, { operation: "command" | "repl" }>, context: SandboxCallContext): Promise<SandboxCodeRunResult> => {
       checkCall(context, this.#options.now);
       const target = request.operation === "code" ? ["-e", request.code] : [sandboxPath(root, request.path)];
-      const active = start(process.execPath, target, root, { timeoutMs: request.timeoutMs });
+      const active = start(this.#options.nodeExecutable ?? process.execPath, target, root, { timeoutMs: request.timeoutMs });
       await waitForExit(active, request.timeoutMs);
       if (active.status === "running") active.child.kill();
       const stdout = active.events.filter(({ type }) => type === "stdout").map(({ text }) => text ?? "").join("");
@@ -282,7 +293,11 @@ export class NodeLocalSandboxProvider implements SandboxProvider {
         manage: async (request, operationContext): Promise<SandboxPackageResult> => {
           checkCall(operationContext, this.#options.now);
           const args = request.operation === "install" ? ["install", request.packageSpec, ...(request.saveDev ? ["--save-dev"] : request.save === false ? ["--no-save"] : [])] : request.operation === "install_from_package_json" ? ["install"] : ["ls", "--depth=0", "--json"];
-          const active = start(process.platform === "win32" ? "npm.cmd" : "npm", args, root);
+          const active = start(
+            this.#options.npmExecutable ?? (process.platform === "win32" ? "npm.cmd" : "npm"),
+            args,
+            root,
+          );
           await waitForExit(active, 600_000);
           const stdout = active.events.filter(({ type }) => type === "stdout").map(({ text }) => text ?? "").join("");
           let packages: Record<string, string> = {};

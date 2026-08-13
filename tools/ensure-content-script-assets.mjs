@@ -9,10 +9,10 @@ import {
 import { dirname, join, relative } from 'path';
 
 const defaultDistDirs = [
-	'dist/chromium',
-	'dist/chrome',
-	'dist/edge',
-	'dist/firefox',
+	'publish/extension/chromium',
+	'publish/extension/chrome',
+	'publish/extension/edge',
+	'publish/extension/firefox',
 ];
 
 const distDirs = process.argv.slice(2);

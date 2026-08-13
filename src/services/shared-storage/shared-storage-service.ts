@@ -1,4 +1,6 @@
 import { logInfo, logWarn, logError } from "@/utils/logger";
+import { createStorageChangeBus } from "@/services/shared-storage/change-bus/current";
+import type { StorageChangeBus } from "./change-bus/types";
 
 // Event types for storage changes
 export interface StorageChangeEvent<T = any> {
@@ -23,8 +25,16 @@ export class SharedStorageService {
 	private db: IDBDatabase | null = null;
 	private readonly DB_NAME = "memorall-shared-storage";
 	private readonly STORE_NAME = "kvstore";
+	private readonly changeBus: StorageChangeBus;
+	private unsubscribeBus: (() => void) | null = null;
 
-	private constructor() {}
+	constructor(changeBus: StorageChangeBus = createStorageChangeBus()) {
+		this.changeBus = changeBus;
+	}
+
+	static create(changeBus?: StorageChangeBus): SharedStorageService {
+		return new SharedStorageService(changeBus);
+	}
 
 	static getInstance(): SharedStorageService {
 		if (!SharedStorageService.instance) {
@@ -40,15 +50,11 @@ export class SharedStorageService {
 			// Open IndexedDB (works in all contexts including offscreen)
 			await this.openDatabase();
 
-			// Listen for custom storage change messages (works in all contexts)
-			if (globalThis.chrome?.runtime?.onMessage) {
-				chrome.runtime.onMessage.addListener((message) => {
-					if (message.type === "STORAGE_CHANGED") {
-						const { key, oldValue, newValue } = message;
-						this.notifyListeners(key, oldValue, newValue);
-					}
-				});
-			}
+			this.unsubscribeBus = this.changeBus.subscribe(
+				({ key, oldValue, newValue }) => {
+					this.notifyListeners(key, oldValue, newValue);
+				},
+			);
 
 			this.initialized = true;
 			logInfo(
@@ -219,21 +225,8 @@ export class SharedStorageService {
 		oldValue: T | null,
 		newValue: T | null,
 	): void {
-		try {
-			chrome.runtime
-				.sendMessage({
-					type: "STORAGE_CHANGED",
-					key,
-					oldValue,
-					newValue,
-					timestamp: Date.now(),
-				})
-				.catch(() => {
-					// Ignore errors - context might not be available to receive
-				});
-		} catch (error) {
-			// Ignore broadcast errors in contexts where runtime is not available
-		}
+		this.notifyListeners(key, oldValue, newValue);
+		this.changeBus.publish({ key, oldValue, newValue, timestamp: Date.now() });
 	}
 
 	/**

@@ -6,11 +6,7 @@ import {
 	ProcessFactory,
 } from "@/services/background-jobs/handlers";
 import { backgroundJob } from "@/services/background-jobs/background-job";
-import type {
-	JobNotificationMessage,
-	OffscreenProgress,
-} from "@/services/background-jobs/bridges";
-import type { BaseJob } from "@/services/background-jobs/handlers/types";
+import type { OffscreenProgress } from "@/services/background-jobs/bridges";
 
 // Import process handlers and factory
 import type { ProcessDependencies } from "@/services/background-jobs/handlers/types";
@@ -27,6 +23,7 @@ import {
 	DEFAULT_ON_DEMAND_SERVICE_CONFIGS,
 	type DefaultOnDemandServiceName,
 } from "@/services/llm/constants";
+import { RuntimeProcessor } from "@/services/runtime/runtime-processor";
 
 type OffscreenGlobal = typeof globalThis & {
 	__memorallOffscreenProcessor__?: OffscreenProcessor;
@@ -86,10 +83,9 @@ class OffscreenProcessor {
 		services: [] as string[],
 		status: "Initializing...",
 	};
-	private ticking = false;
-	private tickRequested = false;
 	private processFactory: ProcessFactory;
 	private dependencies: ProcessDependencies;
+	private runtimeProcessor: RuntimeProcessor | null = null;
 
 	constructor() {
 		// Initialize dependencies for dependency injection
@@ -260,164 +256,25 @@ class OffscreenProcessor {
 		}
 	}
 	private async startQueueProcessing(): Promise<void> {
-		const processQueueJobs = async () => {
-			if (this.ticking) {
-				this.tickRequested = true;
-				return;
-			}
-			this.ticking = true;
-			try {
-				await this.processQueueJobs();
-			} finally {
-				this.ticking = false;
-				if (this.tickRequested) {
-					this.tickRequested = false;
-					logDebug("🔄[OFFSCREEN] Restarting queue processing");
-					return processQueueJobs();
-				}
-			}
-		};
-
-		const processFastMessage = async (message: JobNotificationMessage) => {
-			// Fast processing - no ticking mechanism, direct parallel execution
-			await this.processFastJobs(message);
-		};
-
-		// Setup separate queue and fast message handling
-		await this.setupMessageHandling(processQueueJobs, processFastMessage);
-
-		// Initial queue processing
-		logInfo("🎬[OFFSCREEN] Running initial queue processing");
-		void processQueueJobs();
-
-		// Delayed queue check
-		setTimeout(() => {
-			logInfo("🛡️[OFFSCREEN] Safety queue check");
-			void processQueueJobs();
-		}, 120000);
-
-		// Backup safety interval for queue processing
-		setInterval(() => {
-			logInfo("🛡️[OFFSCREEN] Safety interval check");
-			void processQueueJobs();
-		}, 120000);
-
-		logInfo("✅[OFFSCREEN] Event-driven job processing system initialized");
-	}
-
-	private async processQueueJobs(): Promise<void> {
-		logInfo("🔄[OFFSCREEN] Queue processing: Reading from IndexedDB storage", {
-			timestamp: new Date().toISOString(),
-		});
-
-		try {
-			// Get jobs from IndexedDB storage for heavy processing
-			const response = await chrome.runtime.sendMessage({
-				type: "GET_BACKGROUND_JOBS",
-			});
-
-			if (response?.success && response?.jobs) {
-				// Process jobs from response
-				for (const job of response.jobs) {
-					if (!job || job.status !== "pending") {
-						logDebug("⏭️[OFFSCREEN] Skipping non-pending job from storage", {
-							jobId: job?.id,
-							status: job?.status,
-						});
-						continue;
-					}
-					logInfo("📋[OFFSCREEN] Processing job from storage", {
-						jobId: job.id,
-					});
-
-					// Process jobs ONE BY ONE sequentially for heavy processes
-					await this.processClaimedJob(job);
-				}
-			}
-		} catch (error) {
-			logError("❌[OFFSCREEN] Queue processing failed", error);
-		}
-	}
-
-	private async processFastJobs(
-		message: JobNotificationMessage,
-	): Promise<void> {
-		logInfo("⚡ Fast processing: Direct communication channel", {
-			messageType: message.type,
-			jobId: message.jobId,
-		});
-
-		// Handle fast jobs directly from message - parallel processing
-		if (message.type === "JOB_ENQUEUED" && message.job) {
-			// Process immediately without storage - direct handler execution
-			const jobData: BaseJob = message.job;
-
-			// Parallel processing - don't await, handle immediately
-			void this.processFastJob(jobData);
-		}
-	}
-
-	private async processFastJob(job: BaseJob): Promise<void> {
-		try {
-			logInfo("⚡ Processing fast job", {
-				jobId: job.id,
-				type: job.jobType,
-			});
-
-			// Direct handler execution without claiming
-			await this.processClaimedJob(job);
-		} catch (error) {
-			logError("❌ Fast job processing failed", { error, jobId: job.id });
-		}
-	}
-
-	private async setupMessageHandling(
-		processQueueJobs: () => Promise<void>,
-		processFastMessage: (message: JobNotificationMessage) => Promise<void>,
-	): Promise<void> {
-		try {
-			// Subscribe only to JOB_ENQUEUED messages intended for offscreen processing
-			backgroundJob
-				.getNotificationBridge()
-				.subscribe("JOB_ENQUEUED", async (message: JobNotificationMessage) => {
-					// FAST: Direct processing
-					logInfo("⚡ Fast processing: Direct communication channel", {
-						jobId: message.jobId,
-						jobType: message.job?.jobType,
-					});
-					await processFastMessage(message);
+		this.runtimeProcessor = new RuntimeProcessor({
+			notifications: backgroundJob.getNotificationBridge(),
+			listPendingJobs: async () => {
+				const response = await chrome.runtime.sendMessage({
+					type: "GET_BACKGROUND_JOBS",
 				});
-
-			// Subscribe to other job events that might trigger queue processing
-			backgroundJob
-				.getNotificationBridge()
-				.subscribe("JOB_UPDATED", async (message: JobNotificationMessage) => {
-					// Only trigger queue processing when a pending job update arrives
-					const jobStatus = message.job?.status;
-					if (jobStatus && jobStatus !== "pending") {
-						logDebug("⏭️[OFFSCREEN] Ignoring JOB_UPDATED for non-pending job", {
-							jobId: message.jobId,
-							jobStatus,
-						});
-						return;
-					}
-
-					// QUEUE: Trigger queue processing for updates
-					void processQueueJobs();
-				});
-
-			logInfo(
-				"🎧 JobNotificationChannel handlers registered for offscreen",
-				{},
-			);
-		} catch (err) {
-			logError("❌ Failed to register message handlers", err);
-		}
-	}
-
-	private async processClaimedJob(job: BaseJob): Promise<void> {
-		// Use the new standardized execution with automatic completion and error handling
-		await this.processFactory.executeJob(job.id, job);
+				return response?.success && Array.isArray(response.jobs)
+					? response.jobs
+					: [];
+			},
+			executeJob: (job) => this.processFactory.executeJob(job.id, job),
+			safetyIntervalMs: 120_000,
+			logger: {
+				debug: (message, data) => logDebug(message, data),
+				info: (message, data) => logInfo(message, data),
+				error: (message, error) => logError(message, error),
+			},
+		});
+		await this.runtimeProcessor.start();
 	}
 
 	// Helper method to update job progress via background script message

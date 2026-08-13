@@ -5,6 +5,7 @@ import type { ActionRenderer } from "@/main/modules/chat/components/types";
 import type { MessageActionItem } from "@/main/modules/chat/components/types";
 import { defaultActionRenderer } from "./DefaultActionRenderer";
 import { ToolItemRawIO } from "./ToolCommon";
+import { platform } from "@/platform/current";
 
 interface WebReadPayload {
 	url?: string;
@@ -125,7 +126,7 @@ export const webReadRenderer: ActionRenderer = (item, isOpen) => {
 					className="text-muted-foreground hover:text-foreground shrink-0"
 					onClick={() => {
 						if (!displayUrl) return;
-						chrome.tabs.create({ url: displayUrl });
+						void platform.externalLinks.open(displayUrl);
 					}}
 				>
 					<ExternalLink className="w-3.5 h-3.5" />

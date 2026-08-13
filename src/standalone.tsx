@@ -1,31 +1,3 @@
-import React, { useEffect } from "react";
-import { createRoot } from "react-dom/client";
-import { BACKGROUND_EVENTS } from "@/constants/events";
+import { mountMemorallApp } from "@/main/bootstrap";
 
-import "./globals.css";
-import App from "./main/App";
-
-// Standalone page wrapper component
-const StandaloneApp: React.FC = () => {
-	useEffect(() => {
-		chrome.runtime.sendMessage({
-			type: BACKGROUND_EVENTS.POPUP_OPENED,
-		});
-	}, []);
-	return (
-		<div className="w-full h-screen overflow-hidden bg-app">
-			<App />
-		</div>
-	);
-};
-
-// Initialize standalone page
-const container = document.getElementById("root");
-if (container) {
-	document.documentElement.dataset.uiSurface = "standalone";
-
-	const root = createRoot(container);
-	root.render(<StandaloneApp />);
-} else {
-	console.error("Root element not found in standalone page");
-}
+mountMemorallApp({ surface: "standalone" });

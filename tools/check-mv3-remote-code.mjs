@@ -28,14 +28,18 @@ const requestedRoots = process.argv.slice(2);
 const roots = (
 	requestedRoots.length > 0
 		? requestedRoots
-		: ["dist/chromium", "dist/chrome", "dist/edge"]
+		: [
+				"publish/extension/chromium",
+				"publish/extension/chrome",
+				"publish/extension/edge",
+			]
 )
 	.map((root) => resolve(root))
 	.filter(existsSync);
 
 if (roots.length === 0) {
 	console.error(
-		"MV3 audit found no build output. Build the extension or pass a dist directory.",
+		"MV3 audit found no build output. Build the extension or pass a publish directory.",
 	);
 	process.exit(1);
 }

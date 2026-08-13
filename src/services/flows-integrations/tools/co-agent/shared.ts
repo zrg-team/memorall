@@ -4,6 +4,7 @@ import {
 	type CoAgentContentCommandRequest,
 	type CoAgentContentCommandResponse,
 } from "flow-integrations/interfaces/co-agent";
+import { platform } from "@/platform/current";
 
 const DEFAULT_TIMEOUT_MS = 10_000;
 
@@ -83,7 +84,7 @@ export const sendCoAgentCommand = async (
 	request: CoAgentContentCommandRequest,
 	timeoutMs = DEFAULT_TIMEOUT_MS,
 ): Promise<CoAgentContentCommandResponse> => {
-	const rawResponse = await chrome.runtime.sendMessage({
+	const rawResponse = await platform.browserCommands.request<unknown>({
 		source: CO_AGENT_BROWSER_COMMAND_SOURCE,
 		command: "content-command",
 		request,

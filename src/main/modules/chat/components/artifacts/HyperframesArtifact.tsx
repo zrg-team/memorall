@@ -23,6 +23,7 @@ import {
 } from "@/services/filesystem/filesystem-paths";
 import type { DocumentTreeNode } from "@/types/document-library";
 import type { ArtifactProps } from "./ArtifactActionsMenu";
+import { platform } from "@/platform/current";
 
 // All resolved candidates carry a full root filesystem path.
 // readFile accepts both directly — no stripping or re-prefixing needed.
@@ -511,7 +512,7 @@ const ensureHyperframesPlayer = (): Promise<void> => {
 	if (customElements.get("hyperframes-player")) return Promise.resolve();
 	hyperframesPlayerLoad ??= new Promise<void>((resolve, reject) => {
 		const script = document.createElement("script");
-		script.src = chrome.runtime.getURL(
+		script.src = platform.assets.url(
 			"vendors/hyperframes/hyperframes-player.global.js",
 		);
 		script.onload = () => resolve();
@@ -537,12 +538,7 @@ export const HyperframesArtifact: React.FC<ArtifactProps> = ({
 	const pendingDownloadRef = useRef<PendingDownload | null>(null);
 	// Manifest-declared sandbox page: inline composition code is isolated from the
 	// extension while every runtime it loads remains packaged and reviewable.
-	const previewUrl =
-		typeof chrome !== "undefined" && chrome.runtime?.getURL
-			? chrome.runtime.getURL(
-					"sandbox/pages/hyperframes-preview.html?v=20260812-local-runtime",
-				)
-			: "/sandbox/pages/hyperframes-preview.html?v=20260812-local-runtime";
+	const previewUrl = `${platform.assets.url("sandbox/pages/hyperframes-preview.html")}?v=20260812-local-runtime`;
 	const [previewHtml, setPreviewHtml] = useState<NormalizedComposition | null>(
 		null,
 	);
