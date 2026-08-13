@@ -37,20 +37,25 @@ const EXPORT_SIZE_PRESETS = {
 	"1440p": 1440,
 	"2160p": 2160,
 };
-const TAILWIND_BROWSER_URL = "/vendors/artifacts/tailwind.js";
-const MEDIABUNNY_ESM_URL =
-	"/vendors/artifacts/mediabunny.min.mjs";
-const LUCIDE_UMD_URL =
-	"/vendors/artifacts/lucide.min.js";
-const D3_UMD_URL = "/vendors/artifacts/d3.min.js";
-const THREE_ESM_URL = "/vendors/artifacts/three.min.mjs";
-const GSAP_URL = "/vendors/hyperframes/gsap.min.js";
-const HYPERFRAMES_RUNTIME_URL =
-	"/vendors/hyperframes/hyperframe.runtime.iife.js";
-const HYPERFRAMES_SHADER_URL =
-	"/vendors/hyperframes/shader-transitions.global.js";
-const HTML2CANVAS_URL =
-	"/vendors/hyperframes/html2canvas.min.js";
+const packagedVendorUrl = (path) =>
+	new URL(`../../vendors/${path}`, globalThis.location.href).href;
+const TAILWIND_BROWSER_URL = packagedVendorUrl("artifacts/tailwind.js");
+const MEDIABUNNY_ESM_URL = packagedVendorUrl(
+	"artifacts/mediabunny.min.mjs",
+);
+const LUCIDE_UMD_URL = packagedVendorUrl("artifacts/lucide.min.js");
+const D3_UMD_URL = packagedVendorUrl("artifacts/d3.min.js");
+const THREE_ESM_URL = packagedVendorUrl("artifacts/three.min.mjs");
+const GSAP_URL = packagedVendorUrl("hyperframes/gsap.min.js");
+const HYPERFRAMES_RUNTIME_URL = packagedVendorUrl(
+	"hyperframes/hyperframe.runtime.iife.js",
+);
+const HYPERFRAMES_SHADER_URL = packagedVendorUrl(
+	"hyperframes/shader-transitions.global.js",
+);
+const HTML2CANVAS_URL = packagedVendorUrl(
+	"hyperframes/html2canvas.min.js",
+);
 
 // ── CDN fallback map for extension-local script URLs ─────────────────────────
 // Mirrors the CDN_TO_LOCAL map in composition-preprocessor.ts (reversed).

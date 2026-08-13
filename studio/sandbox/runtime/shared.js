@@ -39,7 +39,7 @@ let almostNodeLibModule = null;
 
 const sandboxAssetUrl = (path) => {
 	const normalizedPath = String(path).replace(/^\/+/, "");
-	return new URL(`/sandbox/${normalizedPath}`, globalThis.location.href).href;
+	return new URL(`../${normalizedPath}`, import.meta.url).href;
 };
 
 export const loadAlmostNodeLib = async () => {

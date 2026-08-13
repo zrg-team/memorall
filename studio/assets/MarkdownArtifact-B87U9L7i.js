@@ -1,0 +1,1 @@
+import"./rolldown-runtime-C0FnF6B9.js";import{n as e,t}from"./jsx-runtime-CKeovgl0.js";import{t as n}from"./MarkdownMessage-CRLtRBxy.js";e();var r=t(),i=({content:e})=>(0,r.jsx)(`div`,{className:`my-2 rounded-md border border-border/70 bg-muted/10 p-3`,children:(0,r.jsx)(n,{children:e})});export{i as MarkdownArtifact};
