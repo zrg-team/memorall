@@ -195,9 +195,13 @@ async function assertWindowsLocalModelChat(browser) {
 		},
 	);
 	const pageErrors = [];
+	const consoleErrors = [];
 	page.on("pageerror", (error) =>
 		pageErrors.push(error.stack ?? error.message),
 	);
+	page.on("console", (message) => {
+		if (message.type() === "error") consoleErrors.push(message.text());
+	});
 
 	await page.evaluate(() => {
 		localStorage.setItem("memorall-copilot-completed", "true");
@@ -248,10 +252,6 @@ async function assertWindowsLocalModelChat(browser) {
 	}
 	await currentModel.waitFor({ state: "attached", timeout: 12 * 60_000 });
 
-	const useChatButton = page.locator("[data-agent-use-chat]");
-	if (await useChatButton.isVisible().catch(() => false)) {
-		await useChatButton.click();
-	}
 	const loadSelectedModel = page.locator("[data-load-selected-model]");
 	if (await loadSelectedModel.isVisible().catch(() => false)) {
 		await loadSelectedModel.click();
@@ -259,6 +259,23 @@ async function assertWindowsLocalModelChat(browser) {
 			state: "hidden",
 			timeout: 12 * 60_000,
 		});
+	}
+
+	const chatPage = page.locator("[data-chat-selected-agent-flow]");
+	await chatPage.waitFor({ state: "attached", timeout: 60_000 });
+	if (
+		(await chatPage.getAttribute("data-chat-selected-agent-flow")) !== "chat"
+	) {
+		const useChatButton = page.locator("[data-agent-use-chat]");
+		await useChatButton.waitFor({ state: "visible", timeout: 60_000 });
+		await useChatButton.click();
+		await pollUntil(
+			"Chat mode to become active",
+			30_000,
+			async () =>
+				(await chatPage.getAttribute("data-chat-selected-agent-flow")) ===
+				"chat",
+		);
 	}
 
 	const composer = page.locator('[contenteditable="true"][role="textbox"]');
@@ -271,12 +288,41 @@ async function assertWindowsLocalModelChat(browser) {
 		"Reply with one short sentence confirming local inference works. Token: LOCAL_MODEL_E2E.",
 	);
 	await composer.press("Enter");
-	await pollUntil(
-		"a completed local-model assistant response",
-		3 * 60_000,
-		async () =>
-			(await completedAssistantMessages.count()) > completedAssistantCount,
-	);
+	try {
+		await pollUntil(
+			"a completed local-model assistant response",
+			3 * 60_000,
+			async () =>
+				(await completedAssistantMessages.count()) > completedAssistantCount,
+		);
+	} catch (error) {
+		const diagnostics = {
+			currentModel: {
+				id: await currentModel.getAttribute("data-current-model-id"),
+				provider: await currentModel.getAttribute(
+					"data-current-model-provider",
+				),
+			},
+			selectedAgentFlow: await chatPage.getAttribute(
+				"data-chat-selected-agent-flow",
+			),
+			messages: await page
+				.locator("[data-message-role]")
+				.evaluateAll((elements) =>
+					elements.map((element) => ({
+						role: element.getAttribute("data-message-role"),
+						state: element.getAttribute("data-message-state"),
+						text: element.textContent?.trim().slice(0, 500),
+					})),
+				),
+			pageErrors,
+			consoleErrors,
+		};
+		console.error(
+			`Desktop local-model chat diagnostics: ${JSON.stringify(diagnostics, null, 2)}`,
+		);
+		throw error;
+	}
 	const responseText = (
 		await completedAssistantMessages.nth(completedAssistantCount).innerText()
 	).trim();
@@ -285,9 +331,12 @@ async function assertWindowsLocalModelChat(browser) {
 			`Packaged Windows local-model chat returned an invalid response:\n${responseText || "<empty>"}`,
 		);
 	}
-	if (pageErrors.length > 0) {
+	if (pageErrors.length > 0 || consoleErrors.length > 0) {
 		throw new Error(
-			`Packaged Windows local-model chat emitted page errors:\n${pageErrors.join("\n")}`,
+			`Packaged Windows local-model chat emitted browser errors:\n${[
+				...pageErrors,
+				...consoleErrors,
+			].join("\n")}`,
 		);
 	}
 	console.log(

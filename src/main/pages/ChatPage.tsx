@@ -763,6 +763,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
 	return (
 		<div
 			className="flex h-full bg-background text-foreground [background-image:linear-gradient(180deg,hsl(var(--muted)/0.28)_0%,transparent_190px)]"
+			data-chat-selected-agent-flow={selectedAgentFlowId ?? ""}
 			data-copilot="chat-center"
 			data-agent-cursor-point="copilot-chat-center"
 		>
