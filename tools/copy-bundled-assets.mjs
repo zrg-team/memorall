@@ -1050,6 +1050,10 @@ async function main() {
 	// _injectRuntime() falls back to loading the HF runtime from jsdelivr CDN when
 	// the runtime isn't auto-detected. Replace with the local extension copy so
 	// the extension CSP is never violated.
+	const publicPlayerFile = path.resolve(
+		process.cwd(),
+		"public/vendors/hyperframes/hyperframes-player.global.js",
+	);
 	const playerDistFiles = [
 		path.resolve(
 			process.cwd(),
@@ -1063,10 +1067,7 @@ async function main() {
 			process.cwd(),
 			"node_modules/@hyperframes/player/dist/hyperframes-player.global.js",
 		),
-		path.resolve(
-			process.cwd(),
-			"public/vendors/hyperframes/hyperframes-player.global.js",
-		),
+		publicPlayerFile,
 	];
 	const hfRuntimeCdnStr = `"https://cdn.jsdelivr.net/npm/@hyperframes/core@0.7.108/dist/hyperframe.runtime.iife.js"`;
 	const hfRuntimeOldLocalExpr = `typeof chrome<"u"&&chrome.runtime?.getURL?chrome.runtime.getURL("vendors/hyperframes/hyperframe.runtime.iife.js"):"https://cdn.jsdelivr.net/npm/@hyperframes/core@0.7.108/dist/hyperframe.runtime.iife.js"`;
@@ -1219,33 +1220,43 @@ async function main() {
 			);
 		}
 		const src = fs.readFileSync(playerFile, "utf8");
-		let patched = src
-			.replaceAll(hfRuntimePagesUnsafeMinifiedExpr, hfRuntimeLocalExpr)
-			.replaceAll(hfRuntimePagesUnsafeExpr, hfRuntimeLocalExpr)
-			.replaceAll(hfRuntimeNestedLocalExpr, hfRuntimeLocalExpr)
-			.replaceAll(hfRuntimeOldLocalExpr, hfRuntimeLocalExpr)
-			.replaceAll(hfRuntimeCdnStr, hfRuntimeLocalExpr)
-			.replaceAll(hfIframeSandboxExpr, hfIframeSandboxNoop);
-		for (const [from, to] of hfSandboxDocReadPatches) {
-			patched = patched.replaceAll(from, to);
+		let patched = src;
+		for (let pass = 0; pass < 8; pass += 1) {
+			const beforePass = patched;
+			patched = patched
+				.replaceAll(hfRuntimePagesUnsafeMinifiedExpr, hfRuntimeLocalExpr)
+				.replaceAll(hfRuntimePagesUnsafeExpr, hfRuntimeLocalExpr)
+				.replaceAll(hfRuntimeNestedLocalExpr, hfRuntimeLocalExpr)
+				.replaceAll(hfRuntimeOldLocalExpr, hfRuntimeLocalExpr)
+				.replaceAll(hfRuntimeCdnStr, hfRuntimeLocalExpr)
+				.replaceAll(hfIframeSandboxExpr, hfIframeSandboxNoop);
+			for (const [from, to] of hfSandboxDocReadPatches) {
+				patched = patched.replaceAll(from, to);
+			}
+			patched = patched
+				.replace(
+					/(?:(?:location\.pathname\.startsWith\("\/sandbox\/"\)|e\.src\.includes\("\/sandbox\/"\))\|\|)+e\.sandbox\.add\("allow-scripts","allow-same-origin"\),/g,
+					hfIframeSandboxNoop,
+				)
+				.replace(
+					/(?:if\(location\.pathname\.startsWith\("\/sandbox\/"\)\)return;)+let e=this\._iframe\.contentDocument;if\(!e\)return;/g,
+					`if(location.pathname.startsWith("/sandbox/"))return;let e=this._iframe.contentDocument;if(!e)return;`,
+				)
+				.replaceAll(
+					`:this.iframe.src.includes("/sandbox/")||e.sandbox.add("allow-scripts","allow-same-origin"),this.iframe.src=e`,
+					`:this["iframe"].sandbox.add("allow-scripts","allow-same-origin"),this.iframe.src=e`,
+				)
+				.replaceAll(
+					`:this.iframe.src.includes("/sandbox/")||this.iframe.sandbox.add("allow-scripts","allow-same-origin"),this.iframe.src=e`,
+					`:this["iframe"].sandbox.add("allow-scripts","allow-same-origin"),this.iframe.src=e`,
+				);
+			if (patched === beforePass) break;
+			if (pass === 7) {
+				throw new Error(
+					`@hyperframes/player localization did not converge: ${playerFile}`,
+				);
+			}
 		}
-		patched = patched
-			.replace(
-				/(?:(?:location\.pathname\.startsWith\("\/sandbox\/"\)|e\.src\.includes\("\/sandbox\/"\))\|\|)+e\.sandbox\.add\("allow-scripts","allow-same-origin"\),/g,
-				hfIframeSandboxNoop,
-			)
-			.replace(
-				/(?:if\(location\.pathname\.startsWith\("\/sandbox\/"\)\)return;)+let e=this\._iframe\.contentDocument;if\(!e\)return;/g,
-				`if(location.pathname.startsWith("/sandbox/"))return;let e=this._iframe.contentDocument;if(!e)return;`,
-			)
-			.replaceAll(
-				`:this.iframe.src.includes("/sandbox/")||e.sandbox.add("allow-scripts","allow-same-origin"),this.iframe.src=e`,
-				`:this["iframe"].sandbox.add("allow-scripts","allow-same-origin"),this.iframe.src=e`,
-			)
-			.replaceAll(
-				`:this.iframe.src.includes("/sandbox/")||this.iframe.sandbox.add("allow-scripts","allow-same-origin"),this.iframe.src=e`,
-				`:this["iframe"].sandbox.add("allow-scripts","allow-same-origin"),this.iframe.src=e`,
-			);
 		const resolver =
 			path.basename(playerFile) === "hyperframes-player.js" ? "q" : "Y";
 		const localizedAnchors = [
@@ -1272,12 +1283,9 @@ async function main() {
 				`@hyperframes/player localization integrity check failed: ${playerFile} (anchor counts ${anchorCounts.join(",")})`,
 			);
 		}
-		if (patched === src && src.includes(hfRuntimeLocalExpr)) {
-			playerPatchCount++; // already patched
-			continue;
+		if (playerFile === publicPlayerFile && patched !== src) {
+			writeFileWithRetry(playerFile, patched.replace(/\r\n?/g, "\n"));
 		}
-		if (patched === src) continue;
-		fs.writeFileSync(playerFile, patched);
 		playerPatchCount++;
 	}
 	if (playerPatchCount !== playerDistFiles.length) {
