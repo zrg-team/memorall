@@ -217,20 +217,34 @@ async function assertWindowsLocalModelChat(browser) {
 		.catch(() => false);
 	if (!isAlreadySelected) {
 		await page.locator('[data-provider-tab="wllama"]').click();
-		const modelCard = page.locator(
+		const quickModelCard = page.locator(
 			`[data-model-provider="wllama"][data-model-id="${localModelRepo}"]`,
 		);
-		await modelCard.waitFor({ state: "visible", timeout: 60_000 });
-		const modelAction = modelCard.locator("[data-model-action]");
-		const modelActionState =
-			await modelAction.getAttribute("data-model-action");
-		if (modelActionState === "download" || modelActionState === "load") {
-			await modelAction.click();
+		const quickModelAvailable = await quickModelCard
+			.waitFor({ state: "visible", timeout: 5_000 })
+			.then(() => true)
+			.catch(() => false);
+		if (quickModelAvailable) {
+			const modelAction = quickModelCard.locator("[data-model-action]");
+			const modelActionState =
+				await modelAction.getAttribute("data-model-action");
+			if (modelActionState === "download" || modelActionState === "load") {
+				await modelAction.click();
+			}
+			await quickModelCard.locator('[data-model-action="ready"]').waitFor({
+				state: "attached",
+				timeout: 12 * 60_000,
+			});
+		} else {
+			await page.locator("[data-model-sidebar-toggle]").click();
+			const downloadedModel = page.locator(
+				`[data-downloaded-model-provider="wllama"][data-downloaded-model-id="${localModelId}"]`,
+			);
+			await downloadedModel.waitFor({ state: "visible", timeout: 60_000 });
+			await downloadedModel
+				.locator('[data-downloaded-model-action="load"]')
+				.click();
 		}
-		await modelCard.locator('[data-model-action="ready"]').waitFor({
-			state: "attached",
-			timeout: 12 * 60_000,
-		});
 	}
 	await currentModel.waitFor({ state: "attached", timeout: 12 * 60_000 });
 

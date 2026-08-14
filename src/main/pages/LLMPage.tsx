@@ -152,6 +152,7 @@ export const LLMPage: React.FC = () => {
 								<WorkspaceCollapsedSidebarItem
 									icon={<PanelLeftOpen className="h-4 w-4" />}
 									label={t("sidebar.show")}
+									modelSidebarToggle
 									onClick={expandSidebar}
 									className="border border-input bg-background hover:bg-accent"
 								/>

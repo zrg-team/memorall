@@ -8,13 +8,23 @@ interface WorkspaceCollapsedSidebarItemProps {
 	disabled?: boolean;
 	onClick: () => void;
 	className?: string;
+	modelSidebarToggle?: boolean;
 }
 
 export const WorkspaceCollapsedSidebarItem: React.FC<
 	WorkspaceCollapsedSidebarItemProps
-> = ({ icon, label, active = false, disabled = false, onClick, className }) => (
+> = ({
+	icon,
+	label,
+	active = false,
+	disabled = false,
+	onClick,
+	className,
+	modelSidebarToggle = false,
+}) => (
 	<button
 		type="button"
+		data-model-sidebar-toggle={modelSidebarToggle || undefined}
 		onClick={onClick}
 		disabled={disabled}
 		aria-label={label}

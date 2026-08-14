@@ -355,11 +355,23 @@ test("selects a local CPU model and completes a real chat request", async () => 
 	});
 
 	await page.locator('[data-provider-tab="wllama"]').click();
-	const modelCard = page.locator(
+	const quickModelCard = page.locator(
 		'[data-model-provider="wllama"][data-model-id="LiquidAI/LFM2-VL-450M-GGUF"]',
 	);
-	await expect(modelCard).toBeVisible();
-	await modelCard.locator('[data-model-action="download"]').click();
+	const quickModelAvailable = await quickModelCard
+		.waitFor({ state: "visible", timeout: 5_000 })
+		.then(() => true)
+		.catch(() => false);
+	if (quickModelAvailable) {
+		await quickModelCard.locator('[data-model-action="download"]').click();
+	} else {
+		await page.locator("[data-model-sidebar-toggle]").click();
+		await page
+			.locator(
+				'[data-downloaded-model-provider="wllama"][data-downloaded-model-id="LiquidAI/LFM2-VL-450M-GGUF/LFM2-VL-450M-Q4_0.gguf"] [data-downloaded-model-action="load"]',
+			)
+			.click();
+	}
 
 	const currentModelCard = page.locator(
 		'[data-llm-page][data-current-model-provider="wllama"][data-current-model-id="LiquidAI/LFM2-VL-450M-GGUF/LFM2-VL-450M-Q4_0.gguf"]',
