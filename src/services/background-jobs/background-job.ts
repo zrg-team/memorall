@@ -196,15 +196,13 @@ export class BackgroundJob {
 		await this.saveJob(job);
 		await this.notifyListeners();
 
-		// Immediate notification via cross-context bridge (0-50ms latency)
-		this.notificationBridge.notifyJobEnqueued(job);
-
-		logInfo(`📋 Queued ${jobType} job: ${jobId}`);
-
 		if (options.stream) {
-			// Create progress stream
+			// Attach the consumer before dispatching the job. Chrome can deliver and
+			// complete a fast offscreen job before the sender's next microtask.
 			const stream = this.createJobProgressStream(jobId);
 			this.attachProgressForwarder(jobId, true); // createJob uses queue-based completion
+			this.notificationBridge.notifyJobEnqueued(job);
+			logInfo(`📋 Queued ${jobType} job: ${jobId}`);
 			return { jobId, stream };
 		} else {
 			// Create promise that resolves on completion.
@@ -260,6 +258,8 @@ export class BackgroundJob {
 					},
 				);
 			});
+			this.notificationBridge.notifyJobEnqueued(job);
+			logInfo(`📋 Queued ${jobType} job: ${jobId}`);
 			return { jobId, promise };
 		}
 	}
@@ -312,16 +312,13 @@ export class BackgroundJob {
 			progress: [],
 		};
 
-		// Skip saveJob - send directly to offscreen for immediate processing
-		// Immediate notification via cross-context bridge for fast processing
-		this.notificationBridge.notifyJobEnqueued(job);
-
-		logInfo(`⚡ Executing immediate ${jobType} job: ${jobId}`);
-
 		if (options.stream) {
-			// Create progress stream
+			// Attach the consumer before dispatching the job. Direct jobs are not
+			// persisted, so a missed completion cannot be recovered by queue polling.
 			const stream = this.createJobProgressStream(jobId);
 			this.attachProgressForwarder(jobId, true); // execute needs direct completion handling
+			this.notificationBridge.notifyJobEnqueued(job);
+			logInfo(`⚡ Executing immediate ${jobType} job: ${jobId}`);
 			return { jobId, stream };
 		} else {
 			// Create promise that resolves on completion - direct notification handling for execute
@@ -351,6 +348,8 @@ export class BackgroundJob {
 					},
 				);
 			});
+			this.notificationBridge.notifyJobEnqueued(job);
+			logInfo(`⚡ Executing immediate ${jobType} job: ${jobId}`);
 			return { jobId, promise };
 		}
 	}
