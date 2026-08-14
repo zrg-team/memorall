@@ -827,6 +827,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
 						<div className="absolute left-2 top-2 z-30">
 							<Button
 								type="button"
+								data-chat-side-panel-toggle
 								variant="ghost"
 								size="icon"
 								className="h-8 w-8 text-muted-foreground hover:bg-muted hover:text-foreground"

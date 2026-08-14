@@ -281,7 +281,14 @@ async function assertWindowsLocalModelChat(browser) {
 	const previousConversationId = await chatPage.getAttribute(
 		"data-chat-conversation-id",
 	);
-	await page.locator("[data-new-chat]").click();
+	const newChatButton = page.locator("[data-new-chat]");
+	let openedCompactSidePanel = false;
+	if ((await newChatButton.count()) === 0) {
+		await page.locator("[data-chat-side-panel-toggle]").click();
+		await newChatButton.waitFor({ state: "visible", timeout: 30_000 });
+		openedCompactSidePanel = true;
+	}
+	await newChatButton.click();
 	await pollUntil("a new empty Chat conversation", 60_000, async () => {
 		const conversationId = await chatPage.getAttribute(
 			"data-chat-conversation-id",
@@ -295,6 +302,9 @@ async function assertWindowsLocalModelChat(browser) {
 				historyBoundary === "",
 		);
 	});
+	if (openedCompactSidePanel) {
+		await page.locator("[data-chat-side-panel-close]").click();
+	}
 
 	const composer = page.locator('[contenteditable="true"][role="textbox"]');
 	await composer.waitFor({ state: "visible", timeout: 60_000 });

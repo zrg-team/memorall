@@ -170,6 +170,7 @@ export const ChatSidePanel: React.FC<ChatSidePanelProps> = ({
 							) : onClose ? (
 								<Button
 									type="button"
+									data-chat-side-panel-close
 									variant="ghost"
 									size="icon"
 									onClick={onClose}
