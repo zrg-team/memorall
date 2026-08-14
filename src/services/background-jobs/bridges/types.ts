@@ -76,7 +76,7 @@ export interface IJobNotificationBridge {
 		listener: (message: JobNotificationMessage) => void,
 	): () => void;
 
-	notifyJobEnqueued(job: BaseJob, target?: MessageTarget): void;
+	notifyJobEnqueued(job: BaseJob, target?: MessageTarget): void | Promise<void>;
 	notifyJobUpdated(jobId: string, job: BaseJob, target?: MessageTarget): void;
 	notifyJobProgress(
 		jobId: string,

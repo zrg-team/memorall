@@ -1,13 +1,13 @@
-import { logInfo, logError } from "@/utils/logger";
+import { logError, logInfo } from "@/utils/logger";
+import type { BaseJob, JobProgressEvent, JobResult } from "../handlers/types";
 import type {
+	BridgeStatus,
+	ContextType,
 	IJobNotificationBridge,
 	JobNotificationMessage,
-	ContextType,
 	MessageTarget,
-	BridgeStatus,
 } from "./types";
 import { isJobNotificationMessage } from "./types";
-import type { BaseJob, JobProgressEvent, JobResult } from "../handlers/types";
 
 /**
  * Chrome Runtime job notification bridge.
@@ -19,6 +19,8 @@ import type { BaseJob, JobProgressEvent, JobResult } from "../handlers/types";
  *   chrome.tabs.sendMessage() — see the relay section in background.ts.
  */
 export class ChromeRuntimeBridge implements IJobNotificationBridge {
+	private static readonly enqueueAttempts = 4;
+	private static readonly enqueueRetryDelayMs = 100;
 	private readonly listeners = new Map<
 		string,
 		Set<(message: JobNotificationMessage) => void>
@@ -26,8 +28,8 @@ export class ChromeRuntimeBridge implements IJobNotificationBridge {
 	private readonly contextType: ContextType;
 	private isReady = false;
 
-	constructor() {
-		this.contextType = ChromeRuntimeBridge.detectContext();
+	constructor(contextType?: ContextType) {
+		this.contextType = contextType ?? ChromeRuntimeBridge.detectContext();
 		this.setupListener();
 		logInfo(`[ChromeRuntimeBridge] ready for "${this.contextType}"`);
 	}
@@ -57,11 +59,28 @@ export class ChromeRuntimeBridge implements IJobNotificationBridge {
 	private setupListener(): void {
 		if (typeof chrome === "undefined" || !chrome.runtime) return;
 
-		chrome.runtime.onMessage.addListener((rawMessage: unknown) => {
-			if (!isJobNotificationMessage(rawMessage)) return;
-			if (!this.isForMe(rawMessage.target)) return;
-			this.dispatch(rawMessage);
-		});
+		chrome.runtime.onMessage.addListener(
+			(rawMessage: unknown, _sender, sendResponse) => {
+				if (!isJobNotificationMessage(rawMessage)) return;
+				if (!this.isForMe(rawMessage.target)) return;
+				const hasJobConsumer =
+					(this.listeners.get(rawMessage.type)?.size ?? 0) > 0 ||
+					(this.listeners.get("*")?.size ?? 0) > 0;
+				this.dispatch(rawMessage);
+				if (
+					rawMessage.type === "JOB_ENQUEUED" &&
+					this.contextType === "offscreen" &&
+					hasJobConsumer
+				) {
+					sendResponse({
+						accepted: true,
+						context: "offscreen",
+						jobId: rawMessage.jobId,
+					});
+				}
+				return false;
+			},
+		);
 
 		this.isReady = true;
 	}
@@ -105,8 +124,55 @@ export class ChromeRuntimeBridge implements IJobNotificationBridge {
 		};
 	}
 
-	notifyJobEnqueued(job: BaseJob, target: MessageTarget = "offscreen"): void {
-		this.send({ type: "JOB_ENQUEUED", target, jobId: job.id, job });
+	async notifyJobEnqueued(
+		job: BaseJob,
+		target: MessageTarget = "offscreen",
+	): Promise<void> {
+		if (target !== "offscreen") {
+			this.send({ type: "JOB_ENQUEUED", target, jobId: job.id, job });
+			return;
+		}
+
+		const message = this.createMessage({
+			type: "JOB_ENQUEUED",
+			target,
+			jobId: job.id,
+			job,
+		});
+		let lastError: unknown;
+		for (
+			let attempt = 1;
+			attempt <= ChromeRuntimeBridge.enqueueAttempts;
+			attempt++
+		) {
+			try {
+				const response = (await chrome.runtime.sendMessage(message)) as
+					| { accepted?: boolean; context?: string; jobId?: string }
+					| undefined;
+				if (
+					response?.accepted === true &&
+					response.context === "offscreen" &&
+					response.jobId === job.id
+				) {
+					return;
+				}
+				lastError = new Error("Offscreen runtime did not acknowledge the job");
+			} catch (error) {
+				lastError = error;
+			}
+			if (attempt < ChromeRuntimeBridge.enqueueAttempts) {
+				await new Promise((resolve) =>
+					setTimeout(
+						resolve,
+						ChromeRuntimeBridge.enqueueRetryDelayMs * 2 ** (attempt - 1),
+					),
+				);
+			}
+		}
+		throw new Error(
+			`Offscreen runtime did not accept job ${job.id} after ${ChromeRuntimeBridge.enqueueAttempts} attempts`,
+			{ cause: lastError },
+		);
 	}
 
 	notifyJobUpdated(
@@ -165,11 +231,7 @@ export class ChromeRuntimeBridge implements IJobNotificationBridge {
 	): void {
 		if (!this.isReady) return;
 
-		const message: JobNotificationMessage = {
-			...partial,
-			sender: this.contextType,
-			timestamp: Date.now(),
-		};
+		const message = this.createMessage(partial);
 
 		chrome.runtime.sendMessage(message).catch((err: Error) => {
 			// "Receiving end does not exist" is normal when no other context is open
@@ -180,5 +242,15 @@ export class ChromeRuntimeBridge implements IJobNotificationBridge {
 				logError(`[Bridge] failed to send ${message.type}:`, err);
 			}
 		});
+	}
+
+	private createMessage(
+		partial: Omit<JobNotificationMessage, "sender" | "timestamp">,
+	): JobNotificationMessage {
+		return {
+			...partial,
+			sender: this.contextType,
+			timestamp: Date.now(),
+		};
 	}
 }

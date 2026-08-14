@@ -139,6 +139,21 @@ export class BackgroundJob {
 		);
 	}
 
+	private async dispatchJob(
+		job: BaseJob,
+		requireAcknowledgement: boolean,
+	): Promise<void> {
+		try {
+			await this.notificationBridge.notifyJobEnqueued(job);
+		} catch (error) {
+			if (requireAcknowledgement) throw error;
+			logError(
+				`Queued job ${job.id} was persisted but not acknowledged; runtime recovery will retry it`,
+				error,
+			);
+		}
+	}
+
 	private async notifyListeners(): Promise<void> {
 		const state = await this.getState();
 		for (const listener of this.listeners) listener(state);
@@ -201,7 +216,7 @@ export class BackgroundJob {
 			// complete a fast offscreen job before the sender's next microtask.
 			const stream = this.createJobProgressStream(jobId);
 			this.attachProgressForwarder(jobId, true); // createJob uses queue-based completion
-			this.notificationBridge.notifyJobEnqueued(job);
+			await this.dispatchJob(job, false);
 			logInfo(`📋 Queued ${jobType} job: ${jobId}`);
 			return { jobId, stream };
 		} else {
@@ -258,7 +273,7 @@ export class BackgroundJob {
 					},
 				);
 			});
-			this.notificationBridge.notifyJobEnqueued(job);
+			await this.dispatchJob(job, false);
 			logInfo(`📋 Queued ${jobType} job: ${jobId}`);
 			return { jobId, promise };
 		}
@@ -317,7 +332,7 @@ export class BackgroundJob {
 			// persisted, so a missed completion cannot be recovered by queue polling.
 			const stream = this.createJobProgressStream(jobId);
 			this.attachProgressForwarder(jobId, true); // execute needs direct completion handling
-			this.notificationBridge.notifyJobEnqueued(job);
+			await this.dispatchJob(job, true);
 			logInfo(`⚡ Executing immediate ${jobType} job: ${jobId}`);
 			return { jobId, stream };
 		} else {
@@ -348,7 +363,7 @@ export class BackgroundJob {
 					},
 				);
 			});
-			this.notificationBridge.notifyJobEnqueued(job);
+			await this.dispatchJob(job, true);
 			logInfo(`⚡ Executing immediate ${jobType} job: ${jobId}`);
 			return { jobId, promise };
 		}
