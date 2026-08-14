@@ -5,8 +5,8 @@ import {
 	getModelRunConfig,
 	getQuickDownloadModelId,
 	type LLMModelConfig,
-	type LLMProvider,
 	type LLMModelRunConfig,
+	type LLMProvider,
 	type ModelRuntimeProfile,
 } from "../interfaces/llm-model-config";
 
@@ -135,5 +135,20 @@ export function getQuickDownloadModelEntry(
 		model: model.id,
 		size: model.sizeLabel,
 		description: model.description,
+	};
+}
+
+export function getConfiguredWllamaFile(
+	repoId: string,
+): { name: string; size: number } | null {
+	const model = getModel(repoId, "wllama");
+	const filename = model?.wllamaConfig?.filename;
+	if (!model || !filename) {
+		return null;
+	}
+
+	return {
+		name: filename,
+		size: Math.round(model.sizeGB * 1024 ** 3),
 	};
 }

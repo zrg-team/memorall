@@ -213,9 +213,10 @@ test("selects a local CPU model and completes a real Web chat request", async ({
 		timeout: 90_000,
 	});
 
-	await page
-		.getByRole("button", { name: "Wllama (GGUF)", exact: true })
-		.click();
+	const wllamaTab = page.locator('[data-provider-tab="wllama"]');
+	await expect(wllamaTab).toBeVisible({ timeout: 90_000 });
+	await expect(wllamaTab).toBeEnabled();
+	await wllamaTab.click();
 	const modelCard = page.locator(
 		'[data-model-provider="wllama"][data-model-id="LiquidAI/LFM2-VL-450M-GGUF"]',
 	);
@@ -234,7 +235,10 @@ test("selects a local CPU model and completes a real Web chat request", async ({
 	if (await useChatButton.isVisible()) await useChatButton.click();
 
 	const composer = page.locator('[contenteditable="true"][role="textbox"]');
-	await expect(composer).toBeVisible({ timeout: 60_000 });
+	await expect(page.locator("[data-load-selected-model]")).toBeHidden({
+		timeout: 12 * 60_000,
+	});
+	await expect(composer).toBeVisible({ timeout: 12 * 60_000 });
 	const completedAssistantMessages = page.locator(
 		'[data-message-role="assistant"][data-message-state="complete"] [data-message-content]',
 	);

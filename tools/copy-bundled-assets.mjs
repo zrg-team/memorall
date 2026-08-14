@@ -118,7 +118,13 @@ function countExact(source, needle) {
 	return count;
 }
 
-function rewriteCopiedAssetExact(file, needle, replacement, expectedCount, label) {
+function rewriteCopiedAssetExact(
+	file,
+	needle,
+	replacement,
+	expectedCount,
+	label,
+) {
 	const source = fs.readFileSync(file, "utf8");
 	const actualCount = countExact(source, needle);
 	if (actualCount !== expectedCount) {
@@ -403,10 +409,7 @@ async function main() {
 	if (fs.existsSync(wllamaSrc)) {
 		// Copy main library
 		const wllamaLibraryDest = path.join(wllamaDestLibs, "wllama.js");
-		copyFile(
-			path.join(wllamaSrc, "index.js"),
-			wllamaLibraryDest,
-		);
+		copyFile(path.join(wllamaSrc, "index.js"), wllamaLibraryDest);
 
 		// Copy WASM files — v3 ships a single wasm/ directory
 		const wllamaWasmSrc = path.join(wllamaSrc, "wasm");
@@ -555,109 +558,109 @@ async function main() {
 	const almostnodeOutDir = path.dirname(almostnodeOut);
 	const almostnodeEntrySource = fs.existsSync(almostnodeEntry)
 		? rewriteText(fs.readFileSync(almostnodeEntry, "utf8"), [
-			[
-				/(const REACT_REFRESH_VERSION = [^;]+;\r?\n)(?!const memorallAssetUrl)/,
-				'$1const memorallAssetUrl = (relative) => new URL(relative, import.meta.url).href;\n',
-			],
-			[
-				/\$\{REACT_CDN\}&dev\/jsx-runtime/g,
-				"/sandbox/vendors/react-jsx-runtime.mjs",
-			],
-			[
-				/\$\{REACT_CDN\}&dev\/jsx-dev-runtime/g,
-				"/sandbox/vendors/react-jsx-dev-runtime.mjs",
-			],
-			[/\$\{REACT_CDN\}\?dev/g, "/sandbox/vendors/react.mjs"],
-			[/\$\{REACT_CDN\}&dev\//g, "/sandbox/vendors/react-subpath-disabled/"],
-			[
-				/\$\{REACT_DOM_CDN\}\/client\?dev/g,
-				"/sandbox/vendors/react-dom-client.mjs",
-			],
-			[/\$\{REACT_DOM_CDN\}\?dev/g, "/sandbox/vendors/react-dom.mjs"],
-			[
-				/\$\{REACT_DOM_CDN\}&dev\//g,
-				"/sandbox/vendors/react-dom-subpath-disabled/",
-			],
-			[
-				/const REACT_CDN = [^;]+;/,
-				'const REACT_CDN = memorallAssetUrl("./react.mjs");',
-			],
-			[
-				/const REACT_DOM_CDN = [^;]+;/,
-				'const REACT_DOM_CDN = memorallAssetUrl("./react-dom.mjs");',
-			],
-			[
-				/const REACT_REFRESH_CDN = [^;]+;/,
-				'const REACT_REFRESH_CDN = memorallAssetUrl("./react-refresh-runtime.mjs");',
-			],
-			[
-				/const ESBUILD_WASM_ESM_CDN = [^;]+;/,
-				'const ESBUILD_WASM_ESM_CDN = memorallAssetUrl("./esbuild-wasm-browser.min.js");',
-			],
-			[
-				/const ESBUILD_WASM_BINARY_CDN = [^;]+;/,
-				'const ESBUILD_WASM_BINARY_CDN = memorallAssetUrl("./esbuild.wasm");',
-			],
-			[
-				/const ESBUILD_WASM_BROWSER_CDN = [^;]+;/,
-				'const ESBUILD_WASM_BROWSER_CDN = memorallAssetUrl("./esbuild-wasm-browser.min.js");',
-			],
-			[
-				/const ROLLUP_BROWSER_CDN = [^;]+;/,
-				'const ROLLUP_BROWSER_CDN = memorallAssetUrl("./rollup-browser.mjs");',
-			],
-			[
-				/const TAILWIND_CDN_URL = [^;]+;/,
-				'const TAILWIND_CDN_URL = memorallAssetUrl("../../vendors/artifacts/tailwind.js");',
-			],
-			[
-				/ {2}"react": `\/sandbox\/vendors\/react\.mjs`,/g,
-				'  "react": REACT_CDN,',
-			],
-			[
-				/ {2}"react\/jsx-runtime": `\/sandbox\/vendors\/react-jsx-runtime\.mjs`,/g,
-				'  "react/jsx-runtime": memorallAssetUrl("./react-jsx-runtime.mjs"),',
-			],
-			[
-				/ {2}"react\/jsx-dev-runtime": `\/sandbox\/vendors\/react-jsx-dev-runtime\.mjs`,/g,
-				'  "react/jsx-dev-runtime": memorallAssetUrl("./react-jsx-dev-runtime.mjs"),',
-			],
-			[
-				/ {2}"react-dom": `\/sandbox\/vendors\/react-dom\.mjs`,/g,
-				'  "react-dom": REACT_DOM_CDN,',
-			],
-			[
-				/ {2}"react-dom\/client": `\/sandbox\/vendors\/react-dom-client\.mjs`/g,
-				'  "react-dom/client": memorallAssetUrl("./react-dom-client.mjs")',
-			],
-			[
-				/return `\/sandbox\/vendors\/remote-modules-disabled\.mjs#\$\{esmPkg\}\?external=react\$\{depsParam\}`;/,
-				`return memorallAssetUrl(\`./remote-modules-disabled.mjs#\${esmPkg}?external=react\${depsParam}\`);`,
-			],
-			[
-				/const almostnodeUrl = opts\.almostnodeUrl \?\? "\/sandbox\/vendors\/almostnode\.bundle\.js";/,
-				'const almostnodeUrl = opts.almostnodeUrl ?? memorallAssetUrl("./almostnode.bundle.js");',
-			],
-			[
-				/"react": "\/sandbox\/vendors\/react\.mjs"/g,
-				`"react": "\${REACT_CDN}"`,
-			],
-			[
-				/"react\/": "\/sandbox\/vendors\/react-subpath-disabled\/"/g,
-				`"react/": "\${memorallAssetUrl("./react-subpath-disabled/")}"`,
-			],
-			[
-				/"react-dom": "\/sandbox\/vendors\/react-dom\.mjs"/g,
-				`"react-dom": "\${REACT_DOM_CDN}"`,
-			],
-			[
-				/"react-dom\/": "\/sandbox\/vendors\/react-dom-subpath-disabled\/"/g,
-				`"react-dom/": "\${memorallAssetUrl("./react-dom-subpath-disabled/")}"`,
-			],
-			[
-				/"react-dom\/client": "\/sandbox\/vendors\/react-dom-client\.mjs"/g,
-				`"react-dom/client": "\${memorallAssetUrl("./react-dom-client.mjs")}"`,
-			],
+				[
+					/(const REACT_REFRESH_VERSION = [^;]+;\r?\n)(?!const memorallAssetUrl)/,
+					"$1const memorallAssetUrl = (relative) => new URL(relative, import.meta.url).href;\n",
+				],
+				[
+					/\$\{REACT_CDN\}&dev\/jsx-runtime/g,
+					"/sandbox/vendors/react-jsx-runtime.mjs",
+				],
+				[
+					/\$\{REACT_CDN\}&dev\/jsx-dev-runtime/g,
+					"/sandbox/vendors/react-jsx-dev-runtime.mjs",
+				],
+				[/\$\{REACT_CDN\}\?dev/g, "/sandbox/vendors/react.mjs"],
+				[/\$\{REACT_CDN\}&dev\//g, "/sandbox/vendors/react-subpath-disabled/"],
+				[
+					/\$\{REACT_DOM_CDN\}\/client\?dev/g,
+					"/sandbox/vendors/react-dom-client.mjs",
+				],
+				[/\$\{REACT_DOM_CDN\}\?dev/g, "/sandbox/vendors/react-dom.mjs"],
+				[
+					/\$\{REACT_DOM_CDN\}&dev\//g,
+					"/sandbox/vendors/react-dom-subpath-disabled/",
+				],
+				[
+					/const REACT_CDN = [^;]+;/,
+					'const REACT_CDN = memorallAssetUrl("./react.mjs");',
+				],
+				[
+					/const REACT_DOM_CDN = [^;]+;/,
+					'const REACT_DOM_CDN = memorallAssetUrl("./react-dom.mjs");',
+				],
+				[
+					/const REACT_REFRESH_CDN = [^;]+;/,
+					'const REACT_REFRESH_CDN = memorallAssetUrl("./react-refresh-runtime.mjs");',
+				],
+				[
+					/const ESBUILD_WASM_ESM_CDN = [^;]+;/,
+					'const ESBUILD_WASM_ESM_CDN = memorallAssetUrl("./esbuild-wasm-browser.min.js");',
+				],
+				[
+					/const ESBUILD_WASM_BINARY_CDN = [^;]+;/,
+					'const ESBUILD_WASM_BINARY_CDN = memorallAssetUrl("./esbuild.wasm");',
+				],
+				[
+					/const ESBUILD_WASM_BROWSER_CDN = [^;]+;/,
+					'const ESBUILD_WASM_BROWSER_CDN = memorallAssetUrl("./esbuild-wasm-browser.min.js");',
+				],
+				[
+					/const ROLLUP_BROWSER_CDN = [^;]+;/,
+					'const ROLLUP_BROWSER_CDN = memorallAssetUrl("./rollup-browser.mjs");',
+				],
+				[
+					/const TAILWIND_CDN_URL = [^;]+;/,
+					'const TAILWIND_CDN_URL = memorallAssetUrl("../../vendors/artifacts/tailwind.js");',
+				],
+				[
+					/ {2}"react": `\/sandbox\/vendors\/react\.mjs`,/g,
+					'  "react": REACT_CDN,',
+				],
+				[
+					/ {2}"react\/jsx-runtime": `\/sandbox\/vendors\/react-jsx-runtime\.mjs`,/g,
+					'  "react/jsx-runtime": memorallAssetUrl("./react-jsx-runtime.mjs"),',
+				],
+				[
+					/ {2}"react\/jsx-dev-runtime": `\/sandbox\/vendors\/react-jsx-dev-runtime\.mjs`,/g,
+					'  "react/jsx-dev-runtime": memorallAssetUrl("./react-jsx-dev-runtime.mjs"),',
+				],
+				[
+					/ {2}"react-dom": `\/sandbox\/vendors\/react-dom\.mjs`,/g,
+					'  "react-dom": REACT_DOM_CDN,',
+				],
+				[
+					/ {2}"react-dom\/client": `\/sandbox\/vendors\/react-dom-client\.mjs`/g,
+					'  "react-dom/client": memorallAssetUrl("./react-dom-client.mjs")',
+				],
+				[
+					/return `\/sandbox\/vendors\/remote-modules-disabled\.mjs#\$\{esmPkg\}\?external=react\$\{depsParam\}`;/,
+					`return memorallAssetUrl(\`./remote-modules-disabled.mjs#\${esmPkg}?external=react\${depsParam}\`);`,
+				],
+				[
+					/const almostnodeUrl = opts\.almostnodeUrl \?\? "\/sandbox\/vendors\/almostnode\.bundle\.js";/,
+					'const almostnodeUrl = opts.almostnodeUrl ?? memorallAssetUrl("./almostnode.bundle.js");',
+				],
+				[
+					/"react": "\/sandbox\/vendors\/react\.mjs"/g,
+					`"react": "\${REACT_CDN}"`,
+				],
+				[
+					/"react\/": "\/sandbox\/vendors\/react-subpath-disabled\/"/g,
+					`"react/": "\${memorallAssetUrl("./react-subpath-disabled/")}"`,
+				],
+				[
+					/"react-dom": "\/sandbox\/vendors\/react-dom\.mjs"/g,
+					`"react-dom": "\${REACT_DOM_CDN}"`,
+				],
+				[
+					/"react-dom\/": "\/sandbox\/vendors\/react-dom-subpath-disabled\/"/g,
+					`"react-dom/": "\${memorallAssetUrl("./react-dom-subpath-disabled/")}"`,
+				],
+				[
+					/"react-dom\/client": "\/sandbox\/vendors\/react-dom-client\.mjs"/g,
+					`"react-dom/client": "\${memorallAssetUrl("./react-dom-client.mjs")}"`,
+				],
 			])
 		: null;
 	if (almostnodeEntrySource) {
@@ -905,6 +908,14 @@ async function main() {
 	}
 
 	const artifactPreviewFiles = [
+		[
+			"runner/caption-overrides.json",
+			"public/sandbox/pages/caption-overrides.json",
+		],
+		[
+			"runner/caption-overrides.json",
+			"public/vendors/hyperframes/caption-overrides.json",
+		],
 		[
 			"runner/hyperframes-preview.html",
 			"public/sandbox/pages/hyperframes-preview.html",

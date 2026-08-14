@@ -58,6 +58,27 @@ if (pdf.length < 100 || !pdf.subarray(0, 5).equals(Buffer.from("%PDF-"))) {
 const requestedDirectories = process.argv.slice(2);
 for (const requestedDirectory of requestedDirectories) {
 	const directory = path.resolve(root, requestedDirectory);
+	let extensionManifest = null;
+	try {
+		extensionManifest = JSON.parse(
+			await readFile(path.join(directory, "manifest.json"), "utf8"),
+		);
+	} catch (error) {
+		if (error?.code !== "ENOENT") throw error;
+	}
+	if (extensionManifest?.manifest_version === 3) {
+		for (const relativePath of [
+			"vendors/hyperframes/caption-overrides.json",
+			"sandbox/pages/caption-overrides.json",
+		]) {
+			const overrides = JSON.parse(
+				await readFile(path.join(directory, relativePath), "utf8"),
+			);
+			if (!Array.isArray(overrides)) {
+				throw new Error(`${relativePath} must contain a JSON array`);
+			}
+		}
+	}
 	for (const file of await javascriptFiles(directory)) {
 		const source = await readFile(file, "utf8");
 		const label = path.relative(root, file).replaceAll(path.sep, "/");

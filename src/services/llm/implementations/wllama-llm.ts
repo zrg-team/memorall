@@ -1,24 +1,32 @@
+import { LLM_RUNNER_URLS } from "@/config/llm-runner";
+import { detectSystemSpecs } from "@/main/modules/llm/utils/system-detection";
+import type {
+	ChatCompletionChunk,
+	ChatCompletionRequest,
+	ChatCompletionResponse,
+} from "@/types/openai";
+import { waitForDOMReady } from "@/utils/dom";
 import type {
 	BaseLLM,
 	LLMInfo,
 	ModelInfo,
 	ModelsResponse,
 } from "../interfaces/base-llm";
-import type {
-	ChatCompletionChunk,
-	ChatCompletionRequest,
-	ChatCompletionResponse,
-} from "@/types/openai";
 import type { ToolCapabilityInfo } from "../interfaces/tool-capability";
+import { getModel } from "../registry/model-registry";
 import {
 	extractToolCallsFromResponse,
-	preparePromptToolRequest,
 	PromptToolStreamTransformer,
+	preparePromptToolRequest,
 } from "../tools/tool-adapter";
 import {
 	getWllamaToolCapabilities,
 	WLLAMA_NATIVE_TOOL_SUPPORT,
 } from "../tools/tool-capability-resolver";
+import {
+	buildRunnerMemoryHint,
+	type RunnerMemoryHint,
+} from "../utils/runner-memory-hints";
 import {
 	chunkHasFinishReason,
 	extractChunkOutputText,
@@ -26,14 +34,6 @@ import {
 	normalizeTokenUsage,
 	resolveTokenUsage,
 } from "../utils/token-usage";
-import { LLM_RUNNER_URLS } from "@/config/llm-runner";
-import { waitForDOMReady } from "@/utils/dom";
-import { detectSystemSpecs } from "@/main/modules/llm/utils/system-detection";
-import {
-	buildRunnerMemoryHint,
-	type RunnerMemoryHint,
-} from "../utils/runner-memory-hints";
-import { getModel } from "../registry/model-registry";
 import { IframeRuntime } from "./iframe-runtime";
 
 interface ServeRequest {
@@ -504,16 +504,21 @@ export class WllamaLLM implements BaseLLM {
 	): Promise<
 		(Omit<ChatCompletionRequest, "signal"> | ServeRequest) & {
 			_memoryHint?: RunnerMemoryHint;
+			_mmprojFile?: string;
 		}
 	> {
 		const memoryHint = await this.getRunnerMemoryHint(requestPayload.model);
-		if (!memoryHint) {
+		const mmprojFile = requestPayload.model
+			? getModel(requestPayload.model, "wllama")?.wllamaConfig?.mmprojFilename
+			: undefined;
+		if (!memoryHint && !mmprojFile) {
 			return requestPayload;
 		}
 
 		return {
 			...requestPayload,
-			_memoryHint: memoryHint,
+			...(memoryHint ? { _memoryHint: memoryHint } : {}),
+			...(mmprojFile ? { _mmprojFile: mmprojFile } : {}),
 		};
 	}
 
@@ -539,9 +544,9 @@ export class WllamaLLM implements BaseLLM {
 		this.iframe?.remove();
 		this.iframe = null;
 		window.removeEventListener("message", this.onMessage);
-		this.pending.forEach(({ reject }) =>
-			reject(new Error("Service destroyed")),
-		);
+		this.pending.forEach(({ reject }) => {
+			reject(new Error("Service destroyed"));
+		});
 		this.pending.clear();
 		this.modelCapabilities.clear();
 		this.ready = false;

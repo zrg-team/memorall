@@ -301,17 +301,17 @@ test("LLM configuration view switches through every supported provider", async (
 	});
 
 	const providers = [
-		{ tab: "Transformer (WebGPU)", content: "Transformer advantages" },
-		{ tab: "Wllama (GGUF)", content: "Wllama advantages" },
-		{ tab: "WebLLM (MLC)", content: "WebLLM advantages" },
-		{ tab: "OpenAI", content: "OpenAI API Key" },
-		{ tab: "OpenRouter", content: "OpenRouter API Key" },
-		{ tab: "LM Studio", content: "Local Endpoint" },
-		{ tab: "Ollama", content: "Local Endpoint" },
+		{ id: "transformer", content: "Transformer advantages" },
+		{ id: "wllama", content: "Wllama advantages" },
+		{ id: "webllm", content: "WebLLM advantages" },
+		{ id: "openai", content: "OpenAI API Key" },
+		{ id: "openrouter", content: "OpenRouter API Key" },
+		{ id: "lmstudio", content: "Local Endpoint" },
+		{ id: "ollama", content: "Local Endpoint" },
 	];
 
 	for (const provider of providers) {
-		const tab = page.getByRole("button", { name: provider.tab, exact: true });
+		const tab = page.locator(`[data-provider-tab="${provider.id}"]`);
 		await expect(tab).toBeVisible();
 		await tab.click();
 		await expect(page.locator("main")).toContainText(provider.content, {
@@ -393,7 +393,13 @@ test("selects a local CPU model and completes a real chat request", async () => 
 	const prompt =
 		"Reply with one short sentence confirming local inference works. Token: LOCAL_MODEL_E2E.";
 	const composer = page.locator('[contenteditable="true"][role="textbox"]');
-	await expect(composer).toBeVisible({ timeout: 60_000 });
+	// setCurrentModel is intentionally persisted before the large runner download
+	// finishes. Wait for the chat-side load guard to clear so this test proves the
+	// selected model is active in memory, not merely selected in storage.
+	await expect(page.locator("[data-load-selected-model]")).toBeHidden({
+		timeout: 12 * 60_000,
+	});
+	await expect(composer).toBeVisible({ timeout: 12 * 60_000 });
 	const completedAssistantMessages = page.locator(
 		'[data-message-role="assistant"][data-message-state="complete"] [data-message-content]',
 	);

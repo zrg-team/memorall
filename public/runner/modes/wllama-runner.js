@@ -1,5 +1,5 @@
 // Wllama Runner - Local LLM inference via WebAssembly (wllama v3)
-import { reply, generateId, sendReady } from "../utils/common.js";
+import { generateId, reply, sendReady } from "../utils/common.js";
 import { ModelLifecycleManager } from "../utils/model-lifecycle.js";
 
 // v3: single WASM file — local relative path, never CDN (Chrome extension CSP)
@@ -12,6 +12,7 @@ let Wllama;
 const loadedModelsCache = new Map();
 const activeOperations = new Map();
 const pendingLoadMemoryHints = new Map();
+const pendingMmprojFiles = new Map();
 const DEFAULT_WLLAMA_N_CTX = 65536;
 
 async function detectWebGPU() {
@@ -76,7 +77,8 @@ function resolveMemoryContextTokens(memoryHint) {
 function detectModelCapabilities(wllama) {
 	const template = wllama.getChatTemplate();
 	// Native tool calling = model embeds an OAI-compatible tool_calls chat template
-	const supportsNativeTools = template != null && template.includes("tool_calls");
+	const supportsNativeTools =
+		template != null && template.includes("tool_calls");
 	// Vision = wllama v3 reports this directly from model architecture metadata
 	const supportsVision = wllama.supportInputModality?.("image") ?? false;
 	const usesGPU = wllama._usesGPU ?? false;
@@ -127,7 +129,8 @@ const MMPROJ_NONE_SENTINEL = "__none__";
 
 function readMmprojCache(repo) {
 	// Memory first
-	if (mmprojFilenameCache.has(repo)) return { hit: true, value: mmprojFilenameCache.get(repo) };
+	if (mmprojFilenameCache.has(repo))
+		return { hit: true, value: mmprojFilenameCache.get(repo) };
 	// Persistent storage
 	try {
 		const raw = localStorage.getItem(MMPROJ_STORAGE_PREFIX + repo);
@@ -143,7 +146,10 @@ function readMmprojCache(repo) {
 function writeMmprojCache(repo, filename) {
 	mmprojFilenameCache.set(repo, filename);
 	try {
-		localStorage.setItem(MMPROJ_STORAGE_PREFIX + repo, filename ?? MMPROJ_NONE_SENTINEL);
+		localStorage.setItem(
+			MMPROJ_STORAGE_PREFIX + repo,
+			filename ?? MMPROJ_NONE_SENTINEL,
+		);
 	} catch {}
 }
 
@@ -166,7 +172,9 @@ async function resolveHFMmprojFilename(repo) {
 			const siblings = data.siblings ?? [];
 			const mmprojFiles = siblings
 				.map((s) => s.rfilename)
-				.filter((f) => f.endsWith(".gguf") && f.toLowerCase().includes("mmproj"));
+				.filter(
+					(f) => f.endsWith(".gguf") && f.toLowerCase().includes("mmproj"),
+				);
 			result =
 				mmprojFiles.find((f) => f.includes("Q8_0")) ??
 				mmprojFiles.find((f) => f.includes("Q4_K_M")) ??
@@ -217,13 +225,22 @@ async function loadWllamaModel(modelId, notifyProgress) {
 
 	const progressCallback = ({ loaded, total }) => {
 		if (notifyProgress) {
-			const percent = Math.max(0, Math.min(100, Math.round((loaded / (total || 1)) * 100)));
+			const percent = Math.max(
+				0,
+				Math.min(100, Math.round((loaded / (total || 1)) * 100)),
+			);
 			notifyProgress({ loaded, total, percent, text: "" });
 		}
 	};
 
-	// Discover mmproj filename from HF repo — loadModelFromHF resolves the full URL internally
-	const mmprojFile = await resolveHFMmprojFilename(repo);
+	// Prefer the reviewed model-registry filename. Network discovery remains a
+	// fallback for user-supplied models, but known multimodal models must not
+	// change runtime backends because a Hugging Face API request was flaky.
+	const configuredMmprojFile = pendingMmprojFiles.get(modelId);
+	const mmprojFile =
+		typeof configuredMmprojFile === "string"
+			? configuredMmprojFile
+			: await resolveHFMmprojFilename(repo);
 	const loadArgs = mmprojFile
 		? { repo, file: filename, mmprojFile }
 		: { repo, file: filename };
@@ -231,16 +248,23 @@ async function loadWllamaModel(modelId, notifyProgress) {
 
 	try {
 		// WebGPU currently loads some multimodal projector models but can stall during generation.
-		const useGPU = !mmprojFile && (await detectWebGPU());
+		const useGPU =
+			!mmprojFile && memoryHint?.usesWebGPU !== false && (await detectWebGPU());
 
 		if (useGPU) {
 			try {
 				const wllamaGPU = new Wllama(WASM_PATHS, WLLAMA_CONFIG);
-				await wllamaGPU.loadModelFromHF(loadArgs, { ...baseOpts, n_gpu_layers: 999 });
+				await wllamaGPU.loadModelFromHF(loadArgs, {
+					...baseOpts,
+					n_gpu_layers: 999,
+				});
 				wllamaGPU._usesGPU = true;
 				return wllamaGPU;
 			} catch (gpuErr) {
-				console.warn("[wllama-runner] WebGPU load failed, retrying on CPU:", gpuErr?.message);
+				console.warn(
+					"[wllama-runner] WebGPU load failed, retrying on CPU:",
+					gpuErr?.message,
+				);
 			}
 		}
 
@@ -250,6 +274,7 @@ async function loadWllamaModel(modelId, notifyProgress) {
 		return wllama;
 	} finally {
 		pendingLoadMemoryHints.delete(modelId);
+		pendingMmprojFiles.delete(modelId);
 	}
 }
 
@@ -345,12 +370,15 @@ window.addEventListener("message", async (event) => {
 			}
 
 			case "serve": {
-				const { model, _memoryHint } = payload || {};
+				const { model, _memoryHint, _mmprojFile } = payload || {};
 				if (!model) throw new Error("Model name is required");
 
 				parseModelName(model);
 				if (_memoryHint) {
 					pendingLoadMemoryHints.set(model, _memoryHint);
+				}
+				if (_mmprojFile) {
+					pendingMmprojFiles.set(model, _mmprojFile);
 				}
 
 				const notifyProgress = (info) => {
@@ -402,13 +430,16 @@ window.addEventListener("message", async (event) => {
 					tools,
 					tool_choice,
 					_memoryHint,
+					_mmprojFile,
 				} = payload || {};
 
 				if (!messages) throw new Error("Messages are required");
 
 				const targetModel = model || wllamaManager.modelId;
 				if (!targetModel) {
-					throw new Error("No model specified and no model loaded. Call serve first.");
+					throw new Error(
+						"No model specified and no model loaded. Call serve first.",
+					);
 				}
 
 				parseModelName(targetModel);
@@ -418,20 +449,25 @@ window.addEventListener("message", async (event) => {
 				if (_memoryHint) {
 					pendingLoadMemoryHints.set(targetModel, _memoryHint);
 				}
+				if (_mmprojFile) {
+					pendingMmprojFiles.set(targetModel, _mmprojFile);
+				}
 
 				try {
 					await wllamaManager.withModel(targetModel, async (wllama) => {
 						const loadedCtx = wllama.getLoadedContextInfo?.();
 						const maxContextTokens =
-							typeof loadedCtx?.n_ctx === "number" ? loadedCtx.n_ctx : undefined;
+							typeof loadedCtx?.n_ctx === "number"
+								? loadedCtx.n_ctx
+								: undefined;
 						const memoryContextTokens = resolveMemoryContextTokens(_memoryHint);
 						const maxTotalContext =
 							typeof maxContextTokens === "number" &&
 							typeof memoryContextTokens === "number"
 								? Math.min(maxContextTokens, memoryContextTokens)
 								: typeof maxContextTokens === "number"
-								? maxContextTokens
-								: memoryContextTokens;
+									? maxContextTokens
+									: memoryContextTokens;
 
 						const requestedMaxTokens =
 							typeof max_tokens === "number" && Number.isFinite(max_tokens)
@@ -478,13 +514,19 @@ window.addEventListener("message", async (event) => {
 								}
 							}
 
-							reply(src, origin, messageId, "stream_end", lastChunk ?? {
-								id: `chatcmpl-${generateId()}`,
-								object: "chat.completion.chunk",
-								created: Math.floor(Date.now() / 1000),
-								model: targetModel,
-								choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
-							});
+							reply(
+								src,
+								origin,
+								messageId,
+								"stream_end",
+								lastChunk ?? {
+									id: `chatcmpl-${generateId()}`,
+									object: "chat.completion.chunk",
+									created: Math.floor(Date.now() / 1000),
+									model: targetModel,
+									choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
+								},
+							);
 						} else {
 							const response = await wllama.createChatCompletion({
 								...completionOptions,

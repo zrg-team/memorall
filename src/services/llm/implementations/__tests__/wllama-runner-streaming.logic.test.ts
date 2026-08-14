@@ -18,4 +18,10 @@ describe("Wllama runner streaming contract", () => {
 		expect(streamingBranch).not.toContain("onData");
 		expect(streamingBranch).toContain("Symbol.asyncIterator");
 	});
+
+	it("keeps reviewed CPU models deterministic when projector discovery is unavailable", () => {
+		expect(source).toContain("pendingMmprojFiles.get(modelId)");
+		expect(source).toContain('typeof configuredMmprojFile === "string"');
+		expect(source).toContain("memoryHint?.usesWebGPU !== false");
+	});
 });

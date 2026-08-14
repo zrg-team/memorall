@@ -20,6 +20,7 @@ export const WLLAMA_MODELS: LLMModelConfig[] = [
 		quickDownload: true,
 		wllamaConfig: {
 			filename: "LFM2-VL-450M-Q4_0.gguf",
+			mmprojFilename: "mmproj-LFM2-VL-450M-Q8_0.gguf",
 		},
 	},
 	{
@@ -61,6 +62,7 @@ export const WLLAMA_MODELS: LLMModelConfig[] = [
 		quickDownload: true,
 		wllamaConfig: {
 			filename: "LFM2-VL-1.6B-Q4_0.gguf",
+			mmprojFilename: "mmproj-LFM2-VL-1.6B-Q8_0.gguf",
 		},
 	},
 	{
