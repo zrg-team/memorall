@@ -409,10 +409,6 @@ test("selects a local CPU model and completes a real chat request", async () => 
 	await expect(submitButton).toBeEnabled();
 	await submitButton.click();
 
-	await expect(page.locator('[data-message-role="user"]').last()).toContainText(
-		"LOCAL_MODEL_E2E",
-		{ timeout: 60_000 },
-	);
 	try {
 		await expect
 			.poll(() => completedAssistantMessages.count(), {

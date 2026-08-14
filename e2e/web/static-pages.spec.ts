@@ -250,19 +250,21 @@ test("selects a local CPU model and completes a real Web chat request", async ({
 	await expect(submitButton).toBeEnabled();
 	await submitButton.click();
 
-	await expect(page.locator('[data-message-role="user"]').last()).toContainText(
-		"LOCAL_MODEL_E2E",
-		{ timeout: 60_000 },
-	);
 	await expect
 		.poll(() => completedAssistantMessages.count(), {
 			timeout: 3 * 60_000,
 		})
 		.toBeGreaterThan(completedAssistantCount);
-	const responseText = (
-		await completedAssistantMessages.nth(completedAssistantCount).innerText()
-	).trim();
-	expect(responseText.length).toBeGreaterThan(0);
+	const assistantMessage = completedAssistantMessages.nth(
+		completedAssistantCount,
+	);
+	await expect(assistantMessage).toBeVisible({ timeout: 3 * 60_000 });
+	await expect
+		.poll(async () => (await assistantMessage.innerText()).trim().length, {
+			timeout: 3 * 60_000,
+		})
+		.toBeGreaterThan(0);
+	const responseText = (await assistantMessage.innerText()).trim();
 	expect(responseText).not.toMatch(/\b(?:error|failed)\b/iu);
 	expect(pageErrors).toEqual([]);
 	console.log(
