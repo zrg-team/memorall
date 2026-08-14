@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
@@ -33,6 +35,38 @@ function assertExactAligned(manifest, prefix, label) {
 const rootManifest = readPackage("package.json");
 const desktopManifest = readPackage("apps/desktop/package.json");
 const sidecarManifest = readPackage("apps/desktop/sidecar/package.json");
+
+const sheetJsTarball = "vendor/xlsx-0.20.3.tgz";
+const sheetJsSha256 =
+	"8DC73FC3B00203E72D176E85B50938627C7B086E607C682E8D3C22C02BB99FE8";
+if (rootManifest.dependencies?.xlsx !== `file:${sheetJsTarball}`) {
+	errors.push(
+		`SheetJS must resolve from the audited local tarball; found ${rootManifest.dependencies?.xlsx ?? "missing"}`,
+	);
+}
+try {
+	const tarball = readFileSync(path.join(root, sheetJsTarball));
+	const actualSha256 = createHash("sha256").update(tarball).digest("hex");
+	if (actualSha256.toUpperCase() !== sheetJsSha256) {
+		errors.push(
+			`SheetJS tarball checksum mismatch; expected ${sheetJsSha256}, found ${actualSha256.toUpperCase()}`,
+		);
+	}
+} catch (error) {
+	errors.push(
+		`SheetJS tarball is missing or unreadable: ${error instanceof Error ? error.message : String(error)}`,
+	);
+}
+try {
+	execFileSync("git", ["ls-files", "--error-unmatch", sheetJsTarball], {
+		cwd: root,
+		stdio: "ignore",
+	});
+} catch {
+	errors.push(
+		`${sheetJsTarball} must be tracked so clean immutable installs can resolve it`,
+	);
+}
 
 assertExactAligned(rootManifest, "@univerjs/", "Univer packages");
 assertExactAligned(rootManifest, "@tiptap/", "TipTap packages");

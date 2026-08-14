@@ -61,6 +61,8 @@ web_modules/
 
 # Output of 'npm pack'
 *.tgz
+# Audited local dependency required by immutable clean-checkout installs.
+!vendor/xlsx-0.20.3.tgz
 
 # Yarn Integrity file
 .yarn-integrity
