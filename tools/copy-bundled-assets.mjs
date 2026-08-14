@@ -556,8 +556,16 @@ async function main() {
 		"public/sandbox/vendors/almostnode.bundle.js",
 	);
 	const almostnodeOutDir = path.dirname(almostnodeOut);
-	const almostnodeEntrySource = fs.existsSync(almostnodeEntry)
-		? rewriteText(fs.readFileSync(almostnodeEntry, "utf8"), [
+	const installedAlmostnodeSource = fs.existsSync(almostnodeEntry)
+		? fs.readFileSync(almostnodeEntry, "utf8")
+		: null;
+	if (installedAlmostnodeSource?.includes("const memorallAssetUrl =")) {
+		throw new Error(
+			"Installed AlmostNode source was modified by an older asset generator. Reinstall dependencies before regenerating bundled assets.",
+		);
+	}
+	const almostnodeEntrySource = installedAlmostnodeSource
+		? rewriteText(installedAlmostnodeSource, [
 				[
 					/(const REACT_REFRESH_VERSION = [^;]+;\r?\n)(?!const memorallAssetUrl)/,
 					"$1const memorallAssetUrl = (relative) => new URL(relative, import.meta.url).href;\n",
