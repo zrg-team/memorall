@@ -43,6 +43,7 @@ function ensureDir(p) {
 function copyFile(src, dest) {
 	ensureDir(path.dirname(dest));
 	fs.copyFileSync(src, dest);
+	fs.chmodSync(dest, 0o644);
 	console.log(`Copied: ${path.relative(process.cwd(), dest)}`);
 }
 
@@ -95,6 +96,14 @@ function rewriteFiles(files, replacements, label) {
 		changed++;
 	}
 	console.log(`✅ ${label}: ${changed} file(s) localized.\n`);
+}
+
+function rewriteText(source, replacements) {
+	let rewritten = source;
+	for (const [pattern, replacement] of replacements) {
+		rewritten = rewritten.replace(pattern, replacement);
+	}
+	return rewritten;
 }
 
 function countExact(source, needle) {
@@ -541,9 +550,8 @@ async function main() {
 		"public/sandbox/vendors/almostnode.bundle.js",
 	);
 	const almostnodeOutDir = path.dirname(almostnodeOut);
-	rewriteFiles(
-		[almostnodeEntry],
-		[
+	const almostnodeEntrySource = fs.existsSync(almostnodeEntry)
+		? rewriteText(fs.readFileSync(almostnodeEntry, "utf8"), [
 			[
 				/(const REACT_REFRESH_VERSION = [^;]+;\r?\n)(?!const memorallAssetUrl)/,
 				'$1const memorallAssetUrl = (relative) => new URL(relative, import.meta.url).href;\n',
@@ -647,11 +655,13 @@ async function main() {
 				/"react-dom\/client": "\/sandbox\/vendors\/react-dom-client\.mjs"/g,
 				`"react-dom/client": "\${memorallAssetUrl("./react-dom-client.mjs")}"`,
 			],
-		],
-		"almostnode runtime URLs",
-	);
+			])
+		: null;
+	if (almostnodeEntrySource) {
+		console.log("✅ almostnode runtime URLs prepared in memory.\n");
+	}
 
-	if (fs.existsSync(almostnodeEntry)) {
+	if (almostnodeEntrySource) {
 		ensureDir(path.dirname(almostnodeOut));
 		removeMatchingFiles(almostnodeOutDir, /^runtime-worker-.*\.js$/);
 
@@ -739,6 +749,19 @@ async function main() {
 			},
 			logLevel: "silent",
 			plugins: [
+				{
+					name: "memorall-almostnode-entry",
+					setup(buildApi) {
+						buildApi.onLoad({ filter: /index\.mjs$/ }, (args) => {
+							if (path.resolve(args.path) !== almostnodeEntry) return null;
+							return {
+								contents: almostnodeEntrySource,
+								loader: "js",
+								resolveDir: path.dirname(almostnodeEntry),
+							};
+						});
+					},
+				},
 				{
 					name: "almostnode-node-polyfill-alias",
 					setup(buildApi) {
