@@ -399,7 +399,9 @@ test("selects a local CPU model and completes a real chat request", async () => 
 	);
 	const completedAssistantCount = await completedAssistantMessages.count();
 	await composer.fill(prompt);
-	await composer.press("Enter");
+	const submitButton = page.locator("[data-chat-submit]");
+	await expect(submitButton).toBeEnabled();
+	await submitButton.click();
 
 	await expect(page.locator('[data-message-role="user"]').last()).toContainText(
 		"LOCAL_MODEL_E2E",

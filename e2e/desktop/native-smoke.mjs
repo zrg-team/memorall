@@ -315,7 +315,14 @@ async function assertWindowsLocalModelChat(browser) {
 	await composer.fill(
 		"Reply with one short sentence confirming local inference works. Token: LOCAL_MODEL_E2E.",
 	);
-	await composer.press("Enter");
+	const submitButton = page.locator("[data-chat-submit]");
+	await submitButton.waitFor({ state: "visible", timeout: 30_000 });
+	await pollUntil(
+		"the local-chat submit button to become enabled",
+		30_000,
+		async () => !(await submitButton.isDisabled()),
+	);
+	await submitButton.click();
 	try {
 		await pollUntil(
 			"a completed local-model assistant response",

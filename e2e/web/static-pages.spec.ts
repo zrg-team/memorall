@@ -242,7 +242,9 @@ test("selects a local CPU model and completes a real Web chat request", async ({
 	await composer.fill(
 		"Reply with one short sentence confirming local inference works. Token: LOCAL_MODEL_E2E.",
 	);
-	await composer.press("Enter");
+	const submitButton = page.locator("[data-chat-submit]");
+	await expect(submitButton).toBeEnabled();
+	await submitButton.click();
 
 	await expect(page.locator('[data-message-role="user"]').last()).toContainText(
 		"LOCAL_MODEL_E2E",
