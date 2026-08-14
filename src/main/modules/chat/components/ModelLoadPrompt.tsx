@@ -198,6 +198,7 @@ export const ModelLoadPrompt: React.FC<ModelLoadPromptProps> = ({
 					<Button
 						type="button"
 						size="sm"
+						data-load-selected-model
 						onClick={handleLoadCurrentModel}
 						disabled={isLoadingCurrentModel}
 						className="h-8 shrink-0 border border-amber-300 bg-amber-50 px-3 text-amber-950 hover:bg-amber-100 dark:border-amber-300/40 dark:bg-amber-100 dark:text-amber-950 dark:hover:bg-amber-200"

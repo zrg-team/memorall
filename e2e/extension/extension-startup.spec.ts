@@ -354,14 +354,12 @@ test("selects a local CPU model and completes a real chat request", async () => 
 		window.dispatchEvent(new PopStateEvent("popstate"));
 	});
 
-	await page
-		.getByRole("button", { name: "Wllama (GGUF)", exact: true })
-		.click();
+	await page.locator('[data-provider-tab="wllama"]').click();
 	const modelCard = page.locator(
 		'[data-model-provider="wllama"][data-model-id="LiquidAI/LFM2-VL-450M-GGUF"]',
 	);
 	await expect(modelCard).toBeVisible();
-	await modelCard.getByRole("button", { name: "Download Model" }).click();
+	await modelCard.locator('[data-model-action="download"]').click();
 
 	const currentModelCard = page.locator(
 		'[data-llm-page][data-current-model-provider="wllama"][data-current-model-id="LiquidAI/LFM2-VL-450M-GGUF/LFM2-VL-450M-Q4_0.gguf"]',
@@ -375,10 +373,7 @@ test("selects a local CPU model and completes a real chat request", async () => 
 		})
 		.toEqual({ registered: true, ready: true });
 
-	const useChatButton = page.getByRole("button", {
-		name: "Use Chat",
-		exact: true,
-	});
+	const useChatButton = page.locator("[data-agent-use-chat]");
 	if (await useChatButton.isVisible()) {
 		await useChatButton.click();
 	}

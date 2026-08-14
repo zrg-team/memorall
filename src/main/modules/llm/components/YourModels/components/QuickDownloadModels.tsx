@@ -196,6 +196,9 @@ export const QuickDownloadModels: React.FC<QuickDownloadModelsProps> = ({
 							</div>
 							<Button
 								size="sm"
+								data-model-action={
+									isLoaded ? "ready" : isDownloaded ? "load" : "download"
+								}
 								onClick={() => handleQuickDownload(model, quickProvider)}
 								disabled={loading || isLoaded}
 								variant={isDownloaded ? "outline" : "default"}

@@ -216,35 +216,29 @@ async function assertWindowsLocalModelChat(browser) {
 		.then(() => true)
 		.catch(() => false);
 	if (!isAlreadySelected) {
-		await page
-			.getByRole("button", { name: "Wllama (GGUF)", exact: true })
-			.click();
+		await page.locator('[data-provider-tab="wllama"]').click();
 		const modelCard = page.locator(
 			`[data-model-provider="wllama"][data-model-id="${localModelRepo}"]`,
 		);
 		await modelCard.waitFor({ state: "visible", timeout: 60_000 });
-		const modelAction = modelCard.getByRole("button");
-		const modelActionName = (await modelAction.innerText()).trim();
-		if (/^(?:Download|Load) Model$/i.test(modelActionName)) {
+		const modelAction = modelCard.locator("[data-model-action]");
+		const modelActionState =
+			await modelAction.getAttribute("data-model-action");
+		if (modelActionState === "download" || modelActionState === "load") {
 			await modelAction.click();
 		}
-		await modelCard
-			.getByRole("button", { name: "Ready", exact: true })
-			.waitFor({ state: "attached", timeout: 12 * 60_000 });
+		await modelCard.locator('[data-model-action="ready"]').waitFor({
+			state: "attached",
+			timeout: 12 * 60_000,
+		});
 	}
 	await currentModel.waitFor({ state: "attached", timeout: 12 * 60_000 });
 
-	const useChatButton = page.getByRole("button", {
-		name: "Use Chat",
-		exact: true,
-	});
+	const useChatButton = page.locator("[data-agent-use-chat]");
 	if (await useChatButton.isVisible().catch(() => false)) {
 		await useChatButton.click();
 	}
-	const loadSelectedModel = page.getByRole("button", {
-		name: "Load model",
-		exact: true,
-	});
+	const loadSelectedModel = page.locator("[data-load-selected-model]");
 	if (await loadSelectedModel.isVisible().catch(() => false)) {
 		await loadSelectedModel.click();
 		await loadSelectedModel.waitFor({
