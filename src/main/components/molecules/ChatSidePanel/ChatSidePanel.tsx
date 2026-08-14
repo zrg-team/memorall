@@ -195,6 +195,7 @@ export const ChatSidePanel: React.FC<ChatSidePanelProps> = ({
 						<CollapsedRailItem
 							icon={<MessageSquarePlus size={17} />}
 							label={t("sidebar.newChat")}
+							newChat
 							onClick={() => void handleNewConversation()}
 						/>
 					</div>

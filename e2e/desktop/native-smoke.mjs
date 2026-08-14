@@ -278,6 +278,24 @@ async function assertWindowsLocalModelChat(browser) {
 		);
 	}
 
+	const previousConversationId = await chatPage.getAttribute(
+		"data-chat-conversation-id",
+	);
+	await page.locator("[data-new-chat]").click();
+	await pollUntil("a new empty Chat conversation", 60_000, async () => {
+		const conversationId = await chatPage.getAttribute(
+			"data-chat-conversation-id",
+		);
+		const historyBoundary = await chatPage.getAttribute(
+			"data-chat-history-boundary",
+		);
+		return Boolean(
+			conversationId &&
+				conversationId !== previousConversationId &&
+				historyBoundary === "",
+		);
+	});
+
 	const composer = page.locator('[contenteditable="true"][role="textbox"]');
 	await composer.waitFor({ state: "visible", timeout: 60_000 });
 	const completedAssistantMessages = page.locator(
@@ -306,6 +324,12 @@ async function assertWindowsLocalModelChat(browser) {
 			selectedAgentFlow: await chatPage.getAttribute(
 				"data-chat-selected-agent-flow",
 			),
+			conversation: {
+				id: await chatPage.getAttribute("data-chat-conversation-id"),
+				historyBoundary: await chatPage.getAttribute(
+					"data-chat-history-boundary",
+				),
+			},
 			messages: await page
 				.locator("[data-message-role]")
 				.evaluateAll((elements) =>

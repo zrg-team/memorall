@@ -7,6 +7,7 @@ interface CollapsedRailItemProps {
 	count?: number | string;
 	active?: boolean;
 	onClick: () => void;
+	newChat?: boolean;
 }
 
 export const CollapsedRailItem: React.FC<CollapsedRailItemProps> = ({
@@ -15,9 +16,11 @@ export const CollapsedRailItem: React.FC<CollapsedRailItemProps> = ({
 	count,
 	active = false,
 	onClick,
+	newChat = false,
 }) => (
 	<button
 		type="button"
+		data-new-chat={newChat || undefined}
 		onClick={onClick}
 		title={label}
 		aria-label={label}

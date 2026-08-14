@@ -45,6 +45,7 @@ import type { AttachedDocumentRef } from "@/types/chat";
 import { ChatSidePanel } from "@/main/components/molecules/ChatSidePanel";
 import { useRuntimeSessionsStore } from "@/main/stores/runtime-sessions";
 import { useShellLayoutStore } from "@/main/stores/shell-layout";
+import { useChatStore } from "@/main/stores/chat";
 import { isPopupSurface } from "@/utils/dom";
 import { getAgentIconScreenFromMetadata } from "@/main/modules/agents/types";
 import type { FeatureCatalogMetadata } from "@/services/flow-feature-catalog-service";
@@ -109,6 +110,9 @@ export const ChatPage: React.FC<ChatPageProps> = ({
 	const setRightPanelCollapsed = useShellLayoutStore(
 		(state) => state.setRightPanelCollapsed,
 	);
+	const currentConversation = useChatStore(
+		(state) => state.currentConversation,
+	);
 	const [attachedImages, setAttachedImages] = React.useState<File[]>([]);
 	const [attachedDocumentRefs, setAttachedDocumentRefs] = React.useState<
 		AttachedDocumentRef[]
@@ -149,6 +153,8 @@ export const ChatPage: React.FC<ChatPageProps> = ({
 		submitMessage,
 	} = useChat(model);
 	const hasInProgressMessage = inProgressMessage != null;
+	const currentHistoryBoundary = messageGroups.find((group) => group.isLatest)
+		?.previousSeparator?.id;
 
 	const handleChatSubmit = (
 		e: React.FormEvent,
@@ -763,6 +769,8 @@ export const ChatPage: React.FC<ChatPageProps> = ({
 	return (
 		<div
 			className="flex h-full bg-background text-foreground [background-image:linear-gradient(180deg,hsl(var(--muted)/0.28)_0%,transparent_190px)]"
+			data-chat-conversation-id={currentConversation?.id ?? ""}
+			data-chat-history-boundary={currentHistoryBoundary ?? ""}
 			data-chat-selected-agent-flow={selectedAgentFlowId ?? ""}
 			data-copilot="chat-center"
 			data-agent-cursor-point="copilot-chat-center"
