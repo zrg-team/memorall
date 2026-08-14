@@ -126,7 +126,10 @@ function rewriteCopiedAssetExact(file, needle, replacement, expectedCount, label
 			`${label}: expected ${expectedCount} exact occurrence(s), found ${actualCount}`,
 		);
 	}
-	writeFileWithRetry(file, source.replaceAll(needle, replacement));
+	const rewritten = source
+		.replaceAll(needle, replacement)
+		.replace(/\r\n?/g, "\n");
+	writeFileWithRetry(file, rewritten);
 }
 
 function removeMatchingFiles(dir, pattern) {
