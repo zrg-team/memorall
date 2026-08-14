@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { SiGithub as Github } from "@icons-pack/react-simple-icons";
 import {
 	Brain,
 	Check,
@@ -7,7 +8,6 @@ import {
 	FileSearch,
 	FolderOpen,
 	GitBranch,
-	Github,
 	Globe,
 	Info,
 	MemoryStick,

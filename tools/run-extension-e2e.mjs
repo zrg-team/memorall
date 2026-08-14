@@ -1,3 +1,4 @@
+import { spawn } from "node:child_process";
 import {
 	cpSync,
 	createWriteStream,
@@ -6,7 +7,6 @@ import {
 	readFileSync,
 	rmSync,
 } from "node:fs";
-import { spawn } from "node:child_process";
 import { resolve } from "node:path";
 
 const mode = process.argv[2];
@@ -18,11 +18,9 @@ const root = process.cwd();
 const yarn = process.platform === "win32" ? "yarn.cmd" : "yarn";
 const readyPath = resolve(root, "dist/extension-js/chromium/ready.json");
 const logDirectory = resolve(root, "publish/test-logs/extension");
-const developmentPublishPath = resolve(
-	root,
-	"publish/extension/dev/chromium",
-);
+const developmentPublishPath = resolve(root, "publish/extension/dev/chromium");
 let producer;
+let producerStartedAt = 0;
 
 function run(args, options = {}) {
 	return new Promise((resolveRun, reject) => {
@@ -58,7 +56,13 @@ async function waitForReady(timeoutMs = 300_000) {
 		if (existsSync(readyPath)) {
 			try {
 				const ready = JSON.parse(readFileSync(readyPath, "utf8"));
-				if (ready.status === "ready" && existsSync(ready.distPath)) {
+				const readyTimestamp = Date.parse(ready.ts ?? ready.compiledAt ?? "");
+				if (
+					ready.status === "ready" &&
+					Number.isFinite(readyTimestamp) &&
+					readyTimestamp >= producerStartedAt &&
+					existsSync(ready.distPath)
+				) {
 					return ready.distPath;
 				}
 				if (ready.status === "error") {
@@ -81,9 +85,13 @@ async function stopProducer() {
 	if (!producer || producer.exitCode !== null) return;
 	if (process.platform === "win32") {
 		await new Promise((resolveStop) => {
-			const killer = spawn("taskkill", ["/PID", String(producer.pid), "/T", "/F"], {
-				stdio: "ignore",
-			});
+			const killer = spawn(
+				"taskkill",
+				["/PID", String(producer.pid), "/T", "/F"],
+				{
+					stdio: "ignore",
+				},
+			);
 			killer.once("exit", resolveStop);
 			killer.once("error", resolveStop);
 		});
@@ -104,12 +112,7 @@ try {
 		);
 		producer = spawn(
 			yarn,
-			[
-				"dev:extension:runtime:no-reload",
-				"--no-browser",
-				"--logs",
-				"error",
-			],
+			["dev:extension:runtime:no-reload", "--no-browser", "--logs", "error"],
 			{
 				cwd: root,
 				env: { ...process.env, FORCE_COLOR: "0" },
@@ -118,26 +121,28 @@ try {
 				detached: process.platform !== "win32",
 			},
 		);
+		producerStartedAt = Date.now();
 		producer.stdout.pipe(log, { end: false });
 		producer.stderr.pipe(log, { end: false });
 		const internalDevelopmentPath = await waitForReady();
 		rmSync(developmentPublishPath, { recursive: true, force: true });
 		mkdirSync(resolve(developmentPublishPath, ".."), { recursive: true });
-		cpSync(internalDevelopmentPath, developmentPublishPath, { recursive: true });
+		cpSync(internalDevelopmentPath, developmentPublishPath, {
+			recursive: true,
+		});
 		extensionPath = developmentPublishPath;
 	} else {
 		await run(["build:extension"]);
 	}
 
-	await run(
-		["playwright", "test", "-c", "playwright.extension.config.ts"],
-		{
-			env: {
-				MEMORALL_EXTENSION_PATH: extensionPath,
-				MEMORALL_EXTENSION_MODE: mode,
-			},
+	await run(["node", "tools/check-extension-no-reload.mjs", extensionPath]);
+
+	await run(["playwright", "test", "-c", "playwright.extension.config.ts"], {
+		env: {
+			MEMORALL_EXTENSION_PATH: extensionPath,
+			MEMORALL_EXTENSION_MODE: mode,
 		},
-	);
+	});
 } finally {
 	await stopProducer();
 }

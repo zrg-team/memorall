@@ -204,6 +204,9 @@ export const MessageRenderer: React.FC<MessageRendererProps> = React.memo(
 		return (
 			<div
 				key={message.id}
+				data-message-id={message.id}
+				data-message-role={message.role}
+				data-message-state={isStreaming ? "streaming" : "complete"}
 				className={cn(
 					"flex flex-col gap-2",
 					isUserMessage ? "items-end" : "items-start",
@@ -228,6 +231,7 @@ export const MessageRenderer: React.FC<MessageRendererProps> = React.memo(
 				{hasRenderableContent || showGenericStreamingStatus ? (
 					<Message key={message.id} from={message.role}>
 						<MessageContent
+							data-message-content
 							className={cn(
 								"relative",
 								hasStructuredAssistantContent &&

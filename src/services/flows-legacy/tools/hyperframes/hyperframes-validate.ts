@@ -296,7 +296,7 @@ export const lintHyperframesComposition = async (
 	resourceRoots?: string[],
 	fsConfig?: HyperframesToolConfig,
 ): Promise<HyperframeLintResult> => {
-	const base = filterFindings(lintHyperframeHtml(html));
+	const base = filterFindings(await lintHyperframeHtml(html));
 	const findings = [
 		...base.findings,
 		...hyperShaderFindings(html),

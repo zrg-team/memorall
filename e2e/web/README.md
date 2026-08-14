@@ -6,11 +6,25 @@ Build and test the exact Pages layout locally:
 yarn test:e2e:web
 ```
 
+Run the opt-in real local-model acceptance separately:
+
+```sh
+yarn test:e2e:web:local-model
+```
+
+It selects and downloads the CPU/WASM Wllama fixture through the production
+Pages artifact, submits through the real Chat composer, and requires a newly
+completed non-error assistant response.
+
 The test server maps
 `http://127.0.0.1:4173/memorall/studio/` to `publish/web/studio/`, matching the
 production project-site URL `https://zrg-team.github.io/memorall/studio/`. The
 suite verifies initial loading, the PWA service-worker scope, manifest placement,
 first-party asset requests, and hash-route reloads.
+
+GitHub Actions runs this suite under Xvfb against the production artifact, scans
+the Web bundle for platform-boundary regressions, and executes the Pages deploy
+dry run. It never pushes the Pages branch or changes the live site.
 
 To inspect it manually:
 

@@ -10,6 +10,7 @@ class TestIntersectionObserver implements IntersectionObserver {
 
 	readonly root: Element | Document | null = null;
 	readonly rootMargin: string;
+	readonly scrollMargin: string;
 	readonly thresholds: ReadonlyArray<number>;
 	private readonly callback: IntersectionObserverCallback;
 	private readonly observed = new Set<Element>();
@@ -21,6 +22,9 @@ class TestIntersectionObserver implements IntersectionObserver {
 		this.callback = callback;
 		this.root = options.root ?? null;
 		this.rootMargin = options.rootMargin ?? "0px";
+		const scrollMargin =
+			"scrollMargin" in options ? options.scrollMargin : undefined;
+		this.scrollMargin = typeof scrollMargin === "string" ? scrollMargin : "0px";
 		this.thresholds = Array.isArray(options.threshold)
 			? options.threshold
 			: [options.threshold ?? 0];

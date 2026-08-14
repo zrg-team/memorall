@@ -2,7 +2,7 @@
   "name": "@memorall/agent-harness-workspace",
   "private": true,
   "version": "0.1.0",
-  "packageManager": "yarn@4.14.1",
+  "packageManager": "yarn@4.18.0",
   "workspaces": [
     "core",
     "langgraph",
@@ -15,15 +15,15 @@
     "full"
   ],
   "scripts": {
-    "build": "tsc -b tsconfig.json --pretty false",
-    "clean": "tsc -b tsconfig.json --clean",
-    "dev": "tsc -b tsconfig.json --watch --preserveWatchOutput --pretty",
+    "build": "node ../../tools/run-typescript.mjs native -b tsconfig.json --pretty false",
+    "clean": "node ../../tools/run-typescript.mjs native -b tsconfig.json --clean",
+    "dev": "node ../../tools/run-typescript.mjs native -b tsconfig.json --watch --preserveWatchOutput --pretty",
     "watch": "yarn dev",
-    "typecheck": "tsc -b tsconfig.json --pretty false",
+    "typecheck": "node ../../tools/run-typescript.mjs native -b tsconfig.json --pretty false",
     "test": "vitest run --config vitest.config.ts"
   },
   "devDependencies": {
-    "typescript": "^5.9.2",
-    "vitest": "^4.1.8"
+    "typescript": "npm:@typescript/typescript6@6.0.2",
+    "vitest": "4.1.10"
   }
 }

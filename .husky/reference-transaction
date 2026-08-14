@@ -1,0 +1,1 @@
+node tools/check-reference-transaction.mjs "$1"

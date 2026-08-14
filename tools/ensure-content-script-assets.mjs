@@ -169,6 +169,33 @@ function ensureContentScriptAssets(distDir) {
 	}
 
 	const jsSanitization = sanitizeExtensionJs(distDir);
+	const requiredRuntimeAssets = [
+		'docs/images/extension_48.png',
+		'options/index.css',
+		'sandbox/pages/js/lottie-preview.js',
+		'vendors/artifacts/lottie_canvas.min.js',
+	];
+	const missingRuntimeAssets = requiredRuntimeAssets.filter(
+		(assetRef) => !existsSync(join(distDir, ...assetRef.split('/'))),
+	);
+	if (missingRuntimeAssets.length > 0) {
+		throw new Error(
+			`${distDir}: missing required runtime asset(s): ${missingRuntimeAssets.join(', ')}`,
+		);
+	}
+	const lottiePreview = readFileSync(
+		join(distDir, 'sandbox', 'pages', 'js', 'lottie-preview.js'),
+		'utf8',
+	);
+	if (
+		!lottiePreview.includes(
+			'../../../vendors/artifacts/lottie_canvas.min.js',
+		)
+	) {
+		throw new Error(
+			`${distDir}: Lottie preview does not resolve the packaged root vendors runtime.`,
+		);
+	}
 
 	if (
 		createdCount > 0 ||

@@ -4,7 +4,8 @@
  */
 
 import React from "react";
-import { Youtube, Clock, Play } from "lucide-react";
+import { SiYoutube as Youtube } from "@icons-pack/react-simple-icons";
+import { Clock, Play } from "lucide-react";
 import type { Activity } from "@/types/activity-tracking";
 
 interface YouTubeEventRendererProps {

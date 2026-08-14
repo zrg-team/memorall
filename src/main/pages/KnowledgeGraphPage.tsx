@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { SiGithub as Github } from "@icons-pack/react-simple-icons";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import {
 	Search,
@@ -16,7 +17,6 @@ import {
 	Workflow,
 	FileSearch,
 	History,
-	Github,
 	Eye,
 	FolderInput,
 } from "lucide-react";

@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import ts from "typescript";
+import ts from "./typescript-compiler-api.mjs";
 
 const projectRoot = process.cwd();
 const sourcePath = path.join(

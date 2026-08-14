@@ -5,7 +5,7 @@
 //
 // LOAD ORDER (guaranteed by renderComposition):
 //   1. Tailwind browser compiler, with preflight disabled
-//   2. GSAP + shader-transitions + Lucide + D3 + Three — packaged scripts
+//   2. GSAP + shader-transitions + Lucide + D3 + Three — packaged runtimes
 //   3. Lucide icon replacement                         — <i data-lucide="...">
 //   4. inline animation script                         — sets window.__timelines["main"] = tl
 //   5. hyperframe.runtime                              — go() reads __timelines on load
@@ -37,21 +37,25 @@ const EXPORT_SIZE_PRESETS = {
 	"1440p": 1440,
 	"2160p": 2160,
 };
-const TAILWIND_BROWSER_URL = "/vendors/artifacts/tailwind.js";
-const MEDIABUNNY_ESM_URL =
-	"/vendors/artifacts/mediabunny.min.mjs";
-const LUCIDE_UMD_URL =
-	"/vendors/artifacts/lucide.min.js";
-const D3_UMD_URL = "/vendors/artifacts/d3.min.js";
-const THREE_GLOBAL_URL =
-	"/vendors/artifacts/three.min.js";
-const GSAP_URL = "/vendors/hyperframes/gsap.min.js";
-const HYPERFRAMES_RUNTIME_URL =
-	"/vendors/hyperframes/hyperframe.runtime.iife.js";
-const HYPERFRAMES_SHADER_URL =
-	"/vendors/hyperframes/shader-transitions.global.js";
-const HTML2CANVAS_URL =
-	"/vendors/hyperframes/html2canvas.min.js";
+const packagedVendorUrl = (path) =>
+	new URL(`../../vendors/${path}`, globalThis.location.href).href;
+const TAILWIND_BROWSER_URL = packagedVendorUrl("artifacts/tailwind.js");
+const MEDIABUNNY_ESM_URL = packagedVendorUrl(
+	"artifacts/mediabunny.min.mjs",
+);
+const LUCIDE_UMD_URL = packagedVendorUrl("artifacts/lucide.min.js");
+const D3_UMD_URL = packagedVendorUrl("artifacts/d3.min.js");
+const THREE_ESM_URL = packagedVendorUrl("artifacts/three.min.mjs");
+const GSAP_URL = packagedVendorUrl("hyperframes/gsap.min.js");
+const HYPERFRAMES_RUNTIME_URL = packagedVendorUrl(
+	"hyperframes/hyperframe.runtime.iife.js",
+);
+const HYPERFRAMES_SHADER_URL = packagedVendorUrl(
+	"hyperframes/shader-transitions.global.js",
+);
+const HTML2CANVAS_URL = packagedVendorUrl(
+	"hyperframes/html2canvas.min.js",
+);
 
 // ── CDN fallback map for extension-local script URLs ─────────────────────────
 // Mirrors the CDN_TO_LOCAL map in composition-preprocessor.ts (reversed).
@@ -63,8 +67,9 @@ const PACKAGED_RUNTIME_MAP = {
 	"lucide.js": LUCIDE_UMD_URL,
 	"d3.min.js": D3_UMD_URL,
 	"d3.js": D3_UMD_URL,
-	"three.min.js": THREE_GLOBAL_URL,
-	"three.js": THREE_GLOBAL_URL,
+	"three.min.js": THREE_ESM_URL,
+	"three.js": THREE_ESM_URL,
+	"three.min.mjs": THREE_ESM_URL,
 	"tailwind.js": TAILWIND_BROWSER_URL,
 };
 
@@ -89,6 +94,7 @@ const key = keyFromLocation();
 let html2CanvasLoad = null;
 let mediabunnyLoad = null;
 let tailwindLoad = null;
+let threeLoad = null;
 let currentFilenameBase = "hyperframes-composition";
 let exportInProgress = false;
 const reportedRuntimeErrors = new Set();
@@ -299,6 +305,16 @@ function loadMediabunny() {
 	return mediabunnyLoad;
 }
 
+function loadThree() {
+	threeLoad ??= import(THREE_ESM_URL).then((three) => {
+		// Preserve the composition-facing global API after Three.js removed its UMD
+		// build. Authored HyperFrames compositions intentionally keep using THREE.*.
+		window.THREE = three;
+		return three;
+	});
+	return threeLoad;
+}
+
 function configureTailwindRuntime() {
 	window.tailwind = window.tailwind || {};
 	window.tailwind.config = {
@@ -400,7 +416,7 @@ function isD3Script(src) {
 }
 
 function isThreeScript(src) {
-	return /(?:^|\/)three(?:@|\/)|\/three(?:\.min)?\.js(?:\?|$)/i.test(src);
+	return /(?:^|\/)three(?:@|\/)|\/three(?:\.min)?\.m?js(?:\?|$)/i.test(src);
 }
 
 function isTailwindScript(src) {
@@ -467,6 +483,7 @@ function getScriptSources(compDoc) {
 function getManagedScriptPlan(html, scriptSources) {
 	const external = [];
 	const runtime = [];
+	const three = usesThree(html) || scriptSources.some(isThreeScript);
 
 	if (usesGsap(html) || scriptSources.some(isGsapScript)) {
 		pushUniqueScript(external, GSAP_URL);
@@ -484,14 +501,10 @@ function getManagedScriptPlan(html, scriptSources) {
 	if (usesD3(html) || scriptSources.some(isD3Script)) {
 		pushUniqueScript(external, D3_UMD_URL);
 	}
-	if (usesThree(html) || scriptSources.some(isThreeScript)) {
-		pushUniqueScript(external, THREE_GLOBAL_URL);
-	}
-
 	// The HyperFrames runtime must always load after authored timelines.
 	pushUniqueScript(runtime, HYPERFRAMES_RUNTIME_URL);
 
-	return { external, runtime };
+	return { external, runtime, three };
 }
 
 function getUnmanagedScriptSources(scriptSources) {
@@ -1032,6 +1045,7 @@ async function renderComposition(html, inlineScripts, options = {}) {
 	for (const src of [...managedScripts.external, ...unmanagedSrcs]) {
 		await loadExternal(src);
 	}
+	if (managedScripts.three) await loadThree();
 
 	// Step 3: replace simple Lucide placeholders before animations target them.
 	renderLucideIcons();

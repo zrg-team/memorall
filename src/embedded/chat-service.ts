@@ -208,7 +208,9 @@ export class EmbeddedChatService {
 
 		// Convert embedded ChatMessage to OpenAI-compatible format
 		// Note: Embedded messages only have user/assistant roles
-		const jobMessages: ChatPayload["messages"] = messages.flatMap((msg) => {
+		const jobMessages: ChatPayload["messages"] = messages.flatMap<
+			ChatPayload["messages"][number]
+		>((msg) => {
 			if (msg.role === "user") {
 				return [{ role: "user" as const, content: msg.content }];
 			}

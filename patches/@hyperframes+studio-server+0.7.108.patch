@@ -1,0 +1,44 @@
+diff --git a/node_modules/@hyperframes/studio-server/dist/index.js b/node_modules/@hyperframes/studio-server/dist/index.js
+--- a/node_modules/@hyperframes/studio-server/dist/index.js
++++ b/node_modules/@hyperframes/studio-server/dist/index.js
+@@ -3196,7 +3196,7 @@ ${compHeadContent}`;
+   }
+   if (!headContent.includes("gsap")) {
+     headContent += `
+-<script src="https://cdn.jsdelivr.net/npm/gsap@3/dist/gsap.min.js"></script>`;
++<script src="/vendors/hyperframes/gsap.min.js"></script>`;
+   }
+   const htmlOpen = htmlAttrs ? `<html ${htmlAttrs}>` : "<html>";
+   const bodyOpen = bodyAttrs ? `<body ${bodyAttrs}>` : "<body>";
+@@ -3287,9 +3287,9 @@ function isVariablesPayload(value) {
+ // src/routes/preview.ts
+ var PROJECT_SIGNATURE_META = "hyperframes-project-signature";
+ var GSAP_CDN_VERSION = "3.15.0";
+-var GSAP_CDN_SCRIPT = `<script src="https://cdn.jsdelivr.net/npm/gsap@${GSAP_CDN_VERSION}/dist/gsap.min.js"></script>`;
+-var GSAP_CUSTOM_EASE_CDN_SCRIPT = `<script src="https://cdn.jsdelivr.net/npm/gsap@${GSAP_CDN_VERSION}/dist/CustomEase.min.js"></script>`;
+-var GSAP_MOTION_PATH_CDN_SCRIPT = `<script src="https://cdn.jsdelivr.net/npm/gsap@${GSAP_CDN_VERSION}/dist/MotionPathPlugin.min.js"></script>`;
++var GSAP_CDN_SCRIPT = `<script src="/vendors/hyperframes/gsap.min.js"></script>`;
++var GSAP_CUSTOM_EASE_CDN_SCRIPT = `<script src="/vendors/hyperframes/CustomEase.min.js"></script>`;
++var GSAP_MOTION_PATH_CDN_SCRIPT = `<script src="/vendors/hyperframes/MotionPathPlugin.min.js"></script>`;
+ function injectProjectSignature(html, signature) {
+   const tag = `<meta name="${PROJECT_SIGNATURE_META}" content="${signature}">`;
+   if (html.includes(`name="${PROJECT_SIGNATURE_META}"`)) {
+@@ -3348,8 +3348,7 @@ function injectMotionPathPluginIfNeeded(html) {
+   const gsapScript = /<script\b[^>]*\bsrc=["'][^"']*\/gsap(\.min)?\.js["'][^>]*>\s*<\/script>/i;
+   const match = html.match(gsapScript);
+   if (match) {
+-    const version = match[0].match(/gsap@([\d.]+)/)?.[1] ?? GSAP_CDN_VERSION;
+-    const pluginTag = `<script src="https://cdn.jsdelivr.net/npm/gsap@${version}/dist/MotionPathPlugin.min.js"></script>`;
++    const pluginTag = `<script src="/vendors/hyperframes/MotionPathPlugin.min.js"></script>`;
+     const end = html.indexOf(match[0]) + match[0].length;
+     return html.slice(0, end) + "\n" + pluginTag + html.slice(end);
+   }
+@@ -3380,7 +3379,7 @@ function injectStudioMotionScript(html, projectDir, activeCompositionPath) {
+ }
+ var GSAP_CDN_FALLBACK_SCRIPT = `<script data-hf-gsap-fallback>
+ (function(){
+-  var cdnBase="https://cdn.jsdelivr.net/npm/gsap@${GSAP_CDN_VERSION}/dist/";
++  var cdnBase="/vendors/hyperframes/";
+   var loaded={};
+   function loadFallback(file){
+     if(loaded[file])return loaded[file];

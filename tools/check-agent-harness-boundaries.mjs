@@ -1,7 +1,7 @@
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
-import ts from "typescript";
+import ts from "./typescript-compiler-api.mjs";
 
 const root = process.cwd();
 const harnessRoot = path.join(root, "packages", "agent-harness");
@@ -50,6 +50,9 @@ const versions = new Set();
 
 const rootManifest = JSON.parse(await readFile(path.join(root, "package.json"), "utf8"));
 const umbrellaManifest = JSON.parse(await readFile(path.join(harnessRoot, "package.json"), "utf8"));
+const sidecarManifest = JSON.parse(
+  await readFile(path.join(root, "apps", "desktop", "sidecar", "package.json"), "utf8"),
+);
 const requireScript = (manifest, owner, name, fragments = []) => {
   const script = manifest.scripts?.[name];
   if (typeof script !== "string" || script.length === 0) {
@@ -60,6 +63,25 @@ const requireScript = (manifest, owner, name, fragments = []) => {
     if (!script.includes(fragment)) errors.push(`${owner}: ${name} must include ${fragment}`);
   }
 };
+const requireNativeTypeScript = (manifest, owner, name, fragments = []) => {
+  requireScript(manifest, owner, name, ["run-typescript.mjs native", ...fragments]);
+  const script = manifest.scripts?.[name];
+  if (typeof script === "string" && /(^|[\s;&|])tsc6?(?=\s|$)/.test(script)) {
+    errors.push(`${owner}: ${name} must not invoke an ambiguous tsc binary`);
+  }
+};
+
+if (!rootManifest.devDependencies?.["@typescript/native"]?.startsWith("npm:typescript@")) {
+  errors.push("root: @typescript/native must alias the TypeScript 7 package");
+}
+const legacyTypeScript = rootManifest.devDependencies?.typescript;
+if (!legacyTypeScript?.startsWith("npm:@typescript/typescript6@")) {
+  errors.push("root: typescript must alias the TypeScript 6 compiler API compatibility package");
+}
+if (sidecarManifest.devDependencies?.typescript !== legacyTypeScript) {
+  errors.push("desktop sidecar: typescript must match the root TypeScript 6 compatibility alias");
+}
+requireNativeTypeScript(sidecarManifest, "desktop sidecar", "type-check", ["--noEmit", "-p"]);
 
 for (const workspacePath of ["packages/agent-harness", "packages/agent-harness/*"]) {
   if (!rootManifest.workspaces?.includes(workspacePath)) {
@@ -77,7 +99,12 @@ requireScript(rootManifest, "root", "dev:extension:no-reload", [
   "dev:harness",
   "dev:extension:runtime:no-reload",
 ]);
-requireScript(rootManifest, "root", "dev:harness", ["tsc -b", "--watch"]);
+requireNativeTypeScript(rootManifest, "root", "dev:harness", ["-b", "--watch"]);
+requireNativeTypeScript(rootManifest, "root", "build:harness", ["-b"]);
+requireNativeTypeScript(rootManifest, "root", "typecheck", ["--noEmit"]);
+requireNativeTypeScript(rootManifest, "root", "typecheck:harness", ["-b"]);
+requireNativeTypeScript(rootManifest, "root", "typecheck:desktop:sidecar", ["--noEmit", "-p"]);
+requireNativeTypeScript(rootManifest, "root", "clean:harness", ["-b", "--clean"]);
 requireScript(rootManifest, "root", "package:extension:all", [
   "build:extension:all",
 ]);
@@ -93,7 +120,14 @@ for (const name of [
 for (const name of ["build", "clean", "dev", "watch", "typecheck", "test"]) {
   requireScript(umbrellaManifest, "agent-harness workspace", name);
 }
-requireScript(umbrellaManifest, "agent-harness workspace", "dev", ["tsc -b", "--watch"]);
+for (const [name, fragments] of [
+  ["build", ["-b"]],
+  ["clean", ["-b", "--clean"]],
+  ["dev", ["-b", "--watch"]],
+  ["typecheck", ["-b"]],
+]) {
+  requireNativeTypeScript(umbrellaManifest, "agent-harness workspace", name, fragments);
+}
 requireScript(umbrellaManifest, "agent-harness workspace", "watch", ["yarn dev"]);
 
 const isRuntimeGlobalUse = (node) => {
@@ -112,6 +146,9 @@ for (const workspace of packageNames) {
   const workspaceRoot = path.join(harnessRoot, workspace);
   const manifest = JSON.parse(await readFile(path.join(workspaceRoot, "package.json"), "utf8"));
   versions.add(manifest.version);
+  if (manifest.devDependencies?.typescript !== legacyTypeScript) {
+    errors.push(`${workspace}: typescript must match the root TypeScript 6 compatibility alias`);
+  }
   if (manifest.private !== true) errors.push(`${workspace}: package must remain private`);
   if (manifest.sideEffects !== false) errors.push(`${workspace}: sideEffects must be false`);
   if (manifest.type !== "module") errors.push(`${workspace}: package must be ESM`);
@@ -119,7 +156,14 @@ for (const workspace of packageNames) {
   for (const name of ["build", "clean", "dev", "watch", "typecheck", "test", "pack"]) {
     requireScript(manifest, workspace, name);
   }
-  requireScript(manifest, workspace, "dev", ["tsc -b", "--watch"]);
+  for (const [name, fragments] of [
+    ["build", ["-b"]],
+    ["clean", ["-b", "--clean"]],
+    ["dev", ["-b", "--watch"]],
+    ["typecheck", ["-b"]],
+  ]) {
+    requireNativeTypeScript(manifest, workspace, name, fragments);
+  }
   requireScript(manifest, workspace, "watch", ["yarn dev"]);
   for (const [subpath, conditions] of Object.entries(manifest.exports ?? {})) {
     if (!conditions || typeof conditions !== "object") {

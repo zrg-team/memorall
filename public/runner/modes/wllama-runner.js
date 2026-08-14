@@ -456,9 +456,16 @@ window.addEventListener("message", async (event) => {
 							const streamIter = await wllama.createChatCompletion({
 								...completionOptions,
 								stream: true,
-								onData: () => {},
 								abortSignal: abortController.signal,
 							});
+							if (
+								!streamIter ||
+								typeof streamIter[Symbol.asyncIterator] !== "function"
+							) {
+								throw new TypeError(
+									"Wllama streaming completion did not return an async iterable",
+								);
+							}
 
 							let lastChunk = null;
 							for await (const chunk of streamIter) {

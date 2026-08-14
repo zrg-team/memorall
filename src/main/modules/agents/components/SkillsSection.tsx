@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { SiGithub as Github } from "@icons-pack/react-simple-icons";
 import { useTranslation } from "react-i18next";
-import { ExternalLink, Github, Pencil, Plus, Trash2 } from "lucide-react";
+import { ExternalLink, Pencil, Plus, Trash2 } from "lucide-react";
 import {
 	skillFileSystemService,
 	type Skill,

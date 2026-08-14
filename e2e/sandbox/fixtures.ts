@@ -74,15 +74,27 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
 	extensionPage: async ({ extensionContext, extensionId, offscreenReady }, use, testInfo) => {
 		if (!offscreenReady) throw new Error("Offscreen services are unavailable");
 		const logs: string[] = [];
+		const observedPages = new WeakSet<Page>();
+		const onPage = (observedPage: Page) => {
+			if (observedPages.has(observedPage)) return;
+			observedPages.add(observedPage);
+			const pageLabel = () => observedPage.url() || "pending";
+			observedPage.on("console", (message) =>
+				logs.push(`[page:${message.type()}:${pageLabel()}] ${message.text()}`),
+			);
+			observedPage.on("pageerror", (error) =>
+				logs.push(`[page:error:${pageLabel()}] ${error.stack ?? error.message}`),
+			);
+		};
 		const onWorker = (worker: { on: (event: "console", listener: (message: { text: () => string }) => void) => void }) => {
 			worker.on("console", (message) => logs.push(`[worker] ${message.text()}`));
 		};
 		for (const worker of extensionContext.serviceWorkers()) onWorker(worker);
 		extensionContext.on("serviceworker", onWorker);
+		for (const observedPage of extensionContext.pages()) onPage(observedPage);
+		extensionContext.on("page", onPage);
 
 		const page = await extensionContext.newPage();
-		page.on("console", (message) => logs.push(`[page:${message.type()}] ${message.text()}`));
-		page.on("pageerror", (error) => logs.push(`[page:error] ${error.message}`));
 		await page.goto(`chrome-extension://${extensionId}/options/index.html`);
 		await use(page);
 

@@ -157,6 +157,8 @@ export const QuickDownloadModels: React.FC<QuickDownloadModelsProps> = ({
 					return (
 						<div
 							key={modelId}
+							data-model-id={modelId}
+							data-model-provider={quickProvider}
 							className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/30 transition-colors"
 						>
 							<div className="flex-1">

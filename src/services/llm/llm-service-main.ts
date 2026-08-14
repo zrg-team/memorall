@@ -137,10 +137,19 @@ export class LLMServiceMain extends LLMServiceCore implements ILLMService {
 			return (async function* () {
 				const llm = await self.get(name);
 				if (!llm) throw new Error(`LLM "${name}" not found`);
-
-				for await (const chunk of llm.chatCompletions(
+				const completion = llm.chatCompletions(
 					request as ChatCompletionRequest & { stream: true },
-				)) {
+				);
+				if (
+					!completion ||
+					typeof completion[Symbol.asyncIterator] !== "function"
+				) {
+					throw new TypeError(
+						`LLM "${name}" (${llm.constructor.name}) did not return an async iterable for a streaming completion`,
+					);
+				}
+
+				for await (const chunk of completion) {
 					yield chunk as ChatCompletionChunk;
 				}
 			})();
