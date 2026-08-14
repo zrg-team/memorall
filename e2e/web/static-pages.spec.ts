@@ -74,12 +74,22 @@ test("serves the production app and every first-party asset below the Pages path
 	);
 	expect(almostnodeRuntime.status()).toBe(200);
 	const almostnodeSource = await almostnodeRuntime.text();
-	expect(almostnodeSource).toContain(
-		"const __memorallRuntimeAssetUrl = (relative) => new URL(relative, import.meta.url).href;",
-	);
-	expect(almostnodeSource).toContain('Ma("./react.mjs")');
+	for (const localRuntime of [
+		"./react.mjs",
+		"./react-dom.mjs",
+		"./react-jsx-runtime.mjs",
+		"./react-refresh-runtime.mjs",
+		"./rollup-browser.mjs",
+		"./esbuild.wasm",
+		"./remote-modules-disabled.mjs#",
+	]) {
+		expect(almostnodeSource).toContain(localRuntime);
+	}
 	expect(almostnodeSource).not.toContain('"/sandbox/vendors/');
 	expect(almostnodeSource).not.toContain('"/vendors/artifacts/');
+	expect(almostnodeSource).not.toContain("https://esm.sh/");
+	expect(almostnodeSource).not.toContain("https://unpkg.com/");
+	expect(almostnodeSource).not.toContain("process.env.NODE_DEBUG");
 	const sandboxBundle = await request.get(
 		`${applicationPath}sandbox/vendors/react.mjs`,
 	);
