@@ -18,7 +18,11 @@ import {
 import { loadSecret } from "@/utils/master-key";
 import { logWarn } from "@/utils/logger";
 import { listConnections } from "./registry";
-import type { AgentConnectionSelection, McpConnection } from "./types";
+import {
+	COMPOSIO_SECRET_KEY,
+	type AgentConnectionSelection,
+	type McpConnection,
+} from "./types";
 
 /**
  * Server key used both as the MCP client's map key and as the tool-name prefix
@@ -73,6 +77,19 @@ const readSelections = (
 	);
 };
 
+/** The Composio project key, used to authenticate its tool-router endpoint. */
+async function loadComposioApiKey(): Promise<string | null> {
+	try {
+		const stored = await loadSecret(COMPOSIO_SECRET_KEY);
+		if (!stored) return null;
+		const parsed = JSON.parse(stored) as { apiKey?: string };
+		return parsed.apiKey ?? null;
+	} catch {
+		// Locked passkey or unreadable secret — the caller degrades gracefully.
+		return null;
+	}
+}
+
 /**
  * Assemble auth into headers/URL, or null when the credential can't be read.
  *
@@ -87,6 +104,17 @@ async function applyAuth(
 	const headers: Record<string, string> = { ...(connection.headers ?? {}) };
 
 	if (connection.authMode === "none") {
+		// Composio's tool-router endpoint carries no headers in its session block
+		// but is not public: unauthenticated calls get 401, which the MCP client
+		// retries over SSE and reports as a misleading 404. Authenticate it with
+		// the stored project key. Doing this here rather than at mint time also
+		// repairs connections saved before this was understood.
+		if (connection.kind === "composio") {
+			const apiKey = await loadComposioApiKey();
+			if (apiKey) {
+				headers["x-api-key"] = apiKey;
+			}
+		}
 		return { url: connection.url, headers };
 	}
 

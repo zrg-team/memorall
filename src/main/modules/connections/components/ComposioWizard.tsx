@@ -18,7 +18,7 @@ import { MasterKeySetupDialog } from "@/main/components/molecules/MasterKeySetup
 import { PasskeyPromptDialog } from "@/main/components/molecules/PasskeyPromptDialog";
 import { cn } from "@/lib/utils";
 import { platform } from "@/platform/current";
-import { logError } from "@/utils/logger";
+import { logError, logInfo } from "@/utils/logger";
 import {
 	ComposioClient,
 	waitForConnection,
@@ -270,9 +270,14 @@ export const ComposioWizard: React.FC<ComposioWizardProps> = ({
 			];
 			setConnected(nextApps);
 
-			// Authorizing is the whole intent — the connection becomes usable here,
-			// not after some later confirmation step. A failure here is reported
-			// separately: the app IS authorized, only the endpoint is missing.
+			// Persist the authorization FIRST and unconditionally. Folding this into
+			// the session mint meant a failed mint discarded the app entirely, so
+			// the detail pane then told the user to connect an app they had just
+			// connected.
+			await persistApps(nextApps);
+
+			// Then try to make it usable. Its failure is reported separately: the
+			// app is authorized either way, only the endpoint is missing.
 			await syncSession(nextApps);
 		} catch (caught) {
 			if ((caught as Error)?.name !== "AbortError") {
@@ -283,6 +288,22 @@ export const ComposioWizard: React.FC<ComposioWizardProps> = ({
 			setPending(null);
 			setLastConsentUrl(null);
 		}
+	};
+
+	/** Record authorized apps on the connection, independent of the mint. */
+	const persistApps = async (apps: ConnectionApp[]) => {
+		const record = connections.find(
+			(entry) => entry.id === COMPOSIO_CONNECTION_ID,
+		);
+		if (!record) return;
+		await save({
+			...record,
+			apps,
+			composio: {
+				...(record.composio ?? { toolkits: [] }),
+				toolkits: apps.map((app) => app.id),
+			},
+		});
 	};
 
 	/**
@@ -302,7 +323,12 @@ export const ComposioWizard: React.FC<ComposioWizardProps> = ({
 		setSyncError(null);
 		setIsSyncing(true);
 		try {
+			logInfo(
+				"[Composio] Minting tool-router session for:",
+				apps.map((app) => app.id).join(", "),
+			);
 			await mintSession(client, record, apps);
+			logInfo("[Composio] Session minted and connection saved.");
 		} catch (caught) {
 			// Surfaced on its own line: the app is authorized either way, and
 			// claiming "ready" when there is no endpoint is what made this
