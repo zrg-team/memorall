@@ -134,6 +134,69 @@ describe("ComposioClient", () => {
 		expect(session.headers).toEqual({ "x-composio-session": "tok" });
 	});
 
+	it("falls back through toolkit payload shapes until one is accepted", async () => {
+		// The docs type `toolkits` as `any`, so a rejected shape must advance to
+		// the next candidate rather than failing the whole setup.
+		const reject = jsonResponse(
+			{ error: { message: "Error in payload.toolkits: Invalid input" } },
+			400,
+		);
+		fetchMock
+			.mockResolvedValueOnce(reject)
+			.mockResolvedValueOnce(reject)
+			.mockResolvedValueOnce(
+				jsonResponse({
+					session_id: "sess_1",
+					mcp: { url: "https://mcp.composio.dev/s/abc", headers: {} },
+				}),
+			);
+
+		const session = await new ComposioClient("k").createMcpSession({
+			userId: "u",
+			toolkits: ["gmail"],
+		});
+
+		expect(session.url).toBe("https://mcp.composio.dev/s/abc");
+		expect(fetchMock).toHaveBeenCalledTimes(3);
+		const bodies = fetchMock.mock.calls.map(
+			([, init]) => JSON.parse(String((init as RequestInit).body)).toolkits,
+		);
+		expect(bodies[0]).toEqual({ enable: ["gmail"] });
+		expect(bodies[1]).toEqual(["gmail"]);
+		expect(bodies[2]).toEqual([{ toolkit: "gmail" }]);
+	});
+
+	it("does not retry shapes when the failure is not about toolkits", async () => {
+		fetchMock.mockResolvedValue(
+			jsonResponse({ error: { message: "unauthorized" } }, 401),
+		);
+
+		await expect(
+			new ComposioClient("k").createMcpSession({
+				userId: "u",
+				toolkits: ["gmail"],
+			}),
+		).rejects.toBeInstanceOf(ComposioError);
+		expect(fetchMock).toHaveBeenCalledTimes(1);
+	});
+
+	it("surfaces the last rejection when every shape fails", async () => {
+		fetchMock.mockResolvedValue(
+			jsonResponse(
+				{ error: { message: "Error in payload.toolkits: Invalid input" } },
+				400,
+			),
+		);
+
+		await expect(
+			new ComposioClient("k").createMcpSession({
+				userId: "u",
+				toolkits: ["gmail"],
+			}),
+		).rejects.toThrow(/toolkits/i);
+		expect(fetchMock).toHaveBeenCalledTimes(4);
+	});
+
 	it("names the status and route in errors so a wrong path is obvious", async () => {
 		fetchMock.mockResolvedValue(
 			jsonResponse({ error: { message: "use /link instead" } }, 400),

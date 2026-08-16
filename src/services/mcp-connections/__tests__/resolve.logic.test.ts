@@ -80,6 +80,26 @@ describe("resolveConnections", () => {
 		expect(loadSecret).toHaveBeenCalledWith("mcp_secret_c1");
 	});
 
+	it("sends Composio's key as x-api-key on the session endpoint", async () => {
+		// The tool-router MCP URL is not public: without a header it answers 401,
+		// which the MCP client retries as SSE and reports as a confusing 404.
+		listConnections.mockResolvedValue([
+			connection({
+				kind: "composio",
+				name: "Composio",
+				url: "https://backend.composio.dev/tool_router/trs_x/mcp",
+				authMode: "header",
+				authHeaderName: "x-api-key",
+				secretRef: "mcp_secret_c1",
+			}),
+		]);
+		loadSecret.mockResolvedValue("ak_live_123");
+
+		const result = await resolveConnections([{ connectionId: "c1" }]);
+
+		expect(result.servers[0].headers).toEqual({ "x-api-key": "ak_live_123" });
+	});
+
 	it("puts query-param auth on the URL", async () => {
 		listConnections.mockResolvedValue([
 			connection({

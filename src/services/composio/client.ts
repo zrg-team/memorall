@@ -269,27 +269,61 @@ export class ComposioClient {
 	/**
 	 * Mint the MCP endpoint. Toolkit and tool scoping are session parameters, so
 	 * narrowing the agent's toolbox happens here rather than as a later mutation.
+	 *
+	 * The docs type `toolkits` as `any` and their example shows `null`, so the
+	 * accepted shape is not knowable from them — and a wrong one comes back as a
+	 * flat "Error in payload.toolkits: Invalid input". Rather than pin one guess,
+	 * try the plausible encodings in order and keep the first the API accepts.
+	 * Only validation rejections advance the ladder; auth or server errors throw
+	 * immediately so a real problem is not retried four times.
 	 */
 	async createMcpSession(options: {
 		userId: string;
 		toolkits: string[];
 		tools?: Record<string, { enable: string[] }>;
 	}): Promise<ComposioMcpSession> {
-		const payload = asRecord(
-			await this.request<unknown>("/tool_router/session", {
-				method: "POST",
-				body: JSON.stringify({
-					user_id: options.userId,
-					// An allowlist object, not a bare array — a plain list is rejected
-					// with "Error in payload.toolkits: Invalid input". `disable` is the
-					// denylist counterpart and the two are mutually exclusive.
-					toolkits: { enable: options.toolkits },
-					...(options.tools ? { tools: options.tools } : {}),
-					// No `mcp` flag exists on this endpoint; the session always returns
-					// its MCP details in the response.
-				}),
-			}),
-		);
+		const slugs = options.toolkits;
+		const toolkitShapes: unknown[] = [
+			{ enable: slugs },
+			slugs,
+			slugs.map((slug) => ({ toolkit: slug })),
+			{ enable: slugs.map((slug) => slug.toUpperCase()) },
+		];
+
+		let payload: Record<string, unknown> | null = null;
+		let lastError: ComposioError | null = null;
+
+		for (const toolkits of toolkitShapes) {
+			try {
+				payload = asRecord(
+					await this.request<unknown>("/tool_router/session", {
+						method: "POST",
+						body: JSON.stringify({
+							user_id: options.userId,
+							toolkits,
+							...(options.tools ? { tools: options.tools } : {}),
+							// No `mcp` flag exists on this endpoint; the session always
+							// returns its MCP details in the response.
+						}),
+					}),
+				);
+				break;
+			} catch (error) {
+				if (!(error instanceof ComposioError)) throw error;
+				const isValidationError =
+					(error.status === 400 || error.status === 422) &&
+					/toolkit/i.test(error.message);
+				if (!isValidationError) throw error;
+				lastError = error;
+			}
+		}
+
+		if (!payload) {
+			throw (
+				lastError ??
+				new ComposioError(0, "Composio rejected every session payload shape.")
+			);
+		}
 
 		const mcp = asRecord(pick(payload, "mcp") ?? {});
 		const url = pick<string>(mcp, "url", "endpoint");

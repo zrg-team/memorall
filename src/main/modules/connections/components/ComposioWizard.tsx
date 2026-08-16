@@ -325,11 +325,14 @@ export const ComposioWizard: React.FC<ComposioWizardProps> = ({
 			toolkits,
 		});
 
-		// Any session credential follows the same encrypted path as every other
-		// connection secret.
+		// Composio returns `mcp: { type, url }` with no headers, but the endpoint
+		// is NOT public: unauthenticated calls get 401, which the MCP client then
+		// treats as a reason to retry over SSE, producing a misleading 404. The
+		// session is authenticated with the project API key, so send that.
 		const secretRef = connectionSecretRef(COMPOSIO_CONNECTION_ID);
-		const authValue = Object.values(session.headers ?? {})[0] ?? "";
-		const authHeaderName = Object.keys(session.headers ?? {})[0];
+		const sessionHeaders = session.headers ?? {};
+		const authHeaderName = Object.keys(sessionHeaders)[0] ?? "x-api-key";
+		const authValue = Object.values(sessionHeaders)[0] ?? apiKey.trim();
 		if (authValue) {
 			await saveSecret(secretRef, authValue);
 		}
