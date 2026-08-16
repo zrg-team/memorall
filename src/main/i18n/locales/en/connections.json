@@ -6,7 +6,7 @@
 	"empty": {
 		"title": "Give your agent hands",
 		"body": "Connections are the tools your agents can call — email, calendars, databases, your own servers. Pick how you want to connect.",
-		"encryption": "Keys and tokens are encrypted with your Memorall passkey — the same one guarding your model keys. Nothing is stored in plain text and nothing leaves this device except calls you configure."
+		"encryption": "Keys and tokens are encrypted with your master passkey — the same one guarding your model keys. Nothing is stored in plain text and nothing leaves this device except calls you configure."
 	},
 	"groups": {
 		"composio": "Composio",
@@ -19,7 +19,7 @@
 		"bridgeDown": "Bridge down",
 		"error": "Error",
 		"off": "Off",
-		"lockedHint": "Unlock with your Memorall passkey to use this connection.",
+		"lockedHint": "Unlock with your master passkey to use this connection.",
 		"bridgeDownHint": "The local server isn't reachable. Start the bridge command again.",
 		"unlock": "Unlock",
 		"reconnect": "Reconnect",
@@ -87,7 +87,7 @@
 		"apiKeyLabel": "Composio API key",
 		"apiKeyPlaceholder": "ak_live_…",
 		"apiKeyHint": "Find it under Settings → Project Settings at platform.composio.dev",
-		"encryptionNote": "Encrypted with your Memorall passkey before it touches disk. You will be asked for the passkey once per browser session — the same prompt that unlocks your model keys.",
+		"encryptionNote": "Encrypted with your master passkey before it touches disk. You will be asked for the passkey once per browser session — the same prompt that unlocks your model keys.",
 		"explainerTitle": "What Composio does for you",
 		"explainerBody": "It holds the OAuth for each app and hands your agent a single tool endpoint. You sign in to Gmail on Google's own page. Memorall stores your Composio key; Composio stores the app tokens; neither of us sees your password.",
 		"save": "Save and connect",

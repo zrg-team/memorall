@@ -6,7 +6,7 @@
 	"empty": {
 		"title": "Trao công cụ cho tác nhân",
 		"body": "Kết nối là những công cụ mà tác nhân của bạn có thể gọi — email, lịch, cơ sở dữ liệu, máy chủ của riêng bạn. Hãy chọn cách bạn muốn kết nối.",
-		"encryption": "Khóa và token được mã hóa bằng mã khóa Memorall của bạn — cùng mã khóa bảo vệ khóa mô hình. Không có gì được lưu ở dạng văn bản thuần và không có gì rời khỏi thiết bị này ngoài những lệnh gọi bạn cấu hình."
+		"encryption": "Khóa và token được mã hóa bằng mã khóa chính (master passkey) của bạn — cùng mã khóa bảo vệ khóa mô hình. Không có gì được lưu ở dạng văn bản thuần và không có gì rời khỏi thiết bị này ngoài những lệnh gọi bạn cấu hình."
 	},
 	"groups": {
 		"composio": "Composio",
@@ -19,7 +19,7 @@
 		"bridgeDown": "Cầu nối đã dừng",
 		"error": "Lỗi",
 		"off": "Đã tắt",
-		"lockedHint": "Mở khóa bằng mã khóa Memorall để dùng kết nối này.",
+		"lockedHint": "Mở khóa bằng mã khóa chính để dùng kết nối này.",
 		"bridgeDownHint": "Không truy cập được máy chủ cục bộ. Hãy chạy lại lệnh cầu nối.",
 		"unlock": "Mở khóa",
 		"reconnect": "Kết nối lại",
@@ -86,7 +86,7 @@
 		"apiKeyLabel": "Khóa API Composio",
 		"apiKeyPlaceholder": "ak_live_…",
 		"apiKeyHint": "Lấy khóa trong Settings → Project Settings tại platform.composio.dev",
-		"encryptionNote": "Được mã hóa bằng mã khóa Memorall trước khi ghi xuống đĩa. Bạn sẽ được hỏi mã khóa một lần mỗi phiên trình duyệt — cùng hộp thoại mở khóa khóa mô hình.",
+		"encryptionNote": "Được mã hóa bằng mã khóa chính trước khi ghi xuống đĩa. Bạn sẽ được hỏi mã khóa một lần mỗi phiên trình duyệt — cùng hộp thoại mở khóa khóa mô hình.",
 		"explainerTitle": "Composio giúp bạn điều gì",
 		"explainerBody": "Composio giữ phần OAuth cho từng ứng dụng và cung cấp cho tác nhân một điểm cuối công cụ duy nhất. Bạn đăng nhập Gmail ngay trên trang của Google. Memorall lưu khóa Composio; Composio lưu token ứng dụng; không bên nào thấy mật khẩu của bạn.",
 		"save": "Lưu và kết nối",

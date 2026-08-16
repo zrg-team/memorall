@@ -303,6 +303,13 @@ export const ComposioWizard: React.FC<ComposioWizardProps> = ({
 				</div>
 			</div>
 
+			{error ? (
+				<div className="flex items-start gap-2 rounded-lg border border-destructive/20 bg-destructive/10 p-2.5 text-xs text-destructive">
+					<AlertCircle size={13} className="mt-0.5 shrink-0" />
+					<span className="min-w-0 break-words">{error}</span>
+				</div>
+			) : null}
+
 			{step === "key" ? (
 				<>
 					<div className="space-y-3 rounded-xl border border-border/60 bg-background/60 p-3.5">
@@ -476,13 +483,6 @@ export const ComposioWizard: React.FC<ComposioWizardProps> = ({
 					</div>
 				</>
 			)}
-
-			{error ? (
-				<div className="flex items-start gap-2 rounded-lg border border-destructive/20 bg-destructive/10 p-2.5 text-xs text-destructive">
-					<AlertCircle size={13} className="mt-0.5 shrink-0" />
-					<span className="min-w-0 break-words">{error}</span>
-				</div>
-			) : null}
 
 			<div className="flex items-center justify-between gap-3">
 				<span className="text-[11px] text-muted-foreground">

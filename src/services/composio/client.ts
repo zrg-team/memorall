@@ -5,7 +5,7 @@
  *   base    https://backend.composio.dev/api/v3
  *   auth    x-api-key: <project key>
  *   apps    GET  /toolkits
- *   auth    GET/POST /auth-configs
+ *   auth    GET/POST /auth_configs   (underscore; the docs' prose writes it hyphenated)
  *   connect POST /connected_accounts -> { id, redirect_url }
  *   poll    GET  /connected_accounts/{id} -> { status: ACTIVE | ... }
  *   mcp     POST /tool_router/session { mcp: true } -> { session_id, mcp: { url, headers } }
@@ -110,9 +110,12 @@ export class ComposioClient {
 
 		if (!response.ok) {
 			const body = await response.text().catch(() => "");
+			// Name the status and the route: a bare "Not Found" from a mistyped path
+			// is indistinguishable from a genuinely missing record.
+			const detail = body.slice(0, 300) || response.statusText;
 			throw new ComposioError(
 				response.status,
-				body.slice(0, 300) || response.statusText,
+				`${response.status} on ${path.split("?")[0]} — ${detail}`,
 			);
 		}
 
@@ -179,13 +182,13 @@ export class ComposioClient {
 			limit: "1",
 		});
 		const existing = asList(
-			await this.request<unknown>(`/auth-configs?${query}`),
+			await this.request<unknown>(`/auth_configs?${query}`),
 		);
 		const found = existing[0] && pick<string>(existing[0], "id", "nanoid");
 		if (found) return found;
 
 		const created = asRecord(
-			await this.request<unknown>("/auth-configs", {
+			await this.request<unknown>("/auth_configs", {
 				method: "POST",
 				body: JSON.stringify({
 					toolkit: { slug: toolkitSlug },
