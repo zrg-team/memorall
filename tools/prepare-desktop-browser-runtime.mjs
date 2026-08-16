@@ -135,15 +135,26 @@ const fetchAsset = async (asset, label) => {
 const extractZip = (archive, destination, label) => {
 	rmSync(destination, { recursive: true, force: true });
 	mkdirSync(destination, { recursive: true });
-	const extraction = spawnSync("tar", ["-xf", archive, "-C", destination], {
-		cwd: root,
-		stdio: "inherit",
-	});
-	if (extraction.status !== 0) {
-		throw new Error(
-			`${label} extraction failed with code ${extraction.status}.`,
-		);
+	// bsdtar (macOS and Windows) reads zip archives, GNU tar (Linux) does not.
+	const extractors =
+		process.platform === "linux"
+			? [
+					["unzip", ["-q", "-o", archive, "-d", destination]],
+					["tar", ["-xf", archive, "-C", destination]],
+				]
+			: [["tar", ["-xf", archive, "-C", destination]]];
+	let failure = "no extractor was attempted";
+	for (const [command, args] of extractors) {
+		const extraction = spawnSync(command, args, {
+			cwd: root,
+			stdio: "inherit",
+		});
+		if (!extraction.error && extraction.status === 0) return;
+		failure = extraction.error
+			? `${command} is unavailable`
+			: `${command} exited with code ${extraction.status}`;
 	}
+	throw new Error(`${label} extraction failed: ${failure}.`);
 };
 
 const sevenZipExecutable = () => {

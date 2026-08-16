@@ -161,7 +161,6 @@ jobs:
             build-essential \
             file \
             libayatana-appindicator3-dev \
-            libasound2 \
             libatk-bridge2.0-0 \
             libatk1.0-0 \
             libatspi2.0-0 \
@@ -185,7 +184,11 @@ jobs:
             libssl-dev \
             libwebkit2gtk-4.1-dev \
             patchelf \
+            unzip \
             xvfb
+          # Ubuntu 24.04 renamed the ALSA runtime, and its libasound2 virtual package is ambiguous.
+          sudo apt-get install -y --no-install-recommends libasound2t64 \
+            || sudo apt-get install -y --no-install-recommends libasound2
       - run: corepack enable
       - run: yarn install --immutable
       - name: Build and smoke the Linux application through the Tauri wrapper
@@ -257,7 +260,6 @@ jobs:
             build-essential \
             file \
             libayatana-appindicator3-dev \
-            libasound2 \
             libatk-bridge2.0-0 \
             libatk1.0-0 \
             libatspi2.0-0 \
@@ -281,7 +283,11 @@ jobs:
             libssl-dev \
             libwebkit2gtk-4.1-dev \
             patchelf \
+            unzip \
             xvfb
+          # Ubuntu 24.04 renamed the ALSA runtime, and its libasound2 virtual package is ambiguous.
+          sudo apt-get install -y --no-install-recommends libasound2t64 \
+            || sudo apt-get install -y --no-install-recommends libasound2
       - run: corepack enable
       - run: yarn install --immutable
       - name: Build and smoke the Linux application through the Tauri wrapper
