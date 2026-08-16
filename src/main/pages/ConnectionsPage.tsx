@@ -46,6 +46,17 @@ export const ConnectionsPage: React.FC = () => {
 		select(null);
 	};
 
+	/** "Add connection" must offer the three ways in, not assume one of them. */
+	const openChooser = () => {
+		setLane(null);
+		select(null);
+	};
+
+	/** Resume a connection whose setup never produced an endpoint. */
+	const continueSetup = (kind: ConnectionLane) => {
+		setLane(kind);
+	};
+
 	const renderMain = () => {
 		if (isLoading && isEmpty) {
 			return (
@@ -130,7 +141,14 @@ export const ConnectionsPage: React.FC = () => {
 		}
 
 		if (selected) {
-			return <ConnectionDetail connection={selected} />;
+			return (
+				<ConnectionDetail
+					connection={selected}
+					onContinueSetup={() =>
+						continueSetup(selected.kind === "composio" ? "composio" : "custom")
+					}
+				/>
+			);
 		}
 
 		return (
@@ -165,7 +183,7 @@ export const ConnectionsPage: React.FC = () => {
 						}
 					/>
 					<div className="px-2 pt-2">
-						<AddConnectionButton onClick={() => startAdding("custom")} />
+						<AddConnectionButton onClick={openChooser} />
 					</div>
 					<div className="min-h-0 flex-1 overflow-y-auto">
 						<ConnectionsSidebar

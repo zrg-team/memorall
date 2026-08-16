@@ -1,6 +1,13 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
-import { AlertCircle, Loader2, Pencil, RefreshCw, Trash2 } from "lucide-react";
+import {
+	AlertCircle,
+	ArrowRight,
+	Loader2,
+	Pencil,
+	RefreshCw,
+	Trash2,
+} from "lucide-react";
 import { Button } from "@/main/components/ui/button";
 import { Badge } from "@/main/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -27,9 +34,11 @@ const relativeTime = (iso: string): string => {
 	return `${Math.round(hours / 24)} d ago`;
 };
 
-export const ConnectionDetail: React.FC<{ connection: McpConnection }> = ({
-	connection,
-}) => {
+export const ConnectionDetail: React.FC<{
+	connection: McpConnection;
+	/** Reopen the lane that created this connection, for unfinished setup. */
+	onContinueSetup?: () => void;
+}> = ({ connection, onContinueSetup }) => {
 	const { t } = useTranslation("connections");
 	const [tab, setTab] = React.useState<DetailTab>("tools");
 	const [isEditing, setIsEditing] = React.useState(false);
@@ -77,6 +86,46 @@ export const ConnectionDetail: React.FC<{ connection: McpConnection }> = ({
 					onSaved={() => setIsEditing(false)}
 					onCancel={() => setIsEditing(false)}
 				/>
+			</div>
+		);
+	}
+
+	/**
+	 * Setup that never produced an endpoint has nothing to sync, list or scope.
+	 * Showing the usual tabs here strands the user on "not synced yet" with no
+	 * way forward, so this replaces them with the one action that matters.
+	 */
+	if (status === "incomplete") {
+		return (
+			<div className="flex min-h-0 flex-1 flex-col">
+				<div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 px-4 py-3">
+					<h2 className="truncate text-sm font-semibold">{connection.name}</h2>
+					<div className="flex shrink-0 items-center gap-1.5">
+						<StatusPill status={status} />
+						<Button
+							type="button"
+							variant="outline"
+							size="sm"
+							className="h-7 w-7 rounded-lg p-0 text-destructive hover:text-destructive"
+							onClick={() => void handleDelete()}
+							aria-label={t("detail.delete")}
+						>
+							<Trash2 size={11} />
+						</Button>
+					</div>
+				</div>
+
+				<div className="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center">
+					<p className="max-w-sm text-sm text-muted-foreground">
+						{t("status.incompleteHint")}
+					</p>
+					{onContinueSetup ? (
+						<Button type="button" size="sm" onClick={onContinueSetup}>
+							<ArrowRight size={13} className="mr-1.5" />
+							{t("status.continueSetup")}
+						</Button>
+					) : null}
+				</div>
 			</div>
 		);
 	}
