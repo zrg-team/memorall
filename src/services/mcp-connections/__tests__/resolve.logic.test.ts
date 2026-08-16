@@ -92,9 +92,7 @@ describe("resolveConnections", () => {
 
 		const result = await resolveConnections([{ connectionId: "c1" }]);
 
-		expect(result.servers[0].url).toBe(
-			"https://mcp.acme.dev/mcp?api_key=abc",
-		);
+		expect(result.servers[0].url).toBe("https://mcp.acme.dev/mcp?api_key=abc");
 	});
 
 	it("skips a connection whose credential cannot be read", async () => {
