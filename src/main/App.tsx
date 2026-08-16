@@ -52,6 +52,7 @@ import {
 	ActivityTimelinePage,
 	AgentsPage,
 	RuntimePage,
+	ConnectionsPage,
 	FlowBuilderPage,
 } from "./pages/lazy-pages";
 import { registerAllEditors } from "@/main/modules/files/editors";
@@ -387,6 +388,10 @@ const App: React.FC = () => {
 														element={<DocumentLibraryPage />}
 													/>
 													<Route path="/agents" element={<AgentsPage />} />
+													<Route
+														path="/connections"
+														element={<ConnectionsPage />}
+													/>
 													<Route
 														path="/activities"
 														element={<ActivityTimelinePage />}

@@ -49,6 +49,7 @@ import {
 	type MemorallFlowServices,
 } from "@/services/agent-harness";
 import type { UnifiedFlowConfig } from "@/services/flows-legacy/interfaces/config/flow-config";
+import { withResolvedConnections } from "@/services/mcp-connections";
 import { buildDefaultFlowConfig } from "@/services/flows-legacy/utils/flow-config";
 import { mergeWithDefaultConfig } from "@/services/flows-legacy/utils/flow-config";
 import { eq, sql } from "drizzle-orm";
@@ -974,9 +975,11 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 				const resolvedConfig = flowConfig
 					? mergeWithDefaultConfig(flowConfig, flowConfig.graphType)
 					: buildDefaultFlowConfig("agent");
-				const resolvedConfigWithPrefix = withThreadHistoryTools(
-					applyFlowConfigPrefix(resolvedConfig, job.payload.flowConfigPrefix),
-					conversation,
+				const resolvedConfigWithPrefix = await withResolvedConnections(
+					withThreadHistoryTools(
+						applyFlowConfigPrefix(resolvedConfig, job.payload.flowConfigPrefix),
+						conversation,
+					),
 				);
 				const stream = toLegacyFlowStream(
 					createMemorallFlowRun({
@@ -1049,9 +1052,8 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 				let resolvedConfig = flowConfig
 					? mergeWithDefaultConfig(flowConfig, flowConfig.graphType)
 					: buildDefaultFlowConfig("foundation");
-				resolvedConfig = applyFlowConfigPrefix(
-					resolvedConfig,
-					job.payload.flowConfigPrefix,
+				resolvedConfig = await withResolvedConnections(
+					applyFlowConfigPrefix(resolvedConfig, job.payload.flowConfigPrefix),
 				);
 
 				await dependencies.updateJobProgress(jobId, {

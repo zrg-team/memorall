@@ -1,0 +1,197 @@
+import React from "react";
+import { useTranslation } from "react-i18next";
+import {
+	AlertTriangle,
+	Check,
+	Link2,
+	Plus,
+	Shield,
+	Terminal,
+} from "lucide-react";
+import { Button } from "@/main/components/ui/button";
+import { cn } from "@/lib/utils";
+import { platform } from "@/platform/current";
+
+export type ConnectionLane = "composio" | "template" | "custom";
+
+/**
+ * The three ways in. Rendered both as the page's empty state and inside the
+ * agent picker, so it takes no layout assumptions from either.
+ *
+ * Composio is visually the recommendation — accent border, app tiles, filled
+ * button — so a first-timer lands in the right place without reading.
+ */
+
+const APP_TILES = [
+	{ label: "G", className: "bg-gradient-to-br from-red-500 to-amber-400" },
+	{ label: "S", className: "bg-gradient-to-br from-sky-400 to-emerald-500" },
+	{ label: "C", className: "bg-gradient-to-br from-blue-600 to-blue-400" },
+	{ label: "N", className: "bg-gradient-to-br from-zinc-700 to-zinc-500" },
+	{ label: "L", className: "bg-gradient-to-br from-indigo-500 to-violet-400" },
+];
+
+interface AddConnectionChooserProps {
+	onSelect: (lane: ConnectionLane) => void;
+	className?: string;
+	/** Hide the encryption footnote when the host already shows one. */
+	compact?: boolean;
+}
+
+export const AddConnectionChooser: React.FC<AddConnectionChooserProps> = ({
+	onSelect,
+	className,
+	compact = false,
+}) => {
+	const { t } = useTranslation("connections");
+
+	// The local-server lane ends differently per platform, and saying so up front
+	// beats discovering it after four steps.
+	const canSpawnNatively = platform.capabilities.get("mcp.stdio").available;
+	const isWeb = platform.environment === "web";
+
+	return (
+		<div className={cn("space-y-4", className)}>
+			<div className="grid gap-3 lg:grid-cols-3">
+				{/* Composio */}
+				<div
+					className={cn(
+						"flex flex-col gap-2.5 rounded-xl border p-3.5",
+						isWeb
+							? "border-border/60 bg-background/60 opacity-70"
+							: "border-blue-500/30 bg-background/60 shadow-[0_0_0_1px_rgba(59,130,246,0.08)]",
+					)}
+				>
+					<div className="flex items-center gap-2">
+						<span className="grid h-7 w-7 place-items-center rounded-lg bg-gradient-to-br from-violet-600 to-fuchsia-500 text-[11px] font-bold text-white">
+							C
+						</span>
+						<span className="text-sm font-semibold">
+							{t("lanes.composio.name")}
+						</span>
+						{!isWeb ? (
+							<span className="ml-auto rounded-full border border-blue-500/30 bg-blue-500/10 px-2 py-0.5 text-[10px] font-semibold text-blue-500">
+								{t("lanes.composio.recommended")}
+							</span>
+						) : null}
+					</div>
+					<p className="text-xs leading-relaxed text-muted-foreground">
+						{t("lanes.composio.body")}
+					</p>
+					<div className="flex flex-wrap items-center gap-1">
+						{APP_TILES.map((tile) => (
+							<span
+								key={tile.label}
+								className={cn(
+									"grid h-4 w-4 place-items-center rounded text-[8px] font-bold text-white",
+									tile.className,
+								)}
+							>
+								{tile.label}
+							</span>
+						))}
+						<span className="ml-1 text-[10px] text-muted-foreground">+245</span>
+					</div>
+					{isWeb ? (
+						<p className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-2 py-1.5 text-[10px] leading-relaxed text-amber-600 dark:text-amber-400">
+							{t("composio.webUnsupported")}
+						</p>
+					) : null}
+					<Button
+						type="button"
+						size="sm"
+						className="mt-auto w-full"
+						disabled={isWeb}
+						onClick={() => onSelect("composio")}
+					>
+						{t("lanes.composio.action")}
+					</Button>
+				</div>
+
+				{/* Local server */}
+				<div className="flex flex-col gap-2.5 rounded-xl border border-border/60 bg-background/60 p-3.5">
+					<div className="flex items-center gap-2">
+						<span className="grid h-7 w-7 place-items-center rounded-lg bg-gradient-to-br from-cyan-700 to-cyan-400 text-white">
+							<Terminal size={13} />
+						</span>
+						<span className="text-sm font-semibold">
+							{t("lanes.template.name")}
+						</span>
+					</div>
+					<p className="text-xs leading-relaxed text-muted-foreground">
+						{t("lanes.template.body")}
+					</p>
+					{canSpawnNatively ? (
+						<p className="flex items-start gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-2 py-1.5 text-[10px] leading-relaxed text-emerald-600 dark:text-emerald-400">
+							<Check size={11} className="mt-px shrink-0" />
+							{t("lanes.template.nativeNote")}
+						</p>
+					) : (
+						<p className="flex items-start gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2 py-1.5 text-[10px] leading-relaxed text-amber-600 dark:text-amber-400">
+							<AlertTriangle size={11} className="mt-px shrink-0" />
+							{t("lanes.template.bridgeWarning")}
+						</p>
+					)}
+					<Button
+						type="button"
+						size="sm"
+						variant="outline"
+						className="mt-auto w-full"
+						onClick={() => onSelect("template")}
+					>
+						{t("lanes.template.action")}
+					</Button>
+				</div>
+
+				{/* Custom endpoint */}
+				<div className="flex flex-col gap-2.5 rounded-xl border border-border/60 bg-background/60 p-3.5">
+					<div className="flex items-center gap-2">
+						<span className="grid h-7 w-7 place-items-center rounded-lg bg-gradient-to-br from-slate-600 to-slate-400 text-white">
+							<Link2 size={13} />
+						</span>
+						<span className="text-sm font-semibold">
+							{t("lanes.custom.name")}
+						</span>
+					</div>
+					<p className="text-xs leading-relaxed text-muted-foreground">
+						{t("lanes.custom.body")}
+					</p>
+					<div className="rounded-lg border border-border/60 bg-muted/40 px-2 py-1.5 font-mono text-[9.5px] leading-relaxed text-muted-foreground">
+						https://mcp.example.com/mcp
+						<br />
+						Authorization: Bearer ••••
+					</div>
+					<Button
+						type="button"
+						size="sm"
+						variant="outline"
+						className="mt-auto w-full"
+						onClick={() => onSelect("custom")}
+					>
+						{t("lanes.custom.action")}
+					</Button>
+				</div>
+			</div>
+
+			{compact ? null : (
+				<div className="flex items-start gap-2 rounded-xl border border-dashed border-border/70 px-3 py-2.5">
+					<Shield size={13} className="mt-0.5 shrink-0 text-muted-foreground" />
+					<p className="text-[11px] leading-relaxed text-muted-foreground">
+						{t("empty.encryption")}
+					</p>
+				</div>
+			)}
+		</div>
+	);
+};
+
+export const AddConnectionButton: React.FC<{ onClick: () => void }> = ({
+	onClick,
+}) => {
+	const { t } = useTranslation("connections");
+	return (
+		<Button type="button" size="sm" className="w-full" onClick={onClick}>
+			<Plus size={13} className="mr-1.5" />
+			{t("add")}
+		</Button>
+	);
+};

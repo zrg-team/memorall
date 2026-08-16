@@ -22,6 +22,7 @@ import enTopics from "./locales/en/topics.json";
 import enActivity from "./locales/en/activity.json";
 import enAuth from "./locales/en/auth.json";
 import enCopilot from "./locales/en/copilot.json";
+import enConnections from "./locales/en/connections.json";
 
 import vnCommon from "./locales/vn/common.json";
 import vnAgents from "./locales/vn/agents.json";
@@ -37,6 +38,7 @@ import vnTopics from "./locales/vn/topics.json";
 import vnActivity from "./locales/vn/activity.json";
 import vnAuth from "./locales/vn/auth.json";
 import vnCopilot from "./locales/vn/copilot.json";
+import vnConnections from "./locales/vn/connections.json";
 
 // Translation resources
 const resources = {
@@ -55,6 +57,7 @@ const resources = {
 		activity: enActivity,
 		auth: enAuth,
 		copilot: enCopilot,
+		connections: enConnections,
 	},
 	vn: {
 		common: vnCommon,
@@ -71,6 +74,7 @@ const resources = {
 		activity: vnActivity,
 		auth: vnAuth,
 		copilot: vnCopilot,
+		connections: vnConnections,
 	},
 } as const;
 

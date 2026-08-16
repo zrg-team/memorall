@@ -9,6 +9,7 @@ import {
 import secureSession from "@/utils/secure-session";
 import { logInfo, logError } from "@/utils/logger";
 import {
+	adoptMasterStrongPassword,
 	hasMasterKey,
 	getMasterStrongPassword,
 	decryptWithMasterPassword,
@@ -24,6 +25,13 @@ type AuthProvider = "openai" | "openrouter";
 export async function restoreAllProviders(
 	masterStrongPassword: string,
 ): Promise<void> {
+	// Both the main app and the offscreen document funnel through here, and
+	// `secureSession` is per-context — so this is the one place that can make the
+	// unlocked master key observable wherever the restore ran. Without it, code
+	// in the offscreen worker (MCP connection secrets, for instance) cannot
+	// decrypt anything even though the user has unlocked.
+	await adoptMasterStrongPassword(masterStrongPassword);
+
 	const providers = await getMasterEncryptedProviders();
 
 	for (const provider of providers) {

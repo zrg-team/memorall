@@ -46,6 +46,9 @@ export const AgentsPage = lazy(() =>
 export const RuntimePage = lazy(() =>
 	import("./RuntimePage").then((m) => ({ default: m.RuntimePage })),
 );
+export const ConnectionsPage = lazy(() =>
+	import("./ConnectionsPage").then((m) => ({ default: m.ConnectionsPage })),
+);
 export const FlowBuilderPage = lazy(() =>
 	import("./FlowBuilderPage/FlowBuilderPage").then((m) => ({
 		default: m.FlowBuilderPage,

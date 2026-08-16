@@ -95,7 +95,14 @@ const definition = defineStep<
 			const client = new MultiServerMCPClient({
 				mcpServers: clientServers,
 				throwOnLoadError: false,
-				onConnectionError: "ignore",
+				// Two servers exposing a common name (`search`, `fetch`) would otherwise
+				// collide and silently shadow each other.
+				prefixToolNameWithServerName: true,
+				// Previously "ignore" — a dead server left no trace anywhere, so the
+				// Connections UI had no error to show and the user saw silent no-ops.
+				onConnectionError: ({ serverName, error }) => {
+					logError(`[MCP_FEATURE] Server "${serverName}" failed:`, error);
+				},
 			});
 
 			await client.initializeConnections();
@@ -105,7 +112,10 @@ const definition = defineStep<
 				await client.close();
 			});
 
-			const mcpBaseTools = langchainTools.map(adaptMCPTool);
+			const allowlist = new Set(config?.toolAllowlist ?? []);
+			const mcpBaseTools = langchainTools
+				.map(adaptMCPTool)
+				.filter((tool) => allowlist.size === 0 || allowlist.has(tool.name));
 			const serverNames = servers.map((s) => s.name);
 
 			const messages = GraphBase.chat.systemMessage(
@@ -145,7 +155,21 @@ stepRegistry.register(STEP_NAME, createMCPFeatureStep, {
 			key: "servers",
 			type: "array",
 			default: [],
-			description: "MCP server configurations",
+			description:
+				"Resolved MCP servers (filled from `connections` at run time)",
+		},
+		{
+			key: "connections",
+			type: "array",
+			default: [],
+			description: "References into the Connections registry",
+		},
+		{
+			key: "toolAllowlist",
+			type: "array",
+			default: [],
+			description:
+				"Server-prefixed tool names the agent may use; empty exposes all",
 		},
 	],
 	defaultStateMapping: { messages: "messages", tools: "tools" },

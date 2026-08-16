@@ -500,8 +500,20 @@ exports[`Memorall legacy flow registered contracts > registers every core step c
       "configParams": [
         {
           "default": [],
-          "description": "MCP server configurations",
+          "description": "Resolved MCP servers (filled from \`connections\` at run time)",
           "key": "servers",
+          "type": "array",
+        },
+        {
+          "default": [],
+          "description": "References into the Connections registry",
+          "key": "connections",
+          "type": "array",
+        },
+        {
+          "default": [],
+          "description": "Server-prefixed tool names the agent may use; empty exposes all",
+          "key": "toolAllowlist",
           "type": "array",
         },
       ],

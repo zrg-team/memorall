@@ -373,61 +373,104 @@ export async function migrateLegacyConfig(
 }
 
 /**
+ * Adopt an already-decrypted master strong password into this JS context.
+ *
+ * `secureSession` is an in-memory map scoped to one JS context, so the
+ * offscreen document never observes an unlock that happened in the main app —
+ * which is why the restore job ships the password across the boundary. Calling
+ * this on the receiving side makes `encryptWithMasterKey` / `decryptWithMasterKey`,
+ * and therefore every keyed secret, work in that context too.
+ */
+export async function adoptMasterStrongPassword(
+	masterStrongPassword: string,
+): Promise<void> {
+	await secureSession.set(MASTER_STRONG_PASSWORD_KEY, masterStrongPassword);
+	await secureSession.set(MASTER_READY_KEY, "true");
+}
+
+// ---------------------------------------------------------------------------
+// Keyed secrets
+//
+// Generic storage for anything that must be encrypted at rest under the single
+// master passkey. Provider configs (`openai_config`, `openrouter_config`) are
+// one caller; MCP connection credentials (`composio_config`, `mcp_secret_<id>`)
+// are another. All of them use the master-key record format — a row in
+// `encryptions` with a null `advancedSeed`.
+// ---------------------------------------------------------------------------
+
+/** Encrypt and upsert a secret. Requires the master key to be unlocked. */
+export async function saveSecret(key: string, value: string): Promise<void> {
+	const encryptedData = await encryptWithMasterKey(value);
+
+	const existing = await serviceManager.databaseService.use(({ db, schema }) =>
+		db
+			.select({ id: schema.encryption.id })
+			.from(schema.encryption)
+			.where(eq(schema.encryption.key, key)),
+	);
+
+	if (existing.length > 0) {
+		await serviceManager.databaseService.use(({ db, schema }) =>
+			db
+				.update(schema.encryption)
+				.set({
+					encryptedData,
+					advancedSeed: null,
+					updatedAt: new Date(),
+				})
+				.where(eq(schema.encryption.key, key)),
+		);
+		return;
+	}
+
+	await serviceManager.databaseService.use(({ db, schema }) =>
+		db.insert(schema.encryption).values({
+			key,
+			encryptedData,
+			advancedSeed: null,
+		}),
+	);
+}
+
+/** Decrypt a secret, or null when no such record exists. */
+export async function loadSecret(key: string): Promise<string | null> {
+	const result = await serviceManager.databaseService.use(({ db, schema }) =>
+		db.select().from(schema.encryption).where(eq(schema.encryption.key, key)),
+	);
+
+	if (result.length === 0) {
+		return null;
+	}
+
+	return decryptWithMasterKey(result[0].encryptedData);
+}
+
+/** Whether a secret record exists, without needing the key unlocked. */
+export async function hasSecret(key: string): Promise<boolean> {
+	const result = await serviceManager.databaseService.use(({ db, schema }) =>
+		db
+			.select({ id: schema.encryption.id })
+			.from(schema.encryption)
+			.where(eq(schema.encryption.key, key)),
+	);
+	return result.length > 0;
+}
+
+export async function deleteSecret(key: string): Promise<void> {
+	await serviceManager.databaseService.use(({ db, schema }) =>
+		db.delete(schema.encryption).where(eq(schema.encryption.key, key)),
+	);
+}
+
+/**
  * Save a provider config encrypted with the master key
  */
 export async function saveProviderConfig(
 	provider: AuthProvider,
 	config: { apiKey: string; baseUrl: string },
 ): Promise<void> {
-	const configKey = `${provider}_config`;
-
-	// Ensure master key is unlocked
-	const masterStrongPassword = await getMasterStrongPassword();
-	if (!masterStrongPassword) {
-		throw new Error("Master key must be unlocked to save provider config");
-	}
-
 	try {
-		// Encrypt config with master key
-		const combinedKey = await deriveAesKeyFromCombined(
-			masterStrongPassword,
-			FIXED_ENCRYPTION_KEY,
-		);
-		const encryptedData = await encryptStringAes(
-			JSON.stringify(config),
-			combinedKey,
-		);
-
-		// Save to database (no advancedSeed for new format)
-		const existing = await serviceManager.databaseService.use(
-			({ db, schema }) =>
-				db
-					.select()
-					.from(schema.encryption)
-					.where(eq(schema.encryption.key, configKey)),
-		);
-
-		if (existing.length > 0) {
-			await serviceManager.databaseService.use(({ db, schema }) =>
-				db
-					.update(schema.encryption)
-					.set({
-						encryptedData,
-						advancedSeed: null, // New format doesn't use per-provider seed
-						updatedAt: new Date(),
-					})
-					.where(eq(schema.encryption.key, configKey)),
-			);
-		} else {
-			await serviceManager.databaseService.use(({ db, schema }) =>
-				db.insert(schema.encryption).values({
-					key: configKey,
-					encryptedData,
-					advancedSeed: null,
-				}),
-			);
-		}
-
+		await saveSecret(`${provider}_config`, JSON.stringify(config));
 		logInfo(`${provider} configuration saved with master key`);
 	} catch (error) {
 		logError(`Failed to save ${provider} config:`, error);
@@ -441,23 +484,9 @@ export async function saveProviderConfig(
 export async function loadProviderConfig(
 	provider: AuthProvider,
 ): Promise<{ apiKey: string; baseUrl: string } | null> {
-	const configKey = `${provider}_config`;
-
 	try {
-		const result = await serviceManager.databaseService.use(({ db, schema }) =>
-			db
-				.select()
-				.from(schema.encryption)
-				.where(eq(schema.encryption.key, configKey)),
-		);
-
-		if (result.length === 0) {
-			return null;
-		}
-
-		const record = result[0];
-		const decryptedData = await decryptWithMasterKey(record.encryptedData);
-		return JSON.parse(decryptedData);
+		const decryptedData = await loadSecret(`${provider}_config`);
+		return decryptedData ? JSON.parse(decryptedData) : null;
 	} catch (error) {
 		logError(`Failed to load ${provider} config:`, error);
 		throw error;

@@ -6,6 +6,7 @@ import {
 	Database,
 	FileText,
 	MessageCircle,
+	Plug,
 	Server,
 	VectorSquareIcon,
 	type LucideIcon,
@@ -48,6 +49,12 @@ export const workspaceNavigationItems: AppNavigationItem[] = [
 		path: "/llm",
 		icon: Cpu,
 		mobileLabel: "Models",
+	},
+	{
+		nameKey: "navigation.connections",
+		path: "/connections",
+		icon: Plug,
+		mobileLabel: "Connections",
 	},
 	{
 		nameKey: "sandboxPanel.title",
