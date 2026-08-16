@@ -280,9 +280,13 @@ export class ComposioClient {
 				method: "POST",
 				body: JSON.stringify({
 					user_id: options.userId,
-					toolkits: options.toolkits,
+					// An allowlist object, not a bare array — a plain list is rejected
+					// with "Error in payload.toolkits: Invalid input". `disable` is the
+					// denylist counterpart and the two are mutually exclusive.
+					toolkits: { enable: options.toolkits },
 					...(options.tools ? { tools: options.tools } : {}),
-					mcp: true,
+					// No `mcp` flag exists on this endpoint; the session always returns
+					// its MCP details in the response.
 				}),
 			}),
 		);

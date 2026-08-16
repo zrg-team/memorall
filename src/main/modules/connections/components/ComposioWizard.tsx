@@ -265,22 +265,9 @@ export const ComposioWizard: React.FC<ComposioWizardProps> = ({
 			];
 			setConnected(nextApps);
 
-			// Persist each authorization as it lands. Waiting until Finish meant
-			// leaving the page after authorizing threw the app away, and it came
-			// back offering "Connect" again.
-			const record = connections.find(
-				(entry) => entry.id === COMPOSIO_CONNECTION_ID,
-			);
-			if (record) {
-				await save({
-					...record,
-					apps: nextApps,
-					composio: {
-						...(record.composio ?? { toolkits: [] }),
-						toolkits: nextApps.map((entry) => entry.id),
-					},
-				});
-			}
+			// Authorizing is the whole intent — the connection becomes usable here,
+			// not after some later confirmation step.
+			await syncSession(nextApps);
 		} catch (caught) {
 			if ((caught as Error)?.name !== "AbortError") {
 				logError("[Composio] Connect failed:", caught);
@@ -292,56 +279,59 @@ export const ComposioWizard: React.FC<ComposioWizardProps> = ({
 		}
 	};
 
-	const handleFinish = async () => {
+	/**
+	 * Mint (or re-mint) the tool-router session for the authorized apps and store
+	 * the result, so the connection flips to Connected on its own.
+	 *
+	 * Scoping is a session parameter, so this reruns whenever the app set
+	 * changes rather than mutating anything server-side.
+	 */
+	const syncSession = async (apps: ConnectionApp[]) => {
 		const client = clientRef.current;
-		if (!client || connected.length === 0) return;
+		const record = connections.find(
+			(entry) => entry.id === COMPOSIO_CONNECTION_ID,
+		);
+		if (!client || apps.length === 0) return;
 
-		setIsBusy(true);
-		setError(null);
-		try {
-			const session = await client.createMcpSession({
-				userId: LOCAL_USER_ID,
-				toolkits: connected.map((app) => app.id),
-			});
+		const toolkits = apps.map((app) => app.id);
+		const session = await client.createMcpSession({
+			userId: LOCAL_USER_ID,
+			toolkits,
+		});
 
-			// The session headers are a live credential, so they follow the same
-			// encrypted path as any other connection secret.
-			const secretRef = connectionSecretRef(COMPOSIO_CONNECTION_ID);
-			const authValue = Object.values(session.headers)[0] ?? "";
-			const authHeaderName = Object.keys(session.headers)[0];
-			if (authValue) {
-				await saveSecret(secretRef, authValue);
-			}
+		// Any session credential follows the same encrypted path as every other
+		// connection secret.
+		const secretRef = connectionSecretRef(COMPOSIO_CONNECTION_ID);
+		const authValue = Object.values(session.headers ?? {})[0] ?? "";
+		const authHeaderName = Object.keys(session.headers ?? {})[0];
+		if (authValue) {
+			await saveSecret(secretRef, authValue);
+		}
 
-			const now = new Date().toISOString();
-			const connection: McpConnection = {
+		const now = new Date().toISOString();
+		const connection: McpConnection = {
+			...(record ?? {
 				id: COMPOSIO_CONNECTION_ID,
 				kind: "composio",
 				name: "Composio",
-				transport: "http",
-				url: session.url,
-				authMode: authValue ? "header" : "none",
-				authHeaderName,
-				secretRef: authValue ? secretRef : undefined,
-				apps: connected,
-				composio: {
-					sessionId: session.sessionId,
-					toolkits: connected.map((app) => app.id),
-				},
 				enabledByDefault: false,
 				createdAt: now,
-				updatedAt: now,
-			};
+			}),
+			id: COMPOSIO_CONNECTION_ID,
+			kind: "composio",
+			name: "Composio",
+			transport: "http",
+			url: session.url,
+			authMode: authValue ? "header" : "none",
+			authHeaderName,
+			secretRef: authValue ? secretRef : undefined,
+			apps,
+			composio: { sessionId: session.sessionId, toolkits },
+			updatedAt: now,
+		} as McpConnection;
 
-			await save(connection);
-			await discover(connection.id);
-			onDone();
-		} catch (caught) {
-			logError("[Composio] Session creation failed:", caught);
-			setError(caught instanceof Error ? caught.message : String(caught));
-		} finally {
-			setIsBusy(false);
-		}
+		await save(connection);
+		await discover(connection.id);
 	};
 
 	const filtered = React.useMemo(() => {
@@ -377,7 +367,34 @@ export const ComposioWizard: React.FC<ComposioWizardProps> = ({
 						· {t("composio.connectSubtitle")}
 					</p>
 				</div>
+				{/* Always reachable, on both steps — leaving must never require
+				    scrolling past the catalog. */}
+				<Button
+					type="button"
+					variant="outline"
+					size="sm"
+					className="ml-auto"
+					onClick={onCancel}
+				>
+					{t("composio.cancel")}
+				</Button>
 			</div>
+
+			{step === "apps" ? (
+				<div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border/60 bg-background/60 px-3 py-2">
+					<span className="flex items-center gap-2 text-[11px] text-muted-foreground">
+						{isBusy ? (
+							<Loader2 size={12} className="animate-spin text-blue-500" />
+						) : null}
+						{connected.length > 0
+							? t("composio.appsConnected", { count: connected.length })
+							: t("composio.connectFirstApp")}
+					</span>
+					<Button type="button" size="sm" onClick={onDone}>
+						{t("composio.done")}
+					</Button>
+				</div>
+			) : null}
 
 			{error ? (
 				<div className="flex items-start gap-2 rounded-lg border border-destructive/20 bg-destructive/10 p-2.5 text-xs text-destructive">
@@ -559,35 +576,6 @@ export const ComposioWizard: React.FC<ComposioWizardProps> = ({
 					</div>
 				</>
 			)}
-
-			<div className="flex items-center justify-between gap-3">
-				<span className="text-[11px] text-muted-foreground">
-					{step === "apps" && connected.length > 0
-						? t("composio.toolsBeforeScoping", {
-								apps: connected.length,
-								tools: "…",
-							})
-						: null}
-				</span>
-				<div className="flex items-center gap-2">
-					<Button type="button" variant="outline" size="sm" onClick={onCancel}>
-						{t("composio.cancel")}
-					</Button>
-					{step === "apps" ? (
-						<Button
-							type="button"
-							size="sm"
-							disabled={connected.length === 0 || isBusy}
-							onClick={() => void handleFinish()}
-						>
-							{isBusy ? (
-								<Loader2 size={12} className="mr-1.5 animate-spin" />
-							) : null}
-							{t("composio.finish")}
-						</Button>
-					) : null}
-				</div>
-			</div>
 
 			<MasterKeySetupDialog
 				open={showKeySetup}

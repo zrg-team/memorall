@@ -122,11 +122,13 @@ describe("ComposioClient", () => {
 
 		const { url, body } = lastCall();
 		expect(url).toContain("/api/v3/tool_router/session");
+		// An allowlist object; a bare array is rejected with
+		// "Error in payload.toolkits: Invalid input". No `mcp` flag exists.
 		expect(body).toMatchObject({
 			user_id: "user-1",
-			toolkits: ["gmail", "slack"],
-			mcp: true,
+			toolkits: { enable: ["gmail", "slack"] },
 		});
+		expect(body.mcp).toBeUndefined();
 		expect(session.sessionId).toBe("sess_1");
 		expect(session.url).toBe("https://mcp.composio.dev/s/abc");
 		expect(session.headers).toEqual({ "x-composio-session": "tok" });

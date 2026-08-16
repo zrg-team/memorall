@@ -103,15 +103,14 @@
 		"waitingBody": "Chúng tôi đã mở trang cấp quyền của {{app}} trong tab mới. Bảng này sẽ tự cập nhật ngay khi bạn chấp nhận.",
 		"reopenTab": "Mở lại tab",
 		"cancel": "Hủy",
-		"toolsBeforeScoping": "Đã kết nối {{apps}} ứng dụng · {{tools}} công cụ trước khi giới hạn",
-		"skipScoping": "Bỏ qua bước giới hạn",
-		"continue": "Tiếp tục",
 		"scopeTitle": "Giới hạn công cụ",
 		"scopeSubtitle": "ít công cụ nhưng đúng trọng tâm sẽ cho tác nhân tốt hơn",
 		"tooManyTools": "{{count}} công cụ là khá nhiều",
 		"willAdd": "{{count}} công cụ sẽ được thêm vào bộ công cụ của tác nhân",
-		"finish": "Hoàn tất",
-		"webUnsupported": "Composio cần tiện ích mở rộng hoặc ứng dụng máy tính — bản web không gọi trực tiếp API của họ được."
+		"webUnsupported": "Composio cần tiện ích mở rộng hoặc ứng dụng máy tính — bản web không gọi trực tiếp API của họ được.",
+		"appsConnected_other": "Đã kết nối {{count}} ứng dụng và sẵn sàng",
+		"connectFirstApp": "Hãy kết nối một ứng dụng bên dưới — nó sẽ dùng được ngay.",
+		"done": "Xong"
 	},
 	"template": {
 		"title": "Máy chủ cục bộ",

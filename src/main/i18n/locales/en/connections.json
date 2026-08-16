@@ -104,15 +104,15 @@
 		"waitingBody": "We opened {{app}}'s authorization page in a new tab. This panel updates by itself the moment you approve.",
 		"reopenTab": "Reopen tab",
 		"cancel": "Cancel",
-		"toolsBeforeScoping": "{{apps}} apps connected · {{tools}} tools available before scoping",
-		"skipScoping": "Skip scoping",
-		"continue": "Continue",
 		"scopeTitle": "Scope tools",
 		"scopeSubtitle": "fewer, sharper tools make a better agent",
 		"tooManyTools": "{{count}} tools is a lot",
 		"willAdd": "{{count}} tools will be added to your agents' toolbox",
-		"finish": "Finish",
-		"webUnsupported": "Composio needs the browser extension or the desktop app — the web build can't reach their API directly."
+		"webUnsupported": "Composio needs the browser extension or the desktop app — the web build can't reach their API directly.",
+		"appsConnected_one": "{{count}} app connected and ready",
+		"appsConnected_other": "{{count}} apps connected and ready",
+		"connectFirstApp": "Connect an app below — it becomes usable straight away.",
+		"done": "Done"
 	},
 	"template": {
 		"title": "Local server",
