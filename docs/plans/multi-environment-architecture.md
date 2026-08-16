@@ -33,7 +33,7 @@ flowchart TD
     OFF["MV3 offscreen host"]
     WORKER["Shared or dedicated Web Worker"]
     NATIVE["Tauri Rust supervisor"]
-    SIDE["Managed Node 22 and Playwright sidecar"]
+    SIDE["Managed Node 22 and browser-router sidecar"]
 
     UI --> CAPS
     UI --> RUNTIME
@@ -213,9 +213,26 @@ The Tauri Rust layer is intentionally narrow:
 
 The sidecar reuses `@memorall/agent-harness-node` and supports health, shutdown,
 cancellation, managed workspace operations, local executor sessions, package
-operations, MCP stdio, managed Chromium installation, and Playwright browser/DOM
-operations. Chromium is pinned to Playwright and downloaded into application data
-only when automation is enabled.
+operations, MCP stdio, and routed browser/DOM operations. Protocol v3 exposes
+only narrow `browser.status`, `browser.command`, `browser.configure`,
+`browser.clear-profile`, `browser.takeover`, and `browser.resume` methods to the
+Rust bridge. A checksum-pinned Chromium renderer, BrowserOS MCP server, and
+optional Lightpanda binary are staged hermetically as Tauri resources; there is
+no first-use browser download.
+
+The sidecar selects direct HTTP, Lightpanda, BrowserOS, or raw Chrome DevTools
+Protocol according to the operation and runtime health while retaining stable
+logical session IDs. BrowserOS is preferred when its fork-specific protocol is
+available; CDP supplies full DOM actions and real screenshots on stock Chromium.
+This improves general compatibility without adding fingerprint spoofing or a
+promise to bypass site controls. Protected flows can be handed to the user in the
+isolated visible browser, during which automation is explicitly paused.
+
+The browser uses an ephemeral Memorall-only profile by default. Persistence is
+explicit opt-in to one profile below application data. Headed visibility and
+profile-mode changes restart Chromium and close active sessions. The tradeoff is
+a substantially larger installer, accepted in exchange for offline readiness,
+version parity across hosts, and no dependency on Chrome/Edge or user profiles.
 
 Local executor defaults:
 
@@ -326,7 +343,7 @@ Architecture checks and unit tests run before extension, web, or Tauri E2E.
 4. Add the Vite Pages shell with hash routing, worker host, locking, IndexedDB,
    quota diagnostics, isolated AlmostNode scope, and versioned PWA shell cache.
 5. Add the Tauri shell, Rust supervisor, sidecar protocol, real Node 22/npm bundle
-   packaging, approval UI, and managed Playwright Chromium.
+   packaging, approval UI, and the managed browser router.
 6. Add portable dataset export/staging import/rollback and cross-environment tests.
 7. Add signed/notarized desktop artifacts, updater channels, independent release
    jobs, and beta promotion gates.
@@ -407,9 +424,7 @@ as production-ready:
   in copied AlmostNode/vendor static assets are tracked separately;
 - finish AlmostNode service-worker asset/scope extraction and web quota/capability
   diagnostics;
-- implement Rust sidecar process supervision and streaming channels, supply the
-  pinned per-target Node 22/npm archives, implement managed Chromium download and
-  Playwright operations, and add native approval/diff UI;
+- supply pinned per-target Node 22/npm archives and add native approval/diff UI;
 - connect PGlite `dumpDataDir()` and the logical filesystem to the portable archive
   interfaces, add encrypted credential packages, and implement concrete staging
   dataset storage/cleanup;
@@ -457,12 +472,27 @@ Accepted. Product wording and controls must reflect the actual trust boundary.
 
 Accepted. Imports stage and roll back; credentials are excluded by default.
 
+### ADR-008 — Bundle a capability-routed browser runtime
+
+Accepted. Every desktop installer includes one checksum-pinned full Chromium
+distribution and the compiled sidecar. BrowserOS, raw CDP, Lightpanda, and direct
+HTTP are internal lanes behind the existing browser command port; no public web
+tool schema depends on one vendor library. The managed browser is isolated,
+headless, and ephemeral by default; visibility and persistence are explicit
+settings. The installer-size increase is preferable to a first-use network
+dependency or access to installed browsers and user profiles. Browser automation
+does not claim to evade access controls; visible user takeover is the supported
+recovery path when a site requires human interaction.
+
 ## Sources
 
 - [Tauri architecture](https://v2.tauri.app/concept/architecture/)
 - [Tauri commands, events, and channels](https://v2.tauri.app/develop/calling-rust/)
 - [Tauri capabilities](https://v2.tauri.app/security/capabilities/)
 - [Tauri sidecars](https://v2.tauri.app/develop/sidecar/)
+- [Chrome DevTools Protocol](https://chromedevtools.github.io/devtools-protocol/)
+- [BrowserOS agent browser](https://github.com/browseros-ai/BrowserOS)
+- [Lightpanda automation browser](https://github.com/lightpanda-io/browser)
 - [Tauri GitHub pipelines](https://v2.tauri.app/distribute/pipelines/github/)
 - [Tauri WebDriver testing](https://v2.tauri.app/develop/tests/webdriver/)
 - [Chrome MV3 service workers](https://developer.chrome.com/docs/extensions/develop/migrate/to-service-workers)

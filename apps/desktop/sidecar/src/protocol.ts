@@ -1,4 +1,4 @@
-export const SIDECAR_PROTOCOL_VERSION = 1 as const;
+export const SIDECAR_PROTOCOL_VERSION = 3 as const;
 
 export const SIDECAR_METHODS = [
 	"health",
@@ -10,9 +10,12 @@ export const SIDECAR_METHODS = [
 	"executor.stop",
 	"package.install",
 	"mcp.stdio.connect",
-	"chromium.install",
-	"browser.open",
-	"browser.dom",
+	"browser.status",
+	"browser.command",
+	"browser.configure",
+	"browser.clear-profile",
+	"browser.takeover",
+	"browser.resume",
 ] as const;
 
 export type SidecarMethod = (typeof SIDECAR_METHODS)[number];
@@ -32,19 +35,30 @@ export interface SidecarResponse {
 	error?: { code: string; message: string };
 }
 
+export interface SidecarError {
+	code: string;
+	message: string;
+}
+
 const methodSet = new Set<string>(SIDECAR_METHODS);
 
 export function parseSidecarRequest(value: unknown): SidecarRequest {
-	if (!value || typeof value !== "object") throw new Error("Request must be an object");
+	if (!value || typeof value !== "object")
+		throw new Error("Request must be an object");
 	const request = value as Record<string, unknown>;
 	if (request.protocolVersion !== SIDECAR_PROTOCOL_VERSION) {
-		throw new Error(`Unsupported sidecar protocol version: ${String(request.protocolVersion)}`);
+		throw new Error(
+			`Unsupported sidecar protocol version: ${String(request.protocolVersion)}`,
+		);
 	}
 	if (typeof request.id !== "string" || request.id.length === 0) {
 		throw new Error("Request id must be a non-empty string");
 	}
 	if (typeof request.method !== "string" || !methodSet.has(request.method)) {
 		throw new Error(`Sidecar method is not allowed: ${String(request.method)}`);
+	}
+	if (!("params" in request)) {
+		throw new Error("Request params field is required");
 	}
 	return request as unknown as SidecarRequest;
 }

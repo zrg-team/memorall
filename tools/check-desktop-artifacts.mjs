@@ -111,6 +111,60 @@ const stagedNode = resolve(
 if (!existsSync(stagedNode)) {
 	throw new Error(`Staged Desktop Node runtime is missing: ${stagedNode}`);
 }
+
+const stagedResources = resolve("publish", ".cache", "tauri-resources");
+const stagedSidecar = join(stagedResources, "desktop-sidecar", "index.mjs");
+const stagedBrowsers = join(stagedResources, "browser-runtime");
+const stagedNotices = join(
+	stagedResources,
+	"licenses",
+	"THIRD_PARTY_NOTICES.txt",
+);
+for (const [label, path] of [
+	["compiled desktop sidecar", stagedSidecar],
+	["bundled browser directory", stagedBrowsers],
+	["third-party browser notices", stagedNotices],
+]) {
+	if (!existsSync(path)) throw new Error(`Staged ${label} is missing: ${path}`);
+}
+const browserFiles = filesIn(stagedBrowsers);
+if (
+	browserFiles.some((path) =>
+		/(?:headless[_-]shell|firefox|webkit)/i.test(portable(path)),
+	)
+) {
+	throw new Error(
+		"Desktop resources contain an unexpected browser distribution.",
+	);
+}
+const expectedBrowserExecutable = {
+	windows: /browser-runtime[\\/]browseros[\\/]Chrome-bin[\\/]chrome\.exe$/i,
+	macos:
+		/browser-runtime[\\/]browseros[\\/]chrome-mac-(?:arm64|x64)[\\/]Google Chrome for Testing\.app[\\/]Contents[\\/]MacOS[\\/]Google Chrome for Testing$/,
+	linux: /browser-runtime[\\/]browseros[\\/]chrome-linux(?:64)?[\\/]chrome$/,
+}[platform];
+const managedBrowserExecutables = browserFiles.filter((path) =>
+	expectedBrowserExecutable.test(path),
+);
+if (managedBrowserExecutables.length !== 1) {
+	throw new Error(
+		`Desktop resources must contain exactly one managed Chromium renderer executable; found ${managedBrowserExecutables.length}.`,
+	);
+}
+const serverPattern =
+	platform === "windows"
+		? /browser-runtime[\\/]browseros[\\/]browseros-server\.exe$/i
+		: /browser-runtime[\\/]browseros[\\/]browseros-server$/;
+if (!browserFiles.some((path) => serverPattern.test(path))) {
+	throw new Error(
+		"Desktop resources contain no BrowserOS MCP server executable.",
+	);
+}
+for (const directory of ["desktop-sidecar", "browser-runtime", "licenses"]) {
+	if (!existsSync(join(root, directory))) {
+		throw new Error(`Portable Desktop artifact is missing ${directory}.`);
+	}
+}
 const stagedVersion = execFileSync(stagedNode, ["--version"], {
 	encoding: "utf8",
 }).trim();
@@ -125,5 +179,5 @@ if (
 }
 
 console.log(
-	`${platform} Desktop artifacts and staged ${stagedVersion} sidecar runtime passed.`,
+	`${platform} Desktop artifacts, staged ${stagedVersion}, sidecar v3, BrowserOS, and bundled Chromium passed.`,
 );

@@ -17,7 +17,7 @@ describe("Wllama model registry", () => {
 	it("uses the configured GGUF file without repository discovery", () => {
 		expect(getConfiguredWllamaFile("LiquidAI/LFM2-VL-450M-GGUF")).toEqual({
 			name: "LFM2-VL-450M-Q4_0.gguf",
-			size: Math.round(0.26 * 1024 ** 3),
+			size: 219_307_424,
 		});
 		expect(getConfiguredWllamaFile("owner/unregistered-model")).toBeNull();
 	});

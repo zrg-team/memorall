@@ -35,6 +35,37 @@ type LocalRuntimeStatus = {
 	statuses?: Record<string, { registered?: boolean; ready?: boolean }>;
 };
 
+const LOCAL_MODEL_SMOKE_TARGETS = {
+	transformer: {
+		cardId: "onnx-community/granite-4.0-350m-ONNX-web",
+		selectedId: "onnx-community/granite-4.0-350m-ONNX-web",
+	},
+	webllm: {
+		cardId: "Qwen3.5-0.8B-q4f16_1-MLC",
+		selectedId: "Qwen3.5-0.8B-q4f16_1-MLC",
+	},
+	wllama: {
+		cardId: "prism-ml/Bonsai-1.7B-gguf",
+		selectedId: "prism-ml/Bonsai-1.7B-gguf/Bonsai-1.7B-Q1_0.gguf",
+	},
+} as const;
+
+type LocalModelSmokeRuntime = keyof typeof LOCAL_MODEL_SMOKE_TARGETS;
+
+function getLocalModelSmokeTarget() {
+	const runtime =
+		(process.env.MEMORALL_LOCAL_MODEL_E2E_RUNTIME as
+			| LocalModelSmokeRuntime
+			| undefined) ?? "wllama";
+	const target = LOCAL_MODEL_SMOKE_TARGETS[runtime];
+	if (!target) {
+		throw new Error(
+			`Unsupported MEMORALL_LOCAL_MODEL_E2E_RUNTIME: ${String(runtime)}`,
+		);
+	}
+	return { runtime, ...target };
+}
+
 async function getLocalRuntimeStatus(
 	page: import("@playwright/test").Page,
 ): Promise<LocalRuntimeStatus> {
@@ -323,12 +354,13 @@ test("LLM configuration view switches through every supported provider", async (
 	expect(consoleErrors).toEqual([]);
 });
 
-test("selects a local CPU model and completes a real chat request", async () => {
+test("selects a local model and completes a real chat request", async () => {
 	test.skip(
 		process.env.MEMORALL_LOCAL_MODEL_E2E !== "1",
 		"Set MEMORALL_LOCAL_MODEL_E2E=1 to download and execute the real local model.",
 	);
 	test.setTimeout(15 * 60_000);
+	const smokeTarget = getLocalModelSmokeTarget();
 
 	const page = await context.newPage();
 	const pageErrors: string[] = [];
@@ -354,9 +386,9 @@ test("selects a local CPU model and completes a real chat request", async () => 
 		window.dispatchEvent(new PopStateEvent("popstate"));
 	});
 
-	await page.locator('[data-provider-tab="wllama"]').click();
+	await page.locator(`[data-provider-tab="${smokeTarget.runtime}"]`).click();
 	const quickModelCard = page.locator(
-		'[data-model-provider="wllama"][data-model-id="LiquidAI/LFM2-VL-450M-GGUF"]',
+		`[data-model-provider="${smokeTarget.runtime}"][data-model-id="${smokeTarget.cardId}"]`,
 	);
 	const quickModelAvailable = await quickModelCard
 		.waitFor({ state: "visible", timeout: 5_000 })
@@ -368,26 +400,33 @@ test("selects a local CPU model and completes a real chat request", async () => 
 		await page.locator("[data-model-sidebar-toggle]").click();
 		await page
 			.locator(
-				'[data-downloaded-model-provider="wllama"][data-downloaded-model-id="LiquidAI/LFM2-VL-450M-GGUF/LFM2-VL-450M-Q4_0.gguf"] [data-downloaded-model-action="load"]',
+				`[data-downloaded-model-provider="${smokeTarget.runtime}"][data-downloaded-model-id="${smokeTarget.selectedId}"] [data-downloaded-model-action="load"]`,
 			)
 			.click();
 	}
 
 	const currentModelCard = page.locator(
-		'[data-llm-page][data-current-model-provider="wllama"][data-current-model-id="LiquidAI/LFM2-VL-450M-GGUF/LFM2-VL-450M-Q4_0.gguf"]',
+		`[data-llm-page][data-current-model-provider="${smokeTarget.runtime}"][data-current-model-id="${smokeTarget.selectedId}"]`,
 	);
 	await expect(currentModelCard).toBeAttached({ timeout: 12 * 60_000 });
 	await expect
-		.poll(async () => (await getLocalRuntimeStatus(page)).statuses?.wllama, {
-			timeout: 60_000,
-			message:
-				"Wllama must be registered and ready in the extension offscreen runtime",
-		})
+		.poll(
+			async () =>
+				(await getLocalRuntimeStatus(page)).statuses?.[smokeTarget.runtime],
+			{
+				timeout: 60_000,
+				message: `${smokeTarget.runtime} must be registered and ready in the extension offscreen runtime`,
+			},
+		)
 		.toEqual({ registered: true, ready: true });
 
 	const useChatButton = page.locator("[data-agent-use-chat]");
 	if (await useChatButton.isVisible()) {
 		await useChatButton.click();
+	}
+	const newChatButton = page.locator("[data-new-chat]:visible").first();
+	if (await newChatButton.isVisible()) {
+		await newChatButton.click();
 	}
 
 	const prompt =
@@ -400,10 +439,10 @@ test("selects a local CPU model and completes a real chat request", async () => 
 		timeout: 12 * 60_000,
 	});
 	await expect(composer).toBeVisible({ timeout: 12 * 60_000 });
-	const completedAssistantMessages = page.locator(
-		'[data-message-role="assistant"][data-message-state="complete"] [data-message-content]',
+	const assistantMessages = page.locator(
+		'[data-message-role="assistant"] [data-message-content]',
 	);
-	const completedAssistantCount = await completedAssistantMessages.count();
+	const assistantCount = await assistantMessages.count();
 	await composer.fill(prompt);
 	const submitButton = page.locator("[data-chat-submit]");
 	await expect(submitButton).toBeEnabled();
@@ -411,10 +450,10 @@ test("selects a local CPU model and completes a real chat request", async () => 
 
 	try {
 		await expect
-			.poll(() => completedAssistantMessages.count(), {
+			.poll(() => assistantMessages.count(), {
 				timeout: 3 * 60_000,
 			})
-			.toBeGreaterThan(completedAssistantCount);
+			.toBeGreaterThan(assistantCount);
 	} catch (error) {
 		const diagnostics = {
 			serviceStatus: await getLocalRuntimeStatus(page),
@@ -439,9 +478,7 @@ test("selects a local CPU model and completes a real chat request", async () => 
 		);
 		throw error;
 	}
-	const assistantMessage = completedAssistantMessages.nth(
-		completedAssistantCount,
-	);
+	const assistantMessage = assistantMessages.nth(assistantCount);
 	await expect(assistantMessage).toBeVisible({ timeout: 3 * 60_000 });
 	await expect
 		.poll(async () => (await assistantMessage.innerText()).trim().length, {
@@ -451,7 +488,7 @@ test("selects a local CPU model and completes a real chat request", async () => 
 	const responseText = (await assistantMessage.innerText()).trim();
 	expect(responseText).not.toMatch(/\b(?:error|failed)\b/iu);
 	console.log(
-		`Local Wllama chat response (${responseText.length} chars): ${responseText.slice(0, 240)}`,
+		`Local ${smokeTarget.runtime} chat response (${responseText.length} chars): ${responseText.slice(0, 240)}`,
 	);
 	expect(pageErrors).toEqual([]);
 	expect(consoleErrors).toEqual([]);

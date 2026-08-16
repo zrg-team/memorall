@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
-import { createServer } from "node:net";
+import { createServer as createHttpServer } from "node:http";
+import { createServer as createNetServer } from "node:net";
 import { resolve } from "node:path";
 import { chromium } from "@playwright/test";
 
@@ -69,8 +70,62 @@ function run(command, args) {
 	});
 }
 
+function waitForExit(child, timeoutMs) {
+	if (child.exitCode !== null) return Promise.resolve(true);
+	return new Promise((resolveWait) => {
+		const timer = setTimeout(() => {
+			child.off("exit", onExit);
+			resolveWait(false);
+		}, timeoutMs);
+		const onExit = () => {
+			clearTimeout(timer);
+			resolveWait(true);
+		};
+		child.once("exit", onExit);
+	});
+}
+
+async function stopSpawnedApp(app, webViewBrowser) {
+	if (app.exitCode !== null) return;
+
+	const page = webViewBrowser
+		?.contexts()
+		.flatMap((context) => context.pages())[0];
+	if (page) {
+		await Promise.race([
+			page.evaluate(() =>
+				window.__TAURI_INTERNALS__?.invoke("plugin:window|close", {
+					label: "main",
+				}),
+			),
+			new Promise((resolveWait) => setTimeout(resolveWait, 2_000)),
+		]).catch(() => {});
+		if (await waitForExit(app, 5_000)) return;
+	}
+
+	if (process.platform === "win32" && app.pid) {
+		await new Promise((resolveWait) => {
+			const killer = spawn(
+				"taskkill.exe",
+				["/pid", String(app.pid), "/t", "/f"],
+				{
+					stdio: "ignore",
+					windowsHide: true,
+				},
+			);
+			killer.once("error", resolveWait);
+			killer.once("exit", resolveWait);
+		});
+		await waitForExit(app, 5_000);
+		return;
+	}
+
+	app.kill("SIGTERM");
+	if (!(await waitForExit(app, 5_000))) app.kill("SIGKILL");
+}
+
 async function reserveLoopbackPort() {
-	const server = createServer();
+	const server = createNetServer();
 	await new Promise((resolveListen, reject) => {
 		server.once("error", reject);
 		server.listen(0, "127.0.0.1", resolveListen);
@@ -84,6 +139,25 @@ async function reserveLoopbackPort() {
 		server.close((error) => (error ? reject(error) : resolveClose())),
 	);
 	return address.port;
+}
+
+async function startBrowserFixture() {
+	const server = createHttpServer((_request, response) => {
+		response.writeHead(200, { "content-type": "text/html" });
+		response.end(
+			"<!doctype html><title>Tauri bridge fixture</title><main>bundled browser bridge ready</main>",
+		);
+	});
+	await new Promise((resolveListen, reject) => {
+		server.once("error", reject);
+		server.listen(0, "127.0.0.1", resolveListen);
+	});
+	const address = server.address();
+	if (!address || typeof address === "string") {
+		server.close();
+		throw new Error("Could not start the desktop browser fixture.");
+	}
+	return { server, url: `http://127.0.0.1:${address.port}/fixture` };
 }
 
 async function waitForWebViewEndpoint(port) {
@@ -116,7 +190,7 @@ async function isPackagedMemorallPage(page) {
 	return (await page.locator("#root > *").count()) > 0;
 }
 
-async function assertWindowsWebViewReady(port) {
+async function assertWindowsWebViewReady(port, browserFixtureUrl) {
 	const endpoint = await waitForWebViewEndpoint(port);
 	const browser = await chromium.connectOverCDP(endpoint);
 	try {
@@ -143,8 +217,56 @@ async function assertWindowsWebViewReady(port) {
 					lastBody.trim().length >= 50 &&
 					(await isPackagedMemorallPage(page))
 				) {
+					const bridgeResult = await page.evaluate(async (url) => {
+						try {
+							const invoke = window.__TAURI_INTERNALS__?.invoke;
+							if (typeof invoke !== "function") {
+								throw new Error(
+									"Tauri invoke bridge is unavailable in the packaged WebView.",
+								);
+							}
+							const sessionId = "tauri-webview-smoke";
+							const opened = await invoke("desktop_browser_request", {
+								request: {
+									source: "memorall:web-browser-command",
+									command: "open",
+									sessionId,
+									url,
+									mode: "tab",
+									timeoutMs: 5_000,
+									maxHtmlChars: 20_000,
+								},
+							});
+							if (!opened?.success) return opened;
+							await invoke("desktop_browser_request", {
+								request: {
+									source: "memorall:web-browser-command",
+									command: "close",
+									sessionId,
+									tabId: opened.surface.tabId,
+								},
+							});
+							return opened;
+						} catch (error) {
+							return {
+								success: false,
+								bridgeError:
+									typeof error === "object" && error !== null
+										? { ...error, message: error.message }
+										: String(error),
+							};
+						}
+					}, browserFixtureUrl);
+					if (
+						!bridgeResult?.success ||
+						bridgeResult.snapshot?.title !== "Tauri bridge fixture"
+					) {
+						throw new Error(
+							`Packaged Tauri browser bridge failed: ${JSON.stringify(bridgeResult)}`,
+						);
+					}
 					console.log(
-						"Windows packaged WebView smoke passed: the initialized Memorall UI rendered without a service failure.",
+						"Windows packaged WebView smoke passed: the initialized UI invoked the bundled Chromium bridge.",
 					);
 					return browser;
 				}
@@ -416,6 +538,8 @@ if (process.platform === "win32") {
 
 const webViewPort =
 	process.platform === "win32" ? await reserveLoopbackPort() : undefined;
+const browserFixture =
+	process.platform === "win32" ? await startBrowserFixture() : undefined;
 const webViewArguments = webViewPort
 	? [
 			process.env.WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS,
@@ -451,18 +575,21 @@ try {
 		});
 	});
 	const webViewSmoke = webViewPort
-		? assertWindowsWebViewReady(webViewPort).then(async (browser) => {
-				webViewBrowser = browser;
-				if (shouldTestLocalModel) {
-					await assertWindowsLocalModelChat(browser);
-				}
-			})
+		? assertWindowsWebViewReady(webViewPort, browserFixture.url).then(
+				async (browser) => {
+					webViewBrowser = browser;
+					if (shouldTestLocalModel) {
+						await assertWindowsLocalModelChat(browser);
+					}
+				},
+			)
 		: Promise.resolve();
 	await Promise.all([processSurvival, webViewSmoke]);
 	console.log(
 		`Native desktop smoke passed: ${executable} remained open for 10 seconds.`,
 	);
 } finally {
+	await stopSpawnedApp(app, webViewBrowser);
 	await webViewBrowser?.close().catch(() => {});
-	if (app.exitCode === null) app.kill("SIGTERM");
+	browserFixture?.server.close();
 }

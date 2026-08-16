@@ -1,13 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { databaseUse, secureValues } = vi.hoisted(() => ({
+const { databaseTransaction, databaseUse, secureValues } = vi.hoisted(() => ({
+	databaseTransaction: vi.fn(),
 	databaseUse: vi.fn(),
 	secureValues: new Map<string, string>(),
 }));
 
 vi.mock("@/services", () => ({
 	serviceManager: {
-		databaseService: { use: databaseUse },
+		databaseService: {
+			transaction: databaseTransaction,
+			use: databaseUse,
+		},
 	},
 }));
 
@@ -18,6 +22,9 @@ vi.mock("../secure-session", () => ({
 		}),
 		get: vi.fn(async (key: string) => secureValues.get(key) ?? null),
 		exists: vi.fn(async (key: string) => secureValues.has(key)),
+		delete: vi.fn(async (key: string) => {
+			secureValues.delete(key);
+		}),
 	},
 }));
 
@@ -46,6 +53,7 @@ vi.mock("../aes", () => ({
 
 import {
 	deleteMasterKey,
+	deleteMasterKeyIfUnused,
 	decryptWithMasterKey,
 	decryptWithMasterPassword,
 	detectEncryptionFormat,
@@ -59,6 +67,7 @@ import {
 	loadProviderConfig,
 	lockMasterKey,
 	migrateLegacyConfig,
+	resetMasterKeyAndEncryptedConfigs,
 	saveProviderConfig,
 	setupMasterKey,
 	unlockMasterKey,
@@ -70,6 +79,7 @@ const queueDatabaseResults = (...results: unknown[]) => {
 
 beforeEach(() => {
 	secureValues.clear();
+	databaseTransaction.mockReset();
 	databaseUse.mockReset();
 });
 
@@ -177,12 +187,45 @@ describe("master-key lifecycle", () => {
 		secureValues.set("master_strong_password", "strong");
 
 		await lockMasterKey();
-		await expect(isMasterKeyUnlocked()).resolves.toBe(true);
-		await expect(getMasterStrongPassword()).resolves.toBe("");
+		await expect(isMasterKeyUnlocked()).resolves.toBe(false);
+		await expect(getMasterStrongPassword()).resolves.toBeNull();
 
 		queueDatabaseResults(undefined);
 		await deleteMasterKey();
 		expect(databaseUse).toHaveBeenCalled();
+	});
+
+	it("removes an unused master key but preserves one with encrypted data", async () => {
+		queueDatabaseResults(
+			[{ key: "master_encryption_key" }],
+			[{ key: "openai_config" }],
+			[],
+		);
+		await expect(deleteMasterKeyIfUnused()).resolves.toBe(false);
+
+		queueDatabaseResults([{ key: "master_encryption_key" }], [], [], undefined);
+		await expect(deleteMasterKeyIfUnused()).resolves.toBe(true);
+	});
+
+	it("force-resets the master key and every encrypted provider config", async () => {
+		secureValues.set("master_ready", "true");
+		secureValues.set("master_strong_password", "strong");
+		secureValues.set("openai_ready", "true");
+		secureValues.set("openrouter_ready", "true");
+		queueDatabaseResults(
+			[{ key: "openai_config" }],
+			[{ key: "openrouter_config" }],
+		);
+		databaseTransaction.mockResolvedValue(undefined);
+
+		await expect(resetMasterKeyAndEncryptedConfigs()).resolves.toEqual([
+			"openai",
+			"openrouter",
+		]);
+		expect(databaseTransaction).toHaveBeenCalledTimes(1);
+		await expect(isMasterKeyUnlocked()).resolves.toBe(false);
+		expect(secureValues.has("openai_ready")).toBe(false);
+		expect(secureValues.has("openrouter_ready")).toBe(false);
 	});
 });
 

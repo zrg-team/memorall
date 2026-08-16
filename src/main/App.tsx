@@ -28,8 +28,9 @@ import {
 } from "@/utils/auth-provider-restore";
 import {
 	detectEncryptionFormat,
-	isMasterKeyUnlocked,
 	getMasterStrongPassword,
+	isMasterKeyUnlocked,
+	resetMasterKeyAndEncryptedConfigs,
 } from "@/utils/master-key";
 import { unlockAndRestoreProvidersWithPasskey } from "@/utils/provider-passkey-unlock";
 import { serviceManager } from "@/services";
@@ -205,6 +206,42 @@ const App: React.FC = () => {
 		);
 	};
 
+	const handleForgotMasterPasskey = async () => {
+		const deletedProviders = await resetMasterKeyAndEncryptedConfigs();
+		const currentModel = await serviceManager.llmService.getCurrentModel();
+		if (
+			currentModel &&
+			deletedProviders.includes(
+				currentModel.provider as "openai" | "openrouter",
+			)
+		) {
+			await serviceManager.llmService.clearCurrentModel();
+		}
+
+		for (const provider of deletedProviders) {
+			if (serviceManager.llmService.has(provider)) {
+				serviceManager.llmService.remove(provider);
+			}
+			try {
+				await backgroundJob.execute(
+					"remove-auth-provider",
+					{ provider },
+					{ stream: false },
+				);
+			} catch (error) {
+				logError(
+					`Failed to remove ${provider} from background services:`,
+					error,
+				);
+			}
+		}
+
+		setEncryptedProviders([]);
+		setEncryptionFormat("none");
+		setServicesStatus("ready");
+		logInfo("Forgotten master passkey reset completed");
+	};
+
 	// Handle migration completion
 	const handleMigrationComplete = async () => {
 		logInfo("Migration complete - checking if passkey is needed");
@@ -377,6 +414,7 @@ const App: React.FC = () => {
 						providers={encryptedProviders}
 						onPasskeySubmit={handlePasskeySubmit}
 						onCancel={handlePasskeyCancel}
+						onForgotPasskey={handleForgotMasterPasskey}
 					/>
 
 					{/* Migration wizard for legacy configs */}

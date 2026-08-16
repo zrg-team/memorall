@@ -67,6 +67,10 @@ class SecureSessionMemory {
 	async exists(key: string) {
 		return this.sessionMemory.has(key);
 	}
+
+	async delete(key: string) {
+		this.sessionMemory.delete(key);
+	}
 }
 
 const secureSession = new SecureSessionMemory();

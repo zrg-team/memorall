@@ -13,6 +13,7 @@
 		"test": "vitest run"
 	},
 	"devDependencies": {
+		"esbuild": "0.25.12",
 		"typescript": "npm:@typescript/typescript6@6.0.2"
 	}
 }

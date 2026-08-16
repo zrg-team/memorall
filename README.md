@@ -104,7 +104,7 @@ available by design.
 | WebGPU acceleration | ◐ browser/device | ◐ system webview/device | ◐ browser/device |
 | In-page assistant, selection capture, and active-tab capture | ✅ | — | — |
 | Browser activity tracking | ✅ | — | — |
-| Agent browser automation | ✅ extension tabs | ◐ managed Chromium rollout | — |
+| Agent browser automation | ✅ extension tabs | ✅ bundled isolated Chromium | — |
 | Native folders, local commands, npm, local servers, and MCP stdio | — | ◐ native bridge rollout | — |
 | MCP HTTP/SSE | ✅ | ✅ | ✅ |
 | Native or browser notifications | ✅ | ✅ | ◐ permission |
@@ -216,7 +216,7 @@ flowchart TD
   OFFSCREEN["Extension offscreen host"]
   WORKER["Shared or dedicated worker"]
   RUST["Tauri Rust supervisor"]
-  SIDECAR["Managed Node and Playwright sidecar"]
+  SIDECAR["Managed Node and browser-router sidecar"]
 
   UI --> PORTS
   UI --> RUNTIME

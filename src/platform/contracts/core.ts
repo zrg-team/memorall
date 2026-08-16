@@ -84,6 +84,62 @@ export interface BrowserCommandPort {
 	tabExists(tabId: number): Promise<boolean>;
 }
 
+export type ManagedBrowserReadiness =
+	| "initializing"
+	| "ready"
+	| "degraded"
+	| "needs-user"
+	| "unavailable";
+
+export type ManagedBrowserEngine =
+	| "direct"
+	| "lightpanda"
+	| "browseros"
+	| "chromium";
+
+export interface ManagedBrowserFailure {
+	code: string;
+	message: string;
+}
+
+export interface ManagedBrowserStatus {
+	readiness: ManagedBrowserReadiness;
+	engine: ManagedBrowserEngine | null;
+	engineVersion: string | null;
+	rendererVersion: string | null;
+	engines: Array<{
+		engine: ManagedBrowserEngine;
+		readiness: "ready" | "unavailable";
+		version: string | null;
+		failure?: ManagedBrowserFailure;
+	}>;
+	persistProfile: boolean;
+	visible: boolean;
+	activeSessions: number;
+	sessions: Array<{
+		tabId: number;
+		engine: ManagedBrowserEngine;
+		url: string;
+		paused: boolean;
+	}>;
+	failure?: ManagedBrowserFailure;
+}
+
+export interface ManagedBrowserSettings {
+	persistProfile: boolean;
+	visible: boolean;
+}
+
+export interface BrowserAutomationControl {
+	getSnapshot(): ManagedBrowserStatus;
+	refresh(): Promise<ManagedBrowserStatus>;
+	configure(settings: ManagedBrowserSettings): Promise<ManagedBrowserStatus>;
+	clearProfile(): Promise<ManagedBrowserStatus>;
+	takeover(tabId: number): Promise<ManagedBrowserStatus>;
+	resume(tabId: number): Promise<ManagedBrowserStatus>;
+	subscribe(listener: () => void): () => void;
+}
+
 export type AppSurface = "popup" | "standalone" | "web" | "desktop";
 
 export interface AppLifecyclePort {
@@ -103,5 +159,6 @@ export interface PlatformComposition {
 	externalLinks: ExternalLinkPort;
 	runtimeDiagnostics: RuntimeDiagnosticsPort;
 	browserCommands: BrowserCommandPort;
+	browserAutomation?: BrowserAutomationControl;
 	lifecycle: AppLifecyclePort;
 }

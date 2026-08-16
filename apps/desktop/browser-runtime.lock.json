@@ -1,0 +1,94 @@
+{
+	"schemaVersion": 1,
+	"browser": {
+		"name": "Managed Chromium runtime",
+		"version": "target-pinned",
+		"license": "Chromium open-source licenses; BrowserOS distributions are AGPL-3.0",
+		"targets": {
+			"win32-x64": {
+				"url": "https://github.com/browseros-ai/BrowserOS/releases/download/browserclaw/v0.49.3/BrowserOS_neo_v0.49.3.1_x64_installer.zip",
+				"sha256": "87db8f396540b35d071aa7e285e72a415043780028a59a5d1d80046a445c50cd",
+				"kind": "browseros-windows-installer",
+				"automation": "browseros-and-cdp",
+				"version": "148.0.7985.97",
+				"executable": "Chrome-bin/chrome.exe"
+			},
+			"darwin-x64": {
+				"url": "https://storage.googleapis.com/chrome-for-testing-public/151.0.7922.34/mac-x64/chrome-mac-x64.zip",
+				"sha256": "69bcc853db975a2380767e9ff36da17f1d7b782fbbe191a210f676d2d5967d3e",
+				"automation": "cdp",
+				"version": "151.0.7922.34",
+				"executable": "chrome-mac-x64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing"
+			},
+			"darwin-arm64": {
+				"url": "https://storage.googleapis.com/chrome-for-testing-public/151.0.7922.34/mac-arm64/chrome-mac-arm64.zip",
+				"sha256": "01a23ef9501b2745e0c2944c2e583207e6f6132d8d91c3a87ff65b5079e438ef",
+				"automation": "cdp",
+				"version": "151.0.7922.34",
+				"executable": "chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing"
+			},
+			"linux-x64": {
+				"url": "https://storage.googleapis.com/chrome-for-testing-public/151.0.7922.34/linux64/chrome-linux64.zip",
+				"sha256": "ae8736ac28bc69278551500f219fc749575648263c43ec5990749eff43b9fcf8",
+				"automation": "cdp",
+				"version": "151.0.7922.34",
+				"executable": "chrome-linux64/chrome"
+			},
+			"linux-arm64": {
+				"url": "https://cdn.playwright.dev/dbazure/download/playwright/builds/chromium/1234/chromium-linux-arm64.zip",
+				"sha256": "b5ad7d8fe70f230b34198ddb5626d717c016db2f627cb44b922babbcaf3479b9",
+				"automation": "cdp",
+				"executable": "chrome-linux/chrome"
+			}
+		}
+	},
+	"browseros": {
+		"version": "0.0.37",
+		"sourceCommit": "375a842cbc1267ed754227b6e176fcef21086ade",
+		"license": "AGPL-3.0-or-later",
+		"targets": {
+			"win32-x64": {
+				"url": "https://github.com/browseros-ai/BrowserOS/releases/download/claw-server/v0.0.37/browseros-claw-server-rust-resources-windows-x64.zip",
+				"sha256": "718a533f70726a713f7e43b8d47f31e4e960757dc5f1469ab12c040b4f06fd10"
+			},
+			"darwin-x64": {
+				"url": "https://github.com/browseros-ai/BrowserOS/releases/download/claw-server/v0.0.37/browseros-claw-server-rust-resources-darwin-x64.zip",
+				"sha256": "267c3e78a3db9356b56b201c2a5467fa9dc3cf2259c464514faf9085d7d39b49"
+			},
+			"darwin-arm64": {
+				"url": "https://github.com/browseros-ai/BrowserOS/releases/download/claw-server/v0.0.37/browseros-claw-server-rust-resources-darwin-arm64.zip",
+				"sha256": "59b943f6cae151635ac49b42ccb52514a8d9d34dd4e8b00cbab5daec66b70556"
+			},
+			"linux-x64": {
+				"url": "https://github.com/browseros-ai/BrowserOS/releases/download/claw-server/v0.0.37/browseros-claw-server-rust-resources-linux-x64.zip",
+				"sha256": "bffd36b869b0f6ccbf9191987ef723ae627997a25d036a366cebc048281322e6"
+			},
+			"linux-arm64": {
+				"url": "https://github.com/browseros-ai/BrowserOS/releases/download/claw-server/v0.0.37/browseros-claw-server-rust-resources-linux-arm64.zip",
+				"sha256": "f578894769957b05851fbf7d19a5d043249df34f645a3a44d4e7c65b9e33629f"
+			}
+		}
+	},
+	"lightpanda": {
+		"version": "0.3.6",
+		"license": "AGPL-3.0",
+		"targets": {
+			"darwin-x64": {
+				"url": "https://github.com/lightpanda-io/browser/releases/download/0.3.6/lightpanda-x86_64-macos",
+				"sha256": "468b3126108e052a75aa214b3154d41c99070dbda78c6b9eb2f027a02beb4258"
+			},
+			"darwin-arm64": {
+				"url": "https://github.com/lightpanda-io/browser/releases/download/0.3.6/lightpanda-aarch64-macos",
+				"sha256": "33568934d374daf9012b9be0847fd82a99dd9f1cb2f2f93bb783cc78a96c99ac"
+			},
+			"linux-x64": {
+				"url": "https://github.com/lightpanda-io/browser/releases/download/0.3.6/lightpanda-x86_64-linux",
+				"sha256": "e438c0ad44e0f6916c14cf13beb003512c60438d8fd200738d2e596e73f652d6"
+			},
+			"linux-arm64": {
+				"url": "https://github.com/lightpanda-io/browser/releases/download/0.3.6/lightpanda-aarch64-linux",
+				"sha256": "29c059cd0755a195350cc79dbcf7ee9580fd575ec3eaa31db755dbada417e616"
+			}
+		}
+	}
+}

@@ -1,30 +1,36 @@
-import React, { useState, useEffect } from "react";
-import { useTranslation } from "react-i18next";
-import { Button } from "@/main/components/ui/button";
-import { Input } from "@/main/components/ui/input";
+import { eq } from "drizzle-orm";
 import {
+	AlertCircle,
+	CheckCircle,
 	Eye,
 	EyeOff,
-	Shield,
-	CheckCircle,
-	AlertCircle,
 	Loader2,
+	Shield,
 	Trash2,
 } from "lucide-react";
+import type React from "react";
+import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { MasterKeySetupDialog } from "@/main/components/molecules/MasterKeySetupDialog";
+import { PasskeyPromptDialog } from "@/main/components/molecules/PasskeyPromptDialog";
+import { Button } from "@/main/components/ui/button";
+import { Input } from "@/main/components/ui/input";
 import { serviceManager } from "@/services";
-import { eq } from "drizzle-orm";
-import secureSession from "@/utils/secure-session";
-import { logError, logInfo } from "@/utils/logger";
 import { backgroundJob } from "@/services/background-jobs/background-job";
+import { logError, logInfo } from "@/utils/logger";
 import {
+	deleteMasterKeyIfUnused,
+	getEncryptedProviders,
+	getMasterStrongPassword,
 	hasMasterKey,
 	isMasterKeyUnlocked,
-	saveProviderConfig,
 	loadProviderConfig,
-	getMasterStrongPassword,
+	resetMasterKeyAndEncryptedConfigs,
+	saveProviderConfig,
 	setupMasterKey,
+	unlockMasterKey,
 } from "@/utils/master-key";
-import { MasterKeySetupDialog } from "@/main/components/molecules/MasterKeySetupDialog";
+import secureSession from "@/utils/secure-session";
 
 interface OpenRouterTabProps {
 	onModelLoaded?: (modelId: string, provider: "openrouter") => void;
@@ -51,6 +57,10 @@ export const OpenRouterTab: React.FC<OpenRouterTabProps> = ({
 
 	// Master key setup dialog
 	const [showMasterKeySetup, setShowMasterKeySetup] = useState(false);
+	const [showMasterKeyUnlock, setShowMasterKeyUnlock] = useState(false);
+	const [unlockProviders, setUnlockProviders] = useState<
+		("openai" | "openrouter")[]
+	>([]);
 	const [pendingSaveConfig, setPendingSaveConfig] = useState<{
 		apiKey: string;
 		baseUrl: string;
@@ -95,6 +105,35 @@ export const OpenRouterTab: React.FC<OpenRouterTabProps> = ({
 		}
 	};
 
+	const saveAndActivateConfig = async (config: {
+		apiKey: string;
+		baseUrl: string;
+	}) => {
+		await saveProviderConfig("openrouter", config);
+
+		await serviceManager.llmService.create("openrouter", {
+			type: "openrouter",
+			apiKey: config.apiKey,
+			baseURL: config.baseUrl,
+		});
+
+		await secureSession.set("openrouter_ready", "true");
+
+		const masterStrongPassword = await getMasterStrongPassword();
+		if (masterStrongPassword) {
+			await backgroundJob.execute(
+				"restore-all-providers",
+				{ masterStrongPassword },
+				{ stream: false },
+			);
+		}
+
+		setTempApiKey("");
+		setConfigState("loaded");
+		logInfo("OpenRouter configuration saved successfully");
+		onModelLoaded?.("openai/gpt-4o", "openrouter");
+	};
+
 	// Save new configuration to database
 	const handleSaveConfig = async () => {
 		if (!tempApiKey.trim()) {
@@ -114,7 +153,9 @@ export const OpenRouterTab: React.FC<OpenRouterTabProps> = ({
 			// Check if master key exists
 			const masterKeyExists = await hasMasterKey();
 
-			if (!masterKeyExists) {
+			const removedUnusedMasterKey =
+				masterKeyExists && (await deleteMasterKeyIfUnused());
+			if (!masterKeyExists || removedUnusedMasterKey) {
 				// Need to setup master key first
 				setPendingSaveConfig(config);
 				setShowMasterKeySetup(true);
@@ -125,41 +166,14 @@ export const OpenRouterTab: React.FC<OpenRouterTabProps> = ({
 			// Check if master key is unlocked
 			const isUnlocked = await isMasterKeyUnlocked();
 			if (!isUnlocked) {
-				setError(t("openai.masterKeyNotUnlocked"));
+				setUnlockProviders(await getEncryptedProviders());
+				setPendingSaveConfig(config);
+				setShowMasterKeyUnlock(true);
 				setIsLoading(false);
 				return;
 			}
 
-			// Save config with master key
-			await saveProviderConfig("openrouter", config);
-
-			// Create OpenRouter service
-			await serviceManager.llmService.create("openrouter", {
-				type: "openrouter",
-				apiKey: config.apiKey,
-				baseURL: config.baseUrl,
-			});
-
-			// Mark as ready
-			await secureSession.set("openrouter_ready", "true");
-
-			// Also restore in offscreen thread via background job
-			const masterStrongPassword = await getMasterStrongPassword();
-			if (masterStrongPassword) {
-				await backgroundJob.execute(
-					"restore-all-providers",
-					{ masterStrongPassword },
-					{ stream: false },
-				);
-			}
-
-			// Clear form and refresh
-			setTempApiKey("");
-			setConfigState("loaded");
-			logInfo("OpenRouter configuration saved successfully");
-
-			// Notify parent
-			onModelLoaded?.("openai/gpt-4o", "openrouter");
+			await saveAndActivateConfig(config);
 		} catch (error) {
 			const msg = error instanceof Error ? error.message : "Unknown error";
 			setError(t("openai.failedToSaveConfiguration", { error: msg }));
@@ -171,45 +185,61 @@ export const OpenRouterTab: React.FC<OpenRouterTabProps> = ({
 
 	// Handle master key setup completion
 	const handleMasterKeySetupComplete = async (passkey: string) => {
-		try {
-			await setupMasterKey(passkey);
+		await setupMasterKey(passkey);
 
-			// Now save the pending config
-			if (pendingSaveConfig) {
-				await saveProviderConfig("openrouter", pendingSaveConfig);
-
-				// Create OpenRouter service
-				await serviceManager.llmService.create("openrouter", {
-					type: "openrouter",
-					apiKey: pendingSaveConfig.apiKey,
-					baseURL: pendingSaveConfig.baseUrl,
-				});
-
-				// Mark as ready
-				await secureSession.set("openrouter_ready", "true");
-
-				// Also restore in offscreen thread via background job
-				const masterStrongPassword = await getMasterStrongPassword();
-				if (masterStrongPassword) {
-					await backgroundJob.execute(
-						"restore-all-providers",
-						{ masterStrongPassword },
-						{ stream: false },
-					);
-				}
-
-				setTempApiKey("");
-				setConfigState("loaded");
-				logInfo("OpenRouter configuration saved with new master key");
-
-				onModelLoaded?.("openai/gpt-4o", "openrouter");
-			}
-
-			setShowMasterKeySetup(false);
-			setPendingSaveConfig(null);
-		} catch (error) {
-			throw error;
+		// Now save the pending config
+		if (pendingSaveConfig) {
+			await saveAndActivateConfig(pendingSaveConfig);
 		}
+
+		setShowMasterKeySetup(false);
+		setPendingSaveConfig(null);
+	};
+
+	const handleMasterKeyUnlockComplete = async (passkey: string) => {
+		await unlockMasterKey(passkey);
+
+		if (pendingSaveConfig) {
+			await saveAndActivateConfig(pendingSaveConfig);
+		}
+
+		setShowMasterKeyUnlock(false);
+		setPendingSaveConfig(null);
+	};
+
+	const handleForgotMasterPasskey = async () => {
+		const deletedProviders = await resetMasterKeyAndEncryptedConfigs();
+		const currentModel = await serviceManager.llmService.getCurrentModel();
+		if (
+			currentModel &&
+			deletedProviders.includes(
+				currentModel.provider as "openai" | "openrouter",
+			)
+		) {
+			await serviceManager.llmService.clearCurrentModel();
+		}
+
+		for (const provider of deletedProviders) {
+			if (serviceManager.llmService.has(provider)) {
+				serviceManager.llmService.remove(provider);
+			}
+			try {
+				await backgroundJob.execute(
+					"remove-auth-provider",
+					{ provider },
+					{ stream: false },
+				);
+			} catch (error) {
+				logError(
+					`Failed to remove ${provider} from background services:`,
+					error,
+				);
+			}
+		}
+
+		setUnlockProviders([]);
+		setShowMasterKeyUnlock(false);
+		setShowMasterKeySetup(true);
 	};
 
 	// Load configuration (auto-load if master key is unlocked)
@@ -290,8 +320,9 @@ export const OpenRouterTab: React.FC<OpenRouterTabProps> = ({
 					.where(eq(schema.encryption.key, "openrouter_config"));
 			});
 
-			// Clear memory
-			await secureSession.set("openrouter_ready", "");
+			// Clear memory and remove the master key if no config still uses it.
+			await secureSession.delete("openrouter_ready");
+			await deleteMasterKeyIfUnused();
 
 			// Remove LLM service
 			if (serviceManager.llmService.has("openrouter")) {
@@ -544,6 +575,17 @@ export const OpenRouterTab: React.FC<OpenRouterTabProps> = ({
 				onSetupComplete={handleMasterKeySetupComplete}
 				onCancel={() => {
 					setShowMasterKeySetup(false);
+					setPendingSaveConfig(null);
+				}}
+			/>
+
+			<PasskeyPromptDialog
+				open={showMasterKeyUnlock}
+				providers={unlockProviders}
+				onPasskeySubmit={handleMasterKeyUnlockComplete}
+				onForgotPasskey={handleForgotMasterPasskey}
+				onCancel={() => {
+					setShowMasterKeyUnlock(false);
 					setPendingSaveConfig(null);
 				}}
 			/>

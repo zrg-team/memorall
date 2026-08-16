@@ -31,31 +31,42 @@ function toWllamaServeId(model: LLMModelConfig): string | null {
 function modelIdsMatch(model: LLMModelConfig, candidateId: string): boolean {
 	const candidate = normalizeModelId(candidateId);
 	const direct = normalizeModelId(model.id);
-	if (candidate === direct) {
+	const modelLeaf = direct.split("/").pop() ?? direct;
+	const candidateLeaf = candidate.split("/").pop() ?? candidate;
+	return modelLeaf === candidateLeaf;
+}
+
+function modelIdMatchesExactly(
+	model: LLMModelConfig,
+	candidateId: string,
+): boolean {
+	const candidate = normalizeModelId(candidateId);
+	if (candidate === normalizeModelId(model.id)) {
 		return true;
 	}
 
 	const wllamaServeId = toWllamaServeId(model);
-	if (wllamaServeId && candidate === normalizeModelId(wllamaServeId)) {
-		return true;
-	}
-
-	const modelLeaf = direct.split("/").pop() ?? direct;
-	const candidateLeaf = candidate.split("/").pop() ?? candidate;
-	return modelLeaf === candidateLeaf;
+	return Boolean(
+		wllamaServeId && candidate === normalizeModelId(wllamaServeId),
+	);
 }
 
 export function getModel(
 	modelId: string,
 	provider?: LLMProvider,
 ): LLMModelConfig | undefined {
-	return ALL_MODELS.find((model) => {
+	const models = ALL_MODELS.filter((model) => {
 		if (provider && model.provider !== provider) {
 			return false;
 		}
 
-		return modelIdsMatch(model, modelId);
+		return true;
 	});
+
+	return (
+		models.find((model) => modelIdMatchesExactly(model, modelId)) ??
+		models.find((model) => modelIdsMatch(model, modelId))
+	);
 }
 
 export function getModelsByProvider(provider: LLMProvider): LLMModelConfig[] {

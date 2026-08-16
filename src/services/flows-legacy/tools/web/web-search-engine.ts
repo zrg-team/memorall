@@ -27,7 +27,7 @@ const ENGINE_URLS: Record<SupportedEngine, (q: string) => string> = {
 		`https://www.google.com/search?q=${encodeURIComponent(q)}&hl=en`,
 	bing: (q) => `https://www.bing.com/search?q=${encodeURIComponent(q)}`,
 	duckduckgo: (q) =>
-		`https://duckduckgo.com/?q=${encodeURIComponent(q)}&ia=web`,
+		`https://html.duckduckgo.com/html/?q=${encodeURIComponent(q)}`,
 	yahoo: (q) => `https://search.yahoo.com/search?p=${encodeURIComponent(q)}`,
 	brave: (q) => `https://search.brave.com/search?q=${encodeURIComponent(q)}`,
 };
@@ -46,6 +46,13 @@ interface SearchResult {
 	snippet: string;
 }
 
+type SearchFailureClassification =
+	| "challenge"
+	| "network"
+	| "timeout"
+	| "parse-empty"
+	| "unknown";
+
 const parseHtml = (html: string): Document =>
 	new DOMParser().parseFromString(
 		html || "<html><body></body></html>",
@@ -58,10 +65,50 @@ const extractText = (el: Element | null): string =>
 const extractHref = (el: Element | null): string =>
 	el?.getAttribute("href") ?? "";
 
-type EngineParser = (doc: Document, max: number) => SearchResult[];
+type EngineParser = (
+	doc: Document,
+	max: number,
+	searchUrl: string,
+) => SearchResult[];
+
+const normalizedResultUrl = (
+	rawHref: string,
+	searchUrl: string,
+): string | null => {
+	if (!rawHref || rawHref.startsWith("#")) return null;
+	let candidate: URL;
+	try {
+		candidate = new URL(rawHref, searchUrl);
+	} catch {
+		return null;
+	}
+	for (const key of ["uddg", "q", "url", "target"]) {
+		const redirected = candidate.searchParams.get(key);
+		if (!redirected) continue;
+		try {
+			const decoded = new URL(redirected);
+			if (decoded.protocol === "http:" || decoded.protocol === "https:") {
+				candidate = decoded;
+				break;
+			}
+		} catch {
+			// Keep the original candidate when the parameter is not an absolute URL.
+		}
+	}
+	if (candidate.protocol !== "http:" && candidate.protocol !== "https:") {
+		return null;
+	}
+	candidate.hash = "";
+	for (const key of [...candidate.searchParams.keys()]) {
+		if (/^(?:utm_|ved$|ei$|source$|form$|cvid$)/i.test(key)) {
+			candidate.searchParams.delete(key);
+		}
+	}
+	return candidate.toString();
+};
 
 const ENGINE_PARSERS: Record<SupportedEngine, EngineParser> = {
-	google: (doc, max) => {
+	google: (doc, max, searchUrl) => {
 		const results: SearchResult[] = [];
 		const containers = doc.querySelectorAll("#search [data-hveid], #rso .g");
 		for (const container of Array.from(containers)) {
@@ -70,16 +117,15 @@ const ENGINE_PARSERS: Record<SupportedEngine, EngineParser> = {
 			const snippetEl = container.querySelector(
 				".VwiC3b, [data-sncf], [data-snf]",
 			);
-			const url = extractHref(linkEl);
+			const url = normalizedResultUrl(extractHref(linkEl), searchUrl);
 			const title = extractText(titleEl);
-			if (!title || !url || url.startsWith("#") || url.startsWith("/search"))
-				continue;
+			if (!title || !url) continue;
 			results.push({ title, url, snippet: extractText(snippetEl) });
 			if (results.length >= max) break;
 		}
 		return results;
 	},
-	bing: (doc, max) => {
+	bing: (doc, max, searchUrl) => {
 		const results: SearchResult[] = [];
 		for (const container of Array.from(doc.querySelectorAll(".b_algo")).slice(
 			0,
@@ -87,14 +133,14 @@ const ENGINE_PARSERS: Record<SupportedEngine, EngineParser> = {
 		)) {
 			const titleEl = container.querySelector("h2 a");
 			const snippetEl = container.querySelector(".b_caption p, .b_algoSlug");
-			const url = extractHref(titleEl);
+			const url = normalizedResultUrl(extractHref(titleEl), searchUrl);
 			const title = extractText(titleEl);
 			if (!title || !url) continue;
 			results.push({ title, url, snippet: extractText(snippetEl) });
 		}
 		return results;
 	},
-	duckduckgo: (doc, max) => {
+	duckduckgo: (doc, max, searchUrl) => {
 		const results: SearchResult[] = [];
 		const containers = doc.querySelectorAll(
 			'[data-testid="result"], .result, .web-result',
@@ -106,29 +152,29 @@ const ENGINE_PARSERS: Record<SupportedEngine, EngineParser> = {
 			const snippetEl = container.querySelector(
 				'[data-testid="result-snippet"], .result__snippet',
 			);
-			const url = extractHref(titleEl);
+			const url = normalizedResultUrl(extractHref(titleEl), searchUrl);
 			const title = extractText(titleEl);
-			if (!title || !url || url.startsWith("#")) continue;
+			if (!title || !url) continue;
 			results.push({ title, url, snippet: extractText(snippetEl) });
 			if (results.length >= max) break;
 		}
 		return results;
 	},
-	yahoo: (doc, max) => {
+	yahoo: (doc, max, searchUrl) => {
 		const results: SearchResult[] = [];
 		for (const container of Array.from(
 			doc.querySelectorAll(".algo, .Sr"),
 		).slice(0, max)) {
 			const titleEl = container.querySelector("h3 a, h3.title a");
 			const snippetEl = container.querySelector(".compText p, p.lh-16");
-			const url = extractHref(titleEl);
+			const url = normalizedResultUrl(extractHref(titleEl), searchUrl);
 			const title = extractText(titleEl);
 			if (!title || !url) continue;
 			results.push({ title, url, snippet: extractText(snippetEl) });
 		}
 		return results;
 	},
-	brave: (doc, max) => {
+	brave: (doc, max, searchUrl) => {
 		const results: SearchResult[] = [];
 		for (const container of Array.from(
 			doc.querySelectorAll(".snippet, [data-type='web']"),
@@ -136,9 +182,9 @@ const ENGINE_PARSERS: Record<SupportedEngine, EngineParser> = {
 			const titleEl = container.querySelector(".title, h3 a");
 			const linkEl = container.querySelector("a.result-header, a[href]");
 			const snippetEl = container.querySelector(".snippet-description, p");
-			const url = extractHref(linkEl);
+			const url = normalizedResultUrl(extractHref(linkEl), searchUrl);
 			const title = extractText(titleEl);
-			if (!title || !url || url.startsWith("#")) continue;
+			if (!title || !url) continue;
 			results.push({ title, url, snippet: extractText(snippetEl) });
 		}
 		return results;
@@ -151,13 +197,17 @@ const universalFallback = (
 	doc: Document,
 	engineDomain: string,
 	max: number,
+	searchUrl: string,
 ): SearchResult[] => {
 	const results: SearchResult[] = [];
 	const seen = new Set<string>();
 	for (const anchor of Array.from(doc.querySelectorAll("a[href]"))) {
-		const url = anchor.getAttribute("href") ?? "";
+		const url = normalizedResultUrl(
+			anchor.getAttribute("href") ?? "",
+			searchUrl,
+		);
 		const title = anchor.textContent?.trim() ?? "";
-		if (!url.startsWith("http") || url.includes(engineDomain)) continue;
+		if (!url || new URL(url).hostname.includes(engineDomain)) continue;
 		if (title.split(/\s+/).length < 3 || seen.has(url)) continue;
 		seen.add(url);
 		results.push({ title, url, snippet: "" });
@@ -166,17 +216,65 @@ const universalFallback = (
 	return results;
 };
 
-const resolveEngines = (engines: string | undefined): SupportedEngine[] => {
-	if (!engines || engines.trim().length === 0) return ["google"];
-	const parts = engines
-		.split(",")
+export const resolveWebSearchEngines = (
+	engines: string | string[] | undefined,
+): SupportedEngine[] => {
+	if (
+		!engines ||
+		(typeof engines === "string" && engines.trim().length === 0)
+	) {
+		return ["duckduckgo", "brave", "bing"];
+	}
+	const parts = (Array.isArray(engines) ? engines : engines.split(","))
 		.map((e) => e.trim().toLowerCase())
 		.filter((e) => e.length > 0);
 	if (parts.includes("all")) return [...SUPPORTED_ENGINES];
 	const valid = parts.filter((e): e is SupportedEngine =>
 		(SUPPORTED_ENGINES as readonly string[]).includes(e),
 	);
-	return valid.length > 0 ? valid : ["google"];
+	return valid.length > 0
+		? [...new Set(valid)]
+		: ["duckduckgo", "brave", "bing"];
+};
+
+const classifySearchFailure = (
+	message: string,
+): SearchFailureClassification => {
+	if (
+		/verify|captcha|challenge|access denied|forbidden|human|security check/i.test(
+			message,
+		)
+	) {
+		return "challenge";
+	}
+	if (/timeout|timed out/i.test(message)) return "timeout";
+	if (/network|fetch|dns|connection|http \d{3}/i.test(message))
+		return "network";
+	return "unknown";
+};
+
+const challengeText = (text: string): boolean =>
+	/(?:verify (?:that )?you are human|checking your browser|enable javascript and cookies|attention required|security verification|unusual traffic|access denied)/i.test(
+		text.slice(0, 20_000),
+	);
+
+const mapConcurrent = async <T, R>(
+	items: T[],
+	concurrency: number,
+	worker: (item: T) => Promise<R>,
+): Promise<R[]> => {
+	const results = new Array<R>(items.length);
+	let next = 0;
+	const run = async () => {
+		while (next < items.length) {
+			const index = next++;
+			results[index] = await worker(items[index] as T);
+		}
+	};
+	await Promise.all(
+		Array.from({ length: Math.min(concurrency, items.length) }, () => run()),
+	);
+	return results;
 };
 
 const schema = z.object({
@@ -185,7 +283,7 @@ const schema = z.object({
 		.string()
 		.optional()
 		.describe(
-			`Comma-separated engines to search. Use "all" for all engines, or any combination of: ${SUPPORTED_ENGINES.join(", ")}. Default: "google". Example: "google,bing".`,
+			`Comma-separated engines to search. Use "all" for all engines, or any combination of: ${SUPPORTED_ENGINES.join(", ")}. Default: "duckduckgo,brave,bing". Example: "google,bing".`,
 		),
 	maxResultsPerEngine: z
 		.number()
@@ -210,7 +308,7 @@ export const createWebSearchEngineTool: ToolFactory<Input, WebToolServices> = (
 	schema,
 	execute: async (input) => {
 		const webBrowser = requireWebBrowserService(services);
-		const engines = resolveEngines(input.engines);
+		const engines = resolveWebSearchEngines(input.engines);
 		const max = Math.max(1, Math.min(30, input.maxResultsPerEngine ?? 10));
 		const timeout = Math.max(500, input.timeoutMs ?? 15_000);
 
@@ -219,9 +317,13 @@ export const createWebSearchEngineTool: ToolFactory<Input, WebToolServices> = (
 			searchUrl: string;
 			results: SearchResult[];
 		}[] = [];
-		const errors: { engine: string; error: string }[] = [];
+		const errors: {
+			engine: string;
+			error: string;
+			classification: SearchFailureClassification;
+		}[] = [];
 
-		for (const engine of engines) {
+		await mapConcurrent(engines, 2, async (engine) => {
 			const searchUrl = ENGINE_URLS[engine](input.query);
 			let sessionId: string | undefined;
 			try {
@@ -234,28 +336,85 @@ export const createWebSearchEngineTool: ToolFactory<Input, WebToolServices> = (
 				});
 				sessionId = session.id;
 
-				const doc = parseHtml(session.html ?? "");
-				let results = ENGINE_PARSERS[engine](doc, max);
+				let html = session.html ?? "";
+				let text = session.text ?? "";
+				let doc = parseHtml(html);
+				let results = ENGINE_PARSERS[engine](doc, max, searchUrl);
 				if (results.length === 0) {
-					results = universalFallback(doc, ENGINE_DOMAINS[engine], max);
+					results = universalFallback(
+						doc,
+						ENGINE_DOMAINS[engine],
+						max,
+						searchUrl,
+					);
+				}
+				if (
+					results.length === 0 &&
+					session.domAccessible &&
+					webBrowser.getCapabilities?.().canWaitForRender
+				) {
+					const settled = await webBrowser
+						.waitForPageRender({
+							sessionId: session.id,
+							timeoutMs: Math.min(5_000, timeout),
+							intervalMs: 200,
+							stabilityMs: 500,
+							maxHtmlChars: 200_000,
+						})
+						.catch(() => null);
+					if (settled) {
+						html = settled.html;
+						text = settled.lastText;
+						doc = parseHtml(html);
+						results = ENGINE_PARSERS[engine](doc, max, searchUrl);
+						if (results.length === 0) {
+							results = universalFallback(
+								doc,
+								ENGINE_DOMAINS[engine],
+								max,
+								searchUrl,
+							);
+						}
+					}
 				}
 
 				engineResults.push({ engine, searchUrl, results });
+				if (results.length === 0) {
+					const challenged = challengeText(text || extractText(doc.body));
+					errors.push({
+						engine,
+						error: challenged
+							? "Search engine returned an interactive verification page."
+							: "Search page loaded but yielded no validated result links.",
+						classification: challenged ? "challenge" : "parse-empty",
+					});
+				}
 			} catch (error) {
+				const message = error instanceof Error ? error.message : String(error);
 				errors.push({
 					engine,
-					error: error instanceof Error ? error.message : String(error),
+					error: message,
+					classification: classifySearchFailure(message),
 				});
 			} finally {
 				if (sessionId) {
 					await webBrowser.closeSession(sessionId).catch(() => {});
 				}
 			}
-		}
+		});
+		engineResults.sort(
+			(left, right) =>
+				engines.indexOf(left.engine as SupportedEngine) -
+				engines.indexOf(right.engine as SupportedEngine),
+		);
+		const resultCount = engineResults.reduce(
+			(total, entry) => total + entry.results.length,
+			0,
+		);
 
 		return createWebResult({
 			actionType: TOOL_NAME,
-			success: engineResults.length > 0,
+			success: resultCount > 0,
 			query: input.query,
 			engines,
 			results: engineResults,
