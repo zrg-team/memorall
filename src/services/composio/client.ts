@@ -6,7 +6,7 @@
  *   auth    x-api-key: <project key>
  *   apps    GET  /toolkits
  *   auth    GET/POST /auth_configs   (underscore; the docs' prose writes it hyphenated)
- *   connect POST /connected_accounts -> { id, redirect_url }
+ *   connect POST /connected_accounts/link -> { connected_account_id, redirect_url }
  *   poll    GET  /connected_accounts/{id} -> { status: ACTIVE | ... }
  *   mcp     POST /tool_router/session { mcp: true } -> { session_id, mcp: { url, headers } }
  *
@@ -111,8 +111,10 @@ export class ComposioClient {
 		if (!response.ok) {
 			const body = await response.text().catch(() => "");
 			// Name the status and the route: a bare "Not Found" from a mistyped path
-			// is indistinguishable from a genuinely missing record.
-			const detail = body.slice(0, 300) || response.statusText;
+			// is indistinguishable from a genuinely missing record. Composio's 4xx
+			// bodies also carry the remedy — which endpoint to use instead — well
+			// past the first 300 characters, so keep enough of it to read.
+			const detail = body.slice(0, 900) || response.statusText;
 			throw new ComposioError(
 				response.status,
 				`${response.status} on ${path.split("?")[0]} — ${detail}`,
@@ -206,28 +208,42 @@ export class ComposioClient {
 		return id;
 	}
 
+	/**
+	 * Start an OAuth connection.
+	 *
+	 * Must be `/connected_accounts/link`, not `/connected_accounts`: the plain
+	 * endpoint now rejects Composio-managed OAuth auth configs outright
+	 * ("no longer supported. Use POST /api/v3/connected_accounts/link instead").
+	 * Its body is flat — `auth_config_id` / `user_id`, not the nested
+	 * `auth_config.id` / `connection.user_id` the other endpoint takes — and the
+	 * account id comes back as `connected_account_id`.
+	 */
 	async initiateConnection(options: {
 		authConfigId: string;
 		userId: string;
 		callbackUrl?: string;
 	}): Promise<ComposioConnectionRequest> {
 		const payload = asRecord(
-			await this.request<unknown>("/connected_accounts", {
+			await this.request<unknown>("/connected_accounts/link", {
 				method: "POST",
 				body: JSON.stringify({
-					auth_config: { id: options.authConfigId },
-					connection: {
-						user_id: options.userId,
-						...(options.callbackUrl
-							? { callback_url: options.callbackUrl }
-							: {}),
-					},
+					auth_config_id: options.authConfigId,
+					user_id: options.userId,
+					...(options.callbackUrl ? { callback_url: options.callbackUrl } : {}),
 				}),
 			}),
 		);
 
 		return {
-			id: String(pick(payload, "id", "nanoid") ?? ""),
+			id: String(
+				pick(
+					payload,
+					"connected_account_id",
+					"connectedAccountId",
+					"id",
+					"nanoid",
+				) ?? "",
+			),
 			redirectUrl: pick<string>(
 				payload,
 				"redirect_url",

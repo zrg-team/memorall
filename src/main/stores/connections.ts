@@ -19,6 +19,7 @@ import { logError } from "@/utils/logger";
  */
 export type ConnectionStatus =
 	| "connected"
+	| "incomplete"
 	| "locked"
 	| "needs-auth"
 	| "bridge-down"
@@ -51,6 +52,10 @@ export const deriveStatus = (
 	unlocked: boolean,
 ): ConnectionStatus => {
 	if (connection.disabled) return "off";
+	// Saved but not finished — a Composio key with no apps yet, or any record
+	// without an endpoint. Making this a real state is what stops half-finished
+	// setup from vanishing and leaving the page looking empty.
+	if (!connection.url) return "incomplete";
 	if (connection.authMode !== "none" && !unlocked) return "locked";
 	if (!entry) return "unknown";
 	if (!entry.error) return "connected";
@@ -151,7 +156,8 @@ export const useConnectionsStore = create<ConnectionsState>((set, get) => ({
 		const connection = get().connections.find(
 			(candidate) => candidate.id === id,
 		);
-		if (!connection || get().discovering.includes(id)) return;
+		// Nothing to discover before setup produces an endpoint.
+		if (!connection?.url || get().discovering.includes(id)) return;
 
 		set({ discovering: [...get().discovering, id] });
 		try {

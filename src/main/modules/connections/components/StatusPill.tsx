@@ -19,6 +19,12 @@ const STATUS_STYLES: Record<
 		bg: "bg-emerald-500/10",
 		border: "border-emerald-500/30",
 	},
+	incomplete: {
+		dot: "bg-amber-500",
+		text: "text-amber-600 dark:text-amber-400",
+		bg: "bg-amber-500/10",
+		border: "border-amber-500/30",
+	},
 	locked: {
 		dot: "bg-blue-500",
 		text: "text-blue-600 dark:text-blue-400",
@@ -59,6 +65,7 @@ const STATUS_STYLES: Record<
 
 const STATUS_KEYS: Record<ConnectionStatus, string> = {
 	connected: "status.connected",
+	incomplete: "status.incomplete",
 	locked: "status.locked",
 	"needs-auth": "status.needsAuth",
 	"bridge-down": "status.bridgeDown",

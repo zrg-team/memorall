@@ -24,7 +24,10 @@
 		"unlock": "Mở khóa",
 		"reconnect": "Kết nối lại",
 		"enable": "Bật",
-		"viewError": "Xem chi tiết"
+		"viewError": "Xem chi tiết",
+		"incomplete": "Chưa hoàn tất thiết lập",
+		"continueSetup": "Tiếp tục thiết lập",
+		"incompleteHint": "Đã lưu khóa của bạn. Hãy kết nối ít nhất một ứng dụng để hoàn tất."
 	},
 	"lanes": {
 		"composio": {

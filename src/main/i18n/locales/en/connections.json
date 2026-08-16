@@ -24,7 +24,10 @@
 		"unlock": "Unlock",
 		"reconnect": "Reconnect",
 		"enable": "Enable",
-		"viewError": "View details"
+		"viewError": "View details",
+		"incomplete": "Setup unfinished",
+		"continueSetup": "Continue setup",
+		"incompleteHint": "Your key is saved. Connect at least one app to finish."
 	},
 	"lanes": {
 		"composio": {

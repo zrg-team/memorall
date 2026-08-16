@@ -71,6 +71,7 @@ export const ComposioWizard: React.FC<ComposioWizardProps> = ({
 	const { t } = useTranslation("connections");
 	const save = useConnectionsStore((state) => state.save);
 	const discover = useConnectionsStore((state) => state.discover);
+	const connections = useConnectionsStore((state) => state.connections);
 
 	const [step, setStep] = React.useState<Step>("key");
 	const [apiKey, setApiKey] = React.useState("");
@@ -98,7 +99,11 @@ export const ComposioWizard: React.FC<ComposioWizardProps> = ({
 		[pending],
 	);
 
-	/** Resume without retyping the key when it is already stored and unlocked. */
+	/**
+	 * Resume where the user left off. A stored key means the first step is
+	 * already done, so re-presenting it — prefilled, asking to "Save and connect"
+	 * again — just looks like the app forgot.
+	 */
 	React.useEffect(() => {
 		void (async () => {
 			try {
@@ -106,8 +111,17 @@ export const ComposioWizard: React.FC<ComposioWizardProps> = ({
 				const stored = await loadSecret(COMPOSIO_SECRET_KEY);
 				if (!stored) return;
 				const parsed = JSON.parse(stored) as { apiKey?: string };
-				if (parsed.apiKey) {
-					setApiKey(parsed.apiKey);
+				if (!parsed.apiKey) return;
+
+				setApiKey(parsed.apiKey);
+				setIsBusy(true);
+				try {
+					await enterAppsStep(parsed.apiKey);
+				} catch (caught) {
+					// A stored key that no longer works drops back to step 1 with a reason.
+					setError(caught instanceof Error ? caught.message : String(caught));
+				} finally {
+					setIsBusy(false);
 				}
 			} catch {
 				// A stored key we cannot read just means the user types it again.
@@ -140,8 +154,33 @@ export const ComposioWizard: React.FC<ComposioWizardProps> = ({
 		setStep("apps");
 	};
 
+	/**
+	 * Record the connection as soon as the key is stored, before any app is
+	 * connected. Otherwise a saved key produces nothing visible: the page still
+	 * reports zero connections and drops the user back on the empty chooser with
+	 * no sign their work was kept.
+	 */
 	const persistKeyAndContinue = async () => {
 		await saveSecret(COMPOSIO_SECRET_KEY, JSON.stringify({ apiKey }));
+
+		if (!connections.some((entry) => entry.id === COMPOSIO_CONNECTION_ID)) {
+			const now = new Date().toISOString();
+			await save({
+				id: COMPOSIO_CONNECTION_ID,
+				kind: "composio",
+				name: "Composio",
+				transport: "http",
+				// No endpoint until a session is minted; this reads as "incomplete".
+				url: "",
+				authMode: "none",
+				apps: [],
+				composio: { toolkits: [] },
+				enabledByDefault: false,
+				createdAt: now,
+				updatedAt: now,
+			});
+		}
+
 		await enterAppsStep(apiKey);
 	};
 
