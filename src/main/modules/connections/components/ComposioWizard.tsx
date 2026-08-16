@@ -57,6 +57,8 @@ type Step = "key" | "apps";
 interface ComposioWizardProps {
 	onDone: () => void;
 	onCancel: () => void;
+	/** Pre-filter the catalog, e.g. when the agent wizard knows it needs Gmail. */
+	initialSearch?: string;
 }
 
 interface PendingApp {
@@ -67,6 +69,7 @@ interface PendingApp {
 export const ComposioWizard: React.FC<ComposioWizardProps> = ({
 	onDone,
 	onCancel,
+	initialSearch,
 }) => {
 	const { t } = useTranslation("connections");
 	const save = useConnectionsStore((state) => state.save);
@@ -80,7 +83,7 @@ export const ComposioWizard: React.FC<ComposioWizardProps> = ({
 	const [error, setError] = React.useState<string | null>(null);
 
 	const [toolkits, setToolkits] = React.useState<ComposioToolkit[]>([]);
-	const [query, setQuery] = React.useState("");
+	const [query, setQuery] = React.useState(initialSearch ?? "");
 	const [connected, setConnected] = React.useState<ConnectionApp[]>([]);
 	const [pending, setPending] = React.useState<PendingApp | null>(null);
 	const [lastConsentUrl, setLastConsentUrl] = React.useState<string | null>(

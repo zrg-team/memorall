@@ -6,6 +6,16 @@ import type { Flow } from "@/services/database/types";
 import type { AgentWizardDraft } from "../types";
 import { useAgentWizard } from "../hooks/use-agent-wizard";
 import { AgentWizardChatPanel } from "./AgentWizardChatPanel";
+
+/**
+ * Loaded on demand: this pulls the MCP discovery client and the Composio client,
+ * which the wizard has no reason to carry unless setup is actually opened.
+ */
+const AgentWizardConnectionSetup = React.lazy(() =>
+	import("./AgentWizardConnectionSetup").then((module) => ({
+		default: module.AgentWizardConnectionSetup,
+	})),
+);
 import { AgentWizardTemplatePanel } from "./AgentWizardTemplatePanel";
 
 interface AgentWizardWorkspaceProps {
@@ -50,6 +60,17 @@ export const AgentWizardWorkspace: React.FC<AgentWizardWorkspaceProps> = ({
 					onStop={wizard.stop}
 					isStreaming={wizard.isStreaming}
 					isModelReady={wizard.isModelReady}
+					setupSlot={
+						wizard.connectionSetup ? (
+							<React.Suspense fallback={null}>
+								<AgentWizardConnectionSetup
+									request={wizard.connectionSetup}
+									onClose={wizard.closeConnectionSetup}
+									onConnected={wizard.attachConnection}
+								/>
+							</React.Suspense>
+						) : null
+					}
 				/>
 			</div>
 			<AgentWizardTemplatePanel

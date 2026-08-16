@@ -297,6 +297,18 @@ const announceToolPatchCursorMove = (patch: AgentWizardToolPatch): void => {
 				`Adding ${patch.name ?? patch.source}`,
 			);
 			break;
+		case "use_connections":
+			announceCursorMove(
+				AGENT_WIZARD_CURSOR_KEYS.mcpServers,
+				"Attaching connections",
+			);
+			break;
+		case "setup_connection":
+			announceCursorMove(
+				AGENT_WIZARD_CURSOR_KEYS.mcpServers,
+				"Opening connection setup",
+			);
+			break;
 		case "enable_feature":
 			announceCursorMove(
 				AGENT_WIZARD_CURSOR_KEYS.feature(patch.name),
@@ -455,6 +467,34 @@ export const applyAgentWizardToolPatch = (
 			}
 			break;
 		}
+		case "use_connections": {
+			// Only ids the user actually has. A hallucinated id would otherwise
+			// resolve to nothing at run time and look like a silent failure.
+			const known = new Set(catalog.connections.map((entry) => entry.id));
+			const accepted = patch.connectionIds.filter((id) => {
+				if (known.has(id)) return true;
+				rejected.push(`connection: ${id}`);
+				return false;
+			});
+			const existing = new Set(
+				next.connections.map((entry) => entry.connectionId),
+			);
+			next.connections = [
+				...next.connections,
+				...accepted
+					.filter((id) => !existing.has(id))
+					.map((id) => ({ connectionId: id })),
+			];
+			// Attaching a connection is meaningless unless the MCP feature runs.
+			next.enabledFeatureNames = addUniqueStrings(
+				next.enabledFeatureNames,
+				filterKnown(["mcp-feature"], catalog.featureNames, [], "feature"),
+			);
+			break;
+		}
+		case "setup_connection":
+			// Pure signal — the panel is opened by the hook, nothing to patch.
+			break;
 		case "enable_feature":
 			next.enabledFeatureNames = addUniqueStrings(
 				next.enabledFeatureNames,
@@ -569,6 +609,20 @@ export const agentWizardToolPatchFromCall = (
 				type: "update_cron_jobs",
 				cronJobs: normalizeCronJobs(args.cronJobs, []),
 			};
+		case AGENT_WIZARD_TOOL_NAMES.useConnections:
+			return {
+				type: "use_connections",
+				connectionIds: uniqueStrings(args.connectionIds),
+			};
+		case AGENT_WIZARD_TOOL_NAMES.setupConnection:
+			return args.kind === "composio" || args.kind === "custom"
+				? {
+						type: "setup_connection",
+						kind: args.kind,
+						toolkit:
+							typeof args.toolkit === "string" ? args.toolkit : undefined,
+					}
+				: null;
 		default:
 			return null;
 	}

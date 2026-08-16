@@ -13,6 +13,8 @@ export const AGENT_WIZARD_TOOL_NAMES = {
 	updateRecallType: "update_agent_recall_type",
 	updateIconScreen: "update_agent_icon_screen",
 	updateCronJobs: "update_agent_cron_jobs",
+	useConnections: "use_agent_connections",
+	setupConnection: "setup_agent_connection",
 } as const;
 
 export type AgentWizardToolName =
@@ -56,6 +58,54 @@ ${catalog.toolNames.map((name) => `- ${name}`).join("\n")}
 
 Default skill names:
 ${catalog.skillNames.map((name) => `- ${name}`).join("\n")}
+
+Existing connections (external tools this user has already set up):
+${
+	catalog.connections.length > 0
+		? catalog.connections
+				.map(
+					(connection) =>
+						`- id: ${connection.id} | name: ${connection.name} | kind: ${connection.kind} | status: ${connection.status} | tools: ${connection.toolCount}${
+							connection.apps?.length
+								? ` | apps: ${connection.apps.join(", ")}`
+								: ""
+						}`,
+				)
+				.join("\n")
+		: "- (none yet)"
+}
+
+Composio API key stored: ${catalog.composioKeySaved ? "yes" : "no"}
+
+# Connections — External Tools
+Connections give the agent real-world abilities: email, calendars, issue trackers,
+databases, a user's own servers. Handle them like this, in order:
+
+1. REUSE FIRST. If an existing connection above already covers what the agent
+   needs, call ${AGENT_WIZARD_TOOL_NAMES.useConnections} with its id. Never ask
+   the user to set up something they already have. Mention it by name, e.g.
+   "I'll use your Gmail connection."
+2. If nothing covers the need and a Composio key is already stored, do NOT ask
+   for a key. Call ${AGENT_WIZARD_TOOL_NAMES.setupConnection} with kind
+   "composio" and, when you know which app is needed, the toolkit slug (e.g.
+   "gmail"). This opens an authorize panel right here in the conversation.
+3. If no Composio key is stored and the agent needs a hosted app, prefer
+   Composio: call ${AGENT_WIZARD_TOOL_NAMES.setupConnection} with kind
+   "composio". The panel collects the key and authorizes apps inline.
+4. Only choose kind "custom" when the user explicitly wants their own MCP
+   server or endpoint rather than a hosted app.
+
+Connection rules:
+- Composio is the priority path for hosted apps. Offer a custom endpoint only
+  when the user asks for one or Composio cannot cover the need.
+- NEVER ask the user to open the Connections page, leave this conversation, or
+  navigate elsewhere. Everything happens inline through
+  ${AGENT_WIZARD_TOOL_NAMES.setupConnection}. Leaving loses this conversation.
+- NEVER ask the user to paste an API key into the chat. The setup panel collects
+  it securely; a key typed into a message would be sent to the model.
+- A connection with status "incomplete" is set up but unfinished — offer to
+  finish it with ${AGENT_WIZARD_TOOL_NAMES.setupConnection} rather than starting over.
+- Explain what the agent will be able to do once connected, not the mechanics.
 
 # CRITICAL: Structured Form Responses — MANDATORY
 
@@ -389,6 +439,41 @@ ANTI-PATTERNS TO AVOID:
 					},
 				},
 				required: ["kind", "value"],
+				additionalProperties: false,
+			},
+		},
+	},
+	{
+		type: "function" as const,
+		function: {
+			name: AGENT_WIZARD_TOOL_NAMES.useConnections,
+			description:
+				"Attach existing connections to the agent by id, so it can call their tools. Use ids from the existing connections list. Prefer this over setting anything up again.",
+			parameters: {
+				type: "object",
+				properties: { connectionIds: stringArraySchema },
+				required: ["connectionIds"],
+				additionalProperties: false,
+			},
+		},
+	},
+	{
+		type: "function" as const,
+		function: {
+			name: AGENT_WIZARD_TOOL_NAMES.setupConnection,
+			description:
+				"Open a connection setup panel inline in this conversation. Use kind 'composio' for hosted apps (the priority path) and 'custom' only when the user wants their own MCP endpoint. Pass toolkit when you know which app is needed, e.g. 'gmail'. Never ask the user to leave the conversation or paste a key into chat.",
+			parameters: {
+				type: "object",
+				properties: {
+					kind: { type: "string", enum: ["composio", "custom"] },
+					toolkit: {
+						type: "string",
+						description:
+							"Composio toolkit slug to pre-select, e.g. gmail, slack, googlecalendar.",
+					},
+				},
+				required: ["kind"],
 				additionalProperties: false,
 			},
 		},

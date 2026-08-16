@@ -9,15 +9,22 @@ import {
 import { chatService } from "@/main/modules/chat/services/chat-service";
 import { listDefaultSkills } from "@/services/filesystem/default-skills";
 import type { Flow } from "@/services/database/types";
+import type { McpConnection } from "@/services/mcp-connections";
 import type { ChatMessage } from "@/types/openai";
 import { logError } from "@/utils/logger";
 import { isUuid } from "@/utils/uuid";
 import type {
 	AgentWizardCatalog,
+	AgentWizardConnectionInfo,
+	AgentWizardConnectionSetupKind,
 	AgentWizardDraft,
 	AgentWizardMessage,
 	AgentWizardTemplate,
 } from "../types";
+import { useConnectionsStore } from "@/main/stores/connections";
+import { COMPOSIO_SECRET_KEY } from "@/services/mcp-connections";
+import { hasSecret } from "@/utils/master-key";
+
 import { metadataWithAgentIconScreen } from "@/main/modules/agents/types";
 import {
 	AGENT_WIZARD_TEMPLATES,
@@ -51,9 +58,18 @@ interface UseAgentWizardOptions {
 	initialAssistantMessage?: string;
 }
 
+/** Which setup surface the wizard asked to open, and for which app. */
+export interface AgentWizardConnectionSetupRequest {
+	kind: AgentWizardConnectionSetupKind;
+	toolkit?: string;
+}
+
 const MAX_AGENT_WIZARD_TOOL_ROUNDS = 6;
 
-const getCatalog = (): AgentWizardCatalog => {
+const getCatalog = (
+	connections: AgentWizardConnectionInfo[],
+	composioKeySaved: boolean,
+): AgentWizardCatalog => {
 	const flowCatalog = serviceManager.flowBuilderService.getCatalog();
 	const featureNames = flowCatalog.steps
 		.filter(
@@ -76,6 +92,8 @@ const getCatalog = (): AgentWizardCatalog => {
 		featureNames: [...new Set(featureNames)],
 		toolNames: [...toolNames],
 		skillNames: listDefaultSkills().map((skill) => skill.name),
+		connections,
+		composioKeySaved,
 	};
 };
 
@@ -92,9 +110,14 @@ const applyToolCallsToDraft = (
 		Awaited<ReturnType<typeof chatService.chatStream>>["toolCalls"]
 	>,
 	catalog: AgentWizardCatalog,
-): { draft: AgentWizardDraft; notes: string[] } => {
+): {
+	draft: AgentWizardDraft;
+	notes: string[];
+	setupRequest: AgentWizardConnectionSetupRequest | null;
+} => {
 	let nextDraft = draft;
 	const notes: string[] = [];
+	let setupRequest: AgentWizardConnectionSetupRequest | null = null;
 	for (const toolCall of toolCalls) {
 		if (!isAgentWizardToolName(toolCall.function.name)) continue;
 		try {
@@ -107,6 +130,11 @@ const applyToolCallsToDraft = (
 				notes.push(`Ignored invalid ${toolCall.function.name} call.`);
 				continue;
 			}
+			// Opening setup is a UI side effect rather than a draft change; the
+			// panel renders inline so the conversation is never left behind.
+			if (patch.type === "setup_connection") {
+				setupRequest = { kind: patch.kind, toolkit: patch.toolkit };
+			}
 			const applied = applyAgentWizardToolPatch(nextDraft, patch, catalog);
 			nextDraft = applied.draft;
 			notes.push(...applied.notes);
@@ -115,7 +143,7 @@ const applyToolCallsToDraft = (
 			notes.push("Ignored an invalid draft update from the model.");
 		}
 	}
-	return { draft: nextDraft, notes };
+	return { draft: nextDraft, notes, setupRequest };
 };
 
 const createToolResultContent = (notes: string[]): string =>
@@ -245,7 +273,42 @@ export const useAgentWizard = ({
 	const draftRef = React.useRef<AgentWizardDraft>(
 		createBlankAgentWizardDraft(),
 	);
-	const catalog = React.useMemo(getCatalog, []);
+	// The wizard has to know what the user already has, so it can reuse a
+	// connection instead of asking them to set one up again.
+	const storeConnections = useConnectionsStore((state) => state.connections);
+	const statusOf = useConnectionsStore((state) => state.statusOf);
+	const toolsOf = useConnectionsStore((state) => state.toolsOf);
+	const initializeConnections = useConnectionsStore(
+		(state) => state.initialize,
+	);
+	const [composioKeySaved, setComposioKeySaved] = React.useState(false);
+	const [connectionSetup, setConnectionSetup] =
+		React.useState<AgentWizardConnectionSetupRequest | null>(null);
+
+	React.useEffect(() => {
+		void initializeConnections();
+		void hasSecret(COMPOSIO_SECRET_KEY)
+			.then(setComposioKeySaved)
+			.catch(() => setComposioKeySaved(false));
+	}, [initializeConnections]);
+
+	const connectionInfo = React.useMemo<AgentWizardConnectionInfo[]>(
+		() =>
+			storeConnections.map((connection) => ({
+				id: connection.id,
+				name: connection.name,
+				kind: connection.kind,
+				status: statusOf(connection.id),
+				toolCount: toolsOf(connection.id).length,
+				apps: connection.apps?.map((app) => app.name),
+			})),
+		[storeConnections, statusOf, toolsOf],
+	);
+
+	const catalog = React.useMemo(
+		() => getCatalog(connectionInfo, composioKeySaved),
+		[connectionInfo, composioKeySaved],
+	);
 
 	React.useEffect(() => {
 		if (!open) return;
@@ -403,6 +466,9 @@ export const useAgentWizard = ({
 					setDraft(applied.draft);
 					onDraftChange?.(applied.draft);
 					accumulatedNotes.push(...applied.notes);
+					if (applied.setupRequest) {
+						setConnectionSetup(applied.setupRequest);
+					}
 					visibleContent = appendVisibleContent(
 						visibleContent,
 						result.toolCalls
@@ -520,6 +586,39 @@ export const useAgentWizard = ({
 		}
 	}, [createPreset, draft, isCreating, onClose, onCreated]);
 
+	/**
+	 * A connection finished setting up inside the conversation — attach it to the
+	 * draft immediately so the user does not have to ask for it again, and say so
+	 * in the transcript so the wizard's next turn knows it happened.
+	 */
+	const attachConnection = React.useCallback(
+		(connection: McpConnection) => {
+			const next: AgentWizardDraft = {
+				...draftRef.current,
+				connections: draftRef.current.connections.some(
+					(entry) => entry.connectionId === connection.id,
+				)
+					? draftRef.current.connections
+					: [...draftRef.current.connections, { connectionId: connection.id }],
+				enabledFeatureNames: draftRef.current.enabledFeatureNames.includes(
+					"mcp-feature",
+				)
+					? draftRef.current.enabledFeatureNames
+					: [...draftRef.current.enabledFeatureNames, "mcp-feature"],
+			};
+			draftRef.current = next;
+			setDraft(next);
+			onDraftChange?.(next);
+			setMessages((current) => [
+				...current,
+				createAssistantMessage(
+					`Connected **${connection.name}** — this agent can now use its tools.`,
+				),
+			]);
+		},
+		[onDraftChange],
+	);
+
 	const requestClose = React.useCallback(() => {
 		if (
 			shouldConfirmClose &&
@@ -547,5 +646,9 @@ export const useAgentWizard = ({
 		createAgent,
 		requestClose,
 		canCreate: Boolean(draft.name.trim()) && !isCreating,
+		connectionSetup,
+		openConnectionSetup: setConnectionSetup,
+		closeConnectionSetup: () => setConnectionSetup(null),
+		attachConnection,
 	};
 };
