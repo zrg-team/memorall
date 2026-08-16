@@ -27,6 +27,8 @@
   "host_permissions": [
     "https://huggingface.co/*",
     "https://*.huggingface.co/*",
+    "https://backend.composio.dev/*",
+    "https://*.composio.dev/*",
     "*://*/*.pdf"
   ],
   "background": {

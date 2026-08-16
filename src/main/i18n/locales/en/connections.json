@@ -38,7 +38,9 @@
 			"body": "Run a published MCP package against your own machine — filesystem, git, Postgres, Puppeteer. Pick a template, fill in the blanks.",
 			"bridgeWarning": "In the extension this needs one terminal command to bridge. The desktop app runs it for you.",
 			"nativeNote": "Runs on your machine, no terminal needed.",
-			"action": "Browse templates"
+			"action": "Browse templates",
+			"notBuiltTitle": "Local servers are not ready yet",
+			"notBuiltBody": "This lane will let you pick a published MCP package and fill in its settings. Until then, run the server yourself and add it as a custom endpoint."
 		},
 		"custom": {
 			"name": "Custom endpoint",

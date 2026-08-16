@@ -1,6 +1,6 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
-import { Link2, Server, Terminal } from "lucide-react";
+import { Link2, Terminal } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useConnectionsStore } from "@/main/stores/connections";
 import type { McpConnection } from "@/services/mcp-connections";
@@ -102,18 +102,10 @@ export const ConnectionsSidebar: React.FC<ConnectionsSidebarProps> = ({
 		(connection) => connection.kind !== "composio",
 	);
 
+	// The page header already says there is nothing here; repeating it directly
+	// underneath just reads as a rendering bug.
 	if (connections.length === 0) {
-		return (
-			<div
-				className={cn(
-					"px-3 py-6 text-center text-xs text-muted-foreground",
-					className,
-				)}
-			>
-				<Server size={18} className="mx-auto mb-2 opacity-40" />
-				{t("descriptionEmpty")}
-			</div>
-		);
+		return null;
 	}
 
 	return (

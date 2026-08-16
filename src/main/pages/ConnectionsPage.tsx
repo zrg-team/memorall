@@ -1,12 +1,13 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
-import { ArrowLeft, Loader2, Plug } from "lucide-react";
+import { ArrowLeft, Construction, Loader2, Plug } from "lucide-react";
 import { Button } from "@/main/components/ui/button";
 import { PageHeader } from "@/main/components/ui/page-header";
 import { useConnectionsStore } from "@/main/stores/connections";
 import {
 	AddConnectionButton,
 	AddConnectionChooser,
+	ComposioWizard,
 	ConnectionDetail,
 	ConnectionsSidebar,
 	CustomEndpointForm,
@@ -83,20 +84,47 @@ export const ConnectionsPage: React.FC = () => {
 			);
 		}
 
-		// Composio and template lanes are not wired yet; the chooser still routes
-		// here so the surface is honest about what exists.
-		if (lane === "composio" || lane === "template") {
+		if (lane === "composio") {
+			return (
+				<div className="min-h-0 flex-1 overflow-y-auto p-4">
+					<div className="mx-auto max-w-2xl">
+						<ComposioWizard
+							onDone={() => setLane(null)}
+							onCancel={() => setLane(null)}
+						/>
+					</div>
+				</div>
+			);
+		}
+
+		// The local-server lane has not been built yet. Say so plainly and point
+		// at the lane that does work, rather than showing a dead end.
+		if (lane === "template") {
 			return (
 				<div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 p-8 text-center">
-					<p className="max-w-sm text-sm text-muted-foreground">
-						{lane === "composio"
-							? t("lanes.composio.body")
-							: t("lanes.template.body")}
-					</p>
-					<Button type="button" variant="outline" onClick={() => setLane(null)}>
-						<ArrowLeft size={13} className="mr-1.5" />
-						{t("composio.cancel")}
-					</Button>
+					<Construction size={22} className="text-muted-foreground" />
+					<div>
+						<p className="text-sm font-semibold">
+							{t("lanes.template.notBuiltTitle")}
+						</p>
+						<p className="mx-auto mt-1 max-w-sm text-xs leading-relaxed text-muted-foreground">
+							{t("lanes.template.notBuiltBody")}
+						</p>
+					</div>
+					<div className="flex items-center gap-2">
+						<Button
+							type="button"
+							variant="outline"
+							size="sm"
+							onClick={() => setLane(null)}
+						>
+							<ArrowLeft size={13} className="mr-1.5" />
+							{t("composio.cancel")}
+						</Button>
+						<Button type="button" size="sm" onClick={() => setLane("custom")}>
+							{t("lanes.custom.action")}
+						</Button>
+					</div>
 				</div>
 			);
 		}

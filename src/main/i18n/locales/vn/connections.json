@@ -38,7 +38,9 @@
 			"body": "Chạy một gói MCP đã phát hành trên máy của bạn — hệ thống tệp, git, Postgres, Puppeteer. Chọn mẫu và điền thông tin.",
 			"bridgeWarning": "Trên tiện ích mở rộng, bạn cần chạy một lệnh terminal để tạo cầu nối. Ứng dụng máy tính sẽ tự chạy giúp bạn.",
 			"nativeNote": "Chạy ngay trên máy của bạn, không cần terminal.",
-			"action": "Xem các mẫu"
+			"action": "Xem các mẫu",
+			"notBuiltTitle": "Máy chủ cục bộ chưa sẵn sàng",
+			"notBuiltBody": "Lối này sẽ cho phép bạn chọn một gói MCP đã phát hành và điền thiết lập. Trong lúc chờ, hãy tự chạy máy chủ và thêm nó như một điểm cuối tùy chỉnh."
 		},
 		"custom": {
 			"name": "Điểm cuối tùy chỉnh",
