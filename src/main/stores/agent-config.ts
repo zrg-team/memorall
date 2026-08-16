@@ -879,13 +879,21 @@ export const useAgentConfigStore = create<AgentConfigState>((set, get) => {
 
 		setAgentConnections: (servers) => {
 			const next = [...servers];
+			// Selecting connections is meaningless unless the MCP step runs: the
+			// resolver only injects servers into an enabled step, so without this
+			// the agent gets the connection on paper and no tools at run time.
+			const draftFeatures = {
+				...get().draftFeatures,
+				[MCP_FEATURE_NAME]: next.length > 0,
+			};
 			set({
 				draftConnections: next,
+				draftFeatures,
 				isDirty: computeDirty(
 					get().savedConfig,
 					get().draftConfig,
 					get().savedFeatures,
-					get().draftFeatures,
+					draftFeatures,
 					get().savedMultiAgentAccessibleAgentIds,
 					get().draftMultiAgentAccessibleAgentIds,
 					get().savedConnections,
