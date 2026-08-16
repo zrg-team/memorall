@@ -18,6 +18,36 @@ env:
   RUST_VERSION: "1.97.1"
 
 jobs:
+  changes:
+    name: Detect desktop-affecting changes
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      desktop: ${{ steps.detect.outputs.desktop }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify the change classifier
+        run: node --test tools/check-desktop-relevant-changes.test.mjs
+      - name: Classify the changed files
+        id: detect
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PULL_REQUEST: ${{ github.event.pull_request.number }}
+        run: |
+          # Anything other than a pull request (a push to main, a manual
+          # dispatch) reports no files, which the classifier treats as
+          # "unknown" and runs the full matrix.
+          if [ -n "$PULL_REQUEST" ]; then
+            changed=$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PULL_REQUEST}/files" \
+              --paginate --jq '.[].filename')
+          else
+            changed=""
+          fi
+          node tools/check-desktop-relevant-changes.mjs "$changed"
+
   quality:
     name: Dependency and shared checks
     runs-on: ubuntu-22.04
@@ -122,7 +152,8 @@ jobs:
 
   desktop:
     name: Desktop native smoke (${{ matrix.name }})
-    needs: quality
+    needs: [changes, quality]
+    if: needs.changes.outputs.desktop == 'true'
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 90
     strategy:
@@ -225,7 +256,8 @@ jobs:
 
   secondary-desktop:
     name: Desktop native smoke (${{ matrix.name }})
-    needs: quality
+    needs: [changes, quality]
+    if: needs.changes.outputs.desktop == 'true'
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 90
     strategy:
