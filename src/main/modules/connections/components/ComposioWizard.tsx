@@ -90,6 +90,8 @@ export const ComposioWizard: React.FC<ComposioWizardProps> = ({
 		null,
 	);
 
+	const [syncError, setSyncError] = React.useState<string | null>(null);
+	const [isSyncing, setIsSyncing] = React.useState(false);
 	const [showKeySetup, setShowKeySetup] = React.useState(false);
 	const [showKeyUnlock, setShowKeyUnlock] = React.useState(false);
 
@@ -269,7 +271,8 @@ export const ComposioWizard: React.FC<ComposioWizardProps> = ({
 			setConnected(nextApps);
 
 			// Authorizing is the whole intent — the connection becomes usable here,
-			// not after some later confirmation step.
+			// not after some later confirmation step. A failure here is reported
+			// separately: the app IS authorized, only the endpoint is missing.
 			await syncSession(nextApps);
 		} catch (caught) {
 			if ((caught as Error)?.name !== "AbortError") {
@@ -296,6 +299,26 @@ export const ComposioWizard: React.FC<ComposioWizardProps> = ({
 		);
 		if (!client || apps.length === 0) return;
 
+		setSyncError(null);
+		setIsSyncing(true);
+		try {
+			await mintSession(client, record, apps);
+		} catch (caught) {
+			// Surfaced on its own line: the app is authorized either way, and
+			// claiming "ready" when there is no endpoint is what made this
+			// failure invisible.
+			logError("[Composio] Session mint failed:", caught);
+			setSyncError(caught instanceof Error ? caught.message : String(caught));
+		} finally {
+			setIsSyncing(false);
+		}
+	};
+
+	const mintSession = async (
+		client: ComposioClient,
+		record: McpConnection | undefined,
+		apps: ConnectionApp[],
+	) => {
 		const toolkits = apps.map((app) => app.id);
 		const session = await client.createMcpSession({
 			userId: LOCAL_USER_ID,
@@ -349,6 +372,11 @@ export const ComposioWizard: React.FC<ComposioWizardProps> = ({
 		return list.slice(0, 60);
 	}, [toolkits, query]);
 
+	/** The connection is only usable once a session produced an endpoint. */
+	const isUsable = Boolean(
+		connections.find((entry) => entry.id === COMPOSIO_CONNECTION_ID)?.url,
+	);
+
 	const isConnected = (slug: string) =>
 		connected.some((app) => app.id === slug);
 
@@ -384,18 +412,62 @@ export const ComposioWizard: React.FC<ComposioWizardProps> = ({
 			</div>
 
 			{step === "apps" ? (
-				<div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border/60 bg-background/60 px-3 py-2">
+				<div
+					className={cn(
+						"flex flex-wrap items-center justify-between gap-3 rounded-xl border px-3 py-2",
+						isUsable
+							? "border-emerald-500/30 bg-emerald-500/10"
+							: connected.length > 0
+								? "border-amber-500/30 bg-amber-500/10"
+								: "border-border/60 bg-background/60",
+					)}
+				>
+					{/* Reads the saved connection, not a count of authorized apps —
+					    saying "ready" while the record has no endpoint is exactly how
+					    this failure stayed invisible. */}
 					<span className="flex items-center gap-2 text-[11px] text-muted-foreground">
-						{isBusy ? (
+						{isBusy || isSyncing ? (
 							<Loader2 size={12} className="animate-spin text-blue-500" />
 						) : null}
-						{connected.length > 0
-							? t("composio.appsConnected", { count: connected.length })
-							: t("composio.connectFirstApp")}
+						{isSyncing
+							? t("composio.finishing")
+							: isUsable
+								? t("composio.appsConnected", { count: connected.length })
+								: connected.length > 0
+									? t("composio.authorizedNotReady", {
+											count: connected.length,
+										})
+									: t("composio.connectFirstApp")}
 					</span>
-					<Button type="button" size="sm" onClick={onDone}>
-						{t("composio.done")}
-					</Button>
+					<div className="flex items-center gap-2">
+						{connected.length > 0 && !isUsable && !isSyncing ? (
+							<Button
+								type="button"
+								variant="outline"
+								size="sm"
+								onClick={() => void syncSession(connected)}
+							>
+								{t("composio.retryFinish")}
+							</Button>
+						) : null}
+						<Button
+							type="button"
+							size="sm"
+							disabled={isSyncing}
+							onClick={onDone}
+						>
+							{t("composio.done")}
+						</Button>
+					</div>
+				</div>
+			) : null}
+
+			{syncError ? (
+				<div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-2.5 text-xs text-amber-600 dark:text-amber-400">
+					<AlertCircle size={13} className="mt-0.5 shrink-0" />
+					<span className="min-w-0 break-words">
+						{t("composio.syncFailed")} {syncError}
+					</span>
 				</div>
 			) : null}
 

@@ -27,7 +27,9 @@
 		"viewError": "View details",
 		"incomplete": "Setup unfinished",
 		"continueSetup": "Continue setup",
-		"incompleteHint": "Your key is saved. Connect at least one app to finish."
+		"incompleteHint": "Your key is saved. Connect at least one app to finish.",
+		"incompleteEndpointHint_one": "{{count}} app is authorized, but the tool endpoint was not created. Continue setup to retry.",
+		"incompleteEndpointHint_other": "{{count}} apps are authorized, but the tool endpoint was not created. Continue setup to retry."
 	},
 	"lanes": {
 		"composio": {
@@ -112,7 +114,12 @@
 		"appsConnected_one": "{{count}} app connected and ready",
 		"appsConnected_other": "{{count}} apps connected and ready",
 		"connectFirstApp": "Connect an app below — it becomes usable straight away.",
-		"done": "Done"
+		"done": "Done",
+		"finishing": "Finishing setup…",
+		"authorizedNotReady_one": "{{count}} app authorized — finishing setup",
+		"authorizedNotReady_other": "{{count}} apps authorized — finishing setup",
+		"retryFinish": "Retry",
+		"syncFailed": "Authorized, but the tool endpoint could not be created:"
 	},
 	"template": {
 		"title": "Local server",

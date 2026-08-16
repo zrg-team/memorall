@@ -117,7 +117,14 @@ export const ConnectionDetail: React.FC<{
 
 				<div className="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center">
 					<p className="max-w-sm text-sm text-muted-foreground">
-						{t("status.incompleteHint")}
+						{/* An authorized app with no endpoint is a different problem from
+						    no apps at all, and telling someone to "connect an app" they
+						    already connected reads as the app losing their work. */}
+						{connection.apps?.length
+							? t("status.incompleteEndpointHint", {
+									count: connection.apps.length,
+								})
+							: t("status.incompleteHint")}
 					</p>
 					{onContinueSetup ? (
 						<Button type="button" size="sm" onClick={onContinueSetup}>

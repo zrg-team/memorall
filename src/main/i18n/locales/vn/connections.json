@@ -27,7 +27,8 @@
 		"viewError": "Xem chi tiết",
 		"incomplete": "Chưa hoàn tất thiết lập",
 		"continueSetup": "Tiếp tục thiết lập",
-		"incompleteHint": "Đã lưu khóa của bạn. Hãy kết nối ít nhất một ứng dụng để hoàn tất."
+		"incompleteHint": "Đã lưu khóa của bạn. Hãy kết nối ít nhất một ứng dụng để hoàn tất.",
+		"incompleteEndpointHint_other": "Đã cấp quyền {{count}} ứng dụng, nhưng chưa tạo được điểm cuối công cụ. Tiếp tục thiết lập để thử lại."
 	},
 	"lanes": {
 		"composio": {
@@ -110,7 +111,11 @@
 		"webUnsupported": "Composio cần tiện ích mở rộng hoặc ứng dụng máy tính — bản web không gọi trực tiếp API của họ được.",
 		"appsConnected_other": "Đã kết nối {{count}} ứng dụng và sẵn sàng",
 		"connectFirstApp": "Hãy kết nối một ứng dụng bên dưới — nó sẽ dùng được ngay.",
-		"done": "Xong"
+		"done": "Xong",
+		"finishing": "Đang hoàn tất thiết lập…",
+		"authorizedNotReady_other": "Đã cấp quyền {{count}} ứng dụng — đang hoàn tất",
+		"retryFinish": "Thử lại",
+		"syncFailed": "Đã cấp quyền, nhưng chưa tạo được điểm cuối công cụ:"
 	},
 	"template": {
 		"title": "Máy chủ cục bộ",
