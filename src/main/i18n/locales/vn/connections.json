@@ -63,11 +63,11 @@
 		"retest": "Kiểm tra lại",
 		"delete": "Xóa kết nối",
 		"deleteConfirm": "Xóa kết nối này? Các tác nhân đang dùng sẽ mất công cụ của nó.",
-		"toolCount": "{{count}} công cụ",
 		"syncedAt": "đồng bộ {{when}}",
 		"neverSynced": "chưa đồng bộ",
 		"usedByNone": "Chưa có tác nhân nào dùng kết nối này",
-		"showMore": "Xem thêm {{count}}"
+		"showMore": "Xem thêm {{count}}",
+		"toolCount_other": "{{count}} công cụ"
 	},
 	"tools": {
 		"presetRecommended": "Khuyên dùng",

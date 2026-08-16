@@ -27,6 +27,9 @@ export type ConnectionStatus =
 	| "off"
 	| "unknown";
 
+/** Shared empty result so selectors keep a stable identity between renders. */
+const NO_TOOLS: CachedToolDescriptor[] = [];
+
 const isLocalUrl = (url: string): boolean => {
 	try {
 		const { hostname } = new URL(url);
@@ -206,7 +209,10 @@ export const useConnectionsStore = create<ConnectionsState>((set, get) => ({
 		return deriveStatus(connection, get().toolCache[id], get().unlocked);
 	},
 
-	toolsOf: (id) => get().toolCache[id]?.descriptors ?? [],
+	// Must return a stable reference. Components call this inside a selector, and
+	// a fresh `[]` on every call reads as a state change to useSyncExternalStore,
+	// which re-renders, which allocates another `[]` — React error #185.
+	toolsOf: (id) => get().toolCache[id]?.descriptors ?? NO_TOOLS,
 
 	totalToolCount: () =>
 		get().connections.reduce((total, connection) => {

@@ -63,12 +63,12 @@
 		"retest": "Retest",
 		"delete": "Delete connection",
 		"deleteConfirm": "Delete this connection? Agents using it will lose its tools.",
-		"toolCount": "{{count}} tool",
-		"toolCount_plural": "{{count}} tools",
 		"syncedAt": "synced {{when}}",
 		"neverSynced": "not synced yet",
 		"usedByNone": "No agents use this yet",
-		"showMore": "Show {{count}} more"
+		"showMore": "Show {{count}} more",
+		"toolCount_one": "{{count}} tool",
+		"toolCount_other": "{{count}} tools"
 	},
 	"tools": {
 		"presetRecommended": "Recommended",
