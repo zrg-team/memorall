@@ -248,6 +248,7 @@ export const AgentContextWarningBanner: React.FC<
 						<Button
 							type="button"
 							size="sm"
+							data-agent-use-chat
 							onClick={onUseChatMode}
 							className="h-8 shrink-0 border border-sky-300 bg-sky-50 px-3 text-sky-950 hover:bg-sky-100 dark:border-sky-300/40 dark:bg-sky-100 dark:text-sky-950 dark:hover:bg-sky-200"
 						>

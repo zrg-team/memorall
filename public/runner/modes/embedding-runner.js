@@ -220,12 +220,31 @@ const embeddingManager = new ModelLifecycleManager({
 	unloadFn: unloadEmbeddingPipeline,
 });
 
+// `postMessage` is a shared, bidirectional channel. Ignore runner responses so
+// they can never be mistaken for new requests and echoed back indefinitely.
+const responseMessageTypes = new Set([
+	"ready",
+	"progress",
+	"complete",
+	"error",
+	"chunk",
+	"stream_chunk",
+	"stream_end",
+]);
+
 window.addEventListener("message", async (event) => {
 	const src = event.source;
 	const origin = event.origin;
 	const { messageId, type, payload } = event.data || {};
-	const fromParent = src === window.parent;
-	const fromOpener = typeof window.opener !== "undefined" && src === window.opener;
+
+	if (
+		typeof messageId !== "string" ||
+		messageId.length === 0 ||
+		typeof type !== "string" ||
+		responseMessageTypes.has(type)
+	) {
+		return;
+	}
 
 	if (type === "init") {
 		console.log("[embedding-runner] received init", {

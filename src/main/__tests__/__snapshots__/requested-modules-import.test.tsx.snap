@@ -143,6 +143,7 @@ exports[`requested main module coverage > imports chat, documents, agents, agent
   "../modules/files/components/KnowledgeConversionDialog.tsx",
   "../modules/files/components/LazyExcelViewer.tsx",
   "../modules/files/components/PDFPageSelector.tsx",
+  "../modules/files/components/excel-to-univer.ts",
   "../modules/files/editors/CodeEditor.tsx",
   "../modules/files/editors/LazyMarkdownEditor.tsx",
   "../modules/files/editors/MarkdownEditor.tsx",

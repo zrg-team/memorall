@@ -51,13 +51,10 @@ vi.mock(
 	}),
 );
 
-vi.mock(
-	"@/main/modules/chat/components/artifacts/artifact-protocol",
-	() => ({
-		collectRuntimeArtifacts: () => [],
-		replaceArtifactContent: vi.fn(),
-	}),
-);
+vi.mock("@/main/modules/chat/components/artifacts/artifact-protocol", () => ({
+	collectRuntimeArtifacts: () => [],
+	replaceArtifactContent: vi.fn(),
+}));
 
 vi.mock("@/main/modules/chat/components/MarkdownMessage", () => ({
 	default: () => null,

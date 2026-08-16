@@ -23,8 +23,10 @@ export function reply(src, origin, messageId, type, payload) {
 	}
 
 	try {
-		window.parent && window.parent.postMessage(message, safeOrigin);
-		return;
+		if (window.parent && window.parent !== window) {
+			window.parent.postMessage(message, safeOrigin);
+			return;
+		}
 	} catch (e) {
 		try {
 			console.warn("reply: postMessage to parent failed", e);
@@ -59,6 +61,7 @@ export function sendReady(mode, endpoints) {
 	} catch {}
 	try {
 		window.parent &&
+			window.parent !== window &&
 			window.parent.postMessage(
 				{
 					messageId: "RUNNER_READY",

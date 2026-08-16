@@ -3,13 +3,17 @@
 	"private": true,
 	"type": "module",
 	"engines": {
-		"node": "22.x"
+		"node": ">=22.23.1 <23"
 	},
 	"dependencies": {
 		"@memorall/agent-harness-node": "workspace:^"
 	},
 	"scripts": {
-		"type-check": "tsc --noEmit -p tsconfig.json",
+		"type-check": "node ../../../tools/run-typescript.mjs native --noEmit -p tsconfig.json",
 		"test": "vitest run"
+	},
+	"devDependencies": {
+		"esbuild": "0.25.12",
+		"typescript": "npm:@typescript/typescript6@6.0.2"
 	}
 }

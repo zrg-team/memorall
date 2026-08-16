@@ -4,6 +4,7 @@
  */
 
 import React from "react";
+import { SiYoutube as Youtube } from "@icons-pack/react-simple-icons";
 import {
 	Globe,
 	Network,
@@ -14,7 +15,6 @@ import {
 	FileCheck,
 	BookOpen,
 	Book,
-	Youtube,
 	Video,
 	VideoIcon,
 } from "lucide-react";

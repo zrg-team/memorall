@@ -30,7 +30,7 @@ export const createCoAgentOverlay = (): void => {
 	const customPropsStyle = document.createElement("style");
 	customPropsStyle.textContent = coAgentStyles;
 	shadowRoot.appendChild(customPropsStyle);
-	createStylesheet("action/index.css", shadowRoot);
+	createStylesheet("options/index.css", shadowRoot);
 
 	const mount = document.createElement("div");
 	shadowRoot.appendChild(mount);

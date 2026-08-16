@@ -92,6 +92,16 @@ const showOpenUINotice = (message: string) => {
 interface OpenUIRendererProps {
 	content: string;
 	streaming: boolean;
+	/**
+	 * Set when an ancestor already unmounts this block while it is off-screen
+	 * (chat's `DeferredMount`). Suppresses the `content-visibility` placeholder
+	 * below — the two virtualization layers cancel each other out: unmounting the
+	 * subtree discards the browser's remembered `contain-intrinsic-size: auto`
+	 * measurement, so each remount snaps back to the 320px intrinsic guess. Inside
+	 * the stick-to-bottom conversation that height swing trips the library's
+	 * negative-resize branch, which re-locks and yanks the reader to the bottom.
+	 */
+	deferred?: boolean;
 	onMessageAction?: (action: MessageActionRequest) => void | Promise<void>;
 }
 
@@ -272,6 +282,7 @@ OpenUIRenderFrame.displayName = "OpenUIRenderFrame";
 export const OpenUIRenderer: React.FC<OpenUIRendererProps> = ({
 	content,
 	streaming,
+	deferred = false,
 	onMessageAction,
 }) => {
 	const baseInterval =
@@ -321,7 +332,7 @@ export const OpenUIRenderer: React.FC<OpenUIRendererProps> = ({
 	return (
 		<div
 			style={
-				streaming
+				streaming || deferred
 					? undefined
 					: {
 							contentVisibility: "auto",

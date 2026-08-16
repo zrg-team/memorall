@@ -20,22 +20,22 @@
     }
   },
   "scripts": {
-    "build": "tsc -b",
-    "clean": "tsc -b --clean",
-    "dev": "tsc -b --watch --preserveWatchOutput --pretty",
+    "build": "node ../../../tools/run-typescript.mjs native -b",
+    "clean": "node ../../../tools/run-typescript.mjs native -b --clean",
+    "dev": "node ../../../tools/run-typescript.mjs native -b --watch --preserveWatchOutput --pretty",
     "watch": "yarn dev",
-    "typecheck": "tsc -b --pretty false",
+    "typecheck": "node ../../../tools/run-typescript.mjs native -b --pretty false",
     "test": "vitest run --config ../vitest.config.ts langgraph",
     "pack": "yarn pack"
   },
   "dependencies": {
-    "@langchain/core": "^1.1.44",
-    "@langchain/langgraph": "^1.3.0",
+    "@langchain/core": "1.2.7",
+    "@langchain/langgraph": "1.4.9",
     "@memorall/agent-harness-core": "workspace:^",
-    "zod": "^4.1.5"
+    "zod": "4.4.3"
   },
   "devDependencies": {
-    "typescript": "^5.9.2",
-    "vitest": "^4.1.8"
+    "typescript": "npm:@typescript/typescript6@6.0.2",
+    "vitest": "4.1.10"
   }
 }

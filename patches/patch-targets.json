@@ -1,0 +1,33 @@
+{
+	"schemaVersion": 1,
+	"targets": [
+		{
+			"packageNames": ["@hyperframes/core"],
+			"intent": "Replace the template's remote GSAP reference with the bundled /vendors/hyperframes runtime."
+		},
+		{
+			"packageNames": ["@hyperframes/lint"],
+			"intent": "Keep lint remediation hints CSP-safe by referring only to packaged GSAP, Lottie, and Three.js runtimes."
+		},
+		{
+			"packageNames": ["@hyperframes/studio-server"],
+			"intent": "Replace preview-time GSAP, CustomEase, and MotionPathPlugin CDN injection with bundled /vendors/hyperframes assets."
+		},
+		{
+			"packageNames": ["extension-develop"],
+			"intent": "Disable Extension.js development reload and HMR injection so content scripts do not depend on its development server."
+		},
+		{
+			"packageNames": ["@electric-sql/pglite"],
+			"intent": "Keep PGlite 0.4.6 browser initialization independent of a Node process global while retaining exit-code preservation in Node runtimes."
+		},
+		{
+			"packageNames": ["jspdf"],
+			"intent": "Replace jsPDF's remote PDFObject fallback with a self-contained data URL so PDF auto-print does not fetch remote executable code."
+		},
+		{
+			"packageNames": ["util"],
+			"intent": "Prevent the browser util shim from reading process.env.NODE_DEBUG."
+		}
+	]
+}

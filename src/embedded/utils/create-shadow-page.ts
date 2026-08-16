@@ -1,20 +1,9 @@
 import { createRoot } from "react-dom/client";
 
-const createStylesheet = (
-	href: string,
-	parent: ShadowRoot,
-	fallbackHref?: string,
-): void => {
+const createStylesheet = (href: string, parent: ShadowRoot): void => {
 	const link = document.createElement("link");
 	link.rel = "stylesheet";
 	link.href = chrome.runtime.getURL(href);
-
-	if (fallbackHref) {
-		link.onerror = () => {
-			link.remove();
-			createStylesheet(fallbackHref, parent);
-		};
-	}
 
 	parent.appendChild(link);
 };
@@ -40,10 +29,9 @@ export const createShadowPage = ({
 	customPropsStyle.textContent = customStyles;
 	shadowRoot.appendChild(customPropsStyle);
 
-	// Inject Tailwind CSS with fallback. The toolbar action no longer builds a
-	// popup entry (it opens the standalone page), so the standalone build's CSS
-	// is the primary source; keep the old action path as a fallback.
-	createStylesheet("options/index.css", shadowRoot, "action/index.css");
+	// The toolbar action opens the standalone options page, so its packaged CSS
+	// is also the canonical stylesheet for embedded shadow-root surfaces.
+	createStylesheet("options/index.css", shadowRoot);
 
 	shadowRoot.appendChild(shadowContainer);
 

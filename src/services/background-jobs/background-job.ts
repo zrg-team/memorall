@@ -1,15 +1,14 @@
-import type {
-	IJobNotificationBridge,
-	JobNotificationMessage,
-} from "./bridges/types";
-import type { IServiceInitializationBridge } from "./bridges/service-initialization";
 import {
 	createJobNotificationBridge,
 	createServiceInitializationBridge,
 } from "@/services/background-jobs/bridges/current-runtime";
-import { IdbJobStore, type JobStore } from "./idb-job-store";
-import { logInfo, logError } from "@/utils/logger";
+import { logError, logInfo } from "@/utils/logger";
 import { v4 as nanoid } from "@/utils/uuid";
+import type { IServiceInitializationBridge } from "./bridges/service-initialization";
+import type {
+	IJobNotificationBridge,
+	JobNotificationMessage,
+} from "./bridges/types";
 import type {
 	BaseJob,
 	JobProgressEvent,
@@ -18,6 +17,8 @@ import type {
 	JobResultFor,
 	JobStatus,
 } from "./handlers/types";
+import { IdbJobStore, type JobStore } from "./idb-job-store";
+
 export type { BaseJob };
 
 export interface JobQueueState {
@@ -138,9 +139,24 @@ export class BackgroundJob {
 		);
 	}
 
+	private async dispatchJob(
+		job: BaseJob,
+		requireAcknowledgement: boolean,
+	): Promise<void> {
+		try {
+			await this.notificationBridge.notifyJobEnqueued(job);
+		} catch (error) {
+			if (requireAcknowledgement) throw error;
+			logError(
+				`Queued job ${job.id} was persisted but not acknowledged; runtime recovery will retry it`,
+				error,
+			);
+		}
+	}
+
 	private async notifyListeners(): Promise<void> {
 		const state = await this.getState();
-		this.listeners.forEach((l) => l(state));
+		for (const listener of this.listeners) listener(state);
 	}
 
 	/**
@@ -195,15 +211,13 @@ export class BackgroundJob {
 		await this.saveJob(job);
 		await this.notifyListeners();
 
-		// Immediate notification via cross-context bridge (0-50ms latency)
-		this.notificationBridge.notifyJobEnqueued(job);
-
-		logInfo(`📋 Queued ${jobType} job: ${jobId}`);
-
 		if (options.stream) {
-			// Create progress stream
+			// Attach the consumer before dispatching the job. Chrome can deliver and
+			// complete a fast offscreen job before the sender's next microtask.
 			const stream = this.createJobProgressStream(jobId);
 			this.attachProgressForwarder(jobId, true); // createJob uses queue-based completion
+			await this.dispatchJob(job, false);
+			logInfo(`📋 Queued ${jobType} job: ${jobId}`);
 			return { jobId, stream };
 		} else {
 			// Create promise that resolves on completion.
@@ -259,6 +273,8 @@ export class BackgroundJob {
 					},
 				);
 			});
+			await this.dispatchJob(job, false);
+			logInfo(`📋 Queued ${jobType} job: ${jobId}`);
 			return { jobId, promise };
 		}
 	}
@@ -311,16 +327,13 @@ export class BackgroundJob {
 			progress: [],
 		};
 
-		// Skip saveJob - send directly to offscreen for immediate processing
-		// Immediate notification via cross-context bridge for fast processing
-		this.notificationBridge.notifyJobEnqueued(job);
-
-		logInfo(`⚡ Executing immediate ${jobType} job: ${jobId}`);
-
 		if (options.stream) {
-			// Create progress stream
+			// Attach the consumer before dispatching the job. Direct jobs are not
+			// persisted, so a missed completion cannot be recovered by queue polling.
 			const stream = this.createJobProgressStream(jobId);
 			this.attachProgressForwarder(jobId, true); // execute needs direct completion handling
+			await this.dispatchJob(job, true);
+			logInfo(`⚡ Executing immediate ${jobType} job: ${jobId}`);
 			return { jobId, stream };
 		} else {
 			// Create promise that resolves on completion - direct notification handling for execute
@@ -350,6 +363,8 @@ export class BackgroundJob {
 					},
 				);
 			});
+			await this.dispatchJob(job, true);
+			logInfo(`⚡ Executing immediate ${jobType} job: ${jobId}`);
 			return { jobId, promise };
 		}
 	}
@@ -370,7 +385,9 @@ export class BackgroundJob {
 	private createJobProgressStream(
 		jobId: string,
 	): AsyncIterable<JobProgressEvent> {
-		let controller: ReadableStreamDefaultController<JobProgressEvent>;
+		let controller:
+			| ReadableStreamDefaultController<JobProgressEvent>
+			| undefined;
 
 		const stream = new ReadableStream<JobProgressEvent>({
 			start: (ctrl) => {
@@ -382,7 +399,9 @@ export class BackgroundJob {
 		});
 
 		// Store the controller for progress updates
-		this.jobProgressStreams.set(jobId, { controller: controller!, stream });
+		if (!controller)
+			throw new Error(`Failed to create progress stream for ${jobId}`);
+		this.jobProgressStreams.set(jobId, { controller, stream });
 
 		// Convert ReadableStream to AsyncIterable
 		return {
@@ -420,6 +439,7 @@ export class BackgroundJob {
 
 				switch (message.type) {
 					case "JOB_PROGRESS":
+						if (!message.progress) return;
 						try {
 							streamData.controller.enqueue(message.progress);
 						} catch (error) {
@@ -552,9 +572,9 @@ export class BackgroundJob {
 
 	async completeJob(jobId: string, result: JobResult): Promise<void> {
 		const job = await this.getJob(jobId);
-		if (!job) return;
 
-		// Close progress stream if exists
+		// Direct execute jobs intentionally skip persistence, but their local stream
+		// and cross-context completion notification still need to be finalized.
 		const streamData = this.jobProgressStreams.get(jobId);
 		if (streamData) {
 			try {
@@ -579,9 +599,12 @@ export class BackgroundJob {
 		// Immediate notification for job completion - send to all contexts
 		this.notificationBridge.notifyJobCompleted(jobId, result, "all");
 
-		// Remove completed job from queue
-		await this.store.delete(jobId);
-		await this.notifyListeners();
+		// Persisted queue jobs are removed after completion. Direct execute jobs do
+		// not have a store record, so there is nothing to delete or broadcast here.
+		if (job) {
+			await this.store.delete(jobId);
+			await this.notifyListeners();
+		}
 
 		logInfo(`📋 Job completed and removed: ${jobId}`);
 	}

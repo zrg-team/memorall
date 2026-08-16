@@ -96,6 +96,7 @@ export const ProviderTabs: React.FC<ProviderTabsProps> = ({
 						<Button
 							key={provider}
 							type="button"
+							data-provider-tab={provider}
 							variant="ghost"
 							onClick={() => handleSelect(provider)}
 							className={`min-h-9 shrink-0 gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors sm:px-3 sm:text-sm ${

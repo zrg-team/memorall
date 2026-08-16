@@ -109,7 +109,12 @@ export const LLMPage: React.FC = () => {
 	});
 
 	return (
-		<div className="flex h-full flex-col overflow-auto bg-background sm:overflow-hidden">
+		<div
+			data-llm-page
+			data-current-model-id={current?.modelId ?? ""}
+			data-current-model-provider={current?.provider ?? ""}
+			className="flex h-full flex-col overflow-auto bg-background sm:overflow-hidden"
+		>
 			<div
 				ref={containerRef}
 				className={
@@ -147,6 +152,7 @@ export const LLMPage: React.FC = () => {
 								<WorkspaceCollapsedSidebarItem
 									icon={<PanelLeftOpen className="h-4 w-4" />}
 									label={t("sidebar.show")}
+									modelSidebarToggle
 									onClick={expandSidebar}
 									className="border border-input bg-background hover:bg-accent"
 								/>

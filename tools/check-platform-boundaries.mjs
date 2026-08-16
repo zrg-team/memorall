@@ -70,6 +70,7 @@ for (const absolute of files) {
 	}
 	if (
 		file.startsWith("src/") &&
+		!file.startsWith("src/platform/desktop/") &&
 		!isTest(file) &&
 		/@tauri-apps\//.test(source)
 	) {

@@ -1,0 +1,60 @@
+diff --git a/node_modules/@hyperframes/lint/dist/browser.js b/node_modules/@hyperframes/lint/dist/browser.js
+--- a/node_modules/@hyperframes/lint/dist/browser.js
++++ b/node_modules/@hyperframes/lint/dist/browser.js
+@@ -2405,7 +2405,7 @@ ${right.raw}`)
+         code: "missing_gsap_script",
+         severity: "error",
+         message: "Composition uses GSAP but no GSAP script is loaded. The animation will not run.",
+-        fixHint: 'Add <script src="https://cdn.jsdelivr.net/npm/gsap@3/dist/gsap.min.js"><\/script> before your animation script.'
++        fixHint: 'Add <script src="/vendors/hyperframes/gsap.min.js"><\/script> before your animation script.'
+       }
+     ];
+   },
+@@ -4348,7 +4348,7 @@ var adapterRules = [
+         code: "missing_lottie_script",
+         severity: "error",
+         message: "Composition uses Lottie but no Lottie script is loaded. The animation will not render.",
+-        fixHint: 'Add <script src="https://cdn.jsdelivr.net/npm/lottie-web@5/build/player/lottie.min.js"><\/script> before your Lottie code.'
++        fixHint: 'Add <script src="/vendors/artifacts/lottie_canvas.min.js"><\/script> before your Lottie code.'
+       }
+     ];
+   },
+@@ -4369,7 +4369,7 @@ var adapterRules = [
+         code: "missing_three_script",
+         severity: "error",
+         message: "Composition uses Three.js but no Three.js script is loaded. The 3D scene will not render.",
+-        fixHint: 'Add <script src="https://cdn.jsdelivr.net/npm/three@0.160/build/three.min.js"><\/script> before your Three.js code.'
++        fixHint: 'Add <script src="/vendors/artifacts/three.min.mjs"><\/script> before your Three.js code.'
+       }
+     ];
+   }
+diff --git a/node_modules/@hyperframes/lint/dist/index.js b/node_modules/@hyperframes/lint/dist/index.js
+--- a/node_modules/@hyperframes/lint/dist/index.js
++++ b/node_modules/@hyperframes/lint/dist/index.js
+@@ -2405,7 +2405,7 @@ ${right.raw}`)
+         code: "missing_gsap_script",
+         severity: "error",
+         message: "Composition uses GSAP but no GSAP script is loaded. The animation will not run.",
+-        fixHint: 'Add <script src="https://cdn.jsdelivr.net/npm/gsap@3/dist/gsap.min.js"></script> before your animation script.'
++        fixHint: 'Add <script src="/vendors/hyperframes/gsap.min.js"></script> before your animation script.'
+       }
+     ];
+   },
+@@ -4348,7 +4348,7 @@ var adapterRules = [
+         code: "missing_lottie_script",
+         severity: "error",
+         message: "Composition uses Lottie but no Lottie script is loaded. The animation will not render.",
+-        fixHint: 'Add <script src="https://cdn.jsdelivr.net/npm/lottie-web@5/build/player/lottie.min.js"></script> before your Lottie code.'
++        fixHint: 'Add <script src="/vendors/artifacts/lottie_canvas.min.js"></script> before your Lottie code.'
+       }
+     ];
+   },
+@@ -4369,7 +4369,7 @@ var adapterRules = [
+         code: "missing_three_script",
+         severity: "error",
+         message: "Composition uses Three.js but no Three.js script is loaded. The 3D scene will not render.",
+-        fixHint: 'Add <script src="https://cdn.jsdelivr.net/npm/three@0.160/build/three.min.js"></script> before your Three.js code.'
++        fixHint: 'Add <script src="/vendors/artifacts/three.min.mjs"></script> before your Three.js code.'
+       }
+     ];
+   }

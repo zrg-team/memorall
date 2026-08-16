@@ -25,21 +25,21 @@
     }
   },
   "scripts": {
-    "build": "tsc -b",
-    "clean": "tsc -b --clean",
-    "dev": "tsc -b --watch --preserveWatchOutput --pretty",
+    "build": "node ../../../tools/run-typescript.mjs native -b",
+    "clean": "node ../../../tools/run-typescript.mjs native -b --clean",
+    "dev": "node ../../../tools/run-typescript.mjs native -b --watch --preserveWatchOutput --pretty",
     "watch": "yarn dev",
-    "typecheck": "tsc -b --pretty false",
+    "typecheck": "node ../../../tools/run-typescript.mjs native -b --pretty false",
     "test": "vitest run --config ../vitest.config.ts core",
     "pack": "yarn pack"
   },
   "dependencies": {
-    "semver": "^7.7.2",
-    "zod": "^4.1.5"
+    "semver": "^7.8.5",
+    "zod": "4.4.3"
   },
   "devDependencies": {
-    "@types/semver": "^7.7.1",
-    "typescript": "^5.9.2",
-    "vitest": "^4.1.8"
+    "@types/semver": "^7.8.0",
+    "typescript": "npm:@typescript/typescript6@6.0.2",
+    "vitest": "4.1.10"
   }
 }

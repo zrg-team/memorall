@@ -1,8 +1,8 @@
 #!/usr/bin/env node
+import { readFile, writeFile } from "node:fs/promises";
+import { createServer } from "node:http";
 import { createRequire } from "node:module";
-import { writeFile } from "node:fs/promises";
 import path from "node:path";
-import { pathToFileURL } from "node:url";
 
 const WIDTH = 1080;
 const HEIGHT = 1920;
@@ -11,6 +11,80 @@ const FPS = 30;
 const TIMESTAMPS = [0, 3, DURATION / 2, DURATION - 1 / FPS];
 const MAX_MEAN_DIFF = 10;
 const MAX_OUTLIER_RATIO = 0.08;
+
+const CONTENT_TYPES = new Map([
+	[".html", "text/html; charset=utf-8"],
+	[".js", "text/javascript; charset=utf-8"],
+	[".mjs", "text/javascript; charset=utf-8"],
+	[".json", "application/json; charset=utf-8"],
+	[".wasm", "application/wasm"],
+]);
+
+function resolveServedPath(baseDirectory, relativePath) {
+	const resolvedBase = path.resolve(baseDirectory);
+	const resolvedPath = path.resolve(resolvedBase, relativePath);
+	if (
+		resolvedPath !== resolvedBase &&
+		!resolvedPath.startsWith(`${resolvedBase}${path.sep}`)
+	) {
+		return undefined;
+	}
+	return resolvedPath;
+}
+
+async function startQaServer(runnerPath) {
+	const runnerDirectory = path.dirname(runnerPath);
+	const publicDirectory = path.join(process.cwd(), "public");
+	const server = createServer(async (request, response) => {
+		try {
+			const pathname = decodeURIComponent(
+				new URL(request.url || "/", "http://127.0.0.1").pathname,
+			);
+			const fromRunner = pathname.startsWith("/runner/");
+			const relativePath = fromRunner
+				? pathname.slice("/runner/".length)
+				: pathname.replace(/^\/+/, "");
+			const servedPath = resolveServedPath(
+				fromRunner ? runnerDirectory : publicDirectory,
+				relativePath,
+			);
+			if (!servedPath) {
+				response.writeHead(403).end("Forbidden");
+				return;
+			}
+
+			const body = await readFile(servedPath);
+			response.writeHead(200, {
+				"Content-Type":
+					CONTENT_TYPES.get(path.extname(servedPath)) ||
+					"application/octet-stream",
+			});
+			response.end(body);
+		} catch (error) {
+			const status = error?.code === "ENOENT" ? 404 : 500;
+			response
+				.writeHead(status)
+				.end(status === 404 ? "Not found" : "Server error");
+		}
+	});
+
+	await new Promise((resolve, reject) => {
+		server.once("error", reject);
+		server.listen(0, "127.0.0.1", resolve);
+	});
+	const address = server.address();
+	if (!address || typeof address === "string") {
+		throw new Error("HyperFrames QA server did not expose a TCP address.");
+	}
+
+	return {
+		origin: `http://127.0.0.1:${address.port}`,
+		close: () =>
+			new Promise((resolve, reject) => {
+				server.close((error) => (error ? reject(error) : resolve()));
+			}),
+	};
+}
 
 function loadPlaywright() {
 	const require = createRequire(import.meta.url);
@@ -214,9 +288,8 @@ async function renderFixture(page, key) {
 		undefined,
 		{ timeout: 15000 },
 	);
-	await page.evaluate(
-		() =>
-			document.fonts?.ready?.then?.(() => undefined).catch?.(() => undefined),
+	await page.evaluate(() =>
+		document.fonts?.ready?.then?.(() => undefined).catch?.(() => undefined),
 	);
 }
 
@@ -260,7 +333,9 @@ async function exportMp4(page, key) {
 					if (msg.status === "complete") {
 						clearTimeout(timeoutId);
 						window.removeEventListener("message", onMessage);
-						const bytes = Array.from(new Uint8Array(await msg.blob.arrayBuffer()));
+						const bytes = Array.from(
+							new Uint8Array(await msg.blob.arrayBuffer()),
+						);
 						resolve({ bytes, filename: msg.filename });
 					}
 				};
@@ -302,7 +377,10 @@ async function compareFrames(page, mp4Bytes, references) {
 			}
 
 			async function seekVideo(video, timestamp) {
-				if (Math.abs(video.currentTime - timestamp) < 0.001 && video.readyState >= 2) {
+				if (
+					Math.abs(video.currentTime - timestamp) < 0.001 &&
+					video.readyState >= 2
+				) {
 					return;
 				}
 				const seeked = waitFor(video, "seeked");
@@ -341,7 +419,9 @@ async function compareFrames(page, mp4Bytes, references) {
 			}
 
 			const videoCanvas = new OffscreenCanvas(width, height);
-			const videoCtx = videoCanvas.getContext("2d", { willReadFrequently: true });
+			const videoCtx = videoCanvas.getContext("2d", {
+				willReadFrequently: true,
+			});
 			const results = [];
 
 			for (const reference of referenceFrames) {
@@ -398,10 +478,12 @@ async function main() {
 	const runnerPath =
 		args.get("--runner") ||
 		path.join(process.cwd(), "runner", "hyperframes-preview.html");
-	const runnerUrl = `${pathToFileURL(runnerPath).href}#composition=${encodeURIComponent(key)}`;
+	const qaServer = await startQaServer(runnerPath);
+	const runnerUrl = `${qaServer.origin}/runner/${encodeURIComponent(path.basename(runnerPath))}#composition=${encodeURIComponent(key)}`;
 
-	const browser = await chromium.launch({ headless: true });
+	let browser;
 	try {
+		browser = await chromium.launch({ headless: true });
 		const page = await browser.newPage({
 			viewport: { width: WIDTH, height: HEIGHT },
 			deviceScaleFactor: 1,
@@ -433,7 +515,11 @@ async function main() {
 			await writeFile(args.get("--out"), Buffer.from(exportResult.bytes));
 		}
 
-		const comparisons = await compareFrames(page, exportResult.bytes, references);
+		const comparisons = await compareFrames(
+			page,
+			exportResult.bytes,
+			references,
+		);
 		const failures = comparisons.filter(
 			(result) =>
 				result.width !== WIDTH ||
@@ -462,7 +548,8 @@ async function main() {
 
 		console.log(`Export parity passed: ${exportResult.filename}`);
 	} finally {
-		await browser.close();
+		await browser?.close();
+		await qaServer.close();
 	}
 }
 

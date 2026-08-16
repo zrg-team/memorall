@@ -30,4 +30,14 @@ describe("secureSession", () => {
 		await expect(secureSession.exists("master")).resolves.toBe(false);
 		await expect(secureSession.get("master")).resolves.toBeNull();
 	});
+
+	it("deletes individual session values", async () => {
+		const { default: secureSession } = await import("../secure-session");
+
+		await secureSession.set("provider_ready", "true");
+		await secureSession.delete("provider_ready");
+
+		await expect(secureSession.exists("provider_ready")).resolves.toBe(false);
+		await expect(secureSession.get("provider_ready")).resolves.toBeNull();
+	});
 });

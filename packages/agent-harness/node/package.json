@@ -25,11 +25,11 @@
     }
   },
   "scripts": {
-    "build": "tsc -b",
-    "clean": "tsc -b --clean",
-    "dev": "tsc -b --watch --preserveWatchOutput --pretty",
+    "build": "node ../../../tools/run-typescript.mjs native -b",
+    "clean": "node ../../../tools/run-typescript.mjs native -b --clean",
+    "dev": "node ../../../tools/run-typescript.mjs native -b --watch --preserveWatchOutput --pretty",
     "watch": "yarn dev",
-    "typecheck": "tsc -b --pretty false",
+    "typecheck": "node ../../../tools/run-typescript.mjs native -b --pretty false",
     "test": "vitest run --config ../vitest.config.ts node",
     "pack": "yarn pack"
   },
@@ -38,7 +38,7 @@
     "@memorall/agent-harness-mcp": "workspace:^",
     "@memorall/agent-harness-sandbox": "workspace:^",
     "@memorall/agent-harness-standard": "workspace:^",
-    "@modelcontextprotocol/sdk": "^1.29.0"
+    "@modelcontextprotocol/sdk": "1.30.0"
   },
   "peerDependencies": {
     "playwright-core": ">=1.55.0"
@@ -49,9 +49,9 @@
     }
   },
   "devDependencies": {
-    "@types/node": "^24.3.1",
+    "@types/node": "22.20.1",
     "playwright-core": "^1.62.1",
-    "typescript": "^5.9.2",
-    "vitest": "^4.1.8"
+    "typescript": "npm:@typescript/typescript6@6.0.2",
+    "vitest": "4.1.10"
   }
 }

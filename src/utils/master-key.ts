@@ -1,5 +1,5 @@
 import { serviceManager } from "@/services";
-import { eq, like } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { FIXED_ENCRYPTION_KEY } from "@/config/security";
 import {
 	generateStrongPasswordBase64,
@@ -236,7 +236,7 @@ export async function getMasterStrongPassword(): Promise<string | null> {
  */
 export async function isMasterKeyUnlocked(): Promise<boolean> {
 	try {
-		return await secureSession.exists(MASTER_READY_KEY);
+		return Boolean(await getMasterStrongPassword());
 	} catch (error) {
 		return false;
 	}
@@ -467,29 +467,33 @@ export async function loadProviderConfig(
 /**
  * Get list of all encrypted provider configs
  */
-export async function getEncryptedProviders(): Promise<AuthProvider[]> {
+async function findEncryptedProviders(): Promise<AuthProvider[]> {
 	const providers: AuthProvider[] = [];
 
-	try {
-		for (const provider of AUTH_PROVIDERS) {
-			const configKey = `${provider}_config`;
-			const result = await serviceManager.databaseService.use(
-				({ db, schema }) =>
-					db
-						.select()
-						.from(schema.encryption)
-						.where(eq(schema.encryption.key, configKey)),
-			);
+	for (const provider of AUTH_PROVIDERS) {
+		const configKey = `${provider}_config`;
+		const result = await serviceManager.databaseService.use(({ db, schema }) =>
+			db
+				.select()
+				.from(schema.encryption)
+				.where(eq(schema.encryption.key, configKey)),
+		);
 
-			if (result.length > 0) {
-				providers.push(provider);
-			}
+		if (result.length > 0) {
+			providers.push(provider);
 		}
-	} catch (error) {
-		logError("Failed to get encrypted providers:", error);
 	}
 
 	return providers;
+}
+
+export async function getEncryptedProviders(): Promise<AuthProvider[]> {
+	try {
+		return await findEncryptedProviders();
+	} catch (error) {
+		logError("Failed to get encrypted providers:", error);
+		return [];
+	}
 }
 
 /**
@@ -497,8 +501,8 @@ export async function getEncryptedProviders(): Promise<AuthProvider[]> {
  */
 export async function lockMasterKey(): Promise<void> {
 	try {
-		await secureSession.set(MASTER_READY_KEY, "");
-		await secureSession.set(MASTER_STRONG_PASSWORD_KEY, "");
+		await secureSession.delete(MASTER_READY_KEY);
+		await secureSession.delete(MASTER_STRONG_PASSWORD_KEY);
 		logInfo("Master key locked");
 	} catch (error) {
 		logError("Failed to lock master key:", error);
@@ -506,8 +510,7 @@ export async function lockMasterKey(): Promise<void> {
 }
 
 /**
- * Delete the master key and all associated configs
- * USE WITH CAUTION - this is destructive
+ * Delete an unused master key. Provider configs are deliberately preserved.
  */
 export async function deleteMasterKey(): Promise<void> {
 	try {
@@ -524,6 +527,58 @@ export async function deleteMasterKey(): Promise<void> {
 		logInfo("Master key deleted");
 	} catch (error) {
 		logError("Failed to delete master key:", error);
+		throw error;
+	}
+}
+
+/**
+ * Delete the master key only when no encrypted provider config still depends on it.
+ * Returns true when a stale/unused master key was removed.
+ */
+export async function deleteMasterKeyIfUnused(): Promise<boolean> {
+	if (!(await hasMasterKey())) {
+		return false;
+	}
+
+	if ((await findEncryptedProviders()).length > 0) {
+		return false;
+	}
+
+	await deleteMasterKey();
+	return true;
+}
+
+/**
+ * Permanently delete the master key and every provider config encrypted by it.
+ * This is the recovery path when the user has forgotten the master passkey.
+ */
+export async function resetMasterKeyAndEncryptedConfigs(): Promise<
+	AuthProvider[]
+> {
+	const encryptedProviders = await findEncryptedProviders();
+	const keysToDelete = [
+		MASTER_KEY_RECORD,
+		...AUTH_PROVIDERS.map((provider) => `${provider}_config`),
+	];
+
+	try {
+		await serviceManager.databaseService.transaction(({ db, schema }) =>
+			db
+				.delete(schema.encryption)
+				.where(inArray(schema.encryption.key, keysToDelete)),
+		);
+
+		await Promise.all([
+			lockMasterKey(),
+			...AUTH_PROVIDERS.map((provider) =>
+				secureSession.delete(`${provider}_ready`),
+			),
+		]);
+
+		logInfo("Master key and encrypted provider configurations reset");
+		return encryptedProviders;
+	} catch (error) {
+		logError("Failed to reset master key and encrypted configs:", error);
 		throw error;
 	}
 }

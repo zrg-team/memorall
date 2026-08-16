@@ -203,6 +203,8 @@ export const DownloadedModelsSection: React.FC<
 												return (
 													<div
 														key={model.id}
+														data-downloaded-model-id={model.id}
+														data-downloaded-model-provider={provider}
 														className="flex items-center justify-between gap-3 rounded-md border p-2"
 													>
 														<div className="min-w-0 flex-1">
@@ -240,6 +242,7 @@ export const DownloadedModelsSection: React.FC<
 																<Button
 																	variant="outline"
 																	size="sm"
+																	data-downloaded-model-action="unload"
 																	onClick={() =>
 																		unloadDownloadedModel(provider, model)
 																	}
@@ -255,6 +258,7 @@ export const DownloadedModelsSection: React.FC<
 															) : (
 																<Button
 																	size="sm"
+																	data-downloaded-model-action="load"
 																	onClick={() =>
 																		loadDownloadedModel(provider, model)
 																	}

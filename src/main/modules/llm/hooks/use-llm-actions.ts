@@ -1,19 +1,20 @@
+import { eq } from "drizzle-orm";
 import { useCallback } from "react";
+import { FIXED_ENCRYPTION_KEY } from "@/config/security";
+import { RECOMMENDATION_WEBLLM_LLMS } from "@/constants/webllm";
+import { serviceManager } from "@/services";
+import { DEFAULT_SERVICES } from "@/services/llm/constants";
+import type { ServiceProvider } from "@/services/llm/interfaces/llm-service.interface";
+import { getConfiguredWllamaFile } from "@/services/llm/registry/model-registry";
 import type {
 	ChatCompletionRequest,
 	ChatCompletionResponse,
 	ChatMessage,
 } from "@/types/openai";
-import { RECOMMENDATION_WEBLLM_LLMS } from "@/constants/webllm";
+import { decryptStringAes, deriveAesKeyFromString } from "@/utils/aes";
 import { logError } from "@/utils/logger";
 import secureSession from "@/utils/secure-session";
-import { serviceManager } from "@/services";
-import { eq } from "drizzle-orm";
-import { FIXED_ENCRYPTION_KEY } from "@/config/security";
-import { deriveAesKeyFromString, decryptStringAes } from "@/utils/aes";
 import type { FileInfo, ProgressData } from "./use-llm-state";
-import { DEFAULT_SERVICES } from "@/services/llm/constants";
-import type { ServiceProvider } from "@/services/llm/interfaces/llm-service.interface";
 
 interface UseLLMActionsProps {
 	// State setters
@@ -130,6 +131,17 @@ export const useLLMActions = ({
 		async (repoInfo: string) => {
 			setStatus("Fetching available files...");
 			setLogs((l) => [...l, `[ui] fetch repo files: ${repoInfo}`]);
+			const configuredFile = getConfiguredWllamaFile(repoInfo);
+			if (configuredFile) {
+				setAvailableFiles([configuredFile]);
+				setFilePath(configuredFile.name);
+				setStatus("Ready to load model");
+				setLogs((l) => [
+					...l,
+					`[ui] using configured GGUF file: ${configuredFile.name}`,
+				]);
+				return;
+			}
 			try {
 				const res = await fetch(
 					`https://huggingface.co/api/models/${repoInfo}`,

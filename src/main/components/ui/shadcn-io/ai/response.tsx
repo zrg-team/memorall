@@ -1,12 +1,12 @@
 "use client";
 
-import { cn } from "@/lib/utils";
 import type { ComponentProps, HTMLAttributes } from "react";
 import { isValidElement, memo } from "react";
 import ReactMarkdown, { type Options } from "react-markdown";
 import rehypeKatex from "rehype-katex";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
+import { cn } from "@/lib/utils";
 import { CodeBlock, CodeBlockCopyButton } from "./code-block";
 import "katex/dist/katex.min.css";
 import hardenReactMarkdown from "harden-react-markdown";
@@ -108,9 +108,6 @@ function parseIncompleteMarkdown(text: string): string {
 	const inlineCodeMatch = result.match(inlineCodePattern);
 	if (inlineCodeMatch) {
 		// Check if we're dealing with a code block (triple backticks)
-		const hasCodeBlockStart = result.includes("```");
-		const codeBlockPattern = /```[\s\S]*?```/g;
-		const completeCodeBlocks = (result.match(codeBlockPattern) || []).length;
 		const allTripleBackticks = (result.match(/```/g) || []).length;
 
 		// If we have an odd number of ``` sequences, we're inside an incomplete code block
@@ -315,19 +312,27 @@ const components: Options["components"] = {
 	},
 	pre: ({ node, className, children }) => {
 		let language = "javascript";
+		const codeClassName: unknown = node?.properties?.className;
 
-		if (typeof node?.properties?.className === "string") {
-			language = node.properties.className.replace("language-", "");
+		if (typeof codeClassName === "string") {
+			language = codeClassName.replace("language-", "");
+		} else if (Array.isArray(codeClassName)) {
+			const languageClass = codeClassName.find(
+				(value): value is string =>
+					typeof value === "string" && value.startsWith("language-"),
+			);
+			if (languageClass) {
+				language = languageClass.replace("language-", "");
+			}
 		}
 
 		// Extract code content from children safely
 		let code = "";
 		if (
-			isValidElement(children) &&
-			children.props &&
-			typeof (children.props as any).children === "string"
+			isValidElement<{ children?: unknown }>(children) &&
+			typeof children.props.children === "string"
 		) {
-			code = (children.props as any).children;
+			code = children.props.children;
 		} else if (typeof children === "string") {
 			code = children;
 		}

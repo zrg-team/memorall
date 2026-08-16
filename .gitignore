@@ -61,6 +61,8 @@ web_modules/
 
 # Output of 'npm pack'
 *.tgz
+# Audited local dependency required by immutable clean-checkout installs.
+!vendor/xlsx-0.20.3.tgz
 
 # Yarn Integrity file
 .yarn-integrity
@@ -199,3 +201,6 @@ apps/desktop/src-tauri/binaries/memorall-node-*
 apps/desktop/src-tauri/target/
 apps/desktop/src-tauri/gen/schemas/
 
+
+# extension.js local session state
+.extension-js

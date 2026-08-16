@@ -27,6 +27,7 @@ import {
 	type RuntimeArtifact,
 } from "@/main/modules/chat/components/artifacts/artifact-protocol";
 import { cn } from "@/lib/utils";
+import { platform } from "@/platform/current";
 
 const HTML_LAZY_RENDER_THRESHOLD = 500_000;
 
@@ -299,7 +300,10 @@ export const RuntimePage: React.FC = () => {
 	);
 	const [artifactListOpen, setArtifactListOpen] = useState(true);
 	const hasRuntime =
-		commands.length > 0 || servers.length > 0 || activeWebSession.isOpen;
+		Boolean(platform.browserAutomation) ||
+		commands.length > 0 ||
+		servers.length > 0 ||
+		activeWebSession.isOpen;
 	const hasArtifacts = artifacts.length > 0;
 	const [section, setSection] = useState<RuntimeSection>(
 		hasArtifacts ? "artifacts" : "runtime",

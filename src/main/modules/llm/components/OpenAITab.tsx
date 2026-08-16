@@ -1,30 +1,36 @@
-import React, { useState, useEffect } from "react";
-import { useTranslation } from "react-i18next";
-import { Button } from "@/main/components/ui/button";
-import { Input } from "@/main/components/ui/input";
+import { eq } from "drizzle-orm";
 import {
+	AlertCircle,
+	CheckCircle,
 	Eye,
 	EyeOff,
-	Shield,
-	CheckCircle,
-	AlertCircle,
 	Loader2,
+	Shield,
 	Trash2,
 } from "lucide-react";
+import type React from "react";
+import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { MasterKeySetupDialog } from "@/main/components/molecules/MasterKeySetupDialog";
+import { PasskeyPromptDialog } from "@/main/components/molecules/PasskeyPromptDialog";
+import { Button } from "@/main/components/ui/button";
+import { Input } from "@/main/components/ui/input";
 import { serviceManager } from "@/services";
-import { eq } from "drizzle-orm";
-import secureSession from "@/utils/secure-session";
-import { logError, logInfo } from "@/utils/logger";
 import { backgroundJob } from "@/services/background-jobs/background-job";
+import { logError, logInfo } from "@/utils/logger";
 import {
+	deleteMasterKeyIfUnused,
+	getEncryptedProviders,
+	getMasterStrongPassword,
 	hasMasterKey,
 	isMasterKeyUnlocked,
-	saveProviderConfig,
 	loadProviderConfig,
-	getMasterStrongPassword,
+	resetMasterKeyAndEncryptedConfigs,
+	saveProviderConfig,
 	setupMasterKey,
+	unlockMasterKey,
 } from "@/utils/master-key";
-import { MasterKeySetupDialog } from "@/main/components/molecules/MasterKeySetupDialog";
+import secureSession from "@/utils/secure-session";
 
 interface OpenAITabProps {
 	onModelLoaded?: (modelId: string, provider: "openai") => void;
@@ -47,6 +53,10 @@ export const OpenAITab: React.FC<OpenAITabProps> = ({ onModelLoaded }) => {
 
 	// Master key setup dialog
 	const [showMasterKeySetup, setShowMasterKeySetup] = useState(false);
+	const [showMasterKeyUnlock, setShowMasterKeyUnlock] = useState(false);
+	const [unlockProviders, setUnlockProviders] = useState<
+		("openai" | "openrouter")[]
+	>([]);
 	const [pendingSaveConfig, setPendingSaveConfig] = useState<{
 		apiKey: string;
 		baseUrl: string;
@@ -91,6 +101,35 @@ export const OpenAITab: React.FC<OpenAITabProps> = ({ onModelLoaded }) => {
 		}
 	};
 
+	const saveAndActivateConfig = async (config: {
+		apiKey: string;
+		baseUrl: string;
+	}) => {
+		await saveProviderConfig("openai", config);
+
+		await serviceManager.llmService.create("openai", {
+			type: "openai",
+			apiKey: config.apiKey,
+			baseURL: config.baseUrl,
+		});
+
+		await secureSession.set("openai_ready", "true");
+
+		const masterStrongPassword = await getMasterStrongPassword();
+		if (masterStrongPassword) {
+			await backgroundJob.execute(
+				"restore-all-providers",
+				{ masterStrongPassword },
+				{ stream: false },
+			);
+		}
+
+		setTempApiKey("");
+		setConfigState("loaded");
+		logInfo("OpenAI configuration saved successfully");
+		onModelLoaded?.("gpt-4o", "openai");
+	};
+
 	// Save new configuration to database
 	const handleSaveConfig = async () => {
 		if (!tempApiKey.trim()) {
@@ -110,7 +149,9 @@ export const OpenAITab: React.FC<OpenAITabProps> = ({ onModelLoaded }) => {
 			// Check if master key exists
 			const masterKeyExists = await hasMasterKey();
 
-			if (!masterKeyExists) {
+			const removedUnusedMasterKey =
+				masterKeyExists && (await deleteMasterKeyIfUnused());
+			if (!masterKeyExists || removedUnusedMasterKey) {
 				// Need to setup master key first
 				setPendingSaveConfig(config);
 				setShowMasterKeySetup(true);
@@ -121,41 +162,14 @@ export const OpenAITab: React.FC<OpenAITabProps> = ({ onModelLoaded }) => {
 			// Check if master key is unlocked
 			const isUnlocked = await isMasterKeyUnlocked();
 			if (!isUnlocked) {
-				setError(t("openai.masterKeyNotUnlocked"));
+				setUnlockProviders(await getEncryptedProviders());
+				setPendingSaveConfig(config);
+				setShowMasterKeyUnlock(true);
 				setIsLoading(false);
 				return;
 			}
 
-			// Save config with master key
-			await saveProviderConfig("openai", config);
-
-			// Create OpenAI service
-			await serviceManager.llmService.create("openai", {
-				type: "openai",
-				apiKey: config.apiKey,
-				baseURL: config.baseUrl,
-			});
-
-			// Mark as ready
-			await secureSession.set("openai_ready", "true");
-
-			// Also restore in offscreen thread via background job
-			const masterStrongPassword = await getMasterStrongPassword();
-			if (masterStrongPassword) {
-				await backgroundJob.execute(
-					"restore-all-providers",
-					{ masterStrongPassword },
-					{ stream: false },
-				);
-			}
-
-			// Clear form and refresh
-			setTempApiKey("");
-			setConfigState("loaded");
-			logInfo("OpenAI configuration saved successfully");
-
-			// Notify parent
-			onModelLoaded?.("gpt-4o", "openai");
+			await saveAndActivateConfig(config);
 		} catch (error) {
 			const msg = error instanceof Error ? error.message : "Unknown error";
 			setError(t("openai.failedToSaveConfiguration", { error: msg }));
@@ -167,45 +181,61 @@ export const OpenAITab: React.FC<OpenAITabProps> = ({ onModelLoaded }) => {
 
 	// Handle master key setup completion
 	const handleMasterKeySetupComplete = async (passkey: string) => {
-		try {
-			await setupMasterKey(passkey);
+		await setupMasterKey(passkey);
 
-			// Now save the pending config
-			if (pendingSaveConfig) {
-				await saveProviderConfig("openai", pendingSaveConfig);
-
-				// Create OpenAI service
-				await serviceManager.llmService.create("openai", {
-					type: "openai",
-					apiKey: pendingSaveConfig.apiKey,
-					baseURL: pendingSaveConfig.baseUrl,
-				});
-
-				// Mark as ready
-				await secureSession.set("openai_ready", "true");
-
-				// Also restore in offscreen thread via background job
-				const masterStrongPassword = await getMasterStrongPassword();
-				if (masterStrongPassword) {
-					await backgroundJob.execute(
-						"restore-all-providers",
-						{ masterStrongPassword },
-						{ stream: false },
-					);
-				}
-
-				setTempApiKey("");
-				setConfigState("loaded");
-				logInfo("OpenAI configuration saved with new master key");
-
-				onModelLoaded?.("gpt-4o", "openai");
-			}
-
-			setShowMasterKeySetup(false);
-			setPendingSaveConfig(null);
-		} catch (error) {
-			throw error;
+		// Now save the pending config
+		if (pendingSaveConfig) {
+			await saveAndActivateConfig(pendingSaveConfig);
 		}
+
+		setShowMasterKeySetup(false);
+		setPendingSaveConfig(null);
+	};
+
+	const handleMasterKeyUnlockComplete = async (passkey: string) => {
+		await unlockMasterKey(passkey);
+
+		if (pendingSaveConfig) {
+			await saveAndActivateConfig(pendingSaveConfig);
+		}
+
+		setShowMasterKeyUnlock(false);
+		setPendingSaveConfig(null);
+	};
+
+	const handleForgotMasterPasskey = async () => {
+		const deletedProviders = await resetMasterKeyAndEncryptedConfigs();
+		const currentModel = await serviceManager.llmService.getCurrentModel();
+		if (
+			currentModel &&
+			deletedProviders.includes(
+				currentModel.provider as "openai" | "openrouter",
+			)
+		) {
+			await serviceManager.llmService.clearCurrentModel();
+		}
+
+		for (const provider of deletedProviders) {
+			if (serviceManager.llmService.has(provider)) {
+				serviceManager.llmService.remove(provider);
+			}
+			try {
+				await backgroundJob.execute(
+					"remove-auth-provider",
+					{ provider },
+					{ stream: false },
+				);
+			} catch (error) {
+				logError(
+					`Failed to remove ${provider} from background services:`,
+					error,
+				);
+			}
+		}
+
+		setUnlockProviders([]);
+		setShowMasterKeyUnlock(false);
+		setShowMasterKeySetup(true);
 	};
 
 	// Load configuration (auto-load if master key is unlocked)
@@ -286,8 +316,9 @@ export const OpenAITab: React.FC<OpenAITabProps> = ({ onModelLoaded }) => {
 					.where(eq(schema.encryption.key, "openai_config"));
 			});
 
-			// Clear memory
-			await secureSession.set("openai_ready", "");
+			// Clear memory and remove the master key if no config still uses it.
+			await secureSession.delete("openai_ready");
+			await deleteMasterKeyIfUnused();
 
 			// Remove LLM service
 			if (serviceManager.llmService.has("openai")) {
@@ -537,6 +568,17 @@ export const OpenAITab: React.FC<OpenAITabProps> = ({ onModelLoaded }) => {
 				onSetupComplete={handleMasterKeySetupComplete}
 				onCancel={() => {
 					setShowMasterKeySetup(false);
+					setPendingSaveConfig(null);
+				}}
+			/>
+
+			<PasskeyPromptDialog
+				open={showMasterKeyUnlock}
+				providers={unlockProviders}
+				onPasskeySubmit={handleMasterKeyUnlockComplete}
+				onForgotPasskey={handleForgotMasterPasskey}
+				onCancel={() => {
+					setShowMasterKeyUnlock(false);
 					setPendingSaveConfig(null);
 				}}
 			/>

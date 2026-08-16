@@ -17,6 +17,7 @@ export interface TransformerRunnerConfig {
 
 export interface WllamaModelConfig {
 	filename: string;
+	mmprojFilename?: string;
 }
 
 export interface LLMModelConfig {

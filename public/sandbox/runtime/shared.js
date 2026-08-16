@@ -39,7 +39,19 @@ let almostNodeLibModule = null;
 
 const sandboxAssetUrl = (path) => {
 	const normalizedPath = String(path).replace(/^\/+/, "");
-	return new URL(`/sandbox/${normalizedPath}`, globalThis.location.href).href;
+	const assetUrl = new URL(self.location.href);
+	const sandboxRootMarker = "/sandbox/";
+	const sandboxRootIndex = assetUrl.pathname.lastIndexOf(sandboxRootMarker);
+	if (sandboxRootIndex < 0) {
+		throw new Error(`Sandbox asset root is unavailable: ${assetUrl.pathname}`);
+	}
+	assetUrl.pathname = `${assetUrl.pathname.slice(
+		0,
+		sandboxRootIndex + sandboxRootMarker.length,
+	)}${normalizedPath}`;
+	assetUrl.search = "";
+	assetUrl.hash = "";
+	return assetUrl.href;
 };
 
 export const loadAlmostNodeLib = async () => {

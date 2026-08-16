@@ -421,6 +421,7 @@ export const ChatInputControls: React.FC<ChatInputControlsProps> = ({
 						<Tooltip>
 							<TooltipTrigger asChild>
 								<PromptInputSubmit
+									data-chat-submit
 									disabled={!canSubmit || isLoading || !model}
 									status={status}
 									className="h-9 w-9 rounded-xl bg-foreground/90 text-background shadow-sm transition hover:bg-foreground disabled:bg-muted/70 disabled:text-muted-foreground disabled:opacity-100"

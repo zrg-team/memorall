@@ -5,7 +5,7 @@ export function createNotification(title: string, message: string): void {
 		type: "basic" as const,
 		title,
 		message,
-		iconUrl: chrome.runtime.getURL("icons/extension_48.png"),
+		iconUrl: chrome.runtime.getURL("docs/images/extension_48.png"),
 	});
 }
 

@@ -32,9 +32,16 @@ const dependencies = Object.fromEntries(Object.entries(packageNames).map(([file,
 await writeFile(path.join(fixture, "package.json"), JSON.stringify({
   private: true,
   type: "module",
-  scripts: { typecheck: "tsc -p tsconfig.json", build: "vite build" },
+  scripts: {
+    typecheck: "node ./node_modules/@typescript/native/bin/tsc -p tsconfig.json",
+    build: "vite build",
+  },
   dependencies: { ...dependencies, vite: "8.0.16" },
-  devDependencies: { "@types/node": "24.3.1", typescript: "5.9.2" },
+  devDependencies: {
+    "@types/node": "22.20.1",
+    "@typescript/native": "npm:typescript@7.0.2",
+    typescript: "npm:@typescript/typescript6@6.0.2",
+  },
 }, null, 2));
 await writeFile(path.join(fixture, "tsconfig.json"), JSON.stringify({
   compilerOptions: {

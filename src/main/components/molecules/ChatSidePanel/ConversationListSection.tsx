@@ -84,6 +84,7 @@ export const ConversationListSection: React.FC = () => {
 				</label>
 				<button
 					type="button"
+					data-new-chat
 					onClick={() => void handleNewConversation()}
 					disabled={isCreating}
 					className="inline-flex h-10 shrink-0 items-center gap-2 rounded-lg border border-border/70 bg-background px-3 text-sm font-medium shadow-sm transition-colors hover:bg-muted disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"

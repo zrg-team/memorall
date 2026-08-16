@@ -33,6 +33,11 @@
 			"icons/icon.icns",
 			"icons/icon.ico"
 		],
-		"externalBin": ["../../../publish/.cache/tauri-sidecars/memorall-node"]
+		"externalBin": ["../../../publish/.cache/tauri-sidecars/memorall-node"],
+		"resources": {
+			"../../../publish/.cache/tauri-resources/desktop-sidecar": "desktop-sidecar",
+			"../../../publish/.cache/tauri-resources/browser-runtime": "browser-runtime",
+			"../../../publish/.cache/tauri-resources/licenses": "licenses"
+		}
 	}
 }

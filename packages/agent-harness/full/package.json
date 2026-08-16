@@ -20,11 +20,11 @@
     }
   },
   "scripts": {
-    "build": "tsc -b",
-    "clean": "tsc -b --clean",
-    "dev": "tsc -b --watch --preserveWatchOutput --pretty",
+    "build": "node ../../../tools/run-typescript.mjs native -b",
+    "clean": "node ../../../tools/run-typescript.mjs native -b --clean",
+    "dev": "node ../../../tools/run-typescript.mjs native -b --watch --preserveWatchOutput --pretty",
     "watch": "yarn dev",
-    "typecheck": "tsc -b --pretty false",
+    "typecheck": "node ../../../tools/run-typescript.mjs native -b --pretty false",
     "test": "vitest run --config ../vitest.config.ts full",
     "pack": "yarn pack"
   },
@@ -36,7 +36,7 @@
     "@memorall/agent-harness-standard": "workspace:^"
   },
   "devDependencies": {
-    "typescript": "^5.9.2",
-    "vitest": "^4.1.8"
+    "typescript": "npm:@typescript/typescript6@6.0.2",
+    "vitest": "4.1.10"
   }
 }

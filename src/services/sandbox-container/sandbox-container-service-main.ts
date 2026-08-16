@@ -712,9 +712,12 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 		this.pending.delete(envelope.requestId);
 
 		if (isSandboxErrorEnvelope(envelope)) {
+			const remoteStack = envelope.error.stack
+				? `\nRemote sandbox stack:\n${envelope.error.stack}`
+				: "";
 			pending.reject(
 				new Error(
-					`Sandbox operation failed (${envelope.operation}): ${envelope.error.message}`,
+					`Sandbox operation failed (${envelope.operation}): ${envelope.error.message}${remoteStack}`,
 				),
 			);
 			return;

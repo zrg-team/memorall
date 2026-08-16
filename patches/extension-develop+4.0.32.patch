@@ -1,0 +1,39 @@
+diff --git a/node_modules/extension-develop/dist/0~rspack-config.mjs b/node_modules/extension-develop/dist/0~rspack-config.mjs
+index c47ecb6c..93829e7a 100644
+--- a/node_modules/extension-develop/dist/0~rspack-config.mjs
++++ b/node_modules/extension-develop/dist/0~rspack-config.mjs
+@@ -8315,6 +8315,7 @@ function resolveHmrHotPath() {
+     return _resolvedHotPath;
+ }
+ function getDevServerHmrImports(compiler) {
++    if ('true' === process.env.EXTENSION_NO_RELOAD) return [];
+     const devServer = compiler.options?.devServer;
+     const envHost = process.env.EXTENSION_DEV_SERVER_HOST;
+     const envPort = process.env.EXTENSION_DEV_SERVER_PORT;
+@@ -8412,7 +8413,7 @@ class AddScriptsAndStylesToCompilation {
+                     ...jsImports,
+                     ...cssAssets
+                 ];
+-                if ('development' === compiler.options.mode) {
++                if ('development' === compiler.options.mode && 'true' !== process.env.EXTENSION_NO_RELOAD) {
+                     if (devServerHmrImports.length > 0) fileAssets.unshift(...devServerHmrImports);
+                     fileAssets.unshift(resolveDevelopDistFile('preact-refresh-shim'));
+                     const hmrScript = resolveDevelopDistFile("minimum-script-file");
+@@ -8768,7 +8769,7 @@ class HtmlPlugin {
+             includeList,
+             browser: this.browser
+         }).apply(compiler);
+-        if ('production' !== (compiler.options.mode || 'development')) {
++        if ('production' !== (compiler.options.mode || 'development') && 'true' !== process.env.EXTENSION_NO_RELOAD) {
+             const contentScriptEntryPaths = new Set();
+             try {
+                 const manifest = parseJsonSafe(__rspack_external_node_fs_5ea92f0c.readFileSync(this.manifestPath, 'utf-8'));
+@@ -12052,7 +12053,7 @@ class UpdateManifest {
+                 patchedManifest = patchChromiumThemeColors(patchedManifest, this.browser);
+                 const overrides = getManifestOverrides(this.manifestPath, manifest);
+                 if ('development' === compiler.options.mode) {
+-                    if (patchedManifest.content_scripts) patchedManifest.content_scripts = this.applyDevOverrides(patchedManifest);
++                    if ('true' !== process.env.EXTENSION_NO_RELOAD && patchedManifest.content_scripts) patchedManifest.content_scripts = this.applyDevOverrides(patchedManifest);
+                     patchedManifest = patchDevContentScriptManifestPaths(compilation, patchedManifest);
+                 }
+                 if (isDebug()) try {

@@ -57,6 +57,11 @@ window.addEventListener("message", (event) => {
 			const result = await handleOperation(request);
 			sendSuccess(request, result);
 		} catch (error) {
+			console.error(
+				"[sandbox-runtime] operation failed",
+				request.operation,
+				error,
+			);
 			sendError(request, error);
 		}
 	})();
