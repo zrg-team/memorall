@@ -40,16 +40,32 @@ const freePort = async (): Promise<number> =>
 		});
 	});
 
+// Managed processes are otherwise silent, so their own diagnostics are the only
+// way to explain a start-up failure on a machine we cannot attach to.
+const captureDiagnostics = (child: ChildProcess): (() => string) => {
+	let buffer = "";
+	child.stderr?.setEncoding("utf8");
+	child.stderr?.on("data", (chunk: string) => {
+		buffer = `${buffer}${chunk}`.slice(-2_000);
+	});
+	return () => buffer.trim();
+};
+
 const waitForPort = async (
 	port: number,
 	child: ChildProcess,
+	label: string,
+	diagnostics: () => string,
 	timeoutMs = 20_000,
 ): Promise<void> => {
 	const deadline = Date.now() + timeoutMs;
 	while (Date.now() < deadline) {
 		if (child.exitCode !== null) {
+			const output = diagnostics();
 			throw new Error(
-				`Managed process exited with code ${String(child.exitCode)}.`,
+				`Managed ${label} exited with code ${String(child.exitCode)}.${
+					output ? ` Output: ${output}` : ""
+				}`,
 			);
 		}
 		const ready = await new Promise<boolean>((resolve) => {
@@ -65,7 +81,12 @@ const waitForPort = async (
 		if (ready) return;
 		await new Promise((resolve) => setTimeout(resolve, 100));
 	}
-	throw new Error(`Timed out waiting for loopback port ${port}.`);
+	const output = diagnostics();
+	throw new Error(
+		`Timed out waiting for the managed ${label} on loopback port ${port}.${
+			output ? ` Output: ${output}` : ""
+		}`,
+	);
 };
 
 const terminateTree = async (child: ChildProcess | null): Promise<void> => {
@@ -352,13 +373,18 @@ export class ManagedBrowserOsRuntime {
 					: []),
 				...(settings.visible ? [] : ["--headless=new", "--disable-gpu"]),
 			],
-			{ stdio: "ignore", windowsHide: true, detached },
+			{ stdio: ["ignore", "ignore", "pipe"], windowsHide: true, detached },
 		);
 		this.browser = browser;
 		try {
-			await waitForPort(cdpPort, browser);
+			await waitForPort(
+				cdpPort,
+				browser,
+				"browser process",
+				captureDiagnostics(browser),
+			);
 			const server = spawn(serverPath, ["--config", configPath], {
-				stdio: "ignore",
+				stdio: ["ignore", "ignore", "pipe"],
 				windowsHide: true,
 				detached,
 				env: {
@@ -367,7 +393,12 @@ export class ManagedBrowserOsRuntime {
 				},
 			});
 			this.server = server;
-			await waitForPort(serverPort, server);
+			await waitForPort(
+				serverPort,
+				server,
+				"BrowserOS server",
+				captureDiagnostics(server),
+			);
 			this.connection = {
 				endpoint: `http://127.0.0.1:${serverPort}/mcp`,
 				token,

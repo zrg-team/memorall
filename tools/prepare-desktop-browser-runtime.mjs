@@ -135,14 +135,15 @@ const fetchAsset = async (asset, label) => {
 const extractZip = (archive, destination, label) => {
 	rmSync(destination, { recursive: true, force: true });
 	mkdirSync(destination, { recursive: true });
-	// bsdtar (macOS and Windows) reads zip archives, GNU tar (Linux) does not.
+	// GNU tar (Linux) cannot read zip archives at all, and bsdtar is a weaker
+	// zip reader than unzip for the symlinks and modes inside a macOS .app.
 	const extractors =
-		process.platform === "linux"
-			? [
+		process.platform === "win32"
+			? [["tar", ["-xf", archive, "-C", destination]]]
+			: [
 					["unzip", ["-q", "-o", archive, "-d", destination]],
 					["tar", ["-xf", archive, "-C", destination]],
-				]
-			: [["tar", ["-xf", archive, "-C", destination]]];
+				];
 	let failure = "no extractor was attempted";
 	for (const [command, args] of extractors) {
 		const extraction = spawnSync(command, args, {
