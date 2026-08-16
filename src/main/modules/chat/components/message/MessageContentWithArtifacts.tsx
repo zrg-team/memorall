@@ -111,6 +111,7 @@ const MessageContentFrame: React.FC<MessageContentWithArtifactsProps> =
 									<OpenUIRenderer
 										content={seg.content}
 										streaming={isStreaming}
+										deferred
 										onMessageAction={onMessageAction}
 									/>
 								</DeferredMount>
