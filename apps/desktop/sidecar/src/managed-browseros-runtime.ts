@@ -99,8 +99,85 @@ const waitForPort = async (
 	);
 };
 
+const hasExited = (child: ChildProcess): boolean =>
+	child.exitCode !== null || child.signalCode !== null;
+
+const waitForExit = async (
+	child: ChildProcess,
+	timeoutMs: number,
+): Promise<boolean> => {
+	if (hasExited(child)) return true;
+	return await new Promise<boolean>((resolve) => {
+		const timer = setTimeout(() => resolve(false), timeoutMs);
+		child.once("exit", () => {
+			clearTimeout(timer);
+			resolve(true);
+		});
+	});
+};
+
+// Chromium only writes localStorage, cookies and preferences out to a
+// persistent profile during an orderly shutdown, and the runtime reuses that
+// same profile directory the moment it restarts. Killing the process instead
+// silently discards whatever had not been flushed yet, so ask the browser to
+// close itself first and fall back to signals only when it will not.
+const closeBrowserGracefully = async (
+	child: ChildProcess,
+	cdpEndpoint: string | undefined,
+): Promise<boolean> => {
+	if (hasExited(child)) return true;
+	if (!cdpEndpoint) return false;
+	let socket: WebSocket | undefined;
+	try {
+		const response = await fetch(`${cdpEndpoint}/json/version`, {
+			signal: AbortSignal.timeout(2_000),
+		});
+		const { webSocketDebuggerUrl } = (await response.json()) as {
+			webSocketDebuggerUrl?: string;
+		};
+		if (!webSocketDebuggerUrl) return false;
+		socket = new WebSocket(webSocketDebuggerUrl);
+		const opened = socket;
+		await new Promise<void>((resolve, reject) => {
+			const timer = setTimeout(
+				() => reject(new Error("CDP shutdown socket timed out.")),
+				3_000,
+			);
+			opened.addEventListener(
+				"open",
+				() => {
+					clearTimeout(timer);
+					resolve();
+				},
+				{ once: true },
+			);
+			opened.addEventListener(
+				"error",
+				() => {
+					clearTimeout(timer);
+					reject(new Error("CDP shutdown socket failed."));
+				},
+				{ once: true },
+			);
+		});
+		opened.send(JSON.stringify({ id: 1, method: "Browser.close", params: {} }));
+		const exited = await waitForExit(child, 10_000);
+		trace(`graceful browser shutdown ${exited ? "completed" : "timed out"}`);
+		return exited;
+	} catch (error) {
+		trace(`graceful browser shutdown unavailable: ${String(error)}`);
+		return false;
+	} finally {
+		try {
+			socket?.close();
+		} catch {
+			// The socket is already gone once the browser exits.
+		}
+	}
+};
+
 const terminateTree = async (child: ChildProcess | null): Promise<void> => {
-	if (!child || child.exitCode !== null || !child.pid) return;
+	if (!child || hasExited(child) || !child.pid) return;
 	if (process.platform === "win32") {
 		await new Promise<void>((resolve) => {
 			const killer = spawn(
@@ -125,6 +202,7 @@ const terminateTree = async (child: ChildProcess | null): Promise<void> => {
 				resolve();
 			});
 		});
+		await waitForExit(child, 5_000);
 		return;
 	}
 	try {
@@ -132,6 +210,15 @@ const terminateTree = async (child: ChildProcess | null): Promise<void> => {
 	} catch {
 		child.kill("SIGTERM");
 	}
+	// A restart reuses the profile directory, so the old process has to be gone
+	// before the next one claims it.
+	if (await waitForExit(child, 5_000)) return;
+	try {
+		process.kill(-child.pid, "SIGKILL");
+	} catch {
+		child.kill("SIGKILL");
+	}
+	await waitForExit(child, 2_000);
 };
 
 const terminateWindowsPath = async (
@@ -265,11 +352,16 @@ export class ManagedBrowserOsRuntime {
 	async stop(): Promise<void> {
 		const server = this.server;
 		const browser = this.browser;
+		const cdpEndpoint = this.connection?.cdpEndpoint;
 		this.server = null;
 		this.browser = null;
 		this.connection = null;
 		trace("terminating BrowserOS server");
 		await terminateTree(server);
+		if (browser) {
+			trace("closing the managed browser");
+			await closeBrowserGracefully(browser, cdpEndpoint);
+		}
 		trace("terminating Chromium root process");
 		await terminateTree(browser);
 		trace("terminating remaining exact-path Chromium children");
