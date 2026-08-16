@@ -145,6 +145,22 @@ describe("ComposioClient", () => {
 		).rejects.toThrow(/400 on \/connected_accounts\/link/);
 	});
 
+	it("reads the toolkit slug from the nested toolkit object", async () => {
+		// Reading only the flat spellings left every account without a slug, so
+		// an already-authorized app showed "Connect" again on reopening.
+		fetchMock.mockResolvedValue(
+			jsonResponse({
+				items: [
+					{ id: "ca_1", status: "ACTIVE", toolkit: { slug: "gmail" } },
+					{ id: "ca_2", status: "ACTIVE", toolkit_slug: "slack" },
+				],
+			}),
+		);
+
+		const accounts = await new ComposioClient("k").listConnectedAccounts("u");
+		expect(accounts.map((a) => a.toolkitSlug)).toEqual(["gmail", "slack"]);
+	});
+
 	it("reads toolkits out of either envelope shape", async () => {
 		fetchMock.mockResolvedValue(
 			jsonResponse({ data: { items: [{ slug: "gmail", name: "Gmail" }] } }),

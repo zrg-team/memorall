@@ -143,7 +143,12 @@ export const MCPServersModal = NiceModal.create(() => {
 							{connections.map((connection) => {
 								const status = statusOf(connection.id);
 								const isOn = Boolean(selectionFor(connection.id));
-								const unusable = status === "bridge-down" || status === "error";
+								// "incomplete" means setup never produced an endpoint, so
+								// enabling it would add a connection that resolves to nothing.
+								const unusable =
+									status === "bridge-down" ||
+									status === "error" ||
+									status === "incomplete";
 								return (
 									<button
 										key={connection.id}
@@ -170,7 +175,9 @@ export const MCPServersModal = NiceModal.create(() => {
 															`connections:status.${
 																status === "bridge-down"
 																	? "bridgeDown"
-																	: "error"
+																	: status === "incomplete"
+																		? "incomplete"
+																		: "error"
 															}`,
 														)
 													: t("connections:detail.toolCount", {

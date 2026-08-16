@@ -162,12 +162,12 @@ export class ComposioClient {
 		const payload = await this.request<unknown>(`/connected_accounts?${query}`);
 		return asList(payload).map((entry) => ({
 			id: String(pick(entry, "id", "nanoid") ?? ""),
-			toolkitSlug: pick<string>(
-				entry,
-				"toolkit_slug",
-				"toolkitSlug",
-				"appName",
-			),
+			// The toolkit arrives nested as `toolkit: { slug }`; the flat spellings
+			// are older shapes. Missing it means an already-connected app looks
+			// unconnected when the catalog is reopened.
+			toolkitSlug:
+				pick<string>(asRecord(entry.toolkit), "slug", "name") ??
+				pick<string>(entry, "toolkit_slug", "toolkitSlug", "appName"),
 			status: String(pick(entry, "status") ?? "UNKNOWN"),
 			label: pick<string>(entry, "alias", "label"),
 		}));

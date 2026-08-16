@@ -116,6 +116,7 @@ export const ComposioWizard: React.FC<ComposioWizardProps> = ({
 				setApiKey(parsed.apiKey);
 				setIsBusy(true);
 				try {
+					await ensureConnectionRecord();
 					await enterAppsStep(parsed.apiKey);
 				} catch (caught) {
 					// A stored key that no longer works drops back to step 1 with a reason.
@@ -139,48 +140,65 @@ export const ComposioWizard: React.FC<ComposioWizardProps> = ({
 		]);
 
 		setToolkits(catalog);
-		setConnected(
-			accounts
-				.filter((account) => account.status === "ACTIVE" && account.toolkitSlug)
-				.map((account) => ({
-					id: String(account.toolkitSlug),
-					name:
-						catalog.find((toolkit) => toolkit.slug === account.toolkitSlug)
-							?.name ?? String(account.toolkitSlug),
-					connectedAccountId: account.id,
-					status: "active" as const,
-				})),
-		);
+
+		const fromApi: ConnectionApp[] = accounts
+			.filter((account) => account.status === "ACTIVE" && account.toolkitSlug)
+			.map((account) => ({
+				id: String(account.toolkitSlug),
+				name:
+					catalog.find((toolkit) => toolkit.slug === account.toolkitSlug)
+						?.name ?? String(account.toolkitSlug),
+				connectedAccountId: account.id,
+				status: "active" as const,
+			}));
+
+		// Merge with what we already recorded. Composio's listing is the source of
+		// truth when it answers, but our own record keeps the catalog honest if
+		// that call fails or returns a shape we do not recognise.
+		const stored =
+			connections.find((entry) => entry.id === COMPOSIO_CONNECTION_ID)?.apps ??
+			[];
+		const byId = new Map<string, ConnectionApp>();
+		for (const app of [...stored, ...fromApi]) {
+			byId.set(app.id, app);
+		}
+
+		setConnected([...byId.values()]);
 		setStep("apps");
 	};
 
 	/**
-	 * Record the connection as soon as the key is stored, before any app is
-	 * connected. Otherwise a saved key produces nothing visible: the page still
-	 * reports zero connections and drops the user back on the empty chooser with
-	 * no sign their work was kept.
+	 * Record the connection as soon as a key is in play, before any app is
+	 * connected. Otherwise a saved key produces nothing visible: the page reports
+	 * zero connections and shows the empty chooser, as if the work was discarded.
+	 *
+	 * Called from both entry points — saving a new key and resuming with a stored
+	 * one — because a returning user skips the save path entirely.
 	 */
+	const ensureConnectionRecord = async () => {
+		if (connections.some((entry) => entry.id === COMPOSIO_CONNECTION_ID)) {
+			return;
+		}
+		const now = new Date().toISOString();
+		await save({
+			id: COMPOSIO_CONNECTION_ID,
+			kind: "composio",
+			name: "Composio",
+			transport: "http",
+			// No endpoint until a session is minted; this reads as "incomplete".
+			url: "",
+			authMode: "none",
+			apps: [],
+			composio: { toolkits: [] },
+			enabledByDefault: false,
+			createdAt: now,
+			updatedAt: now,
+		});
+	};
+
 	const persistKeyAndContinue = async () => {
 		await saveSecret(COMPOSIO_SECRET_KEY, JSON.stringify({ apiKey }));
-
-		if (!connections.some((entry) => entry.id === COMPOSIO_CONNECTION_ID)) {
-			const now = new Date().toISOString();
-			await save({
-				id: COMPOSIO_CONNECTION_ID,
-				kind: "composio",
-				name: "Composio",
-				transport: "http",
-				// No endpoint until a session is minted; this reads as "incomplete".
-				url: "",
-				authMode: "none",
-				apps: [],
-				composio: { toolkits: [] },
-				enabledByDefault: false,
-				createdAt: now,
-				updatedAt: now,
-			});
-		}
-
+		await ensureConnectionRecord();
 		await enterAppsStep(apiKey);
 	};
 
@@ -235,15 +253,34 @@ export const ComposioWizard: React.FC<ComposioWizardProps> = ({
 				signal: controller.signal,
 			});
 
-			setConnected((current) => [
-				...current.filter((app) => app.id !== toolkit.slug),
-				{
-					id: toolkit.slug,
-					name: toolkit.name,
-					connectedAccountId: request.id,
-					status: "active",
-				},
-			]);
+			const app: ConnectionApp = {
+				id: toolkit.slug,
+				name: toolkit.name,
+				connectedAccountId: request.id,
+				status: "active",
+			};
+			const nextApps = [
+				...connected.filter((entry) => entry.id !== toolkit.slug),
+				app,
+			];
+			setConnected(nextApps);
+
+			// Persist each authorization as it lands. Waiting until Finish meant
+			// leaving the page after authorizing threw the app away, and it came
+			// back offering "Connect" again.
+			const record = connections.find(
+				(entry) => entry.id === COMPOSIO_CONNECTION_ID,
+			);
+			if (record) {
+				await save({
+					...record,
+					apps: nextApps,
+					composio: {
+						...(record.composio ?? { toolkits: [] }),
+						toolkits: nextApps.map((entry) => entry.id),
+					},
+				});
+			}
 		} catch (caught) {
 			if ((caught as Error)?.name !== "AbortError") {
 				logError("[Composio] Connect failed:", caught);
