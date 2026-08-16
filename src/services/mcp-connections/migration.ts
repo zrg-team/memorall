@@ -44,30 +44,16 @@ const findEquivalent = (
 			connection.url === server.url && connection.transport === server.type,
 	);
 
-export interface LegacyMigrationResult {
-	config: UnifiedFlowConfig;
-	migrated: boolean;
-}
-
-export async function migrateLegacyServers(
-	config: UnifiedFlowConfig,
-): Promise<LegacyMigrationResult> {
-	const step = config.steps.find(
-		(candidate) => candidate.name === MCP_FEATURE_NAME,
-	);
-	if (!step) {
-		return { config, migrated: false };
-	}
-
-	const alreadyMigrated = Array.isArray(step.config?.connections);
-	const servers = Array.isArray(step.config?.servers)
-		? step.config.servers.filter(isLegacyServer)
-		: [];
-
-	if (alreadyMigrated || servers.length === 0) {
-		return { config, migrated: false };
-	}
-
+/**
+ * Turn raw server configs into registry entries and the selections that point at
+ * them, reusing an existing entry whenever one already targets the same URL.
+ *
+ * Shared by the legacy migration and by the agent wizard, which authors servers
+ * directly and still needs them to land in the registry rather than beside it.
+ */
+export async function ensureConnectionsForServers(
+	servers: MCPServerConfig[],
+): Promise<AgentConnectionSelection[]> {
 	const existing = await listConnections();
 	const selections: AgentConnectionSelection[] = [];
 	const timestamp = new Date().toISOString();
@@ -96,6 +82,35 @@ export async function migrateLegacyServers(
 		existing.push(connection);
 		selections.push({ connectionId: connection.id });
 	}
+
+	return selections;
+}
+
+export interface LegacyMigrationResult {
+	config: UnifiedFlowConfig;
+	migrated: boolean;
+}
+
+export async function migrateLegacyServers(
+	config: UnifiedFlowConfig,
+): Promise<LegacyMigrationResult> {
+	const step = config.steps.find(
+		(candidate) => candidate.name === MCP_FEATURE_NAME,
+	);
+	if (!step) {
+		return { config, migrated: false };
+	}
+
+	const alreadyMigrated = Array.isArray(step.config?.connections);
+	const servers = Array.isArray(step.config?.servers)
+		? step.config.servers.filter(isLegacyServer)
+		: [];
+
+	if (alreadyMigrated || servers.length === 0) {
+		return { config, migrated: false };
+	}
+
+	const selections = await ensureConnectionsForServers(servers);
 
 	logInfo(
 		`[MCP_CONNECTIONS] Migrated ${servers.length} embedded MCP server(s) to the registry.`,

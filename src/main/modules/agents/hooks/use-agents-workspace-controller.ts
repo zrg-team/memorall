@@ -57,7 +57,7 @@ export const useAgentsWorkspaceController = () => {
 		draftConfig,
 		draftFeatures,
 		draftMultiAgentAccessibleAgentIds,
-		draftMCPServers,
+		draftConnections,
 		draftEnabledSkillNames,
 		featureDefinitions,
 		availableTools,
@@ -69,7 +69,7 @@ export const useAgentsWorkspaceController = () => {
 		isSaving: isConfigSaving,
 		setGraphType,
 		setEnabledSkills,
-		setMCPServers,
+		setAgentConnections,
 		setAccessibleAgents,
 		toggleFeature,
 		save,
@@ -263,7 +263,7 @@ export const useAgentsWorkspaceController = () => {
 				recallType: draft.recallType,
 			});
 			setEnabledSkills(draft.enabledSkillNames);
-			setMCPServers(draft.mcpServers);
+			setAgentConnections(draft.connections);
 			setAccessibleAgents(draft.multiAgentAccessibleAgentIds);
 			agentCronJobs.replaceDrafts(
 				draft.cronJobs.map((cronJob) => ({
@@ -293,7 +293,7 @@ export const useAgentsWorkspaceController = () => {
 			setAccessibleAgents,
 			setEnabledSkills,
 			setGraphType,
-			setMCPServers,
+			setAgentConnections,
 			agentCronJobs,
 			t,
 			toggleFeature,
@@ -327,7 +327,7 @@ export const useAgentsWorkspaceController = () => {
 				enabledFeatureNames: [...enabledFeatureNames],
 				enabledToolNames: [...draftConfig.tools],
 				enabledSkillNames: [...draftEnabledSkillNames],
-				mcpServers: [...draftMCPServers],
+				connections: [...draftConnections],
 				multiAgentAccessibleAgentIds: [...draftMultiAgentAccessibleAgentIds],
 				growType: draftMemoryOptions.growType,
 				recallType: draftMemoryOptions.recallType,
@@ -343,7 +343,7 @@ export const useAgentsWorkspaceController = () => {
 			draftConfig.tools,
 			draftEnabledSkillNames,
 			draftFeatures,
-			draftMCPServers,
+			draftConnections,
 			draftMemoryOptions.growType,
 			draftMemoryOptions.recallType,
 			draftMultiAgentAccessibleAgentIds,

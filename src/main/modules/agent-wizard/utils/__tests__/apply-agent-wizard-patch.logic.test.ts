@@ -24,7 +24,7 @@ const draft = {
 	enabledFeatureNames: ["knowledge-retrieval"],
 	enabledToolNames: [],
 	enabledSkillNames: ["writing"],
-	mcpServers: [],
+	connections: [],
 	multiAgentAccessibleAgentIds: [],
 	cronJobs: [],
 	growType: "knowledge-graph",
@@ -46,15 +46,7 @@ describe("agent wizard patch helpers", () => {
 				enabledToolNames: ["search", "unknown-tool"],
 				enabledSkillNames: ["coding", "unknown-skill"],
 				multiAgentAccessibleAgentIds: ["a", "a", "b"],
-				mcpServers: [
-					{
-						type: "http",
-						name: "server",
-						url: "https://example.test",
-						headers: { Authorization: "Bearer token", bad: 1 },
-					},
-					{ type: "stdio", name: "bad", url: "bad" },
-				],
+				connections: ["conn-a", { connectionId: "conn-b" }, 42],
 			} as any,
 			catalog,
 		);
@@ -71,14 +63,7 @@ describe("agent wizard patch helpers", () => {
 				enabledToolNames: ["search"],
 				enabledSkillNames: ["coding"],
 				multiAgentAccessibleAgentIds: ["a", "b"],
-				mcpServers: [
-					{
-						type: "http",
-						name: "server",
-						url: "https://example.test",
-						headers: { Authorization: "Bearer token" },
-					},
-				],
+				connections: [{ connectionId: "conn-a" }, { connectionId: "conn-b" }],
 			}),
 		);
 		expect(result.notes[0]).toContain("unknown-feature");

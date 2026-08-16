@@ -188,7 +188,7 @@ const persistDraftToFlow = async (
 	state.updateField("tools", draft.enabledToolNames);
 	state.updateField("retrievalMode", draft.recallType);
 	state.setEnabledSkills(draft.enabledSkillNames);
-	state.setMCPServers(draft.mcpServers);
+	state.setAgentConnections(draft.connections);
 	state.setAccessibleAgents(draft.multiAgentAccessibleAgentIds);
 
 	const enabledFeatures = new Set(draft.enabledFeatureNames);

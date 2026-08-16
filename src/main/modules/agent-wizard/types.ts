@@ -1,6 +1,6 @@
 import type { GraphType } from "@/main/stores/agent-config";
 import type { AgentPresetStatus } from "@/main/modules/agents/types";
-import type { MCPServerConfig } from "@/services/flows-legacy/steps/features/mcp-feature";
+import type { MCPConnectionSelection } from "@/services/flows-legacy/steps/features/mcp-feature";
 import type {
 	GrowType,
 	RecallType,
@@ -30,7 +30,7 @@ export interface AgentWizardDraft {
 	enabledFeatureNames: string[];
 	enabledToolNames: string[];
 	enabledSkillNames: string[];
-	mcpServers: MCPServerConfig[];
+	connections: MCPConnectionSelection[];
 	multiAgentAccessibleAgentIds: string[];
 	growType: GrowType;
 	recallType: RecallType;
@@ -73,7 +73,7 @@ export type AgentWizardPatch = Partial<
 		| "enabledFeatureNames"
 		| "enabledToolNames"
 		| "enabledSkillNames"
-		| "mcpServers"
+		| "connections"
 		| "multiAgentAccessibleAgentIds"
 		| "growType"
 		| "recallType"

@@ -51,31 +51,38 @@ const filterKnown = (
 const isRecord = (value: unknown): value is Record<string, unknown> =>
 	typeof value === "object" && value !== null && !Array.isArray(value);
 
-const normalizeMcpServers = (
+/**
+ * Agents reference connections from the shared registry rather than declaring
+ * servers inline, so a patch names what it wants — `"Gmail"`, or an id. Names
+ * are resolved against the registry where the store is available; anything that
+ * does not resolve is dropped rather than silently creating a connection.
+ */
+const normalizeConnections = (
 	value: unknown,
-): AgentWizardDraft["mcpServers"] => {
+): AgentWizardDraft["connections"] => {
 	if (!Array.isArray(value)) return [];
 	return value
-		.filter(isRecord)
-		.filter(
-			(server) =>
-				(server.type === "http" || server.type === "sse") &&
-				typeof server.name === "string" &&
-				typeof server.url === "string",
-		)
-		.map((server) => ({
-			type: server.type as "http" | "sse",
-			name: server.name as string,
-			url: server.url as string,
-			headers: isRecord(server.headers)
-				? Object.fromEntries(
-						Object.entries(server.headers).filter(
-							(entry): entry is [string, string] =>
-								typeof entry[1] === "string",
-						),
-					)
-				: undefined,
-		}));
+		.map((entry) => {
+			if (typeof entry === "string" && entry.trim()) {
+				return { connectionId: entry.trim() };
+			}
+			if (isRecord(entry) && typeof entry.connectionId === "string") {
+				return {
+					connectionId: entry.connectionId,
+					...(Array.isArray(entry.toolAllowlist)
+						? {
+								toolAllowlist: entry.toolAllowlist.filter(
+									(name): name is string => typeof name === "string",
+								),
+							}
+						: {}),
+				};
+			}
+			return null;
+		})
+		.filter((entry): entry is AgentWizardDraft["connections"][number] =>
+			Boolean(entry),
+		);
 };
 
 const normalizeGrowType = (value: unknown): GrowType =>
@@ -235,7 +242,7 @@ const announcePatchCursorMoves = (patch: AgentWizardPatch): void => {
 	if ("enabledSkillNames" in patch) {
 		announceCursorMove(AGENT_WIZARD_CURSOR_KEYS.skills, "Updating skills");
 	}
-	if ("mcpServers" in patch) {
+	if ("connections" in patch) {
 		announceCursorMove(
 			AGENT_WIZARD_CURSOR_KEYS.mcpServers,
 			"Updating MCP servers",
@@ -376,8 +383,8 @@ export const applyAgentWizardPatch = (
 			patch.multiAgentAccessibleAgentIds,
 		);
 	}
-	if ("mcpServers" in patch) {
-		next.mcpServers = normalizeMcpServers(patch.mcpServers);
+	if ("connections" in patch) {
+		next.connections = normalizeConnections(patch.connections);
 	}
 	if ("cronJobs" in patch) {
 		next.cronJobs = normalizeCronJobs(patch.cronJobs, rejected);
