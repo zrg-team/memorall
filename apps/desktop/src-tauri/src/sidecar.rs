@@ -244,6 +244,13 @@ impl SidecarSupervisor {
         let browseros_browser_relative = "chrome-linux64/chrome";
         #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
         let browser_renderer_version = "151.0.7922.34";
+        // Mirrors the pinned target's "automation" field in
+        // apps/desktop/browser-runtime.lock.json: only the BrowserOS build
+        // serves the BrowserOS protocol, every other target is plain CDP.
+        #[cfg(target_os = "windows")]
+        let browser_automation = "browseros-and-cdp";
+        #[cfg(not(target_os = "windows"))]
+        let browser_automation = "cdp";
         #[cfg(target_os = "windows")]
         let (browseros_server_name, lightpanda_name) = ("browseros-server.exe", "lightpanda.exe");
         #[cfg(not(target_os = "windows"))]
@@ -280,6 +287,7 @@ impl SidecarSupervisor {
                 "MEMORALL_LIGHTPANDA_PATH",
                 lightpanda_path.join(lightpanda_name),
             )
+            .env("MEMORALL_BROWSER_AUTOMATION", browser_automation)
             .env("MEMORALL_BROWSEROS_VERSION", "0.0.37")
             .env(
                 "MEMORALL_BROWSER_RENDERER_VERSION",

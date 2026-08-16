@@ -533,6 +533,12 @@ export class BrowserOsBackend implements BrowserBackend {
 			);
 		}
 		const connection = await this.runtime.ensure();
+		if (!connection.endpoint) {
+			throw new BrowserAutomationError(
+				"BROWSEROS_UNSUPPORTED",
+				"The packaged browser for this platform speaks standard CDP only, so the BrowserOS lane is unavailable.",
+			);
+		}
 		const key = `${connection.endpoint}\n${connection.token ?? ""}`;
 		if (this.client && this.tools && this.clientKey === key) return this.client;
 		if (this.client) await this.client.close().catch(() => {});

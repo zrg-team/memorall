@@ -20,10 +20,20 @@ const trace = (message: string): void => {
 };
 
 export interface RuntimeConnection {
-	endpoint: string;
+	// Absent on targets whose packaged browser speaks standard CDP only.
+	endpoint?: string;
 	token?: string;
 	cdpEndpoint?: string;
 }
+
+// The BrowserOS server drives its browser through CDP extensions that only the
+// BrowserOS Chromium build implements, and it exits rather than run without
+// them. browser-runtime.lock.json records which packaged browser can serve that
+// protocol; the desktop host forwards the pinned target's capability here.
+const browserOsAutomationSupported = (): boolean =>
+	(process.env.MEMORALL_BROWSER_AUTOMATION ??
+		(process.platform === "win32" ? "browseros-and-cdp" : "cdp")) ===
+	"browseros-and-cdp";
 
 const freePort = async (): Promise<number> =>
 	await new Promise((resolve, reject) => {
@@ -240,7 +250,7 @@ export class ManagedBrowserOsRuntime {
 		if (
 			this.connection &&
 			this.browser?.exitCode === null &&
-			this.server?.exitCode === null
+			(!browserOsAutomationSupported() || this.server?.exitCode === null)
 		) {
 			return this.connection;
 		}
@@ -339,23 +349,26 @@ export class ManagedBrowserOsRuntime {
 			: await mkdtemp(join(tmpdir(), "memorall-browseros-"));
 		this.profileDirectory = profileDirectory;
 		await mkdir(profileDirectory, { recursive: true });
+		const manageServer = browserOsAutomationSupported();
 		const [serverPort, cdpPort] = await Promise.all([freePort(), freePort()]);
 		const token = randomBytes(32).toString("hex");
 		const configPath = join(this.appDataDirectory, "browseros", "server.json");
-		await mkdir(dirname(configPath), { recursive: true });
-		await writeFile(
-			configPath,
-			JSON.stringify({
-				ports: { server: serverPort, cdp: cdpPort },
-				directories: {
-					resources: join(dirname(serverPath), "resources"),
-				},
-				flags: { devMode: false },
-				auth: { token },
-				replay: { retentionDays: 1 },
-			}),
-			"utf8",
-		);
+		if (manageServer) {
+			await mkdir(dirname(configPath), { recursive: true });
+			await writeFile(
+				configPath,
+				JSON.stringify({
+					ports: { server: serverPort, cdp: cdpPort },
+					directories: {
+						resources: join(dirname(serverPath), "resources"),
+					},
+					flags: { devMode: false },
+					auth: { token },
+					replay: { retentionDays: 1 },
+				}),
+				"utf8",
+			);
+		}
 		const detached = process.platform !== "win32";
 		const browser = spawn(
 			browserPath,
@@ -383,6 +396,10 @@ export class ManagedBrowserOsRuntime {
 				"browser process",
 				captureDiagnostics(browser),
 			);
+			if (!manageServer) {
+				this.connection = { cdpEndpoint: `http://127.0.0.1:${cdpPort}` };
+				return this.connection;
+			}
 			const server = spawn(serverPath, ["--config", configPath], {
 				stdio: ["ignore", "ignore", "pipe"],
 				windowsHide: true,
