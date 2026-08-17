@@ -20,6 +20,7 @@ import {
 import {
 	actionLabel,
 	humanizeSlug,
+	looksLikeToolSlug,
 	routerToolLabel,
 	stripServerPrefix,
 	toolkitFromSlug,
@@ -406,37 +407,126 @@ interface DiscoveredTool {
 	description?: string;
 }
 
+/**
+ * Where COMPOSIO_SEARCH_TOOLS actually keeps the tools.
+ *
+ * The response is an envelope — `{results, tool_schemas, session,
+ * toolkit_connection_statuses, time_info, next_steps_guidance}` — so walking
+ * its top level reads those field names as tools. Only these containers hold
+ * real entries.
+ */
+const TOOL_CONTAINER_KEYS = [
+	"results",
+	"tools",
+	"tool_schemas",
+	"schemas",
+	"actions",
+	"items",
+];
+
 const collectDiscoveredTools = (data: unknown): DiscoveredTool[] => {
 	const out: DiscoveredTool[] = [];
+	const seen = new Set<string>();
 
 	const push = (slug: string, record: Record<string, unknown> | null) => {
+		const declaredToolkit = record ? asString(record.toolkit) : undefined;
+		// A declared toolkit makes an entry trustworthy even if its slug is
+		// unusual; otherwise the slug itself has to look like one. Without this
+		// gate, envelope keys such as `results` become apps called "Results".
+		if (!declaredToolkit && !looksLikeToolSlug(slug)) {
+			return;
+		}
+		if (seen.has(slug)) {
+			return;
+		}
+		seen.add(slug);
 		out.push({
 			slug,
-			toolkit:
-				(record ? asString(record.toolkit) : undefined) ??
-				toolkitFromSlug(slug),
+			toolkit: declaredToolkit?.toUpperCase() ?? toolkitFromSlug(slug),
 			description: record ? asString(record.description) : undefined,
 		});
 	};
 
-	if (isRecord(data)) {
-		for (const [key, value] of Object.entries(data)) {
-			if (isRecord(value)) {
-				push(asString(value.tool_slug) ?? key, value);
-			}
-		}
-	}
-
-	if (out.length === 0) {
-		for (const entry of asArray(data)) {
+	const harvest = (container: unknown) => {
+		for (const entry of asArray(container)) {
 			if (isRecord(entry)) {
 				const slug = asString(entry.tool_slug) ?? asString(entry.slug);
 				if (slug) push(slug, entry);
+			} else if (typeof entry === "string") {
+				push(entry, null);
 			}
 		}
+
+		if (isRecord(container) && !Array.isArray(container)) {
+			for (const [key, value] of Object.entries(container)) {
+				if (isRecord(value)) {
+					push(asString(value.tool_slug) ?? key, value);
+				}
+			}
+		}
+	};
+
+	const scan = (root: unknown) => {
+		harvest(root);
+		if (!isRecord(root)) return;
+		for (const key of TOOL_CONTAINER_KEYS) {
+			if (key in root) harvest(root[key]);
+		}
+	};
+
+	scan(data);
+	// Some responses nest the whole envelope one level down.
+	if (isRecord(data) && isRecord(data.data)) {
+		scan(data.data);
 	}
 
 	return out;
+};
+
+/** Apps the session can reach, straight from the search envelope. */
+interface ConnectionStatus {
+	toolkit: string;
+	connected?: boolean;
+	label?: string;
+}
+
+const collectConnectionStatuses = (data: unknown): ConnectionStatus[] => {
+	const source = isRecord(data)
+		? (data.toolkit_connection_statuses ??
+			(isRecord(data.data) ? data.data.toolkit_connection_statuses : undefined))
+		: undefined;
+	if (!isRecord(source)) {
+		return [];
+	}
+
+	return Object.entries(source).map(([toolkit, value]) => {
+		const status = isRecord(value)
+			? (asString(value.status) ?? asString(value.state))
+			: asString(value);
+		const connected =
+			isRecord(value) && typeof value.connected === "boolean"
+				? value.connected
+				: undefined;
+		const normalised = status?.toLowerCase();
+
+		return {
+			toolkit: toolkit.toUpperCase(),
+			connected:
+				connected ??
+				(normalised
+					? ["active", "connected", "initiated"].includes(normalised)
+					: undefined),
+			label: status,
+		};
+	});
+};
+
+const getGuidance = (data: unknown): string | undefined => {
+	if (!isRecord(data)) return undefined;
+	return (
+		asString(data.next_steps_guidance) ??
+		(isRecord(data.data) ? asString(data.data.next_steps_guidance) : undefined)
+	);
 };
 
 /** COMPOSIO_SEARCH_TOOLS / COMPOSIO_RETRIEVE_ACTIONS — what the agent looked for, what it found. */
@@ -453,6 +543,8 @@ const SearchToolsBody: React.FC<{
 		.filter((value): value is string => Boolean(value));
 
 	const tools = collectDiscoveredTools(data);
+	const connections = collectConnectionStatuses(data);
+	const guidance = getGuidance(data);
 	const byToolkit = new Map<string, DiscoveredTool[]>();
 	for (const tool of tools) {
 		const key = tool.toolkit ?? "OTHER";
@@ -461,6 +553,36 @@ const SearchToolsBody: React.FC<{
 
 	return (
 		<div className="space-y-3">
+			{connections.length > 0 ? (
+				<ToolSection title="Apps">
+					<div className="flex flex-wrap gap-1.5">
+						{connections.map((connection) => (
+							<span
+								key={connection.toolkit}
+								className={cn(
+									"inline-flex items-center gap-1.5 rounded-full border px-2 py-1 text-[11px]",
+									connection.connected === false
+										? "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300"
+										: "border-border/60 bg-muted/25 text-foreground",
+								)}
+							>
+								<AppIcon
+									name={toolkitLabel(connection.toolkit)}
+									composioSlug={toolkitLogoSlug(connection.toolkit)}
+									size={16}
+								/>
+								{toolkitLabel(connection.toolkit)}
+								{connection.connected === false ? (
+									<span className="text-[10px] opacity-80">
+										{connection.label ?? "not connected"}
+									</span>
+								) : null}
+							</span>
+						))}
+					</div>
+				</ToolSection>
+			) : null}
+
 			{queries.length > 0 ? (
 				<ToolSection title="Looking for">
 					<div className="space-y-1">
@@ -516,6 +638,18 @@ const SearchToolsBody: React.FC<{
 						))}
 					</div>
 				</ToolSection>
+			) : null}
+
+			{tools.length === 0 ? (
+				<ToolSection title="Response">
+					<ResultBody data={data} emptyLabel="No tools matched." />
+				</ToolSection>
+			) : null}
+
+			{guidance ? (
+				<div className="rounded-md border border-border/50 bg-muted/20 px-2.5 py-2 text-[11px] text-muted-foreground">
+					{guidance}
+				</div>
 			) : null}
 		</div>
 	);

@@ -151,6 +151,18 @@ const titleCaseWord = (word: string): string =>
 	word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
 
 /**
+ * Whether a string is shaped like a Composio tool slug: SCREAMING_SNAKE with at
+ * least two segments, e.g. `GOOGLECALENDAR_FIND_EVENT`.
+ *
+ * This gate matters because tool payloads are objects whose *other* keys are
+ * ordinary lowercase field names (`results`, `session`, `next_steps_guidance`).
+ * Without it those get read as tools and invent toolkits called "Results" and
+ * "Session".
+ */
+export const looksLikeToolSlug = (value: string): boolean =>
+	/^[A-Z][A-Z0-9]*(_[A-Z0-9]+)+$/.test(stripServerPrefix(value));
+
+/**
  * The toolkit a tool slug belongs to, or null for router meta-tools and
  * anything that is not `TOOLKIT_ACTION` shaped.
  *
@@ -176,9 +188,14 @@ export const toolkitFromSlug = (slug: string): string | null => {
 		return best;
 	}
 
-	// Unknown toolkit: assume the conventional single-token prefix.
+	// Unknown toolkit: take the conventional single-token prefix, but only from
+	// something actually slug-shaped. Guessing a toolkit out of a lowercase
+	// field name is how "results" became an app called Results.
+	if (!looksLikeToolSlug(slug)) {
+		return null;
+	}
 	const underscore = bare.indexOf("_");
-	return underscore > 0 ? bare.slice(0, underscore) : bare;
+	return underscore > 0 ? bare.slice(0, underscore) : null;
 };
 
 /** "GOOGLECALENDAR" → "Google Calendar". */
