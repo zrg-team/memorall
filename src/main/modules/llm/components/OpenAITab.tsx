@@ -15,6 +15,7 @@ import { MasterKeySetupDialog } from "@/main/components/molecules/MasterKeySetup
 import { PasskeyPromptDialog } from "@/main/components/molecules/PasskeyPromptDialog";
 import { Button } from "@/main/components/ui/button";
 import { Input } from "@/main/components/ui/input";
+import { DEFAULT_OPENAI_MODEL } from "@/constants/openai";
 import { serviceManager } from "@/services";
 import { backgroundJob } from "@/services/background-jobs/background-job";
 import { logError, logInfo } from "@/utils/logger";
@@ -127,7 +128,7 @@ export const OpenAITab: React.FC<OpenAITabProps> = ({ onModelLoaded }) => {
 		setTempApiKey("");
 		setConfigState("loaded");
 		logInfo("OpenAI configuration saved successfully");
-		onModelLoaded?.("gpt-4o", "openai");
+		onModelLoaded?.(DEFAULT_OPENAI_MODEL, "openai");
 	};
 
 	// Save new configuration to database
@@ -283,7 +284,7 @@ export const OpenAITab: React.FC<OpenAITabProps> = ({ onModelLoaded }) => {
 			setConfigState("loaded");
 			logInfo("OpenAI configuration loaded successfully");
 
-			onModelLoaded?.("gpt-4o", "openai");
+			onModelLoaded?.(DEFAULT_OPENAI_MODEL, "openai");
 		} catch (error) {
 			const msg = error instanceof Error ? error.message : "Unknown error";
 			setError(t("openai.failedToLoadConfiguration", { error: msg }));

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
 	estimateModelMemory,
+	estimateModelMemoryAtUsableContext,
 	estimateSafeTokenBudget,
 	getAvailableModelMemoryGB,
 } from "../model-memory";
@@ -71,5 +72,34 @@ describe("LLM model memory utilities", () => {
 				availableGB: 8,
 			}).maxNewTokensByMemory,
 		).toBe(0);
+	});
+});
+
+describe("estimateModelMemoryAtUsableContext", () => {
+	it("reports fit at the context the device can actually reach", () => {
+		// 2 GB weights, 128K advertised context, 8 GB budget: the full context
+		// overflows, but the model is comfortable at the context it can reach.
+		const atFull = estimateModelMemory(2, 196_608, 128_000, 8);
+		expect(atFull.fit).toBe("overflow");
+
+		// 2 GB of weights against an 8 GB budget is comfortable; only the KV
+		// cache for the full 128K was ever the problem.
+		const usable = estimateModelMemoryAtUsableContext(2, 196_608, 128_000, 8);
+		expect(usable.fit).toBe("comfortable");
+		// The advertised-vs-achievable gap is still reported to the caller.
+		expect(usable.feasibleContext).toBe(atFull.feasibleContext);
+		expect(usable.feasibleContext).toBeLessThan(128_000);
+	});
+
+	it("still reports overflow when the weights alone do not fit", () => {
+		expect(estimateModelMemoryAtUsableContext(20, 1024, 8192, 8).fit).toBe(
+			"overflow",
+		);
+	});
+
+	it("is a passthrough when the full context already fits", () => {
+		expect(estimateModelMemoryAtUsableContext(2, 1024, 2048, 8)).toEqual(
+			estimateModelMemory(2, 1024, 2048, 8),
+		);
 	});
 });

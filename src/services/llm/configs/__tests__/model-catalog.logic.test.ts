@@ -174,4 +174,65 @@ describe("local LLM model catalog", () => {
 			generatedById.get("onnx-community/Bonsai-1.7B-ONNX")?.runnerConfig?.dtype,
 		).toBe("q1");
 	});
+
+	it("declares well-formed abilities on every supported model", () => {
+		const toolModes = new Set(["native", "prompt_injection", "none"]);
+
+		for (const model of ALL_MODELS.filter((entry) => !entry.unsupported)) {
+			const label = `${model.provider}:${model.id}`;
+			expect(model.abilities, `${label} is missing abilities`).toBeDefined();
+			expect(toolModes.has(model.abilities.tools), `${label} tools`).toBe(true);
+			expect(typeof model.abilities.vision, `${label} vision`).toBe("boolean");
+			expect(typeof model.abilities.reasoning, `${label} reasoning`).toBe(
+				"boolean",
+			);
+			expect(typeof model.abilities.multilingual, `${label} multilingual`).toBe(
+				"boolean",
+			);
+		}
+	});
+
+	it("keeps WebLLM entries off native tools until the allowlist covers them", () => {
+		// tool-capability-resolver.ts only grants native function calling to a
+		// pinned Hermes allowlist, and no catalogued model is on it. Claiming
+		// "native" here would promise the recommender something the runtime
+		// cannot deliver.
+		for (const model of getSupportedModels("webllm")) {
+			expect(model.abilities.tools, `${model.id}`).not.toBe("native");
+		}
+	});
+
+	it("marks vision on every model that ships a projector or a vision runtime", () => {
+		for (const model of ALL_MODELS.filter((entry) => !entry.unsupported)) {
+			const carriesVisionArtifacts =
+				Boolean(model.wllamaConfig?.mmprojFilename) ||
+				model.runnerConfig?.runtime === "image_text_to_text" ||
+				model.runnerConfig?.runtime === "vision2seq";
+
+			if (carriesVisionArtifacts) {
+				expect(model.abilities.vision, `${model.provider}:${model.id}`).toBe(
+					true,
+				);
+			}
+		}
+	});
+
+	it("records a source alongside any quality evidence", () => {
+		for (const model of ALL_MODELS) {
+			if (!model.qualityEvidence) {
+				continue;
+			}
+			const label = `${model.provider}:${model.id}`;
+			expect(model.qualityEvidence.source, `${label} source`).toMatch(
+				/^https?:/,
+			);
+			expect(model.qualityEvidence.recordedAt, `${label} recordedAt`).toMatch(
+				/^\d{4}-\d{2}$/,
+			);
+			expect(
+				Object.keys(model.qualityEvidence.scores).length,
+				`${label} has an empty score set`,
+			).toBeGreaterThan(0);
+		}
+	});
 });

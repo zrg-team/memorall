@@ -1,3 +1,5 @@
+import type { ModelAbilities } from "@/services/llm/interfaces/llm-model-config";
+
 /**
  * System specifications detected from the user's device
  */
@@ -22,7 +24,7 @@ export interface SystemSpecs {
 /**
  * User's preference for model selection
  */
-export type ModelPreference = "performance" | "quality" | "context";
+export type ModelPreference = "performance" | "quality" | "context" | "balance";
 
 /**
  * Model recommendation with performance estimates
@@ -56,6 +58,8 @@ export interface ModelRecommendation {
 	 * Used for accurate VRAM estimation at any context length.
 	 */
 	kvBytesPerToken: number;
+	/** What the model can do — surfaced as badges and used in scoring. */
+	abilities: ModelAbilities;
 	/** Model configuration for download */
 	config: ModelConfig;
 }
@@ -83,20 +87,13 @@ export type ModelConfig =
 	  };
 
 /**
- * Recommendation set for all three preferences
- * Each preference includes a primary recommendation and alternatives
+ * Recommendation set covering every preference.
+ * Keyed by `ModelPreference` so adding a preference cannot leave a gap here.
  */
-export interface RecommendationSet {
-	performance: {
+export type RecommendationSet = Record<
+	ModelPreference,
+	{
 		primary: ModelRecommendation;
 		alternatives: ModelRecommendation[];
-	};
-	quality: {
-		primary: ModelRecommendation;
-		alternatives: ModelRecommendation[];
-	};
-	context: {
-		primary: ModelRecommendation;
-		alternatives: ModelRecommendation[];
-	};
-}
+	}
+>;

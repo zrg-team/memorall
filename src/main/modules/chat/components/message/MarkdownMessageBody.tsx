@@ -22,6 +22,8 @@ export interface MarkdownMessageBodyProps {
 	rehypePluginsOverride?: React.ComponentProps<
 		typeof ReactMarkdown
 	>["rehypePlugins"];
+	/** Hosts that already own the file (e.g. the Skills editor) opt out. */
+	showCodeBlockSave?: boolean;
 }
 
 export const MarkdownMessageBody: React.FC<MarkdownMessageBodyProps> = ({
@@ -30,6 +32,7 @@ export const MarkdownMessageBody: React.FC<MarkdownMessageBodyProps> = ({
 	isStreaming = false,
 	remarkPluginsOverride = remarkPlugins,
 	rehypePluginsOverride = rehypePlugins,
+	showCodeBlockSave = true,
 }) => {
 	const { actualTheme } = useTheme();
 	const isDark = actualTheme === "dark";
@@ -41,8 +44,8 @@ export const MarkdownMessageBody: React.FC<MarkdownMessageBodyProps> = ({
 	}, [children, isStreaming]);
 
 	const themeAwareComponents = useMemo(
-		() => createMarkdownComponents({ isDark, isStreaming }),
-		[isDark, isStreaming],
+		() => createMarkdownComponents({ isDark, isStreaming, showCodeBlockSave }),
+		[isDark, isStreaming, showCodeBlockSave],
 	);
 
 	return (

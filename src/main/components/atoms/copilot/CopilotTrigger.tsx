@@ -1,7 +1,7 @@
-import React from "react";
-import { Button } from "@/main/components/ui/button";
-import { useCopilot } from "@/main/components/molecules/Copilot/CopilotContext";
 import { HelpCircle } from "lucide-react";
+import type React from "react";
+import { useCopilot } from "@/main/components/molecules/Copilot/CopilotContext";
+import { Button } from "@/main/components/ui/button";
 
 interface CopilotTriggerProps {
 	variant?: "default" | "outline" | "ghost" | "secondary";

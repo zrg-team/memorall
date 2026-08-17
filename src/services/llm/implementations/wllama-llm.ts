@@ -463,6 +463,18 @@ export class WllamaLLM implements BaseLLM {
 						percent: 100,
 					});
 				}
+				// Same warm-path gap as the transformer runner: without this a
+				// model carried over from an earlier session loses its detected
+				// native tool support and silently degrades to prompt injection.
+				if (!this.modelCapabilities.has(model)) {
+					this.modelCapabilities.set(model, {
+						supportsNativeTools: existingModel.supportsNativeTools === true,
+						supportsVision: existingModel.supportsVision === true,
+						// ModelInfo carries no GPU flag; the runner reports it only on a
+						// fresh serve, and it does not affect tool capability.
+						usesGPU: false,
+					});
+				}
 				keepAlive = await this.iframeRuntime.shouldKeepAliveFor(existingModel);
 				return existingModel;
 			}

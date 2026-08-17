@@ -58,7 +58,53 @@
 	},
 	"providerPanel": {
 		"status": "Status: {{status}}",
-		"testInference": "Test inference"
+		"testInference": "Test inference",
+		"modes": {
+			"label": "Setup mode",
+			"recommended": "Recommended",
+			"browse": "Browse by provider"
+		}
+	},
+	"recommended": {
+		"title": "How do you want to run your model?",
+		"description": "Pick a path — you can switch or add the other one later.",
+		"back": "Back",
+		"browseAllHint": "Already have a key for another provider?",
+		"browseAll": "Browse all providers →",
+		"fast": {
+			"title": "Fast",
+			"description": "Cloud models through OpenRouter, ready in seconds.",
+			"pro1": "Ready in about 30 seconds",
+			"pro2": "300+ models including frontier quality",
+			"pro3": "Best supported provider in Memorall",
+			"con1": "Needs an OpenRouter API key",
+			"con2": "You pay OpenRouter per use",
+			"action": "Set up OpenRouter",
+			"actionUnlock": "Unlock and connect",
+			"actionConnected": "Pick a model",
+			"connected": "Connected",
+			"modelsAvailable": "{{count}} models available on your account.",
+			"loadingModels": "Loading your OpenRouter models…",
+			"headerTitle": "Fast · OpenRouter",
+			"headerDescription": "Connect your API key, then pick a model.",
+			"stepConnect": "Connect",
+			"stepPick": "Pick a model",
+			"pickHint": "Choose the model you want Memorall to use."
+		},
+		"free": {
+			"title": "Free",
+			"description": "Models that run on your own device, at no cost.",
+			"pro1": "No account and no usage cost",
+			"pro2": "Nothing leaves your computer, works offline",
+			"pro3": "We pick a model that fits your hardware",
+			"con1": "One-time download of 0.5–4 GB",
+			"con2": "Slower, and smaller models than the cloud",
+			"action": "Find my model",
+			"actionMore": "Find another model",
+			"downloadedCount": "{{count}} downloaded",
+			"headerTitle": "Free · On this device",
+			"headerDescription": "We check your hardware and recommend what fits."
+		}
 	},
 	"yourModels": {
 		"title": "My Models",
@@ -374,8 +420,8 @@
 			"title": "Choose Your Priority",
 			"description": "Select what matters most to you",
 			"performance": {
-				"title": "Performance",
-				"description": "Fastest responses"
+				"title": "Fast",
+				"description": "Quickest replies"
 			},
 			"quality": {
 				"title": "Quality",
@@ -385,7 +431,13 @@
 				"title": "Context",
 				"description": "Long files"
 			},
-			"backToSpecs": "Back to System Info"
+			"backToSpecs": "Back to System Info",
+			"balance": {
+				"title": "Balanced",
+				"description": "Good all-rounder"
+			},
+			"contextLimited": "Context limited to {{value}} on your hardware",
+			"contextUpTo": "Up to {{value}} context"
 		},
 		"recommendation": {
 			"title": "Ready to Download",
@@ -409,7 +461,13 @@
 			"tryAgain": "Try Again",
 			"advancedSetup": "Advanced Setup"
 		},
-		"useAdvancedSetup": "Use Advanced Setup Instead"
+		"useAdvancedSetup": "Use Advanced Setup Instead",
+		"abilities": {
+			"toolsNative": "Tools",
+			"toolsNone": "No tools",
+			"reasoning": "Reasoning",
+			"vision": "Vision"
+		}
 	},
 	"offscreenServices": {
 		"title": "Offscreen Services",

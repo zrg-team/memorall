@@ -115,7 +115,8 @@
 		"convertError": "Không thể chuyển đổi các trang PDF. Vui lòng thử lại."
 	},
 	"sidebar": {
-		"workspace": "Không gian"
+		"workspace": "Không gian",
+		"skills": "Kỹ năng"
 	},
 	"create": {
 		"title": "Tạo tệp mới",

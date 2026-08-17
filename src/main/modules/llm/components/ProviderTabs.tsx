@@ -24,6 +24,13 @@ interface ProviderTabsProps {
 	webllmAvailableModels: string[];
 	onOpenAITabSelect: () => void;
 	providerStatuses?: Record<ServiceProvider, ProviderStatus>;
+	/**
+	 * Rendered at the head of the strip, before a divider. Used to host the
+	 * "Recommended" mode switch so it does not need a second full-width bar
+	 * stacked above this one — two identical strips read as two tab rows and
+	 * gave no clue which one was the mode and which the provider.
+	 */
+	leading?: React.ReactNode;
 }
 
 export const ProviderTabs: React.FC<ProviderTabsProps> = ({
@@ -35,6 +42,7 @@ export const ProviderTabs: React.FC<ProviderTabsProps> = ({
 	webllmAvailableModels,
 	onOpenAITabSelect,
 	providerStatuses,
+	leading,
 }) => {
 	const { t } = useTranslation("llm");
 
@@ -89,7 +97,16 @@ export const ProviderTabs: React.FC<ProviderTabsProps> = ({
 
 	return (
 		<div className="border-b bg-background/95 pb-2">
-			<div className="flex gap-1 overflow-x-auto rounded-lg border bg-muted/20 p-1">
+			<div className="flex items-center gap-1 overflow-x-auto rounded-lg border bg-muted/20 p-1">
+				{leading ? (
+					<>
+						{leading}
+						<span
+							aria-hidden="true"
+							className="mx-1 h-5 w-px shrink-0 self-center bg-border"
+						/>
+					</>
+				) : null}
 				{PROVIDER_ORDER.map((provider) => {
 					const isActive = advancedProvider === provider;
 					return (

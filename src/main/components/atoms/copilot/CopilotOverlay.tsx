@@ -1,16 +1,22 @@
-import React, { useEffect, useState, useRef } from "react";
+import { AnimatePresence, motion } from "motion/react";
+import type React from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useCopilot } from "@/main/components/molecules/Copilot/CopilotContext";
-import { CopilotTooltip } from "./CopilotTooltip";
-import { motion, AnimatePresence } from "motion/react";
 import {
 	COPILOT_WORKSPACE_FOCUS_CHAT_WIDTH,
 	useShellLayoutStore,
 } from "@/main/stores/shell-layout";
+import { CopilotTooltip } from "./CopilotTooltip";
 
 interface CopilotOverlayProps {
 	className?: string;
 }
+
+/** Attempts (at 100ms each) before a step settles for its fallback target. */
+const FALLBACK_TARGET_AFTER_ATTEMPTS = 5;
+/** Attempts before the step gives up and spotlights the page, never the void. */
+const MAX_TARGET_ATTEMPTS = 20;
 
 export const CopilotOverlay: React.FC<CopilotOverlayProps> = ({
 	className,
@@ -84,7 +90,7 @@ export const CopilotOverlay: React.FC<CopilotOverlayProps> = ({
 		}
 
 		const shouldFocusWorkspace = currentStep.layoutMode === "workspace-focus";
-		const shouldFocusSetup = currentStep.id === "chat-final-navigate";
+		const shouldFocusSetup = currentStep.layoutMode === "setup-focus";
 		const needsWorkspaceLayoutChange =
 			shouldFocusWorkspace &&
 			(rightPanelCollapsed ||
@@ -137,14 +143,33 @@ export const CopilotOverlay: React.FC<CopilotOverlayProps> = ({
 
 		const currentStep = state.steps[state.currentStep];
 
-		// Find target element
-		const findTarget = () => {
-			let element: HTMLElement | null = null;
+		const resolve = (selector: string): HTMLElement | null =>
+			selector === "body"
+				? document.body
+				: document.querySelector<HTMLElement>(selector);
 
-			if (currentStep.target === "body") {
+		// Find target element
+		const findTarget = (attempt = 0) => {
+			const selectors = [currentStep.target];
+			// The preferred target gets a head start; only then do we settle for the
+			// fallback, so a slow-mounting element still wins over its stand-in.
+			if (
+				currentStep.fallbackTarget &&
+				attempt >= FALLBACK_TARGET_AFTER_ATTEMPTS
+			) {
+				selectors.push(currentStep.fallbackTarget);
+			}
+
+			let element: HTMLElement | null = null;
+			for (const selector of selectors) {
+				element = resolve(selector);
+				if (element) break;
+			}
+
+			// A target that never renders used to retry forever, leaving the tour
+			// active with nothing on screen. Spotlight the page instead.
+			if (!element && attempt >= MAX_TARGET_ATTEMPTS) {
 				element = document.body;
-			} else {
-				element = document.querySelector(currentStep.target) as HTMLElement;
 			}
 
 			if (element) {
@@ -152,7 +177,7 @@ export const CopilotOverlay: React.FC<CopilotOverlayProps> = ({
 				setTargetRect(element.getBoundingClientRect());
 			} else {
 				// Retry after a short delay in case the element isn't rendered yet
-				retryTimer = window.setTimeout(findTarget, 100);
+				retryTimer = window.setTimeout(() => findTarget(attempt + 1), 100);
 			}
 		};
 
@@ -234,6 +259,7 @@ export const CopilotOverlay: React.FC<CopilotOverlayProps> = ({
 				<div className="absolute inset-0 pointer-events-auto">
 					{shouldUseSpotlight ? (
 						<svg
+							aria-hidden="true"
 							width="100%"
 							height="100%"
 							className="absolute inset-0"

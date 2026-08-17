@@ -5,6 +5,7 @@
 		"models": "Mô hình",
 		"knowledgeGraph": "Bộ nhớ",
 		"connections": "Kết nối",
+		"skills": "Kỹ năng",
 		"flowBuilder": "Trình xây dựng luồng",
 		"documents": "Tệp",
 		"debug": "Gỡ lỗi",
@@ -437,99 +438,63 @@
 		"steps": {
 			"welcome": {
 				"title": "Chào mừng đến với Memorall",
-				"content": "Memorall là không gian làm việc AI ưu tiên cục bộ cho trò chuyện, tệp, agent, tri thức và mô hình.\n\nHướng dẫn này hoạt động trước khi bạn chọn mô hình, để bạn hiểu workspace trước rồi chọn cách thiết lập ở cuối.",
+				"content": "Memorall là không gian làm việc AI ưu tiên cục bộ. Chat nằm bên trái, còn các tab workspace bên cạnh là những gì agent của bạn biết và có thể làm.\n\nSáu điểm dừng ngắn, rồi quay lại đây để bạn bắt đầu. Nhấn Escape để đóng hướng dẫn bất cứ lúc nào.",
 				"cursor": "Bắt đầu ở đây",
 				"agent": "Tôi sẽ hướng dẫn."
 			},
-			"chatPreview": {
-				"title": "Xem trước Chat",
-				"content": "Chat sẽ trở thành không gian hội thoại chính sau khi có mô hình sẵn sàng.\n\nKhu vực bên trái là nơi hội thoại, lịch sử, chế độ agent, tệp đính kèm và prompt kết hợp với nhau.",
-				"cursor": "Chat ở đây",
-				"agent": "Đây sẽ là Chat."
-			},
-			"layoutExplain": {
-				"title": "Bố cục chia đôi",
-				"content": "Memorall dùng bố cục chia vùng.\n\nTrái: chat và thiết lập.\nGiữa: hội thoại hiện tại và vùng nhập.\nPhải: các trang workspace như Tệp, Đồ thị tri thức, Agent, Mô hình và Runtime.",
-				"cursor": "Trái, giữa và phải",
-				"agent": "Ba vùng làm việc."
-			},
-			"documentsNavigate": {
-				"title": "Tệp",
-				"content": "Tiếp theo: Tệp, thư viện tài nguyên và workspace tệp của bạn.\n\nNhấn Tiếp theo để mở ở panel bên phải.",
-				"cursor": "Mở Tệp",
-				"agent": "Bắt đầu từ tệp."
-			},
-			"documentsExplain": {
-				"title": "Tệp",
-				"content": "Dùng Tệp để tải lên, tạo, sắp xếp và xem trước tài nguyên.\n\nTệp có thể trở thành dữ liệu Đồ thị tri thức, giúp agent có bộ nhớ hữu ích cho các cuộc trò chuyện sau.",
-				"cursor": "Workspace tệp",
-				"agent": "Tri thức bắt đầu ở đây."
+			"welcomeReady": {
+				"title": "Dạo nhanh một vòng workspace",
+				"content": "Mô hình của bạn đã sẵn sàng nên Chat đã dùng được. Đây là những gì bao quanh nó.\n\nSáu điểm dừng ngắn qua các tab workspace — mỗi tab làm agent của bạn hiểu và làm được nhiều hơn. Nhấn Escape để đóng hướng dẫn bất cứ lúc nào.",
+				"cursor": "Bắt đầu ở đây",
+				"agent": "Tôi sẽ hướng dẫn."
 			},
 			"agentsNavigate": {
-				"title": "Agent",
-				"content": "Tiếp theo: Agent, nơi bạn xây dựng trợ lý AI có thể tái sử dụng cho nhiều workflow.\n\nNhấn Tiếp theo để mở Agent.",
+				"title": "Agent — ai trả lời",
+				"content": "Một agent gói chỉ dẫn, bộ nhớ được phép dùng, cùng công cụ và kỹ năng nó có thể gọi thành một trợ lý bạn dùng lại được.\n\nMemorall có sẵn một agent dùng ngay; bạn thêm agent riêng cho từng loại công việc.\n\nNhấn Tiếp theo để mở Agent.",
 				"cursor": "Mở Agent",
-				"agent": "Tạo trợ lý."
+				"agent": "Ai trả lời."
 			},
-			"agentsExplain": {
-				"title": "Agent tùy chỉnh",
-				"content": "Agent kết hợp chỉ dẫn, hành vi bộ nhớ, tính năng và công cụ thành workflow có thể tái sử dụng.\n\nDùng agent khi bạn muốn một trợ lý ổn định cho tác vụ hoặc lĩnh vực lặp lại.",
-				"cursor": "Workspace Agent",
-				"agent": "Làm việc chuyên biệt."
+			"documentsNavigate": {
+				"title": "Tệp — thứ agent đọc",
+				"content": "Tải lên, soạn và xem trước tài liệu tại đây. Mọi thứ bạn giữ lại trở thành ngữ cảnh agent có thể dùng khi trả lời, và có thể chuyển thành bộ nhớ.\n\nNhấn Tiếp theo để mở Tệp.",
+				"cursor": "Mở Tệp",
+				"agent": "Thứ agent đọc."
 			},
 			"knowledgeNavigate": {
-				"title": "Đồ thị tri thức",
-				"content": "Tiếp theo: Đồ thị tri thức, nơi Memorall hiển thị bộ nhớ đã lưu thành chủ đề, thực thể và sự kiện có liên kết.\n\nNhấn Tiếp theo để mở.",
-				"cursor": "Mở Đồ thị tri thức",
-				"agent": "Bản đồ bộ nhớ."
+				"title": "Bộ nhớ — thứ agent nhớ",
+				"content": "Bộ nhớ là đồ thị Memorall dựng từ hội thoại và tệp của bạn: các khái niệm, liên kết giữa chúng, và không gian bộ nhớ của từng mục.\n\nBạn tìm kiếm, dọn bớt, còn agent dùng lại trong các cuộc trò chuyện sau.\n\nNhấn Tiếp theo để mở Bộ nhớ.",
+				"cursor": "Mở Bộ nhớ",
+				"agent": "Thứ agent nhớ."
 			},
-			"knowledgeExplain": {
-				"title": "Bộ nhớ dưới dạng đồ thị",
-				"content": "Đồ thị tri thức giúp bạn kiểm tra những gì Memorall biết.\n\nTìm khái niệm, xem quan hệ, lọc theo chủ đề và quản lý kết nối mà agent có thể dùng sau này.",
-				"cursor": "Workspace đồ thị",
-				"agent": "Xem kết nối."
+			"connectionsNavigate": {
+				"title": "Kết nối — thứ agent thao tác được",
+				"content": "Kết nối cho agent đôi tay: Gmail, Slack và hàng trăm ứng dụng qua Composio, một MCP server trên máy bạn, hoặc bất kỳ endpoint nào bạn truy cập được.\n\nKhóa được mã hóa bằng master passkey và nằm lại trên thiết bị này.\n\nNhấn Tiếp theo để mở Kết nối.",
+				"cursor": "Mở Kết nối",
+				"agent": "Đôi tay của agent."
+			},
+			"skillsNavigate": {
+				"title": "Kỹ năng — cách agent làm",
+				"content": "Kỹ năng là một quy trình markdown ngắn theo chuẩn SKILL.md, dạy agent một việc lặp lại — khi nào áp dụng và các bước cần theo.\n\nBạn tự viết, nhập từ GitHub, hoặc thả vào một thư mục, rồi bật cho từng agent.\n\nNhấn Tiếp theo để mở Kỹ năng.",
+				"cursor": "Mở Kỹ năng",
+				"agent": "Cách agent làm."
 			},
 			"modelsNavigate": {
-				"title": "Mô hình",
-				"content": "Tiếp theo: Mô hình, nơi bạn quản lý mô hình cục bộ, mô hình trong trình duyệt, server cục bộ và nhà cung cấp API.\n\nNhấn Tiếp theo để mở Mô hình.",
+				"title": "Mô hình — thứ agent suy nghĩ bằng",
+				"content": "Mọi câu trả lời đều chạy trên một mô hình. Chạy ngay trong trình duyệt, kết nối server cục bộ như Ollama hay LM Studio, hoặc trỏ Memorall tới nhà cung cấp hosted.\n\nĐổi lúc nào cũng được — phần thiết lập còn lại vẫn giữ nguyên.\n\nNhấn Tiếp theo để mở Mô hình.",
 				"cursor": "Mở Mô hình",
-				"agent": "Chọn sức mạnh."
+				"agent": "Engine của agent."
 			},
-			"modelsExplain": {
-				"title": "Thiết lập mô hình",
-				"content": "Mô hình cung cấp sức mạnh cho chat và workflow agent.\n\nBạn có thể chạy mô hình trong trình duyệt, kết nối server cục bộ như Ollama hoặc LM Studio, hoặc dùng nhà cung cấp API khi cần mô hình hosted mạnh hơn.",
-				"cursor": "Workspace mô hình",
-				"agent": "Chọn engine."
-			},
-			"chatFinalNavigate": {
-				"title": "Quay lại thiết lập đầu tiên",
-				"content": "Bây giờ hãy quay lại màn hình đầu tiên.\n\nCác bước cuối sẽ giải thích ba lựa chọn thiết lập trước khi Chat hoạt động.",
-				"cursor": "Quay lại thiết lập",
-				"agent": "Về điểm bắt đầu."
-			},
-			"chatSetup": {
-				"title": "Chọn cách bắt đầu",
-				"content": "Màn hình đầu tiên hỏi bạn muốn cung cấp sức mạnh cho Memorall bằng cách nào.\n\nBạn có thể dùng dịch vụ quản lý, chạy mô hình cục bộ, hoặc kết nối khóa nhà cung cấp của riêng bạn.",
+			"startHere": {
+				"title": "Bắt đầu tại đây",
+				"content": "Chỉ còn một lựa chọn nữa là Chat hoạt động. Ba cách bắt đầu:\n\n• Dịch vụ quản lý — đăng nhập, không cần cấu hình gì.\n• Mô hình cục bộ — chạy trên thiết bị này, không tốn phí API.\n• Khóa của bạn — dùng OpenAI, OpenRouter hoặc nhà cung cấp khác.\n\nChọn một trên màn hình này rồi gửi tin nhắn đầu tiên. Hướng dẫn này luôn có trong Cài đặt → Trợ giúp & hướng dẫn.",
 				"cursor": "Chọn thiết lập",
-				"agent": "Ba lựa chọn."
+				"agent": "Chọn một cách."
 			},
-			"setupManaged": {
-				"title": "Dịch vụ quản lý",
-				"content": "Dịch vụ quản lý là cách dễ nhất: đăng nhập và để Memorall xử lý truy cập mô hình hosted cùng hạ tầng.\n\nDùng lựa chọn này khi bạn muốn thiết lập nhanh nhất và ít cấu hình nhất.",
-				"cursor": "Dịch vụ quản lý",
-				"agent": "Bắt đầu nhanh."
-			},
-			"setupLocal": {
-				"title": "Mô hình cục bộ",
-				"content": "Mô hình cục bộ giữ công việc trên thiết bị của bạn và có thể chạy không tốn chi phí API.\n\nDùng lựa chọn này khi quyền riêng tư, dùng offline và kiểm soát cục bộ quan trọng hơn sức mạnh mô hình hosted.",
-				"cursor": "Mô hình cục bộ",
-				"agent": "Thiết lập riêng tư."
-			},
-			"setupKeys": {
-				"title": "Khóa của bạn",
-				"content": "Khóa của bạn kết nối các nhà cung cấp bên ngoài như OpenAI hoặc OpenRouter.\n\nDùng lựa chọn này khi bạn muốn chất lượng mô hình cloud nhưng vẫn kiểm soát nhà cung cấp, chi phí và giới hạn.",
-				"cursor": "Khóa của bạn",
-				"agent": "Toàn quyền kiểm soát."
+			"finishReady": {
+				"title": "Xong rồi",
+				"content": "Đó là toàn bộ workspace. Chat nằm bên trái, và mọi tab bạn vừa xem đều phục vụ agent đang trả lời bạn.\n\nHãy hỏi một câu, hoặc đính kèm một tệp rồi hỏi về nó. Hướng dẫn này luôn có trong Cài đặt → Trợ giúp & hướng dẫn.",
+				"cursor": "Chat ở đây",
+				"agent": "Bắt đầu thôi."
 			}
 		}
 	}

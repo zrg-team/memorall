@@ -124,6 +124,125 @@ async function auditWllamaModels(models) {
 	}
 }
 
+async function fetchJson(url) {
+	try {
+		const response = await fetch(url, { redirect: "follow" });
+		if (!response.ok) {
+			return null;
+		}
+		return await response.json();
+	} catch {
+		return null;
+	}
+}
+
+/**
+ * Mirrors `detectNativeToolSupport` in
+ * public/runner/modes/transformmers/capabilities.js so the catalog's
+ * `abilities.tools` claim is checked against the same predicate the runtime
+ * will apply at load time.
+ */
+function templateDeclaresTools(template) {
+	const lowered = String(template ?? "").toLowerCase();
+	return (
+		lowered.includes("tool_calls") ||
+		lowered.includes("tools") ||
+		lowered.includes("builtin_tools")
+	);
+}
+
+async function resolveChatTemplate(model) {
+	if (model.provider === "wllama") {
+		// GGUF repos embed the template in the file itself; the Hub surfaces it
+		// under ?expand[]=gguf, which is what wllama reads via getChatTemplate().
+		const meta = await fetchJson(
+			`https://huggingface.co/api/models/${model.id}?expand[]=gguf`,
+		);
+		return meta?.gguf?.chat_template ?? null;
+	}
+
+	const tokenizerConfig = await fetchJson(
+		`https://huggingface.co/${model.id}/resolve/main/tokenizer_config.json`,
+	);
+	const template = tokenizerConfig?.chat_template;
+	if (typeof template === "string") {
+		return template;
+	}
+	return template ? JSON.stringify(template) : null;
+}
+
+/**
+ * Verifies declared abilities against the model's own Hub files.
+ *
+ * WebLLM is exempt from the native check: `tool-capability-resolver.ts` only
+ * grants native function calling to a pinned Hermes allowlist, so a catalogued
+ * WebLLM entry cannot be native no matter what its base template says.
+ */
+async function auditAbilities(models) {
+	let verified = 0;
+	let unverifiable = 0;
+
+	for (const model of models.filter((entry) => !entry.unsupported)) {
+		const label = `${model.provider}:${model.id}`;
+		assert(model.abilities, `${label} is missing abilities`);
+
+		if (model.provider === "webllm") {
+			assert(
+				model.abilities.tools !== "native",
+				`${label} claims native tools, but WebLLM only grants them to the pinned allowlist`,
+			);
+			continue;
+		}
+
+		const template = await resolveChatTemplate(model);
+		if (template === null) {
+			// No template published; we cannot confirm or deny, but a "native"
+			// claim would then be unfounded.
+			assert(
+				model.abilities.tools !== "native",
+				`${label} claims native tools but publishes no chat template to prove it`,
+			);
+			unverifiable++;
+			continue;
+		}
+
+		const declaresTools = templateDeclaresTools(template);
+		assert(
+			(model.abilities.tools === "native") === declaresTools,
+			`${label} declares tools="${model.abilities.tools}" but its chat template ${
+				declaresTools ? "does" : "does not"
+			} advertise tool calling`,
+		);
+		verified++;
+	}
+
+	console.log(
+		`[audit:llm-models] abilities: ${verified} verified against chat templates, ${unverifiable} unverifiable`,
+	);
+}
+
+/** Reports how much of the catalog still ranks on unsourced quality numbers. */
+function reportQualityEvidenceCoverage(models) {
+	const supported = models.filter((entry) => !entry.unsupported);
+	const sourced = supported.filter((entry) => entry.qualityEvidence);
+	const percent = Math.round((sourced.length / supported.length) * 100);
+
+	console.log(
+		`[audit:llm-models] quality evidence: ${sourced.length}/${supported.length} (${percent}%) of supported models cite published evals`,
+	);
+
+	if (sourced.length < supported.length) {
+		const missing = supported
+			.filter((entry) => !entry.qualityEvidence)
+			.map((entry) => `${entry.provider}:${entry.id}`);
+		console.log(
+			`[audit:llm-models] still estimated: ${missing.slice(0, 10).join(", ")}${
+				missing.length > 10 ? `, +${missing.length - 10} more` : ""
+			}`,
+		);
+	}
+}
+
 async function main() {
 	const { transformerModels, webllmModels, wllamaModels } =
 		await loadCatalogs();
@@ -131,6 +250,10 @@ async function main() {
 	await auditTransformerModels(transformerModels);
 	auditWebllmModels(webllmModels);
 	await auditWllamaModels(wllamaModels);
+
+	const allModels = [...transformerModels, ...webllmModels, ...wllamaModels];
+	await auditAbilities(allModels);
+	reportQualityEvidenceCoverage(allModels);
 
 	console.log(
 		`[audit:llm-models] verified ${transformerModels.length} Transformers.js, ${webllmModels.length} WebLLM, and ${wllamaModels.length} wllama entries`,

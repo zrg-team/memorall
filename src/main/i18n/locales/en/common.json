@@ -5,6 +5,7 @@
 		"models": "Models",
 		"knowledgeGraph": "Memory",
 		"connections": "Connections",
+		"skills": "Skills",
 		"flowBuilder": "Flow Builder",
 		"documents": "Files",
 		"debug": "Debug",
@@ -369,7 +370,7 @@
 		}
 	},
 	"sandboxPanel": {
-		"title": "Runtime Sessions",
+		"title": "Runtime",
 		"description": "Preview generated work, live pages, servers, and command activity.",
 		"outputsTab": "Outputs",
 		"liveRuntimeTab": "Live Runtime",
@@ -447,99 +448,63 @@
 		"steps": {
 			"welcome": {
 				"title": "Welcome to Memorall",
-				"content": "Memorall is a local-first AI workspace for chat, files, agents, knowledge, and models.\n\nThis tour works before you choose a model, so you can understand the workspace first and pick your setup at the end.",
+				"content": "Memorall is a local-first AI workspace. Chat lives on the left, and the workspace tabs beside it are what your agent knows and can do.\n\nSix quick stops, then we come back here so you can start. Escape closes the tour at any point.",
 				"cursor": "Start here",
 				"agent": "I'll guide you."
 			},
-			"chatPreview": {
-				"title": "Chat Preview",
-				"content": "Chat becomes the main conversation workspace after a model is ready.\n\nThis left side is where conversations, history, agent mode, attachments, and prompts come together.",
-				"cursor": "Chat lives here",
-				"agent": "This becomes chat."
-			},
-			"layoutExplain": {
-				"title": "Split Workspace Layout",
-				"content": "Memorall uses a split layout.\n\nLeft: chat and setup.\nCenter: the current conversation and input area.\nRight: workspace pages like Files, Memory, Agents, Models, and Runtime.",
-				"cursor": "Left, center, and right",
-				"agent": "Three work zones."
-			},
-			"documentsNavigate": {
-				"title": "Files",
-				"content": "Next stop: Files, your resource library and file workspace.\n\nClick Next to open it in the right panel.",
-				"cursor": "Open Files",
-				"agent": "Files first."
-			},
-			"documentsExplain": {
-				"title": "Files",
-				"content": "Use Files to upload, create, organize, and preview resources.\n\nFiles can become semantic memory, which gives agents useful context for later conversations.",
-				"cursor": "File workspace",
-				"agent": "Knowledge starts here."
+			"welcomeReady": {
+				"title": "A quick tour of the workspace",
+				"content": "Your model is ready, so chat already works. Here is what surrounds it.\n\nSix quick stops through the workspace tabs — each one sharpens what your agent knows and can do. Escape closes the tour at any point.",
+				"cursor": "Start here",
+				"agent": "I'll guide you."
 			},
 			"agentsNavigate": {
-				"title": "Agents",
-				"content": "Next: Agents, where you build reusable AI assistants for different workflows.\n\nClick Next to open Agents.",
+				"title": "Agents — who answers",
+				"content": "An agent bundles its instructions, the memory it may use, and the tools and skills it can reach into one assistant you can reuse.\n\nMemorall ships with one ready to go; add your own for each kind of work.\n\nNext opens Agents.",
 				"cursor": "Open Agents",
-				"agent": "Build helpers."
+				"agent": "Who answers."
 			},
-			"agentsExplain": {
-				"title": "Custom Agents",
-				"content": "Agents combine instructions, memory behavior, features, and tools into reusable workflows.\n\nUse them when you want a consistent assistant for a repeated task or domain.",
-				"cursor": "Agent workspace",
-				"agent": "Specialized work."
+			"documentsNavigate": {
+				"title": "Files — what it reads",
+				"content": "Upload, write, and preview documents here. Anything you keep becomes context an agent can pull into an answer, and can be turned into memory.\n\nNext opens Files.",
+				"cursor": "Open Files",
+				"agent": "What it reads."
 			},
 			"knowledgeNavigate": {
-				"title": "Memory",
-				"content": "Next: Memory, where Memorall shows semantic facts and procedural skills together.\n\nClick Next to open it.",
+				"title": "Memory — what it remembers",
+				"content": "Memory is the graph Memorall builds from your chats and files: concepts, the links between them, and the memory space each one lives in.\n\nSearch it, prune it, and agents reuse it in later conversations.\n\nNext opens Memory.",
 				"cursor": "Open Memory",
-				"agent": "Memory map."
+				"agent": "What it remembers."
 			},
-			"knowledgeExplain": {
-				"title": "Memory as a Graph",
-				"content": "Memory helps you inspect what Memorall knows and what workflows it can reuse.\n\nSearch concepts, review relationships, filter by memory space, and curate the skills agents can use later.",
-				"cursor": "Graph workspace",
-				"agent": "See connections."
+			"connectionsNavigate": {
+				"title": "Connections — what it can act on",
+				"content": "Connections give an agent hands: Gmail, Slack and hundreds of apps through Composio, an MCP server on your machine, or any endpoint you can reach.\n\nKeys are encrypted with your master passkey and stay on this device.\n\nNext opens Connections.",
+				"cursor": "Open Connections",
+				"agent": "Its hands."
+			},
+			"skillsNavigate": {
+				"title": "Skills — how it works",
+				"content": "A skill is a short markdown procedure, in the SKILL.md format, that teaches an agent a repeatable job — when it applies and the steps to follow.\n\nWrite one, import from GitHub, or drop in a folder, then switch it on per agent.\n\nNext opens Skills.",
+				"cursor": "Open Skills",
+				"agent": "How it works."
 			},
 			"modelsNavigate": {
-				"title": "Models",
-				"content": "Next: Models, where you manage local models, browser models, local servers, and API providers.\n\nClick Next to open Models.",
+				"title": "Models — what it thinks with",
+				"content": "Every answer runs on a model. Run one in your browser, connect a local server such as Ollama or LM Studio, or point Memorall at a hosted provider.\n\nSwap it whenever you like — the rest of your setup stays put.\n\nNext opens Models.",
 				"cursor": "Open Models",
-				"agent": "Choose power."
+				"agent": "Its engine."
 			},
-			"modelsExplain": {
-				"title": "Model Setup",
-				"content": "Models power chat and agent workflows.\n\nYou can run local browser models, connect local servers such as Ollama or LM Studio, or use remote API providers when you need stronger hosted models.",
-				"cursor": "Model workspace",
-				"agent": "Pick an engine."
+			"startHere": {
+				"title": "Start here",
+				"content": "One choice left and chat comes alive. Three ways in:\n\n• Managed service — sign in, nothing to configure.\n• Local models — run on this device, no API cost.\n• Your own keys — bring OpenAI, OpenRouter, or another provider.\n\nPick one on this screen, then send your first message. This tour is always in Settings → Help & Tour.",
+				"cursor": "Pick a setup",
+				"agent": "Choose one."
 			},
-			"chatFinalNavigate": {
-				"title": "Back to First Setup",
-				"content": "Now let's return to the first screen.\n\nThe final steps explain the three setup options you choose from before chat becomes active.",
-				"cursor": "Return to setup",
-				"agent": "Back to start."
-			},
-			"chatSetup": {
-				"title": "Choose How to Start",
-				"content": "This first screen asks how you want to power Memorall.\n\nYou can use a managed service, run local models, or connect your own provider keys.",
-				"cursor": "Choose a setup",
-				"agent": "Three options."
-			},
-			"setupManaged": {
-				"title": "Managed Service",
-				"content": "Managed Service is the easiest path: sign in and let Memorall handle hosted model access and infrastructure.\n\nUse this when you want the fastest setup with the least configuration.",
-				"cursor": "Managed Service",
-				"agent": "Fastest start."
-			},
-			"setupLocal": {
-				"title": "Local Models",
-				"content": "Local Models keep work on your device and can run without API costs.\n\nUse this when privacy, offline use, and local control are more important than hosted model power.",
-				"cursor": "Local Models",
-				"agent": "Private setup."
-			},
-			"setupKeys": {
-				"title": "Your Own Keys",
-				"content": "Your Own Keys connects external providers such as OpenAI or OpenRouter.\n\nUse this when you want cloud model quality while keeping control over provider choice, billing, and limits.",
-				"cursor": "Your Own Keys",
-				"agent": "Full control."
+			"finishReady": {
+				"title": "You're set",
+				"content": "That's the whole workspace. Chat is here on the left, and every tab you just saw feeds the agent answering you.\n\nAsk it something, or attach a file and ask about that. This tour is always in Settings → Help & Tour.",
+				"cursor": "Chat here",
+				"agent": "Go ahead."
 			}
 		}
 	}

@@ -1,9 +1,12 @@
+import { ChevronLeft, ChevronRight, SkipForward, X } from "lucide-react";
+import { motion } from "motion/react";
 import React, { useMemo } from "react";
-import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import { useNavigate } from "react-router-dom";
+import { AgentIcon } from "@/components/AgentIcon";
 import {
-	useCopilot,
 	type CopilotStep,
+	useCopilot,
 } from "@/main/components/molecules/Copilot/CopilotContext";
 import { Button } from "@/main/components/ui/button";
 import {
@@ -13,9 +16,6 @@ import {
 	CardTitle,
 } from "@/main/components/ui/card";
 import { Progress } from "@/main/components/ui/progress";
-import { X, ChevronRight, ChevronLeft, SkipForward } from "lucide-react";
-import { motion } from "motion/react";
-import { AgentIcon } from "@/components/AgentIcon";
 import { useShellLayoutStore } from "@/main/stores/shell-layout";
 
 interface CopilotTooltipProps {
@@ -48,7 +48,6 @@ export const CopilotTooltip: React.FC<CopilotTooltipProps> = ({
 			step.content.split("\n").length * 30 + 200,
 		); // Dynamic height based on content
 		const margin = 16;
-		const arrowSize = 8;
 
 		const viewportWidth = Math.max(window.innerWidth, 400);
 		const viewportHeight = Math.max(window.innerHeight, 300);
@@ -188,7 +187,8 @@ export const CopilotTooltip: React.FC<CopilotTooltipProps> = ({
 		}
 
 		return { x, y, arrowPosition, arrowOffset };
-	}, [step.placement, targetRect]);
+		// `step.content` feeds the height estimate, so a copy change must re-measure.
+	}, [step.placement, step.content, targetRect]);
 
 	const handleNext = () => {
 		try {
@@ -204,7 +204,7 @@ export const CopilotTooltip: React.FC<CopilotTooltipProps> = ({
 			} else {
 				nextStep();
 			}
-		} catch (error) {
+		} catch {
 			endTour(); // Emergency close
 		}
 	};
@@ -244,6 +244,8 @@ export const CopilotTooltip: React.FC<CopilotTooltipProps> = ({
 			}}
 		>
 			<Card
+				data-copilot="tooltip"
+				data-copilot-step={step.id}
 				className="w-[22.5rem] max-w-[calc(100vw-1rem)] shadow-2xl border border-blue-400/40 bg-background relative pointer-events-auto"
 				style={{ zIndex: 9500 }}
 			>

@@ -33,6 +33,12 @@ export interface DefaultSkillSummary {
 	sourceUrl: string;
 	origin: "default";
 	readOnly: true;
+	/** Bundled defaults are always the single-file shape. */
+	format: "file";
+	/** SKILL.md-standard aliases, mapped from `publisher` / `collection` so the
+	 *  manifest entries (60+, one file of which is ~8.8k lines) stay as they are. */
+	author: string;
+	tags: string[];
 }
 
 export interface DefaultSkill extends DefaultSkillSummary {
@@ -49,6 +55,9 @@ const toSummary = (entry: DefaultSkillManifestEntry): DefaultSkillSummary => ({
 	sourceUrl: entry.sourceUrl,
 	origin: "default",
 	readOnly: true,
+	format: "file",
+	author: entry.publisher,
+	tags: entry.collection ? [entry.collection] : [],
 });
 
 const stripFrontmatter = (raw: string): string => {

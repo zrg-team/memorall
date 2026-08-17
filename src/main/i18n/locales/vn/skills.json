@@ -1,0 +1,120 @@
+{
+	"title": "Kỹ năng",
+	"description": "{{count}} có sẵn · {{enabled}} đang bật cho tác nhân này",
+	"descriptionEmpty": "Quy trình mà tác nhân có thể làm theo, ở định dạng SKILL.md.",
+	"searchPlaceholder": "Tìm kỹ năng…",
+	"add": "Thêm kỹ năng",
+	"sidebar": {
+		"yours": "Của bạn",
+		"loading": "Đang tải kỹ năng…",
+		"empty": "Chưa có kỹ năng nào.",
+		"noMatches": "Không có kỹ năng nào khớp.",
+		"expand": "Hiện tệp đi kèm",
+		"collapse": "Ẩn tệp đi kèm",
+		"inUse": "Đang dùng"
+	},
+	"empty": {
+		"title": "Thêm một kỹ năng",
+		"body": "Kỹ năng là tệp markdown dạy tác nhân một quy trình lặp lại — khi nào dùng và các bước cần làm. Kỹ năng tuân theo chuẩn SKILL.md.",
+		"storage": "Kỹ năng được lưu trong hộp cát của bạn, tách khỏi tệp tài liệu. Không có gì được tải lên đâu cả.",
+		"dropHint": "Thả tệp .md hoặc thư mục kỹ năng để nhập"
+	},
+	"lanes": {
+		"recommended": "Khuyên dùng",
+		"manual": {
+			"name": "Tự viết",
+			"body": "Bắt đầu từ mẫu SKILL.md và viết ngay tại đây.",
+			"action": "Viết",
+			"title": "Viết một kỹ năng",
+			"subtitle": "Đặt tên và mô tả khi nào áp dụng; phần nội dung mở trong trình soạn thảo.",
+			"nameLabel": "Tên",
+			"namePlaceholder": "pdf-processing",
+			"nameHint": "Chữ thường, chữ số và dấu gạch ngang, tối đa 64 ký tự.",
+			"descriptionLabel": "Mô tả",
+			"descriptionPlaceholder": "Trích xuất văn bản và bảng từ PDF, điền biểu mẫu, gộp và tách tệp.",
+			"descriptionHint": "Tác nhân chỉ đọc phần này để quyết định có dùng kỹ năng hay không, nên hãy nêu rõ điều kiện kích hoạt.",
+			"invalidName": "Tên này không hợp lệ.",
+			"failed": "Không tạo được kỹ năng."
+		},
+		"github": {
+			"name": "GitHub",
+			"body": "Dán URL tệp hoặc thư mục. Frontmatter sẽ được đọc tự động.",
+			"action": "Nhập",
+			"title": "Nhập từ GitHub",
+			"subtitle": "Một tệp kỹ năng, hoặc cả một thư mục.",
+			"urlLabel": "URL",
+			"urlPlaceholder": "https://github.com/owner/repo/tree/main/skills",
+			"urlHint": "URL tệp (/blob/…), URL thư mục (/tree/…), hoặc liên kết raw.githubusercontent.com.",
+			"failed": "Không đọc được URL đó."
+		},
+		"upload": {
+			"name": "Tải tệp lên",
+			"body": "Chọn một hoặc nhiều tệp .md từ máy của bạn.",
+			"action": "Chọn"
+		},
+		"folder": {
+			"name": "Thư mục",
+			"body": "Chọn một thư mục. Nhánh có SKILL.md thành một kỹ năng; các tệp .md rời thành từng kỹ năng riêng.",
+			"action": "Chọn"
+		}
+	},
+	"import": {
+		"title": "Nhập {{count}} kỹ năng",
+		"subtitle": "Xem lại những gì sẽ được ghi trước khi lưu vào hộp cát.",
+		"confirm": "Nhập {{count}} kỹ năng",
+		"replaces": "sẽ thay thế một kỹ năng đã có",
+		"folderCount": "thư mục · {{count}} tệp",
+		"noneTitle": "Không có gì để nhập",
+		"noneBody": "Không tìm thấy tệp SKILL.md hoặc .md nào ở đó."
+	},
+	"detail": {
+		"defaultAgentName": "tác nhân này",
+		"formatFile": "tệp",
+		"formatFolder": "thư mục",
+		"readOnly": "chỉ đọc",
+		"source": "nguồn",
+		"enableFor": "Bật cho {{agent}}",
+		"enabledFor": "Đang bật cho {{agent}}",
+		"enabledForHint": "Kỹ năng được bật riêng cho từng tác nhân, trên bản nháp bạn đang sửa.",
+		"tabs": {
+			"edit": "Sửa",
+			"preview": "Xem trước",
+			"about": "Thông tin"
+		},
+		"descriptionLabel": "Mô tả",
+		"descriptionPlaceholder": "Khi nào tác nhân nên dùng kỹ năng này?",
+		"descriptionHint": "Đây là phần duy nhất tác nhân thấy trước khi tải nội dung — hãy nêu điều kiện kích hoạt.",
+		"bodyPlaceholder": "# Kỹ năng\n\nHướng dẫn mà tác nhân sẽ làm theo…",
+		"unsaved": "Có thay đổi chưa lưu",
+		"saved": "Đã lưu",
+		"saveFailed": "Không lưu được kỹ năng.",
+		"duplicate": "Nhân bản",
+		"duplicateToEdit": "Nhân bản để sửa",
+		"resourceUnsupported": "Không thể xem trước tệp này ở đây.",
+		"delete": {
+			"title": "Xoá kỹ năng này?",
+			"description": "Thao tác này xoá vĩnh viễn \"{{name}}\" và mọi tệp đi kèm."
+		},
+		"loading": "Đang tải {{name}}…",
+		"loadFailedTitle": "Không mở được {{name}}",
+		"loadFailedBody": "Kỹ năng đi kèm tải hướng dẫn từ kho mã của nhà phát hành, nên cần có kết nối mạng."
+	},
+	"about": {
+		"name": "Tên",
+		"description": "Mô tả",
+		"version": "Phiên bản",
+		"author": "Tác giả",
+		"tags": "Thẻ",
+		"license": "Giấy phép",
+		"repo": "Kho mã",
+		"path": "Đường dẫn",
+		"format": "Định dạng"
+	},
+	"picker": {
+		"title": "Kỹ năng cho tác nhân này",
+		"addSubtitle": "Kỹ năng vừa thêm sẽ được bật ngay cho tác nhân này.",
+		"use": "Dùng",
+		"remove": "Bỏ",
+		"enabledCount": "{{count}} kỹ năng đang dùng"
+	}
+}

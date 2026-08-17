@@ -22,6 +22,12 @@ export const WEBLLM_MODELS: LLMModelConfig[] = [
 		qualityScore: 72,
 		performanceScore: 93,
 		contextScore: 50,
+		abilities: {
+			tools: "prompt_injection",
+			vision: false,
+			reasoning: true,
+			multilingual: true,
+		},
 		releaseDate: "2026-02",
 		quickDownload: true,
 	},
@@ -40,6 +46,12 @@ export const WEBLLM_MODELS: LLMModelConfig[] = [
 		qualityScore: 88,
 		performanceScore: 82,
 		contextScore: 50,
+		abilities: {
+			tools: "prompt_injection",
+			vision: false,
+			reasoning: true,
+			multilingual: true,
+		},
 		releaseDate: "2026-02",
 	},
 	{
@@ -57,6 +69,12 @@ export const WEBLLM_MODELS: LLMModelConfig[] = [
 		qualityScore: 92,
 		performanceScore: 68,
 		contextScore: 50,
+		abilities: {
+			tools: "prompt_injection",
+			vision: false,
+			reasoning: true,
+			multilingual: true,
+		},
 		releaseDate: "2026-02",
 	},
 	{
@@ -74,6 +92,12 @@ export const WEBLLM_MODELS: LLMModelConfig[] = [
 		qualityScore: 89,
 		performanceScore: 72,
 		contextScore: 50,
+		abilities: {
+			tools: "prompt_injection",
+			vision: false,
+			reasoning: false,
+			multilingual: true,
+		},
 		releaseDate: "2025-12",
 	},
 	{
@@ -91,6 +115,12 @@ export const WEBLLM_MODELS: LLMModelConfig[] = [
 		qualityScore: 91,
 		performanceScore: 62,
 		contextScore: 50,
+		abilities: {
+			tools: "prompt_injection",
+			vision: false,
+			reasoning: true,
+			multilingual: true,
+		},
 		releaseDate: "2025-12",
 	},
 	{
@@ -108,6 +138,12 @@ export const WEBLLM_MODELS: LLMModelConfig[] = [
 		qualityScore: 89,
 		performanceScore: 70,
 		contextScore: 50,
+		abilities: {
+			tools: "prompt_injection",
+			vision: false,
+			reasoning: true,
+			multilingual: true,
+		},
 		releaseDate: "2025-02",
 	},
 	{
@@ -125,6 +161,12 @@ export const WEBLLM_MODELS: LLMModelConfig[] = [
 		qualityScore: 77,
 		performanceScore: 88,
 		contextScore: 50,
+		abilities: {
+			tools: "prompt_injection",
+			vision: false,
+			reasoning: false,
+			multilingual: true,
+		},
 		releaseDate: "2025-03",
 		quickDownload: true,
 	},
@@ -143,6 +185,12 @@ export const WEBLLM_MODELS: LLMModelConfig[] = [
 		qualityScore: 72,
 		performanceScore: 86,
 		contextScore: 50,
+		abilities: {
+			tools: "prompt_injection",
+			vision: false,
+			reasoning: false,
+			multilingual: true,
+		},
 		releaseDate: "2025-04",
 		quickDownload: true,
 	},
@@ -161,6 +209,12 @@ export const WEBLLM_MODELS: LLMModelConfig[] = [
 		qualityScore: 90,
 		performanceScore: 69,
 		contextScore: 50,
+		abilities: {
+			tools: "prompt_injection",
+			vision: false,
+			reasoning: true,
+			multilingual: true,
+		},
 		releaseDate: "2025-04",
 	},
 	{
@@ -178,6 +232,12 @@ export const WEBLLM_MODELS: LLMModelConfig[] = [
 		qualityScore: 84,
 		performanceScore: 73,
 		contextScore: 50,
+		abilities: {
+			tools: "prompt_injection",
+			vision: false,
+			reasoning: false,
+			multilingual: true,
+		},
 		releaseDate: "2024-09",
 	},
 	{
@@ -195,6 +255,12 @@ export const WEBLLM_MODELS: LLMModelConfig[] = [
 		qualityScore: 86,
 		performanceScore: 71,
 		contextScore: 50,
+		abilities: {
+			tools: "prompt_injection",
+			vision: false,
+			reasoning: false,
+			multilingual: true,
+		},
 		releaseDate: "2024-11",
 	},
 	{
@@ -212,6 +278,12 @@ export const WEBLLM_MODELS: LLMModelConfig[] = [
 		qualityScore: 50,
 		performanceScore: 88,
 		contextScore: 35,
+		abilities: {
+			tools: "prompt_injection",
+			vision: false,
+			reasoning: false,
+			multilingual: true,
+		},
 		releaseDate: "2024-01",
 		quickDownload: true,
 	},
@@ -230,6 +302,12 @@ export const WEBLLM_MODELS: LLMModelConfig[] = [
 		qualityScore: 70,
 		performanceScore: 95,
 		contextScore: 50,
+		abilities: {
+			tools: "prompt_injection",
+			vision: false,
+			reasoning: true,
+			multilingual: true,
+		},
 		releaseDate: "2025-04",
 	},
 	{
@@ -247,6 +325,12 @@ export const WEBLLM_MODELS: LLMModelConfig[] = [
 		qualityScore: 85,
 		performanceScore: 75,
 		contextScore: 50,
+		abilities: {
+			tools: "prompt_injection",
+			vision: false,
+			reasoning: true,
+			multilingual: true,
+		},
 		releaseDate: "2025-04",
 		quickDownload: true,
 	},
@@ -265,6 +349,12 @@ export const WEBLLM_MODELS: LLMModelConfig[] = [
 		qualityScore: 90,
 		performanceScore: 65,
 		contextScore: 50,
+		abilities: {
+			tools: "prompt_injection",
+			vision: false,
+			reasoning: true,
+			multilingual: true,
+		},
 		releaseDate: "2025-01",
 		quickDownload: true,
 	},
@@ -283,6 +373,12 @@ export const WEBLLM_MODELS: LLMModelConfig[] = [
 		qualityScore: 88,
 		performanceScore: 78,
 		contextScore: 20,
+		abilities: {
+			tools: "prompt_injection",
+			vision: false,
+			reasoning: false,
+			multilingual: false,
+		},
 		releaseDate: "2024-08",
 		quickDownload: true,
 	},
@@ -301,6 +397,12 @@ export const WEBLLM_MODELS: LLMModelConfig[] = [
 		qualityScore: 65,
 		performanceScore: 85,
 		contextScore: 50,
+		abilities: {
+			tools: "prompt_injection",
+			vision: false,
+			reasoning: false,
+			multilingual: true,
+		},
 		releaseDate: "2024-09",
 	},
 	{
@@ -318,6 +420,12 @@ export const WEBLLM_MODELS: LLMModelConfig[] = [
 		qualityScore: 80,
 		performanceScore: 70,
 		contextScore: 50,
+		abilities: {
+			tools: "prompt_injection",
+			vision: false,
+			reasoning: false,
+			multilingual: true,
+		},
 		releaseDate: "2024-09",
 	},
 	{
@@ -335,6 +443,12 @@ export const WEBLLM_MODELS: LLMModelConfig[] = [
 		qualityScore: 80,
 		performanceScore: 76,
 		contextScore: 50,
+		abilities: {
+			tools: "prompt_injection",
+			vision: false,
+			reasoning: false,
+			multilingual: true,
+		},
 		releaseDate: "2024-06",
 	},
 	{
@@ -352,6 +466,12 @@ export const WEBLLM_MODELS: LLMModelConfig[] = [
 		qualityScore: 25,
 		performanceScore: 99,
 		contextScore: 50,
+		abilities: {
+			tools: "prompt_injection",
+			vision: false,
+			reasoning: false,
+			multilingual: false,
+		},
 		releaseDate: "2024-11",
 	},
 	{
@@ -369,6 +489,12 @@ export const WEBLLM_MODELS: LLMModelConfig[] = [
 		qualityScore: 40,
 		performanceScore: 96,
 		contextScore: 50,
+		abilities: {
+			tools: "prompt_injection",
+			vision: false,
+			reasoning: false,
+			multilingual: false,
+		},
 		releaseDate: "2024-11",
 		quickDownload: true,
 	},
@@ -387,6 +513,12 @@ export const WEBLLM_MODELS: LLMModelConfig[] = [
 		qualityScore: 68,
 		performanceScore: 83,
 		contextScore: 50,
+		abilities: {
+			tools: "prompt_injection",
+			vision: false,
+			reasoning: false,
+			multilingual: false,
+		},
 		releaseDate: "2024-11",
 		quickDownload: true,
 	},
@@ -405,6 +537,12 @@ export const WEBLLM_MODELS: LLMModelConfig[] = [
 		qualityScore: 75,
 		performanceScore: 81,
 		contextScore: 50,
+		abilities: {
+			tools: "prompt_injection",
+			vision: false,
+			reasoning: false,
+			multilingual: true,
+		},
 		releaseDate: "2024-09",
 	},
 	{
@@ -422,6 +560,12 @@ export const WEBLLM_MODELS: LLMModelConfig[] = [
 		qualityScore: 78,
 		performanceScore: 79,
 		contextScore: 50,
+		abilities: {
+			tools: "prompt_injection",
+			vision: false,
+			reasoning: false,
+			multilingual: true,
+		},
 		releaseDate: "2024-11",
 		quickDownload: true,
 	},
@@ -440,6 +584,12 @@ export const WEBLLM_MODELS: LLMModelConfig[] = [
 		qualityScore: 60,
 		performanceScore: 78,
 		contextScore: 20,
+		abilities: {
+			tools: "prompt_injection",
+			vision: false,
+			reasoning: false,
+			multilingual: false,
+		},
 		releaseDate: "2024-06",
 	},
 	{
@@ -457,6 +607,12 @@ export const WEBLLM_MODELS: LLMModelConfig[] = [
 		qualityScore: 50,
 		performanceScore: 84,
 		contextScore: 0,
+		abilities: {
+			tools: "none",
+			vision: false,
+			reasoning: false,
+			multilingual: false,
+		},
 		releaseDate: "2024-03",
 		unsupported: true,
 		unsupportedReason:
@@ -477,6 +633,12 @@ export const WEBLLM_MODELS: LLMModelConfig[] = [
 		qualityScore: 58,
 		performanceScore: 60,
 		contextScore: 35,
+		abilities: {
+			tools: "prompt_injection",
+			vision: false,
+			reasoning: false,
+			multilingual: false,
+		},
 		releaseDate: "2023-06",
 	},
 ];

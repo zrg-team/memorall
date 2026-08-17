@@ -331,6 +331,9 @@ test("LLM configuration view switches through every supported provider", async (
 		window.dispatchEvent(new PopStateEvent("popstate"));
 	});
 
+	// The models page opens on the "Recommended" chooser until a model exists.
+	await page.locator('[data-panel-mode="browse"]').click();
+
 	const providers = [
 		{ id: "transformer", content: "Transformer advantages" },
 		{ id: "wllama", content: "Wllama advantages" },
@@ -386,6 +389,7 @@ test("selects a local model and completes a real chat request", async () => {
 		window.dispatchEvent(new PopStateEvent("popstate"));
 	});
 
+	await page.locator('[data-panel-mode="browse"]').click();
 	await page.locator(`[data-provider-tab="${smokeTarget.runtime}"]`).click();
 	const quickModelCard = page.locator(
 		`[data-model-provider="${smokeTarget.runtime}"][data-model-id="${smokeTarget.cardId}"]`,

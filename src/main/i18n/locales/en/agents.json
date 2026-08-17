@@ -335,7 +335,7 @@
 		"label": "Skills",
 		"memoryHint": "Procedural memory — what this agent knows how to do",
 		"addSkill": "Add skill",
-		"manageAction": "Browse",
+		"manageAction": "Manage in Skills",
 		"enableAction": "Enable",
 		"disableAction": "Disable",
 		"manageTitle": "Manage Skills",

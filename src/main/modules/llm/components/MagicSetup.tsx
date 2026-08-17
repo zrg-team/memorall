@@ -9,9 +9,11 @@ import {
 	FileText,
 	CheckCircle2,
 	AlertCircle,
+	Scale,
 	Search,
 	HardDrive,
 	Info,
+	type LucideIcon,
 } from "lucide-react";
 
 import {
@@ -25,7 +27,10 @@ import { Button } from "@/main/components/ui/button";
 import { Input } from "@/main/components/ui/input";
 import { Badge } from "@/main/components/ui/badge";
 import { backgroundJob } from "@/services/background-jobs/background-job";
-import { generateAllRecommendations } from "../utils/model-recommendations";
+import {
+	MODEL_PREFERENCES,
+	generateAllRecommendations,
+} from "../utils/model-recommendations";
 import type {
 	SystemSpecs,
 	ModelPreference,
@@ -35,8 +40,10 @@ import type {
 import {
 	getAvailableModelMemoryGB,
 	estimateModelMemory,
+	estimateModelMemoryAtUsableContext,
 	type ModelMemoryEstimate,
 } from "../utils/model-memory";
+import type { ModelAbilities } from "@/services/llm/interfaces/llm-model-config";
 
 function fmtGB(gb: number): string {
 	return gb < 1 ? `${(gb * 1024).toFixed(0)} MB` : `${gb.toFixed(1)} GB`;
@@ -102,6 +109,100 @@ const FitBadge: React.FC<{
 	);
 };
 
+/**
+ * Abilities the user can act on, shown as badges so the trade-off is visible
+ * before the download rather than after it. Tool support is listed first —
+ * it is the one that decides whether the default agent works at all.
+ */
+const AbilityBadges: React.FC<{
+	abilities: ModelAbilities;
+	className?: string;
+}> = ({ abilities, className = "" }) => {
+	const { t } = useTranslation("llm");
+	const badges: Array<{ key: string; label: string; className: string }> = [];
+
+	if (abilities.tools === "native") {
+		badges.push({
+			key: "tools",
+			label: t("magicSetup.abilities.toolsNative"),
+			className: "border-emerald-500/60 text-emerald-600 dark:text-emerald-500",
+		});
+	} else if (abilities.tools === "none") {
+		badges.push({
+			key: "tools",
+			label: t("magicSetup.abilities.toolsNone"),
+			className: "border-red-500/60 text-red-500",
+		});
+	}
+
+	if (abilities.reasoning) {
+		badges.push({
+			key: "reasoning",
+			label: t("magicSetup.abilities.reasoning"),
+			className: "border-purple-500/60 text-purple-600 dark:text-purple-500",
+		});
+	}
+
+	if (abilities.vision) {
+		badges.push({
+			key: "vision",
+			label: t("magicSetup.abilities.vision"),
+			className: "border-blue-500/60 text-blue-600 dark:text-blue-500",
+		});
+	}
+
+	if (badges.length === 0) {
+		return null;
+	}
+
+	return (
+		<div className={`flex flex-wrap gap-1 ${className}`}>
+			{badges.map((badge) => (
+				<Badge
+					key={badge.key}
+					variant="outline"
+					className={`font-normal text-[10px] px-1.5 py-0 ${badge.className}`}
+				>
+					{badge.label}
+				</Badge>
+			))}
+		</div>
+	);
+};
+
+/** Icon + accent per preference, so the four cards stay one loop. */
+const PREFERENCE_CARDS: Array<{
+	preference: ModelPreference;
+	Icon: LucideIcon;
+	tint: string;
+	text: string;
+}> = [
+	{
+		preference: "performance",
+		Icon: Zap,
+		tint: "bg-green-500/10",
+		text: "text-green-600 dark:text-green-500",
+	},
+	{
+		preference: "balance",
+		Icon: Scale,
+		tint: "bg-amber-500/10",
+		text: "text-amber-600 dark:text-amber-500",
+	},
+	{
+		preference: "quality",
+		Icon: Sparkles,
+		tint: "bg-purple-500/10",
+		text: "text-purple-600 dark:text-purple-500",
+	},
+	{
+		preference: "context",
+		Icon: FileText,
+		tint: "bg-blue-500/10",
+		text: "text-blue-600 dark:text-blue-500",
+	},
+];
+
 // ─── Component ───────────────────────────────────────────────────────────────
 
 interface MagicSetupProps {
@@ -139,12 +240,14 @@ export const MagicSetup: React.FC<MagicSetupProps> = ({
 	/** Memory estimates for the primary model of each preference. */
 	const prefMemory = useMemo(() => {
 		if (!recommendations || !specs) return null;
-		const prefs = ["performance", "quality", "context"] as const;
+		// Driven off the shared list so a new preference cannot silently produce
+		// an `undefined` entry here — the `as Record<...>` cast below would not
+		// catch it, and the card would throw on destructure.
 		return Object.fromEntries(
-			prefs.map((pref) => {
+			MODEL_PREFERENCES.map((pref) => {
 				const m = recommendations[pref].primary;
 				const avail = getAvailableModelMemoryGB(specs, m.usesWebGPU);
-				const est = estimateModelMemory(
+				const est = estimateModelMemoryAtUsableContext(
 					m.sizeGB,
 					m.kvBytesPerToken,
 					m.contextLength,
@@ -159,7 +262,7 @@ export const MagicSetup: React.FC<MagicSetupProps> = ({
 	const selectedMemory = useMemo(() => {
 		if (!selectedModel || !specs) return null;
 		const avail = getAvailableModelMemoryGB(specs, selectedModel.usesWebGPU);
-		const est = estimateModelMemory(
+		const est = estimateModelMemoryAtUsableContext(
 			selectedModel.sizeGB,
 			selectedModel.kvBytesPerToken,
 			selectedModel.contextLength,
@@ -185,13 +288,13 @@ export const MagicSetup: React.FC<MagicSetupProps> = ({
 			const fitOrder = { comfortable: 0, tight: 1, overflow: 2 } as const;
 			const aAvail = getAvailableModelMemoryGB(specs, a.usesWebGPU);
 			const bAvail = getAvailableModelMemoryGB(specs, b.usesWebGPU);
-			const aEst = estimateModelMemory(
+			const aEst = estimateModelMemoryAtUsableContext(
 				a.sizeGB,
 				a.kvBytesPerToken,
 				a.contextLength,
 				aAvail,
 			);
-			const bEst = estimateModelMemory(
+			const bEst = estimateModelMemoryAtUsableContext(
 				b.sizeGB,
 				b.kvBytesPerToken,
 				b.contextLength,
@@ -450,31 +553,51 @@ export const MagicSetup: React.FC<MagicSetupProps> = ({
 						</p>
 					</div>
 
-					<div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-						{/* Performance */}
-						{(() => {
-							const { est, avail } = prefMemory.performance;
-							const m = recommendations.performance.primary;
+					<div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+						{PREFERENCE_CARDS.map(({ preference, Icon, tint, text }) => {
+							const { est, avail } = prefMemory[preference];
+							const m = recommendations[preference].primary;
 							const contextLimited = est.feasibleContext < m.contextLength;
+							// Context is the one axis where the headline number is the
+							// context itself; every other axis leads with speed.
+							const headline =
+								preference === "context"
+									? contextLimited
+										? fmtCtx(est.feasibleContext)
+										: fmtCtx(m.contextLength)
+									: `~${m.estimatedTokensPerSecond} tok/s`;
+
 							return (
 								<Card
-									className="cursor-pointer transition-all hover:shadow-lg hover:border-primary border-2"
-									onClick={() => handlePreferenceSelect("performance")}
+									key={preference}
+									role="button"
+									tabIndex={0}
+									data-preference={preference}
+									className="cursor-pointer transition-all hover:shadow-lg hover:border-primary border-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+									onClick={() => handlePreferenceSelect(preference)}
+									onKeyDown={(event) => {
+										if (event.key === "Enter" || event.key === " ") {
+											event.preventDefault();
+											handlePreferenceSelect(preference);
+										}
+									}}
 								>
 									<CardHeader className="text-center pb-3">
-										<div className="mx-auto mb-3 p-3 rounded-full bg-green-500/10 w-fit">
-											<Zap className="w-6 h-6 text-green-600 dark:text-green-500" />
+										<div
+											className={`mx-auto mb-3 p-3 rounded-full ${tint} w-fit`}
+										>
+											<Icon className={`w-6 h-6 ${text}`} />
 										</div>
 										<CardTitle className="text-lg">
-											{t("magicSetup.choosePriority.performance.title")}
+											{t(`magicSetup.choosePriority.${preference}.title`)}
 										</CardTitle>
 										<CardDescription className="text-xs">
-											{t("magicSetup.choosePriority.performance.description")}
+											{t(`magicSetup.choosePriority.${preference}.description`)}
 										</CardDescription>
 									</CardHeader>
 									<CardContent className="space-y-2 text-center">
-										<div className="text-2xl font-bold text-green-600 dark:text-green-500">
-											~{m.estimatedTokensPerSecond} tok/s
+										<div className={`text-2xl font-bold ${text}`}>
+											{headline}
 										</div>
 										<div className="text-sm font-medium">{m.displayName}</div>
 										<div className="text-xs text-primary font-medium">
@@ -483,6 +606,12 @@ export const MagicSetup: React.FC<MagicSetupProps> = ({
 										<div className="text-xs text-muted-foreground">
 											{m.size} • {m.usesWebGPU ? "WebGPU" : "CPU"}
 										</div>
+
+										<AbilityBadges
+											abilities={m.abilities}
+											className="justify-center"
+										/>
+
 										{/* Memory bar */}
 										<div className="pt-2 border-t space-y-1.5 text-left">
 											<MemoryBar usedGB={est.totalGB} availableGB={avail} />
@@ -494,128 +623,22 @@ export const MagicSetup: React.FC<MagicSetupProps> = ({
 											</div>
 											{contextLimited ? (
 												<div className="text-[11px] text-yellow-600 dark:text-yellow-500">
-													Context limited to {fmtCtx(est.feasibleContext)} on
-													your hardware
+													{t("magicSetup.choosePriority.contextLimited", {
+														value: fmtCtx(est.feasibleContext),
+													})}
 												</div>
 											) : (
 												<div className="text-[11px] text-muted-foreground">
-													Up to {fmtCtx(m.contextLength)} context
+													{t("magicSetup.choosePriority.contextUpTo", {
+														value: fmtCtx(m.contextLength),
+													})}
 												</div>
 											)}
 										</div>
 									</CardContent>
 								</Card>
 							);
-						})()}
-
-						{/* Quality */}
-						{(() => {
-							const { est, avail } = prefMemory.quality;
-							const m = recommendations.quality.primary;
-							const contextLimited = est.feasibleContext < m.contextLength;
-							return (
-								<Card
-									className="cursor-pointer transition-all hover:shadow-lg hover:border-primary border-2"
-									onClick={() => handlePreferenceSelect("quality")}
-								>
-									<CardHeader className="text-center pb-3">
-										<div className="mx-auto mb-3 p-3 rounded-full bg-purple-500/10 w-fit">
-											<Sparkles className="w-6 h-6 text-purple-600 dark:text-purple-500" />
-										</div>
-										<CardTitle className="text-lg">
-											{t("magicSetup.choosePriority.quality.title")}
-										</CardTitle>
-										<CardDescription className="text-xs">
-											{t("magicSetup.choosePriority.quality.description")}
-										</CardDescription>
-									</CardHeader>
-									<CardContent className="space-y-2 text-center">
-										<div className="text-2xl font-bold text-purple-600 dark:text-purple-500">
-											~{m.estimatedTokensPerSecond} tok/s
-										</div>
-										<div className="text-sm font-medium">{m.displayName}</div>
-										<div className="text-xs text-primary font-medium">
-											{m.providerName}
-										</div>
-										<div className="text-xs text-muted-foreground">
-											{m.size} • {m.usesWebGPU ? "WebGPU" : "CPU"}
-										</div>
-										<div className="pt-2 border-t space-y-1.5 text-left">
-											<MemoryBar usedGB={est.totalGB} availableGB={avail} />
-											<div className="flex justify-between items-center">
-												<span className="text-[11px] text-muted-foreground">
-													{fmtGB(est.totalGB)} of {fmtGB(avail)}
-												</span>
-												<FitBadge fit={est.fit} />
-											</div>
-											{contextLimited ? (
-												<div className="text-[11px] text-yellow-600 dark:text-yellow-500">
-													Context limited to {fmtCtx(est.feasibleContext)} on
-													your hardware
-												</div>
-											) : (
-												<div className="text-[11px] text-muted-foreground">
-													Up to {fmtCtx(m.contextLength)} context
-												</div>
-											)}
-										</div>
-									</CardContent>
-								</Card>
-							);
-						})()}
-
-						{/* Context */}
-						{(() => {
-							const { est, avail } = prefMemory.context;
-							const m = recommendations.context.primary;
-							const contextLimited = est.feasibleContext < m.contextLength;
-							return (
-								<Card
-									className="cursor-pointer transition-all hover:shadow-lg hover:border-primary border-2"
-									onClick={() => handlePreferenceSelect("context")}
-								>
-									<CardHeader className="text-center pb-3">
-										<div className="mx-auto mb-3 p-3 rounded-full bg-blue-500/10 w-fit">
-											<FileText className="w-6 h-6 text-blue-600 dark:text-blue-500" />
-										</div>
-										<CardTitle className="text-lg">
-											{t("magicSetup.choosePriority.context.title")}
-										</CardTitle>
-										<CardDescription className="text-xs">
-											{t("magicSetup.choosePriority.context.description")}
-										</CardDescription>
-									</CardHeader>
-									<CardContent className="space-y-2 text-center">
-										<div className="text-2xl font-bold text-blue-600 dark:text-blue-500">
-											{contextLimited
-												? fmtCtx(est.feasibleContext)
-												: fmtCtx(m.contextLength)}
-										</div>
-										<div className="text-sm font-medium">{m.displayName}</div>
-										<div className="text-xs text-primary font-medium">
-											{m.providerName}
-										</div>
-										<div className="text-xs text-muted-foreground">
-											{m.size} • {m.usesWebGPU ? "WebGPU" : "CPU"}
-										</div>
-										<div className="pt-2 border-t space-y-1.5 text-left">
-											<MemoryBar usedGB={est.totalGB} availableGB={avail} />
-											<div className="flex justify-between items-center">
-												<span className="text-[11px] text-muted-foreground">
-													{fmtGB(est.totalGB)} of {fmtGB(avail)}
-												</span>
-												<FitBadge fit={est.fit} />
-											</div>
-											{contextLimited && (
-												<div className="text-[11px] text-muted-foreground">
-													Model supports {fmtCtx(m.contextLength)} max
-												</div>
-											)}
-										</div>
-									</CardContent>
-								</Card>
-							);
-						})()}
+						})}
 					</div>
 
 					<Button
@@ -874,7 +897,7 @@ export const MagicSetup: React.FC<MagicSetupProps> = ({
 													specs,
 													altModel.usesWebGPU,
 												);
-												const altEst = estimateModelMemory(
+												const altEst = estimateModelMemoryAtUsableContext(
 													altModel.sizeGB,
 													altModel.kvBytesPerToken,
 													altModel.contextLength,

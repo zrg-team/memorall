@@ -1,5 +1,5 @@
 import React from "react";
-import { Settings } from "lucide-react";
+import { ArrowRight, Settings, Sparkles } from "lucide-react";
 import { eq } from "drizzle-orm";
 import { useTranslation } from "react-i18next";
 
@@ -11,6 +11,7 @@ import { OpenAITab } from "./OpenAITab";
 import { OpenRouterTab } from "./OpenRouterTab";
 import { ProgressSection } from "./ProgressSection";
 import { ProviderTabs, type ProviderStatus } from "./ProviderTabs";
+import { RecommendedSetup } from "./RecommendedSetup";
 import { TransformerTab } from "./TransformerTab";
 import { WebLLMTab } from "./WebLLMTab";
 import { WllamaTab } from "./WllamaTab";
@@ -63,6 +64,8 @@ interface ProviderPanelProps {
 	onOpenAITabSelect: () => void;
 	onModelLoaded?: (modelId: string, provider: ServiceProvider) => void;
 }
+
+type PanelMode = "recommended" | "browse";
 
 const PROVIDERS: ServiceProvider[] = [
 	"transformer",
@@ -120,8 +123,27 @@ export const ProviderPanel: React.FC<ProviderPanelProps> = ({
 	onModelLoaded,
 }) => {
 	const { t } = useTranslation("llm");
-	const { current, setCurrent } = useCurrentModel();
+	const { current, setCurrent, isInitialized } = useCurrentModel();
 	const [showTestInference, setShowTestInference] = React.useState(false);
+	// Land on "Recommended" for anyone without a model yet, and on the provider
+	// surface for anyone who already has one — unless they pick a mode first.
+	const [mode, setMode] = React.useState<PanelMode>("recommended");
+	const modeResolved = React.useRef(false);
+	const selectMode = React.useCallback((next: PanelMode) => {
+		modeResolved.current = true;
+		setMode(next);
+	}, []);
+
+	React.useEffect(() => {
+		if (modeResolved.current || !isInitialized) {
+			return;
+		}
+		modeResolved.current = true;
+		if (current?.modelId?.trim()) {
+			setMode("browse");
+		}
+	}, [isInitialized, current]);
+
 	const [providerStatuses, setProviderStatuses] = React.useState<
 		Record<ServiceProvider, ProviderStatus>
 	>(() =>
@@ -243,6 +265,54 @@ export const ProviderPanel: React.FC<ProviderPanelProps> = ({
 				? ollamaModels
 				: null;
 
+	// The mode switch rides on whichever row the mode already has, rather than
+	// owning a full-width bar of its own. Two stacked strips read as two tab
+	// rows with no cue as to which was the mode and which the provider.
+	const recommendedPill = (
+		<Button
+			type="button"
+			data-panel-mode="recommended"
+			aria-pressed={false}
+			variant="ghost"
+			onClick={() => selectMode("recommended")}
+			title={t("providerPanel.modes.recommended")}
+			aria-label={t("providerPanel.modes.recommended")}
+			// Icon-only: the seven provider tabs already fill this strip, and a
+			// spelled-out label pushed the last one off the edge. Tailwind
+			// breakpoints track the viewport, not this container, so a
+			// responsive label cannot be sized reliably here.
+			className="min-h-9 w-9 shrink-0 rounded-md p-0 text-muted-foreground transition-colors hover:bg-background/60 hover:text-foreground"
+		>
+			<Sparkles className="h-4 w-4" />
+		</Button>
+	);
+
+	const browseLink = (
+		<Button
+			type="button"
+			data-panel-mode="browse"
+			variant="ghost"
+			size="sm"
+			onClick={() => selectMode("browse")}
+			className="shrink-0 gap-1 text-xs text-muted-foreground hover:text-foreground"
+		>
+			{t("providerPanel.modes.browse")}
+			<ArrowRight className="h-3.5 w-3.5" />
+		</Button>
+	);
+
+	if (mode === "recommended") {
+		return (
+			<div className="space-y-3 px-2 py-2 sm:px-3 lg:px-4">
+				<RecommendedSetup
+					onModelLoaded={onModelLoaded}
+					onBrowseAll={() => selectMode("browse")}
+					browseAction={browseLink}
+				/>
+			</div>
+		);
+	}
+
 	return (
 		<div className="space-y-3 px-2 py-2 sm:px-3 lg:px-4">
 			<ProviderTabs
@@ -254,6 +324,7 @@ export const ProviderPanel: React.FC<ProviderPanelProps> = ({
 				webllmAvailableModels={webllmAvailableModels}
 				onOpenAITabSelect={onOpenAITabSelect}
 				providerStatuses={providerStatuses}
+				leading={recommendedPill}
 			/>
 
 			{quickLoading && (

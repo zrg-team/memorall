@@ -1,0 +1,124 @@
+{
+	"title": "Skills",
+	"description": "{{count}} available · {{enabled}} on for this agent",
+	"descriptionEmpty": "Procedures the agent can follow, in the SKILL.md format.",
+	"searchPlaceholder": "Search skills…",
+	"add": "Add skill",
+	"sidebar": {
+		"yours": "Yours",
+		"loading": "Loading skills…",
+		"empty": "No skills yet.",
+		"noMatches": "No skills match that search.",
+		"expand": "Show bundled files",
+		"collapse": "Hide bundled files",
+		"inUse": "In use"
+	},
+	"empty": {
+		"title": "Add a skill",
+		"body": "A skill is markdown that teaches the agent a repeatable procedure — when to use it, and the steps to follow. Skills follow the SKILL.md standard.",
+		"storage": "Skills are stored in your sandbox, separately from your files. Nothing is uploaded anywhere.",
+		"dropHint": "Drop .md files or a skill folder to import"
+	},
+	"lanes": {
+		"recommended": "Recommended",
+		"manual": {
+			"name": "Write",
+			"body": "Start from a SKILL.md template and write it here.",
+			"action": "Write",
+			"title": "Write a skill",
+			"subtitle": "Name it and describe when it applies; the body opens in the editor.",
+			"nameLabel": "Name",
+			"namePlaceholder": "pdf-processing",
+			"nameHint": "Lowercase letters, digits and hyphens, up to 64 characters.",
+			"descriptionLabel": "Description",
+			"descriptionPlaceholder": "Extract text and tables from PDFs, fill forms, merge and split files.",
+			"descriptionHint": "The agent reads only this to decide whether the skill applies, so put the triggers here.",
+			"invalidName": "That name is not valid.",
+			"failed": "Could not create the skill."
+		},
+		"github": {
+			"name": "GitHub",
+			"body": "Paste a file or folder URL. Frontmatter is read for you.",
+			"action": "Import",
+			"title": "Import from GitHub",
+			"subtitle": "A single skill file, or a folder of them.",
+			"urlLabel": "URL",
+			"urlPlaceholder": "https://github.com/owner/repo/tree/main/skills",
+			"urlHint": "A file URL (/blob/…), a folder URL (/tree/…), or a raw.githubusercontent.com link.",
+			"failed": "Could not read that URL."
+		},
+		"upload": {
+			"name": "Upload files",
+			"body": "Pick one or more .md files from your computer.",
+			"action": "Choose"
+		},
+		"folder": {
+			"name": "Folder",
+			"body": "Pick a folder. A SKILL.md subtree becomes one skill; loose .md files become one each.",
+			"action": "Choose"
+		}
+	},
+	"import": {
+		"title": "Import {{count}} skill",
+		"title_other": "Import {{count}} skills",
+		"subtitle": "Review what will be written before it lands in your sandbox.",
+		"confirm": "Import {{count}} skill",
+		"confirm_other": "Import {{count}} skills",
+		"replaces": "replaces an existing skill",
+		"folderCount": "folder · {{count}} file",
+		"folderCount_other": "folder · {{count}} files",
+		"noneTitle": "Nothing to import",
+		"noneBody": "No SKILL.md or .md files were found there."
+	},
+	"detail": {
+		"defaultAgentName": "this agent",
+		"formatFile": "file",
+		"formatFolder": "folder",
+		"readOnly": "read-only",
+		"source": "source",
+		"enableFor": "Enable for {{agent}}",
+		"enabledFor": "Enabled for {{agent}}",
+		"enabledForHint": "Skills are enabled per agent, on the draft you are editing.",
+		"tabs": {
+			"edit": "Edit",
+			"preview": "Preview",
+			"about": "About"
+		},
+		"descriptionLabel": "Description",
+		"descriptionPlaceholder": "When should the agent reach for this skill?",
+		"descriptionHint": "The only text the agent sees before loading the body — put the triggers here.",
+		"bodyPlaceholder": "# Skill\n\nThe instructions the agent follows…",
+		"unsaved": "Unsaved changes",
+		"saved": "Saved",
+		"saveFailed": "Could not save the skill.",
+		"duplicate": "Duplicate",
+		"duplicateToEdit": "Duplicate to edit",
+		"resourceUnsupported": "This file can't be previewed here.",
+		"delete": {
+			"title": "Delete this skill?",
+			"description": "This permanently deletes \"{{name}}\" and any files bundled with it."
+		},
+		"loading": "Loading {{name}}…",
+		"loadFailedTitle": "Couldn't open {{name}}",
+		"loadFailedBody": "Bundled skills load their instructions from the publisher's repository, so this needs a network connection."
+	},
+	"about": {
+		"name": "Name",
+		"description": "Description",
+		"version": "Version",
+		"author": "Author",
+		"tags": "Tags",
+		"license": "License",
+		"repo": "Repository",
+		"path": "Path",
+		"format": "Format"
+	},
+	"picker": {
+		"title": "Skills for this agent",
+		"addSubtitle": "Added skills are switched on for this agent right away.",
+		"use": "Use",
+		"remove": "Remove",
+		"enabledCount": "{{count}} skill in use",
+		"enabledCount_other": "{{count}} skills in use"
+	}
+}

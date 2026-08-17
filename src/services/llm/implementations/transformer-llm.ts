@@ -511,6 +511,13 @@ export class TransformerLLM implements BaseLLM {
 						percent: 100,
 					});
 				}
+				// The warm path used to skip this, so a model already resident in
+				// the runner silently fell back to prompt-injection tool calling
+				// even though the cached ModelInfo carries the detected flags.
+				this.servedModelCapabilities.set(model, {
+					supportsNativeTools: existingModel.supportsNativeTools === true,
+					supportsVision: existingModel.supportsVision === true,
+				});
 				keepAlive = await this.iframeRuntime.shouldKeepAliveFor(existingModel);
 				return existingModel;
 			}

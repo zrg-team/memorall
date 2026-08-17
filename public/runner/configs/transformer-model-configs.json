@@ -1,6 +1,60 @@
 {
   "models": [
     {
+      "id": "onnx-community/LFM2.5-350M-ONNX",
+      "defaultMaxNewTokens": 1024,
+      "runnerConfig": {
+        "runtime": "causal_lm",
+        "dtype": "q4f16"
+      },
+      "unsupportedReason": null
+    },
+    {
+      "id": "onnx-community/functiongemma-270m-it-ONNX",
+      "defaultMaxNewTokens": 1024,
+      "runnerConfig": {
+        "runtime": "causal_lm",
+        "dtype": "q4f16"
+      },
+      "unsupportedReason": null
+    },
+    {
+      "id": "onnx-community/granite-4.0-h-350m-ONNX",
+      "defaultMaxNewTokens": 1024,
+      "runnerConfig": {
+        "runtime": "causal_lm",
+        "dtype": "q4f16"
+      },
+      "unsupportedReason": null
+    },
+    {
+      "id": "onnx-community/Falcon-H1-Tiny-90M-Instruct-ONNX",
+      "defaultMaxNewTokens": 1024,
+      "runnerConfig": {
+        "runtime": "causal_lm",
+        "dtype": "q4f16"
+      },
+      "unsupportedReason": null
+    },
+    {
+      "id": "onnx-community/LFM2-2.6B-ONNX",
+      "defaultMaxNewTokens": 1024,
+      "runnerConfig": {
+        "runtime": "causal_lm",
+        "dtype": "q4f16"
+      },
+      "unsupportedReason": null
+    },
+    {
+      "id": "onnx-community/Qwen3-0.6B-Instruct-ONNX",
+      "defaultMaxNewTokens": 1024,
+      "runnerConfig": {
+        "runtime": "causal_lm",
+        "dtype": "q4f16"
+      },
+      "unsupportedReason": null
+    },
+    {
       "id": "onnx-community/granite-4.0-micro-ONNX-web",
       "defaultMaxNewTokens": 1024,
       "runnerConfig": {

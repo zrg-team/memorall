@@ -11,9 +11,11 @@ import {
 } from "@/services/llm/registry/model-registry";
 import {
 	PROVIDER_NAMES,
+	deriveQualityScore,
 	type LLMModelConfig,
 	type LLMProvider,
 } from "@/services/llm/interfaces/llm-model-config";
+import type { ToolSupportMode } from "@/services/llm/interfaces/tool-capability";
 
 const PROVIDER_INFO: Record<
 	LLMProvider,
@@ -37,6 +39,152 @@ const PROVIDER_INFO: Record<
 };
 
 /**
+ * A model that can only hold a couple of hundred tokens of context is not
+ * usable for chat, whatever its other merits.
+ */
+const MIN_USABLE_CONTEXT_TOKENS = 2048;
+
+/**
+ * Ability bonuses, in the same units as the doubled preference score — so +8
+ * is worth exactly 4 quality points. Good models cluster in the 70-92 band
+ * where 4 points is a common gap, which makes native tool support decisive
+ * between near-equals without letting a weak tool-capable model beat a
+ * clearly stronger one.
+ */
+const TOOL_BONUS: Record<ToolSupportMode, number> = {
+	native: 8,
+	prompt_injection: 2,
+	none: 0,
+};
+
+/** Thinking costs latency, so it only helps where the user asked for depth. */
+const REASONING_BONUS = 3;
+
+/**
+ * Recency is a *sliding* 24-month window ending today, not a cap measured from
+ * a fixed epoch. A fixed cap saturates: `min(monthsSince2024, 24)` pins every
+ * model released after 2025-12 to the same value, so the whole 2026 cohort
+ * ties and the signal dies a little more each month.
+ *
+ * The window is worth at most +12, down from the old uncapped `months * 0.8`
+ * which handed a 2026-02 model +20.8 — more than a 10-point quality gap.
+ */
+const RECENCY_WINDOW_MONTHS = 24;
+const RECENCY_PER_MONTH = 0.5;
+
+function recencyBonus(releaseDate: string, now: Date): number {
+	const [year, month] = releaseDate.split("-").map(Number);
+	if (!Number.isFinite(year) || !Number.isFinite(month)) {
+		return 0;
+	}
+
+	const releasedMonths = year * 12 + month;
+	const nowMonths = now.getFullYear() * 12 + (now.getMonth() + 1);
+	const ageMonths = nowMonths - releasedMonths;
+
+	// Newest models get the full window; anything older than the window, or
+	// dated in the future by a typo, contributes nothing rather than negative.
+	const withinWindow = Math.max(
+		0,
+		Math.min(RECENCY_WINDOW_MONTHS, RECENCY_WINDOW_MONTHS - ageMonths),
+	);
+	return withinWindow * RECENCY_PER_MONTH;
+}
+
+/**
+ * "Balance" wants models that are decent on every axis, so the axes multiply
+ * rather than add — one bad axis drags the whole score down.
+ *
+ * Context is deliberately down-weighted: `contextScore` is a coarse step
+ * function, and for WebLLM it reflects MLC's compiled 4096-token cap rather
+ * than anything about the model. With equal weights, LFM2 350M (quality 40,
+ * context 98) outranks Gemma 3 1B (quality 77, context 50) — a packaging
+ * artifact beating real capability. At 0.4/0.4/0.2 that inverts correctly.
+ */
+const BALANCE_WEIGHTS = { quality: 0.4, performance: 0.4, context: 0.2 };
+
+/**
+ * Quality from published evals where the model has them, falling back to the
+ * hand-assigned estimate otherwise. `deriveQualityScore` stands down until
+ * enough of the catalog carries evidence to make percentile ranking mean
+ * something, so this is safe to call on a mostly-unsourced catalog.
+ */
+function effectiveQualityScore(model: LLMModelConfig): number {
+	return deriveQualityScore(model, ALL_MODELS) ?? model.qualityScore;
+}
+
+function balanceScore(model: LLMModelConfig): number {
+	return (
+		effectiveQualityScore(model) ** BALANCE_WEIGHTS.quality *
+		model.performanceScore ** BALANCE_WEIGHTS.performance *
+		model.contextScore ** BALANCE_WEIGHTS.context
+	);
+}
+
+function preferenceScore(
+	model: LLMModelConfig,
+	preference: ModelPreference,
+): number {
+	switch (preference) {
+		case "performance":
+			return model.performanceScore;
+		case "quality":
+			return effectiveQualityScore(model);
+		case "context":
+			return model.contextScore;
+		case "balance":
+			return balanceScore(model);
+	}
+}
+
+function scoreModel(
+	model: LLMModelConfig,
+	preference: ModelPreference,
+	specs: SystemSpecs,
+	now: Date,
+): number {
+	let score = preferenceScore(model, preference) * 2;
+
+	// Newer is better, but only up to a point.
+	score += recencyBonus(model.releaseDate, now);
+
+	// Abilities. A model that can call tools is more useful than one that
+	// cannot, regardless of which axis the user optimised for — the default
+	// agent's render_artifact tool is unusable without them.
+	score += TOOL_BONUS[model.abilities.tools];
+
+	if (
+		model.abilities.reasoning &&
+		(preference === "quality" || preference === "balance")
+	) {
+		score += REASONING_BONUS;
+	}
+
+	// Vision is deliberately unweighted: it is orthogonal to chat quality, and
+	// rewarding it would push VL models ahead of better text models.
+
+	if (specs.hasWebGPU && model.requiresWebGPU) {
+		score += 10;
+	}
+
+	if (specs.hasWebGPU) {
+		if (model.provider === "webllm") {
+			score += 5;
+		} else if (model.provider === "transformer") {
+			score += 3;
+		}
+	}
+
+	if (specs.deviceCategory === "ultra" || specs.deviceCategory === "high") {
+		score += model.sizeGB > 1.0 ? 5 : 0;
+	} else if (specs.deviceCategory === "low") {
+		score += model.sizeGB < 0.5 ? 8 : 0;
+	}
+
+	return score;
+}
+
+/**
  * Generates model recommendations based on system specs and user preference.
  * Returns top N models sorted by score.
  */
@@ -58,89 +206,58 @@ export function generateRecommendations(
 			return false;
 		}
 
+		// Probe at the model's own context, which is what MagicSetup renders the
+		// fit badge against. Probing at a fixed 4096 used to let models through
+		// the filter and then show them as "Low RAM" — the filter and the badge
+		// now agree.
 		const availableGB = getAvailableModelMemoryGB(specs, model.requiresWebGPU);
-		const minEstimate = estimateModelMemory(
+		const estimate = estimateModelMemory(
 			model.sizeGB,
 			model.kvBytesPerToken,
-			4096,
+			model.contextLength,
 			availableGB,
 		);
-		return minEstimate.totalGB <= availableGB;
+
+		// A model whose weights alone do not fit is unusable; one that only
+		// overflows on KV cache is still usable at a shorter context.
+		return estimate.feasibleContext >= MIN_USABLE_CONTEXT_TOKENS;
 	});
 
 	if (compatibleModels.length === 0) {
 		return [];
 	}
 
-	const scoredModels = compatibleModels.map((model) => {
-		let score = 0;
+	// One clock read for the whole pass, so ranking cannot shift mid-sort.
+	const now = new Date();
+	const scoredModels = compatibleModels.map((model) => ({
+		model,
+		score: scoreModel(model, preference, specs, now),
+	}));
 
-		switch (preference) {
-			case "performance":
-				score = model.performanceScore * 2;
-				break;
-			case "quality":
-				score = model.qualityScore * 2;
-				break;
-			case "context":
-				score = model.contextScore * 2;
-				break;
-		}
+	scoredModels.sort(
+		(a, b) =>
+			// Explicit tiebreak on size rather than relying on Array.sort
+			// stability, so the ranking does not depend on registry order.
+			b.score - a.score || a.model.sizeGB - b.model.sizeGB,
+	);
 
-		const [year, month] = model.releaseDate.split("-").map(Number);
-		const monthsSince2024 = (year - 2024) * 12 + month;
-		score += monthsSince2024 * 0.8;
-
-		if (specs.hasWebGPU && model.requiresWebGPU) {
-			score += 10;
+	// The same model is often catalogued under two or three runtimes, so an
+	// undeduped list shows "Qwen 3 1.7B" three times and buries genuinely
+	// different options. Keep the highest-scoring runtime for each model —
+	// the list is already sorted, so first occurrence wins.
+	const seenDisplayNames = new Set<string>();
+	const distinctModels = scoredModels.filter(({ model }) => {
+		const key = model.displayName.toLowerCase();
+		if (seenDisplayNames.has(key)) {
+			return false;
 		}
-
-		if (specs.hasWebGPU) {
-			if (model.provider === "webllm") {
-				score += 5;
-			} else if (model.provider === "transformer") {
-				score += 3;
-			}
-		}
-
-		if (specs.deviceCategory === "ultra" || specs.deviceCategory === "high") {
-			score += model.sizeGB > 1.0 ? 5 : 0;
-		} else if (specs.deviceCategory === "low") {
-			score += model.sizeGB < 0.5 ? 8 : 0;
-		}
-
-		if (model.displayName.includes("Ministral 3B")) {
-			score += 6;
-		}
-		if (model.displayName.includes("SmolLM3")) {
-			score += 5;
-		}
-		if (model.displayName.includes("LFM2")) {
-			score += 4;
-		}
-		if (model.displayName.includes("Qwen 3")) {
-			score += 5;
-		}
-		if (model.displayName.includes("Gemma 3")) {
-			score += 4;
-		}
-		if (model.displayName.includes("DeepSeek-R1")) {
-			score += 4;
-		}
-		if (
-			model.displayName.includes("Phi-3.5") ||
-			model.displayName.includes("Phi 4")
-		) {
-			score += 3;
-		}
-
-		return { model, score };
+		seenDisplayNames.add(key);
+		return true;
 	});
 
-	scoredModels.sort((a, b) => b.score - a.score);
-	const topMatches = scoredModels.slice(
+	const topMatches = distinctModels.slice(
 		0,
-		Math.min(limit, scoredModels.length),
+		Math.min(limit, distinctModels.length),
 	);
 
 	return topMatches.flatMap(({ model }) => {
@@ -166,45 +283,45 @@ export function generateRecommendations(
 				releaseDate: model.releaseDate,
 				usesWebGPU: model.requiresWebGPU && specs.hasWebGPU,
 				kvBytesPerToken: model.kvBytesPerToken,
+				abilities: model.abilities,
 				config,
 			},
 		];
 	});
 }
 
+export const MODEL_PREFERENCES: readonly ModelPreference[] = [
+	"performance",
+	"balance",
+	"quality",
+	"context",
+];
+
 /**
- * Generates all three recommendations (performance, quality, context).
+ * Generates a recommendation for every preference.
  * Each preference gets a primary recommendation and all compatible alternatives.
  */
 export function generateAllRecommendations(
 	specs: SystemSpecs,
 ): RecommendationSet | null {
-	const performanceList = generateRecommendations(specs, "performance", 50);
-	const qualityList = generateRecommendations(specs, "quality", 50);
-	const contextList = generateRecommendations(specs, "context", 50);
+	const lists = MODEL_PREFERENCES.map(
+		(preference) =>
+			[preference, generateRecommendations(specs, preference, 50)] as const,
+	);
 
-	if (
-		performanceList.length === 0 ||
-		qualityList.length === 0 ||
-		contextList.length === 0
-	) {
+	// The hard filter is preference-independent, so either every list has
+	// candidates or none do — but bail on any empty list rather than hand back
+	// a half-populated set the UI would have to guard.
+	if (lists.some(([, list]) => list.length === 0)) {
 		return null;
 	}
 
-	return {
-		performance: {
-			primary: performanceList[0],
-			alternatives: performanceList.slice(1),
-		},
-		quality: {
-			primary: qualityList[0],
-			alternatives: qualityList.slice(1),
-		},
-		context: {
-			primary: contextList[0],
-			alternatives: contextList.slice(1),
-		},
-	};
+	return Object.fromEntries(
+		lists.map(([preference, list]) => [
+			preference,
+			{ primary: list[0], alternatives: list.slice(1) },
+		]),
+	) as RecommendationSet;
 }
 
 function estimateTokensPerSecond(
@@ -260,12 +377,23 @@ function generateReason(
 	});
 	const releaseNote = ` Released ${monthName}.`;
 
+	// Abilities are the part of the reason a user cannot infer from the size
+	// and speed figures already on the card, so name them explicitly.
+	const toolNote =
+		model.abilities.tools === "native"
+			? " Calls tools natively."
+			: model.abilities.tools === "none"
+				? " Cannot use tools."
+				: "";
+
 	switch (preference) {
 		case "performance":
-			return `Fastest model for your ${deviceDesc} device${gpuNote}. Optimized for quick responses.${releaseNote}`;
+			return `Fastest model for your ${deviceDesc} device${gpuNote}. Optimized for quick responses.${toolNote}${releaseNote}`;
 		case "quality":
-			return `Best quality model for your ${deviceDesc} device${gpuNote}. Excellent reasoning and accuracy.${releaseNote}`;
+			return `Best quality model for your ${deviceDesc} device${gpuNote}. Excellent reasoning and accuracy.${toolNote}${releaseNote}`;
 		case "context":
-			return `Maximum context window (${model.contextLength.toLocaleString()} tokens) for handling long documents and conversations${gpuNote}.${releaseNote}`;
+			return `Maximum context window (${model.contextLength.toLocaleString()} tokens) for handling long documents and conversations${gpuNote}.${toolNote}${releaseNote}`;
+		case "balance":
+			return `Solid all-rounder for your ${deviceDesc} device${gpuNote} — good quality without giving up speed or context.${toolNote}${releaseNote}`;
 	}
 }

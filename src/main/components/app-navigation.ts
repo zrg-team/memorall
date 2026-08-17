@@ -5,11 +5,12 @@ import {
 	Cpu,
 	Database,
 	FileText,
+	GraduationCap,
+	type LucideIcon,
 	MessageCircle,
 	Plug,
 	Server,
 	VectorSquareIcon,
-	type LucideIcon,
 } from "lucide-react";
 
 export interface AppNavigationItem {
@@ -17,6 +18,12 @@ export interface AppNavigationItem {
 	path: string;
 	icon: LucideIcon;
 	mobileLabel?: string;
+	/**
+	 * Starts a new conceptual group in the horizontal workspace nav, rendered as
+	 * a thin divider before the item. Purely visual — the collapsed vertical rail
+	 * and the mobile nav ignore it.
+	 */
+	groupStart?: boolean;
 }
 
 export const chatNavigationItem: AppNavigationItem = {
@@ -25,18 +32,24 @@ export const chatNavigationItem: AppNavigationItem = {
 	icon: MessageCircle,
 };
 
+/**
+ * Ordered as the agent harness reads: who the agent is (Agents) → what it knows
+ * (Files, Memory) → what it can do (Connections, Skills) → what thinks for it
+ * (Models) → where it runs (Runtime). `groupStart` marks each boundary.
+ */
 export const workspaceNavigationItems: AppNavigationItem[] = [
-	{
-		nameKey: "navigation.documents",
-		path: "/files",
-		icon: FileText,
-		mobileLabel: "Files",
-	},
 	{
 		nameKey: "navigation.agents",
 		path: "/agents",
 		icon: Bot,
 		mobileLabel: "Agents",
+	},
+	{
+		nameKey: "navigation.documents",
+		path: "/files",
+		icon: FileText,
+		mobileLabel: "Files",
+		groupStart: true,
 	},
 	{
 		nameKey: "navigation.knowledgeGraph",
@@ -45,22 +58,31 @@ export const workspaceNavigationItems: AppNavigationItem[] = [
 		mobileLabel: "Memory",
 	},
 	{
-		nameKey: "navigation.models",
-		path: "/llm",
-		icon: Cpu,
-		mobileLabel: "Models",
-	},
-	{
 		nameKey: "navigation.connections",
 		path: "/connections",
 		icon: Plug,
 		mobileLabel: "Connections",
+		groupStart: true,
+	},
+	{
+		nameKey: "navigation.skills",
+		path: "/skills",
+		icon: GraduationCap,
+		mobileLabel: "Skills",
+	},
+	{
+		nameKey: "navigation.models",
+		path: "/llm",
+		icon: Cpu,
+		mobileLabel: "Models",
+		groupStart: true,
 	},
 	{
 		nameKey: "sandboxPanel.title",
 		path: "/runtime",
 		icon: Server,
 		mobileLabel: "Workspace",
+		groupStart: true,
 	},
 ];
 
@@ -82,3 +104,20 @@ export const mainNavigationItems = [
 export const workspaceNavigationPaths = new Set(
 	workspaceNavigationItems.map((item) => item.path),
 );
+
+/**
+ * Stable ids for the copilot tour and agent cursor, keyed by route. Lives here
+ * so the header bar, the collapsed rail and the mobile nav share one table
+ * instead of each keeping its own copy.
+ */
+const COPILOT_NAVIGATION_IDS: Record<string, string> = {
+	"/files": "documents",
+	"/agents": "agents",
+	"/memory": "knowledge",
+	"/connections": "connections",
+	"/llm": "models",
+	"/skills": "skills",
+};
+
+export const getCopilotNavigationId = (path: string): string | null =>
+	COPILOT_NAVIGATION_IDS[path] ?? null;
