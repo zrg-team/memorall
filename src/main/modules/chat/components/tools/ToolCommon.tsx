@@ -28,7 +28,7 @@ export type MCPActionMetadata = {
 };
 
 export const getMCPActionMetadata = (
-	item: MessageActionItem,
+	item: Pick<MessageActionItem, "metadata">,
 ): MCPActionMetadata | null => {
 	if (!isRecord(item.metadata)) {
 		return null;

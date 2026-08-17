@@ -272,6 +272,10 @@ export class AgentGraph extends GraphBase<
 		for (const toolCall of lastMessage.tool_calls) {
 			const toolName = toolCall.function.name;
 			const combined = this.executorMap.get(toolName);
+			// Identity the result alone cannot carry: which MCP server a tool came
+			// from, its original (unprefixed) name, its output schema. The UI reads
+			// this to label the card as something other than a raw JSON dump.
+			const toolMetadata = combined?.executor.metadata;
 			const startedAtMs = Date.now();
 			let parsedInput: unknown = toolCall.function.arguments;
 			try {
@@ -287,6 +291,7 @@ export class AgentGraph extends GraphBase<
 					tool_call_id: toolCall.id,
 					input: parsedInput,
 					startedAt: new Date(startedAtMs).toISOString(),
+					...(toolMetadata ? { tool_metadata: toolMetadata } : {}),
 				},
 			});
 
@@ -303,6 +308,7 @@ export class AgentGraph extends GraphBase<
 						isError: true,
 						endedAt: new Date(endedAtMs).toISOString(),
 						durationMs: endedAtMs - startedAtMs,
+						...(toolMetadata ? { tool_metadata: toolMetadata } : {}),
 					},
 				});
 				const toolMessage = {
@@ -339,6 +345,7 @@ export class AgentGraph extends GraphBase<
 						meta,
 						endedAt: new Date(endedAtMs).toISOString(),
 						durationMs: endedAtMs - startedAtMs,
+						...(toolMetadata ? { tool_metadata: toolMetadata } : {}),
 					},
 				});
 
@@ -382,6 +389,7 @@ export class AgentGraph extends GraphBase<
 						isError: true,
 						endedAt: new Date(endedAtMs).toISOString(),
 						durationMs: endedAtMs - startedAtMs,
+						...(toolMetadata ? { tool_metadata: toolMetadata } : {}),
 					},
 				});
 				const toolMessage = {

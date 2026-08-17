@@ -28,7 +28,7 @@ export const AssistantToolTimelinePart: React.FC<{
 	const { t } = useTranslation("chat");
 	const [isOpen, setIsOpen] = useState(false);
 	const actionName = part.name;
-	const title = translateActionName(t, actionName);
+	const title = translateActionName(t, actionName, part.metadata);
 	const Icon = getActionIcon(actionName);
 	const isRunning = part.state === "running";
 	const isError = part.state === "error";
