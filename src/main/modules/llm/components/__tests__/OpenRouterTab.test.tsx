@@ -98,6 +98,7 @@ vi.mock("@/main/components/molecules/PasskeyPromptDialog", () => ({
 		) : null,
 }));
 
+import { DEFAULT_OPENROUTER_MODEL } from "@/constants/openai";
 import { OpenRouterTab } from "../OpenRouterTab";
 
 beforeEach(() => {
@@ -151,7 +152,10 @@ describe("OpenRouterTab", () => {
 			apiKey: "sk-or-replacement",
 			baseURL: "https://openrouter.ai/api/v1",
 		});
-		expect(onModelLoaded).toHaveBeenCalledWith("openai/gpt-4o", "openrouter");
+		expect(onModelLoaded).toHaveBeenCalledWith(
+			DEFAULT_OPENROUTER_MODEL,
+			"openrouter",
+		);
 		expect(
 			await screen.findByText("openai.openrouterReady"),
 		).toBeInTheDocument();

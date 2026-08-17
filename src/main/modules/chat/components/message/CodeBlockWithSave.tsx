@@ -35,10 +35,17 @@ interface CodeBlockWithSaveProps {
 	code: string;
 	language: string;
 	isDark: boolean;
+	/**
+	 * Offer "save this snippet into Documents". Off for hosts where the code is
+	 * already a file the user is editing — the Skills preview, for instance,
+	 * where it would both duplicate the editor's own Save and write a stray
+	 * snippet into the document library.
+	 */
+	showSave?: boolean;
 }
 
 export const CodeBlockWithSave: React.FC<CodeBlockWithSaveProps> = React.memo(
-	({ code, language, isDark }) => {
+	({ code, language, isDark, showSave = true }) => {
 		const [saveState, setSaveState] = useState<SaveState>("idle");
 		const [saveDialogOpen, setSaveDialogOpen] = useState(false);
 		const { t } = useTranslation("chat");
@@ -51,22 +58,24 @@ export const CodeBlockWithSave: React.FC<CodeBlockWithSaveProps> = React.memo(
 					<span className="truncate text-xs text-muted-foreground">
 						{language || t("htmlPreview.code")}
 					</span>
-					<button
-						type="button"
-						onClick={() => setSaveDialogOpen(true)}
-						disabled={saveState !== "idle"}
-						className="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded bg-muted/80 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors border border-border/50 disabled:opacity-60"
-					>
-						{saveState === "saved" ? (
-							<>
-								<Check className="w-3 h-3" /> {t("htmlPreview.saved")}
-							</>
-						) : (
-							<>
-								<Save className="w-3 h-3" /> {t("htmlPreview.save")}
-							</>
-						)}
-					</button>
+					{showSave ? (
+						<button
+							type="button"
+							onClick={() => setSaveDialogOpen(true)}
+							disabled={saveState !== "idle"}
+							className="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded bg-muted/80 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors border border-border/50 disabled:opacity-60"
+						>
+							{saveState === "saved" ? (
+								<>
+									<Check className="w-3 h-3" /> {t("htmlPreview.saved")}
+								</>
+							) : (
+								<>
+									<Save className="w-3 h-3" /> {t("htmlPreview.save")}
+								</>
+							)}
+						</button>
+					) : null}
 				</div>
 				<SyntaxHighlighter
 					style={isDark ? oneDark : oneLight}
@@ -81,21 +90,23 @@ export const CodeBlockWithSave: React.FC<CodeBlockWithSaveProps> = React.memo(
 				>
 					{code}
 				</SyntaxHighlighter>
-				<DocumentSaveFolderDialog
-					open={saveDialogOpen}
-					content={code}
-					initialFileName={fileName}
-					mimeType={fileMeta.mimeType}
-					onOpenChange={setSaveDialogOpen}
-					onSaved={() => {
-						setSaveState("saved");
-						setTimeout(() => setSaveState("idle"), 2000);
-					}}
-					onError={(err) => {
-						logError("Failed to save code block to documents:", err);
-						setSaveState("idle");
-					}}
-				/>
+				{showSave ? (
+					<DocumentSaveFolderDialog
+						open={saveDialogOpen}
+						content={code}
+						initialFileName={fileName}
+						mimeType={fileMeta.mimeType}
+						onOpenChange={setSaveDialogOpen}
+						onSaved={() => {
+							setSaveState("saved");
+							setTimeout(() => setSaveState("idle"), 2000);
+						}}
+						onError={(err) => {
+							logError("Failed to save code block to documents:", err);
+							setSaveState("idle");
+						}}
+					/>
+				) : null}
 			</div>
 		);
 	},

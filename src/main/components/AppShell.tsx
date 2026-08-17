@@ -12,6 +12,7 @@ import { useRuntimeSessionsStore } from "@/main/stores/runtime-sessions";
 import { Button } from "@/main/components/ui/button";
 import { useMediaQuery } from "@/main/hooks/use-viewport";
 import {
+	getCopilotNavigationId,
 	workspaceNavigationItems,
 	workspaceNavigationPaths,
 } from "@/main/components/app-navigation";
@@ -28,21 +29,6 @@ interface AppShellProps {
 }
 
 const MOBILE_WORKSPACE_QUERY = "(max-width: 640px)";
-
-const getCopilotNavigationId = (path: string) => {
-	switch (path) {
-		case "/files":
-			return "documents";
-		case "/agents":
-			return "agents";
-		case "/memory":
-			return "knowledge";
-		case "/llm":
-			return "models";
-		default:
-			return null;
-	}
-};
 
 export const AppShell: React.FC<AppShellProps> = ({ children }) => {
 	const navigate = useNavigate();

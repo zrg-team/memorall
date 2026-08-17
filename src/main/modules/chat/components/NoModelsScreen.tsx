@@ -43,14 +43,8 @@ import { useAuth, useAuthActions } from "@/main/modules/supabase";
 import type { ServiceProvider } from "@/services/llm/interfaces/llm-service.interface";
 import { Input } from "@/main/components/ui/input";
 import { Label } from "@/main/components/ui/label";
-import type {
-	ModelRecommendation,
-	ModelPreference,
-} from "@/main/modules/llm/types/system-specs";
-import { QUICK_TRANSFORMER_MODELS } from "@/constants/transformer";
-import { QUICK_WALLAMA_LLMS } from "@/constants/wllama";
-import { QUICK_WEBLLM_LLMS } from "@/constants/webllm";
 import { MANAGED_SERVICE_ENABLED } from "@/constants/features";
+import { useMagicModelDownload } from "@/main/modules/llm/hooks/use-magic-model-download";
 import { useModelOperations } from "@/main/modules/llm/hooks/use-model-operations";
 import { useDownloadedModels } from "@/main/modules/llm/hooks/use-downloaded-models";
 import { useDownloadProgress } from "@/main/modules/llm/hooks/use-download-progress";
@@ -152,43 +146,9 @@ export const NoModelsScreen: React.FC<NoModelsScreenProps> = ({
 	}, []);
 
 	// Handler for magic setup model selection
-	const handleMagicModelSelected = async (
-		recommendation: ModelRecommendation,
-		preference: ModelPreference,
-	) => {
-		void preference;
-		const { config } = recommendation;
-
-		if (config.provider === "transformer") {
-			const modelConfig = QUICK_TRANSFORMER_MODELS.find(
-				(m) => m.model === config.model,
-			) ?? {
-				model: config.model,
-				size: recommendation.size,
-				description: recommendation.displayName,
-			};
-			await handleQuickDownload(modelConfig, config.provider);
-		} else if (config.provider === "wllama") {
-			const modelConfig = QUICK_WALLAMA_LLMS.find(
-				(m) => m.repo === config.repo && m.filename === config.filename,
-			) ?? {
-				repo: config.repo,
-				filename: config.filename,
-				size: recommendation.size,
-				description: recommendation.displayName,
-			};
-			await handleQuickDownload(modelConfig, config.provider);
-		} else if (config.provider === "webllm") {
-			const modelConfig = QUICK_WEBLLM_LLMS.find(
-				(m) => m.model === config.model,
-			) ?? {
-				model: config.model,
-				size: recommendation.size,
-				description: recommendation.displayName,
-			};
-			await handleQuickDownload(modelConfig, config.provider);
-		}
-	};
+	const handleMagicModelSelected = useMagicModelDownload({
+		handleQuickDownload,
+	});
 
 	// Auth handlers
 	const handleSignIn = async (e: React.FormEvent) => {

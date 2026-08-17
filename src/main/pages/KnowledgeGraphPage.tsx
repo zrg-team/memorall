@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from "react";
-import { SiGithub as Github } from "@icons-pack/react-simple-icons";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import {
 	Search,
@@ -14,10 +13,8 @@ import {
 	PanelLeftClose,
 	PanelLeftOpen,
 	BookOpenText,
-	Workflow,
 	FileSearch,
 	History,
-	Eye,
 	FolderInput,
 } from "lucide-react";
 import { eq, sql, or } from "drizzle-orm";
@@ -41,16 +38,6 @@ import {
 	DropdownMenuItem,
 	DropdownMenuTrigger,
 } from "@/main/components/ui/dropdown-menu";
-import {
-	AlertDialog,
-	AlertDialogAction,
-	AlertDialogCancel,
-	AlertDialogContent,
-	AlertDialogDescription,
-	AlertDialogFooter,
-	AlertDialogHeader,
-	AlertDialogTitle,
-} from "@/main/components/ui/alert-dialog";
 import { PageHeader } from "@/main/components/ui/page-header";
 import {
 	Tabs,
@@ -65,13 +52,6 @@ import { WorkspaceCollapsedSidebarSection } from "@/main/components/molecules/Wo
 
 import { D3KnowledgeGraph } from "@/main/modules/knowledge/components/D3KnowledgeGraph";
 import {
-	GithubImportDialog,
-	SkillCategoryBadge,
-	SkillEditorDialog,
-	SkillPreviewDialog,
-} from "@/main/modules/agents/components/SkillsSection";
-import { useAgentConfigStore } from "@/main/stores/agent-config";
-import {
 	CreateTopicDialog,
 	EditTopicDialog,
 } from "@/main/modules/topics/modals";
@@ -82,10 +62,6 @@ import type {
 	RecallType,
 } from "@/services/database/entities/topic-types";
 import type { Node, Edge } from "@/services/database/types";
-import {
-	skillFileSystemService,
-	type SkillSummary,
-} from "@/services/filesystem/skill-filesystem";
 import { serviceManager } from "@/services";
 import { logError, logInfo } from "@/utils/logger";
 
@@ -279,310 +255,6 @@ const SectionHeader: React.FC<{
 	</div>
 );
 
-const useProceduralSkills = () => {
-	const [skills, setSkills] = useState<SkillSummary[]>([]);
-	const [loading, setLoading] = useState(true);
-
-	const loadSkills = React.useCallback(async () => {
-		setLoading(true);
-		try {
-			setSkills(await skillFileSystemService.listSkills());
-		} catch (error) {
-			logError("Failed to load procedural memory skills:", error);
-			setSkills([]);
-		} finally {
-			setLoading(false);
-		}
-	}, []);
-
-	useEffect(() => {
-		void loadSkills();
-	}, [loadSkills]);
-
-	return { skills, loading, loadSkills };
-};
-
-const ProceduralMemoryPanel: React.FC<{
-	skills: SkillSummary[];
-	loading: boolean;
-	onSkillsChanged: () => Promise<void>;
-}> = ({ skills, loading, onSkillsChanged }) => {
-	const enabledSkillNames = useAgentConfigStore(
-		(state) => state.draftEnabledSkillNames,
-	);
-	const enabledSkillNameSet = React.useMemo(
-		() => new Set(enabledSkillNames),
-		[enabledSkillNames],
-	);
-	const [searchQuery, setSearchQuery] = useState("");
-	const [editorOpen, setEditorOpen] = useState(false);
-	const [editorInitial, setEditorInitial] = useState<
-		{ name: string; description: string; body: string } | undefined
-	>(undefined);
-	const [importOpen, setImportOpen] = useState(false);
-	const [previewSkill, setPreviewSkill] = useState<SkillSummary | null>(null);
-	const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
-
-	const filteredSkills = React.useMemo(() => {
-		const query = searchQuery.trim().toLowerCase();
-		return skills
-			.filter((skill) => {
-				if (!query) return true;
-				return [
-					skill.name,
-					skill.description,
-					skill.collection,
-					skill.publisher,
-				]
-					.filter(Boolean)
-					.some((value) => value!.toLowerCase().includes(query));
-			})
-			.sort((a, b) => {
-				const aEnabled = enabledSkillNameSet.has(a.name);
-				const bEnabled = enabledSkillNameSet.has(b.name);
-				if (aEnabled !== bEnabled) return aEnabled ? -1 : 1;
-				if (a.origin !== b.origin) return a.origin === "custom" ? -1 : 1;
-				return a.name.localeCompare(b.name);
-			});
-	}, [enabledSkillNameSet, searchQuery, skills]);
-
-	const handleOpenCreate = () => {
-		setEditorInitial(undefined);
-		setEditorOpen(true);
-	};
-
-	const handleOpenEdit = async (skill: SkillSummary) => {
-		const full = await skillFileSystemService.readSkill(skill.name);
-		setEditorInitial({
-			name: full.name,
-			description: full.description,
-			body: full.body,
-		});
-		setEditorOpen(true);
-	};
-
-	const handleSave = async (
-		name: string,
-		description: string,
-		body: string,
-	) => {
-		await skillFileSystemService.writeSkill(name, description, body);
-		await onSkillsChanged();
-	};
-
-	const handleImport = async (url: string) => {
-		await skillFileSystemService.importFromGithub(url);
-		await onSkillsChanged();
-	};
-
-	const handleDelete = async (name: string) => {
-		await skillFileSystemService.deleteSkill(name);
-		setDeleteTarget(null);
-		await onSkillsChanged();
-	};
-
-	return (
-		<>
-			<div className="flex h-full min-h-0 flex-col gap-4 overflow-hidden p-4">
-				<SectionHeader
-					title="Skills"
-					description="Procedural memory stores reusable workflows, triggers, and instructions agents can apply later."
-					action={
-						<div className="flex items-center gap-2">
-							<Button
-								type="button"
-								variant="outline"
-								size="sm"
-								className="h-8"
-								onClick={() => setImportOpen(true)}
-							>
-								<Github className="mr-1.5 h-3.5 w-3.5" />
-								Import skill
-							</Button>
-							<Button
-								type="button"
-								size="sm"
-								className="h-8"
-								onClick={handleOpenCreate}
-							>
-								<Plus className="mr-1.5 h-3.5 w-3.5" />
-								Create skill
-							</Button>
-						</div>
-					}
-				/>
-				<div className="relative">
-					<Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-					<Input
-						value={searchQuery}
-						onChange={(event) => setSearchQuery(event.target.value)}
-						placeholder="Search skills, triggers, or collections..."
-						className="h-9 pl-9"
-					/>
-				</div>
-				<div className="min-h-0 flex-1 overflow-y-auto">
-					{loading ? (
-						<div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-							<Loader2 className="mr-2 h-4 w-4 animate-spin" />
-							Loading skills...
-						</div>
-					) : filteredSkills.length === 0 ? (
-						<MemoryEmptyState
-							icon={<Workflow className="h-5 w-5" />}
-							title="No procedural memory yet"
-							description="Create or import a skill to preserve a reusable workflow."
-							action={
-								<div className="flex justify-center gap-2">
-									<Button size="sm" onClick={handleOpenCreate}>
-										Create skill
-									</Button>
-									<Button
-										size="sm"
-										variant="outline"
-										onClick={() => setImportOpen(true)}
-									>
-										Import skill
-									</Button>
-								</div>
-							}
-						/>
-					) : (
-						<div className="grid gap-3 lg:grid-cols-2">
-							{filteredSkills.map((skill) => {
-								const enabled = enabledSkillNameSet.has(skill.name);
-								const canEdit = skill.origin !== "default" && !skill.readOnly;
-								return (
-									<div
-										key={skill.name}
-										className="flex min-h-[132px] flex-col rounded-lg border border-border/70 bg-card p-4"
-									>
-										<div className="flex items-start justify-between gap-3">
-											<div className="min-w-0 space-y-2">
-												<div className="flex flex-wrap items-center gap-2">
-													<span className="truncate font-mono text-sm font-semibold text-foreground">
-														{skill.name}
-													</span>
-													<Badge
-														variant={
-															skill.origin === "custom"
-																? "default"
-																: "secondary"
-														}
-														className="h-5"
-													>
-														{skill.origin === "custom" ? "Custom" : "Default"}
-													</Badge>
-													{enabled ? (
-														<Badge variant="outline" className="h-5">
-															Enabled in draft
-														</Badge>
-													) : null}
-													{skill.collection ? (
-														<SkillCategoryBadge collection={skill.collection} />
-													) : null}
-												</div>
-												<p className="line-clamp-3 text-xs leading-relaxed text-muted-foreground">
-													{skill.description || "No trigger description yet."}
-												</p>
-											</div>
-										</div>
-										<div className="mt-auto flex flex-wrap items-center justify-between gap-2 pt-4">
-											<p className="text-[11px] text-muted-foreground">
-												{skill.publisher ??
-													skill.repo ??
-													"Local procedural memory"}
-											</p>
-											<div className="flex items-center gap-1">
-												<Button
-													type="button"
-													variant="ghost"
-													size="sm"
-													className="h-7 px-2 text-xs"
-													onClick={() => setPreviewSkill(skill)}
-												>
-													<Eye className="mr-1 h-3.5 w-3.5" />
-													Preview
-												</Button>
-												{canEdit ? (
-													<Button
-														type="button"
-														variant="ghost"
-														size="sm"
-														className="h-7 px-2 text-xs"
-														onClick={() => void handleOpenEdit(skill)}
-													>
-														<Pencil className="mr-1 h-3.5 w-3.5" />
-														Edit
-													</Button>
-												) : null}
-												{canEdit ? (
-													<Button
-														type="button"
-														variant="ghost"
-														size="sm"
-														className="h-7 px-2 text-xs text-muted-foreground hover:text-destructive"
-														onClick={() => setDeleteTarget(skill.name)}
-													>
-														<Trash2 className="h-3.5 w-3.5" />
-													</Button>
-												) : null}
-											</div>
-										</div>
-									</div>
-								);
-							})}
-						</div>
-					)}
-				</div>
-			</div>
-
-			<SkillEditorDialog
-				open={editorOpen}
-				onOpenChange={setEditorOpen}
-				initial={editorInitial}
-				onSave={handleSave}
-			/>
-			<GithubImportDialog
-				open={importOpen}
-				onOpenChange={setImportOpen}
-				onImport={handleImport}
-			/>
-			<SkillPreviewDialog
-				open={previewSkill !== null}
-				onOpenChange={(open) => {
-					if (!open) setPreviewSkill(null);
-				}}
-				skill={previewSkill}
-			/>
-			<AlertDialog
-				open={deleteTarget !== null}
-				onOpenChange={(open) => {
-					if (!open) setDeleteTarget(null);
-				}}
-			>
-				<AlertDialogContent>
-					<AlertDialogHeader>
-						<AlertDialogTitle>Delete procedural memory?</AlertDialogTitle>
-						<AlertDialogDescription>
-							This deletes the custom skill "{deleteTarget}". Default skills
-							cannot be deleted.
-						</AlertDialogDescription>
-					</AlertDialogHeader>
-					<AlertDialogFooter>
-						<AlertDialogCancel>Cancel</AlertDialogCancel>
-						<AlertDialogAction
-							className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-							onClick={() => deleteTarget && void handleDelete(deleteTarget)}
-						>
-							Delete
-						</AlertDialogAction>
-					</AlertDialogFooter>
-				</AlertDialogContent>
-			</AlertDialog>
-		</>
-	);
-};
-
 // ---------------------------------------------------------------------------
 // KnowledgeGraphPage
 // ---------------------------------------------------------------------------
@@ -608,7 +280,6 @@ export const KnowledgeGraphPage: React.FC<KnowledgeGraphPageProps> = () => {
 		useState<string>(DEFAULT_TOPIC_ID);
 	const [deletingTopicId, setDeletingTopicId] = useState<string | null>(null);
 	const [activeTab, setActiveTab] = useState("overview");
-	const { skills, loading: skillsLoading, loadSkills } = useProceduralSkills();
 	const {
 		collapseSidebar,
 		containerRef,
@@ -770,14 +441,9 @@ export const KnowledgeGraphPage: React.FC<KnowledgeGraphPageProps> = () => {
 	const filteredNodes = nodes.filter((node) =>
 		node.name.toLowerCase().includes(searchQuery.toLowerCase()),
 	);
-	const customSkillCount = skills.filter(
-		(skill) => skill.origin === "custom",
-	).length;
-	const defaultSkillCount = Math.max(skills.length - customSkillCount, 0);
 	const recentActivityItems = [
 		`${nodes.length} semantic nodes available`,
 		`${edges.length} semantic relationships available`,
-		`${skills.length} procedural skills available`,
 	].filter(Boolean);
 	const renderSemanticGraphView = () => (
 		<div className="h-full overflow-hidden">
@@ -1129,10 +795,6 @@ export const KnowledgeGraphPage: React.FC<KnowledgeGraphPageProps> = () => {
 								<Network className="h-3.5 w-3.5" />
 								Semantic
 							</TabsTrigger>
-							<TabsTrigger value="procedural" className="gap-1.5 px-3 text-xs">
-								<Workflow className="h-3.5 w-3.5" />
-								Procedural
-							</TabsTrigger>
 							<TabsTrigger value="sources" className="gap-1.5 px-3 text-xs">
 								<FileSearch className="h-3.5 w-3.5" />
 								Sources
@@ -1149,7 +811,7 @@ export const KnowledgeGraphPage: React.FC<KnowledgeGraphPageProps> = () => {
 						className="mt-0 min-h-0 flex-1 overflow-y-auto p-4"
 					>
 						<div className="space-y-5">
-							<div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+							<div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
 								<StatCard
 									icon={<Network className="h-4 w-4" />}
 									label="Semantic nodes"
@@ -1163,12 +825,6 @@ export const KnowledgeGraphPage: React.FC<KnowledgeGraphPageProps> = () => {
 									description="Default memory plus curated semantic spaces."
 								/>
 								<StatCard
-									icon={<Workflow className="h-4 w-4" />}
-									label="Procedural skills"
-									value={skillsLoading ? "..." : skills.length}
-									description="Reusable workflows available to agents."
-								/>
-								<StatCard
 									icon={<FileSearch className="h-4 w-4" />}
 									label="Pending sources"
 									value={0}
@@ -1176,7 +832,7 @@ export const KnowledgeGraphPage: React.FC<KnowledgeGraphPageProps> = () => {
 								/>
 							</div>
 
-							<div className="grid min-h-[320px] gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)]">
+							<div className="grid min-h-[320px] gap-4">
 								<div className="flex min-h-[320px] flex-col rounded-lg border border-border/70 bg-card">
 									<div className="flex items-center justify-between gap-3 border-b px-4 py-3">
 										<div>
@@ -1200,90 +856,6 @@ export const KnowledgeGraphPage: React.FC<KnowledgeGraphPageProps> = () => {
 										{renderSemanticGraphView()}
 									</div>
 								</div>
-
-								<div className="flex min-h-[320px] flex-col rounded-lg border border-border/70 bg-card">
-									<div className="flex items-center justify-between gap-3 border-b px-4 py-3">
-										<div>
-											<h2 className="text-sm font-semibold text-foreground">
-												Procedural memory
-											</h2>
-											<p className="text-xs text-muted-foreground">
-												Skills that preserve reusable workflows.
-											</p>
-										</div>
-										<Button
-											size="sm"
-											variant="outline"
-											className="h-8"
-											onClick={() => setActiveTab("procedural")}
-										>
-											Manage skills
-										</Button>
-									</div>
-									<div className="flex-1 overflow-y-auto p-4">
-										{skillsLoading ? (
-											<div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-												<Loader2 className="mr-2 h-4 w-4 animate-spin" />
-												Loading skills...
-											</div>
-										) : skills.length === 0 ? (
-											<MemoryEmptyState
-												icon={<Workflow className="h-5 w-5" />}
-												title="No procedural memory yet"
-												description="Create or import a skill to preserve a workflow."
-												action={
-													<Button
-														size="sm"
-														onClick={() => setActiveTab("procedural")}
-													>
-														Create skill
-													</Button>
-												}
-											/>
-										) : (
-											<div className="space-y-2">
-												<div className="grid grid-cols-2 gap-2">
-													<StatCard
-														icon={<Workflow className="h-4 w-4" />}
-														label="Custom"
-														value={customSkillCount}
-														description="User-authored workflows."
-													/>
-													<StatCard
-														icon={<BookOpenText className="h-4 w-4" />}
-														label="Default"
-														value={defaultSkillCount}
-														description="Bundled skills."
-													/>
-												</div>
-												{skills.slice(0, 5).map((skill) => (
-													<div
-														key={skill.name}
-														className="rounded-md border border-border/60 bg-muted/20 px-3 py-2"
-													>
-														<div className="flex items-center justify-between gap-2">
-															<p className="truncate font-mono text-xs font-medium text-foreground">
-																{skill.name}
-															</p>
-															<Badge
-																variant="outline"
-																className="h-5 text-[10px]"
-															>
-																{skill.origin === "custom"
-																	? "Custom"
-																	: "Default"}
-															</Badge>
-														</div>
-														<p className="mt-1 line-clamp-2 text-[11px] leading-relaxed text-muted-foreground">
-															{skill.description ||
-																"No trigger description yet."}
-														</p>
-													</div>
-												))}
-											</div>
-										)}
-									</div>
-								</div>
 							</div>
 						</div>
 					</TabsContent>
@@ -1293,17 +865,6 @@ export const KnowledgeGraphPage: React.FC<KnowledgeGraphPageProps> = () => {
 						className="mt-0 min-h-0 flex-1 overflow-hidden"
 					>
 						{renderSemanticGraphView()}
-					</TabsContent>
-
-					<TabsContent
-						value="procedural"
-						className="mt-0 min-h-0 flex-1 overflow-hidden"
-					>
-						<ProceduralMemoryPanel
-							skills={skills}
-							loading={skillsLoading}
-							onSkillsChanged={loadSkills}
-						/>
 					</TabsContent>
 
 					<TabsContent
@@ -1338,7 +899,7 @@ export const KnowledgeGraphPage: React.FC<KnowledgeGraphPageProps> = () => {
 					>
 						<SectionHeader
 							title="Activity"
-							description="Recent semantic and procedural memory changes."
+							description="Recent semantic memory changes."
 						/>
 						<div className="mt-4 rounded-lg border border-border/70 bg-card">
 							{recentActivityItems.map((item, index) => (

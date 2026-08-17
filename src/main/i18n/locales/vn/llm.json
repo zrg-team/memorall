@@ -58,7 +58,53 @@
 	},
 	"providerPanel": {
 		"status": "Trạng thái: {{status}}",
-		"testInference": "Kiểm tra suy luận"
+		"testInference": "Kiểm tra suy luận",
+		"modes": {
+			"label": "Chế độ thiết lập",
+			"recommended": "Đề xuất",
+			"browse": "Duyệt theo nhà cung cấp"
+		}
+	},
+	"recommended": {
+		"title": "Bạn muốn chạy mô hình theo cách nào?",
+		"description": "Chọn một hướng — bạn có thể đổi hoặc thêm hướng còn lại sau.",
+		"back": "Quay lại",
+		"browseAllHint": "Đã có khóa của nhà cung cấp khác?",
+		"browseAll": "Xem tất cả nhà cung cấp →",
+		"fast": {
+			"title": "Nhanh",
+			"description": "Mô hình đám mây qua OpenRouter, sẵn sàng trong vài giây.",
+			"pro1": "Sẵn sàng trong khoảng 30 giây",
+			"pro2": "Hơn 300 mô hình, gồm cả loại mạnh nhất",
+			"pro3": "Nhà cung cấp được hỗ trợ tốt nhất trong Memorall",
+			"con1": "Cần khóa API của OpenRouter",
+			"con2": "Bạn trả phí cho OpenRouter theo mức dùng",
+			"action": "Thiết lập OpenRouter",
+			"actionUnlock": "Mở khóa và kết nối",
+			"actionConnected": "Chọn mô hình",
+			"connected": "Đã kết nối",
+			"modelsAvailable": "Có {{count}} mô hình trong tài khoản của bạn.",
+			"loadingModels": "Đang tải danh sách mô hình OpenRouter…",
+			"headerTitle": "Nhanh · OpenRouter",
+			"headerDescription": "Kết nối khóa API, sau đó chọn mô hình.",
+			"stepConnect": "Kết nối",
+			"stepPick": "Chọn mô hình",
+			"pickHint": "Chọn mô hình bạn muốn Memorall sử dụng."
+		},
+		"free": {
+			"title": "Miễn phí",
+			"description": "Mô hình chạy ngay trên máy bạn, không tốn phí.",
+			"pro1": "Không cần tài khoản, không tốn phí sử dụng",
+			"pro2": "Dữ liệu không rời khỏi máy, chạy được ngoại tuyến",
+			"pro3": "Chúng tôi chọn mô hình phù hợp phần cứng của bạn",
+			"con1": "Tải về một lần, khoảng 0,5–4 GB",
+			"con2": "Chậm hơn và nhỏ hơn mô hình đám mây",
+			"action": "Tìm mô hình cho tôi",
+			"actionMore": "Tìm mô hình khác",
+			"downloadedCount": "Đã tải {{count}}",
+			"headerTitle": "Miễn phí · Trên máy này",
+			"headerDescription": "Chúng tôi kiểm tra phần cứng và gợi ý mô hình phù hợp."
+		}
 	},
 	"yourModels": {
 		"title": "Mô hình của tôi",

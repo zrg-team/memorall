@@ -127,9 +127,12 @@ const animatingComponents = {
 export const createMarkdownComponents = ({
 	isDark,
 	isStreaming,
+	showCodeBlockSave = true,
 }: {
 	isDark: boolean;
 	isStreaming: boolean;
+	/** Hosts that already own the file (e.g. the Skills editor) opt out. */
+	showCodeBlockSave?: boolean;
 }) => {
 	if (isStreaming && SEPARATE_RENDER_STREAM) {
 		return animatingComponents;
@@ -168,7 +171,12 @@ export const createMarkdownComponents = ({
 			}
 
 			return (
-				<CodeBlockWithSave code={code} language={language} isDark={isDark} />
+				<CodeBlockWithSave
+					code={code}
+					language={language}
+					isDark={isDark}
+					showSave={showCodeBlockSave}
+				/>
 			);
 		},
 	};

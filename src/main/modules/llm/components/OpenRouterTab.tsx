@@ -15,6 +15,7 @@ import { MasterKeySetupDialog } from "@/main/components/molecules/MasterKeySetup
 import { PasskeyPromptDialog } from "@/main/components/molecules/PasskeyPromptDialog";
 import { Button } from "@/main/components/ui/button";
 import { Input } from "@/main/components/ui/input";
+import { DEFAULT_OPENROUTER_MODEL } from "@/constants/openai";
 import { serviceManager } from "@/services";
 import { backgroundJob } from "@/services/background-jobs/background-job";
 import { logError, logInfo } from "@/utils/logger";
@@ -131,7 +132,7 @@ export const OpenRouterTab: React.FC<OpenRouterTabProps> = ({
 		setTempApiKey("");
 		setConfigState("loaded");
 		logInfo("OpenRouter configuration saved successfully");
-		onModelLoaded?.("openai/gpt-4o", "openrouter");
+		onModelLoaded?.(DEFAULT_OPENROUTER_MODEL, "openrouter");
 	};
 
 	// Save new configuration to database
@@ -287,7 +288,7 @@ export const OpenRouterTab: React.FC<OpenRouterTabProps> = ({
 			setConfigState("loaded");
 			logInfo("OpenRouter configuration loaded successfully");
 
-			onModelLoaded?.("openai/gpt-4o", "openrouter");
+			onModelLoaded?.(DEFAULT_OPENROUTER_MODEL, "openrouter");
 		} catch (error) {
 			const msg = error instanceof Error ? error.message : "Unknown error";
 			setError(t("openai.failedToLoadConfiguration", { error: msg }));

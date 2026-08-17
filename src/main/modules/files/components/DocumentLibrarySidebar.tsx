@@ -1,5 +1,12 @@
 import React, { memo, useEffect, useState } from "react";
-import { ChevronDown, ChevronRight, FileText } from "lucide-react";
+import {
+	ArrowUpRight,
+	ChevronDown,
+	ChevronRight,
+	FileText,
+	GraduationCap,
+} from "lucide-react";
+import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { DocumentTreeDraggable } from "./DocumentTreeDraggable";
 import { PageHeader } from "@/main/components/ui/page-header";
@@ -154,6 +161,18 @@ export const DocumentLibrarySidebar = memo(function DocumentLibrarySidebar({
 					)}
 				</>
 			) : null}
+
+			{/* Skills used to live in this tree as a plain `/skills` folder, where
+			    renaming or deleting it silently broke every skill. They now have
+			    their own root and their own tab; this is a link, not a node. */}
+			<Link
+				to="/skills"
+				className="mt-auto flex flex-shrink-0 items-center gap-1.5 border-t px-2 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:text-foreground"
+			>
+				<GraduationCap className="h-3 w-3 flex-shrink-0" />
+				{t("sidebar.skills")}
+				<ArrowUpRight className="ml-auto h-3 w-3 flex-shrink-0" />
+			</Link>
 		</div>
 	);
 });

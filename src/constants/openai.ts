@@ -1,3 +1,11 @@
+/**
+ * Model a freshly connected provider points at until the user picks a real one
+ * from the provider's model list. Keep in step with the head of the
+ * recommendation lists below.
+ */
+export const DEFAULT_OPENAI_MODEL = "gpt-5";
+export const DEFAULT_OPENROUTER_MODEL = `openai/${DEFAULT_OPENAI_MODEL}`;
+
 // OpenAI recommended models
 export const RECOMMENDATION_OPENAI_LLMS = [
 	"gpt-5",

@@ -22,6 +22,10 @@ vi.mock("../ActivityTimelinePage", () => ({
 }));
 vi.mock("../AgentsPage", () => ({ AgentsPage: stub("AgentsPage") }));
 vi.mock("../RuntimePage", () => ({ RuntimePage: stub("RuntimePage") }));
+vi.mock("../ConnectionsPage", () => ({
+	ConnectionsPage: stub("ConnectionsPage"),
+}));
+vi.mock("../SkillsPage", () => ({ SkillsPage: stub("SkillsPage") }));
 vi.mock("../FlowBuilderPage/FlowBuilderPage", () => ({
 	FlowBuilderPage: stub("FlowBuilderPage"),
 }));
@@ -38,6 +42,8 @@ const cases: Array<[string, React.LazyExoticComponent<React.ComponentType>]> = [
 	["ActivityTimelinePage", LazyPages.ActivityTimelinePage],
 	["AgentsPage", LazyPages.AgentsPage],
 	["RuntimePage", LazyPages.RuntimePage],
+	["ConnectionsPage", LazyPages.ConnectionsPage],
+	["SkillsPage", LazyPages.SkillsPage],
 	["FlowBuilderPage", LazyPages.FlowBuilderPage],
 ];
 

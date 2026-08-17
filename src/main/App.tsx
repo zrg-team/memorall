@@ -53,6 +53,7 @@ import {
 	AgentsPage,
 	RuntimePage,
 	ConnectionsPage,
+	SkillsPage,
 	FlowBuilderPage,
 } from "./pages/lazy-pages";
 import { registerAllEditors } from "@/main/modules/files/editors";
@@ -392,6 +393,7 @@ const App: React.FC = () => {
 														path="/connections"
 														element={<ConnectionsPage />}
 													/>
+													<Route path="/skills" element={<SkillsPage />} />
 													<Route
 														path="/activities"
 														element={<ActivityTimelinePage />}

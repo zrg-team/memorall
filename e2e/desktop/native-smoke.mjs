@@ -342,6 +342,8 @@ async function assertWindowsLocalModelChat(browser) {
 		.then(() => true)
 		.catch(() => false);
 	if (!isAlreadySelected) {
+		// The models page opens on the "Recommended" chooser until a model exists.
+		await page.locator('[data-panel-mode="browse"]').click();
 		await page.locator('[data-provider-tab="wllama"]').click();
 		const quickModelCard = page.locator(
 			`[data-model-provider="wllama"][data-model-id="${localModelRepo}"]`,

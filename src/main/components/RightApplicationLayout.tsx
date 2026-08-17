@@ -30,6 +30,7 @@ import { Button } from "@/main/components/ui/button";
 import { useRuntimeSessionsStore } from "@/main/stores/runtime-sessions";
 import {
 	debugNavigationItems,
+	getCopilotNavigationId,
 	workspaceNavigationItems,
 } from "@/main/components/app-navigation";
 interface RightApplicationLayoutProps {
@@ -42,21 +43,6 @@ type SettingsPanelStateProps = Pick<
 	React.ComponentProps<typeof SettingPanel>,
 	"setIsReloadingModel" | "setReloadProgress"
 >;
-
-const getCopilotNavigationId = (path: string) => {
-	switch (path) {
-		case "/files":
-			return "documents";
-		case "/agents":
-			return "agents";
-		case "/memory":
-			return "knowledge";
-		case "/llm":
-			return "models";
-		default:
-			return null;
-	}
-};
 
 type RightPanelVerticalRailProps = SettingsPanelStateProps & {
 	runtimeCount: number;
@@ -276,49 +262,59 @@ export const RightApplicationLayout: React.FC<RightApplicationLayoutProps> = ({
 									const IconComponent = item.icon;
 									const copilotId = getCopilotNavigationId(item.path);
 									return (
-										<Tooltip key={item.path}>
-											<TooltipTrigger asChild>
-												<Link
-													to={item.path}
-													onClick={() => openPanel()}
-													data-copilot={
-														copilotId ? `header-nav-${copilotId}` : undefined
-													}
-													data-agent-cursor-point={
-														copilotId
-															? `copilot-header-nav-${copilotId}`
-															: undefined
-													}
-													className={`${
-														isSelected
-															? "bg-blue-500/10 text-blue-500 border border-blue-500/30 shadow-[0_0_0_1px_rgba(59,130,246,0.28),0_4px_20px_rgba(59,130,246,0.12)]"
-															: "text-muted-foreground hover:text-foreground hover:bg-white/5"
-													} relative flex items-center rounded-md text-sm font-medium transition-all duration-200 ease-in-out ${
-														showNavLabels ? "gap-2 px-2.5 py-2" : "p-2"
-													}`}
-												>
-													<IconComponent
-														size={16}
-														className={`flex-shrink-0 transition-transform duration-200 ease-in-out ${
-															isSelected ? "scale-110" : "hover:scale-110"
+										<React.Fragment key={item.path}>
+											{/* Marks a harness group boundary: identity | context |
+											    capability | engine | execution. */}
+											{item.groupStart ? (
+												<span
+													aria-hidden
+													className="mx-1 h-5 w-px shrink-0 bg-border/60"
+												/>
+											) : null}
+											<Tooltip>
+												<TooltipTrigger asChild>
+													<Link
+														to={item.path}
+														onClick={() => openPanel()}
+														data-copilot={
+															copilotId ? `header-nav-${copilotId}` : undefined
+														}
+														data-agent-cursor-point={
+															copilotId
+																? `copilot-header-nav-${copilotId}`
+																: undefined
+														}
+														className={`${
+															isSelected
+																? "bg-blue-500/10 text-blue-500 border border-blue-500/30 shadow-[0_0_0_1px_rgba(59,130,246,0.28),0_4px_20px_rgba(59,130,246,0.12)]"
+																: "text-muted-foreground hover:text-foreground hover:bg-white/5"
+														} relative flex items-center rounded-md text-sm font-medium transition-all duration-200 ease-in-out ${
+															showNavLabels ? "gap-2 px-2.5 py-2" : "p-2"
 														}`}
-													/>
-													{showNavLabels ? (
-														<span className="whitespace-nowrap">
-															{t(item.nameKey)}
-														</span>
-													) : null}
-													{item.path === "/runtime"
-														? renderRuntimeBadge(runtimeCount)
-														: null}
-												</Link>
-											</TooltipTrigger>
-											{showNavLabels ? null : (
-												<TooltipContent side="bottom">
-													<p>{t(item.nameKey)}</p>
-												</TooltipContent>
-											)}
-										</Tooltip>
+													>
+														<IconComponent
+															size={16}
+															className={`flex-shrink-0 transition-transform duration-200 ease-in-out ${
+																isSelected ? "scale-110" : "hover:scale-110"
+															}`}
+														/>
+														{showNavLabels ? (
+															<span className="whitespace-nowrap">
+																{t(item.nameKey)}
+															</span>
+														) : null}
+														{item.path === "/runtime"
+															? renderRuntimeBadge(runtimeCount)
+															: null}
+													</Link>
+												</TooltipTrigger>
+												{showNavLabels ? null : (
+													<TooltipContent side="bottom">
+														<p>{t(item.nameKey)}</p>
+													</TooltipContent>
+												)}
+											</Tooltip>
+										</React.Fragment>
 									);
 								})}
 

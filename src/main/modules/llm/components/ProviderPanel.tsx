@@ -1,5 +1,5 @@
 import React from "react";
-import { Settings } from "lucide-react";
+import { Settings, Sparkles } from "lucide-react";
 import { eq } from "drizzle-orm";
 import { useTranslation } from "react-i18next";
 
@@ -11,6 +11,7 @@ import { OpenAITab } from "./OpenAITab";
 import { OpenRouterTab } from "./OpenRouterTab";
 import { ProgressSection } from "./ProgressSection";
 import { ProviderTabs, type ProviderStatus } from "./ProviderTabs";
+import { RecommendedSetup } from "./RecommendedSetup";
 import { TransformerTab } from "./TransformerTab";
 import { WebLLMTab } from "./WebLLMTab";
 import { WllamaTab } from "./WllamaTab";
@@ -63,6 +64,8 @@ interface ProviderPanelProps {
 	onOpenAITabSelect: () => void;
 	onModelLoaded?: (modelId: string, provider: ServiceProvider) => void;
 }
+
+type PanelMode = "recommended" | "browse";
 
 const PROVIDERS: ServiceProvider[] = [
 	"transformer",
@@ -120,8 +123,27 @@ export const ProviderPanel: React.FC<ProviderPanelProps> = ({
 	onModelLoaded,
 }) => {
 	const { t } = useTranslation("llm");
-	const { current, setCurrent } = useCurrentModel();
+	const { current, setCurrent, isInitialized } = useCurrentModel();
 	const [showTestInference, setShowTestInference] = React.useState(false);
+	// Land on "Recommended" for anyone without a model yet, and on the provider
+	// surface for anyone who already has one — unless they pick a mode first.
+	const [mode, setMode] = React.useState<PanelMode>("recommended");
+	const modeResolved = React.useRef(false);
+	const selectMode = React.useCallback((next: PanelMode) => {
+		modeResolved.current = true;
+		setMode(next);
+	}, []);
+
+	React.useEffect(() => {
+		if (modeResolved.current || !isInitialized) {
+			return;
+		}
+		modeResolved.current = true;
+		if (current?.modelId?.trim()) {
+			setMode("browse");
+		}
+	}, [isInitialized, current]);
+
 	const [providerStatuses, setProviderStatuses] = React.useState<
 		Record<ServiceProvider, ProviderStatus>
 	>(() =>
@@ -243,8 +265,58 @@ export const ProviderPanel: React.FC<ProviderPanelProps> = ({
 				? ollamaModels
 				: null;
 
+	const modeSwitch = (
+		<div
+			role="tablist"
+			aria-label={t("providerPanel.modes.label")}
+			className="flex gap-1 rounded-lg border bg-muted/20 p-1"
+		>
+			{(
+				[
+					{ value: "recommended" as const, icon: true },
+					{ value: "browse" as const, icon: false },
+				] satisfies Array<{ value: PanelMode; icon: boolean }>
+			).map(({ value, icon }) => {
+				const isActive = mode === value;
+				return (
+					<Button
+						key={value}
+						type="button"
+						role="tab"
+						aria-selected={isActive}
+						data-panel-mode={value}
+						variant="ghost"
+						onClick={() => selectMode(value)}
+						className={`min-h-9 flex-1 gap-1.5 rounded-md px-3 text-xs font-medium transition-colors sm:text-sm ${
+							isActive
+								? "bg-background text-foreground shadow-sm ring-1 ring-border"
+								: "text-muted-foreground hover:bg-background/60 hover:text-foreground"
+						}`}
+					>
+						{icon && <Sparkles className="h-4 w-4" />}
+						{t(`providerPanel.modes.${value}`)}
+					</Button>
+				);
+			})}
+		</div>
+	);
+
+	if (mode === "recommended") {
+		return (
+			<div className="space-y-3 px-2 py-2 sm:px-3 lg:px-4">
+				{modeSwitch}
+				<RecommendedSetup
+					onModelLoaded={onModelLoaded}
+					onBrowseAll={() => selectMode("browse")}
+				/>
+			</div>
+		);
+	}
+
 	return (
 		<div className="space-y-3 px-2 py-2 sm:px-3 lg:px-4">
+			{modeSwitch}
+
 			<ProviderTabs
 				advancedProvider={advancedProvider}
 				setAdvancedProvider={setAdvancedProvider}

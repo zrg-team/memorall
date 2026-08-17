@@ -1,8 +1,8 @@
-import React from "react";
+import { Play, RotateCcw, X } from "lucide-react";
+import type React from "react";
 import { useTranslation } from "react-i18next";
-import { Button } from "@/main/components/ui/button";
 import { useCopilot } from "@/main/components/molecules/Copilot/CopilotContext";
-import { X, RotateCcw, Play } from "lucide-react";
+import { Button } from "@/main/components/ui/button";
 
 export const CopilotDebugger: React.FC = () => {
 	const { state, startTour, endTour } = useCopilot();

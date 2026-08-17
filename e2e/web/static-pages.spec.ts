@@ -213,6 +213,9 @@ test("selects a local CPU model and completes a real Web chat request", async ({
 		timeout: 90_000,
 	});
 
+	// The models page opens on the "Recommended" chooser until a model exists.
+	await page.locator('[data-panel-mode="browse"]').click();
+
 	const wllamaTab = page.locator('[data-provider-tab="wllama"]');
 	await expect(wllamaTab).toBeVisible({ timeout: 90_000 });
 	await expect(wllamaTab).toBeEnabled();

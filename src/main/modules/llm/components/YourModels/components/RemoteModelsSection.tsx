@@ -21,6 +21,11 @@ interface RemoteModelsSectionProps {
 	current: CurrentModel | null;
 	loading: boolean;
 	onModelLoaded?: (modelId: string, provider: ServiceProvider) => void;
+	/**
+	 * Forces every provider open, overriding the "collapse long lists" default.
+	 * Used where picking a model is the whole point of the screen.
+	 */
+	defaultExpanded?: boolean;
 }
 
 export const RemoteModelsSection: React.FC<RemoteModelsSectionProps> = ({
@@ -28,6 +33,7 @@ export const RemoteModelsSection: React.FC<RemoteModelsSectionProps> = ({
 	current,
 	loading,
 	onModelLoaded,
+	defaultExpanded = false,
 }) => {
 	const { t } = useTranslation("llm");
 	const [collapsedProviders, setCollapsedProviders] = React.useState<
@@ -55,13 +61,14 @@ export const RemoteModelsSection: React.FC<RemoteModelsSectionProps> = ({
 					continue;
 				}
 				next[providerState.provider] =
+					!defaultExpanded &&
 					providerState.models.length > 40 &&
 					current?.provider !== providerState.provider;
 				changed = true;
 			}
 			return changed ? next : previous;
 		});
-	}, [configuredProvidersSignature, current?.provider]);
+	}, [configuredProvidersSignature, current?.provider, defaultExpanded]);
 
 	if (configuredProviders.length === 0) {
 		return null;
