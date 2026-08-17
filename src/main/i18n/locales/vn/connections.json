@@ -35,6 +35,7 @@
 			"name": "Composio",
 			"recommended": "Khuyên dùng",
 			"body": "Một khóa API, hơn 250 ứng dụng. Đăng nhập Gmail hay Slack như bình thường — Composio giữ phần OAuth, chúng tôi không bao giờ thấy mật khẩu của bạn.",
+			"moreApps": "và hơn 1.000 ứng dụng khác",
 			"action": "Kết nối Composio"
 		},
 		"template": {

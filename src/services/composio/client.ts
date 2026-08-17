@@ -35,7 +35,9 @@ export class ComposioError extends Error {
 export interface ComposioToolkit {
 	slug: string;
 	name: string;
+	/** Square brand mark, `image/svg+xml` from Composio's logo CDN. */
 	logo?: string;
+	description?: string;
 	categories?: string[];
 	toolCount?: number;
 	noAuth?: boolean;
@@ -142,17 +144,39 @@ export class ComposioClient {
 		if (search?.trim()) query.set("search", search.trim());
 
 		const payload = await this.request<unknown>(`/toolkits?${query}`);
-		return asList(payload).map((entry) => ({
-			slug: String(pick(entry, "slug", "key", "name") ?? ""),
-			name: String(pick(entry, "name", "display_name", "displayName") ?? ""),
-			logo: pick<string>(entry, "logo", "logo_url", "logoUrl"),
-			categories: Array.isArray(entry.categories)
-				? entry.categories.map(String)
-				: undefined,
-			toolCount:
-				Number(pick(entry, "tools_count", "toolsCount") ?? 0) || undefined,
-			noAuth: Boolean(pick(entry, "no_auth", "noAuth")),
-		}));
+		return asList(payload).map((entry) => {
+			// Everything descriptive lives under `meta` — logo, tools_count,
+			// description, categories. Reading only the root, as this did, left
+			// every toolkit with no logo and no tool count, which is why the
+			// catalog rendered as initials in grey squares. The root spellings
+			// stay as a fallback for the older response shape.
+			const meta = asRecord(entry.meta);
+			const categories = pick<unknown>(meta, "categories") ?? entry.categories;
+			return {
+				slug: String(pick(entry, "slug", "key", "name") ?? ""),
+				name: String(pick(entry, "name", "display_name", "displayName") ?? ""),
+				logo:
+					pick<string>(meta, "logo", "logo_url", "logoUrl") ??
+					pick<string>(entry, "logo", "logo_url", "logoUrl"),
+				description: pick<string>(meta, "description") ?? undefined,
+				// Categories arrive as `{ id, name }` objects on v3 and as bare
+				// strings on the older shape.
+				categories: Array.isArray(categories)
+					? categories.map((category) =>
+							typeof category === "string"
+								? category
+								: String(pick(asRecord(category), "name", "id") ?? ""),
+						)
+					: undefined,
+				toolCount:
+					Number(
+						pick(meta, "tools_count", "toolsCount") ??
+							pick(entry, "tools_count", "toolsCount") ??
+							0,
+					) || undefined,
+				noAuth: Boolean(pick(entry, "no_auth", "noAuth")),
+			};
+		});
 	}
 
 	async listConnectedAccounts(

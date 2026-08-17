@@ -1,10 +1,10 @@
 import NiceModal from "@ebay/nice-modal-react";
-import { Link2, Plus, Terminal } from "lucide-react";
+import { Plus } from "lucide-react";
 import React from "react";
 import { useTranslation } from "react-i18next";
 import { CursorPoint } from "@/components/AgentCursor";
 import { AGENT_WIZARD_CURSOR_KEYS } from "@/main/modules/agent-wizard";
-import { StatusDot } from "@/main/modules/connections";
+import { AppIcon, ConnectionIcon, StatusDot } from "@/main/modules/connections";
 import { useAgentConfigStore } from "@/main/stores/agent-config";
 import { useConnectionsStore } from "@/main/stores/connections";
 import { selectedProviders } from "@/services/mcp-connections";
@@ -55,14 +55,23 @@ export const MCPServersSection: React.FC = () => {
 						className="flex items-center gap-1.5 rounded-lg border border-border/60 bg-muted/40 px-2.5 py-1 text-xs font-medium transition-colors hover:bg-muted"
 					>
 						<StatusDot status={statusOf(provider.connectionId)} />
-						{provider.connectionKind === "composio" ? (
-							<span className="grid h-3.5 w-3.5 place-items-center rounded bg-gradient-to-br from-violet-600 to-fuchsia-500 text-[7px] font-bold text-white">
-								C
-							</span>
-						) : provider.connectionKind === "template" ? (
-							<Terminal size={10} className="text-muted-foreground" />
+						{/* The chip's mark is the app's, not the credential's — every
+						    Composio chip wearing the same "C" defeated the point of
+						    naming providers instead of connections. */}
+						{provider.appId ? (
+							<AppIcon
+								name={provider.label}
+								src={provider.logo}
+								composioSlug={provider.appId}
+								size={16}
+								className="rounded"
+							/>
 						) : (
-							<Link2 size={10} className="text-muted-foreground" />
+							<ConnectionIcon
+								kind={provider.connectionKind}
+								size={16}
+								className="rounded"
+							/>
 						)}
 						<span>{provider.label}</span>
 					</button>

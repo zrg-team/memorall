@@ -1,13 +1,5 @@
 import NiceModal, { useModal } from "@ebay/nice-modal-react";
-import {
-	AlertTriangle,
-	ArrowLeft,
-	Check,
-	Link2,
-	Loader2,
-	Plus,
-	Terminal,
-} from "lucide-react";
+import { AlertTriangle, ArrowLeft, Check, Loader2, Plus } from "lucide-react";
 import React from "react";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
@@ -20,8 +12,10 @@ import {
 } from "@/main/components/ui/dialog";
 import {
 	AddConnectionChooser,
+	AppIcon,
 	ComposioWizard,
 	type ConnectionLane,
+	ConnectionIcon,
 	CustomEndpointForm,
 	StatusDot,
 } from "@/main/modules/connections";
@@ -41,20 +35,9 @@ import {
 const BUSY_TOOLBOX = 25;
 const CROWDED_TOOLBOX = 50;
 
-const KindIcon: React.FC<{ kind: McpConnection["kind"] }> = ({ kind }) => {
-	if (kind === "composio") {
-		return (
-			<span className="grid h-5 w-5 shrink-0 place-items-center rounded-md bg-gradient-to-br from-violet-600 to-fuchsia-500 text-[8px] font-bold text-white">
-				C
-			</span>
-		);
-	}
-	return (
-		<span className="grid h-5 w-5 shrink-0 place-items-center rounded-md bg-muted text-muted-foreground">
-			{kind === "template" ? <Terminal size={10} /> : <Link2 size={10} />}
-		</span>
-	);
-};
+const KindIcon: React.FC<{ kind: McpConnection["kind"] }> = ({ kind }) => (
+	<ConnectionIcon kind={kind} size={20} />
+);
 
 const Switch: React.FC<{ on: boolean }> = ({ on }) => (
 	<span
@@ -295,7 +278,18 @@ export const MCPServersModal = NiceModal.create(() => {
 										)}
 									>
 										<span className="flex min-w-0 flex-1 items-center gap-2">
-											{grouped ? null : <KindIcon kind={connection.kind} />}
+											{/* A grouped row is one app, so it wears the app's own
+											    mark rather than repeating the credential's. */}
+											{option.appId ? (
+												<AppIcon
+													name={option.label}
+													src={option.logo}
+													composioSlug={option.appId}
+													size={20}
+												/>
+											) : (
+												<KindIcon kind={connection.kind} />
+											)}
 											<span className="truncate text-xs font-medium">
 												{option.label}
 											</span>
@@ -320,7 +314,7 @@ export const MCPServersModal = NiceModal.create(() => {
 									{grouped ? (
 										<div className="flex items-center gap-2 px-2 py-1.5">
 											<KindIcon kind={connection.kind} />
-											<span className="text-xs font-semibold">
+											<span className="min-w-0 truncate text-xs font-semibold">
 												{connection.name}
 											</span>
 											<StatusDot status={statusOf(connection.id)} />
@@ -330,7 +324,7 @@ export const MCPServersModal = NiceModal.create(() => {
 												<button
 													type="button"
 													onClick={() => openLane("composio", true)}
-													className="ml-auto flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+													className="ml-auto flex shrink-0 items-center gap-1 whitespace-nowrap rounded-md px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
 												>
 													<Plus size={10} />
 													{t("connections:agent.addApp")}

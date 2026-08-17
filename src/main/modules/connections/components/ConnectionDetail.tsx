@@ -20,6 +20,7 @@ import {
 	type ConnectionUsage,
 	type McpConnection,
 } from "@/services/mcp-connections";
+import { AppIcon, ConnectionIcon } from "./AppIcon";
 import { StatusPill } from "./StatusPill";
 import { ToolScopeList } from "./ToolScopeList";
 import { CustomEndpointForm } from "./CustomEndpointForm";
@@ -50,9 +51,12 @@ const AppList: React.FC<{ apps: ConnectionApp[] }> = ({ apps }) => {
 					key={app.id}
 					className="flex items-center gap-2.5 rounded-lg border border-border/60 px-3 py-2"
 				>
-					<span className="grid h-6 w-6 shrink-0 place-items-center rounded-lg bg-muted text-[10px] font-bold uppercase text-muted-foreground">
-						{(app.name || app.id).slice(0, 2)}
-					</span>
+					<AppIcon
+						name={app.name || app.id}
+						src={app.logo}
+						composioSlug={app.id}
+						size={26}
+					/>
 					<span className="min-w-0 flex-1 text-left">
 						<span className="block truncate text-xs font-medium">
 							{app.name || app.id}
@@ -151,7 +155,12 @@ export const ConnectionDetail: React.FC<{
 		return (
 			<div className="flex min-h-0 flex-1 flex-col">
 				<div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 px-4 py-3">
-					<h2 className="truncate text-sm font-semibold">{connection.name}</h2>
+					<div className="flex min-w-0 items-center gap-2.5">
+						<ConnectionIcon kind={connection.kind} size={30} />
+						<h2 className="truncate text-sm font-semibold">
+							{connection.name}
+						</h2>
+					</div>
 					<div className="flex shrink-0 items-center gap-1.5">
 						<StatusPill status={status} />
 						<Button
@@ -198,6 +207,7 @@ export const ConnectionDetail: React.FC<{
 		<div className="flex min-h-0 flex-1 flex-col">
 			<div className="flex flex-wrap items-start justify-between gap-3 border-b border-border/60 px-4 py-3">
 				<div className="flex min-w-0 items-center gap-2.5">
+					<ConnectionIcon kind={connection.kind} size={30} />
 					<div className="min-w-0">
 						<div className="flex items-center gap-2">
 							<h2 className="truncate text-sm font-semibold">

@@ -226,6 +226,54 @@ describe("ComposioClient", () => {
 		expect(accounts.map((a) => a.toolkitSlug)).toEqual(["gmail", "slack"]);
 	});
 
+	it("reads the logo and tool count out of the toolkit's meta object", async () => {
+		// v3 nests everything descriptive under `meta`. Reading only the root left
+		// every app in the catalog with no mark and no tool count.
+		fetchMock.mockResolvedValue(
+			jsonResponse({
+				items: [
+					{
+						slug: "gmail",
+						name: "Gmail",
+						meta: {
+							logo: "https://logos.composio.dev/api/gmail",
+							tools_count: 61,
+							description: "Google's email service",
+							categories: [{ id: "email", name: "email" }],
+						},
+					},
+				],
+			}),
+		);
+
+		const [toolkit] = await new ComposioClient("k").listToolkits();
+		expect(toolkit.logo).toBe("https://logos.composio.dev/api/gmail");
+		expect(toolkit.toolCount).toBe(61);
+		expect(toolkit.description).toBe("Google's email service");
+		expect(toolkit.categories).toEqual(["email"]);
+	});
+
+	it("still reads the older flat shape", async () => {
+		fetchMock.mockResolvedValue(
+			jsonResponse({
+				items: [
+					{
+						slug: "slack",
+						name: "Slack",
+						logo: "https://example.test/slack.svg",
+						tools_count: 12,
+						categories: ["chat"],
+					},
+				],
+			}),
+		);
+
+		const [toolkit] = await new ComposioClient("k").listToolkits();
+		expect(toolkit.logo).toBe("https://example.test/slack.svg");
+		expect(toolkit.toolCount).toBe(12);
+		expect(toolkit.categories).toEqual(["chat"]);
+	});
+
 	it("reads toolkits out of either envelope shape", async () => {
 		fetchMock.mockResolvedValue(
 			jsonResponse({ data: { items: [{ slug: "gmail", name: "Gmail" }] } }),

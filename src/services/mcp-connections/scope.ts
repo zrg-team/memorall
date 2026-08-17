@@ -24,6 +24,8 @@ export interface ProviderOption {
 	appId?: string;
 	/** What the user reads: "Gmail", or the server's name. */
 	label: string;
+	/** Brand mark for the row, when the provider is an app that has one. */
+	logo?: string;
 }
 
 export const providerKey = (connectionId: string, appId?: string): string =>
@@ -49,6 +51,7 @@ export const listProviderOptions = (
 					connectionKind: connection.kind,
 					appId: app.id,
 					label: app.name || app.id,
+					logo: app.logo,
 				}));
 		}
 		return [

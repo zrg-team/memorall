@@ -36,6 +36,7 @@
 			"name": "Composio",
 			"recommended": "Recommended",
 			"body": "One API key, 250+ apps. Sign in to Gmail or Slack the normal way — Composio holds the OAuth, we never see your passwords.",
+			"moreApps": "and 1,000+ more",
 			"action": "Connect Composio"
 		},
 		"template": {

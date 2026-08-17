@@ -40,6 +40,7 @@ import {
 	unlockMasterKey,
 } from "@/utils/master-key";
 import { useConnectionsStore } from "@/main/stores/connections";
+import { AppIcon, COMPOSIO_LOGO_URL } from "./AppIcon";
 
 /**
  * Key -> apps -> scope.
@@ -149,14 +150,18 @@ export const ComposioWizard: React.FC<ComposioWizardProps> = ({
 
 		const fromApi: ConnectionApp[] = accounts
 			.filter((account) => account.status === "ACTIVE" && account.toolkitSlug)
-			.map((account) => ({
-				id: String(account.toolkitSlug),
-				name:
-					catalog.find((toolkit) => toolkit.slug === account.toolkitSlug)
-						?.name ?? String(account.toolkitSlug),
-				connectedAccountId: account.id,
-				status: "active" as const,
-			}));
+			.map((account) => {
+				const toolkit = catalog.find(
+					(candidate) => candidate.slug === account.toolkitSlug,
+				);
+				return {
+					id: String(account.toolkitSlug),
+					name: toolkit?.name ?? String(account.toolkitSlug),
+					logo: toolkit?.logo,
+					connectedAccountId: account.id,
+					status: "active" as const,
+				};
+			});
 
 		// Merge with what we already recorded. Composio's listing is the source of
 		// truth when it answers, but our own record keeps the catalog honest if
@@ -166,7 +171,22 @@ export const ComposioWizard: React.FC<ComposioWizardProps> = ({
 			[];
 		const byId = new Map<string, ConnectionApp>();
 		for (const app of [...stored, ...fromApi]) {
-			byId.set(app.id, app);
+			// Merge rather than replace: the catalog is paged, so an app connected
+			// long ago may not appear in it, and the API entry would then arrive
+			// with the slug for a name and no logo — worse than what we had. Keep
+			// the newer entry's fields only where it actually has one.
+			const previous = byId.get(app.id);
+			byId.set(
+				app.id,
+				previous
+					? {
+							...previous,
+							...app,
+							name: app.name || previous.name,
+							logo: app.logo ?? previous.logo,
+						}
+					: app,
+			);
 		}
 
 		const merged = [...byId.values()];
@@ -271,6 +291,7 @@ export const ComposioWizard: React.FC<ComposioWizardProps> = ({
 			const app: ConnectionApp = {
 				id: toolkit.slug,
 				name: toolkit.name,
+				logo: toolkit.logo,
 				connectedAccountId: request.id,
 				status: "active",
 			};
@@ -446,13 +467,13 @@ export const ComposioWizard: React.FC<ComposioWizardProps> = ({
 		connected.some((app) => app.id === slug);
 
 	return (
-		<div className="space-y-4">
-			<div className="flex items-center gap-2.5">
-				<span className="grid h-9 w-9 place-items-center rounded-xl bg-gradient-to-br from-violet-600 to-fuchsia-500 text-sm font-bold text-white">
-					C
-				</span>
-				<div>
-					<h2 className="text-sm font-semibold">
+		// Same reason as the lane chooser: this renders both full-page and inside
+		// a 720px dialog, so the catalog columns have to measure their own box.
+		<div className="@container space-y-4">
+			<div className="flex flex-wrap items-center gap-2.5">
+				<AppIcon name="Composio" src={COMPOSIO_LOGO_URL} size={36} />
+				<div className="min-w-0 flex-1">
+					<h2 className="truncate text-sm font-semibold">
 						{t("composio.connectTitle")}
 					</h2>
 					<p className="text-[11px] text-muted-foreground">
@@ -469,7 +490,7 @@ export const ComposioWizard: React.FC<ComposioWizardProps> = ({
 					type="button"
 					variant="outline"
 					size="sm"
-					className="ml-auto"
+					className="ml-auto shrink-0"
 					onClick={onCancel}
 				>
 					{t("composio.cancel")}
@@ -662,7 +683,7 @@ export const ComposioWizard: React.FC<ComposioWizardProps> = ({
 						</div>
 					) : null}
 
-					<div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+					<div className="grid gap-2 @md:grid-cols-2 @3xl:grid-cols-3">
 						{filtered.map((toolkit) => {
 							const done = isConnected(toolkit.slug);
 							const busy = pending?.slug === toolkit.slug;
@@ -678,9 +699,12 @@ export const ComposioWizard: React.FC<ComposioWizardProps> = ({
 												: "border-border/60 bg-background/60",
 									)}
 								>
-									<span className="grid h-6 w-6 shrink-0 place-items-center rounded-lg bg-muted text-[10px] font-bold uppercase text-muted-foreground">
-										{toolkit.name.slice(0, 2)}
-									</span>
+									<AppIcon
+										name={toolkit.name}
+										src={toolkit.logo}
+										composioSlug={toolkit.slug}
+										size={26}
+									/>
 									<span className="min-w-0 flex-1">
 										<span className="block truncate text-xs font-medium">
 											{toolkit.name}

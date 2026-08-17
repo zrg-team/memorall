@@ -3,6 +3,12 @@ export {
 	AddConnectionChooser,
 	type ConnectionLane,
 } from "./components/AddConnectionChooser";
+export {
+	AppIcon,
+	COMPOSIO_LOGO_URL,
+	composioLogoUrl,
+	ConnectionIcon,
+} from "./components/AppIcon";
 export { ComposioWizard } from "./components/ComposioWizard";
 export { ConnectionDetail } from "./components/ConnectionDetail";
 export { ConnectionsSidebar } from "./components/ConnectionsSidebar";

@@ -11,6 +11,7 @@ import {
 import { Button } from "@/main/components/ui/button";
 import { cn } from "@/lib/utils";
 import { platform } from "@/platform/current";
+import { AppIcon, COMPOSIO_LOGO_URL } from "./AppIcon";
 
 export type ConnectionLane = "composio" | "template" | "custom";
 
@@ -22,12 +23,17 @@ export type ConnectionLane = "composio" | "template" | "custom";
  * button — so a first-timer lands in the right place without reading.
  */
 
+/**
+ * A sample of what the lane reaches, drawn with the apps' real marks. The
+ * letters this replaced ("G", "S", "C") named nothing — a coloured G could
+ * equally have been Gmail, GitHub or Google Drive.
+ */
 const APP_TILES = [
-	{ label: "G", className: "bg-gradient-to-br from-red-500 to-amber-400" },
-	{ label: "S", className: "bg-gradient-to-br from-sky-400 to-emerald-500" },
-	{ label: "C", className: "bg-gradient-to-br from-blue-600 to-blue-400" },
-	{ label: "N", className: "bg-gradient-to-br from-zinc-700 to-zinc-500" },
-	{ label: "L", className: "bg-gradient-to-br from-indigo-500 to-violet-400" },
+	{ slug: "gmail", name: "Gmail" },
+	{ slug: "slack", name: "Slack" },
+	{ slug: "googlecalendar", name: "Google Calendar" },
+	{ slug: "notion", name: "Notion" },
+	{ slug: "linear", name: "Linear" },
 ];
 
 interface AddConnectionChooserProps {
@@ -50,8 +56,13 @@ export const AddConnectionChooser: React.FC<AddConnectionChooserProps> = ({
 	const isWeb = platform.environment === "web";
 
 	return (
-		<div className={cn("space-y-4", className)}>
-			<div className="grid gap-3 lg:grid-cols-3">
+		// Container queries, not viewport ones: this renders full-width on the
+		// page, in a ~615px column beside the onboarding panel, and inside a
+		// 720px dialog. `lg:grid-cols-3` measured the window and gave all three
+		// hosts three columns, so on the split page each card was ~195px and the
+		// name had to fight the "Recommended" badge for room.
+		<div className={cn("@container space-y-4", className)}>
+			<div className="grid gap-3 @lg:grid-cols-2 @3xl:grid-cols-3">
 				{/* Composio */}
 				<div
 					className={cn(
@@ -61,15 +72,16 @@ export const AddConnectionChooser: React.FC<AddConnectionChooserProps> = ({
 							: "border-blue-500/30 bg-background/60 shadow-[0_0_0_1px_rgba(59,130,246,0.08)]",
 					)}
 				>
-					<div className="flex items-center gap-2">
-						<span className="grid h-7 w-7 place-items-center rounded-lg bg-gradient-to-br from-violet-600 to-fuchsia-500 text-[11px] font-bold text-white">
-							C
-						</span>
-						<span className="text-sm font-semibold">
+					{/* The badge wraps to its own line rather than squeezing the name:
+					    "Recommended" translates longer than it reads in English, and a
+					    product name shortened to "Co…" is worse than a taller card. */}
+					<div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+						<AppIcon name="Composio" src={COMPOSIO_LOGO_URL} size={28} />
+						<span className="shrink-0 text-sm font-semibold">
 							{t("lanes.composio.name")}
 						</span>
 						{!isWeb ? (
-							<span className="ml-auto rounded-full border border-blue-500/30 bg-blue-500/10 px-2 py-0.5 text-[10px] font-semibold text-blue-500">
+							<span className="shrink-0 whitespace-nowrap rounded-full border border-blue-500/30 bg-blue-500/10 px-2 py-0.5 text-[10px] font-semibold text-blue-500">
 								{t("lanes.composio.recommended")}
 							</span>
 						) : null}
@@ -79,17 +91,17 @@ export const AddConnectionChooser: React.FC<AddConnectionChooserProps> = ({
 					</p>
 					<div className="flex flex-wrap items-center gap-1">
 						{APP_TILES.map((tile) => (
-							<span
-								key={tile.label}
-								className={cn(
-									"grid h-4 w-4 place-items-center rounded text-[8px] font-bold text-white",
-									tile.className,
-								)}
-							>
-								{tile.label}
-							</span>
+							<AppIcon
+								key={tile.slug}
+								name={tile.name}
+								composioSlug={tile.slug}
+								size={18}
+								className="rounded-md"
+							/>
 						))}
-						<span className="ml-1 text-[10px] text-muted-foreground">+245</span>
+						<span className="ml-1 text-[10px] text-muted-foreground">
+							{t("lanes.composio.moreApps")}
+						</span>
 					</div>
 					{isWeb ? (
 						<p className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-2 py-1.5 text-[10px] leading-relaxed text-amber-600 dark:text-amber-400">
@@ -110,10 +122,10 @@ export const AddConnectionChooser: React.FC<AddConnectionChooserProps> = ({
 				{/* Local server */}
 				<div className="flex flex-col gap-2.5 rounded-xl border border-border/60 bg-background/60 p-3.5">
 					<div className="flex items-center gap-2">
-						<span className="grid h-7 w-7 place-items-center rounded-lg bg-gradient-to-br from-cyan-700 to-cyan-400 text-white">
+						<span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-gradient-to-br from-cyan-700 to-cyan-400 text-white">
 							<Terminal size={13} />
 						</span>
-						<span className="text-sm font-semibold">
+						<span className="min-w-0 truncate text-sm font-semibold">
 							{t("lanes.template.name")}
 						</span>
 					</div>
@@ -145,17 +157,18 @@ export const AddConnectionChooser: React.FC<AddConnectionChooserProps> = ({
 				{/* Custom endpoint */}
 				<div className="flex flex-col gap-2.5 rounded-xl border border-border/60 bg-background/60 p-3.5">
 					<div className="flex items-center gap-2">
-						<span className="grid h-7 w-7 place-items-center rounded-lg bg-gradient-to-br from-slate-600 to-slate-400 text-white">
+						<span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-gradient-to-br from-slate-600 to-slate-400 text-white">
 							<Link2 size={13} />
 						</span>
-						<span className="text-sm font-semibold">
+						<span className="min-w-0 truncate text-sm font-semibold">
 							{t("lanes.custom.name")}
 						</span>
 					</div>
 					<p className="text-xs leading-relaxed text-muted-foreground">
 						{t("lanes.custom.body")}
 					</p>
-					<div className="rounded-lg border border-border/60 bg-muted/40 px-2 py-1.5 font-mono text-[9.5px] leading-relaxed text-muted-foreground">
+					{/* A URL has no space to break at, so it needs permission to. */}
+					<div className="break-all rounded-lg border border-border/60 bg-muted/40 px-2 py-1.5 font-mono text-[9.5px] leading-relaxed text-muted-foreground">
 						https://mcp.example.com/mcp
 						<br />
 						Authorization: Bearer ••••

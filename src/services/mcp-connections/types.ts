@@ -25,6 +25,11 @@ export interface ConnectionApp {
 	/** Composio toolkit slug, e.g. "gmail". */
 	id: string;
 	name: string;
+	/**
+	 * Square brand mark, as Composio reported it. Optional: apps recorded before
+	 * this field existed fall back to deriving the URL from the slug.
+	 */
+	logo?: string;
 	connectedAccountId?: string;
 	status: ConnectionAppStatus;
 	/** Unprefixed tool names this app contributes. Empty means "all". */
