@@ -425,7 +425,31 @@ export class LLMProxy implements BaseLLM {
 	}
 
 	async getToolCapabilities(model?: string): Promise<ToolCapabilityInfo> {
-		return resolveToolCapabilitiesForLLM(this.llmType, model);
+		// Transformer and wllama decide native tool support from the model's own
+		// chat template at load time, and the background service reports it on
+		// ModelInfo. Without this lookup the proxy answered "prompt injection"
+		// for every local model, so any UI-context caller lost native tools.
+		let supportsNativeTools = false;
+		if (
+			model &&
+			(this.llmType === "transformer" || this.llmType === "wllama")
+		) {
+			try {
+				const { data } = await this.models();
+				supportsNativeTools =
+					data.find(
+						(candidate) => candidate.id.toLowerCase() === model.toLowerCase(),
+					)?.supportsNativeTools === true;
+			} catch {
+				// Capability detection is best-effort; prompt injection always works.
+			}
+		}
+
+		return resolveToolCapabilitiesForLLM(
+			this.llmType,
+			model,
+			supportsNativeTools,
+		);
 	}
 
 	async supportsTools(model?: string): Promise<boolean> {

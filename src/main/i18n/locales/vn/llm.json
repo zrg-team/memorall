@@ -418,8 +418,8 @@
 			"title": "Chọn Ưu tiên Của Bạn",
 			"description": "Chọn điều quan trọng nhất với bạn",
 			"performance": {
-				"title": "Hiệu suất",
-				"description": "Phản hồi nhanh nhất"
+				"title": "Nhanh",
+				"description": "Trả lời nhanh nhất"
 			},
 			"quality": {
 				"title": "Chất lượng",
@@ -429,7 +429,13 @@
 				"title": "Ngữ cảnh",
 				"description": "Tệp dài"
 			},
-			"backToSpecs": "Quay lại Thông tin Hệ thống"
+			"backToSpecs": "Quay lại Thông tin Hệ thống",
+			"balance": {
+				"title": "Cân bằng",
+				"description": "Toàn diện, dễ dùng"
+			},
+			"contextLimited": "Ngữ cảnh giới hạn ở {{value}} trên phần cứng của bạn",
+			"contextUpTo": "Ngữ cảnh tối đa {{value}}"
 		},
 		"recommendation": {
 			"title": "Sẵn sàng Tải xuống",
@@ -453,7 +459,13 @@
 			"tryAgain": "Thử lại",
 			"advancedSetup": "Thiết lập Nâng cao"
 		},
-		"useAdvancedSetup": "Sử dụng Thiết lập Nâng cao Thay thế"
+		"useAdvancedSetup": "Sử dụng Thiết lập Nâng cao Thay thế",
+		"abilities": {
+			"toolsNative": "Công cụ",
+			"toolsNone": "Không công cụ",
+			"reasoning": "Suy luận",
+			"vision": "Thị giác"
+		}
 	},
 	"offscreenServices": {
 		"title": "Dịch vụ Offscreen",

@@ -42,6 +42,11 @@ interface RecommendedSetupProps {
 	onModelLoaded?: (modelId: string, provider: ServiceProvider) => void;
 	/** Switches the page over to the provider-by-provider surface. */
 	onBrowseAll: () => void;
+	/**
+	 * The "browse by provider" control, rendered on the header row this view
+	 * already has instead of in a bar of its own.
+	 */
+	browseAction?: React.ReactNode;
 }
 
 const BulletList: React.FC<{ items: string[]; tone: "pro" | "con" }> = ({
@@ -67,6 +72,7 @@ const BulletList: React.FC<{ items: string[]; tone: "pro" | "con" }> = ({
 export const RecommendedSetup: React.FC<RecommendedSetupProps> = ({
 	onModelLoaded,
 	onBrowseAll,
+	browseAction,
 }) => {
 	const { t } = useTranslation("llm");
 	const [path, setPath] = React.useState<RecommendedPath | null>(null);
@@ -265,11 +271,20 @@ export const RecommendedSetup: React.FC<RecommendedSetupProps> = ({
 					</Card>
 				</div>
 
-				<div className="space-y-1 text-center text-sm text-muted-foreground">
+				{/* The chooser has no header row to hang the switch on, so the
+				    escape hatch lives here — one control, not two. */}
+				<div className="flex flex-col items-center gap-1 text-sm text-muted-foreground">
 					<div>{t("recommended.browseAllHint")}</div>
-					<Button variant="link" size="sm" onClick={onBrowseAll}>
-						{t("recommended.browseAll")}
-					</Button>
+					{browseAction ?? (
+						<Button
+							variant="link"
+							size="sm"
+							data-panel-mode="browse"
+							onClick={onBrowseAll}
+						>
+							{t("recommended.browseAll")}
+						</Button>
+					)}
 				</div>
 			</div>
 		);
@@ -283,7 +298,7 @@ export const RecommendedSetup: React.FC<RecommendedSetupProps> = ({
 				<ArrowLeft className="mr-1 h-4 w-4" />
 				{t("recommended.back")}
 			</Button>
-			<div className="min-w-0">
+			<div className="min-w-0 flex-1">
 				<div className="truncate text-sm font-semibold">
 					{path === "fast"
 						? t("recommended.fast.headerTitle")
@@ -295,6 +310,7 @@ export const RecommendedSetup: React.FC<RecommendedSetupProps> = ({
 						: t("recommended.free.headerDescription")}
 				</div>
 			</div>
+			{browseAction}
 		</div>
 	);
 

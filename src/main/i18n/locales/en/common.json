@@ -370,7 +370,7 @@
 		}
 	},
 	"sandboxPanel": {
-		"title": "Runtime Sessions",
+		"title": "Runtime",
 		"description": "Preview generated work, live pages, servers, and command activity.",
 		"outputsTab": "Outputs",
 		"liveRuntimeTab": "Live Runtime",

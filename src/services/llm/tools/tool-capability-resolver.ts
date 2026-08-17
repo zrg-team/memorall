@@ -82,17 +82,29 @@ export function getWllamaToolCapabilities(): ToolCapabilityInfo {
 export { WLLAMA_NATIVE_TOOL_SUPPORT };
 export { TRANSFORMER_NATIVE_TOOL_SUPPORT };
 
+/**
+ * Static capability lookup, used where the caller has no loaded model to
+ * inspect (notably the proxy in `llm-proxy.ts`).
+ *
+ * `supportsNativeTools` must be threaded in by callers that *do* know it —
+ * transformer and wllama detect native support from the model's own chat
+ * template at load time, and omitting it here silently downgrades those
+ * models to prompt injection.
+ */
 export function resolveToolCapabilitiesForLLM(
 	llmType: string,
 	model?: string,
+	supportsNativeTools = false,
 ): ToolCapabilityInfo {
 	switch (llmType) {
 		case "webllm":
 			return getWebLLMToolCapabilities(model);
 		case "transformer":
-			return getTransformerToolCapabilities();
+			return getTransformerToolCapabilities(supportsNativeTools);
 		case "wllama":
-			return getWllamaToolCapabilities();
+			return supportsNativeTools
+				? WLLAMA_NATIVE_TOOL_SUPPORT
+				: getWllamaToolCapabilities();
 		default:
 			return NO_TOOL_SUPPORT;
 	}

@@ -420,8 +420,8 @@
 			"title": "Choose Your Priority",
 			"description": "Select what matters most to you",
 			"performance": {
-				"title": "Performance",
-				"description": "Fastest responses"
+				"title": "Fast",
+				"description": "Quickest replies"
 			},
 			"quality": {
 				"title": "Quality",
@@ -431,7 +431,13 @@
 				"title": "Context",
 				"description": "Long files"
 			},
-			"backToSpecs": "Back to System Info"
+			"backToSpecs": "Back to System Info",
+			"balance": {
+				"title": "Balanced",
+				"description": "Good all-rounder"
+			},
+			"contextLimited": "Context limited to {{value}} on your hardware",
+			"contextUpTo": "Up to {{value}} context"
 		},
 		"recommendation": {
 			"title": "Ready to Download",
@@ -455,7 +461,13 @@
 			"tryAgain": "Try Again",
 			"advancedSetup": "Advanced Setup"
 		},
-		"useAdvancedSetup": "Use Advanced Setup Instead"
+		"useAdvancedSetup": "Use Advanced Setup Instead",
+		"abilities": {
+			"toolsNative": "Tools",
+			"toolsNone": "No tools",
+			"reasoning": "Reasoning",
+			"vision": "Vision"
+		}
 	},
 	"offscreenServices": {
 		"title": "Offscreen Services",

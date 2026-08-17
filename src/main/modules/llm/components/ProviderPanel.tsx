@@ -1,5 +1,5 @@
 import React from "react";
-import { Settings, Sparkles } from "lucide-react";
+import { ArrowRight, Settings, Sparkles } from "lucide-react";
 import { eq } from "drizzle-orm";
 import { useTranslation } from "react-i18next";
 
@@ -265,49 +265,49 @@ export const ProviderPanel: React.FC<ProviderPanelProps> = ({
 				? ollamaModels
 				: null;
 
-	const modeSwitch = (
-		<div
-			role="tablist"
-			aria-label={t("providerPanel.modes.label")}
-			className="flex gap-1 rounded-lg border bg-muted/20 p-1"
+	// The mode switch rides on whichever row the mode already has, rather than
+	// owning a full-width bar of its own. Two stacked strips read as two tab
+	// rows with no cue as to which was the mode and which the provider.
+	const recommendedPill = (
+		<Button
+			type="button"
+			data-panel-mode="recommended"
+			aria-pressed={false}
+			variant="ghost"
+			onClick={() => selectMode("recommended")}
+			title={t("providerPanel.modes.recommended")}
+			aria-label={t("providerPanel.modes.recommended")}
+			// Icon-only: the seven provider tabs already fill this strip, and a
+			// spelled-out label pushed the last one off the edge. Tailwind
+			// breakpoints track the viewport, not this container, so a
+			// responsive label cannot be sized reliably here.
+			className="min-h-9 w-9 shrink-0 rounded-md p-0 text-muted-foreground transition-colors hover:bg-background/60 hover:text-foreground"
 		>
-			{(
-				[
-					{ value: "recommended" as const, icon: true },
-					{ value: "browse" as const, icon: false },
-				] satisfies Array<{ value: PanelMode; icon: boolean }>
-			).map(({ value, icon }) => {
-				const isActive = mode === value;
-				return (
-					<Button
-						key={value}
-						type="button"
-						role="tab"
-						aria-selected={isActive}
-						data-panel-mode={value}
-						variant="ghost"
-						onClick={() => selectMode(value)}
-						className={`min-h-9 flex-1 gap-1.5 rounded-md px-3 text-xs font-medium transition-colors sm:text-sm ${
-							isActive
-								? "bg-background text-foreground shadow-sm ring-1 ring-border"
-								: "text-muted-foreground hover:bg-background/60 hover:text-foreground"
-						}`}
-					>
-						{icon && <Sparkles className="h-4 w-4" />}
-						{t(`providerPanel.modes.${value}`)}
-					</Button>
-				);
-			})}
-		</div>
+			<Sparkles className="h-4 w-4" />
+		</Button>
+	);
+
+	const browseLink = (
+		<Button
+			type="button"
+			data-panel-mode="browse"
+			variant="ghost"
+			size="sm"
+			onClick={() => selectMode("browse")}
+			className="shrink-0 gap-1 text-xs text-muted-foreground hover:text-foreground"
+		>
+			{t("providerPanel.modes.browse")}
+			<ArrowRight className="h-3.5 w-3.5" />
+		</Button>
 	);
 
 	if (mode === "recommended") {
 		return (
 			<div className="space-y-3 px-2 py-2 sm:px-3 lg:px-4">
-				{modeSwitch}
 				<RecommendedSetup
 					onModelLoaded={onModelLoaded}
 					onBrowseAll={() => selectMode("browse")}
+					browseAction={browseLink}
 				/>
 			</div>
 		);
@@ -315,8 +315,6 @@ export const ProviderPanel: React.FC<ProviderPanelProps> = ({
 
 	return (
 		<div className="space-y-3 px-2 py-2 sm:px-3 lg:px-4">
-			{modeSwitch}
-
 			<ProviderTabs
 				advancedProvider={advancedProvider}
 				setAdvancedProvider={setAdvancedProvider}
@@ -326,6 +324,7 @@ export const ProviderPanel: React.FC<ProviderPanelProps> = ({
 				webllmAvailableModels={webllmAvailableModels}
 				onOpenAITabSelect={onOpenAITabSelect}
 				providerStatuses={providerStatuses}
+				leading={recommendedPill}
 			/>
 
 			{quickLoading && (

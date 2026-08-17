@@ -8,6 +8,172 @@ const fp16KvBytesPerToken = (
 
 export const TRANSFORMER_MODELS: LLMModelConfig[] = [
 	{
+		id: "onnx-community/LFM2.5-350M-ONNX",
+		provider: "transformer",
+		displayName: "LFM2.5 350M",
+		sizeGB: 255148587 / 1024 ** 3,
+		sizeLabel: "243MB",
+		description: "⚡ LFM2.5 350M: newest Liquid tiny model, long context",
+		contextLength: 128000,
+		defaultMaxNewTokens: 1024,
+		kvBytesPerToken: fp16KvBytesPerToken(16, 8, 64),
+		requiresWebGPU: true,
+		minMemoryGB: 2,
+		qualityScore: 55,
+		performanceScore: 96,
+		contextScore: 98,
+		abilities: {
+			tools: "native",
+			vision: false,
+			reasoning: false,
+			multilingual: true,
+		},
+		releaseDate: "2026-03",
+		quickDownload: true,
+		runnerConfig: {
+			runtime: "causal_lm",
+			dtype: "q4f16",
+		},
+	},
+	{
+		id: "onnx-community/functiongemma-270m-it-ONNX",
+		provider: "transformer",
+		displayName: "FunctionGemma 270M",
+		sizeGB: 426243042 / 1024 ** 3,
+		sizeLabel: "406MB",
+		description: "🔧 FunctionGemma 270M: purpose-built for tool calling",
+		contextLength: 32768,
+		defaultMaxNewTokens: 1024,
+		kvBytesPerToken: fp16KvBytesPerToken(18, 1, 256),
+		requiresWebGPU: true,
+		minMemoryGB: 2,
+		qualityScore: 48,
+		performanceScore: 97,
+		contextScore: 85,
+		abilities: {
+			tools: "native",
+			vision: false,
+			reasoning: false,
+			multilingual: true,
+		},
+		releaseDate: "2025-12",
+		quickDownload: true,
+		runnerConfig: {
+			runtime: "causal_lm",
+			dtype: "q4f16",
+		},
+	},
+	{
+		id: "onnx-community/granite-4.0-h-350m-ONNX",
+		provider: "transformer",
+		displayName: "Granite 4.0 H 350M",
+		sizeGB: 238341600 / 1024 ** 3,
+		sizeLabel: "227MB",
+		description: "🪨 Granite 4.0 H 350M: IBM hybrid tiny model",
+		contextLength: 32768,
+		defaultMaxNewTokens: 1024,
+		kvBytesPerToken: fp16KvBytesPerToken(32, 4, 64),
+		requiresWebGPU: true,
+		minMemoryGB: 2,
+		qualityScore: 60,
+		performanceScore: 95,
+		contextScore: 85,
+		abilities: {
+			tools: "native",
+			vision: false,
+			reasoning: false,
+			multilingual: true,
+		},
+		releaseDate: "2025-11",
+		quickDownload: true,
+		runnerConfig: {
+			runtime: "causal_lm",
+			dtype: "q4f16",
+		},
+	},
+	{
+		id: "onnx-community/Falcon-H1-Tiny-90M-Instruct-ONNX",
+		provider: "transformer",
+		displayName: "Falcon H1 Tiny 90M",
+		sizeGB: 96721069 / 1024 ** 3,
+		sizeLabel: "92MB",
+		description: "🦅 Falcon H1 Tiny: smallest usable model, huge context",
+		contextLength: 262144,
+		defaultMaxNewTokens: 1024,
+		kvBytesPerToken: fp16KvBytesPerToken(24, 2, 64),
+		requiresWebGPU: true,
+		minMemoryGB: 2,
+		qualityScore: 35,
+		performanceScore: 99,
+		contextScore: 98,
+		abilities: {
+			tools: "native",
+			vision: false,
+			reasoning: false,
+			multilingual: true,
+		},
+		releaseDate: "2026-01",
+		runnerConfig: {
+			runtime: "causal_lm",
+			dtype: "q4f16",
+		},
+	},
+	{
+		id: "onnx-community/LFM2-2.6B-ONNX",
+		provider: "transformer",
+		displayName: "LFM2 2.6B",
+		sizeGB: 1655233726 / 1024 ** 3,
+		sizeLabel: "1.54GB",
+		description: "🌊 LFM2 2.6B: larger Liquid model with 128K context",
+		contextLength: 128000,
+		defaultMaxNewTokens: 1024,
+		kvBytesPerToken: fp16KvBytesPerToken(30, 8, 64),
+		requiresWebGPU: true,
+		minMemoryGB: 4,
+		qualityScore: 84,
+		performanceScore: 68,
+		contextScore: 98,
+		abilities: {
+			tools: "native",
+			vision: false,
+			reasoning: false,
+			multilingual: true,
+		},
+		releaseDate: "2025-09",
+		runnerConfig: {
+			runtime: "causal_lm",
+			dtype: "q4f16",
+		},
+	},
+	{
+		id: "onnx-community/Qwen3-0.6B-Instruct-ONNX",
+		provider: "transformer",
+		displayName: "Qwen 3 0.6B Instruct",
+		sizeGB: 648449396 / 1024 ** 3,
+		sizeLabel: "618MB",
+		description: "🐧 Qwen 3 0.6B Instruct: refreshed instruct tune",
+		contextLength: 40960,
+		defaultMaxNewTokens: 1024,
+		kvBytesPerToken: fp16KvBytesPerToken(28, 8, 128),
+		requiresWebGPU: true,
+		minMemoryGB: 2,
+		qualityScore: 73,
+		performanceScore: 91,
+		contextScore: 88,
+		abilities: {
+			tools: "prompt_injection",
+			vision: false,
+			reasoning: false,
+			multilingual: true,
+		},
+		releaseDate: "2026-04",
+		quickDownload: true,
+		runnerConfig: {
+			runtime: "causal_lm",
+			dtype: "q4f16",
+		},
+	},
+	{
 		id: "onnx-community/granite-4.0-micro-ONNX-web",
 		provider: "transformer",
 		displayName: "Granite 4.0 Micro",
@@ -22,6 +188,12 @@ export const TRANSFORMER_MODELS: LLMModelConfig[] = [
 		qualityScore: 86,
 		performanceScore: 82,
 		contextScore: 98,
+		abilities: {
+			tools: "native",
+			vision: false,
+			reasoning: false,
+			multilingual: true,
+		},
 		releaseDate: "2025-05",
 		quickDownload: true,
 		runnerConfig: {
@@ -44,6 +216,12 @@ export const TRANSFORMER_MODELS: LLMModelConfig[] = [
 		qualityScore: 58,
 		performanceScore: 96,
 		contextScore: 85,
+		abilities: {
+			tools: "native",
+			vision: false,
+			reasoning: false,
+			multilingual: true,
+		},
 		releaseDate: "2025-10",
 		quickDownload: true,
 		runnerConfig: {
@@ -66,6 +244,12 @@ export const TRANSFORMER_MODELS: LLMModelConfig[] = [
 		qualityScore: 78,
 		performanceScore: 82,
 		contextScore: 98,
+		abilities: {
+			tools: "native",
+			vision: false,
+			reasoning: false,
+			multilingual: true,
+		},
 		releaseDate: "2025-09",
 		quickDownload: true,
 		runnerConfig: {
@@ -88,6 +272,12 @@ export const TRANSFORMER_MODELS: LLMModelConfig[] = [
 		qualityScore: 85,
 		performanceScore: 80,
 		contextScore: 88,
+		abilities: {
+			tools: "native",
+			vision: false,
+			reasoning: true,
+			multilingual: true,
+		},
 		releaseDate: "2025-04",
 		quickDownload: true,
 		runnerConfig: {
@@ -110,6 +300,12 @@ export const TRANSFORMER_MODELS: LLMModelConfig[] = [
 		qualityScore: 90,
 		performanceScore: 66,
 		contextScore: 88,
+		abilities: {
+			tools: "native",
+			vision: false,
+			reasoning: true,
+			multilingual: true,
+		},
 		releaseDate: "2025-04",
 		runnerConfig: {
 			runtime: "causal_lm",
@@ -131,6 +327,12 @@ export const TRANSFORMER_MODELS: LLMModelConfig[] = [
 		qualityScore: 68,
 		performanceScore: 86,
 		contextScore: 98,
+		abilities: {
+			tools: "native",
+			vision: false,
+			reasoning: false,
+			multilingual: true,
+		},
 		releaseDate: "2024-09",
 		runnerConfig: {
 			runtime: "causal_lm",
@@ -152,6 +354,12 @@ export const TRANSFORMER_MODELS: LLMModelConfig[] = [
 		qualityScore: 68,
 		performanceScore: 94,
 		contextScore: 85,
+		abilities: {
+			tools: "native",
+			vision: false,
+			reasoning: true,
+			multilingual: false,
+		},
 		releaseDate: "2026-04",
 		quickDownload: true,
 		runnerConfig: {
@@ -174,6 +382,12 @@ export const TRANSFORMER_MODELS: LLMModelConfig[] = [
 		qualityScore: 52,
 		performanceScore: 94,
 		contextScore: 50,
+		abilities: {
+			tools: "native",
+			vision: false,
+			reasoning: false,
+			multilingual: true,
+		},
 		releaseDate: "2026-07",
 		quickDownload: true,
 		runnerConfig: {
@@ -196,6 +410,12 @@ export const TRANSFORMER_MODELS: LLMModelConfig[] = [
 		qualityScore: 70,
 		performanceScore: 82,
 		contextScore: 50,
+		abilities: {
+			tools: "native",
+			vision: false,
+			reasoning: false,
+			multilingual: true,
+		},
 		releaseDate: "2026-07",
 		runnerConfig: {
 			runtime: "causal_lm",
@@ -217,6 +437,12 @@ export const TRANSFORMER_MODELS: LLMModelConfig[] = [
 		qualityScore: 87,
 		performanceScore: 78,
 		contextScore: 60,
+		abilities: {
+			tools: "native",
+			vision: true,
+			reasoning: true,
+			multilingual: true,
+		},
 		releaseDate: "2025-05",
 		quickDownload: true,
 		runnerConfig: {
@@ -241,6 +467,12 @@ export const TRANSFORMER_MODELS: LLMModelConfig[] = [
 		qualityScore: 78,
 		performanceScore: 84,
 		contextScore: 98,
+		abilities: {
+			tools: "native",
+			vision: false,
+			reasoning: true,
+			multilingual: true,
+		},
 		releaseDate: "2025-03",
 		quickDownload: true,
 		runnerConfig: {
@@ -263,6 +495,12 @@ export const TRANSFORMER_MODELS: LLMModelConfig[] = [
 		qualityScore: 88,
 		performanceScore: 60,
 		contextScore: 98,
+		abilities: {
+			tools: "native",
+			vision: false,
+			reasoning: false,
+			multilingual: true,
+		},
 		releaseDate: "2025-03",
 		quickDownload: true,
 		runnerConfig: {
@@ -285,6 +523,12 @@ export const TRANSFORMER_MODELS: LLMModelConfig[] = [
 		qualityScore: 92,
 		performanceScore: 45,
 		contextScore: 98,
+		abilities: {
+			tools: "native",
+			vision: false,
+			reasoning: true,
+			multilingual: true,
+		},
 		releaseDate: "2025-03",
 		quickDownload: true,
 		runnerConfig: {
@@ -307,6 +551,25 @@ export const TRANSFORMER_MODELS: LLMModelConfig[] = [
 		qualityScore: 88,
 		performanceScore: 82,
 		contextScore: 92,
+		abilities: {
+			tools: "native",
+			vision: false,
+			reasoning: true,
+			multilingual: true,
+		},
+		// Instruct model, no-extended-thinking column, except gpqa which is the
+		// extended-thinking figure and humaneval which is HumanEval+ on the base.
+		qualityEvidence: {
+			scores: {
+				mmlu: 44.13,
+				gpqa: 41.7,
+				ifeval: 76.7,
+				humaneval: 30.48,
+				bfcl: 92.3,
+			},
+			source: "https://huggingface.co/HuggingFaceTB/SmolLM3-3B",
+			recordedAt: "2026-08",
+		},
 		releaseDate: "2025-07",
 		quickDownload: true,
 		runnerConfig: {
@@ -329,6 +592,12 @@ export const TRANSFORMER_MODELS: LLMModelConfig[] = [
 		qualityScore: 85,
 		performanceScore: 80,
 		contextScore: 98,
+		abilities: {
+			tools: "native",
+			vision: false,
+			reasoning: true,
+			multilingual: true,
+		},
 		releaseDate: "2025-01",
 		quickDownload: true,
 		runnerConfig: {
@@ -351,6 +620,12 @@ export const TRANSFORMER_MODELS: LLMModelConfig[] = [
 		qualityScore: 70,
 		performanceScore: 92,
 		contextScore: 88,
+		abilities: {
+			tools: "native",
+			vision: false,
+			reasoning: true,
+			multilingual: true,
+		},
 		releaseDate: "2025-04",
 		quickDownload: true,
 		runnerConfig: {
@@ -373,6 +648,12 @@ export const TRANSFORMER_MODELS: LLMModelConfig[] = [
 		qualityScore: 89,
 		performanceScore: 70,
 		contextScore: 98,
+		abilities: {
+			tools: "native",
+			vision: false,
+			reasoning: false,
+			multilingual: true,
+		},
 		releaseDate: "2025-02",
 		quickDownload: true,
 		runnerConfig: {
@@ -395,6 +676,12 @@ export const TRANSFORMER_MODELS: LLMModelConfig[] = [
 		qualityScore: 40,
 		performanceScore: 98,
 		contextScore: 98,
+		abilities: {
+			tools: "native",
+			vision: false,
+			reasoning: false,
+			multilingual: true,
+		},
 		releaseDate: "2024-11",
 		quickDownload: true,
 		runnerConfig: {
@@ -417,6 +704,12 @@ export const TRANSFORMER_MODELS: LLMModelConfig[] = [
 		qualityScore: 60,
 		performanceScore: 90,
 		contextScore: 98,
+		abilities: {
+			tools: "native",
+			vision: false,
+			reasoning: false,
+			multilingual: true,
+		},
 		releaseDate: "2024-11",
 		quickDownload: true,
 		runnerConfig: {
@@ -439,6 +732,12 @@ export const TRANSFORMER_MODELS: LLMModelConfig[] = [
 		qualityScore: 75,
 		performanceScore: 80,
 		contextScore: 98,
+		abilities: {
+			tools: "native",
+			vision: false,
+			reasoning: false,
+			multilingual: true,
+		},
 		releaseDate: "2024-11",
 		quickDownload: true,
 		runnerConfig: {
@@ -461,6 +760,12 @@ export const TRANSFORMER_MODELS: LLMModelConfig[] = [
 		qualityScore: 72,
 		performanceScore: 82,
 		contextScore: 98,
+		abilities: {
+			tools: "native",
+			vision: false,
+			reasoning: true,
+			multilingual: true,
+		},
 		releaseDate: "2025-03",
 		quickDownload: true,
 		runnerConfig: {
@@ -483,6 +788,12 @@ export const TRANSFORMER_MODELS: LLMModelConfig[] = [
 		qualityScore: 30,
 		performanceScore: 99,
 		contextScore: 60,
+		abilities: {
+			tools: "prompt_injection",
+			vision: false,
+			reasoning: false,
+			multilingual: false,
+		},
 		releaseDate: "2024-11",
 		runnerConfig: {
 			runtime: "causal_lm",
@@ -504,6 +815,12 @@ export const TRANSFORMER_MODELS: LLMModelConfig[] = [
 		qualityScore: 45,
 		performanceScore: 96,
 		contextScore: 60,
+		abilities: {
+			tools: "prompt_injection",
+			vision: false,
+			reasoning: false,
+			multilingual: false,
+		},
 		releaseDate: "2024-11",
 		quickDownload: true,
 		runnerConfig: {
@@ -526,6 +843,12 @@ export const TRANSFORMER_MODELS: LLMModelConfig[] = [
 		qualityScore: 65,
 		performanceScore: 83,
 		contextScore: 60,
+		abilities: {
+			tools: "prompt_injection",
+			vision: false,
+			reasoning: false,
+			multilingual: false,
+		},
 		releaseDate: "2024-11",
 		runnerConfig: {
 			runtime: "causal_lm",
@@ -547,6 +870,12 @@ export const TRANSFORMER_MODELS: LLMModelConfig[] = [
 		qualityScore: 55,
 		performanceScore: 95,
 		contextScore: 85,
+		abilities: {
+			tools: "native",
+			vision: false,
+			reasoning: false,
+			multilingual: true,
+		},
 		releaseDate: "2024-09",
 		quickDownload: true,
 		runnerConfig: {
@@ -569,6 +898,12 @@ export const TRANSFORMER_MODELS: LLMModelConfig[] = [
 		qualityScore: 72,
 		performanceScore: 82,
 		contextScore: 85,
+		abilities: {
+			tools: "native",
+			vision: false,
+			reasoning: false,
+			multilingual: true,
+		},
 		releaseDate: "2024-09",
 		runnerConfig: {
 			runtime: "causal_lm",
@@ -591,6 +926,12 @@ export const TRANSFORMER_MODELS: LLMModelConfig[] = [
 		qualityScore: 0,
 		performanceScore: 0,
 		contextScore: 0,
+		abilities: {
+			tools: "none",
+			vision: false,
+			reasoning: false,
+			multilingual: false,
+		},
 		releaseDate: "2025-02",
 		unsupported: true,
 		unsupportedReason:
@@ -611,6 +952,12 @@ export const TRANSFORMER_MODELS: LLMModelConfig[] = [
 		qualityScore: 78,
 		performanceScore: 84,
 		contextScore: 85,
+		abilities: {
+			tools: "prompt_injection",
+			vision: false,
+			reasoning: false,
+			multilingual: true,
+		},
 		releaseDate: "2025-03",
 		quickDownload: true,
 		runnerConfig: {
@@ -633,6 +980,12 @@ export const TRANSFORMER_MODELS: LLMModelConfig[] = [
 		qualityScore: 42,
 		performanceScore: 96,
 		contextScore: 85,
+		abilities: {
+			tools: "prompt_injection",
+			vision: false,
+			reasoning: false,
+			multilingual: true,
+		},
 		releaseDate: "2025-03",
 		quickDownload: true,
 		runnerConfig: {
@@ -655,6 +1008,12 @@ export const TRANSFORMER_MODELS: LLMModelConfig[] = [
 		qualityScore: 0,
 		performanceScore: 0,
 		contextScore: 0,
+		abilities: {
+			tools: "none",
+			vision: false,
+			reasoning: false,
+			multilingual: false,
+		},
 		releaseDate: "2024-11",
 		unsupported: true,
 		unsupportedReason:
@@ -675,6 +1034,12 @@ export const TRANSFORMER_MODELS: LLMModelConfig[] = [
 		qualityScore: 0,
 		performanceScore: 0,
 		contextScore: 0,
+		abilities: {
+			tools: "none",
+			vision: false,
+			reasoning: false,
+			multilingual: false,
+		},
 		releaseDate: "2024-11",
 		unsupported: true,
 		unsupportedReason:
@@ -695,6 +1060,12 @@ export const TRANSFORMER_MODELS: LLMModelConfig[] = [
 		qualityScore: 0,
 		performanceScore: 0,
 		contextScore: 0,
+		abilities: {
+			tools: "none",
+			vision: false,
+			reasoning: false,
+			multilingual: false,
+		},
 		releaseDate: "2024-11",
 		unsupported: true,
 		unsupportedReason:
@@ -715,6 +1086,12 @@ export const TRANSFORMER_MODELS: LLMModelConfig[] = [
 		qualityScore: 0,
 		performanceScore: 0,
 		contextScore: 0,
+		abilities: {
+			tools: "none",
+			vision: false,
+			reasoning: false,
+			multilingual: false,
+		},
 		releaseDate: "2025-03",
 		unsupported: true,
 		unsupportedReason:

@@ -95,6 +95,66 @@ export function estimateModelMemory(
  * Estimates a safe token budget after accounting for model context and device memory.
  * Context is rounded down to 1K-token steps to stay conservative.
  */
+/**
+ * Estimates a model at the context it can actually reach on this device.
+ *
+ * Estimating at the advertised `contextLength` marks a model "overflow" even
+ * when it runs perfectly well at a shorter context — a 128K model that reaches
+ * 87K here is a good recommendation, not a red warning.
+ *
+ * Two things differ from `estimateModelMemory`:
+ *
+ * 1. The footprint is reported at `min(contextTokens, feasibleContext)`, i.e.
+ *    the configuration the user will actually get.
+ * 2. `fit` is classified on the **weights**, not the total. Weights are the
+ *    fixed cost — you either have room for them or you cannot load the model.
+ *    KV cache is the adjustable dial, and `feasibleContext` by construction
+ *    consumes whatever memory is left, so classifying the total would report
+ *    every context-limited model as overflowing at exactly the point it was
+ *    tuned to fit.
+ */
+export function estimateModelMemoryAtUsableContext(
+	sizeGB: number,
+	kvBytesPerToken: number,
+	contextTokens: number,
+	availableGB: number,
+): ModelMemoryEstimate {
+	const atFullContext = estimateModelMemory(
+		sizeGB,
+		kvBytesPerToken,
+		contextTokens,
+		availableGB,
+	);
+
+	if (atFullContext.feasibleContext >= contextTokens) {
+		return atFullContext;
+	}
+
+	const atUsableContext = estimateModelMemory(
+		sizeGB,
+		kvBytesPerToken,
+		atFullContext.feasibleContext,
+		availableGB,
+	);
+
+	const weightsRatio =
+		availableGB > 0
+			? (sizeGB * RUNTIME_BUFFER_MULTIPLIER) / availableGB
+			: Number.POSITIVE_INFINITY;
+	const fit =
+		weightsRatio <= 0.75
+			? "comfortable"
+			: weightsRatio <= 0.95
+				? "tight"
+				: "overflow";
+
+	return {
+		...atUsableContext,
+		feasibleContext: atFullContext.feasibleContext,
+		fit,
+	};
+}
+
 export function estimateSafeTokenBudget({
 	promptTokens,
 	sizeGB,
