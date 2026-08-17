@@ -70,7 +70,17 @@
 		"usedByNone": "No agents use this yet",
 		"showMore": "Show {{count}} more",
 		"toolCount_one": "{{count}} tool",
-		"toolCount_other": "{{count}} tools"
+		"toolCount_other": "{{count}} tools",
+		"appCount_one": "{{count}} app authorized",
+		"appCount_other": "{{count}} apps authorized",
+		"appsNone": "No apps yet",
+		"appsNoneHint": "Connect an app to give this credential something to reach.",
+		"connectMoreApps": "Connect an app",
+		"appStatus": {
+			"active": "active",
+			"pending": "pending",
+			"expired": "expired"
+		}
 	},
 	"tools": {
 		"presetRecommended": "Recommended",
@@ -185,6 +195,14 @@
 		"tooMany": "That's a lot of tools for one agent — consider narrowing the scope.",
 		"done": "Done",
 		"noneConnected": "Nothing is connected yet.",
-		"goToConnections": "Open Connections"
+		"goToConnections": "Open Connections",
+		"providersTitle": "What this agent can use",
+		"providersSubtitle": "Grant each app separately. This agent reaches only what you switch on — nothing else, and nothing added later.",
+		"noApps": "No apps authorized yet — connect one first.",
+		"noneSelected": "No providers granted — this agent has no external tools.",
+		"selectedCount_one": "{{count}} provider granted",
+		"selectedCount_other": "{{count}} providers granted",
+		"scopeProblem": "will give this agent nothing:",
+		"addApp": "Add app"
 	}
 }

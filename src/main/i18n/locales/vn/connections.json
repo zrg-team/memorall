@@ -68,7 +68,16 @@
 		"neverSynced": "chưa đồng bộ",
 		"usedByNone": "Chưa có tác nhân nào dùng kết nối này",
 		"showMore": "Xem thêm {{count}}",
-		"toolCount_other": "{{count}} công cụ"
+		"toolCount_other": "{{count}} công cụ",
+		"appCount_other": "{{count}} ứng dụng đã cấp quyền",
+		"appsNone": "Chưa có ứng dụng nào",
+		"appsNoneHint": "Kết nối một ứng dụng để thông tin đăng nhập này có thứ để dùng.",
+		"connectMoreApps": "Kết nối ứng dụng",
+		"appStatus": {
+			"active": "hoạt động",
+			"pending": "đang chờ",
+			"expired": "hết hạn"
+		}
 	},
 	"tools": {
 		"presetRecommended": "Khuyên dùng",
@@ -181,6 +190,14 @@
 		"tooMany": "Khá nhiều công cụ cho một tác nhân — hãy cân nhắc thu hẹp phạm vi.",
 		"done": "Xong",
 		"noneConnected": "Chưa có kết nối nào.",
-		"goToConnections": "Mở trang Kết nối"
+		"goToConnections": "Mở trang Kết nối",
+		"providersTitle": "Agent này được dùng gì",
+		"providersSubtitle": "Cấp quyền cho từng ứng dụng riêng. Agent chỉ dùng được những gì bạn bật.",
+		"noApps": "Chưa có ứng dụng nào được uỷ quyền — kết nối trước.",
+		"noneSelected": "Chưa cấp quyền — agent này không có công cụ bên ngoài.",
+		"selectedCount_one": "Đã cấp {{count}} nhà cung cấp",
+		"selectedCount_other": "Đã cấp {{count}} nhà cung cấp",
+		"scopeProblem": "sẽ không cấp gì cho agent này:",
+		"addApp": "Thêm ứng dụng"
 	}
 }

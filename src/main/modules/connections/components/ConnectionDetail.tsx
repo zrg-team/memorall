@@ -5,6 +5,7 @@ import {
 	ArrowRight,
 	Loader2,
 	Pencil,
+	Plus,
 	RefreshCw,
 	Trash2,
 } from "lucide-react";
@@ -15,6 +16,7 @@ import { useConnectionsStore } from "@/main/stores/connections";
 import {
 	findAgentsUsingConnection,
 	toServerKey,
+	type ConnectionApp,
 	type ConnectionUsage,
 	type McpConnection,
 } from "@/services/mcp-connections";
@@ -22,7 +24,7 @@ import { StatusPill } from "./StatusPill";
 import { ToolScopeList } from "./ToolScopeList";
 import { CustomEndpointForm } from "./CustomEndpointForm";
 
-type DetailTab = "tools" | "usedBy" | "settings";
+type DetailTab = "apps" | "tools" | "usedBy" | "settings";
 
 const relativeTime = (iso: string): string => {
 	const delta = Date.now() - new Date(iso).getTime();
@@ -34,13 +36,61 @@ const relativeTime = (iso: string): string => {
 	return `${Math.round(hours / 24)} d ago`;
 };
 
+/**
+ * The apps a Composio credential holds. Shown on the detail tab and on the
+ * unfinished-setup screen alike — "which apps did I connect?" is the same
+ * question whether or not the endpoint was ever minted.
+ */
+const AppList: React.FC<{ apps: ConnectionApp[] }> = ({ apps }) => {
+	const { t } = useTranslation("connections");
+	return (
+		<div className="space-y-1.5">
+			{apps.map((app) => (
+				<div
+					key={app.id}
+					className="flex items-center gap-2.5 rounded-lg border border-border/60 px-3 py-2"
+				>
+					<span className="grid h-6 w-6 shrink-0 place-items-center rounded-lg bg-muted text-[10px] font-bold uppercase text-muted-foreground">
+						{(app.name || app.id).slice(0, 2)}
+					</span>
+					<span className="min-w-0 flex-1 text-left">
+						<span className="block truncate text-xs font-medium">
+							{app.name || app.id}
+						</span>
+						<span className="block truncate font-mono text-[10px] text-muted-foreground">
+							{app.id}
+						</span>
+					</span>
+					<Badge
+						variant="outline"
+						className={cn(
+							"shrink-0 text-[9px] uppercase",
+							app.status === "active"
+								? "border-emerald-500/30 text-emerald-500"
+								: "border-amber-500/30 text-amber-500",
+						)}
+					>
+						{t(`detail.appStatus.${app.status}`, { defaultValue: app.status })}
+					</Badge>
+				</div>
+			))}
+		</div>
+	);
+};
+
 export const ConnectionDetail: React.FC<{
 	connection: McpConnection;
 	/** Reopen the lane that created this connection, for unfinished setup. */
 	onContinueSetup?: () => void;
 }> = ({ connection, onContinueSetup }) => {
 	const { t } = useTranslation("connections");
-	const [tab, setTab] = React.useState<DetailTab>("tools");
+	// A Composio credential is a bag of apps, and which apps it holds is the
+	// first thing anyone opening it wants to know — the tool list is six router
+	// entries that say nothing about Gmail or GitHub.
+	const isComposio = connection.kind === "composio";
+	const [tab, setTab] = React.useState<DetailTab>(
+		isComposio ? "apps" : "tools",
+	);
 	const [isEditing, setIsEditing] = React.useState(false);
 	const [usage, setUsage] = React.useState<ConnectionUsage[] | null>(null);
 
@@ -57,10 +107,10 @@ export const ConnectionDetail: React.FC<{
 	const remove = useConnectionsStore((state) => state.remove);
 
 	React.useEffect(() => {
-		setTab("tools");
+		setTab(isComposio ? "apps" : "tools");
 		setIsEditing(false);
 		setUsage(null);
-	}, [connection.id]);
+	}, [connection.id, isComposio]);
 
 	React.useEffect(() => {
 		if (tab !== "usedBy" || usage !== null) return;
@@ -72,6 +122,8 @@ export const ConnectionDetail: React.FC<{
 			active = false;
 		};
 	}, [tab, usage, connection.id]);
+
+	const apps = connection.apps ?? [];
 
 	const handleDelete = async () => {
 		if (!confirm(t("detail.deleteConfirm"))) return;
@@ -120,12 +172,17 @@ export const ConnectionDetail: React.FC<{
 						{/* An authorized app with no endpoint is a different problem from
 						    no apps at all, and telling someone to "connect an app" they
 						    already connected reads as the app losing their work. */}
-						{connection.apps?.length
-							? t("status.incompleteEndpointHint", {
-									count: connection.apps.length,
-								})
+						{apps.length > 0
+							? t("status.incompleteEndpointHint", { count: apps.length })
 							: t("status.incompleteHint")}
 					</p>
+					{/* Naming them beats a count: unfinished setup is exactly when
+					    someone doubts whether their authorizations survived. */}
+					{apps.length > 0 ? (
+						<div className="w-full max-w-sm">
+							<AppList apps={apps} />
+						</div>
+					) : null}
 					{onContinueSetup ? (
 						<Button type="button" size="sm" onClick={onContinueSetup}>
 							<ArrowRight size={13} className="mr-1.5" />
@@ -209,7 +266,10 @@ export const ConnectionDetail: React.FC<{
 			) : null}
 
 			<div className="flex gap-1 border-b border-border/60 px-4">
-				{(["tools", "usedBy", "settings"] as const).map((candidate) => (
+				{(isComposio
+					? (["apps", "tools", "usedBy", "settings"] as const)
+					: (["tools", "usedBy", "settings"] as const)
+				).map((candidate) => (
 					<button
 						key={candidate}
 						type="button"
@@ -227,6 +287,39 @@ export const ConnectionDetail: React.FC<{
 			</div>
 
 			<div className="min-h-0 flex-1 overflow-y-auto p-4">
+				{tab === "apps" ? (
+					<div className="space-y-2.5">
+						<div className="flex flex-wrap items-center justify-between gap-2">
+							<span className="text-[11px] text-muted-foreground">
+								{apps.length > 0
+									? t("detail.appCount", { count: apps.length })
+									: t("detail.appsNone")}
+							</span>
+							{/* The wizard resumes on the app catalog when a key is stored, so
+							    this is "connect another app" rather than a restart. */}
+							{onContinueSetup ? (
+								<Button
+									type="button"
+									size="sm"
+									className="h-7 rounded-lg px-2.5 text-[11px]"
+									onClick={onContinueSetup}
+								>
+									<Plus size={12} className="mr-1" />
+									{t("detail.connectMoreApps")}
+								</Button>
+							) : null}
+						</div>
+
+						{apps.length === 0 ? (
+							<p className="py-6 text-center text-xs text-muted-foreground">
+								{t("detail.appsNoneHint")}
+							</p>
+						) : (
+							<AppList apps={apps} />
+						)}
+					</div>
+				) : null}
+
 				{tab === "tools" ? (
 					tools.length > 0 ? (
 						<div className="space-y-2.5">

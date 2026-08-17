@@ -21,6 +21,7 @@ import { platform } from "@/platform/current";
 import { logError, logInfo } from "@/utils/logger";
 import {
 	ComposioClient,
+	describeComposioError,
 	waitForConnection,
 	type ComposioToolkit,
 } from "@/services/composio";
@@ -168,7 +169,16 @@ export const ComposioWizard: React.FC<ComposioWizardProps> = ({
 			byId.set(app.id, app);
 		}
 
-		setConnected([...byId.values()]);
+		const merged = [...byId.values()];
+		setConnected(merged);
+
+		// Write back what Composio reports. Without this the record keeps whatever
+		// it had when the tab was last open — usually nothing — so the detail pane
+		// says "connect at least one app" to someone who has connected three, and
+		// the agent picker offers no providers to grant.
+		if (merged.length > 0) {
+			await persistApps(merged);
+		}
 		setStep("apps");
 	};
 
@@ -292,9 +302,12 @@ export const ComposioWizard: React.FC<ComposioWizardProps> = ({
 
 	/** Record authorized apps on the connection, independent of the mint. */
 	const persistApps = async (apps: ConnectionApp[]) => {
-		const record = connections.find(
-			(entry) => entry.id === COMPOSIO_CONNECTION_ID,
-		);
+		// Read the store rather than the render's copy: the record may have been
+		// created moments ago by `ensureConnectionRecord`, and the closed-over
+		// array would still be the empty one from before that save.
+		const record = useConnectionsStore
+			.getState()
+			.connections.find((entry) => entry.id === COMPOSIO_CONNECTION_ID);
 		if (!record) return;
 		await save({
 			...record,
@@ -315,9 +328,9 @@ export const ComposioWizard: React.FC<ComposioWizardProps> = ({
 	 */
 	const syncSession = async (apps: ConnectionApp[]) => {
 		const client = clientRef.current;
-		const record = connections.find(
-			(entry) => entry.id === COMPOSIO_CONNECTION_ID,
-		);
+		const record = useConnectionsStore
+			.getState()
+			.connections.find((entry) => entry.id === COMPOSIO_CONNECTION_ID);
 		if (!client || apps.length === 0) return;
 
 		setSyncError(null);
@@ -334,7 +347,7 @@ export const ComposioWizard: React.FC<ComposioWizardProps> = ({
 			// claiming "ready" when there is no endpoint is what made this
 			// failure invisible.
 			logError("[Composio] Session mint failed:", caught);
-			setSyncError(caught instanceof Error ? caught.message : String(caught));
+			setSyncError(describeComposioError(caught));
 		} finally {
 			setIsSyncing(false);
 		}
@@ -405,6 +418,29 @@ export const ComposioWizard: React.FC<ComposioWizardProps> = ({
 	const isUsable = Boolean(
 		connections.find((entry) => entry.id === COMPOSIO_CONNECTION_ID)?.url,
 	);
+
+	/**
+	 * Finish an interrupted setup on sight rather than waiting for Retry.
+	 *
+	 * Coming back to authorized-but-not-ready and being offered a button with no
+	 * stated reason is the dead end users kept hitting. Attempting the mint here
+	 * either completes the setup or puts the real error on screen — a scoped API
+	 * key that cannot create sessions answers 403, and that is worth reading.
+	 */
+	const autoSyncedRef = React.useRef(false);
+	React.useEffect(() => {
+		if (
+			step !== "apps" ||
+			isUsable ||
+			isSyncing ||
+			connected.length === 0 ||
+			autoSyncedRef.current
+		) {
+			return;
+		}
+		autoSyncedRef.current = true;
+		void syncSession(connected);
+	}, [step, isUsable, isSyncing, connected]);
 
 	const isConnected = (slug: string) =>
 		connected.some((app) => app.id === slug);
