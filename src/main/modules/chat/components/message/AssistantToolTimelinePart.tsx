@@ -15,9 +15,11 @@ import {
 } from "@/main/components/ui/collapsible";
 import {
 	getActionIcon,
+	getComposioActionIcon,
 	ToolActionDetails,
 	translateActionName,
 } from "../MessageActions";
+import { AppIcon } from "@/main/modules/connections/components/AppIcon";
 
 export const AssistantToolTimelinePart: React.FC<{
 	part: ComplexContentPartTool;
@@ -30,6 +32,7 @@ export const AssistantToolTimelinePart: React.FC<{
 	const actionName = part.name;
 	const title = translateActionName(t, actionName, part.metadata);
 	const Icon = getActionIcon(actionName);
+	const appMark = getComposioActionIcon(actionName, part.metadata);
 	const isRunning = part.state === "running";
 	const isError = part.state === "error";
 	const [nowMs, setNowMs] = useState(() => Date.now());
@@ -108,7 +111,15 @@ export const AssistantToolTimelinePart: React.FC<{
 											: "text-muted-foreground",
 								)}
 							>
-								<Icon className="h-3.5 w-3.5" />
+								{appMark ? (
+									<AppIcon
+										name={appMark.label}
+										composioSlug={appMark.logoSlug}
+										size={18}
+									/>
+								) : (
+									<Icon className="h-3.5 w-3.5" />
+								)}
 							</span>
 							<span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground transition-colors duration-200">
 								{title}

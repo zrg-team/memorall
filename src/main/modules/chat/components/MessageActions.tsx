@@ -33,7 +33,8 @@ import {
 	TaskTrigger,
 } from "@/main/components/ui/shadcn-io/ai/task";
 import { cn } from "@/lib/utils";
-import type { MessageActionItem } from "./types";
+import { AppIcon } from "@/main/modules/connections/components/AppIcon";
+import type { ActionRenderer, MessageActionItem } from "./types";
 import { webAccessRenderer } from "./tools/WebAccess";
 import { apiResultRenderer } from "./tools/APIResult";
 import { defaultActionRenderer } from "./tools/DefaultActionRenderer";
@@ -44,7 +45,12 @@ import { webSearchRenderer } from "./tools/WebSearch";
 import { fsActionRenderer } from "./tools/FileSystem";
 import { terminalToolRenderer } from "./tools/TerminalTool";
 import { plannerToolRenderer } from "./tools/PlannerTool";
-import { getMCPActionMetadata, ToolItemRawIO } from "./tools/ToolCommon";
+import {
+	getMCPActionMetadata,
+	getToolCallArguments,
+	isRecord,
+	ToolItemRawIO,
+} from "./tools/ToolCommon";
 import {
 	messageKnowledgeGraphRenderer,
 	structMemKnowledgeRetrievalRenderer,
@@ -59,6 +65,15 @@ import {
 	getCoAgentActionTitle,
 } from "./tools/CoAgentTool";
 import { documentConvertRenderer } from "./tools/DocumentConvert";
+import { composioToolRenderer } from "./tools/ComposioTool";
+import {
+	composioCallTitle,
+	isComposioTool,
+	stripServerPrefix,
+	toolkitFromSlug,
+	toolkitLabel,
+	toolkitLogoSlug,
+} from "./tools/composio-toolkits";
 
 const ICON_MAPPINGS: Array<{ keywords: string[]; icon: LucideIcon }> = [
 	{ keywords: ["search", "query", "retrieval", "retrieve"], icon: Search },
@@ -89,9 +104,64 @@ const EXACT_ICON_MAPPINGS: Record<string, LucideIcon> = {
 	pdf_to_image: FileImage,
 };
 
+/**
+ * The toolkit tools a Composio router call ran, read straight off the recorded
+ * tool-call arguments. Used only for titling, so a malformed payload degrades
+ * to "no slugs" rather than throwing.
+ */
+const getComposioExecutedSlugs = (
+	metadata?: Record<string, unknown>,
+): string[] => {
+	const args = metadata
+		? getToolCallArguments({ name: "", description: "", metadata })
+		: null;
+	if (!args) return [];
+
+	const fromList = Array.isArray(args.tools)
+		? (args.tools as unknown[])
+				.map((entry) => (isRecord(entry) ? entry.tool_slug : undefined))
+				.filter((slug): slug is string => typeof slug === "string")
+		: [];
+	if (fromList.length > 0) return fromList;
+
+	return typeof args.tool_slug === "string" ? [args.tool_slug] : [];
+};
+
 const I18N_KEY_REGEX = /^[\w.-]+$/;
 const looksLikeI18nKey = (value: string): boolean =>
 	value.includes(".") && I18N_KEY_REGEX.test(value);
+
+/**
+ * The app mark for a Composio call, or null when the call is not Composio's or
+ * belongs to the router rather than a toolkit. Rendered in place of the generic
+ * lucide glyph so a row is recognisable as "Google Calendar" at a glance.
+ */
+export const getComposioActionIcon = (
+	name: string,
+	metadata?: Record<string, unknown>,
+): { toolkit: string; label: string; logoSlug: string } | null => {
+	const mcp = metadata ? getMCPActionMetadata({ metadata }) : null;
+	const toolName = mcp?.originalToolName ?? name;
+	if (!isComposioTool(toolName, mcp?.serverName)) {
+		return null;
+	}
+
+	// A router call is titled by whatever it executed, so the icon follows the
+	// same slug rather than falling back to Composio's own mark.
+	const executed = getComposioExecutedSlugs(metadata);
+	const source =
+		executed.length === 1 ? executed[0] : stripServerPrefix(toolName);
+	const toolkit = toolkitFromSlug(source);
+	if (!toolkit) {
+		return null;
+	}
+
+	return {
+		toolkit,
+		label: toolkitLabel(toolkit),
+		logoSlug: toolkitLogoSlug(toolkit),
+	};
+};
 
 export const getActionIcon = (name: string): LucideIcon => {
 	const exact = EXACT_ICON_MAPPINGS[name];
@@ -145,6 +215,16 @@ export const translateActionName = (
 	// (`composio__COMPOSIO_MULTI_EXECUTE_TOOL`), which reads as a slug rather
 	// than an action. Name the tool and say where it ran.
 	const mcp = metadata ? getMCPActionMetadata({ metadata }) : null;
+	const toolName = mcp?.originalToolName ?? actionName;
+
+	// A Composio call says "Composio · COMPOSIO MULTI EXECUTE TOOL" under the
+	// generic MCP rule, which names the router rather than the app that was
+	// actually touched. Title it by the toolkit — reading the executed slugs out
+	// of the arguments when the router is standing in for a real app call.
+	if (isComposioTool(toolName, mcp?.serverName)) {
+		return composioCallTitle(toolName, getComposioExecutedSlugs(metadata));
+	}
+
 	if (mcp?.originalToolName) {
 		return `${mcp.serverName} · ${humanizeToolName(mcp.originalToolName)}`;
 	}
@@ -168,11 +248,6 @@ const translateActionDescription = (
 
 	return commonTranslated || description;
 };
-
-type ActionRenderer = (
-	item: MessageActionItem,
-	isOpen: boolean,
-) => React.ReactNode | null;
 
 const ACTION_RENDERERS: Record<string, ActionRenderer> = {
 	container_web_access: webAccessRenderer,
@@ -295,10 +370,30 @@ class ActionRenderErrorBoundary extends React.Component<
 	}
 }
 
+/**
+ * Composio tools cannot be keyed by name: they arrive server-prefixed
+ * (`composio__COMPOSIO_SEARCH_TOOLS`) and the toolkit half is open-ended, so
+ * the exact-match table can never enumerate them. Match on shape instead.
+ */
+const resolveActionRenderer = (item: MessageActionItem): ActionRenderer => {
+	const exact = ACTION_RENDERERS[item.name];
+	if (exact) {
+		return exact;
+	}
+
+	const mcp = getMCPActionMetadata(item);
+	const toolName = mcp?.originalToolName ?? item.name;
+	if (isComposioTool(toolName, mcp?.serverName)) {
+		return composioToolRenderer;
+	}
+
+	return defaultActionRenderer;
+};
+
 const ActionContent: React.FC<ActionContentProps> = React.memo(
 	({ item, isOpen }) => {
 		const { t } = useTranslation("chat");
-		const renderer = ACTION_RENDERERS[item.name] || defaultActionRenderer;
+		const renderer = resolveActionRenderer(item);
 		const displayItem = {
 			...item,
 			description: translateActionDescription(t, item.description),
@@ -336,6 +431,10 @@ const TaskItemRenderer: React.FC<TaskItemRendererProps> = React.memo(
 		const [isOpen, setIsOpen] = React.useState(false);
 
 		const Icon = useMemo(() => getActionIcon(item.name), [item.name]);
+		const appMark = useMemo(
+			() => getComposioActionIcon(item.name, item.metadata),
+			[item.name, item.metadata],
+		);
 		const title = useMemo(
 			() => translateActionName(t, item.name, item.metadata),
 			[t, item.name, item.metadata],
@@ -381,7 +480,15 @@ const TaskItemRenderer: React.FC<TaskItemRendererProps> = React.memo(
 										: "border-border/55 bg-background/70 text-muted-foreground",
 								)}
 							>
-								<Icon className="h-4 w-4" />
+								{appMark ? (
+									<AppIcon
+										name={appMark.label}
+										composioSlug={appMark.logoSlug}
+										size={20}
+									/>
+								) : (
+									<Icon className="h-4 w-4" />
+								)}
 							</span>
 							<span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground transition-colors duration-200">
 								{title}

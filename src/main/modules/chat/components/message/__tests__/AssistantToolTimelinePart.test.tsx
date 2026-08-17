@@ -57,8 +57,21 @@ const mcpPart: ComplexContentPartTool = {
 	state: "complete",
 };
 
+/** A tool served over MCP that is not Composio's, to prove the split. */
+const genericMcpPart: ComplexContentPartTool = {
+	...mcpPart,
+	name: "filesystem__read_file",
+	metadata: {
+		...mcpPart.metadata,
+		tool_metadata: {
+			source: "mcp",
+			mcp: { serverName: "filesystem", originalToolName: "read_file" },
+		},
+	},
+};
+
 describe("AssistantToolTimelinePart", () => {
-	it("names an MCP call by its server and tool instead of the prefixed slug", () => {
+	it("names a Composio call by the app it touched, not the router slug", () => {
 		render(
 			<AssistantToolTimelinePart
 				part={mcpPart}
@@ -67,42 +80,52 @@ describe("AssistantToolTimelinePart", () => {
 			/>,
 		);
 
+		// COMPOSIO_MULTI_EXECUTE_TOOL is a router meta-tool; the call it stands
+		// in for is what the user cares about.
 		expect(
-			screen.getByText("composio · COMPOSIO MULTI EXECUTE TOOL"),
+			screen.getByText("Google Calendar · Events list"),
 		).toBeInTheDocument();
 	});
 
-	it("shows where an MCP result came from and what it was called with", () => {
+	it("shows the app, the action and the slug behind a Composio result", () => {
 		render(
 			<AssistantToolTimelinePart
 				part={mcpPart}
+				isLast={true}
+				forceOpen={true}
+			/>,
+		);
+
+		expect(screen.getAllByText("Google Calendar").length).toBeGreaterThan(0);
+		expect(
+			screen.getAllByText("GOOGLECALENDAR_EVENTS_LIST").length,
+		).toBeGreaterThan(0);
+	});
+
+	it("still exposes the untouched payload behind the Raw toggle", () => {
+		render(
+			<AssistantToolTimelinePart
+				part={mcpPart}
+				isLast={true}
+				forceOpen={true}
+			/>,
+		);
+
+		expect(screen.getByText("Raw")).toBeInTheDocument();
+		expect(screen.getByText("Input")).toBeInTheDocument();
+		expect(screen.getByText("Output")).toBeInTheDocument();
+	});
+
+	it("leaves non-Composio MCP tools on the generic renderer", () => {
+		render(
+			<AssistantToolTimelinePart
+				part={genericMcpPart}
 				isLast={true}
 				forceOpen={true}
 			/>,
 		);
 
 		expect(screen.getByText("MCP")).toBeInTheDocument();
-		expect(screen.getByText("COMPOSIO_MULTI_EXECUTE_TOOL")).toBeInTheDocument();
-		expect(
-			screen.getByText(/GOOGLECALENDAR_EVENTS_LIST/, { selector: "pre" }),
-		).toBeInTheDocument();
-	});
-
-	it("renders a JSON result as formatted code, not a run-on string", () => {
-		const { container } = render(
-			<AssistantToolTimelinePart
-				part={mcpPart}
-				isLast={true}
-				forceOpen={true}
-			/>,
-		);
-
-		const blocks = Array.from(container.querySelectorAll("pre"));
-		const output = blocks.find((block) =>
-			block.textContent?.includes('"successful"'),
-		);
-		expect(output).toBeDefined();
-		// Pretty-printed, so the payload is readable rather than one long line.
-		expect(output?.textContent).toContain("\n");
+		expect(screen.getByText("filesystem · Read file")).toBeInTheDocument();
 	});
 });
