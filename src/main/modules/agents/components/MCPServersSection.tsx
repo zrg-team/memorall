@@ -1,13 +1,14 @@
-import React from "react";
 import NiceModal from "@ebay/nice-modal-react";
-import { useTranslation } from "react-i18next";
 import { Link2, Plus, Terminal } from "lucide-react";
-import { useAgentConfigStore } from "@/main/stores/agent-config";
-import { useConnectionsStore } from "@/main/stores/connections";
-import { MCPServersModal } from "../modals/MCPServersModal";
+import React from "react";
+import { useTranslation } from "react-i18next";
 import { CursorPoint } from "@/components/AgentCursor";
 import { AGENT_WIZARD_CURSOR_KEYS } from "@/main/modules/agent-wizard";
 import { StatusDot } from "@/main/modules/connections";
+import { useAgentConfigStore } from "@/main/stores/agent-config";
+import { useConnectionsStore } from "@/main/stores/connections";
+import { selectedProviders } from "@/services/mcp-connections";
+import { MCPServersModal } from "../modals/MCPServersModal";
 
 /**
  * The agent's connections, shown by what they are rather than where they live —
@@ -30,14 +31,12 @@ export const MCPServersSection: React.FC = () => {
 		void NiceModal.show(MCPServersModal);
 	};
 
-	const selected = draftConnections
-		.map((selection) => ({
-			selection,
-			connection: connections.find(
-				(candidate) => candidate.id === selection.connectionId,
-			),
-		}))
-		.filter((entry) => entry.connection);
+	// Chips name providers, not credentials: "GitHub" is what the agent can do,
+	// "Composio" is only where the key lives.
+	const selected = React.useMemo(
+		() => selectedProviders(draftConnections, connections),
+		[draftConnections, connections],
+	);
 
 	return (
 		<CursorPoint
@@ -48,30 +47,26 @@ export const MCPServersSection: React.FC = () => {
 				{t("connections:agent.label")}
 			</span>
 			<div className="flex flex-wrap items-center gap-1.5">
-				{selected.map(({ selection, connection }) => {
-					if (!connection) return null;
-					const status = statusOf(connection.id);
-					return (
-						<button
-							key={selection.connectionId}
-							type="button"
-							onClick={openModal}
-							className="flex items-center gap-1.5 rounded-lg border border-border/60 bg-muted/40 px-2.5 py-1 text-xs font-medium transition-colors hover:bg-muted"
-						>
-							<StatusDot status={status} />
-							{connection.kind === "composio" ? (
-								<span className="grid h-3.5 w-3.5 place-items-center rounded bg-gradient-to-br from-violet-600 to-fuchsia-500 text-[7px] font-bold text-white">
-									C
-								</span>
-							) : connection.kind === "template" ? (
-								<Terminal size={10} className="text-muted-foreground" />
-							) : (
-								<Link2 size={10} className="text-muted-foreground" />
-							)}
-							<span>{connection.name}</span>
-						</button>
-					);
-				})}
+				{selected.map((provider) => (
+					<button
+						key={provider.key}
+						type="button"
+						onClick={openModal}
+						className="flex items-center gap-1.5 rounded-lg border border-border/60 bg-muted/40 px-2.5 py-1 text-xs font-medium transition-colors hover:bg-muted"
+					>
+						<StatusDot status={statusOf(provider.connectionId)} />
+						{provider.connectionKind === "composio" ? (
+							<span className="grid h-3.5 w-3.5 place-items-center rounded bg-gradient-to-br from-violet-600 to-fuchsia-500 text-[7px] font-bold text-white">
+								C
+							</span>
+						) : provider.connectionKind === "template" ? (
+							<Terminal size={10} className="text-muted-foreground" />
+						) : (
+							<Link2 size={10} className="text-muted-foreground" />
+						)}
+						<span>{provider.label}</span>
+					</button>
+				))}
 				<button
 					type="button"
 					onClick={openModal}

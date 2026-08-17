@@ -350,6 +350,25 @@ export class ComposioClient {
 }
 
 /**
+ * Turn a Composio failure into something a user can act on.
+ *
+ * The one that matters most: minting a tool-router session needs `sessions`
+ * write access, and a scoped project key answers 403 with a message about
+ * permissions. Left raw, that reads as "something went wrong" and the app looks
+ * broken rather than under-permissioned.
+ */
+export function describeComposioError(error: unknown): string {
+	const detail = error instanceof Error ? error.message : String(error);
+	if (error instanceof ComposioError && error.status === 403) {
+		return `This Composio API key is not allowed to create tool sessions. Give it "sessions" write access in the Composio dashboard, or use a full-access project key. (${detail.slice(0, 160)})`;
+	}
+	if (error instanceof ComposioError && error.status === 401) {
+		return "Composio rejected this API key. Check it in the Composio dashboard.";
+	}
+	return detail;
+}
+
+/**
  * Poll a pending connection until it goes ACTIVE. Composio's own SDK exposes
  * `waitForConnection`; this is the REST equivalent with an abort signal so the
  * UI can cancel when the user gives up on the consent tab.

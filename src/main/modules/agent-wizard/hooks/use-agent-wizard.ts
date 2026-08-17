@@ -1,18 +1,27 @@
-import React from "react";
 import { nanoid } from "nanoid";
-import { serviceManager } from "@/services";
+import React from "react";
 import { useCurrentModel } from "@/main/hooks/use-current-model";
-import {
-	useAgentConfigStore,
-	type AgentFeatureDefinition,
-} from "@/main/stores/agent-config";
+import { metadataWithAgentIconScreen } from "@/main/modules/agents/types";
 import { chatService } from "@/main/modules/chat/services/chat-service";
-import { listDefaultSkills } from "@/services/filesystem/default-skills";
+import {
+	type AgentFeatureDefinition,
+	useAgentConfigStore,
+} from "@/main/stores/agent-config";
+import { useConnectionsStore } from "@/main/stores/connections";
+import { serviceManager } from "@/services";
 import type { Flow } from "@/services/database/types";
+import { listDefaultSkills } from "@/services/filesystem/default-skills";
 import type { McpConnection } from "@/services/mcp-connections";
+import { COMPOSIO_SECRET_KEY } from "@/services/mcp-connections";
 import type { ChatMessage } from "@/types/openai";
 import { logError } from "@/utils/logger";
+import { hasSecret } from "@/utils/master-key";
 import { isUuid } from "@/utils/uuid";
+import {
+	AGENT_WIZARD_TEMPLATES,
+	createBlankAgentWizardDraft,
+	draftFromTemplate,
+} from "../templates/agent-wizard-templates";
 import type {
 	AgentWizardCatalog,
 	AgentWizardConnectionInfo,
@@ -21,24 +30,14 @@ import type {
 	AgentWizardMessage,
 	AgentWizardTemplate,
 } from "../types";
-import { useConnectionsStore } from "@/main/stores/connections";
-import { COMPOSIO_SECRET_KEY } from "@/services/mcp-connections";
-import { hasSecret } from "@/utils/master-key";
-
-import { metadataWithAgentIconScreen } from "@/main/modules/agents/types";
-import {
-	AGENT_WIZARD_TEMPLATES,
-	createBlankAgentWizardDraft,
-	draftFromTemplate,
-} from "../templates/agent-wizard-templates";
 import {
 	agentWizardToolPatchFromCall,
 	applyAgentWizardPatch,
 	applyAgentWizardToolPatch,
 } from "../utils/apply-agent-wizard-patch";
 import {
-	buildAgentWizardTools,
 	buildAgentWizardSystemPrompt,
+	buildAgentWizardTools,
 	isAgentWizardToolName,
 } from "../utils/build-agent-wizard-prompt";
 
@@ -300,7 +299,10 @@ export const useAgentWizard = ({
 				kind: connection.kind,
 				status: statusOf(connection.id),
 				toolCount: toolsOf(connection.id).length,
-				apps: connection.apps?.map((app) => app.name),
+				apps: connection.apps?.map((app) => ({
+					id: app.id,
+					name: app.name,
+				})),
 			})),
 		[storeConnections, statusOf, toolsOf],
 	);
@@ -593,13 +595,26 @@ export const useAgentWizard = ({
 	 */
 	const attachConnection = React.useCallback(
 		(connection: McpConnection) => {
+			// Grant exactly the apps just authorized. A Composio entry with no
+			// appIds reaches nothing, so attaching the bare connection here would
+			// look like it worked and quietly leave the agent tool-less.
+			const appIds =
+				connection.kind === "composio"
+					? (connection.apps ?? []).map((app) => app.id)
+					: undefined;
+			const grant = {
+				connectionId: connection.id,
+				...(appIds?.length ? { appIds } : {}),
+			};
 			const next: AgentWizardDraft = {
 				...draftRef.current,
 				connections: draftRef.current.connections.some(
 					(entry) => entry.connectionId === connection.id,
 				)
-					? draftRef.current.connections
-					: [...draftRef.current.connections, { connectionId: connection.id }],
+					? draftRef.current.connections.map((entry) =>
+							entry.connectionId === connection.id ? grant : entry,
+						)
+					: [...draftRef.current.connections, grant],
 				enabledFeatureNames: draftRef.current.enabledFeatureNames.includes(
 					"mcp-feature",
 				)

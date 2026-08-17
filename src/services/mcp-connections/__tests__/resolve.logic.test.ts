@@ -1,10 +1,21 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const listConnections = vi.fn();
+const upsertConnection = vi.fn();
 const loadSecret = vi.fn();
+const createMcpSession = vi.fn();
 
 vi.mock("../registry", () => ({
 	listConnections: (...args: unknown[]) => listConnections(...args),
+	upsertConnection: (...args: unknown[]) => upsertConnection(...args),
+}));
+
+vi.mock("@/services/composio", () => ({
+	ComposioClient: class {
+		createMcpSession(...args: unknown[]) {
+			return createMcpSession(...args);
+		}
+	},
 }));
 
 vi.mock("@/utils/master-key", () => ({
@@ -18,9 +29,9 @@ vi.mock("@/utils/logger", () => ({
 	logDebug: vi.fn(),
 }));
 
+import type { UnifiedFlowConfig } from "@/services/flows-legacy/interfaces/config/flow-config";
 import { resolveConnections, withResolvedConnections } from "../resolve";
 import type { McpConnection } from "../types";
-import type { UnifiedFlowConfig } from "@/services/flows-legacy/interfaces/config/flow-config";
 
 const connection = (overrides: Partial<McpConnection> = {}): McpConnection => ({
 	id: "c1",
@@ -44,9 +55,32 @@ const configWith = (stepConfig: Record<string, unknown>): UnifiedFlowConfig =>
 		],
 	}) as unknown as UnifiedFlowConfig;
 
+/**
+ * A Composio account with three authorized apps — the shape the scoping rules
+ * exist for. `composio.toolkits` is what the connection's own session carries.
+ */
+const composioConnection = (
+	overrides: Partial<McpConnection> = {},
+): McpConnection =>
+	connection({
+		kind: "composio",
+		name: "Composio",
+		url: "https://backend.composio.dev/tool_router/trs_all/mcp",
+		apps: [
+			{ id: "gmail", name: "Gmail", status: "active" },
+			{ id: "googlecalendar", name: "Google Calendar", status: "active" },
+			{ id: "github", name: "GitHub", status: "active" },
+		],
+		composio: { toolkits: ["gmail", "googlecalendar", "github"] },
+		...overrides,
+	});
+
 beforeEach(() => {
 	listConnections.mockReset();
+	upsertConnection.mockReset();
+	upsertConnection.mockResolvedValue(undefined);
 	loadSecret.mockReset();
+	createMcpSession.mockReset();
 });
 
 describe("resolveConnections", () => {
@@ -84,16 +118,16 @@ describe("resolveConnections", () => {
 		// Records written before the endpoint's auth requirement was understood
 		// have authMode "none". They must still authenticate rather than 401.
 		listConnections.mockResolvedValue([
-			connection({
-				kind: "composio",
-				name: "Composio",
-				url: "https://backend.composio.dev/tool_router/trs_x/mcp",
-				authMode: "none",
-			}),
+			composioConnection({ authMode: "none" }),
 		]);
 		loadSecret.mockResolvedValue(JSON.stringify({ apiKey: "ak_live_123" }));
 
-		const result = await resolveConnections([{ connectionId: "c1" }]);
+		const result = await resolveConnections([
+			{
+				connectionId: "c1",
+				appIds: ["gmail", "googlecalendar", "github"],
+			},
+		]);
 
 		expect(loadSecret).toHaveBeenCalledWith("composio_config");
 		expect(result.servers[0].headers).toEqual({ "x-api-key": "ak_live_123" });
@@ -109,10 +143,7 @@ describe("resolveConnections", () => {
 		// The tool-router MCP URL is not public: without a header it answers 401,
 		// which the MCP client retries as SSE and reports as a confusing 404.
 		listConnections.mockResolvedValue([
-			connection({
-				kind: "composio",
-				name: "Composio",
-				url: "https://backend.composio.dev/tool_router/trs_x/mcp",
+			composioConnection({
 				authMode: "header",
 				authHeaderName: "x-api-key",
 				secretRef: "mcp_secret_c1",
@@ -120,7 +151,9 @@ describe("resolveConnections", () => {
 		]);
 		loadSecret.mockResolvedValue("ak_live_123");
 
-		const result = await resolveConnections([{ connectionId: "c1" }]);
+		const result = await resolveConnections([
+			{ connectionId: "c1", appIds: ["gmail", "googlecalendar", "github"] },
+		]);
 
 		expect(result.servers[0].headers).toEqual({ "x-api-key": "ak_live_123" });
 	});
@@ -190,6 +223,147 @@ describe("resolveConnections", () => {
 		expect(result.toolAllowlist).toEqual(["acme-internal__search_orders"]);
 	});
 
+	it("mints a session for exactly the apps an agent was granted", async () => {
+		listConnections.mockResolvedValue([composioConnection()]);
+		loadSecret.mockResolvedValue(JSON.stringify({ apiKey: "ak_live_123" }));
+		createMcpSession.mockResolvedValue({
+			sessionId: "trs_github",
+			url: "https://backend.composio.dev/tool_router/trs_github/mcp",
+		});
+
+		const result = await resolveConnections([
+			{ connectionId: "c1", appIds: ["github"] },
+		]);
+
+		expect(createMcpSession).toHaveBeenCalledWith(
+			expect.objectContaining({ toolkits: ["github"] }),
+		);
+		expect(result.servers[0].url).toBe(
+			"https://backend.composio.dev/tool_router/trs_github/mcp",
+		);
+		// The scope is cached so a second run does not mint again.
+		expect(upsertConnection).toHaveBeenCalledWith(
+			expect.objectContaining({
+				composio: expect.objectContaining({
+					scopedSessions: {
+						github: "https://backend.composio.dev/tool_router/trs_github/mcp",
+					},
+				}),
+			}),
+		);
+	});
+
+	it("reuses a cached session rather than minting per run", async () => {
+		listConnections.mockResolvedValue([
+			composioConnection({
+				composio: {
+					toolkits: ["gmail", "googlecalendar", "github"],
+					scopedSessions: {
+						github: "https://backend.composio.dev/tool_router/trs_cached/mcp",
+					},
+				},
+			}),
+		]);
+		loadSecret.mockResolvedValue(JSON.stringify({ apiKey: "ak_live_123" }));
+
+		const result = await resolveConnections([
+			{ connectionId: "c1", appIds: ["github"] },
+		]);
+
+		expect(createMcpSession).not.toHaveBeenCalled();
+		expect(result.servers[0].url).toBe(
+			"https://backend.composio.dev/tool_router/trs_cached/mcp",
+		);
+	});
+
+	it("gives two agents different endpoints for different apps", async () => {
+		// The guarantee the whole feature rests on: an agent scoped to GitHub
+		// cannot reach Calendar, because Calendar is not in its session.
+		listConnections.mockResolvedValue([
+			composioConnection({
+				composio: {
+					toolkits: ["gmail", "googlecalendar", "github"],
+					scopedSessions: {
+						github: "https://backend.composio.dev/tool_router/trs_gh/mcp",
+						googlecalendar:
+							"https://backend.composio.dev/tool_router/trs_cal/mcp",
+					},
+				},
+			}),
+		]);
+		loadSecret.mockResolvedValue(JSON.stringify({ apiKey: "ak_live_123" }));
+
+		const github = await resolveConnections([
+			{ connectionId: "c1", appIds: ["github"] },
+		]);
+		const calendar = await resolveConnections([
+			{ connectionId: "c1", appIds: ["googlecalendar"] },
+		]);
+
+		expect(github.servers[0].url).not.toBe(calendar.servers[0].url);
+	});
+
+	it("grants nothing when a Composio connection names no apps", async () => {
+		// Attaching the credential is not consent to every app on it — otherwise
+		// authorizing a new app would silently widen every existing agent.
+		listConnections.mockResolvedValue([composioConnection()]);
+		loadSecret.mockResolvedValue(JSON.stringify({ apiKey: "ak_live_123" }));
+
+		const result = await resolveConnections([{ connectionId: "c1" }]);
+
+		expect(result.servers).toEqual([]);
+		expect(result.skipped).toEqual(["c1"]);
+		expect(createMcpSession).not.toHaveBeenCalled();
+	});
+
+	it("drops the connection when a scoped session cannot be minted", async () => {
+		// Falling back to the full session here would hand an agent scoped to
+		// GitHub every app on the key. No tools is the safe failure.
+		listConnections.mockResolvedValue([composioConnection()]);
+		loadSecret.mockResolvedValue(JSON.stringify({ apiKey: "ak_live_123" }));
+		createMcpSession.mockRejectedValue(new Error("429 rate limited"));
+
+		const result = await resolveConnections([
+			{ connectionId: "c1", appIds: ["github"] },
+		]);
+
+		expect(result.servers).toEqual([]);
+		expect(result.skipped).toEqual(["c1"]);
+	});
+
+	it("ignores an app the user has since disconnected", async () => {
+		listConnections.mockResolvedValue([
+			composioConnection({
+				apps: [{ id: "github", name: "GitHub", status: "active" }],
+				composio: { toolkits: ["github"] },
+			}),
+		]);
+		loadSecret.mockResolvedValue(JSON.stringify({ apiKey: "ak_live_123" }));
+
+		const result = await resolveConnections([
+			{ connectionId: "c1", appIds: ["github", "gmail"] },
+		]);
+
+		// Only GitHub survives, and that is the whole of the record's session.
+		expect(createMcpSession).not.toHaveBeenCalled();
+		expect(result.servers[0].url).toBe(
+			"https://backend.composio.dev/tool_router/trs_all/mcp",
+		);
+	});
+
+	it("never narrows Composio by tool name, which cannot express app scope", async () => {
+		// The router's tools are named the same whatever app they reach, so a
+		// name filter here would remove all of them and leave the agent empty.
+		listConnections.mockResolvedValue([composioConnection()]);
+		loadSecret.mockResolvedValue(JSON.stringify({ apiKey: "ak_live_123" }));
+
+		const result = await resolveConnections([
+			{ connectionId: "c1", appIds: ["gmail", "googlecalendar", "github"] },
+		]);
+
+		expect(result.toolAllowlist).toEqual([]);
+	});
+
 	it("leaves an already-prefixed allowlist alone", async () => {
 		listConnections.mockResolvedValue([connection()]);
 
@@ -233,6 +407,57 @@ describe("withResolvedConnections", () => {
 		const step = result.steps.find((entry) => entry.name === "mcp-feature");
 		expect(step?.enabled).toBe(false);
 		expect(step?.config?.servers).toEqual([]);
+	});
+
+	it("projects a saved agent config into a runnable step", async () => {
+		// End of the chain the feature actually lives on: what an agent persists
+		// (`connections`) becomes what the step runs (`servers`), enabled, with
+		// the scoped endpoint. Every earlier step can look right while this is
+		// empty, which is exactly how the tools went missing before.
+		listConnections.mockResolvedValue([
+			composioConnection({
+				composio: {
+					toolkits: ["gmail", "googlecalendar", "github"],
+					scopedSessions: {
+						github: "https://backend.composio.dev/tool_router/trs_gh/mcp",
+					},
+				},
+			}),
+		]);
+		loadSecret.mockResolvedValue(JSON.stringify({ apiKey: "ak_live_123" }));
+
+		const result = await withResolvedConnections(
+			configWith({
+				connections: [{ connectionId: "c1", appIds: ["github"] }],
+			}),
+		);
+
+		const step = result.steps.find((entry) => entry.name === "mcp-feature");
+		expect(step?.enabled).toBe(true);
+		expect(step?.config?.servers).toEqual([
+			{
+				type: "http",
+				name: "composio",
+				url: "https://backend.composio.dev/tool_router/trs_gh/mcp",
+				headers: { "x-api-key": "ak_live_123" },
+			},
+		]);
+	});
+
+	it("enables the step from the selection alone, not a separate toggle", async () => {
+		// Choosing connections IS the intent to use them. Requiring the feature
+		// switch as well let an agent show its providers attached and still run
+		// with no tools.
+		listConnections.mockResolvedValue([connection()]);
+
+		const config = configWith({ connections: [{ connectionId: "c1" }] });
+		config.steps[1].enabled = false;
+
+		const result = await withResolvedConnections(config);
+
+		expect(
+			result.steps.find((entry) => entry.name === "mcp-feature")?.enabled,
+		).toBe(true);
 	});
 
 	it("never throws a registry failure into the chat run", async () => {

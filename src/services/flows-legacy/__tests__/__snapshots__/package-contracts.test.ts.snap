@@ -526,6 +526,7 @@ exports[`Memorall legacy flow registered contracts > registers every core step c
       "feature": {
         "graphTypes": [
           "foundation",
+          "agent",
         ],
         "id": "step-mcp-feature",
         "inputs": [

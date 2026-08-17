@@ -15,12 +15,13 @@ import {
 	MCP_FEATURE_NAME,
 	type MCPServerConfig,
 } from "@/services/flows-legacy/steps/features/mcp-feature";
-import { loadSecret } from "@/utils/master-key";
 import { logWarn } from "@/utils/logger";
-import { listConnections } from "./registry";
+import { loadSecret } from "@/utils/master-key";
+import { listConnections, upsertConnection } from "./registry";
 import {
-	COMPOSIO_SECRET_KEY,
 	type AgentConnectionSelection,
+	COMPOSIO_SECRET_KEY,
+	COMPOSIO_USER_ID,
 	type McpConnection,
 } from "./types";
 
@@ -173,20 +174,12 @@ const resolveAllowlist = (
 		);
 	}
 
-	// Composio narrows by app: its tool slugs are toolkit-prefixed (GMAIL_*), so
-	// an app selection becomes a prefix match rather than an explicit list.
-	if (connection.kind === "composio" && selection.appIds?.length) {
-		const allowed = new Set(selection.appIds.map((id) => id.toUpperCase()));
-		const fromApps = (connection.apps ?? [])
-			.filter((app) => allowed.has(app.id.toUpperCase()))
-			.flatMap((app) => app.toolAllowlist ?? []);
-		if (fromApps.length > 0) {
-			return fromApps.map((name) =>
-				name.includes("__") ? name : `${serverKey}__${name}`,
-			);
-		}
-	}
-
+	// Composio is deliberately absent here. Its router exposes six fixed tools
+	// (COMPOSIO_SEARCH_TOOLS, COMPOSIO_MULTI_EXECUTE_TOOL, …) whose names are the
+	// same whichever app they reach, so a name filter cannot express "GitHub
+	// only" — and filtering on app-level slugs would drop every router tool and
+	// leave the agent with nothing. App scope is enforced by minting a session
+	// for exactly those toolkits; see resolveScopedComposioUrl.
 	return null;
 };
 
@@ -209,6 +202,139 @@ export async function buildServerConfig(
 		url: auth.url,
 		headers: auth.headers,
 	};
+}
+
+/**
+ * The endpoint for a tool-router session carrying exactly `appIds`.
+ *
+ * Composio's router can reach whatever toolkits its SESSION was minted with, so
+ * this is the only place agent scope can be enforced — an allowlist cannot do
+ * it. Returning null means "this scope could not be honoured", and the caller
+ * drops the connection rather than falling back to the full session: quietly
+ * widening an agent from GitHub to every authorized app is the exact failure
+ * this exists to prevent.
+ *
+ * Sessions are cached per sorted app-set on the connection, so a given scope is
+ * minted once rather than on every run.
+ */
+async function mintScopedComposioUrl(
+	connection: McpConnection,
+	appIds: string[],
+): Promise<string | null> {
+	// An app the user has since disconnected is no longer grantable, however old
+	// the agent's selection is.
+	const authorized = new Set((connection.apps ?? []).map((app) => app.id));
+	const toolkits = [...new Set(appIds)]
+		.filter((id) => authorized.size === 0 || authorized.has(id))
+		.sort();
+	if (toolkits.length === 0) {
+		return null;
+	}
+
+	// Selecting every authorized app is the unscoped session already on record.
+	const all = [...new Set(connection.composio?.toolkits ?? [])].sort();
+	if (all.length > 0 && toolkits.join(",") === all.join(",")) {
+		return connection.url;
+	}
+
+	const cacheKey = toolkits.join(",");
+	const cached = connection.composio?.scopedSessions?.[cacheKey];
+	if (cached) return cached;
+
+	const apiKey = await loadComposioApiKey();
+	if (!apiKey) return null;
+
+	const { ComposioClient } = await import("@/services/composio");
+	const session = await new ComposioClient(apiKey).createMcpSession({
+		userId: COMPOSIO_USER_ID,
+		toolkits,
+	});
+
+	await upsertConnection({
+		...connection,
+		composio: {
+			...(connection.composio ?? { toolkits: [] }),
+			scopedSessions: {
+				...(connection.composio?.scopedSessions ?? {}),
+				[cacheKey]: session.url,
+			},
+		},
+	});
+
+	return session.url;
+}
+
+/** Run-path wrapper: a scope that cannot be minted contributes nothing. */
+async function resolveScopedComposioUrl(
+	connection: McpConnection,
+	appIds: string[],
+): Promise<string | null> {
+	try {
+		return await mintScopedComposioUrl(connection, appIds);
+	} catch (error) {
+		logWarn(
+			`[MCP_CONNECTIONS] Could not mint a Composio session for "${connection.name}"; dropping it for this run.`,
+			`${error}`,
+		);
+		return null;
+	}
+}
+
+/**
+ * Why a granted provider would contribute nothing, in the user's words.
+ *
+ * Minting happens lazily on the run path, where there is no UI to fail into —
+ * so the picker calls this when the user saves and surfaces what it finds.
+ * Silence here is what made "I granted GitHub and the agent has no tools" so
+ * hard to explain.
+ */
+export interface ScopeProblem {
+	connectionId: string;
+	connectionName: string;
+	message: string;
+}
+
+export async function prepareConnectionScopes(
+	selections: AgentConnectionSelection[],
+): Promise<ScopeProblem[]> {
+	const problems: ScopeProblem[] = [];
+	let registry: McpConnection[];
+	try {
+		registry = await listConnections();
+	} catch {
+		return problems;
+	}
+	const byId = new Map(registry.map((entry) => [entry.id, entry]));
+
+	for (const selection of selections) {
+		const connection = byId.get(selection.connectionId);
+		if (!connection || connection.kind !== "composio") continue;
+
+		try {
+			const url = await mintScopedComposioUrl(
+				connection,
+				selection.appIds ?? [],
+			);
+			if (!url) {
+				problems.push({
+					connectionId: connection.id,
+					connectionName: connection.name,
+					message: "No app is granted, or its Composio key is unavailable.",
+				});
+			}
+		} catch (error) {
+			// The common cause is a scoped project key: minting a per-agent session
+			// needs "sessions" write access, and a read-only key answers 403.
+			const { describeComposioError } = await import("@/services/composio");
+			problems.push({
+				connectionId: connection.id,
+				connectionName: connection.name,
+				message: describeComposioError(error),
+			});
+		}
+	}
+
+	return problems;
 }
 
 export interface ResolvedConnections {
@@ -258,10 +384,28 @@ export async function resolveConnections(
 			continue;
 		}
 
+		// Composio's router reaches whatever toolkits its SESSION carries, so an
+		// agent that may only use GitHub needs its own session. A selection with
+		// no apps grants nothing — attaching the credential is not consent to
+		// every app on it, and a newly authorized app must never widen an agent
+		// that already exists.
+		let url = auth.url;
+		if (connection.kind === "composio") {
+			const scoped = await resolveScopedComposioUrl(
+				connection,
+				selection.appIds ?? [],
+			);
+			if (!scoped) {
+				skipped.push(connection.id);
+				continue;
+			}
+			url = scoped;
+		}
+
 		servers.push({
 			type: connection.transport,
 			name: serverKey,
-			url: auth.url,
+			url,
 			headers: auth.headers,
 		});
 
@@ -305,7 +449,10 @@ export async function withResolvedConnections(
 							...step,
 							// No reachable server means no tools; leaving the step enabled
 							// would only add an empty MCP preamble to the prompt.
-							enabled: step.enabled && servers.length > 0,
+							// Selecting connections IS the intent to use them. Requiring the
+							// feature toggle as well meant an agent could show its
+							// connections attached and still get no tools at run time.
+							enabled: servers.length > 0,
 							config: {
 								...(step.config ?? {}),
 								servers,

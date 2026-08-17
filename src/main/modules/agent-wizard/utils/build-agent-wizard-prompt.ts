@@ -67,7 +67,9 @@ ${
 					(connection) =>
 						`- id: ${connection.id} | name: ${connection.name} | kind: ${connection.kind} | status: ${connection.status} | tools: ${connection.toolCount}${
 							connection.apps?.length
-								? ` | apps: ${connection.apps.join(", ")}`
+								? ` | apps: ${connection.apps
+										.map((app) => `${app.name} (${app.id})`)
+										.join(", ")}`
 								: ""
 						}`,
 				)
@@ -85,6 +87,9 @@ databases, a user's own servers. Handle them like this, in order:
    needs, call ${AGENT_WIZARD_TOOL_NAMES.useConnections} with its id. Never ask
    the user to set up something they already have. Mention it by name, e.g.
    "I'll use your Gmail connection."
+   For a Composio connection you MUST also pass appIds — the slugs in
+   parentheses in the apps list — naming only the apps this agent actually
+   needs. A Composio connection with no appIds grants the agent nothing.
 2. If nothing covers the need and a Composio key is already stored, do NOT ask
    for a key. Call ${AGENT_WIZARD_TOOL_NAMES.setupConnection} with kind
    "composio" and, when you know which app is needed, the toolkit slug (e.g.
@@ -96,6 +101,8 @@ databases, a user's own servers. Handle them like this, in order:
    server or endpoint rather than a hosted app.
 
 Connection rules:
+- Grant the narrowest set of apps that does the job. An agent that reads the
+  calendar gets googlecalendar and nothing else — never every app on the key.
 - Composio is the priority path for hosted apps. Offer a custom endpoint only
   when the user asks for one or Composio cannot cover the need.
 - NEVER ask the user to open the Connections page, leave this conversation, or
@@ -448,11 +455,24 @@ ANTI-PATTERNS TO AVOID:
 		function: {
 			name: AGENT_WIZARD_TOOL_NAMES.useConnections,
 			description:
-				"Attach existing connections to the agent by id, so it can call their tools. Use ids from the existing connections list. Prefer this over setting anything up again.",
+				'Grant the agent providers from existing connections, so it can call their tools. Use ids from the existing connections list. For a Composio connection, appIds is REQUIRED and must list only the toolkit slugs this agent needs (e.g. ["github"]) — omitting it grants nothing, and listing every app gives the agent far more reach than intended. Prefer this over setting anything up again.',
 			parameters: {
 				type: "object",
-				properties: { connectionIds: stringArraySchema },
-				required: ["connectionIds"],
+				properties: {
+					connections: {
+						type: "array",
+						items: {
+							type: "object",
+							properties: {
+								connectionId: { type: "string" },
+								appIds: stringArraySchema,
+							},
+							required: ["connectionId"],
+							additionalProperties: false,
+						},
+					},
+				},
+				required: ["connections"],
 				additionalProperties: false,
 			},
 		},

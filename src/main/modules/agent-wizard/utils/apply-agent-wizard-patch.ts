@@ -1,3 +1,14 @@
+import { normalizeAgentIconScreen } from "@/main/modules/agents/types";
+import { getLocalTimezone, validateCronExpression } from "@/services/cron-jobs";
+import {
+	DEFAULT_GROW_TYPE,
+	DEFAULT_RECALL_TYPE,
+	GROW_TYPES,
+	type GrowType,
+	getValidRecallTypes,
+	type RecallType,
+} from "@/services/database/entities/topic-types";
+import { isUuid, v4 } from "@/utils/uuid";
 import type {
 	AgentWizardCatalog,
 	AgentWizardCronJobDraft,
@@ -6,22 +17,11 @@ import type {
 	AgentWizardPatch,
 	AgentWizardToolPatch,
 } from "../types";
-import { AGENT_WIZARD_TOOL_NAMES } from "./build-agent-wizard-prompt";
-import {
-	DEFAULT_GROW_TYPE,
-	DEFAULT_RECALL_TYPE,
-	GROW_TYPES,
-	getValidRecallTypes,
-	type GrowType,
-	type RecallType,
-} from "@/services/database/entities/topic-types";
 import {
 	AGENT_WIZARD_CURSOR_KEYS,
 	queueAgentWizardCursorMoveTo,
 } from "./agent-wizard-cursor";
-import { normalizeAgentIconScreen } from "@/main/modules/agents/types";
-import { getLocalTimezone, validateCronExpression } from "@/services/cron-jobs";
-import { isUuid, v4 } from "@/utils/uuid";
+import { AGENT_WIZARD_TOOL_NAMES } from "./build-agent-wizard-prompt";
 
 const MAX_PROMPT_LENGTH = 24000;
 
@@ -67,8 +67,10 @@ const normalizeConnections = (
 				return { connectionId: entry.trim() };
 			}
 			if (isRecord(entry) && typeof entry.connectionId === "string") {
+				const appIds = uniqueStrings(entry.appIds);
 				return {
 					connectionId: entry.connectionId,
+					...(appIds.length > 0 ? { appIds } : {}),
 					...(Array.isArray(entry.toolAllowlist)
 						? {
 								toolAllowlist: entry.toolAllowlist.filter(
@@ -468,23 +470,50 @@ export const applyAgentWizardToolPatch = (
 			break;
 		}
 		case "use_connections": {
-			// Only ids the user actually has. A hallucinated id would otherwise
-			// resolve to nothing at run time and look like a silent failure.
-			const known = new Set(catalog.connections.map((entry) => entry.id));
-			const accepted = patch.connectionIds.filter((id) => {
-				if (known.has(id)) return true;
-				rejected.push(`connection: ${id}`);
-				return false;
-			});
-			const existing = new Set(
-				next.connections.map((entry) => entry.connectionId),
+			// Only providers the user actually has. A hallucinated id — or an app
+			// slug that was never authorized — would resolve to nothing at run time
+			// and look like a silent failure, so both are dropped here instead.
+			const known = new Map(
+				catalog.connections.map((entry) => [entry.id, entry]),
 			);
-			next.connections = [
-				...next.connections,
-				...accepted
-					.filter((id) => !existing.has(id))
-					.map((id) => ({ connectionId: id })),
-			];
+			const merged = new Map(
+				next.connections.map((entry) => [entry.connectionId, entry]),
+			);
+
+			for (const selection of patch.connections) {
+				const info = known.get(selection.connectionId);
+				if (!info) {
+					rejected.push(`connection: ${selection.connectionId}`);
+					continue;
+				}
+
+				let appIds = selection.appIds ?? [];
+				if (info.kind === "composio") {
+					const available = new Set((info.apps ?? []).map((app) => app.id));
+					appIds = appIds.filter((id) => {
+						if (available.has(id)) return true;
+						rejected.push(`app: ${id}`);
+						return false;
+					});
+					// A Composio connection reaches only the apps named here. With
+					// none left there is nothing to grant, and attaching the
+					// credential by itself must not stand in for consent.
+					if (appIds.length === 0) {
+						rejected.push(`connection without apps: ${info.name}`);
+						continue;
+					}
+				}
+
+				const existing = merged.get(selection.connectionId);
+				merged.set(selection.connectionId, {
+					connectionId: selection.connectionId,
+					...(appIds.length > 0
+						? { appIds: [...new Set([...(existing?.appIds ?? []), ...appIds])] }
+						: {}),
+				});
+			}
+
+			next.connections = [...merged.values()];
 			// Attaching a connection is meaningless unless the MCP feature runs.
 			next.enabledFeatureNames = addUniqueStrings(
 				next.enabledFeatureNames,
@@ -612,7 +641,12 @@ export const agentWizardToolPatchFromCall = (
 		case AGENT_WIZARD_TOOL_NAMES.useConnections:
 			return {
 				type: "use_connections",
-				connectionIds: uniqueStrings(args.connectionIds),
+				// `connectionIds` is the older single-argument shape; a model that
+				// still emits it grants the connection with no apps, which the
+				// patch then reports as granting nothing rather than everything.
+				connections: normalizeConnections(
+					args.connections ?? uniqueStrings(args.connectionIds),
+				),
 			};
 		case AGENT_WIZARD_TOOL_NAMES.setupConnection:
 			return args.kind === "composio" || args.kind === "custom"

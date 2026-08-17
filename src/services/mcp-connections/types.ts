@@ -32,6 +32,8 @@ export interface ConnectionApp {
 }
 
 export interface ComposioConnectionDetail {
+	/** Sessions scoped to a subset of apps, keyed by the sorted toolkit list. */
+	scopedSessions?: Record<string, string>;
 	/** Tool-router session backing the MCP endpoint. Re-minted when scoping changes. */
 	sessionId?: string;
 	toolkits: string[];
@@ -123,3 +125,6 @@ export const connectionSecretRef = (connectionId: string): string =>
 	`mcp_secret_${connectionId}`;
 
 export const COMPOSIO_SECRET_KEY = "composio_config";
+
+/** Composio scopes connected accounts per user id; one local user, one id. */
+export const COMPOSIO_USER_ID = "memorall-local";

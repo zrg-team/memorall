@@ -1,12 +1,14 @@
+import type {
+	AgentPresetIconScreen,
+	AgentPresetStatus,
+} from "@/main/modules/agents/types";
 import type { GraphType } from "@/main/stores/agent-config";
-import type { AgentPresetStatus } from "@/main/modules/agents/types";
-import type { MCPConnectionSelection } from "@/services/flows-legacy/steps/features/mcp-feature";
 import type {
 	GrowType,
 	RecallType,
 } from "@/services/database/entities/topic-types";
-import type { AgentPresetIconScreen } from "@/main/modules/agents/types";
 import type { CronJobStatus } from "@/services/database/types";
+import type { MCPConnectionSelection } from "@/services/flows-legacy/steps/features/mcp-feature";
 
 export interface AgentWizardCronJobDraft {
 	id: string;
@@ -106,7 +108,7 @@ export type AgentWizardToolPatch =
 	| { type: "update_recall_type"; recallType: RecallType }
 	| { type: "update_icon_screen"; iconScreen: AgentPresetIconScreen | null }
 	| { type: "update_cron_jobs"; cronJobs: AgentWizardCronJobDraft[] }
-	| { type: "use_connections"; connectionIds: string[] }
+	| { type: "use_connections"; connections: MCPConnectionSelection[] }
 	| {
 			type: "setup_connection";
 			kind: AgentWizardConnectionSetupKind;
@@ -121,8 +123,12 @@ export interface AgentWizardConnectionInfo {
 	/** Live status string, e.g. "connected" or "incomplete". */
 	status: string;
 	toolCount: number;
-	/** Composio only: the toolkits already authorized. */
-	apps?: string[];
+	/**
+	 * Composio only: the toolkits already authorized. Slugs are carried
+	 * alongside names because an agent is granted apps by slug, one at a time —
+	 * attaching the connection alone grants nothing.
+	 */
+	apps?: Array<{ id: string; name: string }>;
 }
 
 export interface AgentWizardCatalog {
