@@ -99,6 +99,17 @@ describe("copilot tour steps", () => {
 		}
 	});
 
+	// The opening step auto-starts on first run, before the user has agreed to
+	// anything. A layout mode here collapses the workspace panel and hides every
+	// route from whatever is driving the app — which is exactly how it broke the
+	// web and sandbox E2E suites. Only steps the user has clicked into may move
+	// the shell.
+	it("leaves the shell layout alone on the auto-starting opening step", () => {
+		for (const steps of [fresh(), ready()]) {
+			expect(steps[0].layoutMode).toBeUndefined();
+		}
+	});
+
 	it("keeps step ids unique so progress cannot stall", () => {
 		const ids = fresh().map((step) => step.id);
 		expect(new Set(ids).size).toBe(ids.length);

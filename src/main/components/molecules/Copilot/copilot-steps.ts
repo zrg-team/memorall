@@ -126,15 +126,18 @@ export const buildCopilotSteps = (
 	const closingKey = hasLLMConfigured ? "finishReady" : "startHere";
 
 	return [
-		// No cursor on the opening step: the subject is the whole screen, and a
-		// pointer parked on its top-left corner points at nothing.
+		// Leaves the layout alone. This step auto-starts on first run and its copy
+		// points at the workspace tabs, so collapsing them would both contradict
+		// the text and hide every route behind the tour for anything driving the
+		// app — which is exactly how it broke the web and sandbox E2E suites.
+		// No cursor either: the subject is the whole screen, and a pointer parked
+		// on its top-left corner points at nothing.
 		step("welcome", openingKey, {
 			target: hasLLMConfigured
 				? '[data-copilot~="chat-center"]'
 				: '[data-copilot~="no-models-screen"]',
 			fallbackTarget: '[data-copilot~="chat-left-panel"]',
 			placement: "center",
-			layoutMode: "setup-focus",
 		}),
 
 		...WORKSPACE_STOPS.map((stop) =>
