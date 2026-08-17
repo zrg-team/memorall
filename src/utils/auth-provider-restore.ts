@@ -9,11 +9,25 @@ import {
 import secureSession from "@/utils/secure-session";
 import { logInfo, logError } from "@/utils/logger";
 import {
+	adoptMasterStrongPassword,
 	hasMasterKey,
+	hasSecret,
+	isMasterKeyUnlocked,
 	getMasterStrongPassword,
 	decryptWithMasterPassword,
 	getEncryptedProviders as getMasterEncryptedProviders,
 } from "@/utils/master-key";
+
+/**
+ * Encrypted secrets that are not LLM providers. They share the master passkey,
+ * so they belong in the start-up unlock even though nothing needs to be
+ * restored into a service for them.
+ */
+const NON_PROVIDER_SECRET_LABELS: Record<string, string> = {
+	composio_config: "composio",
+};
+
+const NON_PROVIDER_SECRET_KEYS = Object.keys(NON_PROVIDER_SECRET_LABELS);
 
 type AuthProvider = "openai" | "openrouter";
 
@@ -24,6 +38,13 @@ type AuthProvider = "openai" | "openrouter";
 export async function restoreAllProviders(
 	masterStrongPassword: string,
 ): Promise<void> {
+	// Both the main app and the offscreen document funnel through here, and
+	// `secureSession` is per-context — so this is the one place that can make the
+	// unlocked master key observable wherever the restore ran. Without it, code
+	// in the offscreen worker (MCP connection secrets, for instance) cannot
+	// decrypt anything even though the user has unlocked.
+	await adoptMasterStrongPassword(masterStrongPassword);
+
 	const providers = await getMasterEncryptedProviders();
 
 	for (const provider of providers) {
@@ -182,7 +203,34 @@ export async function checkAnyProviderNeedsRestore(): Promise<boolean> {
 		}
 	}
 
+	// Secrets that are not LLM providers are still sealed by the same passkey.
+	// Without this, someone whose only stored secret is a Composio key is never
+	// prompted at start-up and their connections silently sit locked.
+	if (!(await isMasterKeyUnlocked())) {
+		for (const key of NON_PROVIDER_SECRET_KEYS) {
+			if (await hasSecret(key)) {
+				return true;
+			}
+		}
+	}
+
 	return false;
+}
+
+/**
+ * Labels shown in the passkey prompt. Providers get restored into services;
+ * these only need the master key unlocked, which the same prompt does.
+ */
+export async function getEncryptedSecretLabels(): Promise<string[]> {
+	const labels: string[] = [...(await getMasterEncryptedProviders())];
+
+	for (const [key, label] of Object.entries(NON_PROVIDER_SECRET_LABELS)) {
+		if (await hasSecret(key)) {
+			labels.push(label);
+		}
+	}
+
+	return labels;
 }
 
 /**

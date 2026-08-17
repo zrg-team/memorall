@@ -1,3 +1,14 @@
+import { normalizeAgentIconScreen } from "@/main/modules/agents/types";
+import { getLocalTimezone, validateCronExpression } from "@/services/cron-jobs";
+import {
+	DEFAULT_GROW_TYPE,
+	DEFAULT_RECALL_TYPE,
+	GROW_TYPES,
+	type GrowType,
+	getValidRecallTypes,
+	type RecallType,
+} from "@/services/database/entities/topic-types";
+import { isUuid, v4 } from "@/utils/uuid";
 import type {
 	AgentWizardCatalog,
 	AgentWizardCronJobDraft,
@@ -6,22 +17,11 @@ import type {
 	AgentWizardPatch,
 	AgentWizardToolPatch,
 } from "../types";
-import { AGENT_WIZARD_TOOL_NAMES } from "./build-agent-wizard-prompt";
-import {
-	DEFAULT_GROW_TYPE,
-	DEFAULT_RECALL_TYPE,
-	GROW_TYPES,
-	getValidRecallTypes,
-	type GrowType,
-	type RecallType,
-} from "@/services/database/entities/topic-types";
 import {
 	AGENT_WIZARD_CURSOR_KEYS,
 	queueAgentWizardCursorMoveTo,
 } from "./agent-wizard-cursor";
-import { normalizeAgentIconScreen } from "@/main/modules/agents/types";
-import { getLocalTimezone, validateCronExpression } from "@/services/cron-jobs";
-import { isUuid, v4 } from "@/utils/uuid";
+import { AGENT_WIZARD_TOOL_NAMES } from "./build-agent-wizard-prompt";
 
 const MAX_PROMPT_LENGTH = 24000;
 
@@ -51,31 +51,40 @@ const filterKnown = (
 const isRecord = (value: unknown): value is Record<string, unknown> =>
 	typeof value === "object" && value !== null && !Array.isArray(value);
 
-const normalizeMcpServers = (
+/**
+ * Agents reference connections from the shared registry rather than declaring
+ * servers inline, so a patch names what it wants — `"Gmail"`, or an id. Names
+ * are resolved against the registry where the store is available; anything that
+ * does not resolve is dropped rather than silently creating a connection.
+ */
+const normalizeConnections = (
 	value: unknown,
-): AgentWizardDraft["mcpServers"] => {
+): AgentWizardDraft["connections"] => {
 	if (!Array.isArray(value)) return [];
 	return value
-		.filter(isRecord)
-		.filter(
-			(server) =>
-				(server.type === "http" || server.type === "sse") &&
-				typeof server.name === "string" &&
-				typeof server.url === "string",
-		)
-		.map((server) => ({
-			type: server.type as "http" | "sse",
-			name: server.name as string,
-			url: server.url as string,
-			headers: isRecord(server.headers)
-				? Object.fromEntries(
-						Object.entries(server.headers).filter(
-							(entry): entry is [string, string] =>
-								typeof entry[1] === "string",
-						),
-					)
-				: undefined,
-		}));
+		.map((entry) => {
+			if (typeof entry === "string" && entry.trim()) {
+				return { connectionId: entry.trim() };
+			}
+			if (isRecord(entry) && typeof entry.connectionId === "string") {
+				const appIds = uniqueStrings(entry.appIds);
+				return {
+					connectionId: entry.connectionId,
+					...(appIds.length > 0 ? { appIds } : {}),
+					...(Array.isArray(entry.toolAllowlist)
+						? {
+								toolAllowlist: entry.toolAllowlist.filter(
+									(name): name is string => typeof name === "string",
+								),
+							}
+						: {}),
+				};
+			}
+			return null;
+		})
+		.filter((entry): entry is AgentWizardDraft["connections"][number] =>
+			Boolean(entry),
+		);
 };
 
 const normalizeGrowType = (value: unknown): GrowType =>
@@ -235,7 +244,7 @@ const announcePatchCursorMoves = (patch: AgentWizardPatch): void => {
 	if ("enabledSkillNames" in patch) {
 		announceCursorMove(AGENT_WIZARD_CURSOR_KEYS.skills, "Updating skills");
 	}
-	if ("mcpServers" in patch) {
+	if ("connections" in patch) {
 		announceCursorMove(
 			AGENT_WIZARD_CURSOR_KEYS.mcpServers,
 			"Updating MCP servers",
@@ -288,6 +297,18 @@ const announceToolPatchCursorMove = (patch: AgentWizardToolPatch): void => {
 			announceCursorMove(
 				AGENT_WIZARD_CURSOR_KEYS.skills,
 				`Adding ${patch.name ?? patch.source}`,
+			);
+			break;
+		case "use_connections":
+			announceCursorMove(
+				AGENT_WIZARD_CURSOR_KEYS.mcpServers,
+				"Attaching connections",
+			);
+			break;
+		case "setup_connection":
+			announceCursorMove(
+				AGENT_WIZARD_CURSOR_KEYS.mcpServers,
+				"Opening connection setup",
 			);
 			break;
 		case "enable_feature":
@@ -376,8 +397,8 @@ export const applyAgentWizardPatch = (
 			patch.multiAgentAccessibleAgentIds,
 		);
 	}
-	if ("mcpServers" in patch) {
-		next.mcpServers = normalizeMcpServers(patch.mcpServers);
+	if ("connections" in patch) {
+		next.connections = normalizeConnections(patch.connections);
 	}
 	if ("cronJobs" in patch) {
 		next.cronJobs = normalizeCronJobs(patch.cronJobs, rejected);
@@ -448,6 +469,61 @@ export const applyAgentWizardToolPatch = (
 			}
 			break;
 		}
+		case "use_connections": {
+			// Only providers the user actually has. A hallucinated id — or an app
+			// slug that was never authorized — would resolve to nothing at run time
+			// and look like a silent failure, so both are dropped here instead.
+			const known = new Map(
+				catalog.connections.map((entry) => [entry.id, entry]),
+			);
+			const merged = new Map(
+				next.connections.map((entry) => [entry.connectionId, entry]),
+			);
+
+			for (const selection of patch.connections) {
+				const info = known.get(selection.connectionId);
+				if (!info) {
+					rejected.push(`connection: ${selection.connectionId}`);
+					continue;
+				}
+
+				let appIds = selection.appIds ?? [];
+				if (info.kind === "composio") {
+					const available = new Set((info.apps ?? []).map((app) => app.id));
+					appIds = appIds.filter((id) => {
+						if (available.has(id)) return true;
+						rejected.push(`app: ${id}`);
+						return false;
+					});
+					// A Composio connection reaches only the apps named here. With
+					// none left there is nothing to grant, and attaching the
+					// credential by itself must not stand in for consent.
+					if (appIds.length === 0) {
+						rejected.push(`connection without apps: ${info.name}`);
+						continue;
+					}
+				}
+
+				const existing = merged.get(selection.connectionId);
+				merged.set(selection.connectionId, {
+					connectionId: selection.connectionId,
+					...(appIds.length > 0
+						? { appIds: [...new Set([...(existing?.appIds ?? []), ...appIds])] }
+						: {}),
+				});
+			}
+
+			next.connections = [...merged.values()];
+			// Attaching a connection is meaningless unless the MCP feature runs.
+			next.enabledFeatureNames = addUniqueStrings(
+				next.enabledFeatureNames,
+				filterKnown(["mcp-feature"], catalog.featureNames, [], "feature"),
+			);
+			break;
+		}
+		case "setup_connection":
+			// Pure signal — the panel is opened by the hook, nothing to patch.
+			break;
 		case "enable_feature":
 			next.enabledFeatureNames = addUniqueStrings(
 				next.enabledFeatureNames,
@@ -562,6 +638,25 @@ export const agentWizardToolPatchFromCall = (
 				type: "update_cron_jobs",
 				cronJobs: normalizeCronJobs(args.cronJobs, []),
 			};
+		case AGENT_WIZARD_TOOL_NAMES.useConnections:
+			return {
+				type: "use_connections",
+				// `connectionIds` is the older single-argument shape; a model that
+				// still emits it grants the connection with no apps, which the
+				// patch then reports as granting nothing rather than everything.
+				connections: normalizeConnections(
+					args.connections ?? uniqueStrings(args.connectionIds),
+				),
+			};
+		case AGENT_WIZARD_TOOL_NAMES.setupConnection:
+			return args.kind === "composio" || args.kind === "custom"
+				? {
+						type: "setup_connection",
+						kind: args.kind,
+						toolkit:
+							typeof args.toolkit === "string" ? args.toolkit : undefined,
+					}
+				: null;
 		default:
 			return null;
 	}

@@ -35,6 +35,13 @@ on:
 permissions:
   contents: read
 
+# Without this, every push to a branch left its predecessor running to
+# completion — paying for a result nobody reads. Pushes to main are left alone
+# so no commit on the default branch ends up marked "cancelled".
+concurrency:
+  group: agent-harness-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   contracts:
     name: Contracts (Node ${{ matrix.node }})

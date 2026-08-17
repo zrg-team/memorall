@@ -96,7 +96,7 @@ vi.mock("@/services/flows-legacy/utils/flow-config", () => {
 				id: "mcp",
 				name: "mcp-feature",
 				enabled: false,
-				config: { servers: [] },
+				config: { connections: [] },
 			},
 			{
 				id: "skills",
@@ -275,7 +275,7 @@ const unifiedConfig = (): UnifiedFlowConfig => ({
 			id: "mcp",
 			name: "mcp-feature",
 			enabled: true,
-			config: { servers: [{ name: "local", url: "http://localhost:3333" }] },
+			config: { connections: [{ connectionId: "conn-local" }] },
 		},
 		{
 			id: "skills",
@@ -337,9 +337,7 @@ describe("useAgentConfigStore", () => {
 			"agent-node": false,
 		});
 		expect(state.draftMultiAgentAccessibleAgentIds).toEqual(["agent-1"]);
-		expect(state.draftMCPServers).toEqual([
-			{ name: "local", url: "http://localhost:3333" },
-		]);
+		expect(state.draftConnections).toEqual([{ connectionId: "conn-local" }]);
 		expect(state.draftEnabledSkillNames).toEqual(["docs"]);
 		expect(state.featureDefinitions.map((feature) => feature.name)).toContain(
 			"custom-feature",
@@ -358,9 +356,7 @@ describe("useAgentConfigStore", () => {
 		store.toggleFeature("custom-feature");
 		store.toggleAccessibleAgent("agent-2");
 		store.setAccessibleAgents(["agent-2", "agent-2", "agent-3"]);
-		store.setMCPServers([
-			{ type: "http", name: "remote", url: "https://mcp.example" },
-		]);
+		store.setAgentConnections([{ connectionId: "conn-remote" }]);
 		store.toggleSkill("docs");
 		store.setEnabledSkills(["skill-a", "skill-a", "skill-b"]);
 		store.patchStepConfig("custom-feature", { level: "advanced" });
@@ -368,9 +364,7 @@ describe("useAgentConfigStore", () => {
 		expect(useAgentConfigStore.getState()).toMatchObject({
 			isDirty: true,
 			draftMultiAgentAccessibleAgentIds: ["agent-2", "agent-3"],
-			draftMCPServers: [
-				{ type: "http", name: "remote", url: "https://mcp.example" },
-			],
+			draftConnections: [{ connectionId: "conn-remote" }],
 			draftEnabledSkillNames: ["skill-a", "skill-b"],
 		});
 		expect(
@@ -404,7 +398,7 @@ describe("useAgentConfigStore", () => {
 		["config field", (store) => store.updateField("systemPrompt", "Changed")],
 		["feature toggle", (store) => store.toggleFeature("custom-feature")],
 		["accessible agents", (store) => store.setAccessibleAgents(["agent-2"])],
-		["MCP servers", (store) => store.setMCPServers([])],
+		["connections", (store) => store.setAgentConnections([])],
 		["skills", (store) => store.setEnabledSkills(["different-skill"])],
 	];
 
@@ -429,9 +423,7 @@ describe("useAgentConfigStore", () => {
 		store.updateField("contextPrompt", "Saved context");
 		store.setKnowledgeRetrievalMode("llm");
 		store.setAccessibleAgents(["agent-2"]);
-		store.setMCPServers([
-			{ type: "http", name: "remote", url: "https://mcp.example" },
-		]);
+		store.setAgentConnections([{ connectionId: "conn-remote" }]);
 		store.setEnabledSkills(["skill-a"]);
 		store.toggleFeature("custom-feature");
 
@@ -461,7 +453,7 @@ describe("useAgentConfigStore", () => {
 			savedConfig.steps.find((step) => step.name === "mcp-feature"),
 		).toMatchObject({
 			config: {
-				servers: [{ type: "http", name: "remote", url: "https://mcp.example" }],
+				connections: [{ connectionId: "conn-remote" }],
 			},
 		});
 		expect(useAgentConfigStore.getState().isDirty).toBe(false);

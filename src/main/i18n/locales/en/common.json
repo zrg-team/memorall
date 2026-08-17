@@ -4,6 +4,7 @@
 		"agents": "Agents",
 		"models": "Models",
 		"knowledgeGraph": "Memory",
+		"connections": "Connections",
 		"flowBuilder": "Flow Builder",
 		"documents": "Files",
 		"debug": "Debug",

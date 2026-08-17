@@ -42,6 +42,17 @@ const isInert = (path) =>
 export const desktopBuildIsAffected = (paths) =>
 	paths.length === 0 || paths.some((path) => !isInert(path));
 
+// Prose cannot break a build. Everything else can: src/ is shared by the web,
+// extension and desktop targets, so there is no honest finer split than this.
+const isProse = (path) =>
+	path.endsWith(".md") ||
+	path === "LICENSE" ||
+	path.startsWith("docs/") ||
+	path.startsWith(".vscode/");
+
+export const codeIsAffected = (paths) =>
+	paths.length === 0 || paths.some((path) => !isProse(path));
+
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
 	const paths = process.argv
 		.slice(2)
@@ -49,6 +60,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
 		.map((path) => path.trim())
 		.filter(Boolean);
 	const affected = desktopBuildIsAffected(paths);
+	const code = codeIsAffected(paths);
 	const skipped = paths.filter(isInert).length;
 	console.log(
 		paths.length === 0
@@ -57,7 +69,16 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
 				? `Desktop matrix runs: ${paths.length - skipped} of ${paths.length} changed file(s) can affect the desktop build.`
 				: `Desktop matrix skipped: all ${paths.length} changed file(s) are documentation, web-only or other-platform files.`,
 	);
+	console.log(
+		code
+			? "Build and test jobs run."
+			: `Build and test jobs skipped: all ${paths.length} changed file(s) are prose.`,
+	);
 	if (process.env.GITHUB_OUTPUT) {
-		appendFileSync(process.env.GITHUB_OUTPUT, `desktop=${affected}\n`, "utf8");
+		appendFileSync(
+			process.env.GITHUB_OUTPUT,
+			`desktop=${affected}\ncode=${code}\n`,
+			"utf8",
+		);
 	}
 }

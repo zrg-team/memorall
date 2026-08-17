@@ -32,6 +32,12 @@ interface AgentWizardChatPanelProps {
 	onBack?: () => void;
 	isStreaming: boolean;
 	isModelReady: boolean;
+	/**
+	 * Connection setup rendered between the transcript and the composer. It lives
+	 * here rather than on another page because wizard messages are not persisted —
+	 * navigating away would discard the conversation.
+	 */
+	setupSlot?: React.ReactNode;
 }
 
 const toDbMessage = (message: AgentWizardMessage): DBMessage =>
@@ -60,6 +66,7 @@ export const AgentWizardChatPanel: React.FC<AgentWizardChatPanelProps> = ({
 	onBack,
 	isStreaming,
 	isModelReady,
+	setupSlot,
 }) => {
 	const { t } = useTranslation(["agents"]);
 	const tc = (key: string) => t(`wizard.chatPanel.${key}`, { ns: "agents" });
@@ -138,6 +145,10 @@ export const AgentWizardChatPanel: React.FC<AgentWizardChatPanelProps> = ({
 				</ConversationContent>
 				<ConversationScrollButton />
 			</Conversation>
+
+			{setupSlot ? (
+				<div className="shrink-0 border-t pt-2">{setupSlot}</div>
+			) : null}
 
 			<div className="shrink-0 border-t p-3">
 				<PromptInput

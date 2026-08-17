@@ -14,8 +14,9 @@ import { DEFAULT_CONTEXT_SYSTEM_PROMPT } from "@/services/flows-legacy/steps/com
 import { MULTI_AGENT_FEATURE_NAME } from "@/services/flows-legacy/steps/features/multi-agent-feature";
 import {
 	MCP_FEATURE_NAME,
-	type MCPServerConfig,
+	type MCPConnectionSelection,
 } from "@/services/flows-legacy/steps/features/mcp-feature";
+import { migrateLegacyServers } from "@/services/mcp-connections";
 import { ADD_SKILL_CONTEXT_STEP_NAME } from "@/services/flows-legacy/steps/common/add-skill-context";
 import { logError } from "@/utils/logger";
 import { deepEqual } from "@/utils/deep-equal";
@@ -204,12 +205,16 @@ const getMultiAgentAccessibleAgentIds = (
 		: [];
 };
 
-const getMCPServers = (unifiedConfig: UnifiedFlowConfig): MCPServerConfig[] => {
+const getAgentConnections = (
+	unifiedConfig: UnifiedFlowConfig,
+): MCPConnectionSelection[] => {
 	const step = unifiedConfig.steps.find(
 		(candidate) => candidate.name === MCP_FEATURE_NAME,
 	);
-	return Array.isArray(step?.config?.servers)
-		? (step.config.servers as MCPServerConfig[])
+	// Agents reference the shared registry; `servers` is only ever written by the
+	// resolver just before a run, and legacy configs are migrated on load.
+	return Array.isArray(step?.config?.connections)
+		? (step.config.connections as MCPConnectionSelection[])
 		: [];
 };
 
@@ -267,7 +272,7 @@ const deriveLegacyStateFromUnified = (unifiedConfig: UnifiedFlowConfig) => {
 		featureDefinitions,
 		multiAgentAccessibleAgentIds:
 			getMultiAgentAccessibleAgentIds(unifiedConfig),
-		mcpServers: getMCPServers(unifiedConfig),
+		connections: getAgentConnections(unifiedConfig),
 		enabledSkillNames: getEnabledSkillNames(unifiedConfig),
 		config: {
 			...DEFAULT_FOUNDATION_PREDEFINED_CONFIG,
@@ -301,7 +306,7 @@ const applyLegacyDraftToUnified = (
 	draftConfig: FoundationPredefinedConfig,
 	draftFeatures: FeatureFlags,
 	draftMultiAgentAccessibleAgentIds: string[],
-	draftMCPServers: MCPServerConfig[],
+	draftConnections: MCPConnectionSelection[],
 	draftEnabledSkillNames: string[],
 ): UnifiedFlowConfig => {
 	const graphType: GraphType =
@@ -394,8 +399,11 @@ const applyLegacyDraftToUnified = (
 			if (step.name === MCP_FEATURE_NAME) {
 				nextStep.config = {
 					...(nextStep.config ?? {}),
-					servers: [...draftMCPServers],
+					connections: [...draftConnections],
 				};
+				// `servers` is derived at run time from `connections`; leaving a stale
+				// copy behind would let a deleted connection keep running.
+				delete nextStep.config.servers;
 			}
 
 			if (step.name === ADD_SKILL_CONTEXT_STEP_NAME) {
@@ -426,8 +434,8 @@ interface AgentConfigState {
 	availableAgents: Flow[];
 	savedMultiAgentAccessibleAgentIds: string[];
 	draftMultiAgentAccessibleAgentIds: string[];
-	savedMCPServers: MCPServerConfig[];
-	draftMCPServers: MCPServerConfig[];
+	savedConnections: MCPConnectionSelection[];
+	draftConnections: MCPConnectionSelection[];
 	savedEnabledSkillNames: string[];
 	draftEnabledSkillNames: string[];
 	currentFlowId: string | null;
@@ -453,7 +461,7 @@ interface AgentConfigState {
 	toggleTool: (toolName: string) => void;
 	toggleAccessibleAgent: (agentId: string) => void;
 	setAccessibleAgents: (agentIds: string[]) => void;
-	setMCPServers: (servers: MCPServerConfig[]) => void;
+	setAgentConnections: (servers: MCPConnectionSelection[]) => void;
 	toggleSkill: (skillName: string) => void;
 	setEnabledSkills: (skillNames: string[]) => void;
 	patchStepConfig: (stepName: string, patch: Record<string, unknown>) => void;
@@ -474,8 +482,8 @@ const computeDirty = (
 	draftFeatures: FeatureFlags,
 	savedMultiAgentAccessibleAgentIds: string[],
 	draftMultiAgentAccessibleAgentIds: string[],
-	savedMCPServers: MCPServerConfig[],
-	draftMCPServers: MCPServerConfig[],
+	savedConnections: MCPConnectionSelection[],
+	draftConnections: MCPConnectionSelection[],
 	savedEnabledSkillNames: string[],
 	draftEnabledSkillNames: string[],
 ): boolean =>
@@ -485,7 +493,7 @@ const computeDirty = (
 		savedMultiAgentAccessibleAgentIds,
 		draftMultiAgentAccessibleAgentIds,
 	) ||
-	!deepEqual(savedMCPServers, draftMCPServers) ||
+	!deepEqual(savedConnections, draftConnections) ||
 	!deepEqual(savedEnabledSkillNames, draftEnabledSkillNames);
 
 export const useAgentConfigStore = create<AgentConfigState>((set, get) => {
@@ -496,7 +504,7 @@ export const useAgentConfigStore = create<AgentConfigState>((set, get) => {
 				draftConfig,
 				draftFeatures,
 				draftMultiAgentAccessibleAgentIds,
-				draftMCPServers,
+				draftConnections,
 				draftEnabledSkillNames,
 				savedUnifiedConfig,
 			} = get();
@@ -513,7 +521,7 @@ export const useAgentConfigStore = create<AgentConfigState>((set, get) => {
 				draftConfig,
 				draftFeatures,
 				draftMultiAgentAccessibleAgentIds,
-				draftMCPServers,
+				draftConnections,
 				draftEnabledSkillNames,
 			);
 
@@ -536,7 +544,7 @@ export const useAgentConfigStore = create<AgentConfigState>((set, get) => {
 				savedMultiAgentAccessibleAgentIds: [
 					...draftMultiAgentAccessibleAgentIds,
 				],
-				savedMCPServers: [...draftMCPServers],
+				savedConnections: [...draftConnections],
 				savedEnabledSkillNames: [...draftEnabledSkillNames],
 				isDirty: false,
 				isSaving: false,
@@ -563,8 +571,8 @@ export const useAgentConfigStore = create<AgentConfigState>((set, get) => {
 		availableAgents: [],
 		savedMultiAgentAccessibleAgentIds: [],
 		draftMultiAgentAccessibleAgentIds: [],
-		savedMCPServers: [],
-		draftMCPServers: [],
+		savedConnections: [],
+		draftConnections: [],
 		savedEnabledSkillNames: [],
 		draftEnabledSkillNames: [],
 		currentFlowId: null,
@@ -637,8 +645,8 @@ export const useAgentConfigStore = create<AgentConfigState>((set, get) => {
 						availableAgents,
 						savedMultiAgentAccessibleAgentIds: [],
 						draftMultiAgentAccessibleAgentIds: [],
-						savedMCPServers: [],
-						draftMCPServers: [],
+						savedConnections: [],
+						draftConnections: [],
 						savedEnabledSkillNames: [],
 						draftEnabledSkillNames: [],
 						currentFlowId: targetFlowId ?? null,
@@ -650,8 +658,30 @@ export const useAgentConfigStore = create<AgentConfigState>((set, get) => {
 					return;
 				}
 
-				const unifiedConfig =
+				const loadedConfig =
 					await serviceManager.flowBuilderService.getUnifiedFlowConfig(flowRef);
+
+				// Agents authored before the Connections registry keep their servers
+				// inline. Lift them into the registry on first load so the picker and
+				// the runtime resolver see the same thing. Idempotent, and never
+				// allowed to block the config from loading.
+				let unifiedConfig = loadedConfig;
+				try {
+					const result = await migrateLegacyServers(loadedConfig);
+					unifiedConfig = result.config;
+					if (result.migrated) {
+						await serviceManager.flowBuilderService.saveUnifiedFlowConfig(
+							flowRef,
+							unifiedConfig,
+						);
+					}
+				} catch (migrationError) {
+					logError(
+						"[AgentConfigStore] Connection migration failed:",
+						migrationError,
+					);
+				}
+
 				const derivedState = deriveLegacyStateFromUnified(unifiedConfig);
 
 				set({
@@ -669,8 +699,8 @@ export const useAgentConfigStore = create<AgentConfigState>((set, get) => {
 					draftMultiAgentAccessibleAgentIds: [
 						...derivedState.multiAgentAccessibleAgentIds,
 					],
-					savedMCPServers: [...derivedState.mcpServers],
-					draftMCPServers: [...derivedState.mcpServers],
+					savedConnections: [...derivedState.connections],
+					draftConnections: [...derivedState.connections],
 					savedEnabledSkillNames: [...derivedState.enabledSkillNames],
 					draftEnabledSkillNames: [...derivedState.enabledSkillNames],
 					currentFlowId: targetFlowId ?? null,
@@ -699,8 +729,8 @@ export const useAgentConfigStore = create<AgentConfigState>((set, get) => {
 					get().draftFeatures,
 					get().savedMultiAgentAccessibleAgentIds,
 					get().draftMultiAgentAccessibleAgentIds,
-					get().savedMCPServers,
-					get().draftMCPServers,
+					get().savedConnections,
+					get().draftConnections,
 					get().savedEnabledSkillNames,
 					get().draftEnabledSkillNames,
 				),
@@ -723,8 +753,8 @@ export const useAgentConfigStore = create<AgentConfigState>((set, get) => {
 					draftFeatures,
 					get().savedMultiAgentAccessibleAgentIds,
 					get().draftMultiAgentAccessibleAgentIds,
-					get().savedMCPServers,
-					get().draftMCPServers,
+					get().savedConnections,
+					get().draftConnections,
 					get().savedEnabledSkillNames,
 					get().draftEnabledSkillNames,
 				),
@@ -753,8 +783,8 @@ export const useAgentConfigStore = create<AgentConfigState>((set, get) => {
 					defaultFeatures,
 					get().savedMultiAgentAccessibleAgentIds,
 					draftMultiAgentAccessibleAgentIds,
-					get().savedMCPServers,
-					get().draftMCPServers,
+					get().savedConnections,
+					get().draftConnections,
 					get().savedEnabledSkillNames,
 					get().draftEnabledSkillNames,
 				),
@@ -775,8 +805,8 @@ export const useAgentConfigStore = create<AgentConfigState>((set, get) => {
 					next,
 					get().savedMultiAgentAccessibleAgentIds,
 					get().draftMultiAgentAccessibleAgentIds,
-					get().savedMCPServers,
-					get().draftMCPServers,
+					get().savedConnections,
+					get().draftConnections,
 					get().savedEnabledSkillNames,
 					get().draftEnabledSkillNames,
 				),
@@ -798,8 +828,8 @@ export const useAgentConfigStore = create<AgentConfigState>((set, get) => {
 					get().draftFeatures,
 					get().savedMultiAgentAccessibleAgentIds,
 					get().draftMultiAgentAccessibleAgentIds,
-					get().savedMCPServers,
-					get().draftMCPServers,
+					get().savedConnections,
+					get().draftConnections,
 					get().savedEnabledSkillNames,
 					get().draftEnabledSkillNames,
 				),
@@ -820,8 +850,8 @@ export const useAgentConfigStore = create<AgentConfigState>((set, get) => {
 					get().draftFeatures,
 					get().savedMultiAgentAccessibleAgentIds,
 					next,
-					get().savedMCPServers,
-					get().draftMCPServers,
+					get().savedConnections,
+					get().draftConnections,
 					get().savedEnabledSkillNames,
 					get().draftEnabledSkillNames,
 				),
@@ -839,26 +869,34 @@ export const useAgentConfigStore = create<AgentConfigState>((set, get) => {
 					get().draftFeatures,
 					get().savedMultiAgentAccessibleAgentIds,
 					next,
-					get().savedMCPServers,
-					get().draftMCPServers,
+					get().savedConnections,
+					get().draftConnections,
 					get().savedEnabledSkillNames,
 					get().draftEnabledSkillNames,
 				),
 			});
 		},
 
-		setMCPServers: (servers) => {
+		setAgentConnections: (servers) => {
 			const next = [...servers];
+			// Selecting connections is meaningless unless the MCP step runs: the
+			// resolver only injects servers into an enabled step, so without this
+			// the agent gets the connection on paper and no tools at run time.
+			const draftFeatures = {
+				...get().draftFeatures,
+				[MCP_FEATURE_NAME]: next.length > 0,
+			};
 			set({
-				draftMCPServers: next,
+				draftConnections: next,
+				draftFeatures,
 				isDirty: computeDirty(
 					get().savedConfig,
 					get().draftConfig,
 					get().savedFeatures,
-					get().draftFeatures,
+					draftFeatures,
 					get().savedMultiAgentAccessibleAgentIds,
 					get().draftMultiAgentAccessibleAgentIds,
-					get().savedMCPServers,
+					get().savedConnections,
 					next,
 					get().savedEnabledSkillNames,
 					get().draftEnabledSkillNames,
@@ -880,8 +918,8 @@ export const useAgentConfigStore = create<AgentConfigState>((set, get) => {
 					get().draftFeatures,
 					get().savedMultiAgentAccessibleAgentIds,
 					get().draftMultiAgentAccessibleAgentIds,
-					get().savedMCPServers,
-					get().draftMCPServers,
+					get().savedConnections,
+					get().draftConnections,
 					get().savedEnabledSkillNames,
 					next,
 				),
@@ -899,8 +937,8 @@ export const useAgentConfigStore = create<AgentConfigState>((set, get) => {
 					get().draftFeatures,
 					get().savedMultiAgentAccessibleAgentIds,
 					get().draftMultiAgentAccessibleAgentIds,
-					get().savedMCPServers,
-					get().draftMCPServers,
+					get().savedConnections,
+					get().draftConnections,
 					get().savedEnabledSkillNames,
 					next,
 				),
@@ -954,7 +992,7 @@ export const useAgentConfigStore = create<AgentConfigState>((set, get) => {
 				draftMultiAgentAccessibleAgentIds: [
 					...get().savedMultiAgentAccessibleAgentIds,
 				],
-				draftMCPServers: [...get().savedMCPServers],
+				draftConnections: [...get().savedConnections],
 				draftEnabledSkillNames: [...get().savedEnabledSkillNames],
 				featureDefinitions: buildFeatureDefinitions(graphType),
 				currentGraphType: graphType,
@@ -971,7 +1009,7 @@ export const useAgentConfigStore = create<AgentConfigState>((set, get) => {
 				draftMultiAgentAccessibleAgentIds: [
 					...derivedState.multiAgentAccessibleAgentIds,
 				],
-				draftMCPServers: [...derivedState.mcpServers],
+				draftConnections: [...derivedState.connections],
 				draftEnabledSkillNames: [...derivedState.enabledSkillNames],
 				featureDefinitions: derivedState.featureDefinitions,
 				currentGraphType: derivedState.graphType,
@@ -982,8 +1020,8 @@ export const useAgentConfigStore = create<AgentConfigState>((set, get) => {
 					derivedState.features,
 					get().savedMultiAgentAccessibleAgentIds,
 					derivedState.multiAgentAccessibleAgentIds,
-					get().savedMCPServers,
-					derivedState.mcpServers,
+					get().savedConnections,
+					derivedState.connections,
 					get().savedEnabledSkillNames,
 					derivedState.enabledSkillNames,
 				),

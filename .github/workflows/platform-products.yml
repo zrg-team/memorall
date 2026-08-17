@@ -11,15 +11,25 @@ permissions:
 
 concurrency:
   group: platform-products-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # Superseding a pull request is fine — only the head commit's checks are read.
+  # Superseding a push to main is not: it leaves a commit on the default branch
+  # whose checks say "cancelled", which reads as a failure forever after.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   NODE_VERSION: "22.23.1"
   RUST_VERSION: "1.97.1"
 
+# Every job below gates its *steps*, never itself.
+#
+# A job-level `if:` reports the job as "skipped", and a job that times out is
+# reported as "cancelled" — a grey slash and a red cross respectively, neither
+# of which means "there is nothing wrong with this change". Gating the steps
+# costs a few seconds of runner time and reports a green check that says in one
+# line why it did nothing.
 jobs:
   changes:
-    name: Detect desktop-affecting changes
+    name: Detect what this change can affect
     runs-on: ubuntu-22.04
     timeout-minutes: 5
     permissions:
@@ -27,6 +37,7 @@ jobs:
       pull-requests: read
     outputs:
       desktop: ${{ steps.detect.outputs.desktop }}
+      code: ${{ steps.detect.outputs.code }}
     steps:
       - uses: actions/checkout@v4
       - name: Verify the change classifier
@@ -50,51 +61,100 @@ jobs:
 
   quality:
     name: Dependency and shared checks
+    needs: changes
     runs-on: ubuntu-22.04
     timeout-minutes: 30
+    env:
+      RUN: ${{ needs.changes.outputs.code }}
     steps:
+      - name: Decide whether this job has anything to do
+        shell: bash
+        run: |
+          if [ "$RUN" = "true" ]; then
+            echo "Running: this change touches more than prose."
+          else
+            echo "Nothing to do: every changed file is documentation."
+          fi
       - uses: actions/checkout@v4
+        if: env.RUN == 'true'
       - uses: actions/setup-node@v4
+        if: env.RUN == 'true'
         with:
           node-version: ${{ env.NODE_VERSION }}
       - name: Enforce conventional branch names
+        if: env.RUN == 'true'
         run: node tools/check-branch-name.mjs
-      - run: corepack enable
-      - run: yarn install --immutable
-      - run: yarn playwright install --with-deps chromium
+      - if: env.RUN == 'true'
+        run: corepack enable
+      - if: env.RUN == 'true'
+        run: yarn install --immutable
+      - if: env.RUN == 'true'
+        run: yarn playwright install --with-deps chromium
       - name: Require reproducible generated assets
+        if: env.RUN == 'true'
         run: git diff --exit-code
       - name: Validate version-bound patches
+        if: env.RUN == 'true'
         run: |
           node --test tools/check-patch-package.test.mjs
           yarn patch-package --error-on-fail
           yarn check:patches
-      - run: yarn dedupe --check
-      - run: yarn lint
-      - run: yarn check
-      - run: yarn check:harness
-      - run: yarn typecheck:desktop:sidecar
-      - run: yarn test:desktop:sidecar
+      - name: Require the desktop version to match package.json
+        if: env.RUN == 'true'
+        run: |
+          node --test tools/sync-desktop-version.test.mjs
+          yarn check:desktop:version
+      - if: env.RUN == 'true'
+        run: yarn dedupe --check
+      - if: env.RUN == 'true'
+        run: yarn lint
+      - if: env.RUN == 'true'
+        run: yarn check
+      - if: env.RUN == 'true'
+        run: yarn check:harness
+      - if: env.RUN == 'true'
+        run: yarn typecheck:desktop:sidecar
+      - if: env.RUN == 'true'
+        run: yarn test:desktop:sidecar
 
   web:
     name: Web production E2E
-    needs: quality
+    needs: [changes, quality]
     runs-on: ubuntu-22.04
     timeout-minutes: 30
+    env:
+      RUN: ${{ needs.changes.outputs.code }}
     steps:
+      - name: Decide whether this job has anything to do
+        shell: bash
+        run: |
+          if [ "$RUN" = "true" ]; then
+            echo "Running: this change touches more than prose."
+          else
+            echo "Nothing to do: every changed file is documentation."
+          fi
       - uses: actions/checkout@v4
+        if: env.RUN == 'true'
       - uses: actions/setup-node@v4
+        if: env.RUN == 'true'
         with:
           node-version: ${{ env.NODE_VERSION }}
-      - run: corepack enable
-      - run: yarn install --immutable
-      - run: yarn playwright install --with-deps chromium
+      - if: env.RUN == 'true'
+        run: corepack enable
+      - if: env.RUN == 'true'
+        run: yarn install --immutable
+      - if: env.RUN == 'true'
+        run: yarn playwright install --with-deps chromium
       - name: Exercise the production Pages layout
+        if: env.RUN == 'true'
         run: xvfb-run --auto-servernum yarn test:e2e:web
       - name: Download a local CPU model and complete a real Web chat request
+        if: env.RUN == 'true'
         run: xvfb-run --auto-servernum yarn test:e2e:web:local-model
-      - run: yarn check:platform:bundles web
+      - if: env.RUN == 'true'
+        run: yarn check:platform:bundles web
       - name: Validate Pages without publishing
+        if: env.RUN == 'true'
         run: yarn deploy:web:github-pages:dry-run
       - name: Upload Web Playwright diagnostics
         if: failure()
@@ -109,34 +169,55 @@ jobs:
 
   extension:
     name: Extension development and packaged E2E
-    needs: quality
+    needs: [changes, quality]
     runs-on: ubuntu-22.04
     timeout-minutes: 45
+    env:
+      RUN: ${{ needs.changes.outputs.code }}
     steps:
+      - name: Decide whether this job has anything to do
+        shell: bash
+        run: |
+          if [ "$RUN" = "true" ]; then
+            echo "Running: this change touches more than prose."
+          else
+            echo "Nothing to do: every changed file is documentation."
+          fi
       - uses: actions/checkout@v4
+        if: env.RUN == 'true'
       - uses: actions/setup-node@v4
+        if: env.RUN == 'true'
         with:
           node-version: ${{ env.NODE_VERSION }}
-      - run: corepack enable
-      - run: yarn install --immutable
-      - run: yarn playwright install --with-deps chromium
+      - if: env.RUN == 'true'
+        run: corepack enable
+      - if: env.RUN == 'true'
+        run: yarn install --immutable
+      - if: env.RUN == 'true'
+        run: yarn playwright install --with-deps chromium
       - name: Exercise the Extension.js development artifact
+        if: env.RUN == 'true'
         run: xvfb-run --auto-servernum yarn test:e2e:extension:dev
       - name: Build and package Chrome and Edge without publishing
+        if: env.RUN == 'true'
         run: yarn package:extension:all
       - name: Exercise the packaged Chrome artifact
+        if: env.RUN == 'true'
         env:
           MEMORALL_EXTENSION_PATH: publish/extension/chrome
           MEMORALL_EXTENSION_MODE: chrome-production
         run: xvfb-run --auto-servernum yarn playwright test -c playwright.extension.config.ts
       - name: Download a local CPU model and complete a real chat request
+        if: env.RUN == 'true'
         run: xvfb-run --auto-servernum yarn test:e2e:extension:local-model
       - name: Exercise the packaged Edge artifact
+        if: env.RUN == 'true'
         env:
           MEMORALL_EXTENSION_PATH: publish/extension/edge
           MEMORALL_EXTENSION_MODE: edge-production
         run: xvfb-run --auto-servernum yarn playwright test -c playwright.extension.config.ts
       - name: Re-run the MV3 remote-code audit
+        if: env.RUN == 'true'
         run: node tools/check-mv3-remote-code.mjs publish/extension/chrome publish/extension/edge
       - name: Upload Extension Playwright diagnostics
         if: failure()
@@ -153,9 +234,10 @@ jobs:
   desktop:
     name: Desktop native smoke (${{ matrix.name }})
     needs: [changes, quality]
-    if: needs.changes.outputs.desktop == 'true'
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 90
+    env:
+      RUN: ${{ needs.changes.outputs.desktop }}
     strategy:
       fail-fast: false
       matrix:
@@ -173,19 +255,46 @@ jobs:
             architecture: x64
             platform: linux
     steps:
+      - name: Decide whether this platform needs a build
+        shell: bash
+        run: |
+          if [ "$RUN" = "true" ]; then
+            echo "Running: this change can affect the desktop build."
+          else
+            echo "Nothing to do: no changed file can affect the desktop build."
+          fi
       - uses: actions/checkout@v4
+        if: env.RUN == 'true'
       - uses: actions/setup-node@v4
+        if: env.RUN == 'true'
         with:
           node-version: ${{ env.NODE_VERSION }}
       - uses: dtolnay/rust-toolchain@master
+        if: env.RUN == 'true'
         with:
           toolchain: ${{ env.RUST_VERSION }}
+      # Nearly all of this job's wall clock is rustc. Without a cache every run
+      # rebuilds every dependency from source, which is what pushed the slowest
+      # runners into their timeout.
+      - name: Cache the Rust build
+        if: env.RUN == 'true'
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            apps/desktop/src-tauri/target/
+          key: cargo-${{ runner.os }}-${{ runner.arch }}-${{ env.RUST_VERSION }}-${{ hashFiles('apps/desktop/src-tauri/Cargo.lock') }}
+          restore-keys: |
+            cargo-${{ runner.os }}-${{ runner.arch }}-${{ env.RUST_VERSION }}-
       - name: Verify runner architecture
+        if: env.RUN == 'true'
         env:
           EXPECTED_ARCHITECTURE: ${{ matrix.architecture }}
         run: node -e "if (process.arch !== process.env.EXPECTED_ARCHITECTURE) { console.error('Expected ' + process.env.EXPECTED_ARCHITECTURE + ', got ' + process.arch); process.exit(1); }"
       - name: Install Linux Tauri and smoke-test dependencies
-        if: runner.os == 'Linux'
+        if: env.RUN == 'true' && runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
@@ -220,46 +329,75 @@ jobs:
           # Ubuntu 24.04 renamed the ALSA runtime, and its libasound2 virtual package is ambiguous.
           sudo apt-get install -y --no-install-recommends libasound2t64 \
             || sudo apt-get install -y --no-install-recommends libasound2
-      - run: corepack enable
-      - run: yarn install --immutable
+      - if: env.RUN == 'true'
+        run: corepack enable
+      - if: env.RUN == 'true'
+        run: yarn install --immutable
       - name: Build and smoke the Linux application through the Tauri wrapper
-        if: runner.os == 'Linux'
+        if: env.RUN == 'true' && runner.os == 'Linux'
         run: xvfb-run --auto-servernum yarn test:e2e:desktop
       - name: Build and smoke the native application through the Tauri wrapper
-        if: runner.os != 'Linux'
+        if: env.RUN == 'true' && runner.os != 'Linux'
         run: yarn test:e2e:desktop
       - name: Verify native installers and staged Node runtime
+        if: env.RUN == 'true'
         run: node tools/check-desktop-artifacts.mjs ${{ matrix.platform }}
       - name: Exercise the staged sidecar and bundled Chromium offline
+        if: env.RUN == 'true'
         run: yarn test:desktop:browser-runtime
       - name: Exercise the standards-CDP fallback independently
+        if: env.RUN == 'true'
         env:
           MEMORALL_BROWSEROS_DISABLED: "1"
         run: yarn test:desktop:browser-runtime
-      - run: yarn check:platform:bundles desktop
+      - if: env.RUN == 'true'
+        run: yarn check:platform:bundles desktop
 
   firefox:
     name: Firefox build (manual, non-blocking)
-    if: github.event_name == 'workflow_dispatch'
-    continue-on-error: true
     needs: quality
     runs-on: ubuntu-22.04
     timeout-minutes: 30
+    env:
+      RUN: ${{ github.event_name == 'workflow_dispatch' }}
     steps:
+      - name: Decide whether this job has anything to do
+        shell: bash
+        run: |
+          if [ "$RUN" = "true" ]; then
+            echo "Running: dispatched manually."
+          else
+            echo "Nothing to do: the Firefox build runs on manual dispatch only."
+          fi
       - uses: actions/checkout@v4
+        if: env.RUN == 'true'
       - uses: actions/setup-node@v4
+        if: env.RUN == 'true'
         with:
           node-version: ${{ env.NODE_VERSION }}
-      - run: corepack enable
-      - run: yarn install --immutable
-      - run: yarn build:extension:firefox
+      - if: env.RUN == 'true'
+        run: corepack enable
+      - if: env.RUN == 'true'
+        run: yarn install --immutable
+      - if: env.RUN == 'true'
+        continue-on-error: true
+        run: yarn build:extension:firefox
 
+  # The second-tier architectures. They build Rust from source on the slowest
+  # runners — the Linux arm64 leg has been hitting the 90-minute ceiling, and a
+  # timed-out job is reported as *cancelled*, indistinguishable in the checks
+  # list from a real failure.
+  #
+  # So they no longer build on pull requests, where the wait buys nothing that
+  # the primary three do not already cover. Coverage is kept on pushes to main
+  # and on manual dispatch, with room in the timeout for a cold cache.
   secondary-desktop:
     name: Desktop native smoke (${{ matrix.name }})
     needs: [changes, quality]
-    if: needs.changes.outputs.desktop == 'true'
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 90
+    timeout-minutes: 120
+    env:
+      RUN: ${{ needs.changes.outputs.desktop == 'true' && github.event_name != 'pull_request' }}
     strategy:
       fail-fast: false
       matrix:
@@ -273,19 +411,45 @@ jobs:
             architecture: arm64
             platform: linux
     steps:
+      - name: Decide whether this platform needs a build
+        shell: bash
+        run: |
+          if [ "$RUN" = "true" ]; then
+            echo "Running: this change can affect the desktop build."
+          elif [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "Nothing to do: second-tier architectures build on main, not on pull requests."
+          else
+            echo "Nothing to do: no changed file can affect the desktop build."
+          fi
       - uses: actions/checkout@v4
+        if: env.RUN == 'true'
       - uses: actions/setup-node@v4
+        if: env.RUN == 'true'
         with:
           node-version: ${{ env.NODE_VERSION }}
       - uses: dtolnay/rust-toolchain@master
+        if: env.RUN == 'true'
         with:
           toolchain: ${{ env.RUST_VERSION }}
+      - name: Cache the Rust build
+        if: env.RUN == 'true'
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            apps/desktop/src-tauri/target/
+          key: cargo-${{ runner.os }}-${{ runner.arch }}-${{ env.RUST_VERSION }}-${{ hashFiles('apps/desktop/src-tauri/Cargo.lock') }}
+          restore-keys: |
+            cargo-${{ runner.os }}-${{ runner.arch }}-${{ env.RUST_VERSION }}-
       - name: Verify runner architecture
+        if: env.RUN == 'true'
         env:
           EXPECTED_ARCHITECTURE: ${{ matrix.architecture }}
         run: node -e "if (process.arch !== process.env.EXPECTED_ARCHITECTURE) { console.error('Expected ' + process.env.EXPECTED_ARCHITECTURE + ', got ' + process.arch); process.exit(1); }"
       - name: Install Linux Tauri and smoke-test dependencies
-        if: runner.os == 'Linux'
+        if: env.RUN == 'true' && runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
@@ -320,20 +484,26 @@ jobs:
           # Ubuntu 24.04 renamed the ALSA runtime, and its libasound2 virtual package is ambiguous.
           sudo apt-get install -y --no-install-recommends libasound2t64 \
             || sudo apt-get install -y --no-install-recommends libasound2
-      - run: corepack enable
-      - run: yarn install --immutable
+      - if: env.RUN == 'true'
+        run: corepack enable
+      - if: env.RUN == 'true'
+        run: yarn install --immutable
       - name: Build and smoke the Linux application through the Tauri wrapper
-        if: runner.os == 'Linux'
+        if: env.RUN == 'true' && runner.os == 'Linux'
         run: xvfb-run --auto-servernum yarn test:e2e:desktop
       - name: Build and smoke the native application through the Tauri wrapper
-        if: runner.os != 'Linux'
+        if: env.RUN == 'true' && runner.os != 'Linux'
         run: yarn test:e2e:desktop
       - name: Verify native installers and staged Node runtime
+        if: env.RUN == 'true'
         run: node tools/check-desktop-artifacts.mjs ${{ matrix.platform }}
       - name: Exercise the staged sidecar and bundled Chromium offline
+        if: env.RUN == 'true'
         run: yarn test:desktop:browser-runtime
       - name: Exercise the standards-CDP fallback independently
+        if: env.RUN == 'true'
         env:
           MEMORALL_BROWSEROS_DISABLED: "1"
         run: yarn test:desktop:browser-runtime
-      - run: yarn check:platform:bundles desktop
+      - if: env.RUN == 'true'
+        run: yarn check:platform:bundles desktop

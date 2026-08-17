@@ -2057,7 +2057,7 @@ dependencies = [
 
 [[package]]
 name = "memorall-desktop"
-version = "0.5.1"
+version = "0.5.4"
 dependencies = [
  "serde",
  "serde_json",

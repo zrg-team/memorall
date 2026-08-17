@@ -49,6 +49,7 @@ import {
 	type MemorallFlowServices,
 } from "@/services/agent-harness";
 import type { UnifiedFlowConfig } from "@/services/flows-legacy/interfaces/config/flow-config";
+import { withResolvedConnections } from "@/services/mcp-connections";
 import { buildDefaultFlowConfig } from "@/services/flows-legacy/utils/flow-config";
 import { mergeWithDefaultConfig } from "@/services/flows-legacy/utils/flow-config";
 import { eq, sql } from "drizzle-orm";
@@ -784,13 +785,16 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 			model,
 			mode,
 			topicId,
-			agentFlowId,
+			agentFlowId: rawAgentFlowId,
 			streamConfig,
 			tools,
 			tool_choice,
 			parallel_tool_calls,
 			conversation,
 		} = job.payload;
+		// "chat" is the composer's sentinel for "no agent selected", not a flow id.
+		const agentFlowId =
+			rawAgentFlowId && rawAgentFlowId !== "chat" ? rawAgentFlowId : undefined;
 		const startTime = Date.now();
 		const provider =
 			(await serviceManager.llmService.getCurrentModel())?.provider ??
@@ -840,6 +844,12 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 			if (!id || !name) return undefined;
 
 			const existing = toolExecutions.find((item) => item.id === id);
+			const toolMetadata =
+				metadata?.tool_metadata &&
+				typeof metadata.tool_metadata === "object" &&
+				!Array.isArray(metadata.tool_metadata)
+					? (metadata.tool_metadata as Record<string, unknown>)
+					: undefined;
 			if (phase === "start") {
 				const input = createToolExecutionPreview(metadata?.input);
 				const record: ToolExecutionRecord = {
@@ -852,6 +862,7 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 							: new Date().toISOString(),
 					inputPreview: input.preview,
 					truncated: input.truncated,
+					...(toolMetadata ? { toolMetadata } : {}),
 				};
 				toolExecutions = upsertToolExecution(toolExecutions, record);
 				return record;
@@ -885,6 +896,9 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 				outputPreview: output.preview,
 				error: isError ? output.preview : undefined,
 				truncated: Boolean(existing?.truncated || output.truncated),
+				...((toolMetadata ?? existing?.toolMetadata)
+					? { toolMetadata: toolMetadata ?? existing?.toolMetadata }
+					: {}),
 			};
 			toolExecutions = upsertToolExecution(toolExecutions, record);
 			return record;
@@ -951,18 +965,17 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 
 				let flowConfig: UnifiedFlowConfig | null = null;
 				try {
-					flowConfig =
-						mode === "normal"
-							? buildDefaultFlowConfig("agent")
-							: job.payload.flowConfig
-								? job.payload.flowConfig
-								: agentFlowId
-									? await serviceManager.flowBuilderService.getUnifiedFlowConfig(
-											{
-												flowId: agentFlowId,
-											},
-										)
-									: buildDefaultFlowConfig("agent");
+					// An agent selected in the composer must behave the same whichever
+					// mode the UI picked. `normal` used to force the stock config here,
+					// so the agent's own features — MCP connections above all — were
+					// silently dropped depending on how the message was started.
+					flowConfig = job.payload.flowConfig
+						? job.payload.flowConfig
+						: agentFlowId
+							? await serviceManager.flowBuilderService.getUnifiedFlowConfig({
+									flowId: agentFlowId,
+								})
+							: buildDefaultFlowConfig("agent");
 				} catch (err) {
 					await dependencies.logger.warn(
 						"Failed to load agent flow config, using defaults",
@@ -974,9 +987,11 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 				const resolvedConfig = flowConfig
 					? mergeWithDefaultConfig(flowConfig, flowConfig.graphType)
 					: buildDefaultFlowConfig("agent");
-				const resolvedConfigWithPrefix = withThreadHistoryTools(
-					applyFlowConfigPrefix(resolvedConfig, job.payload.flowConfigPrefix),
-					conversation,
+				const resolvedConfigWithPrefix = await withResolvedConnections(
+					withThreadHistoryTools(
+						applyFlowConfigPrefix(resolvedConfig, job.payload.flowConfigPrefix),
+						conversation,
+					),
 				);
 				const stream = toLegacyFlowStream(
 					createMemorallFlowRun({
@@ -1049,9 +1064,8 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 				let resolvedConfig = flowConfig
 					? mergeWithDefaultConfig(flowConfig, flowConfig.graphType)
 					: buildDefaultFlowConfig("foundation");
-				resolvedConfig = applyFlowConfigPrefix(
-					resolvedConfig,
-					job.payload.flowConfigPrefix,
+				resolvedConfig = await withResolvedConnections(
+					applyFlowConfigPrefix(resolvedConfig, job.payload.flowConfigPrefix),
 				);
 
 				await dependencies.updateJobProgress(jobId, {

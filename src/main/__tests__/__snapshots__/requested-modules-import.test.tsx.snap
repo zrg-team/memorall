@@ -3,6 +3,7 @@
 exports[`requested main module coverage > imports chat, documents, agents, agent wizard, and llm modules 1`] = `
 [
   "../modules/agent-wizard/components/AgentWizardChatPanel.tsx",
+  "../modules/agent-wizard/components/AgentWizardConnectionSetup.tsx",
   "../modules/agent-wizard/components/AgentWizardTemplatePanel.tsx",
   "../modules/agent-wizard/components/AgentWizardWorkspace.tsx",
   "../modules/agent-wizard/hooks/use-agent-wizard.ts",
@@ -24,7 +25,6 @@ exports[`requested main module coverage > imports chat, documents, agents, agent
   "../modules/agents/components/AgentsWorkspaceLayout.tsx",
   "../modules/agents/components/FeatureCard.tsx",
   "../modules/agents/components/FeaturesGrid.tsx",
-  "../modules/agents/components/MCPServersEditor.tsx",
   "../modules/agents/components/MCPServersSection.tsx",
   "../modules/agents/components/SkillsSection.tsx",
   "../modules/agents/components/SystemPromptEditor.tsx",

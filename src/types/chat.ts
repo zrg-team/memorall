@@ -74,6 +74,12 @@ export interface ToolExecutionRecord {
 	outputPreview?: string;
 	error?: string;
 	truncated?: boolean;
+	/**
+	 * Tool-definition metadata (MCP server, original tool name, output schema).
+	 * The previews above are clipped and redacted for storage; this is what lets
+	 * the UI say *what* ran rather than only dumping its output.
+	 */
+	toolMetadata?: Record<string, unknown>;
 }
 
 export type AssistantToolPartState = "running" | "complete" | "error";

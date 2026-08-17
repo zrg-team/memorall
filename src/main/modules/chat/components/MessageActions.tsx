@@ -44,7 +44,7 @@ import { webSearchRenderer } from "./tools/WebSearch";
 import { fsActionRenderer } from "./tools/FileSystem";
 import { terminalToolRenderer } from "./tools/TerminalTool";
 import { plannerToolRenderer } from "./tools/PlannerTool";
-import { ToolItemRawIO } from "./tools/ToolCommon";
+import { getMCPActionMetadata, ToolItemRawIO } from "./tools/ToolCommon";
 import {
 	messageKnowledgeGraphRenderer,
 	structMemKnowledgeRetrievalRenderer,
@@ -107,9 +107,17 @@ export const getActionIcon = (name: string): LucideIcon => {
 	);
 };
 
+const humanizeToolName = (name: string): string =>
+	name
+		.replace(/_/g, " ")
+		.replace(/\s+/g, " ")
+		.trim()
+		.replace(/^\w/, (c) => c.toUpperCase());
+
 export const translateActionName = (
 	t: ReturnType<typeof useTranslation>["t"],
 	actionName: string,
+	metadata?: Record<string, unknown>,
 ): string => {
 	const translationKey = `actions.${actionName}`;
 	const translated = t(translationKey);
@@ -133,7 +141,15 @@ export const translateActionName = (
 		return coAgentTitle;
 	}
 
-	return actionName.replace(/_/g, " ").replace(/^\w/, (c) => c.toUpperCase());
+	// MCP tools arrive prefixed with the server they came from
+	// (`composio__COMPOSIO_MULTI_EXECUTE_TOOL`), which reads as a slug rather
+	// than an action. Name the tool and say where it ran.
+	const mcp = metadata ? getMCPActionMetadata({ metadata }) : null;
+	if (mcp?.originalToolName) {
+		return `${mcp.serverName} · ${humanizeToolName(mcp.originalToolName)}`;
+	}
+
+	return humanizeToolName(actionName);
 };
 
 const translateActionDescription = (
@@ -321,8 +337,8 @@ const TaskItemRenderer: React.FC<TaskItemRendererProps> = React.memo(
 
 		const Icon = useMemo(() => getActionIcon(item.name), [item.name]);
 		const title = useMemo(
-			() => translateActionName(t, item.name),
-			[t, item.name],
+			() => translateActionName(t, item.name, item.metadata),
+			[t, item.name, item.metadata],
 		);
 
 		return (

@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { desktopBuildIsAffected } from "./check-desktop-relevant-changes.mjs";
+import {
+	codeIsAffected,
+	desktopBuildIsAffected,
+} from "./check-desktop-relevant-changes.mjs";
 
 test("skips documentation and web-only changes", () => {
 	assert.equal(
@@ -65,4 +68,21 @@ test("runs when the change set is unknown", () => {
 test("treats unrecognised paths as relevant", () => {
 	assert.equal(desktopBuildIsAffected(["runner/agent.ts"]), true);
 	assert.equal(desktopBuildIsAffected(["sandbox/index.ts"]), true);
+});
+
+test("treats a prose-only change set as needing no build", () => {
+	assert.equal(
+		codeIsAffected(["README.md", "docs/co-agent.md", "LICENSE"]),
+		false,
+	);
+});
+
+test("builds when any non-prose file rides along", () => {
+	assert.equal(codeIsAffected(["README.md", "src/lib/db.ts"]), true);
+	assert.equal(codeIsAffected(["apps/web/src/main.tsx"]), true);
+	assert.equal(codeIsAffected([".github/workflows/agent-harness.yml"]), true);
+});
+
+test("builds when the change set is unknown", () => {
+	assert.equal(codeIsAffected([]), true);
 });

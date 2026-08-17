@@ -24,7 +24,7 @@ import { useEmbeddingSettings } from "./stores/embedding-settings";
 import {
 	checkAnyProviderNeedsRestore,
 	restoreAllProviders,
-	getEncryptedProviders,
+	getEncryptedSecretLabels,
 } from "@/utils/auth-provider-restore";
 import {
 	detectEncryptionFormat,
@@ -52,6 +52,7 @@ import {
 	ActivityTimelinePage,
 	AgentsPage,
 	RuntimePage,
+	ConnectionsPage,
 	FlowBuilderPage,
 } from "./pages/lazy-pages";
 import { registerAllEditors } from "@/main/modules/files/editors";
@@ -150,8 +151,8 @@ const App: React.FC = () => {
 					const needsRestore = await checkAnyProviderNeedsRestore();
 
 					if (needsRestore) {
-						// Get list of encrypted providers
-						const providers = await getEncryptedProviders();
+						// Every secret sealed by the passkey, not just LLM providers.
+						const providers = await getEncryptedSecretLabels();
 						setEncryptedProviders(providers);
 						logInfo(
 							`Master key authentication required for: ${providers.join(", ")}`,
@@ -251,7 +252,7 @@ const App: React.FC = () => {
 		const isUnlocked = await isMasterKeyUnlocked();
 
 		if (needsRestore && !isUnlocked) {
-			const providers = await getEncryptedProviders();
+			const providers = await getEncryptedSecretLabels();
 			setEncryptedProviders(providers);
 			setServicesStatus("awaiting-passkey");
 		} else if (isUnlocked) {
@@ -296,7 +297,7 @@ const App: React.FC = () => {
 				return;
 			}
 			if (format === "master" && (await checkAnyProviderNeedsRestore())) {
-				const providers = await getEncryptedProviders();
+				const providers = await getEncryptedSecretLabels();
 				setEncryptedProviders(providers);
 				setServicesStatus("awaiting-passkey");
 				return;
@@ -387,6 +388,10 @@ const App: React.FC = () => {
 														element={<DocumentLibraryPage />}
 													/>
 													<Route path="/agents" element={<AgentsPage />} />
+													<Route
+														path="/connections"
+														element={<ConnectionsPage />}
+													/>
 													<Route
 														path="/activities"
 														element={<ActivityTimelinePage />}

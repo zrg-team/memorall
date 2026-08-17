@@ -36,6 +36,7 @@ vi.mock("../aes", () => ({
 }));
 
 vi.mock("../master-key", () => ({
+	adoptMasterStrongPassword: vi.fn(async () => undefined),
 	hasMasterKey: vi.fn(async () => true),
 	getMasterStrongPassword: vi.fn(async () => "master-strong-password"),
 	decryptWithMasterPassword: vi.fn(async () =>

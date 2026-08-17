@@ -471,6 +471,15 @@ export class ManagedBrowserOsRuntime {
 				"--no-first-run",
 				"--disable-default-apps",
 				"--deny-permission-prompts",
+				// The BrowserOS build ships WinSparkle and offers its own upgrade on
+				// every launch. That browser is a pinned, checksummed resource of this
+				// app — browser-runtime.lock.json decides its version — so a user
+				// accepting the prompt would replace a staged binary behind our back,
+				// and declining it is a modal they must dismiss every single time.
+				// Recognised by chrome/browser/win/winsparkle_glue.cc, which then logs
+				// "WinSparkle: updates disabled via command line" and never initialises
+				// the updater. Inert on the Chrome-for-Testing builds used elsewhere.
+				"--disable-updates",
 				"--window-size=1280,800",
 				"--force-device-scale-factor=1",
 				...(process.env.MEMORALL_BROWSER_DISABLE_SANDBOX === "1"

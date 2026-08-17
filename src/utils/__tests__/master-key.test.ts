@@ -231,9 +231,11 @@ describe("master-key lifecycle", () => {
 
 describe("provider config encryption with master key", () => {
 	it("saves new and existing provider configs", async () => {
+		// Provider configs now go through the generic keyed-secret path, so the
+		// unlock guard comes from encryptWithMasterKey rather than a bespoke check.
 		await expect(
 			saveProviderConfig("openai", { apiKey: "key", baseUrl: "url" }),
-		).rejects.toThrow("Master key must be unlocked");
+		).rejects.toThrow("Master key is not unlocked");
 
 		secureValues.set("master_ready", "true");
 		secureValues.set("master_strong_password", "strong");

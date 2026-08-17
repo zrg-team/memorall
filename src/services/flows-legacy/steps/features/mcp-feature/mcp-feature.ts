@@ -1,28 +1,28 @@
 import {
-	defineStep,
-	bindStep,
-} from "@/services/flows-legacy/interfaces/engine/step";
+	GraphBase,
+	type GraphTool,
+} from "@/services/flows-legacy/graph/graph.base";
+import type { ChatCompletionMessageParam } from "@/services/flows-legacy/interfaces/engine/messages";
 import type {
 	BoundStep,
 	StepFactoryFromSpec,
 	StepSpecFromDefinition,
 } from "@/services/flows-legacy/interfaces/engine/step";
 import {
-	MultiServerMCPClient,
-	type StreamableHTTPConnection,
-} from "@/services/flows-legacy/utils/langchain-mcp-adapter/index";
-import { logError } from "@/services/flows-legacy/utils/logger";
+	bindStep,
+	defineStep,
+} from "@/services/flows-legacy/interfaces/engine/step";
 import { stepRegistry } from "@/services/flows-legacy/registries/step-registry";
-import {
-	GraphBase,
-	type GraphTool,
-} from "@/services/flows-legacy/graph/graph.base";
-import type { ChatCompletionMessageParam } from "@/services/flows-legacy/interfaces/engine/messages";
 import { adaptMCPTool } from "@/services/flows-legacy/steps/features/mcp-feature/mcp-tool-adapter";
 import type {
 	MCPFeatureConfig,
 	MCPServerConfig,
 } from "@/services/flows-legacy/steps/features/mcp-feature/types";
+import {
+	MultiServerMCPClient,
+	type StreamableHTTPConnection,
+} from "@/services/flows-legacy/utils/langchain-mcp-adapter/index";
+import { logError, logInfo } from "@/services/flows-legacy/utils/logger";
 
 const STEP_NAME = "mcp-feature" as const;
 export const MCP_FEATURE_NAME = STEP_NAME;
@@ -37,8 +37,7 @@ export interface MCPFeatureOutput {
 	messages?: ChatCompletionMessageParam[];
 }
 
-export type { MCPFeatureConfig };
-export type { MCPServerConfig };
+export type { MCPFeatureConfig, MCPServerConfig };
 
 export const MCP_FEATURE_TOOLS: readonly string[] = [];
 
@@ -95,7 +94,14 @@ const definition = defineStep<
 			const client = new MultiServerMCPClient({
 				mcpServers: clientServers,
 				throwOnLoadError: false,
-				onConnectionError: "ignore",
+				// Two servers exposing a common name (`search`, `fetch`) would otherwise
+				// collide and silently shadow each other.
+				prefixToolNameWithServerName: true,
+				// Previously "ignore" — a dead server left no trace anywhere, so the
+				// Connections UI had no error to show and the user saw silent no-ops.
+				onConnectionError: ({ serverName, error }) => {
+					logError(`[MCP_FEATURE] Server "${serverName}" failed:`, error);
+				},
 			});
 
 			await client.initializeConnections();
@@ -105,8 +111,19 @@ const definition = defineStep<
 				await client.close();
 			});
 
-			const mcpBaseTools = langchainTools.map(adaptMCPTool);
+			const allowlist = new Set(config?.toolAllowlist ?? []);
+			const mcpBaseTools = langchainTools
+				.map(adaptMCPTool)
+				.filter((tool) => allowlist.size === 0 || allowlist.has(tool.name));
 			const serverNames = servers.map((s) => s.name);
+
+			// The one line that proves the model's toolbox actually received these.
+			// Everything upstream (a green dot, a tool count in the sidebar) can be
+			// right while this is empty, so it is logged unconditionally.
+			logInfo(
+				`[MCP_FEATURE] ${mcpBaseTools.length} tool(s) from ${serverNames.join(", ") || "no server"}:`,
+				mcpBaseTools.map((tool) => tool.name).join(", ") || "(none)",
+			);
 
 			const messages = GraphBase.chat.systemMessage(
 				input.messages,
@@ -145,7 +162,21 @@ stepRegistry.register(STEP_NAME, createMCPFeatureStep, {
 			key: "servers",
 			type: "array",
 			default: [],
-			description: "MCP server configurations",
+			description:
+				"Resolved MCP servers (filled from `connections` at run time)",
+		},
+		{
+			key: "connections",
+			type: "array",
+			default: [],
+			description: "References into the Connections registry",
+		},
+		{
+			key: "toolAllowlist",
+			type: "array",
+			default: [],
+			description:
+				"Server-prefixed tool names the agent may use; empty exposes all",
 		},
 	],
 	defaultStateMapping: { messages: "messages", tools: "tools" },
@@ -153,7 +184,10 @@ stepRegistry.register(STEP_NAME, createMCPFeatureStep, {
 	feature: {
 		id: "step-mcp-feature",
 		type: "feature",
-		graphTypes: ["foundation"],
+		// Both graphs expose `messages` and `tools`, which is all this step reads.
+		// Restricting it to `foundation` meant a Simple Agent preset had no MCP
+		// step at all, so a chosen connection could never reach the model.
+		graphTypes: ["foundation", "agent"],
 		inputs: [
 			{
 				name: "messages",

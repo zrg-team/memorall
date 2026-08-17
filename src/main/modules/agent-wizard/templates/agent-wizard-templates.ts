@@ -14,7 +14,7 @@ export const createBlankAgentWizardDraft = (): AgentWizardDraft => ({
 	enabledFeatureNames: [],
 	enabledToolNames: [],
 	enabledSkillNames: [],
-	mcpServers: [],
+	connections: [],
 	multiAgentAccessibleAgentIds: [],
 	growType: DEFAULT_GROW_TYPE,
 	recallType: DEFAULT_RECALL_TYPE,

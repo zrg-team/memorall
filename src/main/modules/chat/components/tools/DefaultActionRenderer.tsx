@@ -9,18 +9,21 @@ import {
 import {
 	getString,
 	getToolCallArguments,
+	ToolCodeBlock,
 	ToolDetail,
 	ToolDetailsGrid,
 	ToolItemRawIO,
 	ToolSection,
 	getMCPActionMetadata,
+	stringifyToolPayload,
 } from "./ToolCommon";
 import { Badge } from "@/main/components/ui/badge";
 
 const MCPToolInfo: React.FC<{
 	serverName: string;
 	originalToolName?: string;
-}> = ({ serverName, originalToolName }) => (
+	args?: Record<string, unknown> | null;
+}> = ({ serverName, originalToolName, args }) => (
 	<div className="min-w-0 rounded-lg border border-sky-500/20 bg-sky-500/5 p-3">
 		<div className="mb-2 flex min-w-0 flex-wrap items-center gap-2">
 			<Badge
@@ -39,6 +42,16 @@ const MCPToolInfo: React.FC<{
 				<ToolDetail label="MCP Tool" value={originalToolName} mono />
 			) : null}
 		</ToolDetailsGrid>
+		{args && Object.keys(args).length > 0 ? (
+			<div className="mt-2">
+				<div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground/80">
+					Arguments
+				</div>
+				<ToolCodeBlock className="max-h-40">
+					{stringifyToolPayload(args)}
+				</ToolCodeBlock>
+			</div>
+		) : null}
 	</div>
 );
 
@@ -99,6 +112,35 @@ const ToolResultImages: React.FC<{ metadata?: Record<string, unknown> }> = ({
 	);
 };
 
+/**
+ * A tool with no bespoke renderer — an MCP tool, above all — still returns
+ * JSON, and pasting it into the page as flowing text is what makes a run look
+ * like a dump. Pretty-print it in a bounded, scrollable block instead, and keep
+ * plain prose as prose.
+ */
+const ToolOutputBody: React.FC<{ description: string }> = ({ description }) => {
+	const text = description.trim();
+	if (!text) return null;
+
+	const looksStructured = /^[[{]/.test(text);
+	if (looksStructured) {
+		try {
+			return (
+				<ToolCodeBlock>{stringifyToolPayload(JSON.parse(text))}</ToolCodeBlock>
+			);
+		} catch {
+			// Truncated or malformed JSON — still better read in a code block.
+			return <ToolCodeBlock>{description}</ToolCodeBlock>;
+		}
+	}
+
+	return (
+		<div className="w-full overflow-hidden whitespace-pre-wrap break-words">
+			{description}
+		</div>
+	);
+};
+
 const RenderArtifactSummary: React.FC<{
 	item: Parameters<ActionRenderer>[0];
 }> = ({ item }) => {
@@ -152,7 +194,9 @@ export const defaultActionRenderer: ActionRenderer = (item, isOpen) => {
 	if (isMermaidOnly(trimmedDesc)) {
 		return (
 			<div className="space-y-3">
-				{mcpMetadata ? <MCPToolInfo {...mcpMetadata} /> : null}
+				{mcpMetadata ? (
+					<MCPToolInfo {...mcpMetadata} args={getToolCallArguments(item)} />
+				) : null}
 				<ToolResultImages metadata={item.metadata} />
 				<TaskMermaidDiagram
 					chart={extractMermaidContent(trimmedDesc)}
@@ -165,11 +209,11 @@ export const defaultActionRenderer: ActionRenderer = (item, isOpen) => {
 
 	return (
 		<div className="space-y-3">
-			{mcpMetadata ? <MCPToolInfo {...mcpMetadata} /> : null}
+			{mcpMetadata ? (
+				<MCPToolInfo {...mcpMetadata} args={getToolCallArguments(item)} />
+			) : null}
 			<ToolResultImages metadata={item.metadata} />
-			<div className="w-full overflow-hidden whitespace-pre-wrap break-words">
-				{item.description}
-			</div>
+			<ToolOutputBody description={item.description} />
 			<ToolItemRawIO item={item} />
 		</div>
 	);
