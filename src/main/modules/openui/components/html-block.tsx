@@ -18,9 +18,36 @@ import { z } from "zod";
  * to navigate the user somewhere or exfiltrate what it was given.
  */
 
-const MIN_HEIGHT = 80;
-const MAX_HEIGHT = 900;
-const DEFAULT_HEIGHT = 320;
+export const MIN_HTML_HEIGHT = 80;
+export const MAX_HTML_HEIGHT = 900;
+export const DEFAULT_HTML_HEIGHT = 320;
+
+export const clampHtmlHeight = (height: number | undefined): number =>
+	Math.min(
+		MAX_HTML_HEIGHT,
+		Math.max(MIN_HTML_HEIGHT, height ?? DEFAULT_HTML_HEIGHT),
+	);
+
+/**
+ * The frame itself, shared so there is exactly one place the sandbox is decided.
+ * CodeEditorBlock previews through this too — a second iframe with its own
+ * hand-written sandbox string is how the two would quietly diverge.
+ */
+export const IsolatedHtmlFrame: React.FC<{
+	html: string;
+	height: number;
+	title: string;
+}> = ({ html, height, title }) => (
+	<iframe
+		srcDoc={html}
+		sandbox="allow-scripts"
+		referrerPolicy="no-referrer"
+		loading="lazy"
+		className="w-full bg-white"
+		style={{ height, border: "none", display: "block" }}
+		title={title}
+	/>
+);
 
 export const HtmlBlock = defineComponent({
 	name: "HtmlBlock",
@@ -33,10 +60,7 @@ export const HtmlBlock = defineComponent({
 	}),
 	component: ({ props }) => {
 		// A model asked for 10000 would push every following section off-screen.
-		const height = Math.min(
-			MAX_HEIGHT,
-			Math.max(MIN_HEIGHT, props.height ?? DEFAULT_HEIGHT),
-		);
+		const height = clampHtmlHeight(props.height);
 
 		return (
 			<figure className="my-2 overflow-hidden rounded-md border border-border">
@@ -45,13 +69,9 @@ export const HtmlBlock = defineComponent({
 						{props.title}
 					</figcaption>
 				) : null}
-				<iframe
-					srcDoc={props.html}
-					sandbox="allow-scripts"
-					referrerPolicy="no-referrer"
-					loading="lazy"
-					className="w-full bg-white"
-					style={{ height, border: "none", display: "block" }}
+				<IsolatedHtmlFrame
+					html={props.html}
+					height={height}
 					title={props.title ?? "Rendered HTML"}
 				/>
 			</figure>

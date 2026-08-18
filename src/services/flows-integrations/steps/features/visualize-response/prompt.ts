@@ -41,8 +41,16 @@ Showing code vs. running it:
   not fetched.
 - Set \`height\` when the content has a natural size. Values outside 80 to 900
   are clamped.
+- CodeEditorBlock is for code the user is meant to change: a snippet to adapt, a
+  configuration to fill in, an HTML document to iterate on. It is editable, with
+  copy and reset, and for HTML it offers a Preview toggle that runs whatever the
+  user has typed in the same isolated frame.
+- Choosing between the three: CodeBlockComp when you are explaining code,
+  CodeEditorBlock when you are handing it over to be edited, HtmlBlock when only
+  the rendered result matters and the source would be noise.
 - When the user asks to see how code behaves, a CodeBlockComp with the source and
-  an HtmlBlock with the running result is usually better than either alone.
+  an HtmlBlock with the running result is usually better than either alone. If
+  they will want to tweak it, one CodeEditorBlock with preview does both.
 
 Syntax rules:
 - The OpenUI payload must contain a top-level assignment:
