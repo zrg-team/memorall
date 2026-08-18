@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { clearEmbeddingCache, embedQuery } from "../embedding-cache";
 import type { FlowEmbeddingLike } from "../vector-search";
 
@@ -28,6 +28,10 @@ const makeRemote = () => {
 };
 
 describe("embedQuery", () => {
+	afterEach(() => {
+		vi.useRealTimers();
+	});
+
 	it("embeds a repeated query once", async () => {
 		const { service, textToVector } = makeLocal();
 
@@ -95,6 +99,54 @@ describe("embedQuery", () => {
 
 		await expect(embedQuery(service, "q")).rejects.toThrow("model not ready");
 		expect(await embedQuery(service, "q")).toEqual([1, 2, 3]);
+	});
+
+	it("recomputes once a cached vector has aged out", async () => {
+		vi.useFakeTimers();
+		vi.setSystemTime(0);
+		const { service, textToVector } = makeLocal();
+
+		await embedQuery(service, "q");
+		vi.setSystemTime(9 * 60_000);
+		await embedQuery(service, "q");
+		expect(textToVector).toHaveBeenCalledTimes(1);
+
+		vi.setSystemTime(11 * 60_000);
+		await embedQuery(service, "q");
+		expect(textToVector).toHaveBeenCalledTimes(2);
+	});
+
+	it("does not extend a deadline just because the query keeps being asked", async () => {
+		vi.useFakeTimers();
+		vi.setSystemTime(0);
+		const { service, textToVector } = makeLocal();
+
+		// Asked repeatedly inside the window, then once past the original deadline.
+		await embedQuery(service, "q");
+		for (const minute of [2, 4, 6, 8]) {
+			vi.setSystemTime(minute * 60_000);
+			await embedQuery(service, "q");
+		}
+		expect(textToVector).toHaveBeenCalledTimes(1);
+
+		vi.setSystemTime(10 * 60_000 + 1);
+		await embedQuery(service, "q");
+		expect(textToVector).toHaveBeenCalledTimes(2);
+	});
+
+	it("sweeps aged entries rather than letting them occupy the bound", async () => {
+		vi.useFakeTimers();
+		vi.setSystemTime(0);
+		const { service } = makeLocal();
+
+		for (let i = 0; i < 30; i += 1) await embedQuery(service, `old${i}`);
+		vi.setSystemTime(11 * 60_000);
+		await embedQuery(service, "fresh");
+
+		// The stale ones are gone, so a later query is not evicting live entries to
+		// make room for itself.
+		vi.setSystemTime(11 * 60_000 + 1);
+		expect(await embedQuery(service, "fresh")).toBeDefined();
 	});
 
 	it("bounds how many queries it keeps", async () => {
