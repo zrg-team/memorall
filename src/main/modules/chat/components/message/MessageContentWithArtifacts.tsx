@@ -8,7 +8,6 @@ import { CompactArtifactReference } from "./CompactArtifactReference";
 import { DeferredMount } from "./DeferredMount";
 import { assignContentSegmentKeys } from "./stable-part-keys";
 import { useThrottledValue } from "@/main/modules/openui/use-throttled-value";
-import { openUIStateKey } from "@/main/modules/openui/openui-form-state";
 
 const USE_STREAMDOWN = false;
 const Streamdown = lazy(() => import("../MessageStreamDown"));
@@ -21,6 +20,11 @@ interface MessageContentWithArtifactsProps {
 	suppressArtifactPreviews?: boolean;
 	onMessageAction?: (action: MessageActionRequest) => void | Promise<void>;
 	seenArtifactKeys?: Set<string>;
+	/**
+	 * Identity for interactive state in this message's OpenUI blocks. Combined
+	 * with each block's position to survive the remount `DeferredMount` performs.
+	 */
+	blockScope?: string;
 }
 
 const MessageContentFrame: React.FC<MessageContentWithArtifactsProps> =
@@ -31,6 +35,7 @@ const MessageContentFrame: React.FC<MessageContentWithArtifactsProps> =
 			suppressArtifactPreviews = false,
 			onMessageAction,
 			seenArtifactKeys,
+			blockScope,
 		}) => {
 			const openUISplitterRef = useRef<ReturnType<
 				typeof createAppendAwareOpenUISplitter
@@ -116,7 +121,11 @@ const MessageContentFrame: React.FC<MessageContentWithArtifactsProps> =
 										// Computed here, above the unmount, so form values
 										// survive both scrolling out of range and the group
 										// collapsing.
-										stateKey={openUIStateKey(key, seg.content)}
+										// Message id plus the block's position in it. Content is
+										// deliberately not part of this: it changes on every
+										// streamed chunk, which would move the identity of a panel
+										// the reader is already interacting with.
+										stateKey={blockScope ? `${blockScope}:${key}` : undefined}
 										onMessageAction={onMessageAction}
 									/>
 								</DeferredMount>

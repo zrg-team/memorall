@@ -316,6 +316,7 @@ export const OpenUIRenderer: React.FC<OpenUIRendererProps> = ({
 	content,
 	streaming,
 	deferred = false,
+	stateKey,
 	onMessageAction,
 }) => {
 	const baseInterval =
@@ -376,6 +377,7 @@ export const OpenUIRenderer: React.FC<OpenUIRendererProps> = ({
 			<OpenUIRenderFrame
 				content={renderContent}
 				streaming={streaming}
+				stateKey={stateKey}
 				onMessageAction={onMessageAction}
 			/>
 		</div>
