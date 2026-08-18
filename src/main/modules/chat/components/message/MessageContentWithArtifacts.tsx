@@ -8,6 +8,7 @@ import { CompactArtifactReference } from "./CompactArtifactReference";
 import { DeferredMount } from "./DeferredMount";
 import { assignContentSegmentKeys } from "./stable-part-keys";
 import { useThrottledValue } from "@/main/modules/openui/use-throttled-value";
+import { openUIStateKey } from "@/main/modules/openui/openui-form-state";
 
 const USE_STREAMDOWN = false;
 const Streamdown = lazy(() => import("../MessageStreamDown"));
@@ -112,6 +113,10 @@ const MessageContentFrame: React.FC<MessageContentWithArtifactsProps> =
 										content={seg.content}
 										streaming={isStreaming}
 										deferred
+										// Computed here, above the unmount, so form values
+										// survive both scrolling out of range and the group
+										// collapsing.
+										stateKey={openUIStateKey(key, seg.content)}
 										onMessageAction={onMessageAction}
 									/>
 								</DeferredMount>

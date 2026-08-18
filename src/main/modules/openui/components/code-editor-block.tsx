@@ -7,6 +7,11 @@ import {
 	IsolatedHtmlFrame,
 	clampHtmlHeight,
 } from "@/main/modules/openui/components/html-block";
+import {
+	openUIStateKey,
+	readOpenUIState,
+	writeOpenUIState,
+} from "@/main/modules/openui/openui-form-state";
 
 /**
  * An editable code surface, for code the user is meant to change rather than
@@ -31,6 +36,17 @@ import {
 const HTML_LANGUAGES = new Set(["html", "htm", "xhtml", "svg"]);
 const TAB = "  ";
 
+/**
+ * Edits have to outlive the unmount, same as any form field.
+ *
+ * A message's OpenUI tree is dropped once it scrolls ~1.5 viewports away, so
+ * plain `useState` would lose whatever the user had typed the moment they
+ * scrolled up to re-read the conversation. Keyed on the original source, so the
+ * same editor reclaims its own edits and a different one never does.
+ */
+const editorStateKey = (code: string, name?: string): string =>
+	openUIStateKey(`codeeditor:${name ?? ""}`, code);
+
 export const CodeEditorBlock = defineComponent({
 	name: "CodeEditorBlock",
 	description:
@@ -41,9 +57,14 @@ export const CodeEditorBlock = defineComponent({
 		filename: z.string().optional(),
 		height: z.number().optional(),
 		preview: z.boolean().optional(),
+		name: z.string().optional(),
 	}),
 	component: ({ props }) => {
-		const [value, setValue] = useState(props.code);
+		const stateKey = editorStateKey(props.code, props.name);
+		const [value, setValue] = useState(() => {
+			const saved = readOpenUIState(stateKey);
+			return typeof saved?.value === "string" ? saved.value : props.code;
+		});
 		const [copied, setCopied] = useState(false);
 		const [showPreview, setShowPreview] = useState(false);
 		const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -54,6 +75,14 @@ export const CodeEditorBlock = defineComponent({
 		const canPreview =
 			props.preview === true || (props.preview !== false && isHtml);
 		const isDirty = value !== props.code;
+
+		const commit = useCallback(
+			(next: string) => {
+				setValue(next);
+				writeOpenUIState(stateKey, { value: next });
+			},
+			[stateKey],
+		);
 
 		const copy = useCallback(() => {
 			void navigator.clipboard?.writeText(value).then(
@@ -74,13 +103,13 @@ export const CodeEditorBlock = defineComponent({
 				const { selectionStart, selectionEnd } = target;
 				const next =
 					value.slice(0, selectionStart) + TAB + value.slice(selectionEnd);
-				setValue(next);
+				commit(next);
 				requestAnimationFrame(() => {
 					const caret = selectionStart + TAB.length;
 					target.setSelectionRange(caret, caret);
 				});
 			},
-			[value],
+			[value, commit],
 		);
 
 		const action = (
@@ -125,7 +154,7 @@ export const CodeEditorBlock = defineComponent({
 								)
 							: null}
 						{action(
-							() => setValue(props.code),
+							() => commit(props.code),
 							<RotateCcw className="h-3 w-3" />,
 							"Reset",
 							!isDirty,
@@ -152,7 +181,7 @@ export const CodeEditorBlock = defineComponent({
 					<textarea
 						ref={textareaRef}
 						value={value}
-						onChange={(event) => setValue(event.target.value)}
+						onChange={(event) => commit(event.target.value)}
 						onKeyDown={handleKeyDown}
 						spellCheck={false}
 						autoCapitalize="off"

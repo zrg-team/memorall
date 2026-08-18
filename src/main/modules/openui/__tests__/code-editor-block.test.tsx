@@ -1,7 +1,8 @@
 import React from "react";
 import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { CodeEditorBlock } from "../components/code-editor-block";
+import { clearOpenUIState } from "../openui-form-state";
 
 const Editor = CodeEditorBlock.component as React.FC<{
 	props: {
@@ -29,6 +30,8 @@ const renderEditor = (props: {
 };
 
 describe("CodeEditorBlock", () => {
+	beforeEach(() => clearOpenUIState());
+
 	it("lets the user change the code", () => {
 		const { textarea } = renderEditor({ code: "const a = 1;" });
 		const editor = textarea();
@@ -103,6 +106,29 @@ describe("CodeEditorBlock", () => {
 
 		fireEvent.click(screen.getByRole("button", { name: /code/i }));
 		expect(textarea()).not.toBeNull();
+	});
+
+	it("keeps edits when the message scrolls away and comes back", () => {
+		// DeferredMount unmounts the whole tree once it is far off-screen. Plain
+		// component state would lose whatever had been typed.
+		const first = renderEditor({ code: "const a = 1;" });
+		const editor = first.textarea();
+		if (!editor) throw new Error("expected a textarea");
+		fireEvent.change(editor, { target: { value: "const a = 99;" } });
+		first.unmount();
+
+		const second = renderEditor({ code: "const a = 1;" });
+		expect(second.textarea()?.value).toBe("const a = 99;");
+	});
+
+	it("does not hand one editor's edits to a different snippet", () => {
+		const first = renderEditor({ code: "aaa" });
+		const editor = first.textarea();
+		if (!editor) throw new Error("expected a textarea");
+		fireEvent.change(editor, { target: { value: "edited" } });
+		first.unmount();
+
+		expect(renderEditor({ code: "bbb" }).textarea()?.value).toBe("bbb");
 	});
 
 	it("clamps height the same way HtmlBlock does", () => {
