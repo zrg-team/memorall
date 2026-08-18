@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="images/origin.png" alt="Memorall icon" width="128" />
+<img src="./docs/images/origin.png" alt="Memorall icon" width="128" />
 
 # Memorall
 
