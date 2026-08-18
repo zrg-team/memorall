@@ -52,15 +52,12 @@ const definition = defineStep<Input, Output, Services, Config>({
 	name: ADD_SKILL_CONTEXT_STEP_NAME,
 	execute: async ({ input, config, services }) => {
 		const skillService = services.skillService;
-		let skills;
-		try {
-			if (!skillService) return { output: {} };
-			skills = await skillService.list();
-		} catch {
-			// If skill service is unavailable (e.g. during cold start), silently skip
-			return { output: {} };
-		}
+		if (!skillService) return { output: {} };
 
+		// Decide whether any skill could apply before asking for the catalogue.
+		// Listing is I/O on the critical path, and an agent with no skills enabled
+		// — the common case — used to pay for it on every message only to discard
+		// the result on the next line.
 		const enabledSkillNames = Array.isArray(config?.enabledSkillNames)
 			? config.enabledSkillNames.filter(
 					(value): value is string =>
@@ -68,10 +65,22 @@ const definition = defineStep<Input, Output, Services, Config>({
 				)
 			: [];
 		const enabledSkillNameSet = new Set(enabledSkillNames);
-		const availableSkills =
-			enabledSkillNameSet.size > 0
-				? skills.filter((skill) => enabledSkillNameSet.has(skill.name))
-				: [];
+
+		if (enabledSkillNameSet.size === 0) {
+			return { output: { messages: input.messages, tools: input.tools ?? [] } };
+		}
+
+		let skills;
+		try {
+			skills = await skillService.list();
+		} catch {
+			// If skill service is unavailable (e.g. during cold start), silently skip
+			return { output: {} };
+		}
+
+		const availableSkills = skills.filter((skill) =>
+			enabledSkillNameSet.has(skill.name),
+		);
 
 		if (availableSkills.length === 0) {
 			return { output: { messages: input.messages, tools: input.tools ?? [] } };
