@@ -1,3 +1,4 @@
+import { embedQuery } from "./embedding-cache";
 import type { IFlowDatabase } from "../interfaces/database";
 import type { IFlowEmbeddingService } from "../interfaces/embedding";
 import type { Edge, Node } from "../interfaces/knowledge";
@@ -36,16 +37,13 @@ const valueToOptionalDate = (value: unknown): Date | undefined =>
 		? new Date(value)
 		: undefined;
 
-const createEmbedding = async (
+// Node and edge searches embed the query themselves, and a single retrieval pass
+// runs several of them over the same text. Going through the cache turns those
+// repeats into one inference.
+const createEmbedding = (
 	embedding: FlowEmbeddingLike,
 	input: string,
-): Promise<number[]> => {
-	if (!embedding.embeddings) {
-		return embedding.textToVector(input);
-	}
-	const response = await embedding.embeddings.create({ input });
-	return response.data[0]?.embedding ?? [];
-};
+): Promise<number[]> => embedQuery(embedding, input);
 
 const getRows = <T>(value: unknown): T[] => {
 	if (Array.isArray(value)) return value as T[];

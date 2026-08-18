@@ -26,6 +26,7 @@ import {
 	vectorSearchNodes,
 	vectorSearchEdges,
 } from "../../utils/vector-search";
+import { embedQuery } from "../../utils/embedding-cache";
 import { and, or, inArray } from "drizzle-orm";
 import { getScopedGraphWhere } from "../../utils/graph-query";
 import type { Node, Edge } from "../../interfaces/knowledge";
@@ -624,8 +625,9 @@ const definition = defineStep<
 			}
 
 			// Phase 1: Primary Query Seed Retrieval
-			const queryEmbedding =
-				await defaultEmbedding.textToVector(processedQuery);
+			// Through the cache, so the node and edge searches below — which embed
+			// the query again themselves — reuse this inference instead of repeating it.
+			const queryEmbedding = await embedQuery(defaultEmbedding, processedQuery);
 
 			const mmrConfig = config.seed.mmr ?? DEFAULT_MMR_CONFIG;
 			const candidateMultiplier = mmrConfig.enabled
@@ -687,8 +689,10 @@ const definition = defineStep<
 				.filter((text) => text.length > 0 && text !== baseQuery);
 
 			for (const contextQuery of contextQueries) {
-				const contextEmbedding =
-					await defaultEmbedding.textToVector(contextQuery);
+				const contextEmbedding = await embedQuery(
+					defaultEmbedding,
+					contextQuery,
+				);
 				const contextNodeResults = await vectorSearchNodes(
 					database,
 					defaultEmbedding,
