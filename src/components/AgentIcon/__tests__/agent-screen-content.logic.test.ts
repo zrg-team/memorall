@@ -38,8 +38,15 @@ describe("toAgentScreenContent", () => {
 	});
 
 	it("prefers a configured screen over the name", () => {
+		// AgentScreenContent is a union that also allows a bare string, so narrow
+		// before reading the field rather than asserting through it.
 		expect(
-			toAgentScreenContent({ kind: "emoji", value: "🧪" }, "Zebra")?.value,
-		).toBe("🧪");
+			toAgentScreenContent({ kind: "emoji", value: "🧪" }, "Zebra"),
+		).toEqual({
+			kind: "emoji",
+			value: "🧪",
+			color: undefined,
+			scale: 0.72,
+		});
 	});
 });

@@ -12,6 +12,7 @@ import {
 	readOpenUIState,
 	writeOpenUIState,
 } from "@/main/modules/openui/openui-form-state";
+import { OpenUIWidgetStateProvider } from "@/main/modules/openui/openui-widget-state";
 import { createComponentLibrary } from "./index";
 import { MarkdownMessage } from "@/main/modules/chat/components/MarkdownMessage";
 import { ThreeDotsLoader } from "@/main/components/atoms/ThreeDotsLoader";
@@ -292,16 +293,18 @@ const OpenUIRenderFrame: React.FC<OpenUIRendererProps> = React.memo(
 
 		return (
 			<OpenUIErrorBoundary content={content}>
-				<Renderer
-					key={resetKey}
-					response={content}
-					library={library}
-					isStreaming={streaming}
-					initialState={initialState}
-					onStateUpdate={handleStateUpdate}
-					onAction={handleOpenUIAction}
-					onError={handleRendererError}
-				/>
+				<OpenUIWidgetStateProvider blockKey={stateKey}>
+					<Renderer
+						key={resetKey}
+						response={content}
+						library={library}
+						isStreaming={streaming}
+						initialState={initialState}
+						onStateUpdate={handleStateUpdate}
+						onAction={handleOpenUIAction}
+						onError={handleRendererError}
+					/>
+				</OpenUIWidgetStateProvider>
 			</OpenUIErrorBoundary>
 		);
 	},

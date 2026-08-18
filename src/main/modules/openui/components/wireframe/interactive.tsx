@@ -5,6 +5,7 @@ import {
 	useTriggerAction,
 } from "@openuidev/react-lang";
 import { z } from "zod";
+import { useOpenUIWidgetState } from "@/main/modules/openui/openui-widget-state";
 import {
 	buildButtonActionPlan,
 	buttonActionPropSchema,
@@ -111,13 +112,16 @@ export const CollapsibleBlock = defineComponent({
 		children: childrenSchema,
 	}),
 	component: ({ props, renderNode }) => {
-		const [open, setOpen] = useState(false);
+		const [open, setOpen] = useOpenUIWidgetState(
+			`collapsible:${props.label}`,
+			false,
+		);
 		return (
 			<div className="border border-dashed border-foreground/40 font-mono">
 				<button
 					type="button"
 					className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-foreground/5"
-					onClick={() => setOpen((v) => !v)}
+					onClick={() => setOpen(!open)}
 				>
 					<span>{open ? "▼" : "▶"}</span>
 					<span>{props.label}</span>
