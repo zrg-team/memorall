@@ -41,7 +41,6 @@ export default defineConfig({
 					include: [
 						"src/utils/**/*.test.ts",
 						"src/services/__tests__/**/*.test.ts",
-						"src/services/flows-legacy/**/*.test.ts",
 						"src/services/flows-features/**/*.test.ts",
 						"src/services/flows-integrations/**/*.test.ts",
 						"src/services/flows-memory/**/*.test.ts",
@@ -57,7 +56,11 @@ export default defineConfig({
 				test: {
 					name: "jsdom",
 					environment: "jsdom",
-					include: ["src/main/**/*.test.tsx", "src/services/**/*.dom.test.ts"],
+					include: [
+						"src/main/**/*.test.tsx",
+						"src/components/**/*.test.tsx",
+						"src/services/**/*.dom.test.ts",
+					],
 					exclude: [
 						"src/main/__tests__/component-smoke.test.tsx",
 						"src/main/__tests__/requested-modules-import.test.tsx",

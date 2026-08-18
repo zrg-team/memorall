@@ -10,11 +10,11 @@
  * degrade to "that connection contributes no tools", never break a chat run.
  */
 
-import type { UnifiedFlowConfig } from "@/services/flows-legacy/interfaces/config/flow-config";
+import type { UnifiedFlowConfig } from "@memorall/agent-harness-flows/interfaces/config/flow-config";
 import {
 	MCP_FEATURE_NAME,
 	type MCPServerConfig,
-} from "@/services/flows-legacy/steps/features/mcp-feature";
+} from "@memorall/agent-harness-flows/steps/features/mcp-feature/index";
 import { logWarn } from "@/utils/logger";
 import { loadSecret } from "@/utils/master-key";
 import { listConnections, upsertConnection } from "./registry";

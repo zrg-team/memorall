@@ -1,19 +1,19 @@
 import {
 	defineStep,
 	bindStep,
-} from "@/services/flows-legacy/interfaces/engine/step";
+} from "@memorall/agent-harness-flows/interfaces/engine/step";
 import type {
 	BoundStep,
 	StepFactoryFromSpec,
 	StepSpecFromDefinition,
-} from "@/services/flows-legacy/interfaces/engine/step";
-import { logError } from "@/services/flows-legacy/utils/logger";
-import { stepRegistry } from "@/services/flows-legacy/registries/step-registry";
+} from "@memorall/agent-harness-flows/interfaces/engine/step";
+import { logError } from "@memorall/agent-harness-flows/logging/logger";
+import { stepRegistry } from "@memorall/agent-harness-flows/registries/step-registry";
 import {
 	GraphBase,
 	type GraphTool,
-} from "@/services/flows-legacy/graph/graph.base";
-import type { ChatCompletionMessageParam } from "@/services/flows-legacy/interfaces/engine/messages";
+} from "@memorall/agent-harness-flows/graph/graph.base";
+import type { ChatCompletionMessageParam } from "@memorall/agent-harness-flows/interfaces/engine/messages";
 
 const STEP_NAME = "documents-fs-feature" as const;
 export const DOCUMENTS_FS_FEATURE_NAME = STEP_NAME;

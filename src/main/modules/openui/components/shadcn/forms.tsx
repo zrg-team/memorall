@@ -20,70 +20,10 @@ import {
 } from "@/main/components/ui/select";
 import { Switch } from "@/main/components/ui/switch";
 import { Textarea } from "@/main/components/ui/textarea";
-import { OPENUI_FORM_FIELD_METADATA_KEY } from "@/main/modules/openui/actions";
+import { useRegisterFieldMetadata } from "@/main/modules/openui/components/form-field";
 
 const fieldId = (formName: string | undefined, name: string) =>
 	`openui-${formName ?? "form"}-${name}`;
-
-type FieldMetadata = { label: string; options?: Record<string, string> };
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-	typeof value === "object" && value !== null && !Array.isArray(value);
-
-const sameOptions = (
-	left: Record<string, string> | undefined,
-	right: Record<string, string> | undefined,
-) => JSON.stringify(left ?? {}) === JSON.stringify(right ?? {});
-
-const useRegisterFieldMetadata = ({
-	formName,
-	name,
-	label,
-	options,
-}: {
-	formName: string | undefined;
-	name: string;
-	label: string;
-	options?: Record<string, string>;
-}) => {
-	const isStreaming = useIsStreaming();
-	const getFieldValue = useGetFieldValue();
-	const setFieldValue = useSetFieldValue();
-	const metadataValue = getFieldValue(formName, OPENUI_FORM_FIELD_METADATA_KEY);
-
-	useEffect(() => {
-		if (isStreaming) return;
-		const current = isRecord(metadataValue)
-			? (metadataValue as Record<string, FieldMetadata>)
-			: {};
-		const nextFieldMetadata: FieldMetadata = options
-			? { label, options }
-			: { label };
-		const currentFieldMetadata = current[name];
-		if (
-			currentFieldMetadata?.label === nextFieldMetadata.label &&
-			sameOptions(currentFieldMetadata.options, nextFieldMetadata.options)
-		) {
-			return;
-		}
-
-		setFieldValue(
-			formName,
-			"MemorallFormMetadata",
-			OPENUI_FORM_FIELD_METADATA_KEY,
-			{ ...current, [name]: nextFieldMetadata },
-			false,
-		);
-	}, [
-		formName,
-		isStreaming,
-		label,
-		metadataValue,
-		name,
-		options,
-		setFieldValue,
-	]);
-};
 
 export const FormBlock = defineComponent({
 	name: "FormBlock",

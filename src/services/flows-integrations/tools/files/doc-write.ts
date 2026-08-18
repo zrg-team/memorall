@@ -2,14 +2,14 @@ import z from "zod";
 import type {
 	Tool,
 	ToolFactory,
-} from "@/services/flows-legacy/interfaces/engine/tool";
-import type { AllServices } from "@/services/flows-legacy/interfaces/services/services";
-import { toolRegistry } from "@/services/flows-legacy/registries/tool-registry";
+} from "@memorall/agent-harness-flows/interfaces/engine/tool";
+import type { AllServices } from "@memorall/agent-harness-flows/interfaces/services/services";
+import { toolRegistry } from "@memorall/agent-harness-flows/registries/tool-registry";
 import { normalizeDocumentPath } from "./util";
 import {
 	pathExists,
 	writeFileBytes,
-} from "@/services/flows-legacy/tools/fs/util";
+} from "@memorall/agent-harness-flows/tools/fs/util";
 
 const TOOL_NAME = "doc_write" as const;
 

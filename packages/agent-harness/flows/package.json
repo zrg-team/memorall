@@ -1,0 +1,50 @@
+{
+  "name": "@memorall/agent-harness-flows",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": true,
+  "engines": {
+    "node": ">=22"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./*": {
+      "types": "./dist/*.d.ts",
+      "import": "./dist/*.js",
+      "default": "./dist/*.js"
+    }
+  },
+  "scripts": {
+    "build": "node ../../../tools/run-typescript.mjs native -b",
+    "clean": "node ../../../tools/run-typescript.mjs native -b --clean",
+    "dev": "node ../../../tools/run-typescript.mjs native -b --watch --preserveWatchOutput --pretty",
+    "watch": "yarn dev",
+    "typecheck": "node ../../../tools/run-typescript.mjs native -b --pretty false",
+    "test": "vitest run --config ../vitest.config.ts flows",
+    "pack": "yarn pack"
+  },
+  "dependencies": {
+    "@langchain/langgraph": "1.4.9",
+    "@memorall/agent-harness-mcp": "workspace:^",
+    "@memorall/agent-harness-sandbox": "workspace:^",
+    "gpt-tokenizer": "^3.4.0",
+    "minimatch": "10.2.6",
+    "nanoid": "6.0.1",
+    "sanitize-html": "2.17.7",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "typescript": "npm:@typescript/typescript6@6.0.2",
+    "vitest": "4.1.10"
+  }
+}

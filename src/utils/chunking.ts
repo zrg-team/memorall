@@ -1,6 +1,6 @@
 import type { ChatMessage } from "@/types/openai";
-import type {} from "@/services/flows-legacy/interfaces/engine/tool";
-import type { AllServices } from "@/services/flows-legacy/interfaces/services/services";
+import type {} from "@memorall/agent-harness-flows/interfaces/engine/tool";
+import type { AllServices } from "@memorall/agent-harness-flows/interfaces/services/services";
 import { logInfo, logError } from "@/utils/logger";
 
 /**

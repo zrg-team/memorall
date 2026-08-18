@@ -63,3 +63,95 @@ describe("ChromeRuntimeBridge", () => {
 		);
 	});
 });
+
+const createBridgeHarness = (context: "popup" | "offscreen") => {
+	const listeners: RuntimeListener[] = [];
+	const sent: JobNotificationMessage[] = [];
+	vi.stubGlobal("chrome", {
+		runtime: {
+			onMessage: {
+				addListener: (listener: RuntimeListener) => listeners.push(listener),
+			},
+			sendMessage: vi.fn(async (message: JobNotificationMessage) => {
+				sent.push(message);
+				return undefined;
+			}),
+		},
+	});
+	const bridge = new ChromeRuntimeBridge(context);
+	const emit = (message: JobNotificationMessage) => {
+		for (const listener of listeners) listener(message, {}, () => undefined);
+	};
+	return { bridge, emit, sent };
+};
+
+describe("duplicate delivery", () => {
+	afterEach(() => {
+		vi.unstubAllGlobals();
+	});
+
+	it("dispatches a notification once even when it arrives twice", () => {
+		const { bridge, emit } = createBridgeHarness("popup");
+		const seen: string[] = [];
+		bridge.subscribe("JOB_PROGRESS", (message) => {
+			seen.push(message.progress?.stage ?? "");
+		});
+
+		// An extension page open in a tab can be reached directly AND by the
+		// background relay. Appending the same delta twice is what interleaves
+		// the assistant's text with itself.
+		const message: JobNotificationMessage = {
+			type: "JOB_PROGRESS",
+			target: "all",
+			sender: "offscreen",
+			timestamp: 1,
+			jobId: "job-1",
+			messageId: "abc:1",
+			progress: { stage: "chunk-a", progress: 10, status: "processing" },
+		};
+		emit(message);
+		emit(message);
+
+		expect(seen).toEqual(["chunk-a"]);
+	});
+
+	it("still delivers distinct notifications sent in the same millisecond", () => {
+		const { bridge, emit } = createBridgeHarness("popup");
+		const seen: string[] = [];
+		bridge.subscribe("JOB_PROGRESS", (message) => {
+			seen.push(message.progress?.stage ?? "");
+		});
+
+		for (const [index, stage] of ["chunk-a", "chunk-b"].entries()) {
+			emit({
+				type: "JOB_PROGRESS",
+				target: "all",
+				sender: "offscreen",
+				timestamp: 1,
+				jobId: "job-1",
+				messageId: `abc:${index + 1}`,
+				progress: { stage, progress: 10, status: "processing" },
+			});
+		}
+
+		expect(seen).toEqual(["chunk-a", "chunk-b"]);
+	});
+
+	it("gives every outgoing message a distinct id", () => {
+		const { bridge, sent } = createBridgeHarness("offscreen");
+		bridge.notifyJobProgress(
+			"job-1",
+			{ stage: "a", progress: 1, status: "processing" },
+			"all",
+		);
+		bridge.notifyJobProgress(
+			"job-1",
+			{ stage: "b", progress: 2, status: "processing" },
+			"all",
+		);
+
+		const ids = sent.map((message) => message.messageId);
+		expect(ids).toHaveLength(2);
+		expect(new Set(ids).size).toBe(2);
+	});
+});

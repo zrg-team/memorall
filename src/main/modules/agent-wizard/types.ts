@@ -8,7 +8,7 @@ import type {
 	RecallType,
 } from "@/services/database/entities/topic-types";
 import type { CronJobStatus } from "@/services/database/types";
-import type { MCPConnectionSelection } from "@/services/flows-legacy/steps/features/mcp-feature";
+import type { MCPConnectionSelection } from "@memorall/agent-harness-flows/steps/features/mcp-feature/index";
 
 export interface AgentWizardCronJobDraft {
 	id: string;

@@ -1,15 +1,15 @@
 import {
 	defineStep,
 	bindStep,
-} from "@/services/flows-legacy/interfaces/engine/step";
+} from "@memorall/agent-harness-flows/interfaces/engine/step";
 import { getKnowledgeDatabase } from "../../interfaces/knowledge";
 import type {
 	StepFactoryFromSpec,
 	StepSpecFromDefinition,
-} from "@/services/flows-legacy/interfaces/engine/step";
-import { stepRegistry } from "@/services/flows-legacy/registries/step-registry";
-import type {} from "@/services/flows-legacy/interfaces/engine/tool";
-import type { AllServices } from "@/services/flows-legacy/interfaces/services/services";
+} from "@memorall/agent-harness-flows/interfaces/engine/step";
+import { stepRegistry } from "@memorall/agent-harness-flows/registries/step-registry";
+import type {} from "@memorall/agent-harness-flows/interfaces/engine/tool";
+import type { AllServices } from "@memorall/agent-harness-flows/interfaces/services/services";
 import type {
 	StructMemEntry,
 	StructMemEvent,
@@ -26,7 +26,7 @@ import {
 	logError,
 	logInfo,
 	logWarn,
-} from "@/services/flows-legacy/utils/logger";
+} from "@memorall/agent-harness-flows/logging/logger";
 
 const STEP_NAME = "structmem-load-related-events" as const;
 

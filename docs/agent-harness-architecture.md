@@ -28,7 +28,7 @@ universal packages.
 Memorall consumes the harness through an app-owned composition layer in
 [`src/services/agent-harness`](../src/services/agent-harness). Stored graph,
 step, feature, and tool behavior remains in
-[`src/services/flows-legacy`](../src/services/flows-legacy), explicitly outside
+[`src/services/flows-core`](../src/services/flows-core), explicitly outside
 the standalone packages. `process-chat` starts an `AgentHarness` run and consumes
 harness events; the compatibility plugin adapts the stored graph runtime without
 placing product state in the reusable contracts.
@@ -37,7 +37,7 @@ placing product state in the reusable contracts.
 flowchart TB
     Product["🔒 Memorall UI, memory, documents, jobs, persistence"]
     Composition["🔒 Memorall harness composition"]
-    Legacy["🔒 Stored-flow compatibility runtime"]
+    Legacy["🔒 App-owned flow runtime (flows-core)"]
     Full["⚙️ @memorall/agent-harness facade"]
     Packs["🧩 Standard, sandbox, MCP, LangGraph"]
     Core["⚙️ Environment-neutral core"]
@@ -112,6 +112,7 @@ release policy are intentionally outside this implementation.
 | [`browser`](../packages/agent-harness/browser) | `@memorall/agent-harness-browser` | Browser, worker | Platform primitives, DOM content processing, OPFS, IndexedDB stores |
 | [`node`](../packages/agent-harness/node) | `@memorall/agent-harness-node` | Node 22+ | Platform, filesystem, stores, MCP stdio, Playwright, local process sandbox |
 | [`compatibility`](../packages/agent-harness/compatibility) | `@memorall/agent-harness-compat` | Browser, worker, Node | Stable legacy IDs and host-supplied migration registration |
+| [`flows`](../packages/agent-harness/flows) | `@memorall/agent-harness-flows` | Browser, worker, Node | Flow engine: graph/step registries, step library, runtime context, run lifecycle |
 | [`full`](../packages/agent-harness/full) | `@memorall/agent-harness` | Browser, worker, Node | Side-effect-free facade and explicit full preset |
 
 ```mermaid
@@ -129,6 +130,8 @@ flowchart TD
     Node --> Sandbox
     Node --> MCP
     Compat["compatibility"] --> Core
+    Flows["flows"] --> MCP
+    Flows --> Sandbox
     Full["full facade"] --> Graph
     Full --> Standard
     Full --> Sandbox
@@ -504,7 +507,7 @@ and the production extension build. This follows the package's declared Node
 
 ### Remaining product debt, outside the standalone harness
 
-- `src/services/flows-legacy` still uses its historical global registries and
+- `src/services/flows-core` still uses its historical global registries and
   import-time feature registration internally. That is deliberate compatibility
   code, not an API for new development. New product flows should be converted to
   native plugins before the compatibility runtime can be deleted.
@@ -526,7 +529,9 @@ adapter.
 
 A harness change is complete only when:
 
-- package imports stay side-effect free and application independent;
+- package imports stay side-effect free and application independent, except
+  registry packages such as `flows`, whose imports *are* the registration and
+  which therefore declare `sideEffects: true`;
 - public inputs, outputs, events, errors, IDs, and cursors stay serializable;
 - capabilities are advertised only when implemented;
 - tool output is bounded and returns continuation/truncation metadata;
@@ -549,7 +554,7 @@ A harness change is complete only when:
 - Node adapters: [`node/src`](../packages/agent-harness/node/src)
 - Full facade: [`full/src/index.ts`](../packages/agent-harness/full/src/index.ts)
 - Memorall composition: [`src/services/agent-harness`](../src/services/agent-harness)
-- App compatibility runtime: [`src/services/flows-legacy`](../src/services/flows-legacy)
+- App compatibility runtime: [`src/services/flows-core`](../src/services/flows-core)
 - Sandbox provider review: [`agent-harness-sandbox-review.md`](./agent-harness-sandbox-review.md)
 - Sandbox container transport: [`sandbox-container.md`](./sandbox-container.md)
 

@@ -8,6 +8,11 @@ import React, {
 } from "react";
 import "@/main/i18n/config";
 import { Renderer, type ActionEvent } from "@openuidev/react-lang";
+import {
+	readOpenUIState,
+	writeOpenUIState,
+} from "@/main/modules/openui/openui-form-state";
+import { OpenUIWidgetStateProvider } from "@/main/modules/openui/openui-widget-state";
 import { createComponentLibrary } from "./index";
 import { MarkdownMessage } from "@/main/modules/chat/components/MarkdownMessage";
 import { ThreeDotsLoader } from "@/main/components/atoms/ThreeDotsLoader";
@@ -102,15 +107,39 @@ interface OpenUIRendererProps {
 	 * negative-resize branch, which re-locks and yanks the reader to the bottom.
 	 */
 	deferred?: boolean;
+	/**
+	 * Identity for this block's form values, so they outlive the unmount that
+	 * `deferred` implies. Omit and the block simply keeps today's behaviour of
+	 * resetting when it scrolls out of range.
+	 */
+	stateKey?: string;
 	onMessageAction?: (action: MessageActionRequest) => void | Promise<void>;
 }
 
 const OpenUIRenderFrame: React.FC<OpenUIRendererProps> = React.memo(
-	({ content, streaming, onMessageAction }) => {
+	({ content, streaming, stateKey, onMessageAction }) => {
 		const { t } = useTranslation("chat");
 		const theme = useMemo(() => detectTheme(content), [content]);
 		const library = useMemo(() => createComponentLibrary(theme), [theme]);
 		const [resetKey, setResetKey] = useState(0);
+
+		// Read once per mount. A fresh object identity on every render would make
+		// the renderer re-hydrate mid-typing.
+		const initialState = useMemo(
+			() => (stateKey ? readOpenUIState(stateKey) : undefined),
+			// resetKey participates so `reset_form` starts from defaults rather than
+			// immediately rehydrating what the user just cleared.
+			[stateKey, resetKey],
+		);
+
+		// Fires per keystroke. A Map write notifies nobody, so a long message list
+		// does not re-render while someone types into one of its messages.
+		const handleStateUpdate = useCallback(
+			(state: Record<string, unknown>) => {
+				if (stateKey) writeOpenUIState(stateKey, state);
+			},
+			[stateKey],
+		);
 		const [renderFailed, setRenderFailed] = useState(false);
 		const [streamingRenderFailed, setStreamingRenderFailed] = useState(false);
 		const prevStreaming = useRef(streaming);
@@ -264,14 +293,18 @@ const OpenUIRenderFrame: React.FC<OpenUIRendererProps> = React.memo(
 
 		return (
 			<OpenUIErrorBoundary content={content}>
-				<Renderer
-					key={resetKey}
-					response={content}
-					library={library}
-					isStreaming={streaming}
-					onAction={handleOpenUIAction}
-					onError={handleRendererError}
-				/>
+				<OpenUIWidgetStateProvider blockKey={stateKey}>
+					<Renderer
+						key={resetKey}
+						response={content}
+						library={library}
+						isStreaming={streaming}
+						initialState={initialState}
+						onStateUpdate={handleStateUpdate}
+						onAction={handleOpenUIAction}
+						onError={handleRendererError}
+					/>
+				</OpenUIWidgetStateProvider>
 			</OpenUIErrorBoundary>
 		);
 	},
@@ -283,6 +316,7 @@ export const OpenUIRenderer: React.FC<OpenUIRendererProps> = ({
 	content,
 	streaming,
 	deferred = false,
+	stateKey,
 	onMessageAction,
 }) => {
 	const baseInterval =
@@ -343,6 +377,7 @@ export const OpenUIRenderer: React.FC<OpenUIRendererProps> = ({
 			<OpenUIRenderFrame
 				content={renderContent}
 				streaming={streaming}
+				stateKey={stateKey}
 				onMessageAction={onMessageAction}
 			/>
 		</div>

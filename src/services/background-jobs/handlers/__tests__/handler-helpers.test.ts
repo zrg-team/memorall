@@ -4,7 +4,7 @@ import { BaseProcessHandler } from "../base-process-handler";
 import { createJobErrorMetadata, getErrorMessage } from "../error-metadata";
 import { HandlerRegistry } from "../handler-registry";
 import { ProcessFactory } from "../process-factory";
-import { StreamBuffer } from "../stream-buffer";
+import { ChunkDispatcher, StreamBuffer } from "../stream-buffer";
 import type { BaseJob, ItemHandlerResult, ProcessDependencies } from "../types";
 
 const makeJob = (jobType: string): BaseJob => ({
@@ -63,6 +63,108 @@ describe("StreamBuffer", () => {
 		buffer.flush();
 		buffer.flush();
 		expect(emitted).toEqual(["hello world again", "tail"]);
+	});
+});
+
+describe("ChunkDispatcher", () => {
+	const createHarness = () => {
+		const sent: string[] = [];
+		let now = 1_000;
+		let scheduled: { fn: () => void; delayMs: number } | null = null;
+
+		const dispatcher = new ChunkDispatcher({
+			intervalMs: 40,
+			sendContent: (content) => {
+				sent.push(content);
+			},
+			now: () => now,
+			schedule: (fn, delayMs) => {
+				scheduled = { fn, delayMs };
+				return 1 as unknown as ReturnType<typeof setTimeout>;
+			},
+			cancel: () => {
+				scheduled = null;
+			},
+		});
+
+		return {
+			dispatcher,
+			sent,
+			advance: (ms: number) => {
+				now += ms;
+			},
+			runTimer: () => {
+				const pending = scheduled;
+				scheduled = null;
+				pending?.fn();
+			},
+			pendingDelay: () => scheduled?.delayMs,
+		};
+	};
+
+	it("sends the first fragment immediately and merges the rest of the window", () => {
+		const { dispatcher, sent, advance, runTimer, pendingDelay } =
+			createHarness();
+
+		dispatcher.queueContent("Hello");
+		expect(sent).toEqual(["Hello"]);
+
+		advance(10);
+		dispatcher.queueContent(" there");
+		advance(10);
+		dispatcher.queueContent(" world");
+		// Still one message on the wire: both fragments landed inside the window.
+		expect(sent).toEqual(["Hello"]);
+		expect(pendingDelay()).toBe(30);
+
+		runTimer();
+		expect(sent).toEqual(["Hello", " there world"]);
+	});
+
+	it("sends again immediately once the window has elapsed", () => {
+		const { dispatcher, sent, advance } = createHarness();
+
+		dispatcher.queueContent("one");
+		advance(40);
+		dispatcher.queueContent("two");
+
+		expect(sent).toEqual(["one", "two"]);
+	});
+
+	it("flushes buffered content before an out-of-band event", () => {
+		const { dispatcher, sent, advance } = createHarness();
+		const order: string[] = [];
+
+		dispatcher.queueContent("first");
+		order.push(...sent.splice(0));
+
+		advance(5);
+		dispatcher.queueContent(" tail");
+		expect(dispatcher.hasPending()).toBe(true);
+
+		dispatcher.send(() => {
+			order.push("tool-call");
+		});
+
+		expect(sent).toEqual([" tail"]);
+		expect(order).toEqual(["first", "tool-call"]);
+		expect(dispatcher.hasPending()).toBe(false);
+	});
+
+	it("drops the pending timer when flushed so no update outlives the turn", () => {
+		const { dispatcher, sent, advance, pendingDelay } = createHarness();
+
+		dispatcher.queueContent("a");
+		advance(5);
+		dispatcher.queueContent("b");
+		expect(pendingDelay()).toBe(35);
+
+		dispatcher.flush();
+		expect(sent).toEqual(["a", "b"]);
+		expect(pendingDelay()).toBeUndefined();
+
+		dispatcher.flush();
+		expect(sent).toEqual(["a", "b"]);
 	});
 });
 

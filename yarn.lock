@@ -2383,6 +2383,23 @@ __metadata:
   languageName: unknown
   linkType: soft
 
+"@memorall/agent-harness-flows@workspace:^, @memorall/agent-harness-flows@workspace:packages/agent-harness/flows":
+  version: 0.0.0-use.local
+  resolution: "@memorall/agent-harness-flows@workspace:packages/agent-harness/flows"
+  dependencies:
+    "@langchain/langgraph": "npm:1.4.9"
+    "@memorall/agent-harness-mcp": "workspace:^"
+    "@memorall/agent-harness-sandbox": "workspace:^"
+    gpt-tokenizer: "npm:^3.4.0"
+    minimatch: "npm:10.2.6"
+    nanoid: "npm:6.0.1"
+    sanitize-html: "npm:2.17.7"
+    typescript: "npm:@typescript/typescript6@6.0.2"
+    vitest: "npm:4.1.10"
+    zod: "npm:4.4.3"
+  languageName: unknown
+  linkType: soft
+
 "@memorall/agent-harness-langgraph@workspace:^, @memorall/agent-harness-langgraph@workspace:packages/agent-harness/langgraph":
   version: 0.0.0-use.local
   resolution: "@memorall/agent-harness-langgraph@workspace:packages/agent-harness/langgraph"
@@ -12917,6 +12934,7 @@ __metadata:
     "@icons-pack/react-simple-icons": "npm:13.13.0"
     "@langchain/core": "npm:1.2.7"
     "@langchain/langgraph": "npm:1.4.9"
+    "@memorall/agent-harness-flows": "workspace:^"
     "@mlc-ai/web-llm": "npm:0.2.84"
     "@mozilla/readability": "npm:^0.6.0"
     "@openuidev/react-lang": "npm:0.2.11"

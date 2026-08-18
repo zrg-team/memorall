@@ -437,7 +437,7 @@ export const useChat = (model: string) => {
 							: {}),
 					},
 					streamConfig: {
-						minWordsToStream: 5,
+						minWordsToStream: 1,
 						streamToolCallsImmediately: true,
 					},
 				},

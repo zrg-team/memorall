@@ -1,22 +1,22 @@
 import {
 	defineStep,
 	bindStep,
-} from "@/services/flows-legacy/interfaces/engine/step";
+} from "@memorall/agent-harness-flows/interfaces/engine/step";
 import {
 	logInfo,
 	logError,
 	logWarn,
-} from "@/services/flows-legacy/utils/logger";
-import { mapRefine } from "@/services/flows-legacy/utils/map-refine";
+} from "@memorall/agent-harness-flows/logging/logger";
+import { mapRefine } from "@memorall/agent-harness-flows/utils/map-refine";
 
 import type {
 	StepFactoryFromSpec,
 	StepSpecFromDefinition,
-} from "@/services/flows-legacy/interfaces/engine/step";
-import { stepRegistry } from "@/services/flows-legacy/registries/step-registry";
-import type {} from "@/services/flows-legacy/interfaces/engine/tool";
-import type { AllServices } from "@/services/flows-legacy/interfaces/services/services";
-import type { ILLMService } from "@/services/flows-legacy/interfaces/services/llm";
+} from "@memorall/agent-harness-flows/interfaces/engine/step";
+import { stepRegistry } from "@memorall/agent-harness-flows/registries/step-registry";
+import type {} from "@memorall/agent-harness-flows/interfaces/engine/tool";
+import type { AllServices } from "@memorall/agent-harness-flows/interfaces/services/services";
+import type { ILLMService } from "@memorall/agent-harness-flows/interfaces/services/llm";
 
 const STEP_NAME = "fact-extraction" as const;
 

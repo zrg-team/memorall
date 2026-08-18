@@ -38,6 +38,16 @@ export interface JobNotificationMessage {
 	progress?: JobProgressEvent;
 	/** Only relevant when target === "content". Omit to broadcast to all eligible tabs. */
 	tabId?: number;
+	/**
+	 * Sender-unique id for this notification.
+	 *
+	 * A context can be reached both directly and through the background relay, so
+	 * the same notification can arrive twice. A duplicated JOB_PROGRESS is not a
+	 * harmless repeat: consumers append `delta.content`, so a second copy
+	 * interleaves the assistant's text with itself and corrupts anything parsed
+	 * out of it. Receivers drop an id they have already dispatched.
+	 */
+	messageId?: string;
 }
 
 // ─── Type guard ───────────────────────────────────────────────────────────────

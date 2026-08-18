@@ -1,4 +1,4 @@
-import type { FsToolConfig } from "@/services/flows-legacy/tools/fs/config";
+import type { FsToolConfig } from "@memorall/agent-harness-flows/tools/fs/config";
 import {
 	normalizeSandboxPath,
 	sandboxPathToFsPath,

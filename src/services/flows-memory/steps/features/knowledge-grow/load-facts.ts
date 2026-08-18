@@ -1,9 +1,12 @@
 import {
 	defineStep,
 	bindStep,
-} from "@/services/flows-legacy/interfaces/engine/step";
+} from "@memorall/agent-harness-flows/interfaces/engine/step";
 import { getKnowledgeDatabase } from "../../../interfaces/knowledge";
-import { logInfo, logError } from "@/services/flows-legacy/utils/logger";
+import {
+	logInfo,
+	logError,
+} from "@memorall/agent-harness-flows/logging/logger";
 import { and, or, inArray, ilike } from "drizzle-orm";
 import { vectorSearchEdges } from "../../../utils/vector-search";
 import type { Edge, Node } from "../../../interfaces/knowledge";
@@ -12,10 +15,10 @@ import { getScopedGraphWhere } from "../../../utils/graph-query";
 import type {
 	StepFactoryFromSpec,
 	StepSpecFromDefinition,
-} from "@/services/flows-legacy/interfaces/engine/step";
-import { stepRegistry } from "@/services/flows-legacy/registries/step-registry";
-import type {} from "@/services/flows-legacy/interfaces/engine/tool";
-import type { AllServices } from "@/services/flows-legacy/interfaces/services/services";
+} from "@memorall/agent-harness-flows/interfaces/engine/step";
+import { stepRegistry } from "@memorall/agent-harness-flows/registries/step-registry";
+import type {} from "@memorall/agent-harness-flows/interfaces/engine/tool";
+import type { AllServices } from "@memorall/agent-harness-flows/interfaces/services/services";
 import {
 	combineSearchResultsWithTrigram,
 	trigramSearchEdges,

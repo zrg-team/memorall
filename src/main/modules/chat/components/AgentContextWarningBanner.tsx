@@ -6,7 +6,7 @@ import { AlertTriangle, Gauge, MessageSquare } from "lucide-react";
 import { serviceManager } from "@/services";
 import { PROVIDER_TO_SERVICE } from "@/services/llm/constants";
 import type { ServiceProvider } from "@/services/llm/interfaces/llm-service.interface";
-import type { UnifiedFlowConfig } from "@/services/flows-legacy/interfaces/config/flow-config";
+import type { UnifiedFlowConfig } from "@memorall/agent-harness-flows/interfaces/config/flow-config";
 import type { FeatureCatalogMetadata } from "@/services/flow-feature-catalog-service";
 import { logError } from "@/utils/logger";
 

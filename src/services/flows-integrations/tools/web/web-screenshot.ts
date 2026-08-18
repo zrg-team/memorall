@@ -2,17 +2,17 @@ import z from "zod";
 import type {
 	Tool,
 	ToolFactory,
-} from "@/services/flows-legacy/interfaces/engine/tool";
-import type { AllServices } from "@/services/flows-legacy/interfaces/services/services";
-import { toolRegistry } from "@/services/flows-legacy/registries/tool-registry";
+} from "@memorall/agent-harness-flows/interfaces/engine/tool";
+import type { AllServices } from "@memorall/agent-harness-flows/interfaces/services/services";
+import { toolRegistry } from "@memorall/agent-harness-flows/registries/tool-registry";
 import { normalizeDocumentPath } from "../files/util";
-import { writeFileBytes } from "@/services/flows-legacy/tools/fs/util";
+import { writeFileBytes } from "@memorall/agent-harness-flows/tools/fs/util";
 import { captureWebSessionScreenshot } from "./web-tool-registry";
 import {
 	createDefaultWebErrorResult,
 	createWebResult,
 	requireWebBrowserService,
-} from "@/services/flows-legacy/tools/web/web-tool-utils";
+} from "@memorall/agent-harness-flows/tools/web/web-tool-utils";
 
 const TOOL_NAME = "web_screenshot" as const;
 

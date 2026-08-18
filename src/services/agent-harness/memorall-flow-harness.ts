@@ -9,13 +9,13 @@ import {
 } from "@memorall/agent-harness-core";
 import { createBrowserPlatform } from "@memorall/agent-harness-browser";
 import type { ChatMessage } from "@/types/openai";
-import type { UnifiedFlowConfig } from "@/services/flows-legacy/interfaces/config/flow-config";
-import { graphRegistry } from "@/services/flows-legacy/registries/graph-registry";
+import type { UnifiedFlowConfig } from "@memorall/agent-harness-flows/interfaces/config/flow-config";
+import { graphRegistry } from "@memorall/agent-harness-flows/registries/graph-registry";
 import {
 	createFlowRuntimeVars,
 	withFlowRuntimeVars,
-} from "@/services/flows-legacy/runtime/runtime-context";
-import { normalizeLangGraphStreamChunk } from "@/services/flows-legacy/utils/langgraph-stream";
+} from "@memorall/agent-harness-flows/context/runtime-context";
+import { normalizeLangGraphStreamChunk } from "@memorall/agent-harness-flows/utils/langgraph-stream";
 import { sanitizeForJson } from "@/utils/sanitize-json";
 
 export const MEMORALL_FLOW_GRAPH_ID = "memorall.compatibility-flow";

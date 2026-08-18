@@ -91,10 +91,12 @@ export class ProcessFactory {
 			// Complete the job automatically
 			await this.dependencies.completeJob(jobId, jobResult);
 
-			// Log result
+			// Log the outcome, not the payload. `handlerResult` for a chat job is the
+			// whole assistant turn — content, parts, tool executions — and persisting
+			// it turned every completed job into a multi-megabyte log entry.
 			await this.dependencies.logger.info(
 				`✅ Job completed: [${jobId}] ${job.jobType}`,
-				{ jobType: job.jobType, result: handlerResult },
+				{ jobType: job.jobType },
 				"offscreen",
 			);
 		} catch (error) {

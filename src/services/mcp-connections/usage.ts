@@ -4,7 +4,7 @@
  */
 
 import { serviceManager } from "@/services";
-import { MCP_FEATURE_NAME } from "@/services/flows-legacy/steps/features/mcp-feature";
+import { MCP_FEATURE_NAME } from "@memorall/agent-harness-flows/steps/features/mcp-feature/index";
 import { logError } from "@/utils/logger";
 import type { AgentConnectionSelection } from "./types";
 

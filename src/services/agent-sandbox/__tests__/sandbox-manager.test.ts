@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { IFlowFileSystem } from "@/services/flows-legacy/interfaces/services/filesystem";
+import type { IFlowFileSystem } from "@memorall/agent-harness-flows/interfaces/services/filesystem";
 import type {
 	SandboxCallContext,
 	SandboxCapabilities,
@@ -7,8 +7,8 @@ import type {
 	SandboxProviderSession,
 	SandboxSessionRequest,
 	SandboxWorkspaceManifest,
-} from "@/services/flows-legacy/interfaces/services/agent-sandbox";
-import { SandboxError } from "@/services/flows-legacy/interfaces/services/agent-sandbox";
+} from "@memorall/agent-harness-flows/interfaces/services/agent-sandbox";
+import { SandboxError } from "@memorall/agent-harness-flows/interfaces/services/agent-sandbox";
 import { SandboxManager } from "../sandbox-manager";
 import { SandboxProviderRegistry } from "../provider-registry";
 import { SandboxWorkspaceCoordinator } from "../workspace-coordinator";

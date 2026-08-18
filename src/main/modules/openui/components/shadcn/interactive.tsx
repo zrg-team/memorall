@@ -5,6 +5,7 @@ import {
 	useTriggerAction,
 } from "@openuidev/react-lang";
 import { z } from "zod";
+import { useOpenUIWidgetState } from "@/main/modules/openui/openui-widget-state";
 import { Button } from "@/main/components/ui/button";
 import {
 	Carousel,
@@ -98,8 +99,14 @@ export const TabsBlock = defineComponent({
 	}),
 	component: ({ props, renderNode }) => {
 		const first = props.items[0]?.props.label ?? "Tab";
+		// Keyed on the tab labels so a block whose tabs changed does not restore a
+		// selection that no longer exists.
+		const [active, setActive] = useOpenUIWidgetState(
+			`tabs:${props.items.map((item) => item.props.label).join("|")}`,
+			first,
+		);
 		return (
-			<Tabs defaultValue={first} className="w-full">
+			<Tabs value={active} onValueChange={setActive} className="w-full">
 				<TabsList className="max-w-full flex-wrap justify-start">
 					{props.items.map((item) => (
 						<TabsTrigger key={item.props.label} value={item.props.label}>
@@ -124,22 +131,32 @@ export const CollapsibleBlock = defineComponent({
 		label: z.string(),
 		children: childrenSchema,
 	}),
-	component: ({ props, renderNode }) => (
-		<Collapsible className="rounded-lg border">
-			<CollapsibleTrigger asChild>
-				<Button
-					type="button"
-					variant="ghost"
-					className="h-auto w-full justify-start rounded-lg px-3 py-2"
-				>
-					{props.label}
-				</Button>
-			</CollapsibleTrigger>
-			<CollapsibleContent className="space-y-3 px-3 pb-3">
-				{renderNode(props.children)}
-			</CollapsibleContent>
-		</Collapsible>
-	),
+	component: ({ props, renderNode }) => {
+		const [open, setOpen] = useOpenUIWidgetState(
+			`collapsible:${props.label}`,
+			false,
+		);
+		return (
+			<Collapsible
+				open={open}
+				onOpenChange={setOpen}
+				className="rounded-lg border"
+			>
+				<CollapsibleTrigger asChild>
+					<Button
+						type="button"
+						variant="ghost"
+						className="h-auto w-full justify-start rounded-lg px-3 py-2"
+					>
+						{props.label}
+					</Button>
+				</CollapsibleTrigger>
+				<CollapsibleContent className="space-y-3 px-3 pb-3">
+					{renderNode(props.children)}
+				</CollapsibleContent>
+			</Collapsible>
+		);
+	},
 });
 
 export const DialogBlock = defineComponent({

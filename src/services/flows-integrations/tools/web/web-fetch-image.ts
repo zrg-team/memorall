@@ -2,11 +2,11 @@ import z from "zod";
 import type {
 	Tool,
 	ToolFactory,
-} from "@/services/flows-legacy/interfaces/engine/tool";
-import type { AllServices } from "@/services/flows-legacy/interfaces/services/services";
-import { toolRegistry } from "@/services/flows-legacy/registries/tool-registry";
+} from "@memorall/agent-harness-flows/interfaces/engine/tool";
+import type { AllServices } from "@memorall/agent-harness-flows/interfaces/services/services";
+import { toolRegistry } from "@memorall/agent-harness-flows/registries/tool-registry";
 import { normalizeDocumentPath } from "../files/util";
-import { writeFileBytes } from "@/services/flows-legacy/tools/fs/util";
+import { writeFileBytes } from "@memorall/agent-harness-flows/tools/fs/util";
 import {
 	fetchImageFromSession,
 	getLatestTabSession,
@@ -17,7 +17,7 @@ import {
 	decodeBase64Bytes,
 	downloadResourceBytes,
 	filenameFromUrl,
-} from "@/services/flows-legacy/utils/download-resource";
+} from "@memorall/agent-harness-flows/utils/download-resource";
 
 const TOOL_NAME = "web_fetch_image" as const;
 

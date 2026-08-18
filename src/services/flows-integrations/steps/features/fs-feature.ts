@@ -1,24 +1,24 @@
 import {
 	defineStep,
 	bindStep,
-} from "@/services/flows-legacy/interfaces/engine/step";
+} from "@memorall/agent-harness-flows/interfaces/engine/step";
 import type {
 	StepFactoryFromSpec,
 	StepSpecFromDefinition,
-} from "@/services/flows-legacy/interfaces/engine/step";
+} from "@memorall/agent-harness-flows/interfaces/engine/step";
 import {
 	GraphBase,
 	type ConfiguredGraphTool,
 	type GraphTool,
-} from "@/services/flows-legacy/graph/graph.base";
-import type { ChatCompletionMessageParam } from "@/services/flows-legacy/interfaces/engine/messages";
-import { stepRegistry } from "@/services/flows-legacy/registries/step-registry";
-import { logError } from "@/services/flows-legacy/utils/logger";
-import type { FsToolConfig } from "@/services/flows-legacy/tools/fs/config";
+} from "@memorall/agent-harness-flows/graph/graph.base";
+import type { ChatCompletionMessageParam } from "@memorall/agent-harness-flows/interfaces/engine/messages";
+import { stepRegistry } from "@memorall/agent-harness-flows/registries/step-registry";
+import { logError } from "@memorall/agent-harness-flows/logging/logger";
+import type { FsToolConfig } from "@memorall/agent-harness-flows/tools/fs/config";
 import {
 	FS_FEATURE_SYSTEM_PROMPT as CORE_FS_FEATURE_SYSTEM_PROMPT,
 	FS_FEATURE_TOOLS,
-} from "@/services/flows-legacy/steps/features/fs-feature";
+} from "@memorall/agent-harness-flows/steps/features/fs-feature";
 import { memorallFsToolConfig } from "flow-integrations/tools/fs/memorall-fs-path-policy";
 
 const STEP_NAME = "fs-feature" as const;

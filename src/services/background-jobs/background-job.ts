@@ -47,6 +47,15 @@ export interface BackgroundJobDependencies {
 	serviceInitializationBridge?: IServiceInitializationBridge;
 }
 
+// How long queue-state broadcasts are coalesced for. Long enough that a fast
+// token stream cannot drive one store read per chunk, short enough to stay live.
+const QUEUE_NOTIFICATION_INTERVAL_MS = 250;
+
+// Progress kept on the persisted record. The authoritative history still travels
+// whole in the job result; the stored copy only backs the queue UI, and appending
+// to it without a bound rewrote an ever-growing array on every chunk.
+const MAX_STORED_PROGRESS_EVENTS = 50;
+
 const isFailedJobResult = (result: unknown): result is JobResult => {
 	return (
 		typeof result === "object" &&
@@ -82,6 +91,12 @@ export class BackgroundJob {
 		}
 	>();
 	private jobProgressListeners = new Map<string, () => void>();
+	// Direct `execute()` jobs are never written to the store, so every progress
+	// update used to pay for an IndexedDB lookup that could only ever miss —
+	// once per streamed chunk. One miss is enough to know for the rest of the run.
+	private unpersistedJobs = new Set<string>();
+	private pendingListenerNotification: ReturnType<typeof setTimeout> | null =
+		null;
 	private store: JobStore;
 	private notificationBridge: IJobNotificationBridge;
 	private serviceInitializationBridge: IServiceInitializationBridge;
@@ -155,8 +170,25 @@ export class BackgroundJob {
 	}
 
 	private async notifyListeners(): Promise<void> {
+		if (this.listeners.size === 0) return;
 		const state = await this.getState();
 		for (const listener of this.listeners) listener(state);
+	}
+
+	/**
+	 * Coalesced queue-state broadcast.
+	 *
+	 * Every notification reads the whole job store, so firing it per progress
+	 * update made a streaming job re-read its own growing record on each chunk.
+	 * Subscribers only render a queue summary, which does not need per-chunk
+	 * fidelity.
+	 */
+	private scheduleListenerNotification(): void {
+		if (this.listeners.size === 0 || this.pendingListenerNotification) return;
+		this.pendingListenerNotification = setTimeout(() => {
+			this.pendingListenerNotification = null;
+			void this.notifyListeners();
+		}, QUEUE_NOTIFICATION_INTERVAL_MS);
 	}
 
 	/**
@@ -524,10 +556,13 @@ export class BackgroundJob {
 		jobId: string,
 		progress: JobProgressUpdate,
 	): Promise<void> {
-		const job = await this.getJob(jobId);
+		const job = this.unpersistedJobs.has(jobId)
+			? null
+			: await this.getJob(jobId);
 
 		// For execute jobs (no job in queue), create a minimal event and send notifications
 		if (!job) {
+			this.unpersistedJobs.add(jobId);
 			const event: JobProgressEvent = {
 				...progress,
 				status: progress.status ?? "processing",
@@ -552,10 +587,13 @@ export class BackgroundJob {
 			job.progress = [];
 		}
 		job.progress.push(event);
+		if (job.progress.length > MAX_STORED_PROGRESS_EVENTS) {
+			job.progress = job.progress.slice(-MAX_STORED_PROGRESS_EVENTS);
+		}
 		job.status = event.status;
 
 		await this.saveJob(job);
-		await this.notifyListeners();
+		this.scheduleListenerNotification();
 
 		// Notify progress stream if exists
 		const streamData = this.jobProgressStreams.get(jobId);
@@ -588,6 +626,8 @@ export class BackgroundJob {
 				this.cleanupProgressStream(jobId);
 			}
 		}
+
+		this.unpersistedJobs.delete(jobId);
 
 		// Notify completion listener if exists
 		const completionListener = this.jobCompletionListeners.get(jobId);

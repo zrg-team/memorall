@@ -4,8 +4,8 @@
  * import, so the main app only needs to import this file once.
  *
  * Architecture:
- *   - All interfaces are imported from @/services/flows-legacy/interfaces/*
- *   - All registrations go through @/services/flows-legacy/{tool,step}-registry
+ *   - All interfaces are imported from @memorall/agent-harness-flows/interfaces/*
+ *   - All registrations go through @memorall/agent-harness-flows/{tool,step}-registry
  *   - This package has no outward exports consumed by the engine itself
  */
 
@@ -26,6 +26,8 @@ export * from "./tools/co-agent/index";
 
 // Browser/Chrome DOM-dependent tools
 import "./tools/js-execute";
+// Queries Memorall's own message schema, so it is host code, not harness code.
+import "./tools/thread-history";
 
 // Co-agent and embedded-chat feature steps
 import "./steps/features/co-agent-feature";
@@ -62,6 +64,28 @@ import "./tools/files-fs/fs-remove";
 import "./tools/files-fs/fs-ls";
 
 // Feature step overrides — must come after core features are registered
+// Memorall's own artifact formats. These are product behaviour, not harness
+// behaviour, so they live here rather than in @memorall/agent-harness-flows —
+// which is also what keeps @hyperframes/core out of the package.
+import "./tools/hyperframes/hyperframes-edit";
+import "./tools/hyperframes/hyperframes-init";
+import "./tools/hyperframes/hyperframes-list";
+import "./tools/hyperframes/hyperframes-read";
+import "./tools/hyperframes/hyperframes-remote-asset-import";
+import "./tools/hyperframes/hyperframes-remote-assets-explore";
+import "./tools/hyperframes/hyperframes-show";
+import "./tools/hyperframes/hyperframes-validate";
+import "./tools/hyperframes/hyperframes-write";
+import "./tools/lottie/lottie-edit";
+import "./tools/lottie/lottie-init";
+import "./tools/lottie/lottie-list";
+import "./tools/lottie/lottie-read";
+import "./tools/lottie/lottie-show";
+import "./tools/lottie/lottie-validate";
+import "./tools/lottie/lottie-write";
+import "./steps/features/hyperframes-base/index";
+import "./steps/features/lottie-animation-feature/index";
+import "./steps/features/visualize-response/index";
 import "./steps/features/hyperframes-feature";
 
 // Document feature steps

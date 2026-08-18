@@ -158,7 +158,8 @@ const UserContextSectionCard: React.FC<{
 export const UserMessageContent: React.FC<{
 	content: string;
 	isStreaming: boolean;
-}> = ({ content, isStreaming }) => {
+	messageId?: string;
+}> = ({ content, isStreaming, messageId }) => {
 	const parsed = useMemo(() => parseUserContext(content), [content]);
 
 	if (!parsed.hasContext) {
@@ -166,6 +167,7 @@ export const UserMessageContent: React.FC<{
 			<MessageContentWithArtifacts
 				content={content}
 				isStreaming={isStreaming}
+				blockScope={messageId}
 			/>
 		);
 	}

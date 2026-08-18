@@ -35,7 +35,10 @@ import {
 	TooltipTrigger,
 } from "@/main/components/ui/tooltip";
 import type { ChatStatus } from "@/types/chat";
+import type { FlowMetadata } from "@/services/database/entities/flows";
 import { cn } from "@/lib/utils";
+import { AgentIcon, toAgentScreenContent } from "@/components/AgentIcon";
+import { getAgentIconScreenFromMetadata } from "@/main/modules/agents/types";
 
 export interface ChatInputControlsProps {
 	isLoading: boolean;
@@ -48,7 +51,12 @@ export interface ChatInputControlsProps {
 	abortController: AbortController | null;
 	isLoadingTopics: boolean;
 	topics: Array<{ id: string; name: string; agentId?: string | null }>;
-	agentFlows: Array<{ id: string; name: string }>;
+	agentFlows: Array<{
+		id: string;
+		name: string;
+		/** Carries the agent's icon screen; drawn by AgentIcon. */
+		metadata?: FlowMetadata | null;
+	}>;
 	selectedAgentFlowId: string | null;
 	setSelectedAgentFlowId: (flowId: string) => void;
 	onCreateAgentFlow?: () => void;
@@ -166,7 +174,17 @@ export const ChatInputControls: React.FC<ChatInputControlsProps> = ({
 											{selectedFlow?.id === "chat" ? (
 												<MessageCircle size={12} />
 											) : (
-												<Brain size={12} />
+												<AgentIcon
+													size={22}
+													reactive={false}
+													aria-label={selectedFlow?.name ?? "Agent"}
+													screenContent={toAgentScreenContent(
+														getAgentIconScreenFromMetadata(
+															selectedFlow?.metadata,
+														),
+														selectedFlow?.name,
+													)}
+												/>
 											)}
 											<span className="min-w-0 max-w-24 truncate max-[420px]:max-w-16">
 												{selectedFlow?.name ?? t("flowSelector.chat")}
@@ -185,7 +203,15 @@ export const ChatInputControls: React.FC<ChatInputControlsProps> = ({
 											{flow.id === "chat" ? (
 												<MessageCircle size={14} />
 											) : (
-												<Brain size={14} />
+												<AgentIcon
+													size={24}
+													reactive={false}
+													aria-label={flow.name}
+													screenContent={toAgentScreenContent(
+														getAgentIconScreenFromMetadata(flow.metadata),
+														flow.name,
+													)}
+												/>
 											)}
 											<span>{flow.name}</span>
 										</DropdownMenuItem>

@@ -6,6 +6,8 @@ export * from "./client.js";
 export * from "./contracts.js";
 export * from "./http-transport.js";
 export * from "./tool-adapter.js";
+export * from "./schema.js";
+export * from "./result.js";
 
 export const MCP_PLUGIN_ID = "agent-harness.mcp";
 

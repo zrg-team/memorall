@@ -2,18 +2,18 @@ import z from "zod";
 import type {
 	Tool,
 	ToolFactory,
-} from "@/services/flows-legacy/interfaces/engine/tool";
-import type { AllServices } from "@/services/flows-legacy/interfaces/services/services";
-import { toolRegistry } from "@/services/flows-legacy/registries/tool-registry";
+} from "@memorall/agent-harness-flows/interfaces/engine/tool";
+import type { AllServices } from "@memorall/agent-harness-flows/interfaces/services/services";
+import { toolRegistry } from "@memorall/agent-harness-flows/registries/tool-registry";
 import { readPDFFile } from "@/main/modules/files/handlers/pdf-extraction";
 import { formatPDFAsText, formatPDFAsMarkdown } from "@/lib/pdf-utils";
 import { normalizeDocumentPath } from "./util";
-import { ensureFolderExists } from "@/services/flows-legacy/utils/fs-utils";
+import { ensureFolderExists } from "@memorall/agent-harness-flows/utils/fs-utils";
 import {
 	pathExists,
 	readFileBytes,
 	writeFileBytes,
-} from "@/services/flows-legacy/tools/fs/util";
+} from "@memorall/agent-harness-flows/tools/fs/util";
 
 const TOOL_NAME = "pdf_to_text" as const;
 

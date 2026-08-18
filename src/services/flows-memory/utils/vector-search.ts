@@ -1,8 +1,9 @@
+import { embedQuery } from "./embedding-cache";
 import type { IFlowDatabase } from "../interfaces/database";
 import type { IFlowEmbeddingService } from "../interfaces/embedding";
 import type { Edge, Node } from "../interfaces/knowledge";
-import type { IFlowLogger } from "@/services/flows-legacy/utils/logger";
-import { getFlowLogger } from "@/services/flows-legacy/utils/logger";
+import type { IFlowLogger } from "@memorall/agent-harness-flows/logging/logger";
+import { getFlowLogger } from "@memorall/agent-harness-flows/logging/logger";
 import { getCurrentEmbeddingColumns } from "./embedding-size-config";
 
 export type FlowEmbeddingLike = Pick<
@@ -36,16 +37,13 @@ const valueToOptionalDate = (value: unknown): Date | undefined =>
 		? new Date(value)
 		: undefined;
 
-const createEmbedding = async (
+// Node and edge searches embed the query themselves, and a single retrieval pass
+// runs several of them over the same text. Going through the cache turns those
+// repeats into one inference.
+const createEmbedding = (
 	embedding: FlowEmbeddingLike,
 	input: string,
-): Promise<number[]> => {
-	if (!embedding.embeddings) {
-		return embedding.textToVector(input);
-	}
-	const response = await embedding.embeddings.create({ input });
-	return response.data[0]?.embedding ?? [];
-};
+): Promise<number[]> => embedQuery(embedding, input);
 
 const getRows = <T>(value: unknown): T[] => {
 	if (Array.isArray(value)) return value as T[];
@@ -77,8 +75,32 @@ export async function vectorSearchNodes(
 
 	if (terms.length === 0) return [];
 
+	return searchNodesByVector(
+		db,
+		await createEmbedding(emb, terms.join(" ")),
+		limit,
+		graphFilter,
+		logger,
+	);
+}
+
+/**
+ * Node search for a caller that already holds the query vector.
+ *
+ * The text-taking variant above embeds and then delegates here. A retrieval pass
+ * computes the query embedding once and drives several searches with it, so
+ * handing the vector over directly means the work is done once by construction —
+ * the cache underneath is a safety net for paths that still pass text, not the
+ * thing keeping the count down.
+ */
+export async function searchNodesByVector(
+	db: IFlowDatabase,
+	searchEmbedding: number[],
+	limit: number,
+	graphFilter?: string,
+	logger: IFlowLogger = getFlowLogger(),
+): Promise<VectorSearchResult<Node>[]> {
 	try {
-		const searchEmbedding = await createEmbedding(emb, terms.join(" "));
 		const columns = await getCurrentEmbeddingColumns();
 		const params: unknown[] = [JSON.stringify(searchEmbedding)];
 		let query = `
@@ -140,8 +162,24 @@ export async function vectorSearchEdges(
 
 	if (terms.length === 0) return [];
 
+	return searchEdgesByVector(
+		db,
+		await createEmbedding(emb, terms.join(" ")),
+		limit,
+		graphFilter,
+		logger,
+	);
+}
+
+/** Edge search for a caller that already holds the query vector. */
+export async function searchEdgesByVector(
+	db: IFlowDatabase,
+	searchEmbedding: number[],
+	limit: number,
+	graphFilter?: string,
+	logger: IFlowLogger = getFlowLogger(),
+): Promise<VectorSearchResult<Edge>[]> {
 	try {
-		const searchEmbedding = await createEmbedding(emb, terms.join(" "));
 		const columns = await getCurrentEmbeddingColumns();
 		const params: unknown[] = [JSON.stringify(searchEmbedding)];
 		let query = `

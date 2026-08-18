@@ -29,6 +29,8 @@ export const isAssistantContentPart = (
 interface AssistantContentFlowProps {
 	parts: AssistantContentPart[];
 	isStreaming: boolean;
+	/** Identifies interactive state in this message; see openui-form-state. */
+	messageId?: string;
 	suppressArtifactPreviews?: boolean;
 	onMessageAction?: (action: MessageActionRequest) => void | Promise<void>;
 }
@@ -38,6 +40,7 @@ export const AssistantContentFlow: React.FC<AssistantContentFlowProps> =
 		({
 			parts,
 			isStreaming,
+			messageId,
 			suppressArtifactPreviews = false,
 			onMessageAction,
 		}) => {
@@ -82,6 +85,7 @@ export const AssistantContentFlow: React.FC<AssistantContentFlowProps> =
 									key={key}
 									content={part.text}
 									isStreaming={isStreaming}
+									blockScope={messageId ? `${messageId}:${key}` : undefined}
 									suppressArtifactPreviews={suppressArtifactPreviews}
 									onMessageAction={onMessageAction}
 									seenArtifactKeys={seenArtifactKeys}

@@ -2,10 +2,10 @@ import z from "zod";
 import type {
 	Tool,
 	ToolFactory,
-} from "@/services/flows-legacy/interfaces/engine/tool";
-import type { AllServices } from "@/services/flows-legacy/interfaces/services/services";
-import { toolRegistry } from "@/services/flows-legacy/registries/tool-registry";
-import type { SandboxHandleSwRequestResult } from "@/services/flows-legacy/interfaces/services/sandbox";
+} from "@memorall/agent-harness-flows/interfaces/engine/tool";
+import type { AllServices } from "@memorall/agent-harness-flows/interfaces/services/services";
+import { toolRegistry } from "@memorall/agent-harness-flows/registries/tool-registry";
+import type { SandboxHandleSwRequestResult } from "@memorall/agent-harness-flows/interfaces/services/sandbox";
 
 const TOOL_NAME = "container_web_access_v2" as const;
 const DEFAULT_TIMEOUT_MS = 120_000;

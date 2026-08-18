@@ -11,8 +11,29 @@ const fixture = path.join(os.tmpdir(), "memorall-agent-harness-consumer");
 await rm(fixture, { recursive: true, force: true });
 await mkdir(fixture, { recursive: true });
 
-const tarballs = (await readdir(packs)).filter((name) => name.endsWith(".tgz"));
-if (tarballs.length !== 9) throw new Error(`Expected 9 harness tarballs, found ${tarballs.length}`);
+// Every workspace must have produced a tarball. Derived from the manifests rather
+// than counted, so adding a package to the family does not fail this on the count
+// alone — it fails only if packing actually missed one, which is what this checks.
+const harnessRoot = path.join(root, "packages", "agent-harness");
+const expectedTarballs = [];
+for (const entry of await readdir(harnessRoot, { withFileTypes: true })) {
+  if (!entry.isDirectory()) continue;
+  try {
+    const manifest = JSON.parse(await readFile(path.join(harnessRoot, entry.name, "package.json"), "utf8"));
+    if (!manifest.name) continue;
+    expectedTarballs.push(`${manifest.name.replace(/^@/, "").replaceAll("/", "-")}-${manifest.version}.tgz`);
+  } catch {
+    // Not a workspace directory.
+  }
+}
+
+const tarballs = new Set((await readdir(packs)).filter((name) => name.endsWith(".tgz")));
+const missing = expectedTarballs.filter((name) => !tarballs.has(name));
+if (missing.length > 0) throw new Error(`Missing harness tarballs: ${missing.join(", ")}`);
+
+// What the consumer fixture installs is a separate, deliberate list: the packages
+// an external consumer actually imports. `flows` is a registry package the facade
+// does not re-export, so it is packed and checked above but not installed here.
 const packageNames = {
   "memorall-agent-harness-core-0.1.0.tgz": "@memorall/agent-harness-core",
   "memorall-agent-harness-langgraph-0.1.0.tgz": "@memorall/agent-harness-langgraph",

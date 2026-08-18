@@ -21,12 +21,22 @@ import { isJobNotificationMessage } from "./types";
 export class ChromeRuntimeBridge implements IJobNotificationBridge {
 	private static readonly enqueueAttempts = 4;
 	private static readonly enqueueRetryDelayMs = 100;
+	// Only needs to outlive the window in which a duplicate can arrive, which is
+	// one relay hop.
+	private static readonly dispatchHistorySize = 512;
 	private readonly listeners = new Map<
 		string,
 		Set<(message: JobNotificationMessage) => void>
 	>();
 	private readonly contextType: ContextType;
 	private isReady = false;
+	private announcedAsConsumer = false;
+	// Sender-scoped so ids stay unique across service-worker restarts, where a
+	// plain counter would restart at 1 and collide with what receivers remember.
+	private readonly senderId = Math.random().toString(36).slice(2, 10);
+	private sequence = 0;
+	private readonly dispatchedIds = new Set<string>();
+	private readonly dispatchedOrder: string[] = [];
 
 	constructor(contextType?: ContextType) {
 		this.contextType = contextType ?? ChromeRuntimeBridge.detectContext();
@@ -63,6 +73,7 @@ export class ChromeRuntimeBridge implements IJobNotificationBridge {
 			(rawMessage: unknown, _sender, sendResponse) => {
 				if (!isJobNotificationMessage(rawMessage)) return;
 				if (!this.isForMe(rawMessage.target)) return;
+				if (this.alreadyDispatched(rawMessage)) return;
 				const hasJobConsumer =
 					(this.listeners.get(rawMessage.type)?.size ?? 0) > 0 ||
 					(this.listeners.get("*")?.size ?? 0) > 0;
@@ -87,6 +98,30 @@ export class ChromeRuntimeBridge implements IJobNotificationBridge {
 
 	private isForMe(target: MessageTarget): boolean {
 		return target === "all" || target === this.contextType;
+	}
+
+	/**
+	 * Drop a notification this context has already handled.
+	 *
+	 * An extension page open in a tab can be reached twice — directly by
+	 * chrome.runtime.sendMessage and again by the background relay. Delivering a
+	 * progress update twice makes the consumer append the same text twice, which
+	 * shows up as the assistant's own words interleaved with themselves. The
+	 * relay is careful not to do this, and this makes it harmless if it ever
+	 * does again.
+	 */
+	private alreadyDispatched(message: JobNotificationMessage): boolean {
+		const id = message.messageId;
+		if (!id) return false;
+		if (this.dispatchedIds.has(id)) return true;
+
+		this.dispatchedIds.add(id);
+		this.dispatchedOrder.push(id);
+		if (this.dispatchedOrder.length > ChromeRuntimeBridge.dispatchHistorySize) {
+			const evicted = this.dispatchedOrder.shift();
+			if (evicted) this.dispatchedIds.delete(evicted);
+		}
+		return false;
 	}
 
 	private dispatch(message: JobNotificationMessage): void {
@@ -118,10 +153,26 @@ export class ChromeRuntimeBridge implements IJobNotificationBridge {
 			this.listeners.set(messageType, bucket);
 		}
 		bucket.add(listener);
+		this.announceContentConsumer();
 		return () => {
 			bucket!.delete(listener);
 			if (bucket!.size === 0) this.listeners.delete(messageType);
 		};
+	}
+
+	/**
+	 * Tell the background this tab consumes job notifications.
+	 *
+	 * Broadcasts reach content scripts only through a background relay, and that
+	 * relay now only talks to tabs known to be listening — otherwise a streaming
+	 * chat messages every open tab once per chunk for nothing. A content script
+	 * that subscribes without ever enqueueing a job would be invisible to it, so
+	 * it says so itself.
+	 */
+	private announceContentConsumer(): void {
+		if (this.contextType !== "content" || this.announcedAsConsumer) return;
+		this.announcedAsConsumer = true;
+		this.send({ type: "QUEUE_UPDATED", target: "background" });
 	}
 
 	async notifyJobEnqueued(
@@ -247,10 +298,12 @@ export class ChromeRuntimeBridge implements IJobNotificationBridge {
 	private createMessage(
 		partial: Omit<JobNotificationMessage, "sender" | "timestamp">,
 	): JobNotificationMessage {
+		this.sequence += 1;
 		return {
 			...partial,
 			sender: this.contextType,
 			timestamp: Date.now(),
+			messageId: `${this.senderId}:${this.sequence}`,
 		};
 	}
 }

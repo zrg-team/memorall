@@ -27,7 +27,7 @@ import {
 	SelectValue,
 } from "@/main/components/ui/select";
 import type { FeatureDetailViewSlot } from "@/services/flow-feature-catalog-service";
-import { DEFAULT_CONTEXT_SYSTEM_PROMPT } from "@/services/flows-legacy/steps/common/context-to-system";
+import { DEFAULT_CONTEXT_SYSTEM_PROMPT } from "@memorall/agent-harness-flows/steps/common/context-to-system";
 import {
 	getAgentFeatureDescription,
 	getAgentFeatureDisplayName,

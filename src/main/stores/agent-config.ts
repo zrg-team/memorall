@@ -1,23 +1,23 @@
 import { create } from "zustand";
 import { serviceManager } from "@/services";
-import { toolRegistry } from "@/services/flows-legacy/registries/tool-registry";
-import { buildDefaultFlowConfig } from "@/services/flows-legacy/utils/flow-config";
-import { mergeWithDefaultConfig } from "@/services/flows-legacy/utils/flow-config";
+import { toolRegistry } from "@memorall/agent-harness-flows/registries/tool-registry";
+import { buildDefaultFlowConfig } from "@memorall/agent-harness-flows/utils/flow-config";
+import { mergeWithDefaultConfig } from "@memorall/agent-harness-flows/utils/flow-config";
 import {
 	DEFAULT_FOUNDATION_PREDEFINED_CONFIG,
 	type FoundationPredefinedConfig,
-} from "@/services/flows-legacy/graph/foundation/state";
-import { DEFAULT_AGENT_SYSTEM_PROMPT } from "@/services/flows-legacy/graph/agent/state";
-import { DEFAULT_FOUNDATION_SYSTEM_PROMPT } from "@/services/flows-legacy/graph/foundation/state";
-import type { UnifiedFlowConfig } from "@/services/flows-legacy/interfaces/config/flow-config";
-import { DEFAULT_CONTEXT_SYSTEM_PROMPT } from "@/services/flows-legacy/steps/common/context-to-system";
-import { MULTI_AGENT_FEATURE_NAME } from "@/services/flows-legacy/steps/features/multi-agent-feature";
+} from "@memorall/agent-harness-flows/graph/foundation/state";
+import { DEFAULT_AGENT_SYSTEM_PROMPT } from "@memorall/agent-harness-flows/graph/agent/state";
+import { DEFAULT_FOUNDATION_SYSTEM_PROMPT } from "@memorall/agent-harness-flows/graph/foundation/state";
+import type { UnifiedFlowConfig } from "@memorall/agent-harness-flows/interfaces/config/flow-config";
+import { DEFAULT_CONTEXT_SYSTEM_PROMPT } from "@memorall/agent-harness-flows/steps/common/context-to-system";
+import { MULTI_AGENT_FEATURE_NAME } from "@memorall/agent-harness-flows/steps/features/multi-agent-feature/index";
 import {
 	MCP_FEATURE_NAME,
 	type MCPConnectionSelection,
-} from "@/services/flows-legacy/steps/features/mcp-feature";
+} from "@memorall/agent-harness-flows/steps/features/mcp-feature/index";
 import { migrateLegacyServers } from "@/services/mcp-connections";
-import { ADD_SKILL_CONTEXT_STEP_NAME } from "@/services/flows-legacy/steps/common/add-skill-context";
+import { ADD_SKILL_CONTEXT_STEP_NAME } from "@memorall/agent-harness-flows/steps/common/add-skill-context";
 import { logError } from "@/utils/logger";
 import { deepEqual } from "@/utils/deep-equal";
 import type {

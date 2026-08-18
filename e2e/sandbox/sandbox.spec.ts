@@ -237,7 +237,10 @@ test("static preview request, render URL, and Runtime Sessions UI", async ({
 		history.pushState({}, "", "/runtime");
 		window.dispatchEvent(new PopStateEvent("popstate"));
 	});
-	await expect(extensionPage.getByText("Runtime Sessions", { exact: false }).first()).toBeVisible();
+	// Assert the page itself, not the empty state: "Runtime Sessions" only ever
+	// matched "No active runtime sessions", which renders only when no session
+	// exists — the opposite of the port assertion below.
+	await expect(extensionPage.getByRole("heading", { name: "Runtime", exact: true }).first()).toBeVisible();
 	await expect(extensionPage.getByText("4173", { exact: false }).first()).toBeVisible();
 	const servers = await runSandboxOperation<{
 		servers: Array<{ port: number }>;

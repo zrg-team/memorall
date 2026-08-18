@@ -40,7 +40,7 @@ import { cn } from "@/lib/utils";
 import type {
 	FlowStateInput,
 	FlowCatalog,
-} from "@/services/flows-legacy/interfaces/config/flow-builder";
+} from "@memorall/agent-harness-flows/interfaces/config/flow-builder";
 import type { CatalogStep } from "@/services/flow-builder-catalog";
 
 const STATE_TYPES = [

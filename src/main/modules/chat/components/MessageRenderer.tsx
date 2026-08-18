@@ -266,12 +266,14 @@ export const MessageRenderer: React.FC<MessageRendererProps> = React.memo(
 											<UserMessageContent
 												content={message.content}
 												isStreaming={isStreaming}
+												messageId={message.id}
 											/>
 										) : hasStructuredAssistantContent ? (
 											<>
 												<AssistantContentFlow
 													parts={renderedAssistantContentParts}
 													isStreaming={isStreaming}
+													messageId={message.id}
 													suppressArtifactPreviews={
 														location.pathname === "/runtime"
 													}

@@ -2,14 +2,14 @@ import z from "zod";
 import type {
 	Tool,
 	ToolFactory,
-} from "@/services/flows-legacy/interfaces/engine/tool";
-import type { AllServices } from "@/services/flows-legacy/interfaces/services/services";
-import { toolRegistry } from "@/services/flows-legacy/registries/tool-registry";
+} from "@memorall/agent-harness-flows/interfaces/engine/tool";
+import type { AllServices } from "@memorall/agent-harness-flows/interfaces/services/services";
+import { toolRegistry } from "@memorall/agent-harness-flows/registries/tool-registry";
 import {
 	appendAssistantOutputToState,
 	type BaseStateBase,
-} from "@/services/flows-legacy/graph/graph.base";
-import { preprocessComposition } from "@/services/flows-legacy/tools/hyperframes/composition-preprocessor";
+} from "@memorall/agent-harness-flows/graph/graph.base";
+import { preprocessComposition } from "@/services/flows-integrations/tools/hyperframes/composition-preprocessor";
 
 const TOOL_NAME = "render_artifact" as const;
 

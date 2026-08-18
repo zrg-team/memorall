@@ -5,7 +5,7 @@ import type { DocumentTreeNode } from "@/types/document-library";
 import type { ILLMService } from "@/services/llm/interfaces/llm-service.interface";
 import type { ISandboxContainerService } from "@/services/sandbox-container";
 import { createAgentSandboxService } from "@/services/agent-sandbox";
-import type { IAgentSandboxService } from "./flows-legacy/interfaces/services/agent-sandbox";
+import type { IAgentSandboxService } from "@memorall/agent-harness-flows/interfaces/services/agent-sandbox";
 import type {
 	SandboxExecuteCommandRequest,
 	SandboxExecutionRequest,
@@ -46,27 +46,28 @@ import type {
 	DirEntry,
 	FileStat,
 	IFlowFileSystem,
-} from "./flows-legacy/interfaces/services/filesystem";
-import type { IFlowLLMService } from "./flows-legacy/interfaces/services/llm";
+} from "@memorall/agent-harness-flows/interfaces/services/filesystem";
+import type { IFlowLLMService } from "@memorall/agent-harness-flows/interfaces/services/llm";
 import type {
 	IFlowSandboxService,
 	SandboxRequest,
-} from "./flows-legacy/interfaces/services/sandbox";
-import type { SandboxCommandResult } from "./flows-legacy/interfaces/services/sandbox";
+} from "@memorall/agent-harness-flows/interfaces/services/sandbox";
+import type { SandboxCommandResult } from "@memorall/agent-harness-flows/interfaces/services/sandbox";
 import type {
 	IFlowWebBrowserService,
 	WebOpenSessionResult as FlowWebOpenSessionResult,
 	WebRefreshSessionArgs as FlowWebRefreshSessionArgs,
 	WebRenderedFallbackResult as FlowWebRenderedFallbackResult,
-} from "./flows-legacy/interfaces/services/web-browser";
-import type { IFlowLogger } from "./flows-legacy/utils/logger";
-import { setFlowLogger } from "./flows-legacy/utils/logger";
-import { serviceRegistry } from "./flows-legacy/registries/service-registry";
+} from "@memorall/agent-harness-flows/interfaces/services/web-browser";
+import type { IFlowLogger } from "@memorall/agent-harness-flows/logging/logger";
+import { setFlowLogger } from "@memorall/agent-harness-flows/logging/logger";
+import { setHtmlParser } from "@memorall/agent-harness-flows/utils/html-parser";
+import { serviceRegistry } from "@memorall/agent-harness-flows/registries/service-registry";
 import type {
 	ChatCompletionChunk,
 	ChatCompletionRequest,
 	ChatCompletionResponse,
-} from "./flows-legacy/interfaces/engine/messages";
+} from "@memorall/agent-harness-flows/interfaces/engine/messages";
 import { schema as appDatabaseSchema } from "@/services/database/schema";
 import type {
 	IKnowledgeDatabase,
@@ -625,3 +626,9 @@ export const registerFlowSandbox = (
 		toAgentSandbox(service, serviceRegistry.resolve("fs")),
 	);
 };
+
+// The flow package parses HTML through whatever the host installs, so it stays
+// runnable under Node as well as in the browser. Every context this app runs in
+// — extension pages, the offscreen document, the desktop and web frontends —
+// has DOMParser, so it is wired once here rather than per call site.
+setHtmlParser((html) => new DOMParser().parseFromString(html, "text/html"));

@@ -1,15 +1,15 @@
 import {
 	defineStep,
 	bindStep,
-} from "@/services/flows-legacy/interfaces/engine/step";
+} from "@memorall/agent-harness-flows/interfaces/engine/step";
 import type {
 	StepFactoryFromSpec,
 	StepSpecFromDefinition,
-} from "@/services/flows-legacy/interfaces/engine/step";
-import { stepRegistry } from "@/services/flows-legacy/registries/step-registry";
-import type {} from "@/services/flows-legacy/interfaces/engine/tool";
-import type { AllServices } from "@/services/flows-legacy/interfaces/services/services";
-import type { ChatCompletionResponse } from "@/services/flows-legacy/interfaces/engine/messages";
+} from "@memorall/agent-harness-flows/interfaces/engine/step";
+import { stepRegistry } from "@memorall/agent-harness-flows/registries/step-registry";
+import type {} from "@memorall/agent-harness-flows/interfaces/engine/tool";
+import type { AllServices } from "@memorall/agent-harness-flows/interfaces/services/services";
+import type { ChatCompletionResponse } from "@memorall/agent-harness-flows/interfaces/engine/messages";
 import type {
 	StructMemEntry,
 	StructMemEvent,
@@ -22,7 +22,10 @@ import {
 	parseStringArray,
 	warnParseFailure,
 } from "./structmem-utils";
-import { logError, logInfo } from "@/services/flows-legacy/utils/logger";
+import {
+	logError,
+	logInfo,
+} from "@memorall/agent-harness-flows/logging/logger";
 
 const STEP_NAME = "structmem-consolidation" as const;
 

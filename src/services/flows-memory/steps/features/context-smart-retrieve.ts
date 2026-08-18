@@ -7,17 +7,20 @@
 
 import { Annotation } from "@langchain/langgraph";
 import type { RetrievalPipelineState } from "flow-memory/interfaces/retrieval-state";
-import { logInfo, logError } from "@/services/flows-legacy/utils/logger";
+import {
+	logInfo,
+	logError,
+} from "@memorall/agent-harness-flows/logging/logger";
 import {
 	defineStep,
 	bindStep,
 	type StepOutput,
-} from "@/services/flows-legacy/interfaces/engine/step";
+} from "@memorall/agent-harness-flows/interfaces/engine/step";
 import type {
 	StepFactoryFromSpec,
 	StepSpecFromDefinition,
-} from "@/services/flows-legacy/interfaces/engine/step";
-import { stepRegistry } from "@/services/flows-legacy/registries/step-registry";
+} from "@memorall/agent-harness-flows/interfaces/engine/step";
+import { stepRegistry } from "@memorall/agent-harness-flows/registries/step-registry";
 import type {
 	SmartRetrieveOutput,
 	SmartRetrieveServices,
@@ -25,12 +28,12 @@ import type {
 	SmartRetrievalConfig,
 } from "../knowledge-retrieval/smart-retrieve";
 import type { EntitiesFactsToContextOutput } from "../knowledge-retrieval/entities-facts-to-context";
-import { extractRetrievalTextFromMessages } from "@/services/flows-legacy/utils/message-query";
+import { extractRetrievalTextFromMessages } from "@memorall/agent-harness-flows/utils/message-query";
 import type {
 	ContextToSystemConfig,
 	ContextToSystemInput,
 	ContextToSystemOutput,
-} from "@/services/flows-legacy/steps/common/context-to-system";
+} from "@memorall/agent-harness-flows/steps/common/context-to-system";
 
 const STEP_NAME = "context-smart-retrieve" as const;
 

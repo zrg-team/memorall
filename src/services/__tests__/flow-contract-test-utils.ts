@@ -1,12 +1,12 @@
 import { expect } from "vitest";
-import type { BaseTool } from "@/services/flows-legacy/interfaces/engine/tool";
-import { defaultRegistries } from "@/services/flows-legacy/registries/registry-set";
-import { convertToolsToOpenAI } from "@/services/flows-legacy/registries/tool-registry";
+import type { BaseTool } from "@memorall/agent-harness-flows/interfaces/engine/tool";
+import { defaultRegistries } from "@memorall/agent-harness-flows/registries/registry-set";
+import { convertToolsToOpenAI } from "@memorall/agent-harness-flows/registries/tool-registry";
 import {
 	stepRegistry,
 	type RegisteredStep,
-} from "@/services/flows-legacy/registries/step-registry";
-import { toolRegistry } from "@/services/flows-legacy/registries/tool-registry";
+} from "@memorall/agent-harness-flows/registries/step-registry";
+import { toolRegistry } from "@memorall/agent-harness-flows/registries/tool-registry";
 
 export const sortedDelta = (before: Set<string>, after: string[]): string[] =>
 	after.filter((name) => !before.has(name)).sort((a, b) => a.localeCompare(b));

@@ -1,6 +1,6 @@
 import type { IFlowDatabase } from "./interfaces/database";
 import type { IFlowEmbeddingService } from "./interfaces/embedding";
-import { serviceRegistry } from "@/services/flows-legacy/registries/service-registry";
+import { serviceRegistry } from "@memorall/agent-harness-flows/registries/service-registry";
 
 serviceRegistry.registerSchema("database", {
 	name: "Database",

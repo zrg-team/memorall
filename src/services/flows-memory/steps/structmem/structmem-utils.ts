@@ -1,8 +1,11 @@
 import type { Node } from "../../interfaces/knowledge";
 import type { IEmbeddingService } from "../../interfaces/embedding";
-import type { ChatCompletionResponse } from "@/services/flows-legacy/interfaces/engine/messages";
+import type { ChatCompletionResponse } from "@memorall/agent-harness-flows/interfaces/engine/messages";
 import { getCurrentEmbeddingFields } from "../../utils/embedding-size-config";
-import { logError, logWarn } from "@/services/flows-legacy/utils/logger";
+import {
+	logError,
+	logWarn,
+} from "@memorall/agent-harness-flows/logging/logger";
 import type {
 	StructMemEntry,
 	StructMemEntryKind,

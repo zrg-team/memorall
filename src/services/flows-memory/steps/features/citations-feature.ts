@@ -1,4 +1,4 @@
-import { stepRegistry } from "@/services/flows-legacy/registries/step-registry";
+import { stepRegistry } from "@memorall/agent-harness-flows/registries/step-registry";
 const STEP_NAME = "citations" as const;
 
 stepRegistry.register(STEP_NAME, {
