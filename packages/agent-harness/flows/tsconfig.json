@@ -4,8 +4,7 @@
     "lib": ["ES2023", "DOM"],
     "rootDir": "src",
     "outDir": "dist",
-    "tsBuildInfoFile": "../.cache/flows.tsbuildinfo",
-    "noUncheckedIndexedAccess": false
+    "tsBuildInfoFile": "../.cache/flows.tsbuildinfo"
   },
   "include": ["src/**/*.ts"],
   "exclude": ["src/**/__tests__/**"],

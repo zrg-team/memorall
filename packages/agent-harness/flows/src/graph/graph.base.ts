@@ -13,7 +13,10 @@ import type {
 	ChatCompletionToolMessageParam,
 	ChatCompletionTool,
 } from "../interfaces/engine/messages.js";
-import { convertToolsToOpenAI } from "../registries/tool-registry.js";
+import {
+	convertToolsToOpenAI,
+	convertToolToOpenAI,
+} from "../registries/tool-registry.js";
 import type {
 	BaseTool,
 	ToolBinding,
@@ -401,6 +404,7 @@ const createChatHelpers = (registries: FlowRegistrySet) => ({
 		const lastUserIdx = messages.findLastIndex((m) => m.role === "user");
 		if (lastUserIdx === -1) return messages;
 		const lastUser = messages[lastUserIdx];
+		if (!lastUser) return messages;
 		const updated = [...messages];
 		updated[lastUserIdx] = (
 			typeof lastUser.content === "string"
@@ -435,7 +439,7 @@ const createChatHelpers = (registries: FlowRegistrySet) => ({
 	): CombinedTool[] => {
 		return toolNames.map((tool): CombinedTool => {
 			if (isRawBaseTool(tool)) {
-				return { executor: tool, tool: convertToolsToOpenAI([tool])[0] };
+				return { executor: tool, tool: convertToolToOpenAI(tool) };
 			}
 			const executor =
 				typeof tool === "string"
@@ -445,7 +449,7 @@ const createChatHelpers = (registries: FlowRegistrySet) => ({
 							services,
 							(tool as ConfiguredGraphTool).config,
 						);
-			return { executor, tool: convertToolsToOpenAI([executor])[0] };
+			return { executor, tool: convertToolToOpenAI(executor) };
 		});
 	},
 });

@@ -49,7 +49,8 @@ export const decodeBase64Bytes = (base64: string): Uint8Array => {
 };
 
 const normalizeMimeType = (contentType: string | null): string =>
-	(contentType ?? "application/octet-stream").split(";", 1)[0].trim();
+	(contentType ?? "application/octet-stream").split(";", 1)[0]?.trim() ??
+	"application/octet-stream";
 
 const assertAllowedMimeType = (
 	mimeType: string,

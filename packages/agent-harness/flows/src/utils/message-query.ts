@@ -27,13 +27,13 @@ export const extractRetrievalTextFromMessages = (
 ): string => {
 	for (let i = messages.length - 1; i >= 0; i -= 1) {
 		const message = messages[i];
-		if (message.role !== "user") continue;
+		if (!message || message.role !== "user") continue;
 		const text = contentToText(message.content).trim();
 		if (text) return text;
 	}
 
 	for (let i = messages.length - 1; i >= 0; i -= 1) {
-		const text = contentToText(messages[i].content).trim();
+		const text = contentToText(messages[i]?.content).trim();
 		if (text) return text;
 	}
 

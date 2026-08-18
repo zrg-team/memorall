@@ -166,6 +166,18 @@ const toOpenAIToolParameters = (schema: ToolSchema): Record<string, unknown> =>
 /**
  * Convert tools to OpenAI ChatCompletionTool format
  */
+/** The single-tool form, so callers do not index into a one-element array. */
+export function convertToolToOpenAI(tool: BaseTool): ChatCompletionTool {
+	return {
+		type: "function" as const,
+		function: {
+			name: tool.name,
+			description: tool.description,
+			parameters: toOpenAIToolParameters(tool.schema),
+		},
+	};
+}
+
 export function convertToolsToOpenAI(tools: BaseTool[]): ChatCompletionTool[] {
 	return tools.map((tool) => ({
 		type: "function" as const,

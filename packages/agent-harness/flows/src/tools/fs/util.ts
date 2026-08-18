@@ -272,9 +272,9 @@ export async function runGrep(
 		const lines = text.split(/\r?\n/);
 		const matchingLineNums: number[] = [];
 
-		for (let i = 0; i < lines.length; i++) {
+		for (const [i, line] of lines.entries()) {
 			contentRegex.lastIndex = 0;
-			if (contentRegex.test(lines[i])) {
+			if (contentRegex.test(line)) {
 				matchingLineNums.push(i);
 			}
 		}

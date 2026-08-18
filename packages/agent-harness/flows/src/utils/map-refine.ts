@@ -116,8 +116,8 @@ export async function mapRefine<T>(
 	let results: T[] = [];
 	const systemPromptTokens = estimateTokens(systemPrompt);
 
-	for (let i = 0; i < chunks.length; i++) {
-		let currentChunk = chunks[i];
+	for (const [i, chunk] of chunks.entries()) {
+		let currentChunk = chunk;
 		let processedSuccessfully = false;
 		let errorContext: string | null = null;
 
@@ -145,12 +145,14 @@ export async function mapRefine<T>(
 						let resultsTokens = 0;
 
 						for (let j = results.length - 1; j >= 0; j--) {
+							const result = results[j];
+							if (result === undefined) continue;
 							const resultSummary = dedupeBy
-								? dedupeBy(results[j])
-								: JSON.stringify(results[j]);
+								? dedupeBy(result)
+								: JSON.stringify(result);
 							const resultTokens = estimateTokens(resultSummary);
 							if (resultsTokens + resultTokens <= maxResultsTokens) {
-								truncatedResults.unshift(results[j]);
+								truncatedResults.unshift(result);
 								resultsTokens += resultTokens;
 							} else {
 								break;
@@ -203,7 +205,7 @@ export async function mapRefine<T>(
 
 							if (subChunks.length > 1) {
 								chunks.splice(i, 1, ...subChunks);
-								currentChunk = chunks[i];
+								currentChunk = subChunks[0] ?? currentChunk;
 								errorContext = null; // Reset error context for new chunk
 							} else {
 								processedSuccessfully = true;
@@ -219,7 +221,7 @@ export async function mapRefine<T>(
 
 						if (subChunks.length > 1) {
 							chunks.splice(i, 1, ...subChunks);
-							currentChunk = chunks[i];
+							currentChunk = subChunks[0] ?? currentChunk;
 							errorContext = null; // Reset error context for new chunk
 						} else {
 							processedSuccessfully = true;
@@ -236,7 +238,9 @@ export async function mapRefine<T>(
 
 					if (subChunks.length > 1) {
 						chunks.splice(i, 1, ...subChunks);
-						currentChunk = chunks[i];
+						// splice put subChunks[0] at i, and the branch is guarded on
+						// subChunks.length > 1, so this is the same element.
+						currentChunk = subChunks[0] ?? currentChunk;
 						errorContext = null; // Reset error context for new chunk
 					} else {
 						processedSuccessfully = true;

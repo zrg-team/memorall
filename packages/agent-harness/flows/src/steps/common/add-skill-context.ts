@@ -96,6 +96,7 @@ const definition = defineStep<Input, Output, Services, Config>({
 
 			for (const match of textContent.matchAll(/@skill:([\w-]+)/g)) {
 				const name = match[1];
+				if (!name) continue;
 				if (skillNameSet.has(name) && !mentionedNames.includes(name)) {
 					mentionedNames.push(name);
 				}

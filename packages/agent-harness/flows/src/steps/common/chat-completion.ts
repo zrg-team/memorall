@@ -71,12 +71,12 @@ const definition = defineStep<
 		let responseContent = "";
 		if (stream && Symbol.asyncIterator in llmResponse) {
 			for await (const chunk of llmResponse as AsyncIterableIterator<ChatCompletionChunk>) {
-				responseContent += chunk.choices[0].delta.content || "";
+				responseContent += chunk.choices[0]?.delta?.content || "";
 				runConfig?.writer?.({ type: "llm", chunk });
 			}
 		} else {
 			const response = llmResponse as ChatCompletionResponse;
-			responseContent = response.choices[0].message.content || "";
+			responseContent = response.choices[0]?.message?.content || "";
 		}
 
 		return {

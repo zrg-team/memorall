@@ -241,8 +241,7 @@ function logTokenBreakdown(state: AutoCompactState): void {
 		["messages", state.messages],
 		["outputMessages", state.outputMessages],
 	] as const) {
-		for (let i = 0; i < msgs.length; i++) {
-			const m = msgs[i];
+		for (const [i, m] of msgs.entries()) {
 			const contentChars =
 				typeof m.content === "string"
 					? m.content.length
@@ -546,6 +545,7 @@ function removeOldestToolCallFlowOnce(
 
 	const assistantMessage = state[key][index];
 	if (
+		!assistantMessage ||
 		assistantMessage.role !== "assistant" ||
 		!assistantMessage.tool_calls?.length
 	) {
@@ -604,7 +604,7 @@ function getLatestUserRef(
 ): { key: keyof AutoCompactState; index: number } | undefined {
 	for (const key of ["outputMessages", "messages"] as const) {
 		for (let index = state[key].length - 1; index >= 0; index--) {
-			if (state[key][index].role === "user") {
+			if (state[key][index]?.role === "user") {
 				return { key, index };
 			}
 		}

@@ -46,8 +46,7 @@ needs a browser or Node API, it belongs in the host.
 
 ## Known gaps
 
-- `noUncheckedIndexedAccess` is off here and on everywhere else. Turning it on
-  surfaces 72 real "possibly undefined" sites inherited from the application.
 - The internal layers are not yet a DAG (`graph ↔ runtime`, `interfaces ↔
-  registries`, `steps ↔ tools`, and three more), which is what keeps this a
-  single package rather than several.
+  registries`, `steps ↔ tools`, `graph ↔ registries`, `interfaces ↔ runtime`,
+  `registries ↔ utils`), which is what keeps this a single package rather than
+  several. Breaking those cycles is the work that unlocks a finer split.

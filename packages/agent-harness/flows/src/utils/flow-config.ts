@@ -225,16 +225,18 @@ export function mergeWithDefaultConfig(
 			typeof savedStep.id === "string"
 				? stepIndexesById.get(savedStep.id)
 				: undefined;
-		if (byIdIndex !== undefined && !matchedIndexes.has(byIdIndex)) {
-			Object.assign(base.steps[byIdIndex], savedStep);
+		const byIdStep = byIdIndex === undefined ? undefined : base.steps[byIdIndex];
+		if (byIdIndex !== undefined && byIdStep && !matchedIndexes.has(byIdIndex)) {
+			Object.assign(byIdStep, savedStep);
 			matchedIndexes.add(byIdIndex);
 			continue;
 		}
 
 		const byNameIndexes = stepIndexesByName.get(savedStep.name) ?? [];
 		const nextIndex = byNameIndexes.find((index) => !matchedIndexes.has(index));
-		if (nextIndex !== undefined) {
-			Object.assign(base.steps[nextIndex], savedStep);
+		const nextStep = nextIndex === undefined ? undefined : base.steps[nextIndex];
+		if (nextIndex !== undefined && nextStep) {
+			Object.assign(nextStep, savedStep);
 			matchedIndexes.add(nextIndex);
 		}
 	}
