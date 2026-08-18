@@ -262,27 +262,30 @@ describe("agent sandbox tools", () => {
 	});
 
 	it("preserves MCP structured content and metadata at the adapter boundary", async () => {
-		const tool = adaptMCPTool({
-			name: "remote_sandbox",
-			description: "Remote sandbox test",
-			schema: { type: "object", properties: {} },
-			metadata: {
-				source: "mcp",
-				mcp: {
-					serverName: "remote",
+		const manager = {
+			call: vi.fn(async () => ({
+				content: [{ type: "text", text: "completed" }],
+				structuredContent: { sessionId: "remote-session" },
+				meta: { operationId: "remote-op" },
+			})),
+		};
+		const tool = adaptMCPTool(
+			manager as never,
+			{
+				serverId: "remote",
+				name: "sandbox",
+				exposedName: "remote__sandbox",
+				title: "Remote Sandbox",
+				description: "Remote sandbox test",
+				inputSchema: { type: "object", properties: {} },
+				outputSchema: { type: "object" },
+				metadata: {
+					source: "mcp",
+					serverId: "remote",
 					originalToolName: "sandbox",
-					title: "Remote Sandbox",
-					outputSchema: { type: "object" },
 				},
-			},
-			invoke: vi.fn(async () =>
-				JSON.stringify({
-					text: "completed",
-					structuredContent: { sessionId: "remote-session" },
-					meta: { operationId: "remote-op" },
-				}),
-			),
-		} as never);
+			} as never,
+		);
 		const extracted = extractToolResult(await tool.execute({}));
 
 		expect(tool.title).toBe("Remote Sandbox");

@@ -17,6 +17,8 @@ export interface McpHttpServerConfig {
   readonly transport?: McpHttpTransportKind;
   readonly headers?: Readonly<Record<string, string>>;
   readonly reconnect?: McpReconnectOptions;
+  /** Set false to try only the configured transport. Defaults to true. */
+  readonly automaticSseFallback?: boolean;
 }
 
 const reconnectionOptions = (options?: McpReconnectOptions) => options ? {

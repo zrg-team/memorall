@@ -13,15 +13,19 @@ import {
 	defineStep,
 } from "@/services/flows-core/interfaces/engine/step";
 import { stepRegistry } from "@/services/flows-core/registries/step-registry";
-import { adaptMCPTool } from "@/services/flows-core/steps/features/mcp-feature/mcp-tool-adapter";
+import {
+	adaptMCPTool,
+	PERMISSIVE_MCP_OUTPUT_VALIDATION,
+} from "@/services/flows-core/steps/features/mcp-feature/mcp-tool-adapter";
 import type {
 	MCPFeatureConfig,
 	MCPServerConfig,
 } from "@/services/flows-core/steps/features/mcp-feature/types";
 import {
-	MultiServerMCPClient,
-	type StreamableHTTPConnection,
-} from "@/services/flows-core/utils/langchain-mcp-adapter/index";
+	McpClientManager,
+	type McpHttpServerConfig,
+	type McpToolDescriptor,
+} from "@memorall/agent-harness-mcp";
 import { logError, logInfo } from "@/services/flows-core/utils/logger";
 
 const STEP_NAME = "mcp-feature" as const;
@@ -46,17 +50,13 @@ export const MCP_FEATURE_DESCRIPTION =
 
 const buildClientServersConfig = (
 	servers: MCPServerConfig[],
-): Record<string, StreamableHTTPConnection> =>
-	Object.fromEntries(
-		servers.map((server) => {
-			const conn: StreamableHTTPConnection = {
-				type: server.type,
-				url: server.url,
-				...(server.headers ? { headers: server.headers } : {}),
-			};
-			return [server.name, conn];
-		}),
-	);
+): McpHttpServerConfig[] =>
+	servers.map((server) => ({
+		id: server.name,
+		transport: server.type,
+		url: server.url,
+		...(server.headers ? { headers: server.headers } : {}),
+	}));
 
 /**
  * Connected MCP clients, keyed by the exact server set they were opened for.
@@ -69,7 +69,7 @@ const buildClientServersConfig = (
  * long-lived offscreen document does not hold sockets open forever.
  */
 interface CachedMCPSession {
-	client: MultiServerMCPClient;
+	manager: McpClientManager;
 	tools: ReturnType<typeof adaptMCPTool>[];
 	idleTimer: ReturnType<typeof setTimeout> | null;
 }
@@ -104,7 +104,7 @@ const touchSession = (key: string, session: CachedMCPSession): void => {
 		session.tools.length > 0 ? MCP_SESSION_IDLE_MS : MCP_FAILED_SESSION_TTL_MS;
 	session.idleTimer = setTimeout(() => {
 		mcpSessions.delete(key);
-		void session.client.close().catch((error) => {
+		void session.manager.close().catch((error) => {
 			logError("[MCP_FEATURE] Failed to close an idle MCP session:", error);
 		});
 	}, ttl);
@@ -112,24 +112,31 @@ const touchSession = (key: string, session: CachedMCPSession): void => {
 
 const openSession = async (
 	servers: MCPServerConfig[],
-	key: string,
 ): Promise<CachedMCPSession> => {
-	const client = new MultiServerMCPClient({
-		mcpServers: buildClientServersConfig(servers),
-		throwOnLoadError: false,
+	const manager = new McpClientManager(buildClientServersConfig(servers), {
+		name: "memorall",
 		// Two servers exposing a common name (`search`, `fetch`) would otherwise
 		// collide and silently shadow each other.
-		prefixToolNameWithServerName: true,
-		// Previously "ignore" — a dead server left no trace anywhere, so the
-		// Connections UI had no error to show and the user saw silent no-ops.
-		onConnectionError: ({ serverName, error }) => {
-			logError(`[MCP_FEATURE] Server "${serverName}" failed:`, error);
-		},
+		prefixToolNames: true,
+		jsonSchemaValidator: PERMISSIVE_MCP_OUTPUT_VALIDATION,
 	});
 
-	await client.initializeConnections();
-	const tools = (await client.getTools()).map(adaptMCPTool);
-	return { client, tools, idleTimer: null };
+	// One unreachable server must not cost the agent the tools of the others.
+	// A dead server is logged rather than swallowed, so the Connections UI has
+	// something to show instead of a silent no-op.
+	const descriptors: McpToolDescriptor[] = [];
+	for (const server of servers) {
+		try {
+			descriptors.push(...(await manager.discover([server.name])));
+		} catch (error) {
+			logError(`[MCP_FEATURE] Server "${server.name}" failed:`, error);
+		}
+	}
+
+	const tools = descriptors.map((descriptor) =>
+		adaptMCPTool(manager, descriptor),
+	);
+	return { manager, tools, idleTimer: null };
 };
 
 /**
@@ -151,13 +158,13 @@ const getSessionTools = async (
 
 	let session: CachedMCPSession;
 	try {
-		session = await openSession(servers, key);
+		session = await openSession(servers);
 	} catch (error) {
 		logError("[MCP_FEATURE] Failed to open an MCP session:", error);
 		session = {
-			client: {
+			manager: {
 				close: async () => undefined,
-			} as unknown as MultiServerMCPClient,
+			} as unknown as McpClientManager,
 			tools: [],
 			idleTimer: null,
 		};
