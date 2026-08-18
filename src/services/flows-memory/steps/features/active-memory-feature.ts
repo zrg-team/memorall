@@ -1,21 +1,21 @@
 import {
 	defineStep,
 	bindStep,
-} from "@/services/flows-legacy/interfaces/engine/step";
+} from "@/services/flows-core/interfaces/engine/step";
 import type {
 	BoundStep,
 	StepFactoryFromSpec,
 	StepSpecFromDefinition,
-} from "@/services/flows-legacy/interfaces/engine/step";
-import { logError } from "@/services/flows-legacy/utils/logger";
-import { stepRegistry } from "@/services/flows-legacy/registries/step-registry";
+} from "@/services/flows-core/interfaces/engine/step";
+import { logError } from "@/services/flows-core/utils/logger";
+import { stepRegistry } from "@/services/flows-core/registries/step-registry";
 import {
 	GraphBase,
 	type GraphTool,
-} from "@/services/flows-legacy/graph/graph.base";
-import type { ChatCompletionMessageParam } from "@/services/flows-legacy/interfaces/engine/messages";
+} from "@/services/flows-core/graph/graph.base";
+import type { ChatCompletionMessageParam } from "@/services/flows-core/interfaces/engine/messages";
 import { ACTIVE_MEMORY_TOOLS } from "../../tools/active-memory";
-import { getFlowRuntimeVars } from "@/services/flows-legacy/runtime/runtime-context";
+import { getFlowRuntimeVars } from "@/services/flows-core/runtime/runtime-context";
 
 const STEP_NAME = "active-memory-feature" as const;
 export const ACTIVE_MEMORY_FEATURE_NAME = STEP_NAME;

@@ -1,5 +1,10 @@
 import { BaseProcessHandler } from "./base-process-handler";
-import type { ProcessDependencies, BaseJob, ItemHandlerResult } from "./types";
+import type {
+	ProcessDependencies,
+	BaseJob,
+	ItemHandlerResult,
+	JobProgressUpdate,
+} from "./types";
 import { serviceManager } from "@/services";
 import type {
 	ChatCompletionRequest,
@@ -14,7 +19,7 @@ import {
 	isCustomChunkPayload,
 	normalizeLangGraphStreamChunk,
 	type FlowAction,
-} from "@/services/flows-legacy/utils/langgraph-stream";
+} from "@/services/flows-core/utils/langgraph-stream";
 import type {
 	AssistantExecutionPart,
 	ComplexContent,
@@ -23,7 +28,7 @@ import type {
 	ToolExecutionRecord,
 } from "@/types/chat";
 import { handlerRegistry } from "./handler-registry";
-import type { FoundationState } from "@/services/flows-legacy/graph/foundation/state";
+import type { FoundationState } from "@/services/flows-core/graph/foundation/state";
 import {
 	MessagePartsAccumulator,
 	resolveMessageParts,
@@ -48,10 +53,10 @@ import {
 	toLegacyFlowStream,
 	type MemorallFlowServices,
 } from "@/services/agent-harness";
-import type { UnifiedFlowConfig } from "@/services/flows-legacy/interfaces/config/flow-config";
+import type { UnifiedFlowConfig } from "@/services/flows-core/interfaces/config/flow-config";
 import { withResolvedConnections } from "@/services/mcp-connections";
-import { buildDefaultFlowConfig } from "@/services/flows-legacy/utils/flow-config";
-import { mergeWithDefaultConfig } from "@/services/flows-legacy/utils/flow-config";
+import { buildDefaultFlowConfig } from "@/services/flows-core/utils/flow-config";
+import { mergeWithDefaultConfig } from "@/services/flows-core/utils/flow-config";
 import { eq, sql } from "drizzle-orm";
 import { documentFileSystemService as fsService } from "@/services/filesystem/document-filesystem";
 import {
@@ -66,23 +71,32 @@ import {
 } from "./error-metadata";
 import { sanitizeForJson } from "@/utils/sanitize-json";
 import { isAbortError } from "@/utils/abort";
-import { StreamBuffer } from "./stream-buffer";
+import { ChunkDispatcher, StreamBuffer } from "./stream-buffer";
 import {
 	createToolExecutionPreview,
 	finishRunningToolExecutions,
 	upsertToolExecution,
 } from "@/services/chat/tool-executions";
-import type { GraphTool } from "@/services/flows-legacy/graph/graph.base";
+import type { GraphTool } from "@/services/flows-core/graph/graph.base";
 import {
 	THREAD_HISTORY_CONVERSATION_RUNTIME_KEY,
 	THREAD_HISTORY_READ_TOOL,
 	THREAD_HISTORY_SEARCH_TOOL,
 	THREAD_HISTORY_SEPARATOR_RUNTIME_KEY,
-} from "@/services/flows-legacy/tools/thread-history";
-export { StreamBuffer } from "./stream-buffer";
+} from "@/services/flows-core/tools/thread-history";
+export { ChunkDispatcher, StreamBuffer } from "./stream-buffer";
 
 export interface ChatStreamConfig {
-	/** Minimum number of words to buffer before streaming (default: 5) */
+	/**
+	 * Minimum number of words to buffer before streaming (default: 1).
+	 *
+	 * This used to be 5, back when every emission was its own message across the
+	 * context boundary and buffering was the only thing keeping that volume
+	 * down. Word-based buffering ties latency to how fast the model happens to
+	 * be — at 20 tokens/s, five words is roughly a third of a second of nothing,
+	 * then a jump. `ChunkDispatcher` now bounds the message rate by time
+	 * instead, which is constant, so the buffer no longer has to.
+	 */
 	minWordsToStream?: number;
 	/** Whether to stream tool calls immediately (default: true) */
 	streamToolCallsImmediately?: boolean;
@@ -154,6 +168,12 @@ export type ChatResult =
 				metadata: Record<string, unknown>;
 			}>;
 	  };
+
+// Upper bound on how often streamed content crosses the offscreen -> UI
+// boundary. Each crossing is a structured clone plus an IPC hop, and a fast
+// model produces content far faster than a 60fps UI can show it; ~25 updates a
+// second is smooth and costs a fraction of one-per-buffered-fragment.
+const CHUNK_DISPATCH_INTERVAL_MS = 40;
 
 const JOB_NAMES = {
 	chat: "chat",
@@ -251,6 +271,36 @@ const withThreadHistoryTools = (
 	};
 };
 
+// Steps a thread-history escalation needs: a system prompt and the completion
+// loop that can call the two history tools. Everything else in the stock agent
+// preset — skills, artifacts, web, auto-compact — is opt-in behaviour the user
+// never asked for by pressing send in plain chat.
+const THREAD_HISTORY_ESCALATION_STEPS = new Set([
+	"add-system",
+	"agent-completion",
+]);
+
+/**
+ * The smallest agent config that can search earlier threads.
+ *
+ * A conversation with any separator escalates normal-mode chat from a direct
+ * completion to an agent run, so the model can look back past the boundary.
+ * Handing it the full default agent preset made every plain message pay for
+ * every default feature — extra prompt, extra tools, a skill lookup and a
+ * max-token lookup per turn — for a capability it usually does not use. Keep
+ * the recall, drop the rest.
+ */
+const buildThreadHistoryFlowConfig = (): UnifiedFlowConfig => {
+	const base = buildDefaultFlowConfig("agent");
+	return {
+		...base,
+		steps: base.steps.map((step) => ({
+			...step,
+			enabled: THREAD_HISTORY_ESCALATION_STEPS.has(step.name),
+		})),
+	};
+};
+
 const getThreadHistoryRuntimeVars = (
 	conversation: ConversationContext | undefined,
 ): Record<string, unknown> | undefined =>
@@ -267,6 +317,7 @@ type FlowStreamDeps = {
 	model: string;
 	config: Required<ChatStreamConfig>;
 	dependencies: ProcessDependencies;
+	dispatcher: ChunkDispatcher;
 	streamBuffer: StreamBuffer;
 	getProgress: () => number;
 	onChunk?: (chunk: ChatCompletionChunk) => void;
@@ -279,12 +330,14 @@ type StreamBufferDeps = {
 	model: string;
 	config: Required<ChatStreamConfig>;
 	dependencies: ProcessDependencies;
+	dispatcher: ChunkDispatcher;
 	onContent: (content: string) => void;
 	getProgress: () => number;
 };
 
 type FlowCustomPayloadDeps = {
 	payload: unknown;
+	dispatcher: ChunkDispatcher;
 	handleChunk: (chunk: ChatCompletionChunk) => Promise<void>;
 	handleActions: (actions: FlowAction[]) => void;
 	handleExecutionStart: (event: {
@@ -307,6 +360,7 @@ type FlowRuntimeDeps = {
 	model: string;
 	config: Required<ChatStreamConfig>;
 	dependencies: ProcessDependencies;
+	dispatcher: ChunkDispatcher;
 	streamBuffer: StreamBuffer;
 	actions: FlowAction[];
 	messagePartsAccumulator: MessagePartsAccumulator;
@@ -493,29 +547,60 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 		};
 	}
 
+	private static contentChunkUpdate(
+		model: string,
+		content: string,
+		progress: number,
+	): JobProgressUpdate {
+		return {
+			stage: "Receiving response...",
+			progress,
+			result: {
+				type: "chunk",
+				chunk: {
+					id: `chunk-${Date.now()}`,
+					object: "chat.completion.chunk",
+					created: Math.floor(Date.now() / 1000),
+					model,
+					choices: [
+						{
+							index: 0,
+							delta: { content, role: "assistant" },
+							finish_reason: null,
+						},
+					],
+				},
+			} as ChatResult,
+		};
+	}
+
+	/**
+	 * The dispatcher every streamed update for one job goes through.
+	 *
+	 * Content is throttled and merged; anything else flushes it first and is sent
+	 * straight away. One place decides the wire rate, so the word-buffer above it
+	 * stays a readability knob rather than the thing that sets IPC volume.
+	 */
+	private static createChunkDispatcher(
+		jobId: string,
+		model: string,
+		dependencies: ProcessDependencies,
+		getProgress: () => number,
+	): ChunkDispatcher {
+		return new ChunkDispatcher({
+			intervalMs: CHUNK_DISPATCH_INTERVAL_MS,
+			sendContent: (content) =>
+				dependencies.updateJobProgress(
+					jobId,
+					ChatHandler.contentChunkUpdate(model, content, getProgress()),
+				),
+		});
+	}
+
 	private static createStreamBuffer(deps: StreamBufferDeps): StreamBuffer {
 		return new StreamBuffer(deps.config.minWordsToStream, (bufferedContent) => {
 			deps.onContent(bufferedContent);
-			deps.dependencies.updateJobProgress(deps.jobId, {
-				stage: "Receiving response...",
-				progress: deps.getProgress(),
-				result: {
-					type: "chunk",
-					chunk: {
-						id: `chunk-${Date.now()}`,
-						object: "chat.completion.chunk",
-						created: Math.floor(Date.now() / 1000),
-						model: deps.model,
-						choices: [
-							{
-								index: 0,
-								delta: { content: bufferedContent, role: "assistant" },
-								finish_reason: null,
-							},
-						],
-					},
-				} as ChatResult,
-			});
+			deps.dispatcher.queueContent(bufferedContent);
 		});
 	}
 
@@ -526,6 +611,13 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 	}
 
 	private static createHandleChunk(deps: FlowStreamDeps) {
+		// Providers differ on whether `role` appears once or on every delta.
+		// When it repeats, the raw chunk used to be forwarded per token on top of
+		// the buffered content — one extra cross-context message per token, for a
+		// field the consumer already has. Announce it once and let content flow
+		// through the buffer alone.
+		let assistantRoleAnnounced = false;
+
 		return async (chunk: ChatCompletionChunk) => {
 			deps.onChunk?.(chunk);
 
@@ -553,36 +645,52 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 				deps.streamBuffer.add(content);
 			}
 
-			if (shouldStreamToolCalls || delta?.role || choice.finish_reason) {
-				const chunkToSend = content
-					? {
-							...chunk,
-							choices: [
-								{
-									...choice,
-									delta: {
-										...delta,
-										content: undefined,
-									},
-								},
-							],
-						}
-					: chunk;
+			const isNewRoleAnnouncement =
+				delta?.role === "assistant" && !assistantRoleAnnounced;
+			if (isNewRoleAnnouncement) {
+				assistantRoleAnnounced = true;
+			}
 
-				await deps.dependencies.updateJobProgress(deps.jobId, {
+			const carriesMetadata =
+				shouldStreamToolCalls ||
+				isToolResultChunk ||
+				Boolean(choice.finish_reason) ||
+				isNewRoleAnnouncement;
+			if (!carriesMetadata) {
+				return;
+			}
+
+			const chunkToSend = content
+				? {
+						...chunk,
+						choices: [
+							{
+								...choice,
+								delta: {
+									...delta,
+									content: undefined,
+								},
+							},
+						],
+					}
+				: chunk;
+
+			deps.dispatcher.send(() =>
+				deps.dependencies.updateJobProgress(deps.jobId, {
 					stage: "Receiving response...",
 					progress: deps.getProgress(),
 					result: {
 						type: "chunk",
 						chunk: chunkToSend,
 					} as ChatResult,
-				});
-			}
+				}),
+			);
 		};
 	}
 
 	private static createFlowHandleActions(
 		dependencies: ProcessDependencies,
+		dispatcher: ChunkDispatcher,
 		jobId: string,
 		actions: FlowAction[],
 	) {
@@ -595,14 +703,16 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 				}
 			}
 			if (added) {
-				dependencies.updateJobProgress(jobId, {
-					stage: "Receiving response...",
-					progress: 10,
-					result: {
-						type: "action",
-						actions,
-					} as ChatResult,
-				});
+				dispatcher.send(() =>
+					dependencies.updateJobProgress(jobId, {
+						stage: "Receiving response...",
+						progress: 10,
+						result: {
+							type: "action",
+							actions,
+						} as ChatResult,
+					}),
+				);
 			}
 		};
 	}
@@ -627,6 +737,7 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 		model,
 		config,
 		dependencies,
+		dispatcher,
 		streamBuffer,
 		actions,
 		messagePartsAccumulator,
@@ -640,6 +751,7 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 				model,
 				config,
 				dependencies,
+				dispatcher,
 				streamBuffer,
 				getProgress,
 				onChunk: (chunk) => messagePartsAccumulator.addChunk(chunk),
@@ -649,6 +761,7 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 			}),
 			handleActions: ChatHandler.createFlowHandleActions(
 				dependencies,
+				dispatcher,
 				jobId,
 				actions,
 			),
@@ -672,6 +785,7 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 			if (mode === "custom") {
 				await ChatHandler.handleFlowCustomPayload({
 					payload,
+					dispatcher: runtimeDeps.dispatcher,
 					handleChunk,
 					handleActions,
 					handleExecutionStart,
@@ -693,6 +807,7 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 
 	private static async handleFlowCustomPayload({
 		payload,
+		dispatcher,
 		handleChunk,
 		handleActions,
 		handleExecutionStart,
@@ -724,21 +839,25 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 					};
 					handleExecutionStart(event);
 					const execution = handleToolExecution("start", event);
-					await dependencies.updateJobProgress(jobId, {
-						stage: executeStage,
-						progress: 12,
-						result: {
-							type: "execute-start",
-							node: event.node,
-							metadata: event.metadata,
-						} as ChatResult,
-					});
-					if (execution) {
-						await dependencies.updateJobProgress(jobId, {
+					dispatcher.send(() =>
+						dependencies.updateJobProgress(jobId, {
 							stage: executeStage,
 							progress: 12,
-							result: { type: "tool-execution", execution } as ChatResult,
-						});
+							result: {
+								type: "execute-start",
+								node: event.node,
+								metadata: event.metadata,
+							} as ChatResult,
+						}),
+					);
+					if (execution) {
+						dispatcher.send(() =>
+							dependencies.updateJobProgress(jobId, {
+								stage: executeStage,
+								progress: 12,
+								result: { type: "tool-execution", execution } as ChatResult,
+							}),
+						);
 					}
 				}
 				return;
@@ -753,11 +872,13 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 					};
 					const execution = handleToolExecution("result", event);
 					if (execution) {
-						await dependencies.updateJobProgress(jobId, {
-							stage: executeStage,
-							progress: 14,
-							result: { type: "tool-execution", execution } as ChatResult,
-						});
+						dispatcher.send(() =>
+							dependencies.updateJobProgress(jobId, {
+								stage: executeStage,
+								progress: 14,
+								result: { type: "tool-execution", execution } as ChatResult,
+							}),
+						);
 					}
 				}
 				return;
@@ -802,7 +923,7 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 
 		// Apply default stream config
 		const config: Required<ChatStreamConfig> = {
-			minWordsToStream: streamConfig?.minWordsToStream ?? 5,
+			minWordsToStream: Math.max(1, streamConfig?.minWordsToStream ?? 1),
 			streamToolCallsImmediately:
 				streamConfig?.streamToolCallsImmediately ?? true,
 		};
@@ -935,16 +1056,27 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 			}
 		};
 
+		const getProgress = () => Math.min(80, 20 + currentContent.length / 10);
+
+		// One dispatcher per job owns the wire rate for everything streamed back.
+		const dispatcher = ChatHandler.createChunkDispatcher(
+			jobId,
+			model,
+			dependencies,
+			getProgress,
+		);
+
 		// Create stream buffer for content
 		const streamBuffer = ChatHandler.createStreamBuffer({
 			jobId,
 			model,
 			config,
 			dependencies,
+			dispatcher,
 			onContent: (bufferedContent) => {
 				currentContent += bufferedContent;
 			},
-			getProgress: () => Math.min(80, 20 + currentContent.length / 10),
+			getProgress,
 		});
 
 		try {
@@ -975,7 +1107,9 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 							? await serviceManager.flowBuilderService.getUnifiedFlowConfig({
 									flowId: agentFlowId,
 								})
-							: buildDefaultFlowConfig("agent");
+							: mode === "agent"
+								? buildDefaultFlowConfig("agent")
+								: buildThreadHistoryFlowConfig();
 				} catch (err) {
 					await dependencies.logger.warn(
 						"Failed to load agent flow config, using defaults",
@@ -1016,16 +1150,18 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 					model,
 					config,
 					dependencies,
+					dispatcher,
 					streamBuffer,
 					actions,
 					messagePartsAccumulator,
 					toolCallAccumulator,
 					addUsage,
-					getProgress: () => Math.min(80, 20 + currentContent.length / 10),
+					getProgress,
 				});
 				finalMessageState = finalState;
 
 				streamBuffer.flush();
+				dispatcher.flush();
 
 				if (typeof finalState?.response === "string") {
 					currentContent = finalState.response;
@@ -1146,12 +1282,13 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 					model,
 					config,
 					dependencies,
+					dispatcher,
 					streamBuffer,
 					actions,
 					messagePartsAccumulator,
 					toolCallAccumulator,
 					addUsage,
-					getProgress: () => Math.min(80, 20 + currentContent.length / 10),
+					getProgress,
 				})) as FoundationState | null;
 				finalMessageState = finalState as unknown as Record<
 					string,
@@ -1160,6 +1297,7 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 
 				// Flush any remaining buffered content from streaming
 				streamBuffer.flush();
+				dispatcher.flush();
 
 				if (finalState) {
 					const response = finalState.response;
@@ -1207,8 +1345,9 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 						model,
 						config,
 						dependencies,
+						dispatcher,
 						streamBuffer,
-						getProgress: () => Math.min(80, 20 + currentContent.length / 10),
+						getProgress,
 						onChunk: (chunk) => messagePartsAccumulator.addChunk(chunk),
 						onUsage: addUsage,
 						onToolCalls: (toolCalls) =>
@@ -1219,6 +1358,7 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 
 				// Flush any remaining buffered content
 				streamBuffer.flush();
+				dispatcher.flush();
 			}
 
 			const finalActions = normalizeActions(actions);
@@ -1264,6 +1404,9 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 
 			return result;
 		} catch (error) {
+			// Drop any queued content and its pending timer: the turn is over, and a
+			// late flush would post progress for a job that has already failed.
+			dispatcher.flush();
 			const errorMessage = getErrorMessage(error);
 			const errorMetadata = createJobErrorMetadata(error);
 			const isAbort = isAbortError(error);

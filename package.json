@@ -2,7 +2,7 @@
   "private": true,
   "name": "memorall",
   "description": "Memorall - AI-powered memory and knowledge management browser.",
-  "version": "0.5.6",
+  "version": "0.5.7",
   "license": "MIT",
   "type": "module",
   "engines": {
@@ -83,7 +83,7 @@
     "test:harness": "vitest run --config packages/agent-harness/vitest.config.ts",
     "test:desktop:sidecar": "vitest run --config apps/desktop/sidecar/vitest.config.ts",
     "test:desktop:browser-runtime": "node tools/smoke-desktop-browser-sidecar.mjs",
-    "test:sandbox:unit": "vitest run src/services/agent-sandbox/__tests__ src/services/sandbox-container/__tests__ src/services/flows-legacy/__tests__/agent-sandbox-tools.test.ts src/services/flows-legacy/__tests__/tool-registry.test.ts src/services/flows-legacy/__tests__/flow-engine-harness.test.ts src/services/__tests__/flow-service-adapters.logic.test.ts",
+    "test:sandbox:unit": "vitest run src/services/agent-sandbox/__tests__ src/services/sandbox-container/__tests__ src/services/flows-core/__tests__/agent-sandbox-tools.test.ts src/services/flows-core/__tests__/tool-registry.test.ts src/services/flows-core/__tests__/flow-engine-harness.test.ts src/services/__tests__/flow-service-adapters.logic.test.ts",
     "test:e2e:sandbox": "yarn build:extension && playwright test -c playwright.sandbox.config.ts --project=deterministic",
     "test:e2e:sandbox:network": "yarn build:extension && playwright test -c playwright.sandbox.config.ts --project=network",
     "test:e2e:extension:dev": "node tools/run-extension-e2e.mjs dev",

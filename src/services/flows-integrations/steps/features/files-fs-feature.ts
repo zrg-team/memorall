@@ -1,19 +1,19 @@
 import {
 	defineStep,
 	bindStep,
-} from "@/services/flows-legacy/interfaces/engine/step";
+} from "@/services/flows-core/interfaces/engine/step";
 import type {
 	BoundStep,
 	StepFactoryFromSpec,
 	StepSpecFromDefinition,
-} from "@/services/flows-legacy/interfaces/engine/step";
-import { logError } from "@/services/flows-legacy/utils/logger";
-import { stepRegistry } from "@/services/flows-legacy/registries/step-registry";
+} from "@/services/flows-core/interfaces/engine/step";
+import { logError } from "@/services/flows-core/utils/logger";
+import { stepRegistry } from "@/services/flows-core/registries/step-registry";
 import {
 	GraphBase,
 	type GraphTool,
-} from "@/services/flows-legacy/graph/graph.base";
-import type { ChatCompletionMessageParam } from "@/services/flows-legacy/interfaces/engine/messages";
+} from "@/services/flows-core/graph/graph.base";
+import type { ChatCompletionMessageParam } from "@/services/flows-core/interfaces/engine/messages";
 
 const STEP_NAME = "documents-fs-feature" as const;
 export const DOCUMENTS_FS_FEATURE_NAME = STEP_NAME;

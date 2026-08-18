@@ -194,7 +194,7 @@ those exports.
 
 - [Agent Harness Architecture](../../docs/agent-harness-architecture.md)
 - [Sandbox Architecture Review](../../docs/agent-harness-sandbox-review.md)
-- [Memorall compatibility runtime](../../src/services/flows-legacy/README.md)
+- [Memorall compatibility runtime](../../src/services/flows-core/README.md)
 
 Start with the [full facade](./full/README.md) for application development, or
 open the [core package](./core/README.md) when designing a new graph driver or

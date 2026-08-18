@@ -427,7 +427,7 @@ export const useAgentWizard = ({
 							tool_choice: "auto",
 							parallel_tool_calls: true,
 							streamConfig: {
-								minWordsToStream: 5,
+								minWordsToStream: 1,
 								streamToolCallsImmediately: true,
 							},
 						},

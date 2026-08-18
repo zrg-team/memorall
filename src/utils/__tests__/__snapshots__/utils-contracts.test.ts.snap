@@ -17,7 +17,6 @@ exports[`src/utils module coverage > imports every utility module without requir
   "../openui.ts",
   "../provider-passkey-unlock.ts",
   "../sanitize-json.ts",
-  "../scoped-graph-query.ts",
   "../secure-session.ts",
   "../trigram-search.ts",
   "../uuid.ts",

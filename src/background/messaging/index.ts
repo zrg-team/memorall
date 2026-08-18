@@ -12,7 +12,12 @@ import {
 	type JobNotificationMessage,
 } from "@/services/background-jobs/bridges/types";
 import { openExtensionPopup } from "@/background/core/notifications";
-import { relayJobNotificationToContent } from "./relay";
+import {
+	isRelayableContentSender,
+	registerContentJobConsumer,
+	relayJobNotificationToContent,
+	unregisterContentJobConsumer,
+} from "./relay";
 import type { BackgroundMessage } from "@/embedded/types";
 import {
 	CO_AGENT_ACTIVE_SESSION_STORAGE_KEY,
@@ -519,9 +524,22 @@ function handleFilesystemChanged(message: Record<string, unknown>): false {
 // ── Listener registration ─────────────────────────────────────────────────────
 
 export function registerMessageHandler(onPopupOpened: () => void): void {
+	// A tab that stops existing cannot consume anything.
+	chrome.tabs.onRemoved.addListener((tabId) => {
+		unregisterContentJobConsumer(tabId);
+	});
+
 	chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 		// Job notification relay — must come first
 		if (isJobNotificationMessage(message)) {
+			// A content script that enqueues a job is a tab that wants the progress
+			// and the result back. Registering here also survives a service-worker
+			// restart, since the job that matters always starts with a message from
+			// the tab. Extension pages are excluded — runtime.sendMessage already
+			// reached them, and relaying again would double every chunk.
+			if (isRelayableContentSender(message as JobNotificationMessage, sender)) {
+				registerContentJobConsumer(sender.tab?.id);
+			}
 			if (message.target === "content" || message.target === "all") {
 				void relayJobNotificationToContent(
 					message as JobNotificationMessage,

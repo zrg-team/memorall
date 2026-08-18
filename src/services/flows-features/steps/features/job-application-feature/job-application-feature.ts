@@ -1,22 +1,22 @@
 import {
 	defineStep,
 	bindStep,
-} from "@/services/flows-legacy/interfaces/engine/step";
+} from "@/services/flows-core/interfaces/engine/step";
 import type {
 	BoundStep,
 	StepFactoryFromSpec,
 	StepSpecFromDefinition,
-} from "@/services/flows-legacy/interfaces/engine/step";
-import { logError } from "@/services/flows-legacy/utils/logger";
-import { stepRegistry } from "@/services/flows-legacy/registries/step-registry";
+} from "@/services/flows-core/interfaces/engine/step";
+import { logError } from "@/services/flows-core/utils/logger";
+import { stepRegistry } from "@/services/flows-core/registries/step-registry";
 import {
 	GraphBase,
 	type GraphTool,
-} from "@/services/flows-legacy/graph/graph.base";
-import type { ChatCompletionMessageParam } from "@/services/flows-legacy/interfaces/engine/messages";
-import type { ActiveWebSessionInfo } from "@/services/flows-legacy/interfaces/services/web-browser";
-import type {} from "@/services/flows-legacy/interfaces/engine/tool";
-import type { AllServices } from "@/services/flows-legacy/interfaces/services/services";
+} from "@/services/flows-core/graph/graph.base";
+import type { ChatCompletionMessageParam } from "@/services/flows-core/interfaces/engine/messages";
+import type { ActiveWebSessionInfo } from "@/services/flows-core/interfaces/services/web-browser";
+import type {} from "@/services/flows-core/interfaces/engine/tool";
+import type { AllServices } from "@/services/flows-core/interfaces/services/services";
 
 const STEP_NAME = "job-application-feature" as const;
 export const JOB_APPLICATION_FEATURE_NAME = STEP_NAME;

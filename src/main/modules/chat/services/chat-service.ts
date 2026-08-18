@@ -25,7 +25,7 @@ import type {
 	ChatCompletionToolChoiceOption,
 	ChatMessage,
 } from "@/types/openai";
-import type { UnifiedFlowConfig } from "@/services/flows-legacy/interfaces/config/flow-config";
+import type { UnifiedFlowConfig } from "@/services/flows-core/interfaces/config/flow-config";
 
 export type ChatMode = "normal" | "custom" | "agent";
 
@@ -203,7 +203,7 @@ export class ChatService {
 					parallel_tool_calls,
 					conversation,
 					streamConfig: streamConfig || {
-						minWordsToStream: 5,
+						minWordsToStream: 1,
 						streamToolCallsImmediately: true,
 					},
 				},
@@ -294,8 +294,11 @@ export class ChatService {
 
 					if (chatResult.type === "chunk" && chatResult.chunk) {
 						messagePartsAccumulator.addChunk(chatResult.chunk);
+						// `toParts()` already hands back a fresh copy, so the streaming
+						// path — the one that runs per chunk — hands it straight on
+						// instead of cloning the same array a second time.
 						parts = messagePartsAccumulator.toParts();
-						emitParts();
+						if (parts) callbacks?.onParts?.(parts);
 						accumulateChunkToolCalls(
 							toolCallAccumulator,
 							chatResult.chunk.choices[0]?.delta?.tool_calls,

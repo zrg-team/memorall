@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it } from "vitest";
-import { stepRegistry } from "@/services/flows-legacy/registries/step-registry";
-import { toolRegistry } from "@/services/flows-legacy/registries/tool-registry";
+import { stepRegistry } from "@/services/flows-core/registries/step-registry";
+import { toolRegistry } from "@/services/flows-core/registries/tool-registry";
 import {
 	expectStepContracts,
 	expectToolContracts,

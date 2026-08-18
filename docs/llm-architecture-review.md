@@ -10,7 +10,7 @@ This document summarizes how LLM capabilities are implemented in Memorall and re
 - `public/runner`
 - `src/services/background-jobs`
 - `scripts/offscreen.ts`
-- `src/services/flows-legacy` (Memorall-owned stored-flow compatibility)
+- `src/services/flows-core` (Memorall-owned stored-flow compatibility)
 - `src/services/flow-service-adapters.ts`
 - `src/services/service-manager.ts`
 
@@ -249,7 +249,7 @@ Flows do not know provider details. `toFlowLLM` adapts `ILLMService` into the fl
 5. Append tool results.
 6. Continue until final answer or max iterations.
 
-The legacy LLM call is made in `src/services/flows-legacy/graph/agent/graph.ts`. Its loop guard checks `currentIteration >= maxIterations`; the legacy default remains 100 for stored-flow compatibility. New standalone runs use the bounded limits in `packages/agent-harness/core/src/limits.ts` (default 10 iterations).
+The legacy LLM call is made in `src/services/flows-core/graph/agent/graph.ts`. Its loop guard checks `currentIteration >= maxIterations`; the legacy default remains 100 for stored-flow compatibility. New standalone runs use the bounded limits in `packages/agent-harness/core/src/limits.ts` (default 10 iterations).
 
 ## Scalability Review Findings
 
@@ -305,7 +305,7 @@ Recommended fix:
 
 ### P1: Agent loop default can run too long
 
-The legacy compatibility default is 100 in `src/services/flows-legacy/graph/agent/state.ts`. This protects stored flows from a silent behavior change, but new standalone runs default to 10 iterations for local browser inference, API cost control, and tool-heavy flows.
+The legacy compatibility default is 100 in `src/services/flows-core/graph/agent/state.ts`. This protects stored flows from a silent behavior change, but new standalone runs default to 10 iterations for local browser inference, API cost control, and tool-heavy flows.
 
 Recommended fix:
 

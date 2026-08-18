@@ -4,7 +4,7 @@ import type {
 	ChatResult,
 	ChatPayload,
 } from "@/services/background-jobs/handlers/process-chat";
-import type { UnifiedFlowConfig } from "@/services/flows-legacy/interfaces/config/flow-config";
+import type { UnifiedFlowConfig } from "@/services/flows-core/interfaces/config/flow-config";
 import type {
 	ChatCompletionChunkToolCall,
 	ChatCompletionMessageToolCall,
@@ -259,7 +259,7 @@ export class EmbeddedChatService {
 				flowConfigPrefix,
 				conversation,
 				streamConfig: {
-					minWordsToStream: 5,
+					minWordsToStream: 1,
 					streamToolCallsImmediately: true,
 				},
 			};

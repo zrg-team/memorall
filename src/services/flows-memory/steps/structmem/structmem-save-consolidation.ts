@@ -1,15 +1,15 @@
 import {
 	defineStep,
 	bindStep,
-} from "@/services/flows-legacy/interfaces/engine/step";
+} from "@/services/flows-core/interfaces/engine/step";
 import { getKnowledgeDatabase } from "../../interfaces/knowledge";
 import type {
 	StepFactoryFromSpec,
 	StepSpecFromDefinition,
-} from "@/services/flows-legacy/interfaces/engine/step";
-import { stepRegistry } from "@/services/flows-legacy/registries/step-registry";
-import type {} from "@/services/flows-legacy/interfaces/engine/tool";
-import type { AllServices } from "@/services/flows-legacy/interfaces/services/services";
+} from "@/services/flows-core/interfaces/engine/step";
+import { stepRegistry } from "@/services/flows-core/registries/step-registry";
+import type {} from "@/services/flows-core/interfaces/engine/tool";
+import type { AllServices } from "@/services/flows-core/interfaces/services/services";
 import type { Node, NewNode } from "../../interfaces/knowledge";
 import type { Edge, NewEdge } from "../../interfaces/knowledge";
 import type {
@@ -18,7 +18,7 @@ import type {
 	StructMemSummary,
 } from "../../graph/structmem/state";
 import { withEmbeddingField } from "./structmem-utils";
-import { logError, logInfo } from "@/services/flows-legacy/utils/logger";
+import { logError, logInfo } from "@/services/flows-core/utils/logger";
 
 const STEP_NAME = "structmem-save-consolidation" as const;
 

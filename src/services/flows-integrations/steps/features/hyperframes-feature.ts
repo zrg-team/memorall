@@ -1,25 +1,25 @@
 import {
 	defineStep,
 	bindStep,
-} from "@/services/flows-legacy/interfaces/engine/step";
+} from "@/services/flows-core/interfaces/engine/step";
 import type {
 	StepFactoryFromSpec,
 	StepSpecFromDefinition,
-} from "@/services/flows-legacy/interfaces/engine/step";
-import { logError } from "@/services/flows-legacy/utils/logger";
-import { stepRegistry } from "@/services/flows-legacy/registries/step-registry";
+} from "@/services/flows-core/interfaces/engine/step";
+import { logError } from "@/services/flows-core/utils/logger";
+import { stepRegistry } from "@/services/flows-core/registries/step-registry";
 import {
 	GraphBase,
 	type ConfiguredGraphTool,
 	type GraphTool,
-} from "@/services/flows-legacy/graph/graph.base";
-import type { ChatCompletionMessageParam } from "@/services/flows-legacy/interfaces/engine/messages";
+} from "@/services/flows-core/graph/graph.base";
+import type { ChatCompletionMessageParam } from "@/services/flows-core/interfaces/engine/messages";
 import {
 	HYPERFRAMES_FEATURE_SYSTEM_PROMPT,
 	HYPERFRAMES_FEATURE_TOOLS,
 	HYPERFRAMES_FEATURE_DESCRIPTION,
-} from "@/services/flows-legacy/steps/features/hyperframes-feature/hyperframes-feature";
-import type { HyperframesToolConfig } from "@/services/flows-legacy/tools/hyperframes/config";
+} from "@/services/flows-core/steps/features/hyperframes-feature/hyperframes-feature";
+import type { HyperframesToolConfig } from "@/services/flows-core/tools/hyperframes/config";
 import { memorallFsToolConfig } from "flow-integrations/tools/fs/memorall-fs-path-policy";
 
 const STEP_NAME = "hyperframes-feature" as const;

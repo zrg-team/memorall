@@ -4,8 +4,8 @@ import { eq } from "drizzle-orm";
 import type {
 	Tool,
 	ToolFactory,
-} from "@/services/flows-legacy/interfaces/engine/tool";
-import { toolRegistry } from "@/services/flows-legacy/registries/tool-registry";
+} from "@/services/flows-core/interfaces/engine/tool";
+import { toolRegistry } from "@/services/flows-core/registries/tool-registry";
 import {
 	findMemoryFacts,
 	resolveRuntimeGraphId,

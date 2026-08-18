@@ -12,11 +12,11 @@
  * upgrades it.
  */
 
-import type { UnifiedFlowConfig } from "@/services/flows-legacy/interfaces/config/flow-config";
+import type { UnifiedFlowConfig } from "@/services/flows-core/interfaces/config/flow-config";
 import {
 	MCP_FEATURE_NAME,
 	type MCPServerConfig,
-} from "@/services/flows-legacy/steps/features/mcp-feature";
+} from "@/services/flows-core/steps/features/mcp-feature";
 import { logInfo } from "@/utils/logger";
 import { listConnections, upsertConnection } from "./registry";
 import type { AgentConnectionSelection, McpConnection } from "./types";

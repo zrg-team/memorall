@@ -3,14 +3,14 @@ import {
 	type RegisteredStep,
 	type StepFeatureMetadata,
 	type StepIOField,
-} from "@/services/flows-legacy/registries/step-registry";
-import { HYPERFRAMES_FEATURE_SYSTEM_PROMPT } from "@/services/flows-legacy/steps/features/hyperframes-feature/hyperframes-feature";
-import { LOTTIE_ANIMATION_FEATURE_SYSTEM_PROMPT } from "@/services/flows-legacy/steps/features/lottie-animation-feature/lottie-animation-feature";
+} from "@/services/flows-core/registries/step-registry";
+import { HYPERFRAMES_FEATURE_SYSTEM_PROMPT } from "@/services/flows-core/steps/features/hyperframes-feature/hyperframes-feature";
+import { LOTTIE_ANIMATION_FEATURE_SYSTEM_PROMPT } from "@/services/flows-core/steps/features/lottie-animation-feature/lottie-animation-feature";
 import {
 	BROWSER_SANDBOX_FEATURE_DESCRIPTION,
 	BROWSER_SANDBOX_FEATURE_SYSTEM_PROMPT,
 	BROWSER_SANDBOX_FEATURE_TOOLS,
-} from "@/services/flows-legacy/steps/features/nodejs-sandbox-feature";
+} from "@/services/flows-core/steps/features/nodejs-sandbox-feature";
 
 export type { StepIOField };
 

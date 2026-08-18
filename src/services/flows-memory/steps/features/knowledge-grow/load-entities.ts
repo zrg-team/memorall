@@ -1,9 +1,9 @@
 import {
 	defineStep,
 	bindStep,
-} from "@/services/flows-legacy/interfaces/engine/step";
+} from "@/services/flows-core/interfaces/engine/step";
 import { getKnowledgeDatabase } from "../../../interfaces/knowledge";
-import { logInfo, logError } from "@/services/flows-legacy/utils/logger";
+import { logInfo, logError } from "@/services/flows-core/utils/logger";
 import { and, or, ilike } from "drizzle-orm";
 import { vectorSearchNodes } from "../../../utils/vector-search";
 import type { Edge, Node } from "../../../interfaces/knowledge";
@@ -12,10 +12,10 @@ import { getScopedGraphWhere } from "../../../utils/graph-query";
 import type {
 	StepFactoryFromSpec,
 	StepSpecFromDefinition,
-} from "@/services/flows-legacy/interfaces/engine/step";
-import { stepRegistry } from "@/services/flows-legacy/registries/step-registry";
-import type {} from "@/services/flows-legacy/interfaces/engine/tool";
-import type { AllServices } from "@/services/flows-legacy/interfaces/services/services";
+} from "@/services/flows-core/interfaces/engine/step";
+import { stepRegistry } from "@/services/flows-core/registries/step-registry";
+import type {} from "@/services/flows-core/interfaces/engine/tool";
+import type { AllServices } from "@/services/flows-core/interfaces/services/services";
 import {
 	combineSearchResultsWithTrigram,
 	trigramSearchEdges,

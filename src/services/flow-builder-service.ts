@@ -7,7 +7,7 @@ import type {
 	FlowConnection,
 	FlowService,
 	FlowConfig,
-} from "@/services/flows-legacy/interfaces/config/flow-builder";
+} from "@/services/flows-core/interfaces/config/flow-builder";
 import type { PredefinedFlowKey } from "@/services/database/entities/flows";
 import type {
 	FlowCatalog,
@@ -18,22 +18,22 @@ import type {
 	FlowMetadataUpdateInput,
 	FlowStateInput,
 	FlowStepInput,
-} from "@/services/flows-legacy/interfaces/config/flow-builder";
+} from "@/services/flows-core/interfaces/config/flow-builder";
 import {
 	DEFAULT_FOUNDATION_PREDEFINED_CONFIG,
 	FOUNDATION_CONFIG_KEYS,
 	type FoundationPredefinedConfig,
-} from "@/services/flows-legacy/graph/foundation/state";
-import { logError, logInfo } from "@/services/flows-legacy/utils/logger";
+} from "@/services/flows-core/graph/foundation/state";
+import { logError, logInfo } from "@/services/flows-core/utils/logger";
 import {
 	getFeatureCatalogSteps,
 	getFlowCatalog,
 } from "@/services/flow-builder-catalog";
-import type { UnifiedFlowConfig } from "@/services/flows-legacy/interfaces/config/flow-config";
+import type { UnifiedFlowConfig } from "@/services/flows-core/interfaces/config/flow-config";
 import {
 	buildDefaultFlowConfig,
 	mergeWithDefaultConfig,
-} from "@/services/flows-legacy/utils/flow-config";
+} from "@/services/flows-core/utils/flow-config";
 
 type PredefinedFlowConfigMap = {
 	foundation: FoundationPredefinedConfig;

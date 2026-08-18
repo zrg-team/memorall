@@ -25,6 +25,7 @@ export interface LogStorage {
 	store(entry: LogEntry): Promise<void>;
 	retrieve(filter?: LogFilter): Promise<LogEntry[]>;
 	clear(olderThan?: number): Promise<void>;
+	trimToNewest(max: number): Promise<number>;
 	getStorageSize(): Promise<number>;
 	isAvailable(): boolean;
 }
@@ -173,6 +174,59 @@ export class IndexedDBLogStorage implements LogStorage {
 				request.onerror = () =>
 					reject(new Error(`Failed to clear log entries: ${request.error}`));
 			}
+		});
+	}
+
+	/**
+	 * Drop everything but the `max` newest entries.
+	 *
+	 * Walks the timestamp index oldest-first and deletes exactly the overflow,
+	 * so the cost is the number of rows removed — not the size of the store.
+	 * The previous trim read every entry back into memory (`getAll` + sort) on
+	 * each write, which turned a steady-state log into a full table scan per
+	 * log line.
+	 */
+	async trimToNewest(max: number): Promise<number> {
+		await this.initialize();
+
+		return new Promise((resolve, reject) => {
+			if (!this.db) {
+				reject(new Error("Database not initialized"));
+				return;
+			}
+
+			const transaction = this.db.transaction([STORE_NAME], "readwrite");
+			const store = transaction.objectStore(STORE_NAME);
+			const countRequest = store.count();
+
+			countRequest.onerror = () =>
+				reject(new Error(`Failed to count log entries: ${countRequest.error}`));
+
+			countRequest.onsuccess = () => {
+				let remaining = countRequest.result - max;
+				if (remaining <= 0) {
+					resolve(0);
+					return;
+				}
+
+				const deleted = remaining;
+				const cursorRequest = store.index("timestamp").openCursor();
+				cursorRequest.onerror = () =>
+					reject(
+						new Error(`Failed to trim log entries: ${cursorRequest.error}`),
+					);
+				cursorRequest.onsuccess = (event) => {
+					const cursor = (event.target as IDBRequest)
+						.result as IDBCursorWithValue | null;
+					if (!cursor || remaining <= 0) {
+						resolve(deleted);
+						return;
+					}
+					cursor.delete();
+					remaining -= 1;
+					cursor.continue();
+				};
+			};
 		});
 	}
 

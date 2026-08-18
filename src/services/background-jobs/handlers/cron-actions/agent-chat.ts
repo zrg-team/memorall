@@ -245,7 +245,7 @@ const runAgentChat: CronActionHandler = async (context) => {
 		agentFlowId: payload.agentFlowId,
 		topicId,
 		streamConfig: payload.streamConfig ?? {
-			minWordsToStream: 5,
+			minWordsToStream: 1,
 			streamToolCallsImmediately: true,
 		},
 	};

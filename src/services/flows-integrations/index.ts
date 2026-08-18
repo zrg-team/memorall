@@ -4,8 +4,8 @@
  * import, so the main app only needs to import this file once.
  *
  * Architecture:
- *   - All interfaces are imported from @/services/flows-legacy/interfaces/*
- *   - All registrations go through @/services/flows-legacy/{tool,step}-registry
+ *   - All interfaces are imported from @/services/flows-core/interfaces/*
+ *   - All registrations go through @/services/flows-core/{tool,step}-registry
  *   - This package has no outward exports consumed by the engine itself
  */
 

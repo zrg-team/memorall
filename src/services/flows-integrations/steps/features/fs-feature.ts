@@ -1,24 +1,24 @@
 import {
 	defineStep,
 	bindStep,
-} from "@/services/flows-legacy/interfaces/engine/step";
+} from "@/services/flows-core/interfaces/engine/step";
 import type {
 	StepFactoryFromSpec,
 	StepSpecFromDefinition,
-} from "@/services/flows-legacy/interfaces/engine/step";
+} from "@/services/flows-core/interfaces/engine/step";
 import {
 	GraphBase,
 	type ConfiguredGraphTool,
 	type GraphTool,
-} from "@/services/flows-legacy/graph/graph.base";
-import type { ChatCompletionMessageParam } from "@/services/flows-legacy/interfaces/engine/messages";
-import { stepRegistry } from "@/services/flows-legacy/registries/step-registry";
-import { logError } from "@/services/flows-legacy/utils/logger";
-import type { FsToolConfig } from "@/services/flows-legacy/tools/fs/config";
+} from "@/services/flows-core/graph/graph.base";
+import type { ChatCompletionMessageParam } from "@/services/flows-core/interfaces/engine/messages";
+import { stepRegistry } from "@/services/flows-core/registries/step-registry";
+import { logError } from "@/services/flows-core/utils/logger";
+import type { FsToolConfig } from "@/services/flows-core/tools/fs/config";
 import {
 	FS_FEATURE_SYSTEM_PROMPT as CORE_FS_FEATURE_SYSTEM_PROMPT,
 	FS_FEATURE_TOOLS,
-} from "@/services/flows-legacy/steps/features/fs-feature";
+} from "@/services/flows-core/steps/features/fs-feature";
 import { memorallFsToolConfig } from "flow-integrations/tools/fs/memorall-fs-path-policy";
 
 const STEP_NAME = "fs-feature" as const;

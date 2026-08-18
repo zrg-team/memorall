@@ -28,7 +28,7 @@ universal packages.
 Memorall consumes the harness through an app-owned composition layer in
 [`src/services/agent-harness`](../src/services/agent-harness). Stored graph,
 step, feature, and tool behavior remains in
-[`src/services/flows-legacy`](../src/services/flows-legacy), explicitly outside
+[`src/services/flows-core`](../src/services/flows-core), explicitly outside
 the standalone packages. `process-chat` starts an `AgentHarness` run and consumes
 harness events; the compatibility plugin adapts the stored graph runtime without
 placing product state in the reusable contracts.
@@ -37,7 +37,7 @@ placing product state in the reusable contracts.
 flowchart TB
     Product["🔒 Memorall UI, memory, documents, jobs, persistence"]
     Composition["🔒 Memorall harness composition"]
-    Legacy["🔒 Stored-flow compatibility runtime"]
+    Legacy["🔒 App-owned flow runtime (flows-core)"]
     Full["⚙️ @memorall/agent-harness facade"]
     Packs["🧩 Standard, sandbox, MCP, LangGraph"]
     Core["⚙️ Environment-neutral core"]
@@ -504,7 +504,7 @@ and the production extension build. This follows the package's declared Node
 
 ### Remaining product debt, outside the standalone harness
 
-- `src/services/flows-legacy` still uses its historical global registries and
+- `src/services/flows-core` still uses its historical global registries and
   import-time feature registration internally. That is deliberate compatibility
   code, not an API for new development. New product flows should be converted to
   native plugins before the compatibility runtime can be deleted.
@@ -549,7 +549,7 @@ A harness change is complete only when:
 - Node adapters: [`node/src`](../packages/agent-harness/node/src)
 - Full facade: [`full/src/index.ts`](../packages/agent-harness/full/src/index.ts)
 - Memorall composition: [`src/services/agent-harness`](../src/services/agent-harness)
-- App compatibility runtime: [`src/services/flows-legacy`](../src/services/flows-legacy)
+- App compatibility runtime: [`src/services/flows-core`](../src/services/flows-core)
 - Sandbox provider review: [`agent-harness-sandbox-review.md`](./agent-harness-sandbox-review.md)
 - Sandbox container transport: [`sandbox-container.md`](./sandbox-container.md)
 

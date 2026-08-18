@@ -2,7 +2,7 @@ import { Annotation } from "@langchain/langgraph";
 import {
 	BaseAnnotation,
 	type BaseStateBase,
-} from "@/services/flows-legacy/graph/graph.base";
+} from "@/services/flows-core/graph/graph.base";
 import type { Node } from "../../interfaces/knowledge";
 import type { Edge } from "../../interfaces/knowledge";
 import type { Source } from "../../interfaces/knowledge";

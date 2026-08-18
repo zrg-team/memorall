@@ -3,13 +3,13 @@ import { marked } from "marked";
 import type {
 	Tool,
 	ToolFactory,
-} from "@/services/flows-legacy/interfaces/engine/tool";
-import type { AllServices } from "@/services/flows-legacy/interfaces/services/services";
-import { toolRegistry } from "@/services/flows-legacy/registries/tool-registry";
+} from "@/services/flows-core/interfaces/engine/tool";
+import type { AllServices } from "@/services/flows-core/interfaces/services/services";
+import { toolRegistry } from "@/services/flows-core/registries/tool-registry";
 import { normalizeDocumentPath } from "./util";
-import type { WebToolServices } from "@/services/flows-legacy/tools/web/web-tool-utils";
-import { ensureFolderExists } from "@/services/flows-legacy/utils/fs-utils";
-import { writeFileBytes } from "@/services/flows-legacy/tools/fs/util";
+import type { WebToolServices } from "@/services/flows-core/tools/web/web-tool-utils";
+import { ensureFolderExists } from "@/services/flows-core/utils/fs-utils";
+import { writeFileBytes } from "@/services/flows-core/tools/fs/util";
 
 const TOOL_NAME = "pdf_generate" as const;
 

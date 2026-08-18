@@ -1,7 +1,7 @@
 import type { IFlowDatabase } from "../interfaces/database";
 import { getKnowledgeDatabase } from "../interfaces/knowledge";
 import type { Node, Edge } from "../interfaces/knowledge";
-import { logWarn } from "@/services/flows-legacy/utils/logger";
+import { logWarn } from "@/services/flows-core/utils/logger";
 
 export interface TrigramSearchResult<T> {
 	item: Partial<T>;

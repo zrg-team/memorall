@@ -2,14 +2,14 @@ import z from "zod";
 import type {
 	Tool,
 	ToolFactory,
-} from "@/services/flows-legacy/interfaces/engine/tool";
-import type { AllServices } from "@/services/flows-legacy/interfaces/services/services";
-import { toolRegistry } from "@/services/flows-legacy/registries/tool-registry";
+} from "@/services/flows-core/interfaces/engine/tool";
+import type { AllServices } from "@/services/flows-core/interfaces/services/services";
+import { toolRegistry } from "@/services/flows-core/registries/tool-registry";
 import { normalizeDocumentPath } from "./util";
 import {
 	readFileBytes,
 	writeFileBytes,
-} from "@/services/flows-legacy/tools/fs/util";
+} from "@/services/flows-core/tools/fs/util";
 
 const TOOL_NAME = "doc_edit" as const;
 

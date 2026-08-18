@@ -1,13 +1,13 @@
 import { PGlite } from "@electric-sql/pglite";
 import { afterEach, describe, expect, it } from "vitest";
 import { up } from "../014_add_message_history_search_index";
-import { createFlowRuntimeVars } from "@/services/flows-legacy/runtime/runtime-context";
+import { createFlowRuntimeVars } from "@/services/flows-core/runtime/runtime-context";
 import {
 	createThreadHistoryReadTool,
 	createThreadHistorySearchTool,
 	THREAD_HISTORY_CONVERSATION_RUNTIME_KEY,
 	THREAD_HISTORY_SEPARATOR_RUNTIME_KEY,
-} from "@/services/flows-legacy/tools/thread-history";
+} from "@/services/flows-core/tools/thread-history";
 
 describe("thread history search migration", () => {
 	let database: PGlite | undefined;

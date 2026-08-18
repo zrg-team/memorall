@@ -1,18 +1,18 @@
 import {
 	defineStep,
 	bindStep,
-} from "@/services/flows-legacy/interfaces/engine/step";
-import { logInfo, logError } from "@/services/flows-legacy/utils/logger";
-import { mapRefine } from "@/services/flows-legacy/utils/map-refine";
+} from "@/services/flows-core/interfaces/engine/step";
+import { logInfo, logError } from "@/services/flows-core/utils/logger";
+import { mapRefine } from "@/services/flows-core/utils/map-refine";
 
 import type {
 	StepFactoryFromSpec,
 	StepSpecFromDefinition,
-} from "@/services/flows-legacy/interfaces/engine/step";
-import { stepRegistry } from "@/services/flows-legacy/registries/step-registry";
-import type {} from "@/services/flows-legacy/interfaces/engine/tool";
-import type { AllServices } from "@/services/flows-legacy/interfaces/services/services";
-import { UuidMapper } from "@/services/flows-legacy/utils/uuid-mapping";
+} from "@/services/flows-core/interfaces/engine/step";
+import { stepRegistry } from "@/services/flows-core/registries/step-registry";
+import type {} from "@/services/flows-core/interfaces/engine/tool";
+import type { AllServices } from "@/services/flows-core/interfaces/services/services";
+import { UuidMapper } from "@/services/flows-core/utils/uuid-mapping";
 
 const STEP_NAME = "entity-resolution" as const;
 

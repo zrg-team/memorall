@@ -1,4 +1,4 @@
-import "@/services/flows-legacy";
+import "@/services/flows-core";
 import "@/services/flows-memory";
 import "@/services/flows-integrations";
 import "@/services/flows-features";

@@ -13,7 +13,7 @@ import {
 	toFlowSandbox,
 	toFlowWebBrowser,
 } from "../flow-service-adapters";
-import { serviceRegistry } from "../flows-legacy/registries/service-registry";
+import { serviceRegistry } from "../flows-core/registries/service-registry";
 
 const text = new TextEncoder();
 

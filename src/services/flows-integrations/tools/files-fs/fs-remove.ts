@@ -2,9 +2,9 @@ import z from "zod";
 import type {
 	Tool,
 	ToolFactory,
-} from "@/services/flows-legacy/interfaces/engine/tool";
-import type { AllServices } from "@/services/flows-legacy/interfaces/services/services";
-import { toolRegistry } from "@/services/flows-legacy/registries/tool-registry";
+} from "@/services/flows-core/interfaces/engine/tool";
+import type { AllServices } from "@/services/flows-core/interfaces/services/services";
+import { toolRegistry } from "@/services/flows-core/registries/tool-registry";
 import { displayPathToFsPath, normalizeFsPath, removePath } from "./util";
 
 const TOOL_NAME = "document_fs_remove" as const;

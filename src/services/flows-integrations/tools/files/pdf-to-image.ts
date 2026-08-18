@@ -4,15 +4,12 @@ import type {
 	Tool,
 	ToolFactory,
 	ToolResultValue,
-} from "@/services/flows-legacy/interfaces/engine/tool";
-import type { AllServices } from "@/services/flows-legacy/interfaces/services/services";
-import { toolRegistry } from "@/services/flows-legacy/registries/tool-registry";
-import type { ChatCompletionContentPart } from "@/services/flows-legacy/interfaces/engine/messages";
+} from "@/services/flows-core/interfaces/engine/tool";
+import type { AllServices } from "@/services/flows-core/interfaces/services/services";
+import { toolRegistry } from "@/services/flows-core/registries/tool-registry";
+import type { ChatCompletionContentPart } from "@/services/flows-core/interfaces/engine/messages";
 import { normalizeDocumentPath } from "./util";
-import {
-	pathExists,
-	readFileBytes,
-} from "@/services/flows-legacy/tools/fs/util";
+import { pathExists, readFileBytes } from "@/services/flows-core/tools/fs/util";
 import { platform } from "@/platform/current";
 
 const TOOL_NAME = "pdf_to_image" as const;

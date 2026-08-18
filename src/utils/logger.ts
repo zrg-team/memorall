@@ -12,10 +12,33 @@ interface LoggerConfig {
 	enablePersistence: boolean;
 }
 
+// Trimming is amortised: a write only pays for it once every
+// TRIM_INTERVAL entries, and the store is allowed to run that far over
+// `maxEntries` in between. Trimming on every write made each log line cost a
+// full scan of the store.
+const TRIM_INTERVAL = 100;
+
+// Persisted entries are diagnostic, not an archive. A single fat payload (a
+// finished chat result, a tool output, a base64 attachment) used to be stored
+// twice — once stringified into `message`, once structured-cloned into `data` —
+// and every later trim read it back again.
+const MAX_PERSISTED_MESSAGE_LENGTH = 2_000;
+
+const safeStringify = (value: unknown): string => {
+	if (value === undefined) return "";
+	try {
+		return JSON.stringify(value) ?? String(value);
+	} catch {
+		return String(value);
+	}
+};
+
 class Logger {
 	private storage: IndexedDBLogStorage;
 	private config: LoggerConfig;
 	private isShowLog: boolean;
+	private writesSinceTrim = 0;
+	private trimming: Promise<void> | null = null;
 
 	constructor(config: Partial<LoggerConfig> = {}) {
 		this.config = {
@@ -48,24 +71,27 @@ class Logger {
 
 	private async cleanupOldLogs(): Promise<void> {
 		try {
-			const count = await this.storage.getStorageSize();
-			if (count > this.config.maxEntries) {
-				// Get all logs, sort by timestamp, and remove oldest ones
-				const logs = await this.storage.retrieve();
-				logs.sort((a, b) => b.timestamp - a.timestamp);
-
-				// Keep only the newest maxEntries logs
-				const logsToKeep = logs.slice(0, this.config.maxEntries);
-				const oldestToKeep = logsToKeep[logsToKeep.length - 1];
-
-				if (oldestToKeep) {
-					// Clear logs older than the oldest we want to keep
-					await this.storage.clear(oldestToKeep.timestamp - 1);
-				}
-			}
+			await this.storage.trimToNewest(this.config.maxEntries);
 		} catch (error) {
 			console.warn("Failed to cleanup old logs:", error);
 		}
+	}
+
+	/**
+	 * Trim at most once per TRIM_INTERVAL writes, and never concurrently.
+	 * Callers do not wait for it: a log line must not sit behind an IndexedDB
+	 * sweep, which is what made every awaited `logger.info` on the chat path a
+	 * full scan of the log store.
+	 */
+	private scheduleCleanup(): void {
+		this.writesSinceTrim += 1;
+		if (this.writesSinceTrim < TRIM_INTERVAL || this.trimming) {
+			return;
+		}
+		this.writesSinceTrim = 0;
+		this.trimming = this.cleanupOldLogs().finally(() => {
+			this.trimming = null;
+		});
 	}
 
 	private generateId(): string {
@@ -104,7 +130,7 @@ class Logger {
 		try {
 			const sanitized: any = {};
 			for (const key in data) {
-				if (data.hasOwnProperty(key)) {
+				if (Object.hasOwn(data, key)) {
 					const value = data[key];
 					// Skip promises and functions
 					if (value instanceof Promise) {
@@ -148,8 +174,8 @@ class Logger {
 
 			await this.storage.store(entry);
 
-			// Cleanup after storing new log
-			await this.cleanupOldLogs();
+			// Amortised: see scheduleCleanup.
+			this.scheduleCleanup();
 		} catch (error) {
 			console.warn("Failed to persist log:", error);
 		}
@@ -203,10 +229,15 @@ class Logger {
 			this.logToConsole(prefix, colorFunc, logFunc, ...args);
 		}
 
-		// Persistence
-		const message = args
-			.map((arg) => (typeof arg === "string" ? arg : JSON.stringify(arg)))
-			.join(" ");
+		// Persistence.
+		// Only string arguments form the message; the rest already travel in
+		// `data`, and stringifying them here stored every payload twice.
+		const textArgs = args.filter(
+			(arg): arg is string => typeof arg === "string",
+		);
+		const message = (
+			textArgs.length > 0 ? textArgs.join(" ") : safeStringify(args[0])
+		).slice(0, MAX_PERSISTED_MESSAGE_LENGTH);
 
 		const data = args.length > 1 ? args.slice(1) : undefined;
 
@@ -419,8 +450,7 @@ export const logSilent = (...args: unknown[]) => {
 	logger.info(undefined, undefined, ...args);
 };
 
+// Export types for external use
+export type { LogEntry, LoggerConfig, LogLevel };
 // Export logger instance for advanced usage
 export { logger };
-
-// Export types for external use
-export type { LogLevel, LogEntry, LoggerConfig };

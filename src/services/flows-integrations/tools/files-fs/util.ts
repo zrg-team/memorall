@@ -19,4 +19,4 @@ export {
 	type GrepOptions,
 	type GrepOutputMode,
 	type ResolvedGrepOptions,
-} from "@/services/flows-legacy/tools/fs/util";
+} from "@/services/flows-core/tools/fs/util";

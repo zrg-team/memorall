@@ -7,17 +7,17 @@
 
 import { Annotation } from "@langchain/langgraph";
 import type { RetrievalPipelineState } from "flow-memory/interfaces/retrieval-state";
-import { logInfo, logError } from "@/services/flows-legacy/utils/logger";
+import { logInfo, logError } from "@/services/flows-core/utils/logger";
 import {
 	defineStep,
 	bindStep,
 	type StepOutput,
-} from "@/services/flows-legacy/interfaces/engine/step";
+} from "@/services/flows-core/interfaces/engine/step";
 import type {
 	StepFactoryFromSpec,
 	StepSpecFromDefinition,
-} from "@/services/flows-legacy/interfaces/engine/step";
-import { stepRegistry } from "@/services/flows-legacy/registries/step-registry";
+} from "@/services/flows-core/interfaces/engine/step";
+import { stepRegistry } from "@/services/flows-core/registries/step-registry";
 import type {
 	LLMRetrieveInput,
 	LLMRetrieveOutput,
@@ -34,9 +34,9 @@ import type {
 	ContextToSystemConfig,
 	ContextToSystemInput,
 	ContextToSystemOutput,
-} from "@/services/flows-legacy/steps/common/context-to-system";
-import type { ChatCompletionMessageParam } from "@/services/flows-legacy/interfaces/engine/messages";
-import { extractRetrievalTextFromMessages } from "@/services/flows-legacy/utils/message-query";
+} from "@/services/flows-core/steps/common/context-to-system";
+import type { ChatCompletionMessageParam } from "@/services/flows-core/interfaces/engine/messages";
+import { extractRetrievalTextFromMessages } from "@/services/flows-core/utils/message-query";
 
 const STEP_NAME = "context-llm-retrieve" as const;
 

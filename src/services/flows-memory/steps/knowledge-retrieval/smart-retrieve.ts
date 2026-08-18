@@ -1,7 +1,7 @@
 import {
 	defineStep,
 	bindStep,
-} from "@/services/flows-legacy/interfaces/engine/step";
+} from "@/services/flows-core/interfaces/engine/step";
 import { getKnowledgeDatabase } from "../../interfaces/knowledge";
 /**
  * Smart Hybrid Retrieval Step for Knowledge RAG
@@ -18,7 +18,7 @@ import { getKnowledgeDatabase } from "../../interfaces/knowledge";
  * 7. Post-Expansion - Connect standalone nodes and edges
  */
 
-import { logInfo, logError } from "@/services/flows-legacy/utils/logger";
+import { logInfo, logError } from "@/services/flows-core/utils/logger";
 import {
 	vectorSearchNodes,
 	vectorSearchEdges,
@@ -31,10 +31,10 @@ import { compactQueryIfNeeded } from "../../utils/query-compaction";
 import type {
 	StepFactoryFromSpec,
 	StepSpecFromDefinition,
-} from "@/services/flows-legacy/interfaces/engine/step";
-import { stepRegistry } from "@/services/flows-legacy/registries/step-registry";
-import type {} from "@/services/flows-legacy/interfaces/engine/tool";
-import type { AllServices } from "@/services/flows-legacy/interfaces/services/services";
+} from "@/services/flows-core/interfaces/engine/step";
+import { stepRegistry } from "@/services/flows-core/registries/step-registry";
+import type {} from "@/services/flows-core/interfaces/engine/tool";
+import type { AllServices } from "@/services/flows-core/interfaces/services/services";
 
 const STEP_NAME = "smart-retrieve" as const;
 

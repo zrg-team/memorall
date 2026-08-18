@@ -1,5 +1,5 @@
 import type { ISandboxContainerService } from "@/services/sandbox-container";
-import type { IFlowFileSystem } from "@/services/flows-legacy/interfaces/services/filesystem";
+import type { IFlowFileSystem } from "@/services/flows-core/interfaces/services/filesystem";
 import { createBrowserPlatform } from "@memorall/agent-harness-browser";
 import {
 	SandboxManager,

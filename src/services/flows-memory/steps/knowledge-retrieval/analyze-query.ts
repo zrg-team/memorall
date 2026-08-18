@@ -1,20 +1,20 @@
 import {
 	defineStep,
 	bindStep,
-} from "@/services/flows-legacy/interfaces/engine/step";
-import { logInfo, logError } from "@/services/flows-legacy/utils/logger";
+} from "@/services/flows-core/interfaces/engine/step";
+import { logInfo, logError } from "@/services/flows-core/utils/logger";
 
 import type {
 	StepFactoryFromSpec,
 	StepSpecFromDefinition,
-} from "@/services/flows-legacy/interfaces/engine/step";
-import { stepRegistry } from "@/services/flows-legacy/registries/step-registry";
-import type {} from "@/services/flows-legacy/interfaces/engine/tool";
-import type { AllServices } from "@/services/flows-legacy/interfaces/services/services";
+} from "@/services/flows-core/interfaces/engine/step";
+import { stepRegistry } from "@/services/flows-core/registries/step-registry";
+import type {} from "@/services/flows-core/interfaces/engine/tool";
+import type { AllServices } from "@/services/flows-core/interfaces/services/services";
 import type {
 	ChatCompletionResponse,
 	ChatMessage,
-} from "@/services/flows-legacy/interfaces/engine/messages";
+} from "@/services/flows-core/interfaces/engine/messages";
 
 const STEP_NAME = "analyze-query" as const;
 

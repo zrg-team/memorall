@@ -8,8 +8,8 @@
  * so read-only and destructive tools can be labelled without guessing.
  */
 
-import { MultiServerMCPClient } from "@/services/flows-legacy/utils/langchain-mcp-adapter/index";
-import { adaptMCPTool } from "@/services/flows-legacy/steps/features/mcp-feature/mcp-tool-adapter";
+import { MultiServerMCPClient } from "@/services/flows-core/utils/langchain-mcp-adapter/index";
+import { adaptMCPTool } from "@/services/flows-core/steps/features/mcp-feature/mcp-tool-adapter";
 import { buildServerConfig } from "./resolve";
 import type { CachedToolDescriptor, McpConnection } from "./types";
 
