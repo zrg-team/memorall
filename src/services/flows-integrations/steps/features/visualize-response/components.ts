@@ -35,9 +35,10 @@ export const OPENUI_COMPONENTS: OpenUIComponentMeta[] = [
 			'syntax highlighted, read-only code with a copy button. language is a name like "typescript" or "python".',
 	},
 	{
-		signature: "CodeEditorBlock(code, language?, filename?, height?, preview?)",
+		signature:
+			"CodeEditorBlock(code, language?, filename?, height?, preview?, name?, label?)",
 		description:
-			"editable code the user can change, with copy and reset. preview adds a toggle that runs the edited source in an isolated frame; it defaults on for html and off otherwise. Use CodeBlockComp instead for code that is only being explained.",
+			"editable code the user can change, with copy and reset. preview adds a toggle that runs the edited source in an isolated frame; it defaults on for html and off otherwise. Give it a name inside a FormBlock to submit the edited source with the form, the same as any input. Use CodeBlockComp instead for code that is only being explained.",
 	},
 	{
 		signature: "HtmlBlock(html, height?, title?)",

@@ -1,8 +1,27 @@
 import React from "react";
 import { fireEvent, render, screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CodeEditorBlock } from "../components/code-editor-block";
 import { clearOpenUIState } from "../openui-form-state";
+
+const formState = vi.hoisted(() => ({ values: new Map<string, unknown>() }));
+
+// The DSL supplies form context; the component's contract with it is what these
+// exercise — that a named editor reads and writes form state rather than its own.
+vi.mock("@openuidev/react-lang", async (importOriginal) => {
+	const actual = await importOriginal<Record<string, unknown>>();
+	return {
+		...actual,
+		useFormName: () => "codeForm",
+		useGetFieldValue: () => (form: string, name: string) =>
+			formState.values.get(`${form}.${name}`),
+		useSetFieldValue:
+			() => (form: string, _type: string, name: string, value: unknown) =>
+				formState.values.set(`${form}.${name}`, value),
+		useSetDefaultValue: () => undefined,
+		useIsStreaming: () => false,
+	};
+});
 
 const Editor = CodeEditorBlock.component as React.FC<{
 	props: {
@@ -11,6 +30,8 @@ const Editor = CodeEditorBlock.component as React.FC<{
 		filename?: string;
 		height?: number;
 		preview?: boolean;
+		name?: string;
+		label?: string;
 	};
 }>;
 
@@ -20,6 +41,8 @@ const renderEditor = (props: {
 	filename?: string;
 	height?: number;
 	preview?: boolean;
+	name?: string;
+	label?: string;
 }) => {
 	const view = render(<Editor props={{ language: "typescript", ...props }} />);
 	return {
@@ -30,7 +53,10 @@ const renderEditor = (props: {
 };
 
 describe("CodeEditorBlock", () => {
-	beforeEach(() => clearOpenUIState());
+	beforeEach(() => {
+		clearOpenUIState();
+		formState.values.clear();
+	});
 
 	it("lets the user change the code", () => {
 		const { textarea } = renderEditor({ code: "const a = 1;" });
@@ -129,6 +155,31 @@ describe("CodeEditorBlock", () => {
 		first.unmount();
 
 		expect(renderEditor({ code: "bbb" }).textarea()?.value).toBe("bbb");
+	});
+
+	it("writes into form state when it is given a name", () => {
+		const { textarea } = renderEditor({ code: "start", name: "snippet" });
+		const editor = textarea();
+		if (!editor) throw new Error("expected a textarea");
+
+		fireEvent.change(editor, { target: { value: "edited by user" } });
+		expect(formState.values.get("codeForm.snippet")).toBe("edited by user");
+	});
+
+	it("renders the value the form already holds, not the original source", () => {
+		formState.values.set("codeForm.snippet", "from the form");
+		expect(
+			renderEditor({ code: "original", name: "snippet" }).textarea()?.value,
+		).toBe("from the form");
+	});
+
+	it("leaves form state alone when it has no name", () => {
+		const { textarea } = renderEditor({ code: "start" });
+		const editor = textarea();
+		if (!editor) throw new Error("expected a textarea");
+
+		fireEvent.change(editor, { target: { value: "scratch" } });
+		expect(formState.values.size).toBe(0);
 	});
 
 	it("clamps height the same way HtmlBlock does", () => {

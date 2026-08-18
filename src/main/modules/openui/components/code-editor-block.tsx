@@ -1,6 +1,13 @@
 import React, { useCallback, useRef, useState } from "react";
-import { defineComponent } from "@openuidev/react-lang";
+import {
+	defineComponent,
+	useFormName,
+	useGetFieldValue,
+	useSetDefaultValue,
+	useSetFieldValue,
+} from "@openuidev/react-lang";
 import { z } from "zod";
+import { useRegisterFieldMetadata } from "@/main/modules/openui/components/form-field";
 import { Check, Copy, Eye, RotateCcw, SquareCode } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -57,14 +64,54 @@ export const CodeEditorBlock = defineComponent({
 		filename: z.string().optional(),
 		height: z.number().optional(),
 		preview: z.boolean().optional(),
+		/**
+		 * Set inside a FormBlock to submit the edited source with the form. The
+		 * value then lives in form state like any other field, so `{{name}}`
+		 * placeholders resolve to it and submissions carry it.
+		 */
 		name: z.string().optional(),
+		/** Label the submission reports this field under. Defaults to the filename. */
+		label: z.string().optional(),
 	}),
 	component: ({ props }) => {
+		// A named editor is a form field: its value belongs to the form, which also
+		// means it persists through the renderer's state map like every other
+		// field. An unnamed one is a standalone scratchpad and keeps its own copy.
+		const formName = useFormName();
+		const getFieldValue = useGetFieldValue();
+		const setFieldValue = useSetFieldValue();
+		const isField = Boolean(props.name);
+		const fieldLabel = props.label ?? props.filename ?? props.language;
+
+		useRegisterFieldMetadata({
+			formName,
+			name: props.name ?? "",
+			label: fieldLabel,
+		});
+		useSetDefaultValue({
+			formName,
+			componentType: "CodeEditorBlock",
+			name: props.name ?? "",
+			existingValue: isField
+				? getFieldValue(formName, props.name as string)
+				: undefined,
+			defaultValue: props.code,
+		});
+
 		const stateKey = editorStateKey(props.code, props.name);
-		const [value, setValue] = useState(() => {
+		const [localValue, setLocalValue] = useState(() => {
 			const saved = readOpenUIState(stateKey);
 			return typeof saved?.value === "string" ? saved.value : props.code;
 		});
+
+		const fieldValue = isField
+			? getFieldValue(formName, props.name as string)
+			: undefined;
+		const value = isField
+			? typeof fieldValue === "string"
+				? fieldValue
+				: props.code
+			: localValue;
 		const [copied, setCopied] = useState(false);
 		const [showPreview, setShowPreview] = useState(false);
 		const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -78,10 +125,19 @@ export const CodeEditorBlock = defineComponent({
 
 		const commit = useCallback(
 			(next: string) => {
-				setValue(next);
+				if (isField) {
+					setFieldValue(
+						formName,
+						"CodeEditorBlock",
+						props.name as string,
+						next,
+					);
+					return;
+				}
+				setLocalValue(next);
 				writeOpenUIState(stateKey, { value: next });
 			},
-			[stateKey],
+			[isField, setFieldValue, formName, props.name, stateKey],
 		);
 
 		const copy = useCallback(() => {

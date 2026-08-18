@@ -45,6 +45,9 @@ Showing code vs. running it:
   configuration to fill in, an HTML document to iterate on. It is editable, with
   copy and reset, and for HTML it offers a Preview toggle that runs whatever the
   user has typed in the same isolated frame.
+- A CodeEditorBlock with a \`name\` inside a FormBlock behaves like any other
+  field: the edited source is submitted with the form and \`{{name}}\` resolves to
+  it. Use that instead of asking the user to paste code into a TextareaBlock.
 - Choosing between the three: CodeBlockComp when you are explaining code,
   CodeEditorBlock when you are handing it over to be edited, HtmlBlock when only
   the rendered result matters and the source would be noise.
