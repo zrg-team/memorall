@@ -638,19 +638,22 @@ const definition = defineStep<
 
 			const nodeCandidateLimit = config.seed.nodeLimit * candidateMultiplier;
 
-			const nodeResults = await searchNodesByVector(
-				database,
-				queryEmbedding,
-				nodeCandidateLimit,
-				input.graphId,
-			);
-
-			const edgeResults = await searchEdgesByVector(
-				database,
-				queryEmbedding,
-				config.seed.edgeLimit,
-				input.graphId,
-			);
+			// Independent reads over the same vector: awaiting them one after the
+			// other spent two round trips to the database where one would do.
+			const [nodeResults, edgeResults] = await Promise.all([
+				searchNodesByVector(
+					database,
+					queryEmbedding,
+					nodeCandidateLimit,
+					input.graphId,
+				),
+				searchEdgesByVector(
+					database,
+					queryEmbedding,
+					config.seed.edgeLimit,
+					input.graphId,
+				),
+			]);
 
 			const nodeCandidates: EnhancedNode[] = nodeResults
 				.filter((result) => result.similarity >= config.seed.nodeThreshold)
@@ -688,24 +691,40 @@ const definition = defineStep<
 				.map((text) => text.trim())
 				.filter((text) => text.length > 0 && text !== baseQuery);
 
-			for (const contextQuery of contextQueries) {
-				const contextEmbedding = await embedQuery(
-					defaultEmbedding,
-					contextQuery,
-				);
-				const contextNodeResults = await searchNodesByVector(
-					database,
-					contextEmbedding,
-					nodeCandidateLimit,
-					input.graphId,
-				);
-				const contextEdgeResults = await searchEdgesByVector(
-					database,
-					contextEmbedding,
-					config.seed.edgeLimit,
-					input.graphId,
-				);
+			// Each context query is independent, so their embeddings and searches run
+			// together instead of one topic at a time. Merging stays sequential and in
+			// the original order below: the maps keep the higher score, so the result
+			// does not depend on which request happened to finish first, and ties
+			// still resolve to the earlier query exactly as before.
+			const contextFetches = await Promise.all(
+				contextQueries.map(async (contextQuery) => {
+					const contextEmbedding = await embedQuery(
+						defaultEmbedding,
+						contextQuery,
+					);
+					const [nodes, edges] = await Promise.all([
+						searchNodesByVector(
+							database,
+							contextEmbedding,
+							nodeCandidateLimit,
+							input.graphId,
+						),
+						searchEdgesByVector(
+							database,
+							contextEmbedding,
+							config.seed.edgeLimit,
+							input.graphId,
+						),
+					]);
+					return { contextEmbedding, nodes, edges };
+				}),
+			);
 
+			for (const {
+				contextEmbedding,
+				nodes: contextNodeResults,
+				edges: contextEdgeResults,
+			} of contextFetches) {
 				const contextCandidates: EnhancedNode[] = contextNodeResults
 					.filter((result) => result.similarity >= config.seed.nodeThreshold)
 					.map((result) =>
@@ -882,14 +901,24 @@ const definition = defineStep<
 
 				const missingComponents = queryComponents.filter((c) => !c.covered);
 
-				for (const component of missingComponents) {
-					const gapResults = await vectorSearchNodes(
-						database,
-						defaultEmbedding,
-						[component.text],
-						config.completeness.gapFillingLimit,
-						input.graphId,
-					);
+				// One search per missing component, run together. The merge below keeps
+				// the first writer for an id, so it stays sequential and in component
+				// order — otherwise which component "claimed" a shared node would
+				// depend on request timing.
+				const gapFetches = await Promise.all(
+					missingComponents.map((component) =>
+						vectorSearchNodes(
+							database,
+							defaultEmbedding,
+							[component.text],
+							config.completeness.gapFillingLimit,
+							input.graphId,
+						),
+					),
+				);
+
+				for (const [index, component] of missingComponents.entries()) {
+					const gapResults = gapFetches[index] ?? [];
 
 					gapResults.forEach((result) => {
 						if (!allNodes.has(result.item.id)) {
