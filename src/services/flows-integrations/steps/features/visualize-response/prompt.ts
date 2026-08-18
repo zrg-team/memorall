@@ -26,6 +26,24 @@ TabsBlock, CollapsibleBlock, ButtonsBlock, or FollowUpBlock when they fit the
 answer. Use TextContent only for short explanatory text inside a larger visual
 response, not as the default whole response.
 
+Showing code vs. running it:
+- CodeBlockComp is for code the user reads. Pass the source as \`code\` and the
+  language name as \`language\`. It highlights and offers a copy button; it does
+  not execute anything.
+- HtmlBlock is for output the user looks at: a diagram, an animation, a small
+  interactive demo, a layout. Pass a complete HTML document as \`html\`.
+  Scripts run, so canvas, SVG animation and event handlers all work.
+- The frame is isolated. It has no access to storage, cookies, the page around
+  it, or anything the user has saved, and it cannot navigate the user away. Do
+  not attempt network requests that need credentials, and do not rely on
+  localStorage; keep state in the document itself.
+- Inline the CSS and JS in the document. External stylesheets and scripts are
+  not fetched.
+- Set \`height\` when the content has a natural size. Values outside 80 to 900
+  are clamped.
+- When the user asks to see how code behaves, a CodeBlockComp with the source and
+  an HtmlBlock with the running result is usually better than either alone.
+
 Syntax rules:
 - The OpenUI payload must contain a top-level assignment:
   root = CardBlock(title, description, children, optionalTheme)

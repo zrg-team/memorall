@@ -1,5 +1,6 @@
 import React from "react";
 import { defineComponent } from "@openuidev/react-lang";
+import { HtmlBlock } from "../html-block";
 import { z } from "zod";
 import {
 	Alert,
@@ -182,4 +183,5 @@ export const contentComponents = [
 	ProgressBlock,
 	SeparatorBlock,
 	CodeBlockComp,
+	HtmlBlock,
 ];
