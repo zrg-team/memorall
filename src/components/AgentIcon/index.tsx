@@ -6,7 +6,7 @@ import {
 	type AgentIconCanvasProps,
 	type AgentScreenContent,
 } from "./AgentIconCanvas";
-export { AgentGlyph, type AgentGlyphProps } from "./AgentGlyph";
+export { toAgentScreenContent } from "./agent-screen-content";
 import {
 	AgentSpeechBubble,
 	type AgentIconSpeechBubble,

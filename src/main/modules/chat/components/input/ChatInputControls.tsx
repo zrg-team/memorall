@@ -37,7 +37,7 @@ import {
 import type { ChatStatus } from "@/types/chat";
 import type { FlowMetadata } from "@/services/database/entities/flows";
 import { cn } from "@/lib/utils";
-import { AgentGlyph } from "@/components/AgentIcon";
+import { AgentIcon, toAgentScreenContent } from "@/components/AgentIcon";
 import { getAgentIconScreenFromMetadata } from "@/main/modules/agents/types";
 
 export interface ChatInputControlsProps {
@@ -54,7 +54,7 @@ export interface ChatInputControlsProps {
 	agentFlows: Array<{
 		id: string;
 		name: string;
-		/** Carries the agent's icon screen; see AgentGlyph. */
+		/** Carries the agent's icon screen; drawn by AgentIcon. */
 		metadata?: FlowMetadata | null;
 	}>;
 	selectedAgentFlowId: string | null;
@@ -174,11 +174,15 @@ export const ChatInputControls: React.FC<ChatInputControlsProps> = ({
 											{selectedFlow?.id === "chat" ? (
 												<MessageCircle size={12} />
 											) : (
-												<AgentGlyph
-													size={14}
-													name={selectedFlow?.name}
-													iconScreen={getAgentIconScreenFromMetadata(
-														selectedFlow?.metadata,
+												<AgentIcon
+													size={22}
+													reactive={false}
+													aria-label={selectedFlow?.name ?? "Agent"}
+													screenContent={toAgentScreenContent(
+														getAgentIconScreenFromMetadata(
+															selectedFlow?.metadata,
+														),
+														selectedFlow?.name,
 													)}
 												/>
 											)}
@@ -199,11 +203,13 @@ export const ChatInputControls: React.FC<ChatInputControlsProps> = ({
 											{flow.id === "chat" ? (
 												<MessageCircle size={14} />
 											) : (
-												<AgentGlyph
-													size={16}
-													name={flow.name}
-													iconScreen={getAgentIconScreenFromMetadata(
-														flow.metadata,
+												<AgentIcon
+													size={24}
+													reactive={false}
+													aria-label={flow.name}
+													screenContent={toAgentScreenContent(
+														getAgentIconScreenFromMetadata(flow.metadata),
+														flow.name,
 													)}
 												/>
 											)}

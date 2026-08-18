@@ -43,7 +43,7 @@ export interface ChatInputProps {
 	agentFlows: Array<{
 		id: string;
 		name: string;
-		/** Carries the agent's icon screen; see AgentGlyph. */
+		/** Carries the agent's icon screen; drawn by AgentIcon. */
 		metadata?: FlowMetadata | null;
 	}>;
 	selectedAgentFlowId: string | null;

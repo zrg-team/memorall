@@ -1,6 +1,6 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
-import type { AgentScreenContent } from "@/components/AgentIcon";
+import { toAgentScreenContent } from "@/components/AgentIcon";
 import { Separator } from "@/main/components/ui/separator";
 import { CursorPoint } from "@/components/AgentCursor";
 import { AGENT_WIZARD_CURSOR_KEYS } from "@/main/modules/agent-wizard";
@@ -11,18 +11,6 @@ import { AgentInlineActions } from "./AgentInlineActions";
 import { AgentCompactStatsRow } from "./AgentCompactStatsRow";
 import { AgentPromptPills } from "./AgentPromptPills";
 import type { AgentConfigFormActions, AgentMetadataChange } from "./types";
-
-const toAgentScreenContent = (
-	iconScreen: AgentPresetDraft["iconScreen"],
-): AgentScreenContent | undefined =>
-	iconScreen
-		? {
-				kind: iconScreen.kind,
-				value: iconScreen.value,
-				color: iconScreen.color,
-				scale: iconScreen.kind === "emoji" ? 0.72 : 0.52,
-			}
-		: undefined;
 
 const AgentDescriptionField: React.FC<{
 	metadataDraft: AgentPresetDraft;
