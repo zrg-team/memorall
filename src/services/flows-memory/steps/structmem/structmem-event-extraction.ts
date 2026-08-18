@@ -1,15 +1,15 @@
 import {
 	defineStep,
 	bindStep,
-} from "@/services/flows-core/interfaces/engine/step";
+} from "@memorall/agent-harness-flows/interfaces/engine/step";
 import type {
 	StepFactoryFromSpec,
 	StepSpecFromDefinition,
-} from "@/services/flows-core/interfaces/engine/step";
-import { stepRegistry } from "@/services/flows-core/registries/step-registry";
-import type {} from "@/services/flows-core/interfaces/engine/tool";
-import type { AllServices } from "@/services/flows-core/interfaces/services/services";
-import type { ChatCompletionResponse } from "@/services/flows-core/interfaces/engine/messages";
+} from "@memorall/agent-harness-flows/interfaces/engine/step";
+import { stepRegistry } from "@memorall/agent-harness-flows/registries/step-registry";
+import type {} from "@memorall/agent-harness-flows/interfaces/engine/tool";
+import type { AllServices } from "@memorall/agent-harness-flows/interfaces/services/services";
+import type { ChatCompletionResponse } from "@memorall/agent-harness-flows/interfaces/engine/messages";
 import type {
 	StructMemEntry,
 	StructMemState,
@@ -20,7 +20,7 @@ import {
 	parseJsonObject,
 	warnParseFailure,
 } from "./structmem-utils";
-import { logError, logInfo } from "@/services/flows-core/utils/logger";
+import { logError, logInfo } from "@memorall/agent-harness-flows/utils/logger";
 
 const STEP_NAME = "structmem-event-extraction" as const;
 

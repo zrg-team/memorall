@@ -1,23 +1,27 @@
 import {
 	defineStep,
 	bindStep,
-} from "@/services/flows-core/interfaces/engine/step";
+} from "@memorall/agent-harness-flows/interfaces/engine/step";
 import { getKnowledgeDatabase } from "../../interfaces/knowledge";
-import { logError, logInfo, logWarn } from "@/services/flows-core/utils/logger";
+import {
+	logError,
+	logInfo,
+	logWarn,
+} from "@memorall/agent-harness-flows/utils/logger";
 import { getCurrentEmbeddingColumns } from "../../utils/embedding-size-config";
-import { extractRetrievalTextFromMessages } from "@/services/flows-core/utils/message-query";
+import { extractRetrievalTextFromMessages } from "@memorall/agent-harness-flows/utils/message-query";
 import type {
 	StepFactoryFromSpec,
 	StepSpecFromDefinition,
-} from "@/services/flows-core/interfaces/engine/step";
-import { stepRegistry } from "@/services/flows-core/registries/step-registry";
-import type {} from "@/services/flows-core/interfaces/engine/tool";
-import type { AllServices } from "@/services/flows-core/interfaces/services/services";
+} from "@memorall/agent-harness-flows/interfaces/engine/step";
+import { stepRegistry } from "@memorall/agent-harness-flows/registries/step-registry";
+import type {} from "@memorall/agent-harness-flows/interfaces/engine/tool";
+import type { AllServices } from "@memorall/agent-harness-flows/interfaces/services/services";
 import type {
 	ContextToSystemConfig,
 	ContextToSystemInput,
 	ContextToSystemOutput,
-} from "@/services/flows-core/steps/common/context-to-system";
+} from "@memorall/agent-harness-flows/steps/common/context-to-system";
 import { asRecord, type StructMemNodeRow } from "./structmem-utils";
 
 const STEP_NAME = "structmem-retrieve" as const;

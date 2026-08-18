@@ -1,22 +1,22 @@
 import {
 	defineStep,
 	bindStep,
-} from "@/services/flows-core/interfaces/engine/step";
+} from "@memorall/agent-harness-flows/interfaces/engine/step";
 import type {
 	BoundStep,
 	StepFactoryFromSpec,
 	StepSpecFromDefinition,
-} from "@/services/flows-core/interfaces/engine/step";
-import { logError } from "@/services/flows-core/utils/logger";
-import { stepRegistry } from "@/services/flows-core/registries/step-registry";
+} from "@memorall/agent-harness-flows/interfaces/engine/step";
+import { logError } from "@memorall/agent-harness-flows/utils/logger";
+import { stepRegistry } from "@memorall/agent-harness-flows/registries/step-registry";
 import {
 	GraphBase,
 	type GraphTool,
-} from "@/services/flows-core/graph/graph.base";
-import type { ChatCompletionMessageParam } from "@/services/flows-core/interfaces/engine/messages";
-import type { ActiveWebSessionInfo } from "@/services/flows-core/interfaces/services/web-browser";
-import type {} from "@/services/flows-core/interfaces/engine/tool";
-import type { AllServices } from "@/services/flows-core/interfaces/services/services";
+} from "@memorall/agent-harness-flows/graph/graph.base";
+import type { ChatCompletionMessageParam } from "@memorall/agent-harness-flows/interfaces/engine/messages";
+import type { ActiveWebSessionInfo } from "@memorall/agent-harness-flows/interfaces/services/web-browser";
+import type {} from "@memorall/agent-harness-flows/interfaces/engine/tool";
+import type { AllServices } from "@memorall/agent-harness-flows/interfaces/services/services";
 
 const STEP_NAME = "meal-planner-feature" as const;
 export const MEAL_PLANNER_FEATURE_NAME = STEP_NAME;

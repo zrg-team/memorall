@@ -6,6 +6,7 @@
     { "path": "./standard" },
     { "path": "./sandbox" },
     { "path": "./mcp" },
+    { "path": "./flows" },
     { "path": "./browser" },
     { "path": "./node" },
     { "path": "./compatibility" },

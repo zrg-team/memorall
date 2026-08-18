@@ -1,5 +1,5 @@
 import { expect } from "vitest";
-import type { SandboxProvider } from "@/services/flows-core/interfaces/services/agent-sandbox";
+import type { SandboxProvider } from "@memorall/agent-harness-flows/interfaces/services/agent-sandbox";
 
 export const expectSandboxProviderConformance = async (
 	provider: SandboxProvider,

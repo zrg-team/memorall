@@ -1,5 +1,5 @@
-import { logInfo } from "@/services/flows-core/utils/logger";
-import { graphRegistry } from "@/services/flows-core/registries/graph-registry";
+import { logInfo } from "@memorall/agent-harness-flows/utils/logger";
+import { graphRegistry } from "@memorall/agent-harness-flows/registries/graph-registry";
 
 export class FlowsService {
 	async initialize(): Promise<void> {

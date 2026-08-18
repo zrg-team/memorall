@@ -1,5 +1,5 @@
-import { stepRegistry } from "@/services/flows-core/registries/step-registry";
-import { DEFAULT_CONTEXT_SYSTEM_PROMPT } from "@/services/flows-core/steps/common/context-to-system";
+import { stepRegistry } from "@memorall/agent-harness-flows/registries/step-registry";
+import { DEFAULT_CONTEXT_SYSTEM_PROMPT } from "@memorall/agent-harness-flows/steps/common/context-to-system";
 
 const STEP_NAME = "knowledge-retrieval" as const;
 

@@ -4,9 +4,9 @@ import { eq } from "drizzle-orm";
 import type {
 	Tool,
 	ToolFactory,
-} from "@/services/flows-core/interfaces/engine/tool";
-import type { AllServices } from "@/services/flows-core/interfaces/services/services";
-import { toolRegistry } from "@/services/flows-core/registries/tool-registry";
+} from "@memorall/agent-harness-flows/interfaces/engine/tool";
+import type { AllServices } from "@memorall/agent-harness-flows/interfaces/services/services";
+import { toolRegistry } from "@memorall/agent-harness-flows/registries/tool-registry";
 import { getCurrentEmbeddingFields } from "../utils/embedding-size-config";
 import type { IEmbeddingService } from "../interfaces/embedding";
 import type {

@@ -7,17 +7,17 @@
 
 import { Annotation } from "@langchain/langgraph";
 import type { RetrievalPipelineState } from "flow-memory/interfaces/retrieval-state";
-import { logInfo, logError } from "@/services/flows-core/utils/logger";
+import { logInfo, logError } from "@memorall/agent-harness-flows/utils/logger";
 import {
 	defineStep,
 	bindStep,
 	type StepOutput,
-} from "@/services/flows-core/interfaces/engine/step";
+} from "@memorall/agent-harness-flows/interfaces/engine/step";
 import type {
 	StepFactoryFromSpec,
 	StepSpecFromDefinition,
-} from "@/services/flows-core/interfaces/engine/step";
-import { stepRegistry } from "@/services/flows-core/registries/step-registry";
+} from "@memorall/agent-harness-flows/interfaces/engine/step";
+import { stepRegistry } from "@memorall/agent-harness-flows/registries/step-registry";
 import type {
 	QuickRetrieveInput,
 	QuickRetrieveOutput,
@@ -28,12 +28,12 @@ import type {
 	EntitiesFactsToContextOutput,
 	EntitiesFactsToContextServices,
 } from "../knowledge-retrieval/entities-facts-to-context";
-import { extractRetrievalTextFromMessages } from "@/services/flows-core/utils/message-query";
+import { extractRetrievalTextFromMessages } from "@memorall/agent-harness-flows/utils/message-query";
 import type {
 	ContextToSystemConfig,
 	ContextToSystemInput,
 	ContextToSystemOutput,
-} from "@/services/flows-core/steps/common/context-to-system";
+} from "@memorall/agent-harness-flows/steps/common/context-to-system";
 
 const STEP_NAME = "context-quick-retrieve" as const;
 

@@ -9,7 +9,7 @@
  */
 
 import { McpClientManager } from "@memorall/agent-harness-mcp";
-import { PERMISSIVE_MCP_OUTPUT_VALIDATION } from "@/services/flows-core/steps/features/mcp-feature/mcp-tool-adapter";
+import { PERMISSIVE_MCP_OUTPUT_VALIDATION } from "@memorall/agent-harness-flows/steps/features/mcp-feature/mcp-tool-adapter";
 import { buildServerConfig } from "./resolve";
 import type { CachedToolDescriptor, McpConnection } from "./types";
 

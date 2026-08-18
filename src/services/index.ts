@@ -1,4 +1,4 @@
-import "@/services/flows-core";
+import "@memorall/agent-harness-flows";
 import "@/services/flows-memory";
 import "@/services/flows-integrations";
 import "@/services/flows-features";

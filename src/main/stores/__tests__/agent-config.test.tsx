@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Flow } from "@/services/database/types";
-import type { UnifiedFlowConfig } from "@/services/flows-core/interfaces/config/flow-config";
+import type { UnifiedFlowConfig } from "@memorall/agent-harness-flows/interfaces/config/flow-config";
 
 const mocks = vi.hoisted(() => ({
 	flowBuilderService: {
@@ -21,7 +21,7 @@ vi.mock("@/services", () => ({
 	},
 }));
 
-vi.mock("@/services/flows-core/registries/tool-registry", () => ({
+vi.mock("@memorall/agent-harness-flows/registries/tool-registry", () => ({
 	toolRegistry: {
 		getRegisteredToolNames: mocks.getRegisteredToolNames,
 	},
@@ -33,7 +33,7 @@ vi.mock("@/utils/logger", () => ({
 	logWarn: vi.fn(),
 }));
 
-vi.mock("@/services/flows-core/utils/flow-config", () => {
+vi.mock("@memorall/agent-harness-flows/utils/flow-config", () => {
 	const buildDefaultFlowConfig = (
 		graphType = "foundation",
 	): UnifiedFlowConfig => ({

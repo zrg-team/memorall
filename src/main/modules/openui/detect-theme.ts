@@ -1,4 +1,4 @@
-import type { OpenUITheme } from "@/services/flows-core/steps/features/visualize-response";
+import type { OpenUITheme } from "@/services/flows-integrations/steps/features/visualize-response/index";
 
 // Theme is the 4th positional arg in: CardBlock("title", "desc", [...], "theme")
 export const THEME_PATTERN = /\bCardBlock\s*\([\s\S]*?\]\s*,\s*"([^"]+)"\s*\)/;

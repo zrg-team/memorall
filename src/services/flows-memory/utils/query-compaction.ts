@@ -5,7 +5,7 @@
  * methods until the query fits within embedding token limits.
  */
 
-import { logInfo, logWarn } from "@/services/flows-core/utils/logger";
+import { logInfo, logWarn } from "@memorall/agent-harness-flows/utils/logger";
 
 // ============================================================================
 // TYPES

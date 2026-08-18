@@ -1,17 +1,17 @@
 import {
 	defineStep,
 	bindStep,
-} from "@/services/flows-core/interfaces/engine/step";
-import { logInfo, logError } from "@/services/flows-core/utils/logger";
+} from "@memorall/agent-harness-flows/interfaces/engine/step";
+import { logInfo, logError } from "@memorall/agent-harness-flows/utils/logger";
 
 import type {
 	StepFactoryFromSpec,
 	StepSpecFromDefinition,
-} from "@/services/flows-core/interfaces/engine/step";
-import { stepRegistry } from "@/services/flows-core/registries/step-registry";
-import type {} from "@/services/flows-core/interfaces/engine/tool";
-import type { AllServices } from "@/services/flows-core/interfaces/services/services";
-import type { ChatMessage } from "@/services/flows-core/interfaces/engine/messages";
+} from "@memorall/agent-harness-flows/interfaces/engine/step";
+import { stepRegistry } from "@memorall/agent-harness-flows/registries/step-registry";
+import type {} from "@memorall/agent-harness-flows/interfaces/engine/tool";
+import type { AllServices } from "@memorall/agent-harness-flows/interfaces/services/services";
+import type { ChatMessage } from "@memorall/agent-harness-flows/interfaces/engine/messages";
 
 const STEP_NAME = "entities-facts-citation" as const;
 

@@ -1,9 +1,9 @@
 import {
 	defineStep,
 	bindStep,
-} from "@/services/flows-core/interfaces/engine/step";
+} from "@memorall/agent-harness-flows/interfaces/engine/step";
 import { getKnowledgeDatabase } from "../../interfaces/knowledge";
-import { logInfo, logError } from "@/services/flows-core/utils/logger";
+import { logInfo, logError } from "@memorall/agent-harness-flows/utils/logger";
 import { and, eq, like, or, desc } from "drizzle-orm";
 import {
 	combineSearchResultsWithTrigram,
@@ -21,10 +21,10 @@ import { getScopedGraphWhere } from "../../utils/graph-query";
 import type {
 	StepFactoryFromSpec,
 	StepSpecFromDefinition,
-} from "@/services/flows-core/interfaces/engine/step";
-import { stepRegistry } from "@/services/flows-core/registries/step-registry";
-import type {} from "@/services/flows-core/interfaces/engine/tool";
-import type { AllServices } from "@/services/flows-core/interfaces/services/services";
+} from "@memorall/agent-harness-flows/interfaces/engine/step";
+import { stepRegistry } from "@memorall/agent-harness-flows/registries/step-registry";
+import type {} from "@memorall/agent-harness-flows/interfaces/engine/tool";
+import type { AllServices } from "@memorall/agent-harness-flows/interfaces/services/services";
 
 const STEP_NAME = "llm-retrieve" as const;
 

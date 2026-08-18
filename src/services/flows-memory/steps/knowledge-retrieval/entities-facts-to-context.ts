@@ -1,14 +1,18 @@
 import {
 	defineStep,
 	bindStep,
-} from "@/services/flows-core/interfaces/engine/step";
-import { logInfo, logError, logWarn } from "@/services/flows-core/utils/logger";
+} from "@memorall/agent-harness-flows/interfaces/engine/step";
+import {
+	logInfo,
+	logError,
+	logWarn,
+} from "@memorall/agent-harness-flows/utils/logger";
 
 import type {
 	StepFactoryFromSpec,
 	StepSpecFromDefinition,
-} from "@/services/flows-core/interfaces/engine/step";
-import { stepRegistry } from "@/services/flows-core/registries/step-registry";
+} from "@memorall/agent-harness-flows/interfaces/engine/step";
+import { stepRegistry } from "@memorall/agent-harness-flows/registries/step-registry";
 
 const STEP_NAME = "entities-facts-to-context" as const;
 

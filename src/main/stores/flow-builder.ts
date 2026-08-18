@@ -17,7 +17,7 @@ import type {
 	FlowLayout,
 	FlowStateInput,
 	FlowStepInput,
-} from "@/services/flows-core/interfaces/config/flow-builder";
+} from "@memorall/agent-harness-flows/interfaces/config/flow-builder";
 import { logError } from "@/utils/logger";
 import { validateFlowGraph } from "@/main/modules/flow-builder/flow-builder-validation";
 import { v4 } from "@/utils/uuid";

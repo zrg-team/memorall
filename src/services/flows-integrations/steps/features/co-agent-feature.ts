@@ -1,19 +1,19 @@
 import {
 	defineStep,
 	bindStep,
-} from "@/services/flows-core/interfaces/engine/step";
+} from "@memorall/agent-harness-flows/interfaces/engine/step";
 import type {
 	BoundStep,
 	StepFactoryFromSpec,
 	StepSpecFromDefinition,
-} from "@/services/flows-core/interfaces/engine/step";
-import { logError } from "@/services/flows-core/utils/logger";
-import { stepRegistry } from "@/services/flows-core/registries/step-registry";
+} from "@memorall/agent-harness-flows/interfaces/engine/step";
+import { logError } from "@memorall/agent-harness-flows/utils/logger";
+import { stepRegistry } from "@memorall/agent-harness-flows/registries/step-registry";
 import {
 	GraphBase,
 	type GraphTool,
-} from "@/services/flows-core/graph/graph.base";
-import type { ChatCompletionMessageParam } from "@/services/flows-core/interfaces/engine/messages";
+} from "@memorall/agent-harness-flows/graph/graph.base";
+import type { ChatCompletionMessageParam } from "@memorall/agent-harness-flows/interfaces/engine/messages";
 import { CO_AGENT_TOOLS } from "../../tools/co-agent";
 
 export const CO_AGENT_FEATURE_STEP_NAME = "co-agent-feature" as const;

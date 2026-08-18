@@ -19,7 +19,7 @@ import {
 	isCustomChunkPayload,
 	normalizeLangGraphStreamChunk,
 	type FlowAction,
-} from "@/services/flows-core/utils/langgraph-stream";
+} from "@memorall/agent-harness-flows/utils/langgraph-stream";
 import type {
 	AssistantExecutionPart,
 	ComplexContent,
@@ -28,7 +28,7 @@ import type {
 	ToolExecutionRecord,
 } from "@/types/chat";
 import { handlerRegistry } from "./handler-registry";
-import type { FoundationState } from "@/services/flows-core/graph/foundation/state";
+import type { FoundationState } from "@memorall/agent-harness-flows/graph/foundation/state";
 import {
 	MessagePartsAccumulator,
 	resolveMessageParts,
@@ -53,10 +53,10 @@ import {
 	toLegacyFlowStream,
 	type MemorallFlowServices,
 } from "@/services/agent-harness";
-import type { UnifiedFlowConfig } from "@/services/flows-core/interfaces/config/flow-config";
+import type { UnifiedFlowConfig } from "@memorall/agent-harness-flows/interfaces/config/flow-config";
 import { withResolvedConnections } from "@/services/mcp-connections";
-import { buildDefaultFlowConfig } from "@/services/flows-core/utils/flow-config";
-import { mergeWithDefaultConfig } from "@/services/flows-core/utils/flow-config";
+import { buildDefaultFlowConfig } from "@memorall/agent-harness-flows/utils/flow-config";
+import { mergeWithDefaultConfig } from "@memorall/agent-harness-flows/utils/flow-config";
 import { eq, sql } from "drizzle-orm";
 import { documentFileSystemService as fsService } from "@/services/filesystem/document-filesystem";
 import {
@@ -77,13 +77,13 @@ import {
 	finishRunningToolExecutions,
 	upsertToolExecution,
 } from "@/services/chat/tool-executions";
-import type { GraphTool } from "@/services/flows-core/graph/graph.base";
+import type { GraphTool } from "@memorall/agent-harness-flows/graph/graph.base";
 import {
 	THREAD_HISTORY_CONVERSATION_RUNTIME_KEY,
 	THREAD_HISTORY_READ_TOOL,
 	THREAD_HISTORY_SEARCH_TOOL,
 	THREAD_HISTORY_SEPARATOR_RUNTIME_KEY,
-} from "@/services/flows-core/tools/thread-history";
+} from "@/services/flows-integrations/tools/thread-history";
 export { ChunkDispatcher, StreamBuffer } from "./stream-buffer";
 
 export interface ChatStreamConfig {

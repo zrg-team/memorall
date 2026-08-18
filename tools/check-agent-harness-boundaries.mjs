@@ -11,6 +11,7 @@ const packageNames = [
   "standard",
   "sandbox",
   "mcp",
+  "flows",
   "browser",
   "node",
   "compatibility",
@@ -18,11 +19,9 @@ const packageNames = [
 ];
 const universal = new Set([
   "core",
-  "langgraph",
-  "standard",
   "sandbox",
   "mcp",
-  "compatibility",
+  "flows",
   "full",
 ]);
 const nodeBuiltins = new Set([
@@ -150,7 +149,15 @@ for (const workspace of packageNames) {
     errors.push(`${workspace}: typescript must match the root TypeScript 6 compatibility alias`);
   }
   if (manifest.private !== true) errors.push(`${workspace}: package must remain private`);
-  if (manifest.sideEffects !== false) errors.push(`${workspace}: sideEffects must be false`);
+  // `flows` populates the step, tool and graph registries by importing modules,
+  // so its imports are the registration. Declaring `sideEffects: false` there
+  // would invite a bundler to tree-shake the registrations away and leave an
+  // agent with no steps. Every other package must stay side-effect free.
+  const registryPackages = new Set(["flows"]);
+  const expectedSideEffects = registryPackages.has(workspace) ? true : false;
+  if (manifest.sideEffects !== expectedSideEffects) {
+    errors.push(`${workspace}: sideEffects must be ${expectedSideEffects}`);
+  }
   if (manifest.type !== "module") errors.push(`${workspace}: package must be ESM`);
   if (!manifest.exports?.["."]) errors.push(`${workspace}: missing explicit root export`);
   for (const name of ["build", "clean", "dev", "watch", "typecheck", "test", "pack"]) {

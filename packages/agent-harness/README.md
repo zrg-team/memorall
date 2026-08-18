@@ -32,10 +32,110 @@ their prompts, data models, UI, persistence policy, and provider credentials.
 | [`@memorall/agent-harness-langgraph`](./langgraph/README.md) | 🔁 | ReAct agent loops and ordered step pipelines backed by LangGraph |
 | [`@memorall/agent-harness-standard`](./standard/README.md) | 🧰 | Filesystem, web, planner, skills, chat, compaction, and delegation capabilities |
 | [`@memorall/agent-harness-sandbox`](./sandbox/README.md) | 🧪 | Provider-neutral sandbox sessions, tools, profiles, and workspace sync |
-| [`@memorall/agent-harness-mcp`](./mcp/README.md) | 🔌 | HTTP/SSE MCP discovery, lifecycle, and structured tool adaptation |
+| [`@memorall/agent-harness-mcp`](./mcp/README.md) | 🔌 | HTTP/SSE MCP discovery with transport fallback, LLM-ready schema normalization, and structured tool adaptation |
+| [`@memorall/agent-harness-flows`](./flows/README.md) | 🌊 | The flow engine in production use: registries, graphs, steps, and tools, wired by import |
 | [`@memorall/agent-harness-browser`](./browser/README.md) | 🌐 | Browser/worker platform, OPFS, IndexedDB, and DOM content adapters |
 | [`@memorall/agent-harness-node`](./node/README.md) | 🟢 | Node platform, filesystem, stores, stdio MCP, Playwright, and local sandbox |
 | [`@memorall/agent-harness-compat`](./compatibility/README.md) | 🧭 | Explicit bridges for legacy graph, step, and tool IDs |
+
+### 🌊 What `flows` is
+
+`core`, `langgraph` and `standard` describe an agent runtime you compose from
+plugins. **`flows` is a complete, working one** — the engine Memorall runs on
+every chat turn. Where the others hand you contracts and a place to put things,
+`flows` arrives with the things already in it:
+
+| Inside `flows` | What you get |
+|---|---|
+| `registries/` | Step, tool, graph and service registries |
+| `graph/` | Two working graphs: `agent` (a ReAct loop) and `foundation` (a linear pipeline) |
+| `steps/common/` | System prompt, chat completion, agent completion, skills, time, compaction |
+| `steps/features/` | Filesystem, web, planner, multi-agent, MCP, sandbox — switchable per run |
+| `tools/` | The tools those features expose: fs, web, planner, sandbox, calculator |
+| `runtime/` | The flow engine, run lifecycle and runtime variables |
+
+Pick `flows` when you want an agent that already works and you intend to
+configure it. Pick `core` + `langgraph` + `standard` when you want to assemble
+one from parts and own the composition.
+
+### 🌊 Using `flows`
+
+Three steps: import it, give it what it needs, run a graph.
+
+```ts
+// 1. Importing IS the registration — this fills the registries.
+import "@memorall/agent-harness-flows";
+import { graphRegistry } from "@memorall/agent-harness-flows/registries/graph-registry";
+import { buildDefaultFlowConfig } from "@memorall/agent-harness-flows/utils/flow-config";
+import {
+  createFlowRuntimeVars,
+  withFlowRuntimeVars,
+} from "@memorall/agent-harness-flows/runtime/runtime-context";
+import { setHtmlParser } from "@memorall/agent-harness-flows/utils/html-parser";
+
+// 2. Supply the capabilities the engine does not own.
+setHtmlParser((html) => new DOMParser().parseFromString(html, "text/html"));
+
+const services = {
+  llm: myLlmService,          // required
+  logger: myLogger,
+  fs: myFileSystem,           // only if the filesystem feature is enabled
+  webBrowser: myWebBrowser,   // only if the web feature is enabled
+};
+
+// 3. Build a config, then run a graph. Every step is on or off in the config,
+//    so the same graph is a plain chat or a full agent depending on this object.
+const config = buildDefaultFlowConfig("agent");
+
+const { graph, getInitialState } = graphRegistry.createChatGraph(
+  "agent",
+  services,
+  config,
+);
+
+const stream = await graph.stream(
+  getInitialState({
+    messages: [{ role: "user", content: "What changed in this repo today?" }],
+    contextQueries: [],
+  }),
+  withFlowRuntimeVars(
+    { streamMode: ["custom", "values"], signal: abortController.signal },
+    createFlowRuntimeVars(),
+  ),
+);
+
+for await (const chunk of stream) {
+  // "custom" carries llm deltas, tool starts and tool results;
+  // "values" carries the final state.
+}
+```
+
+To narrow what the agent can do, disable steps in the config rather than
+changing code:
+
+```ts
+const config = buildDefaultFlowConfig("agent");
+for (const step of config.steps) {
+  step.enabled = ["add-system", "agent-completion"].includes(step.name);
+}
+```
+
+### 🌊 Rules for `flows`
+
+Two properties set it apart from its siblings, both deliberate and both enforced:
+
+- **It has side effects.** Importing a module here registers what it defines, so
+  `flows` declares `sideEffects: true` while every other package declares
+  `false`. Never re-export it through a tree-shakeable barrel — `full`
+  deliberately omits it — or a bundler will drop the registrations and leave an
+  agent with no steps.
+- **It holds no product behaviour.** Nothing here reaches for `window`,
+  `document`, or a Node builtin, so it loads under either runtime; what it
+  cannot do alone it asks the host for, through the service registry,
+  `setHtmlParser`, or `hostTool("…")`. Memorall's own artifact formats —
+  HyperFrames, Lottie, the OpenUI renderer — live in the application, which is
+  why `@hyperframes/core` is not a dependency here. When adding code: if it
+  names a product concept or needs a platform API, it belongs in the host.
 
 ### Fastest path
 

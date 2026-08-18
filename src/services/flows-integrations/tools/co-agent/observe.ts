@@ -2,14 +2,14 @@ import z from "zod";
 import type {
 	Tool,
 	ToolFactory,
-} from "@/services/flows-core/interfaces/engine/tool";
-import { toolRegistry } from "@/services/flows-core/registries/tool-registry";
+} from "@memorall/agent-harness-flows/interfaces/engine/tool";
+import { toolRegistry } from "@memorall/agent-harness-flows/registries/tool-registry";
 import {
 	CO_AGENT_CONTENT_COMMAND_SOURCE,
 	type CoAgentContentCommandResponse,
 	type CoAgentElementInfo,
 } from "flow-integrations/interfaces/co-agent";
-import { createCleanHtmlWithSelectors } from "@/services/flows-core/tools/web/web-tool-utils";
+import { createCleanHtmlWithSelectors } from "@memorall/agent-harness-flows/tools/web/web-tool-utils";
 import {
 	createDefaultErrorResult,
 	normalizeIndex,

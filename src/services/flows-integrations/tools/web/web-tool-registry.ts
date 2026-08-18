@@ -10,7 +10,7 @@ import {
 	type WebSnapshotPayload,
 	type WebWaitSelectorState,
 } from "./web-browser-protocol";
-import { DEFAULT_WEB_MAX_HTML_CHARS } from "@/services/flows-core/tools/web/max-html-chars";
+import { DEFAULT_WEB_MAX_HTML_CHARS } from "@memorall/agent-harness-flows/tools/web/max-html-chars";
 import { platform } from "@/platform/current";
 
 interface WebSessionState {

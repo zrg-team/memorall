@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { graphRegistry } from "@/services/flows-core/registries/graph-registry";
-import type { UnifiedFlowConfig } from "@/services/flows-core/interfaces/config/flow-config";
+import { graphRegistry } from "@memorall/agent-harness-flows/registries/graph-registry";
+import type { UnifiedFlowConfig } from "@memorall/agent-harness-flows/interfaces/config/flow-config";
 import {
 	MEMORALL_FLOW_GRAPH_ID,
 	createMemorallFlowRun,
@@ -10,7 +10,7 @@ import {
 	type MemorallFlowServices,
 } from "../memorall-flow-harness";
 
-vi.mock("@/services/flows-core/registries/graph-registry", () => ({
+vi.mock("@memorall/agent-harness-flows/registries/graph-registry", () => ({
 	graphRegistry: { createChatGraph: vi.fn() },
 }));
 

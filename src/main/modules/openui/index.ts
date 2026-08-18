@@ -20,7 +20,7 @@ import {
 	interactiveComponents as glassInteractiveComponents,
 	knowledgeComponents as glassKnowledgeComponents,
 } from "./components/glass";
-import type { OpenUITheme } from "@/services/flows-core/steps/features/visualize-response";
+import type { OpenUITheme } from "@/services/flows-integrations/steps/features/visualize-response/index";
 
 const componentGroups = [
 	{ name: "Content", components: contentComponents.map((c) => c.name) },

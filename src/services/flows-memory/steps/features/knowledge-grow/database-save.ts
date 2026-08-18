@@ -1,10 +1,14 @@
 import {
 	defineStep,
 	bindStep,
-} from "@/services/flows-core/interfaces/engine/step";
+} from "@memorall/agent-harness-flows/interfaces/engine/step";
 import { getKnowledgeDatabase } from "../../../interfaces/knowledge";
 import { eq, or } from "drizzle-orm";
-import { logInfo, logError, logWarn } from "@/services/flows-core/utils/logger";
+import {
+	logInfo,
+	logError,
+	logWarn,
+} from "@memorall/agent-harness-flows/utils/logger";
 import type { Node, NewNode, Source } from "../../../interfaces/knowledge";
 import type { Edge, NewEdge } from "../../../interfaces/knowledge";
 import type { IEmbeddingService } from "../../../interfaces/embedding";
@@ -13,10 +17,10 @@ import { getCurrentEmbeddingFields } from "../../../utils/embedding-size-config"
 import type {
 	StepFactoryFromSpec,
 	StepSpecFromDefinition,
-} from "@/services/flows-core/interfaces/engine/step";
-import { stepRegistry } from "@/services/flows-core/registries/step-registry";
-import type {} from "@/services/flows-core/interfaces/engine/tool";
-import type { AllServices } from "@/services/flows-core/interfaces/services/services";
+} from "@memorall/agent-harness-flows/interfaces/engine/step";
+import { stepRegistry } from "@memorall/agent-harness-flows/registries/step-registry";
+import type {} from "@memorall/agent-harness-flows/interfaces/engine/tool";
+import type { AllServices } from "@memorall/agent-harness-flows/interfaces/services/services";
 
 const STEP_NAME = "knowledge-database-save" as const;
 

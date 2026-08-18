@@ -3,11 +3,14 @@ import * as pdfjsLib from "pdfjs-dist";
 import type {
 	Tool,
 	ToolFactory,
-} from "@/services/flows-core/interfaces/engine/tool";
-import type { AllServices } from "@/services/flows-core/interfaces/services/services";
-import { toolRegistry } from "@/services/flows-core/registries/tool-registry";
+} from "@memorall/agent-harness-flows/interfaces/engine/tool";
+import type { AllServices } from "@memorall/agent-harness-flows/interfaces/services/services";
+import { toolRegistry } from "@memorall/agent-harness-flows/registries/tool-registry";
 import { normalizeDocumentPath } from "./util";
-import { pathExists, readFileBytes } from "@/services/flows-core/tools/fs/util";
+import {
+	pathExists,
+	readFileBytes,
+} from "@memorall/agent-harness-flows/tools/fs/util";
 import { platform } from "@/platform/current";
 
 const TOOL_NAME = "pdf_metadata" as const;

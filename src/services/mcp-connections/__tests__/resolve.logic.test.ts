@@ -29,7 +29,7 @@ vi.mock("@/utils/logger", () => ({
 	logDebug: vi.fn(),
 }));
 
-import type { UnifiedFlowConfig } from "@/services/flows-core/interfaces/config/flow-config";
+import type { UnifiedFlowConfig } from "@memorall/agent-harness-flows/interfaces/config/flow-config";
 import { resolveConnections, withResolvedConnections } from "../resolve";
 import type { McpConnection } from "../types";
 

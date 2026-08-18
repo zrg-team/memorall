@@ -25,7 +25,7 @@ import type {
 	ChatCompletionToolChoiceOption,
 	ChatMessage,
 } from "@/types/openai";
-import type { UnifiedFlowConfig } from "@/services/flows-core/interfaces/config/flow-config";
+import type { UnifiedFlowConfig } from "@memorall/agent-harness-flows/interfaces/config/flow-config";
 
 export type ChatMode = "normal" | "custom" | "agent";
 

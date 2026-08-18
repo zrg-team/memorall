@@ -41,7 +41,6 @@ export default defineConfig({
 					include: [
 						"src/utils/**/*.test.ts",
 						"src/services/__tests__/**/*.test.ts",
-						"src/services/flows-core/**/*.test.ts",
 						"src/services/flows-features/**/*.test.ts",
 						"src/services/flows-integrations/**/*.test.ts",
 						"src/services/flows-memory/**/*.test.ts",

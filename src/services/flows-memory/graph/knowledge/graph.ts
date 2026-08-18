@@ -1,12 +1,12 @@
 import { END, START, StateGraph } from "@langchain/langgraph";
-import { logInfo } from "@/services/flows-core/utils/logger";
+import { logInfo } from "@memorall/agent-harness-flows/utils/logger";
 
 import { KnowledgeGraphAnnotation, type KnowledgeGraphState } from "./state";
-import { GraphBase } from "@/services/flows-core/graph/graph.base";
-import type {} from "@/services/flows-core/interfaces/engine/tool";
-import type { AllServices } from "@/services/flows-core/interfaces/services/services";
-import { graphRegistry } from "@/services/flows-core/registries/graph-registry";
-import type { FlowRegistrySet } from "@/services/flows-core/registries/registry-set";
+import { GraphBase } from "@memorall/agent-harness-flows/graph/graph.base";
+import type {} from "@memorall/agent-harness-flows/interfaces/engine/tool";
+import type { AllServices } from "@memorall/agent-harness-flows/interfaces/services/services";
+import { graphRegistry } from "@memorall/agent-harness-flows/registries/graph-registry";
+import type { FlowRegistrySet } from "@memorall/agent-harness-flows/registries/registry-set";
 
 export interface KnowledgeGraphConfig {
 	enableTemporalExtraction?: boolean;
