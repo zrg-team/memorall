@@ -112,6 +112,7 @@ release policy are intentionally outside this implementation.
 | [`browser`](../packages/agent-harness/browser) | `@memorall/agent-harness-browser` | Browser, worker | Platform primitives, DOM content processing, OPFS, IndexedDB stores |
 | [`node`](../packages/agent-harness/node) | `@memorall/agent-harness-node` | Node 22+ | Platform, filesystem, stores, MCP stdio, Playwright, local process sandbox |
 | [`compatibility`](../packages/agent-harness/compatibility) | `@memorall/agent-harness-compat` | Browser, worker, Node | Stable legacy IDs and host-supplied migration registration |
+| [`flows`](../packages/agent-harness/flows) | `@memorall/agent-harness-flows` | Browser, worker, Node | Flow engine: graph/step registries, step library, runtime context, run lifecycle |
 | [`full`](../packages/agent-harness/full) | `@memorall/agent-harness` | Browser, worker, Node | Side-effect-free facade and explicit full preset |
 
 ```mermaid
@@ -129,6 +130,8 @@ flowchart TD
     Node --> Sandbox
     Node --> MCP
     Compat["compatibility"] --> Core
+    Flows["flows"] --> MCP
+    Flows --> Sandbox
     Full["full facade"] --> Graph
     Full --> Standard
     Full --> Sandbox
@@ -526,7 +529,9 @@ adapter.
 
 A harness change is complete only when:
 
-- package imports stay side-effect free and application independent;
+- package imports stay side-effect free and application independent, except
+  registry packages such as `flows`, whose imports *are* the registration and
+  which therefore declare `sideEffects: true`;
 - public inputs, outputs, events, errors, IDs, and cursors stay serializable;
 - capabilities are advertised only when implemented;
 - tool output is bounded and returns continuation/truncation metadata;
