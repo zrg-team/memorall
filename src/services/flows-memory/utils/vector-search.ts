@@ -75,8 +75,32 @@ export async function vectorSearchNodes(
 
 	if (terms.length === 0) return [];
 
+	return searchNodesByVector(
+		db,
+		await createEmbedding(emb, terms.join(" ")),
+		limit,
+		graphFilter,
+		logger,
+	);
+}
+
+/**
+ * Node search for a caller that already holds the query vector.
+ *
+ * The text-taking variant above embeds and then delegates here. A retrieval pass
+ * computes the query embedding once and drives several searches with it, so
+ * handing the vector over directly means the work is done once by construction —
+ * the cache underneath is a safety net for paths that still pass text, not the
+ * thing keeping the count down.
+ */
+export async function searchNodesByVector(
+	db: IFlowDatabase,
+	searchEmbedding: number[],
+	limit: number,
+	graphFilter?: string,
+	logger: IFlowLogger = getFlowLogger(),
+): Promise<VectorSearchResult<Node>[]> {
 	try {
-		const searchEmbedding = await createEmbedding(emb, terms.join(" "));
 		const columns = await getCurrentEmbeddingColumns();
 		const params: unknown[] = [JSON.stringify(searchEmbedding)];
 		let query = `
@@ -138,8 +162,24 @@ export async function vectorSearchEdges(
 
 	if (terms.length === 0) return [];
 
+	return searchEdgesByVector(
+		db,
+		await createEmbedding(emb, terms.join(" ")),
+		limit,
+		graphFilter,
+		logger,
+	);
+}
+
+/** Edge search for a caller that already holds the query vector. */
+export async function searchEdgesByVector(
+	db: IFlowDatabase,
+	searchEmbedding: number[],
+	limit: number,
+	graphFilter?: string,
+	logger: IFlowLogger = getFlowLogger(),
+): Promise<VectorSearchResult<Edge>[]> {
 	try {
-		const searchEmbedding = await createEmbedding(emb, terms.join(" "));
 		const columns = await getCurrentEmbeddingColumns();
 		const params: unknown[] = [JSON.stringify(searchEmbedding)];
 		let query = `

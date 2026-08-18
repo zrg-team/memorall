@@ -25,6 +25,8 @@ import {
 import {
 	vectorSearchNodes,
 	vectorSearchEdges,
+	searchNodesByVector,
+	searchEdgesByVector,
 } from "../../utils/vector-search";
 import { embedQuery } from "../../utils/embedding-cache";
 import { and, or, inArray } from "drizzle-orm";
@@ -636,18 +638,16 @@ const definition = defineStep<
 
 			const nodeCandidateLimit = config.seed.nodeLimit * candidateMultiplier;
 
-			const nodeResults = await vectorSearchNodes(
+			const nodeResults = await searchNodesByVector(
 				database,
-				defaultEmbedding,
-				[baseQuery],
+				queryEmbedding,
 				nodeCandidateLimit,
 				input.graphId,
 			);
 
-			const edgeResults = await vectorSearchEdges(
+			const edgeResults = await searchEdgesByVector(
 				database,
-				defaultEmbedding,
-				[baseQuery],
+				queryEmbedding,
 				config.seed.edgeLimit,
 				input.graphId,
 			);
@@ -693,17 +693,15 @@ const definition = defineStep<
 					defaultEmbedding,
 					contextQuery,
 				);
-				const contextNodeResults = await vectorSearchNodes(
+				const contextNodeResults = await searchNodesByVector(
 					database,
-					defaultEmbedding,
-					[contextQuery],
+					contextEmbedding,
 					nodeCandidateLimit,
 					input.graphId,
 				);
-				const contextEdgeResults = await vectorSearchEdges(
+				const contextEdgeResults = await searchEdgesByVector(
 					database,
-					defaultEmbedding,
-					[contextQuery],
+					contextEmbedding,
 					config.seed.edgeLimit,
 					input.graphId,
 				);
