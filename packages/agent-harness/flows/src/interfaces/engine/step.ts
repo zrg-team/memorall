@@ -2,8 +2,8 @@ import type { LangGraphRunnableConfig } from "@langchain/langgraph";
 import {
 	getFlowRunLifecycle,
 	type FlowRunLifecycle,
-} from "../../runtime/run-lifecycle.js";
-import type { FlowRegistrySet } from "../../registries/registry-set.js";
+} from "../../context/run-lifecycle.js";
+import type { FlowRegistries } from "./registries.js";
 
 // ============================================================================
 // Core Step Types
@@ -27,11 +27,11 @@ export interface StepExecuteParams<
 	metadata?: Record<string, unknown>;
 	runConfig?: LangGraphRunnableConfig;
 	runLifecycle?: FlowRunLifecycle;
-	registries?: FlowRegistrySet;
+	registries?: FlowRegistries;
 }
 
 export interface StepFactoryContext {
-	registries: FlowRegistrySet;
+	registries: FlowRegistries;
 }
 
 /** A step definition: name + execute function */

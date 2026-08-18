@@ -14,7 +14,7 @@ import { graphRegistry } from "@memorall/agent-harness-flows/registries/graph-re
 import {
 	createFlowRuntimeVars,
 	withFlowRuntimeVars,
-} from "@memorall/agent-harness-flows/runtime/runtime-context";
+} from "@memorall/agent-harness-flows/context/runtime-context";
 import { normalizeLangGraphStreamChunk } from "@memorall/agent-harness-flows/utils/langgraph-stream";
 import { sanitizeForJson } from "@/utils/sanitize-json";
 

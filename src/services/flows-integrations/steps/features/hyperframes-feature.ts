@@ -6,7 +6,7 @@ import type {
 	StepFactoryFromSpec,
 	StepSpecFromDefinition,
 } from "@memorall/agent-harness-flows/interfaces/engine/step";
-import { logError } from "@memorall/agent-harness-flows/utils/logger";
+import { logError } from "@memorall/agent-harness-flows/logging/logger";
 import { stepRegistry } from "@memorall/agent-harness-flows/registries/step-registry";
 import {
 	GraphBase,

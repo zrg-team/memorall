@@ -1,11 +1,3 @@
-import { serviceRegistry } from "../../registries/service-registry.js";
-
-serviceRegistry.registerSchema("webBrowser", {
-	name: "Web Browser",
-	config: { required: false, category: "core" },
-	metadata: { description: "Browser automation and DOM access service" },
-});
-
 export type WebBrowserMode = "iframe" | "tab" | "window";
 export type WebSelectorState = "present" | "absent";
 export type WebDomActionName =

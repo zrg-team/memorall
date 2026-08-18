@@ -18,7 +18,10 @@ import type {
 	StructMemSummary,
 } from "../../graph/structmem/state";
 import { withEmbeddingField } from "./structmem-utils";
-import { logError, logInfo } from "@memorall/agent-harness-flows/utils/logger";
+import {
+	logError,
+	logInfo,
+} from "@memorall/agent-harness-flows/logging/logger";
 
 const STEP_NAME = "structmem-save-consolidation" as const;
 

@@ -26,7 +26,7 @@ import {
 	type McpHttpServerConfig,
 	type McpToolDescriptor,
 } from "@memorall/agent-harness-mcp";
-import { logError, logInfo } from "../../../utils/logger.js";
+import { logError, logInfo } from "../../../logging/logger.js";
 
 const STEP_NAME = "mcp-feature" as const;
 export const MCP_FEATURE_NAME = STEP_NAME;

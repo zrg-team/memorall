@@ -9,7 +9,7 @@ import type {
 	SandboxCallContext,
 } from "../../interfaces/services/agent-sandbox.js";
 import { SandboxError } from "../../interfaces/services/agent-sandbox.js";
-import { getRuntimeGraphId } from "../../runtime/runtime-context.js";
+import { getRuntimeGraphId } from "../../context/runtime-context.js";
 
 export const SANDBOX_TOOL_OUTPUT_SCHEMA = {
 	type: "object",

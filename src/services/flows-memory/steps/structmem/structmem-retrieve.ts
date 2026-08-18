@@ -7,7 +7,7 @@ import {
 	logError,
 	logInfo,
 	logWarn,
-} from "@memorall/agent-harness-flows/utils/logger";
+} from "@memorall/agent-harness-flows/logging/logger";
 import { getCurrentEmbeddingColumns } from "../../utils/embedding-size-config";
 import { extractRetrievalTextFromMessages } from "@memorall/agent-harness-flows/utils/message-query";
 import type {

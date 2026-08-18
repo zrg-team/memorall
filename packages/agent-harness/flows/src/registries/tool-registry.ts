@@ -11,7 +11,7 @@ import {
 	parseToolInput,
 } from "../interfaces/engine/tool.js";
 import type { ChatCompletionTool } from "../interfaces/engine/messages.js";
-import { logWarn } from "../utils/logger.js";
+import { logWarn } from "../logging/logger.js";
 
 // Global tool type registry for smart type inference
 // Tool modules extend this interface to register their tool types and required services

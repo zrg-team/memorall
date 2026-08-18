@@ -1,7 +1,7 @@
 import { PGlite } from "@electric-sql/pglite";
 import { afterEach, describe, expect, it } from "vitest";
 import { up } from "../014_add_message_history_search_index";
-import { createFlowRuntimeVars } from "@memorall/agent-harness-flows/runtime/runtime-context";
+import { createFlowRuntimeVars } from "@memorall/agent-harness-flows/context/runtime-context";
 import {
 	createThreadHistoryReadTool,
 	createThreadHistorySearchTool,

@@ -3,7 +3,7 @@ import type { UnifiedFlowConfig } from "../../../interfaces/config/flow-config.j
 import type { AllServices } from "../../../interfaces/services/services.js";
 import { normalizeLangGraphStreamChunk } from "../../../utils/langgraph-stream.js";
 import type { ChatCompletionMessageParam } from "../../../interfaces/engine/messages.js";
-import { logInfo, logWarn } from "../../../utils/logger.js";
+import { logInfo, logWarn } from "../../../logging/logger.js";
 import type { FlowRegistrySet } from "../../../registries/registry-set.js";
 
 export interface MultiAgentChildAgent {

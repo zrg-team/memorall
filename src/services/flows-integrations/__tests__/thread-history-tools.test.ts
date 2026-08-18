@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { createFlowRuntimeVars } from "@memorall/agent-harness-flows/runtime/runtime-context";
+import { createFlowRuntimeVars } from "@memorall/agent-harness-flows/context/runtime-context";
 import {
 	createThreadHistoryReadTool,
 	createThreadHistorySearchTool,

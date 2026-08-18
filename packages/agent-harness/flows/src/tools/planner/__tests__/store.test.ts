@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createFlowRuntimeVars } from "../../../runtime/runtime-context.js";
+import { createFlowRuntimeVars } from "../../../context/runtime-context.js";
 import { createPlannerCreateTool } from "../planner-create.js";
 import { clearPlan, getPlan } from "../store.js";
 

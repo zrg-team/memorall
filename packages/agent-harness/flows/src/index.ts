@@ -7,6 +7,7 @@
 
 // Trigger self-registration (graphs, steps, tools)
 import "./interfaces/services/index.js";
+import "./registries/service-schemas.js";
 import "./graph/index.js";
 import "./steps/index.js";
 import "./tools/index.js";
@@ -30,11 +31,14 @@ export * from "./registries/index.js";
 export * from "./graph/index.js";
 
 // Runtime
-export * from "./runtime/runtime-context.js";
+export * from "./context/runtime-context.js";
 export * from "./runtime/flow-engine.js";
 
 // Utils
 export * from "./utils/index.js";
+
+// Logging sits below the registries so the two do not import each other.
+export * from "./logging/logger.js";
 
 // Steps common
 export * from "./steps/common/index.js";

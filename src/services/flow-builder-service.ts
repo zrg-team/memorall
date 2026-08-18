@@ -24,7 +24,10 @@ import {
 	FOUNDATION_CONFIG_KEYS,
 	type FoundationPredefinedConfig,
 } from "@memorall/agent-harness-flows/graph/foundation/state";
-import { logError, logInfo } from "@memorall/agent-harness-flows/utils/logger";
+import {
+	logError,
+	logInfo,
+} from "@memorall/agent-harness-flows/logging/logger";
 import {
 	getFeatureCatalogSteps,
 	getFlowCatalog,

@@ -22,9 +22,9 @@ import {
 import {
 	SEND_MESSAGE_TO_AGENT_TOOL_NAME,
 	type SendMessageToAgentToolConfig,
-} from "./tool-contract.js";
+} from "../../../interfaces/tools/multi-agent.js";
 import type { ChatCompletionMessageParam } from "../../../interfaces/engine/messages.js";
-import { logError } from "../../../utils/logger.js";
+import { logError } from "../../../logging/logger.js";
 
 const STEP_NAME = "multi-agent-feature" as const;
 export const MULTI_AGENT_FEATURE_NAME = STEP_NAME;

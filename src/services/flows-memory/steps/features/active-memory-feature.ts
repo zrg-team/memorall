@@ -7,7 +7,7 @@ import type {
 	StepFactoryFromSpec,
 	StepSpecFromDefinition,
 } from "@memorall/agent-harness-flows/interfaces/engine/step";
-import { logError } from "@memorall/agent-harness-flows/utils/logger";
+import { logError } from "@memorall/agent-harness-flows/logging/logger";
 import { stepRegistry } from "@memorall/agent-harness-flows/registries/step-registry";
 import {
 	GraphBase,
@@ -15,7 +15,7 @@ import {
 } from "@memorall/agent-harness-flows/graph/graph.base";
 import type { ChatCompletionMessageParam } from "@memorall/agent-harness-flows/interfaces/engine/messages";
 import { ACTIVE_MEMORY_TOOLS } from "../../tools/active-memory";
-import { getFlowRuntimeVars } from "@memorall/agent-harness-flows/runtime/runtime-context";
+import { getFlowRuntimeVars } from "@memorall/agent-harness-flows/context/runtime-context";
 
 const STEP_NAME = "active-memory-feature" as const;
 export const ACTIVE_MEMORY_FEATURE_NAME = STEP_NAME;

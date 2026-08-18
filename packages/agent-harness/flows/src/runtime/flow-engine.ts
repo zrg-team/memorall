@@ -1,4 +1,4 @@
-import type { GraphTool } from "../graph/graph.base.js";
+import type { GraphTool } from "../interfaces/engine/graph.js";
 import type { UnifiedFlowConfig } from "../interfaces/config/flow-config.js";
 import type { AllServices } from "../interfaces/services/services.js";
 import type {

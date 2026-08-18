@@ -13,7 +13,7 @@ import {
 } from "@memorall/agent-harness-flows/graph/graph.base";
 import type { ChatCompletionMessageParam } from "@memorall/agent-harness-flows/interfaces/engine/messages";
 import { stepRegistry } from "@memorall/agent-harness-flows/registries/step-registry";
-import { logError } from "@memorall/agent-harness-flows/utils/logger";
+import { logError } from "@memorall/agent-harness-flows/logging/logger";
 import type { FsToolConfig } from "@memorall/agent-harness-flows/tools/fs/config";
 import {
 	FS_FEATURE_SYSTEM_PROMPT as CORE_FS_FEATURE_SYSTEM_PROMPT,

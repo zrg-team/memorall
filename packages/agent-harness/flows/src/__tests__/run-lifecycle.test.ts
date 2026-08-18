@@ -3,7 +3,7 @@ import type { LangGraphRunnableConfig } from "@langchain/langgraph";
 import type { BaseStateBase } from "../graph/graph.base.js";
 import { GraphBase } from "../graph/graph.base.js";
 import { createFlowRegistries } from "../registries/registry-set.js";
-import { getFlowRunLifecycle } from "../runtime/run-lifecycle.js";
+import { getFlowRunLifecycle } from "../context/run-lifecycle.js";
 
 type TestState = BaseStateBase;
 type AppMock = {

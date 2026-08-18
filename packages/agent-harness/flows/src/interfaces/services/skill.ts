@@ -1,11 +1,3 @@
-import { serviceRegistry } from "../../registries/service-registry.js";
-
-serviceRegistry.registerSchema("skillService", {
-	name: "Skill Service",
-	config: { required: false, category: "core" },
-	metadata: { description: "Skill discovery and loading service" },
-});
-
 /**
  * Skill interface aligned with the SKILL.md open standard
  * (agentskills.io spec, co-governed by Anthropic / OpenAI / Google).

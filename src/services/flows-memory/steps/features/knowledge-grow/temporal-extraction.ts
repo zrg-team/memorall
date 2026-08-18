@@ -2,7 +2,10 @@ import {
 	defineStep,
 	bindStep,
 } from "@memorall/agent-harness-flows/interfaces/engine/step";
-import { logInfo, logError } from "@memorall/agent-harness-flows/utils/logger";
+import {
+	logInfo,
+	logError,
+} from "@memorall/agent-harness-flows/logging/logger";
 import { mapRefine } from "@memorall/agent-harness-flows/utils/map-refine";
 
 import type {

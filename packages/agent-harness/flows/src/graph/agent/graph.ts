@@ -18,9 +18,9 @@ import {
 	extractToolResult,
 	parseToolInput,
 } from "../../interfaces/engine/tool.js";
-import { getFlowRuntimeVars } from "../../runtime/runtime-context.js";
+import { getFlowRuntimeVars } from "../../context/runtime-context.js";
 import type { ChatCompletionChunk } from "../../interfaces/engine/messages.js";
-import { logError, logInfo } from "../../utils/logger.js";
+import { logError, logInfo } from "../../logging/logger.js";
 import {
 	graphRegistry,
 	FEATURE_SLOT,

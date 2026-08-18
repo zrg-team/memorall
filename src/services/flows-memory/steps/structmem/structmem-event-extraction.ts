@@ -20,7 +20,10 @@ import {
 	parseJsonObject,
 	warnParseFailure,
 } from "./structmem-utils";
-import { logError, logInfo } from "@memorall/agent-harness-flows/utils/logger";
+import {
+	logError,
+	logInfo,
+} from "@memorall/agent-harness-flows/logging/logger";
 
 const STEP_NAME = "structmem-event-extraction" as const;
 

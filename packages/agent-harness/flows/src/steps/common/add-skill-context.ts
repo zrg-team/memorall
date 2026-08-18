@@ -21,7 +21,7 @@ import type {
 } from "../../graph/graph.base.js";
 import type {} from "../../interfaces/engine/tool.js";
 import type { AllServices } from "../../interfaces/services/services.js";
-import { logInfo } from "../../utils/logger.js";
+import { logInfo } from "../../logging/logger.js";
 
 export const ADD_SKILL_CONTEXT_STEP_NAME = "add-skill-context" as const;
 

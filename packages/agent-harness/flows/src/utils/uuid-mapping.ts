@@ -1,7 +1,7 @@
 import {
 	getFlowLogger,
 	type IFlowLogger,
-} from "./logger.js";
+} from "../logging/logger.js";
 import { nanoid } from "nanoid";
 
 // UUID validation regex (supports both standard UUIDs and nanoid format)

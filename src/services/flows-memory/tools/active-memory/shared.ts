@@ -4,7 +4,7 @@ import type { ToolExecutionContext } from "@memorall/agent-harness-flows/interfa
 import type { AllServices } from "@memorall/agent-harness-flows/interfaces/services/services";
 import type { Edge, NewEdge, NewNode, Node } from "../../interfaces/knowledge";
 import type { IEmbeddingService } from "../../interfaces/embedding";
-import { getRuntimeGraphId } from "@memorall/agent-harness-flows/runtime/runtime-context";
+import { getRuntimeGraphId } from "@memorall/agent-harness-flows/context/runtime-context";
 import { getScopedGraphWhere } from "../../utils/graph-query";
 import { getCurrentEmbeddingFields } from "../../utils/embedding-size-config";
 

@@ -6,7 +6,7 @@ import {
 	logInfo,
 	logError,
 	logWarn,
-} from "@memorall/agent-harness-flows/utils/logger";
+} from "@memorall/agent-harness-flows/logging/logger";
 import { mapRefine } from "@memorall/agent-harness-flows/utils/map-refine";
 
 import type {

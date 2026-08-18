@@ -2,13 +2,21 @@ import type {} from "../interfaces/engine/tool.js";
 import type { ChatCompletionMessageParam } from "../interfaces/engine/messages.js";
 import type { UnifiedFlowConfig } from "../interfaces/config/flow-config.js";
 import type { AllServices } from "../interfaces/services/services.js";
-import type {
-	GraphBase,
-	BaseStateBase,
-} from "../graph/graph.base.js";
+import type { BaseStateBase } from "../interfaces/engine/graph.js";
 import type { FlowRegistrySet } from "./registry-set.js";
 
-export type BaseGraph = GraphBase<any, any, unknown>;
+/**
+ * A compiled graph, as the registry holds it.
+ *
+ * The registry stores and hands back graphs; it never drives one. Naming the
+ * concrete class here would make the registry depend on the `graph/` layer that
+ * depends on it, so it names only the surface a caller uses.
+ */
+export interface BaseGraph {
+	invoke(input: any, options?: any): any;
+	stream(input: any, options?: any): any;
+	getGraph(): any;
+}
 
 export const FEATURE_SLOT = "__features__" as const;
 export type StepSlot = string | typeof FEATURE_SLOT;

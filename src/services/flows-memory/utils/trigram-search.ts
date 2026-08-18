@@ -1,7 +1,7 @@
 import type { IFlowDatabase } from "../interfaces/database";
 import { getKnowledgeDatabase } from "../interfaces/knowledge";
 import type { Node, Edge } from "../interfaces/knowledge";
-import { logWarn } from "@memorall/agent-harness-flows/utils/logger";
+import { logWarn } from "@memorall/agent-harness-flows/logging/logger";
 
 export interface TrigramSearchResult<T> {
 	item: Partial<T>;

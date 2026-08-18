@@ -1,5 +1,5 @@
 import { END, START, StateGraph } from "@langchain/langgraph";
-import { logInfo } from "@memorall/agent-harness-flows/utils/logger";
+import { logInfo } from "@memorall/agent-harness-flows/logging/logger";
 
 import { StructMemAnnotation, type StructMemState } from "./state";
 import { GraphBase } from "@memorall/agent-harness-flows/graph/graph.base";

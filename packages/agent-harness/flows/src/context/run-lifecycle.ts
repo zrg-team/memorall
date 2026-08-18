@@ -1,5 +1,5 @@
 import type { LangGraphRunnableConfig } from "@langchain/langgraph";
-import { logError } from "../utils/logger.js";
+import { logError } from "../logging/logger.js";
 
 export type FlowRunFinishCallback = () => void | Promise<void>;
 

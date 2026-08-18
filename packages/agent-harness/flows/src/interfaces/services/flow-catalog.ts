@@ -1,11 +1,4 @@
 import type { UnifiedFlowConfig } from "../config/flow-config.js";
-import { serviceRegistry } from "../../registries/service-registry.js";
-
-serviceRegistry.registerSchema("flowCatalog", {
-	name: "Flow Catalog Service",
-	config: { required: false, category: "core" },
-	metadata: { description: "Saved flow lookup service" },
-});
 
 export interface FlowInfo {
 	id: string;

@@ -1,11 +1,3 @@
-import { serviceRegistry } from "../../registries/service-registry.js";
-
-serviceRegistry.registerSchema("fs", {
-	name: "Filesystem",
-	config: { required: false, category: "core" },
-	metadata: { description: "Flow filesystem service" },
-});
-
 export type BufferEncoding =
 	| "ascii"
 	| "utf8"

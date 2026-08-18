@@ -15,7 +15,7 @@ vi.mock("drizzle-orm", () => ({
 	eq: vi.fn((column: unknown, value: unknown) => ({ op: "eq", column, value })),
 }));
 
-vi.mock("@memorall/agent-harness-flows/utils/logger", () => ({
+vi.mock("@memorall/agent-harness-flows/logging/logger", () => ({
 	logError: vi.fn(),
 	logInfo: vi.fn(),
 }));

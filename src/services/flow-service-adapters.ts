@@ -59,8 +59,8 @@ import type {
 	WebRefreshSessionArgs as FlowWebRefreshSessionArgs,
 	WebRenderedFallbackResult as FlowWebRenderedFallbackResult,
 } from "@memorall/agent-harness-flows/interfaces/services/web-browser";
-import type { IFlowLogger } from "@memorall/agent-harness-flows/utils/logger";
-import { setFlowLogger } from "@memorall/agent-harness-flows/utils/logger";
+import type { IFlowLogger } from "@memorall/agent-harness-flows/logging/logger";
+import { setFlowLogger } from "@memorall/agent-harness-flows/logging/logger";
 import { setHtmlParser } from "@memorall/agent-harness-flows/utils/html-parser";
 import { serviceRegistry } from "@memorall/agent-harness-flows/registries/service-registry";
 import type {

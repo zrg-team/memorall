@@ -8,7 +8,7 @@ import {
 	logInfo,
 	logError,
 	logWarn,
-} from "@memorall/agent-harness-flows/utils/logger";
+} from "@memorall/agent-harness-flows/logging/logger";
 import type { Node, NewNode, Source } from "../../../interfaces/knowledge";
 import type { Edge, NewEdge } from "../../../interfaces/knowledge";
 import type { IEmbeddingService } from "../../../interfaces/embedding";

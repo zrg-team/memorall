@@ -1,4 +1,4 @@
-import type { FlowRuntimeVars } from "../../runtime/runtime-context.js";
+import type { FlowRuntimeVars } from "../../context/runtime-context.js";
 
 export interface PlanItem {
 	id: string;

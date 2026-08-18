@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { ChatCompletionToolMessageParam } from "./messages.js";
-import type { FlowRuntimeVars } from "../../runtime/runtime-context.js";
+import type { FlowRuntimeVars } from "../../context/runtime-context.js";
 
 // Activate ServiceRegistry (side-effect — enables global augmentation)
 import "../services/services.js";

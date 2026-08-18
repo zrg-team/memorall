@@ -1,4 +1,4 @@
-import { logInfo } from "@memorall/agent-harness-flows/utils/logger";
+import { logInfo } from "@memorall/agent-harness-flows/logging/logger";
 import { graphRegistry } from "@memorall/agent-harness-flows/registries/graph-registry";
 
 export class FlowsService {

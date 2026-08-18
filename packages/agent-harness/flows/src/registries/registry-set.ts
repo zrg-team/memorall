@@ -19,12 +19,18 @@ import {
 	type ToolRegistryPredicate,
 } from "./tool-registry.js";
 
-export interface FlowRegistrySet {
-	services: ServiceRegistryManager;
-	tools: ToolRegistryManager;
-	steps: StepRegistryManager;
-	graphs: GraphRegistryManager;
+declare global {
+	// Fills in the contract declared by interfaces/engine/registries.ts, so a
+	// step can name the registry set without this module importing it back.
+	interface FlowRegistrySetContract {
+		services: ServiceRegistryManager;
+		tools: ToolRegistryManager;
+		steps: StepRegistryManager;
+		graphs: GraphRegistryManager;
+	}
 }
+
+export interface FlowRegistrySet extends FlowRegistrySetContract {}
 
 export interface FlowRegistryForkPredicates {
 	services?: ServiceRegistryPredicate;

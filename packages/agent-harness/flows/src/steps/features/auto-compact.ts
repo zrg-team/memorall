@@ -6,7 +6,7 @@ import type {
 	StepFactoryFromSpec,
 	StepSpecFromDefinition,
 } from "../../interfaces/engine/step.js";
-import { logError, logInfo, logWarn } from "../../utils/logger.js";
+import { logError, logInfo, logWarn } from "../../logging/logger.js";
 import { stepRegistry } from "../../registries/step-registry.js";
 import type { ChatCompletionMessageParam } from "../../interfaces/engine/messages.js";
 import type { BaseLLM } from "../../interfaces/services/llm.js";

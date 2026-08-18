@@ -13,13 +13,13 @@ import {
 	type GraphTool,
 } from "@memorall/agent-harness-flows/graph/graph.base";
 import type { ChatCompletionMessageParam } from "@memorall/agent-harness-flows/interfaces/engine/messages";
-import { getFlowRuntimeVars } from "@memorall/agent-harness-flows/runtime/runtime-context";
+import { getFlowRuntimeVars } from "@memorall/agent-harness-flows/context/runtime-context";
 import {
 	OPENUI_SYSTEM_PROMPT,
 	OPENUI_WIREFRAME_THEME_INSTRUCTION,
 	OPENUI_GLASS_THEME_INSTRUCTION,
 } from "./prompt";
-import { logError } from "@memorall/agent-harness-flows/utils/logger";
+import { logError } from "@memorall/agent-harness-flows/logging/logger";
 
 const STEP_NAME = "visualize-response" as const;
 export const VISUALIZE_RESPONSE_FEATURE_NAME = STEP_NAME;

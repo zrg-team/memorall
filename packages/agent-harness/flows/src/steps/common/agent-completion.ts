@@ -11,7 +11,7 @@ import type {} from "../../interfaces/engine/tool.js";
 import type { AllServices } from "../../interfaces/services/services.js";
 import type { ChatMessage } from "../../interfaces/engine/messages.js";
 import { AgentGraph } from "../../graph/agent/index.js";
-import { logInfo } from "../../utils/logger.js";
+import { logInfo } from "../../logging/logger.js";
 import {
 	isCustomChunkPayload,
 	normalizeLangGraphStreamChunk,

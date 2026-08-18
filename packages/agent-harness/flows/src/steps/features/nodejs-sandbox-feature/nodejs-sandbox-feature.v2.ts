@@ -15,7 +15,7 @@ import {
 	type GraphTool,
 } from "../../../graph/graph.base.js";
 import { stepRegistry } from "../../../registries/step-registry.js";
-import { logError } from "../../../utils/logger.js";
+import { logError } from "../../../logging/logger.js";
 import {
 	getSandboxToolsForProfile,
 	SANDBOX_WEB_APP_TOOLS,
@@ -24,7 +24,7 @@ import {
 import {
 	getFlowRuntimeVars,
 	getRuntimeGraphId,
-} from "../../../runtime/runtime-context.js";
+} from "../../../context/runtime-context.js";
 import {
 	ARTIFACT_FEATURE_SYSTEM_PROMPT,
 	ARTIFACT_FEATURE_TOOLS,

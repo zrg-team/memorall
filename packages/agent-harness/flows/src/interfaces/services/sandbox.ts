@@ -78,14 +78,6 @@ export interface SandboxFsReaddirResult {
 	entries: string[] | SandboxFileEntry[];
 }
 
-import { serviceRegistry } from "../../registries/service-registry.js";
-
-serviceRegistry.registerSchema("sandboxContainer", {
-	name: "Sandbox Container",
-	config: { required: false, category: "core" },
-	metadata: { description: "Sandbox command and server execution service" },
-});
-
 export interface SandboxOperationResult {
 	success?: boolean;
 	message?: string;

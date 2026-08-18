@@ -26,7 +26,7 @@ import {
 	logError,
 	logInfo,
 	logWarn,
-} from "@memorall/agent-harness-flows/utils/logger";
+} from "@memorall/agent-harness-flows/logging/logger";
 
 const STEP_NAME = "structmem-load-related-events" as const;
 

@@ -7,7 +7,7 @@ import { toolRegistry } from "../registries/tool-registry.js";
 import {
 	SEND_MESSAGE_TO_AGENT_TOOL_NAME,
 	type SendMessageToAgentToolConfig,
-} from "../steps/features/multi-agent-feature/tool-contract.js";
+} from "../interfaces/tools/multi-agent.js";
 
 const schema = z.object({
 	agentId: z.string().min(1).describe("Target child agent flow ID."),

@@ -26,7 +26,7 @@ import {
 	type FlowRegistrySet,
 } from "../registries/registry-set.js";
 
-import { logWarn } from "../utils/logger.js";
+import { logWarn } from "../logging/logger.js";
 import {
 	FLOW_RUN_LIFECYCLE_CONFIG_KEY,
 	createFlowRunLifecycle,
@@ -34,7 +34,7 @@ import {
 	toNode,
 	type FlowRunFinishCallback,
 	type FlowRunLifecycle,
-} from "../runtime/run-lifecycle.js";
+} from "../context/run-lifecycle.js";
 import {
 	getEnabledSteps,
 	type UnifiedFlowConfig,
@@ -43,47 +43,39 @@ import {
 const isRawBaseTool = (tool: unknown): tool is BaseTool =>
 	typeof tool === "object" && tool !== null && "execute" in tool;
 
-export type ToolName = `${keyof ToolTypeRegistry & string}`;
+// The contracts moved to interfaces/engine/graph.ts so the registry and the
+// runtime can name them without importing this module. Re-exported here so
+// every existing import path keeps working.
+export {
+	hostTool,
+	type ToolName,
+	type CombinedTool,
+	type ConfiguredGraphTool,
+	type GraphTool,
+	type BaseStateBase,
+	type SystemPlacement,
+	type NormalizeChatMessageOptions,
+} from "../interfaces/engine/graph.js";
 
-export interface CombinedTool {
-	executor: BaseTool;
-	tool: ChatCompletionTool;
-}
-
-export interface ConfiguredGraphTool<TConfig = unknown>
-	extends ToolBinding<ToolName, TConfig> {}
-export type GraphTool = ToolName | ConfiguredGraphTool | BaseTool;
-
-/**
- * Names a tool the *host* registers, not this runtime.
- *
- * `ToolName` is the union of tools registered here, so a feature that hands the
- * model a host-provided capability — Memorall's artifact renderer, its image
- * fetcher — cannot name it and still typecheck. Reaching for the host's own
- * declaration inverts the dependency: the runtime would need its consumer to
- * exist before it compiles, which is exactly what stops this code from being a
- * package.
- *
- * So the requirement is stated here instead, in one greppable place. A feature
- * declaring `hostTool("render_artifact")` is saying "the host must register
- * this"; if it does not, the tool is simply absent at run time, which is the
- * same outcome as any unregistered name. Grep for `hostTool(` to see every
- * capability this runtime expects from its host.
- */
-export const hostTool = (name: string): ToolName => name as ToolName;
-
-export interface BaseStateBase {
-	messages: ChatCompletionMessageParam[];
-	response?: string;
-	outputMessages: ChatCompletionMessageParam[];
-	tools: GraphTool[];
-}
-
-export type SystemPlacement = "append" | "top" | "replace";
-
-export interface NormalizeChatMessageOptions {
-	placement?: SystemPlacement;
-}
+import {
+	hostTool as _hostTool,
+	type ToolName as _ToolName,
+	type CombinedTool as _CombinedTool,
+	type ConfiguredGraphTool as _ConfiguredGraphTool,
+	type GraphTool as _GraphTool,
+	type BaseStateBase as _BaseStateBase,
+	type SystemPlacement as _SystemPlacement,
+	type NormalizeChatMessageOptions as _NormalizeChatMessageOptions,
+} from "../interfaces/engine/graph.js";
+type ToolName = _ToolName;
+type CombinedTool = _CombinedTool;
+type ConfiguredGraphTool<TConfig = unknown> = _ConfiguredGraphTool<TConfig>;
+type GraphTool = _GraphTool;
+type BaseStateBase = _BaseStateBase;
+type SystemPlacement = _SystemPlacement;
+type NormalizeChatMessageOptions = _NormalizeChatMessageOptions;
+const hostTool = _hostTool;
+void hostTool;
 
 export const MISSING_TOOL_CALL_RESULT_CONTENT = "Error: Tool call error.";
 

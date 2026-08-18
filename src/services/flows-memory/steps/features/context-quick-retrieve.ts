@@ -7,7 +7,10 @@
 
 import { Annotation } from "@langchain/langgraph";
 import type { RetrievalPipelineState } from "flow-memory/interfaces/retrieval-state";
-import { logInfo, logError } from "@memorall/agent-harness-flows/utils/logger";
+import {
+	logInfo,
+	logError,
+} from "@memorall/agent-harness-flows/logging/logger";
 import {
 	defineStep,
 	bindStep,

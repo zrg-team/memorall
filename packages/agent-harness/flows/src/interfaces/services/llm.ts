@@ -3,13 +3,6 @@ import type {
 	ChatCompletionRequest,
 	ChatCompletionResponse,
 } from "../engine/messages.js";
-import { serviceRegistry } from "../../registries/service-registry.js";
-
-serviceRegistry.registerSchema("llm", {
-	name: "LLM",
-	config: { required: true, category: "core" },
-	metadata: { description: "Large language model service" },
-});
 
 export interface IFlowLLMService {
 	chat?: {

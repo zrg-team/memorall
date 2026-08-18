@@ -4,7 +4,7 @@ import {
 	logDebug,
 	logError,
 	logInfo,
-} from "./logger.js";
+} from "../logging/logger.js";
 
 // Simple token estimator: ~4 chars per token heuristic
 function estimateTokens(text: string): number {

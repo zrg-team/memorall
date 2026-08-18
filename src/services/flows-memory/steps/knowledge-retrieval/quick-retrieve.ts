@@ -3,7 +3,10 @@ import {
 	bindStep,
 } from "@memorall/agent-harness-flows/interfaces/engine/step";
 import { getKnowledgeDatabase } from "../../interfaces/knowledge";
-import { logInfo, logError } from "@memorall/agent-harness-flows/utils/logger";
+import {
+	logInfo,
+	logError,
+} from "@memorall/agent-harness-flows/logging/logger";
 import { and, or, inArray } from "drizzle-orm";
 import {
 	vectorSearchEdges,

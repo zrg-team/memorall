@@ -18,7 +18,10 @@ import { getKnowledgeDatabase } from "../../interfaces/knowledge";
  * 7. Post-Expansion - Connect standalone nodes and edges
  */
 
-import { logInfo, logError } from "@memorall/agent-harness-flows/utils/logger";
+import {
+	logInfo,
+	logError,
+} from "@memorall/agent-harness-flows/logging/logger";
 import {
 	vectorSearchNodes,
 	vectorSearchEdges,

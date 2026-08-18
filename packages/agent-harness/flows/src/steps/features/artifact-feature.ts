@@ -7,7 +7,7 @@ import type {
 	StepFactoryFromSpec,
 	StepSpecFromDefinition,
 } from "../../interfaces/engine/step.js";
-import { logError } from "../../utils/logger.js";
+import { logError } from "../../logging/logger.js";
 import { stepRegistry } from "../../registries/step-registry.js";
 import {
 	GraphBase,
