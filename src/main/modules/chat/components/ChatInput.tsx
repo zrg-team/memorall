@@ -7,6 +7,7 @@ import {
 	type MentionRichTextareaHandle,
 } from "@/main/modules/chat/components/input/MentionRichTextarea";
 import { TooltipProvider } from "@/main/components/ui/tooltip";
+import type { FlowMetadata } from "@/services/database/entities/flows";
 import type { ChatStatus, AttachedDocumentRef } from "@/types/chat";
 import type { DocumentFile } from "@/types/document-library";
 import { documentFileSystemService } from "@/services/filesystem/document-filesystem";
@@ -39,7 +40,12 @@ export interface ChatInputProps {
 	abortController: AbortController | null;
 	isLoadingTopics: boolean;
 	topics: Array<{ id: string; name: string; agentId?: string | null }>;
-	agentFlows: Array<{ id: string; name: string }>;
+	agentFlows: Array<{
+		id: string;
+		name: string;
+		/** Carries the agent's icon screen; see AgentGlyph. */
+		metadata?: FlowMetadata | null;
+	}>;
 	selectedAgentFlowId: string | null;
 	setSelectedAgentFlowId: (flowId: string) => void;
 	onCreateAgentFlow?: () => void;
