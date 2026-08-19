@@ -37,6 +37,16 @@ export const chatNavigationItem: AppNavigationItem = {
  * (Files, Memory) → what it can do (Connections, Skills) → what thinks for it
  * (Models) → where it runs (Runtime). `groupStart` marks each boundary.
  */
+/**
+ * The workspace item that owns routes not named in this list.
+ *
+ * `App` renders `DocumentLibraryPage` for `/`, for `/files`, and for anything
+ * unmatched, so Files is the destination the user is actually looking at on
+ * those paths and the one the nav should mark active. Nothing here is mounted at
+ * `/` — that is the chat surface, which lives outside this list.
+ */
+export const WORKSPACE_FALLBACK_PATH = "/files";
+
 export const workspaceNavigationItems: AppNavigationItem[] = [
 	{
 		nameKey: "navigation.agents",
