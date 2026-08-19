@@ -9,7 +9,7 @@ import {
 	type WebElementRecord,
 	type WebSnapshotPayload,
 	type WebWaitSelectorState,
-} from "./web-browser-protocol";
+} from "@/services/web-browser/web-browser-protocol";
 import { DEFAULT_WEB_MAX_HTML_CHARS } from "@memorall/agent-harness-flows/tools/web/max-html-chars";
 import {
 	detectWebBlock,
