@@ -4,6 +4,7 @@ import {
 	access,
 	mkdir,
 	mkdtemp,
+	readdir,
 	rename,
 	rm,
 	writeFile,
@@ -269,33 +270,57 @@ const terminateWindowsPath = async (
 	});
 };
 
+/**
+ * Delete a retired profile directory without blocking the caller.
+ *
+ * This used to hand the work to a detached `powershell.exe` so a slow recursive
+ * delete could outlive the sidecar. On Windows that flashed a console window on
+ * every call: `DETACHED_PROCESS` makes `CreateProcess` ignore `CREATE_NO_WINDOW`
+ * — which is all `windowsHide` sets — so PowerShell allocated a console of its
+ * own. Since profiles are retired on every non-persistent shutdown and on every
+ * profile clear, that fired repeatedly during a normal launch.
+ *
+ * Node's retry loop covers what the helper's `Start-Sleep` was for: handles from
+ * the exiting browser take a moment to drop. A delete cut short by our own exit
+ * is picked up by `sweepRetiredProfiles` on the next launch, so nothing
+ * accumulates.
+ */
 const removeDirectoryInBackground = (directory: string): void => {
-	if (process.platform !== "win32") {
-		void rm(directory, {
-			recursive: true,
-			force: true,
-			maxRetries: 3,
-			retryDelay: 250,
-		}).catch(() => {});
-		return;
+	void rm(directory, {
+		recursive: true,
+		force: true,
+		maxRetries: 10,
+		retryDelay: 250,
+	}).catch(() => {});
+};
+
+const EPHEMERAL_PROFILE_PREFIX = "memorall-browseros-";
+const RETIRED_PROFILE_PREFIX = "browser-profile.deleted-";
+
+/**
+ * Best-effort cleanup of profile directories a previous run could not finish,
+ * because deleting them raced the sidecar exiting. Never throws: a leftover
+ * directory is untidy, not a failure worth surfacing.
+ */
+const sweepRetiredProfiles = async (
+	appDataDirectory: string,
+): Promise<void> => {
+	const roots: Array<[string, string]> = [
+		[resolve(tmpdir()), EPHEMERAL_PROFILE_PREFIX],
+		[resolve(appDataDirectory), RETIRED_PROFILE_PREFIX],
+	];
+	for (const [root, prefix] of roots) {
+		let entries: string[];
+		try {
+			entries = await readdir(root);
+		} catch {
+			continue;
+		}
+		for (const entry of entries) {
+			if (!entry.startsWith(prefix)) continue;
+			removeDirectoryInBackground(join(root, entry));
+		}
 	}
-	const cleanup = spawn(
-		"powershell.exe",
-		[
-			"-NoLogo",
-			"-NoProfile",
-			"-NonInteractive",
-			"-Command",
-			"Start-Sleep -Milliseconds 500; Remove-Item -LiteralPath $env:MEMORALL_RETIRED_BROWSER_PROFILE -Recurse -Force -ErrorAction SilentlyContinue",
-		],
-		{
-			stdio: "ignore",
-			windowsHide: true,
-			detached: true,
-			env: { ...process.env, MEMORALL_RETIRED_BROWSER_PROFILE: directory },
-		},
-	);
-	cleanup.unref();
 };
 
 const removeEphemeralProfile = (profileDirectory: string): void => {
@@ -319,11 +344,19 @@ export class ManagedBrowserOsRuntime {
 	private browserExecutable: string | null = null;
 	private serverExecutable: string | null = null;
 	private starting: Promise<RuntimeConnection> | null = null;
+	private swept = false;
 
 	constructor(
 		private readonly appDataDirectory: string,
 		private readonly settings: () => BrowserSettings,
 	) {}
+
+	/** Runs once per process, on the first managed start. */
+	private sweepOnce(): void {
+		if (this.swept) return;
+		this.swept = true;
+		void sweepRetiredProfiles(this.appDataDirectory).catch(() => {});
+	}
 
 	async ensure(): Promise<RuntimeConnection> {
 		const externalEndpoint = process.env.MEMORALL_BROWSEROS_MCP_URL;
@@ -341,6 +374,7 @@ export class ManagedBrowserOsRuntime {
 		) {
 			return this.connection;
 		}
+		this.sweepOnce();
 		if (!this.starting) this.starting = this.startManaged();
 		try {
 			return await this.starting;
@@ -375,9 +409,9 @@ export class ManagedBrowserOsRuntime {
 		this.browserExecutable = null;
 		this.serverExecutable = null;
 		if (this.profileDirectory && !this.settings().persistProfile) {
-			// Recursive cache deletion can take tens of seconds on Windows. A
-			// detached, exact-path helper lets settings restarts continue and avoids
-			// keeping the sidecar event loop alive during app shutdown.
+			// Recursive cache deletion can take tens of seconds on Windows, so this
+			// is deliberately not awaited: settings restarts continue immediately and
+			// shutdown is never held up by it.
 			removeEphemeralProfile(this.profileDirectory);
 		}
 		this.profileDirectory = null;
