@@ -70,6 +70,7 @@ export const AssistantContentFlow: React.FC<AssistantContentFlowProps> =
 					<AssistantWorkflowSummary
 						parts={completedWorkflowParts}
 						evidenceParts={workflowEvidenceParts}
+						isStreaming={isStreaming}
 					/>
 					{toolTimelineParts.length > 0 ? (
 						<AssistantToolTimeline

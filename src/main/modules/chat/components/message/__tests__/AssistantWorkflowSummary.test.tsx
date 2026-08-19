@@ -26,6 +26,7 @@ describe("AssistantWorkflowSummary", () => {
 		render(
 			<AssistantWorkflowSummary
 				parts={[execPart("e1", "custom-step"), execPart("e2", "another-step")]}
+				isStreaming={false}
 			/>,
 		);
 
@@ -43,7 +44,55 @@ describe("AssistantWorkflowSummary", () => {
 	});
 
 	it("renders nothing when there are no parts", () => {
-		const { container } = render(<AssistantWorkflowSummary parts={[]} />);
+		const { container } = render(
+			<AssistantWorkflowSummary parts={[]} isStreaming={false} />,
+		);
 		expect(container).toBeEmptyDOMElement();
+	});
+
+	it("starts open while the agent is still working", () => {
+		// The steps arriving are the whole point of the panel; a collapsed one
+		// mid-run leaves the user with no idea what is happening.
+		render(
+			<AssistantWorkflowSummary
+				parts={[execPart("e1", "custom-step")]}
+				isStreaming
+			/>,
+		);
+
+		expect(screen.getByText("Custom Step")).toBeInTheDocument();
+	});
+
+	it("folds itself away once the run finishes", () => {
+		const { rerender } = render(
+			<AssistantWorkflowSummary
+				parts={[execPart("e1", "custom-step")]}
+				isStreaming
+			/>,
+		);
+		expect(screen.getByText("Custom Step")).toBeInTheDocument();
+
+		rerender(
+			<AssistantWorkflowSummary
+				parts={[execPart("e1", "custom-step")]}
+				isStreaming={false}
+			/>,
+		);
+
+		expect(screen.queryByText("Custom Step")).not.toBeInTheDocument();
+	});
+
+	it("leaves a panel opened after the run alone", () => {
+		// Auto-collapse fires on the streaming-to-idle edge only, so reading the
+		// finished list is not interrupted by a later re-render.
+		render(
+			<AssistantWorkflowSummary
+				parts={[execPart("e1", "custom-step")]}
+				isStreaming={false}
+			/>,
+		);
+
+		fireEvent.click(screen.getByRole("button"));
+		expect(screen.getByText("Custom Step")).toBeInTheDocument();
 	});
 });

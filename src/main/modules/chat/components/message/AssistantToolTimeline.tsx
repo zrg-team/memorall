@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useMemo } from "react";
+import { useStreamingDisclosure } from "./use-streaming-disclosure";
 import { ChevronDown, SlidersHorizontal } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { ComplexContentPartTool } from "@/types/chat";
@@ -27,19 +28,9 @@ export const AssistantToolTimeline: React.FC<{
 	isStreaming: boolean;
 }> = React.memo(({ parts, isStreaming }) => {
 	const { t } = useTranslation("chat");
-	const [isOpen, setIsOpen] = useState(isStreaming);
-	const wasStreamingRef = useRef(isStreaming);
+	const [isOpen, setIsOpen] = useStreamingDisclosure(isStreaming);
 	const hasError = parts.some((part) => part.state === "error");
 	const durationMs = useMemo(() => getTimelineDuration(parts), [parts]);
-
-	useEffect(() => {
-		if (isStreaming) {
-			setIsOpen(true);
-		} else if (wasStreamingRef.current) {
-			setIsOpen(false);
-		}
-		wasStreamingRef.current = isStreaming;
-	}, [isStreaming]);
 
 	const summary = isStreaming
 		? t("toolTimeline.running", {

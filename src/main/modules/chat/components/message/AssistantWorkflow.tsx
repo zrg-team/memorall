@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from "react";
+import { useStreamingDisclosure } from "./use-streaming-disclosure";
 import { useTranslation } from "react-i18next";
 import {
 	BookOpen,
@@ -207,9 +208,10 @@ export const AssistantWorkflowPart: React.FC<{
 export const AssistantWorkflowSummary: React.FC<{
 	parts: ComplexContentPartExecution[];
 	evidenceParts?: ComplexContentPartTool[];
-}> = ({ parts, evidenceParts = [] }) => {
+	isStreaming: boolean;
+}> = ({ parts, evidenceParts = [], isStreaming }) => {
 	const { t } = useTranslation("chat");
-	const [isOpen, setIsOpen] = useState(false);
+	const [isOpen, setIsOpen] = useStreamingDisclosure(isStreaming);
 	const evidence = useMemo(
 		() => evidenceParts.filter(isWorkflowEvidencePart),
 		[evidenceParts],
