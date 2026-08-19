@@ -1,11 +1,49 @@
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { defineConfig } from "vite";
+import { defineConfig, type Plugin } from "vite";
 
 const repositoryRoot = fileURLToPath(new URL("../..", import.meta.url));
+const bootScriptPath = fileURLToPath(new URL("./boot.js", import.meta.url));
+
+/**
+ * Ship `boot.js` verbatim next to `index.html`.
+ *
+ * It is referenced as a classic `<script src>` rather than a module entry on
+ * purpose: Vite folds every module entry of a page into a single chunk, and the
+ * whole point of the boot script is to run *before* the app bundle is fetched.
+ * Serving it by hand keeps that guarantee in dev and in the packaged build.
+ */
+function desktopBootScript(): Plugin {
+	const readBootScript = () => readFileSync(bootScriptPath, "utf8");
+
+	return {
+		name: "memorall:desktop-boot-script",
+		configureServer(server) {
+			server.watcher.add(bootScriptPath);
+			server.middlewares.use((request, response, next) => {
+				if (request.url?.split("?")[0] !== "/boot.js") {
+					next();
+					return;
+				}
+				response.setHeader("Content-Type", "text/javascript; charset=utf-8");
+				response.setHeader("Cache-Control", "no-cache");
+				response.end(readBootScript());
+			});
+		},
+		generateBundle() {
+			this.emitFile({
+				type: "asset",
+				fileName: "boot.js",
+				source: readBootScript(),
+			});
+		},
+	};
+}
 
 export default defineConfig({
 	root: fileURLToPath(new URL(".", import.meta.url)),
 	base: "./",
+	plugins: [desktopBootScript()],
 	// Reuse the same packaged local assets as extension and web builds.
 	publicDir: fileURLToPath(new URL("../../public", import.meta.url)),
 	resolve: {

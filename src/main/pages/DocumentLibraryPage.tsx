@@ -1,7 +1,8 @@
 import React, { useCallback } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { Loader2, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { WorkspaceContentSkeleton } from "@/main/components/atoms/AppSkeletons";
 import { useDocumentLibrary } from "@/main/modules/files/hooks/use-document-library";
 import { DocumentLibraryHeader } from "@/main/modules/files/components/DocumentLibraryHeader";
 import { DocumentLibrarySidebar } from "@/main/modules/files/components/DocumentLibrarySidebar";
@@ -107,11 +108,7 @@ export const DocumentLibraryPage: React.FC = () => {
 	);
 
 	if (lib.loading) {
-		return (
-			<div className="flex items-center justify-center h-full">
-				<Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-			</div>
-		);
+		return <WorkspaceContentSkeleton />;
 	}
 
 	return (

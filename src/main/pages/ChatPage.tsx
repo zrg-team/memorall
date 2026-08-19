@@ -10,7 +10,6 @@ import {
 	ConversationScrollButton,
 } from "@/main/components/ui/shadcn-io/ai/conversation";
 import {
-	LoadingScreen,
 	NoModelsScreen,
 	ChatInput,
 	ChatEmptyState,
@@ -22,6 +21,7 @@ import {
 	useSmartSelectContext,
 } from "@/main/modules/chat/components";
 import { MessageGroup } from "@/main/modules/chat/components/MessageGroup";
+import { ChatPanelSkeleton } from "@/main/components/atoms/AppSkeletons";
 import type {
 	AgentGreetingContext,
 	AgentScreenContent,
@@ -739,7 +739,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
 	}, [navigate]);
 
 	if (!isInitialized) {
-		return <LoadingScreen />;
+		return <ChatPanelSkeleton />;
 	}
 
 	// Check if model is currently downloading

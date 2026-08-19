@@ -4,9 +4,162 @@
 		<meta charset="UTF-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 		<title>Memorall</title>
+		<!--
+			Boot styles are inline on purpose: they are the only paint the window has
+			between "webview created" and "React committed the loading screen", and the
+			Tauri CSP allows inline styles but not inline scripts. Keeping the splash
+			here means the window is never shown blank, and never shown in the wrong
+			theme (`prefers-color-scheme` covers the first frame, `boot.js` refines it
+			from the stored override before React mounts).
+		-->
+		<style>
+			:root {
+				color-scheme: light;
+				--boot-bg: #ffffff;
+				--boot-fg: #0a0a0a;
+				--boot-muted: rgba(10, 10, 10, 0.55);
+				--boot-track: rgba(10, 10, 10, 0.08);
+			}
+
+			@media (prefers-color-scheme: dark) {
+				:root:not(.light) {
+					color-scheme: dark;
+					--boot-bg: #0a0a0a;
+					--boot-fg: #fafafa;
+					--boot-muted: rgba(250, 250, 250, 0.55);
+					--boot-track: rgba(250, 250, 250, 0.1);
+				}
+			}
+
+			:root.dark {
+				color-scheme: dark;
+				--boot-bg: #0a0a0a;
+				--boot-fg: #fafafa;
+				--boot-muted: rgba(250, 250, 250, 0.55);
+				--boot-track: rgba(250, 250, 250, 0.1);
+			}
+
+			html,
+			body {
+				height: 100%;
+				margin: 0;
+				padding: 0;
+				overflow: hidden;
+			}
+
+			/* Only `html` is painted here so `globals.css` keeps owning `body`
+			   (`@layer base` loses to unlayered rules); the two resolve to the same
+			   colour, this one just lands before the stylesheet does. */
+			html {
+				background: var(--boot-bg);
+			}
+
+			#root {
+				height: 100%;
+			}
+
+			#boot-splash {
+				position: fixed;
+				inset: 0;
+				z-index: 2147483647;
+				display: flex;
+				flex-direction: column;
+				align-items: center;
+				justify-content: center;
+				gap: 18px;
+				background: var(--boot-bg);
+				color: var(--boot-fg);
+				font-family:
+					"Space Grotesk", ui-sans-serif, system-ui, -apple-system,
+					BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+				transition: opacity 220ms ease-out;
+			}
+
+			#boot-splash[data-dismissed="true"] {
+				opacity: 0;
+				pointer-events: none;
+			}
+
+			#boot-splash .boot-mark {
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				width: 72px;
+				height: 72px;
+				border-radius: 20px;
+				background: var(--boot-track);
+			}
+
+			#boot-splash .boot-mark img {
+				width: 52px;
+				height: 52px;
+				object-fit: contain;
+			}
+
+			#boot-splash .boot-name {
+				font-size: 15px;
+				font-weight: 600;
+				letter-spacing: 0.12em;
+				text-transform: uppercase;
+			}
+
+			#boot-splash .boot-hint {
+				margin-top: -10px;
+				font-size: 12px;
+				color: var(--boot-muted);
+			}
+
+			#boot-splash .boot-track {
+				width: 180px;
+				height: 3px;
+				overflow: hidden;
+				border-radius: 999px;
+				background: var(--boot-track);
+			}
+
+			#boot-splash .boot-track span {
+				display: block;
+				width: 40%;
+				height: 100%;
+				border-radius: 999px;
+				background: currentColor;
+				opacity: 0.7;
+				animation: boot-slide 1.15s ease-in-out infinite;
+			}
+
+			@keyframes boot-slide {
+				0% {
+					transform: translateX(-100%);
+				}
+				100% {
+					transform: translateX(250%);
+				}
+			}
+
+			@media (prefers-reduced-motion: reduce) {
+				#boot-splash .boot-track span {
+					animation: none;
+					width: 100%;
+					opacity: 0.35;
+				}
+			}
+		</style>
 	</head>
 	<body>
 		<div id="root"></div>
+		<div id="boot-splash" role="status" aria-live="polite">
+			<div class="boot-mark">
+				<img src="./logo.png" alt="" fetchpriority="high" decoding="sync" />
+			</div>
+			<div class="boot-name">Memorall</div>
+			<div class="boot-hint">Starting your local workspace…</div>
+			<div class="boot-track"><span></span></div>
+		</div>
+		<!--
+			Classic, un-bundled script: it must run while the module bundle is still
+			downloading. See the header of `boot.js`.
+		-->
+		<script src="./boot.js"></script>
 		<script type="module" src="/src/main.tsx"></script>
 	</body>
 </html>
