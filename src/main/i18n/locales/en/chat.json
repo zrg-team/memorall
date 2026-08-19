@@ -338,15 +338,15 @@
 		"loadSelected": "Load model"
 	},
 	"tooltips": {
-		"normalMode": "Normal chat mode - Simple conversation without knowledge context",
-		"knowledgeMode": "Knowledge mode - Chat with access to your saved knowledge and context",
 		"topicSelector": "Select a topic to filter knowledge context",
 		"flowSelector": "Select conversation flow",
-		"newMessage": "Start a new message thread in the current conversation",
 		"moreActions": "More actions and settings",
 		"stopGeneration": "Stop generating response",
 		"sendMessage": "Send message (Enter)",
-		"agentSettings": "Agent settings"
+		"agentSettings": "Agent settings",
+		"splitChat": "Split chat — the agent starts fresh from here and can still search everything above",
+		"expandChatWidth": "Expand chat to full width",
+		"constrainChatWidth": "Constrain chat width"
 	},
 	"agentSettings": {
 		"title": "Agent Settings",
