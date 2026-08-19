@@ -101,6 +101,7 @@ exports[`requested main module coverage > imports chat, documents, agents, agent
   "../modules/chat/components/message/message-parts-adapter.ts",
   "../modules/chat/components/message/parseThinkTags.ts",
   "../modules/chat/components/message/stable-part-keys.ts",
+  "../modules/chat/components/message/use-streaming-disclosure.ts",
   "../modules/chat/components/tools/APIResult.tsx",
   "../modules/chat/components/tools/CoAgentTool.tsx",
   "../modules/chat/components/tools/ComposioTool.tsx",
