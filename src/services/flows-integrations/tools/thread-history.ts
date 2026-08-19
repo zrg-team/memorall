@@ -1,4 +1,3 @@
-import z from "zod";
 import type {
 	Tool,
 	ToolExecutionContext,
@@ -7,6 +6,7 @@ import type {
 } from "@memorall/agent-harness-flows/interfaces/engine/tool";
 import type { AllServices } from "@memorall/agent-harness-flows/interfaces/services/services";
 import { toolRegistry } from "@memorall/agent-harness-flows/registries/tool-registry";
+import z from "zod";
 import { buildThreadHistorySearchVectorSql } from "@/services/database/thread-history-search-vector";
 
 export const THREAD_HISTORY_SEARCH_TOOL = "thread_history_search" as const;
@@ -19,8 +19,33 @@ export const THREAD_HISTORY_SEPARATOR_RUNTIME_KEY =
 const SEARCH_RESPONSE_BUDGET = 12_000;
 const READ_RESPONSE_BUDGET = 24_000;
 const MAX_READ_LINES = 200;
+/** Rows pulled per search before ranking; the ranker needs slack to work with. */
+const MAX_SEARCH_CANDIDATES = 200;
+/** Query terms kept for scoring — bounds the width of the corpus-stats SQL. */
+const MAX_SEARCH_TERMS = 8;
+
+/**
+ * BM25 constants. Messages carry no embeddings — the three vector columns on
+ * the table are never written for chat rows — so recall here is purely lexical
+ * (tsvector OR ILIKE) and ranking has to come from term statistics rather than
+ * similarity.
+ */
+export const BM25_K1 = 1.2;
+export const BM25_B = 0.75;
+/** Weight of an exact-phrase hit, as a fraction of the query's total IDF. */
+export const PHRASE_MATCH_WEIGHT = 0.5;
 
 type Services = Pick<AllServices, "database">;
+
+/**
+ * How much of a message to render.
+ *
+ * A single stored message can hold a whole exchange — assistant tool calls plus
+ * their results — so the full text is often far larger than the conversation it
+ * belongs to. `compact` keeps the prose and reduces every tool call and result
+ * to one line; `detail` renders arguments and outputs in full.
+ */
+export type ThreadHistoryTextMode = "compact" | "detail";
 
 interface HistoryRow {
 	messageId: string;
@@ -35,6 +60,12 @@ interface HistoryRow {
 interface HistoryScope {
 	conversationId: string;
 	separatorId: string;
+}
+
+interface CollectContext {
+	mode: ThreadHistoryTextMode;
+	/** tool_call_id → function name, so a tool result can name its caller. */
+	toolNames: Map<string, string>;
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -53,14 +84,71 @@ const isBinaryText = (value: string): boolean =>
 	/^data:[^,]+;base64,/i.test(value.trim()) ||
 	(value.length > 512 && /^[A-Za-z0-9+/=\r\n]+$/.test(value));
 
-const collectVisibleText = (value: unknown, output: string[]): void => {
+const toInlineJson = (value: unknown): string => {
+	if (typeof value === "string") return value.replace(/\s+/gu, " ").trim();
+	try {
+		return JSON.stringify(value) ?? "";
+	} catch {
+		return "";
+	}
+};
+
+const collectToolCalls = (
+	value: unknown,
+	output: string[],
+	context: CollectContext,
+): void => {
+	if (!Array.isArray(value)) return;
+	for (const call of value) {
+		if (!isRecord(call)) continue;
+		const fn = isRecord(call.function) ? call.function : call;
+		const name = typeof fn.name === "string" ? fn.name : "tool";
+		if (typeof call.id === "string" && call.id) {
+			context.toolNames.set(call.id, name);
+		}
+		if (context.mode === "detail") {
+			const args = toInlineJson(safeJsonParse(fn.arguments));
+			output.push(
+				args ? `[tool_call: ${name}] ${args}` : `[tool_call: ${name}]`,
+			);
+		} else {
+			output.push(`[tool_call: ${name}]`);
+		}
+	}
+};
+
+const collectToolResult = (
+	parsed: Record<string, unknown>,
+	output: string[],
+	context: CollectContext,
+): void => {
+	const callId =
+		typeof parsed.tool_call_id === "string" ? parsed.tool_call_id : "";
+	const name = context.toolNames.get(callId) ?? "tool";
+	const body: string[] = [];
+	collectVisibleText(parsed.content, body, context);
+	const text = body.join("\n");
+
+	if (context.mode === "detail") {
+		output.push(`[tool_result: ${name}]`);
+		if (text) output.push(text);
+		return;
+	}
+	output.push(`[tool_result: ${name} · ${text.length} chars]`);
+};
+
+const collectVisibleText = (
+	value: unknown,
+	output: string[],
+	context: CollectContext,
+): void => {
 	const parsed = safeJsonParse(value);
 	if (typeof parsed === "string") {
 		if (!isBinaryText(parsed) && parsed.trim()) output.push(parsed.trim());
 		return;
 	}
 	if (Array.isArray(parsed)) {
-		for (const item of parsed) collectVisibleText(item, output);
+		for (const item of parsed) collectVisibleText(item, output, context);
 		return;
 	}
 	if (!isRecord(parsed)) return;
@@ -76,9 +164,15 @@ const collectVisibleText = (value: unknown, output: string[]): void => {
 		return;
 	}
 
+	if (parsed.role === "tool") {
+		collectToolResult(parsed, output, context);
+		return;
+	}
+
 	if (typeof parsed.role === "string" && "content" in parsed) {
 		const roleOutput: string[] = [];
-		collectVisibleText(parsed.content, roleOutput);
+		collectVisibleText(parsed.content, roleOutput, context);
+		collectToolCalls(parsed.tool_calls, roleOutput, context);
 		if (roleOutput.length > 0) {
 			output.push(`[${parsed.role}]`);
 			output.push(...roleOutput);
@@ -86,13 +180,18 @@ const collectVisibleText = (value: unknown, output: string[]): void => {
 		return;
 	}
 
+	if (Array.isArray(parsed.tool_calls)) {
+		collectToolCalls(parsed.tool_calls, output, context);
+		return;
+	}
+
 	if (typeof parsed.text === "string") {
-		collectVisibleText(parsed.text, output);
+		collectVisibleText(parsed.text, output, context);
 		return;
 	}
 
 	if (typeof parsed.content === "string") {
-		collectVisibleText(parsed.content, output);
+		collectVisibleText(parsed.content, output, context);
 	}
 };
 
@@ -111,13 +210,17 @@ const collectAttachmentNames = (metadata: unknown, output: string[]): void => {
 	}
 };
 
-export const normalizeThreadHistoryMessage = (row: HistoryRow): string => {
+export const normalizeThreadHistoryMessage = (
+	row: HistoryRow,
+	mode: ThreadHistoryTextMode = "compact",
+): string => {
 	const output: string[] = [];
+	const context: CollectContext = { mode, toolNames: new Map() };
 	if (row.content?.trim() && !isBinaryText(row.content)) {
 		output.push(row.content.trim());
 	}
-	collectVisibleText(row.parts, output);
-	collectVisibleText(row.complexContent, output);
+	collectVisibleText(row.parts, output, context);
+	collectVisibleText(row.complexContent, output, context);
 	collectAttachmentNames(row.metadata, output);
 
 	const deduped = output.filter(
@@ -144,6 +247,27 @@ const getScope = (context?: ToolExecutionContext): HistoryScope => {
 	return { conversationId, separatorId };
 };
 
+/**
+ * The join that makes the boundary unforgeable: rows are only reachable when
+ * $2 really is a separator of conversation $1.
+ */
+const HISTORY_BOUNDARY_JOIN = `
+	FROM messages m
+	JOIN messages boundary
+		ON boundary.uuid::text = $2
+		AND boundary.conversation_id::text = $1
+		AND boundary.type = 'separator'
+`;
+
+const HISTORY_SCOPE_WHERE = `
+	WHERE m.conversation_id::text = $1
+		AND m.type <> 'separator'
+		AND m.created_at < boundary.created_at
+`;
+
+/** The text ILIKE and the length statistics both run against. */
+const HAYSTACK_SQL = `coalesce(m.content, '') || ' ' || coalesce(m.parts::text, '')`;
+
 const HISTORY_SELECT = `
 	SELECT
 		m.uuid::text AS "messageId",
@@ -153,11 +277,7 @@ const HISTORY_SELECT = `
 		m.complex_content AS "complexContent",
 		m.metadata AS "metadata",
 		m.created_at AS "createdAt"
-	FROM messages m
-	JOIN messages boundary
-		ON boundary.uuid::text = $2
-		AND boundary.conversation_id::text = $1
-		AND boundary.type = 'separator'
+	${HISTORY_BOUNDARY_JOIN}
 `;
 
 const searchSchema = z.object({
@@ -193,6 +313,141 @@ interface MatchExcerpt {
 	toLine: number;
 	lines: string[];
 }
+
+export interface ThreadHistoryCorpusStats {
+	/** Messages before the boundary. */
+	totalDocs: number;
+	/** Mean haystack length, in the same unit as the per-document length. */
+	averageLength: number;
+	/** term → number of messages containing it. */
+	documentFrequency: Record<string, number>;
+}
+
+const escapeLikePattern = (value: string): string =>
+	value.replace(/[\\%_]/gu, (character) => `\\${character}`);
+
+const countOccurrences = (haystack: string, needle: string): number => {
+	if (!needle) return 0;
+	let count = 0;
+	let index = haystack.indexOf(needle);
+	while (index !== -1) {
+		count += 1;
+		index = haystack.indexOf(needle, index + needle.length);
+	}
+	return count;
+};
+
+/**
+ * Split a query into the distinct terms BM25 scores over. Punctuation is
+ * trimmed from the edges so `"deploy."` and `deploy` score alike.
+ */
+export const tokenizeSearchQuery = (
+	query: string,
+	maxTerms: number = MAX_SEARCH_TERMS,
+): string[] => {
+	const terms = new Set<string>();
+	for (const candidate of query.toLocaleLowerCase().split(/\s+/u)) {
+		const term = candidate.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "");
+		if (!term) continue;
+		terms.add(term);
+		if (terms.size >= maxTerms) break;
+	}
+	return [...terms];
+};
+
+/**
+ * Okapi BM25 over one document, plus a bonus when the whole query appears
+ * verbatim so phrase searches outrank scattered bag-of-words hits.
+ */
+export const scoreThreadHistoryMatch = (
+	haystack: string,
+	terms: string[],
+	phrase: string,
+	stats: ThreadHistoryCorpusStats,
+): number => {
+	if (terms.length === 0 || stats.totalDocs <= 0 || stats.averageLength <= 0) {
+		return 0;
+	}
+
+	const normalized = haystack.toLocaleLowerCase();
+	const length = haystack.length || 1;
+	const lengthRatio = length / stats.averageLength;
+	let score = 0;
+	let idfTotal = 0;
+
+	for (const term of terms) {
+		const df = Math.min(stats.documentFrequency[term] ?? 0, stats.totalDocs);
+		const idf = Math.log(1 + (stats.totalDocs - df + 0.5) / (df + 0.5));
+		idfTotal += idf;
+		const tf = countOccurrences(normalized, term);
+		if (tf === 0) continue;
+		score +=
+			idf *
+			((tf * (BM25_K1 + 1)) /
+				(tf + BM25_K1 * (1 - BM25_B + BM25_B * lengthRatio)));
+	}
+
+	const normalizedPhrase = phrase.toLocaleLowerCase().trim();
+	if (
+		terms.length > 1 &&
+		normalizedPhrase &&
+		normalized.includes(normalizedPhrase)
+	) {
+		score += PHRASE_MATCH_WEIGHT * idfTotal;
+	}
+
+	return score;
+};
+
+const partsToText = (value: unknown): string => {
+	if (typeof value === "string") return value;
+	if (value === null || value === undefined) return "";
+	try {
+		return JSON.stringify(value) ?? "";
+	} catch {
+		return "";
+	}
+};
+
+/** Mirrors HAYSTACK_SQL so scoring and the SQL statistics agree. */
+const buildSearchHaystack = (row: HistoryRow): string =>
+	`${row.content ?? ""} ${partsToText(row.parts)}`;
+
+const loadCorpusStats = async (
+	services: Services,
+	scope: HistoryScope,
+	terms: string[],
+): Promise<ThreadHistoryCorpusStats> => {
+	const filters = terms.map(
+		(_, index) =>
+			`count(*) FILTER (WHERE ${HAYSTACK_SQL} ILIKE $${index + 3}) AS "df${index}"`,
+	);
+	const rows = await services.database.raw<Record<string, unknown>>(
+		`SELECT
+			count(*)::int AS "totalDocs",
+			coalesce(avg(length(${HAYSTACK_SQL})), 0)::float AS "averageLength"${
+				filters.length > 0 ? `,\n\t\t\t${filters.join(",\n\t\t\t")}` : ""
+			}
+		${HISTORY_BOUNDARY_JOIN}
+		${HISTORY_SCOPE_WHERE}`,
+		[
+			scope.conversationId,
+			scope.separatorId,
+			...terms.map((term) => `%${escapeLikePattern(term)}%`),
+		],
+	);
+
+	const row = rows[0] ?? {};
+	const documentFrequency: Record<string, number> = {};
+	terms.forEach((term, index) => {
+		documentFrequency[term] = Number(row[`df${index}`] ?? 0);
+	});
+	return {
+		totalDocs: Number(row.totalDocs ?? 0),
+		averageLength: Number(row.averageLength ?? 0),
+		documentFrequency,
+	};
+};
 
 const findMatchExcerpts = (
 	text: string,
@@ -242,7 +497,7 @@ export const createThreadHistorySearchTool: ToolFactory<
 	name: THREAD_HISTORY_SEARCH_TOOL,
 	title: "Search earlier thread messages",
 	description:
-		"Search messages before the current thread separator. Returns matched message IDs and grep-style line excerpts. Use thread_history_read with returned IDs for more context.",
+		"Search messages from before the current thread separator. Matching is lexical (full-text plus substring), ranked by BM25. Returns message IDs and grep-style excerpts whose line numbers match a compact thread_history_read of the same message.",
 	schema: searchSchema,
 	annotations: {
 		readOnlyHint: true,
@@ -259,31 +514,51 @@ export const createThreadHistorySearchTool: ToolFactory<
 			const searchVector = buildThreadHistorySearchVectorSql("m");
 			const candidates = await services.database.raw<HistoryRow>(
 				`${HISTORY_SELECT}
-				WHERE m.conversation_id::text = $1
-					AND m.type <> 'separator'
-					AND m.created_at < boundary.created_at
+				${HISTORY_SCOPE_WHERE}
 					AND (
 						${searchVector}
 							@@ websearch_to_tsquery('simple'::regconfig, $3)
 						OR coalesce(m.content, '') ILIKE '%' || $3 || '%'
 						OR coalesce(m.parts::text, '') ILIKE '%' || $3 || '%'
 					)
-				ORDER BY
-					ts_rank_cd(
-						${searchVector},
-						websearch_to_tsquery('simple'::regconfig, $3)
-					) DESC,
-					m.created_at DESC
+				ORDER BY m.created_at DESC
 				LIMIT $4`,
-				[scope.conversationId, scope.separatorId, input.query, limit * 4],
+				[
+					scope.conversationId,
+					scope.separatorId,
+					input.query,
+					Math.min(limit * 8, MAX_SEARCH_CANDIDATES),
+				],
 			);
+
+			if (candidates.length === 0) {
+				return {
+					content: `No earlier messages matched "${input.query}".`,
+					meta: { truncated: false, matchedMessageIds: [] },
+				};
+			}
+
+			const terms = tokenizeSearchQuery(input.query);
+			const stats = await loadCorpusStats(services, scope, terms);
+			// Stable sort: equal scores keep the SQL's created_at DESC ordering.
+			const ranked = candidates
+				.map((row) => ({
+					row,
+					score: scoreThreadHistoryMatch(
+						buildSearchHaystack(row),
+						terms,
+						input.query,
+						stats,
+					),
+				}))
+				.sort((left, right) => right.score - left.score);
 
 			const blocks: string[] = [];
 			const matchedIds: string[] = [];
 			let truncated = false;
-			for (const row of candidates) {
+			for (const { row } of ranked) {
 				if (matchedIds.length >= limit) break;
-				const text = normalizeThreadHistoryMessage(row);
+				const text = normalizeThreadHistoryMessage(row, "compact");
 				const excerpts = findMatchExcerpts(
 					text,
 					input.query,
@@ -341,11 +616,15 @@ const readSchema = z.object({
 		.int()
 		.min(1)
 		.optional()
-		.describe("Inclusive last line (default: fromLine + 79)"),
-	readAll: z
-		.boolean()
+		.describe(
+			`Inclusive last line (default: fromLine + 79, capped at fromLine + ${MAX_READ_LINES - 1})`,
+		),
+	mode: z
+		.enum(["compact", "detail"])
 		.optional()
-		.describe("Read all lines of each message; ignores fromLine/toLine"),
+		.describe(
+			"compact (default) renders prose and collapses each tool call and result to one line; detail renders tool arguments and outputs in full. Line numbers differ between modes.",
+		),
 });
 
 type ReadInput = z.infer<typeof readSchema>;
@@ -356,7 +635,7 @@ export const createThreadHistoryReadTool: ToolFactory<ReadInput, Services> = (
 	name: THREAD_HISTORY_READ_TOOL,
 	title: "Read earlier thread messages",
 	description:
-		"Read one or more earlier messages by ID with line numbers. Supply fromLine/toLine for a bounded range, or readAll=true for complete messages.",
+		"Read earlier messages by ID over a bounded line range. Start in compact mode; switch to detail only when you need a tool call's arguments or output. Line numbers are mode-specific, so keep the same mode when continuing a read.",
 	schema: readSchema,
 	annotations: {
 		readOnlyHint: true,
@@ -367,11 +646,8 @@ export const createThreadHistoryReadTool: ToolFactory<ReadInput, Services> = (
 	execute: async (input, context): Promise<ToolExecutionResult> => {
 		try {
 			const scope = getScope(context);
-			if (
-				!input.readAll &&
-				input.toLine &&
-				input.toLine < (input.fromLine ?? 1)
-			) {
+			const mode: ThreadHistoryTextMode = input.mode ?? "compact";
+			if (input.toLine && input.toLine < (input.fromLine ?? 1)) {
 				return {
 					content: "Error: toLine must be greater than or equal to fromLine.",
 					isError: true,
@@ -380,9 +656,7 @@ export const createThreadHistoryReadTool: ToolFactory<ReadInput, Services> = (
 
 			const rows = await services.database.raw<HistoryRow>(
 				`${HISTORY_SELECT}
-				WHERE m.conversation_id::text = $1
-					AND m.type <> 'separator'
-					AND m.created_at < boundary.created_at
+				${HISTORY_SCOPE_WHERE}
 					AND m.uuid::text = ANY($3::text[])`,
 				[scope.conversationId, scope.separatorId, input.messageIds],
 			);
@@ -402,18 +676,14 @@ export const createThreadHistoryReadTool: ToolFactory<ReadInput, Services> = (
 					continue;
 				}
 
-				const text = normalizeThreadHistoryMessage(row);
+				const text = normalizeThreadHistoryMessage(row, mode);
 				const lines = text.split("\n");
-				const fromLine = input.readAll ? 1 : (input.fromLine ?? 1);
-				const requestedTo = input.readAll
-					? lines.length
-					: (input.toLine ?? fromLine + 79);
-				const toLine = input.readAll
-					? requestedTo
-					: Math.min(requestedTo, fromLine + MAX_READ_LINES - 1);
+				const fromLine = input.fromLine ?? 1;
+				const requestedTo = input.toLine ?? fromLine + 79;
+				const toLine = Math.min(requestedTo, fromLine + MAX_READ_LINES - 1);
 				const start = Math.min(Math.max(0, fromLine - 1), lines.length);
 				const end = Math.min(Math.max(start, toLine), lines.length);
-				const header = `messageId: ${row.messageId} · ${row.role} · ${formatDate(row.createdAt)} · lines ${start + 1}-${end}/${lines.length}`;
+				const header = `messageId: ${row.messageId} · ${row.role} · ${formatDate(row.createdAt)} · ${mode} · lines ${start + 1}-${end}/${lines.length}`;
 				const selected = lines.slice(start, end);
 				const rendered: string[] = [header];
 
@@ -445,18 +715,19 @@ export const createThreadHistoryReadTool: ToolFactory<ReadInput, Services> = (
 					blocks.some((block) => block.includes(`messageId: ${messageId}`))
 				)
 					continue;
-				continuation[messageId] = input.readAll ? 1 : (input.fromLine ?? 1);
+				continuation[messageId] = input.fromLine ?? 1;
 			}
 
 			const continuationEntries = Object.entries(continuation);
 			const footer = continuationEntries.length
-				? `\n\n[Response limit reached. Continue with: ${continuationEntries
+				? `\n\n[Response limit reached. Continue in ${mode} mode with: ${continuationEntries
 						.map(([id, line]) => `${id} nextFromLine=${line}`)
 						.join(", ")}]`
 				: "";
 			return {
 				content: `${blocks.join("\n\n")}${footer}`,
 				meta: {
+					mode,
 					truncated: continuationEntries.length > 0,
 					nextFromLine: continuation,
 				},

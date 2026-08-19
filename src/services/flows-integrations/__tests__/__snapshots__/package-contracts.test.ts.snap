@@ -11,6 +11,7 @@ exports[`flows-integrations registered contracts > registers every integrations 
   "hyperframes-feature",
   "lottie-animation-feature",
   "pdf-generate-feature",
+  "thread-history-feature",
   "visualize-response",
 ]
 `;
@@ -537,6 +538,53 @@ exports[`flows-integrations registered contracts > registers every integrations 
     "executable": true,
     "id": "pdf-generate-feature",
     "name": "pdf-generate-feature",
+  },
+  {
+    "config": {
+      "defaultStateMapping": {
+        "messages": "messages",
+        "tools": "tools",
+      },
+      "description": "Let the agent search and read messages from before the chat was split, instead of losing them.",
+      "enabledByDefault": true,
+      "feature": {
+        "graphTypes": [
+          "foundation",
+          "agent",
+        ],
+        "id": "step-thread-history-feature",
+        "inputs": [
+          {
+            "description": "Current chat messages",
+            "name": "messages",
+            "required": true,
+            "type": "Message[]",
+          },
+          {
+            "description": "Current available tools",
+            "name": "tools",
+            "required": true,
+            "type": "Tool[]",
+          },
+        ],
+        "outputs": [
+          {
+            "description": "Messages with guidance on when to look past the split",
+            "name": "messages",
+            "type": "Message[]",
+          },
+          {
+            "description": "Tools extended with thread_history_search and thread_history_read",
+            "name": "tools",
+            "type": "Tool[]",
+          },
+        ],
+        "type": "feature",
+      },
+    },
+    "executable": true,
+    "id": "thread-history-feature",
+    "name": "thread-history-feature",
   },
   {
     "config": {
@@ -1713,7 +1761,7 @@ exports[`flows-integrations registered contracts > registers every integrations 
     },
   },
   {
-    "description": "Read one or more earlier messages by ID with line numbers. Supply fromLine/toLine for a bounded range, or readAll=true for complete messages.",
+    "description": "Read earlier messages by ID over a bounded line range. Start in compact mode; switch to detail only when you need a tool call's arguments or output. Line numbers are mode-specific, so keep the same mode when continuing a read.",
     "name": "thread_history_read",
     "parameters": {
       "properties": {
@@ -1726,8 +1774,12 @@ exports[`flows-integrations registered contracts > registers every integrations 
           },
           "type": "array",
         },
-        "readAll": {
-          "type": "boolean",
+        "mode": {
+          "enum": [
+            "compact",
+            "detail",
+          ],
+          "type": "string",
         },
         "toLine": {
           "type": "number",
@@ -1740,7 +1792,7 @@ exports[`flows-integrations registered contracts > registers every integrations 
     },
   },
   {
-    "description": "Search messages before the current thread separator. Returns matched message IDs and grep-style line excerpts. Use thread_history_read with returned IDs for more context.",
+    "description": "Search messages from before the current thread separator. Matching is lexical (full-text plus substring), ranked by BM25. Returns message IDs and grep-style excerpts whose line numbers match a compact thread_history_read of the same message.",
     "name": "thread_history_search",
     "parameters": {
       "properties": {

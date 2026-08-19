@@ -74,7 +74,7 @@ describe("thread history search migration", () => {
 		expect(searchContent).not.toContain(afterId);
 
 		const read = await createThreadHistoryReadTool(services).execute(
-			{ messageIds: [beforeId], readAll: true },
+			{ messageIds: [beforeId], fromLine: 1, toLine: 10 },
 			context,
 		);
 		expect((read as { content: string }).content).toContain(

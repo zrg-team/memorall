@@ -1,34 +1,21 @@
-import { BaseProcessHandler } from "./base-process-handler";
-import type {
-	ProcessDependencies,
-	BaseJob,
-	ItemHandlerResult,
-	JobProgressUpdate,
-} from "./types";
-import { serviceManager } from "@/services";
-import type {
-	ChatCompletionRequest,
-	ChatMessage,
-	ChatCompletionChunk,
-	ChatCompletionChunkToolCall,
-	ChatCompletionMessageToolCall,
-	ChatCompletionTool,
-	ChatCompletionToolChoiceOption,
-} from "@/types/openai";
+import type { FoundationState } from "@memorall/agent-harness-flows/graph/foundation/state";
+import type { UnifiedFlowConfig } from "@memorall/agent-harness-flows/interfaces/config/flow-config";
 import {
+	buildDefaultFlowConfig,
+	mergeWithDefaultConfig,
+} from "@memorall/agent-harness-flows/utils/flow-config";
+import {
+	type FlowAction,
 	isCustomChunkPayload,
 	normalizeLangGraphStreamChunk,
-	type FlowAction,
 } from "@memorall/agent-harness-flows/utils/langgraph-stream";
-import type {
-	AssistantExecutionPart,
-	ComplexContent,
-	ConversationContext,
-	MessageParts,
-	ToolExecutionRecord,
-} from "@/types/chat";
-import { handlerRegistry } from "./handler-registry";
-import type { FoundationState } from "@memorall/agent-harness-flows/graph/foundation/state";
+import { eq, sql } from "drizzle-orm";
+import { serviceManager } from "@/services";
+import {
+	createMemorallFlowRun,
+	type MemorallFlowServices,
+	toLegacyFlowStream,
+} from "@/services/agent-harness";
 import {
 	MessagePartsAccumulator,
 	resolveMessageParts,
@@ -39,51 +26,64 @@ import {
 	type ToolCallAccumulator,
 } from "@/services/chat/tool-call-accumulator";
 import {
+	createToolExecutionPreview,
+	finishRunningToolExecutions,
+	upsertToolExecution,
+} from "@/services/chat/tool-executions";
+import {
+	getValidRecallTypes,
+	isRecallTypeValidForGrow,
+	type RecallType,
+} from "@/services/database/entities/topic-types";
+import { documentFileSystemService as fsService } from "@/services/filesystem/document-filesystem";
+import {
 	consoleFlowLogger,
+	toAgentSandbox,
 	toFlowDatabase,
 	toFlowEmbedding,
 	toFlowFileSystem,
 	toFlowLLM,
 	toFlowSandbox,
 	toFlowWebBrowser,
-	toAgentSandbox,
 } from "@/services/flow-service-adapters";
 import {
-	createMemorallFlowRun,
-	toLegacyFlowStream,
-	type MemorallFlowServices,
-} from "@/services/agent-harness";
-import type { UnifiedFlowConfig } from "@memorall/agent-harness-flows/interfaces/config/flow-config";
+	THREAD_HISTORY_CONVERSATION_RUNTIME_KEY,
+	THREAD_HISTORY_SEPARATOR_RUNTIME_KEY,
+} from "@/services/flows-integrations/tools/thread-history";
 import { withResolvedConnections } from "@/services/mcp-connections";
-import { buildDefaultFlowConfig } from "@memorall/agent-harness-flows/utils/flow-config";
-import { mergeWithDefaultConfig } from "@memorall/agent-harness-flows/utils/flow-config";
-import { eq, sql } from "drizzle-orm";
-import { documentFileSystemService as fsService } from "@/services/filesystem/document-filesystem";
-import {
-	getValidRecallTypes,
-	isRecallTypeValidForGrow,
-	type RecallType,
-} from "@/services/database/entities/topic-types";
+import type {
+	AssistantExecutionPart,
+	ComplexContent,
+	ConversationContext,
+	MessageParts,
+	ToolExecutionRecord,
+} from "@/types/chat";
+import type {
+	ChatCompletionChunk,
+	ChatCompletionChunkToolCall,
+	ChatCompletionMessageToolCall,
+	ChatCompletionRequest,
+	ChatCompletionTool,
+	ChatCompletionToolChoiceOption,
+	ChatMessage,
+} from "@/types/openai";
+import { isAbortError } from "@/utils/abort";
+import { sanitizeForJson } from "@/utils/sanitize-json";
+import { BaseProcessHandler } from "./base-process-handler";
 import {
 	createJobErrorMetadata,
 	getErrorMessage,
 	type JobErrorMetadata,
 } from "./error-metadata";
-import { sanitizeForJson } from "@/utils/sanitize-json";
-import { isAbortError } from "@/utils/abort";
+import { handlerRegistry } from "./handler-registry";
 import { ChunkDispatcher, StreamBuffer } from "./stream-buffer";
-import {
-	createToolExecutionPreview,
-	finishRunningToolExecutions,
-	upsertToolExecution,
-} from "@/services/chat/tool-executions";
-import type { GraphTool } from "@memorall/agent-harness-flows/graph/graph.base";
-import {
-	THREAD_HISTORY_CONVERSATION_RUNTIME_KEY,
-	THREAD_HISTORY_READ_TOOL,
-	THREAD_HISTORY_SEARCH_TOOL,
-	THREAD_HISTORY_SEPARATOR_RUNTIME_KEY,
-} from "@/services/flows-integrations/tools/thread-history";
+import type {
+	BaseJob,
+	ItemHandlerResult,
+	JobProgressUpdate,
+	ProcessDependencies,
+} from "./types";
+
 export { ChunkDispatcher, StreamBuffer } from "./stream-buffer";
 
 export interface ChatStreamConfig {
@@ -238,68 +238,6 @@ const hasThreadHistory = (
 ): conversation is ConversationContext & {
 	historyBoundary: NonNullable<ConversationContext["historyBoundary"]>;
 } => Boolean(conversation?.historyBoundary?.separatorId);
-
-const withThreadHistoryTools = (
-	config: UnifiedFlowConfig,
-	conversation: ConversationContext | undefined,
-): UnifiedFlowConfig => {
-	if (!hasThreadHistory(conversation)) return config;
-	const historyTools: GraphTool[] = [
-		THREAD_HISTORY_SEARCH_TOOL,
-		THREAD_HISTORY_READ_TOOL,
-	];
-	return {
-		...config,
-		steps: config.steps.map((step) => {
-			if (step.name === "chat-completion") {
-				return { ...step, enabled: false };
-			}
-			if (step.name !== "agent-completion") return step;
-			const existing = Array.isArray(step.config?.tools)
-				? (step.config.tools as GraphTool[])
-				: [];
-			const byName = new Map<string, GraphTool>();
-			for (const tool of [...existing, ...historyTools]) {
-				byName.set(typeof tool === "string" ? tool : tool.name, tool);
-			}
-			return {
-				...step,
-				enabled: true,
-				config: { ...step.config, tools: [...byName.values()] },
-			};
-		}),
-	};
-};
-
-// Steps a thread-history escalation needs: a system prompt and the completion
-// loop that can call the two history tools. Everything else in the stock agent
-// preset — skills, artifacts, web, auto-compact — is opt-in behaviour the user
-// never asked for by pressing send in plain chat.
-const THREAD_HISTORY_ESCALATION_STEPS = new Set([
-	"add-system",
-	"agent-completion",
-]);
-
-/**
- * The smallest agent config that can search earlier threads.
- *
- * A conversation with any separator escalates normal-mode chat from a direct
- * completion to an agent run, so the model can look back past the boundary.
- * Handing it the full default agent preset made every plain message pay for
- * every default feature — extra prompt, extra tools, a skill lookup and a
- * max-token lookup per turn — for a capability it usually does not use. Keep
- * the recall, drop the rest.
- */
-const buildThreadHistoryFlowConfig = (): UnifiedFlowConfig => {
-	const base = buildDefaultFlowConfig("agent");
-	return {
-		...base,
-		steps: base.steps.map((step) => ({
-			...step,
-			enabled: THREAD_HISTORY_ESCALATION_STEPS.has(step.name),
-		})),
-	};
-};
 
 const getThreadHistoryRuntimeVars = (
 	conversation: ConversationContext | undefined,
@@ -1086,10 +1024,7 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 				progress: 5,
 			});
 
-			if (
-				mode === "agent" ||
-				(mode === "normal" && hasThreadHistory(conversation))
-			) {
+			if (mode === "agent") {
 				await dependencies.updateJobProgress(jobId, {
 					stage: "Running Agent...",
 					progress: 20,
@@ -1107,9 +1042,7 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 							? await serviceManager.flowBuilderService.getUnifiedFlowConfig({
 									flowId: agentFlowId,
 								})
-							: mode === "agent"
-								? buildDefaultFlowConfig("agent")
-								: buildThreadHistoryFlowConfig();
+							: buildDefaultFlowConfig("agent");
 				} catch (err) {
 					await dependencies.logger.warn(
 						"Failed to load agent flow config, using defaults",
@@ -1122,10 +1055,7 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 					? mergeWithDefaultConfig(flowConfig, flowConfig.graphType)
 					: buildDefaultFlowConfig("agent");
 				const resolvedConfigWithPrefix = await withResolvedConnections(
-					withThreadHistoryTools(
-						applyFlowConfigPrefix(resolvedConfig, job.payload.flowConfigPrefix),
-						conversation,
-					),
+					applyFlowConfigPrefix(resolvedConfig, job.payload.flowConfigPrefix),
 				);
 				const stream = toLegacyFlowStream(
 					createMemorallFlowRun({
@@ -1253,10 +1183,7 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 					}
 				}
 
-				resolvedConfig = withThreadHistoryTools(
-					applyTopicRecallType(resolvedConfig, topicRecallType),
-					conversation,
-				);
+				resolvedConfig = applyTopicRecallType(resolvedConfig, topicRecallType);
 				const graphType = resolvedConfig.graphType ?? "foundation";
 
 				const stream = toLegacyFlowStream(

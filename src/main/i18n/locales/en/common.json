@@ -315,6 +315,10 @@
 				"name": "News Collection",
 				"description": "Research and summarize news by searching the web and reading full articles from multiple sources."
 			},
+			"threadHistoryFeature": {
+				"name": "Earlier Thread Recall",
+				"description": "Search and read messages from before the chat was split, instead of losing them."
+			},
 			"travelPlannerFeature": {
 				"name": "Travel Planner",
 				"description": "Research destinations and generate a day-by-day travel itinerary saved to /travel/."
