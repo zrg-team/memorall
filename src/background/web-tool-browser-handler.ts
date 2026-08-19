@@ -667,6 +667,41 @@ const handleCloseCommand = async (
 	}
 };
 
+/**
+ * Raise the session's tab for the user.
+ *
+ * Session tabs are opened unfocused on purpose (`openBrowserTab` passes
+ * `active: false`, and `openBrowserWindow` restores the previously focused
+ * window), so a page the agent is stuck on — a CAPTCHA, a sign-in gate — stays
+ * invisible until something explicitly surfaces it. The stored surface wins over
+ * the ids on the request because it tracks the tab across a mid-session
+ * recreation.
+ */
+const handleBringToFrontCommand = async (
+	request: Extract<WebBrowserCommandRequest, { command: "bring-to-front" }>,
+): Promise<WebBrowserCommandResponse> => {
+	try {
+		const surfaces = await loadStoredSurfaces();
+		const stored = surfaces.get(request.sessionId);
+		const tabId = stored?.tabId ?? request.tabId;
+		const windowId = stored?.windowId ?? request.windowId;
+
+		await chrome.tabs.update(tabId, { active: true });
+		if (typeof windowId === "number") {
+			await chrome.windows.update(windowId, { focused: true });
+		}
+
+		return {
+			source: WEB_BROWSER_COMMAND_SOURCE,
+			command: "bring-to-front",
+			success: true,
+			sessionId: request.sessionId,
+		};
+	} catch (error) {
+		return createErrorResponse(request, error);
+	}
+};
+
 const handleCommand = async (
 	request: WebBrowserCommandRequest,
 ): Promise<WebBrowserCommandResponse> => {
@@ -687,6 +722,8 @@ const handleCommand = async (
 			return handleScreenshotCommand(request);
 		case "fetch-image":
 			return handleFetchImageCommand(request);
+		case "bring-to-front":
+			return handleBringToFrontCommand(request);
 	}
 };
 

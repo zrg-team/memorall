@@ -210,6 +210,19 @@ export type WebBrowserCommandRequest =
 			sessionId: string;
 			url: string;
 			tabId: number;
+	  }
+	/**
+	 * Raise the session's tab so the user can act on it themselves — solving a
+	 * CAPTCHA or signing in. Session tabs are opened unfocused on purpose, so this
+	 * is the only way to surface one. Named for the window operation rather than
+	 * "focus", which is already a `WebDomActionName` for focusing an element.
+	 */
+	| {
+			source: typeof WEB_BROWSER_COMMAND_SOURCE;
+			command: "bring-to-front";
+			sessionId: string;
+			tabId: number;
+			windowId?: number;
 	  };
 
 export type WebBrowserCommandResponse =
@@ -277,6 +290,12 @@ export type WebBrowserCommandResponse =
 	  }
 	| {
 			source: typeof WEB_BROWSER_COMMAND_SOURCE;
+			command: "bring-to-front";
+			success: true;
+			sessionId: string;
+	  }
+	| {
+			source: typeof WEB_BROWSER_COMMAND_SOURCE;
 			command:
 				| "open"
 				| "snapshot"
@@ -285,7 +304,8 @@ export type WebBrowserCommandResponse =
 				| "wait-selector"
 				| "close"
 				| "screenshot"
-				| "fetch-image";
+				| "fetch-image"
+				| "bring-to-front";
 			success: false;
 			sessionId: string;
 			error: string;
@@ -419,6 +439,7 @@ export const isWebBrowserCommandRequest = (
 		case "close":
 			return typeof value.sessionId === "string";
 		case "screenshot":
+		case "bring-to-front":
 			return (
 				typeof value.sessionId === "string" && typeof value.tabId === "number"
 			);
@@ -462,6 +483,7 @@ export const isWebBrowserCommandResponse = (
 		case "wait-selector":
 			return typeof value.matched === "boolean" && isRecord(value.snapshot);
 		case "close":
+		case "bring-to-front":
 			return true;
 		case "screenshot":
 			return (

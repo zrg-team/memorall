@@ -155,6 +155,7 @@ export type WebBrowserOperation =
 	| "session.refresh"
 	| "session.getOrOpen"
 	| "session.close"
+	| "session.bringToFront"
 	| "session.disposeActive"
 	| "session.getActiveInfo"
 	| "session.getAllInfo"
@@ -171,6 +172,7 @@ export interface WebBrowserOperationPayloadMap {
 	"session.refresh": WebRefreshSessionArgs;
 	"session.getOrOpen": WebGetOrOpenSessionArgs;
 	"session.close": { sessionId: string };
+	"session.bringToFront": { sessionId: string };
 	"session.disposeActive": { reason?: string } | undefined;
 	"session.getActiveInfo": undefined;
 	"session.getAllInfo": undefined;
@@ -188,6 +190,7 @@ export interface WebBrowserOperationResultMap {
 	"session.refresh": WebSession;
 	"session.getOrOpen": WebGetOrOpenSessionResult;
 	"session.close": { closed: true };
+	"session.bringToFront": { broughtToFront: true };
 	"session.disposeActive": { disposed: true };
 	"session.getActiveInfo": ActiveWebSessionInfo;
 	"session.getAllInfo": ActiveWebSessionInfo[];

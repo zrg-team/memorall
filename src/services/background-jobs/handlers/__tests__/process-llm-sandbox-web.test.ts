@@ -99,6 +99,7 @@ const {
 			payload,
 		})),
 		closeSession: vi.fn(async () => undefined),
+		focusSession: vi.fn(async () => undefined),
 		disposeActiveSession: vi.fn(async () => undefined),
 		getActiveSessionInfo: vi.fn(async () => ({ active: true })),
 		getAllSessionsInfo: vi.fn(async () => [{ id: "s1" }]),
@@ -583,6 +584,12 @@ describe("WebBrowserOperationsHandler", () => {
 		["session.refresh", "refreshSession", { sessionId: "s" }, undefined],
 		["session.getOrOpen", "getOrOpenSession", { url: "x" }, undefined],
 		["session.close", "closeSession", { sessionId: "s" }, { closed: true }],
+		[
+			"session.bringToFront",
+			"focusSession",
+			{ sessionId: "s" },
+			{ broughtToFront: true },
+		],
 		[
 			"session.disposeActive",
 			"disposeActiveSession",
