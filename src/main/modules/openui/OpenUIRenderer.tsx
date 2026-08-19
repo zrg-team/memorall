@@ -19,7 +19,7 @@ import { ThreeDotsLoader } from "@/main/components/atoms/ThreeDotsLoader";
 import { useTranslation } from "react-i18next";
 import { logError, logWarn } from "@/utils/logger";
 import {
-	isSafeOpenUIUrl,
+	normalizeOpenUIExternalUrl,
 	parseMemorallOpenUIAction,
 	resolveOpenUITemplate,
 } from "./actions";
@@ -177,15 +177,21 @@ const OpenUIRenderFrame: React.FC<OpenUIRendererProps> = React.memo(
 				const action = detail.action;
 
 				if (action.type === "open_link") {
-					const url = resolveOpenUITemplate(
+					const raw = resolveOpenUITemplate(
 						action.url,
 						detail.formState,
 						detail.formName,
-					).trim();
-					if (isSafeOpenUIUrl(url)) {
-						window.open(url, "_blank", "noopener,noreferrer");
-					} else {
-						logWarn("[OpenUIRenderer] Blocked unsafe URL:", url);
+					);
+					const url = normalizeOpenUIExternalUrl(raw);
+					if (!url) {
+						logWarn("[OpenUIRenderer] Blocked unsafe URL:", raw);
+						showOpenUINotice(t("openui.linkBlocked"));
+						return;
+					}
+					// A blocked popup returns null, which used to look like a dead button.
+					if (!window.open(url, "_blank", "noopener,noreferrer")) {
+						logWarn("[OpenUIRenderer] Browser blocked opening:", url);
+						showOpenUINotice(t("openui.linkBlocked"));
 					}
 					return;
 				}
@@ -252,15 +258,21 @@ const OpenUIRenderFrame: React.FC<OpenUIRendererProps> = React.memo(
 					detail.action.type === "open_document" ||
 					detail.action.type === "open_route";
 
-				if (onMessageAction && routesToParent) {
-					onMessageAction({
-						type: "openui_action",
-						component: "OpenUIRenderer",
-						payload: { detail },
-					});
+				if (!routesToParent) return;
+				if (!onMessageAction) {
+					logWarn(
+						"[OpenUIRenderer] No host handler for action:",
+						detail.action.type,
+					);
+					return;
 				}
+				onMessageAction({
+					type: "openui_action",
+					component: "OpenUIRenderer",
+					payload: { detail },
+				});
 			},
-			[onMessageAction],
+			[onMessageAction, t],
 		);
 
 		const handleRendererError = useCallback(

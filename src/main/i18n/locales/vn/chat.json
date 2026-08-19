@@ -422,6 +422,7 @@
 	"openui": {
 		"rendering": "Đang tạo giao diện trực quan",
 		"copied": "Đã sao chép",
+		"linkBlocked": "Không thể mở liên kết này.",
 		"renderFailed": {
 			"title": "Không thể hiển thị phản hồi trực quan.",
 			"description": "Mã OpenUI được tạo ra không hợp lệ. Phản hồi gốc được hiển thị bên dưới."

@@ -422,6 +422,7 @@
 	"openui": {
 		"rendering": "Rendering visual response",
 		"copied": "Copied",
+		"linkBlocked": "Could not open that link.",
 		"renderFailed": {
 			"title": "Unable to render visual response.",
 			"description": "The generated OpenUI markup is invalid. The original response is shown below."
