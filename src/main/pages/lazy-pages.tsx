@@ -57,3 +57,18 @@ export const FlowBuilderPage = lazy(() =>
 		default: m.FlowBuilderPage,
 	})),
 );
+
+/**
+ * Kick off the landing route's chunk request without rendering it.
+ *
+ * `App` calls this while services are still initializing so the chunk is
+ * already in flight (usually resolved) by the time the shell mounts. Without
+ * it the app finishes its loading screen only to suspend again on the very
+ * first route, which reads as a second, unexplained loading state.
+ */
+export function prefetchLandingRoute(): void {
+	void import("./DocumentLibraryPage").catch(() => {
+		// A failed prefetch is not an error: React.lazy will retry on render and
+		// LazyRouteErrorBoundary owns the user-visible failure path.
+	});
+}

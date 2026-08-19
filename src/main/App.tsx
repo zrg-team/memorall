@@ -38,6 +38,7 @@ import { backgroundJob } from "@/services/background-jobs/background-job";
 import { CopilotProvider, Copilot } from "./components/atoms/copilot";
 import { AppShell } from "./components/AppShell";
 import { AppLoadingScreen } from "./components/atoms/AppLoadingScreen";
+import { WorkspaceContentSkeleton } from "./components/atoms/AppSkeletons";
 import { LazyRouteErrorBoundary } from "./components/molecules/LazyRouteErrorBoundary";
 // AuthPage renders before the app shell, so it stays eager (not code-split).
 import { AuthPage } from "./pages/AuthPage";
@@ -55,6 +56,7 @@ import {
 	ConnectionsPage,
 	SkillsPage,
 	FlowBuilderPage,
+	prefetchLandingRoute,
 } from "./pages/lazy-pages";
 import { registerAllEditors } from "@/main/modules/files/editors";
 import { useAuthInit } from "@/main/modules/supabase";
@@ -115,6 +117,11 @@ const App: React.FC = () => {
 			try {
 				logInfo("Starting app initialization...");
 				setServicesStatus("loading");
+
+				// Warm the landing route while services boot. Without this the shell
+				// mounts and then immediately suspends on the chunk request, which is
+				// what made the app look like it was loading twice.
+				prefetchLandingRoute();
 
 				const startTime = Date.now();
 				await initializeRuntimeServices((progress) => {
@@ -360,13 +367,7 @@ const App: React.FC = () => {
 								element={
 									<AppShell>
 										<LazyRouteErrorBoundary>
-											<Suspense
-												fallback={
-													<div className="flex h-full w-full items-center justify-center p-8 text-sm text-muted-foreground">
-														…
-													</div>
-												}
-											>
+											<Suspense fallback={<WorkspaceContentSkeleton />}>
 												<Routes>
 													<Route path="/" element={<DocumentLibraryPage />} />
 													<Route path="/llm" element={<LLMPage />} />

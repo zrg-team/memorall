@@ -16,7 +16,8 @@ import {
 	workspaceNavigationItems,
 	workspaceNavigationPaths,
 } from "@/main/components/app-navigation";
-import { LoadingScreen, useCurrentModel } from "@/main/modules/chat/components";
+import { useCurrentModel } from "@/main/modules/chat/components";
+import { AppShellSkeleton } from "@/main/components/atoms/AppSkeletons";
 import {
 	ModelDownloadingScreen,
 	useDownloadProgress,
@@ -102,7 +103,9 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
 	}, [location.pathname, setRightPanelCollapsed]);
 
 	if (!isInitialized) {
-		return <LoadingScreen />;
+		// The persisted-model lookup is a single indexed read; a skeleton of the
+		// shell reads as the app arriving rather than as another loading screen.
+		return <AppShellSkeleton />;
 	}
 
 	const isModelDownloading =
