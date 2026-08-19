@@ -114,6 +114,7 @@ exports[`requested main module coverage > imports chat, documents, agents, agent
   "../modules/chat/components/tools/ToolCommon.tsx",
   "../modules/chat/components/tools/UtilityAgentTools.tsx",
   "../modules/chat/components/tools/WebAccess.tsx",
+  "../modules/chat/components/tools/WebChallengeNotice.tsx",
   "../modules/chat/components/tools/WebDom.tsx",
   "../modules/chat/components/tools/WebOpen.tsx",
   "../modules/chat/components/tools/WebRead.tsx",

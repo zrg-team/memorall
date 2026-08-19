@@ -5,6 +5,7 @@ import {
 	Globe,
 	AlertCircle,
 	ChevronDown,
+	ShieldAlert,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ActionRenderer } from "@/main/modules/chat/components/types";
@@ -34,7 +35,7 @@ interface WebSearchPayload {
 	query?: string;
 	engines?: string;
 	results?: EngineResult[];
-	errors?: { engine: string; error: string }[];
+	errors?: { engine: string; error: string; classification?: string }[];
 	success?: boolean;
 }
 
@@ -84,17 +85,25 @@ const extractPayload = (item: MessageActionItem): WebSearchPayload | null => {
 				.filter((x): x is EngineResult => x !== null)
 		: [];
 
+	// `classification` is produced by the search tool (it already distinguishes a
+	// "challenge" from a parse failure) and used to be dropped here, which is why
+	// a search blocked by a bot wall looked identical to one that found nothing.
+	type SearchError = { engine: string; error: string; classification?: string };
 	const errors = Array.isArray(raw.errors)
 		? (raw.errors as unknown[])
-				.map((e): { engine: string; error: string } | null => {
+				.map((e): SearchError | null => {
 					if (typeof e !== "object" || e === null) return null;
 					const rec = e as Record<string, unknown>;
 					return {
 						engine: typeof rec.engine === "string" ? rec.engine : "?",
 						error: typeof rec.error === "string" ? rec.error : String(e),
+						classification:
+							typeof rec.classification === "string"
+								? rec.classification
+								: undefined,
 					};
 				})
-				.filter((x): x is { engine: string; error: string } => x !== null)
+				.filter((x): x is SearchError => x !== null)
 		: [];
 
 	return {
@@ -286,11 +295,28 @@ export const webSearchRenderer: ActionRenderer = (
 					{errors.map((err, index) => (
 						<div
 							key={`${err.engine}-${err.error}-${index}`}
-							className="flex items-start gap-2 rounded-md border border-red-600/20 bg-red-600/5 px-3 py-2 text-xs text-red-700"
+							className={cn(
+								"flex items-start gap-2 rounded-md border px-3 py-2 text-xs",
+								err.classification === "challenge"
+									? "border-amber-500/30 bg-amber-500/5 text-amber-700"
+									: "border-red-600/20 bg-red-600/5 text-red-700",
+							)}
 						>
-							<AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+							{err.classification === "challenge" ? (
+								<ShieldAlert className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+							) : (
+								<AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+							)}
 							<span>
 								<span className="font-semibold">{err.engine}:</span> {err.error}
+								{err.classification === "challenge" ? (
+									// The engine served a bot wall rather than results. There is
+									// no session behind a search failure to hand over, so say so
+									// plainly instead of offering a button with nothing to act on.
+									<span className="block opacity-80">
+										Open the page yourself, or try a different engine.
+									</span>
+								) : null}
 							</span>
 						</div>
 					))}

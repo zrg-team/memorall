@@ -3,6 +3,7 @@ import { ExternalLink, Globe } from "lucide-react";
 import type { ActionRenderer } from "@/main/modules/chat/components/types";
 import type { MessageActionItem } from "@/main/modules/chat/components/types";
 import { defaultActionRenderer } from "./DefaultActionRenderer";
+import { WebChallengeNotice } from "./WebChallengeNotice";
 import {
 	getBoolean,
 	getString,
@@ -13,6 +14,8 @@ import {
 	ToolItemRawIO,
 	ToolSection,
 	ToolStateBadge,
+	getWebBlockDetails,
+	getToolNumber,
 } from "./ToolCommon";
 
 const extractWebOpenPayload = (
@@ -43,6 +46,8 @@ export const webOpenRenderer: ActionRenderer = (item, isOpen) => {
 	const domAccessible = getBoolean(payload, "domAccessible");
 	const success = getBoolean(payload, "success");
 	const error = getString(payload, "error");
+	const blocked = getWebBlockDetails(payload);
+	const tabId = getToolNumber(payload, "tabId");
 
 	return (
 		<div className="space-y-3">
@@ -88,6 +93,15 @@ export const webOpenRenderer: ActionRenderer = (item, isOpen) => {
 						) : null}
 					</div>
 				</div>
+
+				{blocked ? (
+					<WebChallengeNotice
+						blocked={blocked}
+						sessionId={sessionId}
+						tabId={tabId}
+						url={currentUrl || requestedUrl}
+					/>
+				) : null}
 
 				{error ? (
 					<div className="mt-3 rounded-md border border-red-600/20 bg-red-600/5 px-3 py-2 text-xs text-red-700">

@@ -426,5 +426,24 @@
 			"title": "Unable to render visual response.",
 			"description": "The generated OpenUI markup is invalid. The original response is shown below."
 		}
+	},
+	"webChallenge": {
+		"kind": {
+			"default": "This page is blocking automated access",
+			"captcha": "This page asked for human verification",
+			"cloudflare": "Cloudflare is verifying the browser",
+			"rate-limit": "The site is rate limiting automated requests",
+			"login-wall": "This page needs a signed-in session",
+			"http-block": "The site refused the request"
+		},
+		"genericDescription": "The agent received a verification page instead of the content.",
+		"solveItMyself": "Solve it myself",
+		"iHaveSolvedIt": "I've solved it — continue",
+		"handedOverHint": "Solve the challenge in the browser, then choose Continue.",
+		"desktopVisibleConfirm": "The managed browser is running hidden. Showing it restarts the browser and closes all active sessions, then reopens this page so you can solve the challenge. Continue?",
+		"continuePrompt": "I have solved the verification in the browser. Please continue where you left off.",
+		"missingTab": "This session has no browser tab to hand over.",
+		"missingSession": "This result has no session to hand over.",
+		"missingUrl": "This result has no URL to reopen."
 	}
 }

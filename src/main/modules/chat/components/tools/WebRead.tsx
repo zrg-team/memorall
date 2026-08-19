@@ -4,7 +4,13 @@ import { Globe, ExternalLink } from "lucide-react";
 import type { ActionRenderer } from "@/main/modules/chat/components/types";
 import type { MessageActionItem } from "@/main/modules/chat/components/types";
 import { defaultActionRenderer } from "./DefaultActionRenderer";
-import { ToolItemRawIO } from "./ToolCommon";
+import {
+	getStructuredToolPayload,
+	getToolNumber,
+	getWebBlockDetails,
+	ToolItemRawIO,
+} from "./ToolCommon";
+import { WebChallengeNotice } from "./WebChallengeNotice";
 import { platform } from "@/platform/current";
 
 interface WebReadPayload {
@@ -102,6 +108,15 @@ export const webReadRenderer: ActionRenderer = (item, isOpen) => {
 	}
 
 	const displayUrl = payload.url || payload.requestedUrl || "";
+	// Read the handoff fields from the shared payload rather than re-narrowing
+	// them into WebReadPayload, which duplicates every field twice over.
+	const structured = getStructuredToolPayload(item);
+	const blocked = structured ? getWebBlockDetails(structured) : null;
+	const sessionId =
+		structured && typeof structured.sessionId === "string"
+			? structured.sessionId
+			: undefined;
+	const tabId = structured ? getToolNumber(structured, "tabId") : undefined;
 	const content = payload.content?.trim() || "";
 	const metadataBits = [
 		payload.contentMode ? `mode: ${payload.contentMode}` : null,
@@ -132,6 +147,16 @@ export const webReadRenderer: ActionRenderer = (item, isOpen) => {
 					<ExternalLink className="w-3.5 h-3.5" />
 				</button>
 			</div>
+			{blocked ? (
+				<div className="px-3 pb-1">
+					<WebChallengeNotice
+						blocked={blocked}
+						sessionId={sessionId}
+						tabId={tabId}
+						url={displayUrl}
+					/>
+				</div>
+			) : null}
 			{content && isHtmlMode(payload) ? (
 				<iframe
 					title={t("actions.webRead.iframeTitle", {
