@@ -191,6 +191,12 @@ const request = (method, params, fragmented = false) =>
 	});
 
 const command = (value) => request("browser.command", { source, ...value });
+const openedSurface = (result, label) => {
+	if (!result.success || !result.surface) {
+		throw new Error(`${label} did not open: ${JSON.stringify(result)}`);
+	}
+	return result.surface;
+};
 
 try {
 	const health = await request("health", {}, true);
@@ -365,7 +371,7 @@ try {
 	await command({
 		command: "dom-action",
 		sessionId: persistentSession,
-		tabId: persistentOpen.surface.tabId,
+		tabId: openedSurface(persistentOpen, "Persistent-profile page").tabId,
 		action: "input",
 		selector: "#persist",
 		value: "survives-restart",
@@ -391,7 +397,7 @@ try {
 	const persisted = await command({
 		command: "dom-query",
 		sessionId: "persistent-2",
-		tabId: reopened.surface.tabId,
+		tabId: openedSurface(reopened, "Reopened persistent-profile page").tabId,
 		selector: "#persist",
 		maxResults: 1,
 		timeoutMs: 2_000,
@@ -417,7 +423,7 @@ try {
 	const cleared = await command({
 		command: "dom-query",
 		sessionId: "persistent-cleared",
-		tabId: afterClear.surface.tabId,
+		tabId: openedSurface(afterClear, "Page after clearing the profile").tabId,
 		selector: "#persist",
 		maxResults: 1,
 		timeoutMs: 2_000,
