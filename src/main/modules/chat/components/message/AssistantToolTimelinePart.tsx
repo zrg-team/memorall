@@ -67,7 +67,7 @@ export const AssistantToolTimelinePart: React.FC<{
 	};
 
 	return (
-		<div className="grid w-full min-w-0 max-w-full grid-cols-[0.75rem_minmax(0,1fr)] gap-2 animate-in fade-in-0 slide-in-from-top-1 duration-200 ease-out">
+		<div className="grid w-full min-w-0 max-w-full grid-cols-[0.75rem_minmax(0,1fr)] gap-2">
 			<div className="relative flex h-full justify-center">
 				{connectsToPrevious ? (
 					<div className="absolute left-1/2 top-0 h-4 w-px -translate-x-1/2 bg-border/60" />

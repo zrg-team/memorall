@@ -82,11 +82,6 @@ const requirements = {
 				portable(path).startsWith("bundle/deb/") && /\.deb$/i.test(path),
 		],
 		[
-			"RPM package",
-			(path) =>
-				portable(path).startsWith("bundle/rpm/") && /\.rpm$/i.test(path),
-		],
-		[
 			"AppImage",
 			(path) =>
 				portable(path).startsWith("bundle/appimage/") &&

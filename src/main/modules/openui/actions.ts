@@ -271,6 +271,146 @@ export function isSafeOpenUIUrl(url: string): boolean {
 	}
 }
 
+/**
+ * Models routinely write link targets without a scheme ("mogi.vn/nha-dat"), and
+ * a bare `new URL()` on those throws — which used to drop the click on the floor.
+ * Returns the openable http(s) URL, or null when the value cannot be salvaged.
+ */
+export function normalizeOpenUIExternalUrl(url: string): string | null {
+	const trimmed = url.trim();
+	if (!trimmed) return null;
+	if (isSafeOpenUIUrl(trimmed)) return trimmed;
+	if (/^[a-z][a-z0-9+.-]*:/i.test(trimmed)) return null; // some other scheme: reject
+	if (/\s/.test(trimmed)) return null; // a label, not a URL
+	const candidate = `https://${trimmed.replace(/^\/+/, "")}`;
+	return isSafeOpenUIUrl(candidate) && /\./.test(trimmed) ? candidate : null;
+}
+
+const ACTION_TYPE_ALIASES: Record<string, OpenUIButtonAction["type"]> = {
+	open_url: "open_link",
+	open_external: "open_link",
+	external_link: "open_link",
+	url: "open_link",
+	link: "open_link",
+	send: "send_message",
+	send_prompt: "send_message",
+	ask: "send_message",
+	prompt: "send_message",
+	message: "send_message",
+	add_to_input: "add_message_to_input",
+	append_to_input: "add_message_to_input",
+	set_input: "add_message_to_input",
+	copy: "copy_to_clipboard",
+	toast: "show_toast",
+	notify: "show_toast",
+	open_file: "open_document",
+	open_doc: "open_document",
+	route: "open_route",
+	navigate_route: "open_route",
+	download: "download_text",
+};
+
+const pickString = (
+	record: Record<string, unknown>,
+	keys: string[],
+): string | undefined => {
+	for (const key of keys) {
+		const value = record[key];
+		if (typeof value === "string" && value.trim()) return value;
+	}
+	return undefined;
+};
+
+const canonicalActionType = (
+	record: Record<string, unknown>,
+): string | undefined => {
+	const raw = record.type;
+	if (typeof raw !== "string") return undefined;
+	const key = raw
+		.trim()
+		.toLowerCase()
+		.replace(/[\s-]+/g, "_");
+	// "navigate"/"open" mean either surface depending on what they carry.
+	if (key === "navigate" || key === "open") {
+		return typeof record.url === "string" ? "open_link" : "open_route";
+	}
+	return ACTION_TYPE_ALIASES[key] ?? key;
+};
+
+/**
+ * Maps the near-misses models emit onto the canonical action shape: type
+ * synonyms ("open_url"), field synonyms ("href"), and whole actions handed over
+ * JSON-encoded as a string. Anything still unrecognised is returned untouched so
+ * the zod parse below rejects it.
+ */
+export function normalizeOpenUIActionInput(value: unknown): unknown {
+	if (typeof value === "string") {
+		const trimmed = value.trim();
+		if (!trimmed.startsWith("{") || !trimmed.endsWith("}")) return value;
+		try {
+			return normalizeOpenUIActionInput(JSON.parse(trimmed));
+		} catch {
+			return value;
+		}
+	}
+
+	if (!isRecord(value)) return value;
+
+	const type = canonicalActionType(value);
+	switch (type) {
+		case "send_message":
+			return {
+				type,
+				message: pickString(value, ["message", "text", "prompt", "query"]),
+				valueInput: pickString(value, ["valueInput", "value_input", "field"]),
+				includeFormState:
+					typeof value.includeFormState === "boolean"
+						? value.includeFormState
+						: typeof value.include_form_state === "boolean"
+							? value.include_form_state
+							: undefined,
+			};
+		case "add_message_to_input":
+			return {
+				type,
+				text: pickString(value, ["text", "message", "prompt", "value"]),
+				mode: value.mode === "replace" ? "replace" : "append",
+			};
+		case "open_link":
+			return { type, url: pickString(value, ["url", "href", "link", "value"]) };
+		case "open_document":
+			return {
+				type,
+				path: pickString(value, ["path", "document", "file", "filename"]),
+			};
+		case "copy_to_clipboard":
+			return { type, text: pickString(value, ["text", "value", "content"]) };
+		case "download_text":
+			return {
+				type,
+				filename: pickString(value, ["filename", "name", "file"]),
+				content: pickString(value, ["content", "text", "value"]),
+			};
+		case "open_route":
+			return { type, route: pickString(value, ["route", "path", "url"]) };
+		case "show_toast":
+			return { type, message: pickString(value, ["message", "text"]) };
+		case "reset_form":
+			return { type };
+		default:
+			return value;
+	}
+}
+
+export function parseOpenUIButtonAction(
+	value: unknown,
+): OpenUIButtonAction | null {
+	const parsed = openUIActionSchema.safeParse(
+		normalizeOpenUIActionInput(value),
+	);
+	return parsed.success ? parsed.data : null;
+}
+
 export function isAllowedOpenUIRoute(route: string): boolean {
 	return ALLOWED_OPENUI_ROUTES.has(route);
 }
@@ -282,17 +422,31 @@ export function buildButtonActionPlan(
 	userMessage: string;
 	action: ActionPlan | { type?: string; params?: Record<string, unknown> };
 } {
-	if (!actionOrPrompt || typeof actionOrPrompt === "string") {
-		return {
-			userMessage: actionOrPrompt ?? label,
-			action: {
-				type: BuiltinActionType.ContinueConversation,
-				params: {},
-			},
-		};
+	const continueConversation = (userMessage: string) => ({
+		userMessage,
+		action: {
+			type: BuiltinActionType.ContinueConversation,
+			params: {},
+		},
+	});
+
+	if (!actionOrPrompt) return continueConversation(label);
+
+	// A plain prompt string, unless the model JSON-encoded a whole action into it.
+	const action = parseOpenUIButtonAction(actionOrPrompt);
+	if (!action) {
+		if (typeof actionOrPrompt === "string") {
+			return continueConversation(actionOrPrompt);
+		}
+		// Nothing usable came back: send the label as a prompt rather than
+		// rendering a button whose click silently does nothing.
+		logWarn(
+			"[OpenUI] Unusable button action, falling back to prompt:",
+			actionOrPrompt,
+		);
+		return continueConversation(label);
 	}
 
-	const action = actionOrPrompt;
 	let userMessage: string;
 	switch (action.type) {
 		case "send_message":
@@ -358,14 +512,14 @@ export function parseMemorallOpenUIAction(
 
 	if (event.type !== MEMORALL_OPENUI_ACTION_TYPE) return null;
 
-	const parsed = openUIActionSchema.safeParse(event.params.action);
-	if (!parsed.success) {
+	const parsed = parseOpenUIButtonAction(event.params.action);
+	if (!parsed) {
 		logWarn("[OpenUI] Rejected invalid action:", event.params.action);
 		return null;
 	}
 
 	return {
-		action: parsed.data,
+		action: parsed,
 		formName: event.formName,
 		formState: event.formState,
 		humanFriendlyMessage: event.humanFriendlyMessage,

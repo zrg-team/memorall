@@ -25,6 +25,8 @@ import {
 	CollapsibleTrigger,
 } from "@/main/components/ui/collapsible";
 import { ToolActionDetails } from "../MessageActions";
+import { StreamingListItem } from "./StreamingListItem";
+import { useNewItemIds } from "./use-new-item-ids";
 import { translateCommonKey } from "../../utils/i18n-helpers";
 
 const FLOW_STEP_BY_NAME = new Map(
@@ -185,7 +187,7 @@ export const AssistantWorkflowPart: React.FC<{
 	const isRunning = part.state === "running";
 
 	return (
-		<div className="flex items-center gap-2 pl-1 text-xs text-muted-foreground">
+		<div className="flex animate-in fade-in-0 slide-in-from-top-1 items-center gap-2 pl-1 text-xs text-muted-foreground duration-200 ease-out">
 			<span
 				className={cn(
 					"flex h-5 w-5 items-center justify-center rounded-full border",
@@ -217,6 +219,10 @@ export const AssistantWorkflowSummary: React.FC<{
 		[evidenceParts],
 	);
 	const [openEvidenceId, setOpenEvidenceId] = useState<string | null>(null);
+	const newRowIds = useNewItemIds([
+		...parts.map((part) => part.id),
+		...evidence.map((part) => part.id),
+	]);
 	if (parts.length === 0 && evidence.length === 0) return null;
 	const totalCount = parts.length + evidence.length;
 
@@ -241,64 +247,68 @@ export const AssistantWorkflowSummary: React.FC<{
 				</button>
 			</CollapsibleTrigger>
 			<CollapsibleContent className="overflow-hidden data-[state=open]:animate-collapsible-down data-[state=closed]:animate-collapsible-up">
-				<div className="mt-2 min-w-0 space-y-2 pl-1 sm:pl-3">
+				<div className="min-w-0 pl-1 sm:pl-3">
 					{parts.map((part, index) => (
-						<div
+						<StreamingListItem
 							key={`${part.id}-${index}`}
-							className="grid grid-cols-[1rem_minmax(0,1fr)] gap-2 text-xs"
+							isNew={newRowIds.has(part.id)}
 						>
-							{React.createElement(getWorkflowIcon(part), {
-								className: "mt-0.5 h-3.5 w-3.5 text-muted-foreground",
-							})}
-							<div className="min-w-0">
-								<div className="flex items-center gap-2">
-									<CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
-									<span className="font-medium text-foreground/85">
-										{getWorkflowLabel(part, t)}
-									</span>
-								</div>
-								<div className="mt-0.5 text-muted-foreground">
-									{getWorkflowDescription(part, t)}
+							<div className="grid grid-cols-[1rem_minmax(0,1fr)] gap-2 pt-2 text-xs">
+								{React.createElement(getWorkflowIcon(part), {
+									className: "mt-0.5 h-3.5 w-3.5 text-muted-foreground",
+								})}
+								<div className="min-w-0">
+									<div className="flex items-center gap-2">
+										<CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+										<span className="font-medium text-foreground/85">
+											{getWorkflowLabel(part, t)}
+										</span>
+									</div>
+									<div className="mt-0.5 text-muted-foreground">
+										{getWorkflowDescription(part, t)}
+									</div>
 								</div>
 							</div>
-						</div>
+						</StreamingListItem>
 					))}
 					{evidence.map((part) => {
 						const isEvidenceOpen = openEvidenceId === part.id;
 						const evidenceDescription = getEvidenceDescription(part);
 						return (
-							<div key={part.id} className="text-xs">
-								<button
-									type="button"
-									className="flex w-full items-center gap-2 rounded-md px-1.5 py-1.5 text-left text-muted-foreground transition-colors hover:bg-muted/20 hover:text-foreground"
-									onClick={() =>
-										setOpenEvidenceId(isEvidenceOpen ? null : part.id)
-									}
-								>
-									<Brain className="h-3.5 w-3.5 shrink-0" />
-									<span className="min-w-0 flex-1 truncate font-medium">
-										{t(`workflow.evidence.${part.name}`, {
-											defaultValue: getEvidenceLabel(part),
-										})}
-									</span>
-									{evidenceDescription ? (
-										<span className="min-w-0 shrink truncate text-muted-foreground/70">
-											{evidenceDescription}
+							<StreamingListItem key={part.id} isNew={newRowIds.has(part.id)}>
+								<div className="pt-2 text-xs">
+									<button
+										type="button"
+										className="flex w-full items-center gap-2 rounded-md px-1.5 py-1.5 text-left text-muted-foreground transition-colors hover:bg-muted/20 hover:text-foreground"
+										onClick={() =>
+											setOpenEvidenceId(isEvidenceOpen ? null : part.id)
+										}
+									>
+										<Brain className="h-3.5 w-3.5 shrink-0" />
+										<span className="min-w-0 flex-1 truncate font-medium">
+											{t(`workflow.evidence.${part.name}`, {
+												defaultValue: getEvidenceLabel(part),
+											})}
 										</span>
+										{evidenceDescription ? (
+											<span className="min-w-0 shrink truncate text-muted-foreground/70">
+												{evidenceDescription}
+											</span>
+										) : null}
+										<ChevronDown
+											className={cn(
+												"h-3.5 w-3.5 shrink-0 transition-transform",
+												isEvidenceOpen && "rotate-180",
+											)}
+										/>
+									</button>
+									{isEvidenceOpen ? (
+										<div className="mt-2 min-w-0 pl-2 sm:pl-5">
+											<EvidenceDetails part={part} />
+										</div>
 									) : null}
-									<ChevronDown
-										className={cn(
-											"h-3.5 w-3.5 shrink-0 transition-transform",
-											isEvidenceOpen && "rotate-180",
-										)}
-									/>
-								</button>
-								{isEvidenceOpen ? (
-									<div className="mt-2 min-w-0 pl-2 sm:pl-5">
-										<EvidenceDetails part={part} />
-									</div>
-								) : null}
-							</div>
+								</div>
+							</StreamingListItem>
 						);
 					})}
 				</div>

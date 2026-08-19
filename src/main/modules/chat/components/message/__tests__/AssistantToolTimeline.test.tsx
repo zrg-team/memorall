@@ -37,7 +37,28 @@ const part: ComplexContentPartTool = {
 	state: "running",
 };
 
+/** The wrapper StreamingListItem puts around each row (row > inner > wrapper). */
+const rowWrapperClass = (id: string): string =>
+	screen.getByTestId(`action-${id}`).parentElement?.parentElement?.className ??
+	"";
+
 describe("AssistantToolTimeline", () => {
+	it("animates only the rows that arrive while the user is watching", () => {
+		const { rerender } = render(
+			<AssistantToolTimeline parts={[part]} isStreaming={true} />,
+		);
+		expect(rowWrapperClass("call-1")).not.toContain("animate-list-item-in");
+
+		rerender(
+			<AssistantToolTimeline
+				parts={[part, { ...part, id: "call-2" }]}
+				isStreaming={true}
+			/>,
+		);
+		expect(rowWrapperClass("call-2")).toContain("animate-list-item-in");
+		expect(rowWrapperClass("call-1")).not.toContain("animate-list-item-in");
+	});
+
 	it("stays expanded while running, collapses when finished, and reopens", async () => {
 		const { rerender } = render(
 			<AssistantToolTimeline parts={[part]} isStreaming={true} />,
