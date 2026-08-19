@@ -338,15 +338,15 @@
 		"loadSelected": "Tải mô hình"
 	},
 	"tooltips": {
-		"normalMode": "Chế độ trò chuyện thường - Đàm thoại đơn giản không có ngữ cảnh kiến thức",
-		"knowledgeMode": "Chế độ tri thức - Trò chuyện với quyền truy cập vào kiến thức và ngữ cảnh đã lưu",
 		"topicSelector": "Chọn chủ đề để lọc ngữ cảnh kiến thức",
 		"flowSelector": "Chọn flow hội thoại",
-		"newMessage": "Bắt đầu chuỗi tin nhắn mới trong cuộc trò chuyện hiện tại",
 		"moreActions": "Thêm hành động và cài đặt",
 		"stopGeneration": "Dừng tạo phản hồi",
 		"sendMessage": "Gửi tin nhắn (Enter)",
-		"agentSettings": "Cài đặt tác nhân"
+		"agentSettings": "Cài đặt tác nhân",
+		"splitChat": "Tách đoạn chat — tác nhân bắt đầu lại từ đây và vẫn tìm được mọi thứ phía trên",
+		"expandChatWidth": "Mở rộng khung chat toàn màn hình",
+		"constrainChatWidth": "Thu gọn khung chat"
 	},
 	"agentSettings": {
 		"title": "Cài đặt Tác nhân",

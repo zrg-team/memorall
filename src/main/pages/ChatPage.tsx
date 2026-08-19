@@ -1,64 +1,64 @@
 "use client";
-import React, { useEffect, useRef, useMemo } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
-import { useTranslation } from "react-i18next";
-import { AnimatePresence, motion } from "motion/react";
 import { ArrowUp, History, MessageSquare, X } from "lucide-react";
+import { AnimatePresence, motion } from "motion/react";
+import React, { useEffect, useMemo, useRef } from "react";
+import { useTranslation } from "react-i18next";
+import { useLocation, useNavigate } from "react-router-dom";
+import type {
+	AgentGreetingContext,
+	AgentScreenContent,
+} from "@/components/AgentIcon";
+import { ChatPanelSkeleton } from "@/main/components/atoms/AppSkeletons";
+import { ChatSidePanel } from "@/main/components/molecules/ChatSidePanel";
+import { Button } from "@/main/components/ui/button";
 import {
 	Conversation,
 	ConversationContent,
 	ConversationScrollButton,
 } from "@/main/components/ui/shadcn-io/ai/conversation";
 import {
-	NoModelsScreen,
-	ChatInput,
-	ChatEmptyState,
-	useCurrentModel,
-	useChat,
-	ModelLoadPrompt,
-	AgentContextWarningBanner,
-	SmartSelectContextBanner,
-	useSmartSelectContext,
-} from "@/main/modules/chat/components";
-import { MessageGroup } from "@/main/modules/chat/components/MessageGroup";
-import { ChatPanelSkeleton } from "@/main/components/atoms/AppSkeletons";
-import { useWebChallengeHandoffStore } from "@/main/stores/web-challenge-handoff";
-import type {
-	AgentGreetingContext,
-	AgentScreenContent,
-} from "@/components/AgentIcon";
-import { Button } from "@/main/components/ui/button";
-import {
 	Tooltip,
 	TooltipContent,
 	TooltipProvider,
 	TooltipTrigger,
 } from "@/main/components/ui/tooltip";
-import { topicService } from "@/main/modules/topics/services/topic-service";
-import { useAgentConfigStore } from "@/main/stores/agent-config";
-import type { Flow, Topic } from "@/services/database/types";
-import {
-	useDownloadProgress,
-	ModelDownloadingScreen,
-} from "@/main/modules/llm/components";
-import { serviceManager } from "@/services";
-import type { AttachedDocumentRef } from "@/types/chat";
-import { ChatSidePanel } from "@/main/components/molecules/ChatSidePanel";
-import { useRuntimeSessionsStore } from "@/main/stores/runtime-sessions";
-import { useShellLayoutStore } from "@/main/stores/shell-layout";
-import { useChatStore } from "@/main/stores/chat";
-import { isPopupSurface } from "@/utils/dom";
 import { getAgentIconScreenFromMetadata } from "@/main/modules/agents/types";
-import type { FeatureCatalogMetadata } from "@/services/flow-feature-catalog-service";
+import {
+	AgentContextWarningBanner,
+	ChatEmptyState,
+	ChatInput,
+	ModelLoadPrompt,
+	NoModelsScreen,
+	SmartSelectContextBanner,
+	useChat,
+	useCurrentModel,
+	useSmartSelectContext,
+} from "@/main/modules/chat/components";
 import type { MessageActionRequest } from "@/main/modules/chat/components/artifacts/ArtifactActionsMenu";
+import { MessageGroup } from "@/main/modules/chat/components/MessageGroup";
+import {
+	ModelDownloadingScreen,
+	useDownloadProgress,
+} from "@/main/modules/llm/components";
 import {
 	formatOpenUIFormStateContext,
 	getOpenUISendMessageText,
 	isAllowedOpenUIRoute,
+	type MemorallOpenUIActionDetail,
 	normalizeOpenUIDocumentPath,
 	resolveOpenUITemplate,
-	type MemorallOpenUIActionDetail,
 } from "@/main/modules/openui/actions";
+import { topicService } from "@/main/modules/topics/services/topic-service";
+import { useAgentConfigStore } from "@/main/stores/agent-config";
+import { useChatStore } from "@/main/stores/chat";
+import { useRuntimeSessionsStore } from "@/main/stores/runtime-sessions";
+import { useShellLayoutStore } from "@/main/stores/shell-layout";
+import { useWebChallengeHandoffStore } from "@/main/stores/web-challenge-handoff";
+import { serviceManager } from "@/services";
+import type { Flow, Topic } from "@/services/database/types";
+import type { FeatureCatalogMetadata } from "@/services/flow-feature-catalog-service";
+import type { AttachedDocumentRef } from "@/types/chat";
+import { isPopupSurface } from "@/utils/dom";
 
 type AgentFlowOption = Pick<Flow, "id" | "name" | "metadata">;
 
@@ -1008,7 +1008,6 @@ export const ChatPage: React.FC<ChatPageProps> = ({
 					placeholder={t("input.messageAgent", {
 						agent: selectedAgent?.name ?? t("flowSelector.chat"),
 					})}
-					compactControls={isNarrowChatPanel}
 					onOpenAgentSettings={() => {
 						open(selectedAgentFlowId);
 						setRightPanelCollapsed(false);

@@ -1,26 +1,30 @@
-import React, { useRef, useState, useEffect, useMemo } from "react";
+import type React from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { PromptInput } from "@/main/components/ui/shadcn-io/ai/prompt-input";
+import { TooltipProvider } from "@/main/components/ui/tooltip";
+import { AttachmentList } from "@/main/modules/chat/components/input/AttachmentList";
+import { ChatInputControls } from "@/main/modules/chat/components/input/ChatInputControls";
+import {
+	collectFiles,
+	documentFileToMentionItem,
+	type MentionItem,
+	MentionPopup,
+} from "@/main/modules/chat/components/input/MentionPopup";
 import {
 	MentionRichTextarea,
 	type MentionRichTextareaHandle,
 } from "@/main/modules/chat/components/input/MentionRichTextarea";
-import { TooltipProvider } from "@/main/components/ui/tooltip";
 import type { FlowMetadata } from "@/services/database/entities/flows";
-import type { ChatStatus, AttachedDocumentRef } from "@/types/chat";
-import type { DocumentFile } from "@/types/document-library";
 import { documentFileSystemService } from "@/services/filesystem/document-filesystem";
 import { DOCUMENTS_SANDBOX_ROOT } from "@/services/filesystem/sandbox-paths";
 import { skillFileSystemService } from "@/services/filesystem/skill-filesystem";
-import { AttachmentList } from "@/main/modules/chat/components/input/AttachmentList";
-import {
-	collectFiles,
-	documentFileToMentionItem,
-	MentionPopup,
-	type MentionItem,
-} from "@/main/modules/chat/components/input/MentionPopup";
-import { ChatInputControls } from "@/main/modules/chat/components/input/ChatInputControls";
+import type { AttachedDocumentRef, ChatStatus } from "@/types/chat";
+import type { DocumentFile } from "@/types/document-library";
+
+/** Below this composer width the view controls fold into the overflow menu. */
+const COMPOSER_NARROW_WIDTH = 416;
 
 export interface ChatInputProps {
 	inputValue: string;
@@ -51,7 +55,6 @@ export interface ChatInputProps {
 	onCreateAgentFlow?: () => void;
 	onDeleteChat: () => void;
 	onOpenAgentSettings?: () => void;
-	compactControls?: boolean;
 	attachedImages: File[];
 	onAttachedImagesChange: (images: File[]) => void;
 	attachedDocumentRefs: AttachedDocumentRef[];
@@ -82,7 +85,6 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 	setSelectedAgentFlowId,
 	onCreateAgentFlow,
 	onOpenAgentSettings,
-	compactControls = false,
 	attachedImages,
 	onAttachedImagesChange,
 	attachedDocumentRefs,
@@ -97,6 +99,20 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 	const textareaRef = useRef<MentionRichTextareaHandle>(null);
 	const composerRef = useRef<HTMLDivElement>(null);
 	const isCustomMode = selectedAgentFlowId !== "chat";
+	// The toolbar folds on the composer's own width. Keying off the viewport was
+	// wrong in every surface that matters: the side panel, the desktop pane and
+	// the embedded frame are all narrow inside a wide window.
+	const [isNarrowComposer, setIsNarrowComposer] = useState(false);
+
+	useEffect(() => {
+		const element = composerRef.current;
+		if (!element || typeof ResizeObserver === "undefined") return;
+		const observer = new ResizeObserver(([entry]) => {
+			setIsNarrowComposer(entry.contentRect.width < COMPOSER_NARROW_WIDTH);
+		});
+		observer.observe(element);
+		return () => observer.disconnect();
+	}, []);
 
 	const [mentionQuery, setMentionQuery] = useState<string | null>(null);
 	const mentionAtIndexRef = useRef<number>(-1);
@@ -387,7 +403,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 										: t("model.notLoaded")
 								}
 								disabled={!isModelReady}
-								className="min-h-[68px] !border-0 !border-t-0 px-3 py-3 text-[15px] leading-6 !shadow-none focus:!border-0 focus:!ring-0 focus:!ring-offset-0 focus-visible:!border-0 focus-visible:!ring-0 focus-visible:!ring-offset-0 sm:px-4"
+								className="field-sizing-content min-h-[44px] max-h-[40vh] !border-0 !border-t-0 px-3 py-2.5 text-[15px] leading-6 !shadow-none focus:!border-0 focus:!ring-0 focus:!ring-offset-0 focus-visible:!border-0 focus-visible:!ring-0 focus-visible:!ring-offset-0 sm:px-4"
 							/>
 						</div>
 
@@ -408,7 +424,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 							onCreateAgentFlow={onCreateAgentFlow}
 							onDeleteChat={onDeleteChat}
 							onOpenAgentSettings={onOpenAgentSettings}
-							compactControls={compactControls}
+							isNarrow={isNarrowComposer}
 							isCustomMode={isCustomMode}
 							onAttachFileClick={handleAttachClick}
 							onAttachDocumentClick={handleOpenDocumentPicker}

@@ -1,44 +1,51 @@
-import React from "react";
-import { useTranslation } from "react-i18next";
 import {
-	Square,
-	Plus,
 	Brain,
-	MessageCircle,
+	Check,
 	ChevronDown,
+	FileText,
+	Maximize2,
+	MessageCircle,
+	Minimize2,
+	MoreHorizontal,
+	Paperclip,
+	Plus,
+	ScissorsLineDashed,
+	Settings2,
+	Square,
 	Tags,
 	Trash2,
-	MoreHorizontal,
-	Settings2,
-	Paperclip,
-	FileText,
-	Check,
-	Maximize2,
-	Minimize2,
 } from "lucide-react";
-
-import {
-	PromptInputSubmit,
-	PromptInputToolbar,
-	PromptInputTools,
-} from "@/main/components/ui/shadcn-io/ai/prompt-input";
+import type React from "react";
+import { useTranslation } from "react-i18next";
+import { AgentIcon, toAgentScreenContent } from "@/components/AgentIcon";
+import { cn } from "@/lib/utils";
 import { Button } from "@/main/components/ui/button";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
 	DropdownMenuItem,
+	DropdownMenuLabel,
+	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "@/main/components/ui/dropdown-menu";
+import {
+	PromptInputSubmit,
+	PromptInputToolbar,
+	PromptInputTools,
+} from "@/main/components/ui/shadcn-io/ai/prompt-input";
 import {
 	Tooltip,
 	TooltipContent,
 	TooltipTrigger,
 } from "@/main/components/ui/tooltip";
-import type { ChatStatus } from "@/types/chat";
-import type { FlowMetadata } from "@/services/database/entities/flows";
-import { cn } from "@/lib/utils";
-import { AgentIcon, toAgentScreenContent } from "@/components/AgentIcon";
 import { getAgentIconScreenFromMetadata } from "@/main/modules/agents/types";
+import type { FlowMetadata } from "@/services/database/entities/flows";
+import type { ChatStatus } from "@/types/chat";
+
+/** One box for every control on the bar, so nothing shifts when state changes. */
+const CONTROL =
+	"h-8 rounded-xl text-xs text-muted-foreground hover:text-foreground";
+const ICON_CONTROL = `${CONTROL} w-8 px-0`;
 
 export interface ChatInputControlsProps {
 	isLoading: boolean;
@@ -62,7 +69,12 @@ export interface ChatInputControlsProps {
 	onCreateAgentFlow?: () => void;
 	onDeleteChat: () => void;
 	onOpenAgentSettings?: () => void;
-	compactControls?: boolean;
+	/**
+	 * Measured from the composer itself, not the window — the composer lives in
+	 * a resizable panel, a desktop pane and an embedded frame whose widths have
+	 * nothing to do with the viewport.
+	 */
+	isNarrow?: boolean;
 	isCustomMode: boolean;
 	onAttachFileClick: () => void;
 	onAttachDocumentClick: () => void;
@@ -88,7 +100,7 @@ export const ChatInputControls: React.FC<ChatInputControlsProps> = ({
 	onCreateAgentFlow,
 	onDeleteChat,
 	onOpenAgentSettings,
-	compactControls = false,
+	isNarrow = false,
 	isCustomMode,
 	onAttachFileClick,
 	onAttachDocumentClick,
@@ -119,11 +131,20 @@ export const ChatInputControls: React.FC<ChatInputControlsProps> = ({
 				: topics.find((topic) => topic.id === selectedTopic)?.name ||
 					t("topic.select");
 
+	const fullWidthLabel = isFullWidth
+		? t("tooltips.constrainChatWidth")
+		: t("tooltips.expandChatWidth");
+	const showAgentSettings = isCustomMode && Boolean(onOpenAgentSettings);
+	// Below this width the two view controls fold into the overflow menu, where
+	// they finally carry a written label. Split chat never folds: it changes what
+	// the agent can see and is used mid-conversation.
+	const foldViewControls = isNarrow;
+
 	return (
 		<PromptInputToolbar className="items-center gap-1 p-1.5">
-			<div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-1 gap-y-1.5">
-				<div className="min-w-0 flex-1 basis-[13rem] overflow-hidden">
-					<PromptInputTools className="min-w-0 flex-wrap gap-x-1 gap-y-1">
+			<div className="flex min-w-0 flex-1 items-center gap-1">
+				<div className="min-w-0 flex-1 overflow-hidden">
+					<PromptInputTools className="min-w-0 flex-nowrap gap-1">
 						<DropdownMenu>
 							<Tooltip>
 								<TooltipTrigger asChild>
@@ -133,9 +154,9 @@ export const ChatInputControls: React.FC<ChatInputControlsProps> = ({
 											variant="ghost"
 											size="sm"
 											disabled={isLoading}
-											className="h-9 min-w-9 rounded-xl px-2 text-xs text-muted-foreground hover:text-foreground"
+											className={ICON_CONTROL}
 										>
-											<Paperclip size={12} />
+											<Paperclip size={14} />
 										</Button>
 									</DropdownMenuTrigger>
 								</TooltipTrigger>
@@ -161,175 +182,218 @@ export const ChatInputControls: React.FC<ChatInputControlsProps> = ({
 							</DropdownMenuContent>
 						</DropdownMenu>
 
-						<Tooltip>
-							<DropdownMenu>
-								<TooltipTrigger asChild>
-									<DropdownMenuTrigger asChild>
-										<Button
-											type="button"
-											variant="ghost"
-											size="sm"
-											className="h-9 min-w-0 max-w-[11rem] gap-1 rounded-xl px-2 text-xs text-muted-foreground hover:text-foreground"
-										>
-											{selectedFlow?.id === "chat" ? (
-												<MessageCircle size={12} />
-											) : (
-												<AgentIcon
-													size={22}
-													reactive={false}
-													aria-label={selectedFlow?.name ?? "Agent"}
-													screenContent={toAgentScreenContent(
-														getAgentIconScreenFromMetadata(
-															selectedFlow?.metadata,
-														),
-														selectedFlow?.name,
-													)}
-												/>
-											)}
-											<span className="min-w-0 max-w-24 truncate max-[420px]:max-w-16">
-												{selectedFlow?.name ?? t("flowSelector.chat")}
-											</span>
-											<ChevronDown size={10} className="opacity-50" />
-										</Button>
-									</DropdownMenuTrigger>
-								</TooltipTrigger>
-								<DropdownMenuContent align="start">
-									{flowOptions.map((flow) => (
-										<DropdownMenuItem
-											key={flow.id}
-											onClick={() => setSelectedAgentFlowId(flow.id)}
-											className="flex items-center gap-2"
-										>
-											{flow.id === "chat" ? (
-												<MessageCircle size={14} />
-											) : (
-												<AgentIcon
-													size={24}
-													reactive={false}
-													aria-label={flow.name}
-													screenContent={toAgentScreenContent(
-														getAgentIconScreenFromMetadata(flow.metadata),
-														flow.name,
-													)}
-												/>
-											)}
-											<span>{flow.name}</span>
-										</DropdownMenuItem>
-									))}
-									<DropdownMenuItem
-										onClick={onCreateAgentFlow}
-										className="flex items-center gap-2"
-									>
-										<Plus size={14} />
-										<span>{t("flowSelector.create")}</span>
-									</DropdownMenuItem>
-								</DropdownMenuContent>
-							</DropdownMenu>
-							<TooltipContent>
-								<p className="text-xs">{t("tooltips.flowSelector")}</p>
-							</TooltipContent>
-						</Tooltip>
-
-						{isCustomMode && (
-							<>
-								<Tooltip>
-									<DropdownMenu>
-										<TooltipTrigger asChild>
-											<DropdownMenuTrigger asChild>
-												<Button
-													type="button"
-													variant="ghost"
-													size="sm"
-													disabled={isLoadingTopics}
-													className="h-9 min-w-0 max-w-[9rem] gap-1 rounded-xl px-2 text-xs text-muted-foreground hover:text-foreground"
-												>
-													<Tags size={12} />
-													<span className="min-w-0 max-w-20 truncate max-[420px]:max-w-12">
-														{isLoadingTopics
-															? t("topic.loading")
-															: selectedTopicName}
-													</span>
-													<ChevronDown size={10} className="opacity-50" />
-												</Button>
-											</DropdownMenuTrigger>
-										</TooltipTrigger>
-										<DropdownMenuContent align="start">
-											<DropdownMenuItem
-												onClick={() => setSelectedTopic("default")}
-												className={cn(
-													"flex items-center gap-2",
-													isDefaultTopicSelected &&
-														"bg-accent/60 text-accent-foreground",
-												)}
-											>
-												<Tags size={14} />
-												<span>{t("topic.default")}</span>
-												{isDefaultTopicSelected && (
-													<Check size={13} className="ml-auto text-primary" />
-												)}
-											</DropdownMenuItem>
-											{topics.map((topic) => {
-												const isSelectedTopic = topic.id === selectedTopic;
-												const isCurrentAgentMemory =
-													topic.id === currentAgentTopicId;
-
-												return (
-													<DropdownMenuItem
-														key={topic.id}
-														onClick={() => setSelectedTopic(topic.id)}
-														className={cn(
-															"flex items-center gap-2",
-															isSelectedTopic &&
-																"bg-accent/60 text-accent-foreground",
-														)}
-													>
-														{isCurrentAgentMemory ? (
-															<Brain size={14} className="text-primary" />
-														) : (
-															<Tags size={14} />
-														)}
-														<span>{topic.name}</span>
-														{isSelectedTopic && (
-															<Check
-																size={13}
-																className="ml-auto text-primary"
-															/>
-														)}
-													</DropdownMenuItem>
-												);
-											})}
-										</DropdownMenuContent>
-									</DropdownMenu>
-									<TooltipContent>
-										<p className="text-xs">{t("tooltips.topicSelector")}</p>
-									</TooltipContent>
-								</Tooltip>
-
-								{!compactControls ? (
-									<Tooltip>
-										<TooltipTrigger asChild>
+						{/*
+						 * Agent and memory in one chip. They sat side by side as separate
+						 * chips, same shape and same height, and in agent mode they usually
+						 * truncated to the same word — twice.
+						 */}
+						<div className="flex h-8 min-w-0 items-center rounded-xl bg-muted/40">
+							<Tooltip>
+								<DropdownMenu>
+									<TooltipTrigger asChild>
+										<DropdownMenuTrigger asChild>
 											<Button
 												type="button"
 												variant="ghost"
 												size="sm"
-												onClick={onOpenAgentSettings}
-												className="h-9 min-w-9 rounded-xl px-2 text-xs text-muted-foreground hover:text-foreground"
+												className={cn(
+													CONTROL,
+													"min-w-0 max-w-[11rem] gap-1 px-2",
+													isCustomMode && "rounded-r-none",
+												)}
 											>
-												<Settings2 size={12} />
+												{selectedFlow?.id === "chat" ? (
+													<MessageCircle size={14} />
+												) : (
+													<AgentIcon
+														size={18}
+														reactive={false}
+														aria-label={selectedFlow?.name ?? "Agent"}
+														screenContent={toAgentScreenContent(
+															getAgentIconScreenFromMetadata(
+																selectedFlow?.metadata,
+															),
+															selectedFlow?.name,
+														)}
+													/>
+												)}
+												<span
+													className={cn(
+														"min-w-0 truncate",
+														isNarrow ? "max-w-16" : "max-w-24",
+													)}
+												>
+													{selectedFlow?.name ?? t("flowSelector.chat")}
+												</span>
+												<ChevronDown size={10} className="opacity-50" />
 											</Button>
-										</TooltipTrigger>
+										</DropdownMenuTrigger>
+									</TooltipTrigger>
+									<DropdownMenuContent align="start">
+										<DropdownMenuLabel>
+											{t("tooltips.flowSelector")}
+										</DropdownMenuLabel>
+										{flowOptions.map((flow) => (
+											<DropdownMenuItem
+												key={flow.id}
+												onClick={() => setSelectedAgentFlowId(flow.id)}
+												className={cn(
+													"flex items-center gap-2",
+													flow.id === selectedAgentFlowId &&
+														"bg-accent/60 text-accent-foreground",
+												)}
+											>
+												{flow.id === "chat" ? (
+													<MessageCircle size={14} />
+												) : (
+													<AgentIcon
+														size={24}
+														reactive={false}
+														aria-label={flow.name}
+														screenContent={toAgentScreenContent(
+															getAgentIconScreenFromMetadata(flow.metadata),
+															flow.name,
+														)}
+													/>
+												)}
+												<span>{flow.name}</span>
+												{flow.id === selectedAgentFlowId && (
+													<Check size={13} className="ml-auto text-primary" />
+												)}
+											</DropdownMenuItem>
+										))}
+										<DropdownMenuSeparator />
+										<DropdownMenuItem
+											onClick={onCreateAgentFlow}
+											className="flex items-center gap-2"
+										>
+											<Plus size={14} />
+											<span>{t("flowSelector.create")}</span>
+										</DropdownMenuItem>
+									</DropdownMenuContent>
+								</DropdownMenu>
+								<TooltipContent>
+									<p className="text-xs">{t("tooltips.flowSelector")}</p>
+								</TooltipContent>
+							</Tooltip>
+
+							{isCustomMode && (
+								<>
+									<span
+										aria-hidden="true"
+										className="h-4 w-px shrink-0 bg-border/70"
+									/>
+									<Tooltip>
+										<DropdownMenu>
+											<TooltipTrigger asChild>
+												<DropdownMenuTrigger asChild>
+													<Button
+														type="button"
+														variant="ghost"
+														size="sm"
+														disabled={isLoadingTopics}
+														className={cn(
+															CONTROL,
+															"min-w-0 max-w-[9rem] gap-1 rounded-l-none px-2",
+														)}
+													>
+														<Tags size={14} />
+														<span
+															className={cn(
+																"min-w-0 truncate",
+																isNarrow ? "max-w-12" : "max-w-20",
+															)}
+														>
+															{isLoadingTopics
+																? t("topic.loading")
+																: selectedTopicName}
+														</span>
+														<ChevronDown size={10} className="opacity-50" />
+													</Button>
+												</DropdownMenuTrigger>
+											</TooltipTrigger>
+											<DropdownMenuContent align="start">
+												<DropdownMenuLabel>
+													{t("tooltips.topicSelector")}
+												</DropdownMenuLabel>
+												<DropdownMenuItem
+													onClick={() => setSelectedTopic("default")}
+													className={cn(
+														"flex items-center gap-2",
+														isDefaultTopicSelected &&
+															"bg-accent/60 text-accent-foreground",
+													)}
+												>
+													<Tags size={14} />
+													<span>{t("topic.default")}</span>
+													{isDefaultTopicSelected && (
+														<Check size={13} className="ml-auto text-primary" />
+													)}
+												</DropdownMenuItem>
+												{topics.map((topic) => {
+													const isSelectedTopic = topic.id === selectedTopic;
+													const isCurrentAgentMemory =
+														topic.id === currentAgentTopicId;
+
+													return (
+														<DropdownMenuItem
+															key={topic.id}
+															onClick={() => setSelectedTopic(topic.id)}
+															className={cn(
+																"flex items-center gap-2",
+																isSelectedTopic &&
+																	"bg-accent/60 text-accent-foreground",
+															)}
+														>
+															{isCurrentAgentMemory ? (
+																<Brain size={14} className="text-primary" />
+															) : (
+																<Tags size={14} />
+															)}
+															<span>{topic.name}</span>
+															{isSelectedTopic && (
+																<Check
+																	size={13}
+																	className="ml-auto text-primary"
+																/>
+															)}
+														</DropdownMenuItem>
+													);
+												})}
+											</DropdownMenuContent>
+										</DropdownMenu>
 										<TooltipContent>
-											<p className="text-xs">{t("tooltips.agentSettings")}</p>
+											<p className="text-xs">{t("tooltips.topicSelector")}</p>
 										</TooltipContent>
 									</Tooltip>
-								) : null}
-							</>
-						)}
+								</>
+							)}
+						</div>
 					</PromptInputTools>
 				</div>
 
 				<div className="ml-auto flex shrink-0 items-center gap-1">
-					{onToggleFullWidth ? (
+					{showAgentSettings && !foldViewControls ? (
+						<Tooltip>
+							<TooltipTrigger asChild>
+								<Button
+									type="button"
+									variant="ghost"
+									size="sm"
+									onClick={onOpenAgentSettings}
+									aria-label={t("tooltips.agentSettings")}
+									className={ICON_CONTROL}
+								>
+									<Settings2 size={14} />
+								</Button>
+							</TooltipTrigger>
+							<TooltipContent>
+								<p className="text-xs">{t("tooltips.agentSettings")}</p>
+							</TooltipContent>
+						</Tooltip>
+					) : null}
+
+					{onToggleFullWidth && !foldViewControls ? (
 						<Tooltip>
 							<TooltipTrigger asChild>
 								<Button
@@ -338,31 +402,19 @@ export const ChatInputControls: React.FC<ChatInputControlsProps> = ({
 									size="sm"
 									disabled={isLoading}
 									onClick={onToggleFullWidth}
-									aria-label={
-										isFullWidth
-											? "Constrain chat width"
-											: "Expand chat to full width"
-									}
-									title={
-										isFullWidth
-											? "Constrain chat width"
-											: "Expand chat to full width"
-									}
-									className="h-9 w-9 rounded-xl px-0 text-xs text-muted-foreground hover:text-foreground"
+									aria-label={fullWidthLabel}
+									title={fullWidthLabel}
+									className={ICON_CONTROL}
 								>
 									{isFullWidth ? (
-										<Minimize2 size={12} />
+										<Minimize2 size={14} />
 									) : (
-										<Maximize2 size={12} />
+										<Maximize2 size={14} />
 									)}
 								</Button>
 							</TooltipTrigger>
 							<TooltipContent>
-								<p className="text-xs">
-									{isFullWidth
-										? "Constrain chat width"
-										: "Expand chat to full width"}
-								</p>
+								<p className="text-xs">{fullWidthLabel}</p>
 							</TooltipContent>
 						</Tooltip>
 					) : null}
@@ -375,15 +427,15 @@ export const ChatInputControls: React.FC<ChatInputControlsProps> = ({
 								size="sm"
 								disabled={isLoading}
 								onClick={onInsertSeparator}
-								aria-label={t("tooltips.newMessage")}
-								title={t("tooltips.newMessage")}
-								className="h-8 w-8 rounded-xl px-0 text-xs text-muted-foreground hover:text-foreground"
+								aria-label={t("tooltips.splitChat")}
+								title={t("tooltips.splitChat")}
+								className={ICON_CONTROL}
 							>
-								<Plus size={12} />
+								<ScissorsLineDashed size={14} />
 							</Button>
 						</TooltipTrigger>
 						<TooltipContent>
-							<p className="text-xs">{t("tooltips.newMessage")}</p>
+							<p className="text-xs">{t("tooltips.splitChat")}</p>
 						</TooltipContent>
 					</Tooltip>
 
@@ -396,14 +448,28 @@ export const ChatInputControls: React.FC<ChatInputControlsProps> = ({
 										variant="ghost"
 										size="sm"
 										disabled={isLoading}
-										className="h-8 w-8 rounded-xl px-0 text-muted-foreground hover:text-foreground"
+										aria-label={t("tooltips.moreActions")}
+										className={ICON_CONTROL}
 									>
 										<MoreHorizontal size={14} />
 									</Button>
 								</DropdownMenuTrigger>
 							</TooltipTrigger>
 							<DropdownMenuContent align="end">
-								{compactControls && isCustomMode && onOpenAgentSettings ? (
+								{foldViewControls && onToggleFullWidth ? (
+									<DropdownMenuItem
+										onClick={onToggleFullWidth}
+										className="flex items-center gap-2"
+									>
+										{isFullWidth ? (
+											<Minimize2 size={14} />
+										) : (
+											<Maximize2 size={14} />
+										)}
+										<span>{fullWidthLabel}</span>
+									</DropdownMenuItem>
+								) : null}
+								{foldViewControls && showAgentSettings ? (
 									<DropdownMenuItem
 										onClick={onOpenAgentSettings}
 										className="flex items-center gap-2"
@@ -434,9 +500,13 @@ export const ChatInputControls: React.FC<ChatInputControlsProps> = ({
 									onClick={onStop}
 									size="sm"
 									variant="outline"
-									className="h-10 w-10 rounded-[16px] border-red-200 px-0 text-red-600 hover:bg-red-50"
+									aria-label={t("tooltips.stopGeneration")}
+									className={cn(
+										ICON_CONTROL,
+										"border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700",
+									)}
 								>
-									<Square size={16} />
+									<Square size={14} />
 								</Button>
 							</TooltipTrigger>
 							<TooltipContent>
@@ -450,7 +520,7 @@ export const ChatInputControls: React.FC<ChatInputControlsProps> = ({
 									data-chat-submit
 									disabled={!canSubmit || isLoading || !model}
 									status={status}
-									className="h-9 w-9 rounded-xl bg-foreground/90 text-background shadow-sm transition hover:bg-foreground disabled:bg-muted/70 disabled:text-muted-foreground disabled:opacity-100"
+									className="h-8 w-8 rounded-xl bg-foreground/90 px-0 text-background shadow-sm transition hover:bg-foreground disabled:bg-muted/70 disabled:text-muted-foreground disabled:opacity-100"
 								/>
 							</TooltipTrigger>
 							<TooltipContent>
