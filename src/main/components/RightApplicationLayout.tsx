@@ -133,6 +133,10 @@ export const RightApplicationLayout: React.FC<RightApplicationLayoutProps> = ({
 	const isWideViewport = useIsWideViewport();
 	// In standalone (non-popup) wide mode we have room to show text labels next
 	// to the nav icons; the popup stays icon-only to conserve horizontal space.
+	// Only the active destination is labelled. Naming all of them pushed the bar
+	// into a horizontal scroll on desktop, hiding the tail of the nav behind an
+	// arrow; the icons carry the row and the label names where you are. Everything
+	// unlabelled gets its name from a hover tooltip.
 	const showNavLabels = !isPopupSurface() && isWideViewport;
 
 	const [isReloadingModel, setIsReloadingModel] = React.useState(false);
@@ -289,7 +293,9 @@ export const RightApplicationLayout: React.FC<RightApplicationLayoutProps> = ({
 																? "bg-blue-500/10 text-blue-500 border border-blue-500/30 shadow-[0_0_0_1px_rgba(59,130,246,0.28),0_4px_20px_rgba(59,130,246,0.12)]"
 																: "text-muted-foreground hover:text-foreground hover:bg-white/5"
 														} relative flex items-center rounded-md text-sm font-medium transition-all duration-200 ease-in-out ${
-															showNavLabels ? "gap-2 px-2.5 py-2" : "p-2"
+															showNavLabels && isSelected
+																? "gap-2 px-2.5 py-2"
+																: "p-2"
 														}`}
 													>
 														<IconComponent
@@ -298,7 +304,7 @@ export const RightApplicationLayout: React.FC<RightApplicationLayoutProps> = ({
 																isSelected ? "scale-110" : "hover:scale-110"
 															}`}
 														/>
-														{showNavLabels ? (
+														{showNavLabels && isSelected ? (
 															<span className="whitespace-nowrap">
 																{t(item.nameKey)}
 															</span>
@@ -308,7 +314,7 @@ export const RightApplicationLayout: React.FC<RightApplicationLayoutProps> = ({
 															: null}
 													</Link>
 												</TooltipTrigger>
-												{showNavLabels ? null : (
+												{showNavLabels && isSelected ? null : (
 													<TooltipContent side="bottom">
 														<p>{t(item.nameKey)}</p>
 													</TooltipContent>
@@ -328,7 +334,9 @@ export const RightApplicationLayout: React.FC<RightApplicationLayoutProps> = ({
 															? "bg-blue-500/10 text-blue-500 border border-blue-500/30 shadow-[0_0_0_1px_rgba(59,130,246,0.28),0_4px_20px_rgba(59,130,246,0.12)]"
 															: "text-muted-foreground hover:text-foreground hover:bg-white/5"
 													} flex items-center rounded-md text-sm font-medium transition-all duration-200 ease-in-out ${
-														showNavLabels ? "gap-1.5 px-2.5 py-2" : "p-2"
+														showNavLabels && isDebugSelected
+															? "gap-1.5 px-2.5 py-2"
+															: "p-2"
 													}`}
 												>
 													<Bug
@@ -337,7 +345,7 @@ export const RightApplicationLayout: React.FC<RightApplicationLayoutProps> = ({
 															isDebugSelected ? "scale-110" : "hover:scale-110"
 														}`}
 													/>
-													{showNavLabels ? (
+													{showNavLabels && isDebugSelected ? (
 														<span className="whitespace-nowrap">
 															{t("navigation.debug")}
 														</span>
@@ -346,7 +354,7 @@ export const RightApplicationLayout: React.FC<RightApplicationLayoutProps> = ({
 												</button>
 											</DropdownMenuTrigger>
 										</TooltipTrigger>
-										{showNavLabels ? null : (
+										{showNavLabels && isDebugSelected ? null : (
 											<TooltipContent side="bottom">
 												<p>{t("navigation.debug")}</p>
 											</TooltipContent>
