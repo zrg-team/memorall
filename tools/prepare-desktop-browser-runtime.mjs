@@ -45,9 +45,41 @@ if (!browserAsset || !browserosAsset) {
 	);
 }
 
+/**
+ * Staging the runtime means three decompressions of a ~490 MB Chromium tree, and
+ * it ran on every build even when nothing had changed. The stamp records exactly
+ * which pinned assets produced the current output, so a rebuild can reuse it.
+ *
+ * Keyed on the lock's checksums, not its version strings: a re-pinned asset at
+ * the same version must still restage. Kept in the download cache rather than
+ * inside `runtimeOutput` so it never ships as a bundled resource.
+ */
+const stampPath = join(downloadCache, "stage-stamp.json");
+const stageSignature = JSON.stringify({
+	target,
+	browser: browserAsset.sha256,
+	browseros: browserosAsset.sha256,
+	lightpanda: lightpandaAsset?.sha256 ?? null,
+});
+
+const stagedRuntimeIsCurrent = () => {
+	if (sidecarOnly) return false;
+	if (process.env.MEMORALL_DESKTOP_RESTAGE === "1") return false;
+	try {
+		if (readFileSync(stampPath, "utf8") !== stageSignature) return false;
+	} catch {
+		return false;
+	}
+	// The stamp lives outside the output, so confirm the output is still there.
+	return existsSync(join(browserosOutput, browserAsset.executable));
+};
+const reuseStagedRuntime = stagedRuntimeIsCurrent();
+
 for (const directory of sidecarOnly
 	? [sidecarOutput]
-	: [sidecarOutput, runtimeOutput, licenseOutput]) {
+	: reuseStagedRuntime
+		? [sidecarOutput, licenseOutput]
+		: [sidecarOutput, runtimeOutput, licenseOutput]) {
 	try {
 		rmSync(directory, {
 			recursive: true,
@@ -92,10 +124,93 @@ if (sidecarOnly) {
 	process.exit(0);
 }
 
+if (reuseStagedRuntime) {
+	writeRuntimeMetadata();
+	console.log(
+		`Reused the staged ${lock.browser.name} ${browserAsset.version ?? lock.browser.version} runtime for ${target}; the pinned assets are unchanged. Set MEMORALL_DESKTOP_RESTAGE=1 to force a restage.`,
+	);
+	process.exit(0);
+}
+
 const hashFile = async (path) => {
 	const hash = createHash("sha256");
 	for await (const chunk of createReadStream(path)) hash.update(chunk);
 	return hash.digest("hex");
+};
+
+const DOWNLOAD_ATTEMPTS = 4;
+/** Abort when the connection delivers nothing for this long, so a dead socket
+ *  fails fast into a resume instead of hanging the build indefinitely. */
+const DOWNLOAD_STALL_MS = 60_000;
+
+const formatMegabytes = (bytes) => `${(bytes / 1_000_000).toFixed(1)} MB`;
+
+/**
+ * Stream one attempt into `temporary`, resuming from whatever is already there.
+ *
+ * Returns the number of bytes on disk afterwards. Throws on a stall or a
+ * transport error so the caller can retry — which resumes rather than restarts,
+ * because these assets are ~120 MB and GitHub serves them with
+ * `Accept-Ranges: bytes`.
+ */
+const downloadAttempt = async (asset, label, temporary) => {
+	const resumeFrom = existsSync(temporary) ? statSync(temporary).size : 0;
+	const controller = new AbortController();
+	let stallTimer = setTimeout(() => controller.abort(), DOWNLOAD_STALL_MS);
+	const touch = () => {
+		clearTimeout(stallTimer);
+		stallTimer = setTimeout(() => controller.abort(), DOWNLOAD_STALL_MS);
+	};
+
+	try {
+		const response = await fetch(asset.url, {
+			redirect: "follow",
+			signal: controller.signal,
+			headers: resumeFrom > 0 ? { Range: `bytes=${resumeFrom}-` } : {},
+		});
+		if (!response.ok || !response.body) {
+			throw new Error(`HTTP ${response.status}`);
+		}
+
+		// A server that ignores Range answers 200 with the whole file; appending
+		// that to a partial would silently corrupt it, so start the file over.
+		const resuming = response.status === 206 && resumeFrom > 0;
+		const alreadyOnDisk = resuming ? resumeFrom : 0;
+		const expected =
+			Number(response.headers.get("content-length") ?? 0) + alreadyOnDisk;
+
+		let received = alreadyOnDisk;
+		let lastReported = 0;
+		const source = Readable.from(
+			(async function* stream() {
+				for await (const chunk of response.body) {
+					touch();
+					received += chunk.length;
+					if (received - lastReported >= 16_000_000) {
+						lastReported = received;
+						const suffix = expected
+							? ` of ${formatMegabytes(expected)} (${Math.floor((received / expected) * 100)}%)`
+							: "";
+						console.log(`  ${label}: ${formatMegabytes(received)}${suffix}`);
+					}
+					yield chunk;
+				}
+			})(),
+		);
+
+		if (resuming) {
+			console.log(
+				`  ${label}: resuming from ${formatMegabytes(resumeFrom)}${expected ? ` of ${formatMegabytes(expected)}` : ""}`,
+			);
+		}
+		await pipeline(
+			source,
+			createWriteStream(temporary, { flags: resuming ? "a" : "w" }),
+		);
+		return received;
+	} finally {
+		clearTimeout(stallTimer);
+	}
 };
 
 const fetchAsset = async (asset, label) => {
@@ -114,21 +229,40 @@ const fetchAsset = async (asset, label) => {
 			`${label} is not in the verified offline cache: ${destination}`,
 		);
 	}
+
+	// Deliberately NOT cleared between attempts: these assets are ~120 MB, and
+	// discarding a nearly complete transfer because the connection dropped is
+	// what made this step look like it hangs forever.
 	const temporary = `${destination}.download`;
-	rmSync(temporary, { force: true });
-	const response = await fetch(asset.url, { redirect: "follow" });
-	if (!response.ok || !response.body) {
-		throw new Error(`${label} download failed with HTTP ${response.status}.`);
+	let lastError;
+	for (let attempt = 1; attempt <= DOWNLOAD_ATTEMPTS; attempt += 1) {
+		try {
+			console.log(
+				`Downloading ${label} (attempt ${attempt}/${DOWNLOAD_ATTEMPTS})...`,
+			);
+			await downloadAttempt(asset, label, temporary);
+			break;
+		} catch (error) {
+			lastError = error;
+			if (attempt === DOWNLOAD_ATTEMPTS) {
+				throw new Error(
+					`${label} download failed after ${DOWNLOAD_ATTEMPTS} attempts: ${error.message}. The partial file is kept at ${temporary}, so a rerun resumes.`,
+				);
+			}
+			console.warn(`  ${label}: ${error.message} — resuming.`);
+		}
 	}
-	await pipeline(Readable.fromWeb(response.body), createWriteStream(temporary));
+
 	const actual = await hashFile(temporary);
 	if (actual !== asset.sha256) {
+		// The bytes on disk are unusable and resuming cannot repair them.
 		rmSync(temporary, { force: true });
 		throw new Error(
-			`${label} checksum mismatch: expected ${asset.sha256}, received ${actual}.`,
+			`${label} checksum mismatch: expected ${asset.sha256}, received ${actual}.${lastError ? ` Last transport error: ${lastError.message}.` : ""}`,
 		);
 	}
 	renameSync(temporary, destination);
+	console.log(`Verified ${label}.`);
 	return destination;
 };
 
@@ -311,27 +445,34 @@ if (stagedFiles.filter((path) => path === browserExecutable).length !== 1) {
 	throw new Error("Exactly one managed browser executable must be staged.");
 }
 
-cpSync(lockPath, join(runtimeOutput, "browser-runtime.lock.json"));
-writeFileSync(
-	join(licenseOutput, "THIRD_PARTY_NOTICES.txt"),
-	[
-		"Memorall Desktop managed browser notices",
-		"",
-		`${lock.browser.name} ${browserAsset.version ?? lock.browser.version} (${lock.browser.license})`,
-		`BrowserOS server ${lock.browseros.version}, commit ${lock.browseros.sourceCommit} (${lock.browseros.license})`,
-		"Source and license: https://github.com/browseros-ai/BrowserOS",
-		...(lightpandaAsset
-			? [
-					`Lightpanda ${lock.lightpanda.version} (${lock.lightpanda.license})`,
-					"Source and license: https://github.com/lightpanda-io/browser",
-				]
-			: ["Lightpanda is not distributed for this target."]),
-		"Chromium license and attribution files remain inside the packaged browser distribution.",
-		"Node.js is distributed under the Node.js license and is staged as the Memorall desktop sidecar runtime.",
-		"",
-	].join("\n"),
-	"utf8",
-);
+// A function declaration, not a const: the reuse shortcut above calls this
+// before this point in the file, and an arrow would still be in its TDZ.
+function writeRuntimeMetadata() {
+	cpSync(lockPath, join(runtimeOutput, "browser-runtime.lock.json"));
+	writeFileSync(
+		join(licenseOutput, "THIRD_PARTY_NOTICES.txt"),
+		[
+			"Memorall Desktop managed browser notices",
+			"",
+			`${lock.browser.name} ${browserAsset.version ?? lock.browser.version} (${lock.browser.license})`,
+			`BrowserOS server ${lock.browseros.version}, commit ${lock.browseros.sourceCommit} (${lock.browseros.license})`,
+			"Source and license: https://github.com/browseros-ai/BrowserOS",
+			...(lightpandaAsset
+				? [
+						`Lightpanda ${lock.lightpanda.version} (${lock.lightpanda.license})`,
+						"Source and license: https://github.com/lightpanda-io/browser",
+					]
+				: ["Lightpanda is not distributed for this target."]),
+			"Chromium license and attribution files remain inside the packaged browser distribution.",
+			"Node.js is distributed under the Node.js license and is staged as the Memorall desktop sidecar runtime.",
+			"",
+		].join("\n"),
+		"utf8",
+	);
+}
+
+writeRuntimeMetadata();
+writeFileSync(stampPath, stageSignature, "utf8");
 
 console.log(
 	`Staged sidecar protocol v3, ${lock.browser.name} ${browserAsset.version ?? lock.browser.version}, BrowserOS ${lock.browseros.version}${lightpandaAsset ? `, and Lightpanda ${lock.lightpanda.version}` : ""} for ${target}.`,
