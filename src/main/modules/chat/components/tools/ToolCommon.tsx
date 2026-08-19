@@ -150,6 +150,33 @@ export const formatIsoDate = (value: string): string => {
 	return date.toLocaleString();
 };
 
+/**
+ * Read the bot-wall details a web tool attaches when the page it reached was a
+ * CAPTCHA, Cloudflare interstitial, rate limit or login gate rather than the
+ * requested content. Absent on healthy pages.
+ */
+export const getWebBlockDetails = (
+	payload: Record<string, unknown>,
+): { kind: string; marker: string; description?: string } | null => {
+	const blocked = payload.blocked;
+	if (!isRecord(blocked)) return null;
+	if (typeof blocked.kind !== "string" || typeof blocked.marker !== "string") {
+		return null;
+	}
+	return {
+		kind: blocked.kind,
+		marker: blocked.marker,
+		description:
+			typeof blocked.description === "string" ? blocked.description : undefined,
+	};
+};
+
+export const getToolNumber = (
+	payload: Record<string, unknown>,
+	key: string,
+): number | undefined =>
+	typeof payload[key] === "number" ? (payload[key] as number) : undefined;
+
 export const openToolUrl = (url: string): void => {
 	void platform.externalLinks.open(url);
 };

@@ -22,6 +22,7 @@ import {
 } from "@/main/modules/chat/components";
 import { MessageGroup } from "@/main/modules/chat/components/MessageGroup";
 import { ChatPanelSkeleton } from "@/main/components/atoms/AppSkeletons";
+import { useWebChallengeHandoffStore } from "@/main/stores/web-challenge-handoff";
 import type {
 	AgentGreetingContext,
 	AgentScreenContent,
@@ -264,6 +265,24 @@ export const ChatPage: React.FC<ChatPageProps> = ({
 		},
 		[inputValue, navigate, setInputValue, submitMessage],
 	);
+
+	// A tool call cannot block waiting for a person, so when a web tool hits a bot
+	// wall the turn ends and the warning card takes over. Once the user has solved
+	// the challenge and pressed Continue, the card leaves a prompt here and this
+	// sends it — the card itself has no way to reach `submitMessage`.
+	const pendingContinuation = useWebChallengeHandoffStore(
+		(state) => state.pendingContinuation,
+	);
+	const takeContinuation = useWebChallengeHandoffStore(
+		(state) => state.takeContinuation,
+	);
+
+	useEffect(() => {
+		if (!pendingContinuation) return;
+		const prompt = takeContinuation();
+		if (!prompt) return;
+		void submitMessage({ inputText: prompt, clearComposer: false });
+	}, [pendingContinuation, takeContinuation, submitMessage]);
 
 	useEffect(() => {
 		onCompactChatListOpenChange?.(isCompactSidePanelOpen);

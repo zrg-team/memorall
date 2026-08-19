@@ -426,5 +426,24 @@
 			"title": "Không thể hiển thị phản hồi trực quan.",
 			"description": "Mã OpenUI được tạo ra không hợp lệ. Phản hồi gốc được hiển thị bên dưới."
 		}
+	},
+	"webChallenge": {
+		"kind": {
+			"default": "Trang này đang chặn truy cập tự động",
+			"captcha": "Trang này yêu cầu xác minh người dùng",
+			"cloudflare": "Cloudflare đang xác minh trình duyệt",
+			"rate-limit": "Trang đang giới hạn số lượng truy cập tự động",
+			"login-wall": "Trang này yêu cầu đăng nhập",
+			"http-block": "Máy chủ từ chối yêu cầu"
+		},
+		"genericDescription": "Trợ lý nhận được trang xác minh thay vì nội dung.",
+		"solveItMyself": "Tôi tự xử lý",
+		"iHaveSolvedIt": "Đã xử lý — tiếp tục",
+		"handedOverHint": "Hãy hoàn tất xác minh trong trình duyệt, sau đó chọn Tiếp tục.",
+		"desktopVisibleConfirm": "Trình duyệt đang chạy ẩn. Hiển thị nó sẽ khởi động lại trình duyệt, đóng mọi phiên đang mở, rồi mở lại trang này để bạn xử lý. Tiếp tục?",
+		"continuePrompt": "Tôi đã hoàn tất xác minh trong trình duyệt. Hãy tiếp tục công việc đang dở.",
+		"missingTab": "Phiên này không có tab trình duyệt để bàn giao.",
+		"missingSession": "Kết quả này không có phiên để bàn giao.",
+		"missingUrl": "Kết quả này không có URL để mở lại."
 	}
 }
