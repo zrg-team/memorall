@@ -99,12 +99,20 @@ export default {
           from: { height: "var(--radix-collapsible-content-height)", opacity: "1" },
           to: { height: "0", opacity: "0" },
         },
+        /* A row arriving in a live list: it grows its own height (grid 0fr -> 1fr
+           works for rows of unknown height) so whatever sits below slides down
+           instead of jumping a row at a time. */
+        "list-item-in": {
+          from: { gridTemplateRows: "0fr", opacity: "0", transform: "translateY(-2px)" },
+          to: { gridTemplateRows: "1fr", opacity: "1", transform: "translateY(0)" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
         "collapsible-down": "collapsible-down 0.2s ease-out",
         "collapsible-up": "collapsible-up 0.2s ease-out",
+        "list-item-in": "list-item-in 0.24s cubic-bezier(0.22, 1, 0.36, 1)",
       },
     },
   },

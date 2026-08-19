@@ -72,12 +72,10 @@ export const AssistantContentFlow: React.FC<AssistantContentFlowProps> =
 						evidenceParts={workflowEvidenceParts}
 						isStreaming={isStreaming}
 					/>
-					{toolTimelineParts.length > 0 ? (
-						<AssistantToolTimeline
-							parts={toolTimelineParts}
-							isStreaming={isStreaming}
-						/>
-					) : null}
+					<AssistantToolTimeline
+						parts={toolTimelineParts}
+						isStreaming={isStreaming}
+					/>
 					{assignAssistantPartKeys(parts).map(({ part, index, key }) => {
 						if (part.type === "text") {
 							if (!part.text.trim()) return null;

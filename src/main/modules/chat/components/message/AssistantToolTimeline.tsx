@@ -10,6 +10,8 @@ import {
 	CollapsibleTrigger,
 } from "@/main/components/ui/collapsible";
 import { AssistantToolTimelinePart } from "./AssistantToolTimelinePart";
+import { StreamingListItem } from "./StreamingListItem";
+import { useNewItemIds } from "./use-new-item-ids";
 
 const formatDuration = (durationMs: number): string =>
 	durationMs < 1_000
@@ -30,6 +32,7 @@ export const AssistantToolTimeline: React.FC<{
 	const { t } = useTranslation("chat");
 	const [isOpen, setIsOpen] = useStreamingDisclosure(isStreaming);
 	const hasError = parts.some((part) => part.state === "error");
+	const newPartIds = useNewItemIds(parts.map((part) => part.id));
 	const durationMs = useMemo(() => getTimelineDuration(parts), [parts]);
 
 	const summary = isStreaming
@@ -42,6 +45,9 @@ export const AssistantToolTimeline: React.FC<{
 				duration: formatDuration(durationMs),
 				defaultValue: `${parts.length} agent action${parts.length === 1 ? "" : "s"} · ${formatDuration(durationMs)}`,
 			});
+	// Mounted before the first action lands, so even row one grows in.
+	if (parts.length === 0) return null;
+
 	const disclosureLabel = isOpen
 		? t("workflow.hideDetails", { defaultValue: "Hide run details" })
 		: t("workflow.showDetails", { defaultValue: "Show run details" });
@@ -75,13 +81,14 @@ export const AssistantToolTimeline: React.FC<{
 			<CollapsibleContent className="overflow-hidden data-[state=open]:animate-collapsible-down data-[state=closed]:animate-collapsible-up">
 				<div className="mt-1.5 min-w-0 pl-0.5">
 					{parts.map((part, index) => (
-						<AssistantToolTimelinePart
-							key={part.id}
-							part={part}
-							connectsToPrevious={index > 0}
-							isLast={index === parts.length - 1}
-							forceOpen={isStreaming && part.state === "running"}
-						/>
+						<StreamingListItem key={part.id} isNew={newPartIds.has(part.id)}>
+							<AssistantToolTimelinePart
+								part={part}
+								connectsToPrevious={index > 0}
+								isLast={index === parts.length - 1}
+								forceOpen={isStreaming && part.state === "running"}
+							/>
+						</StreamingListItem>
 					))}
 				</div>
 			</CollapsibleContent>
