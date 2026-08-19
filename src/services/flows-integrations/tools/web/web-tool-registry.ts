@@ -760,6 +760,35 @@ export const closeWebSession = async (sessionId: string): Promise<void> => {
 	WEB_SESSIONS.delete(sessionId);
 };
 
+/**
+ * Bring the session's page to the front so the user can act on it themselves.
+ *
+ * Used when a page turns out to be a bot wall: the user solves the CAPTCHA or
+ * signs in, and the agent carries on with the same session. Iframe sessions have
+ * no surface of their own to raise, so they report the limitation rather than
+ * failing silently.
+ */
+export const focusWebSession = async (sessionId: string): Promise<void> => {
+	const session = WEB_SESSIONS.get(sessionId);
+	if (!session) {
+		throw new Error(`No active web session: ${sessionId}`);
+	}
+	if (session.mode === "iframe" || typeof session.tabId !== "number") {
+		throw new Error(
+			"This session is embedded and has no window of its own to bring forward.",
+		);
+	}
+
+	await sendWebBrowserCommand({
+		source: WEB_BROWSER_COMMAND_SOURCE,
+		command: "bring-to-front",
+		sessionId,
+		tabId: session.tabId,
+		windowId: session.windowId,
+	});
+	scheduleInactivityClose(sessionId);
+};
+
 export const getActiveWebSessionInfo = (): ActiveWebSessionInfo => {
 	let latest: WebSessionState | undefined;
 	for (const session of WEB_SESSIONS.values()) {

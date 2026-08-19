@@ -26,6 +26,7 @@ import type {
 import {
 	closeAllWebSessionsExceptLatest,
 	closeWebSession,
+	focusWebSession,
 	disposeActiveWebSession,
 	fetchRenderedFallback,
 	getActiveWebSessionInfo,
@@ -112,6 +113,11 @@ export class WebBrowserServiceMain implements IWebBrowserService {
 	async closeSession(sessionId: string): Promise<void> {
 		await this.initialize();
 		await closeWebSession(sessionId);
+	}
+
+	async focusSession(sessionId: string): Promise<void> {
+		await this.initialize();
+		await focusWebSession(sessionId);
 	}
 
 	async disposeActiveSession(reason?: string): Promise<void> {

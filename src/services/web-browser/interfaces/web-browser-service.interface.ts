@@ -32,6 +32,8 @@ export interface IWebBrowserService {
 		args: WebGetOrOpenSessionArgs,
 	): Promise<WebGetOrOpenSessionResult>;
 	closeSession(sessionId: string): Promise<void>;
+	/** Bring the session's page to the front for the user to act on. */
+	focusSession(sessionId: string): Promise<void>;
 	disposeActiveSession(reason?: string): Promise<void>;
 	getActiveSessionInfo(): Promise<ActiveWebSessionInfo>;
 	getAllSessionsInfo(): Promise<ActiveWebSessionInfo[]>;

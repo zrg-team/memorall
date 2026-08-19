@@ -121,6 +121,11 @@ export class WebBrowserServiceProxy implements IWebBrowserService {
 		await this.executeOperation("session.close", { sessionId });
 	}
 
+	async focusSession(sessionId: string): Promise<void> {
+		await this.initialize();
+		await this.executeOperation("session.bringToFront", { sessionId });
+	}
+
 	async disposeActiveSession(reason?: string): Promise<void> {
 		await this.initialize();
 		await this.executeOperation("session.disposeActive", { reason });
