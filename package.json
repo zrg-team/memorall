@@ -2,7 +2,7 @@
   "private": true,
   "name": "memorall",
   "description": "Memorall - AI-powered memory and knowledge management browser.",
-  "version": "0.5.6",
+  "version": "0.5.7",
   "license": "MIT",
   "type": "module",
   "engines": {
