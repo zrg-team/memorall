@@ -31,6 +31,7 @@ import { useRuntimeSessionsStore } from "@/main/stores/runtime-sessions";
 import {
 	debugNavigationItems,
 	getCopilotNavigationId,
+	WORKSPACE_FALLBACK_PATH,
 	workspaceNavigationItems,
 } from "@/main/components/app-navigation";
 interface RightApplicationLayoutProps {
@@ -262,7 +263,8 @@ export const RightApplicationLayout: React.FC<RightApplicationLayoutProps> = ({
 								{workspaceNavigationItems.map((item) => {
 									const isSelected =
 										location.pathname === item.path ||
-										(!checkIsExistNavigation && item.path === "/");
+										(!checkIsExistNavigation &&
+											item.path === WORKSPACE_FALLBACK_PATH);
 									const IconComponent = item.icon;
 									const copilotId = getCopilotNavigationId(item.path);
 									return (
