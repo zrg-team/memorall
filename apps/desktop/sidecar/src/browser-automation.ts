@@ -20,6 +20,7 @@ import {
 	type BrowserEngine,
 	type BrowserMode,
 	type BrowserSettings,
+	type BrowserSnapshot,
 } from "./browser-runtime-types";
 
 export {
@@ -53,6 +54,14 @@ const trace = (message: string): void => {
 
 export class BrowserAutomationManager {
 	private readonly direct = new DirectBrowserBackend();
+	/**
+	 * Whether a full managed lane (BrowserOS or the CDP fallback) is ready.
+	 *
+	 * Refreshed by {@link status}, which the UI polls and which is also the lazy
+	 * start boundary, so this is populated before any page is opened. See
+	 * {@link withDomCapability} for why it matters.
+	 */
+	private fullLaneReady = false;
 	private readonly lightpanda = new LightpandaBackend();
 	private readonly browseros: BrowserOsBackend;
 	private readonly chromium: ChromiumCdpBackend;
@@ -123,6 +132,8 @@ export class BrowserAutomationManager {
 				: selected
 					? "degraded"
 					: "unavailable";
+		this.fullLaneReady =
+			browseros?.readiness === "ready" || chromium?.readiness === "ready";
 		const failure =
 			readiness === "unavailable"
 				? (browseros?.failure ??
@@ -300,7 +311,7 @@ export class BrowserAutomationManager {
 					success: true,
 					sessionId: request.sessionId,
 					surface: { mode, tabId: id },
-					snapshot: opened.snapshot,
+					snapshot: this.withDomCapability(opened.snapshot),
 				};
 			} catch (error) {
 				if (error instanceof BackendOpenError && error.session) {
@@ -332,6 +343,26 @@ export class BrowserAutomationManager {
 		);
 	}
 
+	/**
+	 * Report DOM capability for the session, not for the backend that happened to
+	 * answer.
+	 *
+	 * A plain `tab` open prefers the `direct` backend — an HTTP fetch, no engine —
+	 * which reports `domAccessible: false` because that snapshot has no live DOM.
+	 * Callers read the flag as "can I run DOM operations here" and refuse outright
+	 * when it is false, so on desktop `web_dom` and selector waits were never
+	 * offered even though `query`, `action`, `waitSelector` and `screenshot` all
+	 * promote the session to a real browser on demand.
+	 *
+	 * So: true whenever the operation would actually succeed. Gated on a full lane
+	 * being ready, so that a build with no managed browser still reports honestly
+	 * rather than promising an upgrade that would throw.
+	 */
+	private withDomCapability(snapshot: BrowserSnapshot): BrowserSnapshot {
+		if (snapshot.domAccessible || !this.fullLaneReady) return snapshot;
+		return { ...snapshot, domAccessible: true };
+	}
+
 	private async snapshotResponse(
 		request: BrowserCommand,
 		signal?: AbortSignal,
@@ -348,7 +379,7 @@ export class BrowserAutomationManager {
 			command: "snapshot",
 			success: true,
 			sessionId: request.sessionId,
-			snapshot,
+			snapshot: this.withDomCapability(snapshot),
 		};
 	}
 
