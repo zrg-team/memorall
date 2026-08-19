@@ -5,6 +5,7 @@ import type {
 	WebElementRecord,
 	WebWaitSelectorState,
 } from "./web-browser-protocol";
+import type { WebBlockSignal } from "@memorall/agent-harness-flows/tools/web/challenge-detection";
 
 export interface WebSession {
 	id: string;
@@ -14,6 +15,20 @@ export interface WebSession {
 	html: string;
 	text: string;
 	domAccessible: boolean;
+	/**
+	 * Set when the page turned out to be a bot wall (CAPTCHA, Cloudflare, rate
+	 * limit, login gate) rather than the requested content. Derived once when the
+	 * snapshot is applied, so every tool agrees on the verdict.
+	 */
+	block?: WebBlockSignal | null;
+	/** The last snapshot attempt failed; this content is the previous capture. */
+	stale?: boolean;
+	/**
+	 * Transport handle for the page: a browser tab id on the extension, a logical
+	 * session id on the desktop sidecar. Needed to hand the page to the user.
+	 */
+	tabId?: number;
+	windowId?: number;
 	lastAccessedAt: number;
 	createdAt: number;
 	mode: WebBrowserMode;
