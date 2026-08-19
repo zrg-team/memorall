@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MessagePartsAccumulator } from "@/services/chat/message-parts";
-import { StreamBuffer } from "../stream-buffer";
 import type { ChatCompletionChunk } from "@/types/openai";
+import { StreamBuffer } from "../stream-buffer";
 import type {
 	ItemHandlerResult,
 	JobProgressUpdate,
@@ -400,5 +400,76 @@ describe("agent flow with multiple steps over a mock LLM", () => {
 				content: "Let me check the weather It is 31C in Hanoi.",
 			},
 		]);
+	});
+});
+
+describe("a split conversation does not turn plain chat into an agent", () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+	});
+
+	const splitConversation = {
+		id: "conversation-1",
+		historyBoundary: {
+			separatorId: "separator-1",
+			createdAt: "2026-01-01T00:00:00.000Z",
+		},
+	};
+
+	const singleReply = (text: string) =>
+		vi.fn(async function* () {
+			yield chunk({ role: "assistant", content: text });
+			yield {
+				id: "final",
+				object: "chat.completion.chunk",
+				created: 1,
+				model: "test-model",
+				choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
+			} as ChatCompletionChunk;
+		});
+
+	it("keeps normal mode on the direct completion path past a separator", async () => {
+		// Splitting used to escalate every plain message to a full agent run so it
+		// could reach the history tools. Recall is a flow feature now, so "Chat"
+		// stays a single completion over the messages after the split.
+		llmStream.mockImplementation(singleReply("only what I can see"));
+		const { createMemorallFlowRun } = await import("@/services/agent-harness");
+
+		const { result } = await runChat({
+			messages: [{ role: "user", content: "what did we decide?" }],
+			model: "test-model",
+			mode: "normal",
+			conversation: splitConversation,
+		});
+
+		expect(createMemorallFlowRun).not.toHaveBeenCalled();
+		expect(result.content).toBe("only what I can see");
+	});
+
+	it("hands the separator to the flow as runtime vars in agent mode", async () => {
+		flowStream.mockImplementation(
+			vi.fn(async function* () {
+				yield ["values", { response: "found it" }];
+			}),
+		);
+		const { createMemorallFlowRun } = await import("@/services/agent-harness");
+
+		await runChat({
+			messages: [{ role: "user", content: "what did we decide?" }],
+			model: "test-model",
+			mode: "agent",
+			conversation: splitConversation,
+		});
+
+		expect(createMemorallFlowRun).toHaveBeenCalledWith(
+			expect.objectContaining({
+				input: expect.objectContaining({
+					runtimeVars: {
+						"thread.history.conversationId": "conversation-1",
+						"thread.history.separatorId": "separator-1",
+					},
+				}),
+			}),
+		);
 	});
 });

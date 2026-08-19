@@ -1,16 +1,17 @@
 import {
-	stepRegistry,
 	type RegisteredStep,
 	type StepFeatureMetadata,
 	type StepIOField,
+	stepRegistry,
 } from "@memorall/agent-harness-flows/registries/step-registry";
-import { HYPERFRAMES_FEATURE_SYSTEM_PROMPT } from "@/services/flows-integrations/steps/features/hyperframes-base/hyperframes-feature";
-import { LOTTIE_ANIMATION_FEATURE_SYSTEM_PROMPT } from "@/services/flows-integrations/steps/features/lottie-animation-feature/lottie-animation-feature";
 import {
 	BROWSER_SANDBOX_FEATURE_DESCRIPTION,
 	BROWSER_SANDBOX_FEATURE_SYSTEM_PROMPT,
 	BROWSER_SANDBOX_FEATURE_TOOLS,
 } from "@memorall/agent-harness-flows/steps/features/nodejs-sandbox-feature/index";
+import { HYPERFRAMES_FEATURE_SYSTEM_PROMPT } from "@/services/flows-integrations/steps/features/hyperframes-base/hyperframes-feature";
+import { LOTTIE_ANIMATION_FEATURE_SYSTEM_PROMPT } from "@/services/flows-integrations/steps/features/lottie-animation-feature/lottie-animation-feature";
+import { THREAD_HISTORY_FEATURE_SYSTEM_PROMPT } from "@/services/flows-integrations/steps/features/thread-history-feature";
 
 export type { StepIOField };
 
@@ -684,6 +685,24 @@ const FEATURE_UI_METADATA: Record<string, FeatureCatalogMetadata> = {
 			type: "emoji",
 		},
 		accentColor: "#f43f5e",
+	},
+	"step-thread-history-feature": {
+		description:
+			"Let the agent search and read messages from before the chat was split, instead of losing them.",
+		descriptionKey: "flowBuilder.features.threadHistoryFeature.description",
+		displayName: "Earlier Thread Recall",
+		nameKey: "flowBuilder.features.threadHistoryFeature.name",
+		tools: ["thread_history_search", "thread_history_read"],
+		systemPrompt: THREAD_HISTORY_FEATURE_SYSTEM_PROMPT,
+		customizable: false,
+		recommended: true,
+		icon: {
+			name: "History",
+			type: "lucide",
+		},
+		accentColor: "#0ea5e9",
+		section: "core",
+		sectionOrder: 10,
 	},
 	"step-travel-planner-feature": {
 		description:

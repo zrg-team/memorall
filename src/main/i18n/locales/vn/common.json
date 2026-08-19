@@ -305,6 +305,10 @@
 				"name": "Thu thập tin tức",
 				"description": "Tìm kiếm và tóm tắt tin tức bằng cách đọc đầy đủ bài viết từ nhiều nguồn."
 			},
+			"threadHistoryFeature": {
+				"name": "Nhớ lại đoạn chat trước",
+				"description": "Tìm và đọc các tin nhắn từ trước khi tách đoạn chat, thay vì mất chúng."
+			},
 			"travelPlannerFeature": {
 				"name": "Lập kế hoạch du lịch",
 				"description": "Nghiên cứu điểm đến và tạo lịch trình du lịch chi tiết theo từng ngày, lưu vào /travel/."

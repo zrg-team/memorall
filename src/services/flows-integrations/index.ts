@@ -88,6 +88,9 @@ import "./steps/features/lottie-animation-feature/index";
 import "./steps/features/visualize-response/index";
 import "./steps/features/hyperframes-feature";
 
+// Conversation feature steps
+import "./steps/features/thread-history-feature";
+
 // Document feature steps
 import "./steps/features/fs-feature";
 import "./steps/features/files-legacy-feature";
