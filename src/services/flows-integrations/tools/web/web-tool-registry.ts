@@ -11,6 +11,10 @@ import {
 	type WebWaitSelectorState,
 } from "./web-browser-protocol";
 import { DEFAULT_WEB_MAX_HTML_CHARS } from "@memorall/agent-harness-flows/tools/web/max-html-chars";
+import {
+	detectWebBlock,
+	type WebBlockSignal,
+} from "@memorall/agent-harness-flows/tools/web/challenge-detection";
 import { platform } from "@/platform/current";
 
 interface WebSessionState {
@@ -21,6 +25,18 @@ interface WebSessionState {
 	html: string;
 	text: string;
 	domAccessible: boolean;
+	/**
+	 * Set when the page turned out to be a bot wall rather than the content that
+	 * was asked for. Derived once here so every web tool sees the same verdict.
+	 */
+	block?: WebBlockSignal | null;
+	/**
+	 * The last snapshot attempt failed and this content is the previous capture.
+	 * Kept separate from `domAccessible`, which the two used to share: conflating
+	 * "the snapshot is stale" with "there is no DOM" is what made healthy desktop
+	 * pages report "DOM blocked".
+	 */
+	stale?: boolean;
 	lastAccessedAt: number;
 	createdAt: number;
 	mode: WebBrowserMode;
@@ -342,6 +358,8 @@ const applySnapshotToSession = (
 	session.html = snapshot.html;
 	session.text = snapshot.text;
 	session.domAccessible = snapshot.domAccessible;
+	session.block = detectWebBlock({ html: snapshot.html, text: snapshot.text });
+	session.stale = false;
 	session.lastAccessedAt = Date.now();
 	return session;
 };
@@ -354,6 +372,8 @@ const captureIframeSnapshot = (session: WebSessionState): WebSessionState => {
 	session.html = html;
 	session.text = safeText(document);
 	session.domAccessible = Boolean(document);
+	session.block = detectWebBlock({ html, text: session.text });
+	session.stale = false;
 	session.lastAccessedAt = Date.now();
 	return session;
 };
@@ -457,9 +477,10 @@ const touchSession = async (
 		} catch {
 			// Snapshot failed — the tab is likely mid-redirect (e.g. after a
 			// Cloudflare challenge). Return the cached session content so the
-			// caller can still read what was last captured. Mark domAccessible
-			// false to signal that the content may be stale/partial.
-			session.domAccessible = false;
+			// caller can still read what was last captured, flagged as stale.
+			// This used to clear `domAccessible`, which made a healthy page report
+			// "DOM blocked" and blocked the DOM tools outright.
+			session.stale = true;
 		}
 	}
 

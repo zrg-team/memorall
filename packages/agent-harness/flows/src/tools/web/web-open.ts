@@ -1,8 +1,5 @@
 import z from "zod";
-import type {
-	Tool,
-	ToolFactory,
-} from "../../interfaces/engine/tool.js";
+import type { Tool, ToolFactory } from "../../interfaces/engine/tool.js";
 import { toolRegistry } from "../../registries/tool-registry.js";
 import {
 	MAX_WEB_MAX_HTML_CHARS,
@@ -15,6 +12,7 @@ import {
 	createWebResult,
 	truncateContent,
 	requireWebBrowserService,
+	webBlockFields,
 	type WebToolServices,
 } from "./web-tool-utils.js";
 
@@ -53,7 +51,8 @@ export const createWebOpenTool: ToolFactory<Input, WebToolServices> = (
 ): Tool<Input> => ({
 	name: TOOL_NAME,
 	description:
-		"Open a web URL in `iframe` or browser-backed `tab`/`window` mode, wait for the initial navigation load, and expose `sessionId` for follow-up actions. When `renderReady` is false the page timed out but partial content is included — inspect `partialContent` to decide whether to call `web_wait` then `web_read`, or skip this page.",
+		"Open a web URL in `iframe` or browser-backed `tab`/`window` mode, wait for the initial navigation load, and expose `sessionId` for follow-up actions. When `renderReady` is false the page timed out but partial content is included — inspect `partialContent` to decide whether to call `web_wait` then `web_read`, or skip this page. " +
+		"If `blocked` is present the page is a bot wall (CAPTCHA, Cloudflare, rate limit or login gate), not the content: stop, tell the user what is blocking, and do not retry the same URL — the user has a button to solve it themselves.",
 	schema,
 	execute: async (input) => {
 		const webBrowser = requireWebBrowserService(services);
@@ -89,6 +88,7 @@ export const createWebOpenTool: ToolFactory<Input, WebToolServices> = (
 					domAccessible: session.domAccessible,
 					browserMode: session.mode,
 					renderReady: false,
+					...webBlockFields(session),
 					partialContent: cleanHtml || null,
 					text: truncateContent(session.text, maxHtmlChars) || null,
 					hint: 'Page load timed out. partialContent shows what loaded so far. Call web_wait (waitMode="render") then web_read to get more content, or skip this page if partialContent is empty.',
@@ -105,6 +105,7 @@ export const createWebOpenTool: ToolFactory<Input, WebToolServices> = (
 				domAccessible: session.domAccessible,
 				browserMode: session.mode,
 				renderReady: true,
+				...webBlockFields(session),
 				text: truncateContent(session.text, maxHtmlChars),
 			});
 		} catch (error) {

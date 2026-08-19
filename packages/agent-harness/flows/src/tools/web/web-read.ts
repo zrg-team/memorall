@@ -1,9 +1,6 @@
 import { parseHtmlDocument } from "../../utils/html-parser.js";
 import z from "zod";
-import type {
-	Tool,
-	ToolFactory,
-} from "../../interfaces/engine/tool.js";
+import type { Tool, ToolFactory } from "../../interfaces/engine/tool.js";
 import { toolRegistry } from "../../registries/tool-registry.js";
 import type { WebSession } from "../../interfaces/services/web-browser.js";
 import {
@@ -18,6 +15,7 @@ import {
 	stripNonReadableHtml,
 	truncateContent,
 	requireWebBrowserService,
+	webBlockFields,
 	type WebToolServices,
 } from "./web-tool-utils.js";
 
@@ -298,6 +296,7 @@ const createReadResult = (
 		matchCount: snapshot.matchCount,
 		contentMode: snapshot.contentMode,
 		content: snapshot.content,
+		...webBlockFields(snapshot.session),
 		...metadata,
 	});
 };
@@ -402,7 +401,7 @@ export const createWebReadTool: ToolFactory<Input, WebToolServices> = (
 ): Tool<Input> => ({
 	name: TOOL_NAME,
 	description:
-		"Read rendered page content from an active web session or directly from a URL. Default output is readable text.",
+		"Read rendered page content from an active web session or directly from a URL. Default output is readable text. If `blocked` is present the content is a bot wall (CAPTCHA, Cloudflare, rate limit or login gate), not the page: stop, tell the user what is blocking, and do not retry the same URL — the user has a button to solve it themselves.",
 	schema,
 	execute: async (input) => {
 		const webBrowser = requireWebBrowserService(services);
@@ -446,6 +445,7 @@ export const createWebReadTool: ToolFactory<Input, WebToolServices> = (
 					contentMode: transformedFallback.contentMode,
 					content: transformedFallback.content,
 					fallback: "network",
+					...webBlockFields(session),
 				});
 			}
 

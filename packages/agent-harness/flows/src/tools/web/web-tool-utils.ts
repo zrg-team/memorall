@@ -1,7 +1,11 @@
 import sanitizeHtml from "sanitize-html";
 import type {} from "../../interfaces/engine/tool.js";
 import type { AllServices } from "../../interfaces/services/services.js";
-import type { IFlowWebBrowserService } from "../../interfaces/services/web-browser.js";
+import type {
+	IFlowWebBrowserService,
+	WebSession,
+} from "../../interfaces/services/web-browser.js";
+import { describeWebBlock } from "./challenge-detection.js";
 
 export type WebToolServices = Pick<AllServices, "webBrowser">;
 
@@ -27,6 +31,28 @@ export const createDefaultWebErrorResult = (error: unknown): string =>
 
 export const createWebResult = (payload: Record<string, unknown>): string =>
 	JSON.stringify(payload, null, 2);
+
+/**
+ * Result fields describing a bot wall, spread into a tool payload.
+ *
+ * Empty when the page is fine, so callers can spread it unconditionally. When
+ * the page is a wall this carries the kind, the marker that matched, a sentence
+ * the UI can show, and the transport handle the handoff button needs to give the
+ * page back to the user.
+ */
+export const webBlockFields = (
+	session: Pick<WebSession, "block" | "tabId">,
+): Record<string, unknown> => {
+	if (!session.block) return {};
+	return {
+		blocked: {
+			kind: session.block.kind,
+			marker: session.block.marker,
+			description: describeWebBlock(session.block),
+		},
+		...(typeof session.tabId === "number" ? { tabId: session.tabId } : {}),
+	};
+};
 
 const NON_READABLE_ELEMENT_PATTERN =
 	/<(script|style|noscript|template)\b[^>]*>[\s\S]*?<\/\1>/gi;

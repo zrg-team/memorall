@@ -1,3 +1,4 @@
+import type { WebBlockSignal } from "../../tools/web/challenge-detection.js";
 export type WebBrowserMode = "iframe" | "tab" | "window";
 export type WebSelectorState = "present" | "absent";
 export type WebDomActionName =
@@ -62,6 +63,20 @@ export interface WebSession {
 	text: string;
 	lastText?: string;
 	domAccessible: boolean;
+	/**
+	 * Set when the page turned out to be a bot wall (CAPTCHA, Cloudflare, rate
+	 * limit, login gate) rather than the requested content. Derived once when the
+	 * snapshot is applied, so every tool agrees on the verdict.
+	 */
+	block?: WebBlockSignal | null;
+	/** The last snapshot attempt failed; this content is the previous capture. */
+	stale?: boolean;
+	/**
+	 * Transport handle for the page: a browser tab id on the extension, a logical
+	 * session id on the desktop sidecar. Needed to hand the page to the user.
+	 */
+	tabId?: number;
+	windowId?: number;
 	lastAccessedAt: number;
 	createdAt: number;
 	mode: WebBrowserMode;

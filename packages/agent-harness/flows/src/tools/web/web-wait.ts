@@ -1,14 +1,12 @@
 import z from "zod";
-import type {
-	Tool,
-	ToolFactory,
-} from "../../interfaces/engine/tool.js";
+import type { Tool, ToolFactory } from "../../interfaces/engine/tool.js";
 import { toolRegistry } from "../../registries/tool-registry.js";
 import {
 	createDefaultWebErrorResult,
 	createWebResult,
 	truncateContent,
 	requireWebBrowserService,
+	webBlockFields,
 	type WebToolServices,
 } from "./web-tool-utils.js";
 
@@ -141,6 +139,7 @@ export const createWebWaitTool: ToolFactory<Input, WebToolServices> = (
 				matched: result.matched,
 				html: truncateContent(result.html, maxChars),
 				text: truncateContent(result.lastText, maxChars),
+				...webBlockFields(latestSession),
 			});
 			return output;
 		} catch (error) {
