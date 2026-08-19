@@ -118,6 +118,51 @@ const WELL_KNOWN_MODELS: ModelConfig[] = [
 ];
 
 /**
+ * Used when neither the provider nor the pattern table knows the model. Kept
+ * conservative on purpose: overstating the window makes the agent overfill its
+ * context and the request fails upstream, which is worse than budgeting low.
+ */
+const UNKNOWN_MODEL_CONTEXT_WINDOW = 10000;
+const UNKNOWN_MODEL_RESPONSE_TOKENS = 5000;
+
+const positiveInteger = (value: unknown): number | null => {
+	const parsed = typeof value === "string" ? Number(value) : value;
+	return typeof parsed === "number" && Number.isFinite(parsed) && parsed > 0
+		? Math.floor(parsed)
+		: null;
+};
+
+/**
+ * Read the context limits an OpenAI-compatible listing reports for one model.
+ *
+ * OpenRouter uses `context_length` plus `top_provider.max_completion_tokens`;
+ * other gateways use `max_model_len` (vLLM) or `context_window`. When only the
+ * window is known, leave room for a reply rather than claiming the whole window
+ * can be generated.
+ */
+function readReportedLimits(entry: any): ModelConfig | null {
+	const contextWindow =
+		positiveInteger(entry?.context_length) ??
+		positiveInteger(entry?.context_window) ??
+		positiveInteger(entry?.max_model_len);
+	if (!contextWindow) return null;
+
+	const reportedResponse =
+		positiveInteger(entry?.top_provider?.max_completion_tokens) ??
+		positiveInteger(entry?.max_completion_tokens) ??
+		positiveInteger(entry?.max_output_tokens);
+
+	return {
+		pattern: "",
+		contextWindow,
+		maxResponseTokens: Math.min(
+			reportedResponse ?? Math.round(contextWindow / 2),
+			contextWindow,
+		),
+	};
+}
+
+/**
  * Normalize model name by removing special characters and converting to lowercase
  */
 function normalizeModelName(modelName: string): string {
@@ -178,10 +223,49 @@ export class OpenAILLM implements BaseLLM {
 	private ready = false;
 	private apiKey: string;
 	private baseURL: string;
+	/**
+	 * Context limits as reported by the provider's own `/models` listing.
+	 *
+	 * `WELL_KNOWN_MODELS` only recognises models someone thought to add, so every
+	 * aggregator model outside that list silently fell back to a 10K window — the
+	 * agent then budgeted its context against a limit an order of magnitude below
+	 * the truth. OpenRouter (and most OpenAI-compatible gateways) publish
+	 * `context_length` per model, which is authoritative; prefer it.
+	 */
+	private modelLimits = new Map<string, ModelConfig>();
+	private modelLimitsLoad: Promise<void> | null = null;
 
 	constructor(apiKey?: string, baseURL?: string) {
 		this.apiKey = apiKey || "";
 		this.baseURL = (baseURL || "https://api.openai.com/v1").replace(/\/$/, "");
+	}
+
+	/**
+	 * Populate {@link modelLimits} once per instance. Failures are swallowed: the
+	 * pattern table and defaults below still produce a usable answer, and a token
+	 * estimate is never worth failing a chat over.
+	 */
+	private async ensureModelLimits(): Promise<void> {
+		if (this.modelLimits.size > 0) return;
+		if (!this.modelLimitsLoad) {
+			this.modelLimitsLoad = this.models()
+				.then(() => {})
+				.catch(() => {})
+				.finally(() => {
+					this.modelLimitsLoad = null;
+				});
+		}
+		await this.modelLimitsLoad;
+	}
+
+	/**
+	 * Resolve a model's limits, most trustworthy source first: what the provider
+	 * reported, then the built-in pattern table, then null for the caller's
+	 * default.
+	 */
+	private async resolveModelConfig(model: string): Promise<ModelConfig | null> {
+		await this.ensureModelLimits();
+		return this.modelLimits.get(model) ?? findModelConfig(model);
 	}
 
 	private isLocalBase(): boolean {
@@ -223,27 +307,17 @@ export class OpenAILLM implements BaseLLM {
 	}
 
 	async getMaxModelTokens(model?: string): Promise<number> {
-		if (!model) return 10000; // Default fallback
+		if (!model) return UNKNOWN_MODEL_CONTEXT_WINDOW;
 
-		const config = findModelConfig(model);
-		if (config) {
-			return config.contextWindow;
-		}
-
-		// Default fallback for unknown models
-		return 10000;
+		const config = await this.resolveModelConfig(model);
+		return config?.contextWindow ?? UNKNOWN_MODEL_CONTEXT_WINDOW;
 	}
 
 	async getMaxResponseTokens(model?: string): Promise<number> {
-		if (!model) return 8000; // Default fallback
+		if (!model) return UNKNOWN_MODEL_RESPONSE_TOKENS;
 
-		const config = findModelConfig(model);
-		if (config) {
-			return config.maxResponseTokens;
-		}
-
-		// Default fallback for unknown models (80% of context window)
-		return Math.round(10000 * 0.5);
+		const config = await this.resolveModelConfig(model);
+		return config?.maxResponseTokens ?? UNKNOWN_MODEL_RESPONSE_TOKENS;
 	}
 
 	async models(): Promise<ModelsResponse> {
@@ -257,6 +331,15 @@ export class OpenAILLM implements BaseLLM {
 			const data = await res.json();
 			const modelsRaw = Array.isArray(data?.data) ? data.data : [];
 			const now = Math.floor(Date.now() / 1000);
+			for (const entry of modelsRaw) {
+				const limits = readReportedLimits(entry);
+				if (limits) {
+					this.modelLimits.set(
+						String(entry.id || entry.name || entry.model),
+						limits,
+					);
+				}
+			}
 			const modelInfos: ModelInfo[] = modelsRaw.map((m: any) => ({
 				id: String(m.id || m.name || m.model || "unknown-model"),
 				name: String(m.id || m.name || m.model || "unknown-model"),
