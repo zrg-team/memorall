@@ -4,6 +4,8 @@ import {
 	existsSync,
 	mkdirSync,
 	mkdtempSync,
+	readFileSync,
+	readdirSync,
 	renameSync,
 	rmSync,
 	writeFileSync,
@@ -241,24 +243,141 @@ const environment =
 environment.CARGO_TARGET_DIR = cargoTargetDirectory;
 const yarn = process.platform === "win32" ? "yarn.cmd" : "yarn";
 const tauriArguments = process.argv.slice(3);
-const child = spawn(
-	yarn,
-	["--cwd", "apps/desktop", "tauri", command, ...tauriArguments],
-	{
-		cwd: process.cwd(),
-		env: environment,
-		stdio: "inherit",
-		shell: process.platform === "win32",
-	},
-);
 
-const code = await new Promise((resolveExit, reject) => {
-	child.once("error", reject);
-	child.once("exit", (exitCode) => resolveExit(exitCode ?? 1));
-});
+function runTauri(args) {
+	const child = spawn(
+		yarn,
+		["--cwd", "apps/desktop", "tauri", command, ...args],
+		{
+			cwd: process.cwd(),
+			env: environment,
+			stdio: "inherit",
+			shell: process.platform === "win32",
+		},
+	);
+	return new Promise((resolveExit, reject) => {
+		child.once("error", reject);
+		child.once("exit", (exitCode) => resolveExit(exitCode ?? 1));
+	});
+}
+
+const MACOS_DMG_ATTEMPTS = 3;
+
+function productName() {
+	try {
+		const configuration = JSON.parse(
+			readFileSync(
+				resolve("apps", "desktop", "src-tauri", "tauri.conf.json"),
+				"utf8",
+			),
+		);
+		return typeof configuration.productName === "string"
+			? configuration.productName
+			: "";
+	} catch {
+		return "";
+	}
+}
+
+// bundle_dmg.sh mounts the writable image at /Volumes/<productName>. A wedged
+// run leaves that mount behind, and every later attach then fails or picks a
+// numbered mount point, so clear ours before retrying.
+function detachStaleVolumes() {
+	const name = productName();
+	if (!name) return;
+	let volumes = [];
+	try {
+		volumes = readdirSync("/Volumes");
+	} catch {
+		return;
+	}
+	for (const volume of volumes) {
+		if (volume !== name && !volume.startsWith(`${name} `)) continue;
+		try {
+			execFileSync("hdiutil", ["detach", join("/Volumes", volume), "-force"], {
+				stdio: "inherit",
+			});
+		} catch {
+			// Already gone, or owned by something else: the retry will tell us.
+		}
+	}
+}
+
+function bundledFiles(kind, extension) {
+	const directory = join(cargoTargetDirectory, "release", "bundle", kind);
+	if (!existsSync(directory)) return [];
+	try {
+		return readdirSync(directory).filter((file) =>
+			file.toLowerCase().endsWith(extension),
+		);
+	} catch {
+		return [];
+	}
+}
+
+/**
+ * hdiutil intermittently wedges on the macOS Intel CI runners: bundle_dmg.sh
+ * dies with no output of its own and the job ends with an orphaned
+ * diskimages-help process. The compiled binary and the .app bundle are already
+ * complete when that happens, so re-run only the DMG step rather than losing a
+ * build that is otherwise green.
+ *
+ * Retries only when the .app exists and no .dmg was produced, so a genuine
+ * build failure still surfaces with its original exit code.
+ */
+async function retryMacosDmgBundling(failureCode) {
+	if (process.platform !== "darwin") return failureCode;
+	const name = productName();
+	const applicationBundle = join(
+		cargoTargetDirectory,
+		"release",
+		"bundle",
+		"macos",
+		`${name}.app`,
+	);
+	if (!name || !existsSync(applicationBundle)) return failureCode;
+	if (bundledFiles("dmg", ".dmg").length > 0) return failureCode;
+
+	// Drop any --bundles the caller passed so the retry targets the DMG alone.
+	// It takes a space or comma separated list, so skip every value after it.
+	const retryArguments = [];
+	let skippingBundleValues = false;
+	for (const argument of tauriArguments) {
+		if (argument === "--bundles" || argument === "-b") {
+			skippingBundleValues = true;
+			continue;
+		}
+		if (argument.startsWith("--bundles=")) continue;
+		if (skippingBundleValues) {
+			if (!argument.startsWith("-")) continue;
+			skippingBundleValues = false;
+		}
+		retryArguments.push(argument);
+	}
+	retryArguments.push("--bundles", "dmg");
+
+	for (let attempt = 2; attempt <= MACOS_DMG_ATTEMPTS; attempt += 1) {
+		console.warn(
+			`DMG bundling failed. Retrying the DMG step (attempt ${attempt} of ${MACOS_DMG_ATTEMPTS}).`,
+		);
+		detachStaleVolumes();
+		rmSync(join(cargoTargetDirectory, "release", "bundle", "dmg"), {
+			recursive: true,
+			force: true,
+		});
+		const retryCode = await runTauri(retryArguments);
+		if (retryCode === 0 && bundledFiles("dmg", ".dmg").length > 0) return 0;
+	}
+	return failureCode;
+}
+
+let code = await runTauri(tauriArguments);
 const isInformationalCommand = tauriArguments.some((argument) =>
 	["-h", "--help", "-V", "--version"].includes(argument),
 );
+if (code !== 0 && command === "build" && !isInformationalCommand) {
+	code = await retryMacosDmgBundling(code);
+}
 if (code === 0 && command === "build" && !isInformationalCommand) {
 	stageDesktopArtifacts();
 }
