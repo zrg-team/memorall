@@ -119,6 +119,7 @@
     "format:check": "biome format ./src ./scripts",
     "test:patches": "node --test tools/check-patch-package.test.mjs",
     "assets:bundled": "node tools/copy-bundled-assets.mjs",
+    "assets:icons": "node tools/generate-icons.mjs",
     "audit:llm-models": "node tools/audit-llm-models.mjs",
     "benchmark:openui": "node tools/benchmark-openui-streaming.mjs",
     "qa:hyperframes-export": "node tools/hyperframes-export-parity-qa.mjs"

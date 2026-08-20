@@ -17,8 +17,9 @@ This will create production builds in:
 ### 2. Required Assets & Documentation
 
 #### Icons (Already have)
-- ✅ 48x48: `images/extension_48.png`
-- ⚠️ Need: 128x128, 256x256, 512x512 for store listings
+- ✅ 16x16 / 32x32 / 48x48 / 128x128: `docs/images/extension_<size>.png`
+- ✅ 128x128, 256x256, 512x512 store listing art: `docs/store/store_<size>.png`
+- Regenerate every size from the master artwork with `yarn assets:icons docs/images/icon-source.png`
 
 #### Screenshots Needed
 - At least 1280x800 or 640x400 pixels
