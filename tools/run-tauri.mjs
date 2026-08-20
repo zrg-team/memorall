@@ -12,6 +12,7 @@ import {
 } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { delimiter, join, resolve } from "node:path";
+import { retryMacosDmgBundling } from "./tauri-dmg-retry.mjs";
 
 const command = process.argv[2];
 if (command !== "dev" && command !== "build") {
@@ -261,8 +262,6 @@ function runTauri(args) {
 	});
 }
 
-const MACOS_DMG_ATTEMPTS = 3;
-
 function productName() {
 	try {
 		const configuration = JSON.parse(
@@ -279,96 +278,13 @@ function productName() {
 	}
 }
 
-// bundle_dmg.sh mounts the writable image at /Volumes/<productName>. A wedged
-// run leaves that mount behind, and every later attach then fails or picks a
-// numbered mount point, so clear ours before retrying.
-function detachStaleVolumes() {
-	const name = productName();
-	if (!name) return;
-	let volumes = [];
-	try {
-		volumes = readdirSync("/Volumes");
-	} catch {
-		return;
-	}
-	for (const volume of volumes) {
-		if (volume !== name && !volume.startsWith(`${name} `)) continue;
-		try {
-			execFileSync("hdiutil", ["detach", join("/Volumes", volume), "-force"], {
-				stdio: "inherit",
-			});
-		} catch {
-			// Already gone, or owned by something else: the retry will tell us.
-		}
-	}
-}
-
-function bundledFiles(kind, extension) {
-	const directory = join(cargoTargetDirectory, "release", "bundle", kind);
+function listDirectory(directory) {
 	if (!existsSync(directory)) return [];
 	try {
-		return readdirSync(directory).filter((file) =>
-			file.toLowerCase().endsWith(extension),
-		);
+		return readdirSync(directory);
 	} catch {
 		return [];
 	}
-}
-
-/**
- * hdiutil intermittently wedges on the macOS Intel CI runners: bundle_dmg.sh
- * dies with no output of its own and the job ends with an orphaned
- * diskimages-help process. The compiled binary and the .app bundle are already
- * complete when that happens, so re-run only the DMG step rather than losing a
- * build that is otherwise green.
- *
- * Retries only when the .app exists and no .dmg was produced, so a genuine
- * build failure still surfaces with its original exit code.
- */
-async function retryMacosDmgBundling(failureCode) {
-	if (process.platform !== "darwin") return failureCode;
-	const name = productName();
-	const applicationBundle = join(
-		cargoTargetDirectory,
-		"release",
-		"bundle",
-		"macos",
-		`${name}.app`,
-	);
-	if (!name || !existsSync(applicationBundle)) return failureCode;
-	if (bundledFiles("dmg", ".dmg").length > 0) return failureCode;
-
-	// Drop any --bundles the caller passed so the retry targets the DMG alone.
-	// It takes a space or comma separated list, so skip every value after it.
-	const retryArguments = [];
-	let skippingBundleValues = false;
-	for (const argument of tauriArguments) {
-		if (argument === "--bundles" || argument === "-b") {
-			skippingBundleValues = true;
-			continue;
-		}
-		if (argument.startsWith("--bundles=")) continue;
-		if (skippingBundleValues) {
-			if (!argument.startsWith("-")) continue;
-			skippingBundleValues = false;
-		}
-		retryArguments.push(argument);
-	}
-	retryArguments.push("--bundles", "dmg");
-
-	for (let attempt = 2; attempt <= MACOS_DMG_ATTEMPTS; attempt += 1) {
-		console.warn(
-			`DMG bundling failed. Retrying the DMG step (attempt ${attempt} of ${MACOS_DMG_ATTEMPTS}).`,
-		);
-		detachStaleVolumes();
-		rmSync(join(cargoTargetDirectory, "release", "bundle", "dmg"), {
-			recursive: true,
-			force: true,
-		});
-		const retryCode = await runTauri(retryArguments);
-		if (retryCode === 0 && bundledFiles("dmg", ".dmg").length > 0) return 0;
-	}
-	return failureCode;
 }
 
 let code = await runTauri(tauriArguments);
@@ -376,7 +292,29 @@ const isInformationalCommand = tauriArguments.some((argument) =>
 	["-h", "--help", "-V", "--version"].includes(argument),
 );
 if (code !== 0 && command === "build" && !isInformationalCommand) {
-	code = await retryMacosDmgBundling(code);
+	code = await retryMacosDmgBundling({
+		failureCode: code,
+		platform: process.platform,
+		productName: productName(),
+		bundleDirectory: join(cargoTargetDirectory, "release", "bundle"),
+		tauriArguments,
+		runTauri,
+		exists: existsSync,
+		listDirectory,
+		removeDirectory: (directory) =>
+			rmSync(directory, { recursive: true, force: true }),
+		listVolumes: () => listDirectory("/Volumes"),
+		detachVolume: (volume) => {
+			try {
+				execFileSync("hdiutil", ["detach", volume, "-force"], {
+					stdio: "inherit",
+				});
+			} catch {
+				// Already gone, or owned by something else: the retry will tell us.
+			}
+		},
+		log: (message) => console.warn(message),
+	});
 }
 if (code === 0 && command === "build" && !isInformationalCommand) {
 	stageDesktopArtifacts();
