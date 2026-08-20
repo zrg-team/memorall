@@ -170,7 +170,10 @@ function ensureContentScriptAssets(distDir) {
 
 	const jsSanitization = sanitizeExtensionJs(distDir);
 	const requiredRuntimeAssets = [
+		'docs/images/extension_16.png',
+		'docs/images/extension_32.png',
 		'docs/images/extension_48.png',
+		'docs/images/extension_128.png',
 		'options/index.css',
 		'sandbox/pages/js/lottie-preview.js',
 		'vendors/artifacts/lottie_canvas.min.js',
