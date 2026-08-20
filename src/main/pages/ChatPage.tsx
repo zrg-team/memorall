@@ -36,6 +36,7 @@ import {
 } from "@/main/modules/chat/components";
 import type { MessageActionRequest } from "@/main/modules/chat/components/artifacts/ArtifactActionsMenu";
 import { MessageGroup } from "@/main/modules/chat/components/MessageGroup";
+import { translateCommonKey } from "@/main/modules/chat/utils/i18n-helpers";
 import {
 	ModelDownloadingScreen,
 	useDownloadProgress,
@@ -588,9 +589,9 @@ export const ChatPage: React.FC<ChatPageProps> = ({
 					if (!metadata) continue;
 					addFeature(
 						step.name,
-						metadata.nameKey
-							? t(metadata.nameKey)
-							: (metadata.displayName ?? step.name),
+						translateCommonKey(metadata.nameKey, t) ??
+							metadata.displayName ??
+							step.name,
 					);
 				}
 
