@@ -21,6 +21,11 @@ test("accepts creation of a conventional local branch", () => {
 	assert.equal(checkReferenceTransaction("prepared", input), 0);
 });
 
+test("accepts creation of a copilot branch with a conventional type", () => {
+	const input = `${ZERO_OBJECT_ID} ${NEW_OBJECT_ID} refs/heads/copilot/fix-desktop-native-smoke-job\n`;
+	assert.equal(checkReferenceTransaction("prepared", input), 0);
+});
+
 test("allows deletion of an old nonstandard branch", () => {
 	const input = `${OLD_OBJECT_ID} ${ZERO_OBJECT_ID} refs/heads/codex/legacy\n`;
 	assert.equal(checkReferenceTransaction("prepared", input), 0);
