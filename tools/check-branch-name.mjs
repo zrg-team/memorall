@@ -4,9 +4,11 @@ import { fileURLToPath } from "node:url";
 const PROTECTED_BRANCH_NAME = /^(?:main|master|develop)$/u;
 const CONVENTIONAL_BRANCH_NAME =
 	/^(?:feat|fix|chore|refactor|test|docs|style|perf|build|ci|revert|release|hotfix)\/[a-z0-9]+(?:-[a-z0-9]+)*$/u;
+const COPILOT_CONVENTIONAL_BRANCH_NAME =
+	/^copilot\/(?:feat|fix|chore|refactor|test|docs|style|perf|build|ci|revert|release|hotfix)-[a-z0-9]+(?:-[a-z0-9]+)*$/u;
 
 export const BRANCH_NAMING_STANDARD =
-	"Use main, master, or develop; otherwise use <type>/<lowercase-kebab-case-description>. Allowed types: feat, fix, chore, refactor, test, docs, style, perf, build, ci, revert, release, hotfix.";
+	"Use main, master, or develop; otherwise use <type>/<lowercase-kebab-case-description>. Allowed types: feat, fix, chore, refactor, test, docs, style, perf, build, ci, revert, release, hotfix. Copilot branches may use copilot/<type>-<lowercase-kebab-case-description>.";
 
 export function normalizeBranchName(branchName) {
 	return branchName
@@ -24,7 +26,8 @@ export function validateBranchName(branchName) {
 
 	if (
 		!PROTECTED_BRANCH_NAME.test(normalizedBranchName) &&
-		!CONVENTIONAL_BRANCH_NAME.test(normalizedBranchName)
+		!CONVENTIONAL_BRANCH_NAME.test(normalizedBranchName) &&
+		!COPILOT_CONVENTIONAL_BRANCH_NAME.test(normalizedBranchName)
 	) {
 		return {
 			ok: false,

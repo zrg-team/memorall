@@ -46,6 +46,10 @@ test("accepts every conventional branch type", () => {
 	}
 });
 
+test("accepts a copilot branch with a conventional type", () => {
+	assert.equal(validateBranchName("copilot/fix-desktop-native-smoke-job").ok, true);
+});
+
 test("rejects a nonstandard prefix", () => {
 	const result = validateBranchName("codex/dependency-upgrade");
 	assert.equal(result.ok, false);

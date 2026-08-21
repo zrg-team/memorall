@@ -62,9 +62,10 @@ const requirements = {
 	],
 	macos: [
 		[
-			"application bundle executable",
+			"native executable",
 			(path) =>
-				/bundle\/macos\/Memorall\.app\/Contents\/MacOS\/memorall-desktop$/.test(
+				portable(path) === "memorall-desktop" ||
+				/bundle\/macos\/Memorall\.app\/Contents\/MacOS\/Memorall$/.test(
 					portable(path),
 				),
 		],
