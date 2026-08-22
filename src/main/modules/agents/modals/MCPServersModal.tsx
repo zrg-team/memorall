@@ -21,6 +21,7 @@ import {
 } from "@/main/modules/connections";
 import { useAgentConfigStore } from "@/main/stores/agent-config";
 import { useConnectionsStore } from "@/main/stores/connections";
+import { ensureComposioHostAccess } from "@/services/composio";
 import {
 	isProviderSelected,
 	listProviderOptions,
@@ -151,6 +152,17 @@ export const MCPServersModal = NiceModal.create(() => {
 		// wondering later why the agent has no tools.
 		setChecking(true);
 		try {
+			// Minting needs the Composio host, which Chrome can be withholding.
+			// This click is the gesture that lets us ask for it; without asking,
+			// every session below fails as an unexplained "Failed to fetch".
+			const grantsComposio = draftConnections.some((selection) =>
+				connections.some(
+					(connection) =>
+						connection.id === selection.connectionId &&
+						connection.kind === "composio",
+				),
+			);
+			if (grantsComposio) await ensureComposioHostAccess();
 			const found = await prepareConnectionScopes(draftConnections);
 			setProblems(found);
 			// Only hold the modal open the first time, so a warning explains the

@@ -389,6 +389,13 @@ export function describeComposioError(error: unknown): string {
 	if (error instanceof ComposioError && error.status === 401) {
 		return "Composio rejected this API key. Check it in the Composio dashboard.";
 	}
+	// Nothing came back at all. In the extension this is almost always the
+	// browser refusing the request before it left: Composio sends no
+	// `Access-Control-Allow-Origin` for extension origins, so a withheld host
+	// permission turns every call into this one opaque TypeError.
+	if (error instanceof TypeError && /fetch/i.test(detail)) {
+		return "The browser blocked the request to Composio. Allow Memorall to access backend.composio.dev — reopen this step and accept the permission prompt, or turn site access back on from the extension's menu.";
+	}
 	return detail;
 }
 
