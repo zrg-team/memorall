@@ -106,6 +106,8 @@
 		"save": "Lưu và kết nối",
 		"keyVerified": "Khóa hợp lệ",
 		"keyInvalid": "Composio từ chối khóa này. Hãy kiểm tra bạn đã sao chép đủ khóa dự án.",
+		"hostAccessDenied": "Memorall cần quyền truy cập backend.composio.dev. Chrome đã hỏi nhưng yêu cầu bị từ chối — bấm Lưu và kết nối lần nữa để chấp nhận, hoặc bật lại quyền truy cập trang trong trình đơn của tiện ích.",
+		"hostAccessBlocked": "Memorall chưa gọi được backend.composio.dev: Chrome đang giữ lại quyền đó. Bấm Lưu và kết nối để cấp quyền — khóa đã lưu vẫn được giữ nguyên.",
 		"searchApps": "Tìm trong hơn 250 ứng dụng…",
 		"connect": "Kết nối",
 		"connected": "Đã kết nối",

@@ -140,6 +140,25 @@ export interface BrowserAutomationControl {
 	subscribe(listener: () => void): () => void;
 }
 
+/**
+ * Permission to reach a third-party host without the browser's CORS rules.
+ *
+ * Only the extension has one: a browser extension page is a normal web origin
+ * until Chrome grants it the host, and a host declared in the manifest can
+ * still be withheld — Chrome withholds host permissions added by an update
+ * until the user accepts them, and the site-access menu can take them back at
+ * any time. Web and desktop builds leave this undefined; nothing gates them.
+ */
+export interface HostAccessPort {
+	/** Whether requests to `origins` currently bypass CORS. */
+	has(origins: string[]): Promise<boolean>;
+	/**
+	 * Ask the user for `origins`. Chrome only shows the prompt from inside a
+	 * user gesture, so call this from a click handler, never on mount.
+	 */
+	request(origins: string[]): Promise<boolean>;
+}
+
 export type AppSurface = "popup" | "standalone" | "web" | "desktop";
 
 export interface AppLifecyclePort {
@@ -160,5 +179,7 @@ export interface PlatformComposition {
 	runtimeDiagnostics: RuntimeDiagnosticsPort;
 	browserCommands: BrowserCommandPort;
 	browserAutomation?: BrowserAutomationControl;
+	/** Undefined where the platform needs no permission to call out. */
+	hostAccess?: HostAccessPort;
 	lifecycle: AppLifecyclePort;
 }

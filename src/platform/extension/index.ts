@@ -10,6 +10,7 @@ import { ExtensionNavigationPort } from "./extension-navigation-port";
 import { ExtensionExternalLinkPort } from "./extension-external-link-port";
 import { ExtensionRuntimeDiagnostics } from "./extension-runtime-diagnostics";
 import { ExtensionBrowserCommandPort } from "./extension-browser-command-port";
+import { ExtensionHostAccessPort } from "./extension-host-access";
 
 export const platform: PlatformComposition = {
 	environment: "extension",
@@ -52,6 +53,7 @@ export const platform: PlatformComposition = {
 	externalLinks: new ExtensionExternalLinkPort(),
 	runtimeDiagnostics: new ExtensionRuntimeDiagnostics(),
 	browserCommands: new ExtensionBrowserCommandPort(),
+	hostAccess: new ExtensionHostAccessPort(),
 	lifecycle: {
 		onSurfaceOpened: () => {
 			void chrome.runtime.sendMessage({ type: BACKGROUND_EVENTS.POPUP_OPENED });

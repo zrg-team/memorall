@@ -7,7 +7,12 @@ vi.mock("@/utils/logger", () => ({
 	logDebug: vi.fn(),
 }));
 
-import { ComposioClient, ComposioError, waitForConnection } from "../client";
+import {
+	ComposioClient,
+	ComposioError,
+	describeComposioError,
+	waitForConnection,
+} from "../client";
 
 /**
  * These pin the request shapes to what the live API actually accepts. Every one
@@ -303,5 +308,24 @@ describe("waitForConnection", () => {
 		await expect(
 			waitForConnection(new ComposioClient("k"), "ca_1", { intervalMs: 1 }),
 		).rejects.toBeInstanceOf(ComposioError);
+	});
+});
+
+describe("describeComposioError", () => {
+	// A blocked preflight is all the browser gives us: no status, no body. Left
+	// raw it reads as "TypeError: Failed to fetch", which sends people hunting
+	// for a bad API key instead of a withheld host permission.
+	it("names the browser as the blocker on a failed fetch", () => {
+		const message = describeComposioError(
+			new TypeError("Failed to fetch"),
+		).toLowerCase();
+		expect(message).toContain("blocked");
+		expect(message).toContain("backend.composio.dev");
+	});
+
+	it("still calls out an under-permissioned key on a 403", () => {
+		expect(
+			describeComposioError(new ComposioError(403, "forbidden")),
+		).toContain("sessions");
 	});
 });

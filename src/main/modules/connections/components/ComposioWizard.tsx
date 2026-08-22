@@ -22,6 +22,8 @@ import { logError, logInfo } from "@/utils/logger";
 import {
 	ComposioClient,
 	describeComposioError,
+	ensureComposioHostAccess,
+	hasComposioHostAccess,
 	waitForConnection,
 	type ComposioToolkit,
 } from "@/services/composio";
@@ -121,13 +123,20 @@ export const ComposioWizard: React.FC<ComposioWizardProps> = ({
 				if (!parsed.apiKey) return;
 
 				setApiKey(parsed.apiKey);
+				// Resuming is not a user gesture, so the permission cannot be asked
+				// for here. Leave the key in the field, say what is wrong, and let
+				// "Save and connect" — a real click — do the asking.
+				if (!(await hasComposioHostAccess())) {
+					setError(t("composio.hostAccessBlocked"));
+					return;
+				}
 				setIsBusy(true);
 				try {
 					await ensureConnectionRecord();
 					await enterAppsStep(parsed.apiKey);
 				} catch (caught) {
 					// A stored key that no longer works drops back to step 1 with a reason.
-					setError(caught instanceof Error ? caught.message : String(caught));
+					setError(describeComposioError(caught));
 				} finally {
 					setIsBusy(false);
 				}
@@ -241,6 +250,13 @@ export const ComposioWizard: React.FC<ComposioWizardProps> = ({
 		setIsBusy(true);
 		setError(null);
 		try {
+			// Inside the click, where Chrome will still open the prompt. Without
+			// the host, every call below dies in preflight as "Failed to fetch".
+			if (!(await ensureComposioHostAccess())) {
+				setError(t("composio.hostAccessDenied"));
+				return;
+			}
+
 			const client = new ComposioClient(apiKey.trim());
 			if (!(await client.verifyKey())) {
 				setError(t("composio.keyInvalid"));
@@ -258,7 +274,7 @@ export const ComposioWizard: React.FC<ComposioWizardProps> = ({
 			await persistKeyAndContinue();
 		} catch (caught) {
 			logError("[Composio] Key verification failed:", caught);
-			setError(caught instanceof Error ? caught.message : String(caught));
+			setError(describeComposioError(caught));
 		} finally {
 			setIsBusy(false);
 		}
@@ -313,7 +329,7 @@ export const ComposioWizard: React.FC<ComposioWizardProps> = ({
 		} catch (caught) {
 			if ((caught as Error)?.name !== "AbortError") {
 				logError("[Composio] Connect failed:", caught);
-				setError(caught instanceof Error ? caught.message : String(caught));
+				setError(describeComposioError(caught));
 			}
 		} finally {
 			setPending(null);

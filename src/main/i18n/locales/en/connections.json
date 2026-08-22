@@ -109,6 +109,8 @@
 		"save": "Save and connect",
 		"keyVerified": "Key verified",
 		"keyInvalid": "That key was rejected by Composio. Check you copied the whole project key.",
+		"hostAccessDenied": "Memorall needs permission to reach backend.composio.dev. Chrome asked and the request was declined — click Save and connect again to accept, or turn site access back on from the extension's menu.",
+		"hostAccessBlocked": "Memorall cannot reach backend.composio.dev yet: Chrome is withholding that permission. Click Save and connect to grant it — your saved key stays as it is.",
 		"searchApps": "Search 250+ apps…",
 		"connect": "Connect",
 		"connected": "Connected",
