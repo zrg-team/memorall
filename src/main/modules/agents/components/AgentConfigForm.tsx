@@ -5,8 +5,15 @@ import {
 	useAgentConfigStore,
 } from "@/main/stores/agent-config";
 import { Separator } from "@/main/components/ui/separator";
+import { Input } from "@/main/components/ui/input";
+import { Label } from "@/main/components/ui/label";
 import { cn } from "@/lib/utils";
 import { CursorPoint, hideAgentCursor } from "@/components/AgentCursor";
+import {
+	MAX_AGENT_MAX_ITERATIONS,
+	MIN_AGENT_MAX_ITERATIONS,
+	normalizeAgentMaxIterations,
+} from "@memorall/agent-harness-flows/limits";
 import {
 	AGENT_WIZARD_CURSOR_KEYS,
 	clearQueuedAgentWizardCursorMoves,
@@ -82,6 +89,35 @@ export const AgentConfigForm: React.FC<AgentConfigFormProps> = ({
 				/>
 			) : null}
 
+			<div className="flex flex-col gap-3 rounded-2xl border border-border/60 bg-muted/20 p-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
+				<div className="min-w-0 space-y-1">
+					<Label
+						htmlFor="agent-max-iterations"
+						className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground"
+					>
+						{t("maxIterations.label", { ns: "agents" })}
+					</Label>
+					<p className="text-[11px] leading-relaxed text-muted-foreground">
+						{t("maxIterations.description", { ns: "agents" })}
+					</p>
+				</div>
+				<Input
+					id="agent-max-iterations"
+					type="number"
+					min={MIN_AGENT_MAX_ITERATIONS}
+					max={MAX_AGENT_MAX_ITERATIONS}
+					step={1}
+					value={draftConfig.maxIterations}
+					onChange={(event) => {
+						const value = event.currentTarget.valueAsNumber;
+						if (Number.isFinite(value)) {
+							updateField("maxIterations", normalizeAgentMaxIterations(value));
+						}
+					}}
+					className="h-10 w-full shrink-0 rounded-xl border-border/70 bg-background/80 sm:w-32"
+				/>
+			</div>
+
 			{isLegacyConfig ? (
 				<LegacyConfigWarning
 					isSaving={isSaving}
@@ -117,11 +153,9 @@ export const AgentConfigForm: React.FC<AgentConfigFormProps> = ({
 			<AdvancedGraphSection
 				currentGraphType={currentGraphType}
 				currentGraphMeta={currentGraphMeta}
-				maxIterations={draftConfig.maxIterations}
 				showBaseGraph={showBaseGraph}
 				setShowBaseGraph={setShowBaseGraph}
 				setGraphType={setGraphType}
-				setMaxIterations={(value) => updateField("maxIterations", value)}
 			/>
 		</div>
 	);
