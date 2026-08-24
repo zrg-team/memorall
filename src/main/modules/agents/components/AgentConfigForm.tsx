@@ -153,11 +153,9 @@ export const AgentConfigForm: React.FC<AgentConfigFormProps> = ({
 			<AdvancedGraphSection
 				currentGraphType={currentGraphType}
 				currentGraphMeta={currentGraphMeta}
-				maxIterations={draftConfig.maxIterations}
 				showBaseGraph={showBaseGraph}
 				setShowBaseGraph={setShowBaseGraph}
 				setGraphType={setGraphType}
-				setMaxIterations={(value) => updateField("maxIterations", value)}
 			/>
 		</div>
 	);
