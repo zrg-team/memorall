@@ -458,7 +458,11 @@
 		"description": "Số bước mô hình và công cụ tối đa cho mỗi lượt chạy. Giá trị cao hơn hỗ trợ tác vụ dài hơn nhưng có thể dùng nhiều token hơn. Mặc định: 50."
 	},
 	"advanced": {
-		"label": "Cài đặt nâng cao"
+		"label": "Cài đặt nâng cao",
+		"maxIterations": {
+			"label": "Số vòng lặp tối đa",
+			"description": "Số bước mô hình và công cụ tối đa cho mỗi lượt chạy. Giá trị cao hơn hỗ trợ tác vụ dài hơn nhưng có thể dùng nhiều token hơn. Mặc định: 50."
+		}
 	},
 	"wizard": {
 		"templatePanel": {
