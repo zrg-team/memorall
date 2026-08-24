@@ -460,7 +460,11 @@
 		"placeholder": "Describe your agent's role and behavior…"
 	},
 	"advanced": {
-		"label": "Advanced settings"
+		"label": "Advanced settings",
+		"maxIterations": {
+			"label": "Maximum loop iterations",
+			"description": "Maximum model and tool steps per run. Higher values support longer tasks but may use more tokens. Default: 50."
+		}
 	},
 	"wizard": {
 		"templatePanel": {

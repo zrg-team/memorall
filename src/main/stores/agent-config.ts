@@ -11,6 +11,7 @@ import { DEFAULT_AGENT_SYSTEM_PROMPT } from "@memorall/agent-harness-flows/graph
 import { DEFAULT_FOUNDATION_SYSTEM_PROMPT } from "@memorall/agent-harness-flows/graph/foundation/state";
 import type { UnifiedFlowConfig } from "@memorall/agent-harness-flows/interfaces/config/flow-config";
 import { DEFAULT_CONTEXT_SYSTEM_PROMPT } from "@memorall/agent-harness-flows/steps/common/context-to-system";
+import { normalizeAgentMaxIterations } from "@memorall/agent-harness-flows/limits";
 import { MULTI_AGENT_FEATURE_NAME } from "@memorall/agent-harness-flows/steps/features/multi-agent-feature/index";
 import {
 	MCP_FEATURE_NAME,
@@ -290,6 +291,9 @@ const deriveLegacyStateFromUnified = (unifiedConfig: UnifiedFlowConfig) => {
 			tools: Array.isArray(agentCompletionStep?.config?.tools)
 				? agentCompletionStep.config.tools.map(String)
 				: [],
+			maxIterations: normalizeAgentMaxIterations(
+				agentCompletionStep?.config?.maxIterations,
+			),
 			enableContextRetrieval: retrievalSteps.some((step) => step.enabled),
 			retrievalMode: getRetrievalModeFromSteps(unifiedConfig.steps),
 			enableCitations:
@@ -366,6 +370,7 @@ const applyLegacyDraftToUnified = (
 				nextStep.config = {
 					...(nextStep.config ?? {}),
 					tools: [...draftConfig.tools],
+					maxIterations: normalizeAgentMaxIterations(draftConfig.maxIterations),
 				};
 			}
 
@@ -623,8 +628,13 @@ export const useAgentConfigStore = create<AgentConfigState>((set, get) => {
 						: await serviceManager.flowBuilderService.getFlowConfig({
 								predefinedFlow: "foundation",
 							});
+					const normalizedConfig: FoundationPredefinedConfig = {
+						...DEFAULT_FOUNDATION_PREDEFINED_CONFIG,
+						...config,
+						maxIterations: normalizeAgentMaxIterations(config.maxIterations),
+					};
 					const graphType: GraphType =
-						config.graphType === "agent" ? "agent" : "foundation";
+						normalizedConfig.graphType === "agent" ? "agent" : "foundation";
 					const featureDefinitions = buildFeatureDefinitions(graphType);
 					const defaultFeatures = createDefaultFeatureFlags(
 						getCatalogFeatureNames(featureDefinitions),
@@ -635,8 +645,8 @@ export const useAgentConfigStore = create<AgentConfigState>((set, get) => {
 						);
 
 					set({
-						savedConfig: config,
-						draftConfig: { ...config },
+						savedConfig: normalizedConfig,
+						draftConfig: { ...normalizedConfig },
 						savedUnifiedConfig: null,
 						savedFeatures: { ...defaultFeatures, ...featureFlags },
 						draftFeatures: { ...defaultFeatures, ...featureFlags },

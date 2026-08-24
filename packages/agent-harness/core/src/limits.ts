@@ -7,7 +7,7 @@ export interface HarnessLimits {
 }
 
 export const DEFAULT_HARNESS_LIMITS: HarnessLimits = Object.freeze({
-  maxIterations: 10,
+  maxIterations: 50,
   maxConcurrentTools: 1,
   maxBufferedEvents: 256,
   maxToolOutputBytes: 64 * 1024,

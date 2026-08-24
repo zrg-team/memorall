@@ -1,8 +1,6 @@
 import { Annotation } from "@langchain/langgraph";
-import {
-	type BaseStateBase,
-	BaseAnnotation,
-} from "../graph.base.js";
+import { type BaseStateBase, BaseAnnotation } from "../graph.base.js";
+import { DEFAULT_AGENT_MAX_ITERATIONS } from "../../limits.js";
 
 export const DEFAULT_FOUNDATION_SYSTEM_PROMPT = `
 # Role
@@ -25,6 +23,7 @@ export const DEFAULT_FOUNDATION_PREDEFINED_CONFIG = {
 	systemPrompt: "",
 	contextPrompt: "",
 	tools: ["current_time"] as string[],
+	maxIterations: DEFAULT_AGENT_MAX_ITERATIONS,
 	enableContextRetrieval: true,
 	enableCitations: true,
 	retrievalMode: "smart" as "smart" | "quick" | "llm" | "structmem",
@@ -40,6 +39,7 @@ export const FOUNDATION_CONFIG_KEYS = [
 	{ name: "systemPrompt", type: "string" },
 	{ name: "contextPrompt", type: "string" },
 	{ name: "tools", type: "array" },
+	{ name: "maxIterations", type: "number" },
 	{ name: "enableContextRetrieval", type: "boolean" },
 	{ name: "enableCitations", type: "boolean" },
 	{ name: "retrievalMode", type: "string" },
@@ -69,6 +69,6 @@ export const FoundationAnnotation = {
 	}),
 	maxIterations: Annotation<number>({
 		value: (x, y) => y ?? x,
-		default: () => 10,
+		default: () => DEFAULT_AGENT_MAX_ITERATIONS,
 	}),
 };

@@ -26,6 +26,24 @@ export const isAssistantContentPart = (
 	"type" in part &&
 	(part.type === "text" || part.type === "tool" || part.type === "execution");
 
+export const mergeAdjacentAssistantTextParts = (
+	parts: AssistantContentPart[],
+): AssistantContentPart[] => {
+	const merged: AssistantContentPart[] = [];
+
+	for (const part of parts) {
+		const previous = merged[merged.length - 1];
+		if (part.type === "text" && previous?.type === "text") {
+			previous.text = `${previous.text}\n\n${part.text}`;
+			continue;
+		}
+
+		merged.push(part.type === "text" ? { ...part } : part);
+	}
+
+	return merged;
+};
+
 interface AssistantContentFlowProps {
 	parts: AssistantContentPart[];
 	isStreaming: boolean;
@@ -48,19 +66,23 @@ export const AssistantContentFlow: React.FC<AssistantContentFlowProps> =
 			// multiple content parts (e.g. one per agent iteration). Share a dedupe set
 			// across all text parts so a single artifact only renders once.
 			const seenArtifactKeys = useMemo(() => new Set<string>(), [parts]);
+			const mergedParts = useMemo(
+				() => mergeAdjacentAssistantTextParts(parts),
+				[parts],
+			);
 
-			const latestWorkflowIndex = parts.findLastIndex(
+			const latestWorkflowIndex = mergedParts.findLastIndex(
 				(part) => part.type === "execution",
 			);
-			const completedWorkflowParts = parts.filter(
+			const completedWorkflowParts = mergedParts.filter(
 				(part): part is ComplexContentPartExecution =>
 					part.type === "execution" && part.state === "complete",
 			);
-			const workflowEvidenceParts = parts.filter(
+			const workflowEvidenceParts = mergedParts.filter(
 				(part): part is ComplexContentPartTool =>
 					part.type === "tool" && isWorkflowEvidencePart(part),
 			);
-			const toolTimelineParts = parts.filter(
+			const toolTimelineParts = mergedParts.filter(
 				(part): part is ComplexContentPartTool =>
 					part.type === "tool" && !isWorkflowEvidencePart(part),
 			);
@@ -76,7 +98,7 @@ export const AssistantContentFlow: React.FC<AssistantContentFlowProps> =
 						parts={toolTimelineParts}
 						isStreaming={isStreaming}
 					/>
-					{assignAssistantPartKeys(parts).map(({ part, index, key }) => {
+					{assignAssistantPartKeys(mergedParts).map(({ part, index, key }) => {
 						if (part.type === "text") {
 							if (!part.text.trim()) return null;
 							return (
