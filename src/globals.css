@@ -262,6 +262,9 @@
 }
 
 .markdown-body {
+	--markdown-block-gap: 0.75rem;
+	--markdown-heading-gap: 1.25rem;
+	--markdown-inline-gap: 0.375rem;
 	box-sizing: border-box;
 	background-color: transparent !important;
 	color: #24292f !important;
@@ -273,10 +276,29 @@
 	word-wrap: break-word;
 }
 
-/* Paragraph spacing */
+/*
+ * Own the vertical rhythm at the Markdown root. Browser margins and margins
+ * from custom renderers otherwise stack, which makes headings, quotes, and
+ * lists look as though every blank Markdown line created another paragraph.
+ */
+.markdown-body > * {
+	margin-block: 0 !important;
+}
+
+.markdown-body > * + * {
+	margin-block-start: var(--markdown-block-gap) !important;
+}
+
+.markdown-body > :is(h1, h2, h3, h4, h5, h6):not(:first-child) {
+	margin-block-start: var(--markdown-heading-gap) !important;
+}
+
+.markdown-body > :is(h1, h2, h3, h4, h5, h6) + * {
+	margin-block-start: var(--markdown-inline-gap) !important;
+}
+
 .markdown-body p {
-	margin: 0;
-	margin-bottom: 0px !important;
+	margin-block: 0;
 }
 
 /* Headings */
@@ -286,7 +308,7 @@
 .markdown-body h4,
 .markdown-body h5,
 .markdown-body h6 {
-	margin: 0;
+	margin-block: 0;
 	font-weight: 600;
 	line-height: 1.25;
 }
@@ -313,7 +335,7 @@
 /* Lists */
 .markdown-body ul,
 .markdown-body ol {
-	margin: 0 !important;
+	margin-block: 0;
 	padding-left: 1.5em;
 }
 
@@ -328,25 +350,25 @@
 .markdown-body ol > li,
 .markdown-body ul > li {
 	list-style: inherit;
-	margin: 0 !important;
+	margin-block: 0;
 	list-style-position: outside;
 	padding-left: 0.375em;
 	white-space: normal;
 }
 
 .markdown-body li > p {
-	margin: 0 !important;
+	margin-block: 0;
 	padding: 0 !important;
 	display: inline;
 }
 
 .markdown-body li > p + p {
 	display: block;
-	margin-top: 0;
+	margin-block-start: var(--markdown-inline-gap);
 }
 
 .markdown-body li + li {
-	margin-top: 0;
+	margin-block-start: var(--markdown-inline-gap);
 }
 
 /* Nested lists */
@@ -354,7 +376,7 @@
 .markdown-body ul ol,
 .markdown-body ol ol,
 .markdown-body ol ul {
-	margin: 0;
+	margin-block: var(--markdown-inline-gap) 0;
 }
 
 /* Code */
@@ -393,9 +415,21 @@
 
 /* Blockquotes */
 .markdown-body blockquote {
-	margin: 0;
+	margin-block: 0;
 	padding: 0 1em;
 	border-left: 0.25em solid;
+}
+
+.markdown-body :is(blockquote, li) > *:first-child {
+	margin-block-start: 0 !important;
+}
+
+.markdown-body :is(blockquote, li) > *:last-child {
+	margin-block-end: 0 !important;
+}
+
+.markdown-body blockquote > * + * {
+	margin-block-start: var(--markdown-inline-gap) !important;
 }
 
 /* Light theme support */
@@ -460,7 +494,7 @@
 .markdown-body hr {
 	height: 0.1em !important;
 	padding: 0;
-	margin: 0 0 !important;
+	margin-block: 0 !important;
 	background-color: #d0d7de;
 	border: 0;
 }
@@ -518,7 +552,7 @@
 .dark .markdown-body hr {
 	height: 0.1em !important;
 	padding: 0;
-	margin: 1.5em 0;
+	margin-block: 0 !important;
 	background-color: #3e4550;
 	border: 0;
 }

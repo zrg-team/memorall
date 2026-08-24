@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { ChevronDown } from "lucide-react";
 import { GRAPH_REGISTRY, type GraphType } from "@/main/stores/agent-config";
 import { Label } from "@/main/components/ui/label";
+import { Input } from "@/main/components/ui/input";
 import {
 	Select,
 	SelectContent,
@@ -12,19 +13,28 @@ import {
 } from "@/main/components/ui/select";
 import { cn } from "@/lib/utils";
 import type { GraphMeta } from "./types";
+import {
+	MAX_AGENT_MAX_ITERATIONS,
+	MIN_AGENT_MAX_ITERATIONS,
+	normalizeAgentMaxIterations,
+} from "@memorall/agent-harness-flows/limits";
 
 export const AdvancedGraphSection: React.FC<{
 	currentGraphType: GraphType;
 	currentGraphMeta: GraphMeta;
+	maxIterations: number;
 	showBaseGraph: boolean;
 	setShowBaseGraph: React.Dispatch<React.SetStateAction<boolean>>;
 	setGraphType: (graphType: GraphType) => void;
+	setMaxIterations: (maxIterations: number) => void;
 }> = ({
 	currentGraphType,
 	currentGraphMeta,
+	maxIterations,
 	showBaseGraph,
 	setShowBaseGraph,
 	setGraphType,
+	setMaxIterations,
 }) => {
 	const { t } = useTranslation(["chat", "agents", "common"]);
 
@@ -77,6 +87,32 @@ export const AdvancedGraphSection: React.FC<{
 							{t(currentGraphMeta.descKey)}
 						</p>
 					) : null}
+					<div className="space-y-2 border-t border-border/60 pt-3">
+						<Label
+							htmlFor="agent-max-iterations"
+							className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground"
+						>
+							{t("advanced.maxIterations.label", { ns: "agents" })}
+						</Label>
+						<Input
+							id="agent-max-iterations"
+							type="number"
+							min={MIN_AGENT_MAX_ITERATIONS}
+							max={MAX_AGENT_MAX_ITERATIONS}
+							step={1}
+							value={maxIterations}
+							onChange={(event) => {
+								const value = event.currentTarget.valueAsNumber;
+								if (Number.isFinite(value)) {
+									setMaxIterations(normalizeAgentMaxIterations(value));
+								}
+							}}
+							className="h-10 rounded-xl border-border/70 bg-background/80"
+						/>
+						<p className="text-[11px] leading-relaxed text-muted-foreground">
+							{t("advanced.maxIterations.description", { ns: "agents" })}
+						</p>
+					</div>
 				</div>
 			)}
 		</div>

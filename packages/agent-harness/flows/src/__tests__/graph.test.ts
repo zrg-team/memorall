@@ -4,6 +4,7 @@ import type { BaseTool } from "../interfaces/engine/tool.js";
 import type { AgentState } from "../graph/agent/state.js";
 import {
 	AgentGraph,
+	MAX_CONSECUTIVE_TOOL_FAILURES,
 	mergeStreamedToolCall,
 } from "../graph/agent/graph.js";
 import {
@@ -239,5 +240,51 @@ describe("AgentGraph toolsNode", () => {
 			content: "Error: boom",
 			tool_call_id: "call_fail",
 		});
+	});
+
+	it("stops after repeated failures from the same tool", async () => {
+		const failingTool: BaseTool = {
+			name: "failing_tool",
+			description: "Fails on purpose",
+			schema: z.object({}),
+			execute: async () => {
+				throw new Error("missing owner and repo");
+			},
+		};
+		const graph = createGraph([failingTool]);
+		let state = baseState([]);
+
+		for (let attempt = 1; attempt <= MAX_CONSECUTIVE_TOOL_FAILURES; attempt++) {
+			state = {
+				...state,
+				outputMessages: [
+					...state.outputMessages,
+					{
+						role: "assistant",
+						content: null,
+						tool_calls: [
+							{
+								id: `call_fail_${attempt}`,
+								type: "function",
+								function: { name: "failing_tool", arguments: "{}" },
+							},
+						],
+					},
+				],
+			};
+			const result = await graph.toolsNode(state);
+			state = { ...state, ...result } as AgentState;
+		}
+
+		expect(state.toolFailureStreak).toMatchObject({
+			toolName: "failing_tool",
+			count: MAX_CONSECUTIVE_TOOL_FAILURES,
+		});
+
+		const result = await graph.agentNode(state);
+		expect(result.response).toContain(
+			`stopped retrying failing_tool after ${MAX_CONSECUTIVE_TOOL_FAILURES} consecutive errors`,
+		);
+		expect(result.toolFailureStreak).toBeNull();
 	});
 });

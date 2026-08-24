@@ -1,7 +1,4 @@
-import {
-	defineStep,
-	bindStep,
-} from "../../interfaces/engine/step.js";
+import { defineStep, bindStep } from "../../interfaces/engine/step.js";
 import type {
 	StepFactoryFromSpec,
 	StepSpecFromDefinition,
@@ -16,11 +13,12 @@ import {
 	isCustomChunkPayload,
 	normalizeLangGraphStreamChunk,
 } from "../../utils/langgraph-stream.js";
-import {
-	GraphBase,
-	type GraphTool,
-} from "../../graph/graph.base.js";
+import { GraphBase, type GraphTool } from "../../graph/graph.base.js";
 import type { StepFactoryContext } from "../../interfaces/engine/step.js";
+import {
+	DEFAULT_AGENT_MAX_ITERATIONS,
+	normalizeAgentMaxIterations,
+} from "../../limits.js";
 
 export const AGENT_COMPLETION_STEP_NAME = "agent-completion" as const;
 
@@ -50,6 +48,8 @@ export interface AgentCompletionStepConfig {
 	 * Merged (union) with input.tools at runtime.
 	 */
 	tools?: GraphTool[];
+	/** Maximum number of model/tool loop iterations for one run. */
+	maxIterations?: number;
 }
 
 // ============================================================================
@@ -74,10 +74,14 @@ const definition = defineStep<
 			...(input.tools ?? []),
 		);
 
+		const maxIterations = normalizeAgentMaxIterations(
+			config?.maxIterations ?? input.maxIterations,
+		);
 		const agentGraph = new AgentGraph(
 			services,
 			{
 				tools: allTools.length > 0 ? allTools : undefined,
+				maxIterations,
 			},
 			registries,
 		);
@@ -85,7 +89,7 @@ const definition = defineStep<
 		const stream = await agentGraph.stream(
 			{
 				messages: input.messages,
-				maxIterations: input.maxIterations,
+				maxIterations,
 			},
 			{
 				configurable: runConfig?.configurable,
@@ -133,6 +137,12 @@ stepRegistry.register(AGENT_COMPLETION_STEP_NAME, createAgentCompletionStep, {
 			type: "array",
 			default: [],
 			description: "Base tool names always available to the agent",
+		},
+		{
+			key: "maxIterations",
+			type: "number",
+			default: DEFAULT_AGENT_MAX_ITERATIONS,
+			description: "Maximum model/tool loop iterations for one run",
 		},
 	],
 	defaultStateMapping: {

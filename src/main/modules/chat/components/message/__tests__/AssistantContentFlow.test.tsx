@@ -39,6 +39,23 @@ describe("AssistantContentFlow", () => {
 		textMounts.count = 0;
 	});
 
+	it("renders adjacent assistant text parts as one Markdown block", () => {
+		render(
+			<AssistantContentFlow
+				parts={[
+					{ type: "text", text: "## Recommendation" },
+					{ type: "text", text: "First paragraph." },
+				]}
+				isStreaming={false}
+			/>,
+		);
+
+		expect(screen.getAllByTestId("assistant-text")).toHaveLength(1);
+		expect(screen.getByTestId("assistant-text")).toHaveTextContent(
+			"## Recommendation First paragraph.",
+		);
+	});
+
 	it("does not remount existing text content when execution/tool parts are appended", () => {
 		const { rerender } = render(
 			<AssistantContentFlow

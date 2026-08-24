@@ -74,6 +74,12 @@ exports[`Memorall flow registered contracts > registers every core step contract
           "key": "tools",
           "type": "array",
         },
+        {
+          "default": 50,
+          "description": "Maximum model/tool loop iterations for one run",
+          "key": "maxIterations",
+          "type": "number",
+        },
       ],
       "defaultStateMapping": {
         "maxIterations": "maxIterations",

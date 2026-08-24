@@ -38,10 +38,12 @@ export const AgentConfigForm: React.FC<AgentConfigFormProps> = ({
 	const { t } = useTranslation(["chat", "agents", "common"]);
 	const {
 		currentGraphType,
+		draftConfig,
 		isLegacyConfig,
 		isLoading,
 		isSaving,
 		setGraphType,
+		updateField,
 		convertToUnified,
 	} = useAgentConfigStore();
 
@@ -115,9 +117,11 @@ export const AgentConfigForm: React.FC<AgentConfigFormProps> = ({
 			<AdvancedGraphSection
 				currentGraphType={currentGraphType}
 				currentGraphMeta={currentGraphMeta}
+				maxIterations={draftConfig.maxIterations}
 				showBaseGraph={showBaseGraph}
 				setShowBaseGraph={setShowBaseGraph}
 				setGraphType={setGraphType}
+				setMaxIterations={(value) => updateField("maxIterations", value)}
 			/>
 		</div>
 	);

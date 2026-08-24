@@ -54,7 +54,7 @@ vi.mock("@memorall/agent-harness-flows/utils/flow-config", () => {
 				id: "completion",
 				name: "agent-completion",
 				enabled: true,
-				config: { tools: ["current_time"] },
+				config: { tools: ["current_time"], maxIterations: 50 },
 			},
 			{
 				id: "smart",
@@ -233,7 +233,7 @@ const unifiedConfig = (): UnifiedFlowConfig => ({
 			id: "completion",
 			name: "agent-completion",
 			enabled: true,
-			config: { tools: ["current_time", "search"] },
+			config: { tools: ["current_time", "search"], maxIterations: 75 },
 		},
 		{
 			id: "smart",
@@ -326,6 +326,7 @@ describe("useAgentConfigStore", () => {
 			enableContextRetrieval: true,
 			enableCitations: false,
 			tools: ["current_time", "search"],
+			maxIterations: 75,
 		});
 		expect(state.draftFeatures).toMatchObject({
 			"knowledge-retrieval": true,
@@ -421,6 +422,7 @@ describe("useAgentConfigStore", () => {
 		const store = useAgentConfigStore.getState();
 		store.updateField("systemPrompt", "Saved prompt");
 		store.updateField("contextPrompt", "Saved context");
+		store.updateField("maxIterations", 80);
 		store.setKnowledgeRetrievalMode("llm");
 		store.setAccessibleAgents(["agent-2"]);
 		store.setAgentConnections([{ connectionId: "conn-remote" }]);
@@ -439,6 +441,14 @@ describe("useAgentConfigStore", () => {
 			savedConfig.steps.find((step) => step.name === "add-system"),
 		).toMatchObject({
 			config: { content: "Saved prompt" },
+		});
+		expect(
+			savedConfig.steps.find((step) => step.name === "agent-completion"),
+		).toMatchObject({
+			config: {
+				tools: ["current_time", "search"],
+				maxIterations: 80,
+			},
 		});
 		expect(
 			savedConfig.steps.find((step) => step.name === "context-llm-retrieve"),
