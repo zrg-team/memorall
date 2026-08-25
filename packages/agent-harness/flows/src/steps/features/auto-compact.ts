@@ -894,6 +894,61 @@ export function applyAutoCompactPolicy(
 	return compactedState;
 }
 
+/**
+ * Trim `state` until it fits `budgetTokens`, whatever it currently estimates at.
+ *
+ * {@link applyAutoCompactPolicy} is preventive: it weighs an estimate against a
+ * threshold and deliberately does nothing below it. This is the reactive case —
+ * the provider has already refused and named the budget the next attempt has to
+ * fit into, so there is no threshold left to weigh. Either the prompt gets under
+ * that number or the retry fails identically.
+ *
+ * Returns undefined when nothing changed, so a caller can tell a compaction that
+ * bought room from one that has nothing left to give and should stop retrying.
+ */
+export function compactToBudget(
+	state: AutoCompactState,
+	config: AutoCompactConfig | undefined,
+	budgetTokens: number,
+): AutoCompactState | undefined {
+	if (!Number.isFinite(budgetTokens) || budgetTokens <= 0) {
+		return undefined;
+	}
+
+	const initialTokens = estimateStateTokens(state);
+	if (initialTokens <= budgetTokens) {
+		return undefined;
+	}
+
+	logAutoCompact("budget_compaction_requested", {
+		estimatedTokens: initialTokens,
+		budgetTokens,
+	});
+
+	const compacted = trimToSafeThreshold(
+		state,
+		budgetTokens,
+		resolveAutoCompactConfig(config),
+	);
+	const afterTokens = estimateStateTokens(compacted);
+
+	logAutoCompact("budget_compaction_done", {
+		beforeTokens: initialTokens,
+		afterTokens,
+		budgetTokens,
+		state: summarizeState(compacted),
+	});
+
+	if (afterTokens >= initialTokens) {
+		logWarn(
+			`[AUTO_COMPACT] Nothing left to trim: ${afterTokens} tokens still exceeds the ${budgetTokens} token budget.`,
+		);
+		return undefined;
+	}
+
+	return compacted;
+}
+
 export interface AutoCompactInput {
 	messages: ChatCompletionMessageParam[];
 	outputMessages: ChatCompletionMessageParam[];
@@ -939,6 +994,30 @@ const definition = defineStep<
 						config,
 						maxTokens,
 					);
+				},
+			);
+
+			/*
+			 * The hook above runs on an estimate of the model's window. A provider
+			 * that refuses the request anyway — the window was wrong, or the account
+			 * cannot pay for a reply that long — hands back a budget the next
+			 * attempt has to fit, which is a smaller and much more reliable number
+			 * than any estimate. Trimming against it is the same policy, aimed at
+			 * what the provider actually said.
+			 */
+			runLifecycle?.onCompact(
+				"auto-compact",
+				(state: Record<string, unknown>, request) => {
+					const agentState = state as unknown as BaseStateBase;
+					const compacted = compactToBudget(
+						{
+							messages: agentState.messages,
+							outputMessages: agentState.outputMessages,
+						},
+						config,
+						request.budgetTokens,
+					);
+					return compacted as Partial<Record<string, unknown>> | undefined;
 				},
 			);
 		} catch (error) {

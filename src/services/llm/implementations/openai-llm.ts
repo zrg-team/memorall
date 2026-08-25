@@ -20,6 +20,7 @@ import {
 	normalizeTokenUsage,
 	resolveTokenUsage,
 } from "../utils/token-usage";
+import { postCompletionWithBudgetRetry } from "../utils/budget-retry";
 
 // Well-known model configurations with context window and max response tokens
 interface ModelConfig {
@@ -423,11 +424,12 @@ export class OpenAILLM implements BaseLLM {
 			}
 		}
 
-		const res = await fetch(`${this.baseURL}/chat/completions`, {
-			method: "POST",
+		const res = await postCompletionWithBudgetRetry({
+			url: `${this.baseURL}/chat/completions`,
 			headers: this.getHeaders(),
-			body: JSON.stringify(body),
+			body,
 			signal: request.signal,
+			label: "OpenAILLM",
 		});
 		if (!res.ok) {
 			const text = await res.text().catch(() => "");
@@ -493,11 +495,12 @@ export class OpenAILLM implements BaseLLM {
 			}
 		}
 
-		const res = await fetch(`${this.baseURL}/chat/completions`, {
-			method: "POST",
+		const res = await postCompletionWithBudgetRetry({
+			url: `${this.baseURL}/chat/completions`,
 			headers: this.getHeaders(),
-			body: JSON.stringify(body),
+			body,
 			signal: request.signal,
+			label: "OpenAILLM",
 		});
 		if (!res.ok || !res.body) {
 			const text = await res.text().catch(() => "");

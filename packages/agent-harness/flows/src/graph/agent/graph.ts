@@ -20,7 +20,8 @@ import {
 	parseToolInput,
 } from "../../interfaces/engine/tool.js";
 import { getFlowRuntimeVars } from "../../context/runtime-context.js";
-import type { ChatCompletionChunk } from "../../interfaces/engine/messages.js";
+import { getFlowRunLifecycle } from "../../context/run-lifecycle.js";
+import { streamAssistantTurn } from "./assistant-turn.js";
 import { logError, logInfo } from "../../logging/logger.js";
 import {
 	graphRegistry,
@@ -69,41 +70,12 @@ const nextToolFailureStreak = (
 	message: summarizeToolFailure(message),
 });
 
-export type AssembledToolCall = {
-	id: string;
-	type: "function";
-	function: { name: string; arguments: string };
-};
-
-export function mergeStreamedToolCall(
-	toolCallsMap: Map<number, AssembledToolCall>,
-	tc: NonNullable<
-		ChatCompletionChunk["choices"][number]["delta"]["tool_calls"]
-	>[number],
-): void {
-	const existing = toolCallsMap.get(tc.index);
-	if (existing) {
-		if (tc.id) {
-			existing.id = tc.id;
-		}
-		if (tc.function?.name) {
-			existing.function.name += tc.function.name;
-		}
-		if (tc.function?.arguments) {
-			existing.function.arguments += tc.function.arguments;
-		}
-		return;
-	}
-
-	toolCallsMap.set(tc.index, {
-		id: tc.id || crypto.randomUUID(),
-		type: "function",
-		function: {
-			name: tc.function?.name || "",
-			arguments: tc.function?.arguments || "",
-		},
-	});
-}
+// Streamed tool-call assembly moved next to the turn that performs it; both stay
+// exported here because callers and tests already reach for them at this path.
+export {
+	mergeStreamedToolCall,
+	type AssembledToolCall,
+} from "./assistant-turn.js";
 
 /**
  * Simple Agent Graph with 2 nodes:
@@ -241,69 +213,65 @@ export class AgentGraph extends GraphBase<
 		}
 
 		// Full LLM context: stable history + working memory accumulated so far
-		const llmMessages = [...state.messages, ...state.outputMessages];
 		const tools = this.combinedTools.map((t) => t.tool);
 
 		logInfo(
 			"[AGENT] Calling LLM with",
-			llmMessages.length,
+			state.messages.length + state.outputMessages.length,
 			"messages and",
 			tools.length,
 			"tools",
 		);
 
-		const stream = llm.chatCompletions({
-			messages: llmMessages,
-			tools,
-			tool_choice: "auto",
-			stream: true,
-		}) as AsyncIterableIterator<ChatCompletionChunk>;
+		const turn = await streamAssistantTurn(
+			{ messages: state.messages, outputMessages: state.outputMessages },
+			{
+				llm,
+				tools,
+				lifecycle: getFlowRunLifecycle(runConfig),
+				onChunk: (chunk) => runConfig?.writer?.({ type: "llm", chunk }),
+			},
+		);
 
-		let content = "";
-		const toolCallsMap = new Map<number, AssembledToolCall>();
+		const { content, toolCalls } = turn;
+		/*
+		 * A refusal the turn recovered from is recovered for good: the compacted
+		 * conversation is what the next iteration must build on, or the very next
+		 * request re-sends the context the provider just rejected.
+		 */
+		const { messages, outputMessages } = turn.conversation;
 
-		for await (const chunk of stream) {
-			const delta = chunk.choices[0]?.delta;
-			if (delta?.content) content += delta.content;
-			runConfig?.writer?.({ type: "llm", chunk });
-
-			if (delta?.tool_calls) {
-				for (const tc of delta.tool_calls) {
-					mergeStreamedToolCall(toolCallsMap, tc);
-				}
-			}
-		}
-
-		const toolCalls = Array.from(toolCallsMap.values());
 		logInfo(
 			"[AGENT] Stream complete - content:",
 			content.length,
 			"tool_calls:",
 			toolCalls.length,
+			turn.compacted ? "(context compacted to fit the provider budget)" : "",
 		);
 
 		// Tool call path: write assistant message to working memory, defer final commit
 		if (toolCalls.length > 0) {
 			return {
 				outputMessages: [
-					...state.outputMessages,
+					...outputMessages,
 					{
 						role: "assistant" as const,
 						content: content || null,
 						tool_calls: toolCalls,
 					},
 				],
+				...(turn.compacted ? { messages } : {}),
 				currentIteration: state.currentIteration + 1,
 			};
 		}
 
 		// Finished path: commit working memory + final response into messages
 		const finalMessage = { role: "assistant" as const, content };
-		const committedMessages = [...state.outputMessages, finalMessage];
+		const committedMessages = [...outputMessages, finalMessage];
 
 		return {
 			outputMessages: [finalMessage],
-			messages: [...state.messages, ...committedMessages],
+			messages: [...messages, ...committedMessages],
 			response: buildResponseFromOutputMessages([], committedMessages),
 			currentIteration: state.currentIteration + 1,
 		};
