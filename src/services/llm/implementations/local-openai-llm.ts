@@ -29,6 +29,7 @@ import {
 	normalizeTokenUsage,
 	resolveTokenUsage,
 } from "../utils/token-usage";
+import { postCompletionWithBudgetRetry } from "../utils/budget-retry";
 
 // Model patterns for local servers
 const MODEL_TOOL_PATTERNS: Array<{
@@ -206,11 +207,12 @@ export class LocalOpenAICompatibleLLM implements BaseLLM {
 			}
 		}
 
-		const res = await fetch(`${this.baseURL}/chat/completions`, {
-			method: "POST",
+		const res = await postCompletionWithBudgetRetry({
+			url: `${this.baseURL}/chat/completions`,
 			headers: this.headers(),
-			body: JSON.stringify(body),
+			body,
 			signal: request.signal,
+			label: "LocalOpenAICompatibleLLM",
 		});
 		if (!res.ok) {
 			const text = await res.text().catch(() => "");
@@ -292,11 +294,12 @@ export class LocalOpenAICompatibleLLM implements BaseLLM {
 			}
 		}
 
-		const res = await fetch(`${this.baseURL}/chat/completions`, {
-			method: "POST",
+		const res = await postCompletionWithBudgetRetry({
+			url: `${this.baseURL}/chat/completions`,
 			headers: this.headers(),
-			body: JSON.stringify(body),
+			body,
 			signal: request.signal,
+			label: "LocalOpenAICompatibleLLM",
 		});
 		if (!res.ok || !res.body) {
 			const text = await res.text().catch(() => "");

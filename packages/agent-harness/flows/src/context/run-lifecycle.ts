@@ -18,6 +18,25 @@ export type NodeCatchCallback<TState = Record<string, unknown>> = (
 	state: TState,
 ) => Promise<Partial<TState> | void> | Partial<TState> | void;
 
+/**
+ * Why a node is asking for the conversation to be made smaller, right now.
+ *
+ * `onBeforeStart` compaction is preventive: it runs on an estimate, before the
+ * request is sent. This is the other case — the provider has already refused,
+ * and named the budget the next attempt has to fit into. Estimates do not come
+ * into it, so the request carries the number.
+ */
+export interface CompactionRequest {
+	reason: "token-budget";
+	/** Prompt tokens the next attempt must fit within. */
+	budgetTokens: number;
+}
+
+export type CompactionCallback<TState = Record<string, unknown>> = (
+	state: TState,
+	request: CompactionRequest,
+) => Promise<Partial<TState> | void> | Partial<TState> | void;
+
 interface NodeListeners {
 	beforeStart: Map<string, NodeBeforeStartCallback>;
 	afterEnd: Map<string, NodeAfterEndCallback>;
@@ -36,6 +55,16 @@ export interface FlowRunLifecycle {
 		callback: NodeAfterEndCallback,
 	) => void;
 	onCatch: (key: string, callback: NodeCatchCallback) => void;
+	/** Register a strategy for shrinking a run's conversation on demand. */
+	onCompact: (key: string, callback: CompactionCallback) => void;
+	/**
+	 * Ask every registered strategy to shrink `state` to `request.budgetTokens`,
+	 * returning the merged patch, or undefined when nothing could be freed.
+	 */
+	compact: <TState extends Record<string, unknown>>(
+		state: TState,
+		request: CompactionRequest,
+	) => Promise<Partial<TState> | undefined>;
 	has: (key: string) => boolean;
 	drain: () => Promise<void>;
 	getNodeListeners: (nodeName: string) => NodeListeners | undefined;
@@ -48,6 +77,7 @@ class DefaultFlowRunLifecycle implements FlowRunLifecycle {
 	private readonly finishCallbacks = new Map<string, FlowRunFinishCallback>();
 	private readonly nodeListeners = new Map<string, NodeListeners>();
 	private readonly catchCallbacks = new Map<string, NodeCatchCallback>();
+	private readonly compactCallbacks = new Map<string, CompactionCallback>();
 	private isDraining = false;
 
 	onFinish(key: string, callback: FlowRunFinishCallback): void {
@@ -86,6 +116,37 @@ class DefaultFlowRunLifecycle implements FlowRunLifecycle {
 
 	getCatchCallbacks(): Map<string, NodeCatchCallback> {
 		return this.catchCallbacks;
+	}
+
+	onCompact(key: string, callback: CompactionCallback): void {
+		if (this.isDraining || this.compactCallbacks.has(key)) return;
+		this.compactCallbacks.set(key, callback);
+	}
+
+	async compact<TState extends Record<string, unknown>>(
+		state: TState,
+		request: CompactionRequest,
+	): Promise<Partial<TState> | undefined> {
+		let patch: Partial<TState> | undefined;
+		let current = state;
+
+		for (const [key, callback] of this.compactCallbacks) {
+			try {
+				const result = await (callback as CompactionCallback<TState>)(
+					current,
+					request,
+				);
+				if (!result) continue;
+				patch = { ...patch, ...result };
+				current = { ...current, ...result };
+			} catch (error) {
+				// A strategy that cannot shrink the run is not a reason to lose the
+				// run: the caller still gets whatever the others managed to free.
+				logError(`[FLOW_RUN_LIFECYCLE] Compaction failed: ${key}`, error);
+			}
+		}
+
+		return patch;
 	}
 
 	has(key: string): boolean {
@@ -138,6 +199,8 @@ const isFlowRunLifecycle = (value: unknown): value is FlowRunLifecycle => {
 		typeof candidate.onBeforeStart === "function" &&
 		typeof candidate.onAfterEnd === "function" &&
 		typeof candidate.onCatch === "function" &&
+		typeof candidate.onCompact === "function" &&
+		typeof candidate.compact === "function" &&
 		typeof candidate.getNodeListeners === "function" &&
 		typeof candidate.getCatchCallbacks === "function"
 	);
