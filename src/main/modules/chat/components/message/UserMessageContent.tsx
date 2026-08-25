@@ -163,12 +163,18 @@ export const UserMessageContent: React.FC<{
 	const parsed = useMemo(() => parseUserContext(content), [content]);
 
 	if (!parsed.hasContext) {
+		// A typed message is prose the sender line-broke by hand, so its soft
+		// breaks are meaningful even though Markdown would collapse them. The
+		// class opts this subtree — and only this one — back into preserved
+		// breaks inside paragraphs; see `.markdown-preserve-breaks`.
 		return (
-			<MessageContentWithArtifacts
-				content={content}
-				isStreaming={isStreaming}
-				blockScope={messageId}
-			/>
+			<div className="markdown-preserve-breaks">
+				<MessageContentWithArtifacts
+					content={content}
+					isStreaming={isStreaming}
+					blockScope={messageId}
+				/>
+			</div>
 		);
 	}
 
