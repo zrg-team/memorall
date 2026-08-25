@@ -274,6 +274,29 @@
 	font-size: 1rem;
 	line-height: 1.5;
 	word-wrap: break-word;
+	/*
+	 * react-markdown emits a literal "\n" text node between every block it
+	 * renders (between two <p>, between </li> and <li>, around a loose item's
+	 * <p>). Chat hosts wrap message content in `whitespace-pre-wrap` so plain
+	 * text keeps its line breaks, and that inherits straight into the Markdown
+	 * subtree, where each of those separators turns into a real blank line —
+	 * a full extra line of space between every paragraph, heading, and bullet.
+	 * The Markdown root owns its own whitespace so no host can leak that in.
+	 */
+	white-space: normal;
+}
+
+/*
+ * Opt back in where the text really is plain text the author line-broke by
+ * hand (a typed user message). Only the paragraph boxes preserve breaks — the
+ * separators above live between blocks, never inside a <p> — so soft line
+ * breaks survive without the phantom blank lines coming back. Tight list items
+ * hold their text directly; loose ones wrap it in <p> and are excluded so the
+ * separators around that <p> stay collapsed.
+ */
+.markdown-preserve-breaks .markdown-body p,
+.markdown-preserve-breaks .markdown-body li:not(:has(> p)) {
+	white-space: pre-wrap;
 }
 
 /*
@@ -353,7 +376,6 @@
 	margin-block: 0;
 	list-style-position: outside;
 	padding-left: 0.375em;
-	white-space: normal;
 }
 
 .markdown-body li > p {
