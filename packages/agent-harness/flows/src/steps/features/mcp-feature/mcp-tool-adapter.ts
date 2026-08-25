@@ -53,6 +53,35 @@ export type MCPToolRuntimeMetadata = {
 	};
 };
 
+/** The exact key set `normalizeMcpToolResult` emits for a non-text result. */
+const RICH_RESULT_KEYS = new Set(["text", "content", "structuredContent", "meta"]);
+
+/**
+ * Is this JSON the wrapper `normalizeMcpToolResult` produces, or a tool's own
+ * payload that happens to be JSON?
+ *
+ * Testing for a `content` key alone is not enough to tell them apart, and
+ * guessing wrong is destructive: a result like
+ * `{"successful": true, "content": "…", "schema": {…}}` was unwrapped down to
+ * its `content` value, silently discarding every sibling key — including the
+ * argument schemas a model needs to make the next call. The wrapper is
+ * recognised by its whole shape instead: only those four keys, and `content`
+ * always the array of non-text blocks it was built from.
+ */
+const isRichMcpEnvelope = (parsed: Record<string, unknown>): boolean => {
+	if (
+		parsed.structuredContent === undefined &&
+		parsed.meta === undefined &&
+		parsed.content === undefined
+	) {
+		return false;
+	}
+	if (parsed.content !== undefined && !Array.isArray(parsed.content)) {
+		return false;
+	}
+	return Object.keys(parsed).every((key) => RICH_RESULT_KEYS.has(key));
+};
+
 /**
  * A result carrying more than text arrives as JSON. Parsing it back lets the UI
  * render the structured payload instead of dumping the wrapper as prose; a
@@ -60,25 +89,27 @@ export type MCPToolRuntimeMetadata = {
  */
 const parseRichMcpResult = (value: string): ToolExecutionResult | undefined => {
 	try {
-		const parsed = JSON.parse(value) as Record<string, unknown>;
+		const parsed = JSON.parse(value) as unknown;
 		if (
-			parsed.structuredContent === undefined &&
-			parsed.meta === undefined &&
-			parsed.content === undefined
+			typeof parsed !== "object" ||
+			parsed === null ||
+			Array.isArray(parsed) ||
+			!isRichMcpEnvelope(parsed as Record<string, unknown>)
 		) {
 			return undefined;
 		}
+		const envelope = parsed as Record<string, unknown>;
 		return {
 			content:
-				typeof parsed.text === "string"
-					? parsed.text
-					: parsed.content === undefined
+				typeof envelope.text === "string"
+					? envelope.text
+					: envelope.content === undefined
 						? ""
-						: JSON.stringify(parsed.content),
-			structuredContent: parsed.structuredContent,
+						: JSON.stringify(envelope.content),
+			structuredContent: envelope.structuredContent,
 			meta:
-				typeof parsed.meta === "object" && parsed.meta !== null
-					? (parsed.meta as Record<string, unknown>)
+				typeof envelope.meta === "object" && envelope.meta !== null
+					? (envelope.meta as Record<string, unknown>)
 					: undefined,
 		};
 	} catch {

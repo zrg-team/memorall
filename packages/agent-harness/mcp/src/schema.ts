@@ -15,11 +15,43 @@
 
 export type McpJsonSchema = Record<string, unknown>;
 
+/**
+ * The fragment a `#`-local `$ref` points at, by walking the whole pointer.
+ *
+ * Resolving only the last path segment against `$defs` covers `#/$defs/User`
+ * and nothing else — a pointer through a definition (`#/$defs/Outer/properties/
+ * inner`) or into any other container resolves to the wrong node or to nothing.
+ */
+const resolveJsonPointer = (
+  root: McpJsonSchema,
+  ref: string,
+): McpJsonSchema | undefined => {
+  if (!ref.startsWith("#")) {
+    return undefined;
+  }
+
+  let current: unknown = root;
+  for (const rawSegment of ref.slice(1).split("/").filter(Boolean)) {
+    const segment = decodeURIComponent(rawSegment)
+      .replaceAll("~1", "/")
+      .replaceAll("~0", "~");
+    if (!isPlainObject(current)) {
+      return undefined;
+    }
+    current = current[segment];
+  }
+
+  return isPlainObject(current) ? current : undefined;
+};
+
 export const dereferenceJsonSchema = (schema: McpJsonSchema): McpJsonSchema => {
-  const definitions = (schema.$defs ?? schema.definitions ?? {}) as Record<
-    string,
-    McpJsonSchema
-  >;
+  /*
+   * A `$ref` that could not be inlined. Definitions are dropped from the output
+   * because an inlined schema no longer needs them — but dropping them while a
+   * pointer into them survives leaves the model a reference to nothing, which
+   * it can only fill with `{}`. Whatever is still referenced is kept.
+   */
+  let hasUnresolvedRef = false;
 
   const resolveRefs = (
     value: unknown,
@@ -29,20 +61,11 @@ export const dereferenceJsonSchema = (schema: McpJsonSchema): McpJsonSchema => {
       return value;
     }
 
-    if (
-      "$ref" in value &&
-      typeof value.$ref === "string" &&
-      (value.$ref.startsWith("#/$defs/") ||
-        value.$ref.startsWith("#/definitions/"))
-    ) {
+    if ("$ref" in value && typeof value.$ref === "string") {
       const refPath = value.$ref;
-      const definitionName = refPath.split("/").at(-1);
-      if (!definitionName) {
-        return value;
-      }
-
-      const definition = definitions[definitionName];
+      const definition = resolveJsonPointer(schema, refPath);
       if (!definition) {
+        hasUnresolvedRef = true;
         return value;
       }
 
@@ -74,7 +97,18 @@ export const dereferenceJsonSchema = (schema: McpJsonSchema): McpJsonSchema => {
     return result;
   };
 
-  return resolveRefs(schema) as McpJsonSchema;
+  const resolved = resolveRefs(schema) as McpJsonSchema;
+  if (!hasUnresolvedRef) {
+    return resolved;
+  }
+
+  return {
+    ...resolved,
+    ...(schema.$defs === undefined ? {} : { $defs: schema.$defs }),
+    ...(schema.definitions === undefined
+      ? {}
+      : { definitions: schema.definitions }),
+  };
 };
 
 const deepMergeSchemas = (
@@ -209,19 +243,39 @@ export const simplifyJsonSchemaForLLM = (
       : undefined;
 
   if (unionSchemas?.length) {
-    const objectSchemas = unionSchemas.filter(
-      (entry): entry is McpJsonSchema =>
-        isPlainObject(entry) &&
-        ((entry.type as string | undefined) === "object" ||
-          isPlainObject(entry.properties)),
+    /*
+     * `Optional[str]` reaches us as `anyOf: [{type: string}, {type: null}]`,
+     * which every Python MCP server emits for every optional argument. The
+     * null branch says nothing a model can act on, so it is dropped and what
+     * remains is folded back in — otherwise the union is destructured away and
+     * the property is handed to the model with no type at all.
+     */
+    const branches = unionSchemas
+      .filter((entry): entry is McpJsonSchema => isPlainObject(entry))
+      .map((entry) => simplifyJsonSchemaForLLM(entry))
+      .filter((entry) => entry.type !== "null");
+
+    const objectSchemas = branches.filter(
+      (entry) =>
+        (entry.type as string | undefined) === "object" ||
+        isPlainObject(entry.properties),
     );
+
+    if (objectSchemas.length === 0) {
+      if (branches.length === 1) {
+        // The parent's own keywords (title, description, default) win: they
+        // describe this property, the branch only describes its value.
+        result = { ...branches[0], ...result };
+      } else if (branches.length > 1) {
+        result.anyOf = branches;
+      }
+    }
 
     if (objectSchemas.length > 0) {
       const mergedProperties: McpJsonSchema = {};
       const requiredSets: Array<Set<string>> = [];
 
-      for (const objectSchema of objectSchemas) {
-        const simplified = simplifyJsonSchemaForLLM(objectSchema);
+      for (const simplified of objectSchemas) {
         if (isPlainObject(simplified.properties)) {
           Object.assign(mergedProperties, simplified.properties);
         }
@@ -256,8 +310,17 @@ export const simplifyJsonSchemaForLLM = (
     }
   }
 
-  if (isPlainObject(result.properties) && !result.type) {
-    result.type = "object";
+  /*
+   * Recursion into `properties` used to be gated behind "the schema declares no
+   * type", which every real tool schema does declare — so the flattening above
+   * only ever reached a root object and array items, and a `$ref`, `anyOf` or
+   * `allOf` one level down (where servers actually put them) went to the model
+   * untouched.
+   */
+  if (isPlainObject(result.properties)) {
+    if (!result.type) {
+      result.type = "object";
+    }
     result.properties = Object.fromEntries(
       Object.entries(result.properties).map(([key, value]) => [
         key,

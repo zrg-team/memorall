@@ -295,6 +295,38 @@ describe("agent sandbox tools", () => {
 		});
 		expect(extracted.meta).toEqual({ operationId: "remote-op" });
 	});
+
+	it("hands back a tool's own JSON payload whole, even when it has a content key", async () => {
+		// The adapter unwraps the envelope it builds for non-text results. A tool
+		// whose plain-text result happens to be JSON with a `content` key is not
+		// that envelope, and unwrapping it discarded every sibling key — the
+		// argument schemas a model needs for its next call among them.
+		const payload = {
+			successful: true,
+			content: "the page body",
+			url: "https://example.test",
+			schema: { owner: "string", repo: "string" },
+		};
+		const manager = {
+			call: vi.fn(async () => ({
+				content: [{ type: "text", text: JSON.stringify(payload) }],
+			})),
+		};
+		const tool = adaptMCPTool(
+			manager as never,
+			{
+				serverId: "remote",
+				name: "fetch",
+				exposedName: "remote__fetch",
+				description: "Fetch a page",
+				inputSchema: { type: "object", properties: {} },
+			} as never,
+		);
+
+		const extracted = extractToolResult(await tool.execute({}));
+
+		expect(JSON.parse(extracted.contentText)).toEqual(payload);
+	});
 });
 
 describe("sandbox tool profiles", () => {
