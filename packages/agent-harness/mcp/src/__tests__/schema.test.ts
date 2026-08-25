@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   dereferenceJsonSchema,
+  type McpJsonSchema,
   normalizeToolInputSchema,
   simplifyJsonSchemaForLLM,
 } from "../schema.js";
@@ -33,6 +34,40 @@ describe("dereferenceJsonSchema", () => {
     });
 
     expect(result).toBeTruthy();
+  });
+
+  it("resolves a pointer that walks through a definition, not just its last segment", () => {
+    const result = dereferenceJsonSchema({
+      type: "object",
+      properties: { payload: { $ref: "#/$defs/Outer/properties/inner" } },
+      $defs: {
+        Outer: {
+          type: "object",
+          properties: {
+            inner: { type: "object", properties: { id: { type: "string" } } },
+          },
+        },
+      },
+    });
+
+    expect(result.properties).toEqual({
+      payload: { type: "object", properties: { id: { type: "string" } } },
+    });
+  });
+
+  it("keeps definitions alive when a reference could not be inlined", () => {
+    // Dropping `$defs` while a pointer into them survives leaves the model a
+    // reference to nothing, which it can only fill in as `{}`.
+    const result = dereferenceJsonSchema({
+      type: "object",
+      properties: { payload: { $ref: "#/components/schemas/Payload" } },
+      $defs: { Other: { type: "object" } },
+    });
+
+    expect(result.properties).toEqual({
+      payload: { $ref: "#/components/schemas/Payload" },
+    });
+    expect(result.$defs).toEqual({ Other: { type: "object" } });
   });
 });
 
@@ -91,6 +126,57 @@ describe("simplifyJsonSchemaForLLM", () => {
     expect(result.unevaluatedProperties).toBeUndefined();
     expect(result.not).toBeUndefined();
   });
+
+  it("keeps the usable branch of a nullable union instead of erasing its type", () => {
+    // `Optional[str]` is how every Python MCP server writes an optional
+    // argument; dropping the union left the property with no type at all.
+    const result = simplifyJsonSchemaForLLM({
+      anyOf: [{ type: "string" }, { type: "null" }],
+      title: "Owner",
+      description: "Repository owner",
+    });
+
+    expect(result).toEqual({
+      type: "string",
+      title: "Owner",
+      description: "Repository owner",
+    });
+  });
+
+  it("keeps a genuine multi-type union rather than dropping it", () => {
+    const result = simplifyJsonSchemaForLLM({
+      anyOf: [{ type: "string" }, { type: "number" }, { type: "null" }],
+    });
+
+    expect(result.anyOf).toEqual([{ type: "string" }, { type: "number" }]);
+  });
+
+  it("flattens a property of a typed object, not only the root", () => {
+    // Recursion into `properties` was gated on the schema declaring no `type`,
+    // which every real tool schema does declare — so nothing below the root was
+    // ever flattened.
+    const result = simplifyJsonSchemaForLLM({
+      type: "object",
+      properties: {
+        filter: {
+          allOf: [
+            { type: "object", properties: { a: { type: "string" } } },
+            { required: ["a"] },
+          ],
+        },
+        owner: { anyOf: [{ type: "string" }, { type: "null" }] },
+      },
+    });
+
+    expect(result.properties).toEqual({
+      filter: {
+        type: "object",
+        properties: { a: { type: "string" } },
+        required: ["a"],
+      },
+      owner: { type: "string" },
+    });
+  });
 });
 
 describe("normalizeToolInputSchema", () => {
@@ -106,5 +192,35 @@ describe("normalizeToolInputSchema", () => {
     expect(
       Object.keys(result.properties as Record<string, unknown>).sort(),
     ).toEqual(["id", "q"]);
+  });
+
+  it("inlines a reference nested inside a property so no $ref reaches the model", () => {
+    const result = normalizeToolInputSchema({
+      type: "object",
+      properties: {
+        tools: { type: "array", items: { $ref: "#/$defs/ToolExecuteRequest" } },
+      },
+      $defs: {
+        ToolExecuteRequest: {
+          type: "object",
+          properties: {
+            tool_slug: { type: "string" },
+            arguments: { type: "object", additionalProperties: true },
+          },
+          required: ["tool_slug", "arguments"],
+        },
+      },
+    });
+
+    const properties = result.properties as Record<string, McpJsonSchema>;
+    expect(properties.tools.items).toEqual({
+      type: "object",
+      properties: {
+        tool_slug: { type: "string" },
+        arguments: { type: "object", additionalProperties: true },
+      },
+      required: ["tool_slug", "arguments"],
+    });
+    expect(JSON.stringify(result)).not.toContain("$ref");
   });
 });
