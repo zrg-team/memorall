@@ -60,7 +60,25 @@ export interface ComposioMcpSession {
 	sessionId: string;
 	url: string;
 	headers: Record<string, string>;
+	/** Which shape the session was actually minted in; see {@link ComposioSessionPreset}. */
+	preset: ComposioSessionPreset;
 }
+
+/**
+ * How a session presents its tools over MCP.
+ *
+ * `router` is Composio's default: the endpoint serves six meta-tools, and the
+ * agent has to search, fetch a schema, then execute — with the real parameters
+ * hidden inside a free-form `arguments` object that a model can, and does,
+ * leave empty.
+ *
+ * `direct-tools` preloads the tools the session allows and serves them as
+ * themselves, so `GITHUB_GET_A_REPOSITORY` arrives with `owner` and `repo` as
+ * typed, required parameters. No discovery round trips, and an empty argument
+ * object is not expressible. Composio's guidance is to use it for a narrow tool
+ * set, since every allowed tool is preloaded into the model's context.
+ */
+export type ComposioSessionPreset = "router" | "direct-tools";
 
 const pick = <T>(
 	source: Record<string, unknown>,
@@ -300,11 +318,19 @@ export class ComposioClient {
 	 * try the plausible encodings in order and keep the first the API accepts.
 	 * Only validation rejections advance the ladder; auth or server errors throw
 	 * immediately so a real problem is not retried four times.
+	 *
+	 * The preset is probed the same way and for the same reason: the SDK
+	 * documents `session_preset: SESSION_PRESET_DIRECT_TOOLS`, while the REST
+	 * reference for this endpoint lists `preload` and no preset at all. Both are
+	 * offered, in decreasing order of directness, and a session that comes back
+	 * says which shape actually took — asking for direct tools and silently
+	 * getting a router is the failure this whole change exists to end.
 	 */
 	async createMcpSession(options: {
 		userId: string;
 		toolkits: string[];
 		tools?: Record<string, { enable: string[] }>;
+		preset?: ComposioSessionPreset;
 	}): Promise<ComposioMcpSession> {
 		const slugs = options.toolkits;
 		const toolkitShapes: unknown[] = [
@@ -314,31 +340,56 @@ export class ComposioClient {
 			{ enable: slugs.map((slug) => slug.toUpperCase()) },
 		];
 
+		const presetShapes: Array<{
+			preset: ComposioSessionPreset;
+			body: Record<string, unknown>;
+		}> =
+			options.preset === "direct-tools"
+				? [
+						{
+							preset: "direct-tools",
+							body: {
+								session_preset: "SESSION_PRESET_DIRECT_TOOLS",
+								preload: { tools: "all" },
+							},
+						},
+						{ preset: "direct-tools", body: { preload: { tools: "all" } } },
+						// Neither field survived: a router session still works, and the
+						// agent-side guard still catches an empty call.
+						{ preset: "router", body: {} },
+					]
+				: [{ preset: "router", body: {} }];
+
 		let payload: Record<string, unknown> | null = null;
+		let accepted: ComposioSessionPreset = "router";
 		let lastError: ComposioError | null = null;
 
-		for (const toolkits of toolkitShapes) {
-			try {
-				payload = asRecord(
-					await this.request<unknown>("/tool_router/session", {
-						method: "POST",
-						body: JSON.stringify({
-							user_id: options.userId,
-							toolkits,
-							...(options.tools ? { tools: options.tools } : {}),
-							// No `mcp` flag exists on this endpoint; the session always
-							// returns its MCP details in the response.
+		outer: for (const shape of presetShapes) {
+			for (const toolkits of toolkitShapes) {
+				try {
+					payload = asRecord(
+						await this.request<unknown>("/tool_router/session", {
+							method: "POST",
+							body: JSON.stringify({
+								user_id: options.userId,
+								toolkits,
+								...(options.tools ? { tools: options.tools } : {}),
+								...shape.body,
+								// No `mcp` flag exists on this endpoint; the session always
+								// returns its MCP details in the response.
+							}),
 						}),
-					}),
-				);
-				break;
-			} catch (error) {
-				if (!(error instanceof ComposioError)) throw error;
-				const isValidationError =
-					(error.status === 400 || error.status === 422) &&
-					/toolkit/i.test(error.message);
-				if (!isValidationError) throw error;
-				lastError = error;
+					);
+					accepted = shape.preset;
+					break outer;
+				} catch (error) {
+					if (!(error instanceof ComposioError)) throw error;
+					const isValidationError =
+						(error.status === 400 || error.status === 422) &&
+						/toolkit|preset|preload/i.test(error.message);
+					if (!isValidationError) throw error;
+					lastError = error;
+				}
 			}
 		}
 
@@ -369,6 +420,7 @@ export class ComposioClient {
 				string,
 				string
 			>,
+			preset: accepted,
 		};
 	}
 }
