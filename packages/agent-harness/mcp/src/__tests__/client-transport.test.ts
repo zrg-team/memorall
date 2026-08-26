@@ -114,11 +114,16 @@ describe("McpClientManager over a live transport", () => {
         string,
         Record<string, unknown>
       >;
-      expect(properties.tools.items).toEqual({
+      expect(properties.tools.items).toMatchObject({
         type: "object",
         properties: {
           tool_slug: { type: "string" },
-          arguments: { type: "object", additionalProperties: true },
+          arguments: {
+            type: "object",
+            additionalProperties: true,
+            // Free-form on the wire, but the model is told what belongs in it.
+            description: expect.stringContaining("tool_slug"),
+          },
         },
         required: ["tool_slug", "arguments"],
       });

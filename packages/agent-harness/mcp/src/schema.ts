@@ -358,6 +358,116 @@ const isPlainObject = (value: unknown): value is McpJsonSchema =>
  * resolved first (so a `$ref` inside an `anyOf` branch is visible), then
  * flattened for the model.
  */
+/**
+ * Names a sibling property is likely to have when it says *which* tool the
+ * free-form object belongs to.
+ */
+const TARGET_NAMING_KEYS = [
+  "tool_slug",
+  "toolSlug",
+  "slug",
+  "tool_name",
+  "toolName",
+  "action",
+  "tool",
+];
+
+/**
+ * An object the schema describes only as "an object": no properties, and
+ * anything allowed inside.
+ *
+ * A tool router publishes exactly this for the parameters of the tool it is
+ * routing to, because it cannot know them in advance. The trouble is that `{}`
+ * satisfies such a schema completely, so a model that writes nothing has, by
+ * the letter of the schema, complied — and providers refuse the call for
+ * missing fields the schema never mentioned.
+ */
+const isFreeFormObject = (node: McpJsonSchema): boolean =>
+  node.type === "object" &&
+  node.additionalProperties !== false &&
+  (!isPlainObject(node.properties) ||
+    Object.keys(node.properties as McpJsonSchema).length === 0);
+
+const targetNameIn = (
+  properties: McpJsonSchema,
+  self: string,
+): string | undefined =>
+  TARGET_NAMING_KEYS.find((key) => key !== self && key in properties);
+
+const withHint = (node: McpJsonSchema, hint: string): McpJsonSchema => {
+  const existing =
+    typeof node.description === "string" ? node.description.trim() : "";
+  if (existing.includes(hint)) return node;
+  return {
+    ...node,
+    description: existing ? `${existing}
+
+${hint}` : hint,
+  };
+};
+
+/**
+ * Spell out, in the one field a model actually reads, what an opaque object is
+ * for.
+ *
+ * The schema alone cannot say "this object must not be empty" without also
+ * lying about tools that genuinely take no parameters, so the requirement is
+ * stated where it belongs: in the description. It costs nothing, it cannot make
+ * a valid call invalid, and it is the difference between a model reading "an
+ * object" and reading "the parameters for the tool you named, which you must
+ * look up if you do not know them".
+ */
+export const annotateFreeFormObjects = (
+  schema: McpJsonSchema,
+): McpJsonSchema => {
+  const visit = (node: unknown): unknown => {
+    if (Array.isArray(node)) return node.map(visit);
+    if (!isPlainObject(node)) return node;
+
+    const result: McpJsonSchema = { ...node };
+
+    if (isPlainObject(result.properties)) {
+      const properties = result.properties as McpJsonSchema;
+
+      result.properties = Object.fromEntries(
+        Object.entries(properties).map(([name, value]) => {
+          if (!isPlainObject(value)) return [name, value];
+          let property = visit(value) as McpJsonSchema;
+
+          if (isFreeFormObject(property)) {
+            const target = targetNameIn(properties, name);
+            const subject = target
+              ? `the tool named in \`${target}\``
+              : "this call";
+            property = withHint(
+              property,
+              [
+                `Fill this with the complete input parameters for ${subject}.`,
+                "An empty object is only correct when that tool takes no parameters at all;",
+                "otherwise the call is rejected for the fields you left out.",
+                "If you do not know its parameters, look up its schema before calling.",
+              ].join(" "),
+            );
+          }
+
+          return [name, property];
+        }),
+      );
+    }
+
+    for (const key of ["items", "additionalProperties"] as const) {
+      if (isPlainObject(result[key]) || Array.isArray(result[key])) {
+        result[key] = visit(result[key]);
+      }
+    }
+
+    return result;
+  };
+
+  return visit(schema) as McpJsonSchema;
+};
+
 export const normalizeToolInputSchema = (
   schema: McpJsonSchema,
-): McpJsonSchema => simplifyJsonSchemaForLLM(dereferenceJsonSchema(schema));
+): McpJsonSchema =>
+  annotateFreeFormObjects(simplifyJsonSchemaForLLM(dereferenceJsonSchema(schema)));

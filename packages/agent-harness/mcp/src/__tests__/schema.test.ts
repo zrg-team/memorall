@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  annotateFreeFormObjects,
   dereferenceJsonSchema,
   type McpJsonSchema,
   normalizeToolInputSchema,
@@ -213,14 +214,106 @@ describe("normalizeToolInputSchema", () => {
     });
 
     const properties = result.properties as Record<string, McpJsonSchema>;
-    expect(properties.tools.items).toEqual({
+    expect(properties.tools.items).toMatchObject({
+      type: "object",
+      properties: {
+        tool_slug: { type: "string" },
+        arguments: {
+          type: "object",
+          additionalProperties: true,
+          description: expect.stringContaining("tool_slug"),
+        },
+      },
+      required: ["tool_slug", "arguments"],
+    });
+    expect(JSON.stringify(result)).not.toContain("$ref");
+  });
+});
+
+describe("annotateFreeFormObjects", () => {
+  /*
+   * `{"type":"object","additionalProperties":true}` with no properties is what
+   * a tool router publishes for the parameters of whatever it is routing to.
+   * `{}` satisfies it completely, so a model that writes nothing has complied
+   * with the schema — and the call is refused for fields the schema never
+   * named. The requirement has to be stated where a model will read it.
+   */
+  it("tells the model what an opaque parameter object is for, and names its target", () => {
+    const result = annotateFreeFormObjects({
+      type: "object",
+      properties: {
+        tool_slug: { type: "string" },
+        arguments: {
+          type: "object",
+          additionalProperties: true,
+          description: "The arguments to pass to the tool",
+        },
+      },
+      required: ["tool_slug", "arguments"],
+    });
+
+    const args = (result.properties as Record<string, McpJsonSchema>).arguments;
+    expect(args.description).toContain("The arguments to pass to the tool");
+    expect(args.description).toContain("tool_slug");
+    expect(args.description).toContain("An empty object is only correct");
+    // Nothing about what the schema accepts changes: a tool that really takes
+    // no parameters can still be called with `{}`.
+    expect(args.minProperties).toBeUndefined();
+    expect(args.additionalProperties).toBe(true);
+  });
+
+  it("reaches an opaque object nested inside array items", () => {
+    const result = normalizeToolInputSchema({
+      type: "object",
+      properties: {
+        tools: { type: "array", items: { $ref: "#/$defs/Call" } },
+      },
+      $defs: {
+        Call: {
+          type: "object",
+          properties: {
+            tool_slug: { type: "string" },
+            arguments: { type: "object", additionalProperties: true },
+          },
+          required: ["tool_slug", "arguments"],
+        },
+      },
+    });
+
+    const items = (result.properties as Record<string, McpJsonSchema>).tools
+      .items as McpJsonSchema;
+    const args = (items.properties as Record<string, McpJsonSchema>).arguments;
+    expect(args.description).toContain("tool_slug");
+  });
+
+  it("leaves a described object and a closed object alone", () => {
+    const result = annotateFreeFormObjects({
+      type: "object",
+      properties: {
+        known: { type: "object", properties: { a: { type: "string" } } },
+        closed: { type: "object", additionalProperties: false, properties: {} },
+        owner: { type: "string", description: "Repository owner" },
+      },
+    });
+
+    const properties = result.properties as Record<string, McpJsonSchema>;
+    expect(properties.known.description).toBeUndefined();
+    expect(properties.closed.description).toBeUndefined();
+    expect(properties.owner.description).toBe("Repository owner");
+  });
+
+  it("does not stack the same hint when a schema is normalized twice", () => {
+    const once = normalizeToolInputSchema({
       type: "object",
       properties: {
         tool_slug: { type: "string" },
         arguments: { type: "object", additionalProperties: true },
       },
-      required: ["tool_slug", "arguments"],
     });
-    expect(JSON.stringify(result)).not.toContain("$ref");
+    const twice = normalizeToolInputSchema(once);
+
+    const first = (once.properties as Record<string, McpJsonSchema>).arguments;
+    const second = (twice.properties as Record<string, McpJsonSchema>).arguments;
+    expect(second.description).toBe(first.description);
   });
 });
