@@ -179,8 +179,8 @@ const resolveAllowlist = (
 	// same whichever app they reach, so a name filter cannot express "GitHub
 	// only" — and filtering on app-level slugs would drop every router tool and
 	// leave the agent with nothing. Scope is a property of the session instead:
-	// its toolkits, and — where the agent named individual tools — a direct-tools
-	// session carrying exactly those. See resolveScopedComposioUrl.
+	// its toolkits, and — where the agent named individual tools — a session that
+	// preloads exactly those. See resolveScopedComposioUrl.
 	return null;
 };
 
@@ -250,19 +250,22 @@ export const composioToolScope = (
 };
 
 /**
- * Whether this agent should get its tools directly rather than behind the
- * router.
+ * The flat slug list a session preloads, so those tools are served as
+ * themselves rather than behind `COMPOSIO_MULTI_EXECUTE_TOOL`.
  *
- * Direct tools preload every tool the session allows, which is why Composio
- * reserves them for a narrow set — a whole toolkit is a hundred definitions in
- * the model's context on every request. A per-tool allowlist is exactly that
- * narrow set, and it is also the case the router serves worst: the real
- * parameters stay hidden behind an opaque `arguments` object the model is free
- * to leave empty.
+ * Preloading is per tool, not per toolkit, which suits an agent scoped to
+ * particular tools exactly — and is why an agent scoped to a whole app does not
+ * get it: preloading a toolkit would put a hundred definitions in the model's
+ * context on every request.
  */
-export const shouldUseDirectTools = (
+export const composioPreloadTools = (
 	toolScope: Record<string, { enable: string[] }> | undefined,
-): boolean => toolScope !== undefined;
+): string[] =>
+	toolScope
+		? Object.values(toolScope)
+				.flatMap((bucket) => bucket.enable)
+				.sort()
+		: [];
 
 /**
  * The endpoint for a tool-router session carrying exactly `appIds`.
@@ -293,11 +296,11 @@ async function mintScopedComposioUrl(
 	}
 
 	const toolScope = composioToolScope(toolNames, toolkits);
-	const preset = shouldUseDirectTools(toolScope) ? "direct-tools" : "router";
+	const preloadTools = composioPreloadTools(toolScope);
 
 	// Selecting every authorized app is the unscoped session already on record —
-	// but only while nothing narrower was asked for. A tool scope, or direct
-	// tools, is a different session and has to be minted.
+	// but only while nothing narrower was asked for. A tool scope is a different
+	// session and has to be minted.
 	const all = [...new Set(connection.composio?.toolkits ?? [])].sort();
 	if (!toolScope && all.length > 0 && toolkits.join(",") === all.join(",")) {
 		return connection.url;
@@ -307,7 +310,7 @@ async function mintScopedComposioUrl(
 	// session must never be handed back to a request that asked for direct tools.
 	const cacheKey = [
 		toolkits.join(","),
-		preset,
+		preloadTools.length > 0 ? "preloaded" : "router",
 		toolScope ? JSON.stringify(toolScope) : "",
 	].join("|");
 	const cached = connection.composio?.scopedSessions?.[cacheKey];
@@ -321,12 +324,17 @@ async function mintScopedComposioUrl(
 		userId: COMPOSIO_USER_ID,
 		toolkits,
 		...(toolScope ? { tools: toolScope } : {}),
-		preset,
+		...(preloadTools.length > 0 ? { preloadTools } : {}),
 	});
 
-	if (preset === "direct-tools" && session.preset !== "direct-tools") {
+	const missed = preloadTools.filter(
+		(slug) => !session.preloadedTools.includes(slug),
+	);
+	if (missed.length > 0) {
+		// Composio ignores fields it does not recognise, so a request is no
+		// evidence of a result. Anything not echoed back stays behind the router.
 		logWarn(
-			`[MCP_CONNECTIONS] Composio would not mint a direct-tools session for "${connection.name}"; its tools stay behind the router.`,
+			`[MCP_CONNECTIONS] Composio did not preload ${missed.join(", ")} for "${connection.name}"; those stay behind the router.`,
 		);
 	}
 

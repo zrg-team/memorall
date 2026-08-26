@@ -31,9 +31,9 @@ vi.mock("@/utils/logger", () => ({
 
 import type { UnifiedFlowConfig } from "@memorall/agent-harness-flows/interfaces/config/flow-config";
 import {
+	composioPreloadTools,
 	composioToolScope,
 	resolveConnections,
-	shouldUseDirectTools,
 	withResolvedConnections,
 } from "../resolve";
 import type { McpConnection } from "../types";
@@ -283,17 +283,17 @@ describe("resolveConnections", () => {
 		);
 	});
 
-	it("mints direct tools when the agent is scoped to specific tools", async () => {
-		// The router hides every real parameter behind a free-form `arguments`
-		// object the model is free to leave empty. A direct-tools session serves
-		// GITHUB_GET_A_REPOSITORY with `owner` and `repo` as typed parameters, so
-		// an empty call is not expressible.
+	it("preloads the tools an agent was scoped to", async () => {
+		// Left to the router, GITHUB_GET_A_REPOSITORY is reachable only through
+		// COMPOSIO_MULTI_EXECUTE_TOOL's open `arguments` object, which `{}`
+		// satisfies. Preloaded, it is served as itself with `owner` and `repo`
+		// required, and an empty call stops being expressible.
 		listConnections.mockResolvedValue([composioConnection()]);
 		loadSecret.mockResolvedValue(JSON.stringify({ apiKey: "ak_live_123" }));
 		createMcpSession.mockResolvedValue({
 			sessionId: "trs_direct",
 			url: "https://backend.composio.dev/tool_router/trs_direct/mcp",
-			preset: "direct-tools",
+			preloadedTools: ["GITHUB_GET_A_REPOSITORY", "GITHUB_LIST_BRANCHES"],
 		});
 
 		await resolveConnections([
@@ -310,7 +310,7 @@ describe("resolveConnections", () => {
 		expect(createMcpSession).toHaveBeenCalledWith(
 			expect.objectContaining({
 				toolkits: ["github"],
-				preset: "direct-tools",
+				preloadTools: ["GITHUB_GET_A_REPOSITORY", "GITHUB_LIST_BRANCHES"],
 				tools: {
 					github: {
 						enable: ["GITHUB_GET_A_REPOSITORY", "GITHUB_LIST_BRANCHES"],
@@ -320,26 +320,24 @@ describe("resolveConnections", () => {
 		);
 	});
 
-	it("stays on the router when the agent picked whole apps", async () => {
-		// Direct tools preload every allowed tool; a whole toolkit is a hundred
-		// definitions in context on every request.
+	it("preloads nothing when the agent picked whole apps", async () => {
+		// Preloading a whole toolkit would put a hundred tool definitions in the
+		// model's context on every request.
 		listConnections.mockResolvedValue([composioConnection()]);
 		loadSecret.mockResolvedValue(JSON.stringify({ apiKey: "ak_live_123" }));
 		createMcpSession.mockResolvedValue({
 			sessionId: "trs_router",
 			url: "https://backend.composio.dev/tool_router/trs_router/mcp",
-			preset: "router",
+			preloadedTools: [],
 		});
 
 		await resolveConnections([{ connectionId: "c1", appIds: ["github"] }]);
 
-		expect(createMcpSession).toHaveBeenCalledWith(
-			expect.objectContaining({ preset: "router" }),
-		);
+		expect(createMcpSession.mock.calls[0][0].preloadTools).toBeUndefined();
 		expect(createMcpSession.mock.calls[0][0].tools).toBeUndefined();
 	});
 
-	it("does not hand a cached router session to a direct-tools request", async () => {
+	it("does not hand a cached router session to a request that wants preloads", async () => {
 		listConnections.mockResolvedValue([
 			composioConnection({
 				composio: {
@@ -355,7 +353,7 @@ describe("resolveConnections", () => {
 		createMcpSession.mockResolvedValue({
 			sessionId: "trs_direct",
 			url: "https://backend.composio.dev/tool_router/trs_direct/mcp",
-			preset: "direct-tools",
+			preloadedTools: ["GITHUB_GET_A_REPOSITORY", "GITHUB_LIST_BRANCHES"],
 		});
 
 		const result = await resolveConnections([
@@ -615,11 +613,21 @@ describe("composioToolScope", () => {
 	});
 });
 
-describe("shouldUseDirectTools", () => {
-	it("is exactly the narrow case Composio reserves the preset for", () => {
+describe("composioPreloadTools", () => {
+	it("flattens the scope into the slug list a session preloads", () => {
 		expect(
-			shouldUseDirectTools({ github: { enable: ["GITHUB_GET_A_REPOSITORY"] } }),
-		).toBe(true);
-		expect(shouldUseDirectTools(undefined)).toBe(false);
+			composioPreloadTools({
+				github: { enable: ["GITHUB_LIST_BRANCHES", "GITHUB_GET_A_REPOSITORY"] },
+				googlecalendar: { enable: ["GOOGLECALENDAR_CREATE_EVENT"] },
+			}),
+		).toEqual([
+			"GITHUB_GET_A_REPOSITORY",
+			"GITHUB_LIST_BRANCHES",
+			"GOOGLECALENDAR_CREATE_EVENT",
+		]);
+	});
+
+	it("preloads nothing for an agent scoped by app", () => {
+		expect(composioPreloadTools(undefined)).toEqual([]);
 	});
 });

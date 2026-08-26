@@ -202,13 +202,17 @@ describe("ComposioClient", () => {
 		expect(fetchMock).toHaveBeenCalledTimes(4);
 	});
 
-	it("asks for direct tools so the model gets real parameters, not a router", async () => {
-		// A router session hides every real parameter behind a free-form
-		// `arguments` object; a direct-tools session serves the tools themselves.
+	it("preloads the named tools so the model gets their real parameters", async () => {
+		// Verified against the live API: a plain session serves six meta-tools and
+		// hides every real tool behind COMPOSIO_MULTI_EXECUTE_TOOL, whose
+		// `arguments` object is an open object with no properties — a shape `{}`
+		// satisfies. Preloaded, GITHUB_GET_A_REPOSITORY is served as itself with
+		// `owner` and `repo` required.
 		fetchMock.mockResolvedValue(
 			jsonResponse({
 				session_id: "sess_1",
 				mcp: { url: "https://mcp.composio.dev/s/abc", headers: {} },
+				config: { preload: { tools: ["GITHUB_GET_A_REPOSITORY"] } },
 			}),
 		);
 
@@ -216,20 +220,23 @@ describe("ComposioClient", () => {
 			userId: "u",
 			toolkits: ["github"],
 			tools: { github: { enable: ["GITHUB_GET_A_REPOSITORY"] } },
-			preset: "direct-tools",
+			preloadTools: ["GITHUB_GET_A_REPOSITORY"],
 		});
 
 		const { body } = lastCall();
 		expect(body).toMatchObject({
 			toolkits: { enable: ["github"] },
 			tools: { github: { enable: ["GITHUB_GET_A_REPOSITORY"] } },
-			session_preset: "SESSION_PRESET_DIRECT_TOOLS",
-			preload: { tools: "all" },
+			// An array of slugs. `{tools: "all"}` is rejected with
+			// "Expected array, received string", and the SDK's `session_preset` is
+			// accepted by this endpoint and then ignored.
+			preload: { tools: ["GITHUB_GET_A_REPOSITORY"] },
 		});
-		expect(session.preset).toBe("direct-tools");
+		expect(body.session_preset).toBeUndefined();
+		expect(session.preloadedTools).toEqual(["GITHUB_GET_A_REPOSITORY"]);
 	});
 
-	it("keeps the preset out of a router request", async () => {
+	it("sends no preload when nothing was asked for", async () => {
 		fetchMock.mockResolvedValue(
 			jsonResponse({
 				session_id: "sess_1",
@@ -242,83 +249,28 @@ describe("ComposioClient", () => {
 			toolkits: ["github"],
 		});
 
-		const { body } = lastCall();
-		expect(body.session_preset).toBeUndefined();
-		expect(body.preload).toBeUndefined();
-		expect(session.preset).toBe("router");
+		expect(lastCall().body.preload).toBeUndefined();
+		expect(session.preloadedTools).toEqual([]);
 	});
 
-	it("drops to `preload` alone when the endpoint does not know the preset", async () => {
-		// The SDK documents `session_preset`; the REST reference for this endpoint
-		// lists `preload` and no preset at all. Offer both, keep what is accepted.
-		const rejectPreset = jsonResponse(
-			{
-				error: { message: "Error in payload.session_preset: Unrecognized key" },
-			},
-			400,
+	it("reports what was preloaded from the echo, not from the request", async () => {
+		// Composio accepts and then ignores fields it does not know, so asking is
+		// no evidence of getting. Only the echoed config counts.
+		fetchMock.mockResolvedValue(
+			jsonResponse({
+				session_id: "sess_1",
+				mcp: { url: "https://mcp.composio.dev/s/abc", headers: {} },
+				config: { preload: { tools: [] } },
+			}),
 		);
-		fetchMock
-			.mockResolvedValueOnce(rejectPreset)
-			.mockResolvedValueOnce(rejectPreset)
-			.mockResolvedValueOnce(rejectPreset)
-			.mockResolvedValueOnce(rejectPreset)
-			.mockResolvedValueOnce(
-				jsonResponse({
-					session_id: "sess_1",
-					mcp: { url: "https://mcp.composio.dev/s/abc", headers: {} },
-				}),
-			);
 
 		const session = await new ComposioClient("k").createMcpSession({
 			userId: "u",
 			toolkits: ["github"],
-			preset: "direct-tools",
+			preloadTools: ["GITHUB_GET_A_REPOSITORY"],
 		});
 
-		const bodies = fetchMock.mock.calls.map(([, init]) =>
-			JSON.parse(String((init as RequestInit).body)),
-		);
-		expect(bodies[4].session_preset).toBeUndefined();
-		expect(bodies[4].preload).toEqual({ tools: "all" });
-		expect(session.preset).toBe("direct-tools");
-	});
-
-	it("reports a router session when neither preset field is accepted", async () => {
-		// Falling back is right — a router session still works — but the caller
-		// has to be able to tell, or it believes it got direct tools and never
-		// learns why the model is guessing arguments again.
-		const rejectBoth = jsonResponse(
-			{ error: { message: "Error in payload.preload: Unrecognized key" } },
-			400,
-		);
-		fetchMock
-			.mockResolvedValueOnce(rejectBoth)
-			.mockResolvedValueOnce(rejectBoth)
-			.mockResolvedValueOnce(rejectBoth)
-			.mockResolvedValueOnce(rejectBoth)
-			.mockResolvedValueOnce(rejectBoth)
-			.mockResolvedValueOnce(rejectBoth)
-			.mockResolvedValueOnce(rejectBoth)
-			.mockResolvedValueOnce(rejectBoth)
-			.mockResolvedValueOnce(
-				jsonResponse({
-					session_id: "sess_1",
-					mcp: { url: "https://mcp.composio.dev/s/abc", headers: {} },
-				}),
-			);
-
-		const session = await new ComposioClient("k").createMcpSession({
-			userId: "u",
-			toolkits: ["github"],
-			preset: "direct-tools",
-		});
-
-		const bodies = fetchMock.mock.calls.map(([, init]) =>
-			JSON.parse(String((init as RequestInit).body)),
-		);
-		expect(bodies.at(-1)?.session_preset).toBeUndefined();
-		expect(bodies.at(-1)?.preload).toBeUndefined();
-		expect(session.preset).toBe("router");
+		expect(session.preloadedTools).toEqual([]);
 	});
 
 	it("names the status and route in errors so a wrong path is obvious", async () => {
