@@ -60,7 +60,32 @@ export interface ComposioMcpSession {
 	sessionId: string;
 	url: string;
 	headers: Record<string, string>;
+	/**
+	 * Tool slugs the session actually serves directly, read back from the config
+	 * Composio echoes.
+	 *
+	 * Asked-for and got are not the same thing here, and the difference is
+	 * invisible from the URL alone — so the caller is told rather than left to
+	 * assume. Empty means a plain router session: six meta-tools, every real
+	 * tool behind them.
+	 */
+	preloadedTools: string[];
 }
+
+/**
+ * What the session says it preloaded, from the config it echoes back.
+ *
+ * Composio accepts and then ignores fields it does not know, so a request is no
+ * evidence of a result; the echo is.
+ */
+const readPreloadedTools = (payload: Record<string, unknown>): string[] => {
+	const config = asRecord(pick(payload, "config") ?? {});
+	const preload = asRecord(pick(config, "preload") ?? {});
+	const tools = pick<unknown>(preload, "tools");
+	return Array.isArray(tools)
+		? tools.filter((slug): slug is string => typeof slug === "string")
+		: [];
+};
 
 const pick = <T>(
 	source: Record<string, unknown>,
@@ -300,11 +325,23 @@ export class ComposioClient {
 	 * try the plausible encodings in order and keep the first the API accepts.
 	 * Only validation rejections advance the ladder; auth or server errors throw
 	 * immediately so a real problem is not retried four times.
+	 *
+	 * `preload` is what makes the named tools reachable as themselves rather than
+	 * through `COMPOSIO_MULTI_EXECUTE_TOOL`, whose `arguments` object is typed as
+	 * an open object with no properties — a shape `{}` satisfies, which is how a
+	 * model ends up calling GitHub with nothing in it. Preloaded, the same tool
+	 * arrives with `owner` and `repo` as required typed parameters and an empty
+	 * call stops being expressible. Verified against the live API: the meta-tools
+	 * stay either way, and `preload.tools` must be an array of slugs — the SDK's
+	 * `session_preset` is accepted and then ignored by this endpoint, and
+	 * `{tools: "all"}` is rejected outright.
 	 */
 	async createMcpSession(options: {
 		userId: string;
 		toolkits: string[];
 		tools?: Record<string, { enable: string[] }>;
+		/** Tool slugs to serve directly, beside the router meta-tools. */
+		preloadTools?: string[];
 	}): Promise<ComposioMcpSession> {
 		const slugs = options.toolkits;
 		const toolkitShapes: unknown[] = [
@@ -313,6 +350,10 @@ export class ComposioClient {
 			slugs.map((slug) => ({ toolkit: slug })),
 			{ enable: slugs.map((slug) => slug.toUpperCase()) },
 		];
+
+		const preload = options.preloadTools?.length
+			? { preload: { tools: options.preloadTools } }
+			: {};
 
 		let payload: Record<string, unknown> | null = null;
 		let lastError: ComposioError | null = null;
@@ -326,6 +367,7 @@ export class ComposioClient {
 							user_id: options.userId,
 							toolkits,
 							...(options.tools ? { tools: options.tools } : {}),
+							...preload,
 							// No `mcp` flag exists on this endpoint; the session always
 							// returns its MCP details in the response.
 						}),
@@ -336,7 +378,7 @@ export class ComposioClient {
 				if (!(error instanceof ComposioError)) throw error;
 				const isValidationError =
 					(error.status === 400 || error.status === 422) &&
-					/toolkit/i.test(error.message);
+					/toolkit|preload/i.test(error.message);
 				if (!isValidationError) throw error;
 				lastError = error;
 			}
@@ -369,6 +411,7 @@ export class ComposioClient {
 				string,
 				string
 			>,
+			preloadedTools: readPreloadedTools(payload),
 		};
 	}
 }

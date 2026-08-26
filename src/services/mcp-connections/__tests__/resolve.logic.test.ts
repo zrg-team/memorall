@@ -30,7 +30,12 @@ vi.mock("@/utils/logger", () => ({
 }));
 
 import type { UnifiedFlowConfig } from "@memorall/agent-harness-flows/interfaces/config/flow-config";
-import { resolveConnections, withResolvedConnections } from "../resolve";
+import {
+	composioPreloadTools,
+	composioToolScope,
+	resolveConnections,
+	withResolvedConnections,
+} from "../resolve";
 import type { McpConnection } from "../types";
 
 const connection = (overrides: Partial<McpConnection> = {}): McpConnection => ({
@@ -246,7 +251,8 @@ describe("resolveConnections", () => {
 			expect.objectContaining({
 				composio: expect.objectContaining({
 					scopedSessions: {
-						github: "https://backend.composio.dev/tool_router/trs_github/mcp",
+						"github|router|":
+							"https://backend.composio.dev/tool_router/trs_github/mcp",
 					},
 				}),
 			}),
@@ -259,7 +265,8 @@ describe("resolveConnections", () => {
 				composio: {
 					toolkits: ["gmail", "googlecalendar", "github"],
 					scopedSessions: {
-						github: "https://backend.composio.dev/tool_router/trs_cached/mcp",
+						"github|router|":
+							"https://backend.composio.dev/tool_router/trs_cached/mcp",
 					},
 				},
 			}),
@@ -276,6 +283,93 @@ describe("resolveConnections", () => {
 		);
 	});
 
+	it("preloads the tools an agent was scoped to", async () => {
+		// Left to the router, GITHUB_GET_A_REPOSITORY is reachable only through
+		// COMPOSIO_MULTI_EXECUTE_TOOL's open `arguments` object, which `{}`
+		// satisfies. Preloaded, it is served as itself with `owner` and `repo`
+		// required, and an empty call stops being expressible.
+		listConnections.mockResolvedValue([composioConnection()]);
+		loadSecret.mockResolvedValue(JSON.stringify({ apiKey: "ak_live_123" }));
+		createMcpSession.mockResolvedValue({
+			sessionId: "trs_direct",
+			url: "https://backend.composio.dev/tool_router/trs_direct/mcp",
+			preloadedTools: ["GITHUB_GET_A_REPOSITORY", "GITHUB_LIST_BRANCHES"],
+		});
+
+		await resolveConnections([
+			{
+				connectionId: "c1",
+				appIds: ["github"],
+				toolAllowlist: [
+					"acme-internal__GITHUB_GET_A_REPOSITORY",
+					"acme-internal__GITHUB_LIST_BRANCHES",
+				],
+			},
+		]);
+
+		expect(createMcpSession).toHaveBeenCalledWith(
+			expect.objectContaining({
+				toolkits: ["github"],
+				preloadTools: ["GITHUB_GET_A_REPOSITORY", "GITHUB_LIST_BRANCHES"],
+				tools: {
+					github: {
+						enable: ["GITHUB_GET_A_REPOSITORY", "GITHUB_LIST_BRANCHES"],
+					},
+				},
+			}),
+		);
+	});
+
+	it("preloads nothing when the agent picked whole apps", async () => {
+		// Preloading a whole toolkit would put a hundred tool definitions in the
+		// model's context on every request.
+		listConnections.mockResolvedValue([composioConnection()]);
+		loadSecret.mockResolvedValue(JSON.stringify({ apiKey: "ak_live_123" }));
+		createMcpSession.mockResolvedValue({
+			sessionId: "trs_router",
+			url: "https://backend.composio.dev/tool_router/trs_router/mcp",
+			preloadedTools: [],
+		});
+
+		await resolveConnections([{ connectionId: "c1", appIds: ["github"] }]);
+
+		expect(createMcpSession.mock.calls[0][0].preloadTools).toBeUndefined();
+		expect(createMcpSession.mock.calls[0][0].tools).toBeUndefined();
+	});
+
+	it("does not hand a cached router session to a request that wants preloads", async () => {
+		listConnections.mockResolvedValue([
+			composioConnection({
+				composio: {
+					toolkits: ["github"],
+					scopedSessions: {
+						"github|router|":
+							"https://backend.composio.dev/tool_router/trs_router/mcp",
+					},
+				},
+			}),
+		]);
+		loadSecret.mockResolvedValue(JSON.stringify({ apiKey: "ak_live_123" }));
+		createMcpSession.mockResolvedValue({
+			sessionId: "trs_direct",
+			url: "https://backend.composio.dev/tool_router/trs_direct/mcp",
+			preloadedTools: ["GITHUB_GET_A_REPOSITORY", "GITHUB_LIST_BRANCHES"],
+		});
+
+		const result = await resolveConnections([
+			{
+				connectionId: "c1",
+				appIds: ["github"],
+				toolAllowlist: ["acme-internal__GITHUB_GET_A_REPOSITORY"],
+			},
+		]);
+
+		expect(createMcpSession).toHaveBeenCalledTimes(1);
+		expect(result.servers[0].url).toBe(
+			"https://backend.composio.dev/tool_router/trs_direct/mcp",
+		);
+	});
+
 	it("gives two agents different endpoints for different apps", async () => {
 		// The guarantee the whole feature rests on: an agent scoped to GitHub
 		// cannot reach Calendar, because Calendar is not in its session.
@@ -284,8 +378,9 @@ describe("resolveConnections", () => {
 				composio: {
 					toolkits: ["gmail", "googlecalendar", "github"],
 					scopedSessions: {
-						github: "https://backend.composio.dev/tool_router/trs_gh/mcp",
-						googlecalendar:
+						"github|router|":
+							"https://backend.composio.dev/tool_router/trs_gh/mcp",
+						"googlecalendar|router|":
 							"https://backend.composio.dev/tool_router/trs_cal/mcp",
 					},
 				},
@@ -419,7 +514,8 @@ describe("withResolvedConnections", () => {
 				composio: {
 					toolkits: ["gmail", "googlecalendar", "github"],
 					scopedSessions: {
-						github: "https://backend.composio.dev/tool_router/trs_gh/mcp",
+						"github|router|":
+							"https://backend.composio.dev/tool_router/trs_gh/mcp",
 					},
 				},
 			}),
@@ -465,5 +561,73 @@ describe("withResolvedConnections", () => {
 		const config = configWith({ connections: [{ connectionId: "c1" }] });
 
 		await expect(withResolvedConnections(config)).resolves.toBe(config);
+	});
+});
+
+describe("composioToolScope", () => {
+	it("groups server-prefixed names into the shape a session wants", () => {
+		expect(
+			composioToolScope(
+				[
+					"acme__GITHUB_GET_A_REPOSITORY",
+					"acme__GOOGLECALENDAR_CREATE_EVENT",
+					"acme__GITHUB_LIST_BRANCHES",
+				],
+				["github", "googlecalendar"],
+			),
+		).toEqual({
+			github: {
+				enable: ["GITHUB_GET_A_REPOSITORY", "GITHUB_LIST_BRANCHES"],
+			},
+			googlecalendar: { enable: ["GOOGLECALENDAR_CREATE_EVENT"] },
+		});
+	});
+
+	it("never widens the session past the apps the agent was granted", () => {
+		// An allowlist is a narrowing. A tool for an app the agent was not given
+		// must not be able to pull that app into the session.
+		expect(
+			composioToolScope(
+				["acme__GITHUB_GET_A_REPOSITORY", "acme__SLACK_SEND_MESSAGE"],
+				["github"],
+			),
+		).toEqual({ github: { enable: ["GITHUB_GET_A_REPOSITORY"] } });
+	});
+
+	it("has no scope to express when the agent was picked by app", () => {
+		expect(composioToolScope(undefined, ["github"])).toBeUndefined();
+		expect(composioToolScope([], ["github"])).toBeUndefined();
+		// Every named tool belongs to an app that was not granted.
+		expect(
+			composioToolScope(["acme__SLACK_SEND_MESSAGE"], ["github"]),
+		).toBeUndefined();
+	});
+
+	it("tolerates an unprefixed name and does not repeat a tool", () => {
+		expect(
+			composioToolScope(
+				["GITHUB_GET_A_REPOSITORY", "acme__GITHUB_GET_A_REPOSITORY"],
+				["github"],
+			),
+		).toEqual({ github: { enable: ["GITHUB_GET_A_REPOSITORY"] } });
+	});
+});
+
+describe("composioPreloadTools", () => {
+	it("flattens the scope into the slug list a session preloads", () => {
+		expect(
+			composioPreloadTools({
+				github: { enable: ["GITHUB_LIST_BRANCHES", "GITHUB_GET_A_REPOSITORY"] },
+				googlecalendar: { enable: ["GOOGLECALENDAR_CREATE_EVENT"] },
+			}),
+		).toEqual([
+			"GITHUB_GET_A_REPOSITORY",
+			"GITHUB_LIST_BRANCHES",
+			"GOOGLECALENDAR_CREATE_EVENT",
+		]);
+	});
+
+	it("preloads nothing for an agent scoped by app", () => {
+		expect(composioPreloadTools(undefined)).toEqual([]);
 	});
 });

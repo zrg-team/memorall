@@ -202,6 +202,77 @@ describe("ComposioClient", () => {
 		expect(fetchMock).toHaveBeenCalledTimes(4);
 	});
 
+	it("preloads the named tools so the model gets their real parameters", async () => {
+		// Verified against the live API: a plain session serves six meta-tools and
+		// hides every real tool behind COMPOSIO_MULTI_EXECUTE_TOOL, whose
+		// `arguments` object is an open object with no properties — a shape `{}`
+		// satisfies. Preloaded, GITHUB_GET_A_REPOSITORY is served as itself with
+		// `owner` and `repo` required.
+		fetchMock.mockResolvedValue(
+			jsonResponse({
+				session_id: "sess_1",
+				mcp: { url: "https://mcp.composio.dev/s/abc", headers: {} },
+				config: { preload: { tools: ["GITHUB_GET_A_REPOSITORY"] } },
+			}),
+		);
+
+		const session = await new ComposioClient("k").createMcpSession({
+			userId: "u",
+			toolkits: ["github"],
+			tools: { github: { enable: ["GITHUB_GET_A_REPOSITORY"] } },
+			preloadTools: ["GITHUB_GET_A_REPOSITORY"],
+		});
+
+		const { body } = lastCall();
+		expect(body).toMatchObject({
+			toolkits: { enable: ["github"] },
+			tools: { github: { enable: ["GITHUB_GET_A_REPOSITORY"] } },
+			// An array of slugs. `{tools: "all"}` is rejected with
+			// "Expected array, received string", and the SDK's `session_preset` is
+			// accepted by this endpoint and then ignored.
+			preload: { tools: ["GITHUB_GET_A_REPOSITORY"] },
+		});
+		expect(body.session_preset).toBeUndefined();
+		expect(session.preloadedTools).toEqual(["GITHUB_GET_A_REPOSITORY"]);
+	});
+
+	it("sends no preload when nothing was asked for", async () => {
+		fetchMock.mockResolvedValue(
+			jsonResponse({
+				session_id: "sess_1",
+				mcp: { url: "https://mcp.composio.dev/s/abc", headers: {} },
+			}),
+		);
+
+		const session = await new ComposioClient("k").createMcpSession({
+			userId: "u",
+			toolkits: ["github"],
+		});
+
+		expect(lastCall().body.preload).toBeUndefined();
+		expect(session.preloadedTools).toEqual([]);
+	});
+
+	it("reports what was preloaded from the echo, not from the request", async () => {
+		// Composio accepts and then ignores fields it does not know, so asking is
+		// no evidence of getting. Only the echoed config counts.
+		fetchMock.mockResolvedValue(
+			jsonResponse({
+				session_id: "sess_1",
+				mcp: { url: "https://mcp.composio.dev/s/abc", headers: {} },
+				config: { preload: { tools: [] } },
+			}),
+		);
+
+		const session = await new ComposioClient("k").createMcpSession({
+			userId: "u",
+			toolkits: ["github"],
+			preloadTools: ["GITHUB_GET_A_REPOSITORY"],
+		});
+
+		expect(session.preloadedTools).toEqual([]);
+	});
+
 	it("names the status and route in errors so a wrong path is obvious", async () => {
 		fetchMock.mockResolvedValue(
 			jsonResponse({ error: { message: "use /link instead" } }, 400),
