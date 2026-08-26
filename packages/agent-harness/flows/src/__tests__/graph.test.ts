@@ -1,12 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import type { BaseTool } from "../interfaces/engine/tool.js";
+import { jsonToolSchema, type BaseTool } from "../interfaces/engine/tool.js";
 import type { AgentState } from "../graph/agent/state.js";
 import {
 	AgentGraph,
 	MAX_CONSECUTIVE_TOOL_FAILURES,
 	mergeStreamedToolCall,
 } from "../graph/agent/graph.js";
+import { recursionLimitForIterations } from "../limits.js";
 import {
 	MISSING_TOOL_CALL_RESULT_CONTENT,
 	normalizeChatMessages,
@@ -286,5 +287,84 @@ describe("AgentGraph toolsNode", () => {
 			`stopped retrying failing_tool after ${MAX_CONSECUTIVE_TOOL_FAILURES} consecutive errors`,
 		);
 		expect(result.toolFailureStreak).toBeNull();
+	});
+});
+
+describe("agent iteration limit reaches LangGraph", () => {
+	it("budgets two steps per turn plus the initial node", () => {
+		// LangGraph counts every node it runs; one turn that calls a tool is two
+		// of them. Its own default is 25, which has nothing to do with the limit
+		// the user set.
+		expect(recursionLimitForIterations(50)).toBe(104);
+		expect(recursionLimitForIterations(25)).toBe(54);
+		// Out-of-range values go through the same normalisation as the setting.
+		expect(recursionLimitForIterations(Number.NaN)).toBe(104);
+	});
+
+	it("runs every configured iteration instead of stopping at LangGraph's 25", async () => {
+		// The regression: a run configured for 50 turns died on "Recursion limit
+		// of 25 reached" after about twelve tool calls. Fifty turns is roughly a
+		// hundred super-steps, so completing them is only possible if the graph
+		// was given a budget derived from its own limit.
+		const maxIterations = 20;
+		let turns = 0;
+
+		const tool: BaseTool = {
+			name: "ping",
+			description: "ping",
+			schema: jsonToolSchema({ type: "object", properties: {} }),
+			execute: async () => "pong",
+		};
+
+		const graph = new AgentGraph(
+			{
+				llm: {
+					isReady: () => true,
+					getCurrentModel: async () => ({ modelId: "test" }),
+					getMaxModelTokens: async () => 128000,
+					getMaxResponseTokens: async () => 4096,
+					// Never finishes on its own: only a limit can end this run.
+					chatCompletions: (() =>
+						(async function* () {
+							turns += 1;
+							yield {
+								id: "chunk",
+								object: "chat.completion.chunk",
+								created: 0,
+								model: "test",
+								choices: [
+									{
+										index: 0,
+										delta: {
+											role: "assistant",
+											content: null,
+											tool_calls: [
+												{
+													index: 0,
+													id: `call_${turns}`,
+													type: "function",
+													function: { name: "ping", arguments: "{}" },
+												},
+											],
+										},
+										finish_reason: null,
+									},
+								],
+							};
+						})()) as never,
+				},
+			},
+			{ tools: [tool], maxIterations },
+		);
+
+		const stream = await graph.stream(
+			{ messages: [{ role: "user", content: "go" }], maxIterations },
+			{ streamMode: ["values"] },
+		);
+		for await (const _ of stream as AsyncIterable<unknown>) {
+			// drain
+		}
+
+		expect(turns).toBe(maxIterations);
 	});
 });

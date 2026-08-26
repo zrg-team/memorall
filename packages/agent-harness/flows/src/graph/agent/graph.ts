@@ -35,7 +35,11 @@ import {
 import type { BaseGraph } from "../../registries/graph-registry.js";
 import { findEnabledStepByName } from "../../interfaces/config/flow-config.js";
 import type { FlowRegistrySet } from "../../registries/registry-set.js";
-import { normalizeAgentMaxIterations } from "../../limits.js";
+import {
+	DEFAULT_AGENT_MAX_ITERATIONS,
+	normalizeAgentMaxIterations,
+	recursionLimitForIterations,
+} from "../../limits.js";
 
 // Tool names available to the agent
 const DEFAULT_TOOL_NAMES = ["current_time"] as const;
@@ -139,6 +143,17 @@ export class AgentGraph extends GraphBase<
 		this.workflow.addEdge("tool_executor", "agent");
 
 		this.compile();
+	}
+
+	/**
+	 * The agent's own iteration limit is what should end a run, not LangGraph's
+	 * unrelated default of 25 steps. Without this the setting in the UI is
+	 * decorative past about a dozen tool calls.
+	 */
+	protected override stepBudget(): number {
+		return recursionLimitForIterations(
+			this.maxIterations ?? DEFAULT_AGENT_MAX_ITERATIONS,
+		);
 	}
 
 	/**

@@ -704,6 +704,29 @@ export class GraphBase<N extends string, T extends BaseStateBase, S = unknown> {
 		} as TOptions;
 	}
 
+	/**
+	 * How many super-steps this graph needs, when it knows.
+	 *
+	 * LangGraph counts every node it executes and stops at 25 unless told
+	 * otherwise — a number that has nothing to do with what a graph was
+	 * configured to do, and that surfaces as a raw "Recursion limit reached"
+	 * with no way for the reader to connect it to the setting they chose.
+	 * A graph whose own limits imply a step count says so here.
+	 */
+	protected stepBudget(): number | undefined {
+		return undefined;
+	}
+
+	/** The caller's own limit always wins; this only fills a gap. */
+	private withStepBudget<
+		TOptions extends { recursionLimit?: number } | undefined,
+	>(options: TOptions): TOptions {
+		if (options?.recursionLimit !== undefined) return options;
+		const budget = this.stepBudget();
+		if (budget === undefined) return options;
+		return { ...(options ?? {}), recursionLimit: budget } as TOptions;
+	}
+
 	protected compile(
 		options?: Parameters<typeof this.workflow.compile>[0],
 	): CompiledGraph<T> {
@@ -729,7 +752,7 @@ export class GraphBase<N extends string, T extends BaseStateBase, S = unknown> {
 			try {
 				return await this.app.invoke(
 					arg,
-					this.withRunLifecycle(options, runLifecycle),
+					this.withRunLifecycle(this.withStepBudget(options), runLifecycle),
 				);
 			} finally {
 				if (ownsLifecycle) {
@@ -751,7 +774,7 @@ export class GraphBase<N extends string, T extends BaseStateBase, S = unknown> {
 		try {
 			const stream = await this.app.stream(
 				arg,
-				this.withRunLifecycle(options, runLifecycle),
+				this.withRunLifecycle(this.withStepBudget(options), runLifecycle),
 			);
 			const wrappedStream = ownsLifecycle
 				? wrapStreamWithLifecycle(stream as AsyncIterable<unknown>, () =>
