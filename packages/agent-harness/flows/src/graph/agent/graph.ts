@@ -22,6 +22,11 @@ import {
 import { getFlowRuntimeVars } from "../../context/runtime-context.js";
 import { getFlowRunLifecycle } from "../../context/run-lifecycle.js";
 import { streamAssistantTurn } from "./assistant-turn.js";
+import {
+	correctionsExhausted,
+	findToolArgumentProblem,
+	nextCorrectionCount,
+} from "./tool-arguments.js";
 import { logError, logInfo } from "../../logging/logger.js";
 import {
 	graphRegistry,
@@ -297,6 +302,7 @@ export class AgentGraph extends GraphBase<
 		let toolStateOffset = 0;
 		const outputMessages: AgentState["outputMessages"] = [];
 		let toolFailureStreak = state.toolFailureStreak ?? null;
+		let argumentCorrections = state.argumentCorrections ?? {};
 
 		logInfo("[TOOL EXECUTE] Start tool calls", lastMessage.tool_calls);
 
@@ -356,6 +362,52 @@ export class AgentGraph extends GraphBase<
 				for (const chunk of createOutputMessageChunks([toolMessage])) {
 					runConfig?.writer?.({ type: "llm", chunk });
 				}
+				continue;
+			}
+
+			/*
+			 * A call with nothing where the parameters go is already lost: the
+			 * server answers "following fields are missing", which reads as a
+			 * broken tool and, repeated, ends the run. We hold the schema the model
+			 * was missing, so the useful reply is that schema — handed back as this
+			 * tool's result, in time for the next iteration to get it right.
+			 */
+			const argumentProblem = correctionsExhausted(argumentCorrections, toolName)
+				? undefined
+				: findToolArgumentProblem(combined.executor, parsedInput);
+
+			if (argumentProblem) {
+				argumentCorrections = nextCorrectionCount(argumentCorrections, toolName);
+				const content = argumentProblem.correction;
+				logInfo(
+					`[TOOL EXECUTE] Returning ${argumentProblem.target} its schema instead of dispatching an empty call`,
+				);
+				const endedAtMs = Date.now();
+				runConfig?.writer?.({
+					type: "tool-result",
+					node: "tool_executor",
+					metadata: {
+						tool: toolName,
+						tool_call_id: toolCall.id,
+						content,
+						isError: true,
+						endedAt: new Date(endedAtMs).toISOString(),
+						durationMs: endedAtMs - startedAtMs,
+						...(toolMetadata ? { tool_metadata: toolMetadata } : {}),
+					},
+				});
+				const toolMessage = {
+					role: "tool" as const,
+					content,
+					tool_call_id: toolCall.id,
+				};
+				outputMessages.push(toolMessage);
+				for (const chunk of createOutputMessageChunks([toolMessage])) {
+					runConfig?.writer?.({ type: "llm", chunk });
+				}
+				// Deliberately not a failure: the tool never ran, and counting a
+				// correction toward the give-up streak would spend the model's
+				// retries on the very loop this exists to break.
 				continue;
 			}
 
@@ -452,6 +504,7 @@ export class AgentGraph extends GraphBase<
 		return {
 			outputMessages: [...state.outputMessages, ...outputMessages],
 			toolFailureStreak,
+			argumentCorrections,
 		};
 	};
 }

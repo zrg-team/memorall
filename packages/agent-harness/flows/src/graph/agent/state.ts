@@ -18,6 +18,12 @@ export interface AgentState extends BaseStateBase {
 	currentIteration: number;
 	/** Consecutive failures from the same tool, used to stop retry loops. */
 	toolFailureStreak?: ToolFailureStreak | null;
+	/**
+	 * How many times each tool has been handed its schema back after being
+	 * called with nothing in it. Bounded so a model that cannot use the schema
+	 * still reaches the real call rather than looping on our correction.
+	 */
+	argumentCorrections?: Record<string, number>;
 }
 
 export const AgentAnnotation = Annotation.Root({
@@ -32,6 +38,10 @@ export const AgentAnnotation = Annotation.Root({
 	toolFailureStreak: Annotation<ToolFailureStreak | null>({
 		value: (x, y) => (y === undefined ? x : y),
 		default: () => null,
+	}),
+	argumentCorrections: Annotation<Record<string, number>>({
+		value: (x, y) => y ?? x,
+		default: () => ({}),
 	}),
 	...BaseAnnotation,
 });
