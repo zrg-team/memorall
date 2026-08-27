@@ -333,16 +333,29 @@ try {
 			`Navigation timeout did not retain a recoverable page handle: ${JSON.stringify(partial)}`,
 		);
 	}
-	await new Promise((resolveWait) => setTimeout(resolveWait, 350));
-	const recovered = await command({
-		command: "snapshot",
-		sessionId: "partial-timeout",
-		tabId: partialTabId,
-		timeoutMs: 2_000,
-		maxHtmlChars: 10_000,
-	});
-	if (!recovered.success || !recovered.snapshot.text.includes("late content")) {
-		throw new Error("Timed-out navigation did not recover through snapshot.");
+	// The fixture answers /slow after 250ms, so the page is still in flight when
+	// the navigation times out. Poll for the recovery instead of waiting a fixed
+	// amount: a loaded runner needs far longer than the response delay to parse
+	// the page and answer a snapshot, which made this fail intermittently.
+	const recoveryDeadline = Date.now() + 15_000;
+	let recovered;
+	for (;;) {
+		recovered = await command({
+			command: "snapshot",
+			sessionId: "partial-timeout",
+			tabId: partialTabId,
+			timeoutMs: 2_000,
+			maxHtmlChars: 10_000,
+		});
+		if (recovered.success && recovered.snapshot.text.includes("late content")) {
+			break;
+		}
+		if (Date.now() >= recoveryDeadline) {
+			throw new Error(
+				`Timed-out navigation did not recover through snapshot: ${JSON.stringify(recovered)}`,
+			);
+		}
+		await new Promise((resolveWait) => setTimeout(resolveWait, 150));
 	}
 	await command({
 		command: "close",
