@@ -1,11 +1,35 @@
+import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
-import { copyFile, cp, mkdir, readdir, rm, writeFile } from "node:fs/promises";
+import {
+	copyFile,
+	cp,
+	mkdir,
+	readdir,
+	readFile,
+	rm,
+	writeFile,
+} from "node:fs/promises";
 import { defineConfig } from "vite";
 
+const basePath = "/memorall/studio/";
 const repositoryRoot = fileURLToPath(new URL("../..", import.meta.url));
 const landingDirectory = fileURLToPath(
 	new URL("../../runner", import.meta.url),
 );
+const iconDirectory = fileURLToPath(
+	new URL("../../runner/images", import.meta.url),
+);
+// The PWA icon set the manifest and index.html point at, shared with the
+// landing page so a single source image drives every surface.
+const iconFiles = [
+	"favicon.ico",
+	"favicon-16x16.png",
+	"favicon-32x32.png",
+	"apple-touch-icon.png",
+	"android-chrome-192x192.png",
+	"android-chrome-512x512.png",
+];
+
 const deploymentDirectory = fileURLToPath(
 	new URL("../../publish/web", import.meta.url),
 );
@@ -13,9 +37,50 @@ const outputDirectory = fileURLToPath(
 	new URL("../../publish/web/studio", import.meta.url),
 );
 
+/**
+ * Builds the deployed service worker from apps/web/public/sw.js by filling in
+ * the precache list and a build id derived from it. The id changes whenever the
+ * bundle does, which is what makes the browser treat a deploy as a new worker
+ * and lets the app offer "reload to update".
+ */
+async function writeServiceWorker(): Promise<void> {
+	const shell = await readFile(`${outputDirectory}/index.html`, "utf8");
+	const referenced = new Set<string>();
+	const assetReference = new RegExp(`(?:src|href)="${basePath}([^"]+)"`, "g");
+	for (const match of shell.matchAll(assetReference)) {
+		referenced.add(match[1]);
+	}
+	const precache = [
+		"index.html",
+		"manifest.webmanifest",
+		...iconFiles.map((file) => `icons/${file}`),
+		...[...referenced].sort(),
+	];
+	// Names under assets/ already carry a content hash, but index.html and the
+	// manifest do not, so their bytes go into the id as well. Without that, a
+	// deploy that only edits the shell would not look like a new version.
+	const fingerprint = createHash("sha256").update(precache.join("\n"));
+	for (const path of precache) {
+		if (path.startsWith("assets/")) continue;
+		fingerprint.update(await readFile(`${outputDirectory}/${path}`));
+	}
+	const buildId = fingerprint.digest("hex").slice(0, 16);
+	const template = await readFile(
+		fileURLToPath(new URL("./public/sw.js", import.meta.url)),
+		"utf8",
+	);
+	const source = template
+		.replace("__MEMORALL_BUILD_ID__", buildId)
+		.replace("__MEMORALL_PRECACHE__", JSON.stringify(precache, null, "\t"));
+	if (source.includes("__MEMORALL_")) {
+		throw new Error("Service worker template placeholders were not replaced");
+	}
+	await writeFile(`${outputDirectory}/sw.js`, source, "utf8");
+}
+
 export default defineConfig({
 	root: fileURLToPath(new URL(".", import.meta.url)),
-	base: "/memorall/studio/",
+	base: basePath,
 	// Reuse the extension's packaged local model, runner, sandbox, and viewer assets.
 	publicDir: fileURLToPath(new URL("../../public", import.meta.url)),
 	plugins: [
@@ -24,9 +89,32 @@ export default defineConfig({
 			async buildStart() {
 				await rm(deploymentDirectory, { recursive: true, force: true });
 			},
+			// The shell's icons and web manifest live outside `publicDir`, which is
+			// shared with the extension build, so the dev server serves them here to
+			// match what the deployed layout looks like.
+			configureServer(server) {
+				server.middlewares.use((request, response, next) => {
+					const path = (request.url ?? "").split("?")[0];
+					const iconPrefix = `${basePath}icons/`;
+					if (!path.startsWith(iconPrefix)) return next();
+					const file = path.slice(iconPrefix.length);
+					if (!iconFiles.includes(file)) return next();
+					readFile(`${iconDirectory}/${file}`).then(
+						(body) => {
+							response.setHeader(
+								"Content-Type",
+								file.endsWith(".ico") ? "image/x-icon" : "image/png",
+							);
+							response.end(body);
+						},
+						() => next(),
+					);
+				});
+			},
 			async closeBundle() {
 				await mkdir(deploymentDirectory, { recursive: true });
 				await mkdir(outputDirectory, { recursive: true });
+				await mkdir(`${outputDirectory}/icons`, { recursive: true });
 				for (const entry of await readdir(landingDirectory)) {
 					await cp(
 						`${landingDirectory}/${entry}`,
@@ -36,9 +124,11 @@ export default defineConfig({
 				}
 				await mkdir(`${deploymentDirectory}/privacy`, { recursive: true });
 				await Promise.all([
-					copyFile(
-						fileURLToPath(new URL("./public/sw.js", import.meta.url)),
-						`${outputDirectory}/sw.js`,
+					...iconFiles.map((file) =>
+						copyFile(
+							`${iconDirectory}/${file}`,
+							`${outputDirectory}/icons/${file}`,
+						),
 					),
 					copyFile(
 						fileURLToPath(
@@ -53,6 +143,8 @@ export default defineConfig({
 						"utf8",
 					),
 				]);
+				// Last, so the precache list it derives can see every emitted file.
+				await writeServiceWorker();
 			},
 		},
 	],
