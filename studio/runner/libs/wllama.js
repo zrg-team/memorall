@@ -2513,8 +2513,8 @@ var LogLevel = /* @__PURE__ */ ((LogLevel2) => {
 
 // src/wasm-from-cdn.ts
 var WasmCompatFromCDN = {
-  worker: "https://cdn.jsdelivr.net/npm/@wllama/wllama-compat@3.5.1/wasm/wllama.js",
-  wasm: "https://cdn.jsdelivr.net/npm/@wllama/wllama-compat@3.5.1/wasm/wllama.wasm"
+  worker: new URL("./compat/wllama.js", import.meta.url).href,
+  wasm: new URL("./compat/wllama.wasm", import.meta.url).href
 };
 
 // src/wllama.ts

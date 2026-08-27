@@ -1,0 +1,1 @@
+function e(){return document.documentElement.dataset.uiSurface===`popup`||window.location.href.includes(`popup.html`)}async function t(){return new Promise(e=>{if(typeof document>`u`){e();return}document.readyState===`loading`?document.addEventListener(`DOMContentLoaded`,()=>e()):e()})}export{t as n,e as t};

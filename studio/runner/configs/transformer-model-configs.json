@@ -1,11 +1,137 @@
 {
   "models": [
     {
+      "id": "onnx-community/LFM2.5-350M-ONNX",
+      "defaultMaxNewTokens": 1024,
+      "runnerConfig": {
+        "runtime": "causal_lm",
+        "dtype": "q4f16"
+      },
+      "unsupportedReason": null
+    },
+    {
+      "id": "onnx-community/functiongemma-270m-it-ONNX",
+      "defaultMaxNewTokens": 1024,
+      "runnerConfig": {
+        "runtime": "causal_lm",
+        "dtype": "q4f16"
+      },
+      "unsupportedReason": null
+    },
+    {
+      "id": "onnx-community/granite-4.0-h-350m-ONNX",
+      "defaultMaxNewTokens": 1024,
+      "runnerConfig": {
+        "runtime": "causal_lm",
+        "dtype": "q4f16"
+      },
+      "unsupportedReason": null
+    },
+    {
+      "id": "onnx-community/Falcon-H1-Tiny-90M-Instruct-ONNX",
+      "defaultMaxNewTokens": 1024,
+      "runnerConfig": {
+        "runtime": "causal_lm",
+        "dtype": "q4f16"
+      },
+      "unsupportedReason": null
+    },
+    {
+      "id": "onnx-community/LFM2-2.6B-ONNX",
+      "defaultMaxNewTokens": 1024,
+      "runnerConfig": {
+        "runtime": "causal_lm",
+        "dtype": "q4f16"
+      },
+      "unsupportedReason": null
+    },
+    {
+      "id": "onnx-community/Qwen3-0.6B-Instruct-ONNX",
+      "defaultMaxNewTokens": 1024,
+      "runnerConfig": {
+        "runtime": "causal_lm",
+        "dtype": "q4f16"
+      },
+      "unsupportedReason": null
+    },
+    {
       "id": "onnx-community/granite-4.0-micro-ONNX-web",
       "defaultMaxNewTokens": 1024,
       "runnerConfig": {
         "runtime": "causal_lm",
         "dtype": "auto"
+      },
+      "unsupportedReason": null
+    },
+    {
+      "id": "onnx-community/granite-4.0-350m-ONNX-web",
+      "defaultMaxNewTokens": 512,
+      "runnerConfig": {
+        "runtime": "causal_lm",
+        "dtype": "q4f16"
+      },
+      "unsupportedReason": null
+    },
+    {
+      "id": "onnx-community/LFM2-1.2B-Tool-ONNX",
+      "defaultMaxNewTokens": 1024,
+      "runnerConfig": {
+        "runtime": "causal_lm",
+        "dtype": "q4f16"
+      },
+      "unsupportedReason": null
+    },
+    {
+      "id": "onnx-community/Qwen3-1.7B-ONNX",
+      "defaultMaxNewTokens": 1024,
+      "runnerConfig": {
+        "runtime": "causal_lm",
+        "dtype": "q4f16"
+      },
+      "unsupportedReason": null
+    },
+    {
+      "id": "onnx-community/Qwen3-4B-ONNX",
+      "defaultMaxNewTokens": 1024,
+      "runnerConfig": {
+        "runtime": "causal_lm",
+        "dtype": "q4f16"
+      },
+      "unsupportedReason": null
+    },
+    {
+      "id": "onnx-community/Llama-3.2-1B-Instruct-ONNX",
+      "defaultMaxNewTokens": 1024,
+      "runnerConfig": {
+        "runtime": "causal_lm",
+        "dtype": "q4f16"
+      },
+      "unsupportedReason": null
+    },
+    {
+      "id": "onnx-community/Bonsai-1.7B-ONNX",
+      "defaultMaxNewTokens": 512,
+      "runnerConfig": {
+        "runtime": "causal_lm",
+        "dtype": "q1"
+      },
+      "unsupportedReason": null
+    },
+    {
+      "id": "onnx-community/Apertus-v1.1-0.5B-Instruct-ONNX",
+      "defaultMaxNewTokens": 1024,
+      "runnerConfig": {
+        "runtime": "causal_lm",
+        "dtype": "q4f16"
+      },
+      "unsupportedReason": null
+    },
+    {
+      "id": "onnx-community/Apertus-v1.1-1.5B-Instruct-ONNX",
+      "defaultMaxNewTokens": 1024,
+      "runnerConfig": {
+        "runtime": "causal_lm",
+        "dtype": "q4f16"
       },
       "unsupportedReason": null
     },
@@ -120,7 +246,7 @@
       "unsupportedReason": null
     },
     {
-      "id": "onnx-community/SmolLM2-135M-Instruct",
+      "id": "HuggingFaceTB/SmolLM2-135M-Instruct",
       "defaultMaxNewTokens": 512,
       "runnerConfig": {
         "runtime": "causal_lm",
@@ -129,7 +255,7 @@
       "unsupportedReason": null
     },
     {
-      "id": "onnx-community/SmolLM2-360M-Instruct",
+      "id": "HuggingFaceTB/SmolLM2-360M-Instruct",
       "defaultMaxNewTokens": 512,
       "runnerConfig": {
         "runtime": "causal_lm",
@@ -138,7 +264,7 @@
       "unsupportedReason": null
     },
     {
-      "id": "onnx-community/SmolLM2-1.7B-Instruct",
+      "id": "HuggingFaceTB/SmolLM2-1.7B-Instruct",
       "defaultMaxNewTokens": 512,
       "runnerConfig": {
         "runtime": "causal_lm",
@@ -173,14 +299,44 @@
     {
       "id": "onnx-community/gemma-3-1b-it-ONNX",
       "defaultMaxNewTokens": 512,
+      "runnerConfig": {
+        "runtime": "causal_lm",
+        "dtype": "q4f16"
+      },
+      "unsupportedReason": null
+    },
+    {
+      "id": "onnx-community/gemma-3-270m-it-ONNX",
+      "defaultMaxNewTokens": 512,
+      "runnerConfig": {
+        "runtime": "causal_lm",
+        "dtype": "q4f16"
+      },
+      "unsupportedReason": null
+    },
+    {
+      "id": "onnx-community/SmolLM2-135M-Instruct",
+      "defaultMaxNewTokens": 512,
       "runnerConfig": null,
-      "unsupportedReason": "onnx-community/gemma-3-1b-it-ONNX is not currently reliable in the bundled transformers.js runtime in the browser. Use another transformer model or a Wllama GGUF Gemma model instead."
+      "unsupportedReason": "This legacy repository is inaccessible. Select HuggingFaceTB/SmolLM2-135M-Instruct instead."
+    },
+    {
+      "id": "onnx-community/SmolLM2-360M-Instruct",
+      "defaultMaxNewTokens": 512,
+      "runnerConfig": null,
+      "unsupportedReason": "This legacy repository is inaccessible. Select HuggingFaceTB/SmolLM2-360M-Instruct instead."
+    },
+    {
+      "id": "onnx-community/SmolLM2-1.7B-Instruct",
+      "defaultMaxNewTokens": 512,
+      "runnerConfig": null,
+      "unsupportedReason": "This legacy repository is inaccessible. Select HuggingFaceTB/SmolLM2-1.7B-Instruct instead."
     },
     {
       "id": "onnx-community/gemma-3-270m-it",
       "defaultMaxNewTokens": 512,
       "runnerConfig": null,
-      "unsupportedReason": "onnx-community/gemma-3-270m-it is not currently compatible with the bundled transformers.js runtime in the browser. Use a Wllama GGUF Gemma model or another transformer model such as Qwen3 or LFM2 instead."
+      "unsupportedReason": "This repository does not exist. Select onnx-community/gemma-3-270m-it-ONNX instead."
     }
   ]
 }

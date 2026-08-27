@@ -1,5 +1,5 @@
 const LOTTIE_RUNTIME_URL = new URL(
-	"../../vendors/artifacts/lottie_canvas.min.js",
+	"../../../vendors/artifacts/lottie_canvas.min.js",
 	globalThis.location.href,
 ).href;
 const GIF_ENCODER_URL = "./js/gif-encoder.js";
