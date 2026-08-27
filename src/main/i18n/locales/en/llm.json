@@ -56,6 +56,16 @@
 			"configured": "Configured provider"
 		}
 	},
+	"browserSupport": {
+		"title": "{{provider}} is not supported in this browser",
+		"reasons": {
+			"webgpu": "This provider runs models on the GPU through WebGPU, which this browser does not expose. Chrome, Edge, or a recent Safari can run it.",
+			"opfs": "This provider stores downloaded models in the browser's private file system, which this browser does not expose. Chrome, Edge, Firefox, or a recent Safari can run it."
+		},
+		"alternative": "Another on-device provider, or your own API key, will work here.",
+		"tabUnsupported": "Not supported in this browser",
+		"noLocalProviders": "This browser cannot run models on-device. Connect your own API key instead."
+	},
 	"providerPanel": {
 		"status": "Status: {{status}}",
 		"testInference": "Test inference",

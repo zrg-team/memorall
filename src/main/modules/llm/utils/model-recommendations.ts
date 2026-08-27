@@ -202,6 +202,12 @@ export function generateRecommendations(
 			return false;
 		}
 
+		// GGUF weights live in the origin private file system; without it the
+		// download fails inside the runtime, so never recommend one.
+		if (model.provider === "wllama" && !specs.hasOpfs) {
+			return false;
+		}
+
 		if (model.minMemoryGB > specs.memoryGB) {
 			return false;
 		}

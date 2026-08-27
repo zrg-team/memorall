@@ -10,6 +10,11 @@ export interface SystemSpecs {
 	cpuCores: number;
 	/** Whether WebGPU is available */
 	hasWebGPU: boolean;
+	/**
+	 * Whether the origin private file system is available. GGUF (Wllama) models
+	 * are stored there, so without it those models cannot be downloaded at all.
+	 */
+	hasOpfs: boolean;
 	/** GPU information if available */
 	gpu?: {
 		vendor: string;

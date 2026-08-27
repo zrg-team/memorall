@@ -1,5 +1,6 @@
 import type { SystemSpecs } from "../types/system-specs";
 import { detectWebGPUAdapter } from "@/utils/webgpu";
+import { hasOriginPrivateFileSystem } from "@/platform/core/origin-private-file-system";
 import { estimateVRAM as getVRAM } from "./gpu-vram-database";
 
 /**
@@ -14,6 +15,9 @@ export async function detectSystemSpecs(): Promise<SystemSpecs> {
 
 	// Detect WebGPU availability
 	const hasWebGPU = await detectWebGPUAdapter();
+
+	// Detect where downloaded GGUF weights would be stored
+	const hasOpfs = hasOriginPrivateFileSystem();
 
 	// Detect GPU information
 	const gpu = await detectGPU();
@@ -30,6 +34,7 @@ export async function detectSystemSpecs(): Promise<SystemSpecs> {
 		memoryGB,
 		cpuCores,
 		hasWebGPU,
+		hasOpfs,
 		gpu,
 		deviceCategory,
 	};

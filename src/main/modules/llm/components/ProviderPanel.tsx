@@ -15,6 +15,8 @@ import { RecommendedSetup } from "./RecommendedSetup";
 import { TransformerTab } from "./TransformerTab";
 import { WebLLMTab } from "./WebLLMTab";
 import { WllamaTab } from "./WllamaTab";
+import { BrowserSupportNotice } from "./BrowserSupportNotice";
+import { getProviderSupport } from "../utils/browser-support";
 import { LocalModelsList } from "./YourModels/components/LocalModelsList";
 import { QuickDownloadModels } from "./YourModels/components/QuickDownloadModels";
 import { RemoteModelsSection } from "./YourModels/components/RemoteModelsSection";
@@ -124,6 +126,7 @@ export const ProviderPanel: React.FC<ProviderPanelProps> = ({
 }) => {
 	const { t } = useTranslation("llm");
 	const { current, setCurrent, isInitialized } = useCurrentModel();
+	const advancedProviderSupport = getProviderSupport(advancedProvider);
 	const [showTestInference, setShowTestInference] = React.useState(false);
 	// Land on "Recommended" for anyone without a model yet, and on the provider
 	// surface for anyone who already has one — unless they pick a mode first.
@@ -349,7 +352,14 @@ export const ProviderPanel: React.FC<ProviderPanelProps> = ({
 				/>
 			)}
 
-			{advancedProvider === "wllama" && (
+			{advancedProviderSupport.supported ? null : (
+				<BrowserSupportNotice
+					provider={advancedProvider}
+					reason={advancedProviderSupport.reason}
+				/>
+			)}
+
+			{advancedProviderSupport.supported && advancedProvider === "wllama" && (
 				<WllamaTab
 					repo={repo}
 					setRepo={setRepo}
@@ -370,7 +380,7 @@ export const ProviderPanel: React.FC<ProviderPanelProps> = ({
 				/>
 			)}
 
-			{advancedProvider === "webllm" && (
+			{advancedProviderSupport.supported && advancedProvider === "webllm" && (
 				<WebLLMTab
 					model={model}
 					setModel={setModel}

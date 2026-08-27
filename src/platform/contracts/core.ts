@@ -11,7 +11,8 @@ export type CapabilityId =
 	| "notifications.native"
 	| "updates.native"
 	| "ai.webgpu"
-	| "ai.wasmThreads";
+	| "ai.wasmThreads"
+	| "storage.opfs";
 
 export type CapabilityAction = "permission" | "download" | "approval";
 

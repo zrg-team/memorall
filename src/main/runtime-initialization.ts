@@ -1,4 +1,6 @@
 import { platform } from "@/platform/current";
+import { MutableCapabilityRegistry } from "@/platform/core/capability-registry";
+import { detectWebGPUAdapter } from "@/utils/webgpu";
 import { serviceManager } from "@/services";
 import { backgroundJob } from "@/services/background-jobs/background-job";
 import { sharedStorageService } from "@/services/shared-storage/shared-storage-service";
@@ -10,9 +12,28 @@ export interface RuntimeInitializationProgress {
 	status: "initializing" | "completed" | "error";
 }
 
+/**
+ * `navigator.gpu` existing does not mean a GPU adapter can actually be created
+ * — some browsers and virtualised machines expose the API and then hand back
+ * nothing. The capability registry starts from that cheap synchronous check, so
+ * confirm it here, while the loading screen is still up and before any UI has
+ * offered a model that only runs on the GPU.
+ */
+async function confirmWebGpuAdapter(): Promise<void> {
+	const capabilities = platform.capabilities;
+	if (!(capabilities instanceof MutableCapabilityRegistry)) return;
+	if (!capabilities.get("ai.webgpu").available) return;
+	if (await detectWebGPUAdapter()) return;
+	capabilities.set("ai.webgpu", {
+		available: false,
+		reason: "This browser exposes WebGPU but could not provide an adapter.",
+	});
+}
+
 export async function initializeRuntimeServices(
 	onProgress: (progress: RuntimeInitializationProgress) => void,
 ): Promise<void> {
+	await confirmWebGpuAdapter();
 	await sharedStorageService.initialize();
 
 	if (platform.environment === "extension") {

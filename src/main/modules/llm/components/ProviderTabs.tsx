@@ -1,7 +1,9 @@
 import React from "react";
+import { AlertTriangle } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/main/components/ui/button";
 import type { ServiceProvider } from "@/services/llm/interfaces/llm-service.interface";
+import { getProviderSupport } from "../utils/browser-support";
 
 export type ProviderStatus = "active" | "configured" | "idle";
 
@@ -47,6 +49,7 @@ export const ProviderTabs: React.FC<ProviderTabsProps> = ({
 	const { t } = useTranslation("llm");
 
 	const handleSelect = (provider: ServiceProvider) => {
+		if (!getProviderSupport(provider).supported) return;
 		setAdvancedProvider(provider);
 		if (advancedProvider === provider) return;
 		onProviderChange();
@@ -109,23 +112,44 @@ export const ProviderTabs: React.FC<ProviderTabsProps> = ({
 				) : null}
 				{PROVIDER_ORDER.map((provider) => {
 					const isActive = advancedProvider === provider;
+					// A provider this browser cannot run stays visible but inert, so
+					// the reason is discoverable rather than the tab silently missing.
+					const support = getProviderSupport(provider);
+					const unsupportedLabel = support.supported
+						? undefined
+						: `${t("browserSupport.tabUnsupported")} — ${t(
+								`browserSupport.reasons.${support.reason}`,
+							)}`;
 					return (
 						<Button
 							key={provider}
 							type="button"
 							data-provider-tab={provider}
+							data-provider-unsupported={
+								support.supported ? undefined : support.reason
+							}
 							variant="ghost"
 							onClick={() => handleSelect(provider)}
+							title={unsupportedLabel}
+							aria-disabled={!support.supported}
 							className={`min-h-9 shrink-0 gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors sm:px-3 sm:text-sm ${
 								isActive
 									? "bg-background text-foreground shadow-sm ring-1 ring-border"
 									: "text-muted-foreground hover:bg-background/60 hover:text-foreground"
 							}`}
-							disabled={loading}
+							disabled={loading || !support.supported}
 						>
 							<span className="sm:hidden">{compactLabels[provider]}</span>
 							<span className="hidden sm:inline">{labels[provider]}</span>
-							{renderStatus(provider)}
+							{support.supported ? (
+								renderStatus(provider)
+							) : (
+								<AlertTriangle
+									size={12}
+									className="text-amber-500"
+									aria-label={t("browserSupport.tabUnsupported")}
+								/>
+							)}
 						</Button>
 					);
 				})}

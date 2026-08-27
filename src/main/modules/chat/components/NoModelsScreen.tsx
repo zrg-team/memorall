@@ -17,6 +17,7 @@ import { eq } from "drizzle-orm";
 import { platform } from "@/platform/current";
 
 import { cn } from "@/lib/utils";
+import { hasLocalModelSupport } from "@/main/modules/llm/utils/browser-support";
 import { Button } from "@/main/components/ui/button";
 import {
 	Card,
@@ -66,6 +67,7 @@ export const NoModelsScreen: React.FC<NoModelsScreenProps> = ({
 	const { t } = useTranslation("chat");
 	const { t: tLlm } = useTranslation("llm");
 	const { isLoading, isInitialized } = useAuth();
+	const canRunLocalModels = hasLocalModelSupport();
 	const [selectedOption, setSelectedOption] = React.useState<
 		"login" | "local" | "keys" | null
 	>(null);
@@ -379,7 +381,15 @@ export const NoModelsScreen: React.FC<NoModelsScreenProps> = ({
 							<Card
 								data-copilot="setup-local"
 								data-agent-cursor-point="copilot-setup-local"
-								className="group relative cursor-pointer border-2 transition-[transform,box-shadow,border-color,background-color] duration-300 ease-out animate-in fade-in-0 slide-in-from-bottom-4 delay-100 hover:-translate-y-1 hover:scale-[1.01] hover:border-primary hover:shadow-xl hover:shadow-emerald-500/10"
+								data-local-models-unsupported={
+									canRunLocalModels ? undefined : "true"
+								}
+								className={cn(
+									"group relative border-2 transition-[transform,box-shadow,border-color,background-color] duration-300 ease-out animate-in fade-in-0 slide-in-from-bottom-4 delay-100",
+									canRunLocalModels
+										? "cursor-pointer hover:-translate-y-1 hover:scale-[1.01] hover:border-primary hover:shadow-xl hover:shadow-emerald-500/10"
+										: "cursor-not-allowed opacity-60",
+								)}
 							>
 								<Popover>
 									<PopoverTrigger asChild>
@@ -436,6 +446,11 @@ export const NoModelsScreen: React.FC<NoModelsScreenProps> = ({
 											<p>{tLlm("noModelsScreen.localModels.feature4")}</p>
 										</div>
 									</div>
+									{canRunLocalModels ? null : (
+										<p className="mb-3 text-xs text-amber-600 dark:text-amber-500">
+											{tLlm("browserSupport.noLocalProviders")}
+										</p>
+									)}
 									<TooltipProvider>
 										<div className="flex gap-2">
 											{/* Magic Setup Button - Primary */}
@@ -446,6 +461,7 @@ export const NoModelsScreen: React.FC<NoModelsScreenProps> = ({
 															setSelectedOption("local");
 															setLocalSetupMode("magic");
 														}}
+														disabled={!canRunLocalModels}
 														className="flex-1 bg-emerald-600 transition-all duration-200 ease-out hover:bg-emerald-700 hover:shadow-md hover:shadow-emerald-500/20 active:scale-[0.98] dark:bg-emerald-600 dark:hover:bg-emerald-700"
 														size="lg"
 													>
@@ -455,7 +471,9 @@ export const NoModelsScreen: React.FC<NoModelsScreenProps> = ({
 												</TooltipTrigger>
 												<TooltipContent>
 													<p className="max-w-xs">
-														{tLlm("noModelsScreen.localModels.magicTooltip")}
+														{canRunLocalModels
+															? tLlm("noModelsScreen.localModels.magicTooltip")
+															: tLlm("browserSupport.noLocalProviders")}
 													</p>
 												</TooltipContent>
 											</Tooltip>
@@ -468,6 +486,7 @@ export const NoModelsScreen: React.FC<NoModelsScreenProps> = ({
 															setSelectedOption("local");
 															setLocalSetupMode("advanced");
 														}}
+														disabled={!canRunLocalModels}
 														variant="outline"
 														size="lg"
 														className="px-3 transition-all duration-200 ease-out hover:scale-105 active:scale-95"
@@ -477,7 +496,11 @@ export const NoModelsScreen: React.FC<NoModelsScreenProps> = ({
 												</TooltipTrigger>
 												<TooltipContent>
 													<p className="max-w-xs">
-														{tLlm("noModelsScreen.localModels.advancedTooltip")}
+														{canRunLocalModels
+															? tLlm(
+																	"noModelsScreen.localModels.advancedTooltip",
+																)
+															: tLlm("browserSupport.noLocalProviders")}
 													</p>
 												</TooltipContent>
 											</Tooltip>

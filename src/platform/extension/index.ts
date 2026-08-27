@@ -1,6 +1,7 @@
 import { BACKGROUND_EVENTS } from "@/constants/events";
 import type { PlatformComposition } from "../contracts/core";
 import { MutableCapabilityRegistry } from "../core/capability-registry";
+import { hasOriginPrivateFileSystem } from "../core/origin-private-file-system";
 import {
 	BaseUrlAssetResolver,
 	normalizeAssetPath,
@@ -41,6 +42,11 @@ export const platform: PlatformComposition = {
 		"ai.wasmThreads": {
 			available: globalThis.crossOriginIsolated === true,
 			reason: "WASM threads require cross-origin isolation.",
+		},
+		"storage.opfs": {
+			available: hasOriginPrivateFileSystem(),
+			reason:
+				"On-device GGUF models are stored in the origin private file system.",
 		},
 	}),
 	assets:

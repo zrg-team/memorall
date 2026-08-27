@@ -56,6 +56,16 @@
 			"configured": "Nhà cung cấp đã cấu hình"
 		}
 	},
+	"browserSupport": {
+		"title": "Trình duyệt này không hỗ trợ {{provider}}",
+		"reasons": {
+			"webgpu": "Nhà cung cấp này chạy mô hình trên GPU qua WebGPU, thứ mà trình duyệt này không cung cấp. Chrome, Edge hoặc Safari bản mới có thể chạy được.",
+			"opfs": "Nhà cung cấp này lưu mô hình đã tải trong hệ thống tệp riêng của trình duyệt, thứ mà trình duyệt này không cung cấp. Chrome, Edge, Firefox hoặc Safari bản mới có thể chạy được."
+		},
+		"alternative": "Một nhà cung cấp trên thiết bị khác, hoặc API key của bạn, vẫn dùng được ở đây.",
+		"tabUnsupported": "Trình duyệt này không hỗ trợ",
+		"noLocalProviders": "Trình duyệt này không thể chạy mô hình trên thiết bị. Hãy kết nối API key của bạn."
+	},
 	"providerPanel": {
 		"status": "Trạng thái: {{status}}",
 		"testInference": "Kiểm tra suy luận",
