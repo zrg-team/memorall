@@ -26,6 +26,10 @@ import { isPopupSurface } from "@/utils/dom";
 import { useIsWideViewport } from "@/main/hooks/use-viewport";
 import { SettingPanel } from "@/main/components/molecules/SettingPanel";
 import { HarnessStatusBar } from "@/main/components/molecules/HarnessStatusBar";
+import {
+	AppUpdateNotice,
+	AppUpdateRailNotice,
+} from "@/main/components/molecules/AppUpdateNotice";
 import { Button } from "@/main/components/ui/button";
 import { useRuntimeSessionsStore } from "@/main/stores/runtime-sessions";
 import {
@@ -108,6 +112,7 @@ const RightPanelVerticalRail: React.FC<RightPanelVerticalRailProps> = ({
 				</TooltipProvider>
 			</div>
 			<div className="mt-auto flex flex-col items-center gap-1 pb-1">
+				<AppUpdateRailNotice />
 				<ProcessMonitor
 					tooltipSide="left"
 					popoverSide="left"
@@ -418,6 +423,8 @@ export const RightApplicationLayout: React.FC<RightApplicationLayoutProps> = ({
 			<div className="flex min-h-0 flex-1 flex-col overflow-hidden">
 				{children}
 			</div>
+
+			<AppUpdateNotice />
 
 			{reloadOverlay}
 		</div>

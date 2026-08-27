@@ -89,7 +89,12 @@
 	},
 	"rightPanel": {
 		"expandWorkspacePanel": "Expand workspace panel",
-		"collapseWorkspacePanel": "Collapse workspace panel"
+		"collapseWorkspacePanel": "Collapse workspace panel",
+		"update": {
+			"downloading": "Downloading new version…",
+			"ready": "New version ready",
+			"reload": "Reload"
+		}
 	},
 	"appLoading": {
 		"title": "Initializing Memorall...",

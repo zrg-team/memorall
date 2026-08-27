@@ -306,6 +306,23 @@ test("LLM configuration view switches through every supported provider", async (
 	await page.addInitScript(() => {
 		localStorage.setItem("memorall-copilot-completed", "true");
 	});
+	// This test is about switching provider views, not about capability
+	// detection. Runners without a GPU would otherwise get the "not supported
+	// in this browser" panel for WebGPU providers instead of their own content,
+	// so present the capabilities every provider needs. The unsupported panel
+	// has its own coverage in e2e/web/browser-support.spec.ts.
+	await page.addInitScript(() => {
+		Object.defineProperty(navigator, "gpu", {
+			configurable: true,
+			value: { requestAdapter: async () => ({ name: "stub-adapter" }) },
+		});
+		if (!navigator.storage?.getDirectory) {
+			Object.defineProperty(navigator.storage, "getDirectory", {
+				configurable: true,
+				value: async () => ({}),
+			});
+		}
+	});
 
 	await page.goto(`${extensionOrigin}/options/index.html`);
 	await expect(page.locator("#root")).toBeVisible();

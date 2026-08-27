@@ -4,6 +4,7 @@ import { MutableCapabilityRegistry } from "../core/capability-registry";
 import { IndexedDbKeyValueStore } from "../core/indexeddb-key-value-store";
 import { InMemoryKeyValueStore } from "../core/in-memory-key-value-store";
 import { NoopNavigationPort } from "../core/noop-ports";
+import { hasOriginPrivateFileSystem } from "../core/origin-private-file-system";
 import { WindowExternalLinkPort } from "../core/window-external-link-port";
 import { UnavailableRuntimeDiagnostics } from "../core/unavailable-runtime-diagnostics";
 import { DesktopBrowserCommandPort } from "./desktop-browser-command-port";
@@ -38,6 +39,11 @@ const capabilities = new MutableCapabilityRegistry({
 	"ai.wasmThreads": {
 		available: globalThis.crossOriginIsolated === true,
 		reason: "WASM threads depend on the system webview configuration.",
+	},
+	"storage.opfs": {
+		available: hasOriginPrivateFileSystem(),
+		reason:
+			"On-device GGUF models are stored in the origin private file system.",
 	},
 });
 

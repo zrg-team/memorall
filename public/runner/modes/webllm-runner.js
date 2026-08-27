@@ -397,10 +397,33 @@ const webllmManager = new ModelLifecycleManager({
 	unloadFn: unloadWebLLMModel,
 });
 
+// `postMessage` is a shared, bidirectional channel that anything on the page can
+// write to — other extensions' content scripts included. Ignore anything that is
+// not one of our requests, and ignore our own responses so they can never be
+// mistaken for new requests and echoed back indefinitely.
+const responseMessageTypes = new Set([
+	"ready",
+	"progress",
+	"complete",
+	"error",
+	"chunk",
+	"stream_chunk",
+	"stream_end",
+]);
+
 window.addEventListener("message", async (event) => {
 	const src = event.source;
 	const origin = event.origin;
 	const { messageId, type, payload } = event.data || {};
+
+	if (
+		typeof messageId !== "string" ||
+		messageId.length === 0 ||
+		typeof type !== "string" ||
+		responseMessageTypes.has(type)
+	) {
+		return;
+	}
 
 	try {
 		switch (type) {

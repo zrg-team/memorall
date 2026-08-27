@@ -22,6 +22,13 @@ production project-site URL `https://zrg-team.github.io/memorall/studio/`. The
 suite verifies initial loading, the PWA service-worker scope, manifest placement,
 first-party asset requests, and hash-route reloads.
 
+`pwa.spec.ts` covers the installable/offline behaviour on top of that: the
+manifest advertises icons that are actually deployed, the app boots with the
+network switched off, and a new deployment surfaces in the right panel as a
+"New version ready" action that reloads into it. The update test temporarily
+rewrites the build id in `publish/web/studio/sw.js` to stand in for a deploy and
+restores the file afterwards, so run it against a build you can regenerate.
+
 GitHub Actions runs this suite under Xvfb against the production artifact, scans
 the Web bundle for platform-boundary regressions, and executes the Pages deploy
 dry run. It never pushes the Pages branch or changes the live site.

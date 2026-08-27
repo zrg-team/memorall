@@ -7,6 +7,7 @@ import { NoopNavigationPort, noopLifecyclePort } from "../core/noop-ports";
 import { WindowExternalLinkPort } from "../core/window-external-link-port";
 import { UnavailableRuntimeDiagnostics } from "../core/unavailable-runtime-diagnostics";
 import { UnavailableBrowserCommandPort } from "../core/unavailable-browser-command-port";
+import { hasOriginPrivateFileSystem } from "../core/origin-private-file-system";
 
 export const platform: PlatformComposition = {
 	environment: "web",
@@ -46,6 +47,11 @@ export const platform: PlatformComposition = {
 		"ai.wasmThreads": {
 			available: globalThis.crossOriginIsolated === true,
 			reason: "GitHub Pages does not provide the required isolation headers.",
+		},
+		"storage.opfs": {
+			available: hasOriginPrivateFileSystem(),
+			reason:
+				"On-device GGUF models are stored in the origin private file system.",
 		},
 	}),
 	assets: new BaseUrlAssetResolver("/memorall/studio/"),

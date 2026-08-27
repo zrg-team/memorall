@@ -6,6 +6,7 @@ import { vector } from "@electric-sql/pglite/vector";
 import { pg_trgm } from "@electric-sql/pglite/contrib/pg_trgm";
 import { logError, logInfo } from "@/utils/logger";
 
+import { idbFastSyncExtension } from "./idb-fast-sync";
 import { runMigrations } from "./migrations";
 import { DatabaseMode, type DatabaseConfig } from "./constants";
 import { schema } from "./schema";
@@ -37,7 +38,15 @@ export async function initDB(configOrDataDir?: DatabaseConfig | string) {
 		if (config.mode === DatabaseMode.MAIN) {
 			// Main mode: Create real PGlite instance
 			const realPglite = new PGlite(config.dataDir || "idb://memorall-db", {
-				extensions: { vector, uuid_ossp, pg_trgm },
+				extensions: {
+					vector,
+					uuid_ossp,
+					pg_trgm,
+					// Keeps IndexedDB persistence O(changed files) instead of
+					// O(every file) per statement. Safari/Firefox are unusable
+					// without it; see ./idb-fast-sync.ts.
+					idbFastSync: idbFastSyncExtension,
+				},
 			});
 			await realPglite.waitReady;
 			pgliteInstance = realPglite;

@@ -23,6 +23,7 @@ const WEBGPU_SPECS: SystemSpecs = {
 	memoryGB: 8,
 	cpuCores: 8,
 	hasWebGPU: true,
+	hasOpfs: true,
 	deviceCategory: "high",
 };
 
@@ -235,12 +236,45 @@ describe("model recommendations", () => {
 		const cpuOnly: SystemSpecs = {
 			...WEBGPU_SPECS,
 			hasWebGPU: false,
+			hasOpfs: true,
 			deviceCategory: "medium",
 		};
 		const names = generateRecommendations(cpuOnly, "quality", 50).map(
 			(r) => r.displayName,
 		);
 		expect(names).toEqual(["CpuOk"]);
+	});
+
+	it("drops GGUF models when the browser has no private file system", () => {
+		mocks.models = [
+			model({
+				displayName: "GpuOk",
+				id: "test/a",
+				requiresWebGPU: true,
+				provider: "webllm",
+			}),
+			model({
+				displayName: "NeedsOpfs",
+				id: "test/b",
+				requiresWebGPU: false,
+				provider: "wllama",
+			}),
+		];
+
+		// Wllama keeps its weights in OPFS, so with none there is nowhere to put
+		// a downloaded model and it must not be offered.
+		const noOpfs: SystemSpecs = { ...WEBGPU_SPECS, hasOpfs: false };
+		const names = generateRecommendations(noOpfs, "quality", 50).map(
+			(r) => r.displayName,
+		);
+		expect(names).toEqual(["GpuOk"]);
+
+		const cpuOnlyNoOpfs: SystemSpecs = {
+			...WEBGPU_SPECS,
+			hasWebGPU: false,
+			hasOpfs: false,
+		};
+		expect(generateAllRecommendations(cpuOnlyNoOpfs)).toBeNull();
 	});
 
 	it("returns a primary and alternatives for every preference", () => {

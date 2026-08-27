@@ -200,6 +200,7 @@ export interface DetectSystemSpecsResult extends Record<string, unknown> {
 		memoryGB: number;
 		cpuCores: number;
 		hasWebGPU: boolean;
+		hasOpfs: boolean;
 		gpu?: {
 			vendor: string;
 			renderer: string;
