@@ -119,6 +119,35 @@ const DIRECT_WORKSPACE_CONTENT_TYPES: Record<string, string> = {
 	".txt": "text/plain; charset=utf-8",
 };
 
+/**
+ * Resolves the worker of one specific registration once it is activated.
+ * `navigator.serviceWorker.ready` cannot be used for this: it answers for the
+ * registration controlling the page, and the Web build also has an application
+ * shell worker registered at a broader scope.
+ */
+const waitForActiveWorker = (
+	registration: ServiceWorkerRegistration,
+): Promise<ServiceWorker | null> => {
+	if (registration.active) return Promise.resolve(registration.active);
+	const pending = registration.installing ?? registration.waiting;
+	if (!pending) return Promise.resolve(null);
+	return new Promise((resolve) => {
+		const check = () => {
+			if (pending.state === "activated") {
+				pending.removeEventListener("statechange", check);
+				resolve(pending);
+				return;
+			}
+			if (pending.state === "redundant") {
+				pending.removeEventListener("statechange", check);
+				resolve(registration.active ?? null);
+			}
+		};
+		pending.addEventListener("statechange", check);
+		check();
+	});
+};
+
 const isObject = (value: unknown): value is Record<string, unknown> =>
 	typeof value === "object" && value !== null;
 
@@ -322,14 +351,12 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 				swUrl,
 			);
 
-			// Wait for the SW to become active.
-			await navigator.serviceWorker.ready;
-
-			const sw =
-				navigator.serviceWorker.controller ??
-				reg.active ??
-				reg.installing ??
-				reg.waiting;
+			// Wait for this worker to become active. `navigator.serviceWorker.ready`
+			// and `.controller` answer for whichever registration controls the
+			// current page, which on the Web build is the application shell worker
+			// at ./ rather than this one at ./sandbox/ — sending the relay port
+			// there would hand it to a worker that never answers the handshake.
+			const sw = await waitForActiveWorker(reg);
 			if (!sw) {
 				logWarn(
 					"[SW] No active SW found after ready — page reload may be needed",
@@ -339,15 +366,18 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 
 			await this.initSwRelay(sw);
 
-			// Re-init relay if the SW updates or regains control.
-			navigator.serviceWorker.addEventListener("controllerchange", () => {
-				const newSw = navigator.serviceWorker.controller;
-				if (newSw) {
-					logInfo("[SW] Controller changed — re-initialising relay");
-					void this.initSwRelay(newSw, true).catch((error) =>
+			// Re-init the relay when a newer sandbox worker takes over, which drops
+			// the mainPort held by the previous one.
+			reg.addEventListener("updatefound", () => {
+				const installing = reg.installing;
+				if (!installing) return;
+				installing.addEventListener("statechange", () => {
+					if (installing.state !== "activated") return;
+					logInfo("[SW] Sandbox worker replaced — re-initialising relay");
+					void this.initSwRelay(installing, true).catch((error) =>
 						logWarn("[SW] Failed to re-initialise relay", error),
 					);
-				}
+				});
 			});
 
 			// SW asks clients to re-send init when it loses its mainPort.
@@ -358,8 +388,7 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 				"message",
 				(event: MessageEvent) => {
 					if (event.data?.type === "sw-needs-init") {
-						const activeSw =
-							this.swInstance ?? navigator.serviceWorker.controller;
+						const activeSw = this.swInstance;
 						if (activeSw) {
 							void this.initSwRelay(activeSw, true).catch((error) =>
 								logWarn("[SW] Failed to recover relay", error),
