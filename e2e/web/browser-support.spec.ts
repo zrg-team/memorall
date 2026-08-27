@@ -80,14 +80,28 @@ test("says which browser feature is missing instead of failing later", async ({
 	const wllamaTab = page.locator('[data-provider-tab="wllama"]');
 	const webllmTab = page.locator('[data-provider-tab="webllm"]');
 	await expect(wllamaTab).toBeVisible({ timeout: 60_000 });
-	await expect(wllamaTab).toBeDisabled();
 	await expect(wllamaTab).toHaveAttribute("data-provider-unsupported", "opfs");
-	await expect(webllmTab).toBeDisabled();
 	await expect(webllmTab).toHaveAttribute(
 		"data-provider-unsupported",
 		"webgpu",
 	);
 
+	// The tabs stay selectable — that is how the reason is reached on a touch
+	// device, where a disabled control shows no tooltip. Selecting one replaces
+	// the model list with the explanation rather than a download that fails.
+	await wllamaTab.click();
+	await expect(page.locator('[data-browser-unsupported="opfs"]')).toBeVisible();
+	await webllmTab.click();
+	await expect(
+		page.locator('[data-browser-unsupported="webgpu"]'),
+	).toBeVisible();
+
 	// Transformers.js falls back to WASM, so it stays usable.
-	await expect(page.locator('[data-provider-tab="transformer"]')).toBeEnabled();
+	const transformerTab = page.locator('[data-provider-tab="transformer"]');
+	await expect(transformerTab).not.toHaveAttribute(
+		"data-provider-unsupported",
+		/.*/,
+	);
+	await transformerTab.click();
+	await expect(page.locator("[data-browser-unsupported]")).toHaveCount(0);
 });

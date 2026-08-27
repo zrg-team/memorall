@@ -49,7 +49,6 @@ export const ProviderTabs: React.FC<ProviderTabsProps> = ({
 	const { t } = useTranslation("llm");
 
 	const handleSelect = (provider: ServiceProvider) => {
-		if (!getProviderSupport(provider).supported) return;
 		setAdvancedProvider(provider);
 		if (advancedProvider === provider) return;
 		onProviderChange();
@@ -112,8 +111,9 @@ export const ProviderTabs: React.FC<ProviderTabsProps> = ({
 				) : null}
 				{PROVIDER_ORDER.map((provider) => {
 					const isActive = advancedProvider === provider;
-					// A provider this browser cannot run stays visible but inert, so
-					// the reason is discoverable rather than the tab silently missing.
+					// A provider this browser cannot run stays selectable: the panel
+					// explains why, which a disabled tab could only do through a
+					// tooltip no touch device ever shows.
 					const support = getProviderSupport(provider);
 					const unsupportedLabel = support.supported
 						? undefined
@@ -131,13 +131,12 @@ export const ProviderTabs: React.FC<ProviderTabsProps> = ({
 							variant="ghost"
 							onClick={() => handleSelect(provider)}
 							title={unsupportedLabel}
-							aria-disabled={!support.supported}
 							className={`min-h-9 shrink-0 gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors sm:px-3 sm:text-sm ${
 								isActive
 									? "bg-background text-foreground shadow-sm ring-1 ring-border"
 									: "text-muted-foreground hover:bg-background/60 hover:text-foreground"
-							}`}
-							disabled={loading || !support.supported}
+							} ${support.supported ? "" : "opacity-70"}`}
+							disabled={loading}
 						>
 							<span className="sm:hidden">{compactLabels[provider]}</span>
 							<span className="hidden sm:inline">{labels[provider]}</span>
