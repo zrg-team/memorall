@@ -14,7 +14,7 @@
  * be paired with a newer shell.
  */
 
-const BUILD_ID = "40188a8f58f2394c";
+const BUILD_ID = "7398e54d0c0f4c0c";
 const PRECACHE = [
 	"index.html",
 	"manifest.webmanifest",
@@ -95,8 +95,8 @@ const PRECACHE = [
 	"assets/graduation-cap-CNkC2Egw.js",
 	"assets/hard-drive-ChMxSN3p.js",
 	"assets/image-ttjf3aCq.js",
+	"assets/index-BNhjMeD4.js",
 	"assets/index-CNr3eJRW.css",
-	"assets/index-D2SwT7Jc.js",
 	"assets/info-iRNzpaxE.js",
 	"assets/init-ZlXS9mIS.js",
 	"assets/input-Bpw7FW3W.js",
