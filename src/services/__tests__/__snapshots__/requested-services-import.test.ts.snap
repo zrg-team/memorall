@@ -64,6 +64,7 @@ exports[`requested service module coverage > imports requested service trees 1`]
   "../database/entities/topic-files.ts",
   "../database/entities/topic-types.ts",
   "../database/entities/topics.ts",
+  "../database/idb-fast-sync.ts",
   "../database/index.ts",
   "../database/interfaces/database-service.interface.ts",
   "../database/migrations/000_initial.ts",

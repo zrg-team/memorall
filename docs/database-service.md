@@ -44,6 +44,26 @@ graph TD
 | **Migrations** | Handles migrations | No migration responsibility |
 | **Resource Usage** | High (loaded models/DB) | Low (lightweight proxy) |
 
+### 💾 IndexedDB Persistence
+
+Main mode stores the Postgres data directory in IndexedDB (`idb://memorall-db`)
+through Emscripten's IDBFS, and PGlite flushes after every statement. Upstream
+IDBFS rebuilds its manifest on each flush by stepping a key cursor across every
+file in the cluster (~2,800 records) and, when loading, reads them back one
+request at a time.
+
+Chromium answers those requests in microseconds, so the cost is invisible there.
+WebKit and Firefox round-trip each one: measured against the production Web
+bundle in WebKit, a single statement took ~15s and the 16 start-up migrations
+took ~9 minutes, so the app never finished loading.
+
+`src/services/database/idb-fast-sync.ts` installs a PGlite extension that caches
+the manifest between flushes and reads records in batches, taking a WebKit sync
+to ~55ms and start-up migrations to ~4s. It is safe because this process is the
+only writer of that IndexedDB database; anything unexpected falls back to the
+stock IDBFS behaviour, and a failed sync drops the cache so the next one
+rebuilds it from storage.
+
 ## 🔄 Service Modes
 
 ### 🖥️ Main Mode (Offscreen Document)
