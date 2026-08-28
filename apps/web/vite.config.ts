@@ -56,19 +56,25 @@ async function writeServiceWorker(): Promise<void> {
 		...iconFiles.map((file) => `icons/${file}`),
 		...[...referenced].sort(),
 	];
+	const template = await readFile(
+		fileURLToPath(new URL("./public/sw.js", import.meta.url)),
+		"utf8",
+	);
 	// Names under assets/ already carry a content hash, but index.html and the
 	// manifest do not, so their bytes go into the id as well. Without that, a
 	// deploy that only edits the shell would not look like a new version.
-	const fingerprint = createHash("sha256").update(precache.join("\n"));
+	//
+	// The worker's own source counts too: the id names its cache, so a change to
+	// how the worker caches has to start from a clean one. Otherwise an entry
+	// stored under the old rules survives the very update meant to correct it.
+	const fingerprint = createHash("sha256")
+		.update(precache.join("\n"))
+		.update(template);
 	for (const path of precache) {
 		if (path.startsWith("assets/")) continue;
 		fingerprint.update(await readFile(`${outputDirectory}/${path}`));
 	}
 	const buildId = fingerprint.digest("hex").slice(0, 16);
-	const template = await readFile(
-		fileURLToPath(new URL("./public/sw.js", import.meta.url)),
-		"utf8",
-	);
 	const source = template
 		.replace("__MEMORALL_BUILD_ID__", buildId)
 		.replace("__MEMORALL_PRECACHE__", JSON.stringify(precache, null, "\t"));
