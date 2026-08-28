@@ -44,6 +44,7 @@ function resolveEmbeddingDevice(hasWebGPU) {
 
 function createProgressLogger(context, notify) {
 	const lastPctByFile = new Map();
+	const loggedShapes = new Set();
 	return (info) => {
 		try {
 			const status = info?.status;
@@ -95,7 +96,15 @@ function createProgressLogger(context, notify) {
 				return;
 			}
 
-			// Fallback for initiate/unknown shapes
+			// Fallback for initiate/unknown shapes. Transformers.js reports
+			// `progress_total` for every chunk of every file, so logging each one
+			// put ~1,500 entries in the console for a single 135MB model. Devtools
+			// retains every entry and the object hanging off it, which is enough to
+			// take the tab down. Report each status/file pair once instead: the
+			// download's actual progress reaches the UI through `notify` above.
+			const shape = `${status}:${file ?? ""}`;
+			if (loggedShapes.has(shape)) return;
+			loggedShapes.add(shape);
 			console.log("[embedding-runner] load event", info);
 		} catch {}
 	};
