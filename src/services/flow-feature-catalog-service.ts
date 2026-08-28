@@ -467,7 +467,7 @@ const FEATURE_UI_METADATA: Record<string, FeatureCatalogMetadata> = {
 		description:
 			"Retrieve relevant knowledge from the agent memory graph before responding.",
 		descriptionKey: "agentSettings.contextRetrievalDesc",
-		displayName: "Knowledge Retrieval",
+		displayName: "Active Knowledge",
 		nameKey: "agentSettings.contextRetrieval",
 		tools: [],
 		systemPrompt: "",

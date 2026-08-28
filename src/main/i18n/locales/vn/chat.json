@@ -360,7 +360,7 @@
 		"graphSimpleAgent": "Simple Agent",
 		"graphSimpleAgentDesc": "Agent chỉ có thể tùy chỉnh thông qua công cụ, không có các tùy chọn bật hoặc tắt tính năng như truy xuất kiến thức hay trích dẫn.",
 		"features": "Tính năng",
-		"contextRetrieval": "Truy xuất Kiến thức",
+		"contextRetrieval": "Kiến thức chủ động",
 		"contextRetrievalDesc": "Truy xuất ngữ cảnh kiến thức liên quan trước khi tạo phản hồi",
 		"citations": "Trích dẫn",
 		"citationsDesc": "Thêm trích dẫn nguồn vào phản hồi",

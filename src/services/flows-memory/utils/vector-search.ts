@@ -104,7 +104,7 @@ export async function searchNodesByVector(
 		const columns = await getCurrentEmbeddingColumns();
 		const params: unknown[] = [JSON.stringify(searchEmbedding)];
 		let query = `
-			SELECT id, name, summary, attributes, graph, created_at, updated_at,
+			SELECT id, node_type, name, summary, attributes, graph, created_at, updated_at,
 				1 - (${columns.nameEmbedding} <=> $1::vector) as similarity
 			FROM nodes
 			WHERE ${columns.nameEmbedding} IS NOT NULL`;

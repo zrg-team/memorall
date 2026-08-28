@@ -32,6 +32,9 @@ export const createMemoryExplainSourceTool: ToolFactory<
 		const facts = await findMemoryFacts(services, {
 			graphId: resolveRuntimeGraphId(context),
 			edgeId: input.edgeId,
+			// Retrieval can hand back knowledge-graph facts, so explaining one by
+			// id has to be able to look past the active-memory scope.
+			scope: "all",
 			includeInactive: true,
 			limit: 1,
 		});

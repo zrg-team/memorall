@@ -360,7 +360,7 @@
 		"graphSimpleAgent": "Simple Agent",
 		"graphSimpleAgentDesc": "Agent that can only be customized through tools, without additional feature toggles such as knowledge retrieval or citations.",
 		"features": "Features",
-		"contextRetrieval": "Knowledge Retrieval",
+		"contextRetrieval": "Active Knowledge",
 		"contextRetrievalDesc": "Retrieve relevant knowledge context before generating a response",
 		"citations": "Citations",
 		"citationsDesc": "Add source citations to responses",

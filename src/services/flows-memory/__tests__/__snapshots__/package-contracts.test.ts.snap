@@ -671,7 +671,7 @@ exports[`flows-memory registered contracts > registers every memory tool contrac
     },
   },
   {
-    "description": "Retrieve active memories from the currently selected memory graph. Inactive/forgotten memories are excluded unless includeInactive is true.",
+    "description": "Search the currently selected memory graph by meaning and by text. Covers both memories saved through memory_remember and knowledge extracted from saved pages, files, and chats, unless scope is 'active'. Inactive/forgotten memories are excluded unless includeInactive is true.",
     "name": "memory_retrieve",
     "parameters": {
       "properties": {
@@ -690,6 +690,13 @@ exports[`flows-memory registered contracts > registers every memory tool contrac
           "type": "string",
         },
         "query": {
+          "type": "string",
+        },
+        "scope": {
+          "enum": [
+            "active",
+            "all",
+          ],
           "type": "string",
         },
       },

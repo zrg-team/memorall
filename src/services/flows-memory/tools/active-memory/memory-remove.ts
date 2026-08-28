@@ -45,7 +45,9 @@ export const createMemoryRemoveTool: ToolFactory<
 			limit: input.limit ?? 5,
 		});
 
-		if (!facts.length) return "No active memories matched for removal.";
+		if (!facts.length) {
+			return "No active memories matched for removal. Only memories saved through memory_remember can be removed; knowledge extracted from saved pages, files, and chats is not editable here.";
+		}
 		const count = await invalidateMemoryEdges(services, facts, {
 			reason: input.reason,
 		});

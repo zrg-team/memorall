@@ -1,18 +1,64 @@
 import { getKnowledgeDatabase } from "../../interfaces/knowledge";
-import { and, desc, eq, inArray, like, or, sql } from "drizzle-orm";
+import { and, desc, eq, ilike, inArray, or, sql, type SQL } from "drizzle-orm";
 import type { ToolExecutionContext } from "@memorall/agent-harness-flows/interfaces/engine/tool";
 import type { AllServices } from "@memorall/agent-harness-flows/interfaces/services/services";
-import type { Edge, NewEdge, NewNode, Node } from "../../interfaces/knowledge";
+import type {
+	Edge,
+	KnowledgeDatabaseSchema,
+	NewEdge,
+	NewNode,
+	Node,
+} from "../../interfaces/knowledge";
 import type { IEmbeddingService } from "../../interfaces/embedding";
 import { getRuntimeGraphId } from "@memorall/agent-harness-flows/context/runtime-context";
 import { getScopedGraphWhere } from "../../utils/graph-query";
 import { getCurrentEmbeddingFields } from "../../utils/embedding-size-config";
+import {
+	combineSearchResults,
+	vectorSearchEdges,
+	type FlowEmbeddingLike,
+	type SearchWeights,
+} from "../../utils/vector-search";
 
 export const ACTIVE_MEMORY_ORIGIN = "active_memory";
 
 export const MEMORY_KINDS = ["fact", "preference", "project_context"] as const;
 
 export type MemoryKind = (typeof MEMORY_KINDS)[number];
+
+/**
+ * Which facts a lookup is allowed to see.
+ *
+ * `active` is the write-side scope: only edges this agent saved through
+ * `memory_remember`, which is what `memory_update` and `memory_remove` are
+ * allowed to touch. `all` also sees facts the knowledge pipeline extracted from
+ * ingested pages, files, and chats — those carry no `origin` attribute, so the
+ * origin filter made an entire populated graph look empty to a reader.
+ */
+export const MEMORY_SCOPES = ["active", "all"] as const;
+
+export type MemoryScope = (typeof MEMORY_SCOPES)[number];
+
+/**
+ * Vector candidates to pull per requested result.
+ *
+ * The similarity query cannot apply the origin/kind/current filters — those live
+ * on columns the raw search does not select — so the ranked ids are re-filtered
+ * against the same clauses as the text match. Over-fetching keeps that second
+ * pass from starving when some of the nearest edges are filtered out.
+ */
+const VECTOR_CANDIDATE_MULTIPLIER = 3;
+
+/**
+ * Exact substring hits are a stronger signal than proximity when the caller
+ * quotes a remembered phrase, so they keep a reserved share of the result set.
+ * `combineSearchResults` hands the whole budget to whichever side is non-empty,
+ * so a query that only matches semantically still fills the list.
+ */
+const MEMORY_SEARCH_WEIGHTS: SearchWeights = {
+	sqlPercentage: 40,
+	vectorPercentage: 60,
+};
 
 export type ActiveMemoryServices = Pick<AllServices, "database" | "embedding">;
 
@@ -48,14 +94,20 @@ export const normalizeMemoryKind = (memoryKind?: MemoryKind): MemoryKind =>
 	memoryKind ?? "fact";
 
 export const formatMemoryFact = (fact: MemoryFactResult): string => {
-	const kind =
-		((fact.edge.attributes as Record<string, unknown> | null)?.memoryKind as
-			| string
-			| undefined) ?? "fact";
+	const attributes =
+		(fact.edge.attributes as Record<string, unknown> | null) ?? {};
+	const kind = (attributes.memoryKind as string | undefined) ?? "fact";
 	const status = fact.edge.isCurrent === false ? "inactive" : "current";
+	// A reader needs to know which facts it may update or remove: only the ones
+	// this agent saved itself are writable through the memory tools.
+	const source =
+		attributes.origin === ACTIVE_MEMORY_ORIGIN
+			? ACTIVE_MEMORY_ORIGIN
+			: "knowledge_graph";
 	return [
 		`id: ${fact.edge.id}`,
 		`kind: ${kind}`,
+		`source: ${source}`,
 		`status: ${status}`,
 		`fact: ${fact.edge.factText || `${fact.sourceNode.name} ${fact.edge.edgeType} ${fact.destinationNode.name}`}`,
 		`relation: ${fact.sourceNode.name} -[${fact.edge.edgeType}]-> ${fact.destinationNode.name}`,
@@ -191,52 +243,146 @@ export async function createMemoryEdge(
 	);
 }
 
+export interface FindMemoryFactsInput {
+	graphId?: string;
+	query?: string;
+	edgeId?: string;
+	memoryKind?: MemoryKind;
+	includeInactive?: boolean;
+	limit?: number;
+	scope?: MemoryScope;
+}
+
+/** `%` and `_` in a remembered phrase are literal text, not wildcards. */
+const escapeLikePattern = (value: string): string =>
+	value.replace(/[\\%_]/g, "\\$&");
+
+const buildMemoryClauses = (
+	schema: KnowledgeDatabaseSchema,
+	input: FindMemoryFactsInput,
+	scope: MemoryScope,
+): SQL[] => {
+	const clauses: SQL[] = [
+		getScopedGraphWhere({ graphId: input.graphId }, schema.edges.graph),
+	];
+
+	if (scope === "active") {
+		clauses.push(
+			sql`${schema.edges.attributes}->>'origin' = ${ACTIVE_MEMORY_ORIGIN}`,
+		);
+	}
+	if (!input.includeInactive) {
+		clauses.push(eq(schema.edges.isCurrent, true));
+	}
+	if (input.edgeId) {
+		clauses.push(eq(schema.edges.id, input.edgeId));
+	}
+	if (input.memoryKind) {
+		clauses.push(
+			sql`${schema.edges.attributes}->>'memoryKind' = ${input.memoryKind}`,
+		);
+	}
+
+	return clauses;
+};
+
+/**
+ * Nearest memory edges to the query text, as id → similarity.
+ *
+ * Saving a memory already embeds its fact text and relation type. Reading them
+ * back matched on `LIKE` alone, so those vectors were written and never used and
+ * a natural-language question could only find a memory by quoting it verbatim.
+ * Failures stay soft: an embedding model that is not ready degrades this to the
+ * text match rather than failing the tool call.
+ */
+async function searchMemoryEdgesByVector(
+	services: ActiveMemoryServices,
+	query: string,
+	limit: number,
+	graphId?: string,
+): Promise<Map<string, number>> {
+	try {
+		const embedding = await services.embedding.get("default");
+		if (!embedding?.isReady()) return new Map();
+
+		const results = await vectorSearchEdges(
+			services.database,
+			embedding as FlowEmbeddingLike,
+			[query],
+			limit,
+			graphId,
+		);
+		return new Map(
+			results.map((result) => [String(result.item.id), result.similarity]),
+		);
+	} catch {
+		return new Map();
+	}
+}
+
 export async function findMemoryFacts(
 	services: ActiveMemoryServices,
-	input: {
-		graphId?: string;
-		query?: string;
-		edgeId?: string;
-		memoryKind?: MemoryKind;
-		includeInactive?: boolean;
-		limit?: number;
-	},
+	input: FindMemoryFactsInput,
 ): Promise<MemoryFactResult[]> {
 	const query = input.query?.trim();
 	const limit = Math.max(1, Math.min(input.limit ?? 10, 50));
+	const scope = input.scope ?? "active";
+
+	// Ranked ids are resolved first so the filtered row fetch below can apply the
+	// same clauses to both halves of the search.
+	const similarityById =
+		query && !input.edgeId
+			? await searchMemoryEdgesByVector(
+					services,
+					query,
+					limit * VECTOR_CANDIDATE_MULTIPLIER,
+					input.graphId,
+				)
+			: new Map<string, number>();
 
 	const edges = await getKnowledgeDatabase(services.database).query<Edge[]>(
 		async ({ db, schema }) => {
-			const clauses = [
-				getScopedGraphWhere({ graphId: input.graphId }, schema.edges.graph),
-				sql`${schema.edges.attributes}->>'origin' = ${ACTIVE_MEMORY_ORIGIN}`,
-			];
+			const clauses = buildMemoryClauses(schema, input, scope);
 
-			if (!input.includeInactive) {
-				clauses.push(eq(schema.edges.isCurrent, true));
-			}
-			if (input.edgeId) {
-				clauses.push(eq(schema.edges.id, input.edgeId));
-			}
-			if (input.memoryKind) {
-				clauses.push(
-					sql`${schema.edges.attributes}->>'memoryKind' = ${input.memoryKind}`,
-				);
-			}
-			if (query) {
-				const queryClause = or(
-					like(schema.edges.factText, `%${query}%`),
-					like(schema.edges.edgeType, `%${query}%`),
-				);
-				if (queryClause) clauses.push(queryClause);
-			}
+			const textClause = query
+				? or(
+						ilike(schema.edges.factText, `%${escapeLikePattern(query)}%`),
+						ilike(schema.edges.edgeType, `%${escapeLikePattern(query)}%`),
+					)
+				: undefined;
 
-			return db
+			const textMatches = (await db
 				.select()
 				.from(schema.edges)
-				.where(and(...clauses))
+				.where(and(...clauses, ...(textClause ? [textClause] : [])))
 				.orderBy(desc(schema.edges.recordedAt))
-				.limit(limit);
+				.limit(limit)) as Edge[];
+
+			if (!similarityById.size) return textMatches;
+
+			const vectorMatches = (await db
+				.select()
+				.from(schema.edges)
+				.where(
+					and(
+						...clauses,
+						inArray(schema.edges.id, Array.from(similarityById.keys())),
+					),
+				)
+				.limit(limit)) as Edge[];
+
+			return combineSearchResults(
+				textMatches,
+				vectorMatches
+					.map((edge) => ({
+						item: edge,
+						similarity: similarityById.get(String(edge.id)) ?? 0,
+					}))
+					.sort((a, b) => b.similarity - a.similarity),
+				MEMORY_SEARCH_WEIGHTS,
+				limit,
+				(edge) => String(edge.id),
+			);
 		},
 	);
 

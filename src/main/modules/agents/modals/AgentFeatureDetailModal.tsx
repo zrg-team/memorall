@@ -276,7 +276,7 @@ const RetrievalModeSelectSlot: React.FC = () => {
 	const { draftConfig, setKnowledgeRetrievalMode } = useAgentConfigStore();
 	return (
 		<div className="space-y-2">
-			<Label className="text-xs font-medium">Knowledge Retrieval Mode</Label>
+			<Label className="text-xs font-medium">Active Knowledge Mode</Label>
 			<Select
 				value={draftConfig.retrievalMode}
 				onValueChange={(value) =>
