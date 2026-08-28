@@ -43,6 +43,33 @@ const outputDirectory = fileURLToPath(
  * bundle does, which is what makes the browser treat a deploy as a new worker
  * and lets the app offer "reload to update".
  */
+/**
+ * The runner iframes are boot-critical — the app imports them while starting up
+ * — but they load lazily, so whether they had reached the cache before the
+ * network went away was a race. Precache them so being offline is not luck.
+ *
+ * `libs/` is left out on purpose: it is 33MB of model runtimes that are only
+ * needed once a local model is actually used, and it caches on demand.
+ */
+async function collectRunnerAssets(): Promise<string[]> {
+	const root = `${outputDirectory}/runner`;
+	const collected: string[] = [];
+	const walk = async (relative: string): Promise<void> => {
+		const directory = relative ? `${root}/${relative}` : root;
+		for (const entry of await readdir(directory, { withFileTypes: true })) {
+			const next = relative ? `${relative}/${entry.name}` : entry.name;
+			if (entry.isDirectory()) {
+				if (next === "libs") continue;
+				await walk(next);
+				continue;
+			}
+			collected.push(`runner/${next}`);
+		}
+	};
+	await walk("");
+	return collected.sort();
+}
+
 async function writeServiceWorker(): Promise<void> {
 	const shell = await readFile(`${outputDirectory}/index.html`, "utf8");
 	const referenced = new Set<string>();
@@ -55,20 +82,27 @@ async function writeServiceWorker(): Promise<void> {
 		"manifest.webmanifest",
 		...iconFiles.map((file) => `icons/${file}`),
 		...[...referenced].sort(),
+		...(await collectRunnerAssets()),
 	];
+	const template = await readFile(
+		fileURLToPath(new URL("./public/sw.js", import.meta.url)),
+		"utf8",
+	);
 	// Names under assets/ already carry a content hash, but index.html and the
 	// manifest do not, so their bytes go into the id as well. Without that, a
 	// deploy that only edits the shell would not look like a new version.
-	const fingerprint = createHash("sha256").update(precache.join("\n"));
+	//
+	// The worker's own source counts too: the id names its cache, so a change to
+	// how the worker caches has to start from a clean one. Otherwise an entry
+	// stored under the old rules survives the very update meant to correct it.
+	const fingerprint = createHash("sha256")
+		.update(precache.join("\n"))
+		.update(template);
 	for (const path of precache) {
 		if (path.startsWith("assets/")) continue;
 		fingerprint.update(await readFile(`${outputDirectory}/${path}`));
 	}
 	const buildId = fingerprint.digest("hex").slice(0, 16);
-	const template = await readFile(
-		fileURLToPath(new URL("./public/sw.js", import.meta.url)),
-		"utf8",
-	);
 	const source = template
 		.replace("__MEMORALL_BUILD_ID__", buildId)
 		.replace("__MEMORALL_PRECACHE__", JSON.stringify(precache, null, "\t"));
