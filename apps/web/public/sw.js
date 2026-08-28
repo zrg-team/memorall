@@ -46,6 +46,20 @@ function fromNetwork(input) {
 	}
 }
 
+/**
+ * Fetches without letting the HTTP cache answer, but falls back to a normal
+ * fetch when that fails. `cache: "reload"` refuses to be satisfied from the
+ * HTTP cache at all, which offline turns into a hard failure for anything this
+ * worker has not cached yet — a normal fetch can still be answered from it.
+ */
+async function fetchFresh(request) {
+	try {
+		return await fetch(fromNetwork(request));
+	} catch {
+		return await fetch(request);
+	}
+}
+
 self.addEventListener("install", (event) => {
 	event.waitUntil(
 		(async () => {
@@ -157,7 +171,7 @@ self.addEventListener("fetch", (event) => {
 async function serveDocument(request, isShellDocument) {
 	const cache = await caches.open(CACHE_NAME);
 	try {
-		const response = await fetch(fromNetwork(request.url));
+		const response = await fetchFresh(request.url);
 		if (response.ok) void cache.put(request, response.clone());
 		return response;
 	} catch {
@@ -189,7 +203,7 @@ async function serveAsset(request, relativePath) {
 		return cached;
 	}
 	try {
-		const response = await fetch(fromNetwork(request));
+		const response = await fetchFresh(request);
 		if (response.status === 200 && response.type === "basic") {
 			void cache.put(request, response.clone());
 		}

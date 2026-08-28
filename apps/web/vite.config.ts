@@ -43,6 +43,33 @@ const outputDirectory = fileURLToPath(
  * bundle does, which is what makes the browser treat a deploy as a new worker
  * and lets the app offer "reload to update".
  */
+/**
+ * The runner iframes are boot-critical — the app imports them while starting up
+ * — but they load lazily, so whether they had reached the cache before the
+ * network went away was a race. Precache them so being offline is not luck.
+ *
+ * `libs/` is left out on purpose: it is 33MB of model runtimes that are only
+ * needed once a local model is actually used, and it caches on demand.
+ */
+async function collectRunnerAssets(): Promise<string[]> {
+	const root = `${outputDirectory}/runner`;
+	const collected: string[] = [];
+	const walk = async (relative: string): Promise<void> => {
+		const directory = relative ? `${root}/${relative}` : root;
+		for (const entry of await readdir(directory, { withFileTypes: true })) {
+			const next = relative ? `${relative}/${entry.name}` : entry.name;
+			if (entry.isDirectory()) {
+				if (next === "libs") continue;
+				await walk(next);
+				continue;
+			}
+			collected.push(`runner/${next}`);
+		}
+	};
+	await walk("");
+	return collected.sort();
+}
+
 async function writeServiceWorker(): Promise<void> {
 	const shell = await readFile(`${outputDirectory}/index.html`, "utf8");
 	const referenced = new Set<string>();
@@ -55,6 +82,7 @@ async function writeServiceWorker(): Promise<void> {
 		"manifest.webmanifest",
 		...iconFiles.map((file) => `icons/${file}`),
 		...[...referenced].sort(),
+		...(await collectRunnerAssets()),
 	];
 	const template = await readFile(
 		fileURLToPath(new URL("./public/sw.js", import.meta.url)),
