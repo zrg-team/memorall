@@ -56,7 +56,9 @@ export const createMemoryUpdateTool: ToolFactory<
 			limit: 1,
 		});
 		const previous = existing[0];
-		if (!previous) return "No active memory matched for update.";
+		if (!previous) {
+			return "No active memory matched for update. Only memories saved through memory_remember can be updated; knowledge extracted from saved pages, files, and chats is not editable here.";
+		}
 
 		const sourceNode = await upsertMemoryNode(services, {
 			graphId,

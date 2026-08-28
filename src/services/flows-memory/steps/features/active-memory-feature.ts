@@ -51,10 +51,12 @@ The memory tools automatically use the current selected topic/graph. Do not ask 
 
 ## Tools
 - \`memory_remember\`: save a new fact, preference, or project-context item
-- \`memory_retrieve\`: search saved memories
+- \`memory_retrieve\`: search the current graph by meaning and by text — both memories you saved and knowledge extracted from the user's saved pages, files, and chats. Search before concluding that memory is empty.
 - \`memory_update\`: replace an existing memory while preserving history
 - \`memory_remove\`: forget a memory by marking it inactive
 - \`memory_explain_source\`: explain where a memory came from
+
+Only memories you saved through \`memory_remember\` can be updated or removed; extracted knowledge is read-only here. Each retrieved memory reports its \`source\` for that reason.
 
 When updating or removing memory, first retrieve likely matching memories unless the user already provided a memory id.
 `;
