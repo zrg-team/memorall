@@ -14,7 +14,7 @@
  * be paired with a newer shell.
  */
 
-const BUILD_ID = "7398e54d0c0f4c0c";
+const BUILD_ID = "9f5c83336d140a58";
 const PRECACHE = [
 	"index.html",
 	"manifest.webmanifest",
@@ -171,7 +171,32 @@ const PRECACHE = [
 	"assets/webgpu-CfPPmZ6v.js",
 	"assets/with-selector-DNYX53gf.js",
 	"assets/x-B6u8tIyA.js",
-	"assets/zap-BaHGONi8.js"
+	"assets/zap-BaHGONi8.js",
+	"runner/configs/transformer-model-configs.json",
+	"runner/index.html",
+	"runner/main.js",
+	"runner/modes/embedding-runner.js",
+	"runner/modes/transformer-runner.js",
+	"runner/modes/transformmers/cache.js",
+	"runner/modes/transformmers/capabilities.js",
+	"runner/modes/transformmers/catalog.js",
+	"runner/modes/transformmers/chat-completions.js",
+	"runner/modes/transformmers/constants.js",
+	"runner/modes/transformmers/context-window.js",
+	"runner/modes/transformmers/context.js",
+	"runner/modes/transformmers/dtype.js",
+	"runner/modes/transformmers/generation-utils.js",
+	"runner/modes/transformmers/input-builder.js",
+	"runner/modes/transformmers/model-loader.js",
+	"runner/modes/transformmers/progress.js",
+	"runner/modes/transformmers/responses.js",
+	"runner/modes/transformmers/text-utils.js",
+	"runner/modes/transformmers/transformers-env.js",
+	"runner/modes/webllm-runner.js",
+	"runner/modes/wllama-runner.js",
+	"runner/utils/common.js",
+	"runner/utils/gpu-lock.js",
+	"runner/utils/model-lifecycle.js"
 ];
 
 const CACHE_PREFIX = "memorall-studio-";
@@ -183,11 +208,54 @@ const SHELL_URL = new URL("index.html", ROOT).href;
 // server responses, so the shell must never answer for those paths.
 const BYPASS_PREFIXES = ["sandbox/"];
 
+/**
+ * Pages serves everything with `max-age=600`, and the runner, sandbox and
+ * vendor paths below this scope are not content-hashed. A plain fetch can
+ * therefore be answered from the HTTP cache with the previous deploy's bytes,
+ * and because assets are served cache-first that copy would then be pinned for
+ * the whole life of this build — a fixed file staying broken long after it was
+ * fixed. Always populate the cache straight from the network.
+ */
+function fromNetwork(input) {
+	try {
+		return new Request(input, { cache: "reload" });
+	} catch {
+		// A navigation request cannot be reconstructed; fall back to its URL.
+		return new Request(
+			typeof input === "string" ? input : input.url,
+			{ cache: "reload" },
+		);
+	}
+}
+
+/**
+ * Fetches without letting the HTTP cache answer, but falls back to a normal
+ * fetch when that fails. `cache: "reload"` refuses to be satisfied from the
+ * HTTP cache at all, which offline turns into a hard failure for anything this
+ * worker has not cached yet — a normal fetch can still be answered from it.
+ */
+async function fetchFresh(request) {
+	try {
+		return await fetch(fromNetwork(request));
+	} catch {
+		return await fetch(request);
+	}
+}
+
 self.addEventListener("install", (event) => {
 	event.waitUntil(
 		(async () => {
 			const cache = await caches.open(CACHE_NAME);
-			await cache.addAll(PRECACHE.map((path) => new URL(path, ROOT).href));
+			await Promise.all(
+				PRECACHE.map(async (path) => {
+					const url = new URL(path, ROOT).href;
+					const response = await fetch(fromNetwork(url));
+					if (response.status !== 200) {
+						throw new Error(`Precache failed: ${path} (${response.status})`);
+					}
+					await cache.put(url, response);
+				}),
+			);
 		})(),
 	);
 });
@@ -241,7 +309,7 @@ async function warmCache(urls) {
 					return;
 				}
 				if (await cache.match(url.href)) return;
-				const response = await fetch(url.href);
+				const response = await fetch(fromNetwork(url.href));
 				if (response.status === 200 && response.type === "basic") {
 					await cache.put(url.href, response);
 				}
@@ -273,7 +341,7 @@ self.addEventListener("fetch", (event) => {
 	event.respondWith(
 		request.mode === "navigate"
 			? serveDocument(request, isShellDocument)
-			: serveAsset(request),
+			: serveAsset(request, relativePath),
 	);
 });
 
@@ -285,7 +353,7 @@ self.addEventListener("fetch", (event) => {
 async function serveDocument(request, isShellDocument) {
 	const cache = await caches.open(CACHE_NAME);
 	try {
-		const response = await fetch(request);
+		const response = await fetchFresh(request.url);
 		if (response.ok) void cache.put(request, response.clone());
 		return response;
 	} catch {
@@ -297,16 +365,27 @@ async function serveDocument(request, isShellDocument) {
 }
 
 /**
- * Assets are cache-first: the bundle is content-hashed, and the vendored
- * runtimes below it are pinned by the same build, so whatever is in this
- * build's cache is by definition the right version.
+ * Everything under assets/ is emitted by the bundler with a content hash in its
+ * name, so a cached copy can never be the wrong one and is served as-is.
+ *
+ * The runner, sandbox and vendor trees keep the same filenames across deploys,
+ * and the build id is derived from the bundle — so a fix to one of those files
+ * alone does not produce a new worker. Cache-first would pin such a file for as
+ * long as this build lives, leaving an already-fixed script broken. Serve the
+ * cached copy for speed, then refresh it in the background: staleness is bounded
+ * to a single load, offline still works, and no request waits on the network.
  */
-async function serveAsset(request) {
+async function serveAsset(request, relativePath) {
 	const cache = await caches.open(CACHE_NAME);
 	const cached = await cache.match(request);
-	if (cached) return cached;
+	if (cached) {
+		if (!relativePath.startsWith("assets/")) {
+			void refresh(cache, request);
+		}
+		return cached;
+	}
 	try {
-		const response = await fetch(request);
+		const response = await fetchFresh(request);
 		if (response.status === 200 && response.type === "basic") {
 			void cache.put(request, response.clone());
 		}
@@ -316,5 +395,16 @@ async function serveAsset(request) {
 		// network error response leaves that indistinguishable from a fetch this
 		// worker never intercepted; rethrowing would log a worker failure instead.
 		return Response.error();
+	}
+}
+
+async function refresh(cache, request) {
+	try {
+		const response = await fetch(fromNetwork(request));
+		if (response.status === 200 && response.type === "basic") {
+			await cache.put(request, response);
+		}
+	} catch {
+		// Offline: the copy already in the cache stands.
 	}
 }
