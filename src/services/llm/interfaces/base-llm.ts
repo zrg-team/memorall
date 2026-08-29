@@ -42,6 +42,7 @@ export interface ModelInfo {
 	modelLoader?: string;
 	supportsNativeTools?: boolean;
 	supportsVision?: boolean;
+	supportsAudio?: boolean;
 	webgpuCapabilities?: unknown;
 }
 

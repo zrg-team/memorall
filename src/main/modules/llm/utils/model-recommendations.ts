@@ -4,7 +4,11 @@ import type {
 	RecommendationSet,
 	ModelPreference,
 } from "../types/system-specs";
-import { getAvailableModelMemoryGB, estimateModelMemory } from "./model-memory";
+import {
+	engineForProvider,
+	getAvailableModelMemoryGB,
+	estimateModelMemory,
+} from "./model-memory";
 import {
 	ALL_MODELS,
 	getModelRunProfile,
@@ -216,7 +220,11 @@ export function generateRecommendations(
 		// fit badge against. Probing at a fixed 4096 used to let models through
 		// the filter and then show them as "Low RAM" — the filter and the badge
 		// now agree.
-		const availableGB = getAvailableModelMemoryGB(specs, model.requiresWebGPU);
+		const availableGB = getAvailableModelMemoryGB(
+			specs,
+			model.requiresWebGPU,
+			engineForProvider(model.provider),
+		);
 		const estimate = estimateModelMemory(
 			model.sizeGB,
 			model.kvBytesPerToken,

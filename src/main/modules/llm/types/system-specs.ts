@@ -19,9 +19,26 @@ export interface SystemSpecs {
 	gpu?: {
 		vendor: string;
 		renderer: string;
-		/** Estimated VRAM in GB (if detectable) */
+		/**
+		 * VRAM in GB guessed from the renderer string. This is a lookup against a
+		 * hand-kept table, so it is absent for any card the table has not caught
+		 * up with, and meaningless for the integrated GPUs that share system RAM.
+		 * Treat it as a label, never as a budget.
+		 */
 		estimatedVRAM?: number;
 	};
+	/**
+	 * The largest single GPU allocation this device admits, straight from the
+	 * WebGPU adapter. WebGPU deliberately never reports VRAM — this limit is the
+	 * only memory number it guarantees, and llama.cpp's WebGPU backend budgets
+	 * against exactly this figure.
+	 */
+	webgpuMaxAllocationBytes?: number;
+	/**
+	 * Origin storage quota. An upper bound on the model weights that can be
+	 * cached at all, whatever the memory situation.
+	 */
+	storageQuotaBytes?: number;
 	/** Device category based on specs */
 	deviceCategory: "low" | "medium" | "high" | "ultra";
 }

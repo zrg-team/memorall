@@ -29,6 +29,75 @@ const CPU_AI_MEMORY_FRACTION = 0.4;
 const RUNTIME_BUFFER_MULTIPLIER = 1.2;
 const CONTEXT_GRANULARITY = 1024;
 
+/** Where a memory budget's figure came from, so the UI can be honest about it. */
+export type MemoryBudgetSource =
+	| "gpu-allocation-limit"
+	| "gpu-name-lookup"
+	| "device-class-guess"
+	| "system-ram";
+
+export interface MemoryBudget {
+	availableGB: number;
+	source: MemoryBudgetSource;
+}
+
+/**
+ * How the engine behind a model allocates GPU memory, which decides whether the
+ * per-buffer limit bounds the whole model or just one tensor.
+ */
+export type InferenceEngine = "llama.cpp" | "multi-buffer";
+
+/** wllama is llama.cpp; WebLLM (MLC) and Transformers.js (ORT) are not. */
+export function engineForProvider(provider: string): InferenceEngine {
+	return provider === "wllama" ? "llama.cpp" : "multi-buffer";
+}
+
+/**
+ * The effective memory budget for weights plus KV cache, and where it came from.
+ *
+ * No browser API reports VRAM — WebGPU withholds it as a fingerprinting vector,
+ * and probing it by allocating until failure over-reports badly, because the
+ * driver spills to shared system memory rather than failing. So the GPU budget
+ * is ranked by how trustworthy each source is:
+ *
+ * 1. `maxStorageBufferBindingSize` — the only memory figure WebGPU guarantees.
+ *    llama.cpp's WebGPU backend reports exactly this as its free VRAM and stops
+ *    offloading layers once it is used up, so for that engine the per-buffer
+ *    limit really is the whole budget. Engines that spread weights over many
+ *    buffers (MLC, ONNX Runtime) are not bounded this way, so for them it caps
+ *    one tensor rather than the model and must not be read as a total.
+ * 2. A lookup of the GPU name against a hand-kept table, which goes stale the
+ *    moment new hardware ships and means nothing for the integrated GPUs that
+ *    share system RAM.
+ * 3. A guess from the device class.
+ */
+export function getModelMemoryBudget(
+	specs: SystemSpecs,
+	usesWebGPU: boolean,
+	engine: InferenceEngine = "multi-buffer",
+): MemoryBudget {
+	if (!usesWebGPU) {
+		return {
+			availableGB: specs.memoryGB * CPU_AI_MEMORY_FRACTION,
+			source: "system-ram",
+		};
+	}
+
+	if (engine === "llama.cpp" && specs.webgpuMaxAllocationBytes) {
+		return {
+			availableGB: specs.webgpuMaxAllocationBytes / 1024 ** 3,
+			source: "gpu-allocation-limit",
+		};
+	}
+	if (specs.gpu?.estimatedVRAM) {
+		return { availableGB: specs.gpu.estimatedVRAM, source: "gpu-name-lookup" };
+	}
+	return {
+		availableGB: WEBGPU_MEMORY_BY_CATEGORY[specs.deviceCategory] ?? 4,
+		source: "device-class-guess",
+	};
+}
+
 /**
  * Returns the effective memory budget in GB available for model weights + KV cache.
  * WebGPU models consume VRAM; CPU models use a conservative fraction of system RAM.
@@ -36,15 +105,25 @@ const CONTEXT_GRANULARITY = 1024;
 export function getAvailableModelMemoryGB(
 	specs: SystemSpecs,
 	usesWebGPU: boolean,
+	engine: InferenceEngine = "multi-buffer",
 ): number {
-	if (usesWebGPU) {
-		if (specs.gpu?.estimatedVRAM) {
-			return specs.gpu.estimatedVRAM;
-		}
-		return WEBGPU_MEMORY_BY_CATEGORY[specs.deviceCategory] ?? 4;
-	}
+	return getModelMemoryBudget(specs, usesWebGPU, engine).availableGB;
+}
 
-	return specs.memoryGB * CPU_AI_MEMORY_FRACTION;
+/**
+ * Whether the weights can be cached at all.
+ *
+ * Independent of memory: a model larger than the origin's storage quota cannot
+ * be downloaded no matter how much RAM the machine has, and saying so up front
+ * beats failing partway through a multi-gigabyte download.
+ */
+export function fitsStorageQuota(
+	specs: SystemSpecs,
+	sizeGB: number,
+): { fits: boolean; quotaGB?: number } {
+	if (!specs.storageQuotaBytes) return { fits: true };
+	const quotaGB = specs.storageQuotaBytes / 1024 ** 3;
+	return { fits: sizeGB <= quotaGB, quotaGB };
 }
 
 /**

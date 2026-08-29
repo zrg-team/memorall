@@ -22,6 +22,13 @@ export async function detectSystemSpecs(): Promise<SystemSpecs> {
 	// Detect GPU information
 	const gpu = await detectGPU();
 
+	// The ceilings the device actually reports, as opposed to the ones inferred
+	// from a GPU name.
+	const [webgpuMaxAllocationBytes, storageQuotaBytes] = await Promise.all([
+		detectWebGPUAllocationLimit(),
+		detectStorageQuota(),
+	]);
+
 	// Calculate device category
 	const deviceCategory = calculateDeviceCategory(
 		memoryGB,
@@ -36,8 +43,40 @@ export async function detectSystemSpecs(): Promise<SystemSpecs> {
 		hasWebGPU,
 		hasOpfs,
 		gpu,
+		webgpuMaxAllocationBytes,
+		storageQuotaBytes,
 		deviceCategory,
 	};
+}
+
+/**
+ * The largest single buffer this GPU will hand out.
+ *
+ * WebGPU withholds VRAM on purpose — it is a fingerprinting vector — so this is
+ * the only memory figure the API guarantees. It is also the figure llama.cpp's
+ * WebGPU backend treats as free memory, which makes it the number that decides
+ * whether a load actually succeeds.
+ */
+async function detectWebGPUAllocationLimit(): Promise<number | undefined> {
+	try {
+		const gpu = (navigator as Navigator & { gpu?: GPU }).gpu;
+		if (!gpu) return undefined;
+		const adapter = await gpu.requestAdapter();
+		const limit = adapter?.limits?.maxStorageBufferBindingSize;
+		return limit ? Number(limit) : undefined;
+	} catch {
+		return undefined;
+	}
+}
+
+/** How much the origin may store, which bounds what can be downloaded at all. */
+async function detectStorageQuota(): Promise<number | undefined> {
+	try {
+		const estimate = await navigator.storage?.estimate?.();
+		return estimate?.quota ?? undefined;
+	} catch {
+		return undefined;
+	}
 }
 
 /**

@@ -89,6 +89,28 @@ describe("local LLM model catalog", () => {
 		).toBe(196_608);
 	});
 
+	it("charges each wllama model the KV cost its own GGUF header implies", () => {
+		// These four sat at a placeholder 16_384 that was up to 8.5x too low, so
+		// the sizer believed it could afford far more context than it could. Each
+		// value below was read from the model's real GGUF header:
+		// 2 (K+V) x layers x kv_heads x head_dim x 2 bytes (f16).
+		const MEASURED: [string, number][] = [
+			["ibm-granite/granite-4.0-350m-GGUF", 2 * 28 * 4 * 64 * 2],
+			["bartowski/HuggingFaceTB_SmolLM3-3B-GGUF", 2 * 36 * 4 * 128 * 2],
+			["unsloth/Llama-3.2-3B-Instruct-GGUF", 2 * 28 * 8 * 128 * 2],
+			["unsloth/gemma-3-4b-it-GGUF", 2 * 34 * 4 * 256 * 2],
+			// Already correct, and the reason the placeholders stood out: the same
+			// model from another repo carried the right figure.
+			["ggml-org/SmolLM3-3B-GGUF", 2 * 36 * 4 * 128 * 2],
+			["unsloth/gemma-3-1b-it-GGUF", 2 * 26 * 1 * 256 * 2],
+			["unsloth/gemma-3-270m-it-GGUF", 2 * 18 * 1 * 256 * 2],
+		];
+
+		for (const [id, expected] of MEASURED) {
+			expect(getModel(id, "wllama")?.kvBytesPerToken, id).toBe(expected);
+		}
+	});
+
 	it("matches every enabled WebLLM model to its compiled catalog entry", () => {
 		const prebuiltModels = new Map(
 			prebuiltAppConfig.model_list.map((model) => [model.model_id, model]),
