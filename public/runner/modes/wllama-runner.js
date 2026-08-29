@@ -1,6 +1,16 @@
 // Wllama Runner - Local LLM inference via WebAssembly (wllama v3)
 import { generateId, reply, sendReady } from "../utils/common.js";
 import { ModelLifecycleManager } from "../utils/model-lifecycle.js";
+import { toWllamaMessages } from "../utils/openai-content.js";
+import {
+	detectDeviceCeilings,
+	LIMITED_BY,
+	planContextFromMemoryHint,
+} from "../utils/context-planner.js";
+import {
+	kvBytesPerToken as kvBytesPerTokenOf,
+	probeGgufArchitecture,
+} from "../utils/gguf-metadata.js";
 
 // v3: single WASM file — local relative path, never CDN (Chrome extension CSP)
 const WASM_PATHS = {
@@ -9,11 +19,18 @@ const WASM_PATHS = {
 
 let _webGPUCached = null;
 let Wllama;
+let ModelManager;
 const loadedModelsCache = new Map();
 const activeOperations = new Map();
 const pendingLoadMemoryHints = new Map();
 const pendingMmprojFiles = new Map();
 const DEFAULT_WLLAMA_N_CTX = 65536;
+// llama.cpp reserves the whole KV cache up front, so an unreviewed GGUF from
+// Hugging Face fails to load outright when the requested window is larger than
+// the device can hold. Stepping down to this floor is what makes those models
+// usable at all instead of erroring on the first load.
+const MIN_WLLAMA_N_CTX = 2048;
+const CONTEXT_ALLOCATION_ERROR = /memory|alloc|out of|oom|kv[ _-]?cache/i;
 
 async function detectWebGPU() {
 	if (_webGPUCached !== null) return _webGPUCached;
@@ -32,64 +49,173 @@ async function detectWebGPU() {
 	return _webGPUCached;
 }
 
-function resolveMemoryContextTokens(memoryHint) {
-	if (!memoryHint || typeof memoryHint !== "object") {
-		return undefined;
+// Architecture read from the model's own GGUF header, cached per URL. This is
+// what lets an unreviewed Hugging Face model be sized properly instead of
+// starting from a blind default and failing its way down.
+const architectureCache = new Map();
+const ARCH_STORAGE_PREFIX = "wllama:arch:";
+const ARCH_NONE_SENTINEL = "__none__";
+
+function readArchitectureCache(url) {
+	if (architectureCache.has(url)) {
+		return { hit: true, value: architectureCache.get(url) };
 	}
+	try {
+		const raw = localStorage.getItem(ARCH_STORAGE_PREFIX + url);
+		if (raw !== null) {
+			const value = raw === ARCH_NONE_SENTINEL ? null : JSON.parse(raw);
+			architectureCache.set(url, value);
+			return { hit: true, value };
+		}
+	} catch {}
+	return { hit: false, value: undefined };
+}
 
-	const { availableGB, sizeGB, kvBytesPerToken, contextLength } = memoryHint;
-	const hasValidNumbers =
-		typeof availableGB === "number" &&
-		Number.isFinite(availableGB) &&
-		availableGB > 0 &&
-		typeof sizeGB === "number" &&
-		Number.isFinite(sizeGB) &&
-		sizeGB >= 0 &&
-		typeof kvBytesPerToken === "number" &&
-		Number.isFinite(kvBytesPerToken) &&
-		kvBytesPerToken > 0;
+function writeArchitectureCache(url, architecture) {
+	architectureCache.set(url, architecture);
+	try {
+		localStorage.setItem(
+			ARCH_STORAGE_PREFIX + url,
+			architecture ? JSON.stringify(architecture) : ARCH_NONE_SENTINEL,
+		);
+	} catch {}
+}
 
-	if (!hasValidNumbers) {
-		return undefined;
+/**
+ * The model's own KV cost and trained context, or null when the header cannot
+ * be read. A failed probe is never fatal: the catalogue figure, and then the
+ * retry ladder, still stand behind it.
+ * @param {string} url
+ */
+async function probeModelArchitecture(url) {
+	const cached = readArchitectureCache(url);
+	if (cached.hit) return cached.value;
+
+	let architecture = null;
+	try {
+		architecture = await probeGgufArchitecture(url);
+	} catch (error) {
+		// A network hiccup must not be cached as "this model has no header".
+		console.warn("[wllama-runner] GGUF header probe failed:", error?.message);
+		return null;
 	}
+	writeArchitectureCache(url, architecture);
+	return architecture;
+}
 
-	const availableForKV = availableGB / 1.2 - sizeGB;
-	if (availableForKV <= 0) {
-		return 0;
+let deviceCeilingsPromise = null;
+function getDeviceCeilings() {
+	if (!deviceCeilingsPromise) deviceCeilingsPromise = detectDeviceCeilings();
+	return deviceCeilingsPromise;
+}
+
+/**
+ * The context window to request for one backend.
+ *
+ * @param {object} context
+ * @param {object} [context.memoryHint]
+ * @param {number} [context.budgetGB] Budget of the backend in use.
+ * @param {object|null} [context.architecture] Probed GGUF architecture.
+ * @param {object} [context.ceilings] Device ceilings.
+ * @param {boolean} [context.usesGPU]
+ */
+function planWllamaContext(context) {
+	const { memoryHint, budgetGB, architecture, ceilings, usesGPU } = context;
+
+	const plan = planContextFromMemoryHint(memoryHint, {
+		budgetGB,
+		ceiling: DEFAULT_WLLAMA_N_CTX,
+		// The model's own header beats the catalogue's hand-computed figure, and
+		// is the only source at all for a model outside the catalogue.
+		kvBytesPerToken: kvBytesPerTokenOf(architecture),
+		trainedContext: architecture?.trainedContext,
+		weightsBytes: architecture?.fileSizeBytes,
+		layerCount: architecture?.blockCount,
+		// Only the GPU backend is bound by a per-buffer limit; only the wasm heap
+		// is bound by the 32-bit address space.
+		maxAllocationBytes: usesGPU ? ceilings?.maxAllocationBytes : undefined,
+		addressSpaceBytes: usesGPU ? undefined : ceilings?.addressSpaceBytes,
+	});
+
+	if (plan) return plan;
+
+	// Nothing usable to size with: take the product ceiling and let the ladder
+	// find a window that loads.
+	return {
+		contextTokens: DEFAULT_WLLAMA_N_CTX,
+		limitedBy: LIMITED_BY.UNKNOWN,
+		fits: true,
+	};
+}
+
+/**
+ * Context windows to try, largest first, before giving up on a backend. Never
+ * asks for more than the caller budgeted: a device that only affords 1k tokens
+ * must not be handed the floor instead.
+ */
+function contextLadder(nCtx) {
+	const steps = [];
+	let value = nCtx;
+	while (value > MIN_WLLAMA_N_CTX) {
+		steps.push(value);
+		value = Math.max(MIN_WLLAMA_N_CTX, Math.floor(value / 4));
 	}
-
-	const maxTokens = Math.floor((availableForKV * 1024 ** 3) / kvBytesPerToken);
-	const roundedTokens = Math.max(0, Math.floor(maxTokens / 1024) * 1024);
-
-	if (
-		typeof contextLength === "number" &&
-		Number.isFinite(contextLength) &&
-		contextLength > 0
-	) {
-		return Math.min(roundedTokens, contextLength);
-	}
-
-	return roundedTokens;
+	steps.push(Math.min(nCtx, MIN_WLLAMA_N_CTX));
+	return steps;
 }
 
 // Detect capabilities from the loaded model's own embedded metadata.
 // Works for any GGUF from HuggingFace — no hardcoded model lists.
 function detectModelCapabilities(wllama) {
 	const template = wllama.getChatTemplate();
-	// Native tool calling = model embeds an OAI-compatible tool_calls chat template
+	// Native tool calling = the chat template does something with tools. That is
+	// the `tools` input variable, not the assistant-side `tool_calls` output:
+	// llama.cpp parses a model's calls with a parser it picks from the template
+	// format, so a template that only renders tools into the system prompt (LFM2,
+	// Phi-4-mini) still yields native tool_calls. Requiring the output form
+	// silently downgraded 6 of the 28 catalogued models to prompt injection.
 	const supportsNativeTools =
-		template != null && template.includes("tool_calls");
-	// Vision = wllama v3 reports this directly from model architecture metadata
-	const supportsVision = wllama.supportInputModality?.("image") ?? false;
+		template != null && /\btools\b|tool_call/.test(template);
+	// Modalities = wllama v3 reports these from the model's own architecture
+	// metadata, so any multimodal GGUF is covered without a hardcoded list.
+	const supportsVision = supportsModality(wllama, "image");
+	const supportsAudio = supportsModality(wllama, "audio");
 	const usesGPU = wllama._usesGPU ?? false;
-	return { supportsNativeTools, supportsVision, usesGPU };
+	return { supportsNativeTools, supportsVision, supportsAudio, usesGPU };
+}
+
+/**
+ * Whether the loaded model accepts a modality. Builds without the v3 probe are
+ * treated as permissive so a missing method cannot silently reject every image.
+ * @param {any} wllama
+ * @param {"image" | "audio"} modality
+ */
+function supportsModality(wllama, modality) {
+	return typeof wllama?.supportInputModality === "function"
+		? wllama.supportInputModality(modality)
+		: true;
 }
 
 async function ensureWllama() {
 	if (Wllama) return;
 	const mod = await import("../libs/wllama.js");
 	Wllama = mod.Wllama || mod.default;
+	ModelManager = mod.ModelManager;
 	if (!Wllama) throw new Error("Failed to load @wllama/wllama");
+}
+
+/**
+ * Every file a model occupies in the cache. A gguf-split model is stored as one
+ * cache entry per shard, all derivable from whichever shard we hold.
+ * @param {string} url
+ * @returns {string[]}
+ */
+function shardUrls(url) {
+	try {
+		const urls = ModelManager?.parseModelUrl?.(url);
+		if (Array.isArray(urls) && urls.length > 0) return urls;
+	} catch {}
+	return [url];
 }
 
 // CacheManager is accessed via the Wllama instance's public cacheManager field.
@@ -106,19 +232,26 @@ async function getCacheManager() {
 }
 
 /**
- * Parse model name and return components
- * @param {string} model - Format: username/repo/filename
+ * Parse model name and return components.
+ *
+ * The file part keeps every remaining segment: plenty of Hugging Face GGUF
+ * repos put a quantization in its own folder (`Q4_K_M/model-00001-of-00002.gguf`)
+ * and truncating at the first segment would resolve to a directory.
+ *
+ * @param {string} model - Format: username/repo/path/to/file.gguf
  */
 function parseModelName(model) {
 	const parts = model.split("/");
 	if (parts.length < 3) {
 		throw new Error("Model name must be in format: username/repo/filename");
 	}
+	const repo = `${parts[0]}/${parts[1]}`;
+	const filename = parts.slice(2).join("/");
 	return {
 		modelId: model,
-		repo: `${parts[0]}/${parts[1]}`,
-		filename: parts[2],
-		url: `https://huggingface.co/${parts[0]}/${parts[1]}/resolve/main/${parts[2]}`,
+		repo,
+		filename,
+		url: `https://huggingface.co/${repo}/resolve/main/${filename}`,
 	};
 }
 
@@ -191,13 +324,61 @@ async function resolveHFMmprojFilename(repo) {
 }
 
 /**
- * Delete a cached model using v3 CacheManager API
+ * Delete a cached model using v3 CacheManager API.
+ *
+ * A split model occupies one cache entry per shard and a multimodal one also
+ * keeps its projector, so deleting only the URL we were given would leave
+ * gigabytes behind and make the model look half-downloaded afterwards.
  * @param {string} modelId
  */
 async function deleteWllamaModelFromCache(modelId) {
 	const { url } = parseModelName(modelId);
 	const cm = await getCacheManager();
-	await cm.delete(url);
+	const owned = new Set(shardUrls(url));
+	const entries = await cm.list();
+	for (const entry of entries) {
+		if (owned.has(entry.metadata?.originalURL) && entry.metadata?.mmprojURL) {
+			owned.add(entry.metadata.mmprojURL);
+		}
+	}
+	await cm.deleteMany((entry) => owned.has(entry.metadata?.originalURL));
+}
+
+/**
+ * Load one backend, shrinking the context window until it fits.
+ *
+ * Only allocation failures step down; anything else (a missing file, a bad
+ * repo) is raised immediately rather than retried three more times.
+ * @param {object} loadArgs
+ * @param {object} baseOpts
+ * @param {number} nCtx
+ * @param {number} nGpuLayers
+ */
+async function loadWithContextLadder(loadArgs, baseOpts, nCtx, nGpuLayers) {
+	let lastError;
+	for (const contextTokens of contextLadder(nCtx)) {
+		const wllama = new Wllama(WASM_PATHS, WLLAMA_CONFIG);
+		try {
+			await wllama.loadModelFromHF(loadArgs, {
+				...baseOpts,
+				n_ctx: contextTokens,
+				n_gpu_layers: nGpuLayers,
+			});
+			wllama._usesGPU = nGpuLayers > 0;
+			return wllama;
+		} catch (error) {
+			lastError = error;
+			await unloadWllamaModel(wllama);
+			if (!CONTEXT_ALLOCATION_ERROR.test(error?.message ?? "")) {
+				throw error;
+			}
+			console.warn(
+				`[wllama-runner] load failed at n_ctx=${contextTokens}, retrying smaller:`,
+				error?.message,
+			);
+		}
+	}
+	throw lastError;
 }
 
 /**
@@ -208,20 +389,8 @@ async function deleteWllamaModelFromCache(modelId) {
 async function loadWllamaModel(modelId, notifyProgress) {
 	await ensureWllama();
 
-	const { repo, filename } = parseModelName(modelId);
+	const { repo, filename, url } = parseModelName(modelId);
 	const memoryHint = pendingLoadMemoryHints.get(modelId);
-	const memoryContextTokens = resolveMemoryContextTokens(memoryHint);
-
-	if (typeof memoryContextTokens === "number" && memoryContextTokens <= 0) {
-		throw new Error(
-			`Model does not fit available device memory (availableGB=${memoryHint?.availableGB ?? "unknown"})`,
-		);
-	}
-
-	const nCtx =
-		typeof memoryContextTokens === "number"
-			? Math.min(DEFAULT_WLLAMA_N_CTX, memoryContextTokens)
-			: DEFAULT_WLLAMA_N_CTX;
 
 	const progressCallback = ({ loaded, total }) => {
 		if (notifyProgress) {
@@ -244,34 +413,77 @@ async function loadWllamaModel(modelId, notifyProgress) {
 	const loadArgs = mmprojFile
 		? { repo, file: filename, mmprojFile }
 		: { repo, file: filename };
-	const baseOpts = { progressCallback, n_ctx: nCtx };
+	const baseOpts = { progressCallback };
+
+	// Read the model's own architecture before committing to a window. Both are
+	// best-effort and independent of the load itself.
+	const [architecture, ceilings] = await Promise.all([
+		probeModelArchitecture(url),
+		getDeviceCeilings(),
+	]);
 
 	try {
-		// WebGPU currently loads some multimodal projector models but can stall during generation.
-		const useGPU =
-			!mmprojFile && memoryHint?.usesWebGPU !== false && (await detectWebGPU());
+		// wllama offloads to WebGPU whenever n_gpu_layers > 0 and the device has an
+		// adapter. Whether the *model* requires a GPU says nothing about whether it
+		// may use one, so the catalogue's requiresWebGPU flag must not gate this —
+		// every GGUF here also runs on CPU, and reading that flag as permission is
+		// what kept the whole catalogue off the GPU.
+		//
+		// Multimodal models stay on CPU: WebGPU loads the projector but can stall
+		// mid-generation, which a load-time fallback would not catch.
+		const useGPU = !mmprojFile && (await detectWebGPU());
 
 		if (useGPU) {
-			try {
-				const wllamaGPU = new Wllama(WASM_PATHS, WLLAMA_CONFIG);
-				await wllamaGPU.loadModelFromHF(loadArgs, {
-					...baseOpts,
-					n_gpu_layers: 999,
-				});
-				wllamaGPU._usesGPU = true;
-				return wllamaGPU;
-			} catch (gpuErr) {
-				console.warn(
-					"[wllama-runner] WebGPU load failed, retrying on CPU:",
-					gpuErr?.message,
+			// Offloaded weights and their KV cache sit in VRAM, so size the window
+			// against the GPU budget rather than the system-RAM one.
+			const gpuPlan = planWllamaContext({
+				memoryHint,
+				budgetGB: memoryHint?.webgpuAvailableGB,
+				architecture,
+				ceilings,
+				usesGPU: true,
+			});
+			if (gpuPlan.fits) {
+				console.log(
+					`[wllama-runner] GPU context: ${gpuPlan.contextTokens} tokens (limited by ${gpuPlan.limitedBy})`,
 				);
+				try {
+					return await loadWithContextLadder(
+						loadArgs,
+						baseOpts,
+						gpuPlan.contextTokens,
+						999,
+					);
+				} catch (gpuErr) {
+					console.warn(
+						"[wllama-runner] WebGPU load failed, retrying on CPU:",
+						gpuErr?.message,
+					);
+				}
 			}
 		}
 
-		const wllama = new Wllama(WASM_PATHS, WLLAMA_CONFIG);
-		await wllama.loadModelFromHF(loadArgs, { ...baseOpts, n_gpu_layers: 0 });
-		wllama._usesGPU = false;
-		return wllama;
+		const cpuPlan = planWllamaContext({
+			memoryHint,
+			architecture,
+			ceilings,
+			usesGPU: false,
+		});
+		if (!cpuPlan.fits) {
+			throw new Error(
+				`Model does not fit available device memory (limited by ${cpuPlan.limitedBy}, availableGB=${memoryHint?.availableGB ?? "unknown"})`,
+			);
+		}
+		console.log(
+			`[wllama-runner] CPU context: ${cpuPlan.contextTokens} tokens (limited by ${cpuPlan.limitedBy})`,
+		);
+
+		return await loadWithContextLadder(
+			loadArgs,
+			baseOpts,
+			cpuPlan.contextTokens,
+			0,
+		);
 	} finally {
 		pendingLoadMemoryHints.delete(modelId);
 		pendingMmprojFiles.delete(modelId);
@@ -355,10 +567,28 @@ window.addEventListener("message", async (event) => {
 
 				try {
 					const cacheEntries = await cm.list();
+					const sizeByURL = new Map();
+					const projectorURLs = new Set();
+					for (const entry of cacheEntries) {
+						const originalURL = entry.metadata?.originalURL;
+						if (!originalURL) continue;
+						sizeByURL.set(originalURL, entry.size || 0);
+						if (entry.metadata.mmprojURL) {
+							projectorURLs.add(entry.metadata.mmprojURL);
+						}
+					}
+
 					downloadedModels = cacheEntries
 						.filter((entry) => entry.name.endsWith(".gguf"))
 						.map((entry) => {
 							const originURL = entry.metadata?.originalURL || "";
+							// A split model is one model spread over N cache entries, and a
+							// projector is never loadable on its own — listing either as its
+							// own row offers the user something that cannot be served.
+							const shards = shardUrls(originURL);
+							if (shards[0] !== originURL || projectorURLs.has(originURL)) {
+								return null;
+							}
 							const match = originURL.match(
 								/^https:\/\/huggingface\.co\/([^/]+\/[^/]+)\/resolve\/main\/(.+)$/,
 							);
@@ -378,9 +608,13 @@ window.addEventListener("message", async (event) => {
 								object: "model",
 								created: Date.now(),
 								owned_by: "local",
-								size: entry.size || 0,
+								size: shards.reduce(
+									(total, url) => total + (sizeByURL.get(url) || 0),
+									0,
+								),
 							};
-						});
+						})
+						.filter(Boolean);
 				} catch (error) {
 					console.error("Failed to get cached models:", error);
 				}
@@ -423,6 +657,13 @@ window.addEventListener("message", async (event) => {
 						parent: null,
 						loaded: true,
 						downloaded: true,
+						// ModelInfo carries these at the top level and that is what the
+						// warm-serve path reads back; nesting them only under
+						// `capabilities` let a re-served model silently lose its detected
+						// tool and vision support.
+						supportsNativeTools: capabilities.supportsNativeTools,
+						supportsVision: capabilities.supportsVision,
+						supportsAudio: capabilities.supportsAudio,
 						capabilities,
 					};
 
@@ -483,7 +724,11 @@ window.addEventListener("message", async (event) => {
 							typeof loadedCtx?.n_ctx === "number"
 								? loadedCtx.n_ctx
 								: undefined;
-						const memoryContextTokens = resolveMemoryContextTokens(_memoryHint);
+						const memoryContextTokens = planContextFromMemoryHint(_memoryHint, {
+							budgetGB: wllama._usesGPU
+								? _memoryHint?.webgpuAvailableGB
+								: undefined,
+						})?.contextTokens;
 						const maxTotalContext =
 							typeof maxContextTokens === "number" &&
 							typeof memoryContextTokens === "number"
@@ -501,8 +746,15 @@ window.addEventListener("message", async (event) => {
 								? Math.min(requestedMaxTokens, Math.max(0, maxTotalContext))
 								: requestedMaxTokens;
 
+						// Images and audio arrive as OpenAI URL parts and must be decoded
+						// to the bytes wllama swaps for the model's media marker.
+						const wllamaMessages = await toWllamaMessages(messages, {
+							supportsModality: (modality) =>
+								supportsModality(wllama, modality),
+						});
+
 						const completionOptions = {
-							messages,
+							messages: wllamaMessages,
 							max_tokens: effectiveMaxTokens,
 							temperature: typeof temperature === "number" ? temperature : 0.8,
 							top_p: typeof top_p === "number" ? top_p : 0.9,

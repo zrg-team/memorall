@@ -85,6 +85,7 @@ interface ErrorResponse {
 interface DetectedCapabilities {
 	supportsNativeTools: boolean;
 	supportsVision: boolean;
+	supportsAudio: boolean;
 	usesGPU: boolean;
 }
 
@@ -470,6 +471,7 @@ export class WllamaLLM implements BaseLLM {
 					this.modelCapabilities.set(model, {
 						supportsNativeTools: existingModel.supportsNativeTools === true,
 						supportsVision: existingModel.supportsVision === true,
+						supportsAudio: existingModel.supportsAudio === true,
 						// ModelInfo carries no GPU flag; the runner reports it only on a
 						// fresh serve, and it does not affect tool capability.
 						usesGPU: false,

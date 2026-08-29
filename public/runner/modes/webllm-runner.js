@@ -1,6 +1,17 @@
 // WebLLM Runner - WebGPU-accelerated chat completions via WebLLM
 import { reply, generateId, sendReady } from "../utils/common.js";
 import { ModelLifecycleManager } from "../utils/model-lifecycle.js";
+import {
+	detectDeviceCeilings,
+	planContextFromMemoryHint,
+} from "../utils/context-planner.js";
+
+// Resolved once and read synchronously by the sizer below; absent ceilings
+// simply do not constrain the plan.
+let webgpuCeilings = null;
+detectDeviceCeilings().then((ceilings) => {
+	webgpuCeilings = ceilings;
+});
 
 // Scoped state
 let WebLLMEngine;
@@ -105,44 +116,15 @@ function deepEqual(left, right) {
 	return true;
 }
 
+/**
+ * WebLLM always runs on the GPU, so the VRAM budget is the only one that
+ * applies and `maxStorageBufferBindingSize` is a real per-allocation ceiling.
+ */
 function resolveMemoryContextTokens(memoryHint) {
-	if (!memoryHint || typeof memoryHint !== "object") {
-		return undefined;
-	}
-
-	const { availableGB, sizeGB, kvBytesPerToken, contextLength } = memoryHint;
-	const hasValidNumbers =
-		typeof availableGB === "number" &&
-		Number.isFinite(availableGB) &&
-		availableGB > 0 &&
-		typeof sizeGB === "number" &&
-		Number.isFinite(sizeGB) &&
-		sizeGB >= 0 &&
-		typeof kvBytesPerToken === "number" &&
-		Number.isFinite(kvBytesPerToken) &&
-		kvBytesPerToken > 0;
-
-	if (!hasValidNumbers) {
-		return undefined;
-	}
-
-	const availableForKV = availableGB / 1.2 - sizeGB;
-	if (availableForKV <= 0) {
-		return 0;
-	}
-
-	const maxTokens = Math.floor((availableForKV * 1024 ** 3) / kvBytesPerToken);
-	const roundedTokens = Math.max(0, Math.floor(maxTokens / 1024) * 1024);
-
-	if (
-		typeof contextLength === "number" &&
-		Number.isFinite(contextLength) &&
-		contextLength > 0
-	) {
-		return Math.min(roundedTokens, contextLength);
-	}
-
-	return roundedTokens;
+	return planContextFromMemoryHint(memoryHint, {
+		budgetGB: memoryHint?.webgpuAvailableGB,
+		maxAllocationBytes: webgpuCeilings?.maxAllocationBytes,
+	})?.contextTokens;
 }
 
 function cloneConversation(conversation) {

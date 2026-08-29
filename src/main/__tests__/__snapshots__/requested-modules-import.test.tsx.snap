@@ -204,6 +204,7 @@ exports[`requested main module coverage > imports chat, documents, agents, agent
   "../modules/llm/hooks/use-repo-effect.ts",
   "../modules/llm/types/system-specs.ts",
   "../modules/llm/utils/browser-support.ts",
+  "../modules/llm/utils/gguf-repo-files.ts",
   "../modules/llm/utils/gpu-vram-database.ts",
   "../modules/llm/utils/model-memory.ts",
   "../modules/llm/utils/model-recommendations.ts",

@@ -38,7 +38,10 @@ import type {
 	ModelRecommendation,
 } from "../types/system-specs";
 import {
+	engineForProvider,
 	getAvailableModelMemoryGB,
+	getModelMemoryBudget,
+	fitsStorageQuota,
 	estimateModelMemory,
 	estimateModelMemoryAtUsableContext,
 	type ModelMemoryEstimate,
@@ -246,7 +249,11 @@ export const MagicSetup: React.FC<MagicSetupProps> = ({
 		return Object.fromEntries(
 			MODEL_PREFERENCES.map((pref) => {
 				const m = recommendations[pref].primary;
-				const avail = getAvailableModelMemoryGB(specs, m.usesWebGPU);
+				const avail = getAvailableModelMemoryGB(
+					specs,
+					m.usesWebGPU,
+					engineForProvider(m.provider),
+				);
 				const est = estimateModelMemoryAtUsableContext(
 					m.sizeGB,
 					m.kvBytesPerToken,
@@ -261,7 +268,11 @@ export const MagicSetup: React.FC<MagicSetupProps> = ({
 	/** Memory estimate for the currently selected model. */
 	const selectedMemory = useMemo(() => {
 		if (!selectedModel || !specs) return null;
-		const avail = getAvailableModelMemoryGB(specs, selectedModel.usesWebGPU);
+		const avail = getAvailableModelMemoryGB(
+			specs,
+			selectedModel.usesWebGPU,
+			engineForProvider(selectedModel.provider),
+		);
 		const est = estimateModelMemoryAtUsableContext(
 			selectedModel.sizeGB,
 			selectedModel.kvBytesPerToken,
@@ -286,8 +297,16 @@ export const MagicSetup: React.FC<MagicSetupProps> = ({
 			if (sortBy === "size") return a.sizeGB - b.sizeGB;
 			// "fit" sort: comfortable → tight → overflow, then by total GB
 			const fitOrder = { comfortable: 0, tight: 1, overflow: 2 } as const;
-			const aAvail = getAvailableModelMemoryGB(specs, a.usesWebGPU);
-			const bAvail = getAvailableModelMemoryGB(specs, b.usesWebGPU);
+			const aAvail = getAvailableModelMemoryGB(
+				specs,
+				a.usesWebGPU,
+				engineForProvider(a.provider),
+			);
+			const bAvail = getAvailableModelMemoryGB(
+				specs,
+				b.usesWebGPU,
+				engineForProvider(b.provider),
+			);
 			const aEst = estimateModelMemoryAtUsableContext(
 				a.sizeGB,
 				a.kvBytesPerToken,
@@ -471,12 +490,17 @@ export const MagicSetup: React.FC<MagicSetupProps> = ({
 								<div className="text-xs text-muted-foreground">
 									{specs.gpu.renderer}
 								</div>
-								{specs.gpu.estimatedVRAM && (
+								{specs.webgpuMaxAllocationBytes ? (
+									<div className="text-xs text-muted-foreground">
+										{(specs.webgpuMaxAllocationBytes / 1024 ** 3).toFixed(1)} GB
+										max single allocation
+									</div>
+								) : specs.gpu.estimatedVRAM ? (
 									<div className="text-xs text-muted-foreground">
 										~{specs.gpu.estimatedVRAM}{" "}
 										{t("magicSetup.systemDetected.vramGB")}
 									</div>
-								)}
+								) : null}
 							</div>
 						)}
 
@@ -489,28 +513,45 @@ export const MagicSetup: React.FC<MagicSetupProps> = ({
 
 							{specs.hasWebGPU &&
 								(() => {
-									const vramGB = getAvailableModelMemoryGB(specs, true);
+									// wllama runs llama.cpp, the engine whose WebGPU backend
+									// treats this limit as its whole VRAM budget.
+									const budget = getModelMemoryBudget(specs, true, "llama.cpp");
+									const vramGB = budget.availableGB;
+									// Say where the number came from. Only the first of these is
+									// something the device actually told us.
+									const provenance: Record<typeof budget.source, string> = {
+										"gpu-allocation-limit": "reported by your GPU",
+										"gpu-name-lookup": "estimated from the GPU model",
+										"device-class-guess": "estimated from your device class",
+										"system-ram": "share of system memory",
+									};
 									return (
 										<div className="space-y-1.5">
 											<div className="flex justify-between text-xs">
 												<span className="text-muted-foreground">
-													GPU (VRAM) — WebGPU models
+													GPU — WebGPU models
 												</span>
 												<span className="font-medium text-foreground">
-													{specs.gpu?.estimatedVRAM
-														? `~${specs.gpu.estimatedVRAM} GB detected`
-														: `~${vramGB} GB estimated`}
+													{vramGB.toFixed(1)} GB
 												</span>
 											</div>
 											<MemoryBar usedGB={0} availableGB={vramGB} />
 											<div className="text-[11px] text-muted-foreground flex items-center gap-1">
 												<Info className="w-3 h-3" />
-												Supports WebGPU models up to ~
+												{provenance[budget.source]} — fits WebGPU models up to ~
 												{(vramGB / 1.2).toFixed(1)} GB weights
 											</div>
 										</div>
 									);
 								})()}
+
+							{specs.storageQuotaBytes !== undefined && (
+								<div className="text-[11px] text-muted-foreground flex items-center gap-1">
+									<HardDrive className="w-3 h-3" />
+									{(specs.storageQuotaBytes / 1024 ** 3).toFixed(1)} GB of
+									browser storage for downloaded weights
+								</div>
+							)}
 
 							{(() => {
 								const cpuGB = specs.memoryGB * 0.4;
@@ -634,6 +675,20 @@ export const MagicSetup: React.FC<MagicSetupProps> = ({
 													})}
 												</div>
 											)}
+											{(() => {
+												// Storage is a separate wall from memory: weights past
+												// the origin quota cannot be cached at all, and saying
+												// so beats failing partway through the download.
+												const storage = fitsStorageQuota(specs, m.sizeGB);
+												if (storage.fits) return null;
+												return (
+													<div className="text-[11px] text-red-500">
+														Needs {fmtGB(m.sizeGB)} but only{" "}
+														{fmtGB(storage.quotaGB ?? 0)} of browser storage is
+														available
+													</div>
+												);
+											})()}
 										</div>
 									</CardContent>
 								</Card>
@@ -896,6 +951,7 @@ export const MagicSetup: React.FC<MagicSetupProps> = ({
 												const altAvail = getAvailableModelMemoryGB(
 													specs,
 													altModel.usesWebGPU,
+													engineForProvider(altModel.provider),
 												);
 												const altEst = estimateModelMemoryAtUsableContext(
 													altModel.sizeGB,

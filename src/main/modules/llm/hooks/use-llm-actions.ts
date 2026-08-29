@@ -6,6 +6,7 @@ import { serviceManager } from "@/services";
 import { DEFAULT_SERVICES } from "@/services/llm/constants";
 import type { ServiceProvider } from "@/services/llm/interfaces/llm-service.interface";
 import { getConfiguredWllamaFile } from "@/services/llm/registry/model-registry";
+import { listLoadableGgufFiles } from "../utils/gguf-repo-files";
 import type {
 	ChatCompletionRequest,
 	ChatCompletionResponse,
@@ -149,10 +150,7 @@ export const useLLMActions = ({
 				if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
 				const data: { siblings?: { rfilename: string; size?: number }[] } =
 					await res.json();
-				const files = (data.siblings || [])
-					.filter((s) => s.rfilename.toLowerCase().endsWith(".gguf"))
-					.map((s) => ({ name: s.rfilename, size: s.size || 0 }))
-					.sort((a, b) => a.size - b.size); // Sort by size, smallest first
+				const files = listLoadableGgufFiles(data.siblings || []);
 
 				setAvailableFiles(files);
 				setLogs((l) => [...l, `[ui] found ${files.length} gguf files`]);
