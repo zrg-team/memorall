@@ -24,8 +24,10 @@ import {
 	normalizeTokenUsage,
 	resolveTokenUsage,
 } from "../utils/token-usage";
+import { isWebGPUContextLostError } from "../utils/webgpu-runner-errors";
 import { LLM_RUNNER_URLS } from "@/config/llm-runner";
 import { waitForDOMReady } from "@/utils/dom";
+import { logWarn } from "@/utils/logger";
 import { detectSystemSpecs } from "@/main/modules/llm/utils/system-detection";
 import {
 	buildRunnerMemoryHint,
@@ -82,6 +84,11 @@ type RunnerMessageError = Error & {
 	serviceName?: string | null;
 };
 
+/** A chat request as it goes over the wire to the runner iframe. */
+type RunnerChatPayload = Omit<ChatCompletionRequest, "signal"> & {
+	_memoryHint?: RunnerMemoryHint;
+};
+
 type PendingRequest = {
 	resolve: (value: unknown) => void;
 	reject: (error: Error) => void;
@@ -126,6 +133,8 @@ export class TransformerLLM implements BaseLLM {
 	> | null> | null = null;
 	private url: string;
 	private iframeRuntime: IframeRuntime;
+	/** Guards `recoverFromContextLoss` against recursing through `serve`. */
+	private recoveringContext = false;
 
 	constructor(url = LLM_RUNNER_URLS?.transformer) {
 		this.url = url;
@@ -255,7 +264,7 @@ export class TransformerLLM implements BaseLLM {
 				this.signalMap.set(signalId, signal);
 			}
 
-			let response = (await this.send("chat/completions", payloadWithHints, {
+			let response = (await this.sendChatCompletion(payloadWithHints, {
 				signalId,
 			})) as ChatCompletionResponse;
 
@@ -322,82 +331,30 @@ export class TransformerLLM implements BaseLLM {
 				this.signalMap.set(signalId, signal);
 			}
 
-			const chunks: ChatCompletionChunk[] = [];
-			let streamEnded = false;
-			let streamError: Error | null = null;
-			let completionOutput = "";
-			let finalUsage = normalizeTokenUsage(undefined);
-			const promptToolTransformer = useToolParsing
-				? new PromptToolStreamTransformer()
-				: null;
-
-			const chunkHandler = (incomingChunk: ChatCompletionChunk) => {
-				const usage = normalizeTokenUsage(incomingChunk.usage);
-				if (usage) {
-					finalUsage = usage;
-				}
-
-				completionOutput += extractChunkOutputText(incomingChunk);
-
-				const chunk =
-					!usage && !finalUsage && chunkHasFinishReason(incomingChunk)
-						? {
-								...incomingChunk,
-								usage: resolveTokenUsage(
-									undefined,
-									processedRequest.messages,
-									completionOutput,
-								),
-							}
-						: usage
-							? { ...incomingChunk, usage }
-							: incomingChunk;
-
-				if (!promptToolTransformer) {
-					chunks.push(chunk);
-					return;
-				}
-
-				chunks.push(...promptToolTransformer.ingest(chunk));
-			};
-
-			const streamPromise = this.send("chat/completions", payloadWithHints, {
-				onStreamChunk: chunkHandler,
-				signalId,
-			}).catch((error) => {
-				streamError = error;
-				streamEnded = true;
-			});
-
-			// Wait for chunks to arrive
-			while (!streamEnded && !streamError) {
-				if (chunks.length > 0) {
-					const chunk = chunks.shift()!;
-					yield chunk;
-					if (chunk.choices[0]?.finish_reason) {
-						streamEnded = true;
+			// A lost WebGPU context only ever surfaces before the first token, so a
+			// replay on a fresh runner cannot duplicate output. Once anything has
+			// been yielded the failure is passed straight through.
+			let recovered = false;
+			for (;;) {
+				let yieldedAny = false;
+				try {
+					for await (const chunk of this.streamChatCompletionOnce(
+						payloadWithHints,
+						processedRequest.messages,
+						{ signalId, useToolParsing },
+					)) {
+						yieldedAny = true;
+						yield chunk;
 					}
-				} else {
-					await new Promise((resolve) => setTimeout(resolve, 10));
+					return;
+				} catch (error) {
+					if (recovered || yieldedAny || !isWebGPUContextLostError(error)) {
+						throw error;
+					}
+					recovered = true;
+					await this.recoverFromContextLoss(processedRequest.model, error);
 				}
 			}
-
-			// Yield any remaining chunks
-			while (chunks.length > 0) {
-				yield chunks.shift()!;
-			}
-
-			if (promptToolTransformer) {
-				for (const chunk of promptToolTransformer.flush()) {
-					yield chunk;
-				}
-			}
-
-			if (streamError) {
-				throw streamError;
-			}
-
-			await streamPromise;
 		} finally {
 			if (signalId) {
 				this.signalMap.delete(signalId);
@@ -406,13 +363,160 @@ export class TransformerLLM implements BaseLLM {
 		}
 	}
 
+	/**
+	 * Loads a model into the runner, on a fresh one if the current runner lost
+	 * its WebGPU context. A load builds a session on the same dead device, so it
+	 * fails exactly like generation does.
+	 */
+	private async sendServe(
+		request: ServeRequest,
+		onProgress?: (progress: ProgressEvent) => void,
+	): Promise<unknown> {
+		try {
+			return await this.send("serve", request, { onProgress });
+		} catch (error) {
+			if (this.recoveringContext || !isWebGPUContextLostError(error)) {
+				throw error;
+			}
+			// Recover the document only - this call is the retry.
+			await this.recoverFromContextLoss(undefined, error);
+			return this.send("serve", request, { onProgress });
+		}
+	}
+
+	/**
+	 * One non-streaming completion, replayed once on a fresh runner if the
+	 * current one lost its WebGPU context.
+	 */
+	private async sendChatCompletion(
+		payload: RunnerChatPayload,
+		options: { signalId?: string },
+	): Promise<unknown> {
+		try {
+			return await this.send("chat/completions", payload, options);
+		} catch (error) {
+			if (!isWebGPUContextLostError(error)) {
+				throw error;
+			}
+			await this.recoverFromContextLoss(payload.model, error);
+			return this.send("chat/completions", payload, options);
+		}
+	}
+
+	/**
+	 * One streaming attempt: forwards runner chunks as they arrive and throws
+	 * whatever the runner reported. Retrying is the caller's decision.
+	 */
+	private async *streamChatCompletionOnce(
+		payload: RunnerChatPayload,
+		messages: ChatCompletionRequest["messages"],
+		options: { signalId?: string; useToolParsing: boolean },
+	): AsyncIterableIterator<ChatCompletionChunk> {
+		const chunks: ChatCompletionChunk[] = [];
+		let streamEnded = false;
+		let streamError: Error | null = null;
+		let completionOutput = "";
+		let finalUsage = normalizeTokenUsage(undefined);
+		const promptToolTransformer = options.useToolParsing
+			? new PromptToolStreamTransformer()
+			: null;
+
+		const chunkHandler = (incomingChunk: ChatCompletionChunk) => {
+			const usage = normalizeTokenUsage(incomingChunk.usage);
+			if (usage) {
+				finalUsage = usage;
+			}
+
+			completionOutput += extractChunkOutputText(incomingChunk);
+
+			const chunk =
+				!usage && !finalUsage && chunkHasFinishReason(incomingChunk)
+					? {
+							...incomingChunk,
+							usage: resolveTokenUsage(undefined, messages, completionOutput),
+						}
+					: usage
+						? { ...incomingChunk, usage }
+						: incomingChunk;
+
+			if (!promptToolTransformer) {
+				chunks.push(chunk);
+				return;
+			}
+
+			chunks.push(...promptToolTransformer.ingest(chunk));
+		};
+
+		const streamPromise = this.send("chat/completions", payload, {
+			onStreamChunk: chunkHandler,
+			signalId: options.signalId,
+		}).catch((error) => {
+			streamError = error;
+			streamEnded = true;
+		});
+
+		// Wait for chunks to arrive
+		while (!streamEnded && !streamError) {
+			if (chunks.length > 0) {
+				const chunk = chunks.shift()!;
+				yield chunk;
+				if (chunk.choices[0]?.finish_reason) {
+					streamEnded = true;
+				}
+			} else {
+				await new Promise((resolve) => setTimeout(resolve, 10));
+			}
+		}
+
+		// Yield any remaining chunks
+		while (chunks.length > 0) {
+			yield chunks.shift()!;
+		}
+
+		if (promptToolTransformer) {
+			for (const chunk of promptToolTransformer.flush()) {
+				yield chunk;
+			}
+		}
+
+		if (streamError) {
+			throw streamError;
+		}
+
+		await streamPromise;
+	}
+
+	/**
+	 * Replace the runner document after it lost its WebGPU device.
+	 *
+	 * The dead device outlives every model the runner reloads, so the iframe has
+	 * to go: a new document opens a new device. The model is served again into
+	 * the replacement so the caller can simply retry.
+	 */
+	private async recoverFromContextLoss(
+		model: string | undefined,
+		error: unknown,
+	): Promise<void> {
+		logWarn(
+			"🩹 [transformer] runner lost its WebGPU context, recreating the runner iframe",
+			{ model, error: error instanceof Error ? error.message : String(error) },
+		);
+
+		this.destroy();
+		this.recoveringContext = true;
+		try {
+			await this.initialize();
+			if (model) {
+				await this.serve(model);
+			}
+		} finally {
+			this.recoveringContext = false;
+		}
+	}
+
 	private async withRunnerMemoryHint(
 		requestPayload: Omit<ChatCompletionRequest, "signal">,
-	): Promise<
-		Omit<ChatCompletionRequest, "signal"> & {
-			_memoryHint?: RunnerMemoryHint;
-		}
-	> {
+	): Promise<RunnerChatPayload> {
 		const memoryHint = await this.getRunnerMemoryHint(requestPayload.model);
 		if (!memoryHint) {
 			return requestPayload;
@@ -523,7 +627,7 @@ export class TransformerLLM implements BaseLLM {
 			}
 
 			const request: ServeRequest = { model };
-			const response = await this.send("serve", request, { onProgress });
+			const response = await this.sendServe(request, onProgress);
 			const modelInfo = this.iframeRuntime.upsertCachedModel(
 				response as ModelInfo,
 			);

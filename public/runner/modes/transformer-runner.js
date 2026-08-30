@@ -8,6 +8,7 @@ import {
 import {
 	executeChatCompletion,
 	isRecoverableWebGPUExecutionError,
+	WEBGPU_CONTEXT_LOST_CODE,
 } from "./transformmers/chat-completions.js";
 import { getWebgpuCapabilities } from "./transformmers/context.js";
 import {
@@ -176,7 +177,7 @@ async function handleChatCompletions(
 	payload,
 	signal,
 ) {
-	const { messages, model, stream = false } = payload || {};
+	const { messages, model } = payload || {};
 	if (!messages) throw new Error("Messages are required");
 
 	const targetModel = model || transformerManager.modelId;
@@ -184,8 +185,8 @@ async function handleChatCompletions(
 		throw new Error("No model specified and no model loaded. Call serve first.");
 	}
 
-	const execute = () =>
-		executeChatCompletion({
+	try {
+		await executeChatCompletion({
 			transformerManager,
 			targetModel,
 			src,
@@ -194,13 +195,15 @@ async function handleChatCompletions(
 			payload,
 			signal,
 		});
-
-	try {
-		await execute();
 	} catch (error) {
-		if (!stream && isRecoverableWebGPUExecutionError(error)) {
+		// A lost WebGPU context cannot be repaired from in here: reloading the
+		// model only builds a new session on the same dead device. Drop the model
+		// so the weights are not stranded, then tell the host, which recycles the
+		// whole runner document and replays the request.
+		const contextLost = isRecoverableWebGPUExecutionError(error);
+		if (contextLost) {
 			console.warn(
-				"[transformer-runner] recoverable WebGPU execution failure detected, unloading and retrying once:",
+				"[transformer-runner] WebGPU context lost, unloading model:",
 				error,
 			);
 			try {
@@ -211,26 +214,15 @@ async function handleChatCompletions(
 					unloadError,
 				);
 			}
-
-			try {
-				await execute();
-				return;
-			} catch (retryError) {
-				error = retryError;
-			}
-		}
-
-		if (isRecoverableWebGPUExecutionError(error)) {
-			try {
-				await transformerManager.unload();
-			} catch {}
 		}
 
 		reply(src, origin, messageId, "error", {
 			error: {
 				message: `Chat completion failed: ${error.message}`,
 				type: "CompletionError",
-				code: null,
+				code: contextLost ? WEBGPU_CONTEXT_LOST_CODE : null,
+				modelId: targetModel,
+				serviceName: "transformer",
 			},
 		});
 	}

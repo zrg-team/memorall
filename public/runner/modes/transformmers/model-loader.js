@@ -1,4 +1,4 @@
-import { withGPULock } from "../../utils/gpu-lock.js";
+import { withGPULock, withOptionalGPULock } from "../../utils/gpu-lock.js";
 import {
 	getModelRuntimeConfig,
 	getUnsupportedBrowserModelMessage,
@@ -453,7 +453,17 @@ export async function loadTransformerModel(modelId, notifyProgress) {
 	return loadCausalModelBundle(modelId, notifyProgress, config, preferredDevice);
 }
 
+// Disposing an ONNX session tears down its GPU resources, and the lifecycle
+// manager calls this from an idle timer - so it has to queue behind whatever
+// another runner is currently dispatching, or it invalidates the shared device
+// instance mid-generation.
 export async function unloadTransformerModel(bundle) {
+	return withOptionalGPULock(bundle.device === "webgpu", () =>
+		disposeTransformerBundle(bundle),
+	);
+}
+
+async function disposeTransformerBundle(bundle) {
 	if (bundle.generator) {
 		try {
 			bundle.generator.dispose?.();
