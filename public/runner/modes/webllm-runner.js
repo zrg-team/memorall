@@ -1,6 +1,7 @@
 // WebLLM Runner - WebGPU-accelerated chat completions via WebLLM
 import { reply, generateId, sendReady } from "../utils/common.js";
 import { ModelLifecycleManager } from "../utils/model-lifecycle.js";
+import { withGPULock } from "../utils/gpu-lock.js";
 import {
 	detectDeviceCeilings,
 	planContextFromMemoryHint,
@@ -338,12 +339,15 @@ async function loadWebLLMModel(modelId, notifyProgress) {
 		});
 		resetStallTimer(engine);
 
-		await Promise.race([
-			engine.reload(modelId),
-			new Promise((_, reject) => {
-				rejectStalledLoad = reject;
-			}),
-		]);
+		// Compiling and uploading the weights is GPU work like any other.
+		await withGPULock(() =>
+			Promise.race([
+				engine.reload(modelId),
+				new Promise((_, reject) => {
+					rejectStalledLoad = reject;
+				}),
+			]),
+		);
 	} catch (error) {
 		try {
 			await engine.unload?.();
@@ -363,13 +367,17 @@ async function loadWebLLMModel(modelId, notifyProgress) {
  * @param {any} engine
  */
 async function unloadWebLLMModel(engine) {
-	try {
-		if (engine && typeof engine.unload === "function") {
-			await engine.unload();
+	// The lifecycle manager unloads on an idle timer, so this can fire while
+	// another runner is dispatching GPU work.
+	return withGPULock(async () => {
+		try {
+			if (engine && typeof engine.unload === "function") {
+				await engine.unload();
+			}
+		} catch (e) {
+			console.warn("[webllm-runner] unload error:", e?.message || e);
 		}
-	} catch (e) {
-		console.warn("[webllm-runner] unload error:", e?.message || e);
-	}
+	});
 }
 
 // Model lifecycle manager - handles caching and auto-unload after 5 min idle
@@ -509,134 +517,138 @@ window.addEventListener("message", async (event) => {
 				activeOperations.set(messageId, { abortController });
 
 				try {
-					await webllmManager.withModel(targetModel, async (engine) => {
-						const { promptLength, maxContextTokens } = resolveWebLLMPromptBudget(
-							engine,
-							targetModel,
-							messages,
-							requestBody,
-						);
-						const memoryContextTokens = resolveMemoryContextTokens(_memoryHint);
-						const maxTotalContextTokens =
-							typeof maxContextTokens === "number" &&
-							typeof memoryContextTokens === "number"
-								? Math.min(maxContextTokens, memoryContextTokens)
-								: typeof maxContextTokens === "number"
-									? maxContextTokens
-									: memoryContextTokens;
-						const requestedMaxTokens =
-							typeof requestBody.max_tokens === "number" &&
-							Number.isFinite(requestBody.max_tokens)
-								? requestBody.max_tokens
-								: typeof maxTotalContextTokens === "number"
-									? Math.max(0, maxTotalContextTokens - promptLength)
-									: undefined;
-						const effectiveMaxTokens =
-							typeof maxTotalContextTokens === "number" &&
-							typeof requestedMaxTokens === "number"
-								? Math.min(
-										requestedMaxTokens,
-										Math.max(0, maxTotalContextTokens - promptLength),
-									)
-								: requestedMaxTokens;
-
-						if (
-							typeof requestBody.max_tokens !== "number" &&
-							typeof effectiveMaxTokens === "number"
-						) {
-							console.log("[webllm-runner] auto max_tokens", {
-								auto: true,
-								max_tokens: effectiveMaxTokens,
-								promptLength,
-								maxContextTokens,
-								memoryContextTokens,
-								availableGB: _memoryHint?.availableGB,
-							});
-						}
-
-						if (
-							typeof requestedMaxTokens === "number" &&
-							typeof effectiveMaxTokens === "number" &&
-							effectiveMaxTokens < requestedMaxTokens
-						) {
-							console.log("[webllm-runner] clamped max_tokens", {
-								requested: requestedMaxTokens,
-								effective: effectiveMaxTokens,
-								promptLength,
-								maxContextTokens,
-								memoryContextTokens,
-								availableGB: _memoryHint?.availableGB,
-							});
-						}
-
-						if (
-							typeof maxTotalContextTokens === "number" &&
-							maxTotalContextTokens - promptLength <= 0
-						) {
-							throw new Error(
-								typeof memoryContextTokens === "number" &&
-								(typeof maxContextTokens !== "number" ||
-									memoryContextTokens <= maxContextTokens)
-									? `Prompt is too long for available device memory (promptLength=${promptLength}, memoryContextTokens=${memoryContextTokens}, availableGB=${_memoryHint?.availableGB ?? "unknown"})`
-									: `Prompt is too long for the model context window (promptLength=${promptLength}, maxContextTokens=${maxContextTokens})`,
+					await webllmManager.withModel(targetModel, async (engine) =>
+						// MLC runs entirely on WebGPU. Without this lock its kernels race
+						// the embedding and transformer runners for the same device.
+						withGPULock(async () => {
+							const { promptLength, maxContextTokens } = resolveWebLLMPromptBudget(
+								engine,
+								targetModel,
+								messages,
+								requestBody,
 							);
-						}
+							const memoryContextTokens = resolveMemoryContextTokens(_memoryHint);
+							const maxTotalContextTokens =
+								typeof maxContextTokens === "number" &&
+								typeof memoryContextTokens === "number"
+									? Math.min(maxContextTokens, memoryContextTokens)
+									: typeof maxContextTokens === "number"
+										? maxContextTokens
+										: memoryContextTokens;
+							const requestedMaxTokens =
+								typeof requestBody.max_tokens === "number" &&
+								Number.isFinite(requestBody.max_tokens)
+									? requestBody.max_tokens
+									: typeof maxTotalContextTokens === "number"
+										? Math.max(0, maxTotalContextTokens - promptLength)
+										: undefined;
+							const effectiveMaxTokens =
+								typeof maxTotalContextTokens === "number" &&
+								typeof requestedMaxTokens === "number"
+									? Math.min(
+											requestedMaxTokens,
+											Math.max(0, maxTotalContextTokens - promptLength),
+										)
+									: requestedMaxTokens;
 
-						const requestOptions = {
-							...requestBody,
-							messages,
-							model: targetModel,
-							signal: abortController.signal,
-							...(typeof effectiveMaxTokens === "number"
-								? { max_tokens: effectiveMaxTokens }
-								: {}),
-						};
-
-						if (stream) {
-							const completionStream = await engine.chat.completions.create({
-								...requestOptions,
-								stream: true,
-							});
-							let pendingChunk = null;
-							for await (const chunk of completionStream) {
-								if (abortController.signal.aborted) {
-									throw new Error("Operation aborted");
-								}
-
-								if (pendingChunk) {
-									reply(src, origin, messageId, "chunk", pendingChunk);
-								}
-
-								pendingChunk = chunk;
+							if (
+								typeof requestBody.max_tokens !== "number" &&
+								typeof effectiveMaxTokens === "number"
+							) {
+								console.log("[webllm-runner] auto max_tokens", {
+									auto: true,
+									max_tokens: effectiveMaxTokens,
+									promptLength,
+									maxContextTokens,
+									memoryContextTokens,
+									availableGB: _memoryHint?.availableGB,
+								});
 							}
 
-							reply(
-								src,
-								origin,
-								messageId,
-								"end",
-								pendingChunk || {
-									id: `chatcmpl-${generateId()}`,
-									object: "chat.completion.chunk",
-									created: Math.floor(Date.now() / 1000),
-									model: targetModel,
-									choices: [
-										{
-											index: 0,
-											delta: {},
-											finish_reason: "stop",
-										},
-									],
-								},
-							);
-						} else {
-							const completion = await engine.chat.completions.create({
-								...requestOptions,
-								stream: false,
-							});
-							reply(src, origin, messageId, "complete", completion);
-						}
-					});
+							if (
+								typeof requestedMaxTokens === "number" &&
+								typeof effectiveMaxTokens === "number" &&
+								effectiveMaxTokens < requestedMaxTokens
+							) {
+								console.log("[webllm-runner] clamped max_tokens", {
+									requested: requestedMaxTokens,
+									effective: effectiveMaxTokens,
+									promptLength,
+									maxContextTokens,
+									memoryContextTokens,
+									availableGB: _memoryHint?.availableGB,
+								});
+							}
+
+							if (
+								typeof maxTotalContextTokens === "number" &&
+								maxTotalContextTokens - promptLength <= 0
+							) {
+								throw new Error(
+									typeof memoryContextTokens === "number" &&
+									(typeof maxContextTokens !== "number" ||
+										memoryContextTokens <= maxContextTokens)
+										? `Prompt is too long for available device memory (promptLength=${promptLength}, memoryContextTokens=${memoryContextTokens}, availableGB=${_memoryHint?.availableGB ?? "unknown"})`
+										: `Prompt is too long for the model context window (promptLength=${promptLength}, maxContextTokens=${maxContextTokens})`,
+								);
+							}
+
+							const requestOptions = {
+								...requestBody,
+								messages,
+								model: targetModel,
+								signal: abortController.signal,
+								...(typeof effectiveMaxTokens === "number"
+									? { max_tokens: effectiveMaxTokens }
+									: {}),
+							};
+
+							if (stream) {
+								const completionStream = await engine.chat.completions.create({
+									...requestOptions,
+									stream: true,
+								});
+								let pendingChunk = null;
+								for await (const chunk of completionStream) {
+									if (abortController.signal.aborted) {
+										throw new Error("Operation aborted");
+									}
+
+									if (pendingChunk) {
+										reply(src, origin, messageId, "chunk", pendingChunk);
+									}
+
+									pendingChunk = chunk;
+								}
+
+								reply(
+									src,
+									origin,
+									messageId,
+									"end",
+									pendingChunk || {
+										id: `chatcmpl-${generateId()}`,
+										object: "chat.completion.chunk",
+										created: Math.floor(Date.now() / 1000),
+										model: targetModel,
+										choices: [
+											{
+												index: 0,
+												delta: {},
+												finish_reason: "stop",
+											},
+										],
+									},
+								);
+							} else {
+								const completion = await engine.chat.completions.create({
+									...requestOptions,
+									stream: false,
+								});
+								reply(src, origin, messageId, "complete", completion);
+							}
+						}),
+					);
 				} catch (error) {
 					console.error("WebLLM error:", error);
 					throw error;

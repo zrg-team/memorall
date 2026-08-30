@@ -1,7 +1,7 @@
 // Embedding Runner - Text embeddings via @huggingface/transformers
 import { reply, sendReady } from "../utils/common.js";
 import { ModelLifecycleManager } from "../utils/model-lifecycle.js";
-import { withGPULock } from "../utils/gpu-lock.js";
+import { withGPULock, withOptionalGPULock } from "../utils/gpu-lock.js";
 
 // Read model from query params if provided
 const params = new URLSearchParams(self.location ? self.location.search : "");
@@ -213,13 +213,18 @@ async function loadEmbeddingPipeline(modelName, notifyProgress) {
  * @param {any} pipeline
  */
 async function unloadEmbeddingPipeline(pipeline) {
-	try {
-		if (pipeline && typeof pipeline.dispose === "function") {
-			await pipeline.dispose();
+	// The lifecycle manager unloads on an idle timer, so this dispose can land
+	// while another runner is mid-generation. Releasing a WebGPU session out
+	// from under it invalidates the shared device instance.
+	return withOptionalGPULock(pipeline?.__memorallDevice === "webgpu", async () => {
+		try {
+			if (pipeline && typeof pipeline.dispose === "function") {
+				await pipeline.dispose();
+			}
+		} catch (err) {
+			console.warn("[embedding-runner] dispose error:", err);
 		}
-	} catch (err) {
-		console.warn("[embedding-runner] dispose error:", err);
-	}
+	});
 }
 
 // Model lifecycle manager - handles caching and auto-unload after 5 min idle

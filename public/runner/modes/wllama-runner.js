@@ -1,6 +1,7 @@
 // Wllama Runner - Local LLM inference via WebAssembly (wllama v3)
 import { generateId, reply, sendReady } from "../utils/common.js";
 import { ModelLifecycleManager } from "../utils/model-lifecycle.js";
+import { withOptionalGPULock } from "../utils/gpu-lock.js";
 import { toWllamaMessages } from "../utils/openai-content.js";
 import {
 	detectDeviceCeilings,
@@ -356,19 +357,28 @@ async function deleteWllamaModelFromCache(modelId) {
  */
 async function loadWithContextLadder(loadArgs, baseOpts, nCtx, nGpuLayers) {
 	let lastError;
+	const usesGPU = nGpuLayers > 0;
 	for (const contextTokens of contextLadder(nCtx)) {
 		const wllama = new Wllama(WASM_PATHS, WLLAMA_CONFIG);
 		try {
-			await wllama.loadModelFromHF(loadArgs, {
-				...baseOpts,
-				n_ctx: contextTokens,
-				n_gpu_layers: nGpuLayers,
+			// The attempt and its teardown share one lock hold: `disposeWllama` is
+			// the unlocked variant precisely so it can be called from in here.
+			await withOptionalGPULock(usesGPU, async () => {
+				try {
+					await wllama.loadModelFromHF(loadArgs, {
+						...baseOpts,
+						n_ctx: contextTokens,
+						n_gpu_layers: nGpuLayers,
+					});
+				} catch (error) {
+					await disposeWllama(wllama);
+					throw error;
+				}
 			});
-			wllama._usesGPU = nGpuLayers > 0;
+			wllama._usesGPU = usesGPU;
 			return wllama;
 		} catch (error) {
 			lastError = error;
-			await unloadWllamaModel(wllama);
 			if (!CONTEXT_ALLOCATION_ERROR.test(error?.message ?? "")) {
 				throw error;
 			}
@@ -495,6 +505,17 @@ async function loadWllamaModel(modelId, notifyProgress) {
  * @param {any} wllama
  */
 async function unloadWllamaModel(wllama) {
+	// The lifecycle manager unloads on an idle timer, so this can fire while
+	// another runner holds the GPU.
+	return withOptionalGPULock(wllama?._usesGPU, () => disposeWllama(wllama));
+}
+
+/**
+ * Tear a Wllama instance down without taking the GPU lock - for callers that
+ * already hold it.
+ * @param {any} wllama
+ */
+async function disposeWllama(wllama) {
 	try {
 		if (wllama && typeof wllama.exit === "function") {
 			await wllama.exit();
@@ -718,101 +739,106 @@ window.addEventListener("message", async (event) => {
 				}
 
 				try {
-					await wllamaManager.withModel(targetModel, async (wllama) => {
-						const loadedCtx = wllama.getLoadedContextInfo?.();
-						const maxContextTokens =
-							typeof loadedCtx?.n_ctx === "number"
-								? loadedCtx.n_ctx
-								: undefined;
-						const memoryContextTokens = planContextFromMemoryHint(_memoryHint, {
-							budgetGB: wllama._usesGPU
-								? _memoryHint?.webgpuAvailableGB
-								: undefined,
-						})?.contextTokens;
-						const maxTotalContext =
-							typeof maxContextTokens === "number" &&
-							typeof memoryContextTokens === "number"
-								? Math.min(maxContextTokens, memoryContextTokens)
-								: typeof maxContextTokens === "number"
-									? maxContextTokens
-									: memoryContextTokens;
+					await wllamaManager.withModel(targetModel, async (wllama) =>
+						// wllama offloads to WebGPU when n_gpu_layers > 0. Sharing the GPU
+						// with the embedding and transformer runners without this lock
+						// invalidates the device instance mid-generation.
+						withOptionalGPULock(wllama._usesGPU, async () => {
+							const loadedCtx = wllama.getLoadedContextInfo?.();
+							const maxContextTokens =
+								typeof loadedCtx?.n_ctx === "number"
+									? loadedCtx.n_ctx
+									: undefined;
+							const memoryContextTokens = planContextFromMemoryHint(_memoryHint, {
+								budgetGB: wllama._usesGPU
+									? _memoryHint?.webgpuAvailableGB
+									: undefined,
+							})?.contextTokens;
+							const maxTotalContext =
+								typeof maxContextTokens === "number" &&
+								typeof memoryContextTokens === "number"
+									? Math.min(maxContextTokens, memoryContextTokens)
+									: typeof maxContextTokens === "number"
+										? maxContextTokens
+										: memoryContextTokens;
 
-						const requestedMaxTokens =
-							typeof max_tokens === "number" && Number.isFinite(max_tokens)
-								? max_tokens
-								: 512;
-						const effectiveMaxTokens =
-							typeof maxTotalContext === "number"
-								? Math.min(requestedMaxTokens, Math.max(0, maxTotalContext))
-								: requestedMaxTokens;
+							const requestedMaxTokens =
+								typeof max_tokens === "number" && Number.isFinite(max_tokens)
+									? max_tokens
+									: 512;
+							const effectiveMaxTokens =
+								typeof maxTotalContext === "number"
+									? Math.min(requestedMaxTokens, Math.max(0, maxTotalContext))
+									: requestedMaxTokens;
 
-						// Images and audio arrive as OpenAI URL parts and must be decoded
-						// to the bytes wllama swaps for the model's media marker.
-						const wllamaMessages = await toWllamaMessages(messages, {
-							supportsModality: (modality) =>
-								supportsModality(wllama, modality),
-						});
-
-						const completionOptions = {
-							messages: wllamaMessages,
-							max_tokens: effectiveMaxTokens,
-							temperature: typeof temperature === "number" ? temperature : 0.8,
-							top_p: typeof top_p === "number" ? top_p : 0.9,
-							top_k: typeof top_k === "number" ? top_k : 40,
-							...(stop ? { stop: Array.isArray(stop) ? stop : [stop] } : {}),
-							...(tools ? { tools, tool_choice } : {}),
-						};
-
-						if (stream) {
-							const streamIter = await wllama.createChatCompletion({
-								...completionOptions,
-								stream: true,
-								abortSignal: abortController.signal,
+							// Images and audio arrive as OpenAI URL parts and must be decoded
+							// to the bytes wllama swaps for the model's media marker.
+							const wllamaMessages = await toWllamaMessages(messages, {
+								supportsModality: (modality) =>
+									supportsModality(wllama, modality),
 							});
-							if (
-								!streamIter ||
-								typeof streamIter[Symbol.asyncIterator] !== "function"
-							) {
-								throw new TypeError(
-									"Wllama streaming completion did not return an async iterable",
-								);
-							}
 
-							let lastChunk = null;
-							for await (const chunk of streamIter) {
-								if (abortController.signal.aborted) break;
-								const enriched = { ...chunk, model: targetModel };
-								if (chunk.choices?.[0]?.finish_reason != null) {
-									lastChunk = enriched;
-								} else {
-									reply(src, origin, messageId, "stream_chunk", enriched);
+							const completionOptions = {
+								messages: wllamaMessages,
+								max_tokens: effectiveMaxTokens,
+								temperature: typeof temperature === "number" ? temperature : 0.8,
+								top_p: typeof top_p === "number" ? top_p : 0.9,
+								top_k: typeof top_k === "number" ? top_k : 40,
+								...(stop ? { stop: Array.isArray(stop) ? stop : [stop] } : {}),
+								...(tools ? { tools, tool_choice } : {}),
+							};
+
+							if (stream) {
+								const streamIter = await wllama.createChatCompletion({
+									...completionOptions,
+									stream: true,
+									abortSignal: abortController.signal,
+								});
+								if (
+									!streamIter ||
+									typeof streamIter[Symbol.asyncIterator] !== "function"
+								) {
+									throw new TypeError(
+										"Wllama streaming completion did not return an async iterable",
+									);
 								}
-							}
 
-							reply(
-								src,
-								origin,
-								messageId,
-								"stream_end",
-								lastChunk ?? {
-									id: `chatcmpl-${generateId()}`,
-									object: "chat.completion.chunk",
-									created: Math.floor(Date.now() / 1000),
+								let lastChunk = null;
+								for await (const chunk of streamIter) {
+									if (abortController.signal.aborted) break;
+									const enriched = { ...chunk, model: targetModel };
+									if (chunk.choices?.[0]?.finish_reason != null) {
+										lastChunk = enriched;
+									} else {
+										reply(src, origin, messageId, "stream_chunk", enriched);
+									}
+								}
+
+								reply(
+									src,
+									origin,
+									messageId,
+									"stream_end",
+									lastChunk ?? {
+										id: `chatcmpl-${generateId()}`,
+										object: "chat.completion.chunk",
+										created: Math.floor(Date.now() / 1000),
+										model: targetModel,
+										choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
+									},
+								);
+							} else {
+								const response = await wllama.createChatCompletion({
+									...completionOptions,
+									stream: false,
+								});
+								reply(src, origin, messageId, "complete", {
+									...response,
 									model: targetModel,
-									choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
-								},
-							);
-						} else {
-							const response = await wllama.createChatCompletion({
-								...completionOptions,
-								stream: false,
-							});
-							reply(src, origin, messageId, "complete", {
-								...response,
-								model: targetModel,
-							});
-						}
-					});
+								});
+							}
+						}),
+					);
 				} catch (error) {
 					console.error("Wllama chat error:", error);
 					throw error;

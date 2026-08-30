@@ -148,5 +148,6 @@ exports[`requested service module coverage > imports requested service trees 1`]
   "../llm/utils/budget-retry.ts",
   "../llm/utils/runner-memory-hints.ts",
   "../llm/utils/token-usage.ts",
+  "../llm/utils/webgpu-runner-errors.ts",
 ]
 `;
