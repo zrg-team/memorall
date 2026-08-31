@@ -1,29 +1,11 @@
 /**
  * Markdown Editor Component
  * - Preview mode: renders raw initialContent via react-markdown (never goes through Tiptap)
- * - Edit mode: Tiptap WYSIWYG with table, image, and formatting support
+ * - Edit mode: Tiptap WYSIWYG, mounted on demand by MarkdownWysiwyg
  */
 
-import React, {
-	useState,
-	useEffect,
-	useCallback,
-	useMemo,
-	useRef,
-} from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useEditor, EditorContent } from "@tiptap/react";
-import StarterKit from "@tiptap/starter-kit";
-import Image from "@tiptap/extension-image";
-import { Table } from "@tiptap/extension-table";
-import { TableRow } from "@tiptap/extension-table-row";
-import { TableHeader } from "@tiptap/extension-table-header";
-import { TableCell } from "@tiptap/extension-table-cell";
-import Placeholder from "@tiptap/extension-placeholder";
-import { marked } from "marked";
-import TurndownService from "turndown";
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const { gfm } = require("turndown-plugin-gfm");
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
@@ -32,47 +14,90 @@ import {
 	oneDark,
 	oneLight,
 } from "react-syntax-highlighter/dist/esm/styles/prism";
+import { Edit2, ImageIcon } from "lucide-react";
 import { MermaidRenderer } from "@/main/components/atoms/MermaidRenderer";
 import { useTheme } from "@/main/components/molecules/ThemeContext";
 import { Button } from "@/main/components/ui/button";
-import { Input } from "@/main/components/ui/input";
-import { Label } from "@/main/components/ui/label";
+import { documentFileSystemService } from "@/services/filesystem/document-filesystem";
 import {
-	Popover,
-	PopoverContent,
-	PopoverTrigger,
-} from "@/main/components/ui/popover";
-import {
-	Save,
-	Loader2,
-	Bold,
-	Italic,
-	List,
-	ListOrdered,
-	Code,
-	Quote,
-	Eye,
-	Edit2,
-	ImageIcon,
-	Table as TableIcon,
-} from "lucide-react";
-import { logInfo, logError } from "@/utils/logger";
+	imageMimeFor,
+	isDirectlyLoadable,
+	resolveMarkdownAssetPath,
+} from "./markdown-assets";
+import { MarkdownWysiwyg } from "./MarkdownWysiwyg";
 import type { DocumentEditorProps } from "./types";
 import { cn } from "@/lib/utils";
 import "./tiptap-editor.css";
 
-// Configure markdown parser
-marked.setOptions({ gfm: true, breaks: true });
-
-// Configure HTML → Markdown converter with GFM table support
-const turndownService = new TurndownService({
-	headingStyle: "atx",
-	codeBlockStyle: "fenced",
-});
-turndownService.use(gfm);
-
 const remarkPlugins = [remarkGfm];
 const rehypePlugins = [rehypeRaw];
+
+/**
+ * Image in the rendered preview. Relative sources are read out of the document
+ * filesystem and shown through a blob URL — pointing an <img> at the raw
+ * relative path would resolve it against the extension page instead and 404.
+ */
+const MarkdownPreviewImage: React.FC<
+	React.ImgHTMLAttributes<HTMLImageElement> & { filePath: string }
+> = ({ filePath, src, alt, ...props }) => {
+	const [objectUrl, setObjectUrl] = useState<string | null>(null);
+	const [isMissing, setIsMissing] = useState(false);
+	const isLocalAsset = typeof src === "string" && !isDirectlyLoadable(src);
+
+	useEffect(() => {
+		if (!isLocalAsset || typeof src !== "string") return;
+		let currentUrl: string | null = null;
+		let cancelled = false;
+		setObjectUrl(null);
+		setIsMissing(false);
+
+		void (async () => {
+			const assetPath = resolveMarkdownAssetPath(filePath, src);
+			if (!assetPath) {
+				if (!cancelled) setIsMissing(true);
+				return;
+			}
+			try {
+				const bytes = await documentFileSystemService.readFile(assetPath);
+				if (cancelled) return;
+				currentUrl = URL.createObjectURL(
+					new Blob([bytes.slice()], { type: imageMimeFor(assetPath) }),
+				);
+				setObjectUrl(currentUrl);
+			} catch {
+				// Documents routinely reference images that were never stored
+				// alongside them; that is a placeholder, not an error worth logging.
+				if (!cancelled) setIsMissing(true);
+			}
+		})();
+
+		return () => {
+			cancelled = true;
+			if (currentUrl) URL.revokeObjectURL(currentUrl);
+		};
+	}, [filePath, src, isLocalAsset]);
+
+	if (!isLocalAsset) {
+		return <img src={src} alt={alt ?? ""} {...props} />;
+	}
+
+	if (isMissing) {
+		return (
+			<span className="my-2 inline-flex max-w-full items-center gap-2 rounded-md border border-dashed border-border px-3 py-2 text-xs text-muted-foreground">
+				<ImageIcon className="h-3.5 w-3.5 shrink-0" />
+				<span className="truncate">{alt?.trim() || src}</span>
+			</span>
+		);
+	}
+
+	if (!objectUrl) {
+		return (
+			<span className="my-2 inline-flex h-24 w-40 max-w-full animate-pulse rounded-md bg-muted" />
+		);
+	}
+
+	return <img src={objectUrl} alt={alt ?? ""} {...props} />;
+};
 
 export const MarkdownEditor: React.FC<DocumentEditorProps> = ({
 	file,
@@ -85,127 +110,10 @@ export const MarkdownEditor: React.FC<DocumentEditorProps> = ({
 	const { t } = useTranslation("documents");
 	const { actualTheme } = useTheme();
 	const isDark = actualTheme === "dark";
-	const [isSaving, setIsSaving] = useState(false);
-	const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 	const [isPreview, setIsPreview] = useState(true);
-	const [imagePopoverOpen, setImagePopoverOpen] = useState(false);
-	const [imageUrl, setImageUrl] = useState("");
-	const [imageAlt, setImageAlt] = useState("");
-	const imageUrlInputRef = useRef<HTMLInputElement>(null);
-
-	// Preview ALWAYS renders initialContent directly — never goes through Tiptap
-	// so tables, mermaid, and all GFM features always render correctly.
-
-	const initialHtmlContent = useMemo(() => {
-		try {
-			return marked.parse(initialContent) as string;
-		} catch (error) {
-			logError("[MARKDOWN_EDITOR] Failed to parse markdown:", error);
-			return initialContent;
-		}
-	}, [initialContent]);
-
-	const editor = useEditor({
-		extensions: [
-			StarterKit.configure({ heading: { levels: [1, 2, 3, 4, 5, 6] } }),
-			Image.configure({ inline: false, allowBase64: true }),
-			Table.configure({ resizable: false }),
-			TableRow,
-			TableHeader,
-			TableCell,
-			Placeholder.configure({
-				placeholder: t("editor.markdownPlaceholder"),
-			}),
-		],
-		content: initialHtmlContent,
-		editable: !readOnly,
-		editorProps: {
-			attributes: {
-				class:
-					"prose prose-sm sm:prose focus:outline-none max-w-none p-4 min-h-[500px]",
-			},
-		},
-		onUpdate: ({ editor }) => {
-			// Only track dirty state — do NOT derive preview content from Tiptap
-			const html = editor.getHTML();
-			const markdown = turndownService.turndown(html);
-			setHasUnsavedChanges(markdown !== initialContent);
-			onContentChange?.(markdown);
-		},
-	});
-
-	// Reset editor when file changes
-	useEffect(() => {
-		if (!editor) return;
-		const newHtml = marked.parse(initialContent) as string;
-		// emitUpdate=false: don't trigger onUpdate for programmatic content sets
-		editor.commands.setContent(newHtml, { emitUpdate: false } as any);
-		setHasUnsavedChanges(false);
-	}, [initialContent, editor]);
-
-	const handleOpenImagePopover = useCallback(() => {
-		if (!editor) return;
-		const attrs = editor.getAttributes("image");
-		setImageUrl(attrs.src || "");
-		setImageAlt(attrs.alt || "");
-		setImagePopoverOpen(true);
-		setTimeout(() => imageUrlInputRef.current?.focus(), 50);
-	}, [editor]);
-
-	const handleInsertImage = useCallback(() => {
-		if (!editor || !imageUrl.trim()) return;
-		editor
-			.chain()
-			.focus()
-			.setImage({ src: imageUrl.trim(), alt: imageAlt.trim() })
-			.run();
-		setImagePopoverOpen(false);
-		setImageUrl("");
-		setImageAlt("");
-	}, [editor, imageUrl, imageAlt]);
-
-	const handleInsertTable = useCallback(() => {
-		if (!editor) return;
-		editor
-			.chain()
-			.focus()
-			.insertTable({ rows: 3, cols: 3, withHeaderRow: true })
-			.run();
-	}, [editor]);
-
-	const handleSave = useCallback(async () => {
-		if (!editor || !hasUnsavedChanges || isSaving || readOnly) return;
-		try {
-			setIsSaving(true);
-			const html = editor.getHTML();
-			const markdown = turndownService.turndown(html);
-			await onSave(markdown);
-			setHasUnsavedChanges(false);
-			logInfo(`[MARKDOWN_EDITOR] Saved ${file.name}`);
-		} catch (error) {
-			logError("[MARKDOWN_EDITOR] Failed to save:", error);
-		} finally {
-			setIsSaving(false);
-		}
-	}, [editor, file.name, hasUnsavedChanges, isSaving, onSave, readOnly]);
-
-	useEffect(() => {
-		const handleKeyDown = (e: KeyboardEvent) => {
-			if ((e.ctrlKey || e.metaKey) && e.key === "s") {
-				e.preventDefault();
-				handleSave();
-			}
-		};
-		window.addEventListener("keydown", handleKeyDown);
-		return () => window.removeEventListener("keydown", handleKeyDown);
-	}, [handleSave]);
-
-	useEffect(
-		() => () => {
-			editor?.destroy();
-		},
-		[editor],
-	);
+	// The WYSIWYG is built on first edit and then kept mounted, so switching back
+	// to preview does not throw away unsaved changes.
+	const [hasEnteredEditMode, setHasEnteredEditMode] = useState(false);
 
 	const previewComponents = useMemo(
 		() => ({
@@ -244,6 +152,9 @@ export const MarkdownEditor: React.FC<DocumentEditorProps> = ({
 					</SyntaxHighlighter>
 				);
 			},
+			img: (props: React.ImgHTMLAttributes<HTMLImageElement>) => (
+				<MarkdownPreviewImage {...props} filePath={file.path} />
+			),
 			a: ({
 				href,
 				children,
@@ -262,256 +173,59 @@ export const MarkdownEditor: React.FC<DocumentEditorProps> = ({
 				</a>
 			),
 		}),
-		[isDark],
+		[isDark, file.path],
 	);
 
-	if (!editor) {
-		return (
-			<div className="flex items-center justify-center h-full">
-				<Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-			</div>
-		);
-	}
-
 	return (
-		<div className={cn("flex flex-col h-full", className)}>
-			{!isPreview && (
-				<div className="flex items-center justify-between gap-2 px-4 py-2 border-b bg-card">
-					<div className="flex items-center gap-1 flex-wrap">
+		<div className={cn("flex flex-col h-full min-h-0", className)}>
+			<div
+				className={cn(
+					"flex-1 min-h-0 overflow-auto bg-background",
+					!isPreview && "hidden",
+				)}
+			>
+				{!readOnly && (
+					<div className="sticky top-4 z-10 flex justify-end px-4 pointer-events-none">
 						<Button
-							variant={editor.isActive("bold") ? "secondary" : "ghost"}
+							variant="secondary"
 							size="sm"
-							onClick={() => editor.chain().focus().toggleBold().run()}
-							disabled={readOnly}
-							className="h-8 w-8 p-0"
-							title="Bold (Ctrl+B)"
+							onClick={() => {
+								setHasEnteredEditMode(true);
+								setIsPreview(false);
+							}}
+							className="gap-1.5 shadow-md pointer-events-auto"
 						>
-							<Bold className="h-4 w-4" />
-						</Button>
-						<Button
-							variant={editor.isActive("italic") ? "secondary" : "ghost"}
-							size="sm"
-							onClick={() => editor.chain().focus().toggleItalic().run()}
-							disabled={readOnly}
-							className="h-8 w-8 p-0"
-							title="Italic (Ctrl+I)"
-						>
-							<Italic className="h-4 w-4" />
-						</Button>
-						<Button
-							variant={editor.isActive("code") ? "secondary" : "ghost"}
-							size="sm"
-							onClick={() => editor.chain().focus().toggleCode().run()}
-							disabled={readOnly}
-							className="h-8 w-8 p-0"
-							title="Code"
-						>
-							<Code className="h-4 w-4" />
-						</Button>
-						<div className="w-px h-6 bg-border mx-1" />
-						<Button
-							variant={editor.isActive("bulletList") ? "secondary" : "ghost"}
-							size="sm"
-							onClick={() => editor.chain().focus().toggleBulletList().run()}
-							disabled={readOnly}
-							className="h-8 w-8 p-0"
-							title="Bullet List"
-						>
-							<List className="h-4 w-4" />
-						</Button>
-						<Button
-							variant={editor.isActive("orderedList") ? "secondary" : "ghost"}
-							size="sm"
-							onClick={() => editor.chain().focus().toggleOrderedList().run()}
-							disabled={readOnly}
-							className="h-8 w-8 p-0"
-							title="Numbered List"
-						>
-							<ListOrdered className="h-4 w-4" />
-						</Button>
-						<Button
-							variant={editor.isActive("blockquote") ? "secondary" : "ghost"}
-							size="sm"
-							onClick={() => editor.chain().focus().toggleBlockquote().run()}
-							disabled={readOnly}
-							className="h-8 w-8 p-0"
-							title="Quote"
-						>
-							<Quote className="h-4 w-4" />
-						</Button>
-						<div className="w-px h-6 bg-border mx-1" />
-
-						{/* Insert Table */}
-						<Button
-							variant={editor.isActive("table") ? "secondary" : "ghost"}
-							size="sm"
-							onClick={handleInsertTable}
-							disabled={readOnly}
-							className="h-8 w-8 p-0"
-							title={t("editor.insertTable")}
-						>
-							<TableIcon className="h-4 w-4" />
-						</Button>
-
-						{/* Insert / Edit Image */}
-						<Popover open={imagePopoverOpen} onOpenChange={setImagePopoverOpen}>
-							<PopoverTrigger asChild>
-								<Button
-									variant={editor.isActive("image") ? "secondary" : "ghost"}
-									size="sm"
-									onClick={handleOpenImagePopover}
-									disabled={readOnly}
-									className="h-8 w-8 p-0"
-									title={
-										editor.isActive("image")
-											? t("editor.editImage")
-											: t("editor.insertImage")
-									}
-								>
-									<ImageIcon className="h-4 w-4" />
-								</Button>
-							</PopoverTrigger>
-							<PopoverContent
-								className="w-72 p-3"
-								align="start"
-								onOpenAutoFocus={(e) => e.preventDefault()}
-							>
-								<p className="text-sm font-medium mb-3">
-									{editor.isActive("image")
-										? t("editor.editImage")
-										: t("editor.insertImage")}
-								</p>
-								<div className="space-y-2">
-									<div>
-										<Label className="text-xs">{t("editor.imageUrl")}</Label>
-										<Input
-											ref={imageUrlInputRef}
-											value={imageUrl}
-											onChange={(e) => setImageUrl(e.target.value)}
-											placeholder="https://example.com/image.png"
-											className="h-8 text-sm mt-1"
-											onKeyDown={(e) => {
-												if (e.key === "Enter") handleInsertImage();
-												if (e.key === "Escape") setImagePopoverOpen(false);
-											}}
-										/>
-									</div>
-									<div>
-										<Label className="text-xs">{t("editor.imageAlt")}</Label>
-										<Input
-											value={imageAlt}
-											onChange={(e) => setImageAlt(e.target.value)}
-											placeholder={t("editor.imageAltPlaceholder")}
-											className="h-8 text-sm mt-1"
-											onKeyDown={(e) => {
-												if (e.key === "Enter") handleInsertImage();
-												if (e.key === "Escape") setImagePopoverOpen(false);
-											}}
-										/>
-									</div>
-									<Button
-										size="sm"
-										className="w-full"
-										onClick={handleInsertImage}
-										disabled={!imageUrl.trim()}
-									>
-										{editor.isActive("image")
-											? t("editor.updateImage")
-											: t("editor.insertImage")}
-									</Button>
-								</div>
-							</PopoverContent>
-						</Popover>
-
-						<div className="w-px h-6 bg-border mx-1" />
-						<Button
-							size="sm"
-							onClick={handleSave}
-							disabled={!hasUnsavedChanges || isSaving || readOnly}
-							className="gap-2"
-						>
-							{isSaving ? (
-								<>
-									<Loader2 className="h-4 w-4 animate-spin" />
-									{t("editor.saving")}
-								</>
-							) : (
-								<>
-									<Save className="h-4 w-4" />
-									{t("editor.save")}
-								</>
-							)}
+							<Edit2 className="h-4 w-4" />
+							<span className="text-xs">{t("editor.editMode")}</span>
 						</Button>
 					</div>
-
-					<div className="flex items-center gap-2">
-						{hasUnsavedChanges && (
-							<span className="text-xs text-muted-foreground">
-								{t("editor.unsavedChanges")}
-							</span>
-						)}
-						{!readOnly && (
-							<Button
-								variant="ghost"
-								size="sm"
-								onClick={() => setIsPreview(true)}
-								className="gap-1.5"
-							>
-								<Eye className="h-4 w-4" />
-								<span className="text-xs">{t("editor.previewMode")}</span>
-							</Button>
-						)}
-					</div>
-				</div>
-			)}
-
-			{/* Content */}
-			{isPreview ? (
-				<div className="flex-1 overflow-auto bg-background">
-					{!readOnly && (
-						<div className="sticky top-4 z-10 flex justify-end px-4 pointer-events-none">
-							<Button
-								variant="secondary"
-								size="sm"
-								onClick={() => setIsPreview(false)}
-								className="gap-1.5 shadow-md pointer-events-auto"
-							>
-								<Edit2 className="h-4 w-4" />
-								<span className="text-xs">{t("editor.editMode")}</span>
-							</Button>
-						</div>
+				)}
+				<div
+					className={cn(
+						"markdown-preview mx-auto max-w-4xl px-8 py-6",
+						!readOnly && "-mt-10",
 					)}
-					<div
-						className={cn(
-							"markdown-preview mx-auto max-w-4xl px-8 py-6",
-							!readOnly && "-mt-10",
-						)}
+				>
+					<ReactMarkdown
+						remarkPlugins={remarkPlugins}
+						rehypePlugins={rehypePlugins}
+						components={previewComponents}
 					>
-						<ReactMarkdown
-							remarkPlugins={remarkPlugins}
-							rehypePlugins={rehypePlugins}
-							components={previewComponents}
-						>
-							{initialContent}
-						</ReactMarkdown>
-					</div>
+						{initialContent}
+					</ReactMarkdown>
 				</div>
-			) : (
-				<div className="flex-1 overflow-auto bg-background">
-					<EditorContent editor={editor} className="h-full" />
-				</div>
-			)}
+			</div>
 
-			{!isPreview && (
-				<div className="px-4 py-1 border-t bg-card text-xs text-muted-foreground flex items-center justify-between">
-					<span>
-						{t("editor.characterCount", {
-							count:
-								editor.storage.characterCount?.characters() ||
-								editor.getText().length,
-						})}
-					</span>
-					<span>{t("editor.saveHint")}</span>
+			{hasEnteredEditMode && (
+				<div className={cn("flex-1 min-h-0", isPreview && "hidden")}>
+					<MarkdownWysiwyg
+						file={file}
+						initialContent={initialContent}
+						onContentChange={onContentChange}
+						onSave={onSave}
+						readOnly={readOnly}
+						onRequestPreview={() => setIsPreview(true)}
+					/>
 				</div>
 			)}
 		</div>
