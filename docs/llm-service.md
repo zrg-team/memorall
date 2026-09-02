@@ -174,6 +174,38 @@ const llm = await llmService.create('openai-gpt', {
 - Requires API key and internet
 - Pay-per-use model
 
+**Prompt caching:**
+
+`OpenAILLM` is the class behind both the OpenAI and the OpenRouter provider,
+and it keeps the request shape cache-friendly on purpose:
+
+- Every request carries a `prompt_cache_key`, so all turns of one conversation
+  route to the same provider cache (OpenAI natively; OpenRouter uses it as its
+  sticky-routing key). The chat job stamps `memorall:conversation:<id>` on every
+  request of a run through `withPromptCacheKey`; without a saved conversation
+  the adapter derives a key from the first user message instead.
+- Against OpenRouter the body also asks for `usage: { include: true }` (cost and
+  cache accounting). Claude gets an explicit `cache_control` breakpoint on the
+  system prompt plus OpenRouter's request-level automatic mode, which keeps a
+  moving breakpoint on the last cacheable block (tool results included) as the
+  turn grows. Gemini and Qwen have no automatic mode, so they get breakpoints
+  on the system prompt and the latest user message. Automatic-cache models
+  (OpenAI, DeepSeek, Grok, …) are sent untouched.
+- On api.openai.com, models that support it (`gpt-5.5`, `gpt-5.4`, `gpt-5.2`,
+  `gpt-5.1*`, `gpt-5`, `gpt-4.1`) get `prompt_cache_retention: "24h"`, so a chat
+  the user returns to hours later still hits. GPT-5.6 and later keep their own
+  30-minute default.
+- MCP tools are sorted by name before they enter the tool list and the system
+  prompt, so a server that lists them in another order on reconnect does not
+  shift the prefix.
+- `normalizeTokenUsage` flattens `prompt_tokens_details.cached_tokens`,
+  `cache_write_tokens`, `reasoning_tokens` and `cost` into
+  `ChatCompletionUsage`, and `process-chat` sums them per assistant message
+  (with a per-request breakdown) so the chat footer can show the cache-hit rate.
+- Prompt builders must keep the stable prefix stable: anything that changes per
+  turn (retrieved context, timestamps) goes on the latest user message, never
+  into the system prompt. Tool lists and schemas must not reorder between turns.
+
 ### 🏠 Local OpenAI Compatible (LM Studio & Ollama)
 
 Single implementation for both LM Studio and Ollama via their OpenAI-compatible endpoints.

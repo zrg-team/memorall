@@ -8,6 +8,7 @@ import type { UnifiedFlowConfig } from "@memorall/agent-harness-flows/interfaces
 import type {
 	ChatCompletionChunkToolCall,
 	ChatCompletionMessageToolCall,
+	ChatCompletionUsage,
 } from "@/types/openai";
 import type {
 	ComplexContent,
@@ -64,11 +65,7 @@ export interface EmbeddedChatStreamResult {
 	parts?: MessageParts;
 	actions: ChatAction[];
 	toolCalls?: ChatCompletionMessageToolCall[];
-	usage?: {
-		prompt_tokens: number;
-		completion_tokens: number;
-		total_tokens: number;
-	};
+	usage?: ChatCompletionUsage & { requests?: number };
 	failed?: boolean;
 	error?: string;
 }

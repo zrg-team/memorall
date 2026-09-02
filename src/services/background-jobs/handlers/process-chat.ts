@@ -45,11 +45,17 @@ import {
 	toFlowLLM,
 	toFlowSandbox,
 	toFlowWebBrowser,
+	withPromptCacheKey,
 } from "@/services/flow-service-adapters";
 import {
 	THREAD_HISTORY_CONVERSATION_RUNTIME_KEY,
 	THREAD_HISTORY_SEPARATOR_RUNTIME_KEY,
 } from "@/services/flows-integrations/tools/thread-history";
+import {
+	type AggregatedTokenUsage,
+	addTokenUsage,
+	createAggregatedTokenUsage,
+} from "@/services/llm/utils/token-usage";
 import { withResolvedConnections } from "@/services/mcp-connections";
 import type {
 	AssistantExecutionPart,
@@ -65,6 +71,7 @@ import type {
 	ChatCompletionRequest,
 	ChatCompletionTool,
 	ChatCompletionToolChoiceOption,
+	ChatCompletionUsage,
 	ChatMessage,
 } from "@/types/openai";
 import { isAbortError } from "@/utils/abort";
@@ -145,11 +152,7 @@ export type ChatResult =
 				executions?: AssistantExecutionPart[];
 				toolExecutions?: ToolExecutionRecord[];
 				tool_calls?: ChatCompletionMessageToolCall[];
-				usage?: {
-					prompt_tokens: number;
-					completion_tokens: number;
-					total_tokens: number;
-				};
+				usage?: AggregatedTokenUsage;
 				model?: string;
 				provider?: string;
 				timeToAnswer?: number;
@@ -184,11 +187,7 @@ export type ChatJob = BaseJob & {
 	payload: ChatPayload;
 };
 
-type TokenUsage = {
-	prompt_tokens: number;
-	completion_tokens: number;
-	total_tokens: number;
-};
+type TokenUsage = ChatCompletionUsage;
 
 const RECALL_STEP_BY_TYPE: Record<RecallType, string> = {
 	smart: "context-smart-retrieve",
@@ -238,6 +237,19 @@ const hasThreadHistory = (
 ): conversation is ConversationContext & {
 	historyBoundary: NonNullable<ConversationContext["historyBoundary"]>;
 } => Boolean(conversation?.historyBoundary?.separatorId);
+
+/**
+ * The prompt-cache routing key for a conversation.
+ *
+ * Every turn of a thread shares its prompt prefix, so every turn should land
+ * on the provider machine that already holds that prefix. The conversation id
+ * is the one value that is identical across all of them; without a saved
+ * conversation the adapter derives a key from the messages instead.
+ */
+const getPromptCacheKey = (
+	conversation: ConversationContext | undefined,
+): string | undefined =>
+	conversation?.id ? `memorall:conversation:${conversation.id}` : undefined;
 
 const getThreadHistoryRuntimeVars = (
 	conversation: ConversationContext | undefined,
@@ -323,7 +335,7 @@ type AssistantMessageFinalization = {
 	model: string;
 	provider: string;
 	startTime: number;
-	usage?: TokenUsage;
+	usage?: AggregatedTokenUsage;
 	actions: ChatResultFinalAction[];
 	executions: AssistantExecutionPart[];
 	toolExecutions: ToolExecutionRecord[];
@@ -347,7 +359,7 @@ type AssistantMessageMetadata = {
 	actions?: ChatResultFinalAction[];
 	executions?: AssistantExecutionPart[];
 	toolExecutions?: ToolExecutionRecord[];
-	usage?: TokenUsage;
+	usage?: AggregatedTokenUsage;
 	agentFlowName?: string;
 	error?: JobErrorMetadata;
 };
@@ -655,11 +667,16 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 		};
 	}
 
-	private static getFlowServices(): FlowServices {
+	/**
+	 * @param promptCacheKey stamped on every LLM request of the run so the
+	 * provider routes all turns of one conversation to the same prompt cache.
+	 */
+	private static getFlowServices(promptCacheKey?: string): FlowServices {
 		const sandboxService = serviceManager.getSandboxContainerService();
 		const fileSystem = toFlowFileSystem(fsService);
+		const llm = toFlowLLM(serviceManager.llmService);
 		return {
-			llm: toFlowLLM(serviceManager.llmService),
+			llm: promptCacheKey ? withPromptCacheKey(llm, promptCacheKey) : llm,
 			embedding: toFlowEmbedding(serviceManager.embeddingService),
 			database: toFlowDatabase(serviceManager.databaseService),
 			logger: consoleFlowLogger,
@@ -963,15 +980,12 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 			return record;
 		};
 		const toolCallAccumulator = createToolCallAccumulator();
-		const accumulatedUsage: TokenUsage = {
-			prompt_tokens: 0,
-			completion_tokens: 0,
-			total_tokens: 0,
-		};
+		// One entry per provider request: an agent turn makes several, and the
+		// message shows both the sum and how each request fared against the
+		// provider's prompt cache.
+		let accumulatedUsage = createAggregatedTokenUsage();
 		const addUsage = (usage: TokenUsage) => {
-			accumulatedUsage.prompt_tokens += usage.prompt_tokens;
-			accumulatedUsage.completion_tokens += usage.completion_tokens;
-			accumulatedUsage.total_tokens += usage.total_tokens;
+			accumulatedUsage = addTokenUsage(accumulatedUsage, usage);
 		};
 		const finalizeConversation = async (
 			input: Omit<AssistantMessagePersistence, "conversation">,
@@ -1060,7 +1074,9 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 				const stream = toLegacyFlowStream(
 					createMemorallFlowRun({
 						runId: `chat:${jobId}`,
-						services: ChatHandler.getFlowServices(),
+						services: ChatHandler.getFlowServices(
+							getPromptCacheKey(conversation),
+						),
 						input: {
 							graphType: resolvedConfigWithPrefix.graphType ?? "agent",
 							config: resolvedConfigWithPrefix,
@@ -1189,7 +1205,9 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 				const stream = toLegacyFlowStream(
 					createMemorallFlowRun({
 						runId: `chat:${jobId}`,
-						services: ChatHandler.getFlowServices(),
+						services: ChatHandler.getFlowServices(
+							getPromptCacheKey(conversation),
+						),
 						input: {
 							graphType,
 							config: resolvedConfig,
@@ -1255,6 +1273,7 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 					tools,
 					tool_choice,
 					parallel_tool_calls,
+					prompt_cache_key: getPromptCacheKey(conversation),
 				};
 
 				await dependencies.updateJobProgress(jobId, {

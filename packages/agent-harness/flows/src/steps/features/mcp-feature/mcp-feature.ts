@@ -209,9 +209,12 @@ const definition = defineStep<
 			const sessionTools = await getSessionTools(servers);
 
 			const allowlist = new Set(config?.toolAllowlist ?? []);
-			const mcpBaseTools = sessionTools.filter(
-				(tool) => allowlist.size === 0 || allowlist.has(tool.name),
-			);
+			// Sorted by name: the tool list and the prompt block below are part of
+			// the request prefix the provider caches, and a server that lists its
+			// tools in a different order on reconnect would otherwise change both.
+			const mcpBaseTools = sessionTools
+				.filter((tool) => allowlist.size === 0 || allowlist.has(tool.name))
+				.sort((a, b) => a.name.localeCompare(b.name));
 			const serverNames = servers.map((s) => s.name);
 
 			// The one line that proves the model's toolbox actually received these.

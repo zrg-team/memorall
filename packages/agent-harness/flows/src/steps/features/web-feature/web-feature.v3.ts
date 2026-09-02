@@ -109,26 +109,24 @@ Multiple web sessions can be open simultaneously. Use sessionId to target a spec
 
 export const WEB_FEATURE_SYSTEM_PROMPT = SYSTEM_PROMPT_INSTRUCTION.trim();
 
+/**
+ * Lists the sessions the model may reuse. Deliberately no timestamps: this
+ * block lands in the system prompt, and a `lastAccessedAt` that moved on every
+ * tool call rewrote the prompt prefix each turn, so the provider's prompt
+ * cache never matched the conversation again.
+ */
 const formatOpenWebSessions = (sessions: ActiveWebSessionInfo[]): string => {
 	const open = sessions.filter((s) => s.isOpen);
 	if (open.length === 0) {
 		return "";
 	}
 	const entries = open.map((session, i) => {
-		const lastAccessedAt = session.lastAccessedAt
-			? `  - lastAccessedAt: ${new Date(session.lastAccessedAt).toISOString()}`
-			: "";
-		const createdAt = session.createdAt
-			? `  - createdAt: ${new Date(session.createdAt).toISOString()}`
-			: "";
 		return `Session ${i + 1}:
   - sessionId: ${session.sessionId}
   - requestedUrl: ${session.requestedUrl}
   - currentUrl: ${session.currentUrl}
   - title: ${session.title || "(no title)"}
-  - mode: ${session.mode || "iframe"}
-${lastAccessedAt}
-${createdAt}`.trim();
+  - mode: ${session.mode || "iframe"}`;
 	});
 	return `## OPEN WEB SESSIONS\n${entries.join("\n\n")}`;
 };

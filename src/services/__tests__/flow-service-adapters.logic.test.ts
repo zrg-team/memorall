@@ -1,3 +1,4 @@
+import { serviceRegistry } from "@memorall/agent-harness-flows/registries/service-registry";
 import { describe, expect, it, vi } from "vitest";
 import {
 	registerFlowDatabase,
@@ -12,8 +13,8 @@ import {
 	toFlowLLM,
 	toFlowSandbox,
 	toFlowWebBrowser,
+	withPromptCacheKey,
 } from "../flow-service-adapters";
-import { serviceRegistry } from "@memorall/agent-harness-flows/registries/service-registry";
 
 const text = new TextEncoder();
 
@@ -279,5 +280,53 @@ describe("flow service adapters", () => {
 		);
 		expect(register).toHaveBeenCalledWith("sandboxRuntime", expect.any(Object));
 		register.mockRestore();
+	});
+});
+
+describe("withPromptCacheKey", () => {
+	const makeLLM = () => ({
+		chatCompletions: vi.fn(async (body: unknown) => ({ body })),
+		isReady: () => true,
+		getCurrentModel: async () => null,
+		getMaxModelTokens: async () => 1,
+		getMaxResponseTokens: async () => 1,
+		models: async () => ({ object: "list" as const, data: [] }),
+	});
+
+	it("stamps the conversation key on every request of the run", async () => {
+		const llmService = makeLLM();
+		const llm = withPromptCacheKey(
+			toFlowLLM(llmService as any),
+			"memorall:conversation:c1",
+		);
+
+		await llm.chatCompletions({ messages: [], model: "m" });
+		await llm.chat?.completions.create({ messages: [], model: "m" });
+
+		expect(llmService.chatCompletions).toHaveBeenCalledTimes(2);
+		for (const [body] of llmService.chatCompletions.mock.calls) {
+			expect(body).toMatchObject({
+				model: "m",
+				prompt_cache_key: "memorall:conversation:c1",
+			});
+		}
+	});
+
+	it("keeps a key the step chose itself", async () => {
+		const llmService = makeLLM();
+		const llm = withPromptCacheKey(
+			toFlowLLM(llmService as any),
+			"memorall:conversation:c1",
+		);
+
+		await llm.chatCompletions({
+			messages: [],
+			model: "m",
+			prompt_cache_key: "custom",
+		});
+
+		expect(llmService.chatCompletions).toHaveBeenCalledWith(
+			expect.objectContaining({ prompt_cache_key: "custom" }),
+		);
 	});
 });
