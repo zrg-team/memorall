@@ -46,6 +46,10 @@ vi.mock("@/services/flow-service-adapters", () => ({
 	toFlowSandbox: vi.fn(() => ({})),
 	toFlowWebBrowser: vi.fn(() => ({})),
 	toAgentSandbox: vi.fn(() => ({})),
+	withPromptCacheKey: vi.fn((llm, promptCacheKey) => ({
+		...llm,
+		promptCacheKey,
+	})),
 }));
 
 vi.mock("@/services/agent-harness", () => ({
@@ -468,6 +472,32 @@ describe("a split conversation does not turn plain chat into an agent", () => {
 						"thread.history.conversationId": "conversation-1",
 						"thread.history.separatorId": "separator-1",
 					},
+				}),
+			}),
+		);
+	});
+
+	it("routes every request of the run to the conversation's prompt cache", async () => {
+		flowStream.mockImplementation(
+			vi.fn(async function* () {
+				yield ["values", { response: "found it" }];
+			}),
+		);
+		const { createMemorallFlowRun } = await import("@/services/agent-harness");
+
+		await runChat({
+			messages: [{ role: "user", content: "what did we decide?" }],
+			model: "test-model",
+			mode: "agent",
+			conversation: splitConversation,
+		});
+
+		expect(createMemorallFlowRun).toHaveBeenCalledWith(
+			expect.objectContaining({
+				services: expect.objectContaining({
+					llm: expect.objectContaining({
+						promptCacheKey: "memorall:conversation:conversation-1",
+					}),
 				}),
 			}),
 		);

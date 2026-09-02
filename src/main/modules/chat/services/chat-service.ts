@@ -19,6 +19,7 @@ import type {
 	MessageParts,
 	ToolExecutionRecord,
 } from "@/types/chat";
+import type { AggregatedTokenUsage } from "@/services/llm/utils/token-usage";
 import type {
 	ChatCompletionMessageToolCall,
 	ChatCompletionTool,
@@ -73,11 +74,7 @@ export interface ChatStreamResult {
 	error?: string;
 	errorMetadata?: JobErrorMetadata;
 	metadata?: Record<string, unknown>;
-	usage?: {
-		prompt_tokens: number;
-		completion_tokens: number;
-		total_tokens: number;
-	};
+	usage?: AggregatedTokenUsage;
 }
 
 const mergeActions = (

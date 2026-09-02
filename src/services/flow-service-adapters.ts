@@ -257,6 +257,29 @@ export const toFlowLLM = (service: ILLMService): IFlowLLMService => {
 	};
 };
 
+/**
+ * The same LLM service with `prompt_cache_key` stamped on every request that
+ * does not already carry one, so all calls of one conversation share a cache
+ * routing key without each step having to know about it.
+ */
+export const withPromptCacheKey = (
+	service: IFlowLLMService,
+	promptCacheKey: string,
+): IFlowLLMService => {
+	const stamp = (body: ChatCompletionRequest): ChatCompletionRequest =>
+		body.prompt_cache_key
+			? body
+			: { ...body, prompt_cache_key: promptCacheKey };
+	const create = ((body: ChatCompletionRequest) =>
+		service.chatCompletions(stamp(body))) as FlowChatCreate;
+
+	return {
+		...service,
+		chat: { completions: { create } },
+		chatCompletions: (body) => service.chatCompletions(stamp(body)),
+	};
+};
+
 export const toFlowEmbedding = (
 	service: IEmbeddingService,
 ): IFlowEmbeddingService => ({

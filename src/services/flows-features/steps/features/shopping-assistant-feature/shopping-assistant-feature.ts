@@ -256,16 +256,12 @@ const formatOpenWebSessions = (sessions: ActiveWebSessionInfo[]): string => {
 	const open = sessions.filter((s) => s.isOpen);
 	if (open.length === 0) return "";
 	const entries = open.map((session, i) => {
-		const lastAccessedAt = session.lastAccessedAt
-			? `  - lastAccessedAt: ${new Date(session.lastAccessedAt).toISOString()}`
-			: "";
 		return `Session ${i + 1}:
   - sessionId: ${session.sessionId}
   - requestedUrl: ${session.requestedUrl}
   - currentUrl: ${session.currentUrl}
   - title: ${session.title || "(no title)"}
-  - mode: ${session.mode || "tab"}
-${lastAccessedAt}`.trim();
+  - mode: ${session.mode || "tab"}`;
 	});
 	return `## OPEN WEB SESSIONS\n${entries.join("\n\n")}`;
 };

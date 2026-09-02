@@ -158,6 +158,39 @@ export interface ChatCompletionRequest {
 	stream_options?: {
 		include_usage?: boolean;
 	};
+	/**
+	 * Stable key that groups requests sharing a prompt prefix so the provider
+	 * routes them to the same cache (OpenAI `prompt_cache_key`; OpenRouter uses
+	 * it as its sticky-routing key). Adapters derive one when it is omitted.
+	 */
+	prompt_cache_key?: string;
+}
+
+// ==================== USAGE ====================
+
+/**
+ * Token accounting for one completion, flattened across provider dialects.
+ *
+ * OpenAI and OpenRouter report cache activity under
+ * `prompt_tokens_details.{cached_tokens,cache_write_tokens}`; Anthropic-style
+ * gateways use `cache_read_input_tokens` / `cache_creation_input_tokens`. The
+ * adapters fold all of them into the optional fields here so the rest of the
+ * app reads one shape.
+ */
+export interface ChatCompletionUsage {
+	prompt_tokens: number;
+	completion_tokens: number;
+	total_tokens: number;
+	/** Prompt tokens the provider served from its prompt cache. */
+	cached_tokens?: number;
+	/** Prompt tokens the provider wrote into its cache on this request. */
+	cache_write_tokens?: number;
+	/** Completion tokens spent on hidden reasoning, when reported. */
+	reasoning_tokens?: number;
+	/** Cost in USD when the provider reports it (OpenRouter `usage.cost`). */
+	cost?: number;
+	/** True when no provider usage arrived and the counts were estimated locally. */
+	estimated?: boolean;
 }
 
 // ==================== RESPONSE (Non-streaming) ====================
@@ -190,11 +223,7 @@ export interface ChatCompletionResponse {
 	created: number;
 	model: string;
 	choices: ChatCompletionChoice[];
-	usage?: {
-		prompt_tokens: number;
-		completion_tokens: number;
-		total_tokens: number;
-	};
+	usage?: ChatCompletionUsage;
 }
 
 // ==================== RESPONSE (Streaming) ====================
@@ -220,9 +249,5 @@ export interface ChatCompletionChunk {
 	created: number;
 	model: string;
 	choices: ChatCompletionChunkChoice[];
-	usage?: {
-		prompt_tokens: number;
-		completion_tokens: number;
-		total_tokens: number;
-	} | null;
+	usage?: ChatCompletionUsage | null;
 }

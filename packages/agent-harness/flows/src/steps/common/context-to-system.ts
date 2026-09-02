@@ -65,7 +65,11 @@ const definition = defineStep<
 				: `${contextPrompt}\n\n{context}`
 			: DEFAULT_CONTEXT_SYSTEM_PROMPT;
 
-		const updatedMessages = GraphBase.chat.systemMessage(
+		// Retrieved context changes with every query. Appended to the system
+		// prompt it rewrote the very first message of the request each turn and
+		// the provider's prompt cache never matched again; on the newest user
+		// message it sits after the stable prefix, where dynamic content belongs.
+		const updatedMessages = GraphBase.chat.injectUserContext(
 			input.messages || [],
 			contextPromptTemplate.replace("{context}", input.context || ""),
 		);

@@ -1,26 +1,26 @@
 import type {
+	ChatCompletionChunk,
+	ChatCompletionChunkToolCall,
+	ChatCompletionFinishReason,
+	ChatCompletionMessageParam,
+	ChatCompletionRequest,
+	ChatCompletionResponse,
+} from "@/types/openai";
+import type {
 	BaseLLM,
 	LLMInfo,
 	ModelInfo,
 	ModelsResponse,
 } from "../interfaces/base-llm";
-import type {
-	ChatCompletionChunk,
-	ChatCompletionRequest,
-	ChatCompletionResponse,
-	ChatCompletionMessageParam,
-	ChatCompletionChunkToolCall,
-	ChatCompletionFinishReason,
-} from "@/types/openai";
 import type { ToolCapabilityInfo } from "../interfaces/tool-capability";
 import { NATIVE_TOOL_SUPPORT } from "../interfaces/tool-capability";
+import { postCompletionWithBudgetRetry } from "../utils/budget-retry";
 import {
 	extractChunkOutputText,
 	extractResponseOutputText,
 	normalizeTokenUsage,
 	resolveTokenUsage,
 } from "../utils/token-usage";
-import { postCompletionWithBudgetRetry } from "../utils/budget-retry";
 
 // Well-known model configurations with context window and max response tokens
 interface ModelConfig {
@@ -217,6 +217,128 @@ const TOOL_SUPPORT_PATTERNS: Array<{
 	},
 ];
 
+/**
+ * Models that only cache a prompt where the request marks explicit breakpoints
+ * (OpenRouter passes `cache_control` through for these). OpenAI, DeepSeek,
+ * Grok and friends cache automatically, and OpenRouter drops the marker for
+ * them, so the pattern deliberately stays narrow.
+ */
+const EXPLICIT_CACHE_MODEL_PATTERN = /anthropic|claude|google\/|gemini|qwen/i;
+
+/**
+ * Claude via OpenRouter also accepts a request-level `cache_control`, which
+ * keeps a moving breakpoint on the last cacheable block as the conversation
+ * grows — tool results included — without the request naming each block.
+ */
+const ANTHROPIC_MODEL_PATTERN = /anthropic|claude/i;
+
+/**
+ * OpenAI models that accept `prompt_cache_retention: "24h"`. GPT-5.6 and later
+ * keep entries for 30 minutes by default and use a different option, so they
+ * are left out; a chat the user comes back to hours later benefits on these.
+ */
+const OPENAI_EXTENDED_RETENTION_MODEL_PATTERN =
+	/^(gpt-5\.5(-pro)?|gpt-5\.4|gpt-5\.2|gpt-5\.1(-codex(-max|-mini)?|-chat-latest)?|gpt-5(-codex)?|gpt-4\.1)(-\d{4}-\d{2}-\d{2})?$/i;
+
+const CACHE_BREAKPOINT = { type: "ephemeral" } as const;
+
+/** Longest slice of the first user message that feeds the cache key. */
+const CACHE_KEY_TEXT_LIMIT = 4096;
+
+const fnv1a = (text: string): string => {
+	let hash = 0x811c9dc5;
+	for (let index = 0; index < text.length; index++) {
+		hash ^= text.charCodeAt(index);
+		hash = Math.imul(hash, 0x01000193) >>> 0;
+	}
+	return hash.toString(16).padStart(8, "0");
+};
+
+const textOfContent = (
+	content: ChatCompletionMessageParam["content"] | null | undefined,
+): string => {
+	if (typeof content === "string") return content;
+	if (!Array.isArray(content)) return "";
+	return content
+		.map((part) => (part.type === "text" ? part.text : ""))
+		.filter(Boolean)
+		.join("\n");
+};
+
+/**
+ * A routing key that stays the same for every turn of one conversation.
+ *
+ * Providers use `prompt_cache_key` to send requests sharing a prefix to the
+ * machine that already holds that prefix in cache. The conversation id never
+ * reaches this layer, but the first user message is byte-identical on every
+ * later turn of the same thread, so a hash of it is an equally stable key.
+ * Collisions merely route two threads to the same machine; the cache itself
+ * still matches on the exact prefix.
+ */
+export function derivePromptCacheKey(
+	messages: ChatCompletionMessageParam[],
+): string | undefined {
+	const firstUser = messages.find((message) => message.role === "user");
+	const text = textOfContent(firstUser?.content).slice(0, CACHE_KEY_TEXT_LIMIT);
+	if (!text) return undefined;
+	return `memorall:${fnv1a(text)}`;
+}
+
+const markCacheBreakpoint = (
+	message: Record<string, unknown>,
+): Record<string, unknown> => {
+	const content = message.content;
+	if (typeof content === "string") {
+		if (!content) return message;
+		return {
+			...message,
+			content: [
+				{ type: "text", text: content, cache_control: CACHE_BREAKPOINT },
+			],
+		};
+	}
+	if (Array.isArray(content)) {
+		const lastTextIndex = content.findLastIndex(
+			(part) => part?.type === "text" && typeof part.text === "string",
+		);
+		if (lastTextIndex < 0) return message;
+		const parts = [...content];
+		parts[lastTextIndex] = {
+			...parts[lastTextIndex],
+			cache_control: CACHE_BREAKPOINT,
+		};
+		return { ...message, content: parts };
+	}
+	return message;
+};
+
+/**
+ * Mark the two prefixes worth caching for explicit-breakpoint models: the
+ * system prompt (which also covers the tool definitions ahead of it) and the
+ * latest user message, so the next turn, and every tool round-trip inside
+ * this one, reads the whole conversation so far out of cache.
+ */
+export function withCacheBreakpoints(
+	messages: Record<string, unknown>[],
+	options: { latestUser?: boolean } = {},
+): Record<string, unknown>[] {
+	const marked = [...messages];
+	const systemIndex = marked.findIndex((message) => message.role === "system");
+	if (systemIndex >= 0) {
+		marked[systemIndex] = markCacheBreakpoint(marked[systemIndex]);
+	}
+	if (options.latestUser === false) {
+		return marked;
+	}
+	const lastUserIndex = marked.findLastIndex(
+		(message) => message.role === "user",
+	);
+	if (lastUserIndex >= 0) {
+		marked[lastUserIndex] = markCacheBreakpoint(marked[lastUserIndex]);
+	}
+	return marked;
+}
+
 // A lightweight OpenAI-compatible client using fetch/SSE.
 // Supports both OpenAI and local OpenAI-compatible servers (LM Studio, Ollama).
 export class OpenAILLM implements BaseLLM {
@@ -269,14 +391,26 @@ export class OpenAILLM implements BaseLLM {
 		return this.modelLimits.get(model) ?? findModelConfig(model);
 	}
 
-	private isLocalBase(): boolean {
+	private hostname(): string {
 		try {
-			const u = new URL(this.baseURL);
-			const host = u.hostname;
-			return host === "localhost" || host === "127.0.0.1" || host === "0.0.0.0";
+			return new URL(this.baseURL).hostname.toLowerCase();
 		} catch {
-			return false;
+			return "";
 		}
+	}
+
+	private isLocalBase(): boolean {
+		const host = this.hostname();
+		return host === "localhost" || host === "127.0.0.1" || host === "0.0.0.0";
+	}
+
+	private isOpenAI(): boolean {
+		return this.hostname() === "api.openai.com";
+	}
+
+	private isOpenRouter(): boolean {
+		const host = this.hostname();
+		return host === "openrouter.ai" || host.endsWith(".openrouter.ai");
 	}
 
 	private getHeaders(): HeadersInit {
@@ -285,7 +419,90 @@ export class OpenAILLM implements BaseLLM {
 		};
 		// Only send Authorization when we actually have an API key
 		if (this.apiKey) headers["Authorization"] = `Bearer ${this.apiKey}`;
+		if (this.isOpenRouter()) {
+			// OpenRouter app-attribution headers: optional, but they let the
+			// dashboard group this app's traffic.
+			headers["HTTP-Referer"] = "https://zrg-team.github.io/memorall/";
+			headers["X-Title"] = "Memorall";
+		}
 		return headers;
+	}
+
+	/**
+	 * The request body both completion paths share.
+	 *
+	 * Prompt-cache hints live here so neither path forgets them:
+	 * - `prompt_cache_key` groups a conversation's turns on the same cache
+	 *   (OpenAI natively; OpenRouter as its sticky-routing key);
+	 * - OpenRouter's `usage.include` returns cost and cache accounting;
+	 * - explicit-cache models via OpenRouter get `cache_control` breakpoints.
+	 * Everything else stays exactly as the caller sent it, tool order and
+	 * schemas included, since any change there invalidates the whole prefix.
+	 */
+	private buildRequestBody(
+		request: ChatCompletionRequest,
+		stream: boolean,
+	): Record<string, unknown> {
+		const model = stream ? request.model || "gpt-3.5-turbo" : request.model;
+		const openRouter = this.isOpenRouter();
+		const serialized = this.serializeMessages(request.messages);
+		const explicitCache = Boolean(
+			openRouter && model && EXPLICIT_CACHE_MODEL_PATTERN.test(model),
+		);
+		const anthropic =
+			explicitCache && ANTHROPIC_MODEL_PATTERN.test(model ?? "");
+		// Claude: one explicit breakpoint on the system prompt, and the
+		// request-level automatic mode below covers everything after it. Gemini
+		// and Qwen have no automatic mode, so the latest user message is marked
+		// as well.
+		const messages = explicitCache
+			? withCacheBreakpoints(serialized, { latestUser: !anthropic })
+			: serialized;
+
+		const body: Record<string, unknown> = {
+			model,
+			messages,
+			max_tokens: request.max_tokens,
+			temperature: request.temperature,
+			top_p: request.top_p,
+			stop: request.stop,
+			stream,
+		};
+		if (stream) {
+			body.stream_options = { include_usage: true };
+		}
+
+		// Add tools if provided
+		if (request.tools?.length) {
+			body.tools = request.tools;
+			if (request.tool_choice) {
+				body.tool_choice = request.tool_choice;
+			}
+			if (request.parallel_tool_calls !== undefined) {
+				body.parallel_tool_calls = request.parallel_tool_calls;
+			}
+		}
+
+		if (openRouter) {
+			body.usage = { include: true };
+		}
+		if (anthropic) {
+			body.cache_control = CACHE_BREAKPOINT;
+		}
+		if (openRouter || this.isOpenAI()) {
+			const cacheKey =
+				request.prompt_cache_key ?? derivePromptCacheKey(request.messages);
+			if (cacheKey) body.prompt_cache_key = cacheKey;
+		}
+		if (
+			this.isOpenAI() &&
+			model &&
+			OPENAI_EXTENDED_RETENTION_MODEL_PATTERN.test(model)
+		) {
+			body.prompt_cache_retention = "24h";
+		}
+
+		return body;
 	}
 
 	async initialize(): Promise<void> {
@@ -403,26 +620,7 @@ export class OpenAILLM implements BaseLLM {
 	): Promise<ChatCompletionResponse> {
 		if (!this.ready) await this.initialize();
 
-		const body: Record<string, unknown> = {
-			model: request.model,
-			messages: this.serializeMessages(request.messages),
-			max_tokens: request.max_tokens,
-			temperature: request.temperature,
-			top_p: request.top_p,
-			stop: request.stop,
-			stream: false,
-		};
-
-		// Add tools if provided
-		if (request.tools?.length) {
-			body.tools = request.tools;
-			if (request.tool_choice) {
-				body.tool_choice = request.tool_choice;
-			}
-			if (request.parallel_tool_calls !== undefined) {
-				body.parallel_tool_calls = request.parallel_tool_calls;
-			}
-		}
+		const body = this.buildRequestBody(request, false);
 
 		const res = await postCompletionWithBudgetRetry({
 			url: `${this.baseURL}/chat/completions`,
@@ -473,27 +671,7 @@ export class OpenAILLM implements BaseLLM {
 	): AsyncIterableIterator<ChatCompletionChunk> {
 		if (!this.ready) await this.initialize();
 
-		const body: Record<string, unknown> = {
-			model: request.model || "gpt-3.5-turbo",
-			messages: this.serializeMessages(request.messages),
-			max_tokens: request.max_tokens,
-			temperature: request.temperature,
-			top_p: request.top_p,
-			stop: request.stop,
-			stream: true,
-			stream_options: { include_usage: true },
-		};
-
-		// Add tools if provided
-		if (request.tools?.length) {
-			body.tools = request.tools;
-			if (request.tool_choice) {
-				body.tool_choice = request.tool_choice;
-			}
-			if (request.parallel_tool_calls !== undefined) {
-				body.parallel_tool_calls = request.parallel_tool_calls;
-			}
-		}
+		const body = this.buildRequestBody(request, true);
 
 		const res = await postCompletionWithBudgetRetry({
 			url: `${this.baseURL}/chat/completions`,
