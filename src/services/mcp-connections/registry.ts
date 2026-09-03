@@ -13,8 +13,11 @@
 import { eq } from "drizzle-orm";
 import { serviceManager } from "@/services";
 import { logError } from "@/utils/logger";
+import { deleteSecret } from "@/utils/master-key";
 import {
+	COMPOSIO_SECRET_KEY,
 	CONNECTIONS_CONFIG_KEY,
+	connectionSecretRef,
 	EMPTY_REGISTRY,
 	EMPTY_TOOL_CACHE,
 	TOOL_CACHE_CONFIG_KEY,
@@ -117,6 +120,9 @@ export async function upsertConnection(
 
 export async function removeConnection(id: string): Promise<void> {
 	const registry = await loadConnectionRegistry();
+	const removed = registry.connections.find(
+		(connection) => connection.id === id,
+	);
 	await saveConnectionRegistry({
 		...registry,
 		connections: registry.connections.filter(
@@ -124,6 +130,23 @@ export async function removeConnection(id: string): Promise<void> {
 		),
 	});
 	await removeToolCacheEntry(id);
+
+	// The credential goes with the record. It used to stay behind in the
+	// encryption table, so a deleted Composio connection resurfaced with its
+	// old project key the moment the wizard reopened, and "connect with a new
+	// key" silently kept using the old one.
+	const secretKeys = new Set<string>([
+		connectionSecretRef(id),
+		...(removed?.secretRef ? [removed.secretRef] : []),
+		...(removed?.kind === "composio" ? [COMPOSIO_SECRET_KEY] : []),
+	]);
+	for (const key of secretKeys) {
+		try {
+			await deleteSecret(key);
+		} catch (error) {
+			logError(`[MCP_CONNECTIONS] Failed to delete secret "${key}":`, error);
+		}
+	}
 }
 
 export async function loadToolCache(): Promise<ToolCache> {
