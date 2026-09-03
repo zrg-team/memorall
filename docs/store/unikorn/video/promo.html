@@ -1,0 +1,392 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8" />
+<title>Memorall promo composition</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<style>
+  /*
+   * A 1920x1080 composition driven entirely by window.__seek(ms). Nothing in
+   * here animates on its own: every element's opacity and transform is a pure
+   * function of time, so the renderer can screenshot frames in any order and
+   * always get the same picture. Think "Remotion without the framework".
+   */
+  html, body { margin: 0; width: 1920px; height: 1080px; overflow: hidden; background: #05070c; }
+  body { font-family: Inter, "Segoe UI", system-ui, -apple-system, sans-serif; color: #fff; -webkit-font-smoothing: antialiased; }
+  #stage { position: relative; width: 1920px; height: 1080px; overflow: hidden; }
+
+  .bg { position: absolute; inset: 0; background: linear-gradient(118deg, #05070c 0%, #070d18 45%, #0a1830 100%); }
+  .grid { position: absolute; inset: 0;
+    background-image: linear-gradient(rgba(255,255,255,.04) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.04) 1px, transparent 1px);
+    background-size: 84px 84px;
+    -webkit-mask-image: radial-gradient(ellipse at 55% 45%, #000 25%, transparent 72%);
+    mask-image: radial-gradient(ellipse at 55% 45%, #000 25%, transparent 72%); }
+  .glow { position: absolute; width: 1000px; height: 1000px; border-radius: 50%; filter: blur(140px); will-change: transform; }
+  .glow.a { background: rgba(37, 99, 235, .55); left: 1150px; top: -420px; }
+  .glow.b { background: rgba(20, 184, 166, .35); left: -420px; top: 480px; }
+  .vignette { position: absolute; inset: 0; background: radial-gradient(ellipse at 50% 50%, transparent 55%, rgba(0,0,0,.55) 100%); }
+  #particles { position: absolute; inset: 0; pointer-events: none; }
+  .p { position: absolute; width: 6px; height: 6px; border-radius: 50%; background: #93c5fd; will-change: transform, opacity; }
+  #progress { position: absolute; left: 0; bottom: 0; height: 5px; width: 0; background: linear-gradient(90deg, #60a5fa, #22d3ee, #34d399); box-shadow: 0 0 16px rgba(96,165,250,.6); }
+
+  .scene { position: absolute; inset: 0; opacity: 0; }
+  .grad { background: linear-gradient(90deg, #60a5fa 0%, #22d3ee 55%, #34d399 100%); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .chip { display: inline-flex; align-items: center; height: 56px; padding: 0 26px; border-radius: 999px; border: 1px solid rgba(255,255,255,.18); background: rgba(255,255,255,.06); font-size: 24px; font-weight: 600; color: #e5e7eb; margin-right: 18px; }
+
+  /* Intro & outro */
+  .center { position: absolute; left: 0; right: 0; text-align: center; }
+  .logo { width: 168px; height: 168px; filter: drop-shadow(0 20px 40px rgba(0,0,0,.5)); }
+  .brand { font-size: 132px; font-weight: 800; letter-spacing: -0.03em; line-height: 1; }
+  .tag { font-size: 62px; font-weight: 800; letter-spacing: -0.02em; line-height: 1.12; }
+  .sub { font-size: 30px; font-weight: 400; color: #9ca3af; }
+  .ring { position: absolute; left: 960px; top: 540px; width: 10px; height: 10px; margin: -5px 0 0 -5px; border-radius: 50%; border: 3px solid rgba(96,165,250,.9); opacity: 0; }
+
+  /* Hook & value */
+  .big { font-size: 74px; font-weight: 800; letter-spacing: -0.025em; line-height: 1.15; }
+  .line { position: absolute; left: 0; right: 0; text-align: center; white-space: pre; }
+  .caret { display: inline-block; width: 6px; height: 0.9em; margin-left: 6px; background: #60a5fa; vertical-align: -0.1em; }
+
+  /* Screenshot scenes */
+  .caption { position: absolute; left: 96px; top: 290px; width: 520px; }
+  .caption .idx { font-size: 20px; font-weight: 600; letter-spacing: .18em; color: #60a5fa; margin-bottom: 26px; }
+  .caption h2 { margin: 0 0 24px; font-size: 52px; font-weight: 800; letter-spacing: -0.025em; line-height: 1.12; }
+  .caption p { margin: 0; font-size: 25px; line-height: 1.45; color: #a1a1aa; font-weight: 400; }
+  .caption .bar { width: 72px; height: 5px; border-radius: 3px; background: linear-gradient(90deg, #60a5fa, #34d399); margin-top: 34px; }
+  .stage3d { position: absolute; left: 660px; top: 128px; width: 1200px; height: 784px; perspective: 2200px; }
+  .frame { position: absolute; inset: 0; border-radius: 18px; background: #0b0f17; border: 1px solid rgba(255,255,255,.14);
+    box-shadow: 0 50px 120px rgba(0,0,0,.65), 0 0 0 1px rgba(0,0,0,.6), 0 0 80px rgba(37,99,235,.12); overflow: hidden; will-change: transform; }
+  .frame .top { height: 34px; display: flex; align-items: center; padding: 0 16px; gap: 8px; background: #101623; border-bottom: 1px solid rgba(255,255,255,.08); }
+  .frame .top i { width: 11px; height: 11px; border-radius: 50%; display: block; background: #3a4150; }
+  .frame .top i:nth-child(1) { background: #ff5f57; } .frame .top i:nth-child(2) { background: #febc2e; } .frame .top i:nth-child(3) { background: #28c840; }
+  .frame .top span { margin-left: 18px; height: 20px; flex: 1; border-radius: 6px; background: rgba(255,255,255,.06); }
+  .frame .view { position: relative; width: 1200px; height: 750px; overflow: hidden; }
+  .frame .view img { position: absolute; left: 0; top: 0; width: 1200px; height: 750px; display: block; }
+  .hl { position: absolute; border-radius: 12px; border: 3px solid rgba(96,165,250,.95); opacity: 0; will-change: transform, opacity, box-shadow; }
+  .cursor { position: absolute; width: 30px; height: 36px; opacity: 0; filter: drop-shadow(0 4px 8px rgba(0,0,0,.6)); will-change: transform; }
+  .ripple { position: absolute; width: 20px; height: 20px; margin: -10px 0 0 -10px; border-radius: 50%; border: 3px solid rgba(255,255,255,.9); opacity: 0; }
+  .stat { position: absolute; display: flex; flex-direction: column; align-items: flex-start; padding: 14px 22px; border-radius: 14px; background: rgba(8,12,22,.85); border: 1px solid rgba(96,165,250,.35); box-shadow: 0 20px 50px rgba(0,0,0,.5); opacity: 0; }
+  .stat b { font-size: 40px; font-weight: 800; letter-spacing: -0.02em; line-height: 1; }
+  .stat span { font-size: 16px; color: #93c5fd; margin-top: 6px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
+
+  .cta { display: inline-flex; align-items: center; height: 74px; padding: 0 40px; border-radius: 999px; background: #fff; color: #0b1020; font-size: 28px; font-weight: 700; box-shadow: 0 20px 60px rgba(96,165,250,.25); }
+  .link { font-size: 28px; color: #9ca3af; }
+  .link b { color: #e5e7eb; font-weight: 600; }
+  .fade { position: absolute; inset: 0; background: #000; opacity: 0; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div class="bg"></div>
+  <div class="glow a" id="glowA"></div>
+  <div class="glow b" id="glowB"></div>
+  <div class="grid"></div>
+  <div id="particles"></div>
+  <div class="vignette"></div>
+
+  <!-- 1. Intro -->
+  <section class="scene" id="intro">
+    <div class="center" style="top:250px" data-el="logo"><img class="logo" src="../../store_512.png" alt="" /></div>
+    <div class="center brand" style="top:440px" data-el="brand">Memorall</div>
+    <div class="center tag" style="top:600px" data-el="tag1">Không gian làm việc cho AI agent</div>
+    <div class="center tag grad" style="top:672px" data-el="tag2">ngay trong trình duyệt của bạn</div>
+    <div class="center sub" style="top:778px" data-el="sub">Nhớ lâu dài · làm việc thật · chọn model tuỳ ý — chạy ngay trên máy bạn</div>
+    <div class="center" style="top:868px" data-el="chips">
+      <span class="chip" data-chip>Local-first</span><span class="chip" data-chip>Knowledge graph</span><span class="chip" data-chip>Agent + sandbox</span><span class="chip" data-chip>Chrome · Web · Desktop</span><span class="chip" data-chip>Mã nguồn mở (MIT)</span>
+    </div>
+  </section>
+
+  <!-- 2. Hook (typewriter) -->
+  <section class="scene" id="hook">
+    <div class="line big" style="top:330px" data-el="h1" data-text="Mở hàng chục tab để nghiên cứu."></div>
+    <div class="line big" style="top:440px" data-el="h2" data-text="Copy từng đoạn, dán vào chatbot."></div>
+    <div class="line big" style="top:550px" data-el="h3" data-text="Ngày mai hỏi lại — nó chẳng nhớ gì."></div>
+    <div class="ring" data-el="ring"></div>
+    <div class="line big grad" style="top:440px; font-size: 118px" data-el="punch">Memorall thì nhớ.</div>
+  </section>
+
+  <!-- 3..10 Screenshot scenes (filled by script). data-hl = x y w h in % of the screenshot. -->
+  <section class="scene shot" id="s1" data-img="../01-in-page-assistant.png" data-hl="74.2 68.5 24.8 19"
+    data-idx="01 / 08" data-h="Hỏi ngay trên trang đang đọc"
+    data-p="Không cần chuyển tab. Đính kèm đoạn bôi đen, nội dung đang xem hoặc ảnh chụp màn hình làm ngữ cảnh — rồi lưu thẳng vào chủ đề bạn chọn."></section>
+  <section class="scene shot" id="s2" data-img="../02-knowledge-graph.png" data-hl="56 40 40 50"
+    data-idx="02 / 08" data-h="Lưu gì, nhớ nấy"
+    data-p="Trang web, ghi chú, tài liệu được rút thành node và quan hệ theo từng chủ đề. Duyệt bằng đồ thị, tìm theo ngữ nghĩa, sửa ngay trên giao diện."
+    data-stats="115:node|186:quan hệ"></section>
+  <section class="scene shot" id="s3" data-img="../03-documents-pdf.png" data-hl="79.6 13.6 14 6.6"
+    data-idx="03 / 08" data-h="Từ PDF, Excel, ảnh thành tri thức"
+    data-p="Đọc tài liệu ngay trong app, bấm “Convert to Knowledge” — nội dung đi thẳng vào bộ nhớ của agent."></section>
+  <section class="scene shot" id="s4" data-img="../05-chat-workspace.png" data-hl="36.8 44.2 29 16.2"
+    data-idx="04 / 08" data-h="Dựng agent cho đúng việc của bạn"
+    data-p="Mô tả công việc, Memorall dựng sẵn agent với bộ nhớ, công cụ và cách làm việc phù hợp: system prompt, skill, MCP, lịch chạy tự động."></section>
+  <section class="scene shot" id="s5" data-img="../04-agent-builder.png" data-hl="42.6 44.5 37 46"
+    data-idx="05 / 08" data-h="Làm việc thật, không chỉ trả lời"
+    data-p="Chạy code Node.js trong sandbox, điều khiển trình duyệt, đọc ghi file, giao việc cho agent khác — bật tắt từng năng lực cho từng agent."></section>
+  <section class="scene shot" id="s6" data-img="../07-skills-library.png" data-hl="32.2 23 60.8 25"
+    data-idx="06 / 08" data-h="Dạy agent quy trình của bạn"
+    data-p="Skill là một file SKILL.md mô tả cách làm một việc lặp lại. Viết mới, nhập từ GitHub hoặc tải lên — lưu trên máy, không gửi đi đâu."
+    data-stats="112:skill có sẵn"></section>
+  <section class="scene shot" id="s7" data-img="../06-models-local-remote.png" data-hl="27.4 20.4 71.8 46.6"
+    data-idx="07 / 08" data-h="Chạy model nào là tuỳ bạn"
+    data-p="Model chạy ngay trên máy với WebGPU (WebLLM, Wllama, Transformers.js), hoặc gọi OpenAI, OpenRouter, Ollama, LM Studio khi cần mạnh hơn."></section>
+  <section class="scene shot" id="s8" data-img="../08-mcp-connections.png" data-hl="32.4 23.4 19.6 33.6"
+    data-idx="08 / 08" data-h="Nối agent với công cụ bạn đang dùng"
+    data-p="Composio với hơn 250 ứng dụng, MCP server trên máy, hoặc endpoint HTTP/SSE tự cấu hình. Khoá API được mã hoá bằng passkey."></section>
+
+  <!-- 11. Value -->
+  <section class="scene" id="value">
+    <div class="line big" style="top:300px" data-el="v1">Chạy trên máy bạn.</div>
+    <div class="line big" style="top:410px" data-el="v2">Không cần tài khoản.</div>
+    <div class="line big grad" style="top:520px" data-el="v3">Dữ liệu không rời khỏi máy.</div>
+    <div class="center" style="top:700px" data-el="v4"><span class="chip">Mã nguồn mở (MIT)</span><span class="chip">Tự build, tự kiểm tra</span></div>
+  </section>
+
+  <!-- 12. Outro -->
+  <section class="scene" id="outro">
+    <div class="center" style="top:200px" data-el="logo"><img class="logo" src="../../store_512.png" alt="" /></div>
+    <div class="center brand" style="top:392px" data-el="brand">Memorall</div>
+    <div class="center sub" style="top:548px; font-size: 34px; color:#d4d4d8" data-el="sub">Nhớ lâu, làm việc thật, chọn model tuỳ ý — ngay trong trình duyệt.</div>
+    <div class="center" style="top:660px" data-el="cta"><span class="cta" data-el="ctabtn">Cài từ Chrome Web Store</span></div>
+    <div class="center link" style="top:790px" data-el="l1">Dùng thử trên web: <b>zrg-team.github.io/memorall/studio</b></div>
+    <div class="center link" style="top:840px" data-el="l2">Mã nguồn: <b>github.com/zrg-team/memorall</b> &nbsp;·&nbsp; Chrome · Web · Desktop</div>
+  </section>
+
+  <div id="progress"></div>
+  <div class="fade" id="fade"></div>
+</div>
+
+<script>
+  // ---- timeline -----------------------------------------------------------
+  const SCENES = [
+    { id: "intro", start: 0.0,  end: 5.0 },
+    { id: "hook",  start: 5.0,  end: 10.0 },
+    { id: "s1",    start: 10.0, end: 14.6 },
+    { id: "s2",    start: 14.6, end: 19.4 },
+    { id: "s3",    start: 19.4, end: 23.8 },
+    { id: "s4",    start: 23.8, end: 28.2 },
+    { id: "s5",    start: 28.2, end: 32.8 },
+    { id: "s6",    start: 32.8, end: 37.2 },
+    { id: "s7",    start: 37.2, end: 41.8 },
+    { id: "s8",    start: 41.8, end: 46.2 },
+    { id: "value", start: 46.2, end: 52.0 },
+    { id: "outro", start: 52.0, end: 60.0 },
+  ];
+  window.__duration = 60.0;
+
+  const clamp01 = (v) => Math.max(0, Math.min(1, v));
+  const seg = (t, a, b) => clamp01((t - a) / (b - a));
+  const easeOut = (x) => 1 - Math.pow(1 - x, 3);
+  const easeInOut = (x) => (x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2);
+  const easeOutBack = (x) => { const c = 1.70158; return 1 + (c + 1) * Math.pow(x - 1, 3) + c * Math.pow(x - 1, 2); };
+
+  const rise = (el, local, at, dist = 34, dur = 0.7) => {
+    const p = easeOut(seg(local, at, at + dur));
+    el.style.opacity = p;
+    el.style.transform = `translateY(${(1 - p) * dist}px)`;
+  };
+  const pop = (el, local, at, dur = 0.6) => {
+    const p = easeOutBack(seg(local, at, at + dur));
+    el.style.opacity = clamp01(seg(local, at, at + dur * 0.5));
+    el.style.transform = `scale(${0.82 + 0.18 * p})`;
+  };
+  const q = (root, sel) => root.querySelector(sel);
+
+  // ---- particles: 46 slow motes, positions from a seeded hash ---------------
+  const hash = (n) => { const x = Math.sin(n * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); };
+  const particles = [];
+  const particleRoot = document.getElementById("particles");
+  for (let i = 0; i < 46; i++) {
+    const el = document.createElement("i");
+    el.className = "p";
+    particleRoot.appendChild(el);
+    particles.push({ el, x: hash(i) * 1920, y: hash(i + 100) * 1080, speed: 8 + hash(i + 200) * 14, size: 2 + hash(i + 300) * 4, phase: hash(i + 400) * 6.28, drift: 20 + hash(i + 500) * 40 });
+  }
+  const renderParticles = (t) => {
+    for (const p of particles) {
+      const y = ((p.y - t * p.speed) % 1180 + 1180) % 1180 - 50;
+      const x = p.x + Math.sin(t * 0.35 + p.phase) * p.drift;
+      const twinkle = 0.25 + 0.35 * (0.5 + 0.5 * Math.sin(t * 1.7 + p.phase * 3));
+      p.el.style.transform = `translate(${x}px, ${y}px) scale(${p.size / 6})`;
+      p.el.style.opacity = twinkle;
+    }
+  };
+
+  // ---- build screenshot scenes from data attributes -------------------------
+  const CURSOR_SVG = `<svg viewBox="0 0 30 36" width="30" height="36"><path d="M2 2 L2 27 L8.5 21 L13 32 L18 30 L13.5 19 L22 19 Z" fill="#fff" stroke="#111" stroke-width="1.6" stroke-linejoin="round"/></svg>`;
+  for (const scene of document.querySelectorAll(".scene.shot")) {
+    const [hx, hy, hw, hh] = scene.dataset.hl.split(" ").map(Number);
+    const stats = (scene.dataset.stats || "").split("|").filter(Boolean).map((s) => s.split(":"));
+    scene.innerHTML = `
+      <div class="caption" data-el="caption">
+        <div class="idx" data-el="idx">${scene.dataset.idx}</div>
+        <h2 data-el="h">${scene.dataset.h}</h2>
+        <p data-el="p">${scene.dataset.p}</p>
+        <div class="bar" data-el="bar"></div>
+      </div>
+      <div class="stage3d">
+        <div class="frame" data-el="frame">
+          <div class="top"><i></i><i></i><i></i><span></span></div>
+          <div class="view">
+            <img src="${scene.dataset.img}" alt="" />
+            <div class="hl" data-el="hl" style="left:${hx}%;top:${hy}%;width:${hw}%;height:${hh}%"></div>
+            <div class="ripple" data-el="ripple"></div>
+            <div class="cursor" data-el="cursor">${CURSOR_SVG}</div>
+            ${stats.map(([n, label], i) => `<div class="stat" data-stat="${n}" style="right:${36 + i * 210}px;top:36px"><b data-el="num">0</b><span>${label}</span></div>`).join("")}
+          </div>
+        </div>
+      </div>`;
+    scene.__hl = { x: hx, y: hy, w: hw, h: hh };
+  }
+
+  // ---- typewriter --------------------------------------------------------
+  const typeLine = (el, local, at, cps = 34) => {
+    const text = el.dataset.text;
+    const shown = Math.floor(Math.max(0, local - at) * cps);
+    const count = Math.min(text.length, shown);
+    const done = count >= text.length;
+    const started = local >= at;
+    el.style.opacity = started ? 1 : 0;
+    const body = text.slice(0, count);
+    const html = body.replace("chẳng nhớ gì", '<span style="color:#f87171">chẳng nhớ gì</span>');
+    const caretOn = started && !done ? '<span class="caret"></span>' : "";
+    if (el.__html !== html + caretOn) { el.innerHTML = html + caretOn; el.__html = html + caretOn; }
+    return done;
+  };
+
+  // ---- per-scene renderers -----------------------------------------------
+  const renderers = {
+    intro(el, t, d) {
+      pop(q(el, "[data-el=logo]"), t, 0.1, 0.9);
+      const logo = q(el, "[data-el=logo]");
+      logo.style.transform += ` translateY(${Math.sin(t * 1.6) * 6}px)`;
+      rise(q(el, "[data-el=brand]"), t, 0.45);
+      rise(q(el, "[data-el=tag1]"), t, 1.05);
+      rise(q(el, "[data-el=tag2]"), t, 1.3);
+      rise(q(el, "[data-el=sub]"), t, 1.85, 24);
+      const chips = el.querySelectorAll("[data-chip]");
+      q(el, "[data-el=chips]").style.opacity = 1;
+      chips.forEach((chip, i) => { rise(chip, t, 2.35 + i * 0.12, 20, 0.55); chip.style.transform += ` translateY(${Math.sin(t * 2 + i) * 3}px)`; });
+    },
+    hook(el, t, d) {
+      const dim = easeInOut(seg(t, 3.55, 3.95));
+      const starts = [0.2, 1.25, 2.55];
+      ["h1", "h2", "h3"].forEach((id, i) => {
+        const line = q(el, `[data-el=${id}]`);
+        typeLine(line, t, starts[i]);
+        line.style.opacity = String(Number(line.style.opacity) * (1 - dim));
+        line.style.transform = `translateY(${-dim * 20}px)`;
+      });
+      const punch = q(el, "[data-el=punch]");
+      pop(punch, t, 3.95, 0.75);
+      const ring = q(el, "[data-el=ring]");
+      const r = seg(t, 4.0, 5.0);
+      const size = 10 + easeOut(r) * 1500;
+      ring.style.opacity = t < 4.0 ? 0 : (1 - easeOut(r)) * 0.8;
+      ring.style.width = `${size}px`; ring.style.height = `${size}px`;
+      ring.style.margin = `${-size / 2}px 0 0 ${-size / 2}px`;
+    },
+    shot(el, t, d) {
+      // Caption: rise in, slide out left at the end.
+      const out = easeInOut(seg(t, d - 0.45, d));
+      const caption = q(el, "[data-el=caption]");
+      caption.style.transform = `translateX(${-out * 60}px)`;
+      caption.style.opacity = 1 - out;
+      rise(q(el, "[data-el=idx]"), t, 0.15, 16, 0.5);
+      rise(q(el, "[data-el=h]"), t, 0.3, 34, 0.7);
+      rise(q(el, "[data-el=p]"), t, 0.55, 30, 0.7);
+      const bar = q(el, "[data-el=bar]");
+      bar.style.opacity = 1;
+      bar.style.transform = `scaleX(${easeOut(seg(t, 0.75, 1.3))})`;
+      bar.style.transformOrigin = "left";
+
+      // Frame: tilted slide-in from the right, settles flat, then floats.
+      const frame = q(el, "[data-el=frame]");
+      const enter = easeOut(seg(t, 0.0, 0.95));
+      const floatY = Math.sin(t * 1.1) * 5;
+      const floatRot = Math.sin(t * 0.8) * 0.6;
+      frame.style.opacity = enter * (1 - out);
+      frame.style.transform = `translateX(${(1 - enter) * 160 + out * 80}px) translateY(${floatY + out * 30}px) rotateY(${(1 - enter) * -14 + floatRot}deg) scale(${0.96 + 0.04 * enter})`;
+
+      // Cursor travels to the highlight and clicks; the highlight then draws.
+      const { x, y, w, h } = el.__hl;
+      const targetX = (x + w * 0.5) / 100 * 1200;
+      const targetY = (y + h * 0.62) / 100 * 750;
+      const move = easeInOut(seg(t, 0.9, 1.7));
+      const cx = 620 + (targetX - 620) * move;
+      const cy = 560 + (targetY - 560) * move;
+      const cursor = q(el, "[data-el=cursor]");
+      const click = seg(t, 1.7, 1.85);
+      cursor.style.opacity = clamp01(seg(t, 0.85, 1.05)) * (1 - easeInOut(seg(t, 2.9, 3.3)));
+      cursor.style.transform = `translate(${cx}px, ${cy}px) scale(${1 - 0.18 * Math.sin(click * Math.PI)})`;
+      const ripple = q(el, "[data-el=ripple]");
+      const rp = seg(t, 1.75, 2.35);
+      ripple.style.left = `${targetX}px`; ripple.style.top = `${targetY}px`;
+      ripple.style.opacity = (1 - easeOut(rp)) * 0.9;
+      ripple.style.transform = `scale(${1 + easeOut(rp) * 5})`;
+
+      const hl = q(el, "[data-el=hl]");
+      const draw = easeOutBack(seg(t, 1.8, 2.35));
+      const pulse = 0.5 + 0.5 * Math.sin((t - 2.35) * 4);
+      hl.style.opacity = clamp01(seg(t, 1.8, 2.0)) * (1 - out);
+      hl.style.transform = `scale(${1.25 - 0.25 * draw})`;
+      hl.style.boxShadow = `0 0 0 ${4 + pulse * 3}px rgba(96,165,250,${0.18 + pulse * 0.14}), 0 0 ${30 + pulse * 30}px rgba(96,165,250,.55), 0 0 0 9999px rgba(0,0,0,${0.38 * clamp01(seg(t, 1.8, 2.3))})`;
+
+      // Counters.
+      for (const stat of el.querySelectorAll("[data-stat]")) {
+        const target = Number(stat.dataset.stat);
+        const p = easeOut(seg(t, 2.2, 3.3));
+        stat.style.opacity = clamp01(seg(t, 2.1, 2.5)) * (1 - out);
+        stat.style.transform = `translateY(${(1 - easeOut(seg(t, 2.1, 2.6))) * 24}px)`;
+        q(stat, "[data-el=num]").textContent = String(Math.round(target * p));
+      }
+    },
+    value(el, t, d) {
+      rise(q(el, "[data-el=v1]"), t, 0.15, 30, 0.6);
+      rise(q(el, "[data-el=v2]"), t, 0.95, 30, 0.6);
+      rise(q(el, "[data-el=v3]"), t, 1.75, 30, 0.6);
+      rise(q(el, "[data-el=v4]"), t, 2.7, 22, 0.6);
+    },
+    outro(el, t, d) {
+      pop(q(el, "[data-el=logo]"), t, 0.1, 0.9);
+      q(el, "[data-el=logo]").style.transform += ` translateY(${Math.sin(t * 1.4) * 6}px)`;
+      rise(q(el, "[data-el=brand]"), t, 0.4);
+      rise(q(el, "[data-el=sub]"), t, 0.9, 24);
+      pop(q(el, "[data-el=cta]"), t, 1.5, 0.6);
+      const glow = 0.5 + 0.5 * Math.sin(t * 2.2);
+      q(el, "[data-el=ctabtn]").style.boxShadow = `0 20px 60px rgba(96,165,250,${0.2 + glow * 0.3}), 0 0 ${20 + glow * 30}px rgba(96,165,250,${0.25 + glow * 0.25})`;
+      rise(q(el, "[data-el=l1]"), t, 2.1, 20);
+      rise(q(el, "[data-el=l2]"), t, 2.35, 20);
+    },
+  };
+
+  // ---- the only entry point ------------------------------------------------
+  window.__seek = (ms) => {
+    const t = ms / 1000;
+    document.getElementById("glowA").style.transform = `translate(${Math.sin(t * 0.21) * 90}px, ${Math.cos(t * 0.17) * 70}px)`;
+    document.getElementById("glowB").style.transform = `translate(${Math.cos(t * 0.15) * 110}px, ${Math.sin(t * 0.19) * 60}px)`;
+    renderParticles(t);
+    document.getElementById("progress").style.width = `${(t / window.__duration) * 1920}px`;
+
+    for (const scene of SCENES) {
+      const el = document.getElementById(scene.id);
+      const local = t - scene.start;
+      const d = scene.end - scene.start;
+      if (local < 0 || local >= d) { el.style.opacity = 0; el.style.display = "none"; continue; }
+      el.style.display = "block";
+      const fadeIn = easeOut(seg(local, 0, 0.35));
+      const fadeOut = 1 - easeInOut(seg(local, d - 0.4, d));
+      el.style.opacity = fadeIn * fadeOut;
+      (renderers[scene.id] || renderers.shot)(el, local, d);
+    }
+    document.getElementById("fade").style.opacity = easeInOut(seg(t, window.__duration - 0.9, window.__duration - 0.05));
+  };
+
+  window.__ready = Promise.all([
+    document.fonts ? document.fonts.ready : Promise.resolve(),
+    ...Array.from(document.images).map((img) => img.complete ? Promise.resolve() : new Promise((r) => { img.onload = r; img.onerror = r; })),
+  ]);
+  window.__seek(0);
+</script>
+</body>
+</html>
