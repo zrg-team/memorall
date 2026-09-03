@@ -146,6 +146,27 @@ const openSession = async (
  * otherwise repeat its whole connect-and-fall-back sequence on every single
  * message, which is the slowest possible way to contribute nothing.
  */
+/**
+ * Close cached sessions that reach any of `servers` under a different key: a
+ * rotated credential or a re-minted URL for the same server name. The stale
+ * session could not be served to a run any more (the key no longer matches),
+ * but it kept a socket open with the old credential until its idle timer ran.
+ */
+const evictSessionsSharing = (servers: MCPServerConfig[]): void => {
+	const names = new Set(servers.map((server) => server.name));
+	for (const [key, session] of mcpSessions) {
+		const cachedNames = (JSON.parse(key) as Array<{ name: string }>).map(
+			(entry) => entry.name,
+		);
+		if (!cachedNames.some((name) => names.has(name))) continue;
+		if (session.idleTimer) clearTimeout(session.idleTimer);
+		mcpSessions.delete(key);
+		void session.manager.close().catch((error) => {
+			logError("[MCP_FEATURE] Failed to close a superseded MCP session:", error);
+		});
+	}
+};
+
 const getSessionTools = async (
 	servers: MCPServerConfig[],
 ): Promise<ReturnType<typeof adaptMCPTool>[]> => {
@@ -155,6 +176,7 @@ const getSessionTools = async (
 		touchSession(key, cached);
 		return cached.tools;
 	}
+	evictSessionsSharing(servers);
 
 	let session: CachedMCPSession;
 	try {
@@ -175,16 +197,22 @@ const getSessionTools = async (
 	return session.tools;
 };
 
+/**
+ * Names only. Every tool's description already reaches the model once, in
+ * the tool schema; repeating it here doubled the token cost of each MCP
+ * server on every request (a Composio router tool alone describes itself in
+ * several hundred tokens) without telling the model anything new.
+ */
 const buildSystemPrompt = (
-	toolNames: Array<{ name: string; description: string }>,
+	toolNames: Array<{ name: string }>,
 	serverNames: string[],
 ): string => {
 	const serverList = serverNames.join(", ");
-	const toolList = toolNames
-		.map((t) => `- ${t.name}: ${t.description || "(no description)"}`)
-		.join("\n");
+	const toolList = toolNames.map((t) => `- ${t.name}`).join("\n");
 	return `# MCP TOOLS (${serverList})
 You have access to external tools provided via MCP servers: ${serverList}.
+Their names are prefixed with the server they belong to; each tool's
+definition describes what it does.
 
 ## AVAILABLE MCP TOOLS
 ${toolList || "(no tools loaded)"}

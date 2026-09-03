@@ -133,3 +133,29 @@ export const COMPOSIO_SECRET_KEY = "composio_config";
 
 /** Composio scopes connected accounts per user id; one local user, one id. */
 export const COMPOSIO_USER_ID = "memorall-local";
+
+/**
+ * The fixed meta-tools every Composio tool-router session exposes, whatever
+ * apps it reaches. Each carries a long description the model pays for on every
+ * request, so which of them an agent sees is worth choosing.
+ */
+export const COMPOSIO_ROUTER_TOOLS = [
+	"COMPOSIO_SEARCH_TOOLS",
+	"COMPOSIO_GET_TOOL_SCHEMAS",
+	"COMPOSIO_MULTI_EXECUTE_TOOL",
+	"COMPOSIO_MANAGE_CONNECTIONS",
+	"COMPOSIO_REMOTE_BASH_TOOL",
+	"COMPOSIO_REMOTE_WORKBENCH",
+] as const;
+
+/**
+ * The three that make up the search → schema → execute loop, which is all an
+ * agent needs to reach any app tool. The other three are opt-in: connections
+ * are managed from the Connections page rather than by the agent, and the
+ * remote sandbox pair is destructive, heavy to describe, and rarely wanted.
+ */
+export const COMPOSIO_RECOMMENDED_TOOLS = [
+	"COMPOSIO_SEARCH_TOOLS",
+	"COMPOSIO_GET_TOOL_SCHEMAS",
+	"COMPOSIO_MULTI_EXECUTE_TOOL",
+] as const;

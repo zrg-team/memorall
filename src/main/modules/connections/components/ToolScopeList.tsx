@@ -18,6 +18,11 @@ interface ToolScopeListProps {
 	/** Selected exposed names. Empty array means "everything". */
 	value: string[];
 	onChange: (next: string[]) => void;
+	/**
+	 * Exposed names of a curated minimal set, when the server has one (the
+	 * Composio router's search → schema → execute trio). Shown as a preset.
+	 */
+	recommended?: string[];
 	className?: string;
 }
 
@@ -27,6 +32,7 @@ export const ToolScopeList: React.FC<ToolScopeListProps> = ({
 	tools,
 	value,
 	onChange,
+	recommended,
 	className,
 }) => {
 	const { t } = useTranslation("connections");
@@ -35,6 +41,16 @@ export const ToolScopeList: React.FC<ToolScopeListProps> = ({
 
 	const selected = React.useMemo(() => new Set(value), [value]);
 	const allSelected = value.length === 0 || value.length === tools.length;
+
+	const recommendedNames = React.useMemo(() => {
+		if (!recommended?.length) return [];
+		const known = new Set(tools.map((tool) => tool.exposedName));
+		return recommended.filter((name) => known.has(name));
+	}, [recommended, tools]);
+	const recommendedSelected =
+		recommendedNames.length > 0 &&
+		value.length === recommendedNames.length &&
+		recommendedNames.every((name) => selected.has(name));
 
 	const readOnlyNames = React.useMemo(
 		() => tools.filter((tool) => tool.readOnly).map((tool) => tool.exposedName),
@@ -86,6 +102,20 @@ export const ToolScopeList: React.FC<ToolScopeListProps> = ({
 					/>
 				</div>
 				<div className="flex items-center gap-1.5">
+					{recommendedNames.length > 0 ? (
+						<button
+							type="button"
+							onClick={() => onChange(recommendedNames)}
+							className={cn(
+								"rounded-full border px-2 py-0.5 text-[10px] font-semibold transition-colors",
+								recommendedSelected
+									? "border-blue-500/30 bg-blue-500/10 text-blue-500"
+									: "border-border bg-muted/50 text-muted-foreground hover:text-foreground",
+							)}
+						>
+							{t("tools.presetRecommended")} · {recommendedNames.length}
+						</button>
+					) : null}
 					<button
 						type="button"
 						onClick={() => onChange(readOnlyNames)}

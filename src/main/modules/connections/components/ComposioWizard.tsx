@@ -28,8 +28,10 @@ import {
 	type ComposioToolkit,
 } from "@/services/composio";
 import {
+	COMPOSIO_RECOMMENDED_TOOLS,
 	COMPOSIO_SECRET_KEY,
 	connectionSecretRef,
+	toServerKey,
 	type ConnectionApp,
 	type McpConnection,
 } from "@/services/mcp-connections";
@@ -434,6 +436,17 @@ export const ComposioWizard: React.FC<ComposioWizardProps> = ({
 			composio: { sessionId: session.sessionId, toolkits },
 			updatedAt: now,
 		} as McpConnection;
+
+		// A connection minted for the first time starts on the router's
+		// recommended trio (search → schema → execute); the other three
+		// meta-tools are opt-in from the Tools tab. A record that already had a
+		// session keeps whatever scope the user chose for it.
+		if (!record?.composio?.sessionId && !record?.toolAllowlist) {
+			const serverKey = toServerKey(connection);
+			connection.toolAllowlist = COMPOSIO_RECOMMENDED_TOOLS.map(
+				(slug) => `${serverKey}__${slug}`,
+			);
+		}
 
 		await save(connection);
 		await discover(connection.id);

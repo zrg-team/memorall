@@ -631,3 +631,52 @@ describe("composioPreloadTools", () => {
 		expect(composioPreloadTools(undefined)).toEqual([]);
 	});
 });
+
+describe("Composio router tool scope", () => {
+	const routerTool = (slug: string) => `composio__${slug}`;
+	const recommended = [
+		"COMPOSIO_SEARCH_TOOLS",
+		"COMPOSIO_GET_TOOL_SCHEMAS",
+		"COMPOSIO_MULTI_EXECUTE_TOOL",
+	].map(routerTool);
+
+	it("honours the connection's choice of router meta-tools", async () => {
+		// The six router tools are named the same whatever app the session
+		// reaches, so unlike app scope (a session property) which of them the
+		// model sees IS expressible by name — and the Recommended preset relies
+		// on it to drop the three heavy, rarely wanted ones.
+		listConnections.mockResolvedValue([
+			composioConnection({ toolAllowlist: recommended }),
+		]);
+		loadSecret.mockResolvedValue(JSON.stringify({ apiKey: "ak_live_123" }));
+
+		const result = await resolveConnections([
+			{ connectionId: "c1", appIds: ["gmail", "googlecalendar", "github"] },
+		]);
+
+		expect(result.servers).toHaveLength(1);
+		expect(result.toolAllowlist).toEqual(recommended);
+	});
+
+	it("lets an agent's own tool scope override the connection preset", async () => {
+		listConnections.mockResolvedValue([
+			composioConnection({ toolAllowlist: recommended }),
+		]);
+		loadSecret.mockResolvedValue(JSON.stringify({ apiKey: "ak_live_123" }));
+		createMcpSession.mockResolvedValue({
+			sessionId: "trs_direct",
+			url: "https://backend.composio.dev/tool_router/trs_direct/mcp",
+			preloadedTools: ["GITHUB_GET_A_REPOSITORY"],
+		});
+
+		const result = await resolveConnections([
+			{
+				connectionId: "c1",
+				appIds: ["github"],
+				toolAllowlist: ["composio__GITHUB_GET_A_REPOSITORY"],
+			},
+		]);
+
+		expect(result.toolAllowlist).toEqual(["composio__GITHUB_GET_A_REPOSITORY"]);
+	});
+});
