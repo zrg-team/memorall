@@ -14,6 +14,7 @@ import { Badge } from "@/main/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { useConnectionsStore } from "@/main/stores/connections";
 import {
+	COMPOSIO_RECOMMENDED_TOOLS,
 	findAgentsUsingConnection,
 	toServerKey,
 	type ConnectionApp,
@@ -346,6 +347,13 @@ export const ConnectionDetail: React.FC<{
 							<ToolScopeList
 								tools={tools}
 								value={connection.toolAllowlist ?? []}
+								recommended={
+									connection.kind === "composio"
+										? COMPOSIO_RECOMMENDED_TOOLS.map(
+												(slug) => `${toServerKey(connection)}__${slug}`,
+											)
+										: undefined
+								}
 								onChange={(next) =>
 									void save({
 										...connection,
