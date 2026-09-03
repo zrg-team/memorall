@@ -31,3 +31,8 @@ runtime, activities, embeddings, database) để chọn lại khi cần.
 yarn build:extension:chrome
 node .claude/skills/run-memorall/driver.cjs open   # hoặc script capture trong docs/store/unikorn/capture.cjs
 ```
+
+## Video
+
+`video/memorall-promo.mp4` — 60 giây, 1920×1080, có nhạc nền (kèm bản `-silent`). Kịch bản, cách
+dựng lại và chỉnh lời xem `video/README.md`.
