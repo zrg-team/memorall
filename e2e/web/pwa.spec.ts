@@ -65,7 +65,11 @@ test("serves the whole app from cache with the network switched off", async ({
 	page,
 	context,
 }) => {
-	test.setTimeout(240_000);
+	// Boot alone can spend 90s on the ready heading and 60s on the cache poll, and
+	// the update and reload legs each carry their own minute. The old 240s budget
+	// was smaller than the waits below, so a slow runner ran out of time mid
+	// assertion instead of either passing or failing on its merits.
+	test.setTimeout(420_000);
 	await bootApplication(page);
 
 	await context.setOffline(true);
@@ -94,7 +98,11 @@ test("serves the whole app from cache with the network switched off", async ({
 test("announces a new build in the right panel and reloads into it", async ({
 	page,
 }) => {
-	test.setTimeout(240_000);
+	// Boot alone can spend 90s on the ready heading and 60s on the cache poll, and
+	// the update and reload legs each carry their own minute. The old 240s budget
+	// was smaller than the waits below, so a slow runner ran out of time mid
+	// assertion instead of either passing or failing on its merits.
+	test.setTimeout(420_000);
 	const deployed = await readFile(serviceWorkerPath, "utf8");
 	const buildId = deployed.match(/const BUILD_ID = "([^"]+)"/)?.[1];
 	expect(buildId).toBeTruthy();
@@ -127,7 +135,38 @@ test("announces a new build in the right panel and reloads into it", async ({
 		await expect(reloadAction).toBeVisible({ timeout: 30_000 });
 		await expect(reloadAction).toContainText("New version ready");
 
+		// The reload is asynchronous. applyAppUpdate posts SKIP_WAITING and waits
+		// for the new worker to take control, falling back to a 3s handover
+		// timeout, so the click returns long before the document is replaced.
+		//
+		// Nothing else below proves the navigation happened: the new cache key is
+		// written by the installing worker, and the ready heading is on the page we
+		// are leaving as much as the one we are going to. So mark this document and
+		// wait for the mark to disappear. Without it the assertions race the
+		// navigation, and on a slow runner they run against the old page, where the
+		// button is legitimately still visible, and then block on the pending
+		// navigation until the test runs out of time.
+		await page.evaluate(() => {
+			(
+				window as unknown as { __memorallPreReload?: true }
+			).__memorallPreReload = true;
+		});
 		await reloadAction.click();
+		await expect
+			.poll(
+				() =>
+					page
+						.evaluate(
+							() =>
+								(window as unknown as { __memorallPreReload?: true })
+									.__memorallPreReload === undefined,
+						)
+						// Evaluating mid-navigation throws; that is not an answer yet.
+						.catch(() => false),
+				{ timeout: 60_000 },
+			)
+			.toBe(true);
+
 		await expect
 			.poll(
 				() => page.evaluate(() => caches.keys()).catch(() => [] as string[]),
