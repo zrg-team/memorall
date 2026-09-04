@@ -729,7 +729,7 @@ export const awaitWebChallengeResolution = async ({
 		WEB_SESSIONS.get(sessionId) ?? (await recoverSession(sessionId));
 	if (!session?.block) return { outcome: "skip" };
 	if (session.mode === "iframe") return { outcome: "skip" };
-	if (!canPromptForChallenge()) return { outcome: "skip" };
+	if (!(await canPromptForChallenge())) return { outcome: "skip" };
 
 	const now = Date.now();
 	const release = holdWebSession(sessionId);

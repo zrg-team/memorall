@@ -12,7 +12,8 @@
  * things:
  *
  * - Outbound, offscreen to page, goes through `platform.sessionStore`. On the
- *   extension that is `chrome.storage.session`, whose change events reach every
+ *   extension that is the browser's session storage area, whose change events
+ *   reach every
  *   extension context; on desktop the whole app shares one context and one
  *   in-memory store. Routing through storage means the prompt outlives the page
  *   that displays it, so closing and reopening the side panel re-reads the same
@@ -23,8 +24,8 @@
  *   even while the chat job is parked, because the runtime processor handles job
  *   dispatch fire and forget rather than through its serialized drain.
  *
- * Everything written to storage must be a plain JSON literal. `chrome.storage`
- * structured-clones its values and the harness runs `assertJsonValue` over run
+ * Everything written to storage must be a plain JSON literal. The extension
+ * store structured-clones its values and the harness runs `assertJsonValue` over run
  * payloads, so a class instance or a cyclic reference would throw.
  */
 
@@ -134,7 +135,7 @@ const readPromptList = async (): Promise<WebChallengePrompt[]> => {
 		);
 		return Array.isArray(raw) ? raw.filter(isWebChallengePrompt) : [];
 	} catch (error) {
-		// A content script cannot reach chrome.storage.session at all. Callers gate
+		// A content script cannot reach the session storage area at all. Callers gate
 		// on `canPromptForChallenge` first, but storage must never break a web tool
 		// that was otherwise fine.
 		logError("Web challenge prompt read failed:", error);
@@ -159,23 +160,19 @@ const writePromptList = async (
 /**
  * Whether this context can run the handoff at all.
  *
- * The embedded chat runs the same pipeline from an `<all_urls>` content script,
- * where `chrome.storage.session` is trusted-contexts-only and throws rather than
- * degrading. Widening its access level would expose every session record to every
- * page, so the feature stays off there and the tool reports the wall the way it
- * does today.
+ * Probed by actually reading the store rather than by asking which surface this
+ * is. The embedded chat runs the same pipeline from an `<all_urls>` content
+ * script, where the session area is trusted-contexts-only and throws on access
+ * instead of degrading; a plain read is the one honest way to find that out
+ * without naming a browser API in shared product code. Widening the access level
+ * would expose every session record to every page, so the feature simply stays
+ * off there and the tool reports the wall the way it did before.
  */
-export const canPromptForChallenge = (): boolean => {
+export const canPromptForChallenge = async (): Promise<boolean> => {
+	if (typeof platform.sessionStore?.subscribe !== "function") return false;
 	try {
-		if (typeof platform.sessionStore?.subscribe !== "function") return false;
-		const chromeApi = (globalThis as { chrome?: { extension?: unknown } })
-			.chrome;
-		if (!chromeApi) return true;
-		// Content scripts see `chrome` but not `chrome.storage.session`.
-		const storage = (
-			globalThis as { chrome?: { storage?: { session?: unknown } } }
-		).chrome?.storage;
-		return Boolean(storage?.session);
+		await platform.sessionStore.get<unknown[]>(WEB_CHALLENGE_PROMPTS_KEY);
+		return true;
 	} catch {
 		return false;
 	}
