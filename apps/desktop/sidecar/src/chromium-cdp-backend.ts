@@ -2,17 +2,17 @@ import type { BackendSession, BrowserBackend } from "./browser-backend";
 import { BackendOpenError } from "./browser-backend";
 import {
 	BrowserAutomationError,
-	checkedHttpUrl,
-	pngDimensions,
-	requiredNumber,
-	requiredString,
 	type BrowserCommand,
 	type BrowserMode,
 	type BrowserSnapshot,
+	checkedHttpUrl,
 	type EngineStatus,
+	pngDimensions,
+	requiredNumber,
+	requiredString,
 	withTimeoutSignal,
 } from "./browser-runtime-types";
-import { ManagedBrowserOsRuntime } from "./managed-browseros-runtime";
+import type { ManagedBrowserOsRuntime } from "./managed-browseros-runtime";
 
 type CdpMessage = {
 	id?: number;
@@ -336,6 +336,25 @@ export class ChromiumCdpBackend implements BrowserBackend {
 			}
 			await this.close(session).catch(() => {});
 			throw error;
+		} finally {
+			timed.dispose();
+		}
+	}
+
+	async reload(
+		session: BackendSession,
+		timeoutMs: number,
+		maxHtmlChars: number,
+		signal?: AbortSignal,
+	): Promise<BrowserSnapshot> {
+		const page = this.page(session);
+		const timed = withTimeoutSignal(timeoutMs, signal);
+		try {
+			await page.send("Page.reload", { ignoreCache: false }, timed.signal);
+			await this.waitForDocument(page, timed.signal);
+			const snapshot = await this.snapshot(session, maxHtmlChars, timed.signal);
+			session.url = snapshot.url;
+			return snapshot;
 		} finally {
 			timed.dispose();
 		}

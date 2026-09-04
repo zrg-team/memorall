@@ -65,7 +65,8 @@ export type BrowserCommand = Record<string, unknown> & {
 		| "wait-selector"
 		| "close"
 		| "screenshot"
-		| "fetch-image";
+		| "fetch-image"
+		| "reload";
 	sessionId: string;
 };
 
@@ -128,6 +129,7 @@ export const parseBrowserCommand = (value: unknown): BrowserCommand => {
 			"close",
 			"screenshot",
 			"fetch-image",
+			"reload",
 		].includes(command)
 	) {
 		throw new BrowserAutomationError(

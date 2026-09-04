@@ -79,6 +79,12 @@ export class WebBrowserOperationsHandler implements ProcessHandler<BaseJob> {
 			case "session.bringToFront":
 				await webBrowserService.focusSession(payload.payload.sessionId);
 				return { broughtToFront: true };
+			case "session.reload":
+				return webBrowserService.reloadSession(payload.payload);
+			case "challenge.resolve":
+				return webBrowserService.resolveChallenge(payload.payload);
+			case "challenge.cancel":
+				return webBrowserService.cancelChallenges(payload.payload);
 			case "session.disposeActive":
 				await webBrowserService.disposeActiveSession(payload.payload?.reason);
 				return { disposed: true };

@@ -458,6 +458,11 @@
 		"continuePrompt": "Tôi đã hoàn tất xác minh trong trình duyệt. Hãy tiếp tục công việc đang dở.",
 		"missingTab": "Phiên này không có tab trình duyệt để bàn giao.",
 		"missingSession": "Kết quả này không có phiên để bàn giao.",
-		"missingUrl": "Kết quả này không có URL để mở lại."
+		"missingUrl": "Kết quả này không có URL để mở lại.",
+		"reloadAndCheck": "Tải lại & kiểm tra",
+		"stillBlocked": "Vẫn bị chặn. Hãy giải xác minh trong trình duyệt rồi thử lại.",
+		"reloadCleared": "Trang đã tải. Đang tiếp tục từ chỗ tác nhân dừng lại.",
+		"stopWaiting": "Dừng chờ",
+		"expired": "Yêu cầu này đã hết hạn. Tác nhân đã tiếp tục."
 	}
 }

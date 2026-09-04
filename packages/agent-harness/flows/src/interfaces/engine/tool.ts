@@ -1,6 +1,6 @@
-import { z } from "zod";
-import type { ChatCompletionToolMessageParam } from "./messages.js";
+import type { z } from "zod";
 import type { FlowRuntimeVars } from "../../context/runtime-context.js";
+import type { ChatCompletionToolMessageParam } from "./messages.js";
 
 // Activate ServiceRegistry (side-effect — enables global augmentation)
 import "../services/services.js";
@@ -49,6 +49,13 @@ export type ToolResultValue = ToolMessageContent | ToolExecutionResult;
 export interface ToolExecutionContext<TState = unknown> {
 	state: TState;
 	runtime?: FlowRuntimeVars;
+	/**
+	 * The id of the call being executed.
+	 *
+	 * A tool that has to ask the user something needs this so the chat can attach
+	 * its card to the exact call that is waiting rather than to the tool by name.
+	 */
+	toolCallId?: string;
 }
 
 export const toolMessageContentToText = (

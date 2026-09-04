@@ -54,6 +54,67 @@ export const webBlockFields = (
 	};
 };
 
+/**
+ * How many times a wall may be re-checked before the tool gives up.
+ *
+ * A user who cannot clear it in three tries is not going to, and each round
+ * costs another full wait.
+ */
+const MAX_CHALLENGE_ROUNDS = 3;
+
+/**
+ * Park the tool while the user clears a bot wall, then re-check the page.
+ *
+ * The retry is a session refresh rather than a fresh call of the tool, because
+ * the user solves the challenge in the session's own tab: once solved, that tab
+ * holds the real content, and every snapshot recomputes the block signal from
+ * scratch, so a cleared wall clears itself. Re-running the tool would instead
+ * open a second tab and orphan the one the user just solved.
+ *
+ * Returns the session unchanged whenever the handoff cannot help, so the caller
+ * always ends up with something to report:
+ *
+ * - the page is not a wall,
+ * - the backend has no way to ask (a content script, or a harness backend
+ *   without the capability),
+ * - the session is an offscreen iframe, which has no window of its own to raise,
+ *   so the button would be offered and then fail,
+ * - or the user skipped, cancelled, or ran out of time.
+ */
+export const resolveWebBlock = async (
+	services: WebToolServices,
+	session: WebSession,
+	context: { tool: string; toolCallId?: string },
+): Promise<WebSession> => {
+	const webBrowser = services.webBrowser;
+	if (!webBrowser?.awaitChallengeResolution) return session;
+
+	let current = session;
+	for (let round = 0; round < MAX_CHALLENGE_ROUNDS; round += 1) {
+		if (!current.block) return current;
+		if (current.mode === "iframe") return current;
+
+		const resolution = await webBrowser.awaitChallengeResolution({
+			sessionId: current.id,
+			tool: context.tool,
+			toolCallId: context.toolCallId,
+		});
+		if (resolution.outcome !== "retry") return current;
+
+		try {
+			current = await webBrowser.refreshSession({
+				sessionId: resolution.sessionId ?? current.id,
+			});
+		} catch {
+			// The tab went away while the user was working on it. Report the wall we
+			// already know about rather than failing the whole tool call.
+			return current;
+		}
+	}
+
+	return current;
+};
+
 const NON_READABLE_ELEMENT_PATTERN =
 	/<(script|style|noscript|template)\b[^>]*>[\s\S]*?<\/\1>/gi;
 

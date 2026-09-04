@@ -1,8 +1,30 @@
+import { platform } from "@/platform/current";
+import {
+	closeAllWebSessionsExceptLatest,
+	closeWebSession,
+	disposeActiveWebSession,
+	fetchRenderedFallback,
+	focusWebSession,
+	getActiveWebSessionInfo,
+	getAllWebSessionsInfo,
+	getOrOpenWebSession,
+	getWebSession,
+	openWebSession,
+	performDomAction,
+	queryDomElements,
+	refreshWebSession,
+	reloadWebSession,
+	searchInSessionHtml,
+	waitForDomSelector,
+	waitForPageRender,
+} from "@/services/flows-integrations/tools/web/web-tool-registry";
 import { logInfo } from "@/utils/logger";
-import { normalizeWebMaxHtmlChars } from "./max-html-chars";
+import { cancelChallenges, resolveChallenge } from "./challenge-intervention";
 import type { IWebBrowserService } from "./interfaces/web-browser-service.interface";
+import { normalizeWebMaxHtmlChars } from "./max-html-chars";
 import type {
 	ActiveWebSessionInfo,
+	WebCancelChallengesArgs,
 	WebFetchRenderedFallbackArgs,
 	WebFetchRenderedFallbackResult,
 	WebGetOrOpenSessionArgs,
@@ -12,6 +34,8 @@ import type {
 	WebPerformDomActionArgs,
 	WebQueryDomElementsArgs,
 	WebRefreshSessionArgs,
+	WebReloadSessionArgs,
+	WebResolveChallengeArgs,
 	WebSearchInSessionArgs,
 	WebSearchMatch,
 	WebSession,
@@ -23,24 +47,6 @@ import type {
 	WebDomElementInfo,
 	WebElementRecord,
 } from "./web-browser-protocol";
-import {
-	closeAllWebSessionsExceptLatest,
-	closeWebSession,
-	focusWebSession,
-	disposeActiveWebSession,
-	fetchRenderedFallback,
-	getActiveWebSessionInfo,
-	getAllWebSessionsInfo,
-	getOrOpenWebSession,
-	getWebSession,
-	openWebSession,
-	performDomAction,
-	queryDomElements,
-	refreshWebSession,
-	searchInSessionHtml,
-	waitForDomSelector,
-	waitForPageRender,
-} from "@/services/flows-integrations/tools/web/web-tool-registry";
 
 export class WebBrowserServiceMain implements IWebBrowserService {
 	private static instance: WebBrowserServiceMain;
@@ -118,6 +124,42 @@ export class WebBrowserServiceMain implements IWebBrowserService {
 	async focusSession(sessionId: string): Promise<void> {
 		await this.initialize();
 		await focusWebSession(sessionId);
+	}
+
+	async reloadSession(args: WebReloadSessionArgs): Promise<WebSession> {
+		await this.initialize();
+		return reloadWebSession(
+			args.sessionId,
+			normalizeWebMaxHtmlChars(args.maxHtmlChars),
+			args.timeoutMs,
+		);
+	}
+
+	/**
+	 * Answer a parked wait.
+	 *
+	 * Releasing the desktop pause happens here rather than in the React handler,
+	 * so no future caller can forget it: takeover marks the tab paused in the
+	 * sidecar, and every automation command on it throws until it is resumed, so
+	 * a retry would fail the instant it started. No-op on the extension, which
+	 * has no managed browser to pause.
+	 */
+	async resolveChallenge(
+		args: WebResolveChallengeArgs,
+	): Promise<{ resolved: boolean }> {
+		await this.initialize();
+		const tabId = args.decision.tabId;
+		if (args.decision.outcome === "retry" && typeof tabId === "number") {
+			await platform.browserAutomation?.resume(tabId).catch(() => {});
+		}
+		return { resolved: resolveChallenge(args.promptId, args.decision) };
+	}
+
+	async cancelChallenges(
+		args: WebCancelChallengesArgs,
+	): Promise<{ cancelled: number }> {
+		await this.initialize();
+		return { cancelled: cancelChallenges(args) };
 	}
 
 	async disposeActiveSession(reason?: string): Promise<void> {

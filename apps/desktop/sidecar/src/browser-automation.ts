@@ -3,31 +3,31 @@ import {
 	type BackendSession,
 	type BrowserBackend,
 } from "./browser-backend";
-import { BrowserOsBackend } from "./browseros-backend";
-import { ChromiumCdpBackend } from "./chromium-cdp-backend";
-import { DirectBrowserBackend } from "./direct-browser-backend";
-import { LightpandaBackend } from "./lightpanda-backend";
-import { ManagedBrowserOsRuntime } from "./managed-browseros-runtime";
 import {
 	BrowserAutomationError,
-	parseBrowserCommand,
-	requiredNumber,
-	requiredString,
-	responseError,
-	WEB_BROWSER_COMMAND_SOURCE,
 	type BrowserAutomationStatus,
 	type BrowserCommand,
 	type BrowserEngine,
 	type BrowserMode,
 	type BrowserSettings,
 	type BrowserSnapshot,
+	parseBrowserCommand,
+	requiredNumber,
+	requiredString,
+	responseError,
+	WEB_BROWSER_COMMAND_SOURCE,
 } from "./browser-runtime-types";
+import { BrowserOsBackend } from "./browseros-backend";
+import { ChromiumCdpBackend } from "./chromium-cdp-backend";
+import { DirectBrowserBackend } from "./direct-browser-backend";
+import { LightpandaBackend } from "./lightpanda-backend";
+import { ManagedBrowserOsRuntime } from "./managed-browseros-runtime";
 
+export type { BrowserAutomationStatus } from "./browser-runtime-types";
 export {
 	BrowserAutomationError,
 	parseBrowserCommand,
 } from "./browser-runtime-types";
-export type { BrowserAutomationStatus } from "./browser-runtime-types";
 
 interface LogicalSession {
 	id: number;
@@ -216,6 +216,8 @@ export class BrowserAutomationManager {
 					return await this.screenshot(request, signal);
 				case "fetch-image":
 					return await this.fetchImage(request, signal);
+				case "reload":
+					return await this.reload(request, signal);
 				case "close":
 					return await this.close(request);
 			}
@@ -361,6 +363,38 @@ export class BrowserAutomationManager {
 	private withDomCapability(snapshot: BrowserSnapshot): BrowserSnapshot {
 		if (snapshot.domAccessible || !this.fullLaneReady) return snapshot;
 		return { ...snapshot, domAccessible: true };
+	}
+
+	/**
+	 * Re-fetch the page behind a session.
+	 *
+	 * Paused sessions are allowed on purpose: the user presses Reload precisely
+	 * while they are holding the tab after a takeover, and every other automation
+	 * command on a paused tab is refused.
+	 */
+	private async reload(request: BrowserCommand, signal?: AbortSignal) {
+		let session = this.session(requiredNumber(request, "tabId"), true);
+		if (!session.backend.reload) session = await this.promote(session, signal);
+		if (!session.backend.reload) {
+			throw new BrowserAutomationError(
+				"RELOAD_UNAVAILABLE",
+				"This browser engine cannot reload a page.",
+			);
+		}
+		const snapshot = await session.backend.reload(
+			session.backendSession,
+			requiredNumber(request, "timeoutMs"),
+			requiredNumber(request, "maxHtmlChars"),
+			signal,
+		);
+		session.url = snapshot.url;
+		return {
+			source: WEB_BROWSER_COMMAND_SOURCE,
+			command: "reload",
+			success: true,
+			sessionId: request.sessionId,
+			snapshot: this.withDomCapability(snapshot),
+		};
 	}
 
 	private async snapshotResponse(

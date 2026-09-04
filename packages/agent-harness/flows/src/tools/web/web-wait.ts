@@ -4,10 +4,11 @@ import { toolRegistry } from "../../registries/tool-registry.js";
 import {
 	createDefaultWebErrorResult,
 	createWebResult,
-	truncateContent,
 	requireWebBrowserService,
-	webBlockFields,
+	resolveWebBlock,
+	truncateContent,
 	type WebToolServices,
+	webBlockFields,
 } from "./web-tool-utils.js";
 
 const TOOL_NAME = "web_wait" as const;
@@ -62,7 +63,7 @@ export const createWebWaitTool: ToolFactory<Input, WebToolServices> = (
 	description:
 		"Wait for page render stability, selector state, or a fixed time in a web session.",
 	schema,
-	execute: async (input) => {
+	execute: async (input, context) => {
 		const webBrowser = requireWebBrowserService(services);
 		let disposableSessionId: string | undefined;
 		const maxChars = 160_000;
@@ -124,11 +125,21 @@ export const createWebWaitTool: ToolFactory<Input, WebToolServices> = (
 					maxHtmlChars: maxChars,
 				});
 			}
-			const latestSession = await webBrowser.refreshSession({
+			const settled = await webBrowser.refreshSession({
 				sessionId: session.id,
 				maxHtmlChars: maxChars,
 				timeoutMs,
 			});
+
+			// A wait that settles on a bot wall is the clearest case of all: the page
+			// looked stable precisely because the wall is static.
+			const latestSession = await resolveWebBlock(services, settled, {
+				tool: TOOL_NAME,
+				toolCallId: context?.toolCallId,
+			});
+			if (latestSession.block) {
+				disposableSessionId = undefined;
+			}
 
 			const output = createWebResult({
 				actionType: "web_wait",

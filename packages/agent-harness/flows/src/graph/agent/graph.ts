@@ -1,45 +1,45 @@
-import { END, START, StateGraph } from "@langchain/langgraph";
 import type { LangGraphRunnableConfig } from "@langchain/langgraph";
-import {
-	AgentAnnotation,
-	DEFAULT_AGENT_SYSTEM_PROMPT,
-	type AgentState,
-	type ToolFailureStreak,
-} from "./state.js";
-import {
-	buildResponseFromOutputMessages,
-	createOutputMessageChunks,
-	GraphBase,
-	normalizeChatMessages,
-	type CombinedTool,
-	type GraphTool,
-} from "../graph.base.js";
+import { END, START, StateGraph } from "@langchain/langgraph";
+import { getFlowRunLifecycle } from "../../context/run-lifecycle.js";
+import { getFlowRuntimeVars } from "../../context/runtime-context.js";
+import { findEnabledStepByName } from "../../interfaces/config/flow-config.js";
 import type { CombinedServices } from "../../interfaces/engine/tool.js";
 import {
 	extractToolResult,
 	parseToolInput,
 } from "../../interfaces/engine/tool.js";
-import { getFlowRuntimeVars } from "../../context/runtime-context.js";
-import { getFlowRunLifecycle } from "../../context/run-lifecycle.js";
-import { streamAssistantTurn } from "./assistant-turn.js";
-import {
-	correctionsExhausted,
-	findToolArgumentProblem,
-	nextCorrectionCount,
-} from "./tool-arguments.js";
-import { logError, logInfo } from "../../logging/logger.js";
-import {
-	graphRegistry,
-	FEATURE_SLOT,
-} from "../../registries/graph-registry.js";
-import type { BaseGraph } from "../../registries/graph-registry.js";
-import { findEnabledStepByName } from "../../interfaces/config/flow-config.js";
-import type { FlowRegistrySet } from "../../registries/registry-set.js";
 import {
 	DEFAULT_AGENT_MAX_ITERATIONS,
 	normalizeAgentMaxIterations,
 	recursionLimitForIterations,
 } from "../../limits.js";
+import { logError, logInfo } from "../../logging/logger.js";
+import type { BaseGraph } from "../../registries/graph-registry.js";
+import {
+	FEATURE_SLOT,
+	graphRegistry,
+} from "../../registries/graph-registry.js";
+import type { FlowRegistrySet } from "../../registries/registry-set.js";
+import {
+	buildResponseFromOutputMessages,
+	type CombinedTool,
+	createOutputMessageChunks,
+	GraphBase,
+	type GraphTool,
+	normalizeChatMessages,
+} from "../graph.base.js";
+import { streamAssistantTurn } from "./assistant-turn.js";
+import {
+	AgentAnnotation,
+	type AgentState,
+	DEFAULT_AGENT_SYSTEM_PROMPT,
+	type ToolFailureStreak,
+} from "./state.js";
+import {
+	correctionsExhausted,
+	findToolArgumentProblem,
+	nextCorrectionCount,
+} from "./tool-arguments.js";
 
 // Tool names available to the agent
 const DEFAULT_TOOL_NAMES = ["current_time"] as const;
@@ -82,8 +82,8 @@ const nextToolFailureStreak = (
 // Streamed tool-call assembly moved next to the turn that performs it; both stay
 // exported here because callers and tests already reach for them at this path.
 export {
-	mergeStreamedToolCall,
 	type AssembledToolCall,
+	mergeStreamedToolCall,
 } from "./assistant-turn.js";
 
 /**
@@ -387,12 +387,18 @@ export class AgentGraph extends GraphBase<
 			 * was missing, so the useful reply is that schema — handed back as this
 			 * tool's result, in time for the next iteration to get it right.
 			 */
-			const argumentProblem = correctionsExhausted(argumentCorrections, toolName)
+			const argumentProblem = correctionsExhausted(
+				argumentCorrections,
+				toolName,
+			)
 				? undefined
 				: findToolArgumentProblem(combined.executor, parsedInput);
 
 			if (argumentProblem) {
-				argumentCorrections = nextCorrectionCount(argumentCorrections, toolName);
+				argumentCorrections = nextCorrectionCount(
+					argumentCorrections,
+					toolName,
+				);
 				const content = argumentProblem.correction;
 				logInfo(
 					`[TOOL EXECUTE] Returning ${argumentProblem.target} its schema instead of dispatching an empty call`,
@@ -432,6 +438,7 @@ export class AgentGraph extends GraphBase<
 				const rawResult = await combined.executor.execute(validatedArgs, {
 					state: toolState,
 					runtime: getFlowRuntimeVars(runConfig),
+					toolCallId: toolCall.id,
 				});
 				const { content, contentText, structuredContent, isError, meta } =
 					extractToolResult(rawResult);

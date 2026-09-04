@@ -2,12 +2,13 @@ import { backgroundJob } from "@/services/background-jobs/background-job";
 import { logInfo } from "@/utils/logger";
 import type { IWebBrowserService } from "./interfaces/web-browser-service.interface";
 import {
-	WEB_BROWSER_OPERATION_JOB_NAME,
 	type ActiveWebSessionInfo,
+	WEB_BROWSER_OPERATION_JOB_NAME,
 	type WebBrowserOperation,
 	type WebBrowserOperationJobResult,
 	type WebBrowserOperationPayloadMap,
 	type WebBrowserOperationResultMap,
+	type WebCancelChallengesArgs,
 	type WebFetchRenderedFallbackArgs,
 	type WebFetchRenderedFallbackResult,
 	type WebGetOrOpenSessionArgs,
@@ -17,6 +18,8 @@ import {
 	type WebPerformDomActionArgs,
 	type WebQueryDomElementsArgs,
 	type WebRefreshSessionArgs,
+	type WebReloadSessionArgs,
+	type WebResolveChallengeArgs,
 	type WebSearchInSessionArgs,
 	type WebSearchMatch,
 	type WebSession,
@@ -124,6 +127,25 @@ export class WebBrowserServiceProxy implements IWebBrowserService {
 	async focusSession(sessionId: string): Promise<void> {
 		await this.initialize();
 		await this.executeOperation("session.bringToFront", { sessionId });
+	}
+
+	async reloadSession(args: WebReloadSessionArgs): Promise<WebSession> {
+		await this.initialize();
+		return this.executeOperation("session.reload", args);
+	}
+
+	async resolveChallenge(
+		args: WebResolveChallengeArgs,
+	): Promise<{ resolved: boolean }> {
+		await this.initialize();
+		return this.executeOperation("challenge.resolve", args);
+	}
+
+	async cancelChallenges(
+		args: WebCancelChallengesArgs,
+	): Promise<{ cancelled: number }> {
+		await this.initialize();
+		return this.executeOperation("challenge.cancel", args);
 	}
 
 	async disposeActiveSession(reason?: string): Promise<void> {

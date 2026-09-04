@@ -62,6 +62,16 @@ export interface BrowserBackend {
 		url: string,
 		signal?: AbortSignal,
 	): Promise<{ base64: string; mimeType: string }>;
+	/**
+	 * Re-fetch the page and snapshot it again. Absent on backends that cannot
+	 * navigate, which are promoted to one that can before a reload is attempted.
+	 */
+	reload?(
+		session: BackendSession,
+		timeoutMs: number,
+		maxHtmlChars: number,
+		signal?: AbortSignal,
+	): Promise<BrowserSnapshot>;
 	close(session: BackendSession): Promise<void>;
 	stop(): Promise<void>;
 }

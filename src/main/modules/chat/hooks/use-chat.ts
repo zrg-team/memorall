@@ -1,34 +1,35 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { chatService } from "@/main/modules/chat/services/chat-service";
-import type { ChatMessage } from "@/types/openai";
-import { useChatStore } from "@/main/stores/chat";
-import { useAgentConfigStore } from "@/main/stores/agent-config";
-import type {
-	ChatStatus,
-	ComplexContent,
-	AttachedDocumentRef,
-	AssistantExecutionPart,
-	MessageParts,
-	ToolExecutionRecord,
-} from "@/types/chat";
-import { logError, logInfo } from "@/utils/logger";
-import { backgroundJob } from "@/services/background-jobs/background-job";
-import type { Message } from "@/services/database";
 import { buildSendMessages } from "@/main/modules/chat/utils/build-send-messages";
-import { documentFileSystemService } from "@/services/filesystem/document-filesystem";
-import { toDocumentsSandboxPath } from "@/services/filesystem/sandbox-paths";
-import { createJobErrorMetadata } from "@/services/background-jobs/handlers/error-metadata";
 import {
 	extractDocumentText,
 	formatDocumentBlock,
 } from "@/main/modules/chat/utils/extract-document-text";
+import { useAgentConfigStore } from "@/main/stores/agent-config";
+import { useChatStore } from "@/main/stores/chat";
+import { useWebChallengePromptStore } from "@/main/stores/web-challenge-prompts";
+import { backgroundJob } from "@/services/background-jobs/background-job";
+import { createJobErrorMetadata } from "@/services/background-jobs/handlers/error-metadata";
 import { cloneMessageParts } from "@/services/chat/message-parts";
-import { isAbortError } from "@/utils/abort";
-import { useFrameCoalescedState } from "./use-frame-coalesced-state";
 import {
 	finishRunningToolExecutions,
 	upsertToolExecution,
 } from "@/services/chat/tool-executions";
+import type { Message } from "@/services/database";
+import { documentFileSystemService } from "@/services/filesystem/document-filesystem";
+import { toDocumentsSandboxPath } from "@/services/filesystem/sandbox-paths";
+import type {
+	AssistantExecutionPart,
+	AttachedDocumentRef,
+	ChatStatus,
+	ComplexContent,
+	MessageParts,
+	ToolExecutionRecord,
+} from "@/types/chat";
+import type { ChatMessage } from "@/types/openai";
+import { isAbortError } from "@/utils/abort";
+import { logError, logInfo } from "@/utils/logger";
+import { useFrameCoalescedState } from "./use-frame-coalesced-state";
 
 export interface InProgressMessage {
 	id: string;
@@ -205,6 +206,9 @@ export const useChat = (model: string) => {
 			setLoading(false);
 			setStatus("ready");
 		}
+		// A tool parked on a bot wall waits on a person, not on the stream, so
+		// detaching the reader alone would leave it holding the run for minutes.
+		void useWebChallengePromptStore.getState().cancelAll();
 	};
 
 	// Insert a separator message and reset sandbox container state

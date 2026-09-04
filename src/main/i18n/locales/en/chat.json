@@ -458,6 +458,11 @@
 		"continuePrompt": "I have solved the verification in the browser. Please continue where you left off.",
 		"missingTab": "This session has no browser tab to hand over.",
 		"missingSession": "This result has no session to hand over.",
-		"missingUrl": "This result has no URL to reopen."
+		"missingUrl": "This result has no URL to reopen.",
+		"reloadAndCheck": "Reload & check",
+		"stillBlocked": "Still blocked. Solve the challenge in the browser, then try again.",
+		"reloadCleared": "The page loaded. Continuing where the agent left off.",
+		"stopWaiting": "Stop waiting",
+		"expired": "This request expired. The agent has already moved on."
 	}
 }

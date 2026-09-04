@@ -1,8 +1,8 @@
-import { parseHtmlDocument } from "../../utils/html-parser.js";
 import z from "zod";
 import type { Tool, ToolFactory } from "../../interfaces/engine/tool.js";
-import { toolRegistry } from "../../registries/tool-registry.js";
 import type { WebSession } from "../../interfaces/services/web-browser.js";
+import { toolRegistry } from "../../registries/tool-registry.js";
+import { parseHtmlDocument } from "../../utils/html-parser.js";
 import {
 	MAX_WEB_MAX_HTML_CHARS,
 	MIN_WEB_MAX_HTML_CHARS,
@@ -12,11 +12,12 @@ import {
 	createCleanHtml,
 	createDefaultWebErrorResult,
 	createWebResult,
+	requireWebBrowserService,
+	resolveWebBlock,
 	stripNonReadableHtml,
 	truncateContent,
-	requireWebBrowserService,
-	webBlockFields,
 	type WebToolServices,
+	webBlockFields,
 } from "./web-tool-utils.js";
 
 const TOOL_NAME = "web_read" as const;
@@ -403,7 +404,7 @@ export const createWebReadTool: ToolFactory<Input, WebToolServices> = (
 	description:
 		"Read rendered page content from an active web session or directly from a URL. Default output is readable text. If `blocked` is present the content is a bot wall (CAPTCHA, Cloudflare, rate limit or login gate), not the page: stop, tell the user what is blocking, and do not retry the same URL — the user has a button to solve it themselves.",
 	schema,
-	execute: async (input) => {
+	execute: async (input, context) => {
 		const webBrowser = requireWebBrowserService(services);
 		let disposableSession = false;
 		let sessionId = input.sessionId;
@@ -420,7 +421,16 @@ export const createWebReadTool: ToolFactory<Input, WebToolServices> = (
 			});
 			disposableSession = sessionResult.disposable;
 			sessionId = sessionResult.session.id;
-			const session = sessionResult.session;
+
+			// Park here if the page is a bot wall. A disposable session must survive
+			// the wait: closing it would take away the page the handoff raises.
+			const session = await resolveWebBlock(services, sessionResult.session, {
+				tool: TOOL_NAME,
+				toolCallId: context?.toolCallId,
+			});
+			if (session.block) {
+				disposableSession = false;
+			}
 
 			if (session.mode === "iframe" && !session.domAccessible) {
 				const fallback = await webBrowser.fetchRenderedFallback({

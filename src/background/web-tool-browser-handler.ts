@@ -1,16 +1,16 @@
-import { logError } from "@/utils/logger";
 import {
+	isWebBrowserCommandRequest,
+	isWebContentCommandResponse,
 	WEB_BROWSER_COMMAND_SOURCE,
 	WEB_BROWSER_SURFACE_STORAGE_KEY,
 	WEB_CONTENT_COMMAND_SOURCE,
-	isWebBrowserCommandRequest,
-	isWebContentCommandResponse,
 	type WebBrowserCommandRequest,
 	type WebBrowserCommandResponse,
 	type WebBrowserSurface,
 	type WebContentCommandRequest,
 	type WebContentCommandResponse,
 } from "@/services/web-browser";
+import { logError } from "@/utils/logger";
 
 interface StoredWebBrowserSurface extends WebBrowserSurface {
 	sessionId: string;
@@ -434,6 +434,52 @@ const handleOpenCommand = async (
 	}
 };
 
+/**
+ * Wait for a reload to actually begin before waiting for it to finish.
+ *
+ * chrome.tabs.reload resolves as soon as the request is issued, while the tab is
+ * still reporting the old page as complete. Handing straight to waitForTabReady
+ * therefore returns instantly against the page we were trying to leave. So watch
+ * for the tab to enter loading first, and give up that watch quickly: a cached
+ * reload can come and go faster than the poll interval.
+ */
+const waitForReloadToStart = async (tabId: number): Promise<void> => {
+	const deadline = Date.now() + 1_500;
+	while (Date.now() < deadline) {
+		const tab = await getTabOrThrow(tabId);
+		if (tab.status === "loading") return;
+		await delay(100);
+	}
+};
+
+const handleReloadCommand = async (
+	request: Extract<WebBrowserCommandRequest, { command: "reload" }>,
+): Promise<WebBrowserCommandResponse> => {
+	try {
+		await chrome.tabs.reload(request.tabId, { bypassCache: false });
+		await waitForReloadToStart(request.tabId);
+		await waitForTabReady(request.tabId, request.timeoutMs);
+
+		const response = await requestSnapshotWithNavigationRetry(
+			request.tabId,
+			request.timeoutMs,
+		);
+		if (response.type !== "web-tool:snapshot-result") {
+			throw new Error("Invalid browser snapshot response.");
+		}
+
+		return {
+			source: WEB_BROWSER_COMMAND_SOURCE,
+			command: "reload",
+			success: true,
+			sessionId: request.sessionId,
+			snapshot: response.snapshot,
+		};
+	} catch (error) {
+		return createErrorResponse(request, error);
+	}
+};
+
 const handleSnapshotCommand = async (
 	request: Extract<WebBrowserCommandRequest, { command: "snapshot" }>,
 ): Promise<WebBrowserCommandResponse> => {
@@ -724,6 +770,8 @@ const handleCommand = async (
 			return handleFetchImageCommand(request);
 		case "bring-to-front":
 			return handleBringToFrontCommand(request);
+		case "reload":
+			return handleReloadCommand(request);
 	}
 };
 

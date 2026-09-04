@@ -2,23 +2,23 @@ import type { BackendSession, BrowserBackend } from "./browser-backend";
 import { BackendOpenError } from "./browser-backend";
 import {
 	BrowserAutomationError,
-	checkedHttpUrl,
-	pngDimensions,
-	requiredNumber,
-	requiredString,
 	type BrowserCommand,
 	type BrowserMode,
 	type BrowserSettings,
 	type BrowserSnapshot,
+	checkedHttpUrl,
 	type EngineStatus,
+	pngDimensions,
+	requiredNumber,
+	requiredString,
 	withTimeoutSignal,
 } from "./browser-runtime-types";
+import type { ManagedBrowserOsRuntime } from "./managed-browseros-runtime";
 import {
-	StreamableHttpMcpClient,
-	mcpImage,
 	type McpToolResult,
+	mcpImage,
+	StreamableHttpMcpClient,
 } from "./mcp-client";
-import { ManagedBrowserOsRuntime } from "./managed-browseros-runtime";
 
 const browserSnapshotCode = (maxHtmlChars: number): string => `(() => {
   const clone = document.cloneNode(true);
@@ -154,6 +154,29 @@ export class BrowserOsBackend implements BrowserBackend {
 			}
 			await this.close(session).catch(() => {});
 			throw error;
+		} finally {
+			timed.dispose();
+		}
+	}
+
+	async reload(
+		session: BackendSession,
+		timeoutMs: number,
+		maxHtmlChars: number,
+		signal?: AbortSignal,
+	): Promise<BrowserSnapshot> {
+		const client = await this.ensureClient(signal);
+		const timed = withTimeoutSignal(timeoutMs, signal);
+		try {
+			// BrowserOS has no reload verb; navigating to the same URL re-fetches it.
+			await client.callTool(
+				"navigate",
+				{ page: session.handle, action: "url", url: session.url },
+				timed.signal,
+			);
+			const snapshot = await this.snapshot(session, maxHtmlChars, timed.signal);
+			session.url = snapshot.url;
+			return snapshot;
 		} finally {
 			timed.dispose();
 		}
