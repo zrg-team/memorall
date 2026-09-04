@@ -17,6 +17,24 @@ export interface WebBrowserCapabilities {
 	canWaitForRender: boolean;
 	canFetchRenderedFallback: boolean;
 	canManageMultipleSessions: boolean;
+	/** Reload a session's page rather than only re-reading its DOM. */
+	canReloadSession?: boolean;
+	/** Park a blocked tool and ask the user to clear the wall themselves. */
+	canAwaitUserIntervention?: boolean;
+}
+
+/** What the user chose when a tool asked them to clear a bot wall. */
+export interface WebChallengeResolution {
+	outcome: "retry" | "skip" | "cancel";
+	/** The session the user actually solved, which a handoff can change. */
+	sessionId?: string;
+	tabId?: number;
+}
+
+export interface WebAwaitChallengeArgs {
+	sessionId: string;
+	tool: string;
+	toolCallId?: string;
 }
 
 export interface WebSearchMatch {
@@ -200,6 +218,21 @@ export interface IFlowWebBrowserSessionService {
 	getActiveSessionInfo(): Promise<ActiveWebSessionInfo>;
 }
 
+export interface IFlowWebBrowserInterventionService {
+	/**
+	 * Reload the page and snapshot it again, which re-runs block detection.
+	 * Absent on backends that cannot reload, such as the desktop direct backend.
+	 */
+	reloadSession?(args: WebRefreshSessionArgs): Promise<WebSession>;
+	/**
+	 * Publish the wall to the user and wait for their answer. Absent wherever the
+	 * handoff cannot work, in which case tools report the wall as before.
+	 */
+	awaitChallengeResolution?(
+		args: WebAwaitChallengeArgs,
+	): Promise<WebChallengeResolution>;
+}
+
 export interface IFlowWebBrowserContentService {
 	fetchRenderedFallback(
 		args: WebRenderedFallbackArgs,
@@ -220,6 +253,7 @@ export interface IFlowWebBrowserService
 	extends IFlowWebBrowserLifecycleService,
 		IFlowWebBrowserSessionService,
 		IFlowWebBrowserContentService,
+		IFlowWebBrowserInterventionService,
 		IFlowWebBrowserDomService {}
 
 declare global {

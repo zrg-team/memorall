@@ -1,6 +1,24 @@
 import {
-	WEB_BROWSER_COMMAND_SOURCE,
+	describeWebBlock,
+	detectWebBlock,
+	type WebBlockSignal,
+} from "@memorall/agent-harness-flows/tools/web/challenge-detection";
+import { DEFAULT_WEB_MAX_HTML_CHARS } from "@memorall/agent-harness-flows/tools/web/max-html-chars";
+import { platform } from "@/platform/current";
+import {
+	awaitChallengeDecision,
+	cancelChallenges,
+	canPromptForChallenge,
+	WEB_CHALLENGE_WAIT_MS,
+	type WebChallengeDecision,
+} from "@/services/web-browser/challenge-intervention";
+import {
+	extractReadableDocumentText,
+	removeNonReadableNodes,
+} from "@/services/web-browser/readable-text";
+import {
 	isWebBrowserCommandResponse,
+	WEB_BROWSER_COMMAND_SOURCE,
 	type WebBrowserCommandRequest,
 	type WebBrowserCommandResponse,
 	type WebBrowserMode,
@@ -10,16 +28,6 @@ import {
 	type WebSnapshotPayload,
 	type WebWaitSelectorState,
 } from "@/services/web-browser/web-browser-protocol";
-import {
-	extractReadableDocumentText,
-	removeNonReadableNodes,
-} from "@/services/web-browser/readable-text";
-import { DEFAULT_WEB_MAX_HTML_CHARS } from "@memorall/agent-harness-flows/tools/web/max-html-chars";
-import {
-	detectWebBlock,
-	type WebBlockSignal,
-} from "@memorall/agent-harness-flows/tools/web/challenge-detection";
-import { platform } from "@/platform/current";
 
 interface WebSessionState {
 	id: string;
@@ -327,7 +335,38 @@ const extractTextFromDocument = (doc: Document): string => {
 	return doc.body?.innerText ?? doc.documentElement?.textContent ?? "";
 };
 
+/**
+ * Sessions the user is currently being asked to act on.
+ *
+ * Solving a CAPTCHA can take longer than SESSION_TTL_MS, and closing the tab
+ * mid-solve is the one failure the whole handoff exists to avoid. A held session
+ * simply never arms its inactivity timer until the hold is released.
+ */
+const sessionHolds = new Map<string, number>();
+
+export const holdWebSession = (sessionId: string): (() => void) => {
+	sessionHolds.set(sessionId, (sessionHolds.get(sessionId) ?? 0) + 1);
+	const timer = sessionTimeouts.get(sessionId);
+	if (timer !== undefined) {
+		window.clearTimeout(timer);
+		sessionTimeouts.delete(sessionId);
+	}
+	let released = false;
+	return () => {
+		if (released) return;
+		released = true;
+		const next = (sessionHolds.get(sessionId) ?? 1) - 1;
+		if (next > 0) {
+			sessionHolds.set(sessionId, next);
+			return;
+		}
+		sessionHolds.delete(sessionId);
+		if (WEB_SESSIONS.has(sessionId)) scheduleInactivityClose(sessionId);
+	};
+};
+
 const scheduleInactivityClose = (sessionId: string): void => {
+	if ((sessionHolds.get(sessionId) ?? 0) > 0) return;
 	const existing = sessionTimeouts.get(sessionId);
 	if (existing !== undefined) {
 		window.clearTimeout(existing);
@@ -658,6 +697,108 @@ export const refreshWebSession = async (
 	return touchSession(sessionId, maxHtmlChars, timeoutMs);
 };
 
+/**
+ * Reload the session's page and re-snapshot it.
+ *
+ * Distinct from refreshWebSession, which only re-reads the DOM the tab already
+ * has. A user who has just cleared a bot wall usually needs the page fetched
+ * again, and re-snapshotting recomputes session.block from scratch, so a wall
+ * that is gone clears itself with no extra detection step.
+ */
+/**
+ * Publish a bot wall to the user and wait for them to clear it.
+ *
+ * Answers immediately, with "skip", wherever the handoff cannot actually help:
+ * a page that is not a wall, a context that cannot reach session storage (the
+ * embedded chat runs from a content script), or an offscreen iframe, which has
+ * no window of its own to raise and would hand the user a button that throws.
+ *
+ * The session is held for the duration so its inactivity timer cannot close the
+ * very tab the user is working in.
+ */
+export const awaitWebChallengeResolution = async ({
+	sessionId,
+	tool,
+	toolCallId,
+}: {
+	sessionId: string;
+	tool: string;
+	toolCallId?: string;
+}): Promise<WebChallengeDecision> => {
+	const session =
+		WEB_SESSIONS.get(sessionId) ?? (await recoverSession(sessionId));
+	if (!session?.block) return { outcome: "skip" };
+	if (session.mode === "iframe") return { outcome: "skip" };
+	if (!canPromptForChallenge()) return { outcome: "skip" };
+
+	const now = Date.now();
+	const release = holdWebSession(sessionId);
+	try {
+		return await awaitChallengeDecision({
+			id: crypto.randomUUID(),
+			sessionId,
+			toolCallId,
+			tool,
+			url: session.currentUrl || session.requestedUrl,
+			tabId: session.tabId,
+			windowId: session.windowId,
+			mode: session.mode,
+			blocked: {
+				kind: session.block.kind,
+				marker: session.block.marker,
+				description: describeWebBlock(session.block),
+			},
+			createdAt: now,
+			expiresAt: now + WEB_CHALLENGE_WAIT_MS,
+		});
+	} finally {
+		release();
+	}
+};
+
+export const reloadWebSession = async (
+	sessionId: string,
+	maxHtmlChars = DEFAULT_MAX_HTML_CHARS,
+	timeoutMs = DEFAULT_TIMEOUT_MS,
+): Promise<WebSessionState> => {
+	const session =
+		WEB_SESSIONS.get(sessionId) ?? (await recoverSession(sessionId));
+	if (!session) {
+		throw new Error(`No active web session: ${sessionId}`);
+	}
+
+	if (session.mode === "iframe") {
+		const iframe = session.iframe;
+		if (!iframe) {
+			throw new Error("This embedded session has no frame to reload.");
+		}
+		// Reassigning src rather than calling contentWindow.location.reload(),
+		// which throws for a cross-origin document.
+		iframe.src = session.currentUrl || session.requestedUrl;
+		await waitForFrameLoad(iframe, timeoutMs);
+		captureIframeSnapshot(session);
+	} else {
+		if (typeof session.tabId !== "number") {
+			throw new Error("Browser-backed web session is missing tabId.");
+		}
+		const response = await sendWebBrowserCommand({
+			source: WEB_BROWSER_COMMAND_SOURCE,
+			command: "reload",
+			sessionId,
+			tabId: session.tabId,
+			timeoutMs,
+			maxHtmlChars,
+		});
+		if (response.command !== "reload") {
+			throw new Error("Invalid browser reload response.");
+		}
+		applySnapshotToSession(session, response.snapshot);
+	}
+
+	scheduleInactivityClose(sessionId);
+	return session;
+};
+
 export const getWebSession = async (
 	sessionId: string,
 	maxHtmlChars = DEFAULT_MAX_HTML_CHARS,
@@ -745,6 +886,9 @@ export const closeWebSession = async (sessionId: string): Promise<void> => {
 		return;
 	}
 
+	// A tool parked on this page can never be answered once the tab is gone.
+	cancelChallenges({ sessionId });
+	sessionHolds.delete(sessionId);
 	unpersistSession(sessionId);
 	await disposeSessionArtifacts(session);
 	WEB_SESSIONS.delete(sessionId);
@@ -759,7 +903,11 @@ export const closeWebSession = async (sessionId: string): Promise<void> => {
  * failing silently.
  */
 export const focusWebSession = async (sessionId: string): Promise<void> => {
-	const session = WEB_SESSIONS.get(sessionId);
+	// Without the recovery fallback every neighbouring function already has, this
+	// threw after the offscreen document was recreated, even though the tab the
+	// user needs was alive and the persisted entry still described it.
+	const session =
+		WEB_SESSIONS.get(sessionId) ?? (await recoverSession(sessionId));
 	if (!session) {
 		throw new Error(`No active web session: ${sessionId}`);
 	}

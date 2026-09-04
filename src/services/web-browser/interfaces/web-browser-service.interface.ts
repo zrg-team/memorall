@@ -1,5 +1,6 @@
 import type {
 	ActiveWebSessionInfo,
+	WebCancelChallengesArgs,
 	WebFetchRenderedFallbackArgs,
 	WebFetchRenderedFallbackResult,
 	WebGetOrOpenSessionArgs,
@@ -9,6 +10,8 @@ import type {
 	WebPerformDomActionArgs,
 	WebQueryDomElementsArgs,
 	WebRefreshSessionArgs,
+	WebReloadSessionArgs,
+	WebResolveChallengeArgs,
 	WebSearchInSessionArgs,
 	WebSearchMatch,
 	WebSession,
@@ -34,6 +37,19 @@ export interface IWebBrowserService {
 	closeSession(sessionId: string): Promise<void>;
 	/** Bring the session's page to the front for the user to act on. */
 	focusSession(sessionId: string): Promise<void>;
+	/** Reload the session's page and re-snapshot it, which re-runs block detection. */
+	reloadSession(args: WebReloadSessionArgs): Promise<WebSession>;
+	/**
+	 * Answer a tool that is parked on a bot wall. Resolves false when nothing was
+	 * waiting, so the card can say it expired rather than appearing to work.
+	 */
+	resolveChallenge(
+		args: WebResolveChallengeArgs,
+	): Promise<{ resolved: boolean }>;
+	/** Release parked waits, for the Stop button and for a closed session. */
+	cancelChallenges(
+		args: WebCancelChallengesArgs,
+	): Promise<{ cancelled: number }>;
 	disposeActiveSession(reason?: string): Promise<void>;
 	getActiveSessionInfo(): Promise<ActiveWebSessionInfo>;
 	getAllSessionsInfo(): Promise<ActiveWebSessionInfo[]>;

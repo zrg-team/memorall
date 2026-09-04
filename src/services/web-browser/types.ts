@@ -1,3 +1,5 @@
+import type { WebBlockSignal } from "@memorall/agent-harness-flows/tools/web/challenge-detection";
+import type { WebChallengeDecision } from "./challenge-intervention";
 import type {
 	WebBrowserMode,
 	WebDomActionName,
@@ -5,7 +7,6 @@ import type {
 	WebElementRecord,
 	WebWaitSelectorState,
 } from "./web-browser-protocol";
-import type { WebBlockSignal } from "@memorall/agent-harness-flows/tools/web/challenge-detection";
 
 export interface WebSession {
 	id: string;
@@ -150,12 +151,29 @@ export interface WebPerformDomActionArgs {
 	timeoutMs?: number;
 }
 
+export interface WebReloadSessionArgs {
+	sessionId: string;
+	maxHtmlChars?: number;
+	timeoutMs?: number;
+}
+
+export interface WebResolveChallengeArgs {
+	promptId: string;
+	decision: WebChallengeDecision;
+}
+
+export interface WebCancelChallengesArgs {
+	sessionId?: string;
+	all?: boolean;
+}
+
 export type WebBrowserOperation =
 	| "session.open"
 	| "session.refresh"
 	| "session.getOrOpen"
 	| "session.close"
 	| "session.bringToFront"
+	| "session.reload"
 	| "session.disposeActive"
 	| "session.getActiveInfo"
 	| "session.getAllInfo"
@@ -165,7 +183,9 @@ export type WebBrowserOperation =
 	| "dom.action"
 	| "search.findInPage"
 	| "wait.selector"
-	| "wait.render";
+	| "wait.render"
+	| "challenge.resolve"
+	| "challenge.cancel";
 
 export interface WebBrowserOperationPayloadMap {
 	"session.open": WebOpenSessionArgs;
@@ -173,6 +193,7 @@ export interface WebBrowserOperationPayloadMap {
 	"session.getOrOpen": WebGetOrOpenSessionArgs;
 	"session.close": { sessionId: string };
 	"session.bringToFront": { sessionId: string };
+	"session.reload": WebReloadSessionArgs;
 	"session.disposeActive": { reason?: string } | undefined;
 	"session.getActiveInfo": undefined;
 	"session.getAllInfo": undefined;
@@ -183,6 +204,8 @@ export interface WebBrowserOperationPayloadMap {
 	"search.findInPage": WebSearchInSessionArgs;
 	"wait.selector": WebWaitForSelectorArgs;
 	"wait.render": WebWaitForRenderArgs;
+	"challenge.resolve": WebResolveChallengeArgs;
+	"challenge.cancel": WebCancelChallengesArgs;
 }
 
 export interface WebBrowserOperationResultMap {
@@ -191,6 +214,7 @@ export interface WebBrowserOperationResultMap {
 	"session.getOrOpen": WebGetOrOpenSessionResult;
 	"session.close": { closed: true };
 	"session.bringToFront": { broughtToFront: true };
+	"session.reload": WebSession;
 	"session.disposeActive": { disposed: true };
 	"session.getActiveInfo": ActiveWebSessionInfo;
 	"session.getAllInfo": ActiveWebSessionInfo[];
@@ -201,6 +225,8 @@ export interface WebBrowserOperationResultMap {
 	"search.findInPage": WebSearchMatch[];
 	"wait.selector": WebWaitResult;
 	"wait.render": WebWaitResult;
+	"challenge.resolve": { resolved: boolean };
+	"challenge.cancel": { cancelled: number };
 }
 
 export const WEB_BROWSER_OPERATION_JOB_NAME = "web-browser-operation" as const;

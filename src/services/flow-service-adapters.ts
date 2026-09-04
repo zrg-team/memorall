@@ -1,18 +1,45 @@
-import type { IDatabaseService } from "@/services/database/interfaces/database-service.interface";
-import type { IEmbeddingService } from "@/services/embedding/interfaces/embedding-service.interface";
-import type { DocumentFileSystem } from "@/services/filesystem/document-filesystem";
-import type { DocumentTreeNode } from "@/types/document-library";
-import type { ILLMService } from "@/services/llm/interfaces/llm-service.interface";
-import type { ISandboxContainerService } from "@/services/sandbox-container";
-import { createAgentSandboxService } from "@/services/agent-sandbox";
+import type {
+	ChatCompletionChunk,
+	ChatCompletionRequest,
+	ChatCompletionResponse,
+} from "@memorall/agent-harness-flows/interfaces/engine/messages";
 import type { IAgentSandboxService } from "@memorall/agent-harness-flows/interfaces/services/agent-sandbox";
 import type {
+	DirEntry,
+	FileStat,
+	IFlowFileSystem,
+} from "@memorall/agent-harness-flows/interfaces/services/filesystem";
+import type { IFlowLLMService } from "@memorall/agent-harness-flows/interfaces/services/llm";
+import type {
+	IFlowSandboxService,
+	SandboxCommandResult,
+	SandboxRequest,
+} from "@memorall/agent-harness-flows/interfaces/services/sandbox";
+import type {
+	WebOpenSessionResult as FlowWebOpenSessionResult,
+	WebRefreshSessionArgs as FlowWebRefreshSessionArgs,
+	WebRenderedFallbackResult as FlowWebRenderedFallbackResult,
+	IFlowWebBrowserService,
+} from "@memorall/agent-harness-flows/interfaces/services/web-browser";
+import type { IFlowLogger } from "@memorall/agent-harness-flows/logging/logger";
+import { setFlowLogger } from "@memorall/agent-harness-flows/logging/logger";
+import { serviceRegistry } from "@memorall/agent-harness-flows/registries/service-registry";
+import { setHtmlParser } from "@memorall/agent-harness-flows/utils/html-parser";
+import { createAgentSandboxService } from "@/services/agent-sandbox";
+import type { IDatabaseService } from "@/services/database/interfaces/database-service.interface";
+import { schema as appDatabaseSchema } from "@/services/database/schema";
+import type { IEmbeddingService } from "@/services/embedding/interfaces/embedding-service.interface";
+import type { DocumentFileSystem } from "@/services/filesystem/document-filesystem";
+import { awaitWebChallengeResolution } from "@/services/flows-integrations/tools/web/web-tool-registry";
+import type { ILLMService } from "@/services/llm/interfaces/llm-service.interface";
+import type {
+	ISandboxContainerService,
 	SandboxExecuteCommandRequest,
 	SandboxExecutionRequest,
 	SandboxFsExistsRequest,
 	SandboxFsMkdirRequest,
-	SandboxFsReadFileRequest,
 	SandboxFsReaddirRequest,
+	SandboxFsReadFileRequest,
 	SandboxFsRenameRequest,
 	SandboxFsUnlinkRequest,
 	SandboxFsWriteFileRequest,
@@ -28,47 +55,22 @@ import type {
 	SandboxStopServerRequest,
 } from "@/services/sandbox-container";
 import type { SandboxHandleSwRequestPayload } from "@/services/sandbox-container/types";
-import type { IWebBrowserService } from "@/services/web-browser";
 import type {
+	IWebBrowserService,
 	WebFetchRenderedFallbackArgs,
 	WebGetOrOpenSessionArgs,
 	WebOpenSessionArgs,
 	WebPerformDomActionArgs,
 	WebQueryDomElementsArgs,
 	WebRefreshSessionArgs,
+	WebReloadSessionArgs,
 	WebSearchInSessionArgs,
 	WebWaitForRenderArgs,
 	WebWaitForSelectorArgs,
 } from "@/services/web-browser";
+import type { DocumentTreeNode } from "@/types/document-library";
 import type { IFlowDatabase } from "./flows-memory/interfaces/database";
 import type { IFlowEmbeddingService } from "./flows-memory/interfaces/embedding";
-import type {
-	DirEntry,
-	FileStat,
-	IFlowFileSystem,
-} from "@memorall/agent-harness-flows/interfaces/services/filesystem";
-import type { IFlowLLMService } from "@memorall/agent-harness-flows/interfaces/services/llm";
-import type {
-	IFlowSandboxService,
-	SandboxRequest,
-} from "@memorall/agent-harness-flows/interfaces/services/sandbox";
-import type { SandboxCommandResult } from "@memorall/agent-harness-flows/interfaces/services/sandbox";
-import type {
-	IFlowWebBrowserService,
-	WebOpenSessionResult as FlowWebOpenSessionResult,
-	WebRefreshSessionArgs as FlowWebRefreshSessionArgs,
-	WebRenderedFallbackResult as FlowWebRenderedFallbackResult,
-} from "@memorall/agent-harness-flows/interfaces/services/web-browser";
-import type { IFlowLogger } from "@memorall/agent-harness-flows/logging/logger";
-import { setFlowLogger } from "@memorall/agent-harness-flows/logging/logger";
-import { setHtmlParser } from "@memorall/agent-harness-flows/utils/html-parser";
-import { serviceRegistry } from "@memorall/agent-harness-flows/registries/service-registry";
-import type {
-	ChatCompletionChunk,
-	ChatCompletionRequest,
-	ChatCompletionResponse,
-} from "@memorall/agent-harness-flows/interfaces/engine/messages";
-import { schema as appDatabaseSchema } from "@/services/database/schema";
 import type {
 	IKnowledgeDatabase,
 	KnowledgeDatabaseContext,
@@ -120,9 +122,9 @@ const normalizeRowArray = <T>(value: unknown): T[] => {
 import {
 	DOCUMENTS_SANDBOX_ROOT,
 	FILESYSTEM_SANDBOX_ROOT,
-	toDocumentsSandboxPath,
 	normalizeSandboxPath,
 	sandboxPathToFsPath,
+	toDocumentsSandboxPath,
 } from "@/services/filesystem/sandbox-paths";
 
 const DOCUMENTS_FS_ROOT = sandboxPathToFsPath(DOCUMENTS_SANDBOX_ROOT);
@@ -440,6 +442,8 @@ export const toFlowWebBrowser = (
 		canWaitForRender: true,
 		canFetchRenderedFallback: true,
 		canManageMultipleSessions: true,
+		canReloadSession: true,
+		canAwaitUserIntervention: true,
 	}),
 	openSession: async (args) =>
 		normalizeWebOpenResult(
@@ -472,6 +476,11 @@ export const toFlowWebBrowser = (
 		service.waitForDomSelector(args as WebWaitForSelectorArgs),
 	waitForPageRender: async (args: FlowWebRefreshSessionArgs) =>
 		service.waitForPageRender(args as WebWaitForRenderArgs),
+	reloadSession: (args) => service.reloadSession(args as WebReloadSessionArgs),
+	// Wired straight to the registry rather than through IWebBrowserService: only
+	// the context that runs the tools can park one, so a proxy method for it would
+	// be meaningless.
+	awaitChallengeResolution: (args) => awaitWebChallengeResolution(args),
 });
 
 const normalizeSandboxCommand = (

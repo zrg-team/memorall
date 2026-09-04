@@ -10,10 +10,11 @@ import {
 	createCleanHtml,
 	createDefaultWebErrorResult,
 	createWebResult,
-	truncateContent,
 	requireWebBrowserService,
-	webBlockFields,
+	resolveWebBlock,
+	truncateContent,
 	type WebToolServices,
+	webBlockFields,
 } from "./web-tool-utils.js";
 
 const TOOL_NAME = "web_open" as const;
@@ -54,23 +55,37 @@ export const createWebOpenTool: ToolFactory<Input, WebToolServices> = (
 		"Open a web URL in `iframe` or browser-backed `tab`/`window` mode, wait for the initial navigation load, and expose `sessionId` for follow-up actions. When `renderReady` is false the page timed out but partial content is included — inspect `partialContent` to decide whether to call `web_wait` then `web_read`, or skip this page. " +
 		"If `blocked` is present the page is a bot wall (CAPTCHA, Cloudflare, rate limit or login gate), not the content: stop, tell the user what is blocking, and do not retry the same URL — the user has a button to solve it themselves.",
 	schema,
-	execute: async (input) => {
+	execute: async (input, context) => {
 		const webBrowser = requireWebBrowserService(services);
 		const maxHtmlChars = normalizeWebMaxHtmlChars(input.maxHtmlChars);
 		const timeoutMs = Math.max(500, input.timeoutMs ?? 15_000);
 		let disposableSessionId: string | undefined;
 		try {
-			const { session, disposable, renderReady } = await webBrowser.openSession(
-				{
-					url: input.url,
-					timeoutMs,
-					maxHtmlChars,
-					persist: input.keepSession ?? true,
-					mode: input.browserMode,
-				},
-			);
+			const {
+				session: opened,
+				disposable,
+				renderReady,
+			} = await webBrowser.openSession({
+				url: input.url,
+				timeoutMs,
+				maxHtmlChars,
+				persist: input.keepSession ?? true,
+				mode: input.browserMode,
+			});
 			if (disposable) {
-				disposableSessionId = session.id;
+				disposableSessionId = opened.id;
+			}
+
+			// Park here if the page is a bot wall, so the user can clear it and the
+			// same call carries on against the same tab. Keep a disposable session
+			// alive for that: closing it would take away the very page the handoff
+			// button is about to raise.
+			const session = await resolveWebBlock(services, opened, {
+				tool: TOOL_NAME,
+				toolCallId: context?.toolCallId,
+			});
+			if (session.block) {
+				disposableSessionId = undefined;
 			}
 
 			if (!renderReady) {

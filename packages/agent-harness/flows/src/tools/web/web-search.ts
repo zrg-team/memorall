@@ -1,15 +1,14 @@
 import z from "zod";
-import type {
-	Tool,
-	ToolFactory,
-} from "../../interfaces/engine/tool.js";
-import { toolRegistry } from "../../registries/tool-registry.js";
+import type { Tool, ToolFactory } from "../../interfaces/engine/tool.js";
 import type { WebSearchMatch } from "../../interfaces/services/web-browser.js";
+import { toolRegistry } from "../../registries/tool-registry.js";
 import {
 	createDefaultWebErrorResult,
 	createWebResult,
 	requireWebBrowserService,
+	resolveWebBlock,
 	type WebToolServices,
+	webBlockFields,
 } from "./web-tool-utils.js";
 
 const TOOL_NAME = "web_find_in_page" as const;
@@ -83,19 +82,31 @@ export const createWebSearchTool: ToolFactory<Input, WebToolServices> = (
 	description:
 		"Find text or regex matches within the currently opened rendered page. This does not search the web or a search engine.",
 	schema,
-	execute: async (input) => {
+	execute: async (input, context) => {
 		const webBrowser = requireWebBrowserService(services);
 		let shouldCloseSession = false;
 		let sessionId: string | undefined;
 		try {
-			const { session, disposable } = await webBrowser.getOrOpenSession({
-				sessionId: input.sessionId,
-				url: input.url,
-				timeoutMs: Math.max(500, input.timeoutMs ?? 15_000),
-				browserMode: input.browserMode,
-			});
-			sessionId = session.id;
+			const { session: opened, disposable } = await webBrowser.getOrOpenSession(
+				{
+					sessionId: input.sessionId,
+					url: input.url,
+					timeoutMs: Math.max(500, input.timeoutMs ?? 15_000),
+					browserMode: input.browserMode,
+				},
+			);
+			sessionId = opened.id;
 			shouldCloseSession = disposable;
+
+			// Searching a wall finds nothing and reports success, which reads exactly
+			// like a page that genuinely lacks the text.
+			const session = await resolveWebBlock(services, opened, {
+				tool: TOOL_NAME,
+				toolCallId: context?.toolCallId,
+			});
+			if (session.block) {
+				shouldCloseSession = false;
+			}
 			const pattern = input.pattern ?? input.query;
 			const selector = input.selector?.trim() || undefined;
 
@@ -121,6 +132,7 @@ export const createWebSearchTool: ToolFactory<Input, WebToolServices> = (
 				selector,
 				matches,
 				count: matches.length,
+				...webBlockFields(session),
 			});
 			return result;
 		} catch (error) {

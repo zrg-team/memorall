@@ -223,6 +223,19 @@ export type WebBrowserCommandRequest =
 			sessionId: string;
 			tabId: number;
 			windowId?: number;
+	  }
+	/**
+	 * Re-fetch the session's page and snapshot it again. Distinct from "snapshot",
+	 * which re-reads the DOM the tab already has: a user who has just cleared a bot
+	 * wall needs the page itself requested again.
+	 */
+	| {
+			source: typeof WEB_BROWSER_COMMAND_SOURCE;
+			command: "reload";
+			sessionId: string;
+			tabId: number;
+			timeoutMs: number;
+			maxHtmlChars: number;
 	  };
 
 export type WebBrowserCommandResponse =
@@ -296,6 +309,13 @@ export type WebBrowserCommandResponse =
 	  }
 	| {
 			source: typeof WEB_BROWSER_COMMAND_SOURCE;
+			command: "reload";
+			success: true;
+			sessionId: string;
+			snapshot: WebSnapshotPayload;
+	  }
+	| {
+			source: typeof WEB_BROWSER_COMMAND_SOURCE;
 			command:
 				| "open"
 				| "snapshot"
@@ -305,7 +325,8 @@ export type WebBrowserCommandResponse =
 				| "close"
 				| "screenshot"
 				| "fetch-image"
-				| "bring-to-front";
+				| "bring-to-front"
+				| "reload";
 			success: false;
 			sessionId: string;
 			error: string;
@@ -402,6 +423,7 @@ export const isWebBrowserCommandRequest = (
 				typeof value.maxHtmlChars === "number"
 			);
 		case "snapshot":
+		case "reload":
 			return (
 				typeof value.sessionId === "string" &&
 				typeof value.tabId === "number" &&
@@ -475,6 +497,7 @@ export const isWebBrowserCommandResponse = (
 		case "open":
 			return isRecord(value.surface) && isRecord(value.snapshot);
 		case "snapshot":
+		case "reload":
 			return isRecord(value.snapshot);
 		case "dom-query":
 			return Array.isArray(value.elements) && isRecord(value.snapshot);

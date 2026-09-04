@@ -1,15 +1,14 @@
 import z from "zod";
-import type {
-	Tool,
-	ToolFactory,
-} from "../../interfaces/engine/tool.js";
+import type { Tool, ToolFactory } from "../../interfaces/engine/tool.js";
 import type { WebDomElementInfo } from "../../interfaces/services/web-browser.js";
 import { toolRegistry } from "../../registries/tool-registry.js";
 import {
 	createDefaultWebErrorResult,
 	createWebResult,
 	requireWebBrowserService,
+	resolveWebBlock,
 	type WebToolServices,
+	webBlockFields,
 } from "./web-tool-utils.js";
 
 const TOOL_NAME = "web_dom_action" as const;
@@ -92,11 +91,18 @@ export const createWebDomActionTool: ToolFactory<Input, WebToolServices> = (
 	description:
 		"Interact with or inspect DOM of an active web session via selectors (`click`, `input`, `read`, `query`, `focus`, `scroll*`).",
 	schema,
-	execute: async (input) => {
+	execute: async (input, context) => {
 		const webBrowser = requireWebBrowserService(services);
 		try {
-			const session = await webBrowser.refreshSession({
+			const refreshed = await webBrowser.refreshSession({
 				sessionId: input.sessionId,
+			});
+
+			// A wall has a perfectly accessible DOM, so without this the agent
+			// happily clicks and reads the interstitial as though it were the page.
+			const session = await resolveWebBlock(services, refreshed, {
+				tool: TOOL_NAME,
+				toolCallId: context?.toolCallId,
 			});
 			if (!session.domAccessible) {
 				throw new Error("Current session cannot expose DOM actions.");
@@ -141,6 +147,7 @@ export const createWebDomActionTool: ToolFactory<Input, WebToolServices> = (
 					selector: input.selector,
 					note: "Use the returned `index` value for follow-up read/click/input/focus actions. Prefer visible elements with acceptsTextInput=true for text entry.",
 					result: actionResult,
+					...webBlockFields(session),
 				});
 			}
 
@@ -160,6 +167,7 @@ export const createWebDomActionTool: ToolFactory<Input, WebToolServices> = (
 				action: input.action,
 				selector: input.selector,
 				result: actionResult,
+				...webBlockFields(session),
 			});
 		} catch (error) {
 			return createDefaultWebErrorResult(error);
