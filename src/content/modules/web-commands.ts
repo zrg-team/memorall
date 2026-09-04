@@ -6,30 +6,15 @@ import {
 	type WebDomElementInfo,
 	type WebElementRecord,
 } from "@/services/web-browser";
+import { extractReadableDocumentText } from "@/services/web-browser/readable-text";
 
 // ── Snapshot helpers ──────────────────────────────────────────────────────────
-
-const NON_READABLE_SELECTOR = "script, style, noscript, link, template";
-
-const removeNonReadableNodes = (root: ParentNode): void => {
-	root.querySelectorAll(NON_READABLE_SELECTOR).forEach((node) => node.remove());
-};
-
-const getReadableDocumentText = (): string => {
-	const clonedDocument = document.cloneNode(true) as Document;
-	removeNonReadableNodes(clonedDocument);
-	return (
-		clonedDocument.body?.innerText ||
-		clonedDocument.documentElement?.textContent ||
-		""
-	).trim();
-};
 
 const buildWebSnapshot = () => ({
 	url: window.location.href,
 	title: document.title || "",
 	html: document.documentElement?.outerHTML || document.body?.innerHTML || "",
-	text: getReadableDocumentText(),
+	text: extractReadableDocumentText(document),
 	domAccessible: true,
 });
 

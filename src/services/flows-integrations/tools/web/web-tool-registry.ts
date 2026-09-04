@@ -10,6 +10,10 @@ import {
 	type WebSnapshotPayload,
 	type WebWaitSelectorState,
 } from "@/services/web-browser/web-browser-protocol";
+import {
+	extractReadableDocumentText,
+	removeNonReadableNodes,
+} from "@/services/web-browser/readable-text";
 import { DEFAULT_WEB_MAX_HTML_CHARS } from "@memorall/agent-harness-flows/tools/web/max-html-chars";
 import {
 	detectWebBlock,
@@ -221,14 +225,6 @@ const normalizeInputUrl = (rawUrl: string): string => {
 const normalizeReadableText = (value: string): string =>
 	value.replace(/\s+/g, " ").trim();
 
-const NON_READABLE_SELECTOR = "script, style, noscript, link, template";
-
-const removeNonReadableNodes = (root: ParentNode): void => {
-	root.querySelectorAll(NON_READABLE_SELECTOR).forEach((node) => {
-		node.remove();
-	});
-};
-
 const extractReadableHtmlText = (html: string): string =>
 	html
 		.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, " ")
@@ -316,13 +312,7 @@ const safeText = (doc: Document | null): string => {
 	if (!doc) {
 		return "";
 	}
-	const clonedDocument = doc.cloneNode(true) as Document;
-	removeNonReadableNodes(clonedDocument);
-	return (
-		clonedDocument.body?.innerText ??
-		clonedDocument.documentElement?.textContent ??
-		""
-	);
+	return extractReadableDocumentText(doc);
 };
 
 const safeHtml = (doc: Document | null): string => {
