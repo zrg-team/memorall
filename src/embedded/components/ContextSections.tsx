@@ -232,19 +232,19 @@ export const EmbeddedContextSections: React.FC<{
 		return contextItem.label.replace(/^([^:]+:\s*)<[^>]+>\s*/, "$1");
 	}, []);
 
+	/**
+	 * Keeps a wheel over the preview from also scrolling the conversation behind
+	 * it. Chaining out to the host page is handled by `overscroll-contain` on the
+	 * preview itself.
+	 *
+	 * See the note in `use-conversation-auto-scroll`: the `preventDefault` this
+	 * used to call at the scroll boundary was silently ignored, because React
+	 * registers `wheel` as a passive listener, and it logged a console warning on
+	 * the host page for every wheel event once the preview was scrolled to an
+	 * edge.
+	 */
 	const handleScrollableWheel = useCallback(
 		(event: React.WheelEvent<HTMLDivElement>) => {
-			const element = event.currentTarget;
-			const { scrollTop, scrollHeight, clientHeight } = element;
-			const isScrollingDown = event.deltaY > 0;
-			const isScrollingUp = event.deltaY < 0;
-			const atTop = scrollTop <= 0;
-			const atBottom = scrollTop + clientHeight >= scrollHeight - 1;
-
-			if ((atTop && isScrollingUp) || (atBottom && isScrollingDown)) {
-				event.preventDefault();
-			}
-
 			event.stopPropagation();
 		},
 		[],

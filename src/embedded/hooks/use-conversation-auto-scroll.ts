@@ -27,6 +27,18 @@ export const useConversationAutoScroll = () => {
 		setShouldAutoScroll(checkIfNearBottom());
 	}, [checkIfNearBottom]);
 
+	/**
+	 * Keeps a wheel at the scroll boundary from also reaching the rest of the
+	 * embedded panel.
+	 *
+	 * Scroll chaining into the host page is prevented by `overscroll-contain` on
+	 * the conversation, not from here. This used to call `preventDefault` as well,
+	 * which never did anything: React attaches `wheel` to its root container as a
+	 * passive listener, so the call was ignored and Chrome logged "Unable to
+	 * preventDefault inside passive event listener invocation" on every wheel
+	 * event at the top or bottom of the conversation — on whatever page the user
+	 * had the panel open on.
+	 */
 	const handleWheel = useCallback((event: React.WheelEvent<HTMLDivElement>) => {
 		const element = conversationRef.current;
 		if (!element) {
@@ -40,7 +52,6 @@ export const useConversationAutoScroll = () => {
 		const atBottom = scrollTop + clientHeight >= scrollHeight - 1;
 
 		if ((atTop && isScrollingUp) || (atBottom && isScrollingDown)) {
-			event.preventDefault();
 			event.stopPropagation();
 		}
 	}, []);
