@@ -1,3 +1,5 @@
+import { planContextFromMemoryHint } from "../../utils/context-planner.js";
+
 export function getPromptLength(input) {
 	return input?.input_ids?.dims?.[1] || 0;
 }
@@ -40,32 +42,14 @@ export function resolveMaxContextTokens(tokenizer, modelConfig) {
 	return tokenizerMax ?? modelMax;
 }
 
+/**
+ * Transformers.js picks WebGPU or WASM per model, so the budget it is sized
+ * against is whichever the catalogue recorded for it.
+ *
+ * Note this deliberately does not clamp to the model's trained context: callers
+ * here combine it with the tokenizer's own maximum separately.
+ */
 export function resolveMemoryContextTokens(memoryHint) {
-	if (!memoryHint || typeof memoryHint !== "object") {
-		return undefined;
-	}
-
-	const { availableGB, sizeGB, kvBytesPerToken } = memoryHint;
-	const hasValidNumbers =
-		typeof availableGB === "number" &&
-		Number.isFinite(availableGB) &&
-		availableGB > 0 &&
-		typeof sizeGB === "number" &&
-		Number.isFinite(sizeGB) &&
-		sizeGB >= 0 &&
-		typeof kvBytesPerToken === "number" &&
-		Number.isFinite(kvBytesPerToken) &&
-		kvBytesPerToken > 0;
-
-	if (!hasValidNumbers) {
-		return undefined;
-	}
-
-	const availableForKV = availableGB / 1.2 - sizeGB;
-	if (availableForKV <= 0) {
-		return 0;
-	}
-
-	const maxTokens = Math.floor((availableForKV * 1024 ** 3) / kvBytesPerToken);
-	return Math.max(0, Math.floor(maxTokens / 1024) * 1024);
+	return planContextFromMemoryHint(memoryHint, { trainedContext: 0 })
+		?.contextTokens;
 }

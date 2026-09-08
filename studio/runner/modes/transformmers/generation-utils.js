@@ -11,6 +11,24 @@ export function decodeTrimmedSequences(tokenizer, sequences) {
 	})[0] || "";
 }
 
+/**
+ * Reported to the host when the runner's WebGPU context is beyond repair.
+ *
+ * Kept in sync with `WEBGPU_CONTEXT_LOST_CODE` in
+ * `src/services/llm/utils/webgpu-runner-errors.ts`.
+ */
+export const WEBGPU_CONTEXT_LOST_CODE = "TRANSFORMER_WEBGPU_CONTEXT_LOST";
+
+/**
+ * True when the failure killed the document's WebGPU device rather than just
+ * this run. Nothing inside the iframe can undo that - the ONNX runtime keeps
+ * the dead device for the life of the document, so every later session hits
+ * the same wall. Recovery means a fresh runner document; see
+ * `TransformerLLM.recoverFromContextLoss`.
+ *
+ * @param {unknown} error
+ * @returns {boolean}
+ */
 export function isRecoverableWebGPUExecutionError(error) {
 	const message = error instanceof Error ? error.message : String(error || "");
 	const normalized = message.toLowerCase();

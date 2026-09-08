@@ -18,6 +18,7 @@ import {
 	decodeTrimmedSequences,
 	isRecoverableWebGPUExecutionError,
 	trimSequences,
+	WEBGPU_CONTEXT_LOST_CODE,
 } from "./generation-utils.js";
 import {
 	createCompletionResponse,
@@ -456,4 +457,4 @@ export async function executeChatCompletion({
 	});
 }
 
-export { isRecoverableWebGPUExecutionError };
+export { isRecoverableWebGPUExecutionError, WEBGPU_CONTEXT_LOST_CODE };

@@ -2123,6 +2123,554 @@ img {
   color: var(--text);
 }
 
+/* --- On-the-page section ------------------------------------------------ */
+
+.inpage-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1.2rem;
+}
+
+.inpage-card {
+  padding: 1.5rem;
+  border-radius: var(--radius-lg);
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(17, 23, 20, 0.08);
+  box-shadow: var(--shadow);
+  transition:
+    transform 220ms ease,
+    box-shadow 220ms ease,
+    border-color 220ms ease;
+}
+
+.inpage-card:hover,
+.inpage-card:focus-within {
+  transform: translateY(-4px);
+  box-shadow: 0 28px 82px rgba(14, 20, 17, 0.15);
+  border-color: rgba(36, 199, 239, 0.22);
+}
+
+.inpage-card h3 {
+  margin: 0.7rem 0 0;
+  font-size: 1.4rem;
+  letter-spacing: -0.04em;
+}
+
+.inpage-card p {
+  color: rgba(17, 23, 20, 0.64);
+  line-height: 1.65;
+  margin-top: 0.9rem;
+}
+
+.inpage-visual {
+  margin-bottom: 1.4rem;
+  padding: 0.9rem;
+  border-radius: var(--radius-md);
+  background:
+    radial-gradient(circle at top left, rgba(36, 199, 239, 0.1), transparent 14rem),
+    linear-gradient(180deg, rgba(17, 17, 17, 0.98), rgba(30, 30, 30, 0.98));
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.inpage-window {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 0.82fr);
+  gap: 0.75rem;
+  min-height: 12.5rem;
+}
+
+.inpage-article {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 0.85rem;
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.inpage-line {
+  display: block;
+  height: 0.52rem;
+  border-radius: 999px;
+  background: rgba(246, 241, 232, 0.16);
+}
+
+.inpage-line.is-title {
+  height: 0.8rem;
+  width: 68%;
+  background: rgba(246, 241, 232, 0.4);
+}
+
+.inpage-line.is-short {
+  width: 62%;
+}
+
+.inpage-line.is-selected {
+  background: rgba(36, 199, 239, 0.5);
+  box-shadow: 0 0 0 4px rgba(36, 199, 239, 0.12);
+}
+
+.inpage-target {
+  display: block;
+  height: 2.4rem;
+  border-radius: 12px;
+  border: 1px dashed rgba(36, 199, 239, 0.55);
+  background: rgba(36, 199, 239, 0.09);
+  animation: pulse 2.6s ease-in-out infinite;
+}
+
+.inpage-panel,
+.inpage-dock {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.8rem;
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.28);
+}
+
+.inpage-dock {
+  align-self: flex-end;
+  height: max-content;
+}
+
+.inpage-panel-head,
+.inpage-dock-head {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.68rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(246, 241, 232, 0.62);
+}
+
+.inpage-dot {
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 999px;
+  background: rgba(246, 241, 232, 0.4);
+}
+
+.inpage-dot.is-live {
+  background: rgba(36, 199, 239, 0.9);
+  animation: pulse 1.8s ease-in-out infinite;
+}
+
+.inpage-bubble {
+  padding: 0.5rem 0.65rem;
+  border-radius: 12px;
+  font-size: 0.78rem;
+  line-height: 1.4;
+  color: rgba(246, 241, 232, 0.76);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.inpage-bubble.is-user {
+  color: rgba(17, 23, 20, 0.86);
+  background: rgba(246, 241, 232, 0.88);
+  border-color: transparent;
+}
+
+.inpage-attach {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.15rem;
+}
+
+.inpage-attach span {
+  padding: 0.24rem 0.5rem;
+  border-radius: 999px;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.64rem;
+  color: rgba(246, 241, 232, 0.66);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+}
+
+.inpage-dock-step {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.75rem;
+  line-height: 1.35;
+  color: rgba(246, 241, 232, 0.5);
+}
+
+.inpage-dock-step::before {
+  content: "";
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 999px;
+  flex: 0 0 auto;
+  border: 1px solid rgba(246, 241, 232, 0.35);
+}
+
+.inpage-dock-step.is-done {
+  color: rgba(246, 241, 232, 0.78);
+}
+
+.inpage-dock-step.is-done::before {
+  background: rgba(36, 199, 239, 0.85);
+  border-color: rgba(36, 199, 239, 0.85);
+}
+
+/* --- Download section --------------------------------------------------- */
+
+/* Six tracks so the two ready-today surfaces share the first row (3 + 3) and
+   the three desktop targets share the second (2 + 2 + 2). */
+.download-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 1.1rem;
+  align-items: stretch;
+}
+
+.download-card:nth-child(-n + 2) {
+  grid-column: span 3;
+}
+
+.download-card:nth-child(n + 3) {
+  grid-column: span 2;
+}
+
+.download-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  padding: 1.4rem;
+  border-radius: var(--radius-lg);
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(17, 23, 20, 0.08);
+  box-shadow: var(--shadow);
+  transition:
+    transform 220ms ease,
+    box-shadow 220ms ease,
+    border-color 220ms ease;
+}
+
+.download-card:hover,
+.download-card:focus-within {
+  transform: translateY(-4px);
+  box-shadow: 0 28px 82px rgba(14, 20, 17, 0.15);
+  border-color: rgba(36, 199, 239, 0.24);
+}
+
+.download-card.is-primary {
+  color: var(--text-inverse);
+  background:
+    radial-gradient(circle at top left, rgba(36, 199, 239, 0.14), transparent 16rem),
+    linear-gradient(180deg, rgba(17, 17, 17, 0.98), rgba(30, 30, 30, 0.98));
+  border-color: rgba(255, 255, 255, 0.1);
+  box-shadow: var(--shadow-strong);
+}
+
+.download-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.download-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 14px;
+  background: rgba(17, 23, 20, 0.05);
+  border: 1px solid rgba(17, 23, 20, 0.09);
+  color: rgba(17, 23, 20, 0.78);
+}
+
+.download-card.is-primary .download-icon {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(255, 255, 255, 0.12);
+  color: rgba(246, 241, 232, 0.92);
+}
+
+.download-icon svg {
+  width: 1.35rem;
+  height: 1.35rem;
+}
+
+.download-card h3 {
+  margin: 0;
+  font-size: 1.24rem;
+  letter-spacing: -0.03em;
+}
+
+.download-platform {
+  margin: 0.2rem 0 0;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  color: rgba(17, 23, 20, 0.55);
+}
+
+.download-card.is-primary .download-platform {
+  color: rgba(246, 241, 232, 0.55);
+}
+
+.download-copy {
+  margin: 0;
+  line-height: 1.6;
+  color: rgba(17, 23, 20, 0.64);
+}
+
+.download-card.is-primary .download-copy {
+  color: rgba(246, 241, 232, 0.7);
+}
+
+.download-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  align-self: flex-start;
+  padding: 0.34rem 0.7rem;
+  border-radius: 999px;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+}
+
+.download-status::before {
+  content: "";
+  width: 0.42rem;
+  height: 0.42rem;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+.download-status.is-ready {
+  color: #0f766e;
+  background: rgba(15, 118, 110, 0.09);
+  border: 1px solid rgba(15, 118, 110, 0.2);
+}
+
+.download-card.is-primary .download-status.is-ready {
+  color: #6feaf3;
+  background: rgba(36, 199, 239, 0.12);
+  border-color: rgba(36, 199, 239, 0.26);
+}
+
+.download-status.is-rollout {
+  color: rgba(17, 23, 20, 0.6);
+  background: rgba(17, 23, 20, 0.05);
+  border: 1px solid rgba(17, 23, 20, 0.12);
+}
+
+.download-action {
+  margin-top: auto;
+  width: 100%;
+  justify-content: center;
+}
+
+.download-note {
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: rgba(17, 23, 20, 0.52);
+}
+
+.download-card.is-primary .download-note {
+  color: rgba(246, 241, 232, 0.52);
+}
+
+.download-note code {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.78rem;
+  padding: 0.1rem 0.32rem;
+  border-radius: 6px;
+  background: rgba(17, 23, 20, 0.06);
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.platform-matrix {
+  margin-top: 1.4rem;
+  padding: 1.5rem;
+  border-radius: var(--radius-lg);
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(17, 23, 20, 0.08);
+  box-shadow: var(--shadow);
+}
+
+.platform-matrix-head h3 {
+  margin: 0;
+  font-size: 1.4rem;
+  letter-spacing: -0.04em;
+}
+
+.platform-matrix-head p {
+  margin: 0.6rem 0 0;
+  max-width: 44rem;
+  line-height: 1.65;
+  color: rgba(17, 23, 20, 0.64);
+}
+
+/* Only worth saying once the table is actually wider than its container. */
+.platform-matrix-hint {
+  display: none;
+  margin: 0.7rem 0 0;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  color: rgba(17, 23, 20, 0.45);
+}
+
+/* The table is the one wide block on the page, so it scrolls inside itself. */
+.platform-matrix-scroll {
+  margin-top: 1.3rem;
+  overflow-x: auto;
+}
+
+.platform-table {
+  width: 100%;
+  min-width: 46rem;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+.platform-table th,
+.platform-table td {
+  padding: 0.8rem 0.9rem;
+  border-bottom: 1px solid rgba(17, 23, 20, 0.08);
+  vertical-align: middle;
+}
+
+.platform-table thead th {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.72rem;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(17, 23, 20, 0.55);
+  border-bottom-color: rgba(17, 23, 20, 0.14);
+}
+
+.platform-table thead th:not(:first-child),
+.platform-table tbody td {
+  text-align: center;
+  width: 11rem;
+}
+
+.platform-table tbody th {
+  font-weight: 500;
+  font-size: 0.95rem;
+  line-height: 1.45;
+  color: rgba(17, 23, 20, 0.82);
+}
+
+.platform-table tbody tr:last-child th,
+.platform-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.platform-table tbody tr:hover th,
+.platform-table tbody tr:hover td {
+  background: rgba(17, 23, 20, 0.025);
+}
+
+.cell-yes,
+.cell-part,
+.cell-no {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  line-height: 1.3;
+}
+
+.cell-yes::before,
+.cell-part::before,
+.cell-no::before {
+  content: "";
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 999px;
+  flex: 0 0 auto;
+  background: currentColor;
+}
+
+.cell-yes {
+  color: #0f766e;
+  background: rgba(15, 118, 110, 0.09);
+}
+
+.cell-part {
+  color: rgba(17, 23, 20, 0.6);
+  background: rgba(17, 23, 20, 0.05);
+}
+
+.cell-no {
+  color: rgba(17, 23, 20, 0.38);
+  background: transparent;
+}
+
+.platform-matrix-note {
+  margin: 1.1rem 0 0;
+  font-size: 0.88rem;
+  line-height: 1.6;
+  color: rgba(17, 23, 20, 0.55);
+}
+
+.download-footnote {
+  margin-top: 1.4rem;
+  padding: 1.35rem 1.5rem;
+  border-radius: var(--radius-lg);
+  background: rgba(17, 23, 20, 0.035);
+  border: 1px solid rgba(17, 23, 20, 0.08);
+}
+
+.download-footnote p {
+  margin: 0;
+  max-width: 62rem;
+  line-height: 1.7;
+  color: rgba(17, 23, 20, 0.66);
+}
+
+.download-footnote-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin-top: 1rem;
+}
+
+.download-footnote-meta span {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.42rem 0.7rem;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  color: rgba(17, 23, 20, 0.62);
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(17, 23, 20, 0.08);
+}
+
+#get .cta-panel {
+  margin-top: 1.4rem;
+}
+
 .js .reveal {
   opacity: 0;
   transform: translateY(36px);
@@ -2251,8 +2799,19 @@ img {
   .comparison-grid,
   .feature-grid,
   .timeline-grid,
-  .privacy-cards {
+  .privacy-cards,
+  .inpage-grid {
     grid-template-columns: 1fr;
+  }
+
+  /* Two per row: 3 + 3 keeps the first pair together, 2 + 2 + 2 wraps to 2/2/2. */
+  .download-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .download-card:nth-child(-n + 2),
+  .download-card:nth-child(n + 3) {
+    grid-column: span 2;
   }
 
   .step-grid {
@@ -2400,6 +2959,35 @@ img {
   .memory-grid,
   .privacy-cards {
     grid-template-columns: 1fr;
+  }
+
+  .download-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .download-card:nth-child(-n + 2),
+  .download-card:nth-child(n + 3) {
+    grid-column: span 1;
+  }
+
+  .inpage-window {
+    grid-template-columns: 1fr;
+  }
+
+  .inpage-dock {
+    align-self: stretch;
+  }
+
+  .download-footnote {
+    padding: 1.15rem 1.1rem;
+  }
+
+  .platform-matrix {
+    padding: 1.2rem 1.1rem;
+  }
+
+  .platform-matrix-hint {
+    display: block;
   }
 
   .workflow-story-canvas,
