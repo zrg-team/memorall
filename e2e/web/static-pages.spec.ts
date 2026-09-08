@@ -97,7 +97,7 @@ test("serves the production app and every first-party asset below the Pages path
 	const projectRoot = await request.get("/memorall/");
 	expect(projectRoot.status()).toBe(200);
 	expect(await projectRoot.text()).toContain(
-		"The browser is your agent's full workspace.",
+		"Stop re-explaining your work to your AI.",
 	);
 	const landingStyles = await request.get("/memorall/css/index.css");
 	expect(landingStyles.status()).toBe(200);
