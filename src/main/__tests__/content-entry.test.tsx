@@ -214,7 +214,9 @@ describe("content script communication entrypoint", () => {
 		expect(
 			listener({ type: BACKGROUND_EVENTS.HIDE_CO_AGENT }, {}, hideResponse),
 		).toBe(true);
-		expect(mocks.handleHideCoAgent).toHaveBeenCalledWith(hideResponse);
+		await vi.waitFor(() =>
+			expect(mocks.handleHideCoAgent).toHaveBeenCalledWith(hideResponse),
+		);
 
 		const traceResponse = vi.fn();
 		expect(
@@ -273,5 +275,69 @@ describe("content script communication entrypoint", () => {
 			messageListeners[0]({ type: "job-notification" }, {}, sendResponse),
 		).toBe(false);
 		expect(sendResponse).not.toHaveBeenCalled();
+	});
+
+	it("still reads the page when the embedded UI fails to load", async () => {
+		// The failure this guards against does not look like its cause. When the
+		// embedded UI was a static import, one module-level throw anywhere in that
+		// graph meant the listener at the bottom of content.ts never registered,
+		// every tabs.sendMessage failed with "Receiving end does not exist", and
+		// web_open reported "Content script unavailable" on a page that had loaded
+		// perfectly well. Losing the UI must never cost us the page.
+		const { chrome, messageListeners } = installChrome();
+		vi.resetModules();
+		vi.doMock("@/content/modules/ui-handlers", () => {
+			throw new Error("embedded UI blew up on this page");
+		});
+
+		try {
+			await import("../../content");
+
+			expect(chrome.runtime.onMessage.addListener).toHaveBeenCalled();
+
+			mocks.isWebContentCommandRequest.mockReturnValue(true);
+			const snapshotResponse = vi.fn();
+			expect(
+				messageListeners[0](
+					{ source: "memorall:web-content-command", type: "web-tool:snapshot" },
+					{},
+					snapshotResponse,
+				),
+			).toBe(true);
+			await vi.waitFor(() =>
+				expect(mocks.handleWebContentCommand).toHaveBeenCalled(),
+			);
+		} finally {
+			vi.doUnmock("@/content/modules/ui-handlers");
+		}
+	});
+
+	it("answers instead of hanging when a deferred handler cannot load", async () => {
+		const { messageListeners } = installChrome();
+		vi.resetModules();
+		vi.doMock("@/content/modules/ui-handlers", () => {
+			throw new Error("embedded UI blew up on this page");
+		});
+
+		try {
+			await import("../../content");
+
+			const sendResponse = vi.fn();
+			expect(
+				messageListeners[0](
+					{ type: BACKGROUND_EVENTS.SHOW_CHAT_MODAL },
+					{},
+					sendResponse,
+				),
+			).toBe(true);
+			// A sender left waiting forever is what produced the original timeout.
+			await vi.waitFor(() =>
+				expect(sendResponse).toHaveBeenCalledWith(
+					expect.objectContaining({ success: false }),
+				),
+			);
+		} finally {
+			vi.doUnmock("@/content/modules/ui-handlers");
+		}
 	});
 });
