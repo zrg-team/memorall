@@ -51,9 +51,34 @@ type ContentSendResponse = (
 // being registered. Each failure answers the message it was handling instead of
 // leaving the sender waiting for a reply that never comes.
 
-const loadUiHandlers = () => import("./content/modules/ui-handlers");
-const loadMemoryHandlers = () => import("./content/modules/memory-handlers");
-const loadCoAgent = () => import("@/embedded/pages/CoAgent");
+// The UI lives in its own ES module build entry, loaded here by URL with a
+// native import(). A bundler-managed dynamic import cannot work from a content
+// script: its chunk loader appends a <script> tag, which the browser runs in the
+// page's world, so the chunk registers there and this isolated world waits
+// forever — every deferred import failed with `ChunkLoadError: ... (missing)`
+// and the whole embedded UI reported itself "unavailable on this page".
+type EmbeddedUiBundle = typeof import("./content/embedded-ui");
+
+let embeddedUiBundle: Promise<EmbeddedUiBundle> | null = null;
+
+const loadEmbeddedUi = (): Promise<EmbeddedUiBundle> => {
+	if (!embeddedUiBundle) {
+		embeddedUiBundle = import(
+			/* webpackIgnore: true */ chrome.runtime.getURL("embedded/embedded-ui.js")
+		) as Promise<EmbeddedUiBundle>;
+		// A failed load must not poison every later message.
+		embeddedUiBundle.catch(() => {
+			embeddedUiBundle = null;
+		});
+	}
+	return embeddedUiBundle;
+};
+
+const loadUiHandlers = () =>
+	loadEmbeddedUi().then((module) => module.uiHandlers);
+const loadMemoryHandlers = () =>
+	loadEmbeddedUi().then((module) => module.memoryHandlers);
+const loadCoAgent = () => loadEmbeddedUi().then((module) => module.coAgent);
 
 const reportUnavailable = (
 	sendResponse: ContentSendResponse,
@@ -194,8 +219,13 @@ document.addEventListener("contextmenu", () => {
 	// Mouse position tracked for UI positioning in embedded components
 });
 
-// Side-effect only: registers its own activity-tracking listener.
-void import("./embedded/activity-tracker").catch((error) => {
+// Side-effect only: registers its own activity-tracking listener. Loaded by URL
+// for the same reason as the UI bundle above.
+void import(
+	/* webpackIgnore: true */ chrome.runtime.getURL(
+		"embedded/activity-tracker.js",
+	)
+).catch((error) => {
 	logError("Memorall activity tracking is unavailable on this page:", error);
 });
 
