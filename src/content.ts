@@ -57,12 +57,16 @@ type ContentSendResponse = (
 
 // The UI is a separate ES module build entry, fetched by URL — see
 // ./content/load-embedded-ui for why a bundler-managed dynamic import cannot
-// reach a content script's isolated world.
+// reach a content script's isolated world. The loader takes the resolver from
+// here because only this file may reach for a Chrome API.
+const resolveAssetUrl = (path: string) => chrome.runtime.getURL(path);
+
 const loadUiHandlers = () =>
-	loadEmbeddedUi().then((module) => module.uiHandlers);
+	loadEmbeddedUi(resolveAssetUrl).then((module) => module.uiHandlers);
 const loadMemoryHandlers = () =>
-	loadEmbeddedUi().then((module) => module.memoryHandlers);
-const loadCoAgent = () => loadEmbeddedUi().then((module) => module.coAgent);
+	loadEmbeddedUi(resolveAssetUrl).then((module) => module.memoryHandlers);
+const loadCoAgent = () =>
+	loadEmbeddedUi(resolveAssetUrl).then((module) => module.coAgent);
 
 const reportUnavailable = (
 	sendResponse: ContentSendResponse,
@@ -204,7 +208,7 @@ document.addEventListener("contextmenu", () => {
 });
 
 // Side-effect only: registers its own activity-tracking listener.
-void loadActivityTracker().catch((error) => {
+void loadActivityTracker(resolveAssetUrl).catch((error) => {
 	logError("Memorall activity tracking is unavailable on this page:", error);
 });
 

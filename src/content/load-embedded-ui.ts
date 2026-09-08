@@ -24,12 +24,21 @@ export interface EmbeddedUiBundle {
 	readonly uiHandlers: typeof UiHandlersModule;
 }
 
+/**
+ * Resolves a packaged asset path to a URL. The host supplies it — the extension
+ * passes its runtime `getURL` — so this module stays free of platform APIs, as
+ * everything under src/content/ must be.
+ */
+export type ResolveAssetUrl = (path: string) => string;
+
 let embeddedUiBundle: Promise<EmbeddedUiBundle> | null = null;
 
-export const loadEmbeddedUi = (): Promise<EmbeddedUiBundle> => {
+export const loadEmbeddedUi = (
+	resolveAssetUrl: ResolveAssetUrl,
+): Promise<EmbeddedUiBundle> => {
 	if (!embeddedUiBundle) {
 		embeddedUiBundle = import(
-			/* webpackIgnore: true */ chrome.runtime.getURL("embedded/embedded-ui.js")
+			/* webpackIgnore: true */ resolveAssetUrl("embedded/embedded-ui.js")
 		) as Promise<EmbeddedUiBundle>;
 		// A failed load must not poison every later message.
 		embeddedUiBundle.catch(() => {
@@ -40,9 +49,9 @@ export const loadEmbeddedUi = (): Promise<EmbeddedUiBundle> => {
 };
 
 /** Side-effect only: registers the activity-tracking listeners. */
-export const loadActivityTracker = (): Promise<unknown> =>
+export const loadActivityTracker = (
+	resolveAssetUrl: ResolveAssetUrl,
+): Promise<unknown> =>
 	import(
-		/* webpackIgnore: true */ chrome.runtime.getURL(
-			"embedded/activity-tracker.js",
-		)
+		/* webpackIgnore: true */ resolveAssetUrl("embedded/activity-tracker.js")
 	);
