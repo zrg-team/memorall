@@ -19,7 +19,7 @@ static web app, and Tauri applications for Windows, macOS, and Linux.
 [![Agent Tools](https://img.shields.io/badge/Agent-Sandbox%20%2B%20Browser-c05621)](https://github.com/zrg-team/memorall)
 [![Custom Flows](https://img.shields.io/badge/Flows-Customizable-7c3aed)](https://github.com/zrg-team/memorall)
 
-[Platforms](#supported-platforms) • [Quick Start](#quick-start) • [Flow Engine](#flow-engine) • [Agent Power](#agent-power) • [Custom Agents](#custom-agents) • [Architecture](#architecture-at-a-glance) • [Documentation](#documentation-map) • [GitHub](https://github.com/zrg-team/memorall)
+[Platforms](#supported-platforms) • [Quick Start](#quick-start) • [Demo](#demo) • [Flow Engine](#flow-engine) • [Agent Power](#agent-power) • [Custom Agents](#custom-agents) • [Architecture](#architecture-at-a-glance) • [Documentation](#documentation-map) • [GitHub](https://github.com/zrg-team/memorall)
 
 </div>
 
@@ -38,16 +38,12 @@ What makes the current app distinctive:
 <a id="flow-engine"></a>
 ## 🔁 Flow Engine
 
-Memorall's agent behavior is built on the **Flow Engine** in [`src/services/flows`](./src/services/flows). This is the harness system around the LLM: it turns a model from a text predictor into a scalable agent runtime that can run graphs, apply middleware, call tools, retrieve memory, stream activity, and adapt to different host environments.
-
-The Flow Engine is important because Memorall is not meant to be one fixed prompt loop. It is designed to stay:
-
-- **Scalable** - capabilities are split into graphs, steps, tools, feature bundles, services, and adapters instead of one monolithic agent.
-- **Explorable** - registries and catalogs expose available flows, steps, tools, and features so builder UIs and host code can inspect what exists.
-- **Portable** - browser, backend, CLI, sandbox, worker, edge, and test environments can provide their own adapters while the harness stays stable.
-- **Composable** - chat, tool agents, RAG, memory agents, extraction flows, and deterministic test flows are assembled from the same building blocks.
-- **Testable** - LLMs, embeddings, databases, filesystems, browser sessions, and sandbox services can be swapped for fakes.
-- **Streamable** - clients receive OpenAI-compatible chunks plus harness events for progress, tool execution, retrieval, memory, and graph state.
+Memorall's agent behavior runs on the **Flow Engine**, which now lives outside the
+application as a workspace package family under
+[`packages/agent-harness`](./packages/agent-harness). This is the harness system
+around the LLM: it turns a model from a text predictor into a scalable agent
+runtime that can run graphs, apply middleware, call tools, retrieve memory,
+stream activity, and adapt to different host environments.
 
 At a high level:
 
@@ -58,7 +54,84 @@ LLM + Flow Engine  -> explorable agent system
 Flow Engine = runtime + graph + middleware + tools + memory + knowledge + adapters
 ```
 
-Full architecture notes: [Flow Engine README](./src/services/flows/README.md)
+The Flow Engine is important because Memorall is not meant to be one fixed prompt loop. It is designed to stay:
+
+- **Scalable** - capabilities are split into graphs, steps, tools, feature bundles, services, and adapters instead of one monolithic agent.
+- **Explorable** - registries and catalogs expose available flows, steps, tools, and features so builder UIs and host code can inspect what exists.
+- **Portable** - browser, backend, CLI, sandbox, worker, edge, and test environments can provide their own adapters while the harness stays stable.
+- **Composable** - chat, tool agents, RAG, memory agents, extraction flows, and deterministic test flows are assembled from the same building blocks.
+- **Testable** - LLMs, embeddings, databases, filesystems, browser sessions, and sandbox services can be swapped for fakes.
+- **Streamable** - clients receive OpenAI-compatible chunks plus harness events for progress, tool execution, retrieval, memory, and graph state.
+
+### 🌊 The engine itself: `@memorall/agent-harness-flows`
+
+`core`, `langgraph` and `standard` describe an agent runtime you compose from
+plugins. [`flows`](./packages/agent-harness/flows) is a complete, working one -
+the engine Memorall runs on every chat turn. It arrives with the pieces already
+in it:
+
+| Inside `flows` | What you get |
+| --- | --- |
+| `registries/` | Step, tool, graph, and service registries plus their schemas |
+| `graph/` | Two working graphs: `agent` (a ReAct loop) and `foundation` (a linear pipeline) |
+| `steps/common/` | System prompt, chat completion, agent completion, skill context, current time, GPT boost |
+| `steps/features/` | Filesystem, web, planner, multi-agent, MCP, Node sandbox, artifact, auto-compact - switchable per run |
+| `tools/` | The tools those features expose: fs, web, planner, sandbox, calculator, skills, agent messaging |
+| `runtime/`, `context/` | The flow engine, run lifecycle, and runtime variables |
+
+Every step is on or off in a config object, so the same graph is a plain chat or
+a full agent depending on that object rather than on different code.
+
+### 🌊 Two rules that keep it portable
+
+- **Importing is registering.** `flows` declares `sideEffects: true`, alone among
+  the harness packages, because importing a module here registers what it
+  defines. Never re-export it through a tree-shakeable barrel - `full`
+  deliberately omits it - or a bundler will drop the registrations and leave an
+  agent with no steps.
+- **It holds no product behaviour.** Nothing in the package reaches for
+  `window`, `document`, or a Node builtin, so it loads under either runtime.
+  What it cannot do alone it asks the host for: services (LLM, filesystem, web
+  browser, sandbox, logger, skills) through the service registry, HTML parsing
+  through `setHtmlParser`, and host-owned tools named with `hostTool("…")`.
+
+### 🧩 The harness family
+
+| Package | Use it for |
+| --- | --- |
+| [`agent-harness`](./packages/agent-harness/full) | 🚀 The complete facade and explicit presets |
+| [`agent-harness-core`](./packages/agent-harness/core) | ⚙️ Contracts, plugins, runs, events, lifecycle, persistence ports |
+| [`agent-harness-langgraph`](./packages/agent-harness/langgraph) | 🔁 ReAct loops and ordered step pipelines backed by LangGraph |
+| [`agent-harness-standard`](./packages/agent-harness/standard) | 🧰 Filesystem, web, planner, skills, chat, compaction, delegation |
+| [`agent-harness-sandbox`](./packages/agent-harness/sandbox) | 🧪 Provider-neutral sandbox sessions, tools, profiles, workspace sync |
+| [`agent-harness-mcp`](./packages/agent-harness/mcp) | 🔌 HTTP/SSE MCP discovery, schema normalization, tool adaptation |
+| [`agent-harness-flows`](./packages/agent-harness/flows) | 🌊 The flow engine in production use |
+| [`agent-harness-browser`](./packages/agent-harness/browser) | 🌐 Browser/worker platform, OPFS, IndexedDB, DOM content |
+| [`agent-harness-node`](./packages/agent-harness/node) | 🟢 Node platform, filesystem, stores, stdio MCP, Playwright, local sandbox |
+| [`agent-harness-compat`](./packages/agent-harness/compatibility) | 🧭 Explicit bridges for legacy graph, step, and tool IDs |
+
+### 🏠 What stays in the application
+
+Anything that names a Memorall concept or needs a platform API lives in the app
+and is registered into the engine at startup:
+
+- [`src/services/flows-integrations`](./src/services/flows-integrations) - visual
+  (OpenUI) responses, HyperFrames, Lottie, PDF generation, co-agent, embedded
+  chat, thread history, and document conversion steps and tools
+- [`src/services/flows-memory`](./src/services/flows-memory) - knowledge
+  retrieval, active memory, citations, and knowledge-graph growth
+- [`src/services/flows-features`](./src/services/flows-features) - packaged
+  domain agents such as travel planner, finance tracker, news collection,
+  shopping assistant, job application, language tutor, and meal planner
+- [`src/services/flows-service.ts`](./src/services/flows-service.ts) - the thin
+  app service over the graph registry
+- [`src/services/agent-harness`](./src/services/agent-harness) - bridges a flow
+  run into `agent-harness-core`, so runs, events, cancellation, and deadlines
+  are owned by the harness
+
+Full architecture notes: [Agent Harness family README](./packages/agent-harness/README.md) ·
+[Flow engine package README](./packages/agent-harness/flows/README.md) ·
+[Agent Harness architecture](./docs/agent-harness-architecture.md)
 
 <a id="agent-power"></a>
 ## ⚡ Agent Power
@@ -70,11 +143,41 @@ While the Flow Engine defines *how* the agent runs, these are the runtime capabi
 - 📁 Workspace access. The agent is not isolated from your knowledge base. It can work across the document library and writable workspace trees, giving it access to documents, notes, and workspace files.
 - 🛠️ MCP integration is WIP. The repository already includes MCP adapter groundwork, but this should be treated as in-progress rather than a stable, documented feature today.
 
-## Demo
+<a id="demo"></a>
+## 🎬 Demo
+
+First run to a working agent: connect a provider key, pick a model, build an
+agent in the wizard with **Visualize Response** enabled, then ask it something
+and get an interactive answer instead of a wall of text.
 
 ![Memorall demo](docs/assets/demo.gif)
 
-![Memorall screenshot](docs/assets/screenshot.jpg)
+![Memorall visual response](docs/assets/screenshot.jpg)
+
+### The same run, step by step
+
+| | |
+| --- | --- |
+| ![Choose how to get started](docs/assets/feature-onboarding.png)<br>**1. Start your way.** A managed service, free on-device models, or your own provider keys - the app is usable in all three modes. | ![Connect a provider key](docs/assets/feature-provider-keys.png)<br>**2. Bring your own key.** OpenRouter or OpenAI credentials are encrypted with AES-256 behind a single master passkey. |
+| ![Pick a model](docs/assets/feature-models.png)<br>**3. Pick a model.** Local WebGPU/WASM runtimes and remote catalogs sit in the same model space, so local-first and remote are one choice. | ![Build an agent](docs/assets/feature-agent-wizard.png)<br>**4. Build an agent.** Start blank and describe it in chat, or take a template and keep refining it with the wizard. |
+| ![Enable visual response](docs/assets/feature-agent-features.png)<br>**5. Switch on capabilities.** Every feature - memory, tools, web, sandbox, **Visualize Response** - is a switch on the agent, not a fork of the code. | ![Interactive answer](docs/assets/feature-visual-answer.png)<br>**6. Get an answer you can use.** The agent replies with OpenUI components: stat cards, charts, tables, and actions you can click. |
+
+### On the page you are already reading
+
+Both surfaces below are the extension's content script running on a live
+Wikipedia article - no copying into a separate app, no tab switching.
+
+**💬 Ask about this page** - right-click anywhere and the panel opens beside the
+article. Attach the page (or just a selection) as context and ask about it; the
+answer arrives next to what you were reading.
+
+![Ask about this page, on a Wikipedia article](docs/assets/demo-ask-this-page.gif)
+
+**🤖 Co-agent** - the agent joins you *on* the page. It reads the DOM, scrolls,
+points at what it found, and can click safe targets, narrating each step from a
+dock in the corner.
+
+![The co-agent scrolling a Wikipedia article](docs/assets/demo-co-agent.gif)
 
 <a id="supported-platforms"></a>
 ## 🖥️ Supported Platforms
@@ -190,7 +293,7 @@ The content script and embedded pages provide two user-facing overlays:
 
 ### App shell
 
-[`src/main/components/Layout.tsx`](./src/main/components/Layout.tsx) shows what the shared shell actually supports today:
+[`src/main/components/RightApplicationLayout.tsx`](./src/main/components/RightApplicationLayout.tsx) shows what the shared shell actually supports today:
 
 - primary navigation for chat, documents, knowledge graph, and models
 - a debug dropdown for embeddings, database, and logs
@@ -274,7 +377,11 @@ src/
     database/          PGlite, Drizzle schema, entities, migrations, RPC bridge
     embedding/         local and remote embedding implementations
     filesystem/        document/workspace virtual filesystem
-    flows/             graph runtime, step/tool registry, flow builder catalog
+    agent-harness/     bridge from a flow run into the harness runtime
+    flows-features/    packaged domain agents (travel, finance, news, tutor, …)
+    flows-integrations/ visual responses, artifacts, co-agent, page/document steps
+    flows-memory/      knowledge retrieval, active memory, citations, graph growth
+    flows-service.ts   thin app service over the graph registry
     llm/               local/browser/API-backed model adapters
     sandbox-container/ browser-hosted execution runtime
     shared-storage/    cross-context shared state
@@ -287,6 +394,12 @@ apps/
 
 packages/
   agent-harness/       reusable execution contracts and environment adapters
+    core/              contracts, plugins, runs, events, lifecycle, persistence
+    flows/             the flow engine: registries, graphs, steps, tools, runtime
+    langgraph/         ReAct loops and ordered step pipelines
+    standard/          filesystem, web, planner, skills, chat, compaction
+    sandbox/ mcp/      sandbox sessions and MCP discovery
+    browser/ node/     platform adapters for each host
 ```
 
 If you want the shortest accurate mental model:
@@ -309,9 +422,10 @@ These are the current docs that match the codebase today:
 - [Database service](./docs/database-service.md)
 - [Embedding service](./docs/embedding-service.md)
 - [LLM service](./docs/llm-service.md)
-- [Flows service](./docs/flows-service.md)
-- [Flow Engine README](./src/services/flows/README.md)
-- [Customize agents](./docs/customize-agents.md)
+- [Agent Harness family README](./packages/agent-harness/README.md)
+- [Flow engine package README](./packages/agent-harness/flows/README.md)
+- [Agent Harness architecture](./docs/agent-harness-architecture.md)
+- [Sandbox architecture review](./docs/agent-harness-sandbox-review.md)
 - [Multi-environment architecture and rollout](./docs/plans/multi-environment-architecture.md)
 - [Web static E2E and GitHub Pages deployment](./e2e/web/README.md)
 - [Desktop build and E2E](./e2e/desktop/README.md)
@@ -332,10 +446,16 @@ These are the current docs that match the codebase today:
 - [Supabase implementation](./docs/supabase/implementation.md)
 - [Migration notes](./docs/migration.md)
 
-Notes about stale docs from older README versions:
+Notes about stale docs:
 
 - `knowledge-pipeline.md` has been replaced by [`docs/knowledge-graph-service.md`](./docs/knowledge-graph-service.md)
 - `remember-service.md` no longer exists as a standalone current doc
+- [`docs/flows-service.md`](./docs/flows-service.md),
+  [`docs/customize-agents.md`](./docs/customize-agents.md) and
+  [`docs/co-agent.md`](./docs/co-agent.md) still describe the pre-extraction
+  `src/services/flows` layout. The concepts still hold, but the paths moved to
+  [`packages/agent-harness/flows`](./packages/agent-harness/flows) and the
+  app-side `flows-*` directories; read the package READMEs for current paths.
 
 <a id="quick-start"></a>
 ## 🚀 Quick Start

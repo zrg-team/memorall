@@ -70,7 +70,7 @@ import { buildDefaultFlowConfig } from "@memorall/agent-harness-flows/utils/flow
 import {
   createFlowRuntimeVars,
   withFlowRuntimeVars,
-} from "@memorall/agent-harness-flows/runtime/runtime-context";
+} from "@memorall/agent-harness-flows/context/runtime-context";
 import { setHtmlParser } from "@memorall/agent-harness-flows/utils/html-parser";
 
 // 2. Supply the capabilities the engine does not own.
