@@ -33,6 +33,10 @@ import {
 	type WebContentCommandResponse,
 } from "@/services/web-browser";
 import { BACKGROUND_EVENTS } from "./constants/events";
+import {
+	loadActivityTracker,
+	loadEmbeddedUi,
+} from "./content/load-embedded-ui";
 import { handleWebContentCommand } from "./content/modules/web-commands";
 import type { BackgroundMessage, MessageResponse } from "./embedded/types";
 import { isJobNotificationMessage } from "./services/background-jobs/bridges/types";
@@ -51,29 +55,9 @@ type ContentSendResponse = (
 // being registered. Each failure answers the message it was handling instead of
 // leaving the sender waiting for a reply that never comes.
 
-// The UI lives in its own ES module build entry, loaded here by URL with a
-// native import(). A bundler-managed dynamic import cannot work from a content
-// script: its chunk loader appends a <script> tag, which the browser runs in the
-// page's world, so the chunk registers there and this isolated world waits
-// forever — every deferred import failed with `ChunkLoadError: ... (missing)`
-// and the whole embedded UI reported itself "unavailable on this page".
-type EmbeddedUiBundle = typeof import("./content/embedded-ui");
-
-let embeddedUiBundle: Promise<EmbeddedUiBundle> | null = null;
-
-const loadEmbeddedUi = (): Promise<EmbeddedUiBundle> => {
-	if (!embeddedUiBundle) {
-		embeddedUiBundle = import(
-			/* webpackIgnore: true */ chrome.runtime.getURL("embedded/embedded-ui.js")
-		) as Promise<EmbeddedUiBundle>;
-		// A failed load must not poison every later message.
-		embeddedUiBundle.catch(() => {
-			embeddedUiBundle = null;
-		});
-	}
-	return embeddedUiBundle;
-};
-
+// The UI is a separate ES module build entry, fetched by URL — see
+// ./content/load-embedded-ui for why a bundler-managed dynamic import cannot
+// reach a content script's isolated world.
 const loadUiHandlers = () =>
 	loadEmbeddedUi().then((module) => module.uiHandlers);
 const loadMemoryHandlers = () =>
@@ -219,13 +203,8 @@ document.addEventListener("contextmenu", () => {
 	// Mouse position tracked for UI positioning in embedded components
 });
 
-// Side-effect only: registers its own activity-tracking listener. Loaded by URL
-// for the same reason as the UI bundle above.
-void import(
-	/* webpackIgnore: true */ chrome.runtime.getURL(
-		"embedded/activity-tracker.js",
-	)
-).catch((error) => {
+// Side-effect only: registers its own activity-tracking listener.
+void loadActivityTracker().catch((error) => {
 	logError("Memorall activity tracking is unavailable on this page:", error);
 });
 

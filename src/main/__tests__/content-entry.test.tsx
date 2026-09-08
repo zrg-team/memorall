@@ -39,6 +39,35 @@ const mocks = vi.hoisted(() => ({
 		sendResponse({ success: true, handler: "hide-co-agent" }),
 	),
 	setCoAgentActive: vi.fn(async () => undefined),
+	loadEmbeddedUi: vi.fn(),
+	loadActivityTracker: vi.fn(async () => ({})),
+}));
+
+// The embedded UI ships as its own ES module entry, fetched by URL, so this
+// loader is the seam the entry point actually depends on.
+const embeddedUiBundle = () => ({
+	uiHandlers: {
+		handleShowTopicSelector: mocks.handleShowTopicSelector,
+		handleShowChatModal: mocks.handleShowChatModal,
+		handleShowImageSelector: mocks.handleShowImageSelector,
+		handleActivateSmartSelector: mocks.handleActivateSmartSelector,
+		handleShowCoAgent: mocks.handleShowCoAgent,
+		handleHideCoAgent: mocks.handleHideCoAgent,
+		setCoAgentActive: mocks.setCoAgentActive,
+	},
+	memoryHandlers: {
+		handleRememberThis: mocks.handleRememberThis,
+		handleRememberContent: mocks.handleRememberContent,
+		handleLetRemember: mocks.handleLetRemember,
+	},
+	coAgent: {
+		handleCoAgentContentCommand: mocks.handleCoAgentContentCommand,
+	},
+});
+
+vi.mock("@/content/load-embedded-ui", () => ({
+	loadEmbeddedUi: mocks.loadEmbeddedUi,
+	loadActivityTracker: mocks.loadActivityTracker,
 }));
 
 vi.mock("@/services/background-jobs/bridges/types", () => ({
@@ -46,20 +75,6 @@ vi.mock("@/services/background-jobs/bridges/types", () => ({
 }));
 vi.mock("@/content/modules/web-commands", () => ({
 	handleWebContentCommand: mocks.handleWebContentCommand,
-}));
-vi.mock("@/content/modules/memory-handlers", () => ({
-	handleRememberThis: mocks.handleRememberThis,
-	handleRememberContent: mocks.handleRememberContent,
-	handleLetRemember: mocks.handleLetRemember,
-}));
-vi.mock("@/content/modules/ui-handlers", () => ({
-	handleShowTopicSelector: mocks.handleShowTopicSelector,
-	handleShowChatModal: mocks.handleShowChatModal,
-	handleShowImageSelector: mocks.handleShowImageSelector,
-	handleActivateSmartSelector: mocks.handleActivateSmartSelector,
-	handleShowCoAgent: mocks.handleShowCoAgent,
-	handleHideCoAgent: mocks.handleHideCoAgent,
-	setCoAgentActive: mocks.setCoAgentActive,
 }));
 vi.mock("@/services/web-browser", () => ({
 	isWebContentCommandRequest: mocks.isWebContentCommandRequest,
@@ -70,10 +85,6 @@ vi.mock("@/services/co-agent", () => ({
 	isCoAgentBrowserCommandResponse: mocks.isCoAgentBrowserCommandResponse,
 	isCoAgentContentCommandRequest: mocks.isCoAgentContentCommandRequest,
 }));
-vi.mock("@/embedded/pages/CoAgent", () => ({
-	handleCoAgentContentCommand: mocks.handleCoAgentContentCommand,
-}));
-vi.mock("@/embedded/activity-tracker", () => ({}));
 vi.mock("@/utils/logger", () => ({
 	logInfo: vi.fn(),
 	logError: vi.fn(),
@@ -123,6 +134,8 @@ beforeEach(() => {
 	mocks.isWebContentCommandRequest.mockReturnValue(false);
 	mocks.isCoAgentContentCommandRequest.mockReturnValue(false);
 	mocks.isCoAgentBrowserCommandResponse.mockReturnValue(false);
+	mocks.loadEmbeddedUi.mockImplementation(async () => embeddedUiBundle());
+	mocks.loadActivityTracker.mockImplementation(async () => ({}));
 });
 
 describe("content script communication entrypoint", () => {
@@ -285,59 +298,50 @@ describe("content script communication entrypoint", () => {
 		// web_open reported "Content script unavailable" on a page that had loaded
 		// perfectly well. Losing the UI must never cost us the page.
 		const { chrome, messageListeners } = installChrome();
-		vi.resetModules();
-		vi.doMock("@/content/modules/ui-handlers", () => {
-			throw new Error("embedded UI blew up on this page");
-		});
+		mocks.loadEmbeddedUi.mockRejectedValue(
+			new Error("embedded UI blew up on this page"),
+		);
+		mocks.loadActivityTracker.mockRejectedValue(
+			new Error("embedded UI blew up on this page"),
+		);
+		await importContent();
 
-		try {
-			await import("../../content");
+		expect(chrome.runtime.onMessage.addListener).toHaveBeenCalled();
 
-			expect(chrome.runtime.onMessage.addListener).toHaveBeenCalled();
-
-			mocks.isWebContentCommandRequest.mockReturnValue(true);
-			const snapshotResponse = vi.fn();
-			expect(
-				messageListeners[0](
-					{ source: "memorall:web-content-command", type: "web-tool:snapshot" },
-					{},
-					snapshotResponse,
-				),
-			).toBe(true);
-			await vi.waitFor(() =>
-				expect(mocks.handleWebContentCommand).toHaveBeenCalled(),
-			);
-		} finally {
-			vi.doUnmock("@/content/modules/ui-handlers");
-		}
+		mocks.isWebContentCommandRequest.mockReturnValue(true);
+		const snapshotResponse = vi.fn();
+		expect(
+			messageListeners[0](
+				{ source: "memorall:web-content-command", type: "web-tool:snapshot" },
+				{},
+				snapshotResponse,
+			),
+		).toBe(true);
+		await vi.waitFor(() =>
+			expect(mocks.handleWebContentCommand).toHaveBeenCalled(),
+		);
 	});
 
 	it("answers instead of hanging when a deferred handler cannot load", async () => {
 		const { messageListeners } = installChrome();
-		vi.resetModules();
-		vi.doMock("@/content/modules/ui-handlers", () => {
-			throw new Error("embedded UI blew up on this page");
-		});
+		mocks.loadEmbeddedUi.mockRejectedValue(
+			new Error("embedded UI blew up on this page"),
+		);
+		await importContent();
 
-		try {
-			await import("../../content");
-
-			const sendResponse = vi.fn();
-			expect(
-				messageListeners[0](
-					{ type: BACKGROUND_EVENTS.SHOW_CHAT_MODAL },
-					{},
-					sendResponse,
-				),
-			).toBe(true);
-			// A sender left waiting forever is what produced the original timeout.
-			await vi.waitFor(() =>
-				expect(sendResponse).toHaveBeenCalledWith(
-					expect.objectContaining({ success: false }),
-				),
-			);
-		} finally {
-			vi.doUnmock("@/content/modules/ui-handlers");
-		}
+		const sendResponse = vi.fn();
+		expect(
+			messageListeners[0](
+				{ type: BACKGROUND_EVENTS.SHOW_CHAT_MODAL },
+				{},
+				sendResponse,
+			),
+		).toBe(true);
+		// A sender left waiting forever is what produced the original timeout.
+		await vi.waitFor(() =>
+			expect(sendResponse).toHaveBeenCalledWith(
+				expect.objectContaining({ success: false }),
+			),
+		);
 	});
 });
