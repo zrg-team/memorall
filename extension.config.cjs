@@ -88,11 +88,54 @@ module.exports = {
 			// public/offscreen.html is a copied MV3 document, so Extension.js 4 no
 			// longer discovers its TypeScript module as an HTML entry automatically.
 			"scripts/offscreen": path.resolve(__dirname, "scripts/offscreen.ts"),
+			// The content script's deferred UI, emitted as ES modules. A content
+			// script runs in an isolated world, but the default chunk loader appends
+			// a <script> tag that the browser executes in the page's world: the chunk
+			// registers on the page's `rspackChunkmemorall` and the content script
+			// waits for a registration that never arrives (`ChunkLoadError:
+			// ... (missing)`). Shipping these as modules lets `src/content.ts` pull
+			// them in with a native import(), which evaluates in the calling world,
+			// while the injected entry itself stays a small classic script. They are
+			// emitted outside content_scripts/ because they are not injected by the
+			// manifest — only fetched on demand — and the bundler's size budget
+			// judges anything under that prefix as loaded on every navigation.
+			"embedded/embedded-ui": {
+				import: path.resolve(__dirname, "src/content/embedded-ui.ts"),
+				library: { type: "module" },
+				chunkLoading: "import",
+				chunkFormat: "module",
+			},
+			"embedded/activity-tracker": {
+				import: path.resolve(
+					__dirname,
+					"src/content/activity-tracker-entry.ts",
+				),
+				library: { type: "module" },
+				chunkLoading: "import",
+				chunkFormat: "module",
+			},
+		},
+		experiments: {
+			...config.experiments,
+			// Required to emit the two content-script module entries above.
+			outputModule: true,
 		},
 		// The v4 default externalizer can preserve bare CommonJS requires in the
 		// emitted page even with strict references enabled. Browser pages have no
 		// CommonJS loader, so let Rspack resolve every JavaScript dependency.
 		externals: [],
+		// A content script runs in an isolated world, but Rspack's default jsonp
+		// chunk loader appends a <script> tag to the document — which executes in
+		// the page's main world. The chunk then registers on the page's
+		// `rspackChunkmemorall` and the content script waits forever, so every
+		// deferred content-script import (embedded chat, co-agent, topic selector,
+		// activity tracking) failed with `ChunkLoadError: ... (missing)`.
+		// Native `import()` evaluates in the caller's world, so lazy chunks reach
+		// the isolated world intact.
+		experiments: {
+			...config.experiments,
+			outputModule: true,
+		},
 		output: {
 			...config.output,
 			// Extension pages and lazy chunks are always served from the extension root.

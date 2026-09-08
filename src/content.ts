@@ -33,6 +33,10 @@ import {
 	type WebContentCommandResponse,
 } from "@/services/web-browser";
 import { BACKGROUND_EVENTS } from "./constants/events";
+import {
+	loadActivityTracker,
+	loadEmbeddedUi,
+} from "./content/load-embedded-ui";
 import { handleWebContentCommand } from "./content/modules/web-commands";
 import type { BackgroundMessage, MessageResponse } from "./embedded/types";
 import { isJobNotificationMessage } from "./services/background-jobs/bridges/types";
@@ -51,9 +55,18 @@ type ContentSendResponse = (
 // being registered. Each failure answers the message it was handling instead of
 // leaving the sender waiting for a reply that never comes.
 
-const loadUiHandlers = () => import("./content/modules/ui-handlers");
-const loadMemoryHandlers = () => import("./content/modules/memory-handlers");
-const loadCoAgent = () => import("@/embedded/pages/CoAgent");
+// The UI is a separate ES module build entry, fetched by URL — see
+// ./content/load-embedded-ui for why a bundler-managed dynamic import cannot
+// reach a content script's isolated world. The loader takes the resolver from
+// here because only this file may reach for a Chrome API.
+const resolveAssetUrl = (path: string) => chrome.runtime.getURL(path);
+
+const loadUiHandlers = () =>
+	loadEmbeddedUi(resolveAssetUrl).then((module) => module.uiHandlers);
+const loadMemoryHandlers = () =>
+	loadEmbeddedUi(resolveAssetUrl).then((module) => module.memoryHandlers);
+const loadCoAgent = () =>
+	loadEmbeddedUi(resolveAssetUrl).then((module) => module.coAgent);
 
 const reportUnavailable = (
 	sendResponse: ContentSendResponse,
@@ -195,7 +208,7 @@ document.addEventListener("contextmenu", () => {
 });
 
 // Side-effect only: registers its own activity-tracking listener.
-void import("./embedded/activity-tracker").catch((error) => {
+void loadActivityTracker(resolveAssetUrl).catch((error) => {
 	logError("Memorall activity tracking is unavailable on this page:", error);
 });
 

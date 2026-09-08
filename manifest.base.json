@@ -55,6 +55,7 @@
         "*.js",
         "*.css",
         "content_scripts/*.css",
+        "embedded/*.js",
         "action/*.css",
         "action/*.js"
       ],
