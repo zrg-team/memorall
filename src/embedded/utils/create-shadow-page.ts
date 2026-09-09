@@ -1,11 +1,32 @@
 import { createRoot } from "react-dom/client";
 
-const createStylesheet = (href: string, parent: ShadowRoot): void => {
+/**
+ * The packaged options-page stylesheet is the canonical source of design tokens
+ * and Tailwind utilities for every embedded surface.
+ *
+ * It stays a <link> rather than an adopted CSSStyleSheet on purpose: the compiled
+ * bundle references its font files with root-relative `url(/assets/...)`, which a
+ * <link> resolves against the extension origin but `CSSStyleSheet.replace()`
+ * would resolve against the host page, 404ing every brand font.
+ */
+const appendAppStylesheet = (parent: ShadowRoot): void => {
 	const link = document.createElement("link");
 	link.rel = "stylesheet";
-	link.href = chrome.runtime.getURL(href);
+	link.href = chrome.runtime.getURL("options/index.css");
 
 	parent.appendChild(link);
+};
+
+/**
+ * Copilot-owned CSS is appended *after* the app stylesheet so it wins ties by
+ * document order. Appending it first is what forced the rules in customStyles to
+ * carry `!important` just to beat the sheet loaded after them.
+ */
+const appendCopilotStyles = (parent: ShadowRoot, css: string): void => {
+	const style = document.createElement("style");
+	style.textContent = css;
+
+	parent.appendChild(style);
 };
 
 export const createShadowPage = ({
@@ -24,14 +45,8 @@ export const createShadowPage = ({
 	const shadowContainer = document.createElement("div");
 	shadowContainer.className = "memorall-chat-container";
 
-	// Add CSS custom properties for proper theming within Shadow DOM
-	const customPropsStyle = document.createElement("style");
-	customPropsStyle.textContent = customStyles;
-	shadowRoot.appendChild(customPropsStyle);
-
-	// The toolbar action opens the standalone options page, so its packaged CSS
-	// is also the canonical stylesheet for embedded shadow-root surfaces.
-	createStylesheet("options/index.css", shadowRoot);
+	appendAppStylesheet(shadowRoot);
+	appendCopilotStyles(shadowRoot, customStyles);
 
 	shadowRoot.appendChild(shadowContainer);
 
@@ -40,5 +55,10 @@ export const createShadowPage = ({
 	return {
 		root,
 		container,
+		// The element inside the shadow tree that carries the theme class and the
+		// design tokens. Callers pass it to EmbeddedRoot so the injected UI themes
+		// itself without touching the host page's <html>.
+		shadowContainer,
+		shadowRoot,
 	};
 };

@@ -1,24 +1,40 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
-import { BACKGROUND_EVENTS } from "@/constants/events";
+import type React from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AgentCursorOverlay } from "@/components/AgentCursor";
-import { useEmbeddedModelStatus } from "@/embedded/hooks/use-embedded-model-status";
-import { useEmbeddedTranslation } from "@/embedded/hooks/use-embedded-language";
+import { BACKGROUND_EVENTS } from "@/constants/events";
 import { embeddedChatHistoryService } from "@/embedded/chat-history-service";
-import { createEmbeddedContextItem } from "@/embedded/context-items";
+import { createSmartSelectOverlay } from "@/embedded/components/SmartSelectOverlay";
 import {
-	EMBEDDED_CHAT_MODAL_STATE_EVENT,
-	createEmbeddedChatModal,
-} from "@/embedded/pages/EmbeddedChat";
+	buildEmbeddedContextMessageContent,
+	createEmbeddedContextItem,
+} from "@/embedded/context-items";
+import { useEmbeddedCustomOptions } from "@/embedded/hooks/use-embedded-custom-options";
+import { useEmbeddedTranslation } from "@/embedded/hooks/use-embedded-language";
+import { useEmbeddedModelStatus } from "@/embedded/hooks/use-embedded-model-status";
 import { coAgentChatService } from "@/embedded/pages/CoAgent/co-agent-chat";
 import { CO_AGENT_STATUS_EVENT } from "@/embedded/pages/CoAgent/constants";
-import { getPageDescription } from "@/embedded/utils/co-agent/dom-utils";
 import {
-	refreshContextAnchor,
+	createEmbeddedChatModal,
+	EMBEDDED_CHAT_MODAL_STATE_EVENT,
+} from "@/embedded/pages/EmbeddedChat";
+import type { EmbeddedContextItem } from "@/embedded/types";
+import {
 	type CoAgentContextAnchor,
+	refreshContextAnchor,
 } from "@/embedded/utils/co-agent/context-anchor";
-import { useCoAgentContextAnchor } from "./useCoAgentContextAnchor";
-import { CoAgentAnchorTrigger } from "./CoAgentAnchorPrompt";
+import { getPageDescription } from "@/embedded/utils/co-agent/dom-utils";
+import type { MessageActionRequest } from "@/main/modules/chat/components/artifacts/ArtifactActionsMenu";
+import {
+	getOpenUISendMessageText,
+	type MemorallOpenUIActionDetail,
+	resolveOpenUITemplate,
+} from "@/main/modules/openui/actions";
+import {
+	CoAgentAnchorTrigger,
+	overlapsCoAgentDock,
+} from "./CoAgentAnchorPrompt";
 import { CoAgentDock } from "./CoAgentDock";
+import { useCoAgentContextAnchor } from "./useCoAgentContextAnchor";
 
 interface CoAgentOverlayProps {
 	portalRoot: ShadowRoot;
@@ -30,6 +46,13 @@ export const CoAgentOverlay: React.FC<CoAgentOverlayProps> = ({
 	onDestroy,
 }) => {
 	const [message, setMessage] = useState("");
+	// Transient activity ("Observing this page", "Done"), kept apart from the
+	// answer. Sharing one string meant every finished tool call overwrote the
+	// bubble with "Done", so a run that returned no text left only that word.
+	const [statusLine, setStatusLine] = useState("");
+	// Page fragment picked with Smart Select, sent alongside the next prompt.
+	const [attachedSelection, setAttachedSelection] =
+		useState<EmbeddedContextItem | null>(null);
 	const [anchoredInputValue, setAnchoredInputValue] = useState("");
 	const [collapsed, setCollapsed] = useState(false);
 	const [bubbleDismissed, setBubbleDismissed] = useState(false);
@@ -42,13 +65,12 @@ export const CoAgentOverlay: React.FC<CoAgentOverlayProps> = ({
 	const promptInputRef = useRef<HTMLTextAreaElement | null>(null);
 	const { needsPasskey, modelAvailable, selectedModel } =
 		useEmbeddedModelStatus();
+	// Same agent list the panel offers; the dock had no way to pick one.
+	const { agentFlows, selectedAgentFlowId, setSelectedAgentFlowId } =
+		useEmbeddedCustomOptions();
 	const t = useEmbeddedTranslation("coAgent");
 	const showAuthAction = needsPasskey;
-	const speechMessage = showAuthAction
-		? t("unlockRequired")
-		: isSubmitting
-			? message.trim() || t("working")
-			: message.trim();
+	const speechMessage = showAuthAction ? t("unlockRequired") : message.trim();
 	const visibleSpeechMessage = bubbleDismissed ? "" : speechMessage;
 
 	const openPromptUi = useCallback(() => {
@@ -72,8 +94,34 @@ export const CoAgentOverlay: React.FC<CoAgentOverlayProps> = ({
 		[openPromptUi, setActiveAnchor],
 	);
 
+	/**
+	 * "Ask" is deliberately not "Ask about this". Previously any live anchor was
+	 * attached implicitly, so there was no way to ask a plain question while the
+	 * pointer happened to rest on something.
+	 */
+	const openPromptWithoutAnchor = useCallback(() => {
+		setActiveAnchor(null);
+		openPromptUi();
+	}, [openPromptUi, setActiveAnchor]);
+
+	const detachAnchor = useCallback(() => {
+		setActiveAnchor(null);
+	}, [setActiveAnchor]);
+
+	const startSmartSelect = useCallback(() => {
+		setBubbleDismissed(false);
+		createSmartSelectOverlay(
+			(item) => {
+				setAttachedSelection(item);
+				openPromptUi();
+			},
+			() => {},
+		);
+	}, [openPromptUi]);
+
 	const showAnchorTrigger =
 		Boolean(freshAnchor && !freshAnchor.isStale) &&
+		!(freshAnchor && overlapsCoAgentDock(freshAnchor)) &&
 		!anchorPromptOpen &&
 		!chatPopupOpen &&
 		!collapsed &&
@@ -82,7 +130,7 @@ export const CoAgentOverlay: React.FC<CoAgentOverlayProps> = ({
 	useEffect(() => {
 		const handleStatus = (event: Event) => {
 			const detail = (event as CustomEvent<{ message?: string }>).detail;
-			setMessage(detail?.message?.trim() ?? "");
+			setStatusLine(detail?.message?.trim() ?? "");
 		};
 		window.addEventListener(CO_AGENT_STATUS_EVENT, handleStatus);
 		return () =>
@@ -186,6 +234,56 @@ export const CoAgentOverlay: React.FC<CoAgentOverlayProps> = ({
 		}
 	};
 
+	/**
+	 * OpenUI blocks rendered in the dock bubble can act: put text in the composer,
+	 * or submit straight away. Without this the rendered controls were inert.
+	 */
+	const handleMessageAction = useCallback(
+		async (action: MessageActionRequest) => {
+			if (action.type !== "openui_action") return;
+			const detail = action.payload?.detail as
+				| MemorallOpenUIActionDetail
+				| undefined;
+			const openUIAction = detail?.action;
+			if (!openUIAction) return;
+
+			if (openUIAction.type === "add_message_to_input") {
+				const text = resolveOpenUITemplate(
+					openUIAction.text,
+					detail.formState,
+					detail.formName,
+				);
+				setAnchoredInputValue((current) =>
+					openUIAction.mode === "replace"
+						? text
+						: current.trim()
+							? `${current}
+${text}`
+							: text,
+				);
+				setAnchorPromptOpen(true);
+				return;
+			}
+
+			if (openUIAction.type === "send_message") {
+				const message = getOpenUISendMessageText(
+					openUIAction,
+					detail.formState,
+					detail.formName,
+					detail.humanFriendlyMessage,
+				);
+				setAnchoredInputValue(message);
+				setAnchorPromptOpen(true);
+				requestAnimationFrame(() => promptInputRef.current?.focus());
+				return;
+			}
+
+			// Documents and routes belong to the full app, which owns those views.
+			await openFullConversation();
+		},
+		[openFullConversation],
+	);
+
 	const submitPrompt = async (event: React.FormEvent<HTMLFormElement>) => {
 		event.preventDefault();
 		const prompt = anchoredInputValue.trim();
@@ -193,13 +291,34 @@ export const CoAgentOverlay: React.FC<CoAgentOverlayProps> = ({
 		const anchor = activeAnchor
 			? refreshContextAnchor(activeAnchor)
 			: undefined;
+		const selection = attachedSelection;
+		const composed = selection
+			? buildEmbeddedContextMessageContent({
+					userMessage: prompt,
+					contexts: [selection],
+					pageTitle: document.title || "",
+					pageUrl: window.location.href,
+				})
+			: prompt;
+		const promptWithContext =
+			typeof composed === "string"
+				? composed
+				: composed
+						.filter(
+							(part): part is { type: "text"; text: string } =>
+								part.type === "text",
+						)
+						.map((part) => part.text)
+						.join("\n\n");
 
 		setAnchoredInputValue("");
+		setAttachedSelection(null);
 		setAnchorPromptOpen(false);
 		setCollapsed(false);
 		setBubbleDismissed(false);
 		setIsSubmitting(true);
-		setMessage(t("thinking"));
+		setMessage("");
+		setStatusLine(t("thinking"));
 
 		let assistantMessageId: string | null = null;
 		let currentContent = "";
@@ -235,7 +354,8 @@ export const CoAgentOverlay: React.FC<CoAgentOverlayProps> = ({
 			assistantMessageId = assistantMessage.id;
 
 			const result = await coAgentChatService.chatStream({
-				prompt,
+				prompt: promptWithContext,
+				agentFlowId: selectedAgentFlowId,
 				model: selectedModel,
 				pageContext: {
 					url: window.location.href,
@@ -244,7 +364,7 @@ export const CoAgentOverlay: React.FC<CoAgentOverlayProps> = ({
 				},
 				anchorContext: anchor && !anchor.isStale ? anchor : undefined,
 				onExecuteStart: (executeState) => {
-					setMessage(
+					setStatusLine(
 						typeof executeState.node === "string"
 							? executeState.node.replace(/[_-]+/g, " ")
 							: t("working"),
@@ -263,6 +383,7 @@ export const CoAgentOverlay: React.FC<CoAgentOverlayProps> = ({
 					latestToolCalls = toolCalls;
 				},
 				onError: (error) => {
+					setStatusLine("");
 					setMessage(error || t("failedMessage"));
 				},
 			});
@@ -278,6 +399,11 @@ export const CoAgentOverlay: React.FC<CoAgentOverlayProps> = ({
 				error instanceof Error ? error.message : t("errorMessage");
 			setMessage(currentContent);
 		} finally {
+			setStatusLine("");
+			if (!currentContent.trim()) {
+				currentContent = t("finishedNoAnswer");
+				setMessage(currentContent);
+			}
 			const timeToAnswer = (Date.now() - startTime) / 1000;
 			try {
 				if (assistantMessageId) {
@@ -305,7 +431,8 @@ export const CoAgentOverlay: React.FC<CoAgentOverlayProps> = ({
 			{showAnchorTrigger && freshAnchor ? (
 				<CoAgentAnchorTrigger
 					anchor={freshAnchor}
-					onOpen={() => openPrompt(freshAnchor)}
+					onAskAboutThis={() => openPrompt(freshAnchor)}
+					onAsk={openPromptWithoutAnchor}
 				/>
 			) : null}
 			{!chatPopupOpen && !externalChatModalOpen ? (
@@ -313,11 +440,21 @@ export const CoAgentOverlay: React.FC<CoAgentOverlayProps> = ({
 					collapsed={collapsed}
 					showAuthAction={showAuthAction}
 					visibleSpeechMessage={visibleSpeechMessage}
+					statusLine={statusLine}
 					isSubmitting={isSubmitting}
 					promptOpen={anchorPromptOpen}
 					inputValue={anchoredInputValue}
 					inputRef={promptInputRef}
 					modelAvailable={modelAvailable}
+					attachedAnchor={activeAnchor}
+					onDetachAnchor={detachAnchor}
+					onMessageAction={handleMessageAction}
+					agentFlows={agentFlows}
+					selectedAgentFlowId={selectedAgentFlowId}
+					onSelectAgentFlow={setSelectedAgentFlowId}
+					attachedSelectionLabel={attachedSelection?.label ?? null}
+					onDetachSelection={() => setAttachedSelection(null)}
+					onSmartSelect={startSmartSelect}
 					onExpand={() => setCollapsed(false)}
 					onOpenPrompt={() => openPrompt(freshAnchor)}
 					onClosePrompt={() => setAnchorPromptOpen(false)}

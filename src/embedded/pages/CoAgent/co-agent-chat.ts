@@ -1,8 +1,8 @@
-import { embeddedChatService } from "@/embedded/chat-service";
 import type {
 	ChatStreamOptions,
 	EmbeddedChatStreamResult,
 } from "@/embedded/chat-service";
+import { embeddedChatService } from "@/embedded/chat-service";
 import type { ChatMessage } from "@/embedded/types";
 import type { CoAgentContextAnchor } from "@/embedded/utils/co-agent/context-anchor";
 
@@ -28,6 +28,8 @@ export interface CoAgentChatStreamOptions
 	prompt: string;
 	pageContext: CoAgentPageContext;
 	anchorContext?: CoAgentContextAnchor;
+	/** Chosen agent flow; "chat" (or undefined) keeps the default foundation agent. */
+	agentFlowId?: string;
 }
 
 export const CO_AGENT_PAGE_CONTEXT_SYSTEM_PROMPT = `
@@ -91,6 +93,10 @@ export const coAgentChatService = {
 			messages: [createUserMessage(options.prompt)],
 			model: options.model,
 			mode: "custom",
+			agentFlowId:
+				!options.agentFlowId || options.agentFlowId === "chat"
+					? undefined
+					: options.agentFlowId,
 			flowConfigPrefix: createCoAgentFlowPrefixConfig(),
 			systemMessages: [
 				renderCoAgentPageContextPrompt(options.pageContext),

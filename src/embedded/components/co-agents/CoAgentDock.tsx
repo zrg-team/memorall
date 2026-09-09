@@ -1,18 +1,43 @@
+import {
+	LogOut,
+	Maximize2,
+	MessageCircle,
+	MousePointerSquareDashed,
+	Send,
+	X,
+} from "lucide-react";
 import React from "react";
-import { LogOut, Maximize2, MessageCircle, Send, X } from "lucide-react";
 import { AgentIcon } from "@/components/AgentIcon";
-import { EmbeddedMarkdown } from "@/embedded/components/EmbeddedMarkdown";
+import { AssistantMessageContent } from "@/embedded/components/messages/AssistantMessageContent";
 import { useEmbeddedTranslation } from "@/embedded/hooks/use-embedded-language";
+import type { CoAgentContextAnchor } from "@/embedded/utils/co-agent/context-anchor";
+import type { MessageActionRequest } from "@/main/modules/chat/components/artifacts/ArtifactActionsMenu";
+import {
+	CoAgentAnchorAttachment,
+	CoAgentAttachmentChip,
+} from "./CoAgentAnchorPrompt";
 
 interface CoAgentDockProps {
 	collapsed: boolean;
 	showAuthAction: boolean;
 	visibleSpeechMessage: string;
+	/** Transient activity while a run is in flight; never the answer. */
+	statusLine: string;
 	isSubmitting: boolean;
 	promptOpen: boolean;
 	inputValue: string;
 	inputRef: React.RefObject<HTMLTextAreaElement | null>;
 	modelAvailable: boolean;
+	/** Element attached via "Ask about this", shown as a chip on the composer. */
+	attachedAnchor: CoAgentContextAnchor | null;
+	onDetachAnchor: () => void;
+	/** Page fragment picked with Smart Select. */
+	attachedSelectionLabel: string | null;
+	onDetachSelection: () => void;
+	agentFlows: Array<{ id: string; name: string }>;
+	selectedAgentFlowId: string;
+	onSelectAgentFlow: (flowId: string) => void;
+	onMessageAction: (action: MessageActionRequest) => void | Promise<void>;
 	onExpand: () => void;
 	onOpenPrompt: () => void;
 	onClosePrompt: () => void;
@@ -21,6 +46,7 @@ interface CoAgentDockProps {
 	onOpenConversation: () => void;
 	onUnlock: () => void;
 	onLeaveCoAgent: () => void;
+	onSmartSelect: () => void;
 	onDismissBubble: () => void;
 }
 
@@ -28,11 +54,20 @@ export const CoAgentDock: React.FC<CoAgentDockProps> = ({
 	collapsed,
 	showAuthAction,
 	visibleSpeechMessage,
+	statusLine,
 	isSubmitting,
 	promptOpen,
 	inputValue,
 	inputRef,
 	modelAvailable,
+	attachedAnchor,
+	onDetachAnchor,
+	attachedSelectionLabel,
+	onDetachSelection,
+	agentFlows,
+	selectedAgentFlowId,
+	onSelectAgentFlow,
+	onMessageAction,
 	onExpand,
 	onOpenPrompt,
 	onClosePrompt,
@@ -41,6 +76,7 @@ export const CoAgentDock: React.FC<CoAgentDockProps> = ({
 	onOpenConversation,
 	onUnlock,
 	onLeaveCoAgent,
+	onSmartSelect,
 	onDismissBubble,
 }) => {
 	const t = useEmbeddedTranslation("coAgent");
@@ -62,6 +98,9 @@ export const CoAgentDock: React.FC<CoAgentDockProps> = ({
 	const visibleDockMessage =
 		visibleSpeechMessage ||
 		(showIdleHint && !promptOpen && !showAuthAction ? idleHint : "");
+	// A run in flight always shows the bubble, so there is never a silent gap
+	// between submitting and the first streamed token.
+	const showBubble = isSubmitting || Boolean(visibleDockMessage);
 	const activateIcon = () => {
 		if (collapsed) {
 			onExpand();
@@ -143,14 +182,29 @@ export const CoAgentDock: React.FC<CoAgentDockProps> = ({
 							scale: collapsed ? 0.78 : 0.64,
 						}}
 						speechBubble={
-							visibleDockMessage
+							showBubble
 								? {
-										message: visibleDockMessage,
+										message: visibleDockMessage || statusLine || t("working"),
 										tone: showAuthAction ? "thinking" : "neutral",
 										placement: "top",
 										variant: "manga",
 										renderContent: (
 											<div className="memorall-co-agent-bubble-content">
+												{isSubmitting ? (
+													<div className="memorall-co-agent-working">
+														<span
+															aria-hidden="true"
+															className="memorall-co-agent-working-dots"
+														>
+															<span className="memorall-co-agent-working-dot" />
+															<span className="memorall-co-agent-working-dot" />
+															<span className="memorall-co-agent-working-dot" />
+														</span>
+														<span className="memorall-co-agent-working-label">
+															{statusLine || t("working")}
+														</span>
+													</div>
+												) : null}
 												<button
 													type="button"
 													className="memorall-co-agent-bubble-close"
@@ -167,10 +221,13 @@ export const CoAgentDock: React.FC<CoAgentDockProps> = ({
 												>
 													<X size={15} strokeWidth={2.4} />
 												</button>
-												<EmbeddedMarkdown
-													content={visibleDockMessage}
-													isStreaming={isSubmitting}
-												/>
+												{visibleDockMessage ? (
+													<AssistantMessageContent
+														content={visibleDockMessage}
+														isStreaming={isSubmitting}
+														onMessageAction={onMessageAction}
+													/>
+												) : null}
 											</div>
 										),
 									}
@@ -194,6 +251,18 @@ export const CoAgentDock: React.FC<CoAgentDockProps> = ({
 						<MessageCircle size={15} strokeWidth={2.25} />
 						<span className="memorall-co-agent-action-tooltip">
 							{promptOpen ? t("hideChatInput") : t("showChatInput")}
+						</span>
+					</button>
+					<button
+						type="button"
+						className="memorall-co-agent-action"
+						aria-label={t("smartSelect")}
+						title={t("smartSelect")}
+						onClick={onSmartSelect}
+					>
+						<MousePointerSquareDashed size={15} strokeWidth={2.25} />
+						<span className="memorall-co-agent-action-tooltip">
+							{t("smartSelect")}
 						</span>
 					</button>
 					<button
@@ -227,6 +296,18 @@ export const CoAgentDock: React.FC<CoAgentDockProps> = ({
 					className="memorall-co-agent-dock-prompt"
 					onSubmit={onSubmitPrompt}
 				>
+					{attachedAnchor ? (
+						<CoAgentAnchorAttachment
+							anchor={attachedAnchor}
+							onRemove={onDetachAnchor}
+						/>
+					) : null}
+					{attachedSelectionLabel ? (
+						<CoAgentAttachmentChip
+							label={attachedSelectionLabel}
+							onRemove={onDetachSelection}
+						/>
+					) : null}
 					<textarea
 						ref={inputRef}
 						value={inputValue}
@@ -250,6 +331,23 @@ export const CoAgentDock: React.FC<CoAgentDockProps> = ({
 						disabled={!modelAvailable || isSubmitting}
 						rows={1}
 					/>
+					<select
+						className="memorall-co-agent-agent-select"
+						value={selectedAgentFlowId}
+						onChange={(event) => onSelectAgentFlow(event.currentTarget.value)}
+						disabled={isSubmitting}
+						aria-label={t("selectAgent")}
+						title={t("selectAgent")}
+						onKeyDown={(event) => event.stopPropagation()}
+						onKeyUp={(event) => event.stopPropagation()}
+					>
+						<option value="chat">{t("defaultAgent")}</option>
+						{agentFlows.map((flow) => (
+							<option key={flow.id} value={flow.id}>
+								{flow.name}
+							</option>
+						))}
+					</select>
 					<button
 						type="submit"
 						aria-label={t("send")}

@@ -87,4 +87,83 @@ export const coAgentAnchorStyles = `
 			transform: translateY(0) scale(1);
 		}
 	}
+
+	/*
+	 * One segmented control, not two floating pills: the actions are alternatives
+	 * for the same element, so they share a shell and a divider rather than a gap.
+	 */
+	.memorall-co-agent-anchor-trigger-group {
+		all: initial;
+		position: fixed;
+		z-index: 2147483647;
+		display: inline-flex;
+		align-items: stretch;
+		overflow: hidden;
+		border-radius: 999px;
+		background: #0f172a;
+		box-shadow: 0 10px 26px rgb(15 23 42 / 0.28);
+		pointer-events: auto;
+		animation: memorall-co-agent-pop 150ms ease-out;
+	}
+	.memorall-co-agent-anchor-trigger-group .memorall-co-agent-anchor-trigger {
+		position: static;
+		border-radius: 0;
+		box-shadow: none;
+		animation: none;
+		transition: background 140ms ease;
+	}
+	.memorall-co-agent-anchor-trigger-group
+		.memorall-co-agent-anchor-trigger:hover {
+		transform: none;
+		background: rgb(255 255 255 / 0.14);
+	}
+	.memorall-co-agent-anchor-trigger--plain {
+		min-width: 0;
+		border-left: 1px solid rgb(255 255 255 / 0.18);
+	}
+	.memorall-co-agent-attachment {
+		grid-column: 1 / -1;
+		display: flex;
+		align-items: center;
+		gap: 5px;
+		min-width: 0;
+		margin-bottom: 6px;
+		padding: 3px 4px 3px 8px;
+		border: 1px solid rgb(226 232 240 / 0.95);
+		border-radius: 999px;
+		background: rgb(241 245 249 / 0.9);
+		color: #0f172a;
+		font: 650 11px/1.5 Inter, ui-sans-serif, system-ui, sans-serif;
+	}
+	.memorall-co-agent-attachment-text {
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.memorall-co-agent-attachment .memorall-co-agent-attachment-remove {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		flex-shrink: 0;
+		width: 16px;
+		height: 16px;
+		padding: 0;
+		border: 0;
+		border-radius: 999px;
+		background: transparent;
+		color: #64748b;
+		cursor: pointer;
+	}
+	.memorall-co-agent-attachment .memorall-co-agent-attachment-remove:hover {
+		background: rgb(15 23 42 / 0.12);
+		color: #0f172a;
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.memorall-co-agent-anchor-trigger-group,
+		.memorall-co-agent-anchor-trigger {
+			animation: none;
+		}
+	}
 `;

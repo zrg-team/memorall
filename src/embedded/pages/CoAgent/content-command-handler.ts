@@ -1,10 +1,4 @@
-import type {
-	CoAgentContentCommandRequest,
-	CoAgentContentCommandResponse,
-	CoAgentElementInfo,
-} from "@/services/co-agent";
-import { CO_AGENT_CONTENT_COMMAND_SOURCE } from "@/services/co-agent";
-import { ACTION_SETTLE_MS, DEFAULT_DOM_SUMMARY_MAX } from "./constants";
+import { loadEmbeddedTranslationScope } from "@/embedded/i18n/config";
 import {
 	assertSafeClickTarget,
 	assertSafeTextInput,
@@ -17,8 +11,6 @@ import {
 	scrollTarget,
 	setNativeTextValue,
 } from "@/embedded/utils/co-agent/dom-utils";
-import { emitCoAgentStatus, emitCursorEvent } from "./events";
-import { createCoAgentOverlay } from "./overlay";
 import {
 	createBlockedResponse,
 	createErrorResponse,
@@ -29,7 +21,15 @@ import {
 	getCoAgentTrace,
 	recordTraceStep,
 } from "@/embedded/utils/co-agent/trace";
-import { loadEmbeddedTranslationScope } from "@/embedded/i18n/config";
+import type {
+	CoAgentContentCommandRequest,
+	CoAgentContentCommandResponse,
+	CoAgentElementInfo,
+} from "@/services/co-agent";
+import { CO_AGENT_CONTENT_COMMAND_SOURCE } from "@/services/co-agent";
+import { ACTION_SETTLE_MS, DEFAULT_DOM_SUMMARY_MAX } from "./constants";
+import { emitCoAgentStatus, emitCursorEvent } from "./events";
+import { createCoAgentOverlay } from "./overlay";
 
 export const handleCoAgentContentCommand = async (
 	request: CoAgentContentCommandRequest,

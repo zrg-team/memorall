@@ -59,6 +59,9 @@ export default defineConfig({
 					include: [
 						"src/main/**/*.test.tsx",
 						"src/components/**/*.test.tsx",
+						// The injected in-page UI had no coverage at all, which is how
+						// several layout regressions shipped unnoticed.
+						"src/embedded/**/*.test.tsx",
 						"src/services/**/*.dom.test.ts",
 					],
 					exclude: [
