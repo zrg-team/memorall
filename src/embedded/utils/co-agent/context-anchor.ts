@@ -138,3 +138,27 @@ export const refreshContextAnchor = (
 		isStale: !isRectInViewport(rect),
 	};
 };
+
+const truncateLabel = (value: string, max: number): string => {
+	const collapsed = value.replace(/\s+/g, " ").trim();
+	if (collapsed.length <= max) return collapsed;
+	return `${collapsed.slice(0, max - 1)}…`;
+};
+
+/**
+ * Short human description of an anchored element, for the "attached" chip.
+ * The user needs to recognise which thing on the page is riding along with the
+ * prompt, so prefer whatever a person would have read: its label, then its text.
+ */
+export const describeContextAnchor = (anchor: CoAgentContextAnchor): string => {
+	const tag = (anchor.tagName || "element").toLowerCase();
+	const detail =
+		anchor.ariaLabel?.trim() ||
+		anchor.text?.trim() ||
+		anchor.value?.trim() ||
+		anchor.placeholder?.trim() ||
+		anchor.href?.trim() ||
+		"";
+
+	return detail ? `${tag} · ${truncateLabel(detail, 42)}` : tag;
+};

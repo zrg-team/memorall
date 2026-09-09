@@ -1,15 +1,16 @@
-import React, { useState, useEffect } from "react";
-import { logWarn } from "@/utils/logger";
-
-import type { TopicSelectorProps } from "@/embedded/types";
+import type React from "react";
+import { useEffect, useState } from "react";
+import { EmbeddedRoot } from "@/embedded/components/EmbeddedRoot";
+import { useEmbeddedTranslation } from "@/embedded/hooks/use-embedded-language";
 import {
 	getTopicsForSelector,
 	sendContentWithTopic,
 } from "@/embedded/messaging";
 import { customStyles } from "@/embedded/styles/customStyles";
-import { useEmbeddedTranslation } from "@/embedded/hooks/use-embedded-language";
+import type { TopicSelectorProps } from "@/embedded/types";
 
 import { createShadowPage } from "@/embedded/utils/create-shadow-page";
+import { logWarn } from "@/utils/logger";
 
 interface Topic {
 	id: string;
@@ -190,7 +191,7 @@ const TopicSelector: React.FC<TopicSelectorProps> = ({
 export async function createEmbeddedTopicSelector(
 	props: TopicSelectorProps,
 ): Promise<() => void> {
-	const { root, container } = createShadowPage({
+	const { root, container, shadowContainer } = createShadowPage({
 		customStyles,
 	});
 
@@ -207,7 +208,11 @@ export async function createEmbeddedTopicSelector(
 		},
 	};
 
-	root.render(<TopicSelector {...selectorProps} />);
+	root.render(
+		<EmbeddedRoot themeTarget={shadowContainer}>
+			<TopicSelector {...selectorProps} />
+		</EmbeddedRoot>,
+	);
 
 	// Append to body
 	document.body.appendChild(container);

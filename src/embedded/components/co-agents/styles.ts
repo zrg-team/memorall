@@ -1,20 +1,9 @@
 import { customStyles } from "@/embedded/styles/customStyles";
 import { coAgentAnchorStyles } from "./anchorStyles";
 
+// Tokens come from the linked app stylesheet via the .light/.dark class on the
+// mount container, so the dock follows the user's theme like every other surface.
 export const coAgentStyles = `${customStyles}
-	:host {
-		--background: 0 0% 100%;
-		--foreground: 0 0% 3.9%;
-		--card: 0 0% 100%;
-		--card-foreground: 0 0% 3.9%;
-		--primary: 0 0% 9%;
-		--primary-foreground: 0 0% 98%;
-		--muted: 0 0% 96.1%;
-		--muted-foreground: 0 0% 45.1%;
-		--accent: 0 0% 96.1%;
-		--accent-foreground: 0 0% 9%;
-		--border: 0 0% 89.8%;
-	}
 	.memorall-co-agent-root {
 		all: initial;
 		position: fixed;
@@ -191,7 +180,15 @@ export const coAgentStyles = `${customStyles}
 		bottom: calc(100% + 14px);
 		width: max-content;
 		max-width: min(460px, calc(100vw - 36px));
+		/*
+		 * The bubble ships with the centred "top" placement (left-1/2 plus a half-width
+		 * shift); the dock re-anchors it to the icon's right edge instead. Both
+		 * neutralisers are required: Tailwind v3 shifted via 'transform', v4 shifts via
+		 * the separate 'translate' property, so clearing only 'transform' leaves the
+		 * bubble half its own width to the left wherever the v4 variable resolves.
+		 */
 		transform: none;
+		translate: none;
 		pointer-events: auto;
 		white-space: normal;
 	}
@@ -211,7 +208,7 @@ export const coAgentStyles = `${customStyles}
 		white-space: normal;
 	}
 	.memorall-co-agent-icon .agent-speech-bubble-tail {
-		display: none !important;
+		display: none;
 	}
 	.memorall-co-agent-icon .agent-speech-bubble-content {
 		display: block;
@@ -427,4 +424,74 @@ export const coAgentStyles = `${customStyles}
 		margin-top: 4px;
 	}
 ${coAgentAnchorStyles}
+
+	/* Working state inside the dock bubble: present from submit, not just once text streams. */
+	.memorall-co-agent-working {
+		display: flex;
+		align-items: center;
+		gap: 7px;
+		margin-bottom: 6px;
+		color: #475569;
+		font: 650 11px/1.5 Inter, ui-sans-serif, system-ui, sans-serif;
+	}
+	.memorall-co-agent-working-dots {
+		display: inline-flex;
+		align-items: center;
+		gap: 3px;
+		flex-shrink: 0;
+	}
+	.memorall-co-agent-working-dot {
+		width: 5px;
+		height: 5px;
+		border-radius: 999px;
+		background: #2563eb;
+		animation: memorall-co-agent-working 1200ms ease-in-out infinite;
+	}
+	.memorall-co-agent-working-dot:nth-child(2) {
+		animation-delay: 160ms;
+	}
+	.memorall-co-agent-working-dot:nth-child(3) {
+		animation-delay: 320ms;
+	}
+	.memorall-co-agent-working-label {
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	@keyframes memorall-co-agent-working {
+		0%,
+		100% {
+			opacity: 0.25;
+			transform: translateY(0);
+		}
+		50% {
+			opacity: 1;
+			transform: translateY(-2px);
+		}
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.memorall-co-agent-working-dot {
+			animation: none;
+			opacity: 0.75;
+		}
+	}
+
+	.memorall-co-agent-agent-select {
+		grid-column: 1;
+		justify-self: start;
+		max-width: 100%;
+		margin-top: 2px;
+		border: 1px solid rgb(226 232 240 / 0.95);
+		border-radius: 8px;
+		background: #fff;
+		color: #0f172a;
+		font: 650 11px/1.4 Inter, ui-sans-serif, system-ui, sans-serif;
+		padding: 3px 6px;
+		cursor: pointer;
+	}
+	.memorall-co-agent-agent-select:disabled {
+		opacity: 0.55;
+		cursor: not-allowed;
+	}
 `;

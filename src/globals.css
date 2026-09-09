@@ -4,7 +4,14 @@
 @source "../node_modules/streamdown/dist/index.js";
 
 @layer base {
-	:root {
+	/*
+	 * `.light` mirrors `:root` so the token set is reachable from inside a shadow
+	 * tree, where `:root` matches nothing. The injected in-page copilot links this
+	 * same stylesheet and labels its container `light`/`dark`, so both themes come
+	 * from here instead of being hand-copied into the content-script CSS.
+	 */
+	:root,
+	.light {
 		/* Original shadcn/ui defaults — untouched */
 		--background: 0 0% 100%;
 		--foreground: 0 0% 3.9%;

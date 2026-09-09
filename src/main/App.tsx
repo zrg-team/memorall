@@ -1,31 +1,33 @@
-import React, { useState, useEffect, Suspense } from "react";
+import NiceModal from "@ebay/nice-modal-react";
+import type React from "react";
+import { Suspense, useEffect, useState } from "react";
 import {
 	BrowserRouter,
 	HashRouter,
-	Routes,
-	Route,
-	useNavigate,
 	Navigate,
+	Route,
+	Routes,
+	useNavigate,
 } from "react-router-dom";
-import NiceModal from "@ebay/nice-modal-react";
 
 import "./i18n/config"; // Initialize i18n
 
 import {
-	Cursor,
-	CursorFollow,
-	CursorProvider,
-} from "./components/ui/shadcn-io/animated-cursor";
-import { logError, logInfo } from "@/utils/logger";
-import { ThemeProvider } from "./components/molecules/ThemeContext";
-import { PasskeyPromptDialog } from "./components/molecules/PasskeyPromptDialog";
-import { MigrationWizard } from "./components/molecules/MigrationWizard";
-import { useEmbeddingSettings } from "./stores/embedding-settings";
+	AgentCursorBadge,
+	AgentCursorOverlay,
+	AgentCursorPointer,
+} from "@/components/AgentCursor";
+import { registerAllEditors } from "@/main/modules/files/editors";
+import { useAuthInit } from "@/main/modules/supabase";
+import { platform } from "@/platform/current";
+import { serviceManager } from "@/services";
+import { backgroundJob } from "@/services/background-jobs/background-job";
 import {
 	checkAnyProviderNeedsRestore,
-	restoreAllProviders,
 	getEncryptedSecretLabels,
+	restoreAllProviders,
 } from "@/utils/auth-provider-restore";
+import { logError, logInfo } from "@/utils/logger";
 import {
 	detectEncryptionFormat,
 	getMasterStrongPassword,
@@ -33,40 +35,40 @@ import {
 	resetMasterKeyAndEncryptedConfigs,
 } from "@/utils/master-key";
 import { unlockAndRestoreProvidersWithPasskey } from "@/utils/provider-passkey-unlock";
-import { serviceManager } from "@/services";
-import { backgroundJob } from "@/services/background-jobs/background-job";
-import { CopilotProvider, Copilot } from "./components/atoms/copilot";
 import { AppShell } from "./components/AppShell";
 import { AppLoadingScreen } from "./components/atoms/AppLoadingScreen";
 import { WorkspaceContentSkeleton } from "./components/atoms/AppSkeletons";
+import { Copilot, CopilotProvider } from "./components/atoms/copilot";
 import { LazyRouteErrorBoundary } from "./components/molecules/LazyRouteErrorBoundary";
+import { MigrationWizard } from "./components/molecules/MigrationWizard";
+import { PasskeyPromptDialog } from "./components/molecules/PasskeyPromptDialog";
+import { ThemeProvider } from "./components/molecules/ThemeContext";
+import { appThemeStorage } from "./components/molecules/theme-storage";
+import {
+	Cursor,
+	CursorFollow,
+	CursorProvider,
+} from "./components/ui/shadcn-io/animated-cursor";
 // AuthPage renders before the app shell, so it stays eager (not code-split).
 import { AuthPage } from "./pages/AuthPage";
 // pages — route-level code splitting (see ./pages/lazy-pages)
 import {
-	EmbeddingPage,
-	LLMPage,
-	DatabasePage,
-	LogsPage,
-	KnowledgeGraphPage,
-	DocumentLibraryPage,
 	ActivityTimelinePage,
 	AgentsPage,
-	RuntimePage,
 	ConnectionsPage,
-	SkillsPage,
+	DatabasePage,
+	DocumentLibraryPage,
+	EmbeddingPage,
 	FlowBuilderPage,
+	KnowledgeGraphPage,
+	LLMPage,
+	LogsPage,
 	prefetchLandingRoute,
+	RuntimePage,
+	SkillsPage,
 } from "./pages/lazy-pages";
-import { registerAllEditors } from "@/main/modules/files/editors";
-import { useAuthInit } from "@/main/modules/supabase";
-import {
-	AgentCursorBadge,
-	AgentCursorOverlay,
-	AgentCursorPointer,
-} from "@/components/AgentCursor";
-import { platform } from "@/platform/current";
 import { initializeRuntimeServices } from "./runtime-initialization";
+import { useEmbeddingSettings } from "./stores/embedding-settings";
 
 type EncryptionFormat = "master" | "legacy" | "none";
 
@@ -325,7 +327,7 @@ const App: React.FC = () => {
 
 	if (servicesStatus === "loading" || servicesStatus === "error") {
 		return (
-			<ThemeProvider defaultTheme="system">
+			<ThemeProvider defaultTheme="system" storage={appThemeStorage}>
 				<CursorProvider>
 					<Cursor>
 						<AgentCursorPointer />
@@ -352,7 +354,7 @@ const App: React.FC = () => {
 	}
 
 	return (
-		<ThemeProvider defaultTheme="system">
+		<ThemeProvider defaultTheme="system" storage={appThemeStorage}>
 			<CopilotProvider>
 				<NiceModal.Provider>
 					<Router>

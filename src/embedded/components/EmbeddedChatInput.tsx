@@ -1,4 +1,7 @@
-import React from "react";
+import type React from "react";
+import { useEmbeddedTranslation } from "@/embedded/hooks/use-embedded-language";
+import type { EmbeddedContextItem } from "@/embedded/types";
+import { EmbeddedComposerContext } from "./EmbeddedComposerContext";
 import {
 	PromptInput,
 	PromptInputSubmit,
@@ -6,7 +9,6 @@ import {
 	PromptInputToolbar,
 	PromptInputTools,
 } from "./MessageControl";
-import { useEmbeddedTranslation } from "@/embedded/hooks/use-embedded-language";
 
 interface EmbeddedChatInputProps {
 	inputValue: string;
@@ -23,6 +25,8 @@ interface EmbeddedChatInputProps {
 	topicsLoading: boolean;
 	hasTopics: boolean;
 	messages: any[];
+	attachedContexts: EmbeddedContextItem[];
+	onRemoveAttachedContext: (contextItemId: string) => void;
 	onDeleteChat: () => void;
 	onStop: () => void;
 	onOpenSettings: () => void;
@@ -43,6 +47,8 @@ export const EmbeddedChatInput: React.FC<EmbeddedChatInputProps> = ({
 	topicsLoading,
 	hasTopics,
 	messages,
+	attachedContexts,
+	onRemoveAttachedContext,
 	onDeleteChat,
 	onStop,
 	onOpenSettings,
@@ -58,6 +64,10 @@ export const EmbeddedChatInput: React.FC<EmbeddedChatInputProps> = ({
 
 	return (
 		<div className="memorall-composer">
+			<EmbeddedComposerContext
+				attachedContexts={attachedContexts}
+				onRemoveAttachedContext={onRemoveAttachedContext}
+			/>
 			<PromptInput onSubmit={onSubmit}>
 				<PromptInputTextarea
 					value={inputValue}

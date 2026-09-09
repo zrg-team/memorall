@@ -1,7 +1,7 @@
-import React from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { CoAgentOverlay } from "@/embedded/components/co-agents/CoAgentOverlay";
 import { coAgentStyles } from "@/embedded/components/co-agents/styles";
+import { EmbeddedRoot } from "@/embedded/components/EmbeddedRoot";
 import { CO_AGENT_CONTAINER_ID } from "./constants";
 
 let overlayRoot: Root | null = null;
@@ -27,11 +27,17 @@ export const createCoAgentOverlay = (): void => {
 		"position:fixed;inset:0;z-index:2147483647;pointer-events:none;";
 	const shadowRoot = container.attachShadow({ mode: "open" });
 
+	// App stylesheet first, copilot CSS second: document order decides ties, so
+	// our rules win without needing !important.
+	createStylesheet("options/index.css", shadowRoot);
+
 	const customPropsStyle = document.createElement("style");
 	customPropsStyle.textContent = coAgentStyles;
 	shadowRoot.appendChild(customPropsStyle);
-	createStylesheet("options/index.css", shadowRoot);
 
+	// Deliberately no .memorall-chat-container class: that scopes the chat panel's
+	// component rules, which the dock is not laid out for. Design tokens reach the
+	// dock through the .light/.dark class EmbeddedRoot puts on this element.
 	const mount = document.createElement("div");
 	shadowRoot.appendChild(mount);
 	document.body.appendChild(container);
@@ -39,10 +45,12 @@ export const createCoAgentOverlay = (): void => {
 	overlayRoot = createRoot(mount);
 	overlayContainer = container;
 	overlayRoot.render(
-		<CoAgentOverlay
-			portalRoot={shadowRoot}
-			onDestroy={destroyCoAgentOverlay}
-		/>,
+		<EmbeddedRoot themeTarget={mount}>
+			<CoAgentOverlay
+				portalRoot={shadowRoot}
+				onDestroy={destroyCoAgentOverlay}
+			/>
+		</EmbeddedRoot>,
 	);
 };
 

@@ -1,31 +1,33 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { ChatHeader } from "@/embedded/components/MessageControl";
+import type React from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { BACKGROUND_EVENTS } from "@/constants/events";
+import { EmbeddedContextSections } from "@/embedded/components/ContextSections";
 import { EmbeddedChatConversation } from "@/embedded/components/EmbeddedChatConversation";
 import { EmbeddedChatInput } from "@/embedded/components/EmbeddedChatInput";
 import { EmbeddedCloseConfirmation } from "@/embedded/components/EmbeddedCloseConfirmation";
 import { EmbeddedContextRevealButton } from "@/embedded/components/EmbeddedContextRevealButton";
-import { EmbeddedContextSections } from "@/embedded/components/ContextSections";
+import { EmbeddedRoot } from "@/embedded/components/EmbeddedRoot";
 import { EmbeddedSmartSelectNotice } from "@/embedded/components/EmbeddedSmartSelectNotice";
+import { ChatHeader } from "@/embedded/components/MessageControl";
 import { useConversationAutoScroll } from "@/embedded/hooks/use-conversation-auto-scroll";
 import { useEmbeddedChatDisplayMode } from "@/embedded/hooks/use-embedded-chat-display-mode";
 import { useEmbeddedChatSession } from "@/embedded/hooks/use-embedded-chat-session";
 import { useEmbeddedContextAttachments } from "@/embedded/hooks/use-embedded-context-attachments";
 import { useEmbeddedCustomOptions } from "@/embedded/hooks/use-embedded-custom-options";
+import { useEmbeddedTranslation } from "@/embedded/hooks/use-embedded-language";
 import { useEmbeddedModelStatus } from "@/embedded/hooks/use-embedded-model-status";
 import { useEmbeddedSmartSelect } from "@/embedded/hooks/use-embedded-smart-select";
-import { useEmbeddedTranslation } from "@/embedded/hooks/use-embedded-language";
 import { customStyles } from "@/embedded/styles/customStyles";
 import type { ChatModalProps } from "@/embedded/types";
 import { createShadowPage } from "@/embedded/utils/create-shadow-page";
-import { BACKGROUND_EVENTS } from "@/constants/events";
 import type { MessageActionRequest } from "@/main/modules/chat/components/artifacts/ArtifactActionsMenu";
 import {
 	formatOpenUIFormStateContext,
 	getOpenUISendMessageText,
 	isAllowedOpenUIRoute,
+	type MemorallOpenUIActionDetail,
 	normalizeOpenUIDocumentPath,
 	resolveOpenUITemplate,
-	type MemorallOpenUIActionDetail,
 } from "@/main/modules/openui/actions";
 import { backgroundJob } from "@/services/background-jobs/background-job";
 
@@ -404,27 +406,26 @@ const EmbeddedChat: React.FC<ChatModalProps> = ({
 						/>
 					)}
 
-					{!isSmartSelectMode &&
-						!showContextSection &&
-						attachedContexts.length === 0 && (
-							<EmbeddedContextRevealButton
-								label={tChat("context")}
-								smartSelectLabel={tContext("smartSelect")}
-								onClick={toggleContextSection}
-								onSmartSelect={startSmartSelect}
-							/>
-						)}
+					{/* Stays reachable once something is attached: the picker is now the
+					    only way back to Smart Select and the other context kinds. */}
+					{!isSmartSelectMode && !showContextSection && (
+						<EmbeddedContextRevealButton
+							label={tChat("context")}
+							smartSelectLabel={tContext("smartSelect")}
+							onClick={toggleContextSection}
+							onSmartSelect={startSmartSelect}
+						/>
+					)}
 
 					{!isSmartSelectMode && (
 						<div
 							className="overflow-hidden transition-all duration-300 ease-in-out"
 							style={{
-								maxHeight:
-									showContextSection || attachedContexts.length > 0
-										? "500px"
-										: "0px",
-								opacity:
-									showContextSection || attachedContexts.length > 0 ? 1 : 0,
+								// Driven only by the explicit toggle now. Forcing it open whenever
+								// something was attached duplicated the composer's chips, which are
+								// the always-visible answer to "what am I sending?".
+								maxHeight: showContextSection ? "500px" : "0px",
+								opacity: showContextSection ? 1 : 0,
 							}}
 						>
 							<EmbeddedContextSections
@@ -456,6 +457,8 @@ const EmbeddedChat: React.FC<ChatModalProps> = ({
 							topicsLoading={topicsLoading}
 							hasTopics={hasTopics}
 							messages={messages}
+							attachedContexts={attachedContexts}
+							onRemoveAttachedContext={removeAttachedContext}
 							onDeleteChat={deleteChat}
 							onStop={stop}
 							onOpenSettings={handleOpenFullPageAndClose}
@@ -478,7 +481,7 @@ const EmbeddedChat: React.FC<ChatModalProps> = ({
 export async function createEmbeddedChatModal(
 	props: ChatModalProps,
 ): Promise<() => void> {
-	const { root, container } = createShadowPage({
+	const { root, container, shadowContainer } = createShadowPage({
 		customStyles,
 	});
 
@@ -495,7 +498,11 @@ export async function createEmbeddedChatModal(
 		},
 	};
 
-	root.render(<EmbeddedChat {...modalProps} />);
+	root.render(
+		<EmbeddedRoot themeTarget={shadowContainer}>
+			<EmbeddedChat {...modalProps} />
+		</EmbeddedRoot>,
+	);
 	document.body.appendChild(container);
 
 	return cleanupModal;

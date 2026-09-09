@@ -1,6 +1,7 @@
-import React, { createContext, useContext, useEffect, useState } from "react";
+import type React from "react";
+import { createContext, useContext, useEffect, useState } from "react";
 
-type Theme = "light" | "dark" | "system";
+export type Theme = "light" | "dark" | "system";
 
 interface ThemeContextType {
 	theme: Theme;
@@ -10,33 +11,103 @@ interface ThemeContextType {
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
-export const useTheme = () => {
+const prefersDark = () =>
+	typeof window !== "undefined" &&
+	window.matchMedia("(prefers-color-scheme: dark)").matches;
+
+// Tracks the OS preference so surfaces rendered without a provider still resolve
+// a live theme instead of a frozen guess.
+const useSystemTheme = (): "light" | "dark" => {
+	const [systemTheme, setSystemTheme] = useState<"light" | "dark">(() =>
+		prefersDark() ? "dark" : "light",
+	);
+
+	useEffect(() => {
+		if (typeof window === "undefined") return;
+		const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+		const handleChange = () => setSystemTheme(prefersDark() ? "dark" : "light");
+		handleChange();
+
+		if (mediaQuery.addEventListener) {
+			mediaQuery.addEventListener("change", handleChange);
+			return () => mediaQuery.removeEventListener("change", handleChange);
+		}
+		mediaQuery.addListener(handleChange);
+		return () => mediaQuery.removeListener(handleChange);
+	}, []);
+
+	return systemTheme;
+};
+
+const noopSetTheme = () => {};
+
+// Deliberately does not throw when no provider is mounted. Consumers can sit deep
+// inside error-boundary fallbacks (OpenUIRenderer renders MarkdownMessage from
+// its own render()), where a throw escapes the boundary and unmounts the whole
+// tree rather than degrading to plain markdown.
+export const useTheme = (): ThemeContextType => {
 	const context = useContext(ThemeContext);
-	if (!context) {
-		throw new Error("useTheme must be used within a ThemeProvider");
-	}
-	return context;
+	const systemTheme = useSystemTheme();
+
+	if (context) return context;
+	return { theme: "system", setTheme: noopSetTheme, actualTheme: systemTheme };
+};
+
+export const isTheme = (value: unknown): value is Theme =>
+	value === "light" || value === "dark" || value === "system";
+
+/**
+ * Where the preference is read from and written to. Injected so surfaces that do
+ * not own `window.localStorage` — the content-script shadow roots read the *host
+ * page's* storage, not ours — can supply their own backing store.
+ */
+export interface ThemeStorage {
+	read?: () => Theme | null;
+	write?: (theme: Theme) => void;
+	subscribe?: (onChange: (theme: Theme) => void) => () => void;
+}
+
+const localStorageTheme: ThemeStorage = {
+	read: () => {
+		if (typeof window === "undefined") return null;
+		const savedTheme = localStorage.getItem("theme");
+		return isTheme(savedTheme) ? savedTheme : null;
+	},
+	write: (theme) => {
+		if (typeof window === "undefined") return;
+		localStorage.setItem("theme", theme);
+	},
 };
 
 interface ThemeProviderProps {
 	children: React.ReactNode;
 	defaultTheme?: Theme;
+	/**
+	 * Element that receives the `light`/`dark` class. Defaults to the document
+	 * root; shadow-root surfaces pass their own container so the injected UI does
+	 * not restyle the page it is sitting on.
+	 */
+	themeTarget?: HTMLElement | null;
+	storage?: ThemeStorage;
 }
 
 export const ThemeProvider: React.FC<ThemeProviderProps> = ({
 	children,
 	defaultTheme = "system",
+	themeTarget,
+	storage = localStorageTheme,
 }) => {
-	const [theme, setThemeState] = useState<Theme>(() => {
-		// Try to get theme from localStorage first
-		if (typeof window !== "undefined") {
-			const savedTheme = localStorage.getItem("theme") as Theme;
-			if (savedTheme && ["light", "dark", "system"].includes(savedTheme)) {
-				return savedTheme;
-			}
-		}
-		return defaultTheme;
-	});
+	const [theme, setThemeState] = useState<Theme>(
+		() => storage.read?.() ?? defaultTheme,
+	);
+
+	// Late-arriving or externally-changed preference (async stores, other surfaces).
+	useEffect(() => {
+		if (!storage.subscribe) return;
+		return storage.subscribe((nextTheme) => {
+			if (isTheme(nextTheme)) setThemeState(nextTheme);
+		});
+	}, [storage]);
 
 	const [actualTheme, setActualTheme] = useState<"light" | "dark">(() => {
 		// Determine initial actual theme
@@ -80,18 +151,16 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({
 		}
 	}, [theme]);
 
-	// Apply theme class to document root
+	// Apply theme class to the target element (document root by default)
 	useEffect(() => {
-		const root = window.document.documentElement;
+		const root = themeTarget ?? window.document.documentElement;
 		root.classList.remove("light", "dark");
 		root.classList.add(actualTheme);
-	}, [actualTheme]);
+	}, [actualTheme, themeTarget]);
 
 	const setTheme = (newTheme: Theme) => {
 		setThemeState(newTheme);
-		if (typeof window !== "undefined") {
-			localStorage.setItem("theme", newTheme);
-		}
+		storage.write?.(newTheme);
 	};
 
 	const value: ThemeContextType = {

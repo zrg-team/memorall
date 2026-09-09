@@ -1,28 +1,29 @@
-import React, { useMemo } from "react";
-import type { ChatMessage } from "../types";
-import { Loader } from "./Icons";
+import type React from "react";
+import { useMemo } from "react";
 import {
 	getEmbeddedTranslation,
 	useEmbeddedTranslation,
 } from "@/embedded/hooks/use-embedded-language";
-import {
-	formatJsonPreview,
-	getTextContent,
-	translateActionName,
-} from "./messages/utils";
+import type { MessageActionRequest } from "@/main/modules/chat/components/artifacts/ArtifactActionsMenu";
 import type {
 	AssistantExecutionPart,
 	AssistantToolPartState,
 	MessageParts,
 } from "@/types/chat";
 import type { ChatCompletionMessageToolCall } from "@/types/openai";
-import type { MessageActionRequest } from "@/main/modules/chat/components/artifacts/ArtifactActionsMenu";
+import type { ChatMessage } from "../types";
+import { Loader } from "./Icons";
 import {
-	EmbeddedToolSummaries,
 	AssistantMessageContent,
-	UserMessageContent,
+	EmbeddedToolSummaries,
 	MessageActions,
+	UserMessageContent,
 } from "./messages";
+import {
+	formatJsonPreview,
+	getTextContent,
+	translateActionName,
+} from "./messages/utils";
 
 type EmbeddedAssistantPart =
 	| { type: "text"; id: string; text: string }
@@ -236,6 +237,44 @@ const EmbeddedExecutionPart: React.FC<{
 		</div>
 	) : null;
 
+/** Names whatever is currently running, falling back to a generic label. */
+const resolveActivityLabel = (
+	parts: EmbeddedAssistantPart[],
+	actions: Record<string, string>,
+	t: (key: "thinking") => string,
+): string => {
+	for (let index = parts.length - 1; index >= 0; index -= 1) {
+		const part = parts[index];
+		if (part.type === "text") continue;
+		if (part.state !== "running") continue;
+		return translateActionName(
+			part.type === "tool" ? part.name : part.node,
+			actions,
+		);
+	}
+	return t("thinking");
+};
+
+/**
+ * Persistent "the run is still going" affordance.
+ *
+ * The empty-message spinner below only covers the moment before anything has
+ * streamed. Once text or a tool row appeared there was no signal left, so a long
+ * flow looked indistinguishable from a finished one.
+ */
+export const EmbeddedWorkingIndicator: React.FC<{ label: string }> = ({
+	label,
+}) => (
+	<div className="memorall-working" role="status" aria-live="polite">
+		<span className="memorall-working-dots" aria-hidden="true">
+			<span className="memorall-working-dot" />
+			<span className="memorall-working-dot" />
+			<span className="memorall-working-dot" />
+		</span>
+		<span className="memorall-working-label">{label}</span>
+	</div>
+);
+
 const EmbeddedAssistantPartsFlow: React.FC<{
 	parts: EmbeddedAssistantPart[];
 	isStreaming: boolean;
@@ -270,6 +309,11 @@ const EmbeddedAssistantPartsFlow: React.FC<{
 					</div>
 				);
 			})}
+			{isStreaming && (
+				<EmbeddedWorkingIndicator
+					label={resolveActivityLabel(parts, actions, t)}
+				/>
+			)}
 		</div>
 	);
 };
