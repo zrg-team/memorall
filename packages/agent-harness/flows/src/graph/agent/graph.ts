@@ -444,8 +444,14 @@ export class AgentGraph extends GraphBase<
 					runtime: getFlowRuntimeVars(runConfig),
 					toolCallId: toolCall.id,
 				});
-				const { content, contentText, structuredContent, isError, meta } =
-					extractToolResult(rawResult);
+				const {
+					content,
+					contentText,
+					structuredContent,
+					imageUrls,
+					isError,
+					meta,
+				} = extractToolResult(rawResult);
 				toolFailureStreak = isError
 					? nextToolFailureStreak(toolFailureStreak, toolName, contentText)
 					: null;
@@ -458,6 +464,7 @@ export class AgentGraph extends GraphBase<
 						tool_call_id: toolCall.id,
 						structuredContent,
 						content: contentText,
+						...(imageUrls && imageUrls.length > 0 ? { imageUrls } : {}),
 						isError,
 						meta,
 						endedAt: new Date(endedAtMs).toISOString(),

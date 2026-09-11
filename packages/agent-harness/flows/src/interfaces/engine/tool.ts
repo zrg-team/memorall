@@ -58,13 +58,51 @@ export interface ToolExecutionContext<TState = unknown> {
 	toolCallId?: string;
 }
 
+/**
+ * The readable half of a tool result.
+ *
+ * A tool that answers with pictures — `pdf_to_image`, `web_read_images` —
+ * returns image parts alongside its text, and those carry no `text` field. They
+ * used to be mapped anyway, so every image became the literal string
+ * "undefined" in the transcript. Name them instead: the model sees the images
+ * themselves as separate content parts, and the reader gets a line saying how
+ * many came back.
+ */
 export const toolMessageContentToText = (
 	content: ChatCompletionToolMessageParam["content"],
 ): string => {
 	if (typeof content === "string") {
 		return content;
 	}
-	return content.map((part) => part.text).join("\n");
+
+	const lines: string[] = [];
+	let imageCount = 0;
+	for (const part of content) {
+		if (typeof part?.text === "string") {
+			lines.push(part.text);
+			continue;
+		}
+		if ((part as { type?: string })?.type === "image_url") imageCount += 1;
+	}
+	if (imageCount > 0) {
+		lines.push(`[${imageCount} image${imageCount === 1 ? "" : "s"} attached]`);
+	}
+	return lines.join("\n");
+};
+
+/** The image URLs a tool result carries, for the UI to show. */
+export const toolMessageContentImages = (
+	content: ChatCompletionToolMessageParam["content"],
+): string[] => {
+	if (typeof content === "string") return [];
+	const urls: string[] = [];
+	for (const part of content) {
+		const candidate = part as { type?: string; image_url?: { url?: string } };
+		if (candidate?.type !== "image_url") continue;
+		const url = candidate.image_url?.url;
+		if (typeof url === "string" && url) urls.push(url);
+	}
+	return urls;
 };
 
 export const isToolExecutionResult = (
@@ -90,6 +128,11 @@ export const extractToolResult = (
 	content: ChatCompletionToolMessageParam["content"];
 	contentText: string;
 	structuredContent?: unknown;
+	/**
+	 * Image URLs the result carries inline, so the UI can show them.
+	 * Distinct from `metadata.images`, which names files in the workspace.
+	 */
+	imageUrls?: string[];
 	isError: boolean;
 	meta?: ToolExecutionMeta;
 } => {
@@ -118,6 +161,7 @@ export const extractToolResult = (
 	return {
 		content: value,
 		contentText: toolMessageContentToText(value),
+		imageUrls: toolMessageContentImages(value),
 		isError: false,
 	};
 };

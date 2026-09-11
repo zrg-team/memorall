@@ -15,6 +15,7 @@ import {
 	requireWebBrowserService,
 	resolveWebBlock,
 	stripNonReadableHtml,
+	collapseReadableWhitespace,
 	truncateContent,
 	type WebToolServices,
 	webBlockFields,
@@ -133,12 +134,14 @@ const extractSelectorHtml = (
 const extractTextFromHtml = (html: string): string => {
 	const document = parseHtml(stripNonReadableHtml(html));
 	removeNonReadableNodes(document);
-	return (
+	// Collapsed before the caller truncates, so the budget buys words rather
+	// than the source's indentation.
+	return collapseReadableWhitespace(
 		document.body?.innerText ??
-		document.body?.textContent ??
-		document.documentElement?.textContent ??
-		""
-	).trim();
+			document.body?.textContent ??
+			document.documentElement?.textContent ??
+			"",
+	);
 };
 
 const hasAppShellMarkers = (html: string): boolean => {

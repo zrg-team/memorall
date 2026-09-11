@@ -29,6 +29,8 @@ export interface WebDomElementInfo {
 	text: string;
 	value: string | null;
 	href: string | null;
+	/** Media source. A `data:` URL is summarised, never carried. */
+	src: string | null;
 	disabled: boolean;
 	visible: boolean;
 	acceptsTextInput: boolean;

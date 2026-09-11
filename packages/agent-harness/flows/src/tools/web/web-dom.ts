@@ -136,6 +136,7 @@ export const createWebDomActionTool: ToolFactory<Input, WebToolServices> = (
 						acceptsTextInput: record.acceptsTextInput,
 						text: record.text,
 						value: record.value,
+						src: record.src,
 					}));
 
 				return createWebResult({
@@ -145,7 +146,7 @@ export const createWebDomActionTool: ToolFactory<Input, WebToolServices> = (
 					url: session.currentUrl,
 					action: input.action,
 					selector: input.selector,
-					note: "Use the returned `index` value for follow-up read/click/input/focus actions. Prefer visible elements with acceptsTextInput=true for text entry.",
+					note: "Use the returned `index` value for follow-up read/click/input/focus actions. Prefer visible elements with acceptsTextInput=true for text entry. To look at pictures, collect their `src` values and pass them to web_read_images — image bytes are never returned as element text.",
 					result: actionResult,
 					...webBlockFields(session),
 				});

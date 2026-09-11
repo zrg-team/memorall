@@ -13,6 +13,8 @@ import {
 	type WebChallengeDecision,
 } from "@/services/web-browser/challenge-intervention";
 import {
+	extractElementSource,
+	extractElementText,
 	extractReadableDocumentText,
 	removeNonReadableNodes,
 } from "@/services/web-browser/readable-text";
@@ -990,7 +992,7 @@ const elementInfo = (element: Element, index: number): WebDomElementInfo => ({
 		element.getAttribute("aria-labelledby"),
 	title: element.getAttribute("title"),
 	role: element.getAttribute("role"),
-	text: (element.textContent ?? "").trim(),
+	text: extractElementText(element),
 	value:
 		element instanceof HTMLInputElement ||
 		element instanceof HTMLTextAreaElement ||
@@ -1003,6 +1005,7 @@ const elementInfo = (element: Element, index: number): WebDomElementInfo => ({
 		element instanceof HTMLLinkElement
 			? element.getAttribute("href")
 			: null,
+	src: extractElementSource(element),
 	disabled:
 		(element instanceof HTMLInputElement ||
 			element instanceof HTMLTextAreaElement ||
@@ -1441,7 +1444,7 @@ export const performDomAction = async (
 			(element as HTMLElement).focus();
 			return {
 				label: element.tagName.toLowerCase(),
-				text: element.textContent ?? "",
+				text: extractElementText(element),
 				value:
 					(
 						element as
@@ -1459,7 +1462,7 @@ export const performDomAction = async (
 			});
 			return {
 				label: element.tagName.toLowerCase(),
-				text: element.textContent ?? "",
+				text: extractElementText(element),
 				value:
 					(
 						element as
@@ -1477,7 +1480,7 @@ export const performDomAction = async (
 			});
 			return {
 				label: element.tagName.toLowerCase(),
-				text: element.textContent ?? "",
+				text: extractElementText(element),
 				value:
 					(
 						element as
@@ -1490,7 +1493,7 @@ export const performDomAction = async (
 		if (action === "read") {
 			return {
 				label: element.tagName.toLowerCase(),
-				text: element.textContent ?? "",
+				text: extractElementText(element),
 				value:
 					"value" in element && typeof element.value === "string"
 						? element.value
@@ -1505,7 +1508,7 @@ export const performDomAction = async (
 			element.click();
 			return {
 				label: element.tagName.toLowerCase(),
-				text: element.textContent ?? "",
+				text: extractElementText(element),
 				value:
 					(
 						element as

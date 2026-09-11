@@ -1,4 +1,8 @@
-import { extractReadableDocumentText } from "@/services/web-browser/readable-text";
+import {
+	extractElementSource,
+	extractElementText,
+	extractReadableDocumentText,
+} from "@/services/web-browser/readable-text";
 import {
 	WEB_CONTENT_COMMAND_SOURCE,
 	type WebContentCommandRequest,
@@ -103,7 +107,7 @@ const createDomElementInfo = (
 		element.getAttribute("aria-labelledby"),
 	title: element.getAttribute("title"),
 	role: element.getAttribute("role"),
-	text: (element.textContent ?? "").trim(),
+	text: extractElementText(element),
 	value:
 		element instanceof HTMLInputElement ||
 		element instanceof HTMLTextAreaElement ||
@@ -116,6 +120,7 @@ const createDomElementInfo = (
 		element instanceof HTMLLinkElement
 			? element.getAttribute("href")
 			: null,
+	src: extractElementSource(element),
 	disabled:
 		(element instanceof HTMLInputElement ||
 			element instanceof HTMLTextAreaElement ||
@@ -128,7 +133,7 @@ const createDomElementInfo = (
 
 const createElementRecord = (element: Element): WebElementRecord => ({
 	label: element.tagName.toLowerCase(),
-	text: element.textContent ?? "",
+	text: extractElementText(element),
 	value:
 		element instanceof HTMLInputElement ||
 		element instanceof HTMLTextAreaElement ||

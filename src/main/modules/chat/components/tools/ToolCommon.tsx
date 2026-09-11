@@ -350,3 +350,80 @@ export const ToolStateBadge: React.FC<{
 		{label ?? (ok === true ? "success" : ok === false ? "failed" : "unknown")}
 	</Badge>
 );
+
+/**
+ * Any images a tool result carries, from wherever they ended up.
+ *
+ * The harness puts them on the tool-result metadata as `imageUrls`, but a tool
+ * answers in JSON can also name one inline (`web_screenshot` returns a
+ * `dataUrl`), so both are picked up. Only real image references are kept — a
+ * stray string that merely looks URL-ish would render as a broken tile.
+ */
+const IMAGE_URL_PATTERN = /^(?:data:image\/|https?:\/\/|blob:)/i;
+
+export const getToolInlineImages = (item: MessageActionItem): string[] => {
+	const found: string[] = [];
+	const push = (value: unknown) => {
+		if (typeof value !== "string" || !IMAGE_URL_PATTERN.test(value)) return;
+		if (!found.includes(value)) found.push(value);
+	};
+
+	if (isRecord(item.metadata)) {
+		const inline = item.metadata.imageUrls;
+		if (Array.isArray(inline)) for (const entry of inline) push(entry);
+	}
+
+	const payload = getStructuredToolPayload(item);
+	if (payload) {
+		push(payload.dataUrl);
+		push(payload.image_url);
+		if (Array.isArray(payload.images)) {
+			for (const entry of payload.images) {
+				if (typeof entry === "string") push(entry);
+				else if (isRecord(entry)) push(entry.url ?? entry.dataUrl);
+			}
+		}
+	}
+
+	return found;
+};
+
+/**
+ * Thumbnails for a tool result, opening full size in a new tab.
+ *
+ * Worth the space: a screenshot or a page photo is the whole point of the call,
+ * and reading it as a base64 blob in the raw payload tells nobody anything.
+ */
+export const ToolInlineImages: React.FC<{
+	images: string[];
+	className?: string;
+}> = ({ images, className }) => {
+	if (images.length === 0) return null;
+
+	return (
+		<div className={cn("flex flex-wrap gap-2", className)}>
+			{images.map((src, index) => (
+				<a
+					key={`${src.slice(0, 64)}-${index}`}
+					href={src}
+					target="_blank"
+					rel="noreferrer"
+					className="group/tool-image block overflow-hidden rounded-md border border-border/60 bg-muted/20 transition-colors hover:border-primary/40"
+					title={`Open image ${index + 1} full size`}
+				>
+					<img
+						src={src}
+						alt={`Tool result ${index + 1}`}
+						loading="lazy"
+						className="h-28 w-auto max-w-[12rem] object-contain"
+					/>
+				</a>
+			))}
+		</div>
+	);
+};
+
+/** The images a tool returned, or nothing when it returned none. */
+export const ToolItemImages: React.FC<{ item: MessageActionItem }> = ({
+	item,
+}) => <ToolInlineImages images={getToolInlineImages(item)} className="mb-1" />;

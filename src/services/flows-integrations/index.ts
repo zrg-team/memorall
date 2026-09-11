@@ -48,6 +48,7 @@ import "./tools/files/pdf-to-text";
 
 // Web tools that save to the document filesystem
 import "./tools/web/web-fetch-image";
+import "./tools/web/web-read-images";
 import "./tools/web/web-screenshot";
 
 // Browser/virtual-server access tools
