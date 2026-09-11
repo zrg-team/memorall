@@ -27,6 +27,7 @@ import {
 import {
 	logError,
 	logInfo,
+	logWarn,
 } from "@memorall/agent-harness-flows/logging/logger";
 import {
 	getFeatureCatalogSteps,
@@ -872,19 +873,59 @@ export class FlowBuilderService {
 	 * Runtime only reads the unified config blob. When it is absent,
 	 * execution falls back to the canonical default flow definition.
 	 */
+	/**
+	 * The flow config for a reference, falling back to the stock one.
+	 *
+	 * The fallback is silent by design for a predefined flow that has never been
+	 * customised — there is nothing stored yet and the defaults are correct. It is
+	 * the wrong answer for an agent the caller asked for by id: that means the
+	 * agent's instructions, features and tools are all quietly replaced by the
+	 * stock ones, and the run looks like it worked. Callers that need to know use
+	 * `resolveUnifiedFlowConfig`.
+	 */
 	async getUnifiedFlowConfig(ref: FlowConfigRef): Promise<UnifiedFlowConfig> {
+		return (await this.resolveUnifiedFlowConfig(ref)).config;
+	}
+
+	/**
+	 * The flow config plus whether it is actually the one that was asked for.
+	 *
+	 * `usedFallback` is what lets a caller say "ran without your agent" instead of
+	 * answering as somebody else without mentioning it.
+	 */
+	async resolveUnifiedFlowConfig(ref: FlowConfigRef): Promise<{
+		config: UnifiedFlowConfig;
+		usedFallback: boolean;
+		reason?: string;
+	}> {
 		const graphType = "foundation";
 
 		try {
 			const stored = await this.getStoredUnifiedFlowConfig(ref);
 			if (stored) {
-				return stored;
+				return { config: stored, usedFallback: false };
 			}
 
-			return buildDefaultFlowConfig(graphType);
+			const reason =
+				"flowId" in ref
+					? `No saved configuration for flow ${ref.flowId}.`
+					: undefined;
+			if (reason) {
+				logWarn(`[FLOW_BUILDER] ${reason} Falling back to the stock config.`);
+			}
+			return {
+				config: buildDefaultFlowConfig(graphType),
+				usedFallback: Boolean(reason),
+				reason,
+			};
 		} catch (error) {
+			const reason = error instanceof Error ? error.message : String(error);
 			logError("[FLOW_BUILDER] Failed to load unified flow config:", error);
-			return buildDefaultFlowConfig(graphType);
+			return {
+				config: buildDefaultFlowConfig(graphType),
+				usedFallback: true,
+				reason,
+			};
 		}
 	}
 

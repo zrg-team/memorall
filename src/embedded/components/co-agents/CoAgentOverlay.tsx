@@ -333,16 +333,11 @@ ${text}`
 					pageUrl: window.location.href,
 				})
 			: prompt;
-		const promptWithContext =
-			typeof composed === "string"
-				? composed
-				: composed
-						.filter(
-							(part): part is { type: "text"; text: string } =>
-								part.type === "text",
-						)
-						.map((part) => part.text)
-						.join("\n\n");
+		// Sent as-is, parts and all. Flattening to text here is what made an
+		// attached screenshot arrive as the text of the element it was cut from:
+		// the model was handed the div's screen-reader labels rather than the
+		// picture, and answered about those.
+		const promptWithContext = composed;
 
 		setAnchoredInputValue("");
 		setAttachedSelection(null);

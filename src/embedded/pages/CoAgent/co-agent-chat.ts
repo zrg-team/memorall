@@ -14,6 +14,15 @@ export interface CoAgentPageContext {
 	description?: string;
 }
 
+/**
+ * What the user asked, with anything they attached.
+ *
+ * A string for a plain question; the OpenAI content-part form when an image is
+ * attached, so a captured region reaches the model as a picture rather than as
+ * the text of the element it was cut from.
+ */
+export type CoAgentPrompt = ChatMessage["content"];
+
 export interface CoAgentChatStreamOptions
 	extends Pick<
 		ChatStreamOptions,
@@ -25,7 +34,7 @@ export interface CoAgentChatStreamOptions
 		| "onError"
 		| "signal"
 	> {
-	prompt: string;
+	prompt: CoAgentPrompt;
 	pageContext: CoAgentPageContext;
 	anchorContext?: CoAgentContextAnchor;
 	/** Chosen agent flow; "chat" (or undefined) keeps the default foundation agent. */
@@ -67,7 +76,7 @@ const renderCoAgentPageContextPrompt = (context: CoAgentPageContext): string =>
 		.replace("{{title}}", context.title || "Unknown")
 		.replace("{{description}}", context.description || "Not available");
 
-const createUserMessage = (prompt: string): ChatMessage => ({
+const createUserMessage = (prompt: CoAgentPrompt): ChatMessage => ({
 	id: `co-agent-user-${Date.now()}`,
 	role: "user",
 	content: prompt,

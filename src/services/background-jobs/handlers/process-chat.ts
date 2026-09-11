@@ -1125,17 +1125,37 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 				// Load unified flow config — steps carry both their settings and enabled state.
 				// Falls back to the canonical default on failure so the graph always runs.
 				let flowConfig: UnifiedFlowConfig | null = null;
+				// An agent asked for by id that cannot be loaded used to be replaced
+				// by the stock config in silence: the run answered as somebody else,
+				// with none of the agent's instructions, features or tools, and
+				// nothing said so. Keep the fallback, but record it.
+				let agentFallbackReason: string | undefined;
 				try {
-					flowConfig = job.payload.flowConfig
-						? job.payload.flowConfig
-						: agentFlowId
-							? await serviceManager.flowBuilderService.getUnifiedFlowConfig({
-									flowId: agentFlowId,
-								})
-							: await serviceManager.flowBuilderService.getUnifiedFlowConfig({
-									predefinedFlow: "foundation",
-								});
+					if (job.payload.flowConfig) {
+						flowConfig = job.payload.flowConfig;
+					} else if (agentFlowId) {
+						const resolved =
+							await serviceManager.flowBuilderService.resolveUnifiedFlowConfig({
+								flowId: agentFlowId,
+							});
+						flowConfig = resolved.config;
+						if (resolved.usedFallback) {
+							agentFallbackReason =
+								resolved.reason ?? "The selected agent could not be loaded.";
+							await dependencies.logger.warn(
+								`Ran without the selected agent (${agentFlowId})`,
+								agentFallbackReason,
+								"offscreen",
+							);
+						}
+					} else {
+						flowConfig =
+							await serviceManager.flowBuilderService.getUnifiedFlowConfig({
+								predefinedFlow: "foundation",
+							});
+					}
 				} catch (err) {
+					agentFallbackReason = `${err}`;
 					await dependencies.logger.warn(
 						"Failed to load flow config, using defaults",
 						`${err}`,
@@ -1243,6 +1263,20 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 				// Flush any remaining buffered content from streaming
 				streamBuffer.flush();
 				dispatcher.flush();
+
+				// Say it out loud when the answer did not come from the agent the
+				// user picked, rather than letting a stock run pass for theirs.
+				if (agentFallbackReason) {
+					await dependencies.updateJobProgress(jobId, {
+						stage: "Ran without the selected agent",
+						progress: 95,
+						result: {
+							type: "agent-fallback",
+							agentFlowId,
+							reason: agentFallbackReason,
+						} as unknown as ChatResult,
+					});
+				}
 
 				if (finalState) {
 					const response = finalState.response;
