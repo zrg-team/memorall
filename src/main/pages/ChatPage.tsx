@@ -52,6 +52,7 @@ import {
 import { topicService } from "@/main/modules/topics/services/topic-service";
 import { useAgentConfigStore } from "@/main/stores/agent-config";
 import { useChatStore } from "@/main/stores/chat";
+import { useRefreshOnFocus } from "@/main/modules/chat/hooks/use-refresh-on-focus";
 import { useRuntimeSessionsStore } from "@/main/stores/runtime-sessions";
 import { useShellLayoutStore } from "@/main/stores/shell-layout";
 import { useWebChallengeHandoffStore } from "@/main/stores/web-challenge-handoff";
@@ -114,6 +115,16 @@ export const ChatPage: React.FC<ChatPageProps> = ({
 	);
 	const currentConversation = useChatStore(
 		(state) => state.currentConversation,
+	);
+
+	// The co-agent writes into this same conversation from a content script, and
+	// nothing tells this page about it. Re-read when the user comes back, so a
+	// turn taken on the web page is not missing here.
+	const loadConversation = useChatStore((state) => state.loadConversation);
+	useRefreshOnFocus(
+		currentConversation?.id
+			? () => loadConversation(currentConversation.id)
+			: undefined,
 	);
 	const [attachedImages, setAttachedImages] = React.useState<File[]>([]);
 	const [attachedDocumentRefs, setAttachedDocumentRefs] = React.useState<

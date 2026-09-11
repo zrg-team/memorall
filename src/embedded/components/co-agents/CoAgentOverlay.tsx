@@ -1,5 +1,5 @@
 import type React from "react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AgentCursorOverlay, hideAgentCursor } from "@/components/AgentCursor";
 import { BACKGROUND_EVENTS } from "@/constants/events";
 import { embeddedChatHistoryService } from "@/embedded/chat-history-service";
@@ -73,6 +73,12 @@ export const CoAgentOverlay: React.FC<CoAgentOverlayProps> = ({
 	// Same agent list the panel offers; the dock had no way to pick one.
 	const { agentFlows, selectedAgentFlowId, setSelectedAgentFlowId } =
 		useEmbeddedCustomOptions();
+	// Recorded on the message so the reader can see which agent answered — and,
+	// when it is the built-in one, that no agent was applied.
+	const answeringAgentName = useMemo(
+		() => agentFlows.find((flow) => flow.id === selectedAgentFlowId)?.name,
+		[agentFlows, selectedAgentFlowId],
+	);
 	const t = useEmbeddedTranslation("coAgent");
 	const showAuthAction = needsPasskey;
 	const speechMessage = showAuthAction ? t("unlockRequired") : message.trim();
@@ -356,6 +362,9 @@ ${text}`
 		let latestToolCalls:
 			| Awaited<ReturnType<typeof coAgentChatService.chatStream>>["toolCalls"]
 			| undefined;
+		let latestUsage:
+			| Awaited<ReturnType<typeof coAgentChatService.chatStream>>["usage"]
+			| undefined;
 		const startTime = Date.now();
 
 		try {
@@ -427,6 +436,7 @@ ${text}`
 				},
 			});
 
+			latestUsage = result.usage;
 			if (result.content.trim()) {
 				currentContent = result.content.trim();
 				latestActions = result.actions;
@@ -454,6 +464,13 @@ ${text}`
 							tool_calls: latestToolCalls,
 							model: selectedModel,
 							timeToAnswer,
+							// The same bookkeeping a panel message carries. Without it a
+							// co-agent turn had no token counts, no cache figures, and no
+							// answering agent — so every one of them read as "Assistant".
+							...(latestUsage ? { usage: latestUsage } : {}),
+							...(answeringAgentName
+								? { agentFlowName: answeringAgentName }
+								: {}),
 						},
 					});
 				}
