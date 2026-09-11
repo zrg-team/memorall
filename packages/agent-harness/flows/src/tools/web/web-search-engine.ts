@@ -1,15 +1,14 @@
 import { parseHtmlDocument } from "../../utils/html-parser.js";
 import z from "zod";
-import type {
-	Tool,
-	ToolFactory,
-} from "../../interfaces/engine/tool.js";
+import type { Tool, ToolFactory } from "../../interfaces/engine/tool.js";
 import { toolRegistry } from "../../registries/tool-registry.js";
 import {
 	createDefaultWebErrorResult,
 	createWebResult,
 	requireWebBrowserService,
+	resolveWebBlock,
 	type WebToolServices,
+	webBlockFields,
 } from "./web-tool-utils.js";
 
 const TOOL_NAME = "web_search" as const;
@@ -274,6 +273,17 @@ const mapConcurrent = async <T, R>(
 	return results;
 };
 
+/**
+ * How many engines may park on the user in one search.
+ *
+ * Engines are queried together, and a bot wall on one says nothing about the
+ * next — clearing Brave's Cloudflare page does not get Bing to answer. Asking
+ * for every blocked engine would stack cards on the user and hold the run for a
+ * full wait each time, so the first wall gets the question and the rest are
+ * reported to the model as the walls they are.
+ */
+const MAX_SEARCH_CHALLENGE_PROMPTS = 1;
+
 const schema = z.object({
 	query: z.string().min(1).describe("The search query."),
 	engines: z
@@ -303,35 +313,53 @@ export const createWebSearchEngineTool: ToolFactory<Input, WebToolServices> = (
 	description:
 		"Search one or more search engines (Google, Bing, DuckDuckGo, Yahoo, Brave) with a single query and get structured results — title, URL, snippet — per engine. Use this instead of manually opening a search engine URL and reading the page. Engines are queried sequentially.",
 	schema,
-	execute: async (input) => {
+	execute: async (input, context) => {
 		const webBrowser = requireWebBrowserService(services);
 		const engines = resolveWebSearchEngines(input.engines);
 		const max = Math.max(1, Math.min(30, input.maxResultsPerEngine ?? 10));
 		const timeout = Math.max(500, input.timeoutMs ?? 15_000);
+		let challengePromptsUsed = 0;
 
 		const engineResults: {
 			engine: string;
 			searchUrl: string;
 			results: SearchResult[];
 		}[] = [];
-		const errors: {
+		const errors: ({
 			engine: string;
 			error: string;
 			classification: SearchFailureClassification;
-		}[] = [];
+		} & Record<string, unknown>)[] = [];
 
 		await mapConcurrent(engines, 2, async (engine) => {
 			const searchUrl = ENGINE_URLS[engine](input.query);
 			let sessionId: string | undefined;
 			try {
-				const { session } = await webBrowser.openSession({
+				const { session: opened } = await webBrowser.openSession({
 					url: searchUrl,
 					timeoutMs: timeout,
 					maxHtmlChars: 200_000,
 					persist: false,
 					mode: "tab",
 				});
-				sessionId = session.id;
+				sessionId = opened.id;
+
+				// A search engine's bot wall parses as zero results, which reads to
+				// the model exactly like a query that found nothing. Stop and let the
+				// user clear it — they are sitting right there, and their own browser
+				// profile usually passes where the automated request did not.
+				let session = opened;
+				if (
+					session.block &&
+					challengePromptsUsed < MAX_SEARCH_CHALLENGE_PROMPTS
+				) {
+					challengePromptsUsed += 1;
+					session = await resolveWebBlock(services, session, {
+						tool: TOOL_NAME,
+						toolCallId: context?.toolCallId,
+					});
+					sessionId = session.id;
+				}
 
 				let html = session.html ?? "";
 				let text = session.text ?? "";
@@ -377,13 +405,20 @@ export const createWebSearchEngineTool: ToolFactory<Input, WebToolServices> = (
 
 				engineResults.push({ engine, searchUrl, results });
 				if (results.length === 0) {
-					const challenged = challengeText(text || extractText(doc.body));
+					// The session's own block signal is authoritative — it is recomputed
+					// from every snapshot, so it also reflects a wall the user just
+					// failed to clear. The text sniff stays as a fallback for pages the
+					// detector does not know.
+					const challenged =
+						Boolean(session.block) ||
+						challengeText(text || extractText(doc.body));
 					errors.push({
 						engine,
 						error: challenged
 							? "Search engine returned an interactive verification page."
 							: "Search page loaded but yielded no validated result links.",
 						classification: challenged ? "challenge" : "parse-empty",
+						...webBlockFields(session),
 					});
 				}
 			} catch (error) {
