@@ -239,6 +239,8 @@ const WEB_CONTENT_ERROR_TYPE: Record<
 	"web-tool:dom-action": "web-tool:dom-action-result",
 	"web-tool:wait-selector": "web-tool:wait-selector-result",
 	"web-tool:fetch-image": "web-tool:fetch-image-result",
+	"web-tool:open-image-tab": "web-tool:open-image-tab-result",
+	"web-tool:read-rendered-image": "web-tool:read-rendered-image-result",
 };
 
 const createWebContentErrorResponse = (
@@ -321,6 +323,52 @@ export const handleWebContentCommand = async (
 						window.setTimeout(resolve, request.intervalMs),
 					);
 				}
+			}
+
+			case "web-tool:open-image-tab": {
+				// Must happen here rather than through chrome.tabs.create: a tab the
+				// extension opens carries no Referer, so a host with hotlink
+				// protection refuses the navigation. Opened by the page, the request
+				// carries that page's Referer and is served.
+				const opened = window.open(request.url, "_blank");
+				if (!opened) {
+					throw new Error(
+						"The page refused to open the image in a tab (popup blocked).",
+					);
+				}
+				return {
+					source: WEB_CONTENT_COMMAND_SOURCE,
+					type: "web-tool:open-image-tab-result",
+					success: true,
+				};
+			}
+
+			case "web-tool:read-rendered-image": {
+				// Runs in a tab showing the image itself, so the document is
+				// same-origin with it and the canvas is not tainted. Re-fetching here
+				// would send this tab's own Referer and be refused again.
+				const image = document.querySelector("img");
+				if (!image || !image.naturalWidth) {
+					throw new Error("This tab is not displaying a loaded image.");
+				}
+				const canvas = document.createElement("canvas");
+				canvas.width = image.naturalWidth;
+				canvas.height = image.naturalHeight;
+				const context = canvas.getContext("2d");
+				if (!context) {
+					throw new Error("Could not read the image: no canvas context.");
+				}
+				context.drawImage(image, 0, 0);
+				const dataUrl = canvas.toDataURL("image/png");
+				return {
+					source: WEB_CONTENT_COMMAND_SOURCE,
+					type: "web-tool:read-rendered-image-result",
+					success: true,
+					base64: dataUrl.slice(dataUrl.indexOf(",") + 1),
+					mimeType: "image/png",
+					width: image.naturalWidth,
+					height: image.naturalHeight,
+				};
 			}
 
 			case "web-tool:fetch-image": {

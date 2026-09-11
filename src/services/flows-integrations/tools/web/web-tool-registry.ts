@@ -13,6 +13,10 @@ import {
 	type WebChallengeDecision,
 } from "@/services/web-browser/challenge-intervention";
 import {
+	pickLatestTabSession,
+	pickTabSessionForUrl,
+} from "@/services/web-browser/session-selection";
+import {
 	extractElementSource,
 	extractElementText,
 	extractReadableDocumentText,
@@ -1658,19 +1662,53 @@ export const fetchImageFromSession = async (
 	return { base64: response.base64, mimeType: response.mimeType };
 };
 
+/**
+ * Read an image the page can show but nothing can download, through its own tab.
+ *
+ * The last resort behind `fetchImageBytesFromBrowserSession`; see the handler in
+ * the background for why the other routes fail on a hotlink-protected host.
+ * Always re-encoded as PNG, because it comes back off a canvas.
+ */
+export const captureImageFromSession = async (
+	sessionId: string,
+	url: string,
+): Promise<{ base64: string; mimeType: string }> => {
+	const session =
+		WEB_SESSIONS.get(sessionId) ?? (await recoverSession(sessionId));
+	if (!session) {
+		throw new Error(`No active web session: ${sessionId}`);
+	}
+	if (session.mode === "iframe" || typeof session.tabId !== "number") {
+		throw new Error(
+			"Capturing an image needs a tab or window session, not an iframe.",
+		);
+	}
+
+	const response = await sendWebBrowserCommand({
+		source: WEB_BROWSER_COMMAND_SOURCE,
+		command: "capture-image",
+		sessionId: session.id,
+		tabId: session.tabId,
+		url,
+	});
+	if (response.command !== "capture-image") {
+		throw new Error("Invalid capture-image response.");
+	}
+	return { base64: response.base64, mimeType: response.mimeType };
+};
+
+export const getTabSessionForUrl = (
+	url: string,
+): { sessionId: string; tabId: number } | undefined => {
+	const session = pickTabSessionForUrl(WEB_SESSIONS.values(), url);
+	if (!session || typeof session.tabId !== "number") return undefined;
+	return { sessionId: session.id, tabId: session.tabId };
+};
+
 export const getLatestTabSession = ():
 	| { sessionId: string; tabId: number }
 	| undefined => {
-	let latest: WebSessionState | undefined;
-	for (const session of WEB_SESSIONS.values()) {
-		if (
-			typeof session.tabId === "number" &&
-			session.mode !== "iframe" &&
-			(!latest || session.lastAccessedAt > latest.lastAccessedAt)
-		) {
-			latest = session;
-		}
-	}
+	const latest = pickLatestTabSession(WEB_SESSIONS.values());
 	if (!latest || typeof latest.tabId !== "number") return undefined;
 	return { sessionId: latest.id, tabId: latest.tabId };
 };
