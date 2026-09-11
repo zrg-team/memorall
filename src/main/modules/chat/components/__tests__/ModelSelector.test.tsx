@@ -158,3 +158,47 @@ describe("ModelSelector", () => {
 		).toBeTruthy();
 	});
 });
+
+describe("ModelSelector when a provider needs unlocking", () => {
+	it("says what to unlock instead of claiming there are no models", async () => {
+		// "No models yet" is wrong and unactionable when OpenRouter is configured
+		// but its key has not been unlocked in this session.
+		renderUI(
+			<ModelSelector
+				{...props([], { lockedProviders: ["openrouter" as ServiceProvider] })}
+			/>,
+		);
+		await userEvent.click(screen.getByRole("button"));
+
+		expect(panel().getByText(/OpenRouter is set up but locked/)).toBeTruthy();
+		expect(panel().queryByText(/No models yet/)).toBeNull();
+	});
+
+	it("still mentions a locked provider alongside models that do work", async () => {
+		renderUI(
+			<ModelSelector
+				{...props(FEW, { lockedProviders: ["openrouter" as ServiceProvider] })}
+			/>,
+		);
+		await userEvent.click(screen.getByRole("button"));
+
+		expect(screen.getByText(/OpenRouter is locked/)).toBeTruthy();
+	});
+
+	it("re-reads the providers when opened", async () => {
+		// One may have been unlocked since the composer mounted.
+		const onOpen = vi.fn();
+		renderUI(<ModelSelector {...props([], { onOpen })} />);
+
+		await userEvent.click(screen.getByRole("button"));
+
+		expect(onOpen).toHaveBeenCalled();
+	});
+
+	it("falls back to the plain empty state with nothing configured", async () => {
+		renderUI(<ModelSelector {...props([])} />);
+		await userEvent.click(screen.getByRole("button"));
+
+		expect(panel().getByText(/No models yet/)).toBeTruthy();
+	});
+});

@@ -137,7 +137,9 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 	const {
 		models: selectableModels,
 		byProvider: selectableModelsByProvider,
+		lockedProviders: lockedModelProviders,
 		isLoading: isLoadingModels,
+		refresh: refreshModels,
 		selectModel,
 	} = useSelectableModels();
 	const handleSelectModel = useCallback(
@@ -468,8 +470,10 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 							isCoAgentStarting={isCoAgentStarting}
 							selectableModels={selectableModels}
 							selectableModelsByProvider={selectableModelsByProvider}
+							lockedModelProviders={lockedModelProviders}
 							isLoadingModels={isLoadingModels}
 							onSelectModel={handleSelectModel}
+							onRefreshModels={refreshModels}
 						/>
 					</PromptInput>
 				</div>

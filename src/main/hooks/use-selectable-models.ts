@@ -6,6 +6,8 @@ import {
 } from "@/services/llm/constants";
 import type { ModelInfo } from "@/services/llm";
 import type { ServiceProvider } from "@/services/llm/interfaces/llm-service.interface";
+import { eq } from "drizzle-orm";
+import secureSession from "@/utils/secure-session";
 import { logError, logInfo } from "@/utils/logger";
 import { LOCAL_PROVIDERS, type SelectableModel } from "./selectable-model";
 
@@ -25,6 +27,64 @@ export { providerLabel, shortModelName } from "./selectable-model";
  * looks instant; that belongs on the models page, where the download has a
  * progress bar and somewhere to put it.
  */
+
+/**
+ * Providers that keep their key encrypted, so the service does not exist until
+ * the user unlocks it.
+ *
+ * `ensureAllServices` restores only the local providers and whichever service
+ * the current model belongs to, so a configured OpenRouter is invisible to
+ * `list()` until someone opens the models page and unlocks it. Reporting it as
+ * locked is the difference between "No models yet" — which is wrong, and which
+ * the user cannot act on — and telling them exactly what to do.
+ */
+const ENCRYPTED_PROVIDERS: Array<{
+	provider: ServiceProvider;
+	configKey: string;
+	readyKey: string;
+}> = [
+	{
+		provider: "openai",
+		configKey: "openai_config",
+		readyKey: "openai_ready",
+	},
+	{
+		provider: "openrouter",
+		configKey: "openrouter_config",
+		readyKey: "openrouter_ready",
+	},
+];
+
+const findLockedProviders = async (
+	loadedServices: ReadonlySet<string>,
+): Promise<ServiceProvider[]> => {
+	const locked: ServiceProvider[] = [];
+	for (const entry of ENCRYPTED_PROVIDERS) {
+		if (loadedServices.has(entry.provider)) continue;
+		try {
+			const rows = await serviceManager.databaseService.use(({ db, schema }) =>
+				db
+					.select()
+					.from(schema.encryption)
+					.where(eq(schema.encryption.key, entry.configKey)),
+			);
+			// Check the row is the one asked for rather than trusting the filter:
+			// a provider wrongly reported as locked sends the user to unlock
+			// something that was never configured.
+			const configured = rows.some(
+				(row) => (row as { key?: string }).key === entry.configKey,
+			);
+			if (!configured) continue;
+			// Configured but not in memory: either the key is still locked or the
+			// service simply has not been created in this context yet.
+			if (await secureSession.exists(entry.readyKey)) continue;
+			locked.push(entry.provider);
+		} catch (error) {
+			logInfo(`Could not check ${entry.provider} configuration:`, error);
+		}
+	}
+	return locked;
+};
 
 const isDownloaded = (model: ModelInfo): boolean =>
 	model.downloaded === true || model.loaded === true;
@@ -51,6 +111,7 @@ const toSelectable = (
 
 export function useSelectableModels() {
 	const [models, setModels] = useState<SelectableModel[]>([]);
+	const [lockedProviders, setLockedProviders] = useState<ServiceProvider[]>([]);
 	const [isLoading, setIsLoading] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 
@@ -90,6 +151,7 @@ export function useSelectableModels() {
 			}
 
 			setModels(collected);
+			setLockedProviders(await findLockedProviders(new Set(serviceNames)));
 		} catch (err) {
 			logError("Failed to list selectable models:", err);
 			setError(err instanceof Error ? err.message : String(err));
@@ -145,5 +207,13 @@ export function useSelectableModels() {
 		[refresh],
 	);
 
-	return { models, byProvider, isLoading, error, refresh, selectModel };
+	return {
+		models,
+		byProvider,
+		lockedProviders,
+		isLoading,
+		error,
+		refresh,
+		selectModel,
+	};
 }

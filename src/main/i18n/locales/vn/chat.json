@@ -357,7 +357,9 @@
 		"select": "Mô hình",
 		"searchPlaceholder": "Tìm mô hình",
 		"noMatches": "Không có mô hình phù hợp",
-		"noneAvailable": "Chưa có mô hình. Thêm nhà cung cấp hoặc tải một mô hình trước."
+		"noneAvailable": "Chưa có mô hình. Thêm nhà cung cấp hoặc tải một mô hình trước.",
+		"locked": "{{providers}} đã cấu hình nhưng đang khóa. Mở khóa ở trang Mô hình để dùng tại đây.",
+		"lockedHint": "{{providers}} đang khóa — mở khóa ở trang Mô hình."
 	},
 	"tooltips": {
 		"topicSelector": "Chọn chủ đề để lọc ngữ cảnh kiến thức",

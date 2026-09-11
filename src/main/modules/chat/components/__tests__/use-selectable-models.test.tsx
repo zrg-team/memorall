@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
 	list: vi.fn<() => string[]>(() => []),
+	dbRows: vi.fn(async () => [] as Array<{ key: string }>),
+	secureExists: vi.fn(async () => false),
 	modelsFor: vi.fn(async (_service: string) => ({
 		object: "list" as const,
 		data: [] as Array<Record<string, unknown>>,
@@ -19,8 +21,17 @@ vi.mock("@/services", () => ({
 			setCurrentModel: mocks.setCurrentModel,
 			serveFor: mocks.serveFor,
 		},
+		databaseService: {
+			use: vi.fn(async () => mocks.dbRows()),
+		},
 	},
 }));
+
+vi.mock("@/utils/secure-session", () => ({
+	default: { exists: mocks.secureExists },
+}));
+
+vi.mock("drizzle-orm", () => ({ eq: vi.fn(() => undefined) }));
 
 vi.mock("@/utils/logger", () => ({
 	logInfo: vi.fn(),
@@ -44,6 +55,8 @@ describe("useSelectableModels", () => {
 		vi.clearAllMocks();
 		mocks.list.mockReturnValue([]);
 		mocks.modelsFor.mockResolvedValue({ object: "list", data: [] });
+		mocks.dbRows.mockResolvedValue([]);
+		mocks.secureExists.mockResolvedValue(false);
 	});
 
 	it("gathers models from every configured provider", async () => {
@@ -149,5 +162,79 @@ describe("useSelectableModels", () => {
 		await waitFor(() =>
 			expect(result.current.error).toContain("out of memory"),
 		);
+	});
+});
+
+describe("useSelectableModels: providers that need unlocking", () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+		mocks.list.mockReturnValue([]);
+		mocks.modelsFor.mockResolvedValue({ object: "list", data: [] });
+		mocks.dbRows.mockResolvedValue([]);
+		mocks.secureExists.mockResolvedValue(false);
+	});
+
+	it("names a configured provider whose key is still locked", async () => {
+		// ensureAllServices restores only local providers and the current model's
+		// service, so a configured OpenRouter is missing from list() until someone
+		// unlocks it — which read as "No models yet", which the user cannot act on.
+		mocks.dbRows.mockResolvedValue([{ key: "openrouter_config" }]);
+
+		const { result } = renderHook(() => useSelectableModels());
+
+		await waitFor(() =>
+			expect(result.current.lockedProviders).toContain("openrouter"),
+		);
+	});
+
+	it("says nothing about a provider that is already unlocked", async () => {
+		mocks.dbRows.mockResolvedValue([{ key: "openrouter_config" }]);
+		mocks.secureExists.mockResolvedValue(true);
+
+		const { result } = renderHook(() => useSelectableModels());
+
+		await waitFor(() => expect(result.current.isLoading).toBe(false));
+		expect(result.current.lockedProviders).toEqual([]);
+	});
+
+	it("says nothing about a provider already loaded in this context", async () => {
+		mocks.list.mockReturnValue(["openrouter"]);
+		mocks.dbRows.mockResolvedValue([{ key: "openrouter_config" }]);
+
+		const { result } = renderHook(() => useSelectableModels());
+
+		await waitFor(() => expect(result.current.isLoading).toBe(false));
+		expect(result.current.lockedProviders).toEqual([]);
+	});
+
+	it("says nothing when the provider was never configured", async () => {
+		const { result } = renderHook(() => useSelectableModels());
+
+		await waitFor(() => expect(result.current.isLoading).toBe(false));
+		expect(result.current.lockedProviders).toEqual([]);
+	});
+
+	it("picks up a provider that became ready after mount", async () => {
+		const { result } = renderHook(() => useSelectableModels());
+		await waitFor(() => expect(result.current.models).toHaveLength(0));
+
+		// The user unlocked it on the models page; the picker re-reads on open.
+		mocks.list.mockReturnValue(["openrouter"]);
+		mocks.modelsFor.mockResolvedValue({
+			object: "list",
+			data: [
+				{
+					id: "vendor/a",
+					object: "model",
+					created: 0,
+					owned_by: "x",
+					loaded: false,
+					provider: "openrouter",
+				},
+			],
+		});
+		await result.current.refresh();
+
+		await waitFor(() => expect(result.current.models).toHaveLength(1));
 	});
 });

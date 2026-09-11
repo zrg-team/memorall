@@ -92,8 +92,10 @@ export interface ChatInputControlsProps {
 	/** Switching model without leaving the conversation. */
 	selectableModels?: SelectableModel[];
 	selectableModelsByProvider?: Map<ServiceProvider, SelectableModel[]>;
+	lockedModelProviders?: ServiceProvider[];
 	isLoadingModels?: boolean;
 	onSelectModel?: (model: SelectableModel) => void;
+	onRefreshModels?: () => void;
 }
 
 export const ChatInputControls: React.FC<ChatInputControlsProps> = ({
@@ -124,8 +126,10 @@ export const ChatInputControls: React.FC<ChatInputControlsProps> = ({
 	isCoAgentStarting = false,
 	selectableModels,
 	selectableModelsByProvider,
+	lockedModelProviders,
 	isLoadingModels = false,
 	onSelectModel,
+	onRefreshModels,
 }) => {
 	const { t } = useTranslation("chat");
 	const flowOptions = [
@@ -436,6 +440,8 @@ export const ChatInputControls: React.FC<ChatInputControlsProps> = ({
 									currentModelId={model}
 									isLoading={isLoadingModels}
 									onSelect={onSelectModel}
+									lockedProviders={lockedModelProviders}
+									onOpen={onRefreshModels}
 									isNarrow={isNarrow}
 									disabled={isLoading}
 								/>

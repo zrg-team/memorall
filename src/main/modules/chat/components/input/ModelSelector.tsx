@@ -43,6 +43,13 @@ export interface ModelSelectorProps {
 	currentModelId: string;
 	isLoading: boolean;
 	onSelect: (model: SelectableModel) => void;
+	/**
+	 * Providers configured but not loaded — an encrypted key that has not been
+	 * unlocked in this session. Reported so the empty state can say what to do.
+	 */
+	lockedProviders?: ServiceProvider[];
+	/** Re-read the providers. Called on open, since one may have become ready. */
+	onOpen?: () => void;
 	/** Shorten the name for a composer too narrow to spell it out. */
 	isNarrow?: boolean;
 	disabled?: boolean;
@@ -65,6 +72,8 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
 	currentModelId,
 	isLoading,
 	onSelect,
+	lockedProviders = [],
+	onOpen,
 	isNarrow = false,
 	disabled = false,
 	className,
@@ -81,6 +90,13 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
 	useEffect(() => {
 		if (!open) setQuery("");
 	}, [open]);
+
+	// A provider whose key was locked when the composer mounted is usually ready
+	// by the time someone opens this, so re-read rather than showing the stale
+	// "no models" answer.
+	useEffect(() => {
+		if (open) onOpen?.();
+	}, [open, onOpen]);
 
 	useEffect(() => {
 		if (!open || !showSearch) return;
@@ -175,12 +191,23 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
 				<div data-model-options className="max-h-72 overflow-y-auto p-1">
 					{groups.length === 0 ? (
 						<p className="px-2 py-6 text-center text-xs text-muted-foreground">
-							{models.length === 0
-								? t("model.noneAvailable", {
-										defaultValue:
-											"No models yet. Add a provider or download one first.",
-									})
-								: t("model.noMatches", { defaultValue: "No matching models" })}
+							{models.length > 0
+								? t("model.noMatches", { defaultValue: "No matching models" })
+								: lockedProviders.length > 0
+									? t("model.locked", {
+											providers: lockedProviders
+												.map((provider) => providerLabel(provider))
+												.join(", "),
+											defaultValue: `${lockedProviders
+												.map((provider) => providerLabel(provider))
+												.join(
+													", ",
+												)} is set up but locked. Unlock it on the Models page to use it here.`,
+										})
+									: t("model.noneAvailable", {
+											defaultValue:
+												"No models yet. Add a provider or download one first.",
+										})}
 						</p>
 					) : (
 						groups.map(([provider, providerModels]) => (
@@ -218,6 +245,19 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
 						))
 					)}
 				</div>
+
+				{lockedProviders.length > 0 && models.length > 0 ? (
+					<p className="border-t border-border/60 px-3 py-2 text-[11px] text-muted-foreground">
+						{t("model.lockedHint", {
+							providers: lockedProviders
+								.map((provider) => providerLabel(provider))
+								.join(", "),
+							defaultValue: `${lockedProviders
+								.map((provider) => providerLabel(provider))
+								.join(", ")} is locked — unlock it on the Models page.`,
+						})}
+					</p>
+				) : null}
 			</PopoverContent>
 		</Popover>
 	);
