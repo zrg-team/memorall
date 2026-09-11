@@ -25,6 +25,8 @@ interface MessageContentWithArtifactsProps {
 	 * with each block's position to survive the remount `DeferredMount` performs.
 	 */
 	blockScope?: string;
+	/** The answering agent's OpenUI theme, for blocks that do not name one. */
+	configuredTheme?: string;
 }
 
 const MessageContentFrame: React.FC<MessageContentWithArtifactsProps> =
@@ -36,6 +38,7 @@ const MessageContentFrame: React.FC<MessageContentWithArtifactsProps> =
 			onMessageAction,
 			seenArtifactKeys,
 			blockScope,
+			configuredTheme,
 		}) => {
 			const openUISplitterRef = useRef<ReturnType<
 				typeof createAppendAwareOpenUISplitter
@@ -126,6 +129,7 @@ const MessageContentFrame: React.FC<MessageContentWithArtifactsProps> =
 										// streamed chunk, which would move the identity of a panel
 										// the reader is already interacting with.
 										stateKey={blockScope ? `${blockScope}:${key}` : undefined}
+										configuredTheme={configuredTheme}
 										onMessageAction={onMessageAction}
 									/>
 								</DeferredMount>

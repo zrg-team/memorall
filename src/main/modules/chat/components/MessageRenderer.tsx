@@ -163,6 +163,13 @@ export const MessageRenderer: React.FC<MessageRendererProps> = React.memo(
 			return metadata?.error;
 		}, [metadata]);
 
+		// The agent's OpenUI theme, recorded on the message so a block that does
+		// not name a theme still renders in the one the agent is configured for.
+		const configuredOpenUITheme = useMemo(
+			() => (metadata as { openuiTheme?: string } | undefined)?.openuiTheme,
+			[metadata],
+		);
+
 		const agentFlowName = useMemo(() => {
 			return metadata?.agentFlowName;
 		}, [metadata]);
@@ -291,6 +298,7 @@ export const MessageRenderer: React.FC<MessageRendererProps> = React.memo(
 													suppressArtifactPreviews={
 														location.pathname === "/runtime"
 													}
+													configuredTheme={configuredOpenUITheme}
 													onMessageAction={onMessageAction}
 												/>
 												{messageError ? (

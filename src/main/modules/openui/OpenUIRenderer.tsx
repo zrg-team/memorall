@@ -113,13 +113,18 @@ interface OpenUIRendererProps {
 	 * resetting when it scrolls out of range.
 	 */
 	stateKey?: string;
+	/** The agent's configured theme, used when the block does not name one. */
+	configuredTheme?: string;
 	onMessageAction?: (action: MessageActionRequest) => void | Promise<void>;
 }
 
 const OpenUIRenderFrame: React.FC<OpenUIRendererProps> = React.memo(
-	({ content, streaming, stateKey, onMessageAction }) => {
+	({ content, streaming, stateKey, configuredTheme, onMessageAction }) => {
 		const { t } = useTranslation("chat");
-		const theme = useMemo(() => detectTheme(content), [content]);
+		const theme = useMemo(
+			() => detectTheme(content, configuredTheme),
+			[content, configuredTheme],
+		);
 		const library = useMemo(() => createComponentLibrary(theme), [theme]);
 		const [resetKey, setResetKey] = useState(0);
 
