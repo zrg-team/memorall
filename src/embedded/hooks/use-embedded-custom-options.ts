@@ -12,6 +12,8 @@ import {
 export interface EmbeddedSelectOption {
 	id: string;
 	name: string;
+	/** The agent's OpenUI theme, so a rendered block can use it. */
+	openuiTheme?: string;
 }
 
 export const useEmbeddedCustomOptions = () => {

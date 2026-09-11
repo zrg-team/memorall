@@ -49,6 +49,8 @@ interface CoAgentDockProps {
 	onSmartSelect: () => void;
 	/** Smart select is a mode; the button shows whether it is on. */
 	isSmartSelectActive?: boolean;
+	/** The selected agent's OpenUI theme, for blocks in the dock bubble. */
+	openuiTheme?: string;
 	onDismissBubble: () => void;
 }
 
@@ -80,6 +82,7 @@ export const CoAgentDock: React.FC<CoAgentDockProps> = ({
 	onLeaveCoAgent,
 	onSmartSelect,
 	isSmartSelectActive = false,
+	openuiTheme,
 	onDismissBubble,
 }) => {
 	const t = useEmbeddedTranslation("coAgent");
@@ -228,6 +231,7 @@ export const CoAgentDock: React.FC<CoAgentDockProps> = ({
 													<AssistantMessageContent
 														content={visibleDockMessage}
 														isStreaming={isSubmitting}
+														configuredTheme={openuiTheme}
 														onMessageAction={onMessageAction}
 													/>
 												) : null}

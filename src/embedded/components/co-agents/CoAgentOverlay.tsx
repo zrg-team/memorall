@@ -80,10 +80,12 @@ export const CoAgentOverlay: React.FC<CoAgentOverlayProps> = ({
 		useEmbeddedCustomOptions();
 	// Recorded on the message so the reader can see which agent answered — and,
 	// when it is the built-in one, that no agent was applied.
-	const answeringAgentName = useMemo(
-		() => agentFlows.find((flow) => flow.id === selectedAgentFlowId)?.name,
+	const answeringAgent = useMemo(
+		() => agentFlows.find((flow) => flow.id === selectedAgentFlowId),
 		[agentFlows, selectedAgentFlowId],
 	);
+	const answeringAgentName = answeringAgent?.name;
+	const answeringAgentTheme = answeringAgent?.openuiTheme;
 	const t = useEmbeddedTranslation("coAgent");
 	const showAuthAction = needsPasskey;
 	const speechMessage = showAuthAction ? t("unlockRequired") : message.trim();
@@ -494,6 +496,9 @@ ${text}`
 							...(answeringAgentName
 								? { agentFlowName: answeringAgentName }
 								: {}),
+							...(answeringAgentTheme
+								? { openuiTheme: answeringAgentTheme }
+								: {}),
 						},
 					});
 				}
@@ -541,6 +546,7 @@ ${text}`
 					onSelectAgentFlow={setSelectedAgentFlowId}
 					attachedSelectionLabel={attachedSelection?.label ?? null}
 					onDetachSelection={() => setAttachedSelection(null)}
+					openuiTheme={answeringAgentTheme}
 					onSmartSelect={toggleSmartSelect}
 					isSmartSelectActive={isSmartSelectActive}
 					onExpand={() => setCollapsed(false)}
