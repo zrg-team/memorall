@@ -434,7 +434,11 @@ export class AgentGraph extends GraphBase<
 
 			try {
 				const args = JSON.parse(toolCall.function.arguments);
-				const validatedArgs = parseToolInput(combined.executor.schema, args);
+				const validatedArgs = parseToolInput(
+					combined.executor.schema,
+					args,
+					toolName,
+				);
 				const rawResult = await combined.executor.execute(validatedArgs, {
 					state: toolState,
 					runtime: getFlowRuntimeVars(runConfig),

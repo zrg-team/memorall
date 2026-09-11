@@ -149,8 +149,14 @@ export const isJsonToolSchema = (
 	"kind" in schema &&
 	schema.kind === "json-schema";
 
-export const parseToolInput = <T>(schema: ToolSchema, input: unknown): T =>
-	schema.parse(input) as T;
+// Implemented in ./tool-input.js, which rescues the empty-string arguments
+// models routinely send and turns a ZodError into something a model can act on.
+// Re-exported here so every existing import keeps working.
+export {
+	describeSchemaIssues,
+	parseToolInput,
+	ToolInputError,
+} from "./tool-input.js";
 
 // Base tool interface for runtime storage (no generic constraints)
 export interface BaseTool {
