@@ -35,10 +35,10 @@ export const coAgentStyles = `${customStyles}
 		position: relative;
 		width: 34px;
 		height: 34px;
-		border: 1px solid rgb(226 232 240 / 0.92);
+		border: 1px solid hsl(var(--border) / 0.92);
 		border-radius: 999px;
-		background: rgb(255 255 255 / 0.92);
-		color: #0f172a;
+		background: hsl(var(--popover) / 0.92);
+		color: hsl(var(--foreground));
 		box-shadow: 0 10px 24px rgb(15 23 42 / 0.14);
 		backdrop-filter: blur(10px);
 		display: inline-flex;
@@ -49,33 +49,33 @@ export const coAgentStyles = `${customStyles}
 		padding: 0;
 	}
 	.memorall-co-agent-action:hover {
-		background: #f8fafc;
+		background: hsl(var(--accent));
 		transform: translateY(-1px);
 	}
 	.memorall-co-agent-action[data-active="true"] {
-		background: #0f172a;
-		border-color: #0f172a;
-		color: #f8fafc;
+		background: hsl(var(--foreground));
+		border-color: hsl(var(--foreground));
+		color: hsl(var(--background));
 	}
 	.memorall-co-agent-action[data-active="true"]:hover {
-		background: #1e293b;
+		background: hsl(var(--foreground) / 0.85);
 	}
 	.memorall-co-agent-action--danger {
-		color: #b91c1c;
+		color: hsl(var(--destructive));
 	}
 	.memorall-co-agent-action--danger:hover {
-		background: #fef2f2;
-		border-color: rgb(248 113 113 / 0.55);
+		background: hsl(var(--destructive) / 0.12);
+		border-color: hsl(var(--destructive) / 0.55);
 	}
 	.memorall-co-agent-action-tooltip {
 		position: absolute;
 		right: calc(100% + 8px);
 		top: 50%;
 		transform: translateY(-50%) scale(0.96);
-		border: 1px solid rgb(226 232 240 / 0.92);
+		border: 1px solid hsl(var(--border) / 0.92);
 		border-radius: 7px;
-		background: rgb(15 23 42 / 0.92);
-		color: #fff;
+		background: hsl(var(--foreground) / 0.92);
+		color: hsl(var(--popover));
 		box-shadow: 0 10px 24px rgb(15 23 42 / 0.18);
 		font: 650 11px/1 Inter, ui-sans-serif, system-ui, sans-serif;
 		padding: 7px 8px;
@@ -95,9 +95,9 @@ export const coAgentStyles = `${customStyles}
 		grid-template-columns: minmax(0, 1fr) 42px;
 		align-items: stretch;
 		gap: 8px;
-		border: 1px solid rgb(226 232 240 / 0.92);
+		border: 1px solid hsl(var(--border) / 0.92);
 		border-radius: 14px;
-		background: rgb(255 255 255 / 0.96);
+		background: hsl(var(--popover) / 0.96);
 		box-shadow: 0 18px 44px rgb(15 23 42 / 0.18);
 		backdrop-filter: blur(12px);
 		padding: 8px;
@@ -111,12 +111,12 @@ export const coAgentStyles = `${customStyles}
 		outline: none;
 		resize: none;
 		background: transparent;
-		color: #0f172a;
+		color: hsl(var(--foreground));
 		font: 650 13px/1.4 Inter, ui-sans-serif, system-ui, sans-serif;
 		padding: 9px 6px 7px 8px;
 	}
 	.memorall-co-agent-dock-prompt textarea::placeholder {
-		color: #64748b;
+		color: hsl(var(--muted-foreground));
 	}
 	.memorall-co-agent-dock-prompt button {
 		width: 38px;
@@ -124,8 +124,8 @@ export const coAgentStyles = `${customStyles}
 		align-self: center;
 		border: 0;
 		border-radius: 10px;
-		background: #0f172a;
-		color: #fff;
+		background: hsl(var(--foreground));
+		color: hsl(var(--popover));
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
@@ -138,10 +138,10 @@ export const coAgentStyles = `${customStyles}
 	.memorall-co-agent-conversation-button {
 		width: 34px;
 		height: 34px;
-		border: 1px solid rgb(226 232 240 / 0.92);
+		border: 1px solid hsl(var(--border) / 0.92);
 		border-radius: 999px;
-		background: rgb(255 255 255 / 0.9);
-		color: #0f172a;
+		background: hsl(var(--popover) / 0.9);
+		color: hsl(var(--foreground));
 		box-shadow: 0 10px 24px rgb(15 23 42 / 0.16);
 		backdrop-filter: blur(10px);
 		display: inline-flex;
@@ -151,7 +151,7 @@ export const coAgentStyles = `${customStyles}
 		pointer-events: auto;
 	}
 	.memorall-co-agent-conversation-button:hover {
-		background: #f8fafc;
+		background: hsl(var(--accent));
 		transform: translateY(-1px);
 	}
 	.memorall-co-agent-icon {
@@ -177,7 +177,7 @@ export const coAgentStyles = `${customStyles}
 	.memorall-co-agent-anchor-trigger:focus-visible,
 	.memorall-co-agent-dock-prompt button:focus-visible,
 	.memorall-co-agent-anchor-prompt button:focus-visible {
-		outline: 2px solid #2563eb;
+		outline: 2px solid hsl(var(--primary));
 		outline-offset: 2px;
 	}
 	.memorall-co-agent-icon [role="status"] {
@@ -204,10 +204,10 @@ export const coAgentStyles = `${customStyles}
 		position: relative;
 		display: block;
 		overflow: visible;
-		border: 1px solid rgb(226 232 240 / 0.92);
+		border: 1px solid hsl(var(--border) / 0.92);
 		border-radius: 18px;
-		background: #fff;
-		color: #0f172a;
+		background: hsl(var(--popover));
+		color: hsl(var(--foreground));
 		box-shadow: 0 18px 44px rgb(15 23 42 / 0.24), 0 2px 0 rgb(15 23 42 / 0.12);
 		font: 600 13px/1.5 Inter, ui-sans-serif, system-ui, sans-serif;
 		padding: 11px 12px 11px 15px;
@@ -225,7 +225,7 @@ export const coAgentStyles = `${customStyles}
 		overflow: auto;
 		white-space: normal;
 		scrollbar-width: thin;
-		scrollbar-color: rgb(148 163 184 / 0.8) transparent;
+		scrollbar-color: hsl(var(--muted-foreground) / 0.8) transparent;
 	}
 	.memorall-co-agent-bubble-content {
 		display: grid;
@@ -241,7 +241,10 @@ export const coAgentStyles = `${customStyles}
 		min-width: 0;
 	}
 	.memorall-co-agent-bubble-close {
-		position: relative;
+		/* Pinned to the top of the bubble's scroll box: on a long answer this
+		   button used to scroll away with the text, leaving no way to close. */
+		position: sticky;
+		top: 0;
 		grid-column: 2;
 		grid-row: 1;
 		z-index: 2;
@@ -250,7 +253,7 @@ export const coAgentStyles = `${customStyles}
 		height: 22px;
 		border: 0;
 		background: transparent;
-		color: #64748b;
+		color: hsl(var(--muted-foreground));
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
@@ -259,8 +262,8 @@ export const coAgentStyles = `${customStyles}
 		margin-top: -1px;
 	}
 	.memorall-co-agent-bubble-close:hover {
-		background: rgb(15 23 42 / 0.14);
-		color: #0f172a;
+		background: hsl(var(--foreground) / 0.14);
+		color: hsl(var(--foreground));
 	}
 	.memorall-co-agent-icon .memorall-markdown {
 		color: inherit;
@@ -285,15 +288,15 @@ export const coAgentStyles = `${customStyles}
 		margin: 0.2em 0;
 	}
 	.memorall-co-agent-icon .memorall-markdown a {
-		color: #2563eb;
+		color: hsl(var(--primary));
 		text-decoration: underline;
 		text-underline-offset: 2px;
 		pointer-events: auto;
 	}
 	.memorall-co-agent-icon .memorall-markdown-inline-code {
 		border-radius: 5px;
-		background: rgb(15 23 42 / 0.08);
-		color: #0f172a;
+		background: hsl(var(--foreground) / 0.08);
+		color: hsl(var(--foreground));
 		font: 600 0.92em/1.35 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 		padding: 0.08em 0.3em;
 	}
@@ -301,8 +304,8 @@ export const coAgentStyles = `${customStyles}
 		max-width: 100%;
 		overflow-x: auto;
 		border-radius: 10px;
-		background: #0f172a;
-		color: #f8fafc;
+		background: hsl(var(--foreground));
+		color: hsl(var(--background));
 		font: 500 12px/1.45 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 		margin: 0.55em 0;
 		padding: 10px;
@@ -319,7 +322,7 @@ export const coAgentStyles = `${customStyles}
 	}
 	.memorall-co-agent-icon .memorall-markdown th,
 	.memorall-co-agent-icon .memorall-markdown td {
-		border: 1px solid rgb(203 213 225);
+		border: 1px solid hsl(var(--border));
 		padding: 4px 6px;
 		text-align: left;
 	}
@@ -333,7 +336,7 @@ export const coAgentStyles = `${customStyles}
 		height: 0;
 		border-left: 10px solid transparent;
 		border-right: 10px solid transparent;
-		border-top: 12px solid #fff;
+		border-top: 12px solid hsl(var(--popover));
 		filter: drop-shadow(2px 2px 0 rgb(15 23 42 / 0.16));
 	}
 	.memorall-co-agent-auth {
@@ -406,10 +409,10 @@ export const coAgentStyles = `${customStyles}
 	.agent-cursor-bubble {
 		position: relative;
 		max-width: 190px;
-		border: 1px solid rgb(226 232 240 / 0.9);
+		border: 1px solid hsl(var(--border) / 0.9);
 		border-radius: 12px;
-		background: rgb(255 255 255 / 0.94);
-		color: #0f172a;
+		background: hsl(var(--popover) / 0.94);
+		color: hsl(var(--foreground));
 		box-shadow: 0 10px 26px rgb(15 23 42 / 0.18);
 		backdrop-filter: blur(10px);
 		font: 650 11px/1.25 Inter, ui-sans-serif, system-ui, sans-serif;
@@ -439,7 +442,7 @@ ${coAgentAnchorStyles}
 		align-items: center;
 		gap: 7px;
 		margin-bottom: 6px;
-		color: #475569;
+		color: hsl(var(--muted-foreground));
 		font: 650 11px/1.5 Inter, ui-sans-serif, system-ui, sans-serif;
 	}
 	.memorall-co-agent-working-dots {
@@ -452,7 +455,7 @@ ${coAgentAnchorStyles}
 		width: 5px;
 		height: 5px;
 		border-radius: 999px;
-		background: #2563eb;
+		background: hsl(var(--primary));
 		animation: memorall-co-agent-working 1200ms ease-in-out infinite;
 	}
 	.memorall-co-agent-working-dot:nth-child(2) {
@@ -485,15 +488,45 @@ ${coAgentAnchorStyles}
 		}
 	}
 
-	.memorall-co-agent-agent-select {
+	.memorall-co-agent-prompt-tools {
 		grid-column: 1;
-		justify-self: start;
-		max-width: 100%;
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		min-width: 0;
 		margin-top: 2px;
-		border: 1px solid rgb(226 232 240 / 0.95);
+	}
+	/* Beats the form's generic button rule, which paints the send button. */
+	.memorall-co-agent-dock-prompt .memorall-co-agent-prompt-tool {
+		width: 26px;
+		height: 26px;
+		flex: none;
+		align-self: center;
+		border: 1px solid hsl(var(--border) / 0.95);
 		border-radius: 8px;
-		background: #fff;
-		color: #0f172a;
+		background: hsl(var(--popover));
+		color: hsl(var(--muted-foreground));
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		cursor: pointer;
+	}
+	.memorall-co-agent-dock-prompt .memorall-co-agent-prompt-tool:hover {
+		background: hsl(var(--accent));
+		color: hsl(var(--foreground));
+	}
+	.memorall-co-agent-dock-prompt .memorall-co-agent-prompt-tool[data-active="true"] {
+		background: hsl(var(--foreground));
+		border-color: hsl(var(--foreground));
+		color: hsl(var(--background));
+	}
+	.memorall-co-agent-agent-select {
+		min-width: 0;
+		max-width: 100%;
+		border: 1px solid hsl(var(--border) / 0.95);
+		border-radius: 8px;
+		background: hsl(var(--popover));
+		color: hsl(var(--foreground));
 		font: 650 11px/1.4 Inter, ui-sans-serif, system-ui, sans-serif;
 		padding: 3px 6px;
 		cursor: pointer;

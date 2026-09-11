@@ -1,4 +1,11 @@
-import { MessageCircle, Send, Sparkles, X } from "lucide-react";
+import {
+	Crop,
+	MessageCircle,
+	MousePointerSquareDashed,
+	Send,
+	Sparkles,
+	X,
+} from "lucide-react";
 import { motion, useMotionValue, useSpring } from "motion/react";
 import React from "react";
 import { useEmbeddedTranslation } from "@/embedded/hooks/use-embedded-language";
@@ -80,12 +87,22 @@ interface AnchorTriggerProps {
 	onAskAboutThis: () => void;
 	/** Open the prompt with nothing attached. */
 	onAsk: () => void;
+	/** Pick an element to attach instead of the hovered one. */
+	onSmartSelect: () => void;
+	/** Drag a region of the page to attach as an image. */
+	onCanvasSelect: () => void;
+	isSmartSelectActive?: boolean;
+	isCanvasSelectActive?: boolean;
 }
 
 export const CoAgentAnchorTrigger: React.FC<AnchorTriggerProps> = ({
 	anchor,
 	onAskAboutThis,
 	onAsk,
+	onSmartSelect,
+	onCanvasSelect,
+	isSmartSelectActive = false,
+	isCanvasSelectActive = false,
 }) => {
 	const t = useEmbeddedTranslation("coAgent");
 	const askAboutThisLabel = t("askAboutThisShortcut", {
@@ -124,6 +141,30 @@ export const CoAgentAnchorTrigger: React.FC<AnchorTriggerProps> = ({
 			>
 				<Sparkles size={13} strokeWidth={2.4} />
 				<span>{t("anchorAskAboutThis")}</span>
+			</button>
+			{/* Between the two ways of asking: picking what to attach is the same
+			    decision, so it belongs in the same control. */}
+			<button
+				type="button"
+				className="memorall-co-agent-anchor-trigger memorall-co-agent-anchor-trigger--icon"
+				aria-label={t("smartSelect")}
+				title={t("smartSelect")}
+				aria-pressed={isSmartSelectActive}
+				data-active={isSmartSelectActive ? "true" : undefined}
+				onClick={onSmartSelect}
+			>
+				<MousePointerSquareDashed size={13} strokeWidth={2.35} />
+			</button>
+			<button
+				type="button"
+				className="memorall-co-agent-anchor-trigger memorall-co-agent-anchor-trigger--icon"
+				aria-label={t("canvasSelect")}
+				title={t("canvasSelect")}
+				aria-pressed={isCanvasSelectActive}
+				data-active={isCanvasSelectActive ? "true" : undefined}
+				onClick={onCanvasSelect}
+			>
+				<Crop size={13} strokeWidth={2.35} />
 			</button>
 			<button
 				type="button"
