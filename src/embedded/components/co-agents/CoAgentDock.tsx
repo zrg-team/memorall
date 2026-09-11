@@ -47,6 +47,8 @@ interface CoAgentDockProps {
 	onUnlock: () => void;
 	onLeaveCoAgent: () => void;
 	onSmartSelect: () => void;
+	/** Smart select is a mode; the button shows whether it is on. */
+	isSmartSelectActive?: boolean;
 	onDismissBubble: () => void;
 }
 
@@ -77,6 +79,7 @@ export const CoAgentDock: React.FC<CoAgentDockProps> = ({
 	onUnlock,
 	onLeaveCoAgent,
 	onSmartSelect,
+	isSmartSelectActive = false,
 	onDismissBubble,
 }) => {
 	const t = useEmbeddedTranslation("coAgent");
@@ -258,6 +261,8 @@ export const CoAgentDock: React.FC<CoAgentDockProps> = ({
 						className="memorall-co-agent-action"
 						aria-label={t("smartSelect")}
 						title={t("smartSelect")}
+						aria-pressed={isSmartSelectActive}
+						data-active={isSmartSelectActive ? "true" : undefined}
 						onClick={onSmartSelect}
 					>
 						<MousePointerSquareDashed size={15} strokeWidth={2.25} />

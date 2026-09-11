@@ -52,6 +52,14 @@ export const coAgentStyles = `${customStyles}
 		background: #f8fafc;
 		transform: translateY(-1px);
 	}
+	.memorall-co-agent-action[data-active="true"] {
+		background: #0f172a;
+		border-color: #0f172a;
+		color: #f8fafc;
+	}
+	.memorall-co-agent-action[data-active="true"]:hover {
+		background: #1e293b;
+	}
 	.memorall-co-agent-action--danger {
 		color: #b91c1c;
 	}

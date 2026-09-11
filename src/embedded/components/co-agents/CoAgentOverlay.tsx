@@ -5,6 +5,11 @@ import { BACKGROUND_EVENTS } from "@/constants/events";
 import { embeddedChatHistoryService } from "@/embedded/chat-history-service";
 import { createSmartSelectOverlay } from "@/embedded/components/SmartSelectOverlay";
 import {
+	latestToolName,
+	progressForNode,
+	progressForTool,
+} from "@/embedded/utils/co-agent/progress-status";
+import {
 	buildEmbeddedContextMessageContent,
 	createEmbeddedContextItem,
 } from "@/embedded/context-items";
@@ -108,16 +113,44 @@ export const CoAgentOverlay: React.FC<CoAgentOverlayProps> = ({
 		setActiveAnchor(null);
 	}, [setActiveAnchor]);
 
-	const startSmartSelect = useCallback(() => {
+	// Smart select is a mode, and the control that turns a mode on has to be able
+	// to turn it off. The overlay factory already returns a teardown; the dock was
+	// throwing it away and starting a fresh overlay on every click, so once it was
+	// on there was no way out of it.
+	const smartSelectCleanupRef = useRef<(() => void) | null>(null);
+	// Mirrored into state so the dock button can show the mode is on — a toggle
+	// nobody can see is on is barely better than one that cannot be turned off.
+	const [isSmartSelectActive, setIsSmartSelectActive] = useState(false);
+
+	const stopSmartSelect = useCallback(() => {
+		smartSelectCleanupRef.current?.();
+		smartSelectCleanupRef.current = null;
+		setIsSmartSelectActive(false);
+	}, []);
+
+	const toggleSmartSelect = useCallback(() => {
+		if (smartSelectCleanupRef.current) {
+			stopSmartSelect();
+			return;
+		}
 		setBubbleDismissed(false);
-		createSmartSelectOverlay(
+		smartSelectCleanupRef.current = createSmartSelectOverlay(
 			(item) => {
+				smartSelectCleanupRef.current = null;
+				setIsSmartSelectActive(false);
 				setAttachedSelection(item);
 				openPromptUi();
 			},
-			() => {},
+			() => {
+				smartSelectCleanupRef.current = null;
+				setIsSmartSelectActive(false);
+			},
 		);
-	}, [openPromptUi]);
+		setIsSmartSelectActive(true);
+	}, [openPromptUi, stopSmartSelect]);
+
+	// Leaving the page, or turning the co-agent off, must not strand the picker.
+	useEffect(() => stopSmartSelect, [stopSmartSelect]);
 
 	const showAnchorTrigger =
 		Boolean(freshAnchor && !freshAnchor.isStale) &&
@@ -364,16 +397,25 @@ ${text}`
 				},
 				anchorContext: anchor && !anchor.isStale ? anchor : undefined,
 				onExecuteStart: (executeState) => {
+					// The node name is the machinery, not the work. Anything that is
+					// the model composing reads as one steady "Thinking…"; a tool run
+					// waits for the tool name, which arrives on onToolCalls.
 					setStatusLine(
-						typeof executeState.node === "string"
-							? executeState.node.replace(/[_-]+/g, " ")
-							: t("working"),
+						progressForNode(
+							typeof executeState.node === "string"
+								? executeState.node
+								: undefined,
+							t("thinking"),
+						).label,
 					);
 				},
 				onProgress: (content) => {
 					if (content.trim()) {
 						currentContent = content.trim();
 						setMessage(content.trim());
+						// Text is arriving, so the answer has started: the status line
+						// has nothing left to add.
+						setStatusLine("");
 					}
 				},
 				onAction: (actions) => {
@@ -381,6 +423,8 @@ ${text}`
 				},
 				onToolCalls: (toolCalls) => {
 					latestToolCalls = toolCalls;
+					const running = latestToolName(toolCalls);
+					if (running) setStatusLine(progressForTool(running).label);
 				},
 				onError: (error) => {
 					setStatusLine("");
@@ -462,7 +506,8 @@ ${text}`
 					onSelectAgentFlow={setSelectedAgentFlowId}
 					attachedSelectionLabel={attachedSelection?.label ?? null}
 					onDetachSelection={() => setAttachedSelection(null)}
-					onSmartSelect={startSmartSelect}
+					onSmartSelect={toggleSmartSelect}
+					isSmartSelectActive={isSmartSelectActive}
 					onExpand={() => setCollapsed(false)}
 					onOpenPrompt={() => openPrompt(freshAnchor)}
 					onClosePrompt={() => setAnchorPromptOpen(false)}
