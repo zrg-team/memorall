@@ -37,6 +37,8 @@ export type EmbeddedChatHistoryPayload =
 	| {
 			operation: "insert-coagent-marker";
 			marker: CoAgentSessionMarkerType;
+			/** The page the session covers, so a later visit opens a new one. */
+			url?: string;
 	  };
 
 export interface EmbeddedChatHistoryResult extends Record<string, unknown> {
@@ -203,7 +205,9 @@ class EmbeddedChatHistoryHandler implements ProcessHandler<BaseJob> {
 						role: "system",
 						content: "",
 						createdAt: new Date(),
-						metadata: { source: "co-agent" },
+						metadata: payload.url
+							? { source: "co-agent", url: payload.url }
+							: { source: "co-agent" },
 					},
 					payload.marker,
 				);

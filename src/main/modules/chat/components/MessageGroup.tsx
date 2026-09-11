@@ -4,13 +4,26 @@ import { useTranslation } from "react-i18next";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { AgentIcon } from "@/components/AgentIcon";
 import { MessageRenderer } from "./MessageRenderer";
+import { isCoAgentSessionMarker } from "@/services/chat/coagent-session";
+import { CoAgentPageDivider } from "./CoAgentPageDivider";
+import {
+	type CoAgentPage,
+	findCoAgentPageChanges,
+} from "../utils/coagent-timeline";
 import type { InProgressMessage } from "../hooks/use-chat";
 import type { ChatMessageGroup } from "@/main/stores/chat";
 import type { MessageActionRequest } from "./artifacts/ArtifactActionsMenu";
 
+/** Shared empty map so a collapsed group does not allocate one per render. */
+const NO_PAGE_CHANGES: ReadonlyMap<string, CoAgentPage> = new Map();
+
 const hasRenderableMessageContent = (
 	message: ChatMessageGroup["messages"][number],
 ) => {
+	// A session boundary carries no prose — being drawn is the whole of it. It
+	// used to fall through every test below and get dropped here, so the divider
+	// the renderer knows how to draw never reached it.
+	if (isCoAgentSessionMarker(message.type)) return true;
 	if (message.content) return true;
 	if (message.complexContent) return true;
 	if (message.parts) return true;
@@ -106,13 +119,27 @@ export const MessageGroup: React.FC<MessageGroupProps> = React.memo(
 
 		const shouldRenderMessages = !isCollapsed && group.isLoaded;
 
+		// Where each stretch of co-agent turns was asked. Derived from the turns
+		// themselves rather than stored, so it also reads back sessions recorded
+		// before any of this existed.
+		const pageChanges = useMemo(
+			() =>
+				shouldRenderMessages
+					? findCoAgentPageChanges(group.messages)
+					: NO_PAGE_CHANGES,
+			[group.messages, shouldRenderMessages],
+		);
+
 		const messageComponents = useMemo(() => {
 			if (!shouldRenderMessages) return null;
 
-			return group.messages.map((message, index) =>
-				hasRenderableMessageContent(message) ? (
+			let seenPageChange = false;
+
+			return group.messages.map((message, index) => {
+				if (!hasRenderableMessageContent(message)) return undefined;
+
+				const renderer = (
 					<MessageRenderer
-						key={message.id}
 						message={message}
 						index={index}
 						isLastMessage={false}
@@ -121,9 +148,29 @@ export const MessageGroup: React.FC<MessageGroupProps> = React.memo(
 						selectedTopic={selectedTopic}
 						onMessageAction={onMessageAction}
 					/>
-				) : undefined,
-			);
-		}, [group.messages, onMessageAction, selectedTopic, shouldRenderMessages]);
+				);
+
+				const page = pageChanges.get(message.id);
+				if (!page) {
+					return <React.Fragment key={message.id}>{renderer}</React.Fragment>;
+				}
+
+				const isFirst = !seenPageChange;
+				seenPageChange = true;
+				return (
+					<React.Fragment key={message.id}>
+						<CoAgentPageDivider page={page} isFirst={isFirst} />
+						{renderer}
+					</React.Fragment>
+				);
+			});
+		}, [
+			group.messages,
+			onMessageAction,
+			pageChanges,
+			selectedTopic,
+			shouldRenderMessages,
+		]);
 
 		const inProgressMetadata = useMemo(() => {
 			if (!inProgressMessage) return null;

@@ -3,6 +3,10 @@ import {
 	COAGENT_SESSION_END,
 	COAGENT_SESSION_START,
 	isCoAgentSessionMarker,
+	CO_AGENT_SESSION_MAX_IDLE_MS,
+	findOpenCoAgentSession,
+	isCoAgentSessionStale,
+	getCoAgentSessionUrl,
 	isCoAgentSessionOpen,
 	isNonModelMessageType,
 	shouldCloseCoAgentSession,
@@ -73,5 +77,76 @@ describe("what the model is allowed to see", () => {
 		// must not be mistaken for one.
 		expect(isCoAgentSessionMarker(COAGENT_SESSION_START)).toBe(true);
 		expect(isCoAgentSessionMarker("separator")).toBe(false);
+	});
+});
+
+const startedOn = (url?: string) => ({
+	type: COAGENT_SESSION_START,
+	metadata: url ? { source: "co-agent", url } : { source: "co-agent" },
+});
+
+describe("tying a session to the page it was opened on", () => {
+	const PAGE = "https://example.com/listing/1";
+
+	it("finds the start marker of an open session", () => {
+		const start = startedOn(PAGE);
+		expect(findOpenCoAgentSession([msg(), start, msg()])).toBe(start);
+	});
+
+	it("finds nothing once the session was closed", () => {
+		expect(
+			findOpenCoAgentSession([startedOn(PAGE), msg(COAGENT_SESSION_END)]),
+		).toBeNull();
+	});
+
+	it("reads back the page a session was opened for", () => {
+		expect(getCoAgentSessionUrl(startedOn(PAGE))).toBe(PAGE);
+		expect(getCoAgentSessionUrl(startedOn())).toBeNull();
+	});
+});
+
+describe("letting an abandoned session go cold", () => {
+	const NOW = new Date("2026-01-01T12:00:00Z").getTime();
+	const at = (msAgo: number) => ({ createdAt: new Date(NOW - msAgo) });
+
+	it("keeps a session that was in use moments ago", () => {
+		expect(isCoAgentSessionStale([at(60_000)], NOW)).toBe(false);
+	});
+
+	it("keeps a session alive across a navigation", () => {
+		// A session deliberately spans pages: following a trail from one page to
+		// the next is a single piece of work, not two sessions.
+		expect(isCoAgentSessionStale([at(600_000), at(30_000)], NOW)).toBe(false);
+	});
+
+	it("gives up on a session abandoned long ago", () => {
+		// The tab was closed without an end marker; the next question should not
+		// be filed under yesterday's session.
+		expect(
+			isCoAgentSessionStale([at(CO_AGENT_SESSION_MAX_IDLE_MS + 1)], NOW),
+		).toBe(true);
+	});
+
+	it("judges by the newest message, not the oldest", () => {
+		expect(
+			isCoAgentSessionStale(
+				[at(CO_AGENT_SESSION_MAX_IDLE_MS * 4), at(1_000)],
+				NOW,
+			),
+		).toBe(false);
+	});
+
+	it("reads a stored date string as well as a Date", () => {
+		expect(
+			isCoAgentSessionStale(
+				[{ createdAt: new Date(NOW - 1_000).toISOString() }],
+				NOW,
+			),
+		).toBe(false);
+	});
+
+	it("leaves a session open when nothing can be dated", () => {
+		expect(isCoAgentSessionStale([{ createdAt: null }], NOW)).toBe(false);
+		expect(isCoAgentSessionStale([], NOW)).toBe(false);
 	});
 });

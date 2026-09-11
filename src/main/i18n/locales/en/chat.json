@@ -171,7 +171,9 @@
 		"empty": "No messages yet. Start a conversation!",
 		"count": "{{count}} messages",
 		"coAgentSessionStart": "Co-agent session started",
-		"coAgentSessionEnd": "Co-agent session ended"
+		"coAgentSessionEnd": "Co-agent session ended",
+		"coAgentOnPage": "on {{page}}",
+		"coAgentMovedTo": "moved to {{page}}"
 	},
 	"execution": {
 		"default": "Executing {{node}}",

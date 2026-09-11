@@ -55,10 +55,14 @@ export const embeddedChatHistoryService = {
 	 *
 	 * Visual only, like a divider: the agent reads straight through it.
 	 */
-	async insertCoAgentMarker(marker: CoAgentSessionMarkerType): Promise<void> {
+	async insertCoAgentMarker(
+		marker: CoAgentSessionMarkerType,
+		url?: string,
+	): Promise<void> {
 		await executeHistoryJob({
 			operation: "insert-coagent-marker",
 			marker,
+			url,
 		});
 	},
 

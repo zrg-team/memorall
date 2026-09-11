@@ -46,12 +46,76 @@ export const isNonModelMessageType = (type: unknown): boolean =>
  */
 export const isCoAgentSessionOpen = (
 	messages: ReadonlyArray<{ type?: string | null }>,
+): boolean => findOpenCoAgentSession(messages) !== null;
+
+interface MarkerLike {
+	type?: string | null;
+	metadata?: unknown;
+}
+
+/**
+ * The start marker of the session still open, if there is one.
+ *
+ * Returned rather than a bare boolean because a session is only meaningful
+ * for the page it was opened on. Nothing reliably writes an end marker when
+ * the user closes the tab, so a session opened once would otherwise stay open
+ * for ever and every later visit would go unmarked.
+ */
+export const findOpenCoAgentSession = <T extends MarkerLike>(
+	messages: ReadonlyArray<T>,
+): T | null => {
+	for (let index = messages.length - 1; index >= 0; index -= 1) {
+		const message = messages[index];
+		if (message?.type === COAGENT_SESSION_START) return message;
+		if (message?.type === COAGENT_SESSION_END) return null;
+	}
+	return null;
+};
+
+/** The page a start marker was written for, when it recorded one. */
+export const getCoAgentSessionUrl = (marker: MarkerLike): string | null => {
+	const metadata = marker.metadata;
+	if (typeof metadata !== "object" || metadata === null) return null;
+	const url = (metadata as { url?: unknown }).url;
+	return typeof url === "string" && url ? url : null;
+};
+
+/**
+ * How long an open session may sit idle before the next question starts a new one.
+ *
+ * Closing the tab writes no end marker, so without a limit a session opened
+ * once would stay open for ever and swallow every later visit. Time is the
+ * right measure rather than the page: a session deliberately spans navigation,
+ * because following a trail across pages is what the co-agent is for.
+ */
+export const CO_AGENT_SESSION_MAX_IDLE_MS = 30 * 60 * 1000;
+
+const toTimestamp = (value: unknown): number | null => {
+	if (value instanceof Date) return value.getTime();
+	if (typeof value === "string" || typeof value === "number") {
+		const parsed = new Date(value).getTime();
+		return Number.isFinite(parsed) ? parsed : null;
+	}
+	return null;
+};
+
+/**
+ * Whether the open session has gone cold and the next question should open a
+ * fresh one.
+ *
+ * Measured from the newest message in the transcript: a session with nothing
+ * after its start marker is as old as the marker itself.
+ */
+export const isCoAgentSessionStale = (
+	messages: ReadonlyArray<{ createdAt?: unknown }>,
+	now: number,
+	maxIdleMs: number = CO_AGENT_SESSION_MAX_IDLE_MS,
 ): boolean => {
 	for (let index = messages.length - 1; index >= 0; index -= 1) {
-		const type = messages[index]?.type;
-		if (type === COAGENT_SESSION_START) return true;
-		if (type === COAGENT_SESSION_END) return false;
+		const at = toTimestamp(messages[index]?.createdAt);
+		if (at !== null) return now - at > maxIdleMs;
 	}
+	// Nothing datable to judge by; leaving the session open is the safer read.
 	return false;
 };
 

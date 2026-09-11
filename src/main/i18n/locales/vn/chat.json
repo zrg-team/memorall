@@ -171,7 +171,9 @@
 		"empty": "Chưa có tin nhắn nào. Bắt đầu cuộc trò chuyện!",
 		"count": "{{count}} tin nhắn",
 		"coAgentSessionStart": "Bắt đầu phiên co-agent",
-		"coAgentSessionEnd": "Kết thúc phiên co-agent"
+		"coAgentSessionEnd": "Kết thúc phiên co-agent",
+		"coAgentOnPage": "tại {{page}}",
+		"coAgentMovedTo": "chuyển sang {{page}}"
 	},
 	"execution": {
 		"default": "Đang thực thi {{node}}",
