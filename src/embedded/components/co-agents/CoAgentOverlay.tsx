@@ -415,9 +415,28 @@ ${text}`
 			});
 			assistantMessageId = assistantMessage.id;
 
+			// Resolve the agent before the run, so "ran without your agent" is a
+			// thing the user is told rather than something they have to infer from
+			// the answer sounding wrong.
+			const resolvedAgent =
+				await coAgentChatService.resolveAgentFlowConfig(selectedAgentFlowId);
+			if (resolvedAgent.usedFallback) {
+				setStatusLine("");
+				setMessage(
+					t("agentUnavailable", {
+						agent: answeringAgentName ?? selectedAgentFlowId,
+						defaultValue:
+							`Could not load "${answeringAgentName ?? selectedAgentFlowId}", so it was not used. ${resolvedAgent.reason ?? ""}`.trim(),
+					}),
+				);
+				setIsSubmitting(false);
+				return;
+			}
+
 			const result = await coAgentChatService.chatStream({
 				prompt: promptWithContext,
 				agentFlowId: selectedAgentFlowId,
+				flowConfig: resolvedAgent.config,
 				model: selectedModel,
 				pageContext: {
 					url: window.location.href,

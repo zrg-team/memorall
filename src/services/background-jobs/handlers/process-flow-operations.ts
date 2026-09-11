@@ -6,6 +6,7 @@ import { logInfo } from "@/utils/logger";
 
 const JOB_NAMES = {
 	getPredefinedFlows: "get-predefined-flows",
+	getFlowConfig: "get-flow-config",
 } as const;
 
 export interface GetPredefinedFlowsPayload {
@@ -16,9 +17,26 @@ export interface GetPredefinedFlowsResult extends Record<string, unknown> {
 	flows: Array<{ id: string; name: string; openuiTheme?: string }>;
 }
 
+export interface GetFlowConfigPayload {
+	flowId: string;
+}
+
+/**
+ * An agent's resolved configuration, and whether it is really that agent's.
+ *
+ * `usedFallback` is the difference between "here is your agent" and "here is
+ * the stock config wearing your agent's name" — which a caller has no way to
+ * tell apart from the config alone.
+ */
+export interface GetFlowConfigResult extends Record<string, unknown> {
+	config: unknown;
+	usedFallback: boolean;
+	reason?: string;
+}
+
 type FlowOperationsJob = BaseJob & {
 	jobType: (typeof JOB_NAMES)[keyof typeof JOB_NAMES];
-	payload: GetPredefinedFlowsPayload;
+	payload: GetPredefinedFlowsPayload & Partial<GetFlowConfigPayload>;
 };
 
 class FlowOperationsHandler extends BaseProcessHandler<FlowOperationsJob> {
@@ -30,6 +48,10 @@ class FlowOperationsHandler extends BaseProcessHandler<FlowOperationsJob> {
 		switch (job.jobType) {
 			case JOB_NAMES.getPredefinedFlows:
 				return this.handleGetPredefinedFlows(job.payload);
+			case JOB_NAMES.getFlowConfig:
+				return this.handleGetFlowConfig(
+					job.payload as unknown as GetFlowConfigPayload,
+				);
 			default:
 				throw new Error(`Unknown flow operations job type: ${job.jobType}`);
 		}
@@ -69,20 +91,36 @@ class FlowOperationsHandler extends BaseProcessHandler<FlowOperationsJob> {
 		);
 		return { flows: withThemes };
 	}
+
+	private async handleGetFlowConfig(
+		payload: GetFlowConfigPayload,
+	): Promise<GetFlowConfigResult> {
+		const resolved =
+			await serviceManager.flowBuilderService.resolveUnifiedFlowConfig({
+				flowId: payload.flowId,
+			});
+		return {
+			config: resolved.config,
+			usedFallback: resolved.usedFallback,
+			reason: resolved.reason,
+		};
+	}
 }
 
 const flowOperationsHandler = new FlowOperationsHandler();
 handlerRegistry.register({
 	instance: flowOperationsHandler,
-	jobs: [JOB_NAMES.getPredefinedFlows],
+	jobs: [JOB_NAMES.getPredefinedFlows, JOB_NAMES.getFlowConfig],
 });
 
 declare global {
 	interface JobTypeRegistry {
 		"get-predefined-flows": GetPredefinedFlowsPayload;
+		"get-flow-config": GetFlowConfigPayload;
 	}
 
 	interface JobResultRegistry {
 		"get-predefined-flows": GetPredefinedFlowsResult;
+		"get-flow-config": GetFlowConfigResult;
 	}
 }

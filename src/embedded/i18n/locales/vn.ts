@@ -133,6 +133,7 @@ export const vnEmbeddedLocale = {
 	},
 	coAgent: {
 		unlockRequired: "Cần mở khóa",
+		agentUnavailable: "Không tải được {agent}, nên chưa dùng agent này.",
 		working: "Đang làm việc",
 		thinking: "Đang suy nghĩ",
 		anchorAsk: "Hỏi",

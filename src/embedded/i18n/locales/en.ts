@@ -131,6 +131,7 @@ export const enEmbeddedLocale = {
 	},
 	coAgent: {
 		unlockRequired: "Unlock required",
+		agentUnavailable: "Could not load {agent}, so it was not used.",
 		working: "Working",
 		thinking: "Thinking",
 		anchorAsk: "Ask",
