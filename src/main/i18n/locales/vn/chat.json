@@ -353,7 +353,11 @@
 		"selectedNotLoadedDescription": "{{model}} đã được chọn nhưng vẫn chưa hoạt động trong bộ nhớ.",
 		"selectedProvider": "{{provider}}",
 		"loadHint": "Hãy tải mô hình trước khi gửi tin nhắn.",
-		"loadSelected": "Tải mô hình"
+		"loadSelected": "Tải mô hình",
+		"select": "Mô hình",
+		"searchPlaceholder": "Tìm mô hình",
+		"noMatches": "Không có mô hình phù hợp",
+		"noneAvailable": "Chưa có mô hình. Thêm nhà cung cấp hoặc tải một mô hình trước."
 	},
 	"tooltips": {
 		"topicSelector": "Chọn chủ đề để lọc ngữ cảnh kiến thức",

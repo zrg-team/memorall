@@ -207,3 +207,52 @@ describe("ChatInputControls co-agent", () => {
 		expect(button.querySelector(".animate-spin")).not.toBeNull();
 	});
 });
+
+describe("ChatInputControls model selector", () => {
+	const MODELS = [
+		{
+			id: "gpt-4o-mini",
+			name: "gpt-4o-mini",
+			provider: "openai" as const,
+			serviceName: "openai",
+			isLocal: false,
+			loaded: true,
+		},
+	];
+	const modelProps = (overrides: Record<string, unknown> = {}) =>
+		props({
+			model: "gpt-4o-mini",
+			selectableModels: MODELS,
+			selectableModelsByProvider: new Map([["openai" as const, MODELS]]),
+			onSelectModel: vi.fn(),
+			...overrides,
+		});
+
+	it("sits to the right of the agent chip", () => {
+		const { container } = render(<ChatInputControls {...modelProps()} />);
+
+		const tools = container.querySelectorAll('[class*="flex-nowrap"] > *');
+		const pills = Array.from(tools).filter((node) =>
+			node.className.includes("rounded-xl bg-muted/40"),
+		);
+		// The agent/memory pill first, then the model's own pill.
+		expect(pills).toHaveLength(2);
+		expect(pills[1]?.textContent).toContain("gpt-4o-mini");
+	});
+
+	it("stays out of the way until a surface can switch models", () => {
+		const { container } = render(<ChatInputControls {...props()} />);
+
+		expect(container.textContent).not.toContain("gpt-4o-mini");
+	});
+
+	it("keeps a readable short name at narrow widths", () => {
+		const { container } = render(
+			<ChatInputControls {...modelProps({ isNarrow: true })} />,
+		);
+
+		// Shortened, not hidden: the bar must still say which model is running.
+		expect(container.textContent).toContain("gpt-4o-mini");
+		expect(container.querySelector(".max-w-14")).not.toBeNull();
+	});
+});

@@ -79,6 +79,7 @@ exports[`requested main module coverage > imports chat, documents, agents, agent
   "../modules/chat/components/input/ChatInputControls.tsx",
   "../modules/chat/components/input/MentionPopup.tsx",
   "../modules/chat/components/input/MentionRichTextarea.tsx",
+  "../modules/chat/components/input/ModelSelector.tsx",
   "../modules/chat/components/message/AssistantContentFlow.tsx",
   "../modules/chat/components/message/AssistantToolTimeline.tsx",
   "../modules/chat/components/message/AssistantToolTimelinePart.tsx",

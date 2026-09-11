@@ -16,6 +16,10 @@ import {
 	MentionRichTextarea,
 	type MentionRichTextareaHandle,
 } from "@/main/modules/chat/components/input/MentionRichTextarea";
+import {
+	type SelectableModel,
+	useSelectableModels,
+} from "@/main/hooks/use-selectable-models";
 import { useCoAgentActivationStore } from "@/main/stores/co-agent-activation";
 import type { FlowMetadata } from "@/services/database/entities/flows";
 import { documentFileSystemService } from "@/services/filesystem/document-filesystem";
@@ -129,6 +133,19 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 	const startCoAgent = useCallback(() => {
 		void activateCoAgent();
 	}, [activateCoAgent]);
+
+	const {
+		models: selectableModels,
+		byProvider: selectableModelsByProvider,
+		isLoading: isLoadingModels,
+		selectModel,
+	} = useSelectableModels();
+	const handleSelectModel = useCallback(
+		(next: SelectableModel) => {
+			void selectModel(next);
+		},
+		[selectModel],
+	);
 
 	const [mentionQuery, setMentionQuery] = useState<string | null>(null);
 	const mentionAtIndexRef = useRef<number>(-1);
@@ -449,6 +466,10 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 							onToggleFullWidth={onToggleFullWidth}
 							onStartCoAgent={canUseCoAgent ? startCoAgent : undefined}
 							isCoAgentStarting={isCoAgentStarting}
+							selectableModels={selectableModels}
+							selectableModelsByProvider={selectableModelsByProvider}
+							isLoadingModels={isLoadingModels}
+							onSelectModel={handleSelectModel}
 						/>
 					</PromptInput>
 				</div>

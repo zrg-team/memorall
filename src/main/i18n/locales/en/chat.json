@@ -353,7 +353,11 @@
 		"selectedNotLoadedDescription": "{{model}} is selected but not active in memory yet.",
 		"selectedProvider": "{{provider}}",
 		"loadHint": "Load it before sending a message.",
-		"loadSelected": "Load model"
+		"loadSelected": "Load model",
+		"select": "Model",
+		"searchPlaceholder": "Search models",
+		"noMatches": "No matching models",
+		"noneAvailable": "No models yet. Add a provider or download one first."
 	},
 	"tooltips": {
 		"topicSelector": "Select a topic to filter knowledge context",

@@ -40,7 +40,10 @@ import {
 	TooltipContent,
 	TooltipTrigger,
 } from "@/main/components/ui/tooltip";
+import type { SelectableModel } from "@/main/hooks/selectable-model";
 import { getAgentIconScreenFromMetadata } from "@/main/modules/agents/types";
+import type { ServiceProvider } from "@/services/llm/interfaces/llm-service.interface";
+import { ModelSelector } from "./ModelSelector";
 import type { FlowMetadata } from "@/services/database/entities/flows";
 import type { ChatStatus } from "@/types/chat";
 
@@ -86,6 +89,11 @@ export interface ChatInputControlsProps {
 	/** Attach the co-agent to the tab the user is looking at. */
 	onStartCoAgent?: () => void;
 	isCoAgentStarting?: boolean;
+	/** Switching model without leaving the conversation. */
+	selectableModels?: SelectableModel[];
+	selectableModelsByProvider?: Map<ServiceProvider, SelectableModel[]>;
+	isLoadingModels?: boolean;
+	onSelectModel?: (model: SelectableModel) => void;
 }
 
 export const ChatInputControls: React.FC<ChatInputControlsProps> = ({
@@ -114,6 +122,10 @@ export const ChatInputControls: React.FC<ChatInputControlsProps> = ({
 	onToggleFullWidth,
 	onStartCoAgent,
 	isCoAgentStarting = false,
+	selectableModels,
+	selectableModelsByProvider,
+	isLoadingModels = false,
+	onSelectModel,
 }) => {
 	const { t } = useTranslation("chat");
 	const flowOptions = [
@@ -260,7 +272,7 @@ export const ChatInputControls: React.FC<ChatInputControlsProps> = ({
 												<span
 													className={cn(
 														"min-w-0 truncate",
-														isNarrow ? "max-w-16" : "max-w-24",
+														isNarrow ? "max-w-14" : "max-w-24",
 													)}
 												>
 													{selectedFlow?.name ?? t("flowSelector.chat")}
@@ -341,7 +353,7 @@ export const ChatInputControls: React.FC<ChatInputControlsProps> = ({
 														<span
 															className={cn(
 																"min-w-0 truncate",
-																isNarrow ? "max-w-12" : "max-w-20",
+																isNarrow ? "max-w-10" : "max-w-20",
 															)}
 														>
 															{isLoadingTopics
@@ -409,6 +421,26 @@ export const ChatInputControls: React.FC<ChatInputControlsProps> = ({
 								</>
 							)}
 						</div>
+
+						{/*
+						 * Right of the agent, because the two are read together: which
+						 * agent, running on which model. Its own pill rather than a third
+						 * segment of that one — the agent and its memory belong together,
+						 * the model is a separate choice.
+						 */}
+						{onSelectModel && selectableModelsByProvider ? (
+							<div className="flex h-8 min-w-0 items-center rounded-xl bg-muted/40">
+								<ModelSelector
+									models={selectableModels ?? []}
+									byProvider={selectableModelsByProvider}
+									currentModelId={model}
+									isLoading={isLoadingModels}
+									onSelect={onSelectModel}
+									isNarrow={isNarrow}
+									disabled={isLoading}
+								/>
+							</div>
+						) : null}
 					</PromptInputTools>
 				</div>
 
