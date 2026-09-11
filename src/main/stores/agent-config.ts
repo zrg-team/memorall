@@ -18,6 +18,15 @@ import {
 	type MCPConnectionSelection,
 } from "@memorall/agent-harness-flows/steps/features/mcp-feature/index";
 import { migrateLegacyServers } from "@/services/mcp-connections";
+import {
+	applyLegacyDraftToUnified,
+	cloneUnifiedConfig,
+	getRetrievalStepName,
+	KNOWLEDGE_RETRIEVAL_MODES,
+	type KnowledgeRetrievalMode,
+	selectFeatureStepNames,
+	RETRIEVAL_STEP_NAMES,
+} from "@/services/flow-config-legacy";
 import { ADD_SKILL_CONTEXT_STEP_NAME } from "@memorall/agent-harness-flows/steps/common/add-skill-context";
 import { logError } from "@/utils/logger";
 import { deepEqual } from "@/utils/deep-equal";
@@ -83,25 +92,10 @@ export const getDefaultSystemPromptForGraph = (graphType: GraphType): string =>
 		? DEFAULT_AGENT_SYSTEM_PROMPT
 		: DEFAULT_FOUNDATION_SYSTEM_PROMPT;
 
-export type KnowledgeRetrievalMode = "smart" | "quick" | "llm" | "structmem";
-
-export const KNOWLEDGE_RETRIEVAL_MODES: Array<{
-	mode: KnowledgeRetrievalMode;
-	stepName: string;
-}> = [
-	{ mode: "smart", stepName: "context-smart-retrieve" },
-	{ mode: "quick", stepName: "context-quick-retrieve" },
-	{ mode: "llm", stepName: "context-llm-retrieve" },
-	{ mode: "structmem", stepName: "structmem-retrieve" },
-];
-
-const RETRIEVAL_STEP_NAMES = new Set(
-	KNOWLEDGE_RETRIEVAL_MODES.map((mode) => mode.stepName),
-);
-
-const getRetrievalStepName = (mode: string | undefined): string =>
-	KNOWLEDGE_RETRIEVAL_MODES.find((candidate) => candidate.mode === mode)
-		?.stepName ?? "context-smart-retrieve";
+// Re-exported from the shared converter so existing importers need no edits,
+// and so the settings save path and the runtime read path agree by construction.
+export type { KnowledgeRetrievalMode };
+export { KNOWLEDGE_RETRIEVAL_MODES };
 
 const getRetrievalModeFromSteps = (
 	steps: UnifiedFlowConfig["steps"],
@@ -118,27 +112,22 @@ const getRetrievalModeFromSteps = (
 	);
 };
 
-const cloneUnifiedConfig = (config: UnifiedFlowConfig): UnifiedFlowConfig => ({
-	...config,
-	steps: config.steps.map((step) => ({
-		...step,
-		config: step.config ? { ...step.config } : undefined,
-	})),
-});
-
 // ---------------------------------------------------------------------------
 // Build the full ordered featureDefinitions for a graph type.
 // Ordering is determined by registration order in steps/features/index.ts:
 // built-ins (knowledge-retrieval, citations) first, catalog features, agent-node last.
+//
+// The *which steps* question is answered by listFeatureStepNames so this UI
+// metadata and the conversion in flow-config-legacy cannot select different
+// feature sets; only the icons and detail-view slots are built here.
 // ---------------------------------------------------------------------------
 function buildFeatureDefinitions(graphType: string): AgentFeatureDefinition[] {
 	const catalog = serviceManager.flowBuilderService.getCatalog();
+	const featureStepNames = new Set(
+		selectFeatureStepNames(catalog.steps, graphType),
+	);
 	return catalog.steps
-		.filter(
-			(step) =>
-				step.type === "feature" &&
-				(step.graphTypes?.includes(graphType) ?? false),
-		)
+		.filter((step) => featureStepNames.has(step.name))
 		.map((step) => {
 			const meta = step.metadata as Partial<FeatureCatalogMetadata>;
 			return {
@@ -305,128 +294,6 @@ const deriveLegacyStateFromUnified = (unifiedConfig: UnifiedFlowConfig) => {
 	};
 };
 
-const applyLegacyDraftToUnified = (
-	baseConfig: UnifiedFlowConfig,
-	draftConfig: FoundationPredefinedConfig,
-	draftFeatures: FeatureFlags,
-	draftMultiAgentAccessibleAgentIds: string[],
-	draftConnections: MCPConnectionSelection[],
-	draftEnabledSkillNames: string[],
-): UnifiedFlowConfig => {
-	const graphType: GraphType =
-		draftConfig.graphType === "agent" ? "agent" : "foundation";
-	const nextConfig =
-		baseConfig.graphType === graphType
-			? cloneUnifiedConfig(baseConfig)
-			: buildDefaultFlowConfig(graphType);
-	const defaultConfig = buildDefaultFlowConfig(graphType);
-	const defaultSystemPrompt =
-		(defaultConfig.steps.find((step) => step.name === "add-system")?.config
-			?.content as string | undefined) ?? "";
-	const defaultEnabledRetrievalNames = new Set(
-		defaultConfig.steps
-			.filter((step) => RETRIEVAL_STEP_NAMES.has(step.name) && step.enabled)
-			.map((step) => step.name),
-	);
-	const enabledRetrievalNames = new Set(
-		nextConfig.steps
-			.filter((step) => RETRIEVAL_STEP_NAMES.has(step.name) && step.enabled)
-			.map((step) => step.name),
-	);
-	const selectedRetrievalStepName = getRetrievalStepName(
-		draftConfig.retrievalMode,
-	);
-	const featureNames = new Set(
-		getCatalogFeatureNames(buildFeatureDefinitions(graphType)),
-	);
-
-	if (
-		draftFeatures["knowledge-retrieval"] &&
-		enabledRetrievalNames.size === 0
-	) {
-		enabledRetrievalNames.add(
-			defaultEnabledRetrievalNames.has(selectedRetrievalStepName)
-				? selectedRetrievalStepName
-				: getRetrievalStepName(draftConfig.retrievalMode),
-		);
-	}
-
-	return {
-		...nextConfig,
-		graphType,
-		steps: nextConfig.steps.map((step) => {
-			const nextStep = {
-				...step,
-				config: step.config ? { ...step.config } : undefined,
-			};
-
-			if (step.name === "add-system") {
-				nextStep.config = { ...(nextStep.config ?? {}) };
-				nextStep.config.content =
-					draftConfig.systemPrompt.trim() || defaultSystemPrompt;
-			}
-
-			if (step.name === "agent-completion") {
-				nextStep.config = {
-					...(nextStep.config ?? {}),
-					tools: [...draftConfig.tools],
-					maxIterations: normalizeAgentMaxIterations(draftConfig.maxIterations),
-				};
-			}
-
-			if (RETRIEVAL_STEP_NAMES.has(step.name)) {
-				nextStep.enabled =
-					Boolean(draftFeatures["knowledge-retrieval"]) &&
-					step.name === selectedRetrievalStepName;
-				nextStep.config = { ...(nextStep.config ?? {}) };
-				if (draftConfig.contextPrompt.trim()) {
-					nextStep.config.prompt = draftConfig.contextPrompt;
-				} else if ("prompt" in nextStep.config) {
-					delete nextStep.config.prompt;
-				}
-			}
-
-			if (step.name === "entities-facts-citation") {
-				nextStep.enabled = Boolean(draftFeatures["citations"]);
-			}
-
-			if (featureNames.has(step.name)) {
-				nextStep.enabled = Boolean(draftFeatures[step.name]);
-			}
-
-			if (step.name === MULTI_AGENT_FEATURE_NAME) {
-				nextStep.config = {
-					...(nextStep.config ?? {}),
-					accessibleAgentIds: [...draftMultiAgentAccessibleAgentIds],
-				};
-			}
-
-			if (step.name === MCP_FEATURE_NAME) {
-				nextStep.config = {
-					...(nextStep.config ?? {}),
-					connections: [...draftConnections],
-				};
-				// `servers` is derived at run time from `connections`; leaving a stale
-				// copy behind would let a deleted connection keep running.
-				delete nextStep.config.servers;
-			}
-
-			if (step.name === ADD_SKILL_CONTEXT_STEP_NAME) {
-				nextStep.config = {
-					...(nextStep.config ?? {}),
-					enabledSkillNames: [...draftEnabledSkillNames],
-				};
-			}
-
-			if (nextStep.config && Object.keys(nextStep.config).length === 0) {
-				nextStep.config = undefined;
-			}
-
-			return nextStep;
-		}),
-	};
-};
-
 interface AgentConfigState {
 	savedConfig: FoundationPredefinedConfig;
 	draftConfig: FoundationPredefinedConfig;
@@ -528,6 +395,10 @@ export const useAgentConfigStore = create<AgentConfigState>((set, get) => {
 				draftMultiAgentAccessibleAgentIds,
 				draftConnections,
 				draftEnabledSkillNames,
+				selectFeatureStepNames(
+					serviceManager.flowBuilderService.getCatalog().steps,
+					draftConfig.graphType,
+				),
 			);
 
 			if (targetFlowId) {

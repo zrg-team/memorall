@@ -1050,13 +1050,27 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 					// mode the UI picked. `normal` used to force the stock config here,
 					// so the agent's own features — MCP connections above all — were
 					// silently dropped depending on how the message was started.
-					flowConfig = job.payload.flowConfig
-						? job.payload.flowConfig
-						: agentFlowId
-							? await serviceManager.flowBuilderService.getUnifiedFlowConfig({
-									flowId: agentFlowId,
-								})
-							: buildDefaultFlowConfig("agent");
+					if (job.payload.flowConfig) {
+						flowConfig = job.payload.flowConfig;
+					} else if (agentFlowId) {
+						// Same reporting as the custom branch below: silently standing
+						// in the stock config for an agent asked for by id is what made
+						// "the agent is ignored" so hard to see.
+						const resolved =
+							await serviceManager.flowBuilderService.resolveUnifiedFlowConfig({
+								flowId: agentFlowId,
+							});
+						flowConfig = resolved.config;
+						if (resolved.usedFallback) {
+							await dependencies.logger.warn(
+								`Ran without the selected agent (${agentFlowId})`,
+								resolved.reason ?? "The selected agent could not be loaded.",
+								"offscreen",
+							);
+						}
+					} else {
+						flowConfig = buildDefaultFlowConfig("agent");
+					}
 				} catch (err) {
 					await dependencies.logger.warn(
 						"Failed to load agent flow config, using defaults",
