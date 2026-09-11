@@ -35,6 +35,8 @@ export const embeddedChatHistoryService = {
 		id?: string;
 		role: "user" | "assistant";
 		content: string;
+		/** The turn as the model received it, when an attachment makes it more than text. */
+		complexContent?: unknown;
 		topicId?: string | null;
 		metadata?: Record<string, unknown> | null;
 	}): Promise<Message> {

@@ -104,3 +104,96 @@ describe("co-agent session divider", () => {
 		expect(container.querySelector("[data-message-content]")).toBeNull();
 	});
 });
+
+const userTurn = (metadata: Record<string, unknown>): Message =>
+	({
+		id: "u1",
+		conversationId: "c1",
+		type: "text",
+		role: "user",
+		content: "Hi what is this ?",
+		complexContent: null,
+		parts: null,
+		topicId: null,
+		embedding: null,
+		embeddingSmall: null,
+		embeddingLarge: null,
+		metadata,
+		createdAt: new Date("2026-01-01T00:00:00Z"),
+		updatedAt: new Date("2026-01-01T00:00:00Z"),
+	}) as Message;
+
+const renderTurn = (message: Message) =>
+	render(
+		<MemoryRouter>
+			<MessageRenderer
+				message={message}
+				index={0}
+				isLastMessage={false}
+				isStreaming={false}
+			/>
+		</MemoryRouter>,
+	);
+
+/**
+ * What the composer showed before sending has to survive the send. A region
+ * can be shown back as a picture; text and HTML cannot, because being long is
+ * why they were attached — so the chip stands in for them.
+ */
+describe("what a co-agent turn carried", () => {
+	it("shows the chip for a captured region", () => {
+		const { container } = renderTurn(
+			userTurn({
+				source: "co-agent",
+				attachedContexts: [{ kind: "screenshot", label: "Region 641×482" }],
+			}),
+		);
+
+		expect(container.textContent).toContain("Region 641×482");
+	});
+
+	it("shows picked text and markup, which cannot be shown back in full", () => {
+		const { container } = renderTurn(
+			userTurn({
+				source: "co-agent",
+				attachedContexts: [
+					{ kind: "text", label: "Smart Text: <p> Some prose" },
+					{ kind: "html", label: "Clean HTML: <table>" },
+				],
+			}),
+		);
+
+		expect(container.textContent).toContain("Smart Text");
+		expect(container.textContent).toContain("Clean HTML");
+	});
+
+	it("shows the hovered element the question was about", () => {
+		const { container } = renderTurn(
+			userTurn({
+				source: "co-agent",
+				attachedContexts: [{ kind: "anchor", label: "<div> a listing" }],
+			}),
+		);
+
+		expect(container.textContent).toContain("a listing");
+	});
+
+	it("keeps the typed question readable beside the chips", () => {
+		const { container } = renderTurn(
+			userTurn({
+				source: "co-agent",
+				attachedContexts: [{ kind: "screenshot", label: "Region 641×482" }],
+			}),
+		);
+
+		expect(container.textContent).toContain("Hi what is this ?");
+	});
+
+	it("adds nothing to a turn that carried nothing", () => {
+		const { container } = renderTurn(userTurn({ source: "co-agent" }));
+
+		expect(
+			container.querySelector('[data-testid="message-attached-contexts"]'),
+		).toBeNull();
+	});
+});

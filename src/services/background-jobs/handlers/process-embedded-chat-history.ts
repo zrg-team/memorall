@@ -20,6 +20,14 @@ type StoredMessageInput = {
 	id?: string;
 	role: PersistableMessageRole;
 	content: string;
+	/**
+	 * The turn as the model received it, when that is more than text.
+	 *
+	 * An attached region reaches the model as an image part. Storing only
+	 * `content` kept the words and dropped the picture, so the transcript showed
+	 * a question about an image that was nowhere to be seen.
+	 */
+	complexContent?: unknown;
 	createdAt?: Date;
 	topicId?: string | null;
 	metadata?: Record<string, unknown> | null;
@@ -119,6 +127,9 @@ const addMessage = async (
 		type,
 		role: input.role,
 		content: input.content,
+		complexContent: input.complexContent
+			? (sanitizeForJson(input.complexContent) as Record<string, unknown>)
+			: undefined,
 		topicId: input.topicId ?? undefined,
 		metadata: sanitizeForJson(input.metadata ?? {}) as Record<string, unknown>,
 		createdAt: now,

@@ -37,6 +37,10 @@ import {
 } from "./message/AssistantContentFlow";
 import { MessageErrorNotice } from "./message/MessageErrorNotice";
 import {
+	type AttachedContextRef,
+	MessageAttachedContexts,
+} from "./message/MessageAttachedContexts";
+import {
 	buildAssistantContentParts,
 	hasAssistantContentParts,
 } from "./message/message-parts-adapter";
@@ -44,6 +48,8 @@ import {
 interface MessageMetadata extends MessageFooterMetadata {
 	actions?: MessageActionItem[];
 	attachedDocuments?: AttachedDocumentRef[];
+	/** What a co-agent turn carried: a picked element, a region, a block of text. */
+	attachedContexts?: AttachedContextRef[];
 	agentFlowName?: string;
 	error?: {
 		message: string;
@@ -116,6 +122,13 @@ export const MessageRenderer: React.FC<MessageRendererProps> = React.memo(
 			if (!("actions" in message.metadata)) return [];
 			if (!Array.isArray(message.metadata.actions)) return [];
 			return message.metadata.actions;
+		}, [message.metadata]);
+
+		const attachedContexts = useMemo<AttachedContextRef[]>(() => {
+			if (!message.metadata || typeof message.metadata !== "object") return [];
+			if (!("attachedContexts" in message.metadata)) return [];
+			if (!Array.isArray(message.metadata.attachedContexts)) return [];
+			return message.metadata.attachedContexts as AttachedContextRef[];
 		}, [message.metadata]);
 
 		const attachedDocuments = useMemo<AttachedDocumentRef[]>(() => {
@@ -273,6 +286,9 @@ export const MessageRenderer: React.FC<MessageRendererProps> = React.memo(
 						>
 							{message.role === "user" && attachedDocuments.length > 0 && (
 								<MessageAttachedDocuments documents={attachedDocuments} />
+							)}
+							{message.role === "user" && attachedContexts.length > 0 && (
+								<MessageAttachedContexts contexts={attachedContexts} />
 							)}
 							{complexContent && (
 								<MessageComplexImages complexContent={complexContent} />

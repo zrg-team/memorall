@@ -4,6 +4,8 @@ import { AgentCursorOverlay, hideAgentCursor } from "@/components/AgentCursor";
 import { BACKGROUND_EVENTS } from "@/constants/events";
 import { embeddedChatHistoryService } from "@/embedded/chat-history-service";
 import { createCanvasSelectOverlay } from "@/embedded/components/CanvasSelectOverlay";
+import { buildAttachedContexts } from "@/embedded/utils/co-agent/attached-contexts";
+import { buildStoredTurn } from "@/embedded/utils/co-agent/stored-turn";
 import { createSmartSelectOverlay } from "@/embedded/components/SmartSelectOverlay";
 import {
 	latestToolName,
@@ -447,12 +449,19 @@ ${text}`
 
 			await embeddedChatHistoryService.addMessage({
 				role: "user",
-				content: prompt,
+				// Written down as it was sent: an attached region reached the model
+				// as an image part but was never stored, so the transcript showed a
+				// question about a picture that appeared nowhere.
+				...buildStoredTurn(prompt, promptWithContext),
 				metadata: {
 					source: "co-agent",
 					pageUrl: window.location.href,
 					pageTitle: document.title || "",
 					anchor,
+					// The chips the composer showed before sending. Text and HTML
+					// cannot be shown back in full — being long is why they were
+					// attached — so the label stands in for them, as it did there.
+					attachedContexts: buildAttachedContexts({ anchor, selection }),
 				},
 			});
 			const assistantMessage = await embeddedChatHistoryService.addMessage({

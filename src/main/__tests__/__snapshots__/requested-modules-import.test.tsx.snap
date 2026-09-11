@@ -95,6 +95,7 @@ exports[`requested main module coverage > imports chat, documents, agents, agent
   "../modules/chat/components/message/MarkdownMathMessageBody.tsx",
   "../modules/chat/components/message/MarkdownMessageBody.tsx",
   "../modules/chat/components/message/MemorallToolCallCard.tsx",
+  "../modules/chat/components/message/MessageAttachedContexts.tsx",
   "../modules/chat/components/message/MessageAttachedDocuments.tsx",
   "../modules/chat/components/message/MessageContentWithArtifacts.tsx",
   "../modules/chat/components/message/MessageErrorNotice.tsx",
