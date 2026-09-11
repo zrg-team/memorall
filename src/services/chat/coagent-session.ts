@@ -50,7 +50,6 @@ export const isCoAgentSessionOpen = (
 
 interface MarkerLike {
 	type?: string | null;
-	metadata?: unknown;
 }
 
 /**
@@ -70,14 +69,6 @@ export const findOpenCoAgentSession = <T extends MarkerLike>(
 		if (message?.type === COAGENT_SESSION_END) return null;
 	}
 	return null;
-};
-
-/** The page a start marker was written for, when it recorded one. */
-export const getCoAgentSessionUrl = (marker: MarkerLike): string | null => {
-	const metadata = marker.metadata;
-	if (typeof metadata !== "object" || metadata === null) return null;
-	const url = (metadata as { url?: unknown }).url;
-	return typeof url === "string" && url ? url : null;
 };
 
 /**

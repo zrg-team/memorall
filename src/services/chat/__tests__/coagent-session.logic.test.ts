@@ -6,7 +6,6 @@ import {
 	CO_AGENT_SESSION_MAX_IDLE_MS,
 	findOpenCoAgentSession,
 	isCoAgentSessionStale,
-	getCoAgentSessionUrl,
 	isCoAgentSessionOpen,
 	isNonModelMessageType,
 	shouldCloseCoAgentSession,
@@ -97,11 +96,6 @@ describe("tying a session to the page it was opened on", () => {
 		expect(
 			findOpenCoAgentSession([startedOn(PAGE), msg(COAGENT_SESSION_END)]),
 		).toBeNull();
-	});
-
-	it("reads back the page a session was opened for", () => {
-		expect(getCoAgentSessionUrl(startedOn(PAGE))).toBe(PAGE);
-		expect(getCoAgentSessionUrl(startedOn())).toBeNull();
 	});
 });
 

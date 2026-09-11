@@ -151,10 +151,20 @@ export const useCoAgentContextAnchor = ({
 			}, 120);
 		};
 
+		// Scroll is listened to on the capture phase, so this fires for every
+		// scrolling element on the host page — many times a frame on a long one.
+		// Each call measures the anchor and updates React state, so coalescing to
+		// one per frame is the difference between following the page and taxing
+		// it. The position cannot be seen to change faster than a frame anyway.
+		let refreshFrame: number | null = null;
 		const refreshAnchor = () => {
-			setActiveAnchor((anchor) =>
-				anchor ? refreshContextAnchor(anchor) : null,
-			);
+			if (refreshFrame !== null) return;
+			refreshFrame = window.requestAnimationFrame(() => {
+				refreshFrame = null;
+				setActiveAnchor((anchor) =>
+					anchor ? refreshContextAnchor(anchor) : null,
+				);
+			});
 		};
 
 		window.addEventListener("pointermove", handlePointerMove, {
@@ -170,6 +180,7 @@ export const useCoAgentContextAnchor = ({
 		return () => {
 			clearHoverTimer();
 			clearHoverHideTimer();
+			if (refreshFrame !== null) window.cancelAnimationFrame(refreshFrame);
 			window.removeEventListener("pointermove", handlePointerMove);
 			window.removeEventListener("focusin", handleFocusIn);
 			document.removeEventListener("selectionchange", handleSelectionChange);

@@ -102,9 +102,22 @@ export const CoAgentOverlay: React.FC<CoAgentOverlayProps> = ({
 		setAnchorPromptOpen(true);
 	}, []);
 
+	// Declared before the tracker below, which has to be told to stand down while
+	// one of them owns the page.
+	//
+	// Mirrored into state so the dock button can show the mode is on — a toggle
+	// nobody can see is on is barely better than one that cannot be turned off.
+	const [isSmartSelectActive, setIsSmartSelectActive] = useState(false);
+	const [isCanvasSelectActive, setIsCanvasSelectActive] = useState(false);
+	const isPickerActive = isSmartSelectActive || isCanvasSelectActive;
+
 	const { activeAnchor, freshAnchor, setActiveAnchor } =
 		useCoAgentContextAnchor({
-			disabled: showAuthAction,
+			// While a picker is open the page belongs to it. Tracking the cursor
+			// underneath would put the trigger on top of whatever the user is
+			// trying to pick, and costs the host page a DOM walk per pointer move
+			// for an anchor nothing can use.
+			disabled: showAuthAction || isPickerActive,
 			promptOpen: anchorPromptOpen,
 			onOpenPrompt: openPromptUi,
 		});
@@ -136,9 +149,6 @@ export const CoAgentOverlay: React.FC<CoAgentOverlayProps> = ({
 	// throwing it away and starting a fresh overlay on every click, so once it was
 	// on there was no way out of it.
 	const smartSelectCleanupRef = useRef<(() => void) | null>(null);
-	// Mirrored into state so the dock button can show the mode is on — a toggle
-	// nobody can see is on is barely better than one that cannot be turned off.
-	const [isSmartSelectActive, setIsSmartSelectActive] = useState(false);
 
 	const stopSmartSelect = useCallback(() => {
 		smartSelectCleanupRef.current?.();
@@ -171,7 +181,6 @@ export const CoAgentOverlay: React.FC<CoAgentOverlayProps> = ({
 	// registry closes whichever overlay was open when the other starts, and calls
 	// the closed one's onCancel — which is what keeps these two flags honest.
 	const canvasSelectCleanupRef = useRef<(() => void) | null>(null);
-	const [isCanvasSelectActive, setIsCanvasSelectActive] = useState(false);
 
 	const stopCanvasSelect = useCallback(() => {
 		canvasSelectCleanupRef.current?.();
@@ -210,6 +219,7 @@ export const CoAgentOverlay: React.FC<CoAgentOverlayProps> = ({
 		!anchorPromptOpen &&
 		!chatPopupOpen &&
 		!collapsed &&
+		!isPickerActive &&
 		!showAuthAction;
 
 	useEffect(() => {
