@@ -2,6 +2,10 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { createEmbeddedContextItem } from "@/embedded/context-items";
 import {
+	captureElementRegion,
+	RegionCaptureError,
+} from "@/embedded/utils/capture-region";
+import {
 	extractElementCleanHTML,
 	extractElementOuterHTML,
 	extractElementTextContent,
@@ -90,6 +94,8 @@ const SmartSelectOverlay: React.FC<SmartSelectOverlayProps> = ({
 	const [pendingItem, setPendingItem] = useState<EmbeddedContextItem | null>(
 		null,
 	);
+	const [isCapturing, setIsCapturing] = useState(false);
+	const [captureError, setCaptureError] = useState<string | null>(null);
 
 	const updateHighlight = useCallback((element: Element | null) => {
 		setHighlightRect(element ? element.getBoundingClientRect() : null);
@@ -202,8 +208,40 @@ const SmartSelectOverlay: React.FC<SmartSelectOverlayProps> = ({
 	}, [chooserPoint]);
 
 	const handleChoose = useCallback(
-		(format: "text" | "clean_html" | "html") => {
+		async (format: "text" | "clean_html" | "html" | "image") => {
 			if (!selectedElement) {
+				return;
+			}
+
+			if (format === "image") {
+				// A picture of what is on screen, not a re-render of the DOM: the
+				// latter silently drops every cross-origin image, which on a map is
+				// the whole picture.
+				setCaptureError(null);
+				setIsCapturing(true);
+				try {
+					const captured = await captureElementRegion(selectedElement, {
+						hide: getIgnoredContainers(),
+					});
+					const imageItem = createEmbeddedContextItem({
+						kind: "selected_image",
+						label: `${t("smartSelectImage")}: ${describeElement(selectedElement)}`,
+						content: captured.dataUrl,
+					});
+					if (mode === "standalone") {
+						setPendingItem(imageItem);
+					} else {
+						onSelectContext(imageItem);
+					}
+				} catch (error) {
+					setCaptureError(
+						error instanceof RegionCaptureError && error.needsActivation
+							? t("smartSelectImageNeedsActivation")
+							: t("smartSelectImageFailed"),
+					);
+				} finally {
+					setIsCapturing(false);
+				}
 				return;
 			}
 
@@ -377,6 +415,22 @@ const SmartSelectOverlay: React.FC<SmartSelectOverlayProps> = ({
 							>
 								{describeElement(selectedElement)}
 							</div>
+							{captureError ? (
+								<div
+									style={{
+										fontSize: "12px",
+										lineHeight: "16px",
+										color: "#b91c1c",
+										backgroundColor: "#fef2f2",
+										border: "1px solid rgb(248 113 113 / 0.4)",
+										borderRadius: "8px",
+										padding: "8px 10px",
+										marginBottom: "8px",
+									}}
+								>
+									{captureError}
+								</div>
+							) : null}
 							<div style={{ display: "grid", gap: "8px" }}>
 								<button
 									type="button"
@@ -391,6 +445,16 @@ const SmartSelectOverlay: React.FC<SmartSelectOverlayProps> = ({
 									style={choiceButtonStyle}
 								>
 									{t("smartSelectCleanHtml")}
+								</button>
+								<button
+									type="button"
+									disabled={isCapturing}
+									onClick={() => void handleChoose("image")}
+									style={choiceButtonStyle}
+								>
+									{isCapturing
+										? t("smartSelectImageCapturing")
+										: t("smartSelectImage")}
 								</button>
 								<button
 									type="button"

@@ -18,6 +18,7 @@ import { registerContextMenuHandler } from "@/background/context-menu/handler";
 import { registerMessageHandler } from "@/background/messaging";
 import { registerWebToolBrowserHandler } from "@/background/web-tool-browser-handler";
 import { registerCoAgentBrowserHandler } from "@/background/co-agent-browser-handler";
+import { registerViewportCaptureHandler } from "./background/viewport-capture-handler";
 import { openStandalonePage } from "@/utils/open-standalone";
 
 // ── CRITICAL: synchronous setup at module load time ───────────────────────────
@@ -31,6 +32,7 @@ portBridge.initialize({
 registerContextMenuHandler();
 registerWebToolBrowserHandler();
 registerCoAgentBrowserHandler();
+registerViewportCaptureHandler();
 
 registerMessageHandler(() => {
 	// Safe place to verify offscreen is alive (triggered on popup open)

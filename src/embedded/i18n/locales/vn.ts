@@ -93,6 +93,11 @@ export const vnEmbeddedLocale = {
 		smartSelectText: "Text",
 		smartSelectCleanHtml: "Clean HTML",
 		smartSelectHtml: "HTML",
+		smartSelectImage: "Hình ảnh",
+		smartSelectImageCapturing: "Đang chụp…",
+		smartSelectImageFailed: "Không thể chụp vùng này thành hình ảnh.",
+		smartSelectImageNeedsActivation:
+			"Hãy mở Memorall từ menu chuột phải trên trang này trước, rồi chụp.",
 		smartSelectChooseAction: "Chọn hành động",
 		smartSelectStoreToDocument: "Lưu vào tài liệu",
 		smartSelectOpenChat: "Mở trò chuyện",

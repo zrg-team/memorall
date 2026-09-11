@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { createRoot } from "react-dom/client";
-import { captureScreenshotWithFallback } from "../utils/screenshot-helpers";
+import { captureViewport } from "../utils/capture-region";
 import { logWarn } from "@/utils/logger";
 import { useEmbeddedTranslation } from "@/embedded/hooks/use-embedded-language";
 
@@ -28,23 +28,10 @@ const ImageSelectorOverlay: React.FC<ImageSelectorProps> = ({
 	useEffect(() => {
 		const captureScreen = async () => {
 			try {
-				const canvas = await captureScreenshotWithFallback(
-					document.documentElement,
-					{
-						x: window.scrollX,
-						y: window.scrollY,
-						width: window.innerWidth,
-						height: window.innerHeight,
-						windowWidth: window.innerWidth,
-						windowHeight: window.innerHeight,
-						ignoreElements: (element: Element) => {
-							// Skip the overlay itself
-							return element.id === "memorall-image-selector-overlay";
-						},
-					},
-				);
-
-				const base64Image = canvas.toDataURL("image/png");
+				// What the compositor painted, not a re-render of the DOM: the
+				// latter silently drops every cross-origin image, so a map came
+				// back blank.
+				const base64Image = await captureViewport();
 				setCapturedImage(base64Image);
 				setIsCapturing(false);
 			} catch (error) {

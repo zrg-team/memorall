@@ -91,6 +91,11 @@ export const enEmbeddedLocale = {
 		smartSelectText: "Text",
 		smartSelectCleanHtml: "Clean HTML",
 		smartSelectHtml: "HTML",
+		smartSelectImage: "Image",
+		smartSelectImageCapturing: "Capturing…",
+		smartSelectImageFailed: "Could not capture this area as an image.",
+		smartSelectImageNeedsActivation:
+			"Open Memorall from the right-click menu on this page first, then capture.",
 		smartSelectChooseAction: "Choose action",
 		smartSelectStoreToDocument: "Store to document",
 		smartSelectOpenChat: "Open chat",
