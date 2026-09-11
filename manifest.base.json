@@ -17,6 +17,7 @@
   "options_page": "standalone.html",
   "permissions": [
     "activeTab",
+    "scripting",
     "storage",
     "contextMenus",
     "notifications",

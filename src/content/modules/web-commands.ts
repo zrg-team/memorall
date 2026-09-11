@@ -1,3 +1,4 @@
+import { extractReadableDocumentText } from "@/services/web-browser/readable-text";
 import {
 	WEB_CONTENT_COMMAND_SOURCE,
 	type WebContentCommandRequest,
@@ -5,18 +6,52 @@ import {
 	type WebDomActionName,
 	type WebDomElementInfo,
 	type WebElementRecord,
-} from "@/services/web-browser";
-import { extractReadableDocumentText } from "@/services/web-browser/readable-text";
+} from "@/services/web-browser/web-browser-protocol";
 
 // ── Snapshot helpers ──────────────────────────────────────────────────────────
 
-const buildWebSnapshot = () => ({
-	url: window.location.href,
-	title: document.title || "",
-	html: document.documentElement?.outerHTML || document.body?.innerHTML || "",
-	text: extractReadableDocumentText(document),
-	domAccessible: true,
-});
+/**
+ * Hard ceiling on each string a snapshot carries.
+ *
+ * Chrome drops any extension message over 64 MiB, and the sender gets no useful
+ * error for it — the channel just closes, `chrome.tabs.sendMessage` rejects with
+ * "The message port closed before a response was received", and the background
+ * normalises that to "Content script unavailable". So an oversized page reads as
+ * a content script that never loaded, on a page whose script is alive and well.
+ *
+ * A snapshot carries `html` and `text` together and is relayed over two further
+ * hops, so budget each string to well under half the limit. A caller asking for
+ * an unbounded snapshot (the background passes `Number.MAX_SAFE_INTEGER` to mean
+ * "everything") gets everything up to this, rather than a dropped reply.
+ */
+const SNAPSHOT_TRANSPORT_CEILING = 24_000_000;
+
+const TRUNCATION_MARKER = "\n…[truncated by Memorall: snapshot size limit]";
+
+const capSnapshotString = (value: string, limit: number): string =>
+	value.length <= limit ? value : value.slice(0, limit) + TRUNCATION_MARKER;
+
+const snapshotLimit = (maxHtmlChars?: number): number =>
+	typeof maxHtmlChars === "number" && Number.isFinite(maxHtmlChars)
+		? Math.min(
+				Math.max(Math.trunc(maxHtmlChars), 0),
+				SNAPSHOT_TRANSPORT_CEILING,
+			)
+		: SNAPSHOT_TRANSPORT_CEILING;
+
+const buildWebSnapshot = (maxHtmlChars?: number) => {
+	const limit = snapshotLimit(maxHtmlChars);
+	return {
+		url: window.location.href,
+		title: document.title || "",
+		html: capSnapshotString(
+			document.documentElement?.outerHTML || document.body?.innerHTML || "",
+			limit,
+		),
+		text: capSnapshotString(extractReadableDocumentText(document), limit),
+		domAccessible: true,
+	};
+};
 
 // ── DOM element utilities ─────────────────────────────────────────────────────
 
@@ -223,7 +258,7 @@ export const handleWebContentCommand = async (
 					source: WEB_CONTENT_COMMAND_SOURCE,
 					type: "web-tool:snapshot-result",
 					success: true,
-					snapshot: buildWebSnapshot(),
+					snapshot: buildWebSnapshot(request.maxHtmlChars),
 				};
 
 			case "web-tool:dom-query": {
@@ -236,7 +271,7 @@ export const handleWebContentCommand = async (
 					source: WEB_CONTENT_COMMAND_SOURCE,
 					type: "web-tool:dom-query-result",
 					success: true,
-					snapshot: buildWebSnapshot(),
+					snapshot: buildWebSnapshot(request.maxHtmlChars),
 					elements,
 				};
 			}
@@ -247,7 +282,7 @@ export const handleWebContentCommand = async (
 					source: WEB_CONTENT_COMMAND_SOURCE,
 					type: "web-tool:dom-action-result",
 					success: true,
-					snapshot: buildWebSnapshot(),
+					snapshot: buildWebSnapshot(request.maxHtmlChars),
 					result,
 				};
 			}
@@ -262,7 +297,7 @@ export const handleWebContentCommand = async (
 							source: WEB_CONTENT_COMMAND_SOURCE,
 							type: "web-tool:wait-selector-result",
 							success: true,
-							snapshot: buildWebSnapshot(),
+							snapshot: buildWebSnapshot(request.maxHtmlChars),
 							matched: true,
 						};
 					}
@@ -272,7 +307,7 @@ export const handleWebContentCommand = async (
 							source: WEB_CONTENT_COMMAND_SOURCE,
 							type: "web-tool:wait-selector-result",
 							success: true,
-							snapshot: buildWebSnapshot(),
+							snapshot: buildWebSnapshot(request.maxHtmlChars),
 							matched: false,
 						};
 					}

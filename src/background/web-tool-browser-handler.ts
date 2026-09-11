@@ -9,8 +9,13 @@ import {
 	type WebBrowserSurface,
 	type WebContentCommandRequest,
 	type WebContentCommandResponse,
-} from "@/services/web-browser";
+} from "@/services/web-browser/web-browser-protocol";
 import { logError } from "@/utils/logger";
+import {
+	isMissingContentScriptError,
+	registerContentScriptInjectionListeners,
+	reinjectContentScript,
+} from "./content-script-injection";
 
 interface StoredWebBrowserSurface extends WebBrowserSurface {
 	sessionId: string;
@@ -244,14 +249,9 @@ const normalizeContentCommandError = (
 	pageUrl?: string,
 ): string => {
 	const message = toErrorMessage(error);
-	if (
-		message.includes("Receiving end does not exist") ||
-		message.includes("Could not establish connection") ||
-		message.includes("The message port closed before")
-	) {
-		return pageUrl
-			? `Content script unavailable for ${pageUrl}. The page may be restricted or not ready yet.`
-			: "Content script unavailable for this page. The page may be restricted or not ready yet.";
+	if (isMissingContentScriptError(message)) {
+		const target = pageUrl ? ` for ${pageUrl}` : " for this page";
+		return `Content script unavailable${target}, and re-injecting it did not help. The page may be restricted (chrome://, the Web Store, a PDF viewer), or Memorall's site access may be limited to "on click" — set it to "on all sites" in the browser's extension settings.`;
 	}
 	return message;
 };
@@ -288,14 +288,14 @@ const sendContentCommand = async (
 		} catch (error) {
 			lastError = error;
 			const message = toErrorMessage(error);
-			if (
-				!message.includes("Receiving end does not exist") &&
-				!message.includes("Could not establish connection") &&
-				!message.includes("The message port closed before")
-			) {
+			if (!isMissingContentScriptError(message)) {
 				throw new Error(normalizeContentCommandError(error, tab.url));
 			}
 
+			// The tab is loaded but nothing is listening. Retrying alone only helps
+			// if the script is merely late, so put it there ourselves — once per
+			// tab — and let the loop try again.
+			await reinjectContentScript(tabId);
 			await delay(RETRY_INTERVAL_MS);
 		}
 	}
@@ -336,9 +336,7 @@ const openSurfaceForMode = async (
 const isTransientContentScriptError = (error: unknown): boolean => {
 	const message = toErrorMessage(error);
 	return (
-		message.includes("Receiving end does not exist") ||
-		message.includes("Could not establish connection") ||
-		message.includes("The message port closed before") ||
+		isMissingContentScriptError(message) ||
 		message.includes("Content script unavailable")
 	);
 };
@@ -776,6 +774,8 @@ const handleCommand = async (
 };
 
 export function registerWebToolBrowserHandler(): void {
+	registerContentScriptInjectionListeners();
+
 	chrome.runtime.onMessage.addListener((rawMessage, _sender, sendResponse) => {
 		if (!isWebBrowserCommandRequest(rawMessage)) {
 			return false;

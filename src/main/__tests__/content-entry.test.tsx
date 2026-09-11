@@ -76,7 +76,11 @@ vi.mock("@/services/background-jobs/bridges/types", () => ({
 vi.mock("@/content/modules/web-commands", () => ({
 	handleWebContentCommand: mocks.handleWebContentCommand,
 }));
-vi.mock("@/services/web-browser", () => ({
+// The entry deliberately imports the protocol module, not the
+// `@/services/web-browser` barrel — the barrel drags the web session registry
+// and the platform composition into the content bundle, where they evaluate
+// before the message listener is registered.
+vi.mock("@/services/web-browser/web-browser-protocol", () => ({
 	isWebContentCommandRequest: mocks.isWebContentCommandRequest,
 }));
 vi.mock("@/services/co-agent", () => ({
