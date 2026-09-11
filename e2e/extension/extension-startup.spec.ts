@@ -196,12 +196,24 @@ test("content script injects and captures a deterministic page", async () => {
 
 test("background platform APIs, offscreen runtime, and extension storage work", async () => {
 	const marker = `memorall-e2e-${Date.now()}`;
+
+	// The offscreen document is created while the background starts up, so its
+	// absence at any one instant means "not yet", not "broken". Asking once made
+	// this assertion a race the test lost on a slower runner while the same
+	// build passed locally.
+	await expect(async () => {
+		const offscreenUrls = await extensionServiceWorker.evaluate(async () => {
+			const contexts = await chrome.runtime.getContexts({
+				contextTypes: [chrome.runtime.ContextType.OFFSCREEN_DOCUMENT],
+			});
+			return contexts.map((entry) => entry.documentUrl);
+		});
+		expect(offscreenUrls).toContain(`${extensionOrigin}/offscreen.html`);
+	}).toPass({ timeout: 30_000 });
+
 	const platformState = await extensionServiceWorker.evaluate(async (value) => {
 		await chrome.storage.local.set({ memorallE2eMarker: value });
 		const stored = await chrome.storage.local.get("memorallE2eMarker");
-		const offscreenContexts = await chrome.runtime.getContexts({
-			contextTypes: [chrome.runtime.ContextType.OFFSCREEN_DOCUMENT],
-		});
 		await new Promise<void>((resolveUpdate, rejectUpdate) => {
 			chrome.contextMenus.update("save-page", { title: "💾 Save page" }, () => {
 				const message = chrome.runtime.lastError?.message;
@@ -222,15 +234,11 @@ test("background platform APIs, offscreen runtime, and extension storage work", 
 			await chrome.notifications.clear(notificationId);
 		return {
 			stored: stored.memorallE2eMarker,
-			offscreenUrls: offscreenContexts.map((entry) => entry.documentUrl),
 			notificationCleared,
 		};
 	}, marker);
 
 	expect(platformState.stored).toBe(marker);
-	expect(platformState.offscreenUrls).toContain(
-		`${extensionOrigin}/offscreen.html`,
-	);
 	expect(platformState.notificationCleared).toBe(true);
 
 	const page = await context.newPage();

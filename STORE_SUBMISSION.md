@@ -64,14 +64,80 @@ This will create production builds in:
    - Promotional images (optional but recommended)
 
 4. **Privacy & Permissions**
-   - Justify permissions:
-     - `storage`: Save user preferences and knowledge data
-     - `activeTab`: Interact with current webpage
-     - `contextMenus`: Quick access features
-     - `scripting`: Inject content scripts for page analysis
-     - `notifications`: Alert users about important events
-     - `offscreen`: Run background AI/ML tasks
-     - `<all_urls>`: Access web pages for content extraction
+
+   Each permission below needs its own justification field filled in on the
+   **Privacy practices** tab. The store refuses to publish while any is empty,
+   and vague one-liners are a common cause of review rejection — these are
+   written to be pasted as-is.
+
+   **`scripting`**
+   > Memorall re-injects its own content script into a tab that is not
+   > responding. A tab can end up without it for reasons retrying cannot fix:
+   > the user set this extension's site access to "on click", the extension
+   > reloaded while the tab stayed open, or the script failed to load. Every
+   > page feature then fails for the life of that document, on a page that
+   > looks perfectly normal to the user.
+   >
+   > `chrome.scripting.executeScript` is used only to run this extension's own
+   > content script files, read from the manifest's own `content_scripts`
+   > declaration. It never executes remote, arbitrary, or user-supplied code,
+   > and it requests no host access beyond what the manifest already declares.
+   > It runs only for a tab the user has explicitly asked Memorall to act on,
+   > once per document, in the top frame only.
+
+   **`activeTab`**
+   > Reading the page the user is currently on, only when they ask. Every entry
+   > point is an explicit user action: the toolbar icon, a Memorall item in the
+   > right-click menu, or the in-page assistant. It is what lets "save this
+   > page", "ask about this", and region capture see the tab in front of the
+   > user without the extension holding standing access to every site.
+
+   **`storage`**
+   > Saving the user's own data locally: their notes and captured pages, the
+   > knowledge graph built from them, model and provider settings, and UI
+   > preferences such as language and theme. Nothing here is transmitted to us;
+   > the extension has no backend of its own.
+
+   **`contextMenus`**
+   > The right-click entries are the main way Memorall is invoked on a page:
+   > save the page, ask about it, smart select, canvas select. They are also
+   > what grants `activeTab` for that tab, so the feature the user picked can
+   > read the page they picked it on.
+
+   **`notifications`**
+   > Telling the user when long-running local work finishes or fails — a page
+   > finished being converted into the knowledge graph, a model finished
+   > downloading, a background job errored. These run for minutes and the user
+   > is not expected to watch them.
+
+   **`offscreen`**
+   > Running the local AI/ML work and the local database off the service
+   > worker. Embedding generation, local model inference and PGlite need a DOM
+   > and a long-lived context, which a service worker does not provide.
+
+   **`webNavigation`**
+   > Knowing when a tab navigates, so per-document state is discarded at the
+   > right moment: the content-script recovery attempt is reset for the new
+   > document, and page context captured for the old URL is not reused for the
+   > new one.
+
+   **`tabs`**
+   > Addressing the correct tab when the user invokes Memorall, and reading a
+   > tab's URL and title to record what a saved page or a co-agent answer was
+   > about. It is not used to observe browsing in the background.
+
+   **Host permissions** — declared narrowly, and worth saying so explicitly if
+   the reviewer asks about breadth:
+   - `https://huggingface.co/*`, `https://*.huggingface.co/*` — downloading the
+     local embedding/inference models the user chooses to run.
+   - `https://backend.composio.dev/*`, `https://*.composio.dev/*` — the
+     optional Composio tool integration, used only if the user configures it.
+   - `*://*/*.pdf` — reading a PDF the user asks to save, which a content
+     script cannot reach.
+
+   **Content scripts** match `<all_urls>` because the user may ask Memorall
+   about any page they are on. The script is inert until the user invokes a
+   feature; it does not collect or transmit page content on its own.
 
 5. **Distribution**
    - Select visibility: Public / Unlisted / Private
