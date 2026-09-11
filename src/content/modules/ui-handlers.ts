@@ -6,7 +6,7 @@ import {
 	extractViewportContent,
 	extractViewportHTMLStructure,
 	extractFullPageHTMLStructure,
-	createImageSelectorOverlay,
+	createCanvasSelectOverlay,
 } from "@/embedded";
 import { createEmbeddedContextItem } from "@/embedded/context-items";
 import { createEmbeddedChatModal } from "@/embedded/pages/EmbeddedChat";
@@ -244,30 +244,31 @@ export async function handleShowChatModal(
 	}
 }
 
-// ── Image selector ────────────────────────────────────────────────────────────
+// ── Canvas select ─────────────────────────────────────────────────────────────
 
-export function handleShowImageSelector(
+export function handleActivateCanvasSelector(
 	message: BackgroundMessage,
 	sendResponse: (response: MessageResponse) => void,
 ): void {
 	try {
-		document.getElementById("memorall-image-selector-container")?.remove();
-
-		createImageSelectorOverlay(
-			async (selectedImageData) => {
-				document.getElementById("memorall-embedded-chat-modal")?.remove();
+		// The overlay registry evicts whatever is open, so there is nothing to
+		// tear down by hand — and the label the region is attached under is built
+		// by the overlay, which knows its size and the user's language.
+		createCanvasSelectOverlay(
+			(item) => {
+				// Rebuilding the modal discards a conversation already in progress.
+				const existingModal = document.getElementById(
+					"memorall-embedded-chat-modal",
+				);
+				if (existingModal) {
+					existingModal.remove();
+				}
 
 				createEmbeddedChatModal({
 					mode: "general",
 					pageUrl: window.location.href,
 					pageTitle: document.title,
-					contextOptions: [
-						createEmbeddedContextItem({
-							kind: "selected_image",
-							label: "Selected region",
-							content: selectedImageData,
-						}),
-					],
+					contextOptions: [item],
 					onClose: () => {},
 				});
 			},
@@ -279,9 +280,7 @@ export function handleShowImageSelector(
 		sendResponse({
 			success: false,
 			error:
-				error instanceof Error
-					? error.message
-					: "Failed to show image selector",
+				error instanceof Error ? error.message : "Failed to show canvas select",
 		});
 	}
 }

@@ -4,7 +4,7 @@ export const MENU_IDS = {
 	SAVE_DIVIDER: "save-divider",
 	RECALL: "recall",
 	CO_AGENT: "co-agent",
-	RECALL_IMAGE: "recall-image",
+	CANVAS_SELECT: "canvas-select",
 	RECALL_DIVIDER: "recall-divider",
 	START_CAPTURE: "start-capture",
 	STOP_CAPTURE: "stop-capture",

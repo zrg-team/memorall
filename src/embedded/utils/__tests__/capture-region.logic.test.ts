@@ -4,6 +4,7 @@ const sendMessage = vi.fn();
 vi.stubGlobal("chrome", { runtime: { sendMessage } });
 
 import {
+	fitWithinMaxEdge,
 	captureViewport,
 	computeCropBox,
 	RegionCaptureError,
@@ -62,6 +63,35 @@ describe("captureViewport", () => {
 	});
 });
 
+describe("fitWithinMaxEdge", () => {
+	it("leaves a region that is already small enough alone", () => {
+		expect(fitWithinMaxEdge(800, 600, 1568)).toEqual({
+			width: 800,
+			height: 600,
+		});
+	});
+
+	it("never scales a region up to the ceiling", () => {
+		expect(fitWithinMaxEdge(100, 50, 1568)).toEqual({ width: 100, height: 50 });
+	});
+
+	it("scales the long edge down and keeps the shape", () => {
+		// A full-screen drag on a HiDPI 4K display, which is otherwise several
+		// megabytes of base64 carried through the whole conversation.
+		expect(fitWithinMaxEdge(3840, 2160, 1568)).toEqual({
+			width: 1568,
+			height: 882,
+		});
+	});
+
+	it("does nothing without a ceiling", () => {
+		expect(fitWithinMaxEdge(3840, 2160)).toEqual({
+			width: 3840,
+			height: 2160,
+		});
+	});
+});
+
 describe("computeCropBox", () => {
 	const capture = { imageWidth: 2000, imageHeight: 1000, viewportWidth: 1000 };
 
@@ -75,6 +105,19 @@ describe("computeCropBox", () => {
 				rect: { left: 10, top: 20, width: 100, height: 50 },
 			}),
 		).toEqual({ left: 20, top: 40, width: 200, height: 100 });
+	});
+
+	it("handles a fractional scale from a zoomed page", () => {
+		// Browser zoom makes the capture a non-integer multiple of the viewport,
+		// so the crop has to round rather than assume whole pixels.
+		expect(
+			computeCropBox({
+				imageWidth: 1250,
+				imageHeight: 1000,
+				viewportWidth: 1000,
+				rect: { left: 10, top: 20, width: 101, height: 51 },
+			}),
+		).toEqual({ left: 13, top: 25, width: 126, height: 64 });
 	});
 
 	it("never cuts outside the captured image", () => {

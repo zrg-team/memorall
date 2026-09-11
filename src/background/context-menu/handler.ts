@@ -93,7 +93,7 @@ async function handleCoAgent(
 	}
 }
 
-async function handleRecallImage(
+async function handleCanvasSelect(
 	info: chrome.contextMenus.OnClickData,
 	tab: chrome.tabs.Tab,
 ): Promise<void> {
@@ -106,13 +106,16 @@ async function handleRecallImage(
 		}
 
 		const response = await chrome.tabs.sendMessage(tab.id, {
-			type: BACKGROUND_EVENTS.SHOW_IMAGE_SELECTOR,
+			type: BACKGROUND_EVENTS.ACTIVATE_CANVAS_SELECTOR,
 			tabId: tab.id,
 			url: tab.url,
 		});
-		logInfo("📨 Content script response to SHOW_IMAGE_SELECTOR:", response);
+		logInfo(
+			"📨 Content script response to ACTIVATE_CANVAS_SELECTOR:",
+			response,
+		);
 	} catch (error) {
-		logError("❌ Failed to show image selector:", error);
+		logError("❌ Failed to show canvas select:", error);
 	}
 }
 
@@ -329,7 +332,7 @@ export function registerContextMenuHandler(): void {
 		if (id === MENU_IDS.OPEN_DOCUMENTS) return handleOpenDocuments();
 		if (id === MENU_IDS.RECALL) return handleRecall(info, tab);
 		if (id === MENU_IDS.CO_AGENT) return handleCoAgent(info, tab);
-		if (id === MENU_IDS.RECALL_IMAGE) return handleRecallImage(info, tab);
+		if (id === MENU_IDS.CANVAS_SELECT) return handleCanvasSelect(info, tab);
 		if (id === MENU_IDS.START_CAPTURE) return handleStartCapture();
 		if (id === MENU_IDS.STOP_CAPTURE) return handleStopCapture();
 		if (id === MENU_IDS.VIEW_ACTIVITIES) return handleViewActivities();

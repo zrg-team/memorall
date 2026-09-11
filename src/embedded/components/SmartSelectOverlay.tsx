@@ -1,6 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { createRoot } from "react-dom/client";
 import { createEmbeddedContextItem } from "@/embedded/context-items";
+import {
+	getMemorallOverlayContainers,
+	mountExclusiveOverlay,
+	SMART_SELECT_CONTAINER_ID,
+} from "./overlay-registry";
 import {
 	captureElementRegion,
 	RegionCaptureError,
@@ -25,15 +29,10 @@ interface SmartSelectOverlayProps {
 	mode?: "chat" | "standalone";
 }
 
-const SMART_SELECT_CONTAINER_ID = "memorall-smart-select-container";
-let activeOverlayCleanup: (() => void) | null = null;
-
+// The co-agent dock belongs in this list too: leaving it out is what put it
+// inside the images smart select captured.
 const getIgnoredContainers = (): HTMLElement[] =>
-	[
-		document.getElementById("memorall-embedded-chat-modal"),
-		document.getElementById("memorall-image-selector-container"),
-		document.getElementById(SMART_SELECT_CONTAINER_ID),
-	].filter((node): node is HTMLElement => Boolean(node));
+	getMemorallOverlayContainers();
 
 const isIgnoredNode = (target: EventTarget | null): boolean => {
 	if (!(target instanceof Node)) {
@@ -567,73 +566,45 @@ export function createSmartSelectOverlay(
 	onSelectContext: (item: EmbeddedContextItem) => void,
 	onCancel: () => void,
 ): () => void {
-	activeOverlayCleanup?.();
-
-	const container = document.createElement("div");
-	container.id = SMART_SELECT_CONTAINER_ID;
-	document.body.appendChild(container);
-
-	const root = createRoot(container);
-	const cleanup = () => {
-		root.unmount();
-		container.remove();
-		if (activeOverlayCleanup === cleanup) {
-			activeOverlayCleanup = null;
-		}
-	};
-
-	activeOverlayCleanup = cleanup;
-	root.render(
-		<SmartSelectOverlay
-			mode="chat"
-			onSelectContext={(item) => {
-				onSelectContext(item);
-				cleanup();
-			}}
-			onCancel={() => {
-				onCancel();
-				cleanup();
-			}}
-		/>,
-	);
-
-	return cleanup;
+	return mountExclusiveOverlay({
+		containerId: SMART_SELECT_CONTAINER_ID,
+		onDisplaced: onCancel,
+		render: (close) => (
+			<SmartSelectOverlay
+				mode="chat"
+				onSelectContext={(item) => {
+					onSelectContext(item);
+					close();
+				}}
+				onCancel={() => {
+					onCancel();
+					close();
+				}}
+			/>
+		),
+	});
 }
 
 export function createStandaloneSmartSelectOverlay(
 	onAction: (item: EmbeddedContextItem, action: SmartSelectAction) => void,
 	onCancel: () => void,
 ): () => void {
-	activeOverlayCleanup?.();
-
-	const container = document.createElement("div");
-	container.id = SMART_SELECT_CONTAINER_ID;
-	document.body.appendChild(container);
-
-	const root = createRoot(container);
-	const cleanup = () => {
-		root.unmount();
-		container.remove();
-		if (activeOverlayCleanup === cleanup) {
-			activeOverlayCleanup = null;
-		}
-	};
-
-	activeOverlayCleanup = cleanup;
-	root.render(
-		<SmartSelectOverlay
-			mode="standalone"
-			onSelectContext={() => {}}
-			onAction={(item, action) => {
-				onAction(item, action);
-				cleanup();
-			}}
-			onCancel={() => {
-				onCancel();
-				cleanup();
-			}}
-		/>,
-	);
-
-	return cleanup;
+	return mountExclusiveOverlay({
+		containerId: SMART_SELECT_CONTAINER_ID,
+		onDisplaced: onCancel,
+		render: (close) => (
+			<SmartSelectOverlay
+				mode="standalone"
+				onSelectContext={() => {}}
+				onAction={(item, action) => {
+					onAction(item, action);
+					close();
+				}}
+				onCancel={() => {
+					onCancel();
+					close();
+				}}
+			/>
+		),
+	});
 }

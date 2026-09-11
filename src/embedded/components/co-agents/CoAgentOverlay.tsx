@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AgentCursorOverlay, hideAgentCursor } from "@/components/AgentCursor";
 import { BACKGROUND_EVENTS } from "@/constants/events";
 import { embeddedChatHistoryService } from "@/embedded/chat-history-service";
+import { createCanvasSelectOverlay } from "@/embedded/components/CanvasSelectOverlay";
 import { createSmartSelectOverlay } from "@/embedded/components/SmartSelectOverlay";
 import {
 	latestToolName,
@@ -21,6 +22,8 @@ import { CO_AGENT_STATUS_EVENT } from "@/embedded/pages/CoAgent/constants";
 import {
 	COAGENT_SESSION_END,
 	COAGENT_SESSION_START,
+	findOpenCoAgentSession,
+	isCoAgentSessionStale,
 	isCoAgentSessionOpen,
 } from "@/services/chat/coagent-session";
 import {
@@ -162,8 +165,42 @@ export const CoAgentOverlay: React.FC<CoAgentOverlayProps> = ({
 		setIsSmartSelectActive(true);
 	}, [openPromptUi, stopSmartSelect]);
 
+	// Canvas select is the same kind of mode, so it gets the same treatment. The
+	// registry closes whichever overlay was open when the other starts, and calls
+	// the closed one's onCancel — which is what keeps these two flags honest.
+	const canvasSelectCleanupRef = useRef<(() => void) | null>(null);
+	const [isCanvasSelectActive, setIsCanvasSelectActive] = useState(false);
+
+	const stopCanvasSelect = useCallback(() => {
+		canvasSelectCleanupRef.current?.();
+		canvasSelectCleanupRef.current = null;
+		setIsCanvasSelectActive(false);
+	}, []);
+
+	const toggleCanvasSelect = useCallback(() => {
+		if (canvasSelectCleanupRef.current) {
+			stopCanvasSelect();
+			return;
+		}
+		setBubbleDismissed(false);
+		canvasSelectCleanupRef.current = createCanvasSelectOverlay(
+			(item) => {
+				canvasSelectCleanupRef.current = null;
+				setIsCanvasSelectActive(false);
+				setAttachedSelection(item);
+				openPromptUi();
+			},
+			() => {
+				canvasSelectCleanupRef.current = null;
+				setIsCanvasSelectActive(false);
+			},
+		);
+		setIsCanvasSelectActive(true);
+	}, [openPromptUi, stopCanvasSelect]);
+
 	// Leaving the page, or turning the co-agent off, must not strand the picker.
 	useEffect(() => stopSmartSelect, [stopSmartSelect]);
+	useEffect(() => stopCanvasSelect, [stopCanvasSelect]);
 
 	const showAnchorTrigger =
 		Boolean(freshAnchor && !freshAnchor.isStale) &&
@@ -384,9 +421,24 @@ ${text}`
 			// appears: a session the user never used is not worth marking.
 			try {
 				const existing = await embeddedChatHistoryService.loadMessages();
-				if (!isCoAgentSessionOpen(existing)) {
+				const pageUrl = window.location.href;
+				const open = findOpenCoAgentSession(existing);
+				if (!open) {
 					await embeddedChatHistoryService.insertCoAgentMarker(
 						COAGENT_SESSION_START,
+						pageUrl,
+					);
+				} else if (isCoAgentSessionStale(existing, Date.now())) {
+					// Closing the tab writes no end marker, so a session opened once
+					// would stay open for ever and leave every later visit unmarked.
+					// A session still spans navigation — following a trail across
+					// pages is the point — so only an idle gap ends one here.
+					await embeddedChatHistoryService.insertCoAgentMarker(
+						COAGENT_SESSION_END,
+					);
+					await embeddedChatHistoryService.insertCoAgentMarker(
+						COAGENT_SESSION_START,
+						pageUrl,
 					);
 				}
 			} catch {
@@ -544,6 +596,10 @@ ${text}`
 					anchor={freshAnchor}
 					onAskAboutThis={() => openPrompt(freshAnchor)}
 					onAsk={openPromptWithoutAnchor}
+					onSmartSelect={toggleSmartSelect}
+					onCanvasSelect={toggleCanvasSelect}
+					isSmartSelectActive={isSmartSelectActive}
+					isCanvasSelectActive={isCanvasSelectActive}
 				/>
 			) : null}
 			{!chatPopupOpen && !externalChatModalOpen ? (
@@ -568,6 +624,8 @@ ${text}`
 					openuiTheme={answeringAgentTheme}
 					onSmartSelect={toggleSmartSelect}
 					isSmartSelectActive={isSmartSelectActive}
+					onCanvasSelect={toggleCanvasSelect}
+					isCanvasSelectActive={isCanvasSelectActive}
 					onExpand={() => setCollapsed(false)}
 					onOpenPrompt={() => openPrompt(freshAnchor)}
 					onClosePrompt={() => setAnchorPromptOpen(false)}

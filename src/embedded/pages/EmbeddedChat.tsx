@@ -16,7 +16,10 @@ import { useEmbeddedContextAttachments } from "@/embedded/hooks/use-embedded-con
 import { useEmbeddedCustomOptions } from "@/embedded/hooks/use-embedded-custom-options";
 import { useEmbeddedTranslation } from "@/embedded/hooks/use-embedded-language";
 import { useEmbeddedModelStatus } from "@/embedded/hooks/use-embedded-model-status";
-import { useEmbeddedSmartSelect } from "@/embedded/hooks/use-embedded-smart-select";
+import {
+	useEmbeddedCanvasSelect,
+	useEmbeddedSmartSelect,
+} from "@/embedded/hooks/use-embedded-overlay-select";
 import { customStyles } from "@/embedded/styles/customStyles";
 import type { ChatModalProps } from "@/embedded/types";
 import { createShadowPage } from "@/embedded/utils/create-shadow-page";
@@ -168,6 +171,14 @@ const EmbeddedChat: React.FC<ChatModalProps> = ({
 			onAttachContext: attachSmartContext,
 			onSelected: () => setShowContextSection(false),
 		});
+	const { isCanvasSelectMode, startCanvasSelect, cancelCanvasSelect } =
+		useEmbeddedCanvasSelect({
+			onAttachContext: attachSmartContext,
+			onSelected: () => setShowContextSection(false),
+		});
+	// Either picker covers the page, so the panel steps aside for both.
+	const isPickingFromPage = isSmartSelectMode || isCanvasSelectMode;
+	const tCanvasSelect = useEmbeddedTranslation("canvasSelect");
 
 	useEffect(() => {
 		if (shouldAutoScroll) {
@@ -360,7 +371,7 @@ const EmbeddedChat: React.FC<ChatModalProps> = ({
 			) : (
 				<div
 					className={`memorall-chat-shell memorall-chat-shell--${currentDisplayMode} ${
-						isSmartSelectMode ? "memorall-chat-shell--smart" : ""
+						isPickingFromPage ? "memorall-chat-shell--smart" : ""
 					}`}
 					onClick={(event) => event.stopPropagation()}
 					onKeyDown={(event) => event.stopPropagation()}
@@ -382,8 +393,16 @@ const EmbeddedChat: React.FC<ChatModalProps> = ({
 						modelAvailable={modelAvailable}
 					/>
 
-					{isSmartSelectMode ? (
-						<EmbeddedSmartSelectNotice onCancel={cancelSmartSelect} />
+					{isPickingFromPage ? (
+						<EmbeddedSmartSelectNotice
+							onCancel={
+								isCanvasSelectMode ? cancelCanvasSelect : cancelSmartSelect
+							}
+							title={isCanvasSelectMode ? tContext("canvasSelect") : undefined}
+							instruction={
+								isCanvasSelectMode ? tCanvasSelect("instruction") : undefined
+							}
+						/>
 					) : (
 						<EmbeddedChatConversation
 							conversationRef={conversationRef}
@@ -408,7 +427,7 @@ const EmbeddedChat: React.FC<ChatModalProps> = ({
 
 					{/* Stays reachable once something is attached: the picker is now the
 					    only way back to Smart Select and the other context kinds. */}
-					{!isSmartSelectMode && !showContextSection && (
+					{!isPickingFromPage && !showContextSection && (
 						<EmbeddedContextRevealButton
 							label={tChat("context")}
 							smartSelectLabel={tContext("smartSelect")}
@@ -417,7 +436,7 @@ const EmbeddedChat: React.FC<ChatModalProps> = ({
 						/>
 					)}
 
-					{!isSmartSelectMode && (
+					{!isPickingFromPage && (
 						<div
 							className="overflow-hidden transition-all duration-300 ease-in-out"
 							style={{
@@ -435,13 +454,14 @@ const EmbeddedChat: React.FC<ChatModalProps> = ({
 								onRemoveAttachedContext={removeAttachedContext}
 								onClearAttachedContexts={clearAttachedContexts}
 								onStartSmartSelect={startSmartSelect}
+								onStartCanvasSelect={startCanvasSelect}
 								showContextSection={showContextSection}
 								onToggleContextSection={toggleContextSection}
 							/>
 						</div>
 					)}
 
-					{!isSmartSelectMode && (
+					{!isPickingFromPage && (
 						<EmbeddedChatInput
 							inputValue={inputValue}
 							setInputValue={setInputValue}

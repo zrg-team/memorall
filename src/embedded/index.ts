@@ -6,7 +6,7 @@ export * from "./messaging";
 // Component creators
 export { createEmbeddedTopicSelector } from "./pages/TopicSelector";
 export { createEmbeddedChatModal } from "./pages/EmbeddedChat";
-export { createImageSelectorOverlay } from "./components/ImageSelectorOverlay";
+export { createCanvasSelectOverlay } from "./components/CanvasSelectOverlay";
 
 // Re-export default components
 export { default as TopicSelector } from "./pages/TopicSelector";

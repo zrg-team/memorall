@@ -84,6 +84,7 @@ export const enEmbeddedLocale = {
 		charCount: "{count} chars",
 		removeAttachment: "Remove attachment",
 		smartSelect: "Smart Select",
+		canvasSelect: "Canvas Select",
 		smartSelectInstruction:
 			"Hover the page, click an element, then choose Text, Clean HTML, or HTML. Press ESC to cancel.",
 		smartSelectCancel: "Cancel",
@@ -139,6 +140,7 @@ export const enEmbeddedLocale = {
 		defaultAgent: "Default agent",
 		finishedNoAnswer: "Finished — no answer text was returned.",
 		smartSelect: "Smart Select",
+		canvasSelect: "Canvas Select",
 		anchorAskAboutThis: "Ask about this",
 		anchorAskTitle: "Ask without attaching this element",
 		removeAttachedElement: "Remove attached element",
@@ -178,11 +180,16 @@ export const enEmbeddedLocale = {
 		idleHintAct:
 			"I can point, scroll, click safe targets, and type with approval.",
 	},
-	imageSelector: {
+	canvasSelect: {
 		capturingPage: "Capturing page...",
 		capturedPageAlt: "Captured page",
-		instruction: "Drag to select a region of the image • Press ESC to cancel",
+		instruction: "Drag anywhere to capture that area • Press ESC to cancel",
 		cancel: "Cancel",
+		tooSmall: "Too small",
+		attachmentLabel: "Region {width}×{height}",
+		failed: "Could not capture this area as an image.",
+		needsActivation:
+			"Open Memorall from the right-click menu on this page first, then capture.",
 	},
 	messageContent: {
 		openUINotice: "This response contains an interactive visualization",

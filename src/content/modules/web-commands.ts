@@ -18,10 +18,11 @@ import {
  * Hard ceiling on each string a snapshot carries.
  *
  * Chrome drops any extension message over 64 MiB, and the sender gets no useful
- * error for it — the channel just closes, `chrome.tabs.sendMessage` rejects with
- * "The message port closed before a response was received", and the background
- * normalises that to "Content script unavailable". So an oversized page reads as
- * a content script that never loaded, on a page whose script is alive and well.
+ * error for it — the channel just closes, the tabs sendMessage call rejects
+ * with "The message port closed before a response was received", and the
+ * background normalises that to "Content script unavailable". So an oversized
+ * page reads as a content script that never loaded, on a page whose script is
+ * alive and well.
  *
  * A snapshot carries `html` and `text` together and is relayed over two further
  * hops, so budget each string to well under half the limit. A caller asking for
@@ -326,7 +327,7 @@ export const handleWebContentCommand = async (
 			}
 
 			case "web-tool:open-image-tab": {
-				// Must happen here rather than through chrome.tabs.create: a tab the
+				// Must happen here rather than through the extension tabs API: a tab the
 				// extension opens carries no Referer, so a host with hotlink
 				// protection refuses the navigation. Opened by the page, the request
 				// carries that page's Referer and is served.

@@ -123,9 +123,36 @@ export const computeCropBox = ({
 	};
 };
 
+/**
+ * How far a captured region is scaled down before it is attached.
+ *
+ * A full-viewport drag on a HiDPI 4K display is several megabytes of base64
+ * that then rides along in every turn of the conversation. Models do not read
+ * more detail than this anyway, so the ceiling costs nothing legible.
+ */
+export const DEFAULT_MAX_CAPTURE_EDGE = 1568;
+
+/** The size to draw a crop at, never scaling it up. */
+export const fitWithinMaxEdge = (
+	width: number,
+	height: number,
+	maxEdge?: number,
+): { width: number; height: number } => {
+	const longest = Math.max(width, height);
+	if (!maxEdge || longest <= maxEdge) {
+		return { width, height };
+	}
+	const scale = maxEdge / longest;
+	return {
+		width: Math.max(1, Math.round(width * scale)),
+		height: Math.max(1, Math.round(height * scale)),
+	};
+};
+
 export const cropCapture = async (
 	dataUrl: string,
 	rect: RegionRect,
+	options: { maxEdge?: number } = {},
 ): Promise<CapturedRegion> => {
 	const image = await loadImage(dataUrl);
 	const { left, top, width, height } = computeCropBox({
@@ -134,17 +161,32 @@ export const cropCapture = async (
 		viewportWidth: window.innerWidth,
 		rect,
 	});
+	const target = fitWithinMaxEdge(width, height, options.maxEdge);
 
 	const canvas = document.createElement("canvas");
-	canvas.width = width;
-	canvas.height = height;
+	canvas.width = target.width;
+	canvas.height = target.height;
 	const context = canvas.getContext("2d");
 	if (!context) {
 		throw new RegionCaptureError("The image could not be cropped.", false);
 	}
-	context.drawImage(image, left, top, width, height, 0, 0, width, height);
+	context.drawImage(
+		image,
+		left,
+		top,
+		width,
+		height,
+		0,
+		0,
+		target.width,
+		target.height,
+	);
 
-	return { dataUrl: canvas.toDataURL("image/png"), width, height };
+	return {
+		dataUrl: canvas.toDataURL("image/png"),
+		width: target.width,
+		height: target.height,
+	};
 };
 
 const nextFrame = (): Promise<void> =>

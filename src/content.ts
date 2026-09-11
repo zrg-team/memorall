@@ -181,10 +181,12 @@ const messageListener = (
 				.catch(reportUnavailable(sendResponse, "the co-agent"));
 			return true;
 
-		case BACKGROUND_EVENTS.SHOW_IMAGE_SELECTOR:
+		case BACKGROUND_EVENTS.ACTIVATE_CANVAS_SELECTOR:
 			void loadUiHandlers()
-				.then((module) => module.handleShowImageSelector(message, sendResponse))
-				.catch(reportUnavailable(sendResponse, "the image selector"));
+				.then((module) =>
+					module.handleActivateCanvasSelector(message, sendResponse),
+				)
+				.catch(reportUnavailable(sendResponse, "canvas select"));
 			return true;
 
 		case BACKGROUND_EVENTS.ACTIVATE_SMART_SELECTOR:
