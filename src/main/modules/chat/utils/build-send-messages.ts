@@ -1,3 +1,4 @@
+import { isNonModelMessageType } from "@/services/chat/coagent-session";
 import type { ChatMessage, ChatCompletionContentPart } from "@/types/openai";
 import type { ComplexContent, MessageParts } from "@/types/chat";
 import type { Message } from "@/services/database";
@@ -103,7 +104,9 @@ async function buildUserContent(
 export async function buildSendMessages(
 	relevantMessages: Message[],
 ): Promise<ChatMessage[]> {
-	const filtered = relevantMessages.filter((msg) => msg.type !== "separator");
+	const filtered = relevantMessages.filter(
+		(msg) => !isNonModelMessageType(msg.type),
+	);
 	const built: ChatMessage[] = [];
 
 	for (const msg of filtered) {

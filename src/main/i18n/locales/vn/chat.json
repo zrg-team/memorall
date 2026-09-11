@@ -169,7 +169,9 @@
 		"stop": "Dừng",
 		"retry": "Thử lại",
 		"empty": "Chưa có tin nhắn nào. Bắt đầu cuộc trò chuyện!",
-		"count": "{{count}} tin nhắn"
+		"count": "{{count}} tin nhắn",
+		"coAgentSessionStart": "Bắt đầu phiên co-agent",
+		"coAgentSessionEnd": "Kết thúc phiên co-agent"
 	},
 	"execution": {
 		"default": "Đang thực thi {{node}}",

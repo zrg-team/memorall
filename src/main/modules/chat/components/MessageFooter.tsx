@@ -1,3 +1,4 @@
+import { isNonModelMessageType } from "@/services/chat/coagent-session";
 import dayjs from "dayjs";
 import {
 	Box,
@@ -189,7 +190,7 @@ export const MessageFooter: React.FC<MessageFooterProps> = React.memo(
 
 		const documentContent = useMemo(() => {
 			const conversationText = groupMessages
-				.filter((msg) => msg.type !== "separator" && msg.content)
+				.filter((msg) => !isNonModelMessageType(msg.type) && msg.content)
 				.map((msg) => {
 					const role = msg.role === "user" ? "User" : "Assistant";
 					return `${role}: ${msg.content}`;

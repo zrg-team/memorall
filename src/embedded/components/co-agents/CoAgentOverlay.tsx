@@ -19,6 +19,11 @@ import { useEmbeddedModelStatus } from "@/embedded/hooks/use-embedded-model-stat
 import { coAgentChatService } from "@/embedded/pages/CoAgent/co-agent-chat";
 import { CO_AGENT_STATUS_EVENT } from "@/embedded/pages/CoAgent/constants";
 import {
+	COAGENT_SESSION_END,
+	COAGENT_SESSION_START,
+	isCoAgentSessionOpen,
+} from "@/services/chat/coagent-session";
+import {
 	createEmbeddedChatModal,
 	EMBEDDED_CHAT_MODAL_STATE_EVENT,
 } from "@/embedded/pages/EmbeddedChat";
@@ -228,6 +233,11 @@ export const CoAgentOverlay: React.FC<CoAgentOverlayProps> = ({
 	}, [anchorPromptOpen]);
 
 	const leaveCoAgentMode = () => {
+		// Close the session in the transcript before the dock goes away, so the
+		// reader can see where the page turns stopped.
+		void embeddedChatHistoryService
+			.insertCoAgentMarker(COAGENT_SESSION_END)
+			.catch(() => {});
 		void chrome.runtime.sendMessage({ type: BACKGROUND_EVENTS.HIDE_CO_AGENT });
 		onDestroy();
 	};
@@ -368,6 +378,19 @@ ${text}`
 		const startTime = Date.now();
 
 		try {
+			// Opened lazily on the first question rather than when the dock
+			// appears: a session the user never used is not worth marking.
+			try {
+				const existing = await embeddedChatHistoryService.loadMessages();
+				if (!isCoAgentSessionOpen(existing)) {
+					await embeddedChatHistoryService.insertCoAgentMarker(
+						COAGENT_SESSION_START,
+					);
+				}
+			} catch {
+				// A missing marker costs a visual cue, not the answer.
+			}
+
 			await embeddedChatHistoryService.addMessage({
 				role: "user",
 				content: prompt,

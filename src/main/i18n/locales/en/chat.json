@@ -169,7 +169,9 @@
 		"stop": "Stop",
 		"retry": "Retry",
 		"empty": "No messages yet. Start a conversation!",
-		"count": "{{count}} messages"
+		"count": "{{count}} messages",
+		"coAgentSessionStart": "Co-agent session started",
+		"coAgentSessionEnd": "Co-agent session ended"
 	},
 	"execution": {
 		"default": "Executing {{node}}",

@@ -1,3 +1,4 @@
+import type { CoAgentSessionMarkerType } from "@/services/chat/coagent-session";
 import { and, asc, desc, eq, gt, ne } from "drizzle-orm";
 import { serviceManager } from "@/services";
 import { v4 } from "@/utils/uuid";
@@ -32,7 +33,11 @@ export type EmbeddedChatHistoryPayload =
 			id: string;
 			message: Partial<StoredMessageInput>;
 	  }
-	| { operation: "insert-separator" };
+	| { operation: "insert-separator" }
+	| {
+			operation: "insert-coagent-marker";
+			marker: CoAgentSessionMarkerType;
+	  };
 
 export interface EmbeddedChatHistoryResult extends Record<string, unknown> {
 	conversationId?: string;
@@ -187,6 +192,23 @@ class EmbeddedChatHistoryHandler implements ProcessHandler<BaseJob> {
 				return {
 					conversationId: conversation.id,
 					message: await finalizeMessage(payload.id, payload.message),
+				} satisfies EmbeddedChatHistoryResult;
+
+			case "insert-coagent-marker":
+				// Visual only: the agent reads straight through these, so they carry
+				// no content worth sending and are filtered before a run.
+				await addMessage(
+					conversation.id,
+					{
+						role: "system",
+						content: "",
+						createdAt: new Date(),
+						metadata: { source: "co-agent" },
+					},
+					payload.marker,
+				);
+				return {
+					conversationId: conversation.id,
 				} satisfies EmbeddedChatHistoryResult;
 
 			case "insert-separator":

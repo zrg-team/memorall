@@ -1,3 +1,8 @@
+import {
+	COAGENT_SESSION_START,
+	isCoAgentSessionMarker,
+} from "@/services/chat/coagent-session";
+import { Bot } from "lucide-react";
 import React, { Suspense, useMemo } from "react";
 import { useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
@@ -193,6 +198,27 @@ export const MessageRenderer: React.FC<MessageRendererProps> = React.memo(
 			}
 			return t("execution.default", { node: executionLabel });
 		}, [executeState, executionLabel, t]);
+
+		if (isCoAgentSessionMarker(message.type)) {
+			const isStart = message.type === COAGENT_SESSION_START;
+			return (
+				<div key={message.id} className="my-3 flex items-center gap-3">
+					<div className="h-px flex-1 bg-primary/25" />
+					<div className="inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/5 px-2.5 py-1 text-[11px] font-medium text-primary/90">
+						<Bot className="h-3 w-3" />
+						{isStart
+							? t("messages.coAgentSessionStart", {
+									defaultValue: "Co-agent session started",
+								})
+							: t("messages.coAgentSessionEnd", {
+									defaultValue: "Co-agent session ended",
+								})}
+						<span className="font-normal text-primary/60">{formattedDate}</span>
+					</div>
+					<div className="h-px flex-1 bg-primary/25" />
+				</div>
+			);
+		}
 
 		if (message.type === "separator") {
 			return (

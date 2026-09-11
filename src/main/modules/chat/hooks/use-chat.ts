@@ -1,3 +1,8 @@
+import {
+	COAGENT_SESSION_END,
+	isNonModelMessageType,
+	shouldCloseCoAgentSession,
+} from "@/services/chat/coagent-session";
 import { useEffect, useState } from "react";
 import { chatService } from "@/main/modules/chat/services/chat-service";
 import { getAgentOpenUITheme } from "@/main/modules/chat/utils/agent-openui-theme";
@@ -203,7 +208,7 @@ export const useChat = (model: string) => {
 
 		// Find the last user or assistant message (skip separators)
 		const lastMessage = messages
-			.filter((msg) => msg.type !== "separator")
+			.filter((msg) => !isNonModelMessageType(msg.type))
 			.findLast((msg) => msg.role === "user" || msg.role === "assistant");
 
 		if (lastMessage?.topicId) {
@@ -367,6 +372,17 @@ export const useChat = (model: string) => {
 					{ type: "text" as const, text: effectiveMessageContent },
 					...imageParts,
 				];
+			}
+
+			// The user may walk away from the page rather than pressing exit, so a
+			// message typed here is what closes a session left open.
+			if (shouldCloseCoAgentSession(messages)) {
+				await addMessage({
+					role: "system",
+					content: "",
+					type: COAGENT_SESSION_END,
+					createdAt: new Date(),
+				});
 			}
 
 			// Add user message to store and database
