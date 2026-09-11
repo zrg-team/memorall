@@ -1,6 +1,13 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { backgroundJob } from "@/services/background-jobs/background-job";
 import { logError } from "@/utils/logger";
+import {
+	CO_AGENT_DEFAULT_FLOW_ID,
+	getSelectedAgentFlowId,
+	loadSelectedAgentFlowId,
+	setSelectedAgentFlowId as persistSelectedAgentFlowId,
+	subscribeToSelectedAgentFlowId,
+} from "./selected-agent-flow";
 
 export interface EmbeddedSelectOption {
 	id: string;
@@ -12,8 +19,23 @@ export const useEmbeddedCustomOptions = () => {
 	const [agentFlows, setAgentFlows] = useState<EmbeddedSelectOption[]>([]);
 	const [selectedTopic, setSelectedTopic] = useState<string>("");
 	const [topicsLoading, setTopicsLoading] = useState(true);
-	const [selectedAgentFlowId, setSelectedAgentFlowId] =
-		useState<string>("chat");
+	// Shared across the dock and the panel and remembered between pages; see
+	// ./selected-agent-flow.
+	const [selectedAgentFlowId, setSelectedAgentFlowIdState] = useState<string>(
+		() => getSelectedAgentFlowId(),
+	);
+
+	useEffect(() => {
+		const unsubscribe = subscribeToSelectedAgentFlowId(
+			setSelectedAgentFlowIdState,
+		);
+		void loadSelectedAgentFlowId().then(setSelectedAgentFlowIdState);
+		return unsubscribe;
+	}, []);
+
+	const setSelectedAgentFlowId = useCallback((flowId: string) => {
+		persistSelectedAgentFlowId(flowId);
+	}, []);
 
 	useEffect(() => {
 		const loadTopics = async () => {
@@ -76,11 +98,17 @@ export const useEmbeddedCustomOptions = () => {
 				) {
 					const flowList = jobResult.result.flows;
 					if (Array.isArray(flowList)) {
-						const flows = flowList as EmbeddedSelectOption[];
+						// The built-in entry leads: it is the plain co-agent, and the
+						// only way to ask for the stock foundation agent. Auto-selecting
+						// the most recently edited agent instead is what made a
+						// deliberate choice look ignored.
+						const flows: EmbeddedSelectOption[] = [
+							{ id: CO_AGENT_DEFAULT_FLOW_ID, name: "CoAgent" },
+							...(flowList as EmbeddedSelectOption[]).filter(
+								(flow) => flow.id !== CO_AGENT_DEFAULT_FLOW_ID,
+							),
+						];
 						setAgentFlows(flows);
-						if (flows.length > 0) {
-							setSelectedAgentFlowId(flows[0].id);
-						}
 					}
 				}
 			} catch (error) {

@@ -1,6 +1,6 @@
 import type React from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AgentCursorOverlay } from "@/components/AgentCursor";
+import { AgentCursorOverlay, hideAgentCursor } from "@/components/AgentCursor";
 import { BACKGROUND_EVENTS } from "@/constants/events";
 import { embeddedChatHistoryService } from "@/embedded/chat-history-service";
 import { createSmartSelectOverlay } from "@/embedded/components/SmartSelectOverlay";
@@ -422,8 +422,16 @@ ${text}`
 				// The dock response is still useful even if history persistence fails.
 			}
 			setIsSubmitting(false);
+			// The cursor is a progress indicator, not a decoration. co_agent_move
+			// leaves it wherever it last pointed, so without this it sits on the
+			// page long after the run that put it there has finished.
+			hideAgentCursor();
 		}
 	};
+
+	// Turning the co-agent off, or leaving the page, must not leave a cursor
+	// pointing at something nothing is working on any more.
+	useEffect(() => hideAgentCursor, []);
 
 	return (
 		<>
