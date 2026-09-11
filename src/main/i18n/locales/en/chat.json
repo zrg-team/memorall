@@ -134,7 +134,12 @@
 		"quick_knowledge_retrieval": "Quick Knowledge Retrieval",
 		"container_web_access": "Web Access",
 		"web_access": "Web Access",
-		"web access": "Web Access"
+		"web access": "Web Access",
+		"memory_remember": "Remember",
+		"memory_retrieve": "Search Memory",
+		"memory_update": "Update Memory",
+		"memory_remove": "Forget Memory",
+		"memory_explain_source": "Explain Memory"
 	},
 	"messages": {
 		"assistant": "Assistant",
@@ -359,7 +364,8 @@
 		"agentSettings": "Agent settings",
 		"splitChat": "Split chat — the agent starts fresh from here and can still search everything above",
 		"expandChatWidth": "Expand chat to full width",
-		"constrainChatWidth": "Constrain chat width"
+		"constrainChatWidth": "Constrain chat width",
+		"startCoAgent": "Co-agent on the current tab"
 	},
 	"agentSettings": {
 		"title": "Agent Settings",
@@ -464,5 +470,9 @@
 		"reloadCleared": "The page loaded. Continuing where the agent left off.",
 		"stopWaiting": "Stop waiting",
 		"expired": "This request expired. The agent has already moved on."
+	},
+	"coAgent": {
+		"openLink": "Co-agent on {{host}}",
+		"openLinkTitle": "Open {{url}} and turn on the co-agent"
 	}
 }

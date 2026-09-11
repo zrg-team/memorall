@@ -4,6 +4,7 @@ import {
 	screen,
 	within,
 } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import type { ReactElement } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@/main/components/ui/tooltip";
@@ -122,20 +123,12 @@ describe("ChatInputControls layout", () => {
 });
 
 describe("ChatInputControls folding", () => {
-	it("keeps split chat on the bar at every width", () => {
-		for (const isNarrow of [false, true]) {
-			const { container } = render(
-				<ChatInputControls {...props({ isNarrow })} />,
-			);
-			expect(
-				within(container).getByRole("button", { name: "tooltips.splitChat" }),
-			).toBeTruthy();
-		}
-	});
-
-	it("shows the view controls inline when there is room", () => {
+	it("shows every right-hand control inline when there is room", () => {
 		render(<ChatInputControls {...props({ isNarrow: false })} />);
 
+		expect(
+			screen.getByRole("button", { name: "tooltips.splitChat" }),
+		).toBeTruthy();
 		expect(
 			screen.getByRole("button", { name: "tooltips.expandChatWidth" }),
 		).toBeTruthy();
@@ -144,18 +137,73 @@ describe("ChatInputControls folding", () => {
 		).toBeTruthy();
 	});
 
-	it("folds the view controls away when the composer is narrow", () => {
+	it("folds every right-hand control into the overflow menu when narrow", () => {
+		// At small widths the bar cannot show them all, so the row keeps only the
+		// overflow trigger and submit and the rest move under "...".
 		render(<ChatInputControls {...props({ isNarrow: true })} />);
 
+		expect(
+			screen.queryByRole("button", { name: "tooltips.splitChat" }),
+		).toBeNull();
 		expect(
 			screen.queryByRole("button", { name: "tooltips.expandChatWidth" }),
 		).toBeNull();
 		expect(
 			screen.queryByRole("button", { name: "tooltips.agentSettings" }),
 		).toBeNull();
-		// The overflow menu is where they go; it is always present.
 		expect(
 			screen.getByRole("button", { name: "tooltips.moreActions" }),
 		).toBeTruthy();
+	});
+});
+
+describe("ChatInputControls co-agent", () => {
+	it("offers the co-agent beside attach when the surface supports it", async () => {
+		const onStartCoAgent = vi.fn();
+		const { container } = render(
+			<ChatInputControls {...props({ onStartCoAgent })} />,
+		);
+
+		const button = within(container).getByRole("button", {
+			name: "tooltips.startCoAgent",
+		});
+		await userEvent.click(button);
+		expect(onStartCoAgent).toHaveBeenCalledTimes(1);
+	});
+
+	it("sits immediately after the attach control", () => {
+		const { container } = render(
+			<ChatInputControls {...props({ onStartCoAgent: vi.fn() })} />,
+		);
+
+		const tools = container.querySelectorAll('[class*="flex-nowrap"] > *');
+		// Attach dropdown, then the co-agent button, then the agent/memory chip.
+		expect(tools.length).toBeGreaterThanOrEqual(3);
+		expect(tools[1]?.textContent ?? "").toBe("");
+		expect((tools[1] as HTMLElement).querySelector(".animate-spin")).toBeNull();
+	});
+
+	it("omits the button entirely where no browser tab can be driven", () => {
+		const { container } = render(<ChatInputControls {...props()} />);
+
+		expect(
+			within(container).queryByRole("button", {
+				name: "tooltips.startCoAgent",
+			}),
+		).toBeNull();
+	});
+
+	it("disables and spins while a tab is being opened", () => {
+		const { container } = render(
+			<ChatInputControls
+				{...props({ onStartCoAgent: vi.fn(), isCoAgentStarting: true })}
+			/>,
+		);
+
+		const button = within(container).getByRole("button", {
+			name: "tooltips.startCoAgent",
+		});
+		expect(button).toBeDisabled();
+		expect(button.querySelector(".animate-spin")).not.toBeNull();
 	});
 });
