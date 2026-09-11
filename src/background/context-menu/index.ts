@@ -12,6 +12,7 @@ type MenuTexts = {
 	recall: string;
 	coAgent: string;
 	smartSelector: string;
+	canvasSelect: string;
 	openPlatform: string;
 	openDocuments: string;
 };
@@ -23,6 +24,7 @@ const TEXTS: Record<Language, MenuTexts> = {
 		recall: "💬 Ask about this page",
 		coAgent: "🤖 Co-agent",
 		smartSelector: "🎯 Smart Selector",
+		canvasSelect: "⬚ Canvas Select",
 		openPlatform: "🚀 Open platform",
 		openDocuments: "📄 Open documents",
 	},
@@ -32,6 +34,7 @@ const TEXTS: Record<Language, MenuTexts> = {
 		recall: "💬 Hỏi về trang này",
 		coAgent: "🤖 Co-agent",
 		smartSelector: "🎯 Chọn thông minh",
+		canvasSelect: "⬚ Chọn vùng",
 		openPlatform: "🚀 Mở nền tảng",
 		openDocuments: "📄 Mở tài liệu",
 	},
@@ -69,6 +72,11 @@ function getMenuDefinitions(
 		{
 			id: MENU_IDS.SMART_SELECTOR,
 			title: t.smartSelector,
+			contexts: ["page", "selection"],
+		},
+		{
+			id: MENU_IDS.CANVAS_SELECT,
+			title: t.canvasSelect,
 			contexts: ["page", "selection"],
 		},
 		{
@@ -148,6 +156,9 @@ export async function updateContextMenuText(language: Language): Promise<void> {
 		await chrome.contextMenus.update(MENU_IDS.CO_AGENT, { title: t.coAgent });
 		await chrome.contextMenus.update(MENU_IDS.SMART_SELECTOR, {
 			title: t.smartSelector,
+		});
+		await chrome.contextMenus.update(MENU_IDS.CANVAS_SELECT, {
+			title: t.canvasSelect,
 		});
 		await chrome.contextMenus.update(MENU_IDS.OPEN_PLATFORM, {
 			title: t.openPlatform,

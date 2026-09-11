@@ -11,6 +11,11 @@ import {
 	type CoAgentContentCommandRequest,
 	type CoAgentContentCommandResponse,
 } from "@/services/co-agent";
+import {
+	isMissingContentScriptError,
+	registerContentScriptInjectionListeners,
+	reinjectContentScript,
+} from "./content-script-injection";
 
 const DEFAULT_TIMEOUT_MS = 8_000;
 const RESTORE_RETRY_DELAYS_MS = [120, 450, 1_000] as const;
@@ -85,7 +90,7 @@ const setActiveSession = async (
 	});
 };
 
-const sendShowCoAgent = async (tabId: number): Promise<void> => {
+const postShowCoAgent = async (tabId: number): Promise<void> => {
 	const tab = await chrome.tabs.get(tabId).catch(() => null);
 	await chrome.tabs.sendMessage(tabId, {
 		type: BACKGROUND_EVENTS.SHOW_CO_AGENT,
@@ -95,6 +100,18 @@ const sendShowCoAgent = async (tabId: number): Promise<void> => {
 		displayMode: "popup",
 		coAgentEnabled: true,
 	});
+};
+
+const sendShowCoAgent = async (tabId: number): Promise<void> => {
+	try {
+		await postShowCoAgent(tabId);
+	} catch (error) {
+		// A tab with no content script never answers, and no amount of retrying
+		// changes that. Put the script there and ask once more.
+		if (!isMissingContentScriptError(toErrorMessage(error))) throw error;
+		if (!(await reinjectContentScript(tabId))) throw error;
+		await postShowCoAgent(tabId);
+	}
 };
 
 const restoreCoAgentInTab = async (tabId: number): Promise<void> => {
@@ -167,10 +184,133 @@ const sendContentCommand = async (
 	}
 };
 
+const RESTRICTED_URL_PREFIXES = [
+	"chrome://",
+	"chrome-extension://",
+	"edge://",
+	"about:",
+	"devtools://",
+	"view-source:",
+	"https://chromewebstore.google.com/",
+	"https://chrome.google.com/webstore",
+	"https://microsoftedge.microsoft.com/addons",
+];
+
+const isRestrictedUrl = (url?: string | null): boolean =>
+	typeof url === "string" &&
+	RESTRICTED_URL_PREFIXES.some((prefix) => url.startsWith(prefix));
+
+const waitForTabComplete = async (
+	tabId: number,
+	timeoutMs: number,
+): Promise<chrome.tabs.Tab> => {
+	const deadline = Date.now() + timeoutMs;
+	let tab = await chrome.tabs.get(tabId);
+	while (tab.status !== "complete" && Date.now() < deadline) {
+		await new Promise((resolve) => setTimeout(resolve, 150));
+		tab = await chrome.tabs.get(tabId);
+	}
+	return tab;
+};
+
+/**
+ * Find the page the user means when they press the co-agent button.
+ *
+ * The button lives in the chat panel, and on the extension that panel *is* a
+ * tab — so the active tab is usually Memorall's own options page, which the
+ * co-agent cannot attach to. Looking only at active tabs therefore finds
+ * nothing while the user is staring at the page they want.
+ *
+ * So: prefer an active tab that is a real page, then fall back to the most
+ * recently touched real tab, which is the one they were on before opening the
+ * panel. `lastAccessed` is missing on older builds, hence the tab-id tiebreak —
+ * ids climb, so the highest is the newest.
+ */
+const attachableRank = (tab: chrome.tabs.Tab): number =>
+	(tab as { lastAccessed?: number }).lastAccessed ?? tab.id ?? 0;
+
+const isAttachable = (tab: chrome.tabs.Tab): boolean =>
+	typeof tab.id === "number" && !isRestrictedUrl(tab.url);
+
+const findAttachableActiveTab = async (): Promise<chrome.tabs.Tab> => {
+	const query = async (
+		info: chrome.tabs.QueryInfo,
+	): Promise<chrome.tabs.Tab[]> =>
+		chrome.tabs.query(info).catch(() => [] as chrome.tabs.Tab[]);
+
+	const mostRecent = (tabs: chrome.tabs.Tab[]): chrome.tabs.Tab | undefined =>
+		tabs
+			.filter(isAttachable)
+			.sort((left, right) => attachableRank(right) - attachableRank(left))[0];
+
+	const tab =
+		mostRecent(await query({ active: true, lastFocusedWindow: true })) ??
+		mostRecent(await query({ active: true })) ??
+		mostRecent(await query({ lastFocusedWindow: true })) ??
+		mostRecent(await query({}));
+
+	if (!tab || typeof tab.id !== "number") {
+		throw new Error(
+			"No open web page to attach the co-agent to. Open a page in a tab first.",
+		);
+	}
+	return tab;
+};
+
+const handleActivate = async (
+	request: Extract<CoAgentBrowserCommandRequest, { command: "activate" }>,
+): Promise<CoAgentBrowserCommandResponse> => {
+	const timeoutMs = request.timeoutMs ?? 20_000;
+	const url = request.url?.trim();
+
+	if (url && isRestrictedUrl(url)) {
+		throw new Error(`The co-agent cannot run on this page: ${url}`);
+	}
+
+	let tab: chrome.tabs.Tab;
+	if (url) {
+		// Focused on purpose: the point of the button is to put the user in front
+		// of the page the co-agent is about to work on.
+		const created = await chrome.tabs.create({ url, active: true });
+		if (typeof created.id !== "number") {
+			throw new Error("Failed to open a tab for the co-agent.");
+		}
+		tab = await waitForTabComplete(created.id, timeoutMs);
+	} else {
+		tab = await findAttachableActiveTab();
+		await chrome.tabs.update(tab.id as number, { active: true });
+		if (typeof tab.windowId === "number") {
+			await chrome.windows
+				.update(tab.windowId, { focused: true })
+				.catch(() => {});
+		}
+	}
+
+	const tabId = tab.id as number;
+	if (isRestrictedUrl(tab.url)) {
+		throw new Error(`The co-agent cannot run on this page: ${tab.url}`);
+	}
+
+	await setActiveSession(tabId, tab);
+	await sendShowCoAgent(tabId);
+
+	const session = await getActiveSessionOrNull();
+	return {
+		source: CO_AGENT_BROWSER_COMMAND_SOURCE,
+		command: request.command,
+		success: true,
+		...(session ? { session } : {}),
+	};
+};
+
 const handleCommand = async (
 	request: CoAgentBrowserCommandRequest,
 	senderTabId?: number,
 ): Promise<CoAgentBrowserCommandResponse> => {
+	if (request.command === "activate") {
+		return handleActivate(request);
+	}
+
 	if (request.command === "get-active") {
 		const session = await getActiveSessionOrNull();
 		if (!session) {
@@ -213,6 +353,8 @@ const handleCommand = async (
 };
 
 export function registerCoAgentBrowserHandler(): void {
+	registerContentScriptInjectionListeners();
+
 	chrome.runtime.onMessage.addListener((rawMessage, sender, sendResponse) => {
 		if (!isCoAgentBrowserCommandRequest(rawMessage)) {
 			return false;

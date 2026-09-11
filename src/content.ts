@@ -28,10 +28,15 @@ import {
 	isCoAgentBrowserCommandResponse,
 	isCoAgentContentCommandRequest,
 } from "@/services/co-agent";
+// Imported from the protocol module, not the `@/services/web-browser` barrel.
+// The barrel re-exports `WebBrowserServiceMain`, which drags the whole web
+// session registry and `@/platform/extension` into this bundle — and those
+// evaluate at module load, before the listener below is registered. See the
+// header comment: anything that can throw up there costs the tab its listener.
 import {
 	isWebContentCommandRequest,
 	type WebContentCommandResponse,
-} from "@/services/web-browser";
+} from "@/services/web-browser/web-browser-protocol";
 import { BACKGROUND_EVENTS } from "./constants/events";
 import {
 	loadActivityTracker,
@@ -176,10 +181,12 @@ const messageListener = (
 				.catch(reportUnavailable(sendResponse, "the co-agent"));
 			return true;
 
-		case BACKGROUND_EVENTS.SHOW_IMAGE_SELECTOR:
+		case BACKGROUND_EVENTS.ACTIVATE_CANVAS_SELECTOR:
 			void loadUiHandlers()
-				.then((module) => module.handleShowImageSelector(message, sendResponse))
-				.catch(reportUnavailable(sendResponse, "the image selector"));
+				.then((module) =>
+					module.handleActivateCanvasSelector(message, sendResponse),
+				)
+				.catch(reportUnavailable(sendResponse, "canvas select"));
 			return true;
 
 		case BACKGROUND_EVENTS.ACTIVATE_SMART_SELECTOR:

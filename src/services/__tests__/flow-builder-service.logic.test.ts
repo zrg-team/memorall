@@ -18,6 +18,7 @@ vi.mock("drizzle-orm", () => ({
 vi.mock("@memorall/agent-harness-flows/logging/logger", () => ({
 	logError: vi.fn(),
 	logInfo: vi.fn(),
+	logWarn: vi.fn(),
 }));
 
 vi.mock("@/services/flow-builder-catalog", () => ({
@@ -610,5 +611,115 @@ describe("FlowBuilderService", () => {
 		expect(
 			harness.insertBatches.some((batch) => batch.table === schema.flowSteps),
 		).toBe(true);
+	});
+	it("converts a legacy-format agent instead of reporting nothing stored", async () => {
+		const harness = createHarness();
+		// A legacy agent: per-key rows, no unified_config, feature flags in steps.
+		harness.selectQueue.push(
+			[flow({ id: "flow-1" })],
+			[
+				flowConfig({
+					name: "systemPrompt",
+					type: "string",
+					value: "Answer in Vietnamese.",
+				}),
+				flowConfig({ name: "tools", type: "array", value: ["web_search"] }),
+				flowConfig({ name: "maxIterations", type: "number", value: 12 }),
+			],
+			[{ name: "feature-a", metadata: { enabled: true } }],
+			[flow({ id: "flow-1" })],
+			[],
+		);
+
+		const config = await harness.service.getStoredUnifiedFlowConfig({
+			flowId: "flow-1",
+		});
+
+		expect(config).not.toBeNull();
+		expect(
+			config?.steps.find((step) => step.name === "add-system")?.config?.content,
+		).toBe("Answer in Vietnamese.");
+	});
+
+	it("remembers the converted config so the agent converts only once", async () => {
+		const harness = createHarness();
+		harness.selectQueue.push(
+			[flow({ id: "flow-1" })],
+			[flowConfig({ name: "systemPrompt", type: "string", value: "Legacy." })],
+			[],
+			[flow({ id: "flow-1" })],
+			[],
+		);
+
+		await harness.service.getStoredUnifiedFlowConfig({ flowId: "flow-1" });
+		// The write-back is detached, so let it settle before asserting.
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		expect(
+			harness.insertBatches.some(
+				(batch) =>
+					batch.table === schema.flowConfigs &&
+					(batch.value as { name?: string }).name === "unified_config",
+			),
+		).toBe(true);
+	});
+
+	it("still returns the converted config when remembering it fails", async () => {
+		const harness = createHarness();
+		// Two contexts reading the same legacy agent race on a unique index; the
+		// loser must not fall back to the stock config.
+		vi.spyOn(harness.service, "saveUnifiedFlowConfig").mockRejectedValue(
+			new Error("duplicate key value violates unique constraint"),
+		);
+		harness.selectQueue.push(
+			[flow({ id: "flow-1" })],
+			[flowConfig({ name: "systemPrompt", type: "string", value: "Legacy." })],
+			[],
+		);
+
+		const resolved = await harness.service.resolveUnifiedFlowConfig({
+			flowId: "flow-1",
+		});
+
+		expect(resolved.usedFallback).toBe(false);
+		expect(
+			resolved.config.steps.find((step) => step.name === "add-system")?.config
+				?.content,
+		).toBe("Legacy.");
+	});
+
+	it("treats an agent with nothing stored as configured, not as a failure", async () => {
+		const harness = createHarness();
+		// A freshly created agent has no rows at all; the stock config is what it
+		// is meant to run, so callers must not be told the agent failed to load.
+		harness.selectQueue.push(
+			[flow({ id: "flow-1" })],
+			[],
+			[],
+			[flow({ id: "flow-1" })],
+			[],
+			[],
+		);
+
+		const resolved = await harness.service.resolveUnifiedFlowConfig({
+			flowId: "flow-1",
+		});
+
+		expect(resolved.usedFallback).toBe(false);
+		expect(resolved.reason).toBeUndefined();
+	});
+
+	it("keeps a numeric config value instead of replacing it with the default", async () => {
+		const harness = createHarness();
+		// Only a predefined flow runs its rows through validation, which is where
+		// a number used to be rejected and silently swapped for the default.
+		harness.selectQueue.push(
+			[flow({ id: "flow-1", predefinedFlow: "foundation" })],
+			[flowConfig({ name: "maxIterations", type: "number", value: 12 })],
+		);
+
+		await expect(
+			harness.service.getFlowConfig({ flowId: "flow-1" }),
+		).resolves.toMatchObject({ maxIterations: 12 });
 	});
 });

@@ -1,4 +1,15 @@
-const OPENUI_ASSIGNMENT_SEARCH_PATTERN = /\b(?:\w+\s*=\s*)?CardBlock\s*\(/g;
+/**
+ * Where a program might start.
+ *
+ * `CardBlock` is matched bare because it is the conventional root and streams
+ * in before any assignment is written. Everything else has to arrive as an
+ * assignment with a capitalised callee — the same shape a continuation
+ * statement takes — so ordinary prose containing brackets is not mistaken for
+ * code. Anchoring on `CardBlock` alone meant an answer opening with a table or
+ * a paragraph block was shown to the reader as its own source.
+ */
+const OPENUI_ASSIGNMENT_SEARCH_PATTERN =
+	/\b(?:\w+\s*=\s*)?CardBlock\s*\(|\b[A-Za-z_$][\w$]*\s*=\s*[A-Z][\w$]*\s*\(/g;
 
 export type OpenUIContentSegment =
 	| { kind: "text"; text: string; start: number; end: number }
@@ -75,7 +86,10 @@ export function splitOpenUIContent(
 		}
 
 		const rawSlice = content.slice(start, end).trim();
-		const normalized = normalizeOpenUILang(rawSlice);
+		const repaired = program.complete
+			? closeUnbalancedBrackets(rawSlice)
+			: rawSlice;
+		const normalized = normalizeOpenUILang(repaired);
 		const openUIContent =
 			rawSlice && !/^\w+\s*=/.test(normalized)
 				? `root = ${normalized}`
@@ -187,13 +201,71 @@ function findOpenUIProgramEnd(
 
 		const statementEnd = findRootExpressionEnd(content, statementStart);
 		if (statementEnd === -1) {
-			return includeIncomplete
-				? { end: content.length, complete: false }
-				: { end, complete: true };
+			// Still arriving: wait for the rest rather than guessing at it.
+			if (includeIncomplete) return { end: content.length, complete: false };
+
+			// Finished, but this statement never closed its brackets. Models drop
+			// one often enough that stopping here is the wrong answer — it showed
+			// every later section to the reader as raw source. Run on to the next
+			// statement and let the segment be closed off instead.
+			const nextStart = findNextStatementStart(content, statementStart);
+			if (nextStart === -1) return { end: content.length, complete: true };
+			end = nextStart;
+			continue;
 		}
 		end = statementEnd;
 	}
 	return { end, complete: true };
+}
+
+/** The next line that reads as a new top-level statement. */
+function findNextStatementStart(content: string, from: number): number {
+	let newline = content.indexOf("\n", from);
+	while (newline !== -1) {
+		const candidate = newline + 1;
+		if (OPENUI_STATEMENT_PATTERN.test(content.slice(candidate))) {
+			return candidate;
+		}
+		newline = content.indexOf("\n", candidate);
+	}
+	return -1;
+}
+
+/**
+ * Close whatever brackets a program left open.
+ *
+ * A no-op for well-formed source. For source that lost a bracket it is the
+ * difference between the answer rendering and the reader being handed its code.
+ */
+export function closeUnbalancedBrackets(source: string): string {
+	const closers: string[] = [];
+	let inString = false;
+	let escaped = false;
+
+	for (const char of source) {
+		if (inString) {
+			if (escaped) {
+				escaped = false;
+			} else if (char === "\\") {
+				escaped = true;
+			} else if (char === '"') {
+				inString = false;
+			}
+			continue;
+		}
+		if (char === '"') {
+			inString = true;
+			continue;
+		}
+		if (char === "(") closers.push(")");
+		else if (char === "[") closers.push("]");
+		else if (char === "{") closers.push("}");
+		else if (char === ")" || char === "]" || char === "}") closers.pop();
+	}
+
+	const tail = closers.reverse().join("");
+	if (inString) return `${source}"${tail}`;
+	return tail ? source + tail : source;
 }
 
 function replaceBareIdentifier(

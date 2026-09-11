@@ -1,3 +1,4 @@
+import type { CoAgentSessionMarkerType } from "@/services/chat/coagent-session";
 import { and, asc, desc, eq, gt, ne } from "drizzle-orm";
 import { serviceManager } from "@/services";
 import { v4 } from "@/utils/uuid";
@@ -19,6 +20,14 @@ type StoredMessageInput = {
 	id?: string;
 	role: PersistableMessageRole;
 	content: string;
+	/**
+	 * The turn as the model received it, when that is more than text.
+	 *
+	 * An attached region reaches the model as an image part. Storing only
+	 * `content` kept the words and dropped the picture, so the transcript showed
+	 * a question about an image that was nowhere to be seen.
+	 */
+	complexContent?: unknown;
 	createdAt?: Date;
 	topicId?: string | null;
 	metadata?: Record<string, unknown> | null;
@@ -32,7 +41,13 @@ export type EmbeddedChatHistoryPayload =
 			id: string;
 			message: Partial<StoredMessageInput>;
 	  }
-	| { operation: "insert-separator" };
+	| { operation: "insert-separator" }
+	| {
+			operation: "insert-coagent-marker";
+			marker: CoAgentSessionMarkerType;
+			/** The page the session covers, so a later visit opens a new one. */
+			url?: string;
+	  };
 
 export interface EmbeddedChatHistoryResult extends Record<string, unknown> {
 	conversationId?: string;
@@ -112,6 +127,9 @@ const addMessage = async (
 		type,
 		role: input.role,
 		content: input.content,
+		complexContent: input.complexContent
+			? (sanitizeForJson(input.complexContent) as Record<string, unknown>)
+			: undefined,
 		topicId: input.topicId ?? undefined,
 		metadata: sanitizeForJson(input.metadata ?? {}) as Record<string, unknown>,
 		createdAt: now,
@@ -187,6 +205,25 @@ class EmbeddedChatHistoryHandler implements ProcessHandler<BaseJob> {
 				return {
 					conversationId: conversation.id,
 					message: await finalizeMessage(payload.id, payload.message),
+				} satisfies EmbeddedChatHistoryResult;
+
+			case "insert-coagent-marker":
+				// Visual only: the agent reads straight through these, so they carry
+				// no content worth sending and are filtered before a run.
+				await addMessage(
+					conversation.id,
+					{
+						role: "system",
+						content: "",
+						createdAt: new Date(),
+						metadata: payload.url
+							? { source: "co-agent", url: payload.url }
+							: { source: "co-agent" },
+					},
+					payload.marker,
+				);
+				return {
+					conversationId: conversation.id,
 				} satisfies EmbeddedChatHistoryResult;
 
 			case "insert-separator":

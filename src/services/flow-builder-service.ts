@@ -27,11 +27,16 @@ import {
 import {
 	logError,
 	logInfo,
+	logWarn,
 } from "@memorall/agent-harness-flows/logging/logger";
 import {
 	getFeatureCatalogSteps,
 	getFlowCatalog,
 } from "@/services/flow-builder-catalog";
+import {
+	applyLegacyDraftToUnified,
+	selectFeatureStepNames,
+} from "@/services/flow-config-legacy";
 import type { UnifiedFlowConfig } from "@memorall/agent-harness-flows/interfaces/config/flow-config";
 import {
 	buildDefaultFlowConfig,
@@ -69,6 +74,11 @@ const isValidConfigValue = (type: string, value: unknown): boolean => {
 			return typeof value === "boolean";
 		case "array":
 			return Array.isArray(value);
+		case "number":
+			// Declared by FOUNDATION_CONFIG_KEYS (maxIterations) and written by
+			// inferConfigType, so a missing case here silently replaced every
+			// stored value with the default on read.
+			return typeof value === "number" && Number.isFinite(value);
 		default:
 			return false;
 	}
@@ -773,53 +783,143 @@ export class FlowBuilderService {
 		});
 	}
 
+	/**
+	 * Which on-disk shape an agent's configuration uses.
+	 *
+	 * Shared by the format query and the read path so the two can never
+	 * disagree about what "legacy" means — they did not used to share it, and
+	 * the read path simply had no legacy case at all.
+	 */
+	private async classifyStorage(
+		flowId: string,
+		rows: FlowConfigRow[],
+	): Promise<{
+		format: FlowConfigStorageFormat;
+		flags: Record<string, boolean>;
+		hasStoredFeatureRows: boolean;
+	}> {
+		const hasUnifiedRow = rows.some((row) => row.name === "unified_config");
+		const { flags, hasStoredRows } = await this.getStoredFeatureFlags(flowId);
+
+		if (hasUnifiedRow) {
+			return { format: "unified", flags, hasStoredFeatureRows: hasStoredRows };
+		}
+
+		const hasLegacyRows = rows.some((row) => row.name !== "unified_config");
+		return {
+			format: hasLegacyRows || hasStoredRows ? "legacy" : "empty",
+			flags,
+			hasStoredFeatureRows: hasStoredRows,
+		};
+	}
+
 	async getFlowConfigStorageFormat(
 		ref: FlowConfigRef,
 	): Promise<FlowConfigStorageFormat> {
 		const flow = await this.resolveFlow(ref);
 		const rows = await this.getFlowConfigRows(flow.id);
-		const rowMap = new Map(rows.map((row) => [row.name, row]));
-
-		if (rowMap.has("unified_config")) {
-			return "unified";
-		}
-
-		const hasLegacyRows = rows.some((row) => row.name !== "unified_config");
-		const { hasStoredRows } = await this.getStoredFeatureFlags(flow.id);
-
-		return hasLegacyRows || hasStoredRows ? "legacy" : "empty";
+		const { format } = await this.classifyStorage(flow.id, rows);
+		return format;
 	}
 
+	/**
+	 * The agent's stored configuration, whichever shape it is in.
+	 *
+	 * A legacy agent is converted on the way out rather than reported as having
+	 * nothing stored: returning null here meant the run fell back to the stock
+	 * config, so a legacy agent answered with none of its own instructions,
+	 * features or tools while still looking correct in settings.
+	 *
+	 * Returns null only for `empty` — an agent that genuinely has no stored
+	 * customisation, for which the defaults are the right answer.
+	 */
 	async getStoredUnifiedFlowConfig(
 		ref: FlowConfigRef,
 	): Promise<UnifiedFlowConfig | null> {
-		try {
-			const graphType = "foundation";
-			const flow = await this.resolveFlow(ref);
-			const rowMap = new Map(
-				(await this.getFlowConfigRows(flow.id)).map((row) => [row.name, row]),
-			);
-			const unifiedRow = rowMap.get("unified_config");
-			if (
-				unifiedRow &&
-				typeof unifiedRow.value === "object" &&
-				unifiedRow.value !== null
-			) {
-				const stored = unifiedRow.value as Partial<UnifiedFlowConfig>;
-				return mergeWithDefaultConfig(
-					stored,
-					(stored.graphType as string | undefined) ?? graphType,
-				);
-			}
+		const graphType = "foundation";
+		const flow = await this.resolveFlow(ref);
+		const rows = await this.getFlowConfigRows(flow.id);
+		const unifiedRow = rows.find((row) => row.name === "unified_config");
 
-			return null;
-		} catch (error) {
-			logError(
-				"[FLOW_BUILDER] Failed to load stored unified flow config:",
-				error,
+		if (
+			unifiedRow &&
+			typeof unifiedRow.value === "object" &&
+			unifiedRow.value !== null
+		) {
+			const stored = unifiedRow.value as Partial<UnifiedFlowConfig>;
+			return mergeWithDefaultConfig(
+				stored,
+				(stored.graphType as string | undefined) ?? graphType,
 			);
+		}
+
+		const { format, flags, hasStoredFeatureRows } = await this.classifyStorage(
+			flow.id,
+			rows,
+		);
+		if (format !== "legacy") {
 			return null;
 		}
+
+		return this.convertLegacyRowsToUnified(
+			flow.id,
+			rows,
+			flags,
+			hasStoredFeatureRows,
+		);
+	}
+
+	/**
+	 * Fold legacy per-key rows into a unified config, and remember the result.
+	 *
+	 * The write-back is deliberately detached: `flow_configs` is unique on
+	 * (flow_id, name) and the save is select-then-insert, so two contexts
+	 * reading the same legacy agent at once can both insert and one will lose.
+	 * Awaiting that here would turn a lost race into a null return — the very
+	 * fallback this method exists to prevent — so the caller gets its config
+	 * either way and a failed write only costs one more conversion later.
+	 */
+	private async convertLegacyRowsToUnified(
+		flowId: string,
+		rows: FlowConfigRow[],
+		flags: Record<string, boolean>,
+		hasStoredFeatureRows: boolean,
+	): Promise<UnifiedFlowConfig> {
+		const legacyConfig = this.parsePredefinedConfigRows(rows, "foundation");
+		const graphType =
+			legacyConfig.graphType === "agent" ? "agent" : "foundation";
+
+		// With no feature rows the flags are all false, which would switch off
+		// retrieval and citations for an agent whose legacy rows say otherwise.
+		const effectiveFlags = hasStoredFeatureRows
+			? flags
+			: {
+					...flags,
+					"knowledge-retrieval": Boolean(legacyConfig.enableContextRetrieval),
+					citations: Boolean(legacyConfig.enableCitations),
+				};
+
+		// Legacy storage never held accessible-agent ids, MCP connections or
+		// skills, so the empty lists lose nothing.
+		const converted = applyLegacyDraftToUnified(
+			buildDefaultFlowConfig(graphType),
+			legacyConfig,
+			effectiveFlags,
+			[],
+			[],
+			[],
+			selectFeatureStepNames(getFlowCatalog().steps, graphType),
+		);
+		const merged = mergeWithDefaultConfig(converted, converted.graphType);
+
+		void this.saveUnifiedFlowConfig({ flowId }, merged).catch((error) => {
+			logWarn(
+				"[FLOW_BUILDER] Could not persist converted legacy config:",
+				error,
+			);
+		});
+
+		return merged;
 	}
 
 	async saveUnifiedFlowConfig(
@@ -872,19 +972,72 @@ export class FlowBuilderService {
 	 * Runtime only reads the unified config blob. When it is absent,
 	 * execution falls back to the canonical default flow definition.
 	 */
+	/**
+	 * The flow config for a reference, falling back to the stock one.
+	 *
+	 * The fallback is silent by design for a predefined flow that has never been
+	 * customised — there is nothing stored yet and the defaults are correct. It is
+	 * the wrong answer for an agent the caller asked for by id: that means the
+	 * agent's instructions, features and tools are all quietly replaced by the
+	 * stock ones, and the run looks like it worked. Callers that need to know use
+	 * `resolveUnifiedFlowConfig`.
+	 */
 	async getUnifiedFlowConfig(ref: FlowConfigRef): Promise<UnifiedFlowConfig> {
+		return (await this.resolveUnifiedFlowConfig(ref)).config;
+	}
+
+	/**
+	 * The flow config plus whether it is actually the one that was asked for.
+	 *
+	 * `usedFallback` is what lets a caller say "ran without your agent" instead of
+	 * answering as somebody else without mentioning it.
+	 */
+	async resolveUnifiedFlowConfig(ref: FlowConfigRef): Promise<{
+		config: UnifiedFlowConfig;
+		usedFallback: boolean;
+		reason?: string;
+	}> {
 		const graphType = "foundation";
 
 		try {
 			const stored = await this.getStoredUnifiedFlowConfig(ref);
 			if (stored) {
-				return stored;
+				return { config: stored, usedFallback: false };
 			}
 
-			return buildDefaultFlowConfig(graphType);
+			// Nothing stored is not the same as something going wrong. An agent
+			// created but never customised has no rows at all, and the stock
+			// config is exactly what it is meant to run — reporting that as a
+			// fallback made every new agent look broken to callers that refuse to
+			// run without the agent they asked for.
+			const format = await this.getFlowConfigStorageFormat(ref);
+			if (format === "empty") {
+				return {
+					config: buildDefaultFlowConfig(graphType),
+					usedFallback: false,
+				};
+			}
+
+			const reason =
+				"flowId" in ref
+					? `No saved configuration for flow ${ref.flowId}.`
+					: undefined;
+			if (reason) {
+				logWarn(`[FLOW_BUILDER] ${reason} Falling back to the stock config.`);
+			}
+			return {
+				config: buildDefaultFlowConfig(graphType),
+				usedFallback: Boolean(reason),
+				reason,
+			};
 		} catch (error) {
+			const reason = error instanceof Error ? error.message : String(error);
 			logError("[FLOW_BUILDER] Failed to load unified flow config:", error);
-			return buildDefaultFlowConfig(graphType);
+			return {
+				config: buildDefaultFlowConfig(graphType),
+				usedFallback: true,
+				reason,
+			};
 		}
 	}
 

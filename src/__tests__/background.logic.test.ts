@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
 	registerMessageHandler: vi.fn(),
 	registerWebToolBrowserHandler: vi.fn(),
 	registerCoAgentBrowserHandler: vi.fn(),
+	registerViewportCaptureHandler: vi.fn(),
 	openStandalonePage: vi.fn(async () => undefined),
 	logInfo: vi.fn(),
 	logError: vi.fn(),
@@ -57,6 +58,9 @@ vi.mock("@/background/web-tool-browser-handler", () => ({
 }));
 vi.mock("@/background/co-agent-browser-handler", () => ({
 	registerCoAgentBrowserHandler: mocks.registerCoAgentBrowserHandler,
+}));
+vi.mock("@/background/viewport-capture-handler", () => ({
+	registerViewportCaptureHandler: mocks.registerViewportCaptureHandler,
 }));
 vi.mock("@/utils/open-standalone", () => ({
 	openStandalonePage: mocks.openStandalonePage,
@@ -129,6 +133,7 @@ describe("background service worker entrypoint", () => {
 		expect(mocks.registerContextMenuHandler).toHaveBeenCalledTimes(1);
 		expect(mocks.registerWebToolBrowserHandler).toHaveBeenCalledTimes(1);
 		expect(mocks.registerCoAgentBrowserHandler).toHaveBeenCalledTimes(1);
+		expect(mocks.registerViewportCaptureHandler).toHaveBeenCalledTimes(1);
 		expect(mocks.registerMessageHandler).toHaveBeenCalledWith(
 			expect.any(Function),
 		);

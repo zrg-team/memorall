@@ -401,6 +401,10 @@ export const EmbeddedMessageRenderer: React.FC<
 								<AssistantMessageContent
 									content={getTextContent(message.content)}
 									isStreaming={isLoading && message.role === "assistant"}
+									configuredTheme={
+										(message.metadata as { openuiTheme?: string } | undefined)
+											?.openuiTheme
+									}
 									onMessageAction={onMessageAction}
 								/>
 								{!isLoading && (

@@ -86,6 +86,7 @@ export const vnEmbeddedLocale = {
 		charCount: "{count} ký tự",
 		removeAttachment: "Gỡ đính kèm",
 		smartSelect: "Chọn thông minh",
+		canvasSelect: "Chọn vùng",
 		smartSelectInstruction:
 			"Di chuột trên trang, nhấp vào một phần tử, rồi chọn Text, Clean HTML hoặc HTML. Nhấn ESC để hủy.",
 		smartSelectCancel: "Hủy",
@@ -93,6 +94,11 @@ export const vnEmbeddedLocale = {
 		smartSelectText: "Text",
 		smartSelectCleanHtml: "Clean HTML",
 		smartSelectHtml: "HTML",
+		smartSelectImage: "Hình ảnh",
+		smartSelectImageCapturing: "Đang chụp…",
+		smartSelectImageFailed: "Không thể chụp vùng này thành hình ảnh.",
+		smartSelectImageNeedsActivation:
+			"Hãy mở Memorall từ menu chuột phải trên trang này trước, rồi chụp.",
 		smartSelectChooseAction: "Chọn hành động",
 		smartSelectStoreToDocument: "Lưu vào tài liệu",
 		smartSelectOpenChat: "Mở trò chuyện",
@@ -128,6 +134,7 @@ export const vnEmbeddedLocale = {
 	},
 	coAgent: {
 		unlockRequired: "Cần mở khóa",
+		agentUnavailable: "Không tải được {agent}, nên chưa dùng agent này.",
 		working: "Đang làm việc",
 		thinking: "Đang suy nghĩ",
 		anchorAsk: "Hỏi",
@@ -135,6 +142,7 @@ export const vnEmbeddedLocale = {
 		defaultAgent: "Tác nhân mặc định",
 		finishedNoAnswer: "Đã xong — không có nội dung trả lời.",
 		smartSelect: "Chọn thông minh",
+		canvasSelect: "Chọn vùng",
 		anchorAskAboutThis: "Hỏi về mục này",
 		anchorAskTitle: "Hỏi mà không đính kèm phần tử này",
 		removeAttachedElement: "Bỏ phần tử đã đính kèm",
@@ -175,11 +183,16 @@ export const vnEmbeddedLocale = {
 		idleHintAct:
 			"Tôi có thể chỉ vị trí, cuộn trang, nhấp mục an toàn và nhập khi được phép.",
 	},
-	imageSelector: {
+	canvasSelect: {
 		capturingPage: "Đang chụp trang...",
 		capturedPageAlt: "Trang đã chụp",
-		instruction: "Kéo để chọn một vùng của hình ảnh • Nhấn ESC để hủy",
+		instruction: "Kéo bất kỳ vùng nào để chụp • Nhấn ESC để hủy",
 		cancel: "Hủy",
+		tooSmall: "Quá nhỏ",
+		attachmentLabel: "Vùng {width}×{height}",
+		failed: "Không thể chụp vùng này thành hình ảnh.",
+		needsActivation:
+			"Hãy mở Memorall từ menu chuột phải trên trang này trước, rồi chụp lại.",
 	},
 	messageContent: {
 		openUINotice: "Phản hồi này chứa một hình ảnh trực quan tương tác",

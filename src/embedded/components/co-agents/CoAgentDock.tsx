@@ -1,4 +1,5 @@
 import {
+	Crop,
 	LogOut,
 	Maximize2,
 	MessageCircle,
@@ -47,6 +48,12 @@ interface CoAgentDockProps {
 	onUnlock: () => void;
 	onLeaveCoAgent: () => void;
 	onSmartSelect: () => void;
+	onCanvasSelect: () => void;
+	/** Smart select is a mode; the button shows whether it is on. */
+	isSmartSelectActive?: boolean;
+	isCanvasSelectActive?: boolean;
+	/** The selected agent's OpenUI theme, for blocks in the dock bubble. */
+	openuiTheme?: string;
 	onDismissBubble: () => void;
 }
 
@@ -77,6 +84,10 @@ export const CoAgentDock: React.FC<CoAgentDockProps> = ({
 	onUnlock,
 	onLeaveCoAgent,
 	onSmartSelect,
+	onCanvasSelect,
+	isSmartSelectActive = false,
+	isCanvasSelectActive = false,
+	openuiTheme,
 	onDismissBubble,
 }) => {
 	const t = useEmbeddedTranslation("coAgent");
@@ -225,6 +236,7 @@ export const CoAgentDock: React.FC<CoAgentDockProps> = ({
 													<AssistantMessageContent
 														content={visibleDockMessage}
 														isStreaming={isSubmitting}
+														configuredTheme={openuiTheme}
 														onMessageAction={onMessageAction}
 													/>
 												) : null}
@@ -258,11 +270,27 @@ export const CoAgentDock: React.FC<CoAgentDockProps> = ({
 						className="memorall-co-agent-action"
 						aria-label={t("smartSelect")}
 						title={t("smartSelect")}
+						aria-pressed={isSmartSelectActive}
+						data-active={isSmartSelectActive ? "true" : undefined}
 						onClick={onSmartSelect}
 					>
 						<MousePointerSquareDashed size={15} strokeWidth={2.25} />
 						<span className="memorall-co-agent-action-tooltip">
 							{t("smartSelect")}
+						</span>
+					</button>
+					<button
+						type="button"
+						className="memorall-co-agent-action"
+						aria-label={t("canvasSelect")}
+						title={t("canvasSelect")}
+						aria-pressed={isCanvasSelectActive}
+						data-active={isCanvasSelectActive ? "true" : undefined}
+						onClick={onCanvasSelect}
+					>
+						<Crop size={15} strokeWidth={2.25} />
+						<span className="memorall-co-agent-action-tooltip">
+							{t("canvasSelect")}
 						</span>
 					</button>
 					<button
@@ -331,23 +359,49 @@ export const CoAgentDock: React.FC<CoAgentDockProps> = ({
 						disabled={!modelAvailable || isSubmitting}
 						rows={1}
 					/>
-					<select
-						className="memorall-co-agent-agent-select"
-						value={selectedAgentFlowId}
-						onChange={(event) => onSelectAgentFlow(event.currentTarget.value)}
-						disabled={isSubmitting}
-						aria-label={t("selectAgent")}
-						title={t("selectAgent")}
-						onKeyDown={(event) => event.stopPropagation()}
-						onKeyUp={(event) => event.stopPropagation()}
-					>
-						<option value="chat">{t("defaultAgent")}</option>
-						{agentFlows.map((flow) => (
-							<option key={flow.id} value={flow.id}>
-								{flow.name}
-							</option>
-						))}
-					</select>
+					<div className="memorall-co-agent-prompt-tools">
+						<select
+							className="memorall-co-agent-agent-select"
+							value={selectedAgentFlowId}
+							onChange={(event) => onSelectAgentFlow(event.currentTarget.value)}
+							disabled={isSubmitting}
+							aria-label={t("selectAgent")}
+							title={t("selectAgent")}
+							onKeyDown={(event) => event.stopPropagation()}
+							onKeyUp={(event) => event.stopPropagation()}
+						>
+							<option value="chat">{t("defaultAgent")}</option>
+							{agentFlows.map((flow) => (
+								<option key={flow.id} value={flow.id}>
+									{flow.name}
+								</option>
+							))}
+						</select>
+						{/* Reachable while composing, not only from the collapsed dock:
+						    attaching a region is part of writing the question. */}
+						<button
+							type="button"
+							className="memorall-co-agent-prompt-tool"
+							aria-label={t("smartSelect")}
+							title={t("smartSelect")}
+							aria-pressed={isSmartSelectActive}
+							data-active={isSmartSelectActive ? "true" : undefined}
+							onClick={onSmartSelect}
+						>
+							<MousePointerSquareDashed size={13} strokeWidth={2.25} />
+						</button>
+						<button
+							type="button"
+							className="memorall-co-agent-prompt-tool"
+							aria-label={t("canvasSelect")}
+							title={t("canvasSelect")}
+							aria-pressed={isCanvasSelectActive}
+							data-active={isCanvasSelectActive ? "true" : undefined}
+							onClick={onCanvasSelect}
+						>
+							<Crop size={13} strokeWidth={2.25} />
+						</button>
+					</div>
 					<button
 						type="submit"
 						aria-label={t("send")}

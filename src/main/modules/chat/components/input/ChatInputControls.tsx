@@ -1,8 +1,10 @@
 import {
+	Bot,
 	Brain,
 	Check,
 	ChevronDown,
 	FileText,
+	Loader2,
 	Maximize2,
 	MessageCircle,
 	Minimize2,
@@ -38,7 +40,10 @@ import {
 	TooltipContent,
 	TooltipTrigger,
 } from "@/main/components/ui/tooltip";
+import type { SelectableModel } from "@/main/hooks/selectable-model";
 import { getAgentIconScreenFromMetadata } from "@/main/modules/agents/types";
+import type { ServiceProvider } from "@/services/llm/interfaces/llm-service.interface";
+import { ModelSelector } from "./ModelSelector";
 import type { FlowMetadata } from "@/services/database/entities/flows";
 import type { ChatStatus } from "@/types/chat";
 
@@ -81,6 +86,16 @@ export interface ChatInputControlsProps {
 	canSubmit: boolean;
 	isFullWidth?: boolean;
 	onToggleFullWidth?: () => void;
+	/** Attach the co-agent to the tab the user is looking at. */
+	onStartCoAgent?: () => void;
+	isCoAgentStarting?: boolean;
+	/** Switching model without leaving the conversation. */
+	selectableModels?: SelectableModel[];
+	selectableModelsByProvider?: Map<ServiceProvider, SelectableModel[]>;
+	lockedModelProviders?: ServiceProvider[];
+	isLoadingModels?: boolean;
+	onSelectModel?: (model: SelectableModel) => void;
+	onRefreshModels?: () => void;
 }
 
 export const ChatInputControls: React.FC<ChatInputControlsProps> = ({
@@ -107,6 +122,14 @@ export const ChatInputControls: React.FC<ChatInputControlsProps> = ({
 	canSubmit,
 	isFullWidth = false,
 	onToggleFullWidth,
+	onStartCoAgent,
+	isCoAgentStarting = false,
+	selectableModels,
+	selectableModelsByProvider,
+	lockedModelProviders,
+	isLoadingModels = false,
+	onSelectModel,
+	onRefreshModels,
 }) => {
 	const { t } = useTranslation("chat");
 	const flowOptions = [
@@ -135,10 +158,13 @@ export const ChatInputControls: React.FC<ChatInputControlsProps> = ({
 		? t("tooltips.constrainChatWidth")
 		: t("tooltips.expandChatWidth");
 	const showAgentSettings = isCustomMode && Boolean(onOpenAgentSettings);
-	// Below this width the two view controls fold into the overflow menu, where
-	// they finally carry a written label. Split chat never folds: it changes what
-	// the agent can see and is used mid-conversation.
+	// Below this width every action on the right folds into the overflow menu,
+	// where each one finally carries a written label. What stays on the bar is
+	// the overflow trigger and submit — the two the user cannot do without.
 	const foldViewControls = isNarrow;
+	const coAgentLabel = t("tooltips.startCoAgent", {
+		defaultValue: "Co-agent on the current tab",
+	});
 
 	return (
 		<PromptInputToolbar className="items-center gap-1 p-1.5">
@@ -183,6 +209,36 @@ export const ChatInputControls: React.FC<ChatInputControlsProps> = ({
 						</DropdownMenu>
 
 						{/*
+						 * Next to attach because it is the same kind of act: both bring
+						 * something outside the conversation into it. Left of the agent
+						 * chip so the two dropdowns are not adjacent.
+						 */}
+						{onStartCoAgent ? (
+							<Tooltip>
+								<TooltipTrigger asChild>
+									<Button
+										type="button"
+										variant="ghost"
+										size="sm"
+										disabled={isLoading || isCoAgentStarting}
+										onClick={onStartCoAgent}
+										aria-label={coAgentLabel}
+										className={ICON_CONTROL}
+									>
+										{isCoAgentStarting ? (
+											<Loader2 size={14} className="animate-spin" />
+										) : (
+											<Bot size={14} />
+										)}
+									</Button>
+								</TooltipTrigger>
+								<TooltipContent>
+									<p className="text-xs">{coAgentLabel}</p>
+								</TooltipContent>
+							</Tooltip>
+						) : null}
+
+						{/*
 						 * Agent and memory in one chip. They sat side by side as separate
 						 * chips, same shape and same height, and in agent mode they usually
 						 * truncated to the same word — twice.
@@ -220,7 +276,7 @@ export const ChatInputControls: React.FC<ChatInputControlsProps> = ({
 												<span
 													className={cn(
 														"min-w-0 truncate",
-														isNarrow ? "max-w-16" : "max-w-24",
+														isNarrow ? "max-w-14" : "max-w-24",
 													)}
 												>
 													{selectedFlow?.name ?? t("flowSelector.chat")}
@@ -301,7 +357,7 @@ export const ChatInputControls: React.FC<ChatInputControlsProps> = ({
 														<span
 															className={cn(
 																"min-w-0 truncate",
-																isNarrow ? "max-w-12" : "max-w-20",
+																isNarrow ? "max-w-10" : "max-w-20",
 															)}
 														>
 															{isLoadingTopics
@@ -369,6 +425,28 @@ export const ChatInputControls: React.FC<ChatInputControlsProps> = ({
 								</>
 							)}
 						</div>
+
+						{/*
+						 * Right of the agent, because the two are read together: which
+						 * agent, running on which model. Its own pill rather than a third
+						 * segment of that one — the agent and its memory belong together,
+						 * the model is a separate choice.
+						 */}
+						{onSelectModel && selectableModelsByProvider ? (
+							<div className="flex h-8 min-w-0 items-center rounded-xl bg-muted/40">
+								<ModelSelector
+									models={selectableModels ?? []}
+									byProvider={selectableModelsByProvider}
+									currentModelId={model}
+									isLoading={isLoadingModels}
+									onSelect={onSelectModel}
+									lockedProviders={lockedModelProviders}
+									onOpen={onRefreshModels}
+									isNarrow={isNarrow}
+									disabled={isLoading}
+								/>
+							</div>
+						) : null}
 					</PromptInputTools>
 				</div>
 
@@ -419,25 +497,27 @@ export const ChatInputControls: React.FC<ChatInputControlsProps> = ({
 						</Tooltip>
 					) : null}
 
-					<Tooltip>
-						<TooltipTrigger asChild>
-							<Button
-								type="button"
-								variant="ghost"
-								size="sm"
-								disabled={isLoading}
-								onClick={onInsertSeparator}
-								aria-label={t("tooltips.splitChat")}
-								title={t("tooltips.splitChat")}
-								className={ICON_CONTROL}
-							>
-								<ScissorsLineDashed size={14} />
-							</Button>
-						</TooltipTrigger>
-						<TooltipContent>
-							<p className="text-xs">{t("tooltips.splitChat")}</p>
-						</TooltipContent>
-					</Tooltip>
+					{!foldViewControls ? (
+						<Tooltip>
+							<TooltipTrigger asChild>
+								<Button
+									type="button"
+									variant="ghost"
+									size="sm"
+									disabled={isLoading}
+									onClick={onInsertSeparator}
+									aria-label={t("tooltips.splitChat")}
+									title={t("tooltips.splitChat")}
+									className={ICON_CONTROL}
+								>
+									<ScissorsLineDashed size={14} />
+								</Button>
+							</TooltipTrigger>
+							<TooltipContent>
+								<p className="text-xs">{t("tooltips.splitChat")}</p>
+							</TooltipContent>
+						</Tooltip>
+					) : null}
 
 					<Tooltip>
 						<DropdownMenu>
@@ -456,6 +536,15 @@ export const ChatInputControls: React.FC<ChatInputControlsProps> = ({
 								</DropdownMenuTrigger>
 							</TooltipTrigger>
 							<DropdownMenuContent align="end">
+								{foldViewControls ? (
+									<DropdownMenuItem
+										onClick={onInsertSeparator}
+										className="flex items-center gap-2"
+									>
+										<ScissorsLineDashed size={14} />
+										<span>{t("tooltips.splitChat")}</span>
+									</DropdownMenuItem>
+								) : null}
 								{foldViewControls && onToggleFullWidth ? (
 									<DropdownMenuItem
 										onClick={onToggleFullWidth}

@@ -434,14 +434,24 @@ export class AgentGraph extends GraphBase<
 
 			try {
 				const args = JSON.parse(toolCall.function.arguments);
-				const validatedArgs = parseToolInput(combined.executor.schema, args);
+				const validatedArgs = parseToolInput(
+					combined.executor.schema,
+					args,
+					toolName,
+				);
 				const rawResult = await combined.executor.execute(validatedArgs, {
 					state: toolState,
 					runtime: getFlowRuntimeVars(runConfig),
 					toolCallId: toolCall.id,
 				});
-				const { content, contentText, structuredContent, isError, meta } =
-					extractToolResult(rawResult);
+				const {
+					content,
+					contentText,
+					structuredContent,
+					imageUrls,
+					isError,
+					meta,
+				} = extractToolResult(rawResult);
 				toolFailureStreak = isError
 					? nextToolFailureStreak(toolFailureStreak, toolName, contentText)
 					: null;
@@ -454,6 +464,7 @@ export class AgentGraph extends GraphBase<
 						tool_call_id: toolCall.id,
 						structuredContent,
 						content: contentText,
+						...(imageUrls && imageUrls.length > 0 ? { imageUrls } : {}),
 						isError,
 						meta,
 						endedAt: new Date(endedAtMs).toISOString(),

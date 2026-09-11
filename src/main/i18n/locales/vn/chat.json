@@ -134,7 +134,12 @@
 		"quick_knowledge_retrieval": "Truy xuất kiến thức nhanh",
 		"container_web_access": "Truy cập Web",
 		"web_access": "Truy cập Web",
-		"web access": "Truy cập Web"
+		"web access": "Truy cập Web",
+		"memory_remember": "Ghi nhớ",
+		"memory_retrieve": "Tìm trong bộ nhớ",
+		"memory_update": "Cập nhật bộ nhớ",
+		"memory_remove": "Quên bộ nhớ",
+		"memory_explain_source": "Giải thích bộ nhớ"
 	},
 	"messages": {
 		"assistant": "Trợ lý",
@@ -164,7 +169,11 @@
 		"stop": "Dừng",
 		"retry": "Thử lại",
 		"empty": "Chưa có tin nhắn nào. Bắt đầu cuộc trò chuyện!",
-		"count": "{{count}} tin nhắn"
+		"count": "{{count}} tin nhắn",
+		"coAgentSessionStart": "Bắt đầu phiên co-agent",
+		"coAgentSessionEnd": "Kết thúc phiên co-agent",
+		"coAgentOnPage": "tại {{page}}",
+		"coAgentMovedTo": "chuyển sang {{page}}"
 	},
 	"execution": {
 		"default": "Đang thực thi {{node}}",
@@ -348,7 +357,13 @@
 		"selectedNotLoadedDescription": "{{model}} đã được chọn nhưng vẫn chưa hoạt động trong bộ nhớ.",
 		"selectedProvider": "{{provider}}",
 		"loadHint": "Hãy tải mô hình trước khi gửi tin nhắn.",
-		"loadSelected": "Tải mô hình"
+		"loadSelected": "Tải mô hình",
+		"select": "Mô hình",
+		"searchPlaceholder": "Tìm mô hình",
+		"noMatches": "Không có mô hình phù hợp",
+		"noneAvailable": "Chưa có mô hình. Thêm nhà cung cấp hoặc tải một mô hình trước.",
+		"locked": "{{providers}} đã cấu hình nhưng đang khóa. Mở khóa ở trang Mô hình để dùng tại đây.",
+		"lockedHint": "{{providers}} đang khóa — mở khóa ở trang Mô hình."
 	},
 	"tooltips": {
 		"topicSelector": "Chọn chủ đề để lọc ngữ cảnh kiến thức",
@@ -359,7 +374,8 @@
 		"agentSettings": "Cài đặt tác nhân",
 		"splitChat": "Tách đoạn chat — tác nhân bắt đầu lại từ đây và vẫn tìm được mọi thứ phía trên",
 		"expandChatWidth": "Mở rộng khung chat toàn màn hình",
-		"constrainChatWidth": "Thu gọn khung chat"
+		"constrainChatWidth": "Thu gọn khung chat",
+		"startCoAgent": "Co-agent trên tab hiện tại"
 	},
 	"agentSettings": {
 		"title": "Cài đặt Tác nhân",
@@ -464,5 +480,9 @@
 		"reloadCleared": "Trang đã tải. Đang tiếp tục từ chỗ tác nhân dừng lại.",
 		"stopWaiting": "Dừng chờ",
 		"expired": "Yêu cầu này đã hết hạn. Tác nhân đã tiếp tục."
+	},
+	"coAgent": {
+		"openLink": "Co-agent trên {{host}}",
+		"openLinkTitle": "Mở {{url}} và bật co-agent"
 	}
 }

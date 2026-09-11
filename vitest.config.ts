@@ -63,6 +63,8 @@ export default defineConfig({
 						// several layout regressions shipped unnoticed.
 						"src/embedded/**/*.test.tsx",
 						"src/services/**/*.dom.test.ts",
+						// The content script's page-reading modules need a DOM.
+						"src/content/**/*.dom.test.ts",
 					],
 					exclude: [
 						"src/main/__tests__/component-smoke.test.tsx",

@@ -29,6 +29,8 @@ export interface WebDomElementInfo {
 	text: string;
 	value: string | null;
 	href: string | null;
+	/** Media source. A `data:` URL is summarised, never carried. */
+	src: string | null;
 	disabled: boolean;
 	visible: boolean;
 	acceptsTextInput: boolean;
@@ -90,6 +92,30 @@ export type WebContentCommandRequest =
 			source: typeof WEB_CONTENT_COMMAND_SOURCE;
 			type: "web-tool:fetch-image";
 			url: string;
+	  }
+	/**
+	 * Ask the page to open an image in its own tab.
+	 *
+	 * Must run in the page, not the background: a tab the extension creates sends
+	 * no Referer, so a host with hotlink protection refuses the navigation. Opened
+	 * from the page, the request carries that page's Referer and is served.
+	 */
+	| {
+			source: typeof WEB_CONTENT_COMMAND_SOURCE;
+			type: "web-tool:open-image-tab";
+			url: string;
+	  }
+	/**
+	 * Read the image a tab is already displaying, out of its pixels.
+	 *
+	 * Only usable in a tab navigated to the image itself: the document is then
+	 * same-origin with the image, so the canvas is untainted. Re-fetching there
+	 * does not work — the request would carry the image tab's own Referer and be
+	 * refused again.
+	 */
+	| {
+			source: typeof WEB_CONTENT_COMMAND_SOURCE;
+			type: "web-tool:read-rendered-image";
 	  };
 
 export type WebContentCommandResponse =
@@ -129,12 +155,28 @@ export type WebContentCommandResponse =
 	  }
 	| {
 			source: typeof WEB_CONTENT_COMMAND_SOURCE;
+			type: "web-tool:open-image-tab-result";
+			success: true;
+	  }
+	| {
+			source: typeof WEB_CONTENT_COMMAND_SOURCE;
+			type: "web-tool:read-rendered-image-result";
+			success: true;
+			base64: string;
+			mimeType: string;
+			width: number;
+			height: number;
+	  }
+	| {
+			source: typeof WEB_CONTENT_COMMAND_SOURCE;
 			type:
 				| "web-tool:snapshot-result"
 				| "web-tool:dom-query-result"
 				| "web-tool:dom-action-result"
 				| "web-tool:wait-selector-result"
-				| "web-tool:fetch-image-result";
+				| "web-tool:fetch-image-result"
+				| "web-tool:open-image-tab-result"
+				| "web-tool:read-rendered-image-result";
 			success: false;
 			error: string;
 	  };
@@ -210,6 +252,18 @@ export type WebBrowserCommandRequest =
 			sessionId: string;
 			url: string;
 			tabId: number;
+	  }
+	/**
+	 * Get an image a page shows but nothing can download: open it in its own tab
+	 * from the page, then read the pixels the browser rendered.
+	 */
+	| {
+			source: typeof WEB_BROWSER_COMMAND_SOURCE;
+			command: "capture-image";
+			sessionId: string;
+			url: string;
+			tabId: number;
+			timeoutMs?: number;
 	  }
 	/**
 	 * Raise the session's tab so the user can act on it themselves — solving a
@@ -303,6 +357,16 @@ export type WebBrowserCommandResponse =
 	  }
 	| {
 			source: typeof WEB_BROWSER_COMMAND_SOURCE;
+			command: "capture-image";
+			success: true;
+			sessionId: string;
+			base64: string;
+			mimeType: string;
+			width: number;
+			height: number;
+	  }
+	| {
+			source: typeof WEB_BROWSER_COMMAND_SOURCE;
 			command: "bring-to-front";
 			success: true;
 			sessionId: string;
@@ -325,6 +389,7 @@ export type WebBrowserCommandResponse =
 				| "close"
 				| "screenshot"
 				| "fetch-image"
+				| "capture-image"
 				| "bring-to-front"
 				| "reload";
 			success: false;
@@ -366,7 +431,10 @@ export const isWebContentCommandRequest = (
 				typeof value.maxHtmlChars === "number"
 			);
 		case "web-tool:fetch-image":
+		case "web-tool:open-image-tab":
 			return typeof value.url === "string";
+		case "web-tool:read-rendered-image":
+			return true;
 		default:
 			return false;
 	}
@@ -398,9 +466,12 @@ export const isWebContentCommandResponse = (
 		case "web-tool:wait-selector-result":
 			return typeof value.matched === "boolean" && isRecord(value.snapshot);
 		case "web-tool:fetch-image-result":
+		case "web-tool:read-rendered-image-result":
 			return (
 				typeof value.base64 === "string" && typeof value.mimeType === "string"
 			);
+		case "web-tool:open-image-tab-result":
+			return true;
 		default:
 			return false;
 	}
@@ -466,6 +537,7 @@ export const isWebBrowserCommandRequest = (
 				typeof value.sessionId === "string" && typeof value.tabId === "number"
 			);
 		case "fetch-image":
+		case "capture-image":
 			return (
 				typeof value.sessionId === "string" &&
 				typeof value.url === "string" &&
@@ -515,6 +587,7 @@ export const isWebBrowserCommandResponse = (
 				typeof value.height === "number"
 			);
 		case "fetch-image":
+		case "capture-image":
 			return (
 				typeof value.base64 === "string" && typeof value.mimeType === "string"
 			);

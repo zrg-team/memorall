@@ -1,3 +1,4 @@
+import type { CoAgentSessionMarkerType } from "@/services/chat/coagent-session";
 import { backgroundJob } from "@/services/background-jobs/background-job";
 import type {
 	EmbeddedChatHistoryPayload,
@@ -34,6 +35,8 @@ export const embeddedChatHistoryService = {
 		id?: string;
 		role: "user" | "assistant";
 		content: string;
+		/** The turn as the model received it, when an attachment makes it more than text. */
+		complexContent?: unknown;
 		topicId?: string | null;
 		metadata?: Record<string, unknown> | null;
 	}): Promise<Message> {
@@ -47,6 +50,22 @@ export const embeddedChatHistoryService = {
 		}
 
 		return result.message;
+	},
+
+	/**
+	 * Mark where a co-agent session begins or ends.
+	 *
+	 * Visual only, like a divider: the agent reads straight through it.
+	 */
+	async insertCoAgentMarker(
+		marker: CoAgentSessionMarkerType,
+		url?: string,
+	): Promise<void> {
+		await executeHistoryJob({
+			operation: "insert-coagent-marker",
+			marker,
+			url,
+		});
 	},
 
 	async finalizeMessage(

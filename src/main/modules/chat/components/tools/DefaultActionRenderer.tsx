@@ -12,6 +12,7 @@ import {
 	ToolCodeBlock,
 	ToolDetail,
 	ToolDetailsGrid,
+	ToolItemImages,
 	ToolItemRawIO,
 	ToolSection,
 	getMCPActionMetadata,
@@ -198,6 +199,7 @@ export const defaultActionRenderer: ActionRenderer = (item, isOpen) => {
 					<MCPToolInfo {...mcpMetadata} args={getToolCallArguments(item)} />
 				) : null}
 				<ToolResultImages metadata={item.metadata} />
+				<ToolItemImages item={item} />
 				<TaskMermaidDiagram
 					chart={extractMermaidContent(trimmedDesc)}
 					isOpen={isOpen}
@@ -213,6 +215,7 @@ export const defaultActionRenderer: ActionRenderer = (item, isOpen) => {
 				<MCPToolInfo {...mcpMetadata} args={getToolCallArguments(item)} />
 			) : null}
 			<ToolResultImages metadata={item.metadata} />
+			<ToolItemImages item={item} />
 			<ToolOutputBody description={item.description} />
 			<ToolItemRawIO item={item} />
 		</div>

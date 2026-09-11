@@ -46,6 +46,9 @@ describe("detectWebBlock", () => {
 		expect(detectWebBlock(page("", "<div class='g-recaptcha'>"))?.kind).toBe(
 			"captcha",
 		);
+		expect(
+			detectWebBlock(page("Press and hold to confirm you are human"))?.kind,
+		).toBe("captcha");
 	});
 
 	it("detects login and paywall gates", () => {
@@ -103,11 +106,72 @@ describe("detectWebBlock", () => {
 	});
 
 	it("does not fire on an article that merely discusses captchas", () => {
-		// Known limitation, pinned deliberately: the word appears in the body, so
-		// this DOES fire. If it ever becomes a real annoyance the fix is to scope
-		// the captcha markers to the head/title rather than loosen them silently.
+		// Was a pinned limitation: the bare word appeared in the body and this
+		// fired. The markers are now the sentences a challenge page actually shows.
 		expect(
-			detectWebBlock(page("A history of CAPTCHA and bot detection"))?.kind,
+			detectWebBlock(page("A history of CAPTCHA and bot detection")),
+		).toBeNull();
+	});
+
+	it("does not call a working page a wall because of a sign-in widget", () => {
+		// The reported false positive: a news article whose markup pulls in Google
+		// sign-in, which brings recaptcha/api.js with it. The page was served in
+		// full and the reader was never asked to prove anything.
+		const article = [
+			"Lai suat vay mua nha thang 9: Ngan hang nao con duoi 10%?",
+			"Theo so lieu tu DKRA Consulting, lai suat vay mua nha tai 11 ngan hang",
+			"thuong mai pho bien hien o muc binh quan khoang 10,9%/nam doi voi cac",
+			"khoan vay duoc co dinh lai suat trong 12 - 24 thang.",
+		]
+			.join(" ")
+			.padEnd(900, " thong tin thi truong bat dong san.");
+
+		expect(
+			detectWebBlock(
+				page(
+					article,
+					'<script src="https://www.gstatic.com/recaptcha/releases/abc/recaptcha__en.js"></script><div class="g-recaptcha"></div>',
+				),
+			),
+		).toBeNull();
+	});
+
+	it("still catches a challenge widget on a page with nothing else on it", () => {
+		// The same markup with no content is a real wall, and must still fire.
+		expect(
+			detectWebBlock(page("", "<div class='g-recaptcha'></div>"))?.kind,
+		).toBe("captcha");
+	});
+
+	it("ignores wording that only appears in markup", () => {
+		// A script URL is not the page telling the reader to prove anything.
+		expect(
+			detectWebBlock(
+				page("", "<meta name='description' content='verify you are human'>"),
+			),
+		).toBeNull();
+	});
+
+	it("does not mistake a long page for a wall because of a stale marker", () => {
+		// "Attention required" is an ordinary heading; only Cloudflare pairs it
+		// with its own name.
+		expect(
+			detectWebBlock(
+				page("Attention required: read the terms before signing."),
+			),
+		).toBeNull();
+		expect(detectWebBlock(page("Attention Required! | Cloudflare"))?.kind).toBe(
+			"cloudflare",
+		);
+	});
+
+	it("finds wording in the text even when the head is enormous", () => {
+		// Text and html are capped separately; concatenating them let a big <head>
+		// spend the whole budget before the readable text was reached.
+		const hugeHead = `<head>${"<link rel='preload'>".repeat(2_000)}</head>`;
+		expect(
+			detectWebBlock(page("Please verify you are human to continue", hugeHead))
+				?.kind,
 		).toBe("captcha");
 	});
 

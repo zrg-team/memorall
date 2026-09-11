@@ -186,6 +186,17 @@ export type CoAgentBrowserCommandRequest =
 	| {
 			source: typeof CO_AGENT_BROWSER_COMMAND_SOURCE;
 			command: "get-active";
+	  }
+	/**
+	 * Turn the co-agent on from the chat panel rather than the page's context
+	 * menu. With `url` the page is opened in a new tab first; without one the
+	 * co-agent attaches to whichever tab the user is looking at.
+	 */
+	| {
+			source: typeof CO_AGENT_BROWSER_COMMAND_SOURCE;
+			command: "activate";
+			url?: string;
+			timeoutMs?: number;
 	  };
 
 export type CoAgentBrowserCommandResponse =
@@ -282,6 +293,13 @@ export const isCoAgentBrowserCommandRequest = (
 ): value is CoAgentBrowserCommandRequest => {
 	if (!isRecord(value) || value.source !== CO_AGENT_BROWSER_COMMAND_SOURCE) {
 		return false;
+	}
+
+	if (value.command === "activate") {
+		return (
+			(value.url === undefined || typeof value.url === "string") &&
+			(value.timeoutMs === undefined || typeof value.timeoutMs === "number")
+		);
 	}
 
 	if (value.command === "get-active") {

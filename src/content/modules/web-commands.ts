@@ -1,22 +1,62 @@
 import {
+	extractElementSource,
+	extractElementText,
+	extractReadableDocumentText,
+} from "@/services/web-browser/readable-text";
+import {
 	WEB_CONTENT_COMMAND_SOURCE,
 	type WebContentCommandRequest,
 	type WebContentCommandResponse,
 	type WebDomActionName,
 	type WebDomElementInfo,
 	type WebElementRecord,
-} from "@/services/web-browser";
-import { extractReadableDocumentText } from "@/services/web-browser/readable-text";
+} from "@/services/web-browser/web-browser-protocol";
 
 // ── Snapshot helpers ──────────────────────────────────────────────────────────
 
-const buildWebSnapshot = () => ({
-	url: window.location.href,
-	title: document.title || "",
-	html: document.documentElement?.outerHTML || document.body?.innerHTML || "",
-	text: extractReadableDocumentText(document),
-	domAccessible: true,
-});
+/**
+ * Hard ceiling on each string a snapshot carries.
+ *
+ * Chrome drops any extension message over 64 MiB, and the sender gets no useful
+ * error for it — the channel just closes, the tabs sendMessage call rejects
+ * with "The message port closed before a response was received", and the
+ * background normalises that to "Content script unavailable". So an oversized
+ * page reads as a content script that never loaded, on a page whose script is
+ * alive and well.
+ *
+ * A snapshot carries `html` and `text` together and is relayed over two further
+ * hops, so budget each string to well under half the limit. A caller asking for
+ * an unbounded snapshot (the background passes `Number.MAX_SAFE_INTEGER` to mean
+ * "everything") gets everything up to this, rather than a dropped reply.
+ */
+const SNAPSHOT_TRANSPORT_CEILING = 24_000_000;
+
+const TRUNCATION_MARKER = "\n…[truncated by Memorall: snapshot size limit]";
+
+const capSnapshotString = (value: string, limit: number): string =>
+	value.length <= limit ? value : value.slice(0, limit) + TRUNCATION_MARKER;
+
+const snapshotLimit = (maxHtmlChars?: number): number =>
+	typeof maxHtmlChars === "number" && Number.isFinite(maxHtmlChars)
+		? Math.min(
+				Math.max(Math.trunc(maxHtmlChars), 0),
+				SNAPSHOT_TRANSPORT_CEILING,
+			)
+		: SNAPSHOT_TRANSPORT_CEILING;
+
+const buildWebSnapshot = (maxHtmlChars?: number) => {
+	const limit = snapshotLimit(maxHtmlChars);
+	return {
+		url: window.location.href,
+		title: document.title || "",
+		html: capSnapshotString(
+			document.documentElement?.outerHTML || document.body?.innerHTML || "",
+			limit,
+		),
+		text: capSnapshotString(extractReadableDocumentText(document), limit),
+		domAccessible: true,
+	};
+};
 
 // ── DOM element utilities ─────────────────────────────────────────────────────
 
@@ -68,7 +108,7 @@ const createDomElementInfo = (
 		element.getAttribute("aria-labelledby"),
 	title: element.getAttribute("title"),
 	role: element.getAttribute("role"),
-	text: (element.textContent ?? "").trim(),
+	text: extractElementText(element),
 	value:
 		element instanceof HTMLInputElement ||
 		element instanceof HTMLTextAreaElement ||
@@ -81,6 +121,7 @@ const createDomElementInfo = (
 		element instanceof HTMLLinkElement
 			? element.getAttribute("href")
 			: null,
+	src: extractElementSource(element),
 	disabled:
 		(element instanceof HTMLInputElement ||
 			element instanceof HTMLTextAreaElement ||
@@ -93,7 +134,7 @@ const createDomElementInfo = (
 
 const createElementRecord = (element: Element): WebElementRecord => ({
 	label: element.tagName.toLowerCase(),
-	text: element.textContent ?? "",
+	text: extractElementText(element),
 	value:
 		element instanceof HTMLInputElement ||
 		element instanceof HTMLTextAreaElement ||
@@ -199,6 +240,8 @@ const WEB_CONTENT_ERROR_TYPE: Record<
 	"web-tool:dom-action": "web-tool:dom-action-result",
 	"web-tool:wait-selector": "web-tool:wait-selector-result",
 	"web-tool:fetch-image": "web-tool:fetch-image-result",
+	"web-tool:open-image-tab": "web-tool:open-image-tab-result",
+	"web-tool:read-rendered-image": "web-tool:read-rendered-image-result",
 };
 
 const createWebContentErrorResponse = (
@@ -223,7 +266,7 @@ export const handleWebContentCommand = async (
 					source: WEB_CONTENT_COMMAND_SOURCE,
 					type: "web-tool:snapshot-result",
 					success: true,
-					snapshot: buildWebSnapshot(),
+					snapshot: buildWebSnapshot(request.maxHtmlChars),
 				};
 
 			case "web-tool:dom-query": {
@@ -236,7 +279,7 @@ export const handleWebContentCommand = async (
 					source: WEB_CONTENT_COMMAND_SOURCE,
 					type: "web-tool:dom-query-result",
 					success: true,
-					snapshot: buildWebSnapshot(),
+					snapshot: buildWebSnapshot(request.maxHtmlChars),
 					elements,
 				};
 			}
@@ -247,7 +290,7 @@ export const handleWebContentCommand = async (
 					source: WEB_CONTENT_COMMAND_SOURCE,
 					type: "web-tool:dom-action-result",
 					success: true,
-					snapshot: buildWebSnapshot(),
+					snapshot: buildWebSnapshot(request.maxHtmlChars),
 					result,
 				};
 			}
@@ -262,7 +305,7 @@ export const handleWebContentCommand = async (
 							source: WEB_CONTENT_COMMAND_SOURCE,
 							type: "web-tool:wait-selector-result",
 							success: true,
-							snapshot: buildWebSnapshot(),
+							snapshot: buildWebSnapshot(request.maxHtmlChars),
 							matched: true,
 						};
 					}
@@ -272,7 +315,7 @@ export const handleWebContentCommand = async (
 							source: WEB_CONTENT_COMMAND_SOURCE,
 							type: "web-tool:wait-selector-result",
 							success: true,
-							snapshot: buildWebSnapshot(),
+							snapshot: buildWebSnapshot(request.maxHtmlChars),
 							matched: false,
 						};
 					}
@@ -281,6 +324,52 @@ export const handleWebContentCommand = async (
 						window.setTimeout(resolve, request.intervalMs),
 					);
 				}
+			}
+
+			case "web-tool:open-image-tab": {
+				// Must happen here rather than through the extension tabs API: a tab the
+				// extension opens carries no Referer, so a host with hotlink
+				// protection refuses the navigation. Opened by the page, the request
+				// carries that page's Referer and is served.
+				const opened = window.open(request.url, "_blank");
+				if (!opened) {
+					throw new Error(
+						"The page refused to open the image in a tab (popup blocked).",
+					);
+				}
+				return {
+					source: WEB_CONTENT_COMMAND_SOURCE,
+					type: "web-tool:open-image-tab-result",
+					success: true,
+				};
+			}
+
+			case "web-tool:read-rendered-image": {
+				// Runs in a tab showing the image itself, so the document is
+				// same-origin with it and the canvas is not tainted. Re-fetching here
+				// would send this tab's own Referer and be refused again.
+				const image = document.querySelector("img");
+				if (!image || !image.naturalWidth) {
+					throw new Error("This tab is not displaying a loaded image.");
+				}
+				const canvas = document.createElement("canvas");
+				canvas.width = image.naturalWidth;
+				canvas.height = image.naturalHeight;
+				const context = canvas.getContext("2d");
+				if (!context) {
+					throw new Error("Could not read the image: no canvas context.");
+				}
+				context.drawImage(image, 0, 0);
+				const dataUrl = canvas.toDataURL("image/png");
+				return {
+					source: WEB_CONTENT_COMMAND_SOURCE,
+					type: "web-tool:read-rendered-image-result",
+					success: true,
+					base64: dataUrl.slice(dataUrl.indexOf(",") + 1),
+					mimeType: "image/png",
+					width: image.naturalWidth,
+					height: image.naturalHeight,
+				};
 			}
 
 			case "web-tool:fetch-image": {

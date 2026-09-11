@@ -3,6 +3,8 @@ import type {
 	EmbeddedChatStreamResult,
 } from "@/embedded/chat-service";
 import { embeddedChatService } from "@/embedded/chat-service";
+import { backgroundJob } from "@/services/background-jobs/background-job";
+import { logInfo } from "@/utils/logger";
 import type { ChatMessage } from "@/embedded/types";
 import type { CoAgentContextAnchor } from "@/embedded/utils/co-agent/context-anchor";
 
@@ -13,6 +15,15 @@ export interface CoAgentPageContext {
 	title: string;
 	description?: string;
 }
+
+/**
+ * What the user asked, with anything they attached.
+ *
+ * A string for a plain question; the OpenAI content-part form when an image is
+ * attached, so a captured region reaches the model as a picture rather than as
+ * the text of the element it was cut from.
+ */
+export type CoAgentPrompt = ChatMessage["content"];
 
 export interface CoAgentChatStreamOptions
 	extends Pick<
@@ -25,7 +36,7 @@ export interface CoAgentChatStreamOptions
 		| "onError"
 		| "signal"
 	> {
-	prompt: string;
+	prompt: CoAgentPrompt;
 	pageContext: CoAgentPageContext;
 	anchorContext?: CoAgentContextAnchor;
 	/** Chosen agent flow; "chat" (or undefined) keeps the default foundation agent. */
@@ -67,7 +78,7 @@ const renderCoAgentPageContextPrompt = (context: CoAgentPageContext): string =>
 		.replace("{{title}}", context.title || "Unknown")
 		.replace("{{description}}", context.description || "Not available");
 
-const createUserMessage = (prompt: string): ChatMessage => ({
+const createUserMessage = (prompt: CoAgentPrompt): ChatMessage => ({
 	id: `co-agent-user-${Date.now()}`,
 	role: "user",
 	content: prompt,
@@ -85,11 +96,67 @@ export const createCoAgentFlowPrefixConfig = () => ({
 	],
 });
 
+/**
+ * The agent's own configuration, resolved before the run rather than inside it.
+ *
+ * Passing only an id let the run fall back to the stock configuration whenever
+ * the id could not be resolved — silently, so the co-agent answered with none
+ * of the agent's instructions, features or tools and nothing said so. Resolving
+ * here means the fallback is visible: the caller learns the agent was not
+ * applied and can say so, instead of the answer quietly coming from somebody
+ * else.
+ */
+export interface ResolvedAgentFlow {
+	config?: unknown;
+	usedFallback: boolean;
+	reason?: string;
+}
+
+export const resolveAgentFlowConfig = async (
+	agentFlowId: string | undefined,
+): Promise<ResolvedAgentFlow> => {
+	if (!agentFlowId || agentFlowId === "chat") {
+		// The built-in entry: the stock agent is the intent, not a fallback.
+		return { usedFallback: false };
+	}
+
+	try {
+		const result = await backgroundJob.createJob(
+			"get-flow-config",
+			{ flowId: agentFlowId },
+			{ stream: false },
+		);
+		if (!("promise" in result)) {
+			return { usedFallback: true, reason: "The agent could not be read." };
+		}
+		const job = await result.promise;
+		if (job.status !== "completed" || !job.result) {
+			return { usedFallback: true, reason: "The agent could not be read." };
+		}
+		const { config, usedFallback, reason } = job.result;
+		if (usedFallback) {
+			logInfo(`[CO_AGENT] Agent ${agentFlowId} fell back to the stock config.`);
+		}
+		return { config, usedFallback, reason };
+	} catch (error) {
+		return {
+			usedFallback: true,
+			reason: error instanceof Error ? error.message : String(error),
+		};
+	}
+};
+
 export const coAgentChatService = {
+	resolveAgentFlowConfig,
 	chatStream: (
-		options: CoAgentChatStreamOptions,
+		options: CoAgentChatStreamOptions & { flowConfig?: unknown },
 	): Promise<EmbeddedChatStreamResult> =>
 		embeddedChatService.chatStream({
+			// Resolved by the caller, so the run cannot quietly substitute the
+			// stock configuration for the agent that was chosen.
+			...(options.flowConfig
+				? { flowConfig: options.flowConfig as never }
+				: {}),
 			messages: [createUserMessage(options.prompt)],
 			model: options.model,
 			mode: "custom",

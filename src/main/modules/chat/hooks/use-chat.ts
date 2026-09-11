@@ -1,5 +1,11 @@
+import {
+	COAGENT_SESSION_END,
+	isNonModelMessageType,
+	shouldCloseCoAgentSession,
+} from "@/services/chat/coagent-session";
 import { useEffect, useState } from "react";
 import { chatService } from "@/main/modules/chat/services/chat-service";
+import { getAgentOpenUITheme } from "@/main/modules/chat/utils/agent-openui-theme";
 import { buildSendMessages } from "@/main/modules/chat/utils/build-send-messages";
 import {
 	extractDocumentText,
@@ -150,6 +156,18 @@ export const useChat = (model: string) => {
 	const agentFlowName = availableAgents.find(
 		(a) => a.id === selectedAgentFlowId,
 	)?.name;
+	// Recorded on each message so a rendered block falls back to the agent's
+	// theme rather than shadcn when the model omits the theme argument.
+	const [openuiTheme, setOpenuiTheme] = useState<string | undefined>(undefined);
+	useEffect(() => {
+		let active = true;
+		void getAgentOpenUITheme(selectedAgentFlowId ?? undefined).then((theme) => {
+			if (active) setOpenuiTheme(theme);
+		});
+		return () => {
+			active = false;
+		};
+	}, [selectedAgentFlowId]);
 
 	// Action selectors - stable references, won't cause re-renders
 	const setSelectedTopic = useChatStore((state) => state.setSelectedTopic);
@@ -190,7 +208,7 @@ export const useChat = (model: string) => {
 
 		// Find the last user or assistant message (skip separators)
 		const lastMessage = messages
-			.filter((msg) => msg.type !== "separator")
+			.filter((msg) => !isNonModelMessageType(msg.type))
 			.findLast((msg) => msg.role === "user" || msg.role === "assistant");
 
 		if (lastMessage?.topicId) {
@@ -354,6 +372,17 @@ export const useChat = (model: string) => {
 					{ type: "text" as const, text: effectiveMessageContent },
 					...imageParts,
 				];
+			}
+
+			// The user may walk away from the page rather than pressing exit, so a
+			// message typed here is what closes a session left open.
+			if (shouldCloseCoAgentSession(messages)) {
+				await addMessage({
+					role: "system",
+					content: "",
+					type: COAGENT_SESSION_END,
+					createdAt: new Date(),
+				});
 			}
 
 			// Add user message to store and database
@@ -549,6 +578,7 @@ export const useChat = (model: string) => {
 						},
 						model,
 						...(agentFlowName && { agentFlowName }),
+						...(openuiTheme && { openuiTheme }),
 					},
 				});
 				setInProgressMessageImmediate(null);
@@ -564,6 +594,7 @@ export const useChat = (model: string) => {
 						...actionMetadata,
 						model,
 						...(agentFlowName && { agentFlowName }),
+						...(openuiTheme && { openuiTheme }),
 					},
 				});
 			}
@@ -599,6 +630,7 @@ export const useChat = (model: string) => {
 								"cancelled",
 							),
 							...(agentFlowName && { agentFlowName }),
+							...(openuiTheme && { openuiTheme }),
 						},
 					});
 					logInfo("Saved partial content from stopped generation");
@@ -628,6 +660,7 @@ export const useChat = (model: string) => {
 						),
 						model,
 						...(agentFlowName && { agentFlowName }),
+						...(openuiTheme && { openuiTheme }),
 					},
 				});
 			} else {
@@ -638,6 +671,7 @@ export const useChat = (model: string) => {
 						error: errorMetadata,
 						model,
 						...(agentFlowName && { agentFlowName }),
+						...(openuiTheme && { openuiTheme }),
 					},
 				});
 			}

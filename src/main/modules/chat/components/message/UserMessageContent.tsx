@@ -10,6 +10,8 @@ import {
 } from "lucide-react";
 import { EMBEDDED_CONTEXT_TAG_CONFIG } from "@/embedded/context-items";
 import { cn } from "@/lib/utils";
+import { extractMessageLinks } from "../../utils/message-links";
+import { CoAgentLinkActions } from "./CoAgentLinkActions";
 import { MessageContentWithArtifacts } from "./MessageContentWithArtifacts";
 
 type UserContextSection = {
@@ -161,6 +163,12 @@ export const UserMessageContent: React.FC<{
 	messageId?: string;
 }> = ({ content, isStreaming, messageId }) => {
 	const parsed = useMemo(() => parseUserContext(content), [content]);
+	// Only the prose the user typed — a url that arrived inside a <context> block
+	// came from the page they were already on, so offering to open it is noise.
+	const links = useMemo(
+		() => extractMessageLinks(parsed.userMessage),
+		[parsed.userMessage],
+	);
 
 	if (!parsed.hasContext) {
 		// A typed message is prose the sender line-broke by hand, so its soft
@@ -174,6 +182,7 @@ export const UserMessageContent: React.FC<{
 					isStreaming={isStreaming}
 					blockScope={messageId}
 				/>
+				{isStreaming ? null : <CoAgentLinkActions links={links} />}
 			</div>
 		);
 	}
@@ -181,8 +190,11 @@ export const UserMessageContent: React.FC<{
 	return (
 		<div className="space-y-3">
 			{parsed.userMessage ? (
-				<div className="whitespace-pre-wrap break-words">
-					{parsed.userMessage}
+				<div>
+					<div className="whitespace-pre-wrap break-words">
+						{parsed.userMessage}
+					</div>
+					{isStreaming ? null : <CoAgentLinkActions links={links} />}
 				</div>
 			) : null}
 			<div className="space-y-2">

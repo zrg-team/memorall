@@ -1,3 +1,8 @@
+import {
+	COAGENT_SESSION_START,
+	isCoAgentSessionMarker,
+} from "@/services/chat/coagent-session";
+import { Bot } from "lucide-react";
 import React, { Suspense, useMemo } from "react";
 import { useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
@@ -32,6 +37,10 @@ import {
 } from "./message/AssistantContentFlow";
 import { MessageErrorNotice } from "./message/MessageErrorNotice";
 import {
+	type AttachedContextRef,
+	MessageAttachedContexts,
+} from "./message/MessageAttachedContexts";
+import {
 	buildAssistantContentParts,
 	hasAssistantContentParts,
 } from "./message/message-parts-adapter";
@@ -39,6 +48,8 @@ import {
 interface MessageMetadata extends MessageFooterMetadata {
 	actions?: MessageActionItem[];
 	attachedDocuments?: AttachedDocumentRef[];
+	/** What a co-agent turn carried: a picked element, a region, a block of text. */
+	attachedContexts?: AttachedContextRef[];
 	agentFlowName?: string;
 	error?: {
 		message: string;
@@ -113,6 +124,13 @@ export const MessageRenderer: React.FC<MessageRendererProps> = React.memo(
 			return message.metadata.actions;
 		}, [message.metadata]);
 
+		const attachedContexts = useMemo<AttachedContextRef[]>(() => {
+			if (!message.metadata || typeof message.metadata !== "object") return [];
+			if (!("attachedContexts" in message.metadata)) return [];
+			if (!Array.isArray(message.metadata.attachedContexts)) return [];
+			return message.metadata.attachedContexts as AttachedContextRef[];
+		}, [message.metadata]);
+
 		const attachedDocuments = useMemo<AttachedDocumentRef[]>(() => {
 			if (!message.metadata || typeof message.metadata !== "object") return [];
 			if (!("attachedDocuments" in message.metadata)) return [];
@@ -163,6 +181,13 @@ export const MessageRenderer: React.FC<MessageRendererProps> = React.memo(
 			return metadata?.error;
 		}, [metadata]);
 
+		// The agent's OpenUI theme, recorded on the message so a block that does
+		// not name a theme still renders in the one the agent is configured for.
+		const configuredOpenUITheme = useMemo(
+			() => (metadata as { openuiTheme?: string } | undefined)?.openuiTheme,
+			[metadata],
+		);
+
 		const agentFlowName = useMemo(() => {
 			return metadata?.agentFlowName;
 		}, [metadata]);
@@ -186,6 +211,27 @@ export const MessageRenderer: React.FC<MessageRendererProps> = React.memo(
 			}
 			return t("execution.default", { node: executionLabel });
 		}, [executeState, executionLabel, t]);
+
+		if (isCoAgentSessionMarker(message.type)) {
+			const isStart = message.type === COAGENT_SESSION_START;
+			return (
+				<div key={message.id} className="my-3 flex items-center gap-3">
+					<div className="h-px flex-1 bg-primary/25" />
+					<div className="inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/5 px-2.5 py-1 text-[11px] font-medium text-primary/90">
+						<Bot className="h-3 w-3" />
+						{isStart
+							? t("messages.coAgentSessionStart", {
+									defaultValue: "Co-agent session started",
+								})
+							: t("messages.coAgentSessionEnd", {
+									defaultValue: "Co-agent session ended",
+								})}
+						<span className="font-normal text-primary/60">{formattedDate}</span>
+					</div>
+					<div className="h-px flex-1 bg-primary/25" />
+				</div>
+			);
+		}
 
 		if (message.type === "separator") {
 			return (
@@ -241,6 +287,9 @@ export const MessageRenderer: React.FC<MessageRendererProps> = React.memo(
 							{message.role === "user" && attachedDocuments.length > 0 && (
 								<MessageAttachedDocuments documents={attachedDocuments} />
 							)}
+							{message.role === "user" && attachedContexts.length > 0 && (
+								<MessageAttachedContexts contexts={attachedContexts} />
+							)}
 							{complexContent && (
 								<MessageComplexImages complexContent={complexContent} />
 							)}
@@ -291,6 +340,7 @@ export const MessageRenderer: React.FC<MessageRendererProps> = React.memo(
 													suppressArtifactPreviews={
 														location.pathname === "/runtime"
 													}
+													configuredTheme={configuredOpenUITheme}
 													onMessageAction={onMessageAction}
 												/>
 												{messageError ? (

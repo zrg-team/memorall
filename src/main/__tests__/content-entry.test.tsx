@@ -26,7 +26,7 @@ const mocks = vi.hoisted(() => ({
 	handleShowChatModal: vi.fn(async (_message, sendResponse) =>
 		sendResponse({ success: true, handler: "chat-modal" }),
 	),
-	handleShowImageSelector: vi.fn((_message, sendResponse) =>
+	handleActivateCanvasSelector: vi.fn((_message, sendResponse) =>
 		sendResponse({ success: true, handler: "image-selector" }),
 	),
 	handleActivateSmartSelector: vi.fn(async (sendResponse) =>
@@ -49,7 +49,7 @@ const embeddedUiBundle = () => ({
 	uiHandlers: {
 		handleShowTopicSelector: mocks.handleShowTopicSelector,
 		handleShowChatModal: mocks.handleShowChatModal,
-		handleShowImageSelector: mocks.handleShowImageSelector,
+		handleActivateCanvasSelector: mocks.handleActivateCanvasSelector,
 		handleActivateSmartSelector: mocks.handleActivateSmartSelector,
 		handleShowCoAgent: mocks.handleShowCoAgent,
 		handleHideCoAgent: mocks.handleHideCoAgent,
@@ -76,7 +76,11 @@ vi.mock("@/services/background-jobs/bridges/types", () => ({
 vi.mock("@/content/modules/web-commands", () => ({
 	handleWebContentCommand: mocks.handleWebContentCommand,
 }));
-vi.mock("@/services/web-browser", () => ({
+// The entry deliberately imports the protocol module, not the
+// `@/services/web-browser` barrel — the barrel drags the web session registry
+// and the platform composition into the content bundle, where they evaluate
+// before the message listener is registered.
+vi.mock("@/services/web-browser/web-browser-protocol", () => ({
 	isWebContentCommandRequest: mocks.isWebContentCommandRequest,
 }));
 vi.mock("@/services/co-agent", () => ({
@@ -210,7 +214,10 @@ describe("content script communication entrypoint", () => {
 			[BACKGROUND_EVENTS.LET_REMEMBER, mocks.handleLetRemember],
 			[BACKGROUND_EVENTS.SHOW_TOPIC_SELECTOR, mocks.handleShowTopicSelector],
 			[BACKGROUND_EVENTS.SHOW_CHAT_MODAL, mocks.handleShowChatModal],
-			[BACKGROUND_EVENTS.SHOW_IMAGE_SELECTOR, mocks.handleShowImageSelector],
+			[
+				BACKGROUND_EVENTS.ACTIVATE_CANVAS_SELECTOR,
+				mocks.handleActivateCanvasSelector,
+			],
 		] as const) {
 			const sendResponse = vi.fn();
 			expect(listener({ type }, {}, sendResponse)).toBe(true);

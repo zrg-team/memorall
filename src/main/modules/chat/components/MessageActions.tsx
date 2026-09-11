@@ -23,6 +23,7 @@ import {
 	Keyboard,
 	FileImage,
 	FileSearch,
+	Trash2,
 	type LucideIcon,
 } from "lucide-react";
 
@@ -65,6 +66,7 @@ import {
 	getCoAgentActionTitle,
 } from "./tools/CoAgentTool";
 import { documentConvertRenderer } from "./tools/DocumentConvert";
+import { memoryToolIcon, memoryToolRenderer } from "./tools/MemoryTool";
 import { composioToolRenderer } from "./tools/ComposioTool";
 import {
 	composioCallTitle,
@@ -102,6 +104,11 @@ const EXACT_ICON_MAPPINGS: Record<string, LucideIcon> = {
 	pdf_metadata: FileSearch,
 	pdf_to_text: FileText,
 	pdf_to_image: FileImage,
+	memory_remember: memoryToolIcon,
+	memory_retrieve: Search,
+	memory_update: PenLine,
+	memory_remove: Trash2,
+	memory_explain_source: FileSearch,
 };
 
 /**
@@ -296,6 +303,11 @@ const ACTION_RENDERERS: Record<string, ActionRenderer> = {
 	pdf_to_image: documentConvertRenderer,
 	knowledge_graph: messageKnowledgeGraphRenderer,
 	structmem_knowledge_retrieval: structMemKnowledgeRetrievalRenderer,
+	memory_remember: memoryToolRenderer,
+	memory_retrieve: memoryToolRenderer,
+	memory_update: memoryToolRenderer,
+	memory_remove: memoryToolRenderer,
+	memory_explain_source: memoryToolRenderer,
 };
 
 interface ActionContentProps {

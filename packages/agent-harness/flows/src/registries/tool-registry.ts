@@ -6,10 +6,7 @@ import type {
 	ToolFactory,
 	ToolResultValue,
 } from "../interfaces/engine/tool.js";
-import {
-	isJsonToolSchema,
-	parseToolInput,
-} from "../interfaces/engine/tool.js";
+import { isJsonToolSchema, parseToolInput } from "../interfaces/engine/tool.js";
 import type { ChatCompletionTool } from "../interfaces/engine/messages.js";
 import { logWarn } from "../logging/logger.js";
 
@@ -368,6 +365,7 @@ export class ToolRegistryManager {
 		const validatedArgs = parseToolInput<ToolTypeRegistry[T]["input"]>(
 			tool.schema,
 			args,
+			String(toolName),
 		);
 		return tool.execute(validatedArgs);
 	}

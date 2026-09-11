@@ -1,5 +1,5 @@
 import type React from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { PromptInput } from "@/main/components/ui/shadcn-io/ai/prompt-input";
@@ -16,6 +16,11 @@ import {
 	MentionRichTextarea,
 	type MentionRichTextareaHandle,
 } from "@/main/modules/chat/components/input/MentionRichTextarea";
+import {
+	type SelectableModel,
+	useSelectableModels,
+} from "@/main/hooks/use-selectable-models";
+import { useCoAgentActivationStore } from "@/main/stores/co-agent-activation";
 import type { FlowMetadata } from "@/services/database/entities/flows";
 import { documentFileSystemService } from "@/services/filesystem/document-filesystem";
 import { DOCUMENTS_SANDBOX_ROOT } from "@/services/filesystem/sandbox-paths";
@@ -113,6 +118,36 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 		observer.observe(element);
 		return () => observer.disconnect();
 	}, []);
+
+	// The co-agent needs a real browser tab to attach to, which only the
+	// extension has. Elsewhere the button is simply absent rather than present
+	// and failing.
+	const activateCoAgent = useCoAgentActivationStore((state) => state.activate);
+	const isCoAgentStarting = useCoAgentActivationStore(
+		(state) => state.isActivating,
+	);
+	const canUseCoAgent = useMemo(
+		() => typeof chrome !== "undefined" && Boolean(chrome?.runtime?.id),
+		[],
+	);
+	const startCoAgent = useCallback(() => {
+		void activateCoAgent();
+	}, [activateCoAgent]);
+
+	const {
+		models: selectableModels,
+		byProvider: selectableModelsByProvider,
+		lockedProviders: lockedModelProviders,
+		isLoading: isLoadingModels,
+		refresh: refreshModels,
+		selectModel,
+	} = useSelectableModels();
+	const handleSelectModel = useCallback(
+		(next: SelectableModel) => {
+			void selectModel(next);
+		},
+		[selectModel],
+	);
 
 	const [mentionQuery, setMentionQuery] = useState<string | null>(null);
 	const mentionAtIndexRef = useRef<number>(-1);
@@ -431,6 +466,14 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 							canSubmit={!!inputValue.trim() && isModelReady}
 							isFullWidth={isFullWidth}
 							onToggleFullWidth={onToggleFullWidth}
+							onStartCoAgent={canUseCoAgent ? startCoAgent : undefined}
+							isCoAgentStarting={isCoAgentStarting}
+							selectableModels={selectableModels}
+							selectableModelsByProvider={selectableModelsByProvider}
+							lockedModelProviders={lockedModelProviders}
+							isLoadingModels={isLoadingModels}
+							onSelectModel={handleSelectModel}
+							onRefreshModels={refreshModels}
 						/>
 					</PromptInput>
 				</div>

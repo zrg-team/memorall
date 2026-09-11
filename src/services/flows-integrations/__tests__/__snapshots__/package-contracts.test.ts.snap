@@ -686,6 +686,7 @@ exports[`flows-integrations registered contracts > registers every integrations 
   "thread_history_read",
   "thread_history_search",
   "web_fetch_image",
+  "web_read_images",
   "web_screenshot",
 ]
 `;
@@ -1832,6 +1833,38 @@ exports[`flows-integrations registered contracts > registers every integrations 
       },
       "required": [
         "url",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "Look at images from the current page. Give it image URLs (from web_dom_action query on 'img') and it returns the pictures themselves for inspection. Use this instead of trying to read image data out of the DOM. Optionally saves them to the root filesystem.",
+    "name": "web_read_images",
+    "parameters": {
+      "properties": {
+        "detail": {
+          "enum": [
+            "auto",
+            "low",
+            "high",
+          ],
+          "type": "string",
+        },
+        "save_dir": {
+          "type": "string",
+        },
+        "sessionId": {
+          "type": "string",
+        },
+        "urls": {
+          "items": {
+            "type": "string",
+          },
+          "type": "array",
+        },
+      },
+      "required": [
+        "urls",
       ],
       "type": "object",
     },

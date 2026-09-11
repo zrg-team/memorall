@@ -9,8 +9,13 @@ import {
 	type WebBrowserSurface,
 	type WebContentCommandRequest,
 	type WebContentCommandResponse,
-} from "@/services/web-browser";
+} from "@/services/web-browser/web-browser-protocol";
 import { logError } from "@/utils/logger";
+import {
+	isMissingContentScriptError,
+	registerContentScriptInjectionListeners,
+	reinjectContentScript,
+} from "./content-script-injection";
 
 interface StoredWebBrowserSurface extends WebBrowserSurface {
 	sessionId: string;
@@ -244,14 +249,9 @@ const normalizeContentCommandError = (
 	pageUrl?: string,
 ): string => {
 	const message = toErrorMessage(error);
-	if (
-		message.includes("Receiving end does not exist") ||
-		message.includes("Could not establish connection") ||
-		message.includes("The message port closed before")
-	) {
-		return pageUrl
-			? `Content script unavailable for ${pageUrl}. The page may be restricted or not ready yet.`
-			: "Content script unavailable for this page. The page may be restricted or not ready yet.";
+	if (isMissingContentScriptError(message)) {
+		const target = pageUrl ? ` for ${pageUrl}` : " for this page";
+		return `Content script unavailable${target}, and re-injecting it did not help. The page may be restricted (chrome://, the Web Store, a PDF viewer), or Memorall's site access may be limited to "on click" — set it to "on all sites" in the browser's extension settings.`;
 	}
 	return message;
 };
@@ -288,14 +288,14 @@ const sendContentCommand = async (
 		} catch (error) {
 			lastError = error;
 			const message = toErrorMessage(error);
-			if (
-				!message.includes("Receiving end does not exist") &&
-				!message.includes("Could not establish connection") &&
-				!message.includes("The message port closed before")
-			) {
+			if (!isMissingContentScriptError(message)) {
 				throw new Error(normalizeContentCommandError(error, tab.url));
 			}
 
+			// The tab is loaded but nothing is listening. Retrying alone only helps
+			// if the script is merely late, so put it there ourselves — once per
+			// tab — and let the loop try again.
+			await reinjectContentScript(tabId);
 			await delay(RETRY_INTERVAL_MS);
 		}
 	}
@@ -336,9 +336,7 @@ const openSurfaceForMode = async (
 const isTransientContentScriptError = (error: unknown): boolean => {
 	const message = toErrorMessage(error);
 	return (
-		message.includes("Receiving end does not exist") ||
-		message.includes("Could not establish connection") ||
-		message.includes("The message port closed before") ||
+		isMissingContentScriptError(message) ||
 		message.includes("Content script unavailable")
 	);
 };
@@ -686,6 +684,104 @@ const handleFetchImageCommand = async (
 	}
 };
 
+/**
+ * Get an image the page can display but nothing can download.
+ *
+ * Measured behaviour this works around, on a host with hotlink protection:
+ * a direct fetch from the extension is refused (no Referer), a fetch from the
+ * page's content script is blocked by CORS, and a tab the extension opens at the
+ * image sends no Referer either — `openerTabId` does not supply one. Only a tab
+ * the *page* opens carries that page's Referer, and once the tab is on the image
+ * the document is same-origin with it, so the pixels can be read off a canvas.
+ * Re-fetching inside that tab does not work: the request would carry the image
+ * tab's own Referer and be refused again.
+ */
+const findTabOpenedBy = async (
+	openerTabId: number,
+	url: string,
+	knownTabIds: ReadonlySet<number>,
+	timeoutMs: number,
+): Promise<chrome.tabs.Tab> => {
+	const deadline = Date.now() + timeoutMs;
+	while (Date.now() < deadline) {
+		const tabs = await chrome.tabs.query({});
+		const opened = tabs.find(
+			(tab) =>
+				typeof tab.id === "number" &&
+				!knownTabIds.has(tab.id) &&
+				(tab.openerTabId === openerTabId ||
+					tab.url === url ||
+					tab.pendingUrl === url),
+		);
+		if (opened) return opened;
+		await delay(100);
+	}
+	throw new Error("The page did not open the image in a tab.");
+};
+
+const handleCaptureImageCommand = async (
+	request: Extract<WebBrowserCommandRequest, { command: "capture-image" }>,
+): Promise<WebBrowserCommandResponse> => {
+	const timeoutMs = request.timeoutMs ?? 20_000;
+	let imageTabId: number | undefined;
+	try {
+		const known = new Set(
+			(await chrome.tabs.query({}))
+				.map((tab) => tab.id)
+				.filter((id): id is number => typeof id === "number"),
+		);
+
+		await sendContentCommand(
+			request.tabId,
+			{
+				source: WEB_CONTENT_COMMAND_SOURCE,
+				type: "web-tool:open-image-tab",
+				url: request.url,
+			},
+			Math.min(timeoutMs, 8_000),
+		);
+
+		const imageTab = await findTabOpenedBy(
+			request.tabId,
+			request.url,
+			known,
+			Math.min(timeoutMs, 8_000),
+		);
+		imageTabId = imageTab.id as number;
+		await waitForTabReady(imageTabId, timeoutMs);
+
+		const response = await sendContentCommand(
+			imageTabId,
+			{
+				source: WEB_CONTENT_COMMAND_SOURCE,
+				type: "web-tool:read-rendered-image",
+			},
+			Math.min(timeoutMs, 10_000),
+		);
+		if (response.type !== "web-tool:read-rendered-image-result") {
+			throw new Error("Invalid rendered-image response.");
+		}
+
+		return {
+			source: WEB_BROWSER_COMMAND_SOURCE,
+			command: "capture-image",
+			success: true,
+			sessionId: request.sessionId,
+			base64: response.base64,
+			mimeType: response.mimeType,
+			width: response.width,
+			height: response.height,
+		};
+	} catch (error) {
+		return createErrorResponse(request, error);
+	} finally {
+		// The tab exists only to be read; leaving it would litter the user's window.
+		if (typeof imageTabId === "number") {
+			await chrome.tabs.remove(imageTabId).catch(() => {});
+		}
+	}
+};
+
 const handleCloseCommand = async (
 	request: Extract<WebBrowserCommandRequest, { command: "close" }>,
 ): Promise<WebBrowserCommandResponse> => {
@@ -768,6 +864,8 @@ const handleCommand = async (
 			return handleScreenshotCommand(request);
 		case "fetch-image":
 			return handleFetchImageCommand(request);
+		case "capture-image":
+			return handleCaptureImageCommand(request);
 		case "bring-to-front":
 			return handleBringToFrontCommand(request);
 		case "reload":
@@ -776,6 +874,8 @@ const handleCommand = async (
 };
 
 export function registerWebToolBrowserHandler(): void {
+	registerContentScriptInjectionListeners();
+
 	chrome.runtime.onMessage.addListener((rawMessage, _sender, sendResponse) => {
 		if (!isWebBrowserCommandRequest(rawMessage)) {
 			return false;

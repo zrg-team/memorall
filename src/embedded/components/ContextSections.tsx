@@ -14,6 +14,7 @@ export const EmbeddedContextSections: React.FC<{
 	onRemoveAttachedContext: (itemId: string) => void;
 	onClearAttachedContexts: () => void;
 	onStartSmartSelect: () => void;
+	onStartCanvasSelect: () => void;
 	showContextSection: boolean;
 	onToggleContextSection: () => void;
 }> = ({
@@ -23,6 +24,7 @@ export const EmbeddedContextSections: React.FC<{
 	onRemoveAttachedContext,
 	onClearAttachedContexts,
 	onStartSmartSelect,
+	onStartCanvasSelect,
 	showContextSection,
 	onToggleContextSection,
 }) => {
@@ -372,6 +374,28 @@ export const EmbeddedContextSections: React.FC<{
 									/>
 								</svg>
 								{t("smartSelect")}
+							</button>
+							<button
+								onClick={onStartCanvasSelect}
+								className="memorall-smart-select-button"
+								onKeyDown={(e) => e.stopPropagation()}
+								onKeyUp={(e) => e.stopPropagation()}
+								onKeyPress={(e) => e.stopPropagation()}
+							>
+								<svg
+									className="memorall-smart-select-icon"
+									fill="none"
+									stroke="currentColor"
+									viewBox="0 0 24 24"
+								>
+									<path
+										strokeLinecap="round"
+										strokeLinejoin="round"
+										strokeWidth={2}
+										d="M6 3v13a2 2 0 002 2h13M3 6h13a2 2 0 012 2v13"
+									/>
+								</svg>
+								{t("canvasSelect")}
 							</button>
 							{attachedContexts.length > 0 && (
 								<button

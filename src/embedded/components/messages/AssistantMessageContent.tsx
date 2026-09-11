@@ -9,8 +9,10 @@ import { splitOpenUIContent } from "@/utils/openui";
 export const AssistantMessageContent: React.FC<{
 	content: string;
 	isStreaming: boolean;
+	/** The answering agent's OpenUI theme, for blocks that do not name one. */
+	configuredTheme?: string;
 	onMessageAction?: (action: MessageActionRequest) => void | Promise<void>;
-}> = ({ content, isStreaming, onMessageAction }) => {
+}> = ({ content, isStreaming, configuredTheme, onMessageAction }) => {
 	const segments = useMemo(
 		() => splitOpenUIContent(content, { includeIncomplete: isStreaming }),
 		[content, isStreaming],
@@ -46,6 +48,7 @@ export const AssistantMessageContent: React.FC<{
 							<OpenUIRenderer
 								content={segment.content}
 								streaming={isStreaming}
+								configuredTheme={configuredTheme}
 								onMessageAction={onMessageAction}
 							/>
 						</div>

@@ -1,9 +1,17 @@
 import type React from "react";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { AgentCursorOverlay } from "@/components/AgentCursor";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AgentCursorOverlay, hideAgentCursor } from "@/components/AgentCursor";
 import { BACKGROUND_EVENTS } from "@/constants/events";
 import { embeddedChatHistoryService } from "@/embedded/chat-history-service";
+import { createCanvasSelectOverlay } from "@/embedded/components/CanvasSelectOverlay";
+import { buildAttachedContexts } from "@/embedded/utils/co-agent/attached-contexts";
+import { buildStoredTurn } from "@/embedded/utils/co-agent/stored-turn";
 import { createSmartSelectOverlay } from "@/embedded/components/SmartSelectOverlay";
+import {
+	latestToolName,
+	progressForNode,
+	progressForTool,
+} from "@/embedded/utils/co-agent/progress-status";
 import {
 	buildEmbeddedContextMessageContent,
 	createEmbeddedContextItem,
@@ -13,6 +21,13 @@ import { useEmbeddedTranslation } from "@/embedded/hooks/use-embedded-language";
 import { useEmbeddedModelStatus } from "@/embedded/hooks/use-embedded-model-status";
 import { coAgentChatService } from "@/embedded/pages/CoAgent/co-agent-chat";
 import { CO_AGENT_STATUS_EVENT } from "@/embedded/pages/CoAgent/constants";
+import {
+	COAGENT_SESSION_END,
+	COAGENT_SESSION_START,
+	findOpenCoAgentSession,
+	isCoAgentSessionStale,
+	isCoAgentSessionOpen,
+} from "@/services/chat/coagent-session";
 import {
 	createEmbeddedChatModal,
 	EMBEDDED_CHAT_MODAL_STATE_EVENT,
@@ -68,6 +83,14 @@ export const CoAgentOverlay: React.FC<CoAgentOverlayProps> = ({
 	// Same agent list the panel offers; the dock had no way to pick one.
 	const { agentFlows, selectedAgentFlowId, setSelectedAgentFlowId } =
 		useEmbeddedCustomOptions();
+	// Recorded on the message so the reader can see which agent answered — and,
+	// when it is the built-in one, that no agent was applied.
+	const answeringAgent = useMemo(
+		() => agentFlows.find((flow) => flow.id === selectedAgentFlowId),
+		[agentFlows, selectedAgentFlowId],
+	);
+	const answeringAgentName = answeringAgent?.name;
+	const answeringAgentTheme = answeringAgent?.openuiTheme;
 	const t = useEmbeddedTranslation("coAgent");
 	const showAuthAction = needsPasskey;
 	const speechMessage = showAuthAction ? t("unlockRequired") : message.trim();
@@ -79,9 +102,22 @@ export const CoAgentOverlay: React.FC<CoAgentOverlayProps> = ({
 		setAnchorPromptOpen(true);
 	}, []);
 
+	// Declared before the tracker below, which has to be told to stand down while
+	// one of them owns the page.
+	//
+	// Mirrored into state so the dock button can show the mode is on — a toggle
+	// nobody can see is on is barely better than one that cannot be turned off.
+	const [isSmartSelectActive, setIsSmartSelectActive] = useState(false);
+	const [isCanvasSelectActive, setIsCanvasSelectActive] = useState(false);
+	const isPickerActive = isSmartSelectActive || isCanvasSelectActive;
+
 	const { activeAnchor, freshAnchor, setActiveAnchor } =
 		useCoAgentContextAnchor({
-			disabled: showAuthAction,
+			// While a picker is open the page belongs to it. Tracking the cursor
+			// underneath would put the trigger on top of whatever the user is
+			// trying to pick, and costs the host page a DOM walk per pointer move
+			// for an anchor nothing can use.
+			disabled: showAuthAction || isPickerActive,
 			promptOpen: anchorPromptOpen,
 			onOpenPrompt: openPromptUi,
 		});
@@ -108,16 +144,74 @@ export const CoAgentOverlay: React.FC<CoAgentOverlayProps> = ({
 		setActiveAnchor(null);
 	}, [setActiveAnchor]);
 
-	const startSmartSelect = useCallback(() => {
+	// Smart select is a mode, and the control that turns a mode on has to be able
+	// to turn it off. The overlay factory already returns a teardown; the dock was
+	// throwing it away and starting a fresh overlay on every click, so once it was
+	// on there was no way out of it.
+	const smartSelectCleanupRef = useRef<(() => void) | null>(null);
+
+	const stopSmartSelect = useCallback(() => {
+		smartSelectCleanupRef.current?.();
+		smartSelectCleanupRef.current = null;
+		setIsSmartSelectActive(false);
+	}, []);
+
+	const toggleSmartSelect = useCallback(() => {
+		if (smartSelectCleanupRef.current) {
+			stopSmartSelect();
+			return;
+		}
 		setBubbleDismissed(false);
-		createSmartSelectOverlay(
+		smartSelectCleanupRef.current = createSmartSelectOverlay(
 			(item) => {
+				smartSelectCleanupRef.current = null;
+				setIsSmartSelectActive(false);
 				setAttachedSelection(item);
 				openPromptUi();
 			},
-			() => {},
+			() => {
+				smartSelectCleanupRef.current = null;
+				setIsSmartSelectActive(false);
+			},
 		);
-	}, [openPromptUi]);
+		setIsSmartSelectActive(true);
+	}, [openPromptUi, stopSmartSelect]);
+
+	// Canvas select is the same kind of mode, so it gets the same treatment. The
+	// registry closes whichever overlay was open when the other starts, and calls
+	// the closed one's onCancel — which is what keeps these two flags honest.
+	const canvasSelectCleanupRef = useRef<(() => void) | null>(null);
+
+	const stopCanvasSelect = useCallback(() => {
+		canvasSelectCleanupRef.current?.();
+		canvasSelectCleanupRef.current = null;
+		setIsCanvasSelectActive(false);
+	}, []);
+
+	const toggleCanvasSelect = useCallback(() => {
+		if (canvasSelectCleanupRef.current) {
+			stopCanvasSelect();
+			return;
+		}
+		setBubbleDismissed(false);
+		canvasSelectCleanupRef.current = createCanvasSelectOverlay(
+			(item) => {
+				canvasSelectCleanupRef.current = null;
+				setIsCanvasSelectActive(false);
+				setAttachedSelection(item);
+				openPromptUi();
+			},
+			() => {
+				canvasSelectCleanupRef.current = null;
+				setIsCanvasSelectActive(false);
+			},
+		);
+		setIsCanvasSelectActive(true);
+	}, [openPromptUi, stopCanvasSelect]);
+
+	// Leaving the page, or turning the co-agent off, must not strand the picker.
+	useEffect(() => stopSmartSelect, [stopSmartSelect]);
+	useEffect(() => stopCanvasSelect, [stopCanvasSelect]);
 
 	const showAnchorTrigger =
 		Boolean(freshAnchor && !freshAnchor.isStale) &&
@@ -125,6 +219,7 @@ export const CoAgentOverlay: React.FC<CoAgentOverlayProps> = ({
 		!anchorPromptOpen &&
 		!chatPopupOpen &&
 		!collapsed &&
+		!isPickerActive &&
 		!showAuthAction;
 
 	useEffect(() => {
@@ -189,6 +284,11 @@ export const CoAgentOverlay: React.FC<CoAgentOverlayProps> = ({
 	}, [anchorPromptOpen]);
 
 	const leaveCoAgentMode = () => {
+		// Close the session in the transcript before the dock goes away, so the
+		// reader can see where the page turns stopped.
+		void embeddedChatHistoryService
+			.insertCoAgentMarker(COAGENT_SESSION_END)
+			.catch(() => {});
 		void chrome.runtime.sendMessage({ type: BACKGROUND_EVENTS.HIDE_CO_AGENT });
 		onDestroy();
 	};
@@ -300,16 +400,11 @@ ${text}`
 					pageUrl: window.location.href,
 				})
 			: prompt;
-		const promptWithContext =
-			typeof composed === "string"
-				? composed
-				: composed
-						.filter(
-							(part): part is { type: "text"; text: string } =>
-								part.type === "text",
-						)
-						.map((part) => part.text)
-						.join("\n\n");
+		// Sent as-is, parts and all. Flattening to text here is what made an
+		// attached screenshot arrive as the text of the element it was cut from:
+		// the model was handed the div's screen-reader labels rather than the
+		// picture, and answered about those.
+		const promptWithContext = composed;
 
 		setAnchoredInputValue("");
 		setAttachedSelection(null);
@@ -328,17 +423,55 @@ ${text}`
 		let latestToolCalls:
 			| Awaited<ReturnType<typeof coAgentChatService.chatStream>>["toolCalls"]
 			| undefined;
+		let latestUsage:
+			| Awaited<ReturnType<typeof coAgentChatService.chatStream>>["usage"]
+			| undefined;
 		const startTime = Date.now();
 
 		try {
+			// Opened lazily on the first question rather than when the dock
+			// appears: a session the user never used is not worth marking.
+			try {
+				const existing = await embeddedChatHistoryService.loadMessages();
+				const pageUrl = window.location.href;
+				const open = findOpenCoAgentSession(existing);
+				if (!open) {
+					await embeddedChatHistoryService.insertCoAgentMarker(
+						COAGENT_SESSION_START,
+						pageUrl,
+					);
+				} else if (isCoAgentSessionStale(existing, Date.now())) {
+					// Closing the tab writes no end marker, so a session opened once
+					// would stay open for ever and leave every later visit unmarked.
+					// A session still spans navigation — following a trail across
+					// pages is the point — so only an idle gap ends one here.
+					await embeddedChatHistoryService.insertCoAgentMarker(
+						COAGENT_SESSION_END,
+					);
+					await embeddedChatHistoryService.insertCoAgentMarker(
+						COAGENT_SESSION_START,
+						pageUrl,
+					);
+				}
+			} catch {
+				// A missing marker costs a visual cue, not the answer.
+			}
+
 			await embeddedChatHistoryService.addMessage({
 				role: "user",
-				content: prompt,
+				// Written down as it was sent: an attached region reached the model
+				// as an image part but was never stored, so the transcript showed a
+				// question about a picture that appeared nowhere.
+				...buildStoredTurn(prompt, promptWithContext),
 				metadata: {
 					source: "co-agent",
 					pageUrl: window.location.href,
 					pageTitle: document.title || "",
 					anchor,
+					// The chips the composer showed before sending. Text and HTML
+					// cannot be shown back in full — being long is why they were
+					// attached — so the label stands in for them, as it did there.
+					attachedContexts: buildAttachedContexts({ anchor, selection }),
 				},
 			});
 			const assistantMessage = await embeddedChatHistoryService.addMessage({
@@ -353,9 +486,28 @@ ${text}`
 			});
 			assistantMessageId = assistantMessage.id;
 
+			// Resolve the agent before the run, so "ran without your agent" is a
+			// thing the user is told rather than something they have to infer from
+			// the answer sounding wrong.
+			const resolvedAgent =
+				await coAgentChatService.resolveAgentFlowConfig(selectedAgentFlowId);
+			if (resolvedAgent.usedFallback) {
+				setStatusLine("");
+				setMessage(
+					t("agentUnavailable", {
+						agent: answeringAgentName ?? selectedAgentFlowId,
+						defaultValue:
+							`Could not load "${answeringAgentName ?? selectedAgentFlowId}", so it was not used. ${resolvedAgent.reason ?? ""}`.trim(),
+					}),
+				);
+				setIsSubmitting(false);
+				return;
+			}
+
 			const result = await coAgentChatService.chatStream({
 				prompt: promptWithContext,
 				agentFlowId: selectedAgentFlowId,
+				flowConfig: resolvedAgent.config,
 				model: selectedModel,
 				pageContext: {
 					url: window.location.href,
@@ -364,16 +516,25 @@ ${text}`
 				},
 				anchorContext: anchor && !anchor.isStale ? anchor : undefined,
 				onExecuteStart: (executeState) => {
+					// The node name is the machinery, not the work. Anything that is
+					// the model composing reads as one steady "Thinking…"; a tool run
+					// waits for the tool name, which arrives on onToolCalls.
 					setStatusLine(
-						typeof executeState.node === "string"
-							? executeState.node.replace(/[_-]+/g, " ")
-							: t("working"),
+						progressForNode(
+							typeof executeState.node === "string"
+								? executeState.node
+								: undefined,
+							t("thinking"),
+						).label,
 					);
 				},
 				onProgress: (content) => {
 					if (content.trim()) {
 						currentContent = content.trim();
 						setMessage(content.trim());
+						// Text is arriving, so the answer has started: the status line
+						// has nothing left to add.
+						setStatusLine("");
 					}
 				},
 				onAction: (actions) => {
@@ -381,6 +542,8 @@ ${text}`
 				},
 				onToolCalls: (toolCalls) => {
 					latestToolCalls = toolCalls;
+					const running = latestToolName(toolCalls);
+					if (running) setStatusLine(progressForTool(running).label);
 				},
 				onError: (error) => {
 					setStatusLine("");
@@ -388,6 +551,7 @@ ${text}`
 				},
 			});
 
+			latestUsage = result.usage;
 			if (result.content.trim()) {
 				currentContent = result.content.trim();
 				latestActions = result.actions;
@@ -415,6 +579,16 @@ ${text}`
 							tool_calls: latestToolCalls,
 							model: selectedModel,
 							timeToAnswer,
+							// The same bookkeeping a panel message carries. Without it a
+							// co-agent turn had no token counts, no cache figures, and no
+							// answering agent — so every one of them read as "Assistant".
+							...(latestUsage ? { usage: latestUsage } : {}),
+							...(answeringAgentName
+								? { agentFlowName: answeringAgentName }
+								: {}),
+							...(answeringAgentTheme
+								? { openuiTheme: answeringAgentTheme }
+								: {}),
 						},
 					});
 				}
@@ -422,8 +596,16 @@ ${text}`
 				// The dock response is still useful even if history persistence fails.
 			}
 			setIsSubmitting(false);
+			// The cursor is a progress indicator, not a decoration. co_agent_move
+			// leaves it wherever it last pointed, so without this it sits on the
+			// page long after the run that put it there has finished.
+			hideAgentCursor();
 		}
 	};
+
+	// Turning the co-agent off, or leaving the page, must not leave a cursor
+	// pointing at something nothing is working on any more.
+	useEffect(() => hideAgentCursor, []);
 
 	return (
 		<>
@@ -433,6 +615,10 @@ ${text}`
 					anchor={freshAnchor}
 					onAskAboutThis={() => openPrompt(freshAnchor)}
 					onAsk={openPromptWithoutAnchor}
+					onSmartSelect={toggleSmartSelect}
+					onCanvasSelect={toggleCanvasSelect}
+					isSmartSelectActive={isSmartSelectActive}
+					isCanvasSelectActive={isCanvasSelectActive}
 				/>
 			) : null}
 			{!chatPopupOpen && !externalChatModalOpen ? (
@@ -454,7 +640,11 @@ ${text}`
 					onSelectAgentFlow={setSelectedAgentFlowId}
 					attachedSelectionLabel={attachedSelection?.label ?? null}
 					onDetachSelection={() => setAttachedSelection(null)}
-					onSmartSelect={startSmartSelect}
+					openuiTheme={answeringAgentTheme}
+					onSmartSelect={toggleSmartSelect}
+					isSmartSelectActive={isSmartSelectActive}
+					onCanvasSelect={toggleCanvasSelect}
+					isCanvasSelectActive={isCanvasSelectActive}
 					onExpand={() => setCollapsed(false)}
 					onOpenPrompt={() => openPrompt(freshAnchor)}
 					onClosePrompt={() => setAnchorPromptOpen(false)}

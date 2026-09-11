@@ -147,9 +147,30 @@ export const createCleanHtmlWithSelectors = (html: string): string =>
 		"*": ["id", "class", "data-selector", "aria-label", "placeholder", "href"],
 	});
 
+/**
+ * Squeeze the layout out of extracted text.
+ *
+ * A parsed document's `textContent` keeps every space the source HTML used for
+ * indentation, and a deeply nested page is mostly indentation — so the read
+ * budget was being spent on whitespace and the model got a screenful of blank
+ * space followed by "...truncated". Collapsing first means `maxChars` buys
+ * words.
+ *
+ * Runs of spaces and tabs become one space and blank-line runs become one blank
+ * line, so paragraph breaks survive while the layout does not.
+ */
+export const collapseReadableWhitespace = (value: string): string =>
+	value
+		.replace(/\r\n?/g, "\n")
+		.replace(/[^\S\n]+/g, " ")
+		.replace(/ *\n */g, "\n")
+		.replace(/\n{3,}/g, "\n\n")
+		.trim();
+
 export const truncateContent = (value: string, maxChars: number): string => {
 	if (value.length <= maxChars) {
 		return value;
 	}
-	return `${value.slice(0, maxChars)}\n...truncated`;
+	const dropped = value.length - maxChars;
+	return `${value.slice(0, maxChars)}\n...truncated (${dropped.toLocaleString("en-US")} more characters)`;
 };

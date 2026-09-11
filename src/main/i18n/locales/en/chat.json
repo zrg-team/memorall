@@ -134,7 +134,12 @@
 		"quick_knowledge_retrieval": "Quick Knowledge Retrieval",
 		"container_web_access": "Web Access",
 		"web_access": "Web Access",
-		"web access": "Web Access"
+		"web access": "Web Access",
+		"memory_remember": "Remember",
+		"memory_retrieve": "Search Memory",
+		"memory_update": "Update Memory",
+		"memory_remove": "Forget Memory",
+		"memory_explain_source": "Explain Memory"
 	},
 	"messages": {
 		"assistant": "Assistant",
@@ -164,7 +169,11 @@
 		"stop": "Stop",
 		"retry": "Retry",
 		"empty": "No messages yet. Start a conversation!",
-		"count": "{{count}} messages"
+		"count": "{{count}} messages",
+		"coAgentSessionStart": "Co-agent session started",
+		"coAgentSessionEnd": "Co-agent session ended",
+		"coAgentOnPage": "on {{page}}",
+		"coAgentMovedTo": "moved to {{page}}"
 	},
 	"execution": {
 		"default": "Executing {{node}}",
@@ -348,7 +357,13 @@
 		"selectedNotLoadedDescription": "{{model}} is selected but not active in memory yet.",
 		"selectedProvider": "{{provider}}",
 		"loadHint": "Load it before sending a message.",
-		"loadSelected": "Load model"
+		"loadSelected": "Load model",
+		"select": "Model",
+		"searchPlaceholder": "Search models",
+		"noMatches": "No matching models",
+		"noneAvailable": "No models yet. Add a provider or download one first.",
+		"locked": "{{providers}} is set up but locked. Unlock it on the Models page to use it here.",
+		"lockedHint": "{{providers}} is locked — unlock it on the Models page."
 	},
 	"tooltips": {
 		"topicSelector": "Select a topic to filter knowledge context",
@@ -359,7 +374,8 @@
 		"agentSettings": "Agent settings",
 		"splitChat": "Split chat — the agent starts fresh from here and can still search everything above",
 		"expandChatWidth": "Expand chat to full width",
-		"constrainChatWidth": "Constrain chat width"
+		"constrainChatWidth": "Constrain chat width",
+		"startCoAgent": "Co-agent on the current tab"
 	},
 	"agentSettings": {
 		"title": "Agent Settings",
@@ -464,5 +480,9 @@
 		"reloadCleared": "The page loaded. Continuing where the agent left off.",
 		"stopWaiting": "Stop waiting",
 		"expired": "This request expired. The agent has already moved on."
+	},
+	"coAgent": {
+		"openLink": "Co-agent on {{host}}",
+		"openLinkTitle": "Open {{url}} and turn on the co-agent"
 	}
 }

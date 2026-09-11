@@ -13,6 +13,12 @@ import {
 	type WebChallengeDecision,
 } from "@/services/web-browser/challenge-intervention";
 import {
+	pickLatestTabSession,
+	pickTabSessionForUrl,
+} from "@/services/web-browser/session-selection";
+import {
+	extractElementSource,
+	extractElementText,
 	extractReadableDocumentText,
 	removeNonReadableNodes,
 } from "@/services/web-browser/readable-text";
@@ -990,7 +996,7 @@ const elementInfo = (element: Element, index: number): WebDomElementInfo => ({
 		element.getAttribute("aria-labelledby"),
 	title: element.getAttribute("title"),
 	role: element.getAttribute("role"),
-	text: (element.textContent ?? "").trim(),
+	text: extractElementText(element),
 	value:
 		element instanceof HTMLInputElement ||
 		element instanceof HTMLTextAreaElement ||
@@ -1003,6 +1009,7 @@ const elementInfo = (element: Element, index: number): WebDomElementInfo => ({
 		element instanceof HTMLLinkElement
 			? element.getAttribute("href")
 			: null,
+	src: extractElementSource(element),
 	disabled:
 		(element instanceof HTMLInputElement ||
 			element instanceof HTMLTextAreaElement ||
@@ -1441,7 +1448,7 @@ export const performDomAction = async (
 			(element as HTMLElement).focus();
 			return {
 				label: element.tagName.toLowerCase(),
-				text: element.textContent ?? "",
+				text: extractElementText(element),
 				value:
 					(
 						element as
@@ -1459,7 +1466,7 @@ export const performDomAction = async (
 			});
 			return {
 				label: element.tagName.toLowerCase(),
-				text: element.textContent ?? "",
+				text: extractElementText(element),
 				value:
 					(
 						element as
@@ -1477,7 +1484,7 @@ export const performDomAction = async (
 			});
 			return {
 				label: element.tagName.toLowerCase(),
-				text: element.textContent ?? "",
+				text: extractElementText(element),
 				value:
 					(
 						element as
@@ -1490,7 +1497,7 @@ export const performDomAction = async (
 		if (action === "read") {
 			return {
 				label: element.tagName.toLowerCase(),
-				text: element.textContent ?? "",
+				text: extractElementText(element),
 				value:
 					"value" in element && typeof element.value === "string"
 						? element.value
@@ -1505,7 +1512,7 @@ export const performDomAction = async (
 			element.click();
 			return {
 				label: element.tagName.toLowerCase(),
-				text: element.textContent ?? "",
+				text: extractElementText(element),
 				value:
 					(
 						element as
@@ -1655,19 +1662,53 @@ export const fetchImageFromSession = async (
 	return { base64: response.base64, mimeType: response.mimeType };
 };
 
+/**
+ * Read an image the page can show but nothing can download, through its own tab.
+ *
+ * The last resort behind `fetchImageBytesFromBrowserSession`; see the handler in
+ * the background for why the other routes fail on a hotlink-protected host.
+ * Always re-encoded as PNG, because it comes back off a canvas.
+ */
+export const captureImageFromSession = async (
+	sessionId: string,
+	url: string,
+): Promise<{ base64: string; mimeType: string }> => {
+	const session =
+		WEB_SESSIONS.get(sessionId) ?? (await recoverSession(sessionId));
+	if (!session) {
+		throw new Error(`No active web session: ${sessionId}`);
+	}
+	if (session.mode === "iframe" || typeof session.tabId !== "number") {
+		throw new Error(
+			"Capturing an image needs a tab or window session, not an iframe.",
+		);
+	}
+
+	const response = await sendWebBrowserCommand({
+		source: WEB_BROWSER_COMMAND_SOURCE,
+		command: "capture-image",
+		sessionId: session.id,
+		tabId: session.tabId,
+		url,
+	});
+	if (response.command !== "capture-image") {
+		throw new Error("Invalid capture-image response.");
+	}
+	return { base64: response.base64, mimeType: response.mimeType };
+};
+
+export const getTabSessionForUrl = (
+	url: string,
+): { sessionId: string; tabId: number } | undefined => {
+	const session = pickTabSessionForUrl(WEB_SESSIONS.values(), url);
+	if (!session || typeof session.tabId !== "number") return undefined;
+	return { sessionId: session.id, tabId: session.tabId };
+};
+
 export const getLatestTabSession = ():
 	| { sessionId: string; tabId: number }
 	| undefined => {
-	let latest: WebSessionState | undefined;
-	for (const session of WEB_SESSIONS.values()) {
-		if (
-			typeof session.tabId === "number" &&
-			session.mode !== "iframe" &&
-			(!latest || session.lastAccessedAt > latest.lastAccessedAt)
-		) {
-			latest = session;
-		}
-	}
+	const latest = pickLatestTabSession(WEB_SESSIONS.values());
 	if (!latest || typeof latest.tabId !== "number") return undefined;
 	return { sessionId: latest.id, tabId: latest.tabId };
 };
