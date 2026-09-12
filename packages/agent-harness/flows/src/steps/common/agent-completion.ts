@@ -28,6 +28,8 @@ export const AGENT_COMPLETION_STEP_NAME = "agent-completion" as const;
 
 export interface AgentCompletionStepInput {
 	messages: ChatMessage[];
+	/** Volatile context for this run, re-attached past the end of each request. */
+	reminders?: string[];
 	maxIterations?: number;
 	/**
 	 * Tools accumulated in graph state by feature steps (e.g. fs-feature).
@@ -89,6 +91,7 @@ const definition = defineStep<
 		const stream = await agentGraph.stream(
 			{
 				messages: input.messages,
+				reminders: input.reminders ?? [],
 				maxIterations,
 			},
 			{
@@ -147,6 +150,7 @@ stepRegistry.register(AGENT_COMPLETION_STEP_NAME, createAgentCompletionStep, {
 	],
 	defaultStateMapping: {
 		messages: "messages",
+		reminders: "reminders",
 		tools: "tools",
 		maxIterations: "maxIterations",
 	},

@@ -37,7 +37,7 @@ exports[`Memorall flow registered contracts > registers every core step contract
         "messages": "messages",
         "tools": "tools",
       },
-      "description": "Inject @mentioned skills into the user message and append available skill names to the system prompt for lazy loading",
+      "description": "Attach @mentioned skill bodies as reminders and append the available skill names to the system prompt for lazy loading",
       "enabledByDefault": true,
       "injectAfter": "add-system",
     },
@@ -84,6 +84,7 @@ exports[`Memorall flow registered contracts > registers every core step contract
       "defaultStateMapping": {
         "maxIterations": "maxIterations",
         "messages": "messages",
+        "reminders": "reminders",
         "tools": "tools",
       },
       "description": "Run an agentic tool-calling loop and produce a final response",
@@ -274,6 +275,7 @@ exports[`Memorall flow registered contracts > registers every core step contract
       ],
       "defaultStateMapping": {
         "messages": "messages",
+        "reminders": "reminders",
       },
       "description": "Single-turn LLM chat completion (no tool-calling loop)",
       "enabledByDefault": false,
@@ -301,7 +303,7 @@ exports[`Memorall flow registered contracts > registers every core step contract
       "defaultStateMapping": {
         "messages": "messages",
       },
-      "description": "Inject the current date and time into the system prompt automatically",
+      "description": "Inject the current date and time as a system reminder, past the cached prefix",
       "enabledByDefault": true,
       "feature": {
         "graphTypes": [
@@ -318,9 +320,9 @@ exports[`Memorall flow registered contracts > registers every core step contract
         ],
         "outputs": [
           {
-            "description": "Messages with current date & time injected into the system prompt.",
-            "name": "messages",
-            "type": "Message[]",
+            "description": "Current date & time, attached past the end of the cached prefix.",
+            "name": "reminders",
+            "type": "string[]",
           },
         ],
         "type": "feature",

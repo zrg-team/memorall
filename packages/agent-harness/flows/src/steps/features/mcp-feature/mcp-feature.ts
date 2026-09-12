@@ -26,7 +26,7 @@ import {
 	type McpHttpServerConfig,
 	type McpToolDescriptor,
 } from "@memorall/agent-harness-mcp";
-import { logError, logInfo } from "../../../logging/logger.js";
+import { logError, logInfo, logWarn } from "../../../logging/logger.js";
 
 const STEP_NAME = "mcp-feature" as const;
 export const MCP_FEATURE_NAME = STEP_NAME;
@@ -82,6 +82,27 @@ const MCP_FAILED_SESSION_TTL_MS = 30_000;
 
 const mcpSessions = new Map<string, CachedMCPSession>();
 
+/**
+ * The last tool list each server answered discovery with, by server name.
+ *
+ * Tool definitions render at position 0 of every request, ahead of the system
+ * prompt and the entire conversation, and a change to them is the one edit no
+ * model can cache around — it forces a full rebuild. So a server dropping out
+ * costs far more than the tools it was contributing: an unreachable server used
+ * to take its tools out of the prefix, and putting them back when it recovered
+ * cost a second rebuild.
+ *
+ * Keeping the last known definitions through a failed discovery trades an
+ * accurate tool list for a stable one. The trade is worth it because the two
+ * failures are not comparable: calling a tool whose server is down returns an
+ * error the agent already knows how to recover from, while re-reading a
+ * quarter-million-token conversation is silent, slow and paid in full.
+ *
+ * Only a *failed* discovery falls back. A server that answers with a different
+ * list has genuinely changed, and that change is honoured.
+ */
+const lastKnownServerTools = new Map<string, McpToolDescriptor[]>();
+
 // Servers are matched on everything that changes what the session reaches: a
 // re-minted Composio URL or a rotated key must open a new session, not reuse one.
 const sessionKey = (servers: MCPServerConfig[]): string =>
@@ -127,8 +148,19 @@ const openSession = async (
 	const descriptors: McpToolDescriptor[] = [];
 	for (const server of servers) {
 		try {
-			descriptors.push(...(await manager.discover([server.name])));
+			const discovered = await manager.discover([server.name]);
+			descriptors.push(...discovered);
+			lastKnownServerTools.set(server.name, discovered);
 		} catch (error) {
+			const remembered = lastKnownServerTools.get(server.name) ?? [];
+			if (remembered.length > 0) {
+				descriptors.push(...remembered);
+				logWarn(
+					`[MCP_FEATURE] Server "${server.name}" failed; keeping its ${remembered.length} last known tool(s) so the cached prefix survives the reconnect:`,
+					error,
+				);
+				continue;
+			}
 			logError(`[MCP_FEATURE] Server "${server.name}" failed:`, error);
 		}
 	}

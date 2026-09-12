@@ -5,6 +5,7 @@ import type {
 } from "../../interfaces/engine/messages.js";
 import type { BaseLLM } from "../../interfaces/services/llm.js";
 import type { FlowRunLifecycle } from "../../context/run-lifecycle.js";
+import { withSystemReminders } from "../system-reminders.js";
 import { logInfo, logWarn } from "../../logging/logger.js";
 import { estimatePromptTokens } from "../../utils/token-usage.js";
 import {
@@ -59,6 +60,12 @@ export const MAX_TOKEN_BUDGET_ATTEMPTS = 3;
 export interface TurnConversation {
 	messages: ChatCompletionMessageParam[];
 	outputMessages: ChatCompletionMessageParam[];
+	/**
+	 * Volatile context for this run. Deliberately not part of either message
+	 * list: it is re-attached past the end of the request every time, so the
+	 * prefix the provider caches only ever grows at the end.
+	 */
+	reminders?: string[];
 }
 
 export interface AssistantTurn {
@@ -181,7 +188,10 @@ async function runStream(
 	maxTokens: number | undefined,
 	markEmitted: () => void,
 ): Promise<StreamOutcome> {
-	const messages = [...conversation.messages, ...conversation.outputMessages];
+	const messages = withSystemReminders(
+		[...conversation.messages, ...conversation.outputMessages],
+		conversation.reminders,
+	);
 
 	const stream = context.llm.chatCompletions({
 		messages,

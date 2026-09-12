@@ -1,7 +1,4 @@
-import {
-	defineStep,
-	bindStep,
-} from "../../interfaces/engine/step.js";
+import { defineStep, bindStep } from "../../interfaces/engine/step.js";
 import type {
 	StepFactoryFromSpec,
 	StepSpecFromDefinition,
@@ -15,6 +12,8 @@ import type {
 	ChatMessage,
 } from "../../interfaces/engine/messages.js";
 
+import { withSystemReminders } from "../../graph/system-reminders.js";
+
 const STEP_NAME = "chat-completion" as const;
 
 // ============================================================================
@@ -23,6 +22,8 @@ const STEP_NAME = "chat-completion" as const;
 
 export interface ChatCompletionInput {
 	messages: ChatMessage[];
+	/** Volatile context for this run, attached past the end of the request. */
+	reminders?: string[];
 	temperature?: number;
 	maxTokens?: number;
 	stream?: boolean;
@@ -62,7 +63,7 @@ const definition = defineStep<
 		const stream = input.stream ?? config?.stream ?? true;
 
 		const llmResponse = await llm.chatCompletions({
-			messages: input.messages,
+			messages: withSystemReminders(input.messages, input.reminders),
 			temperature,
 			max_tokens: maxTokens,
 			stream,
@@ -110,7 +111,7 @@ stepRegistry.register(STEP_NAME, createChatCompletionStep, {
 			description: "Stream tokens as they are generated",
 		},
 	],
-	defaultStateMapping: { messages: "messages" },
+	defaultStateMapping: { messages: "messages", reminders: "reminders" },
 	enabledByDefault: false,
 });
 
