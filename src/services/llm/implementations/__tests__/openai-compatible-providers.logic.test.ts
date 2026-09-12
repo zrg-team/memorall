@@ -385,16 +385,29 @@ describe("OpenAI-compatible prompt-cache hints", () => {
 		expect(body.prompt_cache_key).toMatch(/^memorall:/);
 		expect(lastHeaders()["X-Title"]).toBe("Memorall");
 
-		// The system prompt carries an explicit breakpoint, the request-level
-		// marker moves the second one along the conversation automatically…
-		expect(body.cache_control).toEqual({ type: "ephemeral" });
+		// Both breakpoints are explicit and long-lived: one on the system prompt
+		// (which covers the tool definitions rendered ahead of it) and one at the
+		// end of the conversation. The request-level marker Claude also accepts
+		// is deliberately absent — it lands on the last block, which is the
+		// volatile reminder tail whenever a run has one.
+		expect(body.cache_control).toBeUndefined();
 		expect(body.messages[0].content).toEqual([
-			{ type: "text", text: "Be terse.", cache_control: { type: "ephemeral" } },
+			{
+				type: "text",
+				text: "Be terse.",
+				cache_control: { type: "ephemeral", ttl: "1h" },
+			},
 		]);
-		// …and every other message keeps its shape.
+		expect(body.messages[3].content).toEqual([
+			{
+				type: "text",
+				text: "Second question",
+				cache_control: { type: "ephemeral", ttl: "1h" },
+			},
+		]);
+		// …and every message in between keeps its shape.
 		expect(body.messages[1].content).toBe("First question");
 		expect(body.messages[2].content).toBe("First answer");
-		expect(body.messages[3].content).toBe("Second question");
 		expect(body.prompt_cache_retention).toBeUndefined();
 	});
 
@@ -466,6 +479,224 @@ describe("OpenAI-compatible prompt-cache hints", () => {
 
 		expect(lastBody().messages[0].content).toBe("Be terse.");
 		expect(lastBody().messages[3].content).toBe("Second question");
+	});
+
+	it("stops the cached prefix before the system-reminder tail", () => {
+		// What the flow layer actually sends mid-run: the conversation, the tool
+		// round-trips appended to it, and the volatile tail past the end.
+		const marked = withCacheBreakpoints([
+			{ role: "system", content: "Be terse." },
+			{ role: "user", content: "Second question" },
+			{ role: "assistant", content: null, tool_calls: [] },
+			{ role: "tool", content: "tool output", tool_call_id: "call_1" },
+			{
+				role: "user",
+				content: `<system-reminder>\n## CURRENT DATE & TIME\n</system-reminder>`,
+			},
+		]);
+
+		// The breakpoint sits on the last tool result, not on the reminder after
+		// it. Marking the reminder would write an entry keyed on a timestamp that
+		// no later request can ever match.
+		expect(marked[3].content).toEqual([
+			{
+				type: "text",
+				text: "tool output",
+				cache_control: { type: "ephemeral" },
+			},
+		]);
+		expect(marked[4].content).toBe(
+			`<system-reminder>\n## CURRENT DATE & TIME\n</system-reminder>`,
+		);
+	});
+
+	it("keeps the cached prefix byte-identical as the reminder changes", () => {
+		const prefix = [
+			{ role: "system", content: "Be terse." },
+			{ role: "user", content: "Second question" },
+			{ role: "tool", content: "tool output", tool_call_id: "call_1" },
+		];
+		const at = (time: string) => [
+			...prefix,
+			{
+				role: "user",
+				content: `<system-reminder>\nNow: ${time}\n</system-reminder>`,
+			},
+		];
+
+		const first = withCacheBreakpoints(at("14:32:07"));
+		const second = withCacheBreakpoints(at("14:39:51"));
+
+		// This is the whole invariant: a different clock moves nothing the next
+		// request reads through, so everything up to the breakpoint still matches.
+		expect(first.slice(0, -1)).toEqual(second.slice(0, -1));
+		expect(first.at(-1)).not.toEqual(second.at(-1));
+	});
+
+	it("marks the end of the conversation when the run has no reminders", () => {
+		const marked = withCacheBreakpoints([
+			{ role: "system", content: "Be terse." },
+			{ role: "user", content: "Second question" },
+			{ role: "tool", content: "tool output", tool_call_id: "call_1" },
+		]);
+
+		expect(marked[2].content).toEqual([
+			{
+				type: "text",
+				text: "tool output",
+				cache_control: { type: "ephemeral" },
+			},
+		]);
+	});
+
+	/**
+	 * OpenRouter serves a model like DeepSeek from several upstream providers,
+	 * and each keeps its own prompt cache. A conversation whose requests land on
+	 * different providers can only ever reuse the request that same provider
+	 * served last — so an append-only prompt still misses.
+	 *
+	 * That is what a real 18-request agent turn showed: every request was
+	 * explained by four isolated caches, and 168k tokens were read cold. Keyed
+	 * off `prompt_cache_key`, OpenRouter only starts pinning *after* the first
+	 * cache hit, so the opening requests scatter before anything sticks. A
+	 * `session_id` pins from the first successful request.
+	 */
+	describe("OpenRouter provider stickiness", () => {
+		const conversationKey = "memorall:conversation:c-42";
+
+		it("pins a conversation to one provider with session_id", async () => {
+			const { lastBody } = captureBody(openAIUsage);
+			const llm = new OpenAILLM("key", "https://openrouter.ai/api/v1");
+
+			await llm.chatCompletions({
+				model: "deepseek/deepseek-v4.1",
+				messages: conversation,
+				stream: false,
+				prompt_cache_key: conversationKey,
+			});
+
+			expect(lastBody().session_id).toBe(conversationKey);
+		});
+
+		it("keeps the same session for every request in a conversation", async () => {
+			const { lastBody } = captureBody(openAIUsage);
+			const llm = new OpenAILLM("key", "https://openrouter.ai/api/v1");
+			const sessions: string[] = [];
+
+			// An agent loop: the conversation grows, the session must not change.
+			let history = [...conversation];
+			for (let step = 0; step < 4; step++) {
+				await llm.chatCompletions({
+					model: "deepseek/deepseek-v4.1",
+					messages: history,
+					stream: false,
+					prompt_cache_key: conversationKey,
+				});
+				sessions.push(lastBody().session_id);
+				history = [
+					...history,
+					{ role: "assistant" as const, content: `step ${step}` },
+					{ role: "user" as const, content: `continue ${step}` },
+				];
+			}
+
+			expect(new Set(sessions)).toEqual(new Set([conversationKey]));
+		});
+
+		it("gives different conversations different sessions", async () => {
+			const { lastBody } = captureBody(openAIUsage);
+			const llm = new OpenAILLM("key", "https://openrouter.ai/api/v1");
+
+			await llm.chatCompletions({
+				model: "deepseek/deepseek-v4.1",
+				messages: conversation,
+				stream: false,
+				prompt_cache_key: "memorall:conversation:a",
+			});
+			const first = lastBody().session_id;
+			await llm.chatCompletions({
+				model: "deepseek/deepseek-v4.1",
+				messages: conversation,
+				stream: false,
+				prompt_cache_key: "memorall:conversation:b",
+			});
+
+			expect(lastBody().session_id).not.toBe(first);
+		});
+
+		it("still pins a request that arrives without a conversation key", async () => {
+			// Falls back to the same stable key as prompt_cache_key, which hashes
+			// the first user message — identical on every turn of one thread.
+			const { lastBody } = captureBody(openAIUsage);
+			const llm = new OpenAILLM("key", "https://openrouter.ai/api/v1");
+
+			await llm.chatCompletions({
+				model: "deepseek/deepseek-v4.1",
+				messages: conversation,
+				stream: false,
+			});
+			const first = lastBody().session_id;
+			await llm.chatCompletions({
+				model: "deepseek/deepseek-v4.1",
+				messages: [
+					...conversation,
+					{ role: "assistant" as const, content: "Second answer" },
+					{ role: "user" as const, content: "Third question" },
+				],
+				stream: false,
+			});
+
+			expect(first).toMatch(/^memorall:/);
+			expect(lastBody().session_id).toBe(first);
+			expect(lastBody().session_id).toBe(lastBody().prompt_cache_key);
+		});
+
+		it("pins streamed requests too", async () => {
+			// The agent loop streams, so this is the path that actually matters.
+			const { lastBody } = captureBody(openAIUsage);
+			const llm = new OpenAILLM("key", "https://openrouter.ai/api/v1");
+
+			for await (const _ of llm.chatCompletions({
+				model: "deepseek/deepseek-v4.1",
+				messages: conversation,
+				stream: true,
+				prompt_cache_key: conversationKey,
+			})) {
+				// drain
+			}
+
+			expect(lastBody().session_id).toBe(conversationKey);
+		});
+
+		it("does not send session_id to a provider that does not define it", async () => {
+			// OpenAI routes nothing and validates its request body; an unknown
+			// field there is a failed request, not a harmless extra.
+			const { lastBody } = captureBody(openAIUsage);
+			const llm = new OpenAILLM("key", "https://api.openai.com/v1");
+
+			await llm.chatCompletions({
+				model: "gpt-5.6-terra",
+				messages: conversation,
+				stream: false,
+				prompt_cache_key: conversationKey,
+			});
+
+			expect(lastBody()).not.toHaveProperty("session_id");
+		});
+
+		it("keeps session_id within OpenRouter's 256-character limit", async () => {
+			const { lastBody } = captureBody(openAIUsage);
+			const llm = new OpenAILLM("key", "https://openrouter.ai/api/v1");
+
+			await llm.chatCompletions({
+				model: "deepseek/deepseek-v4.1",
+				messages: conversation,
+				stream: false,
+				prompt_cache_key: `memorall:conversation:${"x".repeat(400)}`,
+			});
+
+			expect(lastBody().session_id.length).toBeLessThanOrEqual(256);
+		});
 	});
 
 	it("marks the last text part when the user message carries an image", () => {

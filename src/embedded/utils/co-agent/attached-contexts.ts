@@ -16,7 +16,7 @@ import type { EmbeddedContextItem } from "@/embedded/types";
 import {
 	type CoAgentContextAnchor,
 	describeContextAnchor,
-} from "./context-anchor";
+} from "@/co-agent/dom/context-anchor";
 
 /** How a chip should read. `anchor` is the element the cursor was on. */
 export type AttachedContextKind = "text" | "html" | "screenshot" | "anchor";

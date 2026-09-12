@@ -1,5 +1,5 @@
-import type { CoAgentPoint, CoAgentRect } from "@/services/co-agent";
-import { CO_AGENT_STATUS_EVENT } from "./constants";
+import type { CoAgentPoint, CoAgentRect } from "@/co-agent/protocol";
+import { CO_AGENT_STATUS_EVENT } from "@/co-agent/constants";
 
 export const emitCursorEvent = (detail: {
 	selector?: string;

@@ -35,6 +35,7 @@ export const createFsLsTool: ToolFactory<Input, Services> = (
 
 		const dirPath = normalizeFsPath(path);
 		try {
+			// Bounded by default — see the sibling tool in the flows package.
 			const items = await listEntries(dfs, dirPath, recursive);
 			if (items.length === 0) {
 				return `Empty directory: ${dirPath}`;

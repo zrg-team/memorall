@@ -65,6 +65,10 @@ export default defineConfig({
 						"src/services/**/*.dom.test.ts",
 						// The content script's page-reading modules need a DOM.
 						"src/content/**/*.dom.test.ts",
+						// The co-agent DOM layer is shared by the extension, the desktop
+						// window and the managed browser, so it is the one contract all
+						// three hosts have to keep.
+						"src/co-agent/**/*.dom.test.ts",
 					],
 					exclude: [
 						"src/main/__tests__/component-smoke.test.tsx",

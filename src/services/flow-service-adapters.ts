@@ -119,9 +119,9 @@ const normalizeRowArray = <T>(value: unknown): T[] => {
 	return Array.isArray(normalized) ? normalized : (normalized.rows ?? []);
 };
 
+import { describeNativeMountProblem } from "@/services/filesystem/native-folders/mount-registry";
 import {
 	DOCUMENTS_SANDBOX_ROOT,
-	FILESYSTEM_SANDBOX_ROOT,
 	normalizeSandboxPath,
 	sandboxPathToFsPath,
 	toDocumentsSandboxPath,
@@ -150,36 +150,17 @@ const documentFsPathToSandboxPath = (path: string): string =>
 const flowFsPathToSandboxPath = (path: string): string =>
 	documentFsPathToSandboxPath(path);
 
-const findTreeNode = (
-	nodes: DocumentTreeNode[],
-	logicalPath: string,
-): DocumentTreeNode | undefined => {
-	const normalized = normalizeFsPath(logicalPath);
-	for (const node of nodes) {
-		if (normalizeFsPath(node.path) === normalized) return node;
-		const child = findTreeNode(node.children ?? [], normalized);
-		if (child) return child;
-	}
-	return undefined;
-};
-
 const getTreeNode = async (
 	service: DocumentFileSystem,
 	path: string,
 ): Promise<DocumentTreeNode> => {
 	const logicalPath = documentFsPathToLogicalPath(path);
-	const tree = await service.getTree(FILESYSTEM_SANDBOX_ROOT);
-	if (logicalPath === "/") {
-		return {
-			id: "/",
-			name: "",
-			path: "/",
-			type: "folder",
-			isExpanded: false,
-			children: tree,
-		};
-	}
-	const node = findTreeNode(tree, logicalPath);
+	// Deliberately `resolveNode` rather than a lookup in `getTree`: mapped
+	// folders come back from the tree without their contents so the library can
+	// draw before the OS has been walked, and the agent reads the filesystem
+	// through this function. Reading the tree directly made every mapped folder
+	// look empty to `fs_ls`, `fs_glob` and `fs_read`.
+	const node = await service.resolveNode(logicalPath);
 	if (!node) {
 		throw new Error(`Path not found: ${path}`);
 	}
@@ -199,11 +180,17 @@ const toDirEntry = (node: {
 	name: string;
 	type?: string;
 	children?: unknown[];
+	file?: { size?: number };
 }): DirEntry => ({
 	name: node.name,
 	isFile: () => node.type === "file",
 	isDirectory: () => node.type === "folder",
 	isSymbolicLink: () => false,
+	// The tree node already carries this. Dropping it forced every caller that
+	// wanted sizes to stat each file, and a stat here resolves the path from the
+	// tree root again — so a recursive listing paid for the whole walk once per
+	// file it returned.
+	...(typeof node.file?.size === "number" ? { size: node.file.size } : {}),
 });
 
 const toFileStat = (size = 0, type: "file" | "folder" = "file"): FileStat => {
@@ -346,89 +333,142 @@ export const toFlowDatabase = (service: IDatabaseService): IFlowDatabase => {
 	return adapter;
 };
 
+/**
+ * Replace a bare errno with something the agent can act on, when the reason is
+ * the mapping itself.
+ *
+ * A read-only mapped folder reports `EACCES` and a disconnected one reports
+ * `ENOENT`. Both are true and neither is useful: "EACCES" gives no hint that
+ * the folder is read-only by choice, or that it is simply not plugged in. The
+ * original message is kept in parentheses so nothing is hidden.
+ */
+const enrichMountError = (error: unknown, path: unknown): unknown => {
+	if (typeof path !== "string") return error;
+	let problem: string | null = null;
+	try {
+		problem = describeNativeMountProblem(flowFsPathToSandboxPath(path));
+	} catch {
+		return error;
+	}
+	if (!problem) return error;
+	const detail = error instanceof Error ? error.message : String(error);
+	return new Error(`${problem} (${detail})`, { cause: error });
+};
+
+/**
+ * Wrap every filesystem call so a mapped-folder failure explains itself.
+ *
+ * A proxy rather than one wrapper per method: the interface has fifteen of
+ * them, they all take the path first, and a method added later would otherwise
+ * quietly miss out.
+ */
+const withMountDiagnostics = (base: IFlowFileSystem): IFlowFileSystem =>
+	new Proxy(base, {
+		get(target, property, receiver) {
+			const value = Reflect.get(target, property, receiver);
+			if (typeof value !== "function") return value;
+			return (...args: unknown[]) => {
+				try {
+					const result = (value as (...a: unknown[]) => unknown).apply(
+						target,
+						args,
+					);
+					return result instanceof Promise
+						? result.catch((error: unknown) => {
+								throw enrichMountError(error, args[0]);
+							})
+						: result;
+				} catch (error) {
+					throw enrichMountError(error, args[0]);
+				}
+			};
+		},
+	}) as IFlowFileSystem;
+
 export const toFlowFileSystem = (
 	service: DocumentFileSystem,
-): IFlowFileSystem => ({
-	readFile: ((path: string, options?: { encoding: string }) => {
-		const read = service.readFile(flowFsPathToSandboxPath(path));
-		return read.then((bytes: Uint8Array) =>
-			options?.encoding
-				? new TextDecoder(options.encoding).decode(bytes)
-				: bytes,
-		);
-	}) as IFlowFileSystem["readFile"],
-	writeFile: async (path, data) => {
-		const bytes =
-			typeof data === "string" ? new TextEncoder().encode(data) : data;
-		await service.writeFile(flowFsPathToSandboxPath(path), bytes);
-	},
-	appendFile: async (path, data) => {
-		const sandboxPath = flowFsPathToSandboxPath(path);
-		const existing = await service.readFile(sandboxPath);
-		const suffix =
-			typeof data === "string" ? new TextEncoder().encode(data) : data;
-		const merged = new Uint8Array(existing.length + suffix.length);
-		merged.set(existing);
-		merged.set(suffix, existing.length);
-		await service.writeFile(sandboxPath, merged);
-	},
-	unlink: (path) => service.deleteFile(flowFsPathToSandboxPath(path)),
-	rename: async (oldPath, newPath) => {
-		const oldSandboxPath = flowFsPathToSandboxPath(oldPath);
-		const newSandboxPath = flowFsPathToSandboxPath(newPath);
-		const node = await getTreeNode(service, oldPath);
-		const { parent: oldParent } = splitParentAndName(oldSandboxPath);
-		const { parent: newParent, name } = splitParentAndName(newSandboxPath);
-		let currentSandboxPath = oldSandboxPath;
+): IFlowFileSystem =>
+	withMountDiagnostics({
+		readFile: ((path: string, options?: { encoding: string }) => {
+			const read = service.readFile(flowFsPathToSandboxPath(path));
+			return read.then((bytes: Uint8Array) =>
+				options?.encoding
+					? new TextDecoder(options.encoding).decode(bytes)
+					: bytes,
+			);
+		}) as IFlowFileSystem["readFile"],
+		writeFile: async (path, data) => {
+			const bytes =
+				typeof data === "string" ? new TextEncoder().encode(data) : data;
+			await service.writeFile(flowFsPathToSandboxPath(path), bytes);
+		},
+		appendFile: async (path, data) => {
+			const sandboxPath = flowFsPathToSandboxPath(path);
+			const existing = await service.readFile(sandboxPath);
+			const suffix =
+				typeof data === "string" ? new TextEncoder().encode(data) : data;
+			const merged = new Uint8Array(existing.length + suffix.length);
+			merged.set(existing);
+			merged.set(suffix, existing.length);
+			await service.writeFile(sandboxPath, merged);
+		},
+		unlink: (path) => service.deleteFile(flowFsPathToSandboxPath(path)),
+		rename: async (oldPath, newPath) => {
+			const oldSandboxPath = flowFsPathToSandboxPath(oldPath);
+			const newSandboxPath = flowFsPathToSandboxPath(newPath);
+			const node = await getTreeNode(service, oldPath);
+			const { parent: oldParent } = splitParentAndName(oldSandboxPath);
+			const { parent: newParent, name } = splitParentAndName(newSandboxPath);
+			let currentSandboxPath = oldSandboxPath;
 
-		if (oldParent !== newParent) {
-			currentSandboxPath = await service.move(oldSandboxPath, newParent);
-		}
+			if (oldParent !== newParent) {
+				currentSandboxPath = await service.move(oldSandboxPath, newParent);
+			}
 
-		if (name !== node.name) {
-			await service.rename(currentSandboxPath, name);
-		}
-	},
-	copyFile: async (src, dest) => {
-		const bytes = await service.readFile(flowFsPathToSandboxPath(src));
-		await service.writeFile(flowFsPathToSandboxPath(dest), bytes);
-	},
-	mkdir: async (path) => {
-		await service.mkdir(flowFsPathToSandboxPath(path));
-		return undefined;
-	},
-	rmdir: (path) => service.deleteFolder(flowFsPathToSandboxPath(path)),
-	rm: async (path, options) => {
-		const node = await getTreeNode(service, path);
-		if (options?.recursive) {
-			await (node.type === "folder"
-				? service.deleteFolder(flowFsPathToSandboxPath(path))
-				: service.deleteFile(flowFsPathToSandboxPath(path)));
-			return;
-		}
-		if (node.type === "folder") {
-			throw new Error(`Path is a directory: ${path}`);
-		}
-		await service.deleteFile(flowFsPathToSandboxPath(path));
-	},
-	readdir: (async (path: string, options?: { withFileTypes: true }) => {
-		const node = await getTreeNode(service, path);
-		if (node.type !== "folder") {
-			throw new Error(`Path is not a directory: ${path}`);
-		}
-		const nodes = node.children;
-		return options?.withFileTypes
-			? nodes.map(toDirEntry)
-			: nodes.map((node) => node.name);
-	}) as IFlowFileSystem["readdir"],
-	stat: async (path) => {
-		const node = await getTreeNode(service, path);
-		return toFileStat(node.file?.size ?? 0, node.type);
-	},
-	access: async (path) => {
-		await getTreeNode(service, path);
-	},
-});
+			if (name !== node.name) {
+				await service.rename(currentSandboxPath, name);
+			}
+		},
+		copyFile: async (src, dest) => {
+			const bytes = await service.readFile(flowFsPathToSandboxPath(src));
+			await service.writeFile(flowFsPathToSandboxPath(dest), bytes);
+		},
+		mkdir: async (path) => {
+			await service.mkdir(flowFsPathToSandboxPath(path));
+			return undefined;
+		},
+		rmdir: (path) => service.deleteFolder(flowFsPathToSandboxPath(path)),
+		rm: async (path, options) => {
+			const node = await getTreeNode(service, path);
+			if (options?.recursive) {
+				await (node.type === "folder"
+					? service.deleteFolder(flowFsPathToSandboxPath(path))
+					: service.deleteFile(flowFsPathToSandboxPath(path)));
+				return;
+			}
+			if (node.type === "folder") {
+				throw new Error(`Path is a directory: ${path}`);
+			}
+			await service.deleteFile(flowFsPathToSandboxPath(path));
+		},
+		readdir: (async (path: string, options?: { withFileTypes: true }) => {
+			const node = await getTreeNode(service, path);
+			if (node.type !== "folder") {
+				throw new Error(`Path is not a directory: ${path}`);
+			}
+			const nodes = node.children;
+			return options?.withFileTypes
+				? nodes.map(toDirEntry)
+				: nodes.map((node) => node.name);
+		}) as IFlowFileSystem["readdir"],
+		stat: async (path) => {
+			const node = await getTreeNode(service, path);
+			return toFileStat(node.file?.size ?? 0, node.type);
+		},
+		access: async (path) => {
+			await getTreeNode(service, path);
+		},
+	});
 
 export const toFlowWebBrowser = (
 	service: IWebBrowserService,

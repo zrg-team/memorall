@@ -4,6 +4,7 @@ import NiceModal from "@ebay/nice-modal-react";
 import {
 	Upload,
 	FolderPlus,
+	FolderSymlink,
 	Grid3x3,
 	List,
 	Search,
@@ -29,6 +30,7 @@ import {
 import { CreateFolderDialog } from "../modals";
 import type { DocumentTreeNode } from "@/types/document-library";
 import type { Topic } from "@/services/database/entities/topics";
+import { useNativeMounts } from "@/main/modules/files/hooks/use-native-mounts";
 
 interface DocumentLibraryHeaderProps {
 	currentPath: string;
@@ -78,6 +80,11 @@ export const DocumentLibraryHeader = memo(function DocumentLibraryHeader({
 	onCreateFolder,
 }: DocumentLibraryHeaderProps) {
 	const { t } = useTranslation("documents");
+	const {
+		supported: canMapFolders,
+		busy: isMappingFolder,
+		addRoot: addMappedRoot,
+	} = useNativeMounts();
 
 	if (compact) {
 		return (
@@ -120,6 +127,18 @@ export const DocumentLibraryHeader = memo(function DocumentLibraryHeader({
 								<FolderPlus className="mr-2 h-4 w-4" />
 								{t("upload.createFolder")}
 							</DropdownMenuItem>
+							{/* Desktop only. Sits with the other ways to add something,
+							    because that is what it is — the folder then behaves like
+							    any other folder in the tree. */}
+							{canMapFolders && (
+								<DropdownMenuItem
+									disabled={isMappingFolder}
+									onClick={() => void addMappedRoot()}
+								>
+									<FolderSymlink className="mr-2 h-4 w-4" />
+									{t("mappedFolders.add")}
+								</DropdownMenuItem>
+							)}
 						</DropdownMenuContent>
 					</DropdownMenu>
 				</div>
@@ -230,6 +249,18 @@ export const DocumentLibraryHeader = memo(function DocumentLibraryHeader({
 								<FolderPlus className="mr-2 h-4 w-4" />
 								{t("upload.createFolder")}
 							</DropdownMenuItem>
+							{/* Desktop only. Sits with the other ways to add something,
+							    because that is what it is — the folder then behaves like
+							    any other folder in the tree. */}
+							{canMapFolders && (
+								<DropdownMenuItem
+									disabled={isMappingFolder}
+									onClick={() => void addMappedRoot()}
+								>
+									<FolderSymlink className="mr-2 h-4 w-4" />
+									{t("mappedFolders.add")}
+								</DropdownMenuItem>
+							)}
 						</DropdownMenuContent>
 					</DropdownMenu>
 				</div>

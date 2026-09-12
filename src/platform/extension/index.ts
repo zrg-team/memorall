@@ -20,6 +20,7 @@ export const platform: PlatformComposition = {
 		"page.capture": { available: true },
 		"activity.browser": { available: true },
 		"browser.automation": { available: true },
+		"co-agent": { available: true },
 		"sandbox.browser": { available: true },
 		"executor.local": {
 			available: false,

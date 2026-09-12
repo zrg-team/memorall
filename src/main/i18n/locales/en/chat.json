@@ -163,6 +163,10 @@
 		"noCacheInfo": "The provider reported no prompt-cache data",
 		"estimatedUsage": "Estimated locally, the provider sent no usage",
 		"requestBreakdown": "Per request",
+		"cacheMisses_one": "{{count}} request didn't reuse the previous one",
+		"cacheMisses_other": "{{count}} requests didn't reuse the previous one",
+		"cacheRestarted": "Nothing was reused from the previous request.",
+		"cachePartial": "Reused an older request instead of the previous one — likely served by a different provider.",
 		"thinking": "Thinking...",
 		"thought": "Thought",
 		"error": "Failed to send message",
@@ -375,7 +379,8 @@
 		"splitChat": "Split chat — the agent starts fresh from here and can still search everything above",
 		"expandChatWidth": "Expand chat to full width",
 		"constrainChatWidth": "Constrain chat width",
-		"startCoAgent": "Co-agent on the current tab"
+		"startCoAgent": "Let the agent see and act on the page",
+		"stopCoAgent": "Turn the co-agent off"
 	},
 	"agentSettings": {
 		"title": "Agent Settings",

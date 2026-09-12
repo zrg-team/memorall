@@ -1,15 +1,11 @@
 import { stepRegistry } from "../../registries/step-registry.js";
-import {
-	defineStep,
-	bindStep,
-} from "../../interfaces/engine/step.js";
+import { defineStep, bindStep } from "../../interfaces/engine/step.js";
 import type {
 	BoundStep,
 	StepFactoryFromSpec,
 	StepSpecFromDefinition,
 } from "../../interfaces/engine/step.js";
 import type { ChatMessage } from "../../interfaces/engine/messages.js";
-import { GraphBase } from "../../graph/graph.base.js";
 
 export const CURRENT_TIME_STEP_NAME = "current-time" as const;
 
@@ -22,7 +18,7 @@ interface Input {
 }
 
 interface Output {
-	messages?: ChatMessage[];
+	reminders?: string[];
 }
 
 type Services = Record<string, never>;
@@ -63,12 +59,11 @@ const definition = defineStep<Input, Output, Services, CurrentTimeConfig>({
 
 		const content = `## CURRENT DATE & TIME\n- Now: ${formatted}\n- ISO: ${iso}`;
 
-		const updatedMessages = GraphBase.chat.injectUserContext(
-			input.messages ?? [],
-			content,
-		);
-
-		return { output: { messages: updatedMessages } };
+		// A clock is the textbook cache invalidator: it differs on every
+		// request. Handing it back as a reminder keeps it out of the
+		// conversation prefix entirely, so it is re-read at full price and
+		// nothing behind it is.
+		return { output: { reminders: [content] } };
 	},
 });
 
@@ -81,7 +76,7 @@ const createStep: StepFactoryFromSpec<Spec> = (
 
 stepRegistry.register(CURRENT_TIME_STEP_NAME, createStep, {
 	description:
-		"Inject the current date and time into the system prompt automatically",
+		"Inject the current date and time as a system reminder, past the cached prefix",
 	configParams: [
 		{
 			key: "timezone",
@@ -107,10 +102,10 @@ stepRegistry.register(CURRENT_TIME_STEP_NAME, createStep, {
 		],
 		outputs: [
 			{
-				name: "messages",
-				type: "Message[]",
+				name: "reminders",
+				type: "string[]",
 				description:
-					"Messages with current date & time injected into the system prompt.",
+					"Current date & time, attached past the end of the cached prefix.",
 			},
 		],
 		volatile: true,

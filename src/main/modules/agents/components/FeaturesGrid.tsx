@@ -24,6 +24,7 @@ import {
 import { CursorPoint } from "@/components/AgentCursor";
 import { AGENT_WIZARD_CURSOR_KEYS } from "@/main/modules/agent-wizard";
 import type { AgentConfigSummary } from "../types";
+import { platform } from "@/platform/current";
 
 const FEATURES_DEFAULT_VISIBLE = 4;
 
@@ -109,7 +110,15 @@ export const FeaturesGrid: React.FC<FeaturesGridProps> = ({ summary }) => {
 	const enabledToolCount = summary?.enabledToolCount ?? enabledToolNames.length;
 
 	const filteredFeatures = React.useMemo(
-		() => featureDefinitions.filter((f) => !f.hideInGrid),
+		() =>
+			featureDefinitions.filter(
+				(f) =>
+					!f.hideInGrid &&
+					// A feature whose capability is missing here would attach fine and
+					// then fail on every tool call.
+					(!f.requiresCapability ||
+						platform.capabilities.get(f.requiresCapability).available),
+			),
 		[featureDefinitions],
 	);
 

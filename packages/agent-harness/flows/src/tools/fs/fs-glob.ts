@@ -1,18 +1,21 @@
 import z from "zod";
-import type {
-	Tool,
-	ToolFactory,
-} from "../../interfaces/engine/tool.js";
+import type { Tool, ToolFactory } from "../../interfaces/engine/tool.js";
 import type { AllServices } from "../../interfaces/services/services.js";
 import { toolRegistry } from "../../registries/tool-registry.js";
 import type { FsToolConfig } from "./config.js";
 import {
 	normalizeFsPath,
 	globMatches,
-	listEntries,
+	globDescendFilter,
+	globOptsIntoNoise,
+	globSearchRoot,
+	walkEntries,
 } from "./util.js";
 
 const TOOL_NAME = "fs_glob" as const;
+
+/** Enough to answer any real question; small enough to stay readable. */
+const MAX_MATCHES = 500;
 
 const schema = z.object({
 	pattern: z
@@ -45,20 +48,58 @@ export const createFsGlobTool: ToolFactory<Input, Services, FsToolConfig> = (
 
 		const basePath = normalizeFsPath(path);
 
-		const entries = await listEntries(dfs, basePath, true, config);
-		const matches = entries.filter((entry) => {
-			const rel =
-				basePath === "/"
-					? entry.path.slice(1)
-					: entry.path.slice(basePath.length + 1);
-			return rel.length > 0 && globMatches(pattern, rel);
-		});
+		// Three things keep this from reading the whole library, in the order they
+		// save the most. The pattern's literal prefix moves the starting point
+		// down the tree; the noise list keeps the walk out of `node_modules` and
+		// friends unless the pattern asks for them; and the partial match prunes
+		// any branch the pattern can no longer match. What survives all three is
+		// read concurrently, under a result cap and a time budget.
+		const searchRoot = globSearchRoot(pattern, basePath);
+		const canDescend = globDescendFilter(pattern, basePath);
 
-		if (matches.length === 0) {
-			return `No files found matching "${pattern}" under "${basePath}"`;
+		const relativeTo = (entryPath: string): string =>
+			basePath === "/"
+				? entryPath.slice(1)
+				: entryPath.slice(basePath.length + 1);
+
+		const result = await walkEntries(
+			dfs,
+			searchRoot,
+			{
+				recursive: true,
+				withSizes: false,
+				pruneNoise: !globOptsIntoNoise(pattern),
+				limit: MAX_MATCHES,
+				shouldDescend: (displayPath) => canDescend(displayPath),
+				keep: (entry) => {
+					const rel = relativeTo(entry.path);
+					return rel.length > 0 && globMatches(pattern, rel);
+				},
+			},
+			config,
+		);
+
+		if (result.entries.length === 0) {
+			const scope =
+				searchRoot === basePath
+					? `"${basePath}"`
+					: `"${basePath}" (searched "${searchRoot}")`;
+			const skipped = result.prunedDirectories
+				? ` ${result.prunedDirectories} build/dependency folder(s) were skipped \u2014 name one in the pattern to include it.`
+				: "";
+			return `No files found matching "${pattern}" under ${scope}.${skipped}`;
 		}
 
-		return matches.map((entry) => entry.path).join("\n");
+		const paths = result.entries.map((entry) => entry.path).join("\n");
+		if (!result.truncated) return paths;
+
+		// Saying so matters: a truncated search that looks complete is how an
+		// agent concludes a file does not exist.
+		const why =
+			result.stopReason === "time"
+				? "the search ran out of time"
+				: `the first ${MAX_MATCHES} matches were reached`;
+		return `${paths}\n\n(Partial results \u2014 ${why}. Narrow the pattern or pass a more specific "path" to see the rest.)`;
 	},
 });
 

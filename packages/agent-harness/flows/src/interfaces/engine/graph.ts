@@ -7,7 +7,10 @@
  * that implements one, which is what used to make those layers circular.
  */
 
-import type { ChatCompletionMessageParam, ChatCompletionTool } from "./messages.js";
+import type {
+	ChatCompletionMessageParam,
+	ChatCompletionTool,
+} from "./messages.js";
 import type { BaseTool, ToolBinding } from "./tool.js";
 
 export type ToolName = `${keyof ToolTypeRegistry & string}`;
@@ -44,6 +47,15 @@ export interface BaseStateBase {
 	response?: string;
 	outputMessages: ChatCompletionMessageParam[];
 	tools: GraphTool[];
+	/**
+	 * Volatile context for this run — the clock, retrieved knowledge, anything
+	 * that differs request to request. Kept out of `messages` and
+	 * `outputMessages` on purpose: those two are the conversation prefix, and a
+	 * prefix that only ever grows at the end is what the provider's prompt cache
+	 * matches on. Reminders are re-attached past the end of that prefix at each
+	 * request instead, so they cost their own tokens and nothing behind them.
+	 */
+	reminders: string[];
 }
 
 export type SystemPlacement = "append" | "top" | "replace";

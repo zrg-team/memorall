@@ -1,17 +1,23 @@
 import z from "zod";
-import type {
-	Tool,
-	ToolFactory,
-} from "../../interfaces/engine/tool.js";
+import type { Tool, ToolFactory } from "../../interfaces/engine/tool.js";
 import type { AllServices } from "../../interfaces/services/services.js";
 import { toolRegistry } from "../../registries/tool-registry.js";
 import type { FsToolConfig } from "./config.js";
 import {
+	formatFileSize,
+	displayPathToFsPath,
 	normalizeFsPath,
 	readFileBytes,
 } from "./util.js";
 
 const TOOL_NAME = "fs_read" as const;
+
+/**
+ * Largest file this will read as text. Generous for anything line-oriented;
+ * anything past it is almost certainly binary, where numbered lines are
+ * meaningless anyway.
+ */
+const MAX_READ_BYTES = 5 * 1024 * 1024;
 
 const schema = z.object({
 	file_path: z.string().describe("Path to the file to read"),
@@ -67,10 +73,30 @@ export const createFsReadTool: ToolFactory<Input, Services, FsToolConfig> = (
 		};
 
 		try {
+			// Check the size before pulling the bytes in. The library's own files
+			// are small, but a mapped folder is the user's real disk and can hold
+			// a multi-gigabyte video — and this reads the whole file into memory
+			// before it can split it into lines, so `offset`/`limit` do not save
+			// it. One stat is cheap; an unbounded read is not survivable.
+			const stat = await dfs.stat(displayPathToFsPath(filePath, config));
+			if (stat.isDirectory()) {
+				return `Error: Path is a directory, not a file: ${filePath}`;
+			}
+			if (stat.size > MAX_READ_BYTES) {
+				return `Error: ${filePath} is ${formatFileSize(stat.size)}, over the ${formatFileSize(MAX_READ_BYTES)} limit for reading as text. Use fs_grep to search inside it, or pick a smaller file.`;
+			}
+		} catch (error) {
+			// Keep the real reason: a mapped folder that is read-only or
+			// disconnected explains itself here, and reporting "file not found"
+			// for it would send the agent looking for a path that does exist.
+			return `Error: ${error instanceof Error ? error.message : String(error)}`;
+		}
+
+		try {
 			const raw = await readFileBytes(dfs, filePath, config);
 			return readAndFormat(raw, filePath);
-		} catch {
-			return `Error: File not found: ${file_path}`;
+		} catch (error) {
+			return `Error: ${error instanceof Error ? error.message : String(error)}`;
 		}
 	},
 });

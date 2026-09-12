@@ -137,6 +137,16 @@ describe("ChatInputControls folding", () => {
 		).toBeTruthy();
 	});
 
+	it("drops the overflow trigger when every action is already on the bar", () => {
+		// With room for the real buttons the menu held nothing the toolbar was
+		// not already showing, so it was one more control to read past.
+		render(<ChatInputControls {...props({ isNarrow: false })} />);
+
+		expect(
+			screen.queryByRole("button", { name: "tooltips.moreActions" }),
+		).toBeNull();
+	});
+
 	it("folds every right-hand control into the overflow menu when narrow", () => {
 		// At small widths the bar cannot show them all, so the row keeps only the
 		// overflow trigger and submit and the rest move under "...".

@@ -8,6 +8,7 @@ import { hasOriginPrivateFileSystem } from "../core/origin-private-file-system";
 import { WindowExternalLinkPort } from "../core/window-external-link-port";
 import { UnavailableRuntimeDiagnostics } from "../core/unavailable-runtime-diagnostics";
 import { DesktopBrowserCommandPort } from "./desktop-browser-command-port";
+import { DesktopNativeFilesystemPort } from "./desktop-native-filesystem-port";
 
 const capabilities = new MutableCapabilityRegistry({
 	"page.capture": { available: false, reason: "No extension tab access." },
@@ -19,6 +20,13 @@ const capabilities = new MutableCapabilityRegistry({
 		available: false,
 		reason: "Initializing bundled Chromium.",
 	},
+	// Advertised unconditionally, but it now needs the managed browser: the
+	// surface that drove Memorall's own window is gone, because pointing the
+	// co-agent at the app's own UI was never what "let the agent act on the
+	// page" meant. Whether a page can actually be driven is reported by
+	// `browser.automation`, and activation fails with a specific reason
+	// (visibility off, Chromium missing) rather than silently doing nothing.
+	"co-agent": { available: true },
 	"sandbox.browser": {
 		available: false,
 		reason: "Desktop uses the local executor.",
@@ -56,6 +64,8 @@ const browserAutomation = new DesktopBrowserCommandPort(
 	persistentStore,
 );
 
+const nativeFilesystem = new DesktopNativeFilesystemPort(capabilities);
+
 export const platform: PlatformComposition = {
 	environment: "desktop",
 	routerMode: "hash",
@@ -68,6 +78,7 @@ export const platform: PlatformComposition = {
 	runtimeDiagnostics: new UnavailableRuntimeDiagnostics(),
 	browserCommands: browserAutomation,
 	browserAutomation,
+	nativeFilesystem,
 	lifecycle: {
 		onSurfaceOpened: () => {
 			void browserAutomation.initialize();

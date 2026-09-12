@@ -6,9 +6,8 @@ import { embeddedChatService } from "@/embedded/chat-service";
 import { backgroundJob } from "@/services/background-jobs/background-job";
 import { logInfo } from "@/utils/logger";
 import type { ChatMessage } from "@/embedded/types";
-import type { CoAgentContextAnchor } from "@/embedded/utils/co-agent/context-anchor";
-
-const CO_AGENT_FEATURE_STEP_NAME = "co-agent-feature";
+import type { CoAgentContextAnchor } from "@/co-agent/dom/context-anchor";
+import { createCoAgentFlowPrefixConfig } from "@/co-agent/flow-config";
 
 export interface CoAgentPageContext {
 	url: string;
@@ -83,17 +82,6 @@ const createUserMessage = (prompt: CoAgentPrompt): ChatMessage => ({
 	role: "user",
 	content: prompt,
 	timestamp: new Date(),
-});
-
-export const createCoAgentFlowPrefixConfig = () => ({
-	graphType: "foundation",
-	steps: [
-		{
-			id: "runtime__co_agent_feature__1",
-			name: CO_AGENT_FEATURE_STEP_NAME,
-			enabled: true,
-		},
-	],
 });
 
 /**
@@ -177,3 +165,5 @@ export const coAgentChatService = {
 			signal: options.signal,
 		}),
 };
+
+export { createCoAgentFlowPrefixConfig };

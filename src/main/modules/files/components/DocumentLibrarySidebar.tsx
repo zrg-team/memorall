@@ -1,4 +1,4 @@
-import React, { memo, useEffect, useState } from "react";
+import React, { memo, useCallback, useEffect, useState } from "react";
 import {
 	ArrowUpRight,
 	ChevronDown,
@@ -12,6 +12,7 @@ import { DocumentTreeDraggable } from "./DocumentTreeDraggable";
 import { PageHeader } from "@/main/components/ui/page-header";
 import type { DocumentTreeNode } from "@/types/document-library";
 import { cn } from "@/lib/utils";
+import { useNativeMounts } from "@/main/modules/files/hooks/use-native-mounts";
 
 interface DocumentLibrarySidebarProps {
 	tree: DocumentTreeNode[];
@@ -57,6 +58,20 @@ export const DocumentLibrarySidebar = memo(function DocumentLibrarySidebar({
 	const [docsExpanded, setDocsExpanded] = useState(true);
 	const [workspaceExpanded, setWorkspaceExpanded] = useState(true);
 	const showWorkspaceSection = workspaceTree.length > 0;
+	// Mapped folders are ordinary members of the tree; this is only so the rows
+	// can be drawn differently and offer Unmap instead of Delete.
+	const {
+		roots: mappedRoots,
+		mountedPaths: mappedPaths,
+		removeRoot,
+	} = useNativeMounts();
+	const unmapByPath = useCallback(
+		(path: string) => {
+			const match = mappedRoots.find((root) => `/${root.label}` === path);
+			if (match) void removeRoot(match.id);
+		},
+		[mappedRoots, removeRoot],
+	);
 
 	useEffect(() => {
 		setDocsExpanded(selectedSection === "documents");
@@ -111,6 +126,8 @@ export const DocumentLibrarySidebar = memo(function DocumentLibrarySidebar({
 						onMove={onMove}
 						onRename={onRenameNode}
 						onDelete={onDeleteNode}
+						mappedPaths={mappedPaths}
+						onUnmap={unmapByPath}
 					/>
 				</div>
 			)}

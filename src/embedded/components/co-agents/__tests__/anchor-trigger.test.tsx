@@ -4,7 +4,7 @@ import type { ComponentProps } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { coAgentAnchorStyles } from "../anchorStyles";
 import { CoAgentAnchorTrigger } from "../CoAgentAnchorPrompt";
-import type { CoAgentContextAnchor } from "@/embedded/utils/co-agent/context-anchor";
+import type { CoAgentContextAnchor } from "@/co-agent/dom/context-anchor";
 
 vi.mock("motion/react", () => ({
 	motion: {

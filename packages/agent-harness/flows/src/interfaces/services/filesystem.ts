@@ -33,6 +33,17 @@ export interface DirEntry {
 	isFile(): boolean;
 	isDirectory(): boolean;
 	isSymbolicLink(): boolean;
+	/**
+	 * Size in bytes, when the listing already knew it.
+	 *
+	 * Optional because not every filesystem reports it from a directory read.
+	 * Where it is present, callers must not `stat` the entry again: on a mapped
+	 * folder each stat is a round trip to the OS, and on the agent's filesystem
+	 * it also re-resolves the path from the tree root, so re-fetching a size the
+	 * listing just handed over is the single most expensive thing a recursive
+	 * walk can do.
+	 */
+	size?: number;
 }
 
 export interface IFlowFileSystem {

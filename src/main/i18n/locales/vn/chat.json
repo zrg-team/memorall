@@ -163,6 +163,10 @@
 		"noCacheInfo": "Nhà cung cấp không báo dữ liệu prompt cache",
 		"estimatedUsage": "Ước tính cục bộ, nhà cung cấp không gửi usage",
 		"requestBreakdown": "Theo từng yêu cầu",
+		"cacheMisses_one": "{{count}} yêu cầu không dùng lại cache của yêu cầu trước",
+		"cacheMisses_other": "{{count}} yêu cầu không dùng lại cache của yêu cầu trước",
+		"cacheRestarted": "Không dùng lại được gì từ yêu cầu trước.",
+		"cachePartial": "Dùng lại cache của một yêu cầu cũ hơn thay vì yêu cầu ngay trước — có thể do được xử lý bởi nhà cung cấp khác.",
 		"thinking": "Đang suy nghĩ...",
 		"thought": "Suy nghĩ",
 		"error": "Không thể gửi tin nhắn",
@@ -375,7 +379,8 @@
 		"splitChat": "Tách đoạn chat — tác nhân bắt đầu lại từ đây và vẫn tìm được mọi thứ phía trên",
 		"expandChatWidth": "Mở rộng khung chat toàn màn hình",
 		"constrainChatWidth": "Thu gọn khung chat",
-		"startCoAgent": "Co-agent trên tab hiện tại"
+		"startCoAgent": "Cho tác nhân xem và thao tác trên trang web",
+		"stopCoAgent": "Tắt co-agent"
 	},
 	"agentSettings": {
 		"title": "Cài đặt Tác nhân",
