@@ -66,6 +66,7 @@ exports[`requested main module coverage > imports chat, documents, agents, agent
   "../modules/chat/components/ModelLoadPrompt.tsx",
   "../modules/chat/components/NoModelsScreen.tsx",
   "../modules/chat/components/SmartSelectContextBanner.tsx",
+  "../modules/chat/components/TokenUsagePanel.tsx",
   "../modules/chat/components/artifacts/ArtifactActionsMenu.tsx",
   "../modules/chat/components/artifacts/ArtifactRenderer.tsx",
   "../modules/chat/components/artifacts/HtmlArtifact.tsx",
