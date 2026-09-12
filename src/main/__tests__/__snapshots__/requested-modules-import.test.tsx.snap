@@ -173,6 +173,7 @@ exports[`requested main module coverage > imports chat, documents, agents, agent
   "../modules/files/hooks/use-document-library.ts",
   "../modules/files/hooks/use-knowledge-conversion.ts",
   "../modules/files/hooks/use-modal-selector.ts",
+  "../modules/files/hooks/use-native-mounts.ts",
   "../modules/files/hooks/use-source-status.ts",
   "../modules/files/modals/CreateDocumentDialog.tsx",
   "../modules/files/modals/CreateFolderDialog.tsx",

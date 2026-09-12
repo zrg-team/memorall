@@ -10,6 +10,8 @@ import {
 	ChevronDown,
 	Folder,
 	FolderOpen,
+	FolderSymlink,
+	Unlink,
 	FileText,
 	Image,
 	FileCode,
@@ -55,6 +57,12 @@ interface DocumentTreeProps {
 	) => void;
 	onRename?: (node: DocumentTreeNode, newName: string) => void;
 	onDelete?: (node: DocumentTreeNode) => void;
+	/**
+	 * Top-level paths that are folders on the user's disk rather than in the
+	 * library. They behave identically; only the icon says otherwise.
+	 */
+	mappedPaths?: ReadonlySet<string>;
+	onUnmap?: (path: string) => void;
 }
 
 const FILE_ICONS: Record<DocumentType, React.ComponentType<any>> = {
@@ -83,6 +91,8 @@ interface TreeItemProps {
 	onToggleExpand?: (node: DocumentTreeNode) => void;
 	onRename?: (node: DocumentTreeNode, newName: string) => void;
 	onDelete?: (node: DocumentTreeNode) => void;
+	mappedPaths?: ReadonlySet<string>;
+	onUnmap?: (path: string) => void;
 }
 
 const TreeItem: React.FC<TreeItemProps> = ({
@@ -93,8 +103,12 @@ const TreeItem: React.FC<TreeItemProps> = ({
 	onToggleExpand,
 	onRename,
 	onDelete,
+	mappedPaths,
+	onUnmap,
 }) => {
 	const { t } = useTranslation("documents");
+	// Only a root can be a mapped folder; everything inside one is ordinary.
+	const isMapped = level === 0 && Boolean(mappedPaths?.has(node.path));
 	const [contextMenuOpen, setContextMenuOpen] = React.useState(false);
 	const [isRenaming, setIsRenaming] = React.useState(false);
 	const [renameValue, setRenameValue] = React.useState(node.name);
@@ -143,8 +157,14 @@ const TreeItem: React.FC<TreeItemProps> = ({
 	let iconColorClass = "";
 
 	if (isFolder) {
-		IconComponent = node.isExpanded ? FolderOpen : Folder;
-		iconColorClass = "text-blue-500";
+		IconComponent = isMapped
+			? FolderSymlink
+			: node.isExpanded
+				? FolderOpen
+				: Folder;
+		// Amber rather than blue: the only cue that edits here land on the user's
+		// own disk instead of inside Memorall.
+		iconColorClass = isMapped ? "text-amber-500" : "text-blue-500";
 	} else {
 		const fileType = node.file?.type || "other";
 		IconComponent = FILE_ICONS[fileType];
@@ -191,7 +211,7 @@ const TreeItem: React.FC<TreeItemProps> = ({
 							}
 						}}
 						onContextMenu={(e) => {
-							if (!onRename && !onDelete) return;
+							if (!onRename && !onDelete && !(isMapped && onUnmap)) return;
 							e.preventDefault();
 							e.stopPropagation();
 							const rect = e.currentTarget.getBoundingClientRect();
@@ -256,26 +276,43 @@ const TreeItem: React.FC<TreeItemProps> = ({
 					</div>
 				</div>
 				<DropdownMenuContent align="start">
-					{onRename && (
-						<DropdownMenuItem
-							onClick={() => {
-								setRenameValue(node.name);
-								setIsRenaming(true);
-							}}
-						>
-							<Pencil className="h-4 w-4" />
-							{t("tree.rename")}
-						</DropdownMenuItem>
-					)}
-					{onRename && onDelete && <DropdownMenuSeparator />}
-					{onDelete && (
-						<DropdownMenuItem
-							className="text-destructive focus:text-destructive"
-							onClick={() => onDelete(node)}
-						>
-							<Trash2 className="h-4 w-4" />
-							{t("tree.delete")}
-						</DropdownMenuItem>
+					{/*
+					 * A mapped folder offers neither rename nor delete: both would act
+					 * on the real folder on disk, and "delete" next to the user's own
+					 * documents folder is not a mistake worth making possible. Unmap is
+					 * the reversible equivalent.
+					 */}
+					{isMapped ? (
+						onUnmap && (
+							<DropdownMenuItem onClick={() => onUnmap(node.path)}>
+								<Unlink className="h-4 w-4" />
+								{t("mappedFolders.unmap")}
+							</DropdownMenuItem>
+						)
+					) : (
+						<>
+							{onRename && (
+								<DropdownMenuItem
+									onClick={() => {
+										setRenameValue(node.name);
+										setIsRenaming(true);
+									}}
+								>
+									<Pencil className="h-4 w-4" />
+									{t("tree.rename")}
+								</DropdownMenuItem>
+							)}
+							{onRename && onDelete && <DropdownMenuSeparator />}
+							{onDelete && (
+								<DropdownMenuItem
+									className="text-destructive focus:text-destructive"
+									onClick={() => onDelete(node)}
+								>
+									<Trash2 className="h-4 w-4" />
+									{t("tree.delete")}
+								</DropdownMenuItem>
+							)}
+						</>
 					)}
 				</DropdownMenuContent>
 			</DropdownMenu>
@@ -293,6 +330,8 @@ const TreeItem: React.FC<TreeItemProps> = ({
 							onToggleExpand={onToggleExpand}
 							onRename={onRename}
 							onDelete={onDelete}
+							mappedPaths={mappedPaths}
+							onUnmap={onUnmap}
 						/>
 					))}
 				</div>
@@ -309,6 +348,8 @@ export const DocumentTreeDraggable: React.FC<DocumentTreeProps> = ({
 	onMove,
 	onRename,
 	onDelete,
+	mappedPaths,
+	onUnmap,
 }) => {
 	const [activeId, setActiveId] = React.useState<string | null>(null);
 
@@ -450,6 +491,8 @@ export const DocumentTreeDraggable: React.FC<DocumentTreeProps> = ({
 				onToggleExpand={onToggleExpand}
 				onRename={onRename}
 				onDelete={onDelete}
+				mappedPaths={mappedPaths}
+				onUnmap={onUnmap}
 			/>
 		);
 	};

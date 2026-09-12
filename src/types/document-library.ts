@@ -93,6 +93,18 @@ export interface DocumentTreeNode {
 	// Reference to actual data
 	file?: DocumentFile;
 	folder?: DocumentFolder;
+	/**
+	 * A folder whose children have not been read yet.
+	 *
+	 * Only mapped folders are built this way. Everything else lives in the
+	 * in-process filesystem and is cheap to walk in full, but each level of a
+	 * mapped folder is a round trip to the OS, so a folder with thousands of
+	 * files would otherwise have to be read end to end before the library could
+	 * draw anything at all. These are read one level at a time, when opened.
+	 */
+	isLazy?: boolean;
+	/** True while this folder's children are being read. */
+	isLoading?: boolean;
 }
 
 /**
