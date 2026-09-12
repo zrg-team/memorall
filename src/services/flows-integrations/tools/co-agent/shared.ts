@@ -5,8 +5,7 @@ import {
 	type CoAgentContentCommandResponse,
 } from "flow-integrations/interfaces/co-agent";
 import { platform } from "@/platform/current";
-
-const DEFAULT_TIMEOUT_MS = 10_000;
+import { CO_AGENT_COMMAND_TIMEOUT_MS } from "@/co-agent/protocol";
 
 export const optionalTrimmedString = (value: unknown): string | undefined => {
 	if (typeof value !== "string") return undefined;
@@ -82,7 +81,7 @@ export const createToolInputErrorResult = (
 
 export const sendCoAgentCommand = async (
 	request: CoAgentContentCommandRequest,
-	timeoutMs = DEFAULT_TIMEOUT_MS,
+	timeoutMs = CO_AGENT_COMMAND_TIMEOUT_MS,
 ): Promise<CoAgentContentCommandResponse> => {
 	const rawResponse = await platform.browserCommands.request<unknown>({
 		source: CO_AGENT_BROWSER_COMMAND_SOURCE,

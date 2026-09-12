@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import type { BackendSession, BrowserBackend } from "./browser-backend";
 import { BackendOpenError } from "./browser-backend";
 import {
@@ -529,6 +531,86 @@ export class ChromiumCdpBackend implements BrowserBackend {
 		for (const page of this.pages.values()) page.close();
 		this.pages.clear();
 		this.browserHardenedFor = null;
+	}
+
+	/**
+	 * The co-agent bundle, read once.
+	 *
+	 * Built by `tools/prepare-desktop-browser-runtime.mjs` and shipped next to the
+	 * sidecar's own `index.mjs`, so it is found relative to this module rather
+	 * than through an environment variable or an extra Tauri resource entry.
+	 */
+	private coAgentBundle: string | null = null;
+
+	private loadCoAgentBundle(): string {
+		if (this.coAgentBundle !== null) return this.coAgentBundle;
+		try {
+			this.coAgentBundle = readFileSync(
+				fileURLToPath(new URL("./co-agent-overlay.js", import.meta.url)),
+				"utf8",
+			);
+		} catch (error) {
+			throw new BrowserAutomationError(
+				"CO_AGENT_BUNDLE_MISSING",
+				`The co-agent bundle was not staged with the sidecar: ${
+					error instanceof Error ? error.message : String(error)
+				}`,
+			);
+		}
+		return this.coAgentBundle;
+	}
+
+	async coAgentAttach(
+		session: BackendSession,
+		config: Record<string, unknown>,
+		signal?: AbortSignal,
+	): Promise<void> {
+		const page = this.page(session);
+		const source = `window.__MEMORALL_CO_AGENT_CONFIG__ = ${JSON.stringify(
+			config,
+		)};
+${this.loadCoAgentBundle()}`;
+		// Injected for every future document, so the co-agent survives navigation
+		// rather than disappearing the first time the page moves.
+		await page.send(
+			"Page.addScriptToEvaluateOnNewDocument",
+			{ source },
+			signal,
+		);
+		// And once for the document already loaded.
+		await page.send(
+			"Runtime.evaluate",
+			{ expression: source, awaitPromise: false, returnByValue: false },
+			signal,
+		);
+	}
+
+	async coAgentCommand(
+		session: BackendSession,
+		request: unknown,
+		timeoutMs: number,
+		signal?: AbortSignal,
+	): Promise<unknown> {
+		return this.evaluate(
+			session,
+			`window.__memorallCoAgent ? window.__memorallCoAgent.handle(${JSON.stringify(
+				request,
+			)}) : { __memorallCoAgentMissing: true }`,
+			signal,
+			timeoutMs,
+		);
+	}
+
+	async coAgentDetach(
+		session: BackendSession,
+		signal?: AbortSignal,
+	): Promise<void> {
+		await this.evaluate(
+			session,
+			"(() => { try { delete window.__memorallCoAgent; } catch { window.__memorallCoAgent = undefined; } return true; })()",
+			signal,
+			5_000,
+		).catch(() => undefined);
 	}
 
 	private page(session: BackendSession): CdpConnection {

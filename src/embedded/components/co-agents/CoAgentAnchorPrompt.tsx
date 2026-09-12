@@ -12,7 +12,7 @@ import { useEmbeddedTranslation } from "@/embedded/hooks/use-embedded-language";
 import {
 	type CoAgentContextAnchor,
 	describeContextAnchor,
-} from "@/embedded/utils/co-agent/context-anchor";
+} from "@/co-agent/dom/context-anchor";
 import { CO_AGENT_CONTEXT_SHORTCUT_LABEL } from "./useCoAgentContextAnchor";
 
 const clamp = (value: number, min: number, max: number) =>

@@ -375,7 +375,8 @@
 		"splitChat": "Split chat — the agent starts fresh from here and can still search everything above",
 		"expandChatWidth": "Expand chat to full width",
 		"constrainChatWidth": "Constrain chat width",
-		"startCoAgent": "Co-agent on the current tab"
+		"startCoAgent": "Let the agent see and act on the page",
+		"stopCoAgent": "Turn the co-agent off"
 	},
 	"agentSettings": {
 		"title": "Agent Settings",

@@ -1,4 +1,4 @@
-import type { CoAgentRect } from "@/services/co-agent";
+import type { CoAgentRect } from "@/co-agent/protocol";
 import {
 	buildStableSelector,
 	createElementInfo,

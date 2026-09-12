@@ -17,6 +17,12 @@ import {
 	responseError,
 	WEB_BROWSER_COMMAND_SOURCE,
 } from "./browser-runtime-types";
+import {
+	CO_AGENT_BROWSER_COMMAND_SOURCE,
+	isCoAgentRequest,
+	parseCoAgentCommand,
+	type CoAgentCommand,
+} from "./co-agent-runtime-types";
 import { BrowserOsBackend } from "./browseros-backend";
 import { ChromiumCdpBackend } from "./chromium-cdp-backend";
 import { DirectBrowserBackend } from "./direct-browser-backend";
@@ -28,6 +34,12 @@ export {
 	BrowserAutomationError,
 	parseBrowserCommand,
 } from "./browser-runtime-types";
+
+/**
+ * Bumped when the injected bundle's contract changes, so a stale bundle left in
+ * a dev build is reported rather than silently misbehaving.
+ */
+const CO_AGENT_BUNDLE_REVISION = "1";
 
 interface LogicalSession {
 	id: number;
@@ -52,6 +64,49 @@ const trace = (message: string): void => {
 		process.stderr.write(`[browser-manager] ${message}\n`);
 };
 
+/**
+ * Where the co-agent lands when it is switched on without a page in mind.
+ *
+ * Blank rather than a Memorall page: the co-agent drives whatever the user
+ * browses to, and a start page they have to navigate away from is friction.
+ */
+export const CO_AGENT_START_URL = "about:blank";
+
+export interface CoAgentAttachmentPlan {
+	/** The page to attach to, when one is already known. */
+	tabId: number | null;
+	/** A page to open first, or null when `tabId` is enough. */
+	openUrl: string | null;
+}
+
+/**
+ * Decide which page the co-agent attaches to.
+ *
+ * Switching the co-agent on without naming a page is the ordinary case — the
+ * user wants a browser, the same way the extension attaches to the tab already
+ * in front of them. So: honour an explicit tab, otherwise reuse a page they are
+ * already looking at, otherwise open one. Refusing used to be the only outcome
+ * when no page was open, which read as the feature being broken.
+ *
+ * A request that names a URL always opens it: it came from a link the user
+ * clicked, and quietly attaching to some other page instead would be wrong.
+ */
+export const planCoAgentAttachment = (input: {
+	requestedTabId: number | null;
+	url: string | null;
+	openTabIds: number[];
+}): CoAgentAttachmentPlan => {
+	if (input.requestedTabId !== null) {
+		return { tabId: input.requestedTabId, openUrl: null };
+	}
+	if (input.url !== null) return { tabId: null, openUrl: input.url };
+
+	const existing = input.openTabIds.at(-1);
+	if (existing !== undefined) return { tabId: existing, openUrl: null };
+
+	return { tabId: null, openUrl: CO_AGENT_START_URL };
+};
+
 export class BrowserAutomationManager {
 	private readonly direct = new DirectBrowserBackend();
 	/**
@@ -68,6 +123,9 @@ export class BrowserAutomationManager {
 	private readonly managedRuntime: ManagedBrowserOsRuntime;
 	private readonly backends: Record<BrowserEngine, BrowserBackend>;
 	private readonly sessions = new Map<number, LogicalSession>();
+	/** The single page the co-agent is attached to, mirroring the extension. */
+	private coAgentTabId: number | null = null;
+	private coAgentEnabledAt = 0;
 	private nextPageId = 0;
 	private settings: BrowserSettings;
 
@@ -196,6 +254,10 @@ export class BrowserAutomationManager {
 	}
 
 	async handle(raw: unknown, signal?: AbortSignal): Promise<unknown> {
+		// Checked before parseBrowserCommand so that the web-tool grammar keeps
+		// its strict source check instead of being loosened to admit a second
+		// vocabulary.
+		if (isCoAgentRequest(raw)) return this.handleCoAgent(raw, signal);
 		const request = parseBrowserCommand(raw);
 		try {
 			if (signal?.aborted) {
@@ -224,6 +286,191 @@ export class BrowserAutomationManager {
 		} catch (error) {
 			return responseError(request, error);
 		}
+	}
+
+	/**
+	 * The co-agent lane.
+	 *
+	 * Pinned to Chromium rather than routed through the usual backend preference:
+	 * the co-agent needs a persistent injected script, which only CDP provides.
+	 * Lightpanda and direct HTTP cannot host it at all, and BrowserOS exposes
+	 * only a one-shot evaluate.
+	 */
+	private async handleCoAgent(
+		raw: unknown,
+		signal?: AbortSignal,
+	): Promise<unknown> {
+		let request: CoAgentCommand;
+		try {
+			request = parseCoAgentCommand(raw);
+		} catch (error) {
+			return {
+				source: CO_AGENT_BROWSER_COMMAND_SOURCE,
+				command: "content-command",
+				success: false,
+				error: errorMessage(error),
+			};
+		}
+
+		try {
+			switch (request.command) {
+				case "activate":
+					return await this.coAgentActivate(request, signal);
+				case "get-active":
+					return {
+						source: CO_AGENT_BROWSER_COMMAND_SOURCE,
+						command: "get-active",
+						success: true,
+						...(this.coAgentTabId === null
+							? {}
+							: {
+									session: {
+										tabId: this.coAgentTabId,
+										url: this.sessions.get(this.coAgentTabId)?.url,
+										enabledAt: this.coAgentEnabledAt,
+									},
+								}),
+					};
+				case "content-command":
+					return await this.coAgentContentCommand(request, signal);
+				case "detach":
+					return await this.coAgentDetach();
+			}
+		} catch (error) {
+			return {
+				source: CO_AGENT_BROWSER_COMMAND_SOURCE,
+				command: request.command,
+				success: false,
+				error: errorMessage(error),
+			};
+		}
+	}
+
+	private async coAgentActivate(request: CoAgentCommand, signal?: AbortSignal) {
+		if (!this.settings.visible) {
+			// A dock and an animated cursor in a headless browser are pure cost, and
+			// flipping visibility restarts Chromium and closes the user's other
+			// sessions — so this is a precondition, never a silent repair.
+			throw new BrowserAutomationError(
+				"CO_AGENT_REQUIRES_VISIBLE_BROWSER",
+				"Enable Show managed browser before starting the co-agent. Changing visibility closes active sessions.",
+			);
+		}
+
+		const plan = planCoAgentAttachment({
+			requestedTabId: request.tabId ?? null,
+			url: request.url ?? null,
+			openTabIds: [...this.sessions.values()]
+				.filter((session) => !session.paused)
+				.map((session) => session.id),
+		});
+
+		let tabId = plan.tabId;
+		if (plan.openUrl !== null) {
+			const opened = (await this.open(
+				{
+					source: WEB_BROWSER_COMMAND_SOURCE,
+					command: "open",
+					sessionId: `co-agent-${Date.now()}`,
+					url: plan.openUrl,
+					mode: "window",
+					timeoutMs: request.timeoutMs ?? 30_000,
+					maxHtmlChars: 1_000,
+				} as BrowserCommand,
+				signal,
+			)) as { tabId?: number };
+			tabId = opened.tabId ?? null;
+		}
+
+		if (tabId === null) {
+			throw new BrowserAutomationError(
+				"CO_AGENT_NO_MANAGED_PAGE",
+				"The managed browser could not open a page for the co-agent.",
+			);
+		}
+
+		const session = await this.promote(this.session(tabId), signal);
+		if (!session.backend.coAgentAttach) {
+			throw new BrowserAutomationError(
+				"CO_AGENT_REQUIRES_CHROMIUM",
+				"The co-agent needs the bundled Chromium renderer.",
+			);
+		}
+		await session.backend.coAgentAttach(
+			session.backendSession,
+			{ tabId, revision: CO_AGENT_BUNDLE_REVISION },
+			signal,
+		);
+		this.coAgentTabId = tabId;
+		this.coAgentEnabledAt = Date.now();
+
+		return {
+			source: CO_AGENT_BROWSER_COMMAND_SOURCE,
+			command: "activate",
+			success: true,
+			session: { tabId, url: session.url, enabledAt: this.coAgentEnabledAt },
+		};
+	}
+
+	private async coAgentContentCommand(
+		request: CoAgentCommand,
+		signal?: AbortSignal,
+	) {
+		const tabId = request.tabId ?? this.coAgentTabId;
+		if (tabId === null || tabId === undefined) {
+			throw new BrowserAutomationError(
+				"CO_AGENT_NOT_ACTIVE",
+				"The co-agent is not attached to a page.",
+			);
+		}
+		const session = this.session(tabId);
+		if (!session.backend.coAgentCommand) {
+			throw new BrowserAutomationError(
+				"CO_AGENT_REQUIRES_CHROMIUM",
+				"The co-agent needs the bundled Chromium renderer.",
+			);
+		}
+		const contentResponse = (await session.backend.coAgentCommand(
+			session.backendSession,
+			request.request,
+			request.timeoutMs ?? 10_000,
+			signal,
+		)) as Record<string, unknown> | undefined;
+
+		if (contentResponse?.__memorallCoAgentMissing) {
+			// The page navigated before the injected document script ran, or the
+			// bundle failed to evaluate. Say which, rather than returning an empty
+			// result the model would read as "nothing on the page".
+			throw new BrowserAutomationError(
+				"CO_AGENT_NOT_INJECTED",
+				"The co-agent is not present on this page. Re-activate it.",
+			);
+		}
+
+		return {
+			source: CO_AGENT_BROWSER_COMMAND_SOURCE,
+			command: "content-command",
+			success: true,
+			contentResponse,
+		};
+	}
+
+	private async coAgentDetach() {
+		const tabId = this.coAgentTabId;
+		if (tabId !== null) {
+			const session = this.sessions.get(tabId);
+			if (session?.backend.coAgentDetach) {
+				await session.backend
+					.coAgentDetach(session.backendSession)
+					.catch(() => undefined);
+			}
+		}
+		this.coAgentTabId = null;
+		return {
+			source: CO_AGENT_BROWSER_COMMAND_SOURCE,
+			command: "detach",
+			success: true,
+		};
 	}
 
 	async takeover(

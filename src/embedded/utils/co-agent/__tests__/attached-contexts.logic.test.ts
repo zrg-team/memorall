@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { EmbeddedContextItem } from "@/embedded/types";
-import type { CoAgentContextAnchor } from "../context-anchor";
+import type { CoAgentContextAnchor } from "@/co-agent/dom/context-anchor";
 import { buildAttachedContexts } from "../attached-contexts";
 
 const selection = (kind: string, label: string): EmbeddedContextItem =>

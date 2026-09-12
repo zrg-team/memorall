@@ -36,6 +36,8 @@ import type { ChatMessage } from "@/types/openai";
 import { isAbortError } from "@/utils/abort";
 import { logError, logInfo } from "@/utils/logger";
 import { useFrameCoalescedState } from "./use-frame-coalesced-state";
+import { createCoAgentFlowPrefixConfig } from "@/co-agent/flow-config";
+import { useCoAgentActivationStore } from "@/main/stores/co-agent-activation";
 
 export interface InProgressMessage {
 	id: string;
@@ -456,6 +458,11 @@ export const useChat = (model: string) => {
 							? selectedTopic
 							: undefined,
 					agentFlowId: selectedAgentFlowId ?? undefined,
+					// Added to the chosen agent rather than replacing it, so turning
+					// the co-agent on does not swap out the user's configuration.
+					flowConfigPrefix: useCoAgentActivationStore.getState().isActive
+						? createCoAgentFlowPrefixConfig()
+						: undefined,
 					conversation: {
 						id: currentConversation?.id ?? userMessage.conversationId,
 						inProgressMessage: { id: assistantMessage.id },
