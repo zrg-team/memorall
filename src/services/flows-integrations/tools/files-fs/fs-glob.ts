@@ -5,9 +5,19 @@ import type {
 } from "@memorall/agent-harness-flows/interfaces/engine/tool";
 import type { AllServices } from "@memorall/agent-harness-flows/interfaces/services/services";
 import { toolRegistry } from "@memorall/agent-harness-flows/registries/tool-registry";
-import { normalizeFsPath, globMatches, listEntries } from "./util";
+import {
+	normalizeFsPath,
+	globMatches,
+	globDescendFilter,
+	globOptsIntoNoise,
+	globSearchRoot,
+	walkEntries,
+} from "./util";
 
 const TOOL_NAME = "document_fs_glob" as const;
+
+/** Enough to answer any real question; small enough to stay readable. */
+const MAX_MATCHES = 500;
 
 const schema = z.object({
 	pattern: z
@@ -38,20 +48,42 @@ export const createFsGlobTool: ToolFactory<Input, Services> = (
 		if (!dfs) return "Error: fs service not available.";
 
 		const basePath = normalizeFsPath(path);
-		const entries = await listEntries(dfs, basePath, true);
-		const matches = entries.filter((entry) => {
-			const rel =
-				basePath === "/"
-					? entry.path.slice(1)
-					: entry.path.slice(basePath.length + 1);
-			return globMatches(pattern, rel);
+
+		// See the sibling tool in the flows package: start from the pattern's
+		// literal prefix, skip build and dependency folders unless the pattern
+		// names one, and prune any branch the pattern can no longer match.
+		const searchRoot = globSearchRoot(pattern, basePath);
+		const canDescend = globDescendFilter(pattern, basePath);
+
+		const result = await walkEntries(dfs, searchRoot, {
+			recursive: true,
+			withSizes: false,
+			pruneNoise: !globOptsIntoNoise(pattern),
+			limit: MAX_MATCHES,
+			shouldDescend: (displayPath) => canDescend(displayPath),
+			keep: (entry) => {
+				const rel =
+					basePath === "/"
+						? entry.path.slice(1)
+						: entry.path.slice(basePath.length + 1);
+				return rel.length > 0 && globMatches(pattern, rel);
+			},
 		});
 
-		if (matches.length === 0) {
-			return `No files found matching "${pattern}" under "${basePath}"`;
+		if (result.entries.length === 0) {
+			const skipped = result.prunedDirectories
+				? ` ${result.prunedDirectories} build/dependency folder(s) were skipped \u2014 name one in the pattern to include it.`
+				: "";
+			return `No files found matching "${pattern}" under "${basePath}".${skipped}`;
 		}
 
-		return matches.map((entry) => entry.path).join("\n");
+		const paths = result.entries.map((entry) => entry.path).join("\n");
+		if (!result.truncated) return paths;
+		const why =
+			result.stopReason === "time"
+				? "the search ran out of time"
+				: `the first ${MAX_MATCHES} matches were reached`;
+		return `${paths}\n\n(Partial results \u2014 ${why}. Narrow the pattern or pass a more specific "path" to see the rest.)`;
 	},
 });
 
