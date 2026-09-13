@@ -45,7 +45,7 @@
     "build:extension:firefox": "yarn prepare:build:extension && cross-env EXTENSION_STRICT_REFS=true extension build --browser=firefox && node tools/stage-extension-build.mjs firefox && node tools/ensure-content-script-assets.mjs publish/extension/firefox",
     "build:extension:all": "yarn prepare:build:extension && cross-env NODE_ENV=production EXTENSION_STRICT_REFS=true extension build --browser=chrome,edge && node tools/stage-extension-build.mjs chrome edge && node tools/ensure-content-script-assets.mjs publish/extension/chrome publish/extension/edge && node tools/prepare-production.mjs && node tools/check-mv3-remote-code.mjs publish/extension/chrome publish/extension/edge && node tools/check-patched-dependencies.mjs publish/extension/chrome publish/extension/edge",
     "build:web": "yarn build:harness && vite build --config apps/web/vite.config.ts && node tools/check-patched-dependencies.mjs publish/web",
-    "build:desktop": "yarn prepare:desktop:sidecar && node tools/run-tauri.mjs build",
+    "build:desktop": "yarn build:harness && yarn prepare:desktop:sidecar && node tools/run-tauri.mjs build",
     "build:desktop:frontend": "yarn build:harness && vite build --config apps/desktop/vite.config.ts && node tools/check-patched-dependencies.mjs publish/desktop/frontend",
     "build:desktop:windows": "node tools/desktop-platform-guard.mjs windows && yarn build:desktop",
     "build:desktop:macos": "node tools/desktop-platform-guard.mjs macos && yarn build:desktop",

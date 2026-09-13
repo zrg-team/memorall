@@ -1,4 +1,3 @@
-// Browser builds only support network MCP transports.
 export interface MCPHTTPServerConfig {
 	type: "http";
 	name: string;
@@ -13,7 +12,36 @@ export interface MCPSSEServerConfig {
 	headers?: Record<string, string>;
 }
 
-export type MCPServerConfig = MCPHTTPServerConfig | MCPSSEServerConfig;
+/**
+ * A server started as a local process. Only hosts that can start processes (the
+ * desktop app) provide the `mcpStdio` service that runs it; elsewhere the step
+ * skips it.
+ */
+export interface MCPStdioServerConfig {
+	type: "stdio";
+	/** Tool prefix, like a network server's name; may differ between agents. */
+	name: string;
+	/** The connection id, which identifies the process across agents. */
+	id: string;
+	command: string;
+	args: string[];
+	cwd?: string;
+	env?: Record<string, string>;
+	/** Keys of `env` whose values are secrets. */
+	secretEnvKeys?: string[];
+}
+
+export type MCPNetworkServerConfig = MCPHTTPServerConfig | MCPSSEServerConfig;
+
+export type MCPServerConfig = MCPNetworkServerConfig | MCPStdioServerConfig;
+
+export const isStdioServer = (
+	server: MCPServerConfig,
+): server is MCPStdioServerConfig => server.type === "stdio";
+
+export const isNetworkServer = (
+	server: MCPServerConfig,
+): server is MCPNetworkServerConfig => server.type !== "stdio";
 
 /** Agent-side reference into the Connections registry. */
 export interface MCPConnectionSelection {

@@ -10,6 +10,9 @@ import type {
 	IFlowFileSystem,
 } from "@memorall/agent-harness-flows/interfaces/services/filesystem";
 import type { IFlowLLMService } from "@memorall/agent-harness-flows/interfaces/services/llm";
+import type { IFlowMcpStdioService } from "@memorall/agent-harness-flows/interfaces/services/mcp-stdio";
+import type { MCPStdioServerConfig } from "@memorall/agent-harness-flows/steps/features/mcp-feature/types";
+import type { McpCallResult } from "@memorall/agent-harness-mcp";
 import type {
 	IFlowSandboxService,
 	SandboxCommandResult,
@@ -25,6 +28,7 @@ import type { IFlowLogger } from "@memorall/agent-harness-flows/logging/logger";
 import { setFlowLogger } from "@memorall/agent-harness-flows/logging/logger";
 import { serviceRegistry } from "@memorall/agent-harness-flows/registries/service-registry";
 import { setHtmlParser } from "@memorall/agent-harness-flows/utils/html-parser";
+import type { McpStdioPort, McpStdioSpec } from "@/platform/contracts/core";
 import { createAgentSandboxService } from "@/services/agent-sandbox";
 import type { IDatabaseService } from "@/services/database/interfaces/database-service.interface";
 import { schema as appDatabaseSchema } from "@/services/database/schema";
@@ -469,6 +473,53 @@ export const toFlowFileSystem = (
 			await getTreeNode(service, path);
 		},
 	});
+
+const toMcpStdioSpec = (server: MCPStdioServerConfig): McpStdioSpec => ({
+	id: server.id,
+	command: server.command,
+	args: server.args,
+	...(server.cwd ? { cwd: server.cwd } : {}),
+	env: server.env ?? {},
+	secretEnvKeys: server.secretEnvKeys ?? [],
+});
+
+/**
+ * Local MCP servers for flows, or undefined where processes cannot be started.
+ * Tools are named the way `McpClientManager` names a network server's, so the
+ * two kinds are interchangeable in the tool list and in allowlists.
+ */
+export const toFlowMcpStdio = (
+	port: McpStdioPort | undefined,
+): IFlowMcpStdioService | undefined =>
+	port && {
+		listTools: async (server) => {
+			const tools = await port.listTools(toMcpStdioSpec(server));
+			return tools.map((tool) => ({
+				serverId: server.name,
+				name: tool.name,
+				exposedName: `${server.name}__${tool.name}`,
+				title: tool.title ?? (tool.annotations?.title as string | undefined),
+				description:
+					tool.description ?? `MCP tool ${tool.name} from ${server.name}`,
+				inputSchema: tool.inputSchema,
+				outputSchema: tool.outputSchema,
+				annotations: tool.annotations,
+				metadata: {
+					source: "mcp",
+					transport: "stdio",
+					serverId: server.name,
+					originalToolName: tool.name,
+				},
+			}));
+		},
+		call: async (server, toolName, input, options) =>
+			(await port.call(
+				toMcpStdioSpec(server),
+				toolName,
+				{ ...input },
+				options?.signal ? { signal: options.signal } : {},
+			)) as McpCallResult,
+	};
 
 export const toFlowWebBrowser = (
 	service: IWebBrowserService,

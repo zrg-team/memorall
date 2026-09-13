@@ -54,7 +54,12 @@ export type MCPToolRuntimeMetadata = {
 };
 
 /** The exact key set `normalizeMcpToolResult` emits for a non-text result. */
-const RICH_RESULT_KEYS = new Set(["text", "content", "structuredContent", "meta"]);
+const RICH_RESULT_KEYS = new Set([
+	"text",
+	"content",
+	"structuredContent",
+	"meta",
+]);
 
 /**
  * Is this JSON the wrapper `normalizeMcpToolResult` produces, or a tool's own
@@ -151,11 +156,12 @@ export function adaptMCPTool(
 		icons: metadata.mcp.icons,
 		annotations: metadata.mcp.annotations,
 		metadata,
-		execute: async (input: unknown): Promise<ToolResultValue> => {
+		execute: async (input, context): Promise<ToolResultValue> => {
 			const result = await manager.call(
 				descriptor.serverId,
 				descriptor.name,
 				(input ?? {}) as Record<string, unknown>,
+				context?.signal ? { signal: context.signal } : undefined,
 			);
 			const text = normalizeMcpToolResult(
 				descriptor.serverId,

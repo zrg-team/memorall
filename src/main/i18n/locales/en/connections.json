@@ -29,7 +29,11 @@
 		"continueSetup": "Continue setup",
 		"incompleteHint": "Your key is saved. Connect at least one app to finish.",
 		"incompleteEndpointHint_one": "{{count}} app is authorized, but the tool endpoint was not created. Continue setup to retry.",
-		"incompleteEndpointHint_other": "{{count}} apps are authorized, but the tool endpoint was not created. Continue setup to retry."
+		"incompleteEndpointHint_other": "{{count}} apps are authorized, but the tool endpoint was not created. Continue setup to retry.",
+		"starting": "Starting",
+		"stopped": "Stopped",
+		"needsApproval": "Needs approval",
+		"runtimeMissing": "Runtime missing"
 	},
 	"lanes": {
 		"composio": {
@@ -41,12 +45,12 @@
 		},
 		"template": {
 			"name": "Local server",
-			"body": "Run a published MCP package against your own machine — filesystem, git, Postgres, Puppeteer. Pick a template, fill in the blanks.",
-			"bridgeWarning": "In the extension this needs one terminal command to bridge. The desktop app runs it for you.",
+			"body": "Run a published MCP package on this computer — filesystem, git, fetch, a browser. Pick a template, fill in the blanks.",
+			"bridgeWarning": "Local servers run in the Memorall desktop app.",
 			"nativeNote": "Runs on your machine, no terminal needed.",
 			"action": "Browse templates",
-			"notBuiltTitle": "Local servers are not ready yet",
-			"notBuiltBody": "This lane will let you pick a published MCP package and fill in its settings. Until then, run the server yourself and add it as a custom endpoint."
+			"notBuiltTitle": "Local servers need the desktop app",
+			"notBuiltBody": "A browser can't start programs on your computer. Add this server from Memorall for desktop, or run it yourself and add it as a custom endpoint."
 		},
 		"custom": {
 			"name": "Custom endpoint",
@@ -59,7 +63,8 @@
 			"apps": "Apps",
 			"tools": "Tools",
 			"usedBy": "Used by",
-			"settings": "Settings"
+			"settings": "Settings",
+			"process": "Process"
 		},
 		"sync": "Sync",
 		"test": "Test",
@@ -81,6 +86,11 @@
 			"active": "active",
 			"pending": "pending",
 			"expired": "expired"
+		},
+		"localSettings": {
+			"commandLine": "Command",
+			"cwd": "Working directory",
+			"envKeys": "Environment"
 		}
 	},
 	"tools": {
@@ -135,27 +145,394 @@
 		"syncFailed": "Authorized, but the tool endpoint could not be created:"
 	},
 	"template": {
-		"title": "Local server",
+		"title": "Add local server",
+		"subtitle": "Runs on this computer, started and stopped by Memorall",
 		"nameLabel": "Connection name",
-		"chooseTemplate": "Choose a template",
-		"runOnce": "Run this once in a terminal",
-		"runOnceBody": "Browser extensions can't start local processes, so this command bridges the server onto a URL we can reach. Leave it running while you use the agent.",
-		"copyCommand": "Copy command",
-		"copied": "Copied",
-		"portFree": "Port {{port}} is free — we checked.",
-		"portBusy": "Port {{port}} looks busy. We picked {{suggested}} instead.",
-		"bridgeReachable": "Bridge reachable",
-		"bridgeUnreachable": "Nothing is answering on that port yet",
-		"testAgain": "Test again",
-		"keepChecking": "Memorall will keep checking this URL and tell you when the bridge stops.",
+		"chooseTemplate": "Choose a server",
+		"customCommand": {
+			"name": "Custom command",
+			"description": "Any MCP server you start from a command line — npx, uvx, docker, or a program on this computer."
+		},
+		"runtime": {
+			"node": "Node.js",
+			"python": "Python",
+			"docker": "Docker"
+		},
+		"heavy": "Large first download",
+		"docs": "Docs",
+		"catalog": {
+			"filesystem": {
+				"name": "Filesystem",
+				"description": "Read, write and search files inside the folders you choose."
+			},
+			"git": {
+				"name": "Git",
+				"description": "Inspect a repository: status, diffs, log, branches and commits."
+			},
+			"fetch": {
+				"name": "Fetch",
+				"description": "Download web pages and turn them into Markdown the agent can read."
+			},
+			"memory": {
+				"name": "Memory graph",
+				"description": "A small knowledge graph the agent can write to and recall from."
+			},
+			"time": {
+				"name": "Time",
+				"description": "Current time and time-zone conversions."
+			},
+			"sequential-thinking": {
+				"name": "Sequential thinking",
+				"description": "A scratchpad tool for breaking a hard problem into steps."
+			},
+			"playwright": {
+				"name": "Playwright browser",
+				"description": "Drive a real browser: open pages, click, type and take snapshots."
+			},
+			"postgres": {
+				"name": "PostgreSQL",
+				"description": "Explore a Postgres database: schemas, queries, and performance advice."
+			},
+			"duckduckgo": {
+				"name": "DuckDuckGo search",
+				"description": "Search the web and read pages, with no account or key."
+			},
+			"brave-search": {
+				"name": "Brave Search",
+				"description": "Web, news, image and local search from Brave's independent index."
+			},
+			"tavily": {
+				"name": "Tavily",
+				"description": "Search, extract and crawl the web, tuned for agents doing research."
+			},
+			"exa": {
+				"name": "Exa",
+				"description": "Semantic web search that finds pages by meaning. Works without a key at low volume."
+			},
+			"firecrawl": {
+				"name": "Firecrawl",
+				"description": "Scrape, crawl and map websites into clean Markdown, including JavaScript-heavy pages."
+			},
+			"context7": {
+				"name": "Context7 docs",
+				"description": "Up-to-date documentation and code examples for thousands of libraries."
+			},
+			"notion": {
+				"name": "Notion",
+				"description": "Search, read and edit the Notion pages and databases you share with it."
+			},
+			"airtable": {
+				"name": "Airtable",
+				"description": "Read and update records in your Airtable bases."
+			},
+			"jira": {
+				"name": "Jira",
+				"description": "Search, read and update Jira issues on Atlassian Cloud."
+			},
+			"figma": {
+				"name": "Figma",
+				"description": "Read Figma files and frames so the agent can build from real designs."
+			},
+			"github": {
+				"name": "GitHub",
+				"description": "Repositories, issues, pull requests and Actions, through GitHub's official server."
+			},
+			"sentry": {
+				"name": "Sentry",
+				"description": "Look into errors, issues and releases in your Sentry organization."
+			},
+			"supabase": {
+				"name": "Supabase",
+				"description": "Manage Supabase projects: tables, SQL, logs and edge functions."
+			}
+		},
+		"fields": {
+			"filesystem": {
+				"directories": {
+					"label": "Folders",
+					"hint": "The server can only reach these folders."
+				}
+			},
+			"git": {
+				"repository": {
+					"label": "Repository folder",
+					"hint": "A folder containing a .git directory."
+				}
+			},
+			"memory": {
+				"memoryFile": {
+					"label": "Memory file",
+					"hint": "Optional. A full path; leave blank to use the server's default."
+				}
+			},
+			"time": {
+				"timezone": {
+					"label": "Local time zone",
+					"hint": "Optional. An IANA name; leave blank to detect it."
+				}
+			},
+			"postgres": {
+				"databaseUrl": {
+					"label": "Connection URL",
+					"hint": "postgresql://user:password@host:5432/database — stored encrypted."
+				},
+				"readOnly": {
+					"label": "Read-only",
+					"hint": "Only lets the agent run queries that cannot change data."
+				}
+			},
+			"brave-search": {
+				"apiKey": {
+					"label": "Brave Search API key"
+				}
+			},
+			"tavily": {
+				"apiKey": {
+					"label": "Tavily API key"
+				}
+			},
+			"exa": {
+				"apiKey": {
+					"label": "Exa API key",
+					"hint": "Optional. Add one for higher limits."
+				}
+			},
+			"firecrawl": {
+				"apiKey": {
+					"label": "Firecrawl API key"
+				}
+			},
+			"context7": {
+				"apiKey": {
+					"label": "Context7 API key",
+					"hint": "Optional. Add one for higher rate limits."
+				}
+			},
+			"notion": {
+				"token": {
+					"label": "Notion integration secret"
+				}
+			},
+			"airtable": {
+				"token": {
+					"label": "Airtable personal access token"
+				}
+			},
+			"jira": {
+				"siteUrl": {
+					"label": "Jira site URL"
+				},
+				"email": {
+					"label": "Atlassian account email"
+				},
+				"apiToken": {
+					"label": "Atlassian API token"
+				}
+			},
+			"figma": {
+				"token": {
+					"label": "Figma personal access token"
+				}
+			},
+			"github": {
+				"token": {
+					"label": "GitHub personal access token",
+					"hint": "Runs in Docker, so Docker Desktop must be running."
+				}
+			},
+			"sentry": {
+				"token": {
+					"label": "Sentry user auth token"
+				},
+				"host": {
+					"label": "Self-hosted Sentry host",
+					"hint": "Optional. Leave blank for sentry.io."
+				}
+			},
+			"supabase": {
+				"token": {
+					"label": "Supabase access token"
+				},
+				"projectRef": {
+					"label": "Project ref",
+					"hint": "Optional. Limits the agent to one project (the id in its dashboard URL)."
+				},
+				"readOnly": {
+					"label": "Read-only",
+					"hint": "Blocks tools that change your database or project."
+				}
+			}
+		},
+		"browse": "Browse…",
+		"addDirectory": "Add folder",
+		"remove": "Remove",
+		"commandLabel": "Command",
+		"commandPlaceholder": "npx",
+		"argsLabel": "Arguments",
+		"argsHint": "One per line. Passed exactly as written, never through a shell.",
+		"cwdLabel": "Working directory",
+		"cwdHint": "Optional.",
+		"envLabel": "Environment variables",
+		"envKeyPlaceholder": "NAME",
+		"envValuePlaceholder": "value",
+		"envSecret": "Secret",
+		"addEnv": "Add variable",
+		"envHint": "Secret values are encrypted with your master passkey and hidden from logs.",
+		"secretStored": "Stored — leave blank to keep",
+		"runtimeChecking": "Looking for {{command}}…",
+		"runtimeFound": "{{command}} found",
+		"runtimeMissingNode": "Node.js is not installed. This server starts with npx, which comes with Node.js.",
+		"runtimeMissingPython": "uv is not installed. This server starts with uvx, which comes with uv.",
+		"runtimeMissingCommand": "\"{{command}}\" was not found on this computer.",
+		"installNode": "Install Node.js",
+		"installUv": "Install uv",
+		"checkAgain": "Check again",
 		"approveTitle": "Memorall will start this process",
-		"approveBody": "It runs as you, with access to {{scope}}. It stops when you quit Memorall or disable the connection.",
+		"approveBody": "It runs as you and can reach whatever this command can. It stops when you quit Memorall or delete the connection.",
 		"approveAction": "Approve and run",
+		"runAgain": "Run again",
+		"starting": "Starting…",
+		"firstRunHint": "The first start downloads the package, which can take a minute.",
+		"startFailed": "The server did not start: {{error}}",
+		"runFirst": "Start the server once to see its tools before saving.",
+		"secretsNeeded": "Enter a value for every secret variable.",
+		"save": "Save local server",
 		"running": "Running",
 		"logs": "Logs",
+		"noLogs": "No output yet.",
+		"copyLogs": "Copy",
+		"copied": "Copied",
+		"start": "Start",
 		"restart": "Restart",
 		"stop": "Stop",
-		"runsNatively": "Runs natively"
+		"pid": "PID {{pid}}",
+		"startedAt": "Started {{when}}",
+		"desktopOnly": "Local servers run in the Memorall desktop app.",
+		"needsApprovalHint": "This command changed, or has not been approved on this computer yet. Review it before it runs.",
+		"approve": "Approve",
+		"runtimeMissingHint": "The program that starts this server is not installed. Edit the connection to see how to install it.",
+		"stoppedHint": "Not running. It starts the next time an agent uses it.",
+		"crashedHint": "The server stopped unexpectedly. Its log usually says why.",
+		"guides": {
+			"postgres": {
+				"databaseUrl": {
+					"title": "Build your Postgres connection URL",
+					"step1": "Find the host, port, database name, user and password — in your hosting provider's dashboard (look for \"connection string\"), or from your local setup.",
+					"step2": "Combine them as postgresql://user:password@host:5432/database. Encode special characters in the password (for example @ becomes %40).",
+					"step3": "Prefer a database user with read-only permissions for the agent."
+				}
+			},
+			"brave-search": {
+				"apiKey": {
+					"title": "Get a Brave Search API key",
+					"step1": "Sign in to the Brave Search API dashboard.",
+					"step2": "Subscribe to a plan — the free plan is enough to start.",
+					"step3": "Open API Keys, create a key, and copy it."
+				}
+			},
+			"tavily": {
+				"apiKey": {
+					"title": "Get a Tavily API key",
+					"step1": "Sign in or create a free account at Tavily.",
+					"step2": "Your default API key is on the overview page — copy it (it starts with tvly-)."
+				}
+			},
+			"exa": {
+				"apiKey": {
+					"title": "Get an Exa API key",
+					"step1": "Sign in to the Exa dashboard.",
+					"step2": "Open API Keys, create a key, and copy it."
+				}
+			},
+			"firecrawl": {
+				"apiKey": {
+					"title": "Get a Firecrawl API key",
+					"step1": "Sign in or sign up at Firecrawl.",
+					"step2": "Open API Keys and copy your key (it starts with fc-)."
+				}
+			},
+			"context7": {
+				"apiKey": {
+					"title": "Get a Context7 API key",
+					"step1": "Sign in to the Context7 dashboard.",
+					"step2": "Create an API key and copy it."
+				}
+			},
+			"notion": {
+				"token": {
+					"title": "Get a Notion integration secret",
+					"step1": "Open Notion's integrations page and create a new internal integration in your workspace.",
+					"step2": "Copy its Internal Integration Secret (it starts with ntn_).",
+					"step3": "In Notion, open each page or database the agent should see, choose ••• → Connections, and add your integration. It cannot see anything you have not shared."
+				}
+			},
+			"airtable": {
+				"token": {
+					"title": "Create an Airtable personal access token",
+					"step1": "Open the token creation page and name the token.",
+					"step2": "Add the scopes schema.bases:read and data.records:read — and data.records:write if the agent should edit.",
+					"step3": "Choose which bases it can access, create it, and copy the token (it starts with pat)."
+				}
+			},
+			"jira": {
+				"apiToken": {
+					"title": "Create an Atlassian API token",
+					"step1": "Open your Atlassian account's API tokens page and choose Create API token.",
+					"step2": "Name it, pick an expiry, and copy the token — it is shown only once.",
+					"step3": "Use the email you sign in with, and your site URL such as https://your-team.atlassian.net."
+				}
+			},
+			"figma": {
+				"token": {
+					"title": "Create a Figma personal access token",
+					"step1": "In Figma, open your account menu → Settings → Security.",
+					"step2": "Under Personal access tokens, generate a new token with read access to file content.",
+					"step3": "Copy it right away — Figma shows it only once."
+				}
+			},
+			"github": {
+				"token": {
+					"title": "Create a GitHub personal access token",
+					"step1": "Open GitHub's new fine-grained token page and name the token.",
+					"step2": "Choose the repositories, then grant what the agent needs — for example Contents, Issues and Pull requests (read, or read and write).",
+					"step3": "Generate the token and copy it (it starts with github_pat_)."
+				}
+			},
+			"sentry": {
+				"token": {
+					"title": "Create a Sentry user auth token",
+					"step1": "Open Sentry → User settings → Personal Tokens.",
+					"step2": "Create a token with at least org:read, project:read and event:read.",
+					"step3": "Copy the token — it is shown only once."
+				}
+			},
+			"supabase": {
+				"token": {
+					"title": "Create a Supabase access token",
+					"step1": "Open your Supabase account's Access Tokens page and generate a new token.",
+					"step2": "Name it and copy it (it starts with sbp_)."
+				}
+			}
+		},
+		"categories": {
+			"local": "Your computer and data",
+			"web": "Web and research",
+			"work": "Work apps",
+			"developer": "Developer services",
+			"utilities": "Utilities"
+		},
+		"keyRequired": "API key",
+		"keyOptional": "Key optional",
+		"showKey": "Show key",
+		"hideKey": "Hide key",
+		"guide": {
+			"trigger": "How do I get this?",
+			"open": "Open {{site}}",
+			"safety": "The key is encrypted with your master passkey and only passed to this server on this computer."
+		},
+		"runtimeMissingDocker": "Docker is not available. This server runs in a container, so install Docker Desktop and make sure it is running.",
+		"installDocker": "Install Docker",
+		"dockerNotRunning": "Docker is installed but not running. Start Docker Desktop, wait until it says it is running, then run again."
 	},
 	"custom": {
 		"title": "Add custom endpoint",

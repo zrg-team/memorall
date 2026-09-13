@@ -52,7 +52,9 @@ export const AddConnectionChooser: React.FC<AddConnectionChooserProps> = ({
 
 	// The local-server lane ends differently per platform, and saying so up front
 	// beats discovering it after four steps.
-	const canSpawnNatively = platform.capabilities.get("mcp.stdio").available;
+	const canSpawnNatively =
+		Boolean(platform.mcpStdio) &&
+		platform.capabilities.get("mcp.stdio").available;
 	const isWeb = platform.environment === "web";
 
 	return (
@@ -148,6 +150,7 @@ export const AddConnectionChooser: React.FC<AddConnectionChooserProps> = ({
 						size="sm"
 						variant="outline"
 						className="mt-auto w-full"
+						disabled={!canSpawnNatively}
 						onClick={() => onSelect("template")}
 					>
 						{t("lanes.template.action")}

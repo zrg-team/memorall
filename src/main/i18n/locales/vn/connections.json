@@ -28,7 +28,11 @@
 		"incomplete": "Chưa hoàn tất thiết lập",
 		"continueSetup": "Tiếp tục thiết lập",
 		"incompleteHint": "Đã lưu khóa của bạn. Hãy kết nối ít nhất một ứng dụng để hoàn tất.",
-		"incompleteEndpointHint_other": "Đã cấp quyền {{count}} ứng dụng, nhưng chưa tạo được điểm cuối công cụ. Tiếp tục thiết lập để thử lại."
+		"incompleteEndpointHint_other": "Đã cấp quyền {{count}} ứng dụng, nhưng chưa tạo được điểm cuối công cụ. Tiếp tục thiết lập để thử lại.",
+		"starting": "Đang khởi động",
+		"stopped": "Đã dừng",
+		"needsApproval": "Cần chấp nhận",
+		"runtimeMissing": "Thiếu môi trường chạy"
 	},
 	"lanes": {
 		"composio": {
@@ -40,12 +44,12 @@
 		},
 		"template": {
 			"name": "Máy chủ cục bộ",
-			"body": "Chạy một gói MCP đã phát hành trên máy của bạn — hệ thống tệp, git, Postgres, Puppeteer. Chọn mẫu và điền thông tin.",
-			"bridgeWarning": "Trên tiện ích mở rộng, bạn cần chạy một lệnh terminal để tạo cầu nối. Ứng dụng máy tính sẽ tự chạy giúp bạn.",
+			"body": "Chạy một gói MCP đã phát hành trên máy này — hệ thống tệp, git, tải trang, trình duyệt. Chọn mẫu và điền thông tin.",
+			"bridgeWarning": "Máy chủ cục bộ chạy trong ứng dụng Memorall cho máy tính.",
 			"nativeNote": "Chạy ngay trên máy của bạn, không cần terminal.",
 			"action": "Xem các mẫu",
-			"notBuiltTitle": "Máy chủ cục bộ chưa sẵn sàng",
-			"notBuiltBody": "Lối này sẽ cho phép bạn chọn một gói MCP đã phát hành và điền thiết lập. Trong lúc chờ, hãy tự chạy máy chủ và thêm nó như một điểm cuối tùy chỉnh."
+			"notBuiltTitle": "Máy chủ cục bộ cần ứng dụng máy tính",
+			"notBuiltBody": "Trình duyệt không thể khởi động chương trình trên máy của bạn. Hãy thêm máy chủ này từ Memorall cho máy tính, hoặc tự chạy và thêm như một điểm cuối tùy chỉnh."
 		},
 		"custom": {
 			"name": "Điểm cuối tùy chỉnh",
@@ -58,7 +62,8 @@
 			"apps": "Ứng dụng",
 			"tools": "Công cụ",
 			"usedBy": "Đang dùng bởi",
-			"settings": "Cài đặt"
+			"settings": "Cài đặt",
+			"process": "Tiến trình"
 		},
 		"sync": "Đồng bộ",
 		"test": "Kiểm tra",
@@ -78,6 +83,11 @@
 			"active": "hoạt động",
 			"pending": "đang chờ",
 			"expired": "hết hạn"
+		},
+		"localSettings": {
+			"commandLine": "Lệnh",
+			"cwd": "Thư mục làm việc",
+			"envKeys": "Môi trường"
 		}
 	},
 	"tools": {
@@ -130,27 +140,394 @@
 		"syncFailed": "Đã cấp quyền, nhưng chưa tạo được điểm cuối công cụ:"
 	},
 	"template": {
-		"title": "Máy chủ cục bộ",
+		"title": "Thêm máy chủ cục bộ",
+		"subtitle": "Chạy trên máy tính này, do Memorall khởi động và dừng",
 		"nameLabel": "Tên kết nối",
-		"chooseTemplate": "Chọn một mẫu",
-		"runOnce": "Chạy lệnh này một lần trong terminal",
-		"runOnceBody": "Tiện ích trình duyệt không thể khởi động tiến trình cục bộ, nên lệnh này tạo cầu nối máy chủ sang một URL mà chúng tôi truy cập được. Hãy giữ lệnh chạy trong lúc dùng tác nhân.",
-		"copyCommand": "Sao chép lệnh",
-		"copied": "Đã sao chép",
-		"portFree": "Cổng {{port}} đang rảnh — đã kiểm tra.",
-		"portBusy": "Cổng {{port}} có vẻ đang bận. Chúng tôi chọn {{suggested}} thay thế.",
-		"bridgeReachable": "Cầu nối hoạt động",
-		"bridgeUnreachable": "Chưa có phản hồi trên cổng đó",
-		"testAgain": "Kiểm tra lại",
-		"keepChecking": "Memorall sẽ tiếp tục kiểm tra URL này và báo khi cầu nối dừng.",
+		"chooseTemplate": "Chọn một máy chủ",
+		"customCommand": {
+			"name": "Lệnh tùy chỉnh",
+			"description": "Bất kỳ máy chủ MCP nào bạn khởi động bằng dòng lệnh — npx, uvx, docker hoặc một chương trình trên máy này."
+		},
+		"runtime": {
+			"node": "Node.js",
+			"python": "Python",
+			"docker": "Docker"
+		},
+		"heavy": "Lần đầu tải về khá lớn",
+		"docs": "Tài liệu",
+		"catalog": {
+			"filesystem": {
+				"name": "Hệ thống tệp",
+				"description": "Đọc, ghi và tìm kiếm tệp trong các thư mục bạn chọn."
+			},
+			"git": {
+				"name": "Git",
+				"description": "Xem kho mã: trạng thái, thay đổi, lịch sử, nhánh và commit."
+			},
+			"fetch": {
+				"name": "Tải trang",
+				"description": "Tải trang web và chuyển thành Markdown để tác nhân đọc."
+			},
+			"memory": {
+				"name": "Đồ thị ghi nhớ",
+				"description": "Một đồ thị tri thức nhỏ để tác nhân ghi lại và nhớ lại."
+			},
+			"time": {
+				"name": "Thời gian",
+				"description": "Giờ hiện tại và chuyển đổi múi giờ."
+			},
+			"sequential-thinking": {
+				"name": "Suy nghĩ tuần tự",
+				"description": "Công cụ nháp giúp chia một vấn đề khó thành từng bước."
+			},
+			"playwright": {
+				"name": "Trình duyệt Playwright",
+				"description": "Điều khiển trình duyệt thật: mở trang, nhấp, gõ và chụp nhanh."
+			},
+			"postgres": {
+				"name": "PostgreSQL",
+				"description": "Khám phá cơ sở dữ liệu Postgres: lược đồ, truy vấn và gợi ý hiệu năng."
+			},
+			"duckduckgo": {
+				"name": "Tìm kiếm DuckDuckGo",
+				"description": "Tìm kiếm web và đọc trang, không cần tài khoản hay khóa."
+			},
+			"brave-search": {
+				"name": "Brave Search",
+				"description": "Tìm kiếm web, tin tức, hình ảnh và địa điểm từ chỉ mục độc lập của Brave."
+			},
+			"tavily": {
+				"name": "Tavily",
+				"description": "Tìm kiếm, trích xuất và thu thập web, tối ưu cho tác nhân nghiên cứu."
+			},
+			"exa": {
+				"name": "Exa",
+				"description": "Tìm kiếm web theo ngữ nghĩa. Dùng được không cần khóa với lưu lượng thấp."
+			},
+			"firecrawl": {
+				"name": "Firecrawl",
+				"description": "Thu thập và chuyển website thành Markdown sạch, kể cả trang dùng nhiều JavaScript."
+			},
+			"context7": {
+				"name": "Tài liệu Context7",
+				"description": "Tài liệu và ví dụ mã luôn cập nhật cho hàng nghìn thư viện."
+			},
+			"notion": {
+				"name": "Notion",
+				"description": "Tìm, đọc và sửa các trang, cơ sở dữ liệu Notion bạn chia sẻ cho nó."
+			},
+			"airtable": {
+				"name": "Airtable",
+				"description": "Đọc và cập nhật bản ghi trong các base Airtable của bạn."
+			},
+			"jira": {
+				"name": "Jira",
+				"description": "Tìm, đọc và cập nhật issue Jira trên Atlassian Cloud."
+			},
+			"figma": {
+				"name": "Figma",
+				"description": "Đọc tệp và khung Figma để tác nhân dựng giao diện từ thiết kế thật."
+			},
+			"github": {
+				"name": "GitHub",
+				"description": "Kho mã, issue, pull request và Actions qua máy chủ chính thức của GitHub."
+			},
+			"sentry": {
+				"name": "Sentry",
+				"description": "Xem lỗi, issue và bản phát hành trong tổ chức Sentry của bạn."
+			},
+			"supabase": {
+				"name": "Supabase",
+				"description": "Quản lý dự án Supabase: bảng, SQL, nhật ký và edge function."
+			}
+		},
+		"fields": {
+			"filesystem": {
+				"directories": {
+					"label": "Thư mục",
+					"hint": "Máy chủ chỉ truy cập được các thư mục này."
+				}
+			},
+			"git": {
+				"repository": {
+					"label": "Thư mục kho mã",
+					"hint": "Thư mục có chứa thư mục .git."
+				}
+			},
+			"memory": {
+				"memoryFile": {
+					"label": "Tệp ghi nhớ",
+					"hint": "Không bắt buộc. Đường dẫn đầy đủ; để trống để dùng mặc định."
+				}
+			},
+			"time": {
+				"timezone": {
+					"label": "Múi giờ địa phương",
+					"hint": "Không bắt buộc. Tên IANA; để trống để tự nhận diện."
+				}
+			},
+			"postgres": {
+				"databaseUrl": {
+					"label": "URL kết nối",
+					"hint": "postgresql://user:password@host:5432/database — được lưu mã hóa."
+				},
+				"readOnly": {
+					"label": "Chỉ đọc",
+					"hint": "Chỉ cho tác nhân chạy truy vấn không làm thay đổi dữ liệu."
+				}
+			},
+			"brave-search": {
+				"apiKey": {
+					"label": "Khóa API Brave Search"
+				}
+			},
+			"tavily": {
+				"apiKey": {
+					"label": "Khóa API Tavily"
+				}
+			},
+			"exa": {
+				"apiKey": {
+					"label": "Khóa API Exa",
+					"hint": "Không bắt buộc. Thêm khóa để có giới hạn cao hơn."
+				}
+			},
+			"firecrawl": {
+				"apiKey": {
+					"label": "Khóa API Firecrawl"
+				}
+			},
+			"context7": {
+				"apiKey": {
+					"label": "Khóa API Context7",
+					"hint": "Không bắt buộc. Thêm khóa để có giới hạn cao hơn."
+				}
+			},
+			"notion": {
+				"token": {
+					"label": "Mã bí mật tích hợp Notion"
+				}
+			},
+			"airtable": {
+				"token": {
+					"label": "Personal access token Airtable"
+				}
+			},
+			"jira": {
+				"siteUrl": {
+					"label": "URL trang Jira"
+				},
+				"email": {
+					"label": "Email tài khoản Atlassian"
+				},
+				"apiToken": {
+					"label": "API token Atlassian"
+				}
+			},
+			"figma": {
+				"token": {
+					"label": "Personal access token Figma"
+				}
+			},
+			"github": {
+				"token": {
+					"label": "Personal access token GitHub",
+					"hint": "Chạy trong Docker, nên Docker Desktop cần đang chạy."
+				}
+			},
+			"sentry": {
+				"token": {
+					"label": "User auth token Sentry"
+				},
+				"host": {
+					"label": "Máy chủ Sentry tự host",
+					"hint": "Không bắt buộc. Để trống nếu dùng sentry.io."
+				}
+			},
+			"supabase": {
+				"token": {
+					"label": "Access token Supabase"
+				},
+				"projectRef": {
+					"label": "Mã dự án",
+					"hint": "Không bắt buộc. Giới hạn tác nhân trong một dự án (mã trong URL bảng điều khiển)."
+				},
+				"readOnly": {
+					"label": "Chỉ đọc",
+					"hint": "Chặn các công cụ làm thay đổi cơ sở dữ liệu hoặc dự án."
+				}
+			}
+		},
+		"browse": "Chọn…",
+		"addDirectory": "Thêm thư mục",
+		"remove": "Xóa",
+		"commandLabel": "Lệnh",
+		"commandPlaceholder": "npx",
+		"argsLabel": "Tham số",
+		"argsHint": "Mỗi dòng một tham số. Truyền nguyên văn, không qua shell.",
+		"cwdLabel": "Thư mục làm việc",
+		"cwdHint": "Không bắt buộc.",
+		"envLabel": "Biến môi trường",
+		"envKeyPlaceholder": "TÊN",
+		"envValuePlaceholder": "giá trị",
+		"envSecret": "Bí mật",
+		"addEnv": "Thêm biến",
+		"envHint": "Giá trị bí mật được mã hóa bằng khóa chính và ẩn khỏi nhật ký.",
+		"secretStored": "Đã lưu — để trống để giữ nguyên",
+		"runtimeChecking": "Đang tìm {{command}}…",
+		"runtimeFound": "Đã tìm thấy {{command}}",
+		"runtimeMissingNode": "Chưa cài Node.js. Máy chủ này khởi động bằng npx, đi kèm với Node.js.",
+		"runtimeMissingPython": "Chưa cài uv. Máy chủ này khởi động bằng uvx, đi kèm với uv.",
+		"runtimeMissingCommand": "Không tìm thấy \"{{command}}\" trên máy này.",
+		"installNode": "Cài Node.js",
+		"installUv": "Cài uv",
+		"checkAgain": "Kiểm tra lại",
 		"approveTitle": "Memorall sẽ khởi động tiến trình này",
-		"approveBody": "Tiến trình chạy dưới quyền của bạn, truy cập được {{scope}}. Nó dừng khi bạn thoát Memorall hoặc tắt kết nối.",
+		"approveBody": "Tiến trình chạy dưới quyền của bạn và truy cập được mọi thứ lệnh này truy cập được. Nó dừng khi bạn thoát Memorall hoặc xóa kết nối.",
 		"approveAction": "Chấp nhận và chạy",
+		"runAgain": "Chạy lại",
+		"starting": "Đang khởi động…",
+		"firstRunHint": "Lần khởi động đầu tiên sẽ tải gói về, có thể mất khoảng một phút.",
+		"startFailed": "Máy chủ không khởi động được: {{error}}",
+		"runFirst": "Hãy khởi động máy chủ một lần để xem công cụ trước khi lưu.",
+		"secretsNeeded": "Hãy nhập giá trị cho mọi biến bí mật.",
+		"save": "Lưu máy chủ cục bộ",
 		"running": "Đang chạy",
 		"logs": "Nhật ký",
+		"noLogs": "Chưa có đầu ra.",
+		"copyLogs": "Sao chép",
+		"copied": "Đã sao chép",
+		"start": "Khởi động",
 		"restart": "Khởi động lại",
 		"stop": "Dừng",
-		"runsNatively": "Chạy trực tiếp"
+		"pid": "PID {{pid}}",
+		"startedAt": "Bắt đầu {{when}}",
+		"desktopOnly": "Máy chủ cục bộ chạy trong ứng dụng Memorall cho máy tính.",
+		"needsApprovalHint": "Lệnh này đã thay đổi hoặc chưa được chấp nhận trên máy này. Hãy xem lại trước khi chạy.",
+		"approve": "Chấp nhận",
+		"runtimeMissingHint": "Chương trình khởi động máy chủ này chưa được cài. Mở chỉnh sửa kết nối để xem cách cài.",
+		"stoppedHint": "Không chạy. Máy chủ sẽ khởi động khi tác nhân dùng đến.",
+		"crashedHint": "Máy chủ dừng bất ngờ. Nhật ký thường cho biết lý do.",
+		"guides": {
+			"postgres": {
+				"databaseUrl": {
+					"title": "Tạo URL kết nối Postgres",
+					"step1": "Tìm máy chủ, cổng, tên cơ sở dữ liệu, người dùng và mật khẩu — trong bảng điều khiển nhà cung cấp (mục \"connection string\") hoặc từ cài đặt cục bộ.",
+					"step2": "Ghép lại thành postgresql://user:password@host:5432/database. Mã hóa ký tự đặc biệt trong mật khẩu (ví dụ @ thành %40).",
+					"step3": "Nên dùng một người dùng cơ sở dữ liệu chỉ có quyền đọc cho tác nhân."
+				}
+			},
+			"brave-search": {
+				"apiKey": {
+					"title": "Lấy khóa API Brave Search",
+					"step1": "Đăng nhập bảng điều khiển Brave Search API.",
+					"step2": "Đăng ký một gói — gói miễn phí là đủ để bắt đầu.",
+					"step3": "Mở mục API Keys, tạo khóa và sao chép."
+				}
+			},
+			"tavily": {
+				"apiKey": {
+					"title": "Lấy khóa API Tavily",
+					"step1": "Đăng nhập hoặc tạo tài khoản miễn phí tại Tavily.",
+					"step2": "Khóa API mặc định nằm ở trang tổng quan — sao chép nó (bắt đầu bằng tvly-)."
+				}
+			},
+			"exa": {
+				"apiKey": {
+					"title": "Lấy khóa API Exa",
+					"step1": "Đăng nhập bảng điều khiển Exa.",
+					"step2": "Mở mục API Keys, tạo khóa và sao chép."
+				}
+			},
+			"firecrawl": {
+				"apiKey": {
+					"title": "Lấy khóa API Firecrawl",
+					"step1": "Đăng nhập hoặc đăng ký tại Firecrawl.",
+					"step2": "Mở mục API Keys và sao chép khóa (bắt đầu bằng fc-)."
+				}
+			},
+			"context7": {
+				"apiKey": {
+					"title": "Lấy khóa API Context7",
+					"step1": "Đăng nhập bảng điều khiển Context7.",
+					"step2": "Tạo khóa API và sao chép."
+				}
+			},
+			"notion": {
+				"token": {
+					"title": "Lấy mã bí mật tích hợp Notion",
+					"step1": "Mở trang tích hợp của Notion và tạo một tích hợp nội bộ mới trong không gian làm việc.",
+					"step2": "Sao chép Internal Integration Secret (bắt đầu bằng ntn_).",
+					"step3": "Trong Notion, mở từng trang hoặc cơ sở dữ liệu tác nhân cần xem, chọn ••• → Connections và thêm tích hợp. Nó không thấy được gì bạn chưa chia sẻ."
+				}
+			},
+			"airtable": {
+				"token": {
+					"title": "Tạo personal access token Airtable",
+					"step1": "Mở trang tạo token và đặt tên cho token.",
+					"step2": "Thêm scope schema.bases:read và data.records:read — thêm data.records:write nếu tác nhân cần sửa.",
+					"step3": "Chọn các base được truy cập, tạo token và sao chép (bắt đầu bằng pat)."
+				}
+			},
+			"jira": {
+				"apiToken": {
+					"title": "Tạo API token Atlassian",
+					"step1": "Mở trang API tokens của tài khoản Atlassian và chọn Create API token.",
+					"step2": "Đặt tên, chọn thời hạn và sao chép token — nó chỉ hiện một lần.",
+					"step3": "Dùng email bạn đăng nhập và URL trang như https://your-team.atlassian.net."
+				}
+			},
+			"figma": {
+				"token": {
+					"title": "Tạo personal access token Figma",
+					"step1": "Trong Figma, mở menu tài khoản → Settings → Security.",
+					"step2": "Ở mục Personal access tokens, tạo token mới có quyền đọc nội dung tệp.",
+					"step3": "Sao chép ngay — Figma chỉ hiện token một lần."
+				}
+			},
+			"github": {
+				"token": {
+					"title": "Tạo personal access token GitHub",
+					"step1": "Mở trang tạo fine-grained token của GitHub và đặt tên.",
+					"step2": "Chọn kho mã, rồi cấp quyền tác nhân cần — ví dụ Contents, Issues và Pull requests (đọc, hoặc đọc và ghi).",
+					"step3": "Tạo token và sao chép (bắt đầu bằng github_pat_)."
+				}
+			},
+			"sentry": {
+				"token": {
+					"title": "Tạo user auth token Sentry",
+					"step1": "Mở Sentry → User settings → Personal Tokens.",
+					"step2": "Tạo token có ít nhất org:read, project:read và event:read.",
+					"step3": "Sao chép token — nó chỉ hiện một lần."
+				}
+			},
+			"supabase": {
+				"token": {
+					"title": "Tạo access token Supabase",
+					"step1": "Mở trang Access Tokens trong tài khoản Supabase và tạo token mới.",
+					"step2": "Đặt tên và sao chép (bắt đầu bằng sbp_)."
+				}
+			}
+		},
+		"categories": {
+			"local": "Máy tính và dữ liệu của bạn",
+			"web": "Web và nghiên cứu",
+			"work": "Ứng dụng công việc",
+			"developer": "Dịch vụ cho lập trình viên",
+			"utilities": "Tiện ích"
+		},
+		"keyRequired": "Khóa API",
+		"keyOptional": "Khóa tùy chọn",
+		"showKey": "Hiện khóa",
+		"hideKey": "Ẩn khóa",
+		"guide": {
+			"trigger": "Lấy khóa ở đâu?",
+			"open": "Mở {{site}}",
+			"safety": "Khóa được mã hóa bằng khóa chính và chỉ được truyền cho máy chủ này trên máy tính này."
+		},
+		"runtimeMissingDocker": "Docker chưa sẵn sàng. Máy chủ này chạy trong container, hãy cài Docker Desktop và đảm bảo nó đang chạy.",
+		"installDocker": "Cài Docker",
+		"dockerNotRunning": "Docker đã được cài nhưng chưa chạy. Hãy mở Docker Desktop, đợi đến khi nó báo đang chạy rồi chạy lại."
 	},
 	"custom": {
 		"title": "Thêm điểm cuối tùy chỉnh",

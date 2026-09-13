@@ -298,5 +298,99 @@ export interface PlatformComposition {
 	hostAccess?: HostAccessPort;
 	/** Undefined where the platform has no real filesystem to map. */
 	nativeFilesystem?: NativeFilesystemPort;
+	/** Undefined where the platform cannot start local processes. */
+	mcpStdio?: McpStdioPort;
 	lifecycle: AppLifecyclePort;
+}
+
+/**
+ * One local MCP server, as the desktop starts it.
+ *
+ * Every call carries the whole spec, so a server whose host was restarted in
+ * between comes back on the next call instead of failing.
+ */
+export interface McpStdioSpec {
+	/** The connection id. */
+	id: string;
+	command: string;
+	args: string[];
+	cwd?: string;
+	env: Record<string, string>;
+	/** Keys of `env` whose values are redacted from logs. */
+	secretEnvKeys: string[];
+}
+
+export type McpStdioServerState =
+	| "starting"
+	| "running"
+	| "exited"
+	| "error"
+	| "stopped";
+
+export interface McpStdioServerStatus {
+	id: string;
+	state: McpStdioServerState;
+	pid: number | null;
+	startedAt: string | null;
+	lastError: string | null;
+	fingerprint: string;
+	logTail: string[];
+}
+
+export interface McpStdioToolInfo {
+	name: string;
+	title?: string;
+	description?: string;
+	inputSchema: Record<string, unknown>;
+	outputSchema?: Record<string, unknown>;
+	annotations?: Record<string, unknown>;
+}
+
+export interface McpStdioCallResult {
+	content: readonly unknown[];
+	structuredContent?: unknown;
+	meta?: unknown;
+	isError?: boolean;
+}
+
+export interface McpStdioRuntimeProbe {
+	found: boolean;
+	path?: string;
+	version?: string;
+}
+
+/** A failure the UI can act on; `code` is one of the `MCP_STDIO_*` codes. */
+export class McpStdioPortError extends Error {
+	constructor(
+		readonly code: string,
+		message: string,
+	) {
+		super(message);
+		this.name = "McpStdioPortError";
+	}
+}
+
+export interface McpStdioPort {
+	/** Starts the server, or restarts it when the spec changed. */
+	ensure(
+		spec: McpStdioSpec,
+		options?: { force?: boolean; startTimeoutMs?: number },
+	): Promise<McpStdioServerStatus>;
+	listTools(
+		spec: McpStdioSpec,
+		options?: { startTimeoutMs?: number },
+	): Promise<McpStdioToolInfo[]>;
+	call(
+		spec: McpStdioSpec,
+		tool: string,
+		input: Record<string, unknown>,
+		/** Aborting cancels the call on the server, not just the wait for it. */
+		options?: { timeoutMs?: number; signal?: AbortSignal },
+	): Promise<McpStdioCallResult>;
+	stop(id: string): Promise<McpStdioServerStatus | null>;
+	status(ids?: string[]): Promise<McpStdioServerStatus[]>;
+	/** Which of `commands` are installed, e.g. `["node", "npx", "uv", "uvx"]`. */
+	probe(commands: string[]): Promise<Record<string, McpStdioRuntimeProbe>>;
+	/** Opens the native folder picker. Resolves null if the user cancels. */
+	pickDirectory(): Promise<string | null>;
 }

@@ -7,7 +7,16 @@ vi.mock("@/services/mcp-connections", () => ({
 	removeConnection: vi.fn(),
 	saveToolCacheEntry: vi.fn(),
 	upsertConnection: vi.fn(),
+	isStdioConnection: (connection: { transport: string; stdio?: unknown }) =>
+		connection.transport === "stdio" && Boolean(connection.stdio),
+	isStdioApproved: vi.fn(async () => true),
+	approveStdio: vi.fn(),
+	revokeStdioApproval: vi.fn(),
+	buildStdioSpec: vi.fn(),
 }));
+
+const platformState = vi.hoisted(() => ({ mcpStdio: {} as unknown }));
+vi.mock("@/platform/current", () => ({ platform: platformState }));
 
 vi.mock("@/utils/master-key", () => ({
 	isMasterKeyUnlocked: vi.fn(async () => true),
@@ -133,6 +142,106 @@ describe("deriveStatus", () => {
 		expect(deriveStatus(connection({ disabled: true }), undefined, true)).toBe(
 			"off",
 		);
+	});
+});
+
+describe("deriveStatus for local servers", () => {
+	const local = (overrides: Partial<McpConnection> = {}) =>
+		connection({
+			kind: "template",
+			transport: "stdio",
+			url: "",
+			stdio: { command: "npx", args: ["-y", "pkg@1.0.0"] },
+			...overrides,
+		});
+	const status = (
+		state: "starting" | "running" | "exited" | "error" | "stopped",
+		lastError: string | null = null,
+	) => ({
+		id: "c1",
+		state,
+		pid: state === "running" ? 42 : null,
+		startedAt: null,
+		lastError,
+		fingerprint: "f",
+		logTail: [],
+	});
+	const cached = {
+		descriptors: [],
+		discoveredAt: "2026-01-01T00:00:00.000Z",
+	};
+
+	beforeEach(() => {
+		platformState.mcpStdio = {};
+	});
+
+	it("is never incomplete for lacking a URL", () => {
+		expect(deriveStatus(local(), undefined, true, { approved: true })).toBe(
+			"unknown",
+		);
+	});
+
+	it("asks for approval before anything else", () => {
+		expect(
+			deriveStatus(local(), cached, true, {
+				approved: false,
+				status: status("running"),
+			}),
+		).toBe("needs-approval");
+	});
+
+	it("follows the process: starting, running, and set up but stopped", () => {
+		expect(
+			deriveStatus(local(), cached, true, {
+				approved: true,
+				status: status("starting"),
+			}),
+		).toBe("starting");
+		expect(
+			deriveStatus(local(), cached, true, {
+				approved: true,
+				status: status("running"),
+			}),
+		).toBe("connected");
+		expect(
+			deriveStatus(local(), cached, true, {
+				approved: true,
+				status: status("stopped"),
+			}),
+		).toBe("stopped");
+	});
+
+	it("tells a missing launcher apart from a crashing server", () => {
+		expect(
+			deriveStatus(local(), cached, true, {
+				approved: true,
+				status: status("error", '"npx" is not installed or not on PATH.'),
+			}),
+		).toBe("runtime-missing");
+		expect(
+			deriveStatus(local(), cached, true, {
+				approved: true,
+				status: status("exited", "The server process exited."),
+			}),
+		).toBe("error");
+	});
+
+	it("is locked when its secrets need the passkey", () => {
+		expect(
+			deriveStatus(
+				local({
+					stdio: { command: "npx", args: [], secretEnvKeys: ["TOKEN"] },
+				}),
+				cached,
+				false,
+				{ approved: true },
+			),
+		).toBe("locked");
+	});
+
+	it("is off where local servers cannot run", () => {
+		platformState.mcpStdio = undefined;
+		expect(deriveStatus(local(), cached, true, { approved: true })).toBe("off");
 	});
 });
 

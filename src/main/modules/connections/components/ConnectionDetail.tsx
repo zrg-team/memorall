@@ -2,11 +2,13 @@ import React from "react";
 import { useTranslation } from "react-i18next";
 import {
 	AlertCircle,
+	AlertTriangle,
 	ArrowRight,
 	Loader2,
 	Pencil,
 	Plus,
 	RefreshCw,
+	ShieldCheck,
 	Trash2,
 } from "lucide-react";
 import { Button } from "@/main/components/ui/button";
@@ -16,6 +18,7 @@ import { useConnectionsStore } from "@/main/stores/connections";
 import {
 	COMPOSIO_RECOMMENDED_TOOLS,
 	findAgentsUsingConnection,
+	formatCommandLine,
 	toServerKey,
 	type ConnectionApp,
 	type ConnectionUsage,
@@ -25,8 +28,10 @@ import { AppIcon, ConnectionIcon } from "./AppIcon";
 import { StatusPill } from "./StatusPill";
 import { ToolScopeList } from "./ToolScopeList";
 import { CustomEndpointForm } from "./CustomEndpointForm";
+import { LocalServerRuntimePanel } from "./LocalServerRuntimePanel";
+import { LocalServerSetup } from "./LocalServerSetup";
 
-type DetailTab = "apps" | "tools" | "usedBy" | "settings";
+type DetailTab = "apps" | "tools" | "process" | "usedBy" | "settings";
 
 const relativeTime = (iso: string): string => {
 	const delta = Date.now() - new Date(iso).getTime();
@@ -93,6 +98,7 @@ export const ConnectionDetail: React.FC<{
 	// first thing anyone opening it wants to know — the tool list is six router
 	// entries that say nothing about Gmail or GitHub.
 	const isComposio = connection.kind === "composio";
+	const isLocal = connection.transport === "stdio";
 	const [tab, setTab] = React.useState<DetailTab>(
 		isComposio ? "apps" : "tools",
 	);
@@ -110,6 +116,9 @@ export const ConnectionDetail: React.FC<{
 	const discover = useConnectionsStore((state) => state.discover);
 	const save = useConnectionsStore((state) => state.save);
 	const remove = useConnectionsStore((state) => state.remove);
+	const approveLocalServer = useConnectionsStore(
+		(state) => state.approveLocalServer,
+	);
 
 	React.useEffect(() => {
 		setTab(isComposio ? "apps" : "tools");
@@ -134,6 +143,20 @@ export const ConnectionDetail: React.FC<{
 		if (!confirm(t("detail.deleteConfirm"))) return;
 		await remove(connection.id);
 	};
+
+	if (isEditing && isLocal) {
+		return (
+			<div className="min-h-0 flex-1 overflow-y-auto p-4">
+				<div className="mx-auto max-w-2xl">
+					<LocalServerSetup
+						connection={connection}
+						onSaved={() => setIsEditing(false)}
+						onCancel={() => setIsEditing(false)}
+					/>
+				</div>
+			</div>
+		);
+	}
 
 	if (isEditing) {
 		return (
@@ -218,8 +241,17 @@ export const ConnectionDetail: React.FC<{
 								{connection.transport}
 							</Badge>
 						</div>
-						<p className="mt-0.5 truncate font-mono text-[10.5px] text-muted-foreground">
-							{connection.url}
+						<p
+							className="mt-0.5 truncate font-mono text-[10.5px] text-muted-foreground"
+							title={
+								connection.stdio
+									? formatCommandLine(connection.stdio)
+									: connection.url
+							}
+						>
+							{connection.stdio
+								? formatCommandLine(connection.stdio)
+								: connection.url}
 						</p>
 					</div>
 				</div>
@@ -265,7 +297,42 @@ export const ConnectionDetail: React.FC<{
 				</div>
 			</div>
 
-			{cacheEntry?.error ? (
+			{/* A local server that may not run says so first: nothing else about it
+			    matters until someone has looked at the command. */}
+			{status === "needs-approval" && connection.stdio ? (
+				<div className="flex flex-wrap items-start gap-2 border-b border-amber-500/20 bg-amber-500/5 px-4 py-2.5">
+					<ShieldCheck
+						size={13}
+						className="mt-0.5 shrink-0 text-amber-600 dark:text-amber-400"
+					/>
+					<div className="min-w-0 flex-1 space-y-1.5">
+						<p className="text-[11px] text-amber-700 dark:text-amber-300">
+							{t("template.needsApprovalHint")}
+						</p>
+						<pre className="overflow-x-auto whitespace-pre-wrap break-all rounded-md bg-background/60 px-2 py-1 font-mono text-[10px]">
+							{formatCommandLine(connection.stdio)}
+						</pre>
+					</div>
+					<Button
+						type="button"
+						size="sm"
+						className="h-7 shrink-0 rounded-lg px-2.5 text-[11px]"
+						onClick={() => void approveLocalServer(connection.id)}
+					>
+						{t("template.approve")}
+					</Button>
+				</div>
+			) : status === "runtime-missing" ? (
+				<div className="flex items-start gap-2 border-b border-amber-500/20 bg-amber-500/5 px-4 py-2">
+					<AlertTriangle
+						size={12}
+						className="mt-0.5 shrink-0 text-amber-600 dark:text-amber-400"
+					/>
+					<p className="min-w-0 break-words text-[11px] text-amber-700 dark:text-amber-300">
+						{t("template.runtimeMissingHint")}
+					</p>
+				</div>
+			) : cacheEntry?.error ? (
 				<div className="flex items-start gap-2 border-b border-destructive/20 bg-destructive/5 px-4 py-2">
 					<AlertCircle size={12} className="mt-0.5 shrink-0 text-destructive" />
 					<p className="min-w-0 break-words text-[11px] text-destructive">
@@ -279,7 +346,9 @@ export const ConnectionDetail: React.FC<{
 			<div className="flex gap-1 border-b border-border/60 px-4">
 				{(isComposio
 					? (["apps", "tools", "usedBy", "settings"] as const)
-					: (["tools", "usedBy", "settings"] as const)
+					: isLocal
+						? (["tools", "process", "usedBy", "settings"] as const)
+						: (["tools", "usedBy", "settings"] as const)
 				).map((candidate) => (
 					<button
 						key={candidate}
@@ -371,6 +440,10 @@ export const ConnectionDetail: React.FC<{
 					)
 				) : null}
 
+				{tab === "process" ? (
+					<LocalServerRuntimePanel connection={connection} />
+				) : null}
+
 				{tab === "usedBy" ? (
 					usage === null ? (
 						<div className="flex justify-center py-8">
@@ -406,10 +479,52 @@ export const ConnectionDetail: React.FC<{
 								})}
 							</dt>
 						</div>
-						<div className="flex items-start justify-between gap-4">
-							<dt className="text-muted-foreground">{t("custom.authLabel")}</dt>
-							<dd className="font-medium">{connection.authMode}</dd>
-						</div>
+						{connection.stdio ? (
+							<>
+								<div className="space-y-1">
+									<dt className="text-muted-foreground">
+										{t("detail.localSettings.commandLine")}
+									</dt>
+									<dd className="break-all font-mono text-[11px]">
+										{formatCommandLine(connection.stdio)}
+									</dd>
+								</div>
+								{connection.stdio.cwd ? (
+									<div className="flex items-start justify-between gap-4">
+										<dt className="text-muted-foreground">
+											{t("detail.localSettings.cwd")}
+										</dt>
+										<dd className="break-all font-mono text-[11px]">
+											{connection.stdio.cwd}
+										</dd>
+									</div>
+								) : null}
+								{Object.keys(connection.stdio.env ?? {}).length +
+									(connection.stdio.secretEnvKeys?.length ?? 0) >
+								0 ? (
+									<div className="flex items-start justify-between gap-4">
+										<dt className="text-muted-foreground">
+											{t("detail.localSettings.envKeys")}
+										</dt>
+										<dd className="break-all text-right font-mono text-[11px]">
+											{[
+												...Object.keys(connection.stdio.env ?? {}),
+												...(connection.stdio.secretEnvKeys ?? []).map(
+													(key) => `${key} (••••)`,
+												),
+											].join(", ")}
+										</dd>
+									</div>
+								) : null}
+							</>
+						) : (
+							<div className="flex items-start justify-between gap-4">
+								<dt className="text-muted-foreground">
+									{t("custom.authLabel")}
+								</dt>
+								<dd className="font-medium">{connection.authMode}</dd>
+							</div>
+						)}
 						<div className="flex items-start justify-between gap-4">
 							<dt className="text-muted-foreground">
 								{t("custom.enableByDefault")}

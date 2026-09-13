@@ -115,6 +115,12 @@ buildSync({
 	target: "node22",
 	sourcemap: false,
 	minify: true,
+	// CommonJS dependencies (cross-spawn, under the MCP SDK's stdio transport)
+	// call require() for Node built-ins, which an ESM bundle does not define.
+	// Without this the sidecar dies on its first line.
+	banner: {
+		js: 'import { createRequire as __memorallCreateRequire } from "node:module"; const require = __memorallCreateRequire(import.meta.url);',
+	},
 });
 
 // The co-agent, bundled for injection into pages in the managed browser.

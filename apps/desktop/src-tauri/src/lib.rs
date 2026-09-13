@@ -1,4 +1,5 @@
 mod fs_map;
+mod mcp_stdio;
 mod sidecar;
 
 use serde_json::{json, Value};
@@ -175,6 +176,7 @@ pub fn run() {
             desktop_browser_clear_profile,
             desktop_browser_takeover,
             desktop_browser_resume,
+            mcp_stdio::desktop_mcp_stdio_request,
             fs_map::fs_map_list_roots,
             fs_map::fs_map_add_root,
             fs_map::fs_map_remove_root,

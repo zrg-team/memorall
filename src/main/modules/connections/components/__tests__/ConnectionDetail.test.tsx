@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import React from "react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { McpConnection } from "@/services/mcp-connections";
 import { ConnectionDetail } from "../ConnectionDetail";
 
@@ -27,13 +27,18 @@ vi.mock("pdfjs-dist", () => ({
 }));
 
 const storeState = {
-	statusOf: () => "connected" as const,
+	statusOf: (): string => "connected",
 	toolsOf: () => [],
 	toolCache: {} as Record<string, unknown>,
 	discovering: [] as string[],
+	localServers: {} as Record<string, unknown>,
 	discover: vi.fn(),
 	save: vi.fn(),
 	remove: vi.fn(),
+	approveLocalServer: vi.fn(),
+	refreshLocalServers: vi.fn(async () => undefined),
+	stopLocalServer: vi.fn(),
+	restartLocalServer: vi.fn(),
 };
 
 vi.mock("@/main/stores/connections", () => ({
@@ -71,6 +76,30 @@ const custom: McpConnection = {
 	updatedAt: "2026-08-17T00:00:00.000Z",
 };
 
+const localServer: McpConnection = {
+	id: "local-files",
+	kind: "template",
+	name: "Project files",
+	transport: "stdio",
+	url: "",
+	authMode: "none",
+	stdio: {
+		command: "npx",
+		args: ["-y", "@modelcontextprotocol/server-filesystem@2026.8.31", "/work"],
+		env: { LOG_LEVEL: "debug" },
+		secretEnvKeys: ["API_TOKEN"],
+		templateId: "filesystem",
+	},
+	enabledByDefault: true,
+	createdAt: "2026-08-17T00:00:00.000Z",
+	updatedAt: "2026-08-17T00:00:00.000Z",
+};
+
+beforeEach(() => {
+	storeState.statusOf = () => "connected";
+	storeState.approveLocalServer.mockReset();
+});
+
 describe("ConnectionDetail", () => {
 	it("opens a Composio credential on the apps it holds", () => {
 		render(<ConnectionDetail connection={composio} />);
@@ -105,5 +134,49 @@ describe("ConnectionDetail", () => {
 
 		expect(screen.queryByText("detail.tabs.apps")).not.toBeInTheDocument();
 		expect(screen.getByText("detail.tabs.tools")).toBeInTheDocument();
+	});
+
+	describe("a local server", () => {
+		const commandLine =
+			"npx -y @modelcontextprotocol/server-filesystem@2026.8.31 /work";
+
+		it("is described by the command it runs, not an empty URL", () => {
+			render(<ConnectionDetail connection={localServer} />);
+
+			expect(screen.getByText(commandLine)).toBeInTheDocument();
+			expect(screen.getByText("detail.tabs.process")).toBeInTheDocument();
+			expect(screen.queryByText("detail.tabs.apps")).not.toBeInTheDocument();
+		});
+
+		it("never shows secret values in its settings", () => {
+			render(<ConnectionDetail connection={localServer} />);
+			screen.getByText("detail.tabs.settings").click();
+
+			return screen.findByText("LOG_LEVEL, API_TOKEN (••••)").then((env) => {
+				expect(env).toBeInTheDocument();
+				expect(screen.queryByText("custom.authLabel")).not.toBeInTheDocument();
+			});
+		});
+
+		it("asks for approval, showing the exact command, before it may run", () => {
+			storeState.statusOf = () => "needs-approval";
+			render(<ConnectionDetail connection={localServer} />);
+
+			expect(
+				screen.getByText("template.needsApprovalHint"),
+			).toBeInTheDocument();
+			expect(screen.getAllByText(commandLine).length).toBeGreaterThan(1);
+			screen.getByRole("button", { name: "template.approve" }).click();
+			expect(storeState.approveLocalServer).toHaveBeenCalledWith("local-files");
+		});
+
+		it("explains a missing runtime instead of a raw error", () => {
+			storeState.statusOf = () => "runtime-missing";
+			render(<ConnectionDetail connection={localServer} />);
+
+			expect(
+				screen.getByText("template.runtimeMissingHint"),
+			).toBeInTheDocument();
+		});
 	});
 });

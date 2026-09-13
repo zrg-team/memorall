@@ -13,10 +13,8 @@
  */
 
 import type { UnifiedFlowConfig } from "@memorall/agent-harness-flows/interfaces/config/flow-config";
-import {
-	MCP_FEATURE_NAME,
-	type MCPServerConfig,
-} from "@memorall/agent-harness-flows/steps/features/mcp-feature/index";
+import { MCP_FEATURE_NAME } from "@memorall/agent-harness-flows/steps/features/mcp-feature/index";
+import type { MCPNetworkServerConfig } from "@memorall/agent-harness-flows/steps/features/mcp-feature/types";
 import { logInfo } from "@/utils/logger";
 import { listConnections, upsertConnection } from "./registry";
 import type { AgentConnectionSelection, McpConnection } from "./types";
@@ -26,10 +24,13 @@ const newId = (): string =>
 		? crypto.randomUUID()
 		: `conn_${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`;
 
-const isLegacyServer = (value: unknown): value is MCPServerConfig =>
+// Only network servers were ever embedded in agent config; a local server is
+// always a registry entry.
+const isLegacyServer = (value: unknown): value is MCPNetworkServerConfig =>
 	typeof value === "object" &&
 	value !== null &&
-	typeof (value as MCPServerConfig).url === "string";
+	(value as { type?: unknown }).type !== "stdio" &&
+	typeof (value as { url?: unknown }).url === "string";
 
 /**
  * Reuse an existing registry entry when one already points at the same URL, so
@@ -37,7 +38,7 @@ const isLegacyServer = (value: unknown): value is MCPServerConfig =>
  */
 const findEquivalent = (
 	connections: McpConnection[],
-	server: MCPServerConfig,
+	server: MCPNetworkServerConfig,
 ): McpConnection | undefined =>
 	connections.find(
 		(connection) =>
@@ -52,7 +53,7 @@ const findEquivalent = (
  * directly and still needs them to land in the registry rather than beside it.
  */
 export async function ensureConnectionsForServers(
-	servers: MCPServerConfig[],
+	servers: MCPNetworkServerConfig[],
 ): Promise<AgentConnectionSelection[]> {
 	const existing = await listConnections();
 	const selections: AgentConnectionSelection[] = [];

@@ -4,6 +4,9 @@ import {
 	BrowserAutomationError,
 	BrowserAutomationManager,
 } from "./browser-automation";
+import { handleMcpStdioRequest, isMcpStdioMethod } from "./mcp-stdio-handlers";
+import { McpStdioHost } from "./mcp-stdio-host";
+import { McpStdioError } from "./mcp-stdio-spec";
 import {
 	SIDECAR_PROTOCOL_VERSION,
 	parseSidecarRequest,
@@ -21,6 +24,7 @@ const browser = new BrowserAutomationManager(
 		visible: process.env.MEMORALL_BROWSER_VISIBLE === "1",
 	},
 );
+const mcpStdio = new McpStdioHost();
 const operations = new Map<string, AbortController>();
 let shutdownStarted = false;
 
@@ -57,7 +61,21 @@ lines.on("line", (line) => {
 	void handleLine(line);
 });
 lines.once("close", () => {
-	if (!shutdownStarted) void browser.stop();
+	if (!shutdownStarted) {
+		void browser.stop();
+		void mcpStdio.stopAll();
+	}
+});
+// Local MCP servers are the user's processes started on their behalf; none may
+// outlive Memorall, even when the sidecar is killed before it can stop them.
+process.once("exit", () => {
+	for (const pid of mcpStdio.pids()) {
+		try {
+			process.kill(pid);
+		} catch {
+			// Already gone.
+		}
+	}
 });
 
 async function handleLine(line: string): Promise<void> {
@@ -80,7 +98,7 @@ async function handleLine(line: string): Promise<void> {
 			const params = paramsRecord(request.params, request.method);
 			assertOnlyKeys(params, [], request.method);
 			shutdownStarted = true;
-			await browser.stop();
+			await Promise.all([browser.stop(), mcpStdio.stopAll()]);
 			send({ protocolVersion: SIDECAR_PROTOCOL_VERSION, id, ok: true });
 			process.exitCode = 0;
 			lines.close();
@@ -100,6 +118,20 @@ async function handleLine(line: string): Promise<void> {
 		const controller = new AbortController();
 		operations.set(id, controller);
 		try {
+			if (isMcpStdioMethod(request.method)) {
+				send({
+					protocolVersion: SIDECAR_PROTOCOL_VERSION,
+					id,
+					ok: true,
+					result: await handleMcpStdioRequest(
+						mcpStdio,
+						request.method,
+						request.params,
+						controller.signal,
+					),
+				});
+				return;
+			}
 			if (request.method === "browser.status") {
 				const params = paramsRecord(request.params, request.method);
 				assertOnlyKeys(params, ["tabId"], request.method);
@@ -219,7 +251,8 @@ async function handleLine(line: string): Promise<void> {
 			ok: false,
 			error: {
 				code:
-					error instanceof BrowserAutomationError
+					error instanceof BrowserAutomationError ||
+					error instanceof McpStdioError
 						? error.code
 						: "INVALID_REQUEST",
 				message: error instanceof Error ? error.message : String(error),

@@ -8,6 +8,7 @@ import { hasOriginPrivateFileSystem } from "../core/origin-private-file-system";
 import { WindowExternalLinkPort } from "../core/window-external-link-port";
 import { UnavailableRuntimeDiagnostics } from "../core/unavailable-runtime-diagnostics";
 import { DesktopBrowserCommandPort } from "./desktop-browser-command-port";
+import { DesktopMcpStdioPort } from "./desktop-mcp-stdio-port";
 import { DesktopNativeFilesystemPort } from "./desktop-native-filesystem-port";
 
 const capabilities = new MutableCapabilityRegistry({
@@ -79,6 +80,7 @@ export const platform: PlatformComposition = {
 	browserCommands: browserAutomation,
 	browserAutomation,
 	nativeFilesystem,
+	mcpStdio: new DesktopMcpStdioPort(),
 	lifecycle: {
 		onSurfaceOpened: () => {
 			void browserAutomation.initialize();

@@ -61,6 +61,30 @@ const STATUS_STYLES: Record<
 		bg: "bg-muted/50",
 		border: "border-border",
 	},
+	starting: {
+		dot: "bg-blue-500 animate-pulse",
+		text: "text-blue-600 dark:text-blue-400",
+		bg: "bg-blue-500/10",
+		border: "border-blue-500/30",
+	},
+	stopped: {
+		dot: "bg-muted-foreground/50",
+		text: "text-muted-foreground",
+		bg: "bg-muted/50",
+		border: "border-border",
+	},
+	"needs-approval": {
+		dot: "bg-amber-500",
+		text: "text-amber-600 dark:text-amber-400",
+		bg: "bg-amber-500/10",
+		border: "border-amber-500/30",
+	},
+	"runtime-missing": {
+		dot: "bg-amber-500",
+		text: "text-amber-600 dark:text-amber-400",
+		bg: "bg-amber-500/10",
+		border: "border-amber-500/30",
+	},
 };
 
 const STATUS_KEYS: Record<ConnectionStatus, string> = {
@@ -72,6 +96,10 @@ const STATUS_KEYS: Record<ConnectionStatus, string> = {
 	error: "status.error",
 	off: "status.off",
 	unknown: "status.off",
+	starting: "status.starting",
+	stopped: "status.stopped",
+	"needs-approval": "status.needsApproval",
+	"runtime-missing": "status.runtimeMissing",
 };
 
 export const StatusDot: React.FC<{

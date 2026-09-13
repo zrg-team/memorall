@@ -1,25 +1,24 @@
-import {
-	GraphBase,
-	type GraphTool,
-} from "../../../graph/graph.base.js";
+import { GraphBase, type GraphTool } from "../../../graph/graph.base.js";
 import type { ChatCompletionMessageParam } from "../../../interfaces/engine/messages.js";
+import type { AllServices } from "../../../interfaces/services/services.js";
 import type {
 	BoundStep,
 	StepFactoryFromSpec,
 	StepSpecFromDefinition,
 } from "../../../interfaces/engine/step.js";
-import {
-	bindStep,
-	defineStep,
-} from "../../../interfaces/engine/step.js";
+import { bindStep, defineStep } from "../../../interfaces/engine/step.js";
 import { stepRegistry } from "../../../registries/step-registry.js";
 import {
 	adaptMCPTool,
 	PERMISSIVE_MCP_OUTPUT_VALIDATION,
 } from "./mcp-tool-adapter.js";
-import type {
-	MCPFeatureConfig,
-	MCPServerConfig,
+import {
+	isNetworkServer,
+	isStdioServer,
+	type MCPFeatureConfig,
+	type MCPNetworkServerConfig,
+	type MCPServerConfig,
+	type MCPStdioServerConfig,
 } from "./types.js";
 import {
 	McpClientManager,
@@ -43,13 +42,15 @@ export interface MCPFeatureOutput {
 
 export type { MCPFeatureConfig, MCPServerConfig };
 
+export type MCPFeatureServices = Pick<AllServices, "mcpStdio"> | undefined;
+
 export const MCP_FEATURE_TOOLS: readonly string[] = [];
 
 export const MCP_FEATURE_DESCRIPTION =
 	"Connect external MCP (Model Context Protocol) servers and expose their tools to the agent.";
 
 const buildClientServersConfig = (
-	servers: MCPServerConfig[],
+	servers: MCPNetworkServerConfig[],
 ): McpHttpServerConfig[] =>
 	servers.map((server) => ({
 		id: server.name,
@@ -69,7 +70,8 @@ const buildClientServersConfig = (
  * long-lived offscreen document does not hold sockets open forever.
  */
 interface CachedMCPSession {
-	manager: McpClientManager;
+	/** Network connections only; local processes belong to their host. */
+	manager: Pick<McpClientManager, "close">;
 	tools: ReturnType<typeof adaptMCPTool>[];
 	idleTimer: ReturnType<typeof setTimeout> | null;
 }
@@ -105,17 +107,30 @@ const lastKnownServerTools = new Map<string, McpToolDescriptor[]>();
 
 // Servers are matched on everything that changes what the session reaches: a
 // re-minted Composio URL or a rotated key must open a new session, not reuse one.
+const sortedEntries = (record: Record<string, string> | undefined) =>
+	Object.entries(record ?? {}).sort(([a], [b]) => a.localeCompare(b));
+
 const sessionKey = (servers: MCPServerConfig[]): string =>
 	JSON.stringify(
 		[...servers]
-			.map((server) => ({
-				name: server.name,
-				type: server.type,
-				url: server.url,
-				headers: Object.entries(server.headers ?? {}).sort(([a], [b]) =>
-					a.localeCompare(b),
-				),
-			}))
+			.map((server) =>
+				isStdioServer(server)
+					? {
+							name: server.name,
+							type: server.type,
+							id: server.id,
+							command: server.command,
+							args: server.args,
+							cwd: server.cwd ?? null,
+							env: sortedEntries(server.env),
+						}
+					: {
+							name: server.name,
+							type: server.type,
+							url: server.url,
+							headers: sortedEntries(server.headers),
+						},
+			)
 			.sort((a, b) => a.name.localeCompare(b.name)),
 	);
 
@@ -133,22 +148,43 @@ const touchSession = (key: string, session: CachedMCPSession): void => {
 
 const openSession = async (
 	servers: MCPServerConfig[],
+	services: MCPFeatureServices,
 ): Promise<CachedMCPSession> => {
-	const manager = new McpClientManager(buildClientServersConfig(servers), {
-		name: "memorall",
-		// Two servers exposing a common name (`search`, `fetch`) would otherwise
-		// collide and silently shadow each other.
-		prefixToolNames: true,
-		jsonSchemaValidator: PERMISSIVE_MCP_OUTPUT_VALIDATION,
-	});
+	const networkServers = servers.filter(isNetworkServer);
+	const manager = new McpClientManager(
+		buildClientServersConfig(networkServers),
+		{
+			name: "memorall",
+			// Two servers exposing a common name (`search`, `fetch`) would otherwise
+			// collide and silently shadow each other.
+			prefixToolNames: true,
+			jsonSchemaValidator: PERMISSIVE_MCP_OUTPUT_VALIDATION,
+		},
+	);
+	const stdioByName = new Map<string, MCPStdioServerConfig>();
+	const mcpStdio = services?.mcpStdio;
 
 	// One unreachable server must not cost the agent the tools of the others.
 	// A dead server is logged rather than swallowed, so the Connections UI has
 	// something to show instead of a silent no-op.
 	const descriptors: McpToolDescriptor[] = [];
 	for (const server of servers) {
+		if (isStdioServer(server)) {
+			if (!mcpStdio) {
+				// Not a failure to remember tools through: nothing here could ever
+				// call them.
+				logWarn(
+					`[MCP_FEATURE] Server "${server.name}" is a local process, which this host cannot start; skipping it.`,
+				);
+				continue;
+			}
+			stdioByName.set(server.name, server);
+		}
 		try {
-			const discovered = await manager.discover([server.name]);
+			const discovered =
+				isStdioServer(server) && mcpStdio
+					? await mcpStdio.listTools(server)
+					: await manager.discover([server.name]);
 			descriptors.push(...discovered);
 			lastKnownServerTools.set(server.name, discovered);
 		} catch (error) {
@@ -165,8 +201,19 @@ const openSession = async (
 		}
 	}
 
+	// A tool names its server by prefix; send it to whichever side runs that server.
+	const router: Pick<McpClientManager, "call"> = {
+		call: (serverId, toolName, input, options) => {
+			const stdioServer = stdioByName.get(serverId);
+			return stdioServer && mcpStdio
+				? mcpStdio.call(stdioServer, toolName, input, {
+						signal: options?.signal,
+					})
+				: manager.call(serverId, toolName, input, options);
+		},
+	};
 	const tools = descriptors.map((descriptor) =>
-		adaptMCPTool(manager, descriptor),
+		adaptMCPTool(router, descriptor),
 	);
 	return { manager, tools, idleTimer: null };
 };
@@ -194,13 +241,17 @@ const evictSessionsSharing = (servers: MCPServerConfig[]): void => {
 		if (session.idleTimer) clearTimeout(session.idleTimer);
 		mcpSessions.delete(key);
 		void session.manager.close().catch((error) => {
-			logError("[MCP_FEATURE] Failed to close a superseded MCP session:", error);
+			logError(
+				"[MCP_FEATURE] Failed to close a superseded MCP session:",
+				error,
+			);
 		});
 	}
 };
 
 const getSessionTools = async (
 	servers: MCPServerConfig[],
+	services: MCPFeatureServices,
 ): Promise<ReturnType<typeof adaptMCPTool>[]> => {
 	const key = sessionKey(servers);
 	const cached = mcpSessions.get(key);
@@ -212,13 +263,11 @@ const getSessionTools = async (
 
 	let session: CachedMCPSession;
 	try {
-		session = await openSession(servers);
+		session = await openSession(servers, services);
 	} catch (error) {
 		logError("[MCP_FEATURE] Failed to open an MCP session:", error);
 		session = {
-			manager: {
-				close: async () => undefined,
-			} as unknown as McpClientManager,
+			manager: { close: async () => undefined },
 			tools: [],
 			idleTimer: null,
 		};
@@ -255,18 +304,18 @@ Use these tools when they are the best fit for the task at hand.`;
 const definition = defineStep<
 	MCPFeatureInput,
 	MCPFeatureOutput,
-	undefined,
+	MCPFeatureServices,
 	MCPFeatureConfig
 >({
 	name: STEP_NAME,
-	execute: async ({ input, config }) => {
+	execute: async ({ input, config, services }) => {
 		try {
 			const servers = config?.servers ?? [];
 			if (servers.length === 0) {
 				return { output: { tools: input.tools, messages: input.messages } };
 			}
 
-			const sessionTools = await getSessionTools(servers);
+			const sessionTools = await getSessionTools(servers, services);
 
 			const allowlist = new Set(config?.toolAllowlist ?? []);
 			// Sorted by name: the tool list and the prompt block below are part of
@@ -310,10 +359,10 @@ const definition = defineStep<
 
 type MCPFeatureSpec = StepSpecFromDefinition<typeof definition>;
 export const createMCPFeatureStep = (
-	_services?: undefined,
+	services?: MCPFeatureServices,
 	config?: MCPFeatureConfig,
 ): BoundStep<MCPFeatureInput, MCPFeatureOutput> =>
-	bindStep(definition, undefined, config);
+	bindStep(definition, services, config);
 
 stepRegistry.register(STEP_NAME, createMCPFeatureStep, {
 	description: MCP_FEATURE_DESCRIPTION,

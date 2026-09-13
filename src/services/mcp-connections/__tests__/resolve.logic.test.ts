@@ -36,7 +36,12 @@ import {
 	resolveConnections,
 	withResolvedConnections,
 } from "../resolve";
+import type { MCPNetworkServerConfig } from "@memorall/agent-harness-flows/steps/features/mcp-feature/types";
 import type { McpConnection } from "../types";
+
+/** These cases only resolve network connections. */
+const network = (resolved: { servers: unknown[] }) =>
+	resolved.servers as MCPNetworkServerConfig[];
 
 const connection = (overrides: Partial<McpConnection> = {}): McpConnection => ({
 	id: "c1",
@@ -113,7 +118,7 @@ describe("resolveConnections", () => {
 
 		const result = await resolveConnections([{ connectionId: "c1" }]);
 
-		expect(result.servers[0].headers).toEqual({
+		expect(network(result)[0].headers).toEqual({
 			Authorization: "Bearer tok_123",
 		});
 		expect(loadSecret).toHaveBeenCalledWith("mcp_secret_c1");
@@ -135,13 +140,13 @@ describe("resolveConnections", () => {
 		]);
 
 		expect(loadSecret).toHaveBeenCalledWith("composio_config");
-		expect(result.servers[0].headers).toEqual({ "x-api-key": "ak_live_123" });
+		expect(network(result)[0].headers).toEqual({ "x-api-key": "ak_live_123" });
 	});
 
 	it("leaves a non-Composio connection without auth alone", async () => {
 		listConnections.mockResolvedValue([connection({ authMode: "none" })]);
 		const result = await resolveConnections([{ connectionId: "c1" }]);
-		expect(result.servers[0].headers).toEqual({});
+		expect(network(result)[0].headers).toEqual({});
 	});
 
 	it("sends Composio's key as x-api-key on the session endpoint", async () => {
@@ -160,7 +165,7 @@ describe("resolveConnections", () => {
 			{ connectionId: "c1", appIds: ["gmail", "googlecalendar", "github"] },
 		]);
 
-		expect(result.servers[0].headers).toEqual({ "x-api-key": "ak_live_123" });
+		expect(network(result)[0].headers).toEqual({ "x-api-key": "ak_live_123" });
 	});
 
 	it("puts query-param auth on the URL", async () => {
@@ -175,7 +180,7 @@ describe("resolveConnections", () => {
 
 		const result = await resolveConnections([{ connectionId: "c1" }]);
 
-		expect(result.servers[0].url).toBe("https://mcp.acme.dev/mcp?api_key=abc");
+		expect(network(result)[0].url).toBe("https://mcp.acme.dev/mcp?api_key=abc");
 	});
 
 	it("skips a connection whose credential cannot be read", async () => {
@@ -243,7 +248,7 @@ describe("resolveConnections", () => {
 		expect(createMcpSession).toHaveBeenCalledWith(
 			expect.objectContaining({ toolkits: ["github"] }),
 		);
-		expect(result.servers[0].url).toBe(
+		expect(network(result)[0].url).toBe(
 			"https://backend.composio.dev/tool_router/trs_github/mcp",
 		);
 		// The scope is cached so a second run does not mint again.
@@ -278,7 +283,7 @@ describe("resolveConnections", () => {
 		]);
 
 		expect(createMcpSession).not.toHaveBeenCalled();
-		expect(result.servers[0].url).toBe(
+		expect(network(result)[0].url).toBe(
 			"https://backend.composio.dev/tool_router/trs_cached/mcp",
 		);
 	});
@@ -365,7 +370,7 @@ describe("resolveConnections", () => {
 		]);
 
 		expect(createMcpSession).toHaveBeenCalledTimes(1);
-		expect(result.servers[0].url).toBe(
+		expect(network(result)[0].url).toBe(
 			"https://backend.composio.dev/tool_router/trs_direct/mcp",
 		);
 	});
@@ -395,7 +400,7 @@ describe("resolveConnections", () => {
 			{ connectionId: "c1", appIds: ["googlecalendar"] },
 		]);
 
-		expect(github.servers[0].url).not.toBe(calendar.servers[0].url);
+		expect(network(github)[0].url).not.toBe(network(calendar)[0].url);
 	});
 
 	it("grants nothing when a Composio connection names no apps", async () => {
@@ -441,7 +446,7 @@ describe("resolveConnections", () => {
 
 		// Only GitHub survives, and that is the whole of the record's session.
 		expect(createMcpSession).not.toHaveBeenCalled();
-		expect(result.servers[0].url).toBe(
+		expect(network(result)[0].url).toBe(
 			"https://backend.composio.dev/tool_router/trs_all/mcp",
 		);
 	});

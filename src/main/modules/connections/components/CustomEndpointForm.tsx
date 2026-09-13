@@ -92,7 +92,7 @@ export const CustomEndpointForm: React.FC<CustomEndpointFormProps> = ({
 	const [id] = React.useState(() => connection?.id ?? newId());
 	const [name, setName] = React.useState(connection?.name ?? "");
 	const [transport, setTransport] = React.useState<"http" | "sse">(
-		connection?.transport ?? "http",
+		connection?.transport === "sse" ? "sse" : "http",
 	);
 	const [url, setUrl] = React.useState(connection?.url ?? "");
 	const [authMode, setAuthMode] = React.useState<ConnectionAuthMode>(

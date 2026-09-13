@@ -10,6 +10,7 @@
  *   - sandbox.ts    → ServiceRegistry.sandboxContainer?
  *   - skill.ts      → ServiceRegistry.skillService?
  *   - flow-catalog.ts  → ServiceRegistry.flowCatalog?
+ *   - mcp-stdio.ts  → ServiceRegistry.mcpStdio?
  *
  * Other packages extend it without touching this file:
  *   flows-memory:       database?, embedding?

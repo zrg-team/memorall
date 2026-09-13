@@ -96,6 +96,8 @@ const definition = defineStep<
 			},
 			{
 				configurable: runConfig?.configurable,
+				// The nested agent is part of the same run: stopping the chat stops it.
+				signal: runConfig?.signal,
 				streamMode: ["custom", "values"],
 			},
 		);

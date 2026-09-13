@@ -447,6 +447,7 @@ export class AgentGraph extends GraphBase<
 					state: toolState,
 					runtime: getFlowRuntimeVars(runConfig),
 					toolCallId: toolCall.id,
+					signal: runConfig?.signal,
 				});
 				const {
 					content,

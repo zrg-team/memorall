@@ -13,6 +13,35 @@ describe("desktop sidecar protocol", () => {
 		).toMatchObject({ id: "request-1", method: "browser.command" });
 	});
 
+	it("allowlists the local MCP server methods", () => {
+		for (const method of [
+			"mcp.stdio.ensure",
+			"mcp.stdio.list-tools",
+			"mcp.stdio.call",
+			"mcp.stdio.cancel",
+			"mcp.stdio.stop",
+			"mcp.stdio.status",
+			"mcp.stdio.probe",
+		]) {
+			expect(
+				parseSidecarRequest({
+					protocolVersion: 3,
+					id: "x",
+					method,
+					params: {},
+				}),
+			).toMatchObject({ method });
+		}
+		expect(() =>
+			parseSidecarRequest({
+				protocolVersion: 3,
+				id: "x",
+				method: "mcp.stdio.connect",
+				params: {},
+			}),
+		).toThrow("not allowed");
+	});
+
 	it("rejects version mismatches and non-allowlisted methods", () => {
 		expect(() =>
 			parseSidecarRequest({ protocolVersion: 1, id: "x", method: "health" }),
