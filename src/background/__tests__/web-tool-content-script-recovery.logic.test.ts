@@ -36,11 +36,15 @@ const snapshotReply = {
  */
 const installChrome = ({ injectable }: { injectable: boolean }) => {
 	let hasContentScript = false;
-	const executeScript = vi.fn(async () => {
+	const executeScript = vi.fn(async (injection: { files?: string[] }) => {
 		if (!injectable) throw new Error("Cannot access contents of the page.");
-		hasContentScript = true;
+		// Only injecting the content script's files gives the tab a listener;
+		// the keep-awake injection is a function and does not.
+		if (injection.files) hasContentScript = true;
 		return [{ result: null }];
 	});
+	const contentScriptInjections = () =>
+		executeScript.mock.calls.filter(([injection]) => injection.files);
 	const sendMessage = vi.fn(async () => {
 		if (!hasContentScript) {
 			throw new Error(
@@ -104,6 +108,7 @@ const installChrome = ({ injectable }: { injectable: boolean }) => {
 
 	return {
 		executeScript,
+		contentScriptInjections,
 		sendMessage,
 		dispatchOpen: async (
 			timeoutMs = 5_000,
@@ -160,7 +165,7 @@ describe("web tool recovery when a tab has no content script", () => {
 		const response = await harness.dispatchOpen(1_200);
 
 		expect(response.success).toBe(false);
-		expect(harness.executeScript).toHaveBeenCalledTimes(1);
+		expect(harness.contentScriptInjections()).toHaveLength(1);
 		// Many sendMessage attempts, one injection attempt.
 		expect(harness.sendMessage.mock.calls.length).toBeGreaterThan(1);
 	});
