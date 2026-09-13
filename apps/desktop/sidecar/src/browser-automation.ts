@@ -16,6 +16,7 @@ import {
 	requiredString,
 	responseError,
 	WEB_BROWSER_COMMAND_SOURCE,
+	BLANK_PAGE_URL,
 } from "./browser-runtime-types";
 import {
 	CO_AGENT_BROWSER_COMMAND_SOURCE,
@@ -70,7 +71,7 @@ const trace = (message: string): void => {
  * Blank rather than a Memorall page: the co-agent drives whatever the user
  * browses to, and a start page they have to navigate away from is friction.
  */
-export const CO_AGENT_START_URL = "about:blank";
+export const CO_AGENT_START_URL = BLANK_PAGE_URL;
 
 export interface CoAgentAttachmentPlan {
 	/** The page to attach to, when one is already known. */
@@ -365,6 +366,18 @@ export class BrowserAutomationManager {
 				.map((session) => session.id),
 		});
 
+		// Only an engine that can inject a persistent script can host the
+		// co-agent. BrowserOS is preferred for everything else, so without this a
+		// co-agent page opened there and attachment then failed on it.
+		const engines: BrowserBackend[] = [this.browseros, this.chromium];
+		const hosts = engines.filter((backend) => backend.coAgentAttach);
+		if (hosts.length === 0) {
+			throw new BrowserAutomationError(
+				"CO_AGENT_REQUIRES_CHROMIUM",
+				"The co-agent needs the bundled Chromium renderer.",
+			);
+		}
+
 		let tabId = plan.tabId;
 		if (plan.openUrl !== null) {
 			const opened = (await this.open(
@@ -378,8 +391,9 @@ export class BrowserAutomationManager {
 					maxHtmlChars: 1_000,
 				} as BrowserCommand,
 				signal,
-			)) as { tabId?: number };
-			tabId = opened.tabId ?? null;
+				hosts,
+			)) as { surface?: { tabId?: number } };
+			tabId = opened.surface?.tabId ?? null;
 		}
 
 		if (tabId === null) {
@@ -389,14 +403,11 @@ export class BrowserAutomationManager {
 			);
 		}
 
-		const session = await this.promote(this.session(tabId), signal);
-		if (!session.backend.coAgentAttach) {
-			throw new BrowserAutomationError(
-				"CO_AGENT_REQUIRES_CHROMIUM",
-				"The co-agent needs the bundled Chromium renderer.",
-			);
-		}
-		await session.backend.coAgentAttach(
+		// A page the agent opened in BrowserOS is reopened at the same address on
+		// a host engine, in the same managed browser and profile, and the
+		// BrowserOS tab is closed.
+		const session = await this.promote(this.session(tabId), signal, hosts);
+		await session.backend.coAgentAttach!(
 			session.backendSession,
 			{ tabId, revision: CO_AGENT_BUNDLE_REVISION },
 			signal,
@@ -524,16 +535,21 @@ export class BrowserAutomationManager {
 		trace("managed browser stopped");
 	}
 
-	private async open(request: BrowserCommand, signal?: AbortSignal) {
+	private async open(
+		request: BrowserCommand,
+		signal?: AbortSignal,
+		backends?: BrowserBackend[],
+	) {
 		const id = ++this.nextPageId;
 		const url = requiredString(request, "url");
 		const mode = requiredString(request, "mode") as BrowserMode;
 		const timeoutMs = requiredNumber(request, "timeoutMs");
 		const maxHtmlChars = requiredNumber(request, "maxHtmlChars");
 		const preferred =
-			this.settings.persistProfile || mode === "window"
+			backends ??
+			(this.settings.persistProfile || mode === "window"
 				? [this.browseros, this.chromium]
-				: [this.direct, this.lightpanda, this.browseros, this.chromium];
+				: [this.direct, this.lightpanda, this.browseros, this.chromium]);
 		const failures: string[] = [];
 		for (const backend of preferred) {
 			try {
@@ -785,15 +801,11 @@ export class BrowserAutomationManager {
 	private async promote(
 		session: LogicalSession,
 		signal?: AbortSignal,
+		backends: BrowserBackend[] = [this.browseros, this.chromium],
 	): Promise<LogicalSession> {
-		if (
-			session.backend.engine === "browseros" ||
-			session.backend.engine === "chromium"
-		) {
-			return session;
-		}
+		if (backends.includes(session.backend)) return session;
 		const failures: string[] = [];
-		for (const backend of [this.browseros, this.chromium]) {
+		for (const backend of backends) {
 			try {
 				const opened = await backend.open(
 					session.url,

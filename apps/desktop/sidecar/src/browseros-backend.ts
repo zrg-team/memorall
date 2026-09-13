@@ -6,7 +6,9 @@ import {
 	type BrowserMode,
 	type BrowserSettings,
 	type BrowserSnapshot,
+	BLANK_PAGE_URL,
 	checkedHttpUrl,
+	checkedPageUrl,
 	type EngineStatus,
 	pngDimensions,
 	requiredNumber,
@@ -124,7 +126,7 @@ export class BrowserOsBackend implements BrowserBackend {
 		maxHtmlChars: number,
 		signal?: AbortSignal,
 	): Promise<{ session: BackendSession; snapshot: BrowserSnapshot }> {
-		const url = checkedHttpUrl(rawUrl);
+		const url = checkedPageUrl(rawUrl);
 		const client = await this.ensureClient(signal);
 		const created = await client.callTool(
 			"tabs",
@@ -135,11 +137,15 @@ export class BrowserOsBackend implements BrowserBackend {
 		const session: BackendSession = { engine: this.engine, handle, url };
 		const timed = withTimeoutSignal(timeoutMs, signal);
 		try {
-			await client.callTool(
-				"navigate",
-				{ page: handle, action: "url", url },
-				timed.signal,
-			);
+			// A new tab is already blank; asking the navigate tool to go there is
+			// both redundant and not something it is guaranteed to accept.
+			if (url !== BLANK_PAGE_URL) {
+				await client.callTool(
+					"navigate",
+					{ page: handle, action: "url", url },
+					timed.signal,
+				);
+			}
 			return {
 				session,
 				snapshot: await this.snapshot(session, maxHtmlChars, timed.signal),

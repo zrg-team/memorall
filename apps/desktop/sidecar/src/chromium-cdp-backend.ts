@@ -7,7 +7,9 @@ import {
 	type BrowserCommand,
 	type BrowserMode,
 	type BrowserSnapshot,
+	BLANK_PAGE_URL,
 	checkedHttpUrl,
+	checkedPageUrl,
 	type EngineStatus,
 	pngDimensions,
 	requiredNumber,
@@ -281,7 +283,7 @@ export class ChromiumCdpBackend implements BrowserBackend {
 		maxHtmlChars: number,
 		signal?: AbortSignal,
 	): Promise<{ session: BackendSession; snapshot: BrowserSnapshot }> {
-		const url = checkedHttpUrl(rawUrl);
+		const url = checkedPageUrl(rawUrl);
 		const endpoint = await this.endpoint();
 		await this.hardenBrowser(endpoint, signal);
 		const response = await fetch(
@@ -318,13 +320,18 @@ export class ChromiumCdpBackend implements BrowserBackend {
 		try {
 			await page.send("Page.enable", {}, timed.signal);
 			await page.send("Runtime.enable", {}, timed.signal);
-			const navigation = await page.send<{ errorText?: string }>(
-				"Page.navigate",
-				{ url },
-				timed.signal,
-			);
-			if (navigation.errorText) throw new Error(navigation.errorText);
-			await this.waitForDocument(page, timed.signal);
+			// The target was created on a blank page, so a blank page needs no
+			// navigation — and navigating there anyway would wait for a load event
+			// that has already fired.
+			if (url !== BLANK_PAGE_URL) {
+				const navigation = await page.send<{ errorText?: string }>(
+					"Page.navigate",
+					{ url },
+					timed.signal,
+				);
+				if (navigation.errorText) throw new Error(navigation.errorText);
+				await this.waitForDocument(page, timed.signal);
+			}
 			const snapshot = await this.snapshot(session, maxHtmlChars, timed.signal);
 			session.url = snapshot.url;
 			return { session, snapshot };

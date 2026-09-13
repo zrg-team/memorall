@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+	BLANK_PAGE_URL,
+	checkedHttpUrl,
+	checkedPageUrl,
+} from "./browser-runtime-types";
+import {
 	BrowserAutomationError,
 	CO_AGENT_START_URL,
 	parseBrowserCommand,
@@ -101,5 +106,56 @@ describe("co-agent attachment", () => {
 				openTabIds: [1, 2],
 			}),
 		).toEqual({ tabId: 3, openUrl: null });
+	});
+});
+
+/**
+ * Turning the co-agent on with no page picked opens an empty tab, and that
+ * failed outright: every backend validated the URL as HTTP(S) and refused
+ * `about:blank`, so activation died with UNSUPPORTED_URL_SCHEME on both
+ * engines.
+ *
+ * The validation is a security boundary — URLs usually come from the agent,
+ * which web content can steer — so the fix admits exactly one extra page for
+ * opening, and leaves navigation as strict as it was.
+ */
+describe("opening a blank page for the co-agent", () => {
+	it("opens on the blank page it asks for", () => {
+		expect(CO_AGENT_START_URL).toBe(BLANK_PAGE_URL);
+		expect(checkedPageUrl(CO_AGENT_START_URL)).toBe("about:blank");
+	});
+
+	it("still passes ordinary web pages through unchanged", () => {
+		expect(checkedPageUrl("https://example.test/a?b=1")).toBe(
+			"https://example.test/a?b=1",
+		);
+	});
+
+	it.each([
+		["another about: page", "about:config"],
+		["the blank page with a fragment", "about:blank#x"],
+		["a different casing", "ABOUT:BLANK"],
+		["a script URL", "javascript:alert(1)"],
+		["a local file", "file:///C:/Windows/win.ini"],
+		["a browser-internal page", "chrome://settings"],
+		["a data URL", "data:text/html,<script>1</script>"],
+	])("refuses %s", (_label, url) => {
+		// One exact string is allowed, not the scheme: anything else here would
+		// let steered agent input reach pages it has no business opening.
+		expect(() => checkedPageUrl(url)).toThrow();
+	});
+
+	it("keeps navigation limited to HTTP(S), blank page included", () => {
+		// Only *opening* gained the blank page. Navigating an existing page still
+		// goes through the strict check.
+		expect(() => checkedHttpUrl(BLANK_PAGE_URL)).toThrow(
+			/only supports HTTP\(S\)/,
+		);
+	});
+
+	it("still refuses credentials embedded in a URL", () => {
+		expect(() => checkedPageUrl("https://user:pass@example.test")).toThrow(
+			/Credentials embedded/,
+		);
 	});
 });
