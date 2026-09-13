@@ -20,7 +20,7 @@ import { useEmbeddedCustomOptions } from "@/embedded/hooks/use-embedded-custom-o
 import { useEmbeddedTranslation } from "@/embedded/hooks/use-embedded-language";
 import { useEmbeddedModelStatus } from "@/embedded/hooks/use-embedded-model-status";
 import { coAgentChatService } from "@/embedded/pages/CoAgent/co-agent-chat";
-import { CO_AGENT_STATUS_EVENT } from "@/embedded/pages/CoAgent/constants";
+import { CO_AGENT_STATUS_EVENT } from "@/co-agent/constants";
 import {
 	COAGENT_SESSION_END,
 	COAGENT_SESSION_START,
@@ -36,8 +36,8 @@ import type { EmbeddedContextItem } from "@/embedded/types";
 import {
 	type CoAgentContextAnchor,
 	refreshContextAnchor,
-} from "@/embedded/utils/co-agent/context-anchor";
-import { getPageDescription } from "@/embedded/utils/co-agent/dom-utils";
+} from "@/co-agent/dom/context-anchor";
+import { getPageDescription } from "@/co-agent/dom/dom-utils";
 import type { MessageActionRequest } from "@/main/modules/chat/components/artifacts/ArtifactActionsMenu";
 import {
 	getOpenUISendMessageText,

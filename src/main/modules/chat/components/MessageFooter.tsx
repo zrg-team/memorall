@@ -24,6 +24,7 @@ import {
 } from "@/services/llm/utils/token-usage";
 import { logError } from "@/utils/logger";
 import { DocumentSaveFolderDialog } from "./DocumentSaveFolderDialog";
+import { TokenUsagePanel } from "./TokenUsagePanel";
 
 export interface MessageFooterMetadata extends Record<string, unknown> {
 	model?: string;
@@ -41,16 +42,6 @@ export interface MessageFooterMetadata extends Record<string, unknown> {
 
 const formatTokens = (value?: number): string =>
 	value === undefined ? "-" : value.toLocaleString();
-
-const percentOf = (part?: number, whole?: number): number | undefined =>
-	part === undefined || !whole ? undefined : Math.round((part / whole) * 100);
-
-const formatCost = (cost?: number): string => {
-	if (cost === undefined) return "-";
-	return cost > 0 && cost < 0.01
-		? `$${cost.toFixed(5)}`
-		: `$${cost.toFixed(4)}`;
-};
 
 const cacheChipClass = (percent?: number): string => {
 	if (percent === undefined) {
@@ -92,68 +83,6 @@ export const MessageFooter: React.FC<MessageFooterProps> = React.memo(
 		const cacheHitRatio = getCacheHitRatio(usage);
 		const cacheHitPercent =
 			cacheHitRatio === undefined ? undefined : Math.round(cacheHitRatio * 100);
-		const requestCount = usage?.requests ?? (usage ? 1 : 0);
-		const calls = usage?.calls ?? [];
-
-		const usageRows = usage
-			? [
-					{
-						key: "input",
-						label: t("messages.inputTokens", "Input"),
-						value: formatTokens(usage.prompt_tokens),
-					},
-					{
-						key: "cached",
-						label: t("messages.cachedTokens", "Cached"),
-						value:
-							usage.cached_tokens === undefined
-								? "-"
-								: `${formatTokens(usage.cached_tokens)} (${cacheHitPercent ?? 0}%)`,
-					},
-					...(usage.cache_write_tokens !== undefined
-						? [
-								{
-									key: "cacheWrite",
-									label: t("messages.cacheWriteTokens", "Cache write"),
-									value: formatTokens(usage.cache_write_tokens),
-								},
-							]
-						: []),
-					{
-						key: "output",
-						label: t("messages.outputTokens", "Output"),
-						value: formatTokens(usage.completion_tokens),
-					},
-					...(usage.reasoning_tokens !== undefined
-						? [
-								{
-									key: "reasoning",
-									label: t("messages.reasoningTokens", "Reasoning"),
-									value: formatTokens(usage.reasoning_tokens),
-								},
-							]
-						: []),
-					{
-						key: "total",
-						label: t("messages.totalTokens", "Total"),
-						value: formatTokens(usage.total_tokens),
-					},
-					{
-						key: "requests",
-						label: t("messages.requests", "Requests"),
-						value: String(requestCount),
-					},
-					...(usage.cost !== undefined
-						? [
-								{
-									key: "cost",
-									label: t("messages.cost", "Cost"),
-									value: formatCost(usage.cost),
-								},
-							]
-						: []),
-				]
-			: [];
 
 		const formatTime = (seconds?: number) => {
 			if (!seconds) return "-";
@@ -348,75 +277,7 @@ export const MessageFooter: React.FC<MessageFooterProps> = React.memo(
 						)}
 					</div>
 
-					{usage && (
-						<div
-							className="mt-2 rounded-md border border-border/40 bg-muted/30 p-2 text-xs"
-							data-testid="message-usage-details"
-						>
-							<div className="mb-1 flex flex-wrap items-center justify-between gap-2 text-[11px] font-medium text-muted-foreground">
-								<span>{t("messages.tokenDetails", "Token usage")}</span>
-								{usage.estimated ? (
-									<span className="font-normal">
-										{t(
-											"messages.estimatedUsage",
-											"Estimated locally, the provider sent no usage",
-										)}
-									</span>
-								) : cacheHitPercent === undefined ? (
-									<span className="font-normal">
-										{t(
-											"messages.noCacheInfo",
-											"The provider reported no prompt-cache data",
-										)}
-									</span>
-								) : null}
-							</div>
-							<dl className="grid grid-cols-2 gap-x-4 gap-y-0.5 sm:grid-cols-4">
-								{usageRows.map((row) => (
-									<div key={row.key} className="flex justify-between gap-2">
-										<dt className="text-muted-foreground">{row.label}</dt>
-										<dd className="tabular-nums">{row.value}</dd>
-									</div>
-								))}
-							</dl>
-							{requestCount > 1 && calls.length > 0 ? (
-								<ol className="mt-2 space-y-0.5 border-t border-border/40 pt-1 text-[11px] text-muted-foreground">
-									<li className="font-medium">
-										{t("messages.requestBreakdown", "Per request")}
-									</li>
-									{calls.map((call, index) => (
-										<li
-											// biome-ignore lint/suspicious/noArrayIndexKey: requests carry no id and the list is append-only, so the position is the identity
-											key={index}
-											className="flex flex-wrap gap-x-3 tabular-nums"
-										>
-											<span className="w-6">#{index + 1}</span>
-											<span>
-												{t("messages.inputTokens", "Input")}{" "}
-												{formatTokens(call.prompt_tokens)}
-											</span>
-											<span>
-												{t("messages.cachedTokens", "Cached")}{" "}
-												{call.cached_tokens === undefined
-													? "-"
-													: `${formatTokens(call.cached_tokens)} (${percentOf(call.cached_tokens, call.prompt_tokens) ?? 0}%)`}
-											</span>
-											{call.cache_write_tokens ? (
-												<span>
-													{t("messages.cacheWriteTokens", "Cache write")}{" "}
-													{formatTokens(call.cache_write_tokens)}
-												</span>
-											) : null}
-											<span>
-												{t("messages.outputTokens", "Output")}{" "}
-												{formatTokens(call.completion_tokens)}
-											</span>
-										</li>
-									))}
-								</ol>
-							) : null}
-						</div>
-					)}
+					{usage ? <TokenUsagePanel usage={usage} /> : null}
 				</div>
 				<DocumentSaveFolderDialog
 					open={saveDialogOpen}

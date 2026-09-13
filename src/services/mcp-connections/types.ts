@@ -9,7 +9,8 @@
 
 export type ConnectionKind = "composio" | "template" | "custom";
 
-export type ConnectionTransport = "http" | "sse";
+/** `stdio` is a local process the desktop app starts; it has no URL. */
+export type ConnectionTransport = "http" | "sse" | "stdio";
 
 /**
  * How the endpoint is authenticated. Anything but `none` stores its value as an
@@ -44,13 +45,25 @@ export interface ComposioConnectionDetail {
 	toolkits: string[];
 }
 
-export interface TemplateConnectionDetail {
-	templateId: string;
-	port: number;
-	/** Values the user filled into the template's fields, e.g. { root: "~/src" }. */
-	args: Record<string, string>;
-	/** True when the desktop sidecar owns the process rather than a user-run bridge. */
-	native?: boolean;
+/**
+ * A local MCP server (`kind: "template"`, `transport: "stdio"`): a command the
+ * desktop app starts on the user's behalf, from a template or typed in.
+ */
+export interface StdioConnectionDetail {
+	command: string;
+	args: string[];
+	cwd?: string;
+	/** Non-secret environment. */
+	env?: Record<string, string>;
+	/**
+	 * Environment variables whose values are secrets. The values live in one
+	 * encrypted JSON record under `secretRef`, never in the registry.
+	 */
+	secretEnvKeys?: string[];
+	/** Set when the connection came from a template, so it can be edited as one. */
+	templateId?: string;
+	/** Non-secret template field values, for editing. */
+	templateValues?: Record<string, string>;
 }
 
 export interface McpConnection {
@@ -70,7 +83,7 @@ export interface McpConnection {
 	headers?: Record<string, string>;
 	apps?: ConnectionApp[];
 	composio?: ComposioConnectionDetail;
-	template?: TemplateConnectionDetail;
+	stdio?: StdioConnectionDetail;
 	/**
 	 * Connection-level tool scope, as server-prefixed names (`gmail__send_email`).
 	 * Undefined means every discovered tool.

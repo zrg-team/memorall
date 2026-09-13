@@ -1,6 +1,6 @@
 [package]
 name = "memorall-desktop"
-version = "0.5.26"
+version = "0.5.27"
 description = "Memorall desktop supervisor"
 edition = "2021"
 
@@ -12,6 +12,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "=2.6.3", features = [] }
 
 [dependencies]
+notify = "=6.1.1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tauri = { version = "=2.11.5", features = [] }

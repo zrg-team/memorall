@@ -56,6 +56,12 @@ export interface ToolExecutionContext<TState = unknown> {
 	 * its card to the exact call that is waiting rather than to the tool by name.
 	 */
 	toolCallId?: string;
+	/**
+	 * Aborts when the run is cancelled. A tool that waits on something outside
+	 * this process (a local server, a network call) should pass it on, or a
+	 * stopped chat keeps that work running until its own timeout.
+	 */
+	signal?: AbortSignal;
 }
 
 /**

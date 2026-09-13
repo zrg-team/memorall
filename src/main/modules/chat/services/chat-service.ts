@@ -37,6 +37,8 @@ export interface ChatServiceOptions {
 	topicId?: string;
 	agentFlowId?: string;
 	flowConfig?: UnifiedFlowConfig;
+	/** Extra steps added to the chosen agent's flow, not a replacement for it. */
+	flowConfigPrefix?: UnifiedFlowConfig;
 	streamConfig?: ChatStreamConfig;
 	tools?: ChatCompletionTool[];
 	tool_choice?: ChatCompletionToolChoiceOption;
@@ -163,6 +165,7 @@ export class ChatService {
 			topicId,
 			agentFlowId,
 			flowConfig,
+			flowConfigPrefix,
 			streamConfig,
 			tools,
 			tool_choice,
@@ -195,6 +198,7 @@ export class ChatService {
 					topicId,
 					agentFlowId,
 					flowConfig,
+					flowConfigPrefix,
 					tools,
 					tool_choice,
 					parallel_tool_calls,

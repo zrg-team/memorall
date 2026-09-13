@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import type { BackendSession, BrowserBackend } from "./browser-backend";
 import { BackendOpenError } from "./browser-backend";
 import {
@@ -5,7 +7,9 @@ import {
 	type BrowserCommand,
 	type BrowserMode,
 	type BrowserSnapshot,
+	BLANK_PAGE_URL,
 	checkedHttpUrl,
+	checkedPageUrl,
 	type EngineStatus,
 	pngDimensions,
 	requiredNumber,
@@ -279,7 +283,7 @@ export class ChromiumCdpBackend implements BrowserBackend {
 		maxHtmlChars: number,
 		signal?: AbortSignal,
 	): Promise<{ session: BackendSession; snapshot: BrowserSnapshot }> {
-		const url = checkedHttpUrl(rawUrl);
+		const url = checkedPageUrl(rawUrl);
 		const endpoint = await this.endpoint();
 		await this.hardenBrowser(endpoint, signal);
 		const response = await fetch(
@@ -316,13 +320,18 @@ export class ChromiumCdpBackend implements BrowserBackend {
 		try {
 			await page.send("Page.enable", {}, timed.signal);
 			await page.send("Runtime.enable", {}, timed.signal);
-			const navigation = await page.send<{ errorText?: string }>(
-				"Page.navigate",
-				{ url },
-				timed.signal,
-			);
-			if (navigation.errorText) throw new Error(navigation.errorText);
-			await this.waitForDocument(page, timed.signal);
+			// The target was created on a blank page, so a blank page needs no
+			// navigation — and navigating there anyway would wait for a load event
+			// that has already fired.
+			if (url !== BLANK_PAGE_URL) {
+				const navigation = await page.send<{ errorText?: string }>(
+					"Page.navigate",
+					{ url },
+					timed.signal,
+				);
+				if (navigation.errorText) throw new Error(navigation.errorText);
+				await this.waitForDocument(page, timed.signal);
+			}
 			const snapshot = await this.snapshot(session, maxHtmlChars, timed.signal);
 			session.url = snapshot.url;
 			return { session, snapshot };
@@ -529,6 +538,86 @@ export class ChromiumCdpBackend implements BrowserBackend {
 		for (const page of this.pages.values()) page.close();
 		this.pages.clear();
 		this.browserHardenedFor = null;
+	}
+
+	/**
+	 * The co-agent bundle, read once.
+	 *
+	 * Built by `tools/prepare-desktop-browser-runtime.mjs` and shipped next to the
+	 * sidecar's own `index.mjs`, so it is found relative to this module rather
+	 * than through an environment variable or an extra Tauri resource entry.
+	 */
+	private coAgentBundle: string | null = null;
+
+	private loadCoAgentBundle(): string {
+		if (this.coAgentBundle !== null) return this.coAgentBundle;
+		try {
+			this.coAgentBundle = readFileSync(
+				fileURLToPath(new URL("./co-agent-overlay.js", import.meta.url)),
+				"utf8",
+			);
+		} catch (error) {
+			throw new BrowserAutomationError(
+				"CO_AGENT_BUNDLE_MISSING",
+				`The co-agent bundle was not staged with the sidecar: ${
+					error instanceof Error ? error.message : String(error)
+				}`,
+			);
+		}
+		return this.coAgentBundle;
+	}
+
+	async coAgentAttach(
+		session: BackendSession,
+		config: Record<string, unknown>,
+		signal?: AbortSignal,
+	): Promise<void> {
+		const page = this.page(session);
+		const source = `window.__MEMORALL_CO_AGENT_CONFIG__ = ${JSON.stringify(
+			config,
+		)};
+${this.loadCoAgentBundle()}`;
+		// Injected for every future document, so the co-agent survives navigation
+		// rather than disappearing the first time the page moves.
+		await page.send(
+			"Page.addScriptToEvaluateOnNewDocument",
+			{ source },
+			signal,
+		);
+		// And once for the document already loaded.
+		await page.send(
+			"Runtime.evaluate",
+			{ expression: source, awaitPromise: false, returnByValue: false },
+			signal,
+		);
+	}
+
+	async coAgentCommand(
+		session: BackendSession,
+		request: unknown,
+		timeoutMs: number,
+		signal?: AbortSignal,
+	): Promise<unknown> {
+		return this.evaluate(
+			session,
+			`window.__memorallCoAgent ? window.__memorallCoAgent.handle(${JSON.stringify(
+				request,
+			)}) : { __memorallCoAgentMissing: true }`,
+			signal,
+			timeoutMs,
+		);
+	}
+
+	async coAgentDetach(
+		session: BackendSession,
+		signal?: AbortSignal,
+	): Promise<void> {
+		await this.evaluate(
+			session,
+			"(() => { try { delete window.__memorallCoAgent; } catch { window.__memorallCoAgent = undefined; } return true; })()",
+			signal,
+			5_000,
+		).catch(() => undefined);
 	}
 
 	private page(session: BackendSession): CdpConnection {

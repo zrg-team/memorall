@@ -116,7 +116,8 @@
 	},
 	"sidebar": {
 		"workspace": "Không gian",
-		"skills": "Kỹ năng"
+		"skills": "Kỹ năng",
+		"mappedFolders": "Thư mục đã liên kết"
 	},
 	"create": {
 		"title": "Tạo tệp mới",
@@ -167,5 +168,15 @@
 			"knowledge-graph": "Đồ thị ngữ nghĩa",
 			"structmem": "StructMem"
 		}
+	},
+	"mappedFolders": {
+		"badge": "Liên kết",
+		"add": "Liên kết một thư mục…",
+		"empty": "Chưa có thư mục nào được liên kết.",
+		"unavailable": "(không khả dụng)",
+		"unmap": "Bỏ liên kết",
+		"cancel": "Huỷ",
+		"confirmUnmap": "Ngừng hiển thị \"{{name}}\" trong thư viện? Thư mục và các tệp vẫn nằm trên máy của bạn.",
+		"unmapNamed": "Bỏ liên kết {{name}}"
 	}
 }

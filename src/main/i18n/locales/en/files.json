@@ -124,7 +124,8 @@
 	},
 	"sidebar": {
 		"workspace": "Workspace",
-		"skills": "Skills"
+		"skills": "Skills",
+		"mappedFolders": "Mapped folders"
 	},
 	"create": {
 		"title": "Create New File",
@@ -175,5 +176,15 @@
 			"knowledge-graph": "Semantic Graph",
 			"structmem": "StructMem"
 		}
+	},
+	"mappedFolders": {
+		"badge": "Mapped",
+		"add": "Map a local folder…",
+		"empty": "No local folders are mapped yet.",
+		"unavailable": "(unavailable)",
+		"unmap": "Unmap",
+		"cancel": "Cancel",
+		"confirmUnmap": "Stop showing \"{{name}}\" in the library? The folder and its files stay on your computer.",
+		"unmapNamed": "Unmap {{name}}"
 	}
 }

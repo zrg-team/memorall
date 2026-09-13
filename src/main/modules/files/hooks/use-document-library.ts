@@ -28,6 +28,8 @@ import {
 	findNodeByPath,
 	expandNodePath,
 	toggleNodeExpand,
+	updateNodeByPath,
+	mergeTreeState,
 } from "../utils/tree-utils";
 
 // ── Module-level helpers ──────────────────────────────────────────────────────
@@ -156,16 +158,22 @@ export function useDocumentLibrary() {
 			const treeData = await documentFileSystemService.getTree(
 				DOCUMENTS_SANDBOX_ROOT,
 			);
-			setTree(treeData);
+			// Keep open folders open and already-read mapped folders read, rather
+			// than collapsing the library every time anything on disk changes.
+			const merged = mergeTreeState(treeRef.current, treeData);
+			setTree(merged);
+			// Re-select from the merged tree, not the raw one: the raw node for a
+			// mapped folder has no children, so selecting it would empty the
+			// content pane on every unrelated change.
 			setSelectedNode((prev) => {
-				if (!prev || prev.id === "__docs_root__") return makeDocsRoot(treeData);
+				if (!prev || prev.id === "__docs_root__") return makeDocsRoot(merged);
 				return (
-					findNodeById(treeData, prev.id) ??
-					findNodeByPath(treeData, prev.path) ??
+					findNodeById(merged, prev.id) ??
+					findNodeByPath(merged, prev.path) ??
 					null
 				);
 			});
-			return treeData;
+			return merged;
 		} catch (err) {
 			logError("Failed to load tree:", err);
 			return [] as DocumentTreeNode[];
@@ -209,18 +217,89 @@ export function useDocumentLibrary() {
 	}, [loadTree, loadTopics]);
 
 	// ── Node navigation (stable, [] deps) ───────────────────────────────────
-	const handleSelectNode = useCallback((node: DocumentTreeNode | null) => {
-		if (!node) {
-			setSelectedNode(makeDocsRoot(treeRef.current));
-			return;
-		}
-		setSelectedNode(node);
-	}, []);
+	/**
+	 * Fill in a folder whose contents were deferred.
+	 *
+	 * Mapped folders arrive without children so the library can draw before the
+	 * OS has been walked, which means *any* path that shows a folder's contents
+	 * has to be able to ask for them — opening it in the tree, and selecting it
+	 * to list it on the right. Missing the second one made a mapped folder read
+	 * as empty, which is worse than slow.
+	 */
+	const materializeFolder = useCallback(
+		async (node: DocumentTreeNode): Promise<DocumentTreeNode> => {
+			if (node.type !== "folder" || node.isLazy !== true) return node;
 
-	const handleSelectDocNode = useCallback((node: DocumentTreeNode) => {
-		setSelectedSection("documents");
-		setSelectedNode(node);
-	}, []);
+			setTree((prev) =>
+				updateNodeByPath(prev, node.path, (current) => ({
+					...current,
+					isLoading: true,
+				})),
+			);
+			try {
+				const children = await documentFileSystemService.getFolderChildren(
+					node.path,
+				);
+				const loaded: DocumentTreeNode = {
+					...node,
+					children,
+					isLazy: false,
+					isLoading: false,
+					...(node.folder
+						? { folder: { ...node.folder, childCount: children.length } }
+						: {}),
+				};
+				setTree((prev) =>
+					updateNodeByPath(prev, node.path, (current) => ({
+						...current,
+						children,
+						isLazy: false,
+						isLoading: false,
+						...(current.folder
+							? { folder: { ...current.folder, childCount: children.length } }
+							: {}),
+					})),
+				);
+				setSelectedNode((prev) =>
+					prev && prev.path === node.path ? { ...prev, ...loaded } : prev,
+				);
+				return loaded;
+			} catch (err) {
+				logError("Failed to read a mapped folder:", err);
+				// Left lazy on purpose: selecting or reopening it retries, rather
+				// than leaving the folder looking permanently empty.
+				setTree((prev) =>
+					updateNodeByPath(prev, node.path, (current) => ({
+						...current,
+						isLoading: false,
+					})),
+				);
+				return node;
+			}
+		},
+		[],
+	);
+
+	const handleSelectNode = useCallback(
+		(node: DocumentTreeNode | null) => {
+			if (!node) {
+				setSelectedNode(makeDocsRoot(treeRef.current));
+				return;
+			}
+			setSelectedNode(node);
+			void materializeFolder(node);
+		},
+		[materializeFolder],
+	);
+
+	const handleSelectDocNode = useCallback(
+		(node: DocumentTreeNode) => {
+			setSelectedSection("documents");
+			setSelectedNode(node);
+			void materializeFolder(node);
+		},
+		[materializeFolder],
+	);
 
 	/** Select the documents section, falling back to the first top-level node. */
 	const handleSelectDocumentsSection = useCallback(() => {
@@ -248,9 +327,31 @@ export function useDocumentLibrary() {
 		setSelectedNode(makeDocsRoot(treeRef.current));
 	}, []);
 
-	const handleToggleExpand = useCallback((nodeToToggle: DocumentTreeNode) => {
-		setTree((prev) => toggleNodeExpand(prev, nodeToToggle.id));
-	}, []);
+	/**
+	 * Open or close a folder, reading its contents first if they were deferred.
+	 *
+	 * Mapped folders arrive without children so the library can draw immediately
+	 * (see `DocumentFileSystem.getFolderChildren`). The row is marked loading and
+	 * opened straight away rather than after the read, so opening a slow folder
+	 * looks like a folder opening rather than like a click that did nothing.
+	 */
+	const handleToggleExpand = useCallback(
+		(nodeToToggle: DocumentTreeNode) => {
+			const opening =
+				nodeToToggle.type === "folder" && !nodeToToggle.isExpanded;
+
+			// Open straight away and fill in behind, so opening a slow folder looks
+			// like a folder opening rather than like a click that did nothing.
+			setTree((prev) =>
+				updateNodeByPath(prev, nodeToToggle.path, (node) => ({
+					...node,
+					isExpanded: !node.isExpanded,
+				})),
+			);
+			if (opening) void materializeFolder(nodeToToggle);
+		},
+		[materializeFolder],
+	);
 
 	const handleToggleExpandWorkspace = useCallback(
 		(nodeToToggle: DocumentTreeNode) => {

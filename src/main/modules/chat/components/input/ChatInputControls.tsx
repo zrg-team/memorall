@@ -89,6 +89,8 @@ export interface ChatInputControlsProps {
 	/** Attach the co-agent to the tab the user is looking at. */
 	onStartCoAgent?: () => void;
 	isCoAgentStarting?: boolean;
+	/** Whether the co-agent is armed, so the button can show it. */
+	isCoAgentActive?: boolean;
 	/** Switching model without leaving the conversation. */
 	selectableModels?: SelectableModel[];
 	selectableModelsByProvider?: Map<ServiceProvider, SelectableModel[]>;
@@ -124,6 +126,7 @@ export const ChatInputControls: React.FC<ChatInputControlsProps> = ({
 	onToggleFullWidth,
 	onStartCoAgent,
 	isCoAgentStarting = false,
+	isCoAgentActive = false,
 	selectableModels,
 	selectableModelsByProvider,
 	lockedModelProviders,
@@ -162,9 +165,14 @@ export const ChatInputControls: React.FC<ChatInputControlsProps> = ({
 	// where each one finally carries a written label. What stays on the bar is
 	// the overflow trigger and submit — the two the user cannot do without.
 	const foldViewControls = isNarrow;
-	const coAgentLabel = t("tooltips.startCoAgent", {
-		defaultValue: "Co-agent on the current tab",
-	});
+	const coAgentLabel = t(
+		isCoAgentActive ? "tooltips.stopCoAgent" : "tooltips.startCoAgent",
+		{
+			defaultValue: isCoAgentActive
+				? "Turn the co-agent off"
+				: "Let the agent see and act on the page",
+		},
+	);
 
 	return (
 		<PromptInputToolbar className="items-center gap-1 p-1.5">
@@ -223,7 +231,14 @@ export const ChatInputControls: React.FC<ChatInputControlsProps> = ({
 										disabled={isLoading || isCoAgentStarting}
 										onClick={onStartCoAgent}
 										aria-label={coAgentLabel}
-										className={ICON_CONTROL}
+										aria-pressed={isCoAgentActive}
+										className={cn(
+											ICON_CONTROL,
+											// Armed is a real mode — the model gets tools that can
+											// click and type — so it has to be visible at a glance.
+											isCoAgentActive &&
+												"bg-emerald-500/15 text-emerald-500 hover:bg-emerald-500/25 hover:text-emerald-500",
+										)}
 									>
 										{isCoAgentStarting ? (
 											<Loader2 size={14} className="animate-spin" />
@@ -519,67 +534,72 @@ export const ChatInputControls: React.FC<ChatInputControlsProps> = ({
 						</Tooltip>
 					) : null}
 
-					<Tooltip>
-						<DropdownMenu>
-							<TooltipTrigger asChild>
-								<DropdownMenuTrigger asChild>
-									<Button
-										type="button"
-										variant="ghost"
-										size="sm"
-										disabled={isLoading}
-										aria-label={t("tooltips.moreActions")}
-										className={ICON_CONTROL}
-									>
-										<MoreHorizontal size={14} />
-									</Button>
-								</DropdownMenuTrigger>
-							</TooltipTrigger>
-							<DropdownMenuContent align="end">
-								{foldViewControls ? (
+					{/* At full width every action in here already has its own button,
+					    so the menu only duplicated them. It stays for the narrow layout,
+					    which is where those buttons are folded away. */}
+					{foldViewControls ? (
+						<Tooltip>
+							<DropdownMenu>
+								<TooltipTrigger asChild>
+									<DropdownMenuTrigger asChild>
+										<Button
+											type="button"
+											variant="ghost"
+											size="sm"
+											disabled={isLoading}
+											aria-label={t("tooltips.moreActions")}
+											className={ICON_CONTROL}
+										>
+											<MoreHorizontal size={14} />
+										</Button>
+									</DropdownMenuTrigger>
+								</TooltipTrigger>
+								<DropdownMenuContent align="end">
+									{foldViewControls ? (
+										<DropdownMenuItem
+											onClick={onInsertSeparator}
+											className="flex items-center gap-2"
+										>
+											<ScissorsLineDashed size={14} />
+											<span>{t("tooltips.splitChat")}</span>
+										</DropdownMenuItem>
+									) : null}
+									{foldViewControls && onToggleFullWidth ? (
+										<DropdownMenuItem
+											onClick={onToggleFullWidth}
+											className="flex items-center gap-2"
+										>
+											{isFullWidth ? (
+												<Minimize2 size={14} />
+											) : (
+												<Maximize2 size={14} />
+											)}
+											<span>{fullWidthLabel}</span>
+										</DropdownMenuItem>
+									) : null}
+									{foldViewControls && showAgentSettings ? (
+										<DropdownMenuItem
+											onClick={onOpenAgentSettings}
+											className="flex items-center gap-2"
+										>
+											<Settings2 size={14} />
+											<span>{t("tooltips.agentSettings")}</span>
+										</DropdownMenuItem>
+									) : null}
 									<DropdownMenuItem
-										onClick={onInsertSeparator}
-										className="flex items-center gap-2"
+										onClick={onDeleteChat}
+										className="flex items-center gap-2 text-red-600 hover:text-red-700"
 									>
-										<ScissorsLineDashed size={14} />
-										<span>{t("tooltips.splitChat")}</span>
+										<Trash2 size={14} />
+										<span>{t("actions.deleteChat")}</span>
 									</DropdownMenuItem>
-								) : null}
-								{foldViewControls && onToggleFullWidth ? (
-									<DropdownMenuItem
-										onClick={onToggleFullWidth}
-										className="flex items-center gap-2"
-									>
-										{isFullWidth ? (
-											<Minimize2 size={14} />
-										) : (
-											<Maximize2 size={14} />
-										)}
-										<span>{fullWidthLabel}</span>
-									</DropdownMenuItem>
-								) : null}
-								{foldViewControls && showAgentSettings ? (
-									<DropdownMenuItem
-										onClick={onOpenAgentSettings}
-										className="flex items-center gap-2"
-									>
-										<Settings2 size={14} />
-										<span>{t("tooltips.agentSettings")}</span>
-									</DropdownMenuItem>
-								) : null}
-								<DropdownMenuItem
-									onClick={onDeleteChat}
-									className="flex items-center gap-2 text-red-600 hover:text-red-700"
-								>
-									<Trash2 size={14} />
-									<span>{t("actions.deleteChat")}</span>
-								</DropdownMenuItem>
-							</DropdownMenuContent>
-						</DropdownMenu>
-						<TooltipContent>
-							<p className="text-xs">{t("tooltips.moreActions")}</p>
-						</TooltipContent>
-					</Tooltip>
+								</DropdownMenuContent>
+							</DropdownMenu>
+							<TooltipContent>
+								<p className="text-xs">{t("tooltips.moreActions")}</p>
+							</TooltipContent>
+						</Tooltip>
+					) : null}
 
 					{isLoading && abortController ? (
 						<Tooltip>

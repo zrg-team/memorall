@@ -84,6 +84,32 @@ for (const absolute of files) {
 		errors.push(`${file}: shared product code imports a Node builtin`);
 	}
 
+	// The shared co-agent tree is hosted three ways: the extension content
+	// script, the desktop app's own window, and a bundle injected into the
+	// managed browser, where no Memorall runtime exists at all. Only `host/`
+	// may know which one it is in; everything else must stay host-agnostic, or
+	// the injected bundle silently starts pulling in the application.
+	if (
+		file.startsWith("src/co-agent/") &&
+		// `host/` wires the shared co-agent into one particular host and may know
+		// about the app — except the injected bundle, which runs inside a
+		// third-party page where none of the app exists.
+		(!file.startsWith("src/co-agent/host/") ||
+			file === "src/co-agent/host/managed-page-entry.ts") &&
+		!isTest(file)
+	) {
+		for (const forbidden of [
+			"@/embedded/",
+			"@/platform/current",
+			"@/main/",
+			"@/services/",
+		]) {
+			if (source.includes(`"${forbidden}`)) {
+				errors.push(`${file}: shared co-agent code imports ${forbidden}`);
+			}
+		}
+	}
+
 	const adapter = file.match(/^src\/platform\/(extension|web|desktop)\//)?.[1];
 	if (adapter) {
 		for (const foreign of ["extension", "web", "desktop"].filter(

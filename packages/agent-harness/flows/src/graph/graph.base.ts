@@ -17,15 +17,13 @@ import {
 	convertToolsToOpenAI,
 	convertToolToOpenAI,
 } from "../registries/tool-registry.js";
-import type {
-	BaseTool,
-	ToolBinding,
-} from "../interfaces/engine/tool.js";
+import type { BaseTool, ToolBinding } from "../interfaces/engine/tool.js";
 import {
 	defaultRegistries,
 	type FlowRegistrySet,
 } from "../registries/registry-set.js";
 
+import { mergeReminders, withSystemReminders } from "./system-reminders.js";
 import { logWarn } from "../logging/logger.js";
 import {
 	FLOW_RUN_LIFECYCLE_CONFIG_KEY,
@@ -306,9 +304,21 @@ export const normalizeChatMessages = (
 	return [{ role: "system", content: systemParts.join("\n\n") }, ...ordered];
 };
 
+export {
+	SYSTEM_REMINDER_TAG,
+	mergeReminders,
+	withSystemReminders,
+} from "./system-reminders.js";
+
 export const BaseAnnotation = {
 	messages: Annotation<ChatCompletionMessageParam[]>({
 		value: (x, y) => normalizeChatMessages(y ?? x),
+		default: () => [],
+	}),
+	reminders: Annotation<string[]>({
+		// Steps contribute independently — the clock and the retrieved context
+		// both want a say — so reminders accumulate rather than overwrite.
+		value: (x, y) => mergeReminders(x, y),
 		default: () => [],
 	}),
 	response: Annotation<string>({
@@ -389,28 +399,17 @@ const createChatHelpers = (registries: FlowRegistrySet) => ({
 			(message) =>
 				message.role === "tool" && message.tool_call_id === toolCallId,
 		),
-	injectUserContext: (
-		messages: ChatCompletionMessageParam[],
-		content: string,
-	): ChatCompletionMessageParam[] => {
-		const lastUserIdx = messages.findLastIndex((m) => m.role === "user");
-		if (lastUserIdx === -1) return messages;
-		const lastUser = messages[lastUserIdx];
-		if (!lastUser) return messages;
-		const updated = [...messages];
-		updated[lastUserIdx] = (
-			typeof lastUser.content === "string"
-				? { ...lastUser, content: `${lastUser.content}\n\n${content}` }
-				: {
-						...lastUser,
-						content: [
-							...((lastUser.content as ChatCompletionContentPart[]) ?? []),
-							{ type: "text" as const, text: content },
-						],
-					}
-		) as ChatCompletionMessageParam;
-		return updated;
-	},
+	/**
+	 * Attach volatile context past the end of the conversation prefix.
+	 *
+	 * This replaced an `injectUserContext` helper that appended the same text to
+	 * the last user message. That edit was invisible at the time and expensive on
+	 * the next turn: the mutation never reached the stored transcript, so the
+	 * following request rebuilt that user message without it, the prefix diverged
+	 * at a position ahead of the entire tool loop, and every token behind it was
+	 * re-read at full price.
+	 */
+	withSystemReminders,
 	addTool,
 	removeTool: (current: GraphTool[], ...names: ToolName[]): GraphTool[] =>
 		current.filter(

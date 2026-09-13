@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { create } from "zustand";
 
 import {
@@ -25,6 +26,18 @@ interface CoAgentActivationStore {
 	/** Omit `url` to attach to whichever tab the user is looking at. */
 	activate: (url?: string) => Promise<boolean>;
 	clearError: () => void;
+	/** null until the platform has been asked; see `useCoAgentAvailable`. */
+	available: boolean | null;
+	resolveAvailability: () => void;
+	/**
+	 * Whether the next turn should hand the model the co-agent's tools.
+	 *
+	 * Attaching to a window is not the same as arming the agent: the tools are
+	 * added to the flow only while this is on, so an ordinary question in the
+	 * same conversation does not come with page-driving powers attached.
+	 */
+	isActive: boolean;
+	setActive: (active: boolean) => void;
 }
 
 const browserCommands = async () => {
@@ -32,12 +45,34 @@ const browserCommands = async () => {
 	return platform.browserCommands;
 };
 
+const capabilities = async () => {
+	const { platform } = await import("@/platform/current");
+	return platform.capabilities;
+};
+
+let resolvingAvailability = false;
+
 export const useCoAgentActivationStore = create<CoAgentActivationStore>(
 	(set) => ({
 		pendingUrl: null,
 		isActivating: false,
 		error: null,
+		available: null,
+		isActive: false,
+		setActive: (isActive) => set({ isActive }),
 		clearError: () => set({ error: null }),
+		resolveAvailability: () => {
+			if (resolvingAvailability) return;
+			resolvingAvailability = true;
+			void capabilities()
+				.then((registry) => {
+					set({ available: registry.get("co-agent").available });
+				})
+				.catch((error) => {
+					logError("Could not read co-agent availability:", error);
+					set({ available: false });
+				});
+		},
 		activate: async (url) => {
 			set({ isActivating: true, pendingUrl: url ?? null, error: null });
 			try {
@@ -54,11 +89,12 @@ export const useCoAgentActivationStore = create<CoAgentActivationStore>(
 				if (!response.success) {
 					throw new Error(response.error);
 				}
+				set({ isActive: true });
 				return true;
 			} catch (error) {
 				const message = error instanceof Error ? error.message : String(error);
 				logError("Co-agent activation failed:", error);
-				set({ error: message });
+				set({ error: message, isActive: false });
 				return false;
 			} finally {
 				set({ isActivating: false, pendingUrl: null });
@@ -66,3 +102,45 @@ export const useCoAgentActivationStore = create<CoAgentActivationStore>(
 		},
 	}),
 );
+
+/**
+ * A co-agent activation failure, worded for a person.
+ *
+ * The desktop sidecar prefixes its errors with a machine code
+ * (`BROWSER_LAUNCH_FAILED: The bundled browser could not start`). The code is
+ * for logs and for the port's own branching; shown to a person it is noise in
+ * front of the one sentence they need.
+ */
+export const formatCoAgentError = (error: string | null): string | null => {
+	if (!error) return null;
+	const readable = error.replace(/^[A-Z][A-Z0-9_]+:\s*/, "").trim();
+	return readable || error;
+};
+
+/** The current activation failure, ready to show. Null when there is none. */
+export const useCoAgentActivationError = (): string | null =>
+	useCoAgentActivationStore((state) => formatCoAgentError(state.error));
+
+/**
+ * Whether the co-agent is usable on this platform.
+ *
+ * Resolved through the store's existing dynamic import rather than a static
+ * `@/platform/current` one: these controls render inside chat messages, and a
+ * static import would drag the whole platform tree into every test that renders
+ * a message. Undecided reads as unavailable, so a control never appears and then
+ * fails when clicked.
+ */
+export const useCoAgentAvailable = (): boolean => {
+	const available = useCoAgentActivationStore((state) => state.available);
+	const resolveAvailability = useCoAgentActivationStore(
+		(state) => state.resolveAvailability,
+	);
+	useEffect(() => {
+		if (available === null) resolveAvailability();
+	}, [available, resolveAvailability]);
+	return available === true;
+};
+
+/** Whether the co-agent's tools should be added to the next turn. */
+export const useCoAgentActive = (): boolean =>
+	useCoAgentActivationStore((state) => state.isActive);

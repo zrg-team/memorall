@@ -1,9 +1,9 @@
-import { CO_AGENT_CONTENT_COMMAND_SOURCE } from "@/services/co-agent";
+import { CO_AGENT_CONTENT_COMMAND_SOURCE } from "@/co-agent/protocol";
 import type {
 	CoAgentContentCommandRequest,
 	CoAgentContentCommandResponse,
 	CoAgentElementInfo,
-} from "@/services/co-agent";
+} from "@/co-agent/protocol";
 import { buildSnapshot } from "./dom-utils";
 
 export const createSuccessResponse = (

@@ -16,6 +16,7 @@ import {
 	registerContentScriptInjectionListeners,
 	reinjectContentScript,
 } from "./content-script-injection";
+import { keepAgentTabAwake } from "./keep-agent-tab-awake";
 
 interface StoredWebBrowserSurface extends WebBrowserSurface {
 	sessionId: string;
@@ -132,6 +133,15 @@ const addStoredSurface = async (
 	await persistStoredSurfaces();
 };
 
+/** Whether a tab belongs to one of the agent's web sessions. */
+const isAgentTab = async (tabId: number): Promise<boolean> => {
+	const surfaces = await loadStoredSurfaces();
+	for (const surface of surfaces.values()) {
+		if (surface.tabId === tabId) return true;
+	}
+	return false;
+};
+
 const removeStoredSurface = async (sessionId: string): Promise<void> => {
 	const surfaces = await loadStoredSurfaces();
 	surfaces.delete(sessionId);
@@ -244,6 +254,76 @@ const waitForTabReady = async (
 	throw new Error(`Timed out waiting for browser tab ${tabId} to load.`);
 };
 
+/**
+ * The receiving document went away while it held the reply — it navigated, was
+ * put in the back/forward cache, or was replaced. A new document gets its own
+ * content script, so this is a wait, not a reason to inject one.
+ */
+const isClosedReplyChannelError = (message: string): boolean =>
+	message.includes("message channel closed before a response was received");
+
+/**
+ * A page that holds a message without answering it.
+ *
+ * `chrome.tabs.sendMessage` has no deadline of its own. A tab that cannot run
+ * its content script — frozen or put to sleep by the browser because it is in
+ * the background, or with a renderer busy on a heavy page — leaves it pending
+ * for as long as the tab stays that way. Every loop in this file checks its
+ * deadline only between attempts, so one such call held the whole command
+ * until the browser shut this service worker down for handling a message for
+ * five minutes. The tool then reported only "A listener indicated an
+ * asynchronous response by returning true, but the message channel closed
+ * before a response was received" — after five or more minutes, on a page the
+ * user could see loaded.
+ */
+class ContentScriptNoReplyError extends Error {
+	constructor(readonly tabId: number) {
+		super("The page did not answer.");
+		this.name = "ContentScriptNoReplyError";
+	}
+}
+
+const withinDeadline = async <T>(
+	operation: Promise<T>,
+	timeoutMs: number,
+	onTimeout: () => Error,
+): Promise<T> => {
+	let timer: ReturnType<typeof setTimeout> | undefined;
+	try {
+		return await Promise.race([
+			operation,
+			new Promise<never>((_, reject) => {
+				timer = setTimeout(() => reject(onTimeout()), Math.max(0, timeoutMs));
+			}),
+		]);
+	} finally {
+		clearTimeout(timer);
+	}
+};
+
+/**
+ * What the agent is told about a tab that never answered, with the browser's
+ * own reason when it reports one. Says "tab", not "browser tab": that phrase
+ * marks a hard failure elsewhere, which closes the tab — the one the user needs
+ * to switch to.
+ */
+class UnansweredTabError extends Error {
+	constructor(tabId: number, tab: chrome.tabs.Tab | null) {
+		const target = tab?.url ? ` (${tab.url})` : "";
+		// `frozen` is newer than the bundled typings.
+		const state = tab as (chrome.tabs.Tab & { frozen?: boolean }) | null;
+		const reason = state?.frozen
+			? "the browser has frozen this background tab"
+			: state?.discarded
+				? "the browser has put this background tab to sleep"
+				: "the tab may be asleep in the background, or busy";
+		super(
+			`The page in tab ${tabId}${target} did not answer in time: ${reason}. Switch to the tab once to wake it, then try again.`,
+		);
+		this.name = "UnansweredTabError";
+	}
+}
+
 const normalizeContentCommandError = (
 	error: unknown,
 	pageUrl?: string,
@@ -277,7 +357,11 @@ const sendContentCommand = async (
 		}
 
 		try {
-			const rawResponse = await chrome.tabs.sendMessage(tabId, request);
+			const rawResponse = await withinDeadline(
+				chrome.tabs.sendMessage(tabId, request),
+				deadline - Date.now(),
+				() => new ContentScriptNoReplyError(tabId),
+			);
 			if (!isWebContentCommandResponse(rawResponse)) {
 				throw new Error("Invalid content-script response.");
 			}
@@ -287,7 +371,15 @@ const sendContentCommand = async (
 			return rawResponse;
 		} catch (error) {
 			lastError = error;
+			if (error instanceof ContentScriptNoReplyError) {
+				const current = await chrome.tabs.get(tabId).catch(() => null);
+				throw new UnansweredTabError(tabId, current);
+			}
 			const message = toErrorMessage(error);
+			if (isClosedReplyChannelError(message)) {
+				await delay(RETRY_INTERVAL_MS);
+				continue;
+			}
 			if (!isMissingContentScriptError(message)) {
 				throw new Error(normalizeContentCommandError(error, tab.url));
 			}
@@ -295,7 +387,13 @@ const sendContentCommand = async (
 			// The tab is loaded but nothing is listening. Retrying alone only helps
 			// if the script is merely late, so put it there ourselves — once per
 			// tab — and let the loop try again.
-			await reinjectContentScript(tabId);
+			// Bounded like the message itself: injecting into a tab that cannot run
+			// scripts waits exactly as long.
+			await withinDeadline(
+				reinjectContentScript(tabId),
+				deadline - Date.now(),
+				() => new ContentScriptNoReplyError(tabId),
+			).catch(() => false);
 			await delay(RETRY_INTERVAL_MS);
 		}
 	}
@@ -334,6 +432,8 @@ const openSurfaceForMode = async (
 };
 
 const isTransientContentScriptError = (error: unknown): boolean => {
+	// A tab that is briefly busy can still answer before the deadline.
+	if (error instanceof UnansweredTabError) return true;
 	const message = toErrorMessage(error);
 	return (
 		isMissingContentScriptError(message) ||
@@ -397,6 +497,9 @@ const handleOpenCommand = async (
 	try {
 		surface = await openSurfaceForMode(request.mode, request.url);
 		await waitForTabReady(surface.tabId, request.timeoutMs);
+		// Before anything slow: the tab is in the background from the moment it
+		// opens, and the browser may freeze it while the page is still settling.
+		void keepAgentTabAwake(surface.tabId);
 
 		const snapshotResponse = await requestSnapshotWithNavigationRetry(
 			surface.tabId,
@@ -888,5 +991,14 @@ export function registerWebToolBrowserHandler(): void {
 				sendResponse(createErrorResponse(rawMessage, error));
 			});
 		return true;
+	});
+
+	// Every page a session's tab loads is a new document without the lock — a
+	// redirect after a bot check, a link the agent followed — so take it again.
+	chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
+		if (changeInfo.status !== "complete") return;
+		void isAgentTab(tabId).then((owned) => {
+			if (owned) void keepAgentTabAwake(tabId);
+		});
 	});
 }

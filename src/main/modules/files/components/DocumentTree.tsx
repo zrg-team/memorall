@@ -9,12 +9,15 @@ import {
 	ChevronDown,
 	Folder,
 	FolderOpen,
+	FolderSymlink,
+	Loader2,
 	FileText,
 	Image,
 	FileCode,
 	File,
 } from "lucide-react";
 import type { DocumentTreeNode, DocumentType } from "@/types/document-library";
+import { useTranslation } from "react-i18next";
 import { ScrollArea } from "@/main/components/ui/scroll-area";
 
 interface DocumentTreeProps {
@@ -22,6 +25,11 @@ interface DocumentTreeProps {
 	selectedId: string | null;
 	onSelectNode: (node: DocumentTreeNode) => void;
 	onToggleExpand?: (node: DocumentTreeNode) => void;
+	/**
+	 * Top-level paths that are folders on the user's disk rather than in the
+	 * library. They behave identically; only the icon says otherwise.
+	 */
+	mappedPaths?: ReadonlySet<string>;
 }
 
 const FILE_ICONS: Record<DocumentType, React.ComponentType<any>> = {
@@ -48,25 +56,38 @@ interface TreeNodeProps {
 	selectedId: string | null;
 	onSelectNode: (node: DocumentTreeNode) => void;
 	onToggleExpand?: (node: DocumentTreeNode) => void;
+	mappedPaths?: ReadonlySet<string>;
 }
 
 // Memoized row so an unchanged subtree is skipped when the tree re-renders (e.g.
 // expanding one folder or a parent re-rendering with the same props). Recursion
 // is a real component instead of an inline function recreated on every render.
 const TreeNode: React.FC<TreeNodeProps> = React.memo(
-	({ node, level, selectedId, onSelectNode, onToggleExpand }) => {
+	({ node, level, selectedId, onSelectNode, onToggleExpand, mappedPaths }) => {
+		const { t } = useTranslation("files");
 		const isSelected = node.id === selectedId;
-		const hasChildren =
-			node.type === "folder" && node.children && node.children.length > 0;
+		// Only a root can be a mapped folder; everything inside one is ordinary.
+		const isMapped = level === 0 && Boolean(mappedPaths?.has(node.path));
 		const isFolder = node.type === "folder";
+		const hasChildren = isFolder && node.children && node.children.length > 0;
+		// A deferred folder has no children loaded yet, so `hasChildren` is false
+		// while it is still very much openable — without this it renders with no
+		// chevron and cannot be opened at all.
+		const canExpand = isFolder && (hasChildren || node.isLazy === true);
 
 		// Get appropriate icon
 		let IconComponent;
 		let iconColorClass = "";
 
 		if (isFolder) {
-			IconComponent = node.isExpanded ? FolderOpen : Folder;
-			iconColorClass = "text-blue-500";
+			IconComponent = isMapped
+				? FolderSymlink
+				: node.isExpanded
+					? FolderOpen
+					: Folder;
+			// Amber rather than blue: the only cue that edits here land on the
+			// user's own disk instead of inside Memorall.
+			iconColorClass = isMapped ? "text-amber-500" : "text-blue-500";
 		} else {
 			const fileType = node.file?.type || "other";
 			IconComponent = FILE_ICONS[fileType];
@@ -82,8 +103,8 @@ const TreeNode: React.FC<TreeNodeProps> = React.memo(
 					style={{ paddingLeft: `${level * 12 + 8}px` }}
 					onClick={() => onSelectNode(node)}
 				>
-					{/* Expand/Collapse Toggle (only for folders with children) */}
-					{isFolder && hasChildren ? (
+					{/* Expand/Collapse Toggle (folders with children, or not read yet) */}
+					{canExpand ? (
 						<button
 							onClick={(e) => {
 								e.stopPropagation();
@@ -91,7 +112,9 @@ const TreeNode: React.FC<TreeNodeProps> = React.memo(
 							}}
 							className="p-0.5 hover:bg-muted rounded flex-shrink-0"
 						>
-							{node.isExpanded ? (
+							{node.isLoading ? (
+								<Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+							) : node.isExpanded ? (
 								<ChevronDown className="h-3.5 w-3.5" />
 							) : (
 								<ChevronRight className="h-3.5 w-3.5" />
@@ -108,10 +131,22 @@ const TreeNode: React.FC<TreeNodeProps> = React.memo(
 
 					{/* Name */}
 					<span className="text-sm truncate flex-1">{node.name}</span>
+
+					{/* A mapped folder lives on the user's disk, and edits inside it
+					    are edits to their real files. The icon alone was too quiet to
+					    carry that, so the row says so in words. */}
+					{isMapped && (
+						<span
+							className="flex-shrink-0 rounded-sm border border-amber-500/40 bg-amber-500/10 px-1 py-px text-[10px] font-medium uppercase tracking-wide text-amber-600 dark:text-amber-400"
+							title={node.path}
+						>
+							{t("mappedFolders.badge")}
+						</span>
+					)}
 				</div>
 
 				{/* Render Children (only if folder is expanded) */}
-				{isFolder && hasChildren && node.isExpanded && (
+				{isFolder && node.isExpanded && hasChildren && (
 					<div>
 						{node.children.map((child) => (
 							<TreeNode
@@ -121,6 +156,7 @@ const TreeNode: React.FC<TreeNodeProps> = React.memo(
 								selectedId={selectedId}
 								onSelectNode={onSelectNode}
 								onToggleExpand={onToggleExpand}
+								mappedPaths={mappedPaths}
 							/>
 						))}
 					</div>
@@ -132,7 +168,7 @@ const TreeNode: React.FC<TreeNodeProps> = React.memo(
 TreeNode.displayName = "TreeNode";
 
 export const DocumentTree: React.FC<DocumentTreeProps> = React.memo(
-	({ tree, selectedId, onSelectNode, onToggleExpand }) => (
+	({ tree, selectedId, onSelectNode, onToggleExpand, mappedPaths }) => (
 		<ScrollArea className="h-full">
 			<div className="py-2 px-1">
 				{tree.map((node) => (
@@ -143,6 +179,7 @@ export const DocumentTree: React.FC<DocumentTreeProps> = React.memo(
 						selectedId={selectedId}
 						onSelectNode={onSelectNode}
 						onToggleExpand={onToggleExpand}
+						mappedPaths={mappedPaths}
 					/>
 				))}
 			</div>

@@ -244,7 +244,11 @@ export class AgentGraph extends GraphBase<
 		);
 
 		const turn = await streamAssistantTurn(
-			{ messages: state.messages, outputMessages: state.outputMessages },
+			{
+				messages: state.messages,
+				outputMessages: state.outputMessages,
+				reminders: state.reminders,
+			},
 			{
 				llm,
 				tools,
@@ -443,6 +447,7 @@ export class AgentGraph extends GraphBase<
 					state: toolState,
 					runtime: getFlowRuntimeVars(runConfig),
 					toolCallId: toolCall.id,
+					signal: runConfig?.signal,
 				});
 				const {
 					content,

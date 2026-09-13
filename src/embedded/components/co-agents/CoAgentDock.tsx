@@ -11,7 +11,7 @@ import React from "react";
 import { AgentIcon } from "@/components/AgentIcon";
 import { AssistantMessageContent } from "@/embedded/components/messages/AssistantMessageContent";
 import { useEmbeddedTranslation } from "@/embedded/hooks/use-embedded-language";
-import type { CoAgentContextAnchor } from "@/embedded/utils/co-agent/context-anchor";
+import type { CoAgentContextAnchor } from "@/co-agent/dom/context-anchor";
 import type { MessageActionRequest } from "@/main/modules/chat/components/artifacts/ArtifactActionsMenu";
 import {
 	CoAgentAnchorAttachment,

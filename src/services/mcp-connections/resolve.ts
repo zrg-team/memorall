@@ -19,6 +19,12 @@ import { logWarn } from "@/utils/logger";
 import { loadSecret } from "@/utils/master-key";
 import { listConnections, upsertConnection } from "./registry";
 import {
+	buildStdioServerConfig,
+	canRunLocalServers,
+	isStdioApproved,
+	isStdioConnection,
+} from "./stdio";
+import {
 	type AgentConnectionSelection,
 	COMPOSIO_SECRET_KEY,
 	COMPOSIO_USER_ID,
@@ -193,6 +199,10 @@ export async function buildServerConfig(
 	connection: McpConnection,
 	secretOverride?: string,
 ): Promise<MCPServerConfig | null> {
+	if (isStdioConnection(connection)) {
+		return buildStdioServerConfig(connection, toServerKey(connection));
+	}
+	if (connection.transport === "stdio") return null;
 	const auth = await applyAuth(connection, secretOverride);
 	if (!auth) {
 		return null;
@@ -466,6 +476,26 @@ export async function resolveConnections(
 
 	for (const { selection, connection } of selected) {
 		const serverKey = keys.get(connection.id) ?? connection.id;
+
+		if (connection.transport === "stdio") {
+			// A local server runs only where processes can be started, and only
+			// once the user approved this exact command on this device.
+			const server =
+				isStdioConnection(connection) &&
+				canRunLocalServers() &&
+				(await isStdioApproved(connection))
+					? await buildStdioServerConfig(connection, serverKey)
+					: null;
+			if (!server) {
+				skipped.push(connection.id);
+				continue;
+			}
+			servers.push(server);
+			const allowlist = resolveAllowlist(connection, selection, serverKey);
+			if (allowlist) toolAllowlist.push(...allowlist);
+			continue;
+		}
+
 		const auth = await applyAuth(connection);
 
 		if (!auth) {
@@ -493,7 +523,7 @@ export async function resolveConnections(
 		}
 
 		servers.push({
-			type: connection.transport,
+			type: connection.transport as "http" | "sse",
 			name: serverKey,
 			url,
 			headers: auth.headers,

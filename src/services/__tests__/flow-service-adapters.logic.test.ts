@@ -1,5 +1,19 @@
 import { serviceRegistry } from "@memorall/agent-harness-flows/registries/service-registry";
 import { describe, expect, it, vi } from "vitest";
+
+// Two mapped folders in the states that produce a bare errno from the native
+// layer: one mapped read-only, one that has gone away.
+vi.mock("@/services/filesystem/native-folders/mount-registry", () => ({
+	describeNativeMountProblem: (sandboxPath: string) => {
+		if (sandboxPath.startsWith("/Photos")) {
+			return 'The mapped folder "Photos" is mapped read-only, so it cannot be changed from here. Its files can still be read.';
+		}
+		if (sandboxPath.startsWith("/Archive")) {
+			return 'The mapped folder "Archive" is not available right now. It may have been moved, renamed, unplugged, or had its permission revoked — re-map it from the Files view to restore access.';
+		}
+		return null;
+	},
+}));
 import {
 	registerFlowDatabase,
 	registerFlowEmbedding,
@@ -18,11 +32,68 @@ import {
 
 const text = new TextEncoder();
 
-function makeFileSystemService() {
+/**
+ * A stand-in for `DocumentFileSystem`, including the part that matters most
+ * here: mapped folders come out of `getTree` without their children, and it is
+ * `resolveNode` that fills them in. The agent reads the filesystem through that
+ * seam, so a fake without it hides the exact bug this file now guards.
+ */
+function makeFileSystemService(options: { mappedFolder?: boolean } = {}) {
 	const files = new Map<string, Uint8Array>([
 		["/notes/a.txt", text.encode("hello")],
 	]);
+	const mappedChildren = [
+		{
+			id: "m1",
+			name: "design.md",
+			path: "/mapped/design.md",
+			type: "file" as const,
+			isExpanded: false,
+			file: { size: 12 },
+			children: [],
+		},
+	];
+	const lazyMapped = {
+		id: "mapped",
+		name: "mapped",
+		path: "/mapped",
+		type: "folder" as const,
+		isExpanded: false,
+		// Deferred: this is what the sidebar gets.
+		children: [] as typeof mappedChildren,
+		isLazy: true,
+	};
 	return {
+		getFolderChildren: vi.fn(async (path: string) =>
+			path === "/mapped" ? mappedChildren : [],
+		),
+		resolveNode: vi.fn(async (path: string) => {
+			const tree = options.mappedFolder
+				? [lazyMapped, ...baseTree()]
+				: baseTree();
+			if (path === "/") {
+				return {
+					id: "/",
+					name: "",
+					path: "/",
+					type: "folder" as const,
+					isExpanded: false,
+					children: tree,
+				};
+			}
+			if (path === "/mapped") {
+				return { ...lazyMapped, children: mappedChildren, isLazy: false };
+			}
+			const find = (nodes: any[]): any => {
+				for (const node of nodes) {
+					if (node.path === path) return node;
+					const hit = find(node.children ?? []);
+					if (hit) return hit;
+				}
+				return null;
+			};
+			return find(tree);
+		}),
 		readFile: vi.fn(async (path: string) => files.get(path) ?? text.encode("")),
 		writeFile: vi.fn(async (path: string, bytes: Uint8Array) => {
 			files.set(path, bytes);
@@ -36,27 +107,31 @@ function makeFileSystemService() {
 			async (_oldPath: string, newParent: string) => `${newParent}/a.txt`,
 		),
 		rename: vi.fn(),
-		getTree: vi.fn(async () => [
-			{
-				id: "notes",
-				name: "notes",
-				path: "/notes",
-				type: "folder",
-				isExpanded: false,
-				children: [
-					{
-						id: "a",
-						name: "a.txt",
-						path: "/notes/a.txt",
-						type: "file",
-						isExpanded: false,
-						file: { size: 5 },
-						children: [],
-					},
-				],
-			},
-		]),
+		getTree: vi.fn(async () => baseTree()),
 	};
+}
+
+function baseTree(): any[] {
+	return [
+		{
+			id: "notes",
+			name: "notes",
+			path: "/notes",
+			type: "folder",
+			isExpanded: false,
+			children: [
+				{
+					id: "a",
+					name: "a.txt",
+					path: "/notes/a.txt",
+					type: "file",
+					isExpanded: false,
+					file: { size: 5 },
+					children: [],
+				},
+			],
+		},
+	];
 }
 
 describe("flow service adapters", () => {
@@ -130,6 +205,71 @@ describe("flow service adapters", () => {
 		).resolves.toEqual({ rows: [{ id: 3 }] });
 		expect(await db.transaction((flowDb: any) => flowDb)).toBe(db);
 		expect(() => db.collection("x" as never)).toThrow(/not implemented/);
+	});
+
+	/**
+	 * The agent reads files through the same tree the sidebar draws, and mapped
+	 * folders come out of that tree empty so the library can render before the
+	 * OS has been walked. Resolving a path has to fill them in — when it did not,
+	 * every mapped folder read as "exists, but empty (0 files)" to `fs_ls` and
+	 * `fs_glob`, and the agent concluded the user's project was not there.
+	 */
+	it("sees inside a mapped folder the tree has not expanded yet", async () => {
+		const service = makeFileSystemService({ mappedFolder: true });
+		const fs = toFlowFileSystem(service as any);
+
+		const entries = await fs.readdir("/mapped", { withFileTypes: true });
+
+		expect(entries.map((entry) => entry.name)).toEqual(["design.md"]);
+		expect(await fs.readdir("/mapped")).toEqual(["design.md"]);
+	});
+
+	/**
+	 * A mapped folder has two failure modes nothing else in the library has: it
+	 * can be read-only, and it can stop being there. Both arrive from the native
+	 * layer as a bare errno, which tells the agent nothing it can act on — and
+	 * "EACCES" on a folder the user deliberately mapped read-only reads like a
+	 * bug rather than a setting.
+	 */
+	it("explains a read-only mapped folder instead of reporting EACCES", async () => {
+		const service = makeFileSystemService();
+		service.writeFile = vi.fn(async () => {
+			throw Object.assign(new Error("EACCES: permission denied"), {
+				code: "EACCES",
+			});
+		});
+		const fs = toFlowFileSystem(service as any);
+
+		await expect(fs.writeFile("/Photos/a.txt", "x")).rejects.toThrow(
+			/mapped read-only/i,
+		);
+	});
+
+	it("explains a disconnected mapped folder instead of reporting ENOENT", async () => {
+		const service = makeFileSystemService();
+		service.readFile = vi.fn(async () => {
+			throw Object.assign(new Error("ENOENT: no such file"), {
+				code: "ENOENT",
+			});
+		});
+		const fs = toFlowFileSystem(service as any);
+
+		await expect(fs.readFile("/Archive/a.txt")).rejects.toThrow(
+			/not available right now/i,
+		);
+	});
+
+	it("leaves ordinary failures exactly as they were", async () => {
+		const service = makeFileSystemService();
+		service.readFile = vi.fn(async () => {
+			throw new Error("ENOENT: no such file");
+		});
+		const fs = toFlowFileSystem(service as any);
+
+		// Nothing is mapped at /notes, so a missing file is still a missing file.
+		await expect(fs.readFile("/notes/missing.txt")).rejects.toThrow(
+			/^ENOENT: no such file$/,
+		);
 	});
 
 	it("adapts document filesystem operations across document paths", async () => {
@@ -309,6 +449,68 @@ describe("withPromptCacheKey", () => {
 				model: "m",
 				prompt_cache_key: "memorall:conversation:c1",
 			});
+		}
+	});
+
+	it("reaches OpenRouter as one sticky session across an agent loop", async () => {
+		// End to end on the production path: the run's conversation key is
+		// stamped here, passed through the real OpenAI-compatible client, and has
+		// to arrive in the HTTP body as a `session_id`. Without it OpenRouter
+		// spread one conversation over several upstream providers, each with its
+		// own cache, and requests kept re-reading the whole prompt cold.
+		const bodies: Array<Record<string, unknown>> = [];
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(async (_input: string | URL, init?: RequestInit) => {
+				bodies.push(JSON.parse(String(init?.body ?? "{}")));
+				return Response.json({
+					id: "c",
+					object: "chat.completion",
+					created: 1,
+					model: "deepseek/deepseek-v4.1",
+					choices: [
+						{
+							index: 0,
+							message: { role: "assistant", content: "ok" },
+							finish_reason: "stop",
+						},
+					],
+				});
+			}),
+		);
+		try {
+			const { OpenAILLM } = await import(
+				"@/services/llm/implementations/openai-llm"
+			);
+			const client = new OpenAILLM("key", "https://openrouter.ai/api/v1");
+			const llm = withPromptCacheKey(
+				toFlowLLM({
+					...makeLLM(),
+					chatCompletions: (body: any) => client.chatCompletions(body),
+				} as any),
+				"memorall:conversation:c1",
+			);
+
+			let messages: any[] = [{ role: "user", content: "Research my game" }];
+			for (let step = 0; step < 3; step++) {
+				await llm.chatCompletions({
+					model: "deepseek/deepseek-v4.1",
+					messages,
+					stream: false,
+				} as any);
+				messages = [
+					...messages,
+					{ role: "assistant", content: `step ${step}` },
+					{ role: "user", content: `continue ${step}` },
+				];
+			}
+
+			expect(bodies).toHaveLength(3);
+			expect(new Set(bodies.map((body) => body.session_id))).toEqual(
+				new Set(["memorall:conversation:c1"]),
+			);
+		} finally {
+			vi.unstubAllGlobals();
 		}
 	});
 

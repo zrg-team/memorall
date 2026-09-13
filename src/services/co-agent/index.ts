@@ -1,25 +1,7 @@
-export type {
-	CoAgentActiveSession,
-	CoAgentBrowserCommandRequest,
-	CoAgentBrowserCommandResponse,
-	CoAgentContentCommandRequest,
-	CoAgentContentCommandResponse,
-	CoAgentCursorMode,
-	CoAgentElementInfo,
-	CoAgentImageInfo,
-	CoAgentPageSnapshot,
-	CoAgentPoint,
-	CoAgentRect,
-	CoAgentTraceStep,
-	CoAgentViewport,
-} from "./co-agent-protocol";
-
-export {
-	CO_AGENT_ACTIVE_SESSION_STORAGE_KEY,
-	CO_AGENT_BROWSER_COMMAND_SOURCE,
-	CO_AGENT_CONTENT_COMMAND_SOURCE,
-	isCoAgentBrowserCommandRequest,
-	isCoAgentBrowserCommandResponse,
-	isCoAgentContentCommandRequest,
-	isCoAgentContentCommandResponse,
-} from "./co-agent-protocol";
+/**
+ * The co-agent protocol lives at `@/co-agent/protocol` so the extension, the
+ * desktop app and the script injected into the managed browser share one
+ * definition. Re-exported wholesale rather than as a hand-maintained list: the
+ * previous list silently omitted new members until someone noticed.
+ */
+export * from "@/co-agent/protocol";

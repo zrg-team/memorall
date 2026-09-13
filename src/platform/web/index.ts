@@ -23,6 +23,10 @@ export const platform: PlatformComposition = {
 			reason:
 				"Managed browser automation requires the extension or desktop app.",
 		},
+		"co-agent": {
+			available: false,
+			reason: "The co-agent needs the extension or the desktop app.",
+		},
 		"sandbox.browser": { available: true },
 		"executor.local": { available: false, reason: "No native process access." },
 		"filesystem.native": {

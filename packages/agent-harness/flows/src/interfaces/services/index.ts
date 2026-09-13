@@ -5,6 +5,7 @@ export * from "./filesystem.js";
 export * from "./flow-catalog.js";
 export * from "./llm.js";
 export * from "./logger.js";
+export * from "./mcp-stdio.js";
 export * from "./agent-sandbox.js";
 export * from "./sandbox.js";
 export * from "./skill.js";

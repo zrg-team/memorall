@@ -222,6 +222,28 @@ export const checkedHttpUrl = (rawUrl: string): string => {
 	return url.toString();
 };
 
+/**
+ * An empty tab: the one non-HTTP(S) page a real browser may be opened on.
+ *
+ * Needed for the co-agent, which is switched on before the user has picked a
+ * page — the desktop equivalent of the extension attaching to the tab already
+ * in front of them. Both real browsers create a blank tab before navigating
+ * anyway, so opening this means creating the tab and not navigating at all.
+ */
+export const BLANK_PAGE_URL = "about:blank";
+
+/**
+ * {@link checkedHttpUrl}, plus an empty tab.
+ *
+ * Only for backends that are real browsers and only for opening a page; every
+ * navigation keeps using `checkedHttpUrl`. URLs usually come from the agent,
+ * which web content can steer, so this stays a single exact string rather than
+ * the `about:` scheme — `about:config`-style internal pages, `about:blank#…`
+ * and different casings are all still refused.
+ */
+export const checkedPageUrl = (rawUrl: string): string =>
+	rawUrl === BLANK_PAGE_URL ? BLANK_PAGE_URL : checkedHttpUrl(rawUrl);
+
 export const responseError = (request: BrowserCommand, error: unknown) => ({
 	source: WEB_BROWSER_COMMAND_SOURCE,
 	command: request.command,

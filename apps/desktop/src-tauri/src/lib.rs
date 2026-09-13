@@ -1,3 +1,5 @@
+mod fs_map;
+mod mcp_stdio;
 mod sidecar;
 
 use serde_json::{json, Value};
@@ -147,6 +149,8 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .setup(|app| {
             app.manage(SidecarSupervisor::new(app.handle().clone()));
+            app.manage(fs_map::MappedRoots::load(app.handle()));
+            app.manage(fs_map::FolderWatchers::new(app.handle().clone()));
 
             let handle = app.handle().clone();
             thread::spawn(move || {
@@ -172,6 +176,21 @@ pub fn run() {
             desktop_browser_clear_profile,
             desktop_browser_takeover,
             desktop_browser_resume,
+            mcp_stdio::desktop_mcp_stdio_request,
+            fs_map::fs_map_list_roots,
+            fs_map::fs_map_add_root,
+            fs_map::fs_map_remove_root,
+            fs_map::fs_map_list,
+            fs_map::fs_map_stat,
+            fs_map::fs_map_read,
+            fs_map::fs_map_write,
+            fs_map::fs_map_create_file,
+            fs_map::fs_map_mkdir,
+            fs_map::fs_map_unlink,
+            fs_map::fs_map_rmdir,
+            fs_map::fs_map_rename,
+            fs_map::fs_map_touch,
+            fs_map::fs_map_revision,
         ])
         .build(tauri::generate_context!())
         .expect("error while building Memorall desktop");

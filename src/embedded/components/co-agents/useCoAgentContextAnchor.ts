@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { CO_AGENT_CONTAINER_ID } from "@/embedded/pages/CoAgent/constants";
+import { CO_AGENT_CONTAINER_ID } from "@/co-agent/constants";
 import {
 	type CoAgentContextAnchor,
 	createContextAnchor,
 	createSelectionAnchor,
 	isEditableElement,
 	refreshContextAnchor,
-} from "@/embedded/utils/co-agent/context-anchor";
+} from "@/co-agent/dom/context-anchor";
 
 const HOVER_DWELL_MS = 650;
 const HOVER_ANCHOR_IDLE_HIDE_MS = 4200;

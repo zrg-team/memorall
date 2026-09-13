@@ -1,4 +1,5 @@
 import { invoke as tauriInvoke } from "@tauri-apps/api/core";
+import { CO_AGENT_BROWSER_COMMAND_SOURCE } from "@/co-agent/protocol";
 import type {
 	BrowserAutomationControl,
 	BrowserCommandPort,
@@ -7,6 +8,14 @@ import type {
 	ManagedBrowserStatus,
 } from "../contracts/core";
 import type { MutableCapabilityRegistry } from "../core/capability-registry";
+
+/** A co-agent activation, as opposed to a content command or a web-browser call. */
+const isCoAgentActivation = (request: unknown): boolean =>
+	typeof request === "object" &&
+	request !== null &&
+	(request as { source?: unknown }).source ===
+		CO_AGENT_BROWSER_COMMAND_SOURCE &&
+	(request as { command?: unknown }).command === "activate";
 
 const PROFILE_SETTING_KEY = "desktop.browser.persistProfile.v1";
 const VISIBILITY_SETTING_KEY = "desktop.browser.visible.v1";
@@ -91,6 +100,9 @@ export class DesktopBrowserCommandPort
 
 	async request<T>(request: unknown): Promise<T> {
 		await this.initialize();
+		if (isCoAgentActivation(request)) {
+			await this.showBrowserForCoAgent();
+		}
 		try {
 			const response = (await this.invoke("desktop_browser_request", {
 				request,
@@ -128,6 +140,28 @@ export class DesktopBrowserCommandPort
 			this.markUnavailable(failure);
 			throw new Error(`${failure.code}: ${failure.message}`);
 		}
+	}
+
+	/**
+	 * Make the managed browser visible before the co-agent attaches to it.
+	 *
+	 * The co-agent's whole purpose is to be watched — a cursor and a dock moving
+	 * over a page — so the sidecar refuses to attach to a headless browser. The
+	 * browser starts headless by default, which meant clicking the co-agent
+	 * button was refused every time, and the refusal was never shown: from the
+	 * user's side the button simply did nothing.
+	 *
+	 * Turning visibility on restarts Chromium, which ends any background browsing
+	 * sessions the agent had open in the headless one. That is the price of the
+	 * co-agent working at all, and it is only paid once: afterwards the setting
+	 * is persisted and a visible browser is simply reused.
+	 */
+	private async showBrowserForCoAgent(): Promise<void> {
+		if (this.snapshot.visible) return;
+		await this.configure({
+			persistProfile: this.snapshot.persistProfile,
+			visible: true,
+		});
 	}
 
 	async tabExists(tabId: number): Promise<boolean> {
@@ -211,6 +245,14 @@ export class DesktopBrowserCommandPort
 		}
 	}
 
+	/**
+	 * Serve a co-agent command aimed at Memorall's own window.
+	 *
+	 * This runs before `initialize()` on purpose: the in-app co-agent has nothing
+	 * to do with the bundled browser, so it has to keep working even when
+	 * Chromium failed to stage. Returns a box rather than the value so that a
+	 * legitimately undefined result is distinguishable from "not handled here".
+	 */
 	private async initializeOnce(): Promise<ManagedBrowserStatus> {
 		this.capabilities.set("browser.automation", {
 			available: false,

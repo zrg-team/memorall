@@ -115,6 +115,32 @@ buildSync({
 	target: "node22",
 	sourcemap: false,
 	minify: true,
+	// CommonJS dependencies (cross-spawn, under the MCP SDK's stdio transport)
+	// call require() for Node built-ins, which an ESM bundle does not define.
+	// Without this the sidecar dies on its first line.
+	banner: {
+		js: 'import { createRequire as __memorallCreateRequire } from "node:module"; const require = __memorallCreateRequire(import.meta.url);',
+	},
+});
+
+// The co-agent, bundled for injection into pages in the managed browser.
+//
+// A separate classic script rather than part of the desktop frontend: it is
+// injected over CDP into third-party pages, so it must be one self-contained
+// file with no module graph, and it must not end up in `publish/desktop/frontend`
+// where the shell would ship it for no reason. Built before the `--sidecar-only`
+// exit so the fast rebuild refreshes it too.
+buildSync({
+	entryPoints: [resolve(root, "src/co-agent/host/managed-page-entry.ts")],
+	outfile: join(sidecarOutput, "co-agent-overlay.js"),
+	bundle: true,
+	platform: "browser",
+	format: "iife",
+	target: "chrome120",
+	sourcemap: false,
+	minify: true,
+	define: { "process.env.NODE_ENV": '"production"' },
+	tsconfig: resolve(root, "tsconfig.json"),
 });
 
 if (sidecarOnly) {

@@ -13,5 +13,7 @@ export { ComposioWizard } from "./components/ComposioWizard";
 export { ConnectionDetail } from "./components/ConnectionDetail";
 export { ConnectionsSidebar } from "./components/ConnectionsSidebar";
 export { CustomEndpointForm } from "./components/CustomEndpointForm";
+export { LocalServerRuntimePanel } from "./components/LocalServerRuntimePanel";
+export { LocalServerSetup } from "./components/LocalServerSetup";
 export { StatusDot, StatusPill } from "./components/StatusPill";
 export { ToolScopeList } from "./components/ToolScopeList";

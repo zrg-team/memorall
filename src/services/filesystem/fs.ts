@@ -1,6 +1,7 @@
 import { configure, InMemory, fs } from "@zenfs/core";
 import { IndexedDB } from "@zenfs/dom";
 import { logDebug, logError, logInfo } from "@/utils/logger";
+import { syncNativeFolderMounts } from "./native-folders/mount-registry";
 
 let fsReady = false;
 let fsReadyPromise: Promise<void> | null = null;
@@ -17,9 +18,12 @@ const initializeFs = async (): Promise<void> => {
 				"/home": IndexedDB,
 			},
 		})
-			.then(() => {
+			.then(async () => {
 				fsReady = true;
 				logDebug("Filesystem configured");
+				// A no-op unless the platform has folders mapped, so extension and
+				// web behaviour is unchanged.
+				await syncNativeFolderMounts();
 			})
 			.catch((error) => {
 				logError("Filesystem configuration error", error);
@@ -83,6 +87,10 @@ const refreshFsCache = async (): Promise<void> => {
 			});
 
 			fsReady = true;
+			// configure() rebuilt the tree from the two static mounts, which
+			// silently drops every mapped folder. Put them back before anything
+			// reads the filesystem again.
+			await syncNativeFolderMounts();
 			logInfo("✅ ZenFS cache refreshed successfully");
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
@@ -92,6 +100,7 @@ const refreshFsCache = async (): Promise<void> => {
 					"ℹ️ ZenFS mounts already configured, skipping duplicate refresh",
 				);
 				fsReady = true;
+				await syncNativeFolderMounts();
 				return;
 			}
 

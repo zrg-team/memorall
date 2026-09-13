@@ -1,7 +1,4 @@
-import {
-	defineStep,
-	bindStep,
-} from "../../interfaces/engine/step.js";
+import { defineStep, bindStep } from "../../interfaces/engine/step.js";
 import type {
 	StepFactoryFromSpec,
 	StepSpecFromDefinition,
@@ -11,14 +8,8 @@ import type {
 	ChatMessage,
 	ChatCompletionUserMessageParam,
 } from "../../interfaces/engine/messages.js";
-import {
-	messageContentToText,
-	GraphBase,
-} from "../../graph/graph.base.js";
-import type {
-	GraphTool,
-	ToolName,
-} from "../../graph/graph.base.js";
+import { messageContentToText, GraphBase } from "../../graph/graph.base.js";
+import type { GraphTool, ToolName } from "../../graph/graph.base.js";
 import type {} from "../../interfaces/engine/tool.js";
 import type { AllServices } from "../../interfaces/services/services.js";
 import { logInfo } from "../../logging/logger.js";
@@ -37,6 +28,7 @@ interface Input {
 interface Output {
 	messages?: ChatMessage[];
 	tools?: GraphTool[];
+	reminders?: string[];
 }
 
 type Services = Pick<AllServices, "skillService">;
@@ -93,15 +85,20 @@ const definition = defineStep<Input, Output, Services, Config>({
 		const skillNameSet = new Set(availableSkills.map((s) => s.name));
 
 		// --- Resolve @mentions in the last user message ---
+		// The bodies are attached as reminders rather than spliced into the user
+		// message. Rewriting that message (inlining the body, stripping the
+		// @skill: marker) never reached the stored transcript, so the next turn
+		// rebuilt it from the raw text and the prefix diverged at a position the
+		// whole rest of the conversation sits behind.
 		const lastUserIdx = input.messages.findLastIndex((m) => m.role === "user");
-		let updatedMessages = input.messages;
-		const mentionedNames: string[] = [];
+		const reminders: string[] = [];
 
 		if (lastUserIdx >= 0) {
 			const lastUserMsg = input.messages[
 				lastUserIdx
 			] as ChatCompletionUserMessageParam;
 			const textContent = messageContentToText(lastUserMsg.content);
+			const mentionedNames: string[] = [];
 
 			for (const match of textContent.matchAll(/@skill:([\w-]+)/g)) {
 				const name = match[1];
@@ -125,50 +122,33 @@ const definition = defineStep<Input, Output, Services, Config>({
 				).filter(Boolean);
 
 				if (loaded.length > 0) {
-					const skillBlocks = loaded
-						.map((s) => `<skill name="${s!.name}">\n${s!.body}\n</skill>`)
-						.join("\n\n");
-
-					// Remove matched @skill:name markers; preserve other @mentions
-					const cleaned = textContent
-						.replace(/@skill:([\w-]+)/g, (full: string, name: string) =>
-							mentionedNames.includes(name) ? "" : full,
-						)
-						.trim();
-
-					const newText = cleaned
-						? `${skillBlocks}\n\n${cleaned}`
-						: skillBlocks;
-
-					const newContent: ChatCompletionUserMessageParam["content"] =
-						typeof lastUserMsg.content === "string"
-							? newText
-							: lastUserMsg.content.map((p) =>
-									p.type === "text" ? { ...p, text: newText } : p,
-								);
-					updatedMessages = [
-						...input.messages.slice(0, lastUserIdx),
-						{ ...lastUserMsg, content: newContent },
-						...input.messages.slice(lastUserIdx + 1),
-					];
+					reminders.push(
+						...loaded.map(
+							(skill) =>
+								`<skill name="${skill!.name}">\n${skill!.body}\n</skill>`,
+						),
+					);
 
 					logInfo(
-						`[ADD_SKILL_CONTEXT] Injected ${loaded.length} mentioned skill(s) into user message`,
+						`[ADD_SKILL_CONTEXT] Attached ${loaded.length} mentioned skill(s) as reminders`,
 					);
 				}
 			}
 		}
 
-		// --- Append skills index for lazy-loadable (non-mentioned) skills ---
-		const remainingSkills = availableSkills.filter(
-			(s) => !mentionedNames.includes(s.name),
+		// --- Append the skills index to the system prompt ---
+		// Every enabled skill, always, sorted by name. This list used to exclude
+		// whatever the user had just @mentioned, which made the system prompt a
+		// function of the newest message: mention a skill and it left the index,
+		// don't and it came back. The system prompt sits ahead of the tool
+		// definitions and the whole conversation, so every flip re-read the entire
+		// request at full price. Listing one extra name costs a few tokens; the
+		// flip cost the cache.
+		const indexedSkills = [...availableSkills].sort((a, b) =>
+			a.name.localeCompare(b.name),
 		);
 
-		if (remainingSkills.length === 0) {
-			return { output: { messages: updatedMessages, tools: updatedTools } };
-		}
-
-		const index = remainingSkills
+		const index = indexedSkills
 			.map((s) => `- ${s.name}${s.description ? `: ${s.description}` : ""}`)
 			.join("\n");
 
@@ -180,18 +160,24 @@ const definition = defineStep<Input, Output, Services, Config>({
 		].join("\n");
 
 		logInfo(
-			`[ADD_SKILL_CONTEXT] Appending ${remainingSkills.length} skill(s) to system prompt`,
+			`[ADD_SKILL_CONTEXT] Appending ${indexedSkills.length} skill(s) to system prompt`,
 		);
 
 		const finalMessages = GraphBase.chat.systemMessage(
-			updatedMessages,
+			input.messages,
 			skillSection,
 			{
 				placement: "append",
 			},
 		);
 
-		return { output: { messages: finalMessages, tools: updatedTools } };
+		return {
+			output: {
+				messages: finalMessages,
+				tools: updatedTools,
+				...(reminders.length > 0 ? { reminders } : {}),
+			},
+		};
 	},
 });
 
@@ -204,7 +190,7 @@ export const createAddSkillContextStep: StepFactoryFromSpec<Spec> = (
 
 stepRegistry.register(ADD_SKILL_CONTEXT_STEP_NAME, createAddSkillContextStep, {
 	description:
-		"Inject @mentioned skills into the user message and append available skill names to the system prompt for lazy loading",
+		"Attach @mentioned skill bodies as reminders and append the available skill names to the system prompt for lazy loading",
 	configParams: [
 		{
 			key: "enabledSkillNames",

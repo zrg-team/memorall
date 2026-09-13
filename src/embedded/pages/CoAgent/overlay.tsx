@@ -2,7 +2,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { CoAgentOverlay } from "@/embedded/components/co-agents/CoAgentOverlay";
 import { coAgentStyles } from "@/embedded/components/co-agents/styles";
 import { EmbeddedRoot } from "@/embedded/components/EmbeddedRoot";
-import { CO_AGENT_CONTAINER_ID } from "./constants";
+import { CO_AGENT_CONTAINER_ID } from "@/co-agent/constants";
 
 let overlayRoot: Root | null = null;
 let overlayContainer: HTMLDivElement | null = null;

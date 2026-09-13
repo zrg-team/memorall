@@ -12,6 +12,7 @@ import {
 import { HYPERFRAMES_FEATURE_SYSTEM_PROMPT } from "@/services/flows-integrations/steps/features/hyperframes-base/hyperframes-feature";
 import { LOTTIE_ANIMATION_FEATURE_SYSTEM_PROMPT } from "@/services/flows-integrations/steps/features/lottie-animation-feature/lottie-animation-feature";
 import { THREAD_HISTORY_FEATURE_SYSTEM_PROMPT } from "@/services/flows-integrations/steps/features/thread-history-feature";
+import type { CapabilityId } from "@/platform/contracts/core";
 
 export type { StepIOField };
 
@@ -49,6 +50,14 @@ export interface FeatureCatalogMetadata extends Record<string, unknown> {
 	section?: "core" | "other";
 	sectionOrder?: number;
 	hideInGrid?: boolean;
+	/**
+	 * Platform capability this feature needs to work at all.
+	 *
+	 * Declared here but enforced in the UI: this module is imported at module
+	 * scope by the flow-builder catalog and pinned by a contract snapshot, so it
+	 * must stay platform-independent.
+	 */
+	requiresCapability?: CapabilityId;
 	requiresAccessibleAgents?: boolean;
 	volatile?: boolean;
 	detailView?: FeatureDetailViewSlot[];
@@ -180,6 +189,9 @@ const FEATURE_UI_METADATA: Record<string, FeatureCatalogMetadata> = {
 		systemPrompt:
 			'# CO-AGENT BROWSER FEATURE\nYou are controlling the user\'s currently enabled browser tab through visible co-agent tools.\n\nRules:\n- If the request includes an anchored/hover/cursor target, treat that target as the user\'s primary subject. Focus the answer on that cursor target first, not the whole page.\n- Use the anchored target\'s selector, text, label, value, and nearby text as the strongest intent signal. Mention when your answer is about that hovered/cursor area.\n- For anchored/hover/cursor questions, start from the anchor context. If the anchor has a selector, use co_agent_query on that selector when you need verification. Do not call co_agent_observe first for anchored questions.\n- Use co_agent_observe as a scoped reading tool. Always choose the smallest scope that can answer the question:\n  - co_agent_observe({ scope: "metadata" }) gets only URL, title, and viewport. Use for cheap orientation.\n  - co_agent_observe({ scope: "selector", selector, maxChars }) reads one specific hovered/focused element. Prefer this for cursor/anchor questions when anchor text is not enough.\n  - co_agent_observe({ scope: "selection", maxChars }) reads the user\'s selected text. Use when the user selected text or asks about the selected content.\n  - co_agent_observe({ scope: "viewport", maxChars, maxItems }) reads the currently visible screen. Use only when the user asks about what is visible/currently on screen and there is no selector or selected text.\n  - co_agent_observe({ scope: "page", maxChars, maxItems }) reads broad page text. Use only for whole-page requests like summaries, comparisons across the page, or finding content when no target is known.\n- Good tool choices:\n  - User asks "what is this?" with a hover/cursor target: answer from anchor text if enough; otherwise call co_agent_observe({ scope: "selector", selector, maxChars: 1200 }).\n  - User asks about a button/input/link under the cursor: use co_agent_query(selector) or co_agent_observe({ scope: "selector", selector }) before explaining or acting.\n  - User asks about selected text: use co_agent_observe({ scope: "selection", maxChars: 1200 }).\n  - User asks "what is visible here?" with no target: use co_agent_observe({ scope: "viewport", maxChars: 1200, maxItems: 20 }).\n  - User asks "summarize this page": use co_agent_observe({ scope: "page", maxItems: 40 }).\n- Do not use scope="viewport" or scope="page" for cursor/anchor/selection questions unless targeted evidence is insufficient.\n- If the cursor target is an image or contains images, co_agent_observe({ scope: "selector", selector }) returns image URLs, alt text, title, and displayed size. Use alt/title/nearby text as evidence. If visual recognition is required and only an image URL is available, say what can be inferred from metadata and ask for/trigger an image-capable path rather than pretending to see pixels.\n- Tool results are compact text summaries, not raw JSON. Read the field labels directly.\n- Use full-page observations only to verify or add context around the cursor target. Do not replace the cursor target with a broad page summary unless the user asks about the whole page.\n- Use co_agent_query before interacting with a specific element.\n- Use co_agent_move and co_agent_scroll to visibly show where evidence or targets are on the page.\n- When the user says "show me", "where is", "point to", "find", "highlight", or any similar display/location intent:\n  1. Call co_agent_observe with outputFormat:"html" and the appropriate scope (viewport or page) to get elements with data-selector attributes.\n  2. Identify the best matching element from the HTML output — its data-selector attribute is the stable selector.\n  3. Call co_agent_move with that selector so the cursor visually points to the element on screen.\n  - Always finish with co_agent_move so the user can see where the element is, not just read about it.\n  - If the user\'s request already has an anchor/cursor target with a known selector, skip straight to co_agent_move.\n- Use only selectors returned by tools, especially stableSelector values. Never invent selectors.\n- Answer from page evidence after observing/interacting.\n- If a tool returns blocked=true or requiresUserAction=true, stop that browser action and ask the user to do it manually.\n- Do not attempt form submission, uploads, payments, account/security changes, credential entry, password handling, or browser permission acceptance.',
 		customizable: false,
+		// Without this the feature is offered on the web, where every one of its
+		// six tools throws on the first call.
+		requiresCapability: "co-agent",
 		icon: {
 			name: "Bot",
 			type: "lucide",
@@ -188,7 +200,7 @@ const FEATURE_UI_METADATA: Record<string, FeatureCatalogMetadata> = {
 	},
 	"step-current-time": {
 		description:
-			"Inject the current date and time into the system prompt automatically",
+			"Inject the current date and time on every request, after the cached prompt",
 		displayName: "Current Time",
 		tools: [],
 		systemPrompt:

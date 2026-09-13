@@ -163,6 +163,7 @@ const catalog = {
 				tools: ["delegate"],
 				customizable: true,
 				requiresAccessibleAgents: true,
+				requiresCapability: "co-agent",
 			},
 		},
 		{
@@ -310,6 +311,23 @@ describe("useAgentConfigStore", () => {
 		mocks.flowBuilderService.listPredefinedFlows.mockResolvedValue([agentFlow]);
 		mocks.flowBuilderService.saveUnifiedFlowConfig.mockResolvedValue(undefined);
 		mocks.getRegisteredToolNames.mockReturnValue(["current_time", "search"]);
+	});
+
+	it("carries a feature's capability requirement through to the grid", async () => {
+		// The grid hides a feature whose capability is missing; without this
+		// passthrough a web user could attach the co-agent and have every one of
+		// its tools fail on the first call.
+		await initializeUnifiedStore();
+
+		const definitions = useAgentConfigStore.getState().featureDefinitions;
+		const gated = definitions.find(
+			(feature) => feature.name === "multi-agent-feature",
+		);
+		expect(gated?.requiresCapability).toBe("co-agent");
+		const ungated = definitions.find(
+			(feature) => feature.name === "mcp-feature",
+		);
+		expect(ungated?.requiresCapability).toBeUndefined();
 	});
 
 	it("derives the legacy editor state from unified flow config", async () => {

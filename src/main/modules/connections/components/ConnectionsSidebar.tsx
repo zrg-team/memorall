@@ -2,7 +2,10 @@ import React from "react";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import { useConnectionsStore } from "@/main/stores/connections";
-import type { McpConnection } from "@/services/mcp-connections";
+import {
+	formatCommandLine,
+	type McpConnection,
+} from "@/services/mcp-connections";
 import { AppIcon, ConnectionIcon } from "./AppIcon";
 import { StatusDot } from "./StatusPill";
 
@@ -62,12 +65,20 @@ const ConnectionRow: React.FC<{
 			? t("status.bridgeDown")
 			: status === "locked"
 				? t("status.locked")
-				: connection.kind === "composio"
-					? (connection.apps ?? [])
-							.map((app) => app.name)
-							.slice(0, 3)
-							.join(", ") || t("detail.toolCount", { count: tools.length })
-					: connection.url.replace(/^https?:\/\//, "");
+				: status === "needs-approval" || status === "runtime-missing"
+					? t(
+							status === "needs-approval"
+								? "status.needsApproval"
+								: "status.runtimeMissing",
+						)
+					: connection.stdio
+						? formatCommandLine(connection.stdio)
+						: connection.kind === "composio"
+							? (connection.apps ?? [])
+									.map((app) => app.name)
+									.slice(0, 3)
+									.join(", ") || t("detail.toolCount", { count: tools.length })
+							: connection.url.replace(/^https?:\/\//, "");
 
 	return (
 		<button
@@ -86,7 +97,10 @@ const ConnectionRow: React.FC<{
 				<span
 					className={cn(
 						"truncate text-[10px]",
-						status === "bridge-down" || status === "needs-auth"
+						status === "bridge-down" ||
+							status === "needs-auth" ||
+							status === "needs-approval" ||
+							status === "runtime-missing"
 							? "text-amber-600 dark:text-amber-400"
 							: "text-muted-foreground",
 					)}

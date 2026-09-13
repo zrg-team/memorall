@@ -25,6 +25,11 @@ import type {
 	FilesystemChangeEnvelope,
 } from "./change-bus/types";
 import {
+	isInsideNativeMount,
+	isNativeMountRoot,
+} from "@/services/filesystem/native-folders/mount-registry";
+import { startNativeFolderWatcher } from "@/services/filesystem/native-folders/watcher";
+import {
 	isWorkspacesSandboxPath,
 	normalizeSandboxPath,
 	sandboxPathToFsPath,
@@ -104,6 +109,17 @@ export class DocumentFileSystem {
 	// Cleared entirely on any filesystem change — simpler and always correct.
 	private readonly treeCache = new Map<string, DocumentTreeNode[]>();
 
+	/**
+	 * Children of folders that `getTree` deferred, keyed by logical path.
+	 *
+	 * The tree is not only what the sidebar draws — it is also what the agent's
+	 * filesystem reads through, so a deferred folder has to be able to fill
+	 * itself in on demand for any caller, not just for a click. Memoised here so
+	 * a folder costs one listing per cache generation however many times it is
+	 * asked for, and dropped with the tree on any change.
+	 */
+	private readonly lazyChildrenCache = new Map<string, DocumentTreeNode[]>();
+
 	constructor(changeBus: FilesystemChangeBus = createFilesystemChangeBus()) {
 		this.changeBus = changeBus;
 		this.registerMessageListener();
@@ -161,7 +177,7 @@ export class DocumentFileSystem {
 	private notifyFilesystemChanged(
 		change: FilesystemChangeEvent | null = null,
 	): void {
-		this.invalidateCache();
+		this.invalidateCache(change);
 		logInfo(
 			`📢 Notifying filesystem changed (${this.changeListeners.size} local listeners)`,
 		);
@@ -196,13 +212,56 @@ export class DocumentFileSystem {
 		}
 	}
 
-	private invalidateCache(): void {
+	/**
+	 * Drop cached listings after a change.
+	 *
+	 * The tree itself is cheap to rebuild — it no longer descends into mapped
+	 * folders — so it always goes. What must not go with it is every mapped
+	 * folder the user has already opened: each one costs a round trip to the OS
+	 * to read back, and a single file write anywhere used to throw all of them
+	 * away. When the change names a path, only the listings that path can
+	 * actually have altered are dropped: the folder it lives in, and the folder
+	 * itself if it was one.
+	 *
+	 * A change with no path still clears everything, because something happened
+	 * that we cannot reason about — a mount appearing or going away, most often,
+	 * which moves whole subtrees at once.
+	 */
+	private invalidateCache(change?: FilesystemChangeEvent | null): void {
 		this.treeCache.clear();
+
+		const paths = [change?.path, change?.oldPath, change?.newPath].filter(
+			(value): value is string => typeof value === "string" && value.length > 0,
+		);
+		if (paths.length === 0) {
+			this.lazyChildrenCache.clear();
+			return;
+		}
+
+		for (const path of paths) {
+			const normalized = normalizeSandboxPath(path);
+			this.lazyChildrenCache.delete(normalized);
+			const slash = normalized.lastIndexOf("/");
+			this.lazyChildrenCache.delete(
+				slash > 0 ? normalized.slice(0, slash) : "/",
+			);
+		}
 	}
 
 	private async invalidateCacheAndRefreshFs(): Promise<void> {
 		this.invalidateCache();
 		await refreshFsCache();
+	}
+
+	/**
+	 * Announce a change that happened outside Memorall — an editor writing into a
+	 * mapped folder, say.
+	 *
+	 * Goes through the same path as our own writes, so the tree cache is cleared
+	 * and every listener and context hears about it in the usual way.
+	 */
+	public notifyExternalChange(change: FilesystemChangeEvent | null): void {
+		this.notifyFilesystemChanged(change);
 	}
 
 	public forceRefresh(): void {
@@ -272,6 +331,12 @@ export class DocumentFileSystem {
 			await this.ensureDirectory(SANDBOX_FS_PREFIX);
 			await this.migrateLegacyRootsToRoot();
 			this.initialized = true;
+			// Announce edits made to mapped folders outside Memorall. The watcher
+			// takes a callback rather than importing this service, because this
+			// module already imports the filesystem it is mounted into.
+			void startNativeFolderWatcher((change) =>
+				this.notifyExternalChange(change),
+			);
 			logInfo("📚 Document storage initialized");
 		} catch (error) {
 			logError("Failed to initialize document storage:", error);
@@ -517,10 +582,25 @@ export class DocumentFileSystem {
 		};
 	}
 
+	/**
+	 * Read one directory into tree nodes.
+	 *
+	 * Recurses through the in-process filesystem, which is cheap, but stops at
+	 * the edge of a mapped folder: everything under one is the user's real disk,
+	 * reached a level at a time over IPC. Walking a mapped folder to its leaves
+	 * before showing anything is what made mapping a large folder look frozen, so
+	 * those are marked `isLazy` and read when the user opens them.
+	 *
+	 * `singleLevel` reads this directory and nothing below it — every sub-folder
+	 * comes back deferred. That is what the on-demand read uses, so opening a
+	 * folder costs one listing rather than a subtree.
+	 */
 	private async scanDirectory(
 		fsPath: string,
 		logicalPath: string,
+		options: { singleLevel?: boolean } = {},
 	): Promise<DocumentTreeNode[]> {
+		const singleLevel = options.singleLevel ?? false;
 		const nodes: DocumentTreeNode[] = [];
 		try {
 			const entries = await fs.promises.readdir(fsPath, {
@@ -533,10 +613,14 @@ export class DocumentFileSystem {
 						? `/${entry.name}`
 						: `${logicalPath}/${entry.name}`;
 				if (entry.isDirectory()) {
-					const children = await this.scanDirectory(
-						fullFsPath,
-						fullLogicalPath,
-					);
+					// A mapped root, or anything below one: defer it.
+					const deferred =
+						singleLevel ||
+						isNativeMountRoot(fullLogicalPath) ||
+						isInsideNativeMount(fullLogicalPath);
+					const children = deferred
+						? []
+						: await this.scanDirectory(fullFsPath, fullLogicalPath);
 					const folder: DocumentFolder = {
 						id: fullLogicalPath,
 						name: entry.name,
@@ -554,6 +638,7 @@ export class DocumentFileSystem {
 						isExpanded: false,
 						children,
 						folder,
+						...(deferred ? { isLazy: true } : {}),
 					});
 				} else if (entry.isFile()) {
 					try {
@@ -598,16 +683,66 @@ export class DocumentFileSystem {
 		return nodes;
 	}
 
+	private isCrossDeviceError(error: unknown): boolean {
+		const code =
+			typeof error === "object" && error !== null && "code" in error
+				? String((error as { code: unknown }).code)
+				: "";
+		return code === "EXDEV";
+	}
+
+	/**
+	 * Move by copying and then removing the original.
+	 *
+	 * Used both by `move()` and as the fallback when a rename crosses a mount
+	 * boundary, so the two paths cannot drift apart.
+	 */
+	private async copyThenDelete(
+		sourceFsPath: string,
+		destinationFsPath: string,
+	): Promise<void> {
+		const stats = await fs.promises.stat(sourceFsPath);
+		if (stats.isDirectory()) {
+			await this.copyDirectory(sourceFsPath, destinationFsPath);
+			await this.deleteDirectoryRecursive(sourceFsPath);
+			return;
+		}
+		const content = await fs.promises.readFile(sourceFsPath);
+		await fs.promises.writeFile(destinationFsPath, content);
+		await fs.promises.unlink(sourceFsPath);
+	}
+
+	/**
+	 * Run a directory's entries a few at a time rather than one after another.
+	 *
+	 * Inside a mapped folder every one of these is a round trip to the OS, so a
+	 * recursive delete or copy done strictly in sequence takes as long as the
+	 * folder is deep multiplied by how wide it is. Bounded rather than
+	 * unbounded: these write the user's real disk, and thousands of concurrent
+	 * writes is its own kind of rude.
+	 */
+	private static readonly RECURSIVE_CONCURRENCY = 8;
+
+	private async forEachEntry<T>(
+		entries: T[],
+		run: (entry: T) => Promise<void>,
+	): Promise<void> {
+		const width = DocumentFileSystem.RECURSIVE_CONCURRENCY;
+		for (let index = 0; index < entries.length; index += width) {
+			await Promise.all(entries.slice(index, index + width).map(run));
+		}
+	}
+
 	private async deleteDirectoryRecursive(path: string): Promise<void> {
 		const entries = await fs.promises.readdir(path, { withFileTypes: true });
-		for (const entry of entries) {
+		await this.forEachEntry(entries, async (entry) => {
 			const fullPath = `${path}/${entry.name}`;
 			if (entry.isDirectory()) {
 				await this.deleteDirectoryRecursive(fullPath);
 			} else {
 				await fs.promises.unlink(fullPath);
 			}
-		}
+		});
 		await fs.promises.rmdir(path);
 	}
 
@@ -617,7 +752,7 @@ export class DocumentFileSystem {
 	): Promise<void> {
 		await fs.promises.mkdir(destination, { recursive: true });
 		const entries = await fs.promises.readdir(source, { withFileTypes: true });
-		for (const entry of entries) {
+		await this.forEachEntry(entries, async (entry) => {
 			const srcPath = `${source}/${entry.name}`;
 			const destPath = `${destination}/${entry.name}`;
 			if (entry.isDirectory()) {
@@ -626,7 +761,7 @@ export class DocumentFileSystem {
 				const content = await fs.promises.readFile(srcPath);
 				await fs.promises.writeFile(destPath, content);
 			}
-		}
+		});
 	}
 
 	/** Deduplicate a filename within a directory, returning the final name to use. */
@@ -804,6 +939,14 @@ export class DocumentFileSystem {
 	 */
 	async deleteFolder(sandboxPath: string): Promise<void> {
 		await this.initialize();
+		const normalizedFolderPath = normalizeSandboxPath(sandboxPath);
+		if (isNativeMountRoot(normalizedFolderPath)) {
+			// This is the folder itself, not a copy of it: a recursive delete here
+			// would take the user's real files with it.
+			throw new Error(
+				"Unmap this folder instead of deleting it. Deleting it here would remove the real files on disk.",
+			);
+		}
 		const fsPath = this.toFsPath(sandboxPath);
 		const stats = await fs.promises.stat(fsPath);
 		if (!stats.isDirectory()) {
@@ -829,6 +972,11 @@ export class DocumentFileSystem {
 		await this.initialize();
 		const normalizedSourcePath = normalizeSandboxPath(sandboxPath);
 		const normalizedDestinationPath = normalizeSandboxPath(newSandboxPath);
+		if (isNativeMountRoot(normalizedSourcePath)) {
+			throw new Error(
+				"A mapped folder cannot be renamed here. Unmap it and map it again if you need a different name.",
+			);
+		}
 		const oldFsPath = this.toFsPath(normalizedSourcePath);
 		const newFsPath = this.toFsPath(normalizedDestinationPath);
 
@@ -841,7 +989,16 @@ export class DocumentFileSystem {
 			}
 		}
 
-		await fs.promises.rename(oldFsPath, newFsPath);
+		try {
+			await fs.promises.rename(oldFsPath, newFsPath);
+		} catch (error) {
+			// Renaming across a mount boundary — dragging a file between the
+			// virtual filesystem and a mapped folder — is EXDEV, exactly as it
+			// would be on a real filesystem. Fall back to copy-then-delete, which
+			// is what `move()` already does.
+			if (!this.isCrossDeviceError(error)) throw error;
+			await this.copyThenDelete(oldFsPath, newFsPath);
+		}
 		logInfo(
 			`📝 Renamed: ${normalizedSourcePath} → ${normalizedDestinationPath}`,
 		);
@@ -882,6 +1039,18 @@ export class DocumentFileSystem {
 		targetFolderSandboxPath: string,
 	): Promise<string> {
 		await this.initialize();
+		const normalizedSource = normalizeSandboxPath(sandboxPath);
+		if (isNativeMountRoot(normalizedSource)) {
+			// A move here is copy-then-delete, and the delete half would take the
+			// user's real folder off their disk after duplicating all of it into
+			// the library. `deleteFolder` and `renamePath` already refuse this;
+			// this path reaches the same destructive code and was missing the
+			// same guard — dragging a mapped folder in the sidebar, or `doc_move`
+			// naming one, both arrive here.
+			throw new Error(
+				"A mapped folder cannot be moved here. Unmap it and map the folder you want instead.",
+			);
+		}
 		const srcFsPath = this.toFsPath(sandboxPath);
 		const targetFsFolderPath = this.toFsPath(targetFolderSandboxPath);
 
@@ -898,15 +1067,7 @@ export class DocumentFileSystem {
 		const finalName = await this.deduplicateName(targetFsFolderPath, name);
 		const destFsPath = `${targetFsFolderPath}/${finalName}`;
 
-		const stats = await fs.promises.stat(srcFsPath);
-		if (stats.isDirectory()) {
-			await this.copyDirectory(srcFsPath, destFsPath);
-			await this.deleteDirectoryRecursive(srcFsPath);
-		} else {
-			const content = await fs.promises.readFile(srcFsPath);
-			await fs.promises.writeFile(destFsPath, content);
-			await fs.promises.unlink(srcFsPath);
-		}
+		await this.copyThenDelete(srcFsPath, destFsPath);
 
 		const normalizedTargetFolder = normalizeSandboxPath(
 			targetFolderSandboxPath,
@@ -961,6 +1122,70 @@ export class DocumentFileSystem {
 		const fresh = await this.scanDirectory(fsRoot, "/");
 		this.treeCache.set(FILESYSTEM_SANDBOX_ROOT, fresh);
 		return fresh;
+	}
+
+	/**
+	 * Read one level of a folder that `getTree` deferred.
+	 *
+	 * Used when the user opens a mapped folder. Each call costs one directory
+	 * listing plus a stat per file, against the OS rather than in memory, so the
+	 * cost is paid for the folder actually being looked at instead of for every
+	 * folder the mapping happens to contain.
+	 *
+	 * Sub-folders come back deferred in turn, so opening a tree ten levels deep
+	 * costs ten listings rather than the whole subtree.
+	 */
+	async getFolderChildren(logicalPath: string): Promise<DocumentTreeNode[]> {
+		await this.initialize();
+		const normalized = normalizeSandboxPath(logicalPath);
+		const cached = this.lazyChildrenCache.get(normalized);
+		if (cached) return cached;
+		const children = await this.scanDirectory(
+			this.toFsPath(normalized),
+			normalized,
+			{ singleLevel: true },
+		);
+		this.lazyChildrenCache.set(normalized, children);
+		return children;
+	}
+
+	/**
+	 * Find a node by logical path, reading deferred folders along the way.
+	 *
+	 * `getTree` hands back mapped folders without their contents so the library
+	 * can draw immediately. Anything that resolves a *path* — the agent's
+	 * filesystem, the content pane, a breadcrumb — needs the real thing, and
+	 * would otherwise see an empty folder and conclude the files are not there.
+	 * This is the one place that difference is reconciled, so no caller has to
+	 * know a folder was deferred.
+	 */
+	async resolveNode(logicalPath: string): Promise<DocumentTreeNode | null> {
+		await this.initialize();
+		const normalized = normalizeSandboxPath(logicalPath);
+		const tree = await this.getTree(FILESYSTEM_SANDBOX_ROOT);
+		if (normalized === "/") {
+			return {
+				id: "/",
+				name: "",
+				path: "/",
+				type: "folder",
+				isExpanded: false,
+				children: tree,
+			};
+		}
+
+		let level = tree;
+		let node: DocumentTreeNode | null = null;
+		for (const segment of normalized.split("/").filter(Boolean)) {
+			const found = level.find((candidate) => candidate.name === segment);
+			if (!found) return null;
+			node = found;
+			level = found.isLazy
+				? await this.getFolderChildren(found.path)
+				: found.children;
+		}
+		if (!node) return null;
+		return node.isLazy ? { ...node, children: level, isLazy: false } : node;
 	}
 
 	// ── Specialized methods ───────────────────────────────────────────────────

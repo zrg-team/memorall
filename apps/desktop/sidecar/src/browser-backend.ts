@@ -72,6 +72,27 @@ export interface BrowserBackend {
 		maxHtmlChars: number,
 		signal?: AbortSignal,
 	): Promise<BrowserSnapshot>;
+	/**
+	 * Inject the co-agent into the page and keep it there across navigation.
+	 *
+	 * Optional because only a real Chromium over CDP can do it: the other
+	 * backends have no way to run a persistent script, and a co-agent rebuilt per
+	 * command would lose its trace and its overlay on every tool call. A backend
+	 * without these members reports the co-agent as unsupported rather than
+	 * pretending.
+	 */
+	coAgentAttach?(
+		session: BackendSession,
+		config: Record<string, unknown>,
+		signal?: AbortSignal,
+	): Promise<void>;
+	coAgentCommand?(
+		session: BackendSession,
+		request: unknown,
+		timeoutMs: number,
+		signal?: AbortSignal,
+	): Promise<unknown>;
+	coAgentDetach?(session: BackendSession, signal?: AbortSignal): Promise<void>;
 	close(session: BackendSession): Promise<void>;
 	stop(): Promise<void>;
 }

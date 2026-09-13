@@ -4,11 +4,11 @@ import type {
 	CoAgentPageSnapshot,
 	CoAgentRect,
 	CoAgentViewport,
-} from "@/services/co-agent";
+} from "@/co-agent/protocol";
 import {
 	DEFAULT_TEXT_MAX_CHARS,
 	DEFAULT_VISIBLE_TEXT_MAX_CHARS,
-} from "@/embedded/pages/CoAgent/constants";
+} from "@/co-agent/constants";
 
 export const delay = (ms: number): Promise<void> =>
 	new Promise((resolve) => window.setTimeout(resolve, ms));
@@ -425,7 +425,37 @@ const SENSITIVE_INPUT_PATTERN =
 const UNSAFE_CLICK_PATTERN =
 	/(delete|remove|destroy|clear|reset|submit|send|pay|purchase|buy|checkout|subscribe|unsubscribe|sign in|signin|log in|login|logout|upload|confirm|apply|book|reserve|cancel|password|account|security|permission|allow)/i;
 
-export const assertSafeTextInput = (element: Element): void => {
+/**
+ * Whose page the co-agent is acting on.
+ *
+ * `third-party` is a stranger's page: the agent cannot know what any button
+ * does, so the blocklist above is deliberately broad and blocks anything that
+ * reads destructive or transactional.
+ *
+ * `first-party` is Memorall's own UI. That same list would block almost every
+ * action a user would actually ask an in-app co-pilot to take — "delete this
+ * note", "clear this topic" — while adding little safety, because the user
+ * already trusts Memorall with this data and every screen is undoable or
+ * confirmed. So the pattern narrows to the genuinely irreversible affordances,
+ * and any component can opt a subtree back out with
+ * `data-memorall-coagent="deny"`.
+ */
+export type CoAgentSafetyPolicy = "third-party" | "first-party";
+
+const FIRST_PARTY_UNSAFE_CLICK_PATTERN =
+	/(pay|purchase|buy|checkout|subscribe|password|credential|api[ _-]?key|secret|token|security|permission|allow)/i;
+
+const DENY_ATTRIBUTE_SELECTOR = '[data-memorall-coagent="deny"]';
+
+export const assertSafeTextInput = (
+	element: Element,
+	policy: CoAgentSafetyPolicy = "third-party",
+): void => {
+	if (element.closest(DENY_ATTRIBUTE_SELECTOR)) {
+		throw new Error(
+			"This field is marked off limits. User action is required.",
+		);
+	}
 	if (!acceptsTextInput(element)) {
 		throw new Error("Target element does not support safe text input.");
 	}
@@ -437,9 +467,17 @@ export const assertSafeTextInput = (element: Element): void => {
 	}
 };
 
-export const assertSafeClickTarget = (element: Element): void => {
+export const assertSafeClickTarget = (
+	element: Element,
+	policy: CoAgentSafetyPolicy = "third-party",
+): void => {
 	if (!(element instanceof HTMLElement)) {
 		throw new Error("Target element cannot be clicked safely.");
+	}
+	if (element.closest(DENY_ATTRIBUTE_SELECTOR)) {
+		throw new Error(
+			"This control is marked off limits. User action is required.",
+		);
 	}
 	if (
 		(element instanceof HTMLButtonElement ||
@@ -466,7 +504,11 @@ export const assertSafeClickTarget = (element: Element): void => {
 	) {
 		throw new Error("Form submission requires user action.");
 	}
-	if (UNSAFE_CLICK_PATTERN.test(getSensitiveAttributeText(element))) {
+	const unsafeClick =
+		policy === "first-party"
+			? FIRST_PARTY_UNSAFE_CLICK_PATTERN
+			: UNSAFE_CLICK_PATTERN;
+	if (unsafeClick.test(getSensitiveAttributeText(element))) {
 		throw new Error("This click looks high impact. User action is required.");
 	}
 };

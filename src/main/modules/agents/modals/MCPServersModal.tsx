@@ -17,6 +17,7 @@ import {
 	type ConnectionLane,
 	ConnectionIcon,
 	CustomEndpointForm,
+	LocalServerSetup,
 	StatusDot,
 } from "@/main/modules/connections";
 import { useAgentConfigStore } from "@/main/stores/agent-config";
@@ -123,9 +124,12 @@ export const MCPServersModal = NiceModal.create(() => {
 	// attach a provider that resolves to nothing at run time.
 	const unusableStatus = (id: string) => {
 		const status = statusOf(id);
+		// A stopped local server is fine to grant: the run starts it.
 		return status === "bridge-down" ||
 			status === "error" ||
-			status === "incomplete"
+			status === "incomplete" ||
+			status === "needs-approval" ||
+			status === "runtime-missing"
 			? status
 			: null;
 	};
@@ -215,23 +219,10 @@ export const MCPServersModal = NiceModal.create(() => {
 								onCancel={() => setLane(null)}
 							/>
 						) : (
-							// The local-server lane is not built; say so and offer the one
-							// that reaches the same servers rather than stranding anyone.
-							<div className="flex flex-col items-center gap-3 py-10 text-center">
-								<p className="text-sm font-semibold">
-									{t("connections:lanes.template.notBuiltTitle")}
-								</p>
-								<p className="max-w-sm text-xs leading-relaxed text-muted-foreground">
-									{t("connections:lanes.template.notBuiltBody")}
-								</p>
-								<Button
-									type="button"
-									size="sm"
-									onClick={() => openLane("custom")}
-								>
-									{t("connections:lanes.custom.action")}
-								</Button>
-							</div>
+							<LocalServerSetup
+								onSaved={() => setLane(null)}
+								onCancel={() => setLane(null)}
+							/>
 						)}
 					</div>
 				</DialogContent>
@@ -353,7 +344,11 @@ export const MCPServersModal = NiceModal.create(() => {
 														? "bridgeDown"
 														: blocked === "incomplete"
 															? "incomplete"
-															: "error"
+															: blocked === "needs-approval"
+																? "needsApproval"
+																: blocked === "runtime-missing"
+																	? "runtimeMissing"
+																	: "error"
 												}`,
 											)}
 										</p>

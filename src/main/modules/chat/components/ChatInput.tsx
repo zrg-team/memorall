@@ -20,7 +20,12 @@ import {
 	type SelectableModel,
 	useSelectableModels,
 } from "@/main/hooks/use-selectable-models";
-import { useCoAgentActivationStore } from "@/main/stores/co-agent-activation";
+import {
+	useCoAgentActivationStore,
+	useCoAgentActivationError,
+	useCoAgentActive,
+	useCoAgentAvailable,
+} from "@/main/stores/co-agent-activation";
 import type { FlowMetadata } from "@/services/database/entities/flows";
 import { documentFileSystemService } from "@/services/filesystem/document-filesystem";
 import { DOCUMENTS_SANDBOX_ROOT } from "@/services/filesystem/sandbox-paths";
@@ -119,20 +124,28 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 		return () => observer.disconnect();
 	}, []);
 
-	// The co-agent needs a real browser tab to attach to, which only the
-	// extension has. Elsewhere the button is simply absent rather than present
-	// and failing.
+	// The co-agent needs a page to attach to: the current tab in the extension,
+	// a page in the managed browser on desktop. On the web there is neither, so
+	// the button is simply absent rather than present and failing when clicked.
 	const activateCoAgent = useCoAgentActivationStore((state) => state.activate);
 	const isCoAgentStarting = useCoAgentActivationStore(
 		(state) => state.isActivating,
 	);
-	const canUseCoAgent = useMemo(
-		() => typeof chrome !== "undefined" && Boolean(chrome?.runtime?.id),
-		[],
-	);
-	const startCoAgent = useCallback(() => {
+	const canUseCoAgent = useCoAgentAvailable();
+	const isCoAgentActive = useCoAgentActive();
+	// Shown under the composer. Without it a failed activation left the button
+	// looking as though it had ignored the click — the reason existed in the
+	// store and nothing on this path ever read it.
+	const coAgentError = useCoAgentActivationError();
+	const toggleCoAgent = useCallback(() => {
+		// Off is immediate and local: the tools simply stop being offered. On has
+		// to attach first, because there may be nothing to attach to.
+		if (isCoAgentActive) {
+			useCoAgentActivationStore.getState().setActive(false);
+			return;
+		}
 		void activateCoAgent();
-	}, [activateCoAgent]);
+	}, [activateCoAgent, isCoAgentActive]);
 
 	const {
 		models: selectableModels,
@@ -466,8 +479,9 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 							canSubmit={!!inputValue.trim() && isModelReady}
 							isFullWidth={isFullWidth}
 							onToggleFullWidth={onToggleFullWidth}
-							onStartCoAgent={canUseCoAgent ? startCoAgent : undefined}
+							onStartCoAgent={canUseCoAgent ? toggleCoAgent : undefined}
 							isCoAgentStarting={isCoAgentStarting}
+							isCoAgentActive={isCoAgentActive}
 							selectableModels={selectableModels}
 							selectableModelsByProvider={selectableModelsByProvider}
 							lockedModelProviders={lockedModelProviders}
@@ -476,6 +490,11 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 							onRefreshModels={refreshModels}
 						/>
 					</PromptInput>
+					{coAgentError ? (
+						<p className="px-2 pt-1 text-xs text-destructive" role="status">
+							{coAgentError}
+						</p>
+					) : null}
 				</div>
 			</div>
 		</TooltipProvider>

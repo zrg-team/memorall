@@ -338,3 +338,58 @@ export function resolveTokenUsage(
 		estimated: true,
 	};
 }
+
+/**
+ * How each request in a turn fared against the one before it.
+ *
+ * - `first`: nothing earlier in the turn to reuse.
+ * - `continued`: read back essentially all of the previous request.
+ * - `partial`: read something, but far less than the previous request — it
+ *   reused an older prefix instead, which is what a request served by a
+ *   different upstream provider (with its own cache) looks like.
+ * - `restarted`: read nothing at all.
+ * - `unknown`: the provider reported no cache data.
+ */
+export type CacheContinuity =
+	| "first"
+	| "continued"
+	| "partial"
+	| "restarted"
+	| "unknown";
+
+/**
+ * Smallest gap that counts as a real miss rather than the normal tail.
+ *
+ * A healthy request reads the previous one minus whatever that request left
+ * past its cache point — a volatile reminder, plus the provider rounding down
+ * to its cache block size (64 tokens on DeepSeek). Observed tails are tens to
+ * low hundreds of tokens; losing thousands is a different kind of event.
+ */
+const CONTINUITY_MIN_GAP = 512;
+const CONTINUITY_GAP_RATIO = 0.02;
+
+/**
+ * Classify every request in a turn by whether it reused the one before it.
+ *
+ * An append-only conversation should read back each previous request almost
+ * in full. When it does not, the per-request numbers look fine at a glance —
+ * 84%, 88% — while the turn is quietly re-reading tens of thousands of tokens.
+ * This makes that visible instead of leaving it to be worked out by hand.
+ */
+export function describeCacheContinuity(
+	calls: readonly TokenUsage[],
+): CacheContinuity[] {
+	return calls.map((call, index) => {
+		if (index === 0) return "first";
+		if (call.cached_tokens === undefined) return "unknown";
+		if (call.cached_tokens === 0) return "restarted";
+
+		const previous = calls[index - 1]?.prompt_tokens ?? 0;
+		const gap = previous - call.cached_tokens;
+		const allowance = Math.max(
+			CONTINUITY_MIN_GAP,
+			previous * CONTINUITY_GAP_RATIO,
+		);
+		return gap <= allowance ? "continued" : "partial";
+	});
+}

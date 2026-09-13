@@ -4,7 +4,7 @@ import type {
 	CoAgentElementInfo,
 	CoAgentTraceStep,
 	CoAgentViewport,
-} from "@/services/co-agent";
+} from "@/co-agent/protocol";
 
 const traceSteps: CoAgentTraceStep[] = [];
 

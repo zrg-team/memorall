@@ -3,5 +3,7 @@ export * from "./migration";
 export * from "./registry";
 export * from "./resolve";
 export * from "./scope";
+export * from "./stdio";
+export * from "./templates";
 export * from "./types";
 export * from "./usage";

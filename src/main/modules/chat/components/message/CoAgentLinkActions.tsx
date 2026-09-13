@@ -2,7 +2,11 @@ import { Bot, Loader2 } from "lucide-react";
 import type React from "react";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
-import { useCoAgentActivationStore } from "@/main/stores/co-agent-activation";
+import {
+	useCoAgentActivationError,
+	useCoAgentActivationStore,
+	useCoAgentAvailable,
+} from "@/main/stores/co-agent-activation";
 
 const hostLabel = (url: string): string => {
 	try {
@@ -27,9 +31,12 @@ export const CoAgentLinkActions: React.FC<{ links: string[] }> = ({
 	const activate = useCoAgentActivationStore((state) => state.activate);
 	const pendingUrl = useCoAgentActivationStore((state) => state.pendingUrl);
 	const isActivating = useCoAgentActivationStore((state) => state.isActivating);
-	const error = useCoAgentActivationStore((state) => state.error);
+	const error = useCoAgentActivationError();
+	const available = useCoAgentAvailable();
 
-	if (links.length === 0) return null;
+	// These chips used to render everywhere and then throw "Browser-backed
+	// automation is unavailable in this environment" on click.
+	if (!available || links.length === 0) return null;
 
 	return (
 		<div className="mt-2 space-y-1.5">

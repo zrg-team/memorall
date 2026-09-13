@@ -54,8 +54,26 @@ export const resolveMessageParts = ({
 	accumulatedParts: MessageParts;
 }): MessageParts => {
 	const outputMessageParts = getOutputMessageParts(finalState);
-	if (outputMessageParts.length > 0) return outputMessageParts;
-	return accumulatedParts;
+	if (outputMessageParts.length === 0) return accumulatedParts;
+	// An agent graph ends with only its final message in `outputMessages`; every
+	// intermediate turn and tool result was already committed elsewhere. Taking
+	// that list would drop the text written between tool calls, and the stored
+	// message could no longer be read back in the order it happened.
+	const outputToolCallIds = new Set(
+		outputMessageParts.flatMap((part) =>
+			part.role === "tool" ? [part.tool_call_id] : [],
+		),
+	);
+	const dropsStreamedTools = accumulatedParts.some(
+		(part) => part.role === "tool" && !outputToolCallIds.has(part.tool_call_id),
+	);
+	if (
+		dropsStreamedTools ||
+		outputMessageParts.length < accumulatedParts.length
+	) {
+		return accumulatedParts;
+	}
+	return outputMessageParts;
 };
 
 export class MessagePartsAccumulator {

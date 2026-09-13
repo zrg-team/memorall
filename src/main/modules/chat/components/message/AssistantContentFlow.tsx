@@ -11,7 +11,6 @@ import {
 import { AssistantToolTimeline } from "./AssistantToolTimeline";
 import type { MessageActionRequest } from "../artifacts/ArtifactActionsMenu";
 import { MessageContentWithArtifacts } from "./MessageContentWithArtifacts";
-import { assignAssistantPartKeys } from "./stable-part-keys";
 
 export type AssistantContentPart =
 	| { type: "text"; text: string }
@@ -44,6 +43,60 @@ export const mergeAdjacentAssistantTextParts = (
 	return merged;
 };
 
+export type AssistantFlowSegment =
+	| { kind: "text"; key: string; text: string }
+	| { kind: "tools"; key: string; parts: ComplexContentPartTool[] }
+	| { kind: "execution"; key: string; part: ComplexContentPartExecution };
+
+/**
+ * The order a turn is read in: the text the model wrote, then the tools it ran
+ * next, then whatever it wrote after their results.
+ *
+ * Only text the model actually wrote ends a group. Most agent iterations call
+ * tools without a word in between, and each of those used to start its own
+ * group, so a single search-and-read pass turned into a stack of one-row
+ * timelines. Evidence tools and finished workflow steps are left out — they
+ * are summarised above the flow.
+ */
+export const groupAssistantParts = (
+	parts: AssistantContentPart[],
+): AssistantFlowSegment[] => {
+	const segments: AssistantFlowSegment[] = [];
+	const latestWorkflowIndex = parts.findLastIndex(
+		(part) => part.type === "execution",
+	);
+	let group: ComplexContentPartTool[] | null = null;
+	let textCount = 0;
+
+	parts.forEach((part, index) => {
+		if (part.type === "text") {
+			if (!part.text.trim()) return;
+			group = null;
+			segments.push({
+				kind: "text",
+				key: `text-${textCount}`,
+				text: part.text,
+			});
+			textCount += 1;
+			return;
+		}
+		if (part.type === "execution") {
+			if (part.state === "complete" || index !== latestWorkflowIndex) return;
+			segments.push({ kind: "execution", key: `workflow-${part.id}`, part });
+			return;
+		}
+		if (isWorkflowEvidencePart(part)) return;
+		if (!group) {
+			group = [];
+			// Keyed by the first tool so a group that grows keeps its disclosure.
+			segments.push({ kind: "tools", key: `tools-${part.id}`, parts: group });
+		}
+		group.push(part);
+	});
+
+	return segments;
+};
+
 interface AssistantContentFlowProps {
 	parts: AssistantContentPart[];
 	isStreaming: boolean;
@@ -71,9 +124,6 @@ export const AssistantContentFlow: React.FC<AssistantContentFlowProps> =
 				[parts],
 			);
 
-			const latestWorkflowIndex = mergedParts.findLastIndex(
-				(part) => part.type === "execution",
-			);
 			const completedWorkflowParts = mergedParts.filter(
 				(part): part is ComplexContentPartExecution =>
 					part.type === "execution" && part.state === "complete",
@@ -82,9 +132,12 @@ export const AssistantContentFlow: React.FC<AssistantContentFlowProps> =
 				(part): part is ComplexContentPartTool =>
 					part.type === "tool" && isWorkflowEvidencePart(part),
 			);
-			const toolTimelineParts = mergedParts.filter(
-				(part): part is ComplexContentPartTool =>
-					part.type === "tool" && !isWorkflowEvidencePart(part),
+			const segments = useMemo(
+				() => groupAssistantParts(mergedParts),
+				[mergedParts],
+			);
+			const lastToolSegmentIndex = segments.findLastIndex(
+				(segment) => segment.kind === "tools",
 			);
 
 			return (
@@ -94,38 +147,38 @@ export const AssistantContentFlow: React.FC<AssistantContentFlowProps> =
 						evidenceParts={workflowEvidenceParts}
 						isStreaming={isStreaming}
 					/>
-					<AssistantToolTimeline
-						parts={toolTimelineParts}
-						isStreaming={isStreaming}
-					/>
-					{assignAssistantPartKeys(mergedParts).map(({ part, index, key }) => {
-						if (part.type === "text") {
-							if (!part.text.trim()) return null;
+					{segments.map((segment, index) => {
+						if (segment.kind === "text") {
 							return (
 								<MessageContentWithArtifacts
-									key={key}
-									content={part.text}
+									key={segment.key}
+									content={segment.text}
 									isStreaming={isStreaming}
-									blockScope={messageId ? `${messageId}:${key}` : undefined}
+									blockScope={
+										messageId ? `${messageId}:${segment.key}` : undefined
+									}
 									suppressArtifactPreviews={suppressArtifactPreviews}
 									onMessageAction={onMessageAction}
 									seenArtifactKeys={seenArtifactKeys}
 								/>
 							);
 						}
-
-						if (part.type === "execution") {
-							if (part.state === "complete") return null;
-							if (index !== latestWorkflowIndex) return null;
+						if (segment.kind === "execution") {
 							return (
-								<AssistantWorkflowPart
-									key={`workflow-${part.id}`}
-									part={part}
-								/>
+								<AssistantWorkflowPart key={segment.key} part={segment.part} />
 							);
 						}
-						if (isWorkflowEvidencePart(part)) return null;
-						return null;
+						const isLastToolGroup = index === lastToolSegmentIndex;
+						return (
+							<AssistantToolTimeline
+								key={segment.key}
+								parts={segment.parts}
+								// Only the group the agent is working in stays open; the
+								// earlier ones fold away once the turn moves past them.
+								isStreaming={isStreaming && isLastToolGroup}
+								showUnattributedPrompts={isLastToolGroup}
+							/>
+						);
 					})}
 				</div>
 			);

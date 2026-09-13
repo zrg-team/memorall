@@ -1,8 +1,5 @@
 import z from "zod";
-import type {
-	Tool,
-	ToolFactory,
-} from "../../interfaces/engine/tool.js";
+import type { Tool, ToolFactory } from "../../interfaces/engine/tool.js";
 import type { AllServices } from "../../interfaces/services/services.js";
 import { toolRegistry } from "../../registries/tool-registry.js";
 import type { FsToolConfig } from "./config.js";
@@ -75,13 +72,18 @@ export const createFsGrepTool: ToolFactory<Input, Services, FsToolConfig> = (
 		if (!dfs) return "Error: fs service not available.";
 
 		const targetPath = normalizeFsPath(path);
-		const fileNodes = await collectGrepFileNodes(dfs, targetPath, glob, config);
+		const { nodes: fileNodes, truncated } = await collectGrepFileNodes(
+			dfs,
+			targetPath,
+			glob,
+			config,
+		);
 
 		if (fileNodes.length === 0) {
 			return `No files found to search under "${targetPath}"${glob ? ` matching glob "${glob}"` : ""}`;
 		}
 
-		return runGrep(
+		const found = await runGrep(
 			fileNodes,
 			(displayPath) => readFileBytes(dfs, displayPath, config),
 			{
@@ -94,6 +96,11 @@ export const createFsGrepTool: ToolFactory<Input, Services, FsToolConfig> = (
 				outputMode: output_mode,
 			},
 		);
+
+		// A grep that quietly stopped short reads as "not in this project", which
+		// is the wrong conclusion to hand an agent.
+		if (!truncated) return found;
+		return `${found}\n\n(Searched the first ${fileNodes.length} files only \u2014 narrow "glob" or "path" to cover the rest.)`;
 	},
 });
 

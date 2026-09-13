@@ -226,9 +226,11 @@ const TOOL_SUPPORT_PATTERNS: Array<{
 const EXPLICIT_CACHE_MODEL_PATTERN = /anthropic|claude|google\/|gemini|qwen/i;
 
 /**
- * Claude via OpenRouter also accepts a request-level `cache_control`, which
- * keeps a moving breakpoint on the last cacheable block as the conversation
- * grows — tool results included — without the request naming each block.
+ * Claude is the one family here that honours a one-hour cache TTL, so it gets
+ * the longer-lived breakpoints. (It also accepts a request-level
+ * `cache_control` that keeps a moving breakpoint on the last cacheable block;
+ * that is deliberately not used, because the last block is the volatile
+ * reminder tail — see `withCacheBreakpoints`.)
  */
 const ANTHROPIC_MODEL_PATTERN = /anthropic|claude/i;
 
@@ -241,6 +243,30 @@ const OPENAI_EXTENDED_RETENTION_MODEL_PATTERN =
 	/^(gpt-5\.5(-pro)?|gpt-5\.4|gpt-5\.2|gpt-5\.1(-codex(-max|-mini)?|-chat-latest)?|gpt-5(-codex)?|gpt-4\.1)(-\d{4}-\d{2}-\d{2})?$/i;
 
 const CACHE_BREAKPOINT = { type: "ephemeral" } as const;
+
+/**
+ * The one-hour variant, used where the provider honours it.
+ *
+ * The default entry lives five minutes, measured from the *start* of the
+ * request that writes it, so a single tool call that runs longer than that —
+ * a page render, a sandbox install, a slow MCP round-trip — expires the whole
+ * prefix while the agent is still working, and the next request re-reads a
+ * conversation that can be hundreds of thousands of tokens at full price. The
+ * hour costs 2x on writes instead of 1.25x and pays for itself after three
+ * reads, which an agent loop passes within a single turn.
+ */
+const CACHE_BREAKPOINT_1H = { type: "ephemeral", ttl: "1h" } as const;
+
+/**
+ * Opening tag of a system reminder — volatile context the flow layer attaches
+ * past the end of the conversation (see `graph/system-reminders.ts`). The
+ * cached prefix has to stop before it, so the tail is matched here rather than
+ * cached with the rest.
+ */
+const SYSTEM_REMINDER_PREFIX = "<system-reminder>";
+
+/** OpenRouter rejects a longer `session_id`. */
+const OPENROUTER_SESSION_ID_MAX_LENGTH = 256;
 
 /** Longest slice of the first user message that feeds the cache key. */
 const CACHE_KEY_TEXT_LIMIT = 4096;
@@ -286,15 +312,14 @@ export function derivePromptCacheKey(
 
 const markCacheBreakpoint = (
 	message: Record<string, unknown>,
+	breakpoint: Record<string, unknown> = CACHE_BREAKPOINT,
 ): Record<string, unknown> => {
 	const content = message.content;
 	if (typeof content === "string") {
 		if (!content) return message;
 		return {
 			...message,
-			content: [
-				{ type: "text", text: content, cache_control: CACHE_BREAKPOINT },
-			],
+			content: [{ type: "text", text: content, cache_control: breakpoint }],
 		};
 	}
 	if (Array.isArray(content)) {
@@ -305,36 +330,68 @@ const markCacheBreakpoint = (
 		const parts = [...content];
 		parts[lastTextIndex] = {
 			...parts[lastTextIndex],
-			cache_control: CACHE_BREAKPOINT,
+			cache_control: breakpoint,
 		};
 		return { ...message, content: parts };
 	}
 	return message;
 };
 
+const messageText = (message: Record<string, unknown>): string => {
+	const content = message.content;
+	if (typeof content === "string") return content;
+	if (!Array.isArray(content)) return "";
+	const first = content.find((part) => part?.type === "text");
+	return typeof first?.text === "string" ? first.text : "";
+};
+
+const isSystemReminder = (message: Record<string, unknown>): boolean =>
+	message.role === "user" &&
+	messageText(message).trimStart().startsWith(SYSTEM_REMINDER_PREFIX);
+
 /**
- * Mark the two prefixes worth caching for explicit-breakpoint models: the
- * system prompt (which also covers the tool definitions ahead of it) and the
- * latest user message, so the next turn, and every tool round-trip inside
- * this one, reads the whole conversation so far out of cache.
+ * Index of the last message that is part of the stable conversation prefix.
+ *
+ * Everything the flow layer attaches as a system reminder sits past the end of
+ * the conversation and differs on every request. Caching up to the very last
+ * message would write an entry keyed on that tail and never read it back — the
+ * write premium with none of the benefit. Stopping one position short caches
+ * the conversation itself, which is the part the next request re-sends
+ * verbatim.
+ */
+const stablePrefixEnd = (messages: Record<string, unknown>[]): number => {
+	let index = messages.length - 1;
+	while (index >= 0 && isSystemReminder(messages[index]!)) index -= 1;
+	return index;
+};
+
+/**
+ * Mark the two prefixes worth caching for explicit-breakpoint models.
+ *
+ * The first is the system prompt, which also covers the tool definitions
+ * rendered ahead of it. The second is the end of the stable conversation — the
+ * last message before any system-reminder tail — so that every tool round-trip
+ * inside this turn, and every later turn, reads the whole conversation so far
+ * out of cache.
+ *
+ * The second breakpoint used to sit on the latest user message, which was
+ * right only while nothing came after it. Once the agent loop appends tool
+ * results the newest user message is no longer the end of the prefix, and the
+ * growing tail behind it was re-read at full price on every iteration.
  */
 export function withCacheBreakpoints(
 	messages: Record<string, unknown>[],
-	options: { latestUser?: boolean } = {},
+	options: { breakpoint?: Record<string, unknown> } = {},
 ): Record<string, unknown>[] {
+	const breakpoint = options.breakpoint ?? CACHE_BREAKPOINT;
 	const marked = [...messages];
 	const systemIndex = marked.findIndex((message) => message.role === "system");
 	if (systemIndex >= 0) {
-		marked[systemIndex] = markCacheBreakpoint(marked[systemIndex]);
+		marked[systemIndex] = markCacheBreakpoint(marked[systemIndex], breakpoint);
 	}
-	if (options.latestUser === false) {
-		return marked;
-	}
-	const lastUserIndex = marked.findLastIndex(
-		(message) => message.role === "user",
-	);
-	if (lastUserIndex >= 0) {
-		marked[lastUserIndex] = markCacheBreakpoint(marked[lastUserIndex]);
+	const prefixEnd = stablePrefixEnd(marked);
+	if (prefixEnd > systemIndex) {
+		marked[prefixEnd] = markCacheBreakpoint(marked[prefixEnd], breakpoint);
 	}
 	return marked;
 }
@@ -451,12 +508,15 @@ export class OpenAILLM implements BaseLLM {
 		);
 		const anthropic =
 			explicitCache && ANTHROPIC_MODEL_PATTERN.test(model ?? "");
-		// Claude: one explicit breakpoint on the system prompt, and the
-		// request-level automatic mode below covers everything after it. Gemini
-		// and Qwen have no automatic mode, so the latest user message is marked
-		// as well.
+		// Both breakpoints are placed by hand. The request-level automatic mode
+		// Claude also accepts always lands on the very last block, which is the
+		// volatile system-reminder tail — an entry written on every request and
+		// read back by none. An explicit marker one position earlier caches the
+		// conversation instead.
 		const messages = explicitCache
-			? withCacheBreakpoints(serialized, { latestUser: !anthropic })
+			? withCacheBreakpoints(serialized, {
+					breakpoint: anthropic ? CACHE_BREAKPOINT_1H : CACHE_BREAKPOINT,
+				})
 			: serialized;
 
 		const body: Record<string, unknown> = {
@@ -486,13 +546,21 @@ export class OpenAILLM implements BaseLLM {
 		if (openRouter) {
 			body.usage = { include: true };
 		}
-		if (anthropic) {
-			body.cache_control = CACHE_BREAKPOINT;
-		}
 		if (openRouter || this.isOpenAI()) {
 			const cacheKey =
 				request.prompt_cache_key ?? derivePromptCacheKey(request.messages);
 			if (cacheKey) body.prompt_cache_key = cacheKey;
+			// OpenRouter serves one model from several upstream providers, each
+			// with its own prompt cache, so a conversation whose requests land on
+			// different providers keeps missing however append-only the prompt
+			// is. Keyed off `prompt_cache_key` OpenRouter only pins a conversation
+			// once a request has already hit the cache, so the opening requests
+			// scatter before anything sticks. `session_id` pins it from the first
+			// successful request instead. OpenAI does not define the field and
+			// validates the body, so it is sent to OpenRouter alone.
+			if (cacheKey && openRouter) {
+				body.session_id = cacheKey.slice(0, OPENROUTER_SESSION_ID_MAX_LENGTH);
+			}
 		}
 		if (
 			this.isOpenAI() &&

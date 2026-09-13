@@ -10,6 +10,7 @@ import {
 	type CoAgentBrowserCommandResponse,
 	type CoAgentContentCommandRequest,
 	type CoAgentContentCommandResponse,
+	CO_AGENT_COMMAND_TIMEOUT_MS,
 } from "@/services/co-agent";
 import {
 	isMissingContentScriptError,
@@ -17,7 +18,6 @@ import {
 	reinjectContentScript,
 } from "./content-script-injection";
 
-const DEFAULT_TIMEOUT_MS = 8_000;
 const RESTORE_RETRY_DELAYS_MS = [120, 450, 1_000] as const;
 
 const toErrorMessage = (error: unknown): string =>
@@ -341,7 +341,7 @@ const handleCommand = async (
 	const contentResponse = await sendContentCommand(
 		session.tabId,
 		request.request,
-		request.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+		request.timeoutMs ?? CO_AGENT_COMMAND_TIMEOUT_MS,
 	);
 	return {
 		source: CO_AGENT_BROWSER_COMMAND_SOURCE,

@@ -36,6 +36,7 @@ import type {
 	FeatureIcon,
 } from "@/services/flow-feature-catalog-service";
 import type { Flow } from "@/services/database/types";
+import type { CapabilityId } from "@/platform/contracts/core";
 
 // ---------------------------------------------------------------------------
 // Feature definition types
@@ -61,6 +62,8 @@ export interface AgentFeatureDefinition {
 	sectionOrder?: number;
 	/** Exclude this feature from the feature grid (e.g. features with their own dedicated UI). */
 	hideInGrid?: boolean;
+	/** Platform capability this feature needs; hidden where it is unavailable. */
+	requiresCapability?: CapabilityId;
 	/** Tools from this feature only count toward the summary when accessible agents are configured. */
 	requiresAccessibleAgents?: boolean;
 	/** Slot declarations that drive AgentFeatureDetailModal rendering.
@@ -161,6 +164,10 @@ function buildFeatureDefinitions(graphType: string): AgentFeatureDefinition[] {
 				sectionOrder:
 					typeof meta.sectionOrder === "number" ? meta.sectionOrder : undefined,
 				hideInGrid: Boolean(meta.hideInGrid),
+				requiresCapability:
+					typeof meta.requiresCapability === "string"
+						? (meta.requiresCapability as CapabilityId)
+						: undefined,
 				requiresAccessibleAgents: Boolean(meta.requiresAccessibleAgents),
 				detailView: Array.isArray(meta.detailView)
 					? (meta.detailView as FeatureDetailViewSlot[])
