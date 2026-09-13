@@ -10,6 +10,7 @@ import {
 	normalizeLangGraphStreamChunk,
 } from "@memorall/agent-harness-flows/utils/langgraph-stream";
 import { eq, sql } from "drizzle-orm";
+import { platform } from "@/platform/current";
 import { serviceManager } from "@/services";
 import {
 	createMemorallFlowRun,
@@ -43,6 +44,7 @@ import {
 	toFlowEmbedding,
 	toFlowFileSystem,
 	toFlowLLM,
+	toFlowMcpStdio,
 	toFlowSandbox,
 	toFlowWebBrowser,
 	withPromptCacheKey,
@@ -683,6 +685,7 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 			sandboxContainer: toFlowSandbox(sandboxService),
 			sandboxRuntime: toAgentSandbox(sandboxService, fileSystem),
 			webBrowser: toFlowWebBrowser(serviceManager.getWebBrowserService()),
+			mcpStdio: toFlowMcpStdio(platform.mcpStdio),
 			fs: fileSystem,
 		};
 	}
@@ -1121,7 +1124,9 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 				finalMessageState = finalState;
 
 				streamBuffer.flush();
-				dispatcher.flush();
+				// Wait for every chunk already sent, not just the buffered text: the
+				// final result goes out next and must not overtake them.
+				await dispatcher.drain();
 
 				if (typeof finalState?.response === "string") {
 					currentContent = finalState.response;
@@ -1276,7 +1281,9 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 
 				// Flush any remaining buffered content from streaming
 				streamBuffer.flush();
-				dispatcher.flush();
+				// Wait for every chunk already sent, not just the buffered text: the
+				// final result goes out next and must not overtake them.
+				await dispatcher.drain();
 
 				// Say it out loud when the answer did not come from the agent the
 				// user picked, rather than letting a stock run pass for theirs.
@@ -1352,7 +1359,9 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 
 				// Flush any remaining buffered content
 				streamBuffer.flush();
-				dispatcher.flush();
+				// Wait for every chunk already sent, not just the buffered text: the
+				// final result goes out next and must not overtake them.
+				await dispatcher.drain();
 			}
 
 			const finalActions = normalizeActions(actions);

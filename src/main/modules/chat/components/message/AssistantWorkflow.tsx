@@ -25,6 +25,7 @@ import {
 	CollapsibleTrigger,
 } from "@/main/components/ui/collapsible";
 import { ToolActionDetails } from "../MessageActions";
+import { RetrievedKnowledge } from "./RetrievedKnowledge";
 import { StreamingListItem } from "./StreamingListItem";
 import { useNewItemIds } from "./use-new-item-ids";
 import { translateCommonKey } from "../../utils/i18n-helpers";
@@ -142,33 +143,89 @@ const getWorkflowIcon = (part: ComplexContentPartExecution): LucideIcon => {
 	return Settings2;
 };
 
+/**
+ * Context the flow gathered before the agent acted, by the name its part is
+ * recorded under.
+ *
+ * Parts listed here are shown in the run summary above the answer instead of
+ * in the agent's tool timeline. That split is semantic, not cosmetic: these
+ * are not actions the agent chose, so presenting them as tool calls misleads
+ * about what the agent did — and a timeline orders its rows by when events
+ * arrived, which puts context gathered *first* wherever the stream happened to
+ * deliver it. Placement by kind cannot drift that way.
+ *
+ * One table rather than a chain of name checks per concern. With the label,
+ * the description and the details each in their own `if`, a new kind had to
+ * be added in four places in step — and `knowledge_retrieval`, recorded by the
+ * flow as a retrieval turn, was added to none of them, so it landed at the
+ * bottom of the tool timeline.
+ */
+interface WorkflowEvidenceKind {
+	/** Fallback when `workflow.evidence.<name>` has no translation. */
+	label: string;
+	/** `knowledge` shows the retrieved content itself; `action` the tool's details. */
+	details: "knowledge" | "action";
+	/** Whether the collapsed row previews the content beside its label. */
+	previewInRow: boolean;
+}
+
+const WORKFLOW_EVIDENCE = new Map<string, WorkflowEvidenceKind>([
+	[
+		"knowledge_graph",
+		{
+			label: "Knowledge graph evidence",
+			details: "action",
+			previewInRow: true,
+		},
+	],
+	[
+		"context_knowledge",
+		{ label: "Knowledge context", details: "knowledge", previewInRow: false },
+	],
+	[
+		"structmem_knowledge_retrieval",
+		{ label: "StructMem retrieval", details: "action", previewInRow: true },
+	],
+	[
+		// The retrieval turn the flow appends to the conversation. Its content is
+		// a prompt written for the model, so it reads as text, not as a tool call.
+		"knowledge_retrieval",
+		{
+			label: "Retrieved knowledge",
+			details: "knowledge",
+			previewInRow: false,
+		},
+	],
+]);
+
 const isWorkflowEvidencePart = (part: ComplexContentPartTool): boolean =>
-	part.name === "knowledge_graph" ||
-	part.name === "context_knowledge" ||
-	part.name === "structmem_knowledge_retrieval";
+	WORKFLOW_EVIDENCE.has(part.name);
 
-const getEvidenceLabel = (part: ComplexContentPartTool): string => {
-	if (part.name === "knowledge_graph") return "Knowledge graph evidence";
-	if (part.name === "context_knowledge") return "Knowledge context";
-	if (part.name === "structmem_knowledge_retrieval")
-		return "StructMem retrieval";
-	return part.name.replace(/_/g, " ");
-};
+const getEvidenceLabel = (part: ComplexContentPartTool): string =>
+	WORKFLOW_EVIDENCE.get(part.name)?.label ?? part.name.replace(/_/g, " ");
 
-const getEvidenceDescription = (part: ComplexContentPartTool): string => {
-	if (part.name === "context_knowledge") return "";
-	return part.description;
+const getEvidenceDescription = (part: ComplexContentPartTool): string =>
+	WORKFLOW_EVIDENCE.get(part.name)?.previewInRow === false
+		? ""
+		: part.description;
+
+/**
+ * The knowledge itself, without the instructions wrapped around it for the
+ * model. A retrieval block carries its facts inside `<context>` followed by
+ * guidance on how to use them; a person looking at what was retrieved wants
+ * the facts. Content with no such block is shown whole.
+ */
+const readableEvidenceText = (text: string): string => {
+	const match = /<context>\s*([\s\S]*?)\s*<\/context>/i.exec(text);
+	const inner = match?.[1]?.trim();
+	return inner ? inner : text;
 };
 
 const EvidenceDetails: React.FC<{
 	part: ComplexContentPartTool;
 }> = ({ part }) => {
-	if (part.name === "context_knowledge") {
-		return (
-			<div className="whitespace-pre-wrap break-words text-sm leading-relaxed text-muted-foreground">
-				{part.description}
-			</div>
-		);
+	if (WORKFLOW_EVIDENCE.get(part.name)?.details === "knowledge") {
+		return <RetrievedKnowledge text={readableEvidenceText(part.description)} />;
 	}
 
 	const actionItem = {

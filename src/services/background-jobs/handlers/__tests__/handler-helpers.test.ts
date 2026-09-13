@@ -66,6 +66,140 @@ describe("StreamBuffer", () => {
 	});
 });
 
+/**
+ * Progress events cross an async boundary on their way to the chat UI, and the
+ * first few of every turn are slower than the rest: `updateJobProgress` has to
+ * look the job up before it can queue anything, then takes a fast path for
+ * every later event. With emits fired and forgotten, the later events overtook
+ * the early ones.
+ *
+ * The earliest events of a turn are the knowledge-retrieval turn, so it was
+ * rebuilt at the bottom of the run timeline instead of the top — while the
+ * saved message had it first. These model that latency instead of the
+ * synchronous emits every other test uses, which is why it went unnoticed.
+ */
+describe("ChunkDispatcher ordering across async emits", () => {
+	const sleep = (ms: number) =>
+		new Promise((resolve) => setTimeout(resolve, ms));
+
+	const makeDispatcher = (delivered: string[]) =>
+		new ChunkDispatcher({
+			intervalMs: 0,
+			sendContent: async (content) => {
+				delivered.push(`content:${content}`);
+			},
+		});
+
+	it("delivers events in the order they were sent, even when the first is slow", async () => {
+		const delivered: string[] = [];
+		const dispatcher = makeDispatcher(delivered);
+		let first = true;
+		const emit = (label: string) => async () => {
+			// The first call waits on a lookup; the rest take the fast path.
+			if (first) {
+				first = false;
+				await sleep(20);
+			}
+			delivered.push(label);
+		};
+
+		dispatcher.send(emit("retrieval-call"));
+		dispatcher.send(emit("retrieval-result"));
+		dispatcher.send(emit("agent-tool-call"));
+		dispatcher.send(emit("agent-tool-result"));
+		await dispatcher.drain();
+
+		expect(delivered).toEqual([
+			"retrieval-call",
+			"retrieval-result",
+			"agent-tool-call",
+			"agent-tool-result",
+		]);
+	});
+
+	it("keeps buffered content in order with the events around it", async () => {
+		const delivered: string[] = [];
+		const dispatcher = makeDispatcher(delivered);
+
+		dispatcher.send(async () => {
+			await sleep(15);
+			delivered.push("event-1");
+		});
+		dispatcher.queueContent("hello");
+		dispatcher.send(async () => {
+			delivered.push("event-2");
+		});
+		await dispatcher.drain();
+
+		expect(delivered).toEqual(["event-1", "content:hello", "event-2"]);
+	});
+
+	it("keeps going after an emit fails, without reordering the rest", async () => {
+		// One failed progress write must not wedge the queue and swallow every
+		// chunk after it.
+		const delivered: string[] = [];
+		const dispatcher = makeDispatcher(delivered);
+
+		dispatcher.send(async () => {
+			throw new Error("write failed");
+		});
+		dispatcher.send(async () => {
+			delivered.push("after-failure");
+		});
+		await dispatcher.drain();
+
+		expect(delivered).toEqual(["after-failure"]);
+	});
+
+	it("never lets a stuck write hold the end of a turn", async () => {
+		// A progress write that never settles must not stop the turn from
+		// finishing — the user would be left watching it run forever.
+		const dispatcher = makeDispatcher([]);
+		dispatcher.send(() => new Promise<void>(() => {}));
+
+		const started = Date.now();
+		await dispatcher.drain(50);
+
+		expect(Date.now() - started).toBeLessThan(1_000);
+	});
+
+	it("does not wait at all when nothing is still being written", async () => {
+		// The common case: synchronous writes leave nothing in flight, so ending
+		// a turn costs nothing.
+		const delivered: string[] = [];
+		const dispatcher = new ChunkDispatcher({
+			intervalMs: 0,
+			sendContent: (content) => {
+				delivered.push(content);
+			},
+		});
+		dispatcher.send(() => {
+			delivered.push("sync-event");
+		});
+
+		const started = performance.now();
+		await dispatcher.drain();
+
+		expect(performance.now() - started).toBeLessThan(20);
+		expect(delivered).toEqual(["sync-event"]);
+	});
+
+	it("lets the end of a turn wait for everything already sent", async () => {
+		const delivered: string[] = [];
+		const dispatcher = makeDispatcher(delivered);
+
+		dispatcher.send(async () => {
+			await sleep(20);
+			delivered.push("last-chunk");
+		});
+		await dispatcher.drain();
+		// Anything sent after draining — the final result — comes after it.
+		delivered.push("final");
+
+		expect(delivered).toEqual(["last-chunk", "final"]);
+	});
+});
+
 describe("ChunkDispatcher", () => {
 	const createHarness = () => {
 		const sent: string[] = [];

@@ -159,6 +159,102 @@ describe("buildAssistantContentParts", () => {
 		expect(tools).toHaveLength(1);
 	});
 
+	it("keeps text and tools in the order the turn happened", () => {
+		const call = (id: string) => ({
+			id,
+			type: "function" as const,
+			function: { name: "fs_read", arguments: "{}" },
+		});
+		const done = (id: string): ToolExecutionRecord => ({
+			id,
+			name: "fs_read",
+			status: "completed",
+			startedAt: "2026-08-17T00:00:00.000Z",
+		});
+		const built = buildAssistantContentParts({
+			parts: [
+				{ role: "assistant", content: "Let me look.", tool_calls: [call("a")] },
+				{ role: "tool", tool_call_id: "a", content: "{}" },
+				{ role: "assistant", content: null, tool_calls: [call("b")] },
+				{ role: "tool", tool_call_id: "b", content: "{}" },
+				{
+					role: "assistant",
+					content: "Now the next one.",
+					tool_calls: [call("c")],
+				},
+				{ role: "tool", tool_call_id: "c", content: "{}" },
+				{ role: "assistant", content: "Done." },
+			],
+			toolExecutions: [done("a"), done("b"), done("c")],
+		});
+
+		expect(
+			built.map((part) => (part.type === "text" ? part.text : part.id)),
+		).toEqual(["Let me look.", "a", "b", "Now the next one.", "c", "Done."]);
+	});
+
+	it("places a running tool after the call that started it", () => {
+		const built = buildAssistantContentParts({
+			parts: [
+				{
+					role: "assistant",
+					content: "Reading.",
+					tool_calls: [
+						{
+							id: "x",
+							type: "function",
+							function: { name: "fs_read", arguments: "{}" },
+						},
+					],
+				},
+			],
+			toolExecutions: [
+				{ id: "x", name: "fs_read", status: "running", startedAt: "now" },
+			],
+		});
+
+		expect(
+			built.map((part) => (part.type === "text" ? part.text : part.id)),
+		).toEqual(["Reading.", "x"]);
+	});
+
+	it("places a running tool whose id the stream never matched after the latest call", () => {
+		const built = buildAssistantContentParts({
+			parts: [
+				{ role: "assistant", content: "First." },
+				{
+					role: "assistant",
+					content: "Reading.",
+					tool_calls: [
+						{
+							id: "call_0_123",
+							type: "function",
+							function: { name: "fs_read", arguments: "{}" },
+						},
+					],
+				},
+			],
+			toolExecutions: [
+				{ id: "uuid-1", name: "fs_read", status: "running", startedAt: "now" },
+			],
+		});
+
+		expect(
+			built.map((part) => (part.type === "text" ? part.text : part.id)),
+		).toEqual(["First.", "Reading.", "uuid-1"]);
+	});
+
+	it("puts tools ahead of the answer for a message that kept only its final text", () => {
+		const built = buildAssistantContentParts({
+			parts: [{ role: "assistant", content: "Final answer." }],
+			toolExecutions: [record],
+		});
+
+		expect(
+			built.map((part) => (part.type === "text" ? part.text : part.id)),
+		).toEqual(["call_1", "Final answer."]);
+	});
+
 	it("keeps assistant text alongside the tool card", () => {
 		const built = buildAssistantContentParts({
 			parts,

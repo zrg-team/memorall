@@ -268,7 +268,15 @@
 		"evidence": {
 			"knowledge_graph": "Bằng chứng đồ thị tri thức",
 			"context_knowledge": "Ngữ cảnh tri thức",
-			"structmem_knowledge_retrieval": "Truy xuất StructMem"
+			"structmem_knowledge_retrieval": "Truy xuất StructMem",
+			"knowledge_retrieval": "Tri thức đã truy xuất"
+		},
+		"knowledge": {
+			"entities": "Thực thể",
+			"relationships": "Mối quan hệ",
+			"showMore_one": "Xem thêm {{count}}",
+			"showMore_other": "Xem thêm {{count}}",
+			"showLess": "Thu gọn"
 		}
 	},
 	"citation": {

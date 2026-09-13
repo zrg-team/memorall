@@ -43,6 +43,7 @@ vi.mock("@/services/flow-service-adapters", () => ({
 	toFlowEmbedding: vi.fn(() => ({})),
 	toFlowFileSystem: vi.fn(() => ({})),
 	toFlowLLM: vi.fn(() => ({})),
+	toFlowMcpStdio: vi.fn(() => undefined),
 	toFlowSandbox: vi.fn(() => ({})),
 	toFlowWebBrowser: vi.fn(() => ({})),
 	toAgentSandbox: vi.fn(() => ({})),

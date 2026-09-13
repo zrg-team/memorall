@@ -268,7 +268,15 @@
 		"evidence": {
 			"knowledge_graph": "Knowledge graph evidence",
 			"context_knowledge": "Knowledge context",
-			"structmem_knowledge_retrieval": "StructMem retrieval"
+			"structmem_knowledge_retrieval": "StructMem retrieval",
+			"knowledge_retrieval": "Retrieved knowledge"
+		},
+		"knowledge": {
+			"entities": "Entities",
+			"relationships": "Relationships",
+			"showMore_one": "Show {{count}} more",
+			"showMore_other": "Show {{count}} more",
+			"showLess": "Show less"
 		}
 	},
 	"citation": {

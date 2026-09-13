@@ -30,7 +30,13 @@ const getTimelineDuration = (parts: ComplexContentPartTool[]): number => {
 export const AssistantToolTimeline: React.FC<{
 	parts: ComplexContentPartTool[];
 	isStreaming: boolean;
-}> = React.memo(({ parts, isStreaming }) => {
+	/**
+	 * Whether a prompt with no tool call id shows here. A turn renders one
+	 * timeline per group of tools, and only one of them may claim those prompts
+	 * or each group would repeat the same card.
+	 */
+	showUnattributedPrompts?: boolean;
+}> = React.memo(({ parts, isStreaming, showUnattributedPrompts = true }) => {
 	const { t } = useTranslation("chat");
 	const [isOpen, setIsOpen] = useStreamingDisclosure(isStreaming);
 	const hasError = parts.some((part) => part.state === "error");
@@ -47,10 +53,12 @@ export const AssistantToolTimeline: React.FC<{
 	// one attached to the wrong turn.
 	const prompts = useMemo(
 		() =>
-			allPrompts.filter(
-				(prompt) => !prompt.toolCallId || partIds.has(prompt.toolCallId),
+			allPrompts.filter((prompt) =>
+				prompt.toolCallId
+					? partIds.has(prompt.toolCallId)
+					: showUnattributedPrompts,
 			),
-		[allPrompts, partIds],
+		[allPrompts, partIds, showUnattributedPrompts],
 	);
 
 	const summary = isStreaming

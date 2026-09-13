@@ -197,39 +197,96 @@ export const buildAssistantContentParts = ({
 		}
 	}
 
-	const recordedToolCallIds = new Set(
-		(toolExecutions ?? []).map((record) => record.id),
+	const recordsById = new Map(
+		(toolExecutions ?? []).map((record) => [record.id, record]),
 	);
-	const contentParts: AssistantContentPart[] = [
-		...(executions ?? []),
-		...(toolExecutions ?? []).map((record) =>
+	const placedRecordIds = new Set<string>();
+	const contentParts: AssistantContentPart[] = [...(executions ?? [])];
+	const pushRecord = (record: ToolExecutionRecord) => {
+		placedRecordIds.add(record.id);
+		contentParts.push(
 			buildPersistedToolPart(
 				record,
 				toolContentById.get(record.id),
 				findToolCall(toolCallsById, record.id),
 			),
-		),
-	];
+		);
+	};
+
+	// Walk the parts in the order they happened, so each tool card lands after
+	// the text that announced it and before the text that followed its result.
+	// A "block" is one assistant part plus the tool messages answering it.
+	let blockToolCallIds: string[] = [];
+	let blockHasTools = false;
+	// Where tools whose call cannot be located go: the end of the latest block
+	// that used tools.
+	let lastToolBlockEnd = -1;
+	const closeBlock = () => {
+		// A tool that is still running has a record but no tool message yet.
+		for (const id of blockToolCallIds) {
+			const record = recordsById.get(id);
+			if (record && !placedRecordIds.has(id)) pushRecord(record);
+		}
+		if (blockHasTools || blockToolCallIds.length > 0) {
+			lastToolBlockEnd = contentParts.length;
+		}
+		blockToolCallIds = [];
+		blockHasTools = false;
+	};
 
 	for (const part of parts ?? []) {
 		if (part.role === "assistant") {
+			closeBlock();
 			if (typeof part.content === "string" && part.content.trim()) {
 				contentParts.push({ type: "text", text: part.content });
 			}
+			blockToolCallIds = (part.tool_calls ?? []).map((call) => call.id);
 			continue;
 		}
 
+		if (part.role !== "tool") continue;
+		blockHasTools = true;
+		const record = recordsById.get(part.tool_call_id);
+		if (record) {
+			if (!placedRecordIds.has(record.id)) pushRecord(record);
+			continue;
+		}
 		// A tool message with no execution record — an older conversation, or a
 		// result the stream never reported — still gets its own card.
-		if (part.role === "tool" && !recordedToolCallIds.has(part.tool_call_id)) {
-			contentParts.push(
-				buildToolPart(
-					part.tool_call_id,
-					part.content,
-					findToolCall(toolCallsById, part.tool_call_id),
-				),
-			);
-		}
+		contentParts.push(
+			buildToolPart(
+				part.tool_call_id,
+				part.content,
+				findToolCall(toolCallsById, part.tool_call_id),
+			),
+		);
+	}
+	closeBlock();
+
+	// Records no part accounts for: a running call whose id the stream never
+	// matched (the provider sent none, so the two sides minted different ones),
+	// or an older message that kept only its final answer. They belong after the
+	// latest tool block, or ahead of the answer when there is no block at all.
+	const unplaced = (toolExecutions ?? [])
+		.filter((record) => !placedRecordIds.has(record.id))
+		.map((record) =>
+			buildPersistedToolPart(
+				record,
+				toolContentById.get(record.id),
+				findToolCall(toolCallsById, record.id),
+			),
+		);
+	if (unplaced.length > 0) {
+		const lastTextIndex = contentParts.findLastIndex(
+			(part) => part.type === "text",
+		);
+		const insertAt =
+			lastToolBlockEnd >= 0
+				? lastToolBlockEnd
+				: lastTextIndex >= 0
+					? lastTextIndex
+					: contentParts.length;
+		contentParts.splice(insertAt, 0, ...unplaced);
 	}
 
 	if (executeState) {

@@ -31,8 +31,38 @@ vi.mock("../AssistantWorkflow", () => ({
 }));
 
 vi.mock("../AssistantToolTimeline", () => ({
-	AssistantToolTimeline: () => <div data-testid="tool" />,
+	AssistantToolTimeline: ({
+		parts,
+		isStreaming,
+	}: {
+		parts: Array<{ id: string }>;
+		isStreaming: boolean;
+	}) => (
+		<div data-testid="tool" data-streaming={String(isStreaming)}>
+			{parts.map((part) => part.id).join(",")}
+		</div>
+	),
 }));
+
+const tool = (id: string): AssistantContentPart =>
+	({
+		type: "tool",
+		id,
+		name: "fs_read",
+		description: "",
+		state: "complete",
+	}) as AssistantContentPart;
+
+const flowOrder = () =>
+	Array.from(
+		document.querySelectorAll(
+			"[data-testid='assistant-text'], [data-testid='tool']",
+		),
+	).map((node) =>
+		node.getAttribute("data-testid") === "tool"
+			? `tools:${node.textContent}`
+			: `text:${node.textContent}`,
+	);
 
 describe("AssistantContentFlow", () => {
 	beforeEach(() => {
@@ -54,6 +84,73 @@ describe("AssistantContentFlow", () => {
 		expect(screen.getByTestId("assistant-text")).toHaveTextContent(
 			"## Recommendation First paragraph.",
 		);
+	});
+
+	it("renders each group of tools between the text around it", () => {
+		render(
+			<AssistantContentFlow
+				parts={[
+					tool("a"),
+					tool("b"),
+					{ type: "text", text: "   " },
+					tool("c"),
+					{ type: "text", text: "I'll continue." },
+					tool("d"),
+					tool("e"),
+					{ type: "text", text: "Full response." },
+				]}
+				isStreaming={false}
+			/>,
+		);
+
+		expect(flowOrder()).toEqual([
+			"tools:a,b,c",
+			"text:I'll continue.",
+			"tools:d,e",
+			"text:Full response.",
+		]);
+	});
+
+	it("keeps only the latest tool group open while streaming", () => {
+		render(
+			<AssistantContentFlow
+				parts={[tool("a"), { type: "text", text: "Next." }, tool("b")]}
+				isStreaming={true}
+			/>,
+		);
+
+		expect(
+			screen
+				.getAllByTestId("tool")
+				.map((node) => node.getAttribute("data-streaming")),
+		).toEqual(["false", "true"]);
+	});
+
+	it("does not remount text when a tool group and more text follow it", () => {
+		const { rerender } = render(
+			<AssistantContentFlow
+				parts={[{ type: "text", text: "Let me look." }]}
+				isStreaming={true}
+			/>,
+		);
+
+		rerender(
+			<AssistantContentFlow
+				parts={[
+					{ type: "text", text: "Let me look." },
+					tool("a"),
+					{ type: "text", text: "Found it." },
+				]}
+				isStreaming={true}
+			/>,
+		);
+
+		expect(flowOrder()).toEqual([
+			"text:Let me look.",
+			"tools:a",
+			"text:Found it.",
+		]);
+		expect(textMounts.count).toBe(2);
 	});
 
 	it("does not remount existing text content when execution/tool parts are appended", () => {
