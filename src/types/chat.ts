@@ -1,3 +1,4 @@
+import type { DocumentType } from "./document-library";
 export type ChatStatus = "ready" | "submitted" | "streaming" | "error";
 
 export type ChatRole = "user" | "assistant" | "system";
@@ -118,5 +119,5 @@ export interface AttachedDocumentRef {
 	mimeType: string;
 	name: string;
 	/** Document type — determines how the file is sent to the LLM */
-	docType: "pdf" | "text" | "markdown" | "image" | "excel" | "other";
+	docType: DocumentType;
 }

@@ -1,0 +1,75 @@
+{
+	"composer": {
+		"placeholder": "Mô tả hình ảnh bạn muốn tạo",
+		"shortcut": "Enter để tạo",
+		"settings": "Cài đặt hình ảnh"
+	},
+	"settings": {
+		"size": "Kích thước",
+		"count": "Số lượng ảnh",
+		"quality": "Chất lượng",
+		"seed": "Seed",
+		"seedPlaceholder": "Ngẫu nhiên",
+		"randomizeSeed": "Seed ngẫu nhiên",
+		"seedHint": "Dùng cùng seed và mô tả để tạo lại đúng hình ảnh đó.",
+		"orientation": {
+			"square": "Vuông",
+			"landscape": "Ngang",
+			"portrait": "Dọc",
+			"auto": "Tự động"
+		},
+		"qualities": {
+			"auto": "Tự động",
+			"low": "Thấp",
+			"medium": "Trung bình",
+			"high": "Cao"
+		}
+	},
+	"empty": {
+		"title": "Tạo hình ảnh",
+		"description": "Mô tả chủ thể, bối cảnh và phong cách. Mô tả càng cụ thể, ảnh càng đẹp."
+	},
+	"examples": {
+		"fox": "Một chú cáo đỏ cuộn tròn trên tuyết mới lúc bình minh, ánh sáng vàng dịu, xóa phông",
+		"city": "Minh họa isometric một thành phố nhỏ lơ lửng trên không với thác nước, tông màu pastel",
+		"poster": "Áp phích du lịch tối giản về vịnh Hạ Long, hình khối mạnh, bảng màu hạn chế",
+		"product": "Ảnh studio một chiếc cốc cà phê gốm trên khăn lanh, ánh sáng cửa sổ buổi sáng"
+	},
+	"card": {
+		"generating": "Đang tạo…",
+		"elapsed": "{{seconds}} giây",
+		"open": "Mở ảnh",
+		"copyPrompt": "Sao chép mô tả",
+		"reuse": "Dùng lại mô tả và cài đặt",
+		"noImages": "Mô hình không trả về hình ảnh nào.",
+		"saveNumbered": "Lưu ảnh {{number}}"
+	},
+	"lightbox": {
+		"title": "Hình ảnh",
+		"previous": "Ảnh trước",
+		"next": "Ảnh tiếp theo",
+		"position": "{{index}} / {{total}}"
+	},
+	"comments": {
+		"toggle": "Bình luận",
+		"title": "Bình luận",
+		"empty": "Hãy nói điều cần thay đổi. Kéo trên ảnh để chỉ vào một vùng, hoặc viết về cả bức ảnh.",
+		"area": "Vùng đã chọn",
+		"wholeImage": "Cả bức ảnh",
+		"remove": "Xóa bình luận",
+		"areaSelected": "Đã chọn vùng",
+		"clearArea": "Bỏ chọn",
+		"placeholderArea": "Vùng này cần thay đổi gì?",
+		"placeholder": "Cần thay đổi gì?",
+		"dragHint": "Kéo trên ảnh để chọn một vùng",
+		"add": "Thêm",
+		"generate": "Tạo ảnh tiếp theo",
+		"generateWith": "Tạo ảnh tiếp theo ({{total}})",
+		"generateShort": "Tạo tiếp",
+		"busy": "Hãy chờ ảnh hiện tại tạo xong.",
+		"source": "Ảnh được góp ý",
+		"requestTitle": "Phiên bản tiếp theo theo góp ý",
+		"pending_one": "{{count}} bình luận",
+		"pending_other": "{{count}} bình luận"
+	}
+}

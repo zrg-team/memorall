@@ -63,6 +63,7 @@ const ensureMainConversation = async (): Promise<Conversation> => {
 		const existing = await db
 			.select()
 			.from(schema.conversations)
+			.where(eq(schema.conversations.mode, "chat"))
 			.orderBy(desc(schema.conversations.createdAt))
 			.limit(1);
 

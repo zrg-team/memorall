@@ -6,6 +6,14 @@ import {
 } from "@/services/llm/constants";
 import type { ModelInfo } from "@/services/llm";
 import type { ServiceProvider } from "@/services/llm/interfaces/llm-service.interface";
+import type { WorkspaceMode } from "@/services/llm/interfaces/model-category";
+import {
+	PROVIDER_REGISTRY,
+	providersForCategory,
+} from "@/services/llm/provider-registry";
+import { resolveModelCategories } from "@/services/llm/registry/media-model-registry";
+import { getModel } from "@/services/llm/registry/model-registry";
+import type { LLMProvider } from "@/services/llm/interfaces/llm-model-config";
 import { eq } from "drizzle-orm";
 import secureSession from "@/utils/secure-session";
 import { logError, logInfo } from "@/utils/logger";
@@ -38,29 +46,31 @@ export { providerLabel, shortModelName } from "./selectable-model";
  * locked is the difference between "No models yet" — which is wrong, and which
  * the user cannot act on — and telling them exactly what to do.
  */
-const ENCRYPTED_PROVIDERS: Array<{
-	provider: ServiceProvider;
-	configKey: string;
-	readyKey: string;
-}> = [
-	{
-		provider: "openai",
-		configKey: "openai_config",
-		readyKey: "openai_ready",
-	},
-	{
-		provider: "openrouter",
-		configKey: "openrouter_config",
-		readyKey: "openrouter_ready",
-	},
-];
+const ENCRYPTED_PROVIDERS = Object.values(PROVIDER_REGISTRY).flatMap(
+	(descriptor) =>
+		descriptor.encryptionKey && descriptor.readyKey
+			? [
+					{
+						provider: descriptor.id,
+						configKey: descriptor.encryptionKey,
+						readyKey: descriptor.readyKey,
+					},
+				]
+			: [],
+);
 
 const findLockedProviders = async (
 	loadedServices: ReadonlySet<string>,
+	category: WorkspaceMode,
 ): Promise<ServiceProvider[]> => {
 	const locked: ServiceProvider[] = [];
 	for (const entry of ENCRYPTED_PROVIDERS) {
 		if (loadedServices.has(entry.provider)) continue;
+		// A locked provider that could not serve this category is not the reason
+		// the list is empty.
+		if (!PROVIDER_REGISTRY[entry.provider].categories.includes(category)) {
+			continue;
+		}
 		try {
 			const rows = await serviceManager.databaseService.use(({ db, schema }) =>
 				db
@@ -86,12 +96,28 @@ const findLockedProviders = async (
 	return locked;
 };
 
+/**
+ * What the runner reports, else the size its catalog entry records: not every
+ * runner measures what it has cached.
+ */
+const localModelSize = (
+	model: ModelInfo,
+	provider: ServiceProvider,
+): Pick<SelectableModel, "size" | "sizeByDevice"> => {
+	if (model.sizeByDevice || (model.size && model.size > 0)) {
+		return { size: model.size, sizeByDevice: model.sizeByDevice };
+	}
+	const catalogSizeGB = getModel(model.id, provider as LLMProvider)?.sizeGB;
+	return catalogSizeGB ? { size: Math.round(catalogSizeGB * 1024 ** 3) } : {};
+};
+
 const isDownloaded = (model: ModelInfo): boolean =>
 	model.downloaded === true || model.loaded === true;
 
-const toSelectable = (
+export const toSelectable = (
 	model: ModelInfo,
 	serviceName: string,
+	category: WorkspaceMode = "chat",
 ): SelectableModel | null => {
 	const provider = (model.provider ?? SERVICE_TO_PROVIDER[serviceName]) as
 		| ServiceProvider
@@ -99,21 +125,58 @@ const toSelectable = (
 	if (!provider) return null;
 	if (LOCAL_PROVIDERS.has(provider) && !isDownloaded(model)) return null;
 
+	const categories = resolveModelCategories(serviceName, model.id, model);
+	// A hosted model whose id reveals nothing is classified as chat. Media
+	// pickers still offer it (after the recognised ones): the provider knows
+	// what it serves, the id pattern only guesses.
+	const unclassifiedHosted =
+		category !== "chat" &&
+		!LOCAL_PROVIDERS.has(provider) &&
+		categories.length === 1 &&
+		categories[0] === "chat";
+	if (!categories.includes(category) && !unclassifiedHosted) return null;
+
+	const isLocal = LOCAL_PROVIDERS.has(provider);
 	return {
 		id: model.id,
 		name: model.name?.trim() || model.id,
 		provider,
 		serviceName,
-		isLocal: LOCAL_PROVIDERS.has(provider),
+		isLocal,
 		loaded: model.loaded === true,
+		categories,
+		...(isLocal ? localModelSize(model, provider) : {}),
 	};
 };
 
-export function useSelectableModels() {
+/**
+ * Local media runners are created on demand, so `list()` does not contain them
+ * until something has used them. A speech picker still has to ask them what is
+ * downloaded.
+ */
+const serviceNamesFor = (category: WorkspaceMode): string[] => {
+	const names = new Set(serviceManager.llmService.list());
+	if (category !== "chat") {
+		for (const provider of providersForCategory(category)) {
+			if (PROVIDER_REGISTRY[provider].residentLocal) {
+				names.add(PROVIDER_TO_SERVICE[provider]);
+			}
+		}
+	}
+	return [...names].filter((serviceName) =>
+		serviceManager.llmService.supportsCategoryFor(serviceName, category),
+	);
+};
+
+export function useSelectableModels(category: WorkspaceMode = "chat") {
 	const [models, setModels] = useState<SelectableModel[]>([]);
 	const [lockedProviders, setLockedProviders] = useState<ServiceProvider[]>([]);
 	const [isLoading, setIsLoading] = useState(false);
 	const [error, setError] = useState<string | null>(null);
+	// The category whose list has been fetched at least once.
+	const [listedCategory, setListedCategory] = useState<WorkspaceMode | null>(
+		null,
+	);
 
 	const refresh = useCallback(async () => {
 		setIsLoading(true);
@@ -122,7 +185,7 @@ export function useSelectableModels() {
 			// Only services that exist: asking an unconfigured provider for its
 			// models is a guaranteed rejection, and one provider being down must not
 			// empty the list.
-			const serviceNames = serviceManager.llmService.list();
+			const serviceNames = serviceNamesFor(category);
 			const collected: SelectableModel[] = [];
 			const seen = new Set<string>();
 
@@ -141,7 +204,7 @@ export function useSelectableModels() {
 
 			for (const { serviceName, data } of results) {
 				for (const model of data) {
-					const selectable = toSelectable(model, serviceName);
+					const selectable = toSelectable(model, serviceName, category);
 					if (!selectable) continue;
 					const key = `${selectable.provider}:${selectable.id}`;
 					if (seen.has(key)) continue;
@@ -151,14 +214,17 @@ export function useSelectableModels() {
 			}
 
 			setModels(collected);
-			setLockedProviders(await findLockedProviders(new Set(serviceNames)));
+			setLockedProviders(
+				await findLockedProviders(new Set(serviceNames), category),
+			);
 		} catch (err) {
 			logError("Failed to list selectable models:", err);
 			setError(err instanceof Error ? err.message : String(err));
 		} finally {
 			setIsLoading(false);
+			setListedCategory(category);
 		}
-	}, []);
+	}, [category]);
 
 	useEffect(() => {
 		void refresh();
@@ -171,16 +237,22 @@ export function useSelectableModels() {
 			if (group) group.push(model);
 			else groups.set(model.provider, [model]);
 		}
+		const recognised = (model: SelectableModel) =>
+			model.categories?.includes(category) ? 0 : 1;
 		for (const group of groups.values()) {
-			group.sort((left, right) => left.name.localeCompare(right.name));
+			group.sort(
+				(left, right) =>
+					recognised(left) - recognised(right) ||
+					left.name.localeCompare(right.name),
+			);
 		}
 		return groups;
-	}, [models]);
+	}, [models, category]);
 
 	/**
-	 * Switch the active model.
+	 * Switch the active model for this picker's category.
 	 *
-	 * `setCurrentModel` records the choice and `serveFor` makes it usable — a
+	 * `setCurrentModelFor` records the choice and `serveFor` makes it usable — a
 	 * no-op for a hosted provider, a load for a downloaded local one. Recording
 	 * first means a load that fails still leaves the user's choice visible rather
 	 * than silently snapping back.
@@ -190,12 +262,18 @@ export function useSelectableModels() {
 			try {
 				const serviceName =
 					model.serviceName || PROVIDER_TO_SERVICE[model.provider];
-				await serviceManager.llmService.setCurrentModel(
+				await serviceManager.llmService.setCurrentModelFor(
+					category,
 					model.provider,
 					model.id,
 					serviceName,
 				);
-				await serviceManager.llmService.serveFor(serviceName, model.id);
+				await serviceManager.llmService.serveFor(
+					serviceName,
+					model.id,
+					undefined,
+					{ category },
+				);
 				await refresh();
 				return true;
 			} catch (err) {
@@ -204,7 +282,7 @@ export function useSelectableModels() {
 				return false;
 			}
 		},
-		[refresh],
+		[category, refresh],
 	);
 
 	return {
@@ -212,6 +290,8 @@ export function useSelectableModels() {
 		byProvider,
 		lockedProviders,
 		isLoading,
+		/** The list for this category has been fetched at least once. */
+		isListed: listedCategory === category,
 		error,
 		refresh,
 		selectModel,

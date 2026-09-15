@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import secureSession from "@/utils/secure-session";
 import type { ServiceProvider } from "@/services/llm/interfaces/llm-service.interface";
 import { isMasterKeyUnlocked } from "@/utils/master-key";
+import { PROVIDER_REGISTRY } from "@/services/llm/provider-registry";
 
 /**
  * Provider configuration metadata
@@ -26,42 +27,19 @@ interface ProviderConfig {
  * Provider configuration registry
  * Maps each provider to its configuration requirements
  */
-const PROVIDER_CONFIGS: Record<ServiceProvider, ProviderConfig> = {
-	openai: {
-		requiresAuth: true,
-		readyKey: "openai_ready",
-		encryptionKey: "openai_config",
-		isLocal: false,
-	},
-	openrouter: {
-		requiresAuth: true,
-		readyKey: "openrouter_ready",
-		encryptionKey: "openrouter_config",
-		isLocal: false,
-	},
-	lmstudio: {
-		requiresAuth: false,
-		configKey: "lmstudio_config",
-		isLocal: true,
-	},
-	ollama: {
-		requiresAuth: false,
-		configKey: "ollama_config",
-		isLocal: true,
-	},
-	wllama: {
-		requiresAuth: false,
-		isLocal: true,
-	},
-	webllm: {
-		requiresAuth: false,
-		isLocal: true,
-	},
-	transformer: {
-		requiresAuth: false,
-		isLocal: true,
-	},
-};
+const PROVIDER_CONFIGS: Record<ServiceProvider, ProviderConfig> =
+	Object.fromEntries(
+		Object.values(PROVIDER_REGISTRY).map((descriptor) => [
+			descriptor.id,
+			{
+				requiresAuth: descriptor.requiresAuth,
+				readyKey: descriptor.readyKey,
+				encryptionKey: descriptor.encryptionKey,
+				configKey: descriptor.configKey,
+				isLocal: descriptor.isLocal,
+			},
+		]),
+	) as Record<ServiceProvider, ProviderConfig>;
 
 /**
  * Provider state

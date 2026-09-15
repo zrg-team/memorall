@@ -1,0 +1,75 @@
+{
+	"composer": {
+		"placeholder": "Describe the image you want",
+		"shortcut": "Enter to generate",
+		"settings": "Image settings"
+	},
+	"settings": {
+		"size": "Size",
+		"count": "Number of images",
+		"quality": "Quality",
+		"seed": "Seed",
+		"seedPlaceholder": "Random",
+		"randomizeSeed": "Random seed",
+		"seedHint": "Use the same seed and prompt to get the same image again.",
+		"orientation": {
+			"square": "Square",
+			"landscape": "Landscape",
+			"portrait": "Portrait",
+			"auto": "Auto"
+		},
+		"qualities": {
+			"auto": "Auto",
+			"low": "Low",
+			"medium": "Medium",
+			"high": "High"
+		}
+	},
+	"empty": {
+		"title": "Create an image",
+		"description": "Describe the subject, the setting and the style. Specific prompts give better images."
+	},
+	"examples": {
+		"fox": "A red fox curled up in fresh snow at dawn, soft golden light, shallow depth of field",
+		"city": "Isometric illustration of a tiny floating city with waterfalls, pastel colors",
+		"poster": "Minimalist travel poster of Ha Long Bay, bold shapes, limited palette",
+		"product": "Studio photo of a ceramic coffee cup on a linen cloth, morning window light"
+	},
+	"card": {
+		"generating": "Generating…",
+		"elapsed": "{{seconds}}s",
+		"open": "Open image",
+		"copyPrompt": "Copy prompt",
+		"reuse": "Reuse prompt and settings",
+		"noImages": "The model returned no images.",
+		"saveNumbered": "Save image {{number}}"
+	},
+	"lightbox": {
+		"title": "Image",
+		"previous": "Previous image",
+		"next": "Next image",
+		"position": "{{index}} / {{total}}"
+	},
+	"comments": {
+		"toggle": "Comment",
+		"title": "Comments",
+		"empty": "Say what to change. Drag on the image to point at an area, or write about the whole image.",
+		"area": "Selected area",
+		"wholeImage": "Whole image",
+		"remove": "Remove comment",
+		"areaSelected": "Area selected",
+		"clearArea": "Clear",
+		"placeholderArea": "What should change in this area?",
+		"placeholder": "What should change?",
+		"dragHint": "Drag on the image to select an area",
+		"add": "Add",
+		"generate": "Generate next image",
+		"generateWith": "Generate next image ({{total}})",
+		"generateShort": "Generate next",
+		"busy": "Wait for the current image to finish.",
+		"source": "Image the feedback is on",
+		"requestTitle": "Next version with feedback",
+		"pending_one": "{{count}} comment",
+		"pending_other": "{{count}} comments"
+	}
+}

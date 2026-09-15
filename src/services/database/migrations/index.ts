@@ -57,6 +57,10 @@ import {
 	up as boundMessageHistorySearchIndexUp,
 	down as boundMessageHistorySearchIndexDown,
 } from "./015_bound_message_history_search_index";
+import {
+	up as addConversationModeUp,
+	down as addConversationModeDown,
+} from "./016_add_conversation_mode";
 // import { up as futureExampleUp, down as futureExampleDown } from './001_example_future_migration';
 
 export interface Migration {
@@ -182,6 +186,14 @@ export const migrations: Migration[] = [
 		description: "Bound thread history tsvector size for large AI2UI messages",
 		up: boundMessageHistorySearchIndexUp,
 		down: boundMessageHistorySearchIndexDown,
+	},
+	{
+		id: "add_conversation_mode",
+		version: 16,
+		description:
+			"Add conversation mode so media studios keep their own history apart from chat",
+		up: addConversationModeUp,
+		down: addConversationModeDown,
 	},
 	// Example of how to add future migrations:
 	// {

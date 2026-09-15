@@ -11,6 +11,8 @@ export type DocumentType =
 	| "text"
 	| "markdown"
 	| "image"
+	| "audio"
+	| "video"
 	| "excel"
 	| "other";
 
@@ -22,6 +24,21 @@ export const DOCUMENT_MIME_TYPES: Record<DocumentType, string[]> = {
 	text: ["text/plain"],
 	markdown: ["text/markdown", "text/x-markdown"],
 	image: ["image/jpeg", "image/png", "image/gif", "image/webp"],
+	audio: [
+		"audio/wav",
+		"audio/mpeg",
+		"audio/ogg",
+		"audio/webm",
+		"audio/mp4",
+		"audio/flac",
+	],
+	video: [
+		"video/mp4",
+		"video/webm",
+		"video/ogg",
+		"video/quicktime",
+		"video/x-matroska",
+	],
 	excel: [
 		"application/vnd.ms-excel",
 		"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

@@ -1,0 +1,73 @@
+{
+	"canvas": {
+		"label": "Image tools"
+	},
+	"tasks": {
+		"label": "Tool",
+		"background-removal": {
+			"label": "Remove background",
+			"can": "remove backgrounds",
+			"description": "Cut the subject out onto a transparent background."
+		},
+		"depth-estimation": {
+			"label": "Depth",
+			"can": "estimate depth",
+			"description": "See how far each part of a photo is from the camera."
+		},
+		"object-detection": {
+			"label": "Detect objects",
+			"can": "detect objects",
+			"description": "Find and label the objects in an image."
+		},
+		"image-to-text": {
+			"label": "Caption & OCR",
+			"can": "describe images or read their text",
+			"description": "Describe an image, or read the text in it with an OCR model."
+		},
+		"image-segmentation": {
+			"label": "Segment",
+			"can": "segment images",
+			"description": "Split an image into labelled regions."
+		},
+		"image-classification": {
+			"label": "Classify",
+			"can": "classify images",
+			"description": "Tell what an image shows, with confidence scores."
+		}
+	},
+	"hint": {
+		"switchModel": "Switch to a model that can {{task}}.",
+		"chooseModel": "Choose a model"
+	},
+	"input": {
+		"choose": "Choose image",
+		"replace": "Choose another image",
+		"clear": "Remove image",
+		"drop": "or drop an image here, or paste with Ctrl+V",
+		"dropShort": "or drop / paste",
+		"dropZone": "Drop an image, paste one with Ctrl+V, or click to choose.",
+		"dropNow": "Drop the image to use it",
+		"threshold": "Confidence",
+		"run": "Run",
+		"notImage": "That file is not an image.",
+		"tooLarge": "This image is {{size}}; the limit is {{max}}."
+	},
+	"result": {
+		"before": "Before",
+		"after": "After",
+		"compare": "Compare before and after",
+		"cutoutAlt": "{{name}} without background",
+		"downloadPng": "Download PNG",
+		"original": "Original",
+		"depthMap": "Depth map",
+		"sideBySide": "Side by side",
+		"view": "View",
+		"depthAlt": "Depth map of {{name}}",
+		"noDetections": "No objects found above the confidence threshold.",
+		"threshold": "Threshold {{value}}",
+		"noText": "No text was found.",
+		"elapsed": "{{seconds}}s",
+		"segment": "Segment",
+		"noSegments": "No regions were found."
+	}
+}

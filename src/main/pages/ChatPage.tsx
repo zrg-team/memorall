@@ -1,4 +1,5 @@
 "use client";
+import { useWorkspaceModeStore } from "@/main/stores/workspace-mode";
 import { ArrowUp, History, MessageSquare, X } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import React, { useEffect, useMemo, useRef } from "react";
@@ -73,7 +74,6 @@ const RETRIEVAL_STEP_NAMES = new Set([
 
 interface ChatPageProps {
 	onOpenAgentWorkspace?: () => void;
-	hideWideSidePanelCollapsedToggle?: boolean;
 	isNarrowChatPanel?: boolean;
 	onCompactChatListOpenChange?: (open: boolean) => void;
 	useIconOnlyHistoryButton?: boolean;
@@ -81,7 +81,6 @@ interface ChatPageProps {
 
 export const ChatPage: React.FC<ChatPageProps> = ({
 	onOpenAgentWorkspace,
-	hideWideSidePanelCollapsedToggle = false,
 	isNarrowChatPanel = false,
 	onCompactChatListOpenChange,
 	useIconOnlyHistoryButton = false,
@@ -288,6 +287,25 @@ export const ChatPage: React.FC<ChatPageProps> = ({
 	const takeContinuation = useWebChallengeHandoffStore(
 		(state) => state.takeContinuation,
 	);
+
+	// A studio sent text here (a transcript, say): drop it into the composer
+	// rather than sending it, so the user decides what to ask about it.
+	const pendingChatText = useWorkspaceModeStore(
+		(state) => state.pendingChatText,
+	);
+	useEffect(() => {
+		if (pendingChatText === null) return;
+		const text = useWorkspaceModeStore.getState().takePendingChatText();
+		if (text) {
+			setInputValue(
+				inputValue.trim()
+					? `${inputValue}
+
+${text}`
+					: text,
+			);
+		}
+	}, [pendingChatText, inputValue, setInputValue]);
 
 	useEffect(() => {
 		if (!pendingContinuation) return;
@@ -808,7 +826,6 @@ export const ChatPage: React.FC<ChatPageProps> = ({
 		>
 			{isWideChatSidePanelVisible ? (
 				<ChatSidePanel
-					showCollapsedToggle={!hideWideSidePanelCollapsedToggle}
 					onShowConversationGroup={handleConversationGroupSelect}
 				/>
 			) : null}

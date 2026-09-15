@@ -285,6 +285,7 @@ describe("LLMOperationsHandler", () => {
 			"openai",
 			"new-model",
 			expect.any(Function),
+			{ category: undefined, select: undefined },
 		);
 
 		await expect(

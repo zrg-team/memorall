@@ -1,6 +1,7 @@
 import React from "react";
 import { ChevronDown, ChevronRight, Loader2, Search, Zap } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { LocalModelSize } from "./LocalModelSize";
 
 import { Button } from "@/main/components/ui/button";
 import { Input } from "@/main/components/ui/input";
@@ -126,8 +127,9 @@ export const TransformerTab: React.FC<TransformerTabProps> = ({
 								<div className="truncate text-sm font-medium">
 									{cleanTransformerName(modelId)}
 								</div>
-								<div className="truncate text-xs text-muted-foreground">
-									{modelId}
+								<div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+									<span className="truncate">{modelId}</span>
+									<LocalModelSize provider="transformer" modelId={modelId} />
 								</div>
 							</div>
 							<Button
@@ -193,10 +195,17 @@ export const TransformerTab: React.FC<TransformerTabProps> = ({
 									<div className="truncate text-sm font-medium">
 										{result.id}
 									</div>
-									<div className="text-xs text-muted-foreground">
-										{t("transformer.downloads", {
-											count: result.downloads ?? 0,
-										})}
+									<div className="flex items-center gap-2 text-xs text-muted-foreground">
+										<span>
+											{t("transformer.downloads", {
+												count: result.downloads ?? 0,
+											})}
+										</span>
+										<LocalModelSize
+											provider="transformer"
+											modelId={result.id}
+											estimateFromHub
+										/>
 									</div>
 								</div>
 								<Button

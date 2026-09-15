@@ -1,0 +1,76 @@
+{
+	"empty": {
+		"title": "Record or upload audio",
+		"description": "Get a transcript with timestamps. Click a timestamp to hear that moment.",
+		"record": "Record from microphone",
+		"upload": "Upload an audio file"
+	},
+	"record": {
+		"start": "Start recording",
+		"stop": "Stop and transcribe",
+		"stopShort": "Transcribe",
+		"cancel": "Discard",
+		"hint": "Tap to record",
+		"requesting": "Waiting for microphone permission…",
+		"denied": "Microphone access is blocked. Open the site settings (the icon next to the address bar), allow the microphone, then press the button again.",
+		"unsupported": "Recording is not available here. Upload a file instead.",
+		"empty": "Nothing was recorded. Try again."
+	},
+	"upload": {
+		"button": "Upload audio",
+		"drop": "Drop an audio or video file here",
+		"limit": "Audio or video, up to 100 MB",
+		"or": "or",
+		"dropOverlay": "Drop to transcribe",
+		"busy": "Wait for the current transcript to finish",
+		"unsupported": "{{name}} is not an audio or video file.",
+		"tooLarge": "{{name}} is {{size}}. Files up to 100 MB are supported."
+	},
+	"options": {
+		"language": "Language",
+		"auto": "Auto-detect",
+		"task": "Task",
+		"transcribe": "Transcribe",
+		"translate": "Translate to English",
+		"translateShort": "To English",
+		"englishOnly": "This model understands English only."
+	},
+	"progress": {
+		"preparing": "Preparing…",
+		"transcribing": "Transcribing…",
+		"stop": "Stop",
+		"tryAgain": "Try again",
+		"dismiss": "Dismiss",
+		"failedToStart": "Could not start: {{error}}"
+	},
+	"card": {
+		"recording": "Recording",
+		"audioUnavailable": "Audio unavailable",
+		"play": "Play",
+		"pause": "Pause",
+		"seek": "Seek",
+		"playFrom": "Play from {{time}}",
+		"translated": "→ EN",
+		"listening": "Listening to the audio…",
+		"noSpeech": "No speech was detected.",
+		"showMore": "Show more",
+		"showLess": "Show less",
+		"export": "Export",
+		"exportTxt": "Text (.txt)",
+		"exportSrt": "Subtitles (.srt)",
+		"exportVtt": "WebVTT (.vtt)",
+		"edit": "Edit transcript",
+		"editHint": "Edited text replaces the timestamped view and subtitle timings.",
+		"save": "Save",
+		"cancel": "Cancel",
+		"sendToChat": "Send to chat"
+	},
+	"announce": {
+		"recording": "Recording started",
+		"denied": "Microphone access is blocked",
+		"transcribing": "Transcribing",
+		"done": "Transcript ready",
+		"stopped": "Transcription stopped",
+		"failed": "Transcription failed"
+	}
+}

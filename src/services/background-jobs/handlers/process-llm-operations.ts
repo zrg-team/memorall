@@ -4,6 +4,7 @@ import type {
 	ILLMService,
 	ServiceProvider,
 } from "@/services/llm/interfaces/llm-service.interface";
+import type { WorkspaceMode } from "@/services/llm/interfaces/model-category";
 import type {
 	ProcessHandler,
 	ProcessDependencies,
@@ -67,6 +68,10 @@ export interface ServeModelPayload {
 	modelId: string;
 	provider: ServiceProvider;
 	serviceName?: string; // Optional when using default service name for provider
+	/** Which selection the serve records; resolved from the model when absent. */
+	category?: WorkspaceMode;
+	/** `false` loads without recording a selection. */
+	select?: boolean;
 }
 
 export interface UnloadModelPayload {
@@ -538,6 +543,7 @@ export class LLMOperationsHandler implements ProcessHandler<BaseJob> {
 								progress: 50 + progress.percent * 0.4, // 50% to 90%
 							});
 						},
+						{ category: payload.category, select: payload.select },
 					);
 
 					await logger.info(

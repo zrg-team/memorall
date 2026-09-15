@@ -98,6 +98,12 @@ export interface ChatInputControlsProps {
 	isLoadingModels?: boolean;
 	onSelectModel?: (model: SelectableModel) => void;
 	onRefreshModels?: () => void;
+	/**
+	 * The dictation button, rendered by the composer. A slot rather than a
+	 * component import: it reaches the service tree, which this toolbar is
+	 * kept free of.
+	 */
+	dictation?: React.ReactNode;
 }
 
 export const ChatInputControls: React.FC<ChatInputControlsProps> = ({
@@ -133,6 +139,7 @@ export const ChatInputControls: React.FC<ChatInputControlsProps> = ({
 	isLoadingModels = false,
 	onSelectModel,
 	onRefreshModels,
+	dictation,
 }) => {
 	const { t } = useTranslation("chat");
 	const flowOptions = [
@@ -215,6 +222,8 @@ export const ChatInputControls: React.FC<ChatInputControlsProps> = ({
 								</DropdownMenuItem>
 							</DropdownMenuContent>
 						</DropdownMenu>
+
+						{dictation}
 
 						{/*
 						 * Next to attach because it is the same kind of act: both bring

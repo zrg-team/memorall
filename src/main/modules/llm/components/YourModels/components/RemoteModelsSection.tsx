@@ -10,6 +10,9 @@ import { PROVIDER_TO_SERVICE } from "@/services/llm/constants";
 import { logInfo } from "@/utils/logger";
 import type { ServiceProvider } from "@/services/llm/interfaces/llm-service.interface";
 import type { CurrentModel } from "@/main/hooks/use-current-model";
+import { useWorkspaceModeStore } from "@/main/stores/workspace-mode";
+import type { WorkspaceMode } from "@/services/llm/interfaces/model-category";
+import { resolveModelCategories } from "@/services/llm/registry/media-model-registry";
 
 interface RemoteModelsSectionProps {
 	providers: Array<{
@@ -26,6 +29,12 @@ interface RemoteModelsSectionProps {
 	 * Used where picking a model is the whole point of the screen.
 	 */
 	defaultExpanded?: boolean;
+	/**
+	 * The kind of model being picked. Hosted providers list every model they
+	 * serve in one flat list, so speech and image models are filtered out of
+	 * chat (and back in for their studios) by what each id is.
+	 */
+	category?: WorkspaceMode;
 }
 
 export const RemoteModelsSection: React.FC<RemoteModelsSectionProps> = ({
@@ -34,8 +43,18 @@ export const RemoteModelsSection: React.FC<RemoteModelsSectionProps> = ({
 	loading,
 	onModelLoaded,
 	defaultExpanded = false,
+	category = "chat",
 }) => {
 	const { t } = useTranslation("llm");
+	const setWorkspaceMode = useWorkspaceModeStore((state) => state.setMode);
+	providers = providers.map((providerState) => ({
+		...providerState,
+		models: providerState.models.filter((model) =>
+			resolveModelCategories(providerState.provider, model.id, model).includes(
+				category,
+			),
+		),
+	}));
 	const [collapsedProviders, setCollapsedProviders] = React.useState<
 		Partial<Record<"openai" | "openrouter", boolean>>
 	>({});
@@ -206,11 +225,16 @@ export const RemoteModelsSection: React.FC<RemoteModelsSectionProps> = ({
 															variant={isLoaded ? "outline" : "default"}
 															disabled={loading || isLoaded}
 															onClick={async () => {
-																await serviceManager.llmService.setCurrentModel(
+																await serviceManager.llmService.setCurrentModelFor(
+																	category,
 																	providerState.provider,
 																	model.id,
 																	PROVIDER_TO_SERVICE[providerState.provider],
 																);
+																// A speech or image model is used in its studio.
+																if (category !== "chat") {
+																	setWorkspaceMode(category);
+																}
 																logInfo(
 																	`${model.name || model.id} set as current model`,
 																);

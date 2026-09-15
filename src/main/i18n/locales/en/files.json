@@ -64,7 +64,8 @@
 		"description": "Description",
 		"convertSuccess": "Successfully converted content.",
 		"preview": "Preview",
-		"code": "Code"
+		"code": "Code",
+		"mediaUnsupported": "This browser can't play this file's format. Download it to open it in another app."
 	},
 	"tree": {
 		"dropToRoot": "Drop to move to root folder",

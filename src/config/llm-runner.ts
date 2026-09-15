@@ -3,13 +3,19 @@ import { platform } from "@/platform/current";
 // LLM Runner URLs - supports different modes via query params.
 const BASE_RUNNER_URL = platform.assets.url("runner/index.html");
 
-export type LLMRunnerMode = "wllama" | "webllm" | "embedding" | "transformer";
+export type LLMRunnerMode =
+	| "wllama"
+	| "webllm"
+	| "embedding"
+	| "transformer"
+	| "media";
 
 export const LLM_RUNNER_URLS: Record<LLMRunnerMode, string> = {
 	wllama: `${BASE_RUNNER_URL}?mode=wllama`,
 	webllm: `${BASE_RUNNER_URL}?mode=webllm`,
 	embedding: `${BASE_RUNNER_URL}?mode=embedding`,
 	transformer: `${BASE_RUNNER_URL}?mode=transformer`,
+	media: `${BASE_RUNNER_URL}?mode=media`,
 };
 
 // Backward compatibility - defaults to wllama mode

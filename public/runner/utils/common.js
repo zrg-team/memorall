@@ -1,6 +1,9 @@
 // Common utilities shared across all runners
 
-export function reply(src, origin, messageId, type, payload) {
+/**
+ * @param {Transferable[]} [transfer] Buffers to move instead of copy (PCM, images).
+ */
+export function reply(src, origin, messageId, type, payload, transfer) {
 	const safeOrigin = origin && origin !== "null" ? origin : "*";
 	if (origin === "null") {
 		try {
@@ -13,7 +16,8 @@ export function reply(src, origin, messageId, type, payload) {
 	const message = { messageId, type, payload };
 	try {
 		if (src && typeof src.postMessage === "function") {
-			src.postMessage(message, safeOrigin);
+			if (transfer?.length) src.postMessage(message, safeOrigin, transfer);
+			else src.postMessage(message, safeOrigin);
 			return;
 		}
 	} catch (e) {
@@ -24,7 +28,9 @@ export function reply(src, origin, messageId, type, payload) {
 
 	try {
 		if (window.parent && window.parent !== window) {
-			window.parent.postMessage(message, safeOrigin);
+			if (transfer?.length)
+				window.parent.postMessage(message, safeOrigin, transfer);
+			else window.parent.postMessage(message, safeOrigin);
 			return;
 		}
 	} catch (e) {

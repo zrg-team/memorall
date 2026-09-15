@@ -67,6 +67,19 @@ interface DocumentViewerProps {
 	onTopicClick?: (topicId: string) => void;
 }
 
+/** Shown when the browser cannot decode a stored audio or video file. */
+const MediaUnsupportedNote: React.FC = () => {
+	const { t } = useTranslation("documents");
+	return (
+		<p className="max-w-xl text-center text-xs text-muted-foreground">
+			{t("viewer.mediaUnsupported", {
+				defaultValue:
+					"This browser can't play this file's format. Download it to open it in another app.",
+			})}
+		</p>
+	);
+};
+
 export const DocumentViewer: React.FC<DocumentViewerProps> = ({
 	file,
 	isWorkspaceFile = false,
@@ -83,6 +96,7 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({
 }) => {
 	const { t, i18n } = useTranslation("documents");
 	const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+	const [mediaError, setMediaError] = useState(false);
 	const [textContent, setTextContent] = useState<string | null>(null);
 	const [excelData, setExcelData] = useState<Uint8Array | null>(null);
 	const [loading, setLoading] = useState(false);
@@ -107,13 +121,19 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({
 		setTextContent(null);
 		setPreviewUrl(null);
 		setExcelData(null);
+		setMediaError(false);
 
 		// Load preview for supported file types
 		const loadPreview = async () => {
 			const loadContent = async (): Promise<Uint8Array> =>
 				documentFileSystemService.readFile(sandboxPath);
 
-			if (file.type === "pdf" || file.type === "image") {
+			if (
+				file.type === "pdf" ||
+				file.type === "image" ||
+				file.type === "audio" ||
+				file.type === "video"
+			) {
 				setLoading(true);
 				try {
 					const content = await loadContent();
@@ -521,6 +541,43 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({
 								title={file.name}
 							/>
 						</div>
+					</div>
+				)}
+
+				{file.type === "audio" && previewUrl && (
+					<div className="flex flex-1 flex-col items-center justify-center gap-2 p-3 sm:p-4">
+						<div className="w-full max-w-xl rounded-lg border bg-muted/20 p-4">
+							{/* biome-ignore lint/a11y/useMediaCaption: user audio has no captions to offer */}
+							<audio
+								key={previewUrl}
+								src={previewUrl}
+								controls
+								preload="metadata"
+								className="w-full"
+								onError={() => setMediaError(true)}
+								data-document-audio
+							/>
+						</div>
+						{mediaError ? <MediaUnsupportedNote /> : null}
+					</div>
+				)}
+
+				{file.type === "video" && previewUrl && (
+					<div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 p-3 sm:p-4">
+						<div className="flex h-full min-h-0 w-full items-center justify-center overflow-hidden rounded-lg border bg-black">
+							{/* biome-ignore lint/a11y/useMediaCaption: user video has no captions to offer */}
+							<video
+								key={previewUrl}
+								src={previewUrl}
+								controls
+								playsInline
+								preload="metadata"
+								className="h-full w-full object-contain"
+								onError={() => setMediaError(true)}
+								data-document-video
+							/>
+						</div>
+						{mediaError ? <MediaUnsupportedNote /> : null}
 					</div>
 				)}
 

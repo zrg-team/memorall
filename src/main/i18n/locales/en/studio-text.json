@@ -1,0 +1,109 @@
+{
+	"canvas": {
+		"label": "Text tools"
+	},
+	"tasks": {
+		"label": "Tool",
+		"text-classification": {
+			"label": "Classify",
+			"can": "classify text",
+			"description": "Tell what a text is about or how it feels, with confidence scores."
+		},
+		"zero-shot-classification": {
+			"label": "Your labels",
+			"can": "sort text into your own labels",
+			"description": "Sort a text into labels you choose, no training needed."
+		},
+		"text-ranking": {
+			"label": "Rank documents",
+			"can": "rank documents",
+			"description": "Order documents by how well they answer a query."
+		}
+	},
+	"hint": {
+		"switchModel": "Switch to a model that can {{task}}.",
+		"chooseModel": "Choose a model"
+	},
+	"composer": {
+		"run": "Run",
+		"shortcut": "Enter to run",
+		"textPlaceholder": "Paste or write the text to classify",
+		"zeroShotPlaceholder": "Paste the text to sort into your labels",
+		"queryPlaceholder": "What are you looking for?",
+		"labels": "Labels",
+		"labelsPlaceholder": "Labels, separated by commas",
+		"addLabel": "Add a label",
+		"removeLabel": "Remove {{label}}",
+		"multiLabel": "Several labels can apply",
+		"settings": "Label settings",
+		"documents": "Documents",
+		"documentsHint": "One per line",
+		"documentsPlaceholder": "Paste the documents to rank, one on each line.\nThe most relevant comes first."
+	},
+	"settings": {
+		"hypothesisTemplate": "Hypothesis template",
+		"hypothesisHint": "Each label replaces {} to form the sentence the model checks."
+	},
+	"card": {
+		"showMore": "Show more",
+		"showLess": "Show less",
+		"labelCount_one": "{{count}} label",
+		"labelCount_other": "{{count}} labels",
+		"documentCount_one": "{{count}} document",
+		"documentCount_other": "{{count}} documents",
+		"multiLabel": "Several can apply",
+		"noResults": "The model returned nothing.",
+		"elapsed": "{{seconds}}s",
+		"copyResults": "Copy results",
+		"reuse": "Reuse input"
+	},
+	"export": {
+		"text": "Text",
+		"query": "Query",
+		"results": "Results"
+	},
+	"empty": {
+		"text-classification": {
+			"title": "Classify text",
+			"description": "Paste a review, a message or a comment to see what it is about or how it feels, with a score for each label."
+		},
+		"zero-shot-classification": {
+			"title": "Sort text into your labels",
+			"description": "Write a text and the labels you care about. The model scores how well each label fits, no training needed."
+		},
+		"text-ranking": {
+			"title": "Rank documents",
+			"description": "Ask a question and add the documents to compare, one per line. The most relevant ones come first."
+		}
+	},
+	"examples": {
+		"review": {
+			"label": "Classify a product review",
+			"text": "The battery died after two days and support never answered my emails."
+		},
+		"comment": {
+			"label": "Read the mood of a comment",
+			"text": "Loved the new update, everything feels faster and the dark mode is gorgeous!"
+		},
+		"ticket": {
+			"label": "Route a support ticket",
+			"text": "I was charged twice for my subscription this month and the app still says my plan has expired.",
+			"labels": "billing, bug, feature request"
+		},
+		"headline": {
+			"label": "Tag a news headline",
+			"text": "The central bank raised interest rates by half a point to cool inflation.",
+			"labels": "economy, politics, sports, technology"
+		},
+		"password": {
+			"label": "Find the answer to a question",
+			"text": "How do I reset my password?",
+			"documents": "Our office is open Monday to Friday, from 9 am to 5 pm.\nOpen Settings, choose Account, then select Reset password and follow the link we email you.\nYou can change your profile picture from the Account page."
+		},
+		"capital": {
+			"label": "Rank search results",
+			"text": "What is the capital of Australia?",
+			"documents": "Sydney is the largest city in Australia.\nCanberra is the capital city of Australia.\nKangaroos are native to Australia."
+		}
+	}
+}

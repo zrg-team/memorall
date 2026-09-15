@@ -533,6 +533,8 @@ export class DocumentFileSystem {
 		if (mimeType.startsWith("text/plain")) return "text";
 		if (mimeType.includes("markdown")) return "markdown";
 		if (mimeType.startsWith("image/")) return "image";
+		if (mimeType.startsWith("audio/")) return "audio";
+		if (mimeType.startsWith("video/")) return "video";
 		if (
 			mimeType === "application/vnd.ms-excel" ||
 			mimeType ===
@@ -547,6 +549,11 @@ export class DocumentFileSystem {
 				if (ext === "txt") return "text";
 				if (ext === "md" || ext === "markdown") return "markdown";
 				if (["jpg", "jpeg", "png", "gif", "webp"].includes(ext)) return "image";
+				if (["wav", "mp3", "ogg", "oga", "m4a", "flac"].includes(ext))
+					return "audio";
+				// .webm is usually video; a <video> element plays audio-only ones too.
+				if (["mp4", "m4v", "mov", "webm", "ogv", "mkv"].includes(ext))
+					return "video";
 				if (["xls", "xlsx", "xlsm"].includes(ext)) return "excel";
 			}
 		}
@@ -566,6 +573,18 @@ export class DocumentFileSystem {
 			png: "image/png",
 			gif: "image/gif",
 			webp: "image/webp",
+			wav: "audio/wav",
+			mp3: "audio/mpeg",
+			ogg: "audio/ogg",
+			oga: "audio/ogg",
+			m4a: "audio/mp4",
+			flac: "audio/flac",
+			mp4: "video/mp4",
+			m4v: "video/mp4",
+			mov: "video/quicktime",
+			webm: "video/webm",
+			ogv: "video/ogg",
+			mkv: "video/x-matroska",
 			xls: "application/vnd.ms-excel",
 			xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 			xlsm: "application/vnd.ms-excel.sheet.macroEnabled.12",
@@ -1212,6 +1231,62 @@ export class DocumentFileSystem {
 		await fs.promises.writeFile(fullPath, new Uint8Array(arrayBuffer));
 		logInfo(`🖼️ Uploaded chat image: ${fullPath}`);
 		return `/resources/images/${fileName}`;
+	}
+
+	/**
+	 * Store generated or recorded media (speech clips, microphone recordings,
+	 * generated images) under /resources/{audio,images}/ with a UUID filename.
+	 *
+	 * Unlike `uploadChatImage` this announces the write: media produced in the
+	 * offscreen document is read back by the UI, whose filesystem view has to
+	 * refresh first. Returns the logical path.
+	 */
+	async saveMediaFile(
+		bytes: Uint8Array,
+		options: {
+			kind: "audio" | "image";
+			extension: string;
+			folder?: "generated" | "recordings" | "inputs";
+		},
+	): Promise<string> {
+		await this.initialize();
+		const uuid =
+			typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+				? crypto.randomUUID()
+				: `media-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+		const extension = options.extension.startsWith(".")
+			? options.extension
+			: `.${options.extension}`;
+		const base =
+			options.kind === "audio" ? "/resources/audio" : "/resources/images";
+		const logicalPath = `${base}${options.folder ? `/${options.folder}` : ""}/${uuid}${extension}`;
+		await this.writeFile(toDocumentsSandboxPath(logicalPath), bytes, true);
+		logInfo(`🎞️ Saved ${options.kind} media: ${logicalPath}`);
+		return logicalPath;
+	}
+
+	/**
+	 * Read media by logical path, tolerating a file another context has only
+	 * just written: the IndexedDB-backed filesystem caches per context, so the
+	 * first read can miss until the cache refreshes.
+	 */
+	async readMediaFile(logicalPath: string, attempts = 4): Promise<Uint8Array> {
+		const sandboxPath = toDocumentsSandboxPath(logicalPath);
+		let lastError: unknown;
+		for (let attempt = 0; attempt < attempts; attempt++) {
+			try {
+				return await this.readFile(sandboxPath);
+			} catch (error) {
+				lastError = error;
+				await this.invalidateCacheAndRefreshFs().catch(() => undefined);
+				await new Promise((resolve) =>
+					setTimeout(resolve, 150 * (attempt + 1)),
+				);
+			}
+		}
+		throw lastError instanceof Error
+			? lastError
+			: new Error(`File not found: ${logicalPath}`);
 	}
 
 	/**

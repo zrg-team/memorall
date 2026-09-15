@@ -9,7 +9,7 @@ const mocks = vi.hoisted(() => ({
 		object: "list" as const,
 		data: [] as Array<Record<string, unknown>>,
 	})),
-	setCurrentModel: vi.fn(async () => undefined),
+	setCurrentModelFor: vi.fn(async () => undefined),
 	serveFor: vi.fn(async () => undefined),
 }));
 
@@ -18,8 +18,14 @@ vi.mock("@/services", () => ({
 		llmService: {
 			list: mocks.list,
 			modelsFor: mocks.modelsFor,
-			setCurrentModel: mocks.setCurrentModel,
+			setCurrentModelFor: mocks.setCurrentModelFor,
 			serveFor: mocks.serveFor,
+			// The real rule lives in the provider registry; the tests below only
+			// need "chat providers serve chat, media providers serve media".
+			supportsCategoryFor: (service: string, category: string) =>
+				category === "chat"
+					? service !== "transformer-media"
+					: ["transformer-media", "openai"].includes(service),
 		},
 		databaseService: {
 			use: vi.fn(async () => mocks.dbRows()),
@@ -70,6 +76,43 @@ describe("useSelectableModels", () => {
 
 		await waitFor(() => expect(result.current.models).toHaveLength(2));
 		expect(result.current.byProvider.size).toBe(2);
+	});
+
+	it("carries a local model's download size, from the runner or its catalog", async () => {
+		const { toSelectable } = await import("@/main/hooks/use-selectable-models");
+
+		expect(
+			toSelectable(
+				{
+					id: "org/speech-model",
+					object: "model",
+					created: 0,
+					owned_by: "transformer-media",
+					provider: "transformer-media",
+					loaded: false,
+					downloaded: true,
+					size: 900,
+					sizeByDevice: { webgpu: 900, wasm: 300 },
+					categories: ["text-to-speech"],
+				},
+				"transformer-media",
+				"text-to-speech",
+			),
+		).toMatchObject({ size: 900, sizeByDevice: { webgpu: 900, wasm: 300 } });
+
+		const hosted = toSelectable(
+			{
+				id: "gpt-4o-mini",
+				object: "model",
+				created: 0,
+				owned_by: "openai",
+				provider: "openai",
+				loaded: false,
+				size: 5,
+			},
+			"openai",
+		);
+		expect(hosted).not.toHaveProperty("size");
 	});
 
 	it("hides a local model that has not been downloaded", async () => {
@@ -137,12 +180,102 @@ describe("useSelectableModels", () => {
 
 		expect(ok).toBe(true);
 		// Recorded first: a load that fails still leaves the choice visible.
-		expect(mocks.setCurrentModel).toHaveBeenCalledWith(
+		expect(mocks.setCurrentModelFor).toHaveBeenCalledWith(
+			"chat",
 			"openai",
 			"gpt-4o-mini",
 			"openai",
 		);
-		expect(mocks.serveFor).toHaveBeenCalledWith("openai", "gpt-4o-mini");
+		expect(mocks.serveFor).toHaveBeenCalledWith(
+			"openai",
+			"gpt-4o-mini",
+			undefined,
+			{ category: "chat" },
+		);
+	});
+
+	it("keeps models whose id names another capability out of the chat picker", async () => {
+		mocks.list.mockReturnValue(["openai"]);
+		mocks.modelsFor.mockResolvedValue({
+			object: "list",
+			data: [
+				model({ id: "acme-chat", provider: "openai" }),
+				model({ id: "acme-tts", provider: "openai" }),
+				model({ id: "acme-transcribe", provider: "openai" }),
+				model({ id: "acme-image-1", provider: "openai" }),
+				model({ id: "acme-embedding", provider: "openai" }),
+			],
+		});
+
+		const { result } = renderHook(() => useSelectableModels());
+
+		await waitFor(() => expect(result.current.isLoading).toBe(false));
+		expect(result.current.models.map((entry) => entry.id)).toEqual([
+			"acme-chat",
+		]);
+	});
+
+	it("lists a category's models, recognised first, including local runners not yet created", async () => {
+		mocks.list.mockReturnValue(["openai", "wllama"]);
+		mocks.modelsFor.mockImplementation(async (service: string) => {
+			if (service === "openai") {
+				return {
+					object: "list" as const,
+					data: [
+						model({ id: "acme-chat", provider: "openai" }),
+						model({ id: "acme-tts", provider: "openai" }),
+						model({ id: "acme-transcribe", provider: "openai" }),
+					],
+				};
+			}
+			if (service === "transformer-media") {
+				return {
+					object: "list" as const,
+					data: [
+						model({
+							id: "org/speech-model",
+							provider: "transformer-media",
+							downloaded: true,
+							categories: ["text-to-speech"],
+						}),
+						model({
+							id: "org/asr-model",
+							provider: "transformer-media",
+							downloaded: true,
+							categories: ["speech-to-text"],
+						}),
+					],
+				};
+			}
+			return { object: "list" as const, data: [] };
+		});
+
+		const { result } = renderHook(() => useSelectableModels("text-to-speech"));
+
+		await waitFor(() => expect(result.current.isLoading).toBe(false));
+		// A hosted model with an uninformative id is still offered, after the
+		// ones recognised as speech; models of another known kind are not.
+		expect(
+			result.current.byProvider.get("openai")?.map((entry) => entry.id),
+		).toEqual(["acme-tts", "acme-chat"]);
+		expect(
+			result.current.byProvider
+				.get("transformer-media")
+				?.map((entry) => entry.id),
+		).toEqual(["org/speech-model"]);
+		expect(mocks.modelsFor).not.toHaveBeenCalledWith("wllama");
+
+		await result.current.selectModel(
+			result.current.models.find(
+				(entry) => entry.provider === "transformer-media",
+			)!,
+		);
+		expect(mocks.setCurrentModelFor).toHaveBeenCalledWith(
+			"text-to-speech",
+			"transformer-media",
+			"org/speech-model",
+			"transformer-media",
+		);
 	});
 
 	it("reports a failed switch instead of throwing at the composer", async () => {

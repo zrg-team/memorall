@@ -497,5 +497,13 @@
 	"coAgent": {
 		"openLink": "Co-agent trên {{host}}",
 		"openLinkTitle": "Mở {{url}} và bật co-agent"
+	},
+	"dictation": {
+		"start": "Đọc chính tả",
+		"stop": "Dừng và chép lời (Esc để hủy)",
+		"transcribing": "Đang chép lời…",
+		"denied": "Trang này đang bị chặn quyền dùng micro",
+		"chooseModel": "Đọc chính tả — hãy chọn mô hình chép lời trước",
+		"localHint": "Chạy trên thiết bị này. Mô hình chat cục bộ sẽ tạm gỡ khỏi bộ nhớ khi chép lời và nạp lại ở tin nhắn tiếp theo."
 	}
 }

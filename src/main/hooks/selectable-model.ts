@@ -1,4 +1,10 @@
+import type { DeviceDownloadSizes } from "@/services/llm/interfaces/base-llm";
 import type { ServiceProvider } from "@/services/llm/interfaces/llm-service.interface";
+import type { ModelCategory } from "@/services/llm/interfaces/model-category";
+import {
+	LOCAL_RUNNER_PROVIDERS,
+	PROVIDER_REGISTRY,
+} from "@/services/llm/provider-registry";
 
 /**
  * What a model looks like to anything choosing between them.
@@ -15,27 +21,19 @@ export interface SelectableModel {
 	serviceName: string;
 	isLocal: boolean;
 	loaded: boolean;
+	/** What the model does; absent means chat. */
+	categories?: readonly ModelCategory[];
+	/** Local models: bytes on disk / to download (see `downloadBytesFor`). */
+	size?: number;
+	sizeByDevice?: DeviceDownloadSizes;
 }
 
 /** Runs in the browser, so a model is only instantly selectable once local. */
-export const LOCAL_PROVIDERS: ReadonlySet<ServiceProvider> = new Set([
-	"wllama",
-	"webllm",
-	"transformer",
-]);
-
-const PROVIDER_LABELS: Record<ServiceProvider, string> = {
-	wllama: "Wllama",
-	webllm: "WebLLM",
-	transformer: "Transformers",
-	openai: "OpenAI",
-	openrouter: "OpenRouter",
-	lmstudio: "LM Studio",
-	ollama: "Ollama",
-};
+export const LOCAL_PROVIDERS: ReadonlySet<ServiceProvider> =
+	LOCAL_RUNNER_PROVIDERS;
 
 export const providerLabel = (provider: ServiceProvider): string =>
-	PROVIDER_LABELS[provider] ?? provider;
+	PROVIDER_REGISTRY[provider]?.shortLabel ?? provider;
 
 /**
  * The tail of an id is what distinguishes two models; the vendor prefix and the

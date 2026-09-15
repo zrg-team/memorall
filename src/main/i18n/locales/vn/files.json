@@ -64,7 +64,8 @@
 		"description": "Mô tả",
 		"convertSuccess": "Chuyển đổi nội dung thành công.",
 		"preview": "Xem trước",
-		"code": "Mã nguồn"
+		"code": "Mã nguồn",
+		"mediaUnsupported": "Trình duyệt không phát được định dạng tệp này. Hãy tải xuống để mở bằng ứng dụng khác."
 	},
 	"tree": {
 		"dropToRoot": "Thả để di chuyển đến thư mục gốc",

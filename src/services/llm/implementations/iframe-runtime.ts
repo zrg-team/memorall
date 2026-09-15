@@ -1,7 +1,13 @@
 import { sharedStorageService } from "@/services/shared-storage";
-import { CURRENT_MODEL_KEY } from "../constants";
+import {
+	CURRENT_MODEL_KEY,
+	CURRENT_MODELS_BY_CATEGORY_KEY,
+} from "../constants";
 import type { ModelInfo, ModelsResponse } from "../interfaces/base-llm";
-import type { CurrentModelInfo } from "../interfaces/llm-service.interface";
+import type {
+	CurrentModelInfo,
+	CurrentModelsByCategory,
+} from "../interfaces/llm-service.interface";
 
 interface IframeRuntimeOptions {
 	provider: string;
@@ -143,19 +149,33 @@ export class IframeRuntime {
 		}, this.idleDestroyDelayMs);
 	}
 
-	private async getCurrentModelProvider(): Promise<string | null> {
+	/** Service names currently selected for any category, chat first. */
+	private async getCurrentModelProviders(): Promise<string[]> {
 		try {
-			if (!sharedStorageService.isAvailable()) return null;
-			const currentModel =
-				await sharedStorageService.get<CurrentModelInfo>(CURRENT_MODEL_KEY);
-			return currentModel?.serviceName ?? currentModel?.provider ?? null;
+			if (!sharedStorageService.isAvailable()) return [];
+			const [chatModel, byCategory] = await Promise.all([
+				sharedStorageService.get<CurrentModelInfo>(CURRENT_MODEL_KEY),
+				sharedStorageService.get<CurrentModelsByCategory>(
+					CURRENT_MODELS_BY_CATEGORY_KEY,
+				),
+			]);
+			return [chatModel, ...Object.values(byCategory ?? {})]
+				.map((model) => model?.serviceName ?? model?.provider)
+				.filter((name): name is string => typeof name === "string");
 		} catch {
-			return null;
+			return [];
 		}
 	}
 
+	private async getCurrentModelProvider(): Promise<string | null> {
+		const providers = await this.getCurrentModelProviders();
+		return providers.includes(this.provider)
+			? this.provider
+			: (providers[0] ?? null);
+	}
+
 	private async isCurrentProvider(): Promise<boolean> {
-		return (await this.getCurrentModelProvider()) === this.provider;
+		return (await this.getCurrentModelProviders()).includes(this.provider);
 	}
 
 	private hasLoadedOrDownloadedModel(models: ModelsResponse | null): boolean {

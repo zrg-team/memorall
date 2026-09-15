@@ -210,14 +210,9 @@ export const OpenRouterTab: React.FC<OpenRouterTabProps> = ({
 
 	const handleForgotMasterPasskey = async () => {
 		const deletedProviders = await resetMasterKeyAndEncryptedConfigs();
-		const currentModel = await serviceManager.llmService.getCurrentModel();
-		if (
-			currentModel &&
-			deletedProviders.includes(
-				currentModel.provider as "openai" | "openrouter",
-			)
-		) {
-			await serviceManager.llmService.clearCurrentModel();
+		// Chat and every studio lose a model whose key was just deleted.
+		for (const provider of deletedProviders) {
+			await serviceManager.llmService.clearCurrentModelsForProvider(provider);
 		}
 
 		for (const provider of deletedProviders) {
@@ -309,11 +304,12 @@ export const OpenRouterTab: React.FC<OpenRouterTabProps> = ({
 
 		try {
 			// Check if current model is using openrouter provider
-			const currentModel = await serviceManager.llmService.getCurrentModel();
-			if (currentModel && currentModel.provider === "openrouter") {
-				await serviceManager.llmService.clearCurrentModel();
-				logInfo("Cleared current model as it was using openrouter provider");
-			}
+			await serviceManager.llmService.clearCurrentModelsForProvider(
+				"openrouter",
+			);
+			logInfo(
+				"Cleared chat and studio models that used the openrouter provider",
+			);
 
 			await serviceManager.databaseService.use(({ db, schema }) => {
 				return db

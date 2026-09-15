@@ -8,10 +8,16 @@ import type { BaseLLM, ProgressEvent, ModelInfo } from "./interfaces/base-llm";
 import { WllamaLLM } from "./implementations/wllama-llm";
 import { WebLLMLLM } from "./implementations/webllm-llm";
 import { TransformerLLM } from "./implementations/transformer-llm";
+import { TransformerMediaLLM } from "./implementations/transformer-media-llm";
 import { OpenAILLM } from "./implementations/openai-llm";
 import { LocalOpenAICompatibleLLM } from "./implementations/local-openai-llm";
-import type { ILLMService } from "./interfaces/llm-service.interface";
+import type {
+	ILLMService,
+	ServeOptions,
+} from "./interfaces/llm-service.interface";
 import { DEFAULT_SERVICES, SERVICE_TO_PROVIDER } from "./constants";
+import { isResidentLocalProvider } from "./provider-registry";
+import { ResidencyManager } from "./residency-manager";
 import type {
 	LLMRegistry,
 	LMStudioConfig,
@@ -20,12 +26,42 @@ import type {
 	OpenRouterConfig,
 	WebLLMConfig,
 	WllamaConfig,
-	TransformerConfig,
 } from "./interfaces/service";
 import { LLMServiceCore } from "./llm-service-core";
 
 export class LLMServiceMain extends LLMServiceCore implements ILLMService {
 	private isEnsuringServices = false;
+
+	/** One browser-hosted model in memory at a time, across every runner. */
+	private readonly residency = new ResidencyManager({
+		list: () => this.list(),
+		isResidentLocal: (name) =>
+			isResidentLocalProvider(SERVICE_TO_PROVIDER[name] ?? name),
+		modelsFor: async (name) => {
+			const llm = this.llms.get(name);
+			if (!llm) return { object: "list", data: [] };
+			return llm.models();
+		},
+		unloadFor: (name, modelId) => this.unloadFor(name, modelId),
+		isRunnerActive: (name) => this.llms.get(name)?.isReady() ?? false,
+		releaseRunner: (name) => {
+			// Media runners grow a fresh WASM heap per model; destroying the
+			// iframe is the only way that memory is returned. Chat runners keep
+			// their existing lifecycle.
+			if (name !== DEFAULT_SERVICES.TRANSFORMER_MEDIA) {
+				return;
+			}
+			const llm = this.llms.get(name) as { destroy?: () => void } | undefined;
+			llm?.destroy?.();
+		},
+	});
+
+	protected override leaseModel(
+		serviceName: string,
+		modelId: string,
+	): Promise<() => void> {
+		return this.residency.acquire(serviceName, modelId);
+	}
 
 	async initialize(): Promise<void> {
 		logInfo(
@@ -58,6 +94,9 @@ export class LLMServiceMain extends LLMServiceCore implements ILLMService {
 				break;
 			case "transformer":
 				llm = new TransformerLLM() as LLMRegistry[K]["llm"];
+				break;
+			case "transformer-media":
+				llm = new TransformerMediaLLM() as LLMRegistry[K]["llm"];
 				break;
 			case "openai":
 				llm = new OpenAILLM(
@@ -132,34 +171,48 @@ export class LLMServiceMain extends LLMServiceCore implements ILLMService {
 		if (!request.model) {
 			request.model = this.currentModel?.modelId;
 		}
+		// Every chat path - agents, cron jobs, knowledge extraction - lands here,
+		// and runners lazy-load the requested model. Leasing first is what keeps
+		// a speech or image model from sharing memory with it.
+		const modelId = request.model ?? "";
 		if (request.stream) {
 			const self = this;
 			return (async function* () {
 				const llm = await self.get(name);
 				if (!llm) throw new Error(`LLM "${name}" not found`);
-				const completion = llm.chatCompletions(
-					request as ChatCompletionRequest & { stream: true },
-				);
-				if (
-					!completion ||
-					typeof completion[Symbol.asyncIterator] !== "function"
-				) {
-					throw new TypeError(
-						`LLM "${name}" (${llm.constructor.name}) did not return an async iterable for a streaming completion`,
+				const release = await self.residency.acquire(name, modelId);
+				try {
+					const completion = llm.chatCompletions(
+						request as ChatCompletionRequest & { stream: true },
 					);
-				}
+					if (
+						!completion ||
+						typeof completion[Symbol.asyncIterator] !== "function"
+					) {
+						throw new TypeError(
+							`LLM "${name}" (${llm.constructor.name}) did not return an async iterable for a streaming completion`,
+						);
+					}
 
-				for await (const chunk of completion) {
-					yield chunk as ChatCompletionChunk;
+					for await (const chunk of completion) {
+						yield chunk as ChatCompletionChunk;
+					}
+				} finally {
+					release();
 				}
 			})();
 		} else {
 			return (async () => {
 				const llm = await this.get(name);
 				if (!llm) throw new Error(`LLM "${name}" not found`);
-				return llm.chatCompletions(
-					request as ChatCompletionRequest & { stream?: false },
-				) as Promise<ChatCompletionResponse>;
+				const release = await this.residency.acquire(name, modelId);
+				try {
+					return await (llm.chatCompletions(
+						request as ChatCompletionRequest & { stream?: false },
+					) as Promise<ChatCompletionResponse>);
+				} finally {
+					release();
+				}
 			})();
 		}
 	}
@@ -167,7 +220,8 @@ export class LLMServiceMain extends LLMServiceCore implements ILLMService {
 	async unloadFor(name: string, modelId: string): Promise<void> {
 		const llm = await this.get(name);
 		if (!llm) throw new Error(`LLM "${name}" not found`);
-		return llm.unload(modelId);
+		await llm.unload(modelId);
+		this.residency.forget(name, modelId);
 	}
 
 	async deleteModelFor(name: string, modelId: string): Promise<void> {
@@ -180,21 +234,14 @@ export class LLMServiceMain extends LLMServiceCore implements ILLMService {
 		name: string,
 		model: string,
 		onProgress?: (progress: ProgressEvent) => void,
+		options?: ServeOptions,
 	): Promise<ModelInfo> {
 		await this.ensureOnDemandService(name);
 
 		const llm = await this.get(name);
 		if (!llm) throw new Error(`LLM "${name}" not found`);
-		const llmWithServe = llm as BaseLLM & {
-			serve?: (
-				model: string,
-				onProgress?: (progress: ProgressEvent) => void,
-			) => Promise<ModelInfo>;
-		};
 
-		await this.unloadOtherServices(name);
-
-		if (!llmWithServe.serve) {
+		if (!llm.serve) {
 			let existingModel: ModelInfo | undefined;
 			try {
 				const models = await this.modelsFor(name);
@@ -203,31 +250,32 @@ export class LLMServiceMain extends LLMServiceCore implements ILLMService {
 				logWarn(`Failed to fetch models for ${name}:`, error);
 			}
 
-			const provider = SERVICE_TO_PROVIDER[name] ?? this.currentModel?.provider;
-			if (!provider) {
-				throw new Error(`Cannot determine provider for service "${name}"`);
+			// Switching chat to a remote or server-hosted model leaves nothing
+			// local to run; free it now rather than on the runner's idle timer.
+			if (
+				options?.select !== false &&
+				this.resolveServeCategory(name, model, options, existingModel) ===
+					"chat"
+			) {
+				await this.residency.releaseAll();
 			}
-
-			await this.setCurrentModel(provider, model, name);
+			await this.recordServedModel(name, model, options, existingModel);
 			return (
 				existingModel ?? {
 					id: model,
 					name: model,
 					object: "model",
 					created: Math.floor(Date.now() / 1000),
-					owned_by: provider,
+					owned_by: SERVICE_TO_PROVIDER[name] ?? name,
 					loaded: true,
 				}
 			);
 		}
 
+		const release = await this.residency.acquire(name, model);
 		try {
-			const result = await llmWithServe.serve(model, onProgress);
-			const provider = SERVICE_TO_PROVIDER[name] ?? this.currentModel?.provider;
-			if (!provider) {
-				throw new Error(`Cannot determine provider for service "${name}"`);
-			}
-			await this.setCurrentModel(provider, model, name);
+			const result = await llm.serve(model, onProgress);
+			await this.recordServedModel(name, model, options, result);
 			return result;
 		} catch (error) {
 			if (
@@ -241,6 +289,8 @@ export class LLMServiceMain extends LLMServiceCore implements ILLMService {
 				);
 			}
 			throw error;
+		} finally {
+			release();
 		}
 	}
 
@@ -316,37 +366,19 @@ export class LLMServiceMain extends LLMServiceCore implements ILLMService {
 	async serve(
 		model: string,
 		onProgress?: (progress: ProgressEvent) => void,
+		options?: ServeOptions,
 	): Promise<ModelInfo> {
 		if (!this.currentModel) {
 			throw new Error("No current model selected");
 		}
 
 		// Note: ensureAllServices() is called during initialization, no need to call here
-		return this.serveFor(this.currentModel.serviceName, model, onProgress);
-	}
-
-	private async unloadOtherServices(exceptName: string): Promise<void> {
-		for (const [name] of this.llms) {
-			if (name === exceptName) continue;
-			if (name === DEFAULT_SERVICES.OPENAI) continue;
-			try {
-				const models = await this.modelsFor(name);
-				for (const m of models.data) {
-					if (m.loaded) {
-						try {
-							await this.unloadFor(name, m.id);
-						} catch (e) {
-							logWarn(
-								`Failed to unload model ${m.id} from service ${name}:`,
-								e,
-							);
-						}
-					}
-				}
-			} catch (e) {
-				logWarn(`Failed to fetch models for service ${name}:`, e);
-			}
-		}
+		return this.serveFor(
+			this.currentModel.serviceName,
+			model,
+			onProgress,
+			options,
+		);
 	}
 
 	async ensureAllServices(): Promise<void> {

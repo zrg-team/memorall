@@ -2,7 +2,7 @@ import React from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { ChevronsLeft, ChevronsRight, ExternalLink } from "lucide-react";
 import { RightApplicationLayout } from "@/main/components/RightApplicationLayout";
-import { ChatPage } from "@/main/pages/ChatPage";
+import { MainWorkspacePanel } from "@/main/components/MainWorkspacePanel";
 import {
 	SHELL_CHAT_WIDTH_MAX,
 	SHELL_CHAT_WIDTH_MIN,
@@ -30,6 +30,8 @@ interface AppShellProps {
 }
 
 const MOBILE_WORKSPACE_QUERY = "(max-width: 640px)";
+/** Room the panel toggle (a 32px button, 8px from the edge) takes, plus air. */
+const PANEL_TOGGLE_INSET = 48;
 
 export const AppShell: React.FC<AppShellProps> = ({ children }) => {
 	const navigate = useNavigate();
@@ -89,6 +91,18 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
 	const panelTransitionClass = isResizing
 		? ""
 		: "transition-[width,flex-basis] duration-300 ease-out";
+	// The floating navigation (below) overlays the chat panel's top-right corner:
+	// one 32px button per item with 4px gaps, 4px padding, a border and the
+	// 12px offset from the edge, plus 8px of air.
+	const floatingNavigationWidth =
+		workspaceNavigationItems.length * 36 - 4 + 10 + 12 + 8;
+	// The "show full right panel" button overlays the chat panel's top-right
+	// corner only while both panels are open on a wide screen (see below).
+	const showsPanelToggle =
+		!isNarrow &&
+		!rightPanelCollapsed &&
+		!effectiveChatShellCollapsed &&
+		!(isNarrowChatPanel && isCompactChatListOpen);
 	const isMobileWorkspaceOpen =
 		isNarrow && workspaceNavigationPaths.has(location.pathname);
 
@@ -96,11 +110,15 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
 		void refreshRuntimeSessions();
 	}, [refreshRuntimeSessions]);
 
+	// Every navigation to a workspace page shows it - including one that only
+	// changes the query (a studio's "manage models" to /llm?category=…) while
+	// the panel is collapsed on that same page.
+	// biome-ignore lint/correctness/useExhaustiveDependencies: location.key marks each navigation
 	React.useEffect(() => {
 		if (workspaceNavigationPaths.has(location.pathname)) {
 			setRightPanelCollapsed(false);
 		}
-	}, [location.pathname, setRightPanelCollapsed]);
+	}, [location.key, location.pathname, setRightPanelCollapsed]);
 
 	if (!isInitialized) {
 		// The persisted-model lookup is a single indexed read; a skeleton of the
@@ -235,8 +253,14 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
 							</div>
 						</div>
 					) : (
-						<ChatPage
-							hideWideSidePanelCollapsedToggle={effectiveChatShellCollapsed}
+						<MainWorkspacePanel
+							headerInsetEnd={
+								isNarrow && !isMobileWorkspaceOpen
+									? floatingNavigationWidth
+									: showsPanelToggle
+										? PANEL_TOGGLE_INSET
+										: undefined
+							}
 							isNarrowChatPanel={isNarrowChatPanel}
 							onCompactChatListOpenChange={setIsCompactChatListOpen}
 							useIconOnlyHistoryButton={isNarrow && !isMobileWorkspaceOpen}
