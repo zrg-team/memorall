@@ -34,6 +34,7 @@
 	},
 	"providers": {
 		"transformer": "Transformer (WebGPU)",
+		"transformer-media": "Transformers Media (ONNX)",
 		"wllama": "Wllama (GGUF)",
 		"webllm": "WebLLM (MLC)",
 		"openai": "OpenAI",
@@ -42,6 +43,7 @@
 		"ollama": "Ollama",
 		"compact": {
 			"transformer": "Transformer",
+			"transformer-media": "Media",
 			"wllama": "Wllama",
 			"webllm": "WebLLM",
 			"openai": "OpenAI",
@@ -505,5 +507,10 @@
 		}
 	},
 	"empty": "Không có mô hình nào",
-	"error": "Không thể tải mô hình"
+	"error": "Không thể tải mô hình",
+	"studioModels": {
+		"title": "Mô hình studio",
+		"description": "Mô hình mà mỗi studio sử dụng. Mỗi lúc chỉ giữ một mô hình chạy trên thiết bị trong bộ nhớ.",
+		"none": "Chưa chọn — xem mô hình"
+	}
 }

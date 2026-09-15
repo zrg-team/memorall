@@ -3,23 +3,105 @@ import { sharedStorageService } from "@/services/shared-storage";
 import { serviceManager } from "@/services";
 import { eq } from "drizzle-orm";
 import { LOCAL_SERVER_LLM_CONFIG_KEYS } from "@/config/local-server-llm";
-import type { BaseLLM } from "./interfaces/base-llm";
+import type {
+	ImageGenerateParams,
+	ImageGenerationStreamEvent,
+	ImageToolParams,
+	ImageToolResponse,
+	TextToolParams,
+	TextToolResponse,
+	SpeechCreateParams,
+	SpeechResponse,
+	SpeechStreamEvent,
+	Transcription,
+	TranscriptionCreateParams,
+	TranscriptionStreamEvent,
+} from "@/types/openai-media";
+import type { BaseLLM, ModelInfo } from "./interfaces/base-llm";
 import type {
 	CurrentModelInfo,
+	CurrentModelsByCategory,
+	ServeOptions,
 	ServiceProvider,
 } from "./interfaces/llm-service.interface";
+import {
+	MEDIA_CATEGORIES,
+	isWorkspaceMode,
+	type ModelCategory,
+	type WorkspaceMode,
+} from "./interfaces/model-category";
+import { primaryCategoryOf } from "./registry/media-model-registry";
 import type { ToolCapabilityInfo } from "./interfaces/tool-capability";
 import { NO_TOOL_SUPPORT } from "./interfaces/tool-capability";
 import {
 	CURRENT_MODEL_KEY,
+	CURRENT_MODELS_BY_CATEGORY_KEY,
 	DEFAULT_ON_DEMAND_SERVICE_CONFIGS,
+	SERVICE_TO_PROVIDER,
 	type DefaultOnDemandServiceName,
 } from "./constants";
 import type { LLMRegistry } from "./interfaces/service";
+import { PROVIDER_REGISTRY, isKnownProvider } from "./provider-registry";
+
+type MediaMethod =
+	| "audioSpeech"
+	| "audioSpeechStream"
+	| "audioTranscriptions"
+	| "audioTranscriptionsStream"
+	| "imagesGenerations"
+	| "imagesTools"
+	| "textTools";
+
+const MEDIA_METHOD_LABELS: Record<MediaMethod, string> = {
+	audioSpeech: "text-to-speech",
+	audioSpeechStream: "streaming text-to-speech",
+	audioTranscriptions: "speech-to-text",
+	audioTranscriptionsStream: "streaming speech-to-text",
+	imagesGenerations: "image generation",
+	imagesTools: "image tools",
+	textTools: "text tools",
+};
+
+export class UnsupportedModelOperationError extends Error {
+	constructor(serviceName: string, operation: string) {
+		super(`Provider "${serviceName}" does not support ${operation}`);
+		this.name = "UnsupportedModelOperationError";
+	}
+}
+
+export function sameCurrentModel(
+	a: CurrentModelInfo | null | undefined,
+	b: CurrentModelInfo | null | undefined,
+): boolean {
+	if (!a || !b) return !a && !b;
+	return (
+		a.modelId === b.modelId &&
+		a.provider === b.provider &&
+		a.serviceName === b.serviceName
+	);
+}
+
+export function sanitizeCategorySelections(
+	value: unknown,
+): CurrentModelsByCategory {
+	if (!value || typeof value !== "object") {
+		return {};
+	}
+	const source = value as CurrentModelsByCategory;
+	const result: CurrentModelsByCategory = {};
+	for (const category of MEDIA_CATEGORIES) {
+		const entry = source[category];
+		if (entry?.modelId && entry.serviceName && entry.provider) {
+			result[category] = entry;
+		}
+	}
+	return result;
+}
 
 export abstract class LLMServiceCore {
 	protected llms = new Map<string, BaseLLM>();
 	protected currentModel: CurrentModelInfo | null = null;
+	protected currentModelsByCategory: CurrentModelsByCategory = {};
 	private storageUnsubscribe: (() => void) | null = null;
 	private storageLoadAttempted = false;
 
@@ -41,15 +123,38 @@ export abstract class LLMServiceCore {
 		return () => this.currentModelListeners.delete(listener);
 	}
 
+	private currentModelsListeners = new Set<
+		(category: WorkspaceMode, model: CurrentModelInfo | null) => void
+	>();
+
 	// Notify all listeners of current model change
 	protected notifyCurrentModelChange(): void {
 		this.currentModelListeners.forEach((listener) =>
 			listener(this.currentModel),
 		);
+		this.notifyCategoryChange("chat", this.currentModel);
+	}
+
+	/** Fires for every category, chat included. */
+	onCurrentModelsChange(
+		listener: (category: WorkspaceMode, model: CurrentModelInfo | null) => void,
+	): () => void {
+		this.currentModelsListeners.add(listener);
+		return () => this.currentModelsListeners.delete(listener);
+	}
+
+	private notifyCategoryChange(
+		category: WorkspaceMode,
+		model: CurrentModelInfo | null,
+	): void {
+		this.currentModelsListeners.forEach((listener) =>
+			listener(category, model),
+		);
 	}
 
 	async initialize(): Promise<void> {
 		await this.loadCurrentModelFromStorage();
+		await this.loadCurrentModelsByCategoryFromStorage();
 		this.setupStorageListener();
 		await this.ensureAllServices();
 		// Note: ensureCurrentModelService() is not needed here since ensureAllServices() already handles it
@@ -105,6 +210,75 @@ export abstract class LLMServiceCore {
 		}
 
 		this.notifyCurrentModelChange();
+	}
+
+	async getCurrentModelFor(
+		category: WorkspaceMode,
+	): Promise<CurrentModelInfo | null> {
+		if (category === "chat") {
+			return this.getCurrentModel();
+		}
+		return this.currentModelsByCategory[category] ?? null;
+	}
+
+	async getCurrentModels(): Promise<CurrentModelsByCategory> {
+		return { ...this.currentModelsByCategory };
+	}
+
+	async setCurrentModelFor(
+		category: WorkspaceMode,
+		provider: ServiceProvider,
+		modelId: string,
+		serviceName: string,
+	): Promise<void> {
+		if (category === "chat") {
+			return this.setCurrentModel(provider, modelId, serviceName);
+		}
+		if (!serviceName) {
+			throw new Error("Service name is required");
+		}
+		const next: CurrentModelInfo = { modelId, provider, serviceName };
+		if (sameCurrentModel(this.currentModelsByCategory[category], next)) {
+			return;
+		}
+		this.currentModelsByCategory = {
+			...this.currentModelsByCategory,
+			[category]: next,
+		};
+		await this.saveConfig(
+			CURRENT_MODELS_BY_CATEGORY_KEY,
+			this.currentModelsByCategory,
+		);
+		this.notifyCategoryChange(category, next);
+	}
+
+	async clearCurrentModelFor(category: WorkspaceMode): Promise<void> {
+		if (category === "chat") {
+			return this.clearCurrentModel();
+		}
+		if (!this.currentModelsByCategory[category]) {
+			return;
+		}
+		const { [category]: _removed, ...rest } = this.currentModelsByCategory;
+		this.currentModelsByCategory = rest;
+		await this.saveConfig(
+			CURRENT_MODELS_BY_CATEGORY_KEY,
+			this.currentModelsByCategory,
+		);
+		this.notifyCategoryChange(category, null);
+	}
+
+	async clearCurrentModelsForProvider(
+		provider: ServiceProvider,
+	): Promise<void> {
+		for (const category of MEDIA_CATEGORIES) {
+			if (this.currentModelsByCategory[category]?.provider === provider) {
+				await this.clearCurrentModelFor(category);
+			}
+		}
+		if (this.currentModel?.provider === provider) {
+			await this.clearCurrentModel();
+		}
 	}
 
 	list(): string[] {
@@ -203,30 +377,32 @@ export abstract class LLMServiceCore {
 	}
 
 	private async saveCurrentModelToStorage(): Promise<void> {
+		await this.saveConfig(CURRENT_MODEL_KEY, this.currentModel);
+	}
+
+	/**
+	 * Persist a selection to the configurations table (the source of truth) and
+	 * broadcast it through shared storage so every context updates.
+	 */
+	private async saveConfig(key: string, value: unknown): Promise<void> {
 		try {
-			// Save to database (works in all contexts via serviceManager)
 			await serviceManager.databaseService.use(async ({ db, schema }) => {
-				// Upsert into configurations table
+				const data = value as Record<string, unknown>;
 				const existing = await db
 					.select()
 					.from(schema.configurations)
-					.where(eq(schema.configurations.key, CURRENT_MODEL_KEY))
+					.where(eq(schema.configurations.key, key))
 					.limit(1);
 
 				if (existing.length > 0) {
-					// Update existing
 					await db
 						.update(schema.configurations)
-						.set({
-							data: this.currentModel as unknown as Record<string, unknown>,
-							updatedAt: new Date(),
-						})
-						.where(eq(schema.configurations.key, CURRENT_MODEL_KEY));
+						.set({ data, updatedAt: new Date() })
+						.where(eq(schema.configurations.key, key));
 				} else {
-					// Insert new
 					await db.insert(schema.configurations).values({
-						key: CURRENT_MODEL_KEY,
-						data: this.currentModel as unknown as Record<string, unknown>,
+						key,
+						data,
 						createdAt: new Date(),
 						updatedAt: new Date(),
 					});
@@ -235,10 +411,25 @@ export abstract class LLMServiceCore {
 
 			// Store in SharedStorage (IndexedDB) and broadcast to other contexts
 			if (sharedStorageService.isAvailable()) {
-				await sharedStorageService.set(CURRENT_MODEL_KEY, this.currentModel);
+				await sharedStorageService.set(key, value);
 			}
 		} catch (error) {
-			logWarn("Failed to save current model to storage:", error);
+			logWarn(`Failed to save ${key} to storage:`, error);
+		}
+	}
+
+	private async loadCurrentModelsByCategoryFromStorage(): Promise<void> {
+		try {
+			const rows = await serviceManager.databaseService.use(({ db, schema }) =>
+				db
+					.select()
+					.from(schema.configurations)
+					.where(eq(schema.configurations.key, CURRENT_MODELS_BY_CATEGORY_KEY))
+					.limit(1),
+			);
+			this.currentModelsByCategory = sanitizeCategorySelections(rows[0]?.data);
+		} catch (error) {
+			logWarn("Failed to load per-category models from storage:", error);
 		}
 	}
 
@@ -297,6 +488,22 @@ export abstract class LLMServiceCore {
 			},
 		);
 		unsubscribeFunctions.push(modelUnsubscribe);
+
+		const categoriesUnsubscribe =
+			sharedStorageService.subscribe<CurrentModelsByCategory>(
+				CURRENT_MODELS_BY_CATEGORY_KEY,
+				(event) => {
+					const next = sanitizeCategorySelections(event.newValue);
+					const previous = this.currentModelsByCategory;
+					this.currentModelsByCategory = next;
+					for (const category of MEDIA_CATEGORIES) {
+						if (!sameCurrentModel(previous[category], next[category])) {
+							this.notifyCategoryChange(category, next[category] ?? null);
+						}
+					}
+				},
+			);
+		unsubscribeFunctions.push(categoriesUnsubscribe);
 
 		this.storageUnsubscribe = () => {
 			unsubscribeFunctions.forEach((fn) => fn());
@@ -465,6 +672,179 @@ export abstract class LLMServiceCore {
 	async supportsToolsFor(name: string, model?: string): Promise<boolean> {
 		const capability = await this.getToolCapabilitiesFor(name, model);
 		return capability.supported;
+	}
+
+	/**
+	 * Which selection a serve of `model` on `name` belongs to. A speech model
+	 * must never land in the chat slot: agents, cron jobs and knowledge
+	 * extraction all run on the chat model.
+	 */
+	protected resolveServeCategory(
+		name: string,
+		model: string,
+		options?: ServeOptions,
+		info?: Pick<ModelInfo, "categories">,
+	): WorkspaceMode | null {
+		if (options?.category) {
+			return options.category;
+		}
+		const category = primaryCategoryOf(name, model, info);
+		return isWorkspaceMode(category) ? category : null;
+	}
+
+	/** Record a successful serve as the selection for its category. */
+	protected async recordServedModel(
+		name: string,
+		model: string,
+		options?: ServeOptions,
+		info?: Pick<ModelInfo, "categories">,
+	): Promise<void> {
+		if (options?.select === false) {
+			return;
+		}
+		// Unknown until the runner describes the model; the serve that loads it
+		// records the selection with the categories it reports.
+		const category = this.resolveServeCategory(name, model, options, info);
+		if (!category) {
+			return;
+		}
+		const provider =
+			SERVICE_TO_PROVIDER[name] ??
+			(isKnownProvider(name) ? name : this.currentModel?.provider);
+		if (!provider) {
+			throw new Error(`Cannot determine provider for service "${name}"`);
+		}
+		await this.setCurrentModelFor(category, provider, model, name);
+	}
+
+	supportsCategoryFor(name: string, category: ModelCategory): boolean {
+		const provider = SERVICE_TO_PROVIDER[name] ?? name;
+		return isKnownProvider(provider)
+			? PROVIDER_REGISTRY[provider].categories.includes(category)
+			: category === "chat";
+	}
+
+	/**
+	 * Lease a model for one operation. The main service overrides this to keep
+	 * a single local model in memory; in the UI proxy the local runners live in
+	 * the offscreen document, which takes the lease itself.
+	 */
+	protected async leaseModel(
+		_serviceName: string,
+		_modelId: string,
+	): Promise<() => void> {
+		return () => undefined;
+	}
+
+	private async requireMediaMethod<M extends MediaMethod>(
+		name: string,
+		method: M,
+	): Promise<BaseLLM & Required<Pick<BaseLLM, M>>> {
+		await this.ensureOnDemandService(name);
+		const llm = await this.get(name);
+		if (!llm) {
+			throw new Error(`LLM "${name}" not found`);
+		}
+		if (typeof llm[method] !== "function") {
+			throw new UnsupportedModelOperationError(
+				name,
+				MEDIA_METHOD_LABELS[method],
+			);
+		}
+		return llm as BaseLLM & Required<Pick<BaseLLM, M>>;
+	}
+
+	private async withLease<T>(
+		name: string,
+		model: string,
+		operation: () => Promise<T>,
+	): Promise<T> {
+		const release = await this.leaseModel(name, model);
+		try {
+			return await operation();
+		} finally {
+			release();
+		}
+	}
+
+	private async *streamWithLease<T>(
+		name: string,
+		model: string,
+		open: () => AsyncIterableIterator<T>,
+	): AsyncIterableIterator<T> {
+		const release = await this.leaseModel(name, model);
+		try {
+			yield* open();
+		} finally {
+			release();
+		}
+	}
+
+	async audioSpeechFor(
+		name: string,
+		request: SpeechCreateParams,
+	): Promise<SpeechResponse> {
+		const llm = await this.requireMediaMethod(name, "audioSpeech");
+		return this.withLease(name, request.model, () => llm.audioSpeech(request));
+	}
+
+	async *audioSpeechStreamFor(
+		name: string,
+		request: SpeechCreateParams,
+	): AsyncIterableIterator<SpeechStreamEvent> {
+		const llm = await this.requireMediaMethod(name, "audioSpeechStream");
+		yield* this.streamWithLease(name, request.model, () =>
+			llm.audioSpeechStream(request),
+		);
+	}
+
+	async audioTranscriptionsFor(
+		name: string,
+		request: TranscriptionCreateParams,
+	): Promise<Transcription> {
+		const llm = await this.requireMediaMethod(name, "audioTranscriptions");
+		return this.withLease(name, request.model, () =>
+			llm.audioTranscriptions(request),
+		);
+	}
+
+	async *audioTranscriptionsStreamFor(
+		name: string,
+		request: TranscriptionCreateParams,
+	): AsyncIterableIterator<TranscriptionStreamEvent> {
+		const llm = await this.requireMediaMethod(
+			name,
+			"audioTranscriptionsStream",
+		);
+		yield* this.streamWithLease(name, request.model, () =>
+			llm.audioTranscriptionsStream(request),
+		);
+	}
+
+	async *imagesGenerationsFor(
+		name: string,
+		request: ImageGenerateParams,
+	): AsyncIterableIterator<ImageGenerationStreamEvent> {
+		const llm = await this.requireMediaMethod(name, "imagesGenerations");
+		yield* this.streamWithLease(name, request.model, () =>
+			llm.imagesGenerations(request),
+		);
+	}
+
+	async imagesToolsFor(
+		name: string,
+		request: ImageToolParams,
+	): Promise<ImageToolResponse> {
+		const llm = await this.requireMediaMethod(name, "imagesTools");
+		return this.withLease(name, request.model, () => llm.imagesTools(request));
+	}
+
+	async textToolsFor(
+		name: string,
+		request: TextToolParams,
+	): Promise<TextToolResponse> {
+		const llm = await this.requireMediaMethod(name, "textTools");
+		return this.withLease(name, request.model, () => llm.textTools(request));
 	}
 
 	// Abstract methods that must be implemented by concrete classes

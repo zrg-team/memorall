@@ -1,3 +1,4 @@
+import { STUDIO_MESSAGE_TYPE_SET } from "@/types/studio";
 /**
  * Marking where a co-agent session starts and stops in the conversation.
  *
@@ -35,7 +36,11 @@ export const isCoAgentSessionMarker = (type: unknown): boolean =>
  * the markers join it so a session boundary cannot be mistaken for content.
  */
 export const isNonModelMessageType = (type: unknown): boolean =>
-	type === "separator" || isCoAgentSessionMarker(type);
+	type === "separator" ||
+	isCoAgentSessionMarker(type) ||
+	// Studio generations (speech clips, transcripts, images) are never prompt
+	// context, even if one ever ends up in a chat conversation.
+	(typeof type === "string" && STUDIO_MESSAGE_TYPE_SET.has(type));
 
 /**
  * Whether a co-agent session is currently open, read off the transcript.

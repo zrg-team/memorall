@@ -31,6 +31,14 @@ exports[`background job handler registry > registers every background job handle
     "jobType": "activity-stop-session",
   },
   {
+    "handler": "MediaOperationsHandler",
+    "jobType": "audio-speech",
+  },
+  {
+    "handler": "MediaOperationsHandler",
+    "jobType": "audio-transcription",
+  },
+  {
     "handler": "BasicHandler",
     "jobType": "basic-async",
   },
@@ -41,6 +49,10 @@ exports[`background job handler registry > registers every background job handle
   {
     "handler": "LLMOperationsHandler",
     "jobType": "cancel-chat-completion",
+  },
+  {
+    "handler": "MediaOperationsHandler",
+    "jobType": "cancel-media-operation",
   },
   {
     "handler": "ChatHandler",
@@ -123,6 +135,14 @@ exports[`background job handler registry > registers every background job handle
     "jobType": "get-topics",
   },
   {
+    "handler": "MediaOperationsHandler",
+    "jobType": "image-generation",
+  },
+  {
+    "handler": "MediaOperationsHandler",
+    "jobType": "image-tool",
+  },
+  {
     "handler": "EmbeddingOperationsHandler",
     "jobType": "initialize-embedding-service",
   },
@@ -161,6 +181,10 @@ exports[`background job handler registry > registers every background job handle
   {
     "handler": "EmbeddingOperationsHandler",
     "jobType": "text-to-vector",
+  },
+  {
+    "handler": "MediaOperationsHandler",
+    "jobType": "text-tool",
   },
   {
     "handler": "EmbeddingOperationsHandler",

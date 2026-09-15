@@ -1,0 +1,76 @@
+{
+	"empty": {
+		"title": "Ghi âm hoặc tải âm thanh lên",
+		"description": "Nhận bản chép lời có mốc thời gian. Bấm vào mốc thời gian để nghe lại đoạn đó.",
+		"record": "Ghi âm từ micrô",
+		"upload": "Tải lên tệp âm thanh"
+	},
+	"record": {
+		"start": "Bắt đầu ghi âm",
+		"stop": "Dừng và chép lời",
+		"stopShort": "Chép lời",
+		"cancel": "Hủy bỏ",
+		"hint": "Chạm để ghi âm",
+		"requesting": "Đang chờ quyền truy cập micrô…",
+		"denied": "Quyền truy cập micrô đang bị chặn. Mở cài đặt trang (biểu tượng cạnh thanh địa chỉ), cho phép micrô rồi bấm lại nút ghi âm.",
+		"unsupported": "Không thể ghi âm tại đây. Hãy tải tệp lên thay thế.",
+		"empty": "Chưa ghi được âm thanh nào. Hãy thử lại."
+	},
+	"upload": {
+		"button": "Tải âm thanh lên",
+		"drop": "Thả tệp âm thanh hoặc video vào đây",
+		"limit": "Âm thanh hoặc video, tối đa 100 MB",
+		"or": "hoặc",
+		"dropOverlay": "Thả để chép lời",
+		"busy": "Hãy đợi bản chép lời hiện tại hoàn tất",
+		"unsupported": "{{name}} không phải là tệp âm thanh hoặc video.",
+		"tooLarge": "{{name}} có dung lượng {{size}}. Chỉ hỗ trợ tệp tối đa 100 MB."
+	},
+	"options": {
+		"language": "Ngôn ngữ",
+		"auto": "Tự động nhận diện",
+		"task": "Tác vụ",
+		"transcribe": "Chép lời",
+		"translate": "Dịch sang tiếng Anh",
+		"translateShort": "Sang tiếng Anh",
+		"englishOnly": "Mô hình này chỉ hiểu tiếng Anh."
+	},
+	"progress": {
+		"preparing": "Đang chuẩn bị…",
+		"transcribing": "Đang chép lời…",
+		"stop": "Dừng",
+		"tryAgain": "Thử lại",
+		"dismiss": "Đóng",
+		"failedToStart": "Không thể bắt đầu: {{error}}"
+	},
+	"card": {
+		"recording": "Bản ghi âm",
+		"audioUnavailable": "Không có âm thanh",
+		"play": "Phát",
+		"pause": "Tạm dừng",
+		"seek": "Tua",
+		"playFrom": "Phát từ {{time}}",
+		"translated": "→ EN",
+		"listening": "Đang nghe âm thanh…",
+		"noSpeech": "Không phát hiện giọng nói.",
+		"showMore": "Xem thêm",
+		"showLess": "Thu gọn",
+		"export": "Xuất",
+		"exportTxt": "Văn bản (.txt)",
+		"exportSrt": "Phụ đề (.srt)",
+		"exportVtt": "WebVTT (.vtt)",
+		"edit": "Sửa bản chép lời",
+		"editHint": "Văn bản đã sửa sẽ thay cho chế độ xem theo mốc thời gian và thời gian phụ đề.",
+		"save": "Lưu",
+		"cancel": "Hủy",
+		"sendToChat": "Gửi sang trò chuyện"
+	},
+	"announce": {
+		"recording": "Đã bắt đầu ghi âm",
+		"denied": "Quyền truy cập micrô đang bị chặn",
+		"transcribing": "Đang chép lời",
+		"done": "Bản chép lời đã sẵn sàng",
+		"stopped": "Đã dừng chép lời",
+		"failed": "Chép lời thất bại"
+	}
+}

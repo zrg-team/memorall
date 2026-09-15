@@ -12,8 +12,30 @@ import type {
 	ModelInfo,
 	ModelsResponse,
 } from "../interfaces/base-llm";
+import type {
+	ImageGenerateParams,
+	ImageGenerationStreamEvent,
+	SpeechCreateParams,
+	SpeechResponse,
+	SpeechStreamEvent,
+	Transcription,
+	TranscriptionCreateParams,
+	TranscriptionStreamEvent,
+} from "@/types/openai-media";
 import type { ToolCapabilityInfo } from "../interfaces/tool-capability";
 import { NATIVE_TOOL_SUPPORT } from "../interfaces/tool-capability";
+import {
+	createSpeech,
+	createTranscription,
+	generateImages,
+	streamSpeech,
+	streamTranscription,
+	type OpenAIMediaTransport,
+} from "../utils/openai-media-client";
+import {
+	classifyByModalities,
+	classifyRemoteModel,
+} from "../utils/remote-model-categories";
 import { postCompletionWithBudgetRetry } from "../utils/budget-retry";
 import {
 	extractChunkOutputText,
@@ -626,17 +648,26 @@ export class OpenAILLM implements BaseLLM {
 					);
 				}
 			}
-			const modelInfos: ModelInfo[] = modelsRaw.map((m: any) => ({
-				id: String(m.id || m.name || m.model || "unknown-model"),
-				name: String(m.id || m.name || m.model || "unknown-model"),
-				object: "model",
-				created: Number(m.created || now),
-				owned_by: String(
-					m.owned_by || (this.isLocalBase() ? "local" : "openai"),
-				),
-				loaded: true,
-				provider: "openai",
-			}));
+			const modelInfos: ModelInfo[] = modelsRaw.map((m: any) => {
+				const id = String(m.id || m.name || m.model || "unknown-model");
+				return {
+					id,
+					name: id,
+					object: "model",
+					created: Number(m.created || now),
+					owned_by: String(
+						m.owned_by || (this.isLocalBase() ? "local" : "openai"),
+					),
+					loaded: true,
+					provider: "openai",
+					// OpenRouter publishes modalities; OpenAI's listing only has ids.
+					categories:
+						classifyByModalities({
+							input: m.architecture?.input_modalities,
+							output: m.architecture?.output_modalities,
+						}) ?? classifyRemoteModel(id),
+				};
+			});
 			return { object: "list", data: modelInfos };
 		} catch (error) {
 			// For local servers that don't support /models, return an empty list gracefully
@@ -889,5 +920,50 @@ export class OpenAILLM implements BaseLLM {
 			type: "openai",
 			ready: this.ready,
 		};
+	}
+
+	// ---- Media endpoints (OpenAI-compatible) ------------------------------
+
+	private mediaTransport(): OpenAIMediaTransport {
+		const headers = this.getHeaders() as Record<string, string>;
+		const { "Content-Type": _contentType, ...withoutContentType } = headers;
+		return {
+			baseURL: this.baseURL,
+			headers: () => withoutContentType,
+			isOpenRouter: this.isOpenRouter(),
+		};
+	}
+
+	async audioSpeech(request: SpeechCreateParams): Promise<SpeechResponse> {
+		if (!this.ready) await this.initialize();
+		return createSpeech(this.mediaTransport(), request);
+	}
+
+	async *audioSpeechStream(
+		request: SpeechCreateParams,
+	): AsyncIterableIterator<SpeechStreamEvent> {
+		if (!this.ready) await this.initialize();
+		yield* streamSpeech(this.mediaTransport(), request);
+	}
+
+	async audioTranscriptions(
+		request: TranscriptionCreateParams,
+	): Promise<Transcription> {
+		if (!this.ready) await this.initialize();
+		return createTranscription(this.mediaTransport(), request);
+	}
+
+	async *audioTranscriptionsStream(
+		request: TranscriptionCreateParams,
+	): AsyncIterableIterator<TranscriptionStreamEvent> {
+		if (!this.ready) await this.initialize();
+		yield* streamTranscription(this.mediaTransport(), request);
+	}
+
+	async *imagesGenerations(
+		request: ImageGenerateParams,
+	): AsyncIterableIterator<ImageGenerationStreamEvent> {
+		if (!this.ready) await this.initialize();
+		yield* generateImages(this.mediaTransport(), request);
 	}
 }

@@ -1,5 +1,5 @@
 // Main runner entry point - determines mode and loads appropriate runner
-let mode = "wllama"; // 'wllama' | 'embedding' | 'webllm' | 'transformer'
+let mode = "wllama"; // 'wllama' | 'embedding' | 'webllm' | 'transformer' | 'media'
 
 // Parse URL parameters to determine mode
 const params = new URLSearchParams(self.location ? self.location.search : "");
@@ -8,6 +8,7 @@ try {
 	if (m === "embedding") mode = "embedding";
 	if (m === "webllm") mode = "webllm";
 	if (m === "transformer") mode = "transformer";
+	if (m === "media") mode = "media";
 } catch {
 	// Default to wllama
 }
@@ -24,6 +25,9 @@ switch (mode) {
 		break;
 	case "transformer":
 		import("./modes/transformer-runner.js");
+		break;
+	case "media":
+		import("./modes/media-runner.js");
 		break;
 	case "wllama":
 	default:

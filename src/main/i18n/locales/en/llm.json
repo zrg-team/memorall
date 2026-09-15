@@ -34,6 +34,7 @@
 	},
 	"providers": {
 		"transformer": "Transformer (WebGPU)",
+		"transformer-media": "Transformers Media (ONNX)",
 		"wllama": "Wllama (GGUF)",
 		"webllm": "WebLLM (MLC)",
 		"openai": "OpenAI",
@@ -42,6 +43,7 @@
 		"ollama": "Ollama",
 		"compact": {
 			"transformer": "Transformer",
+			"transformer-media": "Media",
 			"wllama": "Wllama",
 			"webllm": "WebLLM",
 			"openai": "OpenAI",
@@ -507,5 +509,10 @@
 		}
 	},
 	"empty": "No models available",
-	"error": "Failed to load model"
+	"error": "Failed to load model",
+	"studioModels": {
+		"title": "Studio models",
+		"description": "The model each studio uses. Only one on-device model is kept in memory at a time.",
+		"none": "Not set — browse"
+	}
 }

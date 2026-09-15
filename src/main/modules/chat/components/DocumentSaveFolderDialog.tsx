@@ -26,9 +26,16 @@ import {
 } from "@/services/filesystem/sandbox-paths";
 import type { DocumentTreeNode } from "@/types/document-library";
 
+/** What the dialog writes: text, bytes, or a loader run only when saving. */
+export type DocumentSaveContent =
+	| string
+	| Blob
+	| Uint8Array
+	| (() => Promise<string | Blob | Uint8Array>);
+
 interface DocumentSaveFolderDialogProps {
 	open: boolean;
-	content: string;
+	content: DocumentSaveContent;
 	initialFileName: string;
 	mimeType: string;
 	onOpenChange: (open: boolean) => void;
@@ -102,7 +109,13 @@ export const DocumentSaveFolderDialog: React.FC<
 		setSaving(true);
 		setError(null);
 		try {
-			const file = new File([content], trimmedName, { type: mimeType });
+			const resolved =
+				typeof content === "function" ? await content() : content;
+			const file = new File(
+				[resolved instanceof Uint8Array ? resolved.slice() : resolved],
+				trimmedName,
+				{ type: mimeType },
+			);
 			await documentFileSystemService.uploadFile(
 				file,
 				toDocumentsSandboxPath(selectedFolder),

@@ -6,7 +6,10 @@ import type {
 import { logWarn, logInfo, logError } from "@/utils/logger";
 import { backgroundJob } from "@/services/background-jobs/background-job";
 import type { BaseLLM, ProgressEvent, ModelInfo } from "./interfaces/base-llm";
-import type { ILLMService } from "./interfaces/llm-service.interface";
+import type {
+	ILLMService,
+	ServeOptions,
+} from "./interfaces/llm-service.interface";
 import { OpenAILLM } from "./implementations/openai-llm";
 import { LocalOpenAICompatibleLLM } from "./implementations/local-openai-llm";
 import { LLMProxy } from "./implementations/llm-proxy";
@@ -81,7 +84,8 @@ export class LLMServiceProxy extends LLMServiceCore implements ILLMService {
 
 			case "wllama":
 			case "webllm":
-			case "transformer": {
+			case "transformer":
+			case "transformer-media": {
 				try {
 					const executeResult = await backgroundJob.execute(
 						"create-llm-service",
@@ -212,6 +216,7 @@ export class LLMServiceProxy extends LLMServiceCore implements ILLMService {
 	async serve(
 		model: string,
 		onProgress?: (progress: ProgressEvent) => void,
+		options?: ServeOptions,
 	): Promise<ModelInfo> {
 		if (!this.currentModel) {
 			throw new Error("No current model selected");
@@ -221,6 +226,7 @@ export class LLMServiceProxy extends LLMServiceCore implements ILLMService {
 			this.currentModel.serviceName,
 			model,
 			onProgress,
+			options,
 		);
 		return result;
 	}
@@ -229,21 +235,16 @@ export class LLMServiceProxy extends LLMServiceCore implements ILLMService {
 		name: string,
 		model: string,
 		onProgress?: (progress: ProgressEvent) => void,
+		options?: ServeOptions,
 	): Promise<ModelInfo> {
 		await this.ensureOnDemandService(name);
 
 		// For lite services, try local first
 		const llm = await this.get(name);
-		const llmWithServe = llm as BaseLLM & {
-			serve?: (
-				model: string,
-				onProgress?: (progress: ProgressEvent) => void,
-			) => Promise<ModelInfo>;
-		};
 
-		if (!llmWithServe || typeof llmWithServe.serve !== "function") {
+		if (!llm || typeof llm.serve !== "function") {
 			// Some providers (OpenAI-compatible, etc.) do not require an explicit
-			// serve step. Update current model and return a best-effort model record.
+			// serve step. Record the selection and return a best-effort model record.
 			let existingModel: ModelInfo | undefined;
 			try {
 				const models = await this.modelsFor(name);
@@ -252,32 +253,32 @@ export class LLMServiceProxy extends LLMServiceCore implements ILLMService {
 				logWarn(`Failed to fetch models for ${name}:`, error);
 			}
 
-			const provider = SERVICE_TO_PROVIDER[name] ?? this.currentModel?.provider;
-			if (!provider) {
-				throw new Error(`Cannot determine provider for service "${name}"`);
-			}
-
-			await this.setCurrentModel(provider, model, name);
+			await this.recordServedModel(name, model, options, existingModel);
 			return (
 				existingModel ?? {
 					id: model,
 					name: model,
 					object: "model",
 					created: Math.floor(Date.now() / 1000),
-					owned_by: provider,
+					owned_by: SERVICE_TO_PROVIDER[name] ?? name,
 					loaded: true,
 				}
 			);
 		}
 
-		const provider = SERVICE_TO_PROVIDER[name] ?? this.currentModel?.provider;
-		if (!provider) {
-			throw new Error(`Cannot determine provider for service "${name}"`);
-		}
-		await this.setCurrentModel(provider, model, name);
+		// Resolve the category here, where the caller's intent is known, and hand
+		// it to the offscreen service so both contexts record the same slot.
+		const category = this.resolveServeCategory(name, model, options);
+		const serveOptions: ServeOptions = {
+			...options,
+			category: category ?? undefined,
+		};
+		await this.recordServedModel(name, model, serveOptions);
 
-		const result = await llmWithServe.serve(model, onProgress);
-		return result;
+		if (llm instanceof LLMProxy) {
+			return llm.serve(model, onProgress, serveOptions);
+		}
+		return llm.serve(model, onProgress);
 	}
 
 	async unloadFor(name: string, modelId: string): Promise<void> {

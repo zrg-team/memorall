@@ -1,0 +1,57 @@
+{
+	"composer": {
+		"label": "Văn bản cần đọc",
+		"placeholder": "Nhập hoặc dán văn bản cần đọc",
+		"musicLabel": "Mô tả bản nhạc",
+		"musicPlaceholder": "Mô tả bản nhạc: thể loại, cảm xúc, nhạc cụ, nhịp độ",
+		"overLimit": "Dài hơn {{limit}} ký tự",
+		"muteLive": "Tắt phát trực tiếp",
+		"unmuteLive": "Phát trong khi tạo",
+		"voice": "Giọng",
+		"voicePlaceholder": "Giọng",
+		"duration": "Độ dài",
+		"seconds": "{{seconds}} giây"
+	},
+	"voice": {
+		"label": "Giọng đọc",
+		"choose": "Giọng đọc: {{voice}}",
+		"preview": "Nghe thử {{voice}}",
+		"stopPreview": "Dừng nghe thử {{voice}}",
+		"female": "Nữ",
+		"male": "Nam",
+		"neutral": "Trung tính"
+	},
+	"settings": {
+		"label": "Cài đặt",
+		"speed": "Tốc độ",
+		"resetSpeed": "Đặt lại tốc độ",
+		"instructions": "Hướng dẫn phong cách",
+		"instructionsPlaceholder": "Ví dụ: Ấm áp và vui tươi, như một phát thanh viên thân thiện",
+		"seed": "Seed",
+		"seedPlaceholder": "Ngẫu nhiên",
+		"seedHint": "Dùng lại cùng seed để có cách đọc giống hệt."
+	},
+	"card": {
+		"reuse": "Dùng lại văn bản",
+		"copy": "Sao chép văn bản",
+		"more": "Thêm thao tác",
+		"regenerate": "Tạo lại",
+		"showMore": "Xem thêm",
+		"showLess": "Thu gọn",
+		"generating": "Đang tạo…",
+		"composing": "Đang soạn nhạc…",
+		"seconds": "{{seconds}} giây"
+	},
+	"empty": {
+		"speechTitle": "Chuyển văn bản thành giọng nói",
+		"musicTitle": "Tạo âm thanh",
+		"speech": "Nhập nội dung bên dưới, chọn giọng đọc rồi bấm Tạo. Bạn sẽ nghe được ngay trong lúc âm thanh đang được tạo.",
+		"music": "Mô tả một đoạn âm thanh hoặc nhạc ngắn.",
+		"tryExample": "Thử một ví dụ"
+	},
+	"announce": {
+		"done": "Đã tạo xong",
+		"failed": "Tạo thất bại",
+		"stopped": "Đã dừng tạo"
+	}
+}

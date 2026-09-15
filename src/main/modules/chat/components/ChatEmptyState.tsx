@@ -18,6 +18,7 @@ import {
 	type AgentScreenContent,
 } from "@/components/AgentIcon";
 import { cn } from "@/lib/utils";
+import { WorkspaceEmptyState } from "@/main/components/molecules/WorkspaceEmptyState";
 
 interface ChatEmptyStateProps {
 	screenContent?: AgentScreenContent;
@@ -74,76 +75,36 @@ export const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
 	];
 
 	return (
-		<div
-			className={cn(
-				"flex flex-1 flex-col items-center justify-center",
-				compact
-					? "min-h-0 justify-center gap-4 py-3"
-					: "min-h-[calc(100vh-18rem)] gap-6 py-10",
-			)}
+		<WorkspaceEmptyState
+			compact={compact}
+			title={t("emptyState.title")}
+			description={t("emptyState.description")}
+			suggestions={promptSuggestions.map((suggestion) => ({
+				key: suggestion.label,
+				label: suggestion.label,
+				icon: suggestion.icon,
+				onSelect: () => onSelectPrompt(suggestion.prompt),
+			}))}
+			visual={
+				<AgentIcon
+					size={compact ? 88 : 108}
+					aria-label="Agent"
+					ambientScreenContent={screenContent}
+					autoGreeting={!showAgentBuilderCallout}
+					speechBubble={
+						showAgentBuilderCallout
+							? {
+									message: agentBuilderPrompt,
+									tone: "thinking",
+									placement: "top",
+									variant: "manga",
+								}
+							: undefined
+					}
+					greetingContext={greetingContext}
+				/>
+			}
 		>
-			<AgentIcon
-				size={compact ? 88 : 108}
-				aria-label="Agent"
-				ambientScreenContent={screenContent}
-				autoGreeting={!showAgentBuilderCallout}
-				speechBubble={
-					showAgentBuilderCallout
-						? {
-								message: agentBuilderPrompt,
-								tone: "thinking",
-								placement: "top",
-								variant: "manga",
-							}
-						: undefined
-				}
-				greetingContext={greetingContext}
-			/>
-			<div className="max-w-xl space-y-2 text-center">
-				<h2
-					className={cn(
-						"font-semibold text-foreground",
-						compact ? "text-lg" : "text-xl",
-					)}
-				>
-					{t("emptyState.title")}
-				</h2>
-				<p className="text-sm leading-6 text-muted-foreground">
-					{t("emptyState.description")}
-				</p>
-			</div>
-
-			<div
-				className={cn(
-					"grid w-full max-w-2xl gap-2",
-					compact ? "grid-cols-1" : "grid-cols-1 sm:grid-cols-3",
-				)}
-			>
-				{promptSuggestions
-					.slice(0, compact ? 2 : promptSuggestions.length)
-					.map((suggestion) => {
-						const Icon = suggestion.icon;
-						return (
-							<button
-								key={suggestion.label}
-								type="button"
-								onClick={() => onSelectPrompt(suggestion.prompt)}
-								className="group flex min-h-12 items-center gap-3 rounded-xl border border-border/70 bg-card/70 px-3 py-2.5 text-left text-sm text-foreground shadow-sm transition hover:-translate-y-0.5 hover:border-primary/30 hover:bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-							>
-								<span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-									<Icon size={15} />
-								</span>
-								<span className="min-w-0 flex-1 font-medium leading-5">
-									{suggestion.label}
-								</span>
-								<ArrowRight
-									size={14}
-									className="shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5"
-								/>
-							</button>
-						);
-					})}
-			</div>
 			{showAgentBuilderCallout ? (
 				<button
 					type="button"
@@ -230,6 +191,6 @@ export const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
 					</span>
 				</button>
 			) : null}
-		</div>
+		</WorkspaceEmptyState>
 	);
 };

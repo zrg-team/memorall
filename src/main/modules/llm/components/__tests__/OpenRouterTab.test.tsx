@@ -36,6 +36,7 @@ vi.mock("@/services", () => ({
 			has: vi.fn(() => false),
 			getCurrentModel: vi.fn(async () => null),
 			clearCurrentModel: vi.fn(),
+			clearCurrentModelsForProvider: vi.fn(async () => undefined),
 			remove: vi.fn(),
 		},
 	},

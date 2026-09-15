@@ -497,5 +497,13 @@
 	"coAgent": {
 		"openLink": "Co-agent on {{host}}",
 		"openLinkTitle": "Open {{url}} and turn on the co-agent"
+	},
+	"dictation": {
+		"start": "Dictate",
+		"stop": "Stop and transcribe (Esc to cancel)",
+		"transcribing": "Transcribing…",
+		"denied": "Microphone access is blocked for this page",
+		"chooseModel": "Dictate — choose a transcription model first",
+		"localHint": "Runs on this device. A local chat model is unloaded while transcribing and reloads on your next message."
 	}
 }

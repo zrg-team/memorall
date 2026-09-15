@@ -496,7 +496,12 @@ export function useDocumentLibrary() {
 		const input = document.createElement("input");
 		input.type = "file";
 		input.multiple = true;
-		input.accept = ".pdf,.txt,.md,.png,.jpg,.jpeg,.gif,.webp,.xls,.xlsx,.xlsm";
+		input.accept = [
+			".pdf,.txt,.md,.png,.jpg,.jpeg,.gif,.webp,.xls,.xlsx,.xlsm",
+			// Audio and video play in the viewer.
+			".wav,.mp3,.ogg,.oga,.m4a,.flac,.mp4,.m4v,.mov,.webm,.ogv,.mkv",
+			"audio/*,video/*",
+		].join(",");
 		input.onchange = (e) => {
 			const files = (e.target as HTMLInputElement).files;
 			if (files?.length) handleUploadFiles(files);

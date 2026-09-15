@@ -1,0 +1,134 @@
+{
+	"switcher": {
+		"label": "Không gian làm việc"
+	},
+	"modes": {
+		"chat": {
+			"label": "Trò chuyện",
+			"short": "Chat",
+			"description": "Trò chuyện với agent hoặc mô hình chat."
+		},
+		"text-to-speech": {
+			"label": "Giọng nói",
+			"short": "Đọc",
+			"description": "Chuyển văn bản thành giọng nói tự nhiên, ngay trên thiết bị hoặc qua đám mây."
+		},
+		"speech-to-text": {
+			"label": "Chép lời",
+			"short": "Chép lời",
+			"description": "Ghi âm hoặc tải âm thanh lên để nhận bản chép lời chính xác."
+		},
+		"image-generation": {
+			"label": "Tạo ảnh",
+			"short": "Ảnh",
+			"description": "Tạo hình ảnh từ mô tả."
+		},
+		"image-tools": {
+			"label": "Công cụ ảnh",
+			"short": "Công cụ",
+			"description": "Tách nền, ước lượng độ sâu, nhận diện vật thể và đọc chữ trong ảnh."
+		},
+		"text-tools": {
+			"label": "Công cụ văn bản",
+			"short": "Văn bản",
+			"description": "Phân loại văn bản, xếp vào nhãn của bạn và sắp xếp tài liệu theo mức liên quan."
+		},
+		"text-to-audio": {
+			"label": "Âm thanh",
+			"short": "Âm thanh",
+			"description": "Tạo đoạn âm thanh, như nhạc hoặc hiệu ứng, từ mô tả."
+		}
+	},
+	"history": {
+		"newSession": "Phiên mới",
+		"search": "Tìm phiên",
+		"empty": "Các kết quả bạn tạo sẽ hiện ở đây.",
+		"open": "Hiện các phiên",
+		"close": "Đóng danh sách phiên",
+		"groups": {
+			"Pinned": "Đã ghim",
+			"Today": "Hôm nay",
+			"Yesterday": "Hôm qua",
+			"Earlier": "Trước đó"
+		},
+		"label": "Phiên {{mode}}",
+		"title": "Phiên",
+		"count_one": "{{count}} phiên",
+		"count_other": "{{count}} phiên",
+		"new": "Mới",
+		"emptyTitle": "Chưa có phiên nào",
+		"noSearchResults": "Không có phiên phù hợp",
+		"expand": "Mở rộng danh sách phiên",
+		"collapse": "Thu gọn danh sách phiên",
+		"resize": "Đổi kích thước danh sách phiên"
+	},
+	"model": {
+		"loading": "Đang tải mô hình {{percent}}%",
+		"loadFailed": "Không tải được mô hình: {{error}}",
+		"manage": "Quản lý mô hình",
+		"loadingName": "Đang tải {{name}}…",
+		"loadingHint": "Lần đầu, mô hình được tải về thiết bị; các lần sau sẽ tải từ bộ nhớ đệm.",
+		"loadFailedName": "Không tải được {{name}}",
+		"chooseAnother": "Chọn mô hình khác",
+		"showDetails": "Chi tiết",
+		"hideDetails": "Ẩn chi tiết"
+	},
+	"empty": {
+		"cloudHint": "Hoặc dùng nhà cung cấp tương thích OpenAI trên đám mây.",
+		"browseModels": "Xem tất cả mô hình"
+	},
+	"common": {
+		"generate": "Tạo",
+		"stop": "Dừng",
+		"retry": "Thử lại",
+		"delete": "Xóa",
+		"download": "Tải xuống",
+		"copy": "Sao chép",
+		"copied": "Đã sao chép",
+		"running": "Đang xử lý…",
+		"failed": "Thất bại",
+		"cancelled": "Đã dừng",
+		"saveToFiles": "Lưu vào Tệp"
+	},
+	"player": {
+		"play": "Phát",
+		"pause": "Tạm dừng",
+		"seek": "Tua",
+		"unavailable": "Không phát được âm thanh"
+	},
+	"models": {
+		"use": "Dùng",
+		"added": "Đã thêm",
+		"selected": "Đang chọn",
+		"inMemory": "Đang nạp",
+		"downloaded": "Đã tải",
+		"unload": "Gỡ khỏi bộ nhớ",
+		"remove": "Xóa",
+		"hub": "Mô hình Hugging Face cho công cụ trên thiết bị",
+		"searchPlaceholder": "Tìm mô hình hoặc dán liên kết Hugging Face",
+		"searching": "Đang tìm…",
+		"noResults": "Không có mô hình phù hợp.",
+		"unavailable": {
+			"noOnnx": "Không có trọng số ONNX nên không chạy được trong trình duyệt.",
+			"customRuntime": "Cần runtime riêng: các tệp ONNX không khai báo loại mô hình của transformers.js nên studio trong trình duyệt không tải được. Hãy chạy nó sau một API tương thích OpenAI để dùng ở đây.",
+			"architecture": "Kiến trúc của nó ({{modelType}}) chưa chạy được trong studio trình duyệt. Hãy chạy nó sau một API tương thích OpenAI để dùng ở đây."
+		},
+		"filterCategory": "Lọc theo công cụ",
+		"filterTask": "Lọc theo tác vụ",
+		"allTools": "Tất cả công cụ",
+		"allTasks": "Tất cả tác vụ",
+		"browseHint": "Không thấy? Tìm mô hình trên Hugging Face, sao chép liên kết hoặc id rồi dán vào ô tìm kiếm.",
+		"browseHub": "Duyệt trên Hugging Face"
+	},
+	"turn": {
+		"you": "Bạn"
+	},
+	"modelError": {
+		"unsupported-architecture": "Kiến trúc của mô hình này ({{modelType}}) chưa chạy được trong trình duyệt. Hãy chọn mô hình khác, hoặc dùng qua máy chủ tương thích OpenAI.",
+		"custom-runtime": "Mô hình này cần runtime riêng nên không chạy được trong trình duyệt. Hãy chọn mô hình khác, hoặc dùng qua máy chủ tương thích OpenAI.",
+		"session": "Trình duyệt không mở được tệp của mô hình, kể cả khi thử các độ chính xác khác. Hãy thử lại hoặc chọn mô hình khác.",
+		"memory": "Không đủ bộ nhớ để tải mô hình. Hãy đóng bớt tab hoặc chọn mô hình nhỏ hơn.",
+		"network": "Không tải được tệp mô hình. Hãy kiểm tra kết nối và thử lại.",
+		"other": "Không tải được mô hình."
+	}
+}

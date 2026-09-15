@@ -1,3 +1,5 @@
+import type { WorkspaceMode } from "@/services/llm/interfaces/model-category";
+import type { ServiceProvider } from "@/services/llm/interfaces/llm-service.interface";
 import { useState } from "react";
 import { RECOMMENDATION_WALLAMA_LLMS } from "@/constants/wllama";
 import { RECOMMENDATION_TRANSFORMER_MODELS } from "@/constants/transformer";
@@ -18,15 +20,10 @@ export const useLLMState = () => {
 	const [repo, setRepo] = useState(RECOMMENDATION_WALLAMA_LLMS[0]);
 	const [filePath, setFilePath] = useState("");
 	const [availableFiles, setAvailableFiles] = useState<FileInfo[]>([]);
-	const [advancedProvider, setAdvancedProvider] = useState<
-		| "wllama"
-		| "webllm"
-		| "transformer"
-		| "openai"
-		| "openrouter"
-		| "lmstudio"
-		| "ollama"
-	>("transformer");
+	const [advancedProvider, setAdvancedProvider] =
+		useState<ServiceProvider>("transformer");
+	// Which kind of model the page is browsing; narrows providers and lists.
+	const [modelCategory, setModelCategory] = useState<WorkspaceMode>("chat");
 	// Generic model state - used by all providers
 	const [model, setModel] = useState(RECOMMENDATION_TRANSFORMER_MODELS[0]);
 	const [webllmAvailableModels, setWebllmAvailableModels] = useState<string[]>(
@@ -62,6 +59,7 @@ export const useLLMState = () => {
 		filePath,
 		availableFiles,
 		advancedProvider,
+		modelCategory,
 		model,
 		webllmAvailableModels,
 		customRepo,
@@ -82,6 +80,7 @@ export const useLLMState = () => {
 		setFilePath,
 		setAvailableFiles,
 		setAdvancedProvider,
+		setModelCategory,
 		setModel,
 		setWebllmAvailableModels,
 		setCustomRepo,

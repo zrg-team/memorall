@@ -1,0 +1,109 @@
+{
+	"canvas": {
+		"label": "Công cụ văn bản"
+	},
+	"tasks": {
+		"label": "Công cụ",
+		"text-classification": {
+			"label": "Phân loại",
+			"can": "phân loại văn bản",
+			"description": "Cho biết văn bản nói về điều gì hoặc mang cảm xúc gì, kèm điểm tin cậy."
+		},
+		"zero-shot-classification": {
+			"label": "Nhãn của bạn",
+			"can": "xếp văn bản vào các nhãn của riêng bạn",
+			"description": "Xếp văn bản vào các nhãn do bạn chọn, không cần huấn luyện."
+		},
+		"text-ranking": {
+			"label": "Xếp hạng tài liệu",
+			"can": "xếp hạng tài liệu",
+			"description": "Sắp xếp tài liệu theo mức độ trả lời đúng truy vấn."
+		}
+	},
+	"hint": {
+		"switchModel": "Hãy chuyển sang mô hình có thể {{task}}.",
+		"chooseModel": "Chọn mô hình"
+	},
+	"composer": {
+		"run": "Chạy",
+		"shortcut": "Enter để chạy",
+		"textPlaceholder": "Dán hoặc viết văn bản cần phân loại",
+		"zeroShotPlaceholder": "Dán văn bản cần xếp vào các nhãn của bạn",
+		"queryPlaceholder": "Bạn đang tìm gì?",
+		"labels": "Nhãn",
+		"labelsPlaceholder": "Các nhãn, cách nhau bằng dấu phẩy",
+		"addLabel": "Thêm nhãn",
+		"removeLabel": "Xóa {{label}}",
+		"multiLabel": "Có thể khớp nhiều nhãn",
+		"settings": "Cài đặt nhãn",
+		"documents": "Tài liệu",
+		"documentsHint": "Mỗi dòng một tài liệu",
+		"documentsPlaceholder": "Dán các tài liệu cần xếp hạng, mỗi tài liệu một dòng.\nTài liệu liên quan nhất sẽ đứng đầu."
+	},
+	"settings": {
+		"hypothesisTemplate": "Mẫu giả thuyết",
+		"hypothesisHint": "Mỗi nhãn sẽ thay cho {} để tạo thành câu mà mô hình kiểm tra."
+	},
+	"card": {
+		"showMore": "Xem thêm",
+		"showLess": "Thu gọn",
+		"labelCount_one": "{{count}} nhãn",
+		"labelCount_other": "{{count}} nhãn",
+		"documentCount_one": "{{count}} tài liệu",
+		"documentCount_other": "{{count}} tài liệu",
+		"multiLabel": "Có thể khớp nhiều nhãn",
+		"noResults": "Mô hình không trả về kết quả nào.",
+		"elapsed": "{{seconds}} giây",
+		"copyResults": "Sao chép kết quả",
+		"reuse": "Dùng lại đầu vào"
+	},
+	"export": {
+		"text": "Văn bản",
+		"query": "Truy vấn",
+		"results": "Kết quả"
+	},
+	"empty": {
+		"text-classification": {
+			"title": "Phân loại văn bản",
+			"description": "Dán một bài đánh giá, tin nhắn hoặc bình luận để xem nó nói về điều gì hoặc mang cảm xúc gì, kèm điểm cho từng nhãn."
+		},
+		"zero-shot-classification": {
+			"title": "Xếp văn bản vào các nhãn của bạn",
+			"description": "Viết văn bản và các nhãn bạn quan tâm. Mô hình chấm điểm mức độ phù hợp của từng nhãn, không cần huấn luyện."
+		},
+		"text-ranking": {
+			"title": "Xếp hạng tài liệu",
+			"description": "Đặt câu hỏi và thêm các tài liệu cần so sánh, mỗi dòng một tài liệu. Tài liệu liên quan nhất sẽ đứng đầu."
+		}
+	},
+	"examples": {
+		"review": {
+			"label": "Phân loại một bài đánh giá sản phẩm",
+			"text": "Pin hết sau hai ngày và bộ phận hỗ trợ không bao giờ trả lời email của tôi."
+		},
+		"comment": {
+			"label": "Đọc cảm xúc của một bình luận",
+			"text": "Mình rất thích bản cập nhật mới, mọi thứ nhanh hơn và chế độ tối đẹp tuyệt!"
+		},
+		"ticket": {
+			"label": "Phân loại yêu cầu hỗ trợ",
+			"text": "Tôi bị trừ tiền gói đăng ký hai lần trong tháng này mà ứng dụng vẫn báo gói của tôi đã hết hạn.",
+			"labels": "thanh toán, lỗi, đề xuất tính năng"
+		},
+		"headline": {
+			"label": "Gắn nhãn tiêu đề tin tức",
+			"text": "Ngân hàng trung ương tăng lãi suất thêm nửa điểm phần trăm để kiềm chế lạm phát.",
+			"labels": "kinh tế, chính trị, thể thao, công nghệ"
+		},
+		"password": {
+			"label": "Tìm câu trả lời cho một câu hỏi",
+			"text": "Làm sao để đặt lại mật khẩu?",
+			"documents": "Văn phòng mở cửa từ thứ Hai đến thứ Sáu, từ 9 giờ sáng đến 5 giờ chiều.\nMở Cài đặt, chọn Tài khoản, sau đó chọn Đặt lại mật khẩu và làm theo liên kết chúng tôi gửi qua email.\nBạn có thể đổi ảnh đại diện trong trang Tài khoản."
+		},
+		"capital": {
+			"label": "Xếp hạng kết quả tìm kiếm",
+			"text": "Thủ đô của Úc là thành phố nào?",
+			"documents": "Sydney là thành phố lớn nhất nước Úc.\nCanberra là thủ đô của nước Úc.\nChuột túi là loài bản địa của nước Úc."
+		}
+	}
+}

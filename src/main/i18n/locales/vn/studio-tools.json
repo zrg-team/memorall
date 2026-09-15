@@ -1,0 +1,73 @@
+{
+	"canvas": {
+		"label": "Công cụ hình ảnh"
+	},
+	"tasks": {
+		"label": "Công cụ",
+		"background-removal": {
+			"label": "Xóa phông",
+			"can": "xóa phông nền",
+			"description": "Tách chủ thể ra khỏi nền, để lại nền trong suốt."
+		},
+		"depth-estimation": {
+			"label": "Độ sâu",
+			"can": "ước lượng độ sâu",
+			"description": "Xem từng phần của ảnh cách máy ảnh bao xa."
+		},
+		"object-detection": {
+			"label": "Nhận diện vật thể",
+			"can": "nhận diện vật thể",
+			"description": "Tìm và gắn nhãn các vật thể trong ảnh."
+		},
+		"image-to-text": {
+			"label": "Mô tả & OCR",
+			"can": "mô tả ảnh hoặc đọc chữ trong ảnh",
+			"description": "Mô tả ảnh, hoặc đọc chữ trong ảnh bằng mô hình OCR."
+		},
+		"image-segmentation": {
+			"label": "Phân vùng",
+			"can": "phân vùng ảnh",
+			"description": "Chia ảnh thành các vùng có nhãn."
+		},
+		"image-classification": {
+			"label": "Phân loại",
+			"can": "phân loại ảnh",
+			"description": "Cho biết ảnh có gì, kèm độ tin cậy."
+		}
+	},
+	"hint": {
+		"switchModel": "Hãy chuyển sang mô hình có thể {{task}}.",
+		"chooseModel": "Chọn mô hình"
+	},
+	"input": {
+		"choose": "Chọn ảnh",
+		"replace": "Chọn ảnh khác",
+		"clear": "Bỏ ảnh",
+		"drop": "hoặc thả ảnh vào đây, hay dán bằng Ctrl+V",
+		"dropShort": "hoặc thả / dán ảnh",
+		"dropZone": "Thả ảnh vào, dán bằng Ctrl+V hoặc bấm để chọn.",
+		"dropNow": "Thả ảnh để sử dụng",
+		"threshold": "Độ tin cậy",
+		"run": "Chạy",
+		"notImage": "Tệp này không phải là hình ảnh.",
+		"tooLarge": "Ảnh này nặng {{size}}; giới hạn là {{max}}."
+	},
+	"result": {
+		"before": "Trước",
+		"after": "Sau",
+		"compare": "So sánh trước và sau",
+		"cutoutAlt": "{{name}} đã xóa phông",
+		"downloadPng": "Tải PNG",
+		"original": "Ảnh gốc",
+		"depthMap": "Bản đồ độ sâu",
+		"sideBySide": "Song song",
+		"view": "Chế độ xem",
+		"depthAlt": "Bản đồ độ sâu của {{name}}",
+		"noDetections": "Không tìm thấy vật thể nào vượt ngưỡng tin cậy.",
+		"threshold": "Ngưỡng {{value}}",
+		"noText": "Không tìm thấy chữ nào.",
+		"elapsed": "{{seconds}} giây",
+		"segment": "Vùng",
+		"noSegments": "Không tìm thấy vùng nào."
+	}
+}

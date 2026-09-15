@@ -3,6 +3,7 @@ import type { OpenAILLM } from "../implementations/openai-llm";
 import type { WebLLMLLM } from "../implementations/webllm-llm";
 import type { WllamaLLM } from "../implementations/wllama-llm";
 import type { TransformerLLM } from "../implementations/transformer-llm";
+import type { TransformerMediaLLM } from "../implementations/transformer-media-llm";
 import type { BaseLLM } from "./base-llm";
 
 // Type-safe config mapping for LLMs
@@ -18,6 +19,10 @@ export interface WebLLMConfig {
 
 export interface TransformerConfig {
 	type: "transformer";
+}
+
+export interface TransformerMediaConfig {
+	type: "transformer-media";
 }
 
 export interface OpenAIConfig {
@@ -59,6 +64,7 @@ export type ServiceProvider =
 	| "wllama"
 	| "webllm"
 	| "transformer"
+	| "transformer-media"
 	| "openai"
 	| "lmstudio"
 	| "ollama"
@@ -82,6 +88,10 @@ export interface LLMRegistry {
 	transformer: {
 		config: TransformerConfig;
 		llm: TransformerLLM;
+	};
+	"transformer-media": {
+		config: TransformerMediaConfig;
+		llm: TransformerMediaLLM;
 	};
 	openai: {
 		config: OpenAIConfig;

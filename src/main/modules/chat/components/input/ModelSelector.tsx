@@ -6,6 +6,11 @@ import {
 	Search,
 	Sparkles,
 } from "lucide-react";
+import { useLocalDevice } from "@/main/hooks/use-local-device";
+import {
+	downloadBytesFor,
+	formatModelSize,
+} from "@/main/modules/llm/utils/model-size";
 import type React from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -80,6 +85,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
 }) => {
 	const { t } = useTranslation("chat");
 	const [open, setOpen] = useState(false);
+	const device = useLocalDevice();
 	const [query, setQuery] = useState("");
 	const searchRef = useRef<HTMLInputElement>(null);
 
@@ -235,6 +241,14 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
 											<span className="min-w-0 flex-1 truncate">
 												{shortModelName(model)}
 											</span>
+											{model.isLocal ? (
+												<span
+													className="shrink-0 tabular-nums text-[10px] text-muted-foreground"
+													data-model-size
+												>
+													{formatModelSize(downloadBytesFor(model, device))}
+												</span>
+											) : null}
 											{isCurrent ? (
 												<Check size={13} className="shrink-0 text-primary" />
 											) : null}

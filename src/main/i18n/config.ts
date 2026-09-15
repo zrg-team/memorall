@@ -24,6 +24,12 @@ import enAuth from "./locales/en/auth.json";
 import enCopilot from "./locales/en/copilot.json";
 import enConnections from "./locales/en/connections.json";
 import enSkills from "./locales/en/skills.json";
+import enStudio from "./locales/en/studio.json";
+import enStudioSpeech from "./locales/en/studio-speech.json";
+import enStudioTranscription from "./locales/en/studio-transcription.json";
+import enStudioImage from "./locales/en/studio-image.json";
+import enStudioTools from "./locales/en/studio-tools.json";
+import enStudioText from "./locales/en/studio-text.json";
 
 import vnCommon from "./locales/vn/common.json";
 import vnAgents from "./locales/vn/agents.json";
@@ -41,6 +47,12 @@ import vnAuth from "./locales/vn/auth.json";
 import vnCopilot from "./locales/vn/copilot.json";
 import vnConnections from "./locales/vn/connections.json";
 import vnSkills from "./locales/vn/skills.json";
+import vnStudio from "./locales/vn/studio.json";
+import vnStudioSpeech from "./locales/vn/studio-speech.json";
+import vnStudioTranscription from "./locales/vn/studio-transcription.json";
+import vnStudioImage from "./locales/vn/studio-image.json";
+import vnStudioTools from "./locales/vn/studio-tools.json";
+import vnStudioText from "./locales/vn/studio-text.json";
 
 // Translation resources
 const resources = {
@@ -61,6 +73,12 @@ const resources = {
 		copilot: enCopilot,
 		connections: enConnections,
 		skills: enSkills,
+		studio: enStudio,
+		studioSpeech: enStudioSpeech,
+		studioTranscription: enStudioTranscription,
+		studioImage: enStudioImage,
+		studioTools: enStudioTools,
+		studioText: enStudioText,
 	},
 	vn: {
 		common: vnCommon,
@@ -79,6 +97,12 @@ const resources = {
 		copilot: vnCopilot,
 		connections: vnConnections,
 		skills: vnSkills,
+		studio: vnStudio,
+		studioSpeech: vnStudioSpeech,
+		studioTranscription: vnStudioTranscription,
+		studioImage: vnStudioImage,
+		studioTools: vnStudioTools,
+		studioText: vnStudioText,
 	},
 } as const;
 

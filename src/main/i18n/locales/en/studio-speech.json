@@ -1,0 +1,57 @@
+{
+	"composer": {
+		"label": "Text to speak",
+		"placeholder": "Type or paste text to speak",
+		"musicLabel": "Music prompt",
+		"musicPlaceholder": "Describe the music: genre, mood, instruments, tempo",
+		"overLimit": "Longer than {{limit}} characters",
+		"muteLive": "Mute live playback",
+		"unmuteLive": "Play while generating",
+		"voice": "Voice",
+		"voicePlaceholder": "Voice",
+		"duration": "Length",
+		"seconds": "{{seconds}} s"
+	},
+	"voice": {
+		"label": "Voice",
+		"choose": "Voice: {{voice}}",
+		"preview": "Preview {{voice}}",
+		"stopPreview": "Stop preview of {{voice}}",
+		"female": "Female",
+		"male": "Male",
+		"neutral": "Neutral"
+	},
+	"settings": {
+		"label": "Settings",
+		"speed": "Speed",
+		"resetSpeed": "Reset speed",
+		"instructions": "Style instructions",
+		"instructionsPlaceholder": "e.g. Warm and upbeat, like a friendly radio host",
+		"seed": "Seed",
+		"seedPlaceholder": "Random",
+		"seedHint": "Use the same seed to get the same delivery again."
+	},
+	"card": {
+		"reuse": "Reuse text",
+		"copy": "Copy text",
+		"more": "More actions",
+		"regenerate": "Generate again",
+		"showMore": "Show more",
+		"showLess": "Show less",
+		"generating": "Generating…",
+		"composing": "Composing…",
+		"seconds": "{{seconds}} s"
+	},
+	"empty": {
+		"speechTitle": "Turn text into speech",
+		"musicTitle": "Create audio",
+		"speech": "Type something below, choose a voice and press Generate. You will hear it while it is being made.",
+		"music": "Describe a short piece of audio or music.",
+		"tryExample": "Try an example"
+	},
+	"announce": {
+		"done": "Generation finished",
+		"failed": "Generation failed",
+		"stopped": "Generation stopped"
+	}
+}

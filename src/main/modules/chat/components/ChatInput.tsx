@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import { PromptInput } from "@/main/components/ui/shadcn-io/ai/prompt-input";
 import { TooltipProvider } from "@/main/components/ui/tooltip";
 import { AttachmentList } from "@/main/modules/chat/components/input/AttachmentList";
+import { ChatDictationButton } from "@/main/modules/chat/components/input/ChatDictationButton";
 import { ChatInputControls } from "@/main/modules/chat/components/input/ChatInputControls";
 import {
 	collectFiles,
@@ -104,6 +105,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 	onToggleFullWidth,
 	placeholder,
 }) => {
+	const latestInputRef = useRef(inputValue);
+	latestInputRef.current = inputValue;
 	const { t } = useTranslation("chat");
 	const fileInputRef = useRef<HTMLInputElement>(null);
 	const textareaRef = useRef<MentionRichTextareaHandle>(null);
@@ -488,6 +491,19 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 							isLoadingModels={isLoadingModels}
 							onSelectModel={handleSelectModel}
 							onRefreshModels={refreshModels}
+							dictation={
+								<ChatDictationButton
+									disabled={isLoading}
+									onText={(text) => {
+										// Read the composer as it is now: the user may have kept
+										// typing while the recording was transcribed.
+										const current = latestInputRef.current;
+										setInputValue(
+											current.trim() ? `${current.trimEnd()} ${text}` : text,
+										);
+									}}
+								/>
+							}
 						/>
 					</PromptInput>
 					{coAgentError ? (

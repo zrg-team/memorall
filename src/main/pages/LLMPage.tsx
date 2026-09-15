@@ -8,6 +8,9 @@ import {
 } from "@/main/modules/llm/components";
 import { YourModels } from "@/main/modules/llm/components/YourModels";
 import { OffscreenServicesCard } from "@/main/modules/llm/components/OffscreenServicesCard";
+import { StudioModelsCard } from "@/main/modules/llm/components/StudioModelsCard";
+import { useLocation } from "react-router-dom";
+import { isWorkspaceMode } from "@/services/llm/interfaces/model-category";
 import {
 	Card,
 	CardHeader,
@@ -93,6 +96,17 @@ export const LLMPage: React.FC = () => {
 			? t("currentModel.status.configured")
 			: t("currentModel.status.inactive");
 
+	// `/llm?category=text-to-speech` opens straight onto that kind of model,
+	// which is where a studio's "Browse models" link lands.
+	const location = useLocation();
+	const { setModelCategory } = state;
+	React.useEffect(() => {
+		const requested = new URLSearchParams(location.search).get("category");
+		if (isWorkspaceMode(requested)) {
+			setModelCategory(requested);
+		}
+	}, [location.search, setModelCategory]);
+
 	// Setup event listeners and effects
 	useProgressListener({
 		setDownloadProgress: state.setDownloadProgress,
@@ -113,6 +127,7 @@ export const LLMPage: React.FC = () => {
 			data-llm-page
 			data-current-model-id={current?.modelId ?? ""}
 			data-current-model-provider={current?.provider ?? ""}
+			data-current-model-category={state.modelCategory}
 			className="flex h-full flex-col overflow-auto bg-background sm:overflow-hidden"
 		>
 			<div
@@ -447,6 +462,8 @@ export const LLMPage: React.FC = () => {
 										)}
 									</CardContent>
 								</Card>
+
+								<StudioModelsCard onBrowseCategory={setModelCategory} />
 
 								<OffscreenServicesCard />
 

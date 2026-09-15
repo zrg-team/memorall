@@ -1,6 +1,7 @@
 import React from "react";
 import { ChevronDown, ChevronRight, Zap } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { LocalModelSize } from "./LocalModelSize";
 
 import { Button } from "@/main/components/ui/button";
 import { Input } from "@/main/components/ui/input";
@@ -103,7 +104,10 @@ export const WebLLMTab: React.FC<WebLLMTabProps> = ({
 										model === modelId ? "border-primary bg-primary/5" : ""
 									}`}
 								>
-									<div className="min-w-0 truncate text-sm">{modelId}</div>
+									<div className="flex min-w-0 items-center gap-2">
+										<span className="min-w-0 truncate text-sm">{modelId}</span>
+										<LocalModelSize provider="webllm" modelId={modelId} />
+									</div>
 									<Button
 										type="button"
 										size="sm"

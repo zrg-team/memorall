@@ -1,5 +1,9 @@
 import type { ServiceProvider } from "@/services/llm/interfaces/llm-service.interface";
 import React from "react";
+import {
+	PROVIDER_ORDER,
+	PROVIDER_REGISTRY,
+} from "@/services/llm/provider-registry";
 import { useTranslation } from "react-i18next";
 
 interface ProviderSelectorProps {
@@ -9,32 +13,21 @@ interface ProviderSelectorProps {
 	allowedProviders?: ServiceProvider[];
 }
 
-const ALL_PROVIDERS: ServiceProvider[] = [
-	"transformer",
-	"wllama",
-	"webllm",
-	"openai",
-	"openrouter",
-	"lmstudio",
-	"ollama",
-];
+const ALL_PROVIDERS = PROVIDER_ORDER;
 
 export const ProviderSelector: React.FC<ProviderSelectorProps> = ({
 	quickProvider,
 	setQuickProvider,
 	loading,
-	allowedProviders = ALL_PROVIDERS,
+	allowedProviders = [...ALL_PROVIDERS],
 }) => {
 	const { t } = useTranslation("llm");
 
-	const providerLabels: Record<ServiceProvider, string> = {
-		transformer: t("providers.transformer"),
-		wllama: t("providers.wllama"),
-		webllm: t("providers.webllm"),
-		openai: `${t("providers.openai")} (Cloud)`,
-		openrouter: `${t("providers.openrouter")} (Cloud)`,
-		lmstudio: `${t("providers.lmstudio")} (Local)`,
-		ollama: `${t("providers.ollama")} (Local)`,
+	const providerLabel = (provider: ServiceProvider) => {
+		const descriptor = PROVIDER_REGISTRY[provider];
+		const name = t(`providers.${provider}`, { defaultValue: descriptor.label });
+		if (descriptor.residentLocal) return name;
+		return `${name} (${descriptor.isLocal ? "Local" : "Cloud"})`;
 	};
 
 	return (
@@ -49,7 +42,7 @@ export const ProviderSelector: React.FC<ProviderSelectorProps> = ({
 					allowedProviders.includes(provider),
 				).map((provider) => (
 					<option key={provider} value={provider}>
-						{providerLabels[provider]}
+						{providerLabel(provider)}
 					</option>
 				))}
 			</select>

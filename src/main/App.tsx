@@ -219,14 +219,9 @@ const App: React.FC = () => {
 
 	const handleForgotMasterPasskey = async () => {
 		const deletedProviders = await resetMasterKeyAndEncryptedConfigs();
-		const currentModel = await serviceManager.llmService.getCurrentModel();
-		if (
-			currentModel &&
-			deletedProviders.includes(
-				currentModel.provider as "openai" | "openrouter",
-			)
-		) {
-			await serviceManager.llmService.clearCurrentModel();
+		// Chat and every studio lose a model whose key was just deleted.
+		for (const provider of deletedProviders) {
+			await serviceManager.llmService.clearCurrentModelsForProvider(provider);
 		}
 
 		for (const provider of deletedProviders) {

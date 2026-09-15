@@ -1,0 +1,134 @@
+{
+	"switcher": {
+		"label": "Workspace"
+	},
+	"modes": {
+		"chat": {
+			"label": "Chat",
+			"short": "Chat",
+			"description": "Talk to an agent or a chat model."
+		},
+		"text-to-speech": {
+			"label": "Speech",
+			"short": "Speak",
+			"description": "Turn text into natural speech, on this device or in the cloud."
+		},
+		"speech-to-text": {
+			"label": "Transcribe",
+			"short": "Transcribe",
+			"description": "Record or upload audio and get an accurate transcript."
+		},
+		"image-generation": {
+			"label": "Image",
+			"short": "Image",
+			"description": "Create images from a description."
+		},
+		"image-tools": {
+			"label": "Image tools",
+			"short": "Tools",
+			"description": "Remove backgrounds, estimate depth, detect objects and read text in images."
+		},
+		"text-tools": {
+			"label": "Text tools",
+			"short": "Text",
+			"description": "Classify text, sort it into your own labels and rank documents by relevance."
+		},
+		"text-to-audio": {
+			"label": "Audio",
+			"short": "Audio",
+			"description": "Generate audio clips, such as music or sound, from a prompt."
+		}
+	},
+	"history": {
+		"newSession": "New session",
+		"search": "Search sessions",
+		"empty": "Your generations will appear here.",
+		"open": "Show sessions",
+		"close": "Close sessions",
+		"groups": {
+			"Pinned": "Pinned",
+			"Today": "Today",
+			"Yesterday": "Yesterday",
+			"Earlier": "Earlier"
+		},
+		"label": "{{mode}} sessions",
+		"title": "Sessions",
+		"count_one": "{{count}} session",
+		"count_other": "{{count}} sessions",
+		"new": "New",
+		"emptyTitle": "No sessions yet",
+		"noSearchResults": "No matching sessions",
+		"expand": "Expand sessions",
+		"collapse": "Collapse sessions",
+		"resize": "Resize sessions"
+	},
+	"model": {
+		"loading": "Loading model {{percent}}%",
+		"loadFailed": "Could not load the model: {{error}}",
+		"manage": "Manage models",
+		"loadingName": "Loading {{name}}…",
+		"loadingHint": "The first time, the model downloads to this device; after that it loads from the cache.",
+		"loadFailedName": "{{name}} couldn't be loaded",
+		"chooseAnother": "Choose another model",
+		"showDetails": "Details",
+		"hideDetails": "Hide details"
+	},
+	"empty": {
+		"cloudHint": "Or use a hosted OpenAI-compatible provider.",
+		"browseModels": "Browse all models"
+	},
+	"common": {
+		"generate": "Generate",
+		"stop": "Stop",
+		"retry": "Retry",
+		"delete": "Delete",
+		"download": "Download",
+		"copy": "Copy",
+		"copied": "Copied",
+		"running": "Working…",
+		"failed": "Failed",
+		"cancelled": "Stopped",
+		"saveToFiles": "Save to Files"
+	},
+	"player": {
+		"play": "Play",
+		"pause": "Pause",
+		"seek": "Seek",
+		"unavailable": "Audio unavailable"
+	},
+	"models": {
+		"use": "Use",
+		"added": "Added",
+		"selected": "Selected",
+		"inMemory": "In memory",
+		"downloaded": "Downloaded",
+		"unload": "Unload",
+		"remove": "Remove",
+		"hub": "Hugging Face models for on-device tools",
+		"searchPlaceholder": "Search models, or paste a Hugging Face link",
+		"searching": "Searching…",
+		"noResults": "No matching models.",
+		"unavailable": {
+			"noOnnx": "No ONNX weights, so it can't run in the browser.",
+			"customRuntime": "Needs its own runtime: its ONNX files have no transformers.js model type, so the browser studio can't load it. Serve it behind an OpenAI-compatible API to use it here.",
+			"architecture": "Its architecture ({{modelType}}) can't run in the browser studio yet. Serve it behind an OpenAI-compatible API to use it here."
+		},
+		"filterCategory": "Filter by tool",
+		"filterTask": "Filter by task",
+		"allTools": "All tools",
+		"allTasks": "All tasks",
+		"browseHint": "Not here? Find a model on Hugging Face, copy its link or id, and paste it into the search box.",
+		"browseHub": "Browse on Hugging Face"
+	},
+	"turn": {
+		"you": "You"
+	},
+	"modelError": {
+		"unsupported-architecture": "This model's architecture ({{modelType}}) can't run in the browser yet. Pick another model, or use it through an OpenAI-compatible server.",
+		"custom-runtime": "This model needs its own runtime, so it can't run in the browser. Pick another model, or use it through an OpenAI-compatible server.",
+		"session": "The browser couldn't open this model's files, even after trying other precisions. Try again, or pick another model.",
+		"memory": "Not enough memory to load this model. Close other tabs or pick a smaller model.",
+		"network": "Couldn't download the model files. Check your connection and try again.",
+		"other": "The model couldn't be loaded."
+	}
+}

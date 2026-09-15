@@ -15,6 +15,13 @@ import { RecommendedSetup } from "./RecommendedSetup";
 import { TransformerTab } from "./TransformerTab";
 import { WebLLMTab } from "./WebLLMTab";
 import { WllamaTab } from "./WllamaTab";
+import { MediaModelsTab } from "./MediaModelsTab";
+import { ModelCategoryChips } from "./ModelCategoryChips";
+import { useCategoryCurrentModel } from "@/main/modules/studio/hooks/use-category-current-model";
+import {
+	isMediaCategory,
+	type WorkspaceMode,
+} from "@/services/llm/interfaces/model-category";
 import { BrowserSupportNotice } from "./BrowserSupportNotice";
 import { getProviderSupport } from "../utils/browser-support";
 import { LocalModelsList } from "./YourModels/components/LocalModelsList";
@@ -29,6 +36,14 @@ import { serviceManager } from "@/services";
 import secureSession from "@/utils/secure-session";
 import type { FileInfo, ProgressData } from "../hooks/use-llm-state";
 import type { ServiceProvider } from "@/services/llm/interfaces/llm-service.interface";
+import {
+	LOCAL_RUNNER_PROVIDERS,
+	PROVIDER_ORDER,
+	PROVIDER_REGISTRY,
+	providersForCategory,
+} from "@/services/llm/provider-registry";
+import { useSelectableModels } from "@/main/hooks/use-selectable-models";
+import { preferredProvider } from "../utils/preferred-provider";
 
 interface ProviderPanelProps {
 	repo: string;
@@ -39,6 +54,9 @@ interface ProviderPanelProps {
 	setAvailableFiles: (files: FileInfo[]) => void;
 	advancedProvider: ServiceProvider;
 	setAdvancedProvider: (provider: ServiceProvider) => void;
+	/** Controlled by the models page; standalone uses keep their own. */
+	modelCategory?: WorkspaceMode;
+	setModelCategory?: (category: WorkspaceMode) => void;
 	model: string;
 	setModel: (model: string) => void;
 	webllmAvailableModels: string[];
@@ -69,27 +87,23 @@ interface ProviderPanelProps {
 
 type PanelMode = "recommended" | "browse";
 
-const PROVIDERS: ServiceProvider[] = [
-	"transformer",
-	"wllama",
-	"webllm",
-	"openai",
-	"openrouter",
-	"lmstudio",
-	"ollama",
-];
+const PROVIDERS = PROVIDER_ORDER;
 
-const CONFIG_KEYS: Partial<Record<ServiceProvider, string>> = {
-	openai: "openai_config",
-	openrouter: "openrouter_config",
-	lmstudio: "lmstudio_config",
-	ollama: "ollama_config",
-};
+const CONFIG_KEYS: Partial<Record<ServiceProvider, string>> =
+	Object.fromEntries(
+		PROVIDER_ORDER.flatMap((provider) => {
+			const descriptor = PROVIDER_REGISTRY[provider];
+			const key = descriptor.encryptionKey ?? descriptor.configKey;
+			return key ? [[provider, key]] : [];
+		}),
+	);
 
-const READY_KEYS: Partial<Record<ServiceProvider, string>> = {
-	openai: "openai_ready",
-	openrouter: "openrouter_ready",
-};
+const READY_KEYS: Partial<Record<ServiceProvider, string>> = Object.fromEntries(
+	PROVIDER_ORDER.flatMap((provider) => {
+		const key = PROVIDER_REGISTRY[provider].readyKey;
+		return key ? [[provider, key]] : [];
+	}),
+);
 
 export const ProviderPanel: React.FC<ProviderPanelProps> = ({
 	repo,
@@ -100,6 +114,8 @@ export const ProviderPanel: React.FC<ProviderPanelProps> = ({
 	setAvailableFiles,
 	advancedProvider,
 	setAdvancedProvider,
+	modelCategory: controlledCategory,
+	setModelCategory: setControlledCategory,
 	model,
 	setModel,
 	webllmAvailableModels,
@@ -125,7 +141,28 @@ export const ProviderPanel: React.FC<ProviderPanelProps> = ({
 	onModelLoaded,
 }) => {
 	const { t } = useTranslation("llm");
-	const { current, setCurrent, isInitialized } = useCurrentModel();
+	const [localCategory, setLocalCategory] =
+		React.useState<WorkspaceMode>("chat");
+	const modelCategory = controlledCategory ?? localCategory;
+	const setModelCategory = setControlledCategory ?? setLocalCategory;
+	const { current: chatCurrent, setCurrent, isInitialized } = useCurrentModel();
+	const { current: categoryCurrent, loading: categoryCurrentLoading } =
+		useCategoryCurrentModel(modelCategory);
+	const isChatCategory = modelCategory === "chat";
+	// Everything that marks "the active model" follows the category on screen.
+	const current = isChatCategory ? chatCurrent : categoryCurrent;
+	const categoryProviders = React.useMemo(
+		() => providersForCategory(modelCategory),
+		[modelCategory],
+	);
+
+	// A provider that cannot serve the chosen kind of model is not a tab any
+	// more; land on the first one that can rather than on an empty panel.
+	React.useEffect(() => {
+		if (!categoryProviders.includes(advancedProvider) && categoryProviders[0]) {
+			setAdvancedProvider(categoryProviders[0]);
+		}
+	}, [advancedProvider, categoryProviders, setAdvancedProvider]);
 	const advancedProviderSupport = getProviderSupport(advancedProvider);
 	const [showTestInference, setShowTestInference] = React.useState(false);
 	// Land on "Recommended" for anyone without a model yet, and on the provider
@@ -142,11 +179,12 @@ export const ProviderPanel: React.FC<ProviderPanelProps> = ({
 			return;
 		}
 		modeResolved.current = true;
-		if (current?.modelId?.trim()) {
+		if (chatCurrent?.modelId?.trim()) {
 			setMode("browse");
 		}
-	}, [isInitialized, current]);
+	}, [isInitialized, chatCurrent]);
 
+	const [statusesReady, setStatusesReady] = React.useState(false);
 	const [providerStatuses, setProviderStatuses] = React.useState<
 		Record<ServiceProvider, ProviderStatus>
 	>(() =>
@@ -231,6 +269,7 @@ export const ProviderPanel: React.FC<ProviderPanelProps> = ({
 			}
 			if (!cancelled) {
 				setProviderStatuses(nextStatuses);
+				setStatusesReady(true);
 			}
 		};
 		refreshStatuses();
@@ -238,6 +277,59 @@ export const ProviderPanel: React.FC<ProviderPanelProps> = ({
 			cancelled = true;
 		};
 	}, [advancedProvider, current]);
+
+	// Open the tab the user most likely wants: where the selected model lives,
+	// then where downloaded models are, then a provider already set up. Once
+	// they pick a tab for this category themselves, it is left alone.
+	const selectable = useSelectableModels(modelCategory);
+	const userPickedCategory = React.useRef<WorkspaceMode | null>(null);
+	const currentReady = isChatCategory ? isInitialized : !categoryCurrentLoading;
+	const preferred = React.useMemo(() => {
+		if (!currentReady || !selectable.isListed || !statusesReady) {
+			return null;
+		}
+		const downloadedProviders = new Set<ServiceProvider>();
+		for (const [provider, models] of selectable.byProvider) {
+			if (LOCAL_RUNNER_PROVIDERS.has(provider) && models.length > 0) {
+				downloadedProviders.add(provider);
+			}
+		}
+		const configuredProviders = new Set(
+			categoryProviders.filter(
+				(provider) =>
+					CONFIG_KEYS[provider] && providerStatuses[provider] !== "idle",
+			),
+		);
+		return preferredProvider({
+			providers: categoryProviders,
+			currentProvider: current?.provider,
+			downloadedProviders,
+			configuredProviders,
+		});
+	}, [
+		currentReady,
+		selectable.isListed,
+		selectable.byProvider,
+		statusesReady,
+		categoryProviders,
+		providerStatuses,
+		current?.provider,
+	]);
+
+	React.useEffect(() => {
+		if (userPickedCategory.current === modelCategory) return;
+		if (preferred && preferred !== advancedProvider) {
+			setAdvancedProvider(preferred);
+		}
+	}, [preferred, modelCategory, advancedProvider, setAdvancedProvider]);
+
+	const pickProvider = React.useCallback(
+		(provider: ServiceProvider) => {
+			userPickedCategory.current = modelCategory;
+			setAdvancedProvider(provider);
+		},
+		[modelCategory, setAdvancedProvider],
+	);
 
 	const quickDownloads = (provider: ServiceProvider) => (
 		<QuickDownloadModels
@@ -304,9 +396,22 @@ export const ProviderPanel: React.FC<ProviderPanelProps> = ({
 		</Button>
 	);
 
-	if (mode === "recommended") {
+	const categoryChips = (
+		<ModelCategoryChips
+			category={modelCategory}
+			onChange={(next) => {
+				setModelCategory(next);
+				// The guided setup only knows chat models.
+				if (next !== "chat") selectMode("browse");
+			}}
+			disabled={loading || quickLoading}
+		/>
+	);
+
+	if (mode === "recommended" && isChatCategory) {
 		return (
 			<div className="space-y-3 px-2 py-2 sm:px-3 lg:px-4">
+				{categoryChips}
 				<RecommendedSetup
 					onModelLoaded={onModelLoaded}
 					onBrowseAll={() => selectMode("browse")}
@@ -318,16 +423,18 @@ export const ProviderPanel: React.FC<ProviderPanelProps> = ({
 
 	return (
 		<div className="space-y-3 px-2 py-2 sm:px-3 lg:px-4">
+			{categoryChips}
 			<ProviderTabs
+				providers={categoryProviders}
 				advancedProvider={advancedProvider}
-				setAdvancedProvider={setAdvancedProvider}
+				setAdvancedProvider={pickProvider}
 				loading={loading || quickLoading}
 				onProviderChange={onProviderChange}
 				onWebLLMTabSelect={onWebLLMTabSelect}
 				webllmAvailableModels={webllmAvailableModels}
 				onOpenAITabSelect={onOpenAITabSelect}
 				providerStatuses={providerStatuses}
-				leading={recommendedPill}
+				leading={isChatCategory ? recommendedPill : undefined}
 			/>
 
 			{quickLoading && (
@@ -405,6 +512,11 @@ export const ProviderPanel: React.FC<ProviderPanelProps> = ({
 				/>
 			)}
 
+			{isMediaCategory(modelCategory) &&
+				advancedProvider === "transformer-media" && (
+					<MediaModelsTab category={modelCategory} />
+				)}
+
 			{advancedProvider === "openai" && (
 				<OpenAITab onModelLoaded={onModelLoaded} />
 			)}
@@ -440,6 +552,7 @@ export const ProviderPanel: React.FC<ProviderPanelProps> = ({
 					current={current}
 					loading={loading}
 					onModelLoaded={onModelLoaded}
+					category={modelCategory}
 				/>
 			)}
 
@@ -457,31 +570,33 @@ export const ProviderPanel: React.FC<ProviderPanelProps> = ({
 				{t("providerPanel.status", { status })}
 			</div>
 
-			<section className="rounded-lg border">
-				<Button
-					type="button"
-					variant="ghost"
-					className="h-auto w-full justify-start gap-2 rounded-none p-3 text-left text-sm font-medium disabled:text-muted-foreground"
-					onClick={() => setShowTestInference((value) => !value)}
-					disabled={!ready}
-				>
-					<Settings className="h-4 w-4" />
-					{t("providerPanel.testInference")}
-				</Button>
-				{showTestInference && ready && (
-					<div className="space-y-4 border-t p-3">
-						<ChatSection
-							ready={ready}
-							prompt={prompt}
-							setPrompt={setPrompt}
-							loading={loading}
-							onGenerate={onGenerate}
-							output={output}
-						/>
-						<LogsSection logs={logs} />
-					</div>
-				)}
-			</section>
+			{isChatCategory ? (
+				<section className="rounded-lg border">
+					<Button
+						type="button"
+						variant="ghost"
+						className="h-auto w-full justify-start gap-2 rounded-none p-3 text-left text-sm font-medium disabled:text-muted-foreground"
+						onClick={() => setShowTestInference((value) => !value)}
+						disabled={!ready}
+					>
+						<Settings className="h-4 w-4" />
+						{t("providerPanel.testInference")}
+					</Button>
+					{showTestInference && ready && (
+						<div className="space-y-4 border-t p-3">
+							<ChatSection
+								ready={ready}
+								prompt={prompt}
+								setPrompt={setPrompt}
+								loading={loading}
+								onGenerate={onGenerate}
+								output={output}
+							/>
+							<LogsSection logs={logs} />
+						</div>
+					)}
+				</section>
+			) : null}
 		</div>
 	);
 };

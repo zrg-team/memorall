@@ -5,6 +5,26 @@ import type {
 	ChatCompletionRequest,
 	ChatCompletionResponse,
 } from "@/types/openai";
+import type {
+	ImageGenerateParams,
+	ImageGenerationStreamEvent,
+	ImageToolParams,
+	ImageToolResponse,
+	TextToolParams,
+	TextToolResponse,
+	MediaVoice,
+	SpeechCreateParams,
+	SpeechResponse,
+	SpeechStreamEvent,
+	Transcription,
+	TranscriptionCreateParams,
+	TranscriptionStreamEvent,
+} from "@/types/openai-media";
+import type {
+	ImageToolTask,
+	ModelCategory,
+	TextToolTask,
+} from "./model-category";
 import type { ToolCapabilityInfo } from "./tool-capability";
 
 // Centralized LLM type definition
@@ -13,6 +33,7 @@ export type LLMType =
 	| "webllm"
 	| "transformer"
 	| "transformer-direct"
+	| "transformer-media"
 	| "openai"
 	| "custom";
 
@@ -20,6 +41,16 @@ export interface LLMInfo {
 	name: string;
 	type: LLMType;
 	ready: boolean;
+}
+
+/**
+ * Bytes a local model downloads, by the device it will run on: runtimes pick a
+ * different precision per device (full precision on WebGPU, quantized on WASM
+ * for transformers.js), so one number would be wrong for someone.
+ */
+export interface DeviceDownloadSizes {
+	webgpu?: number;
+	wasm?: number;
 }
 
 export interface ModelInfo {
@@ -35,6 +66,8 @@ export interface ModelInfo {
 	loaded: boolean;
 	downloaded?: boolean; // Model files are downloaded/cached locally
 	size?: number;
+	/** Download size per device when it differs; `size` is the fallback. */
+	sizeByDevice?: DeviceDownloadSizes;
 	provider?: string; // Added provider field
 	dtype?: string;
 	device?: string;
@@ -44,6 +77,16 @@ export interface ModelInfo {
 	supportsVision?: boolean;
 	supportsAudio?: boolean;
 	webgpuCapabilities?: unknown;
+	/** What the model does. Absent means chat (see `modelCategoriesOf`). */
+	categories?: ModelCategory[];
+	/** Speech models: the voices `audio/speech` accepts. */
+	voices?: MediaVoice[];
+	/** Languages the model declares, as ISO codes. */
+	languages?: string[];
+	/** Image-tools models: the task the model performs. */
+	imageTask?: ImageToolTask;
+	/** Text-tools models: the task the model performs. */
+	textTask?: TextToolTask;
 }
 
 export interface ModelsResponse {
@@ -108,4 +151,34 @@ export interface BaseLLM {
 	// Tool capabilities
 	getToolCapabilities(model?: string): Promise<ToolCapabilityInfo>;
 	supportsTools(model?: string): Promise<boolean>;
+
+	// Media endpoints - OpenAI compatible. Optional: a provider implements the
+	// ones its models can serve, and `ILLMService` reports the rest as
+	// unsupported instead of silently falling back to chat.
+
+	/** POST /v1/audio/speech */
+	audioSpeech?(request: SpeechCreateParams): Promise<SpeechResponse>;
+	/** POST /v1/audio/speech with `stream_format: "sse"`. */
+	audioSpeechStream?(
+		request: SpeechCreateParams,
+	): AsyncIterableIterator<SpeechStreamEvent>;
+	/** POST /v1/audio/transcriptions */
+	audioTranscriptions?(
+		request: TranscriptionCreateParams,
+	): Promise<Transcription>;
+	/** POST /v1/audio/transcriptions with `stream: true`. */
+	audioTranscriptionsStream?(
+		request: TranscriptionCreateParams,
+	): AsyncIterableIterator<TranscriptionStreamEvent>;
+	/**
+	 * POST /v1/images/generations. Always evented: local generation takes long
+	 * enough that progress is part of the result.
+	 */
+	imagesGenerations?(
+		request: ImageGenerateParams,
+	): AsyncIterableIterator<ImageGenerationStreamEvent>;
+	/** POST /v1/images/tools (Memorall extension). */
+	imagesTools?(request: ImageToolParams): Promise<ImageToolResponse>;
+	/** POST /v1/text/tools (Memorall extension). */
+	textTools?(request: TextToolParams): Promise<TextToolResponse>;
 }

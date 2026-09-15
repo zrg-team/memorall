@@ -536,6 +536,8 @@ export const useChatStore = create<ChatStore>((set, get) => {
 						db
 							.select()
 							.from(schema.conversations)
+							// Media studios keep their own history.
+							.where(eq(schema.conversations.mode, "chat"))
 							.orderBy(
 								desc(schema.conversations.updatedAt),
 								desc(schema.conversations.createdAt),
@@ -556,6 +558,7 @@ export const useChatStore = create<ChatStore>((set, get) => {
 						db
 							.select()
 							.from(schema.conversations)
+							.where(eq(schema.conversations.mode, "chat"))
 							.orderBy(desc(schema.conversations.createdAt))
 							.limit(1),
 				);
@@ -609,6 +612,7 @@ export const useChatStore = create<ChatStore>((set, get) => {
 					const [next] = await db
 						.select()
 						.from(schema.conversations)
+						.where(eq(schema.conversations.mode, "chat"))
 						.orderBy(
 							desc(schema.conversations.updatedAt),
 							desc(schema.conversations.createdAt),
