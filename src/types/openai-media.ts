@@ -3,8 +3,8 @@
 // These mirror `/v1/audio/speech`, `/v1/audio/transcriptions` and
 // `/v1/images/generations`, plus one Memorall extension (`/v1/images/tools`)
 // for single-shot image tasks that OpenAI has no endpoint for. Every shape is
-// JSON-safe except `MediaPayload.bytes`: requests cross `chrome.runtime`
-// messaging in the extension, which drops ArrayBuffers, so binary data travels
+// JSON-safe except `MediaPayload.bytes`: requests cross runtime messaging in
+// the extension, which drops ArrayBuffers, so binary data travels
 // as a documents-filesystem path or base64 whenever it leaves its context.
 
 import type {
