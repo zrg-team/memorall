@@ -21,6 +21,14 @@ static web app, and Tauri applications for Windows, macOS, and Linux.
 
 [Platforms](#supported-platforms) • [Quick Start](#quick-start) • [Demo](#demo) • [Flow Engine](#flow-engine) • [Agent Power](#agent-power) • [Custom Agents](#custom-agents) • [Architecture](#architecture-at-a-glance) • [Documentation](#documentation-map) • [GitHub](https://github.com/zrg-team/memorall)
 
+<br />
+
+<img src="./docs/assets/memorall-trailer.gif" alt="Memorall in 50 seconds: an agent built from one sentence in the wizard and submitted, an answer rendered as an interactive dashboard, image and on-device music studios, and the co-agent opening the Issues tab on GitHub" width="800" />
+
+**Your browser harness.** Describe an agent and it builds itself, answers arrive as live UI, images and music come from the same app, and a co-agent works on the page beside you.
+
+▶️ [Watch the full trailer with sound (1:41)](./docs/assets/memorall-trailer.webm) — the soundtrack was generated on-device by Memorall's own Audio studio.
+
 </div>
 
 ## 🧠 Why Memorall
