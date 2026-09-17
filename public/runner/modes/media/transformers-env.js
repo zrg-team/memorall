@@ -1,6 +1,6 @@
 // Lazy transformers.js import for the media engine.
 //
-// Runs in a module Worker, where `chrome.runtime.getURL` does not exist: the
+// Runs in a module Worker, where the extension URL helper does not exist: the
 // ONNX Runtime WASM directory is resolved relative to this file instead, which
 // works for both the extension (`chrome-extension://<id>/runner/...`) and the
 // web build.
