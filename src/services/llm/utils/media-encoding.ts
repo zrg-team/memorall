@@ -1,7 +1,7 @@
 /**
  * Binary helpers for media endpoints.
  *
- * Audio and images cross `chrome.runtime` messaging as base64 or as a
+ * Audio and images cross extension runtime messaging as base64 or as a
  * documents-filesystem path, never as ArrayBuffers (the channel is JSON only),
  * so these conversions sit on every media boundary.
  */
@@ -103,7 +103,7 @@ export function encodeWav(
  * Re-batches a stream of small PCM frames into chunks of roughly `targetMs`.
  *
  * Streaming speech models emit many small frames. Forwarding each one as its
- * own job progress event floods `chrome.runtime`; a few hundred milliseconds
+ * own job progress event floods runtime messaging; a few hundred milliseconds
  * per event keeps playback responsive at a fraction of the traffic.
  */
 export class PcmChunkBatcher {
