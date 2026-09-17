@@ -293,6 +293,15 @@ const OPENROUTER_SESSION_ID_MAX_LENGTH = 256;
 /** Longest slice of the first user message that feeds the cache key. */
 const CACHE_KEY_TEXT_LIMIT = 4096;
 
+/** Stamp the upstream provider a gateway reported onto a request's usage. */
+const withServingProvider = <T extends { provider?: string } | undefined>(
+	usage: T,
+	provider: unknown,
+): T =>
+	usage && typeof provider === "string" && provider.trim() && !usage.provider
+		? { ...usage, provider: provider.trim() }
+		: usage;
+
 const fnv1a = (text: string): string => {
 	let hash = 0x811c9dc5;
 	for (let index = 0; index < text.length; index++) {
@@ -756,10 +765,13 @@ export class OpenAILLM implements BaseLLM {
 			usage: undefined,
 		};
 
-		response.usage = resolveTokenUsage(
-			data?.usage,
-			request.messages,
-			extractResponseOutputText(response),
+		response.usage = withServingProvider(
+			resolveTokenUsage(
+				data?.usage,
+				request.messages,
+				extractResponseOutputText(response),
+			),
+			data?.provider,
 		);
 
 		return response;
@@ -792,6 +804,7 @@ export class OpenAILLM implements BaseLLM {
 		const model = body.model as string;
 		let completionOutput = "";
 		let finalUsage = normalizeTokenUsage(undefined);
+		let servingProvider: unknown;
 
 		while (true) {
 			const { value, done } = await reader.read();
@@ -828,13 +841,19 @@ export class OpenAILLM implements BaseLLM {
 				}
 				try {
 					const json = JSON.parse(dataStr);
+					if (typeof json.provider === "string" && json.provider) {
+						servingProvider = json.provider;
+					}
 					const choice = Array.isArray(json.choices)
 						? json.choices[0]
 						: undefined;
 
 					// Usage-only chunk (OpenAI sends this as the last chunk when stream_options.include_usage is set)
 					if (!choice && json.usage) {
-						const usage = normalizeTokenUsage(json.usage);
+						const usage = withServingProvider(
+							normalizeTokenUsage(json.usage),
+							servingProvider,
+						);
 						if (usage) {
 							finalUsage = usage;
 						}
@@ -855,7 +874,10 @@ export class OpenAILLM implements BaseLLM {
 					const toolCalls: ChatCompletionChunkToolCall[] | undefined =
 						choice?.delta?.tool_calls;
 
-					const usage = normalizeTokenUsage(json.usage);
+					const usage = withServingProvider(
+						normalizeTokenUsage(json.usage),
+						servingProvider,
+					);
 					if (usage) {
 						finalUsage = usage;
 					}

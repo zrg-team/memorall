@@ -586,6 +586,7 @@ graphRegistry.register(
 				getInitialState: (ctx) => ({
 					messages: normalizeChatMessages(ctx.messages),
 					maxIterations,
+					...(ctx.reminders?.length ? { reminders: ctx.reminders } : {}),
 				}),
 			};
 		},

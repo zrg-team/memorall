@@ -503,4 +503,63 @@ describe("a split conversation does not turn plain chat into an agent", () => {
 			}),
 		);
 	});
+
+	it("seeds per-request context into the flow as reminders", async () => {
+		// The co-agent's page and anchor change with every question; seeded as
+		// reminders they ride past the end of each request instead of rewriting
+		// the system prompt the cached prefix starts with.
+		flowStream.mockImplementation(
+			vi.fn(async function* () {
+				yield ["values", { response: "ok" }];
+			}),
+		);
+		const { createMemorallFlowRun } = await import("@/services/agent-harness");
+
+		await runChat({
+			messages: [{ role: "user", content: "what is this?" }],
+			model: "test-model",
+			mode: "custom",
+			conversation: splitConversation,
+			reminders: ["Current page: https://x.test/"],
+		});
+
+		expect(createMemorallFlowRun).toHaveBeenCalledWith(
+			expect.objectContaining({
+				input: expect.objectContaining({
+					initialState: expect.objectContaining({
+						reminders: ["Current page: https://x.test/"],
+					}),
+				}),
+			}),
+		);
+	});
+
+	it("appends reminders after the conversation on the direct completion path", async () => {
+		llmStream.mockImplementation(singleReply("ok"));
+		const { serviceManager } = await import("@/services");
+
+		await runChat({
+			messages: [
+				{ role: "system", content: "Be terse." },
+				{ role: "user", content: "what is this?" },
+			],
+			model: "test-model",
+			mode: "normal",
+			reminders: ["Current page: https://x.test/"],
+		});
+
+		const request = vi
+			.mocked(serviceManager.llmService.chatCompletions)
+			.mock.calls.at(-1)?.[0] as {
+			messages: Array<{ role: string; content: unknown }>;
+		};
+		expect(request.messages.slice(0, 2)).toEqual([
+			{ role: "system", content: "Be terse." },
+			{ role: "user", content: "what is this?" },
+		]);
+		expect(request.messages.at(-1)).toEqual({
+			role: "user",
+			content: expect.stringContaining("Current page: https://x.test/"),
+		});
+	});
 });

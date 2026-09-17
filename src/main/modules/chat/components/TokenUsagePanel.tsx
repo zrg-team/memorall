@@ -8,6 +8,7 @@ import {
 	type AggregatedTokenUsage,
 	type CacheContinuity,
 	describeCacheContinuity,
+	describeProviderSwitch,
 	getCacheHitRatio,
 	type TokenUsage,
 } from "@/services/llm/utils/token-usage";
@@ -114,6 +115,9 @@ export const TokenUsagePanel: React.FC<TokenUsagePanelProps> = ({ usage }) => {
 	const showCacheWrite = calls.some(
 		(call) => (call.cache_write_tokens ?? 0) > 0,
 	);
+	// Only when a gateway named them: one model served by several providers is
+	// the usual reason a request stops reusing the one before it.
+	const showProvider = calls.some((call) => Boolean(call.provider));
 
 	const note = usage.estimated
 		? t(
@@ -260,6 +264,11 @@ export const TokenUsagePanel: React.FC<TokenUsagePanelProps> = ({ usage }) => {
 											{t("messages.cacheWriteTokens", "Cache write")}
 										</th>
 									) : null}
+									{showProvider ? (
+										<th className="py-1 pr-2 text-left font-medium">
+											{t("messages.providerColumn", "Provider")}
+										</th>
+									) : null}
 									<th className="py-1 text-right font-medium">
 										{t("messages.outputTokens", "Output")}
 									</th>
@@ -273,18 +282,25 @@ export const TokenUsagePanel: React.FC<TokenUsagePanelProps> = ({ usage }) => {
 									);
 									const status = continuity[index] ?? "unknown";
 									const missed = isMiss(status);
+									const providerSwitch = describeProviderSwitch(calls, index);
 									const reason =
-										status === "restarted"
-											? t(
-													"messages.cacheRestarted",
-													"Nothing was reused from the previous request.",
-												)
-											: status === "partial"
+										missed && providerSwitch
+											? t("messages.cacheProviderSwitch", {
+													...providerSwitch,
+													defaultValue:
+														"Served by {{to}} instead of {{from}} — each provider keeps its own cache.",
+												})
+											: status === "restarted"
 												? t(
-														"messages.cachePartial",
-														"Reused an older request instead of the previous one — likely served by a different provider.",
+														"messages.cacheRestarted",
+														"Nothing was reused from the previous request.",
 													)
-												: undefined;
+												: status === "partial"
+													? t(
+															"messages.cachePartial",
+															"Reused an older request instead of the previous one — likely served by a different provider.",
+														)
+													: undefined;
 									return (
 										<tr
 											// biome-ignore lint/suspicious/noArrayIndexKey: requests carry no id and the list is append-only, so the position is the identity
@@ -337,6 +353,18 @@ export const TokenUsagePanel: React.FC<TokenUsagePanelProps> = ({ usage }) => {
 													{call.cache_write_tokens
 														? formatTokens(call.cache_write_tokens)
 														: "-"}
+												</td>
+											) : null}
+											{showProvider ? (
+												<td
+													className={cn(
+														"max-w-[8rem] truncate py-1 pr-2 text-left text-muted-foreground",
+														providerSwitch &&
+															"text-amber-600 dark:text-amber-400",
+													)}
+													data-testid={`usage-call-provider-${index + 1}`}
+												>
+													{call.provider ?? "-"}
 												</td>
 											) : null}
 											<td className="py-1 text-right">

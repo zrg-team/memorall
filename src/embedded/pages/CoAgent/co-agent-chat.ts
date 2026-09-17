@@ -33,7 +33,10 @@ export interface CoAgentChatStreamOptions
 		| "onAction"
 		| "onToolCalls"
 		| "onError"
+		| "onParts"
 		| "signal"
+		| "conversation"
+		| "history"
 	> {
 	prompt: CoAgentPrompt;
 	pageContext: CoAgentPageContext;
@@ -42,6 +45,14 @@ export interface CoAgentChatStreamOptions
 	agentFlowId?: string;
 }
 
+/**
+ * Where the user is and what they pointed at, for this question only.
+ *
+ * Sent as reminders — after the conversation, not inside the system prompt.
+ * Both change with every question, and the system prompt is the first thing in
+ * the request: a new URL or a different hovered element there invalidated the
+ * cached prefix of everything behind it, so no two questions ever shared one.
+ */
 export const CO_AGENT_PAGE_CONTEXT_SYSTEM_PROMPT = `
 Current user-enabled browser page context:
 - URL: {{url}}
@@ -153,11 +164,17 @@ export const coAgentChatService = {
 					? undefined
 					: options.agentFlowId,
 			flowConfigPrefix: createCoAgentFlowPrefixConfig(),
-			systemMessages: [
+			// The turns already taken in this co-agent session, replayed as stored.
+			...(options.history?.length ? { history: options.history } : {}),
+			// Saving the turn is the chat handler's job, the same as for the panel:
+			// it writes the parts and tool timeline the transcript renders from.
+			...(options.conversation ? { conversation: options.conversation } : {}),
+			reminders: [
 				renderCoAgentPageContextPrompt(options.pageContext),
 				renderAnchorContextPrompt(options.anchorContext),
 			].filter((message): message is string => Boolean(message)),
 			onExecuteStart: options.onExecuteStart,
+			onParts: options.onParts,
 			onProgress: options.onProgress,
 			onAction: options.onAction,
 			onToolCalls: options.onToolCalls,

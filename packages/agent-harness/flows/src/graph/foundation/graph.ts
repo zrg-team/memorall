@@ -4,10 +4,7 @@ import {
 	FoundationAnnotation,
 	type FoundationState,
 } from "./state.js";
-import {
-	GraphBase,
-	normalizeChatMessages,
-} from "../graph.base.js";
+import { GraphBase, normalizeChatMessages } from "../graph.base.js";
 import type {} from "../../interfaces/engine/tool.js";
 import type { AllServices } from "../../interfaces/services/services.js";
 import { logInfo } from "../../logging/logger.js";
@@ -105,6 +102,7 @@ graphRegistry.register(
 					graphId: ctx.topicId,
 					contextQueries: ctx.contextQueries,
 					tools: [],
+					...(ctx.reminders?.length ? { reminders: ctx.reminders } : {}),
 				}),
 			};
 		},

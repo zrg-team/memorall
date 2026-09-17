@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { describeCacheContinuity, type TokenUsage } from "../token-usage";
+import {
+	describeCacheContinuity,
+	describeProviderSwitch,
+	normalizeTokenUsage,
+	type TokenUsage,
+} from "../token-usage";
 
 const call = (prompt_tokens: number, cached_tokens?: number): TokenUsage => ({
 	prompt_tokens,
@@ -102,5 +107,35 @@ describe("describeCacheContinuity", () => {
 	it("never flags the first request", () => {
 		expect(describeCacheContinuity([call(50_000, 0)])).toEqual(["first"]);
 		expect(describeCacheContinuity([])).toEqual([]);
+	});
+});
+
+describe("naming the provider a request moved to", () => {
+	it("keeps the provider through normalisation, so it survives the relay", () => {
+		expect(
+			normalizeTokenUsage({
+				prompt_tokens: 10,
+				completion_tokens: 1,
+				total_tokens: 11,
+				provider: "DeepSeek",
+			}),
+		).toMatchObject({ provider: "DeepSeek" });
+	});
+
+	it("reports a switch only between two requests that both named one", () => {
+		const calls: TokenUsage[] = [
+			{ ...call(10_000, 0), provider: "DeepSeek" },
+			{ ...call(15_000, 9_984), provider: "DeepSeek" },
+			{ ...call(24_000, 0), provider: "Novita" },
+			call(26_000, 0),
+		];
+
+		expect(describeProviderSwitch(calls, 0)).toBeUndefined();
+		expect(describeProviderSwitch(calls, 1)).toBeUndefined();
+		expect(describeProviderSwitch(calls, 2)).toEqual({
+			from: "DeepSeek",
+			to: "Novita",
+		});
+		expect(describeProviderSwitch(calls, 3)).toBeUndefined();
 	});
 });

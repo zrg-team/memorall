@@ -781,3 +781,92 @@ describe("OpenAI-compatible prompt-cache hints", () => {
 		});
 	});
 });
+
+/**
+ * One model on OpenRouter is served by several upstream providers, each with
+ * its own prompt cache. A request that reads nothing back looks the same
+ * whether its prompt changed or it simply landed elsewhere — only the name of
+ * the provider that served it tells the two apart.
+ */
+describe("recording which provider served a request", () => {
+	afterEach(() => {
+		vi.unstubAllGlobals();
+	});
+
+	const usage = {
+		prompt_tokens: 100,
+		completion_tokens: 5,
+		total_tokens: 105,
+		prompt_tokens_details: { cached_tokens: 64 },
+	};
+
+	it("stamps the streamed provider onto the request's usage", async () => {
+		const body = [
+			`data: ${JSON.stringify({
+				id: "s1",
+				provider: "DeepSeek",
+				choices: [{ index: 0, delta: { role: "assistant", content: "hi" } }],
+			})}\n\n`,
+			`data: ${JSON.stringify({
+				id: "s1",
+				provider: "DeepSeek",
+				choices: [],
+				usage,
+			})}\n\n`,
+			"data: [DONE]\n\n",
+		].join("");
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(
+				async () =>
+					new Response(body, {
+						headers: { "Content-Type": "text/event-stream" },
+					}),
+			),
+		);
+		const llm = new OpenAILLM("key", "https://openrouter.ai/api/v1");
+
+		const chunks = [];
+		for await (const chunk of llm.chatCompletions({
+			model: "deepseek/deepseek-v4.1-flash",
+			messages: [{ role: "user", content: "hi" }],
+			stream: true,
+		})) {
+			chunks.push(chunk);
+		}
+
+		expect(chunks.find((chunk) => chunk.usage)?.usage).toMatchObject({
+			cached_tokens: 64,
+			provider: "DeepSeek",
+		});
+	});
+
+	it("stamps the provider of a non-streamed completion", async () => {
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(async () =>
+				Response.json({
+					id: "c1",
+					provider: "Novita",
+					choices: [
+						{
+							index: 0,
+							message: { role: "assistant", content: "hi" },
+							finish_reason: "stop",
+						},
+					],
+					usage,
+				}),
+			),
+		);
+		const llm = new OpenAILLM("key", "https://openrouter.ai/api/v1");
+
+		const completion = await llm.chatCompletions({
+			model: "deepseek/deepseek-v4.1-flash",
+			messages: [{ role: "user", content: "hi" }],
+			stream: false,
+		});
+
+		expect(completion.usage?.provider).toBe("Novita");
+	});
+});

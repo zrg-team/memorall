@@ -23,9 +23,6 @@ import { coAgentChatService } from "@/embedded/pages/CoAgent/co-agent-chat";
 import { CO_AGENT_STATUS_EVENT } from "@/co-agent/constants";
 import {
 	COAGENT_SESSION_END,
-	COAGENT_SESSION_START,
-	findOpenCoAgentSession,
-	isCoAgentSessionStale,
 	isCoAgentSessionOpen,
 } from "@/services/chat/coagent-session";
 import {
@@ -117,7 +114,11 @@ export const CoAgentOverlay: React.FC<CoAgentOverlayProps> = ({
 			// underneath would put the trigger on top of whatever the user is
 			// trying to pick, and costs the host page a DOM walk per pointer move
 			// for an anchor nothing can use.
-			disabled: showAuthAction || isPickerActive,
+			//
+			// The same holds while an answer is running: a question is already in
+			// flight, and the agent's own focus and clicks on the page would
+			// otherwise read as the user pointing at something new.
+			disabled: showAuthAction || isPickerActive || isSubmitting,
 			promptOpen: anchorPromptOpen,
 			onOpenPrompt: openPromptUi,
 		});
@@ -220,6 +221,9 @@ export const CoAgentOverlay: React.FC<CoAgentOverlayProps> = ({
 		!chatPopupOpen &&
 		!collapsed &&
 		!isPickerActive &&
+		// "Ask about this" under the pointer while the last question is still
+		// being answered only gets in the way of reading the page.
+		!isSubmitting &&
 		!showAuthAction;
 
 	useEffect(() => {
@@ -417,51 +421,48 @@ ${text}`
 
 		let assistantMessageId: string | null = null;
 		let currentContent = "";
-		let latestActions: Awaited<
-			ReturnType<typeof coAgentChatService.chatStream>
-		>["actions"] = [];
-		let latestToolCalls:
-			| Awaited<ReturnType<typeof coAgentChatService.chatStream>>["toolCalls"]
-			| undefined;
-		let latestUsage:
-			| Awaited<ReturnType<typeof coAgentChatService.chatStream>>["usage"]
-			| undefined;
-		const startTime = Date.now();
 
 		try {
+			// Resolve the agent before the run, so "ran without your agent" is a
+			// thing the user is told rather than something they have to infer from
+			// the answer sounding wrong. Resolved before the turn is written, too:
+			// a question that never ran would otherwise sit in the session and be
+			// replayed to every later question as an unanswered turn.
+			const resolvedAgent =
+				await coAgentChatService.resolveAgentFlowConfig(selectedAgentFlowId);
+			if (resolvedAgent.usedFallback) {
+				currentContent = t("agentUnavailable", {
+					agent: answeringAgentName ?? selectedAgentFlowId,
+					defaultValue:
+						`Could not load "${answeringAgentName ?? selectedAgentFlowId}", so it was not used. ${resolvedAgent.reason ?? ""}`.trim(),
+				});
+				setStatusLine("");
+				setMessage(currentContent);
+				return;
+			}
+
 			// Opened lazily on the first question rather than when the dock
-			// appears: a session the user never used is not worth marking.
+			// appears: a session the user never used is not worth marking. The
+			// session is the model's context — its earlier turns are sent like any
+			// chat, and the start marker is the boundary the thread-history tools
+			// read behind for the rest of the conversation.
+			let session: Awaited<
+				ReturnType<typeof embeddedChatHistoryService.openCoAgentSession>
+			> | null = null;
 			try {
-				const existing = await embeddedChatHistoryService.loadMessages();
-				const pageUrl = window.location.href;
-				const open = findOpenCoAgentSession(existing);
-				if (!open) {
-					await embeddedChatHistoryService.insertCoAgentMarker(
-						COAGENT_SESSION_START,
-						pageUrl,
-					);
-				} else if (isCoAgentSessionStale(existing, Date.now())) {
-					// Closing the tab writes no end marker, so a session opened once
-					// would stay open for ever and leave every later visit unmarked.
-					// A session still spans navigation — following a trail across
-					// pages is the point — so only an idle gap ends one here.
-					await embeddedChatHistoryService.insertCoAgentMarker(
-						COAGENT_SESSION_END,
-					);
-					await embeddedChatHistoryService.insertCoAgentMarker(
-						COAGENT_SESSION_START,
-						pageUrl,
-					);
-				}
+				session = await embeddedChatHistoryService.openCoAgentSession(
+					window.location.href,
+				);
 			} catch {
-				// A missing marker costs a visual cue, not the answer.
+				// Without a session the question still gets answered, from scratch.
 			}
 
 			await embeddedChatHistoryService.addMessage({
 				role: "user",
 				// Written down as it was sent: an attached region reached the model
 				// as an image part but was never stored, so the transcript showed a
-				// question about a picture that appeared nowhere.
+				// question about a picture that appeared nowhere. It is also what the
+				// next question in the session replays, so it has to match.
 				...buildStoredTurn(prompt, promptWithContext),
 				metadata: {
 					source: "co-agent",
@@ -485,27 +486,37 @@ ${text}`
 				},
 			});
 			assistantMessageId = assistantMessage.id;
-
-			// Resolve the agent before the run, so "ran without your agent" is a
-			// thing the user is told rather than something they have to infer from
-			// the answer sounding wrong.
-			const resolvedAgent =
-				await coAgentChatService.resolveAgentFlowConfig(selectedAgentFlowId);
-			if (resolvedAgent.usedFallback) {
-				setStatusLine("");
-				setMessage(
-					t("agentUnavailable", {
-						agent: answeringAgentName ?? selectedAgentFlowId,
-						defaultValue:
-							`Could not load "${answeringAgentName ?? selectedAgentFlowId}", so it was not used. ${resolvedAgent.reason ?? ""}`.trim(),
-					}),
-				);
-				setIsSubmitting(false);
-				return;
-			}
+			const conversationId =
+				assistantMessage.conversationId ?? session?.conversationId;
+			const sessionStart = session?.sessionStart;
 
 			const result = await coAgentChatService.chatStream({
 				prompt: promptWithContext,
+				history: session?.history,
+				// The chat handler saves the turn exactly as it saves a panel turn —
+				// text, tool calls, tool results and timings — and keys the prompt
+				// cache on the conversation instead of on this one question.
+				...(conversationId
+					? {
+							conversation: {
+								id: conversationId,
+								inProgressMessage: { id: assistantMessage.id },
+								...(answeringAgentName
+									? { agentFlowName: answeringAgentName }
+									: {}),
+								...(sessionStart
+									? {
+											historyBoundary: {
+												separatorId: sessionStart.id,
+												createdAt: new Date(
+													sessionStart.createdAt,
+												).toISOString(),
+											},
+										}
+									: {}),
+							},
+						}
+					: {}),
 				agentFlowId: selectedAgentFlowId,
 				flowConfig: resolvedAgent.config,
 				model: selectedModel,
@@ -537,11 +548,7 @@ ${text}`
 						setStatusLine("");
 					}
 				},
-				onAction: (actions) => {
-					latestActions = actions;
-				},
 				onToolCalls: (toolCalls) => {
-					latestToolCalls = toolCalls;
 					const running = latestToolName(toolCalls);
 					if (running) setStatusLine(progressForTool(running).label);
 				},
@@ -551,11 +558,8 @@ ${text}`
 				},
 			});
 
-			latestUsage = result.usage;
 			if (result.content.trim()) {
 				currentContent = result.content.trim();
-				latestActions = result.actions;
-				latestToolCalls = result.toolCalls;
 				setMessage(result.content.trim());
 			}
 		} catch (error) {
@@ -568,21 +572,17 @@ ${text}`
 				currentContent = t("finishedNoAnswer");
 				setMessage(currentContent);
 			}
-			const timeToAnswer = (Date.now() - startTime) / 1000;
 			try {
 				if (assistantMessageId) {
+					// Only what the chat handler cannot know. The turn itself — parts,
+					// tool timeline, usage, timing — it has already written, and the
+					// text below is kept only when it never got that far.
 					await embeddedChatHistoryService.finalizeMessage(assistantMessageId, {
 						content: currentContent || message || t("failedMessage"),
 						metadata: {
 							source: "co-agent",
-							actions: latestActions,
-							tool_calls: latestToolCalls,
 							model: selectedModel,
-							timeToAnswer,
-							// The same bookkeeping a panel message carries. Without it a
-							// co-agent turn had no token counts, no cache figures, and no
-							// answering agent — so every one of them read as "Assistant".
-							...(latestUsage ? { usage: latestUsage } : {}),
+							// Without it every co-agent turn read as "Assistant".
 							...(answeringAgentName
 								? { agentFlowName: answeringAgentName }
 								: {}),
