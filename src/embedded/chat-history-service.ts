@@ -53,10 +53,30 @@ export const embeddedChatHistoryService = {
 	},
 
 	/**
-	 * Mark where a co-agent session begins or ends.
-	 *
-	 * Visual only, like a divider: the agent reads straight through it.
+	 * The co-agent session the next question belongs to — reused while it is
+	 * open, started fresh when there is none or it went idle — with the turns
+	 * already taken in it, ready to send.
 	 */
+	async openCoAgentSession(url?: string): Promise<{
+		conversationId?: string;
+		sessionStart: Message;
+		history: NonNullable<EmbeddedChatHistoryResult["history"]>;
+	}> {
+		const result = await executeHistoryJob({
+			operation: "open-coagent-session",
+			url,
+		});
+		if (!result.sessionStart) {
+			throw new Error("Embedded chat history did not open a co-agent session");
+		}
+		return {
+			conversationId: result.conversationId,
+			sessionStart: result.sessionStart,
+			history: result.history ?? [],
+		};
+	},
+
+	/** Mark where a co-agent session begins or ends. */
 	async insertCoAgentMarker(
 		marker: CoAgentSessionMarkerType,
 		url?: string,

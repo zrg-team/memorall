@@ -1,4 +1,11 @@
-import type { CoAgentSessionMarkerType } from "@/services/chat/coagent-session";
+import {
+	COAGENT_SESSION_END,
+	COAGENT_SESSION_START,
+	type CoAgentSessionMarkerType,
+	planCoAgentSession,
+} from "@/services/chat/coagent-session";
+import { buildSendMessages } from "@/main/modules/chat/utils/build-send-messages";
+import type { ChatMessage } from "@/types/openai";
 import { and, asc, desc, eq, gt, ne } from "drizzle-orm";
 import { serviceManager } from "@/services";
 import { v4 } from "@/utils/uuid";
@@ -47,12 +54,24 @@ export type EmbeddedChatHistoryPayload =
 			marker: CoAgentSessionMarkerType;
 			/** The page the session covers, so a later visit opens a new one. */
 			url?: string;
+	  }
+	| {
+			operation: "open-coagent-session";
+			/** The page the question is asked on, recorded on a new start marker. */
+			url?: string;
 	  };
 
 export interface EmbeddedChatHistoryResult extends Record<string, unknown> {
 	conversationId?: string;
 	messages?: Message[];
 	message?: Message;
+	/**
+	 * Where the open co-agent session starts. The model's context begins after
+	 * it; everything before it stays reachable through the thread-history tools.
+	 */
+	sessionStart?: Message;
+	/** This session's earlier turns, built exactly as the panel replays them. */
+	history?: ChatMessage[];
 }
 
 const isObject = (value: unknown): value is Record<string, unknown> =>
@@ -159,9 +178,16 @@ const finalizeMessage = async (
 			return undefined;
 		}
 
+		// A turn the chat handler already saved keeps what it saved: its parts
+		// are the answer, tool calls and all, and the text here is only the
+		// dock's fallback for a run that never got that far.
+		const savedByHandler =
+			Array.isArray(existing.parts) && existing.parts.length > 0;
 		const updated = {
 			...existing,
-			content: input.content ?? existing.content,
+			content: savedByHandler
+				? existing.content
+				: (input.content ?? existing.content),
 			role: input.role ?? existing.role,
 			topicId: input.topicId ?? existing.topicId,
 			metadata: sanitizeForJson({
@@ -178,6 +204,56 @@ const finalizeMessage = async (
 
 		return updated;
 	});
+};
+
+const insertCoAgentMarker = (
+	conversationId: string,
+	marker: CoAgentSessionMarkerType,
+	url: string | undefined,
+	createdAt: Date = new Date(),
+): Promise<Message> =>
+	addMessage(
+		conversationId,
+		{
+			role: "system",
+			content: "",
+			createdAt,
+			metadata: url ? { source: "co-agent", url } : { source: "co-agent" },
+		},
+		marker,
+	);
+
+const openCoAgentSession = async (
+	conversationId: string,
+	url: string | undefined,
+): Promise<Pick<EmbeddedChatHistoryResult, "sessionStart" | "history">> => {
+	const messages = await loadLatestMessages(conversationId);
+	const plan = planCoAgentSession(messages, Date.now());
+
+	if (plan.kind === "continue") {
+		return {
+			sessionStart: plan.start,
+			history: await buildSendMessages(plan.sessionMessages),
+		};
+	}
+
+	if (plan.closeStaleAt) {
+		await insertCoAgentMarker(
+			conversationId,
+			COAGENT_SESSION_END,
+			undefined,
+			plan.closeStaleAt,
+		);
+	}
+	return {
+		sessionStart: await insertCoAgentMarker(
+			conversationId,
+			COAGENT_SESSION_START,
+			url,
+			plan.startAt,
+		),
+		history: [],
+	};
 };
 
 class EmbeddedChatHistoryHandler implements ProcessHandler<BaseJob> {
@@ -209,22 +285,20 @@ class EmbeddedChatHistoryHandler implements ProcessHandler<BaseJob> {
 				} satisfies EmbeddedChatHistoryResult;
 
 			case "insert-coagent-marker":
-				// Visual only: the agent reads straight through these, so they carry
-				// no content worth sending and are filtered before a run.
-				await addMessage(
-					conversation.id,
-					{
-						role: "system",
-						content: "",
-						createdAt: new Date(),
-						metadata: payload.url
-							? { source: "co-agent", url: payload.url }
-							: { source: "co-agent" },
-					},
-					payload.marker,
-				);
+				// Filtered before a run: a marker carries no content worth sending.
 				return {
 					conversationId: conversation.id,
+					message: await insertCoAgentMarker(
+						conversation.id,
+						payload.marker,
+						payload.url,
+					),
+				} satisfies EmbeddedChatHistoryResult;
+
+			case "open-coagent-session":
+				return {
+					conversationId: conversation.id,
+					...(await openCoAgentSession(conversation.id, payload.url)),
 				} satisfies EmbeddedChatHistoryResult;
 
 			case "insert-separator":

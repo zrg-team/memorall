@@ -260,6 +260,54 @@ describe("MessageFooter token usage", () => {
 		);
 	});
 
+	it("names the provider each request went to, and says when it moved", () => {
+		// A request that reads nothing back looks the same whether its prompt
+		// changed or it landed on another provider with a cold cache. Naming the
+		// provider is what tells those apart.
+		renderFooter({
+			prompt_tokens: 50_000,
+			completion_tokens: 30,
+			total_tokens: 50_030,
+			cached_tokens: 9_984,
+			requests: 3,
+			calls: [
+				{
+					prompt_tokens: 10_050,
+					completion_tokens: 10,
+					total_tokens: 10_060,
+					cached_tokens: 0,
+					provider: "DeepSeek",
+				},
+				{
+					prompt_tokens: 15_589,
+					completion_tokens: 10,
+					total_tokens: 15_599,
+					cached_tokens: 9_984,
+					provider: "DeepSeek",
+				},
+				{
+					prompt_tokens: 24_312,
+					completion_tokens: 10,
+					total_tokens: 24_322,
+					cached_tokens: 0,
+					provider: "Novita",
+				},
+			],
+		});
+
+		expect(screen.getByTestId("usage-call-provider-2")).toHaveTextContent(
+			"DeepSeek",
+		);
+		expect(screen.getByTestId("usage-call-provider-3")).toHaveTextContent(
+			"Novita",
+		);
+		expect(screen.getByTestId("usage-call-3")).toHaveAttribute(
+			"title",
+			"Served by Novita instead of DeepSeek — each provider keeps its own cache.",
+		);
+		expect(screen.getByTestId("usage-call-2")).not.toHaveAttribute("title");
+	});
+
 	it("stays quiet about misses when every request reused the last", () => {
 		renderFooter({
 			prompt_tokens: 30_000,

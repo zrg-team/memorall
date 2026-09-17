@@ -191,6 +191,13 @@ export interface ChatCompletionUsage {
 	cost?: number;
 	/** True when no provider usage arrived and the counts were estimated locally. */
 	estimated?: boolean;
+	/**
+	 * The upstream provider that served the request, when a gateway says so
+	 * (OpenRouter names it on every response). One model can be served by
+	 * several providers with separate caches, so this is what tells a request
+	 * that landed elsewhere apart from one whose prompt changed.
+	 */
+	provider?: string;
 }
 
 // ==================== RESPONSE (Non-streaming) ====================

@@ -355,7 +355,10 @@ export const useEmbeddedChatSession = ({
 					flowConfigPrefix: coAgentEnabled
 						? createCoAgentFlowPrefixConfig()
 						: createEmbeddedChatFlowPrefixConfig(),
-					systemMessages: [
+					// After the conversation rather than in the system prompt: the page
+					// changes with every visit, and at the top of the request it would
+					// invalidate the cached prefix of the whole conversation behind it.
+					reminders: [
 						renderEmbeddedPageContextSystemMessage({ pageTitle, pageUrl }),
 					],
 					conversation: {

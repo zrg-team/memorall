@@ -6,7 +6,6 @@ import type {
 } from "@/services/background-jobs/handlers/process-chat";
 import type { UnifiedFlowConfig } from "@memorall/agent-harness-flows/interfaces/config/flow-config";
 import type {
-	ChatCompletionChunkToolCall,
 	ChatCompletionMessageToolCall,
 	ChatCompletionUsage,
 } from "@/types/openai";
@@ -26,6 +25,14 @@ export interface ChatServiceOptions {
 	flowConfig?: UnifiedFlowConfig;
 	flowConfigPrefix?: UnifiedFlowConfig;
 	systemMessages?: string[];
+	/**
+	 * Earlier turns already in model form, sent ahead of `messages` exactly as
+	 * they were built — a stored turn replayed byte for byte, so the provider's
+	 * cached prefix still matches it.
+	 */
+	history?: ChatPayload["messages"];
+	/** Volatile context attached past the end of every request. */
+	reminders?: string[];
 	conversation?: ConversationContext;
 }
 
@@ -93,55 +100,20 @@ const mergeActions = (
 	return merged;
 };
 
-type ToolCallAccumulator = Map<
-	number,
-	{
-		id: string;
-		type: "function";
-		function: {
-			name: string;
-			arguments: string;
-		};
-	}
->;
-
-const accumulateChunkToolCalls = (
-	accumulator: ToolCallAccumulator,
-	toolCalls: ChatCompletionChunkToolCall[] | undefined,
-): void => {
-	if (!toolCalls?.length) {
-		return;
-	}
-
-	for (const toolCall of toolCalls) {
-		const existing = accumulator.get(toolCall.index);
-		if (existing) {
-			if (toolCall.function?.name) {
-				existing.function.name = toolCall.function.name;
-			}
-			if (toolCall.function?.arguments) {
-				existing.function.arguments += toolCall.function.arguments;
-			}
-			if (toolCall.id) {
-				existing.id = toolCall.id;
-			}
-			continue;
-		}
-
-		accumulator.set(toolCall.index, {
-			id: toolCall.id || `call_${toolCall.index}_${Date.now()}`,
-			type: "function",
-			function: {
-				name: toolCall.function?.name || "",
-				arguments: toolCall.function?.arguments || "",
-			},
-		});
-	}
-};
-
-const getAccumulatedToolCalls = (
-	accumulator: ToolCallAccumulator,
-): ChatCompletionMessageToolCall[] => Array.from(accumulator.values());
+/**
+ * Every tool call the run made, in order, read off the assembled parts.
+ *
+ * Chunk indexes restart at 0 with each model request, so grouping streamed
+ * deltas by index alone merged the second request's call into the first —
+ * the name and id overwritten, the arguments of both run together. The parts
+ * already keep each assistant turn apart.
+ */
+export const toolCallsFromParts = (
+	parts: MessageParts | undefined,
+): ChatCompletionMessageToolCall[] =>
+	(parts ?? []).flatMap((part) =>
+		part.role === "assistant" && part.tool_calls?.length ? part.tool_calls : [],
+	);
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
 	typeof value === "object" && value !== null;
@@ -193,6 +165,8 @@ export class EmbeddedChatService {
 			flowConfig,
 			flowConfigPrefix,
 			systemMessages,
+			history,
+			reminders,
 			conversation,
 			onProgress,
 			onParts,
@@ -227,6 +201,7 @@ export class EmbeddedChatService {
 				.map((content) => content.trim())
 				.filter(Boolean)
 				.map((content) => ({ role: "system" as const, content })),
+			...(history ?? []),
 			...jobMessages,
 		];
 
@@ -255,6 +230,7 @@ export class EmbeddedChatService {
 				flowConfig,
 				flowConfigPrefix,
 				conversation,
+				...(reminders?.length ? { reminders } : {}),
 				streamConfig: {
 					minWordsToStream: 1,
 					streamToolCallsImmediately: true,
@@ -268,7 +244,6 @@ export class EmbeddedChatService {
 
 			let finalContent = "";
 			let finalActions: ChatAction[] = [];
-			const toolCallAccumulator: ToolCallAccumulator = new Map();
 			const messagePartsAccumulator = new MessagePartsAccumulator();
 			let finalToolCalls: ChatCompletionMessageToolCall[] = [];
 			let finalUsage: EmbeddedChatStreamResult["usage"];
@@ -336,8 +311,7 @@ export class EmbeddedChatService {
 
 					const delta = chatResult.chunk.choices[0]?.delta;
 					if (delta?.tool_calls?.length) {
-						accumulateChunkToolCalls(toolCallAccumulator, delta.tool_calls);
-						finalToolCalls = getAccumulatedToolCalls(toolCallAccumulator);
+						finalToolCalls = toolCallsFromParts(finalParts);
 						onToolCalls?.(finalToolCalls);
 					}
 
@@ -398,9 +372,9 @@ export class EmbeddedChatService {
 				parts: finalParts ?? messagePartsAccumulator.toParts(),
 				actions: finalActions,
 				toolCalls:
-					finalToolCalls.length > 0
-						? finalToolCalls
-						: getAccumulatedToolCalls(toolCallAccumulator),
+					toolCallsFromParts(finalParts).length > 0
+						? toolCallsFromParts(finalParts)
+						: finalToolCalls,
 				usage: finalUsage,
 			};
 		} catch (error) {

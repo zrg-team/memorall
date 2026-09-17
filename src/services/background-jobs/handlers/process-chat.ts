@@ -1,5 +1,6 @@
 import type { FoundationState } from "@memorall/agent-harness-flows/graph/foundation/state";
 import type { UnifiedFlowConfig } from "@memorall/agent-harness-flows/interfaces/config/flow-config";
+import { withSystemReminders } from "@memorall/agent-harness-flows/graph/system-reminders";
 import {
 	buildDefaultFlowConfig,
 	mergeWithDefaultConfig,
@@ -124,6 +125,13 @@ export interface ChatPayload {
 	tool_choice?: ChatCompletionToolChoiceOption;
 	parallel_tool_calls?: boolean;
 	conversation?: ConversationContext;
+	/**
+	 * Context that changes from one request to the next — the page the user is
+	 * on, what they pointed at. Attached past the end of every request rather
+	 * than written into the system prompt, where it would invalidate the cached
+	 * prefix of everything behind it.
+	 */
+	reminders?: string[];
 }
 
 export type ChatResult =
@@ -870,6 +878,7 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 			tool_choice,
 			parallel_tool_calls,
 			conversation,
+			reminders,
 		} = job.payload;
 		// "chat" is the composer's sentinel for "no agent selected", not a flow id.
 		const agentFlowId =
@@ -1097,7 +1106,12 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 						input: {
 							graphType: resolvedConfigWithPrefix.graphType ?? "agent",
 							config: resolvedConfigWithPrefix,
-							initialState: { messages, topicId, contextQueries: [] },
+							initialState: {
+								messages,
+								topicId,
+								contextQueries: [],
+								reminders,
+							},
 							streamModes: ["custom", "values"],
 							runtimeVars: getThreadHistoryRuntimeVars(conversation),
 						},
@@ -1250,7 +1264,7 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 						input: {
 							graphType,
 							config: resolvedConfig,
-							initialState: { messages, topicId, contextQueries },
+							initialState: { messages, topicId, contextQueries, reminders },
 							streamModes: ["custom", "updates", "values"],
 							runtimeVars: getThreadHistoryRuntimeVars(conversation),
 						},
@@ -1321,7 +1335,7 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 			} else {
 				// Normal mode - direct LLM call (following use-chat.ts pattern exactly)
 				const request: ChatCompletionRequest = {
-					messages: messages,
+					messages: withSystemReminders(messages, reminders),
 					model: model,
 					temperature: 0.3,
 					stream: true,

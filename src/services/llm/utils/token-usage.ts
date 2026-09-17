@@ -148,6 +148,10 @@ export function normalizeTokenUsage(
 		usage.reasoning_tokens,
 	);
 	const cost = nonNegativeNumber(usage.cost);
+	const provider =
+		typeof usage.provider === "string" && usage.provider.trim()
+			? usage.provider.trim()
+			: undefined;
 
 	return {
 		prompt_tokens: promptTokens,
@@ -166,6 +170,7 @@ export function normalizeTokenUsage(
 			: {}),
 		...(cost !== undefined ? { cost } : {}),
 		...(usage.estimated === true ? { estimated: true } : {}),
+		...(provider ? { provider } : {}),
 	};
 }
 
@@ -392,4 +397,18 @@ export function describeCacheContinuity(
 		);
 		return gap <= allowance ? "continued" : "partial";
 	});
+}
+
+/**
+ * The provider a request moved to, when it was served by a different one than
+ * the request before it. Undefined when either request did not say.
+ */
+export function describeProviderSwitch(
+	calls: readonly TokenUsage[],
+	index: number,
+): { from: string; to: string } | undefined {
+	const current = calls[index]?.provider;
+	const previous = calls[index - 1]?.provider;
+	if (!current || !previous || current === previous) return undefined;
+	return { from: previous, to: current };
 }
