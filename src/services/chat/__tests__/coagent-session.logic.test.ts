@@ -8,6 +8,7 @@ import {
 	isCoAgentSessionStale,
 	isCoAgentSessionOpen,
 	isNonModelMessageType,
+	planCoAgentSession,
 	shouldCloseCoAgentSession,
 } from "../coagent-session";
 
@@ -142,5 +143,77 @@ describe("letting an abandoned session go cold", () => {
 	it("leaves a session open when nothing can be dated", () => {
 		expect(isCoAgentSessionStale([{ createdAt: null }], NOW)).toBe(false);
 		expect(isCoAgentSessionStale([], NOW)).toBe(false);
+	});
+});
+
+describe("which session the next co-agent question belongs to", () => {
+	const at = (minutes: number) => new Date(Date.UTC(2026, 8, 17, 12, minutes));
+	const row = (id: string, type: string | null, minutes: number) => ({
+		id,
+		type,
+		createdAt: at(minutes),
+	});
+
+	it("starts a session, with nothing to replay, when none is open", () => {
+		const messages = [row("u1", "text", 0), row("a1", "text", 1)];
+
+		const plan = planCoAgentSession(messages, at(2).getTime());
+
+		expect(plan.kind).toBe("start");
+		if (plan.kind !== "start") return;
+		expect(plan.closeStaleAt).toBeUndefined();
+		// Never ahead of what is already stored, or ordering by time would put
+		// the marker before the messages it follows.
+		expect(plan.startAt.getTime()).toBeGreaterThan(at(1).getTime());
+	});
+
+	it("continues an open session with only the turns taken inside it", () => {
+		// The panel conversation before the session is not replayed: the model
+		// starts from the session, and reaches back through thread history.
+		const messages = [
+			row("panel-user", "text", 0),
+			row("panel-answer", "text", 1),
+			row("start", COAGENT_SESSION_START, 2),
+			row("q1", "text", 3),
+			row("a1", "text", 4),
+		];
+
+		const plan = planCoAgentSession(messages, at(5).getTime());
+
+		expect(plan.kind).toBe("continue");
+		if (plan.kind !== "continue") return;
+		expect(plan.start.id).toBe("start");
+		expect(plan.sessionMessages.map((message) => message.id)).toEqual([
+			"q1",
+			"a1",
+		]);
+	});
+
+	it("starts afresh after a session the panel already closed", () => {
+		const messages = [
+			row("start", COAGENT_SESSION_START, 0),
+			row("q1", "text", 1),
+			row("end", COAGENT_SESSION_END, 2),
+			row("panel-user", "text", 3),
+		];
+
+		expect(planCoAgentSession(messages, at(4).getTime()).kind).toBe("start");
+	});
+
+	it("closes a session that went idle, then opens the next one after it", () => {
+		const messages = [
+			row("start", COAGENT_SESSION_START, 0),
+			row("q1", "text", 1),
+		];
+		const later = at(1).getTime() + CO_AGENT_SESSION_MAX_IDLE_MS + 60_000;
+
+		const plan = planCoAgentSession(messages, later);
+
+		expect(plan.kind).toBe("start");
+		if (plan.kind !== "start") return;
+		expect(plan.closeStaleAt).toBeDefined();
+		expect(plan.startAt.getTime()).toBeGreaterThan(
+			plan.closeStaleAt?.getTime() ?? Number.POSITIVE_INFINITY,
+		);
 	});
 });

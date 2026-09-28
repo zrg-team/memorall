@@ -126,6 +126,25 @@ describe("thread history search", () => {
 	});
 });
 
+describe("thread history behind a co-agent session", () => {
+	it("accepts a session start as the boundary and never returns markers", async () => {
+		// A co-agent session starts its context at the start marker, the way a
+		// divider does for the panel, so the rest of the chat is reached the
+		// same way — searched behind that marker.
+		const database = searchDatabase([row()]);
+		const tool = createThreadHistorySearchTool({ database } as never);
+		await tool.execute({ query: "matched phrase" }, context());
+
+		const sql = String(database.raw.mock.calls[0]?.[0]);
+		expect(sql).toContain(
+			"boundary.type IN ('separator', 'coagent-session-start')",
+		);
+		expect(sql).toContain(
+			"m.type NOT IN ('separator', 'coagent-session-start', 'coagent-session-end')",
+		);
+	});
+});
+
 describe("thread history BM25 scoring", () => {
 	const stats = (
 		documentFrequency: Record<string, number>,

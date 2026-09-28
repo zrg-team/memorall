@@ -50,7 +50,7 @@ export type ThreadHistoryFeatureServices = {};
 
 export const THREAD_HISTORY_FEATURE_SYSTEM_PROMPT = `
 # EARLIER THREAD HISTORY
-This conversation was split. You can see only the messages after the split point — everything before it is still stored and searchable, but it is not in your context.
+This conversation was split — by a divider, or by the start of a co-agent session. You can see only the messages after the split point — everything before it is still stored and searchable, but it is not in your context.
 
 Search earlier history when the user's message points outside what you can see:
 - a reference to earlier work ("the file we discussed", "that link you sent", "as I mentioned")

@@ -7,11 +7,12 @@ import { STUDIO_MESSAGE_TYPE_SET } from "@/types/studio";
  * and nothing says which was which. These markers are the visual answer, built
  * the way a divider is: a stored system message the renderer draws specially.
  *
- * Unlike a divider they carry no meaning for the run. A divider is a history
- * boundary — the agent stops reading above it — whereas a co-agent session is
- * only a thing the reader can see. The agent reads straight through one, and
- * both markers are dropped before messages are sent to the model, exactly as a
- * divider's own text is.
+ * For the co-agent a start marker is also where its context begins, the way a
+ * divider is for the panel: a session's first question starts from nothing,
+ * later ones carry the turns before them, and the thread-history tools search
+ * behind the marker for the rest of the chat. The panel reads straight through
+ * a session. Both markers are dropped before messages are sent to the model,
+ * exactly as a divider's own text is.
  */
 
 export const COAGENT_SESSION_START = "coagent-session-start" as const;
@@ -124,3 +125,55 @@ export const isCoAgentSessionStale = (
 export const shouldCloseCoAgentSession = (
 	messages: ReadonlyArray<{ type?: string | null }>,
 ): boolean => isCoAgentSessionOpen(messages);
+
+export type CoAgentSessionPlan<T> =
+	| { kind: "continue"; start: T; sessionMessages: T[] }
+	| { kind: "start"; closeStaleAt?: Date; startAt: Date };
+
+/**
+ * Which co-agent session the next question belongs to.
+ *
+ * A session is a conversation of its own: the first question starts from an
+ * empty context, and each later one carries the turns before it like any chat.
+ * The rest of the thread is not dropped — the start marker is the boundary the
+ * thread-history tools search behind.
+ *
+ * @param messages the thread since its latest divider, oldest first
+ */
+export const planCoAgentSession = <
+	T extends { type?: string | null; createdAt?: unknown },
+>(
+	messages: ReadonlyArray<T>,
+	now: number,
+): CoAgentSessionPlan<T> => {
+	const open = findOpenCoAgentSession(messages);
+	if (open && !isCoAgentSessionStale(messages, now)) {
+		return {
+			kind: "continue",
+			start: open,
+			sessionMessages: messages.slice(messages.indexOf(open) + 1),
+		};
+	}
+
+	// Strictly after anything already stored, so ordering by time can never put
+	// a new marker ahead of the messages it follows.
+	const latest = messages.at(-1)?.createdAt;
+	const latestMs =
+		latest instanceof Date || typeof latest === "string"
+			? new Date(latest).getTime()
+			: Number.NaN;
+	const firstFree = Number.isFinite(latestMs)
+		? Math.max(now, latestMs + 1)
+		: now;
+
+	if (!open) return { kind: "start", startAt: new Date(firstFree) };
+	// Closing the tab writes no end marker, so a session opened once would stay
+	// open for ever and leave every later visit unmarked. A session still spans
+	// navigation — following a trail across pages is the point — so only an
+	// idle gap ends one here.
+	return {
+		kind: "start",
+		closeStaleAt: new Date(firstFree),
+		startAt: new Date(firstFree + 1),
+	};
+};

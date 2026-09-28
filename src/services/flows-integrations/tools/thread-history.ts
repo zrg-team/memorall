@@ -5,6 +5,10 @@ import type {
 	ToolFactory,
 } from "@memorall/agent-harness-flows/interfaces/engine/tool";
 import type { AllServices } from "@memorall/agent-harness-flows/interfaces/services/services";
+import {
+	COAGENT_SESSION_END,
+	COAGENT_SESSION_START,
+} from "@/services/chat/coagent-session";
 import { toolRegistry } from "@memorall/agent-harness-flows/registries/tool-registry";
 import z from "zod";
 import { buildThreadHistorySearchVectorSql } from "@/services/database/thread-history-search-vector";
@@ -249,19 +253,21 @@ const getScope = (context?: ToolExecutionContext): HistoryScope => {
 
 /**
  * The join that makes the boundary unforgeable: rows are only reachable when
- * $2 really is a separator of conversation $1.
+ * $2 really is a boundary of conversation $1 — a divider, or the start of a
+ * co-agent session, whose context begins there the same way.
  */
 const HISTORY_BOUNDARY_JOIN = `
 	FROM messages m
 	JOIN messages boundary
 		ON boundary.uuid::text = $2
 		AND boundary.conversation_id::text = $1
-		AND boundary.type = 'separator'
+		AND boundary.type IN ('separator', '${COAGENT_SESSION_START}')
 `;
 
+/** Markers carry no content; they are never something to find. */
 const HISTORY_SCOPE_WHERE = `
 	WHERE m.conversation_id::text = $1
-		AND m.type <> 'separator'
+		AND m.type NOT IN ('separator', '${COAGENT_SESSION_START}', '${COAGENT_SESSION_END}')
 		AND m.created_at < boundary.created_at
 `;
 

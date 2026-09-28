@@ -32,6 +32,8 @@ export interface MemorallFlowRunInput {
 		readonly messages: ChatMessage[];
 		readonly topicId?: string;
 		readonly contextQueries: string[];
+		/** Volatile per-run context, attached past the end of every request. */
+		readonly reminders?: string[];
 	};
 	readonly streamModes: readonly ("custom" | "updates" | "values")[];
 	readonly runtimeVars?: Readonly<Record<string, unknown>>;
