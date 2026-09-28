@@ -563,6 +563,37 @@ describe("images/tools", () => {
 	});
 });
 
+describe("systemone", () => {
+	it("loads the decision model, then returns its typed answers", async () => {
+		const decider = { id: "org/decider", task: "typed-decisions" };
+		lab.scripts.systemone = async ({ id, payload }, emit) =>
+			emit(id, "complete", {
+				model: payload.config.id,
+				answers: { urgent: { type: "noul", noul: 0.8 } },
+				usage: { input_tokens: 12, output_tokens: 0 },
+			});
+		const runner = await loadRunner();
+
+		const reply = await runner.send("systemone", {
+			model: decider.id,
+			config: decider,
+			state: "site down",
+			questions: { urgent: { type: "noul", instructions: "Urgent?" } },
+		}).done;
+
+		expect(reply.type).toBe("complete");
+		expect(reply.payload).toMatchObject({
+			model: "org/decider",
+			answers: { urgent: { type: "noul", noul: 0.8 } },
+		});
+		expect(lab.handleCalls.map((call) => call.type)).toEqual([
+			"serve",
+			"systemone",
+		]);
+		expect(callOf("systemone").payload).toMatchObject({ state: "site down" });
+	});
+});
+
 describe("delete", () => {
 	it("removes only that repo's cached files", async () => {
 		const runner = await loadRunner();

@@ -289,3 +289,78 @@ export interface TextToolResponse {
 	/** Ranking results, most relevant first. */
 	ranking?: TextToolRanking[];
 }
+
+// ---------------------------------------------------------------------------
+// POST /v1/systemone: typed decisions (the TypeSafe Jev wire protocol)
+// ---------------------------------------------------------------------------
+
+export type DecisionQuestionType = "choice" | "score" | "noul";
+
+/**
+ * One typed question, in the shape `/v1/systemone` accepts.
+ *
+ * `criteria` per type:
+ * - choice: the options, `{ label: description | null }` (or a plain list);
+ * - score: the ordered levels, lowest first (2 - 10 of them);
+ * - noul: optional wording for `{ true, false }`.
+ */
+export interface DecisionQuestion {
+	type: DecisionQuestionType;
+	instructions: string;
+	criteria?:
+		| Record<string, string | null>
+		| string[]
+		| { true?: string; false?: string };
+}
+
+/** Questions by id; the id names the answer in the response. */
+export type DecisionQuestions = Record<string, DecisionQuestion>;
+
+export interface SystemOneParams {
+	model: string;
+	/** What the questions are about: text, or a JSON object. */
+	state: string | Record<string, unknown>;
+	questions: DecisionQuestions;
+	signal?: AbortSignal;
+}
+
+export interface DecisionChoiceAnswer {
+	type: "choice";
+	choice: string;
+	probabilities?: Record<string, number>;
+	confidence?: number;
+}
+
+export interface DecisionScoreAnswer {
+	type: "score";
+	/** Expected level, fractional (0 is the first level). */
+	score: number;
+	legend?: Record<string, string>;
+	probabilities?: Record<string, number>;
+	confidence?: number;
+}
+
+export interface DecisionNoulAnswer {
+	type: "noul";
+	/** Probability that the statement holds, 0 - 1. */
+	noul: number;
+}
+
+export type DecisionAnswer =
+	| DecisionChoiceAnswer
+	| DecisionScoreAnswer
+	| DecisionNoulAnswer;
+
+export interface SystemOneUsage {
+	input_tokens?: number;
+	output_tokens?: number;
+	/** USD, when the provider reports it (OpenRouter does). */
+	cost?: number;
+}
+
+export interface SystemOneResponse {
+	object: "systemone";
+	model: string;
+	answers: Record<string, DecisionAnswer>;
+	usage?: SystemOneUsage;
+}

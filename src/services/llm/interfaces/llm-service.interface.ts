@@ -8,6 +8,8 @@ import type {
 	ImageGenerationStreamEvent,
 	ImageToolParams,
 	ImageToolResponse,
+	SystemOneParams,
+	SystemOneResponse,
 	TextToolParams,
 	TextToolResponse,
 	SpeechCreateParams,
@@ -186,4 +188,8 @@ export interface ILLMService {
 		name: string,
 		request: TextToolParams,
 	): Promise<TextToolResponse>;
+	systemOneFor(
+		name: string,
+		request: SystemOneParams,
+	): Promise<SystemOneResponse>;
 }

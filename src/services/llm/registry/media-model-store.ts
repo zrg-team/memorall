@@ -7,6 +7,7 @@ import type {
 	MediaPipelineTask,
 } from "../interfaces/media-model-config";
 import type { MediaCategory } from "../interfaces/model-category";
+import { decisionVariantsOf } from "./decision-model-layout";
 import {
 	CATEGORY_TASKS,
 	TASK_CATEGORY,
@@ -116,7 +117,9 @@ interface HubModel {
 export type HubUnavailableReason =
 	| "no-onnx"
 	| "custom-runtime"
-	| "unsupported-architecture";
+	| "unsupported-architecture"
+	/** No decision config, tokenizer and ONNX graph found together. */
+	| "not-decision-model";
 
 export interface HubModelSummary {
 	id: string;
@@ -266,6 +269,16 @@ export function estimateDeviceDownloads(
 export function estimateHubDownload(
 	siblings: HubSibling[] = [],
 ): HubDownloadEstimate {
+	// Decision repos name their graphs freely; each variant is one download.
+	const variants = decisionVariantsOf(siblings);
+	if (variants.length > 0) {
+		const smallest = variants[0]?.sizeBytes || undefined;
+		return {
+			byDevice: { webgpu: smallest, wasm: smallest },
+			smallest,
+			largest: variants.at(-1)?.sizeBytes || undefined,
+		};
+	}
 	const sizes = (Object.keys(PRECISION_SUFFIX) as DownloadPrecision[])
 		.map((precision) => estimateDownloadBytes(siblings, precision))
 		.filter((bytes) => bytes > 0);
@@ -356,6 +369,14 @@ export function browserRunnability(
 	model: Pick<HubModel, "library_name" | "tags" | "siblings" | "config">,
 	task?: MediaPipelineTask,
 ): BrowserRunnability {
+	// Typed-decision graphs run on the runner's own ONNX session code, so they
+	// need their decision files rather than a transformers.js architecture.
+	if (task === "typed-decisions") {
+		if (!model.siblings) return { runnable: false, reason: "custom-runtime" };
+		return decisionVariantsOf(model.siblings).length > 0
+			? { runnable: true }
+			: { runnable: false, reason: "not-decision-model" };
+	}
 	const hasOnnx = (model.siblings ?? []).some((sibling) =>
 		/\.onnx$/i.test(sibling.rfilename),
 	);
@@ -393,6 +414,8 @@ export function unavailableReasonText(
 	switch (runnability.reason) {
 		case "no-onnx":
 			return `${repoId} has no ONNX weights, so it cannot run in the browser.`;
+		case "not-decision-model":
+			return `${repoId} has no typed-decision model: it needs ${"rl_agent_config.json"}, a tokenizer.json and ONNX graphs in the same folder.`;
 		case "unsupported-architecture":
 			return `${repoId} is a "${runnability.modelType}" model, an architecture the in-browser runtime cannot run${task ? ` for ${task}` : ""} yet. Pick another model, or serve this one behind an OpenAI-compatible API to use it here.`;
 		default:
@@ -415,7 +438,12 @@ export async function inspectHubModel(
 		throw new Error(`Hugging Face has no model "${id}" (${response.status})`);
 	}
 	const model = (await response.json()) as HubModel;
-	const task = options.task ?? model.pipeline_tag;
+	// Decision repos are recognised by their files; their pipeline tag, when
+	// there is one, names what the weights were before the decision head.
+	const variants = decisionVariantsOf(model.siblings);
+	const task =
+		options.task ??
+		(variants.length > 0 ? "typed-decisions" : model.pipeline_tag);
 	if (!isMediaPipelineTask(task)) {
 		throw new Error(
 			`${model.id} is a "${model.pipeline_tag ?? "unknown"}" model; the studios run ${Object.keys(TASK_CATEGORY).join(", ")}`,
@@ -438,6 +466,9 @@ export async function inspectHubModel(
 		languages: toArray(model.cardData?.language),
 		license: model.cardData?.license,
 		voices: voices.length > 0 ? voices : undefined,
+		...(task === "typed-decisions"
+			? { decision: { variants, variant: variants[0]?.id } }
+			: {}),
 		addedAt: new Date().toISOString(),
 	};
 }
@@ -475,14 +506,27 @@ export function hubBrowseUrl(
 	tasks: readonly MediaPipelineTask[],
 	query = "",
 ): string {
-	const params = new URLSearchParams({
-		library: "transformers.js",
-		sort: "downloads",
-	});
-	if (tasks.length === 1 && tasks[0]) params.set("pipeline_tag", tasks[0]);
+	const decisionsOnly =
+		tasks.length > 0 && tasks.every((task) => task === "typed-decisions");
+	const params = new URLSearchParams(
+		decisionsOnly
+			? { library: "onnx", other: "system-one", sort: "downloads" }
+			: { library: "transformers.js", sort: "downloads" },
+	);
+	if (tasks.length === 1 && tasks[0] && !decisionsOnly) {
+		params.set("pipeline_tag", tasks[0]);
+	}
 	if (query.trim()) params.set("search", query.trim());
 	return `https://huggingface.co/models?${params}`;
 }
+
+/** Capability tags typed-decision repos are published under. */
+const DECISION_HUB_TAGS = [
+	"system-one",
+	"typed-decisions",
+	"decision-model",
+	"jev-compatible",
+] as const;
 
 const languagesFromTags = (tags: string[] = []) =>
 	tags.filter((tag) => /^[a-z]{2,3}$/.test(tag));
@@ -511,17 +555,10 @@ export async function searchHubModels(
 	const limit = options.limit ?? 20;
 	const text = repoIdFromInput(query) ?? query.trim();
 
-	const request = async (
+	const fetchSummaries = async (
 		task: MediaPipelineTask,
-		browserOnly: boolean,
+		params: URLSearchParams,
 	): Promise<HubModelSummary[]> => {
-		const params = new URLSearchParams({
-			pipeline_tag: task,
-			sort: "downloads",
-			limit: String(limit),
-		});
-		if (browserOnly) params.set("filter", "transformers.js");
-		if (text) params.set("search", text);
 		// Architecture and files for every result: a transformers.js tag alone
 		// does not mean the runtime can load the repo.
 		for (const field of [
@@ -537,7 +574,7 @@ export async function searchHubModels(
 		const response = await fetcher(`${HUB_API}?${params}`);
 		if (!response.ok) return [];
 		const models = (await response.json()) as HubModel[];
-		return models.map((model) => {
+		return models.map((model): HubModelSummary => {
 			const runnability = browserRunnability(model, task);
 			return {
 				id: model.id,
@@ -553,11 +590,40 @@ export async function searchHubModels(
 		});
 	};
 
+	const request = (task: MediaPipelineTask, browserOnly: boolean) => {
+		const params = new URLSearchParams({
+			pipeline_tag: task,
+			sort: "downloads",
+			limit: String(limit),
+		});
+		if (browserOnly) params.set("filter", "transformers.js");
+		if (text) params.set("search", text);
+		return fetchSummaries(task, params);
+	};
+
+	// Decision repos carry no pipeline tag of their own: look for ONNX repos by
+	// the capability tags such repos use (several together are ANDed by the
+	// Hub, so one request per tag), then keep the ones whose files hold a
+	// decision model.
+	const decisionRequests = (task: MediaPipelineTask) =>
+		(text ? [null] : DECISION_HUB_TAGS).map((tag) => {
+			const params = new URLSearchParams({
+				sort: "downloads",
+				limit: String(limit),
+			});
+			params.append("filter", "onnx");
+			if (tag) params.append("filter", tag);
+			if (text) params.set("search", text);
+			return fetchSummaries(task, params);
+		});
+
 	const results = await Promise.all(
 		tasks.flatMap((task) =>
-			text
-				? [request(task, true), request(task, false)]
-				: [request(task, true)],
+			task === "typed-decisions"
+				? decisionRequests(task)
+				: text
+					? [request(task, true), request(task, false)]
+					: [request(task, true)],
 		),
 	);
 	const byId = new Map<string, HubModelSummary>();

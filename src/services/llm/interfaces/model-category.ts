@@ -5,11 +5,12 @@
  * file assumes it: a model with no declared categories is a chat model. Every
  * other category is served by the same providers through OpenAI-compatible
  * media endpoints (`/audio/speech`, `/audio/transcriptions`,
- * `/images/generations`) or the Memorall `/images/tools` and `/text/tools`
- * extensions.
+ * `/images/generations`), the Memorall `/images/tools` and `/text/tools`
+ * extensions, or the typed-decision `/systemone` endpoint.
  */
 export type ModelCategory =
 	| "chat"
+	| "decision"
 	| "text-to-speech"
 	| "speech-to-text"
 	| "image-generation"
@@ -45,6 +46,7 @@ export type TextToolTask =
 
 export const WORKSPACE_MODES: readonly WorkspaceMode[] = [
 	"chat",
+	"decision",
 	"text-to-speech",
 	"speech-to-text",
 	"image-generation",
@@ -60,6 +62,7 @@ export const MEDIA_CATEGORIES: readonly MediaCategory[] = [
 	"image-tools",
 	"text-tools",
 	"text-to-audio",
+	"decision",
 ];
 
 export const IMAGE_TOOL_TASKS: readonly ImageToolTask[] = [

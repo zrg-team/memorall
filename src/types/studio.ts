@@ -1,6 +1,8 @@
 import type {
+	DecisionAnswer,
 	ImageToolDetection,
 	ImageToolLabel,
+	SystemOneUsage,
 	TextToolRanking,
 	TranscriptionSegment,
 } from "@/types/openai-media";
@@ -86,10 +88,20 @@ export type StudioContentPart =
 	| { type: "segments"; segments: TranscriptionSegment[]; language?: string }
 	| { type: "detections"; detections: ImageToolDetection[] }
 	| { type: "labels"; labels: ImageToolLabel[] }
-	| { type: "ranking"; ranking: TextToolRanking[] };
+	| { type: "ranking"; ranking: TextToolRanking[] }
+	/** Typed answers from `/systemone`, keyed by question id. */
+	| {
+			type: "decision";
+			decision: {
+				model: string;
+				answers: Record<string, DecisionAnswer>;
+				usage?: SystemOneUsage;
+			};
+	  };
 
 /** `messages.type` for each studio. Never a chat message type. */
 export const STUDIO_MESSAGE_TYPES: Record<MediaCategory, string> = {
+	decision: "decision",
 	"text-to-speech": "speech",
 	"speech-to-text": "transcription",
 	"image-generation": "image_generation",

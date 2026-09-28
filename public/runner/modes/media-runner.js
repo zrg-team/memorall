@@ -28,6 +28,7 @@ const FORWARDED_TYPES = new Set([
 	"audio/speech",
 	"images/tools",
 	"text/tools",
+	"systemone",
 ]);
 /** Requests that run a model, which is loaded (with fallbacks) first. */
 const MODEL_TYPES = new Set([
@@ -35,6 +36,7 @@ const MODEL_TYPES = new Set([
 	"audio/transcriptions",
 	"images/tools",
 	"text/tools",
+	"systemone",
 ]);
 
 const RUNTIME_RESTARTED = "RUNTIME_RESTARTED";
@@ -456,5 +458,6 @@ const endpoints = [
 	"audio/transcriptions",
 	"images/tools",
 	"text/tools",
+	"systemone",
 ];
 sendReady("media", endpoints);

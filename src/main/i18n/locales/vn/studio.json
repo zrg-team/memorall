@@ -8,6 +8,11 @@
 			"short": "Chat",
 			"description": "Trò chuyện với agent hoặc mô hình chat."
 		},
+		"decision": {
+			"label": "Quyết định",
+			"short": "Quyết định",
+			"description": "Đặt câu hỏi có kiểu về một văn bản và nhận câu trả lời kèm xác suất."
+		},
 		"text-to-speech": {
 			"label": "Giọng nói",
 			"short": "Đọc",

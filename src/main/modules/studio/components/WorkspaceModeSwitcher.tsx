@@ -22,7 +22,7 @@ interface WorkspaceModeSwitcherProps {
 }
 
 /**
- * Chat · Speak · Transcribe · Image · Tools · Audio.
+ * Chat · Decision · Speak · Transcribe · Image · Tools · Text · Audio.
  *
  * A segmented control rather than a menu wherever it fits: which workspace is
  * open is the most important fact about the panel, so it stays visible instead

@@ -439,10 +439,15 @@ export const HubMediaModelList: React.FC<HubMediaModelListProps> = ({
 													modelType: result.modelType ?? "",
 													defaultValue: `Its architecture (${result.modelType ?? "unknown"}) can't run in the browser studio yet. Serve it behind an OpenAI-compatible API to use it here.`,
 												})
-											: t("models.unavailable.customRuntime", {
-													defaultValue:
-														"Needs its own runtime: its ONNX files have no transformers.js model type, so the browser studio can't load it. Serve it behind an OpenAI-compatible API to use it here.",
-												})}
+											: result.reason === "not-decision-model"
+												? t("models.unavailable.notDecision", {
+														defaultValue:
+															"No decision model here: it needs rl_agent_config.json, a tokenizer.json and ONNX graphs in the same folder.",
+													})
+												: t("models.unavailable.customRuntime", {
+														defaultValue:
+															"Needs its own runtime: its ONNX files have no transformers.js model type, so the browser studio can't load it. Serve it behind an OpenAI-compatible API to use it here.",
+													})}
 								</p>
 							)}
 							{hub.busy === result.id ? (
