@@ -1,0 +1,1 @@
+function e(){return typeof navigator<`u`&&`gpu`in navigator}async function t(){if(!e())return!1;try{return await navigator.gpu.requestAdapter()!==null}catch{return!1}}export{e as n,t};

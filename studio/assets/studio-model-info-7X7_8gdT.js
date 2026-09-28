@@ -1,0 +1,1 @@
+var e=e=>e?.voices??[],t=e=>e?.imageTask,n=e=>e?.textTask,r=e=>e?.languages??[],i=e=>{let t=r(e);return t.length>0&&t.every(e=>e===`en`)};export{e as a,n as i,i as n,r,t};

@@ -1,0 +1,1 @@
+import{t as e}from"./web-DBq1bqNV.js";var t=e.assets.url(`runner/index.html`),n={wllama:`${t}?mode=wllama`,webllm:`${t}?mode=webllm`,embedding:`${t}?mode=embedding`,transformer:`${t}?mode=transformer`,media:`${t}?mode=media`};n.wllama;export{n as t};
