@@ -77,6 +77,7 @@ export const PROVIDER_REGISTRY: Readonly<
 			"image-tools",
 			"text-tools",
 			"text-to-audio",
+			"decision",
 		],
 	},
 	openai: {
@@ -105,7 +106,7 @@ export const PROVIDER_REGISTRY: Readonly<
 		requiresAuth: true,
 		readyKey: "openrouter_ready",
 		encryptionKey: "openrouter_config",
-		categories: ["chat", "image-generation"],
+		categories: ["chat", "image-generation", "decision"],
 	},
 	lmstudio: {
 		id: "lmstudio",

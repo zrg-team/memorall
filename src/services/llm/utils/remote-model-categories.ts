@@ -56,5 +56,7 @@ export function classifyByModalities(modalities: {
 	if (output.includes("audio") && !output.includes("text")) {
 		categories.push("text-to-speech");
 	}
+	// OpenRouter's name for `/systemone` typed-decision models.
+	if (output.includes("decisions")) categories.push("decision");
 	return categories.length > 0 ? categories : null;
 }

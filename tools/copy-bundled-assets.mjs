@@ -397,6 +397,25 @@ async function main() {
 		copyFile(path.join(ortSrcDir, file), path.join(ortDestDir, file));
 	}
 
+	// Standalone ORT for runner code that drives ONNX sessions itself (typed
+	// decisions). The WebGPU bundle reuses the asyncify wasm above; the plain
+	// WASM build is the one CPU fallback with every contrib kernel (int4
+	// GatherBlockQuantized included), which the asyncify build lacks.
+	const standaloneOrt = [
+		"ort.webgpu.bundle.min.mjs",
+		"ort.wasm.bundle.min.mjs",
+		"ort-wasm-simd-threaded.mjs",
+		"ort-wasm-simd-threaded.wasm",
+	];
+	for (const file of standaloneOrt) {
+		const source = path.join(ortSrcDir, file);
+		if (!fs.existsSync(source)) {
+			console.error(`Required ORT asset not found: ${file}`);
+			process.exit(2);
+		}
+		copyFile(source, path.join(ortDestDir, file));
+	}
+
 	console.log("✅ ONNX Runtime assets prepared.\n");
 
 	// 2. Copy Wllama library and WASM files

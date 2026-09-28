@@ -10,6 +10,8 @@ import type {
 	ImageGenerationStreamEvent,
 	ImageToolParams,
 	ImageToolResponse,
+	SystemOneParams,
+	SystemOneResponse,
 	TextToolParams,
 	TextToolResponse,
 	MediaVoice,
@@ -87,6 +89,9 @@ export interface ModelInfo {
 	imageTask?: ImageToolTask;
 	/** Text-tools models: the task the model performs. */
 	textTask?: TextToolTask;
+	/** Decision repos: the models the repo holds, and the one in use. */
+	decisionVariants?: { id: string; label: string; sizeBytes?: number }[];
+	decisionVariant?: string;
 }
 
 export interface ModelsResponse {
@@ -181,4 +186,6 @@ export interface BaseLLM {
 	imagesTools?(request: ImageToolParams): Promise<ImageToolResponse>;
 	/** POST /v1/text/tools (Memorall extension). */
 	textTools?(request: TextToolParams): Promise<TextToolResponse>;
+	/** POST /v1/systemone: typed decisions (the TypeSafe Jev protocol). */
+	systemOne?(request: SystemOneParams): Promise<SystemOneResponse>;
 }

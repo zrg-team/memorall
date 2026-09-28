@@ -8,6 +8,11 @@
 			"short": "Chat",
 			"description": "Talk to an agent or a chat model."
 		},
+		"decision": {
+			"label": "Decision",
+			"short": "Decision",
+			"description": "Ask typed questions about a text and get calibrated answers."
+		},
 		"text-to-speech": {
 			"label": "Speech",
 			"short": "Speak",

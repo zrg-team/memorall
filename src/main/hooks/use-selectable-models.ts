@@ -128,9 +128,12 @@ export const toSelectable = (
 	const categories = resolveModelCategories(serviceName, model.id, model);
 	// A hosted model whose id reveals nothing is classified as chat. Media
 	// pickers still offer it (after the recognised ones): the provider knows
-	// what it serves, the id pattern only guesses.
+	// what it serves, the id pattern only guesses. Decisions are the exception:
+	// `/systemone` is only served by models the listing declares as decision
+	// models, so offering every chat model there would only offer failures.
 	const unclassifiedHosted =
 		category !== "chat" &&
+		category !== "decision" &&
 		!LOCAL_PROVIDERS.has(provider) &&
 		categories.length === 1 &&
 		categories[0] === "chat";

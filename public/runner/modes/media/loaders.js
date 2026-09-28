@@ -13,6 +13,7 @@ import {
 	runOnDevice,
 } from "./device.js";
 import { ModelLoadError } from "./cancellation.js";
+import { loadDecisionBundle } from "./decision-model.js";
 import { createDownloadProgress } from "./progress.js";
 
 /**
@@ -47,6 +48,9 @@ async function createPipeline({
 	return { id: config.id, task: config.task, device, dtype, pipe };
 }
 
+/** Typed decisions drive ONNX Runtime themselves (see decision-model.js). */
+const DECISION_TASK = "typed-decisions";
+
 /**
  * Load attempts in order, per device (the preferred one, then WASM, which runs
  * every model, slower):
@@ -57,8 +61,16 @@ async function createPipeline({
  * 3. full precision, which every ONNX export ships, for a broken or
  *    unsupported quantized variant.
  */
-export function loadAttempts(device, dtype) {
+export function loadAttempts(device, dtype, task) {
 	const devices = device === "webgpu" ? ["webgpu", "wasm"] : [device];
+	if (task === DECISION_TASK) {
+		// A decision model's precision is the variant its files are; only the
+		// device and the optimizer level can change between attempts.
+		return devices.flatMap((target) => [
+			{ device: target },
+			{ device: target, optimization: "basic" },
+		]);
+	}
 	return devices.flatMap((target) => {
 		const attempts = [
 			{ device: target, dtype },
@@ -102,10 +114,19 @@ export async function loadMediaBundle({
 	);
 	const { available } = await probeWebGPU();
 	const device = chooseDevice(forceDevice ?? config.device, available);
-	const attempts = loadAttempts(device, config.dtype);
+	const attempts = loadAttempts(device, config.dtype, config.task);
 	const index = Math.min(Math.max(0, loadAttempt), attempts.length - 1);
 	const attempt = attempts[index];
 	try {
+		if (config.task === DECISION_TASK) {
+			return await loadDecisionBundle({
+				transformers,
+				config,
+				device: attempt.device,
+				optimization: attempt.optimization,
+				notifyProgress: progress_callback,
+			});
+		}
 		return await createPipeline({
 			transformers,
 			config: { ...config, dtype: attempt.dtype },

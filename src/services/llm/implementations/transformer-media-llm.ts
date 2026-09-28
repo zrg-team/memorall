@@ -7,6 +7,8 @@ import type {
 import type {
 	ImageToolParams,
 	ImageToolResponse,
+	SystemOneParams,
+	SystemOneResponse,
 	TextToolParams,
 	TextToolResponse,
 	SpeechCreateParams,
@@ -32,6 +34,8 @@ import {
 	imageToolTaskOf,
 	textToolTaskOf,
 } from "../registry/media-model-registry";
+import { selectedDecisionVariant } from "../registry/decision-model-layout";
+import { normalizeSystemOneResponse } from "../utils/decision-schema";
 import {
 	getMediaModel,
 	inspectHubModel,
@@ -173,6 +177,16 @@ export class TransformerMediaLLM implements BaseLLM {
 			languages: config.languages,
 			imageTask: imageToolTaskOf(config),
 			textTask: textToolTaskOf(config),
+			...(config.decision?.variants.length
+				? {
+						decisionVariants: config.decision.variants.map((variant) => ({
+							id: variant.id,
+							label: variant.label,
+							sizeBytes: variant.sizeBytes || undefined,
+						})),
+						decisionVariant: selectedDecisionVariant(config.decision)?.id,
+					}
+				: {}),
 		};
 	}
 
@@ -493,5 +507,24 @@ export class TransformerMediaLLM implements BaseLLM {
 			labels: result.labels,
 			ranking: result.ranking,
 		};
+	}
+
+	// ---- POST /v1/systemone: typed decisions ------------------------------
+
+	async systemOne(request: SystemOneParams): Promise<SystemOneResponse> {
+		const config = await this.resolveConfig(request.model);
+		if (config.task !== "typed-decisions") {
+			throw new Error(
+				`${config.id} is a ${config.task} model and cannot answer typed decisions`,
+			);
+		}
+		const result = await this.getRuntime().run(() =>
+			this.getClient().request(
+				"systemone",
+				{ ...withoutSignal(request), config },
+				{ signal: request.signal },
+			),
+		);
+		return normalizeSystemOneResponse(result, config.id);
 	}
 }

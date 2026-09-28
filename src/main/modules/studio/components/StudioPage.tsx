@@ -44,6 +44,11 @@ const ImageToolsStudio = lazy(() =>
 		default: module.ImageToolsStudio,
 	})),
 );
+const DecisionStudio = lazy(() =>
+	import("./decision/DecisionStudio").then((module) => ({
+		default: module.DecisionStudio,
+	})),
+);
 const TextToolsStudio = lazy(() =>
 	import("./text-tools/TextToolsStudio").then((module) => ({
 		default: module.TextToolsStudio,
@@ -54,6 +59,7 @@ const CANVASES: Record<
 	MediaCategory,
 	React.ComponentType<StudioCanvasProps>
 > = {
+	decision: DecisionStudio,
 	"text-to-speech": SpeechStudio,
 	"text-to-audio": SpeechStudio,
 	"speech-to-text": TranscriptionStudio,

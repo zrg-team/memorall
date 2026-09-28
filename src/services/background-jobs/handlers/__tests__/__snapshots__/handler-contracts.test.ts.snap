@@ -87,6 +87,10 @@ exports[`background job handler registry > registers every background job handle
     "jobType": "cron-trigger",
   },
   {
+    "handler": "MediaOperationsHandler",
+    "jobType": "decision",
+  },
+  {
     "handler": "LLMOperationsHandler",
     "jobType": "delete-model",
   },

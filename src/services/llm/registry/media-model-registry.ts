@@ -32,6 +32,7 @@ export const TASK_CATEGORY: Readonly<Record<MediaPipelineTask, MediaCategory>> =
 		"text-classification": "text-tools",
 		"zero-shot-classification": "text-tools",
 		"text-ranking": "text-tools",
+		"typed-decisions": "decision",
 	};
 
 /** Hub pipeline tags to search for each studio. */

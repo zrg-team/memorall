@@ -36,6 +36,8 @@ import type {
 	ImageGenerationStreamEvent,
 	ImageToolParams,
 	ImageToolResponse,
+	SystemOneParams,
+	SystemOneResponse,
 	TextToolParams,
 	TextToolResponse,
 	MediaPayload,
@@ -683,6 +685,20 @@ export class LLMProxy implements BaseLLM {
 			}
 		}
 		throw new Error("Text tool produced no result");
+	}
+
+	async systemOne(request: SystemOneParams): Promise<SystemOneResponse> {
+		const { signal, ...wire } = request;
+		for await (const item of this.runMediaJob(
+			"decision",
+			{ serviceName: this.name, request: wire },
+			signal,
+		)) {
+			if (item.kind === "result") {
+				return (item.result as { response: SystemOneResponse }).response;
+			}
+		}
+		throw new Error("Decision produced no result");
 	}
 }
 

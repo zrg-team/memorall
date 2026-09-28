@@ -1,4 +1,5 @@
 import type { MediaVoice } from "@/types/openai-media";
+import type { DecisionModelVariant } from "../registry/decision-model-layout";
 import type { DeviceDownloadSizes } from "./base-llm";
 import type { MediaCategory } from "./model-category";
 
@@ -20,7 +21,12 @@ export type MediaPipelineTask =
 	| "image-classification"
 	| "text-classification"
 	| "zero-shot-classification"
-	| "text-ranking";
+	| "text-ranking"
+	/**
+	 * Typed decisions (`/systemone`). Not a transformers.js pipeline: the
+	 * runner drives the repo's ONNX graphs itself (see decision-model-layout).
+	 */
+	| "typed-decisions";
 
 /**
  * A Hub model the user added to a media studio.
@@ -48,5 +54,7 @@ export interface MediaModelConfig {
 	/** Per-model overrides; unset lets transformers.js pick for the device. */
 	dtype?: string | Record<string, string>;
 	device?: "webgpu" | "wasm" | "auto";
+	/** Typed-decision repos: the models found in the repo and the one in use. */
+	decision?: { variants: DecisionModelVariant[]; variant?: string };
 	addedAt: string;
 }

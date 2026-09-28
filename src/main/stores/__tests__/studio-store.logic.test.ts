@@ -277,4 +277,92 @@ describe("studio store", () => {
 		);
 		expect(remaining.rows[0]?.count).toBe(1);
 	});
+
+	it("keeps session settings set before the session exists", async () => {
+		const store = useStudioStore.getState();
+		await store.loadMode("decision");
+		const questions = {
+			topic: { type: "noul", instructions: "It is about billing." },
+		};
+		await store.updateSessionMetadata("decision", {
+			decisionSchema: questions,
+		});
+		expect(useStudioStore.getState().modes.decision?.pendingMetadata).toEqual({
+			decisionSchema: questions,
+		});
+
+		const item = await store.addItem("decision", {
+			content: "charged twice",
+			parts: [],
+			generation: generation({ category: "decision" }),
+		});
+
+		const rows = await pg.query<{ metadata: Record<string, unknown> }>(
+			"SELECT metadata FROM conversations",
+		);
+		expect(rows.rows[0]?.metadata).toMatchObject({
+			decisionSchema: questions,
+		});
+		const state = useStudioStore.getState().modes.decision;
+		expect(state?.pendingMetadata).toEqual({});
+		expect(state?.currentConversationId).toBe(item.conversationId);
+	});
+
+	it("does not lose settings changed while a generation runs", async () => {
+		const store = useStudioStore.getState();
+		const first = await store.addItem("decision", {
+			content: "first",
+			parts: [],
+			generation: generation({ category: "decision" }),
+		});
+		// A run captures the session; the settings change before it settles.
+		await store.updateSessionMetadata("decision", {
+			decisionSchema: { a: { type: "noul", instructions: "A" } },
+		});
+		await store.addItem("decision", {
+			content: "second",
+			parts: [],
+			generation: generation({ category: "decision" }),
+		});
+
+		const rows = await pg.query<{ metadata: Record<string, unknown> }>(
+			"SELECT metadata FROM conversations WHERE id = $1",
+			[first.conversationId],
+		);
+		expect(rows.rows[0]?.metadata).toMatchObject({
+			decisionSchema: { a: { type: "noul", instructions: "A" } },
+			lastMessagePreview: "second",
+		});
+	});
+
+	it("saves settings to the session they were made in", async () => {
+		const store = useStudioStore.getState();
+		const first = await store.addItem("decision", {
+			content: "first",
+			parts: [],
+			generation: generation({ category: "decision" }),
+		});
+		store.newConversation("decision");
+		const second = await store.addItem("decision", {
+			content: "second",
+			parts: [],
+			generation: generation({ category: "decision" }),
+		});
+
+		await store.updateSessionMetadata(
+			"decision",
+			{ decisionSchema: { a: { type: "noul", instructions: "A" } } },
+			first.conversationId,
+		);
+
+		const rows = await pg.query<{
+			id: string;
+			metadata: Record<string, unknown>;
+		}>("SELECT id, metadata FROM conversations");
+		const byId = new Map(rows.rows.map((row) => [row.id, row.metadata]));
+		expect(byId.get(first.conversationId)).toHaveProperty("decisionSchema");
+		expect(byId.get(second.conversationId)).not.toHaveProperty(
+			"decisionSchema",
+		);
+	});
 });

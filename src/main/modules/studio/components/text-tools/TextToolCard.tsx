@@ -101,7 +101,8 @@ const RankedDocument: React.FC<{
 	</li>
 );
 
-const RequestText: React.FC<{ text: string }> = ({ text }) => {
+/** The request text, clamped behind "Show more" when long. */
+export const RequestText: React.FC<{ text: string }> = ({ text }) => {
 	const { t } = useTranslation("studioText");
 	const [expanded, setExpanded] = useState(false);
 	const long =

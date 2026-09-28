@@ -9,6 +9,8 @@ import type {
 	ImageGenerationStreamEvent,
 	ImageToolParams,
 	ImageToolResponse,
+	SystemOneParams,
+	SystemOneResponse,
 	TextToolParams,
 	TextToolResponse,
 	SpeechCreateParams,
@@ -31,6 +33,7 @@ export const MEDIA_JOB_NAMES = {
 	imageGeneration: "image-generation",
 	imageTool: "image-tool",
 	textTool: "text-tool",
+	decision: "decision",
 	cancelMediaOperation: "cancel-media-operation",
 } as const;
 
@@ -62,6 +65,11 @@ export interface TextToolPayload {
 	request: WireRequest<TextToolParams>;
 }
 
+export interface DecisionPayload {
+	serviceName: string;
+	request: WireRequest<SystemOneParams>;
+}
+
 export interface CancelMediaOperationPayload {
 	targetJobId: string;
 }
@@ -88,6 +96,10 @@ export interface ImageToolResult extends Record<string, unknown> {
 
 export interface TextToolResult extends Record<string, unknown> {
 	response: TextToolResponse;
+}
+
+export interface DecisionResult extends Record<string, unknown> {
+	response: SystemOneResponse;
 }
 
 /**
@@ -159,6 +171,8 @@ export class MediaOperationsHandler implements ProcessHandler<BaseJob> {
 					);
 				case MEDIA_JOB_NAMES.textTool:
 					return await this.textTool(job, controller.signal);
+				case MEDIA_JOB_NAMES.decision:
+					return await this.decision(job, controller.signal);
 				default:
 					throw new Error(`Unknown media job type: ${job.jobType}`);
 			}
@@ -312,6 +326,18 @@ export class MediaOperationsHandler implements ProcessHandler<BaseJob> {
 		});
 		return { response } satisfies TextToolResult;
 	}
+
+	private async decision(
+		job: BaseJob,
+		signal: AbortSignal,
+	): Promise<ItemHandlerResult> {
+		const { serviceName, request } = job.payload as DecisionPayload;
+		const response = await this.llm.systemOneFor(serviceName, {
+			...request,
+			signal,
+		});
+		return { response } satisfies DecisionResult;
+	}
 }
 
 backgroundProcessFactory.register({
@@ -326,6 +352,7 @@ declare global {
 		"image-generation": ImageGenerationPayload;
 		"image-tool": ImageToolPayload;
 		"text-tool": TextToolPayload;
+		decision: DecisionPayload;
 		"cancel-media-operation": CancelMediaOperationPayload;
 	}
 
@@ -335,6 +362,7 @@ declare global {
 		"image-generation": ImageGenerationResult;
 		"image-tool": ImageToolResult;
 		"text-tool": TextToolResult;
+		decision: DecisionResult;
 		"cancel-media-operation": { canceled: boolean };
 	}
 }

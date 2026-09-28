@@ -18,6 +18,8 @@ import type {
 	SpeechCreateParams,
 	SpeechResponse,
 	SpeechStreamEvent,
+	SystemOneParams,
+	SystemOneResponse,
 	Transcription,
 	TranscriptionCreateParams,
 	TranscriptionStreamEvent,
@@ -26,6 +28,7 @@ import type { ToolCapabilityInfo } from "../interfaces/tool-capability";
 import { NATIVE_TOOL_SUPPORT } from "../interfaces/tool-capability";
 import {
 	createSpeech,
+	createSystemOneDecision,
 	createTranscription,
 	generateImages,
 	streamSpeech,
@@ -646,7 +649,15 @@ export class OpenAILLM implements BaseLLM {
 			});
 			if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
 			const data = await res.json();
-			const modelsRaw = Array.isArray(data?.data) ? data.data : [];
+			const modelsRaw: any[] = Array.isArray(data?.data) ? data.data : [];
+			// OpenRouter's default listing only has text-output models; decision
+			// models (`/systemone`) are listed by their output modality.
+			if (this.isOpenRouter()) {
+				const listed = new Set(modelsRaw.map((m) => String(m?.id)));
+				for (const entry of await this.fetchDecisionModels()) {
+					if (!listed.has(String(entry?.id))) modelsRaw.push(entry);
+				}
+			}
 			const now = Math.floor(Date.now() / 1000);
 			for (const entry of modelsRaw) {
 				const limits = readReportedLimits(entry);
@@ -681,6 +692,21 @@ export class OpenAILLM implements BaseLLM {
 		} catch (error) {
 			// For local servers that don't support /models, return an empty list gracefully
 			return { object: "list", data: [] };
+		}
+	}
+
+	/** Decision models are optional extras: a failure lists none of them. */
+	private async fetchDecisionModels(): Promise<any[]> {
+		try {
+			const res = await fetch(
+				`${this.baseURL}/models?output_modalities=decisions`,
+				{ method: "GET", headers: this.getHeaders() },
+			);
+			if (!res.ok) return [];
+			const data = await res.json();
+			return Array.isArray(data?.data) ? data.data : [];
+		} catch {
+			return [];
 		}
 	}
 
@@ -959,6 +985,11 @@ export class OpenAILLM implements BaseLLM {
 	async audioSpeech(request: SpeechCreateParams): Promise<SpeechResponse> {
 		if (!this.ready) await this.initialize();
 		return createSpeech(this.mediaTransport(), request);
+	}
+
+	async systemOne(request: SystemOneParams): Promise<SystemOneResponse> {
+		if (!this.ready) await this.initialize();
+		return createSystemOneDecision(this.mediaTransport(), request);
 	}
 
 	async *audioSpeechStream(

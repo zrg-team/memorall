@@ -33,6 +33,11 @@ interface StudioModeState {
 	currentConversationId: string | null;
 	items: StudioItem[];
 	loaded: boolean;
+	/**
+	 * Session settings written before the session exists (it is created by
+	 * its first generation); merged into the new row's metadata then.
+	 */
+	pendingMetadata: Record<string, unknown>;
 }
 
 const emptyModeState = (): StudioModeState => ({
@@ -40,6 +45,7 @@ const emptyModeState = (): StudioModeState => ({
 	currentConversationId: null,
 	items: [],
 	loaded: false,
+	pendingMetadata: {},
 });
 
 export interface NewStudioItem {
@@ -55,6 +61,16 @@ interface StudioStore {
 	openConversation: (mode: MediaCategory, id: string) => Promise<void>;
 	/** Start an empty session; the first generation gives it a title. */
 	newConversation: (mode: MediaCategory) => void;
+	/**
+	 * Merge settings into a session's metadata: `conversationId`, or the open
+	 * session when omitted. Without a session (null, or none open yet) they are
+	 * held for the session the next generation creates.
+	 */
+	updateSessionMetadata: (
+		mode: MediaCategory,
+		patch: Record<string, unknown>,
+		conversationId?: string | null,
+	) => Promise<void>;
 	renameConversation: (
 		mode: MediaCategory,
 		id: string,
@@ -213,10 +229,15 @@ export const useStudioStore = create<StudioStore>((set, get) => {
 
 	const touchConversation = async (
 		mode: MediaCategory,
-		conversation: Conversation,
+		captured: Conversation,
 		preview: string,
 	) => {
 		const updatedAt = new Date();
+		// The copy captured when the generation started may be stale: session
+		// settings can change while it runs.
+		const conversation =
+			modeState(mode).conversations.find((item) => item.id === captured.id) ??
+			captured;
 		const metadata = {
 			...metadataOf(conversation),
 			lastMessagePreview: titleFrom(preview),
@@ -271,7 +292,11 @@ export const useStudioStore = create<StudioStore>((set, get) => {
 		},
 
 		openConversation: async (mode, id) => {
-			patchMode(mode, () => ({ currentConversationId: id, items: [] }));
+			patchMode(mode, () => ({
+				currentConversationId: id,
+				items: [],
+				pendingMetadata: {},
+			}));
 			try {
 				const items = await loadItems(mode, id);
 				if (modeState(mode).currentConversationId === id) {
@@ -283,7 +308,47 @@ export const useStudioStore = create<StudioStore>((set, get) => {
 		},
 
 		newConversation: (mode) => {
-			patchMode(mode, () => ({ currentConversationId: null, items: [] }));
+			patchMode(mode, () => ({
+				currentConversationId: null,
+				items: [],
+				pendingMetadata: {},
+			}));
+		},
+
+		updateSessionMetadata: async (mode, patch, conversationId) => {
+			const state = modeState(mode);
+			const targetId =
+				conversationId === undefined
+					? state.currentConversationId
+					: conversationId;
+			const conversation = targetId
+				? state.conversations.find((item) => item.id === targetId)
+				: undefined;
+			if (!conversation) {
+				// A session that was deleted meanwhile keeps nothing.
+				if (targetId) return;
+				patchMode(mode, (current) => ({
+					pendingMetadata: { ...current.pendingMetadata, ...patch },
+				}));
+				return;
+			}
+			const metadata = { ...metadataOf(conversation), ...patch };
+			patchMode(mode, (current) => ({
+				conversations: current.conversations.map((item) =>
+					item.id === conversation.id ? { ...item, metadata } : item,
+				),
+			}));
+			try {
+				await serviceManager.databaseService.use(({ db, schema }) =>
+					db
+						.update(schema.conversations)
+						.set({ metadata })
+						.where(eq(schema.conversations.id, conversation.id)),
+				);
+			} catch (error) {
+				logError("Failed to save studio session settings:", error);
+				throw error;
+			}
 		},
 
 		renameConversation: async (mode, id, title) => {
@@ -368,7 +433,10 @@ export const useStudioStore = create<StudioStore>((set, get) => {
 							.values({
 								title: titleFrom(item.content),
 								mode,
-								metadata: { createdAt: new Date().toISOString() },
+								metadata: {
+									...state.pendingMetadata,
+									createdAt: new Date().toISOString(),
+								},
 							})
 							.returning();
 						return created;
@@ -379,6 +447,7 @@ export const useStudioStore = create<StudioStore>((set, get) => {
 					conversations: [created, ...current.conversations],
 					currentConversationId: created.id,
 					items: [],
+					pendingMetadata: {},
 				}));
 				state = modeState(mode);
 			}

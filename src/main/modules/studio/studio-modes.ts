@@ -1,6 +1,7 @@
 import {
 	AudioLines,
 	ImageIcon,
+	ListChecks,
 	type LucideIcon,
 	MessageSquare,
 	Mic,
@@ -27,6 +28,13 @@ export const STUDIO_MODE_DESCRIPTORS: readonly StudioModeDescriptor[] = [
 		label: "Chat",
 		shortLabel: "Chat",
 		description: "Talk to an agent or a chat model.",
+	},
+	{
+		mode: "decision",
+		icon: ListChecks,
+		label: "Decision",
+		shortLabel: "Decision",
+		description: "Ask typed questions about a text and get calibrated answers.",
 	},
 	{
 		mode: "text-to-speech",

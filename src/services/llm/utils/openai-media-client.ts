@@ -5,6 +5,8 @@ import type {
 	ImagesResponse,
 	MediaPayload,
 	SpeechCreateParams,
+	SystemOneParams,
+	SystemOneResponse,
 	SpeechResponse,
 	SpeechStreamEvent,
 	Transcription,
@@ -19,6 +21,7 @@ import {
 	mimeTypeToExtension,
 	pcm16ToFloat32,
 } from "./media-encoding";
+import { normalizeSystemOneResponse } from "./decision-schema";
 import { mediaPayloadToBytes } from "./media-payload";
 
 /** `response_format: "pcm"` is 24 kHz 16-bit mono by the API's definition. */
@@ -542,4 +545,27 @@ async function* generateImagesViaChat(
 			data: images,
 		},
 	};
+}
+
+/**
+ * POST /systemone: typed questions about a state, answered with
+ * probabilities (the TypeSafe Jev wire protocol, which OpenRouter serves for
+ * its decision models).
+ */
+export async function createSystemOneDecision(
+	transport: OpenAIMediaTransport,
+	request: SystemOneParams,
+): Promise<SystemOneResponse> {
+	const response = await fetch(`${transport.baseURL}/systemone`, {
+		method: "POST",
+		headers: { ...transport.headers(), "Content-Type": "application/json" },
+		body: JSON.stringify({
+			model: request.model,
+			state: request.state,
+			questions: request.questions,
+		}),
+		signal: request.signal,
+	});
+	if (!response.ok) throw await failure(response, "Decision");
+	return normalizeSystemOneResponse(await response.json(), request.model);
 }

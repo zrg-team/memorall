@@ -98,3 +98,69 @@ export async function fetchCachedArrayBuffer(url) {
 	} catch {}
 	return response.arrayBuffer();
 }
+
+/**
+ * Fetches a model file through the transformers cache, reporting download
+ * progress. For runtimes that load ONNX graphs themselves (typed decisions):
+ * the files land where transformers.js puts its own, so "downloaded" and
+ * delete treat them the same way.
+ * @param {string} url
+ * @param {(loaded: number, total: number) => void} [onProgress]
+ * @returns {Promise<Uint8Array>}
+ */
+export async function fetchCachedWithProgress(url, onProgress) {
+	const storage = cacheStorage();
+	let cache = null;
+	try {
+		cache = storage ? await storage.open(TRANSFORMERS_CACHE_NAME) : null;
+		const hit = await cache?.match(url);
+		if (hit) {
+			const bytes = new Uint8Array(await hit.arrayBuffer());
+			onProgress?.(bytes.byteLength, bytes.byteLength);
+			return bytes;
+		}
+	} catch {}
+
+	const response = await fetch(url);
+	if (!response.ok) {
+		throw new Error(`Failed to fetch ${url}: HTTP ${response.status}`);
+	}
+	const total = Number(response.headers.get("content-length")) || 0;
+	let bytes;
+	if (response.body && typeof response.body.getReader === "function") {
+		const reader = response.body.getReader();
+		const chunks = [];
+		let loaded = 0;
+		for (;;) {
+			const { value, done } = await reader.read();
+			if (done) break;
+			chunks.push(value);
+			loaded += value.byteLength;
+			onProgress?.(loaded, Math.max(total, loaded));
+		}
+		bytes = new Uint8Array(loaded);
+		let offset = 0;
+		for (const chunk of chunks) {
+			bytes.set(chunk, offset);
+			offset += chunk.byteLength;
+		}
+	} else {
+		bytes = new Uint8Array(await response.arrayBuffer());
+	}
+	onProgress?.(bytes.byteLength, bytes.byteLength);
+	try {
+		await cache?.put(
+			url,
+			new Response(bytes, {
+				headers: {
+					"content-type":
+						response.headers.get("content-type") ?? "application/octet-stream",
+					"content-length": String(bytes.byteLength),
+				},
+			}),
+		);
+	} catch (error) {
+		console.warn("[media-runner] could not cache", url, error);
+	}
+	return bytes;
+}

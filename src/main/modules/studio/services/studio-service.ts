@@ -5,6 +5,7 @@ import type {
 	TextToolTask,
 	MediaCategory,
 } from "@/services/llm/interfaces/model-category";
+import { decisionStateOf } from "@/services/llm/utils/decision-schema";
 import { mimeTypeToExtension } from "@/services/llm/utils/media-encoding";
 import {
 	persistGeneratedImage,
@@ -17,6 +18,7 @@ import {
 	useStudioStore,
 } from "@/main/stores/studio";
 import type {
+	DecisionQuestions,
 	ImageGenerationStreamEvent,
 	MediaPayload,
 	SpeechStreamEvent,
@@ -496,6 +498,76 @@ export function runTextTool(options: TextToolOptions): Promise<StudioItem> {
 			return { parts };
 		},
 	);
+}
+
+export interface DecisionOptions {
+	model: CurrentModelInfo;
+	/** The text the questions are about, as typed. */
+	input: string;
+	questions: DecisionQuestions;
+	signal?: AbortSignal;
+}
+
+/**
+ * Typed questions about a text, answered through `/systemone` by whichever
+ * provider serves the model. The questions are stored with the result, so a
+ * card still reads correctly after the session's questions change.
+ */
+export function runDecision(options: DecisionOptions): Promise<StudioItem> {
+	return recordGeneration(
+		{
+			mode: "decision",
+			model: options.model,
+			content: options.input,
+			inputParts: [{ type: "text", text: options.input, role: "prompt" }],
+			params: { questions: options.questions },
+		},
+		async () => {
+			const response = await serviceManager.llmService.systemOneFor(
+				options.model.serviceName,
+				{
+					model: options.model.modelId,
+					state: decisionStateOf(options.input),
+					questions: options.questions,
+					signal: options.signal,
+				},
+			);
+			return {
+				parts: [
+					{
+						type: "decision",
+						decision: {
+							model: response.model,
+							answers: response.answers,
+							usage: response.usage,
+						},
+					},
+				],
+			};
+		},
+	);
+}
+
+/**
+ * Switch a local decision repo to another of its models. The runner keeps the
+ * loaded model by repo id, so it is unloaded; the next run loads the new one.
+ */
+export async function selectDecisionVariant(
+	model: CurrentModelInfo,
+	variant: string,
+): Promise<void> {
+	const { getMediaModel, saveMediaModel } = await import(
+		"@/services/llm/registry/media-model-store"
+	);
+	const config = await getMediaModel(model.modelId);
+	if (!config?.decision || config.decision.variant === variant) return;
+	await saveMediaModel({
+		...config,
+		decision: { ...config.decision, variant },
+	});
+	await serviceManager.llmService
+		.unloadFor(model.serviceName, model.modelId)
+		.catch(() => undefined);
 }
 
 export const isCancellation = isAbortError;

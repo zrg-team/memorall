@@ -14,6 +14,7 @@ import {
 	isCancelledError,
 	toErrorPayload,
 } from "./cancellation.js";
+import { runDecision } from "./decision-model.js";
 import { dtypeLabel } from "./device.js";
 import { runImageTool } from "./image-tools.js";
 import { runTextTool } from "./text-tools.js";
@@ -216,6 +217,12 @@ export function createMediaEngine({
 			case "text/tools": {
 				const result = await withModel(config, ctx, (run) =>
 					runTextTool({ ...run, payload, cancellation }),
+				);
+				return { type: "complete", payload: result };
+			}
+			case "systemone": {
+				const result = await withModel(config, ctx, (run) =>
+					runDecision({ ...run, payload, cancellation }),
 				);
 				return { type: "complete", payload: result };
 			}

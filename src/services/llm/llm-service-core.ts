@@ -8,6 +8,8 @@ import type {
 	ImageGenerationStreamEvent,
 	ImageToolParams,
 	ImageToolResponse,
+	SystemOneParams,
+	SystemOneResponse,
 	TextToolParams,
 	TextToolResponse,
 	SpeechCreateParams,
@@ -50,7 +52,8 @@ type MediaMethod =
 	| "audioTranscriptionsStream"
 	| "imagesGenerations"
 	| "imagesTools"
-	| "textTools";
+	| "textTools"
+	| "systemOne";
 
 const MEDIA_METHOD_LABELS: Record<MediaMethod, string> = {
 	audioSpeech: "text-to-speech",
@@ -60,6 +63,7 @@ const MEDIA_METHOD_LABELS: Record<MediaMethod, string> = {
 	imagesGenerations: "image generation",
 	imagesTools: "image tools",
 	textTools: "text tools",
+	systemOne: "typed decisions",
 };
 
 export class UnsupportedModelOperationError extends Error {
@@ -845,6 +849,14 @@ export abstract class LLMServiceCore {
 	): Promise<TextToolResponse> {
 		const llm = await this.requireMediaMethod(name, "textTools");
 		return this.withLease(name, request.model, () => llm.textTools(request));
+	}
+
+	async systemOneFor(
+		name: string,
+		request: SystemOneParams,
+	): Promise<SystemOneResponse> {
+		const llm = await this.requireMediaMethod(name, "systemOne");
+		return this.withLease(name, request.model, () => llm.systemOne(request));
 	}
 
 	// Abstract methods that must be implemented by concrete classes

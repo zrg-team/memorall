@@ -30,6 +30,7 @@ import enStudioTranscription from "./locales/en/studio-transcription.json";
 import enStudioImage from "./locales/en/studio-image.json";
 import enStudioTools from "./locales/en/studio-tools.json";
 import enStudioText from "./locales/en/studio-text.json";
+import enStudioDecision from "./locales/en/studio-decision.json";
 
 import vnCommon from "./locales/vn/common.json";
 import vnAgents from "./locales/vn/agents.json";
@@ -53,6 +54,7 @@ import vnStudioTranscription from "./locales/vn/studio-transcription.json";
 import vnStudioImage from "./locales/vn/studio-image.json";
 import vnStudioTools from "./locales/vn/studio-tools.json";
 import vnStudioText from "./locales/vn/studio-text.json";
+import vnStudioDecision from "./locales/vn/studio-decision.json";
 
 // Translation resources
 const resources = {
@@ -79,6 +81,7 @@ const resources = {
 		studioImage: enStudioImage,
 		studioTools: enStudioTools,
 		studioText: enStudioText,
+		studioDecision: enStudioDecision,
 	},
 	vn: {
 		common: vnCommon,
@@ -103,6 +106,7 @@ const resources = {
 		studioImage: vnStudioImage,
 		studioTools: vnStudioTools,
 		studioText: vnStudioText,
+		studioDecision: vnStudioDecision,
 	},
 } as const;
 
