@@ -17,6 +17,12 @@ import {
 } from "./browser-runtime-types";
 import type { ManagedBrowserOsRuntime } from "./managed-browseros-runtime";
 import {
+	isNavigationTeardown,
+	outlineActCall,
+	outlineBuildCall,
+	pageOutlineExpression,
+} from "./page-outline-bundle";
+import {
 	type McpToolResult,
 	mcpImage,
 	StreamableHttpMcpClient,
@@ -200,6 +206,111 @@ export class BrowserOsBackend implements BrowserBackend {
 		);
 		session.url = snapshot.url;
 		return snapshot;
+	}
+
+	async outline(
+		session: BackendSession,
+		maxChars: number,
+		signal?: AbortSignal,
+	): Promise<Record<string, unknown>> {
+		const outline = await this.evaluate<Record<string, unknown>>(
+			session,
+			pageOutlineExpression(outlineBuildCall(maxChars)),
+			signal,
+		);
+		if (typeof outline?.url === "string") session.url = outline.url;
+		return outline;
+	}
+
+	async outlineAction(
+		session: BackendSession,
+		request: Record<string, unknown>,
+		maxChars: number,
+		signal?: AbortSignal,
+	): Promise<{
+		result: Record<string, unknown>;
+		outline?: Record<string, unknown>;
+	}> {
+		try {
+			const response = await this.evaluate<{
+				result: Record<string, unknown>;
+				outline: Record<string, unknown>;
+			}>(
+				session,
+				pageOutlineExpression(outlineActCall(request, maxChars)),
+				signal,
+			);
+			if (typeof response?.outline?.url === "string") {
+				session.url = response.outline.url;
+			}
+			return response;
+		} catch (error) {
+			// The action ran and navigated; the old context is gone with its reply.
+			if (!isNavigationTeardown(error)) throw error;
+			return {
+				result: {
+					ok: true,
+					action: request.action,
+					ref: request.ref,
+					detail: "The page started loading a new document.",
+				},
+			};
+		}
+	}
+
+	async navigate(
+		session: BackendSession,
+		url: string,
+		timeoutMs: number,
+		maxHtmlChars: number,
+		signal?: AbortSignal,
+	): Promise<BrowserSnapshot> {
+		const client = await this.ensureClient(signal);
+		const timed = withTimeoutSignal(timeoutMs, signal);
+		try {
+			await client.callTool(
+				"navigate",
+				{ page: session.handle, action: "url", url: checkedPageUrl(url) },
+				timed.signal,
+			);
+			const snapshot = await this.snapshot(session, maxHtmlChars, timed.signal);
+			session.url = snapshot.url;
+			return snapshot;
+		} finally {
+			timed.dispose();
+		}
+	}
+
+	/** BrowserOS has no history verb; drive the page's own history instead. */
+	async history(
+		session: BackendSession,
+		direction: "back" | "forward",
+		timeoutMs: number,
+		maxHtmlChars: number,
+		signal?: AbortSignal,
+	): Promise<BrowserSnapshot> {
+		const timed = withTimeoutSignal(timeoutMs, signal);
+		try {
+			const before = session.url;
+			const verb = direction === "back" ? "back" : "forward";
+			await this.evaluate<boolean>(
+				session,
+				`(() => { history.${verb}(); return true; })()`,
+				timed.signal,
+			).catch((error) => {
+				if (!isNavigationTeardown(error)) throw error;
+			});
+			const deadline = Date.now() + Math.min(timeoutMs, 10_000);
+			let snapshot = await this.snapshot(session, maxHtmlChars, timed.signal);
+			while (snapshot.url === before && Date.now() < deadline) {
+				await new Promise((resolve) => setTimeout(resolve, 200));
+				snapshot = await this.snapshot(session, maxHtmlChars, timed.signal);
+			}
+			session.url = snapshot.url;
+			return snapshot;
+		} finally {
+			timed.dispose();
+		}
 	}
 
 	async query(

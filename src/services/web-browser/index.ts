@@ -55,6 +55,10 @@ export type {
 	WebDomActionName,
 	WebDomElementInfo,
 	WebElementRecord,
+	WebHistoryDirection,
+	WebOutlineActionRequest,
+	WebOutlineActionResult,
+	WebPageOutline,
 	WebSnapshotPayload,
 	WebWaitSelectorState,
 } from "./web-browser-protocol";

@@ -37,7 +37,7 @@ export const runtimeState = {
 let almostNodeLibPromise = null;
 let almostNodeLibModule = null;
 
-const sandboxAssetUrl = (path) => {
+export const sandboxAssetUrl = (path) => {
 	const normalizedPath = String(path).replace(/^\/+/, "");
 	const assetUrl = new URL(self.location.href);
 	const sandboxRootMarker = "/sandbox/";
@@ -164,6 +164,7 @@ export const toServerInfo = (serverState) => ({
 	url: serverState.url,
 	renderUrl: serverState.renderUrl,
 	rootDir: serverState.rootDir,
+	...(serverState.startedBy ? { startedBy: serverState.startedBy } : {}),
 });
 
 export const getServerBridge = async (containerInstance) => {
@@ -648,9 +649,12 @@ const getCommandSessionOrThrow = (commandId) => {
 	return commandSession;
 };
 
+// The foreground command: the one stdin goes to. Commands started alongside
+// it (a curl while a server runs) never read the terminal, as background
+// jobs in a shell do not.
 const getRunningCommandSession = () =>
 	Array.from(runtimeState.commands.values()).find(
-		(commandSession) => !commandSession.completed,
+		(commandSession) => !commandSession.completed && !commandSession.alongside,
 	) ?? null;
 
 const buildCommandResult = (commandSession, offset = 0) => {
@@ -728,7 +732,7 @@ export const executeCommandSession = async (payload = {}) => {
 	}
 
 	const runningCommand = getRunningCommandSession();
-	if (runningCommand) {
+	if (runningCommand && !payload.allowAlongside) {
 		throw new Error(
 			`Sandbox runtime supports only one active command at a time. Stop or wait for ${runningCommand.commandId} first.`,
 		);
@@ -739,6 +743,7 @@ export const executeCommandSession = async (payload = {}) => {
 		command,
 		normalizeCommandCwd(payload.cwd),
 	);
+	commandSession.alongside = Boolean(runningCommand);
 	runtimeState.commands.set(commandSession.commandId, commandSession);
 
 	pushRuntimeLog(

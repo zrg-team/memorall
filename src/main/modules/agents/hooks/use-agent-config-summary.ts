@@ -9,11 +9,13 @@ import {
 import { DEFAULT_CONTEXT_SYSTEM_PROMPT } from "@memorall/agent-harness-flows/steps/common/context-to-system";
 import type { Flow } from "@/services/database/types";
 import type { FoundationPredefinedConfig } from "@memorall/agent-harness-flows/graph/foundation/state";
+import type { StepInstanceConfig } from "@memorall/agent-harness-flows/interfaces/config/flow-config";
 import {
 	coerceDate,
 	type AgentConfigSummary,
 	type FeaturePromptSummary,
 } from "../types";
+import { getAbsorbedFeatures } from "../utils/feature-absorption";
 import { getAgentFeatureDisplayName } from "../utils/feature-display";
 
 const hasToolPickerSlot = (feature: AgentFeatureDefinition): boolean =>
@@ -27,6 +29,7 @@ type UseAgentConfigSummaryOptions = {
 	draftMultiAgentAccessibleAgentIds: string[];
 	featureDefinitions: AgentFeatureDefinition[];
 	selectedPreset: Flow | null;
+	stepConfigs?: StepInstanceConfig[];
 };
 
 export const useAgentConfigSummary = ({
@@ -37,16 +40,24 @@ export const useAgentConfigSummary = ({
 	draftMultiAgentAccessibleAgentIds,
 	featureDefinitions,
 	selectedPreset,
+	stepConfigs,
 }: UseAgentConfigSummaryOptions): AgentConfigSummary | null => {
 	const { t } = useTranslation(["agents", "chat"]);
 
 	return React.useMemo<AgentConfigSummary | null>(() => {
 		if (!selectedPreset) return null;
 		const graphMeta = GRAPH_REGISTRY.find((g) => g.id === currentGraphType);
+		// Runs switch absorbed features off, so they add no tools or prompts.
+		const absorbed = getAbsorbedFeatures(
+			featureDefinitions,
+			draftFeatures,
+			stepConfigs,
+		);
 
 		const enabledFeatureLabels = featureDefinitions.flatMap((feature) => {
 			if (hasToolPickerSlot(feature)) return [];
 			if (!draftFeatures[feature.name]) return [];
+			if (absorbed.has(feature.name)) return [];
 			return [getAgentFeatureDisplayName(feature, t)];
 		});
 
@@ -55,6 +66,7 @@ export const useAgentConfigSummary = ({
 		for (const feature of featureDefinitions) {
 			if (hasToolPickerSlot(feature)) continue;
 			if (!draftFeatures[feature.name]) continue;
+			if (absorbed.has(feature.name)) continue;
 			if (
 				feature.requiresAccessibleAgents &&
 				draftMultiAgentAccessibleAgentIds.length === 0
@@ -99,7 +111,8 @@ export const useAgentConfigSummary = ({
 					(f) =>
 						f.name !== "step-knowledge-retrieval" &&
 						f.systemPrompt.trim().length > 0 &&
-						draftFeatures[f.name],
+						draftFeatures[f.name] &&
+						!absorbed.has(f.name),
 				)
 				.map((f) => ({
 					name: f.name,
@@ -134,6 +147,7 @@ export const useAgentConfigSummary = ({
 		draftMultiAgentAccessibleAgentIds,
 		featureDefinitions,
 		selectedPreset,
+		stepConfigs,
 		t,
 	]);
 };

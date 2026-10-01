@@ -66,7 +66,11 @@ export type BrowserCommand = Record<string, unknown> & {
 		| "close"
 		| "screenshot"
 		| "fetch-image"
-		| "reload";
+		| "reload"
+		| "outline"
+		| "outline-action"
+		| "history"
+		| "navigate";
 	sessionId: string;
 };
 
@@ -130,6 +134,10 @@ export const parseBrowserCommand = (value: unknown): BrowserCommand => {
 			"screenshot",
 			"fetch-image",
 			"reload",
+			"outline",
+			"outline-action",
+			"history",
+			"navigate",
 		].includes(command)
 	) {
 		throw new BrowserAutomationError(
@@ -197,6 +205,50 @@ export const parseBrowserCommand = (value: unknown): BrowserCommand => {
 		requiredNumber(value, "maxHtmlChars");
 	}
 	if (command === "fetch-image") requiredString(value, "url");
+	if (command === "outline" || command === "outline-action") {
+		requiredNumber(value, "timeoutMs");
+		requiredNumber(value, "maxChars");
+	}
+	if (command === "outline-action") {
+		const request = value.request;
+		if (!isRecord(request) || typeof request.action !== "string") {
+			throw new BrowserAutomationError(
+				"INVALID_BROWSER_REQUEST",
+				"Browser request field request must describe an outline action.",
+			);
+		}
+		if (
+			![
+				"click",
+				"input",
+				"focus",
+				"submit",
+				"scrollScreen",
+				"describe",
+			].includes(request.action)
+		) {
+			throw new BrowserAutomationError(
+				"INVALID_BROWSER_REQUEST",
+				`Unsupported outline action: ${request.action}`,
+			);
+		}
+	}
+	if (command === "navigate") {
+		requiredString(value, "url");
+		requiredNumber(value, "timeoutMs");
+		requiredNumber(value, "maxHtmlChars");
+	}
+	if (command === "history") {
+		requiredNumber(value, "timeoutMs");
+		requiredNumber(value, "maxHtmlChars");
+		const direction = requiredString(value, "direction");
+		if (direction !== "back" && direction !== "forward") {
+			throw new BrowserAutomationError(
+				"INVALID_BROWSER_REQUEST",
+				`Unsupported history direction: ${direction}`,
+			);
+		}
+	}
 	return value as BrowserCommand;
 };
 

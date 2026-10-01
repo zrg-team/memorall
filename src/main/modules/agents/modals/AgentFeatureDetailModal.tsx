@@ -32,8 +32,10 @@ import {
 	getAgentFeatureDescription,
 	getAgentFeatureDisplayName,
 } from "../utils/feature-display";
+import { getAbsorbedFeatures } from "../utils/feature-absorption";
 import { KNOWLEDGE_RETRIEVAL_MODES } from "@/main/stores/agent-config";
 import { VisualizeResponseFeatureConfig } from "../components/VisualizeResponseFeatureConfig";
+import { MemonBotFeatureConfig } from "../components/MemonBotFeatureConfig";
 
 interface AgentFeatureDetailModalProps {
 	featureName: string;
@@ -94,6 +96,7 @@ const ToolPickerSlot: React.FC<{
 		draftFeatures,
 		featureDefinitions,
 		availableTools,
+		savedUnifiedConfig,
 		updateField,
 		toggleTool,
 	} = useAgentConfigStore();
@@ -104,17 +107,24 @@ const ToolPickerSlot: React.FC<{
 			? availableTools
 			: availableTools.filter((tool) => !claimedToolSet.has(tool));
 
-	// Tools that are enabled transitively by active features (not by this ToolPicker)
+	// Tools that are enabled transitively by active features (not by this
+	// ToolPicker). Features another feature absorbed are off at run time.
 	const featureEnabledTools = React.useMemo(() => {
+		const absorbed = getAbsorbedFeatures(
+			featureDefinitions,
+			draftFeatures,
+			savedUnifiedConfig?.steps,
+		);
 		const set = new Set<string>();
 		for (const feature of featureDefinitions) {
 			if (feature.detailView?.some((s) => s.component === "ToolPicker"))
 				continue;
 			if (!draftFeatures[feature.name]) continue;
+			if (absorbed.has(feature.name)) continue;
 			for (const tool of feature.tools) set.add(tool);
 		}
 		return set;
-	}, [featureDefinitions, draftFeatures]);
+	}, [featureDefinitions, draftFeatures, savedUnifiedConfig]);
 
 	const isEnabled = (toolName: string) =>
 		draftConfig.tools.includes(toolName) || featureEnabledTools.has(toolName);
@@ -563,6 +573,14 @@ export const AgentFeatureDetailModal =
 						}
 						if (slot.component === "VisualizeResponseConfig") {
 							return <VisualizeResponseConfigSlot key={index} />;
+						}
+						if (slot.component === "MemonBotSettings") {
+							return (
+								<div key={index} className="space-y-5">
+									<MemonBotFeatureConfig />
+									<StandardFeatureDetailView featureName={featureName} />
+								</div>
+							);
 						}
 						return null;
 					})}

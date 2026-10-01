@@ -19,6 +19,7 @@ import {
 	clearQueuedAgentWizardCursorMoves,
 } from "@/main/modules/agent-wizard";
 import { FeaturesGrid } from "./FeaturesGrid";
+import { MemonOSSection } from "./MemonOSSection";
 import { SystemPromptEditor } from "./SystemPromptEditor";
 import {
 	AdvancedGraphSection,
@@ -131,6 +132,8 @@ export const AgentConfigForm: React.FC<AgentConfigFormProps> = ({
 			/>
 
 			<Separator />
+
+			<MemonOSSection />
 
 			<CursorPoint
 				cursorKey={[

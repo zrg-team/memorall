@@ -62,6 +62,7 @@ export const useAgentsWorkspaceController = () => {
 		featureDefinitions,
 		availableTools,
 		currentGraphType,
+		savedUnifiedConfig,
 		initialize,
 		isLegacyConfig,
 		isDirty: hasConfigChanges,
@@ -179,6 +180,7 @@ export const useAgentsWorkspaceController = () => {
 		draftMultiAgentAccessibleAgentIds,
 		featureDefinitions,
 		selectedPreset,
+		stepConfigs: savedUnifiedConfig?.steps,
 	});
 
 	const isBusy =

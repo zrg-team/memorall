@@ -21,7 +21,7 @@ export interface AgentCronJobDraft {
 	metadata?: Record<string, unknown>;
 }
 
-const createDefaultDraft = (
+export const createDefaultDraft = (
 	agentFlowId: string,
 	status: CronJobStatus,
 ): AgentCronJobDraft => ({

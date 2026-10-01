@@ -218,6 +218,45 @@ describe("ChatInputControls co-agent", () => {
 	});
 });
 
+describe("ChatInputControls computer", () => {
+	it("opens the agent's computer in one click when the agent has one", async () => {
+		const onOpenComputer = vi.fn();
+		const { container } = render(
+			<ChatInputControls {...props({ onOpenComputer })} />,
+		);
+
+		const button = within(container).getByRole("button", {
+			name: "tooltips.openComputer",
+		});
+		expect(button.querySelector(".animate-pulse")).toBeNull();
+		await userEvent.click(button);
+		expect(onOpenComputer).toHaveBeenCalledTimes(1);
+	});
+
+	it("shows when the agent is working on its computer", () => {
+		const { container } = render(
+			<ChatInputControls
+				{...props({ onOpenComputer: vi.fn(), isComputerWorking: true })}
+			/>,
+		);
+
+		const button = within(container).getByRole("button", {
+			name: "tooltips.openComputer",
+		});
+		expect(button.querySelector(".animate-pulse")).not.toBeNull();
+	});
+
+	it("is absent for agents without MemonOS Bot", () => {
+		const { container } = render(<ChatInputControls {...props()} />);
+
+		expect(
+			within(container).queryByRole("button", {
+				name: "tooltips.openComputer",
+			}),
+		).toBeNull();
+	});
+});
+
 describe("ChatInputControls model selector", () => {
 	const MODELS = [
 		{

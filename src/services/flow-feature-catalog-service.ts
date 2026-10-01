@@ -11,7 +11,17 @@ import {
 } from "@memorall/agent-harness-flows/steps/features/nodejs-sandbox-feature/index";
 import { HYPERFRAMES_FEATURE_SYSTEM_PROMPT } from "@/services/flows-integrations/steps/features/hyperframes-base/hyperframes-feature";
 import { LOTTIE_ANIMATION_FEATURE_SYSTEM_PROMPT } from "@/services/flows-integrations/steps/features/lottie-animation-feature/lottie-animation-feature";
+import {
+	buildMemonPrompt,
+	MEMON_FEATURE_DESCRIPTION,
+	MEMON_FEATURE_TOOLS,
+} from "@/services/flows-integrations/steps/features/memon-feature";
 import { THREAD_HISTORY_FEATURE_SYSTEM_PROMPT } from "@/services/flows-integrations/steps/features/thread-history-feature";
+import {
+	MEMON_ABSORBED_STEP_NAMES,
+	MEMON_FEATURE_ID,
+} from "@/services/memon/constants";
+import { DEFAULT_MEMON_FEATURE_CONFIG } from "@/services/memon/feature-config";
 import type { CapabilityId } from "@/platform/contracts/core";
 
 export type { StepIOField };
@@ -32,7 +42,8 @@ export type FeatureDetailViewSlot =
 	  }
 	| { component: "RetrievalModeSelect"; configName: "retrievalMode" }
 	| { component: "AgentPicker" }
-	| { component: "VisualizeResponseConfig" };
+	| { component: "VisualizeResponseConfig" }
+	| { component: "MemonBotSettings" };
 
 export interface FeatureCatalogMetadata extends Record<string, unknown> {
 	description: string;
@@ -61,6 +72,12 @@ export interface FeatureCatalogMetadata extends Record<string, unknown> {
 	requiresAccessibleAgents?: boolean;
 	volatile?: boolean;
 	detailView?: FeatureDetailViewSlot[];
+	/**
+	 * Step names this feature takes over while enabled. The grid shows them as
+	 * part of this feature, and the run switches them off (MemonOS Bot drives the
+	 * web, files and sandbox services through its own apps).
+	 */
+	absorbsFeatures?: string[];
 }
 
 export interface FeatureCatalogStep {
@@ -788,6 +805,23 @@ const FEATURE_UI_METADATA: Record<string, FeatureCatalogMetadata> = {
 		accentColor: "#0ea5e9",
 		section: "core",
 		sectionOrder: 3,
+	},
+	[MEMON_FEATURE_ID]: {
+		description: MEMON_FEATURE_DESCRIPTION,
+		descriptionKey: "flowBuilder.features.memonFeature.description",
+		displayName: "MemonOS Bot",
+		nameKey: "flowBuilder.features.memonFeature.name",
+		tools: [...MEMON_FEATURE_TOOLS],
+		systemPrompt: buildMemonPrompt(DEFAULT_MEMON_FEATURE_CONFIG),
+		customizable: false,
+		icon: { name: "Monitor", type: "lucide" },
+		accentColor: "#0891b2",
+		section: "core",
+		sectionOrder: 3.5,
+		// Shown as its own section above Features (MemonOSSection).
+		hideInGrid: true,
+		absorbsFeatures: [...MEMON_ABSORBED_STEP_NAMES],
+		detailView: [{ component: "MemonBotSettings" }],
 	},
 } satisfies Record<string, FeatureCatalogMetadata>;
 

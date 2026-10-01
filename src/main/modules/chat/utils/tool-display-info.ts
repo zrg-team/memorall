@@ -103,4 +103,68 @@ export const TOOL_DISPLAY_INFO: Record<
 		description: "Explain where a saved memory came from",
 		descriptionKey: "agentSettings.toolDescriptions.memory_explain_source",
 	},
+	memon_screen: {
+		name: "Read Screen",
+		description: "Read the MemonOS Bot computer screen",
+		descriptionKey: "agentSettings.toolDescriptions.memon_screen",
+	},
+	memon_open: {
+		name: "Open on Computer",
+		description: "Open an app, page or file on the MemonOS Bot computer",
+		descriptionKey: "agentSettings.toolDescriptions.memon_open",
+	},
+	memon_act: {
+		name: "Use Computer",
+		description: "Click, type, scroll or save on the MemonOS Bot computer",
+		descriptionKey: "agentSettings.toolDescriptions.memon_act",
+	},
+	memon_run: {
+		name: "Run Command",
+		description: "Run a shell command in the MemonOS Bot terminal",
+		descriptionKey: "agentSettings.toolDescriptions.memon_run",
+	},
+	memon_window: {
+		name: "Arrange Windows",
+		description: "Focus, minimize, maximize or close a MemonOS Bot window",
+		descriptionKey: "agentSettings.toolDescriptions.memon_window",
+	},
+	memon_visualize: {
+		name: "Visualize",
+		description:
+			"Show a visual written in OpenUI in the MemonOS Bot Visualize app and save it",
+		descriptionKey: "agentSettings.toolDescriptions.memon_visualize",
+	},
+	memon_notes: {
+		name: "Update Notes",
+		description: "Plan and track the task in the MemonOS Bot Notes app",
+		descriptionKey: "agentSettings.toolDescriptions.memon_notes",
+	},
+	memon_schedule: {
+		name: "Manage Schedules",
+		description:
+			"View and manage the agent's scheduled prompts in the MemonOS Bot Scheduler",
+		descriptionKey: "agentSettings.toolDescriptions.memon_schedule",
+	},
+	memon_memory: {
+		name: "Update Memory",
+		description: "Remember things between chats in Memory.md and keep Bot.md",
+		descriptionKey: "agentSettings.toolDescriptions.memon_memory",
+	},
+	memon_studio: {
+		name: "Use Studio",
+		description:
+			"Run the user's studios on the computer: decisions, speech, transcripts, images, image and text tools, audio",
+		descriptionKey: "agentSettings.toolDescriptions.memon_studio",
+	},
+	memon_skills: {
+		name: "Manage Skills",
+		description: "View and manage the skills this agent uses",
+		descriptionKey: "agentSettings.toolDescriptions.memon_skills",
+	},
+	memon_connections: {
+		name: "Manage Connections",
+		description:
+			"View the user's connected apps and which ones this agent uses",
+		descriptionKey: "agentSettings.toolDescriptions.memon_connections",
+	},
 };

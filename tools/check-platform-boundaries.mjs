@@ -52,6 +52,7 @@ function isExplicitExtensionCode(file) {
 			file,
 		) ||
 		file === "src/services/filesystem/change-bus/extension.ts" ||
+		file === "src/services/memon/change-bus/extension.ts" ||
 		file === "src/services/shared-storage/change-bus/extension.ts"
 	);
 }
@@ -92,10 +93,11 @@ for (const absolute of files) {
 	if (
 		file.startsWith("src/co-agent/") &&
 		// `host/` wires the shared co-agent into one particular host and may know
-		// about the app — except the injected bundle, which runs inside a
+		// about the app — except the injected bundles, which run inside a
 		// third-party page where none of the app exists.
 		(!file.startsWith("src/co-agent/host/") ||
-			file === "src/co-agent/host/managed-page-entry.ts") &&
+			file === "src/co-agent/host/managed-page-entry.ts" ||
+			file === "src/co-agent/host/page-outline-entry.ts") &&
 		!isTest(file)
 	) {
 		for (const forbidden of [

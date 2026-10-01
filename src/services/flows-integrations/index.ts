@@ -54,6 +54,20 @@ import "./tools/web/web-screenshot";
 // Browser/virtual-server access tools
 import "./tools/sandbox-container/container-web-access";
 
+// MemonOS Bot computer tools
+import "./tools/memon/memon-screen";
+import "./tools/memon/memon-open";
+import "./tools/memon/memon-act";
+import "./tools/memon/memon-run";
+import "./tools/memon/memon-window";
+import "./tools/memon/memon-notes";
+import "./tools/memon/memon-visualize";
+import "./tools/memon/memon-schedule";
+import "./tools/memon/memon-memory";
+import "./tools/memon/memon-studio";
+import "./tools/memon/memon-skills";
+import "./tools/memon/memon-connections";
+
 // Memorall document filesystem tools retained in the app integration layer.
 import "./tools/files-fs/fs-glob";
 import "./tools/files-fs/fs-grep";
@@ -91,6 +105,9 @@ import "./steps/features/hyperframes-feature";
 
 // Conversation feature steps
 import "./steps/features/thread-history-feature";
+
+// MemonOS Bot: one computer over the web, files and sandbox features
+import "./steps/features/memon-feature";
 
 // Document feature steps
 import "./steps/features/fs-feature";

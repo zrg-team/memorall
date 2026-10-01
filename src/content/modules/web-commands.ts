@@ -1,3 +1,4 @@
+import { actOnRef, buildPageOutline } from "@/co-agent/dom/page-outline";
 import {
 	extractElementSource,
 	extractElementText,
@@ -239,6 +240,8 @@ const WEB_CONTENT_ERROR_TYPE: Record<
 	"web-tool:dom-query": "web-tool:dom-query-result",
 	"web-tool:dom-action": "web-tool:dom-action-result",
 	"web-tool:wait-selector": "web-tool:wait-selector-result",
+	"web-tool:outline": "web-tool:outline-result",
+	"web-tool:outline-action": "web-tool:outline-action-result",
 	"web-tool:fetch-image": "web-tool:fetch-image-result",
 	"web-tool:open-image-tab": "web-tool:open-image-tab-result",
 	"web-tool:read-rendered-image": "web-tool:read-rendered-image-result",
@@ -324,6 +327,29 @@ export const handleWebContentCommand = async (
 						window.setTimeout(resolve, request.intervalMs),
 					);
 				}
+			}
+
+			case "web-tool:outline":
+				return {
+					source: WEB_CONTENT_COMMAND_SOURCE,
+					type: "web-tool:outline-result",
+					success: true,
+					outline: buildPageOutline(document, { maxChars: request.maxChars }),
+				};
+
+			case "web-tool:outline-action": {
+				const result = actOnRef(document, request.request);
+				// Let the page react (re-render, start a navigation) before reading it
+				// again; a navigation may still replace this document afterwards, which
+				// the caller detects from the URL and re-reads.
+				await new Promise((resolve) => window.setTimeout(resolve, 120));
+				return {
+					source: WEB_CONTENT_COMMAND_SOURCE,
+					type: "web-tool:outline-action-result",
+					success: true,
+					result,
+					outline: buildPageOutline(document, { maxChars: request.maxChars }),
+				};
 			}
 
 			case "web-tool:open-image-tab": {

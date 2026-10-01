@@ -3,7 +3,7 @@ import {
 	isNonModelMessageType,
 	shouldCloseCoAgentSession,
 } from "@/services/chat/coagent-session";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { chatService } from "@/main/modules/chat/services/chat-service";
 import { getAgentOpenUITheme } from "@/main/modules/chat/utils/agent-openui-theme";
 import { buildSendMessages } from "@/main/modules/chat/utils/build-send-messages";
@@ -23,6 +23,7 @@ import {
 } from "@/services/chat/tool-executions";
 import type { Message } from "@/services/database";
 import { documentFileSystemService } from "@/services/filesystem/document-filesystem";
+import { memonClient } from "@/services/memon/memon-client";
 import { toDocumentsSandboxPath } from "@/services/filesystem/sandbox-paths";
 import type {
 	AssistantExecutionPart,
@@ -41,6 +42,8 @@ import { useCoAgentActivationStore } from "@/main/stores/co-agent-activation";
 
 export interface InProgressMessage {
 	id: string;
+	/** The chat the run belongs to; it is only shown there. */
+	conversationId: string;
 	content: string;
 	complexContent: ComplexContent | null;
 	parts: MessageParts | null;
@@ -84,6 +87,7 @@ const pickResultMetadata = (
 		"usage",
 		"executions",
 		"toolExecutions",
+		"stopped",
 	] as const;
 
 	return Object.fromEntries(
@@ -179,6 +183,10 @@ export const useChat = (model: string) => {
 	const addMessage = useChatStore((state) => state.addMessage);
 	const updateMessage = useChatStore((state) => state.updateMessage);
 	const setLoading = useChatStore((state) => state.setLoading);
+	const setActiveRun = useChatStore((state) => state.setActiveRun);
+	// The run this hook drives. A run that ends after Stop and a new submit
+	// must not clear the newer run's state.
+	const runTokenRef = useRef<symbol | null>(null);
 	const ensureMainConversation = useChatStore(
 		(state) => state.ensureMainConversation,
 	);
@@ -220,15 +228,21 @@ export const useChat = (model: string) => {
 
 	// Stop current chat request
 	const handleStop = () => {
+		const run = useChatStore.getState().activeRun;
 		if (abortController) {
+			// Stop ends the agent loop, not the turn: the run hands back what it got
+			// done — text, steps, tool calls, tokens — and `submitMessage` saves it
+			// the way it saves any finished message, then releases the composer.
 			abortController.abort();
 			setAbortController(null);
-			setLoading(false);
-			setStatus("ready");
 		}
 		// A tool parked on a bot wall waits on a person, not on the stream, so
 		// detaching the reader alone would leave it holding the run for minutes.
 		void useWebChallengePromptStore.getState().cancelAll();
+		// Same for a MemonOS Bot tool call parked on its agent's computer.
+		void memonClient
+			.request("control.cancelWaits", run?.agentId ? { key: run.agentId } : {})
+			.catch(() => undefined);
 	};
 
 	// Insert a separator message and reset sandbox container state
@@ -274,7 +288,14 @@ export const useChat = (model: string) => {
 		clearComposer: boolean;
 	}) => {
 		e?.preventDefault();
-		if (!inputText.trim() || isLoading || !model) return;
+		if (
+			!inputText.trim() ||
+			useChatStore.getState().isLoading ||
+			isLoading ||
+			!model
+		) {
+			return;
+		}
 
 		const rawInput = inputText.trim();
 		const userMessageContent = rawInput;
@@ -286,10 +307,16 @@ export const useChat = (model: string) => {
 		}
 		setStatus("submitted");
 		setLoading(true);
+		const runToken = Symbol("chat-run");
+		runTokenRef.current = runToken;
+		const ownsRun = () => runTokenRef.current === runToken;
 
 		// Create abort controller for this request
 		const controller = new AbortController();
 		setAbortController(controller);
+		// Every message of the run goes to the chat it started in, even after
+		// the user switches to another.
+		let runConversationId = currentConversation?.id;
 
 		let assistantMessage: Message | null = null;
 		let currentContent = "";
@@ -297,6 +324,12 @@ export const useChat = (model: string) => {
 		let currentParts: MessageParts | null = null;
 
 		try {
+			runConversationId ??= (await ensureMainConversation()).id;
+			setActiveRun({
+				conversationId: runConversationId,
+				agentId: isCustomMode ? selectedAgentFlowId : null,
+				startedAt: Date.now(),
+			});
 			// Separate document refs by kind
 			const imageRefs = attachedDocumentRefs.filter(
 				(r) => r.docType === "image",
@@ -380,6 +413,7 @@ export const useChat = (model: string) => {
 			// message typed here is what closes a session left open.
 			if (shouldCloseCoAgentSession(messages)) {
 				await addMessage({
+					conversationId: runConversationId,
 					role: "system",
 					content: "",
 					type: COAGENT_SESSION_END,
@@ -389,6 +423,7 @@ export const useChat = (model: string) => {
 
 			// Add user message to store and database
 			const userMessage = await addMessage({
+				conversationId: runConversationId,
 				role: "user",
 				content: userMessageContent,
 				complexContent: complexContent ?? null,
@@ -429,6 +464,7 @@ export const useChat = (model: string) => {
 
 			// Create assistant message placeholder
 			assistantMessage = await addMessage({
+				conversationId: runConversationId,
 				role: "assistant",
 				content: "",
 				// Use the same topicId as the user message for consistency
@@ -438,6 +474,7 @@ export const useChat = (model: string) => {
 			// Set in-progress message for real-time updates
 			setInProgressMessageImmediate({
 				id: assistantMessage.id,
+				conversationId: runConversationId,
 				content: "",
 				complexContent: null,
 				parts: null,
@@ -464,7 +501,7 @@ export const useChat = (model: string) => {
 						? createCoAgentFlowPrefixConfig()
 						: undefined,
 					conversation: {
-						id: currentConversation?.id ?? userMessage.conversationId,
+						id: runConversationId,
 						inProgressMessage: { id: assistantMessage.id },
 						agentFlowName: agentFlowName ?? undefined,
 						...(historySeparator
@@ -588,16 +625,30 @@ export const useChat = (model: string) => {
 						...(openuiTheme && { openuiTheme }),
 					},
 				});
-				setInProgressMessageImmediate(null);
-				setStatus("error");
+				if (ownsRun()) {
+					setInProgressMessageImmediate(null);
+					setStatus("error");
+				}
 				return;
 			} else {
+				// A stopped run that never reported back: keep what was streamed.
+				const detachedStop =
+					result.stopped && !result.metadata
+						? {
+								stopped: true,
+								toolExecutions: finishRunningToolExecutions(
+									inProgressMessageRef.current?.toolExecutions ?? [],
+									"cancelled",
+								),
+							}
+						: {};
 				updateMessage(assistantMessage.id, {
 					content: finalContent,
 					complexContent: finalComplexContent,
 					parts: result.parts ?? null,
 					metadata: {
 						...pickResultMetadata(result.metadata),
+						...detachedStop,
 						...actionMetadata,
 						model,
 						...(agentFlowName && { agentFlowName }),
@@ -607,13 +658,15 @@ export const useChat = (model: string) => {
 			}
 
 			// Clear in-progress message
-			setInProgressMessageImmediate(null);
-			setStatus("ready");
+			if (ownsRun()) {
+				setInProgressMessageImmediate(null);
+				setStatus("ready");
+			}
 		} catch (error) {
 			// Check if error is due to user aborting the request
 			if (isAbortError(error)) {
 				logInfo("Chat request was stopped by user");
-				setStatus("ready");
+				if (ownsRun()) setStatus("ready");
 
 				// Save any partial content that was streamed before abort
 				if (
@@ -644,7 +697,7 @@ export const useChat = (model: string) => {
 				}
 
 				// Clear in-progress message
-				setInProgressMessageImmediate(null);
+				if (ownsRun()) setInProgressMessageImmediate(null);
 				return; // Don't show error message for user-initiated stops
 			}
 
@@ -672,6 +725,7 @@ export const useChat = (model: string) => {
 				});
 			} else {
 				await addMessage({
+					conversationId: runConversationId,
 					role: "assistant",
 					content: "Sorry, I encountered an error processing your message.",
 					metadata: {
@@ -684,11 +738,17 @@ export const useChat = (model: string) => {
 			}
 
 			// Clear in-progress message
-			setInProgressMessageImmediate(null);
-			setStatus("error");
+			if (ownsRun()) {
+				setInProgressMessageImmediate(null);
+				setStatus("error");
+			}
 		} finally {
-			setLoading(false);
-			setAbortController(null);
+			if (ownsRun()) {
+				runTokenRef.current = null;
+				setLoading(false);
+				setActiveRun(null);
+				setAbortController(null);
+			}
 		}
 	};
 

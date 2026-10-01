@@ -362,6 +362,83 @@ try {
 		sessionId: "partial-timeout",
 		tabId: partialTabId,
 	});
+	// Memon Bot reads pages as an outline with element refs and acts on refs.
+	const outlined = await command({
+		command: "outline",
+		sessionId,
+		tabId,
+		timeoutMs: 5_000,
+		maxChars: 4_000,
+	});
+	const outlineBlocks = outlined.outline?.blocks ?? [];
+	const nameRef = outlineBlocks.find(
+		(block) => block.kind === "input" && block.placeholder === "Name",
+	)?.ref;
+	const applyRef = outlineBlocks.find(
+		(block) => block.kind === "button" && block.text === "Apply",
+	)?.ref;
+	if (!outlined.success || !nameRef || !applyRef) {
+		throw new Error(`Outline did not expose refs: ${JSON.stringify(outlined)}`);
+	}
+	const typedByRef = await command({
+		command: "outline-action",
+		sessionId,
+		tabId,
+		timeoutMs: 5_000,
+		maxChars: 4_000,
+		request: {
+			ref: nameRef,
+			docToken: outlined.outline.docToken,
+			action: "input",
+			value: "outline ref",
+		},
+	});
+	const clickedByRef = await command({
+		command: "outline-action",
+		sessionId,
+		tabId,
+		timeoutMs: 5_000,
+		maxChars: 4_000,
+		request: {
+			ref: applyRef,
+			docToken: outlined.outline.docToken,
+			action: "click",
+		},
+	});
+	if (
+		!typedByRef.result?.ok ||
+		!clickedByRef.result?.ok ||
+		!clickedByRef.outline?.blocks.some(
+			// Adjacent text merges, so <main> and the dynamic <aside> share a block.
+			(block) => block.kind === "text" && block.text.includes("outline ref"),
+		)
+	) {
+		throw new Error(
+			`Ref input/click did not update the outline: ${JSON.stringify(clickedByRef)}`,
+		);
+	}
+	const navigated = await command({
+		command: "navigate",
+		sessionId,
+		tabId,
+		url: `${baseUrl}/slow`,
+		timeoutMs: 5_000,
+		maxHtmlChars: 10_000,
+	});
+	if (!navigated.success || !navigated.snapshot.text.includes("late content")) {
+		throw new Error(`Navigate failed: ${JSON.stringify(navigated)}`);
+	}
+	const wentBack = await command({
+		command: "history",
+		sessionId,
+		tabId,
+		direction: "back",
+		timeoutMs: 5_000,
+		maxHtmlChars: 10_000,
+	});
+	if (!wentBack.success || !wentBack.snapshot.url.endsWith("/fixture")) {
+		throw new Error(`History back failed: ${JSON.stringify(wentBack)}`);
+	}
 	await command({ command: "close", sessionId, tabId });
 	const closedStatus = await request("browser.status", { tabId });
 	if (closedStatus.exists || closedStatus.activeSessions !== 0) {

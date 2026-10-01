@@ -20,6 +20,7 @@ import type {
 	ToolExecutionRecord,
 } from "@/types/chat";
 import type { AggregatedTokenUsage } from "@/services/llm/utils/token-usage";
+import { ABORT_ERROR_MESSAGE } from "@/utils/abort";
 import type {
 	ChatCompletionMessageToolCall,
 	ChatCompletionTool,
@@ -77,7 +78,26 @@ export interface ChatStreamResult {
 	errorMetadata?: JobErrorMetadata;
 	metadata?: Record<string, unknown>;
 	usage?: AggregatedTokenUsage;
+	/** The caller stopped the run; `metadata` is missing if it never reported back. */
+	stopped?: boolean;
 }
+
+/**
+ * How long a stopped run gets to hand back its final message.
+ *
+ * A stop ends the run in the background, which then reports what it did like
+ * any finished run — usually within a moment. If it never does, the reader lets
+ * go rather than hold the chat open.
+ */
+const STOP_GRACE_MS = 5_000;
+
+const DETACHED = Symbol("detached");
+
+const requestRunStop = (targetJobId: string) =>
+	void backgroundJob
+		.execute("stop-chat", { targetJobId }, { stream: false })
+		.then(({ promise }) => promise.catch(() => undefined))
+		.catch(() => undefined);
 
 const mergeActions = (
 	current: ChatAction[],
@@ -180,6 +200,10 @@ export class ChatService {
 		this.activeJobs.set(jobId, abortController);
 
 		try {
+			// Stopped before it started: there is no run to end or to keep.
+			if (signal?.aborted) {
+				throw new DOMException(ABORT_ERROR_MESSAGE, "AbortError");
+			}
 			// Handle external abort signal
 			if (signal) {
 				signal.addEventListener("abort", () => {
@@ -236,130 +260,160 @@ export class ChatService {
 				};
 			}
 
+			// Stopping ends the run where it runs, not just this reader: the agent
+			// loop must not go on in the background. The run then reports back like
+			// a finished one, so its message keeps its tokens, steps and tool calls.
+			let detach!: () => void;
+			const detached = new Promise<typeof DETACHED>((resolve) => {
+				detach = () => resolve(DETACHED);
+			});
+			let graceTimer: ReturnType<typeof setTimeout> | undefined;
+			const stopRun = () => {
+				requestRunStop(result.jobId);
+				graceTimer = setTimeout(detach, STOP_GRACE_MS);
+			};
+			if (abortController.signal.aborted) {
+				stopRun();
+			} else {
+				abortController.signal.addEventListener("abort", stopRun, {
+					once: true,
+				});
+			}
+
 			// Process streaming results
-			for await (const progress of result.stream) {
-				if (abortController.signal.aborted) {
-					break;
-				}
+			const progressEvents = result.stream[Symbol.asyncIterator]();
+			try {
+				while (true) {
+					const next = await Promise.race([progressEvents.next(), detached]);
+					if (next === DETACHED) {
+						void progressEvents.return?.();
+						break;
+					}
+					if (next.done) break;
+					const progress = next.value;
 
-				// Handle failure
-				if (progress.status === "failed") {
-					streamFailed = true;
-					streamError = progress.error || "Chat request failed";
-					streamErrorMetadata = getProgressErrorMetadata(
-						progress.metadata,
-						streamError,
-					);
-					callbacks?.onError?.(streamErrorMetadata.message);
-					break;
-				}
+					// Handle failure
+					if (progress.status === "failed") {
+						streamFailed = true;
+						streamError = progress.error || "Chat request failed";
+						streamErrorMetadata = getProgressErrorMetadata(
+							progress.metadata,
+							streamError,
+						);
+						callbacks?.onError?.(streamErrorMetadata.message);
+						break;
+					}
 
-				// Handle completion - get final content
-				if (progress.status === "completed" && progress.result) {
-					const chatResult = progress.result as ChatResult;
-					if (chatResult.type === "final") {
-						// Use the final content from the job result
-						currentContent = chatResult.content;
-						finalMetadata = chatResult.metadata;
-						if (chatResult.metadata?.actions) {
+					// Handle completion - get final content
+					if (progress.status === "completed" && progress.result) {
+						const chatResult = progress.result as ChatResult;
+						if (chatResult.type === "final") {
+							// Use the final content from the job result
+							currentContent = chatResult.content;
+							finalMetadata = chatResult.metadata;
+							if (chatResult.metadata?.actions) {
+								actions.splice(
+									0,
+									actions.length,
+									...mergeActions(actions, chatResult.metadata.actions),
+								);
+							}
+							if (chatResult.parts) {
+								parts = chatResult.parts;
+								emitParts();
+							}
+							if (chatResult.metadata?.tool_calls?.length) {
+								for (const [
+									index,
+									toolCall,
+								] of chatResult.metadata.tool_calls.entries()) {
+									toolCallAccumulator.set(index, toolCall);
+								}
+							}
+							if (chatResult.metadata?.usage) {
+								usage = chatResult.metadata.usage;
+							}
+						}
+					}
+
+					// Process streaming updates
+					if (
+						["processing", "pending"].includes(progress.status) &&
+						progress.result
+					) {
+						const chatResult = progress.result as ChatResult;
+
+						if (chatResult.type === "chunk" && chatResult.chunk) {
+							messagePartsAccumulator.addChunk(chatResult.chunk);
+							// `toParts()` already hands back a fresh copy, so the streaming
+							// path — the one that runs per chunk — hands it straight on
+							// instead of cloning the same array a second time.
+							parts = messagePartsAccumulator.toParts();
+							if (parts) callbacks?.onParts?.(parts);
+							accumulateChunkToolCalls(
+								toolCallAccumulator,
+								chatResult.chunk.choices[0]?.delta?.tool_calls,
+							);
+							// Handle streaming content chunks
+							const delta = chatResult.chunk.choices[0]?.delta;
+							const isToolResultChunk =
+								delta?.role === "tool" || !!delta?.tool_call_id;
+							const content = isToolResultChunk ? "" : delta?.content;
+							if (content) {
+								currentContent += content;
+								callbacks?.onContent?.(currentContent);
+							}
+						} else if (chatResult.type === "action" && chatResult.actions) {
+							// Handle action updates
 							actions.splice(
 								0,
 								actions.length,
-								...mergeActions(actions, chatResult.metadata.actions),
+								...mergeActions(actions, chatResult.actions),
 							);
-						}
-						if (chatResult.parts) {
-							parts = chatResult.parts;
+							callbacks?.onAction?.([...actions]);
+						} else if (chatResult.type === "execute-start") {
+							const event = {
+								node: chatResult.node,
+								metadata: chatResult.metadata,
+							};
+							callbacks?.onExecuteStart?.(event);
+						} else if (chatResult.type === "tool-execution") {
+							callbacks?.onToolExecution?.(chatResult.execution);
+						} else if (chatResult.type === "final") {
+							// Handle final content update (e.g., after citation step)
+							// This replaces the accumulated content with the final version
+							currentContent = chatResult.content;
+							finalMetadata = chatResult.metadata;
+							if (chatResult.metadata?.actions) {
+								actions.splice(
+									0,
+									actions.length,
+									...mergeActions(actions, chatResult.metadata.actions),
+								);
+							}
+							if (chatResult.parts) {
+								parts = chatResult.parts;
+							} else {
+								parts = messagePartsAccumulator.toParts();
+							}
+							if (chatResult.metadata?.tool_calls?.length) {
+								for (const [
+									index,
+									toolCall,
+								] of chatResult.metadata.tool_calls.entries()) {
+									toolCallAccumulator.set(index, toolCall);
+								}
+							}
+							// Notify with the final cited content
+							callbacks?.onContent?.(currentContent);
+							callbacks?.onAction?.([...actions]);
 							emitParts();
 						}
-						if (chatResult.metadata?.tool_calls?.length) {
-							for (const [
-								index,
-								toolCall,
-							] of chatResult.metadata.tool_calls.entries()) {
-								toolCallAccumulator.set(index, toolCall);
-							}
-						}
-						if (chatResult.metadata?.usage) {
-							usage = chatResult.metadata.usage;
-						}
 					}
 				}
-
-				// Process streaming updates
-				if (
-					["processing", "pending"].includes(progress.status) &&
-					progress.result
-				) {
-					const chatResult = progress.result as ChatResult;
-
-					if (chatResult.type === "chunk" && chatResult.chunk) {
-						messagePartsAccumulator.addChunk(chatResult.chunk);
-						// `toParts()` already hands back a fresh copy, so the streaming
-						// path — the one that runs per chunk — hands it straight on
-						// instead of cloning the same array a second time.
-						parts = messagePartsAccumulator.toParts();
-						if (parts) callbacks?.onParts?.(parts);
-						accumulateChunkToolCalls(
-							toolCallAccumulator,
-							chatResult.chunk.choices[0]?.delta?.tool_calls,
-						);
-						// Handle streaming content chunks
-						const delta = chatResult.chunk.choices[0]?.delta;
-						const isToolResultChunk =
-							delta?.role === "tool" || !!delta?.tool_call_id;
-						const content = isToolResultChunk ? "" : delta?.content;
-						if (content) {
-							currentContent += content;
-							callbacks?.onContent?.(currentContent);
-						}
-					} else if (chatResult.type === "action" && chatResult.actions) {
-						// Handle action updates
-						actions.splice(
-							0,
-							actions.length,
-							...mergeActions(actions, chatResult.actions),
-						);
-						callbacks?.onAction?.([...actions]);
-					} else if (chatResult.type === "execute-start") {
-						const event = {
-							node: chatResult.node,
-							metadata: chatResult.metadata,
-						};
-						callbacks?.onExecuteStart?.(event);
-					} else if (chatResult.type === "tool-execution") {
-						callbacks?.onToolExecution?.(chatResult.execution);
-					} else if (chatResult.type === "final") {
-						// Handle final content update (e.g., after citation step)
-						// This replaces the accumulated content with the final version
-						currentContent = chatResult.content;
-						finalMetadata = chatResult.metadata;
-						if (chatResult.metadata?.actions) {
-							actions.splice(
-								0,
-								actions.length,
-								...mergeActions(actions, chatResult.metadata.actions),
-							);
-						}
-						if (chatResult.parts) {
-							parts = chatResult.parts;
-						} else {
-							parts = messagePartsAccumulator.toParts();
-						}
-						if (chatResult.metadata?.tool_calls?.length) {
-							for (const [
-								index,
-								toolCall,
-							] of chatResult.metadata.tool_calls.entries()) {
-								toolCallAccumulator.set(index, toolCall);
-							}
-						}
-						// Notify with the final cited content
-						callbacks?.onContent?.(currentContent);
-						callbacks?.onAction?.([...actions]);
-						emitParts();
-					}
-				}
+			} finally {
+				clearTimeout(graceTimer);
+				abortController.signal.removeEventListener("abort", stopRun);
 			}
 
 			// Return result
@@ -374,6 +428,7 @@ export class ChatService {
 				errorMetadata: streamFailed ? streamErrorMetadata : undefined,
 				metadata: finalMetadata,
 				usage,
+				stopped: abortController.signal.aborted,
 			};
 		} catch (error) {
 			const errorMessage =

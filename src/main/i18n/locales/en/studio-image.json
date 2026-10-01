@@ -2,7 +2,13 @@
 	"composer": {
 		"placeholder": "Describe the image you want",
 		"shortcut": "Enter to generate",
-		"settings": "Image settings"
+		"settings": "Image settings",
+		"attach": "Attach images",
+		"attachment": "Image {{index}} to start from",
+		"placeholderWithImages": "Describe what to make from these images",
+		"notImage": "That file is not an image.",
+		"tooLarge": "This image is {{size}}; the limit is {{max}}.",
+		"tooMany": "Up to {{max}} images can be used at once."
 	},
 	"settings": {
 		"size": "Size",
@@ -71,5 +77,8 @@
 		"requestTitle": "Next version with feedback",
 		"pending_one": "{{count}} comment",
 		"pending_other": "{{count}} comments"
+	},
+	"canvas": {
+		"label": "Create images"
 	}
 }

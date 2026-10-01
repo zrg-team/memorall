@@ -2,7 +2,13 @@
 	"composer": {
 		"placeholder": "Mô tả hình ảnh bạn muốn tạo",
 		"shortcut": "Enter để tạo",
-		"settings": "Cài đặt hình ảnh"
+		"settings": "Cài đặt hình ảnh",
+		"attach": "Đính kèm ảnh",
+		"attachment": "Ảnh {{index}} để bắt đầu",
+		"placeholderWithImages": "Mô tả điều bạn muốn tạo từ những ảnh này",
+		"notImage": "Tệp đó không phải là ảnh.",
+		"tooLarge": "Ảnh này {{size}}; giới hạn là {{max}}.",
+		"tooMany": "Chỉ dùng được tối đa {{max}} ảnh cùng lúc."
 	},
 	"settings": {
 		"size": "Kích thước",
@@ -71,5 +77,8 @@
 		"requestTitle": "Phiên bản tiếp theo theo góp ý",
 		"pending_one": "{{count}} bình luận",
 		"pending_other": "{{count}} bình luận"
+	},
+	"canvas": {
+		"label": "Tạo hình ảnh"
 	}
 }

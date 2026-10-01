@@ -9,6 +9,20 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = platform.assets.url(
 	"vendors/pdfjs/pdf.worker.min.mjs",
 );
 
+/**
+ * A PDF to draw page by page, e.g. in a viewer. The caller closes it when
+ * done; pdf.js keeps the parsed document in its worker until then.
+ */
+export async function openPDFDocument(data: Uint8Array): Promise<{
+	doc: pdfjsLib.PDFDocumentProxy;
+	close: () => Promise<void>;
+}> {
+	const task = pdfjsLib.getDocument({ data });
+	return { doc: await task.promise, close: () => task.destroy() };
+}
+
+export type PDFDocumentProxy = pdfjsLib.PDFDocumentProxy;
+
 export interface PDFPageContent {
 	pageNumber: number;
 	text: string;

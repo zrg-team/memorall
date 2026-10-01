@@ -14,6 +14,7 @@ import {
 	YAxis,
 } from "recharts";
 import { ChartContainer, type ChartConfig } from "@/main/components/ui/chart";
+import { tableArgs } from "../table-args";
 
 const chartColors = [
 	"rgba(255,255,255,0.7)",
@@ -40,57 +41,67 @@ export const TableBlock = defineComponent({
 	props: z.object({
 		columns: z.array(Col.ref),
 		rows: z.array(z.array(z.string())),
+		// Holds the rows when a title comes first: TableBlock("Title", columns, rows).
+		rowsAfterTitle: z.array(z.array(z.string())).optional(),
 	}),
-	component: ({ props }) => (
-		<div className="overflow-hidden rounded-xl border border-white/15 backdrop-blur-sm">
-			<table className="w-full text-sm">
-				<thead>
-					<tr className="border-b border-white/15 bg-white/10">
-						{props.columns.map((col, i) => (
-							<th
-								key={i}
-								className={`px-3 py-2 font-semibold ${
-									col.props.align === "right"
-										? "text-right"
-										: col.props.align === "center"
-											? "text-center"
-											: "text-left"
-								}`}
-							>
-								{col.props.header}
-							</th>
-						))}
-					</tr>
-				</thead>
-				<tbody>
-					{props.rows.map((row, ri) => (
-						<tr
-							key={ri}
-							className="border-b border-white/10 bg-white/5 last:border-0 hover:bg-white/10 transition-colors"
-						>
-							{row.map((cell, ci) => {
-								const col = props.columns[ci];
-								return (
-									<td
-										key={ci}
-										className={`px-3 py-2 ${
-											col?.props.align === "right"
-												? "text-right"
-												: col?.props.align === "center"
-													? "text-center"
-													: ""
-										}`}
-									>
-										{cell}
-									</td>
-								);
-							})}
+	component: ({ props }) => {
+		const table = tableArgs(props);
+		return (
+			<div className="overflow-hidden rounded-xl border border-white/15 backdrop-blur-sm">
+				{table.title ? (
+					<div className="border-b border-white/15 px-3 py-2 text-sm font-semibold">
+						{table.title}
+					</div>
+				) : null}
+				<table className="w-full text-sm">
+					<thead>
+						<tr className="border-b border-white/15 bg-white/10">
+							{table.columns.map((col, i) => (
+								<th
+									key={i}
+									className={`px-3 py-2 font-semibold ${
+										col.align === "right"
+											? "text-right"
+											: col.align === "center"
+												? "text-center"
+												: "text-left"
+									}`}
+								>
+									{col.header}
+								</th>
+							))}
 						</tr>
-					))}
-				</tbody>
-			</table>
-		</div>
-	),
+					</thead>
+					<tbody>
+						{table.rows.map((row, ri) => (
+							<tr
+								key={ri}
+								className="border-b border-white/10 bg-white/5 last:border-0 hover:bg-white/10 transition-colors"
+							>
+								{row.map((cell, ci) => {
+									const col = table.columns[ci];
+									return (
+										<td
+											key={ci}
+											className={`px-3 py-2 ${
+												col?.align === "right"
+													? "text-right"
+													: col?.align === "center"
+														? "text-center"
+														: ""
+											}`}
+										>
+											{cell}
+										</td>
+									);
+								})}
+							</tr>
+						))}
+					</tbody>
+				</table>
+			</div>
+		);
+	},
 });
 
 const chartDataSchema = z.array(

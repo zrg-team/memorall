@@ -20,6 +20,12 @@ const registeredPorts = new Set();
 // Populated via 'set-import-map' message from renderViaIframe.
 const portImportMaps = new Map();
 
+// A rendered page's inline scripts and on* handlers, served as same-origin
+// files: an extension page may not run inline code. Keyed by the path after
+// /__virtual__/<port>, e.g. /__memorall_inline__/<render>/0.js.
+const inlineScripts = new Map();
+const INLINE_SCRIPT_TTL_MS = 10 * 60_000;
+
 function rewriteSpecifier(specifier, importMap) {
   return importMap[specifier] || specifier;
 }
@@ -175,6 +181,21 @@ self.addEventListener('message', (event) => {
   if (type === 'server-unregistered' && data) {
     registeredPorts.delete(data.port);
     DEBUG && console.log(`[SW] Server unregistered from port ${data.port}`);
+  }
+
+  if (type === 'set-inline-scripts' && data) {
+    const now = Date.now();
+    for (const [path, entry] of inlineScripts) {
+      if (entry.expiresAt < now) inlineScripts.delete(path);
+    }
+    for (const script of data.scripts || []) {
+      inlineScripts.set(script.path, {
+        code: String(script.code ?? ''),
+        expiresAt: now + INLINE_SCRIPT_TTL_MS,
+      });
+    }
+    // The renderer writes the page once the scripts are here.
+    event.ports?.[0]?.postMessage({ type: 'inline-scripts-ready' });
   }
 
   if (type === 'set-import-map' && data) {
@@ -429,6 +450,22 @@ self.addEventListener('fetch', (event) => {
  */
 async function handleVirtualRequest(request, port, path) {
   try {
+    if (path.startsWith('/__memorall_inline__/')) {
+      const script = inlineScripts.get(path.split('?')[0]);
+      return new Response(
+        script
+          ? script.code
+          : "console.warn('[memorall] This page changed since it was opened; reload it.');",
+        {
+          status: script ? 200 : 404,
+          headers: sanitizeSynthesizedResponseHeaders({
+            'Content-Type': 'text/javascript; charset=utf-8',
+            'Cache-Control': 'no-store',
+          }),
+        },
+      );
+    }
+
     if (path.startsWith('/__npm_proxy__/')) {
       return new Response('Remote module loading is disabled by Manifest V3 policy.', {
         status: 410,

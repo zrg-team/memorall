@@ -25,6 +25,35 @@ export const mountedWorkspaceDirectories = new Set();
 export const materializedWorkspaceFiles = new Map();
 export const pendingWorkspaceOps = [];
 
+// Sandbox code writes workspace files synchronously, but persisting them is an
+// async round trip through the host. Writes queue in `pendingWorkspaceOps`, and
+// the host is told shortly after that some are waiting, so files a
+// long-running process writes reach the host while it runs rather than only
+// when its command ends.
+export const WORKSPACE_OPS_PENDING_CHANNEL = "memorall-sandbox-fs-pending";
+/** Longest a read waits for the host to send a file it lacks. */
+const FS_BRIDGE_TIMEOUT_MS = 30_000;
+const WORKSPACE_OPS_NOTICE_DELAY_MS = 100;
+let workspaceOpsNoticeTimer = null;
+
+export const queueWorkspaceOp = (op) => {
+	// A process rewriting one file in a loop only needs its last content sent.
+	const last = pendingWorkspaceOps[pendingWorkspaceOps.length - 1];
+	if (op.op === "write" && last?.op === "write" && last.path === op.path) {
+		last.content = op.content;
+	} else {
+		pendingWorkspaceOps.push(op);
+	}
+	if (workspaceOpsNoticeTimer !== null || typeof window === "undefined") return;
+	workspaceOpsNoticeTimer = setTimeout(() => {
+		workspaceOpsNoticeTimer = null;
+		if (pendingWorkspaceOps.length === 0) return;
+		try {
+			window.parent.postMessage({ channel: WORKSPACE_OPS_PENDING_CHANNEL }, "*");
+		} catch (_) {}
+	}, WORKSPACE_OPS_NOTICE_DELAY_MS);
+};
+
 // Dependency trees are runtime state. Persisting them through the host workspace
 // bridge is both expensive and incorrect; package manifests remain workspace files.
 const SANDBOX_LOCAL_ROOTS = ["/node_modules"];
@@ -105,6 +134,52 @@ export const createFsError = (code, syscall, path) => {
 	return err;
 };
 
+/** The encoding a read asks for ("utf8" or { encoding: "utf8" }); null for bytes. */
+export const requestedEncoding = (encodingOrOptions) => {
+	if (typeof encodingOrOptions === "string") return encodingOrOptions;
+	if (
+		encodingOrOptions &&
+		typeof encodingOrOptions === "object" &&
+		typeof encodingOrOptions.encoding === "string"
+	) {
+		return encodingOrOptions.encoding;
+	}
+	return null;
+};
+
+/**
+ * A mounted file's text as a read returns it: text when utf8 is asked for,
+ * bytes otherwise, as Node and the AlmostNode VFS do. AlmostNode wraps the
+ * bytes of an encoding-less read into a Buffer and cannot wrap a string.
+ */
+export const toMountedReadResult = (content, encodingOrOptions) => {
+	const encoding = requestedEncoding(encodingOrOptions);
+	if (content instanceof Uint8Array) {
+		// A copy: the caller may change what it gets back.
+		if (!encoding || encoding === "buffer") return new Uint8Array(content);
+		if (encoding === "utf8" || encoding === "utf-8") {
+			return new TextDecoder().decode(content);
+		}
+		return typeof Buffer !== "undefined"
+			? Buffer.from(content).toString(encoding)
+			: new TextDecoder().decode(content);
+	}
+	if (encoding === "utf8" || encoding === "utf-8") return content;
+	const bytes = new TextEncoder().encode(content);
+	if (!encoding || encoding === "buffer") return bytes;
+	return typeof Buffer !== "undefined"
+		? Buffer.from(bytes).toString(encoding)
+		: content;
+};
+
+/** Bytes, not characters: servers send stat sizes as Content-Length. */
+const mountedByteLength = (content) =>
+	content instanceof Uint8Array
+		? content.byteLength
+		: typeof content === "string"
+			? new TextEncoder().encode(content).byteLength
+			: 0;
+
 export const listMountedDir = (path, directories, files) => {
 	const normalized = normalizePath(path);
 	const prefix = normalized === "/" ? "/" : `${normalized}/`;
@@ -149,6 +224,25 @@ export const ensureMountedParentDirectories = (inputPath, directories) => {
 	}
 };
 
+/**
+ * A file's content as the runtime keeps it: text as a string, and a file that
+ * is not UTF-8 text (an image, a font) as its bytes, which decoding would ruin.
+ */
+export const readMountedContent = (content) => {
+	if (typeof content === "string") return content;
+	let bytes = null;
+	if (content instanceof Uint8Array) bytes = content;
+	else if (ArrayBuffer.isView(content)) {
+		bytes = new Uint8Array(content.buffer, content.byteOffset, content.byteLength);
+	} else if (content instanceof ArrayBuffer) bytes = new Uint8Array(content);
+	if (!bytes) return readMountedTextContent(content);
+	try {
+		return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+	} catch {
+		return new Uint8Array(bytes);
+	}
+};
+
 export const readMountedTextContent = (content) => {
 	if (typeof content === "string") return content;
 	if (content instanceof Uint8Array) return new TextDecoder().decode(content);
@@ -171,7 +265,7 @@ export const materializeMountedDocumentFileContent = (inputPath, content) => {
 	const path = normalizePath(inputPath);
 	mountedDocumentFiles.add(path);
 	ensureMountedParentDirectories(path, mountedDocumentDirectories);
-	materializedMountedFiles.set(path, readMountedTextContent(content));
+	materializedMountedFiles.set(path, readMountedContent(content));
 	return path;
 };
 
@@ -186,7 +280,7 @@ export const materializeMountedWorkspaceFileContent = (inputPath, content) => {
 	const path = toCanonicalMountedPath(inputPath);
 	mountedWorkspaceFiles.add(path);
 	ensureMountedParentDirectories(path, mountedWorkspaceDirectories);
-	materializedWorkspaceFiles.set(path, readMountedTextContent(content));
+	materializedWorkspaceFiles.set(path, readMountedContent(content));
 	return path;
 };
 
@@ -226,7 +320,7 @@ export const moveMountedWorkspacePath = (oldInputPath, newInputPath) => {
 		ensureMountedParentDirectories(newPath, mountedWorkspaceDirectories);
 		const content = materializedWorkspaceFiles.get(oldPath);
 		materializedWorkspaceFiles.delete(oldPath);
-		if (typeof content === "string") {
+		if (content !== undefined) {
 			materializedWorkspaceFiles.set(newPath, content);
 		}
 		return { oldPath, newPath };
@@ -306,7 +400,26 @@ export const installDocumentsVfsOverlay = (vfs) => {
 	const sendFsRequest = (operation, payload) =>
 		new Promise((resolve, reject) => {
 			const requestId = Math.random().toString(36).slice(2, 12);
-			fsPending.set(requestId, { resolve, reject });
+			// A host that never answers must not leave a read (and the request
+			// of a server waiting on it) hanging forever.
+			const timer = setTimeout(() => {
+				fsPending.delete(requestId);
+				reject(
+					new Error(
+						`The host did not answer ${operation} for ${payload?.path ?? "a file"} in time`,
+					),
+				);
+			}, FS_BRIDGE_TIMEOUT_MS);
+			fsPending.set(requestId, {
+				resolve: (value) => {
+					clearTimeout(timer);
+					resolve(value);
+				},
+				reject: (error) => {
+					clearTimeout(timer);
+					reject(error);
+				},
+			});
 			window.parent.postMessage(
 				{ channel: "memorall-sandbox-fs-req", requestId, operation, payload },
 				"*",
@@ -368,11 +481,10 @@ export const installDocumentsVfsOverlay = (vfs) => {
 			if (!materializedMountedFiles.has(path)) {
 				throw new Error(`Mounted file is not materialized in sandbox runtime: ${path}`);
 			}
-			const content = materializedMountedFiles.get(path) || "";
-			if (!encoding || encoding === "utf8" || encoding === "utf-8") {
-				return content;
-			}
-			return new TextEncoder().encode(content);
+			return toMountedReadResult(
+				materializedMountedFiles.get(path) || "",
+				encoding,
+			);
 		}
 		if (isWorkspacePath(path)) {
 			assertWorkspaceMountLoaded();
@@ -382,11 +494,10 @@ export const installDocumentsVfsOverlay = (vfs) => {
 			if (!materializedWorkspaceFiles.has(path)) {
 				throw new Error(`Workspace file not materialized: ${path}`);
 			}
-			const content = materializedWorkspaceFiles.get(path) || "";
-			if (!encoding || encoding === "utf8" || encoding === "utf-8") {
-				return content;
-			}
-			return new TextEncoder().encode(content);
+			return toMountedReadResult(
+				materializedWorkspaceFiles.get(path) || "",
+				encoding,
+			);
 		}
 		if (!original.readFileSync) {
 			throw new Error("vfs.readFileSync is not available");
@@ -402,8 +513,11 @@ export const installDocumentsVfsOverlay = (vfs) => {
 				return createMountedStat(path, true, 0);
 			}
 			if (mountedDocumentFiles.has(path)) {
-				const content = materializedMountedFiles.get(path) || "";
-				return createMountedStat(path, false, content.length);
+				return createMountedStat(
+					path,
+					false,
+					mountedByteLength(materializedMountedFiles.get(path)),
+				);
 			}
 			throw createFsError("ENOENT", "stat", path);
 		}
@@ -413,8 +527,11 @@ export const installDocumentsVfsOverlay = (vfs) => {
 				return createMountedStat(path, true, 0);
 			}
 			if (mountedWorkspaceFiles.has(path)) {
-				const content = materializedWorkspaceFiles.get(path) || "";
-				return createMountedStat(path, false, content.length);
+				return createMountedStat(
+					path,
+					false,
+					mountedByteLength(materializedWorkspaceFiles.get(path)),
+				);
 			}
 			throw createFsError("ENOENT", "stat", path);
 		}
@@ -461,7 +578,7 @@ export const installDocumentsVfsOverlay = (vfs) => {
 		original.writeFileSync(path, content, ...rest);
 		if (isWorkspacePath(path)) {
 			materializeMountedWorkspaceFileContent(path, content);
-			pendingWorkspaceOps.push({
+			queueWorkspaceOp({
 				op: "write",
 				path,
 				content: materializedWorkspaceFiles.get(path) || "",
@@ -475,15 +592,15 @@ export const installDocumentsVfsOverlay = (vfs) => {
 			throw new Error(`Materialized workspace file must be under ${WORKSPACES_MOUNT_ROOT}: ${path}`);
 		}
 		assertWorkspaceMountLoaded();
-		const text = readMountedTextContent(content);
-		materializeMountedWorkspaceFileContent(path, text);
+		const data = readMountedContent(content);
+		materializeMountedWorkspaceFileContent(path, data);
 		if (original.mkdirSync) {
 			try {
 				original.mkdirSync(dirname(path), { recursive: true });
 			} catch (_) {}
 		}
 		if (original.writeFileSync) {
-			original.writeFileSync(path, text);
+			original.writeFileSync(path, data);
 		}
 		return path;
 	};
@@ -504,7 +621,7 @@ export const installDocumentsVfsOverlay = (vfs) => {
 		if (isWorkspacePath(path)) {
 			addMountedWorkspaceDirectory(path);
 			if (!hadWorkspaceDirectory) {
-				pendingWorkspaceOps.push({ op: "mkdir", path });
+				queueWorkspaceOp({ op: "mkdir", path });
 			}
 		}
 	};
@@ -523,7 +640,7 @@ export const installDocumentsVfsOverlay = (vfs) => {
 		original.unlinkSync(path, ...rest);
 		if (isWorkspacePath(path)) {
 			removeMountedWorkspacePath(path);
-			pendingWorkspaceOps.push({ op: "delete", path });
+			queueWorkspaceOp({ op: "delete", path });
 		}
 	};
 
@@ -545,7 +662,7 @@ export const installDocumentsVfsOverlay = (vfs) => {
 		original.renameSync(oldPath, newPath, ...rest);
 		if (isWorkspacePath(oldPath) || isWorkspacePath(newPath)) {
 			moveMountedWorkspacePath(oldPath, newPath);
-			pendingWorkspaceOps.push({ op: "rename", oldPath, newPath });
+			queueWorkspaceOp({ op: "rename", oldPath, newPath });
 		}
 	};
 
@@ -555,21 +672,56 @@ export const installDocumentsVfsOverlay = (vfs) => {
 	// Non-mounted paths fall back to the underlying sync VFS.
 	// -------------------------------------------------------------------------
 
-	vfs.readFile = async (inputPath, encodingOrOptions) => {
+	// AlmostNode's callback API (fs.readFile(path, cb), fs.stat(path, cb), …)
+	// hands its callback to these methods; the runtime's own callers await
+	// the promise instead. Both get the same result.
+	const settle = (pending, callback) => {
+		if (typeof callback !== "function") return pending;
+		pending.then(
+			(value) => setTimeout(() => callback(null, value), 0),
+			(error) => setTimeout(() => callback(error), 0),
+		);
+		return undefined;
+	};
+
+	const readFileAsync = async (inputPath, encodingOrOptions) => {
 		const path = toCanonicalMountedPath(String(inputPath));
-		const encoding = typeof encodingOrOptions === "string" ? encodingOrOptions : "utf8";
 		if (isWorkspacePath(path) || isDocumentsPath(path)) {
-			const result = await sendFsRequest("fs.readFile", { path, encoding });
-			// Populate in-memory so subsequent sync reads (e.g. Vite internals) work.
-			if (isWorkspacePath(path) && typeof result?.content === "string") {
-				materializeMountedWorkspaceFileContent(path, result.content);
-				if (original.writeFileSync) original.writeFileSync(path, result.content);
+			// Content here is current: live sync and the sandbox's own writes
+			// keep it so. Only a file the runtime lacks goes to the host.
+			if (isWorkspacePath(path) && materializedWorkspaceFiles.has(path)) {
+				return toMountedReadResult(
+					materializedWorkspaceFiles.get(path) || "",
+					encodingOrOptions,
+				);
 			}
-			return result?.content ?? "";
+			const result = await sendFsRequest("fs.readFile", {
+				path,
+				encoding: "utf8",
+			});
+			// Text, or bytes for a file that is not (an image, a font).
+			const received =
+				typeof result?.content === "string" ||
+				result?.content instanceof Uint8Array;
+			const content = received ? result.content : "";
+			// Populate in-memory so subsequent sync reads (e.g. Vite internals) work.
+			if (isWorkspacePath(path) && received) {
+				materializeMountedWorkspaceFileContent(path, content);
+				if (original.writeFileSync) original.writeFileSync(path, content);
+			}
+			return toMountedReadResult(content, encodingOrOptions);
 		}
 		if (!original.readFileSync) throw new Error("vfs.readFileSync is not available");
-		return original.readFileSync(path, encoding);
+		const encoding = requestedEncoding(encodingOrOptions);
+		return encoding
+			? original.readFileSync(path, encoding)
+			: original.readFileSync(path);
 	};
+
+	vfs.readFile = (inputPath, encodingOrOptions, callback) =>
+		typeof encodingOrOptions === "function"
+			? settle(readFileAsync(inputPath, undefined), encodingOrOptions)
+			: settle(readFileAsync(inputPath, encodingOrOptions), callback);
 
 	vfs.writeFile = async (inputPath, content) => {
 		const path = toCanonicalMountedPath(String(inputPath));
@@ -582,7 +734,7 @@ export const installDocumentsVfsOverlay = (vfs) => {
 			materializeMountedWorkspaceFileContent(path, content);
 			await sendFsRequest("fs.writeFile", {
 				path,
-				content: readMountedTextContent(content),
+				content: readMountedContent(content),
 			});
 			return;
 		}
@@ -640,12 +792,27 @@ export const installDocumentsVfsOverlay = (vfs) => {
 		vfs.renameSync(oldInputPath, newInputPath);
 	};
 
-	vfs.stat = async (inputPath) => vfs.statSync(inputPath);
+	vfs.stat = (inputPath, callback) =>
+		settle(
+			Promise.resolve().then(() => vfs.statSync(inputPath)),
+			callback,
+		);
 
-	vfs.lstat = async (inputPath) => vfs.lstatSync(inputPath);
+	vfs.lstat = (inputPath, callback) =>
+		settle(
+			Promise.resolve().then(() => vfs.lstatSync(inputPath)),
+			callback,
+		);
 
-	vfs.access = async (inputPath, mode) => {
-		vfs.accessSync(inputPath, mode);
+	vfs.access = (inputPath, mode, callback) => {
+		const done = typeof mode === "function" ? mode : callback;
+		const checkMode = typeof mode === "function" ? undefined : mode;
+		return settle(
+			Promise.resolve().then(() => {
+				vfs.accessSync(inputPath, checkMode);
+			}),
+			done,
+		);
 	};
 
 	vfs.exists = async (inputPath) => vfs.existsSync(String(inputPath));

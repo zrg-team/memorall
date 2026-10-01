@@ -23,6 +23,9 @@
 		"showAdvancedOptions": "Hoặc cài đặt với API key riêng / mô hình cục bộ"
 	},
 	"input": {
+		"runningElsewhere": "Đang trả lời trong “{{title}}”. Mỗi lần chỉ chạy một cuộc trò chuyện.",
+		"openRunningChat": "Mở",
+		"waitForRun": "Đang chờ câu trả lời ở cuộc trò chuyện kia…",
 		"placeholder": "Nhập tin nhắn của bạn...",
 		"messageAgent": "Nhắn cho {{agent}}...",
 		"send": "Gửi",
@@ -33,6 +36,7 @@
 		"attachDocument": "Chọn từ tài liệu"
 	},
 	"sidebar": {
+		"replying": "Đang trả lời",
 		"label": "Lịch sử trò chuyện",
 		"title": "Trò chuyện",
 		"count": "{{count}} cuộc trò chuyện",
@@ -139,7 +143,19 @@
 		"memory_retrieve": "Tìm trong bộ nhớ",
 		"memory_update": "Cập nhật bộ nhớ",
 		"memory_remove": "Quên bộ nhớ",
-		"memory_explain_source": "Giải thích bộ nhớ"
+		"memory_explain_source": "Giải thích bộ nhớ",
+		"memon_screen": "Đọc màn hình",
+		"memon_open": "Mở trên máy tính",
+		"memon_act": "Dùng máy tính",
+		"memon_run": "Chạy lệnh",
+		"memon_window": "Sắp xếp cửa sổ",
+		"memon_notes": "Cập nhật ghi chú",
+		"memon_schedule": "Quản lý lịch chạy",
+		"memon_memory": "Cập nhật trí nhớ",
+		"memon_studio": "Dùng Studio",
+		"memon_skills": "Quản lý kỹ năng",
+		"memon_connections": "Quản lý kết nối",
+		"memon_visualize": "Trực quan hóa"
 	},
 	"messages": {
 		"assistant": "Trợ lý",
@@ -390,6 +406,7 @@
 		"expandChatWidth": "Mở rộng khung chat toàn màn hình",
 		"constrainChatWidth": "Thu gọn khung chat",
 		"startCoAgent": "Cho tác nhân xem và thao tác trên trang web",
+		"openComputer": "Mở máy tính của tác nhân",
 		"stopCoAgent": "Tắt co-agent"
 	},
 	"agentSettings": {
@@ -444,7 +461,19 @@
 			"memory_retrieve": "Tìm kiếm bộ nhớ đang hoạt động trong đồ thị chủ đề đã chọn",
 			"memory_update": "Thay thế một bộ nhớ hiện có trong khi vẫn giữ lịch sử",
 			"memory_remove": "Đánh dấu bộ nhớ là không hoạt động mà không xóa lịch sử",
-			"memory_explain_source": "Giải thích nguồn gốc của một bộ nhớ đã lưu"
+			"memory_explain_source": "Giải thích nguồn gốc của một bộ nhớ đã lưu",
+			"memon_screen": "Đọc màn hình máy tính MemonOS Bot",
+			"memon_open": "Mở ứng dụng, trang hoặc tệp trên máy tính MemonOS Bot",
+			"memon_act": "Nhấp, gõ, cuộn hoặc lưu trên máy tính MemonOS Bot",
+			"memon_run": "Chạy lệnh shell trong terminal của MemonOS Bot",
+			"memon_window": "Chọn, thu nhỏ, phóng to hoặc đóng cửa sổ MemonOS Bot",
+			"memon_notes": "Lên kế hoạch và theo dõi công việc trong ứng dụng Ghi chú của MemonOS Bot",
+			"memon_schedule": "Xem và quản lý các lời nhắc theo lịch của tác nhân trong Bộ lập lịch MemonOS Bot",
+			"memon_memory": "Ghi nhớ giữa các cuộc trò chuyện trong Memory.md và cập nhật Bot.md",
+			"memon_studio": "Chạy các studio của người dùng trên máy tính: quyết định, giọng nói, chép lời, hình ảnh, công cụ ảnh và văn bản, âm thanh",
+			"memon_skills": "Xem và quản lý các kỹ năng agent này dùng",
+			"memon_connections": "Xem các ứng dụng đã kết nối và những ứng dụng agent này dùng",
+			"memon_visualize": "Hiển thị hình trực quan viết bằng OpenUI trong ứng dụng Trực quan hóa của MemonOS Bot và lưu lại"
 		},
 		"cancel": "Hủy",
 		"saved": "Đã lưu",
@@ -461,7 +490,60 @@
 		"legacyConfigDescription": "Preset này vẫn đang dùng cấu hình cũ. Hãy chuyển sang unified flow config trước khi lưu để runtime áp dụng đúng các thiết lập đang hiển thị trong UI.",
 		"revert": "Hoàn tác",
 		"resetDefaults": "Khôi phục mặc định",
-		"resetConfirm": "Thao tác này sẽ đặt lại tất cả cài đặt tác nhân về giá trị mặc định. Bản nháp hiện tại sẽ bị thay thế."
+		"resetConfirm": "Thao tác này sẽ đặt lại tất cả cài đặt tác nhân về giá trị mặc định. Bản nháp hiện tại sẽ bị thay thế.",
+		"appOf": "Ứng dụng trên {{name}}",
+		"appOfHint": "Khi {{name}} bật, tính năng này chạy như một ứng dụng trên máy tính của nó thay vì thêm công cụ riêng.",
+		"memon": {
+			"appsHint": "Ứng dụng đi theo tính năng: Trình duyệt web cho Trình duyệt, Hệ thống tệp cho Tệp, Trình soạn thảo và Trình xem, Browser Sandbox cho Terminal, Lập kế hoạch cho Ghi chú, và Phản hồi trực quan cho Trực quan hóa. Bật tắt chúng trong Tính năng.",
+			"appOn": "Bật",
+			"appOff": "Tắt",
+			"sectionHint": "Khi bật, Trình duyệt web, Hệ thống tệp, Browser Sandbox và Lập kế hoạch bên dưới cũng được bật thành ứng dụng trên máy tính.",
+			"settings": "Cài đặt",
+			"builtIn": "Có sẵn",
+			"builtInHint": "Máy tính MemonOS Bot nào cũng có: lịch chạy, kỹ năng, kết nối của agent và các studio của bạn.",
+			"builtInApps": {
+				"scheduler": "Lập lịch",
+				"studio": "Studio",
+				"skills": "Kỹ năng",
+				"connections": "Kết nối"
+			},
+			"appsShort": "Ứng dụng",
+			"appsLabel": "Ứng dụng trên màn hình",
+			"apps": {
+				"browser": {
+					"name": "Trình duyệt",
+					"description": "Dùng công cụ Trình duyệt web. Trang mở trong cửa sổ của agent và được đọc dưới dạng dàn ý văn bản."
+				},
+				"files": {
+					"name": "Tệp",
+					"description": "Dùng công cụ Hệ thống tệp trên cây / của bạn, kèm Trình soạn thảo cho từng tệp."
+				},
+				"terminal": {
+					"name": "Terminal",
+					"description": "Shell của Browser Sandbox với node, npm, git và py."
+				},
+				"notes": {
+					"name": "Ghi chú",
+					"description": "Lập kế hoạch dưới dạng danh sách bạn theo dõi: agent lập kế hoạch, đánh dấu từng bước khi làm và làm theo chỉnh sửa của bạn."
+				},
+				"visualize": {
+					"name": "Trực quan hóa",
+					"description": "Từ Phản hồi trực quan: hình trực quan tác nhân viết bằng OpenUI, hiển thị trong cửa sổ và lưu thành tệp .openui để mở lại."
+				}
+			},
+			"browserUnavailableWeb": "Không khả dụng trên ứng dụng web. Hãy dùng tiện ích Memorall hoặc ứng dụng máy tính.",
+			"showComputerLabel": "Hiển thị máy tính",
+			"showComputerAuto": "Mở Runtime → Máy tính khi bắt đầu chạy",
+			"showComputerManual": "Giữ trong Runtime cho đến khi tôi mở",
+			"askBeforeLabel": "Tạm dừng và hỏi tôi trước khi",
+			"askBefore": {
+				"forms": "Gửi biểu mẫu",
+				"installs": "Cài đặt gói",
+				"deletes": "Xóa tệp"
+			},
+			"keepDirectTools": "Giữ lại cả công cụ trực tiếp",
+			"keepDirectToolsHint": "Giữ web_*, fs_* và sandbox_* bên cạnh máy tính, cho các thao tác tệp hàng loạt."
+		}
 	},
 	"openui": {
 		"rendering": "Đang tạo giao diện trực quan",
@@ -470,7 +552,9 @@
 		"renderFailed": {
 			"title": "Không thể hiển thị phản hồi trực quan.",
 			"description": "Mã OpenUI được tạo ra không hợp lệ. Phản hồi gốc được hiển thị bên dưới."
-		}
+		},
+		"partial": "Không hiển thị được một số phần ({{count}})",
+		"partFailed": "Không hiển thị được {{name}}."
 	},
 	"webChallenge": {
 		"kind": {
@@ -507,5 +591,11 @@
 		"denied": "Trang này đang bị chặn quyền dùng micro",
 		"chooseModel": "Đọc chính tả — hãy chọn mô hình chép lời trước",
 		"localHint": "Chạy trên thiết bị này. Mô hình chat cục bộ sẽ tạm gỡ khỏi bộ nhớ khi chép lời và nạp lại ở tin nhắn tiếp theo."
+	},
+	"memon": {
+		"needsApproval": "cần bạn phê duyệt",
+		"noSummary": "Thao tác trên máy tính",
+		"showOnComputer": "Xem trên máy tính",
+		"screenReturned": "Màn hình gửi cho mô hình"
 	}
 }

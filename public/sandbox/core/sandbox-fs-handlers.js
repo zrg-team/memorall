@@ -135,6 +135,35 @@ export const handleFsOperation = async (operation, payload, c) => {
 			}
 			return { path: p, materialized: true };
 		}
+		case "fs.listUnmaterializedWorkspaceFiles": {
+			const root = toCanonicalMountedPath(payload?.path || "/");
+			const prefix = root === "/" ? "/" : `${root}/`;
+			const files = [];
+			for (const file of mountedWorkspaceFiles) {
+				if (materializedWorkspaceFiles.has(file)) continue;
+				if (file === root || file.startsWith(prefix)) files.push(file);
+			}
+			return { files };
+		}
+		case "fs.materializeWorkspaceFiles": {
+			// Fill gaps only: content already here is the sandbox's own newer
+			// write or a live-sync update, and must not be replaced by a read
+			// the host started earlier.
+			const materialized = [];
+			for (const file of payload?.files ?? []) {
+				const p = toCanonicalMountedPath(file.path);
+				if (!mountedWorkspaceFiles.has(p) || materializedWorkspaceFiles.has(p)) {
+					continue;
+				}
+				if (typeof c.vfs?.[VFS_WORKSPACE_MATERIALIZE_SYNC] === "function") {
+					c.vfs[VFS_WORKSPACE_MATERIALIZE_SYNC](p, file.content);
+				} else {
+					materializeMountedWorkspaceFileContent(p, file.content);
+				}
+				materialized.push(p);
+			}
+			return { materialized };
+		}
 		case "fs.flushWorkspaceWrites": {
 			const ops = pendingWorkspaceOps.splice(0, pendingWorkspaceOps.length);
 			return { ops };

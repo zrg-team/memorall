@@ -73,6 +73,38 @@ export interface BrowserBackend {
 		signal?: AbortSignal,
 	): Promise<BrowserSnapshot>;
 	/**
+	 * Memon Bot's page view: the shared outline bundle evaluated in the page.
+	 * Optional like `reload`; backends without a live DOM are promoted first.
+	 */
+	outline?(
+		session: BackendSession,
+		maxChars: number,
+		signal?: AbortSignal,
+	): Promise<Record<string, unknown>>;
+	outlineAction?(
+		session: BackendSession,
+		request: Record<string, unknown>,
+		maxChars: number,
+		signal?: AbortSignal,
+	): Promise<{
+		result: Record<string, unknown>;
+		outline?: Record<string, unknown>;
+	}>;
+	navigate?(
+		session: BackendSession,
+		url: string,
+		timeoutMs: number,
+		maxHtmlChars: number,
+		signal?: AbortSignal,
+	): Promise<BrowserSnapshot>;
+	history?(
+		session: BackendSession,
+		direction: "back" | "forward",
+		timeoutMs: number,
+		maxHtmlChars: number,
+		signal?: AbortSignal,
+	): Promise<BrowserSnapshot>;
+	/**
 	 * Inject the co-agent into the page and keep it there across navigation.
 	 *
 	 * Optional because only a real Chromium over CDP can do it: the other

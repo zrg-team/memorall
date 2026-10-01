@@ -10,6 +10,7 @@ exports[`flows-integrations registered contracts > registers every integrations 
   "fs-feature",
   "hyperframes-feature",
   "lottie-animation-feature",
+  "memon-feature",
   "pdf-generate-feature",
   "thread-history-feature",
   "visualize-response",
@@ -499,6 +500,53 @@ exports[`flows-integrations registered contracts > registers every integrations 
         "messages": "messages",
         "tools": "tools",
       },
+      "description": "Give the agent a computer: Browser, Files, Terminal, Notes and your studios on one desktop that you can watch and take over.",
+      "enabledByDefault": false,
+      "feature": {
+        "graphTypes": [
+          "foundation",
+        ],
+        "id": "step-memon-feature",
+        "inputs": [
+          {
+            "description": "Current chat messages",
+            "name": "messages",
+            "required": true,
+            "type": "Message[]",
+          },
+          {
+            "description": "Current available tools",
+            "name": "tools",
+            "required": true,
+            "type": "Tool[]",
+          },
+        ],
+        "outputs": [
+          {
+            "description": "Messages with the MemonOS Bot computer instructions",
+            "name": "messages",
+            "type": "Message[]",
+          },
+          {
+            "description": "Tools extended with the memon_* computer tools",
+            "name": "tools",
+            "type": "Tool[]",
+          },
+        ],
+        "type": "feature",
+      },
+      "version": "1.0.0",
+    },
+    "executable": true,
+    "id": "memon-feature",
+    "name": "memon-feature",
+  },
+  {
+    "config": {
+      "defaultStateMapping": {
+        "messages": "messages",
+        "tools": "tools",
+      },
       "description": "Enable PDF generation tool: create a PDF from a URL, Markdown text, or HTML and save it to the root filesystem.",
       "enabledByDefault": false,
       "feature": {
@@ -679,6 +727,18 @@ exports[`flows-integrations registered contracts > registers every integrations 
   "lottie_show",
   "lottie_validate",
   "lottie_write",
+  "memon_act",
+  "memon_connections",
+  "memon_memory",
+  "memon_notes",
+  "memon_open",
+  "memon_run",
+  "memon_schedule",
+  "memon_screen",
+  "memon_skills",
+  "memon_studio",
+  "memon_visualize",
+  "memon_window",
   "pdf_generate",
   "pdf_metadata",
   "pdf_to_image",
@@ -1600,6 +1660,468 @@ exports[`flows-integrations registered contracts > registers every integrations 
       "required": [
         "project_path",
         "content",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "Act on the computer: click or type on a ref from the latest screen, scroll, go back/forward, switch tabs, or write and save in the Editor. Returns the new screen.",
+    "name": "memon_act",
+    "parameters": {
+      "properties": {
+        "action": {
+          "enum": [
+            "click",
+            "type",
+            "toggle",
+            "select",
+            "describe",
+            "focus",
+            "scroll",
+            "back",
+            "forward",
+            "select_tab",
+            "close_tab",
+            "move",
+            "copy",
+            "cut",
+            "paste",
+            "download",
+          ],
+          "type": "string",
+        },
+        "direction": {
+          "enum": [
+            "up",
+            "down",
+          ],
+          "type": "string",
+        },
+        "ref": {
+          "type": "string",
+        },
+        "submit": {
+          "type": "boolean",
+        },
+        "tab": {
+          "type": "number",
+        },
+        "text": {
+          "type": "string",
+        },
+        "to": {
+          "type": "string",
+        },
+      },
+      "required": [
+        "action",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "See the user's connected apps (Composio apps, MCP servers), their status and tools, and (when the user asks) grant or revoke them for this agent.",
+    "name": "memon_connections",
+    "parameters": {
+      "properties": {
+        "action": {
+          "enum": [
+            "list",
+            "tools",
+            "refresh",
+            "grant",
+            "revoke",
+          ],
+          "type": "string",
+        },
+        "connection": {
+          "type": "number",
+        },
+      },
+      "required": [
+        "action",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "Keep what you remember between chats in Memory.md (and, when the user asks, their standing instructions in Bot.md), one entry at a time. Both files are read at the start of every chat.",
+    "name": "memon_memory",
+    "parameters": {
+      "properties": {
+        "action": {
+          "enum": [
+            "list",
+            "add",
+            "update",
+            "remove",
+          ],
+          "type": "string",
+        },
+        "entry": {
+          "type": "number",
+        },
+        "file": {
+          "enum": [
+            "memory",
+            "bot",
+          ],
+          "type": "string",
+        },
+        "text": {
+          "type": "string",
+        },
+      },
+      "required": [
+        "action",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "Plan and track the task in the Notes app the user watches: set the checklist, mark steps started or done, and keep notes. Returns the screen.",
+    "name": "memon_notes",
+    "parameters": {
+      "properties": {
+        "action": {
+          "enum": [
+            "set",
+            "add",
+            "edit",
+            "start",
+            "done",
+            "undo",
+            "remove",
+            "write",
+          ],
+          "type": "string",
+        },
+        "items": {
+          "items": {
+            "type": "string",
+          },
+          "type": "array",
+        },
+        "step": {
+          "type": "number",
+        },
+        "text": {
+          "type": "string",
+        },
+      },
+      "required": [
+        "action",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "Open an app on the computer and return the screen. Browser opens a url (or a search); Files shows a folder; Editor opens a file; Terminal brings up the shell.",
+    "name": "memon_open",
+    "parameters": {
+      "properties": {
+        "app": {
+          "enum": [
+            "browser",
+            "files",
+            "editor",
+            "terminal",
+            "visualize",
+          ],
+          "type": "string",
+        },
+        "embedded": {
+          "type": "boolean",
+        },
+        "newTab": {
+          "type": "boolean",
+        },
+        "path": {
+          "type": "string",
+        },
+        "url": {
+          "type": "string",
+        },
+      },
+      "required": [
+        "app",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "Run a shell command in the Terminal window (the same "/" tree as Files) and return its output with the screen. Long commands keep running and streaming: call again to wait, type into them, or stop them. \`cd dir\` changes the working directory for later commands.",
+    "name": "memon_run",
+    "parameters": {
+      "properties": {
+        "command": {
+          "type": "string",
+        },
+        "cwd": {
+          "type": "string",
+        },
+        "input": {
+          "type": "string",
+        },
+        "stop": {
+          "type": "boolean",
+        },
+        "waitSeconds": {
+          "type": "number",
+        },
+      },
+      "type": "object",
+    },
+  },
+  {
+    "description": "View, create, edit, pause, resume or delete this agent's scheduled prompts (runs of this agent at set times) in the Scheduler app. Returns the screen.",
+    "name": "memon_schedule",
+    "parameters": {
+      "properties": {
+        "action": {
+          "enum": [
+            "list",
+            "create",
+            "edit",
+            "delete",
+            "pause",
+            "resume",
+          ],
+          "type": "string",
+        },
+        "cron": {
+          "type": "string",
+        },
+        "name": {
+          "type": "string",
+        },
+        "prompt": {
+          "type": "string",
+        },
+        "schedule": {
+          "type": "number",
+        },
+      },
+      "required": [
+        "action",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "Read the computer screen: the open windows, the focused window in full (a page outline with refs, a folder listing, a file, or terminal output), and anything the user changed since your last look.",
+    "name": "memon_screen",
+    "parameters": {
+      "properties": {
+        "waitSeconds": {
+          "type": "number",
+        },
+        "window": {
+          "type": "string",
+        },
+      },
+      "type": "object",
+    },
+  },
+  {
+    "description": "See the skill library and which skills this agent uses, read a skill's instructions, and (when the user asks) enable, disable, create, edit or delete skills.",
+    "name": "memon_skills",
+    "parameters": {
+      "properties": {
+        "action": {
+          "enum": [
+            "list",
+            "read",
+            "enable",
+            "disable",
+            "create",
+            "edit",
+            "delete",
+          ],
+          "type": "string",
+        },
+        "body": {
+          "type": "string",
+        },
+        "description": {
+          "type": "string",
+        },
+        "skill": {
+          "type": "string",
+        },
+      },
+      "required": [
+        "action",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "Use the user's studios with the models they chose: answer typed questions about a text (decision), speak text (speech), transcribe audio, generate images or audio, and run image and text tools. Every result comes back as text; media is saved to Files.",
+    "name": "memon_studio",
+    "parameters": {
+      "properties": {
+        "action": {
+          "enum": [
+            "list",
+            "run",
+          ],
+          "type": "string",
+        },
+        "count": {
+          "type": "number",
+        },
+        "documents": {
+          "items": {
+            "type": "string",
+          },
+          "type": "array",
+        },
+        "duration": {
+          "type": "number",
+        },
+        "instructions": {
+          "type": "string",
+        },
+        "labels": {
+          "items": {
+            "type": "string",
+          },
+          "type": "array",
+        },
+        "language": {
+          "type": "string",
+        },
+        "multiLabel": {
+          "type": "boolean",
+        },
+        "path": {
+          "type": "string",
+        },
+        "questions": {
+          "additionalProperties": {
+            "properties": {
+              "criteria": {
+                "anyOf": [
+                  {
+                    "items": {
+                      "type": "string",
+                    },
+                    "type": "array",
+                  },
+                  {
+                    "additionalProperties": {
+                      "type": "string",
+                    },
+                    "type": "object",
+                  },
+                ],
+              },
+              "instructions": {
+                "type": "string",
+              },
+              "type": {
+                "enum": [
+                  "choice",
+                  "score",
+                  "noul",
+                ],
+                "type": "string",
+              },
+            },
+            "required": [
+              "type",
+              "instructions",
+            ],
+            "type": "object",
+          },
+          "type": "object",
+        },
+        "saveTo": {
+          "type": "string",
+        },
+        "size": {
+          "type": "string",
+        },
+        "speed": {
+          "type": "number",
+        },
+        "task": {
+          "type": "string",
+        },
+        "text": {
+          "type": "string",
+        },
+        "threshold": {
+          "type": "number",
+        },
+        "tool": {
+          "enum": [
+            "decision",
+            "speech",
+            "transcribe",
+            "image",
+            "image_tools",
+            "text_tools",
+            "audio",
+          ],
+          "type": "string",
+        },
+        "translate": {
+          "type": "boolean",
+        },
+        "voice": {
+          "type": "string",
+        },
+      },
+      "required": [
+        "action",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "Show the user a visual (dashboard, report, comparison, chart, table, form) written in OpenUI Lang in the Visualize app, saved as a .openui file they can open again. Returns the screen.",
+    "name": "memon_visualize",
+    "parameters": {
+      "properties": {
+        "guide": {
+          "type": "boolean",
+        },
+        "openui": {
+          "type": "string",
+        },
+        "path": {
+          "type": "string",
+        },
+        "title": {
+          "type": "string",
+        },
+      },
+      "type": "object",
+    },
+  },
+  {
+    "description": "Focus, minimize, maximize or close a window on the computer, and return the screen.",
+    "name": "memon_window",
+    "parameters": {
+      "properties": {
+        "op": {
+          "enum": [
+            "focus",
+            "minimize",
+            "maximize",
+            "close",
+          ],
+          "type": "string",
+        },
+        "window": {
+          "type": "string",
+        },
+      },
+      "required": [
+        "window",
+        "op",
       ],
       "type": "object",
     },

@@ -468,10 +468,21 @@ class BrowserSandboxSession implements SandboxProviderSession {
 						await this.service.mkdir({ path: directory });
 					}
 					for (const path of manifest.deletedPaths ?? []) {
-						await this.service.unlink({ path });
+						// Already gone (never copied in, or removed by live sync) is
+						// what the delete asked for.
+						await this.service.unlink({ path }).catch((error: unknown) => {
+							if (!/ENOENT/.test(String(error))) throw error;
+						});
 					}
 				}
 				for (const file of manifest.files) {
+					// The harness reads files as text, and a file that is not
+					// text (an image, a font) lost bytes there: readFile copies
+					// it in from the documents store, bytes as they are.
+					if (file.content.includes("\uFFFD")) {
+						await this.service.readFile({ path: file.path });
+						continue;
+					}
 					await this.service.request("fs.materializeWorkspaceFile", {
 						path: file.path,
 						content: file.content,
@@ -509,7 +520,10 @@ class BrowserSandboxSession implements SandboxProviderSession {
 								return {
 									operation: "write" as const,
 									path: op.path,
-									content: op.content,
+									// Bytes for a file that is not text (an image): the
+									// harness types this as text, but its file system writes
+									// bytes as they are, and decoding them would ruin them.
+									content: op.content as string,
 								};
 							case "mkdir":
 								return { operation: "mkdir" as const, path: op.path };

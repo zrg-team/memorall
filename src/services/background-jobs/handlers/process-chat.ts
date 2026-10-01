@@ -51,6 +51,12 @@ import {
 	withPromptCacheKey,
 } from "@/services/flow-service-adapters";
 import {
+	AGENT_RUNTIME_KEY,
+	CONVERSATION_RUNTIME_KEY,
+	RUN_RUNTIME_KEY,
+} from "@/services/chat/runtime-keys";
+import { applyMemonAbsorption } from "@/services/memon/feature-config";
+import {
 	THREAD_HISTORY_CONVERSATION_RUNTIME_KEY,
 	THREAD_HISTORY_SEPARATOR_RUNTIME_KEY,
 } from "@/services/flows-integrations/tools/thread-history";
@@ -58,6 +64,8 @@ import {
 	type AggregatedTokenUsage,
 	addTokenUsage,
 	createAggregatedTokenUsage,
+	extractChunkOutputText,
+	resolveTokenUsage,
 } from "@/services/llm/utils/token-usage";
 import { withResolvedConnections } from "@/services/mcp-connections";
 import type {
@@ -70,6 +78,7 @@ import type {
 import type {
 	ChatCompletionChunk,
 	ChatCompletionChunkToolCall,
+	ChatCompletionMessageParam,
 	ChatCompletionMessageToolCall,
 	ChatCompletionRequest,
 	ChatCompletionTool,
@@ -77,7 +86,7 @@ import type {
 	ChatCompletionUsage,
 	ChatMessage,
 } from "@/types/openai";
-import { isAbortError } from "@/utils/abort";
+import { ABORT_ERROR_MESSAGE, isAbortError } from "@/utils/abort";
 import { sanitizeForJson } from "@/utils/sanitize-json";
 import { BaseProcessHandler } from "./base-process-handler";
 import {
@@ -134,6 +143,11 @@ export interface ChatPayload {
 	reminders?: string[];
 }
 
+export interface StopChatPayload {
+	/** The `chat` job whose run should end. */
+	targetJobId: string;
+}
+
 export type ChatResult =
 	| {
 			type: "chunk";
@@ -170,6 +184,8 @@ export type ChatResult =
 				estimatedTokens?: number;
 				agentFlowName?: string;
 				error?: JobErrorMetadata;
+				/** The user stopped the run; this is what it had done by then. */
+				stopped?: boolean;
 			};
 	  }
 	| {
@@ -190,14 +206,119 @@ const CHUNK_DISPATCH_INTERVAL_MS = 40;
 
 const JOB_NAMES = {
 	chat: "chat",
+	stopChat: "stop-chat",
 } as const;
+
+/** How long a stop that arrived before its run is remembered. */
+const STOP_MEMORY_MS = 60_000;
+
+/** How long a stopped run waits for its cut-off requests to wind down. */
+const STOP_SETTLE_MS = 1_000;
 
 export type ChatJob = BaseJob & {
 	jobType: typeof JOB_NAMES.chat;
 	payload: ChatPayload;
 };
 
+type StopChatJob = BaseJob & {
+	jobType: typeof JOB_NAMES.stopChat;
+	payload: StopChatPayload;
+};
+
 type TokenUsage = ChatCompletionUsage;
+
+const createStopError = () =>
+	new DOMException(ABORT_ERROR_MESSAGE, "AbortError");
+
+const isAsyncIterable = <T>(value: unknown): value is AsyncIterable<T> =>
+	typeof value === "object" && value !== null && Symbol.asyncIterator in value;
+
+/**
+ * Every model request of one run, bound to the run's stop signal.
+ *
+ * Stop has to end the request in flight, not just the loop around it, and it
+ * must not cost the run its token count. Providers report usage on the last
+ * chunk, so a request cut short never reports any even though it was billed;
+ * when that happens an estimate is booked for what it read and wrote, the same
+ * estimate a provider without usage reporting gets.
+ */
+const createStoppableRequests = (
+	signal: AbortSignal,
+	addUsage: (usage: TokenUsage) => void,
+) => {
+	const inFlight = new Set<Promise<void>>();
+
+	async function* track(
+		stream: AsyncIterable<ChatCompletionChunk>,
+		messages: ChatCompletionMessageParam[],
+	): AsyncGenerator<ChatCompletionChunk, void, undefined> {
+		if (signal.aborted) throw createStopError();
+		let settle!: () => void;
+		const settled = new Promise<void>((resolve) => {
+			settle = resolve;
+		});
+		inFlight.add(settled);
+		let output = "";
+		let reportedUsage = false;
+		try {
+			for await (const chunk of stream) {
+				if (chunk.usage) reportedUsage = true;
+				output += extractChunkOutputText(chunk);
+				yield chunk;
+				if (signal.aborted) throw createStopError();
+			}
+		} finally {
+			if (signal.aborted && !reportedUsage) {
+				addUsage(resolveTokenUsage(undefined, messages, output));
+			}
+			inFlight.delete(settled);
+			settle();
+		}
+	}
+
+	const request = (
+		send: (body: ChatCompletionRequest) => unknown,
+		body: ChatCompletionRequest,
+	) => {
+		const result = send({
+			...body,
+			signal: body.signal ? AbortSignal.any([body.signal, signal]) : signal,
+		});
+		return isAsyncIterable<ChatCompletionChunk>(result)
+			? track(result, body.messages)
+			: result;
+	};
+
+	return {
+		track,
+		/** The run's LLM, with every request stoppable and accounted for. */
+		bind: (llm: FlowServices["llm"]): FlowServices["llm"] => {
+			const send = (body: ChatCompletionRequest) =>
+				request((next) => llm.chatCompletions(next), body);
+			return {
+				...llm,
+				chat: {
+					completions: {
+						create: send as NonNullable<
+							FlowServices["llm"]["chat"]
+						>["completions"]["create"],
+					},
+				},
+				chatCompletions: send as FlowServices["llm"]["chatCompletions"],
+			};
+		},
+		/** Wait, briefly, for cut-off requests to book their usage. */
+		settle: async () => {
+			if (inFlight.size === 0) return;
+			await Promise.race([
+				Promise.allSettled([...inFlight]),
+				new Promise((resolve) => setTimeout(resolve, STOP_SETTLE_MS)),
+			]);
+		},
+	};
+};
+
+type StoppableRequests = ReturnType<typeof createStoppableRequests>;
 
 const RECALL_STEP_BY_TYPE: Record<RecallType, string> = {
 	smart: "context-smart-retrieve",
@@ -271,6 +392,18 @@ const getThreadHistoryRuntimeVars = (
 					conversation.historyBoundary.separatorId,
 			}
 		: undefined;
+
+/** Runtime vars for every flow run: conversation scope first, then history. */
+const getChatRuntimeVars = (
+	conversation: ConversationContext | undefined,
+	runId: string,
+	agentFlowId: string | undefined,
+): Record<string, unknown> => ({
+	...(conversation?.id ? { [CONVERSATION_RUNTIME_KEY]: conversation.id } : {}),
+	[RUN_RUNTIME_KEY]: runId,
+	...(agentFlowId ? { [AGENT_RUNTIME_KEY]: agentFlowId } : {}),
+	...getThreadHistoryRuntimeVars(conversation),
+});
 
 type FlowStreamDeps = {
 	jobId: string;
@@ -350,6 +483,7 @@ type AssistantMessageFinalization = {
 	executions: AssistantExecutionPart[];
 	toolExecutions: ToolExecutionRecord[];
 	error?: JobErrorMetadata;
+	stopped?: boolean;
 };
 
 type AssistantMessagePersistence = {
@@ -372,6 +506,7 @@ type AssistantMessageMetadata = {
 	usage?: AggregatedTokenUsage;
 	agentFlowName?: string;
 	error?: JobErrorMetadata;
+	stopped?: boolean;
 };
 
 type ChatResultFinalAction = NonNullable<
@@ -432,7 +567,11 @@ const completeExecutionParts = (
 		part.state === "running" ? { ...part, state: "complete" as const } : part,
 	);
 
-export class ChatHandler extends BaseProcessHandler<ChatJob> {
+/** Loaded on first use: most runs have no skills enabled. */
+const loadSkillFileSystem = () =>
+	import("@/services/filesystem/skill-filesystem");
+
+export class ChatHandler extends BaseProcessHandler<ChatJob | StopChatJob> {
 	constructor() {
 		super();
 	}
@@ -484,6 +623,7 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 		executions,
 		toolExecutions,
 		error,
+		stopped,
 	}: AssistantMessageFinalization): AssistantMessageMetadata {
 		const timeToAnswer = (Date.now() - startTime) / 1000;
 		const outputTokens =
@@ -504,6 +644,7 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 				: {}),
 			...(usage ? { usage } : {}),
 			...(error ? { error } : {}),
+			...(stopped ? { stopped } : {}),
 		};
 	}
 
@@ -680,13 +821,19 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 	/**
 	 * @param promptCacheKey stamped on every LLM request of the run so the
 	 * provider routes all turns of one conversation to the same prompt cache.
+	 * @param requests binds every LLM request of the run to its stop signal.
 	 */
-	private static getFlowServices(promptCacheKey?: string): FlowServices {
+	private static getFlowServices(
+		promptCacheKey: string | undefined,
+		requests: StoppableRequests,
+	): FlowServices {
 		const sandboxService = serviceManager.getSandboxContainerService();
 		const fileSystem = toFlowFileSystem(fsService);
 		const llm = toFlowLLM(serviceManager.llmService);
 		return {
-			llm: promptCacheKey ? withPromptCacheKey(llm, promptCacheKey) : llm,
+			llm: requests.bind(
+				promptCacheKey ? withPromptCacheKey(llm, promptCacheKey) : llm,
+			),
 			embedding: toFlowEmbedding(serviceManager.embeddingService),
 			database: toFlowDatabase(serviceManager.databaseService),
 			logger: consoleFlowLogger,
@@ -695,6 +842,13 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 			webBrowser: toFlowWebBrowser(serviceManager.getWebBrowserService()),
 			mcpStdio: toFlowMcpStdio(platform.mcpStdio),
 			fs: fileSystem,
+			// The agent's enabled skills (add-skill-context) and load_skill.
+			skillService: {
+				list: async () =>
+					(await loadSkillFileSystem()).skillFileSystemService.listSkills(),
+				load: async (name) =>
+					(await loadSkillFileSystem()).skillFileSystemService.readSkill(name),
+			},
 		};
 	}
 
@@ -862,10 +1016,46 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 		}
 	}
 
+	/** The stop switch of every run in flight, by job id. */
+	private readonly runStops = new Map<string, AbortController>();
+	/** Stops that arrived before their run did. */
+	private readonly stoppedBeforeStart = new Set<string>();
+
 	async process(
+		jobId: string,
+		job: ChatJob | StopChatJob,
+		dependencies: ProcessDependencies,
+	): Promise<ItemHandlerResult> {
+		if (job.jobType === JOB_NAMES.stopChat) {
+			const { targetJobId } = job.payload;
+			const running = this.runStops.get(targetJobId);
+			if (running) {
+				running.abort();
+			} else {
+				this.stoppedBeforeStart.add(targetJobId);
+				setTimeout(
+					() => this.stoppedBeforeStart.delete(targetJobId),
+					STOP_MEMORY_MS,
+				);
+			}
+			return { stopped: true };
+		}
+
+		const stop = new AbortController();
+		this.runStops.set(jobId, stop);
+		if (this.stoppedBeforeStart.delete(jobId)) stop.abort();
+		try {
+			return await this.runChat(jobId, job, dependencies, stop.signal);
+		} finally {
+			this.runStops.delete(jobId);
+		}
+	}
+
+	private async runChat(
 		jobId: string,
 		job: ChatJob,
 		dependencies: ProcessDependencies,
+		stopSignal: AbortSignal,
 	): Promise<ItemHandlerResult> {
 		const {
 			messages,
@@ -999,6 +1189,7 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 		const addUsage = (usage: TokenUsage) => {
 			accumulatedUsage = addTokenUsage(accumulatedUsage, usage);
 		};
+		const requests = createStoppableRequests(stopSignal, addUsage);
 		const finalizeConversation = async (
 			input: Omit<AssistantMessagePersistence, "conversation">,
 		) => {
@@ -1018,6 +1209,54 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 					"offscreen",
 				);
 			}
+		};
+
+		// The one way a run ends with an answer — finished, or stopped by the user.
+		const finishRun = async () => {
+			const stopped = stopSignal.aborted;
+			const finalActions = normalizeActions(actions);
+			const finalParts = resolveMessageParts({
+				finalState: finalMessageState,
+				accumulatedParts: messagePartsAccumulator.toParts(),
+			});
+			const finalExecutions = completeExecutionParts(executions);
+			const finalToolExecutions = finishRunningToolExecutions(
+				toolExecutions,
+				stopped ? "cancelled" : "completed",
+			);
+			const finalUsage =
+				accumulatedUsage.total_tokens > 0 ? accumulatedUsage : undefined;
+			const finalMetadata = ChatHandler.buildAssistantMessageMetadata({
+				conversation,
+				content: currentContent,
+				model,
+				provider,
+				startTime,
+				usage: finalUsage,
+				actions: finalActions,
+				executions: finalExecutions,
+				toolExecutions: finalToolExecutions,
+				stopped,
+			});
+			const result = {
+				type: "final",
+				content: currentContent,
+				parts: finalParts,
+				metadata: {
+					...finalMetadata,
+					executions: finalExecutions,
+					toolExecutions: finalToolExecutions,
+				},
+			} satisfies ChatResult;
+
+			await finalizeConversation({
+				content: finalParts.length > 0 ? "" : currentContent,
+				complexContent: null,
+				parts: finalParts.length > 0 ? finalParts : null,
+				metadata: finalMetadata,
+			});
+
+			return result;
 		};
 
 		const getProgress = () => Math.min(80, 20 + currentContent.length / 10);
@@ -1095,14 +1334,18 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 					? mergeWithDefaultConfig(flowConfig, flowConfig.graphType)
 					: buildDefaultFlowConfig("agent");
 				const resolvedConfigWithPrefix = await withResolvedConnections(
-					applyFlowConfigPrefix(resolvedConfig, job.payload.flowConfigPrefix),
+					applyMemonAbsorption(
+						applyFlowConfigPrefix(resolvedConfig, job.payload.flowConfigPrefix),
+					),
 				);
 				const stream = toLegacyFlowStream(
 					createMemorallFlowRun({
 						runId: `chat:${jobId}`,
 						services: ChatHandler.getFlowServices(
 							getPromptCacheKey(conversation),
+							requests,
 						),
+						signal: stopSignal,
 						input: {
 							graphType: resolvedConfigWithPrefix.graphType ?? "agent",
 							config: resolvedConfigWithPrefix,
@@ -1113,7 +1356,11 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 								reminders,
 							},
 							streamModes: ["custom", "values"],
-							runtimeVars: getThreadHistoryRuntimeVars(conversation),
+							runtimeVars: getChatRuntimeVars(
+								conversation,
+								`chat:${jobId}`,
+								agentFlowId,
+							),
 						},
 					}),
 				);
@@ -1200,7 +1447,9 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 					? mergeWithDefaultConfig(flowConfig, flowConfig.graphType)
 					: buildDefaultFlowConfig("foundation");
 				resolvedConfig = await withResolvedConnections(
-					applyFlowConfigPrefix(resolvedConfig, job.payload.flowConfigPrefix),
+					applyMemonAbsorption(
+						applyFlowConfigPrefix(resolvedConfig, job.payload.flowConfigPrefix),
+					),
 				);
 
 				await dependencies.updateJobProgress(jobId, {
@@ -1260,13 +1509,19 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 						runId: `chat:${jobId}`,
 						services: ChatHandler.getFlowServices(
 							getPromptCacheKey(conversation),
+							requests,
 						),
+						signal: stopSignal,
 						input: {
 							graphType,
 							config: resolvedConfig,
 							initialState: { messages, topicId, contextQueries, reminders },
 							streamModes: ["custom", "updates", "values"],
-							runtimeVars: getThreadHistoryRuntimeVars(conversation),
+							runtimeVars: getChatRuntimeVars(
+								conversation,
+								`chat:${jobId}`,
+								agentFlowId,
+							),
 						},
 					}),
 				);
@@ -1352,9 +1607,13 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 
 				if (request.stream) {
 					// For streaming, the result should be an AsyncIterableIterator
-					const stream = serviceManager.llmService.chatCompletions(
-						request,
-					) as AsyncIterableIterator<ChatCompletionChunk>;
+					const stream = requests.track(
+						serviceManager.llmService.chatCompletions({
+							...request,
+							signal: stopSignal,
+						}) as AsyncIterableIterator<ChatCompletionChunk>,
+						request.messages,
+					);
 					const handleChunk = ChatHandler.createHandleChunk({
 						jobId,
 						model,
@@ -1378,49 +1637,23 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 				await dispatcher.drain();
 			}
 
-			const finalActions = normalizeActions(actions);
-			const finalParts = resolveMessageParts({
-				finalState: finalMessageState,
-				accumulatedParts: messagePartsAccumulator.toParts(),
-			});
-			const finalExecutions = completeExecutionParts(executions);
-			const finalToolExecutions = finishRunningToolExecutions(
-				toolExecutions,
-				"completed",
-			);
-			const finalUsage =
-				accumulatedUsage.total_tokens > 0 ? accumulatedUsage : undefined;
-			const finalMetadata = ChatHandler.buildAssistantMessageMetadata({
-				conversation,
-				content: currentContent,
-				model,
-				provider,
-				startTime,
-				usage: finalUsage,
-				actions: finalActions,
-				executions: finalExecutions,
-				toolExecutions: finalToolExecutions,
-			});
-			const result = {
-				type: "final",
-				content: currentContent,
-				parts: finalParts,
-				metadata: {
-					...finalMetadata,
-					executions: finalExecutions,
-					toolExecutions: finalToolExecutions,
-				},
-			} satisfies ChatResult;
-
-			await finalizeConversation({
-				content: finalParts.length > 0 ? "" : currentContent,
-				complexContent: null,
-				parts: finalParts.length > 0 ? finalParts : null,
-				metadata: finalMetadata,
-			});
-
-			return result;
+			return await finishRun();
 		} catch (error) {
+			if (stopSignal.aborted) {
+				// Stopping is not a failure. Whatever the run did up to here — text,
+				// steps, tool calls, tokens — is its answer, kept the same way a
+				// finished one is; only the loop that would have gone on is cut.
+				streamBuffer.flush();
+				await dispatcher.drain();
+				await requests.settle();
+				await dependencies.logger.info(
+					`⏹️ Chat job ${jobId} stopped by the user`,
+					undefined,
+					"offscreen",
+				);
+				return await finishRun();
+			}
+
 			// Drop any queued content and its pending timer: the turn is over, and a
 			// late flush would post progress for a job that has already failed.
 			dispatcher.flush();
@@ -1485,16 +1718,18 @@ export class ChatHandler extends BaseProcessHandler<ChatJob> {
 const chatHandler = new ChatHandler();
 handlerRegistry.register({
 	instance: chatHandler,
-	jobs: [JOB_NAMES.chat],
+	jobs: [JOB_NAMES.chat, JOB_NAMES.stopChat],
 });
 
 // Extend global registry for smart type inference
 declare global {
 	interface JobTypeRegistry {
 		chat: ChatPayload;
+		"stop-chat": StopChatPayload;
 	}
 
 	interface JobResultRegistry {
 		chat: ChatResult;
+		"stop-chat": { stopped: boolean };
 	}
 }

@@ -1,3 +1,4 @@
+import { Loader2 } from "lucide-react";
 import type React from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -71,6 +72,14 @@ export interface ChatInputProps {
 	attachedDocumentRefs: AttachedDocumentRef[];
 	onAttachedDocumentRefsChange: (refs: AttachedDocumentRef[]) => void;
 	isModelReady?: boolean;
+	/**
+	 * A run is going in another chat. Runs go one at a time, so the input
+	 * waits and offers a way back to that chat.
+	 */
+	runningElsewhere?: { title: string; onOpen: () => void } | null;
+	/** Opens the agent's MemonOS computer; only for agents that have one. */
+	onOpenComputer?: () => void;
+	isComputerWorking?: boolean;
 	isFullWidth?: boolean;
 	onToggleFullWidth?: () => void;
 	placeholder?: string;
@@ -101,6 +110,9 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 	attachedDocumentRefs,
 	onAttachedDocumentRefsChange,
 	isModelReady = true,
+	runningElsewhere = null,
+	onOpenComputer,
+	isComputerWorking = false,
 	isFullWidth = false,
 	onToggleFullWidth,
 	placeholder,
@@ -429,6 +441,24 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 						onSelect={handleSelectMention}
 					/>
 
+					{runningElsewhere ? (
+						<div className="mb-2 flex items-center gap-2 rounded-xl border border-border/70 bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+							<Loader2 size={13} className="shrink-0 animate-spin" />
+							<span className="min-w-0 flex-1 truncate">
+								{t("input.runningElsewhere", {
+									title: runningElsewhere.title,
+								})}
+							</span>
+							<button
+								type="button"
+								onClick={runningElsewhere.onOpen}
+								className="shrink-0 rounded-md px-2 py-0.5 font-medium text-foreground hover:bg-accent"
+							>
+								{t("input.openRunningChat")}
+							</button>
+						</div>
+					) : null}
+
 					<PromptInput
 						className="divide-border/50 rounded-[22px] border-border/70 bg-card/95 shadow-[0_18px_55px_hsl(var(--foreground)/0.10)]"
 						onSubmit={handleSubmitWithImages}
@@ -449,11 +479,13 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 								onChange={handleInputChange}
 								onKeyDown={handleTextareaKeyDown}
 								placeholder={
-									isModelReady
-										? (placeholder ?? t("input.placeholder"))
-										: t("model.notLoaded")
+									!isModelReady
+										? t("model.notLoaded")
+										: runningElsewhere
+											? t("input.waitForRun")
+											: (placeholder ?? t("input.placeholder"))
 								}
-								disabled={!isModelReady}
+								disabled={!isModelReady || runningElsewhere !== null}
 								className="field-sizing-content min-h-[44px] max-h-[40vh] !border-0 !border-t-0 px-3 py-2.5 text-[15px] leading-6 !shadow-none focus:!border-0 focus:!ring-0 focus:!ring-offset-0 focus-visible:!border-0 focus-visible:!ring-0 focus-visible:!ring-offset-0 sm:px-4"
 							/>
 						</div>
@@ -479,12 +511,16 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 							isCustomMode={isCustomMode}
 							onAttachFileClick={handleAttachClick}
 							onAttachDocumentClick={handleOpenDocumentPicker}
-							canSubmit={!!inputValue.trim() && isModelReady}
+							canSubmit={
+								!!inputValue.trim() && isModelReady && !runningElsewhere
+							}
 							isFullWidth={isFullWidth}
 							onToggleFullWidth={onToggleFullWidth}
 							onStartCoAgent={canUseCoAgent ? toggleCoAgent : undefined}
 							isCoAgentStarting={isCoAgentStarting}
 							isCoAgentActive={isCoAgentActive}
+							onOpenComputer={onOpenComputer}
+							isComputerWorking={isComputerWorking}
 							selectableModels={selectableModels}
 							selectableModelsByProvider={selectableModelsByProvider}
 							lockedModelProviders={lockedModelProviders}

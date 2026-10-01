@@ -1,30 +1,39 @@
 import React, { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import {
-	Network,
-	FileText,
-	Search,
-	Sparkles,
-	ChevronDown,
 	AlertTriangle,
-	PenLine,
-	Database,
-	Brain,
-	Zap,
-	Globe,
-	TerminalSquare,
-	Target,
-	Clock3,
-	ScrollText,
+	AppWindow,
 	Bot,
-	MousePointer2,
-	MousePointerClick,
+	Brain,
+	CalendarClock,
+	ChevronDown,
+	Clock3,
+	Database,
 	Eye,
-	Keyboard,
 	FileImage,
 	FileSearch,
+	FileText,
+	Globe,
+	Keyboard,
+	LayoutDashboard,
+	ListChecks,
+	Monitor,
+	MousePointer2,
+	MousePointerClick,
+	Network,
+	PanelsTopLeft,
+	PenLine,
+	Plug,
+	ScrollText,
+	Search,
+	Sparkles,
+	SquareTerminal,
+	Target,
+	TerminalSquare,
 	Trash2,
 	type LucideIcon,
+	WandSparkles,
+	Zap,
 } from "lucide-react";
 
 import {
@@ -67,6 +76,7 @@ import {
 } from "./tools/CoAgentTool";
 import { documentConvertRenderer } from "./tools/DocumentConvert";
 import { memoryToolIcon, memoryToolRenderer } from "./tools/MemoryTool";
+import { memonToolRenderer } from "./tools/MemonTool";
 import { composioToolRenderer } from "./tools/ComposioTool";
 import {
 	composioCallTitle,
@@ -109,6 +119,18 @@ const EXACT_ICON_MAPPINGS: Record<string, LucideIcon> = {
 	memory_update: PenLine,
 	memory_remove: Trash2,
 	memory_explain_source: FileSearch,
+	memon_screen: Monitor,
+	memon_open: AppWindow,
+	memon_act: MousePointerClick,
+	memon_run: SquareTerminal,
+	memon_window: PanelsTopLeft,
+	memon_notes: ListChecks,
+	memon_visualize: LayoutDashboard,
+	memon_schedule: CalendarClock,
+	memon_memory: Brain,
+	memon_studio: Sparkles,
+	memon_skills: WandSparkles,
+	memon_connections: Plug,
 };
 
 /**
@@ -308,6 +330,18 @@ const ACTION_RENDERERS: Record<string, ActionRenderer> = {
 	memory_update: memoryToolRenderer,
 	memory_remove: memoryToolRenderer,
 	memory_explain_source: memoryToolRenderer,
+	memon_screen: memonToolRenderer,
+	memon_open: memonToolRenderer,
+	memon_act: memonToolRenderer,
+	memon_run: memonToolRenderer,
+	memon_window: memonToolRenderer,
+	memon_notes: memonToolRenderer,
+	memon_visualize: memonToolRenderer,
+	memon_schedule: memonToolRenderer,
+	memon_memory: memonToolRenderer,
+	memon_studio: memonToolRenderer,
+	memon_skills: memonToolRenderer,
+	memon_connections: memonToolRenderer,
 };
 
 interface ActionContentProps {

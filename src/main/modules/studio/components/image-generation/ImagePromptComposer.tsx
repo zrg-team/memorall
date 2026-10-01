@@ -1,4 +1,4 @@
-import { Dices, SlidersHorizontal } from "lucide-react";
+import { Dices, Paperclip, SlidersHorizontal } from "lucide-react";
 import type React from "react";
 import { forwardRef, useImperativeHandle, useRef } from "react";
 import { useTranslation } from "react-i18next";
@@ -7,12 +7,20 @@ import { Button } from "@/main/components/ui/button";
 import { Input } from "@/main/components/ui/input";
 import { Label } from "@/main/components/ui/label";
 import {
+	Tooltip,
+	TooltipContent,
+	TooltipProvider,
+	TooltipTrigger,
+} from "@/main/components/ui/tooltip";
+import { AttachmentList } from "@/main/modules/chat/components/input/AttachmentList";
+import {
 	Popover,
 	PopoverContent,
 	PopoverTrigger,
 } from "@/main/components/ui/popover";
 import {
 	COMPOSER_CONTROL,
+	COMPOSER_ICON_CONTROL,
 	StudioComposer,
 	StudioComposerTextarea,
 } from "../shared/StudioComposer";
@@ -54,6 +62,12 @@ interface ImagePromptComposerProps {
 	onSubmit: () => void;
 	onStop: () => void;
 	isNarrow: boolean;
+	/** Images the next run starts from, shown as chat shows its attachments. */
+	attachments: File[];
+	onAttach: (files: File[]) => void;
+	onRemoveAttachment: (index: number) => void;
+	/** Why the last images could not be added. */
+	attachError?: string | null;
 }
 
 const OptionButton: React.FC<{
@@ -103,12 +117,17 @@ export const ImagePromptComposer = forwardRef<
 			onSubmit,
 			onStop,
 			isNarrow,
+			attachments,
+			onAttach,
+			onRemoveAttachment,
+			attachError,
 		},
 		ref,
 	) => {
 		const { t } = useTranslation("studioImage");
 		const { t: tc } = useTranslation("studio");
 		const textarea = useRef<HTMLTextAreaElement>(null);
+		const fileInput = useRef<HTMLInputElement>(null);
 
 		useImperativeHandle(ref, () => ({
 			focus: () => textarea.current?.focus(),
@@ -131,6 +150,9 @@ export const ImagePromptComposer = forwardRef<
 			.filter(Boolean)
 			.join(" · ");
 
+		const attachLabel = t("composer.attach", {
+			defaultValue: "Attach images",
+		});
 		return (
 			<StudioComposer
 				data-image-composer
@@ -153,6 +175,26 @@ export const ImagePromptComposer = forwardRef<
 				}
 				tools={
 					<>
+						<TooltipProvider>
+							<Tooltip>
+								<TooltipTrigger asChild>
+									<Button
+										type="button"
+										variant="ghost"
+										size="sm"
+										className={COMPOSER_ICON_CONTROL}
+										onClick={() => fileInput.current?.click()}
+										aria-label={attachLabel}
+										data-image-attach
+									>
+										<Paperclip size={14} />
+									</Button>
+								</TooltipTrigger>
+								<TooltipContent>
+									<p className="text-xs">{attachLabel}</p>
+								</TooltipContent>
+							</Tooltip>
+						</TooltipProvider>
 						{hasSettings ? (
 							<Popover>
 								<PopoverTrigger asChild>
@@ -317,6 +359,41 @@ export const ImagePromptComposer = forwardRef<
 					</>
 				}
 			>
+				<input
+					ref={fileInput}
+					type="file"
+					accept="image/*"
+					multiple
+					className="sr-only"
+					tabIndex={-1}
+					aria-hidden
+					data-image-file-input
+					onChange={(event) => {
+						const files = Array.from(event.target.files ?? []);
+						// Reset so choosing the same file again still fires a change.
+						event.target.value = "";
+						if (files.length) onAttach(files);
+					}}
+				/>
+				{attachments.length > 0 ? (
+					<div data-image-attachments>
+						<AttachmentList
+							attachedImages={attachments}
+							attachedDocumentRefs={[]}
+							onRemoveImage={onRemoveAttachment}
+							onRemoveDocRef={() => undefined}
+						/>
+					</div>
+				) : null}
+				{attachError ? (
+					<p
+						className="px-3 pt-2 text-[11px] text-destructive sm:px-4"
+						role="alert"
+						data-image-attach-error
+					>
+						{attachError}
+					</p>
+				) : null}
 				<label htmlFor="image-generation-prompt" className="sr-only">
 					{t("composer.placeholder", {
 						defaultValue: "Describe the image you want",
@@ -330,9 +407,15 @@ export const ImagePromptComposer = forwardRef<
 					onSubmitShortcut={() => {
 						if (!running && canSubmit) onSubmit();
 					}}
-					placeholder={t("composer.placeholder", {
-						defaultValue: "Describe the image you want",
-					})}
+					placeholder={
+						attachments.length > 0
+							? t("composer.placeholderWithImages", {
+									defaultValue: "Describe what to make from these images",
+								})
+							: t("composer.placeholder", {
+									defaultValue: "Describe the image you want",
+								})
+					}
 					data-image-prompt
 				/>
 			</StudioComposer>

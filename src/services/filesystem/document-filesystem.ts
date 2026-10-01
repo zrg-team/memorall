@@ -54,6 +54,8 @@ const ROOT_MIGRATION_STORAGE_KEY = "memorall.filesystem.rootMigration.v1";
 export interface SandboxDocumentsMountSnapshot {
 	directories: string[];
 	files: string[];
+	/** Byte size of each file, where the tree knows it. */
+	fileSizes?: Record<string, number>;
 }
 
 export type FilesystemChangeScope = FilesystemScope;
@@ -1313,6 +1315,7 @@ export class DocumentFileSystem {
 		await this.initialize();
 		const directories = new Set<string>([FILESYSTEM_SANDBOX_ROOT]);
 		const files = new Set<string>();
+		const fileSizes: Record<string, number> = {};
 		const tree = await this.getTree(FILESYSTEM_SANDBOX_ROOT);
 
 		const toMountSandboxPath = (logicalPath: string): string | null => {
@@ -1347,6 +1350,9 @@ export class DocumentFileSystem {
 					directories.add(sp);
 				} else if (node.type === "file") {
 					files.add(sp);
+					if (typeof node.file?.size === "number") {
+						fileSizes[sp] = node.file.size;
+					}
 					ensureParentDirectories(sp);
 				}
 				if (node.children?.length) walk(node.children);
@@ -1357,6 +1363,7 @@ export class DocumentFileSystem {
 		return {
 			directories: Array.from(directories).sort(),
 			files: Array.from(files).sort(),
+			fileSizes,
 		};
 	}
 

@@ -281,6 +281,14 @@ export class BrowserAutomationManager {
 					return await this.fetchImage(request, signal);
 				case "reload":
 					return await this.reload(request, signal);
+				case "outline":
+					return await this.outline(request, signal);
+				case "outline-action":
+					return await this.outlineAction(request, signal);
+				case "history":
+					return await this.history(request, signal);
+				case "navigate":
+					return await this.navigate(request, signal);
 				case "close":
 					return await this.close(request);
 			}
@@ -654,6 +662,88 @@ export class BrowserAutomationManager {
 		return {
 			source: WEB_BROWSER_COMMAND_SOURCE,
 			command: "reload",
+			success: true,
+			sessionId: request.sessionId,
+			snapshot: this.withDomCapability(snapshot),
+		};
+	}
+
+	private async outline(request: BrowserCommand, signal?: AbortSignal) {
+		let session = this.session(requiredNumber(request, "tabId"));
+		if (!session.backend.outline) session = await this.promote(session, signal);
+		const outline = await session.backend.outline!(
+			session.backendSession,
+			requiredNumber(request, "maxChars"),
+			signal,
+		);
+		if (typeof outline.url === "string") session.url = outline.url;
+		return {
+			source: WEB_BROWSER_COMMAND_SOURCE,
+			command: "outline",
+			success: true,
+			sessionId: request.sessionId,
+			outline,
+		};
+	}
+
+	private async outlineAction(request: BrowserCommand, signal?: AbortSignal) {
+		let session = this.session(requiredNumber(request, "tabId"));
+		if (!session.backend.outlineAction) {
+			session = await this.promote(session, signal);
+		}
+		const response = await session.backend.outlineAction!(
+			session.backendSession,
+			request.request as Record<string, unknown>,
+			requiredNumber(request, "maxChars"),
+			signal,
+		);
+		if (typeof response.outline?.url === "string") {
+			session.url = response.outline.url;
+		}
+		return {
+			source: WEB_BROWSER_COMMAND_SOURCE,
+			command: "outline-action",
+			success: true,
+			sessionId: request.sessionId,
+			...response,
+		};
+	}
+
+	private async navigate(request: BrowserCommand, signal?: AbortSignal) {
+		let session = this.session(requiredNumber(request, "tabId"));
+		if (!session.backend.navigate)
+			session = await this.promote(session, signal);
+		const snapshot = await session.backend.navigate!(
+			session.backendSession,
+			requiredString(request, "url"),
+			requiredNumber(request, "timeoutMs"),
+			requiredNumber(request, "maxHtmlChars"),
+			signal,
+		);
+		session.url = snapshot.url;
+		return {
+			source: WEB_BROWSER_COMMAND_SOURCE,
+			command: "navigate",
+			success: true,
+			sessionId: request.sessionId,
+			snapshot: this.withDomCapability(snapshot),
+		};
+	}
+
+	private async history(request: BrowserCommand, signal?: AbortSignal) {
+		let session = this.session(requiredNumber(request, "tabId"));
+		if (!session.backend.history) session = await this.promote(session, signal);
+		const snapshot = await session.backend.history!(
+			session.backendSession,
+			requiredString(request, "direction") as "back" | "forward",
+			requiredNumber(request, "timeoutMs"),
+			requiredNumber(request, "maxHtmlChars"),
+			signal,
+		);
+		session.url = snapshot.url;
+		return {
+			source: WEB_BROWSER_COMMAND_SOURCE,
+			command: "history",
 			success: true,
 			sessionId: request.sessionId,
 			snapshot: this.withDomCapability(snapshot),
