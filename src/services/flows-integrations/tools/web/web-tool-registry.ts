@@ -4,6 +4,7 @@ import {
 	type WebBlockSignal,
 } from "@memorall/agent-harness-flows/tools/web/challenge-detection";
 import { DEFAULT_WEB_MAX_HTML_CHARS } from "@memorall/agent-harness-flows/tools/web/max-html-chars";
+import { actOnRef, buildPageOutline } from "@/co-agent/dom/page-outline";
 import { platform } from "@/platform/current";
 import {
 	awaitChallengeDecision,
@@ -31,6 +32,10 @@ import {
 	type WebDomActionName,
 	type WebDomElementInfo,
 	type WebElementRecord,
+	type WebHistoryDirection,
+	type WebOutlineActionRequest,
+	type WebOutlineActionResult,
+	type WebPageOutline,
 	type WebSnapshotPayload,
 	type WebWaitSelectorState,
 } from "@/services/web-browser/web-browser-protocol";
@@ -69,6 +74,8 @@ interface OpenSessionArgs {
 	maxHtmlChars: number;
 	persist: boolean;
 	mode?: WebBrowserMode;
+	/** Browser-backed modes: open as a tab in this existing window. */
+	windowId?: number;
 }
 
 interface OpenSessionResult {
@@ -371,6 +378,29 @@ export const holdWebSession = (sessionId: string): (() => void) => {
 	};
 };
 
+/**
+ * Sessions owned by another runtime surface (the MemonOS Bot computer). They are
+ * held for as long as the owner keeps them, stay out of the model-facing
+ * session list, and survive `closeAllWebSessionsExceptLatest`, which would
+ * otherwise close the agent's own browser window at the end of every run.
+ */
+const reservedSessions = new Set<string>();
+
+export const reserveWebSession = (sessionId: string): (() => void) => {
+	const release = holdWebSession(sessionId);
+	reservedSessions.add(sessionId);
+	let released = false;
+	return () => {
+		if (released) return;
+		released = true;
+		reservedSessions.delete(sessionId);
+		release();
+	};
+};
+
+const isSessionPinned = (sessionId: string): boolean =>
+	reservedSessions.has(sessionId) || (sessionHolds.get(sessionId) ?? 0) > 0;
+
 const scheduleInactivityClose = (sessionId: string): void => {
 	if ((sessionHolds.get(sessionId) ?? 0) > 0) return;
 	const existing = sessionTimeouts.get(sessionId);
@@ -529,6 +559,7 @@ export const openWebSession = async ({
 	maxHtmlChars = DEFAULT_MAX_HTML_CHARS,
 	persist = true,
 	mode = "iframe",
+	windowId,
 }: OpenSessionArgs): Promise<OpenSessionResult> => {
 	ensureBrowserEnvironment();
 	if (!document.body && mode === "iframe") {
@@ -550,6 +581,7 @@ export const openWebSession = async ({
 				mode,
 				timeoutMs,
 				maxHtmlChars,
+				windowId,
 			});
 		} catch (openError) {
 			// The tab may have been created but timed out before finishing load.
@@ -812,6 +844,216 @@ export const getWebSession = async (
 ): Promise<WebSessionState> =>
 	refreshWebSession(sessionId, maxHtmlChars, timeoutMs);
 
+// ─── Outline (MemonOS Bot) ──────────────────────────────────────────────────────
+// A text-first page view with stable element refs. Unlike the DOM tools these
+// never take a full HTML snapshot first, so reading and acting stay cheap.
+
+export interface WebSessionSurfaceInfo {
+	sessionId: string;
+	mode: WebBrowserMode;
+	tabId?: number;
+	windowId?: number;
+	currentUrl: string;
+	title: string;
+}
+
+const DEFAULT_OUTLINE_MAX_CHARS = 8_000;
+
+const requireWebSession = async (
+	sessionId: string,
+): Promise<WebSessionState> => {
+	const session =
+		WEB_SESSIONS.get(sessionId) ?? (await recoverSession(sessionId));
+	if (!session) {
+		throw new Error(`No active web session: ${sessionId}`);
+	}
+	return session;
+};
+
+const requireFrameDocument = (session: WebSessionState): Document => {
+	const doc = safeDocument(session);
+	if (!doc) {
+		throw new Error(
+			"This page cannot be read from here (cross-origin frame). Open it in a browser window instead.",
+		);
+	}
+	return doc;
+};
+
+const applyOutlineToSession = (
+	session: WebSessionState,
+	outline: WebPageOutline | undefined,
+): void => {
+	if (outline) {
+		session.currentUrl = outline.url || session.currentUrl;
+		session.title = outline.title || session.title;
+		session.stale = false;
+	}
+	session.lastAccessedAt = Date.now();
+	scheduleInactivityClose(session.id);
+};
+
+export const getWebSessionSurface = (
+	sessionId: string,
+): WebSessionSurfaceInfo | null => {
+	const session = WEB_SESSIONS.get(sessionId);
+	if (!session) return null;
+	return {
+		sessionId: session.id,
+		mode: session.mode,
+		tabId: session.tabId,
+		windowId: session.windowId,
+		currentUrl: session.currentUrl || session.requestedUrl,
+		title: session.title,
+	};
+};
+
+export const outlineWebSession = async (
+	sessionId: string,
+	{
+		maxChars = DEFAULT_OUTLINE_MAX_CHARS,
+		timeoutMs = DEFAULT_TIMEOUT_MS,
+	}: { maxChars?: number; timeoutMs?: number } = {},
+): Promise<WebPageOutline> => {
+	const session = await requireWebSession(sessionId);
+	let outline: WebPageOutline;
+	if (session.mode === "iframe") {
+		outline = buildPageOutline(requireFrameDocument(session), { maxChars });
+	} else {
+		if (typeof session.tabId !== "number") {
+			throw new Error("Browser-backed web session is missing tabId.");
+		}
+		const response = await sendWebBrowserCommand({
+			source: WEB_BROWSER_COMMAND_SOURCE,
+			command: "outline",
+			sessionId,
+			tabId: session.tabId,
+			timeoutMs,
+			maxChars,
+		});
+		if (response.command !== "outline") {
+			throw new Error("Invalid browser outline response.");
+		}
+		outline = response.outline;
+	}
+	applyOutlineToSession(session, outline);
+	return outline;
+};
+
+export const performOutlineAction = async (
+	sessionId: string,
+	request: WebOutlineActionRequest,
+	{
+		maxChars = DEFAULT_OUTLINE_MAX_CHARS,
+		timeoutMs = DEFAULT_TIMEOUT_MS,
+	}: { maxChars?: number; timeoutMs?: number } = {},
+): Promise<{ result: WebOutlineActionResult; outline?: WebPageOutline }> => {
+	const session = await requireWebSession(sessionId);
+	if (session.mode === "iframe") {
+		const doc = requireFrameDocument(session);
+		const result = actOnRef(doc, request);
+		await new Promise((resolve) => window.setTimeout(resolve, 120));
+		const outline = safeDocument(session)
+			? buildPageOutline(requireFrameDocument(session), { maxChars })
+			: undefined;
+		applyOutlineToSession(session, outline);
+		return { result, outline };
+	}
+	if (typeof session.tabId !== "number") {
+		throw new Error("Browser-backed web session is missing tabId.");
+	}
+	const response = await sendWebBrowserCommand({
+		source: WEB_BROWSER_COMMAND_SOURCE,
+		command: "outline-action",
+		sessionId,
+		tabId: session.tabId,
+		timeoutMs,
+		maxChars,
+		request,
+	});
+	if (response.command !== "outline-action") {
+		throw new Error("Invalid browser outline action response.");
+	}
+	applyOutlineToSession(session, response.outline);
+	return { result: response.result, outline: response.outline };
+};
+
+export const navigateWebSession = async (
+	sessionId: string,
+	url: string,
+	timeoutMs = DEFAULT_TIMEOUT_MS,
+): Promise<WebSessionState> => {
+	const session = await requireWebSession(sessionId);
+	const safeUrl = normalizeInputUrl(url);
+	if (session.mode === "iframe") {
+		if (!session.iframe) {
+			throw new Error("This embedded session has no frame to navigate.");
+		}
+		session.iframe.src = safeUrl;
+		session.requestedUrl = safeUrl;
+		await waitForFrameLoad(session.iframe, timeoutMs);
+		captureIframeSnapshot(session);
+	} else {
+		if (typeof session.tabId !== "number") {
+			throw new Error("Browser-backed web session is missing tabId.");
+		}
+		const response = await sendWebBrowserCommand({
+			source: WEB_BROWSER_COMMAND_SOURCE,
+			command: "navigate",
+			sessionId,
+			tabId: session.tabId,
+			url: safeUrl,
+			timeoutMs,
+			maxHtmlChars: DEFAULT_MAX_HTML_CHARS,
+		});
+		if (response.command !== "navigate") {
+			throw new Error("Invalid browser navigate response.");
+		}
+		session.requestedUrl = safeUrl;
+		applySnapshotToSession(session, response.snapshot);
+	}
+	scheduleInactivityClose(sessionId);
+	return session;
+};
+
+export const navigateWebSessionHistory = async (
+	sessionId: string,
+	direction: WebHistoryDirection,
+	timeoutMs = DEFAULT_TIMEOUT_MS,
+): Promise<WebSessionState> => {
+	const session = await requireWebSession(sessionId);
+	if (session.mode === "iframe") {
+		const frameWindow = session.iframe?.contentWindow;
+		if (!session.iframe || !frameWindow) {
+			throw new Error("This embedded session has no frame to navigate.");
+		}
+		// history.back()/forward() are allowed on a cross-origin frame window.
+		if (direction === "back") frameWindow.history.back();
+		else frameWindow.history.forward();
+		await waitForFrameLoad(session.iframe, timeoutMs);
+		captureIframeSnapshot(session);
+	} else {
+		if (typeof session.tabId !== "number") {
+			throw new Error("Browser-backed web session is missing tabId.");
+		}
+		const response = await sendWebBrowserCommand({
+			source: WEB_BROWSER_COMMAND_SOURCE,
+			command: "history",
+			sessionId,
+			tabId: session.tabId,
+			timeoutMs,
+			maxHtmlChars: DEFAULT_MAX_HTML_CHARS,
+			direction,
+		});
+		if (response.command !== "history") {
+			throw new Error("Invalid browser history response.");
+		}
+		applySnapshotToSession(session, response.snapshot);
+	}
+	scheduleInactivityClose(sessionId);
+	return session;
+};
+
 export const fetchRenderedFallback = async ({
 	url,
 	timeoutMs = DEFAULT_TIMEOUT_MS,
@@ -895,6 +1137,7 @@ export const closeWebSession = async (sessionId: string): Promise<void> => {
 	// A tool parked on this page can never be answered once the tab is gone.
 	cancelChallenges({ sessionId });
 	sessionHolds.delete(sessionId);
+	reservedSessions.delete(sessionId);
 	unpersistSession(sessionId);
 	await disposeSessionArtifacts(session);
 	WEB_SESSIONS.delete(sessionId);
@@ -956,30 +1199,37 @@ export const getActiveWebSessionInfo = (): ActiveWebSessionInfo => {
 };
 
 export const getAllWebSessionsInfo = (): ActiveWebSessionInfo[] =>
-	Array.from(WEB_SESSIONS.values()).map((session) => ({
-		isOpen: true,
-		sessionId: session.id,
-		requestedUrl: session.requestedUrl,
-		currentUrl: session.currentUrl,
-		title: session.title,
-		lastAccessedAt: session.lastAccessedAt,
-		createdAt: session.createdAt,
-		mode: session.mode,
-	}));
+	Array.from(WEB_SESSIONS.values())
+		.filter((session) => !reservedSessions.has(session.id))
+		.map((session) => ({
+			isOpen: true,
+			sessionId: session.id,
+			requestedUrl: session.requestedUrl,
+			currentUrl: session.currentUrl,
+			title: session.title,
+			lastAccessedAt: session.lastAccessedAt,
+			createdAt: session.createdAt,
+			mode: session.mode,
+		}));
 
 export const closeAllWebSessionsExceptLatest = async (): Promise<void> => {
-	if (WEB_SESSIONS.size <= 1) return;
+	// Held (challenge handoff) and reserved (MemonOS Bot) sessions are neither
+	// candidates for "latest" nor closed here: another surface still owns them.
+	const candidates = Array.from(WEB_SESSIONS.values()).filter(
+		(session) => !isSessionPinned(session.id),
+	);
+	if (candidates.length <= 1) return;
 	let latestId: string | undefined;
 	let latestTime = 0;
-	for (const [id, session] of WEB_SESSIONS) {
+	for (const session of candidates) {
 		if (session.lastAccessedAt > latestTime) {
 			latestTime = session.lastAccessedAt;
-			latestId = id;
+			latestId = session.id;
 		}
 	}
-	for (const sessionId of Array.from(WEB_SESSIONS.keys())) {
-		if (sessionId !== latestId) {
-			await closeWebSession(sessionId);
+	for (const session of candidates) {
+		if (session.id !== latestId) {
+			await closeWebSession(session.id);
 		}
 	}
 };

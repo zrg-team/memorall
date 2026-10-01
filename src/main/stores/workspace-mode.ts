@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { platform } from "@/platform/current";
+import type { AttachedDocumentRef } from "@/types/chat";
 import {
 	isWorkspaceMode,
 	type WorkspaceMode,
@@ -19,9 +20,13 @@ interface WorkspaceModeState {
 	 * not mounted while a studio is open.
 	 */
 	pendingChatText: string | null;
+	/** Files waiting to be attached in the chat composer, like @mentions. */
+	pendingChatDocumentRefs: AttachedDocumentRef[] | null;
 	setMode: (mode: WorkspaceMode) => void;
 	sendTextToChat: (text: string) => void;
 	takePendingChatText: () => string | null;
+	sendDocumentRefsToChat: (refs: AttachedDocumentRef[]) => void;
+	takePendingChatDocumentRefs: () => AttachedDocumentRef[] | null;
 	hydrate: () => Promise<void>;
 }
 
@@ -34,6 +39,7 @@ export const useWorkspaceModeStore = create<WorkspaceModeState>((set, get) => ({
 	mode: "chat",
 	hydrated: false,
 	pendingChatText: null,
+	pendingChatDocumentRefs: null,
 	sendTextToChat: (text) => {
 		set({ pendingChatText: text });
 		get().setMode("chat");
@@ -42,6 +48,20 @@ export const useWorkspaceModeStore = create<WorkspaceModeState>((set, get) => ({
 		const text = get().pendingChatText;
 		if (text !== null) set({ pendingChatText: null });
 		return text;
+	},
+	sendDocumentRefsToChat: (refs) => {
+		set({
+			pendingChatDocumentRefs: [
+				...(get().pendingChatDocumentRefs ?? []),
+				...refs,
+			],
+		});
+		get().setMode("chat");
+	},
+	takePendingChatDocumentRefs: () => {
+		const refs = get().pendingChatDocumentRefs;
+		if (refs !== null) set({ pendingChatDocumentRefs: null });
+		return refs;
 	},
 	setMode: (mode) => {
 		if (get().mode === mode) return;

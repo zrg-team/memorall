@@ -86,7 +86,8 @@ const getNextRunLabel = (draft: AgentCronJobDraft): string => {
 	}
 };
 
-const ScheduleEditor: React.FC<{
+/** One schedule's form; also used by the MemonOS Scheduler window. */
+export const ScheduleEditor: React.FC<{
 	agentStatus: "active" | "draft";
 	draft: AgentCronJobDraft;
 	onUpdate: (updates: Partial<AgentCronJobDraft>) => void;

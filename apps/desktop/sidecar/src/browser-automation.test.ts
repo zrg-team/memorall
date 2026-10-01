@@ -46,6 +46,68 @@ describe("desktop browser command validation", () => {
 		).toThrow("timeoutMs");
 	});
 
+	it("accepts the outline, outline action, navigate and history commands", () => {
+		const base = {
+			source: "memorall:web-browser-command",
+			sessionId: "session-1",
+			tabId: 3,
+			timeoutMs: 1_000,
+		};
+		expect(
+			parseBrowserCommand({ ...base, command: "outline", maxChars: 4_000 })
+				.command,
+		).toBe("outline");
+		expect(
+			parseBrowserCommand({
+				...base,
+				command: "outline-action",
+				maxChars: 4_000,
+				request: { ref: "b3", action: "click" },
+			}).command,
+		).toBe("outline-action");
+		expect(
+			parseBrowserCommand({
+				...base,
+				command: "navigate",
+				url: "https://example.com",
+				maxHtmlChars: 1_000,
+			}).command,
+		).toBe("navigate");
+		expect(
+			parseBrowserCommand({
+				...base,
+				command: "history",
+				direction: "back",
+				maxHtmlChars: 1_000,
+			}).command,
+		).toBe("history");
+	});
+
+	it("rejects unknown outline actions and history directions", () => {
+		const base = {
+			source: "memorall:web-browser-command",
+			sessionId: "session-1",
+			tabId: 3,
+			timeoutMs: 1_000,
+		};
+		expect(() =>
+			parseBrowserCommand({
+				...base,
+				command: "outline-action",
+				maxChars: 4_000,
+				request: { ref: "b3", action: "eval" },
+			}),
+		).toThrow("Unsupported outline action");
+		expect(() =>
+			parseBrowserCommand({
+				...base,
+				command: "history",
+				direction: "sideways",
+				maxHtmlChars: 1_000,
+			}),
+		).toThrow("Unsupported history direction");
+	});
+
 	it("does not expose non-browser sidecar methods through browser.command", () => {
 		expect(() =>
 			parseBrowserCommand({

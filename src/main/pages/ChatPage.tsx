@@ -55,11 +55,19 @@ import { useAgentConfigStore } from "@/main/stores/agent-config";
 import { useChatStore } from "@/main/stores/chat";
 import { useRefreshOnFocus } from "@/main/modules/chat/hooks/use-refresh-on-focus";
 import { useRuntimeSessionsStore } from "@/main/stores/runtime-sessions";
+import {
+	useAgentComputer,
+	useMemonAutoOpen,
+} from "@/main/components/molecules/MemonComputer";
 import { useShellLayoutStore } from "@/main/stores/shell-layout";
 import { useWebChallengeHandoffStore } from "@/main/stores/web-challenge-handoff";
 import { serviceManager } from "@/services";
 import type { Flow, Topic } from "@/services/database/types";
 import type { FeatureCatalogMetadata } from "@/services/flow-feature-catalog-service";
+import {
+	type MemonFeatureConfig,
+	memonConfigFromFlow,
+} from "@/services/memon/feature-config";
 import type { AttachedDocumentRef } from "@/types/chat";
 import { isPopupSurface } from "@/utils/dom";
 
@@ -105,6 +113,8 @@ export const ChatPage: React.FC<ChatPageProps> = ({
 		React.useState<string[]>([]);
 	const [selectedAgentFeatureLabels, setSelectedAgentFeatureLabels] =
 		React.useState<string[]>([]);
+	const [selectedAgentComputer, setSelectedAgentComputer] =
+		React.useState<MemonFeatureConfig | null>(null);
 	const { isOpen, open } = useAgentConfigStore();
 	const refreshRuntimeSessions = useRuntimeSessionsStore(
 		(state) => state.refresh,
@@ -164,7 +174,33 @@ export const ChatPage: React.FC<ChatPageProps> = ({
 		deleteMessages,
 		submitMessage,
 	} = useChat(model);
-	const hasInProgressMessage = inProgressMessage != null;
+	const agentComputer = useAgentComputer(
+		selectedAgentFlowId,
+		selectedAgentComputer,
+	);
+	useMemonAutoOpen(selectedAgentFlowId);
+	// The run shows only in the chat it belongs to.
+	const visibleInProgressMessage =
+		inProgressMessage &&
+		inProgressMessage.conversationId === currentConversation?.id
+			? inProgressMessage
+			: null;
+	const hasInProgressMessage = visibleInProgressMessage != null;
+	const activeRun = useChatStore((state) => state.activeRun);
+	const runHere =
+		activeRun !== null && activeRun.conversationId === currentConversation?.id;
+	const runningElsewhere = React.useMemo(() => {
+		if (!isLoading || !activeRun || runHere) return null;
+		const title =
+			useChatStore
+				.getState()
+				.conversations.find((item) => item.id === activeRun.conversationId)
+				?.title || t("conversation.untitled", { defaultValue: "another chat" });
+		return {
+			title,
+			onOpen: () => void loadConversation(activeRun.conversationId),
+		};
+	}, [activeRun, isLoading, loadConversation, runHere, t]);
 	const currentHistoryBoundary = messageGroups.find((group) => group.isLatest)
 		?.previousSeparator?.id;
 
@@ -173,6 +209,11 @@ export const ChatPage: React.FC<ChatPageProps> = ({
 		images: File[],
 		docRefs: AttachedDocumentRef[],
 	) => {
+		// A run in progress (here or in another chat) keeps the draft as it is.
+		if (useChatStore.getState().isLoading) {
+			e.preventDefault();
+			return;
+		}
 		const contextPrefix = smartSelectContext
 			? `[Smart Select: ${smartSelectContext.label}]\n${smartSelectContext.content}`
 			: undefined;
@@ -306,6 +347,21 @@ ${text}`
 			);
 		}
 	}, [pendingChatText, inputValue, setInputValue]);
+
+	// Files sent from elsewhere (the MemonOS Bot computer) join the attachments,
+	// the same chips an @mention adds.
+	const pendingChatDocumentRefs = useWorkspaceModeStore(
+		(state) => state.pendingChatDocumentRefs,
+	);
+	useEffect(() => {
+		if (pendingChatDocumentRefs === null) return;
+		const refs = useWorkspaceModeStore.getState().takePendingChatDocumentRefs();
+		if (!refs?.length) return;
+		setAttachedDocumentRefs((current) => [
+			...current,
+			...refs.filter((ref) => !current.some((item) => item.path === ref.path)),
+		]);
+	}, [pendingChatDocumentRefs]);
 
 	useEffect(() => {
 		if (!pendingContinuation) return;
@@ -566,6 +622,7 @@ ${text}`
 			if (!selectedAgentFlowId || selectedAgentFlowId === "chat") {
 				setSelectedAgentFeatureNames([]);
 				setSelectedAgentFeatureLabels([]);
+				setSelectedAgentComputer(null);
 				return;
 			}
 
@@ -626,10 +683,12 @@ ${text}`
 
 				setSelectedAgentFeatureNames(names);
 				setSelectedAgentFeatureLabels(labels);
+				setSelectedAgentComputer(memonConfigFromFlow(config));
 			} catch {
 				if (!cancelled) {
 					setSelectedAgentFeatureNames([]);
 					setSelectedAgentFeatureLabels([]);
+					setSelectedAgentComputer(null);
 				}
 			}
 		};
@@ -977,7 +1036,7 @@ ${text}`
 							<MessageGroup
 								key={latestGroup.id}
 								group={latestGroup}
-								inProgressMessage={inProgressMessage}
+								inProgressMessage={visibleInProgressMessage}
 								defaultCollapsed={false}
 								selectedTopic={selectedTopic}
 								onLoadMessages={loadMessageGroup}
@@ -1012,7 +1071,8 @@ ${text}`
 					inputValue={inputValue}
 					setInputValue={setInputValue}
 					onSubmit={handleChatSubmit}
-					isLoading={isLoading}
+					isLoading={isLoading && !runningElsewhere}
+					runningElsewhere={runningElsewhere}
 					model={model}
 					status={status}
 					selectedTopic={selectedTopic}
@@ -1032,6 +1092,8 @@ ${text}`
 					attachedDocumentRefs={attachedDocumentRefs}
 					onAttachedDocumentRefsChange={setAttachedDocumentRefs}
 					isModelReady={isChatInputModelReady}
+					onOpenComputer={agentComputer.open}
+					isComputerWorking={agentComputer.working}
 					isFullWidth={isChatFullWidth}
 					onToggleFullWidth={() => setIsChatFullWidth((value) => !value)}
 					placeholder={t("input.messageAgent", {

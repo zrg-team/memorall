@@ -27,6 +27,9 @@ export const ConversationListSection: React.FC = () => {
 		void loadConversations();
 	}, [loadConversations]);
 
+	const runningId = useChatStore((state) =>
+		state.isLoading ? (state.activeRun?.conversationId ?? null) : null,
+	);
 	// The open conversation is listed even before it is saved to the list.
 	const visibleConversations = useMemo(() => {
 		const byId = new Map(conversations.map((item) => [item.id, item]));
@@ -40,6 +43,7 @@ export const ConversationListSection: React.FC = () => {
 		<ConversationList
 			conversations={visibleConversations}
 			currentId={currentConversation?.id}
+			runningId={runningId}
 			labels={{
 				search: t("sidebar.search"),
 				create: t("sidebar.newChat"),

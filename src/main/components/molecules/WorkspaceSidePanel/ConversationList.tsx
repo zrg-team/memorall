@@ -23,6 +23,8 @@ export interface ConversationListLabels {
 interface ConversationListProps {
 	conversations: readonly Conversation[];
 	currentId: string | null | undefined;
+	/** The conversation a reply is being written in, if any. */
+	runningId?: string | null;
 	labels: ConversationListLabels;
 	createIcon: React.ReactNode;
 	onCreate: () => Promise<void> | void;
@@ -42,6 +44,7 @@ interface ConversationListProps {
 export const ConversationList: React.FC<ConversationListProps> = ({
 	conversations,
 	currentId,
+	runningId = null,
 	labels,
 	createIcon,
 	onCreate,
@@ -118,6 +121,7 @@ export const ConversationList: React.FC<ConversationListProps> = ({
 											key={conversation.id}
 											conversation={conversation}
 											isActive={conversation.id === currentId}
+											isRunning={conversation.id === runningId}
 											isPinned={isConversationPinned(conversation)}
 											onSelect={() => onSelect(conversation)}
 											onRename={(title) => onRename(conversation, title)}

@@ -9,6 +9,8 @@ import {
 	type WebBrowserSurface,
 	type WebContentCommandRequest,
 	type WebContentCommandResponse,
+	type WebOutlineActionResult,
+	type WebPageOutline,
 } from "@/services/web-browser/web-browser-protocol";
 import { logError } from "@/utils/logger";
 import {
@@ -156,6 +158,15 @@ const closeSurfaceArtifacts = async ({
 	windowId?: number;
 }): Promise<void> => {
 	if (typeof windowId === "number") {
+		// A session window can gain sibling tabs (the MemonOS Bot browser opens its
+		// later tabs there). Only remove the window with its last tab.
+		const siblings = await chrome.tabs
+			.query({ windowId })
+			.catch(() => [] as chrome.tabs.Tab[]);
+		if (typeof tabId === "number" && siblings.length > 1) {
+			await chrome.tabs.remove(tabId).catch(() => {});
+			return;
+		}
 		await chrome.windows.remove(windowId).catch(() => {});
 		return;
 	}
@@ -416,10 +427,29 @@ const requestSnapshot = async (
 		timeoutMs,
 	);
 
+const openTabInWindow = async (
+	url: string,
+	windowId: number,
+): Promise<WebBrowserSurface> => {
+	const tab = await chrome.tabs.create({ url, windowId, active: false });
+	if (typeof tab.id !== "number") {
+		throw new Error("Failed to open browser tab for web session.");
+	}
+	return { mode: "tab", tabId: tab.id };
+};
+
 const openSurfaceForMode = async (
 	mode: "tab" | "window",
 	url: string,
+	windowId?: number,
 ): Promise<WebBrowserSurface> => {
+	if (typeof windowId === "number") {
+		try {
+			return await openTabInWindow(url, windowId);
+		} catch {
+			// The window was closed; fall through to a fresh surface.
+		}
+	}
 	if (mode === "window") {
 		try {
 			return await openBrowserWindow(url);
@@ -495,7 +525,11 @@ const handleOpenCommand = async (
 ): Promise<WebBrowserCommandResponse> => {
 	let surface: WebBrowserSurface | null = null;
 	try {
-		surface = await openSurfaceForMode(request.mode, request.url);
+		surface = await openSurfaceForMode(
+			request.mode,
+			request.url,
+			request.windowId,
+		);
 		await waitForTabReady(surface.tabId, request.timeoutMs);
 		// Before anything slow: the tab is in the background from the moment it
 		// opens, and the browser may freeze it while the page is still settling.
@@ -576,6 +610,216 @@ const handleReloadCommand = async (
 			sessionId: request.sessionId,
 			snapshot: response.snapshot,
 		};
+	} catch (error) {
+		return createErrorResponse(request, error);
+	}
+};
+
+/**
+ * Moves the tab through its own history. A bfcache restore or a pushState
+ * entry may never report `loading`, which `waitForReloadToStart` already
+ * tolerates by giving up its watch quickly.
+ */
+const handleHistoryCommand = async (
+	request: Extract<WebBrowserCommandRequest, { command: "history" }>,
+): Promise<WebBrowserCommandResponse> => {
+	try {
+		if (request.direction === "back") {
+			await chrome.tabs.goBack(request.tabId);
+		} else {
+			await chrome.tabs.goForward(request.tabId);
+		}
+		await waitForReloadToStart(request.tabId);
+		await waitForTabReady(request.tabId, request.timeoutMs);
+
+		const response = await requestSnapshotWithNavigationRetry(
+			request.tabId,
+			request.timeoutMs,
+		);
+		if (response.type !== "web-tool:snapshot-result") {
+			throw new Error("Invalid browser snapshot response.");
+		}
+
+		return {
+			source: WEB_BROWSER_COMMAND_SOURCE,
+			command: "history",
+			success: true,
+			sessionId: request.sessionId,
+			snapshot: response.snapshot,
+		};
+	} catch (error) {
+		return createErrorResponse(request, error);
+	}
+};
+
+const handleNavigateCommand = async (
+	request: Extract<WebBrowserCommandRequest, { command: "navigate" }>,
+): Promise<WebBrowserCommandResponse> => {
+	try {
+		if (isRestrictedUrl(request.url)) {
+			throw new Error(
+				`Unsupported page for browser-backed web tools: ${request.url}`,
+			);
+		}
+		await chrome.tabs.update(request.tabId, { url: request.url });
+		await waitForReloadToStart(request.tabId);
+		await waitForTabReady(request.tabId, request.timeoutMs);
+
+		const response = await requestSnapshotWithNavigationRetry(
+			request.tabId,
+			request.timeoutMs,
+		);
+		if (response.type !== "web-tool:snapshot-result") {
+			throw new Error("Invalid browser snapshot response.");
+		}
+
+		return {
+			source: WEB_BROWSER_COMMAND_SOURCE,
+			command: "navigate",
+			success: true,
+			sessionId: request.sessionId,
+			snapshot: response.snapshot,
+		};
+	} catch (error) {
+		return createErrorResponse(request, error);
+	}
+};
+
+/** Outline with the same redirect tolerance as snapshots. */
+const requestOutlineWithNavigationRetry = async (
+	tabId: number,
+	timeoutMs: number,
+	maxChars: number,
+): Promise<WebPageOutline> => {
+	const deadline = Date.now() + timeoutMs;
+	while (true) {
+		const remaining = deadline - Date.now();
+		if (remaining <= 0) {
+			throw new Error(
+				`Timed out waiting for browser tab ${tabId} to produce an outline.`,
+			);
+		}
+		try {
+			const response = await sendContentCommand(
+				tabId,
+				{
+					source: WEB_CONTENT_COMMAND_SOURCE,
+					type: "web-tool:outline",
+					maxChars,
+				},
+				Math.min(8_000, remaining),
+			);
+			if (response.type !== "web-tool:outline-result") {
+				throw new Error("Invalid browser outline response.");
+			}
+			return response.outline;
+		} catch (err) {
+			if (!isTransientContentScriptError(err)) {
+				throw err;
+			}
+			const retryRemaining = deadline - Date.now();
+			if (retryRemaining <= 0) {
+				throw err;
+			}
+			await waitForTabReady(tabId, Math.min(retryRemaining, 15_000));
+		}
+	}
+};
+
+const handleOutlineCommand = async (
+	request: Extract<WebBrowserCommandRequest, { command: "outline" }>,
+): Promise<WebBrowserCommandResponse> => {
+	try {
+		const outline = await requestOutlineWithNavigationRetry(
+			request.tabId,
+			request.timeoutMs,
+			request.maxChars,
+		);
+		return {
+			source: WEB_BROWSER_COMMAND_SOURCE,
+			command: "outline",
+			success: true,
+			sessionId: request.sessionId,
+			outline,
+		};
+	} catch (error) {
+		return createErrorResponse(request, error);
+	}
+};
+
+/**
+ * Sends an outline action exactly once.
+ *
+ * `sendContentCommand` retries on a closed reply channel, which is right for
+ * reads but wrong here: a click that navigates closes the channel after it has
+ * already run, and a retry would replay it on the next page. A closed channel
+ * therefore means "the action started a navigation" and is reported as done.
+ * A missing listener is still safe to retry through `sendContentCommand`,
+ * because the action never reached the page.
+ */
+const handleOutlineActionCommand = async (
+	request: Extract<WebBrowserCommandRequest, { command: "outline-action" }>,
+): Promise<WebBrowserCommandResponse> => {
+	const contentRequest: WebContentCommandRequest = {
+		source: WEB_CONTENT_COMMAND_SOURCE,
+		type: "web-tool:outline-action",
+		request: request.request,
+		maxChars: request.maxChars,
+	};
+	const done = (
+		result: WebOutlineActionResult,
+		outline?: WebPageOutline,
+	): WebBrowserCommandResponse => ({
+		source: WEB_BROWSER_COMMAND_SOURCE,
+		command: "outline-action",
+		success: true,
+		sessionId: request.sessionId,
+		result,
+		outline,
+	});
+	try {
+		const tab = await getTabOrThrow(request.tabId);
+		if (isRestrictedUrl(tab.url)) {
+			throw new Error(
+				`Unsupported page for browser-backed web tools: ${tab.url ?? "unknown URL"}`,
+			);
+		}
+		let rawResponse: unknown;
+		try {
+			rawResponse = await withinDeadline(
+				chrome.tabs.sendMessage(request.tabId, contentRequest),
+				request.timeoutMs,
+				() => new ContentScriptNoReplyError(request.tabId),
+			);
+		} catch (error) {
+			const message = toErrorMessage(error);
+			if (isClosedReplyChannelError(message)) {
+				return done({
+					ok: true,
+					action: request.request.action,
+					ref: request.request.ref,
+					detail: "The page started loading a new document.",
+				});
+			}
+			if (!isMissingContentScriptError(message)) {
+				throw error;
+			}
+			rawResponse = await sendContentCommand(
+				request.tabId,
+				contentRequest,
+				request.timeoutMs,
+			);
+		}
+		if (!isWebContentCommandResponse(rawResponse)) {
+			throw new Error("Invalid content-script response.");
+		}
+		if (!rawResponse.success) {
+			throw new Error(rawResponse.error);
+		}
+		if (rawResponse.type !== "web-tool:outline-action-result") {
+			throw new Error("Invalid browser outline action response.");
+		}
+		return done(rawResponse.result, rawResponse.outline);
 	} catch (error) {
 		return createErrorResponse(request, error);
 	}
@@ -973,6 +1217,14 @@ const handleCommand = async (
 			return handleBringToFrontCommand(request);
 		case "reload":
 			return handleReloadCommand(request);
+		case "history":
+			return handleHistoryCommand(request);
+		case "navigate":
+			return handleNavigateCommand(request);
+		case "outline":
+			return handleOutlineCommand(request);
+		case "outline-action":
+			return handleOutlineActionCommand(request);
 	}
 };
 

@@ -13,6 +13,7 @@ import {
 import {
 	ensureContainer,
 	ensureServerBridgeReady,
+	getServerBridge,
 	loadAlmostNodeLib,
 	normalizeServerPath,
 	pushRuntimeLog,
@@ -1078,6 +1079,50 @@ const isJavaScriptResponse = (path, contentType, headers = {}) => {
 	);
 };
 
+/**
+ * A server a process opened itself (`http.createServer().listen(3000)` run
+ * from a shell), known only to the AlmostNode bridge.
+ */
+const bridgeServerState = (bridge, port) => {
+	const url =
+		typeof bridge.getServerUrl === "function"
+			? bridge.getServerUrl(port)
+			: `/__virtual__/${port}`;
+	return {
+		// A plain Node HTTP server, as an Express one is.
+		kind: "express",
+		port,
+		url,
+		renderUrl: url,
+		// Its process started it: only that process can start it again.
+		startedBy: "process",
+		handleRequest: (method, path, headers, body) =>
+			bridge.handleRequest(port, method, path, headers, body),
+		stop: async () => {
+			await closeTrackedExpressServer(runtimeState.container, port);
+			unregisterBridgeServer(bridge, port);
+		},
+	};
+};
+
+const bridgeServerPorts = async () => {
+	if (!runtimeState.container) return { bridge: null, ports: [] };
+	const bridge = await getServerBridge(runtimeState.container);
+	const ports =
+		bridge && typeof bridge.getServerPorts === "function"
+			? bridge.getServerPorts()
+			: [];
+	return { bridge, ports };
+};
+
+/** A server the runtime started, or one a process started on its own. */
+const resolveServerOrThrow = async (port) => {
+	if (runtimeState.servers.has(port)) return getServerOrThrow(port);
+	const { bridge, ports } = await bridgeServerPorts();
+	if (bridge && ports.includes(port)) return bridgeServerState(bridge, port);
+	return getServerOrThrow(port);
+};
+
 const getServerOrThrow = (port) => {
 	const server = runtimeState.servers.get(port);
 	if (!server) {
@@ -1236,6 +1281,11 @@ const createExpressServerState = async ({
 		throw new Error("Server bridge is not ready for express requests");
 	}
 	const normalizedEntryPath = normalizePath(entryPath || `${rootDir}/server.js`);
+	if (!containerInstance.vfs.existsSync(normalizedEntryPath)) {
+		throw new Error(
+			`No server entry file at ${normalizedEntryPath}. Pass the project folder (rootDir) or the entry file (entryPath), or run the server from the Terminal (cd <folder> && node server.js).`,
+		);
+	}
 	await containerInstance.runFile(normalizedEntryPath);
 	const started = await waitForExpressStartup(bridge, port, 3_000);
 	if (!started) {
@@ -1452,23 +1502,37 @@ export const startServerOperation = async (payload) => {
 };
 
 export const stopServerOperation = async (payload) => {
+	if (!runtimeState.servers.has(payload.port)) {
+		const { bridge, ports } = await bridgeServerPorts();
+		if (bridge && ports.includes(payload.port)) {
+			await bridgeServerState(bridge, payload.port).stop();
+			return { port: payload.port };
+		}
+	}
 	await stopServerState(payload.port);
 	return { port: payload.port };
 };
 
-export const listServersOperation = async () => ({
-	servers: Array.from(runtimeState.servers.values()).map(toServerInfo),
-});
+export const listServersOperation = async () => {
+	const servers = Array.from(runtimeState.servers.values()).map(toServerInfo);
+	const { bridge, ports } = await bridgeServerPorts();
+	for (const port of ports) {
+		if (!runtimeState.servers.has(port)) {
+			servers.push(toServerInfo(bridgeServerState(bridge, port)));
+		}
+	}
+	return { servers };
+};
 
 export const renderServerUrlOperation = async (payload) => {
-	const server = getServerOrThrow(payload.port);
+	const server = await resolveServerOrThrow(payload.port);
 	const url =
 		server.url.replace(/\/?$/, "") + normalizeServerPath(payload.path || "/");
 	return { port: payload.port, url };
 };
 
 export const requestServerOperation = async (payload) => {
-	const server = getServerOrThrow(payload.port);
+	const server = await resolveServerOrThrow(payload.port);
 	const path = normalizeServerPath(payload.path || "/");
 	const url = server.url.replace(/\/?$/, "") + path;
 	const bodyBuffer = payload.body
@@ -1512,7 +1576,7 @@ export const handleSwRequestOperation = async (payload) => {
 	console.log(
 		`[server.handleSwRequest] id=${id} port=${port} method=${method} path=${path}`,
 	);
-	const server = getServerOrThrow(port);
+	const server = await resolveServerOrThrow(port);
 	const normalizedPath = normalizeServerPath(path || "/");
 	const responseData = await server.handleRequest(
 		method ?? "GET",

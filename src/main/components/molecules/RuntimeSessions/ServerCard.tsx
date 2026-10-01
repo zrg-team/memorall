@@ -100,18 +100,21 @@ export const ServerCard: React.FC<{
 						onClick={openServerUrl}
 						icon={<ExternalLink size={14} />}
 					/>
-					<ActionIconButton
-						title={t("sandboxPanel.restartServer")}
-						onClick={() => void handleRestart()}
-						disabled={isRestarting || isStopping}
-						icon={
-							isRestarting ? (
-								<Loader2 size={14} className="animate-spin" />
-							) : (
-								<RotateCw size={14} />
-							)
-						}
-					/>
+					{/* A server its own command opened is restarted by running it again. */}
+					{server.startedBy === "process" ? null : (
+						<ActionIconButton
+							title={t("sandboxPanel.restartServer")}
+							onClick={() => void handleRestart()}
+							disabled={isRestarting || isStopping}
+							icon={
+								isRestarting ? (
+									<Loader2 size={14} className="animate-spin" />
+								) : (
+									<RotateCw size={14} />
+								)
+							}
+						/>
+					)}
 					<ActionIconButton
 						title={t("sandboxPanel.stopServer")}
 						onClick={() => void handleStop()}

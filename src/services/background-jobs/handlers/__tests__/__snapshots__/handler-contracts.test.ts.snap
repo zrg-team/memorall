@@ -155,6 +155,10 @@ exports[`background job handler registry > registers every background job handle
     "jobType": "knowledge-graph",
   },
   {
+    "handler": "MemonOperationsHandler",
+    "jobType": "memon-operation",
+  },
+  {
     "handler": "EmbeddingOperationsHandler",
     "jobType": "reload-embedding-model",
   },
@@ -181,6 +185,10 @@ exports[`background job handler registry > registers every background job handle
   {
     "handler": "LLMOperationsHandler",
     "jobType": "serve-model",
+  },
+  {
+    "handler": "ChatHandler",
+    "jobType": "stop-chat",
   },
   {
     "handler": "EmbeddingOperationsHandler",

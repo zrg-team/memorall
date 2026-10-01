@@ -2,14 +2,27 @@ import { ImageIcon, Sparkles } from "lucide-react";
 import type React from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { cn } from "@/lib/utils";
 import {
 	WorkspaceEmptyState,
 	WorkspaceEmptyVisual,
 } from "@/main/components/molecules/WorkspaceEmptyState";
 import { useStudioStore } from "@/main/stores/studio";
-import type { ImageComment, StudioItem } from "@/types/studio";
+import { readStoredMedia } from "@/services/llm/utils/media-persistence";
+import type { MediaPayload } from "@/types/openai-media";
+import type {
+	ImageComment,
+	StudioContentPart,
+	StudioItem,
+} from "@/types/studio";
 import { logError } from "@/utils/logger";
-import { generateImages, isCancellation } from "../../services/studio-service";
+import {
+	generateImages,
+	isCancellation,
+	saveStudioInput,
+} from "../../services/studio-service";
+import { MAX_INPUT_BYTES } from "../image-tools/detection-geometry";
+import { formatBytes } from "../image-tools/ImageToolInput";
 import { StudioThread } from "../shared/StudioThread";
 import type { StudioCanvasProps } from "../studio-canvas";
 import { generatedImagesOf, ImageGenerationCard } from "./ImageGenerationCard";
@@ -78,7 +91,44 @@ interface GenerationRequest {
 		basePrompt: string;
 		comments: ImageComment[];
 	};
+	/** Images to start from; saved, as this run's own, when it starts. */
+	attachments?: readonly File[];
 }
+
+type FilePayload = Extract<MediaPayload, { kind: "file" }>;
+
+/** How many images one request may start from. */
+const MAX_ATTACHMENTS = 4;
+
+const isEditableTarget = (target: EventTarget | null) =>
+	target instanceof HTMLElement &&
+	(target.isContentEditable || /^(INPUT|SELECT)$/.test(target.tagName));
+
+/** The images a request started from (a follow-up's marked copy aside). */
+const attachedImagesOf = (item: StudioItem) =>
+	feedbackOf(item)
+		? []
+		: item.parts.flatMap((part) =>
+				part.type === "image" && part.image.role === "input"
+					? [part.image]
+					: [],
+			);
+
+/**
+ * An item's images read back into files: deleting the item deletes its
+ * files, so a new run must not point at them.
+ */
+const filesOfItem = (item: StudioItem): Promise<File[]> =>
+	Promise.all(
+		attachedImagesOf(item).map(
+			async (image, index) =>
+				new File(
+					[(await readStoredMedia(image.path)) as BlobPart],
+					image.path.split("/").pop() ?? `image-${index + 1}`,
+					{ type: image.mimeType },
+				),
+		),
+	);
 
 const settingsFromParams = (
 	params: Record<string, unknown>,
@@ -134,8 +184,80 @@ export const ImageGenerationStudio: React.FC<StudioCanvasProps> = ({
 	const [progress, setProgress] = useState<number | null>(null);
 	const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 	const [commenting, setCommenting] = useState(false);
+	const [attachments, setAttachments] = useState<File[]>([]);
+	const [attachError, setAttachError] = useState<string | null>(null);
+	const [dragging, setDragging] = useState(false);
 	const abortRef = useRef<AbortController | null>(null);
 	const composerRef = useRef<ImagePromptComposerHandle>(null);
+	const attachmentsRef = useRef(attachments);
+	attachmentsRef.current = attachments;
+
+	const attach = useCallback(
+		(files: readonly File[], replace = false) => {
+			const images = files.filter((file) => file.type.startsWith("image/"));
+			const tooLarge = images.find((file) => file.size > MAX_INPUT_BYTES);
+			const accepted = images.filter((file) => file.size <= MAX_INPUT_BYTES);
+			const kept = replace ? [] : attachmentsRef.current;
+			const added = accepted.slice(
+				0,
+				Math.max(0, MAX_ATTACHMENTS - kept.length),
+			);
+			const overLimit = kept.length + accepted.length > MAX_ATTACHMENTS;
+			setAttachError(
+				images.length === 0
+					? t("composer.notImage", {
+							defaultValue: "That file is not an image.",
+						})
+					: tooLarge
+						? t("composer.tooLarge", {
+								size: formatBytes(tooLarge.size),
+								max: formatBytes(MAX_INPUT_BYTES),
+								defaultValue: `This image is ${formatBytes(tooLarge.size)}; the limit is ${formatBytes(MAX_INPUT_BYTES)}.`,
+							})
+						: overLimit
+							? t("composer.tooMany", {
+									max: MAX_ATTACHMENTS,
+									defaultValue: `Up to ${MAX_ATTACHMENTS} images can be used at once.`,
+								})
+							: null,
+			);
+			const next = [...kept, ...added];
+			attachmentsRef.current = next;
+			setAttachments(next);
+			composerRef.current?.focus();
+		},
+		[t],
+	);
+
+	const removeAttachment = (index: number) => {
+		setAttachError(null);
+		const next = attachmentsRef.current.filter((_, at) => at !== index);
+		attachmentsRef.current = next;
+		setAttachments(next);
+	};
+
+	/** Clears the composer's images once a run has taken them. */
+	const clearAttachments = () => {
+		attachmentsRef.current = [];
+		setAttachments([]);
+		setAttachError(null);
+	};
+
+	// An image pasted anywhere in the studio, the prompt included, is one to
+	// start from; pasted text is left to the field it goes to.
+	useEffect(() => {
+		const onPaste = (event: ClipboardEvent) => {
+			if (isEditableTarget(event.target)) return;
+			const files = Array.from(event.clipboardData?.files ?? []).filter(
+				(file) => file.type.startsWith("image/"),
+			);
+			if (files.length === 0) return;
+			event.preventDefault();
+			attach(files);
+		};
+		window.addEventListener("paste", onPaste);
+		return () => window.removeEventListener("paste", onPaste);
+	}, [attach]);
 
 	// A different model may not offer the chosen size or several images;
 	// fall back to what it does support instead of sending a request it rejects.
@@ -195,12 +317,28 @@ export const ImageGenerationStudio: React.FC<StudioCanvasProps> = ({
 					);
 					if (controller.signal.aborted) return;
 				}
+				let references: FilePayload[] | undefined = follow?.references;
+				let inputParts: StudioContentPart[] | undefined = follow?.inputParts;
+				if (!follow && request.attachments?.length) {
+					references = await Promise.all(
+						request.attachments.map((file) => saveStudioInput(file, "image")),
+					);
+					inputParts = references.map((image) => ({
+						type: "image" as const,
+						image: {
+							path: image.path,
+							mimeType: image.mimeType,
+							role: "input" as const,
+						},
+					}));
+					if (controller.signal.aborted) return;
+				}
 				await generateImages({
 					model: ready,
 					prompt: follow?.prompt ?? request.prompt,
-					references: follow?.references,
+					references,
 					mask: follow?.mask,
-					inputParts: follow?.inputParts,
+					inputParts,
 					size: sizeParam(request.size),
 					n: request.n > 1 ? request.n : undefined,
 					quality: request.quality === "auto" ? undefined : request.quality,
@@ -238,7 +376,9 @@ export const ImageGenerationStudio: React.FC<StudioCanvasProps> = ({
 		const text = prompt.trim();
 		if (!text || running) return;
 		setPrompt("");
-		void run(requestFrom(text, settings));
+		const files = attachments;
+		clearAttachments();
+		void run({ ...requestFrom(text, settings), attachments: files });
 	};
 
 	const stop = () => abortRef.current?.abort();
@@ -249,6 +389,13 @@ export const ImageGenerationStudio: React.FC<StudioCanvasProps> = ({
 			settingsFromParams(item.generation.params ?? {}, current, capabilities),
 		);
 		composerRef.current?.focus();
+		if (attachedImagesOf(item).length > 0) {
+			void filesOfItem(item)
+				.then((files) => attach(files, true))
+				.catch((error) =>
+					logError("[ImageGenerationStudio] could not read the images", error),
+				);
+		}
 	};
 
 	const retry = (item: StudioItem) => {
@@ -259,6 +406,18 @@ export const ImageGenerationStudio: React.FC<StudioCanvasProps> = ({
 			capabilities,
 		);
 		const feedback = feedbackOf(item);
+		if (!feedback && attachedImagesOf(item).length > 0) {
+			// Its images are read before the failed item, and its files, go.
+			void filesOfItem(item)
+				.then((files) => {
+					void run({ ...requestFrom(item.content, from), attachments: files });
+					void deleteItem(mode, item.id);
+				})
+				.catch((error) =>
+					logError("[ImageGenerationStudio] could not read the images", error),
+				);
+			return;
+		}
 		// A follow-up is made again from its source and notes, with new copies of
 		// the files it sends: the failed item's own are deleted with it.
 		void run({
@@ -348,9 +507,32 @@ export const ImageGenerationStudio: React.FC<StudioCanvasProps> = ({
 	};
 
 	return (
-		<div
-			className="relative flex h-full min-h-0 flex-col"
+		<section
+			className={cn(
+				"relative flex h-full min-h-0 flex-col",
+				dragging && "ring-2 ring-inset ring-primary/60",
+			)}
 			data-studio-canvas={mode}
+			aria-label={t("canvas.label", { defaultValue: "Create images" })}
+			data-image-dragging={dragging || undefined}
+			onDragOver={(event) => {
+				if (!Array.from(event.dataTransfer.types).includes("Files")) return;
+				event.preventDefault();
+				event.dataTransfer.dropEffect = "copy";
+				setDragging(true);
+			}}
+			onDragLeave={(event) => {
+				if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+					setDragging(false);
+				}
+			}}
+			onDrop={(event) => {
+				if (!Array.from(event.dataTransfer.types).includes("Files")) return;
+				event.preventDefault();
+				setDragging(false);
+				const files = Array.from(event.dataTransfer.files);
+				if (files.length) attach(files);
+			}}
 		>
 			<StudioThread empty={items.length === 0} isNarrow={isNarrow}>
 				{items.length === 0 ? (
@@ -413,6 +595,10 @@ export const ImageGenerationStudio: React.FC<StudioCanvasProps> = ({
 				onSubmit={submit}
 				onStop={stop}
 				isNarrow={isNarrow}
+				attachments={attachments}
+				onAttach={attach}
+				onRemoveAttachment={removeAttachment}
+				attachError={attachError}
 			/>
 
 			<ImageLightbox
@@ -423,6 +609,6 @@ export const ImageGenerationStudio: React.FC<StudioCanvasProps> = ({
 				onCommentingChange={setCommenting}
 				comments={commentingProps}
 			/>
-		</div>
+		</section>
 	);
 };

@@ -18,6 +18,7 @@ import {
 	Languages,
 	ListChecks,
 	Minimize2,
+	Monitor,
 	Newspaper,
 	PanelsTopLeft,
 	Plug,
@@ -59,6 +60,7 @@ export const LUCIDE_MAP: Record<
 	Languages,
 	ListChecks,
 	Minimize2,
+	Monitor,
 	Newspaper,
 	PanelsTopLeft,
 	Plug,
@@ -118,6 +120,11 @@ export interface FeatureCardProps {
 	hasDetail?: boolean;
 	displayName: string;
 	displayDesc: string;
+	/**
+	 * Display name of the computer this feature is an app on (MemonOS Bot):
+	 * while on, it runs as that app instead of adding its own tools.
+	 */
+	appOfName?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -132,6 +139,7 @@ export const FeatureCard: React.FC<FeatureCardProps> = ({
 	hasDetail = false,
 	displayName,
 	displayDesc,
+	appOfName,
 }) => {
 	const { t } = useTranslation("chat");
 	const accent = getFeatureAccent(feature);
@@ -139,6 +147,7 @@ export const FeatureCard: React.FC<FeatureCardProps> = ({
 	const showToolsBadge =
 		toolCount !== undefined && totalToolCount !== undefined;
 	const showDetailBtn = hasDetail;
+	const isApp = Boolean(appOfName) && enabled;
 
 	return (
 		<div
@@ -198,6 +207,11 @@ export const FeatureCard: React.FC<FeatureCardProps> = ({
 					<Switch
 						checked={enabled}
 						onCheckedChange={onToggle}
+						title={
+							appOfName
+								? t("agentSettings.appOfHint", { name: appOfName })
+								: undefined
+						}
 						className="shrink-0"
 					/>
 				)}
@@ -213,6 +227,13 @@ export const FeatureCard: React.FC<FeatureCardProps> = ({
 						>
 							Deprecated
 						</Badge>
+					) : isApp ? (
+						<Badge
+							variant="secondary"
+							className="bg-cyan-500/10 text-[10px] text-cyan-700 dark:text-cyan-300"
+						>
+							{t("agentSettings.appOf", { name: appOfName })}
+						</Badge>
 					) : showToolsBadge ? (
 						<Badge variant="secondary" className="text-[10px]">
 							{toolCount}/{totalToolCount}
@@ -222,7 +243,7 @@ export const FeatureCard: React.FC<FeatureCardProps> = ({
 							{t("agentSettings.toolCount", { count: feature.tools.length })}
 						</Badge>
 					)}
-					{!legacy && feature.systemPrompt && (
+					{!legacy && !isApp && feature.systemPrompt && (
 						<Badge
 							variant="outline"
 							className="text-[10px] text-muted-foreground"

@@ -143,6 +143,21 @@ buildSync({
 	tsconfig: resolve(root, "tsconfig.json"),
 });
 
+// The page outline (Memon Bot's text-first page view), bundled the same way so
+// the desktop reads pages with the code the extension content script runs.
+buildSync({
+	entryPoints: [resolve(root, "src/co-agent/host/page-outline-entry.ts")],
+	outfile: join(sidecarOutput, "page-outline.js"),
+	bundle: true,
+	platform: "browser",
+	format: "iife",
+	target: "chrome120",
+	sourcemap: false,
+	minify: true,
+	define: { "process.env.NODE_ENV": '"production"' },
+	tsconfig: resolve(root, "tsconfig.json"),
+});
+
 if (sidecarOnly) {
 	console.log(
 		"Rebuilt desktop browser sidecar protocol v3 without restaging native runtimes.",

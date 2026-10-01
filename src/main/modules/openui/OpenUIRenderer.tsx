@@ -7,14 +7,17 @@ import React, {
 	useState,
 } from "react";
 import "@/main/i18n/config";
-import { Renderer, type ActionEvent } from "@openuidev/react-lang";
+import {
+	Renderer,
+	type ActionEvent,
+	type OpenUIError,
+} from "@openuidev/react-lang";
 import {
 	readOpenUIState,
 	writeOpenUIState,
 } from "@/main/modules/openui/openui-form-state";
 import { OpenUIWidgetStateProvider } from "@/main/modules/openui/openui-widget-state";
 import { createComponentLibrary } from "./index";
-import { MarkdownMessage } from "@/main/modules/chat/components/MarkdownMessage";
 import { ThreeDotsLoader } from "@/main/components/atoms/ThreeDotsLoader";
 import { useTranslation } from "react-i18next";
 import { logError, logWarn } from "@/utils/logger";
@@ -26,6 +29,42 @@ import {
 import { useThrottledValue } from "./use-throttled-value";
 import type { MessageActionRequest } from "@/main/modules/chat/components/artifacts/ArtifactActionsMenu";
 import { detectTheme } from "./detect-theme";
+import { escapeStrayQuotes } from "./repair-openui";
+
+/**
+ * The visual's source, as written. Plain text: as Markdown, the "$" in prices
+ * would be read as math and the source shredded.
+ */
+const OpenUISource = ({ content }: { content: string }) => (
+	<pre className="max-h-96 overflow-auto whitespace-pre-wrap break-words font-mono text-xs">
+		{content}
+	</pre>
+);
+
+/** What could not be drawn, under a visual that otherwise drew. */
+const OpenUIPartNotice = ({ errors }: { errors: readonly OpenUIError[] }) => {
+	const { t } = useTranslation("chat");
+	return (
+		<details className="mt-2 text-xs text-muted-foreground" data-openui-errors>
+			<summary className="cursor-pointer select-none">
+				{t("openui.partial", {
+					count: errors.length,
+					defaultValue: "Some parts could not be shown ({{count}})",
+				})}
+			</summary>
+			<ul className="mt-1 list-disc space-y-0.5 pl-5">
+				{errors.map((error) => (
+					<li
+						key={`${error.code}:${error.statementId ?? ""}:${error.path ?? ""}:${error.message}`}
+					>
+						{error.statementId ? `${error.statementId}: ` : ""}
+						{error.message}
+					</li>
+				))}
+			</ul>
+		</details>
+	);
+};
 
 class OpenUIErrorBoundary extends React.Component<
 	{ content: string; children: React.ReactNode },
@@ -49,7 +88,7 @@ class OpenUIErrorBoundary extends React.Component<
 
 	render() {
 		if (this.state.hasError) {
-			return <MarkdownMessage>{this.props.content}</MarkdownMessage>;
+			return <OpenUISource content={this.props.content} />;
 		}
 		return this.props.children;
 	}
@@ -68,7 +107,7 @@ const OpenUIRenderFallback = ({
 		<div className="font-medium text-destructive">{title}</div>
 		<div className="mt-1 text-muted-foreground">{description}</div>
 		<div className="mt-3 rounded border border-border/60 bg-background/70 p-3">
-			<MarkdownMessage>{content}</MarkdownMessage>
+			<OpenUISource content={content} />
 		</div>
 	</div>
 );
@@ -147,7 +186,11 @@ const OpenUIRenderFrame: React.FC<OpenUIRendererProps> = React.memo(
 		);
 		const [renderFailed, setRenderFailed] = useState(false);
 		const [streamingRenderFailed, setStreamingRenderFailed] = useState(false);
+		const [partErrors, setPartErrors] = useState<OpenUIError[]>([]);
+		const drawn = useRef<HTMLDivElement>(null);
 		const prevStreaming = useRef(streaming);
+		// Quotes left inside a string would lose the whole statement.
+		const response = useMemo(() => escapeStrayQuotes(content), [content]);
 
 		// Dev/harness-only remount counter: proves the OpenUI tree no longer mounts
 		// once per streamed token. No-op unless the perf harness sets window.__openuiPerf.
@@ -162,7 +205,17 @@ const OpenUIRenderFrame: React.FC<OpenUIRendererProps> = React.memo(
 		useEffect(() => {
 			setRenderFailed(false);
 			setStreamingRenderFailed(false);
+			// Same array when nothing changes: a new one would re-render the parser.
+			setPartErrors((current) => (current.length ? [] : current));
 		}, [content]);
+
+		// Whatever drew stays, with a note on what did not; only a visual that
+		// drew nothing falls back to its source.
+		useEffect(() => {
+			if (!partErrors.length || drawn.current?.querySelector("*")) return;
+			if (streaming) setStreamingRenderFailed(true);
+			else setRenderFailed(true);
+		}, [partErrors, streaming]);
 
 		useEffect(() => {
 			if (prevStreaming.current && !streaming) {
@@ -280,19 +333,14 @@ const OpenUIRenderFrame: React.FC<OpenUIRendererProps> = React.memo(
 			[onMessageAction, t],
 		);
 
-		const handleRendererError = useCallback(
-			(errors: unknown[]) => {
-				if (errors.length > 0) {
-					logWarn("[OpenUIRenderer] Parse/runtime errors:", errors);
-					if (streaming) {
-						setStreamingRenderFailed(true);
-					} else {
-						setRenderFailed(true);
-					}
-				}
-			},
-			[streaming],
-		);
+		const handleRendererError = useCallback((errors: OpenUIError[]) => {
+			if (errors.length > 0) {
+				logWarn("[OpenUIRenderer] Parse/runtime errors:", errors);
+			}
+			setPartErrors((current) =>
+				errors.length || current.length ? errors : current,
+			);
+		}, []);
 
 		if (renderFailed && !streaming) {
 			return (
@@ -310,18 +358,23 @@ const OpenUIRenderFrame: React.FC<OpenUIRendererProps> = React.memo(
 
 		return (
 			<OpenUIErrorBoundary content={content}>
-				<OpenUIWidgetStateProvider blockKey={stateKey}>
-					<Renderer
-						key={resetKey}
-						response={content}
-						library={library}
-						isStreaming={streaming}
-						initialState={initialState}
-						onStateUpdate={handleStateUpdate}
-						onAction={handleOpenUIAction}
-						onError={handleRendererError}
-					/>
-				</OpenUIWidgetStateProvider>
+				<div ref={drawn}>
+					<OpenUIWidgetStateProvider blockKey={stateKey}>
+						<Renderer
+							key={resetKey}
+							response={response}
+							library={library}
+							isStreaming={streaming}
+							initialState={initialState}
+							onStateUpdate={handleStateUpdate}
+							onAction={handleOpenUIAction}
+							onError={handleRendererError}
+						/>
+					</OpenUIWidgetStateProvider>
+				</div>
+				{!streaming && partErrors.length > 0 ? (
+					<OpenUIPartNotice errors={partErrors} />
+				) : null}
 			</OpenUIErrorBoundary>
 		);
 	},
@@ -334,6 +387,7 @@ export const OpenUIRenderer: React.FC<OpenUIRendererProps> = ({
 	streaming,
 	deferred = false,
 	stateKey,
+	configuredTheme,
 	onMessageAction,
 }) => {
 	const baseInterval =
@@ -395,6 +449,7 @@ export const OpenUIRenderer: React.FC<OpenUIRendererProps> = ({
 				content={renderContent}
 				streaming={streaming}
 				stateKey={stateKey}
+				configuredTheme={configuredTheme}
 				onMessageAction={onMessageAction}
 			/>
 		</div>

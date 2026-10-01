@@ -21,6 +21,7 @@ exports[`requested service module coverage > imports requested service trees 1`]
   "../background-jobs/handlers/process-knowledge-graph.ts",
   "../background-jobs/handlers/process-llm-operations.ts",
   "../background-jobs/handlers/process-media-operations.ts",
+  "../background-jobs/handlers/process-memon-operations.ts",
   "../background-jobs/handlers/process-remember-save.ts",
   "../background-jobs/handlers/process-sandbox-operations.ts",
   "../background-jobs/handlers/process-topic-operations.ts",

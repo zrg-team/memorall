@@ -489,9 +489,9 @@ describe("SandboxContainerServiceMain", () => {
 		expect(documentFileSystemService.deleteFile).toHaveBeenCalledWith(
 			"/app/old.txt",
 		);
-		expect(documentFileSystemService.rename).toHaveBeenCalledWith(
+		expect(documentFileSystemService.renamePath).toHaveBeenCalledWith(
 			"/app/tmp.txt",
-			"final.txt",
+			"/app/final.txt",
 		);
 	});
 
@@ -677,6 +677,165 @@ describe("SandboxContainerServiceMain", () => {
 		expect(documentFileSystemService.renamePath).toHaveBeenCalledWith(
 			"/app/src/old.ts",
 			"/app/generated/new.ts",
+		);
+	});
+
+	it("pushes host changes in any scope, including newly created files", async () => {
+		const service = createService();
+		const { sandboxWindow } = installReadyIframe(service);
+		service.workspaceMountSynced = true;
+		vi.mocked(
+			documentFileSystemService.getSandboxWorkspaceMountSnapshot,
+		).mockResolvedValue({
+			directories: ["/", "/notes", "/notes/landing-page"],
+			files: ["/notes/landing-page/server.js"],
+		});
+		vi.mocked(documentFileSystemService.readFile).mockResolvedValue(
+			encoded("require('http')"),
+		);
+
+		service.queueWorkspaceHotReload({
+			scope: "root",
+			operation: "create",
+			path: "/notes/landing-page/server.js",
+		});
+		await service.flushWorkspaceHotReload();
+
+		expect(sandboxWindow.postMessage).toHaveBeenCalledWith(
+			expect.objectContaining({
+				type: "memorall-sandbox-workspace-sync",
+				mode: "incremental",
+				changes: [
+					{
+						operation: "write",
+						path: "/notes/landing-page/server.js",
+						content: "require('http')",
+					},
+				],
+			}),
+			"*",
+		);
+	});
+
+	it("saves sandbox writes as they happen and does not echo them back", async () => {
+		const service = createService();
+		const { sandboxWindow } = installReadyIframe(service);
+		service.workspaceMountSynced = true;
+		vi.spyOn(service, "request").mockImplementation(
+			async (operation: unknown) => {
+				if (operation === "fs.flushWorkspaceWrites") {
+					return {
+						ops: [{ op: "write", path: "/app/out.txt", content: "out" }],
+					} as never;
+				}
+				throw new Error(`unexpected operation ${operation}`);
+			},
+		);
+
+		service.onFsMessage({
+			source: sandboxWindow as unknown as MessageEventSource,
+			data: { channel: "memorall-sandbox-fs-pending" },
+		});
+		await vi.waitFor(() =>
+			expect(documentFileSystemService.writeFile).toHaveBeenCalledWith(
+				"/app/out.txt",
+				"out",
+			),
+		);
+
+		vi.mocked(documentFileSystemService.readFile).mockResolvedValue(
+			encoded("out"),
+		);
+		service.queueWorkspaceHotReload({
+			scope: "root",
+			operation: "create",
+			path: "/app/out.txt",
+		});
+		await service.flushWorkspaceHotReload();
+
+		expect(sandboxWindow.postMessage).not.toHaveBeenCalledWith(
+			expect.objectContaining({ type: "memorall-sandbox-workspace-sync" }),
+			"*",
+		);
+	});
+
+	it("remounts everything when a change cannot be described", async () => {
+		const service = createService();
+		installReadyIframe(service);
+		service.workspaceMountSynced = true;
+		const request = vi
+			.spyOn(service, "request")
+			.mockImplementation(async (operation: unknown) => {
+				switch (operation as SandboxOperation) {
+					case "fs.flushWorkspaceWrites":
+						return { ops: [] } as never;
+					case "fs.listUnmaterializedWorkspaceFiles":
+						return { files: [] } as never;
+					default:
+						return { mounted: true } as never;
+				}
+			});
+
+		service.queueWorkspaceHotReload(null);
+		await service.flushWorkspaceHotReload();
+
+		expect(request).toHaveBeenCalledWith("fs.mountWorkspace", {
+			directories: ["/"],
+			files: ["/app/index.js"],
+		});
+	});
+
+	it("loads the working directory's files into the runtime before a command runs", async () => {
+		const service = createService();
+		vi.mocked(
+			documentFileSystemService.getSandboxWorkspaceMountSnapshot,
+		).mockResolvedValue({
+			directories: ["/", "/site", "/site/node_modules"],
+			files: ["/site/server.js", "/site/huge.bin", "/site/.git/HEAD"],
+			fileSizes: { "/site/huge.bin": 50 * 1024 * 1024 },
+		});
+		vi.mocked(documentFileSystemService.readFile).mockImplementation(
+			async (path: string) => encoded(`contents of ${path}`),
+		);
+		const calls: string[] = [];
+		const request = vi
+			.spyOn(service, "request")
+			.mockImplementation(async (operation: unknown, payload: unknown) => {
+				calls.push(operation as string);
+				switch (operation as SandboxOperation) {
+					case "fs.mountDocuments":
+					case "fs.mountWorkspace":
+						return { mounted: true } as never;
+					case "fs.flushWorkspaceWrites":
+						return { ops: [] } as never;
+					case "fs.listUnmaterializedWorkspaceFiles":
+						return {
+							files:
+								(payload as { path: string }).path === "/site"
+									? ["/site/server.js", "/site/huge.bin", "/site/.git/HEAD"]
+									: [],
+						} as never;
+					case "fs.materializeWorkspaceFiles":
+						return { materialized: [] } as never;
+					case "runtime.executeCommand":
+						return commandResult() as never;
+					default:
+						throw new Error(`unexpected operation ${operation}`);
+				}
+			});
+
+		await service.executeCommand({
+			command: "cd site && node server.js",
+			cwd: "/",
+		});
+
+		expect(request).toHaveBeenCalledWith("fs.materializeWorkspaceFiles", {
+			files: [
+				{ path: "/site/server.js", content: "contents of /site/server.js" },
+			],
+		});
+		expect(calls.indexOf("fs.materializeWorkspaceFiles")).toBeLessThan(
+			calls.indexOf("runtime.executeCommand"),
 		);
 	});
 

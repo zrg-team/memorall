@@ -69,6 +69,8 @@ export interface AgentFeatureDefinition {
 	/** Slot declarations that drive AgentFeatureDetailModal rendering.
 	 *  undefined → standard view. A ToolPicker slot suppresses the toggle. */
 	detailView?: FeatureDetailViewSlot[];
+	/** Step names this feature takes over while it is enabled. */
+	absorbsFeatures?: string[];
 }
 
 // ---------------------------------------------------------------------------
@@ -171,6 +173,9 @@ function buildFeatureDefinitions(graphType: string): AgentFeatureDefinition[] {
 				requiresAccessibleAgents: Boolean(meta.requiresAccessibleAgents),
 				detailView: Array.isArray(meta.detailView)
 					? (meta.detailView as FeatureDetailViewSlot[])
+					: undefined,
+				absorbsFeatures: Array.isArray(meta.absorbsFeatures)
+					? meta.absorbsFeatures.map(String)
 					: undefined,
 			};
 		});
@@ -305,6 +310,12 @@ interface AgentConfigState {
 	savedConfig: FoundationPredefinedConfig;
 	draftConfig: FoundationPredefinedConfig;
 	savedUnifiedConfig: UnifiedFlowConfig | null;
+	/**
+	 * `savedUnifiedConfig` as last loaded or saved. Step-config patches from
+	 * feature settings edit `savedUnifiedConfig` directly, so dirtiness and
+	 * revert for those patches are measured against this baseline.
+	 */
+	stepConfigBaseline: UnifiedFlowConfig | null;
 	savedFeatures: FeatureFlags;
 	draftFeatures: FeatureFlags;
 	/** All features for the current graph. Single source of truth for the UI. */
@@ -423,6 +434,7 @@ export const useAgentConfigStore = create<AgentConfigState>((set, get) => {
 			set({
 				savedConfig: { ...draftConfig },
 				savedUnifiedConfig: unifiedConfig,
+				stepConfigBaseline: unifiedConfig,
 				savedFeatures: { ...draftFeatures },
 				savedMultiAgentAccessibleAgentIds: [
 					...draftMultiAgentAccessibleAgentIds,
@@ -447,6 +459,7 @@ export const useAgentConfigStore = create<AgentConfigState>((set, get) => {
 		savedConfig: { ...DEFAULT_FOUNDATION_PREDEFINED_CONFIG },
 		draftConfig: { ...DEFAULT_FOUNDATION_PREDEFINED_CONFIG },
 		savedUnifiedConfig: null,
+		stepConfigBaseline: null,
 		savedFeatures: {},
 		draftFeatures: {},
 		featureDefinitions: [],
@@ -526,6 +539,7 @@ export const useAgentConfigStore = create<AgentConfigState>((set, get) => {
 						savedConfig: normalizedConfig,
 						draftConfig: { ...normalizedConfig },
 						savedUnifiedConfig: null,
+						stepConfigBaseline: null,
 						savedFeatures: { ...defaultFeatures, ...featureFlags },
 						draftFeatures: { ...defaultFeatures, ...featureFlags },
 						featureDefinitions,
@@ -576,6 +590,7 @@ export const useAgentConfigStore = create<AgentConfigState>((set, get) => {
 					savedConfig: derivedState.config,
 					draftConfig: { ...derivedState.config },
 					savedUnifiedConfig: unifiedConfig,
+					stepConfigBaseline: unifiedConfig,
 					savedFeatures: { ...derivedState.features },
 					draftFeatures: { ...derivedState.features },
 					featureDefinitions: derivedState.featureDefinitions,
@@ -851,10 +866,26 @@ export const useAgentConfigStore = create<AgentConfigState>((set, get) => {
 		patchStepConfig: (stepName, patch) => {
 			const { savedUnifiedConfig } = get();
 			if (!savedUnifiedConfig) return;
+			const hasStep = savedUnifiedConfig.steps.some(
+				(step) => step.name === stepName,
+			);
+			// A config stored before this step existed has no slot for it yet. Add
+			// one with the id buildDefaultFlowConfig would give it, so the merge on
+			// save matches it; the draft feature flag still decides `enabled`.
+			const steps = hasStep
+				? savedUnifiedConfig.steps
+				: [
+						...savedUnifiedConfig.steps,
+						{
+							id: `${savedUnifiedConfig.graphType}__${stepName.replace(/[^a-z0-9_-]/gi, "_")}__0`,
+							name: stepName,
+							enabled: false,
+						},
+					];
 			set({
 				savedUnifiedConfig: {
 					...savedUnifiedConfig,
-					steps: savedUnifiedConfig.steps.map((step) =>
+					steps: steps.map((step) =>
 						step.name === stepName
 							? {
 									...step,
@@ -876,6 +907,8 @@ export const useAgentConfigStore = create<AgentConfigState>((set, get) => {
 				savedConfig.graphType === "agent" ? "agent" : "foundation";
 			set({
 				draftConfig: { ...savedConfig },
+				// Undo feature-settings patches along with the draft.
+				savedUnifiedConfig: get().stepConfigBaseline,
 				draftFeatures: { ...get().savedFeatures },
 				draftMultiAgentAccessibleAgentIds: [
 					...get().savedMultiAgentAccessibleAgentIds,
@@ -916,4 +949,21 @@ export const useAgentConfigStore = create<AgentConfigState>((set, get) => {
 			});
 		},
 	};
+});
+
+const stepConfigsChanged = (state: AgentConfigState): boolean =>
+	!deepEqual(
+		state.savedUnifiedConfig?.steps.map((step) => [step.name, step.config]) ??
+			null,
+		state.stepConfigBaseline?.steps.map((step) => [step.name, step.config]) ??
+			null,
+	);
+
+// computeDirty compares the draft slices only; feature-settings patches live on
+// savedUnifiedConfig. Keep the store dirty while those differ from the
+// baseline, so a later unrelated edit cannot hide an unsaved setting.
+useAgentConfigStore.subscribe((state) => {
+	if (!state.isDirty && stepConfigsChanged(state)) {
+		useAgentConfigStore.setState({ isDirty: true });
+	}
 });

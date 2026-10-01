@@ -39,6 +39,7 @@ import {
 	toServerInfo,
 	withTimeout,
 } from "./shared.js";
+import { runPythonOperation } from "./python.js";
 import {
 	handleSwRequestOperation,
 	listServersOperation,
@@ -273,7 +274,54 @@ const collectWorkspaceSnapshotState = (snapshot) => {
 		ensureMountedParentDirectories(path, nextDirectories);
 	}
 
+	// The host has not saved these sandbox changes yet, so its snapshot does not
+	// show them. Replay them on top, or files a running process just wrote
+	// would vanish from under it.
+	for (const op of pendingWorkspaceOps) {
+		if (op.op === "write") {
+			nextFiles.add(op.path);
+			ensureMountedParentDirectories(op.path, nextDirectories);
+		} else if (op.op === "mkdir") {
+			nextDirectories.add(op.path);
+			ensureMountedParentDirectories(op.path, nextDirectories);
+		} else if (op.op === "delete") {
+			removeSnapshotSubtree(op.path, nextFiles, nextDirectories);
+		} else if (op.op === "rename") {
+			moveSnapshotSubtree(op.oldPath, op.newPath, nextFiles, nextDirectories);
+		}
+	}
+
 	return { nextDirectories, nextFiles };
+};
+
+const removeSnapshotSubtree = (path, files, directories) => {
+	const prefix = `${path}/`;
+	for (const file of Array.from(files)) {
+		if (file === path || file.startsWith(prefix)) files.delete(file);
+	}
+	for (const dir of Array.from(directories)) {
+		if (dir !== WORKSPACES_MOUNT_ROOT && (dir === path || dir.startsWith(prefix))) {
+			directories.delete(dir);
+		}
+	}
+};
+
+const moveSnapshotSubtree = (oldPath, newPath, files, directories) => {
+	const prefix = `${oldPath}/`;
+	const rebase = (path) =>
+		path === oldPath ? newPath : `${newPath}/${path.slice(prefix.length)}`;
+	for (const file of Array.from(files)) {
+		if (file !== oldPath && !file.startsWith(prefix)) continue;
+		files.delete(file);
+		files.add(rebase(file));
+	}
+	for (const dir of Array.from(directories)) {
+		if (dir === WORKSPACES_MOUNT_ROOT) continue;
+		if (dir !== oldPath && !dir.startsWith(prefix)) continue;
+		directories.delete(dir);
+		directories.add(rebase(dir));
+	}
+	ensureMountedParentDirectories(newPath, directories);
 };
 
 const applyWorkspaceSnapshot = (snapshot, mode = "full") => {
@@ -306,7 +354,9 @@ const applyWorkspaceMaterializedChange = (change) => {
 	if (change.operation === "write" && typeof change.path === "string") {
 		return materializeMountedWorkspaceFileContent(
 			change.path,
-			String(change.content ?? ""),
+			change.content instanceof Uint8Array
+				? change.content
+				: String(change.content ?? ""),
 		);
 	}
 
@@ -316,7 +366,10 @@ const applyWorkspaceMaterializedChange = (change) => {
 		typeof change.newPath === "string"
 	) {
 		const { newPath } = moveMountedWorkspacePath(change.oldPath, change.newPath);
-		if (typeof change.content === "string") {
+		if (
+			typeof change.content === "string" ||
+			change.content instanceof Uint8Array
+		) {
 			materializeMountedWorkspaceFileContent(newPath, change.content);
 		}
 		return newPath;
@@ -407,6 +460,8 @@ export const handleOperation = async (request) => {
 			return { cleared: true };
 		case "network.fetch":
 			return handleNetworkFetchOperation(payload);
+		case "python.run":
+			return runPythonOperation(payload);
 		case "npm.install":
 			return handleNpmInstallOperation(containerInstance, payload);
 		case "npm.installFromPackageJson":

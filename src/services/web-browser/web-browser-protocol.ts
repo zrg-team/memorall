@@ -1,3 +1,9 @@
+import type {
+	PageOutline,
+	PageOutlineActionRequest,
+	PageOutlineActionResult,
+} from "@/co-agent/dom/page-outline";
+
 export type WebBrowserMode = "iframe" | "tab" | "window";
 export type BrowserBackedWebMode = Exclude<WebBrowserMode, "iframe">;
 export type WebDomActionName =
@@ -8,6 +14,12 @@ export type WebDomActionName =
 	| "scrollBottom"
 	| "scrollTop";
 export type WebWaitSelectorState = "present" | "absent";
+export type WebHistoryDirection = "back" | "forward";
+export type {
+	PageOutline as WebPageOutline,
+	PageOutlineActionRequest as WebOutlineActionRequest,
+	PageOutlineActionResult as WebOutlineActionResult,
+};
 
 export interface WebElementRecord {
 	index?: number;
@@ -88,6 +100,19 @@ export type WebContentCommandRequest =
 			intervalMs: number;
 			maxHtmlChars: number;
 	  }
+	/** The text-first page view MemonOS Bot reads, with stable element refs. */
+	| {
+			source: typeof WEB_CONTENT_COMMAND_SOURCE;
+			type: "web-tool:outline";
+			maxChars: number;
+	  }
+	/** Act on a ref from an outline, then return a fresh outline. */
+	| {
+			source: typeof WEB_CONTENT_COMMAND_SOURCE;
+			type: "web-tool:outline-action";
+			request: PageOutlineActionRequest;
+			maxChars: number;
+	  }
 	| {
 			source: typeof WEB_CONTENT_COMMAND_SOURCE;
 			type: "web-tool:fetch-image";
@@ -148,6 +173,20 @@ export type WebContentCommandResponse =
 	  }
 	| {
 			source: typeof WEB_CONTENT_COMMAND_SOURCE;
+			type: "web-tool:outline-result";
+			success: true;
+			outline: PageOutline;
+	  }
+	| {
+			source: typeof WEB_CONTENT_COMMAND_SOURCE;
+			type: "web-tool:outline-action-result";
+			success: true;
+			result: PageOutlineActionResult;
+			/** Absent when the action started a navigation. */
+			outline?: PageOutline;
+	  }
+	| {
+			source: typeof WEB_CONTENT_COMMAND_SOURCE;
 			type: "web-tool:fetch-image-result";
 			success: true;
 			base64: string;
@@ -174,6 +213,8 @@ export type WebContentCommandResponse =
 				| "web-tool:dom-query-result"
 				| "web-tool:dom-action-result"
 				| "web-tool:wait-selector-result"
+				| "web-tool:outline-result"
+				| "web-tool:outline-action-result"
 				| "web-tool:fetch-image-result"
 				| "web-tool:open-image-tab-result"
 				| "web-tool:read-rendered-image-result";
@@ -190,6 +231,8 @@ export type WebBrowserCommandRequest =
 			mode: BrowserBackedWebMode;
 			timeoutMs: number;
 			maxHtmlChars: number;
+			/** Open as a background tab in this existing window instead. */
+			windowId?: number;
 	  }
 	| {
 			source: typeof WEB_BROWSER_COMMAND_SOURCE;
@@ -290,6 +333,43 @@ export type WebBrowserCommandRequest =
 			tabId: number;
 			timeoutMs: number;
 			maxHtmlChars: number;
+	  }
+	| {
+			source: typeof WEB_BROWSER_COMMAND_SOURCE;
+			command: "outline";
+			sessionId: string;
+			tabId: number;
+			timeoutMs: number;
+			maxChars: number;
+	  }
+	| {
+			source: typeof WEB_BROWSER_COMMAND_SOURCE;
+			command: "outline-action";
+			sessionId: string;
+			tabId: number;
+			timeoutMs: number;
+			maxChars: number;
+			request: PageOutlineActionRequest;
+	  }
+	/** Send the session's tab to a new URL (keeping its history), then snapshot it. */
+	| {
+			source: typeof WEB_BROWSER_COMMAND_SOURCE;
+			command: "navigate";
+			sessionId: string;
+			tabId: number;
+			url: string;
+			timeoutMs: number;
+			maxHtmlChars: number;
+	  }
+	/** Move the session's tab through its own history, then snapshot it. */
+	| {
+			source: typeof WEB_BROWSER_COMMAND_SOURCE;
+			command: "history";
+			sessionId: string;
+			tabId: number;
+			timeoutMs: number;
+			maxHtmlChars: number;
+			direction: WebHistoryDirection;
 	  };
 
 export type WebBrowserCommandResponse =
@@ -380,6 +460,35 @@ export type WebBrowserCommandResponse =
 	  }
 	| {
 			source: typeof WEB_BROWSER_COMMAND_SOURCE;
+			command: "outline";
+			success: true;
+			sessionId: string;
+			outline: PageOutline;
+	  }
+	| {
+			source: typeof WEB_BROWSER_COMMAND_SOURCE;
+			command: "outline-action";
+			success: true;
+			sessionId: string;
+			result: PageOutlineActionResult;
+			outline?: PageOutline;
+	  }
+	| {
+			source: typeof WEB_BROWSER_COMMAND_SOURCE;
+			command: "history";
+			success: true;
+			sessionId: string;
+			snapshot: WebSnapshotPayload;
+	  }
+	| {
+			source: typeof WEB_BROWSER_COMMAND_SOURCE;
+			command: "navigate";
+			success: true;
+			sessionId: string;
+			snapshot: WebSnapshotPayload;
+	  }
+	| {
+			source: typeof WEB_BROWSER_COMMAND_SOURCE;
 			command:
 				| "open"
 				| "snapshot"
@@ -391,7 +500,11 @@ export type WebBrowserCommandResponse =
 				| "fetch-image"
 				| "capture-image"
 				| "bring-to-front"
-				| "reload";
+				| "reload"
+				| "outline"
+				| "outline-action"
+				| "history"
+				| "navigate";
 			success: false;
 			sessionId: string;
 			error: string;
@@ -429,6 +542,14 @@ export const isWebContentCommandRequest = (
 				typeof value.timeoutMs === "number" &&
 				typeof value.intervalMs === "number" &&
 				typeof value.maxHtmlChars === "number"
+			);
+		case "web-tool:outline":
+			return typeof value.maxChars === "number";
+		case "web-tool:outline-action":
+			return (
+				isRecord(value.request) &&
+				typeof value.request.action === "string" &&
+				typeof value.maxChars === "number"
 			);
 		case "web-tool:fetch-image":
 		case "web-tool:open-image-tab":
@@ -472,6 +593,13 @@ export const isWebContentCommandResponse = (
 			);
 		case "web-tool:open-image-tab-result":
 			return true;
+		case "web-tool:outline-result":
+			return isRecord(value.outline);
+		case "web-tool:outline-action-result":
+			return (
+				isRecord(value.result) &&
+				(value.outline === undefined || isRecord(value.outline))
+			);
 		default:
 			return false;
 	}
@@ -529,6 +657,38 @@ export const isWebBrowserCommandRequest = (
 				typeof value.selector === "string" &&
 				typeof value.state === "string"
 			);
+		case "outline":
+			return (
+				typeof value.sessionId === "string" &&
+				typeof value.tabId === "number" &&
+				typeof value.timeoutMs === "number" &&
+				typeof value.maxChars === "number"
+			);
+		case "outline-action":
+			return (
+				typeof value.sessionId === "string" &&
+				typeof value.tabId === "number" &&
+				typeof value.timeoutMs === "number" &&
+				typeof value.maxChars === "number" &&
+				isRecord(value.request) &&
+				typeof value.request.action === "string"
+			);
+		case "navigate":
+			return (
+				typeof value.sessionId === "string" &&
+				typeof value.tabId === "number" &&
+				typeof value.url === "string" &&
+				typeof value.timeoutMs === "number" &&
+				typeof value.maxHtmlChars === "number"
+			);
+		case "history":
+			return (
+				typeof value.sessionId === "string" &&
+				typeof value.tabId === "number" &&
+				typeof value.timeoutMs === "number" &&
+				typeof value.maxHtmlChars === "number" &&
+				(value.direction === "back" || value.direction === "forward")
+			);
 		case "close":
 			return typeof value.sessionId === "string";
 		case "screenshot":
@@ -570,7 +730,16 @@ export const isWebBrowserCommandResponse = (
 			return isRecord(value.surface) && isRecord(value.snapshot);
 		case "snapshot":
 		case "reload":
+		case "history":
+		case "navigate":
 			return isRecord(value.snapshot);
+		case "outline":
+			return isRecord(value.outline);
+		case "outline-action":
+			return (
+				isRecord(value.result) &&
+				(value.outline === undefined || isRecord(value.outline))
+			);
 		case "dom-query":
 			return Array.isArray(value.elements) && isRecord(value.snapshot);
 		case "dom-action":

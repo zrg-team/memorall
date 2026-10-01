@@ -8,6 +8,7 @@ import {
 	Maximize2,
 	MessageCircle,
 	Minimize2,
+	Monitor,
 	MoreHorizontal,
 	Paperclip,
 	Plus,
@@ -91,6 +92,10 @@ export interface ChatInputControlsProps {
 	isCoAgentStarting?: boolean;
 	/** Whether the co-agent is armed, so the button can show it. */
 	isCoAgentActive?: boolean;
+	/** Opens the agent's MemonOS computer; only for agents that have one. */
+	onOpenComputer?: () => void;
+	/** The agent is acting on the computer right now. */
+	isComputerWorking?: boolean;
 	/** Switching model without leaving the conversation. */
 	selectableModels?: SelectableModel[];
 	selectableModelsByProvider?: Map<ServiceProvider, SelectableModel[]>;
@@ -133,6 +138,8 @@ export const ChatInputControls: React.FC<ChatInputControlsProps> = ({
 	onStartCoAgent,
 	isCoAgentStarting = false,
 	isCoAgentActive = false,
+	onOpenComputer,
+	isComputerWorking = false,
 	selectableModels,
 	selectableModelsByProvider,
 	lockedModelProviders,
@@ -258,6 +265,34 @@ export const ChatInputControls: React.FC<ChatInputControlsProps> = ({
 								</TooltipTrigger>
 								<TooltipContent>
 									<p className="text-xs">{coAgentLabel}</p>
+								</TooltipContent>
+							</Tooltip>
+						) : null}
+
+						{onOpenComputer ? (
+							<Tooltip>
+								<TooltipTrigger asChild>
+									<Button
+										type="button"
+										variant="ghost"
+										size="sm"
+										onClick={onOpenComputer}
+										aria-label={t("tooltips.openComputer")}
+										className={cn(
+											ICON_CONTROL,
+											"relative text-cyan-600 hover:text-cyan-600 dark:text-cyan-400",
+											isComputerWorking &&
+												"bg-cyan-500/15 hover:bg-cyan-500/25",
+										)}
+									>
+										<Monitor size={14} />
+										{isComputerWorking ? (
+											<span className="absolute right-1 top-1 h-1.5 w-1.5 animate-pulse rounded-full bg-cyan-500" />
+										) : null}
+									</Button>
+								</TooltipTrigger>
+								<TooltipContent>
+									<p className="text-xs">{t("tooltips.openComputer")}</p>
 								</TooltipContent>
 							</Tooltip>
 						) : null}

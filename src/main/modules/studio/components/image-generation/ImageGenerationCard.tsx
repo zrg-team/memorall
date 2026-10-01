@@ -159,7 +159,13 @@ export const ImageGenerationCard: React.FC<ImageGenerationCardProps> = ({
 		<StudioTurn
 			item={item}
 			data-image-generation-item={item.id}
-			request={feedback ? <FeedbackRequest item={item} /> : item.content}
+			request={
+				feedback ? (
+					<FeedbackRequest item={item} />
+				) : (
+					<PromptRequest item={item} />
+				)
+			}
 			runningLabel={runningLabel}
 			details={details.map((detail) => (
 				<span
@@ -407,6 +413,39 @@ const CommentsBar: React.FC<{
 				<Sparkles size={13} />
 				{t("comments.generateShort", { defaultValue: "Generate next" })}
 			</Button>
+		</div>
+	);
+};
+
+/** A prompt, with the images it started from when it had any. */
+const PromptRequest: React.FC<{ item: StudioItem }> = ({ item }) => {
+	const { t } = useTranslation("studioImage");
+	const images = item.parts.flatMap((part) =>
+		part.type === "image" && part.image.role === "input" ? [part.image] : [],
+	);
+	if (images.length === 0) return <>{item.content}</>;
+	return (
+		<div
+			className="flex max-w-md flex-col gap-2"
+			data-image-request-attachments
+		>
+			<div className="flex flex-wrap justify-end gap-1.5">
+				{images.map((image, index) => (
+					<StoredImage
+						key={image.path}
+						path={image.path}
+						mimeType={image.mimeType}
+						alt={t("composer.attachment", {
+							index: index + 1,
+							defaultValue: `Image ${index + 1} to start from`,
+						})}
+						className="h-16 w-16 shrink-0 rounded-md object-cover"
+						placeholderClassName="h-16 w-16 rounded-md"
+						loading="lazy"
+					/>
+				))}
+			</div>
+			<span className="whitespace-pre-wrap break-words">{item.content}</span>
 		</div>
 	);
 };

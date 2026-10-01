@@ -26,6 +26,7 @@ import {
 	ProgressiveCollectionControl,
 	useProgressiveItems,
 } from "../progressive-collection";
+import { tableArgs } from "../table-args";
 
 const chartColors = [
 	"hsl(var(--primary))",
@@ -52,26 +53,34 @@ export const TableBlock = defineComponent({
 	props: z.object({
 		columns: z.array(Col.ref),
 		rows: z.array(z.array(z.string())),
+		// Holds the rows when a title comes first: TableBlock("Title", columns, rows).
+		rowsAfterTitle: z.array(z.array(z.string())).optional(),
 	}),
 	component: ({ props }) => {
-		const rows = useProgressiveItems(props.rows);
+		const table = tableArgs(props);
+		const rows = useProgressiveItems(table.rows);
 		return (
 			<div className="overflow-hidden rounded-lg border">
+				{table.title ? (
+					<div className="border-b px-3 py-2 text-sm font-medium">
+						{table.title}
+					</div>
+				) : null}
 				<Table>
 					<TableHeader>
 						<TableRow>
-							{props.columns.map((column, index) => (
+							{table.columns.map((column, index) => (
 								<TableHead
-									key={`${column.props.header}-${index}`}
+									key={`${column.header}-${index}`}
 									className={
-										column.props.align === "right"
+										column.align === "right"
 											? "text-right"
-											: column.props.align === "center"
+											: column.align === "center"
 												? "text-center"
 												: undefined
 									}
 								>
-									{column.props.header}
+									{column.header}
 								</TableHead>
 							))}
 						</TableRow>
@@ -80,14 +89,14 @@ export const TableBlock = defineComponent({
 						{rows.items.map((row, rowIndex) => (
 							<TableRow key={rowIndex}>
 								{row.map((cell, cellIndex) => {
-									const column = props.columns[cellIndex];
+									const column = table.columns[cellIndex];
 									return (
 										<TableCell
 											key={`${rowIndex}-${cellIndex}`}
 											className={
-												column?.props.align === "right"
+												column?.align === "right"
 													? "text-right"
-													: column?.props.align === "center"
+													: column?.align === "center"
 														? "text-center"
 														: undefined
 											}

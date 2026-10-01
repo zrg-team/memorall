@@ -124,6 +124,126 @@
 		await new Promise((resolve) => setTimeout(resolve, 50));
 	}
 
+	// ── Inline code ───────────────────────────────────────────────────────────
+	// An extension page may not run inline code: no <script> without src, no
+	// onclick="…". The page's inline scripts become files the service worker
+	// serves, and its on* attributes one script that adds the same listeners.
+	// The dev servers' own HMR scripts stay out: renderer-utils.js stubs them.
+	const JS_TYPES = ['', 'module', 'text/javascript', 'application/javascript', 'text/ecmascript', 'application/ecmascript'];
+	const DEV_SERVER_SCRIPT = /__vite_hot_context__|RefreshRuntime|injectIntoGlobalHook/;
+	// A body's on* attributes for these are the window's handlers.
+	const WINDOW_EVENTS = new Set(['load', 'unload', 'beforeunload', 'pagehide', 'pageshow', 'resize', 'hashchange', 'popstate', 'message', 'online', 'offline', 'storage', 'error', 'focus', 'blur', 'scroll']);
+
+	const handlerScript = (bindings) => {
+		const lines = ['(() => {'];
+		bindings.forEach((binding) => {
+			lines.push('{');
+			lines.push('const el = document.querySelector(\'[data-memorall-on="' + binding.id + '"]\');');
+			lines.push('if (el) {');
+			for (const handler of binding.handlers) {
+				const target = handler.onWindow ? 'window' : 'el';
+				// As an inline handler: `this` is the element, returning false cancels.
+				lines.push(
+					target + '.addEventListener(' + JSON.stringify(handler.type) + ', function (event) {\n' +
+					'if ((function (event) {\n' + handler.code + '\n}).call(this, event) === false) event.preventDefault();\n' +
+					'});',
+				);
+				if (!handler.onWindow && (handler.type === 'load' || handler.type === 'error')) {
+					// An image may have loaded, or failed, before this ran.
+					lines.push(
+						'if (el.complete && el.getAttribute("src") && (el.naturalWidth > 0) === ' +
+						(handler.type === 'load') + ') el.dispatchEvent(new Event(' + JSON.stringify(handler.type) + '));',
+					);
+				}
+			}
+			lines.push('}');
+			lines.push('}');
+		});
+		lines.push('})();');
+		return lines.join('\n');
+	};
+
+	const sendInlineScripts = (scripts) =>
+		new Promise((resolve) => {
+			const controller = navigator.serviceWorker?.controller;
+			if (!controller || scripts.length === 0) return resolve(false);
+			const channel = new MessageChannel();
+			const timer = setTimeout(() => resolve(false), 2000);
+			channel.port1.onmessage = () => {
+				clearTimeout(timer);
+				resolve(true);
+			};
+			controller.postMessage({ type: 'set-inline-scripts', data: { scripts } }, [channel.port2]);
+		});
+
+	const moveInlineCode = async (source) => {
+		const doc = new DOMParser().parseFromString(source, 'text/html');
+		const render = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+		const scripts = [];
+		const served = [];
+		const fileFor = (code) => {
+			const name = '__memorall_inline__/' + render + '/' + scripts.length + '.js';
+			scripts.push({ path: '/' + name, code });
+			return name;
+		};
+
+		for (const script of Array.from(doc.querySelectorAll('script:not([src])'))) {
+			const type = (script.getAttribute('type') || '').trim().toLowerCase();
+			// Import maps reach the service worker out-of-band; data blocks stay.
+			if (type === 'importmap') {
+				script.remove();
+				continue;
+			}
+			if (!JS_TYPES.includes(type)) continue;
+			const code = script.textContent || '';
+			if (!code.trim() || DEV_SERVER_SCRIPT.test(code)) {
+				script.remove();
+				continue;
+			}
+			if (type !== 'module') {
+				// Inline, it ran in place; as a file it must too.
+				script.removeAttribute('async');
+				script.removeAttribute('defer');
+			}
+			script.textContent = '';
+			script.setAttribute('src', fileFor(code));
+			served.push(script);
+		}
+
+		const bindings = [];
+		for (const el of Array.from(doc.querySelectorAll('*'))) {
+			const handlers = [];
+			for (const attr of Array.from(el.attributes)) {
+				const name = attr.name.toLowerCase();
+				if (!name.startsWith('on') || name.length < 3) continue;
+				const type = name.slice(2);
+				handlers.push({
+					type,
+					code: attr.value,
+					onWindow: (el.localName === 'body' || el.localName === 'frameset') && WINDOW_EVENTS.has(type),
+				});
+				el.removeAttribute(attr.name);
+			}
+			if (handlers.length === 0) continue;
+			const id = String(bindings.length);
+			el.setAttribute('data-memorall-on', id);
+			bindings.push({ id, handlers });
+		}
+		if (bindings.length > 0) {
+			const tag = doc.createElement('script');
+			tag.setAttribute('src', fileFor(handlerScript(bindings)));
+			(doc.body || doc.documentElement).appendChild(tag);
+			served.push(tag);
+		}
+
+		// An older service worker cannot serve them: leave them out, as before.
+		if (!(await sendInlineScripts(scripts))) {
+			for (const script of served) script.remove();
+		}
+		console.log('[renderer] inline scripts served=' + scripts.length + ' handlers=' + bindings.length);
+		return (doc.doctype ? '<!DOCTYPE html>\n' : '') + doc.documentElement.outerHTML;
+	};
+
 	// ── Fetch virtual server HTML ─────────────────────────────────────────────
 	try {
 		const virtualPath =
@@ -138,9 +258,7 @@
 		console.log('[renderer] html length=' + html.length);
 		console.log('[renderer] html head (first 1000):', html.slice(0, 1000));
 
-		// Strip inline <script> blocks that have no src= — CSP blocks them; renderer-utils.js provides stubs.
-		// Import maps are sent to the service worker out-of-band, so inline import maps are removed too.
-		html = html.replace(/<script\b(?![^>]*\bsrc\s*=)[^>]*>[\s\S]*?<\/script>/gi, '');
+		html = await moveInlineCode(html);
 
 		// Rewrite absolute-path HTML attributes to relative so <base href> routes them.
 		html = html.replace(/((?:src|href|action)=)"\/(?!\/)/g, '$1"');

@@ -45,6 +45,11 @@ export interface SandboxExecuteCommandRequest {
 	env?: Record<string, string>;
 	waitTimeoutMs?: number;
 	commandTimeoutMs?: number;
+	/**
+	 * Run next to a command that is still running (a server) instead of
+	 * refusing. It does not read stdin, as a background job does not.
+	 */
+	allowAlongside?: boolean;
 }
 
 export interface SandboxListenCommandRequest {
@@ -170,9 +175,12 @@ export interface SandboxFsMountDocumentsResult {
 	fileCount: number;
 }
 
+/** Text, or the bytes of a file that is not UTF-8 text (an image, a font). */
+export type SandboxFileContent = string | Uint8Array;
+
 export interface SandboxFsMaterializeDocumentFileRequest {
 	path: string;
-	content: string;
+	content: SandboxFileContent;
 }
 
 export interface SandboxFsMaterializeDocumentFileResult {
@@ -188,8 +196,30 @@ export type SandboxFsMaterializeWorkspaceFileRequest =
 export type SandboxFsMaterializeWorkspaceFileResult =
 	SandboxFsMaterializeDocumentFileResult;
 
+export interface SandboxFsListUnmaterializedWorkspaceFilesRequest {
+	/** Directory whose subtree is listed; "/" lists the whole mount. */
+	path: string;
+}
+
+export interface SandboxFsListUnmaterializedWorkspaceFilesResult {
+	files: string[];
+}
+
+/**
+ * Fill in mounted files whose content the runtime does not hold yet. A file
+ * the runtime already has content for keeps it: that content is either newer
+ * (written by sandbox code) or arrived through the live change sync.
+ */
+export interface SandboxFsMaterializeWorkspaceFilesRequest {
+	files: Array<{ path: string; content: SandboxFileContent }>;
+}
+
+export interface SandboxFsMaterializeWorkspaceFilesResult {
+	materialized: string[];
+}
+
 export type SandboxWorkspaceOp =
-	| { op: "write"; path: string; content: string }
+	| { op: "write"; path: string; content: SandboxFileContent }
 	| { op: "mkdir"; path: string }
 	| { op: "delete"; path: string }
 	| { op: "rename"; oldPath: string; newPath: string };
@@ -267,6 +297,8 @@ export interface SandboxServerInfo {
 	url: string;
 	renderUrl: string;
 	rootDir?: string;
+	/** "process": a command opened it (`node server.js`); only it can restart it. */
+	startedBy?: "process";
 }
 
 export interface SandboxListServersResult {
@@ -370,6 +402,33 @@ export interface SandboxNetworkFetchResult {
 	body: string;
 }
 
+/** A file carried byte-for-byte between the host filesystem and Pyodide. */
+export interface SandboxPythonFile {
+	path: string;
+	data: Uint8Array;
+}
+
+/** One `py` invocation, run by Pyodide inside the sandbox page. */
+export interface SandboxPythonRunRequest {
+	mode: "file" | "code" | "module";
+	/** A script path, source code, or module name, by mode. */
+	target: string;
+	argv: string[];
+	cwd: string;
+	/** The working directory's files, so the script can read them. */
+	files: SandboxPythonFile[];
+	timeoutMs?: number;
+}
+
+export interface SandboxPythonRunResult {
+	exitCode: number;
+	stdout: string;
+	stderr: string;
+	/** Files the script created or changed under the working directory. */
+	changed: SandboxPythonFile[];
+	deleted: string[];
+}
+
 export type SandboxOperation =
 	| "health"
 	| "runtime.executeCode"
@@ -384,6 +443,7 @@ export type SandboxOperation =
 	| "runtime.getLogs"
 	| "runtime.clearLogs"
 	| "network.fetch"
+	| "python.run"
 	| "fs.writeFile"
 	| "fs.readFile"
 	| "fs.mkdir"
@@ -395,6 +455,8 @@ export type SandboxOperation =
 	| "fs.materializeDocumentFile"
 	| "fs.mountWorkspace"
 	| "fs.materializeWorkspaceFile"
+	| "fs.listUnmaterializedWorkspaceFiles"
+	| "fs.materializeWorkspaceFiles"
 	| "fs.flushWorkspaceWrites"
 	| "npm.install"
 	| "npm.installFromPackageJson"
@@ -423,6 +485,7 @@ export type SandboxOperationPayloadMap = {
 	"runtime.getLogs": SandboxGetLogsRequest;
 	"runtime.clearLogs": undefined;
 	"network.fetch": SandboxNetworkFetchRequest;
+	"python.run": SandboxPythonRunRequest;
 	"fs.writeFile": SandboxFsWriteFileRequest;
 	"fs.readFile": SandboxFsReadFileRequest;
 	"fs.mkdir": SandboxFsMkdirRequest;
@@ -434,6 +497,8 @@ export type SandboxOperationPayloadMap = {
 	"fs.materializeDocumentFile": SandboxFsMaterializeDocumentFileRequest;
 	"fs.mountWorkspace": SandboxFsMountWorkspaceRequest;
 	"fs.materializeWorkspaceFile": SandboxFsMaterializeWorkspaceFileRequest;
+	"fs.listUnmaterializedWorkspaceFiles": SandboxFsListUnmaterializedWorkspaceFilesRequest;
+	"fs.materializeWorkspaceFiles": SandboxFsMaterializeWorkspaceFilesRequest;
 	"fs.flushWorkspaceWrites": undefined;
 	"npm.install": SandboxNpmInstallRequest;
 	"npm.installFromPackageJson": SandboxNpmInstallFromPackageJsonRequest;
@@ -463,6 +528,7 @@ export type SandboxOperationResultMap = {
 	"runtime.getLogs": SandboxGetLogsResult;
 	"runtime.clearLogs": SandboxClearLogsResult;
 	"network.fetch": SandboxNetworkFetchResult;
+	"python.run": SandboxPythonRunResult;
 	"fs.writeFile": { path: string };
 	"fs.readFile": SandboxFsReadFileResult;
 	"fs.mkdir": { path: string };
@@ -474,6 +540,8 @@ export type SandboxOperationResultMap = {
 	"fs.materializeDocumentFile": SandboxFsMaterializeDocumentFileResult;
 	"fs.mountWorkspace": SandboxFsMountWorkspaceResult;
 	"fs.materializeWorkspaceFile": SandboxFsMaterializeWorkspaceFileResult;
+	"fs.listUnmaterializedWorkspaceFiles": SandboxFsListUnmaterializedWorkspaceFilesResult;
+	"fs.materializeWorkspaceFiles": SandboxFsMaterializeWorkspaceFilesResult;
 	"fs.flushWorkspaceWrites": SandboxFsFlushWorkspaceWritesResult;
 	"npm.install": SandboxNpmInstallResult;
 	"npm.installFromPackageJson": SandboxNpmInstallResult;

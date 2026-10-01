@@ -85,6 +85,15 @@ export default defineConfig({
 				),
 			},
 			{
+				find: /^@\/services\/memon\/change-bus\/current$/,
+				replacement: fileURLToPath(
+					new URL(
+						"../../src/services/memon/change-bus/broadcast-channel.ts",
+						import.meta.url,
+					),
+				),
+			},
+			{
 				find: /^@\/services\/shared-storage\/change-bus\/current$/,
 				replacement: fileURLToPath(
 					new URL(

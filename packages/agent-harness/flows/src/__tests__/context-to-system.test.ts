@@ -93,6 +93,14 @@ describe("context-to-system step", () => {
 		expect(messages.at(-2)?.content).toBe("");
 	});
 
+	it("adds nothing when retrieval found nothing", async () => {
+		for (const context of ["", "  \n\t "]) {
+			const { messages, emitted } = await run(context);
+			expect(messages).toEqual(conversation);
+			expect(emitted).toEqual([]);
+		}
+	});
+
 	it("honours a custom prompt template around the context", async () => {
 		const { messages } = await run("CTX", {
 			prompt: "Use this:\n{context}\nDone.",

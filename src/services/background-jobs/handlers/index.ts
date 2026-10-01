@@ -14,6 +14,7 @@ import "./process-cron-trigger";
 import "./process-activity-tracking";
 import "./process-sandbox-operations";
 import "./process-web-browser-operations";
+import "./process-memon-operations";
 
 export { backgroundProcessFactory, ProcessFactory } from "./process-factory";
 export { handlerRegistry } from "./handler-registry";

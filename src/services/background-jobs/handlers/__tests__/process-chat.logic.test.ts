@@ -408,6 +408,151 @@ describe("agent flow with multiple steps over a mock LLM", () => {
 	});
 });
 
+describe("stopping a run keeps it like a finished one", () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+	});
+
+	const job = (id: string, jobType: string, payload: unknown) =>
+		({
+			id,
+			jobType,
+			status: "pending",
+			createdAt: new Date("2026-01-01T00:00:00.000Z"),
+			progress: [],
+			payload,
+		}) as never;
+
+	const startRun = async (payload: Record<string, unknown>) => {
+		const { ChatHandler } = await import("../process-chat");
+		const handler = new ChatHandler();
+		const { dependencies, dispatches } = createRecorder();
+		const stop = () =>
+			handler.process(
+				"stop-1",
+				job("stop-1", "stop-chat", { targetJobId: "job-1" }),
+				dependencies,
+			);
+		const run = () =>
+			handler.process(
+				"job-1",
+				job("job-1", "chat", payload),
+				dependencies,
+			) as Promise<Record<string, unknown>>;
+		return { stop, run, dispatches };
+	};
+
+	it("ends the request in flight and books an estimate for its tokens", async () => {
+		let stop: () => Promise<unknown> = async () => undefined;
+		let streamedPastStop = false;
+		llmStream.mockImplementation(async function* () {
+			yield chunk({ role: "assistant", content: "Hello " });
+			await stop();
+			yield chunk({ content: "world" });
+			streamedPastStop = true;
+			yield chunk({ content: " and more" });
+		});
+
+		const started = await startRun({
+			messages: [{ role: "user", content: "hi" }],
+			model: "test-model",
+			mode: "normal",
+		});
+		stop = started.stop;
+		const result = await started.run();
+
+		expect(streamedPastStop).toBe(false);
+		expect(result.type).toBe("final");
+		expect(result.content).toBe("Hello world");
+		const metadata = result.metadata as Record<string, unknown>;
+		expect(metadata.stopped).toBe(true);
+		// The provider never sent usage for the cut-off request; it still counts.
+		expect(metadata.usage).toEqual(
+			expect.objectContaining({ requests: 1, estimated: true }),
+		);
+		expect(metadata.estimatedTokens).toBeGreaterThan(0);
+		const { serviceManager } = await import("@/services");
+		const request = vi
+			.mocked(serviceManager.llmService.chatCompletions)
+			.mock.calls.at(-1)?.[0] as { signal?: AbortSignal };
+		expect(request.signal?.aborted).toBe(true);
+	});
+
+	it("stops the agent loop and keeps its steps, tool calls and usage", async () => {
+		let stop: () => Promise<unknown> = async () => undefined;
+		flowStream.mockImplementation(async function* () {
+			yield ["custom", { type: "execute-start", node: "plan" }];
+			yield [
+				"custom",
+				{
+					type: "llm",
+					chunk: {
+						...chunk({ role: "assistant", content: "Checking." }),
+						usage: {
+							prompt_tokens: 100,
+							completion_tokens: 5,
+							total_tokens: 105,
+						},
+					},
+				},
+			];
+			yield [
+				"custom",
+				{
+					type: "execute-start",
+					node: "tool",
+					metadata: { tool: "web_open", tool_call_id: "call-1", input: {} },
+				},
+			];
+			await stop();
+			// What the harness does once the run's signal is aborted.
+			throw new Error("cancelled");
+		});
+
+		const started = await startRun({
+			messages: [{ role: "user", content: "open it" }],
+			model: "test-model",
+			mode: "agent",
+			conversation: { id: "conversation-1", inProgressMessage: { id: "m-1" } },
+		});
+		stop = started.stop;
+		const result = await started.run();
+
+		const { createMemorallFlowRun } = await import("@/services/agent-harness");
+		const runOptions = vi.mocked(createMemorallFlowRun).mock.calls.at(-1)?.[0];
+		expect(runOptions?.signal?.aborted).toBe(true);
+
+		expect(result.type).toBe("final");
+		expect(result.content).toBe("Checking.");
+		const metadata = result.metadata as Record<string, unknown>;
+		expect(metadata.stopped).toBe(true);
+		expect(metadata.error).toBeUndefined();
+		expect(metadata.usage).toEqual(
+			expect.objectContaining({ total_tokens: 105, requests: 1 }),
+		);
+		expect(metadata.executions).toEqual([
+			expect.objectContaining({ node: "plan", state: "complete" }),
+		]);
+		expect(metadata.toolExecutions).toEqual([
+			expect.objectContaining({ id: "call-1", status: "cancelled" }),
+		]);
+		expect(started.dispatches.map((d) => d.stage)).not.toContain("Chat failed");
+	});
+
+	it("honours a stop that arrives before the run starts", async () => {
+		const started = await startRun({
+			messages: [{ role: "user", content: "hi" }],
+			model: "test-model",
+			mode: "normal",
+		});
+		await started.stop();
+		const result = await started.run();
+
+		expect(result.type).toBe("final");
+		expect((result.metadata as Record<string, unknown>).stopped).toBe(true);
+	});
+});
+
 describe("a split conversation does not turn plain chat into an agent", () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
@@ -470,6 +615,8 @@ describe("a split conversation does not turn plain chat into an agent", () => {
 			expect.objectContaining({
 				input: expect.objectContaining({
 					runtimeVars: {
+						"conversation.id": "conversation-1",
+						"run.id": expect.stringMatching(/^chat:/),
 						"thread.history.conversationId": "conversation-1",
 						"thread.history.separatorId": "separator-1",
 					},

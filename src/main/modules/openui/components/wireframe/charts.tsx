@@ -1,6 +1,7 @@
 import React from "react";
 import { defineComponent } from "@openuidev/react-lang";
 import { z } from "zod";
+import { tableArgs } from "../table-args";
 
 export const Col = defineComponent({
 	name: "Col",
@@ -18,36 +19,46 @@ export const TableBlock = defineComponent({
 	props: z.object({
 		columns: z.array(Col.ref),
 		rows: z.array(z.array(z.string())),
+		// Holds the rows when a title comes first: TableBlock("Title", columns, rows).
+		rowsAfterTitle: z.array(z.array(z.string())).optional(),
 	}),
-	component: ({ props }) => (
-		<div className="overflow-x-auto border-2 border-dashed border-foreground/40 font-mono">
-			<table className="w-full text-sm">
-				<thead>
-					<tr className="border-b border-dashed border-foreground/40">
-						{props.columns.map((col, i) => (
-							<th key={i} className="px-3 py-2 text-left font-semibold">
-								{col.props.header}
-							</th>
-						))}
-					</tr>
-				</thead>
-				<tbody>
-					{props.rows.map((row, ri) => (
-						<tr
-							key={ri}
-							className="border-b border-dashed border-foreground/20 last:border-0"
-						>
-							{row.map((cell, ci) => (
-								<td key={ci} className="px-3 py-2">
-									{cell}
-								</td>
+	component: ({ props }) => {
+		const table = tableArgs(props);
+		return (
+			<div className="overflow-x-auto border-2 border-dashed border-foreground/40 font-mono">
+				{table.title ? (
+					<div className="border-b border-dashed border-foreground/40 px-3 py-2 text-sm font-semibold">
+						[{table.title}]
+					</div>
+				) : null}
+				<table className="w-full text-sm">
+					<thead>
+						<tr className="border-b border-dashed border-foreground/40">
+							{table.columns.map((col, i) => (
+								<th key={i} className="px-3 py-2 text-left font-semibold">
+									{col.header}
+								</th>
 							))}
 						</tr>
-					))}
-				</tbody>
-			</table>
-		</div>
-	),
+					</thead>
+					<tbody>
+						{table.rows.map((row, ri) => (
+							<tr
+								key={ri}
+								className="border-b border-dashed border-foreground/20 last:border-0"
+							>
+								{row.map((cell, ci) => (
+									<td key={ci} className="px-3 py-2">
+										{cell}
+									</td>
+								))}
+							</tr>
+						))}
+					</tbody>
+				</table>
+			</div>
+		);
+	},
 });
 
 const chartDataSchema = z.array(

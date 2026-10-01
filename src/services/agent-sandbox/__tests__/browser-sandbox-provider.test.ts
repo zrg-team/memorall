@@ -124,6 +124,10 @@ const createContainerService = () => ({
 		responseType: "text" as const,
 		body: "abcdef",
 	})),
+	readFile: vi.fn(async (request: { path: string }) => ({
+		path: request.path,
+		content: "",
+	})),
 	getSnapshot: vi.fn(async () => ({ snapshot: { files: ["main.js"] } })),
 	restoreSnapshot: vi.fn(async () => undefined),
 	getLogs: vi.fn(async () => ({ logs: [] })),
@@ -170,6 +174,35 @@ describe("BrowserSandboxProvider", () => {
 			),
 		).rejects.toMatchObject({ code: "invalid_request" });
 		expect(service.initialize).not.toHaveBeenCalled();
+	});
+
+	it("copies a file the harness could not read as text from the documents store", async () => {
+		const service = createContainerService();
+		const session = await new BrowserSandboxProvider(
+			service as never,
+		).createSession({ sessionKey: "conversation-1" }, context);
+
+		await session.workspace.bind(
+			{
+				root: "/site",
+				directories: ["/site"],
+				files: [
+					{ path: "/site/index.html", content: "<h1>hi</h1>" },
+					// An image decoded as text: its bytes are already lost here.
+					{ path: "/site/logo.png", content: "\uFFFDPNG" },
+				],
+			},
+			context,
+		);
+		expect(service.request).toHaveBeenCalledWith(
+			"fs.materializeWorkspaceFile",
+			{ path: "/site/index.html", content: "<h1>hi</h1>" },
+		);
+		expect(service.readFile).toHaveBeenCalledWith({ path: "/site/logo.png" });
+		expect(service.request).not.toHaveBeenCalledWith(
+			"fs.materializeWorkspaceFile",
+			expect.objectContaining({ path: "/site/logo.png" }),
+		);
 	});
 
 	it("maps every provider domain without leaking numeric process offsets", async () => {

@@ -7,6 +7,9 @@ import {
 } from "@/services/chat/coagent-session";
 import type { Message } from "@/services/database/types";
 import { MessageRenderer } from "../MessageRenderer";
+// The message text renders through a lazily loaded Markdown view; loaded up
+// front, as the app has it by the time a turn shows, it renders at once.
+import "../MarkdownMessage";
 
 // Reaching MessageRenderer drags in the whole integrations tree — PDF
 // extraction, a virtual filesystem, IndexedDB — none of which this render

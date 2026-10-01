@@ -23,6 +23,9 @@
 		"showAdvancedOptions": "Or setup with your own API key / local model"
 	},
 	"input": {
+		"runningElsewhere": "Replying in “{{title}}”. Chats run one at a time.",
+		"openRunningChat": "Open",
+		"waitForRun": "Waiting for the reply in the other chat…",
 		"placeholder": "Type your message...",
 		"messageAgent": "Message {{agent}}...",
 		"send": "Send",
@@ -33,6 +36,7 @@
 		"attachDocument": "Choose from documents"
 	},
 	"sidebar": {
+		"replying": "Replying",
 		"label": "Chat history",
 		"title": "Chats",
 		"count": "{{count}} conversations",
@@ -139,7 +143,19 @@
 		"memory_retrieve": "Search Memory",
 		"memory_update": "Update Memory",
 		"memory_remove": "Forget Memory",
-		"memory_explain_source": "Explain Memory"
+		"memory_explain_source": "Explain Memory",
+		"memon_screen": "Read screen",
+		"memon_open": "Open on computer",
+		"memon_act": "Use computer",
+		"memon_run": "Run command",
+		"memon_window": "Arrange windows",
+		"memon_notes": "Update notes",
+		"memon_schedule": "Manage schedules",
+		"memon_memory": "Update memory",
+		"memon_studio": "Use Studio",
+		"memon_skills": "Manage skills",
+		"memon_connections": "Manage connections",
+		"memon_visualize": "Visualize"
 	},
 	"messages": {
 		"assistant": "Assistant",
@@ -390,6 +406,7 @@
 		"expandChatWidth": "Expand chat to full width",
 		"constrainChatWidth": "Constrain chat width",
 		"startCoAgent": "Let the agent see and act on the page",
+		"openComputer": "Open the agent's computer",
 		"stopCoAgent": "Turn the co-agent off"
 	},
 	"agentSettings": {
@@ -444,7 +461,19 @@
 			"memory_retrieve": "Search active memories in the selected topic graph",
 			"memory_update": "Replace an existing memory while preserving history",
 			"memory_remove": "Mark a memory inactive without deleting history",
-			"memory_explain_source": "Explain where a saved memory came from"
+			"memory_explain_source": "Explain where a saved memory came from",
+			"memon_screen": "Read the MemonOS Bot computer screen",
+			"memon_open": "Open an app, page or file on the MemonOS Bot computer",
+			"memon_act": "Click, type, scroll or save on the MemonOS Bot computer",
+			"memon_run": "Run a shell command in the MemonOS Bot terminal",
+			"memon_window": "Focus, minimize, maximize or close a MemonOS Bot window",
+			"memon_notes": "Plan and track the task in the MemonOS Bot Notes app",
+			"memon_schedule": "View and manage the agent's scheduled prompts in the MemonOS Bot Scheduler",
+			"memon_memory": "Remember things between chats in Memory.md and keep Bot.md",
+			"memon_studio": "Run the user's studios on the computer: decisions, speech, transcripts, images, image and text tools, audio",
+			"memon_skills": "View and manage the skills this agent uses",
+			"memon_connections": "View the user's connected apps and which ones this agent uses",
+			"memon_visualize": "Show a visual written in OpenUI in the MemonOS Bot Visualize app and save it"
 		},
 		"cancel": "Cancel",
 		"saved": "Saved",
@@ -461,7 +490,60 @@
 		"legacyConfigDescription": "This preset is still using the old config shape. Convert it to the unified flow config before saving so the runtime applies the same settings shown in the UI.",
 		"revert": "Revert",
 		"resetDefaults": "Reset to Defaults",
-		"resetConfirm": "This will reset all agent settings to their default values. Your current draft will be replaced."
+		"resetConfirm": "This will reset all agent settings to their default values. Your current draft will be replaced.",
+		"appOf": "App on {{name}}",
+		"appOfHint": "While {{name}} is on, this runs as an app on its computer instead of adding separate tools.",
+		"memon": {
+			"appsLabel": "Apps on the desktop",
+			"appsHint": "Apps follow your features: Web Browser gives the Browser, File System gives Files, Editor and Viewer, Browser Sandbox gives the Terminal, Planner gives Notes, and Visualize response gives Visualize. Switch them in Features.",
+			"appOn": "On",
+			"appOff": "Off",
+			"sectionHint": "Turning it on also turns on Web Browser, File System, Browser Sandbox and Planner below, as apps on the computer.",
+			"settings": "Settings",
+			"builtIn": "Built in",
+			"builtInHint": "Every MemonOS Bot computer has these: the agent's schedules, skills and connections, and your studios.",
+			"builtInApps": {
+				"scheduler": "Scheduler",
+				"studio": "Studio",
+				"skills": "Skills",
+				"connections": "Connections"
+			},
+			"appsShort": "Apps",
+			"apps": {
+				"browser": {
+					"name": "Browser",
+					"description": "Uses the Web Browser tools. Pages open in an agent window and are read as text outlines."
+				},
+				"files": {
+					"name": "Files",
+					"description": "Uses the File System tools on your / tree, plus an Editor for single files."
+				},
+				"terminal": {
+					"name": "Terminal",
+					"description": "The Browser Sandbox shell with node, npm, git and py."
+				},
+				"notes": {
+					"name": "Notes",
+					"description": "The Planner, as a checklist you watch: the agent plans the task, ticks steps as it works, and follows your edits."
+				},
+				"visualize": {
+					"name": "Visualize",
+					"description": "From Visualize response: visuals the agent writes in OpenUI, drawn in a window and saved as .openui files you can open again."
+				}
+			},
+			"browserUnavailableWeb": "Not available in the web app. Use the Memorall extension or desktop app.",
+			"showComputerLabel": "Show the computer",
+			"showComputerAuto": "Open Runtime → Computer when a run starts",
+			"showComputerManual": "Keep it in Runtime until I open it",
+			"askBeforeLabel": "Pause and ask me before",
+			"askBefore": {
+				"forms": "Submitting forms",
+				"installs": "Installing packages",
+				"deletes": "Deleting files"
+			},
+			"keepDirectTools": "Also keep the direct tools",
+			"keepDirectToolsHint": "Keeps web_*, fs_* and sandbox_* available next to the computer, for bulk file work."
+		}
 	},
 	"openui": {
 		"rendering": "Rendering visual response",
@@ -470,7 +552,9 @@
 		"renderFailed": {
 			"title": "Unable to render visual response.",
 			"description": "The generated OpenUI markup is invalid. The original response is shown below."
-		}
+		},
+		"partial": "Some parts could not be shown ({{count}})",
+		"partFailed": "{{name}} could not be shown."
 	},
 	"webChallenge": {
 		"kind": {
@@ -507,5 +591,11 @@
 		"denied": "Microphone access is blocked for this page",
 		"chooseModel": "Dictate — choose a transcription model first",
 		"localHint": "Runs on this device. A local chat model is unloaded while transcribing and reloads on your next message."
+	},
+	"memon": {
+		"needsApproval": "needs your approval",
+		"noSummary": "Computer action",
+		"showOnComputer": "Show on computer",
+		"screenReturned": "Screen returned to the model"
 	}
 }

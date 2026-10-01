@@ -886,6 +886,34 @@ async function main() {
 		console.warn("⚠️  almostnode entry not found, skipping bundle.\n");
 	}
 
+	// 5a. Pyodide for the sandbox's `py` command. The interpreter and standard
+	// library ship with the extension; package wheels do not, so the CDN that
+	// loadPackage would fall back to is replaced with a path that cannot load.
+	const pyodideDir = path.dirname(require.resolve("pyodide/package.json"));
+	const pyodideOutDir = path.resolve(
+		process.cwd(),
+		"public/sandbox/vendors/pyodide",
+	);
+	for (const file of [
+		"pyodide.asm.js",
+		"pyodide.asm.wasm",
+		"python_stdlib.zip",
+		"pyodide-lock.json",
+	]) {
+		copyFile(path.join(pyodideDir, file), path.join(pyodideOutDir, file));
+	}
+	const pyodideLoader = fs
+		.readFileSync(path.join(pyodideDir, "pyodide.js"), "utf8")
+		.replace(
+			/https:\/\/cdn\.jsdelivr\.net\/pyodide\/v\$\{\w+\.version\}\/full\//g,
+			"./packages-not-bundled/",
+		);
+	if (/cdn\.jsdelivr\.net/.test(pyodideLoader)) {
+		throw new Error("Pyodide loader still points at the jsDelivr CDN.");
+	}
+	writeFileWithRetry(path.join(pyodideOutDir, "pyodide.js"), pyodideLoader);
+	console.log("✅ Pyodide packaged for the sandbox py command.\n");
+
 	// 5b. Package the isolated artifact preview pages and every executable
 	// runtime they use. Nothing in these previews is loaded from a remote host.
 	const artifactVendorDest = path.resolve(

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
 	Check,
 	ChevronDown,
@@ -10,11 +10,18 @@ import {
 	Server,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { useLocation } from "react-router-dom";
 import { Button } from "@/main/components/ui/button";
 import { PageHeader } from "@/main/components/ui/page-header";
 import { Tabs, TabsList, TabsTrigger } from "@/main/components/ui/tabs";
 import { Textarea } from "@/main/components/ui/textarea";
 import { RuntimeSessionsSectionList } from "@/main/components/molecules/RuntimeSessions/RuntimeSessionsSectionList";
+import {
+	MemonComputerPanel,
+	MemonComputerStart,
+	useMemonAgents,
+} from "@/main/components/molecules/MemonComputer";
+import { useMemonMachineStore } from "@/main/stores/memon-machine";
 import { useRuntimeSessionsStore } from "@/main/stores/runtime-sessions";
 import { useChatStore } from "@/main/stores/chat";
 import MarkdownMessage from "@/main/modules/chat/components/MarkdownMessage";
@@ -31,7 +38,12 @@ import { platform } from "@/platform/current";
 
 const HTML_LAZY_RENDER_THRESHOLD = 500_000;
 
-type RuntimeSection = "artifacts" | "runtime";
+type RuntimeSection = "artifacts" | "runtime" | "computer";
+
+const wantsComputerSection = (state: unknown): boolean =>
+	typeof state === "object" &&
+	state !== null &&
+	(state as { section?: unknown }).section === "computer";
 type ArtifactMode = "preview" | "code" | "edit";
 type SaveState = "idle" | "saving" | "saved" | "error";
 
@@ -291,6 +303,30 @@ export const RuntimePage: React.FC = () => {
 	const persistMessageContent = useChatStore(
 		(state) => state.persistMessageContent,
 	);
+	const location = useLocation();
+	const chatAgentId = useChatStore((state) => state.selectedAgentFlowId);
+	const memonSummaries = useMemonMachineStore((state) => state.summaries);
+	const memonSnapshots = useMemonMachineStore((state) => state.snapshots);
+	const startMemon = useMemonMachineStore((state) => state.start);
+	const { agents: memonAgents, loading: memonAgentsLoading } = useMemonAgents();
+	// The chat agent's computer: a computer belongs to its agent, whatever the
+	// chat. For an agent without MemonOS Bot, the most recently active one.
+	const memonKey = useMemo(() => {
+		const running =
+			chatAgentId !== null &&
+			Boolean(memonSummaries[chatAgentId] || memonSnapshots[chatAgentId]);
+		if (chatAgentId && running) return chatAgentId;
+		if (memonAgents.some((agent) => agent.id === chatAgentId)) return null;
+		const latest = Object.values(memonSummaries).sort(
+			(a, b) => b.updatedAt - a.updatedAt,
+		)[0];
+		return latest?.key ?? null;
+	}, [chatAgentId, memonAgents, memonSummaries, memonSnapshots]);
+	// Any agent with MemonOS Bot can have its computer started from here.
+	const hasComputer =
+		memonKey !== null ||
+		memonAgents.length > 0 ||
+		wantsComputerSection(location.state);
 	const artifacts = useMemo(
 		() => collectRuntimeArtifacts(messages),
 		[messages],
@@ -306,7 +342,11 @@ export const RuntimePage: React.FC = () => {
 		activeWebSession.isOpen;
 	const hasArtifacts = artifacts.length > 0;
 	const [section, setSection] = useState<RuntimeSection>(
-		hasArtifacts ? "artifacts" : "runtime",
+		wantsComputerSection(location.state)
+			? "computer"
+			: hasArtifacts
+				? "artifacts"
+				: "runtime",
 	);
 
 	useEffect(() => {
@@ -314,6 +354,16 @@ export const RuntimePage: React.FC = () => {
 	}, [refreshRuntimeSessions]);
 
 	useEffect(() => {
+		startMemon();
+	}, [startMemon]);
+
+	useEffect(() => {
+		if (wantsComputerSection(location.state)) setSection("computer");
+	}, [location.state]);
+
+	useEffect(() => {
+		// The Computer tab is chosen explicitly; new artifacts must not steal it.
+		if (section === "computer") return;
 		if (hasArtifacts) {
 			const selectedExists = artifacts.some(
 				(artifact) => artifact.id === selectedArtifactId,
@@ -327,7 +377,22 @@ export const RuntimePage: React.FC = () => {
 
 		setSelectedArtifactId(null);
 		setSection("runtime");
-	}, [artifacts, hasArtifacts, selectedArtifactId]);
+	}, [artifacts, hasArtifacts, selectedArtifactId, section]);
+
+	// A chat with a MemonOS Bot agent opens on its computer, once, unless there
+	// are outputs to show. Runs after the effect above so it wins on mount.
+	const landedOnComputerRef = useRef(false);
+	useEffect(() => {
+		if (landedOnComputerRef.current || memonAgentsLoading) return;
+		landedOnComputerRef.current = true;
+		if (hasArtifacts) return;
+		if (
+			memonKey !== null ||
+			memonAgents.some((agent) => agent.id === chatAgentId)
+		) {
+			setSection("computer");
+		}
+	}, [chatAgentId, hasArtifacts, memonAgents, memonAgentsLoading, memonKey]);
 
 	const selectedArtifact =
 		artifacts.find((artifact) => artifact.id === selectedArtifactId) ??
@@ -349,7 +414,12 @@ export const RuntimePage: React.FC = () => {
 		await persistMessageContent(artifact.messageId, nextMessageContent);
 	};
 
-	const showSectionTabs = hasArtifacts && hasRuntime;
+	// Live Runtime is also the empty fallback when there are no outputs, so it
+	// keeps a tab next to Computer even before anything runs.
+	const showRuntimeTab = hasRuntime || (hasComputer && !hasArtifacts);
+	const sectionCount =
+		Number(hasArtifacts) + Number(showRuntimeTab) + Number(hasComputer);
+	const showSectionTabs = sectionCount > 1;
 
 	return (
 		<div className="flex h-full min-h-0 flex-col bg-background">
@@ -368,14 +438,25 @@ export const RuntimePage: React.FC = () => {
 							onValueChange={(value) => setSection(value as RuntimeSection)}
 						>
 							<TabsList className="h-9">
-								<TabsTrigger value="artifacts" className="px-4">
-									{t("sandboxPanel.outputsTab", { defaultValue: "Outputs" })}
-								</TabsTrigger>
-								<TabsTrigger value="runtime" className="px-4">
-									{t("sandboxPanel.liveRuntimeTab", {
-										defaultValue: "Live Runtime",
-									})}
-								</TabsTrigger>
+								{hasArtifacts ? (
+									<TabsTrigger value="artifacts" className="px-4">
+										{t("sandboxPanel.outputsTab", { defaultValue: "Outputs" })}
+									</TabsTrigger>
+								) : null}
+								{showRuntimeTab ? (
+									<TabsTrigger value="runtime" className="px-4">
+										{t("sandboxPanel.liveRuntimeTab", {
+											defaultValue: "Live Runtime",
+										})}
+									</TabsTrigger>
+								) : null}
+								{hasComputer ? (
+									<TabsTrigger value="computer" className="px-4">
+										{t("sandboxPanel.computerTab", {
+											defaultValue: "Computer",
+										})}
+									</TabsTrigger>
+								) : null}
 							</TabsList>
 						</Tabs>
 					) : undefined
@@ -383,7 +464,17 @@ export const RuntimePage: React.FC = () => {
 			/>
 
 			<div className="min-h-0 flex-1">
-				{section === "artifacts" && selectedArtifact ? (
+				{section === "computer" ? (
+					<MemonComputerPanel
+						machineKey={memonKey}
+						emptyState={
+							<MemonComputerStart
+								agents={memonAgents}
+								loading={memonAgentsLoading}
+							/>
+						}
+					/>
+				) : section === "artifacts" && selectedArtifact ? (
 					<div className="flex h-full min-h-0">
 						{artifacts.length > 1 ? (
 							<aside className="flex h-full w-56 flex-shrink-0 flex-col border-r bg-muted/10">

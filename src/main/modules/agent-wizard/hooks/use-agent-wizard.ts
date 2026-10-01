@@ -410,6 +410,7 @@ export const useAgentWizard = ({
 				const accumulatedNotes: string[] = [];
 
 				for (let round = 0; round < MAX_AGENT_WIZARD_TOOL_ROUNDS; round++) {
+					if (controller.signal.aborted) break;
 					workingMessages = [
 						{
 							role: "system",
@@ -455,7 +456,8 @@ export const useAgentWizard = ({
 
 					visibleContent = appendVisibleContent(visibleContent, result.content);
 
-					if (!result.toolCalls?.length) {
+					// Stopped: keep what this turn said, but start no further round.
+					if (result.stopped || !result.toolCalls?.length) {
 						break;
 					}
 

@@ -17,6 +17,7 @@ import {
 import type { FeatureIcon } from "@/services/flow-feature-catalog-service";
 import { HoverBadgeList } from "./AgentHoverInfo";
 import { FeatureCard, FeatureIconDisplay } from "./FeatureCard";
+import { getAbsorbedFeatures } from "../utils/feature-absorption";
 import {
 	getAgentFeatureDescription,
 	getAgentFeatureDisplayName,
@@ -54,6 +55,7 @@ export const FeaturesGrid: React.FC<FeaturesGridProps> = ({ summary }) => {
 		featureDefinitions,
 		availableTools,
 		toggleFeature,
+		savedUnifiedConfig,
 	} = useAgentConfigStore();
 
 	const [showAll, setShowAll] = React.useState(false);
@@ -67,22 +69,37 @@ export const FeaturesGrid: React.FC<FeaturesGridProps> = ({ summary }) => {
 		return set;
 	}, [featureDefinitions]);
 
+	// Features an enabled feature has taken over (MemonOS Bot absorbs web, files
+	// and sandbox) unless its settings keep the direct tools. Runs switch them
+	// off, so their tools are not counted.
+	const absorbed = React.useMemo(
+		() =>
+			getAbsorbedFeatures(
+				featureDefinitions,
+				draftFeatures,
+				savedUnifiedConfig?.steps,
+			),
+		[featureDefinitions, draftFeatures, savedUnifiedConfig],
+	);
+
 	const featureEnabledTools = React.useMemo(() => {
 		const set = new Set<string>();
 		for (const feature of featureDefinitions) {
 			if (feature.detailView?.some((s) => s.component === "ToolPicker"))
 				continue;
 			if (!draftFeatures[feature.name]) continue;
+			if (absorbed.has(feature.name)) continue;
 			for (const tool of feature.tools) set.add(tool);
 		}
 		return set;
-	}, [featureDefinitions, draftFeatures]);
+	}, [featureDefinitions, draftFeatures, absorbed]);
 
 	const fallbackEnabledToolNames = React.useMemo(() => {
 		const enabledToolSet = new Set(draftConfig.tools);
 		for (const feature of featureDefinitions) {
 			if (hasToolPickerSlot(feature)) continue;
 			if (!draftFeatures[feature.name]) continue;
+			if (absorbed.has(feature.name)) continue;
 			if (
 				feature.requiresAccessibleAgents &&
 				draftMultiAgentAccessibleAgentIds.length === 0
@@ -98,6 +115,7 @@ export const FeaturesGrid: React.FC<FeaturesGridProps> = ({ summary }) => {
 			),
 		];
 	}, [
+		absorbed,
 		availableTools,
 		draftConfig.tools,
 		draftFeatures,
@@ -163,7 +181,7 @@ export const FeaturesGrid: React.FC<FeaturesGridProps> = ({ summary }) => {
 				draftMultiAgentAccessibleAgentIds.length > 0
 			);
 		}
-		return Boolean(draftFeatures[feature.name]);
+		return Boolean(draftFeatures[feature.name]) && !absorbed.has(feature.name);
 	};
 
 	const enabledFeatures = filteredFeatures.filter(isFeatureEffectivelyEnabled);
@@ -171,6 +189,7 @@ export const FeaturesGrid: React.FC<FeaturesGridProps> = ({ summary }) => {
 	const renderFeatureCard = (feature: AgentFeatureDefinition) => {
 		const displayName = getAgentFeatureDisplayName(feature, t);
 		const displayDesc = getAgentFeatureDescription(feature, t);
+		const absorber = absorbed.get(feature.name);
 
 		if (hasToolPickerSlot(feature)) {
 			const slot = feature.detailView!.find(
@@ -214,6 +233,9 @@ export const FeaturesGrid: React.FC<FeaturesGridProps> = ({ summary }) => {
 					displayName={displayName}
 					displayDesc={displayDesc}
 					hasDetail={hasDetailContent(feature)}
+					appOfName={
+						absorber ? getAgentFeatureDisplayName(absorber, t) : undefined
+					}
 				/>
 			</CursorPoint>
 		);

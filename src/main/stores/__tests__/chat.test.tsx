@@ -216,6 +216,34 @@ describe("useChatStore", () => {
 		expect(harness.updates).toHaveLength(4);
 	});
 
+	it("stores a run's message in its own chat when another chat is on screen", async () => {
+		const harness = createDbHarness();
+		await useChatStore.getState().createNewConversation("Other chat");
+		expect(useChatStore.getState().currentConversation?.id).toBe("created-1");
+
+		const answer = await useChatStore.getState().addMessage({
+			id: "answer",
+			conversationId: "run-chat",
+			role: "assistant",
+			content: "",
+		});
+
+		expect(answer.conversationId).toBe("run-chat");
+		expect(harness.inserts).toContainEqual(
+			expect.objectContaining({
+				value: expect.objectContaining({
+					id: "answer",
+					conversationId: "run-chat",
+				}),
+			}),
+		);
+		// Not drawn into the chat that is on screen.
+		expect(useChatStore.getState().messages).toEqual([]);
+		expect(
+			useChatStore.getState().messageGroups.flatMap((group) => group.messages),
+		).toEqual([]);
+	});
+
 	it("loads conversations and hydrates ordered messages into groups", async () => {
 		const harness = createDbHarness();
 		const conv = conversation({ id: "conv-load", title: "Loaded" });

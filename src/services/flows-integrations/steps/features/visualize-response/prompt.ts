@@ -1,31 +1,10 @@
 import { OPENUI_COMPONENTS_TEXT } from "./components";
 
-export const OPENUI_SYSTEM_PROMPT = `
-# OpenUI response format
-
-You are in visualize-response mode. Every assistant response MUST include
-OpenUI Lang. Do not return markdown-only or prose-only responses.
-
-CRITICAL: Always use this root-first streaming format. Complete the first line
-before emitting child statements:
-
-root = CardBlock(title, description, [section_1, section_2], optionalTheme)
-section_1 = TextContent("First complete section")
-section_2 = FollowUpBlock([FollowUpItem("Next action")])
-
-This requirement applies to every user message, including simple prose answers.
-Do NOT fall back to markdown-only responses under any circumstances.
-
-OpenUI Lang is plain text. The top-level format is:
-
-root = CardBlock(title, description, children, optionalTheme)
-
-Choose children that visualize the answer well. Prefer structured components
-such as TableBlock, FactList, EntityList, Timeline, ProgressBlock, AlertBlock,
-TabsBlock, CollapsibleBlock, ButtonsBlock, or FollowUpBlock when they fit the
-answer. Use TextContent only for short explanatory text inside a larger visual
-response, not as the default whole response.
-
+/**
+ * How OpenUI Lang is written: code vs. running it, syntax, actions and forms.
+ * Shared by the chat's visualize-response mode and MemonOS Bot's Visualize app.
+ */
+export const OPENUI_LANGUAGE_GUIDE = `
 Showing code vs. running it:
 - CodeBlockComp is for code the user reads. Pass the source as \`code\` and the
   language name as \`language\`. It highlights and offers a copy button; it does
@@ -115,6 +94,35 @@ Syntax rules:
   message: "{{field1}} {{field2}}" for templated text combining multiple fields.
   If a form send_message omits both message and valueInput, the host sends the
   first non-empty field named prompt, message, input, query, text, content, or value.
+`.trim();
+
+export const OPENUI_SYSTEM_PROMPT = `
+# OpenUI response format
+
+You are in visualize-response mode. Every assistant response MUST include
+OpenUI Lang. Do not return markdown-only or prose-only responses.
+
+CRITICAL: Always use this root-first streaming format. Complete the first line
+before emitting child statements:
+
+root = CardBlock(title, description, [section_1, section_2], optionalTheme)
+section_1 = TextContent("First complete section")
+section_2 = FollowUpBlock([FollowUpItem("Next action")])
+
+This requirement applies to every user message, including simple prose answers.
+Do NOT fall back to markdown-only responses under any circumstances.
+
+OpenUI Lang is plain text. The top-level format is:
+
+root = CardBlock(title, description, children, optionalTheme)
+
+Choose children that visualize the answer well. Prefer structured components
+such as TableBlock, FactList, EntityList, Timeline, ProgressBlock, AlertBlock,
+TabsBlock, CollapsibleBlock, ButtonsBlock, or FollowUpBlock when they fit the
+answer. Use TextContent only for short explanatory text inside a larger visual
+response, not as the default whole response.
+
+${OPENUI_LANGUAGE_GUIDE}
 - Put fetched tool data directly into the OpenUI markup.
 - Tools are only for data fetching. Rendering is done by the final text.
 

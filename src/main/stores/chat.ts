@@ -21,6 +21,13 @@ export interface ChatMessageGroup {
 	isLoading: boolean;
 }
 
+/** The chat run in progress. Runs go one at a time, across all chats. */
+export interface ActiveChatRun {
+	conversationId: string;
+	agentId: string | null;
+	startedAt: number;
+}
+
 interface ChatStore {
 	// State
 	messages: Message[];
@@ -28,6 +35,7 @@ interface ChatStore {
 	conversations: Conversation[];
 	currentConversation: Conversation | null;
 	isLoading: boolean;
+	activeRun: ActiveChatRun | null;
 	chatMode: ChatMode;
 	selectedTopic: string;
 	selectedAgentFlowId: string | null;
@@ -48,6 +56,7 @@ interface ChatStore {
 	clearMessages: () => void;
 	deleteMessages: () => void;
 	setLoading: (loading: boolean) => void;
+	setActiveRun: (run: ActiveChatRun | null) => void;
 	setChatMode: (mode: ChatMode) => void;
 	setSelectedTopic: (topicId: string) => void;
 	setSelectedAgentFlowId: (flowId: string | null) => void;
@@ -222,17 +231,19 @@ export const useChatStore = create<ChatStore>((set, get) => {
 		currentConversation: null,
 		conversations: [],
 		isLoading: false,
+		activeRun: null,
 		chatMode: "custom",
 		selectedTopic: "default",
 		selectedAgentFlowId: null,
 
 		addMessage: async (messageData) => {
+			// A run passes its own chat, so a message written after the user
+			// switched chats still lands where the run started.
 			let conversationId = messageData.conversationId;
-			if (!conversationId && !get().currentConversation) {
-				const conversation = await get().createNewConversation();
-				conversationId = conversation.id;
-			} else if (get().currentConversation) {
-				conversationId = get().currentConversation!.id;
+			if (!conversationId) {
+				conversationId =
+					get().currentConversation?.id ??
+					(await get().createNewConversation()).id;
 			}
 
 			const messageId = messageData.id || v4();
@@ -252,6 +263,10 @@ export const useChatStore = create<ChatStore>((set, get) => {
 			}
 
 			set((state) => {
+				// Another chat is on screen: the message is only stored.
+				if (state.currentConversation?.id !== message.conversationId) {
+					return {};
+				}
 				const existingLatestGroup =
 					getLatestGroup(state.messageGroups) ?? createLatestGroup(null);
 
@@ -729,6 +744,10 @@ export const useChatStore = create<ChatStore>((set, get) => {
 
 		setLoading: (loading: boolean) => {
 			set({ isLoading: loading });
+		},
+
+		setActiveRun: (run) => {
+			set({ activeRun: run });
 		},
 
 		setChatMode: (mode: ChatMode) => {

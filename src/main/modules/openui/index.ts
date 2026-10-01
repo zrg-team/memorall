@@ -21,6 +21,12 @@ import {
 	knowledgeComponents as glassKnowledgeComponents,
 } from "./components/glass";
 import type { OpenUITheme } from "@/services/flows-integrations/steps/features/visualize-response/index";
+import { withPartBoundary } from "./components/part-boundary";
+
+/** Every component in its own error boundary: one broken part, not a blank visual. */
+const bounded = <T extends Parameters<typeof withPartBoundary>[0]>(
+	components: T[],
+): T[] => components.map(withPartBoundary);
 
 const componentGroups = [
 	{ name: "Content", components: contentComponents.map((c) => c.name) },
@@ -43,37 +49,37 @@ export function createComponentLibrary(theme: OpenUITheme = "shadcn") {
 	if (theme === "wireframe") {
 		library = createLibrary({
 			root: "CardBlock",
-			components: [
+			components: bounded([
 				...wireframeContentComponents,
 				...wireframeChartComponents,
 				...wireframeInteractiveComponents,
 				...wireframeFormComponents,
 				...wireframeKnowledgeComponents,
-			],
+			]),
 			componentGroups,
 		});
 	} else if (theme === "glass") {
 		library = createLibrary({
 			root: "CardBlock",
-			components: [
+			components: bounded([
 				...glassContentComponents,
 				...glassChartComponents,
 				...glassInteractiveComponents,
 				...glassFormComponents,
 				...glassKnowledgeComponents,
-			],
+			]),
 			componentGroups,
 		});
 	} else {
 		library = createLibrary({
 			root: "CardBlock",
-			components: [
+			components: bounded([
 				...contentComponents,
 				...chartComponents,
 				...interactiveComponents,
 				...formComponents,
 				...knowledgeComponents,
-			],
+			]),
 			componentGroups,
 		});
 	}

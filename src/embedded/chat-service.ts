@@ -252,6 +252,25 @@ export class EmbeddedChatService {
 			if (!("stream" in result)) {
 				throw new Error("WRONG OUPUT");
 			}
+
+			// Leaving the stream is not enough: the agent loop would run on in the
+			// background. Ending the run also lets it save the message it had.
+			const stopRun = () =>
+				void backgroundJob
+					.execute(
+						"stop-chat",
+						{ targetJobId: result.jobId },
+						{ stream: false },
+					)
+					.then(({ promise }) => promise.catch(() => undefined))
+					.catch(() => undefined);
+			if (abortController.signal.aborted) {
+				stopRun();
+			} else {
+				abortController.signal.addEventListener("abort", stopRun, {
+					once: true,
+				});
+			}
 			// Process streaming results
 			for await (const progress of result.stream) {
 				if (abortController.signal.aborted) {

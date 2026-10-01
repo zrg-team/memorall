@@ -1,5 +1,6 @@
 import {
 	Check,
+	Loader2,
 	MoreHorizontal,
 	Pencil,
 	Pin,
@@ -29,6 +30,8 @@ interface ConversationRowProps {
 	conversation: Conversation;
 	isActive: boolean;
 	isPinned: boolean;
+	/** A reply is being written in this chat. */
+	isRunning?: boolean;
 	onSelect: () => void;
 	onRename: (title: string) => void | Promise<void>;
 	onTogglePin: () => void | Promise<void>;
@@ -39,6 +42,7 @@ export const ConversationRow: React.FC<ConversationRowProps> = ({
 	conversation,
 	isActive,
 	isPinned,
+	isRunning = false,
 	onSelect,
 	onRename,
 	onTogglePin,
@@ -129,6 +133,13 @@ export const ConversationRow: React.FC<ConversationRowProps> = ({
 					<span className="min-w-0 flex-1 truncate text-[13px] font-medium">
 						{getConversationTitle(conversation)}
 					</span>
+					{isRunning ? (
+						<Loader2
+							size={11}
+							className="shrink-0 animate-spin text-primary"
+							aria-label={t("sidebar.replying")}
+						/>
+					) : null}
 					{isPinned ? (
 						<Pin
 							size={11}

@@ -69,6 +69,13 @@ const definition = defineStep<
 >({
 	name: STEP_NAME,
 	execute: async ({ input, config, runConfig }) => {
+		// Nothing was retrieved: an empty <context> with instructions about it
+		// only costs tokens and tells the model to look for knowledge that
+		// is not there.
+		if (!input.context?.trim()) {
+			return { output: { messages: input.messages ?? [] } };
+		}
+
 		const contextPrompt = config.prompt?.trim();
 		const contextPromptTemplate = contextPrompt
 			? contextPrompt.includes("{context}")

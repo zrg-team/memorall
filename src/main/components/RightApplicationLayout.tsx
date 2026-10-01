@@ -32,6 +32,7 @@ import {
 } from "@/main/components/molecules/AppUpdateNotice";
 import { Button } from "@/main/components/ui/button";
 import { useRuntimeSessionsStore } from "@/main/stores/runtime-sessions";
+import { useMemonMachineStore } from "@/main/stores/memon-machine";
 import {
 	debugNavigationItems,
 	getCopilotNavigationId,
@@ -160,8 +161,18 @@ export const RightApplicationLayout: React.FC<RightApplicationLayoutProps> = ({
 	const refreshRuntimeSessions = useRuntimeSessionsStore(
 		(state) => state.refresh,
 	);
+	// A computer the agent is using counts as live runtime too.
+	const activeMemonCount = useMemonMachineStore(
+		(state) =>
+			Object.values(state.summaries).filter(
+				(summary) => summary.status !== "idle",
+			).length,
+	);
 	const runtimeCount =
-		commandsCount + serversCount + Number(hasActiveWebSession);
+		commandsCount +
+		serversCount +
+		Number(hasActiveWebSession) +
+		activeMemonCount;
 
 	React.useEffect(() => {
 		void refreshRuntimeSessions();

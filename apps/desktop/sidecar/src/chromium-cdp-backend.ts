@@ -17,6 +17,12 @@ import {
 	withTimeoutSignal,
 } from "./browser-runtime-types";
 import type { ManagedBrowserOsRuntime } from "./managed-browseros-runtime";
+import {
+	isNavigationTeardown,
+	outlineActCall,
+	outlineBuildCall,
+	pageOutlineExpression,
+} from "./page-outline-bundle";
 
 type CdpMessage = {
 	id?: number;
@@ -381,6 +387,120 @@ export class ChromiumCdpBackend implements BrowserBackend {
 		);
 		session.url = snapshot.url;
 		return snapshot;
+	}
+
+	async outline(
+		session: BackendSession,
+		maxChars: number,
+		signal?: AbortSignal,
+	): Promise<Record<string, unknown>> {
+		const outline = await this.evaluate<Record<string, unknown>>(
+			session,
+			pageOutlineExpression(outlineBuildCall(maxChars)),
+			signal,
+		);
+		if (typeof outline?.url === "string") session.url = outline.url;
+		return outline;
+	}
+
+	async outlineAction(
+		session: BackendSession,
+		request: Record<string, unknown>,
+		maxChars: number,
+		signal?: AbortSignal,
+	): Promise<{
+		result: Record<string, unknown>;
+		outline?: Record<string, unknown>;
+	}> {
+		try {
+			const response = await this.evaluate<{
+				result: Record<string, unknown>;
+				outline: Record<string, unknown>;
+			}>(
+				session,
+				pageOutlineExpression(outlineActCall(request, maxChars)),
+				signal,
+			);
+			if (typeof response?.outline?.url === "string") {
+				session.url = response.outline.url;
+			}
+			return response;
+		} catch (error) {
+			// The action ran and navigated; the old context is gone with its reply.
+			if (!isNavigationTeardown(error)) throw error;
+			await this.waitForDocument(this.page(session), signal).catch(() => {});
+			return {
+				result: {
+					ok: true,
+					action: request.action,
+					ref: request.ref,
+					detail: "The page started loading a new document.",
+				},
+			};
+		}
+	}
+
+	async navigate(
+		session: BackendSession,
+		url: string,
+		timeoutMs: number,
+		maxHtmlChars: number,
+		signal?: AbortSignal,
+	): Promise<BrowserSnapshot> {
+		const page = this.page(session);
+		const timed = withTimeoutSignal(timeoutMs, signal);
+		try {
+			await page.send(
+				"Page.navigate",
+				{ url: checkedPageUrl(url) },
+				timed.signal,
+			);
+			await new Promise((resolve) => setTimeout(resolve, 100));
+			await this.waitForDocument(page, timed.signal);
+			const snapshot = await this.snapshot(session, maxHtmlChars, timed.signal);
+			session.url = snapshot.url;
+			return snapshot;
+		} finally {
+			timed.dispose();
+		}
+	}
+
+	async history(
+		session: BackendSession,
+		direction: "back" | "forward",
+		timeoutMs: number,
+		maxHtmlChars: number,
+		signal?: AbortSignal,
+	): Promise<BrowserSnapshot> {
+		const page = this.page(session);
+		const timed = withTimeoutSignal(timeoutMs, signal);
+		try {
+			const history = await page.send<{
+				currentIndex?: number;
+				entries?: Array<{ id: number }>;
+			}>("Page.getNavigationHistory", {}, timed.signal);
+			const current = history.currentIndex ?? 0;
+			const target =
+				history.entries?.[direction === "back" ? current - 1 : current + 1];
+			if (!target) {
+				throw new BrowserAutomationError(
+					"NO_HISTORY_ENTRY",
+					`There is no page to go ${direction} to.`,
+				);
+			}
+			await page.send(
+				"Page.navigateToHistoryEntry",
+				{ entryId: target.id },
+				timed.signal,
+			);
+			await new Promise((resolve) => setTimeout(resolve, 100));
+			await this.waitForDocument(page, timed.signal);
+			const snapshot = await this.snapshot(session, maxHtmlChars, timed.signal);
+			session.url = snapshot.url;
+			return snapshot;
+		} finally {
+			timed.dispose();
+		}
 	}
 
 	async query(

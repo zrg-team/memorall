@@ -1,4 +1,10 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import {
+	fireEvent,
+	render,
+	screen,
+	waitFor,
+	within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { CurrentModelInfo } from "@/services/llm/interfaces/llm-service.interface";
@@ -12,14 +18,23 @@ vi.mock("react-i18next", () => ({
 	}),
 }));
 
-const { generateImages, deleteItem, updateItem } = vi.hoisted(() => ({
+const {
+	generateImages,
+	deleteItem,
+	updateItem,
+	saveStudioInput,
+	readStoredMedia,
+} = vi.hoisted(() => ({
 	generateImages: vi.fn(),
 	deleteItem: vi.fn(),
 	updateItem: vi.fn(),
+	saveStudioInput: vi.fn(),
+	readStoredMedia: vi.fn(),
 }));
 
 vi.mock("@/main/modules/studio/services/studio-service", () => ({
 	generateImages,
+	saveStudioInput,
 	isCancellation: (error: unknown) =>
 		error instanceof Error && error.name === "AbortError",
 }));
@@ -34,6 +49,13 @@ vi.mock("@/main/stores/studio", () => ({
 }));
 
 vi.mock("@/utils/logger", () => ({ logError: vi.fn() }));
+
+vi.mock("@/services/llm/utils/media-persistence", () => ({ readStoredMedia }));
+
+// Chat's attachment boxes import the documents filesystem; none is needed here.
+vi.mock("@/services/filesystem/document-filesystem", () => ({
+	documentFileSystemService: { readFileAsBase64: vi.fn() },
+}));
 
 // Stored media needs the documents filesystem; a plain <img> is enough here.
 vi.mock("@/main/modules/studio/components/shared/StoredImage", () => ({
@@ -105,7 +127,150 @@ describe("ImageGenerationStudio", () => {
 		generateImages.mockReset();
 		deleteItem.mockReset();
 		updateItem.mockReset();
+		saveStudioInput.mockReset();
+		readStoredMedia.mockReset();
 		generateImages.mockResolvedValue(doneItem("new", "x", []));
+		// jsdom makes no object URLs; chat's attachment boxes ask for them.
+		URL.createObjectURL = vi.fn(() => "blob:preview");
+		URL.revokeObjectURL = vi.fn();
+		saveStudioInput.mockImplementation(async (file: File) => ({
+			kind: "file",
+			path: `/resources/images/inputs/${file.name}`,
+			mimeType: file.type,
+		}));
+	});
+
+	// Attachments show as chat's do: a box per image with its name.
+	const attachedNames = () =>
+		Array.from(
+			document.querySelectorAll<HTMLButtonElement>(
+				'[data-image-attachments] button[aria-label^="Remove "]',
+			),
+		).map((button) => button.getAttribute("aria-label")?.slice(7));
+
+	const fileInput = () =>
+		document.querySelector("[data-image-file-input]") as HTMLInputElement;
+
+	it("starts from attached images: shown in the composer, sent, then cleared", async () => {
+		const user = userEvent.setup();
+		renderStudio();
+		await user.upload(fileInput(), [
+			new File(["a"], "battle.png", { type: "image/png" }),
+			new File(["b"], "hero.webp", { type: "image/webp" }),
+		]);
+		expect(attachedNames()).toEqual(["battle.png", "hero.webp"]);
+		await user.click(screen.getByRole("button", { name: "Remove hero.webp" }));
+		expect(attachedNames()).toEqual(["battle.png"]);
+
+		await user.type(
+			screen.getByPlaceholderText("Describe what to make from these images"),
+			"Make it brighter",
+		);
+		await user.click(screen.getByRole("button", { name: "Generate" }));
+
+		await waitFor(() => expect(generateImages).toHaveBeenCalledTimes(1));
+		const reference = {
+			kind: "file",
+			path: "/resources/images/inputs/battle.png",
+			mimeType: "image/png",
+		};
+		expect(generateImages.mock.calls[0]?.[0]).toMatchObject({
+			prompt: "Make it brighter",
+			references: [reference],
+			inputParts: [
+				{
+					type: "image",
+					image: { path: reference.path, mimeType: "image/png", role: "input" },
+				},
+			],
+		});
+		expect(attachedNames()).toEqual([]);
+		expect(
+			screen.getByPlaceholderText("Describe the image you want"),
+		).toBeInTheDocument();
+	});
+
+	it("takes dropped images and says why it leaves out other files", async () => {
+		renderStudio();
+		const canvas = document.querySelector(
+			"[data-studio-canvas]",
+		) as HTMLElement;
+		fireEvent.drop(canvas, {
+			dataTransfer: {
+				types: ["Files"],
+				files: [new File(["x"], "notes.txt", { type: "text/plain" })],
+			},
+		});
+		expect(
+			document.querySelector("[data-image-attach-error]"),
+		).toHaveTextContent("That file is not an image.");
+		fireEvent.drop(canvas, {
+			dataTransfer: {
+				types: ["Files"],
+				files: Array.from(
+					{ length: 5 },
+					(_, index) =>
+						new File(["x"], `shot-${index}.png`, { type: "image/png" }),
+				),
+			},
+		});
+		expect(attachedNames()).toEqual([
+			"shot-0.png",
+			"shot-1.png",
+			"shot-2.png",
+			"shot-3.png",
+		]);
+		expect(
+			document.querySelector("[data-image-attach-error]"),
+		).toHaveTextContent("Up to 4 images can be used at once.");
+	});
+
+	it("retries a request with its images read back before the item is deleted", async () => {
+		const user = userEvent.setup();
+		readStoredMedia.mockResolvedValue(new Uint8Array([1, 2, 3]));
+		const failed: StudioItem = {
+			...doneItem("failed", "Make it brighter", []),
+			parts: [
+				{ type: "text", text: "Make it brighter", role: "prompt" },
+				{
+					type: "image",
+					image: {
+						path: "/resources/images/inputs/old.png",
+						mimeType: "image/png",
+						role: "input",
+					},
+				},
+			],
+			generation: {
+				...doneItem("failed", "x", []).generation,
+				status: "failed",
+				error: "boom",
+			},
+		};
+		renderStudio({ items: [failed] });
+		expect(
+			document.querySelector("[data-image-request-attachments] img"),
+		).toHaveAttribute("data-stored-path", "/resources/images/inputs/old.png");
+
+		await user.click(screen.getByRole("button", { name: /retry/i }));
+
+		await waitFor(() => expect(generateImages).toHaveBeenCalledTimes(1));
+		expect(readStoredMedia).toHaveBeenCalledWith(
+			"/resources/images/inputs/old.png",
+		);
+		expect(readStoredMedia.mock.invocationCallOrder[0]).toBeLessThan(
+			deleteItem.mock.invocationCallOrder[0] ?? Number.POSITIVE_INFINITY,
+		);
+		expect(deleteItem).toHaveBeenCalledWith("image-generation", "failed");
+		// A copy of its own: the failed item's file goes with it.
+		expect(generateImages.mock.calls[0]?.[0].references).toEqual([
+			{
+				kind: "file",
+				path: "/resources/images/inputs/old.png",
+				mimeType: "image/png",
+			},
+		]);
+		expect(saveStudioInput).toHaveBeenCalledTimes(1);
 	});
 
 	it("generates with the chosen size and count after loading the model", async () => {
