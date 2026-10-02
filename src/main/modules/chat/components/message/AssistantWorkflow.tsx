@@ -25,6 +25,10 @@ import {
 	CollapsibleTrigger,
 } from "@/main/components/ui/collapsible";
 import { ToolActionDetails } from "../MessageActions";
+import {
+	ASSISTANT_DISCLOSURE_ICON_CLASS,
+	ASSISTANT_DISCLOSURE_TRIGGER_CLASS,
+} from "./assistant-disclosure";
 import { RetrievedKnowledge } from "./RetrievedKnowledge";
 import { StreamingListItem } from "./StreamingListItem";
 import { useNewItemIds } from "./use-new-item-ids";
@@ -244,22 +248,25 @@ export const AssistantWorkflowPart: React.FC<{
 	const isRunning = part.state === "running";
 
 	return (
-		<div className="flex animate-in fade-in-0 slide-in-from-top-1 items-center gap-2 pl-1 text-xs text-muted-foreground duration-200 ease-out">
-			<span
-				className={cn(
-					"flex h-5 w-5 items-center justify-center rounded-full border",
-					isRunning
-						? "border-primary/30 text-primary"
-						: "border-border/60 text-muted-foreground/70",
-				)}
-			>
-				{isRunning ? (
-					<Loader2 className="h-3.5 w-3.5 animate-spin" />
-				) : (
-					<Settings2 className="h-3.5 w-3.5" />
-				)}
-			</span>
-			<span>{getWorkflowLabel(part, t)}</span>
+		// Same icon column as the fold triggers around it, so the step lines up
+		// with them and with the agent's name.
+		<div className="flex animate-in fade-in-0 slide-in-from-top-1 items-center gap-1.5 py-1 text-xs text-muted-foreground duration-200 ease-out">
+			{isRunning ? (
+				<Loader2
+					className={cn(
+						ASSISTANT_DISCLOSURE_ICON_CLASS,
+						"animate-spin text-primary",
+					)}
+				/>
+			) : (
+				<Settings2
+					className={cn(
+						ASSISTANT_DISCLOSURE_ICON_CLASS,
+						"text-muted-foreground/70",
+					)}
+				/>
+			)}
+			<span className="min-w-0 truncate">{getWorkflowLabel(part, t)}</span>
 		</div>
 	);
 };
@@ -286,18 +293,17 @@ export const AssistantWorkflowSummary: React.FC<{
 	return (
 		<Collapsible open={isOpen} onOpenChange={setIsOpen} className="mb-1">
 			<CollapsibleTrigger asChild>
-				<button
-					type="button"
-					className="inline-flex items-center gap-1.5 rounded-md px-1 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted/20 hover:text-foreground"
-				>
-					<Settings2 className="h-3.5 w-3.5" />
-					<span>
+				<button type="button" className={ASSISTANT_DISCLOSURE_TRIGGER_CLASS}>
+					<Settings2 className={ASSISTANT_DISCLOSURE_ICON_CLASS} />
+					<span className="truncate">
 						{isOpen ? t("workflow.hideDetails") : t("workflow.showDetails")}
 					</span>
-					<span className="text-muted-foreground/70">({totalCount})</span>
+					<span className="shrink-0 text-muted-foreground/70">
+						({totalCount})
+					</span>
 					<ChevronDown
 						className={cn(
-							"h-3.5 w-3.5 transition-transform",
+							"h-3.5 w-3.5 shrink-0 transition-transform",
 							isOpen && "rotate-180",
 						)}
 					/>

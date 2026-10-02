@@ -2,12 +2,17 @@ import React from "react";
 import { useTranslation } from "react-i18next";
 import ReactMarkdown from "react-markdown";
 import { Brain, ChevronDownIcon } from "lucide-react";
+import { cn } from "@/lib/utils";
 import {
 	Task,
 	TaskContent,
 	TaskItem,
 	TaskTrigger,
 } from "@/main/components/ui/shadcn-io/ai/task";
+import {
+	ASSISTANT_DISCLOSURE_ICON_CLASS,
+	ASSISTANT_DISCLOSURE_TRIGGER_CLASS,
+} from "./assistant-disclosure";
 import { rehypePlugins, remarkPlugins } from "./markdownComponents";
 
 interface ThinkingSectionsProps {
@@ -40,13 +45,21 @@ export const ThinkingSections: React.FC<ThinkingSectionsProps> = ({
 								isThinking ? t("messages.thinking") : t("messages.thought")
 							}
 						>
-							<div className="flex cursor-pointer items-center gap-2 text-muted-foreground hover:text-foreground">
-								<Brain className="size-4" />
-								<p className="text-sm">
+							<button
+								type="button"
+								className={ASSISTANT_DISCLOSURE_TRIGGER_CLASS}
+							>
+								<Brain
+									className={cn(
+										ASSISTANT_DISCLOSURE_ICON_CLASS,
+										isThinking && "animate-pulse text-primary",
+									)}
+								/>
+								<span className="truncate">
 									{isThinking ? t("messages.thinking") : t("messages.thought")}
-								</p>
-								<ChevronDownIcon className="size-4 transition-transform group-data-[state=open]:rotate-180" />
-							</div>
+								</span>
+								<ChevronDownIcon className="h-3.5 w-3.5 shrink-0 transition-transform duration-200 group-data-[state=open]:rotate-180" />
+							</button>
 						</TaskTrigger>
 						<TaskContent>
 							<TaskItem>

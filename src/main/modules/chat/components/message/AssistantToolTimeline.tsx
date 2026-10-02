@@ -10,6 +10,10 @@ import {
 import { useWebChallengePromptStore } from "@/main/stores/web-challenge-prompts";
 import type { ComplexContentPartTool } from "@/types/chat";
 import { WebChallengePromptCard } from "../tools/WebChallengePromptCard";
+import {
+	ASSISTANT_DISCLOSURE_ICON_CLASS,
+	ASSISTANT_DISCLOSURE_TRIGGER_CLASS,
+} from "./assistant-disclosure";
 import { AssistantToolTimelinePart } from "./AssistantToolTimelinePart";
 import { StreamingListItem } from "./StreamingListItem";
 import { useNewItemIds } from "./use-new-item-ids";
@@ -90,11 +94,14 @@ export const AssistantToolTimeline: React.FC<{
 					<button
 						type="button"
 						title={summary}
-						className="group/run-details inline-flex max-w-full items-center gap-1.5 rounded-md px-1.5 py-1 text-left text-xs text-muted-foreground transition-colors hover:bg-muted/20 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+						className={cn(
+							"group/run-details",
+							ASSISTANT_DISCLOSURE_TRIGGER_CLASS,
+						)}
 					>
 						<SlidersHorizontal
 							className={cn(
-								"h-3.5 w-3.5 shrink-0",
+								ASSISTANT_DISCLOSURE_ICON_CLASS,
 								isStreaming && "animate-pulse text-primary",
 								hasError && !isStreaming && "text-destructive",
 							)}
@@ -111,7 +118,8 @@ export const AssistantToolTimeline: React.FC<{
 					</button>
 				</CollapsibleTrigger>
 				<CollapsibleContent className="overflow-hidden data-[state=open]:animate-collapsible-down data-[state=closed]:animate-collapsible-up">
-					<div className="mt-1.5 min-w-0 pl-0.5">
+					{/* The rail's dots sit under the trigger icon's center. */}
+					<div className="mt-1.5 min-w-0 pl-px">
 						{parts.map((part, index) => (
 							<StreamingListItem key={part.id} isNew={newPartIds.has(part.id)}>
 								<AssistantToolTimelinePart
