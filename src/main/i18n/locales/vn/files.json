@@ -17,7 +17,8 @@
 		"deleteItemError": "Không thể xóa mục",
 		"renameItemError": "Không thể đổi tên mục",
 		"deleteFileError": "Không thể xóa tệp",
-		"downloadFileError": "Không thể tải xuống tệp"
+		"downloadFileError": "Không thể tải xuống tệp",
+		"downloadFolderError": "Không thể tải xuống thư mục"
 	},
 	"upload": {
 		"uploadFiles": "Tải lên tệp",
@@ -30,6 +31,7 @@
 		"items": "{{count}} mục",
 		"rename": "Đổi tên",
 		"deleteFolder": "Xóa thư mục",
+		"downloadZip": "Tải xuống dạng ZIP",
 		"manageTopics": "Quản lý chủ đề",
 		"converting": "Đang chuyển đổi...",
 		"convertToKnowledge": "Chuyển đổi thành kiến thức",

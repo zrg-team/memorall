@@ -8,6 +8,7 @@ import type {
 	RecallType,
 } from "@/services/database/entities/topic-types";
 import type { CronJobStatus } from "@/services/database/types";
+import type { MemonAppId } from "@/services/memon/constants";
 import type { MCPConnectionSelection } from "@memorall/agent-harness-flows/steps/features/mcp-feature/index";
 
 export interface AgentWizardCronJobDraft {
@@ -113,7 +114,16 @@ export type AgentWizardToolPatch =
 			type: "setup_connection";
 			kind: AgentWizardConnectionSetupKind;
 			toolkit?: string;
-	  };
+	  }
+	| { type: "offer_computer"; apps: MemonAppId[]; reason?: string };
+
+/** MemonOS Bot, offered to the user as a one-click card. */
+export interface AgentWizardComputerOffer {
+	/** The computer's apps this agent needs. */
+	apps: MemonAppId[];
+	/** One line on why, shown on the card. */
+	reason?: string;
+}
 
 /** What the wizard is told about a connection the user already has. */
 export interface AgentWizardConnectionInfo {

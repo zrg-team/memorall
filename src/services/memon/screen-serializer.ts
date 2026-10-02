@@ -11,8 +11,11 @@ import type {
 	MemonFileEntry,
 	MemonFilesState,
 	MemonMachineSnapshot,
+	MemonTerminalLine,
+	MemonTerminalState,
 	MemonWindowState,
 } from "./types";
+import { terminalRunsInFront } from "./terminal/terminal-state";
 
 /**
  * The screen the model reads. Pure, so the Computer panel's "Screen text"
@@ -107,6 +110,114 @@ const truncateLine = (value: string, max: number): string =>
 
 const windowLabel = (window: MemonWindowState): string => APP_LABEL[window.app];
 
+// ── Terminal ─────────────────────────────────────────────────────────────
+
+const terminalLine = (line: MemonTerminalLine): string =>
+	line.kind === "command"
+		? `$ ${line.text}`
+		: line.kind === "input"
+			? `> ${line.text}`
+			: truncateLine(line.text, 240);
+
+/** The running command, and how long it has been quiet. */
+const runningState = (terminal: MemonTerminalState): string => {
+	if (!terminal.runningCommand) return "";
+	const quiet =
+		terminal.lastOutputAt !== null &&
+		Date.now() - terminal.lastOutputAt >= 5_000
+			? ` · no output for ${formatElapsed(terminal.lastOutputAt)}`
+			: "";
+	return `running \`${truncateLine(terminal.runningCommand, 60)}\` for ${formatElapsed(terminal.startedAt)}${quiet}`;
+};
+
+const terminalBrief = (
+	windowId: string,
+	min: string,
+	terminal: MemonTerminalState,
+): string => {
+	const last = [...terminal.lines]
+		.reverse()
+		.find((line) => line.kind === "command");
+	const elsewhere = terminalRunsInFront(terminal)
+		? ""
+		: `tab ${terminal.runningTabId} `;
+	const state = terminal.approval?.agentWaiting
+		? "waiting for the user's approval"
+		: terminal.runningCommand
+			? `${elsewhere}running for ${formatElapsed(terminal.startedAt)}`
+			: last
+				? `last: $ ${truncateLine(last.text, 48)} (exit ${terminal.lastExitCode ?? "?"})`
+				: "idle";
+	const tabCount =
+		terminal.tabs.length > 1 ? ` · ${terminal.tabs.length} tabs` : "";
+	return `── ${windowId} Terminal${min}${tabCount} · cwd ${terminal.cwd} · ${state}`;
+};
+
+const terminalTabsLines = (terminal: MemonTerminalState): string[] => {
+	if (terminal.tabs.length < 2) return [];
+	const tabs = terminal.tabs
+		.map(
+			(tab) =>
+				`${tab.id === terminal.activeTabId ? `[${tab.id}]` : tab.id} ${tab.cwd}${tab.running ? " (running)" : ""}`,
+		)
+		.join(" · ");
+	return [
+		`tabs: ${tabs} — memon_run { terminal: "<id>" } switches to a tab (with command, runs there), { terminal: "new" } opens one, { terminal: "<id>", closeTab: true } closes one`,
+	];
+};
+
+/** The running tab's latest output, while another tab is in front. */
+const runningTabLines = (terminal: MemonTerminalState): string[] =>
+	terminal.runningTabTail?.length
+		? [
+				`tab ${terminal.runningTabId}'s latest output (memon_run { terminal: "${terminal.runningTabId}" } shows it all):`,
+				...terminal.runningTabTail.map((line) => `  | ${terminalLine(line)}`),
+				`tab ${terminal.activeTabId}:`,
+			]
+		: [];
+
+const approvalLines = (terminal: MemonTerminalState): string[] =>
+	terminal.approval
+		? [
+				`waiting for the user's approval: $ ${terminal.approval.command}`,
+				`  ${terminal.approval.reason}`,
+			]
+		: [];
+
+const serverLines = (terminal: MemonTerminalState): string[] =>
+	terminal.servers?.length
+		? [
+				`serving ${terminal.servers.map((port) => `http://localhost:${port}`).join(", ")} — a server keeps running; memon_open { app: "browser", url: "http://localhost:${terminal.servers[0]}" } shows it in an embedded tab`,
+			]
+		: [];
+
+const terminalInputHint = (terminal: MemonTerminalState): string =>
+	terminalRunsInFront(terminal)
+		? "[t1] input → the running command (memon_run { input } / { stop: true }); file and text commands (ls, cat, mkdir, grep…), curl, git and py still run next to it"
+		: terminal.runningCommand
+			? "[t1] input (use memon_run for commands; while the other tab's command runs, only file and text commands, curl, git and py)"
+			: "[t1] input (use memon_run for commands)";
+
+const terminalLines = (
+	windowId: string,
+	terminal: MemonTerminalState,
+): string[] => {
+	const running = runningState(terminal);
+	const state = terminalRunsInFront(terminal)
+		? running
+		: `idle · last exit ${terminal.lastExitCode ?? "-"}${running ? ` · tab ${terminal.runningTabId} is ${running}` : ""}`;
+	const tab = terminal.tabs.length > 1 ? ` · tab ${terminal.activeTabId}` : "";
+	return [
+		`── ${windowId} Terminal${tab} · cwd ${terminal.cwd} · ${state}`,
+		...terminalTabsLines(terminal),
+		...runningTabLines(terminal),
+		...terminal.lines.slice(-TERMINAL_TAIL_LINES).map(terminalLine),
+		...approvalLines(terminal),
+		...serverLines(terminal),
+		terminalInputHint(terminal),
+	];
+};
+
 const briefLine = (
 	snapshot: MemonMachineSnapshot,
 	window: MemonWindowState,
@@ -152,19 +263,8 @@ const briefLine = (
 			const running = runs.some((run) => run.status === "running");
 			return `── ${window.id} Studio${min} · ${ready}/${tools.length} tools ready · ${runs.length} run${runs.length === 1 ? "" : "s"}${running ? " · running" : ""}`;
 		}
-		case "terminal": {
-			const last = [...snapshot.terminal.lines]
-				.reverse()
-				.find((line) => line.kind === "command");
-			const state = snapshot.terminal.approval?.agentWaiting
-				? "waiting for the user's approval"
-				: snapshot.terminal.runningCommand
-					? `running for ${formatElapsed(snapshot.terminal.startedAt)}`
-					: last
-						? `last: $ ${truncateLine(last.text, 48)} (exit ${snapshot.terminal.lastExitCode ?? "?"})`
-						: "idle";
-			return `── ${window.id} Terminal${min} · cwd ${snapshot.terminal.cwd} · ${state}`;
-		}
+		case "terminal":
+			return terminalBrief(window.id, min, snapshot.terminal);
 	}
 };
 
@@ -278,46 +378,8 @@ const fullLines = (
 			if (page.footer) lines.push(page.footer);
 			return lines;
 		}
-		case "terminal": {
-			const { terminal } = snapshot;
-			const quiet =
-				terminal.lastOutputAt !== null &&
-				Date.now() - terminal.lastOutputAt >= 5_000
-					? ` · no output for ${formatElapsed(terminal.lastOutputAt)}`
-					: "";
-			const state = terminal.runningCommand
-				? `running \`${truncateLine(terminal.runningCommand, 60)}\` for ${formatElapsed(terminal.startedAt)}${quiet}`
-				: `idle · last exit ${terminal.lastExitCode ?? "-"}`;
-			const tail = terminal.lines
-				.slice(-TERMINAL_TAIL_LINES)
-				.map((line) =>
-					line.kind === "command"
-						? `$ ${line.text}`
-						: line.kind === "input"
-							? `> ${line.text}`
-							: truncateLine(line.text, 240),
-				);
-			const approval = terminal.approval
-				? [
-						`waiting for the user's approval: $ ${terminal.approval.command}`,
-						`  ${terminal.approval.reason}`,
-					]
-				: [];
-			const servers = terminal.servers?.length
-				? [
-						`serving ${terminal.servers.map((port) => `http://localhost:${port}`).join(", ")} — a server keeps running; memon_open { app: "browser", url: "http://localhost:${terminal.servers[0]}" } shows it in an embedded tab`,
-					]
-				: [];
-			return [
-				`── ${window.id} Terminal · cwd ${terminal.cwd} · ${state}`,
-				...tail,
-				...approval,
-				...servers,
-				terminal.runningCommand
-					? "[t1] input → the running command (memon_run { input } / { stop: true })"
-					: "[t1] input (use memon_run for commands)",
-			];
-		}
+		case "terminal":
+			return terminalLines(window.id, snapshot.terminal);
 		default:
 			return [];
 	}

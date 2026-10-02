@@ -3,6 +3,7 @@ import type {
 	MemonOperation,
 	MemonOperationPayloadMap,
 } from "@/services/memon/operation-types";
+import type { MemonFeatureConfig } from "@/services/memon/feature-config";
 import type {
 	MemonMachineSnapshot,
 	MemonMachineSummary,
@@ -17,12 +18,21 @@ type InputOperation = Exclude<
 	"snapshot.get" | "machines.list" | "control.cancelWaits"
 >;
 
+/** The open chat's agent, when it is a MemonOS Bot. */
+export interface MemonChatAgent {
+	agentId: string;
+	config: MemonFeatureConfig;
+}
+
 interface MemonMachineState {
 	/** Latest slim summary per machine key, from the change bus. */
 	summaries: Record<string, MemonMachineSummary>;
 	/** Full snapshots, pulled for machines the UI is showing. */
 	snapshots: Record<string, MemonMachineSnapshot>;
 	error: string | null;
+	/** Lets the shell point Runtime at this agent's computer. */
+	chatAgent: MemonChatAgent | null;
+	setChatAgent: (agent: MemonChatAgent | null) => void;
 	start: () => void;
 	pull: (key: string) => Promise<void>;
 	send: <T extends InputOperation>(
@@ -63,6 +73,8 @@ export const useMemonMachineStore = create<MemonMachineState>((set, get) => {
 		summaries: {},
 		snapshots: {},
 		error: null,
+		chatAgent: null,
+		setChatAgent: (chatAgent) => set({ chatAgent }),
 
 		/** Idempotent: subscribes to machine changes and seeds known machines. */
 		start: () => {

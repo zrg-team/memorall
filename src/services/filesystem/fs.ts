@@ -1,11 +1,19 @@
-import { configure, InMemory, fs } from "@zenfs/core";
+import { configure, InMemory, fs, resolveMountConfig } from "@zenfs/core";
 import { IndexedDB } from "@zenfs/dom";
 import { logDebug, logError, logInfo } from "@/utils/logger";
 import { syncNativeFolderMounts } from "./native-folders/mount-registry";
 
+const HOME_MOUNT = "/home";
+
+/**
+ * How long to wait for more FILESYSTEM_CHANGED events before reloading. An
+ * agent saving a batch of files sends one event per folder and file; they only
+ * need one reload between them.
+ */
+const REFRESH_DEBOUNCE_MS = 100;
+
 let fsReady = false;
 let fsReadyPromise: Promise<void> | null = null;
-let refreshInProgress = false;
 
 // Initialize filesystem configuration
 const initializeFs = async (): Promise<void> => {
@@ -35,95 +43,137 @@ const initializeFs = async (): Promise<void> => {
 	return fsReadyPromise;
 };
 
-/**
- * Force ZenFS to refresh its cache by reconfiguring it
- * This is necessary when files are modified in a different context (e.g., offscreen)
- * and we need to ensure the current context sees the latest data from IndexedDB
- */
-const refreshFsCache = async (): Promise<void> => {
-	// Prevent concurrent refresh attempts
-	if (refreshInProgress) {
-		logInfo("⏸️ Refresh already in progress, skipping...");
-		return;
-	}
+// ── Remount gate ──────────────────────────────────────────────────────────────
+//
+// Every context loads the whole IndexedDB store into memory when it mounts
+// `/home`, along with ZenFS's path → inode table. A write made by another
+// context is invisible until `/home` is mounted again.
+//
+// The remount used to unmount `/home`, sleep, and reconfigure, while this
+// context's own operations kept running. A `mkdir` that landed in that gap went
+// into ZenFS's in-memory root and reported success, then vanished with the
+// remount; the file written into it next failed with ENOENT. An agent saving
+// several files at once hit this every time another context answered its
+// change events.
+//
+// So a remount now waits for in-flight calls to finish, holds new ones back,
+// loads the store fresh, and swaps the mount in a single tick.
 
-	refreshInProgress = true;
+let activeOperations = 0;
+let remountGate: Promise<void> | null = null;
+let notifyDrained: (() => void) | null = null;
 
-	const refreshPromise = (async () => {
-		try {
-			logInfo(
-				"🔄 Refreshing ZenFS cache (unmounting and reconfiguring filesystem)",
-			);
-
-			// Reset ready state before remounting.
-			fsReady = false;
-
-			// Unmount existing mounts to avoid "already in use" errors
-			try {
-				await fs.umount("/tmp");
-				logInfo("📤 Unmounted /tmp");
-			} catch (e) {
-				// Ignore if not mounted
-				logDebug("Could not unmount /tmp:", e);
-			}
-
-			try {
-				await fs.umount("/home");
-				logInfo("📤 Unmounted /home");
-			} catch (e) {
-				// Ignore if not mounted
-				logDebug("Could not unmount /home:", e);
-			}
-
-			// Small delay to ensure unmounting is complete
-			await new Promise((resolve) => setTimeout(resolve, 50));
-
-			// Reconfigure the filesystem - this forces ZenFS to reload from IndexedDB
-			await configure({
-				mounts: {
-					"/tmp": InMemory,
-					"/home": IndexedDB,
-				},
-			});
-
-			fsReady = true;
-			// configure() rebuilt the tree from the two static mounts, which
-			// silently drops every mapped folder. Put them back before anything
-			// reads the filesystem again.
-			await syncNativeFolderMounts();
-			logInfo("✅ ZenFS cache refreshed successfully");
-		} catch (error) {
-			const message = error instanceof Error ? error.message : String(error);
-			// If another configure won the race and mounts already exist, treat as success.
-			if (message.includes("Mount point is already in use")) {
-				logInfo(
-					"ℹ️ ZenFS mounts already configured, skipping duplicate refresh",
-				);
-				fsReady = true;
-				await syncNativeFolderMounts();
-				return;
-			}
-
-			logError("Failed to refresh ZenFS cache:", error);
-			// Reset state so next call can try again
-			fsReady = false;
-			throw error;
-		}
-	})();
-
-	// Share one promise across initialize/refresh so configure cannot run in parallel.
-	fsReadyPromise = refreshPromise;
-
+const runOperation = async <T>(operation: () => Promise<T>): Promise<T> => {
+	while (remountGate) await remountGate;
+	activeOperations++;
 	try {
-		await refreshPromise;
+		return await operation();
 	} finally {
-		refreshInProgress = false;
+		activeOperations--;
+		if (activeOperations === 0) notifyDrained?.();
 	}
 };
+
+const waitForOperationsToDrain = (): Promise<void> =>
+	activeOperations === 0
+		? Promise.resolve()
+		: new Promise((resolve) => {
+				notifyDrained = resolve;
+			});
+
+const remountHome = async (): Promise<void> => {
+	await initializeFs();
+
+	let openGate: () => void = () => undefined;
+	remountGate = new Promise((resolve) => {
+		openGate = resolve;
+	});
+	try {
+		await waitForOperationsToDrain();
+		logInfo("🔄 Reloading /home from IndexedDB");
+		// Loaded only after the drain, so it includes every write this context
+		// just committed.
+		const next = await resolveMountConfig({ backend: IndexedDB });
+		// No await between these two: nothing can see `/home` missing.
+		fs.umount(HOME_MOUNT);
+		fs.mount(HOME_MOUNT, next);
+		logInfo("✅ ZenFS cache refreshed successfully");
+	} finally {
+		notifyDrained = null;
+		remountGate = null;
+		openGate();
+	}
+
+	// Mapped folders are their own mounts and survive the swap. This only
+	// matters if the set of mapped folders changed meanwhile.
+	await syncNativeFolderMounts();
+};
+
+let pendingRefresh: Promise<void> | null = null;
+let runningRefresh: Promise<void> | null = null;
+
+/**
+ * Reload `/home` so this context sees writes made by another one (e.g. the
+ * offscreen document).
+ *
+ * Calls within the debounce window share one reload. A call that arrives while
+ * a reload is already running gets a new one after it, because the running one
+ * may have read the store before that change was written.
+ */
+const refreshFsCache = (): Promise<void> => {
+	if (pendingRefresh) return pendingRefresh;
+
+	const refresh = (async () => {
+		try {
+			await new Promise((resolve) => setTimeout(resolve, REFRESH_DEBOUNCE_MS));
+			while (runningRefresh) await runningRefresh.catch(() => undefined);
+		} finally {
+			// From here on a new change needs a new reload.
+			pendingRefresh = null;
+		}
+		const run = remountHome();
+		runningRefresh = run;
+		try {
+			await run;
+		} catch (error) {
+			logError("Failed to refresh ZenFS cache:", error);
+			throw error;
+		} finally {
+			if (runningRefresh === run) runningRefresh = null;
+		}
+	})();
+	pendingRefresh = refresh;
+	return refresh;
+};
+
+/**
+ * `fs.promises` with every call passed through the remount gate.
+ *
+ * Each call holds the gate until it settles, so a remount never starts halfway
+ * through one and the store it loads has everything that call wrote.
+ */
+const gatedPromises = new Proxy(fs.promises, {
+	get(target, property, receiver) {
+		const value = Reflect.get(target, property, receiver);
+		if (typeof value !== "function") return value;
+		return (...args: unknown[]) =>
+			runOperation(async () =>
+				(value as (...a: unknown[]) => unknown).apply(target, args),
+			);
+	},
+});
+
+const gatedFs = new Proxy(fs, {
+	get(target, property, receiver) {
+		return property === "promises"
+			? gatedPromises
+			: Reflect.get(target, property, receiver);
+	},
+}) as typeof fs;
 
 // Start initialization immediately
 initializeFs();
 
 // Export both the fs object and the ready promise
-export default fs;
+export default gatedFs;
 export { initializeFs, fsReady, refreshFsCache };

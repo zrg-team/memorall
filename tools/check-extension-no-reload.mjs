@@ -250,7 +250,9 @@ export function analyzeNoReloadArtifactContents(entries) {
 	}
 	for (const [relative, content] of entries) {
 		if (
-			relative === "sandbox/page-1.js" &&
+			// Whichever sandbox page bundles almostnode: the build numbers them
+			// by their place in manifest.base.json.
+			/^sandbox\/page-\d+\.js$/.test(relative) &&
 			content.includes("vendors/almostnode.bundle.js") &&
 			!content.includes("Sandbox asset root is unavailable")
 		) {

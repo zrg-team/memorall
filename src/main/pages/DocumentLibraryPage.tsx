@@ -270,6 +270,7 @@ export const DocumentLibraryPage: React.FC = () => {
 									onDeleteItem={lib.handleDeleteItem}
 									onRenameItem={lib.handleRenameItem}
 									onDownloadFile={lib.handleDownloadFile}
+									onDownloadFolder={lib.handleDownloadFolder}
 									onDownloadSelectedFile={lib.handleDownloadSelectedFile}
 									onManageTopics={lib.handleManageFileTopic}
 									onConvertToKnowledge={lib.handleConvertToKnowledge}
@@ -346,6 +347,7 @@ export const DocumentLibraryPage: React.FC = () => {
 								onDeleteItem={lib.handleDeleteItem}
 								onRenameItem={lib.handleRenameItem}
 								onDownloadFile={lib.handleDownloadFile}
+								onDownloadFolder={lib.handleDownloadFolder}
 								onDownloadSelectedFile={lib.handleDownloadSelectedFile}
 								onManageTopics={lib.handleManageFileTopic}
 								onConvertToKnowledge={lib.handleConvertToKnowledge}

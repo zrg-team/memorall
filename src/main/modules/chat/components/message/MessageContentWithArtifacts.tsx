@@ -19,7 +19,15 @@ interface MessageContentWithArtifactsProps {
 	isStreaming: boolean;
 	suppressArtifactPreviews?: boolean;
 	onMessageAction?: (action: MessageActionRequest) => void | Promise<void>;
-	seenArtifactKeys?: Set<string>;
+	/**
+	 * Which block shows each artifact, shared by a message's text parts so one
+	 * re-emitted artifact draws once. The first block to claim it keeps it on
+	 * every later render; a plain "seen" set dropped it from its own block the
+	 * moment the message re-rendered (opening the right panel did that).
+	 */
+	seenArtifactKeys?: Map<string, string>;
+	/** This block's stable name, for claiming artifacts in seenArtifactKeys. */
+	artifactScope?: string;
 	/**
 	 * Identity for interactive state in this message's OpenUI blocks. Combined
 	 * with each block's position to survive the remount `DeferredMount` performs.
@@ -37,6 +45,7 @@ const MessageContentFrame: React.FC<MessageContentWithArtifactsProps> =
 			suppressArtifactPreviews = false,
 			onMessageAction,
 			seenArtifactKeys,
+			artifactScope,
 			blockScope,
 			configuredTheme,
 		}) => {
@@ -63,8 +72,10 @@ const MessageContentFrame: React.FC<MessageContentWithArtifactsProps> =
 						const key = `${keyPrefix}-artifact-${i}-${seg.type}`;
 						if (seenArtifactKeys) {
 							const dedupeKey = `${seg.type}:${seg.identifier ?? ""}:${seg.title ?? ""}:${seg.content}`;
-							if (seenArtifactKeys.has(dedupeKey)) return null;
-							seenArtifactKeys.add(dedupeKey);
+							const owner = `${artifactScope ?? ""}:${key}`;
+							const claimedBy = seenArtifactKeys.get(dedupeKey);
+							if (claimedBy && claimedBy !== owner) return null;
+							seenArtifactKeys.set(dedupeKey, owner);
 						}
 						if (suppressArtifactPreviews) {
 							return (

@@ -9,6 +9,7 @@ import {
 	type RecallType,
 } from "@/services/database/entities/topic-types";
 import { isUuid, v4 } from "@/utils/uuid";
+import { MEMON_APP_IDS, type MemonAppId } from "@/services/memon/constants";
 import type {
 	AgentWizardCatalog,
 	AgentWizardCronJobDraft,
@@ -311,6 +312,9 @@ const announceToolPatchCursorMove = (patch: AgentWizardToolPatch): void => {
 				"Opening connection setup",
 			);
 			break;
+		case "offer_computer":
+			// A card for the user, not a change to the draft.
+			break;
 		case "enable_feature":
 			announceCursorMove(
 				AGENT_WIZARD_CURSOR_KEYS.feature(patch.name),
@@ -522,7 +526,8 @@ export const applyAgentWizardToolPatch = (
 			break;
 		}
 		case "setup_connection":
-			// Pure signal — the panel is opened by the hook, nothing to patch.
+		case "offer_computer":
+			// Pure signals: the hook opens the panel or the card; nothing to patch.
 			break;
 		case "enable_feature":
 			next.enabledFeatureNames = addUniqueStrings(
@@ -648,6 +653,20 @@ export const agentWizardToolPatchFromCall = (
 					args.connections ?? uniqueStrings(args.connectionIds),
 				),
 			};
+		case AGENT_WIZARD_TOOL_NAMES.offerComputer: {
+			const known = new Set<string>(MEMON_APP_IDS);
+			const apps = uniqueStrings(args.apps).filter((app): app is MemonAppId =>
+				known.has(app),
+			);
+			return {
+				type: "offer_computer",
+				apps,
+				reason:
+					typeof args.reason === "string" && args.reason.trim()
+						? args.reason.trim()
+						: undefined,
+			};
+		}
 		case AGENT_WIZARD_TOOL_NAMES.setupConnection:
 			return args.kind === "composio" || args.kind === "custom"
 				? {

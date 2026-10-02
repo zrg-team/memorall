@@ -3,8 +3,10 @@ import React from "react";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import { Button } from "@/main/components/ui/button";
+import { terminalRunsInFront } from "@/services/memon/terminal/terminal-state";
 import type { MemonTerminalState } from "@/services/memon/types";
 import type { MemonSend } from "../types";
+import { TerminalTabs } from "./TerminalTabs";
 
 const prompt = (cwd?: string) => `user@memon:${cwd ?? "/"}$`;
 
@@ -41,7 +43,9 @@ export const TerminalWindow: React.FC<{
 	const { t } = useTranslation("common");
 	const [command, setCommand] = React.useState("");
 	const outputRef = React.useRef<HTMLPreElement>(null);
-	const running = terminal.runningCommand !== null;
+	// The running command belongs to one tab; the others run next to it.
+	const running = terminalRunsInFront(terminal);
+	const runningElsewhere = terminal.runningCommand !== null && !running;
 	const servers = terminal.servers ?? [];
 	const now = useNow(running);
 	const { approval } = terminal;
@@ -49,12 +53,23 @@ export const TerminalWindow: React.FC<{
 	React.useEffect(() => {
 		const output = outputRef.current;
 		if (output) output.scrollTop = output.scrollHeight;
-	}, [terminal.lines.length, running]);
+	}, [terminal.lines.length, running, terminal.activeTabId]);
 
 	const stop = () => void send("terminal.stop", { key: machineKey });
 
 	return (
 		<div className="flex min-h-0 flex-1 flex-col gap-1.5 p-2">
+			<TerminalTabs
+				tabs={terminal.tabs}
+				activeTabId={terminal.activeTabId}
+				onSelect={(terminalId) =>
+					void send("terminal.select", { key: machineKey, terminalId })
+				}
+				onClose={(terminalId) =>
+					void send("terminal.close", { key: machineKey, terminalId })
+				}
+				onNew={() => void send("terminal.new", { key: machineKey })}
+			/>
 			{approval ? (
 				<div className="shrink-0 space-y-1.5 rounded-md border border-amber-500/40 bg-amber-500/10 px-2.5 py-2 text-xs">
 					<div className="flex items-center gap-1.5 font-medium text-amber-800 dark:text-amber-200">
@@ -199,7 +214,11 @@ export const TerminalWindow: React.FC<{
 					const value = command.trim();
 					if (!value) return;
 					setCommand("");
-					void send("terminal.exec", { key: machineKey, command: value });
+					void send("terminal.exec", {
+						key: machineKey,
+						command: value,
+						terminalId: terminal.activeTabId,
+					});
 				}}
 			>
 				<label
@@ -218,7 +237,13 @@ export const TerminalWindow: React.FC<{
 					data-memon-ref="t1"
 					value={command}
 					placeholder={
-						running ? t("memonComputer.terminal.inputPlaceholder") : undefined
+						running
+							? t("memonComputer.terminal.inputPlaceholder")
+							: runningElsewhere
+								? t("memonComputer.terminal.otherTabRunning", {
+										id: terminal.runningTabId,
+									})
+								: undefined
 					}
 					onChange={(event) => setCommand(event.target.value)}
 					onKeyDown={(event) => {

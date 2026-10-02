@@ -19,6 +19,13 @@ const TOOL_NAME = "fs_read" as const;
  */
 const MAX_READ_BYTES = 5 * 1024 * 1024;
 
+/** How far into a file to look for a NUL byte, as git does to spot binary. */
+const BINARY_SNIFF_BYTES = 8000;
+
+/** Text files hold no NUL bytes; images, archives and the like do. */
+const looksBinary = (raw: Uint8Array): boolean =>
+	raw.subarray(0, BINARY_SNIFF_BYTES).includes(0);
+
 const schema = z.object({
 	file_path: z.string().describe("Path to the file to read"),
 	offset: z
@@ -94,6 +101,11 @@ export const createFsReadTool: ToolFactory<Input, Services, FsToolConfig> = (
 
 		try {
 			const raw = await readFileBytes(dfs, filePath, config);
+			// Its bytes as "lines" tell the model nothing, and the NUL bytes in
+			// them cannot be stored with the chat, which lost the whole reply.
+			if (looksBinary(raw)) {
+				return `File: ${filePath} is binary (${formatFileSize(raw.byteLength)}), so it is not shown as text. Refer to it by its path instead, for example as an image's src in HTML.`;
+			}
 			return readAndFormat(raw, filePath);
 		} catch (error) {
 			return `Error: ${error instanceof Error ? error.message : String(error)}`;

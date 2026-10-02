@@ -118,7 +118,10 @@ export const AssistantContentFlow: React.FC<AssistantContentFlowProps> =
 			// Some flows re-emit the same assistant text (and its artifact tags) across
 			// multiple content parts (e.g. one per agent iteration). Share a dedupe set
 			// across all text parts so a single artifact only renders once.
-			const seenArtifactKeys = useMemo(() => new Set<string>(), [parts]);
+			const seenArtifactKeys = useMemo(
+				() => new Map<string, string>(),
+				[parts],
+			);
 			const mergedParts = useMemo(
 				() => mergeAdjacentAssistantTextParts(parts),
 				[parts],
@@ -160,6 +163,7 @@ export const AssistantContentFlow: React.FC<AssistantContentFlowProps> =
 									suppressArtifactPreviews={suppressArtifactPreviews}
 									onMessageAction={onMessageAction}
 									seenArtifactKeys={seenArtifactKeys}
+									artifactScope={segment.key}
 								/>
 							);
 						}

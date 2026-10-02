@@ -19,6 +19,7 @@ import {
 	stringifyToolPayload,
 } from "./ToolCommon";
 import { Badge } from "@/main/components/ui/badge";
+import { CompactArtifactReference } from "@/main/modules/chat/components/message/CompactArtifactReference";
 
 const MCPToolInfo: React.FC<{
 	serverName: string;
@@ -155,14 +156,11 @@ const RenderArtifactSummary: React.FC<{
 		<div className="space-y-3">
 			<ToolSection>
 				<div className="space-y-3">
-					<div>
-						<div className="text-sm font-medium text-foreground">
-							{title || "Artifact rendered"}
-						</div>
-						<div className="mt-1 text-xs text-muted-foreground">
-							The visual output is attached to this assistant message.
-						</div>
-					</div>
+					<CompactArtifactReference
+						type={type || "artifact"}
+						title={title}
+						identifier={identifier}
+					/>
 					<ToolDetailsGrid>
 						<ToolDetail label="Type" value={type || "artifact"} mono />
 						{identifier ? (

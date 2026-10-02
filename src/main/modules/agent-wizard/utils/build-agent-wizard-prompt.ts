@@ -1,3 +1,8 @@
+import {
+	MEMON_APP_FEATURES,
+	MEMON_APP_IDS,
+	MEMON_STEP_NAME,
+} from "@/services/memon/constants";
 import type { AgentWizardCatalog, AgentWizardDraft } from "../types";
 
 export const AGENT_WIZARD_TOOL_NAMES = {
@@ -15,6 +20,7 @@ export const AGENT_WIZARD_TOOL_NAMES = {
 	updateCronJobs: "update_agent_cron_jobs",
 	useConnections: "use_agent_connections",
 	setupConnection: "setup_agent_connection",
+	offerComputer: "offer_agent_computer",
 } as const;
 
 export type AgentWizardToolName =
@@ -24,6 +30,27 @@ export const isAgentWizardToolName = (
 	name: string,
 ): name is AgentWizardToolName =>
 	Object.values(AGENT_WIZARD_TOOL_NAMES).includes(name as AgentWizardToolName);
+
+/**
+ * When to offer MemonOS Bot, only where the catalog has it. The user turns it
+ * on from a card with one click, so the wizard never asks in a form.
+ */
+const buildComputerSection = (catalog: AgentWizardCatalog): string => {
+	if (!catalog.featureNames.includes(MEMON_STEP_NAME)) return "";
+	const apps = MEMON_APP_IDS.map(
+		(app) => `${app} (${MEMON_APP_FEATURES[app]})`,
+	).join(", ");
+	return `
+# MemonOS Bot — A Computer For The Agent
+"${MEMON_STEP_NAME}" gives the agent one computer with apps (${apps}) instead of separate tools. The user watches it work live and can take over at any time.
+
+- Consider it for every agent that browses websites, reads or writes files, runs code or commands, or builds pages. It suits multi-step work the user may want to watch or step into.
+- Offer it with ${AGENT_WIZARD_TOOL_NAMES.offerComputer}, naming the apps the agent needs and one short reason. That shows the user a card; they turn it on with one click. Do NOT ask about it in a form or in text, and do NOT enable "${MEMON_STEP_NAME}" yourself.
+- Offer it once. If the current draft already lists "${MEMON_STEP_NAME}", it is on: write the instruction for an agent that works through its computer. If the user dismissed the card, do not offer it again.
+- Still enable the app features the agent needs (for example "web-feature" for browsing): with MemonOS Bot on they become the computer's apps.
+- Keep going while the card is shown; the rest of the draft does not wait for it.
+`;
+};
 
 export const buildAgentWizardSystemPrompt = (
 	catalog: AgentWizardCatalog,
@@ -113,7 +140,7 @@ Connection rules:
 - A connection with status "incomplete" is set up but unfinished — offer to
   finish it with ${AGENT_WIZARD_TOOL_NAMES.setupConnection} rather than starting over.
 - Explain what the agent will be able to do once connected, not the mechanics.
-
+${buildComputerSection(catalog)}
 # CRITICAL: Structured Form Responses — MANDATORY
 
 NEVER ask the user questions using markdown text, bullet lists, or numbered lists.
@@ -494,6 +521,31 @@ ANTI-PATTERNS TO AVOID:
 					},
 				},
 				required: ["kind"],
+				additionalProperties: false,
+			},
+		},
+	},
+	{
+		type: "function" as const,
+		function: {
+			name: AGENT_WIZARD_TOOL_NAMES.offerComputer,
+			description:
+				"Offer MemonOS Bot (a computer the agent works on, which the user can watch and take over) as a one-click card in this conversation. The user turns it on; do not enable it yourself or ask about it in a form. Offer once.",
+			parameters: {
+				type: "object",
+				properties: {
+					apps: {
+						type: "array",
+						items: { type: "string", enum: [...MEMON_APP_IDS] },
+						description: "The computer's apps this agent needs.",
+					},
+					reason: {
+						type: "string",
+						description:
+							"One short line for the card on why this agent benefits, e.g. 'It browses listings and saves photos, and you can watch it work.'",
+					},
+				},
+				required: ["apps"],
 				additionalProperties: false,
 			},
 		},

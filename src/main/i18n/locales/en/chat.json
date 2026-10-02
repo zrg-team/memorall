@@ -318,6 +318,7 @@
 		"preview": "Preview",
 		"code": "Code",
 		"artifactActions": "Artifact actions",
+		"inPanel": "Artifact · open in the right panel",
 		"openInNewTab": "Open in new tab",
 		"resolvingSandboxPreview": "Resolving sandbox preview...",
 		"unsupportedUrl": "Unsupported artifact URL: {{url}}"

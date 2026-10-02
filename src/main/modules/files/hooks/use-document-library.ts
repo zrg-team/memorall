@@ -31,6 +31,7 @@ import {
 	updateNodeByPath,
 	mergeTreeState,
 } from "../utils/tree-utils";
+import { downloadFolderAsZip } from "../utils/save-download";
 
 // ── Module-level helpers ──────────────────────────────────────────────────────
 
@@ -704,6 +705,19 @@ export function useDocumentLibrary() {
 		}
 	}, [t]);
 
+	/** A folder, with everything in it, as one .zip download. */
+	const handleDownloadFolder = useCallback(
+		async (folderPath: string) => {
+			try {
+				await downloadFolderAsZip(folderPath);
+			} catch (err) {
+				logError("Failed to download folder:", err);
+				setError(t("library.downloadFolderError"));
+			}
+		},
+		[t],
+	);
+
 	// ── Move ─────────────────────────────────────────────────────────────────
 	const handleMove = useCallback(
 		async (
@@ -828,6 +842,7 @@ export function useDocumentLibrary() {
 		handleDeleteSelectedFile,
 		handleDownloadFile,
 		handleDownloadSelectedFile,
+		handleDownloadFolder,
 		handleMove,
 		handleTopicFilterChange,
 		handleRemoveTopicFilter,

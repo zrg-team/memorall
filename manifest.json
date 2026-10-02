@@ -76,6 +76,7 @@
   "sandbox": {
     "pages": [
       "sandbox/pages/js-execute.html",
+      "sandbox/pages/html-artifact.html",
       "sandbox/pages/sandbox-container-runtime.html"
     ]
   }

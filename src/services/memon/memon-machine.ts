@@ -7,7 +7,6 @@ import type {
 import {
 	MEMON_AGENT_TURN_CEILING_MS,
 	MEMON_APP_IDS,
-	MEMON_APPROVAL_WAIT_MS,
 	MEMON_VISUAL_EXTENSION,
 	MEMON_VISUALS_DIR,
 	memonDesktopPaths,
@@ -32,20 +31,26 @@ import {
 } from "./desktop-files";
 import { memonFileKind, type MemonViewerKind } from "./file-kinds";
 import { downloadFileName, MEMON_DOWNLOADS_DIR } from "./download";
+import type { FolderZip } from "@/services/filesystem/folder-zip";
 import { listFileRefs, serializeScreen } from "./screen-serializer";
 import { controlsByRef } from "./app-kit/render-text";
 import type { MemonControlValue } from "./app-kit/types";
 import { kitAppForRef } from "./apps";
-import { usesHostCommand } from "@/services/sandbox-container/host-commands";
+import { MemonApprovalRequiredError } from "./approval-error";
 import type { MemonEmbeddedPort } from "./embedded-browser";
 import { isLocalAddress, sandboxTargetOf } from "./embedded-frame";
 import type { MemonStudioPort, MemonStudioRequest } from "./studio-app";
+import {
+	MemonTerminal,
+	type MemonTerminalPort,
+} from "./terminal/memon-terminal";
 import type {
 	MemonAppAvailability,
 	MemonBrowserTab,
 	MemonCursorState,
 	MemonDriver,
 	MemonFileClipboard,
+	MemonFileExport,
 	MemonFileEntry,
 	MemonMachineSnapshot,
 	MemonNoteItem,
@@ -59,8 +64,6 @@ import type {
 	MemonSkillItem,
 	MemonStudioRun,
 	MemonStudioToolState,
-	MemonTerminalApproval,
-	MemonTerminalLine,
 	MemonWindowState,
 } from "./types";
 
@@ -111,6 +114,8 @@ export interface MemonFilesPort {
 	move(from: string, to: string): Promise<void>;
 	/** Copies a file, or a folder with everything in it. */
 	copy(from: string, to: string): Promise<void>;
+	/** A folder with everything in it, as one zip. */
+	zip(folder: string): Promise<FolderZip>;
 	subscribe(listener: () => void): () => void;
 	/** What the agent reads of a file the Viewer shows. */
 	preview(
@@ -135,35 +140,6 @@ export interface MemonSchedulerPort {
 	): Promise<{ agentName?: string; items: MemonSchedule[] }>;
 	save(agentId: string, input: MemonScheduleInput): Promise<MemonSchedule>;
 	remove(id: string): Promise<void>;
-}
-
-export interface MemonCommandOutcome {
-	processId?: string;
-	running: boolean;
-	exitCode: number | null;
-	output: MemonTerminalLine[];
-	cursor?: string;
-	/** Ran next to the command still running (a curl while a server runs). */
-	alongside?: boolean;
-}
-
-export interface MemonTerminalPort {
-	availability(): Promise<MemonAvailability>;
-	run(
-		command: string,
-		options: { cwd: string; waitMs: number; sessionKey: string },
-	): Promise<MemonCommandOutcome>;
-	/** New output of a running command; waits up to waitMs for some. */
-	read(
-		processId: string,
-		cursor: string | undefined,
-		sessionKey: string,
-		waitMs?: number,
-	): Promise<MemonCommandOutcome>;
-	/** Types a line into a running command. */
-	input(processId: string, text: string, sessionKey: string): Promise<void>;
-	/** Stops a running command (Ctrl+C). */
-	stop(processId: string, sessionKey: string): Promise<void>;
 }
 
 /** The skill library and which skills the agent uses. */
@@ -216,16 +192,6 @@ export interface MemonPorts {
 
 export type MemonTurnOutcome = "ready" | "timeout" | "cancelled";
 
-export class MemonApprovalRequiredError extends Error {
-	constructor(
-		readonly gate: "forms" | "installs" | "deletes",
-		message: string,
-	) {
-		super(message);
-		this.name = "MemonApprovalRequiredError";
-	}
-}
-
 // ─── Layout ───────────────────────────────────────────────────────────────────
 
 const DEFAULT_LAYOUT: Record<
@@ -260,29 +226,8 @@ const APP_OF_WINDOW: Record<MemonWindowApp, MemonAppId | null> = {
 };
 /** Extracted text kept for the agent; a very long PDF is cut here. */
 const MAX_VIEWER_TEXT_CHARS = 60_000;
-const MAX_TERMINAL_LINES = 400;
 const MAX_USER_CHANGES = 12;
 const MAX_STUDIO_RUNS = 20;
-/** How long a new command may take before its first output is shown. */
-const COMMAND_START_WAIT_MS = 400;
-/** Each output read waits this long for something new. */
-/** A local address a command prints, or "listening on (port) 3000". */
-const PORT_MENTION =
-	/\b(?:localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\]):(\d{2,5})\b|\blistening on (?:port )?:?(\d{2,5})\b/gi;
-/** How long a stopped command has to end before the Terminal lets it go. */
-const STOP_GRACE_MS = 3_000;
-/** A stopped command's exit code, as a shell reports Ctrl+C. */
-const STOPPED_EXIT_CODE = 130;
-/** Longest a command run next to a running one may take. */
-const ALONGSIDE_WAIT_MS = 60_000;
-/** How often a running command is checked for servers it started. */
-const SERVER_CHECK_MS = 3_000;
-const COMMAND_READ_WAIT_MS = 1_000;
-
-type MemonApprovalDecision = "approve" | "deny" | "timeout" | "cancelled";
-const INSTALL_PATTERN = /\b(npm|pnpm|yarn)\s+(i|install|add)\b/;
-const DELETE_PATTERN = /(^|[;&|]\s*)(rm|rmdir)\s/;
-
 const normalizePath = (path: string, cwd = "/"): string => {
 	const absolute = path.startsWith("/") ? path : `${cwd}/${path}`;
 	const parts: string[] = [];
@@ -361,6 +306,7 @@ export class MemonMachine {
 	private fileEntries: MemonFileEntry[] = [];
 	private filesError: string | undefined;
 	private fileClipboard: MemonFileClipboard | null = null;
+	private fileExport: MemonFileExport | null = null;
 	private visualPath: string | null = null;
 	private visualSource = "";
 	private visualScreenLine = 0;
@@ -399,30 +345,9 @@ export class MemonMachine {
 	private selectedConnection: string | null = null;
 	private connectionsLoading = false;
 	private connectionsError: string | undefined;
-	private terminalCwd = "/";
-	private terminalLines: MemonTerminalLine[] = [];
-	private runningProcessId: string | null = null;
-	private runningCommand: string | null = null;
-	private commandStartedAt: number | null = null;
-	private lastOutputAt: number | null = null;
-	/** Servers the sandbox lists. */
-	private terminalServers: number[] = [];
-	/** Ports the running command printed (http://localhost:3000, "listening on 3000"). */
-	private mentionedPorts = new Set<number>();
-	/** Servers that already ran when the running command started. */
-	private serversBeforeCommand = new Set<number>();
-	private lastServerCheck = 0;
-	private processCursor: string | undefined;
-	private lastExitCode: number | null = null;
-	private readingOutput = false;
-	private commandSettled = new Set<() => void>();
-	private approval: MemonTerminalApproval | null = null;
-	private approvalSeq = 0;
-	private answerApprovalWait:
-		| ((decision: MemonApprovalDecision) => void)
-		| null = null;
+	/** The Terminal: its tabs, commands and servers. */
+	readonly terminal: MemonTerminal;
 	private disposed = false;
-	private terminalAvailability: MemonAvailability = { available: true };
 	private cursor: MemonCursorState | null = null;
 	private userChanges: string[] = [];
 	private drafts = new Map<string, unknown>();
@@ -445,6 +370,24 @@ export class MemonMachine {
 		config: MemonFeatureConfig = DEFAULT_MEMON_FEATURE_CONFIG,
 	) {
 		this.config = config;
+		this.terminal = new MemonTerminal(
+			{
+				sessionKey: key,
+				requireApp: () => this.requireApp("terminal"),
+				askBefore: () => this.config.askBefore,
+				showWindow: () => this.focusWindow(this.openWindow("terminal").id),
+				awaitUser: () => {
+					if (this.cursor) {
+						this.cursor = {
+							...this.cursor,
+							label: "Waiting for your approval",
+						};
+					}
+				},
+				changed: () => this.changed(),
+			},
+			ports,
+		);
 	}
 
 	// ── Lifecycle ───────────────────────────────────────────────────────────
@@ -475,19 +418,9 @@ export class MemonMachine {
 		}
 	}
 
-	async refreshTerminalAvailability(): Promise<void> {
-		try {
-			this.terminalAvailability = await this.ports.terminal.availability();
-		} catch (error) {
-			this.terminalAvailability = {
-				available: false,
-				reason: error instanceof Error ? error.message : String(error),
-			};
-		}
-	}
-
 	async dispose(): Promise<void> {
 		this.disposed = true;
+		this.terminal.dispose();
 		this.cancelWaits();
 		this.unsubscribeFiles?.();
 		this.unsubscribeDesktop?.();
@@ -555,7 +488,7 @@ export class MemonMachine {
 
 	/** Releases every parked tool call, e.g. when the user presses Stop. */
 	cancelWaits(): void {
-		this.answerApprovalWait?.("cancelled");
+		this.terminal.cancelWaits();
 		for (const waiter of this.waiters) {
 			clearTimeout(waiter.timer);
 			waiter.resolve("cancelled");
@@ -647,7 +580,7 @@ export class MemonMachine {
 		}
 		if (app === "files") return this.ports.files.availability();
 		if (app === "notes" || app === "visualize") return { available: true };
-		return this.terminalAvailability;
+		return this.terminal.availability;
 	}
 
 	private requireApp(app: MemonAppId): void {
@@ -1365,6 +1298,44 @@ export class MemonMachine {
 		};
 	}
 
+	/**
+	 * Zips a folder into Files (~/Downloads by default; `to` is a folder or a
+	 * file path) and hands it to the user: the Computer panel downloads it to
+	 * their machine. Nothing is overwritten.
+	 */
+	async exportFolderZip(
+		folder: string,
+		to?: string,
+	): Promise<{ path: string; size: number; fileCount: number }> {
+		this.requireApp("files");
+		const source = this.resolvePath(folder);
+		if (!(await this.ports.files.isDirectory(source).catch(() => false))) {
+			throw new Error(`${folder} is not a folder: zip takes a folder.`);
+		}
+		const zip = await this.ports.files.zip(source);
+		const wanted = this.resolvePath(to?.trim() || MEMON_DOWNLOADS_DIR);
+		const intoFolder =
+			!to?.trim() ||
+			/\/$/.test(to.trim()) ||
+			(await this.ports.files.isDirectory(wanted).catch(() => false));
+		const path = intoFolder
+			? await this.freeName(wanted, zip.name, "move")
+			: await this.freeName(
+					wanted.replace(/\/[^/]*$/, "") || "/",
+					wanted.slice(wanted.lastIndexOf("/") + 1),
+					"move",
+				);
+		await this.ports.files.write(path, zip.bytes);
+		this.fileExport = {
+			id: (this.fileExport?.id ?? 0) + 1,
+			path,
+			name: path.slice(path.lastIndexOf("/") + 1),
+			at: Date.now(),
+		};
+		await this.refreshFiles().catch(() => this.changed());
+		return { path, size: zip.bytes.byteLength, fileCount: zip.fileCount };
+	}
+
 	/** Checks the sources and the folder they go to. */
 	private async fileTransfer(
 		paths: readonly string[],
@@ -2005,451 +1976,6 @@ export class MemonMachine {
 		return existing;
 	}
 
-	// ── Terminal ────────────────────────────────────────────────────────────
-
-	private appendTerminal(lines: MemonTerminalLine[]): void {
-		this.terminalLines.push(...lines);
-		if (this.terminalLines.length > MAX_TERMINAL_LINES) {
-			this.terminalLines = this.terminalLines.slice(-MAX_TERMINAL_LINES);
-		}
-	}
-
-	/** The approval a command of the agent's needs, if any. */
-	private gateFor(command: string): MemonTerminalApproval["gate"] | null {
-		if (this.config.askBefore.installs && INSTALL_PATTERN.test(command)) {
-			return "installs";
-		}
-		if (this.config.askBefore.deletes && DELETE_PATTERN.test(command)) {
-			return "deletes";
-		}
-		return null;
-	}
-
-	/**
-	 * Puts a command in front of the user in the Terminal and waits for their
-	 * answer. Approved, the caller runs it; otherwise the agent is told why.
-	 * Unanswered, it stays in the Terminal for the user to run later.
-	 */
-	private async askApproval(
-		gate: MemonTerminalApproval["gate"],
-		command: string,
-	): Promise<void> {
-		const reason =
-			gate === "installs"
-				? "Installing packages needs the user's approval."
-				: "Deleting files needs the user's approval.";
-		this.focusWindow(this.openWindow("terminal").id);
-		this.approvalSeq += 1;
-		const id = `a${this.approvalSeq}`;
-		this.approval = {
-			id,
-			command,
-			gate,
-			reason,
-			requestedAt: Date.now(),
-			agentWaiting: true,
-		};
-		if (this.cursor) {
-			this.cursor = { ...this.cursor, label: "Waiting for your approval" };
-		}
-		this.changed();
-		const decision = await new Promise<MemonApprovalDecision>((resolve) => {
-			const timer = setTimeout(() => finish("timeout"), MEMON_APPROVAL_WAIT_MS);
-			const finish = (answer: MemonApprovalDecision) => {
-				clearTimeout(timer);
-				this.answerApprovalWait = null;
-				resolve(answer);
-			};
-			this.answerApprovalWait = finish;
-		});
-		if (decision === "approve") {
-			this.approval = null;
-			this.changed();
-			return;
-		}
-		if (decision === "timeout" && this.approval?.id === id) {
-			this.approval = { ...this.approval, agentWaiting: false };
-		} else if (this.approval?.id === id) {
-			this.approval = null;
-		}
-		this.changed();
-		throw new MemonApprovalRequiredError(
-			gate,
-			decision === "deny"
-				? `The user declined to run \`${command}\`. Do not run it; ask what they would like instead.`
-				: decision === "cancelled"
-					? "The user stopped the run before answering."
-					: `${reason} The user has not answered; the command waits in the Terminal for them to run or dismiss.`,
-		);
-	}
-
-	/** The user's answer to a command waiting for approval. */
-	async answerApproval(
-		id: string,
-		decision: "approve" | "deny",
-	): Promise<void> {
-		const approval = this.approval;
-		if (!approval || approval.id !== id) {
-			throw new Error("That command is no longer waiting for approval.");
-		}
-		if (this.answerApprovalWait) {
-			// The agent's call is waiting: approved, it runs the command itself.
-			this.answerApprovalWait(decision);
-			return;
-		}
-		this.approval = null;
-		this.changed();
-		if (decision === "approve") {
-			await this.runCommand(approval.command, { byUser: true, waitMs: 0 });
-		}
-	}
-
-	/**
-	 * Runs a shell command and streams its output into the Terminal. Each
-	 * sandbox run is its own process, so the machine keeps the working
-	 * directory: a bare `cd dir` only moves it, and a trailing `&& cd dir`
-	 * moves it after the command succeeds. Returns after `waitMs` at most; a
-	 * longer command keeps running and streaming.
-	 */
-	async runCommand(
-		command: string,
-		options: { cwd?: string; waitMs?: number; byUser?: boolean } = {},
-	): Promise<MemonCommandOutcome> {
-		this.requireApp("terminal");
-		const trimmed = command.trim();
-		if (this.runningCommand && usesHostCommand(trimmed)) {
-			return this.runAlongside(trimmed, options);
-		}
-		if (this.runningCommand) {
-			throw new Error(
-				`\`${this.runningCommand}\` is still running in the Terminal. Wait for it, type into it, or stop it first.`,
-			);
-		}
-		if (!options.byUser) {
-			const gate = this.gateFor(trimmed);
-			if (gate) await this.askApproval(gate, trimmed);
-		}
-		const window = this.openWindow("terminal");
-		if (options.cwd)
-			this.terminalCwd = normalizePath(options.cwd, this.terminalCwd);
-		const cwd = this.terminalCwd;
-		this.appendTerminal([{ kind: "command", text: trimmed, cwd }]);
-
-		// Only a lone `cd`: `cd dir && node app.js` runs in the sandbox shell.
-		const bareCd = /^cd(?:\s+([^;&|]+?))?\s*$/.exec(trimmed);
-		if (bareCd) {
-			const target = normalizePath(bareCd[1]?.trim() || "/", cwd);
-			if (await this.ports.files.isDirectory(target).catch(() => false)) {
-				this.terminalCwd = target;
-				this.lastExitCode = 0;
-			} else {
-				this.appendTerminal([
-					{
-						kind: "stderr",
-						text: `cd: ${bareCd[1]}: No such file or directory`,
-					},
-				]);
-				this.lastExitCode = 1;
-			}
-			this.focusWindow(window.id);
-			return { running: false, exitCode: this.lastExitCode, output: [] };
-		}
-
-		// What already serves, so a stop can close only what this command opens.
-		this.serversBeforeCommand = new Set(
-			this.ports.embedded
-				? await this.ports.embedded.servers().catch(() => this.terminalServers)
-				: [],
-		);
-		const startedAt = Date.now();
-		this.runningCommand = trimmed;
-		this.commandStartedAt = startedAt;
-		this.lastOutputAt = startedAt;
-		this.focusWindow(window.id);
-		let outcome: MemonCommandOutcome;
-		try {
-			outcome = await this.ports.terminal.run(trimmed, {
-				cwd,
-				waitMs: COMMAND_START_WAIT_MS,
-				sessionKey: this.key,
-			});
-		} catch (error) {
-			this.settleCommand(null);
-			throw error;
-		}
-		this.appendTerminal(outcome.output);
-		if (outcome.running) this.notePorts(outcome.output);
-		if (outcome.running && outcome.processId) {
-			this.runningProcessId = outcome.processId;
-			this.processCursor = outcome.cursor;
-			this.changed();
-			void this.readCommandOutput();
-			const waitMs = options.waitMs ?? 10_000;
-			await this.waitForCommand(waitMs - (Date.now() - startedAt));
-		} else {
-			this.settleCommand(outcome.exitCode);
-		}
-		const running = this.runningCommand !== null;
-		const trailingCd = /&&\s*cd\s+([^;&|]+)$/.exec(trimmed);
-		if (trailingCd && !running && this.lastExitCode === 0) {
-			this.terminalCwd = normalizePath(trailingCd[1].trim(), cwd);
-			this.changed();
-		}
-		return {
-			processId: outcome.processId,
-			running,
-			exitCode: running ? null : this.lastExitCode,
-			output: [],
-		};
-	}
-
-	/**
-	 * A curl, git or py line while a command (a server) runs: it runs next to
-	 * it, as in a second terminal, and its output joins the Terminal's. The
-	 * running command keeps the terminal's input.
-	 */
-	private async runAlongside(
-		command: string,
-		options: { byUser?: boolean },
-	): Promise<MemonCommandOutcome> {
-		if (!options.byUser) {
-			const gate = this.gateFor(command);
-			if (gate) await this.askApproval(gate, command);
-		}
-		const cwd = this.terminalCwd;
-		this.appendTerminal([{ kind: "command", text: command, cwd }]);
-		const outcome = await this.ports.terminal.run(command, {
-			cwd,
-			waitMs: ALONGSIDE_WAIT_MS,
-			sessionKey: this.key,
-		});
-		this.appendTerminal(outcome.output);
-		if (outcome.running && outcome.processId) {
-			// Only one command may keep running; this one had its time.
-			await this.ports.terminal
-				.stop(outcome.processId, this.key)
-				.catch(() => undefined);
-			this.appendTerminal([
-				{
-					kind: "system",
-					text: `Stopped after ${ALONGSIDE_WAIT_MS / 1000}s: a command next to a running one must finish.`,
-				},
-			]);
-		}
-		this.changed();
-		return {
-			running: false,
-			exitCode: outcome.running ? 124 : outcome.exitCode,
-			output: [],
-			alongside: true,
-		};
-	}
-
-	/**
-	 * Streams the running command's output into the Terminal until it ends.
-	 * One reader at a time; each read waits briefly for new output.
-	 */
-	private async readCommandOutput(): Promise<void> {
-		if (this.readingOutput) return;
-		this.readingOutput = true;
-		try {
-			while (this.runningProcessId && !this.disposed) {
-				const processId = this.runningProcessId;
-				let outcome: MemonCommandOutcome;
-				try {
-					outcome = await this.ports.terminal.read(
-						processId,
-						this.processCursor,
-						this.key,
-						COMMAND_READ_WAIT_MS,
-					);
-				} catch (error) {
-					this.appendTerminal([
-						{
-							kind: "system",
-							text: `Lost the command's output: ${error instanceof Error ? error.message : String(error)}`,
-						},
-					]);
-					this.settleCommand(null);
-					return;
-				}
-				if (processId !== this.runningProcessId) return;
-				this.appendTerminal(outcome.output);
-				if (outcome.running) this.notePorts(outcome.output);
-				if (outcome.output.length) this.lastOutputAt = Date.now();
-				this.processCursor = outcome.cursor ?? this.processCursor;
-				if (!outcome.running) this.settleCommand(outcome.exitCode);
-				else if (outcome.output.length) this.changed();
-				// A command that keeps running may be a server; say so.
-				if (
-					outcome.running &&
-					Date.now() - this.lastServerCheck >= SERVER_CHECK_MS
-				) {
-					void this.checkServers();
-				}
-			}
-		} finally {
-			this.readingOutput = false;
-		}
-	}
-
-	/** Reads which servers run in the sandbox, for the Terminal and Browser. */
-	async checkServers(): Promise<number[]> {
-		if (!this.ports.embedded) return this.servers;
-		this.lastServerCheck = Date.now();
-		const listed = await this.ports.embedded.servers();
-		if (listed.join() !== this.terminalServers.join()) {
-			this.terminalServers = listed;
-			this.changed();
-		}
-		return this.servers;
-	}
-
-	/**
-	 * Servers in the computer: the ones the sandbox lists, and the ports the
-	 * running command says it serves (a server that prints its address is
-	 * one, even where the sandbox cannot list it).
-	 */
-	get servers(): number[] {
-		return [...new Set([...this.terminalServers, ...this.mentionedPorts])].sort(
-			(a, b) => a - b,
-		);
-	}
-
-	/** Notes ports a running command prints, like http://localhost:3000. */
-	private notePorts(lines: readonly MemonTerminalLine[]): void {
-		let added = false;
-		for (const line of lines) {
-			for (const match of line.text.matchAll(PORT_MENTION)) {
-				const port = Number(match[1] ?? match[2]);
-				if (port > 0 && port < 65_536 && !this.mentionedPorts.has(port)) {
-					this.mentionedPorts.add(port);
-					added = true;
-				}
-			}
-		}
-		if (added) this.changed();
-	}
-
-	private settleCommand(exitCode: number | null): void {
-		this.mentionedPorts.clear();
-		if (this.terminalServers.length) void this.checkServers();
-		this.runningProcessId = null;
-		this.runningCommand = null;
-		this.commandStartedAt = null;
-		this.lastOutputAt = null;
-		this.lastExitCode = exitCode;
-		this.changed();
-		for (const settled of this.commandSettled) settled();
-		this.commandSettled.clear();
-	}
-
-	/** Waits up to `ms` for the running command to end; true once it has. */
-	waitForCommand(ms: number): Promise<boolean> {
-		if (!this.runningCommand) return Promise.resolve(true);
-		if (ms <= 0) return Promise.resolve(false);
-		return new Promise((resolve) => {
-			const settled = () => {
-				clearTimeout(timer);
-				resolve(true);
-			};
-			const timer = setTimeout(() => {
-				this.commandSettled.delete(settled);
-				resolve(false);
-			}, ms);
-			this.commandSettled.add(settled);
-		});
-	}
-
-	/** Types a line into the running command, e.g. an answer to a prompt. */
-	async sendCommandInput(text: string): Promise<void> {
-		if (!this.runningProcessId) {
-			throw new Error("No command is running in the Terminal to type into.");
-		}
-		this.appendTerminal([{ kind: "input", text }]);
-		this.changed();
-		await this.ports.terminal.input(this.runningProcessId, text, this.key);
-	}
-
-	/**
-	 * Stops the running command (Ctrl+C). A command the sandbox no longer has,
-	 * or one that does not end after the stop, is let go: the Terminal must
-	 * never stay stuck on a command that is not there.
-	 */
-	async stopCommand(): Promise<void> {
-		if (!this.runningCommand) return;
-		this.appendTerminal([{ kind: "system", text: "^C" }]);
-		this.changed();
-		const processId = this.runningProcessId;
-		try {
-			if (processId) {
-				await this.ports.terminal.stop(processId, this.key);
-				void this.readCommandOutput();
-				if (
-					!(await this.waitForCommand(STOP_GRACE_MS)) &&
-					this.runningProcessId === processId
-				) {
-					this.appendTerminal([
-						{
-							kind: "system",
-							text: "The command did not end after the stop; the Terminal let it go.",
-						},
-					]);
-				}
-			}
-		} catch {
-			// The sandbox has no such process any more: nothing is running.
-		}
-		if (this.runningCommand) this.settleCommand(STOPPED_EXIT_CODE);
-		await this.closeCommandServers();
-	}
-
-	/**
-	 * Closes the servers the stopped command opened: in the sandbox, ending a
-	 * process does not close them, and Ctrl+C on a server must stop it.
-	 */
-	private async closeCommandServers(): Promise<void> {
-		const embedded = this.ports.embedded;
-		if (!embedded?.stopServer) return;
-		const listed = await embedded.servers().catch(() => [] as number[]);
-		const opened = listed.filter(
-			(port) => !this.serversBeforeCommand.has(port),
-		);
-		for (const port of opened) {
-			await embedded.stopServer(port).catch(() => undefined);
-		}
-		if (opened.length) {
-			this.appendTerminal([
-				{
-					kind: "system",
-					text: `Closed ${opened.map((port) => `localhost:${port}`).join(", ")}.`,
-				},
-			]);
-			await this.checkServers().catch(() => undefined);
-		}
-	}
-
-	/** How long the running command has run, for the agent's messages. */
-	get commandElapsedMs(): number | null {
-		return this.commandStartedAt === null
-			? null
-			: Date.now() - this.commandStartedAt;
-	}
-
-	/** How long the running command has printed nothing. */
-	get commandQuietMs(): number | null {
-		return this.lastOutputAt === null ? null : Date.now() - this.lastOutputAt;
-	}
-
-	get currentCommand(): string | null {
-		return this.runningCommand;
-	}
-
-	/** Makes sure a running command's output keeps streaming. */
-	async refreshTerminal(): Promise<void> {
-		if (this.runningProcessId) void this.readCommandOutput();
-	}
-
 	// ── Snapshot ────────────────────────────────────────────────────────────
 
 	private apps(): MemonAppAvailability[] {
@@ -2488,6 +2014,7 @@ export class MemonMachine {
 							paths: [...this.fileClipboard.paths],
 						}
 					: null,
+				exported: this.fileExport ? { ...this.fileExport } : null,
 			},
 			editor: {
 				path: this.editorPath,
@@ -2542,17 +2069,7 @@ export class MemonMachine {
 				error: this.viewerError,
 				screenLine: this.viewerScreenLine,
 			},
-			terminal: {
-				cwd: this.terminalCwd,
-				lines: [...this.terminalLines],
-				runningProcessId: this.runningProcessId,
-				runningCommand: this.runningCommand,
-				startedAt: this.commandStartedAt,
-				lastOutputAt: this.lastOutputAt,
-				lastExitCode: this.lastExitCode,
-				approval: this.approval ? { ...this.approval } : null,
-				servers: this.servers,
-			},
+			terminal: this.terminal.snapshot(),
 			cursor: this.cursor,
 			desktop: [...this.desktopEntries],
 			home: this.home,

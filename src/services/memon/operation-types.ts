@@ -92,7 +92,13 @@ export interface MemonOperationPayloadMap {
 	"visual.save": Keyed<{ source: string }>;
 	"editor.update": Keyed<{ content: string }>;
 	"editor.save": Keyed<{ content?: string }>;
-	"terminal.exec": Keyed<{ command: string }>;
+	/** Runs a command in a Terminal tab (the one in front by default). */
+	"terminal.exec": Keyed<{ command: string; terminalId?: string }>;
+	/** Opens a new Terminal tab. */
+	"terminal.new": Keyed;
+	"terminal.select": Keyed<{ terminalId: string }>;
+	/** Closes a Terminal tab, stopping the command running in it. */
+	"terminal.close": Keyed<{ terminalId: string }>;
 	/** Types a line into the running command. */
 	"terminal.input": Keyed<{ text: string }>;
 	"terminal.stop": Keyed;

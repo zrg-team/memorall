@@ -104,6 +104,10 @@ vi.mock("@/main/modules/chat/components/artifacts/HyperframesArtifact", () => ({
 vi.mock("@/main/modules/chat/components/artifacts/LottieArtifact", () => ({
 	LottieArtifact: () => null,
 }));
+// It reads images from Files, which would start the filesystem in jsdom.
+vi.mock("@/main/modules/chat/components/artifacts/HtmlArtifactFrame", () => ({
+	HtmlArtifactFrame: () => null,
+}));
 
 import { RuntimePage } from "../RuntimePage";
 import { useRuntimeSessionsStore } from "@/main/stores/runtime-sessions";

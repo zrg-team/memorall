@@ -87,7 +87,16 @@ import type {
 	ChatMessage,
 } from "@/types/openai";
 import { ABORT_ERROR_MESSAGE, isAbortError } from "@/utils/abort";
-import { sanitizeForJson } from "@/utils/sanitize-json";
+import { isUuid } from "@/utils/uuid";
+import {
+	createReplyCheckpointer,
+	persistReplyWithFallback,
+} from "./chat-message-persistence";
+import {
+	sanitizeForJson,
+	stripNulCharacters,
+	stripNulDeep,
+} from "@/utils/sanitize-json";
 import { BaseProcessHandler } from "./base-process-handler";
 import {
 	createJobErrorMetadata,
@@ -507,7 +516,17 @@ type AssistantMessageMetadata = {
 	agentFlowName?: string;
 	error?: JobErrorMetadata;
 	stopped?: boolean;
+	/** Saved mid-run: the run may still be going, or may have been cut off. */
+	incomplete?: boolean;
 };
+
+/** What is left of the metadata when only the reply's text can be kept. */
+const minimalReplyMetadata = ({
+	actions: _actions,
+	executions: _executions,
+	toolExecutions: _toolExecutions,
+	...rest
+}: AssistantMessageMetadata): AssistantMessageMetadata => rest;
 
 type ChatResultFinalAction = NonNullable<
 	NonNullable<Extract<ChatResult, { type: "final" }>["metadata"]>["actions"]
@@ -597,9 +616,11 @@ export class ChatHandler extends BaseProcessHandler<ChatJob | StopChatJob> {
 			await db
 				.update(schema.messages)
 				.set({
-					content,
-					complexContent,
-					parts,
+					// A tool result can carry a file's raw bytes; one NUL among them
+					// fails the write and loses the reply.
+					content: stripNulCharacters(content),
+					complexContent: stripNulDeep(complexContent),
+					parts: stripNulDeep(parts),
 					metadata: sanitizeForJson({
 						...(typeof existing.metadata === "object" &&
 						existing.metadata !== null
@@ -1190,22 +1211,89 @@ export class ChatHandler extends BaseProcessHandler<ChatJob | StopChatJob> {
 			accumulatedUsage = addTokenUsage(accumulatedUsage, usage);
 		};
 		const requests = createStoppableRequests(stopSignal, addUsage);
+		// Saves the reply while it runs, so a run that is cut off (the extension
+		// reloaded, the offscreen document recycled) still leaves what the user
+		// watched stream in.
+		const checkpointer = createReplyCheckpointer({
+			snapshot: () => {
+				if (!conversation) return null;
+				const parts = resolveMessageParts({
+					finalState: finalMessageState,
+					accumulatedParts: messagePartsAccumulator.toParts(),
+				});
+				const key = [
+					currentContent.length,
+					parts.length,
+					actions.length,
+					toolExecutions.map((item) => item.status).join(""),
+				].join(":");
+				return {
+					key,
+					save: () =>
+						ChatHandler.persistAssistantMessage({
+							conversation,
+							content: parts.length > 0 ? "" : currentContent,
+							complexContent: null,
+							parts: parts.length > 0 ? parts : null,
+							metadata: {
+								...ChatHandler.buildAssistantMessageMetadata({
+									conversation,
+									content: currentContent,
+									model,
+									provider,
+									startTime,
+									actions: normalizeActions(actions),
+									executions,
+									toolExecutions,
+								}),
+								incomplete: true,
+							},
+						}),
+				};
+			},
+			onError: (error) =>
+				void dependencies.logger.warn(
+					`Failed to save the running reply for conversation ${conversation?.id}`,
+					`${error}`,
+					"offscreen",
+				),
+		});
 		const finalizeConversation = async (
 			input: Omit<AssistantMessagePersistence, "conversation">,
 		) => {
+			// Before the final write, so an older checkpoint cannot land after it.
+			await checkpointer.stop();
 			if (!conversation) {
 				return;
 			}
 
 			try {
-				await ChatHandler.persistAssistantMessage({
-					conversation,
-					...input,
-				});
+				const { form, fullError } = await persistReplyWithFallback(
+					{
+						content: input.content,
+						parts: input.parts,
+						// Clears the mark checkpoints left: the run is over.
+						metadata: { ...input.metadata, incomplete: undefined },
+					},
+					(reply) =>
+						ChatHandler.persistAssistantMessage({
+							conversation,
+							complexContent: input.complexContent,
+							...reply,
+						}),
+					minimalReplyMetadata,
+				);
+				if (fullError !== undefined) {
+					await dependencies.logger.warn(
+						`Kept a smaller form (${form}) of the reply for conversation ${conversation.id}`,
+						`${fullError}`,
+						"offscreen",
+					);
+				}
 			} catch (finalizeError) {
-				await dependencies.logger.warn(
-					`Failed to finalize assistant message for conversation ${conversation.id}`,
-					`${finalizeError}`,
+				await dependencies.logger.error(
+					`Failed to save the reply for conversation ${conversation.id}`,
+					finalizeError,
 					"offscreen",
 				);
 			}
@@ -1282,6 +1370,7 @@ export class ChatHandler extends BaseProcessHandler<ChatJob | StopChatJob> {
 			getProgress,
 		});
 
+		checkpointer.start();
 		try {
 			// Send initial progress update
 			await dependencies.updateJobProgress(jobId, {
@@ -1460,7 +1549,9 @@ export class ChatHandler extends BaseProcessHandler<ChatJob | StopChatJob> {
 				// Fetch topic info for retrieval context queries if topicId exists
 				const contextQueries: string[] = [];
 				let topicRecallType: RecallType | undefined;
-				if (topicId) {
+				// "default" means no topic; the column is a uuid, so querying it
+				// with that fails instead of finding nothing.
+				if (topicId && isUuid(topicId)) {
 					try {
 						const topicInfo = await serviceManager.databaseService.use(
 							async ({ db, schema }) => {
@@ -1710,6 +1801,8 @@ export class ChatHandler extends BaseProcessHandler<ChatJob | StopChatJob> {
 			});
 
 			throw error;
+		} finally {
+			await checkpointer.stop();
 		}
 	}
 }

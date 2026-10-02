@@ -436,6 +436,7 @@
 		"expand": "Mở rộng",
 		"collapse": "Thu gọn",
 		"openInTab": "Mở trong tab mới",
+		"openControlledWindow": "Hiện cửa sổ của agent",
 		"resolvingUrl": "Đang phân giải URL…",
 		"urlPlaceholder": "https://example.com",
 		"go": "Đi",
@@ -557,6 +558,7 @@
 		"save": "Lưu",
 		"commandRunning": "(vẫn đang chạy)",
 		"shutDown": "Tắt máy",
+		"you": "Bạn",
 		"start": {
 			"title": "Khởi động máy tính",
 			"description": "Tự dùng Trình duyệt, Tệp và Terminal. Tác nhân sẽ tiếp tục trên máy tính này khi bạn trò chuyện với nó.",
@@ -596,13 +598,17 @@
 			"running": "Đang chạy · {{elapsed}}",
 			"quiet": "không có đầu ra trong {{elapsed}}, hãy Dừng nếu đã xong",
 			"stop": "Dừng (Ctrl+C)",
-			"inputPlaceholder": "Nhập vào lệnh đang chạy, Enter để gửi",
+			"inputPlaceholder": "Nhập vào lệnh đang chạy, hoặc chạy ls, cat, curl… bên cạnh nó",
 			"approvalTitle": "MemonOS Bot muốn chạy lệnh này",
 			"approvalEarlier": "MemonOS Bot đã xin chạy lệnh này trước đó",
 			"approve": "Chạy",
 			"deny": "Không chạy",
 			"serving": "đang phục vụ {{address}}",
-			"openInBrowser": "Mở :{{port}} trong Trình duyệt"
+			"openInBrowser": "Mở :{{port}} trong Trình duyệt",
+			"newTab": "Thẻ terminal mới",
+			"closeTab": "Đóng thẻ {{id}}",
+			"tab": "Thẻ {{id}}",
+			"otherTabRunning": "Thẻ {{id}} đang chạy một lệnh; ở đây bạn có thể chạy ls, cat, curl, git, py…"
 		},
 		"preview": {
 			"preview": "Xem trước",
@@ -793,6 +799,8 @@
 			"thisAgent": "Tác nhân này"
 		},
 		"files": {
+			"zip": "Tải ZIP",
+			"zipHint": "Tải thư mục đang chọn, hoặc thư mục này, dưới dạng .zip",
 			"selected_one": "Đã chọn {{count}}",
 			"selected_other": "Đã chọn {{count}}",
 			"cut": "Cắt",

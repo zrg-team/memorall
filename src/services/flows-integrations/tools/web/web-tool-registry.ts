@@ -5,7 +5,9 @@ import {
 } from "@memorall/agent-harness-flows/tools/web/challenge-detection";
 import { DEFAULT_WEB_MAX_HTML_CHARS } from "@memorall/agent-harness-flows/tools/web/max-html-chars";
 import { actOnRef, buildPageOutline } from "@/co-agent/dom/page-outline";
+import { UnavailableBrowserCommandPort } from "@/platform/core/unavailable-browser-command-port";
 import { platform } from "@/platform/current";
+import { resolveWebBrowserMode } from "@/services/web-browser/browser-mode";
 import {
 	awaitChallengeDecision,
 	cancelChallenges,
@@ -267,6 +269,9 @@ const isWideWebMode = (
 	mode?: WebBrowserMode,
 ): mode is Exclude<WebBrowserMode, "iframe"> =>
 	mode === "tab" || mode === "window";
+
+const browserPagesAvailable = (): boolean =>
+	!(platform.browserCommands instanceof UnavailableBrowserCommandPort);
 
 const ensureBrowserEnvironment = (): void => {
 	if (typeof window === "undefined" || typeof document === "undefined") {
@@ -558,10 +563,15 @@ export const openWebSession = async ({
 	timeoutMs = DEFAULT_TIMEOUT_MS,
 	maxHtmlChars = DEFAULT_MAX_HTML_CHARS,
 	persist = true,
-	mode = "iframe",
+	mode: requestedMode,
 	windowId,
 }: OpenSessionArgs): Promise<OpenSessionResult> => {
 	ensureBrowserEnvironment();
+	// Where nothing can open a browser page (the web app), an iframe is all
+	// there is.
+	const mode = browserPagesAvailable()
+		? resolveWebBrowserMode(url, requestedMode, window.location.origin)
+		: "iframe";
 	if (!document.body && mode === "iframe") {
 		throw new Error("Document body is not available for web sessions.");
 	}
@@ -1093,7 +1103,7 @@ export const getOrOpenWebSession = async ({
 	url,
 	timeoutMs = DEFAULT_TIMEOUT_MS,
 	maxHtmlChars = DEFAULT_MAX_HTML_CHARS,
-	browserMode = "iframe",
+	browserMode,
 }: {
 	sessionId?: string;
 	url?: string;

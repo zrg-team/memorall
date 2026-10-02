@@ -24,6 +24,7 @@ vi.mock("../ports", () => ({
 			move: vi.fn(async () => undefined),
 			copy: vi.fn(async () => undefined),
 			subscribe: vi.fn(() => () => undefined),
+			zip: vi.fn(),
 			preview: vi.fn(async () => ({ text: "" })),
 		},
 		terminal: {

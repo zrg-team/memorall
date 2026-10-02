@@ -12,6 +12,7 @@ import {
 	normalizeSandboxPath,
 	toDocumentsLogicalPath,
 } from "@/services/filesystem/sandbox-paths";
+import { usesOnlyShellTools } from "./alongside-commands";
 import { runHostCommandLine, usesHostCommand } from "./host-commands";
 import { createCurlHttp } from "./host-commands/curl/http";
 import type { HostFiles } from "./host-commands/types";
@@ -1332,7 +1333,12 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 				},
 			);
 		}
-		return this.executeShellCommand(request);
+		// The shell's own tools (ls, cat, mkdir) may run while a server does.
+		return this.executeShellCommand(
+			usesOnlyShellTools(request.command)
+				? { ...request, allowAlongside: true }
+				: request,
+		);
 	}
 
 	/**

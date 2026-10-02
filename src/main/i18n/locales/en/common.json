@@ -446,6 +446,7 @@
 		"expand": "Expand",
 		"collapse": "Collapse",
 		"openInTab": "Open in new tab",
+		"openControlledWindow": "Show the agent's window",
 		"resolvingUrl": "Resolving URL…",
 		"urlPlaceholder": "https://example.com",
 		"go": "Go",
@@ -567,6 +568,7 @@
 		"save": "Save",
 		"commandRunning": "(still running)",
 		"shutDown": "Shut down",
+		"you": "You",
 		"start": {
 			"title": "Start the computer",
 			"description": "Use Browser, Files and Terminal yourself. The agent continues on this computer when you chat with it.",
@@ -592,13 +594,17 @@
 			"running": "Running · {{elapsed}}",
 			"quiet": "no output for {{elapsed}}, Stop it if it is done",
 			"stop": "Stop (Ctrl+C)",
-			"inputPlaceholder": "Type into the running command, Enter to send",
+			"inputPlaceholder": "Type into the running command, or run ls, cat, curl… next to it",
 			"approvalTitle": "MemonOS Bot wants to run this",
 			"approvalEarlier": "MemonOS Bot asked to run this earlier",
 			"approve": "Run it",
 			"deny": "Don't run",
 			"serving": "serving {{address}}",
-			"openInBrowser": "Open :{{port}} in Browser"
+			"openInBrowser": "Open :{{port}} in Browser",
+			"newTab": "New terminal tab",
+			"closeTab": "Close tab {{id}}",
+			"tab": "Tab {{id}}",
+			"otherTabRunning": "Tab {{id}} is running a command; here you can run ls, cat, curl, git, py…"
 		},
 		"preview": {
 			"preview": "Preview",
@@ -803,6 +809,8 @@
 			"open": "Open"
 		},
 		"files": {
+			"zip": "Download ZIP",
+			"zipHint": "Download the selected folder, or this folder, as a .zip",
 			"selected_one": "{{count}} selected",
 			"selected_other": "{{count}} selected",
 			"cut": "Cut",

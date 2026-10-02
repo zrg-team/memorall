@@ -627,3 +627,9 @@
 			steps(var(--agent-bubble-characters, 18), end) both,
 		agent-speech-bubble-caret 700ms step-end 4;
 }
+
+/* MemonOS draws the user's own pointer (MemonUserCursor); resize handles keep theirs. */
+[data-memon-user-cursor],
+[data-memon-user-cursor] *:not(.cursor-nwse-resize) {
+	cursor: none !important;
+}

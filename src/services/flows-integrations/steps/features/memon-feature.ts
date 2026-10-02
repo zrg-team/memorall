@@ -114,6 +114,7 @@ const APP_SECTIONS: Record<MemonAppId, (config: MemonFeatureConfig) => string> =
 				'Edit: memon_act { ref: "e1", action: "type", text: "<the full new content>" }, then { ref: "e2", action: "click" } saves.',
 				'Organize: { ref: "f3", action: "move", text: "<folder>" } ("copy" copies); cut/copy without text, then { action: "paste" }. Nothing is overwritten: a clash gets a new name.',
 				`Download: memon_act { action: "download", text: "<url>", to: "<folder or file>" } saves a web file (image, font, PDF) in one step, into ~/Downloads by default${config.apps.browser ? '; { ref: "b7", action: "download" } saves an image from the page' : ""}. Do not write a script to download.`,
+				'Zip: memon_act { action: "zip", text: "<folder>" } (or a folder ref) zips it into ~/Downloads and hands it to the user to download, when they ask for a folder as a file. Do not zip with a script.',
 				'PDFs, spreadsheets, images and media open in the Viewer as text or a description; { action: "scroll" } pages a long file.',
 				"Keep work under /notes/<topic>/ unless the user says otherwise.",
 			]),

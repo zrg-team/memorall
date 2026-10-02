@@ -15,6 +15,7 @@ import {
 	Tags,
 	Edit,
 	Download,
+	FileArchive,
 	Trash2,
 	Brain,
 	FileAudio,
@@ -24,6 +25,7 @@ import type {
 	DocumentLibraryItem,
 	DocumentType,
 	DocumentFile,
+	DocumentFolder,
 } from "@/types/document-library";
 
 import { Badge } from "@/main/components/ui/badge";
@@ -50,6 +52,8 @@ interface DocumentListProps {
 	onOpenFolder?: (path: string) => void;
 	onDeleteItem?: (item: DocumentLibraryItem) => void;
 	onDownloadFile?: (fileId: string) => void;
+	/** Downloads a folder, with everything in it, as one .zip. */
+	onDownloadFolder?: (folder: DocumentFolder) => void;
 	onManageTopics?: (file: DocumentFile) => void;
 	onRenameItem?: (item: DocumentLibraryItem, newName: string) => void;
 	onConvertToKnowledge?: (file: DocumentFile) => void;
@@ -89,6 +93,7 @@ export const DocumentList: React.FC<DocumentListProps> = ({
 	onOpenFolder,
 	onDeleteItem,
 	onDownloadFile,
+	onDownloadFolder,
 	onManageTopics,
 	onRenameItem,
 	onConvertToKnowledge,
@@ -254,6 +259,20 @@ export const DocumentList: React.FC<DocumentListProps> = ({
 											>
 												<Edit className="h-4 w-4 mr-2" />
 												{t("list.rename")}
+											</DropdownMenuItem>
+											<DropdownMenuSeparator />
+										</>
+									)}
+									{onDownloadFolder && (
+										<>
+											<DropdownMenuItem
+												onClick={(e) => {
+													e.stopPropagation();
+													onDownloadFolder(folder);
+												}}
+											>
+												<FileArchive className="h-4 w-4 mr-2" />
+												{t("list.downloadZip")}
 											</DropdownMenuItem>
 											<DropdownMenuSeparator />
 										</>
@@ -443,6 +462,20 @@ export const DocumentList: React.FC<DocumentListProps> = ({
 												>
 													<Edit className="h-4 w-4 mr-2" />
 													{t("list.rename")}
+												</DropdownMenuItem>
+												<DropdownMenuSeparator />
+											</>
+										)}
+										{onDownloadFolder && (
+											<>
+												<DropdownMenuItem
+													onClick={(e) => {
+														e.stopPropagation();
+														onDownloadFolder(folder);
+													}}
+												>
+													<FileArchive className="h-4 w-4 mr-2" />
+													{t("list.downloadZip")}
 												</DropdownMenuItem>
 												<DropdownMenuSeparator />
 											</>

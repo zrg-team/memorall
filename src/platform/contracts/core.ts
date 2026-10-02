@@ -49,6 +49,12 @@ export interface RuntimeTransport {
 
 export interface AssetResolver {
 	url(path: string): string;
+	/**
+	 * A manifest sandbox page, at `index` among manifest.base.json's sandbox
+	 * pages. Extension builds rename those to sandbox/page-N.html, and only
+	 * the listed copy gets the sandbox policy.
+	 */
+	sandboxPageUrl(path: string, index: number): string;
 }
 
 export interface KeyValueStore {

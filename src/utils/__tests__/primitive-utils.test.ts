@@ -21,7 +21,7 @@ import {
 	waitForDOMReady,
 } from "../dom";
 import { openStandalonePage } from "../open-standalone";
-import { sanitizeForJson } from "../sanitize-json";
+import { sanitizeForJson, stripNulDeep } from "../sanitize-json";
 import { v4, isUuid } from "../uuid";
 import {
 	detectWebGPUAdapter,
@@ -77,6 +77,29 @@ describe("sanitizeForJson", () => {
 			list: [null, "2"],
 			circular: { keep: "value", self: null },
 		});
+	});
+
+	it("drops NUL, which the database cannot store in text or JSON", () => {
+		expect(sanitizeForJson({ "a\u0000": ["x\u0000y"] })).toEqual({
+			a: ["xy"],
+		});
+	});
+});
+
+describe("stripNulDeep", () => {
+	it("drops NUL and keeps everything else as it was", () => {
+		const parts = [
+			{ role: "tool", content: "\u0010JFIF\u0000\u0001", tool_call_id: "c1" },
+			{ role: "assistant", content: "ok", tool_calls: undefined },
+		];
+
+		const stored = stripNulDeep(parts);
+		expect(stored).toEqual([
+			{ role: "tool", content: "\u0010JFIF\u0001", tool_call_id: "c1" },
+			{ role: "assistant", content: "ok", tool_calls: undefined },
+		]);
+		expect("tool_calls" in stored[1]).toBe(true);
+		expect(stripNulDeep(null)).toBeNull();
 	});
 });
 

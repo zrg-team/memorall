@@ -6,7 +6,9 @@ import { Button } from "@/main/components/ui/button";
 import { Separator } from "@/main/components/ui/separator";
 import {
 	AgentWizardChatPanel,
+	AgentWizardInlineSetup,
 	AgentWizardTemplatePanel,
+	hasAgentWizardInlineSetup,
 } from "@/main/modules/agent-wizard";
 import { AgentPresetList } from "./AgentPresetList";
 import { AgentConfigForm } from "./AgentConfigForm";
@@ -82,6 +84,11 @@ export const AgentsWorkspace: React.FC = () => {
 					onBack={agentWizard.requestClose}
 					isStreaming={agentWizard.isStreaming}
 					isModelReady={agentWizard.isModelReady}
+					setupSlot={
+						hasAgentWizardInlineSetup(agentWizard) ? (
+							<AgentWizardInlineSetup wizard={agentWizard} />
+						) : null
+					}
 				/>
 			) : (
 				<AgentPresetList

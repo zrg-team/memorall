@@ -13,10 +13,8 @@ import {
 } from "@/services/memon/constants";
 import { normalizeMemonFeatureConfig } from "@/services/memon/feature-config";
 import { getMemonMachine } from "@/services/memon/machine-registry";
-import {
-	MemonApprovalRequiredError,
-	type MemonMachine,
-} from "@/services/memon/memon-machine";
+import { MemonApprovalRequiredError } from "@/services/memon/approval-error";
+import type { MemonMachine } from "@/services/memon/memon-machine";
 
 export interface MemonToolStructured {
 	ok: boolean;

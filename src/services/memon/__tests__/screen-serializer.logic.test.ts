@@ -80,6 +80,9 @@ const snapshot = (
 		lastOutputAt: null,
 		lastExitCode: 0,
 		approval: null,
+		tabs: [{ id: "1", cwd: "/notes", running: false }],
+		activeTabId: "1",
+		runningTabId: null,
 	},
 	cursor: null,
 	desktop: [

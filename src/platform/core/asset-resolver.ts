@@ -34,4 +34,9 @@ export class BaseUrlAssetResolver implements AssetResolver {
 	url(path: string): string {
 		return `${this.base}${normalizeAssetPath(path)}`;
 	}
+
+	/** Without a manifest, a sandbox page is served at its own path. */
+	sandboxPageUrl(path: string): string {
+		return this.url(path);
+	}
 }

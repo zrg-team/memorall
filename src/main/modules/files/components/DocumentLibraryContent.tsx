@@ -35,6 +35,7 @@ interface DocumentLibraryContentProps {
 	onDeleteItem: (item: DocumentLibraryItem) => void;
 	onRenameItem: (item: DocumentLibraryItem, newName: string) => void;
 	onDownloadFile: (id: string) => void;
+	onDownloadFolder?: (folderPath: string) => void;
 	onDownloadSelectedFile: () => void;
 	onManageTopics: (file: DocumentFile) => void;
 	onConvertToKnowledge: (file: DocumentFile) => void;
@@ -58,6 +59,7 @@ export const DocumentLibraryContent = memo(function DocumentLibraryContent({
 	onDeleteItem,
 	onRenameItem,
 	onDownloadFile,
+	onDownloadFolder,
 	onDownloadSelectedFile,
 	onManageTopics,
 	onConvertToKnowledge,
@@ -119,6 +121,11 @@ export const DocumentLibraryContent = memo(function DocumentLibraryContent({
 				onDeleteItem={onDeleteItem}
 				onRenameItem={onRenameItem}
 				onDownloadFile={effectiveDownloadFile}
+				onDownloadFolder={
+					onDownloadFolder
+						? (folder) => onDownloadFolder(folder.path)
+						: undefined
+				}
 				onManageTopics={effectiveManageTopics}
 				onConvertToKnowledge={effectiveConvertToKnowledge}
 				fileTopicMap={effectiveFileTopicMap}
