@@ -49,3 +49,22 @@ export const shortModelName = (model: Pick<SelectableModel, "id" | "name">) => {
 	const tail = source.split("/").pop() ?? source;
 	return tail.replace(/\.(gguf|bin|safetensors)$/i, "");
 };
+
+/**
+ * The selected model's entry in a listing, found by id the way the model
+ * picker finds it. The provider only breaks a tie: a listing may name its
+ * models by the API they speak (OpenRouter's come back as "openai") rather
+ * than by the provider the selection was made under.
+ */
+export const findSelectedModel = <
+	T extends Pick<SelectableModel, "id" | "provider">,
+>(
+	models: readonly T[],
+	modelId: string,
+	provider?: ServiceProvider,
+): T | undefined => {
+	const sameId = models.filter((candidate) => candidate.id === modelId);
+	return (
+		sameId.find((candidate) => candidate.provider === provider) ?? sameId[0]
+	);
+};

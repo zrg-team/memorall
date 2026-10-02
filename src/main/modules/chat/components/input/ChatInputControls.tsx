@@ -159,6 +159,11 @@ export const ChatInputControls: React.FC<ChatInputControlsProps> = ({
 	dictation,
 }) => {
 	const { t } = useTranslation("chat");
+	// Shown beside the model only when the model has levels to choose from.
+	const reasoningControl =
+		reasoning && onReasoningEffortChange
+			? { reasoning, onChange: onReasoningEffortChange }
+			: null;
 	const flowOptions = [
 		{ id: "chat", name: t("flowSelector.chat") },
 		...agentFlows,
@@ -513,14 +518,24 @@ export const ChatInputControls: React.FC<ChatInputControlsProps> = ({
 									onOpen={onRefreshModels}
 									isNarrow={isNarrow}
 									disabled={isLoading}
+									className={reasoningControl ? "rounded-r-none" : undefined}
 								/>
-								{reasoning && onReasoningEffortChange ? (
-									<ReasoningEffortSelector
-										reasoning={reasoning}
-										value={reasoningEffort}
-										onChange={onReasoningEffortChange}
-										disabled={isLoading}
-									/>
+								{/* The model and how hard it thinks, split like agent and memory. */}
+								{reasoningControl ? (
+									<>
+										<span
+											aria-hidden="true"
+											className="h-4 w-px shrink-0 bg-border/70"
+										/>
+										<ReasoningEffortSelector
+											reasoning={reasoningControl.reasoning}
+											value={reasoningEffort}
+											onChange={reasoningControl.onChange}
+											disabled={isLoading}
+											isNarrow={isNarrow}
+											className="rounded-l-none"
+										/>
+									</>
 								) : null}
 							</div>
 						) : null}
