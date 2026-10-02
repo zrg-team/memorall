@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { lazy, useMemo } from "react";
 import type {
 	ComplexContentPartExecution,
 	ComplexContentPartTool,
@@ -12,8 +12,12 @@ import { AssistantToolTimeline } from "./AssistantToolTimeline";
 import type { MessageActionRequest } from "../artifacts/ArtifactActionsMenu";
 import { MessageContentWithArtifacts } from "./MessageContentWithArtifacts";
 
+/** Loaded with the markdown renderer it uses, like the message text. */
+const ReasoningBlock = lazy(() => import("./ReasoningBlock"));
+
 export type AssistantContentPart =
 	| { type: "text"; text: string }
+	| { type: "reasoning"; text: string }
 	| ComplexContentPartTool
 	| ComplexContentPartExecution;
 
@@ -23,7 +27,10 @@ export const isAssistantContentPart = (
 	!!part &&
 	typeof part === "object" &&
 	"type" in part &&
-	(part.type === "text" || part.type === "tool" || part.type === "execution");
+	(part.type === "text" ||
+		part.type === "reasoning" ||
+		part.type === "tool" ||
+		part.type === "execution");
 
 export const mergeAdjacentAssistantTextParts = (
 	parts: AssistantContentPart[],
@@ -45,6 +52,7 @@ export const mergeAdjacentAssistantTextParts = (
 
 export type AssistantFlowSegment =
 	| { kind: "text"; key: string; text: string }
+	| { kind: "reasoning"; key: string; text: string }
 	| { kind: "tools"; key: string; parts: ComplexContentPartTool[] }
 	| { kind: "execution"; key: string; part: ComplexContentPartExecution };
 
@@ -67,8 +75,20 @@ export const groupAssistantParts = (
 	);
 	let group: ComplexContentPartTool[] | null = null;
 	let textCount = 0;
+	let reasoningCount = 0;
 
 	parts.forEach((part, index) => {
+		if (part.type === "reasoning") {
+			if (!part.text.trim()) return;
+			group = null;
+			segments.push({
+				kind: "reasoning",
+				key: `reasoning-${reasoningCount}`,
+				text: part.text,
+			});
+			reasoningCount += 1;
+			return;
+		}
 		if (part.type === "text") {
 			if (!part.text.trim()) return;
 			group = null;
@@ -142,6 +162,11 @@ export const AssistantContentFlow: React.FC<AssistantContentFlowProps> =
 			const lastToolSegmentIndex = segments.findLastIndex(
 				(segment) => segment.kind === "tools",
 			);
+			// The step indicator is not something the model wrote: thinking is
+			// still going on while nothing written comes after it.
+			const lastWrittenSegmentIndex = segments.findLastIndex(
+				(segment) => segment.kind !== "execution",
+			);
 
 			return (
 				<div className="space-y-3">
@@ -151,6 +176,15 @@ export const AssistantContentFlow: React.FC<AssistantContentFlowProps> =
 						isStreaming={isStreaming}
 					/>
 					{segments.map((segment, index) => {
+						if (segment.kind === "reasoning") {
+							return (
+								<ReasoningBlock
+									key={segment.key}
+									text={segment.text}
+									isThinking={isStreaming && index === lastWrittenSegmentIndex}
+								/>
+							);
+						}
 						if (segment.kind === "text") {
 							return (
 								<MessageContentWithArtifacts

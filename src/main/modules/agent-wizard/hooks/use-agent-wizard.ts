@@ -13,7 +13,11 @@ import type { Flow } from "@/services/database/types";
 import { listDefaultSkills } from "@/services/filesystem/default-skills";
 import type { McpConnection } from "@/services/mcp-connections";
 import { COMPOSIO_SECRET_KEY } from "@/services/mcp-connections";
-import type { ChatMessage } from "@/types/openai";
+import type { MessageParts } from "@/types/chat";
+import type {
+	ChatCompletionMessageToolCall,
+	ChatMessage,
+} from "@/types/openai";
 import { logError } from "@/utils/logger";
 import { hasSecret } from "@/utils/master-key";
 import { isUuid } from "@/utils/uuid";
@@ -172,11 +176,15 @@ const appendVisibleContent = (current: string, next: string): string => {
 	return trimmedCurrent ? `${trimmedCurrent}\n\n${trimmedNext}` : trimmedNext;
 };
 
+type WizardToolCall = ChatCompletionMessageToolCall;
+
+/**
+ * A draft update as the transcript shows it: "writing" while the model is
+ * still streaming its arguments, "applied" once the draft has taken it.
+ */
 const formatToolCallForVisibleMessage = (
-	toolCall: NonNullable<
-		Awaited<ReturnType<typeof chatService.chatStream>>["toolCalls"]
-	>[number],
-	notes: string[],
+	toolCall: WizardToolCall,
+	{ status, notes }: { status: "writing" | "applied"; notes: string[] },
 ): string => {
 	let args: unknown = toolCall.function.arguments;
 	try {
@@ -191,7 +199,7 @@ const formatToolCallForVisibleMessage = (
 			{
 				name: toolCall.function.name,
 				args,
-				status: "applied",
+				status,
 				notes,
 			},
 			null,
@@ -200,6 +208,25 @@ const formatToolCallForVisibleMessage = (
 		"```",
 	].join("\n");
 };
+
+/** What one round has streamed so far: its thinking, and the draft updates it is writing. */
+const readRoundProgress = (
+	parts: MessageParts,
+): { reasoning: string; toolCalls: WizardToolCall[] } => ({
+	reasoning: parts
+		.flatMap((part) =>
+			part.role === "assistant" && part.reasoning?.trim()
+				? [part.reasoning.trim()]
+				: [],
+		)
+		.join("\n\n"),
+	toolCalls: parts.flatMap((part) =>
+		part.role === "assistant" ? (part.tool_calls ?? []) : [],
+	),
+});
+
+const joinReasoning = (earlier: string, next: string): string =>
+	[earlier, next].filter((text) => text.trim()).join("\n\n");
 
 const setFeatureEnabled = (
 	feature: AgentFeatureDefinition,
@@ -425,6 +452,7 @@ export const useAgentWizard = ({
 			try {
 				let workingMessages = chatMessages;
 				let visibleContent = "";
+				let reasoningSoFar = "";
 				const accumulatedNotes: string[] = [];
 
 				for (let round = 0; round < MAX_AGENT_WIZARD_TOOL_ROUNDS; round++) {
@@ -436,6 +464,36 @@ export const useAgentWizard = ({
 						},
 						...workingMessages.filter((message) => message.role !== "system"),
 					];
+
+					// The round as it streams: the text so far, the model's thinking,
+					// and each draft update while its arguments are still arriving.
+					let roundContent = "";
+					let roundProgress = readRoundProgress([]);
+					const showRound = () => {
+						const writing = roundProgress.toolCalls
+							.map((toolCall) =>
+								formatToolCallForVisibleMessage(toolCall, {
+									status: "writing",
+									notes: [],
+								}),
+							)
+							.join("\n\n");
+						const content = appendVisibleContent(
+							appendVisibleContent(visibleContent, roundContent),
+							writing,
+						);
+						const reasoning = joinReasoning(
+							reasoningSoFar,
+							roundProgress.reasoning,
+						);
+						setMessages((prev) =>
+							prev.map((message) =>
+								message.id === assistantId
+									? { ...message, content, reasoning: reasoning || undefined }
+									: message,
+							),
+						);
+					};
 
 					const result = await chatService.chatStream(
 						{
@@ -452,17 +510,12 @@ export const useAgentWizard = ({
 						},
 						{
 							onContent: (streamedContent) => {
-								const nextVisibleContent = appendVisibleContent(
-									visibleContent,
-									streamedContent,
-								);
-								setMessages((prev) =>
-									prev.map((message) =>
-										message.id === assistantId
-											? { ...message, content: nextVisibleContent }
-											: message,
-									),
-								);
+								roundContent = streamedContent;
+								showRound();
+							},
+							onParts: (parts) => {
+								roundProgress = readRoundProgress(parts);
+								showRound();
 							},
 						},
 						controller.signal,
@@ -473,6 +526,10 @@ export const useAgentWizard = ({
 					}
 
 					visibleContent = appendVisibleContent(visibleContent, result.content);
+					reasoningSoFar = joinReasoning(
+						reasoningSoFar,
+						readRoundProgress(result.parts ?? []).reasoning,
+					);
 
 					// Stopped: keep what this turn said, but start no further round.
 					if (result.stopped || !result.toolCalls?.length) {
@@ -502,7 +559,10 @@ export const useAgentWizard = ({
 						visibleContent,
 						result.toolCalls
 							.map((toolCall) =>
-								formatToolCallForVisibleMessage(toolCall, applied.notes),
+								formatToolCallForVisibleMessage(toolCall, {
+									status: "applied",
+									notes: applied.notes,
+								}),
 							)
 							.join("\n\n"),
 					);

@@ -396,6 +396,21 @@
 		"locked": "{{providers}} đã cấu hình nhưng đang khóa. Mở khóa ở trang Mô hình để dùng tại đây.",
 		"lockedHint": "{{providers}} đang khóa — mở khóa ở trang Mô hình."
 	},
+	"reasoningEffort": {
+		"label": "Mức suy luận",
+		"default": "Mặc định",
+		"defaultWith": "Mặc định ({{effort}})",
+		"alwaysThinks": "Mô hình này luôn suy nghĩ. Mức thấp nhất trả lời nhanh nhất.",
+		"levels": {
+			"none": "Tắt",
+			"minimal": "Tối thiểu",
+			"low": "Thấp",
+			"medium": "Trung bình",
+			"high": "Cao",
+			"xhigh": "Rất cao",
+			"max": "Tối đa"
+		}
+	},
 	"tooltips": {
 		"topicSelector": "Chọn chủ đề để lọc ngữ cảnh kiến thức",
 		"flowSelector": "Chọn flow hội thoại",

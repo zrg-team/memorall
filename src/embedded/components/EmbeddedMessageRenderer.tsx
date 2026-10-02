@@ -27,6 +27,7 @@ import {
 
 type EmbeddedAssistantPart =
 	| { type: "text"; id: string; text: string }
+	| { type: "reasoning"; id: string; text: string }
 	| {
 			type: "tool";
 			id: string;
@@ -143,6 +144,14 @@ const buildEmbeddedAssistantParts = ({
 
 	for (const part of parts ?? []) {
 		if (part.role === "assistant") {
+			// What the model thought comes before what it wrote.
+			if (part.reasoning?.trim()) {
+				assistantParts.push({
+					type: "reasoning",
+					id: `reasoning-${assistantParts.length}`,
+					text: part.reasoning,
+				});
+			}
 			const text = contentToText(part.content).trim();
 			if (text) {
 				assistantParts.push({
@@ -173,7 +182,9 @@ const buildEmbeddedAssistantParts = ({
 	}
 
 	return assistantParts.filter((part) => {
-		if (part.type === "text") return part.text.trim().length > 0;
+		if (part.type === "text" || part.type === "reasoning") {
+			return part.text.trim().length > 0;
+		}
 		if (part.type === "tool") return part.name || part.description;
 		return part.state === "running" && part.node;
 	});
@@ -181,7 +192,9 @@ const buildEmbeddedAssistantParts = ({
 
 const hasAssistantContentParts = (parts: EmbeddedAssistantPart[]): boolean =>
 	parts.some((part) => {
-		if (part.type === "text") return part.text.trim().length > 0;
+		if (part.type === "text" || part.type === "reasoning") {
+			return part.text.trim().length > 0;
+		}
 		if (part.type === "tool") return true;
 		return part.state === "running";
 	});
@@ -237,6 +250,32 @@ const EmbeddedExecutionPart: React.FC<{
 		</div>
 	) : null;
 
+/** What the model thought: open while it is still thinking. */
+const EmbeddedReasoningPart: React.FC<{
+	text: string;
+	isThinking: boolean;
+	t: (key: "thinking" | "thought") => string;
+}> = ({ text, isThinking, t }) => (
+	<details
+		// Remounted when thinking ends, so it folds then.
+		key={isThinking ? "thinking" : "thought"}
+		className="memorall-tool-summary"
+		open={isThinking}
+	>
+		<summary className="memorall-tool-summary-main">
+			<span
+				className={`memorall-tool-summary-dot${
+					isThinking ? " memorall-tool-summary-dot--active" : ""
+				}`}
+			/>
+			<span className="memorall-tool-summary-title">
+				{isThinking ? t("thinking") : t("thought")}
+			</span>
+		</summary>
+		<div className="memorall-thinking-text">{text}</div>
+	</details>
+);
+
 /** Names whatever is currently running, falling back to a generic label. */
 const resolveActivityLabel = (
 	parts: EmbeddedAssistantPart[],
@@ -245,7 +284,7 @@ const resolveActivityLabel = (
 ): string => {
 	for (let index = parts.length - 1; index >= 0; index -= 1) {
 		const part = parts[index];
-		if (part.type === "text") continue;
+		if (part.type === "text" || part.type === "reasoning") continue;
 		if (part.state !== "running") continue;
 		return translateActionName(
 			part.type === "tool" ? part.name : part.node,
@@ -282,10 +321,26 @@ const EmbeddedAssistantPartsFlow: React.FC<{
 }> = ({ parts, isStreaming, onMessageAction }) => {
 	const t = useEmbeddedTranslation("messageRenderer");
 	const { actions } = getEmbeddedTranslation("messageRenderer");
+	// A running step is not something the model wrote: thinking is still going
+	// on while nothing written comes after it.
+	const lastWrittenIndex = parts.findLastIndex(
+		(part) => part.type !== "execution",
+	);
 
 	return (
 		<div className="flex flex-col gap-4">
 			{parts.map((part, index) => {
+				if (part.type === "reasoning") {
+					return (
+						<div className="memorall-tool-summary-list" key={part.id}>
+							<EmbeddedReasoningPart
+								text={part.text}
+								isThinking={isStreaming && index === lastWrittenIndex}
+								t={t}
+							/>
+						</div>
+					);
+				}
 				if (part.type === "text") {
 					return (
 						<AssistantMessageContent

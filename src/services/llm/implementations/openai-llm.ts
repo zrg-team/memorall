@@ -40,6 +40,7 @@ import {
 	classifyRemoteModel,
 } from "../utils/remote-model-categories";
 import { postCompletionWithBudgetRetry } from "../utils/budget-retry";
+import { readModelReasoning, readReasoningDelta } from "../utils/reasoning";
 import {
 	extractChunkOutputText,
 	extractResponseOutputText,
@@ -580,6 +581,19 @@ export class OpenAILLM implements BaseLLM {
 		if (openRouter) {
 			body.usage = { include: true };
 		}
+		if (request.reasoning_effort) {
+			// OpenRouter takes one reasoning object across its providers, and
+			// turns thinking off with `enabled: false` on every model that allows
+			// it, including those that list no effort levels.
+			if (openRouter) {
+				body.reasoning =
+					request.reasoning_effort === "none"
+						? { enabled: false }
+						: { effort: request.reasoning_effort };
+			} else {
+				body.reasoning_effort = request.reasoning_effort;
+			}
+		}
 		if (openRouter || this.isOpenAI()) {
 			const cacheKey =
 				request.prompt_cache_key ?? derivePromptCacheKey(request.messages);
@@ -670,7 +684,9 @@ export class OpenAILLM implements BaseLLM {
 			}
 			const modelInfos: ModelInfo[] = modelsRaw.map((m: any) => {
 				const id = String(m.id || m.name || m.model || "unknown-model");
+				const reasoning = readModelReasoning(m);
 				return {
+					...(reasoning ? { reasoning } : {}),
 					id,
 					name: id,
 					object: "model",
@@ -918,6 +934,7 @@ export class OpenAILLM implements BaseLLM {
 								delta: {
 									role: choice?.delta?.role as "assistant" | undefined,
 									content: choice?.delta?.content ?? undefined,
+									reasoning: readReasoningDelta(choice?.delta) || undefined,
 									tool_calls: toolCalls,
 								},
 								finish_reason: (choice.finish_reason ??

@@ -805,6 +805,16 @@ export const customStyles = `
     white-space: pre-wrap;
   }
 
+  .memorall-chat-container .memorall-thinking-text {
+    max-height: 220px;
+    overflow: auto;
+    margin: 8px 0 0;
+    color: hsl(var(--muted-foreground));
+    font-size: 12px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+  }
+
   .memorall-chat-container .memorall-artifact-card {
     width: 100%;
     overflow: hidden;

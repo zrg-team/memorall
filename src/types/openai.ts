@@ -119,6 +119,12 @@ export interface ChatCompletionAssistantMessageParam {
 	content?: string | null;
 	name?: string;
 	tool_calls?: ChatCompletionMessageToolCall[];
+	/**
+	 * What a reasoning model thought before this message, kept so the user can
+	 * read it. Never sent back to a model: adapters serialize messages field by
+	 * field and leave it out.
+	 */
+	reasoning?: string;
 }
 
 /** Tool result message */
@@ -164,7 +170,22 @@ export interface ChatCompletionRequest {
 	 * it as its sticky-routing key). Adapters derive one when it is omitted.
 	 */
 	prompt_cache_key?: string;
+	/** How hard a reasoning model thinks; omitted means the model's default. */
+	reasoning_effort?: ReasoningEffort;
 }
+
+/**
+ * Reasoning effort levels. A model accepts some of them (see
+ * `ModelInfo.reasoning`); "none" turns reasoning off where that is allowed.
+ */
+export type ReasoningEffort =
+	| "none"
+	| "minimal"
+	| "low"
+	| "medium"
+	| "high"
+	| "xhigh"
+	| "max";
 
 // ==================== USAGE ====================
 
@@ -239,6 +260,8 @@ export interface ChatCompletionResponse {
 export interface ChatCompletionChunkDelta {
 	role?: "assistant" | "tool";
 	content?: string | null;
+	/** Reasoning text streamed ahead of (or between) the content. */
+	reasoning?: string;
 	tool_calls?: ChatCompletionChunkToolCall[];
 	tool_call_id?: string;
 }

@@ -1,4 +1,7 @@
-import type { DeviceDownloadSizes } from "@/services/llm/interfaces/base-llm";
+import type {
+	DeviceDownloadSizes,
+	ModelReasoning,
+} from "@/services/llm/interfaces/base-llm";
 import type { ServiceProvider } from "@/services/llm/interfaces/llm-service.interface";
 import type { ModelCategory } from "@/services/llm/interfaces/model-category";
 import {
@@ -26,6 +29,8 @@ export interface SelectableModel {
 	/** Local models: bytes on disk / to download (see `downloadBytesFor`). */
 	size?: number;
 	sizeByDevice?: DeviceDownloadSizes;
+	/** Reasoning models: the effort levels they accept. */
+	reasoning?: ModelReasoning;
 }
 
 /** Runs in the browser, so a model is only instantly selectable once local. */

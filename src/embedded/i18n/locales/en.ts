@@ -209,6 +209,7 @@ export const enEmbeddedLocale = {
 		toolCall: "Tool call",
 		toolLabel: "Tool {index}",
 		thinking: "Thinking...",
+		thought: "Thought",
 		urlArtifact: "URL artifact",
 		htmlArtifact: "HTML artifact",
 		open: "Open",

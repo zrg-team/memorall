@@ -22,6 +22,7 @@ import {
 	type SelectableModel,
 	useSelectableModels,
 } from "@/main/hooks/use-selectable-models";
+import { useReasoningEffort } from "@/main/hooks/use-reasoning-effort";
 import {
 	useCoAgentActivationStore,
 	useCoAgentActivationError,
@@ -176,6 +177,13 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 		},
 		[selectModel],
 	);
+	// The selected model as the picker lists it, for its reasoning controls.
+	const selectedModel = useMemo(
+		() => selectableModels.find((candidate) => candidate.id === model),
+		[selectableModels, model],
+	);
+	const [reasoningEffort, setReasoningEffort] =
+		useReasoningEffort(selectedModel);
 
 	const [mentionQuery, setMentionQuery] = useState<string | null>(null);
 	const mentionAtIndexRef = useRef<number>(-1);
@@ -527,6 +535,9 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 							isLoadingModels={isLoadingModels}
 							onSelectModel={handleSelectModel}
 							onRefreshModels={refreshModels}
+							reasoning={selectedModel?.reasoning}
+							reasoningEffort={reasoningEffort}
+							onReasoningEffortChange={setReasoningEffort}
 							dictation={
 								<ChatDictationButton
 									disabled={isLoading}

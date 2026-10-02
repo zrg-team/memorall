@@ -4,7 +4,11 @@ import { BaseProcessHandler } from "../base-process-handler";
 import { createJobErrorMetadata, getErrorMessage } from "../error-metadata";
 import { HandlerRegistry } from "../handler-registry";
 import { ProcessFactory } from "../process-factory";
-import { ChunkDispatcher, StreamBuffer } from "../stream-buffer";
+import {
+	ChunkDispatcher,
+	StreamBuffer,
+	type StreamedDelta,
+} from "../stream-buffer";
 import type { BaseJob, ItemHandlerResult, ProcessDependencies } from "../types";
 
 const makeJob = (jobType: string): BaseJob => ({
@@ -85,7 +89,7 @@ describe("ChunkDispatcher ordering across async emits", () => {
 	const makeDispatcher = (delivered: string[]) =>
 		new ChunkDispatcher({
 			intervalMs: 0,
-			sendContent: async (content) => {
+			sendDelta: async ({ content }) => {
 				delivered.push(`content:${content}`);
 			},
 		});
@@ -169,7 +173,7 @@ describe("ChunkDispatcher ordering across async emits", () => {
 		const delivered: string[] = [];
 		const dispatcher = new ChunkDispatcher({
 			intervalMs: 0,
-			sendContent: (content) => {
+			sendDelta: ({ content = "" }) => {
 				delivered.push(content);
 			},
 		});
@@ -208,7 +212,7 @@ describe("ChunkDispatcher", () => {
 
 		const dispatcher = new ChunkDispatcher({
 			intervalMs: 40,
-			sendContent: (content) => {
+			sendDelta: ({ content = "" }) => {
 				sent.push(content);
 			},
 			now: () => now,
@@ -299,6 +303,109 @@ describe("ChunkDispatcher", () => {
 
 		dispatcher.flush();
 		expect(sent).toEqual(["a", "b"]);
+	});
+});
+
+describe("ChunkDispatcher streamed deltas", () => {
+	const createHarness = () => {
+		const sent: StreamedDelta[] = [];
+		let now = 1_000;
+		let scheduled: (() => void) | null = null;
+		const dispatcher = new ChunkDispatcher({
+			intervalMs: 40,
+			sendDelta: (delta) => {
+				sent.push(delta);
+			},
+			now: () => now,
+			schedule: (fn) => {
+				scheduled = fn;
+				return 1 as unknown as ReturnType<typeof setTimeout>;
+			},
+			cancel: () => {
+				scheduled = null;
+			},
+		});
+		return {
+			dispatcher,
+			sent,
+			advance: (ms: number) => {
+				now += ms;
+			},
+			runTimer: () => {
+				const pending = scheduled;
+				scheduled = null;
+				pending?.();
+			},
+		};
+	};
+
+	it("streams reasoning the way it streams content, merged per window", () => {
+		const { dispatcher, sent, advance, runTimer } = createHarness();
+
+		dispatcher.queueReasoning("Let me");
+		advance(10);
+		dispatcher.queueReasoning(" think");
+		dispatcher.queueContent("Answer");
+		runTimer();
+
+		expect(sent).toEqual([
+			{ reasoning: "Let me" },
+			{ reasoning: " think", content: "Answer" },
+		]);
+	});
+
+	it("joins a tool call's argument fragments into one message per window", () => {
+		// Arguments arrive a few characters at a time; sending each one was a
+		// cross-context message per token.
+		const { dispatcher, sent, advance, runTimer } = createHarness();
+
+		dispatcher.queueToolCalls([
+			{
+				index: 0,
+				id: "call-1",
+				type: "function",
+				function: { name: "lookup", arguments: "" },
+			},
+		]);
+		advance(5);
+		dispatcher.queueToolCalls([{ index: 0, function: { arguments: '{"q"' } }]);
+		advance(5);
+		dispatcher.queueToolCalls([{ index: 0, function: { arguments: ':"x"}' } }]);
+		runTimer();
+
+		expect(sent).toEqual([
+			{
+				tool_calls: [
+					{
+						index: 0,
+						id: "call-1",
+						type: "function",
+						function: { name: "lookup", arguments: "" },
+					},
+				],
+			},
+			{ tool_calls: [{ index: 0, function: { arguments: '{"q":"x"}' } }] },
+		]);
+	});
+
+	it("never merges two calls that reuse an index", () => {
+		const { dispatcher, sent, advance, runTimer } = createHarness();
+
+		dispatcher.queueContent("start");
+		advance(5);
+		dispatcher.queueToolCalls([
+			{ index: 0, id: "call-1", function: { name: "a", arguments: "{}" } },
+		]);
+		dispatcher.queueToolCalls([
+			{ index: 0, id: "call-2", function: { name: "b", arguments: "{}" } },
+		]);
+		runTimer();
+
+		expect(sent.map((delta) => delta.tool_calls?.[0]?.id)).toEqual([
+			undefined,
+			"call-1",
+			"call-2",
+		]);
 	});
 });
 

@@ -30,6 +30,7 @@ import {
 	resolveTokenUsage,
 } from "../utils/token-usage";
 import { postCompletionWithBudgetRetry } from "../utils/budget-retry";
+import { readModelReasoning, readReasoningDelta } from "../utils/reasoning";
 
 // Model patterns for local servers
 const MODEL_TOOL_PATTERNS: Array<{
@@ -117,14 +118,18 @@ export class LocalOpenAICompatibleLLM implements BaseLLM {
 			const now = Math.floor(Date.now() / 1000);
 			const models: ModelInfo[] = (
 				Array.isArray(data?.data) ? data.data : []
-			).map((m: any) => ({
-				id: String(m?.id || m?.name || m?.model || "unknown-model"),
-				name: String(m?.id || m?.name || m?.model || "unknown-model"),
-				object: "model",
-				created: Number(m?.created || now),
-				owned_by: String(m?.owned_by || "local"),
-				loaded: true,
-			}));
+			).map((m: any) => {
+				const reasoning = readModelReasoning(m);
+				return {
+					id: String(m?.id || m?.name || m?.model || "unknown-model"),
+					name: String(m?.id || m?.name || m?.model || "unknown-model"),
+					object: "model",
+					created: Number(m?.created || now),
+					owned_by: String(m?.owned_by || "local"),
+					loaded: true,
+					...(reasoning ? { reasoning } : {}),
+				};
+			});
 			return { object: "list", data: models };
 		} catch {
 			// Some local servers may not expose /models; return empty list gracefully
@@ -194,6 +199,7 @@ export class LocalOpenAICompatibleLLM implements BaseLLM {
 			top_p: processedRequest.top_p,
 			stop: processedRequest.stop,
 			stream: false,
+			reasoning_effort: processedRequest.reasoning_effort,
 		};
 
 		// Add tools if native support and tools provided
@@ -281,6 +287,7 @@ export class LocalOpenAICompatibleLLM implements BaseLLM {
 			stop: processedRequest.stop,
 			stream: true,
 			stream_options: { include_usage: true },
+			reasoning_effort: processedRequest.reasoning_effort,
 		};
 
 		// Add tools if native support and tools provided
@@ -390,6 +397,7 @@ export class LocalOpenAICompatibleLLM implements BaseLLM {
 								delta: {
 									role: sentFirst ? undefined : ("assistant" as const),
 									content: choice?.delta?.content ?? undefined,
+									reasoning: readReasoningDelta(choice?.delta) || undefined,
 									tool_calls: toolCalls,
 								},
 								finish_reason: (choice.finish_reason ??

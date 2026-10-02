@@ -46,6 +46,24 @@ export const cloneMessageParts = (
 			}))
 		: null;
 
+/**
+ * The graph's own messages never carry reasoning — it only ever reached the
+ * stream — so take it from the streamed part in the same place.
+ */
+const withStreamedReasoning = (
+	parts: MessageParts,
+	streamed: MessageParts,
+): MessageParts =>
+	parts.map((part, index) => {
+		const source = streamed[index];
+		return part.role === "assistant" &&
+			!part.reasoning &&
+			source?.role === "assistant" &&
+			source.reasoning
+			? { ...part, reasoning: source.reasoning }
+			: part;
+	});
+
 export const resolveMessageParts = ({
 	finalState,
 	accumulatedParts,
@@ -73,7 +91,7 @@ export const resolveMessageParts = ({
 	) {
 		return accumulatedParts;
 	}
-	return outputMessageParts;
+	return withStreamedReasoning(outputMessageParts, accumulatedParts);
 };
 
 export class MessagePartsAccumulator {
@@ -94,9 +112,13 @@ export class MessagePartsAccumulator {
 			if (
 				delta.role === "assistant" ||
 				delta.content !== undefined ||
+				delta.reasoning ||
 				delta.tool_calls?.length
 			) {
 				const assistant = this.ensureAssistantPart();
+				if (delta.reasoning) {
+					assistant.reasoning = `${assistant.reasoning ?? ""}${delta.reasoning}`;
+				}
 				if (delta.content) {
 					assistant.content = `${assistant.content ?? ""}${delta.content}`;
 				}

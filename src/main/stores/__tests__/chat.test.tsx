@@ -6,6 +6,10 @@ const mocks = vi.hoisted(() => ({
 		use: vi.fn(),
 	},
 	logError: vi.fn(),
+	persistentStore: {
+		get: vi.fn(async (_key: string): Promise<unknown> => null),
+		set: vi.fn(async (_key: string, _value: unknown) => undefined),
+	},
 }));
 
 vi.mock("drizzle-orm", () => ({
@@ -28,11 +32,15 @@ vi.mock("@/utils/logger", () => ({
 	logError: mocks.logError,
 }));
 
+vi.mock("@/platform/current", () => ({
+	platform: { persistentStore: mocks.persistentStore },
+}));
+
 vi.mock("@/utils/uuid", () => ({
 	v4: vi.fn(() => "generated-message-id"),
 }));
 
-import { useChatStore } from "../chat";
+import { SELECTED_AGENT_STORAGE_KEY, useChatStore } from "../chat";
 
 const schema = {
 	conversations: {
@@ -436,5 +444,55 @@ describe("useChatStore", () => {
 			"Failed to sync with database:",
 			expect.any(Error),
 		);
+	});
+});
+
+describe("selected agent across reloads", () => {
+	beforeEach(() => {
+		useChatStore.setState({ selectedAgentFlowId: null });
+		mocks.persistentStore.get.mockReset().mockResolvedValue(null);
+		mocks.persistentStore.set.mockClear();
+	});
+
+	it("remembers the agent the user picks", () => {
+		useChatStore.getState().setSelectedAgentFlowId("research-agent");
+
+		expect(mocks.persistentStore.set).toHaveBeenCalledWith(
+			SELECTED_AGENT_STORAGE_KEY,
+			"research-agent",
+		);
+	});
+
+	it("comes back to the agent picked last time", async () => {
+		mocks.persistentStore.get.mockResolvedValue("research-agent");
+
+		await useChatStore
+			.getState()
+			.restoreSelectedAgentFlowId(["foundation", "research-agent"]);
+
+		expect(useChatStore.getState().selectedAgentFlowId).toBe("research-agent");
+	});
+
+	it("falls back to the first agent when the remembered one is gone", async () => {
+		mocks.persistentStore.get.mockResolvedValue("deleted-agent");
+
+		await useChatStore
+			.getState()
+			.restoreSelectedAgentFlowId(["foundation", "research-agent"]);
+
+		expect(useChatStore.getState().selectedAgentFlowId).toBe("foundation");
+	});
+
+	it("keeps a pick made while the remembered one was being read", async () => {
+		mocks.persistentStore.get.mockImplementation(async () => {
+			useChatStore.setState({ selectedAgentFlowId: "picked-now" });
+			return "research-agent";
+		});
+
+		await useChatStore
+			.getState()
+			.restoreSelectedAgentFlowId(["foundation", "research-agent"]);
+
+		expect(useChatStore.getState().selectedAgentFlowId).toBe("picked-now");
 	});
 });

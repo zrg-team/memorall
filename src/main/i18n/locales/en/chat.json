@@ -396,6 +396,21 @@
 		"locked": "{{providers}} is set up but locked. Unlock it on the Models page to use it here.",
 		"lockedHint": "{{providers}} is locked — unlock it on the Models page."
 	},
+	"reasoningEffort": {
+		"label": "Reasoning effort",
+		"default": "Default",
+		"defaultWith": "Default ({{effort}})",
+		"alwaysThinks": "This model always thinks. The lowest level answers fastest.",
+		"levels": {
+			"none": "Off",
+			"minimal": "Minimal",
+			"low": "Low",
+			"medium": "Medium",
+			"high": "High",
+			"xhigh": "Extra high",
+			"max": "Max"
+		}
+	},
 	"tooltips": {
 		"topicSelector": "Select a topic to filter knowledge context",
 		"flowSelector": "Select conversation flow",
