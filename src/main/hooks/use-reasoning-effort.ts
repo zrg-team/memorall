@@ -5,53 +5,59 @@ import {
 } from "@/services/llm/reasoning-effort-settings";
 import type { ReasoningEffort } from "@/types/openai";
 import { logWarn } from "@/utils/logger";
-import type { SelectableModel } from "./selectable-model";
+import type { CurrentModel } from "./use-current-model";
 
 /**
  * The reasoning effort chosen for `model`, and a setter. Kept in step with
  * every other context, since the setting is shared by all chat surfaces.
  *
- * A saved level the model no longer accepts is dropped: every run sends the
- * saved level, and the provider refuses one the model does not list.
+ * @param accepted the levels the provider's current list gives the model, or
+ * undefined while that list has not come in. A saved level outside them is
+ * dropped — every run sends the saved level, and the provider refuses one the
+ * model does not list — but only on the list's word: a remembered list may be
+ * out of date.
  */
 export const useReasoningEffort = (
-	model: Pick<SelectableModel, "id" | "provider" | "reasoning"> | undefined,
+	model: CurrentModel | null | undefined,
+	accepted: readonly ReasoningEffort[] | undefined,
 ): readonly [
 	ReasoningEffort | undefined,
 	(effort: ReasoningEffort | undefined) => void,
 ] => {
-	const key = model
-		? reasoningEffortKey({ provider: model.provider, modelId: model.id })
-		: null;
-	// By value, so a refreshed model list does not reload the setting.
-	const accepted = model?.reasoning?.efforts.join(",") ?? "";
+	const key = model ? reasoningEffortKey(model) : null;
 	const [effort, setEffortState] = useState<ReasoningEffort | undefined>();
 
 	useEffect(() => {
 		setEffortState(undefined);
 		if (!key) return;
 		let active = true;
-		const isAccepted = (level: ReasoningEffort | undefined) =>
-			level !== undefined && accepted.split(",").includes(level);
 		void reasoningEffortSettings
 			.get(key)
 			.then((stored) => {
-				if (!active || stored === undefined) return;
-				if (isAccepted(stored)) {
-					setEffortState(stored);
-					return;
-				}
-				return reasoningEffortSettings.set(key, undefined);
+				if (active) setEffortState(stored);
 			})
 			.catch((error) => logWarn("Failed to read the reasoning effort:", error));
 		const unsubscribe = reasoningEffortSettings.subscribe(key, (changed) => {
-			if (active) setEffortState(isAccepted(changed) ? changed : undefined);
+			if (active) setEffortState(changed);
 		});
 		return () => {
 			active = false;
 			unsubscribe();
 		};
-	}, [key, accepted]);
+	}, [key]);
+
+	// By value, so a refreshed list does not count as a change.
+	const acceptedLevels = accepted?.join(",");
+	useEffect(() => {
+		if (!key || acceptedLevels === undefined || !effort) return;
+		if (acceptedLevels.split(",").includes(effort)) return;
+		setEffortState(undefined);
+		void reasoningEffortSettings
+			.set(key, undefined)
+			.catch((error) =>
+				logWarn("Failed to clear the reasoning effort:", error),
+			);
+	}, [key, acceptedLevels, effort]);
 
 	const setEffort = useCallback(
 		(next: ReasoningEffort | undefined) => {
