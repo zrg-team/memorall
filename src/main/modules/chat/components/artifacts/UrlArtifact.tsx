@@ -1,8 +1,13 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ExternalLink } from "lucide-react";
+import { useRuntimeSessionsStore } from "@/main/stores/runtime-sessions";
 import { serviceManager } from "@/services";
 import type { SandboxHandleSwRequestResult } from "@/services/sandbox-container";
+import {
+	defaultPort,
+	isLocalHost,
+} from "@/services/sandbox-container/host-commands/curl/http";
 import { logError } from "@/utils/logger";
 import { ArtifactActionsMenu, type ArtifactProps } from "./ArtifactActionsMenu";
 import { platform } from "@/platform/current";
@@ -91,6 +96,23 @@ const getVirtualSandboxLocation = (
 	return null;
 };
 
+/**
+ * The port of a `localhost` URL. The computer's servers (the Terminal's
+ * `node server.js`) answer there, as its curl treats them, but they live in
+ * the sandbox: an iframe pointed at the real localhost reaches nothing.
+ */
+const getLocalHostPort = (rawUrl: string): number | null => {
+	const parsed = toUrl(rawUrl);
+	if (
+		!parsed ||
+		(parsed.protocol !== "http:" && parsed.protocol !== "https:") ||
+		!isLocalHost(parsed.hostname)
+	) {
+		return null;
+	}
+	return defaultPort(parsed);
+};
+
 const isFrameableUrl = (rawUrl: string): boolean => {
 	const parsed = toUrl(rawUrl);
 	if (!parsed) {
@@ -108,13 +130,50 @@ export const UrlArtifact: React.FC<ArtifactProps> = ({ content, title }) => {
 	const { t } = useTranslation("chat");
 	const url = content.trim();
 	const iframeRef = useRef<HTMLIFrameElement | null>(null);
-	const virtualLocation = useMemo(() => getVirtualSandboxLocation(url), [url]);
+	const localPort = useMemo(() => getLocalHostPort(url), [url]);
+	const sandboxServesLocalPort = useRuntimeSessionsStore(
+		(state) =>
+			localPort !== null &&
+			state.servers.some((server) => server.port === localPort),
+	);
+	// A localhost URL waits for the list of the computer's servers, so it does
+	// not first load the real localhost and flash its error page.
+	const [checkedLocalPort, setCheckedLocalPort] = useState<number | null>(null);
+	useEffect(() => {
+		if (localPort === null) return;
+		let cancelled = false;
+		void useRuntimeSessionsStore
+			.getState()
+			.refresh()
+			.finally(() => {
+				if (!cancelled) setCheckedLocalPort(localPort);
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [localPort]);
+	const localServersChecked =
+		localPort === null ||
+		sandboxServesLocalPort ||
+		checkedLocalPort === localPort;
+	const virtualLocation = useMemo(() => {
+		const direct = getVirtualSandboxLocation(url);
+		if (direct || localPort === null || !sandboxServesLocalPort) return direct;
+		const parsed = toUrl(url);
+		return {
+			port: localPort,
+			path: `${parsed?.pathname || "/"}${parsed?.search ?? ""}`,
+		};
+	}, [url, localPort, sandboxServesLocalPort]);
 	const [renderUrl, setRenderUrl] = useState<string | null>(null);
+	const isCheckingLocalServers = !virtualLocation && !localServersChecked;
 	const iframeSrc = virtualLocation
 		? renderUrl
-		: isFrameableUrl(url)
-			? url
-			: null;
+		: isCheckingLocalServers
+			? null
+			: isFrameableUrl(url)
+				? url
+				: null;
 
 	useEffect(() => {
 		let cancelled = false;
@@ -230,7 +289,7 @@ export const UrlArtifact: React.FC<ArtifactProps> = ({ content, title }) => {
 					sandbox="allow-forms allow-modals allow-pointer-lock allow-popups allow-presentation allow-same-origin allow-scripts"
 					referrerPolicy="no-referrer"
 				/>
-			) : virtualLocation ? (
+			) : virtualLocation || isCheckingLocalServers ? (
 				<div className="px-3 py-4 text-sm text-muted-foreground">
 					{t("htmlPreview.resolvingSandboxPreview")}
 				</div>
