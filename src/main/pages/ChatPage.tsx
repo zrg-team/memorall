@@ -1088,6 +1088,7 @@ ${text}`
 					isLoading={isLoading && !runningElsewhere}
 					runningElsewhere={runningElsewhere}
 					model={model}
+					currentModel={current}
 					status={status}
 					selectedTopic={selectedTopic}
 					setSelectedTopic={handleSelectTopic}

@@ -22,6 +22,8 @@ import {
 	type SelectableModel,
 	useSelectableModels,
 } from "@/main/hooks/use-selectable-models";
+import type { CurrentModel } from "@/main/hooks/use-current-model";
+import { useModelReasoning } from "@/main/hooks/use-model-reasoning";
 import { useReasoningEffort } from "@/main/hooks/use-reasoning-effort";
 import {
 	useCoAgentActivationStore,
@@ -49,6 +51,8 @@ export interface ChatInputProps {
 	) => void;
 	isLoading: boolean;
 	model: string;
+	/** The selected model with its provider, known before the model list loads. */
+	currentModel?: CurrentModel | null;
 	status: ChatStatus;
 	selectedTopic: string;
 	setSelectedTopic: (topicId: string) => void;
@@ -92,6 +96,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 	onSubmit,
 	isLoading,
 	model,
+	currentModel,
 	status,
 	selectedTopic,
 	setSelectedTopic,
@@ -177,13 +182,21 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 		},
 		[selectModel],
 	);
-	// The selected model as the picker lists it, for its reasoning controls.
-	const selectedModel = useMemo(
-		() => selectableModels.find((candidate) => candidate.id === model),
-		[selectableModels, model],
+	// The selected model as the picker lists it, once the list is in.
+	const listedModel = useMemo(
+		() =>
+			selectableModels.find(
+				(candidate) =>
+					candidate.id === model &&
+					(!currentModel || candidate.provider === currentModel.provider),
+			),
+		[selectableModels, model, currentModel],
 	);
-	const [reasoningEffort, setReasoningEffort] =
-		useReasoningEffort(selectedModel);
+	const reasoning = useModelReasoning(currentModel, listedModel);
+	const [reasoningEffort, setReasoningEffort] = useReasoningEffort(
+		currentModel,
+		listedModel ? (listedModel.reasoning?.efforts ?? []) : undefined,
+	);
 
 	const [mentionQuery, setMentionQuery] = useState<string | null>(null);
 	const mentionAtIndexRef = useRef<number>(-1);
@@ -535,7 +548,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 							isLoadingModels={isLoadingModels}
 							onSelectModel={handleSelectModel}
 							onRefreshModels={refreshModels}
-							reasoning={selectedModel?.reasoning}
+							reasoning={reasoning}
 							reasoningEffort={reasoningEffort}
 							onReasoningEffortChange={setReasoningEffort}
 							dictation={
