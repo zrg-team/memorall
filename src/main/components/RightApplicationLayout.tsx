@@ -33,6 +33,8 @@ import {
 import { Button } from "@/main/components/ui/button";
 import { useRuntimeSessionsStore } from "@/main/stores/runtime-sessions";
 import { useMemonMachineStore } from "@/main/stores/memon-machine";
+import { useAgentComputer } from "@/main/components/molecules/MemonComputer/use-agent-computer";
+import { cn } from "@/lib/utils";
 import {
 	debugNavigationItems,
 	getCopilotNavigationId,
@@ -50,14 +52,50 @@ type SettingsPanelStateProps = Pick<
 	"setIsReloadingModel" | "setReloadProgress"
 >;
 
+/** Runtime as a MemonOS Bot's computer: tinted, and opening on Computer. */
+interface RuntimeComputer {
+	open: () => void;
+	working: boolean;
+}
+
+/** MemonOS Bot's accent, the Computer one, for the Runtime icon. */
+const runtimeComputerClass = (
+	computer: RuntimeComputer | null,
+	selected: boolean,
+) =>
+	computer
+		? cn(
+				"text-cyan-500 hover:text-cyan-400",
+				selected
+					? "border-cyan-500/40 bg-cyan-500/15 shadow-[0_0_0_1px_rgba(6,182,212,0.3),0_4px_20px_rgba(6,182,212,0.15)]"
+					: "bg-cyan-500/10 hover:bg-cyan-500/15",
+				computer.working && "ring-1 ring-cyan-400/60 animate-pulse",
+			)
+		: undefined;
+
+/** Clicking Runtime opens the agent's computer instead of the last section. */
+const openComputerOnClick =
+	(computer: RuntimeComputer | null, fallback: () => void) =>
+	(event: React.MouseEvent) => {
+		if (!computer) {
+			fallback();
+			return;
+		}
+		event.preventDefault();
+		fallback();
+		computer.open();
+	};
+
 type RightPanelVerticalRailProps = SettingsPanelStateProps & {
 	runtimeCount: number;
+	runtimeComputer: RuntimeComputer | null;
 	onOpenPanel: () => void;
 	renderRuntimeBadge: (count: number) => React.ReactNode;
 };
 
 const RightPanelVerticalRail: React.FC<RightPanelVerticalRailProps> = ({
 	runtimeCount,
+	runtimeComputer,
 	onOpenPanel,
 	renderRuntimeBadge,
 	setIsReloadingModel,
@@ -84,19 +122,23 @@ const RightPanelVerticalRail: React.FC<RightPanelVerticalRailProps> = ({
 					{workspaceNavigationItems.map((item) => {
 						const IconComponent = item.icon;
 						const copilotId = getCopilotNavigationId(item.path);
+						const computer = item.path === "/runtime" ? runtimeComputer : null;
 						return (
 							<Tooltip key={item.path}>
 								<TooltipTrigger asChild>
 									<Link
 										to={item.path}
-										onClick={onOpenPanel}
+										onClick={openComputerOnClick(computer, onOpenPanel)}
 										data-copilot={
 											copilotId ? `rail-nav-${copilotId}` : undefined
 										}
 										data-agent-cursor-point={
 											copilotId ? `copilot-rail-nav-${copilotId}` : undefined
 										}
-										className="relative flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground"
+										className={cn(
+											"relative flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground",
+											runtimeComputerClass(computer, false),
+										)}
 									>
 										<IconComponent size={16} />
 										{item.path === "/runtime"
@@ -168,6 +210,14 @@ export const RightApplicationLayout: React.FC<RightApplicationLayoutProps> = ({
 				(summary) => summary.status !== "idle",
 			).length,
 	);
+	const chatAgent = useMemonMachineStore((state) => state.chatAgent);
+	const agentComputer = useAgentComputer(
+		chatAgent?.agentId ?? null,
+		chatAgent?.config ?? null,
+	);
+	const runtimeComputer: RuntimeComputer | null = agentComputer.open
+		? { open: agentComputer.open, working: agentComputer.working }
+		: null;
 	const runtimeCount =
 		commandsCount +
 		serversCount +
@@ -234,6 +284,7 @@ export const RightApplicationLayout: React.FC<RightApplicationLayoutProps> = ({
 			<>
 				<RightPanelVerticalRail
 					runtimeCount={runtimeCount}
+					runtimeComputer={runtimeComputer}
 					onOpenPanel={openPanel}
 					renderRuntimeBadge={renderRuntimeBadge}
 					{...settingsPanelStateProps}
@@ -283,6 +334,8 @@ export const RightApplicationLayout: React.FC<RightApplicationLayoutProps> = ({
 											item.path === WORKSPACE_FALLBACK_PATH);
 									const IconComponent = item.icon;
 									const copilotId = getCopilotNavigationId(item.path);
+									const computer =
+										item.path === "/runtime" ? runtimeComputer : null;
 									return (
 										<React.Fragment key={item.path}>
 											{/* Marks a harness group boundary: identity | context |
@@ -297,7 +350,7 @@ export const RightApplicationLayout: React.FC<RightApplicationLayoutProps> = ({
 												<TooltipTrigger asChild>
 													<Link
 														to={item.path}
-														onClick={() => openPanel()}
+														onClick={openComputerOnClick(computer, openPanel)}
 														data-copilot={
 															copilotId ? `header-nav-${copilotId}` : undefined
 														}
@@ -306,15 +359,16 @@ export const RightApplicationLayout: React.FC<RightApplicationLayoutProps> = ({
 																? `copilot-header-nav-${copilotId}`
 																: undefined
 														}
-														className={`${
+														className={cn(
 															isSelected
 																? "bg-blue-500/10 text-blue-500 border border-blue-500/30 shadow-[0_0_0_1px_rgba(59,130,246,0.28),0_4px_20px_rgba(59,130,246,0.12)]"
-																: "text-muted-foreground hover:text-foreground hover:bg-white/5"
-														} relative flex items-center rounded-md text-sm font-medium transition-all duration-200 ease-in-out ${
+																: "text-muted-foreground hover:text-foreground hover:bg-white/5",
+															"relative flex items-center rounded-md text-sm font-medium transition-all duration-200 ease-in-out",
 															showNavLabels && isSelected
 																? "gap-2 px-2.5 py-2"
-																: "p-2"
-														}`}
+																: "p-2",
+															runtimeComputerClass(computer, isSelected),
+														)}
 													>
 														<IconComponent
 															size={16}

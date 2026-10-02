@@ -3,6 +3,7 @@
 exports[`requested service module coverage > imports requested service trees 1`] = `
 [
   "../background-jobs/handlers/base-process-handler.ts",
+  "../background-jobs/handlers/chat-message-persistence.ts",
   "../background-jobs/handlers/cron-actions/agent-chat.ts",
   "../background-jobs/handlers/cron-actions/index.ts",
   "../background-jobs/handlers/cron-actions/registry.ts",
@@ -121,6 +122,7 @@ exports[`requested service module coverage > imports requested service trees 1`]
   "../filesystem/default-skills/types.ts",
   "../filesystem/document-filesystem.ts",
   "../filesystem/filesystem-paths.ts",
+  "../filesystem/folder-zip.ts",
   "../filesystem/fs.ts",
   "../filesystem/native-folders/mount-registry.ts",
   "../filesystem/native-folders/native-folder-fs.ts",

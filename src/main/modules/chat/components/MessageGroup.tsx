@@ -118,6 +118,7 @@ export const MessageGroup: React.FC<MessageGroupProps> = React.memo(
 		);
 
 		const shouldRenderMessages = !isCollapsed && group.isLoaded;
+		const inProgressId = inProgressMessage?.id;
 
 		// Where each stretch of co-agent turns was asked. Derived from the turns
 		// themselves rather than stored, so it also reads back sessions recorded
@@ -137,6 +138,9 @@ export const MessageGroup: React.FC<MessageGroupProps> = React.memo(
 
 			return group.messages.map((message, index) => {
 				if (!hasRenderableMessageContent(message)) return undefined;
+				// The run saves its reply as it goes; while it streams, the live
+				// copy below is the one shown, and a refresh must not add the saved one.
+				if (message.id === inProgressId) return undefined;
 
 				const renderer = (
 					<MessageRenderer
@@ -166,6 +170,7 @@ export const MessageGroup: React.FC<MessageGroupProps> = React.memo(
 			});
 		}, [
 			group.messages,
+			inProgressId,
 			onMessageAction,
 			pageChanges,
 			selectedTopic,

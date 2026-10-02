@@ -1,7 +1,4 @@
-import {
-	defineStep,
-	bindStep,
-} from "../../../interfaces/engine/step.js";
+import { defineStep, bindStep } from "../../../interfaces/engine/step.js";
 import type {
 	BoundStep,
 	StepFactoryFromSpec,
@@ -39,16 +36,14 @@ export type WebFeatureServices = Pick<AllServices, "webBrowser"> | undefined;
 
 const SYSTEM_PROMPT_INSTRUCTION = `
 # WEB TOOL FEATURE
-You have access to browser-backed web tooling and offscreen iframe web tooling.
+You have access to browser-backed web tooling.
 
 Multiple web sessions can be open simultaneously. Use sessionId to target a specific session.
 
 ## MODE GUIDELINES
-- Prefer "tab" or "window" for general website access. They run against a real browser page and usually work on more websites than "iframe".
-- Use "window" when you want dedicated browser-window execution. The runtime may fall back to "tab" if a separate window cannot be created.
-- Use "iframe" only when embedded offscreen browsing is sufficient.
-- Browser-backed "tab" and "window" modes support read, search, DOM actions, and selector waits through the content script.
-- If a website is likely to reject iframe embedding or needs the real page context, choose "tab" or "window" first.
+- Order of preference: "window", then "tab". Leave browserMode out and web_open uses a window; the runtime falls back to a tab when it cannot make one.
+- "iframe" is only for a local server (localhost, 127.0.0.1, a sandbox preview). Public sites block embedding or hide their DOM, so an "iframe" asked for on one opens a window instead.
+- "window" and "tab" run against a real browser page and support read, search, DOM actions, and selector waits through the content script.
 
 ## SESSION RULES
 - Multiple sessions can be open at once. Always pass the correct sessionId when operating on an existing session.
@@ -95,7 +90,7 @@ Multiple web sessions can be open simultaneously. Use sessionId to target a spec
 
 ## RECOMMENDED WORKFLOW
 1. For web search tasks, call web_search first. Use the returned URLs to decide which pages to open with web_open.
-2. Use web_open with keepSession=true and prefer browserMode="tab" or browserMode="window" for most websites.
+2. Use web_open with keepSession=true. Leave browserMode out (a window), or pass "tab"; "iframe" only for a local server.
 3. web_open waits for initial navigation and a default render-readiness check. Check the web_open result. If renderReady is false, the page may still be a JavaScript shell, still hydrating, or the load timed out.
 4. If renderReady is false, use web_read to check current page content. If useful content is present, continue. If not, call web_wait with waitMode="render" before retrying web_read.
 5. Use web_wait with waitMode="render" to wait until the page has stable readable content, waitMode="selector" when you know the target selector, or waitMode="time" for a fixed delay.

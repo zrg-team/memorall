@@ -1,4 +1,4 @@
-import { Loader2, Monitor, Power } from "lucide-react";
+import { Loader2, Power } from "lucide-react";
 import React from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
@@ -13,7 +13,12 @@ import {
 import { useChatStore } from "@/main/stores/chat";
 import { useMemonMachineStore } from "@/main/stores/memon-machine";
 import { MEMON_APP_IDS, MEMON_BUILTIN_APPS } from "@/services/memon/constants";
-import { MEMON_APP_ICONS } from "./MemonWindowFrame";
+import { cn } from "@/lib/utils";
+import {
+	MEMON_APP_ICONS,
+	MEMON_APP_TINTS,
+	MemonLogo,
+} from "./MemonWindowFrame";
 import type { MemonAgent } from "./use-memon-agents";
 
 /**
@@ -58,24 +63,24 @@ export const MemonComputerStart: React.FC<{
 	};
 
 	return (
-		<div className="flex h-full items-center justify-center p-4">
-			<div className="flex h-full w-full flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border/70 p-6 text-center">
-				<Monitor size={20} className="text-muted-foreground" />
-				<div className="max-w-sm space-y-1">
-					<p className="text-sm font-medium">
+		<div className="flex h-full items-center justify-center bg-muted/30 bg-[image:radial-gradient(hsl(var(--foreground)/0.07)_1px,transparent_1px)] p-4 [background-size:22px_22px]">
+			<div className="flex w-full max-w-md flex-col items-center gap-5 rounded-lg border bg-background p-7 text-center shadow-[0_8px_24px_-10px_rgb(0_0_0/0.35)]">
+				<MemonLogo size={64} />
+				<div className="space-y-1.5">
+					<p className="text-lg font-semibold tracking-tight">
 						{t("memonComputer.start.title")}
 					</p>
-					<p className="text-xs text-muted-foreground">
+					<p className="text-[13px] leading-relaxed text-muted-foreground">
 						{t("memonComputer.start.description")}
 					</p>
 				</div>
 				{loading ? (
-					<Loader2 size={16} className="animate-spin text-muted-foreground" />
+					<Loader2 size={18} className="animate-spin text-muted-foreground" />
 				) : agent ? (
-					<div className="flex w-full max-w-xs flex-col gap-2">
+					<div className="flex w-full max-w-xs flex-col gap-3">
 						<Select value={agent.id} onValueChange={setPickedId}>
 							<SelectTrigger
-								className="h-9"
+								className="h-10 rounded-md"
 								aria-label={t("memonComputer.start.agent")}
 							>
 								<SelectValue />
@@ -97,9 +102,12 @@ export const MemonComputerStart: React.FC<{
 								return (
 									<span
 										key={app}
-										className="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground"
+										className={cn(
+											"inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium",
+											MEMON_APP_TINTS[app],
+										)}
 									>
-										<Icon size={11} />
+										<Icon size={12} />
 										{t(`memonComputer.apps.${app}`)}
 									</span>
 								);
@@ -107,7 +115,9 @@ export const MemonComputerStart: React.FC<{
 						</div>
 						<Button
 							type="button"
+							variant="outline"
 							size="sm"
+							className="h-10 rounded-md border-transparent bg-blue-600 font-semibold text-white hover:bg-blue-500 hover:text-white"
 							disabled={starting}
 							onClick={() => void start()}
 						>

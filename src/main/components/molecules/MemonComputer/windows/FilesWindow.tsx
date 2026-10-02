@@ -1,6 +1,7 @@
 import {
 	ClipboardPaste,
 	Copy,
+	FileArchive,
 	FileText,
 	Folder,
 	HardDrive,
@@ -17,6 +18,7 @@ import { listFileRefs } from "@/services/memon/screen-serializer";
 import type { MemonFilesState } from "@/services/memon/types";
 import type { MemonSend } from "../types";
 import { pickFiles, uploadToComputer } from "../upload";
+import { downloadFolderAsZip } from "@/main/modules/files/utils/save-download";
 import { cn } from "@/lib/utils";
 import { logError } from "@/utils/logger";
 
@@ -54,6 +56,7 @@ export const FilesWindow: React.FC<{
 	const open = (ref: string) =>
 		void send("files.ref", { key: machineKey, ref });
 	const [uploading, setUploading] = React.useState(false);
+	const [zipping, setZipping] = React.useState(false);
 	const [dragging, setDragging] = React.useState(false);
 	const [selected, setSelected] = React.useState<string[]>([]);
 	const [anchor, setAnchor] = React.useState<string | null>(null);
@@ -69,6 +72,25 @@ export const FilesWindow: React.FC<{
 	}, [files.cwd]);
 
 	/** Saves the files into a folder (the open one by default). */
+	/** The one folder selected, or the open folder: as a .zip download. */
+	const zipFolder = async () => {
+		if (zipping) return;
+		const [only] = selected;
+		const folder =
+			selected.length === 1 &&
+			files.entries.some((entry) => entry.path === only && entry.type === "dir")
+				? only
+				: files.cwd;
+		setZipping(true);
+		try {
+			await downloadFolderAsZip(folder);
+		} catch (error) {
+			logError("[MEMON] Zip failed:", error);
+		} finally {
+			setZipping(false);
+		}
+	};
+
 	const upload = async (picked: File[], folder = files.cwd) => {
 		if (!picked.length || uploading) return;
 		setUploading(true);
@@ -239,6 +261,20 @@ export const FilesWindow: React.FC<{
 						)}
 					</button>
 				) : null}
+				<button
+					type="button"
+					disabled={zipping}
+					onClick={() => void zipFolder()}
+					className={TOOL_BUTTON}
+					title={t("memonComputer.files.zipHint")}
+				>
+					{zipping ? (
+						<Loader2 size={12} className="animate-spin" />
+					) : (
+						<FileArchive size={12} />
+					)}
+					{t("memonComputer.files.zip")}
+				</button>
 				<button
 					type="button"
 					disabled={uploading}

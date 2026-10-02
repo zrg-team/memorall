@@ -1687,6 +1687,7 @@ exports[`flows-integrations registered contracts > registers every integrations 
             "cut",
             "paste",
             "download",
+            "zip",
           ],
           "type": "string",
         },
@@ -1850,10 +1851,13 @@ exports[`flows-integrations registered contracts > registers every integrations 
     },
   },
   {
-    "description": "Run a shell command in the Terminal window (the same "/" tree as Files) and return its output with the screen. Long commands keep running and streaming: call again to wait, type into them, or stop them. \`cd dir\` changes the working directory for later commands.",
+    "description": "Run a shell command in the Terminal window (the same "/" tree as Files) and return its output with the screen. Long commands keep running and streaming: call again to wait, type into them, or stop them. The Terminal has tabs, each with its own working directory; \`cd dir\` changes the tab's directory for later commands. One long command (a server) runs at a time; while it does, file and text commands (ls, cat, mkdir, grep…), curl, git and py still run next to it in any tab; anything else waits for it.",
     "name": "memon_run",
     "parameters": {
       "properties": {
+        "closeTab": {
+          "type": "boolean",
+        },
         "command": {
           "type": "string",
         },
@@ -1865,6 +1869,9 @@ exports[`flows-integrations registered contracts > registers every integrations 
         },
         "stop": {
           "type": "boolean",
+        },
+        "terminal": {
+          "type": "string",
         },
         "waitSeconds": {
           "type": "number",

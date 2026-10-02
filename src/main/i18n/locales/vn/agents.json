@@ -474,6 +474,12 @@
 			"customSetup": "Tùy chỉnh",
 			"noStarterSkills": "Không có kỹ năng khởi đầu"
 		},
+		"computerOffer": {
+			"title": "Cho agent này một chiếc máy tính?",
+			"description": "MemonOS Bot chạy agent trên máy tính riêng: bạn xem nó làm việc trực tiếp và có thể tiếp quản bất cứ lúc nào.",
+			"turnOn": "Bật",
+			"notNow": "Để sau"
+		},
 		"chatPanel": {
 			"presets": "Preset",
 			"title": "Xây dựng tác nhân với AI",

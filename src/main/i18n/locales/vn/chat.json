@@ -318,6 +318,7 @@
 		"preview": "Xem trước",
 		"code": "Mã nguồn",
 		"artifactActions": "Hành động artifact",
+		"inPanel": "Artifact · mở ở bảng bên phải",
 		"openInNewTab": "Mở trong tab mới",
 		"resolvingSandboxPreview": "Đang chuẩn bị bản xem trước sandbox...",
 		"unsupportedUrl": "URL artifact không được hỗ trợ: {{url}}"

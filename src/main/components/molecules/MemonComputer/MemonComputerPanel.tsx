@@ -26,7 +26,6 @@ import { useWorkspaceModeStore } from "@/main/stores/workspace-mode";
 import { logError } from "@/utils/logger";
 import { type CaptureCrop, captureComputerScreen } from "./capture-screen";
 import { MemonCaptureOverlay } from "./MemonCaptureOverlay";
-import { CommandStatusBadge } from "@/main/components/molecules/RuntimeSessions/SharedComponents";
 import { cn } from "@/lib/utils";
 import { useMemonMachineStore } from "@/main/stores/memon-machine";
 import {
@@ -41,9 +40,14 @@ import type {
 	MemonWindowState,
 } from "@/services/memon/types";
 import { askInChat, memonWindowTarget } from "./ask-in-chat";
-import { MemonAgentCursor } from "./MemonAgentCursor";
+import { MemonAgentCursor, MemonUserCursor } from "./MemonAgentCursor";
 import { MemonDesktopIcons } from "./MemonDesktopIcons";
-import { MEMON_APP_ICONS, MemonWindowFrame } from "./MemonWindowFrame";
+import {
+	MEMON_APP_ICONS,
+	MEMON_APP_TINTS,
+	MemonLogo,
+	MemonWindowFrame,
+} from "./MemonWindowFrame";
 import { BrowserWindow } from "./windows/BrowserWindow";
 import { EditorWindow } from "./windows/EditorWindow";
 import { FilesWindow } from "./windows/FilesWindow";
@@ -53,14 +57,130 @@ import { ViewerWindow } from "./windows/ViewerWindow";
 import { KitWindow } from "./windows/KitWindow";
 import { VisualizeWindow } from "./windows/VisualizeWindow";
 import { useMemonAskMenu } from "./use-memon-ask-menu";
+import { useMemonExportDownloads } from "./use-export-downloads";
 
 const COMPACT_WIDTH = 600;
 
-const STATUS_BADGE: Record<MemonStatus, string> = {
-	working: "running",
-	idle: "completed",
-	paused: "stopped",
-	"waiting-for-user": "stopped",
+/** Blue while the bot drives, orange while the user does, neutral otherwise. */
+type StatusTone = "memon" | "you" | "idle";
+
+const statusTone = (status: MemonStatus, userDriving: boolean): StatusTone =>
+	userDriving || status === "waiting-for-user"
+		? "you"
+		: status === "working"
+			? "memon"
+			: "idle";
+
+const STATUS_TONES: Record<
+	StatusTone,
+	{ pill: string; dot: string; ping: boolean }
+> = {
+	memon: {
+		pill: "border-blue-500/40 bg-blue-500/10 text-blue-700 dark:text-blue-300",
+		dot: "bg-blue-500",
+		ping: true,
+	},
+	you: {
+		pill: "border-orange-400 bg-orange-400 text-orange-950",
+		dot: "bg-orange-950",
+		ping: false,
+	},
+	idle: {
+		pill: "border-border bg-muted/60 text-muted-foreground",
+		dot: "bg-muted-foreground/70",
+		ping: false,
+	},
+};
+
+const StatusPill: React.FC<{ tone: StatusTone; label: string }> = ({
+	tone,
+	label,
+}) => {
+	const style = STATUS_TONES[tone];
+	return (
+		<span
+			role="status"
+			className={cn(
+				"inline-flex h-8 shrink-0 items-center gap-2 rounded-full border pl-2.5 pr-3 text-[13px] font-semibold",
+				style.pill,
+			)}
+		>
+			<span className="relative flex h-2.5 w-2.5">
+				{style.ping ? (
+					<span
+						className={cn(
+							"absolute inset-0 animate-ping rounded-full opacity-60 motion-reduce:animate-none",
+							style.dot,
+						)}
+					/>
+				) : null}
+				<span className={cn("relative h-2.5 w-2.5 rounded-full", style.dot)} />
+			</span>
+			{label}
+		</span>
+	);
+};
+
+/** Header buttons: one colored primary action per state, the rest quiet. */
+const QUIET_BUTTON = "h-8 rounded-md text-[13px]";
+const SEGMENT =
+	"h-7 rounded-[4px] px-3 py-0 text-[13px] data-[state=active]:bg-background data-[state=active]:shadow-sm dark:data-[state=active]:bg-white/[0.12]";
+const YOU_BUTTON =
+	"h-8 rounded-md border-transparent bg-orange-400 text-[13px] font-semibold text-orange-950 hover:bg-orange-300 hover:text-orange-950";
+const MEMON_BUTTON =
+	"h-8 rounded-md border-transparent bg-blue-600 text-[13px] font-semibold text-white hover:bg-blue-500 hover:text-white";
+
+const DockButton: React.FC<{
+	app: MemonWindowApp;
+	label: string;
+	open?: MemonWindowState;
+	active: boolean;
+	compact: boolean;
+	disabled?: boolean;
+	reason?: string;
+	onClick: () => void;
+}> = ({ app, label, open, active, compact, disabled, reason, onClick }) => {
+	const Icon = MEMON_APP_ICONS[app];
+	const name = open ? `${label} · ${open.id}` : label;
+	return (
+		<button
+			type="button"
+			disabled={disabled}
+			title={disabled ? reason : name}
+			aria-label={name}
+			aria-current={active ? "true" : undefined}
+			onClick={onClick}
+			className={cn(
+				"group relative flex shrink-0 flex-col items-center justify-center gap-0.5 rounded-lg px-1.5 text-[11px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40",
+				compact ? "h-10 w-10" : "h-12 min-w-[60px]",
+				active
+					? "bg-blue-500/10 text-foreground"
+					: open
+						? "text-foreground hover:bg-muted"
+						: "text-muted-foreground hover:bg-muted hover:text-foreground",
+			)}
+		>
+			<span
+				className={cn(
+					"flex h-6 w-6 items-center justify-center rounded-md transition-transform duration-150 group-hover:-translate-y-px group-disabled:translate-y-0 motion-reduce:transition-none",
+					MEMON_APP_TINTS[app],
+				)}
+			>
+				<Icon size={14} />
+			</span>
+			{!compact ? (
+				<span className="max-w-[72px] truncate leading-tight">{label}</span>
+			) : null}
+			{open ? (
+				<span
+					className={cn(
+						"absolute bottom-px h-[3px] rounded-full",
+						active ? "w-4 bg-blue-500" : "w-1 bg-muted-foreground/60",
+					)}
+				/>
+			) : null}
+		</button>
+	);
 };
 
 const windowTitle = (
@@ -138,6 +258,8 @@ export const MemonComputerPanel: React.FC<{
 	const clearError = useMemonMachineStore((state) => state.clearError);
 	const [view, setView] = React.useState<"desktop" | "text">("desktop");
 	const desktopRef = React.useRef<HTMLDivElement>(null);
+	// Desktop plus dock: where the user's own cursor is drawn.
+	const areaRef = React.useRef<HTMLDivElement>(null);
 	const [capturing, setCapturing] = React.useState(false);
 	const [captureError, setCaptureError] = React.useState<string | null>(null);
 	const [captureMode, setCaptureMode] = React.useState<
@@ -147,6 +269,7 @@ export const MemonComputerPanel: React.FC<{
 	const width = useElementWidth(desktopRef);
 	const compact = width > 0 && width < COMPACT_WIDTH;
 	const askMenu = useMemonAskMenu(snapshot, desktopRef);
+	useMemonExportDownloads(snapshot?.files.exported);
 
 	React.useEffect(() => {
 		if (machineKey) void pull(machineKey);
@@ -288,12 +411,17 @@ export const MemonComputerPanel: React.FC<{
 
 	return (
 		<div className="flex h-full min-h-0 flex-col">
-			<div className="flex flex-wrap items-center gap-2 border-b bg-muted/10 px-4 py-2.5">
-				<CommandStatusBadge
-					status={STATUS_BADGE[snapshot.status]}
-					label={t(`memonComputer.status.${snapshot.status}`)}
-				/>
-				<span className="text-xs font-medium">{t("memonComputer.title")}</span>
+			<div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b bg-background px-3 py-2">
+				<div className="flex min-w-0 items-center gap-2.5">
+					<MemonLogo size={26} />
+					<span className="text-sm font-semibold tracking-tight">
+						{t("memonComputer.title")}
+					</span>
+					<StatusPill
+						tone={statusTone(snapshot.status, userDriving)}
+						label={t(`memonComputer.status.${snapshot.status}`)}
+					/>
+				</div>
 				<div className="ml-auto flex flex-wrap items-center gap-2">
 					<Tabs
 						value={view}
@@ -302,11 +430,12 @@ export const MemonComputerPanel: React.FC<{
 							setView(value as "desktop" | "text");
 						}}
 					>
-						<TabsList className="h-8">
-							<TabsTrigger value="desktop" className="px-3 text-xs">
+						{/* Same 32px height as the buttons beside it; segments fill it exactly. */}
+						<TabsList className="h-8 gap-0.5 rounded-md p-0.5">
+							<TabsTrigger value="desktop" className={SEGMENT}>
 								{t("memonComputer.desktopView")}
 							</TabsTrigger>
-							<TabsTrigger value="text" className="px-3 text-xs">
+							<TabsTrigger value="text" className={SEGMENT}>
 								{t("memonComputer.screenTextView")}
 							</TabsTrigger>
 						</TabsList>
@@ -317,7 +446,7 @@ export const MemonComputerPanel: React.FC<{
 								type="button"
 								variant="outline"
 								size="sm"
-								className="h-8 text-xs"
+								className={QUIET_BUTTON}
 								disabled={capturing}
 							>
 								{capturing ? (
@@ -364,11 +493,13 @@ export const MemonComputerPanel: React.FC<{
 							</DropdownMenuItem>
 						</DropdownMenuContent>
 					</DropdownMenu>
+					<span aria-hidden="true" className="mx-0.5 h-5 w-px bg-border" />
 					{userDriving ? (
 						<Button
 							type="button"
+							variant="outline"
 							size="sm"
-							className="h-8 text-xs"
+							className={MEMON_BUTTON}
 							onClick={() => void send("control.resume", { key })}
 						>
 							<Play size={13} />
@@ -380,7 +511,9 @@ export const MemonComputerPanel: React.FC<{
 								type="button"
 								variant="outline"
 								size="sm"
-								className="h-8 text-xs"
+								className={
+									snapshot.status === "paused" ? MEMON_BUTTON : QUIET_BUTTON
+								}
 								onClick={() =>
 									void send(
 										snapshot.status === "paused"
@@ -403,7 +536,9 @@ export const MemonComputerPanel: React.FC<{
 								type="button"
 								variant="outline"
 								size="sm"
-								className="h-8 text-xs"
+								className={
+									snapshot.status === "paused" ? QUIET_BUTTON : YOU_BUTTON
+								}
 								onClick={() => void send("control.takeover", { key })}
 							>
 								<Hand size={13} />
@@ -414,9 +549,9 @@ export const MemonComputerPanel: React.FC<{
 					{snapshot.status !== "working" ? (
 						<Button
 							type="button"
-							variant="outline"
+							variant="ghost"
 							size="sm"
-							className="h-8 text-xs"
+							className="h-8 rounded-md text-[13px] text-muted-foreground hover:bg-red-500/10 hover:text-red-600 dark:hover:text-red-400"
 							onClick={() => void send("machine.stop", { key })}
 						>
 							<Power size={13} />
@@ -445,15 +580,18 @@ export const MemonComputerPanel: React.FC<{
 				</button>
 			) : null}
 
-			<div className="relative flex min-h-0 flex-1 flex-col">
+			<div
+				ref={areaRef}
+				className="relative flex min-h-0 flex-1 flex-col overflow-hidden"
+			>
 				{/* biome-ignore lint/a11y/noStaticElementInteractions: right-click asks about what is under the pointer; every window's content stays reachable without it. */}
 				<div
 					ref={desktopRef}
 					onContextMenu={askMenu.onContextMenu}
-					className="relative min-h-0 flex-1 overflow-hidden bg-muted/20"
+					className="relative min-h-0 flex-1 overflow-hidden bg-muted/30 bg-[image:radial-gradient(hsl(var(--foreground)/0.07)_1px,transparent_1px)] [background-size:22px_22px]"
 				>
 					{view === "text" ? (
-						<pre className="absolute inset-0 overflow-auto whitespace-pre-wrap break-words bg-background px-4 py-3 font-mono text-[11px] leading-relaxed">
+						<pre className="absolute inset-0 overflow-auto whitespace-pre-wrap break-words bg-background px-5 py-4 font-mono text-xs leading-relaxed text-foreground/90">
 							{serializeScreen(snapshot)}
 						</pre>
 					) : (
@@ -462,31 +600,6 @@ export const MemonComputerPanel: React.FC<{
 								entries={snapshot.desktop}
 								onOpen={(path) => void send("files.open", { key, path })}
 							/>
-							{!visibleWindows.length ? (
-								<div className="flex h-full flex-col items-center justify-center gap-3 text-xs text-muted-foreground">
-									<span>{t("memonComputer.emptyDesktop")}</span>
-									<div className="flex flex-wrap justify-center gap-2">
-										{launchers.map((app) => {
-											const Icon = MEMON_APP_ICONS[app.id];
-											return (
-												<button
-													type="button"
-													key={app.id}
-													disabled={!app.available}
-													title={app.available ? undefined : app.reason}
-													onClick={() => openApp(app.id)}
-													className="flex w-20 flex-col items-center gap-1.5 rounded-md border border-transparent px-2 py-2 font-medium text-foreground transition-colors hover:border-border hover:bg-background disabled:opacity-50"
-												>
-													<span className="flex h-9 w-9 items-center justify-center rounded-md border bg-background">
-														<Icon size={16} />
-													</span>
-													{t(`memonComputer.apps.${app.id}`)}
-												</button>
-											);
-										})}
-									</div>
-								</div>
-							) : null}
 							{visibleWindows.map((window) => (
 								<MemonWindowFrame
 									key={window.id}
@@ -573,13 +686,16 @@ export const MemonComputerPanel: React.FC<{
 					)}
 					{askMenu.menu}
 					{userDriving ? (
-						<div className="absolute bottom-3 right-3 z-[9100] flex max-w-[calc(100%-1.5rem)] items-center gap-2 rounded-full bg-zinc-900/95 py-1.5 pl-3 pr-1.5 text-xs text-zinc-100 shadow-lg">
-							<span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400" />
+						<div className="absolute bottom-4 left-1/2 z-[9100] flex max-w-[calc(100%-1.5rem)] -translate-x-1/2 items-center gap-3 rounded-full border border-orange-400/80 bg-background/95 py-1.5 pl-3.5 pr-1.5 text-[13px] text-foreground shadow-xl shadow-black/15 backdrop-blur">
+							<span className="relative flex h-2.5 w-2.5 shrink-0">
+								<span className="absolute inset-0 animate-ping rounded-full bg-orange-400 opacity-60 motion-reduce:animate-none" />
+								<span className="relative h-2.5 w-2.5 rounded-full bg-orange-400" />
+							</span>
 							<span className="truncate">{t("memonComputer.userDriving")}</span>
 							<button
 								type="button"
 								onClick={() => void send("control.resume", { key })}
-								className="shrink-0 rounded-full bg-zinc-100 px-2.5 py-0.5 font-semibold text-zinc-900"
+								className="shrink-0 rounded-full bg-blue-600 px-3 py-1 text-xs font-semibold text-white transition-colors hover:bg-blue-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
 							>
 								{t("sandboxPanel.managedBrowserResume")}
 							</button>
@@ -587,52 +703,61 @@ export const MemonComputerPanel: React.FC<{
 					) : null}
 				</div>
 
-				<div className="flex h-11 shrink-0 items-center gap-1 overflow-x-auto border-t bg-background px-2">
-					{launchers.map((app) => {
-						const windowApp: MemonWindowApp = app.id;
-						const Icon = MEMON_APP_ICONS[windowApp];
-						const open = snapshot.windows.find(
-							(window) => window.app === windowApp,
-						);
-						const active =
-							open && open.id === snapshot.focusedWindowId && !open.minimized;
-						return (
-							<button
-								type="button"
-								key={app.id}
-								disabled={!app.available}
-								title={app.available ? undefined : app.reason}
-								onClick={() => openApp(windowApp)}
-								className={cn(
-									"flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-transparent px-2 text-xs font-medium transition-colors disabled:opacity-50",
-									active
-										? "border-blue-500/30 bg-blue-500/10 text-blue-500"
-										: open
-											? "text-foreground hover:bg-muted"
-											: "text-muted-foreground hover:bg-muted",
+				<nav
+					aria-label={t("memonComputer.title")}
+					className={cn(
+						"flex shrink-0 items-center overflow-x-auto overflow-y-hidden border-t bg-background px-2",
+						compact ? "h-12" : "h-14",
+					)}
+				>
+					<div className="mx-auto flex items-center gap-1">
+						{launchers.map((app) => {
+							const windowApp: MemonWindowApp = app.id;
+							const open = snapshot.windows.find(
+								(window) => window.app === windowApp,
+							);
+							return (
+								<DockButton
+									key={app.id}
+									app={windowApp}
+									label={t(`memonComputer.apps.${app.id}`)}
+									open={open}
+									active={Boolean(
+										open &&
+											open.id === snapshot.focusedWindowId &&
+											!open.minimized,
+									)}
+									compact={compact}
+									disabled={!app.available}
+									reason={app.reason}
+									onClick={() => openApp(windowApp)}
+								/>
+							);
+						})}
+						{snapshot.windows.some((window) => window.app === "editor") ? (
+							<DockButton
+								app="editor"
+								label={t("memonComputer.apps.editor")}
+								open={snapshot.windows.find(
+									(window) => window.app === "editor",
 								)}
-							>
-								<Icon size={14} />
-								{!compact ? t(`memonComputer.apps.${app.id}`) : null}
-								{open ? (
-									<span className="font-mono text-[10px] text-muted-foreground">
-										{open.id}
-									</span>
-								) : null}
-							</button>
-						);
-					})}
-					{snapshot.windows.some((window) => window.app === "editor") ? (
-						<button
-							type="button"
-							onClick={() => openApp("editor")}
-							className="flex h-8 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs font-medium hover:bg-muted"
-						>
-							{React.createElement(MEMON_APP_ICONS.editor, { size: 14 })}
-							{!compact ? t("memonComputer.apps.editor") : null}
-						</button>
-					) : null}
-				</div>
+								active={snapshot.windows.some(
+									(window) =>
+										window.app === "editor" &&
+										window.id === snapshot.focusedWindowId &&
+										!window.minimized,
+								)}
+								compact={compact}
+								onClick={() => openApp("editor")}
+							/>
+						) : null}
+					</div>
+				</nav>
+				<MemonUserCursor
+					areaRef={areaRef}
+					enabled={view === "desktop" && !captureMode}
+					label={t("memonComputer.you")}
+				/>
 			</div>
 		</div>
 	);

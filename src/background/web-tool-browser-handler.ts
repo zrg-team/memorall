@@ -158,8 +158,8 @@ const closeSurfaceArtifacts = async ({
 	windowId?: number;
 }): Promise<void> => {
 	if (typeof windowId === "number") {
-		// A session window can gain sibling tabs (the MemonOS Bot browser opens its
-		// later tabs there). Only remove the window with its last tab.
+		// A session window holds other sessions' tabs too (window-mode pages share
+		// one agent window). Only remove the window with its last tab.
 		const siblings = await chrome.tabs
 			.query({ windowId })
 			.catch(() => [] as chrome.tabs.Tab[]);
@@ -438,6 +438,55 @@ const openTabInWindow = async (
 	return { mode: "tab", tabId: tab.id };
 };
 
+/**
+ * The one window the agent's pages share. Every window-mode session opens as
+ * a tab here, so a run leaves one window to look at, not one per page.
+ */
+let agentWindowId: number | undefined;
+let agentWindowQueue: Promise<unknown> = Promise.resolve();
+
+const isOpenWindow = async (windowId: number): Promise<boolean> =>
+	Boolean(await chrome.windows.get(windowId).catch(() => null));
+
+/** The agent window still open, remembered or (after a restart) stored. */
+const findAgentWindow = async (): Promise<number | undefined> => {
+	if (typeof agentWindowId === "number" && (await isOpenWindow(agentWindowId)))
+		return agentWindowId;
+	agentWindowId = undefined;
+	for (const surface of (await loadStoredSurfaces()).values()) {
+		if (surface.mode !== "window" || typeof surface.windowId !== "number")
+			continue;
+		if (await isOpenWindow(surface.windowId)) {
+			agentWindowId = surface.windowId;
+			return agentWindowId;
+		}
+	}
+	return undefined;
+};
+
+const openInAgentWindow = (url: string): Promise<WebBrowserSurface> => {
+	// One at a time: two pages opened together would each make a window.
+	const opening = agentWindowQueue.then(async () => {
+		const windowId = await findAgentWindow();
+		if (typeof windowId === "number") {
+			try {
+				// Shown in its window, which stays where it is behind the user's.
+				const tab = await chrome.tabs.create({ url, windowId, active: true });
+				if (typeof tab.id === "number") {
+					return { mode: "window", tabId: tab.id, windowId } as const;
+				}
+			} catch {
+				// Closed in between; make a new one.
+			}
+		}
+		const surface = await openBrowserWindow(url);
+		agentWindowId = surface.windowId;
+		return surface;
+	});
+	agentWindowQueue = opening.catch(() => undefined);
+	return opening;
+};
+
 const openSurfaceForMode = async (
 	mode: "tab" | "window",
 	url: string,
@@ -452,7 +501,7 @@ const openSurfaceForMode = async (
 	}
 	if (mode === "window") {
 		try {
-			return await openBrowserWindow(url);
+			return await openInAgentWindow(url);
 		} catch {
 			return openBrowserTab(url);
 		}

@@ -18,12 +18,17 @@ import { logError } from "@/utils/logger";
 import { hasSecret } from "@/utils/master-key";
 import { isUuid } from "@/utils/uuid";
 import {
+	MEMON_APP_FEATURES,
+	MEMON_STEP_NAME,
+} from "@/services/memon/constants";
+import {
 	AGENT_WIZARD_TEMPLATES,
 	createBlankAgentWizardDraft,
 	draftFromTemplate,
 } from "../templates/agent-wizard-templates";
 import type {
 	AgentWizardCatalog,
+	AgentWizardComputerOffer,
 	AgentWizardConnectionInfo,
 	AgentWizardConnectionSetupKind,
 	AgentWizardDraft,
@@ -113,10 +118,12 @@ const applyToolCallsToDraft = (
 	draft: AgentWizardDraft;
 	notes: string[];
 	setupRequest: AgentWizardConnectionSetupRequest | null;
+	computerOffer: AgentWizardComputerOffer | null;
 } => {
 	let nextDraft = draft;
 	const notes: string[] = [];
 	let setupRequest: AgentWizardConnectionSetupRequest | null = null;
+	let computerOffer: AgentWizardComputerOffer | null = null;
 	for (const toolCall of toolCalls) {
 		if (!isAgentWizardToolName(toolCall.function.name)) continue;
 		try {
@@ -134,6 +141,13 @@ const applyToolCallsToDraft = (
 			if (patch.type === "setup_connection") {
 				setupRequest = { kind: patch.kind, toolkit: patch.toolkit };
 			}
+			// Also a card for the user: they turn MemonOS Bot on with one click.
+			if (patch.type === "offer_computer") {
+				computerOffer = { apps: patch.apps, reason: patch.reason };
+				notes.push(
+					"Showed the user a one-click card to turn on MemonOS Bot. Do not ask about it again; the draft shows it once they do.",
+				);
+			}
 			const applied = applyAgentWizardToolPatch(nextDraft, patch, catalog);
 			nextDraft = applied.draft;
 			notes.push(...applied.notes);
@@ -142,7 +156,7 @@ const applyToolCallsToDraft = (
 			notes.push("Ignored an invalid draft update from the model.");
 		}
 	}
-	return { draft: nextDraft, notes, setupRequest };
+	return { draft: nextDraft, notes, setupRequest, computerOffer };
 };
 
 const createToolResultContent = (notes: string[]): string =>
@@ -283,6 +297,10 @@ export const useAgentWizard = ({
 	const [composioKeySaved, setComposioKeySaved] = React.useState(false);
 	const [connectionSetup, setConnectionSetup] =
 		React.useState<AgentWizardConnectionSetupRequest | null>(null);
+	const [computerOffer, setComputerOffer] =
+		React.useState<AgentWizardComputerOffer | null>(null);
+	/** Dismissed once: a later offer in the same conversation stays hidden. */
+	const computerDeclinedRef = React.useRef(false);
 
 	React.useEffect(() => {
 		void initializeConnections();
@@ -473,6 +491,13 @@ export const useAgentWizard = ({
 					if (applied.setupRequest) {
 						setConnectionSetup(applied.setupRequest);
 					}
+					if (
+						applied.computerOffer &&
+						!computerDeclinedRef.current &&
+						!applied.draft.enabledFeatureNames.includes(MEMON_STEP_NAME)
+					) {
+						setComputerOffer(applied.computerOffer);
+					}
 					visibleContent = appendVisibleContent(
 						visibleContent,
 						result.toolCalls
@@ -636,6 +661,43 @@ export const useAgentWizard = ({
 		[onDraftChange],
 	);
 
+	/** One click: MemonOS Bot on, with the apps the wizard named. */
+	const acceptComputerOffer = React.useCallback(() => {
+		const offer = computerOffer;
+		if (!offer) return;
+		const features = [
+			MEMON_STEP_NAME,
+			...offer.apps.map((app) => MEMON_APP_FEATURES[app]),
+		].filter((name) => catalog.featureNames.includes(name));
+		const next: AgentWizardDraft = {
+			...draftRef.current,
+			enabledFeatureNames: [
+				...new Set([...draftRef.current.enabledFeatureNames, ...features]),
+			],
+		};
+		draftRef.current = next;
+		setDraft(next);
+		onDraftChange?.(next);
+		setComputerOffer(null);
+		setMessages((current) => [
+			...current,
+			createAssistantMessage(
+				"**MemonOS Bot is on** — this agent works on its own computer, and you can watch it or take over in Runtime → Computer.",
+			),
+		]);
+	}, [catalog.featureNames, computerOffer, onDraftChange]);
+
+	const dismissComputerOffer = React.useCallback(() => {
+		computerDeclinedRef.current = true;
+		setComputerOffer(null);
+		setMessages((current) => [
+			...current,
+			createAssistantMessage(
+				"Keeping this agent without MemonOS Bot. You can turn it on later in the agent's features.",
+			),
+		]);
+	}, []);
+
 	const requestClose = React.useCallback(() => {
 		if (
 			shouldConfirmClose &&
@@ -667,5 +729,8 @@ export const useAgentWizard = ({
 		openConnectionSetup: setConnectionSetup,
 		closeConnectionSetup: () => setConnectionSetup(null),
 		attachConnection,
+		computerOffer,
+		acceptComputerOffer,
+		dismissComputerOffer,
 	};
 };

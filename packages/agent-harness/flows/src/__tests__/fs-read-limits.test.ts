@@ -73,4 +73,17 @@ describe("fs_read limits", () => {
 
 		expect(await read(fs, "/folder")).toMatch(/is a directory/i);
 	});
+
+	it("does not hand back a binary file's bytes as text", async () => {
+		// A JPEG header: its NUL bytes, stored with the chat, failed the save.
+		const jpeg = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a]);
+		const result = await read(
+			makeFs({ readFile: async () => jpeg }),
+			"/projects/house-review/photo-00.jpg",
+		);
+
+		expect(result).toMatch(/is binary/);
+		expect(result).toContain("/projects/house-review/photo-00.jpg");
+		expect(result).not.toContain("\u0000");
+	});
 });

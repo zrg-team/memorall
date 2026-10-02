@@ -767,13 +767,24 @@ export const executeCommandSession = async (payload = {}) => {
 		}, Math.floor(payload.commandTimeoutMs));
 	}
 
+	// almostnode keeps one set of streaming callbacks, abort signal and stdin
+	// for the whole container: a command next to a running one must not take
+	// them, or the running one (a server) stops streaming. Its output comes
+	// with its result instead.
 	commandSession.runPromise = containerInstance
-		.run(executedCommand, {
-			cwd: commandSession.cwd,
-			onStdout: (data) => appendCommandChunk(commandSession, "stdout", data),
-			onStderr: (data) => appendCommandChunk(commandSession, "stderr", data),
-			signal: commandSession.abortController.signal,
-		})
+		.run(
+			executedCommand,
+			commandSession.alongside
+				? { cwd: commandSession.cwd }
+				: {
+						cwd: commandSession.cwd,
+						onStdout: (data) =>
+							appendCommandChunk(commandSession, "stdout", data),
+						onStderr: (data) =>
+							appendCommandChunk(commandSession, "stderr", data),
+						signal: commandSession.abortController.signal,
+					},
+		)
 		.then((result) => {
 			completeCommandSession(commandSession, {
 				exitCode: result?.exitCode ?? 0,

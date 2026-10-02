@@ -25,7 +25,7 @@ const schema = z.object({
 		.enum(["iframe", "tab", "window"])
 		.optional()
 		.describe(
-			"Open mode. `iframe` uses offscreen embedding; `tab`/`window` use browser-backed page access.",
+			"Open mode. Leave it out for a browser window (falls back to a tab); `tab` for a tab; `iframe` only for a local server (localhost or a sandbox preview), and on a public site it opens a window instead.",
 		),
 	timeoutMs: z
 		.number()
@@ -52,7 +52,7 @@ export const createWebOpenTool: ToolFactory<Input, WebToolServices> = (
 ): Tool<Input> => ({
 	name: TOOL_NAME,
 	description:
-		"Open a web URL in `iframe` or browser-backed `tab`/`window` mode, wait for the initial navigation load, and expose `sessionId` for follow-up actions. When `renderReady` is false the page timed out but partial content is included — inspect `partialContent` to decide whether to call `web_wait` then `web_read`, or skip this page. " +
+		"Open a web URL in a browser window (or `tab`; `iframe` only for a local server), wait for the initial navigation load, and expose `sessionId` for follow-up actions. When `renderReady` is false the page timed out but partial content is included — inspect `partialContent` to decide whether to call `web_wait` then `web_read`, or skip this page. " +
 		"If `blocked` is present the page is a bot wall (CAPTCHA, Cloudflare, rate limit or login gate), not the content: stop, tell the user what is blocking, and do not retry the same URL — the user has a button to solve it themselves.",
 	schema,
 	execute: async (input, context) => {

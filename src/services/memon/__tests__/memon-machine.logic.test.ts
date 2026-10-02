@@ -5,14 +5,15 @@ import {
 	type MemonFeatureConfig,
 } from "../feature-config";
 import type { MemonEmbeddedPort } from "../embedded-browser";
+import { MemonApprovalRequiredError } from "../approval-error";
 import {
-	MemonApprovalRequiredError,
 	MemonMachine,
 	type MemonPorts,
 	type MemonScheduleInput,
 	normalizeBrowserUrl,
 } from "../memon-machine";
 import type { MemonStudioRequest } from "../studio-app";
+import { runTerminalAction } from "../terminal/terminal-actions";
 import type { MemonSchedule } from "../types";
 
 const outline = (url: string, title: string): WebPageOutline => ({
@@ -120,6 +121,14 @@ const createPorts = () => {
 				if (dirs.has(from)) dirs.add(to);
 			}),
 			subscribe: vi.fn(() => () => undefined),
+			zip: vi.fn(async (folder: string) => ({
+				name: `${folder.split("/").pop()}.zip`,
+				bytes: new Uint8Array([0x50, 0x4b, 0x05, 0x06]),
+				fileCount: [...files.keys()].filter((path) =>
+					path.startsWith(`${folder}/`),
+				).length,
+				totalBytes: 5,
+			})),
 			preview: vi.fn(async (_path: string, kind: string) => ({
 				text:
 					kind === "pdf"
@@ -397,9 +406,9 @@ describe("MemonMachine", () => {
 	it("keeps the terminal working directory across commands", async () => {
 		const { machine, ports } = createMachine();
 
-		await machine.runCommand("cd /notes");
+		await machine.terminal.runCommand("cd /notes");
 		expect(ports.terminal.run).not.toHaveBeenCalled();
-		await machine.runCommand("ls");
+		await machine.terminal.runCommand("ls");
 
 		expect(ports.terminal.run).toHaveBeenCalledWith("ls", {
 			cwd: "/notes",
@@ -411,7 +420,9 @@ describe("MemonMachine", () => {
 	it("runs a cd chained with another command in the sandbox shell", async () => {
 		const { machine, ports } = createMachine();
 
-		await machine.runCommand("cd /notes/landing-page && node server.js");
+		await machine.terminal.runCommand(
+			"cd /notes/landing-page && node server.js",
+		);
 
 		expect(ports.terminal.run).toHaveBeenCalledWith(
 			"cd /notes/landing-page && node server.js",
@@ -451,20 +462,20 @@ describe("MemonMachine", () => {
 			stopped = true;
 		});
 
-		const run = machine.runCommand("node server.js", { waitMs: 500 });
+		const run = machine.terminal.runCommand("node server.js", { waitMs: 500 });
 		await vi.advanceTimersByTimeAsync(600);
 		await run;
-		expect(machine.servers).toEqual([3000]);
+		expect(machine.terminal.servers).toEqual([3000]);
 		await vi.advanceTimersByTimeAsync(1000);
 		expect(machine.snapshot().terminal.servers).toEqual([3000, 8080]);
 		expect(machine.readScreen()).toContain(
 			"serving http://localhost:3000, http://localhost:8080",
 		);
 
-		const stop = machine.stopCommand();
+		const stop = machine.terminal.stopCommand();
 		await vi.advanceTimersByTimeAsync(3_100);
 		await stop;
-		expect(machine.servers).toEqual([]);
+		expect(machine.terminal.servers).toEqual([]);
 	});
 
 	it("lets go of a command the sandbox no longer has, or that will not stop", async () => {
@@ -478,13 +489,13 @@ describe("MemonMachine", () => {
 			exitCode: null,
 			output: [],
 		});
-		await machine.runCommand("node stuck.js", { waitMs: 0 });
-		expect(machine.currentCommand).toBe("node stuck.js");
+		await machine.terminal.runCommand("node stuck.js", { waitMs: 0 });
+		expect(machine.terminal.running?.command).toBe("node stuck.js");
 		vi.mocked(ports.terminal.stop).mockRejectedValueOnce(
 			new Error("Unknown process: gone"),
 		);
-		await machine.stopCommand();
-		expect(machine.currentCommand).toBeNull();
+		await machine.terminal.stopCommand();
+		expect(machine.terminal.running).toBeNull();
 		expect(machine.snapshot().terminal.lastExitCode).toBe(130);
 
 		vi.mocked(ports.terminal.run).mockResolvedValueOnce({
@@ -493,11 +504,11 @@ describe("MemonMachine", () => {
 			exitCode: null,
 			output: [],
 		});
-		await machine.runCommand("node stuck.js", { waitMs: 0 });
-		const stop = machine.stopCommand();
+		await machine.terminal.runCommand("node stuck.js", { waitMs: 0 });
+		const stop = machine.terminal.stopCommand();
 		await vi.advanceTimersByTimeAsync(3_100);
 		await stop;
-		expect(machine.currentCommand).toBeNull();
+		expect(machine.terminal.running).toBeNull();
 		expect(machine.snapshot().terminal.lines.at(-1)?.text).toContain(
 			"the Terminal let it go",
 		);
@@ -551,7 +562,126 @@ describe("MemonMachine", () => {
 		);
 	});
 
-	it("runs a curl line next to a running server, and nothing else", async () => {
+	it("keeps each Terminal tab's directory and output, with one long command at a time", async () => {
+		const { machine, ports } = createMachine();
+		vi.mocked(ports.terminal.run).mockResolvedValueOnce({
+			processId: "server",
+			running: true,
+			exitCode: null,
+			output: [{ kind: "stdout", text: "listening on 3000" }],
+		});
+		vi.mocked(ports.terminal.read).mockImplementation(
+			() => new Promise(() => undefined),
+		);
+		await machine.terminal.runCommand("node server.js", { waitMs: 0 });
+
+		const second = machine.terminal.openTab();
+		expect(second).toBe("2");
+		expect(machine.snapshot().terminal).toMatchObject({
+			activeTabId: "2",
+			runningTabId: "1",
+			lines: [],
+			tabs: [
+				{ id: "1", cwd: "/", running: true },
+				{ id: "2", cwd: "/", running: false },
+			],
+		});
+
+		await machine.terminal.runCommand("cd notes");
+		await expect(machine.terminal.runCommand("ls")).resolves.toMatchObject({
+			alongside: true,
+			exitCode: 0,
+		});
+		expect(ports.terminal.run).toHaveBeenLastCalledWith(
+			"ls",
+			expect.objectContaining({ cwd: "/notes" }),
+		);
+		const tab2 = machine.snapshot().terminal;
+		expect(tab2.cwd).toBe("/notes");
+		expect(tab2.lines.map((line) => line.text)).toEqual([
+			"cd notes",
+			"ls",
+			"ran ls",
+		]);
+		expect(machine.readScreen()).toContain("tab 1 is running `node server.js`");
+		await expect(machine.terminal.runCommand("npm test")).rejects.toThrow(
+			"`node server.js` is still running in Terminal tab 1",
+		);
+
+		// The server's tab kept its own directory and output.
+		machine.terminal.selectTab("1");
+		expect(machine.snapshot().terminal).toMatchObject({ cwd: "/" });
+		expect(machine.snapshot().terminal.lines.map((line) => line.text)).toEqual([
+			"node server.js",
+			"listening on 3000",
+		]);
+
+		// Closing the server's tab stops it; the other tab comes to the front.
+		const close = machine.terminal.closeTab("1");
+		await vi.advanceTimersByTimeAsync(3_100);
+		await close;
+		expect(ports.terminal.stop).toHaveBeenCalledWith(
+			"server",
+			"conversation-1",
+		);
+		expect(machine.terminal.running).toBeNull();
+		expect(machine.snapshot().terminal).toMatchObject({
+			activeTabId: "2",
+			runningTabId: null,
+			tabs: [{ id: "2", cwd: "/notes", running: false }],
+		});
+		await machine.terminal.runCommand("npm test");
+		expect(ports.terminal.run).toHaveBeenLastCalledWith(
+			"npm test",
+			expect.objectContaining({ cwd: "/notes" }),
+		);
+	});
+
+	it("lets the agent open, switch, read and close Terminal tabs with memon_run", async () => {
+		const { machine, ports } = createMachine();
+		vi.mocked(ports.terminal.run).mockResolvedValueOnce({
+			processId: "server",
+			running: true,
+			exitCode: null,
+			output: [{ kind: "stdout", text: "listening on 3000" }],
+		});
+		vi.mocked(ports.terminal.read).mockImplementation(
+			() => new Promise(() => undefined),
+		);
+		await machine.terminal.runCommand("node server.js", { waitMs: 0 });
+
+		await expect(
+			runTerminalAction(machine.terminal, { command: "ls", terminal: "new" }),
+		).resolves.toContain("(Terminal tab 1), which keeps running");
+		expect(machine.terminal.activeTabId).toBe("2");
+		// The server's output stays on screen while tab 2 is in front.
+		const screen = machine.readScreen();
+		expect(screen).toContain("tab 1's latest output");
+		expect(screen).toContain("  | listening on 3000");
+		expect(screen).toContain("[2] /");
+
+		await expect(
+			runTerminalAction(machine.terminal, { terminal: "2", stop: true }),
+		).rejects.toThrow("Nothing runs in Terminal tab 2");
+		await expect(
+			runTerminalAction(machine.terminal, { terminal: "1" }),
+		).resolves.toContain("Terminal tab 1 is in front.");
+		expect(machine.snapshot().terminal.lines.map((line) => line.text)).toEqual([
+			"node server.js",
+			"listening on 3000",
+		]);
+		expect(machine.readScreen()).not.toContain("latest output");
+
+		await expect(
+			runTerminalAction(machine.terminal, { terminal: "2", closeTab: true }),
+		).resolves.toContain("Closed Terminal tab 2; tab 1 is in front.");
+		expect(machine.snapshot().terminal.tabs.map((tab) => tab.id)).toEqual([
+			"1",
+		]);
+		expect(machine.terminal.running?.command).toBe("node server.js");
+	});
+
+	it("runs curl and the shell's tools next to a running server, and nothing else", async () => {
 		const { machine, ports } = createMachine();
 		vi.mocked(ports.terminal.run)
 			.mockResolvedValueOnce({
@@ -564,32 +694,69 @@ describe("MemonMachine", () => {
 				running: false,
 				exitCode: 0,
 				output: [{ kind: "stdout", text: '{"ok":true}' }],
+			})
+			.mockResolvedValueOnce({
+				running: false,
+				exitCode: 0,
+				output: [{ kind: "stdout", text: "server.js" }],
+			})
+			.mockResolvedValueOnce({
+				running: false,
+				exitCode: 0,
+				output: [{ kind: "stdout", text: "/" }],
 			});
 		vi.mocked(ports.terminal.read).mockImplementation(
 			() => new Promise(() => undefined),
 		);
-		await machine.runCommand("node server.js", { waitMs: 0 });
-		expect(machine.currentCommand).toBe("node server.js");
+		await machine.terminal.runCommand("node server.js", { waitMs: 0 });
+		expect(machine.terminal.running?.command).toBe("node server.js");
 
-		const outcome = await machine.runCommand("curl -s localhost:3000/api");
+		const outcome = await machine.terminal.runCommand(
+			"curl -s localhost:3000/api",
+		);
 		expect(outcome).toMatchObject({ alongside: true, exitCode: 0 });
 		expect(ports.terminal.run).toHaveBeenLastCalledWith(
 			"curl -s localhost:3000/api",
 			expect.objectContaining({ cwd: "/" }),
 		);
-		expect(machine.currentCommand).toBe("node server.js");
+		expect(machine.terminal.running?.command).toBe("node server.js");
 		expect(
 			machine.snapshot().terminal.lines.map((line) => line.text),
 		).toContain('{"ok":true}');
-		await expect(machine.runCommand("ls")).rejects.toThrow(
-			"`node server.js` is still running in the Terminal.",
+
+		await expect(
+			machine.terminal.runCommand("ls -la | grep js"),
+		).resolves.toMatchObject({ alongside: true, exitCode: 0 });
+		expect(machine.terminal.running?.command).toBe("node server.js");
+		expect(
+			machine.snapshot().terminal.lines.map((line) => line.text),
+		).toContain("server.js");
+
+		// The user's input line: a shell tool runs, anything else is stdin.
+		await machine.terminal.enterLine("pwd");
+		expect(ports.terminal.run).toHaveBeenLastCalledWith(
+			"pwd",
+			expect.objectContaining({ cwd: "/" }),
 		);
+		await machine.terminal.enterLine("y");
+		expect(ports.terminal.input).toHaveBeenCalledWith(
+			"server",
+			"y",
+			"conversation-1",
+		);
+
+		await expect(machine.terminal.runCommand("node other.js")).rejects.toThrow(
+			"`node server.js` is still running in this Terminal tab",
+		);
+		await expect(
+			machine.terminal.runCommand("echo $(node other.js)"),
+		).rejects.toThrow("`node server.js` is still running in this Terminal tab");
 	});
 
 	it("puts the agent's install in front of the user and runs it once approved", async () => {
 		const { machine, ports } = createMachine();
 
-		const run = machine.runCommand("npm install zod");
+		const run = machine.terminal.runCommand("npm install zod");
 		await vi.advanceTimersByTimeAsync(0);
 		const approval = machine.snapshot().terminal.approval;
 		expect(approval).toMatchObject({
@@ -602,7 +769,7 @@ describe("MemonMachine", () => {
 		);
 		expect(ports.terminal.run).not.toHaveBeenCalled();
 
-		await machine.answerApproval(approval!.id, "approve");
+		await machine.terminal.answerApproval(approval!.id, "approve");
 		await expect(run).resolves.toMatchObject({ running: false, exitCode: 0 });
 		expect(ports.terminal.run).toHaveBeenCalledTimes(1);
 		expect(machine.snapshot().terminal.approval).toBeNull();
@@ -613,12 +780,12 @@ describe("MemonMachine", () => {
 			askBefore: { forms: true, installs: true, deletes: true },
 		});
 
-		const declined = machine.runCommand("rm -rf /notes", {});
+		const declined = machine.terminal.runCommand("rm -rf /notes", {});
 		const declinedResult = expect(declined).rejects.toThrow(
 			"The user declined to run `rm -rf /notes`.",
 		);
 		await vi.advanceTimersByTimeAsync(0);
-		await machine.answerApproval(
+		await machine.terminal.answerApproval(
 			machine.snapshot().terminal.approval!.id,
 			"deny",
 		);
@@ -626,7 +793,7 @@ describe("MemonMachine", () => {
 		expect(machine.snapshot().terminal.approval).toBeNull();
 
 		// Unanswered, the request stays for the user to run later.
-		const unanswered = machine.runCommand("npm install zod");
+		const unanswered = machine.terminal.runCommand("npm install zod");
 		const unansweredResult = expect(unanswered).rejects.toBeInstanceOf(
 			MemonApprovalRequiredError,
 		);
@@ -634,13 +801,13 @@ describe("MemonMachine", () => {
 		await unansweredResult;
 		const waiting = machine.snapshot().terminal.approval;
 		expect(waiting).toMatchObject({ agentWaiting: false });
-		await machine.answerApproval(waiting!.id, "approve");
+		await machine.terminal.answerApproval(waiting!.id, "approve");
 		expect(ports.terminal.run).toHaveBeenCalledWith(
 			"npm install zod",
 			expect.objectContaining({ cwd: "/" }),
 		);
 
-		const stopped = machine.runCommand("npm install lodash");
+		const stopped = machine.terminal.runCommand("npm install lodash");
 		const stoppedResult = expect(stopped).rejects.toThrow(
 			"The user stopped the run before answering.",
 		);
@@ -680,7 +847,7 @@ describe("MemonMachine", () => {
 			queue.push({ running: false, exitCode: 130, output: [] });
 		});
 
-		const run = machine.runCommand("npm install -g pkg", {
+		const run = machine.terminal.runCommand("npm install -g pkg", {
 			byUser: true,
 			waitMs: 2_000,
 		});
@@ -701,11 +868,13 @@ describe("MemonMachine", () => {
 		expect(machine.snapshot().terminal.lines.map((line) => line.text)).toEqual(
 			expect.arrayContaining(["fetching", "Ok to proceed? (y)"]),
 		);
-		await expect(machine.runCommand("ls", { byUser: true })).rejects.toThrow(
-			"`npm install -g pkg` is still running in the Terminal.",
+		await expect(
+			machine.terminal.runCommand("npm run build", { byUser: true }),
+		).rejects.toThrow(
+			"`npm install -g pkg` is still running in this Terminal tab",
 		);
 
-		await machine.sendCommandInput("y");
+		await machine.terminal.sendInput("y");
 		expect(ports.terminal.input).toHaveBeenCalledWith(
 			"p1",
 			"y",
@@ -713,10 +882,10 @@ describe("MemonMachine", () => {
 		);
 		expect(machine.readScreen()).toContain("> y");
 
-		const stop = machine.stopCommand();
+		const stop = machine.terminal.stopCommand();
 		await vi.advanceTimersByTimeAsync(1_500);
 		await stop;
-		expect(machine.waitForCommand(10)).resolves.toBe(true);
+		expect(machine.terminal.waitForCommand(10)).resolves.toBe(true);
 		expect(machine.snapshot().terminal).toMatchObject({
 			runningCommand: null,
 			lastExitCode: 130,
@@ -1181,8 +1350,8 @@ describe("MemonMachine", () => {
 			DEFAULT_MEMON_FEATURE_CONFIG,
 		);
 
-		await machine.runCommand("node server.js", { waitMs: 0 });
-		await machine.stopCommand();
+		await machine.terminal.runCommand("node server.js", { waitMs: 0 });
+		await machine.terminal.stopCommand();
 		expect(stopServer).toHaveBeenCalledTimes(1);
 		expect(stopServer).toHaveBeenCalledWith(3000);
 		expect([...listening]).toEqual([5173]);
@@ -1265,7 +1434,7 @@ describe("MemonMachine", () => {
 		await machine.showBrowserTab();
 		expect(ports.browser.focus).not.toHaveBeenCalled();
 
-		await machine.checkServers();
+		await machine.terminal.checkServers();
 		machine.focusWindow(machine.openWindow("terminal").id);
 		expect(machine.readScreen()).toContain(
 			"serving http://localhost:3000 — a server keeps running",
@@ -1391,6 +1560,37 @@ describe("MemonMachine", () => {
 		});
 		await expect(machine.openUrl("https://example.com")).rejects.toThrow(
 			/turned off/,
+		);
+	});
+});
+
+describe("MemonMachine zipping a folder for the user", () => {
+	it("zips into Downloads and hands each zip to the user once", async () => {
+		const { machine, ports, files } = createMachine();
+
+		const saved = await machine.exportFolderZip("/notes");
+		expect(saved).toMatchObject({
+			path: `${machine.home}/Downloads/notes.zip`,
+			fileCount: 1,
+		});
+		expect(ports.files.zip).toHaveBeenCalledWith("/notes");
+		expect(files.has(saved.path)).toBe(true);
+		expect(machine.snapshot().files.exported).toMatchObject({
+			id: 1,
+			path: saved.path,
+			name: "notes.zip",
+		});
+
+		// A second zip does not overwrite the first, and is a new download.
+		const again = await machine.exportFolderZip("/notes");
+		expect(again.path).not.toBe(saved.path);
+		expect(machine.snapshot().files.exported?.id).toBe(2);
+	});
+
+	it("takes a folder, not a file", async () => {
+		const { machine } = createMachine();
+		await expect(machine.exportFolderZip("/notes/a.md")).rejects.toThrow(
+			"is not a folder",
 		);
 	});
 });

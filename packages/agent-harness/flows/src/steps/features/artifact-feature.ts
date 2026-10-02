@@ -1,7 +1,4 @@
-import {
-	defineStep,
-	bindStep,
-} from "../../interfaces/engine/step.js";
+import { defineStep, bindStep } from "../../interfaces/engine/step.js";
 import type {
 	BoundStep,
 	StepFactoryFromSpec,
@@ -9,11 +6,7 @@ import type {
 } from "../../interfaces/engine/step.js";
 import { logError } from "../../logging/logger.js";
 import { stepRegistry } from "../../registries/step-registry.js";
-import {
-	GraphBase,
-	hostTool,
-	type GraphTool,
-} from "../../graph/graph.base.js";
+import { GraphBase, hostTool, type GraphTool } from "../../graph/graph.base.js";
 import type { ChatCompletionMessageParam } from "../../interfaces/engine/messages.js";
 
 const STEP_NAME = "artifact-feature" as const;
@@ -51,6 +44,12 @@ Call the tool with:
 - \`title\`: optional display title
 
 The tool appends a standard \`<artifact identifier="..." type="..." title="...">...</artifact>\` assistant message to graph output state. Its normal tool result is only for model context, so do not print or repeat artifact tags yourself.
+
+## Images and other files in an HTML artifact
+- A file saved in Files is shown by its full path from "/", written straight into an inline tag: \`<img src="/projects/house-review/photo-00.jpg" alt="Living room">\`. The same works for \`<video>\`, \`<audio>\`, \`<source>\` and CSS \`url("/…")\`. The preview loads the file from Files.
+- Write one tag per image in the HTML itself. Do not build the gallery with JavaScript, do not \`fetch()\` files, do not probe localhost or other servers, and do not add remote fallbacks: none of that is needed, and it breaks the preview.
+- Always the full path: a relative \`photo-00.jpg\` does not resolve.
+- An image already saved in Files is shown from its path, not its original web URL.
 `;
 
 export const ARTIFACT_FEATURE_SYSTEM_PROMPT = SYSTEM_PROMPT_INSTRUCTION.trim();

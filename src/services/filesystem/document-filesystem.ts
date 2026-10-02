@@ -250,9 +250,16 @@ export class DocumentFileSystem {
 		}
 	}
 
+	/**
+	 * Reload the store, then drop cached listings. Clearing first would let a
+	 * read made before the reload fill the cache with the old tree again.
+	 */
 	private async invalidateCacheAndRefreshFs(): Promise<void> {
-		this.invalidateCache();
-		await refreshFsCache();
+		try {
+			await refreshFsCache();
+		} finally {
+			this.invalidateCache();
+		}
 	}
 
 	/**
@@ -310,19 +317,24 @@ export class DocumentFileSystem {
 			logInfo(
 				`📢 Received FILESYSTEM_CHANGED (${this.changeListeners.size} listeners)`,
 			);
-			this.invalidateCacheAndRefreshFs().catch((err) => {
-				logError("Failed to refresh FS cache:", err);
-			});
-			let notifiedCount = 0;
-			this.changeListeners.forEach((cb) => {
-				try {
-					cb(change);
-					notifiedCount++;
-				} catch (err) {
-					logError("Error in filesystem change listener:", err);
-				}
-			});
-			logInfo(`✅ Notified ${notifiedCount} local listeners`);
+			// Listeners hear about the change once this context can see it. Told
+			// any earlier, they re-read the tree from the store loaded before it.
+			this.invalidateCacheAndRefreshFs()
+				.catch((err) => {
+					logError("Failed to refresh FS cache:", err);
+				})
+				.finally(() => {
+					let notifiedCount = 0;
+					this.changeListeners.forEach((cb) => {
+						try {
+							cb(change);
+							notifiedCount++;
+						} catch (err) {
+							logError("Error in filesystem change listener:", err);
+						}
+					});
+					logInfo(`✅ Notified ${notifiedCount} local listeners`);
+				});
 		}
 	};
 

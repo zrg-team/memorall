@@ -5,7 +5,10 @@ import type {
 import { toolRegistry } from "@memorall/agent-harness-flows/registries/tool-registry";
 import z from "zod";
 import { MEMON_RUN_TOOL } from "@/services/memon/constants";
-import type { MemonMachine } from "@/services/memon/memon-machine";
+import {
+	runTerminalAction,
+	terminalActionLabel,
+} from "@/services/memon/terminal/terminal-actions";
 import { runMemonTool } from "./memon-tool-utils";
 
 const schema = z
@@ -26,7 +29,21 @@ const schema = z
 		cwd: z
 			.string()
 			.optional()
-			.describe("Working directory; defaults to the Terminal's current one."),
+			.describe(
+				"Working directory; defaults to the Terminal tab's current one.",
+			),
+		terminal: z
+			.string()
+			.optional()
+			.describe(
+				'Terminal tab to work in, e.g. "2", or "new" to open one; it comes to the front so the screen shows its output. Alone, it only switches to that tab. Defaults to the tab in front.',
+			),
+		closeTab: z
+			.boolean()
+			.optional()
+			.describe(
+				"Close the Terminal tab given by terminal (default: the tab in front), stopping the command running in it.",
+			),
 		waitSeconds: z
 			.number()
 			.min(1)
@@ -37,94 +54,26 @@ const schema = z
 			),
 	})
 	.describe(
-		"Run, wait for, type into, or stop a command in the computer's Terminal.",
+		"Run, wait for, type into, or stop a command in the computer's Terminal, and open, switch or close its tabs.",
 	);
 
 type Input = z.infer<typeof schema>;
 
-/** Quiet this long, a running command may just be finished. */
-const QUIET_HINT_MS = 5_000;
-
-const formatElapsed = (ms: number | null): string => {
-	if (ms === null) return "";
-	const seconds = Math.round(ms / 1000);
-	return seconds < 60
-		? `${seconds}s`
-		: `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
-};
-
-/** Where the command stands after the call. */
-const status = (machine: MemonMachine, done: string): string => {
-	const running = machine.currentCommand;
-	if (!running) return done;
-	const quietMs = machine.commandQuietMs ?? 0;
-	const servers = machine.servers;
-	// The sandbox cannot tell a finished script from a waiting one: a script
-	// that never calls process.exit keeps "running". A server is meant to.
-	const quiet = servers.length
-		? ` It serves ${servers.map((port) => `http://localhost:${port}`).join(", ")}; leave it running and open that address in the Browser to see the page.`
-		: quietMs >= QUIET_HINT_MS
-			? ` It has printed nothing for ${formatElapsed(quietMs)}; if its work is done, stop it.`
-			: "";
-	return `\`${running}\` is still running (${formatElapsed(machine.commandElapsedMs)}); its output streams into the Terminal.${quiet} Call memon_run with no command to keep waiting, input to answer a prompt, or stop: true to stop it.`;
-};
-
-const apply = async (machine: MemonMachine, input: Input): Promise<string> => {
-	const waitMs = (input.waitSeconds ?? 10) * 1000;
-	if (input.command) {
-		const outcome = await machine.runCommand(input.command, {
-			cwd: input.cwd,
-			waitMs,
-		});
-		if (outcome.alongside) {
-			return `Ran \`${input.command}\` (exit ${outcome.exitCode ?? "?"}) next to \`${machine.currentCommand}\`, which keeps running.`;
-		}
-		return status(
-			machine,
-			`Ran \`${input.command}\` (exit ${outcome.exitCode ?? "?"}).`,
-		);
-	}
-	if (input.stop) {
-		await machine.stopCommand();
-		return status(machine, "Stopped the command.");
-	}
-	if (input.input !== undefined) {
-		await machine.sendCommandInput(input.input);
-		await machine.waitForCommand(waitMs);
-		return status(machine, `Typed "${input.input}"; the command finished.`);
-	}
-	if (!machine.currentCommand) {
-		if (!input.waitSeconds) {
-			return "Nothing is running in the Terminal; pass command to run one.";
-		}
-		await new Promise((resolve) => setTimeout(resolve, waitMs));
-		return `Waited ${input.waitSeconds}s; nothing is running in the Terminal.`;
-	}
-	await machine.waitForCommand(waitMs);
-	return status(machine, "The command finished.");
-};
-
 export const createMemonRunTool: ToolFactory<Input> = (): Tool<Input> => ({
 	name: MEMON_RUN_TOOL,
 	description:
-		'Run a shell command in the Terminal window (the same "/" tree as Files) and return its output with the screen. Long commands keep running and streaming: call again to wait, type into them, or stop them. `cd dir` changes the working directory for later commands.',
+		'Run a shell command in the Terminal window (the same "/" tree as Files) and return its output with the screen. Long commands keep running and streaming: call again to wait, type into them, or stop them. The Terminal has tabs, each with its own working directory; `cd dir` changes the tab\'s directory for later commands. One long command (a server) runs at a time; while it does, file and text commands (ls, cat, mkdir, grep…), curl, git and py still run next to it in any tab; anything else waits for it.',
 	schema,
 	execute: (input, context) =>
 		runMemonTool(
 			MEMON_RUN_TOOL,
 			context,
-			input.command
-				? `Running ${input.command.length > 40 ? `${input.command.slice(0, 39)}…` : input.command}`
-				: input.stop
-					? "Stopping the command"
-					: input.input !== undefined
-						? "Typing into the command"
-						: "Waiting for the command",
+			terminalActionLabel(input),
 			(machine) => ({
 				windowId: machine.findWindow("terminal")?.id,
 				ref: "t1",
 			}),
-			(machine) => apply(machine, input),
+			(machine) => runTerminalAction(machine.terminal, input),
 		),
 });
 

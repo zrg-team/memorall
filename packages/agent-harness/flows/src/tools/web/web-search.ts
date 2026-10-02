@@ -26,7 +26,9 @@ const schema = z
 		browserMode: z
 			.enum(["iframe", "tab", "window"])
 			.optional()
-			.describe("Open mode when no sessionId is provided."),
+			.describe(
+				"Open mode when no sessionId is provided. Leave it out for a window; `iframe` only for a local server.",
+			),
 		pattern: z
 			.string()
 			.min(1)

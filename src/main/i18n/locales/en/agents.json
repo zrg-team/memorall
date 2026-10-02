@@ -480,6 +480,12 @@
 			"customSetup": "Custom setup",
 			"noStarterSkills": "No starter skills"
 		},
+		"computerOffer": {
+			"title": "Give this agent a computer?",
+			"description": "MemonOS Bot runs the agent on its own computer: you watch it work live and can take over at any time.",
+			"turnOn": "Turn on",
+			"notNow": "Not now"
+		},
 		"chatPanel": {
 			"presets": "Presets",
 			"title": "Build agent with AI",

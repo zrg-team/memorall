@@ -33,6 +33,11 @@ import {
 	replaceArtifactContent,
 	type RuntimeArtifact,
 } from "@/main/modules/chat/components/artifacts/artifact-protocol";
+import { HtmlArtifactFrame } from "@/main/modules/chat/components/artifacts/HtmlArtifactFrame";
+import {
+	findRuntimeArtifact,
+	readRuntimeArtifactTarget,
+} from "@/main/modules/chat/components/artifacts/runtime-artifact-state";
 import { cn } from "@/lib/utils";
 import { platform } from "@/platform/current";
 
@@ -217,11 +222,10 @@ const RuntimeArtifactViewer: React.FC<{
 					</div>
 				) : artifact.type === "html" && mode === "preview" ? (
 					renderConfirmed ? (
-						<iframe
-							srcDoc={draft}
-							sandbox="allow-scripts allow-same-origin"
+						<HtmlArtifactFrame
+							html={draft}
+							projectPath={artifact.projectPath}
 							className="h-full min-h-[420px] w-full bg-white"
-							style={{ border: "none" }}
 							title={title}
 						/>
 					) : (
@@ -378,6 +382,19 @@ export const RuntimePage: React.FC = () => {
 		setSelectedArtifactId(null);
 		setSection("runtime");
 	}, [artifacts, hasArtifacts, selectedArtifactId, section]);
+
+	// An artifact a message pointed at: shown once per click, so picking
+	// another one afterwards sticks.
+	const shownTargetRef = useRef<string | null>(null);
+	useEffect(() => {
+		const target = readRuntimeArtifactTarget(location.state);
+		if (!target || shownTargetRef.current === location.key) return;
+		const artifact = findRuntimeArtifact(artifacts, target);
+		if (!artifact) return;
+		shownTargetRef.current = location.key;
+		setSelectedArtifactId(artifact.id);
+		setSection("artifacts");
+	}, [artifacts, location.key, location.state]);
 
 	// A chat with a MemonOS Bot agent opens on its computer, once, unless there
 	// are outputs to show. Runs after the effect above so it wins on mount.

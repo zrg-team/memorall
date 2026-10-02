@@ -4,6 +4,7 @@ import { Save, Check } from "lucide-react";
 import { logError } from "@/utils/logger";
 import { DocumentSaveFolderDialog } from "../DocumentSaveFolderDialog";
 import { ArtifactActionsMenu, type ArtifactProps } from "./ArtifactActionsMenu";
+import { HtmlArtifactFrame } from "./HtmlArtifactFrame";
 
 type SaveState = "idle" | "saving" | "saved";
 
@@ -20,6 +21,7 @@ export const HtmlArtifact: React.FC<ArtifactProps> = ({
 	content,
 	identifier,
 	title,
+	projectPath,
 }) => {
 	const [saveState, setSaveState] = useState<SaveState>("idle");
 	const [saveDialogOpen, setSaveDialogOpen] = useState(false);
@@ -68,12 +70,12 @@ export const HtmlArtifact: React.FC<ArtifactProps> = ({
 					setSaveState("idle");
 				}}
 			/>
-			<iframe
-				srcDoc={content}
-				sandbox="allow-scripts allow-same-origin"
-				className="w-full bg-white"
-				style={{ height: "60vh", border: "none" }}
+			<HtmlArtifactFrame
+				html={content}
+				projectPath={projectPath}
 				title={title || t("htmlPreview.title")}
+				className="w-full bg-white"
+				style={{ height: "60vh" }}
 			/>
 		</div>
 	);

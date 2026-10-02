@@ -52,10 +52,9 @@ const mounted = new Map<string, MountedRecord>();
  * Attach every mapped folder to the virtual filesystem, detaching any that the
  * user has since removed.
  *
- * Safe and cheap to call repeatedly, which matters because `refreshFsCache()`
- * tears the whole ZenFS configuration down and rebuilds it from two static
- * mounts. Anything mounted dynamically would vanish there, so this is called
- * again afterwards to put the mapped folders back. On platforms with no native
+ * Safe and cheap to call repeatedly: `refreshFsCache()` calls it after every
+ * reload of `/home`, and `configure()` at startup rebuilds ZenFS from two
+ * static mounts, which would drop anything mounted dynamically. On platforms with no native
  * filesystem it returns before importing anything, so the backend never reaches
  * the web or extension bundles.
  */

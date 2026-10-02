@@ -59,6 +59,7 @@ import {
 	useAgentComputer,
 	useMemonAutoOpen,
 } from "@/main/components/molecules/MemonComputer";
+import { useMemonMachineStore } from "@/main/stores/memon-machine";
 import { useShellLayoutStore } from "@/main/stores/shell-layout";
 import { useWebChallengeHandoffStore } from "@/main/stores/web-challenge-handoff";
 import { serviceManager } from "@/services";
@@ -179,6 +180,15 @@ export const ChatPage: React.FC<ChatPageProps> = ({
 		selectedAgentComputer,
 	);
 	useMemonAutoOpen(selectedAgentFlowId);
+	const setMemonChatAgent = useMemonMachineStore((state) => state.setChatAgent);
+	React.useEffect(() => {
+		setMemonChatAgent(
+			selectedAgentFlowId && selectedAgentComputer
+				? { agentId: selectedAgentFlowId, config: selectedAgentComputer }
+				: null,
+		);
+		return () => setMemonChatAgent(null);
+	}, [selectedAgentFlowId, selectedAgentComputer, setMemonChatAgent]);
 	// The run shows only in the chat it belongs to.
 	const visibleInProgressMessage =
 		inProgressMessage &&

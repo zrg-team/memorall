@@ -33,7 +33,9 @@ const schema = z.object({
 	browserMode: z
 		.enum(["iframe", "tab", "window"])
 		.optional()
-		.describe("Open mode when opening by URL. Default: tab."),
+		.describe(
+			"Open mode when opening by URL. Leave it out for a window; `iframe` only for a local server.",
+		),
 	file_path: z
 		.string()
 		.optional()
@@ -72,7 +74,7 @@ export const createWebScreenshotTool: ToolFactory<Input, Services> = (
 			const { session, disposable } = await webBrowser.getOrOpenSession({
 				sessionId: input.sessionId,
 				url: input.url,
-				browserMode: input.browserMode ?? "tab",
+				browserMode: input.browserMode,
 				timeoutMs: input.timeoutMs ?? 15_000,
 			});
 

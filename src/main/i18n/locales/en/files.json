@@ -17,7 +17,8 @@
 		"deleteItemError": "Failed to delete item",
 		"renameItemError": "Failed to rename item",
 		"deleteFileError": "Failed to delete file",
-		"downloadFileError": "Failed to download file"
+		"downloadFileError": "Failed to download file",
+		"downloadFolderError": "Failed to download the folder"
 	},
 	"upload": {
 		"uploadFiles": "Upload Files",
@@ -30,6 +31,7 @@
 		"items": "{{count}} items",
 		"rename": "Rename",
 		"deleteFolder": "Delete Folder",
+		"downloadZip": "Download as ZIP",
 		"manageTopics": "Manage Topics",
 		"converting": "Converting...",
 		"convertToKnowledge": "Convert to knowledge",

@@ -53,7 +53,7 @@ export const createMemonScreenTool: ToolFactory<Input> = (): Tool<Input> => ({
 					machine.focusWindow(window.id);
 				}
 				await machine.refreshBrowser();
-				await machine.refreshTerminal();
+				machine.terminal.refresh();
 				return input.waitSeconds
 					? `Waited ${input.waitSeconds}s, then read the screen.`
 					: "Read the screen.";

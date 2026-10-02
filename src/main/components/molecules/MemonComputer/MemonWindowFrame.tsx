@@ -18,6 +18,7 @@ import {
 import React from "react";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
+import { platform } from "@/platform/current";
 import type { MemonWindowApp } from "@/services/memon/constants";
 import type { MemonWindowState } from "@/services/memon/types";
 
@@ -37,6 +38,39 @@ export const MEMON_APP_ICONS: Record<
 	connections: Plug,
 	visualize: LayoutDashboard,
 };
+
+/** Each app's tile color, shared by window title bars, the dock and the launcher. */
+export const MEMON_APP_TINTS: Record<MemonWindowApp, string> = {
+	browser: "bg-cyan-500/15 text-cyan-700 dark:text-cyan-300",
+	files: "bg-teal-500/15 text-teal-700 dark:text-teal-300",
+	editor: "bg-slate-500/15 text-slate-700 dark:text-slate-300",
+	viewer: "bg-slate-500/15 text-slate-700 dark:text-slate-300",
+	terminal: "bg-zinc-500/20 text-zinc-800 dark:text-zinc-200",
+	notes: "bg-yellow-500/15 text-yellow-700 dark:text-yellow-300",
+	scheduler: "bg-violet-500/15 text-violet-700 dark:text-violet-300",
+	studio: "bg-pink-500/15 text-pink-700 dark:text-pink-300",
+	skills: "bg-fuchsia-500/15 text-fuchsia-700 dark:text-fuchsia-300",
+	connections: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300",
+	visualize: "bg-indigo-500/15 text-indigo-700 dark:text-indigo-300",
+};
+
+const LOGO_URL = platform.assets.url("logo.png");
+
+/** The app icon, used as the computer's own mark. */
+export const MemonLogo: React.FC<{ size?: number; className?: string }> = ({
+	size = 28,
+	className,
+}) => (
+	<img
+		src={LOGO_URL}
+		alt=""
+		aria-hidden="true"
+		width={size}
+		height={size}
+		draggable={false}
+		className={cn("shrink-0 select-none object-contain", className)}
+	/>
+);
 
 type Rect = Pick<MemonWindowState, "x" | "y" | "w" | "h">;
 
@@ -64,22 +98,29 @@ interface MemonWindowFrameProps {
 const FrameButton: React.FC<{
 	label: string;
 	onClick: () => void;
+	danger?: boolean;
 	children: React.ReactNode;
-}> = ({ label, onClick, children }) => (
+}> = ({ label, onClick, danger, children }) => (
 	<button
 		type="button"
 		title={label}
 		aria-label={label}
 		onClick={onClick}
-		className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground"
+		className={cn(
+			"inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+			danger
+				? "hover:bg-red-500/15 hover:text-red-600 dark:hover:text-red-400"
+				: "hover:bg-muted hover:text-foreground",
+		)}
 	>
 		{children}
 	</button>
 );
 
 /**
- * A computer window, in the runtime session card style. Dragging and resizing
- * are local until the pointer is released, then sent as one move.
+ * A computer window. The focused one wears its driver's color: blue while
+ * the bot drives, orange while the user does. Dragging and resizing are local
+ * until the pointer is released, then sent as one move.
  */
 export const MemonWindowFrame: React.FC<MemonWindowFrameProps> = ({
 	window,
@@ -164,47 +205,80 @@ export const MemonWindowFrame: React.FC<MemonWindowFrameProps> = ({
 			style={style}
 			onPointerDown={onFocus}
 			className={cn(
-				"absolute flex min-w-0 flex-col overflow-hidden rounded-md border bg-background shadow-sm",
+				"absolute flex min-w-0 flex-col overflow-hidden border bg-background transition-[box-shadow,border-color] duration-200",
+				window.maximized && !compact ? "rounded-none" : "rounded-lg",
+				// One border line; the driver's color shows in it and in the glow.
 				focused
 					? userDriving
-						? "border-amber-500/60"
-						: "border-emerald-500/50"
-					: "border-border",
+						? "border-orange-400 shadow-[0_10px_32px_-8px_rgb(251_146_60/0.45)]"
+						: "border-blue-500 shadow-[0_10px_32px_-8px_rgb(59_130_246/0.45)]"
+					: "border-border shadow-[0_8px_24px_-10px_rgb(0_0_0/0.35)]",
 			)}
 		>
 			<div
-				className="flex cursor-grab touch-none select-none items-center gap-2 border-b border-border bg-muted/20 py-1 pl-2 pr-1 active:cursor-grabbing"
+				className={cn(
+					"flex h-9 shrink-0 cursor-grab touch-none select-none items-center gap-2 border-b border-border pl-2 pr-1 active:cursor-grabbing",
+					focused ? "bg-muted/50" : "bg-muted/25",
+				)}
 				onPointerDown={(event) => startGesture(event, "move")}
 			>
-				<span className="inline-flex shrink-0 items-center gap-1 rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-semibold text-blue-800 dark:bg-blue-900/30 dark:text-blue-300">
-					<Icon size={11} />
-					{window.id}
+				<span
+					className={cn(
+						"inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md",
+						MEMON_APP_TINTS[window.app],
+					)}
+				>
+					<Icon size={13} />
 				</span>
-				<span className="min-w-0 flex-1 truncate text-xs font-medium">
+				<span
+					className={cn(
+						"min-w-0 truncate text-[13px] font-medium",
+						focused ? "text-foreground" : "text-muted-foreground",
+					)}
+				>
 					{title}
 				</span>
+				<span className="shrink-0 font-mono text-[11px] text-muted-foreground">
+					{window.id}
+				</span>
+				<span className="min-w-0 flex-1" />
 				{onAsk ? (
 					<FrameButton label={t("memonComputer.ask.button")} onClick={onAsk}>
-						<MessageSquarePlus size={13} />
+						<MessageSquarePlus size={14} />
 					</FrameButton>
 				) : null}
 				<FrameButton label={t("memonComputer.minimize")} onClick={onMinimize}>
-					<Minus size={13} />
+					<Minus size={14} />
 				</FrameButton>
 				<FrameButton label={t("memonComputer.maximize")} onClick={onMaximize}>
-					<Maximize2 size={12} />
+					<Maximize2 size={13} />
 				</FrameButton>
-				<FrameButton label={t("memonComputer.close")} onClick={onClose}>
-					<X size={13} />
+				<FrameButton label={t("memonComputer.close")} onClick={onClose} danger>
+					<X size={14} />
 				</FrameButton>
 			</div>
 			<div className="flex min-h-0 flex-1 flex-col">{children}</div>
 			{!compact && !window.maximized ? (
 				<div
 					aria-hidden="true"
-					className="absolute bottom-0 right-0 h-3.5 w-3.5 cursor-nwse-resize touch-none"
+					className="absolute bottom-0 right-0 flex h-4 w-4 cursor-nwse-resize touch-none items-end justify-end p-[3px] text-muted-foreground/60"
 					onPointerDown={(event) => startGesture(event, "resize")}
-				/>
+				>
+					<svg
+						width="8"
+						height="8"
+						viewBox="0 0 8 8"
+						fill="none"
+						aria-hidden="true"
+					>
+						<path
+							d="M7 1 1 7M7 4 4 7"
+							stroke="currentColor"
+							strokeWidth="1.2"
+							strokeLinecap="round"
+						/>
+					</svg>
+				</div>
 			) : null}
 		</div>
 	);

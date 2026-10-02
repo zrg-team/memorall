@@ -100,7 +100,7 @@ export const getMemonMachine = async (
 		schedulePublish(machine);
 		scheduleIdleDispose(machine);
 	});
-	await machine.refreshTerminalAvailability();
+	await machine.terminal.refreshAvailability();
 	await machine
 		.prepareDesktop()
 		.catch((error) => logWarn("[MEMON] Could not prepare the desktop:", error));

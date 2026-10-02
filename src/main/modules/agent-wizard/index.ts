@@ -1,5 +1,9 @@
 export { AgentWizardWorkspace } from "./components/AgentWizardWorkspace";
 export { AgentWizardChatPanel } from "./components/AgentWizardChatPanel";
+export {
+	AgentWizardInlineSetup,
+	hasAgentWizardInlineSetup,
+} from "./components/AgentWizardInlineSetup";
 export { AgentWizardTemplatePanel } from "./components/AgentWizardTemplatePanel";
 export {
 	AGENT_WIZARD_CURSOR_KEYS,

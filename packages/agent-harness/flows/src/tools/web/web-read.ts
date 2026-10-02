@@ -67,7 +67,9 @@ const schema = z.object({
 	browserMode: z
 		.enum(["iframe", "tab", "window"])
 		.optional()
-		.describe("Open mode when no sessionId is provided."),
+		.describe(
+			"Open mode when no sessionId is provided. Leave it out for a window; `iframe` only for a local server.",
+		),
 	maxHtmlChars: z
 		.number()
 		.int()

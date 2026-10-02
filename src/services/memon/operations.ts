@@ -9,6 +9,7 @@ import {
 	listMemonMachines,
 } from "./machine-registry";
 import type { MemonMachine } from "./memon-machine";
+import type { MemonTerminalLineOutcome } from "./terminal/memon-terminal";
 import type { MemonOperationJobPayload } from "./operation-types";
 import type { MemonMachineSnapshot } from "./types";
 
@@ -47,17 +48,20 @@ const userInput = async (
 /**
  * Input that answers or steers what the agent started (a prompt, an
  * approval, Ctrl+C): logged for the agent, without taking the computer over,
- * so the agent's waiting call carries on.
+ * so the agent's waiting call carries on. The change may depend on what the
+ * input did.
  */
-const userAside = async (
+const userAside = async <Result>(
 	key: string,
-	change: string,
-	act: (machine: MemonMachine) => Promise<unknown> | void,
+	change: string | ((result: Result) => string),
+	act: (machine: MemonMachine) => Promise<Result> | Result,
 ): Promise<MemonMachineSnapshot | null> => {
 	const machine = findMemonMachine(key);
 	if (!machine) return null;
-	await act(machine);
-	machine.noteUserChange(change);
+	const result = await act(machine);
+	machine.noteUserChange(
+		typeof change === "function" ? change(result) : change,
+	);
 	return machine.snapshot();
 };
 
@@ -137,7 +141,7 @@ export const runMemonOperation = async (
 		case "browser.servers": {
 			const machine = findMemonMachine(job.payload.key);
 			if (!machine) return null;
-			await machine.checkServers();
+			await machine.terminal.checkServers();
 			return machine.snapshot();
 		}
 		case "browser.embeddedNavigated": {
@@ -431,34 +435,54 @@ export const runMemonOperation = async (
 			});
 		}
 		case "terminal.exec": {
-			const { key, command } = job.payload;
+			const { key, command, terminalId } = job.payload;
 			return userInput(key, `ran \`${trim(command)}\``, async (machine) => {
 				// Started, not awaited: its output streams in.
-				await machine.runCommand(command, { byUser: true, waitMs: 0 });
+				await machine.terminal.runCommand(command, {
+					byUser: true,
+					waitMs: 0,
+					terminalId,
+				});
 			});
 		}
+		case "terminal.new":
+			return userAside(job.payload.key, "opened a Terminal tab", (machine) => {
+				machine.terminal.openTab();
+			});
+		case "terminal.select":
+			return control(job.payload.key, (machine) =>
+				machine.terminal.selectTab(job.payload.terminalId),
+			);
+		case "terminal.close":
+			return userAside(
+				job.payload.key,
+				(closed: string) => `closed Terminal tab ${closed}`,
+				(machine) => machine.terminal.closeTab(job.payload.terminalId),
+			);
 		case "terminal.input": {
 			const { key, text } = job.payload;
 			return userAside(
 				key,
-				`typed "${trim(text)}" into the running command`,
-				(machine) => machine.sendCommandInput(text),
+				(outcome: MemonTerminalLineOutcome) =>
+					outcome === "ran"
+						? `ran \`${trim(text.trim())}\` next to the running command`
+						: `typed "${trim(text)}" into the running command`,
+				(machine) => machine.terminal.enterLine(text),
 			);
 		}
 		case "terminal.stop":
 			return userAside(
 				job.payload.key,
 				"stopped the running command",
-				(machine) => machine.stopCommand(),
+				(machine) => machine.terminal.stopCommand(),
 			);
 		case "terminal.approval": {
 			const { key, id, decision } = job.payload;
-			const command =
-				findMemonMachine(key)?.snapshot().terminal.approval?.command ?? "";
+			const command = findMemonMachine(key)?.terminal.approval?.command ?? "";
 			return userAside(
 				key,
 				`${decision === "approve" ? "approved" : "declined"} \`${trim(command)}\``,
-				(machine) => machine.answerApproval(id, decision),
+				(machine) => machine.terminal.answerApproval(id, decision),
 			);
 		}
 		case "window.open": {

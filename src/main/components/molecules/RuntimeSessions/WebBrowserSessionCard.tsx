@@ -1,5 +1,13 @@
 import React, { useEffect, useState } from "react";
-import { ExternalLink, Globe, Loader2, RefreshCw, Send, X } from "lucide-react";
+import {
+	AppWindow,
+	ExternalLink,
+	Globe,
+	Loader2,
+	RefreshCw,
+	Send,
+	X,
+} from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { serviceManager } from "@/services";
 import type { ActiveWebSessionInfo } from "./types";
@@ -16,6 +24,7 @@ export const WebBrowserSessionCard: React.FC<{
 	const [isRefreshing, setIsRefreshing] = useState(false);
 	const [isNavigating, setIsNavigating] = useState(false);
 	const [isClosing, setIsClosing] = useState(false);
+	const [isFocusing, setIsFocusing] = useState(false);
 	const [actionError, setActionError] = useState<string | null>(null);
 
 	useEffect(() => {
@@ -35,7 +44,29 @@ export const WebBrowserSessionCard: React.FC<{
 
 	const lastAccessed = formatSessionTime(session.lastAccessedAt);
 	const createdAt = formatSessionTime(session.createdAt);
-	const actionBusy = isRefreshing || isNavigating || isClosing;
+	const actionBusy = isRefreshing || isNavigating || isClosing || isFocusing;
+	// Tab and window sessions have a real page the user can take over; an
+	// iframe has nothing of its own to raise.
+	const canShowControlledPage =
+		Boolean(session.sessionId) &&
+		(session.mode === "tab" || session.mode === "window");
+
+	const handleShowControlledPage = async () => {
+		if (!session.sessionId) {
+			return;
+		}
+		setIsFocusing(true);
+		setActionError(null);
+		try {
+			await serviceManager
+				.getWebBrowserService()
+				.focusSession(session.sessionId);
+		} catch (error) {
+			setActionError(error instanceof Error ? error.message : String(error));
+		} finally {
+			setIsFocusing(false);
+		}
+	};
 
 	const handleRefresh = async () => {
 		if (!session.sessionId) {
@@ -105,6 +136,20 @@ export const WebBrowserSessionCard: React.FC<{
 					{session.title || t("sandboxPanel.webSessionUntitled")}
 				</span>
 				<div className="flex items-center gap-1">
+					{canShowControlledPage ? (
+						<ActionIconButton
+							title={t("sandboxPanel.openControlledWindow")}
+							onClick={() => void handleShowControlledPage()}
+							disabled={actionBusy}
+							icon={
+								isFocusing ? (
+									<Loader2 size={14} className="animate-spin" />
+								) : (
+									<AppWindow size={14} />
+								)
+							}
+						/>
+					) : null}
 					<ActionIconButton
 						title={t("sandboxPanel.openInTab")}
 						onClick={openInTab}

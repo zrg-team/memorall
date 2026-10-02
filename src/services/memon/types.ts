@@ -71,6 +71,20 @@ export interface MemonFilesState {
 	error?: string;
 	/** Shared by the user and the agent, like a real clipboard. */
 	clipboard?: MemonFileClipboard | null;
+	/**
+	 * The latest folder the agent zipped for the user. The Computer panel
+	 * downloads each one to the user's machine once (by `id`).
+	 */
+	exported?: MemonFileExport | null;
+}
+
+export interface MemonFileExport {
+	id: number;
+	/** The zip in Files. */
+	path: string;
+	name: string;
+	/** When it was made, so a panel opened much later does not download it. */
+	at: number;
 }
 
 export interface MemonEditorState {
@@ -267,8 +281,22 @@ export interface MemonTerminalApproval {
 	requestedAt: number;
 	/** The agent's tool call is waiting on the answer. */
 	agentWaiting: boolean;
+	/** The Terminal tab the command runs in once approved. */
+	terminalId?: string;
 }
 
+/** A Terminal tab: its own working directory and output. */
+export interface MemonTerminalTab {
+	id: string;
+	cwd: string;
+	/** The running command belongs to this tab. */
+	running: boolean;
+}
+
+/**
+ * The Terminal: `cwd`, `lines` and `lastExitCode` are the tab in front's.
+ * One command keeps running at a time, in `runningTabId`'s tab.
+ */
 export interface MemonTerminalState {
 	cwd: string;
 	lines: MemonTerminalLine[];
@@ -282,6 +310,11 @@ export interface MemonTerminalState {
 	approval: MemonTerminalApproval | null;
 	/** Ports of servers running in the sandbox (the Browser embeds them). */
 	servers?: number[];
+	tabs: MemonTerminalTab[];
+	activeTabId: string;
+	runningTabId: string | null;
+	/** The running tab's last lines, while another tab is in front. */
+	runningTabTail?: MemonTerminalLine[];
 }
 
 export interface MemonAppAvailability {

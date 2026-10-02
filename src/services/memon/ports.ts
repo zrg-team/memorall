@@ -7,6 +7,7 @@ import {
 	toFlowFileSystem,
 } from "@/services/flow-service-adapters";
 import { documentFileSystemService } from "@/services/filesystem/document-filesystem";
+import { zipFolder } from "@/services/filesystem/folder-zip";
 import {
 	closeWebSession,
 	focusWebSession,
@@ -21,16 +22,18 @@ import {
 import type {
 	MemonAvailability,
 	MemonBrowserPort,
-	MemonCommandOutcome,
 	MemonDownloadPort,
 	MemonFilesPort,
 	MemonPorts,
 	MemonSchedulerPort,
-	MemonTerminalPort,
 } from "./memon-machine";
 import { getLocalTimezone } from "@/services/cron-jobs/cron-expression";
 import type { CronJob } from "@/services/database/types";
 import type { MemonViewerKind } from "./file-kinds";
+import type {
+	MemonCommandOutcome,
+	MemonTerminalPort,
+} from "./terminal/memon-terminal";
 import type { MemonFileEntry, MemonSchedule, MemonTerminalLine } from "./types";
 import {
 	createMemonConnectionsPort,
@@ -230,6 +233,7 @@ export const createMemonFilesPort = (
 		};
 		await copyTree(from, to);
 	},
+	zip: (folder) => zipFolder(fs, folder),
 	subscribe: (listener) =>
 		documentFileSystemService.onFilesystemChanged(() => listener()),
 	async preview(path, kind) {
