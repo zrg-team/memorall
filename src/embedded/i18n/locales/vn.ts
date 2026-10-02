@@ -212,6 +212,7 @@ export const vnEmbeddedLocale = {
 		toolCall: "Lệnh công cụ",
 		toolLabel: "Công cụ {index}",
 		thinking: "Đang suy nghĩ...",
+		thought: "Đã suy nghĩ",
 		urlArtifact: "Tạo tác URL",
 		htmlArtifact: "Tạo tác HTML",
 		open: "Mở",

@@ -61,6 +61,8 @@ export interface AgentWizardMessage {
 	id: string;
 	role: "user" | "assistant" | "system";
 	content: string;
+	/** What a reasoning model thought while writing this reply. */
+	reasoning?: string;
 	createdAt: Date;
 }
 

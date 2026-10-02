@@ -339,6 +339,45 @@ describe("OpenAI-compatible prompt-cache hints", () => {
 		).not.toBe(firstKey);
 	});
 
+	it("asks OpenRouter for the chosen reasoning effort, and turns thinking off with enabled: false", async () => {
+		const { lastBody } = captureBody(openAIUsage);
+		const llm = new OpenAILLM("key", "https://openrouter.ai/api/v1");
+
+		await llm.chatCompletions({
+			model: "z-ai/glm-5.3-flash",
+			messages: conversation,
+			stream: false,
+			reasoning_effort: "low",
+		});
+		expect(lastBody().reasoning).toEqual({ effort: "low" });
+
+		// Off works on every model that allows it, including those that list no
+		// effort levels, which would refuse an effort.
+		await llm.chatCompletions({
+			model: "z-ai/glm-4.7-flash",
+			messages: conversation,
+			stream: false,
+			reasoning_effort: "none",
+		});
+		expect(lastBody().reasoning).toEqual({ enabled: false });
+		expect(lastBody().reasoning_effort).toBeUndefined();
+	});
+
+	it("sends OpenAI its own reasoning_effort field", async () => {
+		const { lastBody } = captureBody(openAIUsage);
+		const llm = new OpenAILLM("key", "https://api.openai.com/v1");
+
+		await llm.chatCompletions({
+			model: "gpt-5.6-terra",
+			messages: conversation,
+			stream: false,
+			reasoning_effort: "high",
+		});
+
+		expect(lastBody().reasoning_effort).toBe("high");
+		expect(lastBody().reasoning).toBeUndefined();
+	});
+
 	it("honours a caller-supplied prompt_cache_key", async () => {
 		const { lastBody } = captureBody(openAIUsage);
 		const llm = new OpenAILLM("key", "https://api.openai.com/v1");

@@ -237,6 +237,10 @@ export const buildAssistantContentParts = ({
 	for (const part of parts ?? []) {
 		if (part.role === "assistant") {
 			closeBlock();
+			// What the model thought comes before what it wrote.
+			if (part.reasoning?.trim()) {
+				contentParts.push({ type: "reasoning", text: part.reasoning });
+			}
 			if (typeof part.content === "string" && part.content.trim()) {
 				contentParts.push({ type: "text", text: part.content });
 			}

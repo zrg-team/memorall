@@ -4,6 +4,7 @@ import type {
 	ChatCompletionChunk,
 	ChatCompletionRequest,
 	ChatCompletionResponse,
+	ReasoningEffort,
 } from "@/types/openai";
 import type {
 	ImageGenerateParams,
@@ -78,6 +79,8 @@ export interface ModelInfo {
 	supportsNativeTools?: boolean;
 	supportsVision?: boolean;
 	supportsAudio?: boolean;
+	/** Reasoning models, as the provider's listing describes them. */
+	reasoning?: ModelReasoning;
 	webgpuCapabilities?: unknown;
 	/** What the model does. Absent means chat (see `modelCategoriesOf`). */
 	categories?: ModelCategory[];
@@ -92,6 +95,16 @@ export interface ModelInfo {
 	/** Decision repos: the models the repo holds, and the one in use. */
 	decisionVariants?: { id: string; label: string; sizeBytes?: number }[];
 	decisionVariant?: string;
+}
+
+/** How a reasoning model's thinking can be tuned. */
+export interface ModelReasoning {
+	/** The effort levels it accepts, lowest first. */
+	efforts: ReasoningEffort[];
+	/** What it uses when no effort is sent. */
+	defaultEffort?: ReasoningEffort;
+	/** It always thinks: reasoning cannot be turned off. */
+	mandatory?: boolean;
 }
 
 export interface ModelsResponse {

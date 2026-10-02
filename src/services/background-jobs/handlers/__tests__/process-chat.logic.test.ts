@@ -240,6 +240,48 @@ describe("chat streaming over a mock LLM", () => {
 		expect(chunkResults(dispatches).length).toBeLessThan(words.length / 2);
 	});
 
+	it("streams a reasoning model's thinking and joins tool-call fragments", async () => {
+		llmStream.mockImplementation(async function* () {
+			yield chunk({ role: "assistant", reasoning: "Let me " });
+			yield chunk({ reasoning: "check." });
+			yield chunk({
+				tool_calls: [
+					{
+						index: 0,
+						id: "call-1",
+						type: "function",
+						function: { name: "lookup", arguments: "" },
+					},
+				],
+			});
+			for (const piece of ['{"q"', ':"x"', "}"]) {
+				yield chunk({
+					tool_calls: [{ index: 0, function: { arguments: piece } }],
+				});
+			}
+		});
+
+		const { dispatches } = await runChat({
+			messages: [{ role: "user", content: "hi" }],
+			model: "test-model",
+			mode: "normal",
+		});
+
+		const deltas = chunkResults(dispatches).map(
+			(r) => r.chunk.choices?.[0]?.delta,
+		);
+		// The thinking reaches the UI as it streams, in its own field.
+		expect(deltas.map((delta) => delta?.reasoning ?? "").join("")).toBe(
+			"Let me check.",
+		);
+		// The call arrives whole, without a message per argument fragment.
+		const fragments = deltas.flatMap((delta) => delta?.tool_calls ?? []);
+		expect(
+			fragments.map((call) => call.function?.arguments ?? "").join(""),
+		).toBe('{"q":"x"}');
+		expect(fragments.length).toBeLessThan(4);
+	});
+
 	it("puts the first token on the wire without waiting for a word threshold", async () => {
 		llmStream.mockImplementation(async function* () {
 			yield chunk({ role: "assistant", content: "Hel" });

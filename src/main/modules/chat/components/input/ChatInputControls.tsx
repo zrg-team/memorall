@@ -43,8 +43,11 @@ import {
 } from "@/main/components/ui/tooltip";
 import type { SelectableModel } from "@/main/hooks/selectable-model";
 import { getAgentIconScreenFromMetadata } from "@/main/modules/agents/types";
+import type { ModelReasoning } from "@/services/llm/interfaces/base-llm";
 import type { ServiceProvider } from "@/services/llm/interfaces/llm-service.interface";
+import type { ReasoningEffort } from "@/types/openai";
 import { ModelSelector } from "./ModelSelector";
+import { ReasoningEffortSelector } from "./ReasoningEffortSelector";
 import type { FlowMetadata } from "@/services/database/entities/flows";
 import type { ChatStatus } from "@/types/chat";
 
@@ -103,6 +106,10 @@ export interface ChatInputControlsProps {
 	isLoadingModels?: boolean;
 	onSelectModel?: (model: SelectableModel) => void;
 	onRefreshModels?: () => void;
+	/** The selected model's reasoning controls, when it has any. */
+	reasoning?: ModelReasoning;
+	reasoningEffort?: ReasoningEffort;
+	onReasoningEffortChange?: (effort: ReasoningEffort | undefined) => void;
 	/**
 	 * The dictation button, rendered by the composer. A slot rather than a
 	 * component import: it reaches the service tree, which this toolbar is
@@ -146,6 +153,9 @@ export const ChatInputControls: React.FC<ChatInputControlsProps> = ({
 	isLoadingModels = false,
 	onSelectModel,
 	onRefreshModels,
+	reasoning,
+	reasoningEffort,
+	onReasoningEffortChange,
 	dictation,
 }) => {
 	const { t } = useTranslation("chat");
@@ -504,6 +514,14 @@ export const ChatInputControls: React.FC<ChatInputControlsProps> = ({
 									isNarrow={isNarrow}
 									disabled={isLoading}
 								/>
+								{reasoning && onReasoningEffortChange ? (
+									<ReasoningEffortSelector
+										reasoning={reasoning}
+										value={reasoningEffort}
+										onChange={onReasoningEffortChange}
+										disabled={isLoading}
+									/>
+								) : null}
 							</div>
 						) : null}
 					</PromptInputTools>

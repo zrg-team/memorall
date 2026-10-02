@@ -189,7 +189,9 @@ describe("buildAssistantContentParts", () => {
 		});
 
 		expect(
-			built.map((part) => (part.type === "text" ? part.text : part.id)),
+			built.map((part) =>
+				part.type === "text" || part.type === "reasoning" ? part.text : part.id,
+			),
 		).toEqual(["Let me look.", "a", "b", "Now the next one.", "c", "Done."]);
 	});
 
@@ -214,7 +216,9 @@ describe("buildAssistantContentParts", () => {
 		});
 
 		expect(
-			built.map((part) => (part.type === "text" ? part.text : part.id)),
+			built.map((part) =>
+				part.type === "text" || part.type === "reasoning" ? part.text : part.id,
+			),
 		).toEqual(["Reading.", "x"]);
 	});
 
@@ -240,7 +244,9 @@ describe("buildAssistantContentParts", () => {
 		});
 
 		expect(
-			built.map((part) => (part.type === "text" ? part.text : part.id)),
+			built.map((part) =>
+				part.type === "text" || part.type === "reasoning" ? part.text : part.id,
+			),
 		).toEqual(["First.", "Reading.", "uuid-1"]);
 	});
 
@@ -251,7 +257,9 @@ describe("buildAssistantContentParts", () => {
 		});
 
 		expect(
-			built.map((part) => (part.type === "text" ? part.text : part.id)),
+			built.map((part) =>
+				part.type === "text" || part.type === "reasoning" ? part.text : part.id,
+			),
 		).toEqual(["call_1", "Final answer."]);
 	});
 
@@ -265,5 +273,28 @@ describe("buildAssistantContentParts", () => {
 			type: "text",
 			text: "Here is what I found.",
 		});
+	});
+});
+
+describe("buildAssistantContentParts reasoning", () => {
+	it("shows a turn's thinking ahead of what it wrote", () => {
+		const built = buildAssistantContentParts({
+			parts: [
+				{ role: "assistant", content: "Answer.", reasoning: "Think first." },
+			],
+		});
+
+		expect(built).toEqual([
+			{ type: "reasoning", text: "Think first." },
+			{ type: "text", text: "Answer." },
+		]);
+	});
+
+	it("shows thinking that has no text yet, while the model is still at it", () => {
+		const built = buildAssistantContentParts({
+			parts: [{ role: "assistant", content: "", reasoning: "Working…" }],
+		});
+
+		expect(built).toEqual([{ type: "reasoning", text: "Working…" }]);
 	});
 });

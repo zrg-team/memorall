@@ -126,6 +126,9 @@ export const ChatPage: React.FC<ChatPageProps> = ({
 	const currentConversation = useChatStore(
 		(state) => state.currentConversation,
 	);
+	const restoreSelectedAgentFlowId = useChatStore(
+		(state) => state.restoreSelectedAgentFlowId,
+	);
 
 	// The co-agent writes into this same conversation from a content script, and
 	// nothing tells this page about it. Re-read when the user comes back, so a
@@ -609,8 +612,9 @@ ${text}`
 						metadata: flow.metadata,
 					}));
 				setAgentFlows(mapped);
-				if (!selectedAgentFlowId && mapped.length > 0) {
-					setSelectedAgentFlowId(mapped[0].id);
+				if (!selectedAgentFlowId) {
+					// The agent picked last time, when it is still there.
+					await restoreSelectedAgentFlowId(mapped.map((flow) => flow.id));
 				} else if (
 					selectedAgentFlowId &&
 					selectedAgentFlowId !== "chat" &&
@@ -623,7 +627,7 @@ ${text}`
 			}
 		};
 		loadFlows();
-	}, [selectedAgentFlowId, setSelectedAgentFlowId]);
+	}, [selectedAgentFlowId, setSelectedAgentFlowId, restoreSelectedAgentFlowId]);
 
 	useEffect(() => {
 		let cancelled = false;

@@ -36,6 +36,7 @@ import type { IEmbeddingService } from "@/services/embedding/interfaces/embeddin
 import type { DocumentFileSystem } from "@/services/filesystem/document-filesystem";
 import { awaitWebChallengeResolution } from "@/services/flows-integrations/tools/web/web-tool-registry";
 import type { ILLMService } from "@/services/llm/interfaces/llm-service.interface";
+import type { ReasoningEffort } from "@/types/openai";
 import type {
 	ISandboxContainerService,
 	SandboxExecuteCommandRequest,
@@ -250,19 +251,16 @@ export const toFlowLLM = (service: ILLMService): IFlowLLMService => {
 	};
 };
 
-/**
- * The same LLM service with `prompt_cache_key` stamped on every request that
- * does not already carry one, so all calls of one conversation share a cache
- * routing key without each step having to know about it.
- */
-export const withPromptCacheKey = (
+/** A request as the app's LLM service takes it: the harness's, plus app-only fields. */
+type AppChatCompletionRequest = ChatCompletionRequest & {
+	reasoning_effort?: ReasoningEffort;
+};
+
+/** The same LLM service with every request passed through `stamp` first. */
+const withStampedRequests = (
 	service: IFlowLLMService,
-	promptCacheKey: string,
+	stamp: (body: AppChatCompletionRequest) => AppChatCompletionRequest,
 ): IFlowLLMService => {
-	const stamp = (body: ChatCompletionRequest): ChatCompletionRequest =>
-		body.prompt_cache_key
-			? body
-			: { ...body, prompt_cache_key: promptCacheKey };
 	const create = ((body: ChatCompletionRequest) =>
 		service.chatCompletions(stamp(body))) as FlowChatCreate;
 
@@ -272,6 +270,33 @@ export const withPromptCacheKey = (
 		chatCompletions: (body) => service.chatCompletions(stamp(body)),
 	};
 };
+
+/**
+ * The same LLM service with `prompt_cache_key` stamped on every request that
+ * does not already carry one, so all calls of one conversation share a cache
+ * routing key without each step having to know about it.
+ */
+export const withPromptCacheKey = (
+	service: IFlowLLMService,
+	promptCacheKey: string,
+): IFlowLLMService =>
+	withStampedRequests(service, (body) =>
+		body.prompt_cache_key
+			? body
+			: { ...body, prompt_cache_key: promptCacheKey },
+	);
+
+/**
+ * The same LLM service with the user's reasoning effort on every request that
+ * does not choose its own, so every step of a run thinks as hard as asked.
+ */
+export const withReasoningEffort = (
+	service: IFlowLLMService,
+	effort: ReasoningEffort,
+): IFlowLLMService =>
+	withStampedRequests(service, (body) =>
+		body.reasoning_effort ? body : { ...body, reasoning_effort: effort },
+	);
 
 export const toFlowEmbedding = (
 	service: IEmbeddingService,

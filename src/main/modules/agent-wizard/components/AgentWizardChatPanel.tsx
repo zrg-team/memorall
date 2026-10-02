@@ -47,6 +47,16 @@ const toDbMessage = (message: AgentWizardMessage): DBMessage =>
 		type: "text",
 		role: message.role,
 		content: message.content,
+		// As one assistant part, so the reply shows its thinking above it.
+		parts: message.reasoning
+			? [
+					{
+						role: "assistant",
+						content: message.content,
+						reasoning: message.reasoning,
+					},
+				]
+			: null,
 		complexContent: null,
 		topicId: null,
 		embeddingSmall: null,

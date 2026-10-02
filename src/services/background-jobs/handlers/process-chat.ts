@@ -49,7 +49,12 @@ import {
 	toFlowSandbox,
 	toFlowWebBrowser,
 	withPromptCacheKey,
+	withReasoningEffort,
 } from "@/services/flow-service-adapters";
+import {
+	reasoningEffortKey,
+	reasoningEffortSettings,
+} from "@/services/llm/reasoning-effort-settings";
 import {
 	AGENT_RUNTIME_KEY,
 	CONVERSATION_RUNTIME_KEY,
@@ -85,6 +90,7 @@ import type {
 	ChatCompletionToolChoiceOption,
 	ChatCompletionUsage,
 	ChatMessage,
+	ReasoningEffort,
 } from "@/types/openai";
 import { ABORT_ERROR_MESSAGE, isAbortError } from "@/utils/abort";
 import { isUuid } from "@/utils/uuid";
@@ -104,7 +110,11 @@ import {
 	type JobErrorMetadata,
 } from "./error-metadata";
 import { handlerRegistry } from "./handler-registry";
-import { ChunkDispatcher, StreamBuffer } from "./stream-buffer";
+import {
+	ChunkDispatcher,
+	StreamBuffer,
+	type StreamedDelta,
+} from "./stream-buffer";
 import type {
 	BaseJob,
 	ItemHandlerResult,
@@ -328,6 +338,12 @@ const createStoppableRequests = (
 };
 
 type StoppableRequests = ReturnType<typeof createStoppableRequests>;
+
+/** What every LLM request of one run carries. */
+interface RunRequestDefaults {
+	promptCacheKey?: string;
+	reasoningEffort?: ReasoningEffort;
+}
 
 const RECALL_STEP_BY_TYPE: Record<RecallType, string> = {
 	smart: "context-smart-retrieve",
@@ -669,9 +685,9 @@ export class ChatHandler extends BaseProcessHandler<ChatJob | StopChatJob> {
 		};
 	}
 
-	private static contentChunkUpdate(
+	private static deltaChunkUpdate(
 		model: string,
-		content: string,
+		delta: StreamedDelta,
 		progress: number,
 	): JobProgressUpdate {
 		return {
@@ -687,7 +703,7 @@ export class ChatHandler extends BaseProcessHandler<ChatJob | StopChatJob> {
 					choices: [
 						{
 							index: 0,
-							delta: { content, role: "assistant" },
+							delta: { ...delta, role: "assistant" },
 							finish_reason: null,
 						},
 					],
@@ -699,9 +715,10 @@ export class ChatHandler extends BaseProcessHandler<ChatJob | StopChatJob> {
 	/**
 	 * The dispatcher every streamed update for one job goes through.
 	 *
-	 * Content is throttled and merged; anything else flushes it first and is sent
-	 * straight away. One place decides the wire rate, so the word-buffer above it
-	 * stays a readability knob rather than the thing that sets IPC volume.
+	 * Content, reasoning and tool-call arguments are throttled and merged;
+	 * anything else flushes them first and is sent straight away. One place
+	 * decides the wire rate, so the word-buffer above it stays a readability knob
+	 * rather than the thing that sets IPC volume.
 	 */
 	private static createChunkDispatcher(
 		jobId: string,
@@ -711,10 +728,10 @@ export class ChatHandler extends BaseProcessHandler<ChatJob | StopChatJob> {
 	): ChunkDispatcher {
 		return new ChunkDispatcher({
 			intervalMs: CHUNK_DISPATCH_INTERVAL_MS,
-			sendContent: (content) =>
+			sendDelta: (delta) =>
 				dependencies.updateJobProgress(
 					jobId,
-					ChatHandler.contentChunkUpdate(model, content, getProgress()),
+					ChatHandler.deltaChunkUpdate(model, delta, getProgress()),
 				),
 		});
 	}
@@ -736,9 +753,17 @@ export class ChatHandler extends BaseProcessHandler<ChatJob | StopChatJob> {
 		// Providers differ on whether `role` appears once or on every delta.
 		// When it repeats, the raw chunk used to be forwarded per token on top of
 		// the buffered content — one extra cross-context message per token, for a
-		// field the consumer already has. Announce it once and let content flow
-		// through the buffer alone.
+		// field the consumer already has. Announce it once and let the streamed
+		// fragments flow through the dispatcher alone.
 		let assistantRoleAnnounced = false;
+		const sendNow = (chunk: ChatCompletionChunk) =>
+			deps.dispatcher.send(() =>
+				deps.dependencies.updateJobProgress(deps.jobId, {
+					stage: "Receiving response...",
+					progress: deps.getProgress(),
+					result: { type: "chunk", chunk } as ChatResult,
+				}),
+			);
 
 		return async (chunk: ChatCompletionChunk) => {
 			deps.onChunk?.(chunk);
@@ -754,17 +779,26 @@ export class ChatHandler extends BaseProcessHandler<ChatJob | StopChatJob> {
 
 			const delta = choice.delta;
 
-			const shouldStreamToolCalls =
-				deps.config.streamToolCallsImmediately &&
-				ChatHandler.hasToolCalls(delta);
-			if (shouldStreamToolCalls) {
-				deps.onToolCalls?.(delta.tool_calls);
+			// A tool result is one whole message: it goes out as it is.
+			if (delta?.role === "tool" || delta?.tool_call_id) {
+				sendNow(chunk);
+				return;
 			}
 
-			const isToolResultChunk = delta?.role === "tool" || !!delta?.tool_call_id;
-			const content = isToolResultChunk ? "" : (delta?.content ?? "");
-			if (content) {
-				deps.streamBuffer.add(content);
+			if (delta?.reasoning) {
+				deps.dispatcher.queueReasoning(delta.reasoning);
+			}
+			if (delta?.content) {
+				deps.streamBuffer.add(delta.content);
+			}
+			if (
+				deps.config.streamToolCallsImmediately &&
+				ChatHandler.hasToolCalls(delta)
+			) {
+				deps.onToolCalls?.(delta.tool_calls);
+				// Text the buffer still holds was written before this call.
+				deps.streamBuffer.flush();
+				deps.dispatcher.queueToolCalls(delta.tool_calls ?? []);
 			}
 
 			const isNewRoleAnnouncement =
@@ -772,41 +806,15 @@ export class ChatHandler extends BaseProcessHandler<ChatJob | StopChatJob> {
 			if (isNewRoleAnnouncement) {
 				assistantRoleAnnounced = true;
 			}
-
-			const carriesMetadata =
-				shouldStreamToolCalls ||
-				isToolResultChunk ||
-				Boolean(choice.finish_reason) ||
-				isNewRoleAnnouncement;
-			if (!carriesMetadata) {
+			if (!choice.finish_reason && !isNewRoleAnnouncement) {
 				return;
 			}
 
-			const chunkToSend = content
-				? {
-						...chunk,
-						choices: [
-							{
-								...choice,
-								delta: {
-									...delta,
-									content: undefined,
-								},
-							},
-						],
-					}
-				: chunk;
-
-			deps.dispatcher.send(() =>
-				deps.dependencies.updateJobProgress(deps.jobId, {
-					stage: "Receiving response...",
-					progress: deps.getProgress(),
-					result: {
-						type: "chunk",
-						chunk: chunkToSend,
-					} as ChatResult,
-				}),
-			);
+			// The fragments are queued above; this carries only the structure.
+			sendNow({
+				...chunk,
+				choices: [{ ...choice, delta: { role: delta?.role } }],
+			});
 		};
 	}
 
@@ -840,21 +848,32 @@ export class ChatHandler extends BaseProcessHandler<ChatJob | StopChatJob> {
 	}
 
 	/**
-	 * @param promptCacheKey stamped on every LLM request of the run so the
-	 * provider routes all turns of one conversation to the same prompt cache.
+	 * The run's LLM, with what every one of its requests carries: the cache key
+	 * that routes all turns of one conversation to the same prompt cache, and
+	 * the reasoning effort the user chose for the model.
+	 */
+	private static getRunLLM({
+		promptCacheKey,
+		reasoningEffort,
+	}: RunRequestDefaults): FlowServices["llm"] {
+		let llm = toFlowLLM(serviceManager.llmService);
+		if (promptCacheKey) llm = withPromptCacheKey(llm, promptCacheKey);
+		if (reasoningEffort) llm = withReasoningEffort(llm, reasoningEffort);
+		return llm;
+	}
+
+	/**
+	 * @param requestDefaults stamped on every LLM request of the run.
 	 * @param requests binds every LLM request of the run to its stop signal.
 	 */
 	private static getFlowServices(
-		promptCacheKey: string | undefined,
+		requestDefaults: RunRequestDefaults,
 		requests: StoppableRequests,
 	): FlowServices {
 		const sandboxService = serviceManager.getSandboxContainerService();
 		const fileSystem = toFlowFileSystem(fsService);
-		const llm = toFlowLLM(serviceManager.llmService);
 		return {
-			llm: requests.bind(
-				promptCacheKey ? withPromptCacheKey(llm, promptCacheKey) : llm,
-			),
+			llm: requests.bind(ChatHandler.getRunLLM(requestDefaults)),
 			embedding: toFlowEmbedding(serviceManager.embeddingService),
 			database: toFlowDatabase(serviceManager.databaseService),
 			logger: consoleFlowLogger,
@@ -1095,9 +1114,16 @@ export class ChatHandler extends BaseProcessHandler<ChatJob | StopChatJob> {
 		const agentFlowId =
 			rawAgentFlowId && rawAgentFlowId !== "chat" ? rawAgentFlowId : undefined;
 		const startTime = Date.now();
-		const provider =
-			(await serviceManager.llmService.getCurrentModel())?.provider ??
-			"unknown";
+		const currentModel = await serviceManager.llmService.getCurrentModel();
+		const provider = currentModel?.provider ?? "unknown";
+		const requestDefaults: RunRequestDefaults = {
+			promptCacheKey: getPromptCacheKey(conversation),
+			reasoningEffort: currentModel
+				? await reasoningEffortSettings.get(
+						reasoningEffortKey({ provider, modelId: model }),
+					)
+				: undefined,
+		};
 
 		// Apply default stream config
 		const config: Required<ChatStreamConfig> = {
@@ -1430,10 +1456,7 @@ export class ChatHandler extends BaseProcessHandler<ChatJob | StopChatJob> {
 				const stream = toLegacyFlowStream(
 					createMemorallFlowRun({
 						runId: `chat:${jobId}`,
-						services: ChatHandler.getFlowServices(
-							getPromptCacheKey(conversation),
-							requests,
-						),
+						services: ChatHandler.getFlowServices(requestDefaults, requests),
 						signal: stopSignal,
 						input: {
 							graphType: resolvedConfigWithPrefix.graphType ?? "agent",
@@ -1598,10 +1621,7 @@ export class ChatHandler extends BaseProcessHandler<ChatJob | StopChatJob> {
 				const stream = toLegacyFlowStream(
 					createMemorallFlowRun({
 						runId: `chat:${jobId}`,
-						services: ChatHandler.getFlowServices(
-							getPromptCacheKey(conversation),
-							requests,
-						),
+						services: ChatHandler.getFlowServices(requestDefaults, requests),
 						signal: stopSignal,
 						input: {
 							graphType,
@@ -1688,7 +1708,8 @@ export class ChatHandler extends BaseProcessHandler<ChatJob | StopChatJob> {
 					tools,
 					tool_choice,
 					parallel_tool_calls,
-					prompt_cache_key: getPromptCacheKey(conversation),
+					prompt_cache_key: requestDefaults.promptCacheKey,
+					reasoning_effort: requestDefaults.reasoningEffort,
 				};
 
 				await dependencies.updateJobProgress(jobId, {

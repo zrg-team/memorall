@@ -10,6 +10,21 @@ import { logError } from "@/utils/logger";
 import { sanitizeForJson } from "@/utils/sanitize-json";
 import { v4 } from "@/utils/uuid";
 import type { ChatMode } from "@/main/modules/chat/services/chat-service";
+import { platform } from "@/platform/current";
+
+/** The agent picked last in the composer ("chat" for none), kept across reloads. */
+export const SELECTED_AGENT_STORAGE_KEY = "memorall.chat.selectedAgent";
+
+const readRememberedAgentFlowId = async (): Promise<string | null> => {
+	try {
+		const stored = await platform.persistentStore.get<string>(
+			SELECTED_AGENT_STORAGE_KEY,
+		);
+		return typeof stored === "string" && stored ? stored : null;
+	} catch {
+		return null;
+	}
+};
 
 export interface ChatMessageGroup {
 	id: string;
@@ -60,6 +75,11 @@ interface ChatStore {
 	setChatMode: (mode: ChatMode) => void;
 	setSelectedTopic: (topicId: string) => void;
 	setSelectedAgentFlowId: (flowId: string | null) => void;
+	/**
+	 * With no agent selected yet: the one picked last time if it is still
+	 * available, otherwise the first that is.
+	 */
+	restoreSelectedAgentFlowId: (availableIds: string[]) => Promise<void>;
 
 	// Database sync
 	syncWithDB: () => Promise<void>;
@@ -760,6 +780,24 @@ export const useChatStore = create<ChatStore>((set, get) => {
 
 		setSelectedAgentFlowId: (flowId: string | null) => {
 			set({ selectedAgentFlowId: flowId });
+			if (flowId) {
+				void platform.persistentStore
+					.set(SELECTED_AGENT_STORAGE_KEY, flowId)
+					.catch(() => undefined);
+			}
+		},
+
+		restoreSelectedAgentFlowId: async (availableIds) => {
+			if (get().selectedAgentFlowId) return;
+			const remembered = await readRememberedAgentFlowId();
+			// Picked by the user while the stored choice was being read.
+			if (get().selectedAgentFlowId) return;
+			const next =
+				remembered &&
+				(remembered === "chat" || availableIds.includes(remembered))
+					? remembered
+					: availableIds[0];
+			if (next) set({ selectedAgentFlowId: next });
 		},
 
 		syncWithDB: async () => {

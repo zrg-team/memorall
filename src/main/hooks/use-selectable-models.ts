@@ -148,6 +148,7 @@ export const toSelectable = (
 		isLocal,
 		loaded: model.loaded === true,
 		categories,
+		...(model.reasoning ? { reasoning: model.reasoning } : {}),
 		...(isLocal ? localModelSize(model, provider) : {}),
 	};
 };

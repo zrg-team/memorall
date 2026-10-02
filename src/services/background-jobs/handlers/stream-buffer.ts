@@ -1,3 +1,5 @@
+import type { ChatCompletionChunkToolCall } from "@/types/openai";
+
 /**
  * Helper class to buffer streaming content and emit when threshold is reached.
  */
@@ -48,21 +50,32 @@ export class StreamBuffer {
 }
 
 /**
- * Rate-bounds how often streamed content crosses a context boundary.
+ * What a model streams a little at a time: its answer, its reasoning, and the
+ * arguments of the tools it calls. Each piece is a fragment to append.
+ */
+export interface StreamedDelta {
+	content?: string;
+	reasoning?: string;
+	tool_calls?: ChatCompletionChunkToolCall[];
+}
+
+/**
+ * Rate-bounds how often a streamed delta crosses a context boundary.
  *
  * Each progress update is a runtime message: a structured clone, an IPC hop and
- * a relay decision. A fast model emits those faster than any UI can use them, so
- * content is throttled — the first fragment goes out immediately
- * (time-to-first-token must not regress), and everything arriving inside the
- * window is merged into one message sent on the trailing edge.
+ * a relay decision. A fast model emits those faster than any UI can use them —
+ * a tool call's arguments arrive a few characters at a time — so deltas are
+ * throttled: the first fragment goes out immediately (time-to-first-token must
+ * not regress), and everything arriving inside the window is merged into one
+ * message sent on the trailing edge.
  *
- * Anything that is not plain content — a tool call, a tool result, a finish
- * reason — is sent immediately, behind a flush of whatever content is pending,
- * so the consumer still sees events in the order they happened.
+ * Anything else — a tool result, a finish reason — is sent immediately, behind
+ * a flush of whatever is pending, so the consumer still sees events in the order
+ * they happened.
  */
 export interface ChunkDispatcherOptions {
 	intervalMs: number;
-	sendContent: (content: string) => void | Promise<void>;
+	sendDelta: (delta: StreamedDelta) => void | Promise<void>;
 	now?: () => number;
 	schedule?: (fn: () => void, delayMs: number) => ReturnType<typeof setTimeout>;
 	cancel?: (handle: ReturnType<typeof setTimeout>) => void;
@@ -71,8 +84,72 @@ export interface ChunkDispatcherOptions {
 const isPromiseLike = (value: unknown): value is PromiseLike<void> =>
 	typeof (value as { then?: unknown } | null | undefined)?.then === "function";
 
+/** A window's fragments, merged: text appended, tool calls joined by index. */
+class PendingDelta {
+	private content = "";
+	private reasoning = "";
+	private readonly toolCalls = new Map<number, ChatCompletionChunkToolCall>();
+
+	isEmpty(): boolean {
+		return !this.content && !this.reasoning && this.toolCalls.size === 0;
+	}
+
+	addContent(text: string): void {
+		this.content += text;
+	}
+
+	addReasoning(text: string): void {
+		this.reasoning += text;
+	}
+
+	/** False when a fragment starts a new call at an index already in use. */
+	canAddToolCalls(fragments: ChatCompletionChunkToolCall[]): boolean {
+		return fragments.every((fragment) => {
+			const current = this.toolCalls.get(fragment.index);
+			return !current || !fragment.id || fragment.id === current.id;
+		});
+	}
+
+	addToolCalls(fragments: ChatCompletionChunkToolCall[]): void {
+		for (const fragment of fragments) {
+			const current = this.toolCalls.get(fragment.index);
+			if (!current) {
+				this.toolCalls.set(fragment.index, {
+					...fragment,
+					...(fragment.function ? { function: { ...fragment.function } } : {}),
+				});
+				continue;
+			}
+			current.id ??= fragment.id;
+			current.type ??= fragment.type;
+			if (fragment.function) {
+				current.function ??= {};
+				current.function.name ??= fragment.function.name;
+				const added = fragment.function.arguments ?? "";
+				if (added) {
+					current.function.arguments = `${current.function.arguments ?? ""}${added}`;
+				}
+			}
+		}
+	}
+
+	take(): StreamedDelta {
+		const delta: StreamedDelta = {
+			...(this.reasoning ? { reasoning: this.reasoning } : {}),
+			...(this.content ? { content: this.content } : {}),
+			...(this.toolCalls.size > 0
+				? { tool_calls: [...this.toolCalls.values()] }
+				: {}),
+		};
+		this.content = "";
+		this.reasoning = "";
+		this.toolCalls.clear();
+		return delta;
+	}
+}
+
 export class ChunkDispatcher {
-	private pending = "";
+	private readonly pending = new PendingDelta();
 	private timer: ReturnType<typeof setTimeout> | null = null;
 	private lastSentAt = Number.NEGATIVE_INFINITY;
 	private readonly options: Required<ChunkDispatcherOptions>;
@@ -103,8 +180,40 @@ export class ChunkDispatcher {
 
 	queueContent(content: string): void {
 		if (!content) return;
-		this.pending += content;
+		this.pending.addContent(content);
+		this.schedulePending();
+	}
 
+	queueReasoning(reasoning: string): void {
+		if (!reasoning) return;
+		this.pending.addReasoning(reasoning);
+		this.schedulePending();
+	}
+
+	queueToolCalls(toolCalls: ChatCompletionChunkToolCall[]): void {
+		if (toolCalls.length === 0) return;
+		// A second call reusing an index in the same window goes out on its own,
+		// so the receiver never sees two calls merged into one.
+		if (!this.pending.canAddToolCalls(toolCalls)) this.flush();
+		this.pending.addToolCalls(toolCalls);
+		this.schedulePending();
+	}
+
+	/** Emit anything pending right now. Safe to call when nothing is pending. */
+	flush(): void {
+		if (this.timer) {
+			this.options.cancel(this.timer);
+			this.timer = null;
+		}
+		if (this.pending.isEmpty()) return;
+
+		const delta = this.pending.take();
+		this.lastSentAt = this.options.now();
+		this.enqueue(() => this.options.sendDelta(delta));
+	}
+
+	/** Send now if the window has passed, otherwise on its trailing edge. */
+	private schedulePending(): void {
 		const elapsed = this.options.now() - this.lastSentAt;
 		if (elapsed >= this.options.intervalMs) {
 			this.flush();
@@ -117,20 +226,6 @@ export class ChunkDispatcher {
 				this.flush();
 			}, this.options.intervalMs - elapsed);
 		}
-	}
-
-	/** Emit anything pending right now. Safe to call when nothing is pending. */
-	flush(): void {
-		if (this.timer) {
-			this.options.cancel(this.timer);
-			this.timer = null;
-		}
-		if (!this.pending) return;
-
-		const content = this.pending;
-		this.pending = "";
-		this.lastSentAt = this.options.now();
-		this.enqueue(() => this.options.sendContent(content));
 	}
 
 	/** Send an out-of-band event, preserving order against buffered content. */
@@ -207,6 +302,6 @@ export class ChunkDispatcher {
 	}
 
 	hasPending(): boolean {
-		return this.pending.length > 0;
+		return !this.pending.isEmpty();
 	}
 }
