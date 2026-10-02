@@ -22,6 +22,7 @@ import {
 	type SelectableModel,
 	useSelectableModels,
 } from "@/main/hooks/use-selectable-models";
+import { findSelectedModel } from "@/main/hooks/selectable-model";
 import type { CurrentModel } from "@/main/hooks/use-current-model";
 import { useModelReasoning } from "@/main/hooks/use-model-reasoning";
 import { useReasoningEffort } from "@/main/hooks/use-reasoning-effort";
@@ -184,13 +185,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 	);
 	// The selected model as the picker lists it, once the list is in.
 	const listedModel = useMemo(
-		() =>
-			selectableModels.find(
-				(candidate) =>
-					candidate.id === model &&
-					(!currentModel || candidate.provider === currentModel.provider),
-			),
-		[selectableModels, model, currentModel],
+		() => findSelectedModel(selectableModels, model, currentModel?.provider),
+		[selectableModels, model, currentModel?.provider],
 	);
 	const reasoning = useModelReasoning(currentModel, listedModel);
 	const [reasoningEffort, setReasoningEffort] = useReasoningEffort(
