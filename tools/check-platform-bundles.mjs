@@ -1,18 +1,25 @@
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 
+/**
+ * Reused static files: vendored libraries that ship as they are. Two of the
+ * 18 are Pyodide's (sandbox/vendors/pyodide, for the Terminal's `py`): a
+ * dynamic `import("node:child_process")` that only runs under Node.
+ */
+const MAXIMUM_REUSED_STATIC_REFERENCES = 18;
+
 const targets = {
 	web: {
 		directory: "publish/web",
 		applicationAssetPrefixes: ["studio/assets/"],
 		maximumApplicationReferences: 2,
-		maximumReusedStaticReferences: 16,
+		maximumReusedStaticReferences: MAXIMUM_REUSED_STATIC_REFERENCES,
 	},
 	desktop: {
 		directory: "publish/desktop/frontend",
 		applicationAssetPrefixes: ["assets/"],
 		maximumApplicationReferences: 2,
-		maximumReusedStaticReferences: 16,
+		maximumReusedStaticReferences: MAXIMUM_REUSED_STATIC_REFERENCES,
 	},
 };
 const requested = new Set(process.argv.slice(2));
