@@ -259,10 +259,17 @@ export const MessageRenderer: React.FC<MessageRendererProps> = React.memo(
 				)}
 			>
 				{!isUserMessage ? (
-					<div className="flex items-center justify-start gap-2 px-1 text-xs font-medium tracking-normal text-muted-foreground/80">
-						<span>{agentFlowName ?? t("messages.assistant")}</span>
-						<span className="h-1 w-1 rounded-full bg-muted-foreground/35" />
-						<time dateTime={new Date(message.createdAt).toISOString()}>
+					// The name heads the turn, so it stands above the muted fold rows
+					// below it; the time stays secondary.
+					<div className="flex min-w-0 max-w-full items-center justify-start gap-2 tracking-normal">
+						<span className="truncate text-base font-semibold leading-6 text-foreground">
+							{agentFlowName ?? t("messages.assistant")}
+						</span>
+						<span className="h-1 w-1 shrink-0 rounded-full bg-muted-foreground/35" />
+						<time
+							dateTime={new Date(message.createdAt).toISOString()}
+							className="shrink-0 text-xs text-muted-foreground/70"
+						>
 							{formattedDate}
 						</time>
 					</div>

@@ -1,8 +1,9 @@
 "use client";
 import { useWorkspaceModeStore } from "@/main/stores/workspace-mode";
-import { ArrowUp, History, MessageSquare, X } from "lucide-react";
+import { ArrowUp, History, Menu, X } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import React, { useEffect, useMemo, useRef } from "react";
+import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
 import type {
@@ -12,6 +13,7 @@ import type {
 import { ChatPanelSkeleton } from "@/main/components/atoms/AppSkeletons";
 import { ChatSidePanel } from "@/main/components/molecules/ChatSidePanel";
 import { Button } from "@/main/components/ui/button";
+import { useWorkspaceHeaderLeadingSlot } from "@/main/components/workspace-header-slot";
 import {
 	Conversation,
 	ConversationContent,
@@ -151,6 +153,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
 	const [isCompactSidePanelOpen, setIsCompactSidePanelOpen] =
 		React.useState(false);
 	const [isChatFullWidth, setIsChatFullWidth] = React.useState(false);
+	const headerLeadingSlot = useWorkspaceHeaderLeadingSlot();
 	const [expandedMessageGroupId, setExpandedMessageGroupId] = React.useState<
 		string | null
 	>(null);
@@ -824,6 +827,24 @@ ${text}`
 	const isCompactSidePanelAvailable = !isWideChatSidePanelVisible;
 	const isCompactEmptyLanding =
 		isCompactChatSurface && latestGroupIsEmpty && !showPreviousGroups;
+	const compactSidePanelToggleLabel = isCompactSidePanelOpen
+		? t("sidebar.close")
+		: t("header.openChats");
+	const compactSidePanelToggle = isCompactSidePanelAvailable ? (
+		<Button
+			type="button"
+			data-chat-side-panel-toggle
+			variant="ghost"
+			size="icon"
+			className="h-8 w-8 shrink-0 text-muted-foreground hover:bg-muted hover:text-foreground"
+			aria-label={compactSidePanelToggleLabel}
+			aria-expanded={isCompactSidePanelOpen}
+			title={compactSidePanelToggleLabel}
+			onClick={() => setIsCompactSidePanelOpen((open) => !open)}
+		>
+			<Menu size={16} />
+		</Button>
+	) : null;
 
 	const selectedAgent = useMemo(
 		() => agentFlows.find((flow) => flow.id === selectedAgentFlowId),
@@ -940,26 +961,22 @@ ${text}`
 					) : null}
 				</AnimatePresence>
 
+				{/* In the header beside the mode switcher, at the edge the drawer
+				    slides in from, so it never sits on top of a message. */}
+				{compactSidePanelToggle ? (
+					headerLeadingSlot ? (
+						createPortal(compactSidePanelToggle, headerLeadingSlot)
+					) : (
+						<div className="absolute left-2 top-2 z-30">
+							{compactSidePanelToggle}
+						</div>
+					)
+				) : null}
+
 				<Conversation
 					className="min-h-0 flex-1 bg-transparent"
 					resize={hasInProgressMessage ? "instant" : "smooth"}
 				>
-					{isCompactSidePanelAvailable ? (
-						<div className="absolute left-2 top-2 z-30">
-							<Button
-								type="button"
-								data-chat-side-panel-toggle
-								variant="ghost"
-								size="icon"
-								className="h-8 w-8 text-muted-foreground hover:bg-muted hover:text-foreground"
-								aria-label="Open chat side panel"
-								onClick={() => setIsCompactSidePanelOpen(true)}
-							>
-								<MessageSquare size={16} />
-							</Button>
-						</div>
-					) : null}
-
 					{completedGroups.length > 0 ? (
 						<div className="pointer-events-none absolute left-0 right-0 top-4 z-20 flex justify-center">
 							<TooltipProvider>

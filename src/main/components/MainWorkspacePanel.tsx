@@ -1,6 +1,9 @@
 import type React from "react";
 import { Suspense, lazy, useEffect, useState } from "react";
-import { WorkspaceHeaderSlotContext } from "@/main/components/workspace-header-slot";
+import {
+	WorkspaceHeaderLeadingSlotContext,
+	WorkspaceHeaderSlotContext,
+} from "@/main/components/workspace-header-slot";
 import { WorkspaceModeSwitcher } from "@/main/modules/studio/components/WorkspaceModeSwitcher";
 import { ChatPage } from "@/main/pages/ChatPage";
 import {
@@ -38,6 +41,8 @@ export const MainWorkspacePanel: React.FC<MainWorkspacePanelProps> = ({
 	const mode = useWorkspaceModeStore((state) => state.mode);
 	const hydrate = useWorkspaceModeStore((state) => state.hydrate);
 	const [headerSlot, setHeaderSlot] = useState<HTMLElement | null>(null);
+	const [headerLeadingSlot, setHeaderLeadingSlot] =
+		useState<HTMLElement | null>(null);
 
 	useEffect(() => {
 		void hydrate();
@@ -68,6 +73,11 @@ export const MainWorkspacePanel: React.FC<MainWorkspacePanelProps> = ({
 				}}
 				data-workspace-header
 			>
+				<div
+					ref={setHeaderLeadingSlot}
+					className="flex shrink-0 items-center empty:hidden"
+					data-workspace-header-leading
+				/>
 				<WorkspaceModeSwitcher compact={chatProps.isNarrowChatPanel} />
 				<div
 					ref={setHeaderSlot}
@@ -76,15 +86,20 @@ export const MainWorkspacePanel: React.FC<MainWorkspacePanelProps> = ({
 				/>
 			</header>
 			<div className="min-h-0 flex-1">
-				<WorkspaceHeaderSlotContext.Provider value={headerSlot}>
-					{mode === "chat" ? (
-						<ChatPage {...chatProps} />
-					) : (
-						<Suspense fallback={null}>
-							<StudioPage mode={mode} isNarrow={chatProps.isNarrowChatPanel} />
-						</Suspense>
-					)}
-				</WorkspaceHeaderSlotContext.Provider>
+				<WorkspaceHeaderLeadingSlotContext.Provider value={headerLeadingSlot}>
+					<WorkspaceHeaderSlotContext.Provider value={headerSlot}>
+						{mode === "chat" ? (
+							<ChatPage {...chatProps} />
+						) : (
+							<Suspense fallback={null}>
+								<StudioPage
+									mode={mode}
+									isNarrow={chatProps.isNarrowChatPanel}
+								/>
+							</Suspense>
+						)}
+					</WorkspaceHeaderSlotContext.Provider>
+				</WorkspaceHeaderLeadingSlotContext.Provider>
 			</div>
 		</div>
 	);

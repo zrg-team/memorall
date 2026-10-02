@@ -23,9 +23,27 @@ vi.mock("@/platform/current", () => ({
 	},
 }));
 
-vi.mock("@/main/pages/ChatPage", () => ({
-	ChatPage: () => <div data-testid="chat-page" />,
-}));
+vi.mock("@/main/pages/ChatPage", async () => {
+	const { createPortal } = await import("react-dom");
+	const { useWorkspaceHeaderLeadingSlot } = await import(
+		"@/main/components/workspace-header-slot"
+	);
+	return {
+		ChatPage: () => {
+			const slot = useWorkspaceHeaderLeadingSlot();
+			return (
+				<div data-testid="chat-page">
+					{slot
+						? createPortal(
+								<button type="button">Open chat history</button>,
+								slot,
+							)
+						: null}
+				</div>
+			);
+		},
+	};
+});
 
 vi.mock("@/main/modules/studio/components/StudioPage", async () => {
 	const { createPortal } = await import("react-dom");
@@ -90,6 +108,24 @@ describe("MainWorkspacePanel", () => {
 			document.querySelector("[data-workspace-mode-switcher]") as HTMLElement,
 		);
 		expect(screen.getByTestId("studio-page")).not.toContainElement(picker);
+	});
+
+	it("puts chat's history button in the header, before the mode switcher", async () => {
+		render(<MainWorkspacePanel isNarrowChatPanel />);
+
+		const toggle = await screen.findByRole("button", {
+			name: "Open chat history",
+		});
+		const leading = document.querySelector("[data-workspace-header-leading]");
+		expect(leading).toContainElement(toggle);
+		expect(screen.getByTestId("chat-page")).not.toContainElement(toggle);
+		const switcher = document.querySelector(
+			"[data-workspace-mode-switcher]",
+		) as HTMLElement;
+		expect(
+			toggle.compareDocumentPosition(switcher) &
+				Node.DOCUMENT_POSITION_FOLLOWING,
+		).toBeTruthy();
 	});
 
 	it("switches back to chat carrying text a studio sent", async () => {

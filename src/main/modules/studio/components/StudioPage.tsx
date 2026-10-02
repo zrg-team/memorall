@@ -1,11 +1,14 @@
-import { History, Loader2, Settings2 } from "lucide-react";
+import { Loader2, Menu, Settings2 } from "lucide-react";
 import type React from "react";
 import { Suspense, lazy, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/main/components/ui/button";
-import { useWorkspaceHeaderSlot } from "@/main/components/workspace-header-slot";
+import {
+	useWorkspaceHeaderLeadingSlot,
+	useWorkspaceHeaderSlot,
+} from "@/main/components/workspace-header-slot";
 import { TooltipProvider } from "@/main/components/ui/tooltip";
 import type { SelectableModel } from "@/main/hooks/selectable-model";
 import { useSelectableModels } from "@/main/hooks/use-selectable-models";
@@ -87,6 +90,7 @@ export const StudioPage: React.FC<StudioPageProps> = ({
 	const loadMode = useStudioStore((store) => store.loadMode);
 	const [historyOpen, setHistoryOpen] = useState(false);
 	const headerSlot = useWorkspaceHeaderSlot();
+	const headerLeadingSlot = useWorkspaceHeaderLeadingSlot();
 	const pendingLoad = useRef<string | null>(null);
 
 	// Picking a local model loads it right away, through the studio's loader so
@@ -158,6 +162,25 @@ export const StudioPage: React.FC<StudioPageProps> = ({
 		</>
 	);
 	const showRail = !isNarrow;
+	const historyToggleLabel = historyOpen
+		? t("history.close", { defaultValue: "Close sessions" })
+		: t("history.open", { defaultValue: "Show sessions" });
+	const historyToggle =
+		!showRail && current ? (
+			<Button
+				type="button"
+				variant="ghost"
+				size="icon"
+				className="h-8 w-8 shrink-0 text-muted-foreground hover:bg-muted hover:text-foreground"
+				onClick={() => setHistoryOpen((open) => !open)}
+				aria-label={historyToggleLabel}
+				aria-expanded={historyOpen}
+				title={historyToggleLabel}
+				data-studio-history-toggle
+			>
+				<Menu size={16} />
+			</Button>
+		) : null;
 
 	return (
 		<TooltipProvider>
@@ -194,22 +217,14 @@ export const StudioPage: React.FC<StudioPageProps> = ({
 							</div>
 						</>
 					) : null}
-					{!showRail && current ? (
-						<div className="absolute left-2 top-2 z-30">
-							<Button
-								type="button"
-								variant="ghost"
-								size="icon"
-								className="h-8 w-8 text-muted-foreground hover:bg-muted hover:text-foreground"
-								onClick={() => setHistoryOpen(true)}
-								aria-label={t("history.open", {
-									defaultValue: "Show sessions",
-								})}
-								data-studio-history-toggle
-							>
-								<History size={16} />
-							</Button>
-						</div>
+					{/* Beside the mode switcher, like chat's history button, so it never
+					    covers the canvas. */}
+					{historyToggle ? (
+						headerLeadingSlot ? (
+							createPortal(historyToggle, headerLeadingSlot)
+						) : (
+							<div className="absolute left-2 top-2 z-30">{historyToggle}</div>
+						)
 					) : null}
 
 					{/* Loading status and "manage models" sit beside the mode switcher
