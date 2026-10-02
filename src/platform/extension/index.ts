@@ -2,11 +2,9 @@ import { BACKGROUND_EVENTS } from "@/constants/events";
 import type { PlatformComposition } from "../contracts/core";
 import { MutableCapabilityRegistry } from "../core/capability-registry";
 import { hasOriginPrivateFileSystem } from "../core/origin-private-file-system";
-import {
-	BaseUrlAssetResolver,
-	normalizeAssetPath,
-} from "../core/asset-resolver";
+import { BaseUrlAssetResolver } from "../core/asset-resolver";
 import { ChromeStorageKeyValueStore } from "./chrome-storage-key-value-store";
+import { ExtensionAssetResolver } from "./extension-asset-resolver";
 import { ExtensionNavigationPort } from "./extension-navigation-port";
 import { ExtensionExternalLinkPort } from "./extension-external-link-port";
 import { ExtensionRuntimeDiagnostics } from "./extension-runtime-diagnostics";
@@ -51,8 +49,9 @@ export const platform: PlatformComposition = {
 		},
 	}),
 	assets:
-		typeof chrome !== "undefined" && chrome.runtime?.getURL
-			? { url: (path) => chrome.runtime.getURL(normalizeAssetPath(path)) }
+		typeof chrome !== "undefined" &&
+		typeof chrome.runtime?.getURL === "function"
+			? new ExtensionAssetResolver()
 			: new BaseUrlAssetResolver("/"),
 	persistentStore: new ChromeStorageKeyValueStore("local"),
 	sessionStore: new ChromeStorageKeyValueStore("session"),

@@ -13,18 +13,8 @@ const FRAME_PAGE = "sandbox/pages/html-artifact.html";
  */
 export const FRAME_PAGE_INDEX = 1;
 
-const framePageUrl = (): string => {
-	const pages =
-		platform.environment === "extension" && typeof chrome !== "undefined"
-			? (chrome.runtime?.getManifest?.() as { sandbox?: { pages?: string[] } })
-					?.sandbox?.pages
-			: undefined;
-	const page =
-		pages?.find((candidate) => candidate.includes("html-artifact")) ??
-		pages?.[FRAME_PAGE_INDEX] ??
-		FRAME_PAGE;
-	return platform.assets.url(page);
-};
+const framePageUrl = (): string =>
+	platform.assets.sandboxPageUrl(FRAME_PAGE, FRAME_PAGE_INDEX);
 
 /**
  * An HTML artifact, shown the way it was written: its scripts and handlers
