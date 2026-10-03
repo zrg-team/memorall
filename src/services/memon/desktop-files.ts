@@ -2,11 +2,11 @@ import {
 	MEMON_BOT_FILE_NAME,
 	MEMON_LEGACY_DESKTOP_DIR,
 	MEMON_MEMORY_FILE_NAME,
-	memonDesktopPaths,
+	memonHomePaths,
 } from "./constants";
 
 /**
- * Bot.md and Memory.md on the MemonOS desktop. Bot.md is the user's own
+ * Bot.md and Memory.md in the agent's home. Bot.md is the user's own
  * instructions for the bot; Memory.md is what the bot remembers between
  * chats. Both are plain files the user and the bot can edit.
  */
@@ -66,7 +66,7 @@ export const loadMemonDesktopFiles = async (
 	io: MemonDesktopFileIO,
 	home: string,
 ): Promise<MemonDesktopFiles> => {
-	const paths = memonDesktopPaths(home);
+	const paths = memonHomePaths(home);
 	return {
 		bot: await readOrCreate(
 			io,

@@ -107,6 +107,10 @@ export interface MemonNoteItem {
 export interface MemonNotesState {
 	items: MemonNoteItem[];
 	text: string;
+	/** The `.notes` file they are kept in: ~/my.notes unless another is open. */
+	path?: string;
+	/** Why the file could not be read; the next change writes it again. */
+	error?: string;
 }
 
 export type MemonScheduleStatus = "active" | "paused" | "draft";
@@ -270,6 +274,11 @@ export interface MemonTerminalLine {
 	kind: MemonTerminalLineKind;
 	text: string;
 	cwd?: string;
+	/**
+	 * Printed without a newline yet (a prompt waiting for an answer, a
+	 * progress line): what comes next continues it on screen.
+	 */
+	partial?: boolean;
 }
 
 /** A command of the agent's that waits for the user's go-ahead. */
@@ -300,6 +309,13 @@ export interface MemonTerminalTab {
 export interface MemonTerminalState {
 	cwd: string;
 	lines: MemonTerminalLine[];
+	/**
+	 * The front tab's lines dropped before `lines` (it keeps the latest only):
+	 * `lines[0]` is line `lineOffset` of its screen.
+	 */
+	lineOffset?: number;
+	/** The front tab's screen: a new one after `clear`, so it is drawn anew. */
+	screenId?: number;
 	runningProcessId: string | null;
 	/** The command that is running, from the moment it starts. */
 	runningCommand: string | null;
@@ -315,6 +331,10 @@ export interface MemonTerminalState {
 	runningTabId: string | null;
 	/** The running tab's last lines, while another tab is in front. */
 	runningTabTail?: MemonTerminalLine[];
+	/** Commands run before, oldest first, as the history file keeps them. */
+	history?: string[];
+	/** The `.terminal` file the history is kept in: ~/my.terminal by default. */
+	historyPath?: string;
 }
 
 export interface MemonAppAvailability {
@@ -350,10 +370,13 @@ export interface MemonMachineSnapshot {
 	skills: MemonSkillsState;
 	connections: MemonConnectionsState;
 	terminal: MemonTerminalState;
-	/** What is in /Desktop: Bot.md, Memory.md and anything else put there. */
+	/**
+	 * What is in the agent's home, drawn as the desktop: Bot.md, Memory.md,
+	 * my.notes and everything else in it, hidden files left out.
+	 */
 	desktop: MemonFileEntry[];
 	visual: MemonVisualState;
-	/** The agent's home folder (shown as `~`), holding its Desktop. */
+	/** The agent's home folder, `/agents/<agent name>` (shown as `~`). */
 	home: string;
 	cursor: MemonCursorState | null;
 	/** User changes the agent has not read yet. */

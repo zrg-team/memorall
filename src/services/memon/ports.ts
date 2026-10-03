@@ -24,9 +24,22 @@ import type {
 	MemonBrowserPort,
 	MemonDownloadPort,
 	MemonFilesPort,
+	MemonHomePort,
 	MemonPorts,
 	MemonSchedulerPort,
 } from "./memon-machine";
+import {
+	MEMON_GUEST_HOME,
+	MEMON_LEGACY_USERS_DIR,
+	memonHomeDir,
+	memonLegacyHomeDir,
+} from "./constants";
+import {
+	type MemonHomeIO,
+	moveMemonHome,
+	prepareMemonHome,
+} from "./agent-home";
+import { loadMemonDesktopFiles } from "./desktop-files";
 import { getLocalTimezone } from "@/services/cron-jobs/cron-expression";
 import type { CronJob } from "@/services/database/types";
 import type { MemonViewerKind } from "./file-kinds";
@@ -34,7 +47,8 @@ import type {
 	MemonCommandOutcome,
 	MemonTerminalPort,
 } from "./terminal/memon-terminal";
-import type { MemonFileEntry, MemonSchedule, MemonTerminalLine } from "./types";
+import { toTerminalLines } from "./terminal/terminal-output";
+import type { MemonFileEntry, MemonSchedule } from "./types";
 import {
 	createMemonConnectionsPort,
 	createMemonSkillsPort,
@@ -245,21 +259,58 @@ export const createMemonFilesPort = (
 	},
 });
 
-const toLines = (
-	events: Array<{ type: string; text?: string }>,
-): MemonTerminalLine[] =>
-	events
-		.filter((event) => event.type !== "status" && event.text)
-		.flatMap((event) =>
-			(event.text ?? "")
-				.replace(/\n$/, "")
-				.split("\n")
-				.map((text) => ({
-					kind:
-						event.type === "stderr" ? ("stderr" as const) : ("stdout" as const),
-					text,
-				})),
-		);
+const homeIO = (fs: IFlowFileSystem): MemonHomeIO => {
+	const files = createMemonFilesPort(fs);
+	return {
+		list: (dir) => files.list(dir),
+		exists: (path) => files.exists(path),
+		isDirectory: (path) => files.isDirectory(path),
+		move: (from, to) => files.move(from, to),
+		async mkdir(path) {
+			await fs.mkdir(path, { recursive: true });
+		},
+		async removeEmptyDir(path) {
+			await fs.rmdir(path);
+		},
+	};
+};
+
+/** The agent's name, as the agents page has it. */
+const agentNameOf = async (agentId: string): Promise<string | undefined> => {
+	const { serviceManager } = await import("@/services");
+	const flows = await serviceManager.flowBuilderService
+		.listPredefinedFlows("foundation")
+		.catch(() => []);
+	return flows.find((flow) => flow.id === agentId)?.name;
+};
+
+/**
+ * Agents' homes on the documents filesystem: `/agents/<agent name>`, with
+ * Bot.md and Memory.md, and an older home of the agent's moved in.
+ */
+export const createMemonHomePort = (
+	fs: IFlowFileSystem = getFlowFileSystem(),
+	agentName: (agentId: string) => Promise<string | undefined> = agentNameOf,
+): MemonHomePort => {
+	const io = homeIO(fs);
+	const files = createMemonFilesPort(fs);
+	return {
+		async resolve(agentId) {
+			// An agent that is gone keeps a home by its id.
+			const home = agentId
+				? memonHomeDir((await agentName(agentId)) ?? agentId)
+				: MEMON_GUEST_HOME;
+			await prepareMemonHome(io, home, [
+				agentId
+					? memonLegacyHomeDir(agentId)
+					: `${MEMON_LEGACY_USERS_DIR}/guest`,
+			]);
+			await loadMemonDesktopFiles(files, home);
+			return home;
+		},
+		rename: (fromName, toName) => moveMemonHome(io, fromName, toName),
+	};
+};
 
 const operationId = (label: string): string =>
 	`memon:${label}:${Math.random().toString(36).slice(2, 10)}`;
@@ -298,7 +349,7 @@ export const createMemonTerminalPort = (
 			processId: result.processId,
 			running: result.status === "running",
 			exitCode: result.exitCode ?? (result.status === "completed" ? 0 : null),
-			output: toLines(result.events),
+			output: toTerminalLines(result.events),
 			cursor: result.nextCursor,
 		} satisfies MemonCommandOutcome;
 	},
@@ -315,7 +366,7 @@ export const createMemonTerminalPort = (
 			processId,
 			running: result.status === "running",
 			exitCode: result.exitCode ?? (result.status === "completed" ? 0 : null),
-			output: toLines(result.events),
+			output: toTerminalLines(result.events),
 			cursor: result.nextCursor,
 		};
 	},
@@ -508,4 +559,5 @@ export const createMemonPorts = (
 	skills: overrides.skills ?? createMemonSkillsPort(),
 	connections: overrides.connections ?? createMemonConnectionsPort(),
 	download: overrides.download ?? createMemonDownloadPort(),
+	homes: overrides.homes ?? createMemonHomePort(),
 });

@@ -4,18 +4,19 @@ import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import type { MemonTerminalTab } from "@/services/memon/types";
 
-/** A tab's label: its id and the name of its working directory. */
-const tabName = (tab: MemonTerminalTab): string =>
-	`${tab.id} · ${tab.cwd.split("/").filter(Boolean).pop() ?? "/"}`;
+/** A tab's label: its id and the name of its working directory (~ at home). */
+const tabName = (tab: MemonTerminalTab, home: string): string =>
+	`${tab.id} · ${tab.cwd === home ? "~" : (tab.cwd.split("/").filter(Boolean).pop() ?? "/")}`;
 
 /** The Terminal's tabs: pick one, close one, or open a new one. */
 export const TerminalTabs: React.FC<{
 	tabs: MemonTerminalTab[];
 	activeTabId: string;
+	home: string;
 	onSelect: (id: string) => void;
 	onClose: (id: string) => void;
 	onNew: () => void;
-}> = ({ tabs, activeTabId, onSelect, onClose, onNew }) => {
+}> = ({ tabs, activeTabId, home, onSelect, onClose, onNew }) => {
 	const { t } = useTranslation("common");
 	return (
 		<div className="flex shrink-0 items-center gap-1 overflow-x-auto">
@@ -38,7 +39,7 @@ export const TerminalTabs: React.FC<{
 						{tab.running ? (
 							<Loader2 size={10} className="shrink-0 animate-spin" />
 						) : null}
-						<span className="truncate">{tabName(tab)}</span>
+						<span className="truncate">{tabName(tab, home)}</span>
 					</button>
 					{tabs.length > 1 ? (
 						<button

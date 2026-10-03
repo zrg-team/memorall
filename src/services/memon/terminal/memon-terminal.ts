@@ -11,6 +11,15 @@ import {
 	CommandApprovals,
 	type CommandApprovalsHost,
 } from "./command-approvals";
+import {
+	completeTerminalLine,
+	completeTerminalPath,
+	completionWord,
+	expandHome,
+	type MemonTerminalCompletion,
+	splitCompletionPath,
+} from "./terminal-commands";
+import { MEMON_TERMINAL_HISTORY_MAX } from "./terminal-history";
 
 export interface MemonCommandOutcome {
 	processId?: string;
@@ -43,7 +52,7 @@ export interface MemonTerminalPort {
 
 export interface MemonTerminalPorts {
 	terminal: MemonTerminalPort;
-	files: Pick<MemonFilesPort, "isDirectory">;
+	files: Pick<MemonFilesPort, "isDirectory" | "list">;
 	embedded?: Pick<MemonEmbeddedPort, "servers" | "stopServer">;
 }
 
@@ -53,6 +62,10 @@ export interface MemonTerminalHost extends CommandApprovalsHost {
 	readonly sessionKey: string;
 	/** Throws when the Terminal app is turned off. */
 	requireApp(): void;
+	/** The agent's home: where tabs start, `cd` goes and `~` points. */
+	home(): string;
+	/** The command history changed, to be kept in its file. */
+	historyChanged(): void;
 }
 
 /** The command that keeps running, and the tab it prints into. */
@@ -71,7 +84,27 @@ interface TerminalTab {
 	cwd: string;
 	lines: MemonTerminalLine[];
 	lastExitCode: number | null;
+	/** Lines of its screen dropped from the front of `lines`. */
+	dropped: number;
+	/** Its screen, new after each clear. */
+	screen: number;
 }
+
+/** Screens are numbered from the time, so a restarted Terminal's are new. */
+let screenSeq = Date.now();
+const nextScreen = (): number => {
+	screenSeq += 1;
+	return screenSeq;
+};
+
+const newTab = (id: string, cwd: string): TerminalTab => ({
+	id,
+	cwd,
+	lines: [],
+	lastExitCode: null,
+	dropped: 0,
+	screen: nextScreen(),
+});
 
 interface RunningCommand {
 	command: string;
@@ -105,6 +138,8 @@ const PORT_MENTION =
 	/\b(?:localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\]):(\d{2,5})\b|\blistening on (?:port )?:?(\d{2,5})\b/gi;
 /** Only a lone `cd`: `cd dir && node app.js` runs in the sandbox shell. */
 const BARE_CD = /^cd(?:\s+([^;&|]+?))?\s*$/;
+/** `clear`, `history` and `history -c`: the Terminal's own, run in the tab. */
+const BUILTIN = /^(clear|history)(?:\s+(-c))?\s*$/;
 /** `make && cd dist`: once it succeeds, the tab moves to dist. */
 const TRAILING_CD = /&&\s*cd\s+([^;&|]+)$/;
 
@@ -115,10 +150,10 @@ const TRAILING_CD = /&&\s*cd\s+([^;&|]+)$/;
  * lines that never start node (ls, curl).
  */
 export class MemonTerminal {
-	private tabs: TerminalTab[] = [
-		{ id: "1", cwd: "/", lines: [], lastExitCode: null },
-	];
+	private tabs: TerminalTab[];
 	private activeId = "1";
+	/** Commands run in any tab, by the user or the agent, oldest first. */
+	private commandHistory: string[] = [];
 	private tabSeq = 1;
 	private runningCommand: RunningCommand | null = null;
 	/** Servers the sandbox lists. */
@@ -137,6 +172,57 @@ export class MemonTerminal {
 		private readonly ports: MemonTerminalPorts,
 	) {
 		this.approvals = new CommandApprovals(host);
+		this.tabs = [newTab("1", host.home())];
+	}
+
+	// ── Home and history ───────────────────────────────────────────────────
+
+	/**
+	 * The home moved (`follow`: the agent was renamed, its folder with it) or
+	 * is another agent's: tabs in the old home go to the new one.
+	 */
+	changeHome(previous: string, home: string, follow: boolean): void {
+		for (const tab of this.tabs) {
+			if (tab.cwd === previous || tab.cwd.startsWith(`${previous}/`)) {
+				tab.cwd = follow ? `${home}${tab.cwd.slice(previous.length)}` : home;
+			}
+		}
+		this.host.changed();
+	}
+
+	/** The command history, oldest first. */
+	get history(): readonly string[] {
+		return this.commandHistory;
+	}
+
+	/** The history as its file has it. */
+	setHistory(history: readonly string[]): void {
+		this.commandHistory = history.slice(-MEMON_TERMINAL_HISTORY_MAX);
+		this.host.changed();
+	}
+
+	clearHistory(): void {
+		this.commandHistory = [];
+		this.host.historyChanged();
+		this.host.changed();
+	}
+
+	private remember(command: string): void {
+		if (!command || this.commandHistory.at(-1) === command) return;
+		this.commandHistory = [...this.commandHistory, command].slice(
+			-MEMON_TERMINAL_HISTORY_MAX,
+		);
+		this.host.historyChanged();
+	}
+
+	/** A directory as `cd` takes it: nothing or `~` is the home. */
+	private resolveDir(cwd: string, path: string | undefined): string {
+		const value = path?.trim().replace(/^(['"])(.*)\1$/, "$2");
+		if (!value || value === "~") return this.host.home();
+		if (value.startsWith("~/")) {
+			return resolvePath(this.host.home(), value.slice(2));
+		}
+		return resolvePath(cwd, value);
 	}
 
 	// ── Availability and lifecycle ─────────────────────────────────────────
@@ -190,7 +276,17 @@ export class MemonTerminal {
 
 	private append(tab: TerminalTab, lines: MemonTerminalLine[]): void {
 		tab.lines.push(...lines);
-		if (tab.lines.length > MAX_LINES) tab.lines = tab.lines.slice(-MAX_LINES);
+		if (tab.lines.length > MAX_LINES) {
+			tab.dropped += tab.lines.length - MAX_LINES;
+			tab.lines = tab.lines.slice(-MAX_LINES);
+		}
+	}
+
+	/** A tab's screen starts over, empty. */
+	private resetScreen(tab: TerminalTab): void {
+		tab.lines = [];
+		tab.dropped = 0;
+		tab.screen = nextScreen();
 	}
 
 	/** Opens a tab in the current tab's directory, in front; returns its id. */
@@ -201,7 +297,7 @@ export class MemonTerminal {
 		}
 		this.tabSeq += 1;
 		const id = String(this.tabSeq);
-		this.tabs.push({ id, cwd: this.tab().cwd, lines: [], lastExitCode: null });
+		this.tabs.push(newTab(id, this.tab().cwd));
 		this.activeId = id;
 		this.host.showWindow();
 		this.host.changed();
@@ -221,7 +317,7 @@ export class MemonTerminal {
 		const tab = this.tab(id);
 		if (this.runningCommand?.tabId === tab.id) await this.stopCommand();
 		if (this.tabs.length === 1) {
-			tab.lines = [];
+			this.resetScreen(tab);
 			tab.lastExitCode = null;
 		} else {
 			const index = this.tabs.indexOf(tab);
@@ -269,19 +365,78 @@ export class MemonTerminal {
 		const trimmed = command.trim();
 		const tab = this.tab(options.terminalId);
 		const bareCd = BARE_CD.exec(trimmed);
+		const builtin = BUILTIN.exec(trimmed);
 		const alongside = this.runningCommand !== null;
-		if (alongside && !bareCd && !runsAlongside(trimmed)) {
+		if (alongside && !bareCd && !builtin && !runsAlongside(trimmed)) {
 			throw this.busyError(tab);
 		}
 		if (!options.byUser) await this.approvals.require(trimmed, tab.id);
 		this.activeId = tab.id;
 		this.host.showWindow();
-		if (options.cwd) tab.cwd = resolvePath(tab.cwd, options.cwd);
+		if (options.cwd) tab.cwd = this.resolveDir(tab.cwd, options.cwd);
 		const cwd = tab.cwd;
+		this.remember(trimmed);
+		if (builtin?.[1] === "clear") return this.clearScreen(tab);
 		this.append(tab, [{ kind: "command", text: trimmed, cwd }]);
+		if (builtin) return this.showHistory(tab, builtin[2] === "-c");
 		if (bareCd) return this.changeDirectory(tab, bareCd[1]?.trim());
-		if (alongside) return this.runAlongside(tab, trimmed, cwd);
-		return this.startCommand(tab, trimmed, cwd, options.waitMs ?? 10_000);
+		// What runs has `~` expanded; the tab shows the line as it was typed.
+		const line = expandHome(trimmed, this.host.home());
+		if (alongside) return this.runAlongside(tab, trimmed, line, cwd);
+		return this.startCommand(tab, trimmed, line, cwd, options.waitMs ?? 10_000);
+	}
+
+	private clearScreen(tab: TerminalTab): MemonCommandOutcome {
+		this.resetScreen(tab);
+		tab.lastExitCode = 0;
+		this.host.changed();
+		return { running: false, exitCode: 0, output: [] };
+	}
+
+	/** Ctrl+L: clears a tab's screen (the one in front by default). */
+	clearTab(id?: string): void {
+		this.resetScreen(this.tab(id));
+		this.host.changed();
+	}
+
+	/**
+	 * Tab on a line (the text before the cursor): a command name from the
+	 * commands the Terminal knows and the ones run before, any other word
+	 * from the files and folders it names, as a shell completes them.
+	 */
+	async complete(line: string, id?: string): Promise<MemonTerminalCompletion> {
+		const tab = this.tab(id);
+		const word = completionWord(line);
+		if (word.command) return completeTerminalLine(line, this.commandHistory);
+		const { dir } = splitCompletionPath(word.value);
+		const entries = await this.ports.files
+			.list(dir ? this.resolveDir(tab.cwd, dir) : tab.cwd)
+			.catch(() => []);
+		const completion = completeTerminalPath(line, word, entries);
+		if (completion.line !== line || completion.suggestions.length) {
+			return completion;
+		}
+		// Nothing on disk by that name: lines run before that start with it.
+		return completeTerminalLine(line, this.commandHistory);
+	}
+
+	/** `history` lists the commands, numbered; `history -c` forgets them. */
+	private showHistory(tab: TerminalTab, clear: boolean): MemonCommandOutcome {
+		if (clear) {
+			this.clearHistory();
+		} else {
+			const width = String(this.commandHistory.length).length;
+			this.append(
+				tab,
+				this.commandHistory.map((entry, index) => ({
+					kind: "stdout" as const,
+					text: `${String(index + 1).padStart(width + 2)}  ${entry}`,
+				})),
+			);
+		}
+		tab.lastExitCode = 0;
+		this.host.changed();
+		return { running: false, exitCode: 0, output: [] };
 	}
 
 	private busyError(tab: TerminalTab): Error {
@@ -299,7 +454,7 @@ export class MemonTerminal {
 		tab: TerminalTab,
 		path: string | undefined,
 	): Promise<MemonCommandOutcome> {
-		const target = resolvePath(tab.cwd, path || "/");
+		const target = this.resolveDir(tab.cwd, path);
 		if (await this.ports.files.isDirectory(target).catch(() => false)) {
 			tab.cwd = target;
 			tab.lastExitCode = 0;
@@ -316,14 +471,18 @@ export class MemonTerminal {
 	private followTrailingCd(tab: TerminalTab, command: string, cwd: string) {
 		const trailingCd = TRAILING_CD.exec(command);
 		if (trailingCd && tab.lastExitCode === 0) {
-			tab.cwd = resolvePath(cwd, trailingCd[1].trim());
+			tab.cwd = this.resolveDir(cwd, trailingCd[1]);
 		}
 	}
 
-	/** Starts the command that keeps running, and waits up to `waitMs`. */
+	/**
+	 * Starts the command that keeps running, and waits up to `waitMs`.
+	 * `command` is the line as typed; `line` is what runs.
+	 */
 	private async startCommand(
 		tab: TerminalTab,
 		command: string,
+		line: string,
 		cwd: string,
 		waitMs: number,
 	): Promise<MemonCommandOutcome> {
@@ -345,7 +504,7 @@ export class MemonTerminal {
 		this.host.changed();
 		let outcome: MemonCommandOutcome;
 		try {
-			outcome = await this.ports.terminal.run(command, {
+			outcome = await this.ports.terminal.run(line, {
 				cwd,
 				waitMs: COMMAND_START_WAIT_MS,
 				sessionKey: this.host.sessionKey,
@@ -383,10 +542,11 @@ export class MemonTerminal {
 	private async runAlongside(
 		tab: TerminalTab,
 		command: string,
+		line: string,
 		cwd: string,
 	): Promise<MemonCommandOutcome> {
 		this.host.changed();
-		const outcome = await this.ports.terminal.run(command, {
+		const outcome = await this.ports.terminal.run(line, {
 			cwd,
 			waitMs: ALONGSIDE_WAIT_MS,
 			sessionKey: this.host.sessionKey,
@@ -667,6 +827,8 @@ export class MemonTerminal {
 		return {
 			cwd: front.cwd,
 			lines: [...front.lines],
+			lineOffset: front.dropped,
+			screenId: front.screen,
 			runningProcessId: running?.processId ?? null,
 			runningCommand: running?.command ?? null,
 			startedAt: running?.startedAt ?? null,
@@ -685,6 +847,7 @@ export class MemonTerminal {
 				running && running.tabId !== front.id
 					? this.runningTab().lines.slice(-RUNNING_TAB_TAIL_LINES)
 					: undefined,
+			history: [...this.commandHistory],
 		};
 	}
 }

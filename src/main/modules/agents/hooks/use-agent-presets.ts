@@ -16,6 +16,34 @@ import {
 	type RecallType,
 } from "@/services/database/entities/topic-types";
 
+const memonClient = () =>
+	import("@/services/memon/memon-client").then((module) => module.memonClient);
+
+/**
+ * Makes the agent's home, `/agents/<agent name>`, with Bot.md and Memory.md.
+ * A failure is only logged: the home is also made on the agent's first run.
+ */
+const prepareAgentHome = async (agentId: string): Promise<void> => {
+	try {
+		await (await memonClient()).request("agent.home", { agentId });
+	} catch (err) {
+		logError("[Agents] Failed to make the agent's home folder:", err);
+	}
+};
+
+/** Moves the agent's home folder after a rename, and its computer with it. */
+const moveAgentHome = async (
+	agentId: string,
+	from: string,
+	to: string,
+): Promise<void> => {
+	try {
+		await (await memonClient()).request("agent.renamed", { agentId, from, to });
+	} catch (err) {
+		logError("[Agents] Failed to move the agent's home folder:", err);
+	}
+};
+
 type CreatePresetOptions = {
 	growType: GrowType;
 	recallType: RecallType;
@@ -209,10 +237,12 @@ export const useAgentPresets = (): UseAgentPresetsResult => {
 						name,
 						options.status ?? "active",
 					);
+				// The name may have a number added: agents' names are unique.
+				await prepareAgentHome(created.id);
 				if ((options.status ?? "active") === "active") {
 					try {
 						await topicService.createTopic({
-							name,
+							name: created.name,
 							description: "",
 							agentId: created.id,
 							growType: options.growType,
@@ -264,6 +294,9 @@ export const useAgentPresets = (): UseAgentPresetsResult => {
 					},
 				);
 
+			if (selectedPreset && selectedPreset.name !== updated.name) {
+				await moveAgentHome(updated.id, selectedPreset.name, updated.name);
+			}
 			setPresets((prev) =>
 				prev.map((preset) =>
 					preset.id === updated.id ? { ...preset, ...updated } : preset,

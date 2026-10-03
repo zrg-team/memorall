@@ -176,33 +176,31 @@ describe("BrowserSandboxProvider", () => {
 		expect(service.initialize).not.toHaveBeenCalled();
 	});
 
-	it("copies a file the harness could not read as text from the documents store", async () => {
+	it("leaves the files to the container's own sync", async () => {
 		const service = createContainerService();
 		const session = await new BrowserSandboxProvider(
 			service as never,
 		).createSession({ sessionKey: "conversation-1" }, context);
 
-		await session.workspace.bind(
-			{
-				root: "/site",
-				directories: ["/site"],
-				files: [
-					{ path: "/site/index.html", content: "<h1>hi</h1>" },
-					// An image decoded as text: its bytes are already lost here.
-					{ path: "/site/logo.png", content: "\uFFFDPNG" },
-				],
-			},
-			context,
-		);
-		expect(service.request).toHaveBeenCalledWith(
-			"fs.materializeWorkspaceFile",
-			{ path: "/site/index.html", content: "<h1>hi</h1>" },
-		);
-		expect(service.readFile).toHaveBeenCalledWith({ path: "/site/logo.png" });
-		expect(service.request).not.toHaveBeenCalledWith(
-			"fs.materializeWorkspaceFile",
-			expect.objectContaining({ path: "/site/logo.png" }),
-		);
+		await expect(
+			session.workspace.bind(
+				{
+					root: "/site",
+					directories: ["/site"],
+					files: [{ path: "/site/index.html", content: "<h1>hi</h1>" }],
+				},
+				context,
+			),
+		).resolves.toEqual({ changedPaths: [], conflicts: [] });
+		await expect(session.workspace.flush(context)).resolves.toEqual({
+			changedPaths: [],
+			conflicts: [],
+			changes: [],
+		});
+		// The container keeps the sandbox in step with the documents store.
+		expect(service.request).not.toHaveBeenCalled();
+		expect(service.readFile).not.toHaveBeenCalled();
+		expect(service.mkdir).not.toHaveBeenCalled();
 	});
 
 	it("maps every provider domain without leaking numeric process offsets", async () => {
@@ -218,14 +216,6 @@ describe("BrowserSandboxProvider", () => {
 				files: [{ path: "/projects/app/main.js", content: "1 + 1" }],
 			},
 			context,
-		);
-		expect(service.request).toHaveBeenCalledWith("fs.mountWorkspace", {
-			directories: ["/projects/app"],
-			files: ["/projects/app/main.js"],
-		});
-		expect(service.request).toHaveBeenCalledWith(
-			"fs.materializeWorkspaceFile",
-			{ path: "/projects/app/main.js", content: "1 + 1" },
 		);
 
 		await expect(
@@ -293,25 +283,11 @@ describe("BrowserSandboxProvider", () => {
 			),
 		).resolves.toMatchObject({ restored: true });
 
+		// Saved by the container's own sync: nothing for the harness to apply.
 		await expect(session.workspace.flush(context)).resolves.toEqual({
-			changedPaths: [
-				"/projects/app/out.txt",
-				"/projects/app/a.txt",
-				"/projects/app/b.txt",
-			],
+			changedPaths: [],
 			conflicts: [],
-			changes: [
-				{
-					operation: "write",
-					path: "/projects/app/out.txt",
-					content: "generated",
-				},
-				{
-					operation: "rename",
-					oldPath: "/projects/app/a.txt",
-					newPath: "/projects/app/b.txt",
-				},
-			],
+			changes: [],
 		});
 	});
 
@@ -485,10 +461,8 @@ describe("BrowserSandboxProvider", () => {
 			},
 			context,
 		);
-		expect(service.mkdir).toHaveBeenCalledWith({ path: "/projects/app/new" });
-		expect(service.unlink).toHaveBeenCalledWith({
-			path: "/projects/app/old.js",
-		});
+		expect(service.mkdir).not.toHaveBeenCalled();
+		expect(service.unlink).not.toHaveBeenCalled();
 
 		await expect(
 			session.snapshots!.manage(

@@ -17,8 +17,9 @@ import {
 	MEMON_BOT_FILE_NAME,
 	MEMON_CONFIG_RUNTIME_KEY,
 	MEMON_FEATURE_ID,
+	MEMON_HOME_RUNTIME_KEY,
 	MEMON_MEMORY_FILE_NAME,
-	memonHomeDir,
+	MEMON_NOTES_FILE_NAME,
 	MEMON_NOTES_TOOL,
 	MEMON_STEP_NAME,
 	MEMON_STUDIO_TOOL,
@@ -110,17 +111,17 @@ const APP_SECTIONS: Record<MemonAppId, (config: MemonFeatureConfig) => string> =
 			]),
 		files: (config) =>
 			section("Files", "folders, the Editor and the Viewer", [
-				'Open: memon_open { app: "files", path: "/notes" } lists a folder and { ref: "f3", action: "click" } opens an entry; { app: "editor", path } opens or starts a text file.',
+				'Open: memon_open { app: "files", path: "~/reports" } lists a folder and { ref: "f3", action: "click" } opens an entry; { app: "editor", path } opens or starts a text file.',
 				'Edit: memon_act { ref: "e1", action: "type", text: "<the full new content>" }, then { ref: "e2", action: "click" } saves.',
 				'Organize: { ref: "f3", action: "move", text: "<folder>" } ("copy" copies); cut/copy without text, then { action: "paste" }. Nothing is overwritten: a clash gets a new name.',
 				`Download: memon_act { action: "download", text: "<url>", to: "<folder or file>" } saves a web file (image, font, PDF) in one step, into ~/Downloads by default${config.apps.browser ? '; { ref: "b7", action: "download" } saves an image from the page' : ""}. Do not write a script to download.`,
 				'Zip: memon_act { action: "zip", text: "<folder>" } (or a folder ref) zips it into ~/Downloads and hands it to the user to download, when they ask for a folder as a file. Do not zip with a script.',
 				'PDFs, spreadsheets, images and media open in the Viewer as text or a description; { action: "scroll" } pages a long file.',
-				"Keep work under /notes/<topic>/ unless the user says otherwise.",
+				"New files and folders go in your home, ~ (a folder per piece of work, like ~/<topic>/), unless the user names another place.",
 			]),
 		terminal: () =>
 			section("Terminal", "shell, node, py, git and curl", [
-				'Run: memon_run { command } in the same "/" tree as Files; "cd dir" stays for later commands. A long command keeps running: { waitSeconds: 60 } waits, { input: "y" } answers it, { stop: true } stops it.',
+				'Run: memon_run { command } in the same "/" tree as Files, starting in your home (~); "cd dir" stays for later commands and "cd" alone goes home. A long command keeps running: { waitSeconds: 60 } waits, { input: "y" } answers it, { stop: true } stops it.',
 				"Code: write JavaScript to a .js file and run node file.js (node -e is not supported); end scripts with process.exit(0), or they keep running. npm install works for pure-JS packages; git works. Use py (standard library) only when Python is asked for or needed.",
 				"Web: curl works as usual. Save files with it in one line, not with a script: curl -sSL -o assets/hero.jpg <url>; several: curl -sSL --create-dirs --output-dir assets -O <url1> -O <url2>.",
 				"curl, git and py lines run next to a running server: curl -s localhost:3000/api | jq .",
@@ -130,6 +131,7 @@ const APP_SECTIONS: Record<MemonAppId, (config: MemonFeatureConfig) => string> =
 				"If the request is unclear, ask all your questions in one message first; if it is clear, go straight on.",
 				'Plan work with more than one step before starting: memon_notes { action: "set", items: ["…", "…"] }, each step short and concrete.',
 				'Track it: { action: "start", step: 2 }, { action: "done", step: 2 }; { action: "add", items }, { action: "edit", step, text }, { action: "remove", step } as the plan changes. Keep findings, sources and decisions with { action: "write", text }.',
+				`Notes are kept in ~/${MEMON_NOTES_FILE_NAME}, so a plan is still there next chat: for a new task, "set" a new one.`,
 				"Work through every step without stopping between them. Give the final answer only when every step is done or removed. The user may tick, add or remove steps; follow their list.",
 			]),
 		visualize: (config) =>
@@ -185,6 +187,7 @@ const BUILT_IN_SECTION = section(
 const homeSection = (
 	desktop: MemonDesktopFiles | undefined,
 	notes: boolean,
+	home: string | undefined,
 ): string => {
 	const bot = desktop
 		? desktopFileForPrompt(desktop.bot, MEMON_BOT_TEMPLATE)
@@ -197,7 +200,8 @@ const homeSection = (
 			"Your home",
 			`~, with ${MEMON_BOT_FILE_NAME} and ${MEMON_MEMORY_FILE_NAME}`,
 			[
-				`~ is your home folder; every agent has its own. ~/Desktop/${MEMON_BOT_FILE_NAME} is the user's standing instructions for you and ~/Desktop/${MEMON_MEMORY_FILE_NAME} what you remember about them; both are read at the start of every chat.`,
+				`~ is your home folder${home ? `, ${home}` : ""}: your workspace, and the desktop the user sees. Every agent has its own. Keep what you make there unless the user names another place.`,
+				`~/${MEMON_BOT_FILE_NAME} is the user's standing instructions for you and ~/${MEMON_MEMORY_FILE_NAME} what you remember about them; both are read at the start of every chat.`,
 				'Save a lasting preference or fact, or what the user asks you to remember, right away: memon_memory { action: "add", text: "…" }, one short fact per entry. Fix a wrong one: { action: "update", entry: 2, text } or { action: "remove", entry: 2 } (the [n] below).',
 				`Do not save what only matters for this task${notes ? " (that goes in Notes)" : ""}; never save passwords, keys or tokens.`,
 				`Change ${MEMON_BOT_FILE_NAME} only when the user asks to change how you behave from now on: memon_memory { file: "bot", action: "add", text }, then tell them.`,
@@ -218,6 +222,7 @@ export const buildMemonPrompt = (
 	config: MemonFeatureConfig,
 	desktop?: MemonDesktopFiles,
 	studio: readonly MemonStudioToolState[] = [],
+	home?: string,
 ): string => {
 	const apps = MEMON_APP_IDS.filter((app) => config.apps[app]);
 	const ready = studio.filter((tool) => tool.ready);
@@ -242,7 +247,7 @@ export const buildMemonPrompt = (
 		...apps.map((app) => APP_SECTIONS[app](config)),
 		studioSection(ready),
 		BUILT_IN_SECTION,
-		homeSection(desktop, config.apps.notes),
+		homeSection(desktop, config.apps.notes, home),
 		section("Working with the user", "they watch and can take over", [
 			'"user changes since your last screen" lists what they did: continue from the current screen and do not undo their changes.',
 			gates.length > 0 &&
@@ -255,38 +260,25 @@ export const buildMemonPrompt = (
 };
 
 /**
- * Bot.md and Memory.md as they are now, created on first use. Loaded lazily:
- * importing this step must not start the filesystem.
+ * The agent's home, made ready (`/agents/<agent name>`, moved in from where
+ * an older version kept it), with Bot.md and Memory.md as they are now.
+ * Loaded lazily: importing this step must not start the filesystem.
  */
-const readDesktopFiles = async (
+const readHome = async (
 	agentId: string | undefined,
-): Promise<MemonDesktopFiles | undefined> => {
+): Promise<{ home?: string; desktop?: MemonDesktopFiles }> => {
 	try {
-		const { documentFileSystemService } = await import(
-			"@/services/filesystem/document-filesystem"
+		const { createMemonFilesPort, createMemonHomePort } = await import(
+			"@/services/memon/ports"
 		);
-		const { toDocumentsSandboxPath } = await import(
-			"@/services/filesystem/sandbox-paths"
-		);
-		return await loadMemonDesktopFiles(
-			{
-				read: async (path) =>
-					new TextDecoder().decode(
-						await documentFileSystemService.readFile(
-							toDocumentsSandboxPath(path),
-						),
-					),
-				write: (path, content) =>
-					documentFileSystemService.writeFile(
-						toDocumentsSandboxPath(path),
-						content,
-					),
-			},
-			memonHomeDir(agentId),
-		);
+		const home = await createMemonHomePort().resolve(agentId ?? null);
+		return {
+			home,
+			desktop: await loadMemonDesktopFiles(createMemonFilesPort(), home),
+		};
 	} catch (error) {
 		logError("[MEMON_FEATURE] Could not read Bot.md / Memory.md:", error);
-		return undefined;
+		return {};
 	}
 };
 
@@ -313,18 +305,19 @@ const definition = defineStep<
 			const memonConfig = normalizeMemonFeatureConfig(config);
 			const runtime = getFlowRuntimeVars(runConfig);
 			runtime?.set(MEMON_CONFIG_RUNTIME_KEY, memonConfig);
-			const [desktop, studio] = await Promise.all([
+			const [{ home, desktop }, studio] = await Promise.all([
 				// The agent's own home, as its computer uses.
-				readDesktopFiles(getRunAgentId(runtime)),
+				readHome(getRunAgentId(runtime)),
 				readStudioTools(),
 			]);
+			if (home) runtime?.set(MEMON_HOME_RUNTIME_KEY, home);
 			const tools = GraphBase.chat.addTool(
 				input.tools,
 				...memonToolsFor(memonConfig, studio),
 			);
 			const messages = GraphBase.chat.systemMessage(
 				input.messages,
-				buildMemonPrompt(memonConfig, desktop, studio),
+				buildMemonPrompt(memonConfig, desktop, studio, home),
 			);
 			return { output: { tools, messages } };
 		} catch (error) {

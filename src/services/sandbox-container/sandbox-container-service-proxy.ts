@@ -326,7 +326,6 @@ export class SandboxContainerServiceProxy implements ISandboxContainerService {
 		const makeRequest = () =>
 			this.request("server.handleSwRequest", params, 120_000);
 
-		const retriedMissingPaths = new Set<string>();
 		let lastResult: SandboxHandleSwRequestResult | null = null;
 
 		for (
@@ -347,24 +346,9 @@ export class SandboxContainerServiceProxy implements ISandboxContainerService {
 				);
 				const missingPath = match?.[1] ?? null;
 
-				if (missingPath && !retriedMissingPaths.has(missingPath)) {
-					retriedMissingPaths.add(missingPath);
-					try {
-						const bytes = await documentFileSystemService.readFile(missingPath);
-						const content = new TextDecoder().decode(bytes);
-						await this.request("fs.materializeDocumentFile", {
-							path: missingPath,
-							content,
-						});
-						continue;
-					} catch (err) {
-						logWarn(
-							"[SW relay proxy] Failed to materialize workspace file for retry",
-							{ missingPath, err },
-						);
-					}
-				}
-				if (missingPath && retriedMissingPaths.has(missingPath)) {
+				// The main context already sent the file and asked again; one still
+				// missing is served straight from the documents store.
+				if (missingPath) {
 					const directResponse = await this.tryServeDirectWorkspaceFile({
 						method: params.method,
 						missingPath,

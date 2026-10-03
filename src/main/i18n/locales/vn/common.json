@@ -598,7 +598,6 @@
 			"running": "Đang chạy · {{elapsed}}",
 			"quiet": "không có đầu ra trong {{elapsed}}, hãy Dừng nếu đã xong",
 			"stop": "Dừng (Ctrl+C)",
-			"inputPlaceholder": "Nhập vào lệnh đang chạy, hoặc chạy ls, cat, curl… bên cạnh nó",
 			"approvalTitle": "MemonOS Bot muốn chạy lệnh này",
 			"approvalEarlier": "MemonOS Bot đã xin chạy lệnh này trước đó",
 			"approve": "Chạy",
@@ -608,7 +607,11 @@
 			"newTab": "Thẻ terminal mới",
 			"closeTab": "Đóng thẻ {{id}}",
 			"tab": "Thẻ {{id}}",
-			"otherTabRunning": "Thẻ {{id}} đang chạy một lệnh; ở đây bạn có thể chạy ls, cat, curl, git, py…"
+			"otherTabRunning": "Thẻ {{id}} đang chạy một lệnh; ở đây bạn có thể chạy ls, cat, curl, git, py…",
+			"clear": "Xóa",
+			"clearHistory": "Xóa lịch sử lệnh",
+			"clearHistoryConfirm": "Xóa lịch sử lệnh của Terminal? Các lệnh cũng bị xóa khỏi tệp lịch sử.",
+			"historyCount": "{{count}} lệnh trong {{file}}"
 		},
 		"preview": {
 			"preview": "Xem trước",

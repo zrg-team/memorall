@@ -86,16 +86,16 @@ const snapshot = (
 	},
 	cursor: null,
 	desktop: [
-		{ name: "Bot.md", path: "/.users/guest/Desktop/Bot.md", type: "file" },
+		{ name: "Bot.md", path: "/agents/guest/Bot.md", type: "file" },
 		{
 			name: "Memory.md",
-			path: "/.users/guest/Desktop/Memory.md",
+			path: "/agents/guest/Memory.md",
 			type: "file",
 		},
 	],
 	pendingUserChanges: [],
 	drafts: {},
-	home: "/.users/guest",
+	home: "/agents/guest",
 	visual: {
 		path: null,
 		title: "Untitled visual",
@@ -125,7 +125,7 @@ describe("serializeScreen", () => {
 
 	it("names what is on the desktop", () => {
 		expect(serializeScreen(snapshot())).toContain(
-			"desktop (~/Desktop): Bot.md · Memory.md",
+			"desktop (~): Bot.md · Memory.md",
 		);
 	});
 

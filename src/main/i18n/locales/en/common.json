@@ -594,7 +594,6 @@
 			"running": "Running · {{elapsed}}",
 			"quiet": "no output for {{elapsed}}, Stop it if it is done",
 			"stop": "Stop (Ctrl+C)",
-			"inputPlaceholder": "Type into the running command, or run ls, cat, curl… next to it",
 			"approvalTitle": "MemonOS Bot wants to run this",
 			"approvalEarlier": "MemonOS Bot asked to run this earlier",
 			"approve": "Run it",
@@ -604,7 +603,11 @@
 			"newTab": "New terminal tab",
 			"closeTab": "Close tab {{id}}",
 			"tab": "Tab {{id}}",
-			"otherTabRunning": "Tab {{id}} is running a command; here you can run ls, cat, curl, git, py…"
+			"otherTabRunning": "Tab {{id}} is running a command; here you can run ls, cat, curl, git, py…",
+			"clear": "Clear",
+			"clearHistory": "Clear command history",
+			"clearHistoryConfirm": "Clear the Terminal's command history? The commands are removed from its history file too.",
+			"historyCount": "{{count}} commands in {{file}}"
 		},
 		"preview": {
 			"preview": "Preview",

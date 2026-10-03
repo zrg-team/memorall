@@ -57,6 +57,10 @@ const {
 		getLogs: vi.fn(async (payload) => ({ op: "getLogs", payload })),
 		clearLogs: vi.fn(async () => ({ op: "clearLogs" })),
 		fetchResource: vi.fn(async (payload) => ({ op: "fetchResource", payload })),
+		handleSwRequestWithRetry: vi.fn(async (payload) => ({
+			op: "handleSwRequestWithRetry",
+			payload,
+		})),
 		writeFile: vi.fn(async (payload) => ({ op: "writeFile", payload })),
 		readFile: vi.fn(async (payload) => ({ op: "readFile", payload })),
 		mkdir: vi.fn(async (payload) => ({ op: "mkdir", payload })),
@@ -519,6 +523,7 @@ describe("SandboxOperationsHandler", () => {
 		["server.list", "listServers", undefined],
 		["server.request", "requestServer", {}],
 		["server.renderUrl", "getServerRenderUrl", {}],
+		["server.handleSwRequest", "handleSwRequestWithRetry", {}],
 		["snapshot.get", "getSnapshot", undefined],
 		["snapshot.restore", "restoreSnapshot", {}],
 	];
@@ -542,15 +547,7 @@ describe("SandboxOperationsHandler", () => {
 
 	it("dispatches generic request-backed sandbox operations and rejects invalid payloads", async () => {
 		const handler = new SandboxOperationsHandler();
-		for (const operation of [
-			"fs.mountDocuments",
-			"fs.materializeDocumentFile",
-			"fs.mountWorkspace",
-			"fs.materializeWorkspaceFile",
-			"fs.flushWorkspaceWrites",
-			"server.handleSwRequest",
-			"runtime.reset",
-		]) {
+		for (const operation of ["runtime.reset"]) {
 			await handler.process(
 				`sandbox-${operation}`,
 				job("sandbox-operation", { operation, payload: { value: operation } }),

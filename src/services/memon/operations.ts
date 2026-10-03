@@ -112,6 +112,22 @@ export const runMemonOperation = async (
 			});
 			return machine.snapshot();
 		}
+		case "agent.home": {
+			const { createMemonHomePort } = await import("./ports");
+			return createMemonHomePort().resolve(job.payload.agentId);
+		}
+		case "agent.renamed": {
+			const { agentId, from, to } = job.payload;
+			const machines = listMemonMachines().filter(
+				(machine) => machine.agent === agentId,
+			);
+			// Writes still on their way go to the old folder before it moves.
+			await Promise.all(machines.map((machine) => machine.flushWrites()));
+			const { createMemonHomePort } = await import("./ports");
+			const home = await createMemonHomePort().rename(from, to);
+			for (const machine of machines) machine.setAgent(agentId, home);
+			return home;
+		}
 		case "machine.stop": {
 			// Shutting down mid-action would pull the computer out from under
 			// the agent; the user pauses or takes over first.
@@ -470,11 +486,27 @@ export const runMemonOperation = async (
 				(machine) => machine.terminal.enterLine(text),
 			);
 		}
+		case "terminal.clear":
+			return control(job.payload.key, (machine) =>
+				machine.terminal.clearTab(job.payload.terminalId),
+			);
+		case "terminal.complete": {
+			const { key, line, terminalId } = job.payload;
+			const machine = findMemonMachine(key);
+			if (!machine) return { line, suggestions: [] };
+			return machine.terminal.complete(line, terminalId);
+		}
 		case "terminal.stop":
 			return userAside(
 				job.payload.key,
 				"stopped the running command",
 				(machine) => machine.terminal.stopCommand(),
+			);
+		case "terminal.clearHistory":
+			return userAside(
+				job.payload.key,
+				"cleared the Terminal's command history",
+				(machine) => machine.clearTerminalHistory(),
 			);
 		case "terminal.approval": {
 			const { key, id, decision } = job.payload;

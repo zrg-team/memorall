@@ -39,8 +39,26 @@ import { skillFileSystemService } from "@/services/filesystem/skill-filesystem";
 import type { AttachedDocumentRef, ChatStatus } from "@/types/chat";
 import type { DocumentFile } from "@/types/document-library";
 
-/** Below this composer width the view controls fold into the overflow menu. */
+/** Below this composer width the agent and model names shorten. */
 const COMPOSER_NARROW_WIDTH = 416;
+/**
+ * Below this width the view actions (agent settings, full width, split) fold
+ * into the overflow menu, so the agent and model chips keep room for their
+ * names. An agent's bar also carries its memory and settings: it folds sooner.
+ */
+const COMPOSER_FOLD_WIDTH = 600;
+const COMPOSER_AGENT_FOLD_WIDTH = 720;
+
+type ComposerSize = "narrow" | "compact" | "medium" | "wide";
+
+const composerSize = (width: number): ComposerSize =>
+	width < COMPOSER_NARROW_WIDTH
+		? "narrow"
+		: width < COMPOSER_FOLD_WIDTH
+			? "compact"
+			: width < COMPOSER_AGENT_FOLD_WIDTH
+				? "medium"
+				: "wide";
 
 export interface ChatInputProps {
 	inputValue: string;
@@ -83,12 +101,11 @@ export interface ChatInputProps {
 	 * waits and offers a way back to that chat.
 	 */
 	runningElsewhere?: { title: string; onOpen: () => void } | null;
-	/** Opens the agent's MemonOS computer; only for agents that have one. */
-	onOpenComputer?: () => void;
-	isComputerWorking?: boolean;
 	isFullWidth?: boolean;
 	onToggleFullWidth?: () => void;
 	placeholder?: string;
+	/** Changed (a new chat, say): the composer takes the focus. */
+	focusKey?: number;
 }
 
 export const ChatInput: React.FC<ChatInputProps> = ({
@@ -118,11 +135,10 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 	onAttachedDocumentRefsChange,
 	isModelReady = true,
 	runningElsewhere = null,
-	onOpenComputer,
-	isComputerWorking = false,
 	isFullWidth = false,
 	onToggleFullWidth,
 	placeholder,
+	focusKey = 0,
 }) => {
 	const latestInputRef = useRef(inputValue);
 	latestInputRef.current = inputValue;
@@ -134,17 +150,26 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 	// The toolbar folds on the composer's own width. Keying off the viewport was
 	// wrong in every surface that matters: the side panel, the desktop pane and
 	// the embedded frame are all narrow inside a wide window.
-	const [isNarrowComposer, setIsNarrowComposer] = useState(false);
+	const [size, setSize] = useState<ComposerSize>("wide");
+	const isNarrowComposer = size === "narrow";
+	const foldComposerActions =
+		size === "narrow" ||
+		size === "compact" ||
+		(isCustomMode && size === "medium");
 
 	useEffect(() => {
 		const element = composerRef.current;
 		if (!element || typeof ResizeObserver === "undefined") return;
 		const observer = new ResizeObserver(([entry]) => {
-			setIsNarrowComposer(entry.contentRect.width < COMPOSER_NARROW_WIDTH);
+			setSize(composerSize(entry.contentRect.width));
 		});
 		observer.observe(element);
 		return () => observer.disconnect();
 	}, []);
+
+	useEffect(() => {
+		if (focusKey) textareaRef.current?.focus();
+	}, [focusKey]);
 
 	// The co-agent needs a page to attach to: the current tab in the extension,
 	// a page in the managed browser on desktop. On the web there is neither, so
@@ -525,6 +550,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 							onDeleteChat={onDeleteChat}
 							onOpenAgentSettings={onOpenAgentSettings}
 							isNarrow={isNarrowComposer}
+							foldActions={foldComposerActions}
 							isCustomMode={isCustomMode}
 							onAttachFileClick={handleAttachClick}
 							onAttachDocumentClick={handleOpenDocumentPicker}
@@ -536,8 +562,6 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 							onStartCoAgent={canUseCoAgent ? toggleCoAgent : undefined}
 							isCoAgentStarting={isCoAgentStarting}
 							isCoAgentActive={isCoAgentActive}
-							onOpenComputer={onOpenComputer}
-							isComputerWorking={isComputerWorking}
 							selectableModels={selectableModels}
 							selectableModelsByProvider={selectableModelsByProvider}
 							lockedModelProviders={lockedModelProviders}

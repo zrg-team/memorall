@@ -11,7 +11,7 @@ import {
  * (a server). Runners of other commands (bash, xargs, timeout) and `sleep`
  * are left out.
  */
-const SHELL_TOOLS: ReadonlySet<string> = new Set([
+export const SHELL_TOOLS: ReadonlySet<string> = new Set([
 	"awk",
 	"base64",
 	"basename",

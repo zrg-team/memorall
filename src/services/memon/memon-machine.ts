@@ -7,15 +7,24 @@ import type {
 import {
 	MEMON_AGENT_TURN_CEILING_MS,
 	MEMON_APP_IDS,
+	MEMON_GUEST_HOME,
+	MEMON_NOTES_EXTENSION,
+	MEMON_TERMINAL_EXTENSION,
 	MEMON_VISUAL_EXTENSION,
 	MEMON_VISUALS_DIR,
-	memonDesktopPaths,
-	memonHomeDir,
+	memonDisplayPath,
+	memonHomePaths,
 	MEMON_TEXT_PAGE_LINES,
 	type MemonAppId,
 	type MemonStudioToolId,
 	type MemonWindowApp,
 } from "./constants";
+import { MemonFileSync } from "./file-sync";
+import { parseNotesFile, serializeNotesFile } from "./notes-file";
+import {
+	parseTerminalHistory,
+	serializeTerminalHistory,
+} from "./terminal/terminal-history";
 import {
 	DEFAULT_MEMON_FEATURE_CONFIG,
 	type MemonFeatureConfig,
@@ -177,6 +186,17 @@ export interface MemonDownloadPort {
 	): Promise<{ bytes: Uint8Array; contentType: string; url: string }>;
 }
 
+/** Agents' homes, `/agents/<agent name>`. */
+export interface MemonHomePort {
+	/**
+	 * The agent's home, made ready: the folder with Bot.md and Memory.md, and
+	 * what an older version kept elsewhere moved in. No agent: the guest's.
+	 */
+	resolve(agentId: string | null): Promise<string>;
+	/** Moves an agent's home after a rename; returns the new home. */
+	rename(fromName: string, toName: string): Promise<string>;
+}
+
 export interface MemonPorts {
 	browser: MemonBrowserPort;
 	/** Pages of servers started in the Terminal, shown in the window. */
@@ -188,6 +208,8 @@ export interface MemonPorts {
 	skills: MemonSkillsPort;
 	connections: MemonConnectionsPort;
 	download?: MemonDownloadPort;
+	/** Without it the computer stays in the home it is given. */
+	homes?: MemonHomePort;
 }
 
 export type MemonTurnOutcome = "ready" | "timeout" | "cancelled";
@@ -302,7 +324,9 @@ export class MemonMachine {
 	private activeTabId: string | null = null;
 	private browserWindowId: number | undefined;
 	private tabSeq = 0;
-	private filesCwd = "/";
+	/** The agent's home, `/agents/<agent name>`: where Files and the Terminal start. */
+	private homeDir: string = MEMON_GUEST_HOME;
+	private filesCwd: string = MEMON_GUEST_HOME;
 	private fileEntries: MemonFileEntry[] = [];
 	private filesError: string | undefined;
 	private fileClipboard: MemonFileClipboard | null = null;
@@ -325,6 +349,13 @@ export class MemonMachine {
 	private noteItems: MemonNoteItem[] = [];
 	private notesText = "";
 	private noteSeq = 0;
+	/** The `.notes` file open in Notes; null is ~/my.notes. */
+	private notesPath: string | null = null;
+	private notesError: string | undefined;
+	private readonly notesSync: MemonFileSync;
+	/** The `.terminal` file the history is kept in; null is ~/my.terminal. */
+	private historyPath: string | null = null;
+	private readonly historySync: MemonFileSync;
 	private agentId: string | null = null;
 	private agentName: string | undefined;
 	private schedules: MemonSchedule[] = [];
@@ -370,6 +401,8 @@ export class MemonMachine {
 		config: MemonFeatureConfig = DEFAULT_MEMON_FEATURE_CONFIG,
 	) {
 		this.config = config;
+		this.notesSync = new MemonFileSync(ports.files, "the notes");
+		this.historySync = new MemonFileSync(ports.files, "the command history");
 		this.terminal = new MemonTerminal(
 			{
 				sessionKey: key,
@@ -385,6 +418,12 @@ export class MemonMachine {
 					}
 				},
 				changed: () => this.changed(),
+				home: () => this.homeDir,
+				historyChanged: () =>
+					this.historySync.save(
+						this.historyFile,
+						serializeTerminalHistory(this.terminal.history),
+					),
 			},
 			ports,
 		);
@@ -418,8 +457,14 @@ export class MemonMachine {
 		}
 	}
 
+	/** Waits for the notes and history writes started so far. */
+	async flushWrites(): Promise<void> {
+		await Promise.all([this.notesSync.flush(), this.historySync.flush()]);
+	}
+
 	async dispose(): Promise<void> {
 		this.disposed = true;
+		await this.flushWrites();
 		this.terminal.dispose();
 		this.cancelWaits();
 		this.unsubscribeFiles?.();
@@ -986,19 +1031,163 @@ export class MemonMachine {
 	// ── Files and editor ────────────────────────────────────────────────────
 
 	/**
-	 * Creates Bot.md and Memory.md the first time and keeps the desktop's
-	 * file list current, whichever app (or the Files page) changes it.
+	 * Creates Bot.md and Memory.md the first time, reads the notes and the
+	 * command history from their files, and keeps the desktop (the home's
+	 * files) and both apps current, whichever app (or the Files page) changes
+	 * the files.
 	 */
 	async prepareDesktop(): Promise<void> {
-		await loadMemonDesktopFiles(this.ports.files, this.home);
+		const home = this.homeDir;
+		await loadMemonDesktopFiles(this.ports.files, home);
+		if (home !== this.homeDir) return;
+		await Promise.all([this.loadNotes(), this.loadHistory()]);
 		await this.refreshDesktop();
 		this.unsubscribeDesktop ??= this.ports.files.subscribe(() => {
 			if (this.desktopRefreshTimer) clearTimeout(this.desktopRefreshTimer);
 			this.desktopRefreshTimer = setTimeout(() => {
 				this.desktopRefreshTimer = undefined;
 				void this.refreshDesktop();
+				void this.loadNotes();
+				void this.loadHistory();
 			}, 300);
 		});
+	}
+
+	/** The agent using the computer, if any. */
+	get agent(): string | null {
+		return this.agentId;
+	}
+
+	/**
+	 * Moves the computer to another home. `follow`: the same agent's home was
+	 * moved (a rename), so what is open moves with it; otherwise the home is
+	 * another agent's, with its own notes and history.
+	 */
+	setHome(home: string, follow = true): void {
+		if (home === this.homeDir) return;
+		const previous = this.homeDir;
+		if (follow) {
+			this.followMove(previous, home);
+		} else {
+			if (
+				this.filesCwd === previous ||
+				this.filesCwd.startsWith(`${previous}/`)
+			)
+				this.filesCwd = home;
+			this.notesPath = null;
+			this.historyPath = null;
+		}
+		this.homeDir = home;
+		this.terminal.changeHome(previous, home, follow);
+		this.changed();
+		if (this.unsubscribeDesktop) {
+			void this.prepareDesktop().catch(() => undefined);
+		}
+	}
+
+	/** Asks where the agent's home is now, e.g. after a rename. */
+	async refreshHome(follow = true): Promise<string> {
+		const homes = this.ports.homes;
+		if (!homes) return this.homeDir;
+		const agentId = this.agentId;
+		const home = await homes.resolve(agentId);
+		if (agentId === this.agentId) this.setHome(home, follow);
+		return this.homeDir;
+	}
+
+	private get notesFile(): string {
+		return this.notesPath ?? memonHomePaths(this.homeDir).notes;
+	}
+
+	private get historyFile(): string {
+		return this.historyPath ?? memonHomePaths(this.homeDir).terminal;
+	}
+
+	/** Keeps the notes in their file, ~/my.notes unless another is open. */
+	private saveNotes(): void {
+		this.notesError = undefined;
+		this.notesSync.save(
+			this.notesFile,
+			serializeNotesFile({ items: this.noteItems, text: this.notesText }),
+		);
+	}
+
+	/**
+	 * Reads the notes from their file when it changed. A file that is not
+	 * notes leaves them as they are, with the reason shown.
+	 */
+	private async loadNotes(): Promise<void> {
+		const path = this.notesFile;
+		const read = await this.notesSync.read(path);
+		if (path !== this.notesFile || read.status === "same") return;
+		if (read.status === "missing") {
+			if (!this.noteItems.length && !this.notesText && !this.notesError) return;
+			this.noteItems = [];
+			this.notesText = "";
+			this.notesError = undefined;
+		} else {
+			try {
+				const notes = parseNotesFile(read.content);
+				this.noteItems = notes.items.map((item) => ({
+					...this.newNote(item.text),
+					status: item.status,
+				}));
+				this.notesText = notes.text;
+				this.notesError = undefined;
+			} catch (error) {
+				this.notesError = `${memonDisplayPath(path, this.homeDir)} is not notes: ${error instanceof Error ? error.message : String(error)}. The next change writes it again.`;
+			}
+		}
+		this.changed();
+	}
+
+	/** Reads the command history from its file when it changed. */
+	private async loadHistory(): Promise<void> {
+		const path = this.historyFile;
+		const read = await this.historySync.read(path);
+		if (path !== this.historyFile || read.status === "same") return;
+		if (read.status === "missing") {
+			if (this.terminal.history.length) this.terminal.setHistory([]);
+			return;
+		}
+		try {
+			this.terminal.setHistory(parseTerminalHistory(read.content));
+		} catch {
+			// Not a history: the Terminal keeps its own, and writes it again.
+		}
+	}
+
+	/** Opens a `.notes` file in Notes; its steps and notes replace the open ones. */
+	async openNotesFile(path: string): Promise<void> {
+		this.requireApp("notes");
+		const target = this.resolvePath(path);
+		const isDefault = target === memonHomePaths(this.homeDir).notes;
+		if (!isDefault && !(await this.ports.files.exists(target))) {
+			throw new Error(`Could not open ${target}: there is no such file.`);
+		}
+		await this.notesSync.flush();
+		this.notesPath = isDefault ? null : target;
+		await this.loadNotes();
+		this.focusWindow(this.openWindow("notes").id);
+	}
+
+	/** Opens a `.terminal` file in the Terminal: its history is the one kept. */
+	async openTerminalFile(path: string): Promise<void> {
+		this.requireApp("terminal");
+		const target = this.resolvePath(path);
+		const isDefault = target === memonHomePaths(this.homeDir).terminal;
+		if (!isDefault && !(await this.ports.files.exists(target))) {
+			throw new Error(`Could not open ${target}: there is no such file.`);
+		}
+		await this.historySync.flush();
+		this.historyPath = isDefault ? null : target;
+		await this.loadHistory();
+		this.focusWindow(this.openWindow("terminal").id);
+	}
+
+	/** Forgets the Terminal's command history, in its file too. */
+	clearTerminalHistory(): void {
+		this.terminal.clearHistory();
 	}
 
 	/**
@@ -1009,7 +1198,7 @@ export class MemonMachine {
 		file: "memory" | "bot",
 		change: MemonDesktopEntryChange,
 	): Promise<{ path: string; entries: string[]; length: number }> {
-		const paths = memonDesktopPaths(this.home);
+		const paths = memonHomePaths(this.home);
 		const path = file === "bot" ? paths.bot : paths.memory;
 		const template =
 			file === "bot" ? MEMON_BOT_TEMPLATE : MEMON_MEMORY_TEMPLATE;
@@ -1031,10 +1220,11 @@ export class MemonMachine {
 		return { path, entries: listDesktopEntries(next), length: next.length };
 	}
 
+	/** The desktop shows the home's files; hidden ones stay hidden. */
 	async refreshDesktop(): Promise<void> {
 		try {
-			this.desktopEntries = await this.ports.files.list(
-				memonDesktopPaths(this.home).dir,
+			this.desktopEntries = (await this.ports.files.list(this.home)).filter(
+				(entry) => !entry.name.startsWith("."),
 			);
 		} catch {
 			this.desktopEntries = [];
@@ -1062,7 +1252,7 @@ export class MemonMachine {
 
 	/** This agent's home folder, shown as `~`. */
 	get home(): string {
-		return memonHomeDir(this.agentId);
+		return this.homeDir;
 	}
 
 	/** A Files path: `~` is the home, relative paths start at the open folder. */
@@ -1094,8 +1284,21 @@ export class MemonMachine {
 		path: string,
 		options: { create?: boolean } = {},
 	): Promise<void> {
-		this.requireApp("files");
 		const target = this.resolvePath(path);
+		// Like a desktop's file types: a .notes file opens in Notes and a
+		// .terminal file in the Terminal, when the agent has them; else it is
+		// JSON text, for the Editor.
+		if (target.endsWith(MEMON_NOTES_EXTENSION) && this.config.apps.notes) {
+			return this.openNotesFile(target);
+		}
+		if (
+			target.endsWith(MEMON_TERMINAL_EXTENSION) &&
+			this.config.apps.terminal &&
+			this.terminal.availability.available
+		) {
+			return this.openTerminalFile(target);
+		}
+		this.requireApp("files");
 		// A visual opens drawn, in Visualize, when the agent has it.
 		if (target.endsWith(MEMON_VISUAL_EXTENSION) && this.config.apps.visualize) {
 			return this.openVisual(target);
@@ -1372,6 +1575,9 @@ export class MemonMachine {
 					: path;
 		this.editorPath = moved(this.editorPath);
 		this.viewerPath = moved(this.viewerPath);
+		this.visualPath = moved(this.visualPath);
+		this.notesPath = moved(this.notesPath);
+		this.historyPath = moved(this.historyPath);
 		const cwd = moved(this.filesCwd);
 		if (cwd) this.filesCwd = cwd;
 	}
@@ -1605,6 +1811,7 @@ export class MemonMachine {
 		this.noteItems = items
 			.filter((text) => text.trim())
 			.map((text) => this.newNote(text));
+		this.saveNotes();
 		this.showNotes();
 		this.changed();
 	}
@@ -1614,6 +1821,7 @@ export class MemonMachine {
 		this.noteItems.push(
 			...items.filter((text) => text.trim()).map((text) => this.newNote(text)),
 		);
+		this.saveNotes();
 		this.showNotes();
 		this.changed();
 	}
@@ -1623,6 +1831,7 @@ export class MemonMachine {
 		this.requireApp("notes");
 		const item = this.noteAt(step);
 		item.status = status;
+		this.saveNotes();
 		this.changed();
 		return item;
 	}
@@ -1631,6 +1840,7 @@ export class MemonMachine {
 		this.requireApp("notes");
 		const item = this.noteAt(step);
 		this.noteItems = this.noteItems.filter((candidate) => candidate !== item);
+		this.saveNotes();
 		this.changed();
 		return item;
 	}
@@ -1638,6 +1848,7 @@ export class MemonMachine {
 	writeNotesText(text: string): void {
 		this.requireApp("notes");
 		this.notesText = text;
+		this.saveNotes();
 		this.showNotes();
 		this.changed();
 	}
@@ -1648,21 +1859,28 @@ export class MemonMachine {
 		const item = this.noteAt(step);
 		if (!text.trim()) throw new Error("A step needs some text.");
 		item.text = text.trim();
+		this.saveNotes();
 		this.changed();
 		return item;
 	}
 
 	// ── Scheduler ───────────────────────────────────────────────────────────
 
-	/** The agent whose schedules the Scheduler shows; set by its runs. */
-	setAgent(agentId: string | undefined): void {
-		if (!agentId || agentId === this.agentId) return;
-		const home = this.home;
-		this.agentId = agentId;
-		// A new agent brings its own home and Desktop.
-		if (this.home !== home && this.unsubscribeDesktop) {
-			void this.prepareDesktop().catch(() => undefined);
+	/**
+	 * The agent using the computer, set by its runs, with its home when
+	 * known. The same agent with another home was renamed: the computer
+	 * follows its folder.
+	 */
+	setAgent(agentId: string | undefined, home?: string): void {
+		if (!agentId) return;
+		if (agentId === this.agentId) {
+			if (home) this.setHome(home, true);
+			return;
 		}
+		this.agentId = agentId;
+		// A new agent brings its own home, notes and history.
+		if (home) this.setHome(home, false);
+		else void this.refreshHome(false).catch(() => undefined);
 		this.agentName = undefined;
 		this.schedules = [];
 		this.schedulesError = undefined;
@@ -2025,6 +2243,8 @@ export class MemonMachine {
 			notes: {
 				items: this.noteItems.map((item) => ({ ...item })),
 				text: this.notesText,
+				path: this.notesFile,
+				error: this.notesError,
 			},
 			scheduler: {
 				agentId: this.agentId,
@@ -2069,7 +2289,7 @@ export class MemonMachine {
 				error: this.viewerError,
 				screenLine: this.viewerScreenLine,
 			},
-			terminal: this.terminal.snapshot(),
+			terminal: { ...this.terminal.snapshot(), historyPath: this.historyFile },
 			cursor: this.cursor,
 			desktop: [...this.desktopEntries],
 			home: this.home,

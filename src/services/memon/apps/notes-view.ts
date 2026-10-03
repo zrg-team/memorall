@@ -40,6 +40,9 @@ export const notesApp: MemonKitApp = {
 				max: items.length,
 			},
 		];
+		if (snapshot.notes.error) {
+			nodes.push({ type: "text", text: snapshot.notes.error, tone: "error" });
+		}
 		if (doing) {
 			nodes.push({
 				type: "text",

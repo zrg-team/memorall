@@ -1,14 +1,16 @@
-import { Loader2, Server, ShieldAlert, Square } from "lucide-react";
+import { History, Loader2, Server, ShieldAlert, Square } from "lucide-react";
 import React from "react";
 import { useTranslation } from "react-i18next";
-import { cn } from "@/lib/utils";
 import { Button } from "@/main/components/ui/button";
+import { memonDisplayPath } from "@/services/memon/constants";
 import { terminalRunsInFront } from "@/services/memon/terminal/terminal-state";
 import type { MemonTerminalState } from "@/services/memon/types";
 import type { MemonSend } from "../types";
 import { TerminalTabs } from "./TerminalTabs";
-
-const prompt = (cwd?: string) => `user@memon:${cwd ?? "/"}$`;
+import {
+	XtermTerminal,
+	type XtermTerminalHandle,
+} from "./terminal/XtermTerminal";
 
 /** Quiet this long, a running command may just be finished. */
 const QUIET_MS = 5_000;
@@ -31,18 +33,21 @@ const useNow = (active: boolean): number => {
 };
 
 /**
- * The Terminal. Output streams in while a command runs; the input line then
- * types into that command (Ctrl+C stops it). A command of the agent's that
- * needs approval waits here for the user to run or decline it.
+ * The Terminal: a real terminal screen (xterm.js) per tab. Output streams in
+ * while a command runs; what is typed then goes into that command (Ctrl+C
+ * stops it). A command of the agent's that needs approval waits here for the
+ * user to run or decline it.
  */
 export const TerminalWindow: React.FC<{
 	machineKey: string;
 	terminal: MemonTerminalState;
+	/** The agent's home, shown as `~` in the prompt. */
+	home: string;
 	send: MemonSend;
-}> = ({ machineKey, terminal, send }) => {
+}> = ({ machineKey, terminal, home, send }) => {
 	const { t } = useTranslation("common");
-	const [command, setCommand] = React.useState("");
-	const outputRef = React.useRef<HTMLPreElement>(null);
+	const screenRef = React.useRef<XtermTerminalHandle>(null);
+	const history = terminal.history ?? [];
 	// The running command belongs to one tab; the others run next to it.
 	const running = terminalRunsInFront(terminal);
 	const runningElsewhere = terminal.runningCommand !== null && !running;
@@ -50,26 +55,56 @@ export const TerminalWindow: React.FC<{
 	const now = useNow(running);
 	const { approval } = terminal;
 
-	React.useEffect(() => {
-		const output = outputRef.current;
-		if (output) output.scrollTop = output.scrollHeight;
-	}, [terminal.lines.length, running, terminal.activeTabId]);
-
-	const stop = () => void send("terminal.stop", { key: machineKey });
+	const stop = () => {
+		void send("terminal.stop", { key: machineKey });
+		screenRef.current?.focus();
+	};
 
 	return (
 		<div className="flex min-h-0 flex-1 flex-col gap-1.5 p-2">
-			<TerminalTabs
-				tabs={terminal.tabs}
-				activeTabId={terminal.activeTabId}
-				onSelect={(terminalId) =>
-					void send("terminal.select", { key: machineKey, terminalId })
-				}
-				onClose={(terminalId) =>
-					void send("terminal.close", { key: machineKey, terminalId })
-				}
-				onNew={() => void send("terminal.new", { key: machineKey })}
-			/>
+			<div className="flex shrink-0 items-center gap-1">
+				<div className="min-w-0 flex-1">
+					<TerminalTabs
+						tabs={terminal.tabs}
+						activeTabId={terminal.activeTabId}
+						home={home}
+						onSelect={(terminalId) => {
+							void send("terminal.select", { key: machineKey, terminalId });
+							screenRef.current?.focus();
+						}}
+						onClose={(terminalId) =>
+							void send("terminal.close", { key: machineKey, terminalId })
+						}
+						onNew={() => {
+							void send("terminal.new", { key: machineKey });
+							screenRef.current?.focus();
+						}}
+					/>
+				</div>
+				<button
+					type="button"
+					disabled={!history.length}
+					aria-label={t("memonComputer.terminal.clearHistory")}
+					title={`${t("memonComputer.terminal.clearHistory")} · ${t(
+						"memonComputer.terminal.historyCount",
+						{
+							count: history.length,
+							file: memonDisplayPath(terminal.historyPath ?? "", home),
+						},
+					)}`}
+					onClick={() => {
+						if (
+							!window.confirm(t("memonComputer.terminal.clearHistoryConfirm"))
+						)
+							return;
+						void send("terminal.clearHistory", { key: machineKey });
+					}}
+					className="inline-flex h-6 shrink-0 items-center gap-1 rounded-md px-1.5 text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
+				>
+					<History size={12} />
+					{t("memonComputer.terminal.clear")}
+				</button>
+			</div>
 			{approval ? (
 				<div className="shrink-0 space-y-1.5 rounded-md border border-amber-500/40 bg-amber-500/10 px-2.5 py-2 text-xs">
 					<div className="flex items-center gap-1.5 font-medium text-amber-800 dark:text-amber-200">
@@ -117,40 +152,13 @@ export const TerminalWindow: React.FC<{
 					</div>
 				</div>
 			) : null}
-			<pre
-				ref={outputRef}
-				className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap break-words rounded bg-muted px-2 py-1.5 font-mono text-[11px] leading-relaxed"
-			>
-				{terminal.lines.map((line, index) => (
-					<div
-						// biome-ignore lint/suspicious/noArrayIndexKey: terminal lines have no ids
-						key={index}
-						data-memon-ask={
-							line.kind === "command"
-								? `$ ${line.text}`
-								: line.text || undefined
-						}
-						className={cn(
-							line.kind === "stderr" && "text-red-600 dark:text-red-400",
-							line.kind === "system" && "text-muted-foreground",
-							line.kind === "input" && "text-sky-700 dark:text-sky-300",
-						)}
-					>
-						{line.kind === "command" ? (
-							<>
-								<span className="text-emerald-600 dark:text-emerald-400">
-									{prompt(line.cwd)}
-								</span>{" "}
-								{line.text}
-							</>
-						) : line.kind === "input" ? (
-							`> ${line.text}`
-						) : (
-							line.text || " "
-						)}
-					</div>
-				))}
-			</pre>
+			<XtermTerminal
+				ref={screenRef}
+				machineKey={machineKey}
+				terminal={terminal}
+				home={home}
+				send={send}
+			/>
 			{running ? (
 				<div className="flex shrink-0 items-center gap-2 px-1 text-[11px] text-muted-foreground">
 					<Loader2 size={12} className="animate-spin" />
@@ -200,70 +208,16 @@ export const TerminalWindow: React.FC<{
 						{t("memonComputer.terminal.stop")}
 					</button>
 				</div>
+			) : runningElsewhere ? (
+				<div className="flex shrink-0 items-center gap-2 px-1 text-[11px] text-muted-foreground">
+					<Loader2 size={12} className="animate-spin" />
+					<span className="min-w-0 flex-1 truncate">
+						{t("memonComputer.terminal.otherTabRunning", {
+							id: terminal.runningTabId,
+						})}
+					</span>
+				</div>
 			) : null}
-			<form
-				className="flex shrink-0 items-center gap-2 rounded border border-border px-2 font-mono text-[11px]"
-				onSubmit={(event) => {
-					event.preventDefault();
-					if (running) {
-						// An empty line is an answer too (Enter at a prompt).
-						setCommand("");
-						void send("terminal.input", { key: machineKey, text: command });
-						return;
-					}
-					const value = command.trim();
-					if (!value) return;
-					setCommand("");
-					void send("terminal.exec", {
-						key: machineKey,
-						command: value,
-						terminalId: terminal.activeTabId,
-					});
-				}}
-			>
-				<label
-					htmlFor={`memon-terminal-${machineKey}`}
-					className={cn(
-						"whitespace-nowrap",
-						running
-							? "text-sky-700 dark:text-sky-300"
-							: "text-emerald-600 dark:text-emerald-400",
-					)}
-				>
-					{running ? ">" : prompt(terminal.cwd)}
-				</label>
-				<input
-					id={`memon-terminal-${machineKey}`}
-					data-memon-ref="t1"
-					value={command}
-					placeholder={
-						running
-							? t("memonComputer.terminal.inputPlaceholder")
-							: runningElsewhere
-								? t("memonComputer.terminal.otherTabRunning", {
-										id: terminal.runningTabId,
-									})
-								: undefined
-					}
-					onChange={(event) => setCommand(event.target.value)}
-					onKeyDown={(event) => {
-						const input = event.currentTarget;
-						const copying = input.selectionStart !== input.selectionEnd;
-						if (
-							running &&
-							!copying &&
-							event.ctrlKey &&
-							event.key.toLowerCase() === "c"
-						) {
-							event.preventDefault();
-							stop();
-						}
-					}}
-					autoComplete="off"
-					spellCheck={false}
-					className="h-7 min-w-0 flex-1 bg-transparent outline-none placeholder:text-muted-foreground/60"
-				/>
-			</form>
 		</div>
 	);
 };

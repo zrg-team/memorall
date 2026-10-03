@@ -4,6 +4,8 @@ export const MEMON_STEP_NAME = "memon-feature" as const;
 export const MEMON_FEATURE_ID = "step-memon-feature" as const;
 /** Runtime var carrying the normalized feature config from the step to tools. */
 export const MEMON_CONFIG_RUNTIME_KEY = "memon.config" as const;
+/** Runtime var carrying the agent's home, as the step resolved it, to tools. */
+export const MEMON_HOME_RUNTIME_KEY = "memon.home" as const;
 
 /**
  * Features whose services MemonOS Bot drives through its apps. While MemonOS Bot
@@ -131,29 +133,58 @@ export const MEMON_VISUAL_THEMES: readonly MemonVisualTheme[] = [
 ];
 
 /**
- * Every agent has a home of its own, `/.users/<agent id>`, with its Desktop
- * and the two files that shape it. The id, not the name: names change and
- * repeat, and an agent must not lose its memory to a rename. The agent and
- * the windows show the home as `~`.
+ * Every agent has a home of its own, `/agents/<agent name>`: its workspace,
+ * and the desktop of its computer. Bot.md, Memory.md, the Notes and the
+ * Terminal history are plain files in it, and new files go there unless the
+ * user names another place. Agent names are unique, so each name is one
+ * home; a rename moves it. The agent and the windows show the home as `~`.
  */
-export const MEMON_USERS_DIR = "/.users" as const;
+export const MEMON_AGENTS_DIR = "/agents" as const;
 /** Home of a computer started without an agent. */
-export const MEMON_GUEST_HOME = `${MEMON_USERS_DIR}/guest` as const;
+export const MEMON_GUEST_HOME = `${MEMON_AGENTS_DIR}/guest` as const;
 export const MEMON_BOT_FILE_NAME = "Bot.md" as const;
 export const MEMON_MEMORY_FILE_NAME = "Memory.md" as const;
+/** Notes keeps its checklist and notes in a `.notes` file (JSON). */
+export const MEMON_NOTES_EXTENSION = ".notes" as const;
+export const MEMON_NOTES_FILE_NAME = `my${MEMON_NOTES_EXTENSION}` as const;
+/** The Terminal keeps its command history in a `.terminal` file (JSON). */
+export const MEMON_TERMINAL_EXTENSION = ".terminal" as const;
+export const MEMON_TERMINAL_FILE_NAME =
+	`my${MEMON_TERMINAL_EXTENSION}` as const;
 /** The desktop all agents shared before homes; its files seed a new home. */
 export const MEMON_LEGACY_DESKTOP_DIR = "/Desktop" as const;
+/** Homes before they were named after the agent: `/.users/<agent id>/Desktop`. */
+export const MEMON_LEGACY_USERS_DIR = "/.users" as const;
 
-export const memonHomeDir = (agentId?: string | null): string =>
-	agentId
-		? `${MEMON_USERS_DIR}/${agentId.replace(/[^\w.-]/g, "_")}`
+/**
+ * An agent's name as a folder name: what a path cannot hold becomes a space,
+ * and a leading dot (a hidden folder) is dropped.
+ */
+export const memonAgentFolderName = (name: string): string =>
+	name
+		.replace(/[\\/:*?"<>|\p{Cc}]+/gu, " ")
+		.replace(/\s+/g, " ")
+		.trim()
+		.replace(/^\.+\s*/, "")
+		.slice(0, 80)
+		.trim() || "agent";
+
+/** The home of the agent with this name; the guest home without one. */
+export const memonHomeDir = (agentName?: string | null): string =>
+	agentName?.trim()
+		? `${MEMON_AGENTS_DIR}/${memonAgentFolderName(agentName)}`
 		: MEMON_GUEST_HOME;
 
-/** An agent's Desktop and the two files on it. */
-export const memonDesktopPaths = (home: string) => ({
-	dir: `${home}/Desktop`,
-	bot: `${home}/Desktop/${MEMON_BOT_FILE_NAME}`,
-	memory: `${home}/Desktop/${MEMON_MEMORY_FILE_NAME}`,
+/** Where an agent's home was before homes were named after the agent. */
+export const memonLegacyHomeDir = (agentId: string): string =>
+	`${MEMON_LEGACY_USERS_DIR}/${agentId.replace(/[^\w.-]/g, "_")}`;
+
+/** The files of a home that shape the agent and its apps. */
+export const memonHomePaths = (home: string) => ({
+	bot: `${home}/${MEMON_BOT_FILE_NAME}`,
+	memory: `${home}/${MEMON_MEMORY_FILE_NAME}`,
+	notes: `${home}/${MEMON_NOTES_FILE_NAME}`,
+	terminal: `${home}/${MEMON_TERMINAL_FILE_NAME}`,
 });
 
 /** A path as the agent and the windows show it: the home as `~`. */

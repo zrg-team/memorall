@@ -207,7 +207,9 @@ export function useDocumentLibrary() {
 	}, []); // eslint-disable-line react-hooks/exhaustive-deps
 
 	useEffect(() => {
-		return documentFileSystemService.onFilesystemChanged(() => {
+		return documentFileSystemService.onFilesystemChanged((change) => {
+			// The editor's own save: redrawing would reset the editor.
+			if (change?.quiet) return;
 			Promise.all([loadTree(), loadTopics()]).catch((err) => {
 				logError(
 					"[DOCUMENT_LIBRARY] Failed to reload after filesystem change:",

@@ -425,7 +425,7 @@ export const serializeScreen = (
 	}
 	if (snapshot.desktop.length) {
 		lines.push(
-			`desktop (~/Desktop): ${snapshot.desktop
+			`desktop (~): ${snapshot.desktop
 				.map((entry) => `${entry.name}${entry.type === "dir" ? "/" : ""}`)
 				.join(" · ")}`,
 		);

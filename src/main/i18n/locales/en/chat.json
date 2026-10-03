@@ -75,7 +75,9 @@
 		"expandWidth": "Expand message width",
 		"constrainWidth": "Constrain message width",
 		"clearConversation": "Clear messages",
-		"clearConfirm": "Clear every message in this conversation? This cannot be undone."
+		"clearConfirm": "Clear every message in this conversation? This cannot be undone.",
+		"newChat": "New chat",
+		"computerWorking": "The agent is working on its computer: open it"
 	},
 	"emptyState": {
 		"title": "What can I help you recall?",

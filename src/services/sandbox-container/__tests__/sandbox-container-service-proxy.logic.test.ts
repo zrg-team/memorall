@@ -274,29 +274,19 @@ describe("SandboxContainerServiceProxy", () => {
 		});
 	});
 
-	it("materializes missing workspace files and returns a direct GET fallback", async () => {
+	it("serves a file the main context could not send straight from the documents store", async () => {
 		const service = new SandboxContainerServiceProxy();
-		const missingBody = btoa(
-			"Mounted file is not materialized in sandbox runtime: /app.js",
-		);
+		const missingBody = btoa("Workspace file not materialized: /app.js");
 		let handleAttempts = 0;
-		const request = vi
-			.spyOn(service, "request")
-			.mockImplementation(async (operation: SandboxOperation, payload) => {
-				if (operation === "fs.materializeDocumentFile") {
-					return {
-						path: (payload as { path: string }).path,
-						materialized: true,
-					} as never;
-				}
-				handleAttempts += 1;
-				return swResult({
-					statusCode: 500,
-					statusMessage: "Internal Server Error",
-					headers: { "X-Transform-Error": "true" },
-					bodyBase64: missingBody,
-				}) as never;
-			});
+		vi.spyOn(service, "request").mockImplementation(async () => {
+			handleAttempts += 1;
+			return swResult({
+				statusCode: 500,
+				statusMessage: "Internal Server Error",
+				headers: { "X-Transform-Error": "true" },
+				bodyBase64: missingBody,
+			}) as never;
+		});
 		vi.mocked(documentFileSystemService.readFile).mockResolvedValue(
 			encoded("console.log('proxy')"),
 		);
@@ -310,11 +300,8 @@ describe("SandboxContainerServiceProxy", () => {
 			body: null,
 		});
 
-		expect(handleAttempts).toBe(2);
-		expect(request).toHaveBeenCalledWith("fs.materializeDocumentFile", {
-			path: "/app.js",
-			content: "console.log('proxy')",
-		});
+		// The main context already sent the file and asked again.
+		expect(handleAttempts).toBe(1);
 		expect(result).toMatchObject({
 			statusCode: 200,
 			headers: expect.objectContaining({

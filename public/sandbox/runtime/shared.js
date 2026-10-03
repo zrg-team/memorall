@@ -1,16 +1,5 @@
-import {
-	vfsBoolState,
-	mountedDocumentFiles,
-	mountedDocumentDirectories,
-	materializedMountedFiles,
-	mountedWorkspaceFiles,
-	mountedWorkspaceDirectories,
-	materializedWorkspaceFiles,
-	pendingWorkspaceOps,
-	toCanonicalMountedPath,
-	isDocumentsPath,
-	installDocumentsVfsOverlay,
-} from "../core/sandbox-vfs.js";
+import { toCanonicalMountedPath } from "../core/sandbox-vfs.js";
+import { installSyncCapture, resetSyncState } from "../core/sandbox-sync.js";
 
 export const SANDBOX_CHANNEL = "memorall-sandbox-container";
 export const DEFAULT_TIMEOUT_MS = 5000;
@@ -291,7 +280,7 @@ export const createContainerInstance = async () => {
 			}
 		},
 	});
-	installDocumentsVfsOverlay(containerInstance.vfs);
+	installSyncCapture(containerInstance.vfs);
 	return containerInstance;
 };
 
@@ -393,9 +382,6 @@ export const executeCode = async (
 export const runFile = async (path, timeoutMs, maxLogEntries) => {
 	const containerInstance = await ensureContainer();
 	const normalized = toCanonicalMountedPath(path);
-	if (isDocumentsPath(normalized)) {
-		throw new Error(`Cannot execute mounted documents path: ${normalized}`);
-	}
 	if (!containerInstance.vfs.existsSync(normalized)) {
 		throw new Error(`File not found: ${normalized}`);
 	}
@@ -915,16 +901,9 @@ export const resetRuntime = async () => {
 	await stopAllCommands();
 	await stopAllServers();
 	runtimeState.repls.clear();
+	// A new VFS: the host fills it again, and nothing of the old one is owed.
+	resetSyncState();
 	runtimeState.container = await createContainerInstance();
-	mountedDocumentFiles.clear();
-	mountedDocumentDirectories.clear();
-	materializedMountedFiles.clear();
-	vfsBoolState.documentsMountLoaded = false;
-	mountedWorkspaceFiles.clear();
-	mountedWorkspaceDirectories.clear();
-	materializedWorkspaceFiles.clear();
-	pendingWorkspaceOps.length = 0;
-	vfsBoolState.workspaceMountLoaded = false;
 	runtimeState.installedPackages.clear();
 	runtimeState.servers.clear();
 	runtimeState.commands.clear();

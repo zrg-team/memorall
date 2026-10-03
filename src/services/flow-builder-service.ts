@@ -38,6 +38,7 @@ import {
 	selectFeatureStepNames,
 } from "@/services/flow-config-legacy";
 import type { UnifiedFlowConfig } from "@memorall/agent-harness-flows/interfaces/config/flow-config";
+import { uniqueAgentName } from "@/services/memon/agent-home";
 import {
 	buildDefaultFlowConfig,
 	mergeWithDefaultConfig,
@@ -149,10 +150,18 @@ export class FlowBuilderService {
 	): Promise<Flow> {
 		const normalizedName = name.trim() || flowKey;
 		return this.databaseService.transaction(async ({ db, schema }) => {
+			// Agents' names are unique: each one names the agent's home folder.
+			const taken = await db
+				.select({ name: schema.flows.name })
+				.from(schema.flows)
+				.where(eq(schema.flows.predefinedFlow, flowKey));
 			const [flow] = await db
 				.insert(schema.flows)
 				.values({
-					name: normalizedName,
+					name: uniqueAgentName(
+						normalizedName,
+						taken.map((row) => row.name),
+					),
 					predefinedFlow: flowKey,
 					status,
 					serviceKeys: [],
@@ -475,10 +484,29 @@ export class FlowBuilderService {
 		}
 
 		return this.databaseService.transaction(async ({ db, schema }) => {
+			const [current] = await db
+				.select({ predefinedFlow: schema.flows.predefinedFlow })
+				.from(schema.flows)
+				.where(eq(schema.flows.id, flowId))
+				.limit(1);
+			// A renamed agent keeps a name no other agent has.
+			const name = current?.predefinedFlow
+				? uniqueAgentName(
+						normalizedName,
+						(
+							await db
+								.select({ id: schema.flows.id, name: schema.flows.name })
+								.from(schema.flows)
+								.where(eq(schema.flows.predefinedFlow, current.predefinedFlow))
+						)
+							.filter((row) => row.id !== flowId)
+							.map((row) => row.name),
+					)
+				: normalizedName;
 			const [updatedFlow] = await db
 				.update(schema.flows)
 				.set({
-					name: normalizedName,
+					name,
 					description: updates.description?.trim() || null,
 					status: updates.status,
 					...(updates.metadata ? { metadata: updates.metadata } : {}),

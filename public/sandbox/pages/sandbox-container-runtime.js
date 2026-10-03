@@ -1,10 +1,5 @@
 import { SANDBOX_CHANNEL, toError } from "../runtime/shared.js";
-import {
-	applyWorkspaceHotReload,
-	handleOperation,
-} from "../runtime/operations.js";
-
-const SANDBOX_RUNTIME_WORKSPACE_SYNC = "memorall-sandbox-workspace-sync";
+import { handleOperation } from "../runtime/operations.js";
 
 const isObject = (value) => typeof value === "object" && value !== null;
 
@@ -18,10 +13,7 @@ const isSandboxRequest = (value) => {
 	);
 };
 
-const isWorkspaceSyncMessage = (value) =>
-	isObject(value) && value.type === SANDBOX_RUNTIME_WORKSPACE_SYNC;
-
-const sendResponse = (request, response) => {
+const sendResponse = (request, response, transfer = []) => {
 	parent.postMessage(
 		{
 			channel: SANDBOX_CHANNEL,
@@ -31,11 +23,17 @@ const sendResponse = (request, response) => {
 			...response,
 		},
 		"*",
+		transfer,
 	);
 };
 
 const sendSuccess = (request, result) => {
-	sendResponse(request, { ok: true, result });
+	// File contents packed for the host move rather than copy.
+	const transfer =
+		isObject(result) && result.buffer instanceof ArrayBuffer
+			? [result.buffer]
+			: [];
+	sendResponse(request, { ok: true, result }, transfer);
 };
 
 const sendError = (request, error) => {
@@ -43,13 +41,6 @@ const sendError = (request, error) => {
 };
 
 window.addEventListener("message", (event) => {
-	if (isWorkspaceSyncMessage(event.data)) {
-		void applyWorkspaceHotReload(event.data).catch((error) => {
-			console.error("[sandbox-runtime] workspace hot reload failed", error);
-		});
-		return;
-	}
-
 	if (!isSandboxRequest(event.data)) return;
 	const request = event.data;
 	void (async () => {

@@ -652,7 +652,8 @@ export const useAgentWizard = ({
 				draft.iconScreen
 			) {
 				await serviceManager.flowBuilderService.updateFlowMetadata(created.id, {
-					name: draft.name.trim(),
+					// As created: a name another agent has gets a number.
+					name: created.name,
 					description: draft.description,
 					status: draft.status,
 					metadata: metadataWithAgentIconScreen(

@@ -109,6 +109,7 @@ exports[`requested service module coverage > imports requested service trees 1`]
   "../filesystem/change-bus/current.ts",
   "../filesystem/change-bus/extension.ts",
   "../filesystem/change-bus/types.ts",
+  "../filesystem/change-journal.ts",
   "../filesystem/default-skills/alirezarezvani.ts",
   "../filesystem/default-skills/andrej-karpathy.ts",
   "../filesystem/default-skills/anthropic.ts",

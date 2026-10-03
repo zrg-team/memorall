@@ -242,12 +242,13 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({
 
 	const handleSaveContent = async (content: string): Promise<void> => {
 		try {
-			// Workspace saves notify (may update composition previews).
-			// Document saves are silent (notify=false) so the editor doesn't reset.
+			// Workspace saves notify (may update composition previews). Document
+			// saves are quiet: the library does not redraw (the editor would
+			// reset), while the sandbox and other contexts still get the change.
 			await documentFileSystemService.writeFile(
 				sandboxPath,
 				isWorkspaceFile ? content : new TextEncoder().encode(content),
-				isWorkspaceFile,
+				isWorkspaceFile || "quiet",
 			);
 
 			// Update local state after successful save

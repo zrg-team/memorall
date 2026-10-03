@@ -424,10 +424,129 @@ describe("MemonMachine", () => {
 			"cd /notes/landing-page && node server.js",
 		);
 
+		// Tabs start in the agent's home.
 		expect(ports.terminal.run).toHaveBeenCalledWith(
 			"cd /notes/landing-page && node server.js",
-			{ cwd: "/", waitMs: 400, sessionKey: "conversation-1" },
+			{ cwd: "/agents/guest", waitMs: 400, sessionKey: "conversation-1" },
 		);
+	});
+
+	it("goes home with cd and ~, and expands ~ in commands", async () => {
+		const { machine, ports, files } = createMachine();
+		machine.setAgent("agent-1", "/agents/Research Bot");
+		files.set("/agents/Research Bot/site/index.html", "<p>hi</p>");
+
+		await machine.terminal.runCommand("cd /notes");
+		await machine.terminal.runCommand("cd");
+		expect(machine.snapshot().terminal.cwd).toBe("/agents/Research Bot");
+		await machine.terminal.runCommand("cd ~/site");
+		expect(machine.snapshot().terminal.cwd).toBe("/agents/Research Bot/site");
+
+		await machine.terminal.runCommand("cat ~/site/index.html '~/x' && ls ~");
+		expect(ports.terminal.run).toHaveBeenLastCalledWith(
+			"cat '/agents/Research Bot'/site/index.html '~/x' && ls '/agents/Research Bot'",
+			expect.objectContaining({ cwd: "/agents/Research Bot/site" }),
+		);
+		// The tab shows the line as it was typed.
+		expect(machine.snapshot().terminal.lines.at(-2)?.text).toBe(
+			"cat ~/site/index.html '~/x' && ls ~",
+		);
+	});
+
+	it("keeps the command history in ~/my.terminal, with clear and history", async () => {
+		const { machine, files: stored } = createMachine();
+		await machine.prepareDesktop();
+		await machine.terminal.runCommand("ls");
+		await machine.terminal.runCommand("ls");
+		await machine.terminal.runCommand("node app.js");
+		await machine.flushWrites();
+		expect(JSON.parse(stored.get("/agents/guest/my.terminal") ?? "")).toEqual({
+			history: ["ls", "node app.js"],
+		});
+
+		await machine.terminal.runCommand("history");
+		expect(
+			machine
+				.snapshot()
+				.terminal.lines.slice(-3)
+				.map((line) => line.text),
+		).toEqual(["  1  ls", "  2  node app.js", "  3  history"]);
+		await machine.terminal.runCommand("clear");
+		expect(machine.snapshot().terminal.lines).toEqual([]);
+		await machine.flushWrites();
+
+		// Another computer of the agent's reads it back.
+		const { machine: next, files: nextFiles } = createMachine();
+		nextFiles.set(
+			"/agents/guest/my.terminal",
+			stored.get("/agents/guest/my.terminal") ?? "",
+		);
+		await next.prepareDesktop();
+		expect(next.snapshot().terminal.history).toEqual([
+			"ls",
+			"node app.js",
+			"history",
+			"clear",
+		]);
+
+		machine.clearTerminalHistory();
+		await machine.flushWrites();
+		expect(machine.snapshot().terminal.history).toEqual([]);
+		expect(JSON.parse(stored.get("/agents/guest/my.terminal") ?? "")).toEqual({
+			history: [],
+		});
+	});
+
+	it("completes on Tab: a command by name, anything else from the tab's folder", async () => {
+		const { machine, ports } = createMachine();
+		machine.setAgent("agent-1", "/agents/Research Bot");
+		vi.mocked(ports.files.list).mockImplementation(async (dir: string) =>
+			dir === "/agents/Research Bot"
+				? [
+						{ name: "site", path: `${dir}/site`, type: "dir" as const },
+						{
+							name: "notes.md",
+							path: `${dir}/notes.md`,
+							type: "file" as const,
+						},
+					]
+				: [],
+		);
+		expect(await machine.terminal.complete("cat no")).toEqual({
+			line: "cat notes.md ",
+			suggestions: [],
+		});
+		expect((await machine.terminal.complete("cd ~/s")).line).toBe("cd ~/site/");
+		expect((await machine.terminal.complete("hist")).line).toBe("history ");
+		// Nothing by that name: lines run before that start with it.
+		await machine.terminal.runCommand("git status");
+		expect((await machine.terminal.complete("git st")).line).toBe("git status");
+		expect(ports.files.list).toHaveBeenCalledWith("/agents/Research Bot");
+	});
+
+	it("says where the tab's lines start, and clears its screen on Ctrl+L", async () => {
+		const { machine, ports } = createMachine();
+		vi.mocked(ports.terminal.run).mockResolvedValueOnce({
+			running: false,
+			exitCode: 0,
+			output: Array.from({ length: 450 }, (_, index) => ({
+				kind: "stdout" as const,
+				text: `line ${index}`,
+			})),
+		});
+		await machine.terminal.runCommand("seq 450");
+		const before = machine.snapshot().terminal;
+		// The command's line and 450 of output: the latest 400 are kept.
+		expect(before.lineOffset).toBe(51);
+		expect(before.lines[0]?.text).toBe("line 50");
+
+		machine.terminal.clearTab();
+		const after = machine.snapshot().terminal;
+		expect(after.lines).toEqual([]);
+		expect(after.lineOffset).toBe(0);
+		expect(after.screenId).not.toBe(before.screenId);
+		// Unlike `clear`, Ctrl+L is no command in the history.
+		expect(after.history).toEqual(["seq 450"]);
 	});
 
 	it("counts the address a running command prints as a server", async () => {
@@ -582,12 +701,12 @@ describe("MemonMachine", () => {
 			runningTabId: "1",
 			lines: [],
 			tabs: [
-				{ id: "1", cwd: "/", running: true },
-				{ id: "2", cwd: "/", running: false },
+				{ id: "1", cwd: "/agents/guest", running: true },
+				{ id: "2", cwd: "/agents/guest", running: false },
 			],
 		});
 
-		await machine.terminal.runCommand("cd notes");
+		await machine.terminal.runCommand("cd /notes");
 		await expect(machine.terminal.runCommand("ls")).resolves.toMatchObject({
 			alongside: true,
 			exitCode: 0,
@@ -599,7 +718,7 @@ describe("MemonMachine", () => {
 		const tab2 = machine.snapshot().terminal;
 		expect(tab2.cwd).toBe("/notes");
 		expect(tab2.lines.map((line) => line.text)).toEqual([
-			"cd notes",
+			"cd /notes",
 			"ls",
 			"ran ls",
 		]);
@@ -610,7 +729,7 @@ describe("MemonMachine", () => {
 
 		// The server's tab kept its own directory and output.
 		machine.terminal.selectTab("1");
-		expect(machine.snapshot().terminal).toMatchObject({ cwd: "/" });
+		expect(machine.snapshot().terminal).toMatchObject({ cwd: "/agents/guest" });
 		expect(machine.snapshot().terminal.lines.map((line) => line.text)).toEqual([
 			"node server.js",
 			"listening on 3000",
@@ -717,7 +836,7 @@ describe("MemonMachine", () => {
 		expect(outcome).toMatchObject({ alongside: true, exitCode: 0 });
 		expect(ports.terminal.run).toHaveBeenLastCalledWith(
 			"curl -s localhost:3000/api",
-			expect.objectContaining({ cwd: "/" }),
+			expect.objectContaining({ cwd: "/agents/guest" }),
 		);
 		expect(machine.terminal.running?.command).toBe("node server.js");
 		expect(
@@ -736,7 +855,7 @@ describe("MemonMachine", () => {
 		await machine.terminal.enterLine("pwd");
 		expect(ports.terminal.run).toHaveBeenLastCalledWith(
 			"pwd",
-			expect.objectContaining({ cwd: "/" }),
+			expect.objectContaining({ cwd: "/agents/guest" }),
 		);
 		await machine.terminal.enterLine("y");
 		expect(ports.terminal.input).toHaveBeenCalledWith(
@@ -804,7 +923,7 @@ describe("MemonMachine", () => {
 		await machine.terminal.answerApproval(waiting!.id, "approve");
 		expect(ports.terminal.run).toHaveBeenCalledWith(
 			"npm install zod",
-			expect.objectContaining({ cwd: "/" }),
+			expect.objectContaining({ cwd: "/agents/guest" }),
 		);
 
 		const stopped = machine.terminal.runCommand("npm install lodash");
@@ -983,33 +1102,65 @@ describe("MemonMachine", () => {
 		const { machine, files } = createMachine();
 		// What all agents shared before homes seeds a new home, untouched.
 		files.set("/Desktop/Bot.md", "Shared rules.");
-		machine.setAgent("agent-1");
+		machine.setAgent("agent-1", "/agents/Researcher");
 
 		await machine.prepareDesktop();
-		expect(machine.home).toBe("/.users/agent-1");
-		expect(files.get("/.users/agent-1/Desktop/Bot.md")).toBe("Shared rules.");
-		expect(files.get("/.users/agent-1/Desktop/Memory.md")).toContain(
-			"# Memory.md",
-		);
+		expect(machine.home).toBe("/agents/Researcher");
+		expect(files.get("/agents/Researcher/Bot.md")).toBe("Shared rules.");
+		expect(files.get("/agents/Researcher/Memory.md")).toContain("# Memory.md");
 		expect(files.get("/Desktop/Bot.md")).toBe("Shared rules.");
 
-		files.set("/.users/agent-1/Desktop/Bot.md", "Answer briefly.");
+		files.set("/agents/Researcher/Bot.md", "Answer briefly.");
+		files.set("/agents/Researcher/.cache", "hidden");
+		files.set("/agents/Researcher/report.md", "# Report");
 		await machine.prepareDesktop();
-		expect(files.get("/.users/agent-1/Desktop/Bot.md")).toBe("Answer briefly.");
+		expect(files.get("/agents/Researcher/Bot.md")).toBe("Answer briefly.");
+		// The desktop is the whole home, hidden files left out.
 		expect(machine.snapshot().desktop.map((entry) => entry.name)).toEqual([
 			"Bot.md",
 			"Memory.md",
+			"report.md",
 		]);
 		expect(machine.readScreen()).toContain(
-			"desktop (~/Desktop): Bot.md · Memory.md",
+			"desktop (~): Bot.md · Memory.md · report.md",
 		);
+		// Files opens at home.
+		await machine.openFolder("~");
+		expect(machine.snapshot().files.cwd).toBe("/agents/Researcher");
 
-		machine.setAgent("agent-2");
+		machine.setAgent("agent-2", "/agents/Writer");
 		await machine.prepareDesktop();
-		expect(files.get("/.users/agent-2/Desktop/Bot.md")).toBe("Shared rules.");
-		await machine.openFolder("~/Desktop");
-		expect(machine.snapshot().files.cwd).toBe("/.users/agent-2/Desktop");
-		expect(machine.readScreen()).toContain("Files · ~/Desktop");
+		expect(files.get("/agents/Writer/Bot.md")).toBe("Shared rules.");
+		expect(machine.snapshot().files.cwd).toBe("/agents/Writer");
+		expect(machine.snapshot().terminal.cwd).toBe("/agents/Writer");
+		expect(machine.readScreen()).toContain("Files · ~");
+	});
+
+	it("follows its agent's home when the agent is renamed", async () => {
+		const { machine, files, ports } = createMachine();
+		machine.setAgent("agent-1", "/agents/Researcher");
+		await machine.prepareDesktop();
+		machine.setNotes(["Read sources"]);
+		await machine.openFolder("~");
+		await machine.terminal.runCommand("cd ~");
+		await machine.flushWrites();
+
+		await ports.files.move("/agents/Researcher", "/agents/Analyst");
+		machine.setAgent("agent-1", "/agents/Analyst");
+		await vi.advanceTimersByTimeAsync(0);
+
+		expect(machine.home).toBe("/agents/Analyst");
+		expect(machine.snapshot().files.cwd).toBe("/agents/Analyst");
+		expect(machine.snapshot().terminal.cwd).toBe("/agents/Analyst");
+		expect(machine.snapshot().notes.items.map((item) => item.text)).toEqual([
+			"Read sources",
+		]);
+		machine.addNotes(["Write it up"]);
+		await machine.flushWrites();
+		expect(files.has("/agents/Researcher/my.notes")).toBe(false);
+		expect(
+			JSON.parse(files.get("/agents/Analyst/my.notes") ?? "").items,
+		).toHaveLength(2);
 	});
 
 	it("tracks a checklist in Notes without taking the agent's focus", async () => {
@@ -1040,6 +1191,81 @@ describe("MemonMachine", () => {
 		expect(() => machine.setNoteStatus(9, "done")).toThrow(
 			"Notes has no step 9; it has 3.",
 		);
+	});
+
+	it("keeps Notes in ~/my.notes, and opens .notes files in Notes", async () => {
+		const { machine, files } = createMachine();
+		await machine.prepareDesktop();
+		expect(files.has("/agents/guest/my.notes")).toBe(false);
+
+		machine.setNotes(["Search sources", "Write the report"]);
+		machine.setNoteStatus(1, "done");
+		machine.writeNotesText("Source: example.com");
+		await machine.flushWrites();
+		expect(JSON.parse(files.get("/agents/guest/my.notes") ?? "")).toEqual({
+			items: [
+				{ text: "Search sources", status: "done" },
+				{ text: "Write the report", status: "todo" },
+			],
+			text: "Source: example.com",
+		});
+
+		// The next computer reads them back.
+		const { machine: next, files: nextFiles } = createMachine();
+		nextFiles.set(
+			"/agents/guest/my.notes",
+			files.get("/agents/guest/my.notes") ?? "",
+		);
+		await next.prepareDesktop();
+		expect(next.snapshot().notes).toMatchObject({
+			items: [
+				{ text: "Search sources", status: "done" },
+				{ text: "Write the report", status: "todo" },
+			],
+			text: "Source: example.com",
+			path: "/agents/guest/my.notes",
+		});
+
+		// Another .notes file opens in Notes; the Editor never shows it.
+		files.set(
+			"/agents/guest/trip.notes",
+			JSON.stringify({ items: ["Book flights"], text: "" }),
+		);
+		await machine.openFile("~/trip.notes");
+		expect(machine.findWindow("editor")).toBeUndefined();
+		expect(machine.snapshot().focusedWindowId).toBe(
+			machine.findWindow("notes")?.id,
+		);
+		expect(machine.snapshot().notes.path).toBe("/agents/guest/trip.notes");
+		machine.setNoteStatus(1, "done");
+		await machine.flushWrites();
+		expect(
+			JSON.parse(files.get("/agents/guest/trip.notes") ?? "").items,
+		).toEqual([{ text: "Book flights", status: "done" }]);
+
+		// A file that is not notes is reported, not lost.
+		files.set("/agents/guest/broken.notes", "{ not json");
+		await machine.openFile("~/broken.notes");
+		expect(machine.snapshot().notes.error).toContain("is not notes");
+		expect(machine.snapshot().notes.items.map((item) => item.text)).toEqual([
+			"Book flights",
+		]);
+	});
+
+	it("opens .notes and .terminal files as JSON text without their apps", async () => {
+		const { machine, files } = createMachine({
+			apps: {
+				...DEFAULT_MEMON_FEATURE_CONFIG.apps,
+				notes: false,
+				terminal: false,
+			},
+		});
+		files.set("/agents/guest/my.notes", '{ "items": [], "text": "" }');
+		await machine.openFile("~/my.notes");
+		expect(machine.snapshot().editor).toMatchObject({
+			path: "/agents/guest/my.notes",
+			content: '{ "items": [], "text": "" }',
+		});
 	});
 
 	it("keeps Notes closed when the agent has no Planner", () => {
@@ -1189,7 +1415,7 @@ describe("MemonMachine", () => {
 			text: "Prefers short answers",
 		});
 		expect(added.entries).toEqual(["Prefers short answers"]);
-		expect(files.get("/.users/guest/Desktop/Memory.md")).toContain(
+		expect(files.get("/agents/guest/Memory.md")).toContain(
 			"- Prefers short answers",
 		);
 
@@ -1199,13 +1425,13 @@ describe("MemonMachine", () => {
 		});
 		const bot = await machine.editDesktopFile("bot", { action: "list" });
 		expect(bot.entries).toEqual(["Always answer in Vietnamese"]);
-		expect(files.get("/.users/guest/Desktop/Bot.md")).toContain("# Bot.md");
+		expect(files.get("/agents/guest/Bot.md")).toContain("# Bot.md");
 	});
 
 	it("shows the agent's memory change in an open, saved Editor", async () => {
 		const { machine, files } = createMachine();
-		files.set("/.users/guest/Desktop/Memory.md", "# Memory.md\n");
-		await machine.openFile("~/Desktop/Memory.md");
+		files.set("/agents/guest/Memory.md", "# Memory.md\n");
+		await machine.openFile("~/Memory.md");
 
 		await machine.editDesktopFile("memory", {
 			action: "add",
@@ -1443,7 +1669,7 @@ describe("MemonMachine", () => {
 
 	it("shows a visual, keeps it as a .openui file and opens it again", async () => {
 		const { machine, files } = createMachine();
-		machine.setAgent("agent-1");
+		machine.setAgent("agent-1", "/agents/Researcher");
 		await expect(machine.showVisual('TextContent("no root")')).rejects.toThrow(
 			"A visual starts with its root",
 		);
@@ -1453,7 +1679,7 @@ describe("MemonMachine", () => {
 			'section_1 = TextContent("Up 12%")',
 		].join("\n");
 		const path = await machine.showVisual(report);
-		expect(path).toBe("/.users/agent-1/Visuals/Sales report.openui");
+		expect(path).toBe("/agents/Researcher/Visuals/Sales report.openui");
 		expect(files.get(path)).toBe(`${report}\n`);
 		expect(machine.snapshot().visual).toMatchObject({
 			path,
@@ -1476,11 +1702,11 @@ describe("MemonMachine", () => {
 		await machine.openFolder("/notes");
 		await machine.openFile("/notes/a.md");
 		await machine.showVisual(report, { path: "~/Visuals/Copy" });
-		expect(files.get("/.users/agent-1/Visuals/Copy.openui")).toBe(
+		expect(files.get("/agents/Researcher/Visuals/Copy.openui")).toBe(
 			`${report}\n`,
 		);
 		expect(await machine.showVisual(report)).toBe(
-			"/.users/agent-1/Visuals/Sales report 2.openui",
+			"/agents/Researcher/Visuals/Sales report 2.openui",
 		);
 
 		// Files opens a .openui file in Visualize, and the user's edit saves.

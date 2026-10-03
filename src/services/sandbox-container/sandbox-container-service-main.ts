@@ -1,22 +1,18 @@
 import { logError, logInfo, logWarn } from "@/utils/logger";
 import { platform } from "@/platform/current";
-import {
-	documentFileSystemService,
-	type FilesystemChangeEvent,
-} from "@/services/filesystem/document-filesystem";
-import {
-	DOCUMENTS_SANDBOX_ROOT,
-	WORKSPACES_SANDBOX_ROOT,
-	isDocumentsSandboxPath,
-	isWorkspacesSandboxPath,
-	normalizeSandboxPath,
-	toDocumentsLogicalPath,
-} from "@/services/filesystem/sandbox-paths";
+import { documentFileSystemService } from "@/services/filesystem/document-filesystem";
+import { normalizeSandboxPath } from "@/services/filesystem/sandbox-paths";
 import { usesOnlyShellTools } from "./alongside-commands";
 import { runHostCommandLine, usesHostCommand } from "./host-commands";
 import { createCurlHttp } from "./host-commands/curl/http";
 import type { HostFiles } from "./host-commands/types";
 import type { ISandboxContainerService } from "./interfaces/sandbox-container-service.interface";
+import {
+	createMemoryLocalTreeStore,
+	createOpfsLocalTreeStore,
+	LocalTreeCache,
+} from "./local-tree-cache";
+import { DEFAULT_WORKSPACE_SYNC_LIMITS, WorkspaceSync } from "./workspace-sync";
 import {
 	decodeSwResponseBodyPreview,
 	delay,
@@ -69,8 +65,6 @@ import type {
 	SandboxServerRenderUrlResult,
 	SandboxHandleSwRequestResult,
 	SandboxResponseMessage,
-	SandboxWorkspaceOp,
-	SandboxFileContent,
 } from "./types";
 
 interface PendingRequest {
@@ -100,59 +94,11 @@ const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
 const DEFAULT_COMMAND_WAIT_TIMEOUT_MS = 10_000;
 const COMMAND_REQUEST_TIMEOUT_BUFFER_MS = 5_000;
 const EMPTY_LOCAL_BUILD_RETRY_ATTEMPTS = 20;
-const SANDBOX_RUNTIME_WORKSPACE_SYNC = "memorall-sandbox-workspace-sync";
 const SANDBOX_PREVIEW_RELAY_CHANNEL = "memorall-sandbox-preview-relay";
-/** The runtime posts this when sandbox code has queued workspace writes. */
+/** The runtime posts this when sandbox code has changes waiting to be saved. */
 const WORKSPACE_OPS_PENDING_CHANNEL = "memorall-sandbox-fs-pending";
-/**
- * Limits on copying file contents into the runtime ahead of use. Files past
- * them stay on the on-demand paths (lazy retry, direct SW fallback).
- */
-const WORKSPACE_PRELOAD_MAX_FILE_BYTES = 1024 * 1024;
-const WORKSPACE_PRELOAD_MAX_TOTAL_BYTES = 32 * 1024 * 1024;
-const WORKSPACE_PRELOAD_MAX_FILES = 2_000;
-const WORKSPACE_PRELOAD_BATCH_SIZE = 25;
-/**
- * How long a change the sandbox saved to the host is remembered, so the change
- * event it raises on the host is not sent back to the sandbox as news.
- */
-const SANDBOX_ECHO_TTL_MS = 10_000;
-
-const hasPathSegment = (path: string, segment: string): boolean =>
-	path.split("/").includes(segment);
-
-interface RuntimeWorkspaceChange {
-	operation: "write" | "delete" | "rename" | "mkdir";
-	path?: string;
-	oldPath?: string;
-	newPath?: string;
-	content?: SandboxFileContent;
-}
-
-/**
- * A file's content as the sandbox takes it: text as a string, and a file that
- * is not UTF-8 text (an image, a font) as its bytes, which decoding would ruin.
- */
-const sandboxFileContent = (bytes: Uint8Array): SandboxFileContent => {
-	try {
-		return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-	} catch {
-		return bytes;
-	}
-};
-
-const sameFileContent = (
-	left: SandboxFileContent,
-	right: SandboxFileContent,
-): boolean => {
-	if (typeof left === "string" || typeof right === "string") {
-		return left === right;
-	}
-	return (
-		left.byteLength === right.byteLength &&
-		left.every((byte, index) => byte === right[index])
-	);
-};
+/** Filling a VFS sends a whole filesystem: its batches may take a while. */
+const SYNC_REQUEST_TIMEOUT_MS = 120_000;
 
 const DIRECT_WORKSPACE_CONTENT_TYPES: Record<string, string> = {
 	".js": "application/javascript; charset=utf-8",
@@ -227,31 +173,9 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 	private initializedAt: number | null = null;
 	private readonly pending = new Map<string, PendingRequest>();
 	private readonly options: Required<SandboxContainerInitOptions>;
-	private mountDocumentsSyncPromise: Promise<void> | null = null;
-	private mountWorkspaceSyncPromise: Promise<void> | null = null;
-	private workspaceMountSynced = false;
 	private hostFiles: HostFiles | null = null;
-	private fsChangeUnsubscribe: (() => void) | null = null;
-	private workspaceHotReloadTimer: number | null = null;
-	private readonly pendingWorkspaceChanges = new Map<
-		string,
-		FilesystemChangeEvent
-	>();
-	/** Set by a change with no path: the whole mount must be read again. */
-	private pendingWorkspaceFullResync = false;
-	/**
-	 * Saving sandbox writes and pushing host changes both go through this
-	 * chain, so a host snapshot is never taken while sandbox writes are half
-	 * saved (the runtime would drop the files missing from it).
-	 */
-	private workspaceSyncChain: Promise<unknown> = Promise.resolve();
-	private readonly sandboxOriginChanges = new Map<
-		string,
-		{ content?: SandboxFileContent; expiresAt: number }
-	>();
-	private workspaceFileSizes = new Map<string, number>();
-	private readonly workspacePreloads = new Map<string, Promise<void>>();
-	private workspacePreload: Promise<void> | null = null;
+	/** Keeps the sandbox's VFS and the documents filesystem in step. */
+	private readonly workspaceSync: WorkspaceSync;
 	/** Relay channel: port1 stays here, port2 is transferred to the SW as mainPort. */
 	private swRelayChannel: MessageChannel | null = null;
 	private swRelayReady: Promise<void> | null = null;
@@ -267,6 +191,45 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 			loadTimeoutMs: options.loadTimeoutMs ?? DEFAULT_LOAD_TIMEOUT_MS,
 			requestTimeoutMs: options.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS,
 		};
+		this.workspaceSync = new WorkspaceSync(
+			{
+				list: (root) => documentFileSystemService.listEntries(root),
+				stat: (path) => documentFileSystemService.statEntry(path),
+				read: (path) => documentFileSystemService.readFile(path),
+				apply: (ops, buffer, origin) =>
+					documentFileSystemService.applyChanges(ops, buffer, origin),
+				catchUp: (afterSeq) => documentFileSystemService.catchUp(afterSeq),
+				subscribe: (listener) =>
+					documentFileSystemService.onFilesystemChanged(listener),
+			},
+			{
+				state: () => this.request("sync.state", undefined),
+				apply: (batch) =>
+					this.request(
+						"sync.apply",
+						batch,
+						SYNC_REQUEST_TIMEOUT_MS,
+						batch.buffer ? [batch.buffer] : [],
+					),
+				collect: (options) =>
+					this.request("sync.collect", options, SYNC_REQUEST_TIMEOUT_MS),
+				ack: async (batchId, failures) => {
+					await this.request("sync.ack", { batchId, failures });
+				},
+				packLocal: (root) =>
+					this.request("sync.packLocal", { root }, SYNC_REQUEST_TIMEOUT_MS),
+				restoreLocal: (pack) =>
+					this.request("sync.restoreLocal", pack, SYNC_REQUEST_TIMEOUT_MS, [
+						pack.buffer,
+					]),
+			},
+			DEFAULT_WORKSPACE_SYNC_LIMITS,
+			// node_modules and ignored caches outlive the sandbox here: in OPFS,
+			// or for this session where it is missing.
+			new LocalTreeCache(
+				createOpfsLocalTreeStore() ?? createMemoryLocalTreeStore(),
+			),
+		);
 	}
 
 	static getInstance(
@@ -317,11 +280,7 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 
 		window.addEventListener("message", this.onMessage);
 		window.addEventListener("message", this.onFsMessage);
-		if (!this.fsChangeUnsubscribe) {
-			this.fsChangeUnsubscribe = documentFileSystemService.onFilesystemChanged(
-				(change) => this.queueWorkspaceHotReload(change),
-			);
-		}
+		this.workspaceSync.start();
 
 		const iframe = document.createElement("iframe");
 		iframe.style.display = "none";
@@ -585,9 +544,9 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 					logInfo(
 						`[SW relay] materializing ${missingPath} and retrying ${params.method} ${params.path}`,
 					);
-					await this.materializeMountedDocumentFile(
+					await this.workspaceSync.materialize([
 						this.toWorkspaceCanonicalPath(missingPath),
-					);
+					]);
 					continue;
 				}
 				if (missingPath && retriedMissingPaths.has(missingPath)) {
@@ -667,130 +626,15 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 		}
 	}
 
-	// ── VFS bridge ───────────────────────────────────────────────────────────
-	// The sandbox VFS posts memorall-sandbox-fs-req / memorall-sandbox-fs-notify
-	// messages so workspace writes/reads go through documentFileSystemService
-	// for persistence rather than staying in-memory only.
-
+	// The runtime says sandbox code has changes waiting: they are saved
+	// shortly, so a long-running process's files reach the host as it runs.
 	private onFsMessage = (event: MessageEvent<unknown>): void => {
 		if (event.source !== this.iframe?.contentWindow) return;
 		const data = event.data as Record<string, unknown> | null;
-		if (!data || typeof data !== "object") return;
-
-		if (data["channel"] === "memorall-sandbox-fs-req") {
-			void this.handleFsAsyncRequest(
-				data as {
-					requestId: string;
-					operation: string;
-					payload: Record<string, unknown>;
-				},
-			);
-			return;
-		}
-		if (data["channel"] === "memorall-sandbox-fs-notify") {
-			this.handleFsNotify(
-				data as { operation: string; payload: Record<string, unknown> },
-			);
-			return;
-		}
-		if (data["channel"] === WORKSPACE_OPS_PENDING_CHANNEL) {
-			void this.flushWorkspaceWrites().catch((error) =>
-				logWarn("Failed to flush workspace writes while running", { error }),
-			);
+		if (data?.channel === WORKSPACE_OPS_PENDING_CHANNEL) {
+			this.workspaceSync.notePending();
 		}
 	};
-
-	private async handleFsAsyncRequest(req: {
-		requestId: string;
-		operation: string;
-		payload: Record<string, unknown>;
-	}): Promise<void> {
-		if (!this.iframe?.contentWindow) return;
-		try {
-			const result = await this.dispatchFsToDocumentService(
-				req.operation,
-				req.payload,
-			);
-			this.iframe.contentWindow.postMessage(
-				{
-					channel: "memorall-sandbox-fs-res",
-					requestId: req.requestId,
-					ok: true,
-					result,
-				},
-				"*",
-			);
-		} catch (err) {
-			this.iframe.contentWindow.postMessage(
-				{
-					channel: "memorall-sandbox-fs-res",
-					requestId: req.requestId,
-					ok: false,
-					error: err instanceof Error ? err.message : String(err),
-				},
-				"*",
-			);
-		}
-	}
-
-	private handleFsNotify(msg: {
-		operation: string;
-		payload: Record<string, unknown>;
-	}): void {
-		void this.dispatchFsToDocumentService(msg.operation, msg.payload).catch(
-			(err) => {
-				logWarn("[sandbox-fs-notify] failed", {
-					operation: msg.operation,
-					err,
-				});
-			},
-		);
-	}
-
-	private async dispatchFsToDocumentService(
-		operation: string,
-		payload: Record<string, unknown>,
-	): Promise<unknown> {
-		const rawPath =
-			operation === "fs.rename" ? payload["oldPath"] : payload["path"];
-		const path = this.toWorkspaceCanonicalPath(
-			this.normalizeVirtualPath(String(rawPath ?? "")),
-		);
-		switch (operation) {
-			case "fs.readFile": {
-				await this.syncDocumentsMount();
-				const bytes = await documentFileSystemService.readFile(path);
-				return { content: sandboxFileContent(bytes) };
-			}
-			case "fs.writeFile": {
-				const content = payload["content"];
-				await documentFileSystemService.writeFile(
-					path,
-					content instanceof Uint8Array ? content : String(content ?? ""),
-				);
-				return { path };
-			}
-			case "fs.mkdir": {
-				await documentFileSystemService.mkdir(path);
-				return { path };
-			}
-			case "fs.unlink": {
-				await documentFileSystemService.deleteFile(path);
-				return { path };
-			}
-			case "fs.rename": {
-				const newPath = this.toWorkspaceCanonicalPath(
-					this.normalizeVirtualPath(String(payload["newPath"] ?? "")),
-				);
-				await documentFileSystemService.renamePath(path, newPath);
-				return { oldPath: path, newPath };
-			}
-			default:
-				throw new Error(`Unknown fs bridge operation: ${operation}`);
-		}
-	}
-
-	// ── End VFS bridge ────────────────────────────────────────────────────────
 
 	private onMessage = (event: MessageEvent<unknown>): void => {
 		if (!this.iframe?.contentWindow) {
@@ -827,299 +671,6 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 		pending.resolve(envelope.result);
 	};
 
-	private queueWorkspaceHotReload(change: FilesystemChangeEvent | null): void {
-		// The runtime mounts the whole filesystem at "/", so a change in any
-		// scope is a change the sandbox can see. A change with no path is one
-		// nobody can describe (a mount appearing, a git checkout): read it all.
-		if (!change) {
-			this.pendingWorkspaceFullResync = true;
-		} else {
-			const key =
-				change.operation === "rename" || change.operation === "move"
-					? `${change.operation}:${change.oldPath ?? ""}->${change.newPath ?? ""}`
-					: `${change.operation}:${change.path ?? ""}`;
-			this.pendingWorkspaceChanges.set(key, change);
-		}
-		if (this.workspaceHotReloadTimer !== null) {
-			window.clearTimeout(this.workspaceHotReloadTimer);
-		}
-		this.workspaceHotReloadTimer = window.setTimeout(() => {
-			this.workspaceHotReloadTimer = null;
-			void this.flushWorkspaceHotReload();
-		}, 120);
-	}
-
-	private flushWorkspaceHotReload(): Promise<void> {
-		return this.enqueueWorkspaceSync(() => this.pushWorkspaceHotReload());
-	}
-
-	private async pushWorkspaceHotReload(): Promise<void> {
-		const fullResync = this.pendingWorkspaceFullResync;
-		this.pendingWorkspaceFullResync = false;
-		const changes = Array.from(this.pendingWorkspaceChanges.values());
-		this.pendingWorkspaceChanges.clear();
-
-		if (!this.initialized || !this.iframe?.contentWindow) {
-			return;
-		}
-		if (!fullResync && changes.length === 0) {
-			return;
-		}
-
-		try {
-			if (fullResync || !this.workspaceMountSynced) {
-				await this.mountWorkspaceNow();
-				return;
-			}
-
-			const snapshot =
-				await documentFileSystemService.getSandboxWorkspaceMountSnapshot();
-			const { changes: runtimeChanges, onlyEchoes } =
-				await this.buildRuntimeWorkspaceChanges(
-					changes,
-					new Set(snapshot.files),
-				);
-			// Every change was the sandbox's own write coming back: it already
-			// has all of it, and a snapshot push would only cost a re-render.
-			if (onlyEchoes) {
-				return;
-			}
-			this.rememberWorkspaceFileSizes(snapshot.fileSizes);
-			this.iframe.contentWindow.postMessage(
-				{
-					type: SANDBOX_RUNTIME_WORKSPACE_SYNC,
-					mode: "incremental",
-					snapshot: {
-						directories: snapshot.directories,
-						files: snapshot.files,
-					},
-					changes: runtimeChanges,
-				},
-				"*",
-			);
-		} catch (error) {
-			logWarn("Failed to flush workspace hot reload update", error);
-		}
-	}
-
-	private async buildRuntimeWorkspaceChanges(
-		changes: FilesystemChangeEvent[],
-		knownFiles: Set<string>,
-	): Promise<{ changes: RuntimeWorkspaceChange[]; onlyEchoes: boolean }> {
-		const runtimeChanges: RuntimeWorkspaceChange[] = [];
-		let onlyEchoes = true;
-
-		for (const change of changes) {
-			if (
-				(change.operation === "rename" || change.operation === "move") &&
-				change.newPath
-			) {
-				const oldPath = change.oldPath
-					? this.toWorkspaceCanonicalPath(
-							this.normalizeVirtualPath(change.oldPath),
-						)
-					: undefined;
-				const newPath = this.toWorkspaceCanonicalPath(
-					this.normalizeVirtualPath(change.newPath),
-				);
-				if (this.consumeSandboxEcho(`rename:${oldPath ?? ""}->${newPath}`)) {
-					continue;
-				}
-				onlyEchoes = false;
-				let content: SandboxFileContent | undefined;
-				if (knownFiles.has(newPath)) {
-					try {
-						const bytes = await documentFileSystemService.readFile(newPath);
-						content = sandboxFileContent(bytes);
-					} catch {
-						content = undefined;
-					}
-				}
-				runtimeChanges.push({ operation: "rename", oldPath, newPath, content });
-				continue;
-			}
-
-			if (!change.path) {
-				onlyEchoes = false;
-				continue;
-			}
-
-			const path = this.toWorkspaceCanonicalPath(
-				this.normalizeVirtualPath(change.path),
-			);
-			if (change.operation === "write" || change.operation === "create") {
-				let content: SandboxFileContent = "";
-				try {
-					const bytes = await documentFileSystemService.readFile(path);
-					content = sandboxFileContent(bytes);
-				} catch {
-					// A folder, or a file already gone: the snapshot covers both.
-					onlyEchoes = false;
-					continue;
-				}
-				if (this.consumeSandboxEcho(`write:${path}`, content)) {
-					continue;
-				}
-				onlyEchoes = false;
-				runtimeChanges.push({ operation: "write", path, content });
-				continue;
-			}
-
-			if (change.operation === "delete" || change.operation === "mkdir") {
-				if (this.consumeSandboxEcho(`${change.operation}:${path}`)) {
-					continue;
-				}
-				onlyEchoes = false;
-				runtimeChanges.push({ operation: change.operation, path });
-				continue;
-			}
-
-			onlyEchoes = false;
-		}
-
-		return { changes: runtimeChanges, onlyEchoes };
-	}
-
-	/** Note a sandbox change about to be saved, so its echo can be recognised. */
-	private rememberSandboxChange(op: SandboxWorkspaceOp): void {
-		const now = Date.now();
-		if (this.sandboxOriginChanges.size > 500) {
-			for (const [key, entry] of this.sandboxOriginChanges) {
-				if (entry.expiresAt < now) this.sandboxOriginChanges.delete(key);
-			}
-		}
-		const expiresAt = now + SANDBOX_ECHO_TTL_MS;
-		if (op.op === "write") {
-			this.sandboxOriginChanges.set(`write:${op.path}`, {
-				content: op.content,
-				expiresAt,
-			});
-		} else if (op.op === "rename") {
-			this.sandboxOriginChanges.set(`rename:${op.oldPath}->${op.newPath}`, {
-				expiresAt,
-			});
-		} else {
-			this.sandboxOriginChanges.set(`${op.op}:${op.path}`, { expiresAt });
-		}
-	}
-
-	/**
-	 * Whether a host change is the echo of one the sandbox made. A write only
-	 * counts when the host still holds exactly what the sandbox wrote.
-	 */
-	private consumeSandboxEcho(
-		key: string,
-		content?: SandboxFileContent,
-	): boolean {
-		const entry = this.sandboxOriginChanges.get(key);
-		if (!entry) return false;
-		this.sandboxOriginChanges.delete(key);
-		if (entry.expiresAt < Date.now()) return false;
-		return (
-			entry.content === undefined ||
-			(content !== undefined && sameFileContent(entry.content, content))
-		);
-	}
-
-	private enqueueWorkspaceSync<T>(task: () => Promise<T>): Promise<T> {
-		const run = this.workspaceSyncChain.then(task);
-		this.workspaceSyncChain = run.catch(() => undefined);
-		return run;
-	}
-
-	private rememberWorkspaceFileSizes(sizes?: Record<string, number>): void {
-		this.workspaceFileSizes = new Map(Object.entries(sizes ?? {}));
-	}
-
-	/**
-	 * Copy file contents into the runtime ahead of use. Sandbox code reads
-	 * files synchronously, and the host can only answer asynchronously, so a
-	 * file the runtime holds no content for cannot be fetched at the moment it
-	 * is read. Only files the runtime lacks are read, and the runtime keeps any
-	 * content that arrived first.
-	 */
-	private async preloadWorkspaceFiles(
-		root: string,
-		includeDependencies: boolean,
-	): Promise<void> {
-		const listed = await this.request("fs.listUnmaterializedWorkspaceFiles", {
-			path: root,
-		});
-		const candidates = (listed?.files ?? [])
-			.filter(
-				(path) =>
-					!hasPathSegment(path, ".git") &&
-					(includeDependencies || !hasPathSegment(path, "node_modules")) &&
-					(this.workspaceFileSizes.get(path) ?? 0) <=
-						WORKSPACE_PRELOAD_MAX_FILE_BYTES,
-			)
-			// Project files first: a dependency tree can use up the budget alone.
-			.sort(
-				(left, right) =>
-					Number(hasPathSegment(left, "node_modules")) -
-					Number(hasPathSegment(right, "node_modules")),
-			)
-			.slice(0, WORKSPACE_PRELOAD_MAX_FILES);
-
-		const waits: Promise<void>[] = [];
-		const toLoad: string[] = [];
-		for (const path of candidates) {
-			const inFlight = this.workspacePreloads.get(path);
-			if (inFlight) waits.push(inFlight);
-			else toLoad.push(path);
-		}
-
-		let budget = WORKSPACE_PRELOAD_MAX_TOTAL_BYTES;
-		let previous: Promise<void> = Promise.resolve();
-		for (let i = 0; i < toLoad.length; i += WORKSPACE_PRELOAD_BATCH_SIZE) {
-			const batch = toLoad.slice(i, i + WORKSPACE_PRELOAD_BATCH_SIZE);
-			const loaded = previous
-				.then(async () => {
-					if (budget <= 0) return;
-					const reads = await Promise.all(
-						batch.map((path) =>
-							documentFileSystemService.readFile(path).then(
-								(bytes) => ({ path, bytes }),
-								() => null,
-							),
-						),
-					);
-					const files: Array<{ path: string; content: SandboxFileContent }> =
-						[];
-					for (const read of reads) {
-						if (!read) continue;
-						const size = read.bytes.byteLength;
-						if (size > WORKSPACE_PRELOAD_MAX_FILE_BYTES || size > budget) {
-							continue;
-						}
-						budget -= size;
-						files.push({
-							path: read.path,
-							content: sandboxFileContent(read.bytes),
-						});
-					}
-					if (files.length > 0) {
-						await this.request("fs.materializeWorkspaceFiles", { files });
-					}
-				})
-				.catch((error) => {
-					logWarn("Failed to preload workspace files", { root, error });
-				});
-			for (const path of batch) this.workspacePreloads.set(path, loaded);
-			void loaded.then(() => {
-				for (const path of batch) {
-					if (this.workspacePreloads.get(path) === loaded) {
-						this.workspacePreloads.delete(path);
-					}
-				}
-			});
-			waits.push(loaded);
-			previous = loaded;
-		}
-
-		await Promise.all(waits);
-	}
-
 	private buildRequest<T extends SandboxOperation>(
 		operation: T,
 		payload: SandboxOperationPayloadMap[T],
@@ -1137,6 +688,7 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 		operation: T,
 		payload: SandboxOperationPayloadMap[T],
 		timeoutMs: number = this.options.requestTimeoutMs,
+		transfer: Transferable[] = [],
 	): Promise<SandboxOperationResultMap[T]> {
 		await this.initialize();
 		if (!this.iframe?.contentWindow) {
@@ -1162,7 +714,7 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 				operation,
 			});
 
-			this.iframe?.contentWindow?.postMessage(request, "*");
+			this.iframe?.contentWindow?.postMessage(request, "*", transfer);
 		});
 	}
 
@@ -1179,16 +731,13 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 	private async prepareCommandExecution(
 		request: SandboxExecuteCommandRequest,
 	): Promise<SandboxExecuteCommandRequest> {
-		await Promise.all([this.syncDocumentsMount(), this.syncWorkspaceMount()]);
 		const cwd = request.cwd
 			? this.toWorkspaceCanonicalPath(this.normalizeVirtualPath(request.cwd))
 			: undefined;
 
 		// A shell command reads files synchronously, with no way to fetch one it
-		// lacks, so its files must be in the runtime before it starts. The
-		// working directory is loaded in full, dependencies included, since that
-		// is where `node server.js` will look for `require`d files.
-		await this.workspacePreload;
+		// lacks: the host's files, and its own working directory in full, are in
+		// the runtime before it starts.
 		const cdTarget = /^\s*cd\s+([^;&|]+?)\s*&&/
 			.exec(request.command)?.[1]
 			.replace(/^(["'])(.*)\1$/, "$2");
@@ -1197,14 +746,7 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 					cdTarget.startsWith("/") ? cdTarget : `${cwd ?? "/"}/${cdTarget}`,
 				)
 			: cwd;
-		if (workDir && workDir !== "/") {
-			await this.preloadWorkspaceFiles(workDir, true).catch((error) =>
-				logWarn("Failed to preload the command's working directory", {
-					workDir,
-					error,
-				}),
-			);
-		}
+		await this.workspaceSync.ready(workDir && workDir !== "/" ? [workDir] : []);
 
 		return { ...request, cwd };
 	}
@@ -1215,12 +757,7 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 			pending.reject(new Error("Sandbox service disposed."));
 		}
 		this.pending.clear();
-		this.pendingWorkspaceChanges.clear();
-		this.resetWorkspaceSyncState();
-		if (this.workspaceHotReloadTimer !== null) {
-			window.clearTimeout(this.workspaceHotReloadTimer);
-			this.workspaceHotReloadTimer = null;
-		}
+		this.workspaceSync.dispose();
 		if (this.swKeepaliveTimer !== null) {
 			clearInterval(this.swKeepaliveTimer);
 			this.swKeepaliveTimer = null;
@@ -1231,11 +768,6 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 		this.swInstance = null;
 		this.swBroadcastChannel?.close();
 		this.swBroadcastChannel = null;
-		this.workspaceMountSynced = false;
-		if (this.fsChangeUnsubscribe) {
-			this.fsChangeUnsubscribe();
-			this.fsChangeUnsubscribe = null;
-		}
 
 		if (typeof window !== "undefined") {
 			window.removeEventListener("message", this.onMessage);
@@ -1252,17 +784,20 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 		logInfo("🧹 SandboxContainerService disposed");
 	}
 
-	private resetWorkspaceSyncState(): void {
-		this.pendingWorkspaceFullResync = false;
-		this.sandboxOriginChanges.clear();
-		this.workspaceFileSizes.clear();
-		this.workspacePreloads.clear();
-		this.workspacePreload = null;
-	}
-
 	async resetRuntime(): Promise<void> {
-		this.workspaceMountSynced = false;
-		this.resetWorkspaceSyncState();
+		// Saved first: the reset drops the VFS, and what it had not saved yet.
+		await this.workspaceSync
+			.flush()
+			.catch((error) =>
+				logWarn("Failed to save the sandbox's changes before a reset", error),
+			);
+		// And its node_modules and caches, to put back into the next one.
+		await this.workspaceSync
+			.saveLocalTrees()
+			.catch((error) =>
+				logWarn("Failed to cache the sandbox's trees before a reset", error),
+			);
+		this.workspaceSync.invalidate();
 		try {
 			await this.request("runtime.reset", undefined);
 		} catch (error) {
@@ -1291,6 +826,18 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 		request: SandboxExecuteCommandRequest,
 	): Promise<SandboxCommandResult> {
 		if (usesHostCommand(request.command)) {
+			// git, py and curl read the host's files: the sandbox's changes
+			// first, and every other context's, so they read the latest.
+			await this.workspaceSync.flush().catch((error) =>
+				logWarn("Failed to save the sandbox's changes before a host command", {
+					error,
+				}),
+			);
+			await documentFileSystemService.ensureFresh().catch((error) =>
+				logWarn("Failed to load the latest files before a host command", {
+					error,
+				}),
+			);
 			return runHostCommandLine(
 				{
 					...request,
@@ -1325,9 +872,8 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 							(payload.timeoutMs ?? 60_000) + COMMAND_REQUEST_TIMEOUT_BUFFER_MS,
 						),
 					filesChanged: () => {
-						// The shell's copy of the files is stale now: remount it on the
-						// next command, and tell the Files views.
-						this.workspaceMountSynced = false;
+						// Changed on the host behind its change events: the sync
+						// compares the tree, and the Files views refresh.
 						documentFileSystemService.notifyExternalChange(null);
 					},
 				},
@@ -1388,8 +934,8 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 			preparedRequest,
 			this.resolveCommandRequestTimeout(preparedRequest.waitTimeoutMs),
 		);
-		await this.flushWorkspaceWrites().catch((error) =>
-			logWarn("Failed to flush workspace writes after command execution", {
+		await this.workspaceSync.flush().catch((error) =>
+			logWarn("Failed to save the sandbox's changes after a command", {
 				error,
 			}),
 		);
@@ -1404,8 +950,8 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 			request,
 			this.resolveCommandRequestTimeout(request.waitTimeoutMs),
 		);
-		await this.flushWorkspaceWrites().catch((error) =>
-			logWarn("Failed to flush workspace writes after command listen", {
+		await this.workspaceSync.flush().catch((error) =>
+			logWarn("Failed to save the sandbox's changes after reading a command", {
 				error,
 			}),
 		);
@@ -1422,8 +968,8 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 		request: SandboxStopCommandRequest,
 	): Promise<{ commandId: string; stopped: true }> {
 		const result = await this.request("runtime.stopCommand", request);
-		await this.flushWorkspaceWrites().catch((error) =>
-			logWarn("Failed to flush workspace writes after stopping command", {
+		await this.workspaceSync.flush().catch((error) =>
+			logWarn("Failed to save the sandbox's changes after stopping a command", {
 				error,
 			}),
 		);
@@ -1465,11 +1011,13 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 	): Promise<{ path: string }> {
 		const normalizedPath = this.normalizeVirtualPath(request.path);
 		const workspacePath = this.toWorkspaceCanonicalPath(normalizedPath);
-		await this.syncWorkspaceMount();
-		return this.request("fs.writeFile", {
+		await this.workspaceSync.ready();
+		const result = await this.request("fs.writeFile", {
 			...request,
 			path: workspacePath,
 		});
+		await this.workspaceSync.flush();
+		return result;
 	}
 
 	async readFile(
@@ -1477,21 +1025,21 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 	): Promise<SandboxFsReadFileResult> {
 		const normalizedPath = this.normalizeVirtualPath(request.path);
 		const workspacePath = this.toWorkspaceCanonicalPath(normalizedPath);
-		await this.syncWorkspaceMount();
-		const bytes = await documentFileSystemService.readFile(workspacePath);
-		const content = sandboxFileContent(bytes);
-		await this.request("fs.materializeWorkspaceFile", {
-			path: workspacePath,
-			content,
-		});
+		// Its content in full, even when it is too large to copy up front.
+		await this.workspaceSync.ready([workspacePath]);
 		return this.request("fs.readFile", { path: workspacePath });
 	}
 
 	async mkdir(request: SandboxFsMkdirRequest): Promise<{ path: string }> {
 		const normalizedPath = this.normalizeVirtualPath(request.path);
 		const workspacePath = this.toWorkspaceCanonicalPath(normalizedPath);
-		await this.syncWorkspaceMount();
-		return this.request("fs.mkdir", { ...request, path: workspacePath });
+		await this.workspaceSync.ready();
+		const result = await this.request("fs.mkdir", {
+			...request,
+			path: workspacePath,
+		});
+		await this.workspaceSync.flush();
+		return result;
 	}
 
 	async readdir(
@@ -1499,15 +1047,20 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 	): Promise<SandboxFsReaddirResult> {
 		const normalizedPath = this.normalizeVirtualPath(request.path);
 		const workspacePath = this.toWorkspaceCanonicalPath(normalizedPath);
-		await this.syncWorkspaceMount();
+		await this.workspaceSync.ready();
 		return this.request("fs.readdir", { path: workspacePath });
 	}
 
 	async unlink(request: SandboxFsUnlinkRequest): Promise<{ path: string }> {
 		const normalizedPath = this.normalizeVirtualPath(request.path);
 		const workspacePath = this.toWorkspaceCanonicalPath(normalizedPath);
-		await this.syncWorkspaceMount();
-		return this.request("fs.unlink", { ...request, path: workspacePath });
+		await this.workspaceSync.ready();
+		const result = await this.request("fs.unlink", {
+			...request,
+			path: workspacePath,
+		});
+		await this.workspaceSync.flush();
+		return result;
 	}
 
 	async rename(
@@ -1519,8 +1072,10 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 		const newPath = this.toWorkspaceCanonicalPath(
 			this.normalizeVirtualPath(request.newPath),
 		);
-		await this.syncWorkspaceMount();
-		return this.request("fs.rename", { oldPath, newPath });
+		await this.workspaceSync.ready();
+		const result = await this.request("fs.rename", { oldPath, newPath });
+		await this.workspaceSync.flush();
+		return result;
 	}
 
 	async exists(
@@ -1528,16 +1083,8 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 	): Promise<SandboxFsExistsResult> {
 		const normalizedPath = this.normalizeVirtualPath(request.path);
 		const workspacePath = this.toWorkspaceCanonicalPath(normalizedPath);
-		await this.syncWorkspaceMount();
+		await this.workspaceSync.ready();
 		return this.request("fs.exists", { path: workspacePath });
-	}
-
-	private isDocumentsPath(path: string): boolean {
-		return isDocumentsSandboxPath(path);
-	}
-
-	private toDocumentsLogicalPath(normalizedPath: string): string | null {
-		return toDocumentsLogicalPath(normalizedPath);
 	}
 
 	private normalizeVirtualPath(inputPath: string): string {
@@ -1557,130 +1104,10 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 		return resolved.length ? `/${resolved.join("/")}` : "/";
 	}
 
-	private async syncDocumentsMount(): Promise<void> {
-		if (this.mountDocumentsSyncPromise) {
-			return this.mountDocumentsSyncPromise;
-		}
-
-		this.mountDocumentsSyncPromise = (async () => {
-			const { directories, files } =
-				await documentFileSystemService.getSandboxMountSnapshot();
-			await this.request("fs.mountDocuments", { directories, files });
-		})().finally(() => {
-			this.mountDocumentsSyncPromise = null;
-		});
-
-		return this.mountDocumentsSyncPromise;
-	}
-
-	private extractUnmaterializedMountedPath(
-		errorMessage?: string,
-	): string | null {
-		if (!errorMessage) return null;
-		const match = errorMessage.match(
-			/Mounted file is not materialized in sandbox runtime: (\/[^\s]+)/,
-		);
-		return match?.[1] ?? null;
-	}
-
-	private isDocumentsMountNotLoadedError(errorMessage?: string): boolean {
-		if (!errorMessage) return false;
-		return errorMessage.includes(
-			"Documents mount is not loaded in sandbox runtime",
-		);
-	}
-
-	private async materializeMountedDocumentFile(
-		sandboxPath: string,
-	): Promise<boolean> {
-		if (
-			!this.isDocumentsPath(sandboxPath) ||
-			sandboxPath === DOCUMENTS_SANDBOX_ROOT
-		) {
-			return false;
-		}
-		const logicalPath = toDocumentsLogicalPath(sandboxPath) ?? sandboxPath;
-		try {
-			const bytes = await documentFileSystemService.readFile(sandboxPath);
-			const content = sandboxFileContent(bytes);
-			await this.request("fs.materializeDocumentFile", {
-				path: sandboxPath,
-				content,
-			});
-			return true;
-		} catch (error) {
-			logWarn("Failed to lazily materialize mounted document file", {
-				sandboxPath,
-				logicalPath,
-				error,
-			});
-			return false;
-		}
-	}
-
 	// ── Workspace helpers ────────────────────────────────────────────────────
-
-	private isWorkspacePath(path: string): boolean {
-		return isWorkspacesSandboxPath(path);
-	}
 
 	private toWorkspaceCanonicalPath(path: string): string {
 		return normalizeSandboxPath(path);
-	}
-
-	private async syncWorkspaceMount(): Promise<void> {
-		if (this.workspaceMountSynced) {
-			return;
-		}
-		if (this.mountWorkspaceSyncPromise) {
-			return this.mountWorkspaceSyncPromise;
-		}
-		this.mountWorkspaceSyncPromise = this.enqueueWorkspaceSync(async () => {
-			if (!this.workspaceMountSynced) await this.mountWorkspaceNow();
-		}).finally(() => {
-			this.mountWorkspaceSyncPromise = null;
-		});
-		return this.mountWorkspaceSyncPromise;
-	}
-
-	/**
-	 * Mount the whole filesystem afresh, then start copying file contents in.
-	 * Runs inside the workspace sync chain.
-	 */
-	private async mountWorkspaceNow(): Promise<void> {
-		// Mounting clears the runtime's queue of unsaved writes: save them first.
-		await this.drainWorkspaceWrites();
-		const { directories, files, fileSizes } =
-			await documentFileSystemService.getSandboxWorkspaceMountSnapshot();
-		await this.request("fs.mountWorkspace", { directories, files });
-		this.workspaceMountSynced = true;
-		this.rememberWorkspaceFileSizes(fileSizes);
-		this.workspacePreloads.clear();
-		// Not awaited: it can take a while on a large filesystem, and commands
-		// wait for it themselves before they run.
-		this.workspacePreload = this.preloadWorkspaceFiles("/", false).catch(
-			(error) => logWarn("Failed to preload workspace files", { error }),
-		);
-	}
-
-	private async materializeMountedWorkspaceFile(
-		sandboxPath: string,
-	): Promise<boolean> {
-		try {
-			const bytes = await documentFileSystemService.readFile(sandboxPath);
-			const content = sandboxFileContent(bytes);
-			await this.request("fs.materializeWorkspaceFile", {
-				path: sandboxPath,
-				content,
-			});
-			return true;
-		} catch (error) {
-			logWarn("Failed to lazily materialize workspace file", {
-				sandboxPath,
-				error,
-			});
-			return false;
-		}
 	}
 
 	private encodeBytesBase64(bytes: Uint8Array): string {
@@ -1753,45 +1180,13 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 		return match?.[1] ? this.toWorkspaceCanonicalPath(match[1]) : null;
 	}
 
-	private isWorkspaceMountNotLoadedError(errorMessage?: string): boolean {
-		if (!errorMessage) return false;
-		return errorMessage.includes(
-			"Workspace mount is not loaded in sandbox runtime",
-		);
-	}
-
-	/**
-	 * Drain pending workspace writes/deletes/renames and persist to ZenFS.
-	 * Called after every command, and while one runs whenever the runtime says
-	 * writes are waiting.
-	 */
-	private flushWorkspaceWrites(): Promise<void> {
-		return this.enqueueWorkspaceSync(() => this.drainWorkspaceWrites());
-	}
-
-	private async drainWorkspaceWrites(): Promise<void> {
-		const { ops } = await this.request("fs.flushWorkspaceWrites", undefined);
-		for (const op of ops ?? []) {
-			this.rememberSandboxChange(op);
-			try {
-				if (op.op === "write") {
-					await documentFileSystemService.writeFile(op.path, op.content);
-				} else if (op.op === "mkdir") {
-					await documentFileSystemService.mkdir(op.path);
-				} else if (op.op === "delete") {
-					await documentFileSystemService.deleteFile(op.path);
-				} else if (op.op === "rename") {
-					// renamePath, not rename: a sandbox `mv` can change folders.
-					await documentFileSystemService.renamePath(op.oldPath, op.newPath);
-				}
-			} catch (error) {
-				logWarn("Failed to flush workspace op", { op, error });
-			}
-		}
-	}
-
 	// ── End Workspace helpers ─────────────────────────────────────────────────
 
+	/**
+	 * Runs code with the host's files in the runtime. A file too large to copy
+	 * up front fails its first read: its content is sent, and the code runs
+	 * again, a few times at most.
+	 */
 	private async executeWithLazyDocumentsSupport<
 		T extends "runtime.executeCode" | "runtime.runFile",
 	>(
@@ -1800,81 +1195,46 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 	): Promise<SandboxOperationResultMap[T]> {
 		const maxRetries = 5;
 		const retriedPaths = new Set<string>();
-		let hasMountedDocuments = false;
-		let hasMountedWorkspace = false;
-
-		for (let attempt = 0; attempt <= maxRetries; attempt++) {
-			const result = await this.request(operation, payload);
-			if (result.status !== "error") {
-				await this.flushWorkspaceWrites().catch((err) =>
-					logWarn("Failed to flush workspace writes after execution", { err }),
-				);
-				return result;
+		await this.workspaceSync.ready();
+		try {
+			for (let attempt = 0; attempt < maxRetries; attempt++) {
+				const result = await this.request(operation, payload);
+				if (result.status !== "error") return result;
+				const missing = this.extractUnmaterializedWorkspacePath(result.error);
+				if (!missing || retriedPaths.has(missing)) return result;
+				retriedPaths.add(missing);
+				if (!(await this.workspaceSync.materialize([missing]))) return result;
 			}
-
-			if (this.isDocumentsMountNotLoadedError(result.error)) {
-				if (hasMountedDocuments) return result;
-				await this.syncDocumentsMount();
-				hasMountedDocuments = true;
-				continue;
-			}
-
-			if (this.isWorkspaceMountNotLoadedError(result.error)) {
-				if (hasMountedWorkspace) return result;
-				await this.syncWorkspaceMount();
-				hasMountedWorkspace = true;
-				continue;
-			}
-
-			const missingDocPath = this.extractUnmaterializedMountedPath(
-				result.error,
+			return await this.request(operation, payload);
+		} finally {
+			await this.workspaceSync.flush().catch((error) =>
+				logWarn("Failed to save the sandbox's changes after running code", {
+					error,
+				}),
 			);
-			if (missingDocPath && !retriedPaths.has(missingDocPath)) {
-				retriedPaths.add(missingDocPath);
-				const materialized =
-					await this.materializeMountedDocumentFile(missingDocPath);
-				if (materialized) continue;
-				return result;
-			}
-
-			const missingWsPath = this.extractUnmaterializedWorkspacePath(
-				result.error,
-			);
-			if (missingWsPath && !retriedPaths.has(missingWsPath)) {
-				retriedPaths.add(missingWsPath);
-				const materialized = await this.materializeMountedWorkspaceFile(
-					this.toWorkspaceCanonicalPath(missingWsPath),
-				);
-				if (materialized) continue;
-				return result;
-			}
-
-			return result;
 		}
-
-		return this.request(operation, payload);
 	}
 
 	async installPackage(
 		request: SandboxNpmInstallRequest,
 	): Promise<SandboxNpmInstallResult> {
-		await this.syncWorkspaceMount();
+		await this.workspaceSync.ready();
 		const result = await this.request("npm.install", request);
-		await this.flushWorkspaceWrites();
+		await this.workspaceSync.flush();
 		return result;
 	}
 
 	async installFromPackageJson(
 		request: SandboxNpmInstallFromPackageJsonRequest = {},
 	): Promise<SandboxNpmInstallResult> {
-		await this.syncWorkspaceMount();
+		await this.workspaceSync.ready();
 		const result = await this.request("npm.installFromPackageJson", request);
-		await this.flushWorkspaceWrites();
+		await this.workspaceSync.flush();
 		return result;
 	}
 
 	async listInstalledPackages(): Promise<SandboxNpmListResult> {
-		await this.syncWorkspaceMount();
+		await this.workspaceSync.ready();
 		return this.request("npm.list", undefined);
 	}
 
@@ -1963,10 +1323,8 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 			request.entryPath,
 		);
 
-		// The server reads its files synchronously, as a command does: load the
-		// project folder, dependencies included, before it starts.
-		await Promise.all([this.syncDocumentsMount(), this.syncWorkspaceMount()]);
-		await this.workspacePreload;
+		// The server reads its files synchronously, as a command does: its
+		// folder's files are in the runtime, in full, before it starts.
 		const serverDir = request.rootDir
 			? this.toWorkspaceCanonicalPath(request.rootDir)
 			: resolvedEntryPath
@@ -1975,17 +1333,9 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 						"",
 					)
 				: "";
-		if (serverDir && serverDir !== "/") {
-			await this.preloadWorkspaceFiles(serverDir, true).catch((error) =>
-				logWarn("Failed to preload the server's folder", { serverDir, error }),
-			);
-		}
-		if (resolvedEntryPath) {
-			// Loaded even when the runtime has not listed it yet (just written).
-			await this.materializeMountedWorkspaceFile(
-				this.toWorkspaceCanonicalPath(resolvedEntryPath),
-			);
-		}
+		await this.workspaceSync.ready(
+			serverDir && serverDir !== "/" ? [serverDir] : [],
+		);
 
 		// Allow extra time when a template will be scaffolded + npm-installed.
 		const timeoutMs = request.template ? 300_000 : 60_000;
@@ -2002,10 +1352,11 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 			},
 			timeoutMs,
 		);
-		// Flush any sync writes (scaffolded template files) that queued via
-		// pendingWorkspaceOps but weren't persisted by the async bridge yet.
-		await this.flushWorkspaceWrites().catch((err) =>
-			logWarn("Failed to flush workspace writes after server.start", { err }),
+		// Scaffolded template files, saved like any change.
+		await this.workspaceSync.flush().catch((error) =>
+			logWarn("Failed to save the sandbox's changes after server.start", {
+				error,
+			}),
 		);
 		return { ...result, renderUrl: this.resolveRenderUrl(result.renderUrl) };
 	}
@@ -2202,8 +1553,10 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 		request: SandboxRestoreSnapshotRequest,
 	): Promise<{ restored: true }> {
 		const result = await this.request("snapshot.restore", request, 60_000);
-		this.workspaceMountSynced = true;
-		await this.flushWorkspaceWrites();
+		// The restored files, and deletes of the ones it lacks, saved on the
+		// host; the new VFS is filled from it on next use.
+		await this.workspaceSync.flush();
+		this.workspaceSync.invalidate();
 		return result;
 	}
 }

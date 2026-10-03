@@ -20,6 +20,11 @@ import type {
 } from "@/types/document-library";
 import { platform } from "@/platform/current";
 import { createFilesystemChangeBus } from "@/services/filesystem/change-bus/current";
+import {
+	createFilesystemChangeJournal,
+	type FilesystemChangeJournal,
+	type FilesystemJournalEntry,
+} from "@/services/filesystem/change-journal";
 import type {
 	FilesystemChangeBus,
 	FilesystemChangeEnvelope,
@@ -51,13 +56,6 @@ const ROOT_MIGRATION_STORAGE_KEY = "memorall.filesystem.rootMigration.v1";
 
 // ── Event types ───────────────────────────────────────────────────────────────
 
-export interface SandboxDocumentsMountSnapshot {
-	directories: string[];
-	files: string[];
-	/** Byte size of each file, where the tree knows it. */
-	fileSizes?: Record<string, number>;
-}
-
 export type FilesystemChangeScope = FilesystemScope;
 
 export type FilesystemChangeOperation =
@@ -66,7 +64,9 @@ export type FilesystemChangeOperation =
 	| "rename"
 	| "mkdir"
 	| "create"
-	| "move";
+	| "move"
+	/** Several changes saved at once, announced once: see `changes`. */
+	| "batch";
 
 export interface FilesystemChangeEvent {
 	scope: FilesystemChangeScope;
@@ -74,6 +74,33 @@ export interface FilesystemChangeEvent {
 	path?: string;
 	oldPath?: string;
 	newPath?: string;
+	/** Who made the change, so its maker can tell its own changes apart. */
+	origin?: string;
+	/**
+	 * A save the Files library need not redraw for (the editor's own save):
+	 * everything else, the sandbox included, still hears about it.
+	 */
+	quiet?: boolean;
+	/** The changes of a "batch". */
+	changes?: FilesystemChangeEvent[];
+}
+
+/** One change of a batch saved with `applyChanges`. */
+export type FilesystemBatchOp =
+	/** `length` bytes of the batch's buffer, from `offset`. */
+	| { op: "write"; path: string; offset: number; length: number }
+	| { op: "mkdir"; path: string }
+	/** A file or a folder, whichever is there. */
+	| { op: "delete"; path: string; dir?: boolean }
+	/** Replaces whatever is at `to`. */
+	| { op: "rename"; from: string; to: string };
+
+/** An entry as the sandbox sync compares it. */
+export interface FilesystemSyncEntry {
+	path: string;
+	type: "file" | "dir";
+	size: number;
+	mtimeMs: number;
 }
 
 const isFilesystemChangeEvent = (
@@ -122,13 +149,28 @@ export class DocumentFileSystem {
 	 */
 	private readonly lazyChildrenCache = new Map<string, DocumentTreeNode[]>();
 
-	constructor(changeBus: FilesystemChangeBus = createFilesystemChangeBus()) {
+	/** Every change in order, shared by the contexts: see change-journal. */
+	private readonly journal: FilesystemChangeJournal;
+	/**
+	 * The journal entries this context's store view includes, all up to here;
+	 * -1 until the store was reloaded once with the journal read first.
+	 */
+	private loadedSeq = -1;
+
+	constructor(
+		changeBus: FilesystemChangeBus = createFilesystemChangeBus(),
+		journal: FilesystemChangeJournal = createFilesystemChangeJournal(),
+	) {
 		this.changeBus = changeBus;
+		this.journal = journal;
 		this.registerMessageListener();
 	}
 
-	static create(changeBus?: FilesystemChangeBus): DocumentFileSystem {
-		return new DocumentFileSystem(changeBus);
+	static create(
+		changeBus?: FilesystemChangeBus,
+		journal?: FilesystemChangeJournal,
+	): DocumentFileSystem {
+		return new DocumentFileSystem(changeBus, journal);
 	}
 
 	static getInstance(): DocumentFileSystem {
@@ -176,21 +218,30 @@ export class DocumentFileSystem {
 		};
 	}
 
-	private notifyFilesystemChanged(
+	/**
+	 * Tells every listener and context about a change, once it is in the
+	 * journal: a context that reads the journal and then the store has it.
+	 */
+	private async notifyFilesystemChanged(
 		change: FilesystemChangeEvent | null = null,
-	): void {
+	): Promise<void> {
 		this.invalidateCache(change);
+		try {
+			await this.journal.append(this.contextId, change);
+		} catch (error) {
+			logError("Failed to journal a filesystem change:", error);
+		}
 		logInfo(
 			`📢 Notifying filesystem changed (${this.changeListeners.size} local listeners)`,
 		);
+		this.changeListeners.forEach((cb) => {
+			try {
+				cb(change);
+			} catch (err) {
+				logError("Error in local filesystem change listener:", err);
+			}
+		});
 		try {
-			this.changeListeners.forEach((cb) => {
-				try {
-					cb(change);
-				} catch (err) {
-					logError("Error in local filesystem change listener:", err);
-				}
-			});
 			const message: FilesystemChangeEnvelope = {
 				sourceContextId: this.contextId,
 				eventId:
@@ -204,13 +255,6 @@ export class DocumentFileSystem {
 			logInfo("✅ Filesystem change notifications sent");
 		} catch (error) {
 			logError("Failed to notify filesystem change:", error);
-			this.changeListeners.forEach((cb) => {
-				try {
-					cb(change);
-				} catch (err) {
-					logError("Error in local filesystem change listener:", err);
-				}
-			});
 		}
 	}
 
@@ -254,12 +298,62 @@ export class DocumentFileSystem {
 	 * Reload the store, then drop cached listings. Clearing first would let a
 	 * read made before the reload fill the cache with the old tree again.
 	 */
-	private async invalidateCacheAndRefreshFs(): Promise<void> {
+	private async invalidateCacheAndRefreshFs(immediate = false): Promise<void> {
+		// Read first: the reload that follows includes every entry up to it.
+		const head = await this.journal.head().catch(() => -1);
 		try {
-			await refreshFsCache();
+			await refreshFsCache({ immediate });
+			if (head >= 0) this.loadedSeq = Math.max(this.loadedSeq, head);
 		} finally {
 			this.invalidateCache();
 		}
+	}
+
+	/**
+	 * Brings this context up to every change saved so far, by any context, and
+	 * returns the journal entries after `afterSeq`: what a reader that saw
+	 * everything up to `afterSeq` has yet to see. The store is reloaded only
+	 * when another context changed it since this one last loaded it.
+	 */
+	async catchUp(afterSeq: number): Promise<{
+		head: number;
+		entries: FilesystemJournalEntry[];
+		complete: boolean;
+	}> {
+		await this.initialize();
+		const head = await this.journal.head();
+		await this.ensureLoaded(head);
+		if (head <= afterSeq) return { head, entries: [], complete: true };
+		const { entries, complete } = await this.journal.since(afterSeq);
+		return {
+			head,
+			entries: entries.filter((entry) => entry.seq <= head),
+			complete,
+		};
+	}
+
+	/** This context sees every change saved so far, its own and others'. */
+	async ensureFresh(): Promise<void> {
+		await this.initialize();
+		await this.ensureLoaded(await this.journal.head());
+	}
+
+	private async ensureLoaded(head: number): Promise<void> {
+		if (this.loadedSeq >= head) return;
+		if (this.loadedSeq >= 0) {
+			const { entries, complete } = await this.journal.since(this.loadedSeq);
+			const foreign =
+				!complete ||
+				entries.some(
+					(entry) => entry.seq <= head && entry.contextId !== this.contextId,
+				);
+			// Only this context's own changes since: it has them already.
+			if (!foreign) {
+				this.loadedSeq = head;
+				return;
+			}
+		}
+		await this.invalidateCacheAndRefreshFs(true);
 	}
 
 	/**
@@ -269,8 +363,10 @@ export class DocumentFileSystem {
 	 * Goes through the same path as our own writes, so the tree cache is cleared
 	 * and every listener and context hears about it in the usual way.
 	 */
-	public notifyExternalChange(change: FilesystemChangeEvent | null): void {
-		this.notifyFilesystemChanged(change);
+	public notifyExternalChange(
+		change: FilesystemChangeEvent | null,
+	): Promise<void> {
+		return this.notifyFilesystemChanged(change);
 	}
 
 	public forceRefresh(): void {
@@ -838,13 +934,14 @@ export class DocumentFileSystem {
 
 	/**
 	 * Write content to a file, creating parent directories as needed.
-	 * Pass notify=false for silent content saves (e.g. in-editor autosave)
-	 * that should not trigger a tree reload.
+	 * `notify`: "quiet" for the editor's own saves, which the sandbox and other
+	 * contexts must hear about but the Files library need not redraw for;
+	 * false only for a caller that announces the change itself.
 	 */
 	async writeFile(
 		sandboxPath: string,
 		content: string | Uint8Array,
-		notify = true,
+		notify: boolean | "quiet" = true,
 	): Promise<void> {
 		await this.initialize();
 		const fsPath = this.toFsPath(sandboxPath);
@@ -881,10 +978,11 @@ export class DocumentFileSystem {
 		}
 
 		if (notify) {
-			this.notifyFilesystemChanged({
+			await this.notifyFilesystemChanged({
 				scope: this.scopeFromPath(sandboxPath),
 				operation,
 				path: sandboxPath,
+				...(notify === "quiet" ? { quiet: true } : {}),
 			});
 		}
 	}
@@ -943,7 +1041,7 @@ export class DocumentFileSystem {
 		};
 
 		logInfo(`📄 Uploaded file: ${docFile.path}`);
-		this.notifyFilesystemChanged({
+		await this.notifyFilesystemChanged({
 			scope: this.scopeFromPath(sandboxPath),
 			operation: "create",
 			path: logicalFilePath,
@@ -960,7 +1058,7 @@ export class DocumentFileSystem {
 		const fsPath = this.toFsPath(sandboxPath);
 		await fs.promises.unlink(fsPath);
 		logInfo(`🗑️ Deleted file: ${sandboxPath}`);
-		this.notifyFilesystemChanged({
+		await this.notifyFilesystemChanged({
 			scope: this.scopeFromPath(sandboxPath),
 			operation: "delete",
 			path: sandboxPath,
@@ -987,7 +1085,7 @@ export class DocumentFileSystem {
 		}
 		await this.deleteDirectoryRecursive(fsPath);
 		logInfo(`🗑️ Deleted folder: ${sandboxPath}`);
-		this.notifyFilesystemChanged({
+		await this.notifyFilesystemChanged({
 			scope: this.scopeFromPath(sandboxPath),
 			operation: "delete",
 			path: sandboxPath,
@@ -1035,7 +1133,7 @@ export class DocumentFileSystem {
 		logInfo(
 			`📝 Renamed: ${normalizedSourcePath} → ${normalizedDestinationPath}`,
 		);
-		this.notifyFilesystemChanged({
+		await this.notifyFilesystemChanged({
 			scope: this.scopeFromPath(normalizedSourcePath),
 			operation: "rename",
 			oldPath: normalizedSourcePath,
@@ -1110,7 +1208,7 @@ export class DocumentFileSystem {
 				? `/${finalName}`
 				: `${normalizedTargetFolder}/${finalName}`;
 		logInfo(`✅ Moved: ${sandboxPath} → ${newSandboxPath}`);
-		this.notifyFilesystemChanged({
+		await this.notifyFilesystemChanged({
 			scope: this.scopeFromPath(sandboxPath),
 			operation: "move",
 			oldPath: sandboxPath,
@@ -1126,7 +1224,7 @@ export class DocumentFileSystem {
 		await this.initialize();
 		const fsPath = this.toFsPath(sandboxPath);
 		await this.ensureDirectory(fsPath);
-		this.notifyFilesystemChanged({
+		await this.notifyFilesystemChanged({
 			scope: this.scopeFromPath(sandboxPath),
 			operation: "mkdir",
 			path: sandboxPath,
@@ -1320,71 +1418,163 @@ export class DocumentFileSystem {
 		return `data:${mimeType};base64,${btoa(binary)}`;
 	}
 
-	/**
-	 * Build a root mount snapshot for the sandbox runtime.
-	 */
-	async getSandboxMountSnapshot(): Promise<SandboxDocumentsMountSnapshot> {
+	// ── Sandbox sync ──────────────────────────────────────────────────────────
+
+	/** A file's or folder's kind, size and modification time; null if absent. */
+	async statEntry(sandboxPath: string): Promise<FilesystemSyncEntry | null> {
 		await this.initialize();
-		const directories = new Set<string>([FILESYSTEM_SANDBOX_ROOT]);
-		const files = new Set<string>();
-		const fileSizes: Record<string, number> = {};
-		const tree = await this.getTree(FILESYSTEM_SANDBOX_ROOT);
-
-		const toMountSandboxPath = (logicalPath: string): string | null => {
-			if (!logicalPath.startsWith("/")) return null;
-			const segments = logicalPath
-				.replace(/\\/g, "/")
-				.split("/")
-				.filter(Boolean);
-			for (const segment of segments) {
-				if (segment === "." || segment === ".." || segment.includes("\0"))
-					return null;
-			}
-			return toDocumentsSandboxPath(
-				segments.length === 0 ? "/" : `/${segments.join("/")}`,
-			);
-		};
-
-		const ensureParentDirectories = (fullPath: string): void => {
-			const segments = fullPath.split("/").filter(Boolean);
-			let current = "";
-			for (let i = 0; i < segments.length - 1; i++) {
-				current += `/${segments[i]}`;
-				directories.add(current);
-			}
-		};
-
-		const walk = (nodes: DocumentTreeNode[]): void => {
-			for (const node of nodes) {
-				const sp = toMountSandboxPath(node.path);
-				if (!sp) continue;
-				if (node.type === "folder") {
-					directories.add(sp);
-				} else if (node.type === "file") {
-					files.add(sp);
-					if (typeof node.file?.size === "number") {
-						fileSizes[sp] = node.file.size;
-					}
-					ensureParentDirectories(sp);
-				}
-				if (node.children?.length) walk(node.children);
-			}
-		};
-
-		walk(tree);
-		return {
-			directories: Array.from(directories).sort(),
-			files: Array.from(files).sort(),
-			fileSizes,
-		};
+		const path = normalizeSandboxPath(sandboxPath);
+		try {
+			const stats = await fs.promises.stat(this.toFsPath(path));
+			const directory = stats.isDirectory();
+			return {
+				path,
+				type: directory ? "dir" : "file",
+				size: directory ? 0 : stats.size,
+				mtimeMs: new Date(stats.mtime).getTime(),
+			};
+		} catch (error) {
+			if (this.isNotFoundError(error)) return null;
+			throw error;
+		}
 	}
 
 	/**
-	 * Compatibility wrapper for callers that still ask for the old workspace
-	 * mount. The sandbox now receives the same single root snapshot.
+	 * Every file and folder under a folder, from the tree. Mapped folders the
+	 * tree defers are listed without their contents: they are the user's own
+	 * disk, read on demand rather than copied.
 	 */
-	async getSandboxWorkspaceMountSnapshot(): Promise<SandboxDocumentsMountSnapshot> {
-		return this.getSandboxMountSnapshot();
+	async listEntries(sandboxRoot = "/"): Promise<FilesystemSyncEntry[]> {
+		const root = normalizeSandboxPath(sandboxRoot);
+		const node = await this.resolveNode(root);
+		if (node?.type !== "folder") return [];
+		const entries: FilesystemSyncEntry[] = [];
+		const walk = (nodes: DocumentTreeNode[]): void => {
+			for (const child of nodes) {
+				const path = normalizeSandboxPath(child.path);
+				if (child.type === "folder") {
+					entries.push({ path, type: "dir", size: 0, mtimeMs: 0 });
+					if (!child.isLazy && child.children?.length) walk(child.children);
+				} else if (child.type === "file") {
+					entries.push({
+						path,
+						type: "file",
+						size: child.file?.size ?? 0,
+						mtimeMs: child.file?.modifiedAt
+							? new Date(child.file.modifiedAt).getTime()
+							: 0,
+					});
+				}
+			}
+		};
+		walk(node.children ?? []);
+		return entries;
+	}
+
+	/**
+	 * Saves several changes and announces them once, as one "batch" from
+	 * `origin`: the sandbox's saves cost every listener and context one
+	 * refresh per batch instead of one per file. Returns the changes that
+	 * failed, by index; the others are saved.
+	 */
+	async applyChanges(
+		ops: readonly FilesystemBatchOp[],
+		buffer: ArrayBuffer | undefined,
+		origin: string,
+	): Promise<Array<{ index: number; error: string }>> {
+		await this.initialize();
+		const bytes = buffer ? new Uint8Array(buffer) : new Uint8Array(0);
+		const failures: Array<{ index: number; error: string }> = [];
+		const changes: FilesystemChangeEvent[] = [];
+		for (const [index, op] of ops.entries()) {
+			try {
+				changes.push(await this.applyChange(op, bytes));
+			} catch (error) {
+				failures.push({
+					index,
+					error: error instanceof Error ? error.message : String(error),
+				});
+			}
+		}
+		if (changes.length) {
+			await this.notifyFilesystemChanged({
+				scope: "root",
+				operation: "batch",
+				origin,
+				changes,
+			});
+		}
+		return failures;
+	}
+
+	private async applyChange(
+		op: FilesystemBatchOp,
+		bytes: Uint8Array,
+	): Promise<FilesystemChangeEvent> {
+		switch (op.op) {
+			case "write": {
+				const path = normalizeSandboxPath(op.path);
+				// A copy: the store may keep what it is given, and the batch's
+				// buffer holds every other file too.
+				await this.writeFile(
+					path,
+					bytes.slice(op.offset, op.offset + op.length),
+					false,
+				);
+				return { scope: this.scopeFromPath(path), operation: "write", path };
+			}
+			case "mkdir": {
+				const path = normalizeSandboxPath(op.path);
+				await this.ensureDirectory(this.toFsPath(path));
+				return { scope: this.scopeFromPath(path), operation: "mkdir", path };
+			}
+			case "delete": {
+				const path = normalizeSandboxPath(op.path);
+				await this.removeEntry(path);
+				return { scope: this.scopeFromPath(path), operation: "delete", path };
+			}
+			case "rename": {
+				const from = normalizeSandboxPath(op.from);
+				const to = normalizeSandboxPath(op.to);
+				if (isNativeMountRoot(from)) {
+					throw new Error("A mapped folder cannot be renamed here.");
+				}
+				await this.removeEntry(to);
+				const toFs = this.toFsPath(to);
+				await this.ensureDirectory(toFs.substring(0, toFs.lastIndexOf("/")));
+				try {
+					await fs.promises.rename(this.toFsPath(from), toFs);
+				} catch (error) {
+					if (!this.isCrossDeviceError(error)) throw error;
+					await this.copyThenDelete(this.toFsPath(from), toFs);
+				}
+				return {
+					scope: this.scopeFromPath(from),
+					operation: "rename",
+					oldPath: from,
+					newPath: to,
+				};
+			}
+		}
+	}
+
+	/** Deletes a file or a folder with everything in it; nothing there is fine. */
+	private async removeEntry(sandboxPath: string): Promise<void> {
+		if (isNativeMountRoot(sandboxPath)) {
+			throw new Error(
+				"Unmap this folder instead of deleting it. Deleting it here would remove the real files on disk.",
+			);
+		}
+		const fsPath = this.toFsPath(sandboxPath);
+		let stats: Awaited<ReturnType<typeof fs.promises.stat>>;
+		try {
+			stats = await fs.promises.stat(fsPath);
+		} catch (error) {
+			if (this.isNotFoundError(error)) return;
+			throw error;
+		}
+		if (stats.isDirectory()) await this.deleteDirectoryRecursive(fsPath);
+		else await fs.promises.unlink(fsPath);
 	}
 }
 
