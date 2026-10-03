@@ -626,7 +626,7 @@ export const MemonComputerPanel: React.FC<{
 										void send("window.close", { key, windowId: window.id })
 									}
 									onMove={(rect) =>
-										void send("window.move", { key, windowId: window.id, rect })
+										send("window.move", { key, windowId: window.id, rect })
 									}
 									onAsk={
 										memonWindowTarget(snapshot, window)

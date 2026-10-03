@@ -89,7 +89,8 @@ interface MemonWindowFrameProps {
 	onMinimize: () => void;
 	onMaximize: () => void;
 	onClose: () => void;
-	onMove: (rect: Rect) => void;
+	/** Resolves once the machine has the new rect. */
+	onMove: (rect: Rect) => void | Promise<void>;
 	/** Sends this window's page, file or output to the chat composer. */
 	onAsk?: () => void;
 	children: React.ReactNode;
@@ -155,7 +156,8 @@ export const MemonWindowFrame: React.FC<MemonWindowFrameProps> = ({
 		const target = event.currentTarget;
 		target.setPointerCapture(event.pointerId);
 		const start = { x: event.clientX, y: event.clientY };
-		const origin: Rect = { x: window.x, y: window.y, w: window.w, h: window.h };
+		// Start from what is on screen: a dropped rect may still be saving.
+		const origin: Rect = { x: rect.x, y: rect.y, w: rect.w, h: rect.h };
 		let latest = origin;
 		const move = (moveEvent: PointerEvent) => {
 			const dx = (moveEvent.clientX - start.x) / desktop.width;
@@ -178,8 +180,14 @@ export const MemonWindowFrame: React.FC<MemonWindowFrameProps> = ({
 			target.removeEventListener("pointermove", move);
 			target.removeEventListener("pointerup", end);
 			target.removeEventListener("pointercancel", end);
-			setDraft(null);
-			if (latest !== origin) onMove(latest);
+			if (latest === origin) return;
+			const dropped = latest;
+			// Hold the dropped rect until the machine's snapshot carries it, or the
+			// window flashes back to its old place for a frame. A newer drag keeps
+			// its own draft.
+			void Promise.resolve(onMove(dropped)).finally(() =>
+				setDraft((current) => (current === dropped ? null : current)),
+			);
 		};
 		target.addEventListener("pointermove", move);
 		target.addEventListener("pointerup", end);
