@@ -28,6 +28,9 @@ const HOST_COMMANDS: Record<string, () => Promise<HostCommand>> = {
 	python3: () => import("./python-command").then((module) => module.runPython),
 };
 
+/** The commands run on the host, by name. */
+export const HOST_COMMAND_NAMES: readonly string[] = Object.keys(HOST_COMMANDS);
+
 const hostCommandOf = (segment: string) => {
 	const name = parseSegment(segment).argv[0];
 	return name && Object.hasOwn(HOST_COMMANDS, name) ? name : null;

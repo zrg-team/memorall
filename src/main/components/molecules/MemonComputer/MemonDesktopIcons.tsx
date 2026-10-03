@@ -1,28 +1,72 @@
-import { Bot, Brain, FileText, Folder } from "lucide-react";
+import {
+	Bot,
+	Brain,
+	FileArchive,
+	FileAudio,
+	FileImage,
+	FileSpreadsheet,
+	FileText,
+	FileVideo,
+	Folder,
+} from "lucide-react";
 import type React from "react";
 import { cn } from "@/lib/utils";
 import {
 	MEMON_BOT_FILE_NAME,
 	MEMON_MEMORY_FILE_NAME,
+	MEMON_NOTES_EXTENSION,
+	MEMON_TERMINAL_EXTENSION,
+	MEMON_VISUAL_EXTENSION,
 } from "@/services/memon/constants";
+import { memonFileKind } from "@/services/memon/file-kinds";
 import type { MemonFileEntry } from "@/services/memon/types";
-const iconFor = (
-	entry: MemonFileEntry,
-): React.ComponentType<{ size?: number; className?: string }> => {
-	if (entry.name === MEMON_BOT_FILE_NAME) return Bot;
-	if (entry.name === MEMON_MEMORY_FILE_NAME) return Brain;
-	return entry.type === "dir" ? Folder : FileText;
-};
+import { MEMON_APP_ICONS, MEMON_APP_TINTS } from "./MemonWindowFrame";
 
-/** The tile color: the bot's file blue, memory violet, folders teal, the rest neutral. */
-const tintFor = (entry: MemonFileEntry): string => {
-	if (entry.name === MEMON_BOT_FILE_NAME)
-		return "bg-blue-500/15 text-blue-700 dark:text-blue-300";
-	if (entry.name === MEMON_MEMORY_FILE_NAME)
-		return "bg-violet-500/15 text-violet-700 dark:text-violet-300";
+type Icon = React.ComponentType<{ size?: number; className?: string }>;
+
+const NEUTRAL = "bg-muted text-muted-foreground";
+
+/**
+ * How an entry looks, from what opens it: the bot's two files their own,
+ * folders as Files, .notes as Notes, .terminal as the Terminal, a visual as
+ * Visualize; other files by their type.
+ */
+const lookOf = (entry: MemonFileEntry): { icon: Icon; tint: string } => {
 	if (entry.type === "dir")
-		return "bg-teal-500/15 text-teal-700 dark:text-teal-300";
-	return "bg-muted text-muted-foreground";
+		return { icon: Folder, tint: MEMON_APP_TINTS.files };
+	if (entry.name === MEMON_BOT_FILE_NAME)
+		return {
+			icon: Bot,
+			tint: "bg-blue-500/15 text-blue-700 dark:text-blue-300",
+		};
+	if (entry.name === MEMON_MEMORY_FILE_NAME)
+		return {
+			icon: Brain,
+			tint: "bg-violet-500/15 text-violet-700 dark:text-violet-300",
+		};
+	if (entry.name.endsWith(MEMON_NOTES_EXTENSION))
+		return { icon: MEMON_APP_ICONS.notes, tint: MEMON_APP_TINTS.notes };
+	if (entry.name.endsWith(MEMON_TERMINAL_EXTENSION))
+		return { icon: MEMON_APP_ICONS.terminal, tint: MEMON_APP_TINTS.terminal };
+	if (entry.name.endsWith(MEMON_VISUAL_EXTENSION))
+		return {
+			icon: MEMON_APP_ICONS.visualize,
+			tint: MEMON_APP_TINTS.visualize,
+		};
+	switch (memonFileKind(entry.path)) {
+		case "image":
+			return { icon: FileImage, tint: NEUTRAL };
+		case "audio":
+			return { icon: FileAudio, tint: NEUTRAL };
+		case "video":
+			return { icon: FileVideo, tint: NEUTRAL };
+		case "excel":
+			return { icon: FileSpreadsheet, tint: NEUTRAL };
+		case "binary":
+			return { icon: FileArchive, tint: NEUTRAL };
+		default:
+			return { icon: FileText, tint: NEUTRAL };
+	}
 };
 
 /** A short type badge for plain files, e.g. CSV or PDF. */
@@ -38,25 +82,32 @@ const extensionOf = (entry: MemonFileEntry): string | null => {
 	return entry.name.slice(dot + 1, dot + 5);
 };
 
-/** What is on the agent's Desktop (~/Desktop), drawn behind the windows. */
+/** The bot's files first, then folders, then the other files, by name. */
+const rank = (entry: MemonFileEntry): number =>
+	entry.name === MEMON_BOT_FILE_NAME
+		? 0
+		: entry.name === MEMON_MEMORY_FILE_NAME
+			? 1
+			: entry.type === "dir"
+				? 2
+				: 3;
+
+/**
+ * The agent's home (~), drawn behind the windows: every file and folder in
+ * it. A click opens it in the app for its type, a folder in Files.
+ */
 export const MemonDesktopIcons: React.FC<{
 	entries: MemonFileEntry[];
 	onOpen: (path: string) => void;
 }> = ({ entries, onOpen }) => {
 	if (!entries.length) return null;
-	// The bot's own files come first, the way they were put there.
 	const ordered = [...entries].sort(
-		(a, b) =>
-			Number(b.name === MEMON_BOT_FILE_NAME) -
-				Number(a.name === MEMON_BOT_FILE_NAME) ||
-			Number(b.name === MEMON_MEMORY_FILE_NAME) -
-				Number(a.name === MEMON_MEMORY_FILE_NAME) ||
-			a.name.localeCompare(b.name),
+		(a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name),
 	);
 	return (
-		<div className="absolute left-2 top-2 z-0 flex max-h-[calc(100%-1rem)] flex-col flex-wrap gap-1">
+		<div className="absolute left-2 top-2 z-0 flex max-h-[calc(100%-1rem)] flex-col flex-wrap content-start gap-1">
 			{ordered.map((entry) => {
-				const Icon = iconFor(entry);
+				const { icon: Icon, tint } = lookOf(entry);
 				const extension = extensionOf(entry);
 				return (
 					<button
@@ -71,7 +122,7 @@ export const MemonDesktopIcons: React.FC<{
 						<span
 							className={cn(
 								"relative flex h-10 w-10 items-center justify-center rounded-lg",
-								tintFor(entry),
+								tint,
 							)}
 						>
 							<Icon size={20} />

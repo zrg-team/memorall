@@ -1,19 +1,10 @@
 import { handleFsOperation } from "../core/sandbox-fs-handlers.js";
+import { toCanonicalMountedPath } from "../core/sandbox-vfs.js";
 import {
-	WORKSPACES_MOUNT_ROOT,
-	addMountedWorkspaceDirectory,
-	isWorkspacePath,
-	materializedWorkspaceFiles,
-	materializeMountedWorkspaceFileContent,
-	moveMountedWorkspacePath,
-	mountedWorkspaceDirectories,
-	mountedWorkspaceFiles,
-	pendingWorkspaceOps,
-	removeMountedWorkspacePath,
-	ensureMountedParentDirectories,
-	toCanonicalMountedPath,
-	vfsBoolState,
-} from "../core/sandbox-vfs.js";
+	getSyncState,
+	isSyncedPath,
+	handleSyncOperation,
+} from "../core/sandbox-sync.js";
 import {
 	DEFAULT_COMMAND_WAIT_TIMEOUT_MS,
 	DEFAULT_FETCH_TIMEOUT_MS,
@@ -221,15 +212,17 @@ const handleSnapshotRestoreOperation = async (containerInstance, payload) => {
 	const removedFilePaths = previousSnapshot.files
 		.filter((entry) => entry.type === "file")
 		.map((entry) => toCanonicalMountedPath(entry.path))
-		.filter((path) => !restoredFilePaths.has(path));
+		.filter((path) => isSyncedPath(path) && !restoredFilePaths.has(path));
 
+	// What the host has carries over, so the files the snapshot lacks are
+	// deleted there; the restored ones are written like any change.
+	const known = getSyncState();
 	await resetRuntime();
 	const restoredContainer = await ensureContainer();
-	vfsBoolState.workspaceMountLoaded = true;
-	mountedWorkspaceDirectories.add(WORKSPACES_MOUNT_ROOT);
-	for (const path of removedFilePaths) {
-		pendingWorkspaceOps.push({ op: "delete", path });
-	}
+	const sync = getSyncState();
+	sync.hostFiles = known.hostFiles;
+	sync.hostDirs = known.hostDirs;
+	for (const path of removedFilePaths) sync.dirty.add(path);
 
 	const sortedEntries = entries
 		.map((entry, index) => ({
@@ -252,161 +245,6 @@ const handleSnapshotRestoreOperation = async (containerInstance, payload) => {
 	}
 	rememberInstalledPackages(snapshot.installedPackages);
 	return { restored: true };
-};
-
-const collectWorkspaceSnapshotState = (snapshot) => {
-	const nextDirectories = new Set([WORKSPACES_MOUNT_ROOT]);
-	const nextFiles = new Set();
-
-	for (const dirPath of snapshot?.directories ?? []) {
-		const path = toCanonicalMountedPath(dirPath);
-		if (isWorkspacePath(path)) {
-			nextDirectories.add(path);
-		}
-	}
-
-	for (const filePath of snapshot?.files ?? []) {
-		const path = toCanonicalMountedPath(filePath);
-		if (!isWorkspacePath(path)) {
-			continue;
-		}
-		nextFiles.add(path);
-		ensureMountedParentDirectories(path, nextDirectories);
-	}
-
-	// The host has not saved these sandbox changes yet, so its snapshot does not
-	// show them. Replay them on top, or files a running process just wrote
-	// would vanish from under it.
-	for (const op of pendingWorkspaceOps) {
-		if (op.op === "write") {
-			nextFiles.add(op.path);
-			ensureMountedParentDirectories(op.path, nextDirectories);
-		} else if (op.op === "mkdir") {
-			nextDirectories.add(op.path);
-			ensureMountedParentDirectories(op.path, nextDirectories);
-		} else if (op.op === "delete") {
-			removeSnapshotSubtree(op.path, nextFiles, nextDirectories);
-		} else if (op.op === "rename") {
-			moveSnapshotSubtree(op.oldPath, op.newPath, nextFiles, nextDirectories);
-		}
-	}
-
-	return { nextDirectories, nextFiles };
-};
-
-const removeSnapshotSubtree = (path, files, directories) => {
-	const prefix = `${path}/`;
-	for (const file of Array.from(files)) {
-		if (file === path || file.startsWith(prefix)) files.delete(file);
-	}
-	for (const dir of Array.from(directories)) {
-		if (dir !== WORKSPACES_MOUNT_ROOT && (dir === path || dir.startsWith(prefix))) {
-			directories.delete(dir);
-		}
-	}
-};
-
-const moveSnapshotSubtree = (oldPath, newPath, files, directories) => {
-	const prefix = `${oldPath}/`;
-	const rebase = (path) =>
-		path === oldPath ? newPath : `${newPath}/${path.slice(prefix.length)}`;
-	for (const file of Array.from(files)) {
-		if (file !== oldPath && !file.startsWith(prefix)) continue;
-		files.delete(file);
-		files.add(rebase(file));
-	}
-	for (const dir of Array.from(directories)) {
-		if (dir === WORKSPACES_MOUNT_ROOT) continue;
-		if (dir !== oldPath && !dir.startsWith(prefix)) continue;
-		directories.delete(dir);
-		directories.add(rebase(dir));
-	}
-	ensureMountedParentDirectories(newPath, directories);
-};
-
-const applyWorkspaceSnapshot = (snapshot, mode = "full") => {
-	const { nextDirectories, nextFiles } = collectWorkspaceSnapshotState(snapshot);
-
-	mountedWorkspaceFiles.clear();
-	for (const path of nextFiles) {
-		mountedWorkspaceFiles.add(path);
-	}
-
-	mountedWorkspaceDirectories.clear();
-	for (const path of nextDirectories) {
-		mountedWorkspaceDirectories.add(path);
-	}
-
-	if (mode === "full") {
-		materializedWorkspaceFiles.clear();
-	} else {
-		for (const path of Array.from(materializedWorkspaceFiles.keys())) {
-			if (!nextFiles.has(path)) {
-				materializedWorkspaceFiles.delete(path);
-			}
-		}
-	}
-
-	vfsBoolState.workspaceMountLoaded = true;
-};
-
-const applyWorkspaceMaterializedChange = (change) => {
-	if (change.operation === "write" && typeof change.path === "string") {
-		return materializeMountedWorkspaceFileContent(
-			change.path,
-			change.content instanceof Uint8Array
-				? change.content
-				: String(change.content ?? ""),
-		);
-	}
-
-	if (
-		change.operation === "rename" &&
-		typeof change.oldPath === "string" &&
-		typeof change.newPath === "string"
-	) {
-		const { newPath } = moveMountedWorkspacePath(change.oldPath, change.newPath);
-		if (
-			typeof change.content === "string" ||
-			change.content instanceof Uint8Array
-		) {
-			materializeMountedWorkspaceFileContent(newPath, change.content);
-		}
-		return newPath;
-	}
-
-	if (change.operation === "mkdir" && typeof change.path === "string") {
-		return addMountedWorkspaceDirectory(change.path);
-	}
-
-	if (change.operation === "delete" && typeof change.path === "string") {
-		return removeMountedWorkspacePath(change.path);
-	}
-
-	return null;
-};
-
-export const applyWorkspaceHotReload = async (payload) => {
-	const changedPaths = [];
-	for (const change of payload?.changes ?? []) {
-		const changedPath = applyWorkspaceMaterializedChange(change);
-		if (changedPath) {
-			changedPaths.push(changedPath);
-		}
-	}
-
-	if (payload?.snapshot) {
-		applyWorkspaceSnapshot(
-			payload.snapshot,
-			payload.mode === "full" ? "full" : "incremental",
-		);
-	}
-
-	await notifyWorkspaceFileChanges(changedPaths);
-	return {
-		updated: true,
-		changeCount: changedPaths.length,
-	};
 };
 
 export const handleOperation = async (request) => {
@@ -491,16 +329,20 @@ export const handleOperation = async (request) => {
 			await resetRuntime();
 			return { reset: true };
 		default:
-			if (request.operation.startsWith("fs.")) {
-				const result = await handleFsOperation(
+			if (request.operation.startsWith("sync.")) {
+				const result = handleSyncOperation(
 					request.operation,
 					payload,
-					containerInstance,
+					containerInstance.vfs,
 				);
-				if (request.operation === "fs.materializeWorkspaceFile" && result?.path) {
-					await notifyWorkspaceFileChanges([result.path]);
+				// Servers reload what the host changed under them.
+				if (result?.changed?.length) {
+					await notifyWorkspaceFileChanges(result.changed);
 				}
 				return result;
+			}
+			if (request.operation.startsWith("fs.")) {
+				return handleFsOperation(request.operation, payload, containerInstance);
 			}
 			throw new Error(`Unsupported sandbox operation: ${request.operation}`);
 	}

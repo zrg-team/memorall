@@ -68,7 +68,7 @@ const SOURCE =
 const visual = (
 	overrides: Partial<MemonVisualState> = {},
 ): MemonVisualState => ({
-	path: "/.users/a1/Visuals/Trip.openui",
+	path: "/agents/a1/Visuals/Trip.openui",
 	title: "Trip",
 	source: SOURCE,
 	theme: "shadcn",
@@ -83,7 +83,7 @@ const renderWindow = (state: MemonVisualState) => {
 			<VisualizeWindow
 				machineKey="a1"
 				visual={state}
-				home="/.users/a1"
+				home="/agents/a1"
 				send={send as never}
 			/>
 		</MemoryRouter>,
@@ -102,7 +102,7 @@ describe("VisualizeWindow", () => {
 		fireEvent.click(screen.getByRole("button", { name: /openFolder|Visuals/ }));
 		expect(send).toHaveBeenCalledWith("files.open", {
 			key: "a1",
-			path: "/.users/a1/Visuals",
+			path: "/agents/a1/Visuals",
 		});
 	});
 

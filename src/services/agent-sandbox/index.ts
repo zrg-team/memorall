@@ -19,22 +19,24 @@ export * from "./workspace-coordinator";
 
 const serviceCache = new WeakMap<
 	ISandboxContainerService,
-	{ service: IAgentSandboxService; workspaces: SandboxWorkspaceCoordinator }
+	IAgentSandboxService
 >();
 
+/**
+ * The agent's sandbox. `_fileSystem` is accepted and not used: the container
+ * keeps the sandbox's files in step with the documents filesystem itself,
+ * change by change. Given to the harness's coordinator, it would read and
+ * hash every file of that filesystem before and after each run.
+ */
 export const createAgentSandboxService = (
 	containerService: ISandboxContainerService,
-	fileSystem?: IFlowFileSystem,
+	_fileSystem?: IFlowFileSystem,
 ): IAgentSandboxService => {
 	const cached = serviceCache.get(containerService);
-	if (cached) {
-		if (fileSystem) cached.workspaces.setFileSystem(fileSystem);
-		return cached.service;
-	}
+	if (cached) return cached;
 	const providers = new SandboxProviderRegistry().register(
 		new BrowserSandboxProvider(containerService),
 	);
-	const workspaces = new SandboxWorkspaceCoordinator(fileSystem);
 	const service = new SandboxManager(
 		providers,
 		{
@@ -42,8 +44,8 @@ export const createAgentSandboxService = (
 			sessionPolicy: "reuse-conversation",
 		},
 		createBrowserPlatform({ runtime: "extension-worker" }),
-		workspaces,
+		new SandboxWorkspaceCoordinator(),
 	);
-	serviceCache.set(containerService, { service, workspaces });
+	serviceCache.set(containerService, service);
 	return service;
 };

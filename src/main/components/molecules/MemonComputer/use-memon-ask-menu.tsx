@@ -30,8 +30,13 @@ const preview = (value: string): string => {
 		: line;
 };
 
-/** Selected text under the pointer: a field's selection, else the page's. */
+/**
+ * Selected text under the pointer: the Terminal's own selection (it draws
+ * it), a field's, else the page's.
+ */
 const selectedText = (element: HTMLElement, root: HTMLElement): string => {
+	const owner = element.closest<HTMLElement>("[data-memon-ask-selection]");
+	if (owner) return owner.dataset.memonAskSelection ?? "";
 	if (
 		element instanceof HTMLTextAreaElement ||
 		element instanceof HTMLInputElement

@@ -87,7 +87,7 @@ const snapshot = (
 	desktop: [],
 	pendingUserChanges: [],
 	drafts: {},
-	home: "/.users/guest",
+	home: "/agents/guest",
 	visual: {
 		path: null,
 		title: "Untitled visual",

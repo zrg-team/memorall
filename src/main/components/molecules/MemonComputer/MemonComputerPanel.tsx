@@ -205,7 +205,8 @@ const windowTitle = (
 			const done = snapshot.notes.items.filter(
 				(item) => item.status === "done",
 			).length;
-			return `${t("memonComputer.apps.notes")} · ${done}/${snapshot.notes.items.length}`;
+			const file = snapshot.notes.path?.split("/").pop();
+			return `${t("memonComputer.apps.notes")}${file ? ` · ${file}` : ""} · ${done}/${snapshot.notes.items.length}`;
 		}
 		case "scheduler":
 			return `${t("memonComputer.apps.scheduler")} · ${snapshot.scheduler.agentName ?? ""}`;
@@ -216,7 +217,7 @@ const windowTitle = (
 		case "connections":
 			return t("memonComputer.apps.connections");
 		case "terminal":
-			return `${t("memonComputer.apps.terminal")} · ${snapshot.terminal.cwd}`;
+			return `${t("memonComputer.apps.terminal")} · ${memonDisplayPath(snapshot.terminal.cwd, snapshot.home)}`;
 		case "visualize":
 			return snapshot.visual.path
 				? `${t("memonComputer.apps.visualize")} · ${snapshot.visual.title}`
@@ -365,6 +366,7 @@ export const MemonComputerPanel: React.FC<{
 					<TerminalWindow
 						machineKey={key}
 						terminal={snapshot.terminal}
+						home={snapshot.home}
 						send={send}
 					/>
 				);

@@ -13,7 +13,10 @@ import type {
 import { ChatPanelSkeleton } from "@/main/components/atoms/AppSkeletons";
 import { ChatSidePanel } from "@/main/components/molecules/ChatSidePanel";
 import { Button } from "@/main/components/ui/button";
-import { useWorkspaceHeaderLeadingSlot } from "@/main/components/workspace-header-slot";
+import {
+	useWorkspaceHeaderLeadingSlot,
+	useWorkspaceHeaderSlot,
+} from "@/main/components/workspace-header-slot";
 import {
 	Conversation,
 	ConversationContent,
@@ -38,6 +41,8 @@ import {
 	useSmartSelectContext,
 } from "@/main/modules/chat/components";
 import type { MessageActionRequest } from "@/main/modules/chat/components/artifacts/ArtifactActionsMenu";
+import { ChatHeaderActions } from "@/main/modules/chat/components/ChatHeaderActions";
+import { logError } from "@/utils/logger";
 import { MessageGroup } from "@/main/modules/chat/components/MessageGroup";
 import { translateCommonKey } from "@/main/modules/chat/utils/i18n-helpers";
 import {
@@ -136,6 +141,10 @@ export const ChatPage: React.FC<ChatPageProps> = ({
 	// nothing tells this page about it. Re-read when the user comes back, so a
 	// turn taken on the web page is not missing here.
 	const loadConversation = useChatStore((state) => state.loadConversation);
+	const createNewConversation = useChatStore(
+		(state) => state.createNewConversation,
+	);
+	const loadConversations = useChatStore((state) => state.loadConversations);
 	useRefreshOnFocus(
 		currentConversation?.id
 			? () => loadConversation(currentConversation.id)
@@ -154,6 +163,9 @@ export const ChatPage: React.FC<ChatPageProps> = ({
 		React.useState(false);
 	const [isChatFullWidth, setIsChatFullWidth] = React.useState(false);
 	const headerLeadingSlot = useWorkspaceHeaderLeadingSlot();
+	const headerSlot = useWorkspaceHeaderSlot();
+	/** Bumped to put the cursor in the composer (after New chat). */
+	const [composerFocusKey, setComposerFocusKey] = React.useState(0);
 	const [expandedMessageGroupId, setExpandedMessageGroupId] = React.useState<
 		string | null
 	>(null);
@@ -443,6 +455,28 @@ ${text}`
 	);
 	const latestGroupIsEmpty =
 		latestGroup?.messages.length === 0 && !hasInProgressMessage;
+	const isConversationEmpty =
+		completedGroups.length === 0 && latestGroupIsEmpty;
+
+	/**
+	 * The header's New chat. A chat with nothing in it yet already is a new
+	 * one: it is kept, rather than leaving an empty chat behind in the list.
+	 */
+	const handleNewChat = React.useCallback(async () => {
+		setIsCompactSidePanelOpen(false);
+		setShowPreviousGroups(false);
+		setExpandedMessageGroupId(null);
+		if (!isConversationEmpty) {
+			try {
+				await createNewConversation();
+				await loadConversations();
+			} catch (error) {
+				logError("[CHAT] Failed to start a new chat:", error);
+				return;
+			}
+		}
+		setComposerFocusKey((key) => key + 1);
+	}, [createNewConversation, isConversationEmpty, loadConversations]);
 	const completedGroupsIds = useMemo(
 		() =>
 			completedGroups
@@ -973,6 +1007,18 @@ ${text}`
 					)
 				) : null}
 
+				{/* New chat and the agent's computer, at the header's end. */}
+				{headerSlot
+					? createPortal(
+							<ChatHeaderActions
+								onNewChat={() => void handleNewChat()}
+								onOpenComputer={agentComputer.open}
+								isComputerWorking={agentComputer.working}
+							/>,
+							headerSlot,
+						)
+					: null}
+
 				<Conversation
 					className="min-h-0 flex-1 bg-transparent"
 					resize={hasInProgressMessage ? "instant" : "smooth"}
@@ -1124,8 +1170,7 @@ ${text}`
 					attachedDocumentRefs={attachedDocumentRefs}
 					onAttachedDocumentRefsChange={setAttachedDocumentRefs}
 					isModelReady={isChatInputModelReady}
-					onOpenComputer={agentComputer.open}
-					isComputerWorking={agentComputer.working}
+					focusKey={composerFocusKey}
 					isFullWidth={isChatFullWidth}
 					onToggleFullWidth={() => setIsChatFullWidth((value) => !value)}
 					placeholder={t("input.messageAgent", {

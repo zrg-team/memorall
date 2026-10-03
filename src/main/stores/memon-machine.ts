@@ -15,7 +15,12 @@ const PULL_THROTTLE_MS = 150;
 
 type InputOperation = Exclude<
 	MemonOperation,
-	"snapshot.get" | "machines.list" | "control.cancelWaits"
+	| "snapshot.get"
+	| "machines.list"
+	| "control.cancelWaits"
+	| "agent.home"
+	| "agent.renamed"
+	| "terminal.complete"
 >;
 
 /** The open chat's agent, when it is a MemonOS Bot. */
@@ -35,9 +40,14 @@ interface MemonMachineState {
 	setChatAgent: (agent: MemonChatAgent | null) => void;
 	start: () => void;
 	pull: (key: string) => Promise<void>;
+	/**
+	 * Runs an input on the machine and shows the snapshot it returns. A
+	 * failure is the panel's error, or, with `rethrow`, the caller's.
+	 */
 	send: <T extends InputOperation>(
 		operation: T,
 		payload: MemonOperationPayloadMap[T],
+		options?: { rethrow?: boolean },
 	) => Promise<void>;
 	clearError: () => void;
 }
@@ -132,7 +142,7 @@ export const useMemonMachineStore = create<MemonMachineState>((set, get) => {
 			}
 		},
 
-		send: async (operation, payload) => {
+		send: async (operation, payload, options) => {
 			try {
 				const client = await loadClient();
 				const snapshot = await client.request(operation, payload);
@@ -148,6 +158,7 @@ export const useMemonMachineStore = create<MemonMachineState>((set, get) => {
 					}));
 				}
 			} catch (error) {
+				if (options?.rethrow) throw error;
 				set({ error: error instanceof Error ? error.message : String(error) });
 			}
 		},

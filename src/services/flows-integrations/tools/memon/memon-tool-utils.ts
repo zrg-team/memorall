@@ -9,6 +9,7 @@ import {
 } from "@/services/chat/runtime-keys";
 import {
 	MEMON_CONFIG_RUNTIME_KEY,
+	MEMON_HOME_RUNTIME_KEY,
 	type MemonWindowApp,
 } from "@/services/memon/constants";
 import { normalizeMemonFeatureConfig } from "@/services/memon/feature-config";
@@ -51,9 +52,12 @@ export const acquireMemonMachine = async (
 	const config = normalizeMemonFeatureConfig(
 		context?.runtime?.get(MEMON_CONFIG_RUNTIME_KEY),
 	);
+	const home = context?.runtime?.get(MEMON_HOME_RUNTIME_KEY);
 	const machine = await getMemonMachine(machineKeyFor(context), {
 		config,
 		agentId: getRunAgentId(context?.runtime),
+		// The run's home: after a rename, the computer follows the folder.
+		home: typeof home === "string" ? home : undefined,
 	});
 	const runId = context?.runtime?.get(RUN_RUNTIME_KEY);
 	if (typeof runId === "string") machine.beginRun(runId);

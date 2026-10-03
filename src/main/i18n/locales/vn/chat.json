@@ -75,7 +75,9 @@
 		"expandWidth": "Mở rộng chiều rộng tin nhắn",
 		"constrainWidth": "Thu hẹp chiều rộng tin nhắn",
 		"clearConversation": "Xóa tin nhắn",
-		"clearConfirm": "Xóa mọi tin nhắn trong cuộc trò chuyện này? Không thể hoàn tác."
+		"clearConfirm": "Xóa mọi tin nhắn trong cuộc trò chuyện này? Không thể hoàn tác.",
+		"newChat": "Cuộc trò chuyện mới",
+		"computerWorking": "Agent đang dùng máy tính của nó: mở ra xem"
 	},
 	"emptyState": {
 		"title": "Tôi có thể giúp bạn nhớ lại điều gì?",

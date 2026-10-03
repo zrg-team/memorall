@@ -7,6 +7,7 @@ import type { MemonFeatureConfig } from "./feature-config";
 import type { MemonScheduleInput } from "./memon-machine";
 import type { MemonKitAppId } from "./apps";
 import type { MemonStudioRequest } from "./studio-app";
+import type { MemonTerminalCompletion } from "./terminal/terminal-commands";
 import type {
 	MemonMachineSnapshot,
 	MemonMachineSummary,
@@ -29,6 +30,10 @@ export interface MemonOperationPayloadMap {
 	/** Starts (or reconfigures) a computer the user drives themselves. */
 	"machine.start": Keyed<{ config?: MemonFeatureConfig; agentId?: string }>;
 	"machine.stop": Keyed;
+	/** Makes an agent's home, `/agents/<agent name>`: done when it is created. */
+	"agent.home": { agentId: string };
+	/** An agent was renamed: its home moves, and its computer with it. */
+	"agent.renamed": { agentId: string; from: string; to: string };
 	"control.takeover": Keyed;
 	"control.resume": Keyed;
 	"control.pause": Keyed;
@@ -101,7 +106,13 @@ export interface MemonOperationPayloadMap {
 	"terminal.close": Keyed<{ terminalId: string }>;
 	/** Types a line into the running command. */
 	"terminal.input": Keyed<{ text: string }>;
+	/** Ctrl+L: clears a tab's screen (the one in front by default). */
+	"terminal.clear": Keyed<{ terminalId?: string }>;
+	/** Tab: completes the line before the cursor. Changes nothing. */
+	"terminal.complete": Keyed<{ line: string; terminalId?: string }>;
 	"terminal.stop": Keyed;
+	/** Forgets the command history, in its file too. */
+	"terminal.clearHistory": Keyed;
 	/** Answers a command of the agent's that waits for approval. */
 	"terminal.approval": Keyed<{ id: string; decision: "approve" | "deny" }>;
 	"window.open": Keyed<{ app: MemonWindowApp }>;
@@ -117,7 +128,11 @@ export type MemonOperation = keyof MemonOperationPayloadMap;
 export type MemonOperationResultMap = {
 	[K in MemonOperation]: K extends "machines.list"
 		? MemonMachineSummary[]
-		: MemonMachineSnapshot | null;
+		: K extends "agent.home" | "agent.renamed"
+			? string
+			: K extends "terminal.complete"
+				? MemonTerminalCompletion
+				: MemonMachineSnapshot | null;
 };
 
 export type MemonOperationJobPayload = {

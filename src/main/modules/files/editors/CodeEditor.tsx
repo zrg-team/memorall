@@ -42,6 +42,9 @@ const EXT_TO_LANG: Record<string, string> = {
 	sass: "sass",
 	less: "less",
 	json: "json",
+	// MemonOS keeps Notes and the Terminal history as JSON in these.
+	notes: "json",
+	terminal: "json",
 	yaml: "yaml",
 	yml: "yaml",
 	toml: "toml",

@@ -77,24 +77,34 @@ export const getMemonMachine = async (
 		ports?: Partial<MemonPorts>;
 		/** The agent using the computer, for its Scheduler. */
 		agentId?: string;
+		/** The agent's home, as its run resolved it; resolved here otherwise. */
+		home?: string;
 	} = {},
 ): Promise<MemonMachine> => {
 	const registry = getRegistry();
 	const existing = registry.machines.get(key);
 	if (existing) {
 		if (options.config) existing.configure(options.config);
-		existing.setAgent(options.agentId);
+		existing.setAgent(options.agentId, options.home);
 		return existing;
 	}
 	// Loaded on first use: the ports pull in the filesystem, sandbox and
 	// browser services, which importing a tool must not start.
 	const { createMemonPorts } = await import("./ports");
+	const ports = createMemonPorts(options.ports);
+	const home =
+		options.home ??
+		(await ports.homes?.resolve(options.agentId ?? null).catch((error) => {
+			logWarn("[MEMON] Could not prepare the agent's home:", error);
+			return undefined;
+		}));
 	const machine = new MemonMachine(
 		key,
-		createMemonPorts(options.ports),
+		ports,
 		options.config ?? DEFAULT_MEMON_FEATURE_CONFIG,
 	);
-	machine.setAgent(options.agentId);
+	machine.setAgent(options.agentId, home);
+	if (!options.agentId && home) machine.setHome(home, false);
 	registry.machines.set(key, machine);
 	machine.subscribe(() => {
 		schedulePublish(machine);

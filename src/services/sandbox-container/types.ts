@@ -1,3 +1,10 @@
+import type { LocalTreeEntry } from "./local-tree-cache";
+import type {
+	SandboxLocalTreePack,
+	SandboxSyncApplyResult,
+	SandboxSyncCollectResult,
+	SandboxSyncInboundOp,
+} from "./workspace-sync";
 export type SandboxLogLevel = "log" | "info" | "warn" | "error" | "debug";
 
 export interface SandboxLogEntry {
@@ -164,68 +171,34 @@ export interface SandboxFsExistsResult {
 	exists: boolean;
 }
 
-export interface SandboxFsMountDocumentsRequest {
-	directories: string[];
-	files: string[];
-}
-
-export interface SandboxFsMountDocumentsResult {
-	mounted: true;
-	directoryCount: number;
-	fileCount: number;
-}
-
 /** Text, or the bytes of a file that is not UTF-8 text (an image, a font). */
 export type SandboxFileContent = string | Uint8Array;
 
-export interface SandboxFsMaterializeDocumentFileRequest {
-	path: string;
-	content: SandboxFileContent;
+export interface SandboxSyncStateResult {
+	vfsId: string;
+	dirty: number;
+	inFlight: number;
+	stubs: number;
 }
 
-export interface SandboxFsMaterializeDocumentFileResult {
-	path: string;
-	materialized: true;
+export interface SandboxSyncApplyRequest {
+	vfsId: string;
+	ops: SandboxSyncInboundOp[];
+	buffer?: ArrayBuffer;
 }
 
-// Workspace mount shares the same shape as documents mount
-export type SandboxFsMountWorkspaceRequest = SandboxFsMountDocumentsRequest;
-export type SandboxFsMountWorkspaceResult = SandboxFsMountDocumentsResult;
-export type SandboxFsMaterializeWorkspaceFileRequest =
-	SandboxFsMaterializeDocumentFileRequest;
-export type SandboxFsMaterializeWorkspaceFileResult =
-	SandboxFsMaterializeDocumentFileResult;
-
-export interface SandboxFsListUnmaterializedWorkspaceFilesRequest {
-	/** Directory whose subtree is listed; "/" lists the whole mount. */
-	path: string;
+export interface SandboxSyncCollectRequest {
+	/** The host has no batch in flight: one the sandbox waits on is resent. */
+	orphansFailed?: boolean;
 }
 
-export interface SandboxFsListUnmaterializedWorkspaceFilesResult {
-	files: string[];
+export interface SandboxSyncAckRequest {
+	batchId: number;
+	failures: Array<{ index: number; error: string }>;
 }
 
-/**
- * Fill in mounted files whose content the runtime does not hold yet. A file
- * the runtime already has content for keeps it: that content is either newer
- * (written by sandbox code) or arrived through the live change sync.
- */
-export interface SandboxFsMaterializeWorkspaceFilesRequest {
-	files: Array<{ path: string; content: SandboxFileContent }>;
-}
-
-export interface SandboxFsMaterializeWorkspaceFilesResult {
-	materialized: string[];
-}
-
-export type SandboxWorkspaceOp =
-	| { op: "write"; path: string; content: SandboxFileContent }
-	| { op: "mkdir"; path: string }
-	| { op: "delete"; path: string }
-	| { op: "rename"; oldPath: string; newPath: string };
-
-export interface SandboxFsFlushWorkspaceWritesResult {
-	ops: SandboxWorkspaceOp[];
+export interface SandboxSyncStubsResult {
+	stubs: Array<{ path: string; size: number }>;
 }
 
 export interface SandboxNpmInstallRequest {
@@ -451,13 +424,13 @@ export type SandboxOperation =
 	| "fs.unlink"
 	| "fs.rename"
 	| "fs.exists"
-	| "fs.mountDocuments"
-	| "fs.materializeDocumentFile"
-	| "fs.mountWorkspace"
-	| "fs.materializeWorkspaceFile"
-	| "fs.listUnmaterializedWorkspaceFiles"
-	| "fs.materializeWorkspaceFiles"
-	| "fs.flushWorkspaceWrites"
+	| "sync.state"
+	| "sync.apply"
+	| "sync.collect"
+	| "sync.ack"
+	| "sync.stubs"
+	| "sync.packLocal"
+	| "sync.restoreLocal"
 	| "npm.install"
 	| "npm.installFromPackageJson"
 	| "npm.list"
@@ -493,13 +466,17 @@ export type SandboxOperationPayloadMap = {
 	"fs.unlink": SandboxFsUnlinkRequest;
 	"fs.rename": SandboxFsRenameRequest;
 	"fs.exists": SandboxFsExistsRequest;
-	"fs.mountDocuments": SandboxFsMountDocumentsRequest;
-	"fs.materializeDocumentFile": SandboxFsMaterializeDocumentFileRequest;
-	"fs.mountWorkspace": SandboxFsMountWorkspaceRequest;
-	"fs.materializeWorkspaceFile": SandboxFsMaterializeWorkspaceFileRequest;
-	"fs.listUnmaterializedWorkspaceFiles": SandboxFsListUnmaterializedWorkspaceFilesRequest;
-	"fs.materializeWorkspaceFiles": SandboxFsMaterializeWorkspaceFilesRequest;
-	"fs.flushWorkspaceWrites": undefined;
+	"sync.state": undefined;
+	"sync.apply": SandboxSyncApplyRequest;
+	"sync.collect": SandboxSyncCollectRequest;
+	"sync.ack": SandboxSyncAckRequest;
+	"sync.stubs": { root: string };
+	"sync.packLocal": { root: string };
+	"sync.restoreLocal": {
+		root: string;
+		entries: LocalTreeEntry[];
+		buffer: ArrayBuffer;
+	};
 	"npm.install": SandboxNpmInstallRequest;
 	"npm.installFromPackageJson": SandboxNpmInstallFromPackageJsonRequest;
 	"npm.list": undefined;
@@ -536,13 +513,13 @@ export type SandboxOperationResultMap = {
 	"fs.unlink": { path: string };
 	"fs.rename": { oldPath: string; newPath: string };
 	"fs.exists": SandboxFsExistsResult;
-	"fs.mountDocuments": SandboxFsMountDocumentsResult;
-	"fs.materializeDocumentFile": SandboxFsMaterializeDocumentFileResult;
-	"fs.mountWorkspace": SandboxFsMountWorkspaceResult;
-	"fs.materializeWorkspaceFile": SandboxFsMaterializeWorkspaceFileResult;
-	"fs.listUnmaterializedWorkspaceFiles": SandboxFsListUnmaterializedWorkspaceFilesResult;
-	"fs.materializeWorkspaceFiles": SandboxFsMaterializeWorkspaceFilesResult;
-	"fs.flushWorkspaceWrites": SandboxFsFlushWorkspaceWritesResult;
+	"sync.state": SandboxSyncStateResult;
+	"sync.apply": SandboxSyncApplyResult;
+	"sync.collect": SandboxSyncCollectResult;
+	"sync.ack": { acknowledged: boolean };
+	"sync.stubs": SandboxSyncStubsResult;
+	"sync.packLocal": SandboxLocalTreePack;
+	"sync.restoreLocal": { root: string; restored: boolean; files?: number };
 	"npm.install": SandboxNpmInstallResult;
 	"npm.installFromPackageJson": SandboxNpmInstallResult;
 	"npm.list": SandboxNpmListResult;

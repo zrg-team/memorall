@@ -3,7 +3,6 @@ import type {
 	ISandboxContainerService,
 	SandboxOperation,
 	SandboxOperationPayloadMap,
-	SandboxOperationResultMap,
 } from "@/services/sandbox-container";
 import { backgroundProcessFactory } from "./process-factory";
 import type {
@@ -121,31 +120,6 @@ export class SandboxOperationsHandler implements ProcessHandler<BaseJob> {
 				return sandboxContainerService.rename(payload.payload);
 			case "fs.exists":
 				return sandboxContainerService.exists(payload.payload);
-			case "fs.mountDocuments":
-				return sandboxContainerService.request(
-					"fs.mountDocuments",
-					payload.payload,
-				);
-			case "fs.materializeDocumentFile":
-				return sandboxContainerService.request(
-					"fs.materializeDocumentFile",
-					payload.payload,
-				);
-			case "fs.mountWorkspace":
-				return sandboxContainerService.request(
-					"fs.mountWorkspace",
-					payload.payload,
-				);
-			case "fs.materializeWorkspaceFile":
-				return sandboxContainerService.request(
-					"fs.materializeWorkspaceFile",
-					payload.payload,
-				);
-			case "fs.flushWorkspaceWrites":
-				return sandboxContainerService.request(
-					"fs.flushWorkspaceWrites",
-					payload.payload,
-				);
 			case "npm.install":
 				return sandboxContainerService.installPackage(payload.payload);
 			case "npm.installFromPackageJson":
@@ -163,8 +137,8 @@ export class SandboxOperationsHandler implements ProcessHandler<BaseJob> {
 			case "server.renderUrl":
 				return sandboxContainerService.getServerRenderUrl(payload.payload);
 			case "server.handleSwRequest":
-				return sandboxContainerService.request(
-					"server.handleSwRequest",
+				// With the retry that sends a file the sandbox lacked, then asks again.
+				return sandboxContainerService.handleSwRequestWithRetry(
 					payload.payload,
 				);
 			case "snapshot.get":

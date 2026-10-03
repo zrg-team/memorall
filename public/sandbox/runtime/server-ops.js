@@ -1,11 +1,5 @@
-import {
-	WORKSPACES_MOUNT_ROOT,
-	vfsBoolState,
-	mountedWorkspaceDirectories,
-	normalizePath,
-	dirname,
-	isWorkspacePath,
-} from "../core/sandbox-vfs.js";
+import { normalizePath, dirname } from "../core/sandbox-vfs.js";
+import { isStubPath } from "../core/sandbox-sync.js";
 import {
 	FRAMEWORK_TEMPLATES,
 	TEMPLATE_INSTALL_SPECS,
@@ -49,12 +43,6 @@ const scaffoldTemplate = (containerInstance, templateName, rootDir) => {
 		throw new Error(`Unknown template: ${templateName}`);
 	}
 	const root = normalizePath(rootDir || "/");
-
-	if (isWorkspacePath(root) && !vfsBoolState.workspaceMountLoaded) {
-		vfsBoolState.workspaceMountLoaded = true;
-		mountedWorkspaceDirectories.add(WORKSPACES_MOUNT_ROOT);
-	}
-
 	const createdFiles = [];
 	for (const [relPath, content] of Object.entries(files)) {
 		const rel = relPath.startsWith("/") ? relPath.slice(1) : relPath;
@@ -1198,8 +1186,9 @@ const createViteServerState = async ({
 				body,
 			);
 			if ((response.statusCode ?? 200) === 404) {
+				// A file the host has not sent yet: it sends it, and asks again.
 				const fsPath = toViteFsPath(rootDir, pathname);
-				if (isWorkspacePath(fsPath)) {
+				if (isStubPath(fsPath)) {
 					return createWorkspaceMaterializationMissResponse(fsPath);
 				}
 			}

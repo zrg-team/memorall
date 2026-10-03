@@ -8,7 +8,6 @@ import type {
 import type {
 	SandboxCallContext,
 	SandboxCapabilities,
-	SandboxCodeRunResult,
 	SandboxCommandRunResult,
 	SandboxInspectRequest,
 	SandboxNetworkRequest,
@@ -450,97 +449,24 @@ class BrowserSandboxSession implements SandboxProviderSession {
 		},
 	};
 
+	/**
+	 * The container keeps the sandbox's files in step with the documents
+	 * filesystem itself (workspace-sync), before and after every run: the
+	 * harness has no files to copy in or out, and none to apply twice.
+	 */
 	workspace = {
 		bind: async (
-			manifest: SandboxWorkspaceManifest | undefined,
+			_manifest: SandboxWorkspaceManifest | undefined,
 			context: SandboxCallContext,
 		): Promise<SandboxWorkspaceSyncResult> => {
 			this.assertOpen(context);
-			if (!manifest) return { changedPaths: [], conflicts: [] };
-			try {
-				if (manifest.mode !== "incremental") {
-					await this.service.request("fs.mountWorkspace", {
-						directories: manifest.directories,
-						files: manifest.files.map((file) => file.path),
-					});
-				} else {
-					for (const directory of manifest.directories) {
-						await this.service.mkdir({ path: directory });
-					}
-					for (const path of manifest.deletedPaths ?? []) {
-						// Already gone (never copied in, or removed by live sync) is
-						// what the delete asked for.
-						await this.service.unlink({ path }).catch((error: unknown) => {
-							if (!/ENOENT/.test(String(error))) throw error;
-						});
-					}
-				}
-				for (const file of manifest.files) {
-					// The harness reads files as text, and a file that is not
-					// text (an image, a font) lost bytes there: readFile copies
-					// it in from the documents store, bytes as they are.
-					if (file.content.includes("\uFFFD")) {
-						await this.service.readFile({ path: file.path });
-						continue;
-					}
-					await this.service.request("fs.materializeWorkspaceFile", {
-						path: file.path,
-						content: file.content,
-					});
-				}
-				return {
-					changedPaths: [
-						...manifest.directories,
-						...manifest.files.map((file) => file.path),
-						...(manifest.deletedPaths ?? []),
-					],
-					conflicts: [],
-				};
-			} catch (error) {
-				throw normalizeError(error, context.operationId);
-			}
+			return { changedPaths: [], conflicts: [] };
 		},
 		flush: async (
 			context: SandboxCallContext,
 		): Promise<SandboxWorkspaceSyncResult> => {
 			this.assertOpen(context);
-			try {
-				const result = await this.service.request(
-					"fs.flushWorkspaceWrites",
-					undefined,
-				);
-				return {
-					changedPaths: result.ops.flatMap((op) =>
-						op.op === "rename" ? [op.oldPath, op.newPath] : [op.path],
-					),
-					conflicts: [],
-					changes: result.ops.map((op) => {
-						switch (op.op) {
-							case "write":
-								return {
-									operation: "write" as const,
-									path: op.path,
-									// Bytes for a file that is not text (an image): the
-									// harness types this as text, but its file system writes
-									// bytes as they are, and decoding them would ruin them.
-									content: op.content as string,
-								};
-							case "mkdir":
-								return { operation: "mkdir" as const, path: op.path };
-							case "delete":
-								return { operation: "delete" as const, path: op.path };
-							case "rename":
-								return {
-									operation: "rename" as const,
-									oldPath: op.oldPath,
-									newPath: op.newPath,
-								};
-						}
-					}),
-				};
-			} catch (error) {
-				throw normalizeError(error, context.operationId);
-			}
+			return { changedPaths: [], conflicts: [], changes: [] };
 		},
 	};
 

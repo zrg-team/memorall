@@ -219,34 +219,7 @@ describe("ChatInputControls co-agent", () => {
 });
 
 describe("ChatInputControls computer", () => {
-	it("opens the agent's computer in one click when the agent has one", async () => {
-		const onOpenComputer = vi.fn();
-		const { container } = render(
-			<ChatInputControls {...props({ onOpenComputer })} />,
-		);
-
-		const button = within(container).getByRole("button", {
-			name: "tooltips.openComputer",
-		});
-		expect(button.querySelector(".animate-pulse")).toBeNull();
-		await userEvent.click(button);
-		expect(onOpenComputer).toHaveBeenCalledTimes(1);
-	});
-
-	it("shows when the agent is working on its computer", () => {
-		const { container } = render(
-			<ChatInputControls
-				{...props({ onOpenComputer: vi.fn(), isComputerWorking: true })}
-			/>,
-		);
-
-		const button = within(container).getByRole("button", {
-			name: "tooltips.openComputer",
-		});
-		expect(button.querySelector(".animate-pulse")).not.toBeNull();
-	});
-
-	it("is absent for agents without MemonOS Bot", () => {
+	it("leaves the agent's computer to the header", () => {
 		const { container } = render(<ChatInputControls {...props()} />);
 
 		expect(
@@ -254,6 +227,39 @@ describe("ChatInputControls computer", () => {
 				name: "tooltips.openComputer",
 			}),
 		).toBeNull();
+	});
+});
+
+describe("ChatInputControls folding sooner", () => {
+	it("folds the view actions while the chips keep their full names", () => {
+		// The composer folds before it is narrow, so the agent and model chips
+		// keep room for their names instead of shrinking to an icon.
+		render(
+			<ChatInputControls {...props({ isNarrow: false, foldActions: true })} />,
+		);
+
+		expect(
+			screen.queryByRole("button", { name: "tooltips.splitChat" }),
+		).toBeNull();
+		expect(
+			screen.queryByRole("button", { name: "tooltips.agentSettings" }),
+		).toBeNull();
+		expect(
+			screen.getByRole("button", { name: "tooltips.moreActions" }),
+		).toBeTruthy();
+		expect(
+			screen.getByText("Batdongsan HCM Property Researcher").className,
+		).toContain("max-w-24");
+	});
+
+	it("keeps the send arrow after a failed turn", () => {
+		const { container } = render(
+			<ChatInputControls {...props({ status: "error" })} />,
+		);
+
+		const submit = container.querySelector("[data-chat-submit]");
+		expect(submit?.querySelector(".lucide-send")).not.toBeNull();
+		expect(submit?.querySelector(".lucide-x")).toBeNull();
 	});
 });
 

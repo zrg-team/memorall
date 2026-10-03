@@ -111,6 +111,8 @@ const remountHome = async (): Promise<void> => {
 
 let pendingRefresh: Promise<void> | null = null;
 let runningRefresh: Promise<void> | null = null;
+/** Ends the pending reload's wait for more changes. */
+let releaseDebounce: (() => void) | null = null;
 
 /**
  * Reload `/home` so this context sees writes made by another one (e.g. the
@@ -118,14 +120,30 @@ let runningRefresh: Promise<void> | null = null;
  *
  * Calls within the debounce window share one reload. A call that arrives while
  * a reload is already running gets a new one after it, because the running one
- * may have read the store before that change was written.
+ * may have read the store before that change was written. `immediate` is for a
+ * caller about to read what changed: the reload starts now.
  */
-const refreshFsCache = (): Promise<void> => {
-	if (pendingRefresh) return pendingRefresh;
+const refreshFsCache = (
+	options: { immediate?: boolean } = {},
+): Promise<void> => {
+	if (pendingRefresh) {
+		if (options.immediate) releaseDebounce?.();
+		return pendingRefresh;
+	}
 
 	const refresh = (async () => {
 		try {
-			await new Promise((resolve) => setTimeout(resolve, REFRESH_DEBOUNCE_MS));
+			await new Promise<void>((resolve) => {
+				const timer = setTimeout(
+					resolve,
+					options.immediate ? 0 : REFRESH_DEBOUNCE_MS,
+				);
+				releaseDebounce = () => {
+					clearTimeout(timer);
+					resolve();
+				};
+			});
+			releaseDebounce = null;
 			while (runningRefresh) await runningRefresh.catch(() => undefined);
 		} finally {
 			// From here on a new change needs a new reload.

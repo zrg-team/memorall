@@ -16,6 +16,7 @@ import type {
 } from "../types";
 import { documentFileSystemService } from "@/services/filesystem/document-filesystem";
 import { logError } from "@/utils/logger";
+import { runHostCommandLine } from "../host-commands";
 
 vi.mock("@/utils/logger", () => ({
 	logDebug: vi.fn(),
@@ -26,16 +27,25 @@ vi.mock("@/utils/logger", () => ({
 
 vi.mock("@/services/filesystem/document-filesystem", () => ({
 	documentFileSystemService: {
-		deleteFile: vi.fn(),
-		getSandboxMountSnapshot: vi.fn(),
-		getSandboxWorkspaceMountSnapshot: vi.fn(),
-		mkdir: vi.fn(),
+		applyChanges: vi.fn(async () => []),
+		listEntries: vi.fn(async () => []),
+		notifyExternalChange: vi.fn(),
 		onFilesystemChanged: vi.fn(),
 		readFile: vi.fn(),
-		rename: vi.fn(),
-		renamePath: vi.fn(),
-		writeFile: vi.fn(),
+		statEntry: vi.fn(async () => null),
+		catchUp: vi.fn(async () => ({ head: 0, entries: [], complete: true })),
+		ensureFresh: vi.fn(async () => undefined),
 	},
+}));
+
+vi.mock("../host-commands", async (importOriginal) => ({
+	...(await importOriginal<typeof import("../host-commands")>()),
+	runHostCommandLine: vi.fn(),
+}));
+
+// The host's files open ZenFS; the host commands that use them are mocked.
+vi.mock("../host-commands/host-files", () => ({
+	createHostFiles: vi.fn(() => ({})),
 }));
 
 vi.mock("@/platform/current", () => ({
@@ -75,6 +85,22 @@ const installReadyIframe = (service: ServiceUnderTest) => {
 	service.initialized = true;
 	service.initializedAt = 1_700_000_000_000;
 	return { iframe, sandboxWindow };
+};
+
+/** The workspace sync, stubbed: workspace-sync's own tests cover it. */
+const stubSync = (service: ServiceUnderTest) => {
+	const sync = {
+		ready: vi.fn(async (_roots?: string[]) => undefined),
+		flush: vi.fn(async () => undefined),
+		materialize: vi.fn(async (_paths: string[]) => true),
+		notePending: vi.fn(),
+		invalidate: vi.fn(),
+		start: vi.fn(),
+		dispose: vi.fn(),
+		saveLocalTrees: vi.fn(async () => undefined),
+	};
+	service.workspaceSync = sync;
+	return sync;
 };
 
 const captureLastRequest = (sandboxWindow: {
@@ -151,18 +177,6 @@ describe("SandboxContainerServiceMain", () => {
 					getURL: vi.fn((path = "") => `chrome-extension://memorall/${path}`),
 				},
 			},
-		});
-		vi.mocked(
-			documentFileSystemService.getSandboxMountSnapshot,
-		).mockResolvedValue({
-			directories: ["/"],
-			files: ["/note.md"],
-		});
-		vi.mocked(
-			documentFileSystemService.getSandboxWorkspaceMountSnapshot,
-		).mockResolvedValue({
-			directories: ["/"],
-			files: ["/app/index.js"],
 		});
 		vi.mocked(documentFileSystemService.readFile).mockResolvedValue(
 			encoded("file contents"),
@@ -242,6 +256,7 @@ describe("SandboxContainerServiceMain", () => {
 
 	it("maps public runtime, package, server, and snapshot methods to sandbox operations", async () => {
 		const service = createService({ requestTimeoutMs: 40 });
+		const sync = stubSync(service);
 		const request = vi
 			.spyOn(service, "request")
 			.mockImplementation(async (operation: unknown) => {
@@ -304,12 +319,9 @@ describe("SandboxContainerServiceMain", () => {
 					case "snapshot.restore":
 						return { restored: true } as never;
 					default:
-						return { ops: [] } as never;
+						throw new Error(`unexpected operation ${operation}`);
 				}
 			});
-		vi.spyOn(service, "syncDocumentsMount").mockResolvedValue(undefined);
-		vi.spyOn(service, "syncWorkspaceMount").mockResolvedValue(undefined);
-		vi.spyOn(service, "flushWorkspaceWrites").mockResolvedValue(undefined);
 
 		await expect(service.executeCode({ code: "1 + 1" })).resolves.toMatchObject(
 			{
@@ -358,11 +370,17 @@ describe("SandboxContainerServiceMain", () => {
 			},
 			120_000,
 		);
-		expect(service.flushWorkspaceWrites).toHaveBeenCalledTimes(8);
+		// The command's own folder is in the runtime in full before it runs.
+		expect(sync.ready).toHaveBeenCalledWith(["/app"]);
+		// What the sandbox changed is saved after every run.
+		expect(sync.flush).toHaveBeenCalledTimes(8);
+		// A restore replaces the VFS: the next use fills it again.
+		expect(sync.invalidate).toHaveBeenCalledTimes(1);
 	});
 
-	it("normalizes filesystem operations and materializes workspace files before reads", async () => {
+	it("acts on the sandbox's files, kept in step with the host", async () => {
 		const service = createService();
+		const sync = stubSync(service);
 		const request = vi
 			.spyOn(service, "request")
 			.mockImplementation(async (operation: unknown, payload: unknown) => {
@@ -382,21 +400,19 @@ describe("SandboxContainerServiceMain", () => {
 							path: (payload as { path: string }).path,
 							exists: true,
 						} as never;
-					case "fs.rename":
-						return payload as never;
 					default:
 						return payload as never;
 				}
 			});
-		vi.spyOn(service, "syncDocumentsMount").mockResolvedValue(undefined);
-		vi.spyOn(service, "syncWorkspaceMount").mockResolvedValue(undefined);
 
 		await service.writeFile({
 			path: "workspaces/app/../app/index.ts",
 			content: "ts",
 		});
-		await service.readFile({ path: "/note.md" });
-		await service.readFile({ path: "/app/index.ts" });
+		await expect(service.readFile({ path: "/app/index.ts" })).resolves.toEqual({
+			path: "/app/index.ts",
+			content: "ok",
+		});
 		await service.mkdir({ path: "/app/src", recursive: true });
 		await service.readdir({ path: "/" });
 		await service.unlink({ path: "/app/old.ts" });
@@ -410,114 +426,51 @@ describe("SandboxContainerServiceMain", () => {
 			path: "/app/index.ts",
 			content: "ts",
 		});
-		expect(request).toHaveBeenCalledWith("fs.materializeWorkspaceFile", {
-			path: "/note.md",
-			content: "file contents",
-		});
-		expect(request).toHaveBeenCalledWith("fs.materializeWorkspaceFile", {
-			path: "/app/index.ts",
-			content: "file contents",
-		});
-		expect(service.syncWorkspaceMount).toHaveBeenCalled();
-		expect(service.syncDocumentsMount).not.toHaveBeenCalled();
 		expect(request).toHaveBeenCalledWith("fs.rename", {
 			oldPath: "/app/old.ts",
 			newPath: "/app/new.ts",
 		});
+		// A read has the file's content, however large.
+		expect(sync.ready).toHaveBeenCalledWith(["/app/index.ts"]);
+		// Each change is saved on the host before the call returns.
+		expect(sync.flush).toHaveBeenCalledTimes(4);
 	});
 
-	it("retries lazy execution when mounts or files must be materialized", async () => {
+	it("runs code again once a file it read before having it arrives", async () => {
 		const service = createService();
-		const executionAttempts = [
+		const sync = stubSync(service);
+		const attempts = [
 			executionResult({
 				status: "error",
-				error: "Documents mount is not loaded in sandbox runtime",
-			}),
-			executionResult({
-				status: "error",
-				error: "Mounted file is not materialized in sandbox runtime: /note.md",
+				error: "Workspace file not materialized: /data/big.csv",
 			}),
 			executionResult({ status: "ok", result: "loaded" }),
 		];
-		const request = vi
-			.spyOn(service, "request")
-			.mockImplementation(async (operation: unknown) => {
-				switch (operation as SandboxOperation) {
-					case "runtime.executeCode":
-						return executionAttempts.shift() as never;
-					case "fs.mountDocuments":
-						return { mounted: true, directoryCount: 1, fileCount: 1 } as never;
-					case "fs.materializeDocumentFile":
-						return { path: "/note.md", materialized: true } as never;
-					case "fs.flushWorkspaceWrites":
-						return {
-							ops: [
-								{
-									op: "write",
-									path: "/app/out.txt",
-									content: "out",
-								},
-								{ op: "mkdir", path: "/app/generated" },
-								{ op: "delete", path: "/app/old.txt" },
-								{
-									op: "rename",
-									oldPath: "/app/tmp.txt",
-									newPath: "/app/final.txt",
-								},
-							],
-						} as never;
-					default:
-						throw new Error(`unexpected operation ${operation}`);
-				}
-			});
+		vi.spyOn(service, "request").mockImplementation(
+			async () => attempts.shift() as never,
+		);
 
 		await expect(
-			service.executeCode({ code: "read('/note.md')" }),
+			service.executeCode({ code: "read('/data/big.csv')" }),
 		).resolves.toMatchObject({ status: "ok", result: "loaded" });
-
-		expect(request).toHaveBeenCalledWith("fs.mountDocuments", {
-			directories: ["/"],
-			files: ["/note.md"],
-		});
-		expect(documentFileSystemService.writeFile).toHaveBeenCalledWith(
-			"/app/out.txt",
-			"out",
-		);
-		expect(documentFileSystemService.mkdir).toHaveBeenCalledWith(
-			"/app/generated",
-		);
-		expect(documentFileSystemService.deleteFile).toHaveBeenCalledWith(
-			"/app/old.txt",
-		);
-		expect(documentFileSystemService.renamePath).toHaveBeenCalledWith(
-			"/app/tmp.txt",
-			"/app/final.txt",
-		);
+		expect(sync.materialize).toHaveBeenCalledWith(["/data/big.csv"]);
+		expect(sync.flush).toHaveBeenCalledTimes(1);
 	});
 
-	it("retries SW requests by materializing missing workspace files and serving direct fallbacks", async () => {
+	it("retries SW requests once the missing file is sent, then serves it directly", async () => {
 		const service = createService();
-		const missingBody = btoa(
-			"Mounted file is not materialized in sandbox runtime: /app.js",
-		);
+		const sync = stubSync(service);
+		const missingBody = btoa("Workspace file not materialized: /app.js");
 		let swAttempts = 0;
-		const request = vi
-			.spyOn(service, "request")
-			.mockImplementation(async (operation: unknown, payload: unknown) => {
-				if ((operation as SandboxOperation) === "fs.materializeDocumentFile") {
-					return {
-						path: (payload as { path: string }).path,
-						materialized: true,
-					} as never;
-				}
-				swAttempts += 1;
-				return swResult({
-					statusCode: 500,
-					statusMessage: "Internal Server Error",
-					headers: { "X-Transform-Error": "true" },
-					bodyBase64: missingBody,
-				}) as never;
-			});
+		vi.spyOn(service, "request").mockImplementation(async () => {
+			swAttempts += 1;
+			return swResult({
+				statusCode: 404,
+				statusMessage: "Not Found",
+				headers: { "X-Transform-Error": "true" },
+				bodyBase64: missingBody,
+			}) as never;
+		});
 		vi.mocked(documentFileSystemService.readFile).mockResolvedValue(
 			encoded("console.log('direct')"),
 		);
@@ -532,10 +485,7 @@ describe("SandboxContainerServiceMain", () => {
 		});
 
 		expect(swAttempts).toBe(2);
-		expect(request).toHaveBeenCalledWith("fs.materializeDocumentFile", {
-			path: "/app.js",
-			content: "console.log('direct')",
-		});
+		expect(sync.materialize).toHaveBeenCalledWith(["/app.js"]);
 		expect(result).toMatchObject({
 			statusCode: 200,
 			statusMessage: "OK",
@@ -549,6 +499,7 @@ describe("SandboxContainerServiceMain", () => {
 
 	it("builds local server render URLs without remote dependency proxies", async () => {
 		const service = createService();
+		const sync = stubSync(service);
 		const request = vi
 			.spyOn(service, "request")
 			.mockImplementation(async (operation: unknown, payload: unknown) => {
@@ -581,16 +532,10 @@ describe("SandboxContainerServiceMain", () => {
 							renderUrl: "/sandbox/__virtual__/5173/",
 							rootDir: "/app",
 						} as never;
-					case "fs.flushWorkspaceWrites":
-						return { ops: [] } as never;
 					default:
 						return payload as never;
 				}
 			});
-		vi.spyOn(service, "syncWorkspaceMount").mockResolvedValue(undefined);
-		vi.spyOn(service, "materializeMountedWorkspaceFile").mockResolvedValue(
-			true,
-		);
 
 		const renderUrl = await service.getServerRenderUrl({
 			port: 5173,
@@ -611,232 +556,99 @@ describe("SandboxContainerServiceMain", () => {
 			}),
 			60_000,
 		);
+		// The server's folder is in the runtime before it starts.
+		expect(sync.ready).toHaveBeenCalledWith(["/app"]);
 		expect(server.renderUrl).toBe(
 			"chrome-extension://memorall/sandbox/__virtual__/5173/",
 		);
 	});
 
-	it("bridges sandbox VFS requests to the document filesystem service", async () => {
+	it("saves the sandbox's changes shortly after the runtime says they wait", () => {
 		const service = createService();
 		const { sandboxWindow } = installReadyIframe(service);
-		vi.spyOn(service, "request").mockResolvedValue({
-			mounted: true,
-			directoryCount: 1,
-			fileCount: 1,
-		} as never);
+		const sync = stubSync(service);
 
 		service.onFsMessage({
-			source: sandboxWindow as unknown as MessageEventSource,
-			data: {
-				channel: "memorall-sandbox-fs-req",
-				requestId: "fs-1",
-				operation: "fs.readFile",
-				payload: { path: "/app/index.ts" },
-			},
+			source: {} as MessageEventSource,
+			data: { channel: "memorall-sandbox-fs-pending" },
 		});
-		await vi.waitFor(() =>
-			expect(sandboxWindow.postMessage).toHaveBeenCalledWith(
-				expect.objectContaining({
-					channel: "memorall-sandbox-fs-res",
-					requestId: "fs-1",
-					ok: true,
-					result: { content: "file contents" },
-				}),
-				"*",
-			),
-		);
-
-		service.onFsMessage({
-			source: sandboxWindow as unknown as MessageEventSource,
-			data: {
-				channel: "memorall-sandbox-fs-notify",
-				operation: "fs.writeFile",
-				payload: { path: "/app/out.txt", content: "saved" },
-			},
-		});
-		await vi.waitFor(() =>
-			expect(documentFileSystemService.writeFile).toHaveBeenCalledWith(
-				"/app/out.txt",
-				"saved",
-			),
-		);
-	});
-
-	it("bridges rename with exact source and destination paths", async () => {
-		const service = createService();
-
-		await expect(
-			service.dispatchFsToDocumentService("fs.rename", {
-				oldPath: "/app/src/old.ts",
-				newPath: "/app/generated/new.ts",
-			}),
-		).resolves.toEqual({
-			oldPath: "/app/src/old.ts",
-			newPath: "/app/generated/new.ts",
-		});
-		expect(documentFileSystemService.renamePath).toHaveBeenCalledWith(
-			"/app/src/old.ts",
-			"/app/generated/new.ts",
-		);
-	});
-
-	it("pushes host changes in any scope, including newly created files", async () => {
-		const service = createService();
-		const { sandboxWindow } = installReadyIframe(service);
-		service.workspaceMountSynced = true;
-		vi.mocked(
-			documentFileSystemService.getSandboxWorkspaceMountSnapshot,
-		).mockResolvedValue({
-			directories: ["/", "/notes", "/notes/landing-page"],
-			files: ["/notes/landing-page/server.js"],
-		});
-		vi.mocked(documentFileSystemService.readFile).mockResolvedValue(
-			encoded("require('http')"),
-		);
-
-		service.queueWorkspaceHotReload({
-			scope: "root",
-			operation: "create",
-			path: "/notes/landing-page/server.js",
-		});
-		await service.flushWorkspaceHotReload();
-
-		expect(sandboxWindow.postMessage).toHaveBeenCalledWith(
-			expect.objectContaining({
-				type: "memorall-sandbox-workspace-sync",
-				mode: "incremental",
-				changes: [
-					{
-						operation: "write",
-						path: "/notes/landing-page/server.js",
-						content: "require('http')",
-					},
-				],
-			}),
-			"*",
-		);
-	});
-
-	it("saves sandbox writes as they happen and does not echo them back", async () => {
-		const service = createService();
-		const { sandboxWindow } = installReadyIframe(service);
-		service.workspaceMountSynced = true;
-		vi.spyOn(service, "request").mockImplementation(
-			async (operation: unknown) => {
-				if (operation === "fs.flushWorkspaceWrites") {
-					return {
-						ops: [{ op: "write", path: "/app/out.txt", content: "out" }],
-					} as never;
-				}
-				throw new Error(`unexpected operation ${operation}`);
-			},
-		);
-
+		expect(sync.notePending).not.toHaveBeenCalled();
 		service.onFsMessage({
 			source: sandboxWindow as unknown as MessageEventSource,
 			data: { channel: "memorall-sandbox-fs-pending" },
 		});
-		await vi.waitFor(() =>
-			expect(documentFileSystemService.writeFile).toHaveBeenCalledWith(
-				"/app/out.txt",
-				"out",
-			),
-		);
+		expect(sync.notePending).toHaveBeenCalledTimes(1);
+	});
 
-		vi.mocked(documentFileSystemService.readFile).mockResolvedValue(
-			encoded("out"),
-		);
-		service.queueWorkspaceHotReload({
-			scope: "root",
-			operation: "create",
-			path: "/app/out.txt",
-		});
-		await service.flushWorkspaceHotReload();
+	it("saves the sandbox's changes before git, py or curl read the host's files", async () => {
+		const service = createService();
+		const sync = stubSync(service);
+		vi.mocked(runHostCommandLine).mockResolvedValue(commandResult());
 
-		expect(sandboxWindow.postMessage).not.toHaveBeenCalledWith(
-			expect.objectContaining({ type: "memorall-sandbox-workspace-sync" }),
-			"*",
+		await service.executeCommand({ command: "git status", cwd: "/repo" });
+
+		expect(sync.flush).toHaveBeenCalledTimes(1);
+		expect(sync.flush.mock.invocationCallOrder[0]).toBeLessThan(
+			vi.mocked(runHostCommandLine).mock.invocationCallOrder[0] ?? 0,
+		);
+		// And every other context's changes, so git reads the latest.
+		expect(
+			vi.mocked(documentFileSystemService.ensureFresh).mock
+				.invocationCallOrder[0],
+		).toBeLessThan(
+			vi.mocked(runHostCommandLine).mock.invocationCallOrder[0] ?? 0,
 		);
 	});
 
-	it("remounts everything when a change cannot be described", async () => {
+	it("saves before a runtime reset, then fills the next VFS afresh", async () => {
 		const service = createService();
-		installReadyIframe(service);
-		service.workspaceMountSynced = true;
+		const sync = stubSync(service);
 		const request = vi
 			.spyOn(service, "request")
-			.mockImplementation(async (operation: unknown) => {
-				switch (operation as SandboxOperation) {
-					case "fs.flushWorkspaceWrites":
-						return { ops: [] } as never;
-					case "fs.listUnmaterializedWorkspaceFiles":
-						return { files: [] } as never;
-					default:
-						return { mounted: true } as never;
-				}
-			});
+			.mockResolvedValue({ reset: true } as never);
 
-		service.queueWorkspaceHotReload(null);
-		await service.flushWorkspaceHotReload();
+		await service.resetRuntime();
 
-		expect(request).toHaveBeenCalledWith("fs.mountWorkspace", {
-			directories: ["/"],
-			files: ["/app/index.js"],
-		});
+		expect(request).toHaveBeenCalledWith("runtime.reset", undefined);
+		// Saved, then its node_modules and caches cached, then dropped.
+		expect(sync.flush.mock.invocationCallOrder[0]).toBeLessThan(
+			sync.saveLocalTrees.mock.invocationCallOrder[0] ?? 0,
+		);
+		expect(sync.saveLocalTrees.mock.invocationCallOrder[0]).toBeLessThan(
+			sync.invalidate.mock.invocationCallOrder[0] ?? 0,
+		);
 	});
 
-	it("loads the working directory's files into the runtime before a command runs", async () => {
+	it("syncs through the documents filesystem and moves contents with transfers", async () => {
 		const service = createService();
-		vi.mocked(
-			documentFileSystemService.getSandboxWorkspaceMountSnapshot,
-		).mockResolvedValue({
-			directories: ["/", "/site", "/site/node_modules"],
-			files: ["/site/server.js", "/site/huge.bin", "/site/.git/HEAD"],
-			fileSizes: { "/site/huge.bin": 50 * 1024 * 1024 },
-		});
-		vi.mocked(documentFileSystemService.readFile).mockImplementation(
-			async (path: string) => encoded(`contents of ${path}`),
-		);
-		const calls: string[] = [];
 		const request = vi
 			.spyOn(service, "request")
-			.mockImplementation(async (operation: unknown, payload: unknown) => {
-				calls.push(operation as string);
-				switch (operation as SandboxOperation) {
-					case "fs.mountDocuments":
-					case "fs.mountWorkspace":
-						return { mounted: true } as never;
-					case "fs.flushWorkspaceWrites":
-						return { ops: [] } as never;
-					case "fs.listUnmaterializedWorkspaceFiles":
-						return {
-							files:
-								(payload as { path: string }).path === "/site"
-									? ["/site/server.js", "/site/huge.bin", "/site/.git/HEAD"]
-									: [],
-						} as never;
-					case "fs.materializeWorkspaceFiles":
-						return { materialized: [] } as never;
-					case "runtime.executeCommand":
-						return commandResult() as never;
-					default:
-						throw new Error(`unexpected operation ${operation}`);
-				}
-			});
+			.mockResolvedValue({ changed: [], skipped: [], missing: [] } as never);
+		const sync = service.workspaceSync as Record<string, any>;
 
-		await service.executeCommand({
-			command: "cd site && node server.js",
-			cwd: "/",
-		});
+		const buffer = new ArrayBuffer(4);
+		const batch = {
+			vfsId: "vfs-1",
+			ops: [{ op: "write", path: "/a.txt", offset: 0, length: 4 }],
+			buffer,
+		};
+		await sync.runtime.apply(batch);
+		expect(request).toHaveBeenCalledWith("sync.apply", batch, 120_000, [
+			buffer,
+		]);
 
-		expect(request).toHaveBeenCalledWith("fs.materializeWorkspaceFiles", {
-			files: [
-				{ path: "/site/server.js", content: "contents of /site/server.js" },
-			],
-		});
-		expect(calls.indexOf("fs.materializeWorkspaceFiles")).toBeLessThan(
-			calls.indexOf("runtime.executeCommand"),
+		await sync.files.apply(
+			[{ op: "mkdir", path: "/app" }],
+			undefined,
+			"sandbox-sync",
 		);
+		expect(documentFileSystemService.applyChanges).toHaveBeenCalledWith(
+			[{ op: "mkdir", path: "/app" }],
+			undefined,
+			"sandbox-sync",
+		);
+		await sync.files.list("/");
+		expect(documentFileSystemService.listEntries).toHaveBeenCalledWith("/");
 	});
 
 	it("reports initialization failures through the exported ready helper", async () => {
