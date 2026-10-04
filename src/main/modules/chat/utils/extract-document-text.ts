@@ -41,6 +41,13 @@ export async function extractDocumentText(
 		return workbookToMarkdown(workbook);
 	}
 
+	if (fileType === "presentation") {
+		const { presentationToMarkdown, readPresentation } = await import(
+			"@/main/modules/files/handlers/pptx-extraction"
+		);
+		return presentationToMarkdown(await readPresentation(content));
+	}
+
 	return null;
 }
 

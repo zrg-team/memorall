@@ -9,6 +9,7 @@ import {
 	Loader2,
 	Plus,
 	Scissors,
+	Trash2,
 	Upload,
 	X,
 } from "lucide-react";
@@ -16,8 +17,14 @@ import React from "react";
 import { useTranslation } from "react-i18next";
 import { listFileRefs } from "@/services/memon/screen-serializer";
 import type { MemonFilesState } from "@/services/memon/types";
+import {
+	addContextMenuActions,
+	fileMenuActions,
+	pasteMenuAction,
+} from "../context-menu-actions";
 import type { MemonSend } from "../types";
 import { pickFiles, uploadToComputer } from "../upload";
+import { useDeleteConfirm } from "../use-delete-confirm";
 import { downloadFolderAsZip } from "@/main/modules/files/utils/save-download";
 import { cn } from "@/lib/utils";
 import { logError } from "@/utils/logger";
@@ -63,6 +70,10 @@ export const FilesWindow: React.FC<{
 	const [dropTarget, setDropTarget] = React.useState<string | null>(null);
 	const clipboard = files.clipboard ?? null;
 	const entryPaths = files.entries.map((entry) => entry.path);
+	const { confirmDelete, dialog: deleteDialog } = useDeleteConfirm((paths) => {
+		setSelected([]);
+		void send("files.delete", { key: machineKey, paths });
+	});
 
 	// A selection belongs to the folder it was made in.
 	// biome-ignore lint/correctness/useExhaustiveDependencies: reset on every folder change.
@@ -104,14 +115,19 @@ export const FilesWindow: React.FC<{
 		}
 	};
 
-	const toClipboard = (mode: "copy" | "cut") => {
-		if (!selected.length) return;
-		void send("files.clipboard", { key: machineKey, mode, paths: selected });
+	const toClipboard = (mode: "copy" | "cut", paths = selected) => {
+		if (!paths.length) return;
+		void send("files.clipboard", { key: machineKey, mode, paths });
 	};
-	const paste = () => {
+	/** Pastes into a folder, the open one by default. */
+	const paste = (to?: string) => {
 		if (!clipboard) return;
-		void send("files.paste", { key: machineKey });
+		void send("files.paste", { key: machineKey, ...(to ? { to } : {}) });
 	};
+	const refOf = (path: string) =>
+		refs.find(
+			({ target }) => target.kind === "entry" && target.entry.path === path,
+		)?.ref;
 
 	const select = (event: React.MouseEvent, path: string): boolean => {
 		if (event.ctrlKey || event.metaKey) {
@@ -194,8 +210,8 @@ export const FilesWindow: React.FC<{
 
 	return (
 		<div className="flex min-h-0 flex-1 flex-col">
-			<div className="flex shrink-0 items-center gap-1.5 border-b border-border px-2 py-1.5">
-				<nav className="flex min-w-0 flex-1 items-center gap-0.5 overflow-hidden whitespace-nowrap font-mono text-[11px]">
+			<div className="flex shrink-0 flex-wrap items-center gap-1.5 border-b border-border px-2 py-1.5">
+				<nav className="flex min-w-0 flex-auto items-center gap-0.5 overflow-hidden whitespace-nowrap font-mono text-[11px]">
 					{inHome
 						? crumb(<House size={13} />, home, t("memonComputer.files.home"))
 						: crumb(
@@ -236,6 +252,14 @@ export const FilesWindow: React.FC<{
 						</button>
 						<button
 							type="button"
+							className={TOOL_BUTTON}
+							onClick={() => confirmDelete(selected)}
+						>
+							<Trash2 size={12} />
+							{t("buttons.delete")}
+						</button>
+						<button
+							type="button"
 							aria-label={t("memonComputer.files.clear")}
 							title={t("memonComputer.files.clear")}
 							className="rounded p-1 text-muted-foreground hover:bg-muted"
@@ -250,7 +274,7 @@ export const FilesWindow: React.FC<{
 						type="button"
 						className={TOOL_BUTTON}
 						title={clipboard.paths.join("\n")}
-						onClick={paste}
+						onClick={() => paste()}
 					>
 						<ClipboardPaste size={12} />
 						{t(
@@ -300,7 +324,8 @@ export const FilesWindow: React.FC<{
 					</button>
 				) : null}
 			</div>
-			{/* biome-ignore lint/a11y/noStaticElementInteractions: the list takes dropped files and Ctrl+C/X/V; every action also has a button. */}
+			{/* biome-ignore lint/a11y/noStaticElementInteractions: the list takes dropped files, keys and right-clicks; every action also has a button. */}
+			{/* biome-ignore lint/a11y/useKeyWithClickEvents: a click on empty space only clears the selection; Escape does too. */}
 			<div
 				tabIndex={-1}
 				className={cn(
@@ -311,13 +336,37 @@ export const FilesWindow: React.FC<{
 				onKeyDown={(event) => {
 					const mod = event.ctrlKey || event.metaKey;
 					const key = event.key.toLowerCase();
+					// Enter opens the row with focus, else the one selected.
+					const focusedRef = (event.target as HTMLElement).closest<HTMLElement>(
+						"[data-memon-ref]",
+					)?.dataset.memonRef;
+					const openRef =
+						focusedRef ??
+						(selected.length === 1 ? refOf(selected[0]) : undefined);
 					if (mod && key === "c") toClipboard("copy");
 					else if (mod && key === "x") toClipboard("cut");
 					else if (mod && key === "v") paste();
 					else if (mod && key === "a") setSelected(entryPaths);
 					else if (key === "escape") setSelected([]);
+					else if (key === "enter" && openRef) open(openRef);
+					else if (key === "delete" || (event.metaKey && key === "backspace"))
+						confirmDelete(selected);
 					else return;
 					event.preventDefault();
+				}}
+				onClick={(event) => {
+					// A click on empty space clears the selection.
+					if (!(event.target as HTMLElement).closest("[data-memon-ref]")) {
+						setSelected([]);
+					}
+				}}
+				onContextMenu={(event) => {
+					if (
+						clipboard &&
+						!(event.target as HTMLElement).closest("[data-memon-ref]")
+					) {
+						addContextMenuActions(event, [pasteMenuAction(t, () => paste())]);
+					}
 				}}
 				onDragOver={(event) => {
 					if (!event.dataTransfer.types.includes("Files")) return;
@@ -361,9 +410,35 @@ export const FilesWindow: React.FC<{
 								event.dataTransfer.effectAllowed = "copyMove";
 							}}
 							{...(isDir ? folderDrop(path) : {})}
+							// One click selects, two open: as Finder and Explorer do.
 							onClick={(event) => {
-								if (entry && select(event, path)) return;
-								open(ref);
+								if (!entry || select(event, path)) return;
+								setSelected([path]);
+								setAnchor(path);
+							}}
+							onDoubleClick={() => open(ref)}
+							onContextMenu={(event) => {
+								if (!entry) return;
+								// A right-click acts on the selection it is part of, else
+								// selects just this.
+								const paths = isSelected ? selected : [path];
+								if (!isSelected) {
+									setSelected([path]);
+									setAnchor(path);
+								}
+								addContextMenuActions(
+									event,
+									fileMenuActions({
+										t,
+										paths,
+										folder: isDir ? path : undefined,
+										canPaste: Boolean(clipboard),
+										open: () => open(ref),
+										toClipboard,
+										paste,
+										remove: confirmDelete,
+									}),
+								);
 							}}
 							className={cn(
 								"grid w-full grid-cols-[auto_auto_minmax(0,1fr)_auto] items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs hover:bg-muted/50",
@@ -401,6 +476,7 @@ export const FilesWindow: React.FC<{
 					{t("memonComputer.dropHint")} {t("memonComputer.files.hint")}
 				</p>
 			</div>
+			{deleteDialog}
 		</div>
 	);
 };

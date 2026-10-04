@@ -1,5 +1,6 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
+import { HtmlArtifactFrame } from "@/main/modules/chat/components/artifacts/HtmlArtifactFrame";
 import { MarkdownMessageBody } from "@/main/modules/chat/components/message/MarkdownMessageBody";
 import { type MemonTextPreviewKind, parseDelimited } from "../text-preview";
 
@@ -70,15 +71,17 @@ const TablePreview: React.FC<{ text: string; delimiter: string }> = ({
 };
 
 /**
- * A text file drawn for the user: Markdown rendered like chat, HTML in a
- * sandbox with scripts off, CSV and TSV as a table. The agent reads the same
- * file as text.
+ * A text file drawn for the user: Markdown rendered like chat, HTML as the
+ * page it is, SVG as an image, CSV and TSV as a table. The agent reads the
+ * same file as text.
  */
 export const TextPreview: React.FC<{
 	kind: MemonTextPreviewKind;
 	text: string;
 	title: string;
-}> = ({ kind, text, title }) => {
+	/** Where the file is: a page loads the images and scripts beside it. */
+	path?: string;
+}> = ({ kind, text, title, path }) => {
 	switch (kind) {
 		case "markdown":
 			return (
@@ -89,13 +92,35 @@ export const TextPreview: React.FC<{
 				</div>
 			);
 		case "html":
+			// Scripts run, as a chat artifact's do: interactive charts (plotly,
+			// a page an agent built) work. The sandbox page they run in has an
+			// origin of its own and cannot reach the extension.
 			return (
 				<div className="flex min-h-0 flex-1 p-2">
-					<iframe
-						srcDoc={text}
-						sandbox=""
+					<HtmlArtifactFrame
+						html={text}
+						projectPath={
+							path ? path.slice(0, path.lastIndexOf("/")) : undefined
+						}
 						title={title}
 						className="h-full w-full rounded-lg border bg-white"
+					/>
+				</div>
+			);
+		case "svg":
+			return (
+				<div
+					className="flex min-h-0 flex-1 p-3"
+					style={{
+						background:
+							"repeating-conic-gradient(rgb(128 128 128 / 0.12) 0% 25%, transparent 0% 50%) 0 0 / 16px 16px",
+					}}
+				>
+					{/* As an image, the SVG's scripts never run. */}
+					<img
+						src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(text)}`}
+						alt={title}
+						className="h-full min-h-0 w-full object-contain"
 					/>
 				</div>
 			);

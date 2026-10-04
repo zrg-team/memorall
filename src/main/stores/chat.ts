@@ -10,6 +10,10 @@ import { logError } from "@/utils/logger";
 import { sanitizeForJson } from "@/utils/sanitize-json";
 import { v4 } from "@/utils/uuid";
 import type { ChatMode } from "@/main/modules/chat/services/chat-service";
+import {
+	type ConversationCost,
+	loadConversationCosts,
+} from "@/main/modules/chat/utils/conversation-costs";
 import { platform } from "@/platform/current";
 
 /** The agent picked last in the composer ("chat" for none), kept across reloads. */
@@ -36,21 +40,54 @@ export interface ChatMessageGroup {
 	isLoading: boolean;
 }
 
-/** The chat run in progress. Runs go one at a time, across all chats. */
-export interface ActiveChatRun {
+/** A chat run in progress; at most one per chat. */
+export interface ChatRun {
 	conversationId: string;
 	agentId: string | null;
 	startedAt: number;
+	/**
+	 * Whether it may share the time with runs in other chats. Only runs on a
+	 * remote model without an agent computer can: a local model serves one
+	 * request at a time, and an agent's computer is one screen.
+	 */
+	concurrent: boolean;
+	/** Tells this run apart from a later one in the same chat. */
+	token: symbol;
+	/** Stops the run. */
+	controller: AbortController;
+	/** The background job, once started: what injected messages address. */
+	jobId?: string;
 }
+
+/**
+ * The run that keeps a new one in `conversationId` from starting, if any:
+ * its own chat's run, or a run elsewhere when either of the two cannot run
+ * concurrently.
+ */
+export const findBlockingRun = (
+	runs: Record<string, ChatRun>,
+	conversationId: string | undefined,
+	concurrent: boolean,
+): ChatRun | undefined => {
+	if (conversationId && runs[conversationId]) return runs[conversationId];
+	return Object.values(runs).find(
+		(run) =>
+			run.conversationId !== conversationId && !(concurrent && run.concurrent),
+	);
+};
 
 interface ChatStore {
 	// State
 	messages: Message[];
 	messageGroups: ChatMessageGroup[];
 	conversations: Conversation[];
+	/** What each listed chat has cost so far, by conversation id. */
+	conversationCosts: Record<string, ConversationCost>;
 	currentConversation: Conversation | null;
+	/** Whether any chat has a run in progress. */
 	isLoading: boolean;
-	activeRun: ActiveChatRun | null;
+	/** The runs in progress, by conversation id. */
+	runs: Record<string, ChatRun>;
 	chatMode: ChatMode;
 	selectedTopic: string;
 	selectedAgentFlowId: string | null;
@@ -62,7 +99,17 @@ interface ChatStore {
 	finalizeMessage: (id: string, message: Partial<Message>) => Promise<void>;
 	loadConversation: (id: string) => Promise<void>;
 	loadConversations: () => Promise<void>;
+	/** Adds up these chats' costs again (default: the listed ones). */
+	refreshConversationCosts: (conversationIds?: string[]) => Promise<void>;
 	loadMessageGroup: (groupId: string) => Promise<void>;
+	/**
+	 * A chat's latest messages (after its last split) and that split, read
+	 * from the database: for sending to a chat that is not the open one.
+	 */
+	fetchLatestMessages: (conversationId: string) => Promise<{
+		messages: Message[];
+		previousSeparator: Message | null;
+	}>;
 	createNewConversation: (title?: string) => Promise<Conversation>;
 	renameConversation: (id: string, title: string) => Promise<void>;
 	toggleConversationPinned: (id: string) => Promise<void>;
@@ -70,8 +117,14 @@ interface ChatStore {
 	deleteConversation: (id: string) => Promise<void>;
 	clearMessages: () => void;
 	deleteMessages: () => void;
-	setLoading: (loading: boolean) => void;
-	setActiveRun: (run: ActiveChatRun | null) => void;
+	startRun: (run: ChatRun) => void;
+	updateRun: (
+		conversationId: string,
+		token: symbol,
+		patch: Partial<Pick<ChatRun, "jobId">>,
+	) => void;
+	/** Ends the run, unless a newer one has taken the chat since. */
+	finishRun: (conversationId: string, token: symbol) => void;
 	setChatMode: (mode: ChatMode) => void;
 	setSelectedTopic: (topicId: string) => void;
 	setSelectedAgentFlowId: (flowId: string | null) => void;
@@ -250,8 +303,9 @@ export const useChatStore = create<ChatStore>((set, get) => {
 		messageGroups: [createLatestGroup(null)],
 		currentConversation: null,
 		conversations: [],
+		conversationCosts: {},
 		isLoading: false,
-		activeRun: null,
+		runs: {},
 		chatMode: "custom",
 		selectedTopic: "default",
 		selectedAgentFlowId: null,
@@ -469,8 +523,33 @@ export const useChatStore = create<ChatStore>((set, get) => {
 						updatedMessage,
 					),
 				}));
+				// A reply's usage is in: the chat's cost moved.
+				const conversationId =
+					updatedMessage.conversationId ?? get().currentConversation?.id;
+				if (updatedMessage.role === "assistant" && conversationId) {
+					void get().refreshConversationCosts([conversationId]);
+				}
 			} catch (error) {
 				logError("Failed to finalize message in database:", error);
+			}
+		},
+
+		refreshConversationCosts: async (conversationIds) => {
+			const ids =
+				conversationIds ?? get().conversations.map((entry) => entry.id);
+			if (!ids.length) return;
+			try {
+				const costs = await loadConversationCosts(ids);
+				set((state) => {
+					const next = { ...state.conversationCosts };
+					for (const id of ids) {
+						if (costs[id]) next[id] = costs[id];
+						else delete next[id];
+					}
+					return { conversationCosts: next };
+				});
+			} catch (error) {
+				logError("Failed to add up the chats' costs:", error);
 			}
 		},
 
@@ -581,6 +660,9 @@ export const useChatStore = create<ChatStore>((set, get) => {
 				);
 
 				set({ conversations });
+				void get().refreshConversationCosts(
+					conversations.map((entry) => entry.id),
+				);
 			} catch (error) {
 				logError("Failed to load conversations:", error);
 			}
@@ -737,6 +819,17 @@ export const useChatStore = create<ChatStore>((set, get) => {
 			return load;
 		},
 
+		fetchLatestMessages: async (conversationId) => {
+			const separators = await queryConversationSeparators(conversationId);
+			const previousSeparator = separators.at(-1) ?? null;
+			const messages = await queryConversationMessages(
+				conversationId,
+				previousSeparator,
+				null,
+			);
+			return { messages, previousSeparator };
+		},
+
 		clearMessages: () => {
 			hydrationVersion += 1;
 			set({
@@ -762,12 +855,29 @@ export const useChatStore = create<ChatStore>((set, get) => {
 			});
 		},
 
-		setLoading: (loading: boolean) => {
-			set({ isLoading: loading });
+		startRun: (run) => {
+			set((state) => ({
+				runs: { ...state.runs, [run.conversationId]: run },
+				isLoading: true,
+			}));
 		},
 
-		setActiveRun: (run) => {
-			set({ activeRun: run });
+		updateRun: (conversationId, token, patch) => {
+			set((state) => {
+				const run = state.runs[conversationId];
+				if (!run || run.token !== token) return {};
+				return {
+					runs: { ...state.runs, [conversationId]: { ...run, ...patch } },
+				};
+			});
+		},
+
+		finishRun: (conversationId, token) => {
+			set((state) => {
+				if (state.runs[conversationId]?.token !== token) return {};
+				const { [conversationId]: _finished, ...runs } = state.runs;
+				return { runs, isLoading: Object.keys(runs).length > 0 };
+			});
 		},
 
 		setChatMode: (mode: ChatMode) => {

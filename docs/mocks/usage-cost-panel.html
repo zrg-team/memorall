@@ -1,0 +1,1686 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Usage &amp; Cost</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+<style>
+/* ---------- tokens: app chrome (src/globals.css) + chart palette (validated) ---------- */
+:root {
+  color-scheme: light;
+  --bg: #ffffff;
+  --fg: #0a0a0a;
+  --muted: #f5f5f5;
+  --muted-fg: #737373;
+  --hover: rgba(0, 0, 0, .04);
+  --border: rgba(0, 0, 0, .08);
+  --border-input: #e5e5e5;
+  --header-glass: rgba(255, 255, 255, .88);
+  --card: #fdfdfd;
+  --card-shadow: 0 1px 3px rgba(0, 0, 0, .06), 0 4px 12px rgba(0, 0, 0, .05);
+  --popover: #ffffff;
+  --plane: #ececea;
+  --active: #3b82f6;
+  --active-bg: rgba(59, 130, 246, .10);
+  --active-border: rgba(59, 130, 246, .30);
+  --emerald: #059669;
+  --track: rgba(0, 0, 0, .06);
+
+  --grid: #ececea;
+  --axis: #c9c8c2;
+  --ink-muted: #7d7c77;
+  --ink-2: #52514e;
+  --s1: #2a78d6;
+  --s2: #eb6834;
+  --s3: #1baf7a;
+  --s4: #eda100;
+  --s5: #e87ba4;
+  --other: #b9b8b2;
+  --prev: #a3a29c;
+  --spark: #b9b8b2;
+  --bad: #d03b3b;
+  --good: #006300;
+  --warn: #fab219;
+  --ok: #0ca30c;
+  --meter-track: #cde2fb;
+  --h0: #f3f3f1;
+  --h1: #cde2fb;
+  --h2: #9ec5f4;
+  --h3: #6da7ec;
+  --h4: #3987e5;
+  --h5: #256abf;
+  --h6: #184f95;
+}
+.dark {
+  color-scheme: dark;
+  --bg: #0a0a0a;
+  --fg: #fafafa;
+  --muted: #262626;
+  --muted-fg: #a3a3a3;
+  --hover: rgba(255, 255, 255, .05);
+  --border: rgba(255, 255, 255, .08);
+  --border-input: #262626;
+  --header-glass: rgba(10, 10, 10, .84);
+  --card: #101010;
+  --card-shadow: 0 0 0 1px rgba(255, 255, 255, .07), 0 4px 24px rgba(0, 0, 0, .5);
+  --popover: #161616;
+  --plane: #000000;
+  --emerald: #10b981;
+  --track: rgba(255, 255, 255, .08);
+
+  --grid: #222221;
+  --axis: #3a3a37;
+  --ink-muted: #8a8984;
+  --ink-2: #c3c2b7;
+  --s1: #3987e5;
+  --s2: #d95926;
+  --s3: #199e70;
+  --s4: #c98500;
+  --s5: #d55181;
+  --other: #575651;
+  --prev: #6e6d68;
+  --spark: #5f5e5a;
+  --bad: #ef6b6b;
+  --good: #0ca30c;
+  --meter-track: #1c3557;
+  --h0: #191918;
+  --h1: #13294a;
+  --h2: #184f95;
+  --h3: #1c5cab;
+  --h4: #2a78d6;
+  --h5: #5598e7;
+  --h6: #9ec5f4;
+}
+
+/* ---------- base ---------- */
+*, *::before, *::after { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+  font-family: "Space Grotesk", system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.4;
+  background: var(--plane);
+  color: var(--fg);
+  -webkit-font-smoothing: antialiased;
+}
+button, select, input { font: inherit; color: inherit; }
+.mono { font-family: "IBM Plex Mono", ui-monospace, monospace; }
+.muted { color: var(--muted-fg); }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+i[data-lucide] { display: inline-block; width: 16px; height: 16px; flex: none; }
+svg.lucide { width: 16px; height: 16px; flex: none; }
+.ic-12 { width: 12px !important; height: 12px !important; }
+.ic-14 { width: 14px !important; height: 14px !important; }
+.ic-18 { width: 18px !important; height: 18px !important; }
+.ic-20 { width: 20px !important; height: 20px !important; }
+
+/* ---------- stage (mock only: chat column placeholder + right panel) ---------- */
+.stage { display: flex; height: 100vh; overflow: hidden; }
+.chat-ghost {
+  flex: 1; min-width: 0;
+  display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 8px;
+  background: var(--bg); color: var(--muted-fg); font-size: 12px;
+  border-right: 1px solid var(--border);
+}
+.panel {
+  width: 72vw; flex: none; min-width: 0;
+  display: flex; flex-direction: column;
+  background: var(--bg);
+  container: panel / inline-size;
+}
+.stage[data-width="full"] .chat-ghost { display: none; }
+.stage[data-width="full"] .panel { width: 100%; }
+.stage[data-width="narrow"] .panel { width: 600px; }
+
+/* ---------- right panel chrome (RightApplicationLayout) ---------- */
+.topbar {
+  height: 48px; flex: none;
+  display: flex; align-items: center; gap: 2px;
+  padding: 0 12px;
+  background: var(--header-glass);
+  border-bottom: 1px solid var(--border);
+  backdrop-filter: blur(20px);
+}
+.nav-btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 8px; border-radius: 6px;
+  border: 1px solid transparent; background: none;
+  color: var(--muted-fg); cursor: pointer; font-size: 14px;
+}
+.nav-btn:hover { background: var(--hover); color: var(--fg); }
+.nav-btn.active {
+  padding: 8px 10px; font-weight: 500;
+  color: var(--active); background: var(--active-bg); border-color: var(--active-border);
+  box-shadow: 0 0 0 1px rgba(59, 130, 246, .28), 0 4px 20px rgba(59, 130, 246, .12);
+}
+.nav-sep { width: 1px; height: 20px; margin: 0 4px; background: var(--border); }
+.nav-spacer { flex: 1; }
+.statusbar {
+  height: 36px; flex: none;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 14px; font-size: 12px; color: var(--muted-fg);
+  border-bottom: 1px solid var(--border);
+}
+.statusbar span { display: inline-flex; align-items: center; gap: 6px; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted-fg); opacity: .6; }
+
+/* ---------- page ---------- */
+.page { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.page-header {
+  flex: none; display: flex; align-items: flex-start; gap: 10px; flex-wrap: wrap;
+  padding: 16px; border-bottom: 1px solid var(--border);
+}
+.page-header > [data-lucide], .page-header > svg { margin-top: 4px; color: var(--fg); }
+.ph-text { flex: 1 1 260px; min-width: 0; }
+.ph-text h1 { margin: 0; font-size: 18px; font-weight: 600; }
+.ph-text p { margin: 4px 0 0; font-size: 14px; line-height: 1.5; color: var(--muted-fg); }
+.ph-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+.btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 32px; padding: 0 12px; border-radius: 8px;
+  border: 1px solid var(--border-input); background: var(--bg);
+  font-size: 12px; font-weight: 500; cursor: pointer;
+}
+.btn:hover { background: var(--hover); }
+.icon-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; border-radius: 6px; border: 0; background: none;
+  color: var(--muted-fg); cursor: pointer;
+}
+.icon-btn:hover { background: var(--hover); color: var(--fg); }
+
+/* budget pill (calendar month — sits above the filters, so filters don't scope it) */
+.budget {
+  display: grid; grid-template-columns: auto auto; align-items: center; gap: 4px 12px;
+  padding: 6px 8px 6px 12px; border-radius: 10px;
+  border: 1px solid var(--border); background: var(--card);
+}
+.budget .b-top { display: flex; align-items: baseline; gap: 6px; font-size: 12px; }
+.budget .b-top b { font-weight: 600; }
+.budget .meter { grid-column: 1; position: relative; height: 6px; width: 180px; border-radius: 999px; background: var(--meter-track); }
+.budget .meter > i { position: absolute; inset: 0 auto 0 0; border-radius: 999px; background: var(--s1); }
+.budget .meter > b { position: absolute; top: -3px; width: 2px; height: 12px; border-radius: 1px; background: var(--fg); opacity: .55; }
+.budget.over .meter > i { background: var(--warn); }
+.budget .b-status { grid-column: 1; display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--muted-fg); }
+.budget .b-status svg { color: var(--ok); }
+.budget.over .b-status svg { color: var(--warn); }
+.budget .icon-btn { grid-column: 2; grid-row: 1 / span 3; }
+
+/* filters: one row above everything they scope */
+.filters {
+  flex: none; display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
+  padding: 10px 16px; border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--muted) 30%, var(--bg));
+}
+.seg {
+  display: inline-flex; padding: 2px; border-radius: 8px;
+  border: 1px solid var(--border-input); background: var(--bg);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .04);
+}
+.seg button {
+  height: 28px; padding: 0 10px; border: 0; border-radius: 6px; background: none;
+  font-size: 12px; font-weight: 500; color: var(--muted-fg); cursor: pointer; white-space: nowrap;
+}
+.seg button:hover { color: var(--fg); }
+.seg button[aria-pressed="true"] { background: var(--muted); color: var(--fg); }
+.seg-sm button { height: 24px; padding: 0 8px; font-size: 11px; }
+.select {
+  height: 32px; padding: 0 28px 0 10px; border-radius: 8px;
+  border: 1px solid var(--border-input);
+  background: var(--bg) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") no-repeat right 9px center;
+  appearance: none; font-size: 12px; cursor: pointer;
+}
+.f-group { display: inline-flex; align-items: center; gap: 8px; }
+.f-label { font-size: 11px; color: var(--muted-fg); margin-left: 4px; }
+.chips { display: contents; }
+.chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  height: 26px; padding: 0 4px 0 10px; border-radius: 999px;
+  color: var(--active); background: var(--active-bg); border: 1px solid var(--active-border);
+  font-size: 12px; font-weight: 500;
+}
+.chip .k { opacity: .75; font-weight: 400; }
+.chip button { display: inline-flex; border: 0; background: none; color: inherit; padding: 2px; border-radius: 999px; cursor: pointer; }
+.chip button:hover { background: var(--active-bg); }
+.link-btn { border: 0; background: none; color: var(--muted-fg); font-size: 12px; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+.link-btn:hover { color: var(--fg); }
+
+.scroll { flex: 1; min-height: 0; overflow: auto; padding: 16px; display: flex; flex-direction: column; gap: 16px; }
+.scroll.loading > * { opacity: .55; transition: opacity .12s; }
+
+/* ---------- cards ---------- */
+.card {
+  container-type: inline-size;
+  min-width: 0; padding: 16px;
+  background: var(--card);
+  border: 1px solid var(--border); border-radius: 18px;
+  box-shadow: var(--card-shadow);
+}
+.card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.card-title { margin: 0; font-size: 14px; font-weight: 600; }
+.card-sub { margin-top: 2px; font-size: 12px; color: var(--muted-fg); }
+.eyebrow { font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: .18em; color: var(--muted-fg); }
+.grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; }
+.stack-col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+@container panel (max-width: 860px) {
+  .grid-2 { grid-template-columns: minmax(0, 1fr); }
+}
+.empty { padding: 28px 8px; text-align: center; font-size: 12px; color: var(--muted-fg); }
+
+/* ---------- KPI row ---------- */
+.kpis { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 12px; }
+.tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+@container panel (max-width: 760px) {
+  .kpis { grid-template-columns: minmax(0, 1fr); }
+}
+@container panel (max-width: 500px) {
+  .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+.hero { display: flex; flex-direction: column; gap: 6px; }
+.hero-value { font-size: 48px; font-weight: 600; letter-spacing: -.02em; line-height: 1.05; margin-top: 2px; }
+.hero-delta { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px; font-size: 12px; }
+.hero-sub { font-size: 12px; color: var(--muted-fg); }
+.prov { margin-top: auto; padding-top: 10px; display: flex; flex-direction: column; gap: 2px; border-top: 1px solid var(--border); }
+.prov-row {
+  display: grid; grid-template-columns: 88px minmax(0, 1fr) 64px; align-items: center; gap: 10px;
+  padding: 4px 6px; margin: 0 -6px; border: 0; border-radius: 6px; background: none; cursor: pointer; text-align: left;
+  font-size: 12px;
+}
+.prov-row:hover { background: var(--hover); }
+.prov-row.selected { background: var(--active-bg); }
+.prov-row .num { text-align: right; }
+.tile {
+  display: flex; flex-direction: column; gap: 4px; min-width: 0;
+  padding: 12px 14px; border-radius: 14px;
+  background: var(--card); border: 1px solid var(--border);
+}
+.tile .label { font-size: 12px; color: var(--muted-fg); }
+.tile .value { font-size: 22px; font-weight: 600; line-height: 1.15; }
+.tile .foot { display: flex; align-items: flex-end; justify-content: space-between; gap: 8px; margin-top: auto; }
+.tile .sub { font-size: 11px; color: var(--muted-fg); min-width: 0; }
+.tile .sub .delta { display: block; margin-bottom: 1px; text-align: left; }
+
+/* ---------- deltas ---------- */
+.delta { font-size: 11px; font-weight: 500; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.delta.bad { color: var(--bad); }
+.delta.good { color: var(--good); }
+.delta.flat { color: var(--muted-fg); }
+
+/* ---------- insights ---------- */
+.insights { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; }
+.insight {
+  display: flex; gap: 10px; align-items: flex-start;
+  padding: 12px; border-radius: 14px;
+  border: 1px solid var(--border); background: var(--card);
+  font-size: 12px; line-height: 1.5; color: var(--ink-2);
+}
+.insight b { color: var(--fg); font-weight: 600; }
+.insight .ico {
+  display: inline-flex; align-items: center; justify-content: center; flex: none;
+  width: 28px; height: 28px; border-radius: 8px; background: var(--muted); color: var(--fg);
+}
+.insight .act { display: block; margin-top: 4px; padding: 0; border: 0; background: none; font-size: 12px; font-weight: 500; color: var(--active); cursor: pointer; }
+.insight .act:hover { text-decoration: underline; }
+
+/* ---------- charts ---------- */
+.chart { position: relative; width: 100%; }
+.chart svg { display: block; overflow: visible; }
+.gl { stroke: var(--grid); stroke-width: 1; shape-rendering: crispEdges; }
+.bl { stroke: var(--axis); stroke-width: 1; shape-rendering: crispEdges; }
+.ax { fill: var(--ink-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.anno { fill: var(--ink-2); font-size: 11px; font-weight: 500; }
+.xh { stroke: var(--ink-muted); stroke-width: 1; shape-rendering: crispEdges; }
+.hit { fill: transparent; outline: none; cursor: default; }
+.band { fill: var(--hover); opacity: 0; }
+.col:hover .band, .col:focus-within .band { opacity: 1; }
+.dark .col:hover .band, .dark .col:focus-within .band { fill: rgba(255, 255, 255, .06); }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-bottom: 8px; font-size: 12px; color: var(--ink-2); }
+.legend > span { display: inline-flex; align-items: center; gap: 6px; }
+.lg-rect { width: 10px; height: 10px; border-radius: 3px; }
+.lg-line { width: 14px; height: 2px; border-radius: 2px; }
+.spark { display: block; }
+
+/* ---------- ranked list (agents / models) ---------- */
+.rank { display: flex; flex-direction: column; margin-top: 12px; border-top: 1px solid var(--border); padding-top: 8px; }
+.rank-head, .rank-row {
+  display: grid; grid-template-columns: minmax(0, 1fr) 96px 68px 56px 64px; align-items: center; gap: 12px;
+  padding: 7px 8px;
+}
+.rank-head { font-size: 10px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted-fg); padding-top: 0; padding-bottom: 4px; }
+.rank-head .r { text-align: right; }
+.rank-row { width: 100%; border: 0; border-radius: 8px; background: none; text-align: left; cursor: pointer; }
+.rank-row:hover { background: var(--hover); }
+.rank-row.selected { background: var(--active-bg); }
+.nm-cell { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.swatch { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+.nm { display: flex; flex-direction: column; min-width: 0; }
+.nm .t, .nm .s { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nm .t { font-size: 13px; font-weight: 500; }
+.nm .s { font-size: 11px; color: var(--muted-fg); }
+.share-col { display: flex; align-items: center; gap: 6px; }
+.share { flex: 1; height: 4px; border-radius: 999px; background: var(--track); overflow: hidden; }
+.share > i { display: block; height: 100%; border-radius: 999px; }
+.share-col .pct { width: 30px; text-align: right; font-size: 11px; color: var(--muted-fg); font-variant-numeric: tabular-nums; }
+.num { text-align: right; font-size: 13px; font-variant-numeric: tabular-nums; }
+.free { color: var(--emerald); font-weight: 500; }
+.rank-row .delta, .rank-head .d { text-align: right; }
+.spark-col { display: flex; justify-content: flex-end; }
+@container (max-width: 470px) {
+  .rank-head, .rank-row { grid-template-columns: minmax(0, 1fr) 68px 56px 64px; }
+  .share-col, .rank-head .sh { display: none; }
+}
+@container (max-width: 360px) {
+  .rank-head, .rank-row { grid-template-columns: minmax(0, 1fr) 68px 56px; }
+  .spark-col, .rank-head .tr { display: none; }
+}
+
+/* ---------- horizontal bars (features) ---------- */
+.hbars { display: flex; flex-direction: column; }
+.hbar-row {
+  display: grid; grid-template-columns: minmax(110px, 150px) minmax(0, 1fr) 56px 64px; align-items: center; gap: 12px;
+  width: 100%; padding: 6px 8px; border: 0; border-radius: 8px; background: none; text-align: left; cursor: pointer;
+}
+.hbar-row:hover { background: var(--hover); }
+.hbar-row.selected { background: var(--active-bg); }
+.hbar { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.hbar .fill { height: 12px; min-width: 2px; border-radius: 0 4px 4px 0; background: var(--s1); flex: none; }
+.hbar .v { font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.hbar-row .delta { text-align: right; }
+@container (max-width: 420px) {
+  .hbar-row { grid-template-columns: minmax(96px, 120px) minmax(0, 1fr) 56px; }
+  .hbar-row .spark-col { display: none; }
+}
+
+/* ---------- tables ---------- */
+.tbl-wrap { overflow: auto; }
+.tbl-wrap.capped { max-height: 280px; }
+table.t { width: 100%; border-collapse: collapse; font-size: 12px; }
+.t th {
+  position: sticky; top: 0; z-index: 1; background: var(--card);
+  padding: 6px 8px; text-align: left; white-space: nowrap;
+  font-size: 10px; font-weight: 500; text-transform: uppercase; letter-spacing: .06em; color: var(--muted-fg);
+  border-bottom: 1px solid var(--border);
+}
+.t td { padding: 8px; border-top: 1px solid var(--border); vertical-align: middle; }
+.t tbody tr:first-child td { border-top: 0; }
+.t .r { text-align: right; }
+.t td.r { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.t tbody tr:hover td { background: var(--hover); }
+.t tr.clickable { cursor: pointer; }
+.t tr.selected td { background: var(--active-bg); }
+.sort-btn { display: inline-flex; align-items: center; gap: 2px; padding: 0; border: 0; background: none; font: inherit; color: inherit; text-transform: inherit; letter-spacing: inherit; cursor: pointer; }
+.sort-btn:hover, .sort-btn.on { color: var(--fg); }
+.cell-name { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.cell-name .nm .t { font-size: 12px; }
+.total-cell { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+.total-cell .share { flex: none; width: 56px; }
+.tool-name { font-size: 12px; font-weight: 500; }
+.more-row { display: flex; justify-content: center; padding-top: 8px; }
+@container (max-width: 640px) {
+  .t .hide-sm { display: none; }
+}
+
+/* ---------- token mix ---------- */
+.mix-bars { display: flex; flex-direction: column; gap: 10px; }
+.mix-line { display: grid; grid-template-columns: 52px minmax(0, 1fr); align-items: center; gap: 10px; font-size: 12px; color: var(--muted-fg); }
+.mix-stack { display: flex; gap: 2px; height: 20px; }
+.mix-stack .sg { position: relative; display: flex; align-items: center; justify-content: center; min-width: 2px; }
+.mix-stack .sg:last-child { border-radius: 0 4px 4px 0; }
+.mix-stack .sg:hover { filter: brightness(1.08); }
+.mix-stack .lab { font-size: 11px; font-weight: 600; color: #0b0b0b; white-space: nowrap; pointer-events: none; }
+.mix-note { margin: 12px 0 0; font-size: 12px; color: var(--ink-2); line-height: 1.5; }
+.mix-note b { color: var(--fg); }
+
+/* ---------- heatmap ---------- */
+.heat { display: grid; grid-template-columns: 30px repeat(24, minmax(0, 1fr)); gap: 2px; font-size: 10px; color: var(--ink-muted); }
+.heat .hl { display: flex; align-items: center; height: 16px; }
+.heat .hh { height: 14px; font-variant-numeric: tabular-nums; }
+.heat .cell { height: 16px; border-radius: 3px; outline: none; }
+.heat .cell:hover, .heat .cell:focus { box-shadow: 0 0 0 2px var(--card), 0 0 0 3px var(--fg); }
+.h0 { background: var(--h0); } .h1 { background: var(--h1); } .h2 { background: var(--h2); }
+.h3 { background: var(--h3); } .h4 { background: var(--h4); } .h5 { background: var(--h5); } .h6 { background: var(--h6); }
+.heat-scale { display: flex; align-items: center; justify-content: flex-end; gap: 3px; margin-top: 10px; font-size: 11px; color: var(--muted-fg); }
+.heat-scale i { width: 14px; height: 10px; border-radius: 2px; }
+.heat-scale span { margin: 0 4px; }
+
+/* ---------- method note ---------- */
+details.method { font-size: 12px; color: var(--muted-fg); padding: 4px 4px 24px; }
+details.method summary { cursor: pointer; color: var(--ink-2); font-weight: 500; }
+details.method ul { margin: 8px 0 0; padding-left: 18px; line-height: 1.6; }
+details.method code { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 11px; }
+
+/* ---------- tooltip ---------- */
+.tip {
+  position: fixed; z-index: 50; left: 0; top: 0;
+  min-width: 170px; max-width: 300px; padding: 8px 10px;
+  border-radius: 10px; border: 1px solid var(--border);
+  background: var(--popover); box-shadow: 0 8px 28px rgba(0, 0, 0, .14);
+  font-size: 12px; pointer-events: none; opacity: 0; transition: opacity .08s;
+}
+.tip.on { opacity: 1; }
+.tip .tt { margin-bottom: 6px; font-size: 11px; color: var(--muted-fg); }
+.tip .tr { display: grid; grid-template-columns: 12px auto minmax(0, 1fr); align-items: center; gap: 8px; padding: 1px 0; }
+.tip .key { width: 12px; height: 2px; border-radius: 2px; }
+.tip .val { font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; }
+.tip .lab { color: var(--muted-fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tip .tf { display: flex; justify-content: space-between; gap: 12px; margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--border); color: var(--muted-fg); }
+.tip .tf b { color: var(--fg); font-variant-numeric: tabular-nums; }
+
+/* ---------- mock-only reviewer bar ---------- */
+.mockbar {
+  position: fixed; left: 12px; bottom: 12px; z-index: 40;
+  display: flex; align-items: center; gap: 8px; padding: 6px 8px;
+  border-radius: 12px; border: 1px dashed var(--muted-fg);
+  background: var(--popover); box-shadow: 0 8px 28px rgba(0, 0, 0, .14); font-size: 11px;
+}
+.mockbar .mb-label { font-weight: 600; color: var(--muted-fg); text-transform: uppercase; letter-spacing: .12em; padding: 0 4px; }
+</style>
+</head>
+<body>
+<div class="stage" id="stage" data-width="split">
+  <aside class="chat-ghost" aria-hidden="true">
+    <i data-lucide="message-square" class="ic-20"></i>
+    <div>Chat panel</div>
+  </aside>
+
+  <section class="panel" data-copilot="right-panel">
+    <nav class="topbar" aria-label="Workspace">
+      <button class="nav-btn" title="Agents"><i data-lucide="bot"></i></button>
+      <span class="nav-sep"></span>
+      <button class="nav-btn" title="Files"><i data-lucide="file-text"></i></button>
+      <button class="nav-btn" title="Memory"><i data-lucide="brain"></i></button>
+      <span class="nav-sep"></span>
+      <button class="nav-btn" title="Connections"><i data-lucide="plug"></i></button>
+      <button class="nav-btn" title="Skills"><i data-lucide="graduation-cap"></i></button>
+      <span class="nav-sep"></span>
+      <button class="nav-btn" title="Models"><i data-lucide="cpu"></i></button>
+      <button class="nav-btn active" aria-current="page"><i data-lucide="coins"></i><span>Usage</span></button>
+      <span class="nav-sep"></span>
+      <button class="nav-btn" title="Runtime"><i data-lucide="server"></i></button>
+      <button class="nav-btn" title="Debug"><i data-lucide="bug"></i></button>
+      <span class="nav-spacer"></span>
+      <button class="nav-btn" title="Processes"><i data-lucide="activity"></i></button>
+      <button class="nav-btn" title="Settings"><i data-lucide="settings"></i></button>
+    </nav>
+    <div class="statusbar">
+      <span><i data-lucide="bot" class="ic-14"></i>CoAgent</span>
+      <span><span class="dot"></span>Idle</span>
+    </div>
+
+    <main class="page">
+      <header class="page-header">
+        <i data-lucide="coins" class="ic-18"></i>
+        <div class="ph-text">
+          <h1>Usage &amp; cost</h1>
+          <p>What your agents spend across models, features and tools. Local models are free and only count tokens.</p>
+        </div>
+        <div class="ph-actions">
+          <div class="budget" id="budget"></div>
+          <button class="btn" data-act="export"><i data-lucide="download" class="ic-14"></i>Export CSV</button>
+        </div>
+      </header>
+
+      <div class="filters" id="filters">
+        <div class="seg" role="group" aria-label="Date range" id="f-range">
+          <button data-act="range" data-v="7d">7D</button>
+          <button data-act="range" data-v="30d">30D</button>
+          <button data-act="range" data-v="90d">90D</button>
+          <button data-act="range" data-v="mtd">Month to date</button>
+        </div>
+        <label><span class="sr">Agent</span><select class="select" id="f-agent"></select></label>
+        <label><span class="sr">Provider</span><select class="select" id="f-provider"></select></label>
+        <span class="f-group">
+          <span class="f-label">Measure</span>
+          <span class="seg" role="group" aria-label="Measure" id="f-metric">
+            <button data-act="metric" data-v="cost">Cost</button>
+            <button data-act="metric" data-v="tokens">Tokens</button>
+          </span>
+        </span>
+        <div class="chips" id="chips"></div>
+      </div>
+
+      <div class="scroll" id="scroll">
+        <section class="kpis">
+          <div class="card hero" id="hero"></div>
+          <div class="tiles" id="tiles"></div>
+        </section>
+
+        <section class="insights" id="insights" aria-label="Insights"></section>
+
+        <section class="card" id="card-trend"></section>
+
+        <div class="grid-2">
+          <section class="card" id="card-agents"></section>
+          <section class="card" id="card-models"></section>
+        </div>
+
+        <div class="grid-2">
+          <section class="card" id="card-features"></section>
+          <div class="stack-col">
+            <section class="card" id="card-mix"></section>
+            <section class="card" id="card-heat"></section>
+          </div>
+        </div>
+
+        <section class="card" id="card-tools"></section>
+
+        <section class="card" id="card-convs"></section>
+
+        <details class="method">
+          <summary>How costs are counted</summary>
+          <ul>
+            <li>Every model request records <code>usage</code> on the assistant message. Cost is the provider-reported <code>usage.cost</code> when present (OpenRouter), otherwise tokens × the model's price per 1M (input, cached input, output).</li>
+            <li><b>Tool cost</b> = the request that read a tool's result back into the model. The tool result's tokens are the main driver.</li>
+            <li><b>Feature cost</b> = requests that consumed that feature's tool output, plus requests the feature makes on its own (Auto Compact summaries). <b>Base chat</b> = turns before any tool ran.</li>
+            <li>Local runners (WebLLM, Wllama, Transformers.js, Ollama, LM Studio) cost $0 and count tokens only.</li>
+            <li>Not counted yet: background memory and knowledge extraction calls.</li>
+          </ul>
+        </details>
+      </div>
+    </main>
+  </section>
+</div>
+
+<div class="mockbar" role="toolbar" aria-label="Mock controls">
+  <span class="mb-label">Mock</span>
+  <div class="seg seg-sm" role="group" aria-label="Panel width" id="mb-width">
+    <button data-act="width" data-v="split">Chat open</button>
+    <button data-act="width" data-v="full">Chat collapsed</button>
+    <button data-act="width" data-v="narrow">600px</button>
+  </div>
+  <div class="seg seg-sm" role="group" aria-label="Theme" id="mb-theme">
+    <button data-act="theme" data-v="light">Light</button>
+    <button data-act="theme" data-v="dark">Dark</button>
+  </div>
+</div>
+
+<div class="tip" id="tip" role="tooltip"></div>
+
+<!-- ======================= deterministic mock data ======================= -->
+<script>
+window.MOCK = (() => {
+  'use strict';
+  function mulberry32(a) {
+    return function () {
+      a |= 0; a = (a + 0x6D2B79F5) | 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  const rnd = mulberry32(20261004);
+  const pickW = (pairs) => {
+    let total = 0;
+    for (const p of pairs) total += p[1];
+    let r = rnd() * total;
+    for (const p of pairs) { r -= p[1]; if (r <= 0) return p[0]; }
+    return pairs[pairs.length - 1][0];
+  };
+  const poisson = (l) => { const L = Math.exp(-l); let k = 0, p = 1; do { k++; p *= rnd(); } while (p > L); return k - 1; };
+
+  const TODAY = new Date(2026, 9, 4);
+  const DAYS = 180;
+  const DATES = Array.from({ length: DAYS }, (_, i) => { const d = new Date(TODAY); d.setDate(d.getDate() - (DAYS - 1 - i)); return d; });
+  const DOW = DATES.map((d) => (d.getDay() + 6) % 7); // Mon = 0
+
+  // USD per 1M tokens (OpenRouter /models pricing shape)
+  const MODELS = {
+    'gpt-5.6-terra': { short: 'gpt-5.6-terra', provider: 'openai', in: 1.25, out: 10, cache: 0.125, reasoning: true },
+    'gpt-5.6-luna': { short: 'gpt-5.6-luna', provider: 'openai', in: 0.15, out: 0.6, cache: 0.015 },
+    'anthropic/claude-sonnet-4.5': { short: 'claude-sonnet-4.5', provider: 'openrouter', in: 3, out: 15, cache: 0.3 },
+    'google/gemini-2.5-pro': { short: 'gemini-2.5-pro', provider: 'openrouter', in: 1.25, out: 10, cache: 0.31, reasoning: true },
+    'google/gemini-3.8-flash': { short: 'gemini-3.8-flash', provider: 'openrouter', in: 0.3, out: 2.5, cache: 0.075 },
+    'deepseek/deepseek-v4.1': { short: 'deepseek-v4.1', provider: 'openrouter', in: 0.27, out: 1.1, cache: 0.07 },
+    'qwen2.5-7b-instruct.gguf': { short: 'qwen2.5-7b-instruct', provider: 'wllama', runner: 'Wllama', local: true },
+    'onnx-community/Qwen3-0.6B-Instruct-ONNX': { short: 'Qwen3-0.6B-Instruct', provider: 'transformer', runner: 'Transformers.js', local: true },
+  };
+
+  const FEATURES = {
+    base: { name: 'Base chat', note: 'Turns before any tool', tools: [] },
+    web: { name: 'Web Browser', tools: [['web_search', .25], ['web_open', .15], ['web_read', .35], ['web_screenshot', .1], ['web_dom_action', .1], ['web_find_in_page', .05]] },
+    memory: { name: 'Active Memory', tools: [['knowledge_retrieval', 1]] },
+    artifact: { name: 'Artifact Renderer', tools: [['render_artifact', 1]] },
+    sandbox: { name: 'Node.js Sandbox', tools: [['sandbox_run', .6], ['sandbox_packages', .15], ['sandbox_preview', .25]] },
+    fs: { name: 'File System', tools: [['fs_read', .45], ['fs_grep', .2], ['fs_write', .2], ['fs_edit', .15]] },
+    coagent: { name: 'Co-agent', tools: [['co_agent_observe', .5], ['co_agent_click', .3], ['co_agent_input', .2]] },
+    planner: { name: 'Planner', tools: [['planner_create', .4], ['planner_check_item', .6]] },
+    pdf: { name: 'PDF Generate', tools: [['pdf_generate', 1]] },
+    multi: { name: 'Multi-Agent Delegation', tools: [['send_message_to_agent', 1]] },
+    compact: { name: 'Auto Compact', note: 'Context summaries', tools: [] },
+  };
+  const TOOL_RESULT = {
+    web_search: 2600, web_open: 3200, web_read: 8800, web_screenshot: 1600, web_dom_action: 700, web_find_in_page: 600,
+    knowledge_retrieval: 3400, render_artifact: 350, sandbox_run: 1900, sandbox_packages: 500, sandbox_preview: 1100,
+    fs_read: 4200, fs_grep: 1500, fs_write: 180, fs_edit: 260, co_agent_observe: 5200, co_agent_click: 280, co_agent_input: 220,
+    planner_create: 320, planner_check_item: 140, pdf_generate: 240, send_message_to_agent: 2100,
+  };
+  const TOOL_FEATURE = {};
+  for (const [fk, f] of Object.entries(FEATURES)) for (const [t] of f.tools) TOOL_FEATURE[t] = fk;
+
+  const hours = (w) => w.map((v, h) => [h, v]);
+  const H_WORK = hours([.1, .05, .02, .02, .02, .05, .2, .5, 1.2, 2, 2.2, 2, 1.2, 1.6, 2, 2, 1.8, 1.4, .9, .8, .9, .8, .5, .25]);
+  const H_EVENING = hours([.1, .05, 0, 0, 0, 0, .1, .2, .3, .4, .5, .6, .8, .8, .7, .6, .6, .8, 1.4, 2, 2.4, 2.2, 1.4, .5]);
+  const H_INBOX = hours([0, 0, 0, 0, 0, 0, 0, .4, 3, 2.5, .6, .4, .5, 1.8, .6, .4, .5, 1.6, .5, .2, .2, .1, 0, 0]);
+  const ramp = (d, from, to, startDay) => (d < startDay ? from : from + (to - from) * Math.min(1, (d - startDay) / (DAYS - 1 - startDay)));
+
+  const SWITCH_DAY = DAYS - 22; // CoAgent moved its default model
+  const SPIKE_DAY = DAYS - 11;  // one runaway research thread
+
+  const AGENTS = [
+    {
+      id: 'coagent', name: 'CoAgent', sub: 'Default chat', rate: () => 4.2, weekend: .7, depth: 5, hours: H_WORK,
+      models: (d) => (d < SWITCH_DAY
+        ? [['gpt-5.6-terra', .78], ['qwen2.5-7b-instruct.gguf', .22]]
+        : [['google/gemini-3.8-flash', .68], ['gpt-5.6-terra', .12], ['qwen2.5-7b-instruct.gguf', .2]]),
+      features: [['web', .3], ['artifact', .25], ['memory', .2], ['fs', .1], ['coagent', .15]],
+    },
+    {
+      id: 'research', name: 'Research Scout', sub: 'Web research', rate: (d) => ramp(d, .55, 1.2, DAYS - 50), weekend: .5, depth: 9, hours: H_WORK,
+      models: () => [['anthropic/claude-sonnet-4.5', .7], ['google/gemini-2.5-pro', .3]],
+      features: [['web', .72], ['planner', .1], ['pdf', .08], ['memory', .1]],
+    },
+    {
+      id: 'memon', name: 'MemonOS Bot', sub: 'Workspace automation', rate: () => 1.7, weekend: .6, depth: 7, hours: H_WORK,
+      models: () => [['gpt-5.6-terra', .6], ['deepseek/deepseek-v4.1', .4]],
+      features: [['sandbox', .45], ['fs', .3], ['artifact', .15], ['multi', .1]],
+    },
+    {
+      id: 'jobs', name: 'Job Hunter', sub: 'Applications', rate: (d) => ramp(d, 1.7, .5, DAYS - 120), weekend: .8, depth: 6, hours: H_EVENING,
+      models: () => [['anthropic/claude-sonnet-4.5', .5], ['gpt-5.6-terra', .5]],
+      features: [['web', .5], ['pdf', .3], ['fs', .2]],
+    },
+    {
+      id: 'briefing', name: 'Daily Briefing', sub: 'Scheduled · 07:00', cron: true, depth: 5,
+      models: () => [['gpt-5.6-luna', 1]],
+      features: [['web', .6], ['memory', .25], ['pdf', .15]],
+    },
+    {
+      id: 'inbox', name: 'Inbox Triage', sub: 'Co-agent on mail', rate: () => 1.6, weekend: .3, depth: 4, hours: H_INBOX,
+      models: () => [['qwen2.5-7b-instruct.gguf', .7], ['gpt-5.6-luna', .3]],
+      features: [['coagent', .65], ['memory', .35]],
+    },
+    {
+      id: 'tutor', name: 'Language Tutor', sub: 'Practice sessions', rate: () => .5, weekend: 2.2, depth: 4, hours: H_EVENING,
+      models: () => [['onnx-community/Qwen3-0.6B-Instruct-ONNX', .45], ['google/gemini-3.8-flash', .55]],
+      features: [['memory', .5], ['artifact', .5]],
+    },
+  ];
+
+  const TITLES = {
+    coagent: ['Plan a weekend in Da Lat', 'Summarize this PR thread', 'Rewrite landing page hero', 'Explain the WebGPU fallback', 'Draft reply to landlord', 'Compare note-taking apps', 'Debug CORS on staging', 'Weekly reading list', 'Refactor the settings form', 'Gift ideas for Mai'],
+    research: ['State of on-device LLMs 2026', 'Competitor pricing scan', 'Mechanical keyboards under $150', 'Survey of browser agent benchmarks', 'Grants for indie developers', 'Vector DBs that run in the browser', 'Rust vs Go for a CLI'],
+    memon: ['Clean up Downloads folder', 'Build an invoice generator', 'Sync workspace notes', 'Scaffold Vite + React app', 'Batch-rename screenshots', 'Convert receipts to a sheet'],
+    jobs: ['Tailor CV for Staff FE role', 'Track applications sheet', 'Cover letter for Linear', 'Prep system design interview', 'Research Vercel culture'],
+    inbox: ['Triage inbox', 'Unsubscribe sweep', 'Draft follow-ups', 'Find the flight receipts'],
+    tutor: ['Japanese N4 practice', 'Spanish past tense drills', 'Vocabulary review', 'Kanji stroke order'],
+  };
+
+  const CONVS = new Map();
+  const ATOMS = [];
+
+  function convFor(ag, d, forced) {
+    let id, title;
+    if (forced) { id = `${ag.id}:${forced.key}`; title = forced.title; }
+    else if (ag.cron) { id = `${ag.id}:${d}`; title = `Morning briefing · ${DATES[d].toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`; }
+    else {
+      const list = TITLES[ag.id];
+      const block = Math.floor(d / 8);
+      const idx = (block * 3 + Math.floor(rnd() * 3)) % list.length;
+      id = `${ag.id}:${idx}`; title = list[idx];
+    }
+    if (!CONVS.has(id)) CONVS.set(id, { id, title, agent: ag.id });
+    return id;
+  }
+
+  function push(d, h, ai, mk, f, t, c, inT, caT, outT, rsT, res) {
+    const m = MODELS[mk];
+    const cost = m.local ? 0 : ((inT - caT) * m.in + caT * m.cache + (outT + rsT) * m.out) / 1e6;
+    const save = m.local ? 0 : (caT * (m.in - m.cache)) / 1e6;
+    ATOMS.push({ d, h, a: ai, m: mk, p: m.provider, f, t, c, inT, caT, outT, rsT, res, cost, save });
+  }
+
+  function genRun(ai, ag, d, hour, opts = {}) {
+    const mk = pickW(ag.models(d));
+    const m = MODELS[mk];
+    const conv = convFor(ag, d, opts.conv);
+    const nReq = opts.requests || (ag.cron ? 4 + Math.floor(rnd() * 2) : 1 + Math.floor(rnd() * ag.depth));
+    const f1 = pickW(ag.features);
+    const f2 = rnd() < .45 ? pickW(ag.features) : f1;
+    let ctx = 2200 + rnd() * 3800;
+    for (let r = 0; r < nReq; r++) {
+      let f = 'base', tool = '', res = 0;
+      if (r > 0) {
+        f = rnd() < .6 ? f1 : f2;
+        tool = pickW(FEATURES[f].tools);
+        res = Math.round(TOOL_RESULT[tool] * (.5 + rnd()));
+      }
+      ctx += res;
+      const inT = Math.round(ctx);
+      const caT = m.local ? 0 : Math.round(r === 0 ? inT * .35 * rnd() : (inT - res) * (.72 + .22 * rnd()));
+      const last = r === nReq - 1;
+      const outT = Math.round((last ? 450 : 120) + rnd() * (last ? 1100 : 380));
+      const rsT = m.reasoning ? Math.round(outT * (.4 + rnd())) : 0;
+      push(d, hour, ai, mk, f, tool, conv, inT, caT, outT, rsT, res);
+      ctx += outT + 40;
+      if (ctx > 48000 && !m.local) {
+        const cin = Math.round(ctx);
+        const cout = 1400 + Math.round(rnd() * 600);
+        push(d, hour, ai, mk, 'compact', '', conv, cin, Math.round(cin * .8), cout, 0, 0);
+        ctx = 6000 + cout;
+      }
+    }
+  }
+
+  for (let d = 0; d < DAYS; d++) {
+    const weekend = DOW[d] >= 5;
+    AGENTS.forEach((ag, ai) => {
+      if (ag.cron) { genRun(ai, ag, d, 7); return; }
+      const lambda = ag.rate(d) * (weekend ? ag.weekend : 1) * (.75 + .5 * rnd());
+      const runs = poisson(lambda);
+      for (let k = 0; k < runs; k++) genRun(ai, ag, d, pickW(ag.hours));
+    });
+    if (d === SPIKE_DAY) {
+      genRun(1, AGENTS[1], d, 15, { requests: 38, conv: { key: 'ev', title: 'Compare EV lease offers across 12 dealers' } });
+      genRun(1, AGENTS[1], d, 16, { requests: 18, conv: { key: 'ev', title: 'Compare EV lease offers across 12 dealers' } });
+    }
+  }
+
+  return { TODAY, DAYS, DATES, DOW, MODELS, AGENTS, FEATURES, TOOL_FEATURE, ATOMS, CONVS, BUDGET: 6 };
+})();
+</script>
+
+<!-- ======================= page ======================= -->
+<script>
+(() => {
+  'use strict';
+  const { TODAY, DAYS, DATES, DOW, MODELS, AGENTS, FEATURES, TOOL_FEATURE, ATOMS, CONVS } = window.MOCK;
+  let budget = window.MOCK.BUDGET;
+
+  const $ = (s, r = document) => r.querySelector(s);
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const r2 = (v) => Math.round(v * 100) / 100;
+  const sum = (list, fn) => { let s = 0; for (const x of list) s += fn(x); return s; };
+
+  const PROVIDERS = { openai: 'OpenAI', openrouter: 'OpenRouter', local: 'On-device' };
+  const provGroup = (p) => (p === 'openai' || p === 'openrouter' ? p : 'local');
+  const AGENT_IDX = Object.fromEntries(AGENTS.map((a, i) => [a.id, i]));
+
+  // Color follows the entity: slots are fixed once from all-time spend, never re-ranked by filters.
+  const SLOTS = ['var(--s1)', 'var(--s2)', 'var(--s3)', 'var(--s4)', 'var(--s5)'];
+  const OTHER = 'var(--other)';
+  function rankColors(keyFn) {
+    const t = new Map();
+    for (const a of ATOMS) { const k = keyFn(a); t.set(k, (t.get(k) || 0) + a.cost); }
+    const order = [...t.entries()].sort((x, y) => y[1] - x[1]).map((e) => e[0]);
+    const colors = new Map();
+    order.forEach((k, i) => colors.set(k, i < 5 ? SLOTS[i] : OTHER));
+    return { colors, slotted: order.slice(0, 5) };
+  }
+  const AGENT_COLORS = rankColors((a) => a.a);
+  const MODEL_COLORS = rankColors((a) => a.m);
+
+  // ---------- state ----------
+  const state = {
+    range: '30d', metric: 'cost',
+    agent: '', provider: '', model: '', feature: '', tool: '',
+    views: { trend: 'chart', agents: 'chart', models: 'chart' },
+    toolSort: 'v', toolDir: -1, toolsAll: false,
+  };
+  const isCost = () => state.metric === 'cost';
+  const tokensOf = (a) => a.inT + a.outT + a.rsT;
+  const val = (a) => (isCost() ? a.cost : tokensOf(a));
+
+  // ---------- formatting ----------
+  const fmtDate = (i) => DATES[i].toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  const fmtDateLong = (i) => DATES[i].toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+  function fmtUSD(v) {
+    const a = Math.abs(v);
+    if (a === 0) return '$0.00';
+    if (a < 0.01) return '<$0.01';
+    if (a < 1000) return '$' + v.toFixed(2);
+    return '$' + (v / 1000).toFixed(1) + 'K';
+  }
+  function fmtUSDp(v) {
+    const a = Math.abs(v);
+    if (a === 0) return '$0';
+    if (a < 0.01) return '$' + v.toFixed(4);
+    if (a < 1) return '$' + v.toFixed(3);
+    return '$' + v.toFixed(2);
+  }
+  function fmtTok(v) {
+    const a = Math.abs(v);
+    const trim = (s) => s.replace(/\.0$/, '');
+    if (a >= 1e9) return trim((v / 1e9).toFixed(1)) + 'B';
+    if (a >= 1e6) return trim((v / 1e6).toFixed(a >= 1e8 ? 0 : 1)) + 'M';
+    if (a >= 1e3) return trim((v / 1e3).toFixed(a >= 1e5 ? 0 : 1)) + 'K';
+    return String(Math.round(v));
+  }
+  const fmtInt = (v) => Math.round(v).toLocaleString('en-US');
+  const fmtM = (v) => (isCost() ? fmtUSD(v) : fmtTok(v));
+  const fmtPct = (v) => (v >= 0.995 ? '100%' : v < 0.01 && v > 0 ? '<1%' : Math.round(v * 100) + '%');
+  const fmtPrice = (n) => '$' + String(+n.toFixed(3));
+  function fmtAxis(v, step) {
+    if (!isCost()) return v === 0 ? '0' : fmtTok(v);
+    if (v === 0) return '$0';
+    if (step < 0.01) return '$' + v.toFixed(3);
+    if (step < 1) return '$' + v.toFixed(2);
+    return '$' + v.toFixed(0);
+  }
+  // polarity: -1 = up is bad (spend), 1 = up is good (savings), 0 = neutral (volume)
+  function delta(cur, prev, polarity) {
+    if (!(prev > 0)) return { text: cur > 0 ? 'New' : '—', cls: 'flat' };
+    const p = (cur - prev) / prev;
+    if (Math.abs(p) < 0.005) return { text: '0%', cls: 'flat' };
+    const up = p > 0;
+    const mag = Math.abs(p * 100);
+    const text = (up ? '▲ ' : '▼ ') + (mag >= 999 ? '999+' : mag.toFixed(mag < 10 ? 1 : 0)) + '%';
+    const cls = polarity === 0 ? 'flat' : (up === (polarity > 0) ? 'good' : 'bad');
+    return { text, cls };
+  }
+  const metricDelta = (cur, prev) => delta(cur, prev, isCost() ? -1 : 0);
+
+  // ---------- ranges & buckets ----------
+  const dayIndexOf = (date) => DAYS - 1 - Math.round((TODAY - date) / 864e5);
+  function getRange() {
+    const end = DAYS - 1;
+    if (state.range === 'mtd') {
+      const n = TODAY.getDate();
+      const start = end - n + 1;
+      const prevStart = dayIndexOf(new Date(TODAY.getFullYear(), TODAY.getMonth() - 1, 1));
+      const pm = DATES[prevStart].toLocaleDateString('en-US', { month: 'short' });
+      return { start, end, n, prevStart, prevEnd: prevStart + n - 1, label: `vs ${pm} 1–${n}` };
+    }
+    const n = { '7d': 7, '30d': 30, '90d': 90 }[state.range];
+    const start = end - n + 1;
+    return { start, end, n, prevStart: start - n, prevEnd: start - 1, label: `vs previous ${n} days` };
+  }
+  function getBuckets(R) {
+    if (R.n <= 31) {
+      return {
+        n: R.n, unit: 'Daily',
+        idx: (d) => d - R.start,
+        label: (i) => fmtDate(R.start + i),
+        title: (i) => fmtDateLong(R.start + i),
+      };
+    }
+    const n = Math.ceil(R.n / 7);
+    const endOf = (i) => R.end - (n - 1 - i) * 7;
+    const startOf = (i) => Math.max(R.start, endOf(i) - 6);
+    return {
+      n, unit: 'Weekly',
+      idx: (d) => n - 1 - Math.floor((R.end - d) / 7),
+      label: (i) => fmtDate(startOf(i)),
+      title: (i) => `${fmtDate(startOf(i))} – ${fmtDate(endOf(i))}`,
+    };
+  }
+
+  // ---------- aggregation ----------
+  function match(a) {
+    if (state.agent && a.a !== AGENT_IDX[state.agent]) return false;
+    if (state.provider && provGroup(a.p) !== state.provider) return false;
+    if (state.model && a.m !== state.model) return false;
+    if (state.feature && a.f !== state.feature) return false;
+    if (state.tool && a.t !== state.tool) return false;
+    return true;
+  }
+  function totalsBy(list, keyFn, vf = val) {
+    const m = new Map();
+    for (const a of list) { const k = keyFn(a); m.set(k, (m.get(k) || 0) + vf(a)); }
+    return m;
+  }
+  function bucketsBy(list, keyFn, B, vf = val) {
+    const m = new Map();
+    for (const a of list) {
+      const k = keyFn(a);
+      let arr = m.get(k);
+      if (!arr) m.set(k, (arr = new Array(B.n).fill(0)));
+      arr[B.idx(a.d)] += vf(a);
+    }
+    return m;
+  }
+  function bucketTotals(list, B, vf = val) {
+    const arr = new Array(B.n).fill(0);
+    for (const a of list) arr[B.idx(a.d)] += vf(a);
+    return arr;
+  }
+
+  // ---------- tooltip ----------
+  const tip = $('#tip');
+  let tipFns = new Map();
+  let tipSeq = 0;
+  const regTip = (fn) => { const id = 't' + tipSeq++; tipFns.set(id, fn); return id; };
+  function showTip(data, x, y) {
+    tip.replaceChildren();
+    const tt = document.createElement('div');
+    tt.className = 'tt'; tt.textContent = data.title;
+    tip.append(tt);
+    for (const r of data.rows || []) {
+      const row = document.createElement('div'); row.className = 'tr';
+      const key = document.createElement('span'); key.className = 'key'; key.style.background = r.color || 'transparent';
+      const v = document.createElement('span'); v.className = 'val'; v.textContent = r.value;
+      const l = document.createElement('span'); l.className = 'lab'; l.textContent = r.label;
+      row.append(key, v, l); tip.append(row);
+    }
+    if (data.foot) {
+      const f = document.createElement('div'); f.className = 'tf';
+      const l = document.createElement('span'); l.textContent = data.foot[0];
+      const b = document.createElement('b'); b.textContent = data.foot[1];
+      f.append(l, b); tip.append(f);
+    }
+    tip.classList.add('on');
+    const w = tip.offsetWidth, h = tip.offsetHeight;
+    let left = x + 14, top = y + 14;
+    if (left + w > innerWidth - 8) left = x - w - 14;
+    if (top + h > innerHeight - 8) top = y - h - 14;
+    tip.style.left = Math.max(8, left) + 'px';
+    tip.style.top = Math.max(8, top) + 'px';
+  }
+  const hideTip = () => tip.classList.remove('on');
+  document.addEventListener('pointermove', (e) => {
+    const t = e.target.closest && e.target.closest('[data-tip]');
+    if (t && tipFns.has(t.dataset.tip)) showTip(tipFns.get(t.dataset.tip)(), e.clientX, e.clientY);
+    else if (!(e.target.closest && e.target.closest('.hit-line'))) hideTip();
+  });
+  document.addEventListener('focusin', (e) => {
+    const t = e.target.closest && e.target.closest('[data-tip]');
+    if (t && tipFns.has(t.dataset.tip)) { const b = t.getBoundingClientRect(); showTip(tipFns.get(t.dataset.tip)(), b.left + b.width / 2, b.top); }
+  });
+  document.addEventListener('focusout', hideTip);
+  document.getElementById('scroll').addEventListener('scroll', hideTip, { passive: true });
+
+  // ---------- small builders ----------
+  function niceTicks(max, count = 4) {
+    if (!(max > 0)) return { ticks: [0, 1], top: 1, step: 1 };
+    const raw = max / count;
+    const pow = Math.pow(10, Math.floor(Math.log10(raw)));
+    const f = raw / pow;
+    const step = (f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10) * pow;
+    const top = Math.ceil(max / step - 1e-9) * step;
+    const ticks = [];
+    for (let i = 0; i * step <= top + step / 2; i++) ticks.push(+(i * step).toFixed(10));
+    return { ticks, top, step };
+  }
+  function spark(values, color = 'var(--s1)', w = 64, h = 22) {
+    const n = values.length;
+    if (n < 2) return '';
+    const max = Math.max(...values) || 1;
+    const px = (i) => 2 + (i * (w - 7)) / (n - 1);
+    const py = (v) => h - 3 - (v / max) * (h - 6);
+    const pts = values.map((v, i) => `${r2(px(i))},${r2(py(v))}`).join(' ');
+    return `<svg class="spark" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" aria-hidden="true">
+      <polyline points="${pts}" style="fill:none;stroke:var(--spark);stroke-width:1.5;stroke-linejoin:round;stroke-linecap:round"/>
+      <circle cx="${r2(px(n - 1))}" cy="${r2(py(values[n - 1]))}" r="2.5" style="fill:${color}"/></svg>`;
+  }
+  const roundTop = (x, y, w, h, r) => {
+    r = Math.min(r, h, w / 2);
+    return `M${r2(x)},${r2(y + h)}V${r2(y + r)}A${r},${r} 0 0 1 ${r2(x + r)},${r2(y)}H${r2(x + w - r)}A${r},${r} 0 0 1 ${r2(x + w)},${r2(y + r)}V${r2(y + h)}Z`;
+  };
+  function cardHead(title, sub, right = '') {
+    return `<div class="card-head"><div><h3 class="card-title">${esc(title)}</h3>${sub ? `<div class="card-sub">${sub}</div>` : ''}</div>${right}</div>`;
+  }
+  function viewToggle(card) {
+    const v = state.views[card];
+    return `<div class="seg seg-sm" role="group" aria-label="View">${['chart', 'table'].map((k) =>
+      `<button data-act="view" data-card="${card}" data-v="${k}" aria-pressed="${v === k}">${k === 'chart' ? 'Chart' : 'Table'}</button>`).join('')}</div>`;
+  }
+  function tableHtml(cols, rows, capped = true) {
+    return `<div class="tbl-wrap${capped ? ' capped' : ''}"><table class="t"><thead><tr>${cols.map((c) =>
+      `<th class="${c.r ? 'r' : ''}">${esc(c.label)}</th>`).join('')}</tr></thead><tbody>${rows.map((r) =>
+      `<tr>${r.map((c, i) => `<td class="${cols[i].r ? 'r' : ''}">${c}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+  }
+  const emptyHtml = () => '<div class="empty">No usage matches these filters.</div>';
+  const xLabelIdx = (n, k) => {
+    const count = Math.min(n, k);
+    return n <= 1 || count < 2 ? [n - 1] : Array.from({ length: count }, (_, j) => Math.round((j * (n - 1)) / (count - 1)));
+  };
+  const modelSub = (k) => {
+    const m = MODELS[k];
+    return m.local ? `${m.runner} · on-device` : `${PROVIDERS[m.provider]} · ${fmtPrice(m.in)} / ${fmtPrice(m.out)} per 1M`;
+  };
+
+  // ======================= sections =======================
+
+  function renderBudget() {
+    const monthStart = DAYS - TODAY.getDate();
+    const mtd = sum(ATOMS.filter((a) => a.d >= monthStart), (a) => a.cost);
+    const daysInMonth = new Date(TODAY.getFullYear(), TODAY.getMonth() + 1, 0).getDate();
+    const proj = (mtd / TODAY.getDate()) * daysInMonth;
+    const over = proj > budget;
+    const month = TODAY.toLocaleDateString('en-US', { month: 'long' });
+    const el = $('#budget');
+    el.className = 'budget' + (over ? ' over' : '');
+    el.innerHTML = `
+      <div class="b-top"><span class="muted">${esc(month)} budget</span><b>${fmtUSD(mtd)}</b><span class="muted">of ${fmtUSD(budget)}</span></div>
+      <div class="meter" role="meter" aria-valuemin="0" aria-valuemax="${budget}" aria-valuenow="${r2(mtd)}" aria-label="Month-to-date spend against budget">
+        <i style="width:${Math.min(100, (mtd / budget) * 100)}%"></i>
+        <b style="left:calc(${Math.min(100, (proj / budget) * 100)}% - 1px)" title="Projected month-end"></b>
+      </div>
+      <div class="b-status"><i data-lucide="${over ? 'triangle-alert' : 'circle-check'}" class="ic-12"></i>${over
+        ? `Projected ${fmtUSD(proj)}, ${fmtUSD(proj - budget)} over`
+        : `On track · projected ${fmtUSD(proj)}`}</div>
+      <button class="icon-btn" data-act="budget" title="Edit budget" aria-label="Edit budget"><i data-lucide="pencil" class="ic-14"></i></button>`;
+  }
+
+  function renderFilters() {
+    for (const b of document.querySelectorAll('#f-range button')) b.setAttribute('aria-pressed', String(b.dataset.v === state.range));
+    for (const b of document.querySelectorAll('#f-metric button')) b.setAttribute('aria-pressed', String(b.dataset.v === state.metric));
+    $('#f-agent').value = state.agent;
+    $('#f-provider').value = state.provider;
+    const chips = [];
+    if (state.model) chips.push(['model', 'Model', MODELS[state.model].short]);
+    if (state.feature) chips.push(['feature', 'Feature', FEATURES[state.feature].name]);
+    if (state.tool) chips.push(['tool', 'Tool', state.tool]);
+    const any = state.agent || state.provider || chips.length;
+    $('#chips').innerHTML = chips.map(([dim, k, v]) =>
+      `<span class="chip"><span class="k">${esc(k)}</span>${esc(v)}<button data-act="clear" data-dim="${dim}" aria-label="Remove ${esc(k)} filter"><i data-lucide="x" class="ic-12"></i></button></span>`).join('')
+      + (any ? '<button class="link-btn" data-act="reset">Reset filters</button>' : '');
+  }
+
+  function renderHero(cur, prev, R) {
+    const spend = sum(cur, (a) => a.cost);
+    const pSpend = sum(prev, (a) => a.cost);
+    const d = delta(spend, pSpend, -1);
+    const byProv = totalsBy(cur, (a) => provGroup(a.p), (a) => a.cost);
+    const tokProv = totalsBy(cur, (a) => provGroup(a.p), tokensOf);
+    const rows = ['openrouter', 'openai', 'local'].map((k) => {
+      const v = byProv.get(k) || 0;
+      const sel = state.provider === k;
+      const value = k === 'local' ? `<span class="free">Free</span>` : fmtUSD(v);
+      const share = spend > 0 ? v / spend : 0;
+      return `<button class="prov-row${sel ? ' selected' : ''}" data-act="filter" data-dim="provider" data-v="${k}" aria-pressed="${sel}">
+        <span>${PROVIDERS[k]}</span>
+        <span class="share" title="${k === 'local' ? fmtTok(tokProv.get(k) || 0) + ' tokens' : fmtPct(share)}"><i style="width:${(k === 'local' ? 0 : share) * 100}%;background:var(--fg);opacity:.35"></i></span>
+        <span class="num">${value}</span></button>`;
+    }).join('');
+    $('#hero').innerHTML = `
+      <div class="eyebrow">Total spend</div>
+      <div class="hero-value">${fmtUSD(spend)}</div>
+      <div class="hero-delta"><span class="delta ${d.cls}">${d.text}</span><span class="muted">${esc(R.label)} (${fmtUSD(pSpend)})</span></div>
+      <div class="hero-sub">${fmtUSD(spend / R.n)} per day · ${fmtInt(cur.length)} model requests</div>
+      <div class="prov">${rows}</div>`;
+  }
+
+  function renderTiles(cur, prev, B) {
+    const convs = (list) => new Set(list.map((a) => a.c)).size;
+    const spend = sum(cur, (a) => a.cost), pSpend = sum(prev, (a) => a.cost);
+    const tok = sum(cur, tokensOf), pTok = sum(prev, tokensOf);
+    const inTok = sum(cur, (a) => a.inT), outTok = sum(cur, (a) => a.outT + a.rsT);
+    const paidTok = sum(cur.filter((a) => !MODELS[a.m].local), tokensOf);
+    const pPaidTok = sum(prev.filter((a) => !MODELS[a.m].local), tokensOf);
+    const nc = convs(cur), pnc = convs(prev);
+    const save = sum(cur, (a) => a.save), pSave = sum(prev, (a) => a.save);
+    const inputCost = sum(cur, (a) => (MODELS[a.m].local ? 0 : ((a.inT - a.caT) * MODELS[a.m].in + a.caT * MODELS[a.m].cache) / 1e6));
+    const local = cur.filter((a) => MODELS[a.m].local), pLocal = prev.filter((a) => MODELS[a.m].local);
+    const share = cur.length ? local.length / cur.length : 0;
+    const pShare = prev.length ? pLocal.length / prev.length : 0;
+    const pts = (share - pShare) * 100;
+
+    const tiles = [
+      { label: 'Tokens', value: fmtTok(tok), d: delta(tok, pTok, 0), sub: `${fmtTok(inTok)} in · ${fmtTok(outTok)} out`, spark: bucketTotals(cur, B, tokensOf) },
+      { label: 'Requests', value: fmtInt(cur.length), d: delta(cur.length, prev.length, 0), sub: `${fmtInt(nc)} conversations`, spark: bucketTotals(cur, B, () => 1) },
+      { label: 'Avg per conversation', value: nc ? fmtUSDp(spend / nc) : '—', d: delta(nc ? spend / nc : 0, pnc ? pSpend / pnc : 0, -1), sub: 'spend ÷ conversations' },
+      { label: 'Blended rate', value: paidTok ? fmtUSDp((spend / paidTok) * 1e6) : '—', d: delta(paidTok ? spend / paidTok : 0, pPaidTok ? pSpend / pPaidTok : 0, -1), sub: 'per 1M paid tokens' },
+      { label: 'Saved by caching', value: fmtUSD(save), d: delta(save, pSave, 1), sub: inputCost + save > 0 ? `${fmtPct(save / (inputCost + save))} of input cost avoided` : 'no cached input', spark: bucketTotals(cur, B, (a) => a.save) },
+      {
+        label: 'Ran on-device', value: fmtPct(share),
+        d: prev.length ? { text: Math.abs(pts) < 0.05 ? '0 pts' : `${pts > 0 ? '▲' : '▼'} ${Math.abs(pts).toFixed(1)} pts`, cls: Math.abs(pts) < 0.05 ? 'flat' : pts > 0 ? 'good' : 'bad' } : { text: '—', cls: 'flat' },
+        sub: `${fmtTok(sum(local, tokensOf))} tokens · $0`,
+      },
+    ];
+    $('#tiles').innerHTML = tiles.map((t) => `
+      <div class="tile">
+        <div class="label">${esc(t.label)}</div>
+        <div class="value">${t.value}</div>
+        <div class="foot"><div class="sub"><span class="delta ${t.d.cls}">${t.d.text}</span>${esc(t.sub)}</div>${t.spark ? spark(t.spark) : ''}</div>
+      </div>`).join('');
+  }
+
+  function renderInsights(cur, prev, R, B) {
+    const items = [];
+    // 1. biggest agent mover
+    if (!state.agent) {
+      const ac = totalsBy(cur, (a) => a.a), ap = totalsBy(prev, (a) => a.a);
+      let best = null;
+      for (const [k, v] of ac) {
+        const pv = ap.get(k) || 0;
+        if (pv > 0 && (!best || v - pv > best.diff)) best = { k, v, pv, diff: v - pv };
+      }
+      if (best && best.diff > 0 && best.diff / best.pv > 0.1) {
+        const ag = AGENTS[best.k];
+        items.push({
+          icon: 'trending-up',
+          html: `<b>${esc(ag.name)}</b> ${isCost() ? 'spend' : 'usage'} is up <b>${Math.round((best.diff / best.pv) * 100)}%</b> (+${fmtM(best.diff)}) ${esc(R.label)}.`,
+          act: { label: `Focus on ${ag.name}`, dim: 'agent', v: ag.id },
+        });
+      }
+    }
+    // 2. spike day
+    if (R.n >= 7) {
+      const daily = new Array(R.n).fill(0);
+      for (const a of cur) daily[a.d - R.start] += val(a);
+      const total = daily.reduce((s, v) => s + v, 0);
+      const i = daily.indexOf(Math.max(...daily));
+      const avg = total / R.n;
+      if (avg > 0 && daily[i] > avg * 2.2) {
+        const dayAtoms = cur.filter((a) => a.d === R.start + i);
+        const byConv = totalsBy(dayAtoms, (a) => a.c);
+        const topConv = [...byConv.entries()].sort((x, y) => y[1] - x[1])[0];
+        const conv = CONVS.get(topConv[0]);
+        const ag = AGENTS[AGENT_IDX[conv.agent]];
+        items.push({
+          icon: 'zap',
+          html: `<b>${fmtDate(R.start + i)}</b> used <b>${fmtM(daily[i])}</b>, ${(daily[i] / avg).toFixed(1)}× the daily average. Most of it was “${esc(conv.title)}” (${esc(ag.name)}, ${fmtPct(topConv[1] / daily[i])}).`,
+        });
+      }
+    }
+    // 3. heaviest tool
+    if (!state.tool) {
+      const toolAtoms = cur.filter((a) => a.t);
+      const tt = totalsBy(toolAtoms, (a) => a.t);
+      const toolTotal = [...tt.values()].reduce((s, v) => s + v, 0);
+      const top = [...tt.entries()].sort((x, y) => y[1] - x[1])[0];
+      if (top && toolTotal > 0) {
+        const mine = toolAtoms.filter((a) => a.t === top[0]);
+        const avgRes = sum(mine, (a) => a.res) / mine.length;
+        items.push({
+          icon: 'wrench',
+          html: `<b class="mono">${esc(top[0])}</b> results average <b>${fmtTok(avgRes)} tokens</b> and drive <b>${fmtPct(top[1] / toolTotal)}</b> of tool-attributed ${isCost() ? 'spend' : 'tokens'}.`,
+          act: { label: 'Filter to this tool', dim: 'tool', v: top[0] },
+        });
+      }
+    }
+    // 4. caching / on-device
+    const save = sum(cur, (a) => a.save);
+    if (save > 0.01) {
+      const spend = sum(cur, (a) => a.cost);
+      items.push({ icon: 'database-zap', html: `Prompt caching saved <b>${fmtUSD(save)}</b>. Without it this period would have cost <b>${fmtUSD(spend + save)}</b>.` });
+    } else {
+      const local = cur.filter((a) => MODELS[a.m].local);
+      if (local.length) items.push({ icon: 'cpu', html: `<b>${fmtPct(local.length / cur.length)}</b> of requests ran on local models for <b>$0</b>.` });
+    }
+    $('#insights').innerHTML = items.slice(0, 4).map((it) => `
+      <div class="insight"><span class="ico"><i data-lucide="${it.icon}" class="ic-14"></i></span>
+        <div>${it.html}${it.act ? `<button class="act" data-act="filter" data-dim="${it.act.dim}" data-v="${esc(it.act.v)}">${esc(it.act.label)} →</button>` : ''}</div></div>`).join('');
+    $('#insights').hidden = items.length === 0;
+  }
+
+  // ---------- spend over time: line + previous period ----------
+  function renderTrend(cur, prev, R) {
+    const card = $('#card-trend');
+    const c = new Array(R.n).fill(0), p = new Array(R.n).fill(0);
+    for (const a of cur) c[a.d - R.start] += val(a);
+    for (const a of prev) { const i = a.d - R.prevStart; if (i >= 0 && i < R.n) p[i] += val(a); }
+    const total = c.reduce((s, v) => s + v, 0), pTotal = p.reduce((s, v) => s + v, 0);
+    const d = metricDelta(total, pTotal);
+    card.innerHTML = cardHead(isCost() ? 'Spend over time' : 'Tokens over time',
+      `Daily · this period vs ${esc(R.label.replace(/^vs /, ''))} <span class="delta ${d.cls}" style="margin-left:6px">${d.text}</span>`, viewToggle('trend'))
+      + `<div class="legend"><span><i class="lg-line" style="background:var(--s1)"></i>This period · ${fmtM(total)}</span><span><i class="lg-line" style="background:var(--prev)"></i>Previous period · ${fmtM(pTotal)}</span></div>
+         <div class="chart" id="trend-chart"></div>`;
+    const el = $('#trend-chart');
+    if (state.views.trend === 'table') {
+      el.innerHTML = tableHtml(
+        [{ label: 'Date' }, { label: 'This period', r: true }, { label: 'Previous date' }, { label: 'Previous', r: true }],
+        c.map((v, i) => [fmtDateLong(R.start + i), fmtM(v), fmtDate(R.prevStart + i), fmtM(p[i])]).reverse());
+      return;
+    }
+    if (!(total > 0) && !(pTotal > 0)) { el.innerHTML = emptyHtml(); return; }
+
+    const W = Math.max(260, Math.floor(el.clientWidth)), H = 236;
+    const m = { l: 52, r: 16, t: 24, b: 28 };
+    const iw = W - m.l - m.r, ih = H - m.t - m.b, n = R.n;
+    const { ticks, top, step } = niceTicks(Math.max(...c, ...p));
+    const x = (i) => m.l + (n === 1 ? iw / 2 : (i * iw) / (n - 1));
+    const y = (v) => m.t + ih - (v / top) * ih;
+    let s = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="${isCost() ? 'Spend' : 'Tokens'} per day, this period versus previous period">`;
+    for (const t of ticks) {
+      s += `<line class="${t === 0 ? 'bl' : 'gl'}" x1="${m.l}" x2="${W - m.r}" y1="${r2(y(t))}" y2="${r2(y(t))}"/>`;
+      s += `<text class="ax" x="${m.l - 8}" y="${r2(y(t) + 4)}" text-anchor="end">${fmtAxis(t, step)}</text>`;
+    }
+    const xi = xLabelIdx(n, 6);
+    xi.forEach((i, j) => {
+      const anchor = xi.length === 1 ? 'middle' : j === 0 ? 'start' : j === xi.length - 1 ? 'end' : 'middle';
+      s += `<text class="ax" x="${r2(x(i))}" y="${H - 8}" text-anchor="${anchor}">${fmtDate(R.start + i)}</text>`;
+    });
+    const line = (arr) => arr.map((v, i) => `${i ? 'L' : 'M'}${r2(x(i))},${r2(y(v))}`).join('');
+    s += `<path d="${line(p)}" style="fill:none;stroke:var(--prev);stroke-width:2;stroke-linejoin:round;stroke-linecap:round"/>`;
+    s += `<path d="${line(c)}L${r2(x(n - 1))},${r2(y(0))}L${r2(x(0))},${r2(y(0))}Z" style="fill:var(--s1);opacity:.1"/>`;
+    s += `<path d="${line(c)}" style="fill:none;stroke:var(--s1);stroke-width:2;stroke-linejoin:round;stroke-linecap:round"/>`;
+    // selective labels: the peak and the end point
+    const pk = c.indexOf(Math.max(...c));
+    if (n > 2 && c[pk] > 0) {
+      const px = x(pk), anchor = px < m.l + 70 ? 'start' : px > W - m.r - 70 ? 'end' : 'middle';
+      s += `<circle cx="${r2(px)}" cy="${r2(y(c[pk]))}" r="4" style="fill:var(--s1);stroke:var(--card);stroke-width:2"/>`;
+      s += `<text class="anno" x="${r2(px)}" y="${r2(y(c[pk]) - 10)}" text-anchor="${anchor}">Peak ${fmtM(c[pk])} · ${fmtDate(R.start + pk)}</text>`;
+    }
+    if (pk !== n - 1) s += `<circle cx="${r2(x(n - 1))}" cy="${r2(y(c[n - 1]))}" r="4" style="fill:var(--s1);stroke:var(--card);stroke-width:2"/>`;
+    s += `<g id="tr-hover" style="visibility:hidden"><line class="xh" y1="${m.t}" y2="${m.t + ih}"/>
+      <circle class="dp" r="4" style="fill:var(--prev);stroke:var(--card);stroke-width:2"/>
+      <circle class="dc" r="4" style="fill:var(--s1);stroke:var(--card);stroke-width:2"/></g>`;
+    s += `<rect class="hit hit-line" x="${m.l - 6}" y="${m.t}" width="${iw + 12}" height="${ih}" tabindex="0" aria-label="Inspect days with arrow keys"/></svg>`;
+    el.innerHTML = s;
+
+    const svg = el.firstElementChild, hover = svg.querySelector('#tr-hover'), hit = svg.querySelector('.hit');
+    let cursor = n - 1;
+    const show = (i, cx, cy) => {
+      cursor = i;
+      hover.style.visibility = 'visible';
+      hover.querySelector('.xh').setAttribute('x1', x(i));
+      hover.querySelector('.xh').setAttribute('x2', x(i));
+      hover.querySelector('.dc').setAttribute('cx', x(i)); hover.querySelector('.dc').setAttribute('cy', y(c[i]));
+      hover.querySelector('.dp').setAttribute('cx', x(i)); hover.querySelector('.dp').setAttribute('cy', y(p[i]));
+      showTip({
+        title: fmtDateLong(R.start + i),
+        rows: [{ color: 'var(--s1)', value: fmtM(c[i]), label: 'This period' }, { color: 'var(--prev)', value: fmtM(p[i]), label: fmtDate(R.prevStart + i) }],
+      }, cx, cy);
+    };
+    const idxAt = (clientX) => {
+      const b = svg.getBoundingClientRect();
+      return n === 1 ? 0 : Math.max(0, Math.min(n - 1, Math.round((clientX - b.left - m.l) / (iw / (n - 1)))));
+    };
+    hit.addEventListener('pointermove', (e) => show(idxAt(e.clientX), e.clientX, e.clientY));
+    hit.addEventListener('pointerleave', () => { hover.style.visibility = 'hidden'; hideTip(); });
+    const showAtCursor = () => { const b = svg.getBoundingClientRect(); show(cursor, b.left + x(cursor), b.top + y(c[cursor])); };
+    hit.addEventListener('focus', showAtCursor);
+    hit.addEventListener('blur', () => { hover.style.visibility = 'hidden'; hideTip(); });
+    hit.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+        e.preventDefault();
+        cursor = Math.max(0, Math.min(n - 1, cursor + (e.key === 'ArrowLeft' ? -1 : 1)));
+        showAtCursor();
+      }
+    });
+  }
+
+  // ---------- stacked columns over time ----------
+  function renderStacked(el, B, series) {
+    const totals = new Array(B.n).fill(0);
+    for (const se of series) se.values.forEach((v, i) => { totals[i] += v; });
+    if (!totals.some((v) => v > 0)) { el.innerHTML = emptyHtml(); return; }
+    const W = Math.max(240, Math.floor(el.clientWidth)), H = 200;
+    const m = { l: 52, r: 8, t: 10, b: 28 };
+    const iw = W - m.l - m.r, ih = H - m.t - m.b, n = B.n;
+    const { ticks, top, step } = niceTicks(Math.max(...totals));
+    const y = (v) => m.t + ih - (v / top) * ih;
+    const slot = iw / n, bw = Math.max(3, Math.min(24, slot * 0.62));
+    let s = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="Stacked columns by period">`;
+    for (const t of ticks) {
+      if (t > 0) s += `<line class="gl" x1="${m.l}" x2="${W - m.r}" y1="${r2(y(t))}" y2="${r2(y(t))}"/>`;
+      s += `<text class="ax" x="${m.l - 8}" y="${r2(y(t) + 4)}" text-anchor="end">${fmtAxis(t, step)}</text>`;
+    }
+    for (let i = 0; i < n; i++) {
+      const x0 = m.l + slot * i + (slot - bw) / 2;
+      let first = -1, last = -1;
+      series.forEach((se, k) => { if (se.values[i] > 0) { if (first < 0) first = k; last = k; } });
+      s += `<g class="col"><rect class="band" x="${r2(m.l + slot * i)}" y="${m.t}" width="${r2(slot)}" height="${ih}"/>`;
+      let base = y(0);
+      series.forEach((se, k) => {
+        const v = se.values[i];
+        if (!(v > 0)) return;
+        const h = (v / top) * ih;
+        const yTop = base - h;
+        const dh = h - (k === first ? 0 : 2); // 2px surface gap under every segment but the first
+        base = yTop;
+        if (dh < 0.75) return;
+        s += k === last
+          ? `<path d="${roundTop(x0, yTop, bw, dh, 4)}" style="fill:${se.color}"/>`
+          : `<rect x="${r2(x0)}" y="${r2(yTop)}" width="${r2(bw)}" height="${r2(dh)}" style="fill:${se.color}"/>`;
+      });
+      const id = regTip(() => ({
+        title: B.title(i),
+        rows: series.slice().reverse().filter((se) => se.values[i] > 0).map((se) => ({ color: se.color, value: fmtM(se.values[i]), label: se.name })),
+        foot: ['Total', fmtM(totals[i])],
+      }));
+      s += `<rect class="hit" x="${r2(m.l + slot * i)}" y="${m.t}" width="${r2(slot)}" height="${ih}" data-tip="${id}" tabindex="0" aria-label="${esc(B.title(i))}: ${fmtM(totals[i])}"/></g>`;
+    }
+    s += `<line class="bl" x1="${m.l}" x2="${W - m.r}" y1="${r2(y(0))}" y2="${r2(y(0))}"/>`;
+    const xi = xLabelIdx(n, Math.max(2, Math.min(7, Math.floor(iw / 64))));
+    xi.forEach((i, j) => {
+      const cx = m.l + slot * (i + 0.5);
+      const anchor = xi.length === 1 ? 'middle' : j === 0 ? 'start' : j === xi.length - 1 ? 'end' : 'middle';
+      const xx = anchor === 'start' ? cx - bw / 2 : anchor === 'end' ? cx + bw / 2 : cx;
+      s += `<text class="ax" x="${r2(xx)}" y="${H - 8}" text-anchor="${anchor}">${B.label(i)}</text>`;
+    });
+    el.innerHTML = s + '</svg>';
+  }
+
+  // ---------- breakdown card (agents / models) ----------
+  function renderBreakdown(cfg, cur, prev, B) {
+    const card = $('#' + cfg.cardId);
+    const curT = totalsBy(cur, cfg.keyFn), prevT = totalsBy(prev, cfg.keyFn);
+    const perKey = bucketsBy(cur, cfg.keyFn, B);
+    const series = [];
+    const otherVals = new Array(B.n).fill(0);
+    for (const [k, arr] of perKey) {
+      if (cfg.colors.colors.get(k) === OTHER) arr.forEach((v, i) => { otherVals[i] += v; });
+    }
+    for (const k of cfg.colors.slotted) {
+      const arr = perKey.get(k);
+      if (arr && arr.some((v) => v > 0)) series.push({ key: k, name: cfg.label(k).name, color: cfg.colors.colors.get(k), values: arr });
+    }
+    if (otherVals.some((v) => v > 0)) series.push({ key: '__other', name: 'Other', color: OTHER, values: otherVals });
+
+    const keys = new Set([...curT.keys(), ...prevT.keys()]);
+    const rows = [...keys].map((k) => ({ k, v: curT.get(k) || 0, pv: prevT.get(k) || 0 }))
+      .sort((a, b) => b.v - a.v || b.pv - a.pv);
+    const total = rows.reduce((s, r) => s + r.v, 0);
+
+    const legend = series.length > 1
+      ? `<div class="legend">${series.map((se) => `<span><i class="lg-rect" style="background:${se.color}"></i>${esc(se.name)}</span>`).join('')}</div>` : '';
+    const head = `<div class="rank-head"><span>${esc(cfg.noun)}</span><span class="sh">Share</span><span class="r">${isCost() ? 'Cost' : 'Tokens'}</span><span class="d">Δ</span><span class="r tr">Trend</span></div>`;
+    const list = rows.map((r) => {
+      const color = cfg.colors.colors.get(r.k) || OTHER;
+      const lab = cfg.label(r.k);
+      const fv = cfg.filterVal(r.k);
+      const sel = state[cfg.dim] === fv;
+      const free = isCost() && cfg.isFree && cfg.isFree(r.k);
+      const d = free ? { text: '—', cls: 'flat' } : metricDelta(r.v, r.pv);
+      const share = total > 0 ? r.v / total : 0;
+      return `<button class="rank-row${sel ? ' selected' : ''}" data-act="filter" data-dim="${cfg.dim}" data-v="${esc(fv)}" aria-pressed="${sel}" title="${sel ? 'Clear filter' : 'Filter to ' + esc(lab.name)}">
+        <span class="nm-cell"><span class="swatch" style="background:${color}"></span><span class="nm"><span class="t${cfg.mono ? ' mono' : ''}">${esc(lab.name)}</span><span class="s">${esc(lab.sub)}</span></span></span>
+        <span class="share-col"><span class="share"><i style="width:${share * 100}%;background:${color}"></i></span><span class="pct">${free ? '' : fmtPct(share)}</span></span>
+        <span class="num">${free ? '<span class="free">Free</span>' : fmtM(r.v)}</span>
+        <span class="delta ${d.cls}">${d.text}</span>
+        <span class="spark-col">${spark(perKey.get(r.k) || new Array(B.n).fill(0), color)}</span>
+      </button>`;
+    }).join('');
+
+    card.innerHTML = cardHead(`${isCost() ? 'Cost' : 'Tokens'} by ${cfg.noun.toLowerCase()}`,
+      `${B.unit} · top 5 + other · click a row to filter`, viewToggle(cfg.view))
+      + legend + `<div class="chart"></div>`
+      + (rows.length ? `<div class="rank">${head}${list}</div>` : '');
+    const el = card.querySelector('.chart');
+    if (state.views[cfg.view] === 'table') {
+      el.innerHTML = tableHtml(
+        [{ label: B.unit === 'Daily' ? 'Date' : 'Week' }, ...series.map((se) => ({ label: se.name, r: true })), { label: 'Total', r: true }],
+        Array.from({ length: B.n }, (_, i) => [B.title(i), ...series.map((se) => fmtM(se.values[i])), fmtM(series.reduce((s, se) => s + se.values[i], 0))]).reverse());
+    } else {
+      renderStacked(el, B, series);
+    }
+  }
+
+  // ---------- features: ranked bars ----------
+  function renderFeatures(cur, prev, B) {
+    const card = $('#card-features');
+    const curT = totalsBy(cur, (a) => a.f), prevT = totalsBy(prev, (a) => a.f);
+    const req = totalsBy(cur, (a) => a.f, () => 1);
+    const perKey = bucketsBy(cur, (a) => a.f, B);
+    const rows = [...new Set([...curT.keys(), ...prevT.keys()])].map((k) => ({ k, v: curT.get(k) || 0, pv: prevT.get(k) || 0 }))
+      .sort((a, b) => b.v - a.v || b.pv - a.pv);
+    const max = Math.max(0, ...rows.map((r) => r.v));
+    const html = rows.map((r) => {
+      const f = FEATURES[r.k];
+      const sel = state.feature === r.k;
+      const d = metricDelta(r.v, r.pv);
+      const ratio = max > 0 ? r.v / max : 0;
+      return `<button class="hbar-row${sel ? ' selected' : ''}" data-act="filter" data-dim="feature" data-v="${r.k}" aria-pressed="${sel}">
+        <span class="nm"><span class="t">${esc(f.name)}</span><span class="s">${fmtInt(req.get(r.k) || 0)} requests${f.note ? ' · ' + esc(f.note) : ''}</span></span>
+        <span class="hbar"><span class="fill" style="width:calc((100% - 68px) * ${ratio.toFixed(4)})"></span><span class="v">${fmtM(r.v)}</span></span>
+        <span class="delta ${d.cls}">${d.text}</span>
+        <span class="spark-col">${spark(perKey.get(r.k) || new Array(B.n).fill(0))}</span>
+      </button>`;
+    }).join('');
+    card.innerHTML = cardHead(`${isCost() ? 'Cost' : 'Tokens'} by feature`, 'Requests that read a feature’s output, plus calls the feature makes itself')
+      + (rows.length ? `<div class="hbars">${html}</div>` : emptyHtml());
+  }
+
+  // ---------- token mix ----------
+  function renderMix(cur) {
+    const card = $('#card-mix');
+    const comp = [
+      { name: 'Input', color: 'var(--s1)', tok: 0, cost: 0 },
+      { name: 'Cached input', color: 'var(--s2)', tok: 0, cost: 0 },
+      { name: 'Output', color: 'var(--s3)', tok: 0, cost: 0 },
+      { name: 'Reasoning', color: 'var(--s4)', tok: 0, cost: 0 },
+    ];
+    for (const a of cur) {
+      const md = MODELS[a.m];
+      const fresh = a.inT - a.caT;
+      comp[0].tok += fresh; comp[1].tok += a.caT; comp[2].tok += a.outT; comp[3].tok += a.rsT;
+      if (!md.local) {
+        comp[0].cost += (fresh * md.in) / 1e6; comp[1].cost += (a.caT * md.cache) / 1e6;
+        comp[2].cost += (a.outT * md.out) / 1e6; comp[3].cost += (a.rsT * md.out) / 1e6;
+      }
+    }
+    const tTok = comp.reduce((s, c) => s + c.tok, 0), tCost = comp.reduce((s, c) => s + c.cost, 0);
+    if (!(tTok > 0)) { card.innerHTML = cardHead('Where the tokens go', '') + emptyHtml(); return; }
+    const bar = (label, key, total, fmt) => `<div class="mix-line"><span>${label}</span><div class="mix-stack">${comp.filter((c) => c[key] > 0).map((c) => {
+      const id = regTip(() => ({ title: `${c.name} · ${label.toLowerCase()}`, rows: [{ color: c.color, value: fmt(c[key]), label: fmtPct(c[key] / total) + ' of ' + label.toLowerCase() }] }));
+      return `<span class="sg" style="flex:${c[key] / total} 1 0;background:${c.color}" data-tip="${id}"><span class="lab">${fmtPct(c[key] / total)}</span></span>`;
+    }).join('')}</div></div>`;
+    const outTokShare = (comp[2].tok + comp[3].tok) / tTok;
+    const outCostShare = tCost > 0 ? (comp[2].cost + comp[3].cost) / tCost : 0;
+    card.innerHTML = cardHead('Where the tokens go', 'Share of tokens vs share of cost')
+      + `<div class="legend">${comp.map((c) => `<span><i class="lg-rect" style="background:${c.color}"></i>${c.name}</span>`).join('')}</div>`
+      + `<div class="mix-bars">${bar('Tokens', 'tok', tTok, fmtTok)}${tCost > 0 ? bar('Cost', 'cost', tCost, fmtUSD) : ''}</div>`
+      + (tCost > 0
+        ? `<p class="mix-note">Output and reasoning are <b>${fmtPct(outTokShare)}</b> of tokens but <b>${fmtPct(outCostShare)}</b> of cost. Cached input is <b>${fmtPct(comp[1].tok / tTok)}</b> of tokens for <b>${fmtPct(comp[1].cost / tCost)}</b> of cost.</p>`
+        : '<p class="mix-note">Everything here ran on local models, so there is no cost to split.</p>');
+    // drop in-segment labels that don't fit
+    for (const lab of card.querySelectorAll('.mix-stack .lab')) {
+      if (lab.offsetWidth > lab.parentElement.clientWidth - 8) lab.remove();
+    }
+  }
+
+  // ---------- heatmap ----------
+  function renderHeat(cur) {
+    const card = $('#card-heat');
+    const v = Array.from({ length: 7 }, () => new Array(24).fill(0));
+    const rq = Array.from({ length: 7 }, () => new Array(24).fill(0));
+    for (const a of cur) { v[DOW[a.d]][a.h] += val(a); rq[DOW[a.d]][a.h]++; }
+    const nz = v.flat().filter((x) => x > 0).sort((a, b) => a - b);
+    const q = [1, 2, 3, 4, 5].map((k) => nz[Math.floor((nz.length * k) / 6)] ?? Infinity);
+    const bin = (x) => (x <= 0 ? 0 : 1 + q.filter((t) => x >= t).length);
+    const DAYN = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    let g = '<span></span>';
+    for (let h = 0; h < 24; h++) g += `<span class="hh">${h % 6 === 0 ? String(h).padStart(2, '0') : ''}</span>`;
+    for (let d = 0; d < 7; d++) {
+      g += `<span class="hl">${DAYN[d]}</span>`;
+      for (let h = 0; h < 24; h++) {
+        const id = regTip(() => ({
+          title: `${DAYN[d]} · ${String(h).padStart(2, '0')}:00–${String(h + 1).padStart(2, '0')}:00`,
+          rows: [{ color: 'var(--h5)', value: fmtM(v[d][h]), label: `${fmtInt(rq[d][h])} requests` }],
+        }));
+        g += `<span class="cell h${bin(v[d][h])}" data-tip="${id}" tabindex="-1"></span>`;
+      }
+    }
+    card.innerHTML = cardHead('When usage happens', `${isCost() ? 'Spend' : 'Tokens'} by weekday and hour, local time`)
+      + (nz.length ? `<div class="heat">${g}</div><div class="heat-scale">Less<span></span>${[0, 1, 2, 3, 4, 5, 6].map((k) => `<i class="h${k}"></i>`).join('')}<span></span>More</div>` : emptyHtml());
+  }
+
+  // ---------- tools table ----------
+  function renderTools(cur, prev, B) {
+    const card = $('#card-tools');
+    const agg = new Map();
+    for (const a of cur) {
+      if (!a.t) continue;
+      let r = agg.get(a.t);
+      if (!r) agg.set(a.t, (r = { k: a.t, calls: 0, res: 0, v: 0, pv: 0 }));
+      r.calls++; r.res += a.res; r.v += val(a);
+    }
+    for (const a of prev) {
+      if (!a.t) continue;
+      let r = agg.get(a.t);
+      if (!r) agg.set(a.t, (r = { k: a.t, calls: 0, res: 0, v: 0, pv: 0 }));
+      r.pv += val(a);
+    }
+    const perKey = bucketsBy(cur.filter((a) => a.t), (a) => a.t, B);
+    const rows = [...agg.values()].map((r) => ({ ...r, avgRes: r.calls ? r.res / r.calls : 0, per: r.calls ? r.v / r.calls : 0 }));
+    const sortKey = { v: 'v', calls: 'calls', avgRes: 'avgRes', per: 'per' }[state.toolSort];
+    rows.sort((a, b) => state.toolDir * (a[sortKey] - b[sortKey]) || b.v - a.v);
+    const total = rows.reduce((s, r) => s + r.v, 0);
+    const shown = state.toolsAll ? rows : rows.slice(0, 10);
+    const th = (key, label, cls = 'r') => {
+      const on = state.toolSort === key;
+      return `<th class="${cls}"><button class="sort-btn${on ? ' on' : ''}" data-act="sort" data-k="${key}" aria-sort="${on ? (state.toolDir < 0 ? 'descending' : 'ascending') : 'none'}">${label}${on ? (state.toolDir < 0 ? ' ↓' : ' ↑') : ''}</button></th>`;
+    };
+    const body = shown.map((r) => {
+      const sel = state.tool === r.k;
+      const d = metricDelta(r.v, r.pv);
+      const fk = TOOL_FEATURE[r.k];
+      return `<tr class="clickable${sel ? ' selected' : ''}" data-act="filter" data-dim="tool" data-v="${esc(r.k)}">
+        <td><div class="nm"><span class="tool-name mono">${esc(r.k)}</span><span class="s">${esc(FEATURES[fk].name)}</span></div></td>
+        <td class="r">${fmtInt(r.calls)}</td>
+        <td class="r hide-sm">${fmtTok(r.avgRes)}</td>
+        <td class="r">${isCost() ? fmtUSDp(r.per) : fmtTok(r.per)}</td>
+        <td class="r"><div class="total-cell"><span class="share hide-sm"><i style="width:${total > 0 ? (r.v / total) * 100 : 0}%;background:var(--s1)"></i></span>${fmtM(r.v)}</div></td>
+        <td class="r"><span class="delta ${d.cls}">${d.text}</span></td>
+        <td class="r hide-sm"><div class="spark-col">${spark(perKey.get(r.k) || new Array(B.n).fill(0))}</div></td>
+      </tr>`;
+    }).join('');
+    card.innerHTML = cardHead(`${isCost() ? 'Cost' : 'Tokens'} by tool`, 'Attributed to the request that read the tool result back into the model · click a row to filter')
+      + (rows.length ? `<div class="tbl-wrap"><table class="t"><thead><tr>
+          <th>Tool</th>${th('calls', 'Calls')}${th('avgRes', 'Avg result', 'r hide-sm')}${th('per', isCost() ? 'Per call' : 'Tokens / call')}${th('v', isCost() ? 'Cost' : 'Tokens')}<th class="r">Δ</th><th class="r hide-sm">Trend</th>
+        </tr></thead><tbody>${body}</tbody></table></div>
+        ${rows.length > 10 ? `<div class="more-row"><button class="link-btn" data-act="tools-all">${state.toolsAll ? 'Show top 10' : `Show all ${rows.length} tools`}</button></div>` : ''}`
+        : emptyHtml());
+  }
+
+  // ---------- top conversations ----------
+  function renderConvs(cur) {
+    const card = $('#card-convs');
+    const agg = new Map();
+    for (const a of cur) {
+      let r = agg.get(a.c);
+      if (!r) agg.set(a.c, (r = { c: a.c, v: 0, cost: 0, tok: 0, req: 0, last: 0, models: new Map() }));
+      r.v += val(a); r.cost += a.cost; r.tok += tokensOf(a); r.req++; r.last = Math.max(r.last, a.d);
+      r.models.set(a.m, (r.models.get(a.m) || 0) + tokensOf(a));
+    }
+    const rows = [...agg.values()].sort((a, b) => b.v - a.v).slice(0, 8);
+    const ago = (d) => { const n = DAYS - 1 - d; return n === 0 ? 'Today' : n === 1 ? 'Yesterday' : `${n} days ago`; };
+    const body = rows.map((r) => {
+      const conv = CONVS.get(r.c);
+      const ai = AGENT_IDX[conv.agent];
+      const topModel = [...r.models.entries()].sort((a, b) => b[1] - a[1])[0][0];
+      return `<tr>
+        <td><div class="cell-name"><span class="swatch" style="background:${AGENT_COLORS.colors.get(ai)}"></span><div class="nm"><span class="t">${esc(conv.title)}</span><span class="s">${esc(AGENTS[ai].name)}</span></div></div></td>
+        <td class="hide-sm"><span class="mono" style="font-size:11px">${esc(MODELS[topModel].short)}</span>${r.models.size > 1 ? ` <span class="muted">+${r.models.size - 1}</span>` : ''}</td>
+        <td class="r">${fmtInt(r.req)}</td>
+        <td class="r">${fmtTok(r.tok)}</td>
+        <td class="r">${r.cost > 0 ? fmtUSD(r.cost) : '<span class="free">Free</span>'}</td>
+        <td class="r hide-sm muted">${ago(r.last)}</td>
+      </tr>`;
+    }).join('');
+    card.innerHTML = cardHead('Most expensive conversations', `Top ${rows.length} by ${isCost() ? 'cost' : 'tokens'} in this period`)
+      + (rows.length ? `<div class="tbl-wrap"><table class="t"><thead><tr><th>Conversation</th><th class="hide-sm">Main model</th><th class="r">Requests</th><th class="r">Tokens</th><th class="r">Cost</th><th class="r hide-sm">Last active</th></tr></thead><tbody>${body}</tbody></table></div>` : emptyHtml());
+  }
+
+  // ======================= render =======================
+  function render() {
+    tipFns = new Map(); tipSeq = 0; hideTip();
+    const R = getRange();
+    const B = getBuckets(R);
+    const cur = [], prev = [];
+    for (const a of ATOMS) {
+      if (!match(a)) continue;
+      if (a.d >= R.start && a.d <= R.end) cur.push(a);
+      else if (a.d >= R.prevStart && a.d <= R.prevEnd) prev.push(a);
+    }
+    renderBudget();
+    renderFilters();
+    renderHero(cur, prev, R);
+    renderTiles(cur, prev, B);
+    renderInsights(cur, prev, R, B);
+    renderTrend(cur, prev, R);
+    renderBreakdown({
+      cardId: 'card-agents', view: 'agents', noun: 'Agent', dim: 'agent', keyFn: (a) => a.a, colors: AGENT_COLORS,
+      label: (k) => ({ name: AGENTS[k].name, sub: AGENTS[k].sub }), filterVal: (k) => AGENTS[k].id,
+    }, cur, prev, B);
+    renderBreakdown({
+      cardId: 'card-models', view: 'models', noun: 'Model', dim: 'model', keyFn: (a) => a.m, colors: MODEL_COLORS, mono: true,
+      label: (k) => ({ name: MODELS[k].short, sub: modelSub(k) }), filterVal: (k) => k, isFree: (k) => !!MODELS[k].local,
+    }, cur, prev, B);
+    renderFeatures(cur, prev, B);
+    renderMix(cur);
+    renderHeat(cur);
+    renderTools(cur, prev, B);
+    renderConvs(cur);
+    if (window.lucide) window.lucide.createIcons({ attrs: { 'stroke-width': 2 } });
+  }
+
+  // Refetch keeps the frame: dim the previous render briefly instead of flashing a skeleton.
+  function rerender() {
+    const sc = $('#scroll');
+    sc.classList.add('loading');
+    requestAnimationFrame(() => { render(); requestAnimationFrame(() => sc.classList.remove('loading')); });
+  }
+
+  // ---------- events ----------
+  $('#f-agent').innerHTML = '<option value="">All agents</option>' + AGENTS.map((a) => `<option value="${a.id}">${esc(a.name)}</option>`).join('');
+  $('#f-provider').innerHTML = '<option value="">All providers</option>' + Object.entries(PROVIDERS).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
+  $('#f-agent').addEventListener('change', (e) => { state.agent = e.target.value; rerender(); });
+  $('#f-provider').addEventListener('change', (e) => { state.provider = e.target.value; rerender(); });
+
+  function exportCsv() {
+    const R = getRange();
+    const lines = [['date', 'hour', 'agent', 'model', 'provider', 'feature', 'tool', 'input_tokens', 'cached_tokens', 'output_tokens', 'reasoning_tokens', 'cost_usd']];
+    for (const a of ATOMS) {
+      if (a.d < R.start || a.d > R.end || !match(a)) continue;
+      const dt = DATES[a.d];
+      lines.push([`${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`, a.h, AGENTS[a.a].name, a.m, a.p, FEATURES[a.f].name, a.t, a.inT, a.caT, a.outT, a.rsT, a.cost.toFixed(6)]);
+    }
+    const csv = lines.map((l) => l.map((c) => (/[",\n]/.test(String(c)) ? `"${String(c).replace(/"/g, '""')}"` : c)).join(',')).join('\n');
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+    const link = Object.assign(document.createElement('a'), { href: url, download: `memorall-usage-${state.range}.csv` });
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  function setTheme(t) {
+    document.documentElement.classList.toggle('dark', t === 'dark');
+    for (const b of document.querySelectorAll('#mb-theme button')) b.setAttribute('aria-pressed', String(b.dataset.v === t));
+  }
+  function setWidth(w) {
+    $('#stage').dataset.width = w;
+    for (const b of document.querySelectorAll('#mb-width button')) b.setAttribute('aria-pressed', String(b.dataset.v === w));
+  }
+
+  document.addEventListener('click', (e) => {
+    const el = e.target.closest('[data-act]');
+    if (!el) return;
+    const act = el.dataset.act;
+    if (act === 'range') { state.range = el.dataset.v; rerender(); }
+    else if (act === 'metric') {
+      state.metric = el.dataset.v;
+      if (state.toolSort === 'per' || state.toolSort === 'v') state.toolDir = -1;
+      rerender();
+    }
+    else if (act === 'filter') { const dim = el.dataset.dim; state[dim] = state[dim] === el.dataset.v ? '' : el.dataset.v; rerender(); }
+    else if (act === 'clear') { state[el.dataset.dim] = ''; rerender(); }
+    else if (act === 'reset') { Object.assign(state, { agent: '', provider: '', model: '', feature: '', tool: '' }); rerender(); }
+    else if (act === 'view') { state.views[el.dataset.card] = el.dataset.v; render(); }
+    else if (act === 'sort') {
+      const k = el.dataset.k;
+      if (state.toolSort === k) state.toolDir *= -1; else { state.toolSort = k; state.toolDir = -1; }
+      render();
+    }
+    else if (act === 'tools-all') { state.toolsAll = !state.toolsAll; render(); }
+    else if (act === 'budget') {
+      const v = parseFloat(prompt('Monthly budget (USD)', String(budget)) || '');
+      if (v > 0) { budget = v; render(); }
+    }
+    else if (act === 'export') exportCsv();
+    else if (act === 'theme') setTheme(el.dataset.v);
+    else if (act === 'width') setWidth(el.dataset.v);
+  });
+
+  let lastW = 0;
+  new ResizeObserver(() => {
+    const w = $('#scroll').clientWidth;
+    if (Math.abs(w - lastW) > 1) { lastW = w; render(); }
+  }).observe($('#scroll'));
+
+  const params = new URLSearchParams(location.search);
+  setTheme(params.get('theme') || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
+  setWidth(params.get('width') || 'split');
+  if (params.get('range')) state.range = params.get('range');
+  if (params.get('metric')) state.metric = params.get('metric');
+  render();
+})();
+</script>
+</body>
+</html>

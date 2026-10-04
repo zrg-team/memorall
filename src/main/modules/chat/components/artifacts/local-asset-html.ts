@@ -24,11 +24,18 @@ const MEDIA_MIME_BY_EXTENSION: Record<string, string> = {
 	wav: "audio/wav",
 	ogg: "audio/ogg",
 	m4a: "audio/mp4",
+	js: "text/javascript",
+	mjs: "text/javascript",
 };
 
 /** What a relative name has to end in to be looked for in Files. */
 const MEDIA_EXTENSION =
 	"png|jpe?g|gif|webp|svg|avif|bmp|ico|mp4|webm|mov|mp3|wav|ogg|m4a";
+/**
+ * Scripts a page loads from beside it: a chart library written next to the
+ * chart (plotly's include_plotlyjs="directory"), a page's own app.js.
+ */
+const SCRIPT_EXTENSION = "m?js";
 
 /** A path or name as written: no scheme, no protocol-relative `//`. */
 const WRITTEN_PATH = String.raw`(?!\/\/)(?![a-z][a-z0-9+.-]*:)[^"'()<>\s?#]+`;
@@ -48,8 +55,8 @@ const MENTIONED_PATH_PATTERN = new RegExp(
 	String.raw`["'](\/(?!\/)[^"'<>\s?#]+\.(?:${MEDIA_EXTENSION}))["'?#]`,
 	"gi",
 );
-const RELATIVE_MEDIA_PATTERN = new RegExp(
-	String.raw`\.(?:${MEDIA_EXTENSION})$`,
+const RELATIVE_ASSET_PATTERN = new RegExp(
+	String.raw`\.(?:${MEDIA_EXTENSION}|${SCRIPT_EXTENSION})$`,
 	"i",
 );
 
@@ -105,7 +112,7 @@ export const findLocalAssetRefs = (
 		let target: string | null | undefined;
 		if (value.startsWith("/")) {
 			target = value;
-		} else if (RELATIVE_MEDIA_PATTERN.test(value)) {
+		} else if (RELATIVE_ASSET_PATTERN.test(value)) {
 			target = folder
 				? `${folder}${value.replace(/^\.\//, "")}`
 				: mentioned.get(baseName(value));

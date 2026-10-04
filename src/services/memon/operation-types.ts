@@ -56,11 +56,6 @@ export interface MemonOperationPayloadMap {
 	"browser.refresh": Keyed;
 	/** Brings the real browser tab behind the active Browser tab to the front. */
 	"browser.show": Keyed;
-	"notes.toggle": Keyed<{ step: number }>;
-	"notes.add": Keyed<{ text: string }>;
-	"notes.remove": Keyed<{ step: number }>;
-	"notes.write": Keyed<{ text: string }>;
-	"notes.edit": Keyed<{ step: number; text: string }>;
 	"scheduler.refresh": Keyed;
 	"scheduler.save": Keyed<{ schedule: MemonScheduleInput }>;
 	"scheduler.delete": Keyed<{ id: string }>;
@@ -93,6 +88,8 @@ export interface MemonOperationPayloadMap {
 	/** Cuts or copies entries; no paths empties the clipboard. */
 	"files.clipboard": Keyed<{ mode: "copy" | "cut"; paths: string[] }>;
 	"files.paste": Keyed<{ to?: string }>;
+	/** Deletes entries, with everything in them; the user has confirmed. */
+	"files.delete": Keyed<{ paths: string[] }>;
 	/** The user edited the open visual's source and saved it. */
 	"visual.save": Keyed<{ source: string }>;
 	"editor.update": Keyed<{ content: string }>;
@@ -115,12 +112,28 @@ export interface MemonOperationPayloadMap {
 	"terminal.clearHistory": Keyed;
 	/** Answers a command of the agent's that waits for approval. */
 	"terminal.approval": Keyed<{ id: string; decision: "approve" | "deny" }>;
+	/** Answers the agent's request to hand pi code work. */
+	"piCode.approval": Keyed<{ id: string; decision: "approve" | "deny" }>;
 	"window.open": Keyed<{ app: MemonWindowApp }>;
 	"window.focus": Keyed<{ windowId: string }>;
 	"window.minimize": Keyed<{ windowId: string }>;
 	"window.maximize": Keyed<{ windowId: string }>;
 	"window.close": Keyed<{ windowId: string }>;
 	"window.move": Keyed<{ windowId: string; rect: WindowRect }>;
+	/**
+	 * A pi code view connects: pi takes its size (and theme) and redraws in
+	 * full from the returned cursor. Null when pi is not running.
+	 */
+	"piCode.attach": Keyed<{
+		columns: number;
+		rows: number;
+		theme?: "dark" | "light";
+	}>;
+	/** pi's terminal output after `cursor`, waiting up to `waitMs` for some. */
+	"piCode.read": Keyed<{ cursor: number; waitMs: number }>;
+	/** Raw key data from the view (escape sequences, pastes). */
+	"piCode.input": Keyed<{ data: string }>;
+	"piCode.resize": Keyed<{ columns: number; rows: number }>;
 }
 
 export type MemonOperation = keyof MemonOperationPayloadMap;
@@ -132,8 +145,24 @@ export type MemonOperationResultMap = {
 			? string
 			: K extends "terminal.complete"
 				? MemonTerminalCompletion
-				: MemonMachineSnapshot | null;
+				: K extends "piCode.attach"
+					? { cursor: number } | null
+					: K extends "piCode.read"
+						? MemonPiCodeOutput
+						: K extends "piCode.input" | "piCode.resize"
+							? null
+							: MemonMachineSnapshot | null;
 };
+
+/** A read of pi code's terminal output. */
+export interface MemonPiCodeOutput {
+	data: string;
+	cursor: number;
+	/** The cursor was out of date: clear the view and write `data`. */
+	reset: boolean;
+	/** pi is not running: stop reading. */
+	closed: boolean;
+}
 
 export type MemonOperationJobPayload = {
 	[K in MemonOperation]: {

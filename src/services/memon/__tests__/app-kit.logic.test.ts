@@ -13,10 +13,11 @@ import { kitAppForRef } from "../apps";
 import {
 	draftsFromQuestions,
 	questionsFromDrafts,
+	studioDraftsFromSettings,
 	studioRequestFrom,
 	studioApp,
 } from "../apps/studio-view";
-import type { MemonMachineSnapshot } from "../types";
+import type { MemonMachineSnapshot, MemonTaskState } from "../types";
 
 const nodes: MemonViewNode[] = [
 	{
@@ -118,7 +119,7 @@ describe("app kit text", () => {
 
 	it("finds the app a ref belongs to", () => {
 		expect(kitAppForRef("s12")?.[0]).toBe("studio");
-		expect(kitAppForRef("n1")?.[0]).toBe("notes");
+		expect(kitAppForRef("n1")?.[0]).toBe("tasks");
 		expect(kitAppForRef("h3")?.[0]).toBe("scheduler");
 		expect(kitAppForRef("b4")).toBeNull();
 		expect(kitAppForRef("sx")).toBeNull();
@@ -258,6 +259,53 @@ describe("Studio Decision", () => {
 		).toThrow("The questions JSON is not valid");
 	});
 
+	it("fills the form from a .studio app and builds its run over the app's settings", () => {
+		const drafts = studioDraftsFromSettings("decision", {
+			questions: {
+				urgent: { type: "noul", instructions: "Needs a reply today?" },
+			},
+		});
+		expect(drafts["studio:decision:questions"]).toEqual([
+			{
+				id: "urgent",
+				type: "noul",
+				instructions: "Needs a reply today?",
+				criteria: "",
+			},
+		]);
+		// Fields the app does not set are emptied, so the form is the app's.
+		expect(drafts).toHaveProperty("studio:decision:json", undefined);
+		const snapshot = {
+			...snapshotWith({
+				...drafts,
+				"studio:decision:text": "Where is my order?",
+			}),
+			studio: {
+				...snapshotWith({}).studio,
+				app: {
+					path: "/a/Feedback.studio",
+					title: "Feedback",
+					tool: "decision",
+					settings: { labels: ["kept"] },
+				},
+			},
+		} as unknown as MemonMachineSnapshot;
+		expect(studioRequestFrom(snapshot, "decision")).toEqual({
+			tool: "decision",
+			labels: ["kept"],
+			text: "Where is my order?",
+			questions: {
+				urgent: { type: "noul", instructions: "Needs a reply today?" },
+			},
+		});
+		const text = renderViewText(studioApp.view(snapshot), "s").join("\n");
+		expect(text).toContain("- Feedback — app · /a/Feedback.studio");
+		expect(text).toContain(
+			'Save these settings as an app on the desktop: "Feedback" · [',
+		);
+		expect(text).toMatch(/\[s\d+\] Save app/);
+	});
+
 	it("offers to set up a model only to the user", () => {
 		const snapshot = snapshotWith({});
 		(snapshot.studio.tools[0] as { ready: boolean }).ready = false;
@@ -273,19 +321,39 @@ describe("Studio Decision", () => {
 });
 
 describe("app kit languages", () => {
+	const task = (
+		id: number,
+		state: MemonTaskState,
+		checklist: Array<{ text: string; done: boolean }> = [],
+	) => ({
+		id,
+		title: `Task ${id}`,
+		state,
+		checklist,
+		createdBy: "agent" as const,
+		createdAt: 0,
+		updatedAt: 0,
+		...(state === "done" || state === "dropped" ? { finishedAt: 0 } : {}),
+	});
 	const snapshot = {
-		...snapshotWith({}, null),
-		notes: {
-			items: [{ id: "a", text: "Search", status: "doing" }],
-			text: "",
+		...snapshotWith({ "tasks:showFinished": true, "tasks:edit": 3 }, null),
+		home: "/agents/Max",
+		tasks: {
+			items: [
+				task(1, "in_progress", [{ text: "Search", done: true }]),
+				task(2, "new"),
+				task(3, "approved"),
+				task(4, "done", [{ text: "Ship", done: true }]),
+				task(5, "dropped"),
+			],
 		},
 	} as unknown as MemonMachineSnapshot;
 
 	it("keeps the refs and ids the agent reads whatever the window's language", async () => {
-		const { notesApp } = await import("../apps/notes-view");
+		const { tasksApp } = await import("../apps/tasks-view");
 		const shout: MemonKitText = (key, english, values) =>
 			englishKitText(key, english, values).toUpperCase();
-		for (const app of [notesApp, studioApp]) {
+		for (const app of [tasksApp, studioApp]) {
 			const english = controlsByRef(app.view(snapshot), app.refPrefix);
 			const shouted = controlsByRef(app.view(snapshot, shout), app.refPrefix);
 			expect([...shouted.keys()]).toEqual([...english.keys()]);
@@ -293,9 +361,9 @@ describe("app kit languages", () => {
 				[...english.values()].map((control) => control.id),
 			);
 		}
-		expect(renderViewText(notesApp.view(snapshot, shout), "n")).toContain(
-			"NOW: SEARCH",
-		);
+		expect(
+			renderViewText(tasksApp.view(snapshot, shout), "n").join("\n"),
+		).toContain("(IN PROGRESS)");
 	});
 
 	it("has every word the views use in both languages", async () => {
@@ -321,8 +389,22 @@ describe("app kit languages", () => {
 		};
 		const states: MemonMachineSnapshot[] = [
 			snapshot,
+			{ ...snapshot, tasks: { items: [] } } as unknown as MemonMachineSnapshot,
 			snapshotWith({}),
 			snapshotWith({ "studio:decision:json": true }),
+			{
+				...snapshotWith({}),
+				home: "/agents/Max",
+				studio: {
+					...snapshotWith({}).studio,
+					app: {
+						path: "/agents/Max/Feedback.studio",
+						title: "Feedback",
+						tool: "decision",
+						settings: {},
+					},
+				},
+			} as unknown as MemonMachineSnapshot,
 		];
 		for (const state of states) {
 			for (const app of Object.values(MEMON_KIT_APPS)) {

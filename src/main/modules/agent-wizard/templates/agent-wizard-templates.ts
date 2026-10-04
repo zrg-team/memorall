@@ -4,6 +4,18 @@ import {
 	DEFAULT_RECALL_TYPE,
 } from "@/services/database/entities/topic-types";
 
+/**
+ * Features every agent the wizard makes starts with. Auto-compact keeps a
+ * long chat inside the model's window; without it a chat that outgrows the
+ * window fails instead of compacting. Earlier Thread Recall lets the agent
+ * read back what was said before a chat was split. Turning either off stays
+ * possible.
+ */
+export const AGENT_WIZARD_DEFAULT_FEATURES: readonly string[] = [
+	"auto-compact",
+	"thread-history-feature",
+];
+
 export const createBlankAgentWizardDraft = (): AgentWizardDraft => ({
 	name: "",
 	description: "",
@@ -11,7 +23,7 @@ export const createBlankAgentWizardDraft = (): AgentWizardDraft => ({
 	graphType: "foundation",
 	systemPrompt: "",
 	contextPrompt: "",
-	enabledFeatureNames: [],
+	enabledFeatureNames: [...AGENT_WIZARD_DEFAULT_FEATURES],
 	enabledToolNames: [],
 	enabledSkillNames: [],
 	connections: [],
@@ -263,7 +275,9 @@ export const draftFromTemplate = (
 	graphType: template.graphType ?? "foundation",
 	systemPrompt: template.systemPrompt,
 	contextPrompt: template.contextPrompt ?? "",
-	enabledFeatureNames: [...template.featureNames],
+	enabledFeatureNames: [
+		...new Set([...AGENT_WIZARD_DEFAULT_FEATURES, ...template.featureNames]),
+	],
 	enabledToolNames: [...(template.toolNames ?? [])],
 	enabledSkillNames: [...template.skillNames],
 	growType: template.growType ?? DEFAULT_GROW_TYPE,

@@ -2,9 +2,10 @@ import { describe, expect, it } from "vitest";
 import { parseDelimited, textPreviewKind } from "../text-preview";
 
 describe("text previews", () => {
-	it("renders Markdown, HTML, CSV and TSV; other text stays text", () => {
+	it("renders Markdown, HTML, SVG, CSV and TSV; other text stays text", () => {
 		expect(textPreviewKind("/notes/a.md")).toBe("markdown");
 		expect(textPreviewKind("/site/INDEX.HTM")).toBe("html");
+		expect(textPreviewKind("/art/logo.SVG")).toBe("svg");
 		expect(textPreviewKind("/data/table.csv")).toBe("csv");
 		expect(textPreviewKind("/data/table.tsv")).toBe("tsv");
 		expect(textPreviewKind("/code/app.js")).toBeNull();

@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { applyAutoCompactPolicy } from "../../steps/features/auto-compact.js";
+import {
+	applyAutoCompactPolicy,
+	applyStickyAutoCompact,
+	type CompactionMemory,
+} from "../../steps/features/auto-compact.js";
 import type { ChatCompletionMessageParam } from "../../interfaces/engine/messages.js";
+import { estimatePromptTokens } from "../../utils/token-usage.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -645,5 +650,140 @@ describe("config resolution — snapshot", () => {
 			200,
 		);
 		expect(result?.outputMessages).toMatchSnapshot();
+	});
+});
+
+// ---------------------------------------------------------------------------
+// cache stability: the same cuts request after request, and never the system
+// ---------------------------------------------------------------------------
+
+describe("cache-stable compaction", () => {
+	const system: ChatCompletionMessageParam = {
+		role: "system",
+		content: `Rules. Logo: data:image/png;base64,${"A".repeat(400)}`,
+	};
+	const big = "x".repeat(4_000);
+	const flows = (from: number, count: number, content = big) =>
+		Array.from({ length: count }, (_, index) =>
+			makeFlow(`call_${from + index}`, content),
+		).flat();
+	const conversation = (
+		...extra: ChatCompletionMessageParam[]
+	): ChatCompletionMessageParam[] => [
+		system,
+		{ role: "user", content: "Research it" },
+		...flows(0, 10),
+		...extra,
+	];
+	const chunkedIds = (messages: ChatCompletionMessageParam[]) =>
+		messages
+			.filter(
+				(message) =>
+					message.role === "tool" &&
+					typeof message.content === "string" &&
+					message.content.includes("[... chunked tool result:"),
+			)
+			.map((message) => (message.role === "tool" ? message.tool_call_id : ""));
+	/** A window the conversation fills to 80%: past the 75% that compacts. */
+	const maxTokens = Math.ceil(estimatePromptTokens(conversation()) / 0.8);
+
+	it("never rewrites the system prompt, even when it holds base64", () => {
+		const memory: CompactionMemory = new Map();
+		const compacted = applyStickyAutoCompact(
+			{ messages: conversation(), outputMessages: [] },
+			{ toolResultTrim: disabledTrim, toolCallFlowTrim: disabledTrim },
+			Math.ceil(estimatePromptTokens([system]) * 1.1),
+			{ memory },
+		);
+		expect(compacted?.messages[0]).toBe(system);
+	});
+
+	it("makes the same cuts again, so the next request starts with the same bytes", () => {
+		const memory: CompactionMemory = new Map();
+		const first = applyStickyAutoCompact(
+			{ messages: conversation(), outputMessages: [] },
+			undefined,
+			maxTokens,
+			{ memory },
+		);
+		if (!first) throw new Error("expected a compaction");
+		expect(chunkedIds(first.messages).length).toBeGreaterThan(0);
+
+		// The next request (or the next message, rebuilt from the full
+		// history) has a little more: the earlier cuts are made again and
+		// nothing else, so it starts with exactly the bytes sent before.
+		const next = applyStickyAutoCompact(
+			{ messages: conversation(...flows(10, 1, "ok")), outputMessages: [] },
+			undefined,
+			maxTokens,
+			{ memory },
+		);
+		expect(next?.messages.slice(0, first.messages.length)).toEqual(
+			first.messages,
+		);
+	});
+
+	it("reports a new compaction once, not each time its cuts are made again", () => {
+		const memory: CompactionMemory = new Map();
+		const reports: unknown[] = [];
+		const onCompacted = (report: unknown) => reports.push(report);
+		applyStickyAutoCompact(
+			{ messages: conversation(), outputMessages: [] },
+			undefined,
+			maxTokens,
+			{ memory, onCompacted },
+		);
+		applyStickyAutoCompact(
+			{ messages: conversation(...flows(10, 1, "ok")), outputMessages: [] },
+			undefined,
+			maxTokens,
+			{ memory, onCompacted },
+		);
+		expect(reports).toHaveLength(1);
+		expect(reports[0]).toMatchObject({
+			reason: "threshold",
+			windowTokens: maxTokens,
+			shortened: expect.any(Number),
+			removed: expect.any(Number),
+		});
+		const report = reports[0] as { beforeTokens: number; afterTokens: number };
+		expect(report.afterTokens).toBeLessThan(report.beforeTokens);
+	});
+
+	it("cuts more only once past the threshold again, keeping the earlier cuts", () => {
+		const memory: CompactionMemory = new Map();
+		const first = applyStickyAutoCompact(
+			{ messages: conversation(), outputMessages: [] },
+			undefined,
+			maxTokens,
+			{ memory },
+		);
+		const later = applyStickyAutoCompact(
+			{ messages: conversation(...flows(10, 6)), outputMessages: [] },
+			undefined,
+			maxTokens,
+			{ memory },
+		);
+		if (!first || !later) throw new Error("expected compactions");
+		// A cut is a result chunked, or its whole call removed.
+		const present = (messages: ChatCompletionMessageParam[]) =>
+			new Set(
+				messages.flatMap((message) =>
+					message.role === "tool" ? [message.tool_call_id] : [],
+				),
+			);
+		const cuts = (messages: ChatCompletionMessageParam[], total: number) => {
+			const kept = present(messages);
+			const chunked = new Set(chunkedIds(messages));
+			return Array.from(
+				{ length: total },
+				(_, index) => `call_${index}`,
+			).filter((id) => chunked.has(id) || !kept.has(id));
+		};
+		const before = cuts(first.messages, 10);
+		const after = cuts(later.messages, 16);
+		expect(before.length).toBeGreaterThan(0);
+		expect(after.length).toBeGreaterThan(before.length);
+		for (const id of before) expect(after).toContain(id);
 	});
 });

@@ -54,7 +54,7 @@ describe("applyMemonAbsorption", () => {
 				browser: false,
 				files: true,
 				terminal: true,
-				notes: true,
+				tasks: true,
 				visualize: false,
 			},
 		});
@@ -63,7 +63,7 @@ describe("applyMemonAbsorption", () => {
 				browser: false,
 				files: true,
 				terminal: true,
-				notes: true,
+				tasks: true,
 				visualize: false,
 			},
 		);
@@ -118,11 +118,29 @@ describe("normalizeMemonFeatureConfig", () => {
 				browser: false,
 				files: true,
 				terminal: true,
-				notes: true,
-				visualize: true,
+				tasks: true,
+				// An add-on, off unless turned on.
+				visualize: false,
 			},
 			showComputer: "manual",
 			askBefore: { forms: true, installs: true, deletes: true },
 		});
+	});
+
+	it("has pi code on unless the settings turned it off", () => {
+		expect(DEFAULT_MEMON_FEATURE_CONFIG.piCode).toBe(true);
+		expect(normalizeMemonFeatureConfig({}).piCode).toBe(true);
+		expect(normalizeMemonFeatureConfig({ piCode: false }).piCode).toBe(false);
+		expect(normalizeMemonFeatureConfig({ piCode: "no" }).piCode).toBe(true);
+	});
+
+	it("reads Tasks from a config stored when it was called Notes", () => {
+		expect(
+			normalizeMemonFeatureConfig({ apps: { notes: false } }).apps.tasks,
+		).toBe(false);
+		expect(
+			normalizeMemonFeatureConfig({ apps: { notes: false, tasks: true } }).apps
+				.tasks,
+		).toBe(true);
 	});
 });

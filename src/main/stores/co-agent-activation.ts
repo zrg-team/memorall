@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useCallback, useEffect } from "react";
 import { create } from "zustand";
 
 import {
@@ -144,3 +144,27 @@ export const useCoAgentAvailable = (): boolean => {
 /** Whether the co-agent's tools should be added to the next turn. */
 export const useCoAgentActive = (): boolean =>
 	useCoAgentActivationStore((state) => state.isActive);
+
+/** A control's view of the co-agent: absent where there is no page to attach to. */
+export interface CoAgentToggle {
+	active: boolean;
+	starting: boolean;
+	toggle: () => void;
+}
+
+export const useCoAgentToggle = (): CoAgentToggle | undefined => {
+	const available = useCoAgentAvailable();
+	const active = useCoAgentActive();
+	const starting = useCoAgentActivationStore((state) => state.isActivating);
+	const toggle = useCallback(() => {
+		const store = useCoAgentActivationStore.getState();
+		// Off is immediate and local: the tools simply stop being offered. On has
+		// to attach first, because there may be nothing to attach to.
+		if (store.isActive) {
+			store.setActive(false);
+			return;
+		}
+		void store.activate();
+	}, []);
+	return available ? { active, starting, toggle } : undefined;
+};

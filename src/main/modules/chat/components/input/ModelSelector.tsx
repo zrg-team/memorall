@@ -15,6 +15,7 @@ import type React from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
+import { ModelPrice } from "@/main/components/atoms/ModelPrice";
 import { Button } from "@/main/components/ui/button";
 import { Input } from "@/main/components/ui/input";
 import {
@@ -248,6 +249,11 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
 												>
 													{formatModelSize(downloadBytesFor(model, device))}
 												</span>
+											) : model.pricing ? (
+												<ModelPrice
+													pricing={model.pricing}
+													className="text-[10px]"
+												/>
 											) : null}
 											{isCurrent ? (
 												<Check size={13} className="shrink-0 text-primary" />

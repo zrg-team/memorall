@@ -86,6 +86,7 @@ export const EditorWindow: React.FC<{
 						kind={previewKind}
 						text={draft}
 						title={editor.path ?? t("memonComputer.untitled")}
+						path={editor.path ?? undefined}
 					/>
 				</div>
 			) : (

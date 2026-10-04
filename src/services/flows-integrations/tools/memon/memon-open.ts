@@ -10,7 +10,7 @@ import { runMemonTool } from "./memon-tool-utils";
 const schema = z
 	.object({
 		app: z
-			.enum(["browser", "files", "editor", "terminal", "visualize"])
+			.enum(["browser", "files", "editor", "terminal", "tasks", "visualize"])
 			.describe("The app to open or bring to the front."),
 		url: z
 			.string()
@@ -32,7 +32,7 @@ const schema = z
 			.string()
 			.optional()
 			.describe(
-				'Files: the folder to show (default "/"). Editor: the file to open; a missing file starts empty and is created on save. Visualize: the .openui file to open.',
+				'Files: the folder to show (default "/"), or a file to open in its app: a .terminal launcher runs in a new Terminal tab, a .studio app opens Studio set up, a .tasks file opens in Tasks. Editor: the file to open as text (a launcher or studio app too, to read or change it without running it); a missing file starts empty and is created on save. Visualize: the .openui file to open.',
 			),
 	})
 	.describe("Open an app on the computer, a page in the Browser, or a file.");
@@ -76,11 +76,14 @@ export const createMemonOpenTool: ToolFactory<Input> = (): Tool<Input> => ({
 					case "editor":
 						if (!input.path)
 							throw new Error("Give the path of the file to open.");
-						await machine.openFile(input.path, { create: true });
+						await machine.openFile(input.path, { create: true, asText: true });
 						return `Opened ${input.path}.`;
 					case "terminal":
 						machine.openWindow("terminal");
 						return "Brought the Terminal to the front.";
+					case "tasks":
+						machine.openWindow("tasks");
+						return "Brought Tasks to the front.";
 					case "visualize":
 						if (input.path) {
 							await machine.openVisual(input.path);

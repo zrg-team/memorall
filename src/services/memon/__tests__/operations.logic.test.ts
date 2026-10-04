@@ -23,6 +23,7 @@ vi.mock("../ports", () => ({
 			exists: vi.fn(async () => false),
 			move: vi.fn(async () => undefined),
 			copy: vi.fn(async () => undefined),
+			remove: vi.fn(async () => undefined),
 			subscribe: vi.fn(() => () => undefined),
 			zip: vi.fn(),
 			preview: vi.fn(async () => ({ text: "" })),
@@ -87,7 +88,7 @@ describe("runMemonOperation machine lifecycle", () => {
 						browser: false,
 						files: true,
 						terminal: true,
-						notes: true,
+						tasks: true,
 						visualize: false,
 					},
 				},
@@ -148,23 +149,61 @@ describe("runMemonOperation machine lifecycle", () => {
 		expect(findMemonMachine("conversation-1")).toBeUndefined();
 	});
 
-	it("tells the agent when the user ticks a step in Notes", async () => {
+	it("tells the agent when the user approves a task and ticks its checklist", async () => {
 		await runMemonOperation({
 			operation: "machine.start",
 			payload: { key: "conversation-1" },
 		});
-		findMemonMachine("conversation-1")?.setNotes(["Search", "Summarize"]);
-
-		await runMemonOperation({
-			operation: "notes.toggle",
-			payload: { key: "conversation-1", step: 1 },
+		const machine = findMemonMachine("conversation-1");
+		machine?.addTask({
+			title: "Search",
+			checklist: ["Find sources"],
+			by: "agent",
 		});
 
+		// Approving is the user's: it reaches the machine as a kit action.
+		await runMemonOperation({
+			operation: "app.action",
+			payload: { key: "conversation-1", app: "tasks", id: "approve:1" },
+		});
+		await runMemonOperation({
+			operation: "app.action",
+			payload: {
+				key: "conversation-1",
+				app: "tasks",
+				id: "check:1:1",
+				value: true,
+			},
+		});
+
+		expect(machine?.taskById(1)).toMatchObject({
+			state: "approved",
+			checklist: [{ text: "Find sources", done: true }],
+		});
+		const screen = machine?.readScreen();
+		expect(screen).toContain('- approved task #1 "Search" in Tasks');
+		expect(screen).toContain('- ticked "Find sources" of task #1 in Tasks');
+	});
+
+	it("opens what the user clicks on the desktop as their own, so a launcher runs", async () => {
+		await runMemonOperation({
+			operation: "machine.start",
+			payload: { key: "conversation-1" },
+		});
 		const machine = findMemonMachine("conversation-1");
-		expect(machine?.snapshot().notes.items[0].status).toBe("done");
-		expect(machine?.readScreen()).toContain(
-			'- ticked step 1 "Search" in Notes',
-		);
+		if (!machine) throw new Error("no machine");
+		vi.spyOn(machine, "isFolder").mockResolvedValue(false);
+		const open = vi.spyOn(machine, "openFile").mockResolvedValue();
+
+		await runMemonOperation({
+			operation: "files.open",
+			payload: { key: "conversation-1", path: "~/Start Site.terminal" },
+		});
+
+		expect(open).toHaveBeenCalledWith("~/Start Site.terminal", {
+			byUser: true,
+		});
+		expect(machine.readScreen()).toContain("- opened ~/Start Site.terminal");
 	});
 
 	it("runs the user's use of an app control and tells the agent what it led to", async () => {
@@ -173,13 +212,13 @@ describe("runMemonOperation machine lifecycle", () => {
 			payload: { key: "conversation-1" },
 		});
 		const machine = findMemonMachine("conversation-1");
-		machine?.openWindow("notes");
+		machine?.openWindow("tasks");
 
 		await runMemonOperation({
 			operation: "app.action",
 			payload: {
 				key: "conversation-1",
-				app: "notes",
+				app: "tasks",
 				id: "new",
 				value: "Check prices",
 			},
@@ -188,15 +227,16 @@ describe("runMemonOperation machine lifecycle", () => {
 		expect(machine?.readScreen()).not.toContain("user changes");
 		await runMemonOperation({
 			operation: "app.action",
-			payload: { key: "conversation-1", app: "notes", id: "add" },
+			payload: { key: "conversation-1", app: "tasks", id: "add" },
 		});
 
-		expect(machine?.snapshot().notes.items.map((item) => item.text)).toEqual([
-			"Check prices",
+		// A task the user adds is approved: it waits for the agent.
+		expect(machine?.snapshot().tasks.items).toMatchObject([
+			{ title: "Check prices", state: "approved", createdBy: "user" },
 		]);
-		expect(machine?.snapshot().drafts["notes:new"]).toBeUndefined();
+		expect(machine?.snapshot().drafts["tasks:new"]).toBeUndefined();
 		expect(machine?.readScreen()).toContain(
-			'- added step "Check prices" to Notes',
+			'- added task #1 "Check prices" to Tasks',
 		);
 	});
 

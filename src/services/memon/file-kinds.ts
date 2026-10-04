@@ -11,6 +11,7 @@ export type MemonViewerKind =
 	| "video"
 	| "excel"
 	| "document"
+	| "presentation"
 	| "binary";
 export type MemonFileKind = "text" | MemonViewerKind;
 
@@ -37,10 +38,14 @@ const EXTENSION_KIND: Record<string, MemonViewerKind> = {
 	xlsx: "excel",
 	xlsm: "excel",
 	docx: "document",
+	pptx: "presentation",
+	pptm: "presentation",
+	ppsx: "presentation",
+	potx: "presentation",
+	ppt: "presentation",
+	pps: "presentation",
 	// Opened as bytes: decoding them as text would only show noise.
 	doc: "binary",
-	ppt: "binary",
-	pptx: "binary",
 	odt: "binary",
 	zip: "binary",
 	gz: "binary",
@@ -82,6 +87,12 @@ const MIME_TYPES: Record<string, string> = {
 	xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 	xlsm: "application/vnd.ms-excel.sheet.macroEnabled.12",
 	docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+	pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+	pptm: "application/vnd.ms-powerpoint.presentation.macroEnabled.12",
+	ppsx: "application/vnd.openxmlformats-officedocument.presentationml.slideshow",
+	potx: "application/vnd.openxmlformats-officedocument.presentationml.template",
+	ppt: "application/vnd.ms-powerpoint",
+	pps: "application/vnd.ms-powerpoint",
 	md: "text/markdown",
 	markdown: "text/markdown",
 	html: "text/html",
@@ -104,7 +115,13 @@ export const memonMimeType = (path: string): string =>
  */
 export const memonAttachmentType = (path: string): DocumentType | null => {
 	const kind = memonFileKind(path);
-	if (kind === "pdf" || kind === "image" || kind === "excel") return kind;
+	if (
+		kind === "pdf" ||
+		kind === "image" ||
+		kind === "excel" ||
+		kind === "presentation"
+	)
+		return kind;
 	if (kind !== "text") return null;
 	const extension = extensionOf(path);
 	if (extension === "md" || extension === "markdown") return "markdown";

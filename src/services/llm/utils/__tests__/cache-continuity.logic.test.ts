@@ -104,9 +104,36 @@ describe("describeCacheContinuity", () => {
 		]);
 	});
 
-	it("never flags the first request", () => {
+	it("does not flag the first request when there is nothing before it", () => {
 		expect(describeCacheContinuity([call(50_000, 0)])).toEqual(["first"]);
 		expect(describeCacheContinuity([])).toEqual([]);
+	});
+
+	it("holds a message's first request against the previous message's last", () => {
+		// The previous message ended on a 75,744-token request; the next one
+		// read none of it back (the screenshot that started this).
+		const previous = { ...call(75_744, 75_456), provider: "Together" };
+		expect(
+			describeCacheContinuity(
+				[call(68_437, 0), call(70_059, 68_352)],
+				previous,
+			),
+		).toEqual(["restarted", "continued"]);
+		// Reusing it nearly whole is the healthy case.
+		expect(describeCacheContinuity([call(76_400, 75_520)], previous)).toEqual([
+			"continued",
+		]);
+		// Reusing only the start: the conversation changed partway.
+		expect(describeCacheContinuity([call(76_400, 9_000)], previous)).toEqual([
+			"partial",
+		]);
+		expect(
+			describeProviderSwitch(
+				[{ ...call(76_400, 0), provider: "InferenceNet" }],
+				0,
+				previous,
+			),
+		).toEqual({ from: "Together", to: "InferenceNet" });
 	});
 });
 

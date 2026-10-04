@@ -6,10 +6,14 @@
  *
  * What an SVG image cannot load is carried over: canvases and images become
  * data URLs, form fields keep their values, fonts are embedded, and scrolled
- * areas keep their scroll position. Frames and media show as plain boxes.
+ * areas keep their scroll position. A frame whose document can be read (the
+ * Browser's localhost pages, served through the sandbox) is drawn from that
+ * document; other frames and media show as plain boxes.
  */
 
 const XHTML = "http://www.w3.org/1999/xhtml";
+/** What a page paints behind everything when it sets no background. */
+const TRANSPARENT = new Set(["transparent", "rgba(0, 0, 0, 0)"]);
 
 const blobToDataUrl = (blob: Blob): Promise<string> =>
 	new Promise((resolve, reject) => {
@@ -19,14 +23,49 @@ const blobToDataUrl = (blob: Blob): Promise<string> =>
 		reader.readAsDataURL(blob);
 	});
 
-const urlToDataUrl = async (url: string): Promise<string | null> => {
+/** The window an element belongs to: a framed page's own, not this one. */
+const viewOf = (node: Node): Window =>
+	node.ownerDocument?.defaultView ?? window;
+
+/**
+ * A URL as a data URL, fetched by the window of the document that uses it,
+ * so a framed page's resources come from where the page loads them.
+ */
+const urlToDataUrl = async (
+	url: string,
+	view: Window = window,
+): Promise<string | null> => {
 	if (!url || url.startsWith("data:")) return url || null;
 	try {
-		const response = await fetch(url);
+		const response = await view.fetch(url);
 		return response.ok ? await blobToDataUrl(await response.blob()) : null;
 	} catch {
 		return null;
 	}
+};
+
+/**
+ * A loaded image's pixels, without fetching it again; when the canvas will
+ * not give them up (another origin), it is fetched instead.
+ */
+const imageToDataUrl = async (
+	image: HTMLImageElement,
+): Promise<string | null> => {
+	if (image.complete && image.naturalWidth > 0) {
+		try {
+			const canvas = document.createElement("canvas");
+			canvas.width = image.naturalWidth;
+			canvas.height = image.naturalHeight;
+			const context = canvas.getContext("2d");
+			if (context) {
+				context.drawImage(image, 0, 0);
+				return canvas.toDataURL();
+			}
+		} catch {
+			// Tainted by another origin: try fetching it below.
+		}
+	}
+	return urlToDataUrl(image.currentSrc || image.src, viewOf(image));
 };
 
 /** Every computed property, as an inline style. */
@@ -40,7 +79,7 @@ const styleText = (computed: CSSStyleDeclaration): string => {
 };
 
 /** A box standing in for something an image cannot show. */
-const placeholderFor = (source: Element, computed: CSSStyleDeclaration) => {
+const placeholderFor = (computed: CSSStyleDeclaration) => {
 	const box = document.createElementNS(XHTML, "div") as HTMLElement;
 	box.setAttribute("style", styleText(computed));
 	box.style.setProperty("background-color", "rgba(128, 128, 128, 0.12)");
@@ -48,27 +87,76 @@ const placeholderFor = (source: Element, computed: CSSStyleDeclaration) => {
 	return box;
 };
 
+/** A frame's document, when this page may read it. */
+const readableDocument = (frame: HTMLIFrameElement): Document | null => {
+	try {
+		const page = frame.contentDocument;
+		return page?.documentElement ? page : null;
+	} catch {
+		return null;
+	}
+};
+
+/**
+ * The color a page paints its whole viewport with: the root's background,
+ * or the body's, which the browser carries up to the viewport.
+ */
+const pageBackground = (page: Document): string | null => {
+	for (const element of [page.documentElement, page.body]) {
+		if (!element) continue;
+		const color = viewOf(element)
+			.getComputedStyle(element)
+			.getPropertyValue("background-color");
+		if (color && !TRANSPARENT.has(color)) return color;
+	}
+	return null;
+};
+
 interface CloneOptions {
 	skip: (element: Element) => boolean;
 	pending: Promise<void>[];
+	/** Framed documents drawn so far: their fonts are embedded too. */
+	documents: Document[];
 }
+
+/**
+ * A readable frame, drawn as a box of the frame's size holding a clone of
+ * its page, clipped like the frame clips it.
+ */
+const cloneFrame = (
+	computed: CSSStyleDeclaration,
+	page: Document,
+	options: CloneOptions,
+): HTMLElement => {
+	const box = document.createElementNS(XHTML, "div") as HTMLElement;
+	box.setAttribute("style", styleText(computed));
+	if (computed.display === "inline") box.style.setProperty("display", "block");
+	box.style.setProperty("overflow", "hidden");
+	const background = pageBackground(page);
+	if (background) box.style.setProperty("background-color", background);
+	options.documents.push(page);
+	const content = cloneNode(page.documentElement, options);
+	if (content) box.appendChild(content);
+	return box;
+};
 
 const cloneNode = (source: Node, options: CloneOptions): Node | null => {
 	if (source.nodeType === Node.TEXT_NODE) return source.cloneNode(false);
 	if (source.nodeType !== Node.ELEMENT_NODE) return null;
 	const element = source as Element;
 	if (options.skip(element)) return null;
-	const computed = getComputedStyle(element);
+	const computed = viewOf(element).getComputedStyle(element);
 	if (computed.display === "none") return null;
 
 	const tag = element.tagName.toLowerCase();
-	if (
-		tag === "iframe" ||
-		tag === "video" ||
-		tag === "audio" ||
-		tag === "object"
-	) {
-		return placeholderFor(element, computed);
+	if (tag === "iframe") {
+		const page = readableDocument(element as HTMLIFrameElement);
+		return page
+			? cloneFrame(computed, page, options)
+			: placeholderFor(computed);
+	}
+	if (tag === "video" || tag === "audio" || tag === "object") {
+		return placeholderFor(computed);
 	}
 	if (tag === "canvas") {
 		const image = document.createElementNS(XHTML, "img") as HTMLImageElement;
@@ -76,20 +164,23 @@ const cloneNode = (source: Node, options: CloneOptions): Node | null => {
 		try {
 			image.setAttribute("src", (element as HTMLCanvasElement).toDataURL());
 		} catch {
-			return placeholderFor(element, computed);
+			return placeholderFor(computed);
 		}
 		return image;
 	}
 
-	const clone = element.cloneNode(false) as Element;
+	// A framed page's root and body become plain boxes inside the frame's.
+	const clone =
+		tag === "html" || tag === "body"
+			? document.createElementNS(XHTML, "div")
+			: (element.cloneNode(false) as Element);
 	clone.setAttribute("style", styleText(computed));
 	clone.removeAttribute("class");
 	if (tag === "img") {
 		const image = clone as HTMLImageElement;
-		const src = (element as HTMLImageElement).currentSrc || image.src;
 		image.removeAttribute("srcset");
 		options.pending.push(
-			urlToDataUrl(src).then((data) => {
+			imageToDataUrl(element as HTMLImageElement).then((data) => {
 				if (data) image.setAttribute("src", data);
 				else image.removeAttribute("src");
 			}),
@@ -128,32 +219,70 @@ const cloneNode = (source: Node, options: CloneOptions): Node | null => {
 	return clone;
 };
 
-/** The page's @font-face rules, with their files embedded. */
-const embeddedFonts = async (): Promise<string> => {
-	const rules: string[] = [];
-	for (const sheet of Array.from(document.styleSheets)) {
-		let list: CSSRuleList;
-		try {
-			list = sheet.cssRules;
-		} catch {
-			continue;
-		}
-		for (const rule of Array.from(list)) {
-			if (rule instanceof CSSFontFaceRule) rules.push(rule.cssText);
+/** The documents' @font-face rules, with their files embedded. */
+const embeddedFonts = async (documents: Document[]): Promise<string> => {
+	const rules: Array<{ text: string; base: string; view: Window }> = [];
+	for (const page of documents) {
+		const view = page.defaultView ?? window;
+		for (const sheet of Array.from(page.styleSheets)) {
+			let list: CSSRuleList;
+			try {
+				list = sheet.cssRules;
+			} catch {
+				continue;
+			}
+			for (const rule of Array.from(list)) {
+				// By its text: a framed page's rules come from another realm.
+				if (rule.cssText.startsWith("@font-face")) {
+					rules.push({
+						text: rule.cssText,
+						base: sheet.href ?? page.baseURI,
+						view,
+					});
+				}
+			}
 		}
 	}
 	const urlPattern = /url\((['"]?)([^'")]+)\1\)/g;
 	const embedded = await Promise.all(
-		rules.map(async (rule) => {
+		rules.map(async ({ text: rule, base, view }) => {
 			let text = rule;
 			for (const [match, , url] of rule.matchAll(urlPattern)) {
-				const data = await urlToDataUrl(new URL(url, document.baseURI).href);
+				const data = await urlToDataUrl(new URL(url, base).href, view);
 				if (data) text = text.replace(match, `url("${data}")`);
 			}
 			return text;
 		}),
 	);
 	return embedded.join("\n");
+};
+
+/**
+ * The element as a self-contained copy: every style inline, readable frames
+ * drawn from their pages, images as data URLs once `ready` settles.
+ */
+export const cloneForCapture = (
+	element: HTMLElement,
+	skip: (element: Element) => boolean = () => false,
+): {
+	clone: HTMLElement | null;
+	/** Settles once every image is carried over. */
+	ready: Promise<void>;
+	/** The documents drawn: this page's and every readable frame's. */
+	documents: Document[];
+} => {
+	const pending: Promise<void>[] = [];
+	const documents: Document[] = [element.ownerDocument];
+	const clone = cloneNode(element, {
+		skip,
+		pending,
+		documents,
+	}) as HTMLElement | null;
+	return {
+		clone,
+		ready: Promise.all(pending).then(() => undefined),
+		documents,
+	};
 };
 
 export const renderElementToCanvas = async (
@@ -163,11 +292,7 @@ export const renderElementToCanvas = async (
 	const rect = element.getBoundingClientRect();
 	const width = Math.ceil(rect.width);
 	const height = Math.ceil(rect.height);
-	const pending: Promise<void>[] = [];
-	const clone = cloneNode(element, {
-		skip: options.skip ?? (() => false),
-		pending,
-	}) as HTMLElement | null;
+	const { clone, ready, documents } = cloneForCapture(element, options.skip);
 	if (!clone) throw new Error("Nothing to capture.");
 	// The root sits at the image's corner, whatever its place on the page.
 	for (const property of [
@@ -183,8 +308,8 @@ export const renderElementToCanvas = async (
 	clone.style.setProperty("margin", "0");
 	clone.style.setProperty("width", `${width}px`);
 	clone.style.setProperty("height", `${height}px`);
-	await Promise.all(pending);
-	const fonts = await embeddedFonts();
+	await ready;
+	const fonts = await embeddedFonts(documents);
 
 	const holder = document.createElementNS(XHTML, "div");
 	if (fonts) {

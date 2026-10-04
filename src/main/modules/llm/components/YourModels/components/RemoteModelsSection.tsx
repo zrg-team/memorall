@@ -1,5 +1,6 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
+import { ModelPrice } from "@/main/components/atoms/ModelPrice";
 import { Button } from "@/main/components/ui/button";
 import { Badge } from "@/main/components/ui/badge";
 import { Input } from "@/main/components/ui/input";
@@ -220,6 +221,13 @@ export const RemoteModelsSection: React.FC<RemoteModelsSectionProps> = ({
 																{model.id}
 															</div>
 														</div>
+														{model.pricing ? (
+															<ModelPrice
+																pricing={model.pricing}
+																variant="full"
+																className="text-xs"
+															/>
+														) : null}
 														<Button
 															size="sm"
 															variant={isLoaded ? "outline" : "default"}

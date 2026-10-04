@@ -2,7 +2,7 @@
   "private": true,
   "name": "memorall",
   "description": "Memorall - AI-powered memory and knowledge management browser.",
-  "version": "0.5.36",
+  "version": "0.5.37",
   "license": "MIT",
   "type": "module",
   "engines": {
@@ -228,7 +228,7 @@
     "openai": "7.4.0",
     "pdfjs-dist": "6.2.108",
     "prismjs": "^1.30.0",
-    "pyodide": "0.27.7",
+    "pyodide": "0.29.5",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "react-dom-sandbox": "npm:react-dom@19.2.8",

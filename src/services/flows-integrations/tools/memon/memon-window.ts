@@ -12,7 +12,7 @@ const schema = z
 		window: z
 			.string()
 			.describe(
-				'The window, by id ("w2") or app ("browser", "files", "editor", "viewer", "terminal").',
+				'The window, by id ("w2") or app ("browser", "files", "editor", "viewer", "terminal", "tasks", "studio").',
 			),
 		op: z
 			.enum(["focus", "minimize", "maximize", "close"])

@@ -1,6 +1,7 @@
 import type { TFunction } from "i18next";
 import { useShellLayoutStore } from "@/main/stores/shell-layout";
 import { useWorkspaceModeStore } from "@/main/stores/workspace-mode";
+import { sortTasks, taskStateLabel } from "@/services/memon/apps/tasks-view";
 import {
 	memonAttachmentType,
 	memonMimeType,
@@ -39,8 +40,8 @@ export const memonWindowSource = (
 			return `Viewer · ${snapshot.viewer.path ?? ""}`;
 		case "terminal":
 			return `Terminal · ${snapshot.terminal.cwd}`;
-		case "notes":
-			return "Notes";
+		case "tasks":
+			return "Tasks";
 		case "scheduler":
 			return `Scheduler · ${snapshot.scheduler.agentName ?? "this agent"}`;
 		case "studio":
@@ -55,6 +56,10 @@ export const memonWindowSource = (
 			return snapshot.visual.path
 				? `Visualize · ${snapshot.visual.title} — ${snapshot.visual.path}`
 				: "Visualize";
+		case "pi":
+			return snapshot.piCode?.cwd
+				? `pi code · ${snapshot.piCode.cwd}`
+				: "pi code";
 	}
 };
 
@@ -91,13 +96,14 @@ export const memonWindowTarget = (
 			return snapshot.visual.path
 				? { kind: "file", source, path: snapshot.visual.path }
 				: null;
-		case "notes": {
-			const { items, text } = snapshot.notes;
-			const mark = { todo: "[ ]", doing: "[~]", done: "[x]" } as const;
-			const checklist = items.map(
-				(item, index) => `${index + 1}. ${mark[item.status]} ${item.text}`,
-			);
-			const body = [...checklist, ...(text.trim() ? ["", text.trim()] : [])];
+		case "tasks": {
+			const { open } = sortTasks(snapshot.tasks.items);
+			const body = open.flatMap((task) => [
+				`#${task.id} ${task.title} (${taskStateLabel(task.state)})`,
+				...task.checklist.map(
+					(item) => `  ${item.done ? "[x]" : "[ ]"} ${item.text}`,
+				),
+			]);
 			return body.length
 				? { kind: "text", source, text: body.join("\n") }
 				: null;
@@ -182,6 +188,11 @@ export const memonWindowTarget = (
 			return tail.length
 				? { kind: "text", source, text: tail.join("\n") }
 				: null;
+		}
+		case "pi": {
+			// Its screen is a terminal; the folder it works in is what to ask about.
+			const cwd = snapshot.piCode?.cwd;
+			return cwd ? { kind: "folder", source, path: cwd } : null;
 		}
 	}
 };

@@ -6,13 +6,17 @@ import {
 	MEMON_SCREEN_CHAR_BUDGET,
 	MEMON_TEXT_PAGE_LINES,
 	memonDisplayPath,
+	memonHomePaths,
 } from "./constants";
+import { isTaskOpen, taskProgress } from "./tasks-file";
 import type {
 	MemonFileEntry,
 	MemonFilesState,
 	MemonMachineSnapshot,
+	MemonPiCodeEntry,
 	MemonTerminalLine,
 	MemonTerminalState,
+	MemonTerminalTab,
 	MemonWindowState,
 } from "./types";
 import { terminalRunsInFront } from "./terminal/terminal-state";
@@ -32,20 +36,133 @@ const APP_LABEL: Record<MemonWindowState["app"], string> = {
 	editor: "Editor",
 	viewer: "Viewer",
 	terminal: "Terminal",
-	notes: "Notes",
+	tasks: "Tasks",
 	scheduler: "Scheduler",
 	studio: "Studio",
 	skills: "Skills",
 	connections: "Connections",
 	visualize: "Visualize",
+	pi: "pi code",
+};
+
+/** pi code in one line: what it is doing and on which model. */
+const piCodeBrief = (
+	snapshot: MemonMachineSnapshot,
+	windowId: string,
+	min: string,
+): string => {
+	const pi = snapshot.piCode;
+	const state = pi?.approval
+		? "waiting for the user to allow your request"
+		: pi?.status === "error"
+			? `error: ${pi.error ?? "unknown"}`
+			: pi?.status === "running"
+				? pi.working
+					? `working${pi.activity ? `: ${pi.activity}` : ""}`
+					: "idle"
+				: "starting";
+	const where = pi?.cwd ? ` · ${memonDisplayPath(pi.cwd, snapshot.home)}` : "";
+	const model = pi?.model
+		? ` · ${pi.model}${pi.thinkingLevel && pi.thinkingLevel !== "off" ? ` (thinking ${pi.thinkingLevel})` : ""}`
+		: pi?.status === "running"
+			? " · no model selected"
+			: "";
+	const context =
+		pi?.contextPercent !== undefined ? ` · context ${pi.contextPercent}%` : "";
+	const name = pi?.sessionName
+		? ` · "${truncateLine(pi.sessionName, 40)}"`
+		: "";
+	return `── ${windowId} pi code${min} · ${state}${where}${model}${context}${name}`;
+};
+
+const PI_ENTRY_MARK: Record<MemonPiCodeEntry["kind"], string> = {
+	user: "user:",
+	assistant: "pi:",
+	tool: "  tool",
+	bash: "  !",
+	summary: "  …",
+	error: "  error:",
+};
+
+const piCodeEntryLine = (entry: MemonPiCodeEntry): string => {
+	if (entry.kind === "tool") {
+		return `  ${entry.failed ? "✗" : "✓"} ${entry.name ?? "tool"} ${entry.text}`.trimEnd();
+	}
+	if (entry.kind === "bash") {
+		return `  ${entry.failed ? "✗" : "✓"} ! ${entry.text}`;
+	}
+	return `${PI_ENTRY_MARK[entry.kind]} ${entry.text}`;
+};
+
+/** Room pi's conversation gets on the screen; the newest entries first. */
+const PI_TRANSCRIPT_CHARS = 3_600;
+
+/**
+ * pi code in front: what it does, the agent's request waiting for the user,
+ * and the latest of its conversation (the last answer in full).
+ */
+const piCodeLines = (
+	snapshot: MemonMachineSnapshot,
+	windowId: string,
+): string[] => {
+	const pi = snapshot.piCode;
+	const lines = [piCodeBrief(snapshot, windowId, "")];
+	if (pi?.approval) {
+		lines.push(
+			`your request waits for the user in this window: "${truncateLine(pi.approval.task, 200)}"`,
+		);
+	}
+	if (pi?.status !== "running") {
+		if (!pi?.approval) lines.push("(pi is not running)");
+		return lines;
+	}
+	const entries = pi.transcript ?? [];
+	if (!entries.length) {
+		lines.push("(no conversation yet: hand pi work with memon_code)");
+	} else {
+		const shown: string[] = [];
+		let room = PI_TRANSCRIPT_CHARS;
+		for (let index = entries.length - 1; index >= 0; index -= 1) {
+			const line = piCodeEntryLine(entries[index]);
+			if (shown.length && line.length > room) break;
+			shown.unshift(line);
+			room -= line.length + 1;
+		}
+		const left = (pi.earlier ?? 0) + entries.length - shown.length;
+		lines.push(
+			`conversation${left ? ` (${left} earlier entr${left === 1 ? "y" : "ies"} left out)` : ""}:`,
+			...shown,
+		);
+	}
+	for (const queued of pi.queued ?? []) {
+		lines.push(
+			`queued ${queued.mode === "followUp" ? "follow-up" : "steer"}: ${truncateLine(queued.text, 160)}`,
+		);
+	}
+	lines.push(
+		pi.working
+			? 'memon_code { action: "wait" } waits for it · a prompt steers it · { action: "stop" } stops it'
+			: 'memon_code { action: "prompt", text } gives it more work',
+	);
+	return lines;
 };
 
 export { describeSchedule };
 
-const notesProgress = (snapshot: MemonMachineSnapshot): string => {
-	const { items } = snapshot.notes;
-	const done = items.filter((item) => item.status === "done").length;
-	return `${done}/${items.length} done`;
+/** The open tasks by state, and the one in progress: one line. */
+const tasksSummary = (snapshot: MemonMachineSnapshot): string | null => {
+	const open = snapshot.tasks.items.filter((task) => isTaskOpen(task.state));
+	if (!open.length) return null;
+	const count = (state: string) =>
+		open.filter((task) => task.state === state).length;
+	const parts = [
+		count("in_progress") && `${count("in_progress")} in progress`,
+		count("approved") && `${count("approved")} approved (waiting for you)`,
+		count("new") && `${count("new")} new (waiting for the user's approval)`,
+	].filter(Boolean);
+	const now = open.find((task) => task.state === "in_progress");
+	const progress = now ? taskProgress(now) : null;
+	return `tasks: ${parts.join(" · ")}${now ? ` · now: #${now.id} ${truncateLine(now.title, 60)}${now.checklist.length ? ` (${progress?.done}/${progress?.total})` : ""}` : ""}`;
 };
 
 const TERMINAL_TAIL_LINES = 12;
@@ -134,37 +251,49 @@ const terminalBrief = (
 	windowId: string,
 	min: string,
 	terminal: MemonTerminalState,
+	home: string,
 ): string => {
-	const last = [...terminal.lines]
-		.reverse()
-		.find((line) => line.kind === "command");
-	const elsewhere = terminalRunsInFront(terminal)
-		? ""
-		: `tab ${terminal.runningTabId} `;
+	const front = terminal.tabs.find((tab) => tab.id === terminal.activeTabId);
 	const state = terminal.approval?.agentWaiting
 		? "waiting for the user's approval"
 		: terminal.runningCommand
-			? `${elsewhere}running for ${formatElapsed(terminal.startedAt)}`
-			: last
-				? `last: $ ${truncateLine(last.text, 48)} (exit ${terminal.lastExitCode ?? "?"})`
+			? `tab ${terminal.runningTabId} running \`${truncateLine(terminal.runningCommand, 40)}\` for ${formatElapsed(terminal.startedAt)}`
+			: front?.command
+				? `last: $ ${truncateLine(front.command, 48)} (exit ${front.lastExitCode ?? "?"})`
 				: "idle";
 	const tabCount =
-		terminal.tabs.length > 1 ? ` · ${terminal.tabs.length} tabs` : "";
-	return `── ${windowId} Terminal${min}${tabCount} · cwd ${terminal.cwd} · ${state}`;
+		terminal.tabs.length > 1
+			? ` · ${terminal.tabs.length} tabs, tab ${terminal.activeTabId} in front`
+			: "";
+	return `── ${windowId} Terminal${min}${tabCount} · cwd ${memonDisplayPath(terminal.cwd, home)} · ${state}`;
 };
 
-const terminalTabsLines = (terminal: MemonTerminalState): string[] => {
-	if (terminal.tabs.length < 2) return [];
-	const tabs = terminal.tabs
-		.map(
-			(tab) =>
-				`${tab.id === terminal.activeTabId ? `[${tab.id}]` : tab.id} ${tab.cwd}${tab.running ? " (running)" : ""}`,
-		)
-		.join(" · ");
-	return [
-		`tabs: ${tabs} — memon_run { terminal: "<id>" } switches to a tab (with command, runs there), { terminal: "new" } opens one, { terminal: "<id>", closeTab: true } closes one`,
-	];
+/** A tab as one line: where it is, what runs in it or what it last ran. */
+const terminalTabLine = (
+	terminal: MemonTerminalState,
+	tab: MemonTerminalTab,
+	home: string,
+): string => {
+	const front = tab.id === terminal.activeTabId ? "*" : " ";
+	const state = tab.running
+		? `running \`${truncateLine(tab.command ?? terminal.runningCommand ?? "", 60)}\` for ${formatElapsed(terminal.startedAt)}`
+		: tab.command
+			? `last: $ ${truncateLine(tab.command, 60)} (exit ${tab.lastExitCode ?? "?"})`
+			: "nothing run yet";
+	const earlier = (tab.recent ?? []).slice(0, -1).reverse().slice(0, 3);
+	return `  ${tab.id}${front} ${memonDisplayPath(tab.cwd, home)} · ${state}${earlier.length ? ` · before: ${earlier.map((command) => truncateLine(command, 30)).join(", ")}` : ""}`;
 };
+
+const terminalTabsLines = (
+	terminal: MemonTerminalState,
+	home: string,
+): string[] =>
+	terminal.tabs.length < 2
+		? []
+		: [
+				'tabs (* in front) — memon_run { terminal: "<id>" } switches (with command, runs there) · { terminal: "new", command } runs in a new tab · { terminal: "<id>", closeTab: true } closes:',
+				...terminal.tabs.map((tab) => terminalTabLine(terminal, tab, home)),
+			];
 
 /** The running tab's latest output, while another tab is in front. */
 const runningTabLines = (terminal: MemonTerminalState): string[] =>
@@ -193,23 +322,29 @@ const serverLines = (terminal: MemonTerminalState): string[] =>
 
 const terminalInputHint = (terminal: MemonTerminalState): string =>
 	terminalRunsInFront(terminal)
-		? "[t1] input → the running command (memon_run { input } / { stop: true }); file and text commands (ls, cat, mkdir, grep…), curl, git and py still run next to it"
+		? '[t1] input → the running command (memon_run { input } / { stop: true }); file and text commands (ls, cat, mkdir, grep…), curl, git and py still run next to it; { terminal: "new", command } runs anything else in a new tab once it stops'
 		: terminal.runningCommand
 			? "[t1] input (use memon_run for commands; while the other tab's command runs, only file and text commands, curl, git and py)"
-			: "[t1] input (use memon_run for commands)";
+			: terminal.tabs.length > 1
+				? "[t1] input (use memon_run for commands)"
+				: '[t1] input (use memon_run for commands; { terminal: "new", command } opens another tab)';
 
 const terminalLines = (
 	windowId: string,
 	terminal: MemonTerminalState,
+	home: string,
 ): string[] => {
 	const running = runningState(terminal);
 	const state = terminalRunsInFront(terminal)
 		? running
 		: `idle · last exit ${terminal.lastExitCode ?? "-"}${running ? ` · tab ${terminal.runningTabId} is ${running}` : ""}`;
-	const tab = terminal.tabs.length > 1 ? ` · tab ${terminal.activeTabId}` : "";
+	const tab =
+		terminal.tabs.length > 1
+			? ` · tab ${terminal.activeTabId} of ${terminal.tabs.length}`
+			: "";
 	return [
-		`── ${windowId} Terminal${tab} · cwd ${terminal.cwd} · ${state}`,
-		...terminalTabsLines(terminal),
+		`── ${windowId} Terminal${tab} · cwd ${memonDisplayPath(terminal.cwd, home)} · ${state}`,
+		...terminalTabsLines(terminal, home),
 		...runningTabLines(terminal),
 		...terminal.lines.slice(-TERMINAL_TAIL_LINES).map(terminalLine),
 		...approvalLines(terminal),
@@ -243,8 +378,18 @@ const briefLine = (
 			return `── ${window.id} Editor${min} · ${snapshot.editor.path ? memonDisplayPath(snapshot.editor.path, snapshot.home) : "untitled"} · ${snapshot.editor.saved ? "saved" : "unsaved"}`;
 		case "viewer":
 			return `── ${window.id} Viewer${min} · ${snapshot.viewer.path ?? "nothing open"}${snapshot.viewer.kind ? ` · ${snapshot.viewer.kind}` : ""}`;
-		case "notes":
-			return `── ${window.id} Notes${min} · ${notesProgress(snapshot)}`;
+		case "tasks": {
+			const open = snapshot.tasks.items.filter((task) =>
+				isTaskOpen(task.state),
+			).length;
+			const finished = snapshot.tasks.items.length - open;
+			const file =
+				snapshot.tasks.path &&
+				snapshot.tasks.path !== memonHomePaths(snapshot.home).tasks
+					? ` · ${memonDisplayPath(snapshot.tasks.path, snapshot.home)}`
+					: "";
+			return `── ${window.id} Tasks${min}${file} · ${open} open${finished ? ` · ${finished} finished` : ""}`;
+		}
 		case "scheduler":
 			return `── ${window.id} Scheduler${min} · ${snapshot.scheduler.items.length} schedule${snapshot.scheduler.items.length === 1 ? "" : "s"}`;
 		case "skills": {
@@ -264,7 +409,9 @@ const briefLine = (
 			return `── ${window.id} Studio${min} · ${ready}/${tools.length} tools ready · ${runs.length} run${runs.length === 1 ? "" : "s"}${running ? " · running" : ""}`;
 		}
 		case "terminal":
-			return terminalBrief(window.id, min, snapshot.terminal);
+			return terminalBrief(window.id, min, snapshot.terminal, snapshot.home);
+		case "pi":
+			return piCodeBrief(snapshot, window.id, min);
 	}
 };
 
@@ -379,7 +526,9 @@ const fullLines = (
 			return lines;
 		}
 		case "terminal":
-			return terminalLines(window.id, snapshot.terminal);
+			return terminalLines(window.id, snapshot.terminal, snapshot.home);
+		case "pi":
+			return piCodeLines(snapshot, window.id);
 		default:
 			return [];
 	}
@@ -416,13 +565,8 @@ export const serializeScreen = (
 				.join(" · ") || "none"
 		}`,
 	];
-	const { items } = snapshot.notes;
-	if (items.length) {
-		const doing = items.find((item) => item.status === "doing");
-		lines.push(
-			`notes: ${notesProgress(snapshot)}${doing ? ` · now: ${truncateLine(doing.text, 80)}` : ""}`,
-		);
-	}
+	const tasks = tasksSummary(snapshot);
+	if (tasks) lines.push(tasks);
 	if (snapshot.desktop.length) {
 		lines.push(
 			`desktop (~): ${snapshot.desktop

@@ -1,8 +1,11 @@
 import React, { lazy, useMemo } from "react";
 import type {
+	ComplexContentPartCompaction,
 	ComplexContentPartExecution,
 	ComplexContentPartTool,
 } from "@/types/chat";
+import { CompactionMarker } from "./CompactionMarker";
+import { InlineUserMessage } from "./InlineUserMessage";
 import {
 	AssistantWorkflowPart,
 	AssistantWorkflowSummary,
@@ -18,8 +21,11 @@ const ReasoningBlock = lazy(() => import("./ReasoningBlock"));
 export type AssistantContentPart =
 	| { type: "text"; text: string }
 	| { type: "reasoning"; text: string }
+	/** What the user sent while the agent worked, where the agent read it. */
+	| { type: "user-message"; text: string }
 	| ComplexContentPartTool
-	| ComplexContentPartExecution;
+	| ComplexContentPartExecution
+	| ComplexContentPartCompaction;
 
 export const isAssistantContentPart = (
 	part: unknown,
@@ -54,7 +60,9 @@ export type AssistantFlowSegment =
 	| { kind: "text"; key: string; text: string }
 	| { kind: "reasoning"; key: string; text: string }
 	| { kind: "tools"; key: string; parts: ComplexContentPartTool[] }
-	| { kind: "execution"; key: string; part: ComplexContentPartExecution };
+	| { kind: "execution"; key: string; part: ComplexContentPartExecution }
+	| { kind: "compaction"; key: string; part: ComplexContentPartCompaction }
+	| { kind: "user-message"; key: string; text: string };
 
 /**
  * The order a turn is read in: the text the model wrote, then the tools it ran
@@ -76,8 +84,20 @@ export const groupAssistantParts = (
 	let group: ComplexContentPartTool[] | null = null;
 	let textCount = 0;
 	let reasoningCount = 0;
+	let userMessageCount = 0;
 
 	parts.forEach((part, index) => {
+		if (part.type === "user-message") {
+			// The tools after it are a new stretch of the reply.
+			group = null;
+			segments.push({
+				kind: "user-message",
+				key: `user-message-${userMessageCount}`,
+				text: part.text,
+			});
+			userMessageCount += 1;
+			return;
+		}
 		if (part.type === "reasoning") {
 			if (!part.text.trim()) return;
 			group = null;
@@ -103,6 +123,16 @@ export const groupAssistantParts = (
 		if (part.type === "execution") {
 			if (part.state === "complete" || index !== latestWorkflowIndex) return;
 			segments.push({ kind: "execution", key: `workflow-${part.id}`, part });
+			return;
+		}
+		if (part.type === "compaction") {
+			// The tools after it are a new stretch of the reply.
+			group = null;
+			segments.push({
+				kind: "compaction",
+				key: `compaction-${part.compaction.at}`,
+				part,
+			});
 			return;
 		}
 		if (isWorkflowEvidencePart(part)) return;
@@ -165,7 +195,8 @@ export const AssistantContentFlow: React.FC<AssistantContentFlowProps> =
 			// The step indicator is not something the model wrote: thinking is
 			// still going on while nothing written comes after it.
 			const lastWrittenSegmentIndex = segments.findLastIndex(
-				(segment) => segment.kind !== "execution",
+				(segment) =>
+					segment.kind !== "execution" && segment.kind !== "compaction",
 			);
 
 			return (
@@ -204,6 +235,19 @@ export const AssistantContentFlow: React.FC<AssistantContentFlowProps> =
 						if (segment.kind === "execution") {
 							return (
 								<AssistantWorkflowPart key={segment.key} part={segment.part} />
+							);
+						}
+						if (segment.kind === "compaction") {
+							return (
+								<CompactionMarker
+									key={segment.key}
+									compaction={segment.part.compaction}
+								/>
+							);
+						}
+						if (segment.kind === "user-message") {
+							return (
+								<InlineUserMessage key={segment.key} text={segment.text} />
 							);
 						}
 						const isLastToolGroup = index === lastToolSegmentIndex;

@@ -4,6 +4,7 @@ import type {
 } from "@/services/llm/interfaces/base-llm";
 import type { ServiceProvider } from "@/services/llm/interfaces/llm-service.interface";
 import type { ModelCategory } from "@/services/llm/interfaces/model-category";
+import type { ModelPricing } from "@/services/llm/utils/model-pricing";
 import {
 	LOCAL_RUNNER_PROVIDERS,
 	PROVIDER_REGISTRY,
@@ -31,6 +32,8 @@ export interface SelectableModel {
 	sizeByDevice?: DeviceDownloadSizes;
 	/** Reasoning models: the effort levels they accept. */
 	reasoning?: ModelReasoning;
+	/** Hosted models whose provider publishes a price. */
+	pricing?: ModelPricing;
 }
 
 /** Runs in the browser, so a model is only instantly selectable once local. */

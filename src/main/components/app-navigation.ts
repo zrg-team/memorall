@@ -2,6 +2,7 @@ import {
 	Bot,
 	Brain,
 	Bug,
+	Coins,
 	Cpu,
 	Database,
 	FileText,
@@ -35,7 +36,8 @@ export const chatNavigationItem: AppNavigationItem = {
 /**
  * Ordered as the agent harness reads: who the agent is (Agents) → what it knows
  * (Files, Memory) → what it can do (Connections, Skills) → what thinks for it
- * (Models) → where it runs (Runtime). `groupStart` marks each boundary.
+ * (Models) and what that costs (Usage) → where it runs (Runtime). `groupStart`
+ * marks each boundary.
  */
 /**
  * The workspace item that owns routes not named in this list.
@@ -86,6 +88,12 @@ export const workspaceNavigationItems: AppNavigationItem[] = [
 		icon: Cpu,
 		mobileLabel: "Models",
 		groupStart: true,
+	},
+	{
+		nameKey: "navigation.usage",
+		path: "/usage",
+		icon: Coins,
+		mobileLabel: "Usage",
 	},
 	{
 		nameKey: "sandboxPanel.title",

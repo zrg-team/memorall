@@ -1,6 +1,11 @@
 import { v4 as nanoid } from "@/utils/uuid";
 import { assertJsonValue, type JsonValue } from "@memorall/agent-harness-core";
 import type { ISandboxContainerService } from "@/services/sandbox-container";
+import {
+	BUNDLED_PYTHON_PACKAGES,
+	BUNDLED_PYTHON_NOTES,
+	BUNDLED_PYTHON_SUMMARY,
+} from "@/services/sandbox-container/python-packages";
 import type {
 	SandboxCommandResult as ContainerCommandResult,
 	SandboxServerInfo as ContainerServerInfo,
@@ -63,6 +68,13 @@ export const BROWSER_SANDBOX_CAPABILITIES: SandboxCapabilities = {
 	},
 	extensions: {
 		runtime: "almostnode",
+		// `py` in commands: Pyodide, with these packages besides the stdlib.
+		python: {
+			runtime: "pyodide",
+			packages: [...BUNDLED_PYTHON_PACKAGES],
+			summary: BUNDLED_PYTHON_SUMMARY,
+			notes: [...BUNDLED_PYTHON_NOTES],
+		},
 		browserNative: true,
 		ptyResize: false,
 	},

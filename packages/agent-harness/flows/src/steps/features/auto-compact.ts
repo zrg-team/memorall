@@ -9,6 +9,7 @@ import type {
 import { logError, logInfo, logWarn } from "../../logging/logger.js";
 import { stepRegistry } from "../../registries/step-registry.js";
 import type { ChatCompletionMessageParam } from "../../interfaces/engine/messages.js";
+import type { CompactionReport } from "../../interfaces/engine/langgraph.js";
 import type { BaseLLM } from "../../interfaces/services/llm.js";
 import type { BaseStateBase } from "../../graph/graph.base.js";
 import {
@@ -375,6 +376,9 @@ function stripBase64DataUris(text: string): string {
 }
 
 function isBase64Strippable(message: ChatCompletionMessageParam): boolean {
+	// The system prompt starts every request: rewriting it would make the
+	// provider re-read the whole conversation behind it.
+	if (message.role === "system") return false;
 	if (typeof message.content === "string" && hasBase64DataUri(message.content))
 		return true;
 	if (Array.isArray(message.content)) {
@@ -949,6 +953,185 @@ export function compactToBudget(
 	return compacted;
 }
 
+/** What compaction did to one tool call: its result cut down, or the call gone. */
+export type CompactedToolCall = "chunked" | "removed";
+export type CompactionMemory = Map<string, CompactedToolCall>;
+
+/**
+ * What compaction has done, by tool call id, so it can do exactly that
+ * again. Compaction runs before every request of a run and again on the
+ * next message, each time from the full history; left to choose afresh, it
+ * cut a slightly different set as the conversation grew, and the first cut
+ * that moved sat near the front of the history, so nearly every request
+ * re-read the conversation at full price. Re-applying the earlier cuts
+ * first keeps the bytes the same until the conversation crosses the
+ * threshold again. Tool call ids are unique, so one memory serves every
+ * conversation.
+ */
+const compactionMemory: CompactionMemory = new Map();
+const COMPACTION_MEMORY_MAX = 5_000;
+
+const remember = (
+	memory: CompactionMemory,
+	id: string,
+	what: CompactedToolCall,
+): void => {
+	memory.delete(id);
+	memory.set(id, what);
+	if (memory.size > COMPACTION_MEMORY_MAX) {
+		const oldest = memory.keys().next().value;
+		if (oldest !== undefined) memory.delete(oldest);
+	}
+};
+
+/** The cuts compaction made between `before` and `after`, kept in memory. */
+function recordCompaction(
+	before: AutoCompactState,
+	after: AutoCompactState,
+	memory: CompactionMemory,
+): void {
+	const all = (state: AutoCompactState) => [
+		...state.messages,
+		...state.outputMessages,
+	];
+	const kept = new Set<string>();
+	const results = new Map<string, ChatCompletionMessageParam>();
+	for (const message of all(after)) {
+		if (message.role === "assistant") {
+			for (const call of message.tool_calls ?? []) kept.add(call.id);
+		}
+		if (message.role === "tool") results.set(message.tool_call_id, message);
+	}
+	for (const message of all(before)) {
+		if (message.role === "assistant") {
+			for (const call of message.tool_calls ?? []) {
+				if (!kept.has(call.id)) remember(memory, call.id, "removed");
+			}
+		}
+		if (message.role === "tool" && !isChunkedToolResult(message)) {
+			const now = results.get(message.tool_call_id);
+			if (now && isChunkedToolResult(now)) {
+				remember(memory, message.tool_call_id, "chunked");
+			}
+		}
+	}
+}
+
+/**
+ * Applies the cuts compaction made before (results chunked the same way,
+ * calls removed with their results). Returns undefined when none apply.
+ */
+function replayCompaction(
+	state: AutoCompactState,
+	config: ResolvedAutoCompactConfig,
+	memory: CompactionMemory,
+): AutoCompactState | undefined {
+	if (memory.size === 0) return undefined;
+	let changed = false;
+	const replay = (messages: ChatCompletionMessageParam[]) => {
+		const removed = new Set<string>();
+		for (const message of messages) {
+			if (message.role !== "assistant" || !message.tool_calls?.length) continue;
+			if (
+				message.tool_calls.some((call) => memory.get(call.id) === "removed")
+			) {
+				for (const call of message.tool_calls) removed.add(call.id);
+			}
+		}
+		return messages.flatMap((message): ChatCompletionMessageParam[] => {
+			if (
+				message.role === "assistant" &&
+				message.tool_calls?.some((call) => removed.has(call.id))
+			) {
+				changed = true;
+				return [];
+			}
+			if (message.role !== "tool") return [message];
+			if (removed.has(message.tool_call_id)) {
+				changed = true;
+				return [];
+			}
+			if (
+				memory.get(message.tool_call_id) === "chunked" &&
+				isChunkableToolResult(message, config.toolResultTrim)
+			) {
+				changed = true;
+				return [
+					{
+						...message,
+						content: chunkToolResultContent(
+							extractText(message),
+							config.toolResultTrim,
+						),
+					},
+				];
+			}
+			return [message];
+		});
+	};
+	const next = {
+		messages: replay(state.messages),
+		outputMessages: replay(state.outputMessages),
+	};
+	return changed ? next : undefined;
+}
+
+/** What compacting `before` into `after` did, as the chat shows it. */
+export function describeCompaction(
+	before: AutoCompactState,
+	after: AutoCompactState,
+	reason: CompactionReport["reason"],
+	windowTokens: number,
+): CompactionReport {
+	const all = (state: AutoCompactState) => [
+		...state.messages,
+		...state.outputMessages,
+	];
+	const shortenedBefore = all(before).filter(isChunkedToolResult).length;
+	return {
+		reason,
+		beforeTokens: estimateStateTokens(before),
+		afterTokens: estimateStateTokens(after),
+		windowTokens,
+		shortened: Math.max(
+			0,
+			all(after).filter(isChunkedToolResult).length - shortenedBefore,
+		),
+		removed: Math.max(0, all(before).length - all(after).length),
+	};
+}
+
+/**
+ * {@link applyAutoCompactPolicy}, cache-stable: the cuts made for earlier
+ * requests are made again first, and new ones only once that is not
+ * enough. A conversation then sends the same bytes request after request
+ * (and into the next message) until it crosses the threshold again, so
+ * the provider's prompt cache keeps matching. The system prompt is never
+ * cut. `onCompacted` hears of each new compaction (not of the repeats).
+ */
+export function applyStickyAutoCompact(
+	state: AutoCompactState,
+	config: AutoCompactConfig | undefined,
+	maxTokens: number,
+	options: {
+		memory?: CompactionMemory;
+		onCompacted?: (report: CompactionReport) => void;
+	} = {},
+): AutoCompactState | undefined {
+	if (!Number.isFinite(maxTokens) || maxTokens <= 0) return undefined;
+	const memory = options.memory ?? compactionMemory;
+	const resolved = resolveAutoCompactConfig(config);
+	const replayed = replayCompaction(state, resolved, memory);
+	const base = replayed ?? state;
+	const compacted = applyAutoCompactPolicy(base, config, maxTokens);
+	if (!compacted) return replayed;
+	recordCompaction(base, compacted, memory);
+	options.onCompacted?.(
+		describeCompaction(base, compacted, "threshold", maxTokens),
+	);
+	return compacted;
+}
+
 export interface AutoCompactInput {
 	messages: ChatCompletionMessageParam[];
 	outputMessages: ChatCompletionMessageParam[];
@@ -980,19 +1163,27 @@ const definition = defineStep<
 	name: STEP_NAME,
 	execute: async ({ services, config, runLifecycle }) => {
 		try {
+			// The agent node's writer: a compaction is reported to the chat, which
+			// marks where in the reply it happened.
+			let report: ((report: CompactionReport) => void) | undefined;
 			runLifecycle?.onBeforeStart(
 				"auto-compact",
 				"agent",
-				async (state: Record<string, unknown>) => {
+				async (state: Record<string, unknown>, runConfig) => {
+					const writer = runConfig?.writer;
+					if (writer) {
+						report = (metadata) => writer({ type: "compact", metadata });
+					}
 					const agentState = state as unknown as BaseStateBase;
 					const maxTokens = await services.llm.getMaxModelTokens();
-					return applyAutoCompactPolicy(
+					return applyStickyAutoCompact(
 						{
 							messages: agentState.messages,
 							outputMessages: agentState.outputMessages,
 						},
 						config,
 						maxTokens,
+						{ onCompacted: (compaction) => report?.(compaction) },
 					);
 				},
 			);
@@ -1009,14 +1200,27 @@ const definition = defineStep<
 				"auto-compact",
 				(state: Record<string, unknown>, request) => {
 					const agentState = state as unknown as BaseStateBase;
+					const before = {
+						messages: agentState.messages,
+						outputMessages: agentState.outputMessages,
+					};
 					const compacted = compactToBudget(
-						{
-							messages: agentState.messages,
-							outputMessages: agentState.outputMessages,
-						},
+						before,
 						config,
 						request.budgetTokens,
 					);
+					// The retry and the requests after it keep these cuts.
+					if (compacted) {
+						recordCompaction(before, compacted, compactionMemory);
+						report?.(
+							describeCompaction(
+								before,
+								compacted,
+								"token-budget",
+								request.budgetTokens,
+							),
+						);
+					}
 					return compacted as Partial<Record<string, unknown>> | undefined;
 				},
 			);

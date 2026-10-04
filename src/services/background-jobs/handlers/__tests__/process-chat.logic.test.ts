@@ -595,6 +595,98 @@ describe("stopping a run keeps it like a finished one", () => {
 	});
 });
 
+describe("messages sent into a run in progress", () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+	});
+
+	const job = (id: string, jobType: string, payload: unknown) =>
+		({
+			id,
+			jobType,
+			status: "pending",
+			createdAt: new Date("2026-01-01T00:00:00.000Z"),
+			progress: [],
+			payload,
+		}) as never;
+
+	it("reaches the run's inbox while it runs, and is kept where the agent read it", async () => {
+		const { ChatHandler } = await import("../process-chat");
+		const { FLOW_RUN_INBOX_RUNTIME_KEY } = await import(
+			"@memorall/agent-harness-flows/context/run-inbox"
+		);
+		const { createMemorallFlowRun } = await import("@/services/agent-harness");
+		const handler = new ChatHandler();
+		const { dependencies, dispatches } = createRecorder();
+		const inject = (content: string) =>
+			handler.process(
+				"inject-1",
+				job("inject-1", "inject-chat-message", {
+					targetJobId: "job-1",
+					message: { id: "m-1", content },
+				}),
+				dependencies,
+			);
+
+		// No run yet: refused, so the sender sends it as a new message.
+		expect(await inject("too early")).toEqual({ accepted: false });
+
+		let taken: unknown;
+		flowStream.mockImplementation(async function* () {
+			yield [
+				"custom",
+				{
+					type: "llm",
+					chunk: chunk({ role: "assistant", content: "Reading." }),
+				},
+			];
+			expect(await inject("Also check the logs")).toEqual({ accepted: true });
+			// What the agent loop does before its next request.
+			const runtimeVars = vi
+				.mocked(createMemorallFlowRun)
+				.mock.calls.at(-1)?.[0].input.runtimeVars as Record<
+				string,
+				{ take: () => unknown }
+			>;
+			taken = runtimeVars[FLOW_RUN_INBOX_RUNTIME_KEY]?.take();
+			yield [
+				"custom",
+				{ type: "user-message", id: "m-1", content: "Also check the logs" },
+			];
+			yield [
+				"custom",
+				{ type: "llm", chunk: chunk({ role: "assistant", content: "Done." }) },
+			];
+		});
+
+		const result = (await handler.process(
+			"job-1",
+			job("job-1", "chat", {
+				messages: [{ role: "user", content: "read it" }],
+				model: "test-model",
+				mode: "agent",
+			}),
+			dependencies,
+		)) as Record<string, unknown>;
+
+		expect(taken).toEqual([{ id: "m-1", content: "Also check the logs" }]);
+		expect(
+			dispatches.find((d) => d.result?.type === "user-message")?.result,
+		).toEqual({
+			type: "user-message",
+			id: "m-1",
+			content: "Also check the logs",
+		});
+		expect(result.parts).toEqual([
+			{ role: "assistant", content: "Reading." },
+			{ role: "user", content: "Also check the logs" },
+			{ role: "assistant", content: "Done." },
+		]);
+		// The run is over: refused again.
+		expect(await inject("too late")).toEqual({ accepted: false });
+	});
+});
+
 describe("a split conversation does not turn plain chat into an agent", () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
@@ -661,6 +753,11 @@ describe("a split conversation does not turn plain chat into an agent", () => {
 						"run.id": expect.stringMatching(/^chat:/),
 						"thread.history.conversationId": "conversation-1",
 						"thread.history.separatorId": "separator-1",
+						// What the user writes while the run goes on.
+						__flowRunInbox: expect.objectContaining({
+							push: expect.any(Function),
+							take: expect.any(Function),
+						}),
 					},
 				}),
 			}),

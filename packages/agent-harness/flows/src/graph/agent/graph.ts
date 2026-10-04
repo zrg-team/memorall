@@ -1,5 +1,6 @@
 import type { LangGraphRunnableConfig } from "@langchain/langgraph";
 import { END, START, StateGraph } from "@langchain/langgraph";
+import { getFlowRunInbox } from "../../context/run-inbox.js";
 import { getFlowRunLifecycle } from "../../context/run-lifecycle.js";
 import { getFlowRuntimeVars } from "../../context/runtime-context.js";
 import { findEnabledStepByName } from "../../interfaces/config/flow-config.js";
@@ -232,12 +233,33 @@ export class AgentGraph extends GraphBase<
 			};
 		}
 
+		// What the user sent while the agent worked: read now, after the results
+		// it is working on, rather than once the whole reply is over. It joins
+		// working memory, so the reply keeps it where it was read.
+		const sent = getFlowRunInbox(runConfig)?.take() ?? [];
+		for (const message of sent) {
+			runConfig?.writer?.({
+				type: "user-message",
+				id: message.id,
+				content: message.content,
+			});
+		}
+		const workingMemory = sent.length
+			? [
+					...state.outputMessages,
+					...sent.map((message) => ({
+						role: "user" as const,
+						content: message.content,
+					})),
+				]
+			: state.outputMessages;
+
 		// Full LLM context: stable history + working memory accumulated so far
 		const tools = this.combinedTools.map((t) => t.tool);
 
 		logInfo(
 			"[AGENT] Calling LLM with",
-			state.messages.length + state.outputMessages.length,
+			state.messages.length + workingMemory.length,
 			"messages and",
 			tools.length,
 			"tools",
@@ -246,7 +268,7 @@ export class AgentGraph extends GraphBase<
 		const turn = await streamAssistantTurn(
 			{
 				messages: state.messages,
-				outputMessages: state.outputMessages,
+				outputMessages: workingMemory,
 				reminders: state.reminders,
 			},
 			{

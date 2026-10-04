@@ -60,7 +60,7 @@ const snapshot = (
 		loading: false,
 		screenLine: 0,
 	},
-	notes: { items: [], text: "" },
+	tasks: { items: [] },
 	scheduler: { agentId: null, items: [], loading: false },
 	studio: { tools: [], selected: null, runs: [], loading: false },
 	skills: { agentId: null, items: [], open: null, loading: false },
@@ -80,7 +80,15 @@ const snapshot = (
 		lastOutputAt: null,
 		lastExitCode: 0,
 		approval: null,
-		tabs: [{ id: "1", cwd: "/notes", running: false }],
+		tabs: [
+			{
+				id: "1",
+				cwd: "/notes",
+				running: false,
+				command: "ls",
+				lastExitCode: 0,
+			},
+		],
 		activeTabId: "1",
 		runningTabId: null,
 	},
@@ -120,6 +128,74 @@ describe("serializeScreen", () => {
 		expect(screen).toContain('[f4] button "New file"');
 		expect(screen).toContain(
 			"── w2 Terminal (minimized) · cwd /notes · last: $ ls (exit 0)",
+		);
+	});
+
+	it("shows pi code in front: what it does, the agent's request and its conversation", () => {
+		const pi = {
+			id: "w3",
+			app: "pi" as const,
+			x: 0,
+			y: 0,
+			w: 0.7,
+			h: 0.8,
+			z: 20,
+			minimized: false,
+			maximized: false,
+		};
+		const base = snapshot();
+		const screen = serializeScreen({
+			...base,
+			windows: [...base.windows, pi],
+			focusedWindowId: "w3",
+			piCode: {
+				status: "running",
+				working: true,
+				activity: "running bash",
+				cwd: "/agents/guest/todo",
+				model: "openrouter/coder",
+				thinkingLevel: "medium",
+				contextPercent: 12,
+				earlier: 4,
+				transcript: [
+					{ kind: "user", text: "Build a todo API" },
+					{ kind: "tool", name: "write", text: "server.js" },
+					{ kind: "bash", text: "npm test → exit 1", failed: true },
+					{ kind: "assistant", text: "Tests fail; fixing." },
+				],
+				queued: [{ mode: "followUp", text: "Add a README" }],
+			},
+		});
+		expect(screen).toContain(
+			"── w3 pi code · working: running bash · ~/todo · openrouter/coder (thinking medium) · context 12%",
+		);
+		expect(screen).toContain(
+			[
+				"conversation (4 earlier entries left out):",
+				"user: Build a todo API",
+				"  ✓ write server.js",
+				"  ✗ ! npm test → exit 1",
+				"pi: Tests fail; fixing.",
+				"queued follow-up: Add a README",
+				'memon_code { action: "wait" } waits for it · a prompt steers it · { action: "stop" } stops it',
+			].join("\n"),
+		);
+
+		const asking = serializeScreen({
+			...base,
+			windows: [...base.windows, pi],
+			focusedWindowId: "w3",
+			piCode: {
+				status: "idle",
+				working: false,
+				approval: { id: "p1", task: "Build a todo API", requestedAt: 0 },
+			},
+		});
+		expect(asking).toContain(
+			"── w3 pi code · waiting for the user to allow your request",
+		);
+		expect(asking).toContain(
+			'your request waits for the user in this window: "Build a todo API"',
 		);
 	});
 

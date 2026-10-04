@@ -134,10 +134,11 @@ export const TOOL_DISPLAY_INFO: Record<
 			"Show a visual written in OpenUI in the MemonOS Bot Visualize app and save it",
 		descriptionKey: "agentSettings.toolDescriptions.memon_visualize",
 	},
-	memon_notes: {
-		name: "Update Notes",
-		description: "Plan and track the task in the MemonOS Bot Notes app",
-		descriptionKey: "agentSettings.toolDescriptions.memon_notes",
+	memon_tasks: {
+		name: "Update Tasks",
+		description:
+			"Plan and track tasks in the MemonOS Bot Tasks app, kept across chats",
+		descriptionKey: "agentSettings.toolDescriptions.memon_tasks",
 	},
 	memon_schedule: {
 		name: "Manage Schedules",
@@ -166,5 +167,11 @@ export const TOOL_DISPLAY_INFO: Record<
 		description:
 			"View the user's connected apps and which ones this agent uses",
 		descriptionKey: "agentSettings.toolDescriptions.memon_connections",
+	},
+	memon_code: {
+		name: "Use pi code",
+		description:
+			"Hand coding work to pi code, the coding agent on the computer, after the user confirms",
+		descriptionKey: "agentSettings.toolDescriptions.memon_code",
 	},
 };

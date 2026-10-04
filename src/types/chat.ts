@@ -106,6 +106,34 @@ export interface ComplexContentPartExecution {
 
 export type AssistantExecutionPart = ComplexContentPartExecution;
 
+/**
+ * The conversation was compacted to fit the model's window, in the middle of
+ * a reply. Kept in the message's metadata (never sent to the model) so the
+ * reply can show where it happened.
+ */
+export interface ChatCompaction {
+	/** "threshold": the window was filling up; "token-budget": the provider refused. */
+	reason: "threshold" | "token-budget";
+	/** Estimated prompt tokens before and after. */
+	beforeTokens: number;
+	afterTokens: number;
+	/** The model's window, or the budget the provider named. */
+	windowTokens: number;
+	/** Tool results cut to their head and tail. */
+	shortened: number;
+	/** Messages taken out (old tool calls with their results, old turns). */
+	removed: number;
+	/** How many of the reply's parts came before it: it is shown before the next. */
+	atPart: number;
+	at: string;
+}
+
+/** UI-only: where a compaction happened in a reply. */
+export interface ComplexContentPartCompaction {
+	type: "compaction";
+	compaction: ChatCompaction;
+}
+
 /** A skill selected from the mention popup — content is injected directly into the message */
 export interface AttachedSkillRef {
 	name: string;

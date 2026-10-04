@@ -19,6 +19,8 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "@/main/components/ui/dropdown-menu";
+import { ConversationCostBadge } from "@/main/modules/chat/components/ConversationCostBadge";
+import type { ConversationCost } from "@/main/modules/chat/utils/conversation-cost-format";
 import type { Conversation } from "@/services/database/types";
 import {
 	formatConversationTime,
@@ -28,6 +30,8 @@ import {
 
 interface ConversationRowProps {
 	conversation: Conversation;
+	/** What the chat has cost so far, when known. */
+	cost?: ConversationCost;
 	isActive: boolean;
 	isPinned: boolean;
 	/** A reply is being written in this chat. */
@@ -40,6 +44,7 @@ interface ConversationRowProps {
 
 export const ConversationRow: React.FC<ConversationRowProps> = ({
 	conversation,
+	cost,
 	isActive,
 	isPinned,
 	isRunning = false,
@@ -151,8 +156,11 @@ export const ConversationRow: React.FC<ConversationRowProps> = ({
 						{formatConversationTime(conversation)}
 					</time>
 				</span>
-				<span className="mt-0.5 block truncate text-xs text-muted-foreground">
-					{getConversationPreview(conversation)}
+				<span className="mt-0.5 flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+					<span className="min-w-0 flex-1 truncate">
+						{getConversationPreview(conversation)}
+					</span>
+					<ConversationCostBadge cost={cost} variant="list" />
 				</span>
 			</button>
 

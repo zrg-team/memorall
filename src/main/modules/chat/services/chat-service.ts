@@ -17,6 +17,7 @@ import type {
 	ComplexContent,
 	ConversationContext,
 	MessageParts,
+	ChatCompaction,
 	ToolExecutionRecord,
 } from "@/types/chat";
 import type { AggregatedTokenUsage } from "@/services/llm/utils/token-usage";
@@ -64,7 +65,19 @@ export interface ChatStreamCallbacks {
 		metadata?: Record<string, unknown>;
 	}) => void;
 	onToolExecution?: (execution: ToolExecutionRecord) => void;
+	/** The conversation was compacted before the next request. */
+	onCompaction?: (compaction: ChatCompaction) => void;
+	/** The run started; its job id is what `injectMessage` and stop address. */
+	onRunStarted?: (jobId: string) => void;
+	/** The agent read a message injected into the run. */
+	onInjectedMessageRead?: (message: InjectedMessage) => void;
 	onError?: (error: string) => void;
+}
+
+/** A message sent to a run in progress, read before the agent's next request. */
+export interface InjectedMessage {
+	id: string;
+	content: string;
 }
 
 export interface ChatStreamResult {
@@ -259,6 +272,7 @@ export class ChatService {
 					error: "Chat request failed",
 				};
 			}
+			callbacks?.onRunStarted?.(result.jobId);
 
 			// Stopping ends the run where it runs, not just this reader: the agent
 			// loop must not go on in the background. The run then reports back like
@@ -379,6 +393,17 @@ export class ChatService {
 							callbacks?.onExecuteStart?.(event);
 						} else if (chatResult.type === "tool-execution") {
 							callbacks?.onToolExecution?.(chatResult.execution);
+						} else if (chatResult.type === "compaction") {
+							callbacks?.onCompaction?.(chatResult.compaction);
+						} else if (chatResult.type === "user-message") {
+							// Placed where the agent read it, as the saved reply has it.
+							messagePartsAccumulator.addUserMessage(chatResult.content);
+							parts = messagePartsAccumulator.toParts();
+							callbacks?.onParts?.(parts);
+							callbacks?.onInjectedMessageRead?.({
+								id: chatResult.id,
+								content: chatResult.content,
+							});
 						} else if (chatResult.type === "final") {
 							// Handle final content update (e.g., after citation step)
 							// This replaces the accumulated content with the final version
@@ -437,6 +462,30 @@ export class ChatService {
 			throw error;
 		} finally {
 			this.activeJobs.delete(jobId);
+		}
+	}
+
+	/**
+	 * Hand a message to a run in progress; the agent reads it before its next
+	 * request. False when the run is already over (or cannot take messages):
+	 * the caller then sends it as a new message.
+	 */
+	async injectMessage(
+		jobId: string,
+		message: InjectedMessage,
+	): Promise<boolean> {
+		try {
+			const execution = await backgroundJob.execute(
+				"inject-chat-message",
+				{ targetJobId: jobId, message },
+				{ stream: false },
+			);
+			if (!("promise" in execution)) return false;
+			const outcome = await execution.promise;
+			const result = (outcome as { result?: { accepted?: unknown } }).result;
+			return result?.accepted === true;
+		} catch {
+			return false;
 		}
 	}
 

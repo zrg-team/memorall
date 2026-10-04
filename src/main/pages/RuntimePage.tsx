@@ -22,6 +22,7 @@ import {
 	useMemonAgents,
 } from "@/main/components/molecules/MemonComputer";
 import { useMemonMachineStore } from "@/main/stores/memon-machine";
+import { useShellLayoutStore } from "@/main/stores/shell-layout";
 import { useRuntimeSessionsStore } from "@/main/stores/runtime-sessions";
 import { useChatStore } from "@/main/stores/chat";
 import MarkdownMessage from "@/main/modules/chat/components/MarkdownMessage";
@@ -437,10 +438,15 @@ export const RuntimePage: React.FC = () => {
 	const sectionCount =
 		Number(hasArtifacts) + Number(showRuntimeTab) + Number(hasComputer);
 	const showSectionTabs = sectionCount > 1;
+	// The computer, maximized, fills the right panel: no page header above it.
+	const computerMaximized =
+		useShellLayoutStore((state) => state.rightPanelMaximized) &&
+		section === "computer";
 
 	return (
 		<div className="flex h-full min-h-0 flex-col bg-background">
 			<PageHeader
+				className={computerMaximized ? "hidden" : undefined}
 				icon={<Server size={18} />}
 				title={t("sandboxPanel.title")}
 				description={t("sandboxPanel.description", {

@@ -120,6 +120,16 @@ const createPorts = () => {
 				}
 				if (dirs.has(from)) dirs.add(to);
 			}),
+			remove: vi.fn(async (target: string) => {
+				for (const path of [...files.keys()]) {
+					if (path === target || path.startsWith(`${target}/`)) {
+						files.delete(path);
+					}
+				}
+				for (const dir of [...dirs]) {
+					if (dir === target || dir.startsWith(`${target}/`)) dirs.delete(dir);
+				}
+			}),
 			subscribe: vi.fn(() => () => undefined),
 			zip: vi.fn(async (folder: string) => ({
 				name: `${folder.split("/").pop()}.zip`,
@@ -453,16 +463,20 @@ describe("MemonMachine", () => {
 		);
 	});
 
-	it("keeps the command history in ~/my.terminal, with clear and history", async () => {
+	it("keeps the command history in ~/.terminal_history, with clear and history", async () => {
 		const { machine, files: stored } = createMachine();
 		await machine.prepareDesktop();
 		await machine.terminal.runCommand("ls");
 		await machine.terminal.runCommand("ls");
 		await machine.terminal.runCommand("node app.js");
 		await machine.flushWrites();
-		expect(JSON.parse(stored.get("/agents/guest/my.terminal") ?? "")).toEqual({
-			history: ["ls", "node app.js"],
-		});
+		// One command per line, like ~/.bash_history; hidden from the desktop.
+		expect(stored.get("/agents/guest/.terminal_history")).toBe(
+			"ls\nnode app.js\n",
+		);
+		expect(machine.snapshot().terminal.historyPath).toBe(
+			"/agents/guest/.terminal_history",
+		);
 
 		await machine.terminal.runCommand("history");
 		expect(
@@ -478,8 +492,8 @@ describe("MemonMachine", () => {
 		// Another computer of the agent's reads it back.
 		const { machine: next, files: nextFiles } = createMachine();
 		nextFiles.set(
-			"/agents/guest/my.terminal",
-			stored.get("/agents/guest/my.terminal") ?? "",
+			"/agents/guest/.terminal_history",
+			stored.get("/agents/guest/.terminal_history") ?? "",
 		);
 		await next.prepareDesktop();
 		expect(next.snapshot().terminal.history).toEqual([
@@ -492,9 +506,7 @@ describe("MemonMachine", () => {
 		machine.clearTerminalHistory();
 		await machine.flushWrites();
 		expect(machine.snapshot().terminal.history).toEqual([]);
-		expect(JSON.parse(stored.get("/agents/guest/my.terminal") ?? "")).toEqual({
-			history: [],
-		});
+		expect(stored.get("/agents/guest/.terminal_history")).toBe("");
 	});
 
 	it("completes on Tab: a command by name, anything else from the tab's folder", async () => {
@@ -773,11 +785,18 @@ describe("MemonMachine", () => {
 			runTerminalAction(machine.terminal, { command: "ls", terminal: "new" }),
 		).resolves.toContain("(Terminal tab 1), which keeps running");
 		expect(machine.terminal.activeTabId).toBe("2");
-		// The server's output stays on screen while tab 2 is in front.
+		// The server's output stays on screen while tab 2 is in front, and
+		// every tab says what runs in it or what it ran last.
 		const screen = machine.readScreen();
 		expect(screen).toContain("tab 1's latest output");
 		expect(screen).toContain("  | listening on 3000");
-		expect(screen).toContain("[2] /");
+		expect(screen).toContain("Terminal · tab 2 of 2 · cwd ~");
+		expect(screen).toContain("  1  ~ · running `node server.js` for 0s");
+		expect(screen).toContain("  2* ~ · last: $ ls (exit 0)");
+		expect(machine.snapshot().terminal.tabs).toMatchObject([
+			{ id: "1", running: true, command: "node server.js", lastExitCode: null },
+			{ id: "2", running: false, command: "ls", lastExitCode: 0 },
+		]);
 
 		await expect(
 			runTerminalAction(machine.terminal, { terminal: "2", stop: true }),
@@ -798,6 +817,27 @@ describe("MemonMachine", () => {
 			"1",
 		]);
 		expect(machine.terminal.running?.command).toBe("node server.js");
+	});
+
+	it("tells the agent each tab's earlier commands, and where a command ran", async () => {
+		const { machine } = createMachine();
+		await expect(
+			runTerminalAction(machine.terminal, { command: "ls" }),
+		).resolves.toBe("Ran `ls` in Terminal tab 1 (exit 0).");
+		await runTerminalAction(machine.terminal, { command: "git status" });
+		await runTerminalAction(machine.terminal, {
+			command: "npm test",
+			terminal: "new",
+		});
+		expect(machine.snapshot().terminal.tabs[0]?.recent).toEqual([
+			"ls",
+			"git status",
+		]);
+		const screen = machine.readScreen();
+		expect(screen).toContain(
+			"  1  ~ · last: $ git status (exit 0) · before: ls",
+		);
+		expect(screen).toContain("  2* ~ · last: $ npm test (exit 0)");
 	});
 
 	it("runs curl and the shell's tools next to a running server, and nothing else", async () => {
@@ -1140,7 +1180,7 @@ describe("MemonMachine", () => {
 		const { machine, files, ports } = createMachine();
 		machine.setAgent("agent-1", "/agents/Researcher");
 		await machine.prepareDesktop();
-		machine.setNotes(["Read sources"]);
+		machine.addTask({ title: "Read sources", by: "agent" });
 		await machine.openFolder("~");
 		await machine.terminal.runCommand("cd ~");
 		await machine.flushWrites();
@@ -1152,134 +1192,320 @@ describe("MemonMachine", () => {
 		expect(machine.home).toBe("/agents/Analyst");
 		expect(machine.snapshot().files.cwd).toBe("/agents/Analyst");
 		expect(machine.snapshot().terminal.cwd).toBe("/agents/Analyst");
-		expect(machine.snapshot().notes.items.map((item) => item.text)).toEqual([
+		expect(machine.snapshot().tasks.items.map((task) => task.title)).toEqual([
 			"Read sources",
 		]);
-		machine.addNotes(["Write it up"]);
+		machine.addTask({ title: "Write it up", by: "agent" });
 		await machine.flushWrites();
-		expect(files.has("/agents/Researcher/my.notes")).toBe(false);
+		expect(files.has("/agents/Researcher/.tasks")).toBe(false);
 		expect(
-			JSON.parse(files.get("/agents/Analyst/my.notes") ?? "").items,
+			JSON.parse(files.get("/agents/Analyst/.tasks") ?? "").tasks,
 		).toHaveLength(2);
 	});
 
-	it("tracks a checklist in Notes without taking the agent's focus", async () => {
+	it("tracks tasks in Tasks without taking the agent's focus", async () => {
+		vi.setSystemTime(new Date(2026, 9, 4, 9, 30));
 		const { machine } = createMachine();
 		await machine.openFolder("/notes");
 		const filesWindow = machine.findWindow("files")?.id;
 
-		machine.setNotes(["Search sources", "Read the top 3", "Write the report"]);
-		machine.setNoteStatus(1, "done");
-		machine.setNoteStatus(2, "doing");
+		const task = machine.addTask({
+			title: "Write the report",
+			checklist: ["Search sources", "Read the top 3", "Write it"],
+			state: "in_progress",
+			by: "agent",
+		});
+		machine.checkTaskItem(task.id, 1, true);
+		machine.addTask({ title: "Add charts", by: "agent" });
+		machine.addTask({ title: "Translate it", by: "user" });
 
 		expect(machine.snapshot().focusedWindowId).toBe(filesWindow);
 		let screen = machine.readScreen();
-		expect(screen).toContain("notes: 1/3 done · now: Read the top 3");
-		expect(screen).toContain("Notes · 1/3 done");
+		expect(screen).toContain(
+			"tasks: 1 in progress · 1 approved (waiting for you) · 1 new (waiting for the user's approval) · now: #1 Write the report (1/3)",
+		);
+		expect(screen).toContain("Tasks · 3 open");
 
-		machine.focusWindow(machine.findWindow("notes")!.id);
-		machine.writeNotesText("Source: example.com");
+		machine.focusWindow(machine.findWindow("tasks")!.id);
 		screen = machine.readScreen();
+		expect(screen).toContain("[n1] New task: (empty) · [n2] Add");
 		expect(screen).toContain(
-			'[x] 1. [n1] Wording: "Search sources" · [n2] Undo · [n3] Remove',
+			"[~] #1 Write the report — added by the agent 2026-10-04 09:30 (in progress)",
 		);
+		expect(screen).toContain("[n3] [x] Search sources");
+		expect(screen).toContain("[n4] [ ] Read the top 3");
 		expect(screen).toContain(
-			'[~] 2. [n4] Wording: "Read the top 3" · [n5] Done',
+			"[n6] State: in progress (choose: new | approved | in_progress | done | dropped) · [n7] Edit",
 		);
-		expect(screen).toContain('[ ] 3. [n7] Wording: "Write the report"');
-		expect(screen).toContain("[n12] Notes:\n  | Source: example.com");
-		expect(() => machine.setNoteStatus(9, "done")).toThrow(
-			"Notes has no step 9; it has 3.",
+		// The user approves a proposal; the agent never sees that button.
+		expect(screen).toContain(
+			"[ ] #2 Add charts — added by the agent 2026-10-04 09:30 (new · waiting for approval)",
+		);
+		expect(screen).not.toContain("Approve");
+		// Started, approved, proposed: the order work goes in.
+		expect(screen.indexOf("#3 Translate it")).toBeLessThan(
+			screen.indexOf("#2 Add charts"),
+		);
+		expect(() => machine.checkTaskItem(1, 9, true)).toThrow(
+			"Task #1 has no item 9; its checklist has 3.",
+		);
+		expect(() => machine.setTaskState(9, "done")).toThrow(
+			"Tasks has no task #9. Open tasks: #1, #2, #3.",
 		);
 	});
 
-	it("keeps Notes in ~/my.notes, and opens .notes files in Notes", async () => {
+	it("keeps finished tasks as the record, and lets only the user delete one", async () => {
+		const { machine } = createMachine();
+		const first = machine.addTask({
+			title: "Ship v1",
+			checklist: ["Build", "Release"],
+			by: "user",
+		});
+		expect(first.state).toBe("approved");
+		machine.setTaskState(first.id, "in_progress");
+		const done = machine.setTaskState(first.id, "done");
+		expect(done.finishedAt).toEqual(expect.any(Number));
+		const second = machine.addTask({ title: "Old idea", by: "agent" });
+		machine.setTaskState(second.id, "dropped");
+		machine.focusWindow(machine.findWindow("tasks")!.id);
+
+		let screen = machine.readScreen();
+		expect(screen).toContain("Tasks · 0 open · 2 finished");
+		expect(screen).toContain("No open tasks.");
+		expect(screen).toContain("Finished (2): [n3] [off] Show");
+		expect(screen).not.toContain("Ship v1");
+		await machine.actOnControl("n3", "toggle");
+		screen = machine.readScreen();
+		expect(screen).toContain("[x] #1 Ship v1");
+		expect(screen).toContain("- #2 Old idea");
+
+		// A finished task folds its checklist away until asked for it.
+		expect(screen).not.toContain("Release");
+		const details = /\[(n\d+)\] Details/.exec(screen)?.[1];
+		if (!details) throw new Error("no Details on the screen");
+		await machine.actOnControl(details, "click");
+		screen = machine.readScreen();
+		expect(screen).toContain("[ ] Release");
+		expect(screen).toMatch(/\[n\d+\] Hide details/);
+
+		// Reopened, a task loses its finish time; ids are never reused.
+		expect(machine.setTaskState(first.id, "in_progress").finishedAt).toBe(
+			undefined,
+		);
+		machine.removeTask(second.id);
+		expect(machine.addTask({ title: "Next", by: "agent" }).id).toBe(2);
+		machine.removeTask(2);
+		expect(machine.addTask({ title: "After", by: "agent" }).id).toBe(2);
+	});
+
+	it("keeps tasks in the hidden ~/.tasks, and opens .tasks files in Tasks", async () => {
 		const { machine, files } = createMachine();
 		await machine.prepareDesktop();
-		expect(files.has("/agents/guest/my.notes")).toBe(false);
+		expect(files.has("/agents/guest/.tasks")).toBe(false);
 
-		machine.setNotes(["Search sources", "Write the report"]);
-		machine.setNoteStatus(1, "done");
-		machine.writeNotesText("Source: example.com");
-		await machine.flushWrites();
-		expect(JSON.parse(files.get("/agents/guest/my.notes") ?? "")).toEqual({
-			items: [
-				{ text: "Search sources", status: "done" },
-				{ text: "Write the report", status: "todo" },
-			],
-			text: "Source: example.com",
+		const task = machine.addTask({
+			title: "Write the report",
+			checklist: ["Search sources", "Write it"],
+			state: "in_progress",
+			by: "agent",
 		});
+		machine.checkTaskItem(task.id, 1, true);
+		await machine.flushWrites();
+		const saved = JSON.parse(files.get("/agents/guest/.tasks") ?? "");
+		expect(saved.tasks).toEqual([
+			expect.objectContaining({
+				id: 1,
+				title: "Write the report",
+				state: "in_progress",
+				createdBy: "agent",
+				createdAt: expect.stringMatching(/^\d{4}-\d\d-\d\dT/),
+				checklist: [
+					{ text: "Search sources", done: true },
+					{ text: "Write it", done: false },
+				],
+			}),
+		]);
+		// Hidden, like a dotfile: not on the desktop.
+		await machine.refreshDesktop();
+		expect(machine.snapshot().desktop.map((entry) => entry.name)).not.toContain(
+			".tasks",
+		);
 
 		// The next computer reads them back.
 		const { machine: next, files: nextFiles } = createMachine();
 		nextFiles.set(
-			"/agents/guest/my.notes",
-			files.get("/agents/guest/my.notes") ?? "",
+			"/agents/guest/.tasks",
+			files.get("/agents/guest/.tasks") ?? "",
 		);
 		await next.prepareDesktop();
-		expect(next.snapshot().notes).toMatchObject({
+		expect(next.snapshot().tasks).toMatchObject({
 			items: [
-				{ text: "Search sources", status: "done" },
-				{ text: "Write the report", status: "todo" },
+				{
+					title: "Write the report",
+					checklist: [{ done: true }, { done: false }],
+				},
 			],
-			text: "Source: example.com",
-			path: "/agents/guest/my.notes",
+			path: "/agents/guest/.tasks",
 		});
 
-		// Another .notes file opens in Notes; the Editor never shows it.
+		// Another .tasks file opens in Tasks; the Editor never shows it.
 		files.set(
-			"/agents/guest/trip.notes",
-			JSON.stringify({ items: ["Book flights"], text: "" }),
+			"/agents/guest/Trip.tasks",
+			JSON.stringify({ tasks: [{ title: "Book flights" }] }),
 		);
-		await machine.openFile("~/trip.notes");
+		await machine.openFile("~/Trip.tasks");
 		expect(machine.findWindow("editor")).toBeUndefined();
 		expect(machine.snapshot().focusedWindowId).toBe(
-			machine.findWindow("notes")?.id,
+			machine.findWindow("tasks")?.id,
 		);
-		expect(machine.snapshot().notes.path).toBe("/agents/guest/trip.notes");
-		machine.setNoteStatus(1, "done");
+		expect(machine.snapshot().tasks.path).toBe("/agents/guest/Trip.tasks");
+		expect(machine.readScreen()).toContain("Tasks · ~/Trip.tasks · 1 open");
+		machine.setTaskState(1, "done");
 		await machine.flushWrites();
 		expect(
-			JSON.parse(files.get("/agents/guest/trip.notes") ?? "").items,
-		).toEqual([{ text: "Book flights", status: "done" }]);
+			JSON.parse(files.get("/agents/guest/Trip.tasks") ?? "").tasks[0],
+		).toMatchObject({ title: "Book flights", state: "done" });
 
-		// A file that is not notes is reported, not lost.
-		files.set("/agents/guest/broken.notes", "{ not json");
-		await machine.openFile("~/broken.notes");
-		expect(machine.snapshot().notes.error).toContain("is not notes");
-		expect(machine.snapshot().notes.items.map((item) => item.text)).toEqual([
+		// A file that is not tasks is reported, not lost.
+		files.set("/agents/guest/broken.tasks", "{ not json");
+		await machine.openFile("~/broken.tasks");
+		expect(machine.snapshot().tasks.error).toContain("is not tasks");
+		expect(machine.snapshot().tasks.items.map((item) => item.title)).toEqual([
 			"Book flights",
 		]);
 	});
 
-	it("opens .notes and .terminal files as JSON text without their apps", async () => {
+	it("moves an older version's notes and history to their hidden files", async () => {
+		const { machine, files } = createMachine();
+		files.set(
+			"/agents/guest/my.notes",
+			JSON.stringify({
+				items: [
+					{ text: "Search sources", status: "done" },
+					{ text: "Write it", status: "doing" },
+				],
+				text: "Source: example.com",
+			}),
+		);
+		files.set(
+			"/agents/guest/my.terminal",
+			JSON.stringify({ history: ["ls", "node app.js"] }),
+		);
+		await machine.prepareDesktop();
+
+		expect(files.has("/agents/guest/my.notes")).toBe(false);
+		expect(files.has("/agents/guest/my.terminal")).toBe(false);
+		expect(files.get("/agents/guest/Notes.md")).toBe(
+			"# Notes\n\nSource: example.com\n",
+		);
+		expect(machine.snapshot().tasks.items).toMatchObject([
+			{
+				title: "Earlier plan",
+				state: "in_progress",
+				checklist: [
+					{ text: "Search sources", done: true },
+					{ text: "Write it", done: false },
+				],
+			},
+		]);
+		expect(machine.snapshot().terminal.history).toEqual(["ls", "node app.js"]);
+		expect(
+			machine
+				.snapshot()
+				.desktop.map((entry) => entry.name)
+				.sort(),
+		).toEqual(["Bot.md", "Memory.md", "Notes.md"]);
+	});
+
+	it("opens .tasks and .terminal files as JSON text without their apps", async () => {
 		const { machine, files } = createMachine({
 			apps: {
 				...DEFAULT_MEMON_FEATURE_CONFIG.apps,
-				notes: false,
+				tasks: false,
 				terminal: false,
 			},
 		});
-		files.set("/agents/guest/my.notes", '{ "items": [], "text": "" }');
-		await machine.openFile("~/my.notes");
+		files.set("/agents/guest/Trip.tasks", '{ "tasks": [] }');
+		await machine.openFile("~/Trip.tasks");
 		expect(machine.snapshot().editor).toMatchObject({
-			path: "/agents/guest/my.notes",
-			content: '{ "items": [], "text": "" }',
+			path: "/agents/guest/Trip.tasks",
+			content: '{ "tasks": [] }',
 		});
+		files.set("/agents/guest/Dev.terminal", '{ "command": "npm run dev" }');
+		await machine.openFile("~/Dev.terminal");
+		expect(machine.snapshot().editor.path).toBe("/agents/guest/Dev.terminal");
 	});
 
-	it("keeps Notes closed when the agent has no Planner", () => {
+	it("keeps Tasks closed when the agent has no Planner", () => {
 		const { machine } = createMachine({
 			...DEFAULT_MEMON_FEATURE_CONFIG,
-			apps: { ...DEFAULT_MEMON_FEATURE_CONFIG.apps, notes: false },
+			apps: { ...DEFAULT_MEMON_FEATURE_CONFIG.apps, tasks: false },
 		});
-		expect(() => machine.setNotes(["Plan"])).toThrow(
-			"The notes app is turned off for this agent.",
+		expect(() => machine.addTask({ title: "Plan", by: "agent" })).toThrow(
+			"The tasks app is turned off for this agent.",
 		);
-		expect(() => machine.openWindow("notes")).toThrow(
-			"The notes app is turned off for this agent.",
+		expect(() => machine.openWindow("tasks")).toThrow(
+			"The tasks app is turned off for this agent.",
 		);
-		expect(machine.findWindow("notes")).toBeUndefined();
+		expect(machine.findWindow("tasks")).toBeUndefined();
+	});
+
+	it("saves a command as a launcher that runs in a new tab when opened", async () => {
+		const { machine, files, ports } = createMachine();
+		await machine.prepareDesktop();
+		await machine.terminal.runCommand("cd /notes");
+		const path = await machine.saveTerminalLauncher(
+			"Start Notes Server",
+			"node server.js",
+		);
+		expect(path).toBe("/agents/guest/Start Notes Server.terminal");
+		expect(JSON.parse(files.get(path) ?? "")).toEqual({
+			command: "node server.js",
+			cwd: "/notes",
+		});
+		expect(machine.snapshot().desktop.map((entry) => entry.name)).toContain(
+			"Start Notes Server.terminal",
+		);
+
+		// The user's click runs it in a tab of its own, where it says.
+		await machine.openFile(path, { byUser: true });
+		const { terminal } = machine.snapshot();
+		expect(terminal.tabs.map((tab) => tab.id)).toEqual(["1", "2"]);
+		expect(terminal.activeTabId).toBe("2");
+		expect(terminal.cwd).toBe("/notes");
+		expect(ports.terminal.run).toHaveBeenLastCalledWith(
+			"node server.js",
+			expect.objectContaining({ cwd: "/notes" }),
+		);
+		expect(machine.findWindow("editor")).toBeUndefined();
+
+		// A launcher in the home runs there; a fresh tab in front is reused.
+		const { machine: fresh, files: freshFiles } = createMachine();
+		freshFiles.set(
+			"/agents/guest/Build.terminal",
+			'{ "command": "npm run build" }',
+		);
+		await fresh.openFile("~/Build.terminal", { byUser: true });
+		expect(fresh.snapshot().terminal.tabs).toMatchObject([
+			{ id: "1", cwd: "/agents/guest", command: "npm run build" },
+		]);
+
+		// The Editor shows what a launcher runs, without running it.
+		const runs = vi.mocked(ports.terminal.run).mock.calls.length;
+		await machine.openFile(path, { asText: true });
+		expect(machine.snapshot().editor).toMatchObject({
+			path,
+			content: expect.stringContaining('"command": "node server.js"'),
+		});
+		expect(vi.mocked(ports.terminal.run).mock.calls.length).toBe(runs);
+
+		// An older history file is no launcher: it opens as text.
+		files.set("/agents/guest/old.terminal", '{ "history": ["ls"] }');
+		await machine.openFile("~/old.terminal");
+		expect(machine.snapshot().editor.path).toBe("/agents/guest/old.terminal");
+		await expect(machine.saveTerminalLauncher("Empty", "  ")).rejects.toThrow(
+			"A launcher needs a command.",
+		);
 	});
 
 	it("runs a studio tool in the Studio window and keeps the result as text", async () => {
@@ -1405,7 +1631,7 @@ describe("MemonMachine", () => {
 				browser: true,
 				files: false,
 				terminal: false,
-				notes: true,
+				tasks: true,
 				visualize: false,
 			},
 		});
@@ -1441,38 +1667,62 @@ describe("MemonMachine", () => {
 		expect(machine.snapshot().editor.content).toContain("- Uses Edge");
 	});
 
-	it("lets the agent use the Notes controls by their refs", async () => {
+	it("lets the agent use the Tasks controls by their refs", async () => {
 		const { machine } = createMachine();
 		await expect(machine.actOnControl("n1", "click")).rejects.toThrow(
-			"The notes window is not open",
+			"The tasks window is not open",
 		);
-		machine.setNotes(["Search sources"]);
-		machine.openWindow("notes");
+		machine.addTask({
+			title: "Write the report",
+			checklist: ["Search sources"],
+			state: "in_progress",
+			by: "user",
+		});
+		machine.openWindow("tasks");
 
-		// n1 wording · n2 Done · n3 Remove · n4 new step · n5 Add
-		await expect(machine.actOnControl("n5", "click")).rejects.toThrow(
-			"Add is unavailable: type the step first.",
+		// n1 new task · n2 Add · n3 Search sources · n4 State · n5 Edit
+		await expect(machine.actOnControl("n2", "click")).rejects.toThrow(
+			"Add is unavailable: type the task first.",
 		);
-		expect(await machine.actOnControl("n4", "type", "Write the report")).toBe(
-			"",
-		);
-		expect(machine.snapshot().drafts["notes:new"]).toBe("Write the report");
-		expect(await machine.actOnControl("n5", "click")).toBe(
-			'added step "Write the report" to Notes',
-		);
+		expect(await machine.actOnControl("n1", "type", "Add charts")).toBe("");
+		expect(machine.snapshot().drafts["tasks:new"]).toBe("Add charts");
+		// The agent's task is a proposal until the user approves it.
 		expect(await machine.actOnControl("n2", "click")).toBe(
-			'ticked step 1 "Search sources" in Notes',
+			'added task #2 "Add charts" to Tasks',
 		);
-		expect(machine.snapshot().notes.items.map((item) => item.status)).toEqual([
-			"done",
-			"todo",
-		]);
-		await expect(machine.actOnControl("n2", "type", "x")).rejects.toThrow(
-			"n2 is a button; click it.",
+		expect(machine.taskById(2).state).toBe("new");
+		expect(await machine.actOnControl("n3", "toggle")).toBe(
+			'ticked "Search sources" of task #1 in Tasks',
+		);
+		expect(machine.taskById(1).checklist[0]?.done).toBe(true);
+		expect(await machine.actOnControl("n4", "select", "done")).toBe(
+			'set task #1 "Write the report" to done in Tasks',
 		);
 		await expect(machine.actOnControl("n99", "click")).rejects.toThrow(
-			"There is no n99 on the notes window now.",
+			"There is no n99 on the tasks window now.",
 		);
+
+		// Edit fills a shared form; Save keeps ticks by text, [x] sets one.
+		const edit = /\[(n\d+)\] Edit/.exec(machine.readScreen());
+		if (!edit?.[1]) throw new Error("no Edit on the screen");
+		await machine.actOnControl(edit[1], "click");
+		const screen = machine.readScreen();
+		const checklist = /\[(n\d+)\] Checklist/.exec(screen)?.[1];
+		const save = /\[(n\d+)\] Save/.exec(screen)?.[1];
+		if (!checklist || !save) throw new Error("no edit form on the screen");
+		await machine.actOnControl(
+			checklist,
+			"type",
+			"Add a chart\n[x] Pick colors",
+		);
+		expect(await machine.actOnControl(save, "click")).toBe(
+			'edited task #2 "Add charts" in Tasks',
+		);
+		expect(machine.taskById(2).checklist).toEqual([
+			{ text: "Add a chart", done: false },
+			{ text: "Pick colors", done: true },
+		]);
+		expect(machine.snapshot().drafts["tasks:edit"]).toBeUndefined();
 	});
 
 	it("lets the agent fill and run a studio form by its refs", async () => {
@@ -1497,6 +1747,72 @@ describe("MemonMachine", () => {
 		expect(ports.studio.run).toHaveBeenCalledWith(
 			{ tool: "transcribe", path: "/notes/talk.mp3" },
 			{ sessionKey: "memon:conversation-1" },
+		);
+	});
+
+	it("saves a studio setup as a .studio app and runs it with its settings", async () => {
+		const { machine, files, ports } = createMachine();
+		await machine.prepareDesktop();
+		await machine.openStudio("transcribe");
+		const screen = machine.readScreen();
+		const language = /\[(s\d+)\] Language \(e\.g\. en\): \(empty\)/.exec(
+			screen,
+		)?.[1];
+		const name = /\[(s\d+)\] Save these settings as an app on the desktop/.exec(
+			screen,
+		)?.[1];
+		if (!language || !name) throw new Error("no form on the screen");
+		await machine.actOnControl(language, "type", "vi");
+		await machine.actOnControl(name, "type", "Vietnamese Interviews");
+		const install = /\[(s\d+)\] Save as app/.exec(machine.readScreen())?.[1];
+		if (!install) throw new Error("no Save as app on the screen");
+		expect(await machine.actOnControl(install, "click")).toBe(
+			"saved Transcribe as the app ~/Vietnamese Interviews.studio",
+		);
+		const path = "/agents/guest/Vietnamese Interviews.studio";
+		// The input (a file) is given each run, so it is never kept.
+		expect(JSON.parse(files.get(path) ?? "")).toEqual({
+			tool: "transcribe",
+			title: "Vietnamese Interviews",
+			language: "vi",
+		});
+		expect(machine.snapshot().desktop.map((entry) => entry.name)).toContain(
+			"Vietnamese Interviews.studio",
+		);
+
+		// Opened again later, it fills the form and names the runs.
+		machine.setDraft("studio:transcribe:language", "en");
+		machine.closeStudioApp();
+		await machine.openFile(path);
+		expect(machine.snapshot().studio).toMatchObject({
+			selected: "transcribe",
+			app: { path, title: "Vietnamese Interviews", tool: "transcribe" },
+		});
+		expect(machine.snapshot().drafts["studio:transcribe:language"]).toBe("vi");
+		const run = await machine.runStudio({
+			tool: "transcribe",
+			path: "/notes/talk.mp3",
+			language: "vi",
+		});
+		expect(run.app).toBe("Vietnamese Interviews");
+		expect(ports.studio.run).toHaveBeenLastCalledWith(
+			{ tool: "transcribe", path: "/notes/talk.mp3", language: "vi" },
+			expect.anything(),
+		);
+
+		// Settings the form has no field for are still on the screen.
+		files.set(
+			"/agents/guest/Detect.studio",
+			JSON.stringify({ tool: "transcribe", language: "en", threshold: 0.4 }),
+		);
+		await machine.openFile("~/Detect.studio");
+		const appScreen = machine.readScreen();
+		expect(appScreen).toContain("also set: threshold 0.4");
+		expect(appScreen).not.toContain("also set: language");
+
+		files.set("/agents/guest/Broken.studio", '{ "tool": "nope" }');
+		await expect(machine.openFile("~/Broken.studio")).rejects.toThrow(
+			"~/Broken.studio is not a studio app",
 		);
 	});
 
@@ -1536,6 +1852,32 @@ describe("MemonMachine", () => {
 		await expect(machine.pasteFiles()).rejects.toThrow(
 			"Nothing is cut or copied in Files.",
 		);
+	});
+
+	it("deletes files and folders, leaving a deleted folder it had open", async () => {
+		const { machine, files } = createMachine();
+		files.set("/notes/b.md", "bee");
+		files.set("/c.md", "sea");
+		await machine.openFolder("/notes");
+		machine.setFileClipboard("copy", ["/notes/b.md", "/c.md"]);
+		await expect(machine.deleteFiles(["/"])).rejects.toThrow(
+			"/ cannot be deleted.",
+		);
+		await expect(machine.deleteFiles([machine.home])).rejects.toThrow(
+			`${machine.home} cannot be deleted.`,
+		);
+
+		expect(await machine.deleteFiles(["/notes", "/notes"])).toEqual(["/notes"]);
+		expect([...files.keys()].some((path) => path.startsWith("/notes/"))).toBe(
+			false,
+		);
+		// Files steps out of the folder that is gone; the clipboard forgets it.
+		expect(machine.snapshot().files.cwd).toBe("/");
+		expect(machine.snapshot().files.clipboard?.paths).toEqual(["/c.md"]);
+
+		await machine.deleteFiles(["c.md"]);
+		expect(files.has("/c.md")).toBe(false);
+		expect(machine.snapshot().files.clipboard).toBeNull();
 	});
 
 	it("closes the servers a stopped command opened, and only those", async () => {
@@ -1668,7 +2010,9 @@ describe("MemonMachine", () => {
 	});
 
 	it("shows a visual, keeps it as a .openui file and opens it again", async () => {
-		const { machine, files } = createMachine();
+		const { machine, files } = createMachine({
+			apps: { ...DEFAULT_MEMON_FEATURE_CONFIG.apps, visualize: true },
+		});
 		machine.setAgent("agent-1", "/agents/Researcher");
 		await expect(machine.showVisual('TextContent("no root")')).rejects.toThrow(
 			"A visual starts with its root",
@@ -1721,12 +2065,29 @@ describe("MemonMachine", () => {
 		expect(screen).toContain('TextContent("Flat")');
 	});
 
-	it("rewords a Notes step and refuses an empty one", () => {
+	it("edits a task's checklist keeping its ticks, and refuses an empty title", () => {
 		const { machine } = createMachine();
-		machine.setNotes(["Serach sources"]);
-		machine.editNote(1, "Search sources");
-		expect(machine.snapshot().notes.items[0].text).toBe("Search sources");
-		expect(() => machine.editNote(1, "  ")).toThrow("A step needs some text.");
+		const task = machine.addTask({
+			title: "Serach sources",
+			checklist: ["One", "Two"],
+			by: "agent",
+		});
+		machine.checkTaskItem(task.id, 2, true);
+		machine.editTask(task.id, {
+			title: "Search sources",
+			checklist: ["Two", "Three", "[ ] One"],
+		});
+		expect(machine.taskById(task.id)).toMatchObject({
+			title: "Search sources",
+			checklist: [
+				{ text: "Two", done: true },
+				{ text: "Three", done: false },
+				{ text: "One", done: false },
+			],
+		});
+		expect(() => machine.editTask(task.id, { title: "  " })).toThrow(
+			"A task needs a title.",
+		);
 	});
 
 	it("views, creates, edits and deletes the agent's schedules", async () => {
@@ -1780,7 +2141,7 @@ describe("MemonMachine", () => {
 				browser: false,
 				files: true,
 				terminal: true,
-				notes: true,
+				tasks: true,
 				visualize: false,
 			},
 		});
@@ -1818,5 +2179,27 @@ describe("MemonMachine zipping a folder for the user", () => {
 		await expect(machine.exportFolderZip("/notes/a.md")).rejects.toThrow(
 			"is not a folder",
 		);
+	});
+
+	it("takes pi code off the desktop while it is turned off, quitting it", async () => {
+		const { machine } = createMachine();
+		expect(machine.snapshot().builtInApps).toContain("pi");
+		machine.openWindow("pi");
+		expect(machine.findWindow("pi")).toBeDefined();
+
+		machine.configure({ ...DEFAULT_MEMON_FEATURE_CONFIG, piCode: false });
+		await vi.waitFor(() => expect(machine.findWindow("pi")).toBeUndefined());
+		expect(machine.snapshot().builtInApps).toEqual([
+			"scheduler",
+			"studio",
+			"skills",
+			"connections",
+		]);
+		expect(() => machine.openWindow("pi")).toThrow(
+			"pi code is turned off for this agent",
+		);
+		await expect(
+			machine.piCode.act({ action: "prompt", text: "Build it" }),
+		).rejects.toThrow("pi code is turned off for this agent");
 	});
 });

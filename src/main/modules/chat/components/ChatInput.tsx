@@ -26,12 +26,11 @@ import { findSelectedModel } from "@/main/hooks/selectable-model";
 import type { CurrentModel } from "@/main/hooks/use-current-model";
 import { useModelReasoning } from "@/main/hooks/use-model-reasoning";
 import { useReasoningEffort } from "@/main/hooks/use-reasoning-effort";
+import { useCoAgentActivationError } from "@/main/stores/co-agent-activation";
 import {
-	useCoAgentActivationStore,
-	useCoAgentActivationError,
-	useCoAgentActive,
-	useCoAgentAvailable,
-} from "@/main/stores/co-agent-activation";
+	MessageQueueList,
+	type MessageQueueListProps,
+} from "@/main/modules/chat/components/input/MessageQueueList";
 import type { FlowMetadata } from "@/services/database/entities/flows";
 import { documentFileSystemService } from "@/services/filesystem/document-filesystem";
 import { DOCUMENTS_SANDBOX_ROOT } from "@/services/filesystem/sandbox-paths";
@@ -97,10 +96,14 @@ export interface ChatInputProps {
 	onAttachedDocumentRefsChange: (refs: AttachedDocumentRef[]) => void;
 	isModelReady?: boolean;
 	/**
-	 * A run is going in another chat. Runs go one at a time, so the input
-	 * waits and offers a way back to that chat.
+	 * A run in another chat that this one has to wait for (see
+	 * `findBlockingRun`): the input waits and offers a way back to that chat.
 	 */
 	runningElsewhere?: { title: string; onOpen: () => void } | null;
+	/** While this chat's run goes on: keep the draft to send after it. */
+	onQueue?: () => void;
+	/** Messages written while this chat was busy. */
+	queue?: MessageQueueListProps;
 	isFullWidth?: boolean;
 	onToggleFullWidth?: () => void;
 	placeholder?: string;
@@ -135,6 +138,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 	onAttachedDocumentRefsChange,
 	isModelReady = true,
 	runningElsewhere = null,
+	onQueue,
+	queue,
 	isFullWidth = false,
 	onToggleFullWidth,
 	placeholder,
@@ -171,28 +176,10 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 		if (focusKey) textareaRef.current?.focus();
 	}, [focusKey]);
 
-	// The co-agent needs a page to attach to: the current tab in the extension,
-	// a page in the managed browser on desktop. On the web there is neither, so
-	// the button is simply absent rather than present and failing when clicked.
-	const activateCoAgent = useCoAgentActivationStore((state) => state.activate);
-	const isCoAgentStarting = useCoAgentActivationStore(
-		(state) => state.isActivating,
-	);
-	const canUseCoAgent = useCoAgentAvailable();
-	const isCoAgentActive = useCoAgentActive();
-	// Shown under the composer. Without it a failed activation left the button
-	// looking as though it had ignored the click — the reason existed in the
-	// store and nothing on this path ever read it.
+	// The co-agent's button is in the chat header; a failed activation is
+	// still said here, under the composer the user is looking at. Without it
+	// the button looked as though it had ignored the click.
 	const coAgentError = useCoAgentActivationError();
-	const toggleCoAgent = useCallback(() => {
-		// Off is immediate and local: the tools simply stop being offered. On has
-		// to attach first, because there may be nothing to attach to.
-		if (isCoAgentActive) {
-			useCoAgentActivationStore.getState().setActive(false);
-			return;
-		}
-		void activateCoAgent();
-	}, [activateCoAgent, isCoAgentActive]);
 
 	const {
 		models: selectableModels,
@@ -501,6 +488,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 						</div>
 					) : null}
 
+					{queue ? <MessageQueueList {...queue} /> : null}
+
 					<PromptInput
 						className="divide-border/50 rounded-[22px] border-border/70 bg-card/95 shadow-[0_18px_55px_hsl(var(--foreground)/0.10)]"
 						onSubmit={handleSubmitWithImages}
@@ -525,7 +514,9 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 										? t("model.notLoaded")
 										: runningElsewhere
 											? t("input.waitForRun")
-											: (placeholder ?? t("input.placeholder"))
+											: isLoading
+												? t("input.duringRun")
+												: (placeholder ?? t("input.placeholder"))
 								}
 								disabled={!isModelReady || runningElsewhere !== null}
 								className="field-sizing-content min-h-[44px] max-h-[40vh] !border-0 !border-t-0 px-3 py-2.5 text-[15px] leading-6 !shadow-none focus:!border-0 focus:!ring-0 focus:!ring-offset-0 focus-visible:!border-0 focus-visible:!ring-0 focus-visible:!ring-offset-0 sm:px-4"
@@ -559,9 +550,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 							}
 							isFullWidth={isFullWidth}
 							onToggleFullWidth={onToggleFullWidth}
-							onStartCoAgent={canUseCoAgent ? toggleCoAgent : undefined}
-							isCoAgentStarting={isCoAgentStarting}
-							isCoAgentActive={isCoAgentActive}
+							onQueue={onQueue}
 							selectableModels={selectableModels}
 							selectableModelsByProvider={selectableModelsByProvider}
 							lockedModelProviders={lockedModelProviders}
@@ -573,7 +562,6 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 							onReasoningEffortChange={setReasoningEffort}
 							dictation={
 								<ChatDictationButton
-									disabled={isLoading}
 									onText={(text) => {
 										// Read the composer as it is now: the user may have kept
 										// typing while the recording was transcribed.

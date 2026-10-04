@@ -2,11 +2,21 @@ import { Loader2, Plus, X } from "lucide-react";
 import type React from "react";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
+import { memonDisplayPath } from "@/services/memon/constants";
 import type { MemonTerminalTab } from "@/services/memon/types";
 
-/** A tab's label: its id and the name of its working directory (~ at home). */
+/**
+ * A tab's label: its id and what runs in it, or the name of its working
+ * directory (~ at home), as a terminal's tab shows its process.
+ */
 const tabName = (tab: MemonTerminalTab, home: string): string =>
-	`${tab.id} · ${tab.cwd === home ? "~" : (tab.cwd.split("/").filter(Boolean).pop() ?? "/")}`;
+	`${tab.id} · ${
+		tab.running && tab.command
+			? tab.command
+			: tab.cwd === home
+				? "~"
+				: (tab.cwd.split("/").filter(Boolean).pop() ?? "/")
+	}`;
 
 /** The Terminal's tabs: pick one, close one, or open a new one. */
 export const TerminalTabs: React.FC<{
@@ -32,9 +42,23 @@ export const TerminalTabs: React.FC<{
 				>
 					<button
 						type="button"
-						title={`${t("memonComputer.terminal.tab", { id: tab.id })} · ${tab.cwd}`}
+						title={[
+							`${t("memonComputer.terminal.tab", { id: tab.id })} · ${memonDisplayPath(tab.cwd, home)}`,
+							tab.command
+								? tab.running
+									? t("memonComputer.terminal.tabRunning", {
+											command: tab.command,
+										})
+									: t("memonComputer.terminal.tabLast", {
+											command: tab.command,
+											code: tab.lastExitCode ?? "?",
+										})
+								: null,
+						]
+							.filter(Boolean)
+							.join("\n")}
 						onClick={() => onSelect(tab.id)}
-						className="flex h-full max-w-36 items-center gap-1 px-2 font-mono"
+						className="flex h-full max-w-48 items-center gap-1 px-2 font-mono"
 					>
 						{tab.running ? (
 							<Loader2 size={10} className="shrink-0 animate-spin" />

@@ -14,6 +14,7 @@ export type DocumentType =
 	| "audio"
 	| "video"
 	| "excel"
+	| "presentation"
 	| "other";
 
 /**
@@ -43,6 +44,13 @@ export const DOCUMENT_MIME_TYPES: Record<DocumentType, string[]> = {
 		"application/vnd.ms-excel",
 		"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 		"application/vnd.ms-excel.sheet.macroEnabled.12",
+	],
+	presentation: [
+		"application/vnd.openxmlformats-officedocument.presentationml.presentation",
+		"application/vnd.ms-powerpoint.presentation.macroEnabled.12",
+		"application/vnd.openxmlformats-officedocument.presentationml.slideshow",
+		"application/vnd.openxmlformats-officedocument.presentationml.template",
+		"application/vnd.ms-powerpoint",
 	],
 	other: ["*/*"],
 };

@@ -1,3 +1,9 @@
+import {
+	createFlowRunInbox,
+	FLOW_RUN_INBOX_RUNTIME_KEY,
+	type FlowRunInbox,
+	type FlowRunInboxMessage,
+} from "@memorall/agent-harness-flows/context/run-inbox";
 import type { FoundationState } from "@memorall/agent-harness-flows/graph/foundation/state";
 import type { UnifiedFlowConfig } from "@memorall/agent-harness-flows/interfaces/config/flow-config";
 import { withSystemReminders } from "@memorall/agent-harness-flows/graph/system-reminders";
@@ -75,6 +81,7 @@ import {
 import { withResolvedConnections } from "@/services/mcp-connections";
 import type {
 	AssistantExecutionPart,
+	ChatCompaction,
 	ComplexContent,
 	ConversationContext,
 	MessageParts,
@@ -167,6 +174,13 @@ export interface StopChatPayload {
 	targetJobId: string;
 }
 
+export interface InjectChatMessagePayload {
+	/** The `chat` job the user wrote to while it ran. */
+	targetJobId: string;
+	/** Read by the agent before its next request. */
+	message: FlowRunInboxMessage;
+}
+
 export type ChatResult =
 	| {
 			type: "chunk";
@@ -182,6 +196,17 @@ export type ChatResult =
 			execution: ToolExecutionRecord;
 	  }
 	| {
+			/** The conversation was compacted before the next request. */
+			type: "compaction";
+			compaction: ChatCompaction;
+	  }
+	| {
+			/** The agent read a message the user sent while it worked. */
+			type: "user-message";
+			id: string;
+			content: string;
+	  }
+	| {
 			type: "final";
 			content: string;
 			parts?: MessageParts;
@@ -194,6 +219,7 @@ export type ChatResult =
 				}>;
 				executions?: AssistantExecutionPart[];
 				toolExecutions?: ToolExecutionRecord[];
+				compactions?: ChatCompaction[];
 				tool_calls?: ChatCompletionMessageToolCall[];
 				usage?: AggregatedTokenUsage;
 				model?: string;
@@ -226,6 +252,7 @@ const CHUNK_DISPATCH_INTERVAL_MS = 40;
 const JOB_NAMES = {
 	chat: "chat",
 	stopChat: "stop-chat",
+	injectChatMessage: "inject-chat-message",
 } as const;
 
 /** How long a stop that arrived before its run is remembered. */
@@ -242,6 +269,11 @@ export type ChatJob = BaseJob & {
 type StopChatJob = BaseJob & {
 	jobType: typeof JOB_NAMES.stopChat;
 	payload: StopChatPayload;
+};
+
+type InjectChatMessageJob = BaseJob & {
+	jobType: typeof JOB_NAMES.injectChatMessage;
+	payload: InjectChatMessagePayload;
 };
 
 type TokenUsage = ChatCompletionUsage;
@@ -418,16 +450,21 @@ const getThreadHistoryRuntimeVars = (
 			}
 		: undefined;
 
-/** Runtime vars for every flow run: conversation scope first, then history. */
+/**
+ * Runtime vars for every flow run: conversation scope first, then history,
+ * then the inbox the user writes to while the run goes on.
+ */
 const getChatRuntimeVars = (
 	conversation: ConversationContext | undefined,
 	runId: string,
 	agentFlowId: string | undefined,
+	inbox: FlowRunInbox,
 ): Record<string, unknown> => ({
 	...(conversation?.id ? { [CONVERSATION_RUNTIME_KEY]: conversation.id } : {}),
 	[RUN_RUNTIME_KEY]: runId,
 	...(agentFlowId ? { [AGENT_RUNTIME_KEY]: agentFlowId } : {}),
 	...getThreadHistoryRuntimeVars(conversation),
+	[FLOW_RUN_INBOX_RUNTIME_KEY]: inbox,
 });
 
 type FlowStreamDeps = {
@@ -466,6 +503,12 @@ type FlowCustomPayloadDeps = {
 		phase: "start" | "result",
 		event: { node: string; metadata?: Record<string, unknown> },
 	) => ToolExecutionRecord | undefined;
+	/** A compaction the flow reported; returns it as the reply keeps it. */
+	handleCompaction: (
+		report: Record<string, unknown> | undefined,
+	) => ChatCompaction | undefined;
+	/** The agent read a message the user sent while it worked. */
+	handleUserMessage: (message: FlowRunInboxMessage) => void;
 	dependencies: ProcessDependencies;
 	jobId: string;
 	executeStage: string;
@@ -495,6 +538,8 @@ type FlowStreamRunDeps = FlowRuntimeDeps & {
 		metadata?: Record<string, unknown>;
 	}) => void;
 	handleToolExecution: FlowCustomPayloadDeps["handleToolExecution"];
+	handleCompaction: FlowCustomPayloadDeps["handleCompaction"];
+	handleUserMessage: FlowCustomPayloadDeps["handleUserMessage"];
 };
 
 type AssistantMessageFinalization = {
@@ -507,6 +552,7 @@ type AssistantMessageFinalization = {
 	actions: ChatResultFinalAction[];
 	executions: AssistantExecutionPart[];
 	toolExecutions: ToolExecutionRecord[];
+	compactions?: ChatCompaction[];
 	error?: JobErrorMetadata;
 	stopped?: boolean;
 };
@@ -528,6 +574,8 @@ type AssistantMessageMetadata = {
 	actions?: ChatResultFinalAction[];
 	executions?: AssistantExecutionPart[];
 	toolExecutions?: ToolExecutionRecord[];
+	/** Where the conversation was compacted during this reply. */
+	compactions?: ChatCompaction[];
 	usage?: AggregatedTokenUsage;
 	agentFlowName?: string;
 	error?: JobErrorMetadata;
@@ -659,6 +707,7 @@ export class ChatHandler extends BaseProcessHandler<ChatJob | StopChatJob> {
 		actions,
 		executions,
 		toolExecutions,
+		compactions,
 		error,
 		stopped,
 	}: AssistantMessageFinalization): AssistantMessageMetadata {
@@ -676,6 +725,7 @@ export class ChatHandler extends BaseProcessHandler<ChatJob | StopChatJob> {
 			...(actions.length > 0 ? { actions } : {}),
 			...(executions.length > 0 ? { executions } : {}),
 			...(toolExecutions.length > 0 ? { toolExecutions } : {}),
+			...(compactions?.length ? { compactions } : {}),
 			...(conversation?.agentFlowName
 				? { agentFlowName: conversation.agentFlowName }
 				: {}),
@@ -933,6 +983,8 @@ export class ChatHandler extends BaseProcessHandler<ChatJob | StopChatJob> {
 		executeStage,
 		handleExecutionStart,
 		handleToolExecution,
+		handleCompaction,
+		handleUserMessage,
 		...runtimeDeps
 	}: FlowStreamRunDeps): Promise<Record<string, unknown> | null> {
 		const { handleChunk, handleActions } =
@@ -950,6 +1002,8 @@ export class ChatHandler extends BaseProcessHandler<ChatJob | StopChatJob> {
 					handleActions,
 					handleExecutionStart,
 					handleToolExecution,
+					handleCompaction,
+					handleUserMessage,
 					dependencies: runtimeDeps.dependencies,
 					jobId: runtimeDeps.jobId,
 					executeStage,
@@ -972,6 +1026,8 @@ export class ChatHandler extends BaseProcessHandler<ChatJob | StopChatJob> {
 		handleActions,
 		handleExecutionStart,
 		handleToolExecution,
+		handleCompaction,
+		handleUserMessage,
 		dependencies,
 		jobId,
 		executeStage,
@@ -1042,6 +1098,44 @@ export class ChatHandler extends BaseProcessHandler<ChatJob | StopChatJob> {
 					}
 				}
 				return;
+			case "compact": {
+				const compaction = handleCompaction(
+					"metadata" in payload &&
+						payload.metadata &&
+						typeof payload.metadata === "object"
+						? (payload.metadata as unknown as Record<string, unknown>)
+						: undefined,
+				);
+				if (compaction) {
+					dispatcher.send(() =>
+						dependencies.updateJobProgress(jobId, {
+							stage: executeStage,
+							progress: 14,
+							result: { type: "compaction", compaction } as ChatResult,
+						}),
+					);
+				}
+				return;
+			}
+			case "user-message": {
+				const message = payload as unknown as Partial<FlowRunInboxMessage>;
+				if (
+					typeof message.id !== "string" ||
+					typeof message.content !== "string"
+				) {
+					return;
+				}
+				const read = { id: message.id, content: message.content };
+				handleUserMessage(read);
+				dispatcher.send(() =>
+					dependencies.updateJobProgress(jobId, {
+						stage: executeStage,
+						progress: 14,
+						result: { type: "user-message", ...read } as ChatResult,
+					}),
+				);
+				return;
+			}
 			default:
 				return;
 		}
@@ -1060,12 +1154,20 @@ export class ChatHandler extends BaseProcessHandler<ChatJob | StopChatJob> {
 	private readonly runStops = new Map<string, AbortController>();
 	/** Stops that arrived before their run did. */
 	private readonly stoppedBeforeStart = new Set<string>();
+	/** What the user wrote to each run in flight, by job id. */
+	private readonly runInboxes = new Map<string, FlowRunInbox>();
 
 	async process(
 		jobId: string,
-		job: ChatJob | StopChatJob,
+		job: ChatJob | StopChatJob | InjectChatMessageJob,
 		dependencies: ProcessDependencies,
 	): Promise<ItemHandlerResult> {
+		if (job.jobType === JOB_NAMES.injectChatMessage) {
+			// Refused once the run is over: the sender sends it as a new message.
+			const { targetJobId, message } = job.payload;
+			const accepted = this.runInboxes.get(targetJobId)?.push(message) ?? false;
+			return { accepted };
+		}
 		if (job.jobType === JOB_NAMES.stopChat) {
 			const { targetJobId } = job.payload;
 			const running = this.runStops.get(targetJobId);
@@ -1084,10 +1186,15 @@ export class ChatHandler extends BaseProcessHandler<ChatJob | StopChatJob> {
 		const stop = new AbortController();
 		this.runStops.set(jobId, stop);
 		if (this.stoppedBeforeStart.delete(jobId)) stop.abort();
+		const inbox = createFlowRunInbox();
+		this.runInboxes.set(jobId, inbox);
 		try {
-			return await this.runChat(jobId, job, dependencies, stop.signal);
+			return await this.runChat(jobId, job, dependencies, stop.signal, inbox);
 		} finally {
 			this.runStops.delete(jobId);
+			// Whatever the agent did not get to read goes out as a new message.
+			inbox.close();
+			this.runInboxes.delete(jobId);
 		}
 	}
 
@@ -1096,6 +1203,7 @@ export class ChatHandler extends BaseProcessHandler<ChatJob | StopChatJob> {
 		job: ChatJob,
 		dependencies: ProcessDependencies,
 		stopSignal: AbortSignal,
+		inbox: FlowRunInbox,
 	): Promise<ItemHandlerResult> {
 		const {
 			messages,
@@ -1149,6 +1257,33 @@ export class ChatHandler extends BaseProcessHandler<ChatJob | StopChatJob> {
 		const actions: FlowAction[] = [];
 		let executions: AssistantExecutionPart[] = [];
 		let toolExecutions: ToolExecutionRecord[] = [];
+		const compactions: ChatCompaction[] = [];
+		const handleCompaction: FlowCustomPayloadDeps["handleCompaction"] = (
+			report,
+		) => {
+			const count = (name: string) =>
+				typeof report?.[name] === "number" ? (report[name] as number) : 0;
+			if (!report) return undefined;
+			const compaction: ChatCompaction = {
+				reason: report.reason === "token-budget" ? "token-budget" : "threshold",
+				beforeTokens: count("beforeTokens"),
+				afterTokens: count("afterTokens"),
+				windowTokens: count("windowTokens"),
+				shortened: count("shortened"),
+				removed: count("removed"),
+				atPart: messagePartsAccumulator.toParts().length,
+				at: new Date().toISOString(),
+			};
+			compactions.push(compaction);
+			return compaction;
+		};
+		// Kept in the reply where the agent read it, so the next turn's history
+		// has it in the same place.
+		const handleUserMessage: FlowCustomPayloadDeps["handleUserMessage"] = (
+			message,
+		) => {
+			messagePartsAccumulator.addUserMessage(message.content);
+		};
 		const handleExecutionStart = (event: {
 			node: string;
 			metadata?: Record<string, unknown>;
@@ -1271,6 +1406,7 @@ export class ChatHandler extends BaseProcessHandler<ChatJob | StopChatJob> {
 									actions: normalizeActions(actions),
 									executions,
 									toolExecutions,
+									compactions,
 								}),
 								incomplete: true,
 							},
@@ -1350,6 +1486,7 @@ export class ChatHandler extends BaseProcessHandler<ChatJob | StopChatJob> {
 				actions: finalActions,
 				executions: finalExecutions,
 				toolExecutions: finalToolExecutions,
+				compactions,
 				stopped,
 			});
 			const result = {
@@ -1472,6 +1609,7 @@ export class ChatHandler extends BaseProcessHandler<ChatJob | StopChatJob> {
 								conversation,
 								`chat:${jobId}`,
 								agentFlowId,
+								inbox,
 							),
 						},
 					}),
@@ -1482,6 +1620,8 @@ export class ChatHandler extends BaseProcessHandler<ChatJob | StopChatJob> {
 					executeStage: "Executing agent action...",
 					handleExecutionStart,
 					handleToolExecution,
+					handleCompaction,
+					handleUserMessage,
 					jobId,
 					model,
 					config,
@@ -1632,6 +1772,7 @@ export class ChatHandler extends BaseProcessHandler<ChatJob | StopChatJob> {
 								conversation,
 								`chat:${jobId}`,
 								agentFlowId,
+								inbox,
 							),
 						},
 					}),
@@ -1642,6 +1783,8 @@ export class ChatHandler extends BaseProcessHandler<ChatJob | StopChatJob> {
 					executeStage: "Executing...",
 					handleExecutionStart,
 					handleToolExecution,
+					handleCompaction,
+					handleUserMessage,
 					jobId,
 					model,
 					config,
@@ -1792,6 +1935,7 @@ export class ChatHandler extends BaseProcessHandler<ChatJob | StopChatJob> {
 						toolExecutions,
 						isAbort ? "cancelled" : "failed",
 					),
+					compactions,
 					error: isAbort ? undefined : errorMetadata,
 				});
 				await finalizeConversation({
@@ -1832,7 +1976,7 @@ export class ChatHandler extends BaseProcessHandler<ChatJob | StopChatJob> {
 const chatHandler = new ChatHandler();
 handlerRegistry.register({
 	instance: chatHandler,
-	jobs: [JOB_NAMES.chat, JOB_NAMES.stopChat],
+	jobs: [JOB_NAMES.chat, JOB_NAMES.stopChat, JOB_NAMES.injectChatMessage],
 });
 
 // Extend global registry for smart type inference
@@ -1840,10 +1984,13 @@ declare global {
 	interface JobTypeRegistry {
 		chat: ChatPayload;
 		"stop-chat": StopChatPayload;
+		"inject-chat-message": InjectChatMessagePayload;
 	}
 
 	interface JobResultRegistry {
 		chat: ChatResult;
 		"stop-chat": { stopped: boolean };
+		/** False when the run was already over. */
+		"inject-chat-message": { accepted: boolean };
 	}
 }

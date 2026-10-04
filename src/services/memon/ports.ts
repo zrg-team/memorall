@@ -39,7 +39,7 @@ import {
 	moveMemonHome,
 	prepareMemonHome,
 } from "./agent-home";
-import { loadMemonDesktopFiles } from "./desktop-files";
+import { loadMemonDesktopFiles, migrateMemonHomeFiles } from "./desktop-files";
 import { getLocalTimezone } from "@/services/cron-jobs/cron-expression";
 import type { CronJob } from "@/services/database/types";
 import type { MemonViewerKind } from "./file-kinds";
@@ -54,6 +54,7 @@ import {
 	createMemonSkillsPort,
 } from "./settings-ports";
 import { createStudioPort, type MemonStudioPort } from "./studio-app";
+import { createPiCodePort } from "./apps/pi-code/pi-code-port";
 import { formatDownloadSize, MEMON_DOWNLOAD_MAX_BYTES } from "./download";
 import { isResidentLocalProvider } from "@/services/llm/provider-registry";
 
@@ -175,6 +176,15 @@ const previewText = async (
 			);
 			return docxToMarkdown(bytes) || "(this document has no text)";
 		}
+		case "presentation": {
+			const { presentationToMarkdown, readPresentation } = await import(
+				"@/main/modules/files/handlers/pptx-extraction"
+			);
+			return (
+				presentationToMarkdown(await readPresentation(bytes)) ||
+				"(this presentation has no slides)"
+			);
+		}
 		case "image": {
 			const size = await imageSize(bytes);
 			return `An image${size ? `, ${size.width}×${size.height} px` : ""}. The user sees it; its pixels are not text you can read. If Studio has an Image tools model, memon_studio can caption or label it.`;
@@ -247,6 +257,7 @@ export const createMemonFilesPort = (
 		};
 		await copyTree(from, to);
 	},
+	remove: (path) => fs.rm(path, { recursive: true }),
 	zip: (folder) => zipFolder(fs, folder),
 	subscribe: (listener) =>
 		documentFileSystemService.onFilesystemChanged(() => listener()),
@@ -286,7 +297,8 @@ const agentNameOf = async (agentId: string): Promise<string | undefined> => {
 
 /**
  * Agents' homes on the documents filesystem: `/agents/<agent name>`, with
- * Bot.md and Memory.md, and an older home of the agent's moved in.
+ * Bot.md and Memory.md, and an older home of the agent's moved in (its old
+ * notes and history to their hidden files).
  */
 export const createMemonHomePort = (
 	fs: IFlowFileSystem = getFlowFileSystem(),
@@ -305,6 +317,7 @@ export const createMemonHomePort = (
 					? memonLegacyHomeDir(agentId)
 					: `${MEMON_LEGACY_USERS_DIR}/guest`,
 			]);
+			await migrateMemonHomeFiles(files, home);
 			await loadMemonDesktopFiles(files, home);
 			return home;
 		},
@@ -560,4 +573,7 @@ export const createMemonPorts = (
 	connections: overrides.connections ?? createMemonConnectionsPort(),
 	download: overrides.download ?? createMemonDownloadPort(),
 	homes: overrides.homes ?? createMemonHomePort(),
+	piCode:
+		overrides.piCode ??
+		createPiCodePort({ fs: getFlowFileSystem, sandbox: resolveMemonSandbox }),
 });

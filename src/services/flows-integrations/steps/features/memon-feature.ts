@@ -1,5 +1,9 @@
-import { getRunAgentId } from "@/services/chat/runtime-keys";
+import {
+	getConversationScopeKey,
+	getRunAgentId,
+} from "@/services/chat/runtime-keys";
 import { getFlowRuntimeVars } from "@memorall/agent-harness-flows/context/runtime-context";
+import { BUNDLED_PYTHON_BRIEF } from "@/services/sandbox-container/python-packages";
 import {
 	GraphBase,
 	type GraphTool,
@@ -15,17 +19,18 @@ import { logError } from "@memorall/agent-harness-flows/logging/logger";
 import { stepRegistry } from "@memorall/agent-harness-flows/registries/step-registry";
 import {
 	MEMON_BOT_FILE_NAME,
+	MEMON_CODE_TOOL,
 	MEMON_CONFIG_RUNTIME_KEY,
 	MEMON_FEATURE_ID,
 	MEMON_HOME_RUNTIME_KEY,
 	MEMON_MEMORY_FILE_NAME,
-	MEMON_NOTES_FILE_NAME,
-	MEMON_NOTES_TOOL,
 	MEMON_STEP_NAME,
 	MEMON_STUDIO_TOOL,
+	MEMON_TASKS_TOOL,
 	MEMON_APP_IDS,
 	MEMON_TOOL_NAMES,
 	MEMON_VISUALIZE_TOOL,
+	memonHomePaths,
 	type MemonAppId,
 	type MemonStudioToolId,
 } from "@/services/memon/constants";
@@ -40,7 +45,8 @@ import {
 	type MemonFeatureConfig,
 	normalizeMemonFeatureConfig,
 } from "@/services/memon/feature-config";
-import type { MemonStudioToolState } from "@/services/memon/types";
+import { parseTasksFile, taskProgress } from "@/services/memon/tasks-file";
+import type { MemonStudioToolState, MemonTask } from "@/services/memon/types";
 import { OPENUI_COMPONENTS_TEXT } from "./visualize-response/components";
 
 export interface MemonFeatureInput {
@@ -51,18 +57,20 @@ export interface MemonFeatureInput {
 export interface MemonFeatureOutput {
 	tools?: GraphTool[];
 	messages?: ChatCompletionMessageParam[];
+	/** Volatile context (the open tasks), attached past the cached prefix. */
+	reminders?: string[];
 }
 
 export type MemonFeatureServices = {};
 
 export const MEMON_FEATURE_DESCRIPTION =
-	"Give the agent a computer: Browser, Files, Terminal, Notes and your studios on one desktop that you can watch and take over.";
+	"Give the agent a computer: Browser, Files, Terminal, Tasks and your studios on one desktop that you can watch and take over.";
 
 export const MEMON_FEATURE_TOOLS = [...MEMON_TOOL_NAMES];
 
 /**
- * The tools a run gets: memon_notes only with the Notes app, memon_studio
- * only when a studio has a model.
+ * The tools a run gets: memon_tasks only with the Tasks app, memon_studio
+ * only when a studio has a model, memon_code only while pi code is on.
  */
 export const memonToolsFor = (
 	config: MemonFeatureConfig,
@@ -70,8 +78,9 @@ export const memonToolsFor = (
 ) =>
 	MEMON_FEATURE_TOOLS.filter(
 		(tool) =>
-			(tool !== MEMON_NOTES_TOOL || config.apps.notes) &&
+			(tool !== MEMON_TASKS_TOOL || config.apps.tasks) &&
 			(tool !== MEMON_VISUALIZE_TOOL || config.apps.visualize) &&
+			(tool !== MEMON_CODE_TOOL || config.piCode) &&
 			(tool !== MEMON_STUDIO_TOOL || studio.some((entry) => entry.ready)),
 	);
 
@@ -115,24 +124,26 @@ const APP_SECTIONS: Record<MemonAppId, (config: MemonFeatureConfig) => string> =
 				'Edit: memon_act { ref: "e1", action: "type", text: "<the full new content>" }, then { ref: "e2", action: "click" } saves.',
 				'Organize: { ref: "f3", action: "move", text: "<folder>" } ("copy" copies); cut/copy without text, then { action: "paste" }. Nothing is overwritten: a clash gets a new name.',
 				`Download: memon_act { action: "download", text: "<url>", to: "<folder or file>" } saves a web file (image, font, PDF) in one step, into ~/Downloads by default${config.apps.browser ? '; { ref: "b7", action: "download" } saves an image from the page' : ""}. Do not write a script to download.`,
-				'Zip: memon_act { action: "zip", text: "<folder>" } (or a folder ref) zips it into ~/Downloads and hands it to the user to download, when they ask for a folder as a file. Do not zip with a script.',
+				'Zip: memon_act { action: "zip", text: "<folder>" } (or a folder ref) zips it into ~/Downloads for the user, when they ask for a folder as a file. Do not zip with a script.',
 				'PDFs, spreadsheets, images and media open in the Viewer as text or a description; { action: "scroll" } pages a long file.',
 				"New files and folders go in your home, ~ (a folder per piece of work, like ~/<topic>/), unless the user names another place.",
 			]),
 		terminal: () =>
 			section("Terminal", "shell, node, py, git and curl", [
-				'Run: memon_run { command } in the same "/" tree as Files, starting in your home (~); "cd dir" stays for later commands and "cd" alone goes home. A long command keeps running: { waitSeconds: 60 } waits, { input: "y" } answers it, { stop: true } stops it.',
-				"Code: write JavaScript to a .js file and run node file.js (node -e is not supported); end scripts with process.exit(0), or they keep running. npm install works for pure-JS packages; git works. Use py (standard library) only when Python is asked for or needed.",
-				"Web: curl works as usual. Save files with it in one line, not with a script: curl -sSL -o assets/hero.jpg <url>; several: curl -sSL --create-dirs --output-dir assets -O <url1> -O <url2>.",
-				"curl, git and py lines run next to a running server: curl -s localhost:3000/api | jq .",
+				'Run: memon_run { command } in the "/" tree of Files, from your home (~); "cd dir" sticks, "cd" goes home. A long command keeps running: { waitSeconds: 60 } waits, { input: "y" } answers, { stop: true } stops.',
+				'Tabs: the screen shows what runs or last ran in each; { terminal: "new", command } runs in a new tab. { command, saveAs: "Start Site" } saves ~/Start Site.terminal instead; clicking it runs it.',
+				"Code: write JavaScript to a .js file and run node file.js (no node -e); end scripts with process.exit(0) or they hang. npm install works for pure-JS packages; git works.",
+				`Python: py file.py: stdlib plus ${BUNDLED_PYTHON_BRIEF} (imports load them; pip list names them, pip show <name> says how). Charts: plt.savefig("chart.png").`,
+				"Web: save files with one curl, not a script: curl -sSL -o assets/hero.jpg <url>; several: --create-dirs --output-dir assets -O <url1> -O <url2>.",
+				"curl, git and py run next to a running server: curl -s localhost:3000/api | jq .",
 			]),
-		notes: () =>
-			section("Notes", "your plan, which the user watches", [
+		tasks: () =>
+			section("Tasks", "work you share with the user, kept across chats", [
 				"If the request is unclear, ask all your questions in one message first; if it is clear, go straight on.",
-				'Plan work with more than one step before starting: memon_notes { action: "set", items: ["…", "…"] }, each step short and concrete.',
-				'Track it: { action: "start", step: 2 }, { action: "done", step: 2 }; { action: "add", items }, { action: "edit", step, text }, { action: "remove", step } as the plan changes. Keep findings, sources and decisions with { action: "write", text }.',
-				`Notes are kept in ~/${MEMON_NOTES_FILE_NAME}, so a plan is still there next chat: for a new task, "set" a new one.`,
-				"Work through every step without stopping between them. Give the final answer only when every step is done or removed. The user may tick, add or remove steps; follow their list.",
+				'Work with more than one step is a task: memon_tasks { action: "add", title, items, start: true } for what the user asked; the checklist is your plan.',
+				'Then { action: "check", task: 3, item: 2 } per item; "edit", "done" or "drop" as it goes.',
+				'Tasks are never cleared; finished ones are the record. Work you were not asked for: add without start; it stays "new" until the user approves. "approved" ones wait for you.',
+				"Work through every item without stopping between them. Give the final answer only when the task is done or dropped.",
 			]),
 		visualize: (config) =>
 			section("Visualize", "visuals the user keeps", [
@@ -171,6 +182,7 @@ const studioSection = (
 				`Ready: ${ready.map((tool) => tool.id).join(", ")}. memon_studio { action: "run", tool, … } runs one in the Studio window; you get text back, and audio and images are saved to Files (you cannot hear or see them). { action: "list" } shows models, voices and tasks.`,
 				...ready.map((tool) => STUDIO_EXAMPLES[tool.id]),
 				"Use one when the user asks for what it makes, or when a typed decision, transcript or classification helps the task.",
+				'Apps: { action: "save", name, tool, … } keeps a setup as ~/<name>.studio; run it with { action: "run", app, text }.',
 			])
 		: null;
 
@@ -184,9 +196,19 @@ const BUILT_IN_SECTION = section(
 	],
 );
 
+const PI_CODE_SECTION = section(
+	"pi code",
+	"a coding agent you hand coding work to",
+	[
+		'memon_code { action: "prompt", text: "<the task on its own: goal, files, how to check>", cwd: "~/<project>" } hands pi (its own tools, the chat\'s model) an app, a feature or a multi-file fix; small edits are quicker yourself.',
+		'The user confirms in the pi code window first. Then "wait", another prompt steers it, "stop"; the screen shows its conversation. Check its work before you answer.',
+		`Declined: code it yourself with the Terminal and Files, save that now (memon_memory { action: "add", text: "Code it myself; the user does not want pi code." }) and do not use pi code again unless asked; skip it too when ${MEMON_MEMORY_FILE_NAME} says so.`,
+	],
+);
+
 const homeSection = (
 	desktop: MemonDesktopFiles | undefined,
-	notes: boolean,
+	tasks: boolean,
 	home: string | undefined,
 ): string => {
 	const bot = desktop
@@ -203,7 +225,7 @@ const homeSection = (
 				`~ is your home folder${home ? `, ${home}` : ""}: your workspace, and the desktop the user sees. Every agent has its own. Keep what you make there unless the user names another place.`,
 				`~/${MEMON_BOT_FILE_NAME} is the user's standing instructions for you and ~/${MEMON_MEMORY_FILE_NAME} what you remember about them; both are read at the start of every chat.`,
 				'Save a lasting preference or fact, or what the user asks you to remember, right away: memon_memory { action: "add", text: "…" }, one short fact per entry. Fix a wrong one: { action: "update", entry: 2, text } or { action: "remove", entry: 2 } (the [n] below).',
-				`Do not save what only matters for this task${notes ? " (that goes in Notes)" : ""}; never save passwords, keys or tokens.`,
+				`Do not save what only matters for this task${tasks ? " (that goes in Tasks)" : ""}; never save passwords, keys or tokens.`,
 				`Change ${MEMON_BOT_FILE_NAME} only when the user asks to change how you behave from now on: memon_memory { file: "bot", action: "add", text }, then tell them.`,
 			],
 		),
@@ -216,7 +238,94 @@ const homeSection = (
 	].join("\n");
 };
 
+/**
+ * Bot.md and Memory.md as each conversation's system prompt first had them.
+ * The prompt is the start of every request, so a file that changed there
+ * (the agent saves memories as it learns) would make the next message
+ * re-read the whole conversation at full price. The prompt keeps the first
+ * version; a change comes as a reminder past the cached prefix.
+ */
+const PROMPT_FILES = new Map<string, MemonDesktopFiles>();
+const PROMPT_FILES_MAX = 50;
+
+/**
+ * The files for this conversation's system prompt: as it first had them,
+ * or as they are now for a new conversation (or one without a key).
+ */
+export const conversationDesktopFiles = (
+	key: string | undefined,
+	current: MemonDesktopFiles,
+): MemonDesktopFiles => {
+	if (!key) return current;
+	const first = PROMPT_FILES.get(key) ?? current;
+	// Most recently used last, so the oldest conversation goes first.
+	PROMPT_FILES.delete(key);
+	PROMPT_FILES.set(key, first);
+	if (PROMPT_FILES.size > PROMPT_FILES_MAX) {
+		const oldest = PROMPT_FILES.keys().next().value;
+		if (oldest !== undefined) PROMPT_FILES.delete(oldest);
+	}
+	return first;
+};
+
+/**
+ * Bot.md or Memory.md as they are now, when they changed since the system
+ * prompt took them, with the entry numbers memon_memory uses now.
+ */
+export const desktopFilesChangedReminder = (
+	prompt: MemonDesktopFiles,
+	current: MemonDesktopFiles,
+): string | null => {
+	const changed = [
+		prompt.bot !== current.bot &&
+			`<bot_md>\n${desktopFileForPrompt(current.bot, MEMON_BOT_TEMPLATE) ?? "(no instructions)"}\n</bot_md>`,
+		prompt.memory !== current.memory &&
+			`<memory_md>\n${desktopFileForPrompt(current.memory, MEMON_MEMORY_TEMPLATE) ?? "(empty)"}\n</memory_md>`,
+	].filter(Boolean);
+	return changed.length
+		? [
+				`Changed during this chat; this is how it is now (follow it, and use these entry numbers):`,
+				...changed,
+			].join("\n")
+		: null;
+};
+
 const appName = (app: string) => app[0].toUpperCase() + app.slice(1);
+
+/** Open tasks listed in the prompt; the Tasks window has them all. */
+const PROMPT_TASKS = 10;
+
+const STATE_WORDS: Record<MemonTask["state"], string> = {
+	new: "new, waiting for the user's approval",
+	approved: "approved, waiting for you",
+	in_progress: "in progress",
+	done: "done",
+	dropped: "dropped",
+};
+
+/**
+ * The open tasks, one line each, so a new message knows what is waiting.
+ * They change as work goes on, so they are a reminder past the cached
+ * prefix: in the system prompt, every tick would make the next message
+ * re-read the whole conversation at full price.
+ */
+export const openTasksReminder = (
+	tasks: readonly MemonTask[],
+): string | null => {
+	const open = tasks.filter(
+		(task) => task.state !== "done" && task.state !== "dropped",
+	);
+	if (!open.length) return null;
+	const lines = open.slice(0, PROMPT_TASKS).map((task) => {
+		const { done, total } = taskProgress(task);
+		const progress = task.checklist.length ? ` · ${done}/${total}` : "";
+		return `- #${task.id} ${task.title} (${STATE_WORDS[task.state]}${progress})`;
+	});
+	if (open.length > PROMPT_TASKS) {
+		lines.push(`- … ${open.length - PROMPT_TASKS} more in Tasks`);
+	}
+	return `MemonOS Tasks, open when this message arrived (the Tasks window has them live):\n${lines.join("\n")}`;
+};
 
 export const buildMemonPrompt = (
 	config: MemonFeatureConfig,
@@ -231,6 +340,7 @@ export const buildMemonPrompt = (
 		ready.length ? "Studio" : null,
 		"Skills",
 		"Connections",
+		config.piCode ? "pi code" : null,
 	].filter(Boolean);
 	const gates = [
 		config.askBefore.forms ? "submitting forms" : null,
@@ -247,7 +357,8 @@ export const buildMemonPrompt = (
 		...apps.map((app) => APP_SECTIONS[app](config)),
 		studioSection(ready),
 		BUILT_IN_SECTION,
-		homeSection(desktop, config.apps.notes, home),
+		config.piCode ? PI_CODE_SECTION : null,
+		homeSection(desktop, config.apps.tasks, home),
 		section("Working with the user", "they watch and can take over", [
 			'"user changes since your last screen" lists what they did: continue from the current screen and do not undo their changes.',
 			gates.length > 0 &&
@@ -261,20 +372,30 @@ export const buildMemonPrompt = (
 
 /**
  * The agent's home, made ready (`/agents/<agent name>`, moved in from where
- * an older version kept it), with Bot.md and Memory.md as they are now.
- * Loaded lazily: importing this step must not start the filesystem.
+ * an older version kept it), with Bot.md, Memory.md and the tasks as they
+ * are now. Loaded lazily: importing this step must not start the filesystem.
  */
 const readHome = async (
 	agentId: string | undefined,
-): Promise<{ home?: string; desktop?: MemonDesktopFiles }> => {
+): Promise<{
+	home?: string;
+	desktop?: MemonDesktopFiles;
+	tasks?: MemonTask[];
+}> => {
 	try {
 		const { createMemonFilesPort, createMemonHomePort } = await import(
 			"@/services/memon/ports"
 		);
 		const home = await createMemonHomePort().resolve(agentId ?? null);
+		const files = createMemonFilesPort();
+		const tasks = await files
+			.read(memonHomePaths(home).tasks)
+			.then((content) => parseTasksFile(content).tasks)
+			.catch(() => []);
 		return {
 			home,
-			desktop: await loadMemonDesktopFiles(createMemonFilesPort(), home),
+			desktop: await loadMemonDesktopFiles(files, home),
+			tasks,
 		};
 	} catch (error) {
 		logError("[MEMON_FEATURE] Could not read Bot.md / Memory.md:", error);
@@ -305,7 +426,7 @@ const definition = defineStep<
 			const memonConfig = normalizeMemonFeatureConfig(config);
 			const runtime = getFlowRuntimeVars(runConfig);
 			runtime?.set(MEMON_CONFIG_RUNTIME_KEY, memonConfig);
-			const [{ home, desktop }, studio] = await Promise.all([
+			const [{ home, desktop, tasks }, studio] = await Promise.all([
 				// The agent's own home, as its computer uses.
 				readHome(getRunAgentId(runtime)),
 				readStudioTools(),
@@ -315,11 +436,27 @@ const definition = defineStep<
 				input.tools,
 				...memonToolsFor(memonConfig, studio),
 			);
+			// What changes as the chat goes on stays out of the system prompt.
+			const promptFiles = desktop
+				? conversationDesktopFiles(getConversationScopeKey(runtime), desktop)
+				: undefined;
 			const messages = GraphBase.chat.systemMessage(
 				input.messages,
-				buildMemonPrompt(memonConfig, desktop, studio, home),
+				buildMemonPrompt(memonConfig, promptFiles, studio, home),
 			);
-			return { output: { tools, messages } };
+			const reminders = [
+				promptFiles && desktop
+					? desktopFilesChangedReminder(promptFiles, desktop)
+					: null,
+				memonConfig.apps.tasks ? openTasksReminder(tasks ?? []) : null,
+			].filter((reminder): reminder is string => Boolean(reminder));
+			return {
+				output: {
+					tools,
+					messages,
+					...(reminders.length ? { reminders } : {}),
+				},
+			};
 		} catch (error) {
 			logError("[MEMON_FEATURE] Failed:", error);
 			return {

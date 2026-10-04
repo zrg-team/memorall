@@ -1,7 +1,4 @@
-import {
-	defineStep,
-	bindStep,
-} from "../../../interfaces/engine/step.js";
+import { defineStep, bindStep } from "../../../interfaces/engine/step.js";
 import type {
 	BoundStep,
 	StepFactoryFromSpec,
@@ -10,10 +7,7 @@ import type {
 } from "../../../interfaces/engine/step.js";
 import type { ChatCompletionMessageParam } from "../../../interfaces/engine/messages.js";
 import type { AllServices } from "../../../interfaces/services/services.js";
-import {
-	GraphBase,
-	type GraphTool,
-} from "../../../graph/graph.base.js";
+import { GraphBase, type GraphTool } from "../../../graph/graph.base.js";
 import { stepRegistry } from "../../../registries/step-registry.js";
 import { logError } from "../../../logging/logger.js";
 import {
@@ -59,14 +53,67 @@ export const BROWSER_SANDBOX_FEATURE_DESCRIPTION =
 export const NODEJS_SANDBOX_FEATURE_DESCRIPTION =
 	BROWSER_SANDBOX_FEATURE_DESCRIPTION;
 
+/** Python as the sandbox reports it in `capabilities.extensions.python`. */
+export interface SandboxPythonCapability {
+	/** Importable besides the standard library, by pip name; nothing else can be installed. */
+	packages: readonly string[];
+	/** The same packages described for the agent: what to import, and what for. */
+	summary?: string;
+	/** How to use them here, one tip each (no window, so charts go to files…). */
+	notes?: readonly string[];
+}
+
+const strings = (value: unknown): string[] =>
+	Array.isArray(value)
+		? value.filter(
+				(item): item is string => typeof item === "string" && !!item.trim(),
+			)
+		: [];
+
+/** The sandbox's Python, when it reports one. */
+export const readSandboxPython = (
+	extensions: Record<string, unknown> | undefined,
+): SandboxPythonCapability | undefined => {
+	const python = extensions?.python;
+	if (!python || typeof python !== "object") return undefined;
+	const { packages, summary, notes } = python as {
+		packages?: unknown;
+		summary?: unknown;
+		notes?: unknown;
+	};
+	return {
+		packages: strings(packages),
+		...(typeof summary === "string" && summary.trim()
+			? { summary: summary.trim() }
+			: {}),
+		...(strings(notes).length ? { notes: strings(notes) } : {}),
+	};
+};
+
+const pythonGuidance = ({
+	packages,
+	summary,
+	notes = [],
+}: SandboxPythonCapability): string => {
+	const listed = summary ?? packages.join(", ");
+	const extras = listed
+		? `the standard library plus ${listed}`
+		: "the standard library only";
+	return [
+		`- Python: run \`py file.py\` or \`py -c "..."\` as a command. It is Pyodide in the browser with ${extras}; importing them loads them, and pip cannot install anything else. Use it when Python is asked for or suits the task.`,
+		...notes.map((note) => `- ${note}`),
+	].join("\n");
+};
+
 export const buildBrowserSandboxPrompt = (
 	tools: readonly string[],
+	python?: SandboxPythonCapability,
 ): string => `# BROWSER SANDBOX
 Use the active browser sandbox when code must be executed, packages tested, commands run, or a web app previewed.
 
 Available sandbox tools: ${tools.join(", ")}.
 
-- The runtime is AlmostNode in the browser, not OS Node.js. Browser-compatible JavaScript, TypeScript, npm packages, and common Node shims are supported; native addons and OS process assumptions are not.
+- The runtime is AlmostNode in the browser, not OS Node.js. Browser-compatible JavaScript, TypeScript, npm packages, and common Node shims are supported; native addons and OS process assumptions are not.${python ? `\n${pythonGuidance(python)}` : ""}
 - Use the existing fs_read, fs_write, fs_edit, fs_ls, fs_glob, fs_grep, fs_mkdir, and fs_remove tools for workspace files. The harness synchronizes those files with the sandbox.
 - Use sandbox_run for code, workspace files, commands, and REPL evaluation. For a running command, continue with sandbox_process read and its returned nextCursor; never invent or alter opaque IDs and cursors.
 - Use sandbox_packages only when a dependency is required.
@@ -114,9 +161,12 @@ const definition = defineStep<
 				...sandboxTools,
 				...ARTIFACT_FEATURE_TOOLS,
 			);
+			const python = readSandboxPython(
+				capabilities?.extensions as Record<string, unknown> | undefined,
+			);
 			const messages = GraphBase.chat.systemMessage(
 				input.messages,
-				`${buildBrowserSandboxPrompt(sandboxTools)}\n\n${ARTIFACT_FEATURE_SYSTEM_PROMPT}`,
+				`${buildBrowserSandboxPrompt(sandboxTools, python)}\n\n${ARTIFACT_FEATURE_SYSTEM_PROMPT}`,
 			);
 
 			return { output: { tools, messages } };

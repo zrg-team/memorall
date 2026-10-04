@@ -3,6 +3,7 @@
 		"chat": "Trò chuyện",
 		"agents": "Tác nhân",
 		"models": "Mô hình",
+		"usage": "Mức dùng",
 		"knowledgeGraph": "Bộ nhớ",
 		"connections": "Kết nối",
 		"skills": "Kỹ năng",
@@ -368,7 +369,7 @@
 			},
 			"memonFeature": {
 				"name": "MemonOS Bot",
-				"description": "Cho agent một chiếc máy tính: Trình duyệt, Tệp, Terminal, Ghi chú và các studio của bạn trên một màn hình mà bạn có thể theo dõi và tiếp quản."
+				"description": "Cho agent một chiếc máy tính: Trình duyệt, Tệp, Terminal, Công việc và các studio của bạn trên một màn hình mà bạn có thể theo dõi và tiếp quản."
 			}
 		}
 	},
@@ -558,6 +559,10 @@
 		"save": "Lưu",
 		"commandRunning": "(vẫn đang chạy)",
 		"shutDown": "Tắt máy",
+		"fullscreen": "Toàn màn hình",
+		"exitFullscreen": "Thoát toàn màn hình",
+		"maximizePanel": "Phóng to: lấp đầy bảng bên phải, vẫn giữ khung chat",
+		"restorePanel": "Hiện lại thanh tab và tiêu đề của bảng",
 		"you": "Bạn",
 		"start": {
 			"title": "Khởi động máy tính",
@@ -587,13 +592,24 @@
 			"editor": "Trình soạn thảo",
 			"viewer": "Trình xem",
 			"terminal": "Terminal",
-			"notes": "Ghi chú",
+			"tasks": "Công việc",
 			"scheduler": "Lập lịch",
 			"studio": "Studio",
 			"skills": "Kỹ năng",
 			"connections": "Kết nối",
-			"visualize": "Trực quan hóa"
+			"visualize": "Trực quan hóa",
+			"pi": "pi code"
 		},
+		"piCode": {
+			"starting": "Đang khởi động pi…",
+			"error": "Không khởi động được pi code: {{error}}",
+			"waiting": "pi code sẽ khởi động khi bạn cho phép MemonOS Bot dùng nó.",
+			"approvalTitle": "MemonOS Bot muốn giao việc này cho pi code",
+			"approvalHint": "pi sẽ đọc, sửa và chạy mã trong tệp của bạn bằng mô hình của khung chat. Nếu bạn từ chối, MemonOS Bot sẽ tự viết mã và không hỏi lại.",
+			"approve": "Dùng pi code",
+			"deny": "Để MemonOS Bot tự viết"
+		},
+		"tasksOpen": "{{count}} đang mở",
 		"terminal": {
 			"running": "Đang chạy · {{elapsed}}",
 			"quiet": "không có đầu ra trong {{elapsed}}, hãy Dừng nếu đã xong",
@@ -611,7 +627,9 @@
 			"clear": "Xóa",
 			"clearHistory": "Xóa lịch sử lệnh",
 			"clearHistoryConfirm": "Xóa lịch sử lệnh của Terminal? Các lệnh cũng bị xóa khỏi tệp lịch sử.",
-			"historyCount": "{{count}} lệnh trong {{file}}"
+			"historyCount": "{{count}} lệnh trong {{file}}",
+			"tabRunning": "đang chạy: {{command}}",
+			"tabLast": "lần cuối: {{command}} (mã thoát {{code}})"
 		},
 		"preview": {
 			"preview": "Xem trước",
@@ -737,7 +755,16 @@
 				"running": "đang chạy",
 				"done": "xong",
 				"failed": "lỗi"
-			}
+			},
+			"appFrom": "ứng dụng · {{file}}",
+			"appHint": "Cài đặt đã được điền bên dưới; nhập dữ liệu và chạy.",
+			"appSettings": "cài đặt khác: {{settings}}",
+			"closeApp": "Đóng ứng dụng",
+			"appName": "Lưu các cài đặt này thành ứng dụng trên màn hình",
+			"appNamePlaceholder": "Tên ứng dụng, ví dụ Phân tích phản hồi người dùng",
+			"saveApp": "Lưu ứng dụng",
+			"installApp": "Lưu thành ứng dụng",
+			"needAppName": "hãy đặt tên ứng dụng trước"
 		},
 		"scheduler": {
 			"noAgent": "Máy tính này chưa gắn với tác nhân nào. Khởi động từ một tác nhân, hoặc trò chuyện với tác nhân, để xem lịch của nó.",
@@ -766,20 +793,36 @@
 				"paused": "đã tạm dừng"
 			}
 		},
-		"notes": {
-			"done": "xong",
-			"now": "đang làm: {{step}}",
-			"empty": "Chưa có bước nào. Lên kế hoạch công việc ở đây.",
-			"wording": "Nội dung",
-			"undo": "Hoàn tác",
-			"tick": "Xong",
-			"remove": "Xóa",
-			"newStep": "Bước mới",
-			"addPlaceholder": "Thêm một bước",
+		"tasks": {
+			"state": {
+				"new": "mới",
+				"approved": "đã duyệt",
+				"in_progress": "đang làm",
+				"done": "xong",
+				"dropped": "đã bỏ"
+			},
+			"stateLabel": "Trạng thái",
+			"addedByUser": "người dùng thêm lúc {{time}}",
+			"addedByAgent": "agent thêm lúc {{time}}",
+			"doneAt": "xong lúc {{time}}",
+			"droppedAt": "bỏ lúc {{time}}",
+			"title": "Tiêu đề",
+			"checklistField": "Danh sách kiểm tra, mỗi dòng một mục (\"[x] \" đánh dấu mục đã xong)",
+			"waiting": "mới · chờ duyệt",
+			"progress": "xong",
+			"approve": "Duyệt",
+			"newTask": "Công việc mới",
+			"addPlaceholder": "Cần làm gì?",
 			"add": "Thêm",
-			"addDisabled": "hãy nhập bước trước",
-			"text": "Ghi chú",
-			"textPlaceholder": "Phát hiện, nguồn, quyết định…"
+			"addDisabled": "hãy nhập công việc trước",
+			"empty": "Chưa có công việc đang mở. Thêm ở đây, hoặc nhờ agent trong chat.",
+			"open": "Đang mở ({{count}})",
+			"finished": "Đã kết thúc ({{count}})",
+			"showFinished": "Hiện",
+			"older": "… {{count}} công việc cũ hơn được giữ trong {{file}}.",
+			"deleteConfirm": "Xóa hẳn công việc này? Công việc đã xong hoặc đã bỏ vẫn được giữ làm hồ sơ; xóa sẽ gỡ nó khỏi tệp công việc.",
+			"details": "Chi tiết",
+			"hideDetails": "Ẩn chi tiết"
 		},
 		"showRealPage": "Hiện trang thật trong trình duyệt",
 		"showRealPageShort": "Hiện",
@@ -813,9 +856,16 @@
 			"pasteCut_other": "Dán {{count}} mục đã cắt",
 			"pasteCopy_one": "Dán {{count}} mục đã sao chép",
 			"pasteCopy_other": "Dán {{count}} mục đã sao chép",
-			"hint": "Ctrl/⌘-nhấp để chọn; kéo vào một thư mục để di chuyển, giữ Ctrl hoặc Alt để sao chép.",
+			"hint": "Nhấp đúp để mở, nhấp chuột phải để xem thêm; Ctrl/⌘-nhấp để chọn nhiều mục; kéo vào một thư mục để di chuyển, giữ Ctrl hoặc Alt để sao chép.",
 			"home": "Thư mục nhà (~): thư mục riêng của tác nhân này",
-			"root": "Máy tính (/)"
+			"root": "Máy tính (/)",
+			"open": "Mở",
+			"paste": "Dán",
+			"pasteInto": "Dán vào {{name}}",
+			"deleteOne": "Xóa “{{name}}”?",
+			"deleteMany_one": "Xóa {{count}} mục?",
+			"deleteMany_other": "Xóa {{count}} mục?",
+			"deleteWarning": "Không thể hoàn tác: máy tính này không có thùng rác. Xóa một thư mục sẽ xóa mọi thứ bên trong."
 		},
 		"browser": {
 			"newRealTab": "Thẻ mới trong trình duyệt thật",

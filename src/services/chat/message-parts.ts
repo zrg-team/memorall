@@ -12,13 +12,19 @@ import {
 
 type AssistantPart = Extract<ChatCompletionMessageParam, { role: "assistant" }>;
 type ToolPart = Extract<ChatCompletionMessageParam, { role: "tool" }>;
+type UserPart = Extract<ChatCompletionMessageParam, { role: "user" }>;
 
-const isAssistantOrToolMessage = (
+/** A reply's parts: what the agent wrote, its tools, and what the user sent meanwhile. */
+const isReplyPart = (
 	message: unknown,
-): message is AssistantPart | ToolPart => {
+): message is AssistantPart | ToolPart | UserPart => {
 	if (!message || typeof message !== "object") return false;
 	if (!("role" in message)) return false;
-	return message.role === "assistant" || message.role === "tool";
+	return (
+		message.role === "assistant" ||
+		message.role === "tool" ||
+		message.role === "user"
+	);
 };
 
 export const getOutputMessageParts = (
@@ -26,7 +32,7 @@ export const getOutputMessageParts = (
 ): MessageParts => {
 	const outputMessages = finalState?.outputMessages;
 	if (!Array.isArray(outputMessages)) return [];
-	return outputMessages.filter(isAssistantOrToolMessage);
+	return outputMessages.filter(isReplyPart);
 };
 
 export const cloneMessageParts = (
@@ -127,6 +133,15 @@ export class MessagePartsAccumulator {
 				}
 			}
 		}
+	}
+
+	/**
+	 * A message the user sent while the agent worked, where the agent read it:
+	 * what the agent writes next starts a new part after it.
+	 */
+	addUserMessage(content: string): void {
+		this.currentAssistantIndex = null;
+		this.parts.push({ role: "user", content });
 	}
 
 	toParts(): MessageParts {

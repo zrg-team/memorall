@@ -1,0 +1,199 @@
+{
+	"title": "Mức dùng & chi phí",
+	"description": "Các agent đã chi bao nhiêu cho từng mô hình, tính năng và công cụ. Mô hình cục bộ miễn phí và chỉ đếm token.",
+	"actions": {
+		"refresh": "Làm mới",
+		"exportCsv": "Xuất CSV",
+		"retry": "Thử lại"
+	},
+	"range": {
+		"label": "Khoảng thời gian",
+		"7d": "7N",
+		"30d": "30N",
+		"90d": "90N",
+		"mtd": "Từ đầu tháng"
+	},
+	"compare": {
+		"previousDays_other": "so với {{count}} ngày trước đó",
+		"monthToDate": "so với {{day}} ngày đầu {{month}}"
+	},
+	"measure": {
+		"label": "Đo theo",
+		"cost": "Chi phí",
+		"tokens": "Token"
+	},
+	"filters": {
+		"agent": "Agent",
+		"provider": "Nhà cung cấp",
+		"model": "Mô hình",
+		"feature": "Tính năng",
+		"tool": "Công cụ",
+		"allAgents": "Tất cả agent",
+		"allProviders": "Tất cả nhà cung cấp",
+		"remove": "Bỏ bộ lọc {{name}}",
+		"reset": "Xóa bộ lọc",
+		"clear": "Bỏ lọc",
+		"focus": "Lọc theo {{name}}"
+	},
+	"providers": {
+		"local": "Trên thiết bị",
+		"unknown": "Không rõ nhà cung cấp"
+	},
+	"agents": {
+		"default": "Chat mặc định",
+		"defaultSub": "Không chọn agent"
+	},
+	"models": {
+		"unknown": "Không rõ mô hình",
+		"onDevice": "{{provider}} · trên thiết bị"
+	},
+	"change": {
+		"new": "Mới"
+	},
+	"summary": {
+		"totalSpend": "Tổng chi phí",
+		"perDay": "{{value}} mỗi ngày · {{requests}} yêu cầu mô hình",
+		"unpricedTokens_other": "+{{tokens}} token từ {{count}} yêu cầu không có giá được báo",
+		"unpricedRow": "Không có giá được báo — hiển thị token thay thế",
+		"tokensUnit": "token",
+		"plusTokens": "+{{tokens}} token",
+		"free": "Miễn phí"
+	},
+	"tiles": {
+		"tokens": "Token",
+		"tokensSub": "{{input}} vào · {{output}} ra",
+		"requests": "Yêu cầu",
+		"conversations_other": "{{count}} cuộc trò chuyện",
+		"perConversation": "TB mỗi cuộc trò chuyện",
+		"perConversationSub": "chi phí ÷ số cuộc trò chuyện",
+		"blendedRate": "Đơn giá trung bình",
+		"blendedRateSub": "mỗi 1M token có giá",
+		"cached": "Đầu vào từ cache",
+		"cachedSub": "trên token đầu vào từ xa",
+		"local": "Chạy trên thiết bị",
+		"localSub": "{{tokens}} token · $0"
+	},
+	"insights": {
+		"label": "Nhận xét",
+		"agentRise": "<b>{{agent}}</b> tăng <b>{{change}}%</b> (+{{delta}}) {{compare}}.",
+		"focus": "Xem riêng {{name}}",
+		"peakDay": "<b>{{day}}</b> dùng <b>{{value}}</b>, gấp {{ratio}} lần trung bình ngày. Phần lớn là “{{title}}” ({{share}}).",
+		"topTool": "Kết quả của <code>{{tool}}</code> trung bình <b>~{{tokens}} token</b> và chiếm <b>{{share}}</b> mức dùng do công cụ.",
+		"filterTool": "Lọc theo công cụ này",
+		"cacheHit": "<b>{{share}}</b> token đầu vào từ xa được lấy từ cache prompt.",
+		"local": "<b>{{share}}</b> yêu cầu chạy trên mô hình cục bộ với giá <b>$0</b>."
+	},
+	"trend": {
+		"titleCost": "Chi phí theo thời gian",
+		"titleTokens": "Token theo thời gian",
+		"subtitle": "Theo ngày · kỳ này {{compare}}",
+		"current": "Kỳ này",
+		"previous": "Kỳ trước",
+		"date": "Ngày",
+		"previousDate": "Ngày kỳ trước",
+		"peak": "Đỉnh",
+		"ariaLabel": "Mức dùng mỗi ngày, kỳ này so với kỳ trước",
+		"keyboard": "Dùng phím mũi tên để chuyển giữa các ngày"
+	},
+	"view": {
+		"label": "Hiển thị",
+		"chart": "Biểu đồ",
+		"table": "Bảng"
+	},
+	"breakdown": {
+		"costBy": "Chi phí theo {{name}}",
+		"tokensBy": "Token theo {{name}}",
+		"subtitleDaily": "Theo ngày · top 5 + khác · bấm vào dòng để lọc",
+		"subtitleWeekly": "Theo tuần · top 5 + khác · bấm vào dòng để lọc",
+		"agent": "agent",
+		"agentColumn": "Agent",
+		"model": "mô hình",
+		"modelColumn": "Mô hình",
+		"other": "Khác",
+		"week": "Tuần",
+		"total": "Tổng",
+		"share": "Tỷ lệ",
+		"trend": "Xu hướng"
+	},
+	"features": {
+		"titleCost": "Chi phí theo tính năng",
+		"titleTokens": "Token theo tính năng",
+		"subtitle": "Các yêu cầu đã đọc kết quả công cụ của tính năng · bấm vào dòng để lọc",
+		"base": "Chat cơ bản",
+		"other": "Công cụ khác",
+		"requests_other": "{{formatted}} yêu cầu"
+	},
+	"mix": {
+		"title": "Token đi đâu",
+		"subtitle": "Token đầu vào, cache, đầu ra và suy luận",
+		"input": "Đầu vào",
+		"cached": "Đầu vào từ cache",
+		"output": "Đầu ra",
+		"reasoning": "Suy luận"
+	},
+	"heatmap": {
+		"title": "Thời điểm sử dụng",
+		"subtitleCost": "Chi phí theo thứ và giờ, giờ địa phương",
+		"subtitleTokens": "Token theo thứ và giờ, giờ địa phương",
+		"less": "Ít",
+		"more": "Nhiều",
+		"requests_other": "{{formatted}} yêu cầu"
+	},
+	"tools": {
+		"titleCost": "Chi phí theo công cụ",
+		"titleTokens": "Token theo công cụ",
+		"subtitle": "Tính cho yêu cầu đã đọc kết quả công cụ vào mô hình · bấm vào dòng để lọc",
+		"empty": "Không có kết quả công cụ nào được đọc trong kỳ này.",
+		"tool": "Công cụ",
+		"calls": "Lượt gọi",
+		"avgResult": "KQ trung bình",
+		"perCall": "Mỗi lượt",
+		"tokensPerCall": "Token / lượt",
+		"showTop": "Chỉ hiện top {{count}}",
+		"showAll": "Hiện cả {{count}} công cụ"
+	},
+	"conversations": {
+		"title": "Cuộc trò chuyện tốn nhất",
+		"subtitleCost": "Top {{count}} theo chi phí trong kỳ · bấm để mở",
+		"subtitleTokens": "Top {{count}} theo token trong kỳ · bấm để mở",
+		"conversation": "Cuộc trò chuyện",
+		"model": "Mô hình chính",
+		"lastActive": "Hoạt động gần nhất",
+		"open": "Mở trong chat",
+		"untitled": "Cuộc trò chuyện không tên",
+		"today": "Hôm nay",
+		"yesterday": "Hôm qua",
+		"daysAgo_other": "{{count}} ngày trước"
+	},
+	"budget": {
+		"set": "Đặt ngân sách",
+		"edit": "Sửa ngân sách",
+		"label": "Ngân sách hằng tháng (USD)",
+		"hint": "So với chi phí nhà cung cấp báo trong tháng này.",
+		"save": "Lưu",
+		"clear": "Xóa",
+		"month": "Ngân sách {{month}}",
+		"of": "trên {{budget}}",
+		"meter": "Chi phí từ đầu tháng so với ngân sách",
+		"projectedMarker": "Dự kiến cuối tháng",
+		"over": "Dự kiến {{projected}}, vượt {{over}}",
+		"onTrack": "Trong ngân sách · dự kiến {{projected}}"
+	},
+	"error": {
+		"load": "Không tải được mức dùng: {{message}}"
+	},
+	"empty": {
+		"loading": "Đang tải mức dùng…",
+		"title": "Chưa có mức dùng",
+		"description": "Trò chuyện với một agent và mức dùng mô hình sẽ hiện ở đây.",
+		"filtered": "Không có mức dùng khớp với bộ lọc."
+	},
+	"method": {
+		"title": "Cách tính chi phí",
+		"cost": "Chi phí là số nhà cung cấp báo cho từng yêu cầu (OpenRouter có báo). Khi không có giá, dòng đó hiển thị token của các yêu cầu thay thế — ví dụ \"$1.20 +45K token\".",
+		"tools": "Chi phí công cụ là yêu cầu đã đọc kết quả công cụ vào mô hình, chia theo độ dài kết quả khi một yêu cầu đọc nhiều kết quả.",
+		"features": "Chi phí tính năng là các yêu cầu đã đọc kết quả công cụ của tính năng đó. Chat cơ bản là các yêu cầu trước khi có công cụ nào chạy.",
+		"local": "Mô hình chạy cục bộ (WebLLM, Wllama, Transformers.js, Ollama, LM Studio) có giá $0 và chỉ đếm token.",
+		"notCounted": "Chưa tính: trích xuất bộ nhớ và tri thức chạy nền, sub-agent được giao việc, và các lượt tạo trong studio."
+	}
+}

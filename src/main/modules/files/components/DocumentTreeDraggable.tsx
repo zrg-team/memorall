@@ -21,6 +21,7 @@ import {
 	Trash2,
 	FileAudio,
 	FileVideo,
+	Presentation,
 } from "lucide-react";
 import {
 	DropdownMenu,
@@ -75,6 +76,7 @@ const FILE_ICONS: Record<DocumentType, React.ComponentType<any>> = {
 	audio: FileAudio,
 	video: FileVideo,
 	excel: FileText,
+	presentation: Presentation,
 	other: File,
 };
 
@@ -86,6 +88,7 @@ const FILE_COLORS: Record<DocumentType, string> = {
 	audio: "text-violet-500",
 	video: "text-pink-500",
 	excel: "text-green-600",
+	presentation: "text-orange-500",
 	other: "text-gray-400",
 };
 

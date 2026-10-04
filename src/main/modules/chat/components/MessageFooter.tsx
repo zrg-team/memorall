@@ -80,6 +80,29 @@ export const MessageFooter: React.FC<MessageFooterProps> = React.memo(
 			usage,
 		} = metadata;
 
+		// The previous answer's last request: this turn's first should reuse it.
+		const previousTurn = useMemo(() => {
+			const index = groupMessages.findIndex((entry) => entry.id === message.id);
+			for (let i = index - 1; i >= 0; i--) {
+				const entry = groupMessages[i];
+				if (entry?.role !== "assistant") continue;
+				const call = (
+					entry.metadata as MessageFooterMetadata | null | undefined
+				)?.usage?.calls?.at(-1);
+				if (!call) return undefined;
+				const ended = new Date(entry.updatedAt ?? entry.createdAt).getTime();
+				const started = new Date(message.createdAt).getTime();
+				return {
+					call,
+					minutesBefore:
+						Number.isFinite(ended) && Number.isFinite(started)
+							? Math.max(0, (started - ended) / 60_000)
+							: undefined,
+				};
+			}
+			return undefined;
+		}, [groupMessages, message.id, message.createdAt]);
+
 		const cacheHitRatio = getCacheHitRatio(usage);
 		const cacheHitPercent =
 			cacheHitRatio === undefined ? undefined : Math.round(cacheHitRatio * 100);
@@ -277,7 +300,9 @@ export const MessageFooter: React.FC<MessageFooterProps> = React.memo(
 						)}
 					</div>
 
-					{usage ? <TokenUsagePanel usage={usage} /> : null}
+					{usage ? (
+						<TokenUsagePanel usage={usage} previous={previousTurn} />
+					) : null}
 				</div>
 				<DocumentSaveFolderDialog
 					open={saveDialogOpen}

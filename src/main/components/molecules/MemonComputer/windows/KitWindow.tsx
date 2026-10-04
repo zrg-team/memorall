@@ -150,6 +150,17 @@ export const KitWindow: React.FC<{
 	};
 
 	const onUserAction = (id: string) => {
+		// Approving and deleting a task are the user's: the agent never sees
+		// those buttons, but the machine carries them out.
+		if (app === "tasks") {
+			if (
+				id.startsWith("delete:") &&
+				!window.confirm(t("memonComputer.tasks.deleteConfirm"))
+			)
+				return;
+			void onAction(id, undefined);
+			return;
+		}
 		if (id === "page") {
 			navigate(app === "skills" ? "/skills" : "/connections");
 			return;
@@ -187,7 +198,7 @@ export const KitWindow: React.FC<{
 	};
 
 	return (
-		<div className="min-h-0 flex-1 overflow-auto p-3">
+		<div className="min-h-0 flex-1 overflow-auto px-3.5 py-3">
 			<MemonAppView
 				nodes={nodes}
 				refPrefix={kit.refPrefix}

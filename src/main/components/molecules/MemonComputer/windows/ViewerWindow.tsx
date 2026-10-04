@@ -2,6 +2,7 @@ import { FileQuestion } from "lucide-react";
 import React from "react";
 import { useTranslation } from "react-i18next";
 import { LazyExcelViewer } from "@/main/modules/files/components/LazyExcelViewer";
+import { LazyPresentationViewer } from "@/main/modules/files/components/LazyPresentationViewer";
 import { documentFileSystemService } from "@/services/filesystem/document-filesystem";
 import { toDocumentsSandboxPath } from "@/services/filesystem/sandbox-paths";
 import { memonMimeType } from "@/services/memon/file-kinds";
@@ -26,6 +27,7 @@ export const ViewerWindow: React.FC<{ viewer: MemonViewerState }> = ({
 	const [url, setUrl] = React.useState<string | null>(null);
 	const [excelData, setExcelData] = React.useState<Uint8Array | null>(null);
 	const [pdfData, setPdfData] = React.useState<Uint8Array | null>(null);
+	const [slideData, setSlideData] = React.useState<Uint8Array | null>(null);
 	const [error, setError] = React.useState<string | null>(null);
 	const [mediaError, setMediaError] = React.useState(false);
 	const { path, kind } = viewer;
@@ -34,6 +36,7 @@ export const ViewerWindow: React.FC<{ viewer: MemonViewerState }> = ({
 		setUrl(null);
 		setExcelData(null);
 		setPdfData(null);
+		setSlideData(null);
 		setError(null);
 		setMediaError(false);
 		// Word documents show the text the agent reads, rendered.
@@ -52,6 +55,10 @@ export const ViewerWindow: React.FC<{ viewer: MemonViewerState }> = ({
 				}
 				if (kind === "pdf") {
 					setPdfData(content);
+					return;
+				}
+				if (kind === "presentation") {
+					setSlideData(content);
 					return;
 				}
 				objectUrl = URL.createObjectURL(
@@ -111,6 +118,18 @@ export const ViewerWindow: React.FC<{ viewer: MemonViewerState }> = ({
 						className="h-full"
 					/>
 				</div>
+			</div>
+		) : (
+			<Centered>{t("memonComputer.viewer.opening")}</Centered>
+		);
+	}
+	if (kind === "presentation") {
+		return slideData ? (
+			<div className="flex min-h-0 flex-1">
+				<LazyPresentationViewer
+					fileData={slideData}
+					fileName={path.split("/").pop() ?? path}
+				/>
 			</div>
 		) : (
 			<Centered>{t("memonComputer.viewer.opening")}</Centered>

@@ -23,7 +23,7 @@
 		"showAdvancedOptions": "Or setup with your own API key / local model"
 	},
 	"input": {
-		"runningElsewhere": "Replying in “{{title}}”. Chats run one at a time.",
+		"runningElsewhere": "Replying in “{{title}}”. This chat waits: a local model or an agent with a computer runs one chat at a time.",
 		"openRunningChat": "Open",
 		"waitForRun": "Waiting for the reply in the other chat…",
 		"placeholder": "Type your message...",
@@ -33,7 +33,8 @@
 		"clearButton": "New",
 		"attachImage": "Attach files",
 		"attachFile": "Upload from computer",
-		"attachDocument": "Choose from documents"
+		"attachDocument": "Choose from documents",
+		"duringRun": "Add to it: the agent reads it at its next step"
 	},
 	"sidebar": {
 		"replying": "Replying",
@@ -151,12 +152,13 @@
 		"memon_act": "Use computer",
 		"memon_run": "Run command",
 		"memon_window": "Arrange windows",
-		"memon_notes": "Update notes",
+		"memon_tasks": "Update tasks",
 		"memon_schedule": "Manage schedules",
 		"memon_memory": "Update memory",
 		"memon_studio": "Use Studio",
 		"memon_skills": "Manage skills",
 		"memon_connections": "Manage connections",
+		"memon_code": "Use pi code",
 		"memon_visualize": "Visualize"
 	},
 	"messages": {
@@ -186,6 +188,9 @@
 		"cacheRestarted": "Nothing was reused from the previous request.",
 		"cachePartial": "Reused an older request instead of the previous one — likely served by a different provider.",
 		"cacheProviderSwitch": "Served by {{to}} instead of {{from}} — each provider keeps its own cache.",
+		"cacheTurnRestarted": "Nothing was reused from your previous message: the start of the request changed, so the whole conversation was read again.",
+		"cacheTurnExpired": "Nothing was reused from your previous message, {{minutes}} min earlier: the provider may have dropped its cache, or the start of the request changed.",
+		"cacheTurnPartial": "Reused only part of your previous message: the conversation changed partway (compacted history, say), or another provider served it.",
 		"providerColumn": "Provider",
 		"thinking": "Thinking...",
 		"thought": "Thought",
@@ -197,7 +202,18 @@
 		"coAgentSessionStart": "Co-agent session started",
 		"coAgentSessionEnd": "Co-agent session ended",
 		"coAgentOnPage": "on {{page}}",
-		"coAgentMovedTo": "moved to {{page}}"
+		"coAgentMovedTo": "moved to {{page}}",
+		"compaction": {
+			"title": "Context compacted",
+			"tokens": "{{before}} → {{after}} tokens",
+			"shortened_one": "{{count}} tool result shortened",
+			"shortened_other": "{{count}} tool results shortened",
+			"removed_one": "{{count}} older message set aside",
+			"removed_other": "{{count}} older messages set aside",
+			"thresholdHint": "The conversation was filling the model's {{window}}-token window, so older tool results were shortened and old steps set aside before the next request. Your saved chat is unchanged.",
+			"budgetHint": "The provider refused the request as too large, so the conversation was compacted to fit {{budget}} tokens. Your saved chat is unchanged."
+		},
+		"readDuringRun": "Read by the agent at its next step"
 	},
 	"execution": {
 		"default": "Executing {{node}}",
@@ -425,7 +441,9 @@
 		"constrainChatWidth": "Constrain chat width",
 		"startCoAgent": "Let the agent see and act on the page",
 		"openComputer": "Open the agent's computer",
-		"stopCoAgent": "Turn the co-agent off"
+		"stopCoAgent": "Turn the co-agent off",
+		"sendToRun": "Send now: the agent reads it at its next step",
+		"queueMessage": "Queue: send when this reply finishes"
 	},
 	"agentSettings": {
 		"title": "Agent Settings",
@@ -485,12 +503,13 @@
 			"memon_act": "Click, type, scroll or save on the MemonOS Bot computer",
 			"memon_run": "Run a shell command in the MemonOS Bot terminal",
 			"memon_window": "Focus, minimize, maximize or close a MemonOS Bot window",
-			"memon_notes": "Plan and track the task in the MemonOS Bot Notes app",
+			"memon_tasks": "Plan and track tasks in the MemonOS Bot Tasks app, kept across chats",
 			"memon_schedule": "View and manage the agent's scheduled prompts in the MemonOS Bot Scheduler",
 			"memon_memory": "Remember things between chats in Memory.md and keep Bot.md",
 			"memon_studio": "Run the user's studios on the computer: decisions, speech, transcripts, images, image and text tools, audio",
 			"memon_skills": "View and manage the skills this agent uses",
 			"memon_connections": "View the user's connected apps and which ones this agent uses",
+			"memon_code": "Hand coding work to pi code, the coding agent on the computer, after the user confirms",
 			"memon_visualize": "Show a visual written in OpenUI in the MemonOS Bot Visualize app and save it"
 		},
 		"cancel": "Cancel",
@@ -513,18 +532,19 @@
 		"appOfHint": "While {{name}} is on, this runs as an app on its computer instead of adding separate tools.",
 		"memon": {
 			"appsLabel": "Apps on the desktop",
-			"appsHint": "Apps follow your features: Web Browser gives the Browser, File System gives Files, Editor and Viewer, Browser Sandbox gives the Terminal, Planner gives Notes, and Visualize response gives Visualize. Switch them in Features.",
+			"appsHint": "Apps follow your features: Web Browser gives the Browser, File System gives Files, Editor and Viewer, Browser Sandbox gives the Terminal, Planner gives Tasks, and Visualize response gives Visualize. Switch them in Features.",
 			"appOn": "On",
 			"appOff": "Off",
 			"sectionHint": "Turning it on also turns on Web Browser, File System, Browser Sandbox and Planner below, as apps on the computer.",
 			"settings": "Settings",
 			"builtIn": "Built in",
-			"builtInHint": "Every MemonOS Bot computer has these: the agent's schedules, skills and connections, and your studios.",
+			"builtInHint": "Every MemonOS Bot computer has these: the agent's schedules, skills and connections, your studios, and pi code unless you turn it off.",
 			"builtInApps": {
 				"scheduler": "Scheduler",
 				"studio": "Studio",
 				"skills": "Skills",
-				"connections": "Connections"
+				"connections": "Connections",
+				"pi": "pi code"
 			},
 			"appsShort": "Apps",
 			"apps": {
@@ -540,9 +560,9 @@
 					"name": "Terminal",
 					"description": "The Browser Sandbox shell with node, npm, git and py."
 				},
-				"notes": {
-					"name": "Notes",
-					"description": "The Planner, as a checklist you watch: the agent plans the task, ticks steps as it works, and follows your edits."
+				"tasks": {
+					"name": "Tasks",
+					"description": "The Planner, as tasks you share: the agent adds tasks with checklists and works through them; you add, approve and edit them. Tasks stay across chats."
 				},
 				"visualize": {
 					"name": "Visualize",
@@ -560,7 +580,9 @@
 				"deletes": "Deleting files"
 			},
 			"keepDirectTools": "Also keep the direct tools",
-			"keepDirectToolsHint": "Keeps web_*, fs_* and sandbox_* available next to the computer, for bulk file work."
+			"keepDirectToolsHint": "Keeps web_*, fs_* and sandbox_* available next to the computer, for bulk file work.",
+			"piCode": "pi code",
+			"piCodeHint": "The pi coding agent on the desktop. MemonOS Bot can hand it coding work, and asks you in the pi code window first. Off, it is neither on the desktop nor used."
 		}
 	},
 	"openui": {
@@ -615,5 +637,24 @@
 		"noSummary": "Computer action",
 		"showOnComputer": "Show on computer",
 		"screenReturned": "Screen returned to the model"
+	},
+	"cost": {
+		"label": "Cost of this chat",
+		"total": "This chat so far: {{cost}}",
+		"noPrice": "This chat so far (the provider reported no price)",
+		"tokens": "Input {{input}} tokens ({{cached}}% from cache) · output {{output}}",
+		"requests": "{{requests}} model requests over {{replies}} replies",
+		"tokensOnly": "{{tokens}} tokens"
+	},
+	"queue": {
+		"label": "Messages waiting to be sent",
+		"pending": "Next step",
+		"queued": "Queued",
+		"paused": "Waiting for you",
+		"sendNow": "Send now",
+		"edit": "Edit",
+		"remove": "Remove",
+		"attachments_one": "{{count}} attachment",
+		"attachments_other": "{{count}} attachments"
 	}
 }

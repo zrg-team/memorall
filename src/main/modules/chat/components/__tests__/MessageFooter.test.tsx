@@ -260,6 +260,66 @@ describe("MessageFooter token usage", () => {
 		);
 	});
 
+	it("flags a message whose first request reused nothing of the previous message", () => {
+		const previous = {
+			...message,
+			id: "m0",
+			metadata: {
+				usage: {
+					prompt_tokens: 75_744,
+					completion_tokens: 290,
+					total_tokens: 76_034,
+					requests: 1,
+					calls: [
+						{
+							prompt_tokens: 75_744,
+							completion_tokens: 290,
+							total_tokens: 76_034,
+							cached_tokens: 75_456,
+						},
+					],
+				},
+			},
+			createdAt: new Date("2026-01-01T00:00:00Z"),
+			updatedAt: new Date("2026-01-01T00:01:00Z"),
+		} as Message;
+		const next = {
+			...message,
+			createdAt: new Date("2026-01-01T00:03:00Z"),
+		} as Message;
+		const call = {
+			prompt_tokens: 76_400,
+			completion_tokens: 40,
+			total_tokens: 76_440,
+			cached_tokens: 0,
+		};
+		render(
+			<MessageFooter
+				message={next}
+				groupMessages={[
+					previous,
+					{ ...message, id: "u1", role: "user" } as Message,
+					next,
+				]}
+				metadata={{
+					usage: { ...call, requests: 1, calls: [call] },
+				}}
+			/>,
+		);
+		fireEvent.click(screen.getByText("Response details"));
+
+		// One request, yet the breakdown shows: it re-read the conversation.
+		const row = screen.getByTestId("usage-call-1");
+		expect(row.dataset.continuity).toBe("restarted");
+		expect(row).toHaveAttribute(
+			"title",
+			"Nothing was reused from your previous message: the start of the request changed, so the whole conversation was read again.",
+		);
+		expect(screen.getByTestId("usage-cache-misses")).toHaveTextContent(
+			"1 request didn't reuse the previous one",
+		);
+	});
+
 	it("names the provider each request went to, and says when it moved", () => {
 		// A request that reads nothing back looks the same whether its prompt
 		// changed or it landed on another provider with a cold cache. Naming the

@@ -17,7 +17,11 @@ import {
 const DIR = "/projects/house-review";
 
 describe("files shown in an HTML artifact", () => {
-	beforeEach(() => readMediaFile.mockReset());
+	// A block body: a function returned from beforeEach is run as its cleanup,
+	// and mockReset returns the mock itself.
+	beforeEach(() => {
+		readMediaFile.mockReset();
+	});
 
 	it("finds full Files paths and leaves web URLs alone", () => {
 		const refs = findLocalAssetRefs(`
@@ -58,6 +62,28 @@ describe("files shown in an HTML artifact", () => {
 			"photo-00.jpg": `${DIR}/photo-00.jpg`,
 			"./img/a.png": `${DIR}/img/a.png`,
 		});
+	});
+
+	it("loads a script written beside the page, like plotly's library", async () => {
+		// What plotly writes with include_plotlyjs="directory".
+		const html =
+			'<script charset="utf-8" src="plotly.min.js"></script><script src="https://cdn.example.com/x.js"></script>';
+		expect(Object.fromEntries(findLocalAssetRefs(html, DIR))).toEqual({
+			"plotly.min.js": `${DIR}/plotly.min.js`,
+		});
+
+		readMediaFile.mockResolvedValue(new Uint8Array([1]));
+		const { result } = renderHook(() => usePreparedArtifactHtml(html, DIR));
+		await waitFor(() => expect(result.current.ready).toBe(true));
+		expect(result.current.assets).toEqual([
+			{
+				token: "memorall-asset://0/",
+				bytes: new Uint8Array([1]),
+				mime: "text/javascript",
+			},
+		]);
+		expect(result.current.html).toContain('src="memorall-asset://0/"');
+		expect(result.current.html).toContain('src="https://cdn.example.com/x.js"');
 	});
 
 	it("swaps every place the page names a file it has", () => {

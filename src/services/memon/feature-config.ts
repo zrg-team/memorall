@@ -16,6 +16,11 @@ export interface MemonFeatureConfig {
 	showComputer: MemonShowComputer;
 	askBefore: { forms: boolean; installs: boolean; deletes: boolean };
 	keepDirectTools: boolean;
+	/**
+	 * pi code, the coding agent app: on the desktop, and the agent can hand
+	 * it coding work (the user confirms each time). Off, it is neither.
+	 */
+	piCode: boolean;
 	/** Visualize's look: the theme the Visualize response feature has. */
 	visualTheme: MemonVisualTheme;
 }
@@ -25,12 +30,14 @@ export const DEFAULT_MEMON_FEATURE_CONFIG: MemonFeatureConfig = {
 		browser: true,
 		files: true,
 		terminal: true,
-		notes: true,
-		visualize: true,
+		tasks: true,
+		// An add-on: turned on for agents that should draw visuals.
+		visualize: false,
 	},
 	showComputer: "auto",
 	askBefore: { forms: true, installs: true, deletes: false },
 	keepDirectTools: false,
+	piCode: true,
 	visualTheme: "shadcn",
 };
 
@@ -50,7 +57,12 @@ export const normalizeMemonFeatureConfig = (
 	raw: unknown,
 ): MemonFeatureConfig => {
 	const config = asRecord(raw);
-	const apps = asRecord(config.apps);
+	// Tasks was Notes before; a stored config may still say so.
+	const stored = asRecord(config.apps);
+	const apps: Record<string, unknown> = {
+		...stored,
+		tasks: stored.tasks ?? stored.notes,
+	};
 	const askBefore = asRecord(config.askBefore);
 	const defaults = DEFAULT_MEMON_FEATURE_CONFIG;
 	return {
@@ -70,6 +82,7 @@ export const normalizeMemonFeatureConfig = (
 			config.keepDirectTools,
 			defaults.keepDirectTools,
 		),
+		piCode: asBoolean(config.piCode, defaults.piCode),
 		visualTheme: asVisualTheme(config.visualTheme),
 	};
 };

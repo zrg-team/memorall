@@ -17,10 +17,12 @@ import {
 import {
 	MEMON_STUDIO_LABELS,
 	MEMON_STUDIO_TOOL_IDS,
+	memonDisplayPath,
 	type MemonStudioToolId,
 } from "../constants";
 import { memonFileKind } from "../file-kinds";
 import type { MemonStudioRequest } from "../studio-app";
+import type { MemonStudioAppSettings } from "../studio-app-file";
 import type { MemonMachineSnapshot, MemonStudioRun } from "../types";
 
 /** One question as the builder edits it: criteria as comma-separated text. */
@@ -207,14 +209,95 @@ const decisionQuestions = (
 	return questions;
 };
 
-/** The run the Studio form describes. */
+/** The form fields a `.studio` app's settings fill, by draft name. */
+const APP_FIELDS = [
+	"voice",
+	"language",
+	"translate",
+	"count",
+	"duration",
+	"task",
+	"labels",
+	"documents",
+	"questions",
+	"json",
+	"jsonText",
+] as const;
+
+/**
+ * The drafts that fill Studio's form from a `.studio` app's settings: every
+ * field the app sets, and the tool's other settings fields emptied (an
+ * undefined value), so the form is the app's. Its input stays as typed.
+ */
+export const studioDraftsFromSettings = (
+	tool: MemonStudioToolId,
+	settings: MemonStudioAppSettings,
+): Record<string, unknown> => {
+	const values: Partial<Record<(typeof APP_FIELDS)[number], unknown>> = {
+		voice: settings.voice,
+		language: settings.language,
+		translate: settings.translate || undefined,
+		count: settings.count === undefined ? undefined : String(settings.count),
+		duration:
+			settings.duration === undefined ? undefined : String(settings.duration),
+		task: settings.task,
+		labels: settings.labels?.join(", "),
+		documents: settings.documents?.join("\n"),
+		questions:
+			tool === "decision" && settings.questions
+				? draftsFromQuestions(settings.questions as DecisionQuestions)
+				: undefined,
+	};
+	return Object.fromEntries(
+		APP_FIELDS.map((name) => [key(tool, name), values[name]]),
+	);
+};
+
+/** The settings each tool's form has a field for. */
+const FORM_SETTINGS: Record<MemonStudioToolId, readonly string[]> = {
+	decision: ["questions"],
+	speech: ["voice"],
+	transcribe: ["language", "translate"],
+	image: ["count"],
+	image_tools: ["task"],
+	text_tools: ["task", "labels", "documents"],
+	audio: ["duration"],
+};
+
+/**
+ * An app's settings the form does not show (a speech app's speed, a
+ * detection threshold), so the user and the agent still see them.
+ */
+export const studioAppExtraSettings = (
+	tool: MemonStudioToolId,
+	settings: MemonStudioAppSettings,
+): string =>
+	Object.entries(settings)
+		.filter(
+			([name, value]) =>
+				value !== undefined && !FORM_SETTINGS[tool].includes(name),
+		)
+		.map(
+			([name, value]) =>
+				`${name} ${Array.isArray(value) ? value.join(", ") : typeof value === "object" ? JSON.stringify(value) : String(value)}`,
+		)
+		.join(" · ");
+
+/**
+ * The run the Studio form describes: the open `.studio` app's settings
+ * with the form's fields over them.
+ */
 export const studioRequestFrom = (
 	snapshot: MemonMachineSnapshot,
 	tool: MemonStudioToolId,
 ): MemonStudioRequest => {
 	const read = (name: string) => snapshot.drafts[key(tool, name)];
 	const text = (name: string) => String(read(name) ?? "").trim();
-	const request: MemonStudioRequest = { tool };
+	const app = snapshot.studio.app;
+	const request: MemonStudioRequest = {
+		...(app?.tool === tool ? app.settings : {}),
+		tool,
+	};
 	if (text("text")) request.text = text("text");
 	if (text("path")) request.path = text("path");
 	if (text("voice")) request.voice = text("voice");
@@ -272,7 +355,7 @@ const runNode = (run: MemonStudioRun, t: MemonKitText): MemonViewNode => {
 	return {
 		type: "item",
 		id: `run:${run.id}`,
-		title: `${toolLabel(run.tool, t)} · ${t(`studio.status.${run.status}`, run.status)}`,
+		title: `${run.app ?? toolLabel(run.tool, t)} · ${t(`studio.status.${run.status}`, run.status)}`,
 		detail: run.model,
 		tone: run.status === "failed" ? "error" : undefined,
 		children,
@@ -591,6 +674,53 @@ export const studioApp: MemonKitApp = {
 			);
 		} else {
 			const running = studio.runs.some((run) => run.status === "running");
+			const app = studio.app?.tool === selected ? studio.app : null;
+			if (app) {
+				const extra = studioAppExtraSettings(app.tool, app.settings);
+				nodes.push({
+					type: "item",
+					id: "app",
+					title: app.title,
+					detail: t("studio.appFrom", "app · {{file}}", {
+						file: memonDisplayPath(app.path, snapshot.home),
+					}),
+					children: [
+						...(extra
+							? [
+									{
+										type: "text" as const,
+										text: t("studio.appSettings", "also set: {{settings}}", {
+											settings: extra,
+										}),
+									},
+								]
+							: []),
+						{
+							type: "group",
+							layout: "row",
+							children: [
+								{
+									type: "text",
+									text: t(
+										"studio.appHint",
+										"Its settings are filled in below; give the input and run it.",
+									),
+									tone: "muted",
+								},
+								{
+									type: "button",
+									id: "closeApp",
+									label: t("studio.closeApp", "Close app"),
+									variant: "ghost",
+								},
+							],
+						},
+					],
+				});
+			}
+			const appName = String(
+				snapshot.drafts[key(selected, "appName")] ?? app?.title ?? "",
+			);
 			nodes.push(
 				{
 					type: "group",
@@ -633,6 +763,37 @@ export const studioApp: MemonKitApp = {
 						: running
 							? t("studio.busy", "a run is still going")
 							: undefined,
+				},
+				{
+					type: "group",
+					layout: "row",
+					children: [
+						{
+							type: "input",
+							id: "field:appName",
+							label: t(
+								"studio.appName",
+								"Save these settings as an app on the desktop",
+							),
+							value: appName,
+							placeholder: t(
+								"studio.appNamePlaceholder",
+								"App name, e.g. Analyze User Feedback",
+							),
+						},
+						{
+							type: "button",
+							id: "install",
+							label:
+								app && appName.trim() === app.title
+									? t("studio.saveApp", "Save app")
+									: t("studio.installApp", "Save as app"),
+							icon: "save",
+							disabled: appName.trim()
+								? undefined
+								: t("studio.needAppName", "name the app first"),
+						},
+					],
 				},
 			);
 		}
@@ -728,6 +889,31 @@ export const studioApp: MemonKitApp = {
 				}
 				throw new Error(`Studio has no control ${id}.`);
 			}
+			case "install": {
+				if (!selected) throw new Error("Choose a studio tool first.");
+				const name = String(
+					snapshot.drafts[key(selected, "appName")] ??
+						snapshot.studio.app?.title ??
+						"",
+				).trim();
+				if (!name) throw new Error("Name the app first.");
+				const {
+					tool,
+					text: _text,
+					path: _path,
+					...settings
+				} = studioRequestFrom(snapshot, selected);
+				const path = await machine.saveStudioApp(name, {
+					tool,
+					title: name,
+					settings,
+				});
+				machine.setDraft(key(selected, "appName"), undefined);
+				return `saved ${MEMON_STUDIO_LABELS[selected]} as the app ${memonDisplayPath(path, snapshot.home)}`;
+			}
+			case "closeApp":
+				machine.closeStudioApp();
+				return "closed the studio app";
 			case "run": {
 				if (!selected) throw new Error("Choose a studio tool first.");
 				const request = studioRequestFrom(snapshot, selected);

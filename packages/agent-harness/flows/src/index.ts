@@ -32,6 +32,7 @@ export * from "./graph/index.js";
 
 // Runtime
 export * from "./context/runtime-context.js";
+export * from "./context/run-inbox.js";
 export * from "./runtime/flow-engine.js";
 
 // Utils

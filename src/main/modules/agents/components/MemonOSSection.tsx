@@ -6,6 +6,7 @@ import {
 	LayoutDashboard,
 	ListChecks,
 	Monitor,
+	Pi,
 	Plug,
 	Settings2,
 	Sparkles,
@@ -32,6 +33,10 @@ import {
 	type MemonBuiltinApp,
 } from "@/services/memon/constants";
 import {
+	DEFAULT_MEMON_FEATURE_CONFIG,
+	normalizeMemonFeatureConfig,
+} from "@/services/memon/feature-config";
+import {
 	getAgentFeatureDescription,
 	getAgentFeatureDisplayName,
 } from "../utils/feature-display";
@@ -43,7 +48,7 @@ const APP_ICONS: Record<
 	browser: Globe,
 	files: FolderOpen,
 	terminal: SquareTerminal,
-	notes: ListChecks,
+	tasks: ListChecks,
 	visualize: LayoutDashboard,
 };
 
@@ -55,6 +60,7 @@ const BUILTIN_ICONS: Record<
 	studio: Sparkles,
 	skills: WandSparkles,
 	connections: Plug,
+	pi: Pi,
 };
 
 const isAvailableHere = (feature: AgentFeatureDefinition): boolean =>
@@ -69,14 +75,23 @@ const isAvailableHere = (feature: AgentFeatureDefinition): boolean =>
  */
 export const MemonOSSection: React.FC = () => {
 	const { t } = useTranslation("chat");
-	const { featureDefinitions, draftFeatures, toggleFeature } =
-		useAgentConfigStore();
+	const {
+		featureDefinitions,
+		draftFeatures,
+		toggleFeature,
+		savedUnifiedConfig,
+		patchStepConfig,
+	} = useAgentConfigStore();
 	const memon = featureDefinitions.find(
 		(feature) => feature.name === MEMON_STEP_NAME,
 	);
 	if (!memon) return null;
 
 	const enabled = Boolean(draftFeatures[memon.name]);
+	const memonConfig = normalizeMemonFeatureConfig(
+		savedUnifiedConfig?.steps.find((step) => step.name === MEMON_STEP_NAME)
+			?.config,
+	);
 	const appFeature = (app: MemonAppId) =>
 		featureDefinitions.find(
 			(feature) => feature.name === MEMON_APP_FEATURES[app],
@@ -87,6 +102,8 @@ export const MemonOSSection: React.FC = () => {
 		toggleFeature(memon.name);
 		if (!next) return;
 		for (const app of MEMON_APP_IDS) {
+			// Apps off by default (Visualize) stay off until turned on below.
+			if (!DEFAULT_MEMON_FEATURE_CONFIG.apps[app]) continue;
 			const feature = appFeature(app);
 			if (
 				feature &&
@@ -176,6 +193,33 @@ export const MemonOSSection: React.FC = () => {
 					</span>
 					{MEMON_BUILTIN_APPS.map((app) => {
 						const Icon = BUILTIN_ICONS[app];
+						// pi code is the one built-in app that can be turned off.
+						if (app === "pi") {
+							const on = memonConfig.piCode;
+							return (
+								<button
+									type="button"
+									key={app}
+									aria-pressed={on}
+									onClick={() =>
+										patchStepConfig(MEMON_STEP_NAME, {
+											...memonConfig,
+											piCode: !on,
+										})
+									}
+									title={t("agentSettings.memon.piCodeHint")}
+									className={cn(
+										"inline-flex h-7 items-center gap-1.5 rounded-lg border px-2 text-[11px] font-medium transition-colors",
+										on
+											? "border-cyan-500/40 bg-cyan-500/10 text-cyan-700 dark:text-cyan-300"
+											: "border-border/60 text-muted-foreground line-through hover:bg-muted",
+									)}
+								>
+									<Icon size={12} />
+									{t(`agentSettings.memon.builtInApps.${app}`)}
+								</button>
+							);
+						}
 						return (
 							<span
 								key={app}

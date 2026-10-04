@@ -33,6 +33,7 @@ import {
 import { Button } from "@/main/components/ui/button";
 import { useRuntimeSessionsStore } from "@/main/stores/runtime-sessions";
 import { useMemonMachineStore } from "@/main/stores/memon-machine";
+import { useShellLayoutStore } from "@/main/stores/shell-layout";
 import { useAgentComputer } from "@/main/components/molecules/MemonComputer/use-agent-computer";
 import { cn } from "@/lib/utils";
 import {
@@ -187,6 +188,8 @@ export const RightApplicationLayout: React.FC<RightApplicationLayoutProps> = ({
 	// arrow; the icons carry the row and the label names where you are. Everything
 	// unlabelled gets its name from a hover tooltip.
 	const showNavLabels = !isPopupSurface() && isWideViewport;
+	// A maximized page takes the tab bar's room too.
+	const maximized = useShellLayoutStore((state) => state.rightPanelMaximized);
 
 	const [isReloadingModel, setIsReloadingModel] = React.useState(false);
 	const [reloadProgress, setReloadProgress] = React.useState({
@@ -297,7 +300,7 @@ export const RightApplicationLayout: React.FC<RightApplicationLayoutProps> = ({
 	return (
 		<div className="flex h-full min-h-0 flex-col bg-app">
 			<nav
-				className="z-30 flex-shrink-0"
+				className={cn("z-30 flex-shrink-0", maximized && "hidden")}
 				style={{
 					backdropFilter: "blur(20px)",
 					WebkitBackdropFilter: "blur(20px)",

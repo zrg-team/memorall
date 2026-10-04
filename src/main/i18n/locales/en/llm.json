@@ -514,5 +514,12 @@
 		"title": "Studio models",
 		"description": "The model each studio uses. Only one on-device model is kept in memory at a time.",
 		"none": "Not set — browse"
+	},
+	"pricing": {
+		"free": "Free",
+		"freeHint": "Free: the provider charges nothing per token",
+		"title": "Input {{input}} · output {{output}} per 1M tokens",
+		"cached": "Cached input {{price}} per 1M tokens",
+		"full": "{{input}} in · {{output}} out / 1M"
 	}
 }

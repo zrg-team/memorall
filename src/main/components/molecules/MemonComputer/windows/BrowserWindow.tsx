@@ -274,15 +274,18 @@ export const BrowserWindow: React.FC<{
 						if (open) void send("browser.servers", { key: machineKey });
 					}}
 				>
-					<DropdownMenuTrigger asChild>
-						<button
-							type="button"
-							aria-label={t("memonComputer.newTab")}
-							className="mb-1 rounded p-1 text-muted-foreground hover:bg-muted"
-						>
-							<Plus size={12} />
-						</button>
-					</DropdownMenuTrigger>
+					{/* Same box as a tab (border, padding), so + centers on the tabs' line. */}
+					<div className="flex shrink-0 items-center self-stretch border border-b-0 border-transparent px-0.5 py-1">
+						<DropdownMenuTrigger asChild>
+							<button
+								type="button"
+								aria-label={t("memonComputer.newTab")}
+								className="rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+							>
+								<Plus size={12} />
+							</button>
+						</DropdownMenuTrigger>
+					</div>
 					<DropdownMenuContent align="start" className="min-w-56">
 						<DropdownMenuItem
 							onSelect={() =>

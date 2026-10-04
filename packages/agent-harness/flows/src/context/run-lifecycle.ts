@@ -5,6 +5,8 @@ export type FlowRunFinishCallback = () => void | Promise<void>;
 
 export type NodeBeforeStartCallback<TState = Record<string, unknown>> = (
 	state: TState,
+	/** The node's run config: its `writer` reports to the run's stream. */
+	runConfig?: LangGraphRunnableConfig,
 ) => Promise<Partial<TState> | void> | Partial<TState> | void;
 
 export type NodeAfterEndCallback<TState = Record<string, unknown>> = (
@@ -241,7 +243,10 @@ export function toNode<TState extends Record<string, unknown>>(
 		let current = state;
 		if (listeners?.beforeStart.size) {
 			for (const cb of listeners.beforeStart.values()) {
-				const patch = await (cb as NodeBeforeStartCallback<TState>)(current);
+				const patch = await (cb as NodeBeforeStartCallback<TState>)(
+					current,
+					runConfig,
+				);
 				if (patch) current = { ...current, ...patch };
 			}
 		}
