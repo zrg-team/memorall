@@ -29,6 +29,7 @@ import {
 } from "@/services/flow-config-legacy";
 import { ADD_SKILL_CONTEXT_STEP_NAME } from "@memorall/agent-harness-flows/steps/common/add-skill-context";
 import { logError } from "@/utils/logger";
+import { applySettingsToRunningComputer } from "@/services/memon/agent-settings-sync";
 import { deepEqual } from "@/utils/deep-equal";
 import type {
 	FeatureCatalogMetadata,
@@ -445,6 +446,16 @@ export const useAgentConfigStore = create<AgentConfigState>((set, get) => {
 				isSaving: false,
 				isLegacyConfig: false,
 			});
+			// A running computer of the agent follows the saved settings at once.
+			if (targetFlowId) {
+				void applySettingsToRunningComputer(targetFlowId, unifiedConfig).catch(
+					(error) =>
+						logError(
+							"[AgentConfigStore] Could not update the computer:",
+							error,
+						),
+				);
+			}
 		} catch (err) {
 			logError("[AgentConfigStore] Failed to save unified config:", err);
 			set({

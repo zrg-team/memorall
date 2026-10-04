@@ -46,6 +46,7 @@ import {
 
 import { PDFPageSelector } from "./PDFPageSelector";
 import { LazyExcelViewer } from "./LazyExcelViewer";
+import { LazyPresentationViewer } from "./LazyPresentationViewer";
 import { ExcelSheetSelector } from "./ExcelSheetSelector";
 import { useModalSelector } from "../hooks/use-modal-selector";
 import { useSourceStatus } from "../hooks/use-source-status";
@@ -99,9 +100,18 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({
 	const [mediaError, setMediaError] = useState(false);
 	const [textContent, setTextContent] = useState<string | null>(null);
 	const [excelData, setExcelData] = useState<Uint8Array | null>(null);
+	const [presentationData, setPresentationData] = useState<Uint8Array | null>(
+		null,
+	);
 	const [loading, setLoading] = useState(false);
 	const [showProperties, setShowProperties] = useState(false);
 	const [htmlShowCode, setHtmlShowCode] = useState(false);
+	// SVG is text the user can edit, previewed as the image it draws.
+	const isSvg =
+		file.mimeType === "image/svg+xml" ||
+		file.name.toLowerCase().endsWith(".svg");
+	const isHtml =
+		file.mimeType === "text/html" || file.name.toLowerCase().endsWith(".html");
 	const pdfPageSelector = useModalSelector();
 	const excelSheetSelector = useModalSelector();
 	const [loadedFileTopics, setLoadedFileTopics] = useState<Topic[]>([]);
@@ -121,6 +131,7 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({
 		setTextContent(null);
 		setPreviewUrl(null);
 		setExcelData(null);
+		setPresentationData(null);
 		setMediaError(false);
 
 		// Load preview for supported file types
@@ -130,7 +141,7 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({
 
 			if (
 				file.type === "pdf" ||
-				file.type === "image" ||
+				(file.type === "image" && !isSvg) ||
 				file.type === "audio" ||
 				file.type === "video"
 			) {
@@ -148,7 +159,8 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({
 			} else if (
 				file.type === "text" ||
 				file.type === "markdown" ||
-				file.type === "other"
+				file.type === "other" ||
+				isSvg
 			) {
 				try {
 					const content = await loadContent();
@@ -168,6 +180,15 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({
 					logInfo("Excel data set in state");
 				} catch (error) {
 					logError("Failed to load Excel file:", error);
+				} finally {
+					setLoading(false);
+				}
+			} else if (file.type === "presentation") {
+				setLoading(true);
+				try {
+					setPresentationData(await loadContent());
+				} catch (error) {
+					logError("Failed to load presentation:", error);
 				} finally {
 					setLoading(false);
 				}
@@ -326,7 +347,8 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({
 								)}
 								{(file.type === "text" ||
 									file.type === "markdown" ||
-									file.type === "other") &&
+									file.type === "other" ||
+									file.type === "presentation") &&
 									onConvertToKnowledge && (
 										<Button
 											variant="ghost"
@@ -471,7 +493,8 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({
 						)}
 						{(file.type === "text" ||
 							file.type === "markdown" ||
-							file.type === "other") &&
+							file.type === "other" ||
+							file.type === "presentation") &&
 							onConvertToKnowledge && (
 								<Button
 									variant="default"
@@ -582,7 +605,7 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({
 					</div>
 				)}
 
-				{file.type === "image" && previewUrl && (
+				{file.type === "image" && !isSvg && previewUrl && (
 					<div className="flex-1 overflow-hidden p-3 sm:p-4">
 						<div className="border rounded-lg overflow-hidden h-full flex items-center justify-center bg-muted/20">
 							<img
@@ -594,53 +617,66 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({
 					</div>
 				)}
 
-				{textContent !== null &&
-					(file.mimeType === "text/html" ||
-						file.name.toLowerCase().endsWith(".html")) && (
-						<div className="flex-1 flex flex-col overflow-hidden p-3 sm:p-4 gap-2">
-							<div className="flex justify-end">
-								<Button
-									variant="outline"
-									size="sm"
-									onClick={() => setHtmlShowCode((prev) => !prev)}
-									className="h-7 gap-1.5 text-xs"
-								>
-									{htmlShowCode ? (
-										<>
-											<Eye className="h-3.5 w-3.5" />
-											{t("viewer.preview")}
-										</>
-									) : (
-										<>
-											<Code className="h-3.5 w-3.5" />
-											{t("viewer.code")}
-										</>
-									)}
-								</Button>
-							</div>
-							<div className="flex-1 border rounded-lg overflow-hidden">
+				{textContent !== null && (isHtml || isSvg) && (
+					<div className="flex-1 flex flex-col overflow-hidden p-3 sm:p-4 gap-2">
+						<div className="flex justify-end">
+							<Button
+								variant="outline"
+								size="sm"
+								onClick={() => setHtmlShowCode((prev) => !prev)}
+								className="h-7 gap-1.5 text-xs"
+							>
 								{htmlShowCode ? (
-									<CodeEditor
-										file={file}
-										initialContent={textContent}
-										onSave={handleSaveContent}
-									/>
+									<>
+										<Eye className="h-3.5 w-3.5" />
+										{t("viewer.preview")}
+									</>
 								) : (
-									<iframe
-										srcDoc={textContent}
-										sandbox="allow-scripts allow-same-origin"
-										className="w-full h-full bg-white"
-										title={file.name}
-									/>
+									<>
+										<Code className="h-3.5 w-3.5" />
+										{t("viewer.code")}
+									</>
 								)}
-							</div>
+							</Button>
 						</div>
-					)}
+						<div className="flex-1 border rounded-lg overflow-hidden">
+							{htmlShowCode ? (
+								<CodeEditor
+									file={file}
+									initialContent={textContent}
+									onSave={handleSaveContent}
+								/>
+							) : isSvg ? (
+								<div
+									className="flex h-full w-full p-4"
+									style={{
+										background:
+											"repeating-conic-gradient(rgb(128 128 128 / 0.12) 0% 25%, transparent 0% 50%) 0 0 / 16px 16px",
+									}}
+								>
+									{/* As an image, the SVG's scripts never run. */}
+									<img
+										src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(textContent)}`}
+										alt={file.name}
+										className="h-full min-h-0 w-full object-contain"
+									/>
+								</div>
+							) : (
+								<iframe
+									srcDoc={textContent}
+									sandbox="allow-scripts allow-same-origin"
+									className="w-full h-full bg-white"
+									title={file.name}
+								/>
+							)}
+						</div>
+					</div>
+				)}
 
 				{(file.type === "text" || file.type === "other") &&
 					textContent !== null &&
-					file.mimeType !== "text/html" &&
-					!file.name.toLowerCase().endsWith(".html") && (
+					!isHtml &&
+					!isSvg && (
 						<div className="flex-1 overflow-hidden">
 							<CodeEditor
 								file={file}
@@ -685,6 +721,17 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({
 								fileData={excelData}
 								fileName={file.name}
 								className="h-full"
+							/>
+						</div>
+					</div>
+				)}
+
+				{file.type === "presentation" && presentationData && (
+					<div className="flex-1 overflow-hidden p-3 sm:p-4">
+						<div className="h-full overflow-hidden rounded-lg border">
+							<LazyPresentationViewer
+								fileData={presentationData}
+								fileName={file.name}
 							/>
 						</div>
 					</div>

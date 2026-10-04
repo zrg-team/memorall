@@ -171,6 +171,7 @@ exports[`requested service module coverage > imports requested service trees 1`]
   "../llm/utils/media-encoding.ts",
   "../llm/utils/media-payload.ts",
   "../llm/utils/media-persistence.ts",
+  "../llm/utils/model-pricing.ts",
   "../llm/utils/openai-media-client.ts",
   "../llm/utils/reasoning.ts",
   "../llm/utils/remote-model-categories.ts",

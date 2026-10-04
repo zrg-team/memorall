@@ -1,0 +1,205 @@
+{
+	"title": "Usage & cost",
+	"description": "What your agents spend across models, features and tools. Local models are free and only count tokens.",
+	"actions": {
+		"refresh": "Refresh",
+		"exportCsv": "Export CSV",
+		"retry": "Retry"
+	},
+	"range": {
+		"label": "Date range",
+		"7d": "7D",
+		"30d": "30D",
+		"90d": "90D",
+		"mtd": "Month to date"
+	},
+	"compare": {
+		"previousDays_one": "vs previous day",
+		"previousDays_other": "vs previous {{count}} days",
+		"monthToDate": "vs {{month}} 1–{{day}}"
+	},
+	"measure": {
+		"label": "Measure",
+		"cost": "Cost",
+		"tokens": "Tokens"
+	},
+	"filters": {
+		"agent": "Agent",
+		"provider": "Provider",
+		"model": "Model",
+		"feature": "Feature",
+		"tool": "Tool",
+		"allAgents": "All agents",
+		"allProviders": "All providers",
+		"remove": "Remove {{name}} filter",
+		"reset": "Reset filters",
+		"clear": "Clear filter",
+		"focus": "Filter to {{name}}"
+	},
+	"providers": {
+		"local": "On-device",
+		"unknown": "Unknown provider"
+	},
+	"agents": {
+		"default": "Default chat",
+		"defaultSub": "No agent selected"
+	},
+	"models": {
+		"unknown": "Unknown model",
+		"onDevice": "{{provider}} · on-device"
+	},
+	"change": {
+		"new": "New"
+	},
+	"summary": {
+		"totalSpend": "Total spend",
+		"perDay": "{{value}} per day · {{requests}} model requests",
+		"unpricedTokens_one": "+{{tokens}} tokens from {{count}} request with no reported price",
+		"unpricedTokens_other": "+{{tokens}} tokens from {{count}} requests with no reported price",
+		"unpricedRow": "No reported price — showing tokens instead",
+		"tokensUnit": "tokens",
+		"plusTokens": "+{{tokens}} tok",
+		"free": "Free"
+	},
+	"tiles": {
+		"tokens": "Tokens",
+		"tokensSub": "{{input}} in · {{output}} out",
+		"requests": "Requests",
+		"conversations_one": "{{count}} conversation",
+		"conversations_other": "{{count}} conversations",
+		"perConversation": "Avg per conversation",
+		"perConversationSub": "spend ÷ conversations",
+		"blendedRate": "Blended rate",
+		"blendedRateSub": "per 1M priced tokens",
+		"cached": "Cached input",
+		"cachedSub": "of remote input tokens",
+		"local": "Ran on-device",
+		"localSub": "{{tokens}} tokens · $0"
+	},
+	"insights": {
+		"label": "Insights",
+		"agentRise": "<b>{{agent}}</b> is up <b>{{change}}%</b> (+{{delta}}) {{compare}}.",
+		"focus": "Focus on {{name}}",
+		"peakDay": "<b>{{day}}</b> used <b>{{value}}</b>, {{ratio}}× the daily average. Most of it was “{{title}}” ({{share}}).",
+		"topTool": "<code>{{tool}}</code> results average <b>~{{tokens}} tokens</b> and drive <b>{{share}}</b> of tool-attributed usage.",
+		"filterTool": "Filter to this tool",
+		"cacheHit": "<b>{{share}}</b> of remote input tokens came from the prompt cache.",
+		"local": "<b>{{share}}</b> of requests ran on local models for <b>$0</b>."
+	},
+	"trend": {
+		"titleCost": "Spend over time",
+		"titleTokens": "Tokens over time",
+		"subtitle": "Daily · this period {{compare}}",
+		"current": "This period",
+		"previous": "Previous period",
+		"date": "Date",
+		"previousDate": "Previous date",
+		"peak": "Peak",
+		"ariaLabel": "Usage per day, this period against the previous period",
+		"keyboard": "Use the arrow keys to move between days"
+	},
+	"view": {
+		"label": "View",
+		"chart": "Chart",
+		"table": "Table"
+	},
+	"breakdown": {
+		"costBy": "Cost by {{name}}",
+		"tokensBy": "Tokens by {{name}}",
+		"subtitleDaily": "Daily · top 5 + other · click a row to filter",
+		"subtitleWeekly": "Weekly · top 5 + other · click a row to filter",
+		"agent": "agent",
+		"agentColumn": "Agent",
+		"model": "model",
+		"modelColumn": "Model",
+		"other": "Other",
+		"week": "Week",
+		"total": "Total",
+		"share": "Share",
+		"trend": "Trend"
+	},
+	"features": {
+		"titleCost": "Cost by feature",
+		"titleTokens": "Tokens by feature",
+		"subtitle": "Requests that read a feature's tool results · click a row to filter",
+		"base": "Base chat",
+		"other": "Other tools",
+		"requests_one": "{{formatted}} request",
+		"requests_other": "{{formatted}} requests"
+	},
+	"mix": {
+		"title": "Where the tokens go",
+		"subtitle": "Input, cache, output and reasoning tokens",
+		"input": "Input",
+		"cached": "Cached input",
+		"output": "Output",
+		"reasoning": "Reasoning"
+	},
+	"heatmap": {
+		"title": "When usage happens",
+		"subtitleCost": "Spend by weekday and hour, local time",
+		"subtitleTokens": "Tokens by weekday and hour, local time",
+		"less": "Less",
+		"more": "More",
+		"requests_one": "{{formatted}} request",
+		"requests_other": "{{formatted}} requests"
+	},
+	"tools": {
+		"titleCost": "Cost by tool",
+		"titleTokens": "Tokens by tool",
+		"subtitle": "Attributed to the request that read the tool result back into the model · click a row to filter",
+		"empty": "No tool results were read in this period.",
+		"tool": "Tool",
+		"calls": "Calls",
+		"avgResult": "Avg result",
+		"perCall": "Per call",
+		"tokensPerCall": "Tokens / call",
+		"showTop": "Show top {{count}}",
+		"showAll": "Show all {{count}} tools"
+	},
+	"conversations": {
+		"title": "Most expensive conversations",
+		"subtitleCost": "Top {{count}} by cost in this period · click to open",
+		"subtitleTokens": "Top {{count}} by tokens in this period · click to open",
+		"conversation": "Conversation",
+		"model": "Main model",
+		"lastActive": "Last active",
+		"open": "Open in chat",
+		"untitled": "Untitled conversation",
+		"today": "Today",
+		"yesterday": "Yesterday",
+		"daysAgo_one": "{{count}} day ago",
+		"daysAgo_other": "{{count}} days ago"
+	},
+	"budget": {
+		"set": "Set budget",
+		"edit": "Edit budget",
+		"label": "Monthly budget (USD)",
+		"hint": "Compared with this month's provider-reported spend.",
+		"save": "Save",
+		"clear": "Remove",
+		"month": "{{month}} budget",
+		"of": "of {{budget}}",
+		"meter": "Month-to-date spend against the budget",
+		"projectedMarker": "Projected month-end",
+		"over": "Projected {{projected}}, {{over}} over",
+		"onTrack": "On track · projected {{projected}}"
+	},
+	"error": {
+		"load": "Couldn't load usage: {{message}}"
+	},
+	"empty": {
+		"loading": "Loading usage…",
+		"title": "No usage yet",
+		"description": "Chat with an agent and its model usage will show up here.",
+		"filtered": "No usage matches these filters."
+	},
+	"method": {
+		"title": "How costs are counted",
+		"cost": "Cost is what the provider reported for each request (OpenRouter reports it). Where no price was reported, rows show those requests' tokens instead — e.g. \"$1.20 +45K tok\".",
+		"tools": "Tool cost is the request that read a tool's result back into the model, split by result size when one request read several.",
+		"features": "Feature cost is the requests that read its tools' results. Base chat is the requests made before any tool ran.",
+		"local": "Local runners (WebLLM, Wllama, Transformers.js, Ollama, LM Studio) cost $0 and count tokens only.",
+		"notCounted": "Not counted yet: background memory and knowledge extraction, delegated sub-agents, and studio generations."
+	}
+}

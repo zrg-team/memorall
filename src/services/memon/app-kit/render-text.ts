@@ -147,7 +147,7 @@ export const renderViewText = (
 				case "item": {
 					const mark = node.status ? STATUS_MARK[node.status] : "-";
 					const badges = node.badges?.length
-						? ` (${node.badges.join(", ")})`
+						? ` (${node.badges.map((badge) => (typeof badge === "string" ? badge : badge.text)).join(", ")})`
 						: "";
 					const head = `${indent}${mark} ${node.title}${node.detail ? ` — ${node.detail}` : ""}${badges}`;
 					const start = lines.length;
@@ -168,11 +168,20 @@ export const renderViewText = (
 						`${indent}[${ref}] ${node.label}${node.disabled ? ` (unavailable: ${node.disabled})` : ""}`,
 					);
 					break;
-				case "toggle":
+				case "toggle": {
+					const mark =
+						node.variant === "check"
+							? node.checked
+								? "x"
+								: " "
+							: node.checked
+								? "on"
+								: "off";
 					lines.push(
-						`${indent}[${ref}] [${node.checked ? "on" : "off"}] ${node.label}${node.disabled ? ` (unavailable: ${node.disabled})` : ""}`,
+						`${indent}[${ref}] [${mark}] ${node.label}${node.disabled ? ` (unavailable: ${node.disabled})` : ""}`,
 					);
 					break;
+				}
 				case "input":
 					for (const line of fieldLines(node, ref)) {
 						lines.push(`${indent}${line}`);

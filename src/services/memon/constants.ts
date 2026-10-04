@@ -25,13 +25,14 @@ export const MEMON_OPEN_TOOL = "memon_open" as const;
 export const MEMON_ACT_TOOL = "memon_act" as const;
 export const MEMON_RUN_TOOL = "memon_run" as const;
 export const MEMON_WINDOW_TOOL = "memon_window" as const;
-export const MEMON_NOTES_TOOL = "memon_notes" as const;
+export const MEMON_TASKS_TOOL = "memon_tasks" as const;
 export const MEMON_SCHEDULE_TOOL = "memon_schedule" as const;
 export const MEMON_MEMORY_TOOL = "memon_memory" as const;
 export const MEMON_STUDIO_TOOL = "memon_studio" as const;
 export const MEMON_SKILLS_TOOL = "memon_skills" as const;
 export const MEMON_CONNECTIONS_TOOL = "memon_connections" as const;
 export const MEMON_VISUALIZE_TOOL = "memon_visualize" as const;
+export const MEMON_CODE_TOOL = "memon_code" as const;
 
 export const MEMON_TOOL_NAMES = [
 	MEMON_SCREEN_TOOL,
@@ -39,13 +40,14 @@ export const MEMON_TOOL_NAMES = [
 	MEMON_ACT_TOOL,
 	MEMON_RUN_TOOL,
 	MEMON_WINDOW_TOOL,
-	MEMON_NOTES_TOOL,
+	MEMON_TASKS_TOOL,
 	MEMON_SCHEDULE_TOOL,
 	MEMON_MEMORY_TOOL,
 	MEMON_STUDIO_TOOL,
 	MEMON_SKILLS_TOOL,
 	MEMON_CONNECTIONS_TOOL,
 	MEMON_VISUALIZE_TOOL,
+	MEMON_CODE_TOOL,
 ] as const;
 
 export type MemonToolName = (typeof MEMON_TOOL_NAMES)[number];
@@ -54,25 +56,26 @@ export const MEMON_APP_IDS = [
 	"browser",
 	"files",
 	"terminal",
-	"notes",
+	"tasks",
 	"visualize",
 ] as const;
 export type MemonAppId = (typeof MEMON_APP_IDS)[number];
 /**
  * Apps every computer has: the agent's own settings (schedules, skills,
- * connections) and the user's studios.
+ * connections), the user's studios and pi code (the pi coding agent).
  */
 export const MEMON_BUILTIN_APPS = [
 	"scheduler",
 	"studio",
 	"skills",
 	"connections",
+	"pi",
 ] as const;
 export type MemonBuiltinApp = (typeof MEMON_BUILTIN_APPS)[number];
 
 /**
- * Editor and Viewer come with Files; built-in apps are always there. None of
- * them is toggled on its own.
+ * Editor and Viewer come with Files. Built-in apps are always there, except
+ * pi code, which the agent's settings can turn off.
  */
 export type MemonWindowApp = MemonAppId | MemonBuiltinApp | "editor" | "viewer";
 
@@ -114,7 +117,7 @@ export const MEMON_APP_FEATURES: Record<
 	browser: "web-feature",
 	files: "fs-feature",
 	terminal: "nodejs-sandbox-feature",
-	notes: "planner-feature",
+	tasks: "planner-feature",
 	visualize: "visualize-response",
 };
 
@@ -134,23 +137,37 @@ export const MEMON_VISUAL_THEMES: readonly MemonVisualTheme[] = [
 
 /**
  * Every agent has a home of its own, `/agents/<agent name>`: its workspace,
- * and the desktop of its computer. Bot.md, Memory.md, the Notes and the
+ * and the desktop of its computer. Bot.md, Memory.md, the tasks and the
  * Terminal history are plain files in it, and new files go there unless the
  * user names another place. Agent names are unique, so each name is one
  * home; a rename moves it. The agent and the windows show the home as `~`.
+ *
+ * As on Linux and macOS, a name starting with a dot is hidden: the apps'
+ * own files (`.tasks`, `.terminal_history`) are not on the desktop.
  */
 export const MEMON_AGENTS_DIR = "/agents" as const;
 /** Home of a computer started without an agent. */
 export const MEMON_GUEST_HOME = `${MEMON_AGENTS_DIR}/guest` as const;
 export const MEMON_BOT_FILE_NAME = "Bot.md" as const;
 export const MEMON_MEMORY_FILE_NAME = "Memory.md" as const;
-/** Notes keeps its checklist and notes in a `.notes` file (JSON). */
-export const MEMON_NOTES_EXTENSION = ".notes" as const;
-export const MEMON_NOTES_FILE_NAME = `my${MEMON_NOTES_EXTENSION}` as const;
-/** The Terminal keeps its command history in a `.terminal` file (JSON). */
+/** Tasks keeps its tasks in a `.tasks` file (JSON); ~/.tasks is the agent's. */
+export const MEMON_TASKS_EXTENSION = ".tasks" as const;
+export const MEMON_TASKS_FILE_NAME = MEMON_TASKS_EXTENSION;
+/** The Terminal's command history, one command per line, like .bash_history. */
+export const MEMON_TERMINAL_HISTORY_FILE_NAME = ".terminal_history" as const;
+/**
+ * A `.terminal` file is a launcher: opening it runs its command in a new
+ * Terminal tab, e.g. "Start Landing Page.terminal" on the desktop.
+ */
 export const MEMON_TERMINAL_EXTENSION = ".terminal" as const;
-export const MEMON_TERMINAL_FILE_NAME =
-	`my${MEMON_TERMINAL_EXTENSION}` as const;
+/**
+ * A `.studio` file is a studio tool set up for one job, e.g. "Analyze User
+ * Feedback.studio" holding a Decision's questions; it opens in Studio.
+ */
+export const MEMON_STUDIO_EXTENSION = ".studio" as const;
+/** Where older versions kept the notes and the history, in sight. */
+export const MEMON_LEGACY_NOTES_FILE_NAME = "my.notes" as const;
+export const MEMON_LEGACY_TERMINAL_FILE_NAME = "my.terminal" as const;
 /** The desktop all agents shared before homes; its files seed a new home. */
 export const MEMON_LEGACY_DESKTOP_DIR = "/Desktop" as const;
 /** Homes before they were named after the agent: `/.users/<agent id>/Desktop`. */
@@ -183,8 +200,8 @@ export const memonLegacyHomeDir = (agentId: string): string =>
 export const memonHomePaths = (home: string) => ({
 	bot: `${home}/${MEMON_BOT_FILE_NAME}`,
 	memory: `${home}/${MEMON_MEMORY_FILE_NAME}`,
-	notes: `${home}/${MEMON_NOTES_FILE_NAME}`,
-	terminal: `${home}/${MEMON_TERMINAL_FILE_NAME}`,
+	tasks: `${home}/${MEMON_TASKS_FILE_NAME}`,
+	terminalHistory: `${home}/${MEMON_TERMINAL_HISTORY_FILE_NAME}`,
 });
 
 /** A path as the agent and the windows show it: the home as `~`. */

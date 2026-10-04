@@ -96,7 +96,9 @@ export const MemonComputerStart: React.FC<{
 						<div className="flex flex-wrap justify-center gap-1.5">
 							{[
 								...MEMON_APP_IDS.filter((app) => agent.config.apps[app]),
-								...MEMON_BUILTIN_APPS,
+								...MEMON_BUILTIN_APPS.filter(
+									(app) => app !== "pi" || agent.config.piCode,
+								),
 							].map((app) => {
 								const Icon = MEMON_APP_ICONS[app];
 								return (

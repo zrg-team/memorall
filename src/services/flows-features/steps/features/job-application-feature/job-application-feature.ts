@@ -14,7 +14,7 @@ import {
 	type GraphTool,
 } from "@memorall/agent-harness-flows/graph/graph.base";
 import type { ChatCompletionMessageParam } from "@memorall/agent-harness-flows/interfaces/engine/messages";
-import type { ActiveWebSessionInfo } from "@memorall/agent-harness-flows/interfaces/services/web-browser";
+import { formatOpenWebSessions } from "@memorall/agent-harness-flows/steps/features/web-feature/open-sessions";
 import type {} from "@memorall/agent-harness-flows/interfaces/engine/tool";
 import type { AllServices } from "@memorall/agent-harness-flows/interfaces/services/services";
 
@@ -29,6 +29,8 @@ export interface JobApplicationFeatureInput {
 export interface JobApplicationFeatureOutput {
 	tools?: GraphTool[];
 	messages?: ChatCompletionMessageParam[];
+	/** The open web sessions, attached past the cached prefix. */
+	reminders?: string[];
 }
 
 export interface JobApplicationFeatureConfig {}
@@ -208,20 +210,6 @@ Sincerely,
 export const JOB_APPLICATION_FEATURE_SYSTEM_PROMPT =
 	SYSTEM_PROMPT_INSTRUCTION.trim();
 
-const formatOpenWebSessions = (sessions: ActiveWebSessionInfo[]): string => {
-	const open = sessions.filter((s) => s.isOpen);
-	if (open.length === 0) return "";
-	const entries = open.map((session, i) => {
-		return `Session ${i + 1}:
-  - sessionId: ${session.sessionId}
-  - requestedUrl: ${session.requestedUrl}
-  - currentUrl: ${session.currentUrl}
-  - title: ${session.title || "(no title)"}
-  - mode: ${session.mode || "tab"}`;
-	});
-	return `## OPEN WEB SESSIONS\n${entries.join("\n\n")}`;
-};
-
 export const JOB_APPLICATION_FEATURE_TOOLS = [
 	"doc_read",
 	"doc_search",
@@ -250,16 +238,19 @@ const definition = defineStep<
 				input.tools,
 				...JOB_APPLICATION_FEATURE_TOOLS,
 			);
-			const allSessions =
-				(await services?.webBrowser?.getAllSessionsInfo()) ?? [];
 			const messages = GraphBase.chat.systemMessage(
 				input.messages,
-				`${JOB_APPLICATION_FEATURE_SYSTEM_PROMPT}\n\n${formatOpenWebSessions(allSessions)}`,
+				JOB_APPLICATION_FEATURE_SYSTEM_PROMPT,
+			);
+			// Open sessions change between messages: past the cached prefix.
+			const sessions = formatOpenWebSessions(
+				(await services?.webBrowser?.getAllSessionsInfo()) ?? [],
 			);
 			return {
 				output: {
 					tools,
 					messages,
+					...(sessions ? { reminders: [sessions] } : {}),
 				},
 			};
 		} catch (error) {

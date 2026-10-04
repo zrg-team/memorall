@@ -512,5 +512,12 @@
 		"title": "Mô hình studio",
 		"description": "Mô hình mà mỗi studio sử dụng. Mỗi lúc chỉ giữ một mô hình chạy trên thiết bị trong bộ nhớ.",
 		"none": "Chưa chọn — xem mô hình"
+	},
+	"pricing": {
+		"free": "Miễn phí",
+		"freeHint": "Miễn phí: nhà cung cấp không tính phí theo token",
+		"title": "Đầu vào {{input}} · đầu ra {{output}} cho 1 triệu token",
+		"cached": "Đầu vào từ bộ nhớ đệm {{price}} cho 1 triệu token",
+		"full": "vào {{input}} · ra {{output}} / 1 triệu"
 	}
 }

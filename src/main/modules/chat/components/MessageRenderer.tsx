@@ -20,6 +20,7 @@ import type {
 	AttachedDocumentRef,
 	ComplexContent,
 	MessageParts,
+	ChatCompaction,
 	ToolExecutionRecord,
 } from "@/types/chat";
 import { cn } from "@/lib/utils";
@@ -64,6 +65,7 @@ interface MessageMetadata extends MessageFooterMetadata {
 	};
 	executions?: AssistantExecutionPart[];
 	toolExecutions?: ToolExecutionRecord[];
+	compactions?: ChatCompaction[];
 }
 
 interface MessageRendererProps {
@@ -148,6 +150,10 @@ export const MessageRenderer: React.FC<MessageRendererProps> = React.memo(
 				Array.isArray(metadata?.toolExecutions) ? metadata.toolExecutions : [],
 			[metadata],
 		);
+		const compactions = useMemo<ChatCompaction[]>(
+			() => (Array.isArray(metadata?.compactions) ? metadata.compactions : []),
+			[metadata],
+		);
 		const partsContentParts = useMemo<AssistantContentPart[]>(
 			() =>
 				message.role === "assistant"
@@ -156,9 +162,11 @@ export const MessageRenderer: React.FC<MessageRendererProps> = React.memo(
 							executions: executionParts,
 							executeState: isStreaming ? executeState : undefined,
 							toolExecutions,
+							compactions,
 						})
 					: [],
 			[
+				compactions,
 				executeState,
 				executionParts,
 				isStreaming,

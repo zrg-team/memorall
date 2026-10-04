@@ -1,6 +1,8 @@
 import {
 	MEMON_BOT_FILE_NAME,
 	MEMON_LEGACY_DESKTOP_DIR,
+	MEMON_LEGACY_NOTES_FILE_NAME,
+	MEMON_LEGACY_TERMINAL_FILE_NAME,
 	MEMON_MEMORY_FILE_NAME,
 	memonHomePaths,
 } from "./constants";
@@ -81,6 +83,62 @@ export const loadMemonDesktopFiles = async (
 			`${MEMON_LEGACY_DESKTOP_DIR}/${MEMON_MEMORY_FILE_NAME}`,
 		),
 	};
+};
+
+export interface MemonHomeFilesIO extends MemonDesktopFileIO {
+	exists(path: string): Promise<boolean>;
+	move(from: string, to: string): Promise<void>;
+}
+
+/** A name in `dir` nothing has yet: "Notes.md", else "Notes 2.md"… */
+const freeFilePath = async (
+	io: MemonHomeFilesIO,
+	dir: string,
+	stem: string,
+	extension: string,
+): Promise<string> => {
+	for (let n = 1; ; n += 1) {
+		const path = `${dir}/${stem}${n === 1 ? "" : ` ${n}`}${extension}`;
+		if (!(await io.exists(path))) return path;
+	}
+};
+
+/**
+ * Moves what an older version kept in sight to the hidden files that hold
+ * it now: my.notes becomes ~/.tasks (its steps one task; its free-form
+ * notes, if any, go to Notes.md) and my.terminal ~/.terminal_history. A
+ * hidden file that is already there wins; the old one is left alone.
+ */
+export const migrateMemonHomeFiles = async (
+	io: MemonHomeFilesIO,
+	home: string,
+): Promise<void> => {
+	const paths = memonHomePaths(home);
+	const moves: Array<[string, string]> = [
+		[`${home}/${MEMON_LEGACY_NOTES_FILE_NAME}`, paths.tasks],
+		[`${home}/${MEMON_LEGACY_TERMINAL_FILE_NAME}`, paths.terminalHistory],
+	];
+	for (const [from, to] of moves) {
+		try {
+			if (!(await io.exists(from)) || (await io.exists(to))) continue;
+			if (from.endsWith(MEMON_LEGACY_NOTES_FILE_NAME)) {
+				const data = JSON.parse((await io.read(from)) || "{}") as {
+					text?: unknown;
+				};
+				const text = typeof data.text === "string" ? data.text.trim() : "";
+				if (text) {
+					await io.write(
+						await freeFilePath(io, home, "Notes", ".md"),
+						`# Notes\n\n${text}\n`,
+					);
+				}
+			}
+			await io.move(from, to);
+		} catch {
+			// Another computer of this agent moved it first, or the old file is
+			// not what it should be: it stays where it is.
+		}
+	}
 };
 
 // ── Entries ──────────────────────────────────────────────────────────────────

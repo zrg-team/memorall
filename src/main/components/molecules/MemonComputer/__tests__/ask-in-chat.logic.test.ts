@@ -59,7 +59,7 @@ const snapshot = (
 	files: { cwd: "/", entries: [] },
 	editor: { path: null, content: "", saved: true, screenLine: 0 },
 	viewer: { path: null, kind: null, text: "", loading: false, screenLine: 0 },
-	notes: { items: [], text: "" },
+	tasks: { items: [] },
 	scheduler: { agentId: null, items: [], loading: false },
 	studio: { tools: [], selected: null, runs: [], loading: false },
 	skills: { agentId: null, items: [], open: null, loading: false },

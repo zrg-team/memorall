@@ -26,6 +26,7 @@ vi.mock("../ConnectionsPage", () => ({
 	ConnectionsPage: stub("ConnectionsPage"),
 }));
 vi.mock("../SkillsPage", () => ({ SkillsPage: stub("SkillsPage") }));
+vi.mock("../UsagePage", () => ({ UsagePage: stub("UsagePage") }));
 vi.mock("../FlowBuilderPage/FlowBuilderPage", () => ({
 	FlowBuilderPage: stub("FlowBuilderPage"),
 }));
@@ -44,6 +45,7 @@ const cases: Array<[string, React.LazyExoticComponent<React.ComponentType>]> = [
 	["RuntimePage", LazyPages.RuntimePage],
 	["ConnectionsPage", LazyPages.ConnectionsPage],
 	["SkillsPage", LazyPages.SkillsPage],
+	["UsagePage", LazyPages.UsagePage],
 	["FlowBuilderPage", LazyPages.FlowBuilderPage],
 ];
 

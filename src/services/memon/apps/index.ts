@@ -1,14 +1,14 @@
 import type { MemonKitApp } from "../app-kit/types";
 import type { MemonWindowApp } from "../constants";
 import { connectionsApp } from "./connections-view";
-import { notesApp } from "./notes-view";
 import { schedulerApp } from "./scheduler-view";
 import { skillsApp } from "./skills-view";
 import { studioApp } from "./studio-view";
+import { tasksApp } from "./tasks-view";
 
 /** Computer apps built with the app kit, by window. */
 export const MEMON_KIT_APPS = {
-	notes: notesApp,
+	tasks: tasksApp,
 	scheduler: schedulerApp,
 	studio: studioApp,
 	skills: skillsApp,

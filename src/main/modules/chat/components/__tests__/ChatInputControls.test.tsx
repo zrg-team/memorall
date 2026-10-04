@@ -168,32 +168,7 @@ describe("ChatInputControls folding", () => {
 });
 
 describe("ChatInputControls co-agent", () => {
-	it("offers the co-agent beside attach when the surface supports it", async () => {
-		const onStartCoAgent = vi.fn();
-		const { container } = render(
-			<ChatInputControls {...props({ onStartCoAgent })} />,
-		);
-
-		const button = within(container).getByRole("button", {
-			name: "tooltips.startCoAgent",
-		});
-		await userEvent.click(button);
-		expect(onStartCoAgent).toHaveBeenCalledTimes(1);
-	});
-
-	it("sits immediately after the attach control", () => {
-		const { container } = render(
-			<ChatInputControls {...props({ onStartCoAgent: vi.fn() })} />,
-		);
-
-		const tools = container.querySelectorAll('[class*="flex-nowrap"] > *');
-		// Attach dropdown, then the co-agent button, then the agent/memory chip.
-		expect(tools.length).toBeGreaterThanOrEqual(3);
-		expect(tools[1]?.textContent ?? "").toBe("");
-		expect((tools[1] as HTMLElement).querySelector(".animate-spin")).toBeNull();
-	});
-
-	it("omits the button entirely where no browser tab can be driven", () => {
+	it("leaves the co-agent to the header", () => {
 		const { container } = render(<ChatInputControls {...props()} />);
 
 		expect(
@@ -202,19 +177,58 @@ describe("ChatInputControls co-agent", () => {
 			}),
 		).toBeNull();
 	});
+});
 
-	it("disables and spins while a tab is being opened", () => {
+describe("ChatInputControls during a run", () => {
+	const running = (overrides: Record<string, unknown> = {}) =>
+		props({
+			isLoading: true,
+			abortController: new AbortController(),
+			onQueue: vi.fn(),
+			...overrides,
+		});
+
+	it("offers only stop while nothing is typed", () => {
 		const { container } = render(
-			<ChatInputControls
-				{...props({ onStartCoAgent: vi.fn(), isCoAgentStarting: true })}
-			/>,
+			<ChatInputControls {...running({ canSubmit: false })} />,
 		);
 
-		const button = within(container).getByRole("button", {
-			name: "tooltips.startCoAgent",
-		});
-		expect(button).toBeDisabled();
-		expect(button.querySelector(".animate-spin")).not.toBeNull();
+		expect(
+			within(container).getByRole("button", {
+				name: "tooltips.stopGeneration",
+			}),
+		).toBeTruthy();
+		expect(container.querySelector("[data-chat-queue]")).toBeNull();
+		expect(container.querySelector("[data-chat-submit]")).toBeNull();
+	});
+
+	it("sends a typed message into the run, with queue to its left", async () => {
+		const onQueue = vi.fn();
+		const { container } = render(
+			<ChatInputControls {...running({ onQueue })} />,
+		);
+
+		const queue = container.querySelector<HTMLElement>("[data-chat-queue]");
+		const submit = container.querySelector<HTMLElement>("[data-chat-submit]");
+		if (!queue || !submit) throw new Error("queue and send are both shown");
+		expect(submit).not.toBeDisabled();
+		// Send shows its arrow, not the streaming square.
+		expect(submit.querySelector(".lucide-send")).not.toBeNull();
+		expect(
+			queue.compareDocumentPosition(submit) & Node.DOCUMENT_POSITION_FOLLOWING,
+		).toBeTruthy();
+		await userEvent.click(queue);
+		expect(onQueue).toHaveBeenCalledTimes(1);
+	});
+
+	it("keeps attaching open while the run goes on", () => {
+		const { container } = render(<ChatInputControls {...running()} />);
+
+		const attach = container.querySelector<HTMLElement>(
+			'[class*="flex-nowrap"] button',
+		);
+		expect(attach?.querySelector(".lucide-paperclip")).not.toBeNull();
+		expect(attach).not.toBeDisabled();
 	});
 });
 

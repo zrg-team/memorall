@@ -6,10 +6,18 @@ import {
 	uniqueAgentName,
 } from "../agent-home";
 import { memonAgentFolderName, memonHomeDir } from "../constants";
-import { parseNotesFile, serializeNotesFile } from "../notes-file";
+import { migrateMemonHomeFiles } from "../desktop-files";
+import { parseStudioAppFile, serializeStudioAppFile } from "../studio-app-file";
+import {
+	parseTasksFile,
+	serializeTasksFile,
+	taskProgress,
+} from "../tasks-file";
 import {
 	parseTerminalHistory,
+	parseTerminalLauncher,
 	serializeTerminalHistory,
+	serializeTerminalLauncher,
 } from "../terminal/terminal-history";
 
 /** Files and folders in memory, as the documents filesystem keeps them. */
@@ -115,43 +123,176 @@ describe("agent names and homes", () => {
 	});
 });
 
-describe("the .notes and .terminal files", () => {
-	it("reads and writes notes as JSON", () => {
-		const content = serializeNotesFile({
-			items: [{ text: "Search", status: "done" }],
-			text: "Sources",
-		});
-		expect(JSON.parse(content)).toEqual({
-			items: [{ text: "Search", status: "done" }],
-			text: "Sources",
-		});
-		expect(parseNotesFile(content)).toEqual({
-			items: [{ text: "Search", status: "done" }],
-			text: "Sources",
-		});
-		expect(
-			parseNotesFile(
-				'{ "items": ["Plain", { "text": "Odd", "status": "x" }] }',
-			),
-		).toEqual({
-			items: [
-				{ text: "Plain", status: "todo" },
-				{ text: "Odd", status: "todo" },
+describe("the home's files", () => {
+	it("reads and writes tasks as JSON, with readable times", () => {
+		const content = serializeTasksFile({
+			tasks: [
+				{
+					id: 3,
+					title: "Search",
+					state: "done",
+					checklist: [{ text: "One", done: true }],
+					createdBy: "user",
+					createdAt: Date.UTC(2026, 9, 4, 9),
+					updatedAt: Date.UTC(2026, 9, 4, 10),
+					finishedAt: Date.UTC(2026, 9, 4, 10),
+				},
 			],
-			text: "",
 		});
-		expect(parseNotesFile("")).toEqual({ items: [], text: "" });
-		expect(() => parseNotesFile("[1]")).toThrow("JSON object");
-		expect(() => parseNotesFile("{ nope")).toThrow("not valid JSON");
+		expect(JSON.parse(content).tasks[0]).toEqual({
+			id: 3,
+			title: "Search",
+			state: "done",
+			createdBy: "user",
+			createdAt: "2026-10-04T09:00:00.000Z",
+			updatedAt: "2026-10-04T10:00:00.000Z",
+			finishedAt: "2026-10-04T10:00:00.000Z",
+			checklist: [{ text: "One", done: true }],
+		});
+		expect(parseTasksFile(content).tasks[0]).toMatchObject({
+			id: 3,
+			createdAt: Date.UTC(2026, 9, 4, 9),
+			finishedAt: Date.UTC(2026, 9, 4, 10),
+		});
 	});
 
-	it("reads and writes the command history as JSON", () => {
-		const content = serializeTerminalHistory(["ls", "node app.js"]);
-		expect(JSON.parse(content)).toEqual({ history: ["ls", "node app.js"] });
-		expect(parseTerminalHistory(content)).toEqual(["ls", "node app.js"]);
-		expect(parseTerminalHistory('["pwd", 3, "  "]')).toEqual(["pwd"]);
-		expect(() => parseTerminalHistory('{ "history": 1 }')).toThrow(
-			'"history" list',
+	it("reads tasks written by hand, and an older Notes file as one task", () => {
+		const { tasks } = parseTasksFile(
+			JSON.stringify({
+				tasks: [
+					"Plain",
+					{ id: 2, title: "Doing", state: "In Progress", checklist: ["a"] },
+					{ id: 2, title: "Same id", status: "todo" },
+					{ title: "" },
+				],
+			}),
+			1000,
 		);
+		expect(tasks.map(({ id, title, state }) => ({ id, title, state }))).toEqual(
+			[
+				{ id: 1, title: "Plain", state: "approved" },
+				{ id: 2, title: "Doing", state: "in_progress" },
+				{ id: 3, title: "Same id", state: "approved" },
+			],
+		);
+		expect(tasks[1]?.checklist).toEqual([{ text: "a", done: false }]);
+		expect(
+			parseTasksFile(
+				'{ "items": [{ "text": "Search", "status": "done" }], "text": "x" }',
+				1000,
+			).tasks,
+		).toEqual([
+			{
+				id: 1,
+				title: "Earlier plan",
+				state: "done",
+				checklist: [{ text: "Search", done: true }],
+				createdBy: "agent",
+				createdAt: 1000,
+				updatedAt: 1000,
+				finishedAt: 1000,
+			},
+		]);
+		expect(parseTasksFile("")).toEqual({ tasks: [] });
+		expect(() => parseTasksFile("1")).toThrow('"tasks" list');
+		expect(() => parseTasksFile("{ nope")).toThrow("not valid JSON");
+		expect(taskProgress({ state: "done", checklist: [] })).toEqual({
+			done: 1,
+			total: 1,
+		});
+	});
+
+	it("keeps the command history one command per line, and reads the older JSON", () => {
+		const content = serializeTerminalHistory(["ls", "node app.js"]);
+		expect(content).toBe("ls\nnode app.js\n");
+		expect(parseTerminalHistory(content)).toEqual(["ls", "node app.js"]);
+		expect(parseTerminalHistory("pwd\r\n\n  \ngit status")).toEqual([
+			"pwd",
+			"git status",
+		]);
+		expect(parseTerminalHistory('{ "history": ["ls", 3, "  "] }')).toEqual([
+			"ls",
+		]);
+		expect(serializeTerminalHistory([])).toBe("");
+	});
+
+	it("reads a launcher as JSON or as the command itself", () => {
+		const content = serializeTerminalLauncher({
+			command: "npm run dev",
+			cwd: "~/site",
+		});
+		expect(parseTerminalLauncher(content)).toEqual({
+			command: "npm run dev",
+			cwd: "~/site",
+		});
+		expect(parseTerminalLauncher("# dev\nnpm i\nnpm run dev\n")).toEqual({
+			command: "npm i && npm run dev",
+		});
+		expect(parseTerminalLauncher('{ "history": ["ls"] }')).toBeNull();
+		expect(parseTerminalLauncher("")).toBeNull();
+	});
+
+	it("reads a studio app's tool and settings, never its input", () => {
+		const content = serializeStudioAppFile({
+			tool: "speech",
+			title: "Narrator",
+			settings: { voice: "af_heart", speed: 1.2 },
+		});
+		expect(JSON.parse(content)).toEqual({
+			tool: "speech",
+			title: "Narrator",
+			voice: "af_heart",
+			speed: 1.2,
+		});
+		expect(
+			parseStudioAppFile(
+				'{ "tool": "decision", "text": "an input", "questions": { "a": {} }, "count": "2" }',
+				"/agents/Max/Analyze User Feedback.studio",
+			),
+		).toEqual({
+			tool: "decision",
+			title: "Analyze User Feedback",
+			settings: { questions: { a: {} } },
+		});
+		expect(() => parseStudioAppFile('{ "tool": "nope" }', "/a.studio")).toThrow(
+			'it needs "tool"',
+		);
+	});
+
+	it("moves an older version's visible files to hidden ones, once", async () => {
+		const files = new Map<string, string>([
+			["/h/my.notes", '{ "items": ["a"], "text": "Keep me" }'],
+			["/h/my.terminal", '{ "history": ["ls"] }'],
+			["/h/Notes.md", "mine"],
+			["/k/my.notes", "{}"],
+			["/k/.tasks", '{ "tasks": [] }'],
+		]);
+		const io = {
+			read: async (path: string) => {
+				const content = files.get(path);
+				if (content === undefined) throw new Error("ENOENT");
+				return content;
+			},
+			write: async (path: string, content: string) => {
+				files.set(path, content);
+			},
+			exists: async (path: string) => files.has(path),
+			move: async (from: string, to: string) => {
+				files.set(to, files.get(from) ?? "");
+				files.delete(from);
+			},
+		};
+		await migrateMemonHomeFiles(io, "/h");
+		await migrateMemonHomeFiles(io, "/k");
+		expect([...files.keys()].sort()).toEqual([
+			"/h/.tasks",
+			"/h/.terminal_history",
+			"/h/Notes 2.md",
+			"/h/Notes.md",
+			"/k/.tasks",
+			"/k/my.notes",
+		]);
+		expect(files.get("/h/Notes 2.md")).toBe("# Notes\n\nKeep me\n");
+		expect(files.get("/k/.tasks")).toBe('{ "tasks": [] }');
 	});
 });

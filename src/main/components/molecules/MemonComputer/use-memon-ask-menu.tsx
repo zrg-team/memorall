@@ -1,6 +1,7 @@
 import { MessageSquarePlus } from "lucide-react";
 import React from "react";
 import { useTranslation } from "react-i18next";
+import { cn } from "@/lib/utils";
 import type { MemonMachineSnapshot } from "@/services/memon/types";
 import {
 	askInChat,
@@ -8,6 +9,10 @@ import {
 	memonWindowSource,
 	memonWindowTarget,
 } from "./ask-in-chat";
+import {
+	contextMenuActions,
+	type MemonMenuAction,
+} from "./context-menu-actions";
 
 interface MenuItem {
 	label: string;
@@ -17,10 +22,13 @@ interface MenuItem {
 interface MenuState {
 	x: number;
 	y: number;
+	/** What the item under the pointer offers, e.g. Open or Delete. */
+	actions: MemonMenuAction[];
 	items: MenuItem[];
 }
 
 const MENU_WIDTH = 240;
+const ROW_HEIGHT = 30;
 const PREVIEW_CHARS = 36;
 
 const preview = (value: string): string => {
@@ -52,8 +60,9 @@ const selectedText = (element: HTMLElement, root: HTMLElement): string => {
 };
 
 /**
- * Right-click on the computer: ask in chat about the selection, the item
- * under the pointer (a page block, file, terminal line) or the whole window.
+ * Right-click on the computer: the actions the item under the pointer added
+ * (see addContextMenuActions), then ask in chat about the selection, the
+ * item (a page block, file, terminal line) or the whole window.
  */
 export const useMemonAskMenu = (
 	snapshot: MemonMachineSnapshot | undefined,
@@ -135,13 +144,16 @@ export const useMemonAskMenu = (
 				target: whole,
 			});
 		}
-		// Nothing to ask about: leave the browser's own menu alone.
-		if (!items.length) return;
+		const actions = contextMenuActions(event);
+		// Nothing to offer: leave the browser's own menu alone.
+		if (!items.length && !actions.length) return;
 		event.preventDefault();
 		const rect = desktop.getBoundingClientRect();
+		const height = (actions.length + items.length) * ROW_HEIGHT + 16;
 		setState({
 			x: Math.min(event.clientX - rect.left, rect.width - MENU_WIDTH - 4),
-			y: Math.min(event.clientY - rect.top, rect.height - 40 * items.length),
+			y: Math.min(event.clientY - rect.top, rect.height - height),
+			actions,
 			items,
 		});
 	};
@@ -153,6 +165,36 @@ export const useMemonAskMenu = (
 			style={{ left: Math.max(4, state.x), top: Math.max(4, state.y) }}
 			className="absolute z-[9200] w-60 rounded-md border bg-popover p-1 text-popover-foreground shadow-md"
 		>
+			{state.actions.map((action) => {
+				const Icon = action.icon;
+				return (
+					<button
+						type="button"
+						role="menuitem"
+						key={action.label}
+						onClick={() => {
+							setState(null);
+							action.run();
+						}}
+						className={cn(
+							"flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-xs hover:bg-accent hover:text-accent-foreground",
+							action.destructive &&
+								"text-red-600 hover:text-red-600 dark:text-red-400 dark:hover:text-red-400",
+						)}
+					>
+						<Icon size={13} className="shrink-0" />
+						<span className="min-w-0 flex-1 truncate">{action.label}</span>
+						{action.shortcut ? (
+							<span className="shrink-0 text-[10px] text-muted-foreground">
+								{action.shortcut}
+							</span>
+						) : null}
+					</button>
+				);
+			})}
+			{state.actions.length && state.items.length ? (
+				<div role="separator" className="-mx-1 my-1 h-px bg-border" />
+			) : null}
 			{state.items.map((entry) => (
 				<button
 					type="button"

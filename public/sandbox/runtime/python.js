@@ -4,7 +4,8 @@ import { sandboxAssetUrl } from "./shared.js";
  * The `py` command's interpreter: Pyodide in a worker, so a runaway script can
  * be stopped without freezing the sandbox. The host sends the files under the
  * working directory with each run and gets back what the script changed;
- * Pyodide's own filesystem never persists between runs.
+ * Pyodide's own filesystem never persists between runs. The packages bundled
+ * next to it (see tools/pyodide-packages.mjs) load when a run imports them.
  */
 
 const DEFAULT_TIMEOUT_MS = 60_000;
@@ -13,6 +14,8 @@ const SYSTEM_ROOTS = ["/lib", "/dev", "/proc", "/sys", "/tmp", "/home/pyodide"];
 
 const RUNNER = [
 	"import os, sys, runpy, traceback",
+	// A worker has no page to draw on: charts are saved to files (savefig).
+	"os.environ.setdefault('MPLBACKEND', 'Agg')",
 	"def __memorall_run(mode, target, argv, cwd):",
 	"    os.makedirs(cwd, exist_ok=True)",
 	"    os.chdir(cwd)",
@@ -48,9 +51,38 @@ const workerSource = () => {
 	return `
 importScripts(${JSON.stringify(loaderUrl)});
 const SYSTEM_ROOTS = ${JSON.stringify(SYSTEM_ROOTS)};
+// WebGL packages (zengl) draw on the page's canvas, found through window and
+// document; a worker has neither, so they get an OffscreenCanvas under those
+// names. Set after Pyodide has loaded, so its own environment check is not
+// misled into seeing a page.
+const NO_WEBGL2 =
+	"WebGL2 is not available here (no GPU access, or WebGL is turned off in this browser), so nothing can render with it.";
+const offerOffscreenCanvas = () => {
+	if (typeof OffscreenCanvas === "undefined") return;
+	const createCanvas = () => {
+		const canvas = new OffscreenCanvas(512, 512);
+		const getContext = canvas.getContext.bind(canvas);
+		// Without this a missing context comes back as nothing, and the package
+		// fails later with an error that does not say why.
+		canvas.getContext = (type, options) => {
+			const context = getContext(type, options);
+			if (!context && type === "webgl2") throw new Error(NO_WEBGL2);
+			return context;
+		};
+		return canvas;
+	};
+	let canvas = null;
+	self.window ??= self;
+	self.document ??= {
+		getElementById: (id) => (id === "canvas" ? (canvas ??= createCanvas()) : null),
+		createElement: (tag) => (tag === "canvas" ? createCanvas() : null),
+		body: { appendChild: () => undefined },
+	};
+};
 let ready = null;
 const load = () => {
 	ready ??= loadPyodide({ indexURL: ${JSON.stringify(indexUrl)} }).then((py) => {
+		offerOffscreenCanvas();
 		py.runPython(${JSON.stringify(RUNNER)});
 		return py;
 	});
@@ -80,6 +112,50 @@ const sameBytes = (a, b) => {
 	for (let i = 0; i < a.length; i += 1) if (a[i] !== b[i]) return false;
 	return true;
 };
+const decoder = new TextDecoder();
+// The bundled packages a run imports load before it runs; the lock file lists
+// only those, so any other import fails as "No module named ...".
+const loadImports = async (py, mode, target, files, stderr) => {
+	const sources = mode === "code" ? [target] : mode === "module" ? ["import " + target] : [];
+	for (const file of files) {
+		if (file.path.endsWith(".py")) sources.push(decoder.decode(file.data));
+	}
+	for (const source of sources) {
+		try {
+			await py.loadPackagesFromImports(source, {
+				messageCallback: () => {},
+				errorCallback: (text) => stderr.push(text + "\\n"),
+			});
+		} catch {
+			// A file that does not parse: running it says so.
+		}
+	}
+};
+// Which bundled package a module belongs to, from the lock file shipped with them.
+let moduleIndex = null;
+const packageOfModule = async (name) => {
+	moduleIndex ??= fetch(${JSON.stringify(`${indexUrl}pyodide-lock.json`)})
+		.then((response) => response.json())
+		.then((lock) => {
+			const index = new Map();
+			for (const [name, entry] of Object.entries(lock.packages ?? {})) {
+				for (const module of entry.imports ?? []) index.set(module, name);
+			}
+			return index;
+		})
+		.catch(() => new Map());
+	return (await moduleIndex).get(name);
+};
+const MISSING_MODULE = /No module named '([^'.]+)/;
+const MAX_LAZY_LOADS = 6;
+const execute = (py, mode, target, argv, cwd) => {
+	const run = py.globals.get("__memorall_run");
+	try {
+		return run(mode, target, py.toPy(argv), cwd);
+	} finally {
+		run.destroy();
+	}
+};
 let synced = [];
 self.onmessage = async (event) => {
 	const { id, mode, target, argv, cwd, files } = event.data;
@@ -91,20 +167,39 @@ self.onmessage = async (event) => {
 		py.setStdout({ batched: (text) => stdout.push(text + "\\n") });
 		py.setStderr({ batched: (text) => stderr.push(text + "\\n") });
 		py.setStdin({ error: true });
-		for (const path of synced) {
-			try { FS.unlink(path); } catch {}
-		}
 		const before = new Map();
-		for (const file of files) {
-			if (isSystemPath(file.path)) continue;
-			FS.mkdirTree(file.path.slice(0, file.path.lastIndexOf("/")) || "/");
-			FS.writeFile(file.path, file.data);
-			before.set(file.path, file.data);
+		// The working tree as the host sent it: before the run, and again
+		// before a retry, so the second run starts where the first did.
+		const restore = () => {
+			const leftovers = [];
+			walk(FS, cwd, leftovers);
+			for (const path of [...synced, ...leftovers]) {
+				try { FS.unlink(path); } catch {}
+			}
+			for (const file of files) {
+				if (isSystemPath(file.path)) continue;
+				FS.mkdirTree(file.path.slice(0, file.path.lastIndexOf("/")) || "/");
+				FS.writeFile(file.path, file.data);
+				before.set(file.path, file.data);
+			}
+			FS.mkdirTree(cwd);
+		};
+		restore();
+		await loadImports(py, mode, target, files, stderr);
+		let exitCode = execute(py, mode, target, argv, cwd);
+		// A bundled package imported lazily (pandas's Excel reader, a converter
+		// document_html picks per file) is not among the script's imports:
+		// load it and run again, as long as each run finds a new one.
+		for (let round = 0; exitCode !== 0 && round < MAX_LAZY_LOADS; round += 1) {
+			const missing = MISSING_MODULE.exec(stderr.join(""));
+			const lazy = missing ? await packageOfModule(missing[1]) : undefined;
+			if (!lazy || lazy in py.loadedPackages) break;
+			await py.loadPackage(lazy, { messageCallback: () => {} });
+			stdout.length = 0;
+			stderr.length = 0;
+			restore();
+			exitCode = execute(py, mode, target, argv, cwd);
 		}
-		FS.mkdirTree(cwd);
-		const run = py.globals.get("__memorall_run");
-		const exitCode = run(mode, target, py.toPy(argv), cwd);
-		run.destroy();
 		const after = [];
 		walk(FS, cwd, after);
 		const changed = [];

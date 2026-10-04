@@ -21,6 +21,8 @@ export type MemonViewNode =
 	| { type: "progress"; label: string; value: number; max: number }
 	/** Children side by side (`row`) or stacked. */
 	| { type: "group"; layout?: "row" | "column"; children: MemonViewNode[] }
+	/** In a row, pushes what follows to the far end. Drawn only. */
+	| { type: "spacer" }
 	| MemonItemNode
 	| MemonButtonNode
 	| MemonToggleNode
@@ -47,13 +49,18 @@ export type MemonViewNode =
 	 */
 	| { type: "slot"; name: string; text: string };
 
-/** A row of a list: a step, a schedule, a skill, a run. */
+/** A small label on an item; a tone colors it (e.g. a task's state). */
+export type MemonBadge =
+	| string
+	| { text: string; tone?: "info" | "success" | "warning" | "muted" };
+
+/** A row of a list: a task, a schedule, a skill, a run. */
 export interface MemonItemNode {
 	type: "item";
 	id: string;
 	title: string;
 	detail?: string;
-	badges?: string[];
+	badges?: MemonBadge[];
 	/** A checklist row: drawn and read as [ ], [~] or [x]. */
 	status?: "todo" | "doing" | "done";
 	tone?: "muted" | "error" | "success";
@@ -78,6 +85,8 @@ export interface MemonToggleNode {
 	label: string;
 	checked: boolean;
 	disabled?: string;
+	/** "check": a checklist item, drawn as a checkbox and read as [x]. */
+	variant?: "switch" | "check";
 }
 
 export interface MemonInputNode {
@@ -91,6 +100,8 @@ export interface MemonInputNode {
 	mono?: boolean;
 	/** Drawn as its text until clicked, e.g. a step's wording. */
 	inline?: boolean;
+	/** Drawn without its label above (the placeholder says it). */
+	hideLabel?: boolean;
 	/** Agent screens show at most this many characters of the value. */
 	maxChars?: number;
 	/** Values to offer, e.g. matching files in the open folder. */
@@ -103,6 +114,8 @@ export interface MemonSelectNode {
 	label: string;
 	value: string;
 	options: Array<{ value: string; label: string }>;
+	/** Drawn with its label beside it, for a row of actions; else above. */
+	inline?: boolean;
 }
 
 /** A choice drawn as chips, e.g. Studio's tools. */
@@ -133,6 +146,8 @@ export type MemonViewIcon =
 	| "upload"
 	| "json"
 	| "builder"
+	| "expand"
+	| "collapse"
 	| (string & {});
 
 /** A control the agent can use, by ref. */

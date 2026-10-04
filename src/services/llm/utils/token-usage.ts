@@ -345,9 +345,11 @@ export function resolveTokenUsage(
 }
 
 /**
- * How each request in a turn fared against the one before it.
+ * How each request in a turn fared against the one before it. The turn's
+ * first request is held against the previous message's last request, when
+ * it is known: a new message should reuse the conversation sent so far.
  *
- * - `first`: nothing earlier in the turn to reuse.
+ * - `first`: nothing earlier to compare with.
  * - `continued`: read back essentially all of the previous request.
  * - `partial`: read something, but far less than the previous request — it
  *   reused an older prefix instead, which is what a request served by a
@@ -383,13 +385,16 @@ const CONTINUITY_GAP_RATIO = 0.02;
  */
 export function describeCacheContinuity(
 	calls: readonly TokenUsage[],
+	/** The previous message's last request, to judge this turn's first. */
+	previousTurn?: TokenUsage,
 ): CacheContinuity[] {
 	return calls.map((call, index) => {
-		if (index === 0) return "first";
+		const before = index === 0 ? previousTurn : calls[index - 1];
+		if (!before) return "first";
 		if (call.cached_tokens === undefined) return "unknown";
 		if (call.cached_tokens === 0) return "restarted";
 
-		const previous = calls[index - 1]?.prompt_tokens ?? 0;
+		const previous = before.prompt_tokens ?? 0;
 		const gap = previous - call.cached_tokens;
 		const allowance = Math.max(
 			CONTINUITY_MIN_GAP,
@@ -401,14 +406,17 @@ export function describeCacheContinuity(
 
 /**
  * The provider a request moved to, when it was served by a different one than
- * the request before it. Undefined when either request did not say.
+ * the request before it (for the first, the previous message's last).
+ * Undefined when either request did not say.
  */
 export function describeProviderSwitch(
 	calls: readonly TokenUsage[],
 	index: number,
+	previousTurn?: TokenUsage,
 ): { from: string; to: string } | undefined {
 	const current = calls[index]?.provider;
-	const previous = calls[index - 1]?.provider;
+	const previous =
+		index === 0 ? previousTurn?.provider : calls[index - 1]?.provider;
 	if (!current || !previous || current === previous) return undefined;
 	return { from: previous, to: current };
 }

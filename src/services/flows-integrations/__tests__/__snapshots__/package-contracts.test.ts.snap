@@ -500,7 +500,7 @@ exports[`flows-integrations registered contracts > registers every integrations 
         "messages": "messages",
         "tools": "tools",
       },
-      "description": "Give the agent a computer: Browser, Files, Terminal, Notes and your studios on one desktop that you can watch and take over.",
+      "description": "Give the agent a computer: Browser, Files, Terminal, Tasks and your studios on one desktop that you can watch and take over.",
       "enabledByDefault": false,
       "feature": {
         "graphTypes": [
@@ -728,15 +728,16 @@ exports[`flows-integrations registered contracts > registers every integrations 
   "lottie_validate",
   "lottie_write",
   "memon_act",
+  "memon_code",
   "memon_connections",
   "memon_memory",
-  "memon_notes",
   "memon_open",
   "memon_run",
   "memon_schedule",
   "memon_screen",
   "memon_skills",
   "memon_studio",
+  "memon_tasks",
   "memon_visualize",
   "memon_window",
   "pdf_generate",
@@ -1721,6 +1722,64 @@ exports[`flows-integrations registered contracts > registers every integrations 
     },
   },
   {
+    "description": "Hand coding work to pi code, the pi coding agent in its own window: it reads, edits and runs code in the computer's files with its own tools, on the chat's model. Then wait for it, steer it, stop it or type into it. The user confirms in the pi code window before you hand it work. Returns a summary and the screen, which shows pi's conversation while its window is in front.",
+    "name": "memon_code",
+    "parameters": {
+      "properties": {
+        "action": {
+          "enum": [
+            "prompt",
+            "wait",
+            "stop",
+            "keys",
+            "new",
+            "compact",
+            "close",
+          ],
+          "type": "string",
+        },
+        "cwd": {
+          "type": "string",
+        },
+        "key": {
+          "enum": [
+            "enter",
+            "alt+enter",
+            "escape",
+            "tab",
+            "shift+tab",
+            "up",
+            "down",
+            "right",
+            "left",
+            "backspace",
+            "ctrl+c",
+            "ctrl+o",
+            "ctrl+t",
+          ],
+          "type": "string",
+        },
+        "queue": {
+          "enum": [
+            "steer",
+            "followUp",
+          ],
+          "type": "string",
+        },
+        "text": {
+          "type": "string",
+        },
+        "waitSeconds": {
+          "type": "number",
+        },
+      },
+      "required": [
+        "action",
+      ],
+      "type": "object",
+    },
+  },
+  {
     "description": "See the user's connected apps (Composio apps, MCP servers), their status and tools, and (when the user asks) grant or revoke them for this agent.",
     "name": "memon_connections",
     "parameters": {
@@ -1780,43 +1839,6 @@ exports[`flows-integrations registered contracts > registers every integrations 
     },
   },
   {
-    "description": "Plan and track the task in the Notes app the user watches: set the checklist, mark steps started or done, and keep notes. Returns the screen.",
-    "name": "memon_notes",
-    "parameters": {
-      "properties": {
-        "action": {
-          "enum": [
-            "set",
-            "add",
-            "edit",
-            "start",
-            "done",
-            "undo",
-            "remove",
-            "write",
-          ],
-          "type": "string",
-        },
-        "items": {
-          "items": {
-            "type": "string",
-          },
-          "type": "array",
-        },
-        "step": {
-          "type": "number",
-        },
-        "text": {
-          "type": "string",
-        },
-      },
-      "required": [
-        "action",
-      ],
-      "type": "object",
-    },
-  },
-  {
     "description": "Open an app on the computer and return the screen. Browser opens a url (or a search); Files shows a folder; Editor opens a file; Terminal brings up the shell.",
     "name": "memon_open",
     "parameters": {
@@ -1827,6 +1849,7 @@ exports[`flows-integrations registered contracts > registers every integrations 
             "files",
             "editor",
             "terminal",
+            "tasks",
             "visualize",
           ],
           "type": "string",
@@ -1865,6 +1888,9 @@ exports[`flows-integrations registered contracts > registers every integrations 
           "type": "string",
         },
         "input": {
+          "type": "string",
+        },
+        "saveAs": {
           "type": "string",
         },
         "stop": {
@@ -1972,7 +1998,11 @@ exports[`flows-integrations registered contracts > registers every integrations 
           "enum": [
             "list",
             "run",
+            "save",
           ],
+          "type": "string",
+        },
+        "app": {
           "type": "string",
         },
         "count": {
@@ -2001,6 +2031,9 @@ exports[`flows-integrations registered contracts > registers every integrations 
         },
         "multiLabel": {
           "type": "boolean",
+        },
+        "name": {
+          "type": "string",
         },
         "path": {
           "type": "string",
@@ -2078,6 +2111,48 @@ exports[`flows-integrations registered contracts > registers every integrations 
           "type": "boolean",
         },
         "voice": {
+          "type": "string",
+        },
+      },
+      "required": [
+        "action",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "Plan and track work in the Tasks app the user watches and edits too: add a task with its checklist, start it, tick items, finish or drop it. Tasks stay across chats. Keep them as a careful person would: one task per piece of work, and before adding one, continue the open task it belongs to; tick each item as you finish it, so the list always shows where the work stands; when the plan changes, edit the list rather than leaving stale items; when asked to bring a task up to date, check what is really done and fix the whole list in one edit; finish it only when every item is ticked or edited out. Returns the screen.",
+    "name": "memon_tasks",
+    "parameters": {
+      "properties": {
+        "action": {
+          "enum": [
+            "add",
+            "start",
+            "check",
+            "uncheck",
+            "edit",
+            "done",
+            "drop",
+          ],
+          "type": "string",
+        },
+        "item": {
+          "type": "number",
+        },
+        "items": {
+          "items": {
+            "type": "string",
+          },
+          "type": "array",
+        },
+        "start": {
+          "type": "boolean",
+        },
+        "task": {
+          "type": "number",
+        },
+        "title": {
           "type": "string",
         },
       },

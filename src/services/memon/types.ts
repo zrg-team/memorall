@@ -3,10 +3,12 @@ import type { ConnectionStatus } from "@/services/mcp-connections/status";
 import type { StudioContentPart } from "@/types/studio";
 import type {
 	MemonAppId,
+	MemonBuiltinApp,
 	MemonStudioToolId,
 	MemonWindowApp,
 } from "./constants";
 import type { MemonViewerKind } from "./file-kinds";
+import type { MemonStudioAppSettings } from "./studio-app-file";
 
 export type MemonDriver = "agent" | "user";
 export type MemonStatus = "idle" | "working" | "paused" | "waiting-for-user";
@@ -95,19 +97,41 @@ export interface MemonEditorState {
 	screenLine: number;
 }
 
-export type MemonNoteStatus = "todo" | "doing" | "done";
+/**
+ * Where a task stands. The agent proposes ("new") and the user approves;
+ * a task the user adds or asks for in chat needs no approval.
+ */
+export type MemonTaskState =
+	| "new"
+	| "approved"
+	| "in_progress"
+	| "done"
+	| "dropped";
 
-export interface MemonNoteItem {
-	id: string;
+export interface MemonTaskCheck {
 	text: string;
-	status: MemonNoteStatus;
+	done: boolean;
 }
 
-/** The Notes app: the task's checklist and free-form notes. */
-export interface MemonNotesState {
-	items: MemonNoteItem[];
-	text: string;
-	/** The `.notes` file they are kept in: ~/my.notes unless another is open. */
+/** A piece of work the user and the agent share, with its checklist. */
+export interface MemonTask {
+	/** Stable number, shown as #3; never reused. */
+	id: number;
+	title: string;
+	state: MemonTaskState;
+	checklist: MemonTaskCheck[];
+	createdBy: "agent" | "user";
+	createdAt: number;
+	updatedAt: number;
+	/** When it was last done or dropped. */
+	finishedAt?: number;
+}
+
+/** The Tasks app: every task, kept in a `.tasks` file across chats. */
+export interface MemonTasksState {
+	/** Oldest first. */
+	items: MemonTask[];
+	/** The `.tasks` file they are kept in: ~/.tasks unless another is open. */
 	path?: string;
 	/** Why the file could not be read; the next change writes it again. */
 	error?: string;
@@ -233,13 +257,26 @@ export interface MemonStudioRun {
 	model?: string;
 	error?: string;
 	startedAt: number;
+	/** The `.studio` app it ran with, by title. */
+	app?: string;
 	/** Where the run is kept in Studio history. */
 	conversationId?: string;
 	itemId?: string;
 }
 
+/** A `.studio` file open in Studio: a tool set up for one job. */
+export interface MemonStudioAppFile {
+	path: string;
+	title: string;
+	tool: MemonStudioToolId;
+	/** Its settings; the form's fields go over them. */
+	settings: MemonStudioAppSettings;
+}
+
 export interface MemonStudioState {
 	tools: MemonStudioToolState[];
+	/** The `.studio` app the form was filled from, if any. */
+	app?: MemonStudioAppFile | null;
 	/** The tool whose runs the window shows; null shows them all. */
 	selected: MemonStudioToolId | null;
 	runs: MemonStudioRun[];
@@ -300,6 +337,12 @@ export interface MemonTerminalTab {
 	cwd: string;
 	/** The running command belongs to this tab. */
 	running: boolean;
+	/** The command running in it, or the last one it ran. */
+	command?: string;
+	/** The last command's exit code, once it finished. */
+	lastExitCode?: number | null;
+	/** Commands run in this tab, oldest first (the latest few). */
+	recent?: string[];
 }
 
 /**
@@ -333,7 +376,7 @@ export interface MemonTerminalState {
 	runningTabTail?: MemonTerminalLine[];
 	/** Commands run before, oldest first, as the history file keeps them. */
 	history?: string[];
-	/** The `.terminal` file the history is kept in: ~/my.terminal by default. */
+	/** The file the history is kept in: ~/.terminal_history. */
 	historyPath?: string;
 }
 
@@ -358,31 +401,35 @@ export interface MemonMachineSnapshot {
 	driver: MemonDriver;
 	status: MemonStatus;
 	apps: MemonAppAvailability[];
+	/** The built-in apps this computer has (pi code can be turned off). */
+	builtInApps?: MemonBuiltinApp[];
 	windows: MemonWindowState[];
 	focusedWindowId: string | null;
 	browser: MemonBrowserState;
 	files: MemonFilesState;
 	editor: MemonEditorState;
 	viewer: MemonViewerState;
-	notes: MemonNotesState;
+	tasks: MemonTasksState;
 	scheduler: MemonSchedulerState;
 	studio: MemonStudioState;
 	skills: MemonSkillsState;
 	connections: MemonConnectionsState;
 	terminal: MemonTerminalState;
 	/**
-	 * What is in the agent's home, drawn as the desktop: Bot.md, Memory.md,
-	 * my.notes and everything else in it, hidden files left out.
+	 * What is in the agent's home, drawn as the desktop: Bot.md, Memory.md
+	 * and everything else in it, hidden (dot) files left out.
 	 */
 	desktop: MemonFileEntry[];
 	visual: MemonVisualState;
+	/** pi code, while its window is open (absent before it is opened). */
+	piCode?: MemonPiCodeState;
 	/** The agent's home folder, `/agents/<agent name>` (shown as `~`). */
 	home: string;
 	cursor: MemonCursorState | null;
 	/** User changes the agent has not read yet. */
 	pendingUserChanges: string[];
 	/**
-	 * What is typed into the apps' fields (a new step, a studio prompt, a
+	 * What is typed into the apps' fields (a new task, a studio prompt, a
 	 * skill being written), by key. Held here so the user and the agent fill
 	 * the same form.
 	 */
@@ -403,6 +450,58 @@ export interface MemonMachineSummary {
 	showComputer: "auto" | "manual";
 	updatedAt: number;
 	disposed?: boolean;
+}
+
+/**
+ * pi code: the pi coding agent, running in the computer with the chat's
+ * model. Its screen is a terminal the window streams, not snapshot fields.
+ */
+export interface MemonPiCodeState {
+	/** idle: nothing runs yet, only the agent's request waits. */
+	status: "idle" | "starting" | "running" | "error";
+	/** pi is busy: a model turn, a tool, a ! command or compaction. */
+	working: boolean;
+	cwd?: string;
+	/** provider/model its next turn uses. */
+	model?: string;
+	thinkingLevel?: string;
+	/** Share of the model's context window in use, 0–100. */
+	contextPercent?: number;
+	sessionName?: string;
+	error?: string;
+	/** What pi does right now, e.g. "running bash", while it works. */
+	activity?: string;
+	/** pi's conversation, oldest first, the latest entries only. */
+	transcript?: MemonPiCodeEntry[];
+	/** Entries before the transcript that are left out. */
+	earlier?: number;
+	/** Messages waiting for pi's next turn, in order. */
+	queued?: MemonPiCodeQueued[];
+	/** The agent asks to use pi code; the user answers in the window. */
+	approval?: MemonPiCodeApproval;
+}
+
+/** One entry of pi's conversation, as the agent and the panel read it. */
+export interface MemonPiCodeEntry {
+	kind: "user" | "assistant" | "tool" | "bash" | "summary" | "error";
+	text: string;
+	/** A tool's name. */
+	name?: string;
+	/** A tool or ! command that failed. */
+	failed?: boolean;
+}
+
+export interface MemonPiCodeQueued {
+	mode: "steer" | "followUp";
+	text: string;
+}
+
+/** The agent waits for the user to let it hand work to pi code. */
+export interface MemonPiCodeApproval {
+	id: string;
+	/** The work the agent would give pi. */
+	task: string;
+	requestedAt: number;
 }
 
 /** The Visualize window: one visual, kept as an OpenUI Lang file. */

@@ -59,7 +59,10 @@ import {
 } from "@/main/modules/openui/actions";
 import { topicService } from "@/main/modules/topics/services/topic-service";
 import { useAgentConfigStore } from "@/main/stores/agent-config";
-import { useChatStore } from "@/main/stores/chat";
+import { findBlockingRun, useChatStore } from "@/main/stores/chat";
+import { useChatMessageQueueStore } from "@/main/stores/chat-message-queue";
+import { useCoAgentToggle } from "@/main/stores/co-agent-activation";
+import { LOCAL_PROVIDERS } from "@/main/hooks/selectable-model";
 import { useRefreshOnFocus } from "@/main/modules/chat/hooks/use-refresh-on-focus";
 import { useRuntimeSessionsStore } from "@/main/stores/runtime-sessions";
 import {
@@ -133,6 +136,20 @@ export const ChatPage: React.FC<ChatPageProps> = ({
 	const currentConversation = useChatStore(
 		(state) => state.currentConversation,
 	);
+	const currentConversationCost = useChatStore((state) =>
+		state.currentConversation
+			? state.conversationCosts[state.currentConversation.id]
+			: undefined,
+	);
+	const refreshConversationCosts = useChatStore(
+		(state) => state.refreshConversationCosts,
+	);
+	// An older chat may be beyond the listed ones: add up its cost on opening.
+	React.useEffect(() => {
+		if (currentConversation?.id) {
+			void refreshConversationCosts([currentConversation.id]);
+		}
+	}, [currentConversation?.id, refreshConversationCosts]);
 	const restoreSelectedAgentFlowId = useChatStore(
 		(state) => state.restoreSelectedAgentFlowId,
 	);
@@ -173,6 +190,12 @@ export const ChatPage: React.FC<ChatPageProps> = ({
 	const completedGroupRefs = useRef(new Map<string, HTMLDivElement>());
 	const shouldScrollToPreviousGroupsRef = useRef(false);
 	const pendingGroupScrollRef = useRef<string | null>(null);
+	// A local model serves one request at a time and an agent's computer is one
+	// screen; anything else can run while other chats run.
+	const canRunConcurrently =
+		!!current &&
+		!LOCAL_PROVIDERS.has(current.provider) &&
+		!selectedAgentComputer;
 	const {
 		inputValue,
 		setInputValue,
@@ -192,7 +215,11 @@ export const ChatPage: React.FC<ChatPageProps> = ({
 		loadMessageGroup,
 		deleteMessages,
 		submitMessage,
-	} = useChat(model);
+		enqueueMessage,
+		injectMessage,
+		sendQueuedMessage,
+	} = useChat(model, { concurrent: canRunConcurrently });
+	const coAgentToggle = useCoAgentToggle();
 	const agentComputer = useAgentComputer(
 		selectedAgentFlowId,
 		selectedAgentComputer,
@@ -214,34 +241,78 @@ export const ChatPage: React.FC<ChatPageProps> = ({
 			? inProgressMessage
 			: null;
 	const hasInProgressMessage = visibleInProgressMessage != null;
-	const activeRun = useChatStore((state) => state.activeRun);
-	const runHere =
-		activeRun !== null && activeRun.conversationId === currentConversation?.id;
+	// A run in another chat that this one has to wait for: runs share the time
+	// only on a remote model and without an agent computer on either side.
+	const runs = useChatStore((state) => state.runs);
+	const blockingRun = findBlockingRun(
+		runs,
+		currentConversation?.id,
+		canRunConcurrently,
+	);
+	const runningElsewhereId =
+		blockingRun && blockingRun.conversationId !== currentConversation?.id
+			? blockingRun.conversationId
+			: null;
 	const runningElsewhere = React.useMemo(() => {
-		if (!isLoading || !activeRun || runHere) return null;
+		if (!runningElsewhereId) return null;
 		const title =
 			useChatStore
 				.getState()
-				.conversations.find((item) => item.id === activeRun.conversationId)
-				?.title || t("conversation.untitled", { defaultValue: "another chat" });
+				.conversations.find((item) => item.id === runningElsewhereId)?.title ||
+			t("conversation.untitled", { defaultValue: "another chat" });
 		return {
 			title,
-			onOpen: () => void loadConversation(activeRun.conversationId),
+			onOpen: () => void loadConversation(runningElsewhereId),
 		};
-	}, [activeRun, isLoading, loadConversation, runHere, t]);
+	}, [runningElsewhereId, loadConversation, t]);
 	const currentHistoryBoundary = messageGroups.find((group) => group.isLatest)
 		?.previousSeparator?.id;
+
+	const queuedMessages = useChatMessageQueueStore((state) =>
+		currentConversation ? state.queued[currentConversation.id] : undefined,
+	);
+	const pendingMessages = useChatMessageQueueStore((state) =>
+		currentConversation ? state.pending[currentConversation.id] : undefined,
+	);
+	const isQueuePaused = useChatMessageQueueStore((state) =>
+		currentConversation ? Boolean(state.paused[currentConversation.id]) : false,
+	);
+	const removeQueuedMessage = useChatMessageQueueStore((state) => state.remove);
+
+	/** The composer as it stands, taken out of it. */
+	const takeComposerDraft = (
+		images: File[],
+		docRefs: AttachedDocumentRef[],
+	) => {
+		const draft = {
+			text: inputValue,
+			images,
+			documentRefs: docRefs,
+			contextPrefix: smartSelectContext
+				? `[Smart Select: ${smartSelectContext.label}]\n${smartSelectContext.content}`
+				: undefined,
+		};
+		setInputValue("");
+		setSmartSelectContext(null);
+		setAttachedImages([]);
+		setAttachedDocumentRefs([]);
+		return draft;
+	};
 
 	const handleChatSubmit = (
 		e: React.FormEvent,
 		images: File[],
 		docRefs: AttachedDocumentRef[],
 	) => {
-		// A run in progress (here or in another chat) keeps the draft as it is.
-		if (useChatStore.getState().isLoading) {
-			e.preventDefault();
+		e.preventDefault();
+		if (!inputValue.trim()) return;
+		// This chat's run takes it before the agent's next step.
+		if (isLoading && currentConversation) {
+			injectMessage(currentConversation.id, takeComposerDraft(images, docRefs));
 			return;
 		}
+		// A run in another chat that this one waits for keeps the draft as it is.
+		if (runningElsewhere) return;
 		const contextPrefix = smartSelectContext
 			? `[Smart Select: ${smartSelectContext.label}]\n${smartSelectContext.content}`
 			: undefined;
@@ -249,6 +320,26 @@ export const ChatPage: React.FC<ChatPageProps> = ({
 		setSmartSelectContext(null);
 		setAttachedImages([]);
 		setAttachedDocumentRefs([]);
+	};
+
+	/** Sent after this chat's run finishes. */
+	const handleQueueMessage = () => {
+		if (!currentConversation || !inputValue.trim()) return;
+		enqueueMessage(
+			currentConversation.id,
+			takeComposerDraft(attachedImages, attachedDocumentRefs),
+		);
+	};
+
+	const handleEditQueuedMessage = (id: string) => {
+		if (!currentConversation) return;
+		const message = removeQueuedMessage(currentConversation.id, id);
+		if (!message) return;
+		setInputValue(
+			inputValue.trim() ? `${message.text}\n${inputValue}` : message.text,
+		);
+		setAttachedImages((current) => [...message.images, ...current]);
+		setAttachedDocumentRefs((current) => [...message.documentRefs, ...current]);
 	};
 
 	const handleMessageAction = React.useCallback(
@@ -666,6 +757,14 @@ ${text}`
 		loadFlows();
 	}, [selectedAgentFlowId, setSelectedAgentFlowId, restoreSelectedAgentFlowId]);
 
+	// Saving the selected agent in Agents changes its features and computer
+	// settings here too (pi code turned off leaves its computer at once).
+	const savedAgentConfig = useAgentConfigStore((state) =>
+		state.currentFlowId === selectedAgentFlowId
+			? state.savedUnifiedConfig
+			: null,
+	);
+
 	useEffect(() => {
 		let cancelled = false;
 
@@ -679,9 +778,10 @@ ${text}`
 
 			try {
 				const [config, catalog] = await Promise.all([
-					serviceManager.flowBuilderService.getUnifiedFlowConfig({
-						flowId: selectedAgentFlowId,
-					}),
+					savedAgentConfig ??
+						serviceManager.flowBuilderService.getUnifiedFlowConfig({
+							flowId: selectedAgentFlowId,
+						}),
 					Promise.resolve(serviceManager.flowBuilderService.getCatalog()),
 				]);
 				if (cancelled) return;
@@ -748,7 +848,7 @@ ${text}`
 		return () => {
 			cancelled = true;
 		};
-	}, [selectedAgentFlowId, t]);
+	}, [selectedAgentFlowId, savedAgentConfig, t]);
 
 	const getAgentTopicId = React.useCallback(
 		(flowId: string) =>
@@ -1011,9 +1111,11 @@ ${text}`
 				{headerSlot
 					? createPortal(
 							<ChatHeaderActions
+								cost={currentConversationCost}
 								onNewChat={() => void handleNewChat()}
 								onOpenComputer={agentComputer.open}
 								isComputerWorking={agentComputer.working}
+								coAgent={coAgentToggle}
 							/>,
 							headerSlot,
 						)
@@ -1148,8 +1250,25 @@ ${text}`
 					inputValue={inputValue}
 					setInputValue={setInputValue}
 					onSubmit={handleChatSubmit}
-					isLoading={isLoading && !runningElsewhere}
+					isLoading={isLoading}
 					runningElsewhere={runningElsewhere}
+					onQueue={handleQueueMessage}
+					queue={{
+						queued: queuedMessages ?? [],
+						pending: pendingMessages ?? [],
+						paused: isQueuePaused,
+						onSend: (id) => {
+							if (currentConversation) {
+								sendQueuedMessage(currentConversation.id, id);
+							}
+						},
+						onEdit: handleEditQueuedMessage,
+						onRemove: (id) => {
+							if (currentConversation) {
+								removeQueuedMessage(currentConversation.id, id);
+							}
+						},
+					}}
 					model={model}
 					currentModel={current}
 					status={status}

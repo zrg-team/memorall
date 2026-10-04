@@ -8,6 +8,7 @@ import { getConversationTitle } from "./chat-side-panel-utils";
 
 export const ConversationListSection: React.FC = () => {
 	const conversations = useChatStore((state) => state.conversations);
+	const conversationCosts = useChatStore((state) => state.conversationCosts);
 	const currentConversation = useChatStore(
 		(state) => state.currentConversation,
 	);
@@ -27,9 +28,8 @@ export const ConversationListSection: React.FC = () => {
 		void loadConversations();
 	}, [loadConversations]);
 
-	const runningId = useChatStore((state) =>
-		state.isLoading ? (state.activeRun?.conversationId ?? null) : null,
-	);
+	const runs = useChatStore((state) => state.runs);
+	const runningIds = useMemo(() => new Set(Object.keys(runs)), [runs]);
 	// The open conversation is listed even before it is saved to the list.
 	const visibleConversations = useMemo(() => {
 		const byId = new Map(conversations.map((item) => [item.id, item]));
@@ -42,8 +42,9 @@ export const ConversationListSection: React.FC = () => {
 	return (
 		<ConversationList
 			conversations={visibleConversations}
+			costs={conversationCosts}
 			currentId={currentConversation?.id}
-			runningId={runningId}
+			runningIds={runningIds}
 			labels={{
 				search: t("sidebar.search"),
 				create: t("sidebar.newChat"),

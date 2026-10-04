@@ -66,6 +66,7 @@ import {
 	prefetchLandingRoute,
 	RuntimePage,
 	SkillsPage,
+	UsagePage,
 } from "./pages/lazy-pages";
 import { initializeRuntimeServices } from "./runtime-initialization";
 import { useEmbeddingSettings } from "./stores/embedding-settings";
@@ -369,6 +370,7 @@ const App: React.FC = () => {
 													<Route path="/" element={<DocumentLibraryPage />} />
 													<Route path="/llm" element={<LLMPage />} />
 													<Route path="/runtime" element={<RuntimePage />} />
+													<Route path="/usage" element={<UsagePage />} />
 													<Route
 														path="/embeddings"
 														element={<EmbeddingPage />}

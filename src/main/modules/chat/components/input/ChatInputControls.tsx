@@ -1,10 +1,9 @@
 import {
-	Bot,
 	Brain,
 	Check,
 	ChevronDown,
 	FileText,
-	Loader2,
+	ListPlus,
 	Maximize2,
 	MessageCircle,
 	Minimize2,
@@ -95,11 +94,12 @@ export interface ChatInputControlsProps {
 	canSubmit: boolean;
 	isFullWidth?: boolean;
 	onToggleFullWidth?: () => void;
-	/** Attach the co-agent to the tab the user is looking at. */
-	onStartCoAgent?: () => void;
-	isCoAgentStarting?: boolean;
-	/** Whether the co-agent is armed, so the button can show it. */
-	isCoAgentActive?: boolean;
+	/**
+	 * While this chat's run goes on, a typed message can go two ways: submit
+	 * hands it to the run before the agent's next step, this keeps it to send
+	 * once the run finishes.
+	 */
+	onQueue?: () => void;
 	/** Switching model without leaving the conversation. */
 	selectableModels?: SelectableModel[];
 	selectableModelsByProvider?: Map<ServiceProvider, SelectableModel[]>;
@@ -144,9 +144,7 @@ export const ChatInputControls: React.FC<ChatInputControlsProps> = ({
 	canSubmit,
 	isFullWidth = false,
 	onToggleFullWidth,
-	onStartCoAgent,
-	isCoAgentStarting = false,
-	isCoAgentActive = false,
+	onQueue,
 	selectableModels,
 	selectableModelsByProvider,
 	lockedModelProviders,
@@ -194,13 +192,14 @@ export const ChatInputControls: React.FC<ChatInputControlsProps> = ({
 	// where each one finally carries a written label. What stays on the bar is
 	// the overflow trigger and submit — the two the user cannot do without.
 	const foldViewControls = foldActions ?? isNarrow;
-	const coAgentLabel = t(
-		isCoAgentActive ? "tooltips.stopCoAgent" : "tooltips.startCoAgent",
-		{
-			defaultValue: isCoAgentActive
-				? "Turn the co-agent off"
-				: "Let the agent see and act on the page",
-		},
+	// While the run goes on, a typed message is sent into it or queued.
+	const showRunSendControls = isLoading && canSubmit;
+	const sendLabel = isLoading
+		? t("tooltips.sendToRun", "Send now: the agent reads it at its next step")
+		: t("tooltips.sendMessage");
+	const queueLabel = t(
+		"tooltips.queueMessage",
+		"Queue: send when this reply finishes",
 	);
 
 	return (
@@ -216,7 +215,6 @@ export const ChatInputControls: React.FC<ChatInputControlsProps> = ({
 											type="button"
 											variant="ghost"
 											size="sm"
-											disabled={isLoading}
 											className={ICON_CONTROL}
 										>
 											<Paperclip size={14} />
@@ -246,43 +244,6 @@ export const ChatInputControls: React.FC<ChatInputControlsProps> = ({
 						</DropdownMenu>
 
 						{dictation}
-
-						{/*
-						 * Next to attach because it is the same kind of act: both bring
-						 * something outside the conversation into it. Left of the agent
-						 * chip so the two dropdowns are not adjacent.
-						 */}
-						{onStartCoAgent ? (
-							<Tooltip>
-								<TooltipTrigger asChild>
-									<Button
-										type="button"
-										variant="ghost"
-										size="sm"
-										disabled={isLoading || isCoAgentStarting}
-										onClick={onStartCoAgent}
-										aria-label={coAgentLabel}
-										aria-pressed={isCoAgentActive}
-										className={cn(
-											ICON_CONTROL,
-											// Armed is a real mode — the model gets tools that can
-											// click and type — so it has to be visible at a glance.
-											isCoAgentActive &&
-												"bg-emerald-500/15 text-emerald-500 hover:bg-emerald-500/25 hover:text-emerald-500",
-										)}
-									>
-										{isCoAgentStarting ? (
-											<Loader2 size={14} className="animate-spin" />
-										) : (
-											<Bot size={14} />
-										)}
-									</Button>
-								</TooltipTrigger>
-								<TooltipContent>
-									<p className="text-xs">{coAgentLabel}</p>
-								</TooltipContent>
-							</Tooltip>
-						) : null}
 
 						{/*
 						 * Agent and memory in one chip. They sat side by side as separate
@@ -671,23 +632,49 @@ export const ChatInputControls: React.FC<ChatInputControlsProps> = ({
 								<p className="text-xs">{t("tooltips.stopGeneration")}</p>
 							</TooltipContent>
 						</Tooltip>
-					) : (
+					) : null}
+
+					{/* Left of send: the slower of the two ways a message can go. */}
+					{showRunSendControls && onQueue ? (
+						<Tooltip>
+							<TooltipTrigger asChild>
+								<Button
+									type="button"
+									variant="outline"
+									size="sm"
+									onClick={onQueue}
+									aria-label={queueLabel}
+									data-chat-queue
+									className={ICON_CONTROL}
+								>
+									<ListPlus size={14} />
+								</Button>
+							</TooltipTrigger>
+							<TooltipContent>
+								<p className="text-xs">{queueLabel}</p>
+							</TooltipContent>
+						</Tooltip>
+					) : null}
+
+					{!isLoading || showRunSendControls ? (
 						<Tooltip>
 							<TooltipTrigger asChild>
 								<PromptInputSubmit
 									data-chat-submit
-									disabled={!canSubmit || isLoading || !model}
+									aria-label={sendLabel}
+									disabled={!canSubmit || !model}
 									// After a failed turn it still sends: the error is shown
-									// in the turn, and an X here read as "close".
-									status={status === "error" ? "ready" : status}
+									// in the turn, and an X here read as "close". During a run
+									// it sends too, into the run.
+									status={isLoading || status === "error" ? "ready" : status}
 									className="h-8 w-8 rounded-xl bg-foreground/90 px-0 text-background shadow-sm transition hover:bg-foreground disabled:bg-muted/70 disabled:text-muted-foreground disabled:opacity-100"
 								/>
 							</TooltipTrigger>
 							<TooltipContent>
-								<p className="text-xs">{t("tooltips.sendMessage")}</p>
+								<p className="text-xs">{sendLabel}</p>
 							</TooltipContent>
 						</Tooltip>
-					)}
+					) : null}
 				</div>
 			</div>
 		</PromptInputToolbar>

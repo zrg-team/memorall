@@ -32,6 +32,7 @@ import fs from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { build } from "esbuild";
+import { bundlePyodidePackages } from "./pyodide-packages.mjs";
 
 const require = createRequire(import.meta.url);
 const writeRetrySignal = new Int32Array(new SharedArrayBuffer(4));
@@ -886,9 +887,10 @@ async function main() {
 		console.warn("⚠️  almostnode entry not found, skipping bundle.\n");
 	}
 
-	// 5a. Pyodide for the sandbox's `py` command. The interpreter and standard
-	// library ship with the extension; package wheels do not, so the CDN that
-	// loadPackage would fall back to is replaced with a path that cannot load.
+	// 5a. Pyodide for the sandbox's `py` command. The interpreter, the standard
+	// library and the packages in python-packages.json ship with the extension
+	// (downloaded and checked at build time); the CDN that loadPackage would
+	// fall back to is replaced with a path that cannot load.
 	const pyodideDir = path.dirname(require.resolve("pyodide/package.json"));
 	const pyodideOutDir = path.resolve(
 		process.cwd(),
@@ -898,14 +900,22 @@ async function main() {
 		"pyodide.asm.js",
 		"pyodide.asm.wasm",
 		"python_stdlib.zip",
-		"pyodide-lock.json",
 	]) {
 		copyFile(path.join(pyodideDir, file), path.join(pyodideOutDir, file));
 	}
+	await bundlePyodidePackages({
+		pyodideDir,
+		outDir: pyodideOutDir,
+		configFile: path.resolve(
+			process.cwd(),
+			"src/services/sandbox-container/python-packages.json",
+		),
+	});
 	const pyodideLoader = fs
 		.readFileSync(path.join(pyodideDir, "pyodide.js"), "utf8")
 		.replace(
-			/https:\/\/cdn\.jsdelivr\.net\/pyodide\/v\$\{\w+\.version\}\/full\//g,
+			// `v${t.version}` before 0.29, `v${x}` since.
+			/https:\/\/cdn\.jsdelivr\.net\/pyodide\/v\$\{[\w.]+\}\/full\//g,
 			"./packages-not-bundled/",
 		);
 	if (/cdn\.jsdelivr\.net/.test(pyodideLoader)) {

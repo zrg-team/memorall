@@ -16,7 +16,7 @@ const schema = z
 			.string()
 			.optional()
 			.describe(
-				'A ref from the latest screen: "b12" (browser), "f3" (files), "e1"/"e2" (editor), or a control of an app window such as "s5" (Studio), "n2" (Notes), "k3" (Skills), "c1" (Connections), "h4" (Scheduler).',
+				'A ref from the latest screen: "b12" (browser), "f3" (files), "e1"/"e2" (editor), or a control of an app window such as "s5" (Studio), "n2" (Tasks), "k3" (Skills), "c1" (Connections), "h4" (Scheduler).',
 			),
 		action: z
 			.enum([
@@ -83,7 +83,7 @@ const refApp = (
 };
 
 const act = async (machine: MemonMachine, input: Input): Promise<string> => {
-	// Controls of the app windows (Studio, Notes, Skills, …) share one path.
+	// Controls of the app windows (Studio, Tasks, Skills, …) share one path.
 	if (input.ref && kitAppForRef(input.ref)) {
 		if (
 			input.action !== "click" &&

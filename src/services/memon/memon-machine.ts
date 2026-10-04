@@ -7,8 +7,10 @@ import type {
 import {
 	MEMON_AGENT_TURN_CEILING_MS,
 	MEMON_APP_IDS,
+	MEMON_BUILTIN_APPS,
 	MEMON_GUEST_HOME,
-	MEMON_NOTES_EXTENSION,
+	MEMON_STUDIO_EXTENSION,
+	MEMON_TASKS_EXTENSION,
 	MEMON_TERMINAL_EXTENSION,
 	MEMON_VISUAL_EXTENSION,
 	MEMON_VISUALS_DIR,
@@ -16,15 +18,23 @@ import {
 	memonHomePaths,
 	MEMON_TEXT_PAGE_LINES,
 	type MemonAppId,
+	type MemonBuiltinApp,
 	type MemonStudioToolId,
 	type MemonWindowApp,
 } from "./constants";
 import { MemonFileSync } from "./file-sync";
-import { parseNotesFile, serializeNotesFile } from "./notes-file";
+import { isTaskOpen, parseTasksFile, serializeTasksFile } from "./tasks-file";
 import {
 	parseTerminalHistory,
+	parseTerminalLauncher,
 	serializeTerminalHistory,
+	serializeTerminalLauncher,
 } from "./terminal/terminal-history";
+import {
+	type MemonStudioAppConfig,
+	parseStudioAppFile,
+	serializeStudioAppFile,
+} from "./studio-app-file";
 import {
 	DEFAULT_MEMON_FEATURE_CONFIG,
 	type MemonFeatureConfig,
@@ -36,6 +46,7 @@ import {
 	loadMemonDesktopFiles,
 	MEMON_BOT_TEMPLATE,
 	MEMON_MEMORY_TEMPLATE,
+	migrateMemonHomeFiles,
 	type MemonDesktopEntryChange,
 } from "./desktop-files";
 import { memonFileKind, type MemonViewerKind } from "./file-kinds";
@@ -45,7 +56,9 @@ import { listFileRefs, serializeScreen } from "./screen-serializer";
 import { controlsByRef } from "./app-kit/render-text";
 import type { MemonControlValue } from "./app-kit/types";
 import { kitAppForRef } from "./apps";
+import { studioDraftsFromSettings } from "./apps/studio-view";
 import { MemonApprovalRequiredError } from "./approval-error";
+import { MemonPiCode, type MemonPiCodePort } from "./apps/pi-code/pi-code-app";
 import type { MemonEmbeddedPort } from "./embedded-browser";
 import { isLocalAddress, sandboxTargetOf } from "./embedded-frame";
 import type { MemonStudioPort, MemonStudioRequest } from "./studio-app";
@@ -62,8 +75,6 @@ import type {
 	MemonFileExport,
 	MemonFileEntry,
 	MemonMachineSnapshot,
-	MemonNoteItem,
-	MemonNoteStatus,
 	MemonSchedule,
 	MemonScheduleStatus,
 	MemonMachineSummary,
@@ -71,8 +82,11 @@ import type {
 	MemonConnectionItem,
 	MemonOpenSkill,
 	MemonSkillItem,
+	MemonStudioAppFile,
 	MemonStudioRun,
 	MemonStudioToolState,
+	MemonTask,
+	MemonTaskState,
 	MemonWindowState,
 } from "./types";
 
@@ -123,6 +137,8 @@ export interface MemonFilesPort {
 	move(from: string, to: string): Promise<void>;
 	/** Copies a file, or a folder with everything in it. */
 	copy(from: string, to: string): Promise<void>;
+	/** Deletes a file, or a folder with everything in it. */
+	remove(path: string): Promise<void>;
 	/** A folder with everything in it, as one zip. */
 	zip(folder: string): Promise<FolderZip>;
 	subscribe(listener: () => void): () => void;
@@ -210,6 +226,8 @@ export interface MemonPorts {
 	download?: MemonDownloadPort;
 	/** Without it the computer stays in the home it is given. */
 	homes?: MemonHomePort;
+	/** Without it pi code is not available. */
+	piCode?: MemonPiCodePort;
 }
 
 export type MemonTurnOutcome = "ready" | "timeout" | "cancelled";
@@ -225,12 +243,13 @@ const DEFAULT_LAYOUT: Record<
 	terminal: { x: 0.27, y: 0.5, w: 0.66, h: 0.46 },
 	editor: { x: 0.37, y: 0.05, w: 0.56, h: 0.6 },
 	viewer: { x: 0.2, y: 0.04, w: 0.62, h: 0.86 },
-	notes: { x: 0.66, y: 0.04, w: 0.32, h: 0.62 },
+	tasks: { x: 0.6, y: 0.04, w: 0.38, h: 0.8 },
 	scheduler: { x: 0.18, y: 0.06, w: 0.6, h: 0.78 },
 	studio: { x: 0.14, y: 0.05, w: 0.66, h: 0.82 },
 	skills: { x: 0.2, y: 0.05, w: 0.6, h: 0.82 },
 	connections: { x: 0.24, y: 0.06, w: 0.56, h: 0.8 },
 	visualize: { x: 0.12, y: 0.04, w: 0.7, h: 0.88 },
+	pi: { x: 0.1, y: 0.04, w: 0.74, h: 0.88 },
 };
 /** The app each window needs turned on; built-in apps need none. */
 const APP_OF_WINDOW: Record<MemonWindowApp, MemonAppId | null> = {
@@ -239,12 +258,13 @@ const APP_OF_WINDOW: Record<MemonWindowApp, MemonAppId | null> = {
 	editor: "files",
 	viewer: "files",
 	terminal: "terminal",
-	notes: "notes",
+	tasks: "tasks",
 	visualize: "visualize",
 	scheduler: null,
 	studio: null,
 	skills: null,
 	connections: null,
+	pi: null,
 };
 /** Extracted text kept for the agent; a very long PDF is cut here. */
 const MAX_VIEWER_TEXT_CHARS = 60_000;
@@ -346,15 +366,12 @@ export class MemonMachine {
 	private viewerLoading = false;
 	private viewerError: string | undefined;
 	private viewerScreenLine = 0;
-	private noteItems: MemonNoteItem[] = [];
-	private notesText = "";
-	private noteSeq = 0;
-	/** The `.notes` file open in Notes; null is ~/my.notes. */
-	private notesPath: string | null = null;
-	private notesError: string | undefined;
-	private readonly notesSync: MemonFileSync;
-	/** The `.terminal` file the history is kept in; null is ~/my.terminal. */
-	private historyPath: string | null = null;
+	private taskItems: MemonTask[] = [];
+	/** The `.tasks` file open in Tasks; null is ~/.tasks. */
+	private tasksPath: string | null = null;
+	private tasksError: string | undefined;
+	private readonly tasksSync: MemonFileSync;
+	/** The history is kept in ~/.terminal_history. */
 	private readonly historySync: MemonFileSync;
 	private agentId: string | null = null;
 	private agentName: string | undefined;
@@ -363,6 +380,8 @@ export class MemonMachine {
 	private schedulesError: string | undefined;
 	private studioTools: MemonStudioToolState[] = [];
 	private studioSelected: MemonStudioToolId | null = null;
+	/** The `.studio` app the form was filled from. */
+	private studioAppFile: MemonStudioAppFile | null = null;
 	private studioRuns: MemonStudioRun[] = [];
 	private studioLoading = false;
 	private studioError: string | undefined;
@@ -378,6 +397,8 @@ export class MemonMachine {
 	private connectionsError: string | undefined;
 	/** The Terminal: its tabs, commands and servers. */
 	readonly terminal: MemonTerminal;
+	/** pi code: runs while its window is open, with or without a view. */
+	readonly piCode: MemonPiCode;
 	private disposed = false;
 	private cursor: MemonCursorState | null = null;
 	private userChanges: string[] = [];
@@ -401,7 +422,7 @@ export class MemonMachine {
 		config: MemonFeatureConfig = DEFAULT_MEMON_FEATURE_CONFIG,
 	) {
 		this.config = config;
-		this.notesSync = new MemonFileSync(ports.files, "the notes");
+		this.tasksSync = new MemonFileSync(ports.files, "the tasks");
 		this.historySync = new MemonFileSync(ports.files, "the command history");
 		this.terminal = new MemonTerminal(
 			{
@@ -427,12 +448,37 @@ export class MemonMachine {
 			},
 			ports,
 		);
+		this.piCode = new MemonPiCode(
+			{
+				sessionKey: key,
+				home: () => this.home,
+				changed: () => this.changed(),
+				quit: () => {
+					const window = this.windowFor("pi");
+					if (window) void this.closeWindow(window.id);
+				},
+				enabled: () => this.config.piCode,
+				show: () => {
+					const opened = !this.windowFor("pi");
+					this.openWindow("pi");
+					return opened;
+				},
+				cursorLabel: (label) => {
+					if (this.cursor) this.cursor = { ...this.cursor, label };
+				},
+				runId: () => this.activeRunId,
+			},
+			ports.piCode,
+		);
 	}
 
 	// ── Lifecycle ───────────────────────────────────────────────────────────
 
 	configure(config: MemonFeatureConfig): void {
 		this.config = config;
+		// Turned off: pi code leaves the desktop, and quits if it runs.
+		const pi = config.piCode ? undefined : this.windowFor("pi");
+		if (pi) void this.closeWindow(pi.id);
 		this.changed();
 	}
 
@@ -457,15 +503,16 @@ export class MemonMachine {
 		}
 	}
 
-	/** Waits for the notes and history writes started so far. */
+	/** Waits for the tasks and history writes started so far. */
 	async flushWrites(): Promise<void> {
-		await Promise.all([this.notesSync.flush(), this.historySync.flush()]);
+		await Promise.all([this.tasksSync.flush(), this.historySync.flush()]);
 	}
 
 	async dispose(): Promise<void> {
 		this.disposed = true;
 		await this.flushWrites();
 		this.terminal.dispose();
+		await this.piCode.stop();
 		this.cancelWaits();
 		this.unsubscribeFiles?.();
 		this.unsubscribeDesktop?.();
@@ -534,6 +581,7 @@ export class MemonMachine {
 	/** Releases every parked tool call, e.g. when the user presses Stop. */
 	cancelWaits(): void {
 		this.terminal.cancelWaits();
+		this.piCode.cancelWaits();
 		for (const waiter of this.waiters) {
 			clearTimeout(waiter.timer);
 			waiter.resolve("cancelled");
@@ -624,7 +672,7 @@ export class MemonMachine {
 				: real;
 		}
 		if (app === "files") return this.ports.files.availability();
-		if (app === "notes" || app === "visualize") return { available: true };
+		if (app === "tasks" || app === "visualize") return { available: true };
 		return this.terminal.availability;
 	}
 
@@ -746,6 +794,11 @@ export class MemonMachine {
 	openWindow(app: MemonWindowApp): MemonWindowState {
 		const required = APP_OF_WINDOW[app];
 		if (required) this.requireApp(required);
+		if (app === "pi" && !this.config.piCode) {
+			throw new Error(
+				"pi code is turned off for this agent. The user can turn it on in MemonOS Bot settings.",
+			);
+		}
 		let window = this.windowFor(app);
 		if (!window) {
 			this.windowSeq += 1;
@@ -764,6 +817,8 @@ export class MemonMachine {
 				);
 			}
 		}
+		// pi runs while its window is open; opening the window starts it.
+		if (app === "pi") this.piCode.start();
 		this.focusWindow(window.id);
 		return window;
 	}
@@ -821,6 +876,8 @@ export class MemonMachine {
 			this.unsubscribeFiles?.();
 			this.unsubscribeFiles = undefined;
 		}
+		// Closing pi's window quits pi, like closing an app.
+		if (window.app === "pi") await this.piCode.stop();
 		this.windows = this.windows.filter((candidate) => candidate !== window);
 		if (this.focusedWindowId === windowId)
 			this.focusedWindowId = this.topWindowId();
@@ -1031,23 +1088,24 @@ export class MemonMachine {
 	// ── Files and editor ────────────────────────────────────────────────────
 
 	/**
-	 * Creates Bot.md and Memory.md the first time, reads the notes and the
-	 * command history from their files, and keeps the desktop (the home's
-	 * files) and both apps current, whichever app (or the Files page) changes
-	 * the files.
+	 * Creates Bot.md and Memory.md the first time, moves an older version's
+	 * notes and history to their hidden files, reads the tasks and the
+	 * command history, and keeps the desktop (the home's files) and both apps
+	 * current, whichever app (or the Files page) changes the files.
 	 */
 	async prepareDesktop(): Promise<void> {
 		const home = this.homeDir;
+		await migrateMemonHomeFiles(this.ports.files, home);
 		await loadMemonDesktopFiles(this.ports.files, home);
 		if (home !== this.homeDir) return;
-		await Promise.all([this.loadNotes(), this.loadHistory()]);
+		await Promise.all([this.loadTasks(), this.loadHistory()]);
 		await this.refreshDesktop();
 		this.unsubscribeDesktop ??= this.ports.files.subscribe(() => {
 			if (this.desktopRefreshTimer) clearTimeout(this.desktopRefreshTimer);
 			this.desktopRefreshTimer = setTimeout(() => {
 				this.desktopRefreshTimer = undefined;
 				void this.refreshDesktop();
-				void this.loadNotes();
+				void this.loadTasks();
 				void this.loadHistory();
 			}, 300);
 		});
@@ -1061,7 +1119,7 @@ export class MemonMachine {
 	/**
 	 * Moves the computer to another home. `follow`: the same agent's home was
 	 * moved (a rename), so what is open moves with it; otherwise the home is
-	 * another agent's, with its own notes and history.
+	 * another agent's, with its own tasks and history.
 	 */
 	setHome(home: string, follow = true): void {
 		if (home === this.homeDir) return;
@@ -1074,8 +1132,7 @@ export class MemonMachine {
 				this.filesCwd.startsWith(`${previous}/`)
 			)
 				this.filesCwd = home;
-			this.notesPath = null;
-			this.historyPath = null;
+			this.tasksPath = null;
 		}
 		this.homeDir = home;
 		this.terminal.changeHome(previous, home, follow);
@@ -1095,47 +1152,41 @@ export class MemonMachine {
 		return this.homeDir;
 	}
 
-	private get notesFile(): string {
-		return this.notesPath ?? memonHomePaths(this.homeDir).notes;
+	private get tasksFile(): string {
+		return this.tasksPath ?? memonHomePaths(this.homeDir).tasks;
 	}
 
 	private get historyFile(): string {
-		return this.historyPath ?? memonHomePaths(this.homeDir).terminal;
+		return memonHomePaths(this.homeDir).terminalHistory;
 	}
 
-	/** Keeps the notes in their file, ~/my.notes unless another is open. */
-	private saveNotes(): void {
-		this.notesError = undefined;
-		this.notesSync.save(
-			this.notesFile,
-			serializeNotesFile({ items: this.noteItems, text: this.notesText }),
+	/** Keeps the tasks in their file, ~/.tasks unless another is open. */
+	private saveTasks(): void {
+		this.tasksError = undefined;
+		this.tasksSync.save(
+			this.tasksFile,
+			serializeTasksFile({ tasks: this.taskItems }),
 		);
 	}
 
 	/**
-	 * Reads the notes from their file when it changed. A file that is not
-	 * notes leaves them as they are, with the reason shown.
+	 * Reads the tasks from their file when it changed. A file that is not
+	 * tasks leaves them as they are, with the reason shown.
 	 */
-	private async loadNotes(): Promise<void> {
-		const path = this.notesFile;
-		const read = await this.notesSync.read(path);
-		if (path !== this.notesFile || read.status === "same") return;
+	private async loadTasks(): Promise<void> {
+		const path = this.tasksFile;
+		const read = await this.tasksSync.read(path);
+		if (path !== this.tasksFile || read.status === "same") return;
 		if (read.status === "missing") {
-			if (!this.noteItems.length && !this.notesText && !this.notesError) return;
-			this.noteItems = [];
-			this.notesText = "";
-			this.notesError = undefined;
+			if (!this.taskItems.length && !this.tasksError) return;
+			this.taskItems = [];
+			this.tasksError = undefined;
 		} else {
 			try {
-				const notes = parseNotesFile(read.content);
-				this.noteItems = notes.items.map((item) => ({
-					...this.newNote(item.text),
-					status: item.status,
-				}));
-				this.notesText = notes.text;
-				this.notesError = undefined;
+				this.taskItems = parseTasksFile(read.content).tasks;
+				this.tasksError = undefined;
 			} catch (error) {
-				this.notesError = `${memonDisplayPath(path, this.homeDir)} is not notes: ${error instanceof Error ? error.message : String(error)}. The next change writes it again.`;
+				this.tasksError = `${memonDisplayPath(path, this.homeDir)} is not tasks: ${error instanceof Error ? error.message : String(error)}. The next change writes it again.`;
 			}
 		}
 		this.changed();
@@ -1157,32 +1208,96 @@ export class MemonMachine {
 		}
 	}
 
-	/** Opens a `.notes` file in Notes; its steps and notes replace the open ones. */
-	async openNotesFile(path: string): Promise<void> {
-		this.requireApp("notes");
+	/** Opens a `.tasks` file in Tasks; its tasks replace the open ones. */
+	async openTasksFile(path: string): Promise<void> {
+		this.requireApp("tasks");
 		const target = this.resolvePath(path);
-		const isDefault = target === memonHomePaths(this.homeDir).notes;
+		const isDefault = target === memonHomePaths(this.homeDir).tasks;
 		if (!isDefault && !(await this.ports.files.exists(target))) {
 			throw new Error(`Could not open ${target}: there is no such file.`);
 		}
-		await this.notesSync.flush();
-		this.notesPath = isDefault ? null : target;
-		await this.loadNotes();
-		this.focusWindow(this.openWindow("notes").id);
+		await this.tasksSync.flush();
+		this.tasksPath = isDefault ? null : target;
+		await this.loadTasks();
+		this.focusWindow(this.openWindow("tasks").id);
 	}
 
-	/** Opens a `.terminal` file in the Terminal: its history is the one kept. */
-	async openTerminalFile(path: string): Promise<void> {
+	/**
+	 * Runs a `.terminal` launcher: its command, in a Terminal tab of its own.
+	 * The user's click runs it; the agent's waits for approval like any of
+	 * its commands. Returns the tab, or null when the file is no launcher.
+	 */
+	async launchTerminalFile(
+		path: string,
+		options: { byUser?: boolean; waitMs?: number } = {},
+	): Promise<{ tabId: string; command: string } | null> {
 		this.requireApp("terminal");
 		const target = this.resolvePath(path);
-		const isDefault = target === memonHomePaths(this.homeDir).terminal;
-		if (!isDefault && !(await this.ports.files.exists(target))) {
-			throw new Error(`Could not open ${target}: there is no such file.`);
+		let content: string;
+		try {
+			content = await this.ports.files.read(target);
+		} catch (error) {
+			throw new Error(
+				`Could not open ${target}: ${error instanceof Error ? error.message : String(error)}`,
+			);
 		}
-		await this.historySync.flush();
-		this.historyPath = isDefault ? null : target;
-		await this.loadHistory();
+		const launcher = parseTerminalLauncher(content);
+		if (!launcher) return null;
 		this.focusWindow(this.openWindow("terminal").id);
+		const { tabId } = await this.terminal.launch(launcher.command, {
+			cwd: launcher.cwd,
+			byUser: options.byUser,
+			waitMs: options.waitMs,
+		});
+		return { tabId, command: launcher.command };
+	}
+
+	/**
+	 * Keeps a command as a `.terminal` launcher (in the home unless `name` is
+	 * a path), so a click on the desktop runs it again in a new tab. `cwd` is
+	 * where it runs (default: the Terminal tab's directory), kept with `~` so
+	 * the launcher moves with the home.
+	 */
+	async saveTerminalLauncher(
+		name: string,
+		command: string,
+		cwd?: string,
+	): Promise<string> {
+		this.requireApp("terminal");
+		if (!command.trim()) throw new Error("A launcher needs a command.");
+		const path = this.appFilePath(name, MEMON_TERMINAL_EXTENSION);
+		const dir = this.resolvePath(
+			cwd?.trim() || ".",
+			this.terminal.snapshot().cwd,
+		);
+		await this.ports.files.write(
+			path,
+			serializeTerminalLauncher({
+				command: command.trim(),
+				cwd:
+					dir === this.homeDir
+						? undefined
+						: memonDisplayPath(dir, this.homeDir),
+			}),
+		);
+		await this.refreshDesktop();
+		return path;
+	}
+
+	/**
+	 * Where an app file goes: a bare name is a file in the home, a path is
+	 * where it says; the extension is added when missing.
+	 */
+	private appFilePath(name: string, extension: string): string {
+		const trimmed = name.trim();
+		if (!trimmed) throw new Error("Give the file a name.");
+		const path =
+			trimmed.includes("/") || trimmed.startsWith("~")
+				? this.resolvePath(trimmed)
+				: `${this.homeDir}/${trimmed.replace(/[\\:*?"<>|]+/g, " ").trim()}`;
+		return path.toLowerCase().endsWith(extension)
+			? path
+			: `${path}${extension}`;
 	}
 
 	/** Forgets the Terminal's command history, in its file too. */
@@ -1282,21 +1397,34 @@ export class MemonMachine {
 
 	async openFile(
 		path: string,
-		options: { create?: boolean } = {},
+		options: { create?: boolean; byUser?: boolean; asText?: boolean } = {},
 	): Promise<void> {
 		const target = this.resolvePath(path);
-		// Like a desktop's file types: a .notes file opens in Notes and a
-		// .terminal file in the Terminal, when the agent has them; else it is
-		// JSON text, for the Editor.
-		if (target.endsWith(MEMON_NOTES_EXTENSION) && this.config.apps.notes) {
-			return this.openNotesFile(target);
+		// Like a desktop's file types: a .tasks file opens in Tasks, a
+		// .terminal launcher runs in the Terminal and a .studio app opens in
+		// Studio, when the agent has them; else it is JSON text, for the Editor.
+		// `asText` opens them in the Editor, to read or change what they hold
+		// (a launcher's command) without running them.
+		const asApp = !options.asText;
+		if (
+			asApp &&
+			target.endsWith(MEMON_TASKS_EXTENSION) &&
+			this.config.apps.tasks
+		) {
+			return this.openTasksFile(target);
+		}
+		if (asApp && target.endsWith(MEMON_STUDIO_EXTENSION)) {
+			await this.openStudioApp(target);
+			return;
 		}
 		if (
+			asApp &&
 			target.endsWith(MEMON_TERMINAL_EXTENSION) &&
 			this.config.apps.terminal &&
-			this.terminal.availability.available
+			this.terminal.availability.available &&
+			(await this.launchTerminalFile(target, { byUser: options.byUser }))
 		) {
-			return this.openTerminalFile(target);
+			return;
 		}
 		this.requireApp("files");
 		// A visual opens drawn, in Visualize, when the agent has it.
@@ -1576,8 +1704,11 @@ export class MemonMachine {
 		this.editorPath = moved(this.editorPath);
 		this.viewerPath = moved(this.viewerPath);
 		this.visualPath = moved(this.visualPath);
-		this.notesPath = moved(this.notesPath);
-		this.historyPath = moved(this.historyPath);
+		this.tasksPath = moved(this.tasksPath);
+		if (this.studioAppFile) {
+			this.studioAppFile.path =
+				moved(this.studioAppFile.path) ?? this.studioAppFile.path;
+		}
 		const cwd = moved(this.filesCwd);
 		if (cwd) this.filesCwd = cwd;
 	}
@@ -1615,6 +1746,36 @@ export class MemonMachine {
 		return placed;
 	}
 
+	/**
+	 * Deletes files and folders, with everything in them. There is no trash:
+	 * the user confirms first. Returns the paths deleted.
+	 */
+	async deleteFiles(paths: readonly string[]): Promise<string[]> {
+		this.requireApp("files");
+		const targets = [...new Set(paths.map((path) => this.resolvePath(path)))];
+		for (const target of targets) {
+			if (target === "/" || target === this.home) {
+				throw new Error(`${target} cannot be deleted.`);
+			}
+		}
+		const gone = (path: string, target: string) =>
+			path === target || path.startsWith(`${target}/`);
+		for (const target of targets) {
+			await this.ports.files.remove(target);
+			if (gone(this.filesCwd, target)) this.filesCwd = parentOf(target);
+			if (this.fileClipboard) {
+				const kept = this.fileClipboard.paths.filter(
+					(path) => !gone(path, target),
+				);
+				this.fileClipboard = kept.length
+					? { ...this.fileClipboard, paths: kept }
+					: null;
+			}
+		}
+		await this.refreshFiles();
+		return targets;
+	}
+
 	/** Cuts or copies entries; a paste moves or copies them. */
 	setFileClipboard(mode: "copy" | "cut", paths: readonly string[]): void {
 		this.requireApp("files");
@@ -1643,8 +1804,14 @@ export class MemonMachine {
 		};
 	}
 
-	/** Resolves an `f` ref from the Files window and acts on it. */
-	async openFileRef(ref: string): Promise<void> {
+	/**
+	 * Resolves an `f` ref from the Files window and acts on it. `byUser`: the
+	 * user's click, so a launcher runs as their own command.
+	 */
+	async openFileRef(
+		ref: string,
+		options: { byUser?: boolean } = {},
+	): Promise<void> {
 		const match = listFileRefs({
 			cwd: this.filesCwd,
 			entries: this.fileEntries,
@@ -1660,7 +1827,7 @@ export class MemonMachine {
 		}
 		return match.target.entry.type === "dir"
 			? this.openFolder(match.target.entry.path)
-			: this.openFile(match.target.entry.path);
+			: this.openFile(match.target.entry.path, options);
 	}
 
 	private async nextUntitledPath(): Promise<string> {
@@ -1770,19 +1937,19 @@ export class MemonMachine {
 		this.changed();
 	}
 
-	// ── Notes ───────────────────────────────────────────────────────────────
+	// ── Tasks ───────────────────────────────────────────────────────────────
 
 	/**
-	 * Opens the Notes window the first time it has something, without taking
+	 * Opens the Tasks window the first time it has something, without taking
 	 * focus: the agent keeps reading the window it is working in.
 	 */
-	private showNotes(): void {
-		if (this.windowFor("notes")) return;
+	private showTasks(): void {
+		if (this.windowFor("tasks")) return;
 		this.windowSeq += 1;
 		this.windows.push({
 			id: `w${this.windowSeq}`,
-			app: "notes",
-			...DEFAULT_LAYOUT.notes,
+			app: "tasks",
+			...DEFAULT_LAYOUT.tasks,
 			z: ++this.zSeq,
 			minimized: false,
 			maximized: false,
@@ -1790,78 +1957,145 @@ export class MemonMachine {
 		this.focusedWindowId ??= `w${this.windowSeq}`;
 	}
 
-	private noteAt(step: number): MemonNoteItem {
-		const item = this.noteItems[step - 1];
-		if (!item) {
+	/** A task by its number (#3). */
+	taskById(id: number): MemonTask {
+		const task = this.taskItems.find((candidate) => candidate.id === id);
+		if (!task) {
+			const open = this.taskItems
+				.filter((candidate) => isTaskOpen(candidate.state))
+				.map((candidate) => `#${candidate.id}`);
 			throw new Error(
-				`Notes has no step ${step}; it has ${this.noteItems.length}.`,
+				`Tasks has no task #${id}.${open.length ? ` Open tasks: ${open.join(", ")}.` : ""}`,
 			);
 		}
-		return item;
+		return task;
 	}
 
-	private newNote(text: string): MemonNoteItem {
-		this.noteSeq += 1;
-		return { id: `n${this.noteSeq}`, text: text.trim(), status: "todo" };
-	}
-
-	/** Replaces the checklist. */
-	setNotes(items: string[]): void {
-		this.requireApp("notes");
-		this.noteItems = items
-			.filter((text) => text.trim())
-			.map((text) => this.newNote(text));
-		this.saveNotes();
-		this.showNotes();
+	private tasksChanged(task?: MemonTask): void {
+		if (task) task.updatedAt = Date.now();
+		this.saveTasks();
+		this.showTasks();
 		this.changed();
 	}
 
-	addNotes(items: string[]): void {
-		this.requireApp("notes");
-		this.noteItems.push(
-			...items.filter((text) => text.trim()).map((text) => this.newNote(text)),
-		);
-		this.saveNotes();
-		this.showNotes();
-		this.changed();
+	/**
+	 * Adds a task. One the user adds is approved; one the agent adds is new
+	 * (a proposal the user approves) unless it gives the state, e.g. starting
+	 * a task the user asked for.
+	 */
+	addTask(input: {
+		title: string;
+		checklist?: readonly string[];
+		state?: MemonTaskState;
+		by: "agent" | "user";
+	}): MemonTask {
+		this.requireApp("tasks");
+		const title = input.title.trim();
+		if (!title) throw new Error("A task needs a title.");
+		const now = Date.now();
+		const state = input.state ?? (input.by === "user" ? "approved" : "new");
+		const task: MemonTask = {
+			id: Math.max(0, ...this.taskItems.map((item) => item.id)) + 1,
+			title,
+			state,
+			checklist: (input.checklist ?? [])
+				.map((text) => text.trim())
+				.filter(Boolean)
+				.map((text) => ({ text, done: false })),
+			createdBy: input.by,
+			createdAt: now,
+			updatedAt: now,
+			...(isTaskOpen(state) ? {} : { finishedAt: now }),
+		};
+		this.taskItems.push(task);
+		this.tasksChanged();
+		return task;
 	}
 
-	/** Marks a step (1-based); starting one finishes no other. */
-	setNoteStatus(step: number, status: MemonNoteStatus): MemonNoteItem {
-		this.requireApp("notes");
-		const item = this.noteAt(step);
-		item.status = status;
-		this.saveNotes();
-		this.changed();
-		return item;
+	/** Moves a task to another state; done and dropped ones keep their time. */
+	setTaskState(id: number, state: MemonTaskState): MemonTask {
+		this.requireApp("tasks");
+		const task = this.taskById(id);
+		if (task.state === state) return task;
+		task.state = state;
+		if (isTaskOpen(state)) delete task.finishedAt;
+		else task.finishedAt = Date.now();
+		this.tasksChanged(task);
+		return task;
 	}
 
-	removeNote(step: number): MemonNoteItem {
-		this.requireApp("notes");
-		const item = this.noteAt(step);
-		this.noteItems = this.noteItems.filter((candidate) => candidate !== item);
-		this.saveNotes();
-		this.changed();
-		return item;
+	/**
+	 * Renames a task or replaces its checklist. A line starting with "[x]"
+	 * is ticked and "[ ]" is not; other lines keep the tick of the item with
+	 * the same text.
+	 */
+	editTask(
+		id: number,
+		change: { title?: string; checklist?: readonly string[] },
+	): MemonTask {
+		this.requireApp("tasks");
+		const task = this.taskById(id);
+		if (change.title !== undefined) {
+			if (!change.title.trim()) throw new Error("A task needs a title.");
+			task.title = change.title.trim();
+		}
+		if (change.checklist) {
+			const before = [...task.checklist];
+			task.checklist = change.checklist.flatMap((line) => {
+				const mark = /^\s*\[( |x|X)?\]\s*/.exec(line);
+				const text = (mark ? line.slice(mark[0].length) : line).trim();
+				if (!text) return [];
+				const same = before.findIndex((item) => item.text === text);
+				const kept = same >= 0 ? before.splice(same, 1)[0] : undefined;
+				return [
+					{
+						text,
+						done: mark ? /x/i.test(mark[1] ?? "") : (kept?.done ?? false),
+					},
+				];
+			});
+		}
+		this.tasksChanged(task);
+		return task;
 	}
 
-	writeNotesText(text: string): void {
-		this.requireApp("notes");
-		this.notesText = text;
-		this.saveNotes();
-		this.showNotes();
-		this.changed();
+	/** Adds items to the end of a task's checklist. */
+	addTaskItems(id: number, items: readonly string[]): MemonTask {
+		this.requireApp("tasks");
+		const task = this.taskById(id);
+		const added = items.map((text) => text.trim()).filter(Boolean);
+		if (!added.length) throw new Error("Give the items to add.");
+		task.checklist.push(...added.map((text) => ({ text, done: false })));
+		this.tasksChanged(task);
+		return task;
 	}
 
-	/** Changes a step's wording (1-based). */
-	editNote(step: number, text: string): MemonNoteItem {
-		this.requireApp("notes");
-		const item = this.noteAt(step);
-		if (!text.trim()) throw new Error("A step needs some text.");
-		item.text = text.trim();
-		this.saveNotes();
-		this.changed();
-		return item;
+	/** Ticks or unticks a checklist item (1-based). */
+	checkTaskItem(
+		id: number,
+		item: number,
+		done: boolean,
+	): { task: MemonTask; text: string } {
+		this.requireApp("tasks");
+		const task = this.taskById(id);
+		const entry = task.checklist[item - 1];
+		if (!entry) {
+			throw new Error(
+				`Task #${id} has no item ${item}; its checklist has ${task.checklist.length}.`,
+			);
+		}
+		entry.done = done;
+		this.tasksChanged(task);
+		return { task, text: entry.text };
+	}
+
+	/** Deletes a task for good; only the user does this. */
+	removeTask(id: number): MemonTask {
+		this.requireApp("tasks");
+		const task = this.taskById(id);
+		this.taskItems = this.taskItems.filter((candidate) => candidate !== task);
+		this.tasksChanged();
+		return task;
 	}
 
 	// ── Scheduler ───────────────────────────────────────────────────────────
@@ -1878,7 +2112,7 @@ export class MemonMachine {
 			return;
 		}
 		this.agentId = agentId;
-		// A new agent brings its own home, notes and history.
+		// A new agent brings its own home, tasks and history.
 		if (home) this.setHome(home, false);
 		else void this.refreshHome(false).catch(() => undefined);
 		this.agentName = undefined;
@@ -1953,6 +2187,81 @@ export class MemonMachine {
 	}
 
 	/**
+	 * Opens a `.studio` app: Studio with its tool chosen and the form filled
+	 * from its settings, ready for an input. Returns the app.
+	 */
+	async openStudioApp(path: string): Promise<MemonStudioAppFile> {
+		const target = this.resolvePath(path);
+		let content: string;
+		try {
+			content = await this.ports.files.read(target);
+		} catch (error) {
+			throw new Error(
+				`Could not open ${target}: ${error instanceof Error ? error.message : String(error)}`,
+			);
+		}
+		let config: MemonStudioAppConfig;
+		try {
+			config = parseStudioAppFile(content, target);
+		} catch (error) {
+			throw new Error(
+				`${memonDisplayPath(target, this.homeDir)} is not a studio app: ${error instanceof Error ? error.message : String(error)}.`,
+			);
+		}
+		this.openWindow("studio");
+		this.studioSelected = config.tool;
+		this.studioAppFile = { path: target, ...config };
+		for (const [key, value] of Object.entries(
+			studioDraftsFromSettings(config.tool, config.settings),
+		)) {
+			if (value === undefined) this.drafts.delete(key);
+			else this.drafts.set(key, value);
+		}
+		this.changed();
+		await this.refreshStudio();
+		return { ...this.studioAppFile };
+	}
+
+	/**
+	 * Keeps a studio tool and its settings as a `.studio` app (in the home
+	 * unless `name` is a path), so the desktop opens it ready to run. The
+	 * open app is saved over; another file of that name is kept.
+	 */
+	async saveStudioApp(
+		name: string,
+		config: Omit<MemonStudioAppConfig, "title"> & { title?: string },
+	): Promise<string> {
+		const wanted = this.appFilePath(name, MEMON_STUDIO_EXTENSION);
+		const path =
+			wanted === this.studioAppFile?.path ||
+			!(await this.ports.files.exists(wanted))
+				? wanted
+				: await this.freeName(
+						parentOf(wanted),
+						wanted.slice(wanted.lastIndexOf("/") + 1),
+						"move",
+					);
+		const title =
+			config.title?.trim() ||
+			path.slice(path.lastIndexOf("/") + 1).replace(/\.studio$/i, "");
+		const saved: MemonStudioAppConfig = {
+			tool: config.tool,
+			title,
+			settings: config.settings,
+		};
+		await this.ports.files.write(path, serializeStudioAppFile(saved));
+		this.studioAppFile = { path, ...saved };
+		await this.refreshDesktop();
+		return path;
+	}
+
+	/** Leaves the open `.studio` app: the form is the tool's own again. */
+	closeStudioApp(): void {
+		this.studioAppFile = null;
+		this.changed();
+	}
+
+	/**
 	 * Runs a studio tool in the Studio window. The user watches the run there
 	 * and sees its audio, images and answers; the agent gets the result as
 	 * text. With saveTo, the whole text result is also written to that file.
@@ -1973,6 +2282,9 @@ export class MemonMachine {
 			parts: [],
 			startedAt: Date.now(),
 		};
+		if (this.studioAppFile && this.studioAppFile.tool === request.tool) {
+			run.app = this.studioAppFile.title;
+		}
 		this.studioRuns = [run, ...this.studioRuns].slice(0, MAX_STUDIO_RUNS);
 		this.changed();
 		try {
@@ -2196,6 +2508,13 @@ export class MemonMachine {
 
 	// ── Snapshot ────────────────────────────────────────────────────────────
 
+	/** The built-in apps on this computer: pi code only while it is on. */
+	private builtInApps(): MemonBuiltinApp[] {
+		return MEMON_BUILTIN_APPS.filter(
+			(app) => app !== "pi" || this.config.piCode,
+		);
+	}
+
 	private apps(): MemonAppAvailability[] {
 		return MEMON_APP_IDS.map((id) => {
 			const availability = this.appAvailability(id);
@@ -2215,6 +2534,7 @@ export class MemonMachine {
 			driver: this.driver,
 			status: this.status,
 			apps: this.apps(),
+			builtInApps: this.builtInApps(),
 			windows: this.windows.map((window) => ({ ...window })),
 			focusedWindowId: this.focusedWindowId,
 			browser: {
@@ -2240,11 +2560,13 @@ export class MemonMachine {
 				saved: this.editorSaved,
 				screenLine: this.editorScreenLine,
 			},
-			notes: {
-				items: this.noteItems.map((item) => ({ ...item })),
-				text: this.notesText,
-				path: this.notesFile,
-				error: this.notesError,
+			tasks: {
+				items: this.taskItems.map((task) => ({
+					...task,
+					checklist: task.checklist.map((item) => ({ ...item })),
+				})),
+				path: this.tasksFile,
+				error: this.tasksError,
 			},
 			scheduler: {
 				agentId: this.agentId,
@@ -2276,6 +2598,12 @@ export class MemonMachine {
 			studio: {
 				tools: this.studioTools.map((tool) => ({ ...tool })),
 				selected: this.studioSelected,
+				app: this.studioAppFile
+					? {
+							...this.studioAppFile,
+							settings: { ...this.studioAppFile.settings },
+						}
+					: null,
 				runs: this.studioRuns.map((run) => ({ ...run })),
 				loading: this.studioLoading,
 				error: this.studioError,
@@ -2301,6 +2629,7 @@ export class MemonMachine {
 				screenLine: this.visualScreenLine,
 				error: this.visualError,
 			},
+			piCode: this.piCode.state(),
 			pendingUserChanges: [...this.userChanges],
 			drafts: Object.fromEntries(this.drafts),
 			updatedAt: this.lastActiveAt,

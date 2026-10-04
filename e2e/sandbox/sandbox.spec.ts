@@ -33,7 +33,7 @@ test("runtime health and structured JavaScript execution", async ({ extensionPag
 	expect(failure.error).toContain("expected sandbox failure");
 });
 
-test("workspace file execution, runtime mutation, and flush", async ({ extensionPage }) => {
+test("workspace file execution and runtime mutation", async ({ extensionPage }) => {
 	await runSandboxOperation(extensionPage, "fs.mkdir", {
 		path: "/projects/sandbox-e2e",
 		recursive: true,
@@ -55,10 +55,9 @@ test("workspace file execution, runtime mutation, and flush", async ({ extension
 		{ path: "/projects/sandbox-e2e/generated.txt", encoding: "utf8" },
 	);
 	expect(generated.content).toBe("generated");
-	await runSandboxOperation(extensionPage, "fs.flushWorkspaceWrites", undefined);
 });
 
-test("filesystem exists, list, rename, delete, and flush", async ({ extensionPage }) => {
+test("filesystem exists, list, rename, and delete", async ({ extensionPage }) => {
 	const root = "/projects/sandbox-e2e/fs-operations";
 	const originalPath = `${root}/original.txt`;
 	const renamedPath = `${root}/renamed.txt`;
@@ -102,7 +101,6 @@ test("filesystem exists, list, rename, delete, and flush", async ({ extensionPag
 			path: renamedPath,
 		}),
 	).resolves.toMatchObject({ exists: false });
-	await runSandboxOperation(extensionPage, "fs.flushWorkspaceWrites", undefined);
 });
 
 test("background command cursor reads and stop", async ({ extensionPage }) => {

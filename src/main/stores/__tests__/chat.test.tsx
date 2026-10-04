@@ -40,7 +40,12 @@ vi.mock("@/utils/uuid", () => ({
 	v4: vi.fn(() => "generated-message-id"),
 }));
 
-import { SELECTED_AGENT_STORAGE_KEY, useChatStore } from "../chat";
+import {
+	type ChatRun,
+	findBlockingRun,
+	SELECTED_AGENT_STORAGE_KEY,
+	useChatStore,
+} from "../chat";
 
 const schema = {
 	conversations: {
@@ -404,7 +409,15 @@ describe("useChatStore", () => {
 		expect(useChatStore.getState().currentConversation).toBe(next);
 		expect(harness.deletes).toHaveLength(3);
 
-		useChatStore.getState().setLoading(true);
+		const token = Symbol("run");
+		useChatStore.getState().startRun({
+			conversationId: next.id,
+			agentId: null,
+			startedAt: 0,
+			concurrent: true,
+			token,
+			controller: new AbortController(),
+		});
 		useChatStore.getState().setChatMode("normal");
 		useChatStore.getState().setSelectedTopic("topic-1");
 		useChatStore.getState().setSelectedAgentFlowId("agent-flow-1");
@@ -413,6 +426,14 @@ describe("useChatStore", () => {
 			chatMode: "normal",
 			selectedTopic: "topic-1",
 			selectedAgentFlowId: "agent-flow-1",
+		});
+		// Only the run that holds the chat can end it.
+		useChatStore.getState().finishRun(next.id, Symbol("older run"));
+		expect(useChatStore.getState().isLoading).toBe(true);
+		useChatStore.getState().finishRun(next.id, token);
+		expect(useChatStore.getState()).toMatchObject({
+			isLoading: false,
+			runs: {},
 		});
 
 		useChatStore.getState().clearMessages();
@@ -494,5 +515,31 @@ describe("selected agent across reloads", () => {
 			.restoreSelectedAgentFlowId(["foundation", "research-agent"]);
 
 		expect(useChatStore.getState().selectedAgentFlowId).toBe("picked-now");
+	});
+});
+
+describe("runs in several chats", () => {
+	const run = (conversationId: string, concurrent: boolean): ChatRun => ({
+		conversationId,
+		agentId: null,
+		startedAt: 0,
+		concurrent,
+		token: Symbol(conversationId),
+		controller: new AbortController(),
+	});
+
+	it("lets a chat start while others run only when both sides can share", () => {
+		const remote = { a: run("a", true) };
+		// Its own run always holds a chat.
+		expect(findBlockingRun(remote, "a", true)?.conversationId).toBe("a");
+		// A remote model without an agent computer, next to another such run.
+		expect(findBlockingRun(remote, "b", true)).toBeUndefined();
+		// A local model or an agent computer waits for the other run…
+		expect(findBlockingRun(remote, "b", false)?.conversationId).toBe("a");
+		// …and nothing starts next to one.
+		expect(
+			findBlockingRun({ a: run("a", false) }, "b", true)?.conversationId,
+		).toBe("a");
+		expect(findBlockingRun({}, undefined, false)).toBeUndefined();
 	});
 });

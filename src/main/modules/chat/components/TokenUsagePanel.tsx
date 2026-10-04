@@ -92,7 +92,15 @@ const HitBar: React.FC<{
 
 export interface TokenUsagePanelProps {
 	usage: TokenUsageDetails;
+	/**
+	 * The previous message's last request, and how long before this turn it
+	 * ended: this turn's first request should reuse what it sent.
+	 */
+	previous?: { call: TokenUsage; minutesBefore?: number };
 }
+
+/** Past this, a provider has likely dropped the prompt cache on its own. */
+const CACHE_EXPIRY_HINT_MINUTES = 5;
 
 /**
  * What a turn cost and how well it reused the provider's prompt cache.
@@ -101,7 +109,10 @@ export interface TokenUsagePanelProps {
  * lives in a chat column the user can resize: a wide window with a narrow chat
  * used to pick the four-column layout anyway and overlap every number.
  */
-export const TokenUsagePanel: React.FC<TokenUsagePanelProps> = ({ usage }) => {
+export const TokenUsagePanel: React.FC<TokenUsagePanelProps> = ({
+	usage,
+	previous,
+}) => {
 	const { t } = useTranslation("chat");
 
 	const cacheHitRatio = getCacheHitRatio(usage);
@@ -110,7 +121,11 @@ export const TokenUsagePanel: React.FC<TokenUsagePanelProps> = ({ usage }) => {
 	const requestCount = usage.requests ?? 1;
 	const calls = usage.calls ?? [];
 
-	const continuity = useMemo(() => describeCacheContinuity(calls), [calls]);
+	const previousCall = previous?.call;
+	const continuity = useMemo(
+		() => describeCacheContinuity(calls, previousCall),
+		[calls, previousCall],
+	);
 	const missCount = continuity.filter(isMiss).length;
 	const showCacheWrite = calls.some(
 		(call) => (call.cache_write_tokens ?? 0) > 0,
@@ -221,7 +236,7 @@ export const TokenUsagePanel: React.FC<TokenUsagePanelProps> = ({ usage }) => {
 				))}
 			</dl>
 
-			{requestCount > 1 && calls.length > 0 ? (
+			{calls.length > 0 && (requestCount > 1 || previousCall) ? (
 				<div className="mt-2.5 border-t border-border/40 pt-2">
 					<div className="mb-1 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
 						<h5 className="text-[11px] font-medium text-muted-foreground">
@@ -282,7 +297,12 @@ export const TokenUsagePanel: React.FC<TokenUsagePanelProps> = ({ usage }) => {
 									);
 									const status = continuity[index] ?? "unknown";
 									const missed = isMiss(status);
-									const providerSwitch = describeProviderSwitch(calls, index);
+									const providerSwitch = describeProviderSwitch(
+										calls,
+										index,
+										previousCall,
+									);
+									const minutes = Math.round(previous?.minutesBefore ?? 0);
 									const reason =
 										missed && providerSwitch
 											? t("messages.cacheProviderSwitch", {
@@ -290,17 +310,33 @@ export const TokenUsagePanel: React.FC<TokenUsagePanelProps> = ({ usage }) => {
 													defaultValue:
 														"Served by {{to}} instead of {{from}} — each provider keeps its own cache.",
 												})
-											: status === "restarted"
-												? t(
-														"messages.cacheRestarted",
-														"Nothing was reused from the previous request.",
-													)
-												: status === "partial"
+											: index === 0 && missed
+												? status === "partial"
 													? t(
-															"messages.cachePartial",
-															"Reused an older request instead of the previous one — likely served by a different provider.",
+															"messages.cacheTurnPartial",
+															"Reused only part of your previous message: the conversation changed partway (compacted history, say), or another provider served it.",
 														)
-													: undefined;
+													: minutes >= CACHE_EXPIRY_HINT_MINUTES
+														? t("messages.cacheTurnExpired", {
+																minutes,
+																defaultValue:
+																	"Nothing was reused from your previous message, {{minutes}} min earlier: the provider may have dropped its cache, or the start of the request changed.",
+															})
+														: t(
+																"messages.cacheTurnRestarted",
+																"Nothing was reused from your previous message: the start of the request changed, so the whole conversation was read again.",
+															)
+												: status === "restarted"
+													? t(
+															"messages.cacheRestarted",
+															"Nothing was reused from the previous request.",
+														)
+													: status === "partial"
+														? t(
+																"messages.cachePartial",
+																"Reused an older request instead of the previous one — likely served by a different provider.",
+															)
+														: undefined;
 									return (
 										<tr
 											// biome-ignore lint/suspicious/noArrayIndexKey: requests carry no id and the list is append-only, so the position is the identity

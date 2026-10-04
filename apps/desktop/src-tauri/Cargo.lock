@@ -2116,7 +2116,7 @@ dependencies = [
 
 [[package]]
 name = "memorall-desktop"
-version = "0.5.36"
+version = "0.5.37"
 dependencies = [
  "notify",
  "serde",

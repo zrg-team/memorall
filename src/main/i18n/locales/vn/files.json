@@ -98,6 +98,14 @@
 		"containerNotReady": "Vùng hiển thị chưa sẵn sàng",
 		"loadError": "Không thể tải tệp Excel"
 	},
+	"presentationViewer": {
+		"opening": "Đang mở bản trình bày…",
+		"empty": "Bản trình bày này không có trang chiếu nào.",
+		"slide": "Trang chiếu {{number}}",
+		"hidden": "Đã ẩn",
+		"chart": "Biểu đồ",
+		"textOnly": "Tệp .ppt cũ chỉ hiển thị phần chữ của từng trang chiếu. Hãy tải tệp xuống để xem đầy đủ thiết kế."
+	},
 	"pdfSelector": {
 		"title": "Chuyển đổi trang PDF thành nội dung đã nhớ",
 		"description": "Chọn các trang bạn muốn chuyển đổi và lưu vào thư viện nội dung đã nhớ",

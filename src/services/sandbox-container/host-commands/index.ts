@@ -17,8 +17,9 @@ import type {
 
 /**
  * Commands the sandbox shell cannot run itself, run on the host instead:
- * `git` needs binary-safe files, `py` needs Pyodide, and `curl` needs the
- * network (and this computer's servers) the way curl reaches them.
+ * `git` needs binary-safe files, `py` (and `pip`, `zip`, `unzip`, which run
+ * through it) needs Pyodide, and `curl` needs the network (and this
+ * computer's servers) the way curl reaches them.
  */
 const HOST_COMMANDS: Record<string, () => Promise<HostCommand>> = {
 	curl: () => import("./curl-command").then((module) => module.runCurl),
@@ -26,6 +27,10 @@ const HOST_COMMANDS: Record<string, () => Promise<HostCommand>> = {
 	py: () => import("./python-command").then((module) => module.runPython),
 	python: () => import("./python-command").then((module) => module.runPython),
 	python3: () => import("./python-command").then((module) => module.runPython),
+	pip: () => import("./python-command").then((module) => module.runPip),
+	pip3: () => import("./python-command").then((module) => module.runPip),
+	zip: () => import("./python-command").then((module) => module.runZip),
+	unzip: () => import("./python-command").then((module) => module.runUnzip),
 };
 
 /** The commands run on the host, by name. */

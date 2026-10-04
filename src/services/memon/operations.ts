@@ -205,45 +205,6 @@ export const runMemonOperation = async (
 			await machine.showBrowserTab();
 			return machine.snapshot();
 		}
-		case "notes.toggle": {
-			const { key, step } = job.payload;
-			const item = findMemonMachine(key)?.snapshot().notes.items[step - 1];
-			const next = item?.status === "done" ? "todo" : "done";
-			return userInput(
-				key,
-				`${next === "done" ? "ticked" : "unticked"} step ${step}${item ? ` "${trim(item.text)}"` : ""} in Notes`,
-				(machine) => {
-					machine.setNoteStatus(step, next);
-				},
-			);
-		}
-		case "notes.add": {
-			const { key, text } = job.payload;
-			return userInput(key, `added step "${trim(text)}" to Notes`, (machine) =>
-				machine.addNotes([text]),
-			);
-		}
-		case "notes.remove": {
-			const { key, step } = job.payload;
-			const item = findMemonMachine(key)?.snapshot().notes.items[step - 1];
-			return userInput(
-				key,
-				`removed step ${step}${item ? ` "${trim(item.text)}"` : ""} from Notes`,
-				(machine) => {
-					machine.removeNote(step);
-				},
-			);
-		}
-		case "notes.edit": {
-			const { key, step, text } = job.payload;
-			return userInput(
-				key,
-				`reworded step ${step} in Notes to "${trim(text)}"`,
-				(machine) => {
-					machine.editNote(step, text);
-				},
-			);
-		}
 		case "scheduler.refresh": {
 			const machine = findMemonMachine(job.payload.key);
 			if (!machine) return null;
@@ -363,20 +324,12 @@ export const runMemonOperation = async (
 			machine.selectStudioTool(job.payload.tool);
 			return machine.snapshot();
 		}
-		case "notes.write":
-			return userInput(
-				job.payload.key,
-				"edited the notes in Notes",
-				(machine) => machine.writeNotesText(job.payload.text),
-			);
 		case "files.open": {
 			const { key, path } = job.payload;
 			return userInput(key, `opened ${trim(path)}`, async (machine) => {
-				try {
-					await machine.openFolder(path);
-				} catch {
-					await machine.openFile(path);
-				}
+				if (await machine.isFolder(path)) await machine.openFolder(path);
+				// A launcher the user opens runs as their own command.
+				else await machine.openFile(path, { byUser: true });
 			});
 		}
 		case "files.uploaded": {
@@ -391,7 +344,7 @@ export const runMemonOperation = async (
 		case "files.ref": {
 			const { key, ref } = job.payload;
 			return userInput(key, `opened ${ref} in Files`, (machine) =>
-				machine.openFileRef(ref),
+				machine.openFileRef(ref, { byUser: true }),
 			);
 		}
 		case "files.move":
@@ -426,6 +379,12 @@ export const runMemonOperation = async (
 				key,
 				`pasted ${clipboard ? trim(names(clipboard.paths)) : "files"} into ${folder}`,
 				(target) => target.pasteFiles(to),
+			);
+		}
+		case "files.delete": {
+			const { key, paths } = job.payload;
+			return userAside(key, `deleted ${trim(names(paths))}`, (machine) =>
+				machine.deleteFiles(paths),
 			);
 		}
 		case "visual.save": {
@@ -517,6 +476,16 @@ export const runMemonOperation = async (
 				(machine) => machine.terminal.answerApproval(id, decision),
 			);
 		}
+		case "piCode.approval": {
+			const { key, id, decision } = job.payload;
+			return userAside(
+				key,
+				decision === "approve"
+					? "allowed your pi code request"
+					: "declined your pi code request",
+				(machine) => machine.piCode.answerApproval(id, decision),
+			);
+		}
 		case "window.open": {
 			const { key, app } = job.payload;
 			return userInput(key, `opened ${app}`, async (machine) => {
@@ -557,6 +526,31 @@ export const runMemonOperation = async (
 			if (!machine) return null;
 			machine.moveWindow(job.payload.windowId, job.payload.rect);
 			return machine.snapshot();
+		}
+		case "piCode.attach": {
+			const { key, columns, rows, theme } = job.payload;
+			const machine = findMemonMachine(key);
+			const cursor = await machine?.piCode.attach(columns, rows, theme);
+			return cursor === null || cursor === undefined ? null : { cursor };
+		}
+		case "piCode.read": {
+			const { key, cursor, waitMs } = job.payload;
+			const machine = findMemonMachine(key);
+			if (!machine) return { data: "", cursor, reset: false, closed: true };
+			return machine.piCode.read(cursor, Math.min(Math.max(waitMs, 0), 5_000));
+		}
+		case "piCode.input": {
+			const machine = findMemonMachine(job.payload.key);
+			if (!machine) return null;
+			// Typing into pi keeps an idle computer from being put away.
+			machine.lastActiveAt = Date.now();
+			await machine.piCode.input(job.payload.data);
+			return null;
+		}
+		case "piCode.resize": {
+			const { key, columns, rows } = job.payload;
+			await findMemonMachine(key)?.piCode.resize(columns, rows);
+			return null;
 		}
 	}
 };

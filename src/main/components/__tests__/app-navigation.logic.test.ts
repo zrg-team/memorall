@@ -28,6 +28,7 @@ describe("workspace navigation", () => {
 			"/connections",
 			"/skills",
 			"/llm",
+			"/usage",
 			"/runtime",
 		]);
 	});
@@ -44,7 +45,8 @@ describe("workspace navigation", () => {
 		expect(getCopilotNavigationId("/skills")).toBe("skills");
 		expect(getCopilotNavigationId("/memory")).toBe("knowledge");
 		expect(getCopilotNavigationId("/connections")).toBe("connections");
-		// Runtime is execution plumbing, not a tour stop.
+		// Runtime is execution plumbing and Usage is reporting, not tour stops.
 		expect(getCopilotNavigationId("/runtime")).toBeNull();
+		expect(getCopilotNavigationId("/usage")).toBeNull();
 	});
 });

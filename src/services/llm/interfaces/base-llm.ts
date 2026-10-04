@@ -1,5 +1,6 @@
 // Base LLM interface for all LLM implementations
 
+import type { ModelPricing } from "../utils/model-pricing";
 import type {
 	ChatCompletionChunk,
 	ChatCompletionRequest,
@@ -81,6 +82,8 @@ export interface ModelInfo {
 	supportsAudio?: boolean;
 	/** Reasoning models, as the provider's listing describes them. */
 	reasoning?: ModelReasoning;
+	/** Hosted models whose provider publishes a price. */
+	pricing?: ModelPricing;
 	webgpuCapabilities?: unknown;
 	/** What the model does. Absent means chat (see `modelCategoriesOf`). */
 	categories?: ModelCategory[];

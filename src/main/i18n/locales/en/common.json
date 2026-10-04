@@ -3,6 +3,7 @@
 		"chat": "Chat",
 		"agents": "Agents",
 		"models": "Models",
+		"usage": "Usage",
 		"knowledgeGraph": "Memory",
 		"connections": "Connections",
 		"skills": "Skills",
@@ -378,7 +379,7 @@
 			},
 			"memonFeature": {
 				"name": "MemonOS Bot",
-				"description": "Give the agent a computer: Browser, Files, Terminal, Notes and your studios on one desktop that you can watch and take over."
+				"description": "Give the agent a computer: Browser, Files, Terminal, Tasks and your studios on one desktop that you can watch and take over."
 			}
 		}
 	},
@@ -568,6 +569,10 @@
 		"save": "Save",
 		"commandRunning": "(still running)",
 		"shutDown": "Shut down",
+		"fullscreen": "Full screen",
+		"exitFullscreen": "Exit full screen",
+		"maximizePanel": "Maximize: fill the right panel, chat stays",
+		"restorePanel": "Restore the panel's tabs and header",
 		"you": "You",
 		"start": {
 			"title": "Start the computer",
@@ -583,13 +588,24 @@
 			"editor": "Editor",
 			"viewer": "Viewer",
 			"terminal": "Terminal",
-			"notes": "Notes",
+			"tasks": "Tasks",
 			"scheduler": "Scheduler",
 			"studio": "Studio",
 			"skills": "Skills",
 			"connections": "Connections",
-			"visualize": "Visualize"
+			"visualize": "Visualize",
+			"pi": "pi code"
 		},
+		"piCode": {
+			"starting": "Starting pi…",
+			"error": "pi code could not start: {{error}}",
+			"waiting": "pi code starts once you allow MemonOS Bot to use it.",
+			"approvalTitle": "MemonOS Bot wants to hand this to pi code",
+			"approvalHint": "pi will read, edit and run code in your files with the chat's model. Declined, MemonOS Bot codes it itself and won't ask again.",
+			"approve": "Use pi code",
+			"deny": "Let MemonOS Bot code it"
+		},
+		"tasksOpen": "{{count}} open",
 		"terminal": {
 			"running": "Running · {{elapsed}}",
 			"quiet": "no output for {{elapsed}}, Stop it if it is done",
@@ -607,7 +623,9 @@
 			"clear": "Clear",
 			"clearHistory": "Clear command history",
 			"clearHistoryConfirm": "Clear the Terminal's command history? The commands are removed from its history file too.",
-			"historyCount": "{{count}} commands in {{file}}"
+			"historyCount": "{{count}} commands in {{file}}",
+			"tabRunning": "running: {{command}}",
+			"tabLast": "last: {{command}} (exit {{code}})"
 		},
 		"preview": {
 			"preview": "Preview",
@@ -733,7 +751,16 @@
 				"running": "running",
 				"done": "done",
 				"failed": "failed"
-			}
+			},
+			"appFrom": "app · {{file}}",
+			"appHint": "Its settings are filled in below; give the input and run it.",
+			"appSettings": "also set: {{settings}}",
+			"closeApp": "Close app",
+			"appName": "Save these settings as an app on the desktop",
+			"appNamePlaceholder": "App name, e.g. Analyze User Feedback",
+			"saveApp": "Save app",
+			"installApp": "Save as app",
+			"needAppName": "name the app first"
 		},
 		"scheduler": {
 			"noAgent": "This computer has no agent yet. Start it from an agent, or chat with one, to see its schedules.",
@@ -762,20 +789,36 @@
 				"paused": "paused"
 			}
 		},
-		"notes": {
-			"done": "done",
-			"now": "now: {{step}}",
-			"empty": "No steps yet. Plan the work here.",
-			"wording": "Wording",
-			"undo": "Undo",
-			"tick": "Done",
-			"remove": "Remove",
-			"newStep": "New step",
-			"addPlaceholder": "Add a step",
+		"tasks": {
+			"state": {
+				"new": "new",
+				"approved": "approved",
+				"in_progress": "in progress",
+				"done": "done",
+				"dropped": "dropped"
+			},
+			"stateLabel": "State",
+			"addedByUser": "added by the user {{time}}",
+			"addedByAgent": "added by the agent {{time}}",
+			"doneAt": "done {{time}}",
+			"droppedAt": "dropped {{time}}",
+			"title": "Title",
+			"checklistField": "Checklist, one item per line (\"[x] \" marks a done one)",
+			"waiting": "new · waiting for approval",
+			"progress": "done",
+			"approve": "Approve",
+			"newTask": "New task",
+			"addPlaceholder": "What needs doing?",
 			"add": "Add",
-			"addDisabled": "type the step first",
-			"text": "Notes",
-			"textPlaceholder": "Findings, sources, decisions…"
+			"addDisabled": "type the task first",
+			"empty": "No open tasks. Add one here, or ask the agent in chat.",
+			"open": "Open ({{count}})",
+			"finished": "Finished ({{count}})",
+			"showFinished": "Show",
+			"older": "… {{count}} older ones are kept in {{file}}.",
+			"deleteConfirm": "Delete this task for good? Done and dropped tasks stay as the record; deleting removes it from the tasks file too.",
+			"details": "Details",
+			"hideDetails": "Hide details"
 		},
 		"showRealPage": "Show the real page in the browser",
 		"showRealPageShort": "Show",
@@ -823,9 +866,16 @@
 			"pasteCut_other": "Paste {{count}} cut items",
 			"pasteCopy_one": "Paste {{count}} copied item",
 			"pasteCopy_other": "Paste {{count}} copied items",
-			"hint": "Ctrl/⌘-click to select; drag onto a folder to move it, hold Ctrl or Alt to copy.",
+			"hint": "Double-click to open, right-click for more; Ctrl/⌘-click to select several; drag onto a folder to move it, hold Ctrl or Alt to copy.",
 			"home": "Home (~): this agent's own folder",
-			"root": "Computer (/)"
+			"root": "Computer (/)",
+			"open": "Open",
+			"paste": "Paste",
+			"pasteInto": "Paste into {{name}}",
+			"deleteOne": "Delete “{{name}}”?",
+			"deleteMany_one": "Delete {{count}} item?",
+			"deleteMany_other": "Delete {{count}} items?",
+			"deleteWarning": "This can't be undone: the computer has no trash. A folder is deleted with everything in it."
 		},
 		"browser": {
 			"newRealTab": "New tab in the real browser",

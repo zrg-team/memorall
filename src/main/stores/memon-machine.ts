@@ -21,6 +21,10 @@ type InputOperation = Exclude<
 	| "agent.home"
 	| "agent.renamed"
 	| "terminal.complete"
+	| "piCode.attach"
+	| "piCode.read"
+	| "piCode.input"
+	| "piCode.resize"
 >;
 
 /** The open chat's agent, when it is a MemonOS Bot. */

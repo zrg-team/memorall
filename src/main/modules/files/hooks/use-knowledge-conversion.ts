@@ -75,6 +75,13 @@ export async function convertToKnowledge(
 				const workbook = await parseExcelFile(fileContent);
 				content = workbookToMarkdown(workbook);
 				break;
+			case "presentation": {
+				const { presentationToMarkdown, readPresentation } = await import(
+					"../handlers/pptx-extraction"
+				);
+				content = presentationToMarkdown(await readPresentation(fileContent));
+				break;
+			}
 			default:
 				content = new TextDecoder("utf-8").decode(fileContent);
 		}

@@ -9,6 +9,14 @@ import {
 } from "../graph/agent/graph.js";
 import { recursionLimitForIterations } from "../limits.js";
 import {
+	createFlowRunInbox,
+	FLOW_RUN_INBOX_RUNTIME_KEY,
+} from "../context/run-inbox.js";
+import {
+	createFlowRuntimeVars,
+	FLOW_RUNTIME_VARS_CONFIG_KEY,
+} from "../context/runtime-context.js";
+import {
 	MISSING_TOOL_CALL_RESULT_CONTENT,
 	normalizeChatMessages,
 } from "../graph/graph.base.js";
@@ -366,5 +374,112 @@ describe("agent iteration limit reaches LangGraph", () => {
 		}
 
 		expect(turns).toBe(maxIterations);
+	});
+});
+
+describe("messages sent while the agent works", () => {
+	const chunk = (delta: Record<string, unknown>) => ({
+		id: "chunk",
+		object: "chat.completion.chunk",
+		created: 0,
+		model: "test",
+		choices: [{ index: 0, delta, finish_reason: null }],
+	});
+
+	it("reads them before its next request, after the tool results, and keeps them", async () => {
+		const inbox = createFlowRunInbox();
+		const requests: Array<Array<{ role: string; content?: unknown }>> = [];
+		const tool: BaseTool = {
+			name: "ping",
+			description: "ping",
+			schema: jsonToolSchema({ type: "object", properties: {} }),
+			// The user writes while the tool runs.
+			execute: async () => {
+				inbox.push({ id: "m-1", content: "Also check the logs" });
+				return "pong";
+			},
+		};
+		const graph = new AgentGraph(
+			{
+				llm: {
+					isReady: () => true,
+					getCurrentModel: async () => ({ modelId: "test" }),
+					getMaxModelTokens: async () => 128000,
+					getMaxResponseTokens: async () => 4096,
+					chatCompletions: ((body: { messages: never[] }) =>
+						(async function* () {
+							requests.push(body.messages);
+							yield requests.length === 1
+								? chunk({
+										role: "assistant",
+										content: null,
+										tool_calls: [
+											{
+												index: 0,
+												id: "call_1",
+												type: "function",
+												function: { name: "ping", arguments: "{}" },
+											},
+										],
+									})
+								: chunk({ role: "assistant", content: "Done, logs too." });
+						})()) as never,
+				},
+			},
+			{ tools: [tool] },
+		);
+
+		const events: unknown[] = [];
+		let finalMessages: Array<{ role: string; content?: unknown }> = [];
+		const stream = await graph.stream(
+			{ messages: [{ role: "user", content: "go" }] },
+			{
+				streamMode: ["custom", "values"],
+				configurable: {
+					[FLOW_RUNTIME_VARS_CONFIG_KEY]: createFlowRuntimeVars({
+						[FLOW_RUN_INBOX_RUNTIME_KEY]: inbox,
+					}),
+				},
+			},
+		);
+		for await (const [mode, payload] of stream as AsyncIterable<
+			[string, Record<string, unknown>]
+		>) {
+			if (mode === "custom") events.push(payload);
+			if (mode === "values") finalMessages = payload.messages as never;
+		}
+
+		// The second request has it right after the tool's result.
+		const second = requests[1] ?? [];
+		const toolIndex = second.findIndex((message) => message.role === "tool");
+		expect(second[toolIndex + 1]).toEqual({
+			role: "user",
+			content: "Also check the logs",
+		});
+		// The caller hears which message was read.
+		expect(events).toContainEqual({
+			type: "user-message",
+			id: "m-1",
+			content: "Also check the logs",
+		});
+		// The reply keeps it where it was read.
+		expect(finalMessages.map((message) => message.role)).toEqual([
+			"system",
+			"user",
+			"assistant",
+			"tool",
+			"user",
+			"assistant",
+		]);
+		expect(inbox.take()).toEqual([]);
+	});
+
+	it("refuses messages once the run is over and hands back the unread", () => {
+		const inbox = createFlowRunInbox();
+		expect(inbox.push({ id: "a", content: "first" })).toBe(true);
+		expect(inbox.push({ id: "b", content: "   " })).toBe(false);
+		expect(inbox.close()).toEqual([{ id: "a", content: "first" }]);
+		expect(inbox.closed).toBe(true);
+		expect(inbox.push({ id: "c", content: "late" })).toBe(false);
 	});
 });

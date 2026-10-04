@@ -652,6 +652,11 @@ export class DocumentFileSystem {
 			mimeType === "application/vnd.ms-excel.sheet.macroEnabled.12"
 		)
 			return "excel";
+		if (
+			mimeType.startsWith("application/vnd.ms-powerpoint") ||
+			mimeType.includes("officedocument.presentationml")
+		)
+			return "presentation";
 		if (fileName) {
 			const ext = fileName.toLowerCase().split(".").pop();
 			if (ext) {
@@ -665,6 +670,8 @@ export class DocumentFileSystem {
 				if (["mp4", "m4v", "mov", "webm", "ogv", "mkv"].includes(ext))
 					return "video";
 				if (["xls", "xlsx", "xlsm"].includes(ext)) return "excel";
+				if (["ppt", "pps", "pptx", "pptm", "ppsx", "potx"].includes(ext))
+					return "presentation";
 			}
 		}
 		return "other";
@@ -698,6 +705,12 @@ export class DocumentFileSystem {
 			xls: "application/vnd.ms-excel",
 			xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 			xlsm: "application/vnd.ms-excel.sheet.macroEnabled.12",
+			ppt: "application/vnd.ms-powerpoint",
+			pps: "application/vnd.ms-powerpoint",
+			pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+			pptm: "application/vnd.ms-powerpoint.presentation.macroEnabled.12",
+			ppsx: "application/vnd.openxmlformats-officedocument.presentationml.slideshow",
+			potx: "application/vnd.openxmlformats-officedocument.presentationml.template",
 		};
 		return mimeTypes[ext] ?? "application/octet-stream";
 	}

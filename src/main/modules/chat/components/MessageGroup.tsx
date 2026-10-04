@@ -185,6 +185,7 @@ export const MessageGroup: React.FC<MessageGroupProps> = React.memo(
 				executeState: inProgressMessage.executeState,
 				executions: inProgressMessage.executions,
 				toolExecutions: inProgressMessage.toolExecutions,
+				compactions: inProgressMessage.compactions,
 			};
 		}, [
 			Boolean(inProgressMessage),
@@ -192,6 +193,7 @@ export const MessageGroup: React.FC<MessageGroupProps> = React.memo(
 			inProgressMessage?.executeState,
 			inProgressMessage?.executions,
 			inProgressMessage?.toolExecutions,
+			inProgressMessage?.compactions,
 		]);
 
 		const inProgressMessageData = useMemo(() => {

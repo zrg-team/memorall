@@ -1,0 +1,660 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>pi code</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@6.0.0/css/xterm.css">
+<script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@6.0.0/lib/xterm.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.11.0/lib/addon-fit.js"></script>
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+<style>
+/* ---------- tokens: app chrome (src/globals.css) ---------- */
+:root {
+  color-scheme: light;
+  --bg: #ffffff;
+  --fg: #0a0a0a;
+  --muted: #f5f5f5;
+  --muted-fg: #737373;
+  --hover: rgba(0, 0, 0, .04);
+  --border: rgba(0, 0, 0, .1);
+  --plane: #ececea;
+  --desktop: linear-gradient(160deg, #e9eef5 0%, #f3efe9 100%);
+  --focus-blue: #3b82f6;
+  --focus-orange: #fb923c;
+  --tint-pi: rgba(132, 204, 22, .15);
+  --tint-pi-fg: #4d7c0f;
+  --dock: rgba(255, 255, 255, .72);
+  --note: #fdfdfd;
+  --ok: #059669;
+  --warn: #b45309;
+  --bad: #d03b3b;
+}
+:root.dark {
+  color-scheme: dark;
+  --bg: #0a0a0a;
+  --fg: #fafafa;
+  --muted: #262626;
+  --muted-fg: #a3a3a3;
+  --hover: rgba(255, 255, 255, .05);
+  --border: rgba(255, 255, 255, .1);
+  --plane: #000000;
+  --desktop: linear-gradient(160deg, #10141b 0%, #17130f 100%);
+  --tint-pi: rgba(132, 204, 22, .15);
+  --tint-pi-fg: #bef264;
+  --dock: rgba(23, 23, 23, .72);
+  --note: #101010;
+  --ok: #10b981;
+  --warn: #f59e0b;
+  --bad: #ef6b6b;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+  font-family: "Space Grotesk", system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.4;
+  background: var(--plane);
+  color: var(--fg);
+  -webkit-font-smoothing: antialiased;
+}
+button { font: inherit; color: inherit; }
+.mono { font-family: "IBM Plex Mono", ui-monospace, monospace; }
+.muted { color: var(--muted-fg); }
+svg.lucide { width: 16px; height: 16px; flex: none; }
+
+/* ---------- mock-only controls ---------- */
+.mockbar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+  padding: 10px 16px; border-bottom: 1px solid var(--border); background: var(--bg);
+}
+.mockbar h1 { font-size: 15px; font-weight: 600; margin: 0 12px 0 0; display: flex; align-items: center; gap: 8px; }
+.mockbar .spacer { flex: 1; }
+.btn {
+  display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 10px;
+  border-radius: 8px; border: 1px solid var(--border); background: var(--bg); cursor: pointer;
+  font-size: 13px;
+}
+.btn:hover { background: var(--hover); }
+.btn:disabled { opacity: .45; cursor: default; }
+.btn.danger { color: var(--bad); }
+
+.layout { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 16px; padding: 16px; height: calc(100% - 51px); }
+@media (max-width: 960px) { .layout { grid-template-columns: 1fr; height: auto; } }
+
+/* ---------- Memon computer ---------- */
+.computer {
+  position: relative; display: flex; flex-direction: column; min-height: 560px;
+  border: 1px solid var(--border); border-radius: 12px; overflow: hidden; background: var(--bg);
+}
+.computer-head {
+  display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 12px;
+  border-bottom: 1px solid var(--border); font-size: 13px;
+}
+.power-dot { width: 8px; height: 8px; border-radius: 99px; background: var(--ok); }
+.computer.off .power-dot { background: var(--muted-fg); }
+.desktop { position: relative; flex: 1; background: var(--desktop); overflow: hidden; }
+.icons { position: absolute; left: 14px; top: 14px; display: grid; gap: 10px; }
+.icon {
+  display: grid; justify-items: center; gap: 4px; width: 76px; padding: 6px 4px; border-radius: 10px;
+  font-size: 11.5px; cursor: pointer; border: 0; background: none;
+}
+.icon:hover { background: var(--hover); }
+.icon .tile {
+  width: 40px; height: 40px; border-radius: 10px; display: grid; place-items: center;
+  background: rgba(100, 116, 139, .16);
+}
+.icon .tile.pi { background: var(--tint-pi); color: var(--tint-pi-fg); font: 700 20px "IBM Plex Mono", monospace; }
+
+.win {
+  position: absolute; left: 112px; top: 18px; right: 18px; bottom: 64px;
+  display: flex; flex-direction: column; overflow: hidden; border-radius: 8px;
+  border: 1px solid var(--focus-orange); background: var(--bg);
+  box-shadow: 0 10px 32px -8px rgb(251 146 60 / .45);
+}
+.win.hidden { display: none; }
+.titlebar {
+  display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 4px 0 8px;
+  border-bottom: 1px solid var(--border); background: color-mix(in srgb, var(--muted) 50%, transparent);
+}
+.chip { width: 24px; height: 24px; border-radius: 6px; display: grid; place-items: center; background: var(--tint-pi); color: var(--tint-pi-fg); font: 700 13px "IBM Plex Mono", monospace; }
+.titlebar .title { font-size: 13px; font-weight: 500; }
+.titlebar .wid { font: 11px "IBM Plex Mono", monospace; color: var(--muted-fg); }
+.model-pill {
+  display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 8px; margin-left: 6px;
+  border-radius: 99px; border: 1px solid var(--border); font-size: 11.5px; color: var(--muted-fg);
+}
+.model-pill b { color: var(--fg); font-weight: 500; }
+.titlebar .grow { flex: 1; }
+.fbtn { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 6px; border: 0; background: none; color: var(--muted-fg); cursor: pointer; }
+.fbtn:hover { background: var(--muted); color: var(--fg); }
+.fbtn.x:hover { background: rgba(239, 68, 68, .15); color: #dc2626; }
+.termwrap { position: relative; flex: 1; min-height: 0; padding: 6px 4px 4px 8px; background: #16161c; }
+.termwrap .xterm { height: 100%; }
+.termnotice {
+  position: absolute; inset: 0; display: none; place-items: center; padding: 0 24px; text-align: center;
+  font: 12px "IBM Plex Mono", monospace; color: #8a8a96;
+}
+.win.fresh .termnotice { display: grid; }
+.win.fresh #term { visibility: hidden; }
+
+/* MemonOS Bot asks to hand pi work: amber, on top of the window, until answered. */
+.win.asking {
+  border-color: #f59e0b;
+  box-shadow: 0 0 0 3px rgb(251 191 36 / .45), 0 10px 32px -8px rgb(245 158 11 / .5);
+}
+.ask {
+  display: none; margin: 8px 8px 0; padding: 10px 12px; border: 2px solid #fbbf24; border-radius: 8px;
+  background: #fffbeb; box-shadow: 0 0 0 4px rgb(251 191 36 / .3); font-size: 12px;
+}
+:root.dark .ask { background: #451a03; }
+.win.asking .ask { display: block; }
+.ask-title { display: flex; align-items: center; gap: 8px; font-weight: 600; color: #78350f; }
+:root.dark .ask-title { color: #fef3c7; }
+.ping { position: relative; width: 10px; height: 10px; flex: none; }
+.ping::before, .ping::after { content: ""; position: absolute; inset: 0; border-radius: 99px; background: #f59e0b; }
+.ping::before { background: #fbbf24; animation: ping 1s cubic-bezier(0, 0, .2, 1) infinite; }
+@keyframes ping { 75%, 100% { transform: scale(2.2); opacity: 0; } }
+.ask-task {
+  margin: 8px 0; padding: 6px 8px; border-radius: 6px; background: rgba(255, 255, 255, .8); color: #0a0a0a;
+  font: 11.5px "IBM Plex Mono", monospace; white-space: pre-wrap;
+}
+:root.dark .ask-task { background: rgba(0, 0, 0, .3); color: #fafafa; }
+.ask-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.ask-row .hint { flex: 1; min-width: 180px; color: #92400e; font-size: 11.5px; }
+:root.dark .ask-row .hint { color: #fde68a; }
+.btn.amber { background: #f59e0b; border-color: transparent; color: #451a03; font-weight: 600; }
+.btn.amber:hover { background: #fbbf24; }
+.btn.sm { height: 28px; font-size: 12px; }
+
+.dock {
+  position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%);
+  display: flex; gap: 6px; padding: 6px; border-radius: 14px; border: 1px solid var(--border);
+  background: var(--dock); backdrop-filter: blur(10px);
+}
+.dock .d {
+  position: relative; width: 36px; height: 36px; border-radius: 9px; display: grid; place-items: center;
+  background: rgba(100, 116, 139, .14); border: 0; cursor: pointer;
+}
+.dock .d.pi { background: var(--tint-pi); color: var(--tint-pi-fg); font: 700 17px "IBM Plex Mono", monospace; }
+.dock .d .run { position: absolute; bottom: -5px; left: 50%; width: 5px; height: 5px; margin-left: -2.5px; border-radius: 9px; background: var(--muted-fg); }
+.dock .d .run.busy { background: #10b981; animation: pulse 1.1s ease-in-out infinite; }
+.dock .d .run.ask { width: 16px; margin-left: -8px; background: #f59e0b; animation: pulse 1.1s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: .25; } }
+
+.off-screen {
+  position: absolute; inset: 0; display: none; place-items: center; text-align: center;
+  background: color-mix(in srgb, var(--bg) 86%, transparent); font-size: 13px;
+}
+.computer.off .off-screen { display: grid; }
+.computer.off .win, .computer.off .dock, .computer.off .icons { display: none; }
+.collapsed-screen {
+  position: absolute; inset: 0; display: none; place-items: center; text-align: center;
+  background: color-mix(in srgb, var(--bg) 92%, transparent); font-size: 13px;
+}
+.computer.collapsed .collapsed-screen { display: grid; }
+.computer.collapsed .win, .computer.collapsed .dock, .computer.collapsed .icons { visibility: hidden; }
+
+.toast {
+  position: absolute; right: 18px; bottom: 64px; max-width: 300px; padding: 10px 12px; border-radius: 10px;
+  border: 1px solid var(--border); background: var(--bg); font-size: 12.5px; box-shadow: 0 8px 24px -10px rgb(0 0 0 / .35);
+  display: none;
+}
+.toast.show { display: block; }
+
+/* ---------- notes ---------- */
+.notes { display: grid; gap: 12px; align-content: start; overflow: auto; }
+.card { border: 1px solid var(--border); border-radius: 12px; background: var(--note); padding: 12px 14px; }
+.card h2 { font-size: 13px; margin: 0 0 8px; font-weight: 600; }
+.card p, .card li { font-size: 12.5px; color: var(--muted-fg); margin: 0; }
+.card ul { margin: 0; padding-left: 16px; display: grid; gap: 4px; }
+.state-row { display: flex; justify-content: space-between; gap: 8px; font-size: 12.5px; padding: 3px 0; }
+.state-row span:last-child { font-family: "IBM Plex Mono", monospace; }
+.tag { padding: 1px 6px; border-radius: 6px; font-size: 11px; font-weight: 500; }
+.tag.ok { background: rgba(16, 185, 129, .15); color: var(--ok); }
+.tag.idle { background: var(--muted); color: var(--muted-fg); }
+.tag.bad { background: rgba(239, 68, 68, .14); color: var(--bad); }
+.tag.warn { background: rgba(245, 158, 11, .16); color: var(--warn); }
+.chatlog { display: grid; gap: 5px; font: 11.5px "IBM Plex Mono", monospace; color: var(--muted-fg); }
+.chatlog div { overflow-wrap: anywhere; }
+.chatlog b { color: var(--fg); font-weight: 500; }
+table { width: 100%; border-collapse: collapse; font-size: 12px; }
+td { padding: 5px 4px; border-top: 1px solid var(--border); vertical-align: top; }
+td:first-child { color: var(--fg); width: 36%; }
+td:last-child { color: var(--muted-fg); }
+</style>
+</head>
+<body>
+<div class="mockbar">
+  <h1><span class="chip">π</span> pi code — MemonOS app mock</h1>
+  <button class="btn" id="ask"><i data-lucide="bot"></i>Agent hands pi work</button>
+  <button class="btn" id="run"><i data-lucide="play"></i>Type a prompt</button>
+  <button class="btn" id="close"><i data-lucide="x"></i>Close window</button>
+  <button class="btn" id="leave"><i data-lucide="panel-right-close"></i>Leave Runtime / collapse panel</button>
+  <button class="btn danger" id="power"><i data-lucide="power"></i>Shut down</button>
+  <span class="spacer"></span>
+  <button class="btn" id="toggle-pi" aria-pressed="true"><i data-lucide="toggle-right"></i>pi code: On</button>
+  <button class="btn" id="theme"><i data-lucide="sun-moon"></i>Theme</button>
+</div>
+
+<div class="layout">
+  <section class="computer" id="computer" aria-label="Memon computer">
+    <div class="computer-head">
+      <span class="power-dot"></span>
+      <b>Memon</b><span class="muted">· coder agent</span>
+      <span class="spacer" style="flex:1"></span>
+      <span class="muted mono" id="tabstate" style="font-size:12px">Runtime → Computer: in view</span>
+    </div>
+    <div class="desktop">
+      <div class="icons">
+        <button class="icon"><span class="tile"><i data-lucide="globe"></i></span>Browser</button>
+        <button class="icon"><span class="tile"><i data-lucide="folder-open"></i></span>Files</button>
+        <button class="icon"><span class="tile"><i data-lucide="square-terminal"></i></span>Terminal</button>
+        <button class="icon" id="pi-icon"><span class="tile pi">π</span>pi code</button>
+      </div>
+
+      <div class="win" id="win" role="group" aria-label="pi code">
+        <div class="titlebar">
+          <span class="chip">π</span>
+          <span class="title">pi code · ~/projects/todo-api</span>
+          <span class="wid">w3</span>
+          <span class="grow"></span>
+          <button class="fbtn" title="Minimize"><i data-lucide="minus"></i></button>
+          <button class="fbtn" title="Maximize"><i data-lucide="maximize-2" style="width:13px;height:13px"></i></button>
+          <button class="fbtn x" id="close-x" title="Close"><i data-lucide="x"></i></button>
+        </div>
+        <div class="ask" role="alertdialog" aria-labelledby="ask-title">
+          <div class="ask-title" id="ask-title"><span class="ping"></span><i data-lucide="shield-alert"></i>MemonOS Bot wants to hand this to pi code</div>
+          <div class="ask-task" id="ask-task"></div>
+          <div class="ask-row">
+            <span class="hint">pi will read, edit and run code in your files with the chat's model. Declined, MemonOS Bot codes it itself and won't ask again.</span>
+            <button class="btn sm" id="deny">Let MemonOS Bot code it</button>
+            <button class="btn sm amber" id="approve">Use pi code</button>
+          </div>
+        </div>
+        <div class="termwrap"><div id="term" style="height:100%"></div><div class="termnotice">pi code starts once you allow MemonOS Bot to use it.</div></div>
+      </div>
+
+      <div class="dock">
+        <button class="d" title="Browser"><i data-lucide="globe"></i></button>
+        <button class="d" title="Files"><i data-lucide="folder-open"></i></button>
+        <button class="d" title="Terminal"><i data-lucide="square-terminal"></i></button>
+        <button class="d pi" id="dock-pi" title="pi code">π<span class="run" id="run-dot"></span></button>
+      </div>
+
+      <div class="toast" id="toast"></div>
+    </div>
+    <div class="collapsed-screen">
+      <div>
+        <i data-lucide="panel-right-open" style="width:28px;height:28px"></i>
+        <p><b>Computer out of view</b></p>
+        <p class="muted">pi keeps working inside the computer. Come back to see its screen, redrawn in full.</p>
+      </div>
+    </div>
+    <div class="off-screen">
+      <div>
+        <i data-lucide="power" style="width:28px;height:28px"></i>
+        <p><b>Computer is off</b></p>
+        <p class="muted" id="off-msg">pi code session stopped.</p>
+        <button class="btn" id="boot" style="margin-top:8px"><i data-lucide="power"></i>Start computer</button>
+      </div>
+    </div>
+  </section>
+
+  <aside class="notes">
+    <div class="card">
+      <h2>Live state</h2>
+      <div class="state-row"><span>pi session</span><span id="s-session"><span class="tag idle">idle</span></span></div>
+      <div class="state-row"><span>Window</span><span id="s-window">open · view attached</span></div>
+      <div class="state-row"><span>Runtime view</span><span id="s-tab">in view</span></div>
+      <div class="state-row"><span>Main chat agent</span><span id="s-chat"><span class="tag ok">running</span></span></div>
+      <div class="state-row"><span>LLM</span><span>chat composer model</span></div>
+      <div class="state-row"><span>pi code setting</span><span id="s-enabled"><span class="tag ok">on</span></span></div>
+    </div>
+    <div class="card">
+      <h2>Main chat (MemonOS Bot)</h2>
+      <div class="chatlog" id="chatlog"><div class="muted">Press “Agent hands pi work”.</div></div>
+    </div>
+    <div class="card">
+      <h2>Lifecycle</h2>
+      <table>
+        <tr><td>Close window</td><td>Quits pi, like closing an app: aborts its LLM stream and any bash command, ends the session. Opening pi code again starts a new session (the old one is saved in ~/.pi).</td></tr>
+        <tr><td>Leave Runtime / collapse panel</td><td>Only the view goes away. pi runs in the Memon computer (offscreen on the extension) and keeps working; the dock dot pulses. Coming back redraws pi's screen in full.</td></tr>
+        <tr><td>Shut down</td><td>Stops pi with the computer. The chat's own agent run is untouched.</td></tr>
+        <tr><td>Model switch</td><td>Read from the chat composer at every turn; the next turn uses the new model.</td></tr>
+        <tr><td>MemonOS Bot hands it work</td><td>memon_code opens pi code and asks you first, in an amber card on the window (the dock dot turns amber). Allowed, pi starts and gets the task; the agent waits for it, steers or stops it, and reads pi's conversation on its screen. It asks once per message.</td></tr>
+        <tr><td>Declined</td><td>pi does not start, and a window opened only for the question closes. The agent codes it itself with the Terminal and Files, and saves to Memory.md that you don't want pi code, so it won't ask again.</td></tr>
+        <tr><td>Turned off (MemonOS Bot settings)</td><td>pi code leaves the desktop (a running session quits) and the agent no longer gets memon_code.</td></tr>
+      </table>
+    </div>
+    <div class="card">
+      <h2>What is pi here</h2>
+      <ul>
+        <li>pi-tui renders into xterm through a Terminal adapter (same differential renderer, editor, markdown, loader).</li>
+        <li>pi agent loop + session (steer/follow-up queue, ! bash, /new, /compact) as upstream.</li>
+        <li>Tools read · bash · edit · write · grep · find · ls run on the agent's Memon home via pluggable operations.</li>
+      </ul>
+    </div>
+  </aside>
+</div>
+
+<script>
+lucide.createIcons();
+
+/* ---------- pi dark theme (coding-agent/src/modes/interactive/theme/dark.json) ---------- */
+const hex = (h) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
+const fg = (h, s) => `\x1b[38;2;${hex(h).join(";")}m${s}\x1b[39m`;
+const bgc = (h, s) => `\x1b[48;2;${hex(h).join(";")}m${s}\x1b[49m`;
+const bold = (s) => `\x1b[1m${s}\x1b[22m`;
+const italic = (s) => `\x1b[3m${s}\x1b[23m`;
+const C = {
+  accent: "#8abeb7", border: "#5f87ff", borderMuted: "#505050", success: "#b5bd68", error: "#cc6666",
+  warning: "#ffff00", muted: "#808080", dim: "#666666", userBg: "#343541", pendBg: "#282832",
+  okBg: "#283228", errBg: "#3c2828", heading: "#f0c674", thinkLow: "#5f87af", thinkMed: "#81a2be",
+};
+const strip = (s) => s.replace(/\x1b\[[0-9;]*m/g, "");
+const width = (s) => [...strip(s)].length;
+const padTo = (s, w) => s + " ".repeat(Math.max(0, w - width(s)));
+function wrap(text, w) {
+  const out = [];
+  for (const para of text.split("\n")) {
+    let line = "";
+    for (const word of para.split(" ")) {
+      if (width(line) + width(word) + (line ? 1 : 0) > w && line) { out.push(line); line = word; }
+      else line = line ? `${line} ${word}` : word;
+    }
+    out.push(line);
+  }
+  return out;
+}
+/* Box(paddingX=1, paddingY=1, bg) like pi-tui's Box */
+function box(lines, bgHex, w) {
+  const blank = bgc(bgHex, " ".repeat(w));
+  return [blank, ...lines.map((l) => bgc(bgHex, padTo(` ${l}`, w))), blank];
+}
+
+/* ---------- transcript model ---------- */
+const MODEL = "claude-sonnet-5-5";
+const CWD = "~/projects/todo-api";
+let items = [];          // rendered components
+let editorText = "";
+let working = false;
+let spin = 0;
+let tokens = { up: 0, down: 0, ctx: 0 };
+let stopped = false;
+
+function header(w) {
+  return [
+    "",
+    ` ${bold(fg(C.accent, "pi"))}${fg(C.dim, " v0.73.1")}`,
+    ` ${fg(C.dim, "esc")}${fg(C.muted, " interrupt")}${fg(C.muted, " · ")}${fg(C.dim, "ctrl+c/ctrl+d")}${fg(C.muted, " clear/exit")}${fg(C.muted, " · ")}${fg(C.dim, "/")}${fg(C.muted, " commands")}${fg(C.muted, " · ")}${fg(C.dim, "!")}${fg(C.muted, " bash")}${fg(C.muted, " · ")}${fg(C.dim, "ctrl+o")}${fg(C.muted, " more")}`,
+    ` ${fg(C.dim, "Model: the one selected in the chat composer. Files: this agent's Memon home (/agents/coder).")}`,
+    "",
+  ];
+}
+function render(w) {
+  let lines = header(w);
+  for (const it of items) lines.push(...it(w));
+  if (working) {
+    const frames = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏";
+    lines.push("", ` ${fg(C.accent, frames[spin % frames.length])} ${fg(C.muted, "Working... (esc to interrupt)")}`);
+  }
+  const borderColor = editorText.startsWith("!") ? C.success : C.thinkMed;
+  lines.push("", fg(borderColor, "─".repeat(w)));
+  lines.push(` ${editorText}\x1b[7m \x1b[27m`);
+  lines.push(fg(borderColor, "─".repeat(w)));
+  lines.push(fg(C.dim, CWD));
+  const left = `↑${tokens.up}k ↓${tokens.down}k ${tokens.ctx.toFixed(1)}%/200k (auto)`;
+  const right = `${MODEL} • medium`;
+  lines.push(fg(C.dim, left + " ".repeat(Math.max(2, w - left.length - right.length)) + right));
+  return lines;
+}
+
+const user = (text) => (w) => ["", ...box(wrap(text, w - 2), C.userBg, w)];
+const assistant = (text) => (w) => ["", ...wrap(text, w - 2).map((l) => ` ${l}`)];
+const thinking = (text) => (w) => ["", ...wrap(text, w - 2).map((l) => ` ${italic(fg(C.muted, l))}`)];
+const tool = (title, out, state) => (w) => {
+  const bgHex = state === "ok" ? C.okBg : state === "err" ? C.errBg : C.pendBg;
+  return ["", ...box([title, ...out], bgHex, w)];
+};
+const status = (text, color = C.dim) => (w) => ["", ` ${fg(color, text)}`];
+
+/* ---------- xterm ---------- */
+const term = new Terminal({
+  fontFamily: '"IBM Plex Mono", ui-monospace, monospace', fontSize: 12.5, lineHeight: 1.15,
+  cursorBlink: false, cursorStyle: "bar", scrollback: 2000, allowProposedApi: true,
+  theme: { background: "#16161c", foreground: "#d4d4d4", cursor: "#16161c", selectionBackground: "#3a3a4a" },
+});
+const fit = new FitAddon.FitAddon();
+term.loadAddon(fit);
+term.open(document.getElementById("term"));
+fit.fit();
+new ResizeObserver(() => { try { fit.fit(); paint(); } catch {} }).observe(document.getElementById("term"));
+
+let attached = true;
+function paint() {
+  if (!attached) return;
+  // xterm 6 overlays its scrollbar on the last column.
+  const w = term.cols - 1;
+  // pi-tui renders inline with synchronized output; the mock repaints the whole frame.
+  term.write("\x1b[?2026h\x1b[H\x1b[2J\x1b[3J" + render(w).join("\r\n") + "\x1b[?2026l");
+}
+paint();
+
+/* ---------- scripted run ---------- */
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+let runId = 0;
+async function type(text) {
+  for (const ch of text) { editorText += ch; paint(); await sleep(18); }
+  await sleep(250);
+  editorText = ""; items.push(user(text)); paint();
+}
+async function stream(make, text, id) {
+  let shown = "";
+  const idx = items.push(make("")) - 1;
+  for (const word of text.split(" ")) {
+    if (id !== runId) return false;
+    shown = shown ? `${shown} ${word}` : word;
+    items[idx] = make(shown); paint(); await sleep(45);
+  }
+  return true;
+}
+async function runTool(title, pendingOut, finalOut, state, id) {
+  const idx = items.push(tool(title, pendingOut, "pending")) - 1; paint();
+  await sleep(700);
+  if (id !== runId) return false;
+  items[idx] = tool(title, finalOut, state); paint();
+  return true;
+}
+async function demo(agentPrompt) {
+  const id = ++runId;
+  stopped = false;
+  setSession("running");
+  // The agent's prompt arrives whole; the user's is typed.
+  if (agentPrompt) { items.push(user(agentPrompt)); paint(); }
+  else await type("The /todos endpoint returns 500 when the list is empty. Find and fix it, then run the tests.");
+  working = true; tickSpinner(id);
+  if (!(await stream(thinking, "The error is probably in the handler that reduces the todo list. Read it first.", id))) return;
+  tokens = { up: 3.1, down: 0.2, ctx: 2.4 };
+  if (!(await runTool(`${bold("read")} ${fg(C.accent, "src/routes/todos.ts")}`, [fg(C.muted, "...")], [
+    fg(C.muted, "export function listTodos(store: Store) {"),
+    fg(C.muted, "  const todos = store.all();"),
+    fg(C.muted, "  const latest = todos.reduce((a, b) => (a.at > b.at ? a : b));"),
+    fg(C.muted, "  return { todos, latest: latest.id };"),
+    fg(C.muted, "}"),
+  ], "ok", id))) return;
+  if (!(await stream(assistant, "`reduce` without an initial value throws on an empty array. Guarding it:", id))) return;
+  if (!(await runTool(`${bold("edit")} ${fg(C.accent, "src/routes/todos.ts")}`, [fg(C.muted, "...")], [
+    fg(C.error, "-3   const latest = todos.reduce((a, b) => (a.at > b.at ? a : b));"),
+    fg(C.error, "-4   return { todos, latest: latest.id };"),
+    fg(C.success, "+3   const latest = todos.length ? todos.reduce((a, b) => (a.at > b.at ? a : b)) : null;"),
+    fg(C.success, "+4   return { todos, latest: latest?.id ?? null };"),
+  ], "ok", id))) return;
+  tokens = { up: 7.8, down: 0.9, ctx: 4.1 };
+  if (!(await runTool(bold("$ npm test"), [fg(C.muted, "Running...")], [
+    fg(C.muted, "> todo-api@1.0.0 test"),
+    fg(C.muted, "> node --test"),
+    fg(C.muted, "✔ lists todos (2.1ms)"),
+    fg(C.muted, "✔ empty list returns latest: null (0.8ms)"),
+    fg(C.muted, "ℹ tests 2  pass 2  fail 0"),
+  ], "ok", id))) return;
+  if (!(await stream(assistant, "Fixed. `listTodos` now returns `latest: null` for an empty list instead of throwing, and both tests pass.", id))) return;
+  tokens = { up: 9.6, down: 1.3, ctx: 4.9 };
+  working = false; paint();
+  setSession("idle");
+  return true;
+}
+async function tickSpinner(id) {
+  while (working && id === runId) { spin++; paint(); await sleep(80); }
+}
+
+/* ---------- lifecycle controls ---------- */
+const $ = (id) => document.getElementById(id);
+function setSession(s) {
+  const tag = s === "running" ? '<span class="tag ok">running</span>' : s === "stopped" ? '<span class="tag bad">stopped</span>' : '<span class="tag idle">idle</span>';
+  $("s-session").innerHTML = tag;
+  $("run-dot").className = s === "running" ? "run busy" : "run";
+  $("run").disabled = s === "running";
+}
+function toast(text) {
+  const t = $("toast"); t.innerHTML = text; t.classList.add("show");
+  clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove("show"), 3200);
+}
+function closeWindow() {
+  if (asking) {
+    endAsk();
+    chat("→ the user closed pi code instead of answering: <b>coding it myself</b>");
+    $("s-chat").innerHTML = '<span class="tag ok">coding it itself</span>';
+  }
+  const wasRunning = working;
+  runId++; working = false;
+  attached = false; $("win").classList.add("hidden");
+  $("s-window").textContent = "closed · pi quit";
+  setSession("stopped");
+  toast(wasRunning ? "<b>pi code</b> quit: its run was aborted." : "<b>pi code</b> quit.");
+}
+function openWindow() {
+  if (!$("win").classList.contains("hidden")) return;
+  // A new window is a new pi session.
+  items = []; tokens = { up: 0, down: 0, ctx: 0 }; editorText = "";
+  setSession("idle");
+  $("win").classList.remove("hidden"); attached = true;
+  $("s-window").textContent = "open · view attached";
+  requestAnimationFrame(() => { fit.fit(); paint(); });
+}
+$("run").onclick = () => { if (!inView) $("leave").click(); openWindow(); demo(); };
+
+/* ---------- MemonOS Bot hands pi work: the user confirms in the window ---------- */
+const TASK = "The /todos endpoint in ~/projects/todo-api returns 500 when the list is empty. Find the bug, fix it, and run the tests.";
+let piEnabled = true, asking = false, openedForAsk = false;
+function chat(html) {
+  const log = $("chatlog");
+  if (log.firstElementChild?.classList.contains("muted")) log.innerHTML = "";
+  const line = document.createElement("div"); line.innerHTML = html; log.append(line);
+}
+function endAsk() {
+  asking = false;
+  $("win").classList.remove("asking", "fresh");
+  $("run-dot").className = working ? "run busy" : "run";
+  requestAnimationFrame(() => { fit.fit(); paint(); });
+}
+$("ask").onclick = () => {
+  if (!piEnabled || asking || working) return;
+  if (!inView) $("leave").click();
+  chat('<b>memon_code</b> { action: "prompt", text: "The /todos endpoint…", cwd: "~/projects/todo-api" }');
+  openedForAsk = $("win").classList.contains("hidden");
+  if (openedForAsk) {
+    openWindow();
+    // pi starts only once the user allows it.
+    $("win").classList.add("fresh");
+    $("s-window").textContent = "open · waiting for your answer";
+  }
+  asking = true;
+  $("ask-task").textContent = TASK;
+  $("win").classList.add("asking");
+  $("run-dot").className = "run ask";
+  $("s-chat").innerHTML = '<span class="tag warn">waiting for your approval</span>';
+  requestAnimationFrame(() => { fit.fit(); paint(); });
+};
+$("approve").onclick = async () => {
+  endAsk();
+  $("s-window").textContent = "open · view attached";
+  $("s-chat").innerHTML = '<span class="tag ok">waiting for pi code</span>';
+  chat("→ allowed: pi code works on it");
+  if (await demo(TASK)) {
+    chat("→ pi code is done: “Fixed. listTodos now returns latest: null…”");
+    chat("MemonOS Bot runs the tests, then answers in chat.");
+    $("s-chat").innerHTML = '<span class="tag ok">running</span>';
+  }
+};
+$("deny").onclick = () => {
+  endAsk();
+  if (openedForAsk) {
+    // The window was opened only to ask: it goes with the question.
+    $("win").classList.add("hidden"); attached = false;
+    $("s-window").textContent = "closed (opened only to ask)";
+    setSession("idle");
+  }
+  $("s-chat").innerHTML = '<span class="tag ok">coding it itself</span>';
+  chat("→ declined: do the coding yourself, and remember it");
+  chat('<b>memon_memory</b> { action: "add", text: "Code it myself; the user does not want pi code." }');
+  chat('<b>memon_run</b> { command: "npm test" } … MemonOS Bot fixes it itself');
+  toast("MemonOS Bot codes it itself. Saved to <b>Memory.md</b>: “Code it myself; the user does not want pi code.”");
+};
+$("toggle-pi").onclick = () => {
+  piEnabled = !piEnabled;
+  if (!piEnabled && !$("win").classList.contains("hidden")) closeWindow();
+  $("pi-icon").hidden = !piEnabled;
+  $("dock-pi").hidden = !piEnabled;
+  $("ask").disabled = !piEnabled;
+  $("run").disabled = !piEnabled;
+  $("toggle-pi").setAttribute("aria-pressed", String(piEnabled));
+  $("toggle-pi").lastChild.textContent = `pi code: ${piEnabled ? "On" : "Off"}`;
+  $("s-enabled").innerHTML = piEnabled ? '<span class="tag ok">on</span>' : '<span class="tag idle">off</span>';
+  toast(piEnabled
+    ? "<b>pi code</b> is back on the desktop."
+    : "<b>pi code</b> is off for this agent: not on the desktop, and MemonOS Bot gets no memon_code.");
+};
+$("close").onclick = closeWindow;
+$("close-x").onclick = closeWindow;
+$("pi-icon").onclick = openWindow;
+$("dock-pi").onclick = openWindow;
+let inView = true;
+$("leave").onclick = () => {
+  inView = !inView;
+  $("computer").classList.toggle("collapsed", !inView);
+  // No view: pi keeps running in the computer; coming back redraws in full.
+  attached = inView && !$("win").classList.contains("hidden");
+  if (attached) requestAnimationFrame(() => { fit.fit(); paint(); });
+  $("tabstate").textContent = `Runtime → Computer: ${inView ? "in view" : "out of view"}`;
+  $("s-tab").textContent = inView ? "in view" : "out of view (pi keeps running)";
+  $("leave").lastChild.textContent = inView ? "Leave Runtime / collapse panel" : "Back to Runtime → Computer";
+};
+$("power").onclick = () => {
+  const wasRunning = working;
+  runId++; working = false;
+  if (wasRunning) {
+    items.push(status("Operation aborted", C.error));
+    items.push(status("Session stopped: the computer was shut down."));
+  }
+  paint();
+  setSession("stopped");
+  $("computer").classList.add("off");
+  $("off-msg").textContent = wasRunning ? "pi code's run was aborted and pi stopped with the computer. The chat's agent keeps running." : "pi stopped with the computer. The chat's agent keeps running.";
+  $("power").disabled = true;
+};
+$("boot").onclick = () => {
+  $("computer").classList.remove("off");
+  $("power").disabled = false;
+  $("win").classList.add("hidden");
+  openWindow();
+};
+$("theme").onclick = () => document.documentElement.classList.toggle("dark");
+if (matchMedia("(prefers-color-scheme: dark)").matches) document.documentElement.classList.add("dark");
+</script>
+</body>
+</html>

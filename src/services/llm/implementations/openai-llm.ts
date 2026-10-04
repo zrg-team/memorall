@@ -40,6 +40,7 @@ import {
 	classifyRemoteModel,
 } from "../utils/remote-model-categories";
 import { postCompletionWithBudgetRetry } from "../utils/budget-retry";
+import { readModelPricing } from "../utils/model-pricing";
 import { readModelReasoning, readReasoningDelta } from "../utils/reasoning";
 import {
 	extractChunkOutputText,
@@ -685,8 +686,10 @@ export class OpenAILLM implements BaseLLM {
 			const modelInfos: ModelInfo[] = modelsRaw.map((m: any) => {
 				const id = String(m.id || m.name || m.model || "unknown-model");
 				const reasoning = readModelReasoning(m);
+				const pricing = readModelPricing(m);
 				return {
 					...(reasoning ? { reasoning } : {}),
+					...(pricing ? { pricing } : {}),
 					id,
 					name: id,
 					object: "model",

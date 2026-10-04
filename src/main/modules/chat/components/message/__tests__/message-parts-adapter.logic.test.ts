@@ -190,9 +190,87 @@ describe("buildAssistantContentParts", () => {
 
 		expect(
 			built.map((part) =>
-				part.type === "text" || part.type === "reasoning" ? part.text : part.id,
+				part.type === "text" || part.type === "reasoning"
+					? part.text
+					: "id" in part
+						? part.id
+						: part.type,
 			),
 		).toEqual(["Let me look.", "a", "b", "Now the next one.", "c", "Done."]);
+	});
+
+	it("shows a compaction after the tools before it and ahead of what came next", () => {
+		const call = (id: string) => ({
+			id,
+			type: "function" as const,
+			function: { name: "fs_read", arguments: "{}" },
+		});
+		const compaction = (atPart: number) => ({
+			reason: "threshold" as const,
+			beforeTokens: 160_000,
+			afterTokens: 120_000,
+			windowTokens: 200_000,
+			shortened: 6,
+			removed: 2,
+			atPart,
+			at: `2026-10-04T10:0${atPart}:00.000Z`,
+		});
+		const built = buildAssistantContentParts({
+			parts: [
+				{ role: "assistant", content: "Reading.", tool_calls: [call("a")] },
+				{ role: "tool", tool_call_id: "a", content: "{}" },
+				{ role: "assistant", content: "Next step." },
+			],
+			// Before the request that wrote "Next step.", and before one that
+			// has written nothing yet.
+			compactions: [compaction(5), compaction(2)],
+		});
+
+		expect(
+			built.map((part) =>
+				part.type === "text" ||
+				part.type === "reasoning" ||
+				part.type === "user-message"
+					? part.text
+					: part.type === "compaction"
+						? `compacted@${part.compaction.atPart}`
+						: part.id,
+			),
+		).toEqual(["Reading.", "a", "compacted@2", "Next step.", "compacted@5"]);
+	});
+
+	it("shows a message sent during the run where the agent read it", () => {
+		const built = buildAssistantContentParts({
+			parts: [
+				{
+					role: "assistant",
+					content: "Reading.",
+					tool_calls: [
+						{
+							id: "a",
+							type: "function",
+							function: { name: "read", arguments: "{}" },
+						},
+					],
+				},
+				{ role: "tool", tool_call_id: "a", content: "file" },
+				{ role: "user", content: "Also check the logs" },
+				{ role: "assistant", content: "Checked both." },
+			],
+		});
+
+		expect(
+			built.map((part) =>
+				part.type === "tool"
+					? `tool:${part.id}`
+					: `${part.type}:${"text" in part ? part.text : ""}`,
+			),
+		).toEqual([
+			"text:Reading.",
+			"tool:a",
+			"user-message:Also check the logs",
+			"text:Checked both.",
+		]);
 	});
 
 	it("places a running tool after the call that started it", () => {
@@ -217,7 +295,11 @@ describe("buildAssistantContentParts", () => {
 
 		expect(
 			built.map((part) =>
-				part.type === "text" || part.type === "reasoning" ? part.text : part.id,
+				part.type === "text" || part.type === "reasoning"
+					? part.text
+					: "id" in part
+						? part.id
+						: part.type,
 			),
 		).toEqual(["Reading.", "x"]);
 	});
@@ -245,7 +327,11 @@ describe("buildAssistantContentParts", () => {
 
 		expect(
 			built.map((part) =>
-				part.type === "text" || part.type === "reasoning" ? part.text : part.id,
+				part.type === "text" || part.type === "reasoning"
+					? part.text
+					: "id" in part
+						? part.id
+						: part.type,
 			),
 		).toEqual(["First.", "Reading.", "uuid-1"]);
 	});
@@ -258,7 +344,11 @@ describe("buildAssistantContentParts", () => {
 
 		expect(
 			built.map((part) =>
-				part.type === "text" || part.type === "reasoning" ? part.text : part.id,
+				part.type === "text" || part.type === "reasoning"
+					? part.text
+					: "id" in part
+						? part.id
+						: part.type,
 			),
 		).toEqual(["call_1", "Final answer."]);
 	});

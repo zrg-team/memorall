@@ -640,6 +640,11 @@ exports[`Memorall flow registered contracts > registers every core step contract
             "name": "tools",
             "type": "Tool[]",
           },
+          {
+            "description": "The open web sessions, attached past the end of the cached prefix.",
+            "name": "reminders",
+            "type": "string[]",
+          },
         ],
         "type": "feature",
       },

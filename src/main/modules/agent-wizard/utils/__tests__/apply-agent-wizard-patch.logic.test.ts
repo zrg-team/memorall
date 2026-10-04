@@ -6,6 +6,11 @@ import {
 	applyAgentWizardToolPatch,
 } from "../apply-agent-wizard-patch";
 import { AGENT_WIZARD_TOOL_NAMES } from "../build-agent-wizard-prompt";
+import {
+	AGENT_WIZARD_TEMPLATES,
+	createBlankAgentWizardDraft,
+	draftFromTemplate,
+} from "../../templates/agent-wizard-templates";
 
 const catalog = {
 	featureNames: ["knowledge-retrieval", "web-access"],
@@ -69,6 +74,42 @@ describe("agent wizard patch helpers", () => {
 		expect(result.notes[0]).toContain("unknown-feature");
 		expect(result.notes[0]).toContain("unknown-tool");
 		expect(result.notes[0]).toContain("unknown-skill");
+	});
+
+	it("starts every agent with auto-compact and thread recall, and keeps them unless asked to drop them", () => {
+		expect(createBlankAgentWizardDraft().enabledFeatureNames).toEqual([
+			"auto-compact",
+			"thread-history-feature",
+		]);
+		for (const template of AGENT_WIZARD_TEMPLATES) {
+			expect(draftFromTemplate(template).enabledFeatureNames).toEqual(
+				expect.arrayContaining(["auto-compact", "thread-history-feature"]),
+			);
+		}
+		const withCompact = {
+			...draft,
+			enabledFeatureNames: ["knowledge-retrieval", "auto-compact"],
+		};
+		const wizardCatalog = {
+			...catalog,
+			featureNames: [...catalog.featureNames, "auto-compact"],
+		};
+		// A list written out in full keeps it: the model listed what to add.
+		expect(
+			applyAgentWizardPatch(
+				withCompact,
+				{ enabledFeatureNames: ["web-access"] } as any,
+				wizardCatalog,
+			).draft.enabledFeatureNames,
+		).toEqual(["web-access", "auto-compact"]);
+		// Turning it off is still possible.
+		expect(
+			applyAgentWizardToolPatch(
+				withCompact,
+				{ type: "disable_feature", name: "auto-compact" } as any,
+				wizardCatalog,
+			).draft.enabledFeatureNames,
+		).toEqual(["knowledge-retrieval"]);
 	});
 
 	it("applies tool patches for skills, features, and instructions", () => {

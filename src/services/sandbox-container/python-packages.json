@@ -1,0 +1,214 @@
+{
+	"packages": [
+		"numpy",
+		"pandas",
+		"matplotlib",
+		"altair",
+		"svgwrite",
+		"pillow",
+		"pypdf",
+		"fpdf2",
+		"python-docx",
+		"python-pptx",
+		"openpyxl",
+		"python-calamine",
+		"soundfile",
+		"tree-sitter",
+		"tree-sitter-python",
+		"tree-sitter-java",
+		"tree-sitter-go",
+		"rank-bm25",
+		"rdflib",
+		"zengl",
+		"sqlite3",
+		"plotly",
+		"jinja2",
+		"faker",
+		"pdfminer.six",
+		"scikit-image",
+		"scipy",
+		"networkx",
+		"mammoth",
+		"pymupdf",
+		"lzma"
+	],
+	"summary": "data (numpy, pandas, scipy), charts (matplotlib, plotly, altair, svgwrite), images (PIL, skimage), PDF (pypdf, pymupdf, pdfminer, fpdf), Word (docx, mammoth), PowerPoint (pptx), Excel (openpyxl, python_calamine), archives (zipfile, tarfile, gzip, bz2, lzma), templates (jinja2), sample data (faker), graphs (networkx), audio (soundfile), code parsing (tree_sitter: Python, Java, Go), search (rank_bm25), RDF (rdflib), WebGL (zengl) and sqlite3",
+	"brief": "data, chart, image, PDF, Word, PowerPoint, Excel, audio and code-parsing packages",
+	"notes": [
+		"Nothing here has a window: save charts with plt.savefig(\"chart.png\") and use the file.",
+		"To HTML: Word with mammoth.convert_to_html, PDF with pymupdf page.get_text(\"xhtml\"), Excel with pandas DataFrame.to_html or openpyxl, PowerPoint by reading slides with python-pptx. Open the .html in the Editor to see it.",
+		"Archives: zipfile, tarfile, gzip, bz2 and lzma in Python; zip, unzip, tar and gzip in the shell."
+	],
+	"usage": {
+		"pymupdf": {
+			"imports": ["pymupdf", "fitz"],
+			"note": "import pymupdf; doc = pymupdf.open(\"a.pdf\"). Read: page.get_text() or get_text(\"xhtml\"/\"html\"/\"dict\"). Render: page.get_pixmap(dpi=150).save(\"page1.png\"). Edit: page.insert_text((72, 72), \"text\"), add_redact_annot(rect) then apply_redactions(), doc.insert_pdf(other), doc.delete_page(n), then doc.save(\"out.pdf\")."
+		},
+		"zengl": {
+			"imports": ["zengl"],
+			"note": "zengl.init() and zengl.context() take no arguments. There is no screen (ctx.screen is 0): render into ctx.image((w, h), \"rgba8unorm\") and read it back. Clear with image.clear_value = (r, g, b, a), then image.clear(). Shaders are GLSL ES 3.00: start each with \"#version 300 es\" and \"precision highp float;\", and give the fragment shader \"layout (location = 0) out vec4 out_color;\". Per frame: ctx.new_frame(), image.clear(), pipeline.render(), ctx.end_frame(). Save: Image.frombytes(\"RGBA\", (w, h), image.read()).save(\"out.png\"). Formats: r/rg/rgba 8unorm, 16float, 32float, the int/uint ones and depth; no sRGB. Free what you are done with: ctx.release(image)."
+		},
+		"altair": {
+			"imports": ["altair"],
+			"note": "No renderer and no PNG or SVG export here: chart.save(\"chart.json\") (or chart.to_dict()) keeps the Vega-Lite spec. Draw images with matplotlib."
+		},
+		"matplotlib": {
+			"imports": ["matplotlib"],
+			"note": "No window: plt.savefig(\"chart.png\") and use the file; plt.show() shows nothing."
+		},
+		"plotly": {
+			"imports": ["plotly"],
+			"note": "No window and no image export (kaleido is not here). fig.write_html(\"chart.html\", include_plotlyjs=\"directory\") writes chart.html with plotly.min.js beside it; open chart.html in the Editor and it is interactive. fig.show() shows nothing."
+		},
+		"fpdf2": {
+			"imports": ["fpdf"],
+			"note": "Built-in fonts (helvetica, times, courier) are Latin-1 only. For Vietnamese or any other script, use the DejaVu fonts matplotlib ships: fonts = matplotlib.get_data_path() + \"/fonts/ttf/\"; pdf.add_font(\"DejaVu\", fname=fonts + \"DejaVuSans.ttf\"); pdf.add_font(\"DejaVu\", style=\"B\", fname=fonts + \"DejaVuSans-Bold.ttf\") (bold is also what table headings use); then pdf.set_font(\"DejaVu\", size=12)."
+		},
+		"python-calamine": {
+			"imports": ["python_calamine"],
+			"note": "CalamineWorkbook.from_path(path).get_sheet_by_name(name).to_python() reads .xlsx, .xls and .ods; or pd.read_excel(path, engine=\"calamine\"). To write .xlsx use openpyxl or DataFrame.to_excel."
+		},
+		"tree-sitter": {
+			"imports": ["tree_sitter"],
+			"note": "Grammars here: tree_sitter_python, tree_sitter_java and tree_sitter_go only (no JavaScript or TypeScript). Parser(Language(tree_sitter_python.language())).parse(source_bytes).root_node."
+		},
+		"soundfile": {
+			"imports": ["soundfile"],
+			"note": "soundfile.write(\"a.wav\", data, rate) and soundfile.read(path) handle WAV, FLAC, OGG, MP3, AIFF and more. Nothing can play sound here."
+		},
+		"faker": {
+			"imports": ["faker"],
+			"note": "Sample data in 110 languages: Faker(\"ja_JP\"), Faker(\"zh_CN\"), Faker(\"ko_KR\"), Faker(\"vi_VN\"), Faker(\"fr_FR\"), Faker(\"de_DE\"), Faker(\"es_ES\"), Faker(\"pt_BR\"), Faker(\"ru_RU\"), Faker(\"ar_SA\"), Faker(\"hi_IN\"), Faker(\"th_TH\")… (faker.config.AVAILABLE_LOCALES lists them all; Faker() is en_US). Faker([\"en_US\", \"ja_JP\"]) mixes them. fake.seed_instance(1) makes the data the same on every run."
+		},
+		"pdfminer.six": {
+			"imports": ["pdfminer"],
+			"note": "pdfminer.high_level.extract_text(path) for the text, extract_pages(path) for its layout (text boxes with positions). It reads text a PDF has; scanned pages need OCR, which is not here."
+		},
+		"scikit-image": {
+			"imports": ["skimage"],
+			"note": "Imports as skimage; the first import takes a few seconds (it loads scipy). skimage.io.imread/imsave read and write image files; skimage.data has sample images (camera, astronaut, coins…). No window: save results as files."
+		}
+	},
+	"pypi": [
+		{
+			"name": "pypdf",
+			"version": "6.19.0",
+			"file": "pypdf-6.19.0-py3-none-any.whl",
+			"sha256": "7e5d6e730e7dae87d560a2cee218b852f6498c8be61966f3cd02ead971e48d14",
+			"imports": ["pypdf"],
+			"depends": []
+		},
+		{
+			"name": "fpdf2",
+			"version": "2.8.9",
+			"file": "fpdf2-2.8.9-py3-none-any.whl",
+			"sha256": "6e1d94af6d6311950a23dec7fb5fc84b000203eb59aee8e76c1e701b12a14976",
+			"imports": ["fpdf"],
+			"depends": ["defusedxml", "pillow", "fonttools", "ssl"]
+		},
+		{
+			"name": "defusedxml",
+			"version": "0.7.1",
+			"file": "defusedxml-0.7.1-py2.py3-none-any.whl",
+			"sha256": "a352e7e428770286cc899e2542b6cdaedb2b4953ff269a210103ec58f6198a61",
+			"imports": ["defusedxml"],
+			"depends": []
+		},
+		{
+			"name": "python-docx",
+			"version": "1.2.0",
+			"file": "python_docx-1.2.0-py3-none-any.whl",
+			"sha256": "3fd478f3250fbbbfd3b94fe1e985955737c145627498896a8a6bf81f4baf66c7",
+			"imports": ["docx"],
+			"depends": ["lxml", "typing-extensions"]
+		},
+		{
+			"name": "python-pptx",
+			"version": "1.0.2",
+			"file": "python_pptx-1.0.2-py3-none-any.whl",
+			"sha256": "160838e0b8565a8b1f67947675886e9fea18aa5e795db7ae531606d68e785cba",
+			"imports": ["pptx"],
+			"depends": ["pillow", "xlsxwriter", "lxml", "typing-extensions"]
+		},
+		{
+			"name": "xlsxwriter",
+			"version": "3.2.9",
+			"file": "xlsxwriter-3.2.9-py3-none-any.whl",
+			"sha256": "9a5db42bc5dff014806c58a20b9eae7322a134abb6fce3c92c181bfb275ec5b3",
+			"imports": ["xlsxwriter"],
+			"depends": []
+		},
+		{
+			"name": "openpyxl",
+			"version": "3.1.5",
+			"file": "openpyxl-3.1.5-py2.py3-none-any.whl",
+			"sha256": "5282c12b107bffeef825f4617dc029afaf41d0ea60823bbb665ef3079dc79de2",
+			"imports": ["openpyxl"],
+			"depends": ["et-xmlfile"]
+		},
+		{
+			"name": "et-xmlfile",
+			"version": "2.0.0",
+			"file": "et_xmlfile-2.0.0-py3-none-any.whl",
+			"sha256": "7a91720bc756843502c3b7504c77b8fe44217c85c537d85037f0f536151b2caa",
+			"imports": ["et_xmlfile"],
+			"depends": []
+		},
+		{
+			"name": "rdflib",
+			"version": "7.6.0",
+			"file": "rdflib-7.6.0-py3-none-any.whl",
+			"sha256": "30c0a3ebf4c0e09215f066be7246794b6492e054e782d7ac2a34c9f70a15e0dd",
+			"imports": ["rdflib"],
+			"depends": ["pyparsing"]
+		},
+		{
+			"name": "rank-bm25",
+			"version": "0.2.2",
+			"file": "rank_bm25-0.2.2-py3-none-any.whl",
+			"sha256": "7bd4a95571adadfc271746fa146a4bcfd89c0cf731e49c3d1ad863290adbe8ae",
+			"imports": ["rank_bm25"],
+			"depends": ["numpy"]
+		},
+		{
+			"name": "plotly",
+			"version": "7.1.0",
+			"file": "plotly-7.1.0-py3-none-any.whl",
+			"sha256": "dbb7fa18afce40d0a8e80d1bf162eceb3faa0ce5a77fe741ad09a74cf78f53f3",
+			"imports": ["plotly"],
+			"depends": ["narwhals", "packaging"]
+		},
+		{
+			"name": "faker",
+			"version": "40.40.0",
+			"file": "faker-40.40.0-py3-none-any.whl",
+			"sha256": "cd45ebdd1363f92a45740ac49945e49fa18f7e10771884a83c796a235550d7b7",
+			"imports": ["faker"],
+			"depends": []
+		},
+		{
+			"name": "pdfminer.six",
+			"version": "20260107",
+			"file": "pdfminer_six-20260107-py3-none-any.whl",
+			"sha256": "366585ba97e80dffa8f00cebe303d2f381884d8637af4ce422f1df3ef38111a9",
+			"imports": ["pdfminer"],
+			"depends": ["charset-normalizer", "cryptography"]
+		},
+		{
+			"name": "mammoth",
+			"version": "1.13.0",
+			"file": "mammoth-1.13.0-py2.py3-none-any.whl",
+			"sha256": "dd7629fa9d0a5e82207b3f481a9dcb8308fb43f6206258e062f11121efba9991",
+			"imports": ["mammoth"],
+			"depends": ["cobble"]
+		},
+		{
+			"name": "cobble",
+			"version": "0.1.4",
+			"file": "cobble-0.1.4-py3-none-any.whl",
+			"sha256": "36c91b1655e599fd428e2b95fdd5f0da1ca2e9f1abb0bc871dec21a0e78a2b44",
+			"imports": ["cobble"],
+			"depends": []
+		}
+	]
+}

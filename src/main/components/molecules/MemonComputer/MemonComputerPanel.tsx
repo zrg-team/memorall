@@ -5,7 +5,11 @@ import {
 	FileText,
 	Hand,
 	Loader2,
+	Maximize,
+	Maximize2,
 	MessageSquarePlus,
+	Minimize,
+	Minimize2,
 	Monitor,
 	Pause,
 	Play,
@@ -21,6 +25,7 @@ import {
 	DropdownMenuItem,
 	DropdownMenuTrigger,
 } from "@/main/components/ui/dropdown-menu";
+import { useMediaQuery } from "@/main/hooks/use-viewport";
 import { useShellLayoutStore } from "@/main/stores/shell-layout";
 import { useWorkspaceModeStore } from "@/main/stores/workspace-mode";
 import { logError } from "@/utils/logger";
@@ -30,6 +35,7 @@ import { cn } from "@/lib/utils";
 import { useMemonMachineStore } from "@/main/stores/memon-machine";
 import {
 	MEMON_BUILTIN_APPS,
+	MEMON_TASKS_FILE_NAME,
 	type MemonWindowApp,
 	memonDisplayPath,
 } from "@/services/memon/constants";
@@ -40,6 +46,11 @@ import type {
 	MemonWindowState,
 } from "@/services/memon/types";
 import { askInChat, memonWindowTarget } from "./ask-in-chat";
+import {
+	addContextMenuActions,
+	fileMenuActions,
+	pasteMenuAction,
+} from "./context-menu-actions";
 import { MemonAgentCursor, MemonUserCursor } from "./MemonAgentCursor";
 import { MemonDesktopIcons } from "./MemonDesktopIcons";
 import {
@@ -52,14 +63,20 @@ import { BrowserWindow } from "./windows/BrowserWindow";
 import { EditorWindow } from "./windows/EditorWindow";
 import { FilesWindow } from "./windows/FilesWindow";
 import { TerminalWindow } from "./windows/TerminalWindow";
+import { PiCodeWindow } from "./windows/PiCodeWindow";
 import { MemonWindowErrorBoundary } from "./MemonWindowErrorBoundary";
 import { ViewerWindow } from "./windows/ViewerWindow";
 import { KitWindow } from "./windows/KitWindow";
 import { VisualizeWindow } from "./windows/VisualizeWindow";
+import { useDeleteConfirm } from "./use-delete-confirm";
 import { useMemonAskMenu } from "./use-memon-ask-menu";
 import { useMemonExportDownloads } from "./use-export-downloads";
 
 const COMPACT_WIDTH = 600;
+/** Where the app shell stacks chat and the right panel instead. */
+const NARROW_SHELL_QUERY = "(max-width: 640px)";
+const HEADER_ICON_BUTTON =
+	"h-8 w-8 rounded-md text-muted-foreground hover:text-foreground";
 
 /** Blue while the bot drives, orange while the user does, neutral otherwise. */
 type StatusTone = "memon" | "you" | "idle";
@@ -138,8 +155,23 @@ const DockButton: React.FC<{
 	compact: boolean;
 	disabled?: boolean;
 	reason?: string;
+	/** The app is working on its own (pi code mid-turn), shown in the dot. */
+	busy?: boolean;
+	/** The app waits for the user's answer (an agent request in pi code). */
+	attention?: boolean;
 	onClick: () => void;
-}> = ({ app, label, open, active, compact, disabled, reason, onClick }) => {
+}> = ({
+	app,
+	label,
+	open,
+	active,
+	compact,
+	disabled,
+	reason,
+	busy,
+	attention,
+	onClick,
+}) => {
 	const Icon = MEMON_APP_ICONS[app];
 	const name = open ? `${label} · ${open.id}` : label;
 	return (
@@ -175,7 +207,14 @@ const DockButton: React.FC<{
 				<span
 					className={cn(
 						"absolute bottom-px h-[3px] rounded-full",
-						active ? "w-4 bg-blue-500" : "w-1 bg-muted-foreground/60",
+						active ? "w-4" : "w-1",
+						attention
+							? "w-4 bg-amber-500 motion-safe:animate-pulse"
+							: busy
+								? "bg-emerald-500 motion-safe:animate-pulse"
+								: active
+									? "bg-blue-500"
+									: "bg-muted-foreground/60",
 					)}
 				/>
 			) : null}
@@ -186,7 +225,7 @@ const DockButton: React.FC<{
 const windowTitle = (
 	snapshot: MemonMachineSnapshot,
 	window: MemonWindowState,
-	t: (key: string) => string,
+	t: (key: string, values?: Record<string, unknown>) => string,
 ): string => {
 	switch (window.app) {
 		case "browser": {
@@ -201,12 +240,12 @@ const windowTitle = (
 			return `${t("memonComputer.apps.editor")} · ${snapshot.editor.path?.split("/").pop() ?? ""}${snapshot.editor.saved ? "" : " •"}`;
 		case "viewer":
 			return `${t("memonComputer.apps.viewer")} · ${snapshot.viewer.path?.split("/").pop() ?? ""}`;
-		case "notes": {
-			const done = snapshot.notes.items.filter(
-				(item) => item.status === "done",
+		case "tasks": {
+			const open = snapshot.tasks.items.filter(
+				(task) => task.state !== "done" && task.state !== "dropped",
 			).length;
-			const file = snapshot.notes.path?.split("/").pop();
-			return `${t("memonComputer.apps.notes")}${file ? ` · ${file}` : ""} · ${done}/${snapshot.notes.items.length}`;
+			const file = snapshot.tasks.path?.split("/").pop();
+			return `${t("memonComputer.apps.tasks")}${file && file !== MEMON_TASKS_FILE_NAME ? ` · ${file}` : ""} · ${t("memonComputer.tasksOpen", { count: open })}`;
 		}
 		case "scheduler":
 			return `${t("memonComputer.apps.scheduler")} · ${snapshot.scheduler.agentName ?? ""}`;
@@ -222,6 +261,10 @@ const windowTitle = (
 			return snapshot.visual.path
 				? `${t("memonComputer.apps.visualize")} · ${snapshot.visual.title}`
 				: t("memonComputer.apps.visualize");
+		case "pi":
+			return snapshot.piCode?.cwd
+				? `${t("memonComputer.apps.pi")} · ${memonDisplayPath(snapshot.piCode.cwd, snapshot.home)}`
+				: t("memonComputer.apps.pi");
 	}
 };
 
@@ -271,6 +314,50 @@ export const MemonComputerPanel: React.FC<{
 	const compact = width > 0 && width < COMPACT_WIDTH;
 	const askMenu = useMemonAskMenu(snapshot, desktopRef);
 	useMemonExportDownloads(snapshot?.files.exported);
+	const { confirmDelete, dialog: deleteDialog } = useDeleteConfirm((paths) => {
+		if (snapshot) void send("files.delete", { key: snapshot.key, paths });
+	});
+	// Maximized: the computer takes the whole right panel, its tab bar and
+	// page header too; chat stays beside it.
+	const maximized = useShellLayoutStore((state) => state.rightPanelMaximized);
+	const narrowShell = useMediaQuery(NARROW_SHELL_QUERY);
+	// Full screen: the panel covers the page, and the page fills the screen
+	// when the browser allows it. The page goes full screen, not the panel, so
+	// menus and dialogs drawn at the end of the page still show.
+	const [fullscreen, setFullscreen] = React.useState(false);
+	// A computer that shuts down leaves full screen with it.
+	const running = Boolean(machineKey && snapshot);
+	React.useEffect(() => {
+		if (!running) setFullscreen(false);
+		// Its page gets its header back when the computer goes, or this panel.
+		if (!running) useShellLayoutStore.getState().setRightPanelMaximized(false);
+		return () => useShellLayoutStore.getState().setRightPanelMaximized(false);
+	}, [running]);
+	React.useEffect(() => {
+		if (!fullscreen) return;
+		// Esc, or the browser's own control, leaves full screen.
+		const onChange = () => {
+			if (!document.fullscreenElement) setFullscreen(false);
+		};
+		document.addEventListener("fullscreenchange", onChange);
+		return () => {
+			document.removeEventListener("fullscreenchange", onChange);
+			if (document.fullscreenElement) {
+				void document.exitFullscreen().catch(() => undefined);
+			}
+		};
+	}, [fullscreen]);
+	const toggleFullscreen = () => {
+		if (fullscreen) {
+			setFullscreen(false);
+			return;
+		}
+		setFullscreen(true);
+		// Asked from the click itself: browsers only allow it from a gesture.
+		if (document.fullscreenEnabled && !document.fullscreenElement) {
+			void document.documentElement.requestFullscreen().catch(() => undefined);
+		}
+	};
 
 	React.useEffect(() => {
 		if (machineKey) void pull(machineKey);
@@ -310,7 +397,10 @@ export const MemonComputerPanel: React.FC<{
 			available,
 			reason,
 		})),
-		...MEMON_BUILTIN_APPS.map((id) => ({ id, available: true })),
+		...(snapshot.builtInApps ?? MEMON_BUILTIN_APPS).map((id) => ({
+			id,
+			available: true,
+		})),
 	];
 
 	const renderBody = (window: MemonWindowState) => {
@@ -339,7 +429,7 @@ export const MemonComputerPanel: React.FC<{
 				);
 			case "viewer":
 				return <ViewerWindow viewer={snapshot.viewer} />;
-			case "notes":
+			case "tasks":
 			case "scheduler":
 			case "studio":
 			case "skills":
@@ -367,6 +457,15 @@ export const MemonComputerPanel: React.FC<{
 						machineKey={key}
 						terminal={snapshot.terminal}
 						home={snapshot.home}
+						send={send}
+					/>
+				);
+			case "pi":
+				return (
+					<PiCodeWindow
+						machineKey={key}
+						state={snapshot.piCode}
+						focused={window.id === snapshot.focusedWindowId}
 						send={send}
 					/>
 				);
@@ -412,7 +511,12 @@ export const MemonComputerPanel: React.FC<{
 	};
 
 	return (
-		<div className="flex h-full min-h-0 flex-col">
+		<div
+			className={cn(
+				"flex h-full min-h-0 flex-col",
+				fullscreen && "fixed inset-0 z-50 h-auto bg-background",
+			)}
+		>
 			<div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b bg-background px-3 py-2">
 				<div className="flex min-w-0 items-center gap-2.5">
 					<MemonLogo size={26} />
@@ -560,6 +664,55 @@ export const MemonComputerPanel: React.FC<{
 							{t("memonComputer.shutDown")}
 						</Button>
 					) : null}
+					<span aria-hidden="true" className="mx-0.5 h-5 w-px bg-border" />
+					<div className="flex items-center gap-0.5">
+						{!narrowShell && !fullscreen ? (
+							<Button
+								type="button"
+								variant="ghost"
+								size="icon"
+								className={HEADER_ICON_BUTTON}
+								aria-pressed={maximized}
+								aria-label={
+									maximized
+										? t("memonComputer.restorePanel")
+										: t("memonComputer.maximizePanel")
+								}
+								title={
+									maximized
+										? t("memonComputer.restorePanel")
+										: t("memonComputer.maximizePanel")
+								}
+								onClick={() =>
+									useShellLayoutStore
+										.getState()
+										.setRightPanelMaximized(!maximized)
+								}
+							>
+								{maximized ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
+							</Button>
+						) : null}
+						<Button
+							type="button"
+							variant="ghost"
+							size="icon"
+							className={HEADER_ICON_BUTTON}
+							aria-pressed={fullscreen}
+							aria-label={
+								fullscreen
+									? t("memonComputer.exitFullscreen")
+									: t("memonComputer.fullscreen")
+							}
+							title={
+								fullscreen
+									? t("memonComputer.exitFullscreen")
+									: t("memonComputer.fullscreen")
+							}
+							onClick={toggleFullscreen}
+						>
+							{fullscreen ? <Minimize size={15} /> : <Maximize size={15} />}
+						</Button>
+					</div>
 				</div>
 			</div>
 
@@ -589,8 +742,25 @@ export const MemonComputerPanel: React.FC<{
 				{/* biome-ignore lint/a11y/noStaticElementInteractions: right-click asks about what is under the pointer; every window's content stays reachable without it. */}
 				<div
 					ref={desktopRef}
-					onContextMenu={askMenu.onContextMenu}
-					className="relative min-h-0 flex-1 overflow-hidden bg-muted/30 bg-[image:radial-gradient(hsl(var(--foreground)/0.07)_1px,transparent_1px)] [background-size:22px_22px]"
+					onContextMenu={(event) => {
+						// Empty desktop: paste into the home it shows.
+						if (
+							event.target === event.currentTarget &&
+							snapshot.files.clipboard
+						) {
+							addContextMenuActions(event, [
+								pasteMenuAction(
+									t,
+									() => void send("files.paste", { key, to: snapshot.home }),
+								),
+							]);
+						}
+						askMenu.onContextMenu(event);
+					}}
+					// `isolate`: windows stack by an ever-growing z (one more per focus),
+					// so keep it inside the desktop. Left in the page's stacking, a
+					// window past z 50 covers the menus its own buttons open.
+					className="relative isolate min-h-0 flex-1 overflow-hidden bg-muted/30 bg-[image:radial-gradient(hsl(var(--foreground)/0.07)_1px,transparent_1px)] [background-size:22px_22px]"
 				>
 					{view === "text" ? (
 						<pre className="absolute inset-0 overflow-auto whitespace-pre-wrap break-words bg-background px-5 py-4 font-mono text-xs leading-relaxed text-foreground/90">
@@ -601,6 +771,21 @@ export const MemonComputerPanel: React.FC<{
 							<MemonDesktopIcons
 								entries={snapshot.desktop}
 								onOpen={(path) => void send("files.open", { key, path })}
+								menuActions={(entry) =>
+									fileMenuActions({
+										t,
+										paths: [entry.path],
+										folder: entry.type === "dir" ? entry.path : undefined,
+										canPaste: Boolean(snapshot.files.clipboard),
+										open: () =>
+											void send("files.open", { key, path: entry.path }),
+										toClipboard: (mode, paths) =>
+											void send("files.clipboard", { key, mode, paths }),
+										paste: (to) => void send("files.paste", { key, to }),
+										remove: confirmDelete,
+									})
+								}
+								onDelete={(path) => confirmDelete([path])}
 							/>
 							{visibleWindows.map((window) => (
 								<MemonWindowFrame
@@ -732,6 +917,10 @@ export const MemonComputerPanel: React.FC<{
 									compact={compact}
 									disabled={!app.available}
 									reason={app.reason}
+									busy={windowApp === "pi" && snapshot.piCode?.working}
+									attention={
+										windowApp === "pi" && Boolean(snapshot.piCode?.approval)
+									}
 									onClick={() => openApp(windowApp)}
 								/>
 							);
@@ -761,6 +950,7 @@ export const MemonComputerPanel: React.FC<{
 					label={t("memonComputer.you")}
 				/>
 			</div>
+			{deleteDialog}
 		</div>
 	);
 };

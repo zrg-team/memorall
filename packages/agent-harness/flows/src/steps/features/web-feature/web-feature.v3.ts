@@ -13,9 +13,10 @@ import {
 	type ToolName,
 } from "../../../graph/graph.base.js";
 import type { ChatCompletionMessageParam } from "../../../interfaces/engine/messages.js";
-import type { ActiveWebSessionInfo } from "../../../interfaces/services/web-browser.js";
 import type {} from "../../../interfaces/engine/tool.js";
 import type { AllServices } from "../../../interfaces/services/services.js";
+
+import { formatOpenWebSessions } from "./open-sessions.js";
 
 const STEP_NAME = "web-feature" as const;
 export const WEB_FEATURE_NAME = STEP_NAME;
@@ -28,6 +29,8 @@ export interface WebFeatureInput {
 export interface WebFeatureOutput {
 	tools?: GraphTool[];
 	messages?: ChatCompletionMessageParam[];
+	/** The open web sessions, attached past the cached prefix. */
+	reminders?: string[];
 }
 
 export interface WebFeatureConfig {}
@@ -48,7 +51,7 @@ Multiple web sessions can be open simultaneously. Use sessionId to target a spec
 ## SESSION RULES
 - Multiple sessions can be open at once. Always pass the correct sessionId when operating on an existing session.
 - Use web_open (with a url) to open a new session. Reuse an existing session by passing its sessionId without a url.
-- If OPEN WEB SESSIONS are shown below, prefer reusing those sessions over opening new ones for the same URL.
+- If an OPEN WEB SESSIONS reminder is attached, prefer reusing those sessions over opening new ones for the same URL.
 - Never invent or guess a sessionId. Use only sessionIds from OPEN WEB SESSIONS or returned by web_open.
 - Sessions auto-close after 10 minutes of inactivity — no need to close them manually.
 
@@ -104,28 +107,6 @@ Multiple web sessions can be open simultaneously. Use sessionId to target a spec
 
 export const WEB_FEATURE_SYSTEM_PROMPT = SYSTEM_PROMPT_INSTRUCTION.trim();
 
-/**
- * Lists the sessions the model may reuse. Deliberately no timestamps: this
- * block lands in the system prompt, and a `lastAccessedAt` that moved on every
- * tool call rewrote the prompt prefix each turn, so the provider's prompt
- * cache never matched the conversation again.
- */
-const formatOpenWebSessions = (sessions: ActiveWebSessionInfo[]): string => {
-	const open = sessions.filter((s) => s.isOpen);
-	if (open.length === 0) {
-		return "";
-	}
-	const entries = open.map((session, i) => {
-		return `Session ${i + 1}:
-  - sessionId: ${session.sessionId}
-  - requestedUrl: ${session.requestedUrl}
-  - currentUrl: ${session.currentUrl}
-  - title: ${session.title || "(no title)"}
-  - mode: ${session.mode || "iframe"}`;
-	});
-	return `## OPEN WEB SESSIONS\n${entries.join("\n\n")}`;
-};
-
 export const WEB_FEATURE_TOOLS: ToolName[] = [
 	"web_search",
 	"web_open",
@@ -152,16 +133,18 @@ const definition = defineStep<
 				await services?.webBrowser?.trimToLatestSession();
 			});
 			const tools = GraphBase.chat.addTool(input.tools, ...WEB_FEATURE_TOOLS);
-			const allSessions =
-				(await services?.webBrowser?.getAllSessionsInfo()) ?? [];
 			const messages = GraphBase.chat.systemMessage(
 				input.messages,
-				`${WEB_FEATURE_SYSTEM_PROMPT}\n\n${formatOpenWebSessions(allSessions)}`,
+				WEB_FEATURE_SYSTEM_PROMPT,
+			);
+			const sessions = formatOpenWebSessions(
+				(await services?.webBrowser?.getAllSessionsInfo()) ?? [],
 			);
 			return {
 				output: {
 					tools,
 					messages,
+					...(sessions ? { reminders: [sessions] } : {}),
 				},
 			};
 		} catch (error) {
@@ -217,6 +200,12 @@ stepRegistry.register(STEP_NAME, createWebFeatureStep, {
 				name: "tools",
 				type: "Tool[]",
 				description: "Tools extended with web toolset.",
+			},
+			{
+				name: "reminders",
+				type: "string[]",
+				description:
+					"The open web sessions, attached past the end of the cached prefix.",
 			},
 		],
 	},

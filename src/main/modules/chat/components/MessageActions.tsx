@@ -23,6 +23,7 @@ import {
 	Network,
 	PanelsTopLeft,
 	PenLine,
+	Pi,
 	Plug,
 	ScrollText,
 	Search,
@@ -124,13 +125,14 @@ const EXACT_ICON_MAPPINGS: Record<string, LucideIcon> = {
 	memon_act: MousePointerClick,
 	memon_run: SquareTerminal,
 	memon_window: PanelsTopLeft,
-	memon_notes: ListChecks,
+	memon_tasks: ListChecks,
 	memon_visualize: LayoutDashboard,
 	memon_schedule: CalendarClock,
 	memon_memory: Brain,
 	memon_studio: Sparkles,
 	memon_skills: WandSparkles,
 	memon_connections: Plug,
+	memon_code: Pi,
 };
 
 /**
@@ -335,13 +337,14 @@ const ACTION_RENDERERS: Record<string, ActionRenderer> = {
 	memon_act: memonToolRenderer,
 	memon_run: memonToolRenderer,
 	memon_window: memonToolRenderer,
-	memon_notes: memonToolRenderer,
+	memon_tasks: memonToolRenderer,
 	memon_visualize: memonToolRenderer,
 	memon_schedule: memonToolRenderer,
 	memon_memory: memonToolRenderer,
 	memon_studio: memonToolRenderer,
 	memon_skills: memonToolRenderer,
 	memon_connections: memonToolRenderer,
+	memon_code: memonToolRenderer,
 };
 
 interface ActionContentProps {

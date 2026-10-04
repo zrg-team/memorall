@@ -127,7 +127,7 @@ export const runTerminalAction = async (
 				waitMs: waitSeconds * 1000,
 				terminalId: tab,
 			});
-			const ran = `Ran \`${command}\` (exit ${outcome.exitCode ?? "?"})`;
+			const ran = `Ran \`${command}\` in Terminal tab ${terminal.activeTabId} (exit ${outcome.exitCode ?? "?"})`;
 			const running = terminal.running;
 			if (outcome.alongside && running) {
 				return `${ran} next to \`${running.command}\` (Terminal tab ${running.tabId}), which keeps running.`;

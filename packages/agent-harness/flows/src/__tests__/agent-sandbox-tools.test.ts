@@ -17,6 +17,8 @@ import {
 import {
 	BROWSER_SANDBOX_FEATURE_SYSTEM_PROMPT,
 	BROWSER_SANDBOX_FEATURE_TOOLS,
+	buildBrowserSandboxPrompt,
+	readSandboxPython,
 } from "../steps/features/nodejs-sandbox-feature/index.js";
 
 const service = (): IAgentSandboxService => ({
@@ -377,6 +379,44 @@ describe("sandbox tool profiles", () => {
 		expect(BROWSER_SANDBOX_FEATURE_SYSTEM_PROMPT).toContain("sandbox_run");
 		expect(BROWSER_SANDBOX_FEATURE_SYSTEM_PROMPT).not.toContain(
 			"container_run_code",
+		);
+	});
+
+	it("tells the agent about Python only when the sandbox reports it", () => {
+		// No report: nothing said about Python.
+		expect(BROWSER_SANDBOX_FEATURE_SYSTEM_PROMPT).not.toContain("Python");
+		expect(readSandboxPython({ runtime: "almostnode" })).toBeUndefined();
+
+		const python = readSandboxPython({
+			python: { runtime: "pyodide", packages: ["numpy", "matplotlib", 3] },
+		});
+		expect(python).toEqual({ packages: ["numpy", "matplotlib"] });
+		const prompt = buildBrowserSandboxPrompt(SANDBOX_WEB_APP_TOOLS, python);
+		expect(prompt).toContain(
+			"the standard library plus numpy, matplotlib; importing them loads them, and pip cannot install anything else",
+		);
+		expect(
+			buildBrowserSandboxPrompt(SANDBOX_WEB_APP_TOOLS, { packages: [] }),
+		).toContain("Pyodide in the browser with the standard library only");
+	});
+
+	it("describes the packages with the host's summary and passes on its tips", () => {
+		const python = readSandboxPython({
+			python: {
+				packages: ["matplotlib", "python-calamine"],
+				summary: "matplotlib and python_calamine (Excel)",
+				notes: ['Save charts with plt.savefig("chart.png").', "", 7],
+			},
+		});
+		expect(python?.notes).toEqual([
+			'Save charts with plt.savefig("chart.png").',
+		]);
+		const prompt = buildBrowserSandboxPrompt(SANDBOX_WEB_APP_TOOLS, python);
+		expect(prompt).toContain(
+			"the standard library plus matplotlib and python_calamine (Excel);",
+		);
+		expect(prompt).toContain(
+			'\n- Save charts with plt.savefig("chart.png").\n',
 		);
 	});
 });

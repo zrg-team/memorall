@@ -88,6 +88,8 @@ interface TerminalTab {
 	dropped: number;
 	/** Its screen, new after each clear. */
 	screen: number;
+	/** The commands it ran, oldest first: the latest few. */
+	recent: string[];
 }
 
 /** Screens are numbered from the time, so a restarted Terminal's are new. */
@@ -104,6 +106,7 @@ const newTab = (id: string, cwd: string): TerminalTab => ({
 	lastExitCode: null,
 	dropped: 0,
 	screen: nextScreen(),
+	recent: [],
 });
 
 interface RunningCommand {
@@ -119,6 +122,8 @@ interface RunningCommand {
 
 const MAX_LINES = 400;
 const MAX_TABS = 6;
+/** Commands each tab lists as its own (the history keeps them all). */
+const TAB_RECENT_COMMANDS = 5;
 /** The running tab's last lines, shown while another tab is in front. */
 const RUNNING_TAB_TAIL_LINES = 8;
 /** How long a new command may take before its first output is shown. */
@@ -289,15 +294,18 @@ export class MemonTerminal {
 		tab.screen = nextScreen();
 	}
 
-	/** Opens a tab in the current tab's directory, in front; returns its id. */
-	openTab(): string {
+	/**
+	 * Opens a tab, in front, in `cwd` (default: the current tab's directory);
+	 * returns its id.
+	 */
+	openTab(cwd?: string): string {
 		this.host.requireApp();
 		if (this.tabs.length >= MAX_TABS) {
 			throw new Error(`The Terminal has ${MAX_TABS} tabs; close one first.`);
 		}
 		this.tabSeq += 1;
 		const id = String(this.tabSeq);
-		this.tabs.push(newTab(id, this.tab().cwd));
+		this.tabs.push(newTab(id, cwd ?? this.tab().cwd));
 		this.activeId = id;
 		this.host.showWindow();
 		this.host.changed();
@@ -377,6 +385,7 @@ export class MemonTerminal {
 		const cwd = tab.cwd;
 		this.remember(trimmed);
 		if (builtin?.[1] === "clear") return this.clearScreen(tab);
+		tab.recent = [...tab.recent, trimmed].slice(-TAB_RECENT_COMMANDS);
 		this.append(tab, [{ kind: "command", text: trimmed, cwd }]);
 		if (builtin) return this.showHistory(tab, builtin[2] === "-c");
 		if (bareCd) return this.changeDirectory(tab, bareCd[1]?.trim());
@@ -384,6 +393,41 @@ export class MemonTerminal {
 		const line = expandHome(trimmed, this.host.home());
 		if (alongside) return this.runAlongside(tab, trimmed, line, cwd);
 		return this.startCommand(tab, trimmed, line, cwd, options.waitMs ?? 10_000);
+	}
+
+	/**
+	 * Runs a launcher's command (a `.terminal` file) in a tab of its own, in
+	 * `cwd` (`~` is the home; the home by default): the tab in front when
+	 * nothing ran in it yet, else a new one. Returns the tab.
+	 */
+	async launch(
+		command: string,
+		options: { cwd?: string; byUser?: boolean; waitMs?: number } = {},
+	): Promise<{ tabId: string; outcome: MemonCommandOutcome }> {
+		this.host.requireApp();
+		const trimmed = command.trim();
+		if (!trimmed) throw new Error("There is no command to run.");
+		// Refused before a tab opens, so a refused launch leaves nothing behind.
+		if (this.runningCommand && !runsAlongside(trimmed)) {
+			throw this.busyError();
+		}
+		const cwd = this.resolveDir(this.host.home(), options.cwd);
+		if (!(await this.ports.files.isDirectory(cwd).catch(() => false))) {
+			throw new Error(`${options.cwd ?? cwd} is not a folder.`);
+		}
+		const front = this.tab();
+		const fresh =
+			!front.recent.length &&
+			!front.lines.length &&
+			this.runningCommand?.tabId !== front.id;
+		const tabId = fresh ? front.id : this.openTab(cwd);
+		this.tab(tabId).cwd = cwd;
+		const outcome = await this.runCommand(trimmed, {
+			byUser: options.byUser,
+			terminalId: tabId,
+			waitMs: options.waitMs ?? 0,
+		});
+		return { tabId, outcome };
 	}
 
 	private clearScreen(tab: TerminalTab): MemonCommandOutcome {
@@ -439,10 +483,10 @@ export class MemonTerminal {
 		return { running: false, exitCode: 0, output: [] };
 	}
 
-	private busyError(tab: TerminalTab): Error {
+	private busyError(tab?: TerminalTab): Error {
 		const running = this.runningCommand as RunningCommand;
 		const where =
-			running.tabId === tab.id
+			running.tabId === tab?.id
 				? "in this Terminal tab"
 				: `in Terminal tab ${running.tabId}`;
 		return new Error(
@@ -778,7 +822,7 @@ export class MemonTerminal {
 		return this.servers;
 	}
 
-	/** Notes ports a running command prints, like http://localhost:3000. */
+	/** Records ports a running command prints, like http://localhost:3000. */
 	private notePorts(lines: readonly MemonTerminalLine[]): void {
 		let added = false;
 		for (const line of lines) {
@@ -840,6 +884,10 @@ export class MemonTerminal {
 				id: tab.id,
 				cwd: tab.cwd,
 				running: tab.id === running?.tabId,
+				command:
+					tab.id === running?.tabId ? running.command : tab.recent.at(-1),
+				lastExitCode: tab.id === running?.tabId ? null : tab.lastExitCode,
+				recent: [...tab.recent],
 			})),
 			activeTabId: front.id,
 			runningTabId: running?.tabId ?? null,

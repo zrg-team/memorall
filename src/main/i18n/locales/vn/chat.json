@@ -23,7 +23,7 @@
 		"showAdvancedOptions": "Hoặc cài đặt với API key riêng / mô hình cục bộ"
 	},
 	"input": {
-		"runningElsewhere": "Đang trả lời trong “{{title}}”. Mỗi lần chỉ chạy một cuộc trò chuyện.",
+		"runningElsewhere": "Đang trả lời trong “{{title}}”. Cuộc trò chuyện này phải chờ: mô hình cục bộ hoặc tác nhân có máy tính chỉ chạy một cuộc trò chuyện mỗi lần.",
 		"openRunningChat": "Mở",
 		"waitForRun": "Đang chờ câu trả lời ở cuộc trò chuyện kia…",
 		"placeholder": "Nhập tin nhắn của bạn...",
@@ -33,7 +33,8 @@
 		"clearButton": "Mới",
 		"attachImage": "Đính kèm tệp",
 		"attachFile": "Tải lên từ máy tính",
-		"attachDocument": "Chọn từ tài liệu"
+		"attachDocument": "Chọn từ tài liệu",
+		"duringRun": "Nhắn thêm: tác nhân sẽ đọc ở bước tiếp theo"
 	},
 	"sidebar": {
 		"replying": "Đang trả lời",
@@ -151,12 +152,13 @@
 		"memon_act": "Dùng máy tính",
 		"memon_run": "Chạy lệnh",
 		"memon_window": "Sắp xếp cửa sổ",
-		"memon_notes": "Cập nhật ghi chú",
+		"memon_tasks": "Cập nhật công việc",
 		"memon_schedule": "Quản lý lịch chạy",
 		"memon_memory": "Cập nhật trí nhớ",
 		"memon_studio": "Dùng Studio",
 		"memon_skills": "Quản lý kỹ năng",
 		"memon_connections": "Quản lý kết nối",
+		"memon_code": "Dùng pi code",
 		"memon_visualize": "Trực quan hóa"
 	},
 	"messages": {
@@ -186,6 +188,9 @@
 		"cacheRestarted": "Không dùng lại được gì từ yêu cầu trước.",
 		"cachePartial": "Dùng lại cache của một yêu cầu cũ hơn thay vì yêu cầu ngay trước — có thể do được xử lý bởi nhà cung cấp khác.",
 		"cacheProviderSwitch": "Được xử lý bởi {{to}} thay vì {{from}} — mỗi nhà cung cấp có cache riêng.",
+		"cacheTurnRestarted": "Không dùng lại được gì từ tin nhắn trước: phần đầu của yêu cầu đã thay đổi nên toàn bộ cuộc trò chuyện phải đọc lại.",
+		"cacheTurnExpired": "Không dùng lại được gì từ tin nhắn trước ({{minutes}} phút trước): nhà cung cấp có thể đã xóa cache, hoặc phần đầu của yêu cầu đã thay đổi.",
+		"cacheTurnPartial": "Chỉ dùng lại được một phần của tin nhắn trước: cuộc trò chuyện đã thay đổi ở giữa (ví dụ lịch sử bị rút gọn), hoặc một nhà cung cấp khác đã xử lý.",
 		"providerColumn": "Nhà cung cấp",
 		"thinking": "Đang suy nghĩ...",
 		"thought": "Suy nghĩ",
@@ -197,7 +202,18 @@
 		"coAgentSessionStart": "Bắt đầu phiên co-agent",
 		"coAgentSessionEnd": "Kết thúc phiên co-agent",
 		"coAgentOnPage": "tại {{page}}",
-		"coAgentMovedTo": "chuyển sang {{page}}"
+		"coAgentMovedTo": "chuyển sang {{page}}",
+		"compaction": {
+			"title": "Đã rút gọn ngữ cảnh",
+			"tokens": "{{before}} → {{after}} token",
+			"shortened_one": "{{count}} kết quả công cụ được rút gọn",
+			"shortened_other": "{{count}} kết quả công cụ được rút gọn",
+			"removed_one": "{{count}} tin nhắn cũ được tạm bỏ",
+			"removed_other": "{{count}} tin nhắn cũ được tạm bỏ",
+			"thresholdHint": "Cuộc trò chuyện sắp đầy cửa sổ {{window}} token của mô hình, nên các kết quả công cụ cũ được rút gọn và các bước cũ được tạm bỏ trước yêu cầu tiếp theo. Cuộc trò chuyện đã lưu không thay đổi.",
+			"budgetHint": "Nhà cung cấp từ chối yêu cầu vì quá lớn, nên cuộc trò chuyện được rút gọn cho vừa {{budget}} token. Cuộc trò chuyện đã lưu không thay đổi."
+		},
+		"readDuringRun": "Tác nhân đã đọc ở bước tiếp theo"
 	},
 	"execution": {
 		"default": "Đang thực thi {{node}}",
@@ -425,7 +441,9 @@
 		"constrainChatWidth": "Thu gọn khung chat",
 		"startCoAgent": "Cho tác nhân xem và thao tác trên trang web",
 		"openComputer": "Mở máy tính của tác nhân",
-		"stopCoAgent": "Tắt co-agent"
+		"stopCoAgent": "Tắt co-agent",
+		"sendToRun": "Gửi ngay: tác nhân sẽ đọc ở bước tiếp theo",
+		"queueMessage": "Xếp hàng: gửi khi câu trả lời này xong"
 	},
 	"agentSettings": {
 		"title": "Cài đặt Tác nhân",
@@ -485,12 +503,13 @@
 			"memon_act": "Nhấp, gõ, cuộn hoặc lưu trên máy tính MemonOS Bot",
 			"memon_run": "Chạy lệnh shell trong terminal của MemonOS Bot",
 			"memon_window": "Chọn, thu nhỏ, phóng to hoặc đóng cửa sổ MemonOS Bot",
-			"memon_notes": "Lên kế hoạch và theo dõi công việc trong ứng dụng Ghi chú của MemonOS Bot",
+			"memon_tasks": "Lên kế hoạch và theo dõi công việc trong ứng dụng Công việc của MemonOS Bot, được giữ lại giữa các cuộc trò chuyện",
 			"memon_schedule": "Xem và quản lý các lời nhắc theo lịch của tác nhân trong Bộ lập lịch MemonOS Bot",
 			"memon_memory": "Ghi nhớ giữa các cuộc trò chuyện trong Memory.md và cập nhật Bot.md",
 			"memon_studio": "Chạy các studio của người dùng trên máy tính: quyết định, giọng nói, chép lời, hình ảnh, công cụ ảnh và văn bản, âm thanh",
 			"memon_skills": "Xem và quản lý các kỹ năng agent này dùng",
 			"memon_connections": "Xem các ứng dụng đã kết nối và những ứng dụng agent này dùng",
+			"memon_code": "Giao việc lập trình cho pi code, tác tử lập trình trên máy tính, sau khi người dùng xác nhận",
 			"memon_visualize": "Hiển thị hình trực quan viết bằng OpenUI trong ứng dụng Trực quan hóa của MemonOS Bot và lưu lại"
 		},
 		"cancel": "Hủy",
@@ -512,18 +531,19 @@
 		"appOf": "Ứng dụng trên {{name}}",
 		"appOfHint": "Khi {{name}} bật, tính năng này chạy như một ứng dụng trên máy tính của nó thay vì thêm công cụ riêng.",
 		"memon": {
-			"appsHint": "Ứng dụng đi theo tính năng: Trình duyệt web cho Trình duyệt, Hệ thống tệp cho Tệp, Trình soạn thảo và Trình xem, Browser Sandbox cho Terminal, Lập kế hoạch cho Ghi chú, và Phản hồi trực quan cho Trực quan hóa. Bật tắt chúng trong Tính năng.",
+			"appsHint": "Ứng dụng đi theo tính năng: Trình duyệt web cho Trình duyệt, Hệ thống tệp cho Tệp, Trình soạn thảo và Trình xem, Browser Sandbox cho Terminal, Lập kế hoạch cho Công việc, và Phản hồi trực quan cho Trực quan hóa. Bật tắt chúng trong Tính năng.",
 			"appOn": "Bật",
 			"appOff": "Tắt",
 			"sectionHint": "Khi bật, Trình duyệt web, Hệ thống tệp, Browser Sandbox và Lập kế hoạch bên dưới cũng được bật thành ứng dụng trên máy tính.",
 			"settings": "Cài đặt",
 			"builtIn": "Có sẵn",
-			"builtInHint": "Máy tính MemonOS Bot nào cũng có: lịch chạy, kỹ năng, kết nối của agent và các studio của bạn.",
+			"builtInHint": "Máy tính MemonOS Bot nào cũng có: lịch chạy, kỹ năng, kết nối của agent, các studio của bạn, và pi code nếu bạn không tắt nó.",
 			"builtInApps": {
 				"scheduler": "Lập lịch",
 				"studio": "Studio",
 				"skills": "Kỹ năng",
-				"connections": "Kết nối"
+				"connections": "Kết nối",
+				"pi": "pi code"
 			},
 			"appsShort": "Ứng dụng",
 			"appsLabel": "Ứng dụng trên màn hình",
@@ -540,9 +560,9 @@
 					"name": "Terminal",
 					"description": "Shell của Browser Sandbox với node, npm, git và py."
 				},
-				"notes": {
-					"name": "Ghi chú",
-					"description": "Lập kế hoạch dưới dạng danh sách bạn theo dõi: agent lập kế hoạch, đánh dấu từng bước khi làm và làm theo chỉnh sửa của bạn."
+				"tasks": {
+					"name": "Công việc",
+					"description": "Lập kế hoạch dưới dạng công việc chung: agent thêm công việc kèm danh sách kiểm tra và làm lần lượt; bạn thêm, duyệt và chỉnh sửa chúng. Công việc được giữ lại giữa các cuộc trò chuyện."
 				},
 				"visualize": {
 					"name": "Trực quan hóa",
@@ -560,7 +580,9 @@
 				"deletes": "Xóa tệp"
 			},
 			"keepDirectTools": "Giữ lại cả công cụ trực tiếp",
-			"keepDirectToolsHint": "Giữ web_*, fs_* và sandbox_* bên cạnh máy tính, cho các thao tác tệp hàng loạt."
+			"keepDirectToolsHint": "Giữ web_*, fs_* và sandbox_* bên cạnh máy tính, cho các thao tác tệp hàng loạt.",
+			"piCode": "pi code",
+			"piCodeHint": "Tác tử lập trình pi trên màn hình. MemonOS Bot có thể giao việc lập trình cho nó và sẽ hỏi bạn trong cửa sổ pi code trước. Khi tắt, pi code không có trên màn hình và không được dùng."
 		}
 	},
 	"openui": {
@@ -615,5 +637,24 @@
 		"noSummary": "Thao tác trên máy tính",
 		"showOnComputer": "Xem trên máy tính",
 		"screenReturned": "Màn hình gửi cho mô hình"
+	},
+	"cost": {
+		"label": "Chi phí của cuộc trò chuyện",
+		"total": "Cuộc trò chuyện này đến nay: {{cost}}",
+		"noPrice": "Cuộc trò chuyện này đến nay (nhà cung cấp không báo giá)",
+		"tokens": "Đầu vào {{input}} token ({{cached}}% từ cache) · đầu ra {{output}}",
+		"requests": "{{requests}} yêu cầu tới mô hình qua {{replies}} câu trả lời",
+		"tokensOnly": "{{tokens}} token"
+	},
+	"queue": {
+		"label": "Tin nhắn đang chờ gửi",
+		"pending": "Bước tiếp theo",
+		"queued": "Đang xếp hàng",
+		"paused": "Đang chờ bạn",
+		"sendNow": "Gửi ngay",
+		"edit": "Sửa",
+		"remove": "Xóa",
+		"attachments_one": "{{count}} tệp đính kèm",
+		"attachments_other": "{{count}} tệp đính kèm"
 	}
 }

@@ -1,6 +1,7 @@
 import { Search } from "lucide-react";
 import type React from "react";
 import { useMemo, useState } from "react";
+import type { ConversationCost } from "@/main/modules/chat/utils/conversation-cost-format";
 import type { Conversation } from "@/services/database/types";
 import { ConversationRow } from "../ChatSidePanel/ConversationRow";
 import {
@@ -22,9 +23,11 @@ export interface ConversationListLabels {
 
 interface ConversationListProps {
 	conversations: readonly Conversation[];
+	/** What each chat has cost so far, by id; chats without one show none. */
+	costs?: Readonly<Record<string, ConversationCost>>;
 	currentId: string | null | undefined;
-	/** The conversation a reply is being written in, if any. */
-	runningId?: string | null;
+	/** The conversations a reply is being written in. */
+	runningIds?: ReadonlySet<string>;
 	labels: ConversationListLabels;
 	createIcon: React.ReactNode;
 	onCreate: () => Promise<void> | void;
@@ -43,8 +46,9 @@ interface ConversationListProps {
  */
 export const ConversationList: React.FC<ConversationListProps> = ({
 	conversations,
+	costs,
 	currentId,
-	runningId = null,
+	runningIds,
 	labels,
 	createIcon,
 	onCreate,
@@ -120,8 +124,9 @@ export const ConversationList: React.FC<ConversationListProps> = ({
 										<ConversationRow
 											key={conversation.id}
 											conversation={conversation}
+											cost={costs?.[conversation.id]}
 											isActive={conversation.id === currentId}
-											isRunning={conversation.id === runningId}
+											isRunning={runningIds?.has(conversation.id) ?? false}
 											isPinned={isConversationPinned(conversation)}
 											onSelect={() => onSelect(conversation)}
 											onRename={(title) => onRename(conversation, title)}

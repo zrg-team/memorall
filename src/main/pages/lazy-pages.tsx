@@ -52,6 +52,9 @@ export const ConnectionsPage = lazy(() =>
 export const SkillsPage = lazy(() =>
 	import("./SkillsPage").then((m) => ({ default: m.SkillsPage })),
 );
+export const UsagePage = lazy(() =>
+	import("./UsagePage").then((m) => ({ default: m.UsagePage })),
+);
 export const FlowBuilderPage = lazy(() =>
 	import("./FlowBuilderPage/FlowBuilderPage").then((m) => ({
 		default: m.FlowBuilderPage,

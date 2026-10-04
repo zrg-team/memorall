@@ -1,11 +1,12 @@
 /** How a text file can be shown rendered to the user. */
-export type MemonTextPreviewKind = "markdown" | "html" | "csv" | "tsv";
+export type MemonTextPreviewKind = "markdown" | "html" | "svg" | "csv" | "tsv";
 
 const PREVIEW_KINDS: Record<string, MemonTextPreviewKind> = {
 	md: "markdown",
 	markdown: "markdown",
 	html: "html",
 	htm: "html",
+	svg: "svg",
 	csv: "csv",
 	tsv: "tsv",
 };

@@ -1,5 +1,6 @@
 import type {
 	AssistantExecutionPart,
+	ChatCompaction,
 	ComplexContentPartTool,
 	MessageParts,
 	ToolExecutionRecord,
@@ -23,6 +24,20 @@ const parseToolContent = (content: unknown): Record<string, unknown> | null => {
 		return null;
 	}
 };
+
+/** A message's text, whether it is a string or a list of content parts. */
+const messageText = (content: unknown): string =>
+	typeof content === "string"
+		? content
+		: Array.isArray(content)
+			? content
+					.map((part) =>
+						part && typeof part === "object" && "text" in part
+							? String((part as { text: unknown }).text ?? "")
+							: "",
+					)
+					.join("")
+			: "";
 
 const stringifyToolContent = (content: unknown): string => {
 	if (typeof content === "string") return content;
@@ -171,11 +186,14 @@ export const buildAssistantContentParts = ({
 	executions,
 	executeState,
 	toolExecutions,
+	compactions,
 }: {
 	parts: MessageParts | null | undefined;
 	executions?: AssistantExecutionPart[];
 	executeState?: ExecuteState;
 	toolExecutions?: ToolExecutionRecord[];
+	/** Where the conversation was compacted: shown before the part that came next. */
+	compactions?: ChatCompaction[];
 }): AssistantContentPart[] => {
 	const hasExecutionRecords = Boolean(toolExecutions?.length);
 	const toolCallsById = new Map<string, ChatCompletionMessageToolCall>();
@@ -234,9 +252,30 @@ export const buildAssistantContentParts = ({
 		blockHasTools = false;
 	};
 
-	for (const part of parts ?? []) {
+	const pendingCompactions = [...(compactions ?? [])].sort(
+		(a, b) => a.atPart - b.atPart,
+	);
+	const placeCompactionsBefore = (partIndex: number) => {
+		while (pendingCompactions[0] && pendingCompactions[0].atPart <= partIndex) {
+			const compaction = pendingCompactions.shift() as ChatCompaction;
+			contentParts.push({ type: "compaction", compaction });
+		}
+	};
+
+	for (const [partIndex, part] of (parts ?? []).entries()) {
+		if (part.role === "user") {
+			// Sent while the agent worked: between the tools before it and the
+			// request that read it.
+			closeBlock();
+			placeCompactionsBefore(partIndex);
+			const text = messageText(part.content);
+			if (text.trim()) contentParts.push({ type: "user-message", text });
+			continue;
+		}
 		if (part.role === "assistant") {
 			closeBlock();
+			// Compacted before this request: after the tools that came before it.
+			placeCompactionsBefore(partIndex);
 			// What the model thought comes before what it wrote.
 			if (part.reasoning?.trim()) {
 				contentParts.push({ type: "reasoning", text: part.reasoning });
@@ -249,6 +288,7 @@ export const buildAssistantContentParts = ({
 		}
 
 		if (part.role !== "tool") continue;
+		placeCompactionsBefore(partIndex);
 		blockHasTools = true;
 		const record = recordsById.get(part.tool_call_id);
 		if (record) {
@@ -266,6 +306,8 @@ export const buildAssistantContentParts = ({
 		);
 	}
 	closeBlock();
+	// Compacted before a request that has written nothing yet.
+	placeCompactionsBefore(Number.POSITIVE_INFINITY);
 
 	// Records no part accounts for: a running call whose id the stream never
 	// matched (the provider sent none, so the two sides minted different ones),

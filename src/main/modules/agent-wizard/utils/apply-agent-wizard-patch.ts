@@ -22,6 +22,7 @@ import {
 	AGENT_WIZARD_CURSOR_KEYS,
 	queueAgentWizardCursorMoveTo,
 } from "./agent-wizard-cursor";
+import { AGENT_WIZARD_DEFAULT_FEATURES } from "../templates/agent-wizard-templates";
 import { AGENT_WIZARD_TOOL_NAMES } from "./build-agent-wizard-prompt";
 
 const MAX_PROMPT_LENGTH = 24000;
@@ -373,12 +374,19 @@ export const applyAgentWizardPatch = (
 	if (contextPrompt !== undefined) next.contextPrompt = contextPrompt;
 
 	if ("enabledFeatureNames" in patch) {
-		next.enabledFeatureNames = filterKnown(
+		const listed = filterKnown(
 			patch.enabledFeatureNames,
 			catalog.featureNames,
 			rejected,
 			"feature",
 		);
+		// A list written out in full keeps the defaults it left out (a model
+		// lists what it means to add); only disable_feature turns one off.
+		const keptDefaults = AGENT_WIZARD_DEFAULT_FEATURES.filter(
+			(name) =>
+				draft.enabledFeatureNames.includes(name) && !listed.includes(name),
+		);
+		next.enabledFeatureNames = [...listed, ...keptDefaults];
 	}
 	if ("enabledToolNames" in patch) {
 		next.enabledToolNames = filterKnown(

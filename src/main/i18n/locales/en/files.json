@@ -102,6 +102,14 @@
 		"containerNotReady": "Container not ready",
 		"loadError": "Failed to load Excel file"
 	},
+	"presentationViewer": {
+		"opening": "Opening presentation…",
+		"empty": "This presentation has no slides.",
+		"slide": "Slide {{number}}",
+		"hidden": "Hidden",
+		"chart": "Chart",
+		"textOnly": "Older .ppt files show each slide's text only. Download the file to see its full design."
+	},
 	"pdfSelector": {
 		"title": "Convert PDF Pages to Remembered Content",
 		"description": "Select the pages you want to convert and save to your remembered content library",

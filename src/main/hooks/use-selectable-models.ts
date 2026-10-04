@@ -149,6 +149,7 @@ export const toSelectable = (
 		loaded: model.loaded === true,
 		categories,
 		...(model.reasoning ? { reasoning: model.reasoning } : {}),
+		...(model.pricing ? { pricing: model.pricing } : {}),
 		...(isLocal ? localModelSize(model, provider) : {}),
 	};
 };

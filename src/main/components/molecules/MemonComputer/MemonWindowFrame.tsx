@@ -8,6 +8,7 @@ import {
 	Maximize2,
 	MessageSquarePlus,
 	Minus,
+	Pi,
 	Plug,
 	Sparkles,
 	SquareTerminal,
@@ -31,12 +32,13 @@ export const MEMON_APP_ICONS: Record<
 	editor: FileText,
 	viewer: Eye,
 	terminal: SquareTerminal,
-	notes: ListChecks,
+	tasks: ListChecks,
 	scheduler: CalendarClock,
 	studio: Sparkles,
 	skills: WandSparkles,
 	connections: Plug,
 	visualize: LayoutDashboard,
+	pi: Pi,
 };
 
 /** Each app's tile color, shared by window title bars, the dock and the launcher. */
@@ -46,12 +48,13 @@ export const MEMON_APP_TINTS: Record<MemonWindowApp, string> = {
 	editor: "bg-slate-500/15 text-slate-700 dark:text-slate-300",
 	viewer: "bg-slate-500/15 text-slate-700 dark:text-slate-300",
 	terminal: "bg-zinc-500/20 text-zinc-800 dark:text-zinc-200",
-	notes: "bg-yellow-500/15 text-yellow-700 dark:text-yellow-300",
+	tasks: "bg-yellow-500/15 text-yellow-700 dark:text-yellow-300",
 	scheduler: "bg-violet-500/15 text-violet-700 dark:text-violet-300",
 	studio: "bg-pink-500/15 text-pink-700 dark:text-pink-300",
 	skills: "bg-fuchsia-500/15 text-fuchsia-700 dark:text-fuchsia-300",
 	connections: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300",
 	visualize: "bg-indigo-500/15 text-indigo-700 dark:text-indigo-300",
+	pi: "bg-lime-500/15 text-lime-700 dark:text-lime-300",
 };
 
 const LOGO_URL = platform.assets.url("logo.png");

@@ -4,7 +4,7 @@ import type {
 } from "@memorall/agent-harness-flows/interfaces/engine/tool";
 import { toolRegistry } from "@memorall/agent-harness-flows/registries/tool-registry";
 import z from "zod";
-import { MEMON_RUN_TOOL } from "@/services/memon/constants";
+import { MEMON_RUN_TOOL, memonDisplayPath } from "@/services/memon/constants";
 import {
 	runTerminalAction,
 	terminalActionLabel,
@@ -52,6 +52,12 @@ const schema = z
 			.describe(
 				"How long to wait for the command to finish before returning (default 10). With nothing else set, waits for the running command, or just waits when nothing runs.",
 			),
+		saveAs: z
+			.string()
+			.optional()
+			.describe(
+				'Keep `command` as a launcher instead of running it, e.g. "Start Landing Page" saves ~/Start Landing Page.terminal on the desktop; opening it runs the command in a new Terminal tab, in `cwd` (default: the tab\'s directory). A path saves it there.',
+			),
 	})
 	.describe(
 		"Run, wait for, type into, or stop a command in the computer's Terminal, and open, switch or close its tabs.",
@@ -68,12 +74,27 @@ export const createMemonRunTool: ToolFactory<Input> = (): Tool<Input> => ({
 		runMemonTool(
 			MEMON_RUN_TOOL,
 			context,
-			terminalActionLabel(input),
+			input.saveAs !== undefined
+				? `Saving ${input.saveAs}`
+				: terminalActionLabel(input),
 			(machine) => ({
 				windowId: machine.findWindow("terminal")?.id,
 				ref: "t1",
 			}),
-			(machine) => runTerminalAction(machine.terminal, input),
+			async (machine) => {
+				if (input.saveAs !== undefined) {
+					if (!input.command?.trim()) {
+						throw new Error("saveAs needs the command to keep.");
+					}
+					const path = await machine.saveTerminalLauncher(
+						input.saveAs,
+						input.command,
+						input.cwd,
+					);
+					return `Saved ${memonDisplayPath(path, machine.home)}: opening it (a click on the desktop, or memon_open { app: "files", path }) runs \`${input.command.trim()}\` in a new Terminal tab.`;
+				}
+				return runTerminalAction(machine.terminal, input);
+			},
 		),
 });
 

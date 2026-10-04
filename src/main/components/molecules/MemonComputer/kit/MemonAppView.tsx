@@ -1,6 +1,9 @@
 import {
 	ArrowLeft,
 	Braces,
+	Check,
+	ChevronDown,
+	ChevronUp,
 	CircleDot,
 	ExternalLink,
 	ListChecks,
@@ -24,6 +27,7 @@ import { AudioClipPlayer } from "@/main/modules/studio/components/shared/AudioCl
 import { StoredImage } from "@/main/modules/studio/components/shared/StoredImage";
 import { assignRefs } from "@/services/memon/app-kit/render-text";
 import type {
+	MemonBadge,
 	MemonControlValue,
 	MemonInputNode,
 	MemonViewNode,
@@ -43,16 +47,32 @@ const ICONS: Record<string, IconComponent> = {
 	upload: Upload,
 	json: Braces,
 	builder: ListChecks,
+	expand: ChevronDown,
+	collapse: ChevronUp,
 };
 
+/**
+ * Every control is one height (32px): fields, selects, buttons and the box
+ * a switch sits in, so a row of them lines up.
+ */
 const FIELD =
-	"w-full rounded-md border border-input bg-background px-2 py-1.5 text-xs outline-none focus-visible:ring-1 focus-visible:ring-ring";
+	"w-full rounded-md border border-input bg-background px-2.5 text-xs outline-none placeholder:text-muted-foreground/70 focus-visible:ring-1 focus-visible:ring-ring";
+const LABEL = "text-[11px] font-medium leading-4 text-muted-foreground";
 
 const TONE: Record<string, string> = {
 	muted: "text-muted-foreground",
 	error: "text-red-700 dark:text-red-300",
 	warning: "text-amber-800 dark:text-amber-200",
 	success: "text-emerald-700 dark:text-emerald-300",
+};
+
+const BADGE_TONE: Record<string, string> = {
+	info: "border-sky-500/40 bg-sky-500/10 text-sky-700 dark:text-sky-300",
+	success:
+		"border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+	warning:
+		"border-amber-500/40 bg-amber-500/10 text-amber-800 dark:text-amber-200",
+	muted: "text-muted-foreground",
 };
 
 export interface MemonAppViewProps {
@@ -67,6 +87,11 @@ export interface MemonAppViewProps {
 	/** Icons beyond the kit's own, by name (e.g. a studio's). */
 	icons?: Record<string, IconComponent>;
 }
+
+/** A field with its label drawn above it. */
+const labelledAbove = (node: MemonViewNode): boolean =>
+	(node.type === "input" && !node.inline && !node.hideLabel) ||
+	(node.type === "select" && !node.inline);
 
 /** A field that keeps what the user types until it is committed. */
 const Field: React.FC<{
@@ -95,7 +120,7 @@ const Field: React.FC<{
 				data-memon-ref={refName}
 				title={node.label}
 				onClick={() => setEditingInline(true)}
-				className="min-w-0 flex-1 truncate rounded px-1 text-left text-xs hover:bg-muted/60"
+				className="h-8 min-w-0 flex-1 truncate rounded-md px-1.5 text-left text-xs hover:bg-muted/60"
 			>
 				{node.value || node.placeholder || node.label}
 			</button>
@@ -123,7 +148,11 @@ const Field: React.FC<{
 						event.currentTarget.blur();
 					}
 				}}
-				className={cn(FIELD, node.mono && "font-mono text-[11px]")}
+				className={cn(
+					FIELD,
+					"block resize-y py-1.5 leading-5",
+					node.mono && "font-mono text-[11px]",
+				)}
 			/>
 		);
 	}
@@ -143,7 +172,7 @@ const Field: React.FC<{
 						setEditingInline(false);
 					}
 				}}
-				className={cn(FIELD, "min-w-0 flex-1", node.mono && "font-mono")}
+				className={cn(FIELD, "h-8 min-w-0", node.mono && "font-mono")}
 			/>
 			{listId ? (
 				<datalist id={listId}>
@@ -162,11 +191,18 @@ const STATUS_ICON = {
 	done: SquareCheck,
 } as const;
 
+const badgeOf = (badge: MemonBadge) =>
+	typeof badge === "string" ? { text: badge, tone: undefined } : badge;
+
 /**
  * Draws an app's nodes as its window. Every control carries the ref the
  * agent reads on its screen (`data-memon-ref`), so the agent's cursor lands
  * on it and both work the same controls. Actions run in order: a field the
  * user leaves is committed before the button they press.
+ *
+ * Layout: nodes stack; a row lines its controls up on their bottoms when
+ * one has its label above, and centers them otherwise. A list item with
+ * controls is drawn as a card, its details under its title.
  */
 export const MemonAppView: React.FC<MemonAppViewProps> = ({
 	nodes,
@@ -190,7 +226,11 @@ export const MemonAppView: React.FC<MemonAppViewProps> = ({
 	const iconFor = (name?: string) =>
 		name ? (icons?.[name] ?? ICONS[name]) : undefined;
 
-	const draw = (list: MemonViewNode[], keyPrefix: string): React.ReactNode =>
+	const draw = (
+		list: MemonViewNode[],
+		keyPrefix: string,
+		inRow = false,
+	): React.ReactNode =>
 		list.map((node, index) => {
 			const key = `${keyPrefix}${index}`;
 			const ref = refs.get(node);
@@ -199,7 +239,10 @@ export const MemonAppView: React.FC<MemonAppViewProps> = ({
 					return (
 						<p
 							key={key}
-							className="min-w-0 flex-1 truncate text-xs font-semibold"
+							className={cn(
+								"text-xs font-semibold",
+								inRow ? "min-w-0 flex-1 truncate" : "pt-1",
+							)}
 						>
 							{node.text}
 						</p>
@@ -208,7 +251,7 @@ export const MemonAppView: React.FC<MemonAppViewProps> = ({
 					return node.mono ? (
 						<pre
 							key={key}
-							className="max-h-48 overflow-auto whitespace-pre-wrap rounded-md bg-muted/40 px-2 py-1.5 font-mono text-[11px] leading-relaxed"
+							className="max-h-48 overflow-auto whitespace-pre-wrap rounded-md bg-muted/40 px-2.5 py-2 font-mono text-[11px] leading-relaxed"
 						>
 							{node.text}
 						</pre>
@@ -216,7 +259,8 @@ export const MemonAppView: React.FC<MemonAppViewProps> = ({
 						<p
 							key={key}
 							className={cn(
-								"whitespace-pre-wrap text-[11px]",
+								"whitespace-pre-wrap text-[11px] leading-4",
+								inRow && "min-w-0 flex-1",
 								node.tone && TONE[node.tone],
 							)}
 						>
@@ -239,11 +283,8 @@ export const MemonAppView: React.FC<MemonAppViewProps> = ({
 					);
 				case "progress":
 					return (
-						<div key={key} className="space-y-1">
-							<p className="text-[11px] text-muted-foreground">
-								{node.value}/{node.max} {node.label}
-							</p>
-							<div className="h-1 overflow-hidden rounded-full bg-muted">
+						<div key={key} className="flex items-center gap-2">
+							<div className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-muted">
 								<div
 									className="h-full rounded-full bg-emerald-500 transition-all"
 									style={{
@@ -253,74 +294,107 @@ export const MemonAppView: React.FC<MemonAppViewProps> = ({
 									}}
 								/>
 							</div>
+							<span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
+								{node.value}/{node.max} {node.label}
+							</span>
 						</div>
 					);
+				case "spacer":
+					return <span key={key} aria-hidden="true" className="flex-1" />;
 				case "group":
-					return (
+					return node.layout === "row" ? (
 						<div
 							key={key}
 							className={cn(
-								node.layout === "row"
-									? "flex flex-wrap items-center gap-2"
-									: "space-y-2",
+								"flex min-w-0 flex-wrap gap-2",
+								node.children.some(labelledAbove)
+									? "items-end"
+									: "items-center",
 							)}
 						>
+							{draw(node.children, `${key}.`, true)}
+						</div>
+					) : (
+						<div key={key} className="flex min-w-0 flex-col gap-2">
 							{draw(node.children, `${key}.`)}
 						</div>
 					);
 				case "item": {
 					const StatusIcon = node.status ? STATUS_ICON[node.status] : null;
+					const card = Boolean(node.children?.length);
 					return (
 						<div
 							key={key}
 							data-memon-ask={`${node.title}${node.detail ? ` — ${node.detail}` : ""}`}
 							className={cn(
-								"space-y-1.5 rounded-lg px-2 py-1.5 hover:bg-muted/40",
-								node.tone === "muted" && "opacity-80",
+								"flex min-w-0 flex-col gap-2 rounded-lg",
+								card
+									? "border border-border/70 bg-muted/[0.15] px-3 py-2.5"
+									: "px-2 py-1.5 hover:bg-muted/40",
+								node.tone === "muted" && "opacity-75",
 							)}
 						>
-							<div className="flex min-w-0 items-center gap-2">
+							<div className="flex min-w-0 items-start gap-2">
 								{StatusIcon ? (
 									<StatusIcon
 										size={14}
 										className={cn(
-											"shrink-0",
+											"mt-px shrink-0",
 											node.status === "done"
 												? "text-emerald-600"
 												: node.status === "doing"
-													? "text-sky-600"
+													? "text-sky-500"
 													: "text-muted-foreground",
 										)}
 									/>
 								) : null}
-								<span
+								<div className="min-w-0 flex-1">
+									<p
+										title={node.title}
+										className={cn(
+											"line-clamp-2 break-words text-xs font-medium leading-4",
+											node.tone === "error" && TONE.error,
+										)}
+									>
+										{node.title}
+									</p>
+									{node.detail ? (
+										<p
+											title={node.detail}
+											className="mt-0.5 truncate text-[11px] leading-4 text-muted-foreground"
+										>
+											{node.detail}
+										</p>
+									) : null}
+								</div>
+								{node.badges?.length ? (
+									<div className="flex shrink-0 flex-wrap justify-end gap-1">
+										{node.badges.map((entry) => {
+											const badge = badgeOf(entry);
+											return (
+												<Badge
+													key={badge.text}
+													variant="outline"
+													className={cn(
+														"h-5 px-1.5 text-[10px] font-medium leading-none",
+														badge.tone && BADGE_TONE[badge.tone],
+													)}
+												>
+													{badge.text}
+												</Badge>
+											);
+										})}
+									</div>
+								) : null}
+							</div>
+							{card ? (
+								<div
 									className={cn(
-										"min-w-0 truncate text-xs font-medium",
-										node.tone === "error" && TONE.error,
+										"flex min-w-0 flex-col gap-2",
+										StatusIcon && "pl-[22px]",
 									)}
 								>
-									{node.title}
-								</span>
-								{node.detail ? (
-									<span className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground">
-										{node.detail}
-									</span>
-								) : (
-									<span className="flex-1" />
-								)}
-								{node.badges?.map((badge) => (
-									<Badge
-										key={badge}
-										variant="outline"
-										className="shrink-0 text-[10px]"
-									>
-										{badge}
-									</Badge>
-								))}
-							</div>
-							{node.children?.length ? (
-								<div className="space-y-1.5 pl-5">
-									{draw(node.children, `${key}.`)}
+									{draw(node.children ?? [], `${key}.`)}
 								</div>
 							) : null}
 						</div>
@@ -347,22 +421,61 @@ export const MemonAppView: React.FC<MemonAppViewProps> = ({
 								node.userOnly ? onUserAction?.(node.id) : act(node.id)
 							}
 							className={cn(
-								"h-7 shrink-0 text-[11px]",
-								node.variant === "danger" && "text-red-700 dark:text-red-300",
+								"h-8 shrink-0 gap-1.5 px-3 text-xs",
+								!inRow && "self-start",
+								node.variant === "danger" &&
+									"text-red-700 hover:bg-red-500/10 hover:text-red-700 dark:text-red-300 dark:hover:text-red-300",
 							)}
 						>
-							{Icon ? <Icon size={12} /> : null}
+							{Icon ? <Icon size={13} /> : null}
 							{node.label}
 						</Button>
 					);
 				}
 				case "toggle":
+					if (node.variant === "check") {
+						return (
+							<button
+								key={key}
+								type="button"
+								role="checkbox"
+								aria-checked={node.checked}
+								data-memon-ref={ref}
+								disabled={Boolean(node.disabled)}
+								title={node.disabled}
+								onClick={() => act(node.id, !node.checked)}
+								className="-mx-1 flex min-w-0 items-start gap-2 rounded-md px-1 py-1 text-left text-xs leading-4 transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-50"
+							>
+								<span
+									className={cn(
+										"flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors",
+										node.checked
+											? "border-emerald-600 bg-emerald-600 text-white"
+											: "border-muted-foreground/50",
+									)}
+								>
+									{node.checked ? <Check size={12} strokeWidth={3} /> : null}
+								</span>
+								<span
+									className={cn(
+										"min-w-0 flex-1 break-words",
+										node.checked && "text-muted-foreground line-through",
+									)}
+								>
+									{node.label}
+								</span>
+							</button>
+						);
+					}
 					return (
 						<label
 							key={key}
 							htmlFor={`memon-kit-${ref}`}
 							title={node.disabled}
-							className="flex shrink-0 items-center gap-1.5 text-[11px]"
+							className={cn(
+								"flex h-8 shrink-0 items-center gap-2 text-xs",
+								!inRow && "self-start",
+							)}
 						>
 							<Switch
 								id={`memon-kit-${ref}`}
@@ -379,14 +492,12 @@ export const MemonAppView: React.FC<MemonAppViewProps> = ({
 						<div
 							key={key}
 							className={cn(
-								"min-w-0",
-								node.inline ? "flex flex-1" : "flex-1 space-y-1",
+								"flex min-w-0 flex-col gap-1",
+								inRow && "min-w-[10rem] flex-1",
 							)}
 						>
-							{node.inline ? null : (
-								<p className="text-[10px] font-medium text-muted-foreground">
-									{node.label}
-								</p>
+							{node.inline || node.hideLabel ? null : (
+								<p className={LABEL}>{node.label}</p>
 							)}
 							<div className="flex min-w-0 items-center gap-2">
 								<Field
@@ -397,27 +508,43 @@ export const MemonAppView: React.FC<MemonAppViewProps> = ({
 							</div>
 						</div>
 					);
-				case "select":
-					return (
+				case "select": {
+					const select = (
+						<select
+							data-memon-ref={ref}
+							aria-label={node.label}
+							value={node.value}
+							onChange={(event) => act(node.id, event.target.value)}
+							className={cn(FIELD, "h-8 w-auto max-w-full cursor-pointer pr-7")}
+						>
+							{node.options.map((option) => (
+								<option key={option.value} value={option.value}>
+									{option.label}
+								</option>
+							))}
+						</select>
+					);
+					return node.inline ? (
 						<label
 							key={key}
-							className="flex shrink-0 items-center gap-1.5 text-[11px]"
+							className="flex h-8 shrink-0 items-center gap-1.5 text-xs"
 						>
 							<span className="text-muted-foreground">{node.label}</span>
-							<select
-								data-memon-ref={ref}
-								value={node.value}
-								onChange={(event) => act(node.id, event.target.value)}
-								className={cn(FIELD, "w-auto")}
-							>
-								{node.options.map((option) => (
-									<option key={option.value} value={option.value}>
-										{option.label}
-									</option>
-								))}
-							</select>
+							{select}
 						</label>
+					) : (
+						<div
+							key={key}
+							className={cn(
+								"flex shrink-0 flex-col gap-1",
+								!inRow && "self-start",
+							)}
+						>
+							<p className={LABEL}>{node.label}</p>
+							{select}
+						</div>
 					);
+				}
 				case "tabs":
 					return (
 						<div
@@ -425,7 +552,7 @@ export const MemonAppView: React.FC<MemonAppViewProps> = ({
 							data-memon-ref={ref}
 							role="tablist"
 							aria-label={node.label}
-							className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto"
+							className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5"
 						>
 							{node.options.map((option) => {
 								const Icon = iconFor(option.icon);
@@ -438,7 +565,7 @@ export const MemonAppView: React.FC<MemonAppViewProps> = ({
 										aria-selected={selected}
 										onClick={() => act(node.id, option.value)}
 										className={cn(
-											"inline-flex h-7 shrink-0 items-center gap-1.5 rounded-lg border px-2 text-[11px] font-medium transition-colors",
+											"inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-medium transition-colors",
 											selected
 												? "border-cyan-500/40 bg-cyan-500/10 text-cyan-700 dark:text-cyan-300"
 												: "border-border/60 text-muted-foreground hover:bg-muted",
@@ -479,7 +606,7 @@ export const MemonAppView: React.FC<MemonAppViewProps> = ({
 							path={node.path}
 							mimeType={node.mimeType}
 							alt={node.alt}
-							className="h-28 w-auto max-w-full rounded-md border border-border/60 object-contain"
+							className="h-28 w-auto max-w-full self-start rounded-md border border-border/60 object-contain"
 							placeholderClassName="h-28 w-28 rounded-md"
 						/>
 					);
@@ -495,5 +622,5 @@ export const MemonAppView: React.FC<MemonAppViewProps> = ({
 			return null;
 		});
 
-	return <div className="space-y-2">{draw(nodes, "")}</div>;
+	return <div className="flex min-w-0 flex-col gap-2.5">{draw(nodes, "")}</div>;
 };
