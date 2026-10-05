@@ -127,6 +127,8 @@ export const runTerminalAction = async (
 				waitMs: waitSeconds * 1000,
 				terminalId: tab,
 			});
+			// Its tab may be gone (picode exits it): the outcome says it all.
+			if (outcome.summary) return outcome.summary;
 			const ran = `Ran \`${command}\` in Terminal tab ${terminal.activeTabId} (exit ${outcome.exitCode ?? "?"})`;
 			const running = terminal.running;
 			if (outcome.alongside && running) {

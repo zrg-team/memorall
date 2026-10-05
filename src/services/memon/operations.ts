@@ -497,6 +497,22 @@ export const runMemonOperation = async (
 			return userAside(job.payload.key, "stopped pi code", (machine) =>
 				machine.piCode.interrupt(),
 			);
+		case "piCode.folders":
+			return (
+				(await findMemonMachine(job.payload.key)?.piCode.recentFolders()) ?? []
+			);
+		case "piCode.browse": {
+			const machine = findMemonMachine(job.payload.key);
+			return machine ? machine.browseFolders(job.payload.dir) : null;
+		}
+		case "piCode.open": {
+			const { key, cwd, continueLast, create } = job.payload;
+			return userInput(
+				key,
+				`opened pi code in ${create ? "a new folder, " : ""}${cwd}${continueLast ? " on its last session" : ""}`,
+				(machine) => machine.openPiCode(cwd, { continueLast, create }),
+			);
+		}
 		case "window.open": {
 			const { key, app } = job.payload;
 			return userInput(key, `opened ${app}`, async (machine) => {

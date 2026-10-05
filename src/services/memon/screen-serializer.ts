@@ -60,7 +60,9 @@ const piCodeBrief = (
 				? pi.working
 					? `working${pi.activity ? `: ${pi.activity}` : ""}`
 					: "idle"
-				: "starting";
+				: pi?.status === "choosing"
+					? "the user picks a folder to open"
+					: "starting";
 	const where = pi?.cwd ? ` · ${memonDisplayPath(pi.cwd, snapshot.home)}` : "";
 	const model = pi?.model
 		? ` · ${pi.model}${pi.thinkingLevel && pi.thinkingLevel !== "off" ? ` (thinking ${pi.thinkingLevel})` : ""}`
@@ -113,7 +115,13 @@ const piCodeLines = (
 		);
 	}
 	if (pi?.status !== "running") {
-		if (!pi?.approval) lines.push("(pi is not running)");
+		if (pi?.status === "choosing") {
+			lines.push(
+				'(pi starts once the user picks a folder; memon_code { action: "prompt", text, cwd } starts it in the one you name)',
+			);
+		} else if (!pi?.approval) {
+			lines.push("(pi is not running)");
+		}
 		return lines;
 	}
 	const entries = pi.transcript ?? [];

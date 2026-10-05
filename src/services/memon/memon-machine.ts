@@ -62,7 +62,11 @@ import type { MemonControlValue } from "./app-kit/types";
 import { kitAppForRef } from "./apps";
 import { studioDraftsFromSettings } from "./apps/studio-view";
 import { MemonApprovalRequiredError } from "./approval-error";
-import { MemonPiCode, type MemonPiCodePort } from "./apps/pi-code/pi-code-app";
+import {
+	MemonPiCode,
+	type MemonPiCodePort,
+	type PiCodeOpened,
+} from "./apps/pi-code/pi-code-app";
 import type { MemonEmbeddedPort } from "./embedded-browser";
 import type { MemonModelsPort } from "./models-port";
 import type { MemonCaptureRequest, MemonPageCapture } from "./page-capture";
@@ -91,6 +95,7 @@ import type {
 	MemonStatus,
 	MemonConnectionItem,
 	MemonOpenSkill,
+	MemonPiCodeBrowse,
 	MemonSkillItem,
 	MemonStudioAppFile,
 	MemonStudioRun,
@@ -470,6 +475,7 @@ export class MemonMachine {
 						this.historyFile,
 						serializeTerminalHistory(this.terminal.history),
 					),
+				openPiCode: (cwd, options) => this.openPiCode(cwd, options),
 			},
 			ports,
 		);
@@ -850,8 +856,9 @@ export class MemonMachine {
 				);
 			}
 		}
-		// pi runs while its window is open; opening the window starts it.
-		if (app === "pi") this.piCode.start();
+		// pi runs while its window is open. Opened by the user, the window
+		// asks for a folder; the agent starts pi in the folder it names.
+		if (app === "pi") this.piCode.choose();
 		this.focusWindow(window.id);
 		return window;
 	}
@@ -922,6 +929,61 @@ export class MemonMachine {
 		const visible = this.windows.filter((window) => !window.minimized);
 		visible.sort((a, b) => b.z - a.z);
 		return visible[0]?.id ?? null;
+	}
+
+	// ── pi code ─────────────────────────────────────────────────────────────
+
+	/**
+	 * Opens pi code in a folder (`~` is the home): the user's pick in its
+	 * window, or `picode` in the Terminal. `continueLast` opens the folder's
+	 * last session; `create` a new folder, which pi makes as it starts.
+	 */
+	async openPiCode(
+		path: string,
+		options: { continueLast?: boolean; create?: boolean } = {},
+	): Promise<PiCodeOpened> {
+		if (!this.config.piCode) {
+			throw new Error(
+				"pi code is turned off for this agent. The user can turn it on in MemonOS Bot settings.",
+			);
+		}
+		const cwd = this.resolvePath(path, this.home);
+		const shown = memonDisplayPath(cwd, this.home);
+		const isFolder = (folder: string) =>
+			this.ports.files.isDirectory(folder).catch(() => false);
+		if (options.create) {
+			if (await this.ports.files.exists(cwd).catch(() => false)) {
+				throw new Error(`${shown} is already there.`);
+			}
+			const parent = cwd.replace(/\/[^/]*$/, "") || "/";
+			if (!(await isFolder(parent))) {
+				throw new Error(
+					`${memonDisplayPath(parent, this.home)} is not a folder.`,
+				);
+			}
+		} else if (!(await isFolder(cwd))) {
+			throw new Error(`${shown} is not a folder.`);
+		}
+		return this.piCode.open(cwd, options);
+	}
+
+	/** The folders in a folder (the home by default), for pi's folder picker. */
+	async browseFolders(path = "~"): Promise<MemonPiCodeBrowse> {
+		const dir = this.resolvePath(path, this.home);
+		if (!(await this.ports.files.isDirectory(dir).catch(() => false))) {
+			throw new Error(`${memonDisplayPath(dir, this.home)} is not a folder.`);
+		}
+		const entries = await this.ports.files.list(dir);
+		return {
+			dir,
+			parent: dir === "/" ? undefined : dir.replace(/\/[^/]*$/, "") || "/",
+			folders: entries
+				.filter((entry) => entry.type === "dir")
+				.map(({ name, path: folder }) => ({ name, path: folder })),
+			files: entries
+				.filter((entry) => entry.type === "file")
+				.map((entry) => entry.name),
+		};
 	}
 
 	// ── Browser ─────────────────────────────────────────────────────────────

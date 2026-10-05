@@ -465,6 +465,7 @@ export const MemonComputerPanel: React.FC<{
 					<PiCodeWindow
 						machineKey={key}
 						state={snapshot.piCode}
+						home={snapshot.home}
 						focused={window.id === snapshot.focusedWindowId}
 						send={send}
 					/>

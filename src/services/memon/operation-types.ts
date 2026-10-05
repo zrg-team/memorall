@@ -11,6 +11,8 @@ import type { MemonTerminalCompletion } from "./terminal/terminal-commands";
 import type {
 	MemonMachineSnapshot,
 	MemonMachineSummary,
+	MemonPiCodeBrowse,
+	MemonPiCodeFolder,
 	MemonWindowState,
 } from "./types";
 
@@ -126,6 +128,19 @@ export interface MemonOperationPayloadMap {
 	"piCode.approval": Keyed<{ id: string; decision: "approve" | "deny" }>;
 	/** Stops pi's turn and drops its queue; the agent waiting on pi hears it. */
 	"piCode.stop": Keyed;
+	/** The folders pi worked in, for its folder picker. Changes nothing. */
+	"piCode.folders": Keyed;
+	/** The folders in a folder (the home by default). Changes nothing. */
+	"piCode.browse": Keyed<{ dir?: string }>;
+	/**
+	 * Opens pi code in a folder: `continueLast` opens its last session,
+	 * `create` makes it.
+	 */
+	"piCode.open": Keyed<{
+		cwd: string;
+		continueLast?: boolean;
+		create?: boolean;
+	}>;
 	"window.open": Keyed<{ app: MemonWindowApp }>;
 	"window.focus": Keyed<{ windowId: string }>;
 	"window.minimize": Keyed<{ windowId: string }>;
@@ -157,13 +172,17 @@ export type MemonOperationResultMap = {
 			? string
 			: K extends "terminal.complete"
 				? MemonTerminalCompletion
-				: K extends "piCode.attach"
-					? { cursor: number } | null
-					: K extends "piCode.read"
-						? MemonPiCodeOutput
-						: K extends "piCode.input" | "piCode.resize"
-							? null
-							: MemonMachineSnapshot | null;
+				: K extends "piCode.folders"
+					? MemonPiCodeFolder[]
+					: K extends "piCode.browse"
+						? MemonPiCodeBrowse | null
+						: K extends "piCode.attach"
+							? { cursor: number } | null
+							: K extends "piCode.read"
+								? MemonPiCodeOutput
+								: K extends "piCode.input" | "piCode.resize"
+									? null
+									: MemonMachineSnapshot | null;
 };
 
 /** A read of pi code's terminal output. */

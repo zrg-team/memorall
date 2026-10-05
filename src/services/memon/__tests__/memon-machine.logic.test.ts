@@ -6,6 +6,10 @@ import {
 } from "../feature-config";
 import type { MemonEmbeddedPort } from "../embedded-browser";
 import { MemonApprovalRequiredError } from "../approval-error";
+import type {
+	MemonPiCodePort,
+	PiCodeRunner,
+} from "../apps/pi-code/pi-code-app";
 import {
 	MemonMachine,
 	type MemonPorts,
@@ -273,6 +277,36 @@ ${transcript}`,
 		},
 	};
 	return { ports, files };
+};
+
+/** A pi that starts at once, idle, in the folder it is given. */
+const fakePiCode = () => {
+	const port = {
+		start: vi.fn(
+			async ({ cwd, home }: { cwd?: string; home: string }) =>
+				({
+					status: () => ({ running: false, cwd: cwd ?? home }),
+					view: () => ({
+						entries: [],
+						earlier: 0,
+						thinkingLevel: "off",
+						queued: [],
+					}),
+					attach: () => 0,
+					read: async (cursor: number) => ({ data: "", cursor, reset: false }),
+					input: () => {},
+					resize: () => {},
+					submit: async () => {},
+					interrupt: async () => {},
+					newSession: async () => {},
+					compact: async () => {},
+					waitForIdle: async () => true,
+					dispose: async () => {},
+				}) satisfies PiCodeRunner,
+		),
+		folders: vi.fn(async () => []),
+	};
+	return port as typeof port & MemonPiCodePort;
 };
 
 const createMachine = (config: Partial<MemonFeatureConfig> = {}) => {
@@ -2375,5 +2409,120 @@ describe("MemonMachine zipping a folder for the user", () => {
 		await expect(
 			machine.piCode.act({ action: "prompt", text: "Build it" }),
 		).rejects.toThrow("pi code is turned off for this agent");
+	});
+
+	it("picode opens pi code in the tab's folder, and the tab exits", async () => {
+		const { ports } = createPorts();
+		const piCode = fakePiCode();
+		const machine = new MemonMachine("conversation-1", { ...ports, piCode });
+		await machine.terminal.runCommand("cd /notes", { byUser: true });
+		machine.terminal.openTab();
+		expect(machine.snapshot().terminal.tabs.map((tab) => tab.id)).toEqual([
+			"1",
+			"2",
+		]);
+
+		await machine.terminal.runCommand("picode", {
+			byUser: true,
+			terminalId: "1",
+		});
+		expect(piCode.start).toHaveBeenCalledWith(
+			expect.objectContaining({ cwd: "/notes", sessionFile: undefined }),
+		);
+		// pi's window is in front, and tab 1 is gone.
+		expect(machine.snapshot().focusedWindowId).toBe(
+			machine.findWindow("pi")?.id,
+		);
+		expect(machine.snapshot().terminal.tabs.map((tab) => tab.id)).toEqual([
+			"2",
+		]);
+		await vi.waitFor(() =>
+			expect(machine.snapshot().piCode).toMatchObject({
+				status: "running",
+				cwd: "/notes",
+			}),
+		);
+
+		// The agent's picode: in pi's own folder pi only comes up; the last
+		// tab exits as `exit` does, cleared.
+		await expect(
+			runTerminalAction(machine.terminal, { command: "picode -c /notes" }),
+		).resolves.toBe(
+			'pi code was open in /notes already; it is in front. Terminal tab 2 exited. Hand pi work with memon_code { action: "prompt", text }.',
+		);
+		expect(piCode.start).toHaveBeenCalledTimes(1);
+		expect(machine.snapshot().terminal.tabs.map((tab) => tab.id)).toEqual([
+			"2",
+		]);
+		expect(machine.snapshot().terminal.lines).toEqual([]);
+	});
+
+	it("picode says in the tab what it cannot open, and the tab stays", async () => {
+		const { ports } = createPorts();
+		const piCode = fakePiCode();
+		const machine = new MemonMachine("conversation-1", { ...ports, piCode });
+		const run = async (command: string) => {
+			const outcome = await machine.terminal.runCommand(command, {
+				byUser: true,
+			});
+			return {
+				exitCode: outcome.exitCode,
+				said: machine.snapshot().terminal.lines.at(-1)?.text,
+			};
+		};
+
+		await expect(run("picode /nope")).resolves.toEqual({
+			exitCode: 1,
+			said: "picode: /nope is not a folder.",
+		});
+		await expect(run("picode -x /notes")).resolves.toEqual({
+			exitCode: 2,
+			said: "  -c, --continue  open the folder's last pi session",
+		});
+		expect(machine.snapshot().terminal.lines.at(-4)?.text).toBe(
+			"picode: unknown option -x",
+		);
+		machine.configure({ ...DEFAULT_MEMON_FEATURE_CONFIG, piCode: false });
+		await expect(run("picode /notes")).resolves.toEqual({
+			exitCode: 1,
+			said: "picode: pi code is turned off for this agent. The user can turn it on in MemonOS Bot settings.",
+		});
+		expect(piCode.start).not.toHaveBeenCalled();
+		expect(machine.findWindow("pi")).toBeUndefined();
+		expect(machine.snapshot().terminal.tabs).toHaveLength(1);
+	});
+
+	it("opens pi code on its folder picker when the user opens it, listing the folders to go through", async () => {
+		const { ports } = createPorts();
+		const piCode = fakePiCode();
+		const machine = new MemonMachine("conversation-1", { ...ports, piCode });
+		machine.openWindow("pi");
+		expect(machine.snapshot().piCode).toEqual({
+			status: "choosing",
+			working: false,
+		});
+		expect(machine.readScreen()).toContain(
+			"pi code · the user picks a folder to open",
+		);
+		expect(piCode.start).not.toHaveBeenCalled();
+
+		await expect(machine.browseFolders("/notes")).resolves.toEqual({
+			dir: "/notes",
+			parent: "/",
+			folders: [],
+			files: ["a.md"],
+		});
+		await expect(machine.browseFolders("/nope")).rejects.toThrow(
+			"/nope is not a folder.",
+		);
+
+		// A new folder is made by pi as it starts; one that is there is refused.
+		await expect(
+			machine.openPiCode("/notes", { create: true }),
+		).rejects.toThrow("/notes is already there.");
+		await machine.openPiCode("/notes/app", { create: true });
+		expect(piCode.start).toHaveBeenCalledWith(
+			expect.objectContaining({ cwd: "/notes/app" }),
+		);
 	});
 });

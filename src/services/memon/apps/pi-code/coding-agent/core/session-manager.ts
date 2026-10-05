@@ -484,7 +484,7 @@ const entryText = (message: { content?: unknown }): string => {
 };
 
 /** A saved session file as a list shows it; null when it is not a session. */
-function savedSessionInfo(
+export function savedSessionInfo(
 	path: string,
 	entries: FileEntry[],
 ): SessionInfo | null {

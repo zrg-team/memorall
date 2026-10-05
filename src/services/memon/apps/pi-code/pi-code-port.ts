@@ -43,4 +43,8 @@ export const createPiCodePort = (deps: {
 		});
 		return session;
 	},
+	async folders(home, cwd) {
+		const { listSavedFolders } = await import("./host/saved-folders");
+		return listSavedFolders(deps.fs(), home, cwd);
+	},
 });

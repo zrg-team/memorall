@@ -21,6 +21,8 @@ type InputOperation = Exclude<
 	| "agent.home"
 	| "agent.renamed"
 	| "terminal.complete"
+	| "piCode.folders"
+	| "piCode.browse"
 	| "piCode.attach"
 	| "piCode.read"
 	| "piCode.input"

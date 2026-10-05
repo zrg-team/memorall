@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { MemonPiCodeEntry } from "../../../types";
+import type { MemonPiCodeEntry, MemonPiCodeFolder } from "../../../types";
 import {
 	MemonPiCode,
 	type MemonPiCodePort,
@@ -93,6 +93,8 @@ const setup = () => {
 	const folders = new Set([HOME, `${HOME}/a`, `${HOME}/todo`]);
 	/** What pi's /resume calls, from the latest start. */
 	let resume: ((sessionFile: string, cwd: string) => void) | undefined;
+	/** Folders with saved sessions, the one used last first. */
+	let saved: MemonPiCodeFolder[] = [];
 	const port: MemonPiCodePort = {
 		start: vi.fn(async ({ cwd, onResume }) => {
 			const folder = cwd ?? HOME;
@@ -102,6 +104,9 @@ const setup = () => {
 			runners.push(fake);
 			return fake.runner;
 		}),
+		folders: vi.fn(async (_home: string, cwd?: string) =>
+			cwd ? saved.filter((folder) => folder.path === cwd) : saved,
+		),
 	};
 	let windowOpen = false;
 	let front = true;
@@ -117,11 +122,11 @@ const setup = () => {
 			void piCode.stop();
 		}),
 		enabled: () => enabled,
-		// The machine's openWindow("pi") starts pi.
+		// The machine's openWindow("pi") asks for a folder unless pi runs.
 		show: vi.fn(() => {
 			const opened = !windowOpen;
 			windowOpen = true;
-			piCode.start();
+			piCode.choose();
 			return opened;
 		}),
 		inFront: () => windowOpen && front,
@@ -147,6 +152,9 @@ const setup = () => {
 		},
 		/** The user picks a saved session with /resume in pi. */
 		resume: (sessionFile: string, cwd: string) => resume?.(sessionFile, cwd),
+		setSaved: (folders: MemonPiCodeFolder[]) => {
+			saved = folders;
+		},
 	};
 };
 
@@ -240,8 +248,20 @@ describe("pi code, driven by the Memon agent", () => {
 	it("keeps a window the user had open when they decline", async () => {
 		const { piCode, host } = setup();
 		host.show();
-		await vi.waitFor(() => expect(piCode.state()?.status).toBe("running"));
+		// Still picking a folder: the question waits over the picker.
+		const asking = piCode.act({ action: "prompt", text: "Refactor" });
+		const question = await asked(piCode);
+		expect(piCode.state()).toMatchObject({
+			status: "choosing",
+			approval: question,
+		});
+		piCode.answerApproval(question.id, "deny");
+		await asking;
+		expect(piCode.state()?.status).toBe("choosing");
 
+		// pi open in a folder.
+		await piCode.open("~");
+		await vi.waitFor(() => expect(piCode.state()?.status).toBe("running"));
 		const call = piCode.act({ action: "prompt", text: "Refactor" });
 		piCode.answerApproval((await asked(piCode)).id, "deny");
 		await call;
@@ -486,5 +506,113 @@ describe("pi code, driven by the Memon agent", () => {
 		expect(piCode.state()?.instance).toBeGreaterThan(firstInstance ?? 0);
 		await piCode.act({ action: "prompt", text: "Slow the intro" });
 		expect(runners[2].submitted.at(-1)?.text).toBe("Slow the intro");
+	});
+});
+
+describe("pi code, opened by the user", () => {
+	it("asks which folder to open, and starts pi in the one the user picks", async () => {
+		const { piCode, port, host, setSaved } = setup();
+		const folder: MemonPiCodeFolder = {
+			path: `${HOME}/todo`,
+			lastUsed: 1,
+			sessions: 2,
+			latest: { file: `${HOME}/.pi/agent/sessions/--todo--/b.jsonl` },
+		};
+		setSaved([folder]);
+
+		// The window opens on the folder picker; pi waits for the pick.
+		host.show();
+		expect(piCode.state()).toEqual({ status: "choosing", working: false });
+		expect(port.start).not.toHaveBeenCalled();
+		await expect(piCode.recentFolders()).resolves.toEqual([folder]);
+
+		await expect(piCode.open("~/todo")).resolves.toEqual({
+			cwd: `${HOME}/todo`,
+			shown: false,
+			from: undefined,
+			continued: false,
+		});
+		expect(port.start).toHaveBeenCalledWith(
+			expect.objectContaining({ cwd: `${HOME}/todo`, sessionFile: undefined }),
+		);
+		await vi.waitFor(() => expect(piCode.state()?.status).toBe("running"));
+
+		// Opened again, the window shows pi, not the picker.
+		host.show();
+		expect(piCode.state()?.status).toBe("running");
+	});
+
+	it("continues a folder's last session, or starts a new one when it has none", async () => {
+		const { piCode, port, setSaved } = setup();
+		const latest = `${HOME}/.pi/agent/sessions/--a--/b.jsonl`;
+		setSaved([
+			{ path: `${HOME}/a`, lastUsed: 1, sessions: 2, latest: { file: latest } },
+		]);
+
+		await expect(
+			piCode.open(`${HOME}/a`, { continueLast: true }),
+		).resolves.toMatchObject({ continued: true });
+		expect(port.start).toHaveBeenLastCalledWith(
+			expect.objectContaining({ cwd: `${HOME}/a`, sessionFile: latest }),
+		);
+		expect(port.folders).toHaveBeenLastCalledWith(HOME, `${HOME}/a`);
+
+		await expect(
+			piCode.open("~/todo", { continueLast: true }),
+		).resolves.toMatchObject({ continued: false, from: `${HOME}/a` });
+		expect(port.start).toHaveBeenLastCalledWith(
+			expect.objectContaining({ cwd: `${HOME}/todo`, sessionFile: undefined }),
+		);
+	});
+
+	it("moves pi to another folder while it is idle, brings it up in its own, and refuses while it works", async () => {
+		const { piCode, port, host, runners } = setup();
+		await piCode.open("~/a");
+		await vi.waitFor(() => expect(piCode.state()?.status).toBe("running"));
+
+		// Its own folder: pi only comes up.
+		host.show.mockClear();
+		await expect(piCode.open(`${HOME}/a`)).resolves.toMatchObject({
+			shown: true,
+		});
+		expect(port.start).toHaveBeenCalledTimes(1);
+		expect(host.show).toHaveBeenCalled();
+
+		// Another folder: pi starts again there; the first is let go.
+		await expect(piCode.open("~/todo")).resolves.toMatchObject({
+			shown: false,
+			from: `${HOME}/a`,
+		});
+		expect(runners[0].runner.dispose).toHaveBeenCalled();
+		await vi.waitFor(() =>
+			expect(piCode.state()).toMatchObject({
+				status: "running",
+				cwd: `${HOME}/todo`,
+			}),
+		);
+
+		// pi at work is not moved away from its work.
+		runners[1].setIdle(false);
+		await expect(piCode.open("~/a")).rejects.toThrow(
+			"pi code is working in ~/todo; wait for it or stop it first.",
+		);
+		expect(port.start).toHaveBeenCalledTimes(2);
+	});
+
+	it("keeps the agent's question up instead of the picker, and closes the picker on close", async () => {
+		const { piCode, host } = setup();
+		const call = piCode.act({ action: "prompt", text: "Build it" });
+		await asked(piCode);
+		// The question opened the window: it shows the question, not the picker.
+		expect(piCode.state()?.status).toBe("idle");
+		piCode.cancelWaits();
+		await call;
+
+		host.show();
+		expect(piCode.state()?.status).toBe("choosing");
+		await expect(piCode.act({ action: "close" })).resolves.toBe(
+			"Closed pi code; its session is saved in ~/.pi/agent/sessions.",
+		);
+		expect(piCode.state()).toBeUndefined();
 	});
 });
