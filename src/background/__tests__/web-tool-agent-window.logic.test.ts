@@ -57,6 +57,8 @@ const installBrowser = () => {
 		  ) => boolean)
 		| null = null;
 	const session = new Map<string, unknown>();
+	// What the background tells the extension's pages (the offscreen document).
+	const runtimeSendMessage = vi.fn(async (_message: unknown) => undefined);
 	const windowsApi = {
 		create: vi.fn(async ({ url }: { url: string }) => {
 			const id = nextWindow++;
@@ -86,6 +88,7 @@ const installBrowser = () => {
 					messageListener = listener;
 				}),
 			},
+			sendMessage: runtimeSendMessage,
 		},
 		windows: windowsApi,
 		tabs: {
@@ -147,7 +150,18 @@ const installBrowser = () => {
 			maxHtmlChars: 1_000,
 		});
 
-	return { windows, windowsApi, dispatch, open };
+	/** A message from a page's content script, as the browser delivers it. */
+	const sendFromTab = (tabId: number, message: unknown) =>
+		messageListener?.(message, { tab: { id: tabId } }, () => undefined);
+
+	return {
+		windows,
+		windowsApi,
+		dispatch,
+		open,
+		sendFromTab,
+		runtimeSendMessage,
+	};
 };
 
 const register = async () => {
@@ -217,5 +231,63 @@ describe("the agent's window", () => {
 		const after = surfaceOf(await browser.open("b", "https://b.example/"));
 		expect(after.windowId).toBe(windowId);
 		expect(browser.windowsApi.create).toHaveBeenCalledTimes(1);
+	});
+});
+
+describe("what the user does in a session's tab", () => {
+	beforeEach(() => {
+		vi.unstubAllGlobals();
+	});
+
+	it("leaves the other pages when the user already closed a page's tab", async () => {
+		const browser = installBrowser();
+		await register();
+		const a = surfaceOf(await browser.open("a", "https://a.example/"));
+		const b = surfaceOf(await browser.open("b", "https://b.example/"));
+
+		// Closed in the browser: the window now holds only b's tab.
+		await chrome.tabs.remove(a.tabId);
+		await browser.dispatch({
+			command: "close",
+			sessionId: "a",
+			tabId: a.tabId,
+			windowId: a.windowId,
+		});
+
+		expect(browser.windows.get(a.windowId as number)).toEqual([b.tabId]);
+	});
+
+	it("asks an opened page to report what the user does in it", async () => {
+		const browser = installBrowser();
+		await register();
+		const a = surfaceOf(await browser.open("a", "https://a.example/"));
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		expect(chrome.tabs.sendMessage).toHaveBeenCalledWith(a.tabId, {
+			source: WEB_CONTENT_COMMAND_SOURCE,
+			type: "web-tool:watch-user-actions",
+		});
+	});
+
+	it("passes a session page's clicks on to its session, and nobody else's", async () => {
+		const browser = installBrowser();
+		await register();
+		const a = surfaceOf(await browser.open("a", "https://a.example/"));
+		const click = {
+			source: "memorall:web-page-action",
+			action: { kind: "clicked", target: 'button "Buy"' },
+		};
+
+		browser.sendFromTab(a.tabId, click);
+		// The user's own tab.
+		browser.sendFromTab(100, click);
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		expect(browser.runtimeSendMessage).toHaveBeenCalledTimes(1);
+		expect(browser.runtimeSendMessage).toHaveBeenCalledWith({
+			source: "memorall:web-session-event",
+			sessionId: "a",
+			event: { kind: "clicked", target: 'button "Buy"' },
+		});
 	});
 });

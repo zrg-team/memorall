@@ -1,5 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { WebPageOutline } from "@/services/web-browser/web-browser-protocol";
+import type {
+	WebPageOutline,
+	WebSessionEvent,
+} from "@/services/web-browser/web-browser-protocol";
 import {
 	DEFAULT_MEMON_FEATURE_CONFIG,
 	type MemonFeatureConfig,
@@ -382,6 +385,131 @@ describe("MemonMachine", () => {
 		expect(screen).toContain("url: https://example.com/inbox/42");
 		expect(screen).toContain("title: Message");
 		expect(screen).toContain("(the page was still loading when read");
+	});
+
+	it("follows what the user does in the real tab, and tells the agent", async () => {
+		const { machine, ports } = createMachine();
+		let report: (event: WebSessionEvent) => void = () => undefined;
+		const unwatch = vi.fn();
+		ports.browser.watch = vi.fn((_sessionId, listener) => {
+			report = listener;
+			return unwatch;
+		});
+		await machine.openUrl("https://example.com");
+		expect(ports.browser.watch).toHaveBeenCalledWith(
+			"s1",
+			expect.any(Function),
+		);
+		machine.readScreen();
+		vi.mocked(ports.browser.outline).mockClear();
+		vi.mocked(ports.browser.outline).mockResolvedValue(
+			outline("https://example.com/next", "Next"),
+		);
+
+		// A click and the navigation it starts: one re-read for both.
+		report({
+			kind: "clicked",
+			target: 'link "Next"',
+			href: "https://example.com/next",
+		});
+		report({
+			kind: "navigated",
+			url: "https://example.com/next",
+			reload: false,
+		});
+		await vi.advanceTimersByTimeAsync(300);
+		expect(ports.browser.outline).toHaveBeenCalledTimes(1);
+		const screen = machine.readScreen();
+		expect(screen).toContain('- clicked link "Next" in the real tab');
+		expect(screen).toContain(
+			"- went to https://example.com/next in the real tab",
+		);
+		expect(screen).toContain("url: https://example.com/next");
+		// Followed by the user, so the computer was not taken over.
+		expect(machine.snapshot().driver).toBe("agent");
+
+		// Where the tab already is: nothing new to say.
+		report({
+			kind: "navigated",
+			url: "https://example.com/next/",
+			reload: false,
+		});
+		await vi.advanceTimersByTimeAsync(300);
+		expect(machine.readScreen()).not.toContain("user changes");
+
+		report({ kind: "closed" });
+		await vi.advanceTimersByTimeAsync(0);
+		expect(machine.readScreen()).toContain(
+			"- closed the real tab (https://example.com/next)",
+		);
+		expect(machine.snapshot().browser.tabs).toHaveLength(0);
+		expect(unwatch).toHaveBeenCalled();
+	});
+
+	it("reads a tab behind the front one only when it comes to the front", async () => {
+		const { machine, ports } = createMachine();
+		const reports = new Map<string, (event: WebSessionEvent) => void>();
+		ports.browser.watch = vi.fn((sessionId, listener) => {
+			reports.set(sessionId, listener);
+			return vi.fn();
+		});
+		let pageB = "https://b.example";
+		const settle = vi.fn(
+			async (_sessionId: string, _options: { timeoutMs: number }) =>
+				outline(pageB, "B"),
+		);
+		ports.browser.settle = settle;
+		await machine.openUrl("https://a.example");
+		await machine.openUrl("https://b.example", { newTab: true });
+		await machine.selectTab(1);
+		machine.readScreen();
+		settle.mockClear();
+		vi.mocked(ports.browser.outline).mockClear();
+
+		// The user works in tab 2 while tab 1 is in front.
+		pageB = "https://b.example/cart";
+		reports.get("s2")?.({
+			kind: "navigated",
+			url: "https://b.example/cart",
+			reload: false,
+		});
+		await vi.advanceTimersByTimeAsync(1_000);
+		expect(settle).not.toHaveBeenCalled();
+		expect(ports.browser.outline).not.toHaveBeenCalled();
+		expect(machine.readScreen()).toContain(
+			"- went to https://b.example/cart in real tab 2",
+		);
+
+		// Switching to it reads it, waiting for its page to settle.
+		await machine.selectTab(2);
+		expect(settle).toHaveBeenCalledWith("s2", { timeoutMs: 3_000 });
+		expect(machine.readScreen()).toContain("url: https://b.example/cart");
+
+		// Unchanged since: switching back and forth just reads it.
+		await machine.selectTab(1);
+		await machine.selectTab(2);
+		expect(settle).toHaveBeenCalledTimes(1);
+	});
+
+	it("acts with the page the agent read, not one the machine read since", async () => {
+		const { machine, ports } = createMachine();
+		await machine.openUrl("https://example.com");
+		machine.readScreen();
+		// The page changed and was read again without the agent seeing it.
+		vi.mocked(ports.browser.outline).mockResolvedValue(
+			outline("https://example.com/other", "Other"),
+		);
+		await machine.refreshBrowser();
+
+		const pending = machine.browserAction({ ref: "b1", action: "click" });
+		await vi.runAllTimersAsync();
+		await pending;
+
+		// The page refuses the old ref as stale instead of clicking another b1.
+		expect(ports.browser.act).toHaveBeenLastCalledWith(
+			"s1",
+			expect.objectContaining({ docToken: "doc-Example" }),
+		);
 	});
 
 	it("turns plain words into a search", async () => {

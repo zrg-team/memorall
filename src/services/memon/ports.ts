@@ -21,6 +21,7 @@ import {
 	outlineWebSession,
 	performOutlineAction,
 	reserveWebSession,
+	watchWebSession,
 } from "@/services/flows-integrations/tools/web/web-tool-registry";
 import type {
 	MemonAvailability,
@@ -147,6 +148,7 @@ export const createMemonBrowserPort = (): MemonBrowserPort => ({
 		await navigateWebSessionHistory(sessionId, direction, OPEN_TIMEOUT_MS);
 	},
 	close: (sessionId) => closeWebSession(sessionId),
+	watch: (sessionId, listener) => watchWebSession(sessionId, listener),
 	focus: (sessionId) => focusWebSession(sessionId),
 	reserve: (sessionId) => reserveWebSession(sessionId),
 });

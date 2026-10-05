@@ -249,6 +249,29 @@ export const BrowserWindow: React.FC<{
 	// An embedded tab shows its page; the outline is what the agent reads.
 	const [agentView, setAgentView] = React.useState(false);
 
+	// Back from the real browser window: the Browser shows the page as the
+	// user left it, typing included. Where the browser streams its clicks and
+	// navigations (the extension), this catches what it does not report; on
+	// desktop it is how the Browser follows the real tab at all.
+	const realTabOpen = Boolean(tab) && !embedded;
+	React.useEffect(() => {
+		if (!realTabOpen) return;
+		let lastSync = 0;
+		const sync = () => {
+			if (document.visibilityState !== "visible") return;
+			// Focus and visibility arrive together.
+			if (Date.now() - lastSync < 1_000) return;
+			lastSync = Date.now();
+			void send("browser.refresh", { key: machineKey });
+		};
+		window.addEventListener("focus", sync);
+		document.addEventListener("visibilitychange", sync);
+		return () => {
+			window.removeEventListener("focus", sync);
+			document.removeEventListener("visibilitychange", sync);
+		};
+	}, [machineKey, realTabOpen, send]);
+
 	const act = (
 		ref: string,
 		action: "click" | "input" | "submit",

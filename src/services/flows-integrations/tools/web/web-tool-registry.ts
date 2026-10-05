@@ -27,6 +27,7 @@ import {
 } from "@/services/web-browser/readable-text";
 import {
 	isWebBrowserCommandResponse,
+	isWebSessionEventMessage,
 	WEB_BROWSER_COMMAND_SOURCE,
 	type WebBrowserCommandRequest,
 	type WebBrowserCommandResponse,
@@ -38,6 +39,7 @@ import {
 	type WebOutlineActionRequest,
 	type WebOutlineActionResult,
 	type WebPageOutline,
+	type WebSessionEvent,
 	type WebSnapshotPayload,
 	type WebWaitSelectorState,
 } from "@/services/web-browser/web-browser-protocol";
@@ -926,6 +928,24 @@ export const getWebSessionSurface = (
 		currentUrl: session.currentUrl || session.requestedUrl,
 		title: session.title,
 	};
+};
+
+/**
+ * What a session's tab does that the agent did not: the person using it
+ * clicks, submits a form, navigates, reloads or closes it. Null where the
+ * platform does not report it.
+ */
+export const watchWebSession = (
+	sessionId: string,
+	listener: (event: WebSessionEvent) => void,
+): (() => void) | null => {
+	const port = platform.browserCommands;
+	if (!port.subscribeEvents) return null;
+	return port.subscribeEvents((message) => {
+		if (isWebSessionEventMessage(message) && message.sessionId === sessionId) {
+			listener(message.event);
+		}
+	});
 };
 
 export const outlineWebSession = async (
