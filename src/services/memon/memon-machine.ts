@@ -128,6 +128,15 @@ export interface MemonBrowserPort {
 		url: string,
 	): Promise<{ url: string; title: string }>;
 	outline(sessionId: string): Promise<WebPageOutline>;
+	/**
+	 * The outline once the page holds still: a page its own scripts draw is
+	 * still filling in when the browser reports it loaded. Without it, the
+	 * page is read as it is.
+	 */
+	settle?(
+		sessionId: string,
+		options: { timeoutMs: number },
+	): Promise<WebPageOutline>;
 	act(
 		sessionId: string,
 		request: WebOutlineActionRequest,
@@ -294,6 +303,10 @@ const MAX_USER_CHANGES = 12;
 const MAX_STUDIO_RUNS = 20;
 /** How long a local address waits for a starting command's server. */
 const SERVER_START_WAIT_MS = 3_000;
+/** How long an opened page gets to draw itself before it is read. */
+const PAGE_OPEN_SETTLE_MS = 10_000;
+/** A page read again (the screen) is usually drawn already; it gets less. */
+const PAGE_READ_SETTLE_MS = 3_000;
 const normalizePath = (path: string, cwd = "/"): string => {
 	const absolute = path.startsWith("/") ? path : `${cwd}/${path}`;
 	const parts: string[] = [];
@@ -1060,9 +1073,17 @@ export class MemonMachine {
 		tab.historyIndex = tab.history.length - 1;
 	}
 
-	private async readTab(tab: MemonBrowserTab): Promise<void> {
+	/**
+	 * Syncs the tab from its page: address, title, history and outline.
+	 * `settleMs` waits up to that long for the page to hold still first.
+	 */
+	private async readTab(tab: MemonBrowserTab, settleMs = 0): Promise<void> {
 		try {
-			const outline = await this.browserPort(tab).outline(tab.sessionId);
+			const port = this.browserPort(tab);
+			const outline =
+				settleMs > 0 && port.settle
+					? await port.settle(tab.sessionId, { timeoutMs: settleMs })
+					: await port.outline(tab.sessionId);
 			tab.outline = outline;
 			tab.url = outline.url || tab.url;
 			tab.title = outline.title || tab.title;
@@ -1136,7 +1157,7 @@ export class MemonMachine {
 			current.url = page.url;
 			current.title = page.title;
 			current.outline = null;
-			await this.readTab(current);
+			await this.readTab(current, PAGE_OPEN_SETTLE_MS);
 			this.focusWindow(window.id);
 			return;
 		}
@@ -1158,7 +1179,7 @@ export class MemonMachine {
 		};
 		this.tabs.push(tab);
 		this.activeTabId = tab.id;
-		await this.readTab(tab);
+		await this.readTab(tab, PAGE_OPEN_SETTLE_MS);
 		this.focusWindow(window.id);
 	}
 
@@ -1216,12 +1237,16 @@ export class MemonMachine {
 		} else {
 			await this.browserPort(tab).history(tab.sessionId, direction);
 		}
-		await this.readTab(tab);
+		await this.readTab(tab, PAGE_OPEN_SETTLE_MS);
 	}
 
+	/**
+	 * Syncs the front tab again from its page, which may have moved since it
+	 * was read: the user worked in the real tab, or its scripts drew more.
+	 */
 	async refreshBrowser(): Promise<void> {
 		const tab = this.activeTab();
-		if (tab) await this.readTab(tab);
+		if (tab) await this.readTab(tab, PAGE_READ_SETTLE_MS);
 	}
 
 	async selectTab(index: number): Promise<void> {

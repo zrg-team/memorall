@@ -352,6 +352,38 @@ describe("MemonMachine", () => {
 		expect(screen).toContain('[b1] link "Next"');
 	});
 
+	it("waits for an opened page to draw itself, and syncs it again on a read", async () => {
+		const { machine, ports } = createMachine();
+		const settle = vi.fn(
+			async (_sessionId: string, _options: { timeoutMs: number }) =>
+				outline("https://example.com", "Example"),
+		);
+		ports.browser.settle = settle;
+
+		await machine.openUrl("https://example.com");
+		await machine.openUrl("https://example.com/inbox");
+		expect(ports.browser.navigate).toHaveBeenCalledWith(
+			"s1",
+			"https://example.com/inbox",
+		);
+		// A new tab and the same tab both wait the same way.
+		expect(settle).toHaveBeenNthCalledWith(1, "s1", { timeoutMs: 10_000 });
+		expect(settle).toHaveBeenNthCalledWith(2, "s1", { timeoutMs: 10_000 });
+		expect(ports.browser.outline).not.toHaveBeenCalled();
+
+		// The page moved on in the real tab: a read brings the tab up to date.
+		settle.mockResolvedValueOnce({
+			...outline("https://example.com/inbox/42", "Message"),
+			busy: true,
+		});
+		await machine.refreshBrowser();
+		expect(settle).toHaveBeenLastCalledWith("s1", { timeoutMs: 3_000 });
+		const screen = machine.readScreen();
+		expect(screen).toContain("url: https://example.com/inbox/42");
+		expect(screen).toContain("title: Message");
+		expect(screen).toContain("(the page was still loading when read");
+	});
+
 	it("turns plain words into a search", async () => {
 		const { machine, ports } = createMachine();
 		await machine.openUrl("agent quality improvement");

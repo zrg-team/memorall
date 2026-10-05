@@ -1851,7 +1851,7 @@ exports[`flows-integrations registered contracts > registers every integrations 
     },
   },
   {
-    "description": "Open an app on the computer and return the screen. Browser opens a url (or a search); Files shows a folder; Editor opens a file; Terminal brings up the shell.",
+    "description": "Open an app on the computer and return the screen. Browser opens a url (or a search) and waits for the page to finish drawing itself; Files shows a folder; Editor opens a file; Terminal brings up the shell.",
     "name": "memon_open",
     "parameters": {
       "properties": {
@@ -1954,7 +1954,7 @@ exports[`flows-integrations registered contracts > registers every integrations 
     },
   },
   {
-    "description": "Read the computer screen: the open windows, the focused window in full (a page outline with refs, a folder listing, a file, or terminal output), and anything the user changed since your last look.",
+    "description": "Read the computer screen: the open windows, the focused window in full (a page outline with refs, a folder listing, a file, or terminal output), and anything the user changed since your last look. The Browser tab is synced again from its page, once the page holds still.",
     "name": "memon_screen",
     "parameters": {
       "properties": {

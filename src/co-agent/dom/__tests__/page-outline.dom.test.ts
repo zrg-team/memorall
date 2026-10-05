@@ -67,6 +67,30 @@ describe("page outline", () => {
 		expect(text).not.toContain("secret");
 	});
 
+	it("says the page is busy while it shows a loading region or spinner", () => {
+		expect(buildPageOutline(document).busy).toBeUndefined();
+
+		const main = document.createElement("main");
+		main.setAttribute("aria-busy", "true");
+		document.body.append(main);
+		expect(buildPageOutline(document).busy).toBe(true);
+
+		main.setAttribute("aria-busy", "false");
+		const spinner = document.createElement("div");
+		spinner.setAttribute("role", "progressbar");
+		document.body.append(spinner);
+		expect(buildPageOutline(document).busy).toBe(true);
+
+		// A progress bar with a value is content, like "3 of 5 done".
+		spinner.setAttribute("aria-valuenow", "60");
+		expect(buildPageOutline(document).busy).toBeUndefined();
+
+		// A loading indicator the page has hidden does not count.
+		main.setAttribute("aria-busy", "true");
+		main.hidden = true;
+		expect(buildPageOutline(document).busy).toBeUndefined();
+	});
+
 	it("keeps refs stable across reads of the same document", () => {
 		const first = buildPageOutline(document);
 		const second = buildPageOutline(document);

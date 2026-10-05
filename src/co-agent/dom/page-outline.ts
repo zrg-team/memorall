@@ -92,6 +92,12 @@ export interface PageOutline {
 		/** The viewport's width, for positions; absent from older pages. */
 		viewportWidth?: number;
 	};
+	/**
+	 * The page says it is still loading: its document is still parsing, or it
+	 * shows a busy region or a progress bar without a value. A page read until
+	 * it holds still is also busy when the wait ran out before it did.
+	 */
+	busy?: boolean;
 }
 
 export interface BuildPageOutlineOptions {
@@ -210,6 +216,9 @@ const CONTROL_ROLES = new Set([
 ]);
 const EDITABLE_SELECTOR =
 	'[contenteditable=""],[contenteditable="true"],[contenteditable="plaintext-only"]';
+/** What a page shows while it loads: a busy region, a spinner-like progress bar. */
+const BUSY_SELECTOR =
+	'[aria-busy="true"],[role="progressbar"]:not([aria-valuenow]),progress:not([value])';
 /** Anything that takes a click or text, natively or by the page's own markup. */
 const INTERACTIVE_SELECTOR = [
 	"a[href]",
@@ -308,6 +317,20 @@ const isVisible = (element: Element, style: CSSStyleDeclaration): boolean => {
 	if (element.getAttribute("aria-hidden") === "true") return false;
 	if (style.display === "none" || style.visibility === "hidden") return false;
 	return element.getClientRects().length > 0;
+};
+
+/**
+ * The page says it is still loading. Only a document still parsing counts:
+ * one that stays "interactive" (a written page whose load never fires) is
+ * already drawn.
+ */
+const isPageBusy = (doc: Document): boolean => {
+	if (doc.readyState === "loading") return true;
+	const view = doc.defaultView;
+	if (!view) return false;
+	return Array.from(doc.querySelectorAll(BUSY_SELECTOR)).some((element) =>
+		isVisible(element, view.getComputedStyle(element)),
+	);
 };
 
 /** The outermost element of a rich-text editor (contenteditable). */
@@ -864,6 +887,7 @@ export const buildPageOutline = (
 			pageHeight: Math.round(doc.documentElement?.scrollHeight ?? 0),
 			viewportWidth: Math.round(view?.innerWidth ?? 0),
 		},
+		...(isPageBusy(doc) ? { busy: true } : {}),
 	};
 };
 

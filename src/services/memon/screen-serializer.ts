@@ -471,6 +471,11 @@ const fullLines = (
 					);
 				}
 				lines.push(formatPageOutline(tab.outline));
+				if (tab.outline.busy) {
+					lines.push(
+						"(the page was still loading when read — memon_screen with waitSeconds reads it again)",
+					);
+				}
 			} else {
 				lines.push("(page not read yet)");
 			}

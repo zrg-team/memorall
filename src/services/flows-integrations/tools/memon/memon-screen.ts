@@ -31,7 +31,7 @@ type Input = z.infer<typeof schema>;
 export const createMemonScreenTool: ToolFactory<Input> = (): Tool<Input> => ({
 	name: MEMON_SCREEN_TOOL,
 	description:
-		"Read the computer screen: the open windows, the focused window in full (a page outline with refs, a folder listing, a file, or terminal output), and anything the user changed since your last look.",
+		"Read the computer screen: the open windows, the focused window in full (a page outline with refs, a folder listing, a file, or terminal output), and anything the user changed since your last look. The Browser tab is synced again from its page, once the page holds still.",
 	schema,
 	execute: (input, context) =>
 		runMemonTool(

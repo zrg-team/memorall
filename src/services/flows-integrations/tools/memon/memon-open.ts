@@ -42,7 +42,7 @@ type Input = z.infer<typeof schema>;
 export const createMemonOpenTool: ToolFactory<Input> = (): Tool<Input> => ({
 	name: MEMON_OPEN_TOOL,
 	description:
-		"Open an app on the computer and return the screen. Browser opens a url (or a search); Files shows a folder; Editor opens a file; Terminal brings up the shell.",
+		"Open an app on the computer and return the screen. Browser opens a url (or a search) and waits for the page to finish drawing itself; Files shows a folder; Editor opens a file; Terminal brings up the shell.",
 	schema,
 	execute: (input, context) =>
 		runMemonTool(

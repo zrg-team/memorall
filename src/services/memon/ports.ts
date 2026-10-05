@@ -1,5 +1,6 @@
 import { createMemonEmbeddedPort } from "./embedded-browser";
 import { cropScreenshot } from "./page-capture";
+import { settleOutline } from "./settle-outline";
 import type { IAgentSandboxService } from "@memorall/agent-harness-sandbox";
 import type { IFlowFileSystem } from "@memorall/agent-harness-flows/interfaces/services/filesystem";
 import { platform } from "@/platform/current";
@@ -94,6 +95,8 @@ export const createMemonBrowserPort = (): MemonBrowserPort => ({
 			timeoutMs: OPEN_TIMEOUT_MS,
 			maxHtmlChars: 1_000,
 			windowId,
+			// The machine waits on the outline it reads (settle below).
+			waitForRender: false,
 		});
 		const surface = getWebSessionSurface(session.id);
 		return {
@@ -112,6 +115,11 @@ export const createMemonBrowserPort = (): MemonBrowserPort => ({
 	},
 	outline: (sessionId) =>
 		outlineWebSession(sessionId, { maxChars: OUTLINE_MAX_CHARS }),
+	settle: (sessionId, { timeoutMs }) =>
+		settleOutline(
+			() => outlineWebSession(sessionId, { maxChars: OUTLINE_MAX_CHARS }),
+			{ timeoutMs },
+		),
 	act: (sessionId, request) =>
 		performOutlineAction(sessionId, request, { maxChars: OUTLINE_MAX_CHARS }),
 	// The tab's screenshot, cut to the element: what the page shows, WebGL too.
