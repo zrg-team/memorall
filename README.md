@@ -18,7 +18,7 @@ static web app, and Tauri applications for Windows, macOS, and Linux.
 [![Offline First](https://img.shields.io/badge/Architecture-Offline--First-0f766e)](https://github.com/zrg-team/memorall)
 [![Agent Tools](https://img.shields.io/badge/Agent-Sandbox%20%2B%20Browser-c05621)](https://github.com/zrg-team/memorall)
 [![Custom Flows](https://img.shields.io/badge/Flows-Customizable-7c3aed)](https://github.com/zrg-team/memorall)
-[![MemonOS](https://img.shields.io/badge/MemonOS-Agent%20Computer-0e7490)](#memonos)
+[![MemonOS](https://img.shields.io/badge/MemonOS-Shared%20Desktop-0e7490)](#memonos)
 
 [MemonOS](#memonos) • [Platforms](#supported-platforms) • [Quick Start](#quick-start) • [Demo](#demo) • [Flow Engine](#flow-engine) • [Agent Power](#agent-power) • [Custom Agents](#custom-agents) • [Architecture](#architecture-at-a-glance) • [Build a MemonOS App](#build-a-memonos-app) • [Documentation](#documentation-map) • [GitHub](https://github.com/zrg-team/memorall)
 
@@ -30,16 +30,29 @@ static web app, and Tauri applications for Windows, macOS, and Linux.
 
 ▶️ [Watch the full trailer with sound (1:41)](./docs/assets/memorall-trailer.webm) — the soundtrack was generated on-device by Memorall's own Audio studio.
 
-🖥️ **New: MemonOS.** Give any agent a computer of its own, watch it work, and take over at any time. [See it run ↓](#memonos)
+🖥️ **New: MemonOS.** Your agent doesn't need a real PC. It needs a place to work with you: one desktop you share, where you watch every step and take over at any time. [See it run ↓](#memonos)
 
 </div>
 
-<a id="memonos"></a>
-## 🖥️ MemonOS: Give Your Agent a Computer
+## 🧠 Why Memorall
 
-Switch on **MemonOS Bot** for an agent and it gets a computer of its own: a
-desktop with a Browser, Files, a Terminal, Tasks and more, shown in
-**Runtime → Computer**. The agent works through these apps the way a person
+Memorall is built for people who do serious work in tabs. Instead of treating the browser as disposable context, it turns pages, selections, documents, and workspaces into durable memory that you can search, inspect, and chat with later.
+
+What makes the current app distinctive:
+
+- 🏠 Local-first by default. The app can run with in-browser runtimes such as Wllama, WebLLM, and Transformers, while still supporting OpenAI, OpenRouter, LM Studio, and Ollama when you want external or local server-backed models.
+- 🖥️ A place to work with your agent. With [MemonOS](#memonos) you and the agent share a desktop beside the chat: it works in a Browser, Files, a Terminal and Tasks, and you can take over at any time.
+- 🤖 More than a chat window. The shipped UI includes a document library, topic system, knowledge graph explorer, model manager, debug tools, and advanced flow/activity surfaces.
+- 🌐 Embedded where work happens. The content script can open a page-aware assistant, capture selected text, visible content, page HTML, and screenshots, and route saved content into a topic.
+- ⚙️ Backed by a real agent harness. The Flow Engine turns the model into a composable runtime — graph-based flows, middleware steps, tool execution, memory retrieval, and streaming activity — all running off-thread so the UI stays fast and responsive.
+- 🔐 Privacy-aware. Supabase auth is optional, the core app can run local-only, and encrypted provider credentials are restored through the app's passkey flow.
+
+<a id="memonos"></a>
+## 🖥️ MemonOS: A Place to Work With Your Agent
+
+Your agent doesn't need a real PC. It needs a place to work with you. Switch on
+**MemonOS Bot** for an agent and the two of you share a desktop with a Browser,
+Files, a Terminal, Tasks and more, shown in **Runtime → Computer**. The agent works through these apps the way a person
 would. It opens pages, writes files, runs commands and ticks off its
 checklist, and you see each step as it happens. Press **Take over** at any
 moment to drive the computer yourself; the agent waits until you hand it back.
@@ -91,19 +104,6 @@ app has every other app.
 How it works and how to add your own app:
 [MemonOS architecture](#memonos-architecture) ·
 [Build a MemonOS app](#build-a-memonos-app)
-
-## 🧠 Why Memorall
-
-Memorall is built for people who do serious work in tabs. Instead of treating the browser as disposable context, it turns pages, selections, documents, and workspaces into durable memory that you can search, inspect, and chat with later.
-
-What makes the current app distinctive:
-
-- 🏠 Local-first by default. The app can run with in-browser runtimes such as Wllama, WebLLM, and Transformers, while still supporting OpenAI, OpenRouter, LM Studio, and Ollama when you want external or local server-backed models.
-- 🖥️ An agent computer you can watch. With [MemonOS](#memonos) the agent works in a Browser, Files, a Terminal and Tasks on a desktop beside the chat, and you can take over at any time.
-- 🤖 More than a chat window. The shipped UI includes a document library, topic system, knowledge graph explorer, model manager, debug tools, and advanced flow/activity surfaces.
-- 🌐 Embedded where work happens. The content script can open a page-aware assistant, capture selected text, visible content, page HTML, and screenshots, and route saved content into a topic.
-- ⚙️ Backed by a real agent harness. The Flow Engine turns the model into a composable runtime — graph-based flows, middleware steps, tool execution, memory retrieval, and streaming activity — all running off-thread so the UI stays fast and responsive.
-- 🔐 Privacy-aware. Supabase auth is optional, the core app can run local-only, and encrypted provider credentials are restored through the app's passkey flow.
 
 <a id="flow-engine"></a>
 ## 🔁 Flow Engine
