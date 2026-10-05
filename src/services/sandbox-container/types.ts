@@ -402,6 +402,37 @@ export interface SandboxPythonRunResult {
 	deleted: string[];
 }
 
+/**
+ * One run of a media command inside the sandbox page: `ffmpeg` or `ffprobe`
+ * on FFmpeg.wasm, or `magick` (and ImageMagick's other tools) on magick-wasm.
+ */
+export interface SandboxMediaRunRequest {
+	engine: "ffmpeg" | "magick";
+	/** The command line, the tool's name first. */
+	argv: string[];
+	cwd: string;
+	/** The files the command line names, so the tool can read them. */
+	files: SandboxPythonFile[];
+	/** Folders it names, made before it runs (an output folder may be empty). */
+	dirs: string[];
+	/** What the command line pipes in. */
+	stdin?: Uint8Array;
+	/** ffmpeg: where its input pipe ("-i -") was pointed, to get `stdin`. */
+	stdinPath?: string;
+	/** ffmpeg: where its output pipe ("-" last, "pipe:1") was pointed, read back as stdout. */
+	stdoutPath?: string;
+	timeoutMs?: number;
+}
+
+export interface SandboxMediaRunResult {
+	exitCode: number;
+	/** What the tool printed, or the bytes it wrote to stdout. */
+	stdout: Uint8Array;
+	stderr: string;
+	/** Files the tool created or changed. */
+	changed: SandboxPythonFile[];
+}
+
 export type SandboxOperation =
 	| "health"
 	| "runtime.executeCode"
@@ -417,6 +448,7 @@ export type SandboxOperation =
 	| "runtime.clearLogs"
 	| "network.fetch"
 	| "python.run"
+	| "media.run"
 	| "fs.writeFile"
 	| "fs.readFile"
 	| "fs.mkdir"
@@ -459,6 +491,7 @@ export type SandboxOperationPayloadMap = {
 	"runtime.clearLogs": undefined;
 	"network.fetch": SandboxNetworkFetchRequest;
 	"python.run": SandboxPythonRunRequest;
+	"media.run": SandboxMediaRunRequest;
 	"fs.writeFile": SandboxFsWriteFileRequest;
 	"fs.readFile": SandboxFsReadFileRequest;
 	"fs.mkdir": SandboxFsMkdirRequest;
@@ -506,6 +539,7 @@ export type SandboxOperationResultMap = {
 	"runtime.clearLogs": SandboxClearLogsResult;
 	"network.fetch": SandboxNetworkFetchResult;
 	"python.run": SandboxPythonRunResult;
+	"media.run": SandboxMediaRunResult;
 	"fs.writeFile": { path: string };
 	"fs.readFile": SandboxFsReadFileResult;
 	"fs.mkdir": { path: string };

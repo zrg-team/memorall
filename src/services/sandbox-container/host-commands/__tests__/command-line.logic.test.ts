@@ -56,6 +56,7 @@ const files = (): HostFiles & { written: Map<string, string> } => {
 		written,
 		isDirectory: async (path) => path === "/repo" || path === "/",
 		exists: async () => true,
+		list: async () => [],
 		walk: async () => ({ files: [], truncated: false }),
 		read: async () => new Uint8Array(),
 		write: async (path, data) => {

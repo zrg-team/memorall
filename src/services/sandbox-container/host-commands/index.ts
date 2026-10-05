@@ -15,14 +15,30 @@ import type {
 	HostCommandOutput,
 } from "./types";
 
+const ffmpeg = () =>
+	import("./media-command").then((module) => module.runFfmpeg);
+const magick = () =>
+	import("./media-command").then((module) => module.runMagick);
+
 /**
  * Commands the sandbox shell cannot run itself, run on the host instead:
  * `git` needs binary-safe files, `py` (and `pip`, `zip`, `unzip`, which run
- * through it) needs Pyodide, and `curl` needs the network (and this
- * computer's servers) the way curl reaches them.
+ * through it) needs Pyodide, `curl` needs the network (and this computer's
+ * servers) the way curl reaches them, and `ffmpeg`, `ffprobe` and `magick`
+ * (with ImageMagick's own `convert`, `identify`, `mogrify`, `composite`,
+ * `montage` and `compare`) need FFmpeg.wasm and magick-wasm.
  */
 const HOST_COMMANDS: Record<string, () => Promise<HostCommand>> = {
+	compare: magick,
+	composite: magick,
+	convert: magick,
 	curl: () => import("./curl-command").then((module) => module.runCurl),
+	ffmpeg,
+	ffprobe: ffmpeg,
+	identify: magick,
+	magick,
+	mogrify: magick,
+	montage: magick,
 	git: () => import("./git-command").then((module) => module.runGit),
 	py: () => import("./python-command").then((module) => module.runPython),
 	python: () => import("./python-command").then((module) => module.runPython),
@@ -36,9 +52,49 @@ const HOST_COMMANDS: Record<string, () => Promise<HostCommand>> = {
 /** The commands run on the host, by name. */
 export const HOST_COMMAND_NAMES: readonly string[] = Object.keys(HOST_COMMANDS);
 
+const isHostCommand = (name: string) => Object.hasOwn(HOST_COMMANDS, name);
+
+/**
+ * `which ffmpeg`, `command -v magick`, `type py`: the shell looks only among
+ * its own commands, so it would say a host command is missing (and an agent
+ * would go and install it). Answered here when every name asked about is a
+ * host command; any other lookup stays the shell's.
+ */
+const lookupOf = (argv: readonly string[]): HostCommand | null => {
+	const [command, ...rest] = argv;
+	const flag = rest[0];
+	if (command === "command" && flag !== "-v" && flag !== "-V") return null;
+	if (command !== "which" && command !== "type" && command !== "command") {
+		return null;
+	}
+	const names = rest.filter((arg) => !arg.startsWith("-"));
+	if (!names.length || !names.every(isHostCommand)) return null;
+	return async () => ({
+		stdout: names
+			.map((name) =>
+				command === "type" || flag === "-V"
+					? `${name} is /usr/bin/${name}\n`
+					: `/usr/bin/${name}\n`,
+			)
+			.join(""),
+		stderr: "",
+		exitCode: 0,
+	});
+};
+
+/** The host command that runs these words, if one does. */
+const hostCommandFor = (
+	argv: readonly string[],
+): (() => Promise<HostCommand>) | null => {
+	const name = argv[0];
+	if (name && isHostCommand(name)) return HOST_COMMANDS[name] ?? null;
+	const lookup = lookupOf(argv);
+	return lookup ? async () => lookup : null;
+};
+
 const hostCommandOf = (segment: string) => {
-	const name = parseSegment(segment).argv[0];
-	return name && Object.hasOwn(HOST_COMMANDS, name) ? name : null;
+	const { argv } = parseSegment(segment);
+	return hostCommandFor(argv) ? (argv[0] as string) : null;
 };
 
 /** Whether any part of this command line needs a host command. */
@@ -175,7 +231,7 @@ export const runHostCommandLine = async (
 		if (stages.length > 1 && hostAt.length === 1) {
 			const at = hostAt[0] as number;
 			const stage = parseSegment(stages[at] as string);
-			const command = await HOST_COMMANDS[stage.argv[0] as string]?.();
+			const command = await hostCommandFor(stage.argv)?.();
 			const after = stages.slice(at + 1);
 			if (
 				command &&
@@ -221,8 +277,7 @@ export const runHostCommandLine = async (
 			}
 		}
 
-		const load =
-			name && Object.hasOwn(HOST_COMMANDS, name) ? HOST_COMMANDS[name] : null;
+		const load = hostCommandFor(parsed.argv);
 		if (!load) {
 			// Each shell segment runs on its own: `$?` is filled in with the
 			// line's last exit code, as the shell would have it.

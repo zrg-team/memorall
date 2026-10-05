@@ -18,6 +18,8 @@ import {
 	BROWSER_SANDBOX_FEATURE_SYSTEM_PROMPT,
 	BROWSER_SANDBOX_FEATURE_TOOLS,
 	buildBrowserSandboxPrompt,
+	readSandboxCommands,
+	readSandboxNotes,
 	readSandboxPython,
 } from "../steps/features/nodejs-sandbox-feature/index.js";
 
@@ -418,5 +420,51 @@ describe("sandbox tool profiles", () => {
 		expect(prompt).toContain(
 			'\n- Save charts with plt.savefig("chart.png").\n',
 		);
+	});
+
+	it("says which commands come installed, so the agent never installs them", () => {
+		expect(readSandboxCommands({ runtime: "almostnode" })).toEqual([]);
+		expect(BROWSER_SANDBOX_FEATURE_SYSTEM_PROMPT).not.toContain(
+			"Installed by default",
+		);
+
+		const commands = readSandboxCommands({
+			commands: [
+				{
+					names: ["magick", "convert", 4],
+					summary: "ImageMagick 7",
+					notes: ["magick in.png out.webp", ""],
+				},
+				{ names: [], summary: "nothing to run" },
+				"ffmpeg",
+			],
+		});
+		expect(commands).toEqual([
+			{
+				names: ["magick", "convert"],
+				summary: "ImageMagick 7",
+				notes: ["magick in.png out.webp"],
+			},
+		]);
+		const prompt = buildBrowserSandboxPrompt(
+			SANDBOX_WEB_APP_TOOLS,
+			undefined,
+			commands,
+		);
+		expect(prompt).toContain(
+			"- Installed by default, run as commands (never install them, with npm, pip, apt or anything else):\n  - `magick`, `convert`: ImageMagick 7.\n    magick in.png out.webp\n",
+		);
+	});
+
+	it("lists the sandbox's own notes on how its runtime works", () => {
+		expect(readSandboxNotes({ runtime: "almostnode" })).toEqual([]);
+
+		const notes = readSandboxNotes({
+			notes: ["One command runs at a time.", "", 3],
+		});
+		expect(notes).toEqual(["One command runs at a time."]);
+		expect(
+			buildBrowserSandboxPrompt(SANDBOX_WEB_APP_TOOLS, undefined, [], notes),
+		).toContain("\n- One command runs at a time.\n");
 	});
 });

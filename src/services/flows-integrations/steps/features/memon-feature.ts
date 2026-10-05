@@ -129,13 +129,14 @@ const APP_SECTIONS: Record<MemonAppId, (config: MemonFeatureConfig) => string> =
 				"New files and folders go in your home, ~ (a folder per piece of work, like ~/<topic>/), unless the user names another place.",
 			]),
 		terminal: () =>
-			section("Terminal", "shell, node, py, git and curl", [
+			section("Terminal", "shell, node, py, git, curl, ffmpeg and magick", [
 				'Run: memon_run { command } in the "/" tree of Files, from your home (~); "cd dir" sticks, "cd" goes home. A long command keeps running: { waitSeconds: 60 } waits, { input: "y" } answers, { stop: true } stops.',
 				'Tabs: the screen shows what runs or last ran in each; { terminal: "new", command } runs in a new tab. { command, saveAs: "Start Site" } saves ~/Start Site.terminal instead; clicking it runs it.',
 				"Code: write JavaScript to a .js file and run node file.js (no node -e); end scripts with process.exit(0) or they hang. npm install works for pure-JS packages; git works.",
 				`Python: py file.py: stdlib plus ${BUNDLED_PYTHON_BRIEF} (imports load them; pip list names them, pip show <name> says how). Charts: plt.savefig("chart.png").`,
+				"Media: ffmpeg, ffprobe and magick (ImageMagick; convert, identify, mogrify… too) are installed by default: never install them. ffmpeg has one thread: trim and scale down to keep encodes short.",
 				"Web: save files with one curl, not a script: curl -sSL -o assets/hero.jpg <url>; several: --create-dirs --output-dir assets -O <url1> -O <url2>.",
-				"curl, git and py run next to a running server: curl -s localhost:3000/api | jq .",
+				'One long command (a server) runs at a time, in any tab: the Terminal shows its tab and port; use that server, or stop it first ({ terminal: "1", stop: true }). curl, git and py run next to it: curl -s localhost:3000/api | jq .',
 			]),
 		tasks: () =>
 			section("Tasks", "work you share with the user, kept across chats", [

@@ -735,8 +735,18 @@ describe("MemonMachine", () => {
 			"ran ls",
 		]);
 		expect(machine.readScreen()).toContain("tab 1 is running `node server.js`");
+		// The running tab says the port it serves, so the agent uses that
+		// server instead of starting another.
+		expect(machine.readScreen()).toMatch(
+			/1 .+ · running `node server\.js` for .+ · serving http:\/\/localhost:3000/,
+		);
 		await expect(machine.terminal.runCommand("npm test")).rejects.toThrow(
-			"`node server.js` is still running in Terminal tab 1",
+			"`node server.js` is still running in Terminal tab 1, serving http://localhost:3000, and only one such command runs at a time",
+		);
+		// So does the Terminal's line when another window is in front.
+		machine.focusWindow(machine.openWindow("editor").id);
+		expect(machine.readScreen()).toMatch(
+			/Terminal.* · tab 1 running `node server\.js` for \S+ · serving http:\/\/localhost:3000/,
 		);
 
 		// The server's tab kept its own directory and output.

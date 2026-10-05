@@ -487,10 +487,14 @@ export class MemonTerminal {
 		const running = this.runningCommand as RunningCommand;
 		const where =
 			running.tabId === tab?.id
-				? "in this Terminal tab"
+				? `in this Terminal tab (tab ${running.tabId})`
 				: `in Terminal tab ${running.tabId}`;
+		// Its server may be what the next command was meant to start.
+		const serving = this.servers.length
+			? `, serving ${this.servers.map((port) => `http://localhost:${port}`).join(", ")}`
+			: "";
 		return new Error(
-			`\`${running.command}\` is still running ${where}, and only one such command runs at a time. Next to it you can run file and text commands (ls, cat, mkdir, grep…), curl, git or py; for anything else, wait for it, type into it, or stop it first.`,
+			`\`${running.command}\` is still running ${where}${serving}, and only one such command runs at a time. Next to it you can run file and text commands (ls, cat, mkdir, grep…), curl, git, py, ffmpeg or magick; for anything else, wait for it, type into it, or stop it first.`,
 		);
 	}
 

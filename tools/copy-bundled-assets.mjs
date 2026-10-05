@@ -924,6 +924,58 @@ async function main() {
 	writeFileWithRetry(path.join(pyodideOutDir, "pyodide.js"), pyodideLoader);
 	console.log("✅ Pyodide packaged for the sandbox py command.\n");
 
+	// 5a2. FFmpeg.wasm (@ffmpeg/core, one thread) and ImageMagick
+	// (magick-wasm) for the sandbox's `ffmpeg`, `ffprobe` and `magick`
+	// commands, with Liberation Sans for their text. magick-wasm has no command
+	// line, so ours (src/services/sandbox-container/magick) is bundled into the
+	// worker that runs it. Installed with the extension: nothing to download.
+	const sandboxVendorsDir = path.resolve(
+		process.cwd(),
+		"public/sandbox/vendors",
+	);
+	copyFile(
+		require.resolve("@ffmpeg/core"),
+		path.join(sandboxVendorsDir, "ffmpeg/ffmpeg-core.js"),
+	);
+	copyFile(
+		require.resolve("@ffmpeg/core/wasm"),
+		path.join(sandboxVendorsDir, "ffmpeg/ffmpeg-core.wasm"),
+	);
+	copyFile(
+		require.resolve("@imagemagick/magick-wasm/magick.wasm"),
+		path.join(sandboxVendorsDir, "magick/magick.wasm"),
+	);
+	await build({
+		entryPoints: [
+			path.resolve(
+				process.cwd(),
+				"src/services/sandbox-container/magick/magick-worker.ts",
+			),
+		],
+		outfile: path.join(sandboxVendorsDir, "magick/magick-worker.js"),
+		bundle: true,
+		format: "iife",
+		platform: "browser",
+		target: ["es2022"],
+		minify: true,
+		sourcemap: false,
+		logLevel: "silent",
+	});
+	const liberationDir = path.dirname(
+		require.resolve("pdfjs-dist/standard_fonts/LiberationSans-Regular.ttf"),
+	);
+	for (const file of [
+		"LiberationSans-Regular.ttf",
+		"LiberationSans-Bold.ttf",
+		"LICENSE_LIBERATION",
+	]) {
+		copyFile(
+			path.join(liberationDir, file),
+			path.join(sandboxVendorsDir, "fonts", file),
+		);
+	}
+	console.log("✅ FFmpeg.wasm and ImageMagick packaged for the sandbox.\n");
+
 	// 5b. Package the isolated artifact preview pages and every executable
 	// runtime they use. Nothing in these previews is loaded from a remote host.
 	const artifactVendorDest = path.resolve(

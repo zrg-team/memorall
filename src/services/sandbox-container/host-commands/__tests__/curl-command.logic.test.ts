@@ -46,6 +46,7 @@ const createContext = (
 				path === "/work" ||
 				[...files.keys()].some((file) => file.startsWith(`${path}/`)),
 			exists: async (path) => files.has(path),
+			list: async () => [],
 			walk: async () => ({ files: [], truncated: false }),
 			read: async (path) => {
 				const data = files.get(path);

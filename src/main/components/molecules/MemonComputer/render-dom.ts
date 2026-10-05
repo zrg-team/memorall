@@ -68,6 +68,34 @@ const imageToDataUrl = async (
 	return urlToDataUrl(image.currentSrc || image.src, viewOf(image));
 };
 
+/** How long a canvas's page has to draw its next frame. */
+const NEXT_FRAME_WAIT_MS = 250;
+
+/**
+ * A canvas as its page draws it in the next frame. A WebGL canvas that does
+ * not keep its drawing buffer reads blank once its frame is on screen, so
+ * between frames it is black. Pages draw in requestAnimationFrame, and a
+ * callback asked for now runs after theirs, before the frame is shown: the
+ * one moment the picture is there to read. Null when no frame comes.
+ */
+const drawnDataUrl = (canvas: HTMLCanvasElement): Promise<string | null> =>
+	new Promise((resolve) => {
+		const view = viewOf(canvas);
+		if (typeof view.requestAnimationFrame !== "function") {
+			resolve(null);
+			return;
+		}
+		const timer = setTimeout(() => resolve(null), NEXT_FRAME_WAIT_MS);
+		view.requestAnimationFrame(() => {
+			clearTimeout(timer);
+			try {
+				resolve(canvas.toDataURL());
+			} catch {
+				resolve(null);
+			}
+		});
+	});
+
 /** Every computed property, as an inline style. */
 const styleText = (computed: CSSStyleDeclaration): string => {
 	let css = "";
@@ -132,6 +160,12 @@ const cloneFrame = (
 	box.setAttribute("style", styleText(computed));
 	if (computed.display === "inline") box.style.setProperty("display", "block");
 	box.style.setProperty("overflow", "hidden");
+	// The page's fixed parts (a game's full-screen canvas) sit in its own
+	// viewport, the frame. A transform makes the box that viewport; without
+	// one they land at the picture's corner and the window shows black.
+	if (computed.transform === "none") {
+		box.style.setProperty("transform", "translate(0px, 0px)");
+	}
 	const background = pageBackground(page);
 	if (background) box.style.setProperty("background-color", background);
 	options.documents.push(page);
@@ -159,13 +193,20 @@ const cloneNode = (source: Node, options: CloneOptions): Node | null => {
 		return placeholderFor(computed);
 	}
 	if (tag === "canvas") {
+		const canvas = element as HTMLCanvasElement;
 		const image = document.createElementNS(XHTML, "img") as HTMLImageElement;
 		image.setAttribute("style", styleText(computed));
 		try {
-			image.setAttribute("src", (element as HTMLCanvasElement).toDataURL());
+			image.setAttribute("src", canvas.toDataURL());
 		} catch {
+			// Tainted by another origin's pixels.
 			return placeholderFor(computed);
 		}
+		options.pending.push(
+			drawnDataUrl(canvas).then((data) => {
+				if (data) image.setAttribute("src", data);
+			}),
+		);
 		return image;
 	}
 

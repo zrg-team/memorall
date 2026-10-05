@@ -1,6 +1,7 @@
 import { v4 as nanoid } from "@/utils/uuid";
 import { assertJsonValue, type JsonValue } from "@memorall/agent-harness-core";
 import type { ISandboxContainerService } from "@/services/sandbox-container";
+import { INSTALLED_COMMANDS } from "@/services/sandbox-container/installed-commands";
 import {
 	BUNDLED_PYTHON_PACKAGES,
 	BUNDLED_PYTHON_NOTES,
@@ -41,6 +42,14 @@ import { SandboxError } from "@memorall/agent-harness-sandbox";
 
 export const BROWSER_SANDBOX_PROVIDER_ID = "browser";
 
+/**
+ * How this sandbox runs commands, for the agent: almostnode streams one
+ * command at a time, so a second long one is refused while the first runs.
+ */
+export const BROWSER_SANDBOX_NOTES = [
+	"One command runs at a time: while one is still running (a server, a watcher), starting another is refused. File and text commands (ls, cat, mkdir, grep…), curl, git, py and the installed commands still run next to it. Before starting a server, check what already runs and the port it serves: use that server, or stop the running command first.",
+] as const;
+
 export const BROWSER_SANDBOX_CAPABILITIES: SandboxCapabilities = {
 	supported: [
 		"runtime.code",
@@ -75,6 +84,14 @@ export const BROWSER_SANDBOX_CAPABILITIES: SandboxCapabilities = {
 			summary: BUNDLED_PYTHON_SUMMARY,
 			notes: [...BUNDLED_PYTHON_NOTES],
 		},
+		// Installed with the app, run in commands: ffmpeg, magick…
+		commands: INSTALLED_COMMANDS.map((command) => ({
+			names: [...command.names],
+			summary: command.summary,
+			notes: [...command.notes],
+		})),
+		// Limits of this runtime the agent works within.
+		notes: [...BROWSER_SANDBOX_NOTES],
 		browserNative: true,
 		ptyResize: false,
 	},

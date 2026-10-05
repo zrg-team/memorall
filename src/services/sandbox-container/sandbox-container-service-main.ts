@@ -826,8 +826,9 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 		request: SandboxExecuteCommandRequest,
 	): Promise<SandboxCommandResult> {
 		if (usesHostCommand(request.command)) {
-			// git, py and curl read the host's files: the sandbox's changes
-			// first, and every other context's, so they read the latest.
+			// Host commands (git, py, curl, ffmpeg, magick) read the host's
+			// files: the sandbox's changes first, and every other context's, so
+			// they read the latest.
 			await this.workspaceSync.flush().catch((error) =>
 				logWarn("Failed to save the sandbox's changes before a host command", {
 					error,
@@ -849,7 +850,7 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 				},
 				{
 					files: await this.getHostFiles(),
-					// A curl, git or py line may run while a server does.
+					// A host command line may run while a server does.
 					runShell: (command, cwd) =>
 						this.executeShellCommand({
 							...request,
@@ -870,6 +871,13 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 							"python.run",
 							payload,
 							(payload.timeoutMs ?? 60_000) + COMMAND_REQUEST_TIMEOUT_BUFFER_MS,
+						),
+					runMedia: (payload) =>
+						this.request(
+							"media.run",
+							payload,
+							(payload.timeoutMs ?? 600_000) +
+								COMMAND_REQUEST_TIMEOUT_BUFFER_MS,
 						),
 					filesChanged: () => {
 						// Changed on the host behind its change events: the sync

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { cloneForCapture } from "../render-dom";
 
 /** A window holding a frame whose page this document can read. */
@@ -41,6 +41,43 @@ describe("capturing a window with a page in a frame", () => {
 		expect(box.querySelector("html, body")).toBeNull();
 		// Its fonts are embedded with this page's.
 		expect(documents).toEqual([document, page]);
+	});
+
+	it("keeps a page's fixed parts in its frame, not at the picture's corner", async () => {
+		const { window } = windowWithPage(
+			'<html><body><canvas style="position: fixed; inset: 0"></canvas></body></html>',
+		);
+
+		const { clone, ready } = cloneForCapture(window);
+		await ready;
+
+		const box = clone?.firstElementChild as HTMLElement;
+		// A transform makes the box the viewport the fixed canvas sits in.
+		expect(box.style.getPropertyValue("transform")).toBe("translate(0px, 0px)");
+	});
+
+	it("reads a canvas again once its page has drawn the next frame", async () => {
+		const { window, page } = windowWithPage(
+			"<html><body><canvas></canvas></body></html>",
+		);
+		const canvas = page.querySelector("canvas") as HTMLCanvasElement;
+		// A WebGL canvas reads blank between frames and drawn right after one.
+		canvas.toDataURL = vi
+			.fn()
+			.mockReturnValueOnce("data:image/png;base64,blank")
+			.mockReturnValue("data:image/png;base64,drawn");
+		const view = page.defaultView as Window;
+		view.requestAnimationFrame = (callback) => {
+			setTimeout(() => callback(0));
+			return 1;
+		};
+
+		const { clone, ready } = cloneForCapture(window);
+		await ready;
+
+		expect(clone?.querySelector("img")?.getAttribute("src")).toBe(
+			"data:image/png;base64,drawn",
+		);
 	});
 
 	it("still shows a frame it cannot read as a box", async () => {

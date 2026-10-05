@@ -105,15 +105,75 @@ const pythonGuidance = ({
 	].join("\n");
 };
 
+/**
+ * A command the sandbox has installed, as it reports them in
+ * `capabilities.extensions.commands` (ffmpeg, magick…).
+ */
+export interface SandboxInstalledCommand {
+	/** The names it runs by, its own first. */
+	names: readonly string[];
+	summary?: string;
+	/** How to use it here, one tip each. */
+	notes?: readonly string[];
+}
+
+/** The commands the sandbox reports as installed; empty when it reports none. */
+export const readSandboxCommands = (
+	extensions: Record<string, unknown> | undefined,
+): SandboxInstalledCommand[] => {
+	const commands = extensions?.commands;
+	if (!Array.isArray(commands)) return [];
+	return commands.flatMap((command) => {
+		if (!command || typeof command !== "object") return [];
+		const { names, summary, notes } = command as {
+			names?: unknown;
+			summary?: unknown;
+			notes?: unknown;
+		};
+		if (!strings(names).length) return [];
+		return [
+			{
+				names: strings(names),
+				...(typeof summary === "string" && summary.trim()
+					? { summary: summary.trim() }
+					: {}),
+				...(strings(notes).length ? { notes: strings(notes) } : {}),
+			},
+		];
+	});
+};
+
+/**
+ * The sandbox's own notes on how its runtime works, one each, as it reports
+ * them in `capabilities.extensions.notes`: limits a provider has that others
+ * may not.
+ */
+export const readSandboxNotes = (
+	extensions: Record<string, unknown> | undefined,
+): string[] => strings(extensions?.notes);
+
+const commandsGuidance = (
+	commands: readonly SandboxInstalledCommand[],
+): string =>
+	[
+		"- Installed by default, run as commands (never install them, with npm, pip, apt or anything else):",
+		...commands.flatMap(({ names, summary, notes = [] }) => [
+			`  - ${names.map((name) => `\`${name}\``).join(", ")}${summary ? `: ${summary}.` : ""}`,
+			...notes.map((note) => `    ${note}`),
+		]),
+	].join("\n");
+
 export const buildBrowserSandboxPrompt = (
 	tools: readonly string[],
 	python?: SandboxPythonCapability,
+	commands: readonly SandboxInstalledCommand[] = [],
+	notes: readonly string[] = [],
 ): string => `# BROWSER SANDBOX
 Use the active browser sandbox when code must be executed, packages tested, commands run, or a web app previewed.
 
 Available sandbox tools: ${tools.join(", ")}.
 
-- The runtime is AlmostNode in the browser, not OS Node.js. Browser-compatible JavaScript, TypeScript, npm packages, and common Node shims are supported; native addons and OS process assumptions are not.${python ? `\n${pythonGuidance(python)}` : ""}
+- The runtime is AlmostNode in the browser, not OS Node.js. Browser-compatible JavaScript, TypeScript, npm packages, and common Node shims are supported; native addons and OS process assumptions are not.${python ? `\n${pythonGuidance(python)}` : ""}${commands.length ? `\n${commandsGuidance(commands)}` : ""}${notes.map((note) => `\n- ${note}`).join("")}
 - Use the existing fs_read, fs_write, fs_edit, fs_ls, fs_glob, fs_grep, fs_mkdir, and fs_remove tools for workspace files. The harness synchronizes those files with the sandbox.
 - Use sandbox_run for code, workspace files, commands, and REPL evaluation. For a running command, continue with sandbox_process read and its returned nextCursor; never invent or alter opaque IDs and cursors.
 - Use sandbox_packages only when a dependency is required.
@@ -161,12 +221,15 @@ const definition = defineStep<
 				...sandboxTools,
 				...ARTIFACT_FEATURE_TOOLS,
 			);
-			const python = readSandboxPython(
-				capabilities?.extensions as Record<string, unknown> | undefined,
-			);
+			const extensions = capabilities?.extensions as
+				| Record<string, unknown>
+				| undefined;
+			const python = readSandboxPython(extensions);
+			const commands = readSandboxCommands(extensions);
+			const notes = readSandboxNotes(extensions);
 			const messages = GraphBase.chat.systemMessage(
 				input.messages,
-				`${buildBrowserSandboxPrompt(sandboxTools, python)}\n\n${ARTIFACT_FEATURE_SYSTEM_PROMPT}`,
+				`${buildBrowserSandboxPrompt(sandboxTools, python, commands, notes)}\n\n${ARTIFACT_FEATURE_SYSTEM_PROMPT}`,
 			);
 
 			return { output: { tools, messages } };
