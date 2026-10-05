@@ -10,17 +10,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useEditor, EditorContent } from "@tiptap/react";
-import StarterKit from "@tiptap/starter-kit";
-import Image from "@tiptap/extension-image";
-import { Table } from "@tiptap/extension-table";
-import { TableRow } from "@tiptap/extension-table-row";
-import { TableHeader } from "@tiptap/extension-table-header";
-import { TableCell } from "@tiptap/extension-table-cell";
-import Placeholder from "@tiptap/extension-placeholder";
-import { marked } from "marked";
-import TurndownService from "turndown";
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const { gfm } = require("turndown-plugin-gfm");
 import {
 	Bold,
 	Code,
@@ -28,6 +17,7 @@ import {
 	ImageIcon,
 	Italic,
 	List,
+	ListChecks,
 	ListOrdered,
 	Loader2,
 	Quote,
@@ -43,26 +33,12 @@ import {
 	PopoverTrigger,
 } from "@/main/components/ui/popover";
 import { logInfo, logError } from "@/utils/logger";
+import {
+	createMarkdownExtensions,
+	getMarkdownContent,
+	setMarkdownContent,
+} from "./markdown-extensions";
 import type { DocumentEditorProps } from "./types";
-
-// Configure markdown parser
-marked.setOptions({ gfm: true, breaks: true });
-
-// Configure HTML -> Markdown converter with GFM table support
-const turndownService = new TurndownService({
-	headingStyle: "atx",
-	codeBlockStyle: "fenced",
-});
-turndownService.use(gfm);
-
-const parseMarkdown = (markdown: string): string => {
-	try {
-		return marked.parse(markdown) as string;
-	} catch (error) {
-		logError("[MARKDOWN_EDITOR] Failed to parse markdown:", error);
-		return markdown;
-	}
-};
 
 interface MarkdownWysiwygProps extends Omit<DocumentEditorProps, "className"> {
 	/** Switch the surrounding editor back to the rendered preview. */
@@ -73,6 +49,7 @@ export const MarkdownWysiwyg: React.FC<MarkdownWysiwygProps> = ({
 	file,
 	initialContent,
 	onContentChange,
+	onDirtyChange,
 	onSave,
 	readOnly = false,
 	onRequestPreview,
@@ -84,20 +61,21 @@ export const MarkdownWysiwyg: React.FC<MarkdownWysiwygProps> = ({
 	const [imageUrl, setImageUrl] = useState("");
 	const [imageAlt, setImageAlt] = useState("");
 	const imageUrlInputRef = useRef<HTMLInputElement>(null);
+	// The document as this editor writes it when nothing was changed. Comparing
+	// against the file itself would flag every file the serializer normalizes
+	// (table padding, list markers) as changed the moment it opens.
+	const baselineRef = useRef(initialContent);
+	// What the last save wrote; it comes back as `initialContent`.
+	const savedRef = useRef<string | null>(null);
+	const initialContentRef = useRef(initialContent);
+	initialContentRef.current = initialContent;
+	const onContentChangeRef = useRef(onContentChange);
+	onContentChangeRef.current = onContentChange;
 
 	const editor = useEditor({
-		extensions: [
-			StarterKit.configure({ heading: { levels: [1, 2, 3, 4, 5, 6] } }),
-			Image.configure({ inline: false, allowBase64: true }),
-			Table.configure({ resizable: false }),
-			TableRow,
-			TableHeader,
-			TableCell,
-			Placeholder.configure({
-				placeholder: t("editor.markdownPlaceholder"),
-			}),
-		],
-		content: parseMarkdown(initialContent),
+		extensions: createMarkdownExtensions({
+			placeholder: t("editor.markdownPlaceholder"),
+		}),
 		editable: !readOnly,
 		editorProps: {
 			attributes: {
@@ -107,12 +85,15 @@ export const MarkdownWysiwyg: React.FC<MarkdownWysiwygProps> = ({
 		},
 		onUpdate: ({ editor }) => {
 			// Only track dirty state — the preview always renders the saved file.
-			const html = editor.getHTML();
-			const markdown = turndownService.turndown(html);
-			setHasUnsavedChanges(markdown !== initialContent);
-			onContentChange?.(markdown);
+			const markdown = getMarkdownContent(editor, initialContentRef.current);
+			setHasUnsavedChanges(markdown !== baselineRef.current);
+			onContentChangeRef.current?.(markdown);
 		},
 	});
+
+	useEffect(() => {
+		onDirtyChange?.(hasUnsavedChanges);
+	}, [hasUnsavedChanges, onDirtyChange]);
 
 	// Reset the document when the file changes underneath the editor.
 	useEffect(() => {
@@ -120,10 +101,19 @@ export const MarkdownWysiwyg: React.FC<MarkdownWysiwygProps> = ({
 		// throws. Tiptap tears the editor down a tick after unmount, so a quick
 		// remount can still hand this effect the render's stale instance.
 		if (!editor || editor.isDestroyed) return;
-		// emitUpdate=false: don't trigger onUpdate for programmatic content sets
-		editor.commands.setContent(parseMarkdown(initialContent), {
-			emitUpdate: false,
-		} as any);
+		if (initialContent === savedRef.current) {
+			// Our own save: the document already shows it, and resetting it would
+			// send the cursor back to the start. Edits made while it was saving
+			// stay unsaved.
+			savedRef.current = null;
+			baselineRef.current = initialContent;
+			setHasUnsavedChanges(
+				getMarkdownContent(editor, initialContent) !== initialContent,
+			);
+			return;
+		}
+		setMarkdownContent(editor, initialContent);
+		baselineRef.current = getMarkdownContent(editor, initialContent);
 		setHasUnsavedChanges(false);
 	}, [initialContent, editor]);
 
@@ -159,19 +149,31 @@ export const MarkdownWysiwyg: React.FC<MarkdownWysiwygProps> = ({
 
 	const handleSave = useCallback(async () => {
 		if (!editor || !hasUnsavedChanges || isSaving || readOnly) return;
+		const markdown = getMarkdownContent(editor, initialContent);
 		try {
 			setIsSaving(true);
-			const html = editor.getHTML();
-			const markdown = turndownService.turndown(html);
+			savedRef.current = markdown;
 			await onSave(markdown);
-			setHasUnsavedChanges(false);
+			baselineRef.current = markdown;
+			setHasUnsavedChanges(
+				getMarkdownContent(editor, initialContent) !== markdown,
+			);
 			logInfo(`[MARKDOWN_EDITOR] Saved ${file.name}`);
 		} catch (error) {
+			savedRef.current = null;
 			logError("[MARKDOWN_EDITOR] Failed to save:", error);
 		} finally {
 			setIsSaving(false);
 		}
-	}, [editor, file.name, hasUnsavedChanges, isSaving, onSave, readOnly]);
+	}, [
+		editor,
+		file.name,
+		hasUnsavedChanges,
+		initialContent,
+		isSaving,
+		onSave,
+		readOnly,
+	]);
 
 	useEffect(() => {
 		const handleKeyDown = (e: KeyboardEvent) => {
@@ -251,6 +253,16 @@ export const MarkdownWysiwyg: React.FC<MarkdownWysiwygProps> = ({
 						title="Numbered List"
 					>
 						<ListOrdered className="h-4 w-4" />
+					</Button>
+					<Button
+						variant={editor.isActive("taskList") ? "secondary" : "ghost"}
+						size="sm"
+						onClick={() => editor.chain().focus().toggleTaskList().run()}
+						disabled={readOnly}
+						className="h-8 w-8 p-0"
+						title={t("editor.taskList")}
+					>
+						<ListChecks className="h-4 w-4" />
 					</Button>
 					<Button
 						variant={editor.isActive("blockquote") ? "secondary" : "ghost"}

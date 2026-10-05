@@ -65,9 +65,10 @@ export const createHyperframesEditTool: ToolFactory<
 		}
 
 		const count = replace_all ? html.split(old_string).length - 1 : 1;
+		// A replacer function keeps `$&`, `$$`, `` $` `` and `$'` literal.
 		const updated = replace_all
 			? html.split(old_string).join(new_string)
-			: html.replace(old_string, new_string);
+			: html.replace(old_string, () => new_string);
 
 		await writeFileBytes(dfs, file, updated, true, config);
 

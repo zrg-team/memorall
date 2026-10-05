@@ -247,6 +247,12 @@ const runningState = (terminal: MemonTerminalState): string => {
 	return `running \`${truncateLine(terminal.runningCommand, 60)}\` for ${formatElapsed(terminal.startedAt)}${quiet}`;
 };
 
+/** " · serving http://localhost:3000": the computer's servers, if any. */
+const servingNote = (terminal: MemonTerminalState): string =>
+	terminal.servers?.length
+		? ` · serving ${terminal.servers.map((port) => `http://localhost:${port}`).join(", ")}`
+		: "";
+
 const terminalBrief = (
 	windowId: string,
 	min: string,
@@ -265,7 +271,7 @@ const terminalBrief = (
 		terminal.tabs.length > 1
 			? ` · ${terminal.tabs.length} tabs, tab ${terminal.activeTabId} in front`
 			: "";
-	return `── ${windowId} Terminal${min}${tabCount} · cwd ${memonDisplayPath(terminal.cwd, home)} · ${state}`;
+	return `── ${windowId} Terminal${min}${tabCount} · cwd ${memonDisplayPath(terminal.cwd, home)} · ${state}${servingNote(terminal)}`;
 };
 
 /** A tab as one line: where it is, what runs in it or what it last ran. */
@@ -276,7 +282,7 @@ const terminalTabLine = (
 ): string => {
 	const front = tab.id === terminal.activeTabId ? "*" : " ";
 	const state = tab.running
-		? `running \`${truncateLine(tab.command ?? terminal.runningCommand ?? "", 60)}\` for ${formatElapsed(terminal.startedAt)}`
+		? `running \`${truncateLine(tab.command ?? terminal.runningCommand ?? "", 60)}\` for ${formatElapsed(terminal.startedAt)}${servingNote(terminal)}`
 		: tab.command
 			? `last: $ ${truncateLine(tab.command, 60)} (exit ${tab.lastExitCode ?? "?"})`
 			: "nothing run yet";
@@ -322,9 +328,9 @@ const serverLines = (terminal: MemonTerminalState): string[] =>
 
 const terminalInputHint = (terminal: MemonTerminalState): string =>
 	terminalRunsInFront(terminal)
-		? '[t1] input → the running command (memon_run { input } / { stop: true }); file and text commands (ls, cat, mkdir, grep…), curl, git and py still run next to it; { terminal: "new", command } runs anything else in a new tab once it stops'
+		? "[t1] input → the running command (memon_run { input } / { stop: true }); memon_run { command } runs a command that finishes next to it; another long one waits until it stops"
 		: terminal.runningCommand
-			? "[t1] input (use memon_run for commands; while the other tab's command runs, only file and text commands, curl, git and py)"
+			? "[t1] input (use memon_run for commands; while the other tab's command runs, commands here must finish)"
 			: terminal.tabs.length > 1
 				? "[t1] input (use memon_run for commands)"
 				: '[t1] input (use memon_run for commands; { terminal: "new", command } opens another tab)';
@@ -450,6 +456,12 @@ const fullLines = (
 			if (tab.error) lines.push(`error: ${tab.error}`);
 			if (tab.outline) {
 				lines.push(`page: ${tab.outline.docToken}`);
+				const { scroll } = tab.outline;
+				if (scroll?.viewportWidth) {
+					lines.push(
+						`viewport: ${scroll.viewportWidth}×${scroll.viewportHeight}, scrolled ${scroll.y} of ${Math.max(0, scroll.pageHeight - scroll.viewportHeight)} px (x, y are in it)`,
+					);
+				}
 				lines.push(formatPageOutline(tab.outline));
 			} else {
 				lines.push("(page not read yet)");
@@ -488,6 +500,11 @@ const fullLines = (
 			const page = textPage(editor.content, editor.screenLine);
 			const lines = [
 				`── ${window.id} Editor · ${editor.path ?? "untitled"} · ${editor.saved ? "saved" : "unsaved"} · ${editor.content.split("\n").length} lines`,
+				...(editor.conflict !== undefined
+					? [
+							"(the file changed on disk under these unsaved edits; saving is refused so it is not replaced — open the file again to see it, then redo the change)",
+						]
+					: []),
 				"[e1] text:",
 				...page.lines,
 			];

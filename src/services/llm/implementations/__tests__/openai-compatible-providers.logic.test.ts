@@ -520,56 +520,59 @@ describe("OpenAI-compatible prompt-cache hints", () => {
 		expect(lastBody().messages[3].content).toBe("Second question");
 	});
 
-	it("stops the cached prefix before the system-reminder tail", () => {
-		// What the flow layer actually sends mid-run: the conversation, the tool
-		// round-trips appended to it, and the volatile tail past the end.
+	it("caches through a reminder, which stays where it was sent", () => {
+		// What the flow layer sends on a run's first request: the conversation,
+		// then this run's reminders right after the user's message.
+		const reminder = {
+			role: "user",
+			content: `<system-reminder>\n## CURRENT DATE & TIME\n</system-reminder>`,
+		};
 		const marked = withCacheBreakpoints([
 			{ role: "system", content: "Be terse." },
 			{ role: "user", content: "Second question" },
-			{ role: "assistant", content: null, tool_calls: [] },
-			{ role: "tool", content: "tool output", tool_call_id: "call_1" },
-			{
-				role: "user",
-				content: `<system-reminder>\n## CURRENT DATE & TIME\n</system-reminder>`,
-			},
+			reminder,
 		]);
 
-		// The breakpoint sits on the last tool result, not on the reminder after
-		// it. Marking the reminder would write an entry keyed on a timestamp that
-		// no later request can ever match.
-		expect(marked[3].content).toEqual([
+		// The reminder is part of the conversation from here on, so the entry
+		// ends on it.
+		expect(marked[2].content).toEqual([
+			{
+				type: "text",
+				text: reminder.content,
+				cache_control: { type: "ephemeral" },
+			},
+		]);
+		expect(marked[1].content).toBe("Second question");
+	});
+
+	it("reads the previous request back whole on the next tool round-trip", () => {
+		const first = [
+			{ role: "system", content: "Be terse." },
+			{ role: "user", content: "Second question" },
+			{
+				role: "user",
+				content: `<system-reminder>\nNow: 14:32:07\n</system-reminder>`,
+			},
+		];
+		const second = [
+			...first,
+			{ role: "assistant", content: null, tool_calls: [] },
+			{ role: "tool", content: "tool output", tool_call_id: "call_1" },
+		];
+
+		const markedSecond = withCacheBreakpoints(second);
+
+		// This is the whole invariant: the next request extends the last one, so
+		// everything the first request cached is still the opening of this one,
+		// and the new entry ends on the newest tool result.
+		expect(markedSecond.slice(1, first.length)).toEqual(first.slice(1));
+		expect(markedSecond.at(-1)?.content).toEqual([
 			{
 				type: "text",
 				text: "tool output",
 				cache_control: { type: "ephemeral" },
 			},
 		]);
-		expect(marked[4].content).toBe(
-			`<system-reminder>\n## CURRENT DATE & TIME\n</system-reminder>`,
-		);
-	});
-
-	it("keeps the cached prefix byte-identical as the reminder changes", () => {
-		const prefix = [
-			{ role: "system", content: "Be terse." },
-			{ role: "user", content: "Second question" },
-			{ role: "tool", content: "tool output", tool_call_id: "call_1" },
-		];
-		const at = (time: string) => [
-			...prefix,
-			{
-				role: "user",
-				content: `<system-reminder>\nNow: ${time}\n</system-reminder>`,
-			},
-		];
-
-		const first = withCacheBreakpoints(at("14:32:07"));
-		const second = withCacheBreakpoints(at("14:39:51"));
-
-		// This is the whole invariant: a different clock moves nothing the next
-		// request reads through, so everything up to the breakpoint still matches.
-		expect(first.slice(0, -1)).toEqual(second.slice(0, -1));
-		expect(first.at(-1)).not.toEqual(second.at(-1));
 	});
 
 	it("marks the end of the conversation when the run has no reminders", () => {

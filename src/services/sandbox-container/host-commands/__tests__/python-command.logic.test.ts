@@ -19,6 +19,7 @@ const createContext = (existing: Record<string, string>) => {
 		files: {
 			isDirectory: async () => true,
 			exists: async (path) => path in existing,
+			list: async () => [],
 			walk: async () => ({
 				files: Object.keys(existing).map((path) => ({ path, size: 1 })),
 				truncated: false,

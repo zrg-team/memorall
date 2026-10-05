@@ -1,9 +1,15 @@
 import {
 	actOnRef,
 	buildPageOutline,
+	elementOfRef,
 	type PageOutlineBlock,
 } from "@/co-agent/dom/page-outline";
 import type { SandboxHandleSwRequestResult } from "@/services/sandbox-container";
+import {
+	captureElement,
+	type MemonCaptureRequest,
+	type MemonPageCapture,
+} from "./page-capture";
 import type {
 	WebOutlineActionRequest,
 	WebOutlineActionResult,
@@ -97,6 +103,15 @@ export const sandboxTargetOf = (url: string): SandboxTarget | null => {
 		};
 	}
 	return null;
+};
+
+/**
+ * True for an address on this machine's loopback (localhost:3000), as
+ * opposed to the renderer and virtual URLs that only the sandbox has.
+ */
+export const isLoopbackUrl = (url: string): boolean => {
+	const parsed = parse(isLocalAddress(url) ? `http://${url.trim()}` : url);
+	return Boolean(parsed && LOCAL_HOSTS.has(parsed.hostname));
 };
 
 /** The address the user and the agent see for a sandbox page. */
@@ -320,4 +335,19 @@ export const frameAct = async (
 		outline = undefined;
 	}
 	return { result, outline };
+};
+
+/** A picture of a ref of the page in the frame, drawn from the page itself. */
+export const frameCapture = async (
+	iframe: HTMLIFrameElement,
+	request: MemonCaptureRequest,
+): Promise<MemonPageCapture> => {
+	const doc = frameDocument(iframe);
+	// Brings it into view and reads an image's address.
+	const described = actOnRef(doc, { ...request, action: "describe" });
+	const source = (described.ok && described.detail) || undefined;
+	return captureElement(
+		elementOfRef(doc, request.ref, request.docToken),
+		source,
+	);
 };

@@ -22,6 +22,7 @@ import {
 	cachedPercent,
 	formatTokenCount,
 	formatUsd,
+	withRunUsage,
 } from "../conversation-cost-format";
 import { loadConversationCosts } from "../conversation-costs";
 
@@ -114,5 +115,43 @@ describe("a chat's cost", () => {
 		expect(formatTokenCount(1_704_188)).toBe("1.7M");
 		expect(formatTokenCount(76_400)).toBe("76k");
 		expect(formatTokenCount(640)).toBe("640");
+	});
+
+	it("adds a running reply on top of what the chat had", () => {
+		const saved = {
+			cost: 0.02,
+			inputTokens: 10_000,
+			cachedTokens: 8_000,
+			outputTokens: 300,
+			requests: 5,
+			replies: 1,
+		};
+		const running = {
+			prompt_tokens: 6_000,
+			completion_tokens: 100,
+			total_tokens: 6_100,
+			cached_tokens: 5_000,
+			cost: 0.004,
+			requests: 2,
+		};
+
+		expect(withRunUsage(saved, running)).toEqual({
+			cost: expect.closeTo(0.024, 6),
+			inputTokens: 16_000,
+			cachedTokens: 13_000,
+			outputTokens: 400,
+			requests: 7,
+			replies: 2,
+		});
+		// The first reply of a new chat has nothing saved under it yet.
+		expect(withRunUsage(undefined, running)).toMatchObject({
+			cost: 0.004,
+			replies: 1,
+		});
+		// A model that reports no price stays a token count.
+		const { cost: _cost, ...unpriced } = running;
+		expect(withRunUsage(undefined, unpriced)).not.toHaveProperty("cost");
+		// Nothing running: the saved total as it is.
+		expect(withRunUsage(saved, undefined)).toBe(saved);
 	});
 });

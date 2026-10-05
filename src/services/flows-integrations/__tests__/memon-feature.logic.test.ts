@@ -93,7 +93,7 @@ describe("buildMemonPrompt", () => {
 		}
 		// The whole computer, pi code included, without Bot.md and Memory.md,
 		// in about 2k tokens.
-		expect(prompt.length).toBeLessThan(9_300);
+		expect(prompt.length).toBeLessThan(9_700);
 	});
 
 	it("says how to fetch a file in one step, with Files and with the Terminal", () => {
@@ -292,6 +292,20 @@ describe("buildMemonPrompt", () => {
 		);
 		expect(prompt).toContain('plt.savefig("chart.png")');
 		expect(prompt).toContain("git works");
+	});
+
+	it("says ffmpeg and magick come installed, so the agent never installs them", () => {
+		const prompt = buildMemonPrompt(DEFAULT_MEMON_FEATURE_CONFIG);
+		expect(prompt).toContain(
+			"Media: ffmpeg, ffprobe and magick (ImageMagick; convert, identify, mogrify… too) are installed by default: never install them.",
+		);
+	});
+
+	it("says one long command keeps running at a time, and others that finish run next to it", () => {
+		const prompt = buildMemonPrompt(DEFAULT_MEMON_FEATURE_CONFIG);
+		expect(prompt).toContain(
+			'One long command (a server) keeps running at a time, in any tab: the Terminal shows its tab and port; use that server, or stop it first ({ terminal: "1", stop: true }). Commands that finish run next to it: node --check app.js',
+		);
 	});
 
 	it("follows Bot.md and carries Memory.md once the user has filled them", () => {

@@ -92,6 +92,13 @@ export interface UsageMessageRow {
 	usage: unknown;
 	toolExecutions: unknown;
 	parts: unknown;
+	/**
+	 * A ledger row (a model request outside a chat reply): what the whole
+	 * request is charged to. An agent tool (memon_code for pi code's requests)
+	 * resolves to its feature; anything else (a Studio page run, charged to
+	 * its studio) to its source's feature.
+	 */
+	charge?: { tool: string; source: string };
 }
 
 export interface UsageFeatureEntry {

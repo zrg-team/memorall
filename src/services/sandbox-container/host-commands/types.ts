@@ -1,4 +1,9 @@
-import type { SandboxPythonRunRequest, SandboxPythonRunResult } from "../types";
+import type {
+	SandboxMediaRunRequest,
+	SandboxMediaRunResult,
+	SandboxPythonRunRequest,
+	SandboxPythonRunResult,
+} from "../types";
 import type { CurlHttp } from "./curl/http";
 
 export interface HostCommandOutput {
@@ -18,6 +23,8 @@ export interface HostFileEntry {
 export interface HostFiles {
 	isDirectory(path: string): Promise<boolean>;
 	exists(path: string): Promise<boolean>;
+	/** The files directly in `dir`, not in its folders. */
+	list(dir: string): Promise<HostFileEntry[]>;
 	/** Files under `dir`, depth first, within the limits. */
 	walk(
 		dir: string,
@@ -38,6 +45,8 @@ export interface HostCommandContext {
 	env: Record<string, string>;
 	files: HostFiles;
 	runPython(request: SandboxPythonRunRequest): Promise<SandboxPythonRunResult>;
+	/** ffmpeg, ffprobe and magick in the sandbox page; absent where there is none. */
+	runMedia?(request: SandboxMediaRunRequest): Promise<SandboxMediaRunResult>;
 	/** Longest a command may run, when the caller set one. */
 	timeoutMs?: number;
 	/** What the command line pipes in (`… | curl -d @-`). */

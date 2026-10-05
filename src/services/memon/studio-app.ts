@@ -1,5 +1,6 @@
 import type { ModelInfo } from "@/services/llm/interfaces/base-llm";
 import type { CurrentModelInfo } from "@/services/llm/interfaces/llm-service.interface";
+import type { MeteredLlmService } from "@/services/model-usage/metered-llm";
 import type {
 	ImageToolTask,
 	MediaCategory,
@@ -23,6 +24,10 @@ import type {
 	StoredStudioRun,
 	StudioRunRecord,
 } from "@/services/studio/studio-history";
+import {
+	type ModelUsageScope,
+	STUDIO_USAGE_SOURCE,
+} from "@/services/model-usage/model-usage-ledger";
 import type { DecisionAnswer, DecisionQuestions } from "@/types/openai-media";
 import type {
 	StudioContentPart,
@@ -31,6 +36,7 @@ import type {
 import {
 	MEMON_STUDIO_LABELS,
 	MEMON_STUDIO_MODES,
+	MEMON_STUDIO_TOOL,
 	MEMON_STUDIO_TOOL_IDS,
 	type MemonStudioToolId,
 } from "./constants";
@@ -85,7 +91,12 @@ export interface MemonStudioPort {
 	tools(detailed?: boolean): Promise<MemonStudioToolState[]>;
 	run(
 		request: MemonStudioRequest,
-		context: { sessionKey: string; signal?: AbortSignal },
+		context: {
+			sessionKey: string;
+			/** The agent (flow id) the run is booked to, if any. */
+			agentId?: string | null;
+			signal?: AbortSignal;
+		},
 	): Promise<MemonStudioOutcome>;
 }
 
@@ -105,6 +116,11 @@ export interface MemonStudioDeps {
 	/** Loads an on-device model before it runs. */
 	prepare(model: CurrentModelInfo, mode: MediaCategory): Promise<void>;
 	generators: MemonStudioGenerators;
+	/**
+	 * The metered LLM service a run uses, booked to the computer's Studio
+	 * session and agent (without it the run is booked to plain "Studio").
+	 */
+	models?(scope: ModelUsageScope): Promise<MeteredLlmService>;
 	record(record: StudioRunRecord): Promise<StoredStudioRun>;
 }
 
@@ -304,7 +320,8 @@ const prepareRun = (
 	model: CurrentModelInfo,
 	info: ModelInfo | undefined,
 	generators: MemonStudioGenerators,
-	signal: AbortSignal | undefined,
+	/** Every generator gets the run's signal and LLM service. */
+	run: { signal?: AbortSignal; llm?: MeteredLlmService },
 ): PreparedRun => {
 	switch (request.tool) {
 		case "decision": {
@@ -335,7 +352,7 @@ const prepareRun = (
 				questions,
 				sessionMetadata: { decisionSchema: questions },
 				generate: () =>
-					generators.decision({ model, input: text, questions, signal }),
+					generators.decision({ model, input: text, questions, ...run }),
 			};
 		}
 		case "speech":
@@ -385,7 +402,7 @@ const prepareRun = (
 						instructions:
 							request.tool === "audio" ? undefined : request.instructions,
 						duration,
-						signal,
+						...run,
 					}),
 			};
 		}
@@ -417,7 +434,7 @@ const prepareRun = (
 						fileName: baseName(file.path),
 						language: request.language,
 						task,
-						signal,
+						...run,
 					}),
 			};
 		}
@@ -457,7 +474,7 @@ const prepareRun = (
 						size: request.size,
 						n: request.count,
 						references: reference ? [reference] : undefined,
-						signal,
+						...run,
 					}),
 			};
 		}
@@ -495,7 +512,7 @@ const prepareRun = (
 						image,
 						fileName: baseName(image.path),
 						threshold: request.threshold,
-						signal,
+						...run,
 					}),
 			};
 		}
@@ -537,7 +554,7 @@ const prepareRun = (
 						labels: request.labels,
 						multiLabel: request.multiLabel,
 						documents: request.documents,
-						signal,
+						...run,
 					}),
 			};
 		}
@@ -578,7 +595,7 @@ export const createStudioPort = (deps: MemonStudioDeps): MemonStudioPort => ({
 		);
 	},
 
-	async run(request, { sessionKey, signal }) {
+	async run(request, { sessionKey, agentId, signal }) {
 		const mode = MEMON_STUDIO_MODES[request.tool];
 		const label = MEMON_STUDIO_LABELS[request.tool];
 		const model = await deps.currentModel(mode);
@@ -588,7 +605,17 @@ export const createStudioPort = (deps: MemonStudioDeps): MemonStudioPort => ({
 			);
 		}
 		const info = await deps.modelInfo(model).catch(() => undefined);
-		const prepared = prepareRun(request, model, info, deps.generators, signal);
+		const llm = await deps.models?.({
+			source: STUDIO_USAGE_SOURCE,
+			tool: MEMON_STUDIO_TOOL,
+			agentId,
+			sessionId: sessionKey,
+			title: `Studio · ${label}`,
+		});
+		const prepared = prepareRun(request, model, info, deps.generators, {
+			signal,
+			llm,
+		});
 		await deps.prepare(model, mode);
 		const startedAt = Date.now();
 		const result = await prepared.generate();

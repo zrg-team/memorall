@@ -6,10 +6,9 @@ import {
 } from "./host-commands/command-line";
 
 /**
- * The shell's own tools: they never start `node`, so they leave alone the
- * stdin and output streaming that almostnode keeps for one running command
- * (a server). Runners of other commands (bash, xargs, timeout) and `sleep`
- * are left out.
+ * The shell's own tools (ls, grep): a line made of them is a command of its
+ * own, never input for a running program. Runners of other commands (bash,
+ * xargs, timeout) and `sleep` are left out.
  */
 export const SHELL_TOOLS: ReadonlySet<string> = new Set([
 	"awk",
@@ -93,9 +92,9 @@ export const usesOnlyShellTools = (command: string): boolean => {
 };
 
 /**
- * Whether this command line may run next to a running command: host
- * commands run outside the shell, and the shell's own tools leave the
- * running command's stdin and output alone.
+ * Whether a line entered in a running command's tab runs next to it (ls,
+ * curl) instead of being typed into it: host commands and the shell's own
+ * tools are commands, never a program's input.
  */
 export const runsAlongside = (command: string): boolean =>
 	usesHostCommand(command) || usesOnlyShellTools(command);

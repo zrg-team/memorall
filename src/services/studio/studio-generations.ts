@@ -1,5 +1,8 @@
 import { serviceManager } from "@/services";
-import type { CurrentModelInfo } from "@/services/llm/interfaces/llm-service.interface";
+import type {
+	CurrentModelInfo,
+	ILLMService,
+} from "@/services/llm/interfaces/llm-service.interface";
 import type {
 	ImageToolTask,
 	TextToolTask,
@@ -18,7 +21,36 @@ import type {
 	Transcription,
 	TranscriptionStreamEvent,
 } from "@/types/openai-media";
+import {
+	meterLlmService,
+	type MeteredLlmService,
+} from "@/services/model-usage/metered-llm";
+import {
+	type ModelUsageScope,
+	STUDIO_USAGE_SOURCE,
+} from "@/services/model-usage/model-usage-ledger";
 import type { StudioContentPart } from "@/types/studio";
+
+/**
+ * Where a generation's model requests are booked. Every Studio run is
+ * metered, from the Studio page or from an agent's computer, so the Usage
+ * page counts its tokens and cost.
+ */
+export interface StudioRunContext {
+	/** An already metered service (an agent's computer passes its own). */
+	llm?: MeteredLlmService;
+	/** Otherwise the app's service is metered to this, e.g. the Studio session. */
+	booking?: Omit<ModelUsageScope, "source">;
+}
+
+const llmOf = (options: StudioRunContext): ILLMService =>
+	options.llm ??
+	meterLlmService(serviceManager.llmService, () => ({
+		sessionId: "studio",
+		title: "Studio",
+		...options.booking,
+		source: STUDIO_USAGE_SOURCE,
+	}));
 
 /**
  * The studios' model calls, without their history. The Studio page records
@@ -31,7 +63,7 @@ export interface StudioGenerationResult {
 	content?: string;
 }
 
-export interface SpeechOptions {
+export interface SpeechOptions extends StudioRunContext {
 	mode?: "text-to-speech" | "text-to-audio";
 	model: CurrentModelInfo;
 	input: string;
@@ -53,7 +85,7 @@ export async function runSpeechGeneration(
 ): Promise<StudioGenerationResult> {
 	let done: Extract<SpeechStreamEvent, { type: "speech.audio.done" }> | null =
 		null;
-	for await (const event of serviceManager.llmService.audioSpeechStreamFor(
+	for await (const event of llmOf(options).audioSpeechStreamFor(
 		options.model.serviceName,
 		{
 			model: options.model.modelId,
@@ -93,7 +125,7 @@ export async function runSpeechGeneration(
 	};
 }
 
-export interface TranscriptionOptions {
+export interface TranscriptionOptions extends StudioRunContext {
 	model: CurrentModelInfo;
 	file: Extract<MediaPayload, { kind: "file" }>;
 	fileName?: string;
@@ -110,7 +142,7 @@ export async function runTranscription(
 ): Promise<StudioGenerationResult> {
 	let text = "";
 	let result: Transcription | null = null;
-	for await (const event of serviceManager.llmService.audioTranscriptionsStreamFor(
+	for await (const event of llmOf(options).audioTranscriptionsStreamFor(
 		options.model.serviceName,
 		{
 			model: options.model.modelId,
@@ -143,7 +175,7 @@ export async function runTranscription(
 	return { parts, content: result.text || options.fileName };
 }
 
-export interface ImageGenerationOptions {
+export interface ImageGenerationOptions extends StudioRunContext {
 	model: CurrentModelInfo;
 	prompt: string;
 	size?: string;
@@ -166,7 +198,7 @@ export async function runImageGeneration(
 		ImageGenerationStreamEvent,
 		{ type: "image_generation.completed" }
 	> | null = null;
-	for await (const event of serviceManager.llmService.imagesGenerationsFor(
+	for await (const event of llmOf(options).imagesGenerationsFor(
 		options.model.serviceName,
 		{
 			model: options.model.modelId,
@@ -207,7 +239,7 @@ export async function runImageGeneration(
 	};
 }
 
-export interface ImageToolOptions {
+export interface ImageToolOptions extends StudioRunContext {
 	model: CurrentModelInfo;
 	task: ImageToolTask;
 	image: Extract<MediaPayload, { kind: "file" }>;
@@ -219,7 +251,7 @@ export interface ImageToolOptions {
 export async function runImageToolGeneration(
 	options: ImageToolOptions,
 ): Promise<StudioGenerationResult> {
-	const response = await serviceManager.llmService.imagesToolsFor(
+	const response = await llmOf(options).imagesToolsFor(
 		options.model.serviceName,
 		{
 			model: options.model.modelId,
@@ -257,7 +289,7 @@ export async function runImageToolGeneration(
 	return { parts, content: response.text || options.fileName };
 }
 
-export interface TextToolOptions {
+export interface TextToolOptions extends StudioRunContext {
 	model: CurrentModelInfo;
 	task: TextToolTask;
 	/** The text to classify, or the query to rank documents against. */
@@ -274,7 +306,7 @@ export interface TextToolOptions {
 export async function runTextToolGeneration(
 	options: TextToolOptions,
 ): Promise<StudioGenerationResult> {
-	const response = await serviceManager.llmService.textToolsFor(
+	const response = await llmOf(options).textToolsFor(
 		options.model.serviceName,
 		{
 			model: options.model.modelId,
@@ -299,7 +331,7 @@ export async function runTextToolGeneration(
 	return { parts };
 }
 
-export interface DecisionOptions {
+export interface DecisionOptions extends StudioRunContext {
 	model: CurrentModelInfo;
 	/** The text the questions are about, as typed. */
 	input: string;
@@ -311,7 +343,7 @@ export interface DecisionOptions {
 export async function runDecisionGeneration(
 	options: DecisionOptions,
 ): Promise<StudioGenerationResult> {
-	const response = await serviceManager.llmService.systemOneFor(
+	const response = await llmOf(options).systemOneFor(
 		options.model.serviceName,
 		{
 			model: options.model.modelId,

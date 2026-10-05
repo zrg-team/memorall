@@ -103,6 +103,7 @@ export const MarkdownEditor: React.FC<DocumentEditorProps> = ({
 	file,
 	initialContent,
 	onContentChange,
+	onDirtyChange,
 	onSave,
 	readOnly = false,
 	className,
@@ -222,6 +223,7 @@ export const MarkdownEditor: React.FC<DocumentEditorProps> = ({
 						file={file}
 						initialContent={initialContent}
 						onContentChange={onContentChange}
+						onDirtyChange={onDirtyChange}
 						onSave={onSave}
 						readOnly={readOnly}
 						onRequestPreview={() => setIsPreview(true)}

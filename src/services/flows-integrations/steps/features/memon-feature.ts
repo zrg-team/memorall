@@ -114,9 +114,9 @@ const APP_SECTIONS: Record<MemonAppId, (config: MemonFeatureConfig) => string> =
 		browser: () =>
 			section("Browser", "read and use web pages", [
 				'Open: memon_open { app: "browser", url, newTab? }; plain words search DuckDuckGo.',
-				'Read: the screen is an outline with refs on links, buttons, fields and images ([b7] img 720×360 "alt"). memon_act { action: "scroll", direction: "down" } reads on, { action: "back" } goes back.',
-				'Act: { ref: "b12", action: "click" }; { ref: "b3", action: "type", text: "…", submit: true } fills and sends. If a ref is gone or the page changed, call memon_screen.',
-				"Local servers: http://localhost:3000 and the like are servers in this computer; they open in an embedded tab that you read and click the same way (a real tab cannot reach them). embedded: false only for a server outside the computer.",
+				'Read: an outline with refs on all you can use, controls with their state ([b4] switch "Dark" (checked)), canvases with their place ([b9] canvas 800×600 at 0,120). memon_act { action: "scroll" } reads on (with a ref: its list or panel); "back" goes back.',
+				'Act: { ref: "b12", action: "click" }; { ref: "b3", action: "type", text, submit: true }; select, toggle, hover; { action: "press", text: "Escape" }. By position: { ref: "b9", action: "click", x, y } inside a ref, or x, y in the viewport. If a ref is gone, call memon_screen.',
+				"Local servers: an address the Terminal serves (localhost:3000) opens embedded, used the same way; other local addresses are the user's and open in a real tab.",
 			]),
 		files: (config) =>
 			section("Files", "folders, the Editor and the Viewer", [
@@ -129,13 +129,14 @@ const APP_SECTIONS: Record<MemonAppId, (config: MemonFeatureConfig) => string> =
 				"New files and folders go in your home, ~ (a folder per piece of work, like ~/<topic>/), unless the user names another place.",
 			]),
 		terminal: () =>
-			section("Terminal", "shell, node, py, git and curl", [
+			section("Terminal", "shell, node, py, git, curl, ffmpeg and magick", [
 				'Run: memon_run { command } in the "/" tree of Files, from your home (~); "cd dir" sticks, "cd" goes home. A long command keeps running: { waitSeconds: 60 } waits, { input: "y" } answers, { stop: true } stops.',
 				'Tabs: the screen shows what runs or last ran in each; { terminal: "new", command } runs in a new tab. { command, saveAs: "Start Site" } saves ~/Start Site.terminal instead; clicking it runs it.',
 				"Code: write JavaScript to a .js file and run node file.js (no node -e); end scripts with process.exit(0) or they hang. npm install works for pure-JS packages; git works.",
 				`Python: py file.py: stdlib plus ${BUNDLED_PYTHON_BRIEF} (imports load them; pip list names them, pip show <name> says how). Charts: plt.savefig("chart.png").`,
+				"Media: ffmpeg, ffprobe and magick (ImageMagick; convert, identify, mogrify… too) are installed by default: never install them. ffmpeg has one thread: trim and scale down to keep encodes short.",
 				"Web: save files with one curl, not a script: curl -sSL -o assets/hero.jpg <url>; several: --create-dirs --output-dir assets -O <url1> -O <url2>.",
-				"curl, git and py run next to a running server: curl -s localhost:3000/api | jq .",
+				'One long command (a server) keeps running at a time, in any tab: the Terminal shows its tab and port; use that server, or stop it first ({ terminal: "1", stop: true }). Commands that finish run next to it: node --check app.js, curl -s localhost:3000/api | jq .',
 			]),
 		tasks: () =>
 			section("Tasks", "work you share with the user, kept across chats", [
@@ -200,8 +201,8 @@ const PI_CODE_SECTION = section(
 	"pi code",
 	"a coding agent you hand coding work to",
 	[
-		'memon_code { action: "prompt", text: "<the task on its own: goal, files, how to check>", cwd: "~/<project>" } hands pi (its own tools, the chat\'s model) an app, a feature or a multi-file fix; small edits are quicker yourself.',
-		'The user confirms in the pi code window first. Then "wait", another prompt steers it, "stop"; the screen shows its conversation. Check its work before you answer.',
+		'memon_code { action: "prompt", text: "<the task on its own: goal, files, how to check>", cwd: "<the project folder>" } hands pi (its own tools, the chat\'s model) an app, a feature or a multi-file fix; small edits are quicker yourself.',
+		"The user confirms in the pi code window first. A prompt returns when pi's turn ends; answer its questions with another prompt. Check its work before you answer.",
 		`Declined: code it yourself with the Terminal and Files, save that now (memon_memory { action: "add", text: "Code it myself; the user does not want pi code." }) and do not use pi code again unless asked; skip it too when ${MEMON_MEMORY_FILE_NAME} says so.`,
 	],
 );

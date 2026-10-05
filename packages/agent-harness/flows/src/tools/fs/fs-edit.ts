@@ -55,7 +55,9 @@ export const createFsEditTool: ToolFactory<Input, Services, FsToolConfig> = (
 				const count = text.split(old_string).length - 1;
 				return { newText: text.split(old_string).join(new_string), count };
 			}
-			return { newText: text.replace(old_string, new_string), count: 1 };
+			// A replacer function inserts new_string verbatim; a string would
+			// expand `$&`, `$$`, `` $` `` and `$'` inside it.
+			return { newText: text.replace(old_string, () => new_string), count: 1 };
 		};
 
 		let text: string;

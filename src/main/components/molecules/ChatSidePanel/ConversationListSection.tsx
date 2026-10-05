@@ -2,6 +2,7 @@ import { MessageSquarePlus } from "lucide-react";
 import type React from "react";
 import { useEffect, useMemo } from "react";
 import { useTranslation } from "react-i18next";
+import { withRunUsage } from "@/main/modules/chat/utils/conversation-cost-format";
 import { useChatStore } from "@/main/stores/chat";
 import { ConversationList } from "../WorkspaceSidePanel/ConversationList";
 import { getConversationTitle } from "./chat-side-panel-utils";
@@ -30,6 +31,15 @@ export const ConversationListSection: React.FC = () => {
 
 	const runs = useChatStore((state) => state.runs);
 	const runningIds = useMemo(() => new Set(Object.keys(runs)), [runs]);
+	// A chat with a reply still running shows what it has spent by now.
+	const costs = useMemo(() => {
+		const withRuns = { ...conversationCosts };
+		for (const [id, run] of Object.entries(runs)) {
+			const cost = withRunUsage(conversationCosts[id], run.usage);
+			if (cost) withRuns[id] = cost;
+		}
+		return withRuns;
+	}, [conversationCosts, runs]);
 	// The open conversation is listed even before it is saved to the list.
 	const visibleConversations = useMemo(() => {
 		const byId = new Map(conversations.map((item) => [item.id, item]));
@@ -42,7 +52,7 @@ export const ConversationListSection: React.FC = () => {
 	return (
 		<ConversationList
 			conversations={visibleConversations}
-			costs={conversationCosts}
+			costs={costs}
 			currentId={currentConversation?.id}
 			runningIds={runningIds}
 			labels={{

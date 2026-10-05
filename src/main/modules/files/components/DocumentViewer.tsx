@@ -3,7 +3,7 @@
  * Display detailed information and preview for selected document
  */
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import {
 	FileText,
@@ -38,20 +38,43 @@ import {
 	PopoverContent,
 	PopoverTrigger,
 } from "@/main/components/ui/popover";
-import { documentFileSystemService } from "@/services/filesystem/document-filesystem";
+import {
+	documentFileSystemService,
+	type FilesystemChangeEvent,
+} from "@/services/filesystem/document-filesystem";
 import {
 	toDocumentsSandboxPath,
 	toWorkspacesSandboxPath,
 } from "@/services/filesystem/sandbox-paths";
 
+import { FileConflictBanner } from "./FileConflictBanner";
 import { PDFPageSelector } from "./PDFPageSelector";
 import { LazyExcelViewer } from "./LazyExcelViewer";
 import { LazyPresentationViewer } from "./LazyPresentationViewer";
 import { ExcelSheetSelector } from "./ExcelSheetSelector";
 import { useModalSelector } from "../hooks/use-modal-selector";
 import { useSourceStatus } from "../hooks/use-source-status";
+import { type SyncedFile, useDocumentSync } from "../hooks/use-document-sync";
 import { editorRegistry } from "../editors";
 import { CodeEditor } from "../editors/CodeEditor";
+
+/** Whether a filesystem change can have altered the file at `path`. */
+function changeTouches(
+	change: FilesystemChangeEvent | null,
+	path: string,
+): boolean {
+	// No details: anything may have changed.
+	if (!change) return true;
+	if (change.changes) {
+		return change.changes.some((inner) => changeTouches(inner, path));
+	}
+	return [change.path, change.oldPath, change.newPath].some((changed) => {
+		if (changed === undefined) return false;
+		const target = changed.replace(/\/+$/, "");
+		// The file itself, or a folder it is in.
+		return path === target || path.startsWith(`${target}/`);
+	});
+}
 
 interface DocumentViewerProps {
 	file: DocumentFile;
@@ -261,20 +284,43 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({
 		}).format(date);
 	};
 
+	// Text files follow their file on disk while open: the agent may write them.
+	const isTextFile =
+		file.type === "text" ||
+		file.type === "markdown" ||
+		file.type === "other" ||
+		isSvg;
+	const syncedFile = useMemo<SyncedFile | null>(
+		() =>
+			isTextFile
+				? {
+						read: async () =>
+							new TextDecoder("utf-8").decode(
+								await documentFileSystemService.readFile(sandboxPath),
+							),
+						// Workspace saves notify (may update composition previews).
+						// Document saves are quiet: the library does not redraw (the
+						// editor would reset), while the sandbox and other contexts
+						// still get the change.
+						write: (content) =>
+							documentFileSystemService.writeFile(
+								sandboxPath,
+								isWorkspaceFile ? content : new TextEncoder().encode(content),
+								isWorkspaceFile || "quiet",
+							),
+						subscribe: (listener) =>
+							documentFileSystemService.onFilesystemChanged((change) => {
+								if (changeTouches(change, sandboxPath)) listener();
+							}),
+					}
+				: null,
+		[isTextFile, isWorkspaceFile, sandboxPath],
+	);
+	const sync = useDocumentSync(syncedFile, textContent, setTextContent);
+
 	const handleSaveContent = async (content: string): Promise<void> => {
 		try {
-			// Workspace saves notify (may update composition previews). Document
-			// saves are quiet: the library does not redraw (the editor would
-			// reset), while the sandbox and other contexts still get the change.
-			await documentFileSystemService.writeFile(
-				sandboxPath,
-				isWorkspaceFile ? content : new TextEncoder().encode(content),
-				isWorkspaceFile || "quiet",
-			);
-
-			// Update local state after successful save
-			setTextContent(content);
-
+			await sync.save(content);
 			logInfo(`[DOCUMENT_VIEWER] Saved ${file.name}`);
 		} catch (error) {
 			logError("[DOCUMENT_VIEWER] Failed to save file:", error);
@@ -555,6 +601,14 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({
 
 			{/* Content Area - Flex layout */}
 			<div className="flex-1 flex flex-col overflow-hidden">
+				{sync.conflict && (
+					<FileConflictBanner
+						base={sync.conflict.base}
+						disk={sync.conflict.disk}
+						onReload={sync.reload}
+						onKeepMine={sync.keepMine}
+					/>
+				)}
 				{/* Preview Section - Takes remaining space */}
 				{file.type === "pdf" && previewUrl && (
 					<div className="flex-1 overflow-hidden p-3 sm:p-4">
@@ -644,6 +698,8 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({
 								<CodeEditor
 									file={file}
 									initialContent={textContent}
+									onContentChange={sync.onContentChange}
+									onDirtyChange={sync.onDirtyChange}
 									onSave={handleSaveContent}
 								/>
 							) : isSvg ? (
@@ -681,6 +737,8 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({
 							<CodeEditor
 								file={file}
 								initialContent={textContent}
+								onContentChange={sync.onContentChange}
+								onDirtyChange={sync.onDirtyChange}
 								onSave={handleSaveContent}
 							/>
 						</div>
@@ -697,6 +755,8 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({
 									<EditorComponent
 										file={file}
 										initialContent={textContent}
+										onContentChange={sync.onContentChange}
+										onDirtyChange={sync.onDirtyChange}
 										onSave={handleSaveContent}
 									/>
 								</div>

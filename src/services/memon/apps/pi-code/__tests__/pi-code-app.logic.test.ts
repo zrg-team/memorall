@@ -9,15 +9,20 @@ import {
 const HOME = "/agents/Bot";
 
 /** A pi that takes prompts and finishes at once, unless told otherwise. */
-const fakeRunner = (cwd: string) => {
+const fakeRunner = (cwd: string, createdCwd = false) => {
 	const submitted: Array<{ text: string; queue?: string }> = [];
 	const entries: MemonPiCodeEntry[] = [];
 	let idle = true;
+	/** Prompts start a turn that runs until finish() or a stop. */
+	let works = false;
+	let disposed = false;
+	let turn: { ended?: "done" | "error" | "stopped"; reply?: string } = {};
 	const runner: PiCodeRunner = {
 		status: () => ({ running: !idle, cwd, model: "openrouter/coder" }),
 		view: () => ({
 			entries,
 			earlier: 0,
+			...turn,
 			thinkingLevel: "off",
 			queued: [],
 			activity: idle ? undefined : "running bash",
@@ -28,16 +33,38 @@ const fakeRunner = (cwd: string) => {
 		resize: () => {},
 		submit: async (text, queue) => {
 			submitted.push({ text, queue });
-			entries.push(
-				{ kind: "user", text },
-				{ kind: "assistant", text: "Done." },
-			);
+			entries.push({ kind: "user", text });
+			if (works) {
+				idle = false;
+				return;
+			}
+			entries.push({ kind: "assistant", text: "Done." });
+			turn = { ended: "done", reply: "Done." };
 		},
-		interrupt: vi.fn(async () => {}),
+		interrupt: vi.fn(async () => {
+			idle = true;
+			entries.push({ kind: "error", text: "stopped" });
+			turn = { ...turn, ended: "stopped" };
+		}),
 		newSession: vi.fn(async () => {}),
 		compact: vi.fn(async () => {}),
-		waitForIdle: async () => idle,
-		dispose: vi.fn(async () => {}),
+		// As pi's own: idle, quit, the signal or the timeout ends it.
+		waitForIdle: (timeoutMs, signal) => {
+			const deadline = Date.now() + timeoutMs;
+			return new Promise((resolve) => {
+				const tick = () => {
+					if (disposed) return resolve(true);
+					if (idle || signal?.aborted || Date.now() >= deadline)
+						return resolve(idle);
+					setTimeout(tick, 10);
+				};
+				tick();
+			});
+		},
+		dispose: vi.fn(async () => {
+			disposed = true;
+		}),
+		createdCwd,
 	};
 	return {
 		runner,
@@ -45,23 +72,44 @@ const fakeRunner = (cwd: string) => {
 		setIdle: (value: boolean) => {
 			idle = value;
 		},
+		keepWorking: () => {
+			works = true;
+		},
+		/** pi's turn ends: it answers, asks, fails or was stopped. */
+		finish: (ended: "done" | "error" | "stopped", reply?: string) => {
+			if (reply) entries.push({ kind: "assistant", text: reply });
+			if (ended === "error")
+				entries.push({ kind: "error", text: "rate limited" });
+			if (ended === "stopped") entries.push({ kind: "error", text: "stopped" });
+			turn = { ended, reply };
+			idle = true;
+		},
 	};
 };
 
 const setup = () => {
 	const runners: Array<ReturnType<typeof fakeRunner>> = [];
+	/** Folders in Files; pi makes any other one it starts in. */
+	const folders = new Set([HOME, `${HOME}/a`, `${HOME}/todo`]);
+	/** What pi's /resume calls, from the latest start. */
+	let resume: ((sessionFile: string) => void) | undefined;
 	const port: MemonPiCodePort = {
-		start: vi.fn(async ({ cwd }) => {
-			const fake = fakeRunner(cwd ?? HOME);
+		start: vi.fn(async ({ cwd, onResume }) => {
+			const folder = cwd ?? HOME;
+			const fake = fakeRunner(folder, !folders.has(folder));
+			folders.add(folder);
+			resume = onResume;
 			runners.push(fake);
 			return fake.runner;
 		}),
 	};
 	let windowOpen = false;
+	let front = true;
 	let enabled = true;
 	let runId: string | null = "run-1";
 	const host = {
 		sessionKey: "machine",
+		agentId: () => "agent-1",
 		home: () => HOME,
 		changed: vi.fn(),
 		quit: vi.fn(() => {
@@ -76,6 +124,7 @@ const setup = () => {
 			piCode.start();
 			return opened;
 		}),
+		inFront: () => windowOpen && front,
 		cursorLabel: vi.fn(),
 		runId: () => runId,
 	};
@@ -92,8 +141,17 @@ const setup = () => {
 		setRun: (value: string | null) => {
 			runId = value;
 		},
+		/** The user brings another window to the front, or pi's back. */
+		setFront: (value: boolean) => {
+			front = value;
+		},
+		/** The user picks a saved session with /resume in pi. */
+		resume: (sessionFile: string) => resume?.(sessionFile),
 	};
 };
+
+const ANSWER_OR_CHECK =
+	'If it asks you something, answer it with memon_code { action: "prompt", text }; ask the user only what you cannot decide. Otherwise check its work before you answer.';
 
 /** Lets the agent's call reach its question. */
 const asked = async (piCode: MemonPiCode) => {
@@ -123,7 +181,7 @@ describe("pi code, driven by the Memon agent", () => {
 		piCode.answerApproval(approval.id, "approve");
 		const summary = await call;
 		expect(summary).toBe(
-			"Sent to pi code. pi code is done; its answer is on the screen. Check its work before you answer.",
+			`Sent to pi code. pi code's turn is over; its reply is on the screen. ${ANSWER_OR_CHECK}`,
 		);
 		expect(port.start).toHaveBeenCalledWith(
 			expect.objectContaining({ home: HOME, cwd: `${HOME}/todo` }),
@@ -222,10 +280,10 @@ describe("pi code, driven by the Memon agent", () => {
 		const steer = await piCode.act({
 			action: "prompt",
 			text: "Use SQLite",
-			waitSeconds: 1,
+			waitSeconds: 0.05,
 		});
 		expect(steer).toBe(
-			'Queued for pi code (after its current tools). pi code is still working (running bash). memon_code { action: "wait" } waits for it; a prompt steers it; { action: "stop" } stops it.',
+			'Queued for pi code (after its current tools). pi code is still working (running bash). memon_code { action: "wait" } waits for it again; a prompt steers it; { action: "stop" } stops it.',
 		);
 		expect(pi.submitted.at(-1)).toEqual({
 			text: "Use SQLite",
@@ -236,6 +294,93 @@ describe("pi code, driven by the Memon agent", () => {
 			"Stopped pi code; its queued messages were dropped.",
 		);
 		expect(pi.runner.interrupt).toHaveBeenCalled();
+		// The agent's own stop is not the user's.
+		expect(await piCode.act({ action: "wait" })).toBe("pi code is stopped.");
+	});
+
+	it("a prompt waits until pi's turn ends, then hands back what pi asks", async () => {
+		const { piCode, runners, setFront } = setup();
+		const first = piCode.act({ action: "prompt", text: "Build it" });
+		piCode.answerApproval((await asked(piCode)).id, "approve");
+		await first;
+		const pi = runners[0];
+
+		pi.keepWorking();
+		const call = piCode.act({ action: "prompt", text: "Add auth" });
+		await new Promise((resolve) => setTimeout(resolve, 50));
+		let returned = false;
+		void call.then(() => {
+			returned = true;
+		});
+		await new Promise((resolve) => setTimeout(resolve, 50));
+		// Still working: the call holds, no "wait" turns needed.
+		expect(returned).toBe(false);
+
+		pi.finish("done", "Sessions or JWT for auth?");
+		expect(await call).toBe(
+			`Sent to pi code. pi code's turn is over; its reply is on the screen. ${ANSWER_OR_CHECK}`,
+		);
+
+		// Another window in front: the screen does not show pi, the summary does.
+		setFront(false);
+		const asking = piCode.act({ action: "prompt", text: "Add a login page" });
+		await new Promise((resolve) => setTimeout(resolve, 30));
+		pi.finish("done", "Which route, /login or /signin?");
+		expect(await asking).toBe(
+			`Sent to pi code. pi code's turn is over. Its reply:\nWhich route, /login or /signin?\n\n${ANSWER_OR_CHECK}`,
+		);
+	});
+
+	it("the user stops pi from MemonOS: the waiting agent hears it was them", async () => {
+		const { piCode, runners } = setup();
+		const first = piCode.act({ action: "prompt", text: "Build it" });
+		piCode.answerApproval((await asked(piCode)).id, "approve");
+		await first;
+		const pi = runners[0];
+
+		pi.keepWorking();
+		const call = piCode.act({ action: "prompt", text: "Rewrite the API" });
+		await new Promise((resolve) => setTimeout(resolve, 30));
+		await piCode.interrupt();
+		const summary = await call;
+		expect(pi.runner.interrupt).toHaveBeenCalled();
+		expect(summary).toContain("Sent to pi code. The user stopped pi code.");
+		expect(summary).toContain("Do not hand pi the same work again unchanged.");
+
+		// Escape in pi's own window ends the turn the same way.
+		const escaped = piCode.act({ action: "prompt", text: "Try again" });
+		await new Promise((resolve) => setTimeout(resolve, 30));
+		pi.finish("stopped");
+		expect(await escaped).toContain("The user stopped pi code.");
+	});
+
+	it("ends the wait when the user writes to the agent, or closes pi, or pi fails", async () => {
+		const { piCode, runners, host } = setup();
+		const first = piCode.act({ action: "prompt", text: "Build it" });
+		piCode.answerApproval((await asked(piCode)).id, "approve");
+		await first;
+		const pi = runners[0];
+
+		let unread = 0;
+		pi.setIdle(false);
+		const call = piCode.act({ action: "wait" }, { inbox: () => unread });
+		unread = 1;
+		expect(await call).toBe(
+			'pi code is still working (running bash). The user wrote to you: read it first. memon_code { action: "wait" } waits for it again; a prompt steers it; { action: "stop" } stops it.',
+		);
+
+		const failing = piCode.act({ action: "wait" });
+		await new Promise((resolve) => setTimeout(resolve, 30));
+		pi.finish("error");
+		expect(await failing).toBe("pi code stopped on an error: rate limited");
+
+		pi.setIdle(false);
+		const closing = piCode.act({ action: "wait" });
+		await new Promise((resolve) => setTimeout(resolve, 30));
+		host.quit();
+		expect(await closing).toBe(
+			"The user closed pi code before it finished; its session is saved in ~/.pi/agent/sessions. Find out why before you go on.",
+		);
 	});
 
 	it("types keys into pi after asking, as the user would", async () => {
@@ -252,8 +397,8 @@ describe("pi code, driven by the Memon agent", () => {
 		expect(runners[0].runner.input).toHaveBeenCalledWith("/name api\r");
 	});
 
-	it("refuses while pi code is turned off, and keeps one folder per session", async () => {
-		const { piCode, setEnabled } = setup();
+	it("refuses while pi code is turned off, and moves pi to another folder while it is idle", async () => {
+		const { piCode, setEnabled, runners, port } = setup();
 		setEnabled(false);
 		await expect(
 			piCode.act({ action: "prompt", text: "Build it" }),
@@ -266,11 +411,64 @@ describe("pi code, driven by the Memon agent", () => {
 			cwd: "~/a",
 		});
 		piCode.answerApproval((await asked(piCode)).id, "approve");
-		await first;
-		await expect(
-			piCode.act({ action: "prompt", text: "Other", cwd: "~/b" }),
-		).rejects.toThrow(
-			'pi code works in ~/a. Close it first ({ action: "close" }) to start it in ~/b',
+		expect(await first).toMatch(/^Sent to pi code\. /);
+
+		// Idle in ~/a: pi starts again in ~/b, without asking the user again.
+		const moved = await piCode.act({
+			action: "prompt",
+			text: "Other",
+			cwd: "~/b",
+		});
+		expect(moved).toContain(
+			"pi code moved from ~/a to ~/b; its session there is saved (/resume in pi opens it).",
 		);
+		// A folder that was not there is called out: the agent may have guessed it.
+		expect(moved).toContain(
+			"~/b was not there: pi made it, empty. If the project is elsewhere, prompt again with its folder as cwd.",
+		);
+		expect(runners[0].runner.dispose).toHaveBeenCalled();
+		expect(port.start).toHaveBeenLastCalledWith(
+			expect.objectContaining({ cwd: `${HOME}/b` }),
+		);
+		expect(runners[1].submitted).toEqual([{ text: "Other", queue: undefined }]);
+		expect(piCode.state()?.approval).toBeUndefined();
+
+		// Working: pi is not moved under it.
+		runners[1].keepWorking();
+		await piCode.act({ action: "prompt", text: "Long job", waitSeconds: 0 });
+		await expect(
+			piCode.act({ action: "prompt", text: "Back", cwd: "~/a" }),
+		).rejects.toThrow(
+			'pi code is working in ~/b. Wait for it or stop it ({ action: "stop" }), then hand it work in ~/a.',
+		);
+	});
+
+	it("/resume starts pi again on the saved session; a waiting agent hears it", async () => {
+		const { piCode, runners, port, resume, isWindowOpen } = setup();
+		const first = piCode.act({
+			action: "prompt",
+			text: "Build it",
+			cwd: "~/a",
+		});
+		piCode.answerApproval((await asked(piCode)).id, "approve");
+		await first;
+
+		runners[0].keepWorking();
+		const waiting = piCode.act({ action: "prompt", text: "Add tests" });
+		await new Promise((resolve) => setTimeout(resolve, 30));
+		const saved = `${HOME}/.pi/agent/sessions/--agents-Bot-a--/older.jsonl`;
+		resume(saved);
+		expect(await waiting).toBe(
+			"Sent to pi code. pi code opened another saved session (/resume); its conversation is on the screen. Hand pi the work again if it still matters.",
+		);
+		await vi.waitFor(() => expect(piCode.state()?.status).toBe("running"));
+		expect(port.start).toHaveBeenLastCalledWith(
+			expect.objectContaining({ cwd: `${HOME}/a`, sessionFile: saved }),
+		);
+		expect(runners[0].runner.dispose).toHaveBeenCalled();
+		// The same window, and the run's answer stands.
+		expect(isWindowOpen()).toBe(true);
+		await piCode.act({ action: "prompt", text: "Go on" });
+		expect(runners[1].submitted.at(-1)?.text).toBe("Go on");
 	});
 });

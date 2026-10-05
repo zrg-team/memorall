@@ -1,6 +1,7 @@
 import { v4 as nanoid } from "@/utils/uuid";
 import { assertJsonValue, type JsonValue } from "@memorall/agent-harness-core";
 import type { ISandboxContainerService } from "@/services/sandbox-container";
+import { INSTALLED_COMMANDS } from "@/services/sandbox-container/installed-commands";
 import {
 	BUNDLED_PYTHON_PACKAGES,
 	BUNDLED_PYTHON_NOTES,
@@ -41,6 +42,14 @@ import { SandboxError } from "@memorall/agent-harness-sandbox";
 
 export const BROWSER_SANDBOX_PROVIDER_ID = "browser";
 
+/**
+ * How this sandbox runs commands, for the agent: side by side, each with its
+ * own output and input, and one command serves at a time.
+ */
+export const BROWSER_SANDBOX_NOTES = [
+	"Commands run side by side, each with its own output and input: tests, node --check or curl run while a server does. One command serves at a time: a second server closes and its command stops with EADDRINUSE. Before starting a server, check what already runs and the port it serves: use that server, or stop its command first.",
+] as const;
+
 export const BROWSER_SANDBOX_CAPABILITIES: SandboxCapabilities = {
 	supported: [
 		"runtime.code",
@@ -75,6 +84,14 @@ export const BROWSER_SANDBOX_CAPABILITIES: SandboxCapabilities = {
 			summary: BUNDLED_PYTHON_SUMMARY,
 			notes: [...BUNDLED_PYTHON_NOTES],
 		},
+		// Installed with the app, run in commands: ffmpeg, magick…
+		commands: INSTALLED_COMMANDS.map((command) => ({
+			names: [...command.names],
+			summary: command.summary,
+			notes: [...command.notes],
+		})),
+		// Limits of this runtime the agent works within.
+		notes: [...BROWSER_SANDBOX_NOTES],
 		browserNative: true,
 		ptyResize: false,
 	},

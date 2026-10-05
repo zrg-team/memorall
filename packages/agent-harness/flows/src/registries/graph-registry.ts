@@ -41,10 +41,10 @@ export interface ChatGraphContext {
 	topicId?: string;
 	contextQueries: string[];
 	/**
-	 * Volatile context for this run — the page the user is on, what they
-	 * pointed at. Seeded into the `reminders` channel so it rides past the end of
-	 * every request instead of sitting in the system prompt, where any change
-	 * would invalidate the whole cached prefix behind it.
+	 * Context for this run — the page the user is on, what they pointed at.
+	 * Seeded into the `reminders` channel, which attaches it right after the
+	 * newest message, instead of the system prompt, where any change would
+	 * invalidate the whole cached prefix behind it.
 	 */
 	reminders?: string[];
 }

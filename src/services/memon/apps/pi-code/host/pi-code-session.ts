@@ -38,8 +38,8 @@ import { InteractiveMode } from "../coding-agent/modes/interactive/interactive-m
 import { initTheme } from "../coding-agent/modes/interactive/theme/theme";
 import { join } from "../platform/path";
 import {
-	registerChatModelProvider,
-	resolveChatModel,
+	type ChatModelLink,
+	connectChatModel,
 	thinkingLevelForEffort,
 } from "./chat-model";
 import { createPiFileSystem } from "./file-system";
@@ -71,14 +71,18 @@ export interface PiCodeSessionOptions {
 		provider: string,
 		modelId: string,
 	) => Promise<ReasoningEffort | undefined>;
+	/** A saved session to open (pi's /resume) instead of a new one. */
+	sessionFile?: string;
 	/** The user quit pi (/quit, Ctrl+C twice, Ctrl+D). */
 	onQuit: () => void;
+	/** /resume picked a saved session: start pi again on it. */
+	onResume?: (sessionFile: string) => void;
 	/** What the agent reads changed: running/idle, a message, a tool, the model. */
 	onChange: () => void;
 }
 
 export interface PiCodeStatus {
-	/** The agent is working: a model turn, a tool, a ! command or compaction. */
+	/** The agent is working: a model turn, a tool, a ! command, compaction or a retry. */
 	running: boolean;
 	cwd: string;
 	/** provider/model the next turn uses, when one is selected. */
@@ -119,12 +123,14 @@ const IDLE_SETTLE_MS = 400;
 const ENVIRONMENT_NOTE = [
 	"Environment: you are running inside MemonOS, a computer that lives in the user's browser.",
 	"- The file system is the agent's Memon files. Paths start at / and the home directory (~) is the current agent's folder.",
-	"- bash runs in a browser sandbox (almostnode): a POSIX-like shell with Node.js, npm/npx and common tools (ls, cat, grep, find, sed, awk, jq, ...), plus git, python/pip and curl run by the host. It is not a full Linux: no sudo, apt or system packages, and only one long-running command can run at a time.",
+	"- bash runs in a browser sandbox (almostnode): a POSIX-like shell with Node.js, npm/npx and common tools (ls, cat, grep, find, sed, awk, jq, ...), plus git, python/pip and curl run by the host. It is not a full Linux: no sudo, apt or system packages. Commands run side by side, but only one serves at a time: a second server is stopped.",
 	"- Long-running servers started from bash keep the sandbox busy; prefer short commands.",
 ].join("\n");
 
 export class PiCodeSession {
 	readonly terminal: StreamTerminal;
+	/** pi's folder was not there: pi made it, empty, when it started. */
+	createdCwd = false;
 	private disposed = false;
 	private unsubscribers: Array<() => void> = [];
 	private viewCache: { key: readonly unknown[]; view: PiCodeView } | undefined;
@@ -134,19 +140,38 @@ export class PiCodeSession {
 		private readonly mode: InteractiveMode,
 		terminal: StreamTerminal,
 		private readonly footerData: FooterDataProvider,
+		private readonly link: ChatModelLink,
 	) {
 		this.terminal = terminal;
 	}
 
 	static async start(options: PiCodeSessionOptions): Promise<PiCodeSession> {
+		// The session's own connection to the chat's model, through its LLM.
+		const link = connectChatModel(options.getLlm);
+		try {
+			return await PiCodeSession.open(options, link);
+		} catch (error) {
+			link.dispose();
+			throw error;
+		}
+	}
+
+	private static async open(
+		options: PiCodeSessionOptions,
+		link: ChatModelLink,
+	): Promise<PiCodeSession> {
 		const home = options.home;
 		const cwd = options.cwd ?? home;
 		const agentDir = join(home, PI_CONFIG_DIR, "agent");
 		const files = createPiFileSystem(options.fs);
 		// pi works in a folder the agent named; it may not be there yet.
-		await options.fs.mkdir(cwd, { recursive: true }).catch(() => undefined);
-
-		registerChatModelProvider(options.getLlm);
+		const createdCwd = await options.fs.stat(cwd).then(
+			() => false,
+			() => true,
+		);
+		if (createdCwd) {
+			await options.fs.mkdir(cwd, { recursive: true }).catch(() => undefined);
+		}
 
 		const [globalSettings, projectSettings, keybindingsText, resources, model] =
 			await Promise.all([
@@ -158,7 +183,7 @@ export class PiCodeSession {
 					{ cwd, agentDir, environmentNote: ENVIRONMENT_NOTE },
 					files.readText,
 				),
-				resolveChatModel(options.getLlm).catch(() => undefined),
+				link.resolve().catch(() => undefined),
 			]);
 
 		const settingsManager = SettingsManager.fromStorage(
@@ -178,11 +203,14 @@ export class PiCodeSession {
 		const sessionDir =
 			settingsManager.getSessionDir(home) ??
 			getDefaultSessionDir(cwd, agentDir);
-		const sessionManager = SessionManager.create(
-			cwd,
-			sessionDir,
-			files.sessions,
-		);
+		const sessionManager = options.sessionFile
+			? await SessionManager.open(
+					options.sessionFile,
+					files.sessions,
+					sessionDir,
+					cwd,
+				)
+			: SessionManager.create(cwd, sessionDir, files.sessions);
 
 		const thinkingLevel = await PiCodeSession.initialThinkingLevel(
 			options,
@@ -226,6 +254,9 @@ export class PiCodeSession {
 			followUpMode: settingsManager.getFollowUpMode(),
 			thinkingBudgets: settingsManager.getThinkingBudgets(),
 		});
+		// A resumed session goes on from its conversation.
+		const restored = sessionManager.buildSessionContext();
+		if (restored.messages.length > 0) agent.state.messages = restored.messages;
 
 		const session = new AgentSession({
 			agent,
@@ -243,7 +274,7 @@ export class PiCodeSession {
 					throw new Error(`Skill file not found: ${path}`);
 				return text;
 			},
-			resolveModel: () => resolveChatModel(options.getLlm),
+			resolveModel: () => link.resolve(),
 		});
 		if (model) {
 			sessionManager.appendModelChange(model.provider, model.id);
@@ -261,9 +292,11 @@ export class PiCodeSession {
 			onboarding: `Model: the one selected in the chat composer. Files: this agent's Memon home (${home}).`,
 			describeModelChange: "change it in the chat composer",
 			onQuit: options.onQuit,
+			onResume: options.onResume,
 		});
 
-		const piCode = new PiCodeSession(session, mode, terminal, footerData);
+		const piCode = new PiCodeSession(session, mode, terminal, footerData, link);
+		piCode.createdCwd = createdCwd;
 		terminal.onCompactRequest = () => piCode.redraw();
 		mode.init();
 		piCode.watch(options);
@@ -307,7 +340,8 @@ export class PiCodeSession {
 				if (this.disposed) return;
 				this.unsubscribers.push(
 					llm.onCurrentModelChange(() => {
-						void resolveChatModel(options.getLlm)
+						void this.link
+							.resolve()
 							.then((model) => {
 								if (!this.disposed) this.session.setModel(model);
 							})
@@ -318,13 +352,24 @@ export class PiCodeSession {
 			.catch(() => {});
 	}
 
+	/** pi's current session (a new one after /new). */
+	get sessionId(): string {
+		return this.session.sessionId;
+	}
+
+	get cwd(): string {
+		return this.session.cwd;
+	}
+
 	status(): PiCodeStatus {
 		const model = this.session.model;
 		return {
+			// A retry waits between attempts: the turn has not ended yet.
 			running:
 				this.session.isStreaming ||
 				this.session.isBashRunning ||
-				this.session.isCompacting,
+				this.session.isCompacting ||
+				this.session.isRetrying,
 			cwd: this.session.cwd,
 			model: model ? `${model.provider}/${model.id}` : undefined,
 			sessionName: this.session.sessionName,
@@ -502,6 +547,7 @@ export class PiCodeSession {
 		for (const unsubscribe of this.unsubscribers.splice(0)) unsubscribe();
 		this.session.dispose();
 		this.mode.stop();
+		this.link.dispose();
 		this.footerData.dispose();
 		this.terminal.release();
 		await this.session.sessionManager.flush().catch(() => {});

@@ -1,3 +1,5 @@
+import { unwrapFlowRunInboxMessage } from "@memorall/agent-harness-flows/context/run-inbox";
+import { isSystemReminderMessage } from "@memorall/agent-harness-flows/graph/system-reminders";
 import type {
 	AssistantExecutionPart,
 	ChatCompaction,
@@ -264,11 +266,14 @@ export const buildAssistantContentParts = ({
 
 	for (const [partIndex, part] of (parts ?? []).entries()) {
 		if (part.role === "user") {
+			// Context the run attached for the model: kept for the next turn's
+			// history, never something the user wrote.
+			if (isSystemReminderMessage(part)) continue;
 			// Sent while the agent worked: between the tools before it and the
 			// request that read it.
 			closeBlock();
 			placeCompactionsBefore(partIndex);
-			const text = messageText(part.content);
+			const text = unwrapFlowRunInboxMessage(messageText(part.content));
 			if (text.trim()) contentParts.push({ type: "user-message", text });
 			continue;
 		}

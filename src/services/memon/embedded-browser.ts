@@ -7,6 +7,7 @@ import type {
 import {
 	attachSandboxFrame,
 	frameAct,
+	frameCapture,
 	frameOutline,
 	type SandboxFrameHost,
 	type SandboxTarget,
@@ -14,6 +15,7 @@ import {
 	sandboxTargetOf,
 } from "./embedded-frame";
 import type { MemonBrowserPort } from "./memon-machine";
+import type { MemonCaptureRequest, MemonPageCapture } from "./page-capture";
 
 /**
  * Who shows an embedded tab. While the Computer window shows the tab, that
@@ -25,7 +27,7 @@ import type { MemonBrowserPort } from "./memon-machine";
  */
 const CHANNEL = "memorall-memon-embedded";
 
-export type EmbeddedOp = "outline" | "act" | "navigate" | "history";
+export type EmbeddedOp = "outline" | "act" | "navigate" | "history" | "capture";
 
 type HostMessage =
 	| { kind: "claim"; sessionId: string; hostId: string }
@@ -55,6 +57,8 @@ export interface EmbeddedPageHandlers {
 	): Promise<{ result: WebOutlineActionResult; outline?: WebPageOutline }>;
 	navigate(url: string): Promise<void>;
 	history(direction: WebHistoryDirection): Promise<void>;
+	/** A picture of a ref of the page. */
+	capture(request: MemonCaptureRequest): Promise<MemonPageCapture>;
 }
 
 /**
@@ -81,6 +85,8 @@ export const serveEmbeddedPage = (
 					return handlers.navigate(String(message.args));
 				case "history":
 					return handlers.history(message.args as WebHistoryDirection);
+				case "capture":
+					return handlers.capture(message.args as MemonCaptureRequest);
 			}
 		};
 		void run().then(
@@ -120,6 +126,11 @@ export interface MemonEmbeddedPort extends MemonBrowserPort {
 	servers(): Promise<number[]>;
 	/** Closes a server, such as one a stopped command opened. */
 	stopServer?(port: number): Promise<void>;
+	/** A picture of an element: drawn from the page, which this window can reach. */
+	capture(
+		sessionId: string,
+		request: MemonCaptureRequest,
+	): Promise<MemonPageCapture>;
 }
 
 interface EmbeddedSession {
@@ -348,6 +359,18 @@ export const createMemonEmbeddedPort = (
 			}>(session, sessionId, "act", request);
 			if (hosted) return hosted.value;
 			return frameAct(await ownFrame(session), request);
+		},
+
+		async capture(sessionId, request) {
+			const session = requireSession(sessionId);
+			const hosted = await askHost<MemonPageCapture>(
+				session,
+				sessionId,
+				"capture",
+				request,
+			);
+			if (hosted) return hosted.value;
+			return frameCapture(await ownFrame(session), request);
 		},
 
 		async history(sessionId, direction) {

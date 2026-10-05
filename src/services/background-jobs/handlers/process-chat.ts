@@ -6,7 +6,10 @@ import {
 } from "@memorall/agent-harness-flows/context/run-inbox";
 import type { FoundationState } from "@memorall/agent-harness-flows/graph/foundation/state";
 import type { UnifiedFlowConfig } from "@memorall/agent-harness-flows/interfaces/config/flow-config";
-import { withSystemReminders } from "@memorall/agent-harness-flows/graph/system-reminders";
+import {
+	SYSTEM_REMINDER_EVENT,
+	systemReminderMessage,
+} from "@memorall/agent-harness-flows/graph/system-reminders";
 import {
 	buildDefaultFlowConfig,
 	mergeWithDefaultConfig,
@@ -25,8 +28,10 @@ import {
 	toLegacyFlowStream,
 } from "@/services/agent-harness";
 import {
+	hasReplyParts,
 	MessagePartsAccumulator,
 	resolveMessageParts,
+	withReplyText,
 } from "@/services/chat/message-parts";
 import {
 	accumulateChunkToolCalls,
@@ -161,10 +166,11 @@ export interface ChatPayload {
 	parallel_tool_calls?: boolean;
 	conversation?: ConversationContext;
 	/**
-	 * Context that changes from one request to the next — the page the user is
-	 * on, what they pointed at. Attached past the end of every request rather
-	 * than written into the system prompt, where it would invalidate the cached
-	 * prefix of everything behind it.
+	 * Context that changes from one message to the next — the page the user is
+	 * on, what they pointed at. Attached once, right after the newest message,
+	 * and kept there in the stored reply, rather than written into the system
+	 * prompt, where it would invalidate the cached prefix of everything behind
+	 * it.
 	 */
 	reminders?: string[];
 }
@@ -205,6 +211,19 @@ export type ChatResult =
 			type: "user-message";
 			id: string;
 			content: string;
+	  }
+	| {
+			/**
+			 * Context the run attached for the model, as it was sent. Kept in the
+			 * reply where it was read, never shown as anything the user wrote.
+			 */
+			type: "system-reminder";
+			content: string;
+	  }
+	| {
+			/** What the reply has used so far, after each model request. */
+			type: "usage";
+			usage: Omit<AggregatedTokenUsage, "calls">;
 	  }
 	| {
 			type: "final";
@@ -509,6 +528,8 @@ type FlowCustomPayloadDeps = {
 	) => ChatCompaction | undefined;
 	/** The agent read a message the user sent while it worked. */
 	handleUserMessage: (message: FlowRunInboxMessage) => void;
+	/** The run attached reminders to the conversation. */
+	handleSystemReminder: (content: string) => void;
 	dependencies: ProcessDependencies;
 	jobId: string;
 	executeStage: string;
@@ -540,6 +561,7 @@ type FlowStreamRunDeps = FlowRuntimeDeps & {
 	handleToolExecution: FlowCustomPayloadDeps["handleToolExecution"];
 	handleCompaction: FlowCustomPayloadDeps["handleCompaction"];
 	handleUserMessage: FlowCustomPayloadDeps["handleUserMessage"];
+	handleSystemReminder: FlowCustomPayloadDeps["handleSystemReminder"];
 };
 
 type AssistantMessageFinalization = {
@@ -658,6 +680,22 @@ export class ChatHandler extends BaseProcessHandler<ChatJob | StopChatJob> {
 	constructor() {
 		super();
 	}
+
+	/**
+	 * The reply as it is stored: its parts when they hold it, its text when
+	 * they do not. Parts that are only reminders keep the text beside them
+	 * rather than replacing it with nothing.
+	 */
+	private static storedReplyBody = (
+		parts: MessageParts,
+		content: string,
+	): Pick<AssistantMessagePersistence, "content" | "parts"> => {
+		const stored = withReplyText(parts, content);
+		return {
+			content: hasReplyParts(stored) ? "" : content,
+			parts: stored.length > 0 ? stored : null,
+		};
+	};
 
 	private static persistAssistantMessage = ({
 		conversation,
@@ -985,6 +1023,7 @@ export class ChatHandler extends BaseProcessHandler<ChatJob | StopChatJob> {
 		handleToolExecution,
 		handleCompaction,
 		handleUserMessage,
+		handleSystemReminder,
 		...runtimeDeps
 	}: FlowStreamRunDeps): Promise<Record<string, unknown> | null> {
 		const { handleChunk, handleActions } =
@@ -1004,6 +1043,7 @@ export class ChatHandler extends BaseProcessHandler<ChatJob | StopChatJob> {
 					handleToolExecution,
 					handleCompaction,
 					handleUserMessage,
+					handleSystemReminder,
 					dependencies: runtimeDeps.dependencies,
 					jobId: runtimeDeps.jobId,
 					executeStage,
@@ -1028,6 +1068,7 @@ export class ChatHandler extends BaseProcessHandler<ChatJob | StopChatJob> {
 		handleToolExecution,
 		handleCompaction,
 		handleUserMessage,
+		handleSystemReminder,
 		dependencies,
 		jobId,
 		executeStage,
@@ -1132,6 +1173,22 @@ export class ChatHandler extends BaseProcessHandler<ChatJob | StopChatJob> {
 						stage: executeStage,
 						progress: 14,
 						result: { type: "user-message", ...read } as ChatResult,
+					}),
+				);
+				return;
+			}
+			case SYSTEM_REMINDER_EVENT: {
+				const content =
+					"content" in payload && typeof payload.content === "string"
+						? payload.content
+						: "";
+				if (!content) return;
+				handleSystemReminder(content);
+				dispatcher.send(() =>
+					dependencies.updateJobProgress(jobId, {
+						stage: executeStage,
+						progress: 14,
+						result: { type: "system-reminder", content } as ChatResult,
 					}),
 				);
 				return;
@@ -1284,6 +1341,12 @@ export class ChatHandler extends BaseProcessHandler<ChatJob | StopChatJob> {
 		) => {
 			messagePartsAccumulator.addUserMessage(message.content);
 		};
+		// Same for the reminders the run attached: the next turn has to send them
+		// again where this one did, or its prefix stops matching there.
+		const handleSystemReminder: FlowCustomPayloadDeps["handleSystemReminder"] =
+			(content) => {
+				messagePartsAccumulator.addSystemReminder(content);
+			};
 		const handleExecutionStart = (event: {
 			node: string;
 			metadata?: Record<string, unknown>;
@@ -1364,12 +1427,33 @@ export class ChatHandler extends BaseProcessHandler<ChatJob | StopChatJob> {
 			return record;
 		};
 		const toolCallAccumulator = createToolCallAccumulator();
+		const getProgress = () => Math.min(80, 20 + currentContent.length / 10);
+
+		// One dispatcher per job owns the wire rate for everything streamed back.
+		const dispatcher = ChatHandler.createChunkDispatcher(
+			jobId,
+			model,
+			dependencies,
+			getProgress,
+		);
+
 		// One entry per provider request: an agent turn makes several, and the
 		// message shows both the sum and how each request fared against the
 		// provider's prompt cache.
 		let accumulatedUsage = createAggregatedTokenUsage();
 		const addUsage = (usage: TokenUsage) => {
 			accumulatedUsage = addTokenUsage(accumulatedUsage, usage);
+			// The chat's cost moves with every request, not only once the reply
+			// is saved: a long agent turn would otherwise show the old total for
+			// minutes. The per-request list stays with the saved reply.
+			const { calls: _calls, ...running } = accumulatedUsage;
+			dispatcher.send(() =>
+				dependencies.updateJobProgress(jobId, {
+					stage: "Receiving response...",
+					progress: getProgress(),
+					result: { type: "usage", usage: running } as ChatResult,
+				}),
+			);
 		};
 		const requests = createStoppableRequests(stopSignal, addUsage);
 		// Saves the reply while it runs, so a run that is cut off (the extension
@@ -1393,9 +1477,8 @@ export class ChatHandler extends BaseProcessHandler<ChatJob | StopChatJob> {
 					save: () =>
 						ChatHandler.persistAssistantMessage({
 							conversation,
-							content: parts.length > 0 ? "" : currentContent,
+							...ChatHandler.storedReplyBody(parts, currentContent),
 							complexContent: null,
-							parts: parts.length > 0 ? parts : null,
 							metadata: {
 								...ChatHandler.buildAssistantMessageMetadata({
 									conversation,
@@ -1465,10 +1548,13 @@ export class ChatHandler extends BaseProcessHandler<ChatJob | StopChatJob> {
 		const finishRun = async () => {
 			const stopped = stopSignal.aborted;
 			const finalActions = normalizeActions(actions);
-			const finalParts = resolveMessageParts({
-				finalState: finalMessageState,
-				accumulatedParts: messagePartsAccumulator.toParts(),
-			});
+			const finalParts = withReplyText(
+				resolveMessageParts({
+					finalState: finalMessageState,
+					accumulatedParts: messagePartsAccumulator.toParts(),
+				}),
+				currentContent,
+			);
 			const finalExecutions = completeExecutionParts(executions);
 			const finalToolExecutions = finishRunningToolExecutions(
 				toolExecutions,
@@ -1501,24 +1587,13 @@ export class ChatHandler extends BaseProcessHandler<ChatJob | StopChatJob> {
 			} satisfies ChatResult;
 
 			await finalizeConversation({
-				content: finalParts.length > 0 ? "" : currentContent,
+				...ChatHandler.storedReplyBody(finalParts, currentContent),
 				complexContent: null,
-				parts: finalParts.length > 0 ? finalParts : null,
 				metadata: finalMetadata,
 			});
 
 			return result;
 		};
-
-		const getProgress = () => Math.min(80, 20 + currentContent.length / 10);
-
-		// One dispatcher per job owns the wire rate for everything streamed back.
-		const dispatcher = ChatHandler.createChunkDispatcher(
-			jobId,
-			model,
-			dependencies,
-			getProgress,
-		);
 
 		// Create stream buffer for content
 		const streamBuffer = ChatHandler.createStreamBuffer({
@@ -1622,6 +1697,7 @@ export class ChatHandler extends BaseProcessHandler<ChatJob | StopChatJob> {
 					handleToolExecution,
 					handleCompaction,
 					handleUserMessage,
+					handleSystemReminder,
 					jobId,
 					model,
 					config,
@@ -1785,6 +1861,7 @@ export class ChatHandler extends BaseProcessHandler<ChatJob | StopChatJob> {
 					handleToolExecution,
 					handleCompaction,
 					handleUserMessage,
+					handleSystemReminder,
 					jobId,
 					model,
 					config,
@@ -1843,8 +1920,24 @@ export class ChatHandler extends BaseProcessHandler<ChatJob | StopChatJob> {
 				}
 			} else {
 				// Normal mode - direct LLM call (following use-chat.ts pattern exactly)
+				// One request, so the reminders sit right after the newest message;
+				// the reply keeps them there for the next turn's history.
+				const reminderMessage = systemReminderMessage(reminders);
+				if (reminderMessage) {
+					handleSystemReminder(reminderMessage.content);
+					dispatcher.send(() =>
+						dependencies.updateJobProgress(jobId, {
+							stage: "Sending request to LLM...",
+							progress: 20,
+							result: {
+								type: "system-reminder",
+								content: reminderMessage.content,
+							} as ChatResult,
+						}),
+					);
+				}
 				const request: ChatCompletionRequest = {
-					messages: withSystemReminders(messages, reminders),
+					messages: reminderMessage ? [...messages, reminderMessage] : messages,
 					model: model,
 					temperature: 0.3,
 					stream: true,
@@ -1939,9 +2032,8 @@ export class ChatHandler extends BaseProcessHandler<ChatJob | StopChatJob> {
 					error: isAbort ? undefined : errorMetadata,
 				});
 				await finalizeConversation({
-					content: errorParts.length > 0 ? "" : currentContent,
+					...ChatHandler.storedReplyBody(errorParts, currentContent),
 					complexContent: null,
-					parts: errorParts.length > 0 ? errorParts : null,
 					metadata: persistenceMetadata,
 				});
 			} catch (persistError) {

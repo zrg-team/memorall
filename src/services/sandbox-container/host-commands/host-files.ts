@@ -37,6 +37,17 @@ export const createHostFiles = (): HostFiles => {
 				return false;
 			}
 		},
+		async list(dir) {
+			await ready();
+			const names = await fs.promises.readdir(sandboxPathToFsPath(dir));
+			const files: HostFileEntry[] = [];
+			for (const name of names.sort()) {
+				const path = join(dir, name);
+				const info = await fs.promises.stat(sandboxPathToFsPath(path));
+				if (info.isFile()) files.push({ path, size: info.size });
+			}
+			return files;
+		},
 		async walk(dir, { skipDirs, maxFiles, maxBytes }) {
 			await ready();
 			const files: HostFileEntry[] = [];

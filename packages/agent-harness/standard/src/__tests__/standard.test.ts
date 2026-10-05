@@ -75,6 +75,10 @@ describe("standard capability packs", () => {
     await executeTool(byName(tools, "fs_write"), { path: "src/a.ts", content: "alpha\nbeta" }, execution);
     expect((await executeTool(byName(tools, "fs_read"), { path: "/src/a.ts" }, execution)).content).toBe("alpha\nbeta");
     expect((await executeTool(byName(tools, "fs_edit"), { path: "/src/a.ts", old_text: "beta", new_text: "gamma" }, execution)).isError).toBeUndefined();
+    // `$&` and `$$` stay literal instead of expanding as replace() patterns.
+    await executeTool(byName(tools, "fs_edit"), { path: "/src/a.ts", old_text: "alpha", new_text: "a$&$$" }, execution);
+    expect((await executeTool(byName(tools, "fs_read"), { path: "/src/a.ts" }, execution)).content).toBe("a$&$$\ngamma");
+    await executeTool(byName(tools, "fs_edit"), { path: "/src/a.ts", old_text: "a$&$$", new_text: "alpha" }, execution);
     await executeTool(byName(tools, "fs_mkdir"), { path: "/out" }, execution);
     expect((await executeTool(byName(tools, "fs_ls"), { path: "/" }, execution)).content).toContain("d src");
     expect((await executeTool(byName(tools, "fs_glob"), { path: "/", pattern: "**/*.ts" }, execution)).content).toContain("/src/a.ts");

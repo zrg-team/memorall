@@ -28,7 +28,7 @@ export const AGENT_COMPLETION_STEP_NAME = "agent-completion" as const;
 
 export interface AgentCompletionStepInput {
 	messages: ChatMessage[];
-	/** Volatile context for this run, re-attached past the end of each request. */
+	/** Context for this run, attached once and kept where it was sent. */
 	reminders?: string[];
 	maxIterations?: number;
 	/**

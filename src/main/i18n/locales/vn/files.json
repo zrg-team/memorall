@@ -159,7 +159,16 @@
 		"updateImage": "Cập nhật ảnh",
 		"imageUrl": "URL ảnh",
 		"imageAlt": "Văn bản thay thế",
-		"imageAltPlaceholder": "Mô tả ảnh..."
+		"imageAltPlaceholder": "Mô tả ảnh...",
+		"taskList": "Danh sách việc"
+	},
+	"conflict": {
+		"message": "Tệp này đã bị thay đổi bên ngoài trình soạn thảo trong lúc bạn đang chỉnh sửa.",
+		"showChanges": "Xem thay đổi",
+		"hideChanges": "Ẩn thay đổi",
+		"reload": "Tải lại",
+		"keepMine": "Giữ bản của tôi",
+		"unchangedLines": "⋯ {{count}} dòng không đổi"
 	},
 	"navigator": {
 		"expand": "Mở rộng",

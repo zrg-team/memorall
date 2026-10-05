@@ -88,16 +88,31 @@ const focusedApp = (machine: MemonMachine): MemonWindowApp | undefined => {
 	)?.app;
 };
 
-/** Every memon_* result: one summary line, then the screen. */
+/** A tool's answer: its summary, and a picture (a data URL) for the model to look at. */
+export interface MemonToolOutput {
+	summary: string;
+	image?: string;
+}
+
+/** Every memon_* result: one summary line, then the screen (and a picture). */
 export const memonResult = (
 	machine: MemonMachine,
 	action: string,
-	summary: string,
+	output: string | MemonToolOutput,
 ): ToolExecutionResult => {
+	const { summary, image } =
+		typeof output === "string" ? { summary: output, image: undefined } : output;
 	const screen = machine.readScreen();
 	const snapshot = machine.snapshot();
+	const text = `${summary}\n\n${screen}`;
 	return {
-		content: `${summary}\n\n${screen}`,
+		// Tool results carry image parts through to the model (pdf_to_image too).
+		content: image
+			? ([
+					{ type: "text", text },
+					{ type: "image_url", image_url: { url: image, detail: "auto" } },
+				] as unknown as ToolExecutionResult["content"])
+			: text,
 		structuredContent: {
 			ok: true,
 			action,
@@ -139,7 +154,7 @@ export const runMemonTool = async (
 	context: ToolExecutionContext | undefined,
 	label: string,
 	target: (machine: MemonMachine) => { windowId?: string | null; ref?: string },
-	body: (machine: MemonMachine) => Promise<string>,
+	body: (machine: MemonMachine) => Promise<string | MemonToolOutput>,
 ): Promise<ToolExecutionResult> => {
 	let machine: MemonMachine | undefined;
 	try {
@@ -147,10 +162,10 @@ export const runMemonTool = async (
 		machine = acquired.machine;
 		if (acquired.blocked) return acquired.blocked;
 		const active = machine;
-		const summary = await active.runAgentAction(label, target(active), () =>
+		const output = await active.runAgentAction(label, target(active), () =>
 			body(active),
 		);
-		return memonResult(active, action, summary);
+		return memonResult(active, action, output);
 	} catch (error) {
 		return memonFailure(machine, action, error);
 	}

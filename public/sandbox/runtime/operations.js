@@ -30,6 +30,7 @@ import {
 	toServerInfo,
 	withTimeout,
 } from "./shared.js";
+import { runMediaOperation } from "./media.js";
 import { runPythonOperation } from "./python.js";
 import {
 	handleSwRequestOperation,
@@ -300,6 +301,8 @@ export const handleOperation = async (request) => {
 			return handleNetworkFetchOperation(payload);
 		case "python.run":
 			return runPythonOperation(payload);
+		case "media.run":
+			return runMediaOperation(payload);
 		case "npm.install":
 			return handleNpmInstallOperation(containerInstance, payload);
 		case "npm.installFromPackageJson":

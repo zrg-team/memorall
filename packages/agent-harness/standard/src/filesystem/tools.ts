@@ -80,7 +80,8 @@ export const createFilesystemTools = (): BaseTool<any>[] => [
       if (!replace_all && matches > 1) {
         return { content: `Text occurs ${matches} times in ${path}; set replace_all or provide more context`, isError: true };
       }
-      const next = replace_all ? current.split(old_text).join(new_text) : current.replace(old_text, new_text);
+      // A replacer function keeps `$&`, `$$`, `` $` `` and `$'` in new_text literal.
+      const next = replace_all ? current.split(old_text).join(new_text) : current.replace(old_text, () => new_text);
       await fs.writeFile(normalizePath(path), next);
       return result(`Edited ${path}`, { path: normalizePath(path), replacements: replace_all ? matches : 1 });
     },

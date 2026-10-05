@@ -5,6 +5,8 @@ import {
 	planCoAgentSession,
 } from "@/services/chat/coagent-session";
 import { buildSendMessages } from "@/main/modules/chat/utils/build-send-messages";
+import { hasReplyParts } from "@/services/chat/message-parts";
+import type { MessageParts } from "@/types/chat";
 import type { ChatMessage } from "@/types/openai";
 import { and, asc, desc, eq, gt, ne } from "drizzle-orm";
 import { serviceManager } from "@/services";
@@ -181,8 +183,8 @@ const finalizeMessage = async (
 		// A turn the chat handler already saved keeps what it saved: its parts
 		// are the answer, tool calls and all, and the text here is only the
 		// dock's fallback for a run that never got that far.
-		const savedByHandler =
-			Array.isArray(existing.parts) && existing.parts.length > 0;
+		// Reminders alone are not an answer.
+		const savedByHandler = hasReplyParts(existing.parts as MessageParts | null);
 		const updated = {
 			...existing,
 			content: savedByHandler

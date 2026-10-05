@@ -1,3 +1,4 @@
+import { formatFlowRunInboxMessage } from "@memorall/agent-harness-flows/context/run-inbox";
 import { describe, expect, it } from "vitest";
 import type {
 	ComplexContentPartTool,
@@ -254,7 +255,11 @@ describe("buildAssistantContentParts", () => {
 					],
 				},
 				{ role: "tool", tool_call_id: "a", content: "file" },
-				{ role: "user", content: "Also check the logs" },
+				// Stored tagged, as the agent read it; shown as the user wrote it.
+				{
+					role: "user",
+					content: formatFlowRunInboxMessage("Also check the logs"),
+				},
 				{ role: "assistant", content: "Checked both." },
 			],
 		});
@@ -271,6 +276,41 @@ describe("buildAssistantContentParts", () => {
 			"user-message:Also check the logs",
 			"text:Checked both.",
 		]);
+	});
+
+	it("never shows the reminders the run attached for the model", () => {
+		const reminder = {
+			role: "user" as const,
+			content:
+				"<system-reminder>\nMemonOS Tasks: #10 (1/4)\n</system-reminder>",
+		};
+		const built = buildAssistantContentParts({
+			parts: [
+				reminder,
+				{
+					role: "assistant",
+					content: "Checking.",
+					tool_calls: [
+						{
+							id: "a",
+							type: "function",
+							function: { name: "read", arguments: "{}" },
+						},
+					],
+				},
+				{ role: "tool", tool_call_id: "a", content: "file" },
+				reminder,
+				{ role: "assistant", content: "Done." },
+			],
+		});
+
+		expect(
+			built.map((part) =>
+				part.type === "tool"
+					? `tool:${part.id}`
+					: `${part.type}:${"text" in part ? part.text : ""}`,
+			),
+		).toEqual(["text:Checking.", "tool:a", "text:Done."]);
 	});
 
 	it("places a running tool after the call that started it", () => {

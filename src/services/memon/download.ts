@@ -1,6 +1,9 @@
 /** Where downloads go when no folder is given, under the agent's home. */
 export const MEMON_DOWNLOADS_DIR = "~/Downloads";
 
+/** Where pictures of pages go when the chat's model cannot look at them. */
+export const MEMON_PICTURES_DIR = "~/Pictures";
+
 /** Largest file a download saves. */
 export const MEMON_DOWNLOAD_MAX_BYTES = 50 * 1024 * 1024;
 

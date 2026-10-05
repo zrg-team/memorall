@@ -22,6 +22,7 @@ import {
 	runTextToolGeneration,
 	runTranscription,
 	type SpeechOptions,
+	type StudioRunContext,
 	type TextToolOptions,
 	type TranscriptionOptions,
 } from "@/services/studio/studio-generations";
@@ -66,6 +67,9 @@ export async function saveStudioInput(
 	return { kind: "file", path, mimeType };
 }
 
+/** Where a run's model requests are booked: its Studio session. */
+type StudioBooking = NonNullable<StudioRunContext["booking"]>;
+
 interface GenerationContext {
 	mode: MediaCategory;
 	model: CurrentModelInfo;
@@ -83,11 +87,15 @@ interface GenerationContext {
  * The placeholder is what makes a slow local model tolerable: the card shows
  * up the moment the user presses generate, with a live status, and survives a
  * reload as "failed" rather than vanishing if the tab dies mid-run.
+ *
+ * The run's model requests are booked to the session it lands in, so the
+ * Usage page counts the Studio's tokens and cost next to the chat's.
  */
 async function recordGeneration(
 	context: GenerationContext,
 	run: (
 		update: (parts: StudioContentPart[], content?: string) => void,
+		booking: StudioBooking,
 	) => Promise<{ parts: StudioContentPart[]; content?: string }>,
 ): Promise<StudioItem> {
 	const store = useStudioStore.getState();
@@ -116,8 +124,20 @@ async function recordGeneration(
 		});
 	};
 
+	// Charged to the studio itself, e.g. decision, in the session it lands in.
+	const booking: StudioBooking = {
+		tool: context.mode,
+		sessionId: item.conversationId,
+		title:
+			useStudioStore
+				.getState()
+				.modes[context.mode]?.conversations.find(
+					(conversation) => conversation.id === item.conversationId,
+				)?.title || context.content,
+	};
+
 	try {
-		const result = await run(update);
+		const result = await run(update, booking);
 		const settled: NewStudioItem = {
 			content: result.content ?? context.content,
 			parts: [...context.inputParts, ...result.parts],
@@ -165,7 +185,7 @@ export function generateSpeech(options: SpeechOptions): Promise<StudioItem> {
 				duration: options.duration,
 			},
 		},
-		() => runSpeechGeneration(options),
+		(_update, booking) => runSpeechGeneration({ ...options, booking }),
 	);
 }
 
@@ -190,7 +210,7 @@ export function transcribeAudio(
 			],
 			params: { language: options.language, task: options.task },
 		},
-		(update) => runTranscription(options, update),
+		(update, booking) => runTranscription({ ...options, booking }, update),
 	);
 }
 
@@ -213,7 +233,7 @@ export function generateImages(
 				quality: options.quality,
 			},
 		},
-		() => runImageGeneration(options),
+		(_update, booking) => runImageGeneration({ ...options, booking }),
 	);
 }
 
@@ -236,7 +256,7 @@ export function runImageTool(options: ImageToolOptions): Promise<StudioItem> {
 			],
 			params: { task: options.task, threshold: options.threshold },
 		},
-		() => runImageToolGeneration(options),
+		(_update, booking) => runImageToolGeneration({ ...options, booking }),
 	);
 }
 
@@ -257,7 +277,7 @@ export function runTextTool(options: TextToolOptions): Promise<StudioItem> {
 			inputParts: [{ type: "text", text: options.input, role: "prompt" }],
 			params,
 		},
-		() => runTextToolGeneration(options),
+		(_update, booking) => runTextToolGeneration({ ...options, booking }),
 	);
 }
 
@@ -275,7 +295,7 @@ export function runDecision(options: DecisionOptions): Promise<StudioItem> {
 			inputParts: [{ type: "text", text: options.input, role: "prompt" }],
 			params: { questions: options.questions },
 		},
-		() => runDecisionGeneration(options),
+		(_update, booking) => runDecisionGeneration({ ...options, booking }),
 	);
 }
 

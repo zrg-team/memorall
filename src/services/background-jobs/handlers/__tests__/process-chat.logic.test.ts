@@ -581,6 +581,56 @@ describe("stopping a run keeps it like a finished one", () => {
 		expect(started.dispatches.map((d) => d.stage)).not.toContain("Chat failed");
 	});
 
+	it("reports what the reply has used after every request, not only at the end", async () => {
+		const usage = (prompt: number, cost: number) => ({
+			prompt_tokens: prompt,
+			completion_tokens: 10,
+			total_tokens: prompt + 10,
+			cost,
+		});
+		flowStream.mockImplementation(async function* () {
+			yield [
+				"custom",
+				{
+					type: "llm",
+					chunk: {
+						...chunk({ role: "assistant", content: "Looking." }),
+						usage: usage(1_000, 0.001),
+					},
+				},
+			];
+			yield [
+				"custom",
+				{
+					type: "llm",
+					chunk: {
+						...chunk({ role: "assistant", content: " Done." }),
+						usage: usage(1_500, 0.002),
+					},
+				},
+			];
+		});
+
+		const { dispatches } = await runChat({
+			messages: [{ role: "user", content: "look" }],
+			model: "test-model",
+			mode: "agent",
+		});
+
+		const reports = dispatches
+			.map((d) => d.result)
+			.filter((result) => result?.type === "usage")
+			.map((result) => result?.usage as Record<string, unknown>);
+		// A running total per request, without the per-request list the saved
+		// reply keeps.
+		expect(reports).toEqual([
+			expect.objectContaining({ prompt_tokens: 1_000, requests: 1 }),
+			expect.objectContaining({ prompt_tokens: 2_500, requests: 2 }),
+		]);
+		expect(reports[1]?.cost).toBeCloseTo(0.003, 6);
+		expect(reports[1]).not.toHaveProperty("calls");
+	});
+
 	it("honours a stop that arrives before the run starts", async () => {
 		const started = await startRun({
 			messages: [{ role: "user", content: "hi" }],
@@ -679,7 +729,11 @@ describe("messages sent into a run in progress", () => {
 		});
 		expect(result.parts).toEqual([
 			{ role: "assistant", content: "Reading." },
-			{ role: "user", content: "Also check the logs" },
+			// Stored as the agent read it, so the next turn sends the same bytes.
+			{
+				role: "user",
+				content: "<by-the-way>\nAlso check the logs\n</by-the-way>",
+			},
 			{ role: "assistant", content: "Done." },
 		]);
 		// The run is over: refused again.
@@ -792,8 +846,8 @@ describe("a split conversation does not turn plain chat into an agent", () => {
 
 	it("seeds per-request context into the flow as reminders", async () => {
 		// The co-agent's page and anchor change with every question; seeded as
-		// reminders they ride past the end of each request instead of rewriting
-		// the system prompt the cached prefix starts with.
+		// reminders they follow the question instead of rewriting the system
+		// prompt the cached prefix starts with.
 		flowStream.mockImplementation(
 			vi.fn(async function* () {
 				yield ["values", { response: "ok" }];
@@ -847,5 +901,77 @@ describe("a split conversation does not turn plain chat into an agent", () => {
 			role: "user",
 			content: expect.stringContaining("Current page: https://x.test/"),
 		});
+	});
+
+	it("keeps the direct path's reminders in the reply, where the model read them", async () => {
+		llmStream.mockImplementation(singleReply("ok"));
+
+		const { result, dispatches } = await runChat({
+			messages: [{ role: "user", content: "what is this?" }],
+			model: "test-model",
+			mode: "normal",
+			reminders: ["Current page: https://x.test/"],
+		});
+
+		const reminder =
+			"<system-reminder>\nCurrent page: https://x.test/\n</system-reminder>";
+		// The next turn replays these parts, so it sends the reminder again in
+		// the same place instead of losing it from the prefix.
+		expect(result.parts).toEqual([
+			{ role: "user", content: reminder },
+			{ role: "assistant", content: "ok" },
+		]);
+		expect(
+			dispatches.find((d) => d.result?.type === "system-reminder")?.result,
+		).toEqual({ type: "system-reminder", content: reminder });
+	});
+
+	it("keeps the answer of a reply that never streamed beside its reminders", async () => {
+		const reminder = "<system-reminder>\nMemonOS Tasks\n</system-reminder>";
+		// A completion that was not streamed: no chunks, only the final state.
+		flowStream.mockImplementation(async function* () {
+			yield ["custom", { type: "system-reminder", content: reminder }];
+			yield ["values", { response: "Two left." }];
+		});
+
+		const { result } = await runChat({
+			messages: [{ role: "user", content: "check tasks" }],
+			model: "test-model",
+			mode: "custom",
+		});
+
+		// Parts that were only the reminder would replay without the answer.
+		expect(result.parts).toEqual([
+			{ role: "user", content: reminder },
+			{ role: "assistant", content: "Two left." },
+		]);
+	});
+
+	it("keeps a flow's reminders in the reply in the order they were sent", async () => {
+		const reminder = "<system-reminder>\nMemonOS Tasks\n</system-reminder>";
+		flowStream.mockImplementation(async function* () {
+			yield ["custom", { type: "system-reminder", content: reminder }];
+			yield [
+				"custom",
+				{
+					type: "llm",
+					chunk: chunk({ role: "assistant", content: "Checking." }),
+				},
+			];
+		});
+
+		const { result, dispatches } = await runChat({
+			messages: [{ role: "user", content: "check tasks" }],
+			model: "test-model",
+			mode: "agent",
+		});
+
+		expect(result.parts).toEqual([
+			{ role: "user", content: reminder },
+			{ role: "assistant", content: "Checking." },
+		]);
+		expect(
+			dispatches.find((d) => d.result?.type === "system-reminder")?.result,
+		).toEqual({ type: "system-reminder", content: reminder });
 	});
 });

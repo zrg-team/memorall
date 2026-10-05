@@ -735,8 +735,20 @@ describe("MemonMachine", () => {
 			"ran ls",
 		]);
 		expect(machine.readScreen()).toContain("tab 1 is running `node server.js`");
-		await expect(machine.terminal.runCommand("npm test")).rejects.toThrow(
-			"`node server.js` is still running in Terminal tab 1",
+		// The running tab says the port it serves, so the agent uses that
+		// server instead of starting another.
+		expect(machine.readScreen()).toMatch(
+			/1 .+ · running `node server\.js` for .+ · serving http:\/\/localhost:3000/,
+		);
+		// A command that finishes runs next to the server, in its own tab.
+		await expect(
+			machine.terminal.runCommand("npm test"),
+		).resolves.toMatchObject({ alongside: true, exitCode: 0 });
+		expect(machine.terminal.running?.command).toBe("node server.js");
+		// So does the Terminal's line when another window is in front.
+		machine.focusWindow(machine.openWindow("editor").id);
+		expect(machine.readScreen()).toMatch(
+			/Terminal.* · tab 1 running `node server\.js` for \S+ · serving http:\/\/localhost:3000/,
 		);
 
 		// The server's tab kept its own directory and output.
@@ -840,7 +852,7 @@ describe("MemonMachine", () => {
 		expect(screen).toContain("  2* ~ · last: $ npm test (exit 0)");
 	});
 
-	it("runs curl and the shell's tools next to a running server, and nothing else", async () => {
+	it("runs any command that finishes next to a running server", async () => {
 		const { machine, ports } = createMachine();
 		vi.mocked(ports.terminal.run)
 			.mockResolvedValueOnce({
@@ -904,12 +916,70 @@ describe("MemonMachine", () => {
 			"conversation-1",
 		);
 
-		await expect(machine.terminal.runCommand("node other.js")).rejects.toThrow(
-			"`node server.js` is still running in this Terminal tab",
-		);
+		// node runs next to it too: each sandbox command has its own streams.
 		await expect(
-			machine.terminal.runCommand("echo $(node other.js)"),
-		).rejects.toThrow("`node server.js` is still running in this Terminal tab");
+			machine.terminal.runCommand("node --check other.js"),
+		).resolves.toMatchObject({ alongside: true, exitCode: 0 });
+		expect(ports.terminal.run).toHaveBeenLastCalledWith(
+			"node --check other.js",
+			expect.objectContaining({ cwd: "/agents/guest" }),
+		);
+		expect(machine.terminal.running?.command).toBe("node server.js");
+	});
+
+	it("stops a command that keeps running next to another, and closes its servers", async () => {
+		const { ports } = createPorts();
+		const listening = new Set([3000]);
+		const stopServer = vi.fn(async (port: number) => {
+			listening.delete(port);
+		});
+		ports.embedded = {
+			servers: vi.fn(async () => [...listening].sort()),
+			stopServer,
+		} as unknown as MemonEmbeddedPort;
+		vi.mocked(ports.terminal.run)
+			.mockResolvedValueOnce({
+				processId: "server",
+				running: true,
+				exitCode: null,
+				output: [{ kind: "stdout", text: "listening on 3000" }],
+			})
+			.mockImplementationOnce(async () => {
+				listening.add(4000);
+				return {
+					processId: "watch",
+					running: true,
+					exitCode: null,
+					output: [{ kind: "stdout", text: "watching" }],
+				};
+			});
+		vi.mocked(ports.terminal.read).mockImplementation(
+			() => new Promise(() => undefined),
+		);
+		const machine = new MemonMachine(
+			"conversation-1",
+			ports,
+			DEFAULT_MEMON_FEATURE_CONFIG,
+		);
+		await machine.terminal.runCommand("node server.js", { waitMs: 0 });
+
+		await expect(
+			machine.terminal.runCommand("node watch.js"),
+		).resolves.toMatchObject({ alongside: true, exitCode: 124 });
+		expect(ports.terminal.stop).toHaveBeenCalledWith("watch", "conversation-1");
+		expect(stopServer).toHaveBeenCalledTimes(1);
+		expect(stopServer).toHaveBeenCalledWith(4000);
+		expect([...listening]).toEqual([3000]);
+		expect(
+			machine
+				.snapshot()
+				.terminal.lines.slice(-2)
+				.map((line) => line.text),
+		).toEqual([
+			"Stopped after 60s: a command next to a running one must finish.",
+			"Closed localhost:4000.",
+		]);
+		expect(machine.terminal.running?.command).toBe("node server.js");
 	});
 
 	it("puts the agent's install in front of the user and runs it once approved", async () => {
@@ -1027,11 +1097,16 @@ describe("MemonMachine", () => {
 		expect(machine.snapshot().terminal.lines.map((line) => line.text)).toEqual(
 			expect.arrayContaining(["fetching", "Ok to proceed? (y)"]),
 		);
+		// Another command runs next to it, and the first keeps its input.
+		vi.mocked(ports.terminal.run).mockResolvedValueOnce({
+			running: false,
+			exitCode: 0,
+			output: [{ kind: "stdout", text: "built" }],
+		});
 		await expect(
 			machine.terminal.runCommand("npm run build", { byUser: true }),
-		).rejects.toThrow(
-			"`npm install -g pkg` is still running in this Terminal tab",
-		);
+		).resolves.toMatchObject({ alongside: true, exitCode: 0 });
+		expect(machine.terminal.running?.command).toBe("npm install -g pkg");
 
 		await machine.terminal.sendInput("y");
 		expect(ports.terminal.input).toHaveBeenCalledWith(
@@ -1746,7 +1821,7 @@ describe("MemonMachine", () => {
 		);
 		expect(ports.studio.run).toHaveBeenCalledWith(
 			{ tool: "transcribe", path: "/notes/talk.mp3" },
-			{ sessionKey: "memon:conversation-1" },
+			{ sessionKey: "memon:conversation-1", agentId: null },
 		);
 	});
 
@@ -1949,6 +2024,11 @@ describe("MemonMachine", () => {
 			close: vi.fn(async () => undefined),
 			reserve: vi.fn(() => () => undefined),
 			servers: vi.fn(async () => [3000]),
+			capture: vi.fn(async () => ({
+				dataUrl: "data:image/png;base64,AAAA",
+				width: 2,
+				height: 2,
+			})),
 		};
 		ports.embedded = embedded;
 		const machine = new MemonMachine(
@@ -1979,19 +2059,20 @@ describe("MemonMachine", () => {
 		expect(machine.snapshot().browser.tabs).toHaveLength(2);
 		expect(machine.readScreen()).toContain('"Todo app" (embedded)');
 
-		// Any local address opens embedded, server seen or not; a real tab
-		// only when asked for.
+		// A local address the computer does not serve is the user's own
+		// server, which only a real tab reaches.
 		await machine.openUrl("localhost:4000");
-		expect(embedded.open).toHaveBeenLastCalledWith("http://localhost:4000", {
-			windowId: undefined,
-		});
-		expect(machine.snapshot().browser.tabs).toHaveLength(3);
-		await machine.selectTab(2);
-		await machine.openUrl("localhost:4000", { embedded: false });
 		expect(ports.browser.navigate).toHaveBeenCalledWith(
 			"s1",
 			"http://localhost:4000",
 		);
+		expect(embedded.open).toHaveBeenCalledTimes(1);
+		// Asked for, it opens embedded anyway.
+		await machine.openUrl("localhost:4000", { embedded: true, newTab: true });
+		expect(embedded.open).toHaveBeenLastCalledWith("http://localhost:4000", {
+			windowId: undefined,
+		});
+		expect(machine.snapshot().browser.tabs).toHaveLength(3);
 
 		await machine.selectTab(1);
 		await machine.openUrl("http://localhost:3000/done", { embedded: true });
@@ -2007,6 +2088,99 @@ describe("MemonMachine", () => {
 		expect(machine.readScreen()).toContain(
 			"serving http://localhost:3000 — a server keeps running",
 		);
+	});
+
+	it("takes a picture of a page ref where the page is shown, and saves it for a model that cannot look", async () => {
+		const { ports, files } = createPorts();
+		const embedded: MemonEmbeddedPort = {
+			availability: () => ({ available: true }),
+			open: vi.fn(async (url: string) => ({
+				sessionId: "embedded-1",
+				url,
+				title: "",
+			})),
+			navigate: vi.fn(),
+			outline: vi.fn(async () => outline("http://localhost:8347/", "Game")),
+			act: vi.fn(),
+			history: vi.fn(async () => undefined),
+			focus: vi.fn(async () => undefined),
+			close: vi.fn(async () => undefined),
+			reserve: vi.fn(() => () => undefined),
+			servers: vi.fn(async () => [8347]),
+			capture: vi.fn(async () => ({
+				dataUrl: `data:image/png;base64,${btoa("png")}`,
+				width: 880,
+				height: 594,
+			})),
+		};
+		ports.embedded = embedded;
+		const machine = new MemonMachine(
+			"conversation-1",
+			ports,
+			DEFAULT_MEMON_FEATURE_CONFIG,
+		);
+		await machine.openUrl("localhost:8347");
+
+		// The ref as the agent read it: a stale page refuses it.
+		const picture = await machine.captureRef("b1");
+		expect(embedded.capture).toHaveBeenCalledWith("embedded-1", {
+			ref: "b1",
+			docToken: "doc-Game",
+		});
+		expect(picture).toMatchObject({ width: 880, height: 594 });
+
+		// No models port, or a model that takes no images: the picture is a file.
+		expect(await machine.modelAcceptsImages()).toBe(false);
+		const saved = await machine.savePicture(picture.dataUrl, "b1-picture");
+		expect(saved).toBe(`${machine.home}/Pictures/b1-picture.png`);
+		expect(files.get(saved)).toEqual(new TextEncoder().encode("png"));
+
+		ports.models = {
+			llm: vi.fn(),
+			acceptsImages: vi.fn(async () => true),
+		};
+		expect(await machine.modelAcceptsImages()).toBe(true);
+	});
+
+	it("opens any local address embedded where there are no real tabs", async () => {
+		const { ports } = createPorts();
+		ports.browser.availability = () => ({
+			available: false,
+			reason: "the web app cannot drive a browser",
+		});
+		const embedded: MemonEmbeddedPort = {
+			availability: () => ({ available: true }),
+			open: vi.fn(async (url: string) => ({
+				sessionId: "embedded-1",
+				url,
+				title: "",
+			})),
+			navigate: vi.fn(),
+			outline: vi.fn(async () => outline("http://localhost:4000/", "Todo")),
+			act: vi.fn(),
+			history: vi.fn(async () => undefined),
+			focus: vi.fn(async () => undefined),
+			close: vi.fn(async () => undefined),
+			reserve: vi.fn(() => () => undefined),
+			servers: vi.fn(async () => []),
+			capture: vi.fn(async () => ({
+				dataUrl: "data:image/png;base64,AAAA",
+				width: 2,
+				height: 2,
+			})),
+		};
+		ports.embedded = embedded;
+		const machine = new MemonMachine(
+			"conversation-1",
+			ports,
+			DEFAULT_MEMON_FEATURE_CONFIG,
+		);
+
+		await machine.openUrl("localhost:4000");
+		expect(embedded.open).toHaveBeenCalledWith("http://localhost:4000", {
+			windowId: undefined,
+		});
+		expect(ports.browser.open).not.toHaveBeenCalled();
 	});
 
 	it("shows a visual, keeps it as a .openui file and opens it again", async () => {

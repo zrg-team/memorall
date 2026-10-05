@@ -3,7 +3,7 @@ import {
 	PROVIDER_REGISTRY,
 } from "@/services/llm/provider-registry";
 import type { UsageMessageRow, UsageRequest, UsageToolShare } from "../types";
-import type { FeatureResolver } from "./usage-features";
+import { type FeatureResolver, sourceOfFeatureKey } from "./usage-features";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -209,6 +209,24 @@ export const toUsageRequests = (
 		local: isLocalProvider(provider),
 	};
 
+	// Charged as a whole. An agent tool's calls are the chat's own, counted
+	// from its replies; a request of a source's own (a Studio run) is a call.
+	const chargedFeature = row.charge
+		? resolveFeature(row.charge.tool, row.charge.source)
+		: null;
+	const charged: UsageToolShare[] | null =
+		row.charge && chargedFeature
+			? [
+					{
+						tool: row.charge.tool,
+						feature: chargedFeature,
+						weight: 1,
+						resultChars: 0,
+						calls: sourceOfFeatureKey(chargedFeature) ? 1 : 0,
+					},
+				]
+			: null;
+
 	return calls.map((call, index) => {
 		const segment =
 			(fillLast && index > 0
@@ -240,7 +258,7 @@ export const toUsageRequests = (
 			outputTokens: call.output,
 			reasoningTokens: call.reasoning,
 			estimated: call.estimated,
-			tools,
+			tools: charged ?? tools,
 		};
 	});
 };

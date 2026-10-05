@@ -1666,13 +1666,15 @@ exports[`flows-integrations registered contracts > registers every integrations 
     },
   },
   {
-    "description": "Act on the computer: click or type on a ref from the latest screen, scroll, go back/forward, switch tabs, or write and save in the Editor. Returns the new screen.",
+    "description": "Act on the computer: click, hover or type on a ref from the latest screen (or click a page point by x, y), press keys, scroll, go back/forward, switch tabs, or write and save in the Editor. Returns the new screen.",
     "name": "memon_act",
     "parameters": {
       "properties": {
         "action": {
           "enum": [
             "click",
+            "hover",
+            "press",
             "type",
             "toggle",
             "select",
@@ -1696,6 +1698,10 @@ exports[`flows-integrations registered contracts > registers every integrations 
           "enum": [
             "up",
             "down",
+            "left",
+            "right",
+            "top",
+            "bottom",
           ],
           "type": "string",
         },
@@ -1714,6 +1720,12 @@ exports[`flows-integrations registered contracts > registers every integrations 
         "to": {
           "type": "string",
         },
+        "x": {
+          "type": "number",
+        },
+        "y": {
+          "type": "number",
+        },
       },
       "required": [
         "action",
@@ -1722,7 +1734,7 @@ exports[`flows-integrations registered contracts > registers every integrations 
     },
   },
   {
-    "description": "Hand coding work to pi code, the pi coding agent in its own window: it reads, edits and runs code in the computer's files with its own tools, on the chat's model. Then wait for it, steer it, stop it or type into it. The user confirms in the pi code window before you hand it work. Returns a summary and the screen, which shows pi's conversation while its window is in front.",
+    "description": "Hand coding work to pi code, the pi coding agent in its own window: it reads, edits and runs code in the computer's files with its own tools, on the chat's model. A prompt returns when pi's turn ends: it answered or asks you something, failed, or the user stopped it; or sooner, when the user writes to you. Then answer it, steer it, stop it or type into it. The user confirms in the pi code window before you hand it work. Returns a summary and the screen, which shows pi's conversation while its window is in front.",
     "name": "memon_code",
     "parameters": {
       "properties": {
@@ -1874,7 +1886,7 @@ exports[`flows-integrations registered contracts > registers every integrations 
     },
   },
   {
-    "description": "Run a shell command in the Terminal window (the same "/" tree as Files) and return its output with the screen. Long commands keep running and streaming: call again to wait, type into them, or stop them. The Terminal has tabs, each with its own working directory; \`cd dir\` changes the tab's directory for later commands. One long command (a server) runs at a time; while it does, file and text commands (ls, cat, mkdir, grep…), curl, git and py still run next to it in any tab; anything else waits for it.",
+    "description": "Run a shell command in the Terminal window (the same "/" tree as Files) and return its output with the screen. Long commands keep running and streaming: call again to wait, type into them, or stop them. The Terminal has tabs, each with its own working directory; \`cd dir\` changes the tab's directory for later commands. One long command (a server) keeps running at a time; while it does, any command that finishes (ls, node --check, tests, curl, git, py) runs next to it in any tab, and a second server is stopped.",
     "name": "memon_run",
     "parameters": {
       "properties": {

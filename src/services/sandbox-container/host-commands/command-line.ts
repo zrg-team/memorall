@@ -1,8 +1,8 @@
 /**
  * Just enough shell parsing to run `git` and `py` outside the sandbox while
  * the rest of a command line still goes to the sandbox shell: chains split at
- * `&&`, `||` and `;`, quoting, leading `NAME=value` assignments, and an output
- * redirect at the end.
+ * `&&`, `||` and `;`, pipes, quoting, leading `NAME=value` assignments, and
+ * redirects (`> file`, `2>&1`, `< file`).
  */
 
 export type ChainJoin = "&&" | "||" | ";";
@@ -111,7 +111,12 @@ export interface ParsedSegment {
 	stderrRedirect?: { path: string; append: boolean };
 	/** `2>&1`: stderr goes where stdout goes. */
 	mergeStderr: boolean;
-	/** Uses a pipe or input redirect, which only the sandbox shell can run. */
+	/** `< file`: stdin read from a file. */
+	inputRedirect?: string;
+	/**
+	 * Uses what only the sandbox shell can run: a pipe (in a segment not split
+	 * at them), a here-document (<<, <<<) or a process substitution (<(…)).
+	 */
 	needsShell: boolean;
 }
 
@@ -220,6 +225,14 @@ export const parseSegment = (text: string): ParsedSegment => {
 				};
 				if (token.value.startsWith("2")) parsed.stderrRedirect = redirect;
 				else parsed.redirect = redirect;
+				index += 1;
+			} else if (token.value === "<") {
+				const target = tokens[index + 1];
+				if (!target || target.operator || target.value.startsWith("(")) {
+					parsed.needsShell = true;
+					break;
+				}
+				parsed.inputRedirect = target.value;
 				index += 1;
 			} else {
 				parsed.needsShell = true;

@@ -61,6 +61,10 @@ import {
 	up as addConversationModeUp,
 	down as addConversationModeDown,
 } from "./016_add_conversation_mode";
+import {
+	up as addModelUsageUp,
+	down as addModelUsageDown,
+} from "./017_add_model_usage";
 // import { up as futureExampleUp, down as futureExampleDown } from './001_example_future_migration';
 
 export interface Migration {
@@ -194,6 +198,14 @@ export const migrations: Migration[] = [
 			"Add conversation mode so media studios keep their own history apart from chat",
 		up: addConversationModeUp,
 		down: addConversationModeDown,
+	},
+	{
+		id: "add_model_usage",
+		version: 17,
+		description:
+			"Add model_usage for model requests made outside chat replies (pi code, Studio on a computer)",
+		up: addModelUsageUp,
+		down: addModelUsageDown,
 	},
 	// Example of how to add future migrations:
 	// {

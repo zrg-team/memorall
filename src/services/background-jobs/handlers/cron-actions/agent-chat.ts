@@ -1,5 +1,6 @@
 import { eq, sql } from "drizzle-orm";
 import { serviceManager } from "@/services";
+import { hasReplyParts } from "@/services/chat/message-parts";
 import type { AgentChatCronPayload, Message } from "@/services/database/types";
 import type { ChatPayload, ChatResult } from "../process-chat";
 import { handlerRegistry } from "../handler-registry";
@@ -188,7 +189,8 @@ const persistAgentChatRun = async (
 			createMessage(
 				conversationId,
 				"assistant",
-				assistantParts ? "" : result.content,
+				// Parts that are only reminders do not hold the answer.
+				hasReplyParts(assistantParts) ? "" : result.content,
 				{
 					topicId,
 					complexContent: null,

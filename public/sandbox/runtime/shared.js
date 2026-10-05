@@ -19,6 +19,8 @@ export const runtimeState = {
 	installedPackages: new Map(),
 	servers: new Map(),
 	commands: new Map(),
+	/** Ports commands serve, by port: the command that opened each. */
+	commandServers: new Map(),
 	container: null,
 	currentExecutionContext: null,
 };
@@ -635,13 +637,59 @@ const getCommandSessionOrThrow = (commandId) => {
 	return commandSession;
 };
 
-// The foreground command: the one stdin goes to. Commands started alongside
-// it (a curl while a server runs) never read the terminal, as background
-// jobs in a shell do not.
-const getRunningCommandSession = () =>
-	Array.from(runtimeState.commands.values()).find(
-		(commandSession) => !commandSession.completed && !commandSession.alongside,
-	) ?? null;
+const listeningPorts = () => {
+	const bridge = runtimeState.container?.serverBridge;
+	return new Set(
+		typeof bridge?.getServerPorts === "function" ? bridge.getServerPorts() : [],
+	);
+};
+
+/**
+ * A server another command opened that still listens, if any. `port` now
+ * listens for this command: whatever had it before was replaced.
+ */
+const serverServingBesides = (commandSession, port) => {
+	const listening = listeningPorts();
+	for (const [servedPort, owner] of runtimeState.commandServers) {
+		if (servedPort === port || !listening.has(servedPort)) {
+			runtimeState.commandServers.delete(servedPort);
+		} else if (owner.commandId !== commandSession.commandId) {
+			return { port: servedPort, command: owner.command };
+		}
+	}
+	return null;
+};
+
+/**
+ * One command serves at a time: a server a command opens is its own, unless
+ * another command already serves. Then the new server closes and its command
+ * stops, saying which server to use instead.
+ */
+const onCommandServerListen = (commandSession, port, server) => {
+	const serving = serverServingBesides(commandSession, port);
+	if (!serving) {
+		runtimeState.commandServers.set(port, {
+			commandId: commandSession.commandId,
+			command: commandSession.command,
+		});
+		return;
+	}
+	// After the listen callback, so the refusal is the command's last word.
+	setTimeout(() => {
+		try {
+			server?.close?.();
+		} catch {
+			// Closing is best effort: the command stops either way.
+		}
+		appendCommandChunk(
+			commandSession,
+			"stderr",
+			`Error: listen EADDRINUSE: one server runs at a time, and \`${serving.command}\` already serves http://localhost:${serving.port}, so port ${port} was closed. Use that server, or stop it first.\n`,
+		);
+		commandSession.serverRefused = true;
+		commandSession.abortController.abort();
+	}, 0);
+};
 
 const buildCommandResult = (commandSession, offset = 0) => {
 	const normalizedOffset = normalizeCommandOffset(offset);
@@ -717,19 +765,11 @@ export const executeCommandSession = async (payload = {}) => {
 		throw new Error("Command is required");
 	}
 
-	const runningCommand = getRunningCommandSession();
-	if (runningCommand && !payload.allowAlongside) {
-		throw new Error(
-			`Sandbox runtime supports only one active command at a time. Stop or wait for ${runningCommand.commandId} first.`,
-		);
-	}
-
 	const containerInstance = await ensureContainer();
 	const commandSession = createCommandSession(
 		command,
 		normalizeCommandCwd(payload.cwd),
 	);
-	commandSession.alongside = Boolean(runningCommand);
 	runtimeState.commands.set(commandSession.commandId, commandSession);
 
 	pushRuntimeLog(
@@ -753,27 +793,22 @@ export const executeCommandSession = async (payload = {}) => {
 		}, Math.floor(payload.commandTimeoutMs));
 	}
 
-	// almostnode keeps one set of streaming callbacks, abort signal and stdin
-	// for the whole container: a command next to a running one must not take
-	// them, or the running one (a server) stops streaming. Its output comes
-	// with its result instead.
+	// Each run has its own output, stop signal, stdin and servers (the
+	// almostnode patch in patches/), so commands run side by side.
 	commandSession.runPromise = containerInstance
-		.run(
-			executedCommand,
-			commandSession.alongside
-				? { cwd: commandSession.cwd }
-				: {
-						cwd: commandSession.cwd,
-						onStdout: (data) =>
-							appendCommandChunk(commandSession, "stdout", data),
-						onStderr: (data) =>
-							appendCommandChunk(commandSession, "stderr", data),
-						signal: commandSession.abortController.signal,
-					},
-		)
+		.run(executedCommand, {
+			cwd: commandSession.cwd,
+			onStdout: (data) => appendCommandChunk(commandSession, "stdout", data),
+			onStderr: (data) => appendCommandChunk(commandSession, "stderr", data),
+			signal: commandSession.abortController.signal,
+			onServerListen: (port, server) =>
+				onCommandServerListen(commandSession, port, server),
+		})
 		.then((result) => {
 			completeCommandSession(commandSession, {
-				exitCode: result?.exitCode ?? 0,
+				exitCode: commandSession.serverRefused
+					? 1
+					: (result?.exitCode ?? 0),
 				result,
 				stopRequested: commandSession.stopRequested,
 				timedOut: commandSession.timedOut,
@@ -815,16 +850,11 @@ export const sendCommandSessionInput = async (payload = {}) => {
 		throw new Error(`Command is not running: ${payload.commandId}`);
 	}
 
-	const activeCommandSession = getRunningCommandSession();
-	if (!activeCommandSession || activeCommandSession.commandId !== payload.commandId) {
-		throw new Error(
-			`Command ${payload.commandId} is not the active stdin target in the sandbox runtime`,
-		);
-	}
-
 	const containerInstance = await ensureContainer();
+	// The command's own signal picks its stdin out of the commands running.
 	containerInstance.sendInput(
 		`${String(payload.input ?? "")}${payload.appendNewline ? "\n" : ""}`,
+		commandSession.abortController.signal,
 	);
 	commandSession.updatedAt = Date.now();
 	return {
@@ -907,6 +937,7 @@ export const resetRuntime = async () => {
 	runtimeState.installedPackages.clear();
 	runtimeState.servers.clear();
 	runtimeState.commands.clear();
+	runtimeState.commandServers.clear();
 	runtimeState.runtimeLogs.length = 0;
 	pushRuntimeLog("info", "Sandbox runtime reset");
 };

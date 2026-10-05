@@ -12,6 +12,7 @@ import {
 	formatTokens,
 	formatUsd,
 } from "../utils/usage-format";
+import { isModelUsageSession } from "@/services/model-usage/model-usage-ledger";
 import { UsageCard } from "./chart-primitives";
 import { MetricCell } from "./MetricCell";
 import { UsageTable } from "./UsageTable";
@@ -89,52 +90,58 @@ export const ConversationTableCard: React.FC<{
 							optional: true,
 						},
 					]}
-					rows={rows.map((row) => ({
-						key: row.conversationId,
-						title: onOpen ? t("conversations.open") : undefined,
-						onSelect: onOpen ? () => onOpen(row.conversationId) : undefined,
-						cells: [
-							<span key="name" className="flex min-w-0 items-center gap-2">
-								<span
-									className="h-2.5 w-2.5 shrink-0 rounded-[3px]"
-									style={{
-										background:
-											view.agentColors.get(row.agent) ?? palette.other,
-									}}
-								/>
-								<span className="flex min-w-0 flex-col">
-									<span className="truncate font-medium">
-										{row.title || t("conversations.untitled")}
+					rows={rows.map((row) => {
+						// pi code and Studio sessions on a computer are no chat to open.
+						const open = isModelUsageSession(row.conversationId)
+							? undefined
+							: onOpen;
+						return {
+							key: row.conversationId,
+							title: open ? t("conversations.open") : undefined,
+							onSelect: open ? () => open(row.conversationId) : undefined,
+							cells: [
+								<span key="name" className="flex min-w-0 items-center gap-2">
+									<span
+										className="h-2.5 w-2.5 shrink-0 rounded-[3px]"
+										style={{
+											background:
+												view.agentColors.get(row.agent) ?? palette.other,
+										}}
+									/>
+									<span className="flex min-w-0 flex-col">
+										<span className="truncate font-medium">
+											{row.title || t("conversations.untitled")}
+										</span>
+										<span className="truncate text-[11px] text-muted-foreground">
+											{view.agentLabel(row.agent)}
+										</span>
 									</span>
-									<span className="truncate text-[11px] text-muted-foreground">
-										{view.agentLabel(row.agent)}
+								</span>,
+								<span key="model" className="whitespace-nowrap">
+									<span className="font-mono text-[11px]">
+										{view.modelLabel(row.model).name}
 									</span>
-								</span>
-							</span>,
-							<span key="model" className="whitespace-nowrap">
-								<span className="font-mono text-[11px]">
-									{view.modelLabel(row.model).name}
-								</span>
-								{row.models > 1 ? (
-									<span className="text-muted-foreground">
-										{" "}
-										+{row.models - 1}
-									</span>
-								) : null}
-							</span>,
-							formatCount(row.requests),
-							formatTokens(row.tokens),
-							<MetricCell
-								key="cost"
-								value={row.cost}
-								coverage={coverage.get(row.conversationId)}
-								view={costView}
-							/>,
-							<span key="last" className="text-muted-foreground">
-								{lastActive(row.lastAt)}
-							</span>,
-						],
-					}))}
+									{row.models > 1 ? (
+										<span className="text-muted-foreground">
+											{" "}
+											+{row.models - 1}
+										</span>
+									) : null}
+								</span>,
+								formatCount(row.requests),
+								formatTokens(row.tokens),
+								<MetricCell
+									key="cost"
+									value={row.cost}
+									coverage={coverage.get(row.conversationId)}
+									view={costView}
+								/>,
+								<span key="last" className="text-muted-foreground">
+									{lastActive(row.lastAt)}
+								</span>,
+							],
+						};
+					})}
 				/>
 			)}
 		</UsageCard>

@@ -15,6 +15,8 @@ export interface DocumentEditorProps {
 	initialContent: string;
 	/** Callback when content changes */
 	onContentChange?: (content: string) => void;
+	/** Callback when the editor gains or loses unsaved changes */
+	onDirtyChange?: (dirty: boolean) => void;
 	/** Callback when save is requested */
 	onSave: (content: string) => Promise<void>;
 	/** Whether the document is read-only */

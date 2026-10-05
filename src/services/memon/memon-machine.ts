@@ -50,7 +50,11 @@ import {
 	type MemonDesktopEntryChange,
 } from "./desktop-files";
 import { memonFileKind, type MemonViewerKind } from "./file-kinds";
-import { downloadFileName, MEMON_DOWNLOADS_DIR } from "./download";
+import {
+	downloadFileName,
+	MEMON_DOWNLOADS_DIR,
+	MEMON_PICTURES_DIR,
+} from "./download";
 import type { FolderZip } from "@/services/filesystem/folder-zip";
 import { listFileRefs, serializeScreen } from "./screen-serializer";
 import { controlsByRef } from "./app-kit/render-text";
@@ -60,7 +64,13 @@ import { studioDraftsFromSettings } from "./apps/studio-view";
 import { MemonApprovalRequiredError } from "./approval-error";
 import { MemonPiCode, type MemonPiCodePort } from "./apps/pi-code/pi-code-app";
 import type { MemonEmbeddedPort } from "./embedded-browser";
-import { isLocalAddress, sandboxTargetOf } from "./embedded-frame";
+import type { MemonModelsPort } from "./models-port";
+import type { MemonCaptureRequest, MemonPageCapture } from "./page-capture";
+import {
+	isLocalAddress,
+	isLoopbackUrl,
+	sandboxTargetOf,
+} from "./embedded-frame";
 import type { MemonStudioPort, MemonStudioRequest } from "./studio-app";
 import {
 	MemonTerminal,
@@ -118,6 +128,11 @@ export interface MemonBrowserPort {
 		request: WebOutlineActionRequest,
 	): Promise<{ result: WebOutlineActionResult; outline?: WebPageOutline }>;
 	history(sessionId: string, direction: WebHistoryDirection): Promise<void>;
+	/** A picture of an element of the page; without it, pages are text only. */
+	capture?(
+		sessionId: string,
+		request: MemonCaptureRequest,
+	): Promise<MemonPageCapture>;
 	/** Brings the session's real tab and window to the front. */
 	focus(sessionId: string): Promise<void>;
 	close(sessionId: string): Promise<void>;
@@ -228,6 +243,8 @@ export interface MemonPorts {
 	homes?: MemonHomePort;
 	/** Without it pi code is not available. */
 	piCode?: MemonPiCodePort;
+	/** Without it the agent gets pictures of pages as files, never to look at. */
+	models?: MemonModelsPort;
 }
 
 export type MemonTurnOutcome = "ready" | "timeout" | "cancelled";
@@ -270,6 +287,8 @@ const APP_OF_WINDOW: Record<MemonWindowApp, MemonAppId | null> = {
 const MAX_VIEWER_TEXT_CHARS = 60_000;
 const MAX_USER_CHANGES = 12;
 const MAX_STUDIO_RUNS = 20;
+/** How long a local address waits for a starting command's server. */
+const SERVER_START_WAIT_MS = 3_000;
 const normalizePath = (path: string, cwd = "/"): string => {
 	const absolute = path.startsWith("/") ? path : `${cwd}/${path}`;
 	const parts: string[] = [];
@@ -359,6 +378,12 @@ export class MemonMachine {
 	private editorContent = "";
 	private editorSaved = true;
 	private editorScreenLine = 0;
+	/** The file text the Editor's content is based on; null for a new file. */
+	private editorBase: string | null = null;
+	/** The file's text, when it changed on disk under unsaved edits. */
+	private editorConflict: string | null = null;
+	private unsubscribeEditorFile: (() => void) | undefined;
+	private editorRefreshTimer: ReturnType<typeof setTimeout> | undefined;
 	private viewerPath: string | null = null;
 	private viewerKind: MemonViewerKind | null = null;
 	private viewerText = "";
@@ -452,6 +477,7 @@ export class MemonMachine {
 			{
 				sessionKey: key,
 				home: () => this.home,
+				agentId: () => this.agentId,
 				changed: () => this.changed(),
 				quit: () => {
 					const window = this.windowFor("pi");
@@ -462,6 +488,12 @@ export class MemonMachine {
 					const opened = !this.windowFor("pi");
 					this.openWindow("pi");
 					return opened;
+				},
+				inFront: () => {
+					const window = this.windowFor("pi");
+					return Boolean(
+						window && !window.minimized && window.id === this.focusedWindowId,
+					);
 				},
 				cursorLabel: (label) => {
 					if (this.cursor) this.cursor = { ...this.cursor, label };
@@ -516,6 +548,7 @@ export class MemonMachine {
 		this.cancelWaits();
 		this.unsubscribeFiles?.();
 		this.unsubscribeDesktop?.();
+		this.unwatchEditorFile();
 		if (this.desktopRefreshTimer) clearTimeout(this.desktopRefreshTimer);
 		if (this.filesRefreshTimer) clearTimeout(this.filesRefreshTimer);
 		for (const release of this.releases.values()) release();
@@ -876,6 +909,7 @@ export class MemonMachine {
 			this.unsubscribeFiles?.();
 			this.unsubscribeFiles = undefined;
 		}
+		if (window.app === "editor") this.unwatchEditorFile();
 		// Closing pi's window quits pi, like closing an app.
 		if (window.app === "pi") await this.piCode.stop();
 		this.windows = this.windows.filter((candidate) => candidate !== window);
@@ -911,6 +945,42 @@ export class MemonMachine {
 		return tab;
 	}
 
+	/** A picture of an element of the page in front (a ref of the latest screen). */
+	async captureRef(ref: string): Promise<MemonPageCapture> {
+		this.requireApp("browser");
+		const tab = this.requireActiveTab();
+		const port = this.browserPort(tab);
+		if (!port.capture) {
+			throw new Error("Pictures of pages are not available on this computer.");
+		}
+		return port.capture(tab.sessionId, {
+			ref,
+			docToken: tab.outline?.docToken,
+		});
+	}
+
+	/** The chat's model can look at pictures, so a picture goes to it. */
+	async modelAcceptsImages(): Promise<boolean> {
+		return (
+			(await this.ports.models?.acceptsImages().catch(() => false)) ?? false
+		);
+	}
+
+	/** Saves a picture (a PNG data URL) into ~/Pictures; returns its path. */
+	async savePicture(dataUrl: string, name: string): Promise<string> {
+		this.requireApp("files");
+		const binary = atob(dataUrl.slice(dataUrl.indexOf(",") + 1));
+		const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+		const path = await this.freeName(
+			this.resolvePath(MEMON_PICTURES_DIR),
+			`${name}.png`,
+			"move",
+		);
+		await this.ports.files.write(path, bytes);
+		await this.refreshFiles().catch(() => undefined);
+		return path;
+	}
+
 	private async releaseTab(tab: MemonBrowserTab): Promise<void> {
 		this.releases.get(tab.sessionId)?.();
 		this.releases.delete(tab.sessionId);
@@ -943,9 +1013,33 @@ export class MemonMachine {
 	}
 
 	/**
-	 * Opens a URL in the active tab, or in a new one. A local address
-	 * (localhost:3000) opens embedded, where the computer's servers are, unless
-	 * `embedded: false` asks for a real tab.
+	 * Whether a page opens embedded: the sandbox's own preview URLs, and a
+	 * local address the computer serves. Any other local address is a server
+	 * on the user's machine, which only a real tab reaches; where there are
+	 * no real tabs (the web build), embedded is all there is.
+	 */
+	private async opensEmbedded(url: string): Promise<boolean> {
+		const target = this.ports.embedded ? sandboxTargetOf(url) : null;
+		if (!target) return false;
+		if (!isLoopbackUrl(url)) return true;
+		if (!this.ports.browser.availability().available) return true;
+		// A command still starting its server gets a moment to listen.
+		const deadline =
+			Date.now() + (this.terminal.running ? SERVER_START_WAIT_MS : 0);
+		while (true) {
+			const servers = await this.terminal
+				.checkServers()
+				.catch(() => this.terminal.servers);
+			if (servers.includes(target.port)) return true;
+			if (Date.now() >= deadline) return false;
+			await new Promise((resolve) => setTimeout(resolve, 500));
+		}
+	}
+
+	/**
+	 * Opens a URL in the active tab, or in a new one. A local address the
+	 * computer serves (localhost:3000) opens embedded, where its servers are;
+	 * `embedded` asks for one kind or the other.
 	 */
 	async openUrl(
 		input: string,
@@ -954,9 +1048,7 @@ export class MemonMachine {
 		this.requireApp("browser");
 		const window = this.openWindow("browser");
 		const url = normalizeBrowserUrl(input);
-		const embedded =
-			options.embedded ??
-			(Boolean(this.ports.embedded) && sandboxTargetOf(url) !== null);
+		const embedded = options.embedded ?? (await this.opensEmbedded(url));
 		if (embedded && !this.ports.embedded) {
 			throw new Error("Embedded pages are not available on this computer.");
 		}
@@ -1032,9 +1124,15 @@ export class MemonMachine {
 			tab.url = outline.url || tab.url;
 			tab.title = outline.title || tab.title;
 		}
-		// A click can start a navigation that replaces the document after the
-		// outline was taken; read again once it settles.
-		if (!outline || request.action === "click" || request.action === "submit") {
+		// A click or a key can start a navigation that replaces the document
+		// after the outline was taken; read again once it settles.
+		if (
+			!outline ||
+			request.action === "click" ||
+			request.action === "submit" ||
+			request.action === "press" ||
+			request.action === "toggle"
+		) {
 			await new Promise((resolve) => setTimeout(resolve, 400));
 			await this.readTab(tab);
 		} else {
@@ -1329,6 +1427,7 @@ export class MemonMachine {
 			// Show it in an open Editor, unless the user has unsaved edits there.
 			if (this.editorPath === path && this.editorSaved) {
 				this.editorContent = next;
+				this.editorBase = next;
 			}
 			this.changed();
 		}
@@ -1450,9 +1549,67 @@ export class MemonMachine {
 		this.editorPath = target;
 		this.editorContent = content;
 		this.editorSaved = saved;
+		this.editorBase = saved ? content : null;
+		this.editorConflict = null;
 		this.editorScreenLine = 0;
 		const window = this.openWindow("editor");
+		this.watchEditorFile();
 		this.focusWindow(window.id);
+	}
+
+	/**
+	 * The agent or another window may write the open file. Follow it while the
+	 * Editor has no unsaved edits; otherwise remember it, so a save does not
+	 * silently replace it.
+	 */
+	private watchEditorFile(): void {
+		if (this.unsubscribeEditorFile) return;
+		this.unsubscribeEditorFile = this.ports.files.subscribe(() => {
+			if (this.editorRefreshTimer) clearTimeout(this.editorRefreshTimer);
+			this.editorRefreshTimer = setTimeout(() => {
+				this.editorRefreshTimer = undefined;
+				void this.refreshEditorFromDisk();
+			}, 150);
+		});
+	}
+
+	private unwatchEditorFile(): void {
+		this.unsubscribeEditorFile?.();
+		this.unsubscribeEditorFile = undefined;
+		if (this.editorRefreshTimer) clearTimeout(this.editorRefreshTimer);
+		this.editorRefreshTimer = undefined;
+	}
+
+	private async readEditorFile(path: string): Promise<string | null> {
+		try {
+			return await this.ports.files.read(path);
+		} catch {
+			return null;
+		}
+	}
+
+	private async refreshEditorFromDisk(): Promise<void> {
+		const path = this.editorPath;
+		if (!path || this.disposed) return;
+		const disk = await this.readEditorFile(path);
+		// Gone, or another file opened meanwhile.
+		if (disk === null || path !== this.editorPath) return;
+		const before = [this.editorContent, this.editorSaved, this.editorConflict];
+		if (disk === this.editorBase) {
+			this.editorConflict = null;
+		} else if (disk === this.editorContent) {
+			// The unsaved content landed on disk (a save, or the same edit).
+			this.editorBase = disk;
+			this.editorSaved = true;
+			this.editorConflict = null;
+		} else if (this.editorSaved) {
+			this.editorContent = disk;
+			this.editorBase = disk;
+		} else {
+			this.editorConflict = disk;
+		}
+		const after = [this.editorContent, this.editorSaved, this.editorConflict];
+		if (after.some((value, index) => value !== before[index])) this.changed();
 	}
 
 	/**
@@ -1844,12 +2001,54 @@ export class MemonMachine {
 		this.changed();
 	}
 
-	async saveEditor(): Promise<void> {
-		if (!this.editorPath) throw new Error("No file is open in the Editor.");
-		await this.ports.files.write(this.editorPath, this.editorContent);
+	/**
+	 * Refused when the file changed on disk since the content was based on it
+	 * (the agent or another window wrote it), unless `overwrite` says to
+	 * replace that. `base` is the text the edits started from when it is not
+	 * the Editor's own: the user's window edits a draft of its own.
+	 */
+	async saveEditor(
+		options: { base?: string; overwrite?: boolean } = {},
+	): Promise<void> {
+		const path = this.editorPath;
+		if (!path) throw new Error("No file is open in the Editor.");
+		if (!options.overwrite) {
+			const base = options.base ?? this.editorBase;
+			const disk = await this.readEditorFile(path);
+			if (disk !== null && disk !== base) {
+				this.editorConflict = disk;
+				this.changed();
+				throw new Error(
+					`${path} changed on disk since it was opened, so saving would replace those changes. Open it again to see the new content, then make the change again.`,
+				);
+			}
+		}
+		const previousBase = this.editorBase;
+		// Before the write, so its own change notice finds the expected text.
+		this.editorBase = this.editorContent;
+		try {
+			await this.ports.files.write(path, this.editorContent);
+		} catch (error) {
+			this.editorBase = previousBase;
+			throw error;
+		}
 		this.editorSaved = true;
-		if (parentOf(this.editorPath) === this.filesCwd) await this.refreshFiles();
+		this.editorConflict = null;
+		if (parentOf(path) === this.filesCwd) await this.refreshFiles();
 		else this.changed();
+	}
+
+	/** Drops the Editor's unsaved edits and shows the file as it is on disk. */
+	async reloadEditor(): Promise<void> {
+		const path = this.editorPath;
+		if (!path) throw new Error("No file is open in the Editor.");
+		const disk = await this.readEditorFile(path);
+		if (disk === null) throw new Error(`Could not read ${path}.`);
+		this.editorContent = disk;
+		this.editorBase = disk;
+		this.editorSaved = true;
+		this.editorConflict = null;
+		this.changed();
 	}
 
 	/** Shows the user the real page behind the active Browser tab. */
@@ -2290,6 +2489,7 @@ export class MemonMachine {
 		try {
 			const outcome = await this.ports.studio.run(request, {
 				sessionKey: `memon:${this.key}`,
+				agentId: this.agentId,
 			});
 			Object.assign(run, {
 				status: "done",
@@ -2559,6 +2759,9 @@ export class MemonMachine {
 				content: this.editorContent,
 				saved: this.editorSaved,
 				screenLine: this.editorScreenLine,
+				...(this.editorConflict !== null
+					? { conflict: this.editorConflict }
+					: {}),
 			},
 			tasks: {
 				items: this.taskItems.map((task) => ({

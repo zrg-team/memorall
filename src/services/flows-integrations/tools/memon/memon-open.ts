@@ -26,7 +26,7 @@ const schema = z
 			.boolean()
 			.optional()
 			.describe(
-				"Browser: local addresses (http://localhost:PORT) open embedded, where the servers started in the Terminal are; false opens one in a real browser tab instead (a server outside this computer).",
+				"Browser: a local address a Terminal server listens on (http://localhost:PORT) opens embedded; any other opens in a real browser tab, where the user's own servers are. true or false forces one.",
 			),
 		path: z
 			.string()

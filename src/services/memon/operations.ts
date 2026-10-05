@@ -402,12 +402,19 @@ export const runMemonOperation = async (
 			return machine.snapshot();
 		}
 		case "editor.save": {
-			const { key, content } = job.payload;
+			const { key, content, base, overwrite } = job.payload;
 			const path = findMemonMachine(key)?.snapshot().editor.path ?? "the file";
 			return userInput(key, `edited and saved ${path}`, async (machine) => {
 				if (content !== undefined) machine.setEditorContent(content);
-				await machine.saveEditor();
+				await machine.saveEditor({ base, overwrite });
 			});
+		}
+		case "editor.reload": {
+			const { key } = job.payload;
+			const path = findMemonMachine(key)?.snapshot().editor.path ?? "the file";
+			return userInput(key, `reloaded ${path} from disk`, (machine) =>
+				machine.reloadEditor(),
+			);
 		}
 		case "terminal.exec": {
 			const { key, command, terminalId } = job.payload;
@@ -486,6 +493,10 @@ export const runMemonOperation = async (
 				(machine) => machine.piCode.answerApproval(id, decision),
 			);
 		}
+		case "piCode.stop":
+			return userAside(job.payload.key, "stopped pi code", (machine) =>
+				machine.piCode.interrupt(),
+			);
 		case "window.open": {
 			const { key, app } = job.payload;
 			return userInput(key, `opened ${app}`, async (machine) => {

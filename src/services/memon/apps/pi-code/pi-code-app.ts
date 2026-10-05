@@ -17,8 +17,11 @@ import { isAbsolute, join, normalize } from "./platform/path";
  * with a size, then read the terminal output by cursor and send raw keys.
  *
  * The Memon agent drives pi too (memon_code): it prompts, waits, steers and
- * stops it, and reads its conversation on the screen. Before the agent
- * hands pi work, the user confirms in the pi window, once per agent run.
+ * stops it, and reads its conversation on the screen. A prompt waits until
+ * pi's turn ends (it answers or asks, fails, or the user stops it), so the
+ * agent answers pi's questions and hears when the user stopped it. Before
+ * the agent hands pi work, the user confirms in the pi window, once per
+ * agent run.
  */
 
 export type PiCodeTheme = "dark" | "light";
@@ -27,6 +30,10 @@ export type PiCodeTheme = "dark" | "light";
 export interface PiCodeRunnerView {
 	entries: MemonPiCodeEntry[];
 	earlier: number;
+	/** How pi's last turn ended, read once it is idle. */
+	ended?: "done" | "error" | "stopped";
+	/** pi's last reply, when it had text. */
+	reply?: string;
 	thinkingLevel: string;
 	contextPercent?: number;
 	activity?: string;
@@ -58,6 +65,8 @@ export interface PiCodeRunner {
 	/** True once pi is idle; false when still working at the timeout. */
 	waitForIdle(timeoutMs: number, signal?: AbortSignal): Promise<boolean>;
 	dispose(): Promise<void>;
+	/** pi's folder was not there: pi made it, empty, when it started. */
+	readonly createdCwd?: boolean;
 }
 
 export interface MemonPiCodePort {
@@ -65,9 +74,15 @@ export interface MemonPiCodePort {
 		home: string;
 		/** Where pi works; the home when left out. */
 		cwd?: string;
+		/** The agent (flow id) the computer belongs to; its usage is booked there. */
+		agentId?: string | null;
 		sandboxSessionKey: string;
+		/** A saved session to open instead of a new one. */
+		sessionFile?: string;
 		/** The user quit pi from inside it. */
 		onQuit: () => void;
+		/** The user picked a saved session (/resume): start pi again on it. */
+		onResume: (sessionFile: string) => void;
 		/** What the agent reads changed. */
 		onChange: () => void;
 	}): Promise<PiCodeRunner>;
@@ -85,6 +100,8 @@ export interface PiCodeRead {
 interface PiCodeHost {
 	sessionKey: string;
 	home: () => string;
+	/** The agent (flow id) the computer belongs to, if any. */
+	agentId: () => string | null;
 	changed: () => void;
 	/** Close the pi window (the user quit pi). */
 	quit: () => void;
@@ -92,6 +109,8 @@ interface PiCodeHost {
 	enabled: () => boolean;
 	/** Opens the pi window, or brings it up; true when it was not open. */
 	show: () => boolean;
+	/** The pi window is in front: the agent's screen shows its conversation. */
+	inFront: () => boolean;
 	/** What the agent's cursor on the computer says it is doing. */
 	cursorLabel: (label: string) => void;
 	/** The agent run a call belongs to: an approval holds for that run. */
@@ -140,10 +159,27 @@ export interface PiCodeActionInput {
 	waitSeconds?: number;
 }
 
-/** How long a prompt waits for pi to finish, unless the call says. */
-export const PI_CODE_DEFAULT_WAIT_SECONDS = 60;
-export const PI_CODE_MAX_WAIT_SECONDS = 300;
+export interface PiCodeActOptions {
+	/**
+	 * Messages the user sent to the agent's run and it has not read yet: a
+	 * wait for pi returns for them, so the agent never misses the user.
+	 */
+	inbox?: () => number;
+}
+
+/** How long a prompt waits for pi's turn to end, unless the call says. */
+export const PI_CODE_DEFAULT_WAIT_SECONDS = 600;
+export const PI_CODE_MAX_WAIT_SECONDS = 600;
+/** How often a wait checks for a message from the user. */
+const INBOX_POLL_MS = 500;
 const TASK_CHARS = 2_000;
+
+const NEXT_WHILE_WORKING =
+	'memon_code { action: "wait" } waits for it again; a prompt steers it; { action: "stop" } stops it.';
+const USER_STOPPED =
+	"The user stopped pi code. Something it did was likely wrong or unwanted: look at its last steps, and ask the user what to change if that is not clear. Do not hand pi the same work again unchanged.";
+const USER_CLOSED =
+	"The user closed pi code before it finished; its session is saved in ~/.pi/agent/sessions. Find out why before you go on.";
 
 type Decision = "approve" | "deny" | "timeout" | "cancelled" | "closed";
 
@@ -189,6 +225,10 @@ export class MemonPiCode {
 	private answerWait: ((decision: Decision) => void) | undefined;
 	/** The agent run the user let use pi code. */
 	private approvedRun: string | null = null;
+	/** The agent stopped pi's last turn itself, so the user did not. */
+	private agentStopped = false;
+	/** pi starts again on a saved session (/resume): it did not quit. */
+	private reopening = false;
 	private readonly waits = new Set<AbortController>();
 
 	constructor(
@@ -206,6 +246,22 @@ export class MemonPiCode {
 	 */
 	start(cwd?: string): void {
 		if (this.runner || this.starting || this.approval) return;
+		this.boot(cwd);
+	}
+
+	/** pi's /resume: pi starts again in its folder, on the saved session. */
+	private async reopen(sessionFile: string): Promise<void> {
+		const cwd = this.runner?.status().cwd ?? this.startingCwd;
+		this.reopening = true;
+		try {
+			await this.release();
+			this.boot(cwd, sessionFile);
+		} finally {
+			this.reopening = false;
+		}
+	}
+
+	private boot(cwd?: string, sessionFile?: string): void {
 		if (!this.port) {
 			this.error = "pi code is not available here.";
 			this.host.changed();
@@ -218,8 +274,14 @@ export class MemonPiCode {
 			.start({
 				home: this.host.home(),
 				cwd,
+				agentId: this.host.agentId(),
 				sandboxSessionKey: this.host.sessionKey,
+				sessionFile,
 				onQuit: () => this.host.quit(),
+				// After the TUI is done handling the key that picked it.
+				onResume: (file) => {
+					setTimeout(() => void this.reopen(file), 0);
+				},
 				onChange: () => this.host.changed(),
 			})
 			.then(async (runner) => {
@@ -246,9 +308,14 @@ export class MemonPiCode {
 
 	/** Stops pi: aborts the model stream and any bash command, closes the session. */
 	async stop(): Promise<void> {
-		this.generation += 1;
 		this.answerWait?.("closed");
 		this.approvedRun = null;
+		await this.release();
+	}
+
+	/** Disposes pi (and a start on its way); the user's answers stand. */
+	private async release(): Promise<void> {
+		this.generation += 1;
 		const runner = this.runner;
 		this.runner = undefined;
 		this.starting = undefined;
@@ -316,6 +383,14 @@ export class MemonPiCode {
 
 	async resize(columns: number, rows: number): Promise<void> {
 		(await this.ready())?.resize(columns, rows);
+	}
+
+	/** The user stops pi's turn from MemonOS, as Escape in pi does. */
+	async interrupt(): Promise<void> {
+		const runner = this.runner;
+		if (!runner?.status().running) return;
+		this.agentStopped = false;
+		await runner.interrupt();
 	}
 
 	// ── The user's answer to the agent ──────────────────────────────────────
@@ -406,35 +481,75 @@ export class MemonPiCode {
 		return this.runner;
 	}
 
-	/** Waits for pi to finish, up to the call's wait; says how it went. */
+	/**
+	 * Waits until pi's turn ends (it answers or asks, fails, the user stops
+	 * or closes it), up to the call's wait; a message from the user to the
+	 * agent or Stop ends the wait sooner. Says how it went.
+	 */
 	private async report(
 		runner: PiCodeRunner,
 		lead: string,
 		waitSeconds: number,
+		inbox?: () => number,
 	): Promise<string> {
 		const wait = new AbortController();
 		this.waits.add(wait);
-		if (waitSeconds > 0) {
-			this.host.cursorLabel("Waiting for pi code");
-			this.host.changed();
-		}
 		const seconds = Math.min(
 			Math.max(waitSeconds, 0),
 			PI_CODE_MAX_WAIT_SECONDS,
 		);
+		let userWrote = false;
+		const poll =
+			seconds > 0 && inbox
+				? setInterval(() => {
+						if (inbox() > 0) {
+							userWrote = true;
+							wait.abort();
+						}
+					}, INBOX_POLL_MS)
+				: undefined;
+		if (seconds > 0) {
+			this.host.cursorLabel("Waiting for pi code");
+			this.host.changed();
+		}
 		const idle = await runner
 			.waitForIdle(seconds * 1000, wait.signal)
-			.finally(() => this.waits.delete(wait));
-		if (this.runner !== runner) return `${lead}pi code has quit.`;
+			.finally(() => {
+				clearInterval(poll);
+				this.waits.delete(wait);
+			});
+		if (this.runner !== runner) {
+			return this.active || this.reopening
+				? `${lead}pi code opened another saved session (/resume); its conversation is on the screen. Hand pi the work again if it still matters.`
+				: `${lead}${USER_CLOSED}`;
+		}
 		const view = runner.view();
 		if (!idle) {
-			return `${lead}pi code is still working${view.activity ? ` (${view.activity})` : ""}. memon_code { action: "wait" } waits for it; a prompt steers it; { action: "stop" } stops it.`;
+			const doing = view.activity ? ` (${view.activity})` : "";
+			const why = userWrote ? " The user wrote to you: read it first." : "";
+			return `${lead}pi code is still working${doing}.${why} ${NEXT_WHILE_WORKING}`;
 		}
-		const last = view.entries.at(-1);
-		if (last?.kind === "error") {
-			return `${lead}pi code stopped: ${last.text}`;
+		switch (view.ended) {
+			case undefined:
+				return `${lead}pi code is idle.`;
+			case "stopped":
+				return `${lead}${this.agentStopped ? "pi code is stopped." : USER_STOPPED}`;
+			case "error": {
+				const last = view.entries.at(-1);
+				const error = last?.kind === "error" ? `: ${last.text}` : ".";
+				return `${lead}pi code stopped on an error${error}`;
+			}
+			case "done": {
+				const next =
+					'If it asks you something, answer it with memon_code { action: "prompt", text }; ask the user only what you cannot decide. Otherwise check its work before you answer.';
+				if (!view.reply) {
+					return `${lead}pi code's turn is over, without a reply. ${next}`;
+				}
+				return this.host.inFront()
+					? `${lead}pi code's turn is over; its reply is on the screen. ${next}`
+					: `${lead}pi code's turn is over. Its reply:\n${view.reply}\n\n${next}`;
+			}
 		}
-		return `${lead}pi code is done; its answer is on the screen. Check its work before you answer.`;
 	}
 
 	private resolveFolder(path: string): string {
@@ -453,7 +568,10 @@ export class MemonPiCode {
 	}
 
 	/** The Memon agent's memon_code call. Returns the summary line. */
-	async act(input: PiCodeActionInput): Promise<string> {
+	async act(
+		input: PiCodeActionInput,
+		options: PiCodeActOptions = {},
+	): Promise<string> {
 		if (!this.host.enabled()) {
 			throw new Error(
 				"pi code is turned off for this agent (MemonOS Bot settings). Do the coding yourself with the Terminal and Files.",
@@ -465,24 +583,47 @@ export class MemonPiCode {
 				if (!text) throw new Error("prompt needs text: the work for pi.");
 				const cwd =
 					input.cwd !== undefined ? this.resolveFolder(input.cwd) : undefined;
-				const current = this.runner?.status().cwd ?? this.startingCwd;
-				if (cwd && this.active && current && current !== cwd) {
+				const moving = () => {
+					const current = this.runner?.status().cwd ?? this.startingCwd;
+					return cwd && this.active && current && current !== cwd
+						? current
+						: undefined;
+				};
+				const from = moving();
+				if (from && this.runner?.status().running) {
 					throw new Error(
-						`pi code works in ${this.display(current)}. Close it first ({ action: "close" }) to start it in ${this.display(cwd)}, or name paths in the prompt.`,
+						`pi code is working in ${this.display(from)}. Wait for it or stop it ({ action: "stop" }), then hand it work in ${this.display(cwd ?? from)}.`,
 					);
 				}
 				const notApproved = await this.askToUse(text);
 				if (notApproved) return notApproved;
+				// Another folder: pi starts again there; its session here is saved.
+				const left = moving();
+				if (left) await this.release();
+				const started = !this.active;
 				const runner = await this.launch(cwd);
 				const working = runner.status().running;
 				await runner.submit(text, input.queue);
-				const lead = working
-					? `Queued for pi code (${input.queue === "followUp" ? "after it finishes" : "after its current tools"}). `
-					: "Sent to pi code. ";
+				this.agentStopped = false;
+				const where = runner.status().cwd;
+				const notes = [
+					left
+						? `pi code moved from ${this.display(left)} to ${this.display(where)}; its session there is saved (/resume in pi opens it).`
+						: null,
+					started && runner.createdCwd
+						? `${this.display(where)} was not there: pi made it, empty. If the project is elsewhere, prompt again with its folder as cwd.`
+						: null,
+				].filter(Boolean);
+				const lead = `${notes.map((note) => `${note} `).join("")}${
+					working
+						? `Queued for pi code (${input.queue === "followUp" ? "after it finishes" : "after its current tools"}). `
+						: "Sent to pi code. "
+				}`;
 				return this.report(
 					runner,
 					lead,
 					input.waitSeconds ?? PI_CODE_DEFAULT_WAIT_SECONDS,
+					options.inbox,
 				);
 			}
 			case "keys": {
@@ -498,7 +639,14 @@ export class MemonPiCode {
 				runner.input(
 					`${input.text ?? ""}${input.key ? PI_CODE_KEYS[input.key] : ""}`,
 				);
-				return this.report(runner, `Typed ${typed}. `, input.waitSeconds ?? 1);
+				// Escape or Ctrl+C from the agent interrupts pi like its stop.
+				this.agentStopped = input.key === "escape" || input.key === "ctrl+c";
+				return this.report(
+					runner,
+					`Typed ${typed}. `,
+					input.waitSeconds ?? 1,
+					options.inbox,
+				);
 			}
 			case "wait": {
 				const runner = await this.ready();
@@ -513,11 +661,13 @@ export class MemonPiCode {
 					runner,
 					"",
 					input.waitSeconds ?? PI_CODE_DEFAULT_WAIT_SECONDS,
+					options.inbox,
 				);
 			}
 			case "stop": {
 				const runner = this.running();
 				if (!runner.status().running) return "pi code was not working.";
+				this.agentStopped = true;
 				await runner.interrupt();
 				return "Stopped pi code; its queued messages were dropped.";
 			}

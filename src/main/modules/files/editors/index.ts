@@ -8,7 +8,7 @@ export * from "./registry";
 export { LazyMarkdownEditor } from "./LazyMarkdownEditor";
 
 // Import editors and registry. The markdown editor is registered via its lazy
-// wrapper so its heavy dependencies (TipTap, marked, turndown, …) are code-split
+// wrapper so its heavy dependencies (TipTap, @tiptap/markdown, …) are code-split
 // out of the entry bundle and only loaded when a document is opened.
 import { LazyMarkdownEditor } from "./LazyMarkdownEditor";
 import { editorRegistry } from "./registry";

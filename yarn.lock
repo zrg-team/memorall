@@ -1756,6 +1756,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@ffmpeg/core@npm:0.12.10":
+  version: 0.12.10
+  resolution: "@ffmpeg/core@npm:0.12.10"
+  checksum: 10c0/099a739f0ac6419d638e8fde175307722dddf53a0dbab744a045475f0fa1b4bbb28036ab51c990298b6f88d2907d44612e0a02e57a72bb0beb36837ca742e7a2
+  languageName: node
+  linkType: hard
+
 "@flatten-js/interval-tree@npm:1.1.3":
   version: 1.1.3
   resolution: "@flatten-js/interval-tree@npm:1.1.3"
@@ -1977,6 +1984,13 @@ __metadata:
   peerDependencies:
     react: ^16.13 || ^17 || ^18 || ^19
   checksum: 10c0/2c49846554d855347f0ebbcd39accdd754854670db214d218df7b8d4927d3f8b3f3b5c8ac25280006467e8c94d585105a3e3f7de17e61bf3f63538aad3728309
+  languageName: node
+  linkType: hard
+
+"@imagemagick/magick-wasm@npm:0.0.44":
+  version: 0.0.44
+  resolution: "@imagemagick/magick-wasm@npm:0.0.44"
+  checksum: 10c0/d25f23e1b3ddd5961eb7f1269b938b63d1cd158db2653008fa255867ceae1fc274d93c2b01f7dac7cec3938797573caab91d6ca56d073a1fcec435b8d9fabd52
   languageName: node
   linkType: hard
 
@@ -5311,6 +5325,18 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@tiptap/markdown@npm:3.30.1":
+  version: 3.30.1
+  resolution: "@tiptap/markdown@npm:3.30.1"
+  dependencies:
+    marked: "npm:^17.0.1"
+  peerDependencies:
+    "@tiptap/core": 3.30.1
+    "@tiptap/pm": 3.30.1
+  checksum: 10c0/a7863637a96a10727f665d1df8280b27ddcafff9dc8143b7993231e46c8f748190e8eaad4ec236a442c236e08af9bbaf9d3ca80ffa2ba9749cca9ccc0a8d562e
+  languageName: node
+  linkType: hard
+
 "@tiptap/pm@npm:3.30.1":
   version: 3.30.1
   resolution: "@tiptap/pm@npm:3.30.1"
@@ -5975,13 +6001,6 @@ __metadata:
   version: 2.0.7
   resolution: "@types/trusted-types@npm:2.0.7"
   checksum: 10c0/4c4855f10de7c6c135e0d32ce462419d8abbbc33713b31d294596c0cc34ae1fa6112a2f9da729c8f7a20707782b0d69da3b1f8df6645b0366d08825ca1522e0c
-  languageName: node
-  linkType: hard
-
-"@types/turndown@npm:^5.0.6":
-  version: 5.0.6
-  resolution: "@types/turndown@npm:5.0.6"
-  checksum: 10c0/cc5648c115b67ba413782fd0a8ae273ad6b87940df770ab9a5fefe0303c368704013fca2a55dd08f46a2132a747912fd47f96a83162c47fd189babf1352ac4be
   languageName: node
   linkType: hard
 
@@ -7200,7 +7219,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"almostnode@npm:^0.2.14":
+"almostnode@npm:0.2.14":
   version: 0.2.14
   resolution: "almostnode@npm:0.2.14"
   dependencies:
@@ -12995,6 +13014,7 @@ __metadata:
     "@dnd-kit/utilities": "npm:^3.2.2"
     "@ebay/nice-modal-react": "npm:^1.2.13"
     "@electric-sql/pglite": "npm:0.4.6"
+    "@ffmpeg/core": "npm:0.12.10"
     "@fontsource/ibm-plex-mono": "npm:5.3.0"
     "@fontsource/space-grotesk": "npm:5.3.0"
     "@huggingface/transformers": "npm:^4.2.0"
@@ -13004,6 +13024,7 @@ __metadata:
     "@hyperframes/shader-transitions": "npm:0.7.108"
     "@hyperframes/studio-server": "npm:0.7.108"
     "@icons-pack/react-simple-icons": "npm:13.13.0"
+    "@imagemagick/magick-wasm": "npm:0.0.44"
     "@langchain/core": "npm:1.2.7"
     "@langchain/langgraph": "npm:1.4.9"
     "@memorall/agent-harness-flows": "workspace:^"
@@ -13042,12 +13063,15 @@ __metadata:
     "@testing-library/user-event": "npm:14.6.4"
     "@tiptap/core": "npm:3.30.1"
     "@tiptap/extension-image": "npm:3.30.1"
+    "@tiptap/extension-list": "npm:3.30.1"
     "@tiptap/extension-placeholder": "npm:3.30.1"
     "@tiptap/extension-table": "npm:3.30.1"
     "@tiptap/extension-table-cell": "npm:3.30.1"
     "@tiptap/extension-table-header": "npm:3.30.1"
     "@tiptap/extension-table-row": "npm:3.30.1"
+    "@tiptap/extension-underline": "npm:3.30.1"
     "@tiptap/extensions": "npm:3.30.1"
+    "@tiptap/markdown": "npm:3.30.1"
     "@tiptap/pm": "npm:3.30.1"
     "@tiptap/react": "npm:3.30.1"
     "@tiptap/starter-kit": "npm:3.30.1"
@@ -13060,7 +13084,6 @@ __metadata:
     "@types/react-syntax-highlighter": "npm:^15.5.13"
     "@types/sanitize-html": "npm:^2.16.1"
     "@types/three": "npm:^0"
-    "@types/turndown": "npm:^5.0.6"
     "@typescript/native": "npm:typescript@7.0.2"
     "@univerjs/core": "npm:0.25.1"
     "@univerjs/design": "npm:0.25.1"
@@ -13085,7 +13108,7 @@ __metadata:
     "@zenfs/core": "npm:2.6.2"
     "@zenfs/dom": "npm:1.2.10"
     adm-zip: "npm:0.6.0"
-    almostnode: "npm:^0.2.14"
+    almostnode: "npm:0.2.14"
     assert: "npm:^2.1.0"
     autoprefixer: "npm:10.5.4"
     baseline-browser-mapping: "npm:2.11.14"
@@ -13167,8 +13190,6 @@ __metadata:
     tailwindcss: "npm:4.3.3"
     tailwindcss-animate: "npm:^1.0.7"
     three: "npm:0.185.1"
-    turndown: "npm:7.2.4"
-    turndown-plugin-gfm: "npm:^1.0.2"
     typescript: "npm:@typescript/typescript6@6.0.2"
     url: "npm:^0.11.4"
     use-stick-to-bottom: "npm:1.1.6"
@@ -17518,14 +17539,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"turndown-plugin-gfm@npm:^1.0.2":
-  version: 1.0.2
-  resolution: "turndown-plugin-gfm@npm:1.0.2"
-  checksum: 10c0/eb9bc20dbb08d5335231f9617d7440f14b35781f14a3a393d8f13fc8205afeb11a0a632d52da4548ab0fa353f315ca265462b24d368faf23258dccbe439182b9
-  languageName: node
-  linkType: hard
-
-"turndown@npm:7.2.4, turndown@npm:^7.2.2":
+"turndown@npm:^7.2.2":
   version: 7.2.4
   resolution: "turndown@npm:7.2.4"
   dependencies:

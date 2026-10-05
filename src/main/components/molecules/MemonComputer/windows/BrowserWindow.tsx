@@ -145,9 +145,28 @@ const OutlineBlock: React.FC<{
 				>
 					<RefChip value={block.ref} />
 					{block.text}
+					{block.state ? (
+						<span className="ml-1.5 text-[10px] text-muted-foreground">
+							{block.state}
+						</span>
+					) : null}
 				</button>
 			);
 		case "input":
+			if (block.checked !== undefined) {
+				return (
+					<label className="flex items-center gap-2 self-start text-xs">
+						<RefChip value={block.ref} />
+						<input
+							data-memon-ref={block.ref}
+							type={block.inputType === "radio" ? "radio" : "checkbox"}
+							checked={block.checked}
+							onChange={() => act(block.ref, "click")}
+						/>
+						<span>{block.label}</span>
+					</label>
+				);
+			}
 			return (
 				<OutlineInput
 					block={block}
@@ -193,6 +212,21 @@ const OutlineBlock: React.FC<{
 						})}
 					</span>
 				</div>
+			);
+		case "region":
+			return (
+				<button
+					type="button"
+					data-memon-ref={block.ref}
+					onClick={() => act(block.ref, "click")}
+					className="flex max-h-40 w-full flex-col items-center justify-center gap-1 rounded-md border border-dashed border-border bg-muted/40 p-3 text-center font-mono text-[10px] text-muted-foreground"
+					style={{
+						aspectRatio: `${Math.max(block.width, 1)} / ${Math.max(block.height, 1)}`,
+					}}
+				>
+					<RefChip value={block.ref} />
+					{formatOutlineBlock(block).replace(/^\[[^\]]+\]\s*/, "")}
+				</button>
 			);
 	}
 };

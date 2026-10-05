@@ -1,5 +1,5 @@
 import type { LangGraphRunnableConfig } from "@langchain/langgraph";
-import { getFlowRuntimeVars } from "./runtime-context.js";
+import { type FlowRuntimeVars, getFlowRuntimeVars } from "./runtime-context.js";
 
 /** A message the user sent while the run was still going. */
 export interface FlowRunInboxMessage {
@@ -22,10 +22,45 @@ export interface FlowRunInbox {
 	/** Ends the inbox and hands back what nobody took. */
 	close(): FlowRunInboxMessage[];
 	readonly closed: boolean;
+	/** Messages waiting to be taken; a long tool call returns early for them. */
+	readonly size: number;
 }
 
 /** Where a run keeps its inbox among its runtime vars. */
 export const FLOW_RUN_INBOX_RUNTIME_KEY = "__flowRunInbox";
+
+/**
+ * What a message sent mid-run is wrapped in wherever the model reads it. Left
+ * bare, the model takes the newest user message as the whole request and drops
+ * the task it was on; marked as a "by the way", it does both.
+ */
+export const FLOW_RUN_INBOX_TAG = "by-the-way" as const;
+
+const OPEN_TAG = `<${FLOW_RUN_INBOX_TAG}>\n`;
+const CLOSE_TAG = `\n</${FLOW_RUN_INBOX_TAG}>`;
+
+/**
+ * A message sent mid-run as the model reads it. The reply stores it this way
+ * too, so the next turn's history repeats the bytes this run sent.
+ */
+export const formatFlowRunInboxMessage = (content: string): string =>
+	`${OPEN_TAG}${content}${CLOSE_TAG}`;
+
+/** The user's own words back from a stored message; anything else as is. */
+export const unwrapFlowRunInboxMessage = (content: string): string =>
+	content.length >= OPEN_TAG.length + CLOSE_TAG.length &&
+	content.startsWith(OPEN_TAG) &&
+	content.endsWith(CLOSE_TAG)
+		? content.slice(OPEN_TAG.length, -CLOSE_TAG.length)
+		: content;
+
+/** How the agent reads a tagged message, attached for the rest of the run. */
+export const FLOW_RUN_INBOX_REMINDER = [
+	`The user wrote to you while you were working: the <${FLOW_RUN_INBOX_TAG}> message after your tool results.`,
+	"It is an addition to the request you are working on, not a replacement for it.",
+	"Handle it too, keep going until the original request is done, and answer both in your reply.",
+	"Stop, cancel or switch tasks only when the message explicitly asks you to.",
+].join(" ");
 
 class DefaultFlowRunInbox implements FlowRunInbox {
 	private pending: FlowRunInboxMessage[] = [];
@@ -33,6 +68,10 @@ class DefaultFlowRunInbox implements FlowRunInbox {
 
 	get closed(): boolean {
 		return this.isClosed;
+	}
+
+	get size(): number {
+		return this.pending.length;
 	}
 
 	push(message: FlowRunInboxMessage): boolean {
@@ -61,10 +100,16 @@ const isFlowRunInbox = (value: unknown): value is FlowRunInbox =>
 	typeof (value as Partial<FlowRunInbox>).push === "function" &&
 	typeof (value as Partial<FlowRunInbox>).take === "function";
 
+/** The run's inbox among its runtime vars (a tool's `context.runtime`). */
+export const getFlowRunInboxFromVars = (
+	vars?: FlowRuntimeVars,
+): FlowRunInbox | undefined => {
+	const inbox = vars?.get(FLOW_RUN_INBOX_RUNTIME_KEY);
+	return isFlowRunInbox(inbox) ? inbox : undefined;
+};
+
 /** The run's inbox, when whoever started the run gave it one. */
 export const getFlowRunInbox = (
 	runConfig?: LangGraphRunnableConfig,
-): FlowRunInbox | undefined => {
-	const inbox = getFlowRuntimeVars(runConfig)?.get(FLOW_RUN_INBOX_RUNTIME_KEY);
-	return isFlowRunInbox(inbox) ? inbox : undefined;
-};
+): FlowRunInbox | undefined =>
+	getFlowRunInboxFromVars(getFlowRuntimeVars(runConfig));

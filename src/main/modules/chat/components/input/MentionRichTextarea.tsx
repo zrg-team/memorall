@@ -96,36 +96,54 @@ function getPlainText(el: HTMLElement): string {
 	return text;
 }
 
-/** Return the cursor position as a character offset into the plain text. */
-function getCursorOffset(el: HTMLElement): number {
-	const sel = window.getSelection();
-	if (!sel || sel.rangeCount === 0) return 0;
-	const range = sel.getRangeAt(0);
+/** Plain-text length of one child node (a badge counts as its raw mention). */
+function nodeTextLength(node: Node): number {
+	if (node instanceof HTMLElement) {
+		return (
+			node.dataset.mention?.length ??
+			(node.tagName === "BR" ? 1 : (node.textContent?.length ?? 0))
+		);
+	}
+	return node.textContent?.length ?? 0;
+}
 
+/** Turn a DOM position (container + offset) into a plain-text offset. */
+function textOffsetAt(
+	el: HTMLElement,
+	container: Node,
+	containerOffset: number,
+): number {
 	let offset = 0;
-	for (const node of el.childNodes) {
-		if (node === range.startContainer) {
-			offset += range.startOffset;
-			break;
-		}
-		if (node.contains(range.startContainer)) {
+	const children = Array.from(el.childNodes);
+	for (const [index, node] of children.entries()) {
+		// A position on the div itself counts children, not characters.
+		if (container === el && index === containerOffset) return offset;
+		if (node === container) return offset + containerOffset;
+		if (node.contains(container)) {
 			// cursor is inside this node (shouldn't happen for mention spans since they're
 			// contenteditable=false, but handle gracefully)
-			offset +=
-				(node as HTMLElement).dataset.mention?.length ??
-				node.textContent?.length ??
-				0;
-			break;
+			return offset + nodeTextLength(node);
 		}
-		if (node.nodeType === Node.TEXT_NODE) {
-			offset += node.textContent?.length ?? 0;
-		} else if (node instanceof HTMLElement) {
-			offset +=
-				node.dataset.mention?.length ??
-				(node.tagName === "BR" ? 1 : (node.textContent?.length ?? 0));
-		}
+		offset += nodeTextLength(node);
 	}
 	return offset;
+}
+
+/** Return the selection as plain-text offsets; collapsed when it is a cursor. */
+function getSelectionOffsets(el: HTMLElement): { start: number; end: number } {
+	const sel = window.getSelection();
+	if (!sel || sel.rangeCount === 0) return { start: 0, end: 0 };
+	const range = sel.getRangeAt(0);
+	const start = textOffsetAt(el, range.startContainer, range.startOffset);
+	const end = range.collapsed
+		? start
+		: textOffsetAt(el, range.endContainer, range.endOffset);
+	return { start, end };
+}
+
+/** Return the cursor position as a character offset into the plain text. */
+function getCursorOffset(el: HTMLElement): number {
+	return getSelectionOffsets(el).start;
 }
 
 /** Restore cursor to a given plain-text character offset. */
@@ -201,6 +219,9 @@ export const MentionRichTextarea = forwardRef<
 		const lastValueRef = useRef<string>(value);
 		// When set, used as the cursor position on the next external value sync
 		const pendingCursorRef = useRef<number | null>(null);
+		// True while an IME (Vietnamese Telex, pinyin, kana, …) is composing.
+		// Rewriting the DOM then cancels the composition mid-word.
+		const composingRef = useRef(false);
 
 		useImperativeHandle(ref, () => ({
 			focus: () => divRef.current?.focus(),
@@ -233,14 +254,7 @@ export const MentionRichTextarea = forwardRef<
 			// eslint-disable-next-line react-hooks/exhaustive-deps
 		}, []);
 
-		const handleInput = () => {
-			const el = divRef.current;
-			if (!el) return;
-
-			const text = getPlainText(el);
-			if (text === lastValueRef.current) return;
-
-			const cursor = getCursorOffset(el);
+		const commitText = (el: HTMLDivElement, text: string, cursor: number) => {
 			// Re-render with badges so new mentions are styled immediately
 			el.innerHTML = buildHTML(text);
 			lastValueRef.current = text;
@@ -249,7 +263,53 @@ export const MentionRichTextarea = forwardRef<
 			onChange(text, cursor);
 		};
 
+		const handleInput = () => {
+			const el = divRef.current;
+			if (!el || composingRef.current) return;
+
+			const text = getPlainText(el);
+			if (text === lastValueRef.current) return;
+
+			commitText(el, text, getCursorOffset(el));
+		};
+
+		const handleCompositionEnd = () => {
+			composingRef.current = false;
+			// Some browsers fire the last input before compositionend, so pick
+			// up the committed text here.
+			handleInput();
+		};
+
+		// Paste as plain text: rich HTML would add markup that getPlainText
+		// flattens, losing line breaks.
+		const handlePaste = (e: React.ClipboardEvent<HTMLDivElement>) => {
+			const el = divRef.current;
+			const pasted = e.clipboardData.getData("text/plain");
+			if (!el || !pasted) return;
+			e.preventDefault();
+
+			const inserted = pasted.replace(/\r\n?/g, "\n");
+			const current = getPlainText(el);
+			const { start, end } = getSelectionOffsets(el);
+			commitText(
+				el,
+				current.slice(0, start) + inserted + current.slice(end),
+				start + inserted.length,
+			);
+		};
+
 		const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+			// Keys during composition belong to the IME: Enter picks a candidate
+			// instead of sending. Safari reports that Enter after compositionend
+			// with keyCode 229.
+			if (
+				composingRef.current ||
+				e.nativeEvent.isComposing ||
+				e.keyCode === 229
+			) {
+				return;
+			}
+
 			// Let parent handle first (e.g. mention popup navigation/selection)
 			onKeyDown?.(e);
 			if (e.defaultPrevented) return;
@@ -273,6 +333,11 @@ export const MentionRichTextarea = forwardRef<
 				aria-placeholder={placeholder}
 				data-placeholder={placeholder}
 				onInput={handleInput}
+				onCompositionStart={() => {
+					composingRef.current = true;
+				}}
+				onCompositionEnd={handleCompositionEnd}
+				onPaste={handlePaste}
 				onKeyDown={handleKeyDown}
 				className={cn(
 					"w-full resize-none rounded-none border-none p-3 shadow-none outline-none ring-0",

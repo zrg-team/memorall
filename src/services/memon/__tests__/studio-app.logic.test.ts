@@ -147,6 +147,26 @@ describe("Studio app", () => {
 		);
 	});
 
+	it("runs on the metered LLM, booked to the computer's Studio session and agent", async () => {
+		const { deps, generate } = createDeps();
+		const metered = { metered: true } as never;
+		deps.models = vi.fn(async () => metered);
+		await createStudioPort(deps).run(
+			{ tool: "speech", text: "Hello there" },
+			{ ...context, agentId: "agent-1" },
+		);
+		expect(deps.models).toHaveBeenCalledWith({
+			source: "studio",
+			tool: "memon_studio",
+			agentId: "agent-1",
+			sessionId: "memon:conversation-1",
+			title: "Studio · Speech",
+		});
+		expect(generate).toHaveBeenCalledWith(
+			expect.objectContaining({ input: "Hello there", llm: metered }),
+		);
+	});
+
 	it("refuses bad requests before running a model", async () => {
 		const { deps, generate } = createDeps({
 			models: { "speech-to-text": false },

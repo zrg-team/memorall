@@ -26,6 +26,7 @@ import {
 	Loader,
 	Markdown,
 	type MarkdownTheme,
+	SelectList,
 	type SlashCommand,
 	Spacer,
 	setKeybindings,
@@ -39,7 +40,7 @@ import { parseSkillBlock } from "../../core/agent-session";
 import type { FooterDataProvider } from "../../core/footer-data-provider";
 import type { AppKeybinding, KeybindingsManager } from "../../core/keybindings";
 import { createCompactionSummaryMessage } from "../../core/messages";
-import type { SessionContext } from "../../core/session-manager";
+import type { SessionContext, SessionInfo } from "../../core/session-manager";
 import { BUILTIN_SLASH_COMMANDS } from "../../core/slash-commands";
 import type { TruncationResult } from "../../core/tools/truncate";
 import { AssistantMessageComponent } from "./components/assistant-message";
@@ -55,7 +56,12 @@ import { keyHint, keyText, rawKeyHint } from "./components/keybinding-hints";
 import { SkillInvocationMessageComponent } from "./components/skill-invocation-message";
 import { ToolExecutionComponent } from "./components/tool-execution";
 import { UserMessageComponent } from "./components/user-message";
-import { getEditorTheme, getMarkdownTheme, theme } from "./theme/theme";
+import {
+	getEditorTheme,
+	getMarkdownTheme,
+	getSelectListTheme,
+	theme,
+} from "./theme/theme";
 
 /** Interface for components that can be expanded/collapsed */
 interface Expandable {
@@ -112,7 +118,26 @@ export interface InteractiveModeOptions {
 	describeModelChange?: string;
 	/** The user quit (/quit, Ctrl+C twice, Ctrl+D on an empty editor). */
 	onQuit: () => void;
+	/** /resume picked a saved session: the app starts pi again on it. */
+	onResume?: (sessionFile: string) => void;
 }
+
+/** How long ago, as a session list shows it. */
+const ago = (date: Date): string => {
+	const minutes = Math.max(
+		0,
+		Math.round((Date.now() - date.getTime()) / 60_000),
+	);
+	if (minutes < 1) return "just now";
+	if (minutes < 60) return `${minutes}m ago`;
+	const hours = Math.round(minutes / 60);
+	if (hours < 24) return `${hours}h ago`;
+	return `${Math.round(hours / 24)}d ago`;
+};
+
+/** A saved session's name, or its first prompt on one line. */
+const sessionTitle = (info: SessionInfo): string =>
+	info.name ?? info.firstMessage.replace(/\s+/g, " ").trim();
 
 export class InteractiveMode {
 	readonly ui: TUI;
@@ -433,6 +458,10 @@ export class InteractiveMode {
 
 		// Register app action handlers
 		this.defaultEditor.onAction("app.clear", () => this.handleCtrlC());
+		this.defaultEditor.onAction(
+			"app.session.resume",
+			() => void this.handleResumeCommand(""),
+		);
 		this.defaultEditor.onCtrlD = () => this.handleCtrlD();
 		this.defaultEditor.onAction("app.thinking.cycle", () =>
 			this.cycleThinkingLevel(),
@@ -490,6 +519,16 @@ export class InteractiveMode {
 			if (text === "/session") {
 				this.handleSessionCommand();
 				this.editor.setText("");
+				return;
+			}
+			if (text === "/sessions") {
+				this.editor.setText("");
+				await this.handleSessionsCommand();
+				return;
+			}
+			if (text === "/resume" || text.startsWith("/resume ")) {
+				this.editor.setText("");
+				await this.handleResumeCommand(text.slice("/resume".length).trim());
 				return;
 			}
 			if (text === "/hotkeys") {
@@ -1576,6 +1615,108 @@ export class InteractiveMode {
 		this.chatContainer.addChild(new Spacer(1));
 		this.chatContainer.addChild(new Text(info, 1, 0));
 		this.ui.requestRender();
+	}
+
+	/** /sessions: this folder's saved sessions, numbered for /resume. */
+	private async handleSessionsCommand(): Promise<void> {
+		const sessions = await this.sessionManager.listSaved();
+		const current = this.sessionManager.getSessionFile();
+		let info = `${theme.bold("Sessions")} ${theme.fg("dim", `in ${this.sessionManager.getCwd()}`)}\n\n`;
+		if (sessions.length === 0) {
+			info += theme.fg("dim", "No saved sessions in this folder yet.");
+		}
+		sessions.forEach((session, index) => {
+			const mark =
+				session.path === current ? theme.fg("accent", " (current)") : "";
+			info += `${theme.fg("dim", `${index + 1}.`)} ${sessionTitle(session)}${mark}\n`;
+			info += `   ${theme.fg("dim", `${ago(session.modified)} · ${session.messageCount} messages`)}\n`;
+		});
+		if (sessions.length > 0) {
+			info += `\n${theme.fg("dim", "/resume <number> opens one; /resume alone picks from the list.")}`;
+		}
+		this.chatContainer.addChild(new Spacer(1));
+		this.chatContainer.addChild(new Text(info.trimEnd(), 1, 0));
+		this.ui.requestRender();
+	}
+
+	/** /resume [number | name | id]: opens a saved session of this folder. */
+	private async handleResumeCommand(choice: string): Promise<void> {
+		if (
+			this.session.isStreaming ||
+			this.session.isBashRunning ||
+			this.session.isCompacting
+		) {
+			this.showWarning(
+				"pi is working: wait for it (or press Esc), then /resume.",
+			);
+			return;
+		}
+		const sessions = await this.sessionManager.listSaved();
+		const current = this.sessionManager.getSessionFile();
+		if (!choice) {
+			this.showSessionPicker(
+				sessions.filter((session) => session.path !== current),
+			);
+			return;
+		}
+		const wanted = choice.toLowerCase();
+		const picked = /^\d+$/.test(choice)
+			? sessions[Number(choice) - 1]
+			: sessions.find(
+					(session) =>
+						session.name?.toLowerCase() === wanted ||
+						session.id.startsWith(choice),
+				);
+		if (!picked) {
+			this.showWarning(`No saved session "${choice}". /sessions lists them.`);
+			return;
+		}
+		if (picked.path === current) {
+			this.showStatus("That is the session you are in.");
+			return;
+		}
+		this.resumeSession(picked.path);
+	}
+
+	/** Picks a saved session in place of the editor; Esc goes back. */
+	private showSessionPicker(sessions: SessionInfo[]): void {
+		if (sessions.length === 0) {
+			this.showStatus("No other saved sessions in this folder.");
+			return;
+		}
+		const picker = new SelectList(
+			sessions.map((session) => ({
+				value: session.path,
+				label: sessionTitle(session),
+				description: `${ago(session.modified)} · ${session.messageCount} messages`,
+			})),
+			Math.min(sessions.length, 8),
+			getSelectListTheme(),
+		);
+		const done = () => {
+			this.editorContainer.clear();
+			this.editorContainer.addChild(this.editor as Component);
+			this.ui.setFocus(this.editor);
+			this.ui.requestRender();
+		};
+		picker.onSelect = (item) => {
+			done();
+			this.resumeSession(item.value);
+		};
+		picker.onCancel = done;
+		this.editorContainer.clear();
+		this.editorContainer.addChild(picker);
+		this.ui.setFocus(picker);
+		this.ui.requestRender();
+	}
+
+	private resumeSession(sessionFile: string): void {
+		if (!this.options.onResume) {
+			this.showWarning("Opening saved sessions is not available here.");
+			return;
+		}
+		this.showStatus("Opening the session…");
+		this.options.onResume(sessionFile);
 	}
 
 	/**

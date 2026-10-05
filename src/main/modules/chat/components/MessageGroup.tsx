@@ -5,6 +5,8 @@ import { ChevronDown, ChevronRight } from "lucide-react";
 import { AgentIcon } from "@/components/AgentIcon";
 import { MessageRenderer } from "./MessageRenderer";
 import { isCoAgentSessionMarker } from "@/services/chat/coagent-session";
+import { hasReplyParts } from "@/services/chat/message-parts";
+import type { MessageParts } from "@/types/chat";
 import { CoAgentPageDivider } from "./CoAgentPageDivider";
 import {
 	type CoAgentPage,
@@ -26,7 +28,8 @@ const hasRenderableMessageContent = (
 	if (isCoAgentSessionMarker(message.type)) return true;
 	if (message.content) return true;
 	if (message.complexContent) return true;
-	if (message.parts) return true;
+	// Reminders kept for the model are not something to show.
+	if (hasReplyParts(message.parts as MessageParts | null)) return true;
 	if (!message.metadata || typeof message.metadata !== "object") return false;
 	return (
 		("actions" in message.metadata &&

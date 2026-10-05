@@ -24,7 +24,10 @@ import {
 import { useWebChallengePromptStore } from "@/main/stores/web-challenge-prompts";
 import { backgroundJob } from "@/services/background-jobs/background-job";
 import { createJobErrorMetadata } from "@/services/background-jobs/handlers/error-metadata";
-import { cloneMessageParts } from "@/services/chat/message-parts";
+import {
+	cloneMessageParts,
+	hasReplyParts,
+} from "@/services/chat/message-parts";
 import {
 	finishRunningToolExecutions,
 	upsertToolExecution,
@@ -663,6 +666,10 @@ export const useChat = (model: string, options: UseChatOptions = {}) => {
 							.getState()
 							.removePending(conversationId, id);
 					},
+					onUsage: (usage) => {
+						// The chat's cost follows the reply request by request.
+						useChatStore.getState().updateRun(conversationId, token, { usage });
+					},
 					onContent: (content) => {
 						currentContent = content;
 						// Only update in-progress message, not the store
@@ -721,8 +728,10 @@ export const useChat = (model: string, options: UseChatOptions = {}) => {
 			const actionMetadata = {
 				actions: result.actions,
 			};
-			const finalContent = result.parts?.length ? "" : result.content;
-			const finalComplexContent = result.parts?.length
+			// Parts that are only reminders do not hold the answer.
+			const hasParts = hasReplyParts(result.parts);
+			const finalContent = hasParts ? "" : result.content;
+			const finalComplexContent = hasParts
 				? null
 				: cloneComplexContent(result.contentParts);
 
@@ -802,8 +811,7 @@ export const useChat = (model: string, options: UseChatOptions = {}) => {
 					: [];
 				if (assistantMessage && (currentContent || toolExecutions.length > 0)) {
 					const savedParts = currentParts as MessageParts | null;
-					const hasSavedParts =
-						Array.isArray(savedParts) && savedParts.length > 0;
+					const hasSavedParts = hasReplyParts(savedParts);
 					updateMessage(assistantMessage.id, {
 						content: hasSavedParts ? "" : currentContent,
 						complexContent: hasSavedParts

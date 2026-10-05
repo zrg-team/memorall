@@ -21,6 +21,7 @@ import type {
 	ToolExecutionRecord,
 } from "@/types/chat";
 import type { AggregatedTokenUsage } from "@/services/llm/utils/token-usage";
+import type { RunUsage } from "../utils/conversation-cost-format";
 import { ABORT_ERROR_MESSAGE } from "@/utils/abort";
 import type {
 	ChatCompletionMessageToolCall,
@@ -71,6 +72,8 @@ export interface ChatStreamCallbacks {
 	onRunStarted?: (jobId: string) => void;
 	/** The agent read a message injected into the run. */
 	onInjectedMessageRead?: (message: InjectedMessage) => void;
+	/** What the reply has used so far, after each model request. */
+	onUsage?: (usage: RunUsage) => void;
 	onError?: (error: string) => void;
 }
 
@@ -404,6 +407,14 @@ export class ChatService {
 								id: chatResult.id,
 								content: chatResult.content,
 							});
+						} else if (chatResult.type === "usage") {
+							callbacks?.onUsage?.(chatResult.usage);
+						} else if (chatResult.type === "system-reminder") {
+							// Kept where the model read it, as the saved reply has it; the
+							// message view never shows it.
+							messagePartsAccumulator.addSystemReminder(chatResult.content);
+							parts = messagePartsAccumulator.toParts();
+							callbacks?.onParts?.(parts);
 						} else if (chatResult.type === "final") {
 							// Handle final content update (e.g., after citation step)
 							// This replaces the accumulated content with the final version

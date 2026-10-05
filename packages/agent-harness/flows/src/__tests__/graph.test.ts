@@ -10,7 +10,10 @@ import {
 import { recursionLimitForIterations } from "../limits.js";
 import {
 	createFlowRunInbox,
+	FLOW_RUN_INBOX_REMINDER,
 	FLOW_RUN_INBOX_RUNTIME_KEY,
+	formatFlowRunInboxMessage,
+	unwrapFlowRunInboxMessage,
 } from "../context/run-inbox.js";
 import {
 	createFlowRuntimeVars,
@@ -454,7 +457,7 @@ describe("messages sent while the agent works", () => {
 		const toolIndex = second.findIndex((message) => message.role === "tool");
 		expect(second[toolIndex + 1]).toEqual({
 			role: "user",
-			content: "Also check the logs",
+			content: "<by-the-way>\nAlso check the logs\n</by-the-way>",
 		});
 		// The caller hears which message was read.
 		expect(events).toContainEqual({
@@ -462,23 +465,124 @@ describe("messages sent while the agent works", () => {
 			id: "m-1",
 			content: "Also check the logs",
 		});
-		// The reply keeps it where it was read.
+		// The reply keeps it where it was read, with the reminder on how to read
+		// it right behind.
 		expect(finalMessages.map((message) => message.role)).toEqual([
 			"system",
 			"user",
 			"assistant",
 			"tool",
 			"user",
+			"user",
 			"assistant",
 		]);
+		expect(finalMessages[5]).toEqual({
+			role: "user",
+			content: `<system-reminder>\n${FLOW_RUN_INBOX_REMINDER}\n</system-reminder>`,
+		});
 		expect(inbox.take()).toEqual([]);
+	});
+
+	it("reads them as a by-the-way to the task it is on, for the rest of the run", async () => {
+		const inbox = createFlowRunInbox();
+		const requests: Array<Array<{ role: string; content?: unknown }>> = [];
+		let pings = 0;
+		const tool: BaseTool = {
+			name: "ping",
+			description: "ping",
+			schema: jsonToolSchema({ type: "object", properties: {} }),
+			execute: async () => {
+				pings += 1;
+				if (pings === 1)
+					inbox.push({ id: "m-1", content: "Also check the logs" });
+				return "pong";
+			},
+		};
+		const toolCall = (id: string) =>
+			chunk({
+				role: "assistant",
+				content: null,
+				tool_calls: [
+					{
+						index: 0,
+						id,
+						type: "function",
+						function: { name: "ping", arguments: "{}" },
+					},
+				],
+			});
+		const graph = new AgentGraph(
+			{
+				llm: {
+					isReady: () => true,
+					getCurrentModel: async () => ({ modelId: "test" }),
+					getMaxModelTokens: async () => 128000,
+					getMaxResponseTokens: async () => 4096,
+					chatCompletions: ((body: { messages: never[] }) =>
+						(async function* () {
+							requests.push(body.messages);
+							yield requests.length < 3
+								? toolCall(`call_${requests.length}`)
+								: chunk({ role: "assistant", content: "Both done." });
+						})()) as never,
+				},
+			},
+			{ tools: [tool] },
+		);
+
+		const stream = await graph.stream(
+			{ messages: [{ role: "user", content: "go" }] },
+			{
+				streamMode: ["custom", "values"],
+				configurable: {
+					[FLOW_RUNTIME_VARS_CONFIG_KEY]: createFlowRuntimeVars({
+						[FLOW_RUN_INBOX_RUNTIME_KEY]: inbox,
+					}),
+				},
+			},
+		);
+		for await (const _ of stream as AsyncIterable<unknown>) {
+			// drain
+		}
+
+		const reminder = `<system-reminder>\n${FLOW_RUN_INBOX_REMINDER}\n</system-reminder>`;
+		// Nothing was sent yet: the request is untouched.
+		expect(requests[0]?.some((message) => message.content === reminder)).toBe(
+			false,
+		);
+		// The request that reads the message has the reminder right after it.
+		expect(requests[1]?.slice(-2)).toEqual([
+			{
+				role: "user",
+				content: formatFlowRunInboxMessage("Also check the logs"),
+			},
+			{ role: "user", content: reminder },
+		]);
+		// And it stays there: the next request extends this one instead of
+		// moving the reminder behind the new tool round-trip.
+		expect(requests[2]?.slice(0, requests[1]?.length)).toEqual(requests[1]);
+		expect(
+			requests[2]?.filter((message) => message.content === reminder),
+		).toHaveLength(1);
+	});
+
+	it("tags a message as the model reads it and gives the user's words back", () => {
+		const tagged = formatFlowRunInboxMessage("Also\ncheck the logs");
+		expect(tagged).toBe("<by-the-way>\nAlso\ncheck the logs\n</by-the-way>");
+		expect(unwrapFlowRunInboxMessage(tagged)).toBe("Also\ncheck the logs");
+		// Replies stored before the tag read back as they were.
+		expect(unwrapFlowRunInboxMessage("Also check the logs")).toBe(
+			"Also check the logs",
+		);
 	});
 
 	it("refuses messages once the run is over and hands back the unread", () => {
 		const inbox = createFlowRunInbox();
 		expect(inbox.push({ id: "a", content: "first" })).toBe(true);
 		expect(inbox.push({ id: "b", content: "   " })).toBe(false);
+		expect(inbox.size).toBe(1);
 		expect(inbox.close()).toEqual([{ id: "a", content: "first" }]);
+		expect(inbox.size).toBe(0);
 		expect(inbox.closed).toBe(true);
 		expect(inbox.push({ id: "c", content: "late" })).toBe(false);
 	});

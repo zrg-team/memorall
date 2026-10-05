@@ -95,6 +95,12 @@ export interface MemonEditorState {
 	saved: boolean;
 	/** First line of the page the agent's screen shows (0-based). */
 	screenLine: number;
+	/**
+	 * The file's text, when it changed on disk under unsaved edits. Saving
+	 * would replace it, so a save is refused until the file is reloaded or
+	 * overwritten on purpose.
+	 */
+	conflict?: string;
 }
 
 /**

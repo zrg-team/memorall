@@ -136,4 +136,38 @@ describe("buildSendMessages", () => {
 
 		expect(messages).toEqual([{ role: "assistant", content: "visible" }]);
 	});
+
+	it("replays a turn's reminders where the model read them, every turn", async () => {
+		const reminder = (text: string) => ({
+			role: "user",
+			content: `<system-reminder>\n${text}\n</system-reminder>`,
+		});
+		const messages = await buildSendMessages([
+			msg({ role: "user", content: "check tasks" }),
+			msg({
+				role: "assistant",
+				parts: [
+					reminder("Tasks: #10 (1/4)"),
+					{ role: "assistant", content: "On it." },
+				],
+			}),
+			msg({ role: "user", content: "and now?" }),
+			// A reply that was not streamed: its parts are only the reminder.
+			msg({
+				role: "assistant",
+				content: "Two left.",
+				parts: [reminder("Tasks: #10 (2/4)")],
+			}),
+		] as any);
+
+		// The earlier reminder stays in its turn; the next turn adds its own.
+		expect(messages).toEqual([
+			{ role: "user", content: "check tasks" },
+			reminder("Tasks: #10 (1/4)"),
+			{ role: "assistant", content: "On it." },
+			{ role: "user", content: "and now?" },
+			reminder("Tasks: #10 (2/4)"),
+			{ role: "assistant", content: "Two left." },
+		]);
+	});
 });

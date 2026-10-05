@@ -29,6 +29,7 @@ import * as flowStepsSchema from "./entities/flow-steps";
 import * as flowConnectionsSchema from "./entities/flow-connections";
 import * as flowConfigsSchema from "./entities/flow-configs";
 import * as cronJobsSchema from "./entities/cron-jobs";
+import * as modelUsageSchema from "./entities/model-usage";
 
 // Export consolidated schema object
 export const schema = {
@@ -59,4 +60,6 @@ export const schema = {
 	flowConnections: flowConnectionsSchema.flowConnections,
 	flowConfigs: flowConfigsSchema.flowConfigs,
 	cronJobs: cronJobsSchema.cronJobs,
+	// Model requests outside chat replies
+	modelUsage: modelUsageSchema.modelUsage,
 };

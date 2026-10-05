@@ -607,7 +607,9 @@
 			"approvalTitle": "MemonOS Bot muốn giao việc này cho pi code",
 			"approvalHint": "pi sẽ đọc, sửa và chạy mã trong tệp của bạn bằng mô hình của khung chat. Nếu bạn từ chối, MemonOS Bot sẽ tự viết mã và không hỏi lại.",
 			"approve": "Dùng pi code",
-			"deny": "Để MemonOS Bot tự viết"
+			"deny": "Để MemonOS Bot tự viết",
+			"stop": "Dừng",
+			"stopHint": "Dừng pi, như phím Esc. MemonOS Bot sẽ biết bạn đã dừng nó; hãy nói lý do trong khung chat."
 		},
 		"tasksOpen": "{{count}} đang mở",
 		"terminal": {

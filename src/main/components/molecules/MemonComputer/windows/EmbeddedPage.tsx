@@ -6,6 +6,7 @@ import { serveEmbeddedPage } from "@/services/memon/embedded-browser";
 import {
 	attachSandboxFrame,
 	frameAct,
+	frameCapture,
 	frameOutline,
 	sandboxTargetOf,
 } from "@/services/memon/embedded-frame";
@@ -89,6 +90,7 @@ export const EmbeddedPage: React.FC<{
 				serving.current = serveEmbeddedPage(sessionId, {
 					outline: () => frameOutline(iframe),
 					act: (request) => frameAct(iframe, request),
+					capture: (request) => frameCapture(iframe, request),
 					async navigate(next) {
 						const target = sandboxTargetOf(next);
 						if (!target)

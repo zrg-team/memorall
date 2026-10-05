@@ -603,7 +603,9 @@
 			"approvalTitle": "MemonOS Bot wants to hand this to pi code",
 			"approvalHint": "pi will read, edit and run code in your files with the chat's model. Declined, MemonOS Bot codes it itself and won't ask again.",
 			"approve": "Use pi code",
-			"deny": "Let MemonOS Bot code it"
+			"deny": "Let MemonOS Bot code it",
+			"stop": "Stop",
+			"stopHint": "Stop pi, as Esc does. MemonOS Bot hears you stopped it; tell it why in the chat."
 		},
 		"tasksOpen": "{{count}} open",
 		"terminal": {
