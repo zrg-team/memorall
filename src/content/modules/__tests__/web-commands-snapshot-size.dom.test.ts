@@ -3,11 +3,14 @@ import { WEB_CONTENT_COMMAND_SOURCE } from "@/services/web-browser/web-browser-p
 import { handleWebContentCommand } from "../web-commands";
 
 const snapshotOf = async (maxHtmlChars: number) => {
-	const response = await handleWebContentCommand({
-		source: WEB_CONTENT_COMMAND_SOURCE,
-		type: "web-tool:snapshot",
-		maxHtmlChars,
-	});
+	const response = await handleWebContentCommand(
+		{
+			source: WEB_CONTENT_COMMAND_SOURCE,
+			type: "web-tool:snapshot",
+			maxHtmlChars,
+		},
+		() => undefined,
+	);
 	if (!response.success || response.type !== "web-tool:snapshot-result") {
 		throw new Error("Expected a successful snapshot.");
 	}

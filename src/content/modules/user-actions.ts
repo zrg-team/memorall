@@ -161,14 +161,18 @@ const actionableTarget = (event: Event): Element | null => {
 	return null;
 };
 
+/**
+ * Hands one action to the background. The content entry supplies it, because
+ * only that file may reach for a Chrome API.
+ */
+export type SendUserAction = (message: WebPageActionMessage) => void;
+
+/** This copy's channel to the background, set when watching starts. */
+let send: SendUserAction | null = null;
+
 const report = (action: WebPageAction): void => {
 	try {
-		void chrome.runtime
-			.sendMessage({
-				source: WEB_PAGE_ACTION_SOURCE,
-				action,
-			} satisfies WebPageActionMessage)
-			.catch(() => undefined);
+		send?.({ source: WEB_PAGE_ACTION_SOURCE, action });
 	} catch {
 		// A copy left behind by an extension reload can no longer send.
 	}
@@ -205,7 +209,8 @@ let listening = false;
  * Starts reporting for this document. Called by the background for every
  * page a session's tab loads; a second call is a no-op.
  */
-export const watchUserActions = (): void => {
+export const watchUserActions = (sendUserAction: SendUserAction): void => {
+	send = sendUserAction;
 	state().watching = true;
 	if (listening) return;
 	listening = true;

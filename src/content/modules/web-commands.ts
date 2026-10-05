@@ -12,7 +12,11 @@ import {
 	type WebDomElementInfo,
 	type WebElementRecord,
 } from "@/services/web-browser/web-browser-protocol";
-import { runAsAgent, watchUserActions } from "./user-actions";
+import {
+	runAsAgent,
+	type SendUserAction,
+	watchUserActions,
+} from "./user-actions";
 
 // ── Snapshot helpers ──────────────────────────────────────────────────────────
 
@@ -263,6 +267,7 @@ const createWebContentErrorResponse = (
 
 export const handleWebContentCommand = async (
 	request: WebContentCommandRequest,
+	sendUserAction: SendUserAction,
 ): Promise<WebContentCommandResponse> => {
 	try {
 		switch (request.type) {
@@ -334,7 +339,7 @@ export const handleWebContentCommand = async (
 			}
 
 			case "web-tool:watch-user-actions":
-				watchUserActions();
+				watchUserActions(sendUserAction);
 				return {
 					source: WEB_CONTENT_COMMAND_SOURCE,
 					type: "web-tool:watch-user-actions-result",
