@@ -31,6 +31,8 @@ interface DocumentLibraryCompactNavigatorProps {
 	) => void;
 	onRenameNode?: (node: DocumentTreeNode, newName: string) => void;
 	onDeleteNode?: (node: DocumentTreeNode) => void;
+	/** Downloads a folder of the documents tree as a .zip. */
+	onDownloadFolderNode?: (node: DocumentTreeNode) => void;
 }
 
 export const DocumentLibraryCompactNavigator = memo(
@@ -51,6 +53,7 @@ export const DocumentLibraryCompactNavigator = memo(
 		onMove,
 		onRenameNode,
 		onDeleteNode,
+		onDownloadFolderNode,
 	}: DocumentLibraryCompactNavigatorProps) {
 		const { t } = useTranslation("documents");
 		const showWorkspaceSection = workspaceTree.length > 0;
@@ -66,6 +69,8 @@ export const DocumentLibraryCompactNavigator = memo(
 			const handleToggleExpand =
 				section === "workspace" ? onToggleExpandWorkspace : onToggleExpand;
 			const handleMove = section === "workspace" ? undefined : onMove;
+			const handleDownloadFolder =
+				section === "workspace" ? undefined : onDownloadFolderNode;
 
 			return (
 				<div
@@ -100,6 +105,7 @@ export const DocumentLibraryCompactNavigator = memo(
 								onMove={handleMove}
 								onRename={onRenameNode}
 								onDelete={onDeleteNode}
+								onDownloadFolder={handleDownloadFolder}
 							/>
 						</div>
 					)}

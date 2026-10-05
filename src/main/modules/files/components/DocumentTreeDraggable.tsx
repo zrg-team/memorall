@@ -8,6 +8,7 @@ import { useTranslation } from "react-i18next";
 import {
 	ChevronRight,
 	ChevronDown,
+	FileArchive,
 	Folder,
 	FolderOpen,
 	FolderSymlink,
@@ -60,6 +61,8 @@ interface DocumentTreeProps {
 	) => void;
 	onRename?: (node: DocumentTreeNode, newName: string) => void;
 	onDelete?: (node: DocumentTreeNode) => void;
+	/** A folder, with everything in it, as one .zip download. */
+	onDownloadFolder?: (node: DocumentTreeNode) => void;
 	/**
 	 * Top-level paths that are folders on the user's disk rather than in the
 	 * library. They behave identically; only the icon says otherwise.
@@ -100,6 +103,7 @@ interface TreeItemProps {
 	onToggleExpand?: (node: DocumentTreeNode) => void;
 	onRename?: (node: DocumentTreeNode, newName: string) => void;
 	onDelete?: (node: DocumentTreeNode) => void;
+	onDownloadFolder?: (node: DocumentTreeNode) => void;
 	mappedPaths?: ReadonlySet<string>;
 	onUnmap?: (path: string) => void;
 }
@@ -112,6 +116,7 @@ const TreeItem: React.FC<TreeItemProps> = ({
 	onToggleExpand,
 	onRename,
 	onDelete,
+	onDownloadFolder,
 	mappedPaths,
 	onUnmap,
 }) => {
@@ -127,6 +132,8 @@ const TreeItem: React.FC<TreeItemProps> = ({
 		node.type === "folder" && node.children && node.children.length > 0;
 	const isFolder = node.type === "folder";
 	const isSelected = node.id === selectedId;
+	// Zipping only reads, so a mapped folder can be downloaded too.
+	const canDownload = isFolder && Boolean(onDownloadFolder);
 
 	// Use draggable for all items
 	const {
@@ -220,7 +227,13 @@ const TreeItem: React.FC<TreeItemProps> = ({
 							}
 						}}
 						onContextMenu={(e) => {
-							if (!onRename && !onDelete && !(isMapped && onUnmap)) return;
+							if (
+								!onRename &&
+								!onDelete &&
+								!canDownload &&
+								!(isMapped && onUnmap)
+							)
+								return;
 							e.preventDefault();
 							e.stopPropagation();
 							const rect = e.currentTarget.getBoundingClientRect();
@@ -285,6 +298,17 @@ const TreeItem: React.FC<TreeItemProps> = ({
 					</div>
 				</div>
 				<DropdownMenuContent align="start">
+					{canDownload && (
+						<>
+							<DropdownMenuItem onClick={() => onDownloadFolder?.(node)}>
+								<FileArchive className="h-4 w-4" />
+								{t("list.downloadZip")}
+							</DropdownMenuItem>
+							{(isMapped ? onUnmap : onRename || onDelete) && (
+								<DropdownMenuSeparator />
+							)}
+						</>
+					)}
 					{/*
 					 * A mapped folder offers neither rename nor delete: both would act
 					 * on the real folder on disk, and "delete" next to the user's own
@@ -339,6 +363,7 @@ const TreeItem: React.FC<TreeItemProps> = ({
 							onToggleExpand={onToggleExpand}
 							onRename={onRename}
 							onDelete={onDelete}
+							onDownloadFolder={onDownloadFolder}
 							mappedPaths={mappedPaths}
 							onUnmap={onUnmap}
 						/>
@@ -357,6 +382,7 @@ export const DocumentTreeDraggable: React.FC<DocumentTreeProps> = ({
 	onMove,
 	onRename,
 	onDelete,
+	onDownloadFolder,
 	mappedPaths,
 	onUnmap,
 }) => {
@@ -500,6 +526,7 @@ export const DocumentTreeDraggable: React.FC<DocumentTreeProps> = ({
 				onToggleExpand={onToggleExpand}
 				onRename={onRename}
 				onDelete={onDelete}
+				onDownloadFolder={onDownloadFolder}
 				mappedPaths={mappedPaths}
 				onUnmap={onUnmap}
 			/>
