@@ -130,8 +130,25 @@ export interface PageOutlineActionRequest {
 	allowFormSubmit?: boolean;
 }
 
+/** Where an element is in the viewport, in CSS pixels (describe). */
+export interface PageOutlineElementBox {
+	x: number;
+	y: number;
+	width: number;
+	height: number;
+	viewportWidth: number;
+	viewportHeight: number;
+}
+
 export type PageOutlineActionResult =
-	| { ok: true; action: PageOutlineAction; ref?: string; detail?: string }
+	| {
+			ok: true;
+			action: PageOutlineAction;
+			ref?: string;
+			detail?: string;
+			/** describe: the element's box, to cut a screenshot to. */
+			box?: PageOutlineElementBox;
+	  }
 	| {
 			ok: false;
 			action: PageOutlineAction;
@@ -850,7 +867,8 @@ export const buildPageOutline = (
 	};
 };
 
-const resolveRef = (
+/** The element a ref of the latest outline stands for. */
+export const elementOfRef = (
 	doc: Document,
 	ref: string | undefined,
 	docToken: string | undefined,
@@ -1127,7 +1145,7 @@ const resolvePoint = (
 	const x = request.x ?? 0;
 	const y = request.y ?? 0;
 	if (request.ref) {
-		const element = resolveRef(doc, request.ref, request.docToken);
+		const element = elementOfRef(doc, request.ref, request.docToken);
 		(element as HTMLElement).scrollIntoView?.(
 			hasPoint ? { block: "nearest", inline: "nearest" } : { block: "center" },
 		);
@@ -1466,7 +1484,7 @@ const scrollPage = (
 	const horizontal = direction === "left" || direction === "right";
 	const view = doc.defaultView;
 	const area = request.ref
-		? scrollAreaOf(resolveRef(doc, request.ref, request.docToken), horizontal)
+		? scrollAreaOf(elementOfRef(doc, request.ref, request.docToken), horizontal)
 		: null;
 	const root = doc.documentElement;
 	const box = area
@@ -1554,7 +1572,7 @@ export const actOnRef = (
 		const press = parseKey(request.value);
 		let target: Element;
 		if (request.ref) {
-			target = resolveRef(doc, request.ref, request.docToken);
+			target = elementOfRef(doc, request.ref, request.docToken);
 			assertActionable(target);
 			(target as HTMLElement).focus?.({ preventScroll: true });
 		} else {
@@ -1600,14 +1618,33 @@ export const actOnRef = (
 		return { ok: true, action, ref: request.ref, detail };
 	}
 
-	const element = resolveRef(doc, request.ref, request.docToken);
+	const element = elementOfRef(doc, request.ref, request.docToken);
 	const ref = request.ref;
 	assertActionable(element);
 	const tag = tagOf(element);
 
+	// Any element: an image's address, and where it is to take its picture.
 	if (action === "describe") {
-		if (tag !== "img") throw new Error(`${ref} is not an image.`);
-		return { ok: true, action, ref, detail: imageSource(element) ?? "" };
+		(element as HTMLElement).scrollIntoView?.({
+			block: "nearest",
+			inline: "nearest",
+		});
+		const rect = element.getBoundingClientRect();
+		const view = element.ownerDocument.defaultView;
+		return {
+			ok: true,
+			action,
+			ref,
+			detail: tag === "img" ? (imageSource(element) ?? "") : "",
+			box: {
+				x: rect.left,
+				y: rect.top,
+				width: rect.width,
+				height: rect.height,
+				viewportWidth: view?.innerWidth ?? 0,
+				viewportHeight: view?.innerHeight ?? 0,
+			},
+		};
 	}
 	if (action === "focus") {
 		(element as HTMLElement).focus?.();

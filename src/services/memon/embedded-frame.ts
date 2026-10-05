@@ -1,9 +1,15 @@
 import {
 	actOnRef,
 	buildPageOutline,
+	elementOfRef,
 	type PageOutlineBlock,
 } from "@/co-agent/dom/page-outline";
 import type { SandboxHandleSwRequestResult } from "@/services/sandbox-container";
+import {
+	captureElement,
+	type MemonCaptureRequest,
+	type MemonPageCapture,
+} from "./page-capture";
 import type {
 	WebOutlineActionRequest,
 	WebOutlineActionResult,
@@ -329,4 +335,19 @@ export const frameAct = async (
 		outline = undefined;
 	}
 	return { result, outline };
+};
+
+/** A picture of a ref of the page in the frame, drawn from the page itself. */
+export const frameCapture = async (
+	iframe: HTMLIFrameElement,
+	request: MemonCaptureRequest,
+): Promise<MemonPageCapture> => {
+	const doc = frameDocument(iframe);
+	// Brings it into view and reads an image's address.
+	const described = actOnRef(doc, { ...request, action: "describe" });
+	const source = (described.ok && described.detail) || undefined;
+	return captureElement(
+		elementOfRef(doc, request.ref, request.docToken),
+		source,
+	);
 };

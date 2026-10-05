@@ -11,6 +11,11 @@ import type { ModelUsageScope } from "@/services/model-usage/model-usage-ledger"
 export interface MemonModelsPort {
 	/** The LLM service, metered to `scope` (read at each request). */
 	llm(scope: () => ModelUsageScope): Promise<MeteredLlmService>;
+	/**
+	 * The chat's model takes images, as its provider's listing says. Unknown
+	 * counts as no: an image a model cannot read fails the whole reply.
+	 */
+	acceptsImages(): Promise<boolean>;
 }
 
 export const createMemonModelsPort = (): MemonModelsPort => ({
@@ -20,5 +25,18 @@ export const createMemonModelsPort = (): MemonModelsPort => ({
 			import("@/services/model-usage/metered-llm"),
 		]);
 		return meterLlmService(serviceManager.getLLMService(), scope);
+	},
+	async acceptsImages() {
+		try {
+			const { serviceManager } = await import("@/services");
+			const llm = serviceManager.getLLMService();
+			const current = await llm.getCurrentModel();
+			if (!current) return false;
+			const { data } = await llm.modelsFor(current.serviceName);
+			const model = data.find((entry) => entry.id === current.modelId);
+			return model?.supportsVision === true;
+		} catch {
+			return false;
+		}
 	},
 });

@@ -50,7 +50,11 @@ import {
 	type MemonDesktopEntryChange,
 } from "./desktop-files";
 import { memonFileKind, type MemonViewerKind } from "./file-kinds";
-import { downloadFileName, MEMON_DOWNLOADS_DIR } from "./download";
+import {
+	downloadFileName,
+	MEMON_DOWNLOADS_DIR,
+	MEMON_PICTURES_DIR,
+} from "./download";
 import type { FolderZip } from "@/services/filesystem/folder-zip";
 import { listFileRefs, serializeScreen } from "./screen-serializer";
 import { controlsByRef } from "./app-kit/render-text";
@@ -60,6 +64,8 @@ import { studioDraftsFromSettings } from "./apps/studio-view";
 import { MemonApprovalRequiredError } from "./approval-error";
 import { MemonPiCode, type MemonPiCodePort } from "./apps/pi-code/pi-code-app";
 import type { MemonEmbeddedPort } from "./embedded-browser";
+import type { MemonModelsPort } from "./models-port";
+import type { MemonCaptureRequest, MemonPageCapture } from "./page-capture";
 import {
 	isLocalAddress,
 	isLoopbackUrl,
@@ -122,6 +128,11 @@ export interface MemonBrowserPort {
 		request: WebOutlineActionRequest,
 	): Promise<{ result: WebOutlineActionResult; outline?: WebPageOutline }>;
 	history(sessionId: string, direction: WebHistoryDirection): Promise<void>;
+	/** A picture of an element of the page; without it, pages are text only. */
+	capture?(
+		sessionId: string,
+		request: MemonCaptureRequest,
+	): Promise<MemonPageCapture>;
 	/** Brings the session's real tab and window to the front. */
 	focus(sessionId: string): Promise<void>;
 	close(sessionId: string): Promise<void>;
@@ -232,6 +243,8 @@ export interface MemonPorts {
 	homes?: MemonHomePort;
 	/** Without it pi code is not available. */
 	piCode?: MemonPiCodePort;
+	/** Without it the agent gets pictures of pages as files, never to look at. */
+	models?: MemonModelsPort;
 }
 
 export type MemonTurnOutcome = "ready" | "timeout" | "cancelled";
@@ -930,6 +943,42 @@ export class MemonMachine {
 		const tab = this.activeTab();
 		if (!tab) throw new Error("No page is open. Use memon_open with a url.");
 		return tab;
+	}
+
+	/** A picture of an element of the page in front (a ref of the latest screen). */
+	async captureRef(ref: string): Promise<MemonPageCapture> {
+		this.requireApp("browser");
+		const tab = this.requireActiveTab();
+		const port = this.browserPort(tab);
+		if (!port.capture) {
+			throw new Error("Pictures of pages are not available on this computer.");
+		}
+		return port.capture(tab.sessionId, {
+			ref,
+			docToken: tab.outline?.docToken,
+		});
+	}
+
+	/** The chat's model can look at pictures, so a picture goes to it. */
+	async modelAcceptsImages(): Promise<boolean> {
+		return (
+			(await this.ports.models?.acceptsImages().catch(() => false)) ?? false
+		);
+	}
+
+	/** Saves a picture (a PNG data URL) into ~/Pictures; returns its path. */
+	async savePicture(dataUrl: string, name: string): Promise<string> {
+		this.requireApp("files");
+		const binary = atob(dataUrl.slice(dataUrl.indexOf(",") + 1));
+		const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+		const path = await this.freeName(
+			this.resolvePath(MEMON_PICTURES_DIR),
+			`${name}.png`,
+			"move",
+		);
+		await this.ports.files.write(path, bytes);
+		await this.refreshFiles().catch(() => undefined);
+		return path;
 	}
 
 	private async releaseTab(tab: MemonBrowserTab): Promise<void> {

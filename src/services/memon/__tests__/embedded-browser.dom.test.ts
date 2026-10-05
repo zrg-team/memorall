@@ -92,6 +92,11 @@ describe("embedded browser port", () => {
 			})),
 			navigate: vi.fn(async () => undefined),
 			history: vi.fn(async () => undefined),
+			capture: vi.fn(async () => ({
+				dataUrl: "data:image/png;base64,AAAA",
+				width: 880,
+				height: 594,
+			})),
 		};
 		const release = serveEmbeddedPage(sessionId, host);
 		await settle();
@@ -100,6 +105,11 @@ describe("embedded browser port", () => {
 		expect(await port.outline(sessionId)).toEqual(hostOutline);
 		await port.act(sessionId, { ref: "b1", action: "click" });
 		expect(host.act).toHaveBeenCalledWith({ ref: "b1", action: "click" });
+		// A picture is taken where the page is shown.
+		expect(
+			await port.capture(sessionId, { ref: "b1", docToken: "d1" }),
+		).toMatchObject({ width: 880, height: 594 });
+		expect(host.capture).toHaveBeenCalledWith({ ref: "b1", docToken: "d1" });
 		await port.navigate(sessionId, "http://localhost:3000/done");
 		expect(host.navigate).toHaveBeenCalledWith("http://localhost:3000/done");
 

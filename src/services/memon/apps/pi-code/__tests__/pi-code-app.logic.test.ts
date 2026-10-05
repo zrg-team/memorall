@@ -9,7 +9,7 @@ import {
 const HOME = "/agents/Bot";
 
 /** A pi that takes prompts and finishes at once, unless told otherwise. */
-const fakeRunner = (cwd: string) => {
+const fakeRunner = (cwd: string, createdCwd = false) => {
 	const submitted: Array<{ text: string; queue?: string }> = [];
 	const entries: MemonPiCodeEntry[] = [];
 	let idle = true;
@@ -64,6 +64,7 @@ const fakeRunner = (cwd: string) => {
 		dispose: vi.fn(async () => {
 			disposed = true;
 		}),
+		createdCwd,
 	};
 	return {
 		runner,
@@ -88,9 +89,16 @@ const fakeRunner = (cwd: string) => {
 
 const setup = () => {
 	const runners: Array<ReturnType<typeof fakeRunner>> = [];
+	/** Folders in Files; pi makes any other one it starts in. */
+	const folders = new Set([HOME, `${HOME}/a`, `${HOME}/todo`]);
+	/** What pi's /resume calls, from the latest start. */
+	let resume: ((sessionFile: string) => void) | undefined;
 	const port: MemonPiCodePort = {
-		start: vi.fn(async ({ cwd }) => {
-			const fake = fakeRunner(cwd ?? HOME);
+		start: vi.fn(async ({ cwd, onResume }) => {
+			const folder = cwd ?? HOME;
+			const fake = fakeRunner(folder, !folders.has(folder));
+			folders.add(folder);
+			resume = onResume;
 			runners.push(fake);
 			return fake.runner;
 		}),
@@ -137,6 +145,8 @@ const setup = () => {
 		setFront: (value: boolean) => {
 			front = value;
 		},
+		/** The user picks a saved session with /resume in pi. */
+		resume: (sessionFile: string) => resume?.(sessionFile),
 	};
 };
 
@@ -387,8 +397,8 @@ describe("pi code, driven by the Memon agent", () => {
 		expect(runners[0].runner.input).toHaveBeenCalledWith("/name api\r");
 	});
 
-	it("refuses while pi code is turned off, and keeps one folder per session", async () => {
-		const { piCode, setEnabled } = setup();
+	it("refuses while pi code is turned off, and moves pi to another folder while it is idle", async () => {
+		const { piCode, setEnabled, runners, port } = setup();
 		setEnabled(false);
 		await expect(
 			piCode.act({ action: "prompt", text: "Build it" }),
@@ -401,11 +411,64 @@ describe("pi code, driven by the Memon agent", () => {
 			cwd: "~/a",
 		});
 		piCode.answerApproval((await asked(piCode)).id, "approve");
-		await first;
-		await expect(
-			piCode.act({ action: "prompt", text: "Other", cwd: "~/b" }),
-		).rejects.toThrow(
-			'pi code works in ~/a. Close it first ({ action: "close" }) to start it in ~/b',
+		expect(await first).toMatch(/^Sent to pi code\. /);
+
+		// Idle in ~/a: pi starts again in ~/b, without asking the user again.
+		const moved = await piCode.act({
+			action: "prompt",
+			text: "Other",
+			cwd: "~/b",
+		});
+		expect(moved).toContain(
+			"pi code moved from ~/a to ~/b; its session there is saved (/resume in pi opens it).",
 		);
+		// A folder that was not there is called out: the agent may have guessed it.
+		expect(moved).toContain(
+			"~/b was not there: pi made it, empty. If the project is elsewhere, prompt again with its folder as cwd.",
+		);
+		expect(runners[0].runner.dispose).toHaveBeenCalled();
+		expect(port.start).toHaveBeenLastCalledWith(
+			expect.objectContaining({ cwd: `${HOME}/b` }),
+		);
+		expect(runners[1].submitted).toEqual([{ text: "Other", queue: undefined }]);
+		expect(piCode.state()?.approval).toBeUndefined();
+
+		// Working: pi is not moved under it.
+		runners[1].keepWorking();
+		await piCode.act({ action: "prompt", text: "Long job", waitSeconds: 0 });
+		await expect(
+			piCode.act({ action: "prompt", text: "Back", cwd: "~/a" }),
+		).rejects.toThrow(
+			'pi code is working in ~/b. Wait for it or stop it ({ action: "stop" }), then hand it work in ~/a.',
+		);
+	});
+
+	it("/resume starts pi again on the saved session; a waiting agent hears it", async () => {
+		const { piCode, runners, port, resume, isWindowOpen } = setup();
+		const first = piCode.act({
+			action: "prompt",
+			text: "Build it",
+			cwd: "~/a",
+		});
+		piCode.answerApproval((await asked(piCode)).id, "approve");
+		await first;
+
+		runners[0].keepWorking();
+		const waiting = piCode.act({ action: "prompt", text: "Add tests" });
+		await new Promise((resolve) => setTimeout(resolve, 30));
+		const saved = `${HOME}/.pi/agent/sessions/--agents-Bot-a--/older.jsonl`;
+		resume(saved);
+		expect(await waiting).toBe(
+			"Sent to pi code. pi code opened another saved session (/resume); its conversation is on the screen. Hand pi the work again if it still matters.",
+		);
+		await vi.waitFor(() => expect(piCode.state()?.status).toBe("running"));
+		expect(port.start).toHaveBeenLastCalledWith(
+			expect.objectContaining({ cwd: `${HOME}/a`, sessionFile: saved }),
+		);
+		expect(runners[0].runner.dispose).toHaveBeenCalled();
+		// The same window, and the run's answer stands.
+		expect(isWindowOpen()).toBe(true);
+		await piCode.act({ action: "prompt", text: "Go on" });
+		expect(runners[1].submitted.at(-1)?.text).toBe("Go on");
 	});
 });

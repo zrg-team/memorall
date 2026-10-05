@@ -1,4 +1,5 @@
 import { createMemonEmbeddedPort } from "./embedded-browser";
+import { cropScreenshot } from "./page-capture";
 import type { IAgentSandboxService } from "@memorall/agent-harness-sandbox";
 import type { IFlowFileSystem } from "@memorall/agent-harness-flows/interfaces/services/filesystem";
 import { platform } from "@/platform/current";
@@ -9,6 +10,7 @@ import {
 import { documentFileSystemService } from "@/services/filesystem/document-filesystem";
 import { zipFolder } from "@/services/filesystem/folder-zip";
 import {
+	captureWebSessionScreenshot,
 	closeWebSession,
 	focusWebSession,
 	getWebSessionSurface,
@@ -112,6 +114,27 @@ export const createMemonBrowserPort = (): MemonBrowserPort => ({
 		outlineWebSession(sessionId, { maxChars: OUTLINE_MAX_CHARS }),
 	act: (sessionId, request) =>
 		performOutlineAction(sessionId, request, { maxChars: OUTLINE_MAX_CHARS }),
+	// The tab's screenshot, cut to the element: what the page shows, WebGL too.
+	async capture(sessionId, request) {
+		const { result } = await performOutlineAction(
+			sessionId,
+			{ ...request, action: "describe" },
+			{ maxChars: OUTLINE_MAX_CHARS },
+		);
+		if (!result.ok || !result.box) {
+			throw new Error(`${request.ref} could not be found on the page.`);
+		}
+		const { box } = result;
+		const shot = await captureWebSessionScreenshot(sessionId);
+		const scale = box.viewportWidth > 0 ? shot.width / box.viewportWidth : 1;
+		const picture = await cropScreenshot(shot.dataUrl, {
+			x: box.x * scale,
+			y: box.y * scale,
+			width: box.width * scale,
+			height: box.height * scale,
+		});
+		return result.detail ? { ...picture, source: result.detail } : picture;
+	},
 	async history(sessionId, direction) {
 		await navigateWebSessionHistory(sessionId, direction, OPEN_TIMEOUT_MS);
 	},
@@ -585,6 +608,7 @@ export const createMemonPorts = (
 	connections: overrides.connections ?? createMemonConnectionsPort(),
 	download: overrides.download ?? createMemonDownloadPort(),
 	homes: overrides.homes ?? createMemonHomePort(),
+	models: overrides.models ?? models,
 	piCode:
 		overrides.piCode ??
 		createPiCodePort({

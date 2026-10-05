@@ -3,8 +3,9 @@
  * Browser port: the session tree, entries and context building are unchanged.
  * JSONL files go through an injected async SessionStore (the Memon file
  * system) instead of sync node:fs: appends are queued in order and flush()
- * waits for them. Session listing, forking across projects and the session
- * picker are not ported.
+ * waits for them. Listing covers the sessions of one folder (/sessions,
+ * /resume); forking across projects and pi's searchable session picker are
+ * not ported.
  */
 import type { AgentMessage } from "@/services/memon/apps/pi-code/agent";
 import type {
@@ -468,6 +469,59 @@ export interface SessionStore {
 	list(dir: string): Promise<string[]>;
 }
 
+const entryText = (message: { content?: unknown }): string => {
+	const { content } = message;
+	if (typeof content === "string") return content.trim();
+	if (!Array.isArray(content)) return "";
+	return content
+		.filter(
+			(part): part is TextContent =>
+				part?.type === "text" && typeof part.text === "string",
+		)
+		.map((part) => part.text)
+		.join(" ")
+		.trim();
+};
+
+/** A saved session file as a list shows it; null when it is not a session. */
+function savedSessionInfo(
+	path: string,
+	entries: FileEntry[],
+): SessionInfo | null {
+	const header = entries[0];
+	if (header?.type !== "session") return null;
+	let name: string | undefined;
+	let messageCount = 0;
+	let firstMessage = "";
+	let latest = Date.parse(header.timestamp) || 0;
+	const texts: string[] = [];
+	for (const entry of entries) {
+		const at = Date.parse((entry as { timestamp?: string }).timestamp ?? "");
+		if (at > latest) latest = at;
+		if (entry.type === "session_info") name = entry.name?.trim() || undefined;
+		if (entry.type !== "message") continue;
+		messageCount += 1;
+		const message = entry.message as { role?: string; content?: unknown };
+		if (message.role !== "user" && message.role !== "assistant") continue;
+		const text = entryText(message);
+		if (!text) continue;
+		texts.push(text);
+		if (!firstMessage && message.role === "user") firstMessage = text;
+	}
+	return {
+		path,
+		id: header.id,
+		cwd: typeof header.cwd === "string" ? header.cwd : "",
+		name,
+		parentSessionPath: header.parentSession,
+		created: new Date(header.timestamp),
+		modified: new Date(latest),
+		messageCount,
+		firstMessage: firstMessage || "(no messages)",
+		allMessagesText: texts.join(" "),
+	};
+}
+
 /**
  * Manages conversation sessions as append-only trees stored in JSONL files.
  *
@@ -625,6 +679,27 @@ export class SessionManager {
 
 	getSessionDir(): string {
 		return this.sessionDir;
+	}
+
+	/** The sessions saved in this session's folder, the latest first. */
+	async listSaved(): Promise<SessionInfo[]> {
+		const store = this.store;
+		if (!store || !this.sessionDir) return [];
+		const names = (await store.list(this.sessionDir).catch(() => [])).filter(
+			(name) => name.endsWith(".jsonl"),
+		);
+		const infos = await Promise.all(
+			names.map(async (name) => {
+				const path = join(this.sessionDir, name);
+				const content = await store.read(path).catch(() => undefined);
+				return content
+					? savedSessionInfo(path, parseSessionEntries(content))
+					: null;
+			}),
+		);
+		return infos
+			.filter((info): info is SessionInfo => info !== null)
+			.sort((a, b) => b.modified.getTime() - a.modified.getTime());
 	}
 
 	getSessionId(): string {

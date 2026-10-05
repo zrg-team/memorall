@@ -7,8 +7,9 @@ import z from "zod";
 import { MEMON_ACT_TOOL, memonDisplayPath } from "@/services/memon/constants";
 import { formatDownloadSize } from "@/services/memon/download";
 import type { MemonMachine } from "@/services/memon/memon-machine";
+import type { MemonPageCapture } from "@/services/memon/page-capture";
 import { kitAppForRef } from "@/services/memon/apps";
-import { runMemonTool } from "./memon-tool-utils";
+import { type MemonToolOutput, runMemonTool } from "./memon-tool-utils";
 
 const schema = z
 	.object({
@@ -41,7 +42,7 @@ const schema = z
 				"zip",
 			])
 			.describe(
-				"click a ref (a button, link, file or switch), or a page point with x and y; hover a page ref or point (menus that open on hover); press a key (text: Enter, Escape, Tab, ArrowDown, Control+a) on a page ref or the focused element; type text into a field or the editor (e1); toggle a switch or checkbox (text on/off sets it); select an option of a choice (text is the option); describe an image; scroll the focused window (page, Editor or Viewer), or with a page ref the area it scrolls in; back/forward the page; select_tab/close_tab by number. Files entries: move/copy into the folder in text, or cut/copy without text to the clipboard, then paste (into the open folder, or into a folder ref). download: save the file at the address in text (or a page image ref) into Files. zip: zip a folder (a Files ref, or its path in text) into Files and hand it to the user to download.",
+				"click a ref (a button, link, file or switch), or a page point with x and y; hover a page ref or point (menus that open on hover); press a key (text: Enter, Escape, Tab, ArrowDown, Control+a) on a page ref or the focused element; type text into a field or the editor (e1); toggle a switch or checkbox (text on/off sets it); select an option of a choice (text is the option); describe a page ref to see it (a canvas, an image or any part of the page comes back as a picture; an image also gives its address); scroll the focused window (page, Editor or Viewer), or with a page ref the area it scrolls in; back/forward the page; select_tab/close_tab by number. Files entries: move/copy into the folder in text, or cut/copy without text to the clipboard, then paste (into the open folder, or into a folder ref). download: save the file at the address in text (or a page image ref) into Files. zip: zip a folder (a Files ref, or its path in text) into Files and hand it to the user to download.",
 			),
 		text: z
 			.string()
@@ -96,7 +97,43 @@ const refApp = (
 	return null;
 };
 
-const act = async (machine: MemonMachine, input: Input): Promise<string> => {
+/**
+ * describe: a picture of a page ref (a canvas, an image, any part of the
+ * page). A model that takes images looks at it; otherwise it is saved to
+ * Files. An image whose picture cannot be taken still gives its address.
+ */
+const describe = async (
+	machine: MemonMachine,
+	ref: string,
+): Promise<string | MemonToolOutput> => {
+	let picture: MemonPageCapture;
+	try {
+		picture = await machine.captureRef(ref);
+	} catch (error) {
+		const result = await machine
+			.browserAction({ ref, action: "describe" })
+			.catch(() => undefined);
+		const source = result?.ok ? result.detail : "";
+		if (!source) throw error;
+		const reason = error instanceof Error ? error.message : String(error);
+		return `No picture of ${ref} (${reason}). Image ${ref} source: ${source}.`;
+	}
+	const size = `${picture.width}×${picture.height}`;
+	const source = picture.source ? ` Image source: ${picture.source}.` : "";
+	if (await machine.modelAcceptsImages()) {
+		return {
+			summary: `The picture of ${ref} (${size}) is attached: look at it.${source}`,
+			image: picture.dataUrl,
+		};
+	}
+	const saved = await machine.savePicture(picture.dataUrl, `${ref}-picture`);
+	return `Saved a picture of ${ref} (${size}) to ${memonDisplayPath(saved, machine.home)}. The chat's model cannot look at images; if Studio has an Image tools model, memon_studio can caption it.${source}`;
+};
+
+const act = async (
+	machine: MemonMachine,
+	input: Input,
+): Promise<string | MemonToolOutput> => {
 	// Controls of the app windows (Studio, Tasks, Skills, …) share one path.
 	if (input.ref && kitAppForRef(input.ref)) {
 		if (
@@ -310,13 +347,8 @@ const act = async (machine: MemonMachine, input: Input): Promise<string> => {
 		case "focus":
 			await machine.browserAction({ ref: input.ref, action: "focus" });
 			return `Focused ${input.ref}.`;
-		case "describe": {
-			const result = await machine.browserAction({
-				ref: input.ref,
-				action: "describe",
-			});
-			return `Image ${input.ref} source: ${(result.ok && result.detail) || "unknown"}.`;
-		}
+		case "describe":
+			return describe(machine, input.ref);
 		default:
 			throw new Error(`Unsupported action ${input.action}.`);
 	}
@@ -334,7 +366,7 @@ export const createMemonActTool: ToolFactory<Input> = (): Tool<Input> => ({
 			input.action === "download"
 				? "Downloading a file"
 				: input.ref
-					? `${input.action === "type" ? "Typing into" : "Clicking"} ${input.ref}`
+					? `${input.action === "type" ? "Typing into" : input.action === "describe" ? "Looking at" : "Clicking"} ${input.ref}`
 					: input.x !== undefined
 						? `${input.action} at (${input.x}, ${input.y})`
 						: `${input.action}`,

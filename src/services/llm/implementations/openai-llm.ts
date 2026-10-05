@@ -654,9 +654,14 @@ export class OpenAILLM implements BaseLLM {
 				const id = String(m.id || m.name || m.model || "unknown-model");
 				const reasoning = readModelReasoning(m);
 				const pricing = readModelPricing(m);
+				const input = m.architecture?.input_modalities;
 				return {
 					...(reasoning ? { reasoning } : {}),
 					...(pricing ? { pricing } : {}),
+					// Image input, where the listing says (OpenRouter does).
+					...(Array.isArray(input)
+						? { supportsVision: input.includes("image") }
+						: {}),
 					id,
 					name: id,
 					object: "model",

@@ -65,6 +65,8 @@ export interface PiCodeRunner {
 	/** True once pi is idle; false when still working at the timeout. */
 	waitForIdle(timeoutMs: number, signal?: AbortSignal): Promise<boolean>;
 	dispose(): Promise<void>;
+	/** pi's folder was not there: pi made it, empty, when it started. */
+	readonly createdCwd?: boolean;
 }
 
 export interface MemonPiCodePort {
@@ -75,8 +77,12 @@ export interface MemonPiCodePort {
 		/** The agent (flow id) the computer belongs to; its usage is booked there. */
 		agentId?: string | null;
 		sandboxSessionKey: string;
+		/** A saved session to open instead of a new one. */
+		sessionFile?: string;
 		/** The user quit pi from inside it. */
 		onQuit: () => void;
+		/** The user picked a saved session (/resume): start pi again on it. */
+		onResume: (sessionFile: string) => void;
 		/** What the agent reads changed. */
 		onChange: () => void;
 	}): Promise<PiCodeRunner>;
@@ -221,6 +227,8 @@ export class MemonPiCode {
 	private approvedRun: string | null = null;
 	/** The agent stopped pi's last turn itself, so the user did not. */
 	private agentStopped = false;
+	/** pi starts again on a saved session (/resume): it did not quit. */
+	private reopening = false;
 	private readonly waits = new Set<AbortController>();
 
 	constructor(
@@ -238,6 +246,22 @@ export class MemonPiCode {
 	 */
 	start(cwd?: string): void {
 		if (this.runner || this.starting || this.approval) return;
+		this.boot(cwd);
+	}
+
+	/** pi's /resume: pi starts again in its folder, on the saved session. */
+	private async reopen(sessionFile: string): Promise<void> {
+		const cwd = this.runner?.status().cwd ?? this.startingCwd;
+		this.reopening = true;
+		try {
+			await this.release();
+			this.boot(cwd, sessionFile);
+		} finally {
+			this.reopening = false;
+		}
+	}
+
+	private boot(cwd?: string, sessionFile?: string): void {
 		if (!this.port) {
 			this.error = "pi code is not available here.";
 			this.host.changed();
@@ -252,7 +276,12 @@ export class MemonPiCode {
 				cwd,
 				agentId: this.host.agentId(),
 				sandboxSessionKey: this.host.sessionKey,
+				sessionFile,
 				onQuit: () => this.host.quit(),
+				// After the TUI is done handling the key that picked it.
+				onResume: (file) => {
+					setTimeout(() => void this.reopen(file), 0);
+				},
 				onChange: () => this.host.changed(),
 			})
 			.then(async (runner) => {
@@ -279,9 +308,14 @@ export class MemonPiCode {
 
 	/** Stops pi: aborts the model stream and any bash command, closes the session. */
 	async stop(): Promise<void> {
-		this.generation += 1;
 		this.answerWait?.("closed");
 		this.approvedRun = null;
+		await this.release();
+	}
+
+	/** Disposes pi (and a start on its way); the user's answers stand. */
+	private async release(): Promise<void> {
+		this.generation += 1;
 		const runner = this.runner;
 		this.runner = undefined;
 		this.starting = undefined;
@@ -484,7 +518,11 @@ export class MemonPiCode {
 				clearInterval(poll);
 				this.waits.delete(wait);
 			});
-		if (this.runner !== runner) return `${lead}${USER_CLOSED}`;
+		if (this.runner !== runner) {
+			return this.active || this.reopening
+				? `${lead}pi code opened another saved session (/resume); its conversation is on the screen. Hand pi the work again if it still matters.`
+				: `${lead}${USER_CLOSED}`;
+		}
 		const view = runner.view();
 		if (!idle) {
 			const doing = view.activity ? ` (${view.activity})` : "";
@@ -545,21 +583,42 @@ export class MemonPiCode {
 				if (!text) throw new Error("prompt needs text: the work for pi.");
 				const cwd =
 					input.cwd !== undefined ? this.resolveFolder(input.cwd) : undefined;
-				const current = this.runner?.status().cwd ?? this.startingCwd;
-				if (cwd && this.active && current && current !== cwd) {
+				const moving = () => {
+					const current = this.runner?.status().cwd ?? this.startingCwd;
+					return cwd && this.active && current && current !== cwd
+						? current
+						: undefined;
+				};
+				const from = moving();
+				if (from && this.runner?.status().running) {
 					throw new Error(
-						`pi code works in ${this.display(current)}. Close it first ({ action: "close" }) to start it in ${this.display(cwd)}, or name paths in the prompt.`,
+						`pi code is working in ${this.display(from)}. Wait for it or stop it ({ action: "stop" }), then hand it work in ${this.display(cwd ?? from)}.`,
 					);
 				}
 				const notApproved = await this.askToUse(text);
 				if (notApproved) return notApproved;
+				// Another folder: pi starts again there; its session here is saved.
+				const left = moving();
+				if (left) await this.release();
+				const started = !this.active;
 				const runner = await this.launch(cwd);
 				const working = runner.status().running;
 				await runner.submit(text, input.queue);
 				this.agentStopped = false;
-				const lead = working
-					? `Queued for pi code (${input.queue === "followUp" ? "after it finishes" : "after its current tools"}). `
-					: "Sent to pi code. ";
+				const where = runner.status().cwd;
+				const notes = [
+					left
+						? `pi code moved from ${this.display(left)} to ${this.display(where)}; its session there is saved (/resume in pi opens it).`
+						: null,
+					started && runner.createdCwd
+						? `${this.display(where)} was not there: pi made it, empty. If the project is elsewhere, prompt again with its folder as cwd.`
+						: null,
+				].filter(Boolean);
+				const lead = `${notes.map((note) => `${note} `).join("")}${
+					working
+						? `Queued for pi code (${input.queue === "followUp" ? "after it finishes" : "after its current tools"}). `
+						: "Sent to pi code. "
+				}`;
 				return this.report(
 					runner,
 					lead,

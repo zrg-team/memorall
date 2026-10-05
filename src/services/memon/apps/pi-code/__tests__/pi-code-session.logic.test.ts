@@ -400,6 +400,56 @@ describe("PiCodeSession", () => {
 		await expect(session.submit("again")).rejects.toThrow("pi code has quit.");
 	});
 
+	it("lists the folder's saved sessions and opens one again with its conversation", async () => {
+		const fs = new MemoryFs({
+			[`${HOME}/todo/src/a.ts`]: "export const answer = 41;\n",
+		});
+		const options = {
+			home: HOME,
+			cwd: `${HOME}/todo`,
+			sandboxSessionKey: "memon:test",
+			theme: "dark" as const,
+			fs,
+			getSandbox: async () => createSandbox([]),
+			getLlm: async () => createLlm([]),
+			onQuit: () => {},
+			onChange: () => {},
+		};
+		const first = await PiCodeSession.start(options);
+		expect(first.createdCwd).toBe(false);
+		await first.submit("fix the answer");
+		expect(await first.waitForIdle(5_000)).toBe(true);
+		await first.dispose();
+
+		const onResume = vi.fn();
+		session = await PiCodeSession.start({ ...options, onResume });
+		const cursor = session.attach(100, 30);
+		session.input("/sessions\r");
+		await vi.waitFor(async () => {
+			const screen = plain((await session!.read(cursor, 0)).data);
+			expect(screen).toContain("Sessions");
+			expect(screen).toContain("fix the answer");
+		});
+		session.input("/resume 1\r");
+		await vi.waitFor(() => expect(onResume).toHaveBeenCalledTimes(1));
+		const saved = String(onResume.mock.calls[0][0]);
+		expect(saved).toMatch(/\.jsonl$/);
+		await session.dispose();
+
+		// Opened again: pi goes on from that conversation.
+		session = await PiCodeSession.start({ ...options, sessionFile: saved });
+		expect(session.view().entries).toContainEqual({
+			kind: "user",
+			text: "fix the answer",
+		});
+		expect(session.view().reply).toBe("Done: the answer is 42.");
+		await session.dispose();
+
+		// A folder that was not there is made, and said so.
+		session = await PiCodeSession.start({ ...options, cwd: `${HOME}/fresh` });
+		expect(session.createdCwd).toBe(true);
+	});
+
 	it("books each pi request to its own session, with two computers running pi", async () => {
 		const booked: ModelUsageEntry[] = [];
 		const record = async (entry: ModelUsageEntry) => {

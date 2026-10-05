@@ -71,8 +71,12 @@ export interface PiCodeSessionOptions {
 		provider: string,
 		modelId: string,
 	) => Promise<ReasoningEffort | undefined>;
+	/** A saved session to open (pi's /resume) instead of a new one. */
+	sessionFile?: string;
 	/** The user quit pi (/quit, Ctrl+C twice, Ctrl+D). */
 	onQuit: () => void;
+	/** /resume picked a saved session: start pi again on it. */
+	onResume?: (sessionFile: string) => void;
 	/** What the agent reads changed: running/idle, a message, a tool, the model. */
 	onChange: () => void;
 }
@@ -125,6 +129,8 @@ const ENVIRONMENT_NOTE = [
 
 export class PiCodeSession {
 	readonly terminal: StreamTerminal;
+	/** pi's folder was not there: pi made it, empty, when it started. */
+	createdCwd = false;
 	private disposed = false;
 	private unsubscribers: Array<() => void> = [];
 	private viewCache: { key: readonly unknown[]; view: PiCodeView } | undefined;
@@ -159,7 +165,13 @@ export class PiCodeSession {
 		const agentDir = join(home, PI_CONFIG_DIR, "agent");
 		const files = createPiFileSystem(options.fs);
 		// pi works in a folder the agent named; it may not be there yet.
-		await options.fs.mkdir(cwd, { recursive: true }).catch(() => undefined);
+		const createdCwd = await options.fs.stat(cwd).then(
+			() => false,
+			() => true,
+		);
+		if (createdCwd) {
+			await options.fs.mkdir(cwd, { recursive: true }).catch(() => undefined);
+		}
 
 		const [globalSettings, projectSettings, keybindingsText, resources, model] =
 			await Promise.all([
@@ -191,11 +203,14 @@ export class PiCodeSession {
 		const sessionDir =
 			settingsManager.getSessionDir(home) ??
 			getDefaultSessionDir(cwd, agentDir);
-		const sessionManager = SessionManager.create(
-			cwd,
-			sessionDir,
-			files.sessions,
-		);
+		const sessionManager = options.sessionFile
+			? await SessionManager.open(
+					options.sessionFile,
+					files.sessions,
+					sessionDir,
+					cwd,
+				)
+			: SessionManager.create(cwd, sessionDir, files.sessions);
 
 		const thinkingLevel = await PiCodeSession.initialThinkingLevel(
 			options,
@@ -239,6 +254,9 @@ export class PiCodeSession {
 			followUpMode: settingsManager.getFollowUpMode(),
 			thinkingBudgets: settingsManager.getThinkingBudgets(),
 		});
+		// A resumed session goes on from its conversation.
+		const restored = sessionManager.buildSessionContext();
+		if (restored.messages.length > 0) agent.state.messages = restored.messages;
 
 		const session = new AgentSession({
 			agent,
@@ -274,9 +292,11 @@ export class PiCodeSession {
 			onboarding: `Model: the one selected in the chat composer. Files: this agent's Memon home (${home}).`,
 			describeModelChange: "change it in the chat composer",
 			onQuit: options.onQuit,
+			onResume: options.onResume,
 		});
 
 		const piCode = new PiCodeSession(session, mode, terminal, footerData, link);
+		piCode.createdCwd = createdCwd;
 		terminal.onCompactRequest = () => piCode.redraw();
 		mode.init();
 		piCode.watch(options);

@@ -2024,6 +2024,11 @@ describe("MemonMachine", () => {
 			close: vi.fn(async () => undefined),
 			reserve: vi.fn(() => () => undefined),
 			servers: vi.fn(async () => [3000]),
+			capture: vi.fn(async () => ({
+				dataUrl: "data:image/png;base64,AAAA",
+				width: 2,
+				height: 2,
+			})),
 		};
 		ports.embedded = embedded;
 		const machine = new MemonMachine(
@@ -2085,6 +2090,58 @@ describe("MemonMachine", () => {
 		);
 	});
 
+	it("takes a picture of a page ref where the page is shown, and saves it for a model that cannot look", async () => {
+		const { ports, files } = createPorts();
+		const embedded: MemonEmbeddedPort = {
+			availability: () => ({ available: true }),
+			open: vi.fn(async (url: string) => ({
+				sessionId: "embedded-1",
+				url,
+				title: "",
+			})),
+			navigate: vi.fn(),
+			outline: vi.fn(async () => outline("http://localhost:8347/", "Game")),
+			act: vi.fn(),
+			history: vi.fn(async () => undefined),
+			focus: vi.fn(async () => undefined),
+			close: vi.fn(async () => undefined),
+			reserve: vi.fn(() => () => undefined),
+			servers: vi.fn(async () => [8347]),
+			capture: vi.fn(async () => ({
+				dataUrl: `data:image/png;base64,${btoa("png")}`,
+				width: 880,
+				height: 594,
+			})),
+		};
+		ports.embedded = embedded;
+		const machine = new MemonMachine(
+			"conversation-1",
+			ports,
+			DEFAULT_MEMON_FEATURE_CONFIG,
+		);
+		await machine.openUrl("localhost:8347");
+
+		// The ref as the agent read it: a stale page refuses it.
+		const picture = await machine.captureRef("b1");
+		expect(embedded.capture).toHaveBeenCalledWith("embedded-1", {
+			ref: "b1",
+			docToken: "doc-Game",
+		});
+		expect(picture).toMatchObject({ width: 880, height: 594 });
+
+		// No models port, or a model that takes no images: the picture is a file.
+		expect(await machine.modelAcceptsImages()).toBe(false);
+		const saved = await machine.savePicture(picture.dataUrl, "b1-picture");
+		expect(saved).toBe(`${machine.home}/Pictures/b1-picture.png`);
+		expect(files.get(saved)).toEqual(new TextEncoder().encode("png"));
+
+		ports.models = {
+			llm: vi.fn(),
+			acceptsImages: vi.fn(async () => true),
+		};
+		expect(await machine.modelAcceptsImages()).toBe(true);
+	});
+
 	it("opens any local address embedded where there are no real tabs", async () => {
 		const { ports } = createPorts();
 		ports.browser.availability = () => ({
@@ -2106,6 +2163,11 @@ describe("MemonMachine", () => {
 			close: vi.fn(async () => undefined),
 			reserve: vi.fn(() => () => undefined),
 			servers: vi.fn(async () => []),
+			capture: vi.fn(async () => ({
+				dataUrl: "data:image/png;base64,AAAA",
+				width: 2,
+				height: 2,
+			})),
 		};
 		ports.embedded = embedded;
 		const machine = new MemonMachine(

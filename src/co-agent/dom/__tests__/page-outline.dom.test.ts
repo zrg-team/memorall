@@ -199,6 +199,43 @@ describe("page outline controls", () => {
 		expect(outline.scroll.viewportWidth).toBe(window.innerWidth);
 	});
 
+	it("describes any ref with its box to picture it, and an image with its address", () => {
+		document.body.innerHTML = `
+			<canvas aria-label="Game"></canvas>
+			<img src="/logo.png" alt="Logo" width="64" height="64">
+		`;
+		const outline = buildPageOutline(document);
+		const canvas = actOnRef(document, {
+			action: "describe",
+			ref: refOf(outline, "Game"),
+			docToken: outline.docToken,
+		});
+		expect(canvas).toMatchObject({
+			ok: true,
+			detail: "",
+			box: {
+				x: 0,
+				y: 0,
+				width: 100,
+				height: 40,
+				viewportWidth: window.innerWidth,
+				viewportHeight: window.innerHeight,
+			},
+		});
+		const image = outline.blocks.find((block) => block.kind === "image");
+		if (image?.kind !== "image") throw new Error("no image block");
+		expect(
+			actOnRef(document, {
+				action: "describe",
+				ref: image.ref,
+				docToken: outline.docToken,
+			}),
+		).toMatchObject({
+			ok: true,
+			detail: expect.stringMatching(/\/logo\.png$/),
+		});
+	});
+
 	it("clicks with the events a pointer makes, not a bare click()", () => {
 		document.body.innerHTML = `<div role="option">Apple</div>`;
 		const outline = buildPageOutline(document);
