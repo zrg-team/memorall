@@ -256,8 +256,8 @@ const EXPLICIT_CACHE_MODEL_PATTERN = /anthropic|claude|google\/|gemini|qwen/i;
  * Claude is the one family here that honours a one-hour cache TTL, so it gets
  * the longer-lived breakpoints. (It also accepts a request-level
  * `cache_control` that keeps a moving breakpoint on the last cacheable block;
- * that is deliberately not used, because the last block is the volatile
- * reminder tail — see `withCacheBreakpoints`.)
+ * the explicit markers from `withCacheBreakpoints` are used instead so every
+ * explicit-cache family is handled the same way.)
  */
 const ANTHROPIC_MODEL_PATTERN = /anthropic|claude/i;
 
@@ -283,14 +283,6 @@ const CACHE_BREAKPOINT = { type: "ephemeral" } as const;
  * reads, which an agent loop passes within a single turn.
  */
 const CACHE_BREAKPOINT_1H = { type: "ephemeral", ttl: "1h" } as const;
-
-/**
- * Opening tag of a system reminder — volatile context the flow layer attaches
- * past the end of the conversation (see `graph/system-reminders.ts`). The
- * cached prefix has to stop before it, so the tail is matched here rather than
- * cached with the rest.
- */
-const SYSTEM_REMINDER_PREFIX = "<system-reminder>";
 
 /** OpenRouter rejects a longer `session_id`. */
 const OPENROUTER_SESSION_ID_MAX_LENGTH = 256;
@@ -373,42 +365,19 @@ const markCacheBreakpoint = (
 	return message;
 };
 
-const messageText = (message: Record<string, unknown>): string => {
-	const content = message.content;
-	if (typeof content === "string") return content;
-	if (!Array.isArray(content)) return "";
-	const first = content.find((part) => part?.type === "text");
-	return typeof first?.text === "string" ? first.text : "";
-};
-
-const isSystemReminder = (message: Record<string, unknown>): boolean =>
-	message.role === "user" &&
-	messageText(message).trimStart().startsWith(SYSTEM_REMINDER_PREFIX);
-
-/**
- * Index of the last message that is part of the stable conversation prefix.
- *
- * Everything the flow layer attaches as a system reminder sits past the end of
- * the conversation and differs on every request. Caching up to the very last
- * message would write an entry keyed on that tail and never read it back — the
- * write premium with none of the benefit. Stopping one position short caches
- * the conversation itself, which is the part the next request re-sends
- * verbatim.
- */
-const stablePrefixEnd = (messages: Record<string, unknown>[]): number => {
-	let index = messages.length - 1;
-	while (index >= 0 && isSystemReminder(messages[index]!)) index -= 1;
-	return index;
-};
-
 /**
  * Mark the two prefixes worth caching for explicit-breakpoint models.
  *
  * The first is the system prompt, which also covers the tool definitions
- * rendered ahead of it. The second is the end of the stable conversation — the
- * last message before any system-reminder tail — so that every tool round-trip
- * inside this turn, and every later turn, reads the whole conversation so far
- * out of cache.
+ * rendered ahead of it. The second is the end of the request, so that every
+ * tool round-trip inside this turn, and every later turn, reads the whole
+ * conversation so far out of cache.
+ *
+ * The conversation only grows at the end — system reminders included, which
+ * stay where they were first sent (see `graph/system-reminders.ts`) — so the
+ * whole request is the next one's prefix. This used to stop short of a
+ * trailing reminder, back when reminders were re-attached past the end of
+ * every request and an entry ending on one was never read again.
  *
  * The second breakpoint used to sit on the latest user message, which was
  * right only while nothing came after it. Once the agent loop appends tool
@@ -425,7 +394,7 @@ export function withCacheBreakpoints(
 	if (systemIndex >= 0) {
 		marked[systemIndex] = markCacheBreakpoint(marked[systemIndex], breakpoint);
 	}
-	const prefixEnd = stablePrefixEnd(marked);
+	const prefixEnd = marked.length - 1;
 	if (prefixEnd > systemIndex) {
 		marked[prefixEnd] = markCacheBreakpoint(marked[prefixEnd], breakpoint);
 	}
@@ -544,11 +513,9 @@ export class OpenAILLM implements BaseLLM {
 		);
 		const anthropic =
 			explicitCache && ANTHROPIC_MODEL_PATTERN.test(model ?? "");
-		// Both breakpoints are placed by hand. The request-level automatic mode
-		// Claude also accepts always lands on the very last block, which is the
-		// volatile system-reminder tail — an entry written on every request and
-		// read back by none. An explicit marker one position earlier caches the
-		// conversation instead.
+		// Both breakpoints are placed by hand, so the system prompt keeps an
+		// entry of its own and the same placement works for every
+		// explicit-cache family, not only the ones with an automatic mode.
 		const messages = explicitCache
 			? withCacheBreakpoints(serialized, {
 					breakpoint: anthropic ? CACHE_BREAKPOINT_1H : CACHE_BREAKPOINT,

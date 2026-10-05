@@ -43,11 +43,11 @@ import { SandboxError } from "@memorall/agent-harness-sandbox";
 export const BROWSER_SANDBOX_PROVIDER_ID = "browser";
 
 /**
- * How this sandbox runs commands, for the agent: almostnode streams one
- * command at a time, so a second long one is refused while the first runs.
+ * How this sandbox runs commands, for the agent: side by side, each with its
+ * own output and input, and one command serves at a time.
  */
 export const BROWSER_SANDBOX_NOTES = [
-	"One command runs at a time: while one is still running (a server, a watcher), starting another is refused. File and text commands (ls, cat, mkdir, grep…), curl, git, py and the installed commands still run next to it. Before starting a server, check what already runs and the port it serves: use that server, or stop the running command first.",
+	"Commands run side by side, each with its own output and input: tests, node --check or curl run while a server does. One command serves at a time: a second server closes and its command stops with EADDRINUSE. Before starting a server, check what already runs and the port it serves: use that server, or stop its command first.",
 ] as const;
 
 export const BROWSER_SANDBOX_CAPABILITIES: SandboxCapabilities = {

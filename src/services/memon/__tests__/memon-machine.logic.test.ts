@@ -740,9 +740,11 @@ describe("MemonMachine", () => {
 		expect(machine.readScreen()).toMatch(
 			/1 .+ · running `node server\.js` for .+ · serving http:\/\/localhost:3000/,
 		);
-		await expect(machine.terminal.runCommand("npm test")).rejects.toThrow(
-			"`node server.js` is still running in Terminal tab 1, serving http://localhost:3000, and only one such command runs at a time",
-		);
+		// A command that finishes runs next to the server, in its own tab.
+		await expect(
+			machine.terminal.runCommand("npm test"),
+		).resolves.toMatchObject({ alongside: true, exitCode: 0 });
+		expect(machine.terminal.running?.command).toBe("node server.js");
 		// So does the Terminal's line when another window is in front.
 		machine.focusWindow(machine.openWindow("editor").id);
 		expect(machine.readScreen()).toMatch(
@@ -850,7 +852,7 @@ describe("MemonMachine", () => {
 		expect(screen).toContain("  2* ~ · last: $ npm test (exit 0)");
 	});
 
-	it("runs curl and the shell's tools next to a running server, and nothing else", async () => {
+	it("runs any command that finishes next to a running server", async () => {
 		const { machine, ports } = createMachine();
 		vi.mocked(ports.terminal.run)
 			.mockResolvedValueOnce({
@@ -914,12 +916,70 @@ describe("MemonMachine", () => {
 			"conversation-1",
 		);
 
-		await expect(machine.terminal.runCommand("node other.js")).rejects.toThrow(
-			"`node server.js` is still running in this Terminal tab",
-		);
+		// node runs next to it too: each sandbox command has its own streams.
 		await expect(
-			machine.terminal.runCommand("echo $(node other.js)"),
-		).rejects.toThrow("`node server.js` is still running in this Terminal tab");
+			machine.terminal.runCommand("node --check other.js"),
+		).resolves.toMatchObject({ alongside: true, exitCode: 0 });
+		expect(ports.terminal.run).toHaveBeenLastCalledWith(
+			"node --check other.js",
+			expect.objectContaining({ cwd: "/agents/guest" }),
+		);
+		expect(machine.terminal.running?.command).toBe("node server.js");
+	});
+
+	it("stops a command that keeps running next to another, and closes its servers", async () => {
+		const { ports } = createPorts();
+		const listening = new Set([3000]);
+		const stopServer = vi.fn(async (port: number) => {
+			listening.delete(port);
+		});
+		ports.embedded = {
+			servers: vi.fn(async () => [...listening].sort()),
+			stopServer,
+		} as unknown as MemonEmbeddedPort;
+		vi.mocked(ports.terminal.run)
+			.mockResolvedValueOnce({
+				processId: "server",
+				running: true,
+				exitCode: null,
+				output: [{ kind: "stdout", text: "listening on 3000" }],
+			})
+			.mockImplementationOnce(async () => {
+				listening.add(4000);
+				return {
+					processId: "watch",
+					running: true,
+					exitCode: null,
+					output: [{ kind: "stdout", text: "watching" }],
+				};
+			});
+		vi.mocked(ports.terminal.read).mockImplementation(
+			() => new Promise(() => undefined),
+		);
+		const machine = new MemonMachine(
+			"conversation-1",
+			ports,
+			DEFAULT_MEMON_FEATURE_CONFIG,
+		);
+		await machine.terminal.runCommand("node server.js", { waitMs: 0 });
+
+		await expect(
+			machine.terminal.runCommand("node watch.js"),
+		).resolves.toMatchObject({ alongside: true, exitCode: 124 });
+		expect(ports.terminal.stop).toHaveBeenCalledWith("watch", "conversation-1");
+		expect(stopServer).toHaveBeenCalledTimes(1);
+		expect(stopServer).toHaveBeenCalledWith(4000);
+		expect([...listening]).toEqual([3000]);
+		expect(
+			machine
+				.snapshot()
+				.terminal.lines.slice(-2)
+				.map((line) => line.text),
+		).toEqual([
+			"Stopped after 60s: a command next to a running one must finish.",
+			"Closed localhost:4000.",
+		]);
+		expect(machine.terminal.running?.command).toBe("node server.js");
 	});
 
 	it("puts the agent's install in front of the user and runs it once approved", async () => {
@@ -1037,11 +1097,16 @@ describe("MemonMachine", () => {
 		expect(machine.snapshot().terminal.lines.map((line) => line.text)).toEqual(
 			expect.arrayContaining(["fetching", "Ok to proceed? (y)"]),
 		);
+		// Another command runs next to it, and the first keeps its input.
+		vi.mocked(ports.terminal.run).mockResolvedValueOnce({
+			running: false,
+			exitCode: 0,
+			output: [{ kind: "stdout", text: "built" }],
+		});
 		await expect(
 			machine.terminal.runCommand("npm run build", { byUser: true }),
-		).rejects.toThrow(
-			"`npm install -g pkg` is still running in this Terminal tab",
-		);
+		).resolves.toMatchObject({ alongside: true, exitCode: 0 });
+		expect(machine.terminal.running?.command).toBe("npm install -g pkg");
 
 		await machine.terminal.sendInput("y");
 		expect(ports.terminal.input).toHaveBeenCalledWith(

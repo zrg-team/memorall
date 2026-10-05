@@ -2,7 +2,6 @@ import { logError, logInfo, logWarn } from "@/utils/logger";
 import { platform } from "@/platform/current";
 import { documentFileSystemService } from "@/services/filesystem/document-filesystem";
 import { normalizeSandboxPath } from "@/services/filesystem/sandbox-paths";
-import { usesOnlyShellTools } from "./alongside-commands";
 import { runHostCommandLine, usesHostCommand } from "./host-commands";
 import { createCurlHttp } from "./host-commands/curl/http";
 import type { HostFiles } from "./host-commands/types";
@@ -850,14 +849,8 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 				},
 				{
 					files: await this.getHostFiles(),
-					// A host command line may run while a server does.
 					runShell: (command, cwd) =>
-						this.executeShellCommand({
-							...request,
-							command,
-							cwd,
-							allowAlongside: true,
-						}),
+						this.executeShellCommand({ ...request, command, cwd }),
 					runShellWithInput: (command, cwd, input) =>
 						this.executeShellCommandWithInput(request, command, cwd, input),
 					http: createCurlHttp({
@@ -887,12 +880,7 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 				},
 			);
 		}
-		// The shell's own tools (ls, cat, mkdir) may run while a server does.
-		return this.executeShellCommand(
-			usesOnlyShellTools(request.command)
-				? { ...request, allowAlongside: true }
-				: request,
-		);
+		return this.executeShellCommand(request);
 	}
 
 	/**
@@ -926,7 +914,6 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 				...request,
 				command: `cat '${path}' | ${command}`,
 				cwd,
-				allowAlongside: true,
 			});
 		} finally {
 			await this.request("fs.unlink", { path }).catch(() => undefined);

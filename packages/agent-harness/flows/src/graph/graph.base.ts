@@ -305,8 +305,12 @@ export const normalizeChatMessages = (
 };
 
 export {
+	SYSTEM_REMINDER_EVENT,
 	SYSTEM_REMINDER_TAG,
+	type SystemReminderEvent,
+	isSystemReminderMessage,
 	mergeReminders,
+	systemReminderMessage,
 	withSystemReminders,
 } from "./system-reminders.js";
 
@@ -317,7 +321,9 @@ export const BaseAnnotation = {
 	}),
 	reminders: Annotation<string[]>({
 		// Steps contribute independently — the clock and the retrieved context
-		// both want a say — so reminders accumulate rather than overwrite.
+		// both want a say — so reminders accumulate rather than overwrite. The
+		// completion writes them into the conversation once; this channel only
+		// says what the run has to tell the model.
 		value: (x, y) => mergeReminders(x, y),
 		default: () => [],
 	}),
@@ -400,14 +406,15 @@ const createChatHelpers = (registries: FlowRegistrySet) => ({
 				message.role === "tool" && message.tool_call_id === toolCallId,
 		),
 	/**
-	 * Attach volatile context past the end of the conversation prefix.
+	 * Attach context as its own message after the conversation.
 	 *
 	 * This replaced an `injectUserContext` helper that appended the same text to
 	 * the last user message. That edit was invisible at the time and expensive on
 	 * the next turn: the mutation never reached the stored transcript, so the
 	 * following request rebuilt that user message without it, the prefix diverged
 	 * at a position ahead of the entire tool loop, and every token behind it was
-	 * re-read at full price.
+	 * re-read at full price. The reminder message has to be kept where it was
+	 * sent for the same reason — see `system-reminders.ts`.
 	 */
 	withSystemReminders,
 	addTool,

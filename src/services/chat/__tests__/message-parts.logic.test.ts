@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { MessageParts } from "@/types/chat";
-import { MessagePartsAccumulator, resolveMessageParts } from "../message-parts";
+import {
+	hasReplyParts,
+	MessagePartsAccumulator,
+	resolveMessageParts,
+	withReplyText,
+} from "../message-parts";
 
 const streamed: MessageParts = [
 	{
@@ -92,5 +97,51 @@ describe("reasoning in message parts", () => {
 		).toEqual([
 			{ role: "assistant", content: "Answer (cited).", reasoning: "Think." },
 		]);
+	});
+});
+
+describe("reminders in message parts", () => {
+	const reminder = "<system-reminder>\nTasks: #10 (1/4)\n</system-reminder>";
+
+	it("keeps a reminder byte for byte ahead of what the agent wrote after it", () => {
+		const accumulator = new MessagePartsAccumulator();
+		accumulator.addSystemReminder(reminder);
+		accumulator.addChunk({
+			id: "c",
+			object: "chat.completion.chunk",
+			created: 1,
+			model: "m",
+			choices: [
+				{
+					index: 0,
+					delta: { role: "assistant", content: "On it." },
+					finish_reason: null,
+				},
+			],
+		});
+
+		expect(accumulator.toParts()).toEqual([
+			{ role: "user", content: reminder },
+			{ role: "assistant", content: "On it." },
+		]);
+	});
+
+	it("does not take reminders alone for an answer", () => {
+		expect(hasReplyParts([{ role: "user", content: reminder }])).toBe(false);
+		expect(hasReplyParts([])).toBe(false);
+		expect(hasReplyParts(null)).toBe(false);
+		expect(hasReplyParts(streamed)).toBe(true);
+	});
+
+	it("adds text that never streamed after the reminders, so the parts hold it", () => {
+		const parts: MessageParts = [{ role: "user", content: reminder }];
+		expect(withReplyText(parts, "Two left.")).toEqual([
+			{ role: "user", content: reminder },
+			{ role: "assistant", content: "Two left." },
+		]);
+		// Nothing to add, or the answer is already there.
+		expect(withReplyText(parts, "  ")).toBe(parts);
+		expect(withReplyText(streamed, "Here it is.")).toBe(streamed);
+		expect(withReplyText([], "text")).toEqual([]);
 	});
 });

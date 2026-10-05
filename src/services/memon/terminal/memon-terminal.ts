@@ -27,7 +27,7 @@ export interface MemonCommandOutcome {
 	exitCode: number | null;
 	output: MemonTerminalLine[];
 	cursor?: string;
-	/** Ran next to the command still running (a curl while a server runs). */
+	/** Ran next to the command still running (a test while a server runs). */
 	alongside?: boolean;
 }
 
@@ -150,9 +150,9 @@ const TRAILING_CD = /&&\s*cd\s+([^;&|]+)$/;
 
 /**
  * The computer's Terminal: tabs, each with its own working directory and
- * output, and the one command that keeps running. almostnode streams one
- * command's output and stdin at a time, so next to it, in any tab, run only
- * lines that never start node (ls, curl).
+ * output, and the one command that keeps running (a server, a watcher). Any
+ * other line runs next to it, in any tab, and must finish; the sandbox lets
+ * one command serve at a time.
  */
 export class MemonTerminal {
 	private tabs: TerminalTab[];
@@ -374,11 +374,8 @@ export class MemonTerminal {
 		const tab = this.tab(options.terminalId);
 		const bareCd = BARE_CD.exec(trimmed);
 		const builtin = BUILTIN.exec(trimmed);
-		const alongside = this.runningCommand !== null;
-		if (alongside && !bareCd && !builtin && !runsAlongside(trimmed)) {
-			throw this.busyError(tab);
-		}
 		if (!options.byUser) await this.approvals.require(trimmed, tab.id);
+		const alongside = this.runningCommand !== null;
 		this.activeId = tab.id;
 		this.host.showWindow();
 		if (options.cwd) tab.cwd = this.resolveDir(tab.cwd, options.cwd);
@@ -494,7 +491,7 @@ export class MemonTerminal {
 			? `, serving ${this.servers.map((port) => `http://localhost:${port}`).join(", ")}`
 			: "";
 		return new Error(
-			`\`${running.command}\` is still running ${where}${serving}, and only one such command runs at a time. Next to it you can run file and text commands (ls, cat, mkdir, grep…), curl, git, py, ffmpeg or magick; for anything else, wait for it, type into it, or stop it first.`,
+			`\`${running.command}\` is still running ${where}${serving}, and the Terminal keeps one long command running at a time. Commands that finish can run next to it; to start another long one, wait for it or stop it first.`,
 		);
 	}
 
@@ -534,10 +531,9 @@ export class MemonTerminal {
 		cwd: string,
 		waitMs: number,
 	): Promise<MemonCommandOutcome> {
+		// Without a server list it starts at once: running before any output.
 		const serversBefore = new Set(
-			this.ports.embedded
-				? await this.ports.embedded.servers().catch(() => this.listedServers)
-				: [],
+			this.ports.embedded ? await this.listServers() : [],
 		);
 		const startedAt = Date.now();
 		this.runningCommand = {
@@ -584,8 +580,8 @@ export class MemonTerminal {
 	}
 
 	/**
-	 * A line that never starts node (curl, ls), while a command runs: it runs
-	 * next to it and must finish. The running command keeps its tab's input.
+	 * A line run while a command keeps running: it runs next to it and must
+	 * finish. The running command keeps its tab's input.
 	 */
 	private async runAlongside(
 		tab: TerminalTab,
@@ -594,6 +590,7 @@ export class MemonTerminal {
 		cwd: string,
 	): Promise<MemonCommandOutcome> {
 		this.host.changed();
+		const serversBefore = new Set(await this.listServers());
 		const outcome = await this.ports.terminal.run(line, {
 			cwd,
 			waitMs: ALONGSIDE_WAIT_MS,
@@ -611,6 +608,7 @@ export class MemonTerminal {
 					text: `Stopped after ${ALONGSIDE_WAIT_MS / 1000}s: a command next to a running one must finish.`,
 				},
 			]);
+			await this.closeServersOpenedSince(serversBefore, tab);
 		}
 		tab.lastExitCode = outcome.running ? 124 : outcome.exitCode;
 		this.followTrailingCd(tab, command, cwd);
@@ -773,7 +771,7 @@ export class MemonTerminal {
 			// The sandbox has no such process any more: nothing is running.
 		}
 		if (this.runningCommand === running) this.settle(STOPPED_EXIT_CODE);
-		await this.closeServersOpenedBy(running, tab);
+		await this.closeServersOpenedSince(running.serversBefore, tab);
 	}
 
 	/** The user's answer to a command waiting for approval. */
@@ -841,18 +839,24 @@ export class MemonTerminal {
 		if (added) this.host.changed();
 	}
 
+	/** The servers the sandbox lists now; none when it cannot say. */
+	private async listServers(): Promise<number[]> {
+		if (!this.ports.embedded) return [];
+		return this.ports.embedded.servers().catch(() => this.listedServers);
+	}
+
 	/**
 	 * Closes the servers a stopped command opened: in the sandbox, ending a
 	 * process does not close them, and Ctrl+C on a server must stop it.
 	 */
-	private async closeServersOpenedBy(
-		running: RunningCommand,
+	private async closeServersOpenedSince(
+		serversBefore: ReadonlySet<number>,
 		tab: TerminalTab,
 	): Promise<void> {
 		const embedded = this.ports.embedded;
 		if (!embedded?.stopServer) return;
 		const listed = await embedded.servers().catch(() => [] as number[]);
-		const opened = listed.filter((port) => !running.serversBefore.has(port));
+		const opened = listed.filter((port) => !serversBefore.has(port));
 		for (const port of opened) {
 			await embedded.stopServer(port).catch(() => undefined);
 		}

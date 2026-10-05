@@ -404,6 +404,12 @@ export class ChatService {
 								id: chatResult.id,
 								content: chatResult.content,
 							});
+						} else if (chatResult.type === "system-reminder") {
+							// Kept where the model read it, as the saved reply has it; the
+							// message view never shows it.
+							messagePartsAccumulator.addSystemReminder(chatResult.content);
+							parts = messagePartsAccumulator.toParts();
+							callbacks?.onParts?.(parts);
 						} else if (chatResult.type === "final") {
 							// Handle final content update (e.g., after citation step)
 							// This replaces the accumulated content with the final version

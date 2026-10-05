@@ -12,7 +12,11 @@ import type {
 	ChatMessage,
 } from "../../interfaces/engine/messages.js";
 
-import { withSystemReminders } from "../../graph/system-reminders.js";
+import {
+	SYSTEM_REMINDER_EVENT,
+	type SystemReminderEvent,
+	systemReminderMessage,
+} from "../../graph/system-reminders.js";
 
 const STEP_NAME = "chat-completion" as const;
 
@@ -22,7 +26,7 @@ const STEP_NAME = "chat-completion" as const;
 
 export interface ChatCompletionInput {
 	messages: ChatMessage[];
-	/** Volatile context for this run, attached past the end of the request. */
+	/** Context for this run, attached right after the newest message. */
 	reminders?: string[];
 	temperature?: number;
 	maxTokens?: number;
@@ -62,8 +66,20 @@ const definition = defineStep<
 		const maxTokens = input.maxTokens ?? config?.maxTokens;
 		const stream = input.stream ?? config?.stream ?? true;
 
+		// One request, so the reminders sit right after the newest message. The
+		// event lets the stored reply keep them there for the next turn.
+		const reminderMessage = systemReminderMessage(input.reminders);
+		if (reminderMessage) {
+			runConfig?.writer?.({
+				type: SYSTEM_REMINDER_EVENT,
+				content: reminderMessage.content,
+			} satisfies SystemReminderEvent);
+		}
+
 		const llmResponse = await llm.chatCompletions({
-			messages: withSystemReminders(input.messages, input.reminders),
+			messages: reminderMessage
+				? [...input.messages, reminderMessage]
+				: input.messages,
 			temperature,
 			max_tokens: maxTokens,
 			stream,

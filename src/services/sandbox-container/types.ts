@@ -52,11 +52,6 @@ export interface SandboxExecuteCommandRequest {
 	env?: Record<string, string>;
 	waitTimeoutMs?: number;
 	commandTimeoutMs?: number;
-	/**
-	 * Run next to a command that is still running (a server) instead of
-	 * refusing. It does not read stdin, as a background job does not.
-	 */
-	allowAlongside?: boolean;
 }
 
 export interface SandboxListenCommandRequest {

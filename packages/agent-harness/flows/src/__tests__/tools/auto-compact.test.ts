@@ -180,6 +180,47 @@ describe("chat message trimming", () => {
 		]);
 		expect(result?.outputMessages).toEqual([]);
 	});
+
+	it("never removes or rewrites a reminder once it was sent", () => {
+		const earlier = {
+			role: "user" as const,
+			content: "<system-reminder>\nTasks: #10 (1/4)\n</system-reminder>",
+		};
+		// Sent after the latest question: it must not take that question's
+		// protection, and must not be stripped of anything it carries.
+		const current = {
+			role: "user" as const,
+			content:
+				"<system-reminder>\nScreenshot: data:image/png;base64,AAAA\n</system-reminder>",
+		};
+		const result = applyAutoCompactPolicy(
+			{
+				messages: [
+					{ role: "user", content: "old question ".repeat(30) },
+					earlier,
+					{ role: "assistant", content: "old answer ".repeat(30) },
+					{ role: "user", content: "latest question" },
+				],
+				outputMessages: [current],
+			},
+			{
+				compactThresholdRatio: 0.5,
+				safeThresholdRatio: 0.1,
+				maxRoundPercentSteps: [100],
+				toolResultTrim: disabledTrim,
+				toolCallFlowTrim: disabledTrim,
+				chatMessageTrim: fullTrim,
+				smartTrim: fullTrim,
+			},
+			120,
+		);
+
+		expect(result?.messages).toEqual([
+			earlier,
+			{ role: "user", content: "latest question" },
+		]);
+		expect(result?.outputMessages).toEqual([current]);
+	});
 });
 
 // ---------------------------------------------------------------------------

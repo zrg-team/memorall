@@ -796,8 +796,8 @@ describe("a split conversation does not turn plain chat into an agent", () => {
 
 	it("seeds per-request context into the flow as reminders", async () => {
 		// The co-agent's page and anchor change with every question; seeded as
-		// reminders they ride past the end of each request instead of rewriting
-		// the system prompt the cached prefix starts with.
+		// reminders they follow the question instead of rewriting the system
+		// prompt the cached prefix starts with.
 		flowStream.mockImplementation(
 			vi.fn(async function* () {
 				yield ["values", { response: "ok" }];
@@ -851,5 +851,77 @@ describe("a split conversation does not turn plain chat into an agent", () => {
 			role: "user",
 			content: expect.stringContaining("Current page: https://x.test/"),
 		});
+	});
+
+	it("keeps the direct path's reminders in the reply, where the model read them", async () => {
+		llmStream.mockImplementation(singleReply("ok"));
+
+		const { result, dispatches } = await runChat({
+			messages: [{ role: "user", content: "what is this?" }],
+			model: "test-model",
+			mode: "normal",
+			reminders: ["Current page: https://x.test/"],
+		});
+
+		const reminder =
+			"<system-reminder>\nCurrent page: https://x.test/\n</system-reminder>";
+		// The next turn replays these parts, so it sends the reminder again in
+		// the same place instead of losing it from the prefix.
+		expect(result.parts).toEqual([
+			{ role: "user", content: reminder },
+			{ role: "assistant", content: "ok" },
+		]);
+		expect(
+			dispatches.find((d) => d.result?.type === "system-reminder")?.result,
+		).toEqual({ type: "system-reminder", content: reminder });
+	});
+
+	it("keeps the answer of a reply that never streamed beside its reminders", async () => {
+		const reminder = "<system-reminder>\nMemonOS Tasks\n</system-reminder>";
+		// A completion that was not streamed: no chunks, only the final state.
+		flowStream.mockImplementation(async function* () {
+			yield ["custom", { type: "system-reminder", content: reminder }];
+			yield ["values", { response: "Two left." }];
+		});
+
+		const { result } = await runChat({
+			messages: [{ role: "user", content: "check tasks" }],
+			model: "test-model",
+			mode: "custom",
+		});
+
+		// Parts that were only the reminder would replay without the answer.
+		expect(result.parts).toEqual([
+			{ role: "user", content: reminder },
+			{ role: "assistant", content: "Two left." },
+		]);
+	});
+
+	it("keeps a flow's reminders in the reply in the order they were sent", async () => {
+		const reminder = "<system-reminder>\nMemonOS Tasks\n</system-reminder>";
+		flowStream.mockImplementation(async function* () {
+			yield ["custom", { type: "system-reminder", content: reminder }];
+			yield [
+				"custom",
+				{
+					type: "llm",
+					chunk: chunk({ role: "assistant", content: "Checking." }),
+				},
+			];
+		});
+
+		const { result, dispatches } = await runChat({
+			messages: [{ role: "user", content: "check tasks" }],
+			model: "test-model",
+			mode: "agent",
+		});
+
+		expect(result.parts).toEqual([
+			{ role: "user", content: reminder },
+			{ role: "assistant", content: "Checking." },
+		]);
+		expect(
+			dispatches.find((d) => d.result?.type === "system-reminder")?.result,
+		).toEqual({ type: "system-reminder", content: reminder });
 	});
 });

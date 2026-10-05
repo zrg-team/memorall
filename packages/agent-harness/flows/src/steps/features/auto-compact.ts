@@ -1,7 +1,4 @@
-import {
-	defineStep,
-	bindStep,
-} from "../../interfaces/engine/step.js";
+import { defineStep, bindStep } from "../../interfaces/engine/step.js";
 import type {
 	StepFactoryFromSpec,
 	StepSpecFromDefinition,
@@ -12,6 +9,7 @@ import type { ChatCompletionMessageParam } from "../../interfaces/engine/message
 import type { CompactionReport } from "../../interfaces/engine/langgraph.js";
 import type { BaseLLM } from "../../interfaces/services/llm.js";
 import type { BaseStateBase } from "../../graph/graph.base.js";
+import { isSystemReminderMessage } from "../../graph/system-reminders.js";
 import {
 	estimatePromptTokens,
 	estimateMessageTokens,
@@ -377,8 +375,11 @@ function stripBase64DataUris(text: string): string {
 
 function isBase64Strippable(message: ChatCompletionMessageParam): boolean {
 	// The system prompt starts every request: rewriting it would make the
-	// provider re-read the whole conversation behind it.
-	if (message.role === "system") return false;
+	// provider re-read the whole conversation behind it. A reminder is never
+	// rewritten once sent, for the same reason.
+	if (message.role === "system" || isSystemReminderMessage(message)) {
+		return false;
+	}
 	if (typeof message.content === "string" && hasBase64DataUri(message.content))
 		return true;
 	if (Array.isArray(message.content)) {
@@ -608,12 +609,35 @@ function getLatestUserRef(
 ): { key: keyof AutoCompactState; index: number } | undefined {
 	for (const key of ["outputMessages", "messages"] as const) {
 		for (let index = state[key].length - 1; index >= 0; index--) {
-			if (state[key][index]?.role === "user") {
+			const message = state[key][index];
+			// A reminder follows the request it belongs to; protecting it instead
+			// would leave the request itself free to be trimmed.
+			if (message?.role === "user" && !isSystemReminderMessage(message)) {
 				return { key, index };
 			}
 		}
 	}
 	return undefined;
+}
+
+/**
+ * A chat message compaction may drop: anything the user or the agent said,
+ * except the request being worked on. Reminders are never dropped — once sent
+ * they stay where they are, and they are small next to what is trimmed here.
+ */
+function isTrimmableChatMessage(
+	message: ChatCompletionMessageParam,
+	messageIndex: number,
+	key: AutoCompactStateKey,
+	latestUserRef: ReturnType<typeof getLatestUserRef>,
+): boolean {
+	if (message.role === "user") {
+		if (isSystemReminderMessage(message)) return false;
+		return !(
+			latestUserRef?.key === key && latestUserRef.index === messageIndex
+		);
+	}
+	return message.role === "assistant" && !message.tool_calls?.length;
 }
 
 function trimOldestChatMessage(
@@ -625,14 +649,9 @@ function trimOldestChatMessage(
 } {
 	const latestUserRef = getLatestUserRef(state);
 
-	const index = state[key].findIndex((message, messageIndex) => {
-		if (message.role === "user") {
-			return !(
-				latestUserRef?.key === key && latestUserRef.index === messageIndex
-			);
-		}
-		return message.role === "assistant" && !message.tool_calls?.length;
-	});
+	const index = state[key].findIndex((message, messageIndex) =>
+		isTrimmableChatMessage(message, messageIndex, key, latestUserRef),
+	);
 	if (index === -1) return { state, affectedCount: 0 };
 
 	return {
@@ -650,14 +669,9 @@ function countChatMessages(
 ): number {
 	const latestUserRef = getLatestUserRef(state);
 
-	return state[key].filter((message, messageIndex) => {
-		if (message.role === "user") {
-			return !(
-				latestUserRef?.key === key && latestUserRef.index === messageIndex
-			);
-		}
-		return message.role === "assistant" && !message.tool_calls?.length;
-	}).length;
+	return state[key].filter((message, messageIndex) =>
+		isTrimmableChatMessage(message, messageIndex, key, latestUserRef),
+	).length;
 }
 
 function removeOldestChatMessages(

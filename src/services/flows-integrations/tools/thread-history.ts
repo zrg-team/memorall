@@ -9,6 +9,7 @@ import {
 	COAGENT_SESSION_END,
 	COAGENT_SESSION_START,
 } from "@/services/chat/coagent-session";
+import { isSystemReminderMessage } from "@memorall/agent-harness-flows/graph/system-reminders";
 import { toolRegistry } from "@memorall/agent-harness-flows/registries/tool-registry";
 import z from "zod";
 import { buildThreadHistorySearchVectorSql } from "@/services/database/thread-history-search-vector";
@@ -172,6 +173,9 @@ const collectVisibleText = (
 		collectToolResult(parsed, output, context);
 		return;
 	}
+
+	// Context a run attached for the model, not something anyone said.
+	if (isSystemReminderMessage(parsed as never)) return;
 
 	if (typeof parsed.role === "string" && "content" in parsed) {
 		const roleOutput: string[] = [];

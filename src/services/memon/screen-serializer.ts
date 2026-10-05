@@ -328,9 +328,9 @@ const serverLines = (terminal: MemonTerminalState): string[] =>
 
 const terminalInputHint = (terminal: MemonTerminalState): string =>
 	terminalRunsInFront(terminal)
-		? '[t1] input → the running command (memon_run { input } / { stop: true }); file and text commands (ls, cat, mkdir, grep…), curl, git, py, ffmpeg and magick still run next to it; { terminal: "new", command } runs anything else in a new tab once it stops'
+		? "[t1] input → the running command (memon_run { input } / { stop: true }); memon_run { command } runs a command that finishes next to it; another long one waits until it stops"
 		: terminal.runningCommand
-			? "[t1] input (use memon_run for commands; while the other tab's command runs, only file and text commands, curl, git, py, ffmpeg and magick)"
+			? "[t1] input (use memon_run for commands; while the other tab's command runs, commands here must finish)"
 			: terminal.tabs.length > 1
 				? "[t1] input (use memon_run for commands)"
 				: '[t1] input (use memon_run for commands; { terminal: "new", command } opens another tab)';

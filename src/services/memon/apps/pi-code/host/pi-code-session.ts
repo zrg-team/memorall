@@ -119,7 +119,7 @@ const IDLE_SETTLE_MS = 400;
 const ENVIRONMENT_NOTE = [
 	"Environment: you are running inside MemonOS, a computer that lives in the user's browser.",
 	"- The file system is the agent's Memon files. Paths start at / and the home directory (~) is the current agent's folder.",
-	"- bash runs in a browser sandbox (almostnode): a POSIX-like shell with Node.js, npm/npx and common tools (ls, cat, grep, find, sed, awk, jq, ...), plus git, python/pip and curl run by the host. It is not a full Linux: no sudo, apt or system packages, and only one long-running command can run at a time.",
+	"- bash runs in a browser sandbox (almostnode): a POSIX-like shell with Node.js, npm/npx and common tools (ls, cat, grep, find, sed, awk, jq, ...), plus git, python/pip and curl run by the host. It is not a full Linux: no sudo, apt or system packages. Commands run side by side, but only one serves at a time: a second server is stopped.",
 	"- Long-running servers started from bash keep the sandbox busy; prefer short commands.",
 ].join("\n");
 

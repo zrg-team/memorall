@@ -136,7 +136,7 @@ const APP_SECTIONS: Record<MemonAppId, (config: MemonFeatureConfig) => string> =
 				`Python: py file.py: stdlib plus ${BUNDLED_PYTHON_BRIEF} (imports load them; pip list names them, pip show <name> says how). Charts: plt.savefig("chart.png").`,
 				"Media: ffmpeg, ffprobe and magick (ImageMagick; convert, identify, mogrify… too) are installed by default: never install them. ffmpeg has one thread: trim and scale down to keep encodes short.",
 				"Web: save files with one curl, not a script: curl -sSL -o assets/hero.jpg <url>; several: --create-dirs --output-dir assets -O <url1> -O <url2>.",
-				'One long command (a server) runs at a time, in any tab: the Terminal shows its tab and port; use that server, or stop it first ({ terminal: "1", stop: true }). curl, git and py run next to it: curl -s localhost:3000/api | jq .',
+				'One long command (a server) keeps running at a time, in any tab: the Terminal shows its tab and port; use that server, or stop it first ({ terminal: "1", stop: true }). Commands that finish run next to it: node --check app.js, curl -s localhost:3000/api | jq .',
 			]),
 		tasks: () =>
 			section("Tasks", "work you share with the user, kept across chats", [

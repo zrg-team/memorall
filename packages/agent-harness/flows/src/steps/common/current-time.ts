@@ -59,10 +59,10 @@ const definition = defineStep<Input, Output, Services, CurrentTimeConfig>({
 
 		const content = `## CURRENT DATE & TIME\n- Now: ${formatted}\n- ISO: ${iso}`;
 
-		// A clock is the textbook cache invalidator: it differs on every
-		// request. Handing it back as a reminder keeps it out of the
-		// conversation prefix entirely, so it is re-read at full price and
-		// nothing behind it is.
+		// A clock is the textbook cache invalidator: it differs on every run.
+		// In the system prompt it would rewrite the opening bytes of every
+		// request; as a reminder it is written once, after the user's message,
+		// and every later request reads it back from cache like the rest.
 		return { output: { reminders: [content] } };
 	},
 });

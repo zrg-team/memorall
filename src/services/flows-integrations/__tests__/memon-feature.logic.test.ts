@@ -301,10 +301,10 @@ describe("buildMemonPrompt", () => {
 		);
 	});
 
-	it("says one long command runs at a time, and to use or stop the one running", () => {
+	it("says one long command keeps running at a time, and others that finish run next to it", () => {
 		const prompt = buildMemonPrompt(DEFAULT_MEMON_FEATURE_CONFIG);
 		expect(prompt).toContain(
-			'One long command (a server) runs at a time, in any tab: the Terminal shows its tab and port; use that server, or stop it first ({ terminal: "1", stop: true }).',
+			'One long command (a server) keeps running at a time, in any tab: the Terminal shows its tab and port; use that server, or stop it first ({ terminal: "1", stop: true }). Commands that finish run next to it: node --check app.js',
 		);
 	});
 

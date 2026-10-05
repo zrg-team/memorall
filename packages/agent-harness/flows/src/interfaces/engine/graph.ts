@@ -48,12 +48,12 @@ export interface BaseStateBase {
 	outputMessages: ChatCompletionMessageParam[];
 	tools: GraphTool[];
 	/**
-	 * Volatile context for this run — the clock, retrieved knowledge, anything
-	 * that differs request to request. Kept out of `messages` and
-	 * `outputMessages` on purpose: those two are the conversation prefix, and a
-	 * prefix that only ever grows at the end is what the provider's prompt cache
-	 * matches on. Reminders are re-attached past the end of that prefix at each
-	 * request instead, so they cost their own tokens and nothing behind them.
+	 * Context for this run — the clock, the open tasks, the page the user is
+	 * on — that steps contribute before the model is called. Kept out of the
+	 * system prompt, where any change invalidates the whole cached prefix. The
+	 * completion attaches it to the conversation once, right after the newest
+	 * message, and it stays there: the conversation only ever grows at the end,
+	 * which is what the provider's prompt cache matches on.
 	 */
 	reminders: string[];
 }

@@ -204,7 +204,7 @@
     "@xyflow/react": "12.11.3",
     "@zenfs/core": "2.6.2",
     "@zenfs/dom": "1.2.10",
-    "almostnode": "^0.2.14",
+    "almostnode": "0.2.14",
     "d3": "^7.9.0",
     "dayjs": "1.11.21",
     "diff": "^9.0.0",

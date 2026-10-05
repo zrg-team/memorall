@@ -465,15 +465,21 @@ describe("messages sent while the agent works", () => {
 			id: "m-1",
 			content: "Also check the logs",
 		});
-		// The reply keeps it where it was read.
+		// The reply keeps it where it was read, with the reminder on how to read
+		// it right behind.
 		expect(finalMessages.map((message) => message.role)).toEqual([
 			"system",
 			"user",
 			"assistant",
 			"tool",
 			"user",
+			"user",
 			"assistant",
 		]);
+		expect(finalMessages[5]).toEqual({
+			role: "user",
+			content: `<system-reminder>\n${FLOW_RUN_INBOX_REMINDER}\n</system-reminder>`,
+		});
 		expect(inbox.take()).toEqual([]);
 	});
 
@@ -540,24 +546,24 @@ describe("messages sent while the agent works", () => {
 		}
 
 		const reminder = `<system-reminder>\n${FLOW_RUN_INBOX_REMINDER}\n</system-reminder>`;
-		const tail = (request: Array<{ role: string; content?: unknown }> = []) =>
-			request[request.length - 1];
 		// Nothing was sent yet: the request is untouched.
 		expect(requests[0]?.some((message) => message.content === reminder)).toBe(
 			false,
 		);
-		// From the request that reads it on, the reminder rides past the end once.
-		for (const request of requests.slice(1)) {
-			expect(tail(request)).toEqual({ role: "user", content: reminder });
-			expect(
-				request.filter((message) => message.content === reminder),
-			).toHaveLength(1);
-		}
-		// The message keeps its tag on every request after it was read.
-		expect(requests[2]).toContainEqual({
-			role: "user",
-			content: formatFlowRunInboxMessage("Also check the logs"),
-		});
+		// The request that reads the message has the reminder right after it.
+		expect(requests[1]?.slice(-2)).toEqual([
+			{
+				role: "user",
+				content: formatFlowRunInboxMessage("Also check the logs"),
+			},
+			{ role: "user", content: reminder },
+		]);
+		// And it stays there: the next request extends this one instead of
+		// moving the reminder behind the new tool round-trip.
+		expect(requests[2]?.slice(0, requests[1]?.length)).toEqual(requests[1]);
+		expect(
+			requests[2]?.filter((message) => message.content === reminder),
+		).toHaveLength(1);
 	});
 
 	it("tags a message as the model reads it and gives the user's words back", () => {

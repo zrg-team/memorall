@@ -28,6 +28,10 @@
 		{
 			"packageNames": ["util"],
 			"intent": "Prevent the browser util shim from reading process.env.NODE_DEBUG."
+		},
+		{
+			"packageNames": ["almostnode"],
+			"intent": "Give each container.run() command its own output, stop signal, stdin and server ownership instead of module globals, so commands run side by side without stealing a running server's streams, and support node --check."
 		}
 	]
 }

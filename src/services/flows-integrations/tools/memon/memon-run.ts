@@ -68,7 +68,7 @@ type Input = z.infer<typeof schema>;
 export const createMemonRunTool: ToolFactory<Input> = (): Tool<Input> => ({
 	name: MEMON_RUN_TOOL,
 	description:
-		'Run a shell command in the Terminal window (the same "/" tree as Files) and return its output with the screen. Long commands keep running and streaming: call again to wait, type into them, or stop them. The Terminal has tabs, each with its own working directory; `cd dir` changes the tab\'s directory for later commands. One long command (a server) runs at a time; while it does, file and text commands (ls, cat, mkdir, grep…), curl, git, py, ffmpeg and magick still run next to it in any tab; anything else waits for it.',
+		'Run a shell command in the Terminal window (the same "/" tree as Files) and return its output with the screen. Long commands keep running and streaming: call again to wait, type into them, or stop them. The Terminal has tabs, each with its own working directory; `cd dir` changes the tab\'s directory for later commands. One long command (a server) keeps running at a time; while it does, any command that finishes (ls, node --check, tests, curl, git, py) runs next to it in any tab, and a second server is stopped.',
 	schema,
 	execute: (input, context) =>
 		runMemonTool(

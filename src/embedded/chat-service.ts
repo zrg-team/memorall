@@ -14,7 +14,10 @@ import type {
 	ConversationContext,
 	MessageParts,
 } from "@/types/chat";
-import { MessagePartsAccumulator } from "@/services/chat/message-parts";
+import {
+	hasReplyParts,
+	MessagePartsAccumulator,
+} from "@/services/chat/message-parts";
 
 export interface ChatServiceOptions {
 	messages: ChatMessage[];
@@ -31,7 +34,10 @@ export interface ChatServiceOptions {
 	 * cached prefix still matches it.
 	 */
 	history?: ChatPayload["messages"];
-	/** Volatile context attached past the end of every request. */
+	/**
+	 * Context for this message, attached right after it. The reply's parts keep
+	 * it there, so replaying them as `history` repeats it in place.
+	 */
 	reminders?: string[];
 	conversation?: ConversationContext;
 }
@@ -185,11 +191,12 @@ export class EmbeddedChatService {
 			if (msg.role === "user") {
 				return [{ role: "user" as const, content: msg.content }];
 			}
-			if (msg.parts?.length) {
+			if (msg.parts && hasReplyParts(msg.parts)) {
 				return msg.parts;
 			}
-			// Assistant messages
+			// Assistant messages, after any reminders the run attached for them
 			return [
+				...(msg.parts ?? []),
 				{
 					role: "assistant" as const,
 					content: typeof msg.content === "string" ? msg.content : null,
@@ -341,6 +348,11 @@ export class EmbeddedChatService {
 						finalContent += content;
 						onProgress?.(finalContent, false);
 					}
+				} else if (chatResult.type === "system-reminder") {
+					// Kept where the model read it, so the next turn's history repeats it.
+					messagePartsAccumulator.addSystemReminder(chatResult.content);
+					finalParts = messagePartsAccumulator.toParts();
+					onParts?.(finalParts);
 				} else if (chatResult.type === "execute-start") {
 					const event = {
 						node: chatResult.node,

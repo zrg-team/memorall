@@ -1,4 +1,5 @@
 import { isNonModelMessageType } from "@/services/chat/coagent-session";
+import { hasReplyParts } from "@/services/chat/message-parts";
 import type { ChatMessage, ChatCompletionContentPart } from "@/types/openai";
 import type { ComplexContent, MessageParts } from "@/types/chat";
 import type { Message } from "@/services/database";
@@ -121,12 +122,12 @@ export async function buildSendMessages(
 			continue;
 		}
 
-		const parts = msg.parts as MessageParts | null | undefined;
-		if (Array.isArray(parts) && parts.length > 0) {
-			built.push(...parts);
-			continue;
-		}
+		const parts = Array.isArray(msg.parts) ? (msg.parts as MessageParts) : [];
+		built.push(...parts);
+		if (hasReplyParts(parts)) continue;
 
+		// Parts that are only the reminders the run attached went back above,
+		// where the model read them; the text that was the answer follows.
 		built.push({ role: "assistant", content: buildAssistantContent(msg) });
 	}
 

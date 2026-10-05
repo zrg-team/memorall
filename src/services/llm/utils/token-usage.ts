@@ -368,9 +368,9 @@ export type CacheContinuity =
  * Smallest gap that counts as a real miss rather than the normal tail.
  *
  * A healthy request reads the previous one minus whatever that request left
- * past its cache point — a volatile reminder, plus the provider rounding down
- * to its cache block size (64 tokens on DeepSeek). Observed tails are tens to
- * low hundreds of tokens; losing thousands is a different kind of event.
+ * past its cache point — mostly the provider rounding down to its cache block
+ * size (64 tokens on DeepSeek). Observed tails are tens to low hundreds of
+ * tokens; losing thousands is a different kind of event.
  */
 const CONTINUITY_MIN_GAP = 512;
 const CONTINUITY_GAP_RATIO = 0.02;

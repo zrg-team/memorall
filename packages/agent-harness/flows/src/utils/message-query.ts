@@ -1,3 +1,4 @@
+import { isSystemReminderMessage } from "../graph/system-reminders.js";
 import type { ChatCompletionMessageParam } from "../interfaces/engine/messages.js";
 
 const contentToText = (
@@ -28,11 +29,14 @@ export const extractRetrievalTextFromMessages = (
 	for (let i = messages.length - 1; i >= 0; i -= 1) {
 		const message = messages[i];
 		if (!message || message.role !== "user") continue;
+		// Context a run attached is not what the user asked about.
+		if (isSystemReminderMessage(message)) continue;
 		const text = contentToText(message.content).trim();
 		if (text) return text;
 	}
 
 	for (let i = messages.length - 1; i >= 0; i -= 1) {
+		if (isSystemReminderMessage(messages[i])) continue;
 		const text = contentToText(messages[i]?.content).trim();
 		if (text) return text;
 	}

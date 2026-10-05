@@ -34,6 +34,11 @@ import {
 	mergeReminders,
 	normalizeChatMessages,
 } from "../graph.base.js";
+import {
+	SYSTEM_REMINDER_EVENT,
+	type SystemReminderEvent,
+	systemReminderMessage,
+} from "../system-reminders.js";
 import { streamAssistantTurn } from "./assistant-turn.js";
 import {
 	AgentAnnotation,
@@ -250,19 +255,34 @@ export class AgentGraph extends GraphBase<
 			});
 		}
 		// Tagged as a "by the way" to the task it is on, not a new request; the
-		// reminder says how to read the tag, and the tool path carries it to the
-		// rest of the run.
-		const workingMemory = sent.length
-			? [
-					...state.outputMessages,
-					...sent.map((message) => ({
-						role: "user" as const,
-						content: formatFlowRunInboxMessage(message.content),
-					})),
-				]
-			: state.outputMessages;
+		// reminder says how to read the tag.
 		const inboxReminders = sent.length ? [FLOW_RUN_INBOX_REMINDER] : undefined;
-		const reminders = mergeReminders(state.reminders, inboxReminders);
+		// Whatever context this run has not sent yet joins working memory after
+		// everything already there — the first request gets the run's reminders
+		// right after the user's message, a later one only what is new. Once in,
+		// a reminder stays where it is: moving it to the end of each request made
+		// every request diverge from the last one at the reminder.
+		const reminderMessage = systemReminderMessage(
+			mergeReminders(state.reminders, inboxReminders),
+			state.outputMessages,
+		);
+		if (reminderMessage) {
+			runConfig?.writer?.({
+				type: SYSTEM_REMINDER_EVENT,
+				content: reminderMessage.content,
+			} satisfies SystemReminderEvent);
+		}
+		const workingMemory =
+			sent.length || reminderMessage
+				? [
+						...state.outputMessages,
+						...sent.map((message) => ({
+							role: "user" as const,
+							content: formatFlowRunInboxMessage(message.content),
+						})),
+						...(reminderMessage ? [reminderMessage] : []),
+					]
+				: state.outputMessages;
 
 		// Full LLM context: stable history + working memory accumulated so far
 		const tools = this.combinedTools.map((t) => t.tool);
@@ -279,7 +299,6 @@ export class AgentGraph extends GraphBase<
 			{
 				messages: state.messages,
 				outputMessages: workingMemory,
-				reminders,
 			},
 			{
 				llm,

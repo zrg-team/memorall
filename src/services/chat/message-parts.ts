@@ -15,7 +15,10 @@ type AssistantPart = Extract<ChatCompletionMessageParam, { role: "assistant" }>;
 type ToolPart = Extract<ChatCompletionMessageParam, { role: "tool" }>;
 type UserPart = Extract<ChatCompletionMessageParam, { role: "user" }>;
 
-/** A reply's parts: what the agent wrote, its tools, and what the user sent meanwhile. */
+/**
+ * A reply's parts: what the agent wrote, its tools, what the user sent
+ * meanwhile, and the reminders the run attached for the model.
+ */
 const isReplyPart = (
 	message: unknown,
 ): message is AssistantPart | ToolPart | UserPart => {
@@ -27,6 +30,33 @@ const isReplyPart = (
 		message.role === "user"
 	);
 };
+
+/**
+ * Whether the parts hold the reply itself — something the agent wrote or a
+ * tool it ran — rather than only the reminders kept for the model. Nearly
+ * every run attaches a reminder, so "has parts" no longer means "has an
+ * answer": a reply that was not streamed, or failed before its first token,
+ * has parts and nothing in them to read.
+ */
+export const hasReplyParts = (
+	parts: MessageParts | null | undefined,
+): boolean =>
+	Array.isArray(parts) &&
+	parts.some((part) => part.role === "assistant" || part.role === "tool");
+
+/**
+ * The parts to store for a reply whose text only reached `content` — a
+ * completion that was not streamed — with that text added as the assistant's
+ * part after the reminders. The next turn replays a reply's parts, not its
+ * content, so parts without it would replay the reminders and lose the answer.
+ */
+export const withReplyText = (
+	parts: MessageParts,
+	content: string,
+): MessageParts =>
+	parts.length > 0 && !hasReplyParts(parts) && content.trim()
+		? [...parts, { role: "assistant", content }]
+		: parts;
 
 export const getOutputMessageParts = (
 	finalState: Record<string, unknown> | null | undefined,
@@ -147,6 +177,16 @@ export class MessagePartsAccumulator {
 			role: "user",
 			content: formatFlowRunInboxMessage(content),
 		});
+	}
+
+	/**
+	 * Context the run attached for the model, kept byte for byte where the
+	 * model read it: the next turn's history has to repeat it in place, or
+	 * every request after it stops matching the cached prefix there.
+	 */
+	addSystemReminder(content: string): void {
+		this.currentAssistantIndex = null;
+		this.parts.push({ role: "user", content });
 	}
 
 	toParts(): MessageParts {
