@@ -14,6 +14,10 @@ import {
 	type ConversationCost,
 	loadConversationCosts,
 } from "@/main/modules/chat/utils/conversation-costs";
+import {
+	type RunUsage,
+	withRunUsage,
+} from "@/main/modules/chat/utils/conversation-cost-format";
 import { platform } from "@/platform/current";
 
 /** The agent picked last in the composer ("chat" for none), kept across reloads. */
@@ -57,6 +61,8 @@ export interface ChatRun {
 	controller: AbortController;
 	/** The background job, once started: what injected messages address. */
 	jobId?: string;
+	/** What the reply has used so far; the chat's cost shows it on top. */
+	usage?: RunUsage;
 }
 
 /**
@@ -121,7 +127,7 @@ interface ChatStore {
 	updateRun: (
 		conversationId: string,
 		token: symbol,
-		patch: Partial<Pick<ChatRun, "jobId">>,
+		patch: Partial<Pick<ChatRun, "jobId" | "usage">>,
 	) => void;
 	/** Ends the run, unless a newer one has taken the chat since. */
 	finishRun: (conversationId: string, token: symbol) => void;
@@ -874,9 +880,27 @@ export const useChatStore = create<ChatStore>((set, get) => {
 
 		finishRun: (conversationId, token) => {
 			set((state) => {
-				if (state.runs[conversationId]?.token !== token) return {};
+				const finished = state.runs[conversationId];
+				if (finished?.token !== token) return {};
 				const { [conversationId]: _finished, ...runs } = state.runs;
-				return { runs, isLoading: Object.keys(runs).length > 0 };
+				// Kept in the total until the saved one is read back, so the cost
+				// does not drop to what it was before the reply in between.
+				const cost = withRunUsage(
+					state.conversationCosts[conversationId],
+					finished.usage,
+				);
+				return {
+					runs,
+					isLoading: Object.keys(runs).length > 0,
+					...(cost && finished.usage
+						? {
+								conversationCosts: {
+									...state.conversationCosts,
+									[conversationId]: cost,
+								},
+							}
+						: {}),
+				};
 			});
 		},
 

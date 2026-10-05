@@ -50,10 +50,17 @@ const toolTarget = (args: Record<string, unknown>): string => {
 	return clip(parts.join(" in "), TARGET_CHARS);
 };
 
+/** How pi's last turn ended: it answered (or asked), failed, or was stopped. */
+export type PiTurnEnd = "done" | "error" | "stopped";
+
 export interface Transcript {
 	entries: MemonPiCodeEntry[];
 	/** Entries before `entries` that were left out. */
 	earlier: number;
+	/** How the last turn ended, read once pi is idle; unset before the first. */
+	ended?: PiTurnEnd;
+	/** The last reply's text, clipped as the screen shows it; unset when it had none. */
+	reply?: string;
 }
 
 /**
@@ -68,6 +75,9 @@ export const buildTranscript = (
 	const entries: MemonPiCodeEntry[] = [];
 	const calls = new Map<string, MemonPiCodeEntry>();
 	let lastAnswer: { entry: MemonPiCodeEntry; text: string } | undefined;
+	let ended: PiTurnEnd | undefined;
+	/** The latest reply's own text: empty when it only called tools. */
+	let replied = "";
 
 	const add = (message: AgentMessage) => {
 		switch (message.role) {
@@ -105,6 +115,13 @@ export const buildTranscript = (
 				} else if (message.stopReason === "aborted") {
 					entries.push({ kind: "error", text: "stopped" });
 				}
+				replied = text;
+				ended =
+					message.stopReason === "error"
+						? "error"
+						: message.stopReason === "aborted"
+							? "stopped"
+							: "done";
 				return;
 			}
 			case "toolResult": {
@@ -158,10 +175,17 @@ export const buildTranscript = (
 	};
 
 	for (const message of messages) add(message);
+	// A reply still streaming has not ended the turn.
+	const settled = { ended, reply: replied.trim() ? replied : undefined };
 	if (streaming) add(streaming);
 	if (lastAnswer)
 		lastAnswer.entry.text = clip(lastAnswer.text, LAST_ANSWER_CHARS);
 
 	const earlier = Math.max(0, entries.length - limit);
-	return { entries: entries.slice(earlier), earlier };
+	return {
+		entries: entries.slice(earlier),
+		earlier,
+		ended: settled.ended,
+		reply: settled.reply && clip(settled.reply, LAST_ANSWER_CHARS),
+	};
 };

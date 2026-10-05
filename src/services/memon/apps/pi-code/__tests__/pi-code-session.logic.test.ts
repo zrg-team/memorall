@@ -12,7 +12,9 @@ import type {
 } from "@/types/openai";
 import { meterLlmService } from "@/services/model-usage/metered-llm";
 import type { ModelUsageEntry } from "@/services/model-usage/model-usage-ledger";
+import type { AgentMessage } from "../agent";
 import { PiCodeSession } from "../host/pi-code-session";
+import { buildTranscript } from "../host/transcript";
 
 const HOME = "/agents/coder";
 
@@ -381,6 +383,8 @@ describe("PiCodeSession", () => {
 			{ kind: "assistant", text: "Done: the answer is 42." },
 		]);
 		expect(view.earlier).toBe(0);
+		expect(view.ended).toBe("done");
+		expect(view.reply).toBe("Done: the answer is 42.");
 		expect(view.queued).toEqual([]);
 		expect(view.activity).toBeUndefined();
 		expect(changes).toHaveBeenCalled();
@@ -489,5 +493,49 @@ describe("PiCodeSession", () => {
 			expect(fresh.reset).toBe(false);
 			expect(fresh.data).toContain("\x1b[2J");
 		});
+	});
+});
+
+describe("pi's transcript, as the agent reads how a turn ended", () => {
+	const reply = (
+		text: string,
+		stopReason: "stop" | "toolUse" | "error" | "aborted",
+	) =>
+		({
+			role: "assistant",
+			content: text ? [{ type: "text", text }] : [],
+			stopReason,
+			errorMessage: stopReason === "error" ? "rate limited" : undefined,
+		}) as unknown as AgentMessage;
+	const ask = { role: "user", content: "fix it" } as unknown as AgentMessage;
+
+	it("tells an answer, an error and a stop apart, and only a finished reply counts", () => {
+		expect(buildTranscript([])).toEqual({
+			entries: [],
+			earlier: 0,
+			ended: undefined,
+			reply: undefined,
+		});
+		expect(
+			buildTranscript([ask, reply("Sessions or JWT?", "stop")]),
+		).toMatchObject({ ended: "done", reply: "Sessions or JWT?" });
+		expect(
+			buildTranscript([
+				ask,
+				reply("Earlier answer", "stop"),
+				ask,
+				reply("", "error"),
+			]),
+		).toMatchObject({ ended: "error", reply: undefined });
+		expect(buildTranscript([ask, reply("", "aborted")])).toMatchObject({
+			ended: "stopped",
+		});
+		// Still streaming: the last finished turn is what counts.
+		expect(
+			buildTranscript(
+				[ask, reply("Done.", "stop"), ask],
+				reply("Working on", "stop"),
+			),
+		).toMatchObject({ ended: "done", reply: "Done." });
 	});
 });

@@ -1,3 +1,5 @@
+import type { AggregatedTokenUsage } from "@/services/llm/utils/token-usage";
+
 /**
  * What a chat has cost so far: every reply's usage, as the provider reported
  * it, added up. `cost` is absent when no reply carried a price (a local
@@ -13,6 +15,37 @@ export interface ConversationCost {
 	/** Replies that reported usage. */
 	replies: number;
 }
+
+/** What a reply still running has used so far, summed over its requests. */
+export type RunUsage = Omit<AggregatedTokenUsage, "calls">;
+
+/**
+ * A chat's cost with a running reply's usage on top. The saved total only has
+ * a reply once it is finished, so a long agent turn would show the old total
+ * until the end; this is what it has spent by now.
+ */
+export const withRunUsage = (
+	cost: ConversationCost | undefined,
+	usage: RunUsage | undefined,
+): ConversationCost | undefined => {
+	if (!usage) return cost;
+	const base = cost ?? {
+		inputTokens: 0,
+		cachedTokens: 0,
+		outputTokens: 0,
+		requests: 0,
+		replies: 0,
+	};
+	const priced = base.cost !== undefined || usage.cost !== undefined;
+	return {
+		...(priced ? { cost: (base.cost ?? 0) + (usage.cost ?? 0) } : {}),
+		inputTokens: base.inputTokens + usage.prompt_tokens,
+		cachedTokens: base.cachedTokens + (usage.cached_tokens ?? 0),
+		outputTokens: base.outputTokens + usage.completion_tokens,
+		requests: base.requests + usage.requests,
+		replies: base.replies + 1,
+	};
+};
 
 /** A dollar amount as small as a chat's: $1.24, $0.092, $0.0057. */
 export const formatUsd = (value: number): string =>

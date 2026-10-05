@@ -2,7 +2,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { type ITheme, Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
-import { ShieldAlert } from "lucide-react";
+import { ShieldAlert, Square } from "lucide-react";
 import React from "react";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
@@ -131,7 +131,9 @@ const PiCodeApprovalCard: React.FC<{
  * streams pi's screen output and sends raw keys. Closing the window quits
  * pi; leaving the page or collapsing the panel only detaches the view, and
  * the next view redraws pi's screen in full. When MemonOS Bot asks to hand
- * pi work, the question waits on top of the window for the user.
+ * pi work, the question waits on top of the window for the user. While pi
+ * works, Stop ends its turn (as Escape in pi does) and MemonOS Bot, waiting
+ * on pi, hears that the user stopped it.
  */
 export const PiCodeWindow: React.FC<{
 	machineKey: string;
@@ -420,6 +422,20 @@ export const PiCodeWindow: React.FC<{
 					>
 						{notice}
 					</div>
+				) : state?.working ? (
+					<button
+						type="button"
+						data-testid="memon-pi-code-stop"
+						title={t("memonComputer.piCode.stopHint")}
+						onClick={() => {
+							void send("piCode.stop", { key: machineKey });
+							termRef.current?.focus();
+						}}
+						className="absolute right-3 top-2 z-10 inline-flex h-6 items-center gap-1 rounded-md border border-input bg-background/90 px-2 text-[11px] font-medium text-foreground shadow-sm hover:bg-accent"
+					>
+						<Square size={10} />
+						{t("memonComputer.piCode.stop")}
+					</button>
 				) : null}
 			</div>
 		</div>

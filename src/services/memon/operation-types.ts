@@ -124,6 +124,8 @@ export interface MemonOperationPayloadMap {
 	"terminal.approval": Keyed<{ id: string; decision: "approve" | "deny" }>;
 	/** Answers the agent's request to hand pi code work. */
 	"piCode.approval": Keyed<{ id: string; decision: "approve" | "deny" }>;
+	/** Stops pi's turn and drops its queue; the agent waiting on pi hears it. */
+	"piCode.stop": Keyed;
 	"window.open": Keyed<{ app: MemonWindowApp }>;
 	"window.focus": Keyed<{ windowId: string }>;
 	"window.minimize": Keyed<{ windowId: string }>;

@@ -493,6 +493,10 @@ export const runMemonOperation = async (
 				(machine) => machine.piCode.answerApproval(id, decision),
 			);
 		}
+		case "piCode.stop":
+			return userAside(job.payload.key, "stopped pi code", (machine) =>
+				machine.piCode.interrupt(),
+			);
 		case "window.open": {
 			const { key, app } = job.payload;
 			return userInput(key, `opened ${app}`, async (machine) => {

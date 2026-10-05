@@ -202,7 +202,7 @@ const PI_CODE_SECTION = section(
 	"a coding agent you hand coding work to",
 	[
 		'memon_code { action: "prompt", text: "<the task on its own: goal, files, how to check>", cwd: "~/<project>" } hands pi (its own tools, the chat\'s model) an app, a feature or a multi-file fix; small edits are quicker yourself.',
-		'The user confirms in the pi code window first. Then "wait", another prompt steers it, "stop"; the screen shows its conversation. Check its work before you answer.',
+		"The user confirms in the pi code window first. A prompt returns when pi's turn ends; answer its questions with another prompt. Check its work before you answer.",
 		`Declined: code it yourself with the Terminal and Files, save that now (memon_memory { action: "add", text: "Code it myself; the user does not want pi code." }) and do not use pi code again unless asked; skip it too when ${MEMON_MEMORY_FILE_NAME} says so.`,
 	],
 );

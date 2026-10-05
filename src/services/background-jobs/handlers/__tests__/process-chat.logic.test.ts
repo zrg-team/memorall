@@ -581,6 +581,56 @@ describe("stopping a run keeps it like a finished one", () => {
 		expect(started.dispatches.map((d) => d.stage)).not.toContain("Chat failed");
 	});
 
+	it("reports what the reply has used after every request, not only at the end", async () => {
+		const usage = (prompt: number, cost: number) => ({
+			prompt_tokens: prompt,
+			completion_tokens: 10,
+			total_tokens: prompt + 10,
+			cost,
+		});
+		flowStream.mockImplementation(async function* () {
+			yield [
+				"custom",
+				{
+					type: "llm",
+					chunk: {
+						...chunk({ role: "assistant", content: "Looking." }),
+						usage: usage(1_000, 0.001),
+					},
+				},
+			];
+			yield [
+				"custom",
+				{
+					type: "llm",
+					chunk: {
+						...chunk({ role: "assistant", content: " Done." }),
+						usage: usage(1_500, 0.002),
+					},
+				},
+			];
+		});
+
+		const { dispatches } = await runChat({
+			messages: [{ role: "user", content: "look" }],
+			model: "test-model",
+			mode: "agent",
+		});
+
+		const reports = dispatches
+			.map((d) => d.result)
+			.filter((result) => result?.type === "usage")
+			.map((result) => result?.usage as Record<string, unknown>);
+		// A running total per request, without the per-request list the saved
+		// reply keeps.
+		expect(reports).toEqual([
+			expect.objectContaining({ prompt_tokens: 1_000, requests: 1 }),
+			expect.objectContaining({ prompt_tokens: 2_500, requests: 2 }),
+		]);
+		expect(reports[1]?.cost).toBeCloseTo(0.003, 6);
+		expect(reports[1]).not.toHaveProperty("calls");
+	});
+
 	it("honours a stop that arrives before the run starts", async () => {
 		const started = await startRun({
 			messages: [{ role: "user", content: "hi" }],

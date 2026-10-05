@@ -1,5 +1,5 @@
 import type { LangGraphRunnableConfig } from "@langchain/langgraph";
-import { getFlowRuntimeVars } from "./runtime-context.js";
+import { type FlowRuntimeVars, getFlowRuntimeVars } from "./runtime-context.js";
 
 /** A message the user sent while the run was still going. */
 export interface FlowRunInboxMessage {
@@ -22,6 +22,8 @@ export interface FlowRunInbox {
 	/** Ends the inbox and hands back what nobody took. */
 	close(): FlowRunInboxMessage[];
 	readonly closed: boolean;
+	/** Messages waiting to be taken; a long tool call returns early for them. */
+	readonly size: number;
 }
 
 /** Where a run keeps its inbox among its runtime vars. */
@@ -68,6 +70,10 @@ class DefaultFlowRunInbox implements FlowRunInbox {
 		return this.isClosed;
 	}
 
+	get size(): number {
+		return this.pending.length;
+	}
+
 	push(message: FlowRunInboxMessage): boolean {
 		if (this.isClosed || !message.content.trim()) return false;
 		this.pending.push({ id: message.id, content: message.content });
@@ -94,10 +100,16 @@ const isFlowRunInbox = (value: unknown): value is FlowRunInbox =>
 	typeof (value as Partial<FlowRunInbox>).push === "function" &&
 	typeof (value as Partial<FlowRunInbox>).take === "function";
 
+/** The run's inbox among its runtime vars (a tool's `context.runtime`). */
+export const getFlowRunInboxFromVars = (
+	vars?: FlowRuntimeVars,
+): FlowRunInbox | undefined => {
+	const inbox = vars?.get(FLOW_RUN_INBOX_RUNTIME_KEY);
+	return isFlowRunInbox(inbox) ? inbox : undefined;
+};
+
 /** The run's inbox, when whoever started the run gave it one. */
 export const getFlowRunInbox = (
 	runConfig?: LangGraphRunnableConfig,
-): FlowRunInbox | undefined => {
-	const inbox = getFlowRuntimeVars(runConfig)?.get(FLOW_RUN_INBOX_RUNTIME_KEY);
-	return isFlowRunInbox(inbox) ? inbox : undefined;
-};
+): FlowRunInbox | undefined =>
+	getFlowRunInboxFromVars(getFlowRuntimeVars(runConfig));

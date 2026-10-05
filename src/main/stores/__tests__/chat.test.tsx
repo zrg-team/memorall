@@ -542,4 +542,45 @@ describe("runs in several chats", () => {
 		).toBe("a");
 		expect(findBlockingRun({}, undefined, false)).toBeUndefined();
 	});
+
+	it("keeps a finished run's usage in the chat's cost until the saved one is read", () => {
+		const running = run("costed", true);
+		useChatStore.setState({
+			runs: {},
+			conversationCosts: {
+				costed: {
+					cost: 0.02,
+					inputTokens: 10_000,
+					cachedTokens: 8_000,
+					outputTokens: 300,
+					requests: 5,
+					replies: 1,
+				},
+			},
+		});
+		useChatStore.getState().startRun(running);
+		useChatStore.getState().updateRun("costed", running.token, {
+			usage: {
+				prompt_tokens: 6_000,
+				completion_tokens: 100,
+				total_tokens: 6_100,
+				cost: 0.004,
+				requests: 2,
+			},
+		});
+		// While it runs, the saved total is untouched; the run carries the rest.
+		expect(useChatStore.getState().conversationCosts.costed?.cost).toBe(0.02);
+		expect(useChatStore.getState().runs.costed?.usage?.requests).toBe(2);
+
+		useChatStore.getState().finishRun("costed", running.token);
+
+		// No dip back to the old total between the run ending and the re-read.
+		expect(useChatStore.getState().conversationCosts.costed).toMatchObject({
+			cost: expect.closeTo(0.024, 6),
+			inputTokens: 16_000,
+			requests: 7,
+			replies: 2,
+		});
+		expect(useChatStore.getState().runs).toEqual({});
+	});
 });

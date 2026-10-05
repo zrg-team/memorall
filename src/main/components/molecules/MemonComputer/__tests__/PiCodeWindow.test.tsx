@@ -56,6 +56,45 @@ describe("PiCodeWindow", () => {
 		});
 	});
 
+	it("puts Stop over pi while it works, and stops pi's turn", async () => {
+		request.mockImplementation(async (operation: unknown) =>
+			operation === "piCode.attach"
+				? ({ cursor: 0 } as never)
+				: // The read waits for output that never comes.
+					new Promise<null>(() => {}),
+		);
+		const send = vi.fn(async () => null);
+		const working: MemonPiCodeState = {
+			status: "running",
+			working: true,
+			transcript: [],
+		};
+		const view = render(
+			<PiCodeWindow
+				machineKey="m1"
+				state={working}
+				focused
+				send={send as unknown as MemonSend}
+			/>,
+		);
+
+		const stop = await screen.findByTestId("memon-pi-code-stop");
+		fireEvent.click(stop);
+		expect(send).toHaveBeenLastCalledWith("piCode.stop", { key: "m1" });
+
+		view.rerender(
+			<PiCodeWindow
+				machineKey="m1"
+				state={{ ...working, working: false }}
+				focused
+				send={send as unknown as MemonSend}
+			/>,
+		);
+		expect(screen.queryByTestId("memon-pi-code-stop")).toBeNull();
+		view.unmount();
+		request.mockReset();
+	});
+
 	it("shows no request when nothing waits", () => {
 		render(
 			<PiCodeWindow

@@ -1,3 +1,4 @@
+import { getFlowRunInboxFromVars } from "@memorall/agent-harness-flows/context/run-inbox";
 import type {
 	Tool,
 	ToolFactory,
@@ -22,7 +23,7 @@ const schema = z
 		action: z
 			.enum(PI_CODE_ACTIONS)
 			.describe(
-				'"prompt" hands pi work, or steers it while it works; "wait" waits for it to finish; "stop" stops it; "keys" types into its terminal; "new" starts a new pi session; "compact" compacts its conversation; "close" quits pi.',
+				'"prompt" hands pi work, or steers it while it works, and waits until its turn ends; "wait" waits for that again; "stop" stops it; "keys" types into its terminal; "new" starts a new pi session; "compact" compacts its conversation; "close" quits pi.',
 			),
 		text: z
 			.string()
@@ -52,7 +53,7 @@ const schema = z
 			.max(PI_CODE_MAX_WAIT_SECONDS)
 			.optional()
 			.describe(
-				`How long to wait for pi to finish before returning (prompt and wait: ${PI_CODE_DEFAULT_WAIT_SECONDS} by default; 0 returns at once).`,
+				`The most seconds to wait for pi's turn to end (prompt and wait: ${PI_CODE_DEFAULT_WAIT_SECONDS} by default; 0 returns at once).`,
 			),
 	})
 	.describe("Drive pi code, the coding agent app on the computer.");
@@ -62,16 +63,18 @@ type Input = z.infer<typeof schema>;
 export const createMemonCodeTool: ToolFactory<Input> = (): Tool<Input> => ({
 	name: MEMON_CODE_TOOL,
 	description:
-		"Hand coding work to pi code, the pi coding agent in its own window: it reads, edits and runs code in the computer's files with its own tools, on the chat's model. Then wait for it, steer it, stop it or type into it. The user confirms in the pi code window before you hand it work. Returns a summary and the screen, which shows pi's conversation while its window is in front.",
+		"Hand coding work to pi code, the pi coding agent in its own window: it reads, edits and runs code in the computer's files with its own tools, on the chat's model. A prompt returns when pi's turn ends: it answered or asks you something, failed, or the user stopped it; or sooner, when the user writes to you. Then answer it, steer it, stop it or type into it. The user confirms in the pi code window before you hand it work. Returns a summary and the screen, which shows pi's conversation while its window is in front.",
 	schema,
-	execute: (input, context) =>
-		runMemonTool(
+	execute: (input, context) => {
+		const inbox = getFlowRunInboxFromVars(context?.runtime);
+		return runMemonTool(
 			MEMON_CODE_TOOL,
 			context,
 			piCodeActionLabel(input),
 			(machine) => ({ windowId: machine.findWindow("pi")?.id, ref: "p1" }),
-			(machine) => machine.piCode.act(input),
-		),
+			(machine) => machine.piCode.act(input, { inbox: () => inbox?.size ?? 0 }),
+		);
+	},
 });
 
 toolRegistry.register(MEMON_CODE_TOOL, createMemonCodeTool);

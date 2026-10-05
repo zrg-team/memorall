@@ -78,7 +78,7 @@ export interface PiCodeSessionOptions {
 }
 
 export interface PiCodeStatus {
-	/** The agent is working: a model turn, a tool, a ! command or compaction. */
+	/** The agent is working: a model turn, a tool, a ! command, compaction or a retry. */
 	running: boolean;
 	cwd: string;
 	/** provider/model the next turn uses, when one is selected. */
@@ -344,10 +344,12 @@ export class PiCodeSession {
 	status(): PiCodeStatus {
 		const model = this.session.model;
 		return {
+			// A retry waits between attempts: the turn has not ended yet.
 			running:
 				this.session.isStreaming ||
 				this.session.isBashRunning ||
-				this.session.isCompacting,
+				this.session.isCompacting ||
+				this.session.isRetrying,
 			cwd: this.session.cwd,
 			model: model ? `${model.provider}/${model.id}` : undefined,
 			sessionName: this.session.sessionName,

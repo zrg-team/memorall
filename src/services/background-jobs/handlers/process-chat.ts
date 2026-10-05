@@ -221,6 +221,11 @@ export type ChatResult =
 			content: string;
 	  }
 	| {
+			/** What the reply has used so far, after each model request. */
+			type: "usage";
+			usage: Omit<AggregatedTokenUsage, "calls">;
+	  }
+	| {
 			type: "final";
 			content: string;
 			parts?: MessageParts;
@@ -1422,12 +1427,33 @@ export class ChatHandler extends BaseProcessHandler<ChatJob | StopChatJob> {
 			return record;
 		};
 		const toolCallAccumulator = createToolCallAccumulator();
+		const getProgress = () => Math.min(80, 20 + currentContent.length / 10);
+
+		// One dispatcher per job owns the wire rate for everything streamed back.
+		const dispatcher = ChatHandler.createChunkDispatcher(
+			jobId,
+			model,
+			dependencies,
+			getProgress,
+		);
+
 		// One entry per provider request: an agent turn makes several, and the
 		// message shows both the sum and how each request fared against the
 		// provider's prompt cache.
 		let accumulatedUsage = createAggregatedTokenUsage();
 		const addUsage = (usage: TokenUsage) => {
 			accumulatedUsage = addTokenUsage(accumulatedUsage, usage);
+			// The chat's cost moves with every request, not only once the reply
+			// is saved: a long agent turn would otherwise show the old total for
+			// minutes. The per-request list stays with the saved reply.
+			const { calls: _calls, ...running } = accumulatedUsage;
+			dispatcher.send(() =>
+				dependencies.updateJobProgress(jobId, {
+					stage: "Receiving response...",
+					progress: getProgress(),
+					result: { type: "usage", usage: running } as ChatResult,
+				}),
+			);
 		};
 		const requests = createStoppableRequests(stopSignal, addUsage);
 		// Saves the reply while it runs, so a run that is cut off (the extension
@@ -1568,16 +1594,6 @@ export class ChatHandler extends BaseProcessHandler<ChatJob | StopChatJob> {
 
 			return result;
 		};
-
-		const getProgress = () => Math.min(80, 20 + currentContent.length / 10);
-
-		// One dispatcher per job owns the wire rate for everything streamed back.
-		const dispatcher = ChatHandler.createChunkDispatcher(
-			jobId,
-			model,
-			dependencies,
-			getProgress,
-		);
 
 		// Create stream buffer for content
 		const streamBuffer = ChatHandler.createStreamBuffer({

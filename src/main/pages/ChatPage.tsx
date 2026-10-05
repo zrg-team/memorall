@@ -44,6 +44,7 @@ import type { MessageActionRequest } from "@/main/modules/chat/components/artifa
 import { ChatHeaderActions } from "@/main/modules/chat/components/ChatHeaderActions";
 import { logError } from "@/utils/logger";
 import { MessageGroup } from "@/main/modules/chat/components/MessageGroup";
+import { withRunUsage } from "@/main/modules/chat/utils/conversation-cost-format";
 import { translateCommonKey } from "@/main/modules/chat/utils/i18n-helpers";
 import {
 	ModelDownloadingScreen,
@@ -136,10 +137,20 @@ export const ChatPage: React.FC<ChatPageProps> = ({
 	const currentConversation = useChatStore(
 		(state) => state.currentConversation,
 	);
-	const currentConversationCost = useChatStore((state) =>
+	const savedConversationCost = useChatStore((state) =>
 		state.currentConversation
 			? state.conversationCosts[state.currentConversation.id]
 			: undefined,
+	);
+	const runningUsage = useChatStore((state) =>
+		state.currentConversation
+			? state.runs[state.currentConversation.id]?.usage
+			: undefined,
+	);
+	// What a reply still running has spent, on top of what the chat had.
+	const currentConversationCost = React.useMemo(
+		() => withRunUsage(savedConversationCost, runningUsage),
+		[savedConversationCost, runningUsage],
 	);
 	const refreshConversationCosts = useChatStore(
 		(state) => state.refreshConversationCosts,

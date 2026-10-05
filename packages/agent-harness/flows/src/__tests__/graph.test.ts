@@ -580,7 +580,9 @@ describe("messages sent while the agent works", () => {
 		const inbox = createFlowRunInbox();
 		expect(inbox.push({ id: "a", content: "first" })).toBe(true);
 		expect(inbox.push({ id: "b", content: "   " })).toBe(false);
+		expect(inbox.size).toBe(1);
 		expect(inbox.close()).toEqual([{ id: "a", content: "first" }]);
+		expect(inbox.size).toBe(0);
 		expect(inbox.closed).toBe(true);
 		expect(inbox.push({ id: "c", content: "late" })).toBe(false);
 	});

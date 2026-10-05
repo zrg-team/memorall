@@ -666,6 +666,10 @@ export const useChat = (model: string, options: UseChatOptions = {}) => {
 							.getState()
 							.removePending(conversationId, id);
 					},
+					onUsage: (usage) => {
+						// The chat's cost follows the reply request by request.
+						useChatStore.getState().updateRun(conversationId, token, { usage });
+					},
 					onContent: (content) => {
 						currentContent = content;
 						// Only update in-progress message, not the store

@@ -476,6 +476,12 @@ export class MemonMachine {
 					this.openWindow("pi");
 					return opened;
 				},
+				inFront: () => {
+					const window = this.windowFor("pi");
+					return Boolean(
+						window && !window.minimized && window.id === this.focusedWindowId,
+					);
+				},
 				cursorLabel: (label) => {
 					if (this.cursor) this.cursor = { ...this.cursor, label };
 				},
