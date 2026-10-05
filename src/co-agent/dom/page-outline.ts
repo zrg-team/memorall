@@ -316,6 +316,9 @@ const isVisible = (element: Element, style: CSSStyleDeclaration): boolean => {
 	if (element.hasAttribute("hidden")) return false;
 	if (element.getAttribute("aria-hidden") === "true") return false;
 	if (style.display === "none" || style.visibility === "hidden") return false;
+	// A wrapper drawn as its children (Svelte's hydration wrapper, layout
+	// helpers) has no box of its own; it used to hide a whole page's content.
+	if (style.display === "contents") return true;
 	return element.getClientRects().length > 0;
 };
 

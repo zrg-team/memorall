@@ -67,6 +67,25 @@ describe("page outline", () => {
 		expect(text).not.toContain("secret");
 	});
 
+	it("reads what a box-less wrapper (display: contents) draws", () => {
+		const wrapper = document.createElement("div");
+		wrapper.style.display = "contents";
+		wrapper.innerHTML =
+			'<section><h2>Daily Papers</h2><a href="/papers/2509.00001">The Other Half of the Memory Wall</a></section>';
+		document.body.append(wrapper);
+		// As in a browser: the wrapper itself has no box.
+		const rects = vi.mocked(Element.prototype.getClientRects);
+		rects.mockImplementation(function (this: Element) {
+			return (this === wrapper
+				? []
+				: [{ width: 10, height: 10 }]) as unknown as DOMRectList;
+		});
+
+		const text = formatPageOutline(buildPageOutline(document));
+		expect(text).toContain("## Daily Papers");
+		expect(text).toMatch(/\[b\d+\] link "The Other Half of the Memory Wall"/);
+	});
+
 	it("says the page is busy while it shows a loading region or spinner", () => {
 		expect(buildPageOutline(document).busy).toBeUndefined();
 
