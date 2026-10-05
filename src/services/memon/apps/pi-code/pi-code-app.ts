@@ -65,6 +65,8 @@ export interface MemonPiCodePort {
 		home: string;
 		/** Where pi works; the home when left out. */
 		cwd?: string;
+		/** The agent (flow id) the computer belongs to; its usage is booked there. */
+		agentId?: string | null;
 		sandboxSessionKey: string;
 		/** The user quit pi from inside it. */
 		onQuit: () => void;
@@ -85,6 +87,8 @@ export interface PiCodeRead {
 interface PiCodeHost {
 	sessionKey: string;
 	home: () => string;
+	/** The agent (flow id) the computer belongs to, if any. */
+	agentId: () => string | null;
 	changed: () => void;
 	/** Close the pi window (the user quit pi). */
 	quit: () => void;
@@ -218,6 +222,7 @@ export class MemonPiCode {
 			.start({
 				home: this.host.home(),
 				cwd,
+				agentId: this.host.agentId(),
 				sandboxSessionKey: this.host.sessionKey,
 				onQuit: () => this.host.quit(),
 				onChange: () => this.host.changed(),

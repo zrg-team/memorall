@@ -1,5 +1,9 @@
 import { and, eq, gte, sql } from "drizzle-orm";
 import { serviceManager } from "@/services";
+import {
+	MODEL_USAGE_SOURCE_LABELS,
+	modelUsageSessionKey,
+} from "@/services/model-usage/model-usage-ledger";
 import type { UsageMessageRow, UsageRequest } from "../types";
 import {
 	createFeatureResolver,
@@ -71,26 +75,89 @@ export const loadUsageRows = (since: Date): Promise<UsageMessageRow[]> =>
 			.orderBy(messages.createdAt);
 	});
 
-/** Provider-reported spend since `since`, summed in the database. */
-export const loadReportedSpend = async (since: Date): Promise<number> => {
-	const rows = await serviceManager.databaseService.use(({ db, schema }) =>
-		db
+/**
+ * Model requests booked outside chat replies since `since` (pi code and
+ * Studio, from its page or an agent's computer), as one-request rows
+ * charged to their tool. Each ledger session lists like a conversation; one
+ * that belongs to no agent is named after its source ("Studio").
+ */
+export const loadModelUsageRows = (since: Date): Promise<UsageMessageRow[]> =>
+	serviceManager.databaseService.use(async ({ db, schema }) => {
+		const { modelUsage, flows } = schema;
+		const rows = await db
 			.select({
-				cost: sql<
-					number | string | null
-				>`sum(case when jsonb_typeof(${schema.messages.metadata}->'usage'->'cost') = 'number' then (${schema.messages.metadata}->'usage'->>'cost')::float8 end)`,
+				id: modelUsage.id,
+				source: modelUsage.source,
+				tool: modelUsage.tool,
+				sessionId: modelUsage.sessionId,
+				title: modelUsage.title,
+				provider: modelUsage.provider,
+				model: modelUsage.model,
+				usage: modelUsage.usage,
+				createdAt: modelUsage.createdAt,
+				flowName: flows.name,
 			})
-			.from(schema.messages)
-			.where(
-				and(
-					eq(schema.messages.role, "assistant"),
-					gte(schema.messages.createdAt, since),
-				),
-			),
+			.from(modelUsage)
+			.leftJoin(flows, eq(flows.id, modelUsage.agentFlowId))
+			.where(gte(modelUsage.createdAt, since))
+			.orderBy(modelUsage.createdAt);
+		return rows.map(
+			(row): UsageMessageRow => ({
+				id: row.id,
+				conversationId: modelUsageSessionKey(row),
+				createdAt: row.createdAt,
+				conversationTitle: row.title,
+				flowName: row.flowName,
+				agentName: row.flowName
+					? null
+					: (MODEL_USAGE_SOURCE_LABELS[row.source] ?? null),
+				model: row.model,
+				provider: row.provider,
+				usage: row.usage,
+				toolExecutions: [],
+				parts: [],
+				charge: { tool: row.tool || row.source, source: row.source },
+			}),
+		);
+	});
+
+const toCost = (value: number | string | null | undefined): number => {
+	const cost = typeof value === "string" ? Number(value) : (value ?? 0);
+	return Number.isFinite(cost) ? cost : 0;
+};
+
+/**
+ * Provider-reported spend since `since`, chat replies and the model usage
+ * ledger together, summed in the database.
+ */
+export const loadReportedSpend = async (since: Date): Promise<number> => {
+	const [replies, ledger] = await serviceManager.databaseService.use(
+		({ db, schema }) =>
+			Promise.all([
+				db
+					.select({
+						cost: sql<
+							number | string | null
+						>`sum(case when jsonb_typeof(${schema.messages.metadata}->'usage'->'cost') = 'number' then (${schema.messages.metadata}->'usage'->>'cost')::float8 end)`,
+					})
+					.from(schema.messages)
+					.where(
+						and(
+							eq(schema.messages.role, "assistant"),
+							gte(schema.messages.createdAt, since),
+						),
+					),
+				db
+					.select({
+						cost: sql<
+							number | string | null
+						>`sum(case when jsonb_typeof(${schema.modelUsage.usage}->'cost') = 'number' then (${schema.modelUsage.usage}->>'cost')::float8 end)`,
+					})
+					.from(schema.modelUsage)
+					.where(gte(schema.modelUsage.createdAt, since)),
+			]),
 	);
-	const cost = rows[0]?.cost;
-	const value = typeof cost === "string" ? Number(cost) : (cost ?? 0);
-	return Number.isFinite(value) ? value : 0;
+	return toCost(replies[0]?.cost) + toCost(ledger[0]?.cost);
 };
 
 const loadFeatureResolver = (): FeatureResolver => {
@@ -105,7 +172,11 @@ const loadFeatureResolver = (): FeatureResolver => {
 export const loadUsageRequests = async (
 	since: Date,
 ): Promise<UsageRequest[]> => {
-	const rows = await loadUsageRows(since);
+	const [replies, ledger] = await Promise.all([
+		loadUsageRows(since),
+		loadModelUsageRows(since),
+	]);
+	const rows = [...replies, ...ledger];
 	const resolveFeature = loadFeatureResolver();
 	return rows.flatMap((row) => toUsageRequests(row, resolveFeature));
 };

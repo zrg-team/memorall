@@ -1,3 +1,4 @@
+import { unwrapFlowRunInboxMessage } from "@memorall/agent-harness-flows/context/run-inbox";
 import type {
 	AssistantExecutionPart,
 	ChatCompaction,
@@ -268,7 +269,7 @@ export const buildAssistantContentParts = ({
 			// request that read it.
 			closeBlock();
 			placeCompactionsBefore(partIndex);
-			const text = messageText(part.content);
+			const text = unwrapFlowRunInboxMessage(messageText(part.content));
 			if (text.trim()) contentParts.push({ type: "user-message", text });
 			continue;
 		}

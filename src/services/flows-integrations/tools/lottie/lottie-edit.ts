@@ -67,9 +67,10 @@ export const createLottieEditTool: ToolFactory<
 		}
 
 		const count = replace_all ? json.split(old_string).length - 1 : 1;
+		// A replacer function keeps `$&`, `$$`, `` $` `` and `$'` literal.
 		const updated = replace_all
 			? json.split(old_string).join(new_string)
-			: json.replace(old_string, new_string);
+			: json.replace(old_string, () => new_string);
 
 		try {
 			JSON.parse(updated);

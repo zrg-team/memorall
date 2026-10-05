@@ -1746,7 +1746,7 @@ describe("MemonMachine", () => {
 		);
 		expect(ports.studio.run).toHaveBeenCalledWith(
 			{ tool: "transcribe", path: "/notes/talk.mp3" },
-			{ sessionKey: "memon:conversation-1" },
+			{ sessionKey: "memon:conversation-1", agentId: null },
 		);
 	});
 
@@ -1979,19 +1979,20 @@ describe("MemonMachine", () => {
 		expect(machine.snapshot().browser.tabs).toHaveLength(2);
 		expect(machine.readScreen()).toContain('"Todo app" (embedded)');
 
-		// Any local address opens embedded, server seen or not; a real tab
-		// only when asked for.
+		// A local address the computer does not serve is the user's own
+		// server, which only a real tab reaches.
 		await machine.openUrl("localhost:4000");
-		expect(embedded.open).toHaveBeenLastCalledWith("http://localhost:4000", {
-			windowId: undefined,
-		});
-		expect(machine.snapshot().browser.tabs).toHaveLength(3);
-		await machine.selectTab(2);
-		await machine.openUrl("localhost:4000", { embedded: false });
 		expect(ports.browser.navigate).toHaveBeenCalledWith(
 			"s1",
 			"http://localhost:4000",
 		);
+		expect(embedded.open).toHaveBeenCalledTimes(1);
+		// Asked for, it opens embedded anyway.
+		await machine.openUrl("localhost:4000", { embedded: true, newTab: true });
+		expect(embedded.open).toHaveBeenLastCalledWith("http://localhost:4000", {
+			windowId: undefined,
+		});
+		expect(machine.snapshot().browser.tabs).toHaveLength(3);
 
 		await machine.selectTab(1);
 		await machine.openUrl("http://localhost:3000/done", { embedded: true });
@@ -2007,6 +2008,42 @@ describe("MemonMachine", () => {
 		expect(machine.readScreen()).toContain(
 			"serving http://localhost:3000 — a server keeps running",
 		);
+	});
+
+	it("opens any local address embedded where there are no real tabs", async () => {
+		const { ports } = createPorts();
+		ports.browser.availability = () => ({
+			available: false,
+			reason: "the web app cannot drive a browser",
+		});
+		const embedded: MemonEmbeddedPort = {
+			availability: () => ({ available: true }),
+			open: vi.fn(async (url: string) => ({
+				sessionId: "embedded-1",
+				url,
+				title: "",
+			})),
+			navigate: vi.fn(),
+			outline: vi.fn(async () => outline("http://localhost:4000/", "Todo")),
+			act: vi.fn(),
+			history: vi.fn(async () => undefined),
+			focus: vi.fn(async () => undefined),
+			close: vi.fn(async () => undefined),
+			reserve: vi.fn(() => () => undefined),
+			servers: vi.fn(async () => []),
+		};
+		ports.embedded = embedded;
+		const machine = new MemonMachine(
+			"conversation-1",
+			ports,
+			DEFAULT_MEMON_FEATURE_CONFIG,
+		);
+
+		await machine.openUrl("localhost:4000");
+		expect(embedded.open).toHaveBeenCalledWith("http://localhost:4000", {
+			windowId: undefined,
+		});
+		expect(ports.browser.open).not.toHaveBeenCalled();
 	});
 
 	it("shows a visual, keeps it as a .openui file and opens it again", async () => {

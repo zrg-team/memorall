@@ -679,7 +679,11 @@ describe("messages sent into a run in progress", () => {
 		});
 		expect(result.parts).toEqual([
 			{ role: "assistant", content: "Reading." },
-			{ role: "user", content: "Also check the logs" },
+			// Stored as the agent read it, so the next turn sends the same bytes.
+			{
+				role: "user",
+				content: "<by-the-way>\nAlso check the logs\n</by-the-way>",
+			},
 			{ role: "assistant", content: "Done." },
 		]);
 		// The run is over: refused again.

@@ -99,6 +99,15 @@ export const sandboxTargetOf = (url: string): SandboxTarget | null => {
 	return null;
 };
 
+/**
+ * True for an address on this machine's loopback (localhost:3000), as
+ * opposed to the renderer and virtual URLs that only the sandbox has.
+ */
+export const isLoopbackUrl = (url: string): boolean => {
+	const parsed = parse(isLocalAddress(url) ? `http://${url.trim()}` : url);
+	return Boolean(parsed && LOCAL_HOSTS.has(parsed.hostname));
+};
+
 /** The address the user and the agent see for a sandbox page. */
 export const sandboxServerUrl = ({ port, path }: SandboxTarget): string =>
 	`http://localhost:${port}${path.startsWith("/") ? path : `/${path}`}`;

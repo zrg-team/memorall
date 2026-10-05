@@ -1,9 +1,10 @@
 /**
  * pi's LLM provider for this app: whatever model the chat has selected.
  *
- * Registered with pi-ai's provider registry under CHAT_MODEL_API, so pi's
- * agent loop and its compaction both stream through
- * `llmService.chatCompletionsFor(serviceName, { stream: true, tools })`.
+ * Each pi session connects with its own LLM (the computer's, metered to that
+ * session) under an api id of its own, so pi's agent loop and its
+ * compaction both stream through that session's
+ * `llm.chatCompletionsFor(serviceName, { stream: true, tools })`.
  * Message conversion, tool-call accumulation, usage and stop reasons follow
  * pi-ai's openai-completions provider.
  */
@@ -29,6 +30,7 @@ import {
 	parseStreamingJson,
 	registerApiProvider,
 	type SimpleStreamOptions,
+	unregisterApiProviders,
 	type StopReason,
 	sanitizeSurrogates,
 	type TextContent,
@@ -50,7 +52,9 @@ type LlmSource = () => Promise<ILLMService>;
 const servicesByModel = new Map<string, string>();
 const modelKey = (provider: string, id: string) => `${provider}:${id}`;
 
-let llmSource: LlmSource | undefined;
+/** Each connected session's LLM, by the api id its models carry. */
+const llmSources = new Map<string, LlmSource>();
+let linkSeq = 0;
 
 const PI_THINKING_LEVELS: Exclude<ModelThinkingLevel, "off">[] = [
 	"minimal",
@@ -93,7 +97,8 @@ interface ListedModel {
 /** The chat's current model as a pi Model, or undefined when none is selected. */
 export async function resolveChatModel(
 	getLlm: LlmSource,
-): Promise<Model<typeof CHAT_MODEL_API> | undefined> {
+	api: string = CHAT_MODEL_API,
+): Promise<Model<string> | undefined> {
 	const llm = await getLlm();
 	const current = await llm.getCurrentModel();
 	if (!current) return undefined;
@@ -121,7 +126,7 @@ export async function resolveChatModel(
 	return {
 		id: modelId,
 		name: listed?.name ?? modelId,
-		api: CHAT_MODEL_API,
+		api,
 		provider,
 		baseUrl: "",
 		reasoning,
@@ -397,6 +402,7 @@ function streamChatModel(
 		};
 
 		try {
+			const llmSource = llmSources.get(model.api);
 			if (!llmSource) throw new Error("The chat model is not connected.");
 			const llm = await llmSource();
 			const serviceName = servicesByModel.get(
@@ -618,15 +624,34 @@ function streamChatModel(
 	return stream;
 }
 
-/** Connect pi's provider registry to the app's LLM service (idempotent). */
-export function registerChatModelProvider(getLlm: LlmSource): void {
-	llmSource = getLlm;
+/** One pi session's connection to the chat's model. */
+export interface ChatModelLink {
+	/** The api id the session's models carry. */
+	api: string;
+	/** The chat's current model, for this session. */
+	resolve(): Promise<Model<string> | undefined>;
+	/** Disconnects the session; its models stop streaming. */
+	dispose(): void;
+}
+
+/**
+ * Connects one pi session to the chat's model through its own LLM, so each
+ * session's requests go through (and are booked to) that session.
+ */
+export function connectChatModel(getLlm: LlmSource): ChatModelLink {
+	linkSeq += 1;
+	const api = `${CHAT_MODEL_API}:${linkSeq}`;
+	llmSources.set(api, getLlm);
 	registerApiProvider(
-		{
-			api: CHAT_MODEL_API,
-			stream: streamChatModel,
-			streamSimple: streamChatModel,
-		},
-		"memon-chat-model",
+		{ api, stream: streamChatModel, streamSimple: streamChatModel },
+		api,
 	);
+	return {
+		api,
+		resolve: () => resolveChatModel(getLlm, api),
+		dispose: () => {
+			llmSources.delete(api);
+			unregisterApiProviders(api);
+		},
+	};
 }

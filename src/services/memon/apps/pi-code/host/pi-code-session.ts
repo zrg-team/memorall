@@ -38,8 +38,8 @@ import { InteractiveMode } from "../coding-agent/modes/interactive/interactive-m
 import { initTheme } from "../coding-agent/modes/interactive/theme/theme";
 import { join } from "../platform/path";
 import {
-	registerChatModelProvider,
-	resolveChatModel,
+	type ChatModelLink,
+	connectChatModel,
 	thinkingLevelForEffort,
 } from "./chat-model";
 import { createPiFileSystem } from "./file-system";
@@ -134,19 +134,32 @@ export class PiCodeSession {
 		private readonly mode: InteractiveMode,
 		terminal: StreamTerminal,
 		private readonly footerData: FooterDataProvider,
+		private readonly link: ChatModelLink,
 	) {
 		this.terminal = terminal;
 	}
 
 	static async start(options: PiCodeSessionOptions): Promise<PiCodeSession> {
+		// The session's own connection to the chat's model, through its LLM.
+		const link = connectChatModel(options.getLlm);
+		try {
+			return await PiCodeSession.open(options, link);
+		} catch (error) {
+			link.dispose();
+			throw error;
+		}
+	}
+
+	private static async open(
+		options: PiCodeSessionOptions,
+		link: ChatModelLink,
+	): Promise<PiCodeSession> {
 		const home = options.home;
 		const cwd = options.cwd ?? home;
 		const agentDir = join(home, PI_CONFIG_DIR, "agent");
 		const files = createPiFileSystem(options.fs);
 		// pi works in a folder the agent named; it may not be there yet.
 		await options.fs.mkdir(cwd, { recursive: true }).catch(() => undefined);
-
-		registerChatModelProvider(options.getLlm);
 
 		const [globalSettings, projectSettings, keybindingsText, resources, model] =
 			await Promise.all([
@@ -158,7 +171,7 @@ export class PiCodeSession {
 					{ cwd, agentDir, environmentNote: ENVIRONMENT_NOTE },
 					files.readText,
 				),
-				resolveChatModel(options.getLlm).catch(() => undefined),
+				link.resolve().catch(() => undefined),
 			]);
 
 		const settingsManager = SettingsManager.fromStorage(
@@ -243,7 +256,7 @@ export class PiCodeSession {
 					throw new Error(`Skill file not found: ${path}`);
 				return text;
 			},
-			resolveModel: () => resolveChatModel(options.getLlm),
+			resolveModel: () => link.resolve(),
 		});
 		if (model) {
 			sessionManager.appendModelChange(model.provider, model.id);
@@ -263,7 +276,7 @@ export class PiCodeSession {
 			onQuit: options.onQuit,
 		});
 
-		const piCode = new PiCodeSession(session, mode, terminal, footerData);
+		const piCode = new PiCodeSession(session, mode, terminal, footerData, link);
 		terminal.onCompactRequest = () => piCode.redraw();
 		mode.init();
 		piCode.watch(options);
@@ -307,7 +320,8 @@ export class PiCodeSession {
 				if (this.disposed) return;
 				this.unsubscribers.push(
 					llm.onCurrentModelChange(() => {
-						void resolveChatModel(options.getLlm)
+						void this.link
+							.resolve()
 							.then((model) => {
 								if (!this.disposed) this.session.setModel(model);
 							})
@@ -316,6 +330,15 @@ export class PiCodeSession {
 				);
 			})
 			.catch(() => {});
+	}
+
+	/** pi's current session (a new one after /new). */
+	get sessionId(): string {
+		return this.session.sessionId;
+	}
+
+	get cwd(): string {
+		return this.session.cwd;
 	}
 
 	status(): PiCodeStatus {
@@ -502,6 +525,7 @@ export class PiCodeSession {
 		for (const unsubscribe of this.unsubscribers.splice(0)) unsubscribe();
 		this.session.dispose();
 		this.mode.stop();
+		this.link.dispose();
 		this.footerData.dispose();
 		this.terminal.release();
 		await this.session.sessionManager.flush().catch(() => {});

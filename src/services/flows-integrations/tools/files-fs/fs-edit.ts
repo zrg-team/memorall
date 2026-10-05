@@ -59,7 +59,9 @@ export const createFsEditTool: ToolFactory<Input, Services> = (
 			newText = text.split(old_string).join(new_string);
 		} else {
 			count = 1;
-			newText = text.replace(old_string, new_string);
+			// A replacer function inserts new_string verbatim; a string would
+			// expand `$&`, `$$`, `` $` `` and `$'` inside it.
+			newText = text.replace(old_string, () => new_string);
 		}
 
 		await writeFileBytes(dfs, filePath, newText);

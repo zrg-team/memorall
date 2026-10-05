@@ -1,3 +1,4 @@
+import { formatFlowRunInboxMessage } from "@memorall/agent-harness-flows/context/run-inbox";
 import { describe, expect, it } from "vitest";
 import type {
 	ComplexContentPartTool,
@@ -254,7 +255,11 @@ describe("buildAssistantContentParts", () => {
 					],
 				},
 				{ role: "tool", tool_call_id: "a", content: "file" },
-				{ role: "user", content: "Also check the logs" },
+				// Stored tagged, as the agent read it; shown as the user wrote it.
+				{
+					role: "user",
+					content: formatFlowRunInboxMessage("Also check the logs"),
+				},
 				{ role: "assistant", content: "Checked both." },
 			],
 		});

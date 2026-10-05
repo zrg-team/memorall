@@ -29,3 +29,6 @@ export * from "./flow-configs";
 
 // Cron job entities
 export * from "./cron-jobs";
+
+// Model requests outside chat replies
+export * from "./model-usage";

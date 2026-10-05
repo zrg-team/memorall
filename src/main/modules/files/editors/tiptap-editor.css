@@ -85,6 +85,84 @@
   padding: 0;
 }
 
+/* Task lists */
+.ProseMirror ul[data-type="taskList"] {
+  list-style: none;
+  padding-left: 0.25em;
+}
+
+.ProseMirror ul[data-type="taskList"] li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5em;
+}
+
+.ProseMirror ul[data-type="taskList"] li > label {
+  margin-top: 0.3em;
+  user-select: none;
+}
+
+.ProseMirror ul[data-type="taskList"] li > div {
+  flex: 1;
+  min-width: 0;
+}
+
+.ProseMirror ul[data-type="taskList"] li > div > p {
+  margin: 0;
+}
+
+/* Tables */
+.ProseMirror table {
+  border-collapse: collapse;
+  margin: 1em 0;
+  width: 100%;
+}
+
+.ProseMirror th,
+.ProseMirror td {
+  border: 1px solid #d1d5db;
+  padding: 0.35em 0.6em;
+  text-align: left;
+  vertical-align: top;
+}
+
+.ProseMirror th {
+  background: #f3f4f6;
+  font-weight: 600;
+}
+
+.ProseMirror th > p,
+.ProseMirror td > p {
+  margin: 0;
+}
+
+/* Markdown kept as source: block HTML and front matter */
+.ProseMirror pre[data-html-block],
+.ProseMirror pre[data-front-matter] {
+  position: relative;
+  padding-top: 1.6em;
+  border: 1px dashed #d1d5db;
+  background: transparent;
+}
+
+.ProseMirror pre[data-html-block]::before,
+.ProseMirror pre[data-front-matter]::before {
+  position: absolute;
+  top: 0.35em;
+  left: 1em;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 0.75em;
+  color: #9ca3af;
+}
+
+.ProseMirror pre[data-html-block]::before {
+  content: "HTML";
+}
+
+.ProseMirror pre[data-front-matter]::before {
+  content: "Front matter";
+}
+
 /* Blockquotes */
 .ProseMirror blockquote {
   border-left: 3px solid #d1d5db;
@@ -153,6 +231,21 @@
   .ProseMirror hr {
     border-top-color: #374151;
   }
+
+  .ProseMirror pre[data-html-block],
+  .ProseMirror pre[data-front-matter] {
+    border-color: #4b5563;
+    background: transparent;
+  }
+
+  .ProseMirror th,
+  .ProseMirror td {
+    border-color: #4b5563;
+  }
+
+  .ProseMirror th {
+    background: #1f2937;
+  }
 }
 
 /* ========================
@@ -202,6 +295,17 @@
 
 .markdown-preview ul { list-style-type: disc; }
 .markdown-preview ol { list-style-type: decimal; }
+
+/* GFM task lists: the checkbox replaces the bullet */
+.markdown-preview ul.contains-task-list {
+  list-style: none;
+  padding-left: 0.25em;
+}
+
+.markdown-preview .task-list-item input[type="checkbox"] {
+  margin-right: 0.5em;
+  vertical-align: middle;
+}
 
 .markdown-preview li {
   margin: 0.4em 0;

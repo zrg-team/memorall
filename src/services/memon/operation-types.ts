@@ -93,7 +93,17 @@ export interface MemonOperationPayloadMap {
 	/** The user edited the open visual's source and saved it. */
 	"visual.save": Keyed<{ source: string }>;
 	"editor.update": Keyed<{ content: string }>;
-	"editor.save": Keyed<{ content?: string }>;
+	/**
+	 * `base`: the text the user's edits started from; the save is refused if
+	 * the file no longer holds it, unless `overwrite`.
+	 */
+	"editor.save": Keyed<{
+		content?: string;
+		base?: string;
+		overwrite?: boolean;
+	}>;
+	/** Drops unsaved edits and shows the file as it is on disk. */
+	"editor.reload": Keyed;
 	/** Runs a command in a Terminal tab (the one in front by default). */
 	"terminal.exec": Keyed<{ command: string; terminalId?: string }>;
 	/** Opens a new Terminal tab. */

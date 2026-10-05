@@ -53,8 +53,10 @@ import {
 	createMemonConnectionsPort,
 	createMemonSkillsPort,
 } from "./settings-ports";
+import { STUDIO_USAGE_SOURCE } from "@/services/model-usage/model-usage-ledger";
 import { createStudioPort, type MemonStudioPort } from "./studio-app";
 import { createPiCodePort } from "./apps/pi-code/pi-code-port";
+import { createMemonModelsPort, type MemonModelsPort } from "./models-port";
 import { formatDownloadSize, MEMON_DOWNLOAD_MAX_BYTES } from "./download";
 import { isResidentLocalProvider } from "@/services/llm/provider-registry";
 
@@ -472,30 +474,38 @@ export const createMemonSchedulerPort = (): MemonSchedulerPort => {
 
 /**
  * Studio on the studios the Studio page runs: the model the user chose for
- * each, the same generation code, and the same history.
+ * each, the same generation code, and the same history. Its model calls go
+ * through the models port: each run is booked to the computer's Studio
+ * session and its agent.
  */
-export const createMemonStudioPort = (): MemonStudioPort => {
-	const services = async () => (await import("@/services")).serviceManager;
+export const createMemonStudioPort = (
+	models: MemonModelsPort = createMemonModelsPort(),
+): MemonStudioPort => {
 	const generations = () => import("@/services/studio/studio-generations");
+	// Looking models up and loading them makes no model request to book.
+	const lookups = () =>
+		models.llm(() => ({
+			source: STUDIO_USAGE_SOURCE,
+			sessionId: "lookups",
+			title: "Studio",
+		}));
 	return createStudioPort({
-		currentModel: async (mode) =>
-			(await services()).llmService.getCurrentModelFor(mode),
+		currentModel: async (mode) => (await lookups()).getCurrentModelFor(mode),
 		modelInfo: async (model) => {
-			const { data } = await (await services()).llmService.modelsFor(
-				model.serviceName,
-			);
+			const { data } = await (await lookups()).modelsFor(model.serviceName);
 			const target = model.modelId.toLowerCase();
 			return data.find((entry) => entry.id.toLowerCase() === target);
 		},
 		prepare: async (model, mode) => {
 			if (!isResidentLocalProvider(model.provider)) return;
-			await (await services()).llmService.serveFor(
+			await (await lookups()).serveFor(
 				model.serviceName,
 				model.modelId,
 				undefined,
 				{ category: mode },
 			);
 		},
+		models: (scope) => models.llm(() => scope),
 		generators: {
 			speech: async (options) =>
 				(await generations()).runSpeechGeneration(options),
@@ -562,18 +572,24 @@ export const createMemonDownloadPort = (): MemonDownloadPort => ({
 
 export const createMemonPorts = (
 	overrides: Partial<MemonPorts> = {},
+	/** The one way the computer's apps reach the models (metered). */
+	models: MemonModelsPort = createMemonModelsPort(),
 ): MemonPorts => ({
 	browser: overrides.browser ?? createMemonBrowserPort(),
 	embedded: overrides.embedded ?? createMemonEmbeddedPort(),
 	files: overrides.files ?? createMemonFilesPort(),
 	terminal: overrides.terminal ?? createMemonTerminalPort(),
 	scheduler: overrides.scheduler ?? createMemonSchedulerPort(),
-	studio: overrides.studio ?? createMemonStudioPort(),
+	studio: overrides.studio ?? createMemonStudioPort(models),
 	skills: overrides.skills ?? createMemonSkillsPort(),
 	connections: overrides.connections ?? createMemonConnectionsPort(),
 	download: overrides.download ?? createMemonDownloadPort(),
 	homes: overrides.homes ?? createMemonHomePort(),
 	piCode:
 		overrides.piCode ??
-		createPiCodePort({ fs: getFlowFileSystem, sandbox: resolveMemonSandbox }),
+		createPiCodePort({
+			fs: getFlowFileSystem,
+			sandbox: resolveMemonSandbox,
+			models,
+		}),
 });

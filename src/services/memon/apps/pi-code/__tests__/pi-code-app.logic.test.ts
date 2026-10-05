@@ -62,6 +62,7 @@ const setup = () => {
 	let runId: string | null = "run-1";
 	const host = {
 		sessionKey: "machine",
+		agentId: () => "agent-1",
 		home: () => HOME,
 		changed: vi.fn(),
 		quit: vi.fn(() => {

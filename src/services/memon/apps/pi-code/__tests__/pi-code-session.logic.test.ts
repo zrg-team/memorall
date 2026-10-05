@@ -10,6 +10,8 @@ import type {
 	ChatCompletionChunk,
 	ChatCompletionRequest,
 } from "@/types/openai";
+import { meterLlmService } from "@/services/model-usage/metered-llm";
+import type { ModelUsageEntry } from "@/services/model-usage/model-usage-ledger";
 import { PiCodeSession } from "../host/pi-code-session";
 
 const HOME = "/agents/coder";
@@ -392,6 +394,73 @@ describe("PiCodeSession", () => {
 		// A prompt pi cannot take comes back to the caller.
 		await session.dispose();
 		await expect(session.submit("again")).rejects.toThrow("pi code has quit.");
+	});
+
+	it("books each pi request to its own session, with two computers running pi", async () => {
+		const booked: ModelUsageEntry[] = [];
+		const record = async (entry: ModelUsageEntry) => {
+			booked.push(entry);
+		};
+		const sessions: Record<"A" | "B", PiCodeSession | undefined> = {
+			A: undefined,
+			B: undefined,
+		};
+		const requests = {
+			A: [] as ChatCompletionRequest[],
+			B: [] as ChatCompletionRequest[],
+		};
+		const start = (name: "A" | "B") => {
+			const llm = meterLlmService(
+				createLlm(requests[name]),
+				() => ({
+					source: "pi-code",
+					tool: "memon_code",
+					sessionId: sessions[name]?.sessionId ?? name,
+					title: name,
+				}),
+				record,
+			);
+			return PiCodeSession.start({
+				home: HOME,
+				sandboxSessionKey: `memon:${name}`,
+				theme: "dark",
+				fs: new MemoryFs({
+					[`${HOME}/src/a.ts`]: "export const answer = 41;\n",
+				}),
+				getSandbox: async () => createSandbox([]),
+				getLlm: async () => llm,
+				onQuit: () => {},
+				onChange: () => {},
+			});
+		};
+		sessions.A = await start("A");
+		sessions.B = await start("B");
+		try {
+			for (const name of ["B", "A"] as const) {
+				await sessions[name]?.submit("fix the answer");
+				expect(await sessions[name]?.waitForIdle(5_000)).toBe(true);
+			}
+			expect(requests.A).toHaveLength(2);
+			expect(requests.B).toHaveLength(2);
+			for (const name of ["A", "B"] as const) {
+				const mine = booked.filter((entry) => entry.title === name);
+				expect(mine.map((entry) => entry.sessionId)).toEqual([
+					sessions[name]?.sessionId,
+					sessions[name]?.sessionId,
+				]);
+				// The tool call reported no usage (estimated); the answer did.
+				expect(mine.map((entry) => entry.usage)).toEqual([
+					expect.objectContaining({ estimated: true }),
+					expect.objectContaining({
+						prompt_tokens: 1200,
+						completion_tokens: 30,
+					}),
+				]);
+			}
+		} finally {
+			await sessions.A?.dispose();
+			await sessions.B?.dispose();
+		}
 	});
 
 	it("restarts the output at a full redraw for a view that attaches late", async () => {

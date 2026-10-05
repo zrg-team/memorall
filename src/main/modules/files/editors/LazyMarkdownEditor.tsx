@@ -1,7 +1,7 @@
 import React, { Suspense, lazy } from "react";
 import type { DocumentEditorProps } from "./types";
 
-// The markdown editor pulls in TipTap, marked, turndown, react-markdown and
+// The markdown editor pulls in TipTap, @tiptap/markdown, react-markdown and
 // react-syntax-highlighter. Load it lazily so registering editors at app start
 // does not drag all of that into the entry bundle — it is fetched only when a
 // document is actually opened/edited.

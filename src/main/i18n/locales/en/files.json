@@ -167,7 +167,16 @@
 		"updateImage": "Update Image",
 		"imageUrl": "Image URL",
 		"imageAlt": "Alt Text",
-		"imageAltPlaceholder": "Describe the image..."
+		"imageAltPlaceholder": "Describe the image...",
+		"taskList": "Task List"
+	},
+	"conflict": {
+		"message": "This file changed outside the editor while you were editing it.",
+		"showChanges": "Show changes",
+		"hideChanges": "Hide changes",
+		"reload": "Reload",
+		"keepMine": "Keep mine",
+		"unchangedLines": "⋯ {{count}} unchanged lines"
 	},
 	"navigator": {
 		"expand": "Expand",

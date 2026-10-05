@@ -220,6 +220,9 @@ export const parseBrowserCommand = (value: unknown): BrowserCommand => {
 		if (
 			![
 				"click",
+				"hover",
+				"press",
+				"toggle",
 				"input",
 				"focus",
 				"submit",

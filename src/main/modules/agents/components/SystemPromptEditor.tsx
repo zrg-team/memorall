@@ -1,20 +1,16 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
 import { useEditor, EditorContent } from "@tiptap/react";
-import StarterKit from "@tiptap/starter-kit";
-import Placeholder from "@tiptap/extension-placeholder";
-import { marked } from "marked";
-import TurndownService from "turndown";
 import {
 	useAgentConfigStore,
 	getDefaultSystemPromptForGraph,
 } from "@/main/stores/agent-config";
+import {
+	createMarkdownExtensions,
+	getMarkdownContent,
+	setMarkdownContent,
+} from "@/main/modules/files/editors/markdown-extensions";
 import { cn } from "@/lib/utils";
-
-// ---------------------------------------------------------------------------
-// Singleton — never recreated across renders
-// ---------------------------------------------------------------------------
-const td = new TurndownService({ headingStyle: "atx", bulletListMarker: "-" });
 
 // ---------------------------------------------------------------------------
 // Typography for the rendered markdown nodes. Scoped to this editor on purpose:
@@ -38,6 +34,10 @@ const MARKDOWN_NODE_STYLES = [
 	"[&_.ProseMirror_pre_code]:bg-transparent [&_.ProseMirror_pre_code]:p-0",
 	"[&_.ProseMirror_blockquote]:my-2 [&_.ProseMirror_blockquote]:border-l-2 [&_.ProseMirror_blockquote]:border-border [&_.ProseMirror_blockquote]:pl-3 [&_.ProseMirror_blockquote]:text-muted-foreground",
 	"[&_.ProseMirror_hr]:my-4 [&_.ProseMirror_hr]:border-t [&_.ProseMirror_hr]:border-border",
+	"[&_.ProseMirror_ul[data-type=taskList]]:list-none [&_.ProseMirror_ul[data-type=taskList]]:pl-1",
+	"[&_.ProseMirror_li[data-type=taskItem]]:flex [&_.ProseMirror_li[data-type=taskItem]]:gap-2",
+	// Prompt tags such as <instructions> stay as source text.
+	"[&_.ProseMirror_pre[data-html-block]]:border [&_.ProseMirror_pre[data-html-block]]:border-dashed [&_.ProseMirror_pre[data-html-block]]:border-border [&_.ProseMirror_pre[data-html-block]]:bg-transparent",
 ].join(" ");
 
 // ---------------------------------------------------------------------------
@@ -49,26 +49,29 @@ const PromptEditorContent = React.memo<{
 	onChange: (value: string) => void;
 	placeholder?: string;
 }>(({ value, onChange, placeholder }) => {
-	// Tracks last markdown we produced to skip no-op external syncs
-	const currentMdRef = React.useRef(value);
+	// Tracks last markdown we produced to skip no-op external syncs; null until
+	// the first value is loaded.
+	const currentMdRef = React.useRef<string | null>(null);
+	const onChangeRef = React.useRef(onChange);
+	onChangeRef.current = onChange;
 
 	const editor = useEditor({
-		extensions: [StarterKit, Placeholder.configure({ placeholder })],
-		content: marked.parse(value || "") as string,
+		extensions: createMarkdownExtensions({ placeholder }),
 		onUpdate: ({ editor }) => {
-			const md = td.turndown(editor.getHTML());
+			const md = getMarkdownContent(editor, currentMdRef.current ?? "");
 			currentMdRef.current = md;
-			onChange(md);
+			onChangeRef.current(md);
 		},
 	});
 
-	// Sync when value changes externally (preset switch, reset, revert…)
+	// Load the value, and sync when it changes externally (preset switch,
+	// reset, revert…)
 	React.useEffect(() => {
-		if (!editor || currentMdRef.current === value) return;
+		if (!editor || editor.isDestroyed || currentMdRef.current === value) {
+			return;
+		}
 		currentMdRef.current = value;
-		editor.commands.setContent(marked.parse(value || "") as string, {
-			emitUpdate: false,
-		});
+		setMarkdownContent(editor, value || "");
 	}, [editor, value]);
 
 	return (

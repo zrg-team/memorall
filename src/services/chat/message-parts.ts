@@ -1,3 +1,4 @@
+import { formatFlowRunInboxMessage } from "@memorall/agent-harness-flows/context/run-inbox";
 import type {
 	ChatCompletionChunk,
 	ChatCompletionMessageParam,
@@ -136,12 +137,16 @@ export class MessagePartsAccumulator {
 	}
 
 	/**
-	 * A message the user sent while the agent worked, where the agent read it:
-	 * what the agent writes next starts a new part after it.
+	 * A message the user sent while the agent worked, where the agent read it
+	 * and tagged as it read it: what the agent writes next starts a new part
+	 * after it.
 	 */
 	addUserMessage(content: string): void {
 		this.currentAssistantIndex = null;
-		this.parts.push({ role: "user", content });
+		this.parts.push({
+			role: "user",
+			content: formatFlowRunInboxMessage(content),
+		});
 	}
 
 	toParts(): MessageParts {

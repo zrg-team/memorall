@@ -87,6 +87,8 @@ const GUTTER_WIDTH = "3.5rem";
 export const CodeEditor: React.FC<DocumentEditorProps> = ({
 	file,
 	initialContent,
+	onContentChange,
+	onDirtyChange,
 	onSave,
 	readOnly = false,
 	className,
@@ -94,6 +96,16 @@ export const CodeEditor: React.FC<DocumentEditorProps> = ({
 	const { t } = useTranslation("documents");
 	const [content, setContent] = useState(initialContent);
 	const [isDirty, setIsDirty] = useState(false);
+
+	const edit = (next: string) => {
+		setContent(next);
+		setIsDirty(true);
+		onContentChange?.(next);
+	};
+
+	useEffect(() => {
+		onDirtyChange?.(isDirty);
+	}, [isDirty, onDirtyChange]);
 	const [isSaving, setIsSaving] = useState(false);
 
 	const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -123,6 +135,9 @@ export const CodeEditor: React.FC<DocumentEditorProps> = ({
 		try {
 			await onSave(content);
 			setIsDirty(false);
+		} catch {
+			// The edits stay unsaved; whoever refused the save says why (a file
+			// changed on disk shows its own banner).
 		} finally {
 			setIsSaving(false);
 		}
@@ -149,8 +164,7 @@ export const CodeEditor: React.FC<DocumentEditorProps> = ({
 			const end = el.selectionEnd;
 			const newContent =
 				content.substring(0, start) + "  " + content.substring(end);
-			setContent(newContent);
-			setIsDirty(true);
+			edit(newContent);
 			requestAnimationFrame(() => {
 				el.selectionStart = el.selectionEnd = start + 2;
 			});
@@ -268,10 +282,7 @@ export const CodeEditor: React.FC<DocumentEditorProps> = ({
 				<textarea
 					ref={textareaRef}
 					value={content}
-					onChange={(e) => {
-						setContent(e.target.value);
-						setIsDirty(true);
-					}}
+					onChange={(e) => edit(e.target.value)}
 					onScroll={syncHighlight}
 					onKeyDown={handleKeyDown}
 					className="absolute inset-0 resize-none outline-none border-0 overflow-auto"

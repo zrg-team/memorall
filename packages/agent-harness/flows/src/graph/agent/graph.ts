@@ -1,6 +1,10 @@
 import type { LangGraphRunnableConfig } from "@langchain/langgraph";
 import { END, START, StateGraph } from "@langchain/langgraph";
-import { getFlowRunInbox } from "../../context/run-inbox.js";
+import {
+	FLOW_RUN_INBOX_REMINDER,
+	formatFlowRunInboxMessage,
+	getFlowRunInbox,
+} from "../../context/run-inbox.js";
 import { getFlowRunLifecycle } from "../../context/run-lifecycle.js";
 import { getFlowRuntimeVars } from "../../context/runtime-context.js";
 import { findEnabledStepByName } from "../../interfaces/config/flow-config.js";
@@ -27,6 +31,7 @@ import {
 	createOutputMessageChunks,
 	GraphBase,
 	type GraphTool,
+	mergeReminders,
 	normalizeChatMessages,
 } from "../graph.base.js";
 import { streamAssistantTurn } from "./assistant-turn.js";
@@ -244,15 +249,20 @@ export class AgentGraph extends GraphBase<
 				content: message.content,
 			});
 		}
+		// Tagged as a "by the way" to the task it is on, not a new request; the
+		// reminder says how to read the tag, and the tool path carries it to the
+		// rest of the run.
 		const workingMemory = sent.length
 			? [
 					...state.outputMessages,
 					...sent.map((message) => ({
 						role: "user" as const,
-						content: message.content,
+						content: formatFlowRunInboxMessage(message.content),
 					})),
 				]
 			: state.outputMessages;
+		const inboxReminders = sent.length ? [FLOW_RUN_INBOX_REMINDER] : undefined;
+		const reminders = mergeReminders(state.reminders, inboxReminders);
 
 		// Full LLM context: stable history + working memory accumulated so far
 		const tools = this.combinedTools.map((t) => t.tool);
@@ -269,7 +279,7 @@ export class AgentGraph extends GraphBase<
 			{
 				messages: state.messages,
 				outputMessages: workingMemory,
-				reminders: state.reminders,
+				reminders,
 			},
 			{
 				llm,
@@ -307,6 +317,7 @@ export class AgentGraph extends GraphBase<
 					},
 				],
 				...(turn.compacted ? { messages } : {}),
+				...(inboxReminders ? { reminders: inboxReminders } : {}),
 				currentIteration: state.currentIteration + 1,
 			};
 		}

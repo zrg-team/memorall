@@ -219,4 +219,96 @@ describe("usage repository", () => {
 		await expect(loadReportedSpend(since)).resolves.toBeCloseTo(0.06);
 		expect(loadFeatureLabels().get("step-fs")).toBe("File System");
 	});
+
+	it("adds the model usage ledger: requests made on a computer, charged to their tool", async () => {
+		const db = database.db as Db;
+		const since = new Date(Date.now() - 86_400_000);
+		const spentBefore = await loadReportedSpend(since);
+		const [agent] = await db
+			.insert(schema.flows)
+			.values({ name: "Coder" })
+			.returning();
+		await db.insert(schema.modelUsage).values([
+			{
+				source: "pi-code",
+				tool: "web_read",
+				agentFlowId: agent?.id,
+				sessionId: "pi-1",
+				title: "pi code · ~/todo",
+				provider: "openrouter",
+				model: "anthropic/claude-sonnet-4.5",
+				usage: {
+					prompt_tokens: 900,
+					completion_tokens: 60,
+					total_tokens: 960,
+					cached_tokens: 800,
+					cost: 0.004,
+				},
+			},
+			{
+				// A run on the Studio page: no agent, charged to its studio.
+				source: "studio",
+				tool: "decision",
+				sessionId: "studio-session-1",
+				title: "Support tickets",
+				provider: "ollama",
+				model: "llama-4",
+				usage: {
+					prompt_tokens: 40,
+					completion_tokens: 4,
+					total_tokens: 44,
+					estimated: true,
+				},
+			},
+		]);
+
+		const ledger = (await loadUsageRequests(since)).filter((request) =>
+			request.conversationId.startsWith("model-usage:"),
+		);
+		expect(ledger).toEqual([
+			expect.objectContaining({
+				conversationId: "model-usage:pi-code:pi-1",
+				conversationTitle: "pi code · ~/todo",
+				agent: "Coder",
+				provider: "openrouter",
+				local: false,
+				cost: 0.004,
+				inputTokens: 900,
+				cachedTokens: 800,
+				outputTokens: 60,
+				// Charged to its tool as a whole, without a call of its own.
+				tools: [
+					{
+						tool: "web_read",
+						feature: "step-web",
+						weight: 1,
+						resultChars: 0,
+						calls: 0,
+					},
+				],
+			}),
+			expect.objectContaining({
+				conversationId: "model-usage:studio:studio-session-1",
+				conversationTitle: "Support tickets",
+				// Named after its source, not "Default chat".
+				agent: "Studio",
+				local: true,
+				cost: 0,
+				estimated: true,
+				// Studio's own feature; each run is a call of its studio.
+				tools: [
+					{
+						tool: "decision",
+						feature: "source:studio",
+						weight: 1,
+						resultChars: 0,
+						calls: 1,
+					},
+				],
+			}),
+		]);
+		await expect(loadReportedSpend(since)).resolves.toBeCloseTo(
+			spentBefore + 0.004,
+		);
+	});
 });

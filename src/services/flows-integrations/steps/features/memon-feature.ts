@@ -114,9 +114,9 @@ const APP_SECTIONS: Record<MemonAppId, (config: MemonFeatureConfig) => string> =
 		browser: () =>
 			section("Browser", "read and use web pages", [
 				'Open: memon_open { app: "browser", url, newTab? }; plain words search DuckDuckGo.',
-				'Read: the screen is an outline with refs on links, buttons, fields and images ([b7] img 720×360 "alt"). memon_act { action: "scroll", direction: "down" } reads on, { action: "back" } goes back.',
-				'Act: { ref: "b12", action: "click" }; { ref: "b3", action: "type", text: "…", submit: true } fills and sends. If a ref is gone or the page changed, call memon_screen.',
-				"Local servers: http://localhost:3000 and the like are servers in this computer; they open in an embedded tab that you read and click the same way (a real tab cannot reach them). embedded: false only for a server outside the computer.",
+				'Read: an outline with refs on all you can use, controls with their state ([b4] switch "Dark" (checked)), canvases with their place ([b9] canvas 800×600 at 0,120). memon_act { action: "scroll" } reads on (with a ref: its list or panel); "back" goes back.',
+				'Act: { ref: "b12", action: "click" }; { ref: "b3", action: "type", text, submit: true }; select, toggle, hover; { action: "press", text: "Escape" }. By position: { ref: "b9", action: "click", x, y } inside a ref, or x, y in the viewport. If a ref is gone, call memon_screen.',
+				"Local servers: an address the Terminal serves (localhost:3000) opens embedded, used the same way; other local addresses are the user's and open in a real tab.",
 			]),
 		files: (config) =>
 			section("Files", "folders, the Editor and the Viewer", [

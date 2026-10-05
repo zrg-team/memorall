@@ -11,6 +11,7 @@ import {
 } from "@/services/llm/provider-registry";
 import { useUsageBudget } from "../hooks/use-usage-budget";
 import { useUsageRequests } from "../hooks/use-usage-requests";
+import { MODEL_USAGE_SOURCE_LABELS } from "@/services/model-usage/model-usage-ledger";
 import { loadFeatureLabels } from "../services/usage-repository";
 import type {
 	UsageFilterKey,
@@ -227,7 +228,8 @@ export const UsageDashboard: React.FC = () => {
 			if (feature === BASE_FEATURE) return t("features.base");
 			if (feature === OTHER_FEATURE) return t("features.other");
 			const source = sourceOfFeatureKey(feature);
-			if (source) return source.toUpperCase();
+			if (source)
+				return MODEL_USAGE_SOURCE_LABELS[source] ?? source.toUpperCase();
 			return featureLabels.get(feature) ?? feature;
 		},
 		[featureLabels, t],

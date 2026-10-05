@@ -450,6 +450,12 @@ const fullLines = (
 			if (tab.error) lines.push(`error: ${tab.error}`);
 			if (tab.outline) {
 				lines.push(`page: ${tab.outline.docToken}`);
+				const { scroll } = tab.outline;
+				if (scroll?.viewportWidth) {
+					lines.push(
+						`viewport: ${scroll.viewportWidth}×${scroll.viewportHeight}, scrolled ${scroll.y} of ${Math.max(0, scroll.pageHeight - scroll.viewportHeight)} px (x, y are in it)`,
+					);
+				}
 				lines.push(formatPageOutline(tab.outline));
 			} else {
 				lines.push("(page not read yet)");
@@ -488,6 +494,11 @@ const fullLines = (
 			const page = textPage(editor.content, editor.screenLine);
 			const lines = [
 				`── ${window.id} Editor · ${editor.path ?? "untitled"} · ${editor.saved ? "saved" : "unsaved"} · ${editor.content.split("\n").length} lines`,
+				...(editor.conflict !== undefined
+					? [
+							"(the file changed on disk under these unsaved edits; saving is refused so it is not replaced — open the file again to see it, then redo the change)",
+						]
+					: []),
 				"[e1] text:",
 				...page.lines,
 			];

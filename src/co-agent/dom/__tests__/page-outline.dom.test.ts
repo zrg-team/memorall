@@ -3,6 +3,7 @@ import {
 	actOnRef,
 	buildPageOutline,
 	formatPageOutline,
+	type PageOutline,
 	StaleOutlineError,
 } from "../page-outline";
 
@@ -140,5 +141,244 @@ describe("page outline", () => {
 				value: "hunter2",
 			}),
 		).toThrow();
+	});
+});
+
+describe("page outline controls", () => {
+	/** The ref of the first block whose text or label is `name`. */
+	const refOf = (outline: PageOutline, name: string): string => {
+		for (const block of outline.blocks) {
+			const text =
+				"text" in block ? block.text : "label" in block ? block.label : "";
+			if (text === name && "ref" in block && block.ref) return block.ref;
+		}
+		throw new Error(`no ref for ${name}`);
+	};
+
+	/** jsdom draws nothing; say what is drawn at every point. */
+	const drawAt = (element: Element) => {
+		Object.defineProperty(document, "elementFromPoint", {
+			configurable: true,
+			value: vi.fn(() => element),
+		});
+	};
+
+	beforeEach(() => {
+		stubLayout();
+	});
+
+	afterEach(() => {
+		vi.restoreAllMocks();
+		Reflect.deleteProperty(document, "elementFromPoint");
+		document.body.innerHTML = "";
+	});
+
+	it("labels the page's own controls, with their state, editors and canvases", () => {
+		document.body.innerHTML = `
+			<div role="switch" aria-checked="true">Dark mode</div>
+			<div style="cursor: pointer">Open settings</div>
+			<span tabindex="0">Menu</span>
+			<label><input type="checkbox" name="remember" checked> Remember me</label>
+			<div contenteditable="true" aria-label="Message">Hi</div>
+			<details><summary>More</summary></details>
+			<canvas aria-label="Chart"></canvas>
+			<div style="cursor: pointer"><button>Inner</button></div>
+		`;
+		const outline = buildPageOutline(document);
+		const text = formatPageOutline(outline);
+
+		expect(text).toMatch(/\[b\d+\] switch "Dark mode" \(checked\)/);
+		expect(text).toMatch(/\[b\d+\] button "Open settings"/);
+		expect(text).toMatch(/\[b\d+\] button "Menu"/);
+		expect(text).toMatch(/\[b\d+\] checkbox "Remember me" \(checked\)/);
+		expect(text).toMatch(/\[b\d+\] input textbox "Message" value="Hi"/);
+		expect(text).toMatch(/\[b\d+\] button "More" \(collapsed\)/);
+		expect(text).toMatch(/\[b\d+\] canvas "Chart" 100×40 at 0,0/);
+		// A clickable wrapper around a control lists the control, once.
+		expect(text.match(/"Inner"/g)).toHaveLength(1);
+		expect(outline.scroll.viewportWidth).toBe(window.innerWidth);
+	});
+
+	it("clicks with the events a pointer makes, not a bare click()", () => {
+		document.body.innerHTML = `<div role="option">Apple</div>`;
+		const outline = buildPageOutline(document);
+		const option = document.querySelector('[role="option"]') as HTMLElement;
+		const events: string[] = [];
+		for (const type of [
+			"pointerdown",
+			"mousedown",
+			"pointerup",
+			"mouseup",
+			"click",
+		]) {
+			option.addEventListener(type, () => events.push(type));
+		}
+
+		actOnRef(document, {
+			ref: refOf(outline, "Apple"),
+			docToken: outline.docToken,
+			action: "click",
+		});
+		expect(events).toEqual([
+			"pointerdown",
+			"mousedown",
+			"pointerup",
+			"mouseup",
+			"click",
+		]);
+	});
+
+	it("clicks a viewport point and says what it landed on", () => {
+		document.body.innerHTML = "<button>Save</button>";
+		const outline = buildPageOutline(document);
+		const button = document.querySelector("button") as HTMLButtonElement;
+		drawAt(button);
+		let clicked: MouseEvent | undefined;
+		button.addEventListener("click", (event) => {
+			clicked = event;
+		});
+
+		const result = actOnRef(document, {
+			action: "click",
+			x: 40,
+			y: 12,
+			docToken: outline.docToken,
+		});
+		expect(clicked).toMatchObject({ clientX: 40, clientY: 12 });
+		expect(result).toMatchObject({
+			ok: true,
+			detail: `at (40, 12) on ${refOf(outline, "Save")} "Save"`,
+		});
+		expect(() =>
+			actOnRef(document, { action: "click", x: 40, y: 99_999 }),
+		).toThrow(/outside the viewport/);
+	});
+
+	it("clicks a point inside a ref, from its top-left corner", () => {
+		document.body.innerHTML = `<canvas aria-label="Board"></canvas>`;
+		const outline = buildPageOutline(document);
+		const canvas = document.querySelector("canvas") as HTMLCanvasElement;
+		drawAt(canvas);
+		const points: Array<[number, number]> = [];
+		canvas.addEventListener("click", (event) =>
+			points.push([event.clientX, event.clientY]),
+		);
+		const ref = refOf(outline, "Board");
+
+		actOnRef(document, { ref, action: "click", x: 30, y: 20 });
+		expect(points).toEqual([[30, 20]]);
+		expect(() =>
+			actOnRef(document, { ref, action: "click", x: 500, y: 20 }),
+		).toThrow(/100×40/);
+	});
+
+	it("asks before a click by position sends a POST form", () => {
+		document.body.innerHTML = `<form method="post"><button>Pay <span>now</span></button></form>`;
+		buildPageOutline(document);
+		drawAt(document.querySelector("span") as HTMLElement);
+		const submit = vi.fn((event: Event) => event.preventDefault());
+		document.forms[0].addEventListener("submit", submit);
+
+		const result = actOnRef(document, { action: "click", x: 5, y: 5 });
+		expect(result).toMatchObject({ ok: false, needsApproval: "form-submit" });
+		expect(submit).not.toHaveBeenCalled();
+	});
+
+	it("presses keys on the focused element, with Tab and Enter doing their part", () => {
+		document.body.innerHTML = `<input name="q"><button>Go</button>`;
+		buildPageOutline(document);
+		const field = document.querySelector("input") as HTMLInputElement;
+		const button = document.querySelector("button") as HTMLButtonElement;
+		const keys: string[] = [];
+		document.addEventListener("keydown", (event) =>
+			keys.push(`${(event.target as Element).localName}:${event.key}`),
+		);
+		const clicks = vi.fn();
+		button.addEventListener("click", clicks);
+		field.focus();
+
+		actOnRef(document, { action: "press", value: "Escape" });
+		expect(keys).toEqual(["input:Escape"]);
+
+		const tabbed = actOnRef(document, { action: "press", value: "Tab" });
+		expect(document.activeElement).toBe(button);
+		expect(tabbed.ok && tabbed.detail).toMatch(/^focus moved to b\d+ "Go"$/);
+
+		actOnRef(document, { action: "press", value: "Enter" });
+		expect(clicks).toHaveBeenCalledTimes(1);
+		expect(() =>
+			actOnRef(document, { action: "press", value: "Hyper" }),
+		).toThrow(/Unknown key/);
+	});
+
+	it("toggles a checkbox to the state asked for", () => {
+		document.body.innerHTML = `<label><input type="checkbox" name="news"> News</label>`;
+		const outline = buildPageOutline(document);
+		const box = document.querySelector("input") as HTMLInputElement;
+		const ref = refOf(outline, "News");
+
+		expect(
+			actOnRef(document, { ref, action: "toggle", value: "on" }),
+		).toMatchObject({ ok: true, detail: "turned on" });
+		expect(box.checked).toBe(true);
+		expect(
+			actOnRef(document, { ref, action: "toggle", value: "on" }),
+		).toMatchObject({ ok: true, detail: "already on" });
+		expect(box.checked).toBe(true);
+	});
+
+	it("types into a rich-text editor", () => {
+		document.body.innerHTML = `<div contenteditable="true" aria-label="Message"></div>`;
+		const outline = buildPageOutline(document);
+		const editor = document.querySelector("[contenteditable]") as HTMLElement;
+		const inputs = vi.fn();
+		editor.addEventListener("input", inputs);
+
+		actOnRef(document, {
+			ref: refOf(outline, "Message"),
+			action: "input",
+			value: "Hello",
+		});
+		expect(editor.textContent).toBe("Hello");
+		expect(inputs).toHaveBeenCalled();
+	});
+
+	it("scrolls the area a ref is in, and says where it stopped", () => {
+		document.body.innerHTML = `<div style="overflow-y: auto"><button>Item 1</button></div>`;
+		const outline = buildPageOutline(document);
+		const list = document.querySelector("div") as HTMLDivElement;
+		Object.defineProperties(list, {
+			scrollHeight: { value: 1000 },
+			clientHeight: { value: 200 },
+			scrollTop: { value: 0, writable: true },
+		});
+		list.scrollTo = vi.fn((options?: ScrollToOptions | number) => {
+			if (typeof options === "object") list.scrollTop = options.top ?? 0;
+		}) as typeof list.scrollTo;
+		const ref = refOf(outline, "Item 1");
+
+		const result = actOnRef(document, {
+			ref,
+			action: "scrollScreen",
+			value: "down",
+		});
+		expect(list.scrollTop).toBe(170);
+		expect(result).toMatchObject({
+			ok: true,
+			detail: `${ref}'s scroll area is at 170 of 800 px down.`,
+		});
+	});
+
+	it("hovers without clicking", () => {
+		document.body.innerHTML = `<button aria-haspopup="menu">Account</button>`;
+		const outline = buildPageOutline(document);
+		const button = document.querySelector("button") as HTMLButtonElement;
+		const seen: string[] = [];
+		for (const type of ["mouseover", "mousemove", "click"]) {
+			button.addEventListener(type, () => seen.push(type));
+		}
+
+		actOnRef(document, { ref: refOf(outline, "Account"), action: "hover" });
+		expect(seen).toEqual(["mouseover", "mousemove"]);
 	});
 });

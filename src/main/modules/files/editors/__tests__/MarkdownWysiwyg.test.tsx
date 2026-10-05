@@ -7,25 +7,13 @@ vi.mock("react-i18next", () => ({
 	useTranslation: () => ({ t: (key: string) => key }),
 }));
 
-vi.mock("@tiptap/starter-kit", () => {
-	const stub: { configure: () => unknown } = { configure: () => stub };
-	return { default: stub };
-});
-vi.mock("@tiptap/extension-image", () => {
-	const stub: { configure: () => unknown } = { configure: () => stub };
-	return { default: stub };
-});
-vi.mock("@tiptap/extension-table", () => {
-	const stub: { configure: () => unknown } = { configure: () => stub };
-	return { Table: stub };
-});
-vi.mock("@tiptap/extension-table-row", () => ({ TableRow: {} }));
-vi.mock("@tiptap/extension-table-header", () => ({ TableHeader: {} }));
-vi.mock("@tiptap/extension-table-cell", () => ({ TableCell: {} }));
-vi.mock("@tiptap/extension-placeholder", () => {
-	const stub: { configure: () => unknown } = { configure: () => stub };
-	return { default: stub };
-});
+vi.mock("../markdown-extensions", () => ({
+	createMarkdownExtensions: () => [],
+	getMarkdownContent: () => "",
+	setMarkdownContent: () => {
+		throw new TypeError("Cannot read properties of null (reading 'commands')");
+	},
+}));
 
 /**
  * Stands in for a TipTap editor that has already been torn down: `destroy()`
