@@ -1,5 +1,7 @@
 import { runsAlongside } from "@/services/sandbox-container/alongside-commands";
 import { resolvePath } from "@/services/sandbox-container/host-commands/command-line";
+import type { PiCodeOpened } from "../apps/pi-code/pi-code-app";
+import { memonDisplayPath } from "../constants";
 import type { MemonEmbeddedPort } from "../embedded-browser";
 import type { MemonAvailability, MemonFilesPort } from "../memon-machine";
 import type {
@@ -29,6 +31,8 @@ export interface MemonCommandOutcome {
 	cursor?: string;
 	/** Ran next to the command still running (a test while a server runs). */
 	alongside?: boolean;
+	/** What a line the Terminal ran itself did, when its tab cannot show it. */
+	summary?: string;
 }
 
 export interface MemonTerminalPort {
@@ -66,6 +70,11 @@ export interface MemonTerminalHost extends CommandApprovalsHost {
 	home(): string;
 	/** The command history changed, to be kept in its file. */
 	historyChanged(): void;
+	/** Opens pi code in a folder (`picode`); throws when it cannot. */
+	openPiCode(
+		cwd: string,
+		options: { continueLast: boolean },
+	): Promise<PiCodeOpened>;
 }
 
 /** The command that keeps running, and the tab it prints into. */
@@ -147,6 +156,14 @@ const BARE_CD = /^cd(?:\s+([^;&|]+?))?\s*$/;
 const BUILTIN = /^(clear|history)(?:\s+(-c))?\s*$/;
 /** `make && cd dist`: once it succeeds, the tab moves to dist. */
 const TRAILING_CD = /&&\s*cd\s+([^;&|]+)$/;
+/** `picode [-c] [folder]`: pi code, in the tab's folder by default. */
+const PICODE = /^picode(?:\s+(.*?))?\s*$/;
+const PICODE_OPTION = /^(-\S+)(?:\s+|$)/;
+const PICODE_USAGE = [
+	"Usage: picode [-c] [folder]",
+	"Opens pi code in the folder (this one by default); this tab exits.",
+	"  -c, --continue  open the folder's last pi session",
+];
 
 /**
  * The computer's Terminal: tabs, each with its own working directory and
@@ -374,6 +391,7 @@ export class MemonTerminal {
 		const tab = this.tab(options.terminalId);
 		const bareCd = BARE_CD.exec(trimmed);
 		const builtin = BUILTIN.exec(trimmed);
+		const picode = PICODE.exec(trimmed);
 		if (!options.byUser) await this.approvals.require(trimmed, tab.id);
 		const alongside = this.runningCommand !== null;
 		this.activeId = tab.id;
@@ -386,6 +404,7 @@ export class MemonTerminal {
 		this.append(tab, [{ kind: "command", text: trimmed, cwd }]);
 		if (builtin) return this.showHistory(tab, builtin[2] === "-c");
 		if (bareCd) return this.changeDirectory(tab, bareCd[1]?.trim());
+		if (picode) return this.openPiCode(tab, picode[1]?.trim() ?? "");
 		// What runs has `~` expanded; the tab shows the line as it was typed.
 		const line = expandHome(trimmed, this.host.home());
 		if (alongside) return this.runAlongside(tab, trimmed, line, cwd);
@@ -511,6 +530,90 @@ export class MemonTerminal {
 		}
 		this.host.changed();
 		return { running: false, exitCode: tab.lastExitCode, output: [] };
+	}
+
+	/** Lines the tab prints for a line the Terminal ran itself. */
+	private finish(
+		tab: TerminalTab,
+		exitCode: number,
+		lines: MemonTerminalLine[] = [],
+	): MemonCommandOutcome {
+		this.append(tab, lines);
+		tab.lastExitCode = exitCode;
+		this.host.changed();
+		return { running: false, exitCode, output: [] };
+	}
+
+	/**
+	 * `picode [-c] [folder]`: pi code opens in the folder (the tab's by
+	 * default), on its last session with -c, and the tab exits, as a shell
+	 * does when a program takes its place. A tab running the long command
+	 * stays, with its command.
+	 */
+	private async openPiCode(
+		tab: TerminalTab,
+		args: string,
+	): Promise<MemonCommandOutcome> {
+		const usage = PICODE_USAGE.map(
+			(text): MemonTerminalLine => ({ kind: "stdout", text }),
+		);
+		let rest = args;
+		let continueLast = false;
+		let option = PICODE_OPTION.exec(rest);
+		while (option) {
+			const flag = option[1];
+			if (flag === "-h" || flag === "--help") return this.finish(tab, 0, usage);
+			if (flag !== "-c" && flag !== "--continue") {
+				return this.finish(tab, 2, [
+					{ kind: "stderr", text: `picode: unknown option ${flag}` },
+					...usage,
+				]);
+			}
+			continueLast = true;
+			rest = rest.slice(option[0].length);
+			option = PICODE_OPTION.exec(rest);
+		}
+		const cwd = rest ? this.resolveDir(tab.cwd, rest) : tab.cwd;
+		let opened: PiCodeOpened;
+		try {
+			opened = await this.host.openPiCode(cwd, { continueLast });
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			return this.finish(tab, 1, [
+				{ kind: "stderr", text: `picode: ${message}` },
+			]);
+		}
+		const running = this.runningCommand;
+		const keeps = running?.tabId === tab.id;
+		if (keeps) {
+			this.finish(tab, 0);
+		} else {
+			await this.closeTab(tab.id);
+		}
+		const home = this.host.home();
+		const where = memonDisplayPath(opened.cwd, home);
+		return {
+			running: false,
+			exitCode: 0,
+			output: [],
+			summary: [
+				opened.shown
+					? `pi code was open in ${where} already; it is in front.`
+					: `Opened pi code in ${where}${opened.continued ? " on the folder's last session" : ""}.`,
+				opened.from
+					? `It left ${memonDisplayPath(opened.from, home)}; its session there is saved.`
+					: null,
+				continueLast && !opened.shown && !opened.continued
+					? "The folder had no session to continue, so pi started a new one."
+					: null,
+				keeps
+					? `Terminal tab ${tab.id} keeps running \`${running?.command}\`.`
+					: `Terminal tab ${tab.id} exited.`,
+				'Hand pi work with memon_code { action: "prompt", text }.',
+			]
+				.filter(Boolean)
+				.join(" "),
+		};
 	}
 
 	private followTrailingCd(tab: TerminalTab, command: string, cwd: string) {

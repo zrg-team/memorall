@@ -2,7 +2,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { type ITheme, Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
-import { ShieldAlert, Square } from "lucide-react";
+import { FolderOpen, ShieldAlert, Square } from "lucide-react";
 import React from "react";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
@@ -14,6 +14,7 @@ import type {
 	MemonPiCodeState,
 } from "@/services/memon/types";
 import type { MemonSend } from "../types";
+import { PiCodeFolderPicker } from "./PiCodeFolderPicker";
 
 const FONT_FAMILY = '"IBM Plex Mono", ui-monospace, monospace';
 const FONT_SIZE = 12;
@@ -127,7 +128,10 @@ const PiCodeApprovalCard: React.FC<{
 /**
  * pi code: the pi coding agent's own terminal UI, drawn by xterm.js.
  *
- * pi runs in the computer, not here: this window attaches with its size,
+ * Opened by the user, the window first asks which folder pi opens in (the
+ * folder picker); the folder button over pi opens another one later, and
+ * pi moves there. pi runs in the computer, not here: this window attaches
+ * with its size,
  * streams pi's screen output and sends raw keys. Closing the window quits
  * pi; leaving the page or collapsing the panel only detaches the view, and
  * the next view redraws pi's screen in full. When MemonOS Bot asks to hand
@@ -138,10 +142,12 @@ const PiCodeApprovalCard: React.FC<{
 export const PiCodeWindow: React.FC<{
 	machineKey: string;
 	state: MemonPiCodeState | undefined;
+	/** The agent's home, shown as `~`. */
+	home: string;
 	/** Window in front: keys go to pi. */
 	focused: boolean;
 	send: MemonSend;
-}> = ({ machineKey, state, focused, send }) => {
+}> = ({ machineKey, state, home, focused, send }) => {
 	const { t } = useTranslation("common");
 	const { actualTheme } = useTheme();
 	const hostRef = React.useRef<HTMLDivElement>(null);
@@ -152,6 +158,12 @@ export const PiCodeWindow: React.FC<{
 	const status = state?.status;
 	/** A new start of pi (/resume, another folder) needs attaching again. */
 	const instance = state?.instance;
+	/** The folder picker, over pi or its error, to open another folder. */
+	const [picking, setPicking] = React.useState(false);
+	// biome-ignore lint/correctness/useExhaustiveDependencies: a new start of pi closes the picker.
+	React.useEffect(() => {
+		setPicking(false);
+	}, [instance]);
 
 	// One xterm.js terminal per start of pi, attached while it runs.
 	// biome-ignore lint/correctness/useExhaustiveDependencies: reconnects when pi (re)starts, even too fast to see "starting"; other inputs are read through `live`.
@@ -377,18 +389,24 @@ export const PiCodeWindow: React.FC<{
 	}, [actualTheme, machineKey, connected]);
 
 	React.useEffect(() => {
-		if (focused && connected) termRef.current?.focus();
-	}, [focused, connected]);
+		if (focused && connected && !picking) termRef.current?.focus();
+	}, [focused, connected, picking]);
 
 	const approval = state?.approval;
-	const notice =
-		status === "error"
+	const choosing = status === "choosing";
+	const notice = choosing
+		? null
+		: status === "error"
 			? t("memonComputer.piCode.error", { error: state?.error ?? "" })
 			: status === "idle"
 				? t("memonComputer.piCode.waiting")
 				: status !== "running" || !connected
 					? t("memonComputer.piCode.starting")
 					: null;
+	const closePicker = () => {
+		setPicking(false);
+		termRef.current?.focus();
+	};
 
 	return (
 		<div
@@ -417,12 +435,37 @@ export const PiCodeWindow: React.FC<{
 					data-testid="memon-pi-code-screen"
 					className="h-full w-full"
 				/>
+				{choosing || picking ? (
+					<div className="absolute inset-0 z-20">
+						<PiCodeFolderPicker
+							machineKey={machineKey}
+							home={home}
+							send={send}
+							focused={focused}
+							current={status === "running" ? state?.cwd : undefined}
+							onCancel={picking ? closePicker : undefined}
+							onOpened={() => setPicking(false)}
+						/>
+					</div>
+				) : null}
 				{notice ? (
 					<div
 						role="status"
-						className="absolute inset-0 flex items-center justify-center px-6 text-center font-mono text-xs text-muted-foreground"
+						className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 text-center font-mono text-xs text-muted-foreground"
 					>
 						{notice}
+						{status === "error" ? (
+							<Button
+								type="button"
+								size="sm"
+								variant="outline"
+								className="h-7 gap-1.5 font-sans text-[11px]"
+								onClick={() => setPicking(true)}
+							>
+								<FolderOpen size={12} />
+								{t("memonComputer.piCode.chooseFolder")}
+							</Button>
+						) : null}
 					</div>
 				) : state?.working ? (
 					<button
@@ -437,6 +480,17 @@ export const PiCodeWindow: React.FC<{
 					>
 						<Square size={10} />
 						{t("memonComputer.piCode.stop")}
+					</button>
+				) : connected && !picking ? (
+					<button
+						type="button"
+						data-testid="memon-pi-code-open-folder-button"
+						title={t("memonComputer.piCode.openFolder")}
+						aria-label={t("memonComputer.piCode.openFolder")}
+						onClick={() => setPicking(true)}
+						className="absolute right-3 top-2 z-10 inline-flex h-6 w-6 items-center justify-center rounded-md border border-input bg-background/90 text-muted-foreground opacity-70 shadow-sm hover:bg-accent hover:text-foreground hover:opacity-100"
+					>
+						<FolderOpen size={12} />
 					</button>
 				) : null}
 			</div>

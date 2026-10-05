@@ -1,8 +1,16 @@
 import { SHELL_TOOLS } from "@/services/sandbox-container/alongside-commands";
 import { HOST_COMMAND_NAMES } from "@/services/sandbox-container/host-commands";
 
-/** Lines the Terminal runs itself: a tab's directory, screen and history. */
-export const MEMON_TERMINAL_BUILTINS = ["cd", "clear", "history"] as const;
+/**
+ * Lines the Terminal runs itself: a tab's directory, screen and history, and
+ * `picode`, which opens pi code in the tab's folder.
+ */
+export const MEMON_TERMINAL_BUILTINS = [
+	"cd",
+	"clear",
+	"history",
+	"picode",
+] as const;
 
 /** What the sandbox runs besides the shell's tools. */
 const RUNTIME_COMMANDS = [

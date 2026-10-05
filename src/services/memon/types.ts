@@ -463,8 +463,11 @@ export interface MemonMachineSummary {
  * model. Its screen is a terminal the window streams, not snapshot fields.
  */
 export interface MemonPiCodeState {
-	/** idle: nothing runs yet, only the agent's request waits. */
-	status: "idle" | "starting" | "running" | "error";
+	/**
+	 * idle: nothing runs yet, only the agent's request waits. choosing: the
+	 * user opened pi code; it starts in the folder they pick.
+	 */
+	status: "idle" | "choosing" | "starting" | "running" | "error";
 	/** pi is busy: a model turn, a tool, a ! command or compaction. */
 	working: boolean;
 	cwd?: string;
@@ -506,6 +509,31 @@ export interface MemonPiCodeEntry {
 export interface MemonPiCodeQueued {
 	mode: "steer" | "followUp";
 	text: string;
+}
+
+/** A folder pi saved sessions in, as the folder picker lists it. */
+export interface MemonPiCodeFolder {
+	path: string;
+	/** When pi last wrote to a session there (ms). */
+	lastUsed: number;
+	/** Sessions saved there. */
+	sessions: number;
+	/** The latest of them, to continue. */
+	latest: {
+		file: string;
+		/** Its name, else its first prompt. */
+		title?: string;
+	};
+}
+
+/** The folders in a folder, for the folder picker to go through. */
+export interface MemonPiCodeBrowse {
+	dir: string;
+	/** Its parent; none at the top. */
+	parent?: string;
+	folders: Array<{ name: string; path: string }>;
+	/** Its files' names: shown so the folder is known, not to be picked. */
+	files: string[];
 }
 
 /** The agent waits for the user to let it hand work to pi code. */

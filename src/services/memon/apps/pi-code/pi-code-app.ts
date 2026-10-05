@@ -2,6 +2,7 @@ import { MEMON_APPROVAL_WAIT_MS, memonDisplayPath } from "../../constants";
 import type {
 	MemonPiCodeApproval,
 	MemonPiCodeEntry,
+	MemonPiCodeFolder,
 	MemonPiCodeQueued,
 	MemonPiCodeState,
 } from "../../types";
@@ -10,8 +11,11 @@ import { isAbsolute, join, normalize } from "./platform/path";
 /**
  * pi code on a Memon machine: a pi coding agent session per open window.
  *
- * Opening the window starts pi; closing the window, /quit or shutting the
- * computer down stops it (its model stream and any bash command too). The
+ * The user opens the window on a folder picker and pi starts in the folder
+ * they pick (`picode` in the Terminal opens it in the tab's folder); the
+ * agent starts it in the folder it names. Closing the window, /quit or
+ * shutting the computer down stops it (its model stream and any bash
+ * command too). The
  * session belongs to the machine, so it keeps working while no view is
  * attached (the Runtime tab left, the side panel collapsed). Views attach
  * with a size, then read the terminal output by cursor and send raw keys.
@@ -86,6 +90,22 @@ export interface MemonPiCodePort {
 		/** What the agent reads changed. */
 		onChange: () => void;
 	}): Promise<PiCodeRunner>;
+	/**
+	 * The folders pi saved sessions in, the one used last first; with `cwd`,
+	 * only that folder.
+	 */
+	folders(home: string, cwd?: string): Promise<MemonPiCodeFolder[]>;
+}
+
+/** Where the user's open() put pi. */
+export interface PiCodeOpened {
+	cwd: string;
+	/** pi already worked there: its window only came up. */
+	shown: boolean;
+	/** The folder pi left; its session there is saved. */
+	from?: string;
+	/** pi opened the folder's last session; false when it had none. */
+	continued: boolean;
 }
 
 export interface PiCodeRead {
@@ -229,6 +249,8 @@ export class MemonPiCode {
 	private agentStopped = false;
 	/** pi starts again on a saved session (/resume): it did not quit. */
 	private reopening = false;
+	/** The user opened the window: it waits for them to pick a folder. */
+	private choosing = false;
 	private readonly waits = new Set<AbortController>();
 
 	constructor(
@@ -249,6 +271,53 @@ export class MemonPiCode {
 		this.boot(cwd);
 	}
 
+	/**
+	 * The user opened pi code: its window asks which folder to open, unless
+	 * pi runs or starts, or the agent's request waits there.
+	 */
+	choose(): void {
+		if (this.active || this.approval) return;
+		this.choosing = true;
+		this.error = undefined;
+		this.host.changed();
+	}
+
+	/** The folders pi worked in, the one used last first. */
+	async recentFolders(): Promise<MemonPiCodeFolder[]> {
+		return (await this.port?.folders(this.host.home())) ?? [];
+	}
+
+	/**
+	 * The user opens pi in a folder (the folder picker, `picode` in the
+	 * Terminal), on its last session with `continueLast`: pi starts there, or
+	 * starts again there and saves its session in the other folder. Throws
+	 * while pi works in another folder.
+	 */
+	async open(
+		path: string,
+		options: { continueLast?: boolean } = {},
+	): Promise<PiCodeOpened> {
+		const cwd = this.resolveFolder(path);
+		const current = this.runner?.status().cwd ?? this.startingCwd;
+		if (this.active && current === cwd) {
+			this.host.show();
+			return { cwd, shown: true, continued: false };
+		}
+		if (this.runner?.status().running) {
+			throw new Error(
+				`pi code is working in ${this.display(current ?? cwd)}; wait for it or stop it first.`,
+			);
+		}
+		const last = options.continueLast
+			? (await this.port?.folders(this.host.home(), cwd))?.[0]?.latest.file
+			: undefined;
+		const from = this.active ? current : undefined;
+		await this.release();
+		this.boot(cwd, last);
+		this.host.show();
+		return { cwd, shown: false, from, continued: Boolean(last) };
+	}
+
 	/** pi's /resume: pi starts again on the saved session, in its folder. */
 	private async reopen(sessionFile: string, cwd: string): Promise<void> {
 		this.reopening = true;
@@ -267,6 +336,7 @@ export class MemonPiCode {
 			return;
 		}
 		this.error = undefined;
+		this.choosing = false;
 		const generation = ++this.generation;
 		this.startingCwd = cwd ?? this.host.home();
 		this.starting = this.port
@@ -309,6 +379,7 @@ export class MemonPiCode {
 	async stop(): Promise<void> {
 		this.answerWait?.("closed");
 		this.approvedRun = null;
+		this.choosing = false;
 		await this.release();
 	}
 
@@ -354,6 +425,7 @@ export class MemonPiCode {
 			};
 		if (this.error)
 			return { status: "error", working: false, error: this.error, approval };
+		if (this.choosing) return { status: "choosing", working: false, approval };
 		if (approval) return { status: "idle", working: false, approval };
 		return undefined;
 	}
@@ -683,7 +755,9 @@ export class MemonPiCode {
 				return this.report(runner, "Compacted pi's conversation. ", 0);
 			}
 			case "close": {
-				if (!this.active && !this.error) return "pi code was not open.";
+				if (!this.active && !this.error && !this.choosing) {
+					return "pi code was not open.";
+				}
 				this.host.quit();
 				return "Closed pi code; its session is saved in ~/.pi/agent/sessions.";
 			}
