@@ -205,6 +205,18 @@ export const runMemonOperation = async (
 			await machine.showBrowserTab();
 			return machine.snapshot();
 		}
+		case "browser.recheckWall": {
+			const machine = findMemonMachine(job.payload.key);
+			if (!machine) return null;
+			await machine.recheckWall();
+			return machine.snapshot();
+		}
+		case "browser.continuePastWall":
+			return userAside(
+				job.payload.key,
+				"let the agent continue past the page's verification check",
+				(machine) => machine.continuePastWall(),
+			);
 		case "scheduler.refresh": {
 			const machine = findMemonMachine(job.payload.key);
 			if (!machine) return null;

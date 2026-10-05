@@ -107,6 +107,15 @@ export const DocumentLibraryPage: React.FC = () => {
 		[lib],
 	);
 
+	const handleTreeDownloadFolder = useCallback(
+		(node: DocumentTreeNode) => {
+			if (node.type === "folder") {
+				void lib.handleDownloadFolder(node.folder?.path ?? node.path);
+			}
+		},
+		[lib],
+	);
+
 	if (lib.loading) {
 		return <WorkspaceContentSkeleton />;
 	}
@@ -215,6 +224,7 @@ export const DocumentLibraryPage: React.FC = () => {
 									onMove={lib.handleMove}
 									onRenameNode={handleTreeRename}
 									onDeleteNode={handleTreeDelete}
+									onDownloadFolderNode={handleTreeDownloadFolder}
 								/>
 							</div>
 						)}
@@ -326,6 +336,7 @@ export const DocumentLibraryPage: React.FC = () => {
 							onMove={lib.handleMove}
 							onRenameNode={handleTreeRename}
 							onDeleteNode={handleTreeDelete}
+							onDownloadFolderNode={handleTreeDownloadFolder}
 						/>
 						<div className="min-w-0 flex-1 overflow-hidden">
 							<DocumentLibraryContent

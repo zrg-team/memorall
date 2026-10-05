@@ -99,6 +99,11 @@ export interface RuntimeDiagnosticsPort {
 export interface BrowserCommandPort {
 	request<T>(request: unknown): Promise<T>;
 	tabExists(tabId: number): Promise<boolean>;
+	/**
+	 * Messages the browser sends unasked (what a web session's tab did that
+	 * the agent did not), where the platform has them. Callers validate them.
+	 */
+	subscribeEvents?(listener: (message: unknown) => void): () => void;
 }
 
 export type ManagedBrowserReadiness =

@@ -18,8 +18,9 @@ static web app, and Tauri applications for Windows, macOS, and Linux.
 [![Offline First](https://img.shields.io/badge/Architecture-Offline--First-0f766e)](https://github.com/zrg-team/memorall)
 [![Agent Tools](https://img.shields.io/badge/Agent-Sandbox%20%2B%20Browser-c05621)](https://github.com/zrg-team/memorall)
 [![Custom Flows](https://img.shields.io/badge/Flows-Customizable-7c3aed)](https://github.com/zrg-team/memorall)
+[![MemonOS](https://img.shields.io/badge/MemonOS-Agent%20Computer-0e7490)](#memonos)
 
-[Platforms](#supported-platforms) • [Quick Start](#quick-start) • [Demo](#demo) • [Flow Engine](#flow-engine) • [Agent Power](#agent-power) • [Custom Agents](#custom-agents) • [Architecture](#architecture-at-a-glance) • [Documentation](#documentation-map) • [GitHub](https://github.com/zrg-team/memorall)
+[MemonOS](#memonos) • [Platforms](#supported-platforms) • [Quick Start](#quick-start) • [Demo](#demo) • [Flow Engine](#flow-engine) • [Agent Power](#agent-power) • [Custom Agents](#custom-agents) • [Architecture](#architecture-at-a-glance) • [Build a MemonOS App](#build-a-memonos-app) • [Documentation](#documentation-map) • [GitHub](https://github.com/zrg-team/memorall)
 
 <br />
 
@@ -29,7 +30,67 @@ static web app, and Tauri applications for Windows, macOS, and Linux.
 
 ▶️ [Watch the full trailer with sound (1:41)](./docs/assets/memorall-trailer.webm) — the soundtrack was generated on-device by Memorall's own Audio studio.
 
+🖥️ **New: MemonOS.** Give any agent a computer of its own, watch it work, and take over at any time. [See it run ↓](#memonos)
+
 </div>
+
+<a id="memonos"></a>
+## 🖥️ MemonOS: Give Your Agent a Computer
+
+Switch on **MemonOS Bot** for an agent and it gets a computer of its own: a
+desktop with a Browser, Files, a Terminal, Tasks and more, shown in
+**Runtime → Computer**. The agent works through these apps the way a person
+would. It opens pages, writes files, runs commands and ticks off its
+checklist, and you see each step as it happens. Press **Take over** at any
+moment to drive the computer yourself; the agent waits until you hand it back.
+
+<img src="./docs/assets/demo-memonos.gif" alt="MemonOS in the extension: from one chat request the agent adds a task with a checklist, opens the live Hacker News front page in its Browser, writes ~/news/digest.md in its Editor, checks the file with cat in its Terminal, and shows the finished task with every item ticked" width="100%" />
+
+<sub>One request, four apps: the agent plans in Tasks, reads the live Hacker News front page in its Browser, writes <code>~/news/digest.md</code> in its Editor, checks the file in its Terminal, and ticks the task off. Recorded in the Chromium extension. The model's turns were scripted so the take is repeatable; the windows, the page, the file and the commands are the real app.</sub>
+
+### 🧰 What is on the desktop
+
+| App | What the agent does there | Agent tool |
+| --- | --- | --- |
+| 🌐 Browser | Opens real tabs and reads each page as an outline with a ref on every control; clicks, types, selects, toggles, hovers, scrolls and goes back. Servers started in the Terminal open embedded. | `memon_open`, `memon_act` |
+| 📁 Files, Editor, Viewer | Works in its own home, `/agents/<agent name>`: moves, copies, downloads and zips files; edits text in the Editor; reads PDFs, spreadsheets, slides, images and media in the Viewer. | `memon_open`, `memon_act` |
+| 💻 Terminal | A shell with `node`, `npm`, `py` (Pyodide), `git`, `curl`, `ffmpeg` and `magick`, in tabs, with long-running servers. | `memon_run` |
+| ✅ Tasks | A checklist shared with you, kept in a `.tasks` file. Tasks the agent proposes wait for your approval. | `memon_tasks` |
+| 📊 Visualize | Interactive OpenUI visuals, saved as `.openui` files you can reopen and edit. | `memon_visualize` |
+| ⏰ Scheduler | The agent's own recurring runs. | `memon_schedule` |
+| 🎨 Studio | Image, speech, transcription, audio, text and decision tools, each on the model you chose for that studio. A `.studio` file keeps one set up for a job. | `memon_studio` |
+| 🧩 Skills, 🔌 Connections | The skills and connected apps this agent may use. | `memon_skills`, `memon_connections` |
+| π pi code | The [pi](https://github.com/badlogic/pi-mono) coding agent in a terminal window. The agent hands it coding work after you confirm in that window. | `memon_code` |
+
+Each agent's home also holds `Bot.md` (your standing instructions) and
+`Memory.md` (what it remembers between chats). Both are read at the start of
+every chat, and the agent adds to them with `memon_memory`. `memon_screen`
+reads the whole screen and `memon_window` arranges the windows.
+
+### 🕹️ You stay in control
+
+- **Watch or take over.** The panel shows who is driving. Pause or Take over,
+  and the agent's next tool call waits until you resume. Changes you make are
+  reported to the agent at its next step.
+- **See what the model sees.** The **Screen text** tab shows exactly the text
+  the agent reads, refs included.
+- **Ask first.** Per agent, MemonOS Bot can pause and ask you before it submits
+  a form, installs a package or deletes a file.
+- **Apps follow the agent's features.** Web Browser gives the Browser, File
+  System gives Files, Browser Sandbox gives the Terminal, Planner gives Tasks,
+  and Visualize response gives Visualize. With MemonOS Bot on, those features'
+  own tools fold into the computer, which keeps the prompt small.
+- **One computer per agent.** The computer belongs to the agent, not to a chat:
+  it carries over to new chats and shuts down after four idle hours, never
+  while you are using it.
+
+Turn it on in **Agents → MemonOS Bot**, or choose MemonOS Bot in the agent
+wizard. The Browser app needs the extension or the desktop app; the static web
+app has every other app.
+
+How it works and how to add your own app:
+[MemonOS architecture](#memonos-architecture) ·
+[Build a MemonOS app](#build-a-memonos-app)
 
 ## 🧠 Why Memorall
 
@@ -38,6 +99,7 @@ Memorall is built for people who do serious work in tabs. Instead of treating th
 What makes the current app distinctive:
 
 - 🏠 Local-first by default. The app can run with in-browser runtimes such as Wllama, WebLLM, and Transformers, while still supporting OpenAI, OpenRouter, LM Studio, and Ollama when you want external or local server-backed models.
+- 🖥️ An agent computer you can watch. With [MemonOS](#memonos) the agent works in a Browser, Files, a Terminal and Tasks on a desktop beside the chat, and you can take over at any time.
 - 🤖 More than a chat window. The shipped UI includes a document library, topic system, knowledge graph explorer, model manager, debug tools, and advanced flow/activity surfaces.
 - 🌐 Embedded where work happens. The content script can open a page-aware assistant, capture selected text, visible content, page HTML, and screenshots, and route saved content into a topic.
 - ⚙️ Backed by a real agent harness. The Flow Engine turns the model into a composable runtime — graph-based flows, middleware steps, tool execution, memory retrieval, and streaming activity — all running off-thread so the UI stays fast and responsive.
@@ -150,6 +212,8 @@ While the Flow Engine defines *how* the agent runs, these are the runtime capabi
 - 🌐 Browser access. The agent can open pages, keep an active browser session, inspect DOM state, search rendered HTML, wait for selectors, and perform DOM actions instead of working from raw text alone.
 - 📁 Workspace access. The agent is not isolated from your knowledge base. It can work across the document library and writable workspace trees, giving it access to documents, notes, and workspace files.
 - 🛠️ MCP integration is WIP. The repository already includes MCP adapter groundwork, but this should be treated as in-progress rather than a stable, documented feature today.
+
+With MemonOS Bot on, the agent reaches the browser, workspace and sandbox through the apps on its [computer](#memonos) instead of separate tools, so you can follow and steer every step.
 
 <a id="demo"></a>
 ## 🎬 Demo
@@ -281,7 +345,11 @@ Offline-first in Memorall is architectural, not decorative. The product is fully
 
 Routes currently wired in [`src/main/App.tsx`](./src/main/App.tsx):
 
-- `/` - chat workspace
+- `/` - home (the document library); the chat panel sits beside every app route
+- `/runtime` - live runtime sessions and the MemonOS **Computer**
+- `/agents` - agents, their features, and MemonOS Bot settings
+- `/skills` and `/connections` - skills and connected apps agents may use
+- `/usage` - model usage and cost per conversation
 - `/files` - file and resource library
 - `/knowledge-graph` - graph explorer
 - `/llm` - model and provider management
@@ -369,6 +437,178 @@ The full decision record, critique, security model, feature matrix, test plan,
 and rollout status live in
 [`docs/plans/multi-environment-architecture.md`](./docs/plans/multi-environment-architecture.md).
 
+<a id="memonos-architecture"></a>
+## 🧬 MemonOS Architecture
+
+MemonOS is a small operating system that lives inside the shared runtime. One
+machine holds the state of the computer; the agent and the user are two drivers
+of that same machine.
+
+```mermaid
+flowchart TD
+  subgraph RUN["Agent run (Flow Engine)"]
+    STEP["memon-feature step<br/>one prompt section per app"]
+    TOOLS["memon_* tools"]
+  end
+  subgraph UI["React UI"]
+    PANEL["Runtime → Computer<br/>panel and windows"]
+    CLIENT["memonClient"]
+  end
+  JOB["memon-operation<br/>background job"]
+  REG["Machine registry<br/>one machine per agent"]
+  MACHINE["MemonMachine<br/>windows · driver · app state · drafts"]
+  SCREEN["Screen serializer<br/>snapshot → screen text"]
+  PORTS["MemonPorts"]
+  SERVICES["Platform services<br/>web sessions · document FS · sandbox · cron · LLM"]
+  BUS["Change bus"]
+
+  STEP --> TOOLS --> REG
+  PANEL --> CLIENT --> JOB --> REG
+  REG --> MACHINE
+  MACHINE --> SCREEN
+  MACHINE --> PORTS --> SERVICES
+  MACHINE -->|summary| BUS -->|pull snapshot| PANEL
+```
+
+- **One machine, two drivers.**
+  [`MemonMachine`](./src/services/memon/memon-machine.ts) holds the open
+  windows, which driver is in control, each app's state, and the drafts (form
+  fields) that both drivers type into. Everything the user sees and the agent
+  reads comes from one `MemonMachineSnapshot`.
+- **One screen for both.**
+  [`screen-serializer.ts`](./src/services/memon/screen-serializer.ts) turns the
+  snapshot into the text the model reads: the focused window in full and the
+  others in one line each, within about 6,000 characters. Each control gets a
+  ref (`[b12]`, `[e1]`, `[n3]`) that `memon_act` takes. The panel's Screen text
+  tab shows the same string.
+- **Ports instead of platform imports.** The machine reaches the browser,
+  files, terminal sandbox, scheduler, studio, skills, connections, downloads,
+  homes, pi code and models only through `MemonPorts`
+  ([`ports.ts`](./src/services/memon/ports.ts)), created on first use. Each
+  platform passes its own ports and tests pass fakes.
+- **Runs where the runtime runs.** Agent tools call the
+  [machine registry](./src/services/memon/machine-registry.ts) directly inside
+  the run. The UI sends operations such as `snapshot.get`, `control.takeover`
+  and `app.action` through the `memon-operation` background job
+  ([`operations.ts`](./src/services/memon/operations.ts)), which runs offscreen
+  in the extension and in a local processor on web and desktop. Changes go out
+  as a throttled summary on the change bus (BroadcastChannel, or extension
+  messaging), and the windows pull the full snapshot when its revision moves.
+- **Scoped to the agent.** The machine key is the agent id (the conversation
+  when a run has no agent). The registry is pinned on `globalThis`, so a
+  hot-reloaded module or a second bundle chunk finds the same machines instead
+  of orphaning open browser windows.
+- **Features become apps.** `applyMemonAbsorption`
+  ([`feature-config.ts`](./src/services/memon/feature-config.ts)) turns the
+  agent's web, file system, sandbox, planner and visualize features into apps
+  and switches those steps off for the run, so their tools and prompts never
+  reach the model.
+  [`memon-feature.ts`](./src/services/flows-integrations/steps/features/memon-feature.ts)
+  writes one prompt section per enabled app, and the tools live in
+  [`tools/memon`](./src/services/flows-integrations/tools/memon).
+
+<a id="build-a-memonos-app"></a>
+### 🧱 Build a MemonOS App
+
+Most apps are **kit apps**. You describe the window once, as nodes, in
+[`app-kit/types.ts`](./src/services/memon/app-kit/types.ts) terms. MemonOS
+draws those nodes as a window for the user, prints them as screen text with
+refs for the agent, and sends both drivers' actions to the same `act` handler.
+Tasks, Scheduler, Studio, Skills and Connections are all kit apps.
+
+```ts
+// src/services/memon/apps/bookmarks-view.ts (an example)
+import { englishKitText, type MemonKitApp } from "../app-kit/types";
+
+const NEW = "bookmarks:new";
+
+export const bookmarksApp: MemonKitApp = {
+	// One letter, unique. Taken: b f e t (built in), n h s k c (kit apps).
+	refPrefix: "m",
+
+	view(snapshot, t = englishKitText) {
+		const draft = String(snapshot.drafts[NEW] ?? "");
+		return [
+			{ type: "heading", text: t("bookmarks.title", "Bookmarks") },
+			{ type: "input", id: "new", label: t("bookmarks.url", "Address"), value: draft },
+			{
+				type: "button",
+				id: "add",
+				label: t("kit.new", "New"),
+				variant: "primary",
+				disabled: draft.trim() ? undefined : t("bookmarks.empty", "type an address first"),
+			},
+		];
+	},
+
+	act(machine, id, value) {
+		if (id === "new") {
+			machine.setDraft(NEW, value);
+			return "";
+		}
+		if (id === "add") {
+			// Change the machine's state here, then say what happened.
+			machine.setDraft(NEW, undefined);
+			return "added a bookmark";
+		}
+		throw new Error(`Bookmarks has no control ${id}.`);
+	},
+};
+```
+
+The string `act` returns is what the agent reads back, and it is logged as the
+user's change when the user pressed the control. To wire the app in:
+
+1. **State.** Keep what the app shows on the snapshot
+   ([`types.ts`](./src/services/memon/types.ts) and the machine), and keep form
+   fields in `drafts` so the user and the agent fill in the same form.
+2. **Register.** Add the app to `MEMON_KIT_APPS` in
+   [`apps/index.ts`](./src/services/memon/apps/index.ts). `memon_act` then
+   routes refs with your prefix to it, and
+   [`KitWindow`](./src/main/components/molecules/MemonComputer/windows/KitWindow.tsx)
+   draws it.
+3. **Give it a window id.** Add the id to `MEMON_BUILTIN_APPS` (always on the
+   desktop), or to `MEMON_APP_IDS` and `MEMON_APP_FEATURES` (comes with a
+   feature), in [`constants.ts`](./src/services/memon/constants.ts). Then run
+   `yarn typecheck`: each exhaustive map and switch that needs your app
+   (default layout, screen label and brief, icon, tint, window title) fails
+   until it has a case. The panel's `renderBody` switch in
+   [`MemonComputerPanel.tsx`](./src/main/components/molecules/MemonComputer/MemonComputerPanel.tsx)
+   is not checked, so add your id to its kit-app cases yourself.
+4. **Translate.** Put every `t(key, english)` the view uses under
+   `memonComputer` in both the `en` and `vn` `common.json`. A test renders every
+   kit app and fails on a missing key.
+5. **Agent shortcut (optional).** Kit controls already work through
+   `memon_act` and `memon_window`. Add a `memon_<app>` tool and a prompt
+   section only when the agent needs something the window does not offer.
+
+Apps that need their own surface, such as a terminal or a live page, are
+**custom window apps**, built the way Terminal and pi code are:
+
+- Machine-side logic goes in `src/services/memon/apps/<app>/`. It is an app,
+  never a top-level `src/services/<app>` service, and the machine owns it, so
+  it keeps running when no window is attached.
+- Whatever the app needs from the platform goes behind a new port in
+  `MemonPorts`, loaded with a dynamic `import()` so computers that never open
+  the app do not carry it.
+- The React window in
+  [`MemonComputer/windows`](./src/main/components/molecules/MemonComputer/windows)
+  only streams input in and output out.
+- A brief in the screen serializer lets the agent read the window like any
+  other.
+
+### 📈 How MemonOS Scales
+
+- **An app is data plus one handler.** View nodes give the user a window, the
+  agent screen text and refs, and translations in one place, with no per-app
+  React or prompt code.
+- **Ports keep the machine host-neutral.** The extension, web and desktop pass
+  different ports to the same machine.
+- **The screen stays inside its budget.** Only the focused window is printed in
+  full, so adding apps does not grow every request.
+- **Only enabled apps cost anything.** The prompt has a section only for the
+  apps an agent has, and heavy apps such as pi code load on first use.
+
 ## 📦 Core `src/` Layout
 
 ```text
@@ -391,6 +631,9 @@ src/
     flows-memory/      knowledge retrieval, active memory, citations, graph growth
     flows-service.ts   thin app service over the graph registry
     llm/               local/browser/API-backed model adapters
+    memon/             MemonOS: machine, registry, ports, screen, app kit
+      apps/            kit apps (Tasks, Scheduler, Studio, Skills, Connections) and pi code
+      terminal/        the Terminal app's shell, tabs and approvals
     sandbox-container/ browser-hosted execution runtime
     shared-storage/    cross-context shared state
     web-browser/       browser session and DOM automation service
@@ -421,6 +664,15 @@ If you want the shortest accurate mental model:
 ## 📚 Documentation Map
 
 These are the current docs that match the codebase today:
+
+### MemonOS
+
+- [MemonOS overview](#memonos) and [architecture](#memonos-architecture)
+- [Build a MemonOS app](#build-a-memonos-app)
+- [App kit types](./src/services/memon/app-kit/types.ts) and the
+  [kit apps](./src/services/memon/apps)
+- [Agent tools](./src/services/flows-integrations/tools/memon) and the
+  [MemonOS Bot step](./src/services/flows-integrations/steps/features/memon-feature.ts)
 
 ### Architecture and services
 
@@ -562,6 +814,7 @@ When contributing, it helps to understand the runtime split first:
 - UI and interaction work usually lives in [`src/main`](./src/main) or [`src/embedded`](./src/embedded)
 - extension wiring lives in [`src/background`](./src/background), [`src/background.ts`](./src/background.ts), and [`src/content.ts`](./src/content.ts)
 - anything stateful or heavy likely belongs in [`src/services`](./src/services)
+- a MemonOS app goes in [`src/services/memon/apps`](./src/services/memon/apps), with its window in [`src/main/components/molecules/MemonComputer/windows`](./src/main/components/molecules/MemonComputer/windows); see [Build a MemonOS app](#build-a-memonos-app)
 
 ## 📄 License
 

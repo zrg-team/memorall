@@ -1,6 +1,7 @@
 import {
 	isWebBrowserCommandRequest,
 	isWebContentCommandResponse,
+	isWebPageActionMessage,
 	WEB_BROWSER_COMMAND_SOURCE,
 	WEB_BROWSER_SURFACE_STORAGE_KEY,
 	WEB_CONTENT_COMMAND_SOURCE,
@@ -19,6 +20,11 @@ import {
 	reinjectContentScript,
 } from "./content-script-injection";
 import { keepAgentTabAwake } from "./keep-agent-tab-awake";
+import {
+	AGENT_ACTION_GRACE_MS,
+	AGENT_NAVIGATION_GRACE_MS,
+	createWebSessionEvents,
+} from "./web-session-events";
 
 interface StoredWebBrowserSurface extends WebBrowserSurface {
 	sessionId: string;
@@ -135,19 +141,63 @@ const addStoredSurface = async (
 	await persistStoredSurfaces();
 };
 
-/** Whether a tab belongs to one of the agent's web sessions. */
-const isAgentTab = async (tabId: number): Promise<boolean> => {
+/** The agent web session a tab belongs to, if any. */
+const sessionIdForTab = async (tabId: number): Promise<string | null> => {
 	const surfaces = await loadStoredSurfaces();
 	for (const surface of surfaces.values()) {
-		if (surface.tabId === tabId) return true;
+		if (surface.tabId === tabId) return surface.sessionId;
 	}
-	return false;
+	return null;
 };
+
+/** Whether a tab belongs to one of the agent's web sessions. */
+const isAgentTab = async (tabId: number): Promise<boolean> =>
+	(await sessionIdForTab(tabId)) !== null;
 
 const removeStoredSurface = async (sessionId: string): Promise<void> => {
 	const surfaces = await loadStoredSurfaces();
 	surfaces.delete(sessionId);
 	await persistStoredSurfaces();
+};
+
+/**
+ * What a session's tab does that the agent did not, sent to the offscreen
+ * document (where the sessions live) as a runtime message.
+ */
+const sessionEvents = createWebSessionEvents({
+	sessionIdForTab,
+	forgetSession: removeStoredSurface,
+	send: (message) => {
+		void chrome.runtime.sendMessage(message).catch(() => undefined);
+	},
+});
+
+const WATCH_ATTEMPTS = 5;
+
+/**
+ * Has a session's page report the clicks and form submissions of whoever
+ * uses it. Sent for every document the tab loads; the content script may
+ * still be starting when the tab reports complete, so it is retried.
+ */
+const watchUserActionsIn = async (tabId: number): Promise<void> => {
+	const request: WebContentCommandRequest = {
+		source: WEB_CONTENT_COMMAND_SOURCE,
+		type: "web-tool:watch-user-actions",
+	};
+	for (let attempt = 0; attempt < WATCH_ATTEMPTS; attempt++) {
+		try {
+			// A frozen tab never answers; the next load asks again.
+			await withinDeadline(
+				chrome.tabs.sendMessage(tabId, request),
+				2_000,
+				() => new ContentScriptNoReplyError(tabId),
+			);
+			return;
+		} catch (error) {
+			if (error instanceof ContentScriptNoReplyError) return;
+			await delay(400);
+		}
+	}
 };
 
 const closeSurfaceArtifacts = async ({
@@ -157,6 +207,14 @@ const closeSurfaceArtifacts = async ({
 	tabId?: number;
 	windowId?: number;
 }): Promise<void> => {
+	// The user closed the tab already. Its window may now hold only other
+	// sessions' tabs, which the window check below would take down with it.
+	if (
+		typeof tabId === "number" &&
+		!(await chrome.tabs.get(tabId).catch(() => null))
+	) {
+		return;
+	}
 	if (typeof windowId === "number") {
 		// A session window holds other sessions' tabs too (window-mode pages share
 		// one agent window). Only remove the window with its last tab.
@@ -598,6 +656,9 @@ const handleOpenCommand = async (
 			windowId: surface.windowId,
 			mode: surface.mode,
 		});
+		// A redirect right after the agent's open is still the agent's doing.
+		sessionEvents.markAgent(surface.tabId, AGENT_NAVIGATION_GRACE_MS);
+		void watchUserActionsIn(surface.tabId);
 
 		return {
 			source: WEB_BROWSER_COMMAND_SOURCE,
@@ -1240,7 +1301,34 @@ const handleBringToFrontCommand = async (
 	}
 };
 
-const handleCommand = async (
+/** How long after a command that moves a tab the tab is still the agent's doing. */
+const agentGraceMs = (request: WebBrowserCommandRequest): number | null => {
+	switch (request.command) {
+		case "navigate":
+		case "reload":
+		case "history":
+		case "close":
+			return AGENT_NAVIGATION_GRACE_MS;
+		case "outline-action":
+		case "dom-action":
+			return AGENT_ACTION_GRACE_MS;
+		default:
+			return null;
+	}
+};
+
+const handleCommand = (
+	request: WebBrowserCommandRequest,
+): Promise<WebBrowserCommandResponse> => {
+	const graceMs = agentGraceMs(request);
+	const tabId = "tabId" in request ? request.tabId : undefined;
+	// What the tab does meanwhile is the agent's, not the user's to report.
+	return graceMs !== null && typeof tabId === "number"
+		? sessionEvents.whileAgentDrives(tabId, graceMs, () => runCommand(request))
+		: runCommand(request);
+};
+
+const runCommand = async (
 	request: WebBrowserCommandRequest,
 ): Promise<WebBrowserCommandResponse> => {
 	switch (request.command) {
@@ -1280,7 +1368,16 @@ const handleCommand = async (
 export function registerWebToolBrowserHandler(): void {
 	registerContentScriptInjectionListeners();
 
-	chrome.runtime.onMessage.addListener((rawMessage, _sender, sendResponse) => {
+	chrome.runtime.onMessage.addListener((rawMessage, sender, sendResponse) => {
+		// A session's page reporting a click or a form submission.
+		if (isWebPageActionMessage(rawMessage)) {
+			const tabId = sender.tab?.id;
+			if (typeof tabId === "number") {
+				sessionEvents.onPageAction(tabId, rawMessage.action);
+			}
+			return false;
+		}
+
 		if (!isWebBrowserCommandRequest(rawMessage)) {
 			return false;
 		}
@@ -1296,10 +1393,21 @@ export function registerWebToolBrowserHandler(): void {
 
 	// Every page a session's tab loads is a new document without the lock — a
 	// redirect after a bot check, a link the agent followed — so take it again.
+	// Nor does it report what the user does in it until asked again.
 	chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
 		if (changeInfo.status !== "complete") return;
 		void isAgentTab(tabId).then((owned) => {
-			if (owned) void keepAgentTabAwake(tabId);
+			if (!owned) return;
+			void keepAgentTabAwake(tabId);
+			void watchUserActionsIn(tabId);
 		});
 	});
+
+	// Navigations and reloads the agent did not make, a single-page app's
+	// route changes, and the tab being closed.
+	chrome.webNavigation?.onCommitted.addListener(sessionEvents.onCommitted);
+	chrome.webNavigation?.onHistoryStateUpdated.addListener(
+		sessionEvents.onHistoryStateUpdated,
+	);
+	chrome.tabs.onRemoved.addListener(sessionEvents.onTabRemoved);
 }

@@ -30,9 +30,21 @@ vi.mock("@/components/AgentIcon", () => ({
 }));
 
 vi.mock("../MessageRenderer", () => ({
-	MessageRenderer: () => {
+	MessageRenderer: ({
+		message,
+		isLastMessage,
+	}: {
+		message: Message;
+		isLastMessage: boolean;
+	}) => {
 		rendererCalls.count += 1;
-		return <div data-testid="message-renderer" />;
+		return (
+			<div
+				data-testid="message-renderer"
+				data-id={message.id}
+				data-last={String(isLastMessage)}
+			/>
+		);
 	},
 }));
 
@@ -183,6 +195,63 @@ describe("co-agent session boundaries in a group", () => {
 		);
 
 		expect(rendererCalls.count).toBe(0);
+	});
+});
+
+describe("a reply its iteration limit cut off", () => {
+	const reply = (id: string, metadata: Record<string, unknown>): Message =>
+		({
+			...buildCoAgentMessage(id, "https://example.com"),
+			content: "",
+			metadata,
+		}) as Message;
+
+	const latest = (messages: Message[]): ChatMessageGroup => ({
+		id: "g-latest",
+		previousSeparator: null,
+		separator: null,
+		messages,
+		isLatest: true,
+		isLoaded: true,
+		isLoading: false,
+	});
+
+	it("is shown even with nothing else to show, as the chat's newest message", () => {
+		render(
+			<MessageGroup
+				group={latest([
+					buildMessage(() => "earlier answer"),
+					reply("cut-off", { iterationLimit: 50 }),
+				])}
+				defaultCollapsed={false}
+			/>,
+		);
+
+		const renderers = screen.getAllByTestId("message-renderer");
+		expect(renderers.map((el) => el.dataset.last)).toEqual(["false", "true"]);
+		expect(renderers[1].dataset.id).toBe("cut-off");
+	});
+
+	it("is not the newest message while a reply streams after it", () => {
+		render(
+			<MessageGroup
+				group={latest([reply("cut-off", { iterationLimit: 50 })])}
+				inProgressMessage={{
+					id: "next",
+					conversationId: "c1",
+					content: "",
+					complexContent: null,
+					parts: null,
+					actions: [],
+				}}
+				defaultCollapsed={false}
+			/>,
+		);
+
+		const cutOff = screen
+			.getAllByTestId("message-renderer")
+			.find((el) => el.dataset.id === "cut-off");
+		expect(cutOff?.dataset.last).toBe("false");
 	});
 });
 

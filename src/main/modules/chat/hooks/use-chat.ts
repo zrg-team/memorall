@@ -104,6 +104,10 @@ const cloneComplexContent = (
 ): ComplexContent | null =>
 	complexContent ? complexContent.map((part) => ({ ...part })) : null;
 
+/** What the agent reads when the user lets a cut-off reply go on. */
+const CONTINUE_AFTER_LIMIT_REMINDER =
+	"Your previous reply reached its iteration limit before the task was finished. Continue the task from where you stopped, without redoing work that is already done.";
+
 const pickResultMetadata = (
 	metadata: Record<string, unknown> | undefined,
 ): Record<string, unknown> => {
@@ -118,6 +122,7 @@ const pickResultMetadata = (
 		"executions",
 		"toolExecutions",
 		"stopped",
+		"iterationLimit",
 	] as const;
 
 	return Object.fromEntries(
@@ -385,6 +390,7 @@ export const useChat = (model: string, options: UseChatOptions = {}) => {
 		agentFlowId: requestedAgentFlowId,
 		topicId: requestedTopicId,
 		concurrent = concurrentRef.current,
+		continuation,
 	}: {
 		e?: React.FormEvent;
 		inputText: string;
@@ -398,13 +404,18 @@ export const useChat = (model: string, options: UseChatOptions = {}) => {
 		agentFlowId?: string | null;
 		topicId?: string;
 		concurrent?: boolean;
+		/**
+		 * Runs the agent on the chat as it is, with no message from the user:
+		 * only this note for the model, kept in the reply and never shown.
+		 */
+		continuation?: string;
 	}) => {
 		e?.preventDefault();
 		const store = useChatStore.getState();
 		let runConversationId =
 			targetConversationId ?? store.currentConversation?.id;
 		if (
-			!inputText.trim() ||
+			(!inputText.trim() && !continuation) ||
 			!model ||
 			findBlockingRun(store.runs, runConversationId, concurrent)
 		) {
@@ -551,7 +562,7 @@ export const useChat = (model: string, options: UseChatOptions = {}) => {
 
 			// The user may walk away from the page rather than pressing exit, so a
 			// message typed here is what closes a session left open.
-			if (shouldCloseCoAgentSession(history.messages)) {
+			if (!continuation && shouldCloseCoAgentSession(history.messages)) {
 				await addMessage({
 					conversationId,
 					role: "system",
@@ -561,29 +572,34 @@ export const useChat = (model: string, options: UseChatOptions = {}) => {
 				});
 			}
 
-			// Add user message to store and database
-			const userMessage = await addMessage({
-				conversationId,
-				role: "user",
-				content: userMessageContent,
-				complexContent: complexContent ?? null,
-				metadata:
-					docRefs.length > 0
-						? {
-								attachedDocuments: docRefs,
-							}
-						: undefined,
-				// Include topicId when in custom mode with a selected topic
-				topicId:
-					customMode && topic && topic !== "default" && topic !== "__all__"
-						? topic
-						: undefined,
-			});
+			// Include topicId when in custom mode with a selected topic
+			const messageTopicId =
+				customMode && topic && topic !== "default" && topic !== "__all__"
+					? topic
+					: undefined;
+			// Add user message to store and database; a continuation has none.
+			const userMessage = continuation
+				? null
+				: await addMessage({
+						conversationId,
+						role: "user",
+						content: userMessageContent,
+						complexContent: complexContent ?? null,
+						metadata:
+							docRefs.length > 0
+								? {
+										attachedDocuments: docRefs,
+									}
+								: undefined,
+						topicId: messageTopicId,
+					});
 
 			setRunStatus(conversationId, "streaming");
 
 			// Find the latest separator index to only send messages after it
-			const allMessages = [...history.messages, userMessage];
+			const allMessages = userMessage
+				? [...history.messages, userMessage]
+				: history.messages;
 			const latestSeparatorIndex = allMessages.findLastIndex(
 				(msg) => msg.type === "separator",
 			);
@@ -605,7 +621,7 @@ export const useChat = (model: string, options: UseChatOptions = {}) => {
 				role: "assistant",
 				content: "",
 				// Use the same topicId as the user message for consistency
-				topicId: userMessage.topicId,
+				topicId: userMessage ? userMessage.topicId : messageTopicId,
 			});
 
 			// Set in-progress message for real-time updates
@@ -650,6 +666,7 @@ export const useChat = (model: string, options: UseChatOptions = {}) => {
 						minWordsToStream: 1,
 						streamToolCallsImmediately: true,
 					},
+					...(continuation ? { reminders: [continuation] } : {}),
 				},
 				{
 					onRunStarted: (jobId) => {
@@ -916,6 +933,19 @@ export const useChat = (model: string, options: UseChatOptions = {}) => {
 		});
 	};
 
+	/**
+	 * Lets the agent go on with a reply its iteration limit cut off, without a
+	 * message from the user: the new reply picks up from the chat as it is.
+	 */
+	const continueRun = async (conversationId?: string) => {
+		await submitMessage({
+			inputText: "",
+			clearComposer: false,
+			conversationId,
+			continuation: CONTINUE_AFTER_LIMIT_REMINDER,
+		});
+	};
+
 	/** A draft as it waits in a queue, with the agent it was written to. */
 	const toQueuedMessage = (draft: ChatMessageDraft): QueuedChatMessage => {
 		const store = useChatStore.getState();
@@ -1022,6 +1052,7 @@ export const useChat = (model: string, options: UseChatOptions = {}) => {
 		inProgressMessage,
 		submitMessage,
 		handleSubmit,
+		continueRun,
 		handleStop,
 		insertSeparator,
 		loadMessageGroup,

@@ -27,6 +27,7 @@ import {
 } from "@/services/web-browser/readable-text";
 import {
 	isWebBrowserCommandResponse,
+	isWebSessionEventMessage,
 	WEB_BROWSER_COMMAND_SOURCE,
 	type WebBrowserCommandRequest,
 	type WebBrowserCommandResponse,
@@ -38,6 +39,7 @@ import {
 	type WebOutlineActionRequest,
 	type WebOutlineActionResult,
 	type WebPageOutline,
+	type WebSessionEvent,
 	type WebSnapshotPayload,
 	type WebWaitSelectorState,
 } from "@/services/web-browser/web-browser-protocol";
@@ -78,6 +80,11 @@ interface OpenSessionArgs {
 	mode?: WebBrowserMode;
 	/** Browser-backed modes: open as a tab in this existing window. */
 	windowId?: number;
+	/**
+	 * false: return once the page has loaded, for a caller that waits for it
+	 * to draw itself in its own way. `renderReady` is then false.
+	 */
+	waitForRender?: boolean;
 }
 
 interface OpenSessionResult {
@@ -565,6 +572,7 @@ export const openWebSession = async ({
 	persist = true,
 	mode: requestedMode,
 	windowId,
+	waitForRender = true,
 }: OpenSessionArgs): Promise<OpenSessionResult> => {
 	ensureBrowserEnvironment();
 	// Where nothing can open a browser page (the web app), an iframe is all
@@ -654,6 +662,10 @@ export const openWebSession = async ({
 		applySnapshotToSession(session, response.snapshot);
 		WEB_SESSIONS.set(id, session);
 		persistSession(session);
+		if (!waitForRender) {
+			scheduleInactivityClose(id);
+			return { session, disposable: !persist, renderReady: false };
+		}
 		let renderState: { matched: boolean; html: string; lastText: string };
 		try {
 			renderState = await waitForPageRender({
@@ -701,7 +713,7 @@ export const openWebSession = async ({
 	captureIframeSnapshot(session);
 	WEB_SESSIONS.set(id, session);
 
-	if (timedOut) {
+	if (timedOut || !waitForRender) {
 		scheduleInactivityClose(id);
 		return {
 			session,
@@ -916,6 +928,24 @@ export const getWebSessionSurface = (
 		currentUrl: session.currentUrl || session.requestedUrl,
 		title: session.title,
 	};
+};
+
+/**
+ * What a session's tab does that the agent did not: the person using it
+ * clicks, submits a form, navigates, reloads or closes it. Null where the
+ * platform does not report it.
+ */
+export const watchWebSession = (
+	sessionId: string,
+	listener: (event: WebSessionEvent) => void,
+): (() => void) | null => {
+	const port = platform.browserCommands;
+	if (!port.subscribeEvents) return null;
+	return port.subscribeEvents((message) => {
+		if (isWebSessionEventMessage(message) && message.sessionId === sessionId) {
+			listener(message.event);
+		}
+	});
 };
 
 export const outlineWebSession = async (

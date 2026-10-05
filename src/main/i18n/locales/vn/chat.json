@@ -197,6 +197,12 @@
 		"error": "Không thể gửi tin nhắn",
 		"stop": "Dừng",
 		"retry": "Thử lại",
+		"iterationLimit": {
+			"title": "Đã dừng trước khi hoàn thành",
+			"description_one": "Agent đã chạm giới hạn {{count}} bước khi việc còn dang dở. Bấm Tiếp tục để agent làm tiếp từ chỗ đã dừng.",
+			"description_other": "Agent đã chạm giới hạn {{count}} bước khi việc còn dang dở. Bấm Tiếp tục để agent làm tiếp từ chỗ đã dừng.",
+			"continue": "Tiếp tục"
+		},
 		"empty": "Chưa có tin nhắn nào. Bắt đầu cuộc trò chuyện!",
 		"count": "{{count}} tin nhắn",
 		"coAgentSessionStart": "Bắt đầu phiên co-agent",

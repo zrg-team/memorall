@@ -226,6 +226,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
 		loadMessageGroup,
 		deleteMessages,
 		submitMessage,
+		continueRun,
 		enqueueMessage,
 		injectMessage,
 		sendQueuedMessage,
@@ -355,6 +356,11 @@ export const ChatPage: React.FC<ChatPageProps> = ({
 
 	const handleMessageAction = React.useCallback(
 		async (action: MessageActionRequest) => {
+			// A reply its iteration limit cut off: the agent goes on, unprompted.
+			if (action.type === "continue_run") {
+				await continueRun();
+				return;
+			}
 			if (action.type === "openui_action") {
 				const detail = action.payload?.detail as MemorallOpenUIActionDetail;
 				if (!detail?.action) return;
@@ -445,7 +451,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
 				await submitMessage({ inputText: prompt, clearComposer: false });
 			}
 		},
-		[inputValue, navigate, setInputValue, submitMessage],
+		[continueRun, inputValue, navigate, setInputValue, submitMessage],
 	);
 
 	// A tool call cannot block waiting for a person, so when a web tool hits a bot

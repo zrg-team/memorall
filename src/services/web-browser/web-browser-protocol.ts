@@ -141,6 +141,14 @@ export type WebContentCommandRequest =
 	| {
 			source: typeof WEB_CONTENT_COMMAND_SOURCE;
 			type: "web-tool:read-rendered-image";
+	  }
+	/**
+	 * The tab belongs to a web session: report what the person using it does
+	 * there (clicks, form submissions), for as long as this document lives.
+	 */
+	| {
+			source: typeof WEB_CONTENT_COMMAND_SOURCE;
+			type: "web-tool:watch-user-actions";
 	  };
 
 export type WebContentCommandResponse =
@@ -208,6 +216,11 @@ export type WebContentCommandResponse =
 	  }
 	| {
 			source: typeof WEB_CONTENT_COMMAND_SOURCE;
+			type: "web-tool:watch-user-actions-result";
+			success: true;
+	  }
+	| {
+			source: typeof WEB_CONTENT_COMMAND_SOURCE;
 			type:
 				| "web-tool:snapshot-result"
 				| "web-tool:dom-query-result"
@@ -217,7 +230,8 @@ export type WebContentCommandResponse =
 				| "web-tool:outline-action-result"
 				| "web-tool:fetch-image-result"
 				| "web-tool:open-image-tab-result"
-				| "web-tool:read-rendered-image-result";
+				| "web-tool:read-rendered-image-result"
+				| "web-tool:watch-user-actions-result";
 			success: false;
 			error: string;
 	  };
@@ -555,6 +569,7 @@ export const isWebContentCommandRequest = (
 		case "web-tool:open-image-tab":
 			return typeof value.url === "string";
 		case "web-tool:read-rendered-image":
+		case "web-tool:watch-user-actions":
 			return true;
 		default:
 			return false;
@@ -592,6 +607,7 @@ export const isWebContentCommandResponse = (
 				typeof value.base64 === "string" && typeof value.mimeType === "string"
 			);
 		case "web-tool:open-image-tab-result":
+		case "web-tool:watch-user-actions-result":
 			return true;
 		case "web-tool:outline-result":
 			return isRecord(value.outline);
@@ -762,5 +778,79 @@ export const isWebBrowserCommandResponse = (
 			);
 		default:
 			return false;
+	}
+};
+
+// ─── Session events ─────────────────────────────────────────────────────────
+// What happens in a session's tab that the agent did not do: the person using
+// the tab clicked, submitted a form, navigated, reloaded or closed it.
+
+/** A page's report of what the person did in it, sent to the background. */
+export const WEB_PAGE_ACTION_SOURCE = "memorall:web-page-action" as const;
+/** A session's event, sent by the background to wherever the sessions live. */
+export const WEB_SESSION_EVENT_SOURCE = "memorall:web-session-event" as const;
+
+/** What the person did on the page itself. */
+export type WebPageAction =
+	| {
+			kind: "clicked";
+			/** What was clicked, as the page labels it: `link "Pricing"`. */
+			target: string;
+			href?: string;
+	  }
+	| { kind: "submitted"; target: string };
+
+export type WebSessionEvent =
+	| WebPageAction
+	| {
+			kind: "navigated";
+			url: string;
+			/** The same page loaded again. */
+			reload: boolean;
+	  }
+	| { kind: "closed" };
+
+export interface WebPageActionMessage {
+	source: typeof WEB_PAGE_ACTION_SOURCE;
+	action: WebPageAction;
+}
+
+export interface WebSessionEventMessage {
+	source: typeof WEB_SESSION_EVENT_SOURCE;
+	sessionId: string;
+	event: WebSessionEvent;
+}
+
+const isWebPageAction = (value: unknown): value is WebPageAction =>
+	isRecord(value) &&
+	(value.kind === "clicked" || value.kind === "submitted") &&
+	typeof value.target === "string";
+
+export const isWebPageActionMessage = (
+	value: unknown,
+): value is WebPageActionMessage =>
+	isRecord(value) &&
+	value.source === WEB_PAGE_ACTION_SOURCE &&
+	isWebPageAction(value.action);
+
+export const isWebSessionEventMessage = (
+	value: unknown,
+): value is WebSessionEventMessage => {
+	if (
+		!isRecord(value) ||
+		value.source !== WEB_SESSION_EVENT_SOURCE ||
+		typeof value.sessionId !== "string" ||
+		!isRecord(value.event)
+	) {
+		return false;
+	}
+	const { event } = value;
+	switch (event.kind) {
+		case "navigated":
+			return typeof event.url === "string" && typeof event.reload === "boolean";
+		case "closed":
+			return true;
+		default:
+			return isWebPageAction(event);
 	}
 };

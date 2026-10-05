@@ -3,6 +3,7 @@ import type {
 	WebOutlineActionRequest,
 	WebOutlineActionResult,
 	WebPageOutline,
+	WebSessionEvent,
 } from "@/services/web-browser/web-browser-protocol";
 import {
 	MEMON_AGENT_TURN_CEILING_MS,
@@ -62,6 +63,7 @@ import type { MemonControlValue } from "./app-kit/types";
 import { kitAppForRef } from "./apps";
 import { studioDraftsFromSettings } from "./apps/studio-view";
 import { MemonApprovalRequiredError } from "./approval-error";
+import { findVerificationWall } from "./verification-wall";
 import {
 	MemonPiCode,
 	type MemonPiCodePort,
@@ -128,6 +130,15 @@ export interface MemonBrowserPort {
 		url: string,
 	): Promise<{ url: string; title: string }>;
 	outline(sessionId: string): Promise<WebPageOutline>;
+	/**
+	 * The outline once the page holds still: a page its own scripts draw is
+	 * still filling in when the browser reports it loaded. Without it, the
+	 * page is read as it is.
+	 */
+	settle?(
+		sessionId: string,
+		options: { timeoutMs: number },
+	): Promise<WebPageOutline>;
 	act(
 		sessionId: string,
 		request: WebOutlineActionRequest,
@@ -138,6 +149,15 @@ export interface MemonBrowserPort {
 		sessionId: string,
 		request: MemonCaptureRequest,
 	): Promise<MemonPageCapture>;
+	/**
+	 * What the tab's page does that the agent did not (the user clicks,
+	 * navigates, closes it), where the browser reports it. Returns the
+	 * unsubscribe, or null where nothing is reported.
+	 */
+	watch?(
+		sessionId: string,
+		listener: (event: WebSessionEvent) => void,
+	): (() => void) | null;
 	/** Brings the session's real tab and window to the front. */
 	focus(sessionId: string): Promise<void>;
 	close(sessionId: string): Promise<void>;
@@ -294,6 +314,23 @@ const MAX_USER_CHANGES = 12;
 const MAX_STUDIO_RUNS = 20;
 /** How long a local address waits for a starting command's server. */
 const SERVER_START_WAIT_MS = 3_000;
+/** How long an opened page gets to draw itself before it is read. */
+const PAGE_OPEN_SETTLE_MS = 10_000;
+/** A page read again (the screen) is usually drawn already; it gets less. */
+const PAGE_READ_SETTLE_MS = 3_000;
+/** A click and the navigation it starts arrive close together: one re-read. */
+const TAB_SYNC_DELAY_MS = 300;
+const MAX_URL_CHARS = 120;
+
+const shortUrl = (url: string): string =>
+	url.length > MAX_URL_CHARS ? `${url.slice(0, MAX_URL_CHARS - 1)}…` : url;
+
+/** The same page, give or take a trailing slash or empty fragment. */
+const samePage = (a?: string, b?: string): boolean =>
+	(a ?? "").replace(/[#/]+$/, "") === (b ?? "").replace(/[#/]+$/, "");
+
+/** A wall the user let the agent past: this tab, at this address. */
+const wallKey = (tab: MemonBrowserTab): string => `${tab.id} ${tab.url}`;
 const normalizePath = (path: string, cwd = "/"): string => {
 	const absolute = path.startsWith("/") ? path : `${cwd}/${path}`;
 	const parts: string[] = [];
@@ -432,12 +469,31 @@ export class MemonMachine {
 	private disposed = false;
 	private cursor: MemonCursorState | null = null;
 	private userChanges: string[] = [];
+	/**
+	 * Per tab, the page the agent last read (its outline's docToken). The
+	 * machine re-reads pages on its own, so the latest outline is not
+	 * necessarily the one whose refs the agent is using.
+	 */
+	private readonly readTokens = new Map<string, string>();
 	private drafts = new Map<string, unknown>();
 	/** The run the agent last acted in, and the one a takeover interrupted. */
 	private activeRunId: string | null = null;
 	private takeoverRunId: string | null = null;
+	/** The tab whose verification wall stopped the agent, until it is through. */
+	private wallTabId: string | null = null;
+	/** Walls the user let the agent past ("tabId url"): not stopped on again. */
+	private readonly passedWalls = new Set<string>();
 	private readonly waiters = new Set<Waiter>();
 	private readonly releases = new Map<string, () => void>();
+	/** Per session, the unsubscribe from what its real tab reports. */
+	private readonly watches = new Map<string, () => void>();
+	/** Per tab, a pending re-read after its page reported a change. */
+	private readonly syncTimers = new Map<
+		string,
+		ReturnType<typeof setTimeout>
+	>();
+	/** Tabs behind the front one whose page changed since they were read. */
+	private readonly staleTabs = new Set<string>();
 	private readonly listeners = new Set<() => void>();
 	private unsubscribeFiles: (() => void) | undefined;
 	private filesRefreshTimer: ReturnType<typeof setTimeout> | undefined;
@@ -607,6 +663,8 @@ export class MemonMachine {
 	resume(): void {
 		this.driver = "agent";
 		this.paused = false;
+		// A wall still there stops the agent again when it reads the page.
+		this.wallTabId = null;
 		this.wakeWaiters();
 		this.changed();
 	}
@@ -670,6 +728,10 @@ export class MemonMachine {
 	/** Screen for the model; clears the change log it reports. */
 	readScreen(): string {
 		const screen = serializeScreen(this.snapshot());
+		// The refs the agent now holds belong to this page; its actions carry
+		// this token, so a page that changed behind it fails as stale.
+		const tab = this.activeTab();
+		if (tab?.outline) this.readTokens.set(tab.id, tab.outline.docToken);
 		if (this.userChanges.length) {
 			this.userChanges = [];
 			this.changed();
@@ -1017,8 +1079,13 @@ export class MemonMachine {
 		}
 		return port.capture(tab.sessionId, {
 			ref,
-			docToken: tab.outline?.docToken,
+			docToken: this.readToken(tab),
 		});
+	}
+
+	/** The page whose refs the agent holds: the one it last read. */
+	private readToken(tab: MemonBrowserTab): string | undefined {
+		return this.readTokens.get(tab.id) ?? tab.outline?.docToken;
 	}
 
 	/** The chat's model can look at pictures, so a picture goes to it. */
@@ -1044,8 +1111,17 @@ export class MemonMachine {
 	}
 
 	private async releaseTab(tab: MemonBrowserTab): Promise<void> {
+		// First, so closing the tab is not reported back as the user's doing.
+		this.watches.get(tab.sessionId)?.();
+		this.watches.delete(tab.sessionId);
+		clearTimeout(this.syncTimers.get(tab.id));
+		this.syncTimers.delete(tab.id);
+		this.staleTabs.delete(tab.id);
+		// Its wall went with it: nothing left to wait for.
+		if (this.wallTabId === tab.id) this.resume();
 		this.releases.get(tab.sessionId)?.();
 		this.releases.delete(tab.sessionId);
+		this.readTokens.delete(tab.id);
 		await this.browserPort(tab)
 			.close(tab.sessionId)
 			.catch(() => undefined);
@@ -1053,25 +1129,82 @@ export class MemonMachine {
 
 	/** Records the tab's current page as a new history entry if it moved. */
 	private recordVisit(tab: MemonBrowserTab, url: string): void {
-		const same = (a?: string, b?: string) =>
-			(a ?? "").replace(/[#/]+$/, "") === (b ?? "").replace(/[#/]+$/, "");
-		if (same(tab.history[tab.historyIndex], url)) return;
+		if (samePage(tab.history[tab.historyIndex], url)) return;
 		tab.history = [...tab.history.slice(0, tab.historyIndex + 1), url];
 		tab.historyIndex = tab.history.length - 1;
 	}
 
-	private async readTab(tab: MemonBrowserTab): Promise<void> {
+	/**
+	 * Syncs the tab from its page: address, title, history and outline.
+	 * `settleMs` waits up to that long for the page to hold still first.
+	 */
+	private async readTab(tab: MemonBrowserTab, settleMs = 0): Promise<void> {
 		try {
-			const outline = await this.browserPort(tab).outline(tab.sessionId);
+			const port = this.browserPort(tab);
+			const outline =
+				settleMs > 0 && port.settle
+					? await port.settle(tab.sessionId, { timeoutMs: settleMs })
+					: await port.outline(tab.sessionId);
 			tab.outline = outline;
 			tab.url = outline.url || tab.url;
 			tab.title = outline.title || tab.title;
 			tab.error = undefined;
 			this.recordVisit(tab, tab.url);
+			this.checkWall(tab, outline);
 		} catch (error) {
 			tab.error = error instanceof Error ? error.message : String(error);
 		}
 		this.changed();
+	}
+
+	/**
+	 * A page only a person can get past: a CAPTCHA, a Cloudflare check. The
+	 * agent that runs into one stops there, as when the user takes over, and
+	 * the Browser asks the user to solve it; once the page is through, the
+	 * agent goes on by itself.
+	 */
+	private checkWall(tab: MemonBrowserTab, outline: WebPageOutline): void {
+		const wall = findVerificationWall(outline);
+		if (wall && !this.passedWalls.has(wallKey(tab))) {
+			tab.wall = wall;
+			// The agent's own read (not the user browsing) is what stops it.
+			if (this.busy > 0 && this.driver === "agent") {
+				this.takeOver();
+				this.wallTabId = tab.id;
+				if (this.cursor) {
+					this.cursor = { ...this.cursor, label: "Waiting for you to verify" };
+				}
+			}
+			return;
+		}
+		tab.wall = undefined;
+		if (this.wallTabId === tab.id) {
+			this.noteUserChange(`got ${shortUrl(tab.url)} past its verification`);
+			this.resume();
+		}
+	}
+
+	/**
+	 * The user says they solved the wall: read the page again. Through, the
+	 * agent goes on; still a wall, it keeps waiting.
+	 */
+	async recheckWall(): Promise<void> {
+		const tab =
+			this.tabs.find((candidate) => candidate.id === this.wallTabId) ??
+			this.activeTab();
+		if (tab) await this.readTab(tab, PAGE_READ_SETTLE_MS);
+	}
+
+	/** The user lets the agent past a wall it should not stop on. */
+	continuePastWall(): void {
+		const tab =
+			this.tabs.find((candidate) => candidate.id === this.wallTabId) ??
+			this.activeTab();
+		if (tab?.wall) {
+			this.passedWalls.add(wallKey(tab));
+			tab.wall = undefined;
+		}
+		this.resume();
 	}
 
 	/**
@@ -1136,7 +1269,7 @@ export class MemonMachine {
 			current.url = page.url;
 			current.title = page.title;
 			current.outline = null;
-			await this.readTab(current);
+			await this.readTab(current, PAGE_OPEN_SETTLE_MS);
 			this.focusWindow(window.id);
 			return;
 		}
@@ -1158,8 +1291,72 @@ export class MemonMachine {
 		};
 		this.tabs.push(tab);
 		this.activeTabId = tab.id;
-		await this.readTab(tab);
+		const unwatch = port.watch?.(opened.sessionId, (event) =>
+			this.onTabEvent(tab.id, event),
+		);
+		if (unwatch) this.watches.set(opened.sessionId, unwatch);
+		await this.readTab(tab, PAGE_OPEN_SETTLE_MS);
 		this.focusWindow(window.id);
+	}
+
+	/**
+	 * What happened in a tab's real page that the agent did not do (the user
+	 * clicked, navigated, closed it): logged for the agent, without taking the
+	 * computer over, and the tab synced again so the Browser follows it.
+	 */
+	private onTabEvent(tabId: string, event: WebSessionEvent): void {
+		const tab = this.tabs.find((candidate) => candidate.id === tabId);
+		if (!tab) return;
+		const name =
+			this.tabs.length > 1
+				? `real tab ${this.tabs.indexOf(tab) + 1}`
+				: "the real tab";
+		switch (event.kind) {
+			case "closed":
+				this.noteUserChange(`closed ${name} (${shortUrl(tab.url)})`);
+				void this.closeTab(this.tabs.indexOf(tab) + 1).catch(() => undefined);
+				return;
+			case "navigated":
+				// A read of the machine's own has already followed it there.
+				if (!event.reload && samePage(event.url, tab.url)) return;
+				this.noteUserChange(
+					event.reload
+						? `reloaded the page in ${name}`
+						: `went to ${shortUrl(event.url)} in ${name}`,
+				);
+				break;
+			case "clicked":
+			case "submitted":
+				this.noteUserChange(`${event.kind} ${event.target} in ${name}`);
+				break;
+		}
+		// Only the tab in front is read again: the agent reads another one by
+		// switching to it, and that read waits for the page to settle.
+		if (tab.id === this.activeTabId) this.syncTabSoon(tab);
+		else this.staleTabs.add(tab.id);
+	}
+
+	/**
+	 * Reads a tab that comes to the front. One whose page changed while it was
+	 * behind waits for that page to settle; the rest are read as they are.
+	 */
+	private async readFrontTab(tab: MemonBrowserTab): Promise<void> {
+		const stale = this.staleTabs.delete(tab.id);
+		await this.readTab(tab, stale ? PAGE_READ_SETTLE_MS : 0);
+	}
+
+	/** Reads the tab again once a burst of its events is over. */
+	private syncTabSoon(tab: MemonBrowserTab): void {
+		clearTimeout(this.syncTimers.get(tab.id));
+		this.syncTimers.set(
+			tab.id,
+			setTimeout(() => {
+				this.syncTimers.delete(tab.id);
+				if (this.tabs.includes(tab)) {
+					void this.readTab(tab, PAGE_READ_SETTLE_MS);
+				}
+			}, TAB_SYNC_DELAY_MS),
+		);
 	}
 
 	async browserAction(
@@ -1172,7 +1369,7 @@ export class MemonMachine {
 		const { result, outline } = await this.browserPort(tab).act(tab.sessionId, {
 			...request,
 			// The user acts on what they see; the agent must act on what it read.
-			docToken: options.byUser ? undefined : tab.outline?.docToken,
+			docToken: options.byUser ? undefined : this.readToken(tab),
 			allowFormSubmit,
 		});
 		if (!result.ok) {
@@ -1216,12 +1413,16 @@ export class MemonMachine {
 		} else {
 			await this.browserPort(tab).history(tab.sessionId, direction);
 		}
-		await this.readTab(tab);
+		await this.readTab(tab, PAGE_OPEN_SETTLE_MS);
 	}
 
+	/**
+	 * Syncs the front tab again from its page, which may have moved since it
+	 * was read: the user worked in the real tab, or its scripts drew more.
+	 */
 	async refreshBrowser(): Promise<void> {
 		const tab = this.activeTab();
-		if (tab) await this.readTab(tab);
+		if (tab) await this.readTab(tab, PAGE_READ_SETTLE_MS);
 	}
 
 	async selectTab(index: number): Promise<void> {
@@ -1230,7 +1431,7 @@ export class MemonMachine {
 		this.activeTabId = tab.id;
 		const window = this.windowFor("browser");
 		if (window) this.focusWindow(window.id);
-		await this.readTab(tab);
+		await this.readFrontTab(tab);
 	}
 
 	async closeTab(index: number): Promise<void> {
@@ -1239,7 +1440,10 @@ export class MemonMachine {
 		await this.releaseTab(tab);
 		this.tabs = this.tabs.filter((candidate) => candidate !== tab);
 		if (this.activeTabId === tab.id) {
-			this.activeTabId = this.tabs[Math.max(0, index - 2)]?.id ?? null;
+			const next = this.tabs[Math.max(0, index - 2)];
+			this.activeTabId = next?.id ?? null;
+			// The tab now in front may have changed while it was behind.
+			if (next && this.staleTabs.has(next.id)) await this.readFrontTab(next);
 		}
 		if (!this.tabs.length) this.browserWindowId = undefined;
 		this.changed();
@@ -2803,6 +3007,7 @@ export class MemonMachine {
 				tabs: this.tabs.map((tab) => ({ ...tab })),
 				activeTabId: this.activeTabId,
 				windowId: this.browserWindowId,
+				...(this.wallTabId ? { wallTabId: this.wallTabId } : {}),
 			},
 			files: {
 				cwd: this.filesCwd,

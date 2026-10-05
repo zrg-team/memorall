@@ -7,7 +7,10 @@ import {
 	MAX_CONSECUTIVE_TOOL_FAILURES,
 	mergeStreamedToolCall,
 } from "../graph/agent/graph.js";
-import { recursionLimitForIterations } from "../limits.js";
+import {
+	ITERATION_LIMIT_EVENT,
+	recursionLimitForIterations,
+} from "../limits.js";
 import {
 	createFlowRunInbox,
 	FLOW_RUN_INBOX_REMINDER,
@@ -370,13 +373,83 @@ describe("agent iteration limit reaches LangGraph", () => {
 
 		const stream = await graph.stream(
 			{ messages: [{ role: "user", content: "go" }], maxIterations },
-			{ streamMode: ["values"] },
+			{ streamMode: ["values", "custom"] },
 		);
-		for await (const _ of stream as AsyncIterable<unknown>) {
-			// drain
+		const limits: unknown[] = [];
+		for await (const [mode, payload] of stream as AsyncIterable<
+			[string, { type?: string }]
+		>) {
+			if (mode === "custom" && payload.type === ITERATION_LIMIT_EVENT) {
+				limits.push(payload);
+			}
 		}
 
 		expect(turns).toBe(maxIterations);
+		// The run says it was cut off, so the chat can offer to go on.
+		expect(limits).toEqual([{ type: ITERATION_LIMIT_EVENT, maxIterations }]);
+	});
+
+	it("reports no limit when the last allowed turn is the answer", async () => {
+		let turns = 0;
+		const tool: BaseTool = {
+			name: "ping",
+			description: "ping",
+			schema: jsonToolSchema({ type: "object", properties: {} }),
+			execute: async () => "pong",
+		};
+		const delta = (turn: number) =>
+			turn === 1
+				? {
+						role: "assistant",
+						content: null,
+						tool_calls: [
+							{
+								index: 0,
+								id: "call_1",
+								type: "function",
+								function: { name: "ping", arguments: "{}" },
+							},
+						],
+					}
+				: { role: "assistant", content: "Done." };
+		const graph = new AgentGraph(
+			{
+				llm: {
+					isReady: () => true,
+					getCurrentModel: async () => ({ modelId: "test" }),
+					getMaxModelTokens: async () => 128000,
+					getMaxResponseTokens: async () => 4096,
+					chatCompletions: (() =>
+						(async function* () {
+							turns += 1;
+							yield {
+								id: "chunk",
+								object: "chat.completion.chunk",
+								created: 0,
+								model: "test",
+								choices: [
+									{ index: 0, delta: delta(turns), finish_reason: null },
+								],
+							};
+						})()) as never,
+				},
+			},
+			{ tools: [tool], maxIterations: 2 },
+		);
+
+		const stream = await graph.stream(
+			{ messages: [{ role: "user", content: "go" }], maxIterations: 2 },
+			{ streamMode: ["values", "custom"] },
+		);
+		const types: unknown[] = [];
+		for await (const [mode, payload] of stream as AsyncIterable<
+			[string, { type?: string }]
+		>) {
+			if (mode === "custom") types.push(payload.type);
+		}
+
+		expect(turns).toBe(2);
+		expect(types).not.toContain(ITERATION_LIMIT_EVENT);
 	});
 });
 

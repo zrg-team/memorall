@@ -35,7 +35,8 @@ const hasRenderableMessageContent = (
 		("actions" in message.metadata &&
 			Array.isArray(message.metadata.actions) &&
 			message.metadata.actions.length > 0) ||
-		"error" in message.metadata
+		"error" in message.metadata ||
+		"iterationLimit" in message.metadata
 	);
 };
 
@@ -122,6 +123,11 @@ export const MessageGroup: React.FC<MessageGroupProps> = React.memo(
 
 		const shouldRenderMessages = !isCollapsed && group.isLoaded;
 		const inProgressId = inProgressMessage?.id;
+		// The chat's newest message, while no reply is streaming after it.
+		const lastMessageId =
+			group.isLatest && !inProgressMessage
+				? group.messages[group.messages.length - 1]?.id
+				: undefined;
 
 		// Where each stretch of co-agent turns was asked. Derived from the turns
 		// themselves rather than stored, so it also reads back sessions recorded
@@ -149,7 +155,7 @@ export const MessageGroup: React.FC<MessageGroupProps> = React.memo(
 					<MessageRenderer
 						message={message}
 						index={index}
-						isLastMessage={false}
+						isLastMessage={message.id === lastMessageId}
 						isStreaming={false}
 						groupMessages={group.messages}
 						selectedTopic={selectedTopic}
@@ -174,6 +180,7 @@ export const MessageGroup: React.FC<MessageGroupProps> = React.memo(
 		}, [
 			group.messages,
 			inProgressId,
+			lastMessageId,
 			onMessageAction,
 			pageChanges,
 			selectedTopic,

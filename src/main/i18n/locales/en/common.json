@@ -857,6 +857,18 @@
 		},
 		"showRealPage": "Show the real page in the browser",
 		"showRealPageShort": "Show",
+		"wall": {
+			"title": "This page needs a person",
+			"pill": "MemonOS Bot waits for you to solve a verification check in the Browser.",
+			"captcha": "The site asks to verify you are human (CAPTCHA).",
+			"cloudflare": "The site is showing a Cloudflare security check.",
+			"rate-limit": "The site is limiting automated visits and asks to verify you are human.",
+			"waiting": "MemonOS Bot stopped here. Solve it in the real page, then press Done: the agent goes on once the page is through.",
+			"idle": "Only a person can get past it: solve it in the real page.",
+			"show": "Show page",
+			"done": "Done",
+			"ignore": "Continue anyway"
+		},
 		"viewer": {
 			"empty": "No file open",
 			"opening": "Opening…",

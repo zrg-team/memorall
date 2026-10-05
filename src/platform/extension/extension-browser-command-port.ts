@@ -13,4 +13,14 @@ export class ExtensionBrowserCommandPort implements BrowserCommandPort {
 			return false;
 		}
 	}
+
+	/** The background's runtime messages reach this page (the offscreen document). */
+	subscribeEvents(listener: (message: unknown) => void): () => void {
+		const handler = (message: unknown) => {
+			listener(message);
+			return false;
+		};
+		chrome.runtime.onMessage.addListener(handler);
+		return () => chrome.runtime.onMessage.removeListener(handler);
+	}
 }

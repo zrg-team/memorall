@@ -12,6 +12,7 @@ import {
 	type WebDomElementInfo,
 	type WebElementRecord,
 } from "@/services/web-browser/web-browser-protocol";
+import { runAsAgent, watchUserActions } from "./user-actions";
 
 // ── Snapshot helpers ──────────────────────────────────────────────────────────
 
@@ -245,6 +246,7 @@ const WEB_CONTENT_ERROR_TYPE: Record<
 	"web-tool:fetch-image": "web-tool:fetch-image-result",
 	"web-tool:open-image-tab": "web-tool:open-image-tab-result",
 	"web-tool:read-rendered-image": "web-tool:read-rendered-image-result",
+	"web-tool:watch-user-actions": "web-tool:watch-user-actions-result",
 };
 
 const createWebContentErrorResponse = (
@@ -288,7 +290,9 @@ export const handleWebContentCommand = async (
 			}
 
 			case "web-tool:dom-action": {
-				const result = executeDomAction(request.action, request);
+				const result = await runAsAgent(() =>
+					executeDomAction(request.action, request),
+				);
 				return {
 					source: WEB_CONTENT_COMMAND_SOURCE,
 					type: "web-tool:dom-action-result",
@@ -329,6 +333,14 @@ export const handleWebContentCommand = async (
 				}
 			}
 
+			case "web-tool:watch-user-actions":
+				watchUserActions();
+				return {
+					source: WEB_CONTENT_COMMAND_SOURCE,
+					type: "web-tool:watch-user-actions-result",
+					success: true,
+				};
+
 			case "web-tool:outline":
 				return {
 					source: WEB_CONTENT_COMMAND_SOURCE,
@@ -338,11 +350,14 @@ export const handleWebContentCommand = async (
 				};
 
 			case "web-tool:outline-action": {
-				const result = actOnRef(document, request.request);
-				// Let the page react (re-render, start a navigation) before reading it
-				// again; a navigation may still replace this document afterwards, which
-				// the caller detects from the URL and re-reads.
-				await new Promise((resolve) => window.setTimeout(resolve, 120));
+				const result = await runAsAgent(async () => {
+					const acted = actOnRef(document, request.request);
+					// Let the page react (re-render, start a navigation) before reading
+					// it again; a navigation may still replace this document afterwards,
+					// which the caller detects from the URL and re-reads.
+					await new Promise((resolve) => window.setTimeout(resolve, 120));
+					return acted;
+				});
 				return {
 					source: WEB_CONTENT_COMMAND_SOURCE,
 					type: "web-tool:outline-action-result",

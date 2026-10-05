@@ -16,6 +16,7 @@ import {
 } from "./embedded-frame";
 import type { MemonBrowserPort } from "./memon-machine";
 import type { MemonCaptureRequest, MemonPageCapture } from "./page-capture";
+import { settleOutline } from "./settle-outline";
 
 /**
  * Who shows an embedded tab. While the Computer window shows the tab, that
@@ -301,6 +302,13 @@ export const createMemonEmbeddedPort = (
 		return session.frame.iframe;
 	};
 
+	const readOutline = async (sessionId: string): Promise<WebPageOutline> => {
+		const session = requireSession(sessionId);
+		const hosted = await askHost<WebPageOutline>(session, sessionId, "outline");
+		if (hosted) return hosted.value;
+		return frameOutline(await ownFrame(session));
+	};
+
 	const targetOf = (url: string): SandboxTarget => {
 		const target = sandboxTargetOf(url);
 		if (!target) {
@@ -340,16 +348,10 @@ export const createMemonEmbeddedPort = (
 			return { url: sandboxServerUrl(target), title: "" };
 		},
 
-		async outline(sessionId) {
-			const session = requireSession(sessionId);
-			const hosted = await askHost<WebPageOutline>(
-				session,
-				sessionId,
-				"outline",
-			);
-			if (hosted) return hosted.value;
-			return frameOutline(await ownFrame(session));
-		},
+		outline: readOutline,
+
+		settle: (sessionId, { timeoutMs }) =>
+			settleOutline(() => readOutline(sessionId), { timeoutMs }),
 
 		async act(sessionId, request) {
 			const session = requireSession(sessionId);

@@ -37,6 +37,7 @@ import {
 	type AssistantContentPart,
 } from "./message/AssistantContentFlow";
 import { MessageErrorNotice } from "./message/MessageErrorNotice";
+import { MessageLimitNotice } from "./message/MessageLimitNotice";
 import {
 	type AttachedContextRef,
 	MessageAttachedContexts,
@@ -66,6 +67,8 @@ interface MessageMetadata extends MessageFooterMetadata {
 	executions?: AssistantExecutionPart[];
 	toolExecutions?: ToolExecutionRecord[];
 	compactions?: ChatCompaction[];
+	/** The run's iteration limit cut this reply off with work left. */
+	iterationLimit?: number;
 }
 
 interface MessageRendererProps {
@@ -180,14 +183,42 @@ export const MessageRenderer: React.FC<MessageRendererProps> = React.memo(
 		const hasStructuredAssistantContent = hasAssistantContentParts(
 			renderedAssistantContentParts,
 		);
+		const iterationLimit =
+			typeof metadata?.iterationLimit === "number"
+				? metadata.iterationLimit
+				: undefined;
+		// A cut-off reply still shows, if only to say so and offer to go on.
 		const hasRenderableContent =
-			message.content.trim().length > 0 || hasStructuredAssistantContent;
+			message.content.trim().length > 0 ||
+			hasStructuredAssistantContent ||
+			Boolean(iterationLimit);
 		const showGenericStreamingStatus =
 			isStreaming && actions.length === 0 && !hasStructuredAssistantContent;
 
 		const messageError = useMemo(() => {
 			return metadata?.error;
 		}, [metadata]);
+		// Only the newest reply goes on, and only where the chat can run it.
+		const continueRun =
+			showMessageControls && isLastMessage && !isStreaming && onMessageAction
+				? () =>
+						void onMessageAction({
+							type: "continue_run",
+							component: "message",
+							identifier: message.id,
+						})
+				: undefined;
+		const messageNotices = (
+			<>
+				{messageError ? <MessageErrorNotice error={messageError} /> : null}
+				{iterationLimit ? (
+					<MessageLimitNotice
+						maxIterations={iterationLimit}
+						onContinue={continueRun}
+					/>
+				) : null}
+			</>
+		);
 
 		// The agent's OpenUI theme, recorded on the message so a block that does
 		// not name a theme still renders in the one the agent is configured for.
@@ -343,9 +374,7 @@ export const MessageRenderer: React.FC<MessageRendererProps> = React.memo(
 													}
 													onMessageAction={onMessageAction}
 												/>
-												{messageError ? (
-													<MessageErrorNotice error={messageError} />
-												) : null}
+												{messageNotices}
 											</>
 										) : (
 											<>
@@ -358,9 +387,7 @@ export const MessageRenderer: React.FC<MessageRendererProps> = React.memo(
 													configuredTheme={configuredOpenUITheme}
 													onMessageAction={onMessageAction}
 												/>
-												{messageError ? (
-													<MessageErrorNotice error={messageError} />
-												) : null}
+												{messageNotices}
 											</>
 										)}
 										{showGenericStreamingStatus && (
