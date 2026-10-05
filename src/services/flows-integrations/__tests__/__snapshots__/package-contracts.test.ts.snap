@@ -1666,13 +1666,15 @@ exports[`flows-integrations registered contracts > registers every integrations 
     },
   },
   {
-    "description": "Act on the computer: click or type on a ref from the latest screen, scroll, go back/forward, switch tabs, or write and save in the Editor. Returns the new screen.",
+    "description": "Act on the computer: click, hover or type on a ref from the latest screen (or click a page point by x, y), press keys, scroll, go back/forward, switch tabs, or write and save in the Editor. Returns the new screen.",
     "name": "memon_act",
     "parameters": {
       "properties": {
         "action": {
           "enum": [
             "click",
+            "hover",
+            "press",
             "type",
             "toggle",
             "select",
@@ -1696,6 +1698,10 @@ exports[`flows-integrations registered contracts > registers every integrations 
           "enum": [
             "up",
             "down",
+            "left",
+            "right",
+            "top",
+            "bottom",
           ],
           "type": "string",
         },
@@ -1713,6 +1719,12 @@ exports[`flows-integrations registered contracts > registers every integrations 
         },
         "to": {
           "type": "string",
+        },
+        "x": {
+          "type": "number",
+        },
+        "y": {
+          "type": "number",
         },
       },
       "required": [
