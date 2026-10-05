@@ -438,10 +438,10 @@ export class MagickRun {
 			try {
 				return this.decode(this.stdin, "-", this.readSettings(format));
 			} catch {
-				// A shell command's output reaches magick as text, so an image
-				// piped in arrives broken.
+				// Host commands, cat, tee and base64 pipe bytes; any other shell
+				// command's output reaches magick as text, an image broken.
 				throw new MagickUsageError(
-					"could not read an image from stdin (pipes into magick carry text here); give magick the file name instead",
+					"could not read an image from stdin; pipe it from a file with cat, from ffmpeg, curl or magick, or give magick the file name (other commands pipe text here)",
 				);
 			}
 		}
@@ -605,7 +605,14 @@ export class MagickRun {
 		const escaped = pattern.replace(/%(%|[fdetiM])/g, (match, key: string) =>
 			key === "%" ? match : (names[key] ?? "").replace(/%/g, "%%"),
 		);
-		return image.formatExpression(escaped) ?? "";
+		// magick-wasm drops leading whitespace, which ImageMagick keeps
+		// (-format " %m", "\n%f").
+		const [lead = ""] = /^(?:\s|\\[ntr])*/.exec(escaped) ?? [];
+		const kept = lead.replace(
+			/\\[ntr]/g,
+			(code) => LEADING_ESCAPES[code] ?? "",
+		);
+		return kept + (image.formatExpression(escaped.slice(lead.length)) ?? "");
 	}
 
 	/** ImageMagick's one line per image, as identify prints it. */
@@ -748,6 +755,12 @@ export class MagickRun {
 		this.files.set(path, data);
 	}
 }
+
+const LEADING_ESCAPES: Record<string, string> = {
+	"\\n": "\n",
+	"\\t": "\t",
+	"\\r": "\r",
+};
 
 /** "frame_%03d.png" for one index. */
 const frameName = (name: string, index: number): string =>

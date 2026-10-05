@@ -53,3 +53,23 @@ test("ffmpeg, ffprobe and magick come installed", async ({ extensionPage }) => {
 	expect(missing.exitCode).toBe(1);
 	expect(missing.stderr).toContain("unable to open image 'nope.png'");
 });
+
+test("pipes carry images and video byte for byte", async ({ extensionPage }) => {
+	const piped = await run(
+		extensionPage,
+		"cat card.png | magick - -resize 50% half.jpg && identify -format '%m %wx%h' half.jpg",
+	);
+	expect(piped).toMatchObject({ exitCode: 0, stdout: "JPEG 80x45" });
+
+	const chained = await run(
+		extensionPage,
+		"ffmpeg -hide_banner -loglevel error -i clip.mp4 -frames:v 1 -f image2pipe -c:v png - | magick - -format %wx%h info:",
+	);
+	expect(chained).toMatchObject({ exitCode: 0, stdout: "160x120" });
+
+	const encoded = await run(
+		extensionPage,
+		"magick - -format %m info: < card.png && magick card.png png:- | base64 -w0 | head -c 11",
+	);
+	expect(encoded).toMatchObject({ exitCode: 0, stdout: "PNGiVBORw0KGgo" });
+});

@@ -248,6 +248,9 @@ describe("magick", () => {
 		expect(run("magick", "red.png", "-format", "%m %wx%h", "info:").text).toBe(
 			"PNG 8x8",
 		);
+		// Leading whitespace stays, as ImageMagick keeps it.
+		expect(run("identify", "-format", " %m\\n", "red.png").text).toBe(" PNG\n");
+		expect(run("identify", "-format", "\\n%w", "red.png").text).toBe("\n8");
 		expect(run("magick", "-list", "format").text).toMatch(/PNG {2}rw/);
 		expect(run("magick", "-version").text).toContain("ImageMagick 7");
 		expect(run("identify", "-verbose", "red.png").text).toContain(
@@ -283,6 +286,8 @@ describe("magick", () => {
 			stdin: new TextEncoder().encode("�PNG mangled by a text pipe"),
 		});
 		expect(piped.exitCode).toBe(1);
-		expect(piped.stderr).toContain("give magick the file name instead");
+		expect(piped.stderr).toContain(
+			"could not read an image from stdin; pipe it from a file with cat",
+		);
 	});
 });
