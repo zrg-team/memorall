@@ -58,6 +58,10 @@ export interface MemonOperationPayloadMap {
 	"browser.refresh": Keyed;
 	/** Brings the real browser tab behind the active Browser tab to the front. */
 	"browser.show": Keyed;
+	/** The user solved a page's verification: read it again, then go on. */
+	"browser.recheckWall": Keyed;
+	/** The user lets the agent past a page it stopped on as a wall. */
+	"browser.continuePastWall": Keyed;
 	"scheduler.refresh": Keyed;
 	"scheduler.save": Keyed<{ schedule: MemonScheduleInput }>;
 	"scheduler.delete": Keyed<{ id: string }>;

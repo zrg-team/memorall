@@ -63,6 +63,7 @@ import type { MemonControlValue } from "./app-kit/types";
 import { kitAppForRef } from "./apps";
 import { studioDraftsFromSettings } from "./apps/studio-view";
 import { MemonApprovalRequiredError } from "./approval-error";
+import { findVerificationWall } from "./verification-wall";
 import {
 	MemonPiCode,
 	type MemonPiCodePort,
@@ -327,6 +328,9 @@ const shortUrl = (url: string): string =>
 /** The same page, give or take a trailing slash or empty fragment. */
 const samePage = (a?: string, b?: string): boolean =>
 	(a ?? "").replace(/[#/]+$/, "") === (b ?? "").replace(/[#/]+$/, "");
+
+/** A wall the user let the agent past: this tab, at this address. */
+const wallKey = (tab: MemonBrowserTab): string => `${tab.id} ${tab.url}`;
 const normalizePath = (path: string, cwd = "/"): string => {
 	const absolute = path.startsWith("/") ? path : `${cwd}/${path}`;
 	const parts: string[] = [];
@@ -475,6 +479,10 @@ export class MemonMachine {
 	/** The run the agent last acted in, and the one a takeover interrupted. */
 	private activeRunId: string | null = null;
 	private takeoverRunId: string | null = null;
+	/** The tab whose verification wall stopped the agent, until it is through. */
+	private wallTabId: string | null = null;
+	/** Walls the user let the agent past ("tabId url"): not stopped on again. */
+	private readonly passedWalls = new Set<string>();
 	private readonly waiters = new Set<Waiter>();
 	private readonly releases = new Map<string, () => void>();
 	/** Per session, the unsubscribe from what its real tab reports. */
@@ -655,6 +663,8 @@ export class MemonMachine {
 	resume(): void {
 		this.driver = "agent";
 		this.paused = false;
+		// A wall still there stops the agent again when it reads the page.
+		this.wallTabId = null;
 		this.wakeWaiters();
 		this.changed();
 	}
@@ -1107,6 +1117,8 @@ export class MemonMachine {
 		clearTimeout(this.syncTimers.get(tab.id));
 		this.syncTimers.delete(tab.id);
 		this.staleTabs.delete(tab.id);
+		// Its wall went with it: nothing left to wait for.
+		if (this.wallTabId === tab.id) this.resume();
 		this.releases.get(tab.sessionId)?.();
 		this.releases.delete(tab.sessionId);
 		this.readTokens.delete(tab.id);
@@ -1138,10 +1150,61 @@ export class MemonMachine {
 			tab.title = outline.title || tab.title;
 			tab.error = undefined;
 			this.recordVisit(tab, tab.url);
+			this.checkWall(tab, outline);
 		} catch (error) {
 			tab.error = error instanceof Error ? error.message : String(error);
 		}
 		this.changed();
+	}
+
+	/**
+	 * A page only a person can get past: a CAPTCHA, a Cloudflare check. The
+	 * agent that runs into one stops there, as when the user takes over, and
+	 * the Browser asks the user to solve it; once the page is through, the
+	 * agent goes on by itself.
+	 */
+	private checkWall(tab: MemonBrowserTab, outline: WebPageOutline): void {
+		const wall = findVerificationWall(outline);
+		if (wall && !this.passedWalls.has(wallKey(tab))) {
+			tab.wall = wall;
+			// The agent's own read (not the user browsing) is what stops it.
+			if (this.busy > 0 && this.driver === "agent") {
+				this.takeOver();
+				this.wallTabId = tab.id;
+				if (this.cursor) {
+					this.cursor = { ...this.cursor, label: "Waiting for you to verify" };
+				}
+			}
+			return;
+		}
+		tab.wall = undefined;
+		if (this.wallTabId === tab.id) {
+			this.noteUserChange(`got ${shortUrl(tab.url)} past its verification`);
+			this.resume();
+		}
+	}
+
+	/**
+	 * The user says they solved the wall: read the page again. Through, the
+	 * agent goes on; still a wall, it keeps waiting.
+	 */
+	async recheckWall(): Promise<void> {
+		const tab =
+			this.tabs.find((candidate) => candidate.id === this.wallTabId) ??
+			this.activeTab();
+		if (tab) await this.readTab(tab, PAGE_READ_SETTLE_MS);
+	}
+
+	/** The user lets the agent past a wall it should not stop on. */
+	continuePastWall(): void {
+		const tab =
+			this.tabs.find((candidate) => candidate.id === this.wallTabId) ??
+			this.activeTab();
+		if (tab?.wall) {
+			this.passedWalls.add(wallKey(tab));
+			tab.wall = undefined;
+		}
+		this.resume();
 	}
 
 	/**
@@ -2944,6 +3007,7 @@ export class MemonMachine {
 				tabs: this.tabs.map((tab) => ({ ...tab })),
 				activeTabId: this.activeTabId,
 				windowId: this.browserWindowId,
+				...(this.wallTabId ? { wallTabId: this.wallTabId } : {}),
 			},
 			files: {
 				cwd: this.filesCwd,

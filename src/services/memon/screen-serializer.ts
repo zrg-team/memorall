@@ -462,6 +462,13 @@ const fullLines = (
 				);
 			}
 			if (tab.error) lines.push(`error: ${tab.error}`);
+			if (tab.wall) {
+				lines.push(
+					snapshot.browser.wallTabId === tab.id
+						? `blocked: ${tab.wall.description} The user was asked to solve it in the real page; your next action waits until they have.`
+						: `blocked: ${tab.wall.description} Only a person can get past it: ask the user to solve it in the real page.`,
+				);
+			}
 			if (tab.outline) {
 				lines.push(`page: ${tab.outline.docToken}`);
 				const { scroll } = tab.outline;

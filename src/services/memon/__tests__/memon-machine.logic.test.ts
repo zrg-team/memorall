@@ -491,6 +491,79 @@ describe("MemonMachine", () => {
 		expect(settle).toHaveBeenCalledTimes(1);
 	});
 
+	it("stops the agent at a verification wall until the user gets the page through", async () => {
+		const { machine, ports } = createMachine();
+		vi.mocked(ports.browser.outline).mockResolvedValue({
+			...outline("https://shop.test/", "Just a moment..."),
+			blocks: [
+				{
+					kind: "text",
+					text: "Verifying you are human. Performance & security by Cloudflare",
+				},
+			],
+		});
+
+		// The agent opens the page and stops there.
+		await machine.runAgentAction("Opening", {}, () =>
+			machine.openUrl("https://shop.test/"),
+		);
+		expect(machine.snapshot().driver).toBe("user");
+		expect(machine.snapshot().browser.wallTabId).toBe("tab1");
+		const screen = machine.readScreen();
+		expect(screen).toContain(
+			"blocked: The site served a Cloudflare verification page",
+		);
+		expect(screen).toContain("your next action waits until they have");
+		let turn: string | undefined;
+		void machine.waitForAgentTurn().then((outcome) => {
+			turn = outcome;
+		});
+		await vi.advanceTimersByTimeAsync(1_000);
+		expect(turn).toBeUndefined();
+
+		// Done, but the page still asks: the agent keeps waiting.
+		await machine.recheckWall();
+		await vi.advanceTimersByTimeAsync(0);
+		expect(turn).toBeUndefined();
+
+		// Through: the agent goes on by itself.
+		vi.mocked(ports.browser.outline).mockResolvedValue(
+			outline("https://shop.test/", "Shop"),
+		);
+		await machine.recheckWall();
+		await vi.advanceTimersByTimeAsync(0);
+		expect(turn).toBe("ready");
+		expect(machine.snapshot().browser.wallTabId).toBeUndefined();
+		expect(machine.readScreen()).toContain(
+			"- got https://shop.test/ past its verification",
+		);
+	});
+
+	it("leaves the user's own browsing alone, and a wall the user waves through", async () => {
+		const { machine, ports } = createMachine();
+		vi.mocked(ports.browser.outline).mockResolvedValue({
+			...outline("https://shop.test/", "Security check"),
+			blocks: [{ kind: "text", text: "Please verify you are human." }],
+		});
+
+		// The user opens it: nothing to stop.
+		await machine.openUrl("https://shop.test/");
+		expect(machine.snapshot().driver).toBe("agent");
+		expect(machine.snapshot().browser.tabs[0].wall?.kind).toBe("captcha");
+		expect(machine.readScreen()).toContain("Only a person can get past it");
+
+		await machine.runAgentAction("Reading", {}, () => machine.refreshBrowser());
+		expect(machine.snapshot().driver).toBe("user");
+
+		// A false alarm: the user lets the agent go on, and it is not stopped
+		// on that page again.
+		machine.continuePastWall();
+		expect(machine.snapshot().driver).toBe("agent");
+		await machine.runAgentAction("Reading", {}, () => machine.refreshBrowser());
+		expect(machine.snapshot().driver).toBe("agent");
+		expect(machine.snapshot().browser.tabs[0].wall).toBeUndefined();
+	});
+
 	it("acts with the page the agent read, not one the machine read since", async () => {
 		const { machine, ports } = createMachine();
 		await machine.openUrl("https://example.com");

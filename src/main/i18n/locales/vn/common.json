@@ -861,6 +861,18 @@
 		},
 		"showRealPage": "Hiện trang thật trong trình duyệt",
 		"showRealPageShort": "Hiện",
+		"wall": {
+			"title": "Trang này cần người thật xác minh",
+			"pill": "MemonOS Bot đang chờ bạn xác minh trên trang trong Trình duyệt.",
+			"captcha": "Trang yêu cầu xác minh bạn là người (CAPTCHA).",
+			"cloudflare": "Trang đang hiển thị bước kiểm tra bảo mật của Cloudflare.",
+			"rate-limit": "Trang đang giới hạn truy cập tự động và yêu cầu xác minh bạn là người.",
+			"waiting": "MemonOS Bot đã dừng ở đây. Hãy xác minh trên trang thật rồi bấm Xong: agent sẽ tiếp tục khi trang đã qua bước xác minh.",
+			"idle": "Chỉ người thật mới vượt qua được: hãy xác minh trên trang thật.",
+			"show": "Mở trang",
+			"done": "Xong",
+			"ignore": "Vẫn tiếp tục"
+		},
 		"status": {
 			"idle": "Rảnh",
 			"working": "Agent đang điều khiển",

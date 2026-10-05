@@ -9,6 +9,7 @@ import type {
 } from "./constants";
 import type { MemonViewerKind } from "./file-kinds";
 import type { MemonStudioAppSettings } from "./studio-app-file";
+import type { MemonVerificationWall } from "./verification-wall";
 
 export type MemonDriver = "agent" | "user";
 export type MemonStatus = "idle" | "working" | "paused" | "waiting-for-user";
@@ -45,6 +46,11 @@ export interface MemonBrowserTab {
 	history: string[];
 	historyIndex: number;
 	error?: string;
+	/**
+	 * The page is a verification wall (a CAPTCHA, a Cloudflare check) only a
+	 * person can get past.
+	 */
+	wall?: MemonVerificationWall;
 }
 
 export interface MemonBrowserState {
@@ -52,6 +58,11 @@ export interface MemonBrowserState {
 	activeTabId: string | null;
 	/** Browser window the tabs share (extension window mode), when known. */
 	windowId?: number;
+	/**
+	 * The tab whose verification wall stopped the agent: it waits until the
+	 * user gets the page through, or lets it continue anyway.
+	 */
+	wallTabId?: string;
 }
 
 export interface MemonFileEntry {

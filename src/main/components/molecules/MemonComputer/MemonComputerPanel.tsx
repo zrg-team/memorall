@@ -879,13 +879,27 @@ export const MemonComputerPanel: React.FC<{
 								<span className="absolute inset-0 animate-ping rounded-full bg-orange-400 opacity-60 motion-reduce:animate-none" />
 								<span className="relative h-2.5 w-2.5 rounded-full bg-orange-400" />
 							</span>
-							<span className="truncate">{t("memonComputer.userDriving")}</span>
+							<span className="truncate">
+								{snapshot.browser.wallTabId
+									? t("memonComputer.wall.pill")
+									: t("memonComputer.userDriving")}
+							</span>
 							<button
 								type="button"
-								onClick={() => void send("control.resume", { key })}
+								onClick={() =>
+									void send(
+										// Stopped on a wall: Done checks the page is through.
+										snapshot.browser.wallTabId
+											? "browser.recheckWall"
+											: "control.resume",
+										{ key },
+									)
+								}
 								className="shrink-0 rounded-full bg-blue-600 px-3 py-1 text-xs font-semibold text-white transition-colors hover:bg-blue-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
 							>
-								{t("sandboxPanel.managedBrowserResume")}
+								{snapshot.browser.wallTabId
+									? t("memonComputer.wall.done")
+									: t("sandboxPanel.managedBrowserResume")}
 							</button>
 						</div>
 					) : null}

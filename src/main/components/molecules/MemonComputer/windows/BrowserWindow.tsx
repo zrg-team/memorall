@@ -7,6 +7,7 @@ import {
 	Plus,
 	RefreshCw,
 	Server,
+	ShieldAlert,
 	X,
 } from "lucide-react";
 import React from "react";
@@ -25,7 +26,10 @@ import {
 	DropdownMenuTrigger,
 } from "@/main/components/ui/dropdown-menu";
 import { sandboxTargetOf } from "@/services/memon/embedded-frame";
-import type { MemonBrowserState } from "@/services/memon/types";
+import type {
+	MemonBrowserState,
+	MemonBrowserTab,
+} from "@/services/memon/types";
 import type { MemonSend } from "../types";
 import { EmbeddedPage } from "./EmbeddedPage";
 
@@ -229,6 +233,65 @@ const OutlineBlock: React.FC<{
 				</button>
 			);
 	}
+};
+
+/**
+ * The page is a verification wall (a CAPTCHA, a Cloudflare check). Asks the
+ * user to solve it in the real page; Done reads the page again and lets the
+ * agent go on once it is through.
+ */
+const WallNotice: React.FC<{
+	wall: NonNullable<MemonBrowserTab["wall"]>;
+	/** The agent stopped on it and waits. */
+	waiting: boolean;
+	/** The page is in a real browser tab, which can be brought forward. */
+	real: boolean;
+	onShow: () => void;
+	onDone: () => void;
+	onIgnore: () => void;
+}> = ({ wall, waiting, real, onShow, onDone, onIgnore }) => {
+	const { t } = useTranslation("common");
+	const button =
+		"h-7 shrink-0 rounded border border-amber-500/40 px-2.5 text-[11px] font-medium hover:bg-amber-500/15";
+	return (
+		<div
+			role="alert"
+			className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-b border-amber-500/35 bg-amber-500/10 px-3 py-2 text-xs text-amber-900 dark:text-amber-100"
+		>
+			<ShieldAlert size={16} className="shrink-0" />
+			<div className="min-w-0 flex-1">
+				<div className="font-semibold">{t("memonComputer.wall.title")}</div>
+				<div className="text-amber-800/90 dark:text-amber-100/80">
+					{t(`memonComputer.wall.${wall.kind}`, {
+						defaultValue: wall.description,
+					})}{" "}
+					{waiting
+						? t("memonComputer.wall.waiting")
+						: t("memonComputer.wall.idle")}
+				</div>
+			</div>
+			<div className="flex shrink-0 gap-1.5">
+				{real ? (
+					<button type="button" onClick={onShow} className={button}>
+						{t("memonComputer.wall.show")}
+					</button>
+				) : null}
+				<button
+					type="button"
+					onClick={onDone}
+					className={cn(
+						button,
+						"border-transparent bg-amber-600 text-white hover:bg-amber-500",
+					)}
+				>
+					{t("memonComputer.wall.done")}
+				</button>
+				<button type="button" onClick={onIgnore} className={button}>
+					{t("memonComputer.wall.ignore")}
+				</button>
+			</div>
+		</div>
+	);
 };
 
 export const BrowserWindow: React.FC<{
@@ -485,6 +548,18 @@ export const BrowserWindow: React.FC<{
 					</button>
 				) : null}
 			</form>
+			{tab?.wall ? (
+				<WallNotice
+					wall={tab.wall}
+					waiting={browser.wallTabId === tab.id}
+					real={!embedded}
+					onShow={() => void send("browser.show", { key: machineKey })}
+					onDone={() => void send("browser.recheckWall", { key: machineKey })}
+					onIgnore={() =>
+						void send("browser.continuePastWall", { key: machineKey })
+					}
+				/>
+			) : null}
 			<div className="relative min-h-0 flex-1">
 				{tab && embedded ? (
 					<EmbeddedPage
