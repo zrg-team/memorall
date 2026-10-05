@@ -400,9 +400,10 @@ describe("PiCodeSession", () => {
 		await expect(session.submit("again")).rejects.toThrow("pi code has quit.");
 	});
 
-	it("lists the folder's saved sessions and opens one again with its conversation", async () => {
+	it("lists every folder's saved sessions and opens them again, one after another", async () => {
 		const fs = new MemoryFs({
 			[`${HOME}/todo/src/a.ts`]: "export const answer = 41;\n",
+			"/projects/game/src/a.ts": "export const answer = 41;\n",
 		});
 		const options = {
 			home: HOME,
@@ -415,34 +416,66 @@ describe("PiCodeSession", () => {
 			onQuit: () => {},
 			onChange: () => {},
 		};
-		const first = await PiCodeSession.start(options);
-		expect(first.createdCwd).toBe(false);
-		await first.submit("fix the answer");
-		expect(await first.waitForIdle(5_000)).toBe(true);
-		await first.dispose();
+		// One session here, one in a folder outside the home.
+		for (const [cwd, prompt] of [
+			[`${HOME}/todo`, "fix the answer"],
+			["/projects/game", "fix the game"],
+		]) {
+			const earlier = await PiCodeSession.start({ ...options, cwd });
+			expect(earlier.createdCwd).toBe(false);
+			await earlier.submit(prompt);
+			expect(await earlier.waitForIdle(5_000)).toBe(true);
+			await earlier.dispose();
+		}
 
 		const onResume = vi.fn();
 		session = await PiCodeSession.start({ ...options, onResume });
-		const cursor = session.attach(100, 30);
+		const cursor = session.attach(100, 40);
 		session.input("/sessions\r");
+		// This folder first, then the others, numbered across them.
 		await vi.waitFor(async () => {
 			const screen = plain((await session!.read(cursor, 0)).data);
-			expect(screen).toContain("Sessions");
-			expect(screen).toContain("fix the answer");
+			expect(screen).toContain("~/todo (this folder)");
+			expect(screen).toContain("1. fix the answer");
+			expect(screen).toContain("/projects/game");
+			expect(screen).toContain("2. fix the game");
 		});
-		session.input("/resume 1\r");
+		session.input("/resume 2\r");
 		await vi.waitFor(() => expect(onResume).toHaveBeenCalledTimes(1));
-		const saved = String(onResume.mock.calls[0][0]);
-		expect(saved).toMatch(/\.jsonl$/);
+		const [game, gameFolder] = onResume.mock.calls[0];
+		expect(String(game)).toMatch(/--projects-game--\/.+\.jsonl$/);
+		expect(gameFolder).toBe("/projects/game");
 		await session.dispose();
 
-		// Opened again: pi goes on from that conversation.
-		session = await PiCodeSession.start({ ...options, sessionFile: saved });
+		// Opened in its own folder, pi goes on from that conversation...
+		session = await PiCodeSession.start({
+			...options,
+			cwd: gameFolder,
+			sessionFile: game,
+			onResume,
+		});
+		expect(session.cwd).toBe("/projects/game");
+		expect(session.view().entries).toContainEqual({
+			kind: "user",
+			text: "fix the game",
+		});
+		expect(session.view().reply).toBe("Done: the answer is 42.");
+		// ...and resumes again from there, back into the home's folder.
+		session.attach(100, 40);
+		session.input("/resume 2\r");
+		await vi.waitFor(() => expect(onResume).toHaveBeenCalledTimes(2));
+		const [todo, todoFolder] = onResume.mock.calls[1];
+		expect(todoFolder).toBe(`${HOME}/todo`);
+		await session.dispose();
+		session = await PiCodeSession.start({
+			...options,
+			sessionFile: todo,
+			onResume,
+		});
 		expect(session.view().entries).toContainEqual({
 			kind: "user",
 			text: "fix the answer",
 		});
-		expect(session.view().reply).toBe("Done: the answer is 42.");
 		await session.dispose();
 
 		// A folder that was not there is made, and said so.

@@ -92,7 +92,7 @@ const setup = () => {
 	/** Folders in Files; pi makes any other one it starts in. */
 	const folders = new Set([HOME, `${HOME}/a`, `${HOME}/todo`]);
 	/** What pi's /resume calls, from the latest start. */
-	let resume: ((sessionFile: string) => void) | undefined;
+	let resume: ((sessionFile: string, cwd: string) => void) | undefined;
 	const port: MemonPiCodePort = {
 		start: vi.fn(async ({ cwd, onResume }) => {
 			const folder = cwd ?? HOME;
@@ -146,7 +146,7 @@ const setup = () => {
 			front = value;
 		},
 		/** The user picks a saved session with /resume in pi. */
-		resume: (sessionFile: string) => resume?.(sessionFile),
+		resume: (sessionFile: string, cwd: string) => resume?.(sessionFile, cwd),
 	};
 };
 
@@ -457,7 +457,7 @@ describe("pi code, driven by the Memon agent", () => {
 		const waiting = piCode.act({ action: "prompt", text: "Add tests" });
 		await new Promise((resolve) => setTimeout(resolve, 30));
 		const saved = `${HOME}/.pi/agent/sessions/--agents-Bot-a--/older.jsonl`;
-		resume(saved);
+		resume(saved, `${HOME}/a`);
 		expect(await waiting).toBe(
 			"Sent to pi code. pi code opened another saved session (/resume); its conversation is on the screen. Hand pi the work again if it still matters.",
 		);
@@ -470,5 +470,21 @@ describe("pi code, driven by the Memon agent", () => {
 		expect(isWindowOpen()).toBe(true);
 		await piCode.act({ action: "prompt", text: "Go on" });
 		expect(runners[1].submitted.at(-1)?.text).toBe("Go on");
+
+		// Again, from the resumed pi: a session of another folder opens there,
+		// and each start of pi is a new instance for the window to attach to.
+		const firstInstance = piCode.state()?.instance;
+		const other = `${HOME}/.pi/agent/sessions/--projects-game--/game.jsonl`;
+		resume(other, "/projects/game");
+		await vi.waitFor(() => expect(runners).toHaveLength(3));
+		await vi.waitFor(() => expect(piCode.state()?.status).toBe("running"));
+		expect(port.start).toHaveBeenLastCalledWith(
+			expect.objectContaining({ cwd: "/projects/game", sessionFile: other }),
+		);
+		expect(runners[1].runner.dispose).toHaveBeenCalled();
+		expect(piCode.state()?.cwd).toBe("/projects/game");
+		expect(piCode.state()?.instance).toBeGreaterThan(firstInstance ?? 0);
+		await piCode.act({ action: "prompt", text: "Slow the intro" });
+		expect(runners[2].submitted.at(-1)?.text).toBe("Slow the intro");
 	});
 });

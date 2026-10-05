@@ -150,9 +150,11 @@ export const PiCodeWindow: React.FC<{
 	live.current = { machineKey, actualTheme, send };
 	const [connected, setConnected] = React.useState(false);
 	const status = state?.status;
+	/** A new start of pi (/resume, another folder) needs attaching again. */
+	const instance = state?.instance;
 
-	// One xterm.js terminal for the window's life, attached while pi runs.
-	// biome-ignore lint/correctness/useExhaustiveDependencies: reconnects when pi (re)starts; other inputs are read through `live`.
+	// One xterm.js terminal per start of pi, attached while it runs.
+	// biome-ignore lint/correctness/useExhaustiveDependencies: reconnects when pi (re)starts, even too fast to see "starting"; other inputs are read through `live`.
 	React.useEffect(() => {
 		const host = hostRef.current;
 		if (!host || status !== "running") return;
@@ -347,7 +349,7 @@ export const PiCodeWindow: React.FC<{
 			term.dispose();
 			termRef.current = null;
 		};
-	}, [status]);
+	}, [status, instance]);
 
 	// The theme follows the app's: xterm's colors here, pi's colors in pi
 	// (pi redraws in its other theme; the read loop replays it).

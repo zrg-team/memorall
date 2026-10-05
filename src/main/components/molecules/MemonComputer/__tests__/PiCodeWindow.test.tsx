@@ -95,6 +95,55 @@ describe("PiCodeWindow", () => {
 		request.mockReset();
 	});
 
+	it("attaches again to a new start of pi, even one too fast to show starting", async () => {
+		// The old pi says it closed; the new one never sends output.
+		let reads = 0;
+		request.mockImplementation(async (operation: unknown) => {
+			if (operation === "piCode.attach") return { cursor: 0 } as never;
+			reads += 1;
+			return reads === 1
+				? ({ data: "", cursor: 0, reset: false, closed: true } as never)
+				: new Promise<null>(() => {});
+		});
+		const running = (instance: number): MemonPiCodeState => ({
+			status: "running",
+			instance,
+			working: false,
+			transcript: [],
+		});
+		const view = render(
+			<PiCodeWindow
+				machineKey="m1"
+				state={running(1)}
+				focused
+				send={vi.fn() as unknown as MemonSend}
+			/>,
+		);
+		const attaches = () =>
+			request.mock.calls.filter(([operation]) => operation === "piCode.attach")
+				.length;
+		await vi.waitFor(() => expect(attaches()).toBe(1));
+		await vi.waitFor(() =>
+			expect(screen.getByRole("status").textContent).toBe(
+				"memonComputer.piCode.starting",
+			),
+		);
+
+		// /resume: still "running", but another pi.
+		view.rerender(
+			<PiCodeWindow
+				machineKey="m1"
+				state={running(2)}
+				focused
+				send={vi.fn() as unknown as MemonSend}
+			/>,
+		);
+		await vi.waitFor(() => expect(attaches()).toBe(2));
+		await vi.waitFor(() => expect(screen.queryByRole("status")).toBeNull());
+		view.unmount();
+		request.mockReset();
+	});
+
 	it("shows no request when nothing waits", () => {
 		render(
 			<PiCodeWindow
