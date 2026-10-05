@@ -76,7 +76,7 @@ export interface PiCodeSessionOptions {
 	/** The user quit pi (/quit, Ctrl+C twice, Ctrl+D). */
 	onQuit: () => void;
 	/** /resume picked a saved session: start pi again on it. */
-	onResume?: (sessionFile: string) => void;
+	onResume?: (sessionFile: string, cwd: string) => void;
 	/** What the agent reads changed: running/idle, a message, a tool, the model. */
 	onChange: () => void;
 }
@@ -292,6 +292,7 @@ export class PiCodeSession {
 			onboarding: `Model: the one selected in the chat composer. Files: this agent's Memon home (${home}).`,
 			describeModelChange: "change it in the chat composer",
 			onQuit: options.onQuit,
+			sessionsDir: join(agentDir, "sessions"),
 			onResume: options.onResume,
 		});
 

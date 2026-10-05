@@ -3,7 +3,7 @@
  * Browser port: the session tree, entries and context building are unchanged.
  * JSONL files go through an injected async SessionStore (the Memon file
  * system) instead of sync node:fs: appends are queued in order and flush()
- * waits for them. Listing covers the sessions of one folder (/sessions,
+ * waits for them. Listing covers every folder's sessions (/sessions,
  * /resume); forking across projects and pi's searchable session picker are
  * not ported.
  */
@@ -683,14 +683,38 @@ export class SessionManager {
 
 	/** The sessions saved in this session's folder, the latest first. */
 	async listSaved(): Promise<SessionInfo[]> {
+		return this.savedIn([this.sessionDir]);
+	}
+
+	/**
+	 * Every saved session, the latest first: those of each folder under
+	 * `sessionsRoot` (pi's ~/.pi/agent/sessions) and this session's own.
+	 */
+	async listAllSaved(sessionsRoot: string): Promise<SessionInfo[]> {
+		const names = (await this.store?.list(sessionsRoot).catch(() => [])) ?? [];
+		const dirs = new Set(
+			names
+				.filter((name) => !name.endsWith(".jsonl"))
+				.map((name) => join(sessionsRoot, name)),
+		);
+		dirs.add(this.sessionDir);
+		return this.savedIn([...dirs]);
+	}
+
+	private async savedIn(dirs: string[]): Promise<SessionInfo[]> {
 		const store = this.store;
-		if (!store || !this.sessionDir) return [];
-		const names = (await store.list(this.sessionDir).catch(() => [])).filter(
-			(name) => name.endsWith(".jsonl"),
+		if (!store) return [];
+		const files = await Promise.all(
+			dirs
+				.filter(Boolean)
+				.map(async (dir) =>
+					(await store.list(dir).catch(() => []))
+						.filter((name) => name.endsWith(".jsonl"))
+						.map((name) => join(dir, name)),
+				),
 		);
 		const infos = await Promise.all(
-			names.map(async (name) => {
-				const path = join(this.sessionDir, name);
+			files.flat().map(async (path) => {
 				const content = await store.read(path).catch(() => undefined);
 				return content
 					? savedSessionInfo(path, parseSessionEntries(content))

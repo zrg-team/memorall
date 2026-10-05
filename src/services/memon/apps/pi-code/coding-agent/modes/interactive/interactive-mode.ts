@@ -118,8 +118,13 @@ export interface InteractiveModeOptions {
 	describeModelChange?: string;
 	/** The user quit (/quit, Ctrl+C twice, Ctrl+D on an empty editor). */
 	onQuit: () => void;
-	/** /resume picked a saved session: the app starts pi again on it. */
-	onResume?: (sessionFile: string) => void;
+	/**
+	 * Where pi keeps every folder's sessions (~/.pi/agent/sessions): /sessions
+	 * and /resume list them all. Without it, only this folder's.
+	 */
+	sessionsDir?: string;
+	/** /resume picked a saved session: the app starts pi again on it, in `cwd`. */
+	onResume?: (sessionFile: string, cwd: string) => void;
 }
 
 /** How long ago, as a session list shows it. */
@@ -1617,29 +1622,69 @@ export class InteractiveMode {
 		this.ui.requestRender();
 	}
 
-	/** /sessions: this folder's saved sessions, numbered for /resume. */
-	private async handleSessionsCommand(): Promise<void> {
-		const sessions = await this.sessionManager.listSaved();
-		const current = this.sessionManager.getSessionFile();
-		let info = `${theme.bold("Sessions")} ${theme.fg("dim", `in ${this.sessionManager.getCwd()}`)}\n\n`;
-		if (sessions.length === 0) {
-			info += theme.fg("dim", "No saved sessions in this folder yet.");
+	/** A folder as pi shows it: "~" for the agent's home. */
+	private folderName(cwd: string): string {
+		const home = this.session.home;
+		if (home && home !== "/" && (cwd === home || cwd.startsWith(`${home}/`))) {
+			return `~${cwd.slice(home.length)}`;
 		}
+		return cwd;
+	}
+
+	/** The folder a saved session works in (an old one may not say). */
+	private sessionFolder(session: SessionInfo): string {
+		return session.cwd || this.sessionManager.getCwd();
+	}
+
+	/**
+	 * Every saved session, in /sessions' numbering: this folder's first, then
+	 * each other folder's, the folder used last first; the latest first in each.
+	 */
+	private async savedSessions(): Promise<SessionInfo[]> {
+		const all = this.options.sessionsDir
+			? await this.sessionManager.listAllSaved(this.options.sessionsDir)
+			: await this.sessionManager.listSaved();
+		const folders = [this.sessionManager.getCwd()];
+		for (const session of all) {
+			const folder = this.sessionFolder(session);
+			if (!folders.includes(folder)) folders.push(folder);
+		}
+		return folders.flatMap((folder) =>
+			all.filter((session) => this.sessionFolder(session) === folder),
+		);
+	}
+
+	/** /sessions: every saved session by folder, numbered for /resume. */
+	private async handleSessionsCommand(): Promise<void> {
+		const sessions = await this.savedSessions();
+		const current = this.sessionManager.getSessionFile();
+		const here = this.sessionManager.getCwd();
+		let info = theme.bold("Sessions");
+		if (sessions.length === 0) {
+			info += `\n\n${theme.fg("dim", "No saved sessions yet.")}`;
+		}
+		let folder: string | undefined;
 		sessions.forEach((session, index) => {
+			const cwd = this.sessionFolder(session);
+			if (cwd !== folder) {
+				folder = cwd;
+				const mark = cwd === here ? theme.fg("dim", " (this folder)") : "";
+				info += `\n\n${theme.fg("accent", this.folderName(cwd))}${mark}`;
+			}
 			const mark =
 				session.path === current ? theme.fg("accent", " (current)") : "";
-			info += `${theme.fg("dim", `${index + 1}.`)} ${sessionTitle(session)}${mark}\n`;
-			info += `   ${theme.fg("dim", `${ago(session.modified)} · ${session.messageCount} messages`)}\n`;
+			info += `\n${theme.fg("dim", `${index + 1}.`)} ${sessionTitle(session)}${mark}`;
+			info += `\n   ${theme.fg("dim", `${ago(session.modified)} · ${session.messageCount} messages`)}`;
 		});
 		if (sessions.length > 0) {
-			info += `\n${theme.fg("dim", "/resume <number> opens one; /resume alone picks from the list.")}`;
+			info += `\n\n${theme.fg("dim", "/resume <number> opens one in its folder; /resume alone picks from a list.")}`;
 		}
 		this.chatContainer.addChild(new Spacer(1));
-		this.chatContainer.addChild(new Text(info.trimEnd(), 1, 0));
+		this.chatContainer.addChild(new Text(info, 1, 0));
 		this.ui.requestRender();
 	}
 
-	/** /resume [number | name | id]: opens a saved session of this folder. */
+	/** /resume [number | name | id]: opens a saved session, in its folder. */
 	private async handleResumeCommand(choice: string): Promise<void> {
 		if (
 			this.session.isStreaming ||
@@ -1651,7 +1696,7 @@ export class InteractiveMode {
 			);
 			return;
 		}
-		const sessions = await this.sessionManager.listSaved();
+		const sessions = await this.savedSessions();
 		const current = this.sessionManager.getSessionFile();
 		if (!choice) {
 			this.showSessionPicker(
@@ -1675,20 +1720,20 @@ export class InteractiveMode {
 			this.showStatus("That is the session you are in.");
 			return;
 		}
-		this.resumeSession(picked.path);
+		this.resumeSession(picked);
 	}
 
 	/** Picks a saved session in place of the editor; Esc goes back. */
 	private showSessionPicker(sessions: SessionInfo[]): void {
 		if (sessions.length === 0) {
-			this.showStatus("No other saved sessions in this folder.");
+			this.showStatus("No other saved sessions.");
 			return;
 		}
 		const picker = new SelectList(
 			sessions.map((session) => ({
 				value: session.path,
 				label: sessionTitle(session),
-				description: `${ago(session.modified)} · ${session.messageCount} messages`,
+				description: `${this.folderName(this.sessionFolder(session))} · ${ago(session.modified)} · ${session.messageCount} messages`,
 			})),
 			Math.min(sessions.length, 8),
 			getSelectListTheme(),
@@ -1701,7 +1746,8 @@ export class InteractiveMode {
 		};
 		picker.onSelect = (item) => {
 			done();
-			this.resumeSession(item.value);
+			const picked = sessions.find((session) => session.path === item.value);
+			if (picked) this.resumeSession(picked);
 		};
 		picker.onCancel = done;
 		this.editorContainer.clear();
@@ -1710,13 +1756,19 @@ export class InteractiveMode {
 		this.ui.requestRender();
 	}
 
-	private resumeSession(sessionFile: string): void {
+	/** pi starts again on the session, in its folder (it moves there if need be). */
+	private resumeSession(session: SessionInfo): void {
 		if (!this.options.onResume) {
 			this.showWarning("Opening saved sessions is not available here.");
 			return;
 		}
-		this.showStatus("Opening the session…");
-		this.options.onResume(sessionFile);
+		const cwd = this.sessionFolder(session);
+		this.showStatus(
+			cwd === this.sessionManager.getCwd()
+				? "Opening the session…"
+				: `Opening the session in ${this.folderName(cwd)}…`,
+		);
+		this.options.onResume(session.path, cwd);
 	}
 
 	/**

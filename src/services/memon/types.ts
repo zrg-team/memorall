@@ -477,6 +477,12 @@ export interface MemonPiCodeState {
 	error?: string;
 	/** What pi does right now, e.g. "running bash", while it works. */
 	activity?: string;
+	/**
+	 * Which start of pi this is. pi starts again on /resume and in another
+	 * folder, sometimes faster than a view sees "starting": a view attaches
+	 * again whenever it changes.
+	 */
+	instance?: number;
 	/** pi's conversation, oldest first, the latest entries only. */
 	transcript?: MemonPiCodeEntry[];
 	/** Entries before the transcript that are left out. */

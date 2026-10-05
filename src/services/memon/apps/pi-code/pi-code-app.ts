@@ -81,8 +81,8 @@ export interface MemonPiCodePort {
 		sessionFile?: string;
 		/** The user quit pi from inside it. */
 		onQuit: () => void;
-		/** The user picked a saved session (/resume): start pi again on it. */
-		onResume: (sessionFile: string) => void;
+		/** The user picked a saved session (/resume): start pi again on it, in `cwd`. */
+		onResume: (sessionFile: string, cwd: string) => void;
 		/** What the agent reads changed. */
 		onChange: () => void;
 	}): Promise<PiCodeRunner>;
@@ -249,9 +249,8 @@ export class MemonPiCode {
 		this.boot(cwd);
 	}
 
-	/** pi's /resume: pi starts again in its folder, on the saved session. */
-	private async reopen(sessionFile: string): Promise<void> {
-		const cwd = this.runner?.status().cwd ?? this.startingCwd;
+	/** pi's /resume: pi starts again on the saved session, in its folder. */
+	private async reopen(sessionFile: string, cwd: string): Promise<void> {
 		this.reopening = true;
 		try {
 			await this.release();
@@ -279,8 +278,8 @@ export class MemonPiCode {
 				sessionFile,
 				onQuit: () => this.host.quit(),
 				// After the TUI is done handling the key that picked it.
-				onResume: (file) => {
-					setTimeout(() => void this.reopen(file), 0);
+				onResume: (file, folder) => {
+					setTimeout(() => void this.reopen(file, folder), 0);
 				},
 				onChange: () => this.host.changed(),
 			})
@@ -331,6 +330,7 @@ export class MemonPiCode {
 			const view = this.runner.view();
 			return {
 				status: "running",
+				instance: this.generation,
 				working: status.running,
 				cwd: status.cwd,
 				model: status.model,
@@ -347,6 +347,7 @@ export class MemonPiCode {
 		if (this.starting)
 			return {
 				status: "starting",
+				instance: this.generation,
 				working: false,
 				cwd: this.startingCwd,
 				approval,
