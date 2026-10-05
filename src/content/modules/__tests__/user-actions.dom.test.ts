@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { runAsAgent, watchUserActions } from "../user-actions";
 
-const sendMessage = vi.fn(async (_message: unknown) => undefined);
+const sendUserAction = vi.fn((_message: unknown) => undefined);
 
 /**
  * Input from a person. `dispatchEvent` marks every event untrusted, as the
@@ -38,16 +38,15 @@ const click = (element: Element, trusted = true) => {
 };
 
 const reported = () =>
-	sendMessage.mock.calls.map(
+	sendUserAction.mock.calls.map(
 		([message]) => (message as { action: unknown }).action,
 	);
 
 describe("what the user does in a session's page", () => {
 	beforeEach(() => {
-		sendMessage.mockClear();
+		sendUserAction.mockClear();
 		// A new document: not watched until the background asks.
 		delete window.__memorallUserActions;
-		vi.stubGlobal("chrome", { runtime: { sendMessage } });
 		document.body.innerHTML = `
 			<a href="https://shop.test/pricing">Pricing</a>
 			<button aria-label="Open menu"><svg></svg></button>
@@ -59,12 +58,11 @@ describe("what the user does in a session's page", () => {
 	});
 
 	afterEach(() => {
-		vi.unstubAllGlobals();
 		document.body.innerHTML = "";
 	});
 
 	it("reports clicks on links, buttons and controls, as the page labels them", () => {
-		watchUserActions();
+		watchUserActions(sendUserAction);
 		click(document.querySelector("a") as Element);
 		click(document.querySelector("button svg") as Element);
 		// The click checks it, then reports the state it left.
@@ -82,15 +80,15 @@ describe("what the user does in a session's page", () => {
 	});
 
 	it("leaves out plain text, fields being typed into, and their values", () => {
-		watchUserActions();
+		watchUserActions(sendUserAction);
 		click(document.getElementById("plain") as Element);
 		click(document.querySelector('input[type="email"]') as Element);
 
-		expect(sendMessage).not.toHaveBeenCalled();
+		expect(sendUserAction).not.toHaveBeenCalled();
 	});
 
 	it("reports a form submission with the form's name", () => {
-		watchUserActions();
+		watchUserActions(sendUserAction);
 		const form = document.querySelector("form") as HTMLFormElement;
 		form.addEventListener("submit", (event) => event.preventDefault());
 		dispatchAsUser(
@@ -104,20 +102,20 @@ describe("what the user does in a session's page", () => {
 	});
 
 	it("ignores the agent's synthetic events and what its actions cause", async () => {
-		watchUserActions();
+		watchUserActions(sendUserAction);
 		const link = document.querySelector("a") as Element;
 		click(link, false);
 		await runAsAgent(() => click(link));
 
-		expect(sendMessage).not.toHaveBeenCalled();
+		expect(sendUserAction).not.toHaveBeenCalled();
 	});
 
 	it("says nothing in a page it was not asked to watch", () => {
 		click(document.querySelector("a") as Element);
-		expect(sendMessage).not.toHaveBeenCalled();
+		expect(sendUserAction).not.toHaveBeenCalled();
 
-		watchUserActions();
+		watchUserActions(sendUserAction);
 		click(document.querySelector("a") as Element);
-		expect(sendMessage).toHaveBeenCalledTimes(1);
+		expect(sendUserAction).toHaveBeenCalledTimes(1);
 	});
 });

@@ -36,6 +36,7 @@ import {
 import {
 	isWebContentCommandRequest,
 	type WebContentCommandResponse,
+	type WebPageActionMessage,
 } from "@/services/web-browser/web-browser-protocol";
 import { BACKGROUND_EVENTS } from "./constants/events";
 import {
@@ -65,6 +66,12 @@ type ContentSendResponse = (
 // reach a content script's isolated world. The loader takes the resolver from
 // here because only this file may reach for a Chrome API.
 const resolveAssetUrl = (path: string) => chrome.runtime.getURL(path);
+
+// What the user does in a web session's tab, sent from here for the same reason.
+// A send nobody is listening for rejects; the action is just dropped.
+const sendUserAction = (message: WebPageActionMessage) => {
+	void chrome.runtime.sendMessage(message).catch(() => undefined);
+};
 
 const loadUiHandlers = () =>
 	loadEmbeddedUi(resolveAssetUrl).then((module) => module.uiHandlers);
@@ -98,7 +105,7 @@ const messageListener = (
 	// Page reading first, and from a statically imported module: this is the path
 	// web_open depends on, so it must not rely on anything deferred.
 	if (isWebContentCommandRequest(rawMessage)) {
-		void handleWebContentCommand(rawMessage).then(sendResponse);
+		void handleWebContentCommand(rawMessage, sendUserAction).then(sendResponse);
 		return true;
 	}
 
