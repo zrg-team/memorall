@@ -47,6 +47,11 @@ export interface ChatServiceOptions {
 	tool_choice?: ChatCompletionToolChoiceOption;
 	parallel_tool_calls?: boolean;
 	conversation?: ConversationContext;
+	/**
+	 * Context for the model, attached after the newest message and kept in the
+	 * reply, never shown as something the user wrote.
+	 */
+	reminders?: string[];
 }
 
 export interface ChatAction {
@@ -207,6 +212,7 @@ export class ChatService {
 			tool_choice,
 			parallel_tool_calls,
 			conversation,
+			reminders,
 		} = options;
 
 		const abortController = new AbortController();
@@ -243,6 +249,7 @@ export class ChatService {
 					tool_choice,
 					parallel_tool_calls,
 					conversation,
+					...(reminders?.length ? { reminders } : {}),
 					streamConfig: streamConfig || {
 						minWordsToStream: 1,
 						streamToolCallsImmediately: true,

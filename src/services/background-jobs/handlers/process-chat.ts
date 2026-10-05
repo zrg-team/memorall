@@ -10,6 +10,7 @@ import {
 	SYSTEM_REMINDER_EVENT,
 	systemReminderMessage,
 } from "@memorall/agent-harness-flows/graph/system-reminders";
+import { ITERATION_LIMIT_EVENT } from "@memorall/agent-harness-flows/limits";
 import {
 	buildDefaultFlowConfig,
 	mergeWithDefaultConfig,
@@ -250,6 +251,11 @@ export type ChatResult =
 				error?: JobErrorMetadata;
 				/** The user stopped the run; this is what it had done by then. */
 				stopped?: boolean;
+				/**
+				 * The run reached its iteration limit (this many turns) with tool
+				 * calls still to make: cut off, not finished, and can be continued.
+				 */
+				iterationLimit?: number;
 			};
 	  }
 	| {
@@ -530,6 +536,8 @@ type FlowCustomPayloadDeps = {
 	handleUserMessage: (message: FlowRunInboxMessage) => void;
 	/** The run attached reminders to the conversation. */
 	handleSystemReminder: (content: string) => void;
+	/** The run reached its iteration limit with work left. */
+	handleIterationLimit: (maxIterations: number) => void;
 	dependencies: ProcessDependencies;
 	jobId: string;
 	executeStage: string;
@@ -562,6 +570,7 @@ type FlowStreamRunDeps = FlowRuntimeDeps & {
 	handleCompaction: FlowCustomPayloadDeps["handleCompaction"];
 	handleUserMessage: FlowCustomPayloadDeps["handleUserMessage"];
 	handleSystemReminder: FlowCustomPayloadDeps["handleSystemReminder"];
+	handleIterationLimit: FlowCustomPayloadDeps["handleIterationLimit"];
 };
 
 type AssistantMessageFinalization = {
@@ -577,6 +586,7 @@ type AssistantMessageFinalization = {
 	compactions?: ChatCompaction[];
 	error?: JobErrorMetadata;
 	stopped?: boolean;
+	iterationLimit?: number;
 };
 
 type AssistantMessagePersistence = {
@@ -602,6 +612,8 @@ type AssistantMessageMetadata = {
 	agentFlowName?: string;
 	error?: JobErrorMetadata;
 	stopped?: boolean;
+	/** The run reached its iteration limit (this many turns) with work left. */
+	iterationLimit?: number;
 	/** Saved mid-run: the run may still be going, or may have been cut off. */
 	incomplete?: boolean;
 };
@@ -748,6 +760,7 @@ export class ChatHandler extends BaseProcessHandler<ChatJob | StopChatJob> {
 		compactions,
 		error,
 		stopped,
+		iterationLimit,
 	}: AssistantMessageFinalization): AssistantMessageMetadata {
 		const timeToAnswer = (Date.now() - startTime) / 1000;
 		const outputTokens =
@@ -770,6 +783,7 @@ export class ChatHandler extends BaseProcessHandler<ChatJob | StopChatJob> {
 			...(usage ? { usage } : {}),
 			...(error ? { error } : {}),
 			...(stopped ? { stopped } : {}),
+			...(iterationLimit ? { iterationLimit } : {}),
 		};
 	}
 
@@ -1024,6 +1038,7 @@ export class ChatHandler extends BaseProcessHandler<ChatJob | StopChatJob> {
 		handleCompaction,
 		handleUserMessage,
 		handleSystemReminder,
+		handleIterationLimit,
 		...runtimeDeps
 	}: FlowStreamRunDeps): Promise<Record<string, unknown> | null> {
 		const { handleChunk, handleActions } =
@@ -1044,6 +1059,7 @@ export class ChatHandler extends BaseProcessHandler<ChatJob | StopChatJob> {
 					handleCompaction,
 					handleUserMessage,
 					handleSystemReminder,
+					handleIterationLimit,
 					dependencies: runtimeDeps.dependencies,
 					jobId: runtimeDeps.jobId,
 					executeStage,
@@ -1069,6 +1085,7 @@ export class ChatHandler extends BaseProcessHandler<ChatJob | StopChatJob> {
 		handleCompaction,
 		handleUserMessage,
 		handleSystemReminder,
+		handleIterationLimit,
 		dependencies,
 		jobId,
 		executeStage,
@@ -1193,6 +1210,14 @@ export class ChatHandler extends BaseProcessHandler<ChatJob | StopChatJob> {
 				);
 				return;
 			}
+			case ITERATION_LIMIT_EVENT:
+				if (
+					"maxIterations" in payload &&
+					typeof payload.maxIterations === "number"
+				) {
+					handleIterationLimit(payload.maxIterations);
+				}
+				return;
 			default:
 				return;
 		}
@@ -1346,6 +1371,12 @@ export class ChatHandler extends BaseProcessHandler<ChatJob | StopChatJob> {
 		const handleSystemReminder: FlowCustomPayloadDeps["handleSystemReminder"] =
 			(content) => {
 				messagePartsAccumulator.addSystemReminder(content);
+			};
+		// The reply says it was cut off, so the user can let the agent go on.
+		let iterationLimit: number | undefined;
+		const handleIterationLimit: FlowCustomPayloadDeps["handleIterationLimit"] =
+			(maxIterations) => {
+				iterationLimit = maxIterations;
 			};
 		const handleExecutionStart = (event: {
 			node: string;
@@ -1574,6 +1605,7 @@ export class ChatHandler extends BaseProcessHandler<ChatJob | StopChatJob> {
 				toolExecutions: finalToolExecutions,
 				compactions,
 				stopped,
+				iterationLimit,
 			});
 			const result = {
 				type: "final",
@@ -1698,6 +1730,7 @@ export class ChatHandler extends BaseProcessHandler<ChatJob | StopChatJob> {
 					handleCompaction,
 					handleUserMessage,
 					handleSystemReminder,
+					handleIterationLimit,
 					jobId,
 					model,
 					config,
@@ -1862,6 +1895,7 @@ export class ChatHandler extends BaseProcessHandler<ChatJob | StopChatJob> {
 					handleCompaction,
 					handleUserMessage,
 					handleSystemReminder,
+					handleIterationLimit,
 					jobId,
 					model,
 					config,

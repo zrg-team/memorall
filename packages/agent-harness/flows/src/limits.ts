@@ -30,3 +30,15 @@ export const normalizeAgentMaxIterations = (value: unknown): number => {
  */
 export const recursionLimitForIterations = (maxIterations: number): number =>
 	2 * normalizeAgentMaxIterations(maxIterations) + 4;
+
+/**
+ * What a run reports when its iteration limit ends it while the agent still
+ * had tool calls to make: the work was cut off, not finished, and can be
+ * continued.
+ */
+export const ITERATION_LIMIT_EVENT = "iteration-limit" as const;
+
+export interface IterationLimitEvent {
+	type: typeof ITERATION_LIMIT_EVENT;
+	maxIterations: number;
+}

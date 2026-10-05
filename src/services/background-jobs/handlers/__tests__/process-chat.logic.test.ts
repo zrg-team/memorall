@@ -947,6 +947,43 @@ describe("a split conversation does not turn plain chat into an agent", () => {
 		]);
 	});
 
+	it("marks a reply its iteration limit cut off, so it can be continued", async () => {
+		flowStream.mockImplementation(async function* () {
+			yield [
+				"custom",
+				{
+					type: "llm",
+					chunk: chunk({ role: "assistant", content: "Reading page 3." }),
+				},
+			];
+			yield ["custom", { type: "iteration-limit", maxIterations: 50 }];
+		});
+
+		const { result } = await runChat({
+			messages: [{ role: "user", content: "summarize every page" }],
+			model: "test-model",
+			mode: "custom",
+		});
+
+		expect(
+			(result.metadata as Record<string, unknown> | undefined)?.iterationLimit,
+		).toBe(50);
+	});
+
+	it("leaves a finished reply unmarked", async () => {
+		flowStream.mockImplementation(async function* () {
+			yield ["values", { response: "All done." }];
+		});
+
+		const { result } = await runChat({
+			messages: [{ role: "user", content: "summarize" }],
+			model: "test-model",
+			mode: "custom",
+		});
+
+		expect(result.metadata).not.toHaveProperty("iterationLimit");
+	});
+
 	it("keeps a flow's reminders in the reply in the order they were sent", async () => {
 		const reminder = "<system-reminder>\nMemonOS Tasks\n</system-reminder>";
 		flowStream.mockImplementation(async function* () {

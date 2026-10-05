@@ -15,6 +15,8 @@ import {
 } from "../../interfaces/engine/tool.js";
 import {
 	DEFAULT_AGENT_MAX_ITERATIONS,
+	ITERATION_LIMIT_EVENT,
+	type IterationLimitEvent,
 	normalizeAgentMaxIterations,
 	recursionLimitForIterations,
 } from "../../limits.js";
@@ -326,6 +328,14 @@ export class AgentGraph extends GraphBase<
 
 		// Tool call path: write assistant message to working memory, defer final commit
 		if (toolCalls.length > 0) {
+			// This was the last turn allowed: routeAfterAgent ends the run with
+			// these calls unmade, so the reply is cut off rather than finished.
+			if (state.currentIteration + 1 >= state.maxIterations) {
+				runConfig?.writer?.({
+					type: ITERATION_LIMIT_EVENT,
+					maxIterations: state.maxIterations,
+				} satisfies IterationLimitEvent);
+			}
 			return {
 				outputMessages: [
 					...outputMessages,

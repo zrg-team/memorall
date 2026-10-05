@@ -197,6 +197,12 @@
 		"error": "Failed to send message",
 		"stop": "Stop",
 		"retry": "Retry",
+		"iterationLimit": {
+			"title": "Stopped before finishing",
+			"description_one": "The agent reached its limit of {{count}} step with work left. Continue lets it pick up where it stopped.",
+			"description_other": "The agent reached its limit of {{count}} steps with work left. Continue lets it pick up where it stopped.",
+			"continue": "Continue"
+		},
 		"empty": "No messages yet. Start a conversation!",
 		"count": "{{count}} messages",
 		"coAgentSessionStart": "Co-agent session started",
