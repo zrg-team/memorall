@@ -8,11 +8,13 @@ import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import { useTheme } from "@/main/components/molecules/ThemeContext";
 import { Button } from "@/main/components/ui/button";
+import { bytesToBase64 } from "@/services/llm/utils/media-encoding";
 import type { MemonPiCodeOutput } from "@/services/memon/operation-types";
 import type {
 	MemonPiCodeApproval,
 	MemonPiCodeState,
 } from "@/services/memon/types";
+import { pastedFiles } from "@/utils/clipboard-files";
 import type { MemonSend } from "../types";
 import { PiCodeFolderPicker } from "./PiCodeFolderPicker";
 
@@ -202,28 +204,62 @@ export const PiCodeWindow: React.FC<{
 		);
 		termRef.current = term;
 
-		// Keys go out in order, batched while one send is on its way.
-		let pending = "";
+		// Keys and pasted pictures go out in order, keys batched while one send
+		// is on its way.
+		const outbox: Array<
+			{ data: string } | { image: Promise<{ data: string; mimeType: string }> }
+		> = [];
 		let sending = false;
 		const flushInput = async () => {
-			if (sending || !pending) return;
+			if (sending) return;
+			const next = outbox.shift();
+			if (!next) return;
 			sending = true;
-			const data = pending;
-			pending = "";
 			try {
 				const client = await loadClient();
-				await client.request("piCode.input", { key, data });
+				if ("data" in next) {
+					await client.request("piCode.input", { key, data: next.data });
+				} else {
+					await client.request("piCode.pasteImage", {
+						key,
+						...(await next.image),
+					});
+				}
 			} catch {
 				// pi stopped; the read loop notices.
 			} finally {
 				sending = false;
-				if (pending && !disposed) void flushInput();
+				if (outbox.length > 0 && !disposed) void flushInput();
 			}
 		};
 		const sendInput = (data: string) => {
-			pending += data;
+			const last = outbox.at(-1);
+			if (last && "data" in last) last.data += data;
+			else outbox.push({ data });
 			void flushInput();
 		};
+
+		// A pasted picture (an image's data URL or base64 too) goes to pi as a
+		// file, as pi's own clipboard image paste; text is xterm's paste. Caught
+		// on the way down, before xterm's textarea takes it.
+		const onPaste = (event: ClipboardEvent) => {
+			const images = pastedFiles(event.clipboardData).filter((file) =>
+				file.type.startsWith("image/"),
+			);
+			if (images.length === 0) return;
+			event.preventDefault();
+			event.stopPropagation();
+			for (const image of images) {
+				outbox.push({
+					image: image.arrayBuffer().then((buffer) => ({
+						data: bytesToBase64(new Uint8Array(buffer)),
+						mimeType: image.type,
+					})),
+				});
+			}
+			void flushInput();
+		};
+		host.addEventListener("paste", onPaste, true);
 
 		// Copy and paste as a terminal has them: Ctrl+C copies a selection
 		// (else it reaches pi), Ctrl+Shift+C always; Ctrl+V is the browser's
@@ -356,6 +392,7 @@ export const PiCodeWindow: React.FC<{
 			clearTimeout(resizeTimer);
 			cancelAnimationFrame(frame);
 			observer?.disconnect();
+			host.removeEventListener("paste", onPaste, true);
 			data.dispose();
 			selection.dispose();
 			term.dispose();

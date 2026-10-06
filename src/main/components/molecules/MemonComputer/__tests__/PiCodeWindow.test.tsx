@@ -155,6 +155,54 @@ describe("PiCodeWindow", () => {
 		request.mockReset();
 	});
 
+	it("sends a pasted picture to pi as a file, and leaves text to the terminal", async () => {
+		request.mockImplementation(async (operation: unknown) =>
+			operation === "piCode.attach"
+				? ({ cursor: 0 } as never)
+				: operation === "piCode.read"
+					? new Promise<null>(() => {})
+					: null,
+		);
+		const view = render(
+			<PiCodeWindow
+				machineKey="m1"
+				home={HOME}
+				state={{ status: "running", working: false, transcript: [] }}
+				focused
+				send={vi.fn() as unknown as MemonSend}
+			/>,
+		);
+		const screenHost = screen.getByTestId("memon-pi-code-screen");
+		const paste = (content: { text?: string; files?: File[] }) =>
+			fireEvent.paste(screenHost, {
+				clipboardData: {
+					files: content.files ?? [],
+					items: [],
+					types: [],
+					getData: (type: string) =>
+						type === "text/plain" ? (content.text ?? "") : "",
+				},
+			});
+		const pastedImages = () =>
+			request.mock.calls.filter(
+				([operation]) => operation === "piCode.pasteImage",
+			);
+
+		expect(paste({ text: "hello" })).toBe(true);
+		const shot = new File([new Uint8Array([1, 2, 3])], "image.png", {
+			type: "image/png",
+		});
+		expect(paste({ files: [shot] })).toBe(false);
+
+		await vi.waitFor(() => expect(pastedImages()).toHaveLength(1));
+		expect(pastedImages()[0]).toEqual([
+			"piCode.pasteImage",
+			{ key: "m1", data: "AQID", mimeType: "image/png" },
+		]);
+		view.unmount();
+		request.mockReset();
+	});
+
 	it("shows no request when nothing waits", () => {
 		render(
 			<PiCodeWindow

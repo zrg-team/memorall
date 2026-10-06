@@ -11,6 +11,8 @@ import type { IAgentSandboxService } from "@memorall/agent-harness-sandbox";
 import type { IFlowFileSystem } from "@memorall/agent-harness-flows/interfaces/services/filesystem";
 import type { ILLMService } from "@/services/llm/interfaces/llm-service.interface";
 import type { ReasoningEffort } from "@/types/openai";
+import { imageExtension } from "@/utils/clipboard-files";
+import { memonDisplayPath } from "../../../constants";
 import type { MemonPiCodeQueued } from "../../../types";
 import { Agent, type ThinkingLevel } from "../agent";
 import type { Model } from "../ai";
@@ -37,6 +39,7 @@ import { createWriteToolDefinition } from "../coding-agent/core/tools/write";
 import { InteractiveMode } from "../coding-agent/modes/interactive/interactive-mode";
 import { initTheme } from "../coding-agent/modes/interactive/theme/theme";
 import { join } from "../platform/path";
+import type { TempFileSink } from "../platform/temp-files";
 import {
 	type ChatModelLink,
 	connectChatModel,
@@ -142,6 +145,8 @@ export class PiCodeSession {
 		terminal: StreamTerminal,
 		private readonly footerData: FooterDataProvider,
 		private readonly link: ChatModelLink,
+		private readonly tempFiles: TempFileSink,
+		private readonly home: string,
 	) {
 		this.terminal = terminal;
 	}
@@ -297,7 +302,15 @@ export class PiCodeSession {
 			onResume: options.onResume,
 		});
 
-		const piCode = new PiCodeSession(session, mode, terminal, footerData, link);
+		const piCode = new PiCodeSession(
+			session,
+			mode,
+			terminal,
+			footerData,
+			link,
+			tempFiles,
+			home,
+		);
 		piCode.createdCwd = createdCwd;
 		terminal.onCompactRequest = () => piCode.redraw();
 		mode.init();
@@ -536,6 +549,23 @@ export class PiCodeSession {
 
 	input(data: string): void {
 		if (!this.disposed) this.terminal.input(data);
+	}
+
+	/**
+	 * A picture pasted in the view, as pi's clipboard image paste: written to
+	 * pi's temp folder and its path pasted into pi, for the model to `read`.
+	 */
+	async pasteImage(data: Uint8Array, mimeType: string): Promise<void> {
+		if (this.disposed) return;
+		const path = join(
+			this.tempFiles.dir,
+			`pi-clipboard-${crypto.randomUUID()}${imageExtension(mimeType)}`,
+		);
+		await this.tempFiles.write(path, data);
+		if (this.disposed) return;
+		this.terminal.input(
+			`\x1b[200~${memonDisplayPath(path, this.home)}\x1b[201~`,
+		);
 	}
 
 	resize(columns: number, rows: number): void {

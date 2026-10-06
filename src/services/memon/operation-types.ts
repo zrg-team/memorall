@@ -164,6 +164,11 @@ export interface MemonOperationPayloadMap {
 	"piCode.read": Keyed<{ cursor: number; waitMs: number }>;
 	/** Raw key data from the view (escape sequences, pastes). */
 	"piCode.input": Keyed<{ data: string }>;
+	/**
+	 * A picture pasted in the view (base64): saved where pi keeps temp files,
+	 * its path pasted into pi, as pi's own clipboard image paste does.
+	 */
+	"piCode.pasteImage": Keyed<{ data: string; mimeType: string }>;
 	"piCode.resize": Keyed<{ columns: number; rows: number }>;
 }
 
@@ -184,7 +189,10 @@ export type MemonOperationResultMap = {
 							? { cursor: number } | null
 							: K extends "piCode.read"
 								? MemonPiCodeOutput
-								: K extends "piCode.input" | "piCode.resize"
+								: K extends
+											| "piCode.input"
+											| "piCode.pasteImage"
+											| "piCode.resize"
 									? null
 									: MemonMachineSnapshot | null;
 };

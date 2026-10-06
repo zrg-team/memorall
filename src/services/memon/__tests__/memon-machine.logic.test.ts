@@ -298,6 +298,7 @@ const fakePiCode = () => {
 					attach: () => 0,
 					read: async (cursor: number) => ({ data: "", cursor, reset: false }),
 					input: () => {},
+					pasteImage: async () => {},
 					resize: () => {},
 					submit: async () => {},
 					interrupt: async () => {},

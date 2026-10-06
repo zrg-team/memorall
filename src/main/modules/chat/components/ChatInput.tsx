@@ -305,7 +305,11 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 		const files = Array.from(e.target.files ?? []);
 		if (files.length === 0) return;
 		e.target.value = "";
+		attachFiles(files);
+	};
 
+	/** Picked or pasted files: pictures go with the message, the rest to Documents. */
+	const attachFiles = (files: File[]) => {
 		const imageFiles = files.filter((file) => file.type.startsWith("image/"));
 		const documentFiles = files.filter(
 			(file) => !file.type.startsWith("image/"),
@@ -509,6 +513,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 								value={inputValue}
 								onChange={handleInputChange}
 								onKeyDown={handleTextareaKeyDown}
+								onPasteFiles={attachFiles}
 								placeholder={
 									!isModelReady
 										? t("model.notLoaded")

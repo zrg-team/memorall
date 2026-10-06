@@ -60,6 +60,8 @@ export interface PiCodeRunner {
 		waitMs: number,
 	): Promise<{ data: string; cursor: number; reset: boolean }>;
 	input(data: string): void;
+	/** A pasted picture: saved where pi keeps temp files, its path pasted in. */
+	pasteImage(data: Uint8Array, mimeType: string): Promise<void>;
 	resize(columns: number, rows: number): void;
 	/** A prompt, queued as a steer or follow-up while pi works. */
 	submit(text: string, queue?: "steer" | "followUp"): Promise<void>;
@@ -463,6 +465,10 @@ export class MemonPiCode {
 
 	async input(data: string): Promise<void> {
 		(await this.ready())?.input(data);
+	}
+
+	async pasteImage(data: Uint8Array, mimeType: string): Promise<void> {
+		await (await this.ready())?.pasteImage(data, mimeType);
 	}
 
 	async resize(columns: number, rows: number): Promise<void> {
