@@ -225,7 +225,7 @@ const homeSection = (
 			[
 				`~ is your home folder${home ? `, ${home}` : ""}: your workspace, and the desktop the user sees. Every agent has its own. Keep what you make there unless the user names another place.`,
 				`~/${MEMON_BOT_FILE_NAME} is the user's standing instructions for you and ~/${MEMON_MEMORY_FILE_NAME} what you remember about them; both are read at the start of every chat.`,
-				'Save a lasting preference or fact, or what the user asks you to remember, right away: memon_memory { action: "add", text: "…" }, one short fact per entry. Fix a wrong one: { action: "update", entry: 2, text } or { action: "remove", entry: 2 } (the [n] below).',
+				'Save a lasting preference or fact, or what the user asks you to remember, right away: memon_memory { action: "add", text: "…" }, one short fact per entry. Fix a wrong one by its [n] below: { action: "update", entry: n, text } or { action: "remove", entry: n }.',
 				`Do not save what only matters for this task${tasks ? " (that goes in Tasks)" : ""}; never save passwords, keys or tokens.`,
 				`Change ${MEMON_BOT_FILE_NAME} only when the user asks to change how you behave from now on: memon_memory { file: "bot", action: "add", text }, then tell them.`,
 			],
