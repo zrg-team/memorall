@@ -25,6 +25,11 @@ export interface MemonWindowState {
 	z: number;
 	minimized: boolean;
 	maximized: boolean;
+	/**
+	 * How far the agent scrolled the window's list, in lines: from the top,
+	 * or back from the newest in the Terminal and pi code. Absent at rest.
+	 */
+	scroll?: number;
 }
 
 export interface MemonBrowserTab {

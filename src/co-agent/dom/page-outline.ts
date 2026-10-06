@@ -81,13 +81,18 @@ export interface PageOutline {
 	title: string;
 	docToken: string;
 	blocks: PageOutlineBlock[];
-	/** Blocks before `blocks[0]` that were left out to fit the budget. */
+	/** Blocks scrolled past that were left out to fit the budget. */
 	omittedAbove: number;
-	/** Blocks after the last one that were left out to fit the budget. */
+	/** Blocks below the screen that were left out to fit the budget. */
 	omittedBelow: number;
+	/**
+	 * How far the page is scrolled: the document, or, when only an area of
+	 * it scrolls (an app's main pane), that area.
+	 */
 	scroll: {
 		y: number;
 		viewportHeight: number;
+		/** The viewport plus all there is to scroll. */
 		pageHeight: number;
 		/** The viewport's width, for positions; absent from older pages. */
 		viewportWidth?: number;
@@ -508,7 +513,12 @@ const clickSubmitsPostForm = (element: Element): boolean => {
 
 interface Collected {
 	block: PageOutlineBlock;
+	/**
+	 * Where it is drawn, in viewport pixels: a scrolled pane moves its blocks,
+	 * a pinned header keeps its own.
+	 */
 	top: number;
+	bottom: number;
 }
 
 const interactiveBlock = (
@@ -629,22 +639,25 @@ const collectBlocks = (doc: Document, state: OutlineState): Collected[] => {
 	const out: Collected[] = [];
 	const root = doc.body ?? doc.documentElement;
 	if (!root || !view) return out;
-	const scrollY = view.scrollY || 0;
 	let visited = 0;
 
-	const topOf = (element: Element): number =>
-		element.getBoundingClientRect().top + scrollY;
 	const push = (block: PageOutlineBlock, element: Element) => {
-		const last = out[out.length - 1]?.block;
-		if (block.kind === "text" && last?.kind === "text") {
-			last.text = clean(`${last.text} ${block.text}`, MAX_TEXT_CHARS);
+		const { top, bottom } = element.getBoundingClientRect();
+		const previous = out[out.length - 1];
+		if (previous && block.kind === "text" && previous.block.kind === "text") {
+			previous.block.text = clean(
+				`${previous.block.text} ${block.text}`,
+				MAX_TEXT_CHARS,
+			);
+			previous.bottom = Math.max(previous.bottom, bottom);
 			return;
 		}
-		if (block.kind === "list" && last?.kind === "list") {
-			last.items.push(...block.items);
+		if (previous && block.kind === "list" && previous.block.kind === "list") {
+			previous.block.items.push(...block.items);
+			previous.bottom = Math.max(previous.bottom, bottom);
 			return;
 		}
-		out.push({ block, top: topOf(element) });
+		out.push({ block, top, bottom });
 	};
 
 	// A paragraph's controls are looked up, not walked to; one inside another
@@ -840,9 +853,60 @@ export const formatPageOutline = (
 };
 
 /**
- * Builds the outline. When the page does not fit the budget, the window of
- * blocks starts a little above the current viewport, so scrolling moves the
- * outline with the reader.
+ * The blocks that fit the budget: what is on screen, then what is below it,
+ * each in page order; what was scrolled past is left out. Blocks go by where
+ * they are drawn, so scrolling an app's pane reads on as the page does, and
+ * a pinned header neither holds the outline at the top nor gets left out.
+ */
+const pickBlocks = (
+	collected: Collected[],
+	maxChars: number,
+	viewportHeight: number,
+): { keep: boolean[]; above: number } => {
+	const sizes = collected.map(
+		({ block }) => formatOutlineBlock(block).length + 1,
+	);
+	const keep = collected.map(() => true);
+	if (sizes.reduce((sum, size) => sum + size, 0) <= maxChars) {
+		return { keep, above: 0 };
+	}
+	keep.fill(false);
+	// A little of what was just scrolled past stays, to read on from.
+	const scrolledPast = -viewportHeight * 0.25;
+	const tierOf = ({ top, bottom }: Collected): number =>
+		bottom < scrolledPast ? 2 : top < viewportHeight ? 0 : 1;
+	const tiers = collected.map(tierOf);
+	let used = 0;
+	fill: for (const tier of [0, 1]) {
+		for (let index = 0; index < collected.length; index += 1) {
+			if (tiers[index] !== tier) continue;
+			if (used + sizes[index] > maxChars) break fill;
+			keep[index] = true;
+			used += sizes[index];
+		}
+	}
+	if (!keep.includes(true)) {
+		const next = tiers.findIndex((tier) => tier !== 2);
+		if (next >= 0) {
+			keep[next] = true;
+		} else {
+			// Scrolled past everything: the end of the page.
+			for (let index = collected.length - 1; index >= 0; index -= 1) {
+				if (keep.includes(true) && used + sizes[index] > maxChars) break;
+				keep[index] = true;
+				used += sizes[index];
+			}
+		}
+	}
+	const above = tiers.filter(
+		(tier, index) => tier === 2 && !keep[index],
+	).length;
+	return { keep, above };
+};
+
+/**
+ * Builds the outline. When the page does not fit the budget, it shows what
+ * is on screen and below, so scrolling moves the outline with the reader.
  */
 export const buildPageOutline = (
 	doc: Document,
@@ -853,41 +917,25 @@ export const buildPageOutline = (
 	const collected = collectBlocks(doc, state);
 	const maxChars = options.maxChars ?? DEFAULT_MAX_CHARS;
 	const viewportHeight = view?.innerHeight ?? 0;
-	const scrollY = view?.scrollY ?? 0;
-
-	const sizes = collected.map(
-		({ block }) => formatOutlineBlock(block).length + 1,
-	);
-	const total = sizes.reduce((sum, size) => sum + size, 0);
-	let start = 0;
-	let end = collected.length;
-	if (total > maxChars) {
-		const anchor = scrollY - viewportHeight * 0.25;
-		start = Math.max(
-			0,
-			collected.findIndex(({ top }) => top >= anchor),
-		);
-		if (start < 0) start = 0;
-		let used = 0;
-		end = start;
-		while (end < collected.length && used + sizes[end] <= maxChars) {
-			used += sizes[end];
-			end += 1;
-		}
-		if (end === start && start < collected.length) end = start + 1;
-	}
+	const { keep, above } = pickBlocks(collected, maxChars, viewportHeight);
+	const blocks = collected
+		.filter((_, index) => keep[index])
+		.map(({ block }) => block);
+	const pane = pageScroller(doc);
 
 	return {
 		url: doc.location?.href ?? doc.URL,
 		title: clean(doc.title, 200),
 		docToken: state.token,
-		blocks: collected.slice(start, end).map(({ block }) => block),
-		omittedAbove: start,
-		omittedBelow: collected.length - end,
+		blocks,
+		omittedAbove: above,
+		omittedBelow: collected.length - blocks.length - above,
 		scroll: {
-			y: Math.round(scrollY),
+			y: Math.round(pane.position().top),
 			viewportHeight: Math.round(viewportHeight),
-			pageHeight: Math.round(doc.documentElement?.scrollHeight ?? 0),
+			pageHeight: Math.round(
+				viewportHeight + Math.max(0, pane.extent.height - pane.box.height),
+			),
 			viewportWidth: Math.round(view?.innerWidth ?? 0),
 		},
 		...(isPageBusy(doc) ? { busy: true } : {}),
@@ -1457,7 +1505,9 @@ const isOn = (element: Element): boolean | undefined => {
 	return undefined;
 };
 
-const SCROLL_DIRECTIONS = new Set([
+type ScrollDirection = "up" | "down" | "left" | "right" | "top" | "bottom";
+
+const SCROLL_DIRECTIONS = new Set<string>([
 	"up",
 	"down",
 	"left",
@@ -1466,14 +1516,23 @@ const SCROLL_DIRECTIONS = new Set([
 	"bottom",
 ]);
 
+const isHorizontal = (direction: ScrollDirection): boolean =>
+	direction === "left" || direction === "right";
+
 const scrollsOn = (element: Element, horizontal: boolean): boolean => {
-	const view = element.ownerDocument.defaultView;
-	if (!view) return false;
-	const style = view.getComputedStyle(element);
+	const doc = element.ownerDocument;
+	const view = doc.defaultView;
+	if (!view || element === doc.documentElement) return false;
+	const overflow = (target: Element) => {
+		const style = view.getComputedStyle(target);
+		return horizontal ? style.overflowX : style.overflowY;
+	};
+	if (!/(?:auto|scroll|overlay)/.test(overflow(element))) return false;
+	// The body's overflow is the page's own while the root's is visible.
 	if (
-		!/(?:auto|scroll|overlay)/.test(
-			horizontal ? style.overflowX : style.overflowY,
-		)
+		element === doc.body &&
+		doc.documentElement &&
+		overflow(doc.documentElement) === "visible"
 	)
 		return false;
 	return horizontal
@@ -1481,20 +1540,142 @@ const scrollsOn = (element: Element, horizontal: boolean): boolean => {
 		: element.scrollHeight > element.clientHeight + 1;
 };
 
-/** What a ref scrolls in: itself or its nearest scrolling ancestor; null for the page. */
-const scrollAreaOf = (
+/** The areas an element scrolls in, innermost first. */
+const scrollAreasAround = (
 	element: Element,
 	horizontal: boolean,
-): Element | null => {
-	const doc = element.ownerDocument;
-	for (
-		let node: Element | null = element;
-		node && node !== doc.body && node !== doc.documentElement;
-		node = parentOf(node)
-	) {
-		if (scrollsOn(node, horizontal)) return node;
+): Element[] => {
+	const areas: Element[] = [];
+	for (let node: Element | null = element; node; node = parentOf(node)) {
+		if (scrollsOn(node, horizontal)) areas.push(node);
 	}
-	return null;
+	return areas;
+};
+
+/** Something that scrolls: an area of the page, or the page itself. */
+interface Scroller {
+	/** Null for the page. */
+	area: Element | null;
+	box: { width: number; height: number };
+	extent: { width: number; height: number };
+	position: () => { left: number; top: number };
+}
+
+const scrollerOf = (doc: Document, area: Element | null): Scroller => {
+	if (area) {
+		return {
+			area,
+			box: { width: area.clientWidth, height: area.clientHeight },
+			extent: { width: area.scrollWidth, height: area.scrollHeight },
+			position: () => ({ left: area.scrollLeft, top: area.scrollTop }),
+		};
+	}
+	const view = doc.defaultView;
+	const root = doc.scrollingElement ?? doc.documentElement;
+	return {
+		area: null,
+		box: { width: view?.innerWidth || 800, height: view?.innerHeight || 600 },
+		extent: { width: root?.scrollWidth ?? 0, height: root?.scrollHeight ?? 0 },
+		position: () => ({ left: view?.scrollX ?? 0, top: view?.scrollY ?? 0 }),
+	};
+};
+
+/** Whether a scroller has room left that way. */
+const canMove = (scroller: Scroller, direction: ScrollDirection): boolean => {
+	const { left, top } = scroller.position();
+	switch (direction) {
+		case "up":
+		case "top":
+			return top > 0;
+		case "down":
+		case "bottom":
+			return top < scroller.extent.height - scroller.box.height - 1;
+		case "left":
+			return left > 0;
+		case "right":
+			return left < scroller.extent.width - scroller.box.width - 1;
+	}
+};
+
+/** Points of the viewport, as fractions, where the page's main area is looked for. */
+const MAIN_AREA_PROBES = [
+	[0.5, 0.5],
+	[0.5, 0.25],
+	[0.5, 0.75],
+	[0.3, 0.5],
+	[0.7, 0.5],
+] as const;
+
+/**
+ * The area that scrolls an app whose document stays put (its main pane),
+ * found under a few points of the viewport as a wheel would: the biggest
+ * one with room left that way, else the biggest.
+ */
+const mainScrollArea = (
+	doc: Document,
+	direction: ScrollDirection,
+): Element | null => {
+	const view = doc.defaultView;
+	const width = view?.innerWidth ?? 0;
+	const height = view?.innerHeight ?? 0;
+	if (!width || !height) return null;
+	const areas = new Set<Element>();
+	for (const [x, y] of MAIN_AREA_PROBES) {
+		const hit = elementAt(doc, { x: width * x, y: height * y });
+		if (!hit || hit.element.ownerDocument !== doc) continue;
+		for (const area of scrollAreasAround(hit.element, isHorizontal(direction)))
+			areas.add(area);
+	}
+	const size = (area: Element) => area.clientWidth * area.clientHeight;
+	const ranked = [...areas].sort((a, b) => size(b) - size(a));
+	return (
+		ranked.find((area) => canMove(scrollerOf(doc, area), direction)) ??
+		ranked[0] ??
+		null
+	);
+};
+
+/** What scrolls the page down: the document, or its main area when only that scrolls. */
+const pageScroller = (doc: Document): Scroller => {
+	const page = scrollerOf(doc, null);
+	if (page.extent.height > page.box.height + 1) return page;
+	const main = mainScrollArea(doc, "down");
+	return main ? scrollerOf(doc, main) : page;
+};
+
+/**
+ * Where a scroll goes, as a wheel would: with a ref, the innermost area
+ * around it with room left that way, else the page; without one, the page,
+ * or its main area when the document itself cannot move.
+ */
+const scrollTarget = (
+	doc: Document,
+	request: PageOutlineActionRequest,
+	direction: ScrollDirection,
+): { scroller: Scroller; where: string } => {
+	const page = scrollerOf(doc, null);
+	const { ref } = request;
+	if (ref) {
+		const areas = scrollAreasAround(
+			elementOfRef(doc, ref, request.docToken),
+			isHorizontal(direction),
+		).map((area) => scrollerOf(doc, area));
+		const index = areas.findIndex((area) => canMove(area, direction));
+		if (index >= 0) {
+			return {
+				scroller: areas[index],
+				where: index === 0 ? `${ref}'s scroll area` : `The area around ${ref}`,
+			};
+		}
+		if (areas.length && !canMove(page, direction)) {
+			return { scroller: areas[0], where: `${ref}'s scroll area` };
+		}
+	}
+	if (canMove(page, direction)) return { scroller: page, where: "The page" };
+	const main = mainScrollArea(doc, direction);
+	return main
+		? { scroller: scrollerOf(doc, main), where: "The page's main area" }
+		: { scroller: page, where: "The page" };
 };
 
 /** Scrolls the page, or the area a ref is in, and says where it ended up. */
@@ -1502,29 +1683,17 @@ const scrollPage = (
 	doc: Document,
 	request: PageOutlineActionRequest,
 ): PageOutlineActionResult => {
-	const direction = (request.value ?? "down").trim().toLowerCase();
-	if (!SCROLL_DIRECTIONS.has(direction)) {
+	const value = (request.value ?? "down").trim().toLowerCase();
+	if (!SCROLL_DIRECTIONS.has(value)) {
 		throw new Error(
 			`Scroll up, down, left, right, top or bottom, not "${request.value}".`,
 		);
 	}
-	const horizontal = direction === "left" || direction === "right";
-	const view = doc.defaultView;
-	const area = request.ref
-		? scrollAreaOf(elementOfRef(doc, request.ref, request.docToken), horizontal)
-		: null;
-	const root = doc.documentElement;
-	const box = area
-		? { width: area.clientWidth, height: area.clientHeight }
-		: { width: view?.innerWidth || 800, height: view?.innerHeight || 600 };
-	const extent = area
-		? { width: area.scrollWidth, height: area.scrollHeight }
-		: { width: root?.scrollWidth ?? 0, height: root?.scrollHeight ?? 0 };
-	const position = () =>
-		area
-			? { left: area.scrollLeft, top: area.scrollTop }
-			: { left: view?.scrollX ?? 0, top: view?.scrollY ?? 0 };
-	const before = position();
+	const direction = value as ScrollDirection;
+	const horizontal = isHorizontal(direction);
+	const { scroller, where } = scrollTarget(doc, request, direction);
+	const { area, box, extent } = scroller;
+	const before = scroller.position();
 	const step = (size: number) => Math.round(size * 0.85);
 	const next = { ...before };
 	if (direction === "up") next.top -= step(box.height);
@@ -1533,19 +1702,24 @@ const scrollPage = (
 	if (direction === "right") next.left += step(box.width);
 	if (direction === "top") next.top = 0;
 	if (direction === "bottom") next.top = extent.height;
-	const scroller = area ?? view;
-	if (typeof scroller?.scrollTo === "function") {
-		scroller.scrollTo({ ...next, behavior: "instant" as ScrollBehavior });
+	const target = area ?? doc.defaultView;
+	if (typeof target?.scrollTo === "function") {
+		target.scrollTo({ ...next, behavior: "instant" as ScrollBehavior });
 	} else if (area) {
 		area.scrollTop = next.top;
 		area.scrollLeft = next.left;
 	}
-	const after = position();
-	const where = area ? `${request.ref}'s scroll area` : "The page";
+	const after = scroller.position();
+	const moved = after.top !== before.top || after.left !== before.left;
+	// A tab out of sight paints no frames, and the browser sends scroll
+	// events with them: lists that draw their rows on one would stay put.
+	const view = doc.defaultView as (Window & { Event: typeof Event }) | null;
+	if (moved && view) {
+		(area ?? doc).dispatchEvent(new view.Event("scroll", { bubbles: !area }));
+	}
 	const at = horizontal
 		? `${Math.round(after.left)} of ${Math.max(0, extent.width - box.width)} px across`
 		: `${Math.round(after.top)} of ${Math.max(0, extent.height - box.height)} px down`;
-	const moved = after.top !== before.top || after.left !== before.left;
 	return {
 		ok: true,
 		action: "scrollScreen",

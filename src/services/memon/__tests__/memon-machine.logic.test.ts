@@ -1466,6 +1466,24 @@ describe("MemonMachine", () => {
 		expect(screen).toContain("(lines 51–90 of 90; scroll up/down to page)");
 	});
 
+	it("pages a long folder in Files, and starts another folder at its top", async () => {
+		const { machine, files } = createMachine();
+		for (let i = 1; i <= 300; i += 1) files.set(`/big/file-${i}.md`, "x");
+		files.set("/small/a.md", "x");
+
+		await machine.openFolder("/big");
+		expect(machine.readScreen()).toContain("more lines below");
+		expect(machine.scrollWindow("down")).toEqual({ app: "files", moved: true });
+		expect(machine.readScreen()).toContain("lines above — scroll up");
+
+		await machine.openFolder("/small");
+		expect(machine.snapshot().windows[0].scroll).toBeUndefined();
+		expect(machine.scrollWindow("down")).toEqual({
+			app: "files",
+			moved: false,
+		});
+	});
+
 	it("opens images in the Viewer even when asked for the Editor", async () => {
 		const { machine } = createMachine();
 

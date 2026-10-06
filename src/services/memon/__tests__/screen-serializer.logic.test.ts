@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { listFileRefs, serializeScreen } from "../screen-serializer";
+import {
+	listFileRefs,
+	nextWindowScroll,
+	serializeScreen,
+} from "../screen-serializer";
 import type { MemonMachineSnapshot } from "../types";
 
 const snapshot = (
@@ -256,6 +260,101 @@ describe("serializeScreen", () => {
 		expect(screen).toContain("  line 41");
 		expect(screen).not.toContain("  line 40\n");
 		expect(screen).toContain("(lines 41–80 of 100; scroll up/down to page)");
+	});
+
+	it("pages a folder too long for the screen, and scrolls through it", () => {
+		const entries = Array.from({ length: 400 }, (_, i) => ({
+			name: `file-${i + 1}.md`,
+			path: `/notes/file-${i + 1}.md`,
+			type: "file" as const,
+			size: 10,
+		}));
+		const at = (scroll?: number) => {
+			const base = snapshot({ files: { cwd: "/notes", entries } });
+			const [files, ...rest] = base.windows;
+			return { ...base, windows: [{ ...files, scroll }, ...rest] };
+		};
+
+		const first = serializeScreen(at());
+		expect(first).toContain("[f1] .. (up)");
+		expect(first).toContain("[f2] file-1.md · 10 B");
+		expect(first).toMatch(
+			/\(… \d+ more lines below — scroll down to see them\)/,
+		);
+		expect(first).not.toContain("file-400.md");
+		expect(first).not.toContain("screen truncated");
+
+		const down = nextWindowScroll(at(), at().windows[0], "down");
+		expect(down?.moved).toBe(true);
+		const second = serializeScreen(at(down?.scroll));
+		expect(second).toMatch(/\(… \d+ lines above — scroll up to see them\)/);
+		expect(second).not.toContain("[f1] .. (up)");
+
+		const bottom = nextWindowScroll(at(), at().windows[0], "bottom");
+		const last = serializeScreen(at(bottom?.scroll));
+		expect(last).toContain("file-400.md");
+		expect(last).toContain('button "New file"');
+		expect(last).not.toContain("more lines below");
+		expect(
+			nextWindowScroll(
+				at(bottom?.scroll),
+				at(bottom?.scroll).windows[0],
+				"down",
+			),
+		).toMatchObject({ moved: false });
+		expect(
+			nextWindowScroll(
+				at(bottom?.scroll),
+				at(bottom?.scroll).windows[0],
+				"top",
+			),
+		).toEqual({ scroll: 0, moved: true });
+	});
+
+	it("scrolls the Terminal back through its output, and down to the newest", () => {
+		const at = (scroll?: number) => {
+			const base = snapshot();
+			return {
+				...base,
+				focusedWindowId: "w2",
+				windows: base.windows.map((window) =>
+					window.id === "w2" ? { ...window, minimized: false, scroll } : window,
+				),
+				terminal: {
+					...base.terminal,
+					lines: Array.from({ length: 100 }, (_, i) => ({
+						kind: "stdout" as const,
+						text: `out ${i + 1}`,
+					})),
+				},
+			};
+		};
+		const terminal = (scroll?: number) =>
+			at(scroll).windows.find((window) => window.id === "w2") as ReturnType<
+				typeof at
+			>["windows"][number];
+
+		const live = serializeScreen(at());
+		expect(live).toContain("out 100");
+		expect(live).toContain("out 89\n");
+		expect(live).not.toContain("out 88\n");
+		expect(live).toContain(
+			"(… 88 earlier lines above — scroll up to see them)",
+		);
+
+		const up = nextWindowScroll(at(), terminal(), "up");
+		expect(up).toEqual({ scroll: 12, moved: true });
+		const earlier = serializeScreen(at(up?.scroll));
+		expect(earlier).toContain("out 88\n");
+		expect(earlier).not.toContain("out 89\n");
+		expect(earlier).toContain(
+			"(… 12 newer lines below — scroll down to see them)",
+		);
+
+		expect(nextWindowScroll(at(12), terminal(12), "down")).toEqual({
+			scroll: 0,
+			moved: true,
+		});
 	});
 
 	it("truncates past the budget", () => {

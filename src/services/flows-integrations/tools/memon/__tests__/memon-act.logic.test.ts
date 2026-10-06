@@ -94,3 +94,62 @@ describe("memon_act describe", () => {
 		});
 	});
 });
+
+describe("memon_act scroll", () => {
+	beforeEach(() => {
+		vi.mocked(getMemonMachine).mockReset();
+	});
+
+	const scroll = async (
+		focused: { app: "files" | "browser"; moved?: boolean },
+		direction?: "down" | "bottom",
+	) => {
+		const machine = {
+			...fakeMachine({ looks: false }),
+			focusedTextWindow: () => null,
+			scrollWindow: vi.fn(() =>
+				focused.app === "browser"
+					? null
+					: { app: focused.app, moved: focused.moved ?? true },
+			),
+		};
+		machine.browserAction.mockResolvedValue({
+			ok: true,
+			action: "scrollScreen",
+			ref: "",
+			detail: "The page is at 680 of 4000 px down.",
+		});
+		vi.mocked(getMemonMachine).mockResolvedValue(machine as never);
+		const result = await createMemonActTool().execute(
+			{ action: "scroll", ...(direction ? { direction } : {}) },
+			undefined,
+		);
+		return { machine, result };
+	};
+
+	it("pages the focused window's list, not the page behind it", async () => {
+		const { machine, result } = await scroll({ app: "files" }, "bottom");
+		expect(machine.scrollWindow).toHaveBeenCalledWith("bottom");
+		expect(machine.browserAction).not.toHaveBeenCalled();
+		expect(result).toMatchObject({
+			content: expect.stringContaining("Scrolled Files to the bottom."),
+		});
+
+		const atEnd = await scroll({ app: "files", moved: false });
+		expect(atEnd.result).toMatchObject({
+			content: expect.stringContaining("Files cannot scroll down any further."),
+		});
+	});
+
+	it("scrolls the page when the Browser is in front", async () => {
+		const { machine, result } = await scroll({ app: "browser" });
+		expect(machine.browserAction).toHaveBeenCalledWith({
+			action: "scrollScreen",
+			value: "down",
+			ref: undefined,
+		});
+		expect(result).toMatchObject({
+			content: expect.stringContaining("The page is at 680 of 4000 px down."),
+		});
+	});
+});

@@ -57,7 +57,12 @@ import {
 	MEMON_PICTURES_DIR,
 } from "./download";
 import type { FolderZip } from "@/services/filesystem/folder-zip";
-import { listFileRefs, serializeScreen } from "./screen-serializer";
+import {
+	listFileRefs,
+	type MemonWindowScrollDirection,
+	nextWindowScroll,
+	serializeScreen,
+} from "./screen-serializer";
 import { controlsByRef } from "./app-kit/render-text";
 import type { MemonControlValue } from "./app-kit/types";
 import { kitAppForRef } from "./apps";
@@ -409,6 +414,8 @@ export class MemonMachine {
 	private homeDir: string = MEMON_GUEST_HOME;
 	private filesCwd: string = MEMON_GUEST_HOME;
 	private fileEntries: MemonFileEntry[] = [];
+	/** The folder `fileEntries` lists. */
+	private listedFilesCwd: string | undefined;
 	private filesError: string | undefined;
 	private fileClipboard: MemonFileClipboard | null = null;
 	private fileExport: MemonFileExport | null = null;
@@ -1384,13 +1391,15 @@ export class MemonMachine {
 			tab.title = outline.title || tab.title;
 		}
 		// A click or a key can start a navigation that replaces the document
-		// after the outline was taken; read again once it settles.
+		// after the outline was taken; a scroll draws a list's next rows and
+		// loads what comes into view only then. Read again once it settles.
 		if (
 			!outline ||
 			request.action === "click" ||
 			request.action === "submit" ||
 			request.action === "press" ||
-			request.action === "toggle"
+			request.action === "toggle" ||
+			request.action === "scrollScreen"
 		) {
 			await new Promise((resolve) => setTimeout(resolve, 400));
 			await this.readTab(tab);
@@ -1721,6 +1730,12 @@ export class MemonMachine {
 	}
 
 	async refreshFiles(): Promise<void> {
+		// Another folder's list starts at its top.
+		if (this.filesCwd !== this.listedFilesCwd) {
+			this.listedFilesCwd = this.filesCwd;
+			const window = this.windowFor("files");
+			if (window) delete window.scroll;
+		}
 		try {
 			this.fileEntries = await this.ports.files.list(this.filesCwd);
 			this.filesError = undefined;
@@ -1924,7 +1939,7 @@ export class MemonMachine {
 	/** Pages the agent's view of the Editor or Viewer text. */
 	scrollText(
 		app: "editor" | "viewer" | "visualize",
-		direction: "up" | "down",
+		direction: MemonWindowScrollDirection,
 	): void {
 		const text =
 			app === "editor"
@@ -1942,20 +1957,53 @@ export class MemonMachine {
 				: app === "visualize"
 					? this.visualScreenLine
 					: this.viewerScreenLine;
-		const next = Math.min(
-			lastPage,
-			Math.max(
-				0,
-				current +
-					(direction === "down"
-						? MEMON_TEXT_PAGE_LINES
-						: -MEMON_TEXT_PAGE_LINES),
-			),
-		);
+		const next =
+			direction === "top"
+				? 0
+				: direction === "bottom"
+					? lastPage
+					: Math.min(
+							lastPage,
+							Math.max(
+								0,
+								current +
+									(direction === "down"
+										? MEMON_TEXT_PAGE_LINES
+										: -MEMON_TEXT_PAGE_LINES),
+							),
+						);
 		if (app === "editor") this.editorScreenLine = next;
 		else if (app === "visualize") this.visualScreenLine = next;
 		else this.viewerScreenLine = next;
 		this.changed();
+	}
+
+	/**
+	 * Pages the agent's view of the focused window's list: Files, an app's
+	 * controls, the Terminal's output or pi's conversation. Null when the
+	 * focused window is the Browser or a text window, which page by
+	 * themselves, or when no window is focused.
+	 */
+	scrollWindow(
+		direction: MemonWindowScrollDirection,
+	): { app: MemonWindowApp; moved: boolean } | null {
+		const window = this.windows.find(
+			(candidate) =>
+				candidate.id === this.focusedWindowId && !candidate.minimized,
+		);
+		if (
+			!window ||
+			window.app === "browser" ||
+			this.focusedTextWindow() !== null
+		) {
+			return null;
+		}
+		const next = nextWindowScroll(this.snapshot(), window, direction);
+		if (!next) return { app: window.app, moved: false };
+		if (next.scroll) window.scroll = next.scroll;
+		else delete window.scroll;
+		if (next.moved) this.changed();
+		return { app: window.app, moved: next.moved };
 	}
 
 	/** The path an `f` ref of the Files window names. */

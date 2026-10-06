@@ -9,6 +9,7 @@ import { formatDownloadSize } from "@/services/memon/download";
 import type { MemonMachine } from "@/services/memon/memon-machine";
 import type { MemonPageCapture } from "@/services/memon/page-capture";
 import { kitAppForRef } from "@/services/memon/apps";
+import { memonWindowLabel } from "@/services/memon/screen-serializer";
 import { type MemonToolOutput, runMemonTool } from "./memon-tool-utils";
 
 const schema = z
@@ -42,7 +43,7 @@ const schema = z
 				"zip",
 			])
 			.describe(
-				"click a ref (a button, link, file or switch), or a page point with x and y; hover a page ref or point (menus that open on hover); press a key (text: Enter, Escape, Tab, ArrowDown, Control+a) on a page ref or the focused element; type text into a field or the editor (e1); toggle a switch or checkbox (text on/off sets it); select an option of a choice (text is the option); describe a page ref to see it (a canvas, an image or any part of the page comes back as a picture; an image also gives its address); scroll the focused window (page, Editor or Viewer), or with a page ref the area it scrolls in; back/forward the page; select_tab/close_tab by number. Files entries: move/copy into the folder in text, or cut/copy without text to the clipboard, then paste (into the open folder, or into a folder ref). download: save the file at the address in text (or a page image ref) into Files. zip: zip a folder (a Files ref, or its path in text) into Files and hand it to the user to download.",
+				"click a ref (a button, link, file or switch), or a page point with x and y; hover a page ref or point (menus that open on hover); press a key (text: Enter, Escape, Tab, ArrowDown, Control+a) on a page ref or the focused element; type text into a field or the editor (e1); toggle a switch or checkbox (text on/off sets it); select an option of a choice (text is the option); describe a page ref to see it (a canvas, an image or any part of the page comes back as a picture; an image also gives its address); scroll the focused window (the page, a file in the Editor or Viewer, or a long list: Files, Tasks, Skills, the Terminal's output, pi's conversation), or with a page ref the area it scrolls in; back/forward the page; select_tab/close_tab by number. Files entries: move/copy into the folder in text, or cut/copy without text to the clipboard, then paste (into the open folder, or into a folder ref). download: save the file at the address in text (or a page image ref) into Files. zip: zip a folder (a Files ref, or its path in text) into Files and hand it to the user to download.",
 			),
 		text: z
 			.string()
@@ -74,7 +75,7 @@ const schema = z
 			.enum(["up", "down", "left", "right", "top", "bottom"])
 			.optional()
 			.describe(
-				"scroll: which way (default down, one screen); left/right/top/bottom on a page.",
+				"scroll: which way (default down, one screen); top/bottom jump to an end; left/right on a page.",
 			),
 		tab: z
 			.number()
@@ -159,14 +160,32 @@ const act = async (
 	switch (input.action) {
 		case "scroll": {
 			const direction = input.direction ?? "down";
-			// Long files page in the Editor and Viewer; anything else is the page.
-			const textWindow = input.ref ? null : machine.focusedTextWindow();
-			if (textWindow) {
-				if (direction !== "up" && direction !== "down") {
-					throw new Error(`The ${textWindow} scrolls up or down.`);
+			const toward =
+				direction === "top" || direction === "bottom"
+					? `to the ${direction}`
+					: direction;
+			// Long files page in the Editor and Viewer, lists in their own
+			// window (Files, Tasks, the Terminal, …); the Browser is the page.
+			if (!input.ref) {
+				const textWindow = machine.focusedTextWindow();
+				if (textWindow) {
+					if (direction === "left" || direction === "right") {
+						throw new Error(
+							`The ${textWindow} scrolls up, down, top or bottom.`,
+						);
+					}
+					machine.scrollText(textWindow, direction);
+					return `Scrolled the ${textWindow} ${toward}.`;
 				}
-				machine.scrollText(textWindow, direction);
-				return `Scrolled the ${textWindow} ${direction}.`;
+				if (direction !== "left" && direction !== "right") {
+					const scrolled = machine.scrollWindow(direction);
+					if (scrolled) {
+						const label = memonWindowLabel(scrolled.app);
+						return scrolled.moved
+							? `Scrolled ${label} ${toward}.`
+							: `${label} cannot scroll ${direction} any further.`;
+					}
+				}
 			}
 			if (input.ref && app !== "browser") {
 				throw new Error(
