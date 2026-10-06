@@ -88,6 +88,31 @@ function rewriteBareSpecifiers(code, importMap) {
   return rewritten;
 }
 
+/**
+ * A stylesheet a module imports (`import "./app.css"`): a browser only runs
+ * JavaScript there and refuses text/css, so it becomes a module that adds
+ * the styles to the page, as a bundler's dev server serves it. Any server in
+ * the sandbox gets this, a plain static one too.
+ */
+function cssModuleSource(css, path) {
+  const id = path.split('?')[0];
+  return `const css = ${JSON.stringify(css)};
+const id = ${JSON.stringify(id)};
+let style = Array.from(document.querySelectorAll('style[data-css-module]')).find((node) => node.dataset.cssModule === id);
+if (!style) {
+  style = document.createElement('style');
+  style.dataset.cssModule = id;
+  document.head.appendChild(style);
+}
+style.textContent = css;
+export default css;
+`;
+}
+
+function isCssImportedByModule(request, contentType) {
+  return request.destination === 'script' && /^text\/css\b/i.test(contentType || '');
+}
+
 function shouldRewriteModule(path, text) {
   if (/\.(?:[cm]?[jt]sx?|vue|svelte)(?:\?.*)?$/i.test(path)) {
     return true;
@@ -478,6 +503,11 @@ async function handleVirtualRequest(request, port, path) {
     request.headers.forEach((value, key) => {
       headers[key] = value;
     });
+    // A worker never sees Sec-Fetch-Dest, which tells a dev server whether a
+    // .css is a <link> (CSS) or a module's import (JavaScript): say it here.
+    if (!headers['sec-fetch-dest']) {
+      headers['sec-fetch-dest'] = request.destination || 'empty';
+    }
 
     // Get body if present
     let body = null;
@@ -525,9 +555,15 @@ async function handleVirtualRequest(request, port, path) {
           }
         }
 
-        const contentType =
+        let contentType =
           getHeaderCaseInsensitive(response.headers, 'content-type') ||
           'application/octet-stream';
+        if (isCssImportedByModule(request, contentType)) {
+          bytes = new TextEncoder().encode(
+            cssModuleSource(new TextDecoder().decode(bytes), path),
+          );
+          contentType = 'text/javascript; charset=utf-8';
+        }
         const blob = new Blob([bytes], { type: contentType });
         DEBUG && console.log('[SW] Created blob size:', blob.size);
 
@@ -547,6 +583,20 @@ async function handleVirtualRequest(request, port, path) {
           headers: { 'Content-Type': 'text/plain' },
         });
       }
+    } else if (
+      isCssImportedByModule(
+        request,
+        getHeaderCaseInsensitive(response.headers, 'content-type'),
+      )
+    ) {
+      // An empty stylesheet a module imports: an empty module.
+      const respHeaders = sanitizeSynthesizedResponseHeaders(response.headers);
+      respHeaders.set('Content-Type', 'text/javascript; charset=utf-8');
+      finalResponse = new Response(cssModuleSource('', path), {
+        status: response.statusCode,
+        statusText: response.statusMessage,
+        headers: respHeaders,
+      });
     } else {
       const respHeaders = sanitizeSynthesizedResponseHeaders(response.headers);
       finalResponse = new Response(null, {
