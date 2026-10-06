@@ -72,7 +72,7 @@ For every agent draft, consider and provide or update these setup areas:
 3. Instruction — required. Write the generated instruction in English. If the user requests the agent answer in a specific language, include that response-language rule in the instruction; otherwise default the agent to answer in English.
 4. Features — required. Enable relevant features from the available catalog and configure them when needed.
 5. Expected response output — required. Decide whether the agent should primarily answer in markdown, rich visualized chat responses, or visual/artifact output. If unclear and the choice materially changes the agent, ask the user whether they want rich visualized responses. If they say yes, enable "visualize-response" when it exists in the feature catalog.
-6. Skills — add when relevant to the user's requested workflows. If visual output is expected, choose exactly one style-specific design skill from the default skills catalog when available, such as dashboard, application, shadcn, clean, bento, editorial, brutalism, or another matching awesome-design-skills mode. Pick one that best fits the user's intent and follow it consistently — do not add more than one design style skill.
+6. Skills — add when relevant to the user's requested workflows. If visual output is expected, choose exactly one style-specific design skill from the default skills catalog when available, such as shadcn, clean, bento, editorial, enterprise, roku, brutalism, or another matching awesome-design-skills mode. Pick one that best fits the user's intent and follow it consistently — do not add more than one design style skill.
 7. Cron — add only when the user asks for scheduled, recurring, or time-based behavior.
 
 # Available Catalog

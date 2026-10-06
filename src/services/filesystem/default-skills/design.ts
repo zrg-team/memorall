@@ -13,9 +13,24 @@ const DESIGN_SKILL_SOURCES = [
 			"Conversational AI-first interface with minimal controls, clear outcomes, and delegated task flows for agentic workflows.",
 	},
 	{
+		slug: "ant",
+		description:
+			"Structured, enterprise-focused design system emphasizing clarity, consistency, and efficiency for data-dense web applications.",
+	},
+	{
 		slug: "artistic",
 		description:
 			"High-contrast, expressive style with creative typography and bold color choices for visually striking interfaces.",
+	},
+	{
+		slug: "basic",
+		description:
+			"Print-inspired visual language for books, magazines, and reports with editorial grids and expressive typography.",
+	},
+	{
+		slug: "bento",
+		description:
+			"Modular grid layout with card-like blocks, clear hierarchy, soft spacing, and subtle visual contrast for organized, scannable interfaces.",
 	},
 	{
 		slug: "bold",
@@ -33,6 +48,11 @@ const DESIGN_SKILL_SOURCES = [
 			"Cozy cafe-inspired interface with warm tones, soft typography, and clean layouts for a relaxed browsing experience.",
 	},
 	{
+		slug: "claude",
+		description:
+			"Research-journal aesthetic on warm ivory parchment: authoritative, editorial, almost achromatic, with near-black slate as the dominant ink.",
+	},
+	{
 		slug: "claymorphism",
 		description:
 			"Soft, rounded 3D-like shapes mimicking malleable clay with playful, puffy elements and colorful surfaces.",
@@ -41,6 +61,11 @@ const DESIGN_SKILL_SOURCES = [
 		slug: "clean",
 		description:
 			"Simplicity-focused design with ample whitespace, legible typography, and a limited color palette to reduce visual clutter.",
+	},
+	{
+		slug: "codex",
+		description:
+			"Radically minimal, edge-to-edge blank-canvas interface with almost no color, where typography carries the visual weight and black is the only fill.",
 	},
 	{
 		slug: "colorful",
@@ -88,16 +113,6 @@ const DESIGN_SKILL_SOURCES = [
 			"Magazine-inspired editorial layout with refined serif typography, structured grids, and elegant reading experiences.",
 	},
 	{
-		slug: "elegant",
-		description:
-			"Graceful, refined aesthetic with delicate typography, minimal palettes, and polished layouts that exude sophistication.",
-	},
-	{
-		slug: "energetic",
-		description:
-			"Dynamic, vibrant style with thick borders, geometric shapes, high-contrast colors, and expressive typography conveying motion and vitality.",
-	},
-	{
 		slug: "enterprise",
 		description:
 			"Clean, high-contrast enterprise design for data-driven workflows with intuitive drag-and-drop patterns and structured layouts.",
@@ -111,6 +126,11 @@ const DESIGN_SKILL_SOURCES = [
 		slug: "fantasy",
 		description:
 			"Game-inspired fantasy aesthetic with bold, premium visuals, rich color palettes, and immersive thematic elements.",
+	},
+	{
+		slug: "fiction",
+		description:
+			"Playful, cartoonesque style inspired by children's-book illustrations: warm cream backgrounds, bold display type, saturated color blocks and thick outlines.",
 	},
 	{
 		slug: "flat",
@@ -128,6 +148,11 @@ const DESIGN_SKILL_SOURCES = [
 			"Forward-looking design with tech-inspired typography, modern layouts, and a sleek, innovation-driven aesthetic.",
 	},
 	{
+		slug: "geometric",
+		description:
+			"Geometric, structured design with clean typography, neutral colors, precise shapes, and intuitive layouts that stay out of the way.",
+	},
+	{
 		slug: "glassmorphism",
 		description:
 			"Frosted glass effect with translucent layers, subtle blur, and luminous borders for depth and modern elegance.",
@@ -138,14 +163,34 @@ const DESIGN_SKILL_SOURCES = [
 			"Smooth color transitions and gradient-rich surfaces for modern, playful interfaces with visual depth.",
 	},
 	{
-		slug: "luxury",
+		slug: "immersive",
 		description:
-			"High-end dark aesthetic with bold headings, monochromatic palette, and premium feel for luxury brand experiences.",
+			"Exhibit-style interactive interface blending storytelling, animation, and gamified elements on one continuous brand-colored canvas.",
+	},
+	{
+		slug: "impeccable",
+		description:
+			"Modern, graphic editorial-poster aesthetic, warm and confident, alternating cream and burnt-orange sections with an amber brand color.",
+	},
+	{
+		slug: "levels",
+		description:
+			"Conversion-focused design that removes friction and guides users toward action through clarity, trust, and speed.",
+	},
+	{
+		slug: "lingo",
+		description:
+			"Playful, minimal design with bright colors, rounded shapes, tactile 3D borders, and friendly illustrations for approachable interfaces.",
 	},
 	{
 		slug: "material",
 		description:
 			"Google's Material Design with layered surfaces, dynamic theming, built-in motion, and responsive cross-platform patterns.",
+	},
+	{
+		slug: "matrix",
+		description:
+			"Cyber-slick, dark-only Matrix-inspired interface with minimalist fashion and high-tech digital elements.",
 	},
 	{
 		slug: "minimal",
@@ -193,6 +238,11 @@ const DESIGN_SKILL_SOURCES = [
 			"Spatial depth design with isometric views, vanishing points, and layered elements that guide attention through 3D-like realism.",
 	},
 	{
+		slug: "power",
+		description:
+			"High-end dark aesthetic with bold headings, monochromatic palette, and premium feel for luxury brand experiences.",
+	},
+	{
 		slug: "premium",
 		description:
 			"Apple-inspired premium aesthetic with precise spacing, modern typography, and a refined, polished visual language.",
@@ -203,9 +253,9 @@ const DESIGN_SKILL_SOURCES = [
 			"Polished, business-ready design with modern typography, structured layouts, and a trustworthy visual identity.",
 	},
 	{
-		slug: "publication",
+		slug: "pulse",
 		description:
-			"Print-inspired visual language for books, magazines, and reports with editorial grids and expressive typography.",
+			"Dynamic, vibrant style with thick borders, geometric shapes, high-contrast colors, and expressive typography conveying motion and vitality.",
 	},
 	{
 		slug: "refined",
@@ -218,14 +268,29 @@ const DESIGN_SKILL_SOURCES = [
 			"Throwback design with vintage-inspired typography, high-contrast retro palettes, and nostalgic visual elements.",
 	},
 	{
+		slug: "riso",
+		description:
+			"Playful two-color risograph print aesthetic on a single warm off-white paper surface running through every section.",
+	},
+	{
+		slug: "roku",
+		description:
+			"App dashboard with purple-themed aesthetic, top-bar navigation, card-based layouts, and developer-first workflows.",
+	},
+	{
+		slug: "sega",
+		description:
+			"Arcade-inspired interface for games: VT323 pixel type, hard 0px corners, and chunky pill buttons that press into solid offset blocks.",
+	},
+	{
 		slug: "shadcn",
 		description:
 			"Shadcn/ui-inspired design with minimal, clean components, monochrome palette, and utility-first patterns.",
 	},
 	{
-		slug: "simple",
+		slug: "sketch",
 		description:
-			"Straightforward, no-frills design with clean typography, neutral colors, and intuitive layouts that stay out of the way.",
+			"Friendly hand-drawn sketch interface on warm cream paper, with soft teal accents, handwritten display headings, and rounded pill controls.",
 	},
 	{
 		slug: "skeumorphism",
@@ -243,9 +308,24 @@ const DESIGN_SKILL_SOURCES = [
 			"Generous whitespace, consistent padding, and grid-based layouts for clean, readable, and breathing interfaces.",
 	},
 	{
+		slug: "square",
+		description:
+			"Graceful, refined aesthetic with delicate typography, minimal palettes, and polished layouts that exude sophistication.",
+	},
+	{
+		slug: "stitch",
+		description:
+			"Clean, high-contrast design for data-driven workflows with drag-and-drop patterns and structured layouts.",
+	},
+	{
 		slug: "storytelling",
 		description:
 			"Narrative-driven design using visuals, copy, and interaction to guide users through engaging, emotionally resonant journeys.",
+	},
+	{
+		slug: "terracotta",
+		description:
+			"Sun-baked, clay-toned editorial interface: warm cream surfaces, ink-brown display-serif headlines, and a single terracotta accent.",
 	},
 	{
 		slug: "tetris",
@@ -261,36 +341,6 @@ const DESIGN_SKILL_SOURCES = [
 		slug: "vintage",
 		description:
 			"1950s-1990s nostalgia with skeuomorphic touches, grainy textures, retro color palettes, and pixel-style typography.",
-	},
-	{
-		slug: "levels",
-		description:
-			"Conversion-focused design that removes friction and guides users toward action through clarity, trust, and speed.",
-	},
-	{
-		slug: "bento",
-		description:
-			"Modular grid layout with card-like blocks, clear hierarchy, soft spacing, and subtle visual contrast for organized, scannable interfaces.",
-	},
-	{
-		slug: "lingo",
-		description:
-			"Playful, minimal design with bright colors, rounded shapes, tactile 3D borders, and friendly illustrations for approachable interfaces.",
-	},
-	{
-		slug: "dashboard",
-		description:
-			"Dark-themed cloud-platform aesthetic with modular grids, glass-like panels, and strong data hierarchy for productivity dashboards.",
-	},
-	{
-		slug: "application",
-		description:
-			"App dashboard with purple-themed aesthetic, top-bar navigation, card-based layouts, and developer-first workflows.",
-	},
-	{
-		slug: "ant",
-		description:
-			"Structured, enterprise-focused design system emphasizing clarity, consistency, and efficiency for data-dense web applications.",
 	},
 ] as const;
 
