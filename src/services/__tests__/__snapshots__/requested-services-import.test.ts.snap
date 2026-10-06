@@ -180,6 +180,7 @@ exports[`requested service module coverage > imports requested service trees 1`]
   "../llm/utils/remote-model-categories.ts",
   "../llm/utils/runner-memory-hints.ts",
   "../llm/utils/token-usage.ts",
+  "../llm/utils/tool-images.ts",
   "../llm/utils/webgpu-runner-errors.ts",
 ]
 `;
