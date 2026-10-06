@@ -5,6 +5,7 @@ import React, {
 	useRef,
 } from "react";
 import { cn } from "@/lib/utils";
+import { pastedFiles } from "@/utils/clipboard-files";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -14,6 +15,8 @@ export interface MentionRichTextareaProps {
 	value: string;
 	onChange: (value: string, cursorOffset: number) => void;
 	onKeyDown?: React.KeyboardEventHandler<HTMLDivElement>;
+	/** Files or a picture pasted in, to attach; left out, only text pastes. */
+	onPasteFiles?: (files: File[]) => void;
 	placeholder?: string;
 	disabled?: boolean;
 	className?: string;
@@ -207,6 +210,7 @@ export const MentionRichTextarea = forwardRef<
 			value,
 			onChange,
 			onKeyDown,
+			onPasteFiles,
 			placeholder = "What would you like to know?",
 			disabled = false,
 			className,
@@ -281,12 +285,21 @@ export const MentionRichTextarea = forwardRef<
 		};
 
 		// Paste as plain text: rich HTML would add markup that getPlainText
-		// flattens, losing line breaks.
+		// flattens, losing line breaks. Files and pictures (an image's data URL
+		// or base64 too) go to the parent as attachments.
 		const handlePaste = (e: React.ClipboardEvent<HTMLDivElement>) => {
 			const el = divRef.current;
-			const pasted = e.clipboardData.getData("text/plain");
-			if (!el || !pasted) return;
+			if (!el) return;
+			// Never the browser's paste: a picture would land as an <img> that
+			// getPlainText drops.
 			e.preventDefault();
+			const files = onPasteFiles ? pastedFiles(e.clipboardData) : [];
+			if (files.length > 0) {
+				onPasteFiles?.(files);
+				return;
+			}
+			const pasted = e.clipboardData.getData("text/plain");
+			if (!pasted) return;
 
 			const inserted = pasted.replace(/\r\n?/g, "\n");
 			const current = getPlainText(el);

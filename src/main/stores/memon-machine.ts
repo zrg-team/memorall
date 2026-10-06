@@ -26,6 +26,7 @@ type InputOperation = Exclude<
 	| "piCode.attach"
 	| "piCode.read"
 	| "piCode.input"
+	| "piCode.pasteImage"
 	| "piCode.resize"
 >;
 

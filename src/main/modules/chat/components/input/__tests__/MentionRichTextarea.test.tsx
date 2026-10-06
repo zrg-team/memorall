@@ -73,4 +73,60 @@ describe("MentionRichTextarea paste", () => {
 		expect(onChange).toHaveBeenLastCalledWith("hello there\nfriend", 18);
 		expect(box.innerHTML).toBe("hello there<br>friend");
 	});
+
+	const pasteInto = (
+		box: HTMLElement,
+		content: { text?: string; files?: File[] },
+	) =>
+		fireEvent.paste(box, {
+			clipboardData: {
+				files: content.files ?? [],
+				items: [],
+				types: [],
+				getData: (type: string) =>
+					type === "text/plain" ? (content.text ?? "") : "",
+			},
+		});
+
+	it("hands a pasted picture to the parent instead of the text", () => {
+		const onChange = vi.fn();
+		const onPasteFiles = vi.fn();
+		const { getByRole } = render(
+			<MentionRichTextarea
+				value="look at"
+				onChange={onChange}
+				onPasteFiles={onPasteFiles}
+			/>,
+		);
+		const box = getByRole("textbox") as HTMLDivElement;
+		const shot = new File([new Uint8Array([1])], "image.png", {
+			type: "image/png",
+		});
+
+		pasteInto(box, { files: [shot] });
+		expect(onPasteFiles).toHaveBeenLastCalledWith([shot]);
+
+		// An image's data URL is a picture too, not text to type.
+		pasteInto(box, {
+			text: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
+		});
+		const [[image]] = onPasteFiles.mock.calls.at(-1) as [File[]];
+		expect(image.type).toBe("image/png");
+
+		expect(onChange).not.toHaveBeenCalled();
+		expect(box.textContent).toBe("look at");
+	});
+
+	it("puts nothing in the field for a paste without text", () => {
+		const { box, onChange } = setup("hello");
+		const shot = new File([new Uint8Array([1])], "image.png", {
+			type: "image/png",
+		});
+		const event = pasteInto(box, { files: [shot] });
+
+		// The browser's paste is prevented: no <img> lands in the field.
+		expect(event).toBe(false);
+		expect(onChange).not.toHaveBeenCalled();
+		expect(box.innerHTML).toBe("hello");
+	});
 });

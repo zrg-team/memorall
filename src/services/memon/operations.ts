@@ -1,3 +1,4 @@
+import { base64ToBytes } from "@/services/llm/utils/media-encoding";
 import type { WebOutlineActionRequest } from "@/services/web-browser/web-browser-protocol";
 import { MEMON_KIT_APPS } from "./apps";
 import { normalizeMemonFeatureConfig } from "./feature-config";
@@ -584,6 +585,14 @@ export const runMemonOperation = async (
 			// Typing into pi keeps an idle computer from being put away.
 			machine.lastActiveAt = Date.now();
 			await machine.piCode.input(job.payload.data);
+			return null;
+		}
+		case "piCode.pasteImage": {
+			const { key, data, mimeType } = job.payload;
+			const machine = findMemonMachine(key);
+			if (!machine) return null;
+			machine.lastActiveAt = Date.now();
+			await machine.piCode.pasteImage(base64ToBytes(data), mimeType);
 			return null;
 		}
 		case "piCode.resize": {

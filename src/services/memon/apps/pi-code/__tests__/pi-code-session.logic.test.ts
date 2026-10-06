@@ -577,6 +577,39 @@ describe("PiCodeSession", () => {
 			expect(fresh.data).toContain("\x1b[2J");
 		});
 	});
+
+	it("saves a pasted picture in pi's temp folder and pastes its path after the user's text", async () => {
+		const fs = new MemoryFs({ [`${HOME}/Bot.md`]: "# Bot" });
+		session = await PiCodeSession.start({
+			home: HOME,
+			sandboxSessionKey: "memon:test",
+			theme: "dark",
+			columns: 120,
+			rows: 30,
+			fs,
+			getSandbox: async () => createSandbox([]),
+			getLlm: async () => createLlm([]),
+			onQuit: () => {},
+			onChange: () => {},
+		});
+		const cursor = session.attach(120, 30);
+		session.input("what is in");
+		const picture = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
+		await session.pasteImage(picture, "image/png");
+
+		const saved = [...fs.files.keys()].filter((path) =>
+			path.startsWith(`${HOME}/.pi/agent/tmp/pi-clipboard-`),
+		);
+		expect(saved).toHaveLength(1);
+		expect(saved[0]).toMatch(/\.png$/);
+		expect(fs.files.get(saved[0])).toEqual(picture);
+		const shown = saved[0].replace(HOME, "~");
+		await vi.waitFor(async () =>
+			expect(plain((await session!.read(cursor, 0)).data)).toContain(
+				`what is in ${shown}`,
+			),
+		);
+	});
 });
 
 describe("pi's transcript, as the agent reads how a turn ended", () => {

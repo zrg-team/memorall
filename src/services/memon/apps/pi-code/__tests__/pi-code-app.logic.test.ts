@@ -30,6 +30,7 @@ const fakeRunner = (cwd: string, createdCwd = false) => {
 		attach: () => 0,
 		read: async (cursor) => ({ data: "", cursor, reset: false }),
 		input: vi.fn(),
+		pasteImage: vi.fn(async () => {}),
 		resize: () => {},
 		submit: async (text, queue) => {
 			submitted.push({ text, queue });
