@@ -192,6 +192,8 @@ export interface MemonFilesPort {
 		path: string,
 		kind: MemonViewerKind,
 	): Promise<{ text: string; size?: number }>;
+	/** An image file as a picture for the agent to look at, scaled down. */
+	picture?(path: string): Promise<MemonPageCapture>;
 }
 
 export interface MemonScheduleInput {
@@ -1077,17 +1079,40 @@ export class MemonMachine {
 	}
 
 	/** A picture of an element of the page in front (a ref of the latest screen). */
-	async captureRef(ref: string): Promise<MemonPageCapture> {
+	/** A picture of a ref of the page, or without one, of what the page shows. */
+	async captureRef(ref?: string): Promise<MemonPageCapture> {
 		this.requireApp("browser");
 		const tab = this.requireActiveTab();
 		const port = this.browserPort(tab);
 		if (!port.capture) {
 			throw new Error("Pictures of pages are not available on this computer.");
 		}
-		return port.capture(tab.sessionId, {
-			ref,
-			docToken: this.readToken(tab),
-		});
+		return port.capture(
+			tab.sessionId,
+			ref ? { ref, docToken: this.readToken(tab) } : {},
+		);
+	}
+
+	/** An image file in Files as a picture for the agent to look at. */
+	async pictureOfFile(path: string): Promise<MemonPageCapture> {
+		this.requireApp("files");
+		const target = this.resolvePath(path);
+		if (memonFileKind(target) !== "image") {
+			throw new Error(
+				`describe looks at images (png, jpeg, gif, webp); ${memonDisplayPath(target, this.home)} is not one. Open it to read it.`,
+			);
+		}
+		if (!this.ports.files.picture) {
+			throw new Error("Pictures of files are not available on this computer.");
+		}
+		return this.ports.files.picture(target);
+	}
+
+	/** The image the Viewer shows, when the Viewer is in front with one. */
+	viewerImage(): string | null {
+		return this.focusedTextWindow() === "viewer" && this.viewerKind === "image"
+			? this.viewerPath
+			: null;
 	}
 
 	/** The page whose refs the agent holds: the one it last read. */

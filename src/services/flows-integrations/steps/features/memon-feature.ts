@@ -125,7 +125,7 @@ const APP_SECTIONS: Record<MemonAppId, (config: MemonFeatureConfig) => string> =
 				'Organize: { ref: "f3", action: "move", text: "<folder>" } ("copy" copies); cut/copy without text, then { action: "paste" }. Nothing is overwritten: a clash gets a new name.',
 				`Download: memon_act { action: "download", text: "<url>", to: "<folder or file>" } saves a web file (image, font, PDF) in one step, into ~/Downloads by default${config.apps.browser ? '; { ref: "b7", action: "download" } saves an image from the page' : ""}. Do not write a script to download.`,
 				'Zip: memon_act { action: "zip", text: "<folder>" } (or a folder ref) zips it into ~/Downloads for the user, when they ask for a folder as a file. Do not zip with a script.',
-				'PDFs, spreadsheets, images and media open in the Viewer as text or a description; { action: "scroll" } pages a long file.',
+				'PDFs, spreadsheets and media open in the Viewer as text; { action: "scroll" } pages a long file; { action: "describe" } shows you an image.',
 				"New files and folders go in your home, ~ (a folder per piece of work, like ~/<topic>/), unless the user names another place.",
 			]),
 		terminal: () =>

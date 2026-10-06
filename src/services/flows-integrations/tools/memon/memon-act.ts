@@ -43,7 +43,7 @@ const schema = z
 				"zip",
 			])
 			.describe(
-				"click a ref (a button, link, file or switch), or a page point with x and y; hover a page ref or point (menus that open on hover); press a key (text: Enter, Escape, Tab, ArrowDown, Control+a) on a page ref or the focused element; type text into a field or the editor (e1); toggle a switch or checkbox (text on/off sets it); select an option of a choice (text is the option); describe a page ref to see it (a canvas, an image or any part of the page comes back as a picture; an image also gives its address); scroll the focused window (the page, a file in the Editor or Viewer, or a long list: Files, Tasks, Skills, the Terminal's output, pi's conversation), or with a page ref the area it scrolls in; back/forward the page; select_tab/close_tab by number. Files entries: move/copy into the folder in text, or cut/copy without text to the clipboard, then paste (into the open folder, or into a folder ref). download: save the file at the address in text (or a page image ref) into Files. zip: zip a folder (a Files ref, or its path in text) into Files and hand it to the user to download.",
+				"click a ref (a button, link, file or switch), or a page point with x and y; hover a page ref or point (menus that open on hover); press a key (text: Enter, Escape, Tab, ArrowDown, Control+a) on a page ref or the focused element; type text into a field or the editor (e1); toggle a switch or checkbox (text on/off sets it); select an option of a choice (text is the option); describe to see a picture: a page ref (a canvas, an image or any part of the page; an image also gives its address), an image in Files (f3), or with no ref the image the Viewer shows, else the page as it shows; scroll the focused window (the page, a file in the Editor or Viewer, or a long list: Files, Tasks, Skills, the Terminal's output, pi's conversation), or with a page ref the area it scrolls in; back/forward the page; select_tab/close_tab by number. Files entries: move/copy into the folder in text, or cut/copy without text to the clipboard, then paste (into the open folder, or into a folder ref). download: save the file at the address in text (or a page image ref) into Files. zip: zip a folder (a Files ref, or its path in text) into Files and hand it to the user to download.",
 			),
 		text: z
 			.string()
@@ -99,18 +99,53 @@ const refApp = (
 };
 
 /**
- * describe: a picture of a page ref (a canvas, an image, any part of the
- * page). A model that takes images looks at it; otherwise it is saved to
- * Files. An image whose picture cannot be taken still gives its address.
+ * describe on an image in Files (a Files ref, or the image the Viewer shows):
+ * the picture itself. A model that cannot take images is pointed at Studio's
+ * captions instead; the file is in Files already.
+ */
+const describeFile = async (
+	machine: MemonMachine,
+	path: string,
+): Promise<string | MemonToolOutput> => {
+	const shown = memonDisplayPath(path, machine.home);
+	if (!(await machine.modelAcceptsImages())) {
+		return `The chat's model cannot look at images. If Studio has an Image tools model, memon_studio { action: "run", tool: "image_tools", path: "${shown}" } can caption it.`;
+	}
+	const picture = await machine.pictureOfFile(path);
+	return {
+		summary: `The picture of ${shown} (${picture.width}×${picture.height}) is attached: look at it.`,
+		image: picture.dataUrl,
+	};
+};
+
+/**
+ * describe: a picture to look at. Of a page ref (a canvas, an image, any part
+ * of the page), of an image in Files (a Files ref), or with no ref, of the
+ * image the Viewer shows, else of the page as it shows. A model that takes
+ * images looks at it; otherwise a page picture is saved to Files. An image
+ * whose picture cannot be taken still gives its address.
  */
 const describe = async (
 	machine: MemonMachine,
-	ref: string,
+	ref: string | undefined,
 ): Promise<string | MemonToolOutput> => {
+	const app = refApp(ref);
+	if (app === "files" && ref) {
+		return describeFile(machine, machine.fileRefPath(ref));
+	}
+	if (ref && app !== "browser") {
+		throw new Error(
+			"describe takes a page ref (b9), an image in Files (f3), or no ref: the image the Viewer shows, else the page.",
+		);
+	}
+	const viewed = ref ? null : machine.viewerImage();
+	if (viewed) return describeFile(machine, viewed);
+	const what = ref ?? "the page";
 	let picture: MemonPageCapture;
 	try {
 		picture = await machine.captureRef(ref);
 	} catch (error) {
+		if (!ref) throw error;
 		const result = await machine
 			.browserAction({ ref, action: "describe" })
 			.catch(() => undefined);
@@ -123,12 +158,15 @@ const describe = async (
 	const source = picture.source ? ` Image source: ${picture.source}.` : "";
 	if (await machine.modelAcceptsImages()) {
 		return {
-			summary: `The picture of ${ref} (${size}) is attached: look at it.${source}`,
+			summary: `The picture of ${what} (${size}) is attached: look at it.${source}`,
 			image: picture.dataUrl,
 		};
 	}
-	const saved = await machine.savePicture(picture.dataUrl, `${ref}-picture`);
-	return `Saved a picture of ${ref} (${size}) to ${memonDisplayPath(saved, machine.home)}. The chat's model cannot look at images; if Studio has an Image tools model, memon_studio can caption it.${source}`;
+	const saved = await machine.savePicture(
+		picture.dataUrl,
+		`${ref ?? "page"}-picture`,
+	);
+	return `Saved a picture of ${what} (${size}) to ${memonDisplayPath(saved, machine.home)}. The chat's model cannot look at images; if Studio has an Image tools model, memon_studio can caption it.${source}`;
 };
 
 const act = async (
@@ -199,6 +237,8 @@ const act = async (
 			});
 			return (result.ok && result.detail) || `Scrolled ${direction}.`;
 		}
+		case "describe":
+			return describe(machine, input.ref);
 		case "back":
 		case "forward":
 			await machine.browserHistory(input.action);
@@ -366,8 +406,6 @@ const act = async (
 		case "focus":
 			await machine.browserAction({ ref: input.ref, action: "focus" });
 			return `Focused ${input.ref}.`;
-		case "describe":
-			return describe(machine, input.ref);
 		default:
 			throw new Error(`Unsupported action ${input.action}.`);
 	}
@@ -384,11 +422,13 @@ export const createMemonActTool: ToolFactory<Input> = (): Tool<Input> => ({
 			context,
 			input.action === "download"
 				? "Downloading a file"
-				: input.ref
-					? `${input.action === "type" ? "Typing into" : input.action === "describe" ? "Looking at" : "Clicking"} ${input.ref}`
-					: input.x !== undefined
-						? `${input.action} at (${input.x}, ${input.y})`
-						: `${input.action}`,
+				: input.action === "describe" && !input.ref
+					? "Looking at the screen"
+					: input.ref
+						? `${input.action === "type" ? "Typing into" : input.action === "describe" ? "Looking at" : "Clicking"} ${input.ref}`
+						: input.x !== undefined
+							? `${input.action} at (${input.x}, ${input.y})`
+							: `${input.action}`,
 			(machine) => {
 				const app =
 					input.action === "download"

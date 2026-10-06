@@ -13,7 +13,16 @@ const PICTURE = "data:image/png;base64,AAAA";
 const fakeMachine = (options: {
 	looks: boolean;
 	capture?: () => Promise<unknown>;
+	/** The image the Viewer shows in front, if any. */
+	viewer?: string;
 }) => ({
+	fileRefPath: vi.fn(() => "/agents/Bot/shots/hero.png"),
+	pictureOfFile: vi.fn(async () => ({
+		dataUrl: PICTURE,
+		width: 640,
+		height: 360,
+	})),
+	viewerImage: () => options.viewer ?? null,
 	home: "/agents/Bot",
 	beginRun: vi.fn(),
 	waitForAgentTurn: async () => "ready",
@@ -66,6 +75,82 @@ describe("memon_act describe", () => {
 			],
 		});
 		expect(machine.savePicture).not.toHaveBeenCalled();
+	});
+
+	it("hands over an image in Files, by its ref or as the Viewer shows it", async () => {
+		const machine = fakeMachine({ looks: true });
+		vi.mocked(getMemonMachine).mockResolvedValue(machine as never);
+		const result = await createMemonActTool().execute(
+			{ ref: "f3", action: "describe" },
+			undefined,
+		);
+		expect(machine.fileRefPath).toHaveBeenCalledWith("f3");
+		expect(machine.pictureOfFile).toHaveBeenCalledWith(
+			"/agents/Bot/shots/hero.png",
+		);
+		expect(result).toMatchObject({
+			content: [
+				{
+					type: "text",
+					text: "The picture of ~/shots/hero.png (640×360) is attached: look at it.\n\nscreen",
+				},
+				{ type: "image_url", image_url: { url: PICTURE, detail: "auto" } },
+			],
+		});
+
+		const viewing = fakeMachine({
+			looks: true,
+			viewer: "/agents/Bot/chart.webp",
+		});
+		vi.mocked(getMemonMachine).mockResolvedValue(viewing as never);
+		await createMemonActTool().execute({ action: "describe" }, undefined);
+		expect(viewing.pictureOfFile).toHaveBeenCalledWith(
+			"/agents/Bot/chart.webp",
+		);
+		expect(viewing.captureRef).not.toHaveBeenCalled();
+	});
+
+	it("pictures the whole page without a ref, and points a model that cannot look at captions", async () => {
+		const machine = fakeMachine({ looks: true });
+		vi.mocked(getMemonMachine).mockResolvedValue(machine as never);
+		const page = await createMemonActTool().execute(
+			{ action: "describe" },
+			undefined,
+		);
+		expect(machine.captureRef).toHaveBeenCalledWith(undefined);
+		expect(page).toMatchObject({
+			content: [
+				{
+					type: "text",
+					text: expect.stringContaining(
+						"The picture of the page (880×594) is attached",
+					),
+				},
+				{ type: "image_url" },
+			],
+		});
+
+		const blind = fakeMachine({ looks: false });
+		vi.mocked(getMemonMachine).mockResolvedValue(blind as never);
+		const file = await createMemonActTool().execute(
+			{ ref: "f3", action: "describe" },
+			undefined,
+		);
+		expect(blind.pictureOfFile).not.toHaveBeenCalled();
+		expect(file).toMatchObject({
+			content: expect.stringContaining(
+				'memon_studio { action: "run", tool: "image_tools", path: "~/shots/hero.png" } can caption it.',
+			),
+		});
+
+		await expect(
+			createMemonActTool().execute(
+				{ ref: "e1", action: "describe" },
+				undefined,
+			),
+		).resolves.toMatchObject({
+			content: expect.stringContaining("describe takes a page ref (b9)"),
+		});
 	});
 
 	it("saves the picture to Files for a model that cannot look", async () => {
