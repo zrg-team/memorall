@@ -70,6 +70,7 @@
 		}
 	},
 	"header": {
+		"threadElsewhere": "The chat is open beside MemonOS in full screen.",
 		"openChats": "Open chat history",
 		"conversationActions": "Conversation actions",
 		"newContext": "Start new context",

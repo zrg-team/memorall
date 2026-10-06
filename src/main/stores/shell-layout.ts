@@ -17,12 +17,19 @@ interface ShellLayoutState {
 	 */
 	rightPanelMaximized: boolean;
 	mobileChatListOpen: boolean;
+	/**
+	 * Where the chat's thread (its messages and input) shows instead of its
+	 * own column, while a page that covers the column opens it beside itself:
+	 * MemonOS in full screen. Null: in the chat column.
+	 */
+	chatThreadSlot: HTMLElement | null;
 	setChatRailCollapsed: (collapsed: boolean) => void;
 	setChatShellCollapsed: (collapsed: boolean) => void;
 	setChatShellWidth: (width: number) => void;
 	setRightPanelCollapsed: (collapsed: boolean) => void;
 	setRightPanelMaximized: (maximized: boolean) => void;
 	setMobileChatListOpen: (open: boolean) => void;
+	setChatThreadSlot: (slot: HTMLElement | null) => void;
 }
 
 export const useShellLayoutStore = create<ShellLayoutState>((set) => ({
@@ -32,10 +39,12 @@ export const useShellLayoutStore = create<ShellLayoutState>((set) => ({
 	rightPanelCollapsed: true,
 	rightPanelMaximized: false,
 	mobileChatListOpen: false,
+	chatThreadSlot: null,
 	setChatRailCollapsed: (chatRailCollapsed) => set({ chatRailCollapsed }),
 	setChatShellCollapsed: (chatShellCollapsed) => set({ chatShellCollapsed }),
 	setChatShellWidth: (chatShellWidth) => set({ chatShellWidth }),
 	setRightPanelCollapsed: (rightPanelCollapsed) => set({ rightPanelCollapsed }),
 	setRightPanelMaximized: (rightPanelMaximized) => set({ rightPanelMaximized }),
 	setMobileChatListOpen: (mobileChatListOpen) => set({ mobileChatListOpen }),
+	setChatThreadSlot: (chatThreadSlot) => set({ chatThreadSlot }),
 }));
