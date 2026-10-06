@@ -106,6 +106,7 @@ const PI_TRANSCRIPT_CHARS = 3_600;
 const piCodeLines = (
 	snapshot: MemonMachineSnapshot,
 	windowId: string,
+	scroll: number,
 ): string[] => {
 	const pi = snapshot.piCode;
 	const lines = [piCodeBrief(snapshot, windowId, "")];
@@ -124,22 +125,24 @@ const piCodeLines = (
 		}
 		return lines;
 	}
-	const entries = pi.transcript ?? [];
-	if (!entries.length) {
+	const body = piCodeBody(snapshot);
+	if (!body?.lines.length) {
 		lines.push("(no conversation yet: hand pi work with memon_code)");
 	} else {
-		const shown: string[] = [];
-		let room = PI_TRANSCRIPT_CHARS;
-		for (let index = entries.length - 1; index >= 0; index -= 1) {
-			const line = piCodeEntryLine(entries[index]);
-			if (shown.length && line.length > room) break;
-			shown.unshift(line);
-			room -= line.length + 1;
-		}
-		const left = (pi.earlier ?? 0) + entries.length - shown.length;
+		const { start, end } = pageOf(body, scroll);
+		const left = (pi.earlier ?? 0) + start;
+		const scrollUp = start
+			? ` — scroll up to see ${start === left ? "them" : `the last ${start}`}`
+			: "";
+		const below = body.lines.length - end;
 		lines.push(
-			`conversation${left ? ` (${left} earlier entr${left === 1 ? "y" : "ies"} left out)` : ""}:`,
-			...shown,
+			`conversation${left ? ` (${left} earlier entr${left === 1 ? "y" : "ies"} left out${scrollUp})` : ""}:`,
+			...body.lines.slice(start, end),
+			...(below
+				? [
+						`(… ${below} newer entr${below === 1 ? "y" : "ies"} below — scroll down to see them)`,
+					]
+				: []),
 		);
 	}
 	for (const queued of pi.queued ?? []) {
@@ -199,6 +202,88 @@ const textPage = (
 		lines,
 		footer: `  (lines ${start + 1}–${end} of ${all.length}; scroll up/down to page)`,
 	};
+};
+
+/** Room a window's list gets on the screen; longer ones scroll. */
+const WINDOW_PAGE_CHARS = 4_500;
+
+/** The part of a window the agent scrolls: a list, or output read from the newest. */
+interface ScrollBody {
+	lines: string[];
+	/** Room for one page, in characters. */
+	room: number;
+	/** Newest at the bottom: the scroll counts lines back from the end. */
+	tail: boolean;
+	/** At the end and not scrolled, only this many lines show (the Terminal's tail). */
+	liveLines?: number;
+}
+
+/** Where the page that starts at `start` ends; at least one line. */
+const pageEnd = (lines: string[], start: number, room: number): number => {
+	let end = start;
+	let used = 0;
+	while (
+		end < lines.length &&
+		(end === start || used + lines[end].length <= room)
+	) {
+		used += lines[end].length + 1;
+		end += 1;
+	}
+	return end;
+};
+
+/** Where the page that ends at `end` starts; at least one line. */
+const pageStart = (lines: string[], end: number, room: number): number => {
+	let start = end;
+	let used = 0;
+	while (
+		start > 0 &&
+		(start === end || used + lines[start - 1].length <= room)
+	) {
+		used += lines[start - 1].length + 1;
+		start -= 1;
+	}
+	return start;
+};
+
+/** The lines of the page a window is scrolled to. */
+const pageOf = (
+	body: ScrollBody,
+	scroll: number,
+): { start: number; end: number } => {
+	const { lines, room } = body;
+	if (body.tail) {
+		const back = Math.min(Math.max(0, scroll), Math.max(0, lines.length - 1));
+		const end = lines.length - back;
+		if (!back && body.liveLines !== undefined) {
+			return { start: Math.max(0, end - body.liveLines), end };
+		}
+		return { start: pageStart(lines, end, room), end };
+	}
+	const start = Math.min(
+		Math.max(0, scroll),
+		pageStart(lines, lines.length, room),
+	);
+	return { start, end: pageEnd(lines, start, room) };
+};
+
+/** A window's list as it scrolls: one page, with what is above and below it. */
+const scrolledLines = (body: ScrollBody, scroll: number): string[] => {
+	const { start, end } = pageOf(body, scroll);
+	const below = body.lines.length - end;
+	return [
+		...(start > 0
+			? [
+					`(… ${start} ${body.tail ? "earlier " : ""}lines above — scroll up to see them)`,
+				]
+			: []),
+		...body.lines.slice(start, end),
+		...(below > 0
+			? [
+					`(… ${below} ${body.tail ? "newer" : "more"} lines below — scroll down to see them)`,
+				]
+			: []),
+	];
 };
 
 export type MemonFileRefTarget =
@@ -343,10 +428,18 @@ const terminalInputHint = (terminal: MemonTerminalState): string =>
 				? "[t1] input (use memon_run for commands)"
 				: '[t1] input (use memon_run for commands; { terminal: "new", command } opens another tab)';
 
+const terminalBody = (terminal: MemonTerminalState): ScrollBody => ({
+	lines: terminal.lines.map(terminalLine),
+	room: WINDOW_PAGE_CHARS,
+	tail: true,
+	liveLines: TERMINAL_TAIL_LINES,
+});
+
 const terminalLines = (
 	windowId: string,
 	terminal: MemonTerminalState,
 	home: string,
+	scroll: number,
 ): string[] => {
 	const running = runningState(terminal);
 	const state = terminalRunsInFront(terminal)
@@ -360,7 +453,7 @@ const terminalLines = (
 		`── ${windowId} Terminal${tab} · cwd ${memonDisplayPath(terminal.cwd, home)} · ${state}`,
 		...terminalTabsLines(terminal, home),
 		...runningTabLines(terminal),
-		...terminal.lines.slice(-TERMINAL_TAIL_LINES).map(terminalLine),
+		...scrolledLines(terminalBody(terminal), scroll),
 		...approvalLines(terminal),
 		...serverLines(terminal),
 		terminalInputHint(terminal),
@@ -433,12 +526,13 @@ const fullLines = (
 	snapshot: MemonMachineSnapshot,
 	window: MemonWindowState,
 ): string[] => {
+	const scroll = window.scroll ?? 0;
 	// Apps built with the kit: the window's own controls, with their refs.
 	if (isKitApp(window.app)) {
-		const app = MEMON_KIT_APPS[window.app];
+		const body = scrollBodyOf(snapshot, window);
 		return [
 			briefLine(snapshot, { ...window, minimized: false }),
-			...renderViewText(app.view(snapshot), app.refPrefix),
+			...(body ? scrolledLines(body, scroll) : []),
 		];
 	}
 	switch (window.app) {
@@ -493,17 +587,16 @@ const fullLines = (
 				`── ${window.id} Files · ${memonDisplayPath(snapshot.files.cwd, snapshot.home)}`,
 			];
 			if (snapshot.files.error) lines.push(`error: ${snapshot.files.error}`);
-			for (const { ref, target } of listFileRefs(snapshot.files)) {
-				if (target.kind === "up") lines.push(`[${ref}] .. (up)`);
-				else if (target.kind === "new-file")
-					lines.push(`[${ref}] button "New file"`);
-				else if (target.entry.type === "dir")
-					lines.push(`[${ref}] ${target.entry.name}/`);
-				else
-					lines.push(
-						`[${ref}] ${target.entry.name}${formatSize(target.entry.size)}`,
-					);
-			}
+			lines.push(
+				...scrolledLines(
+					{
+						lines: fileLines(snapshot.files),
+						room: WINDOW_PAGE_CHARS,
+						tail: false,
+					},
+					scroll,
+				),
+			);
 			const clipboard = snapshot.files.clipboard;
 			if (clipboard) {
 				const names = clipboard.paths.map(
@@ -563,13 +656,112 @@ const fullLines = (
 			return lines;
 		}
 		case "terminal":
-			return terminalLines(window.id, snapshot.terminal, snapshot.home);
+			return terminalLines(window.id, snapshot.terminal, snapshot.home, scroll);
 		case "pi":
-			return piCodeLines(snapshot, window.id);
+			return piCodeLines(snapshot, window.id, scroll);
 		default:
 			return [];
 	}
 };
+
+/** The Files list: a line for each ref. */
+const fileLines = (files: MemonFilesState): string[] =>
+	listFileRefs(files).map(({ ref, target }) =>
+		target.kind === "up"
+			? `[${ref}] .. (up)`
+			: target.kind === "new-file"
+				? `[${ref}] button "New file"`
+				: target.entry.type === "dir"
+					? `[${ref}] ${target.entry.name}/`
+					: `[${ref}] ${target.entry.name}${formatSize(target.entry.size)}`,
+	);
+
+/** pi's conversation, an entry a line, while pi runs. */
+const piCodeBody = (snapshot: MemonMachineSnapshot): ScrollBody | null =>
+	snapshot.piCode?.status === "running"
+		? {
+				lines: (snapshot.piCode.transcript ?? []).map(piCodeEntryLine),
+				room: PI_TRANSCRIPT_CHARS,
+				tail: true,
+			}
+		: null;
+
+/** What scrolls in a window that pages by itself here (not Browser, Editor, Viewer or Visualize). */
+const scrollBodyOf = (
+	snapshot: MemonMachineSnapshot,
+	window: MemonWindowState,
+): ScrollBody | null => {
+	if (isKitApp(window.app)) {
+		const app = MEMON_KIT_APPS[window.app];
+		return {
+			lines: renderViewText(app.view(snapshot), app.refPrefix),
+			room: WINDOW_PAGE_CHARS,
+			tail: false,
+		};
+	}
+	switch (window.app) {
+		case "files":
+			return {
+				lines: fileLines(snapshot.files),
+				room: WINDOW_PAGE_CHARS,
+				tail: false,
+			};
+		case "terminal":
+			return terminalBody(snapshot.terminal);
+		case "pi":
+			return piCodeBody(snapshot);
+		default:
+			return null;
+	}
+};
+
+export type MemonWindowScrollDirection = "up" | "down" | "top" | "bottom";
+
+/** A page that way from where the window's list is, as its `scroll`. */
+const scrollToward = (
+	body: ScrollBody,
+	from: { start: number; end: number },
+	direction: MemonWindowScrollDirection,
+): number => {
+	const { lines, room } = body;
+	const { start, end } = from;
+	if (body.tail) {
+		const back = (to: number) => lines.length - to;
+		if (direction === "bottom") return 0;
+		if (direction === "top") return back(pageEnd(lines, 0, room));
+		if (direction === "up") return back(start > 0 ? start : end);
+		return back(end < lines.length ? pageEnd(lines, end, room) : end);
+	}
+	const last = pageStart(lines, lines.length, room);
+	if (direction === "top") return 0;
+	if (direction === "bottom") return last;
+	if (direction === "up") return pageStart(lines, start, room);
+	return Math.min(end, last);
+};
+
+/**
+ * Where a window's list goes on a scroll, as `scroll` for the window, and
+ * whether what shows changes. Null when the window has no list to scroll.
+ */
+export const nextWindowScroll = (
+	snapshot: MemonMachineSnapshot,
+	window: MemonWindowState,
+	direction: MemonWindowScrollDirection,
+): { scroll: number; moved: boolean } | null => {
+	const body = scrollBodyOf(snapshot, window);
+	if (!body) return null;
+	const before = pageOf(body, window.scroll ?? 0);
+	const scroll = scrollToward(body, before, direction);
+	const after = pageOf(body, scroll);
+	return {
+		scroll,
+		moved: after.start !== before.start || after.end !== before.end,
+	};
+};
+
+/** A window's name on the screen. */
+export const memonWindowLabel = (app: MemonWindowState["app"]): string =>
+	APP_LABEL[app];
 
 export const serializeScreen = (
 	snapshot: MemonMachineSnapshot,

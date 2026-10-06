@@ -7,6 +7,7 @@ import {
 import type { SandboxHandleSwRequestResult } from "@/services/sandbox-container";
 import {
 	captureElement,
+	captureViewport,
 	type MemonCaptureRequest,
 	type MemonPageCapture,
 } from "./page-capture";
@@ -343,6 +344,8 @@ export const frameCapture = async (
 	request: MemonCaptureRequest,
 ): Promise<MemonPageCapture> => {
 	const doc = frameDocument(iframe);
+	// No ref: the page as its viewport shows it.
+	if (!request.ref) return captureViewport(doc);
 	// Brings it into view and reads an image's address.
 	const described = actOnRef(doc, { ...request, action: "describe" });
 	const source = (described.ok && described.detail) || undefined;

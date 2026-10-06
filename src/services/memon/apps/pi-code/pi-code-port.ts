@@ -29,6 +29,7 @@ export const createPiCodePort = (deps: {
 			source: PI_CODE_USAGE_SOURCE,
 			tool: MEMON_CODE_TOOL,
 			agentId: options.agentId,
+			conversationId: options.chargeTo?.() ?? null,
 			sessionId: session?.sessionId ?? options.sandboxSessionKey,
 			title: `pi code · ${memonDisplayPath(session?.cwd ?? options.cwd ?? options.home, options.home)}`,
 		}));

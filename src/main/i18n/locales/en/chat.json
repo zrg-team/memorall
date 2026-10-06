@@ -70,6 +70,7 @@
 		}
 	},
 	"header": {
+		"threadElsewhere": "The chat is open beside MemonOS in full screen.",
 		"openChats": "Open chat history",
 		"conversationActions": "Conversation actions",
 		"newContext": "Start new context",
@@ -600,7 +601,8 @@
 			"description": "The generated OpenUI markup is invalid. The original response is shown below."
 		},
 		"partial": "Some parts could not be shown ({{count}})",
-		"partFailed": "{{name}} could not be shown."
+		"partFailed": "{{name}} could not be shown.",
+		"drawingDiagram": "Drawing the diagram…"
 	},
 	"webChallenge": {
 		"kind": {
@@ -650,7 +652,9 @@
 		"noPrice": "This chat so far (the provider reported no price)",
 		"tokens": "Input {{input}} tokens ({{cached}}% from cache) · output {{output}}",
 		"requests": "{{requests}} model requests over {{replies}} replies",
-		"tokensOnly": "{{tokens}} tokens"
+		"tokensOnly": "{{tokens}} tokens",
+		"tools": "Of that, tools such as pi code: {{cost}} over {{requests}} requests",
+		"toolsNoPrice": "Of that, tools such as pi code made {{requests}} requests"
 	},
 	"queue": {
 		"label": "Messages waiting to be sent",

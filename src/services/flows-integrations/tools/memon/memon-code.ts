@@ -13,6 +13,7 @@ import {
 	type PiCodeKey,
 	piCodeActionLabel,
 } from "@/services/memon/apps/pi-code/pi-code-app";
+import { CONVERSATION_RUNTIME_KEY } from "@/services/chat/runtime-keys";
 import { MEMON_CODE_TOOL } from "@/services/memon/constants";
 import { runMemonTool } from "./memon-tool-utils";
 
@@ -67,12 +68,20 @@ export const createMemonCodeTool: ToolFactory<Input> = (): Tool<Input> => ({
 	schema,
 	execute: (input, context) => {
 		const inbox = getFlowRunInboxFromVars(context?.runtime);
+		// pi's requests on this chat's work count in its cost.
+		const conversationId = context?.runtime?.get(CONVERSATION_RUNTIME_KEY);
 		return runMemonTool(
 			MEMON_CODE_TOOL,
 			context,
 			piCodeActionLabel(input),
 			(machine) => ({ windowId: machine.findWindow("pi")?.id, ref: "p1" }),
-			(machine) => machine.piCode.act(input, { inbox: () => inbox?.size ?? 0 }),
+			(machine) =>
+				machine.piCode.act(input, {
+					inbox: () => inbox?.size ?? 0,
+					...(typeof conversationId === "string" && conversationId
+						? { conversationId }
+						: {}),
+				}),
 		);
 	},
 });

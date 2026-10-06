@@ -7,6 +7,7 @@ import {
 	HardDrive,
 	House,
 	Loader2,
+	Menu,
 	Plus,
 	Scissors,
 	Trash2,
@@ -27,6 +28,14 @@ import { pickFiles, uploadToComputer } from "../upload";
 import { useDeleteConfirm } from "../use-delete-confirm";
 import { downloadFolderAsZip } from "@/main/modules/files/utils/save-download";
 import { cn } from "@/lib/utils";
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuLabel,
+	DropdownMenuSeparator,
+	DropdownMenuTrigger,
+} from "@/main/components/ui/dropdown-menu";
 import { logError } from "@/utils/logger";
 
 const formatSize = (size?: number): string =>
@@ -39,8 +48,9 @@ const formatSize = (size?: number): string =>
 /** Entries dragged inside Files, as JSON paths. */
 const DRAG_TYPE = "application/x-memon-files";
 
+/** Header buttons are icons of one size: the header never changes height. */
 const TOOL_BUTTON =
-	"inline-flex h-6 shrink-0 items-center gap-1 rounded-md border border-input bg-background px-2 text-[11px] font-medium hover:bg-accent disabled:opacity-60";
+	"inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-input bg-background text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-60";
 
 export const FilesWindow: React.FC<{
 	machineKey: string;
@@ -210,7 +220,7 @@ export const FilesWindow: React.FC<{
 
 	return (
 		<div className="flex min-h-0 flex-1 flex-col">
-			<div className="flex shrink-0 flex-wrap items-center gap-1.5 border-b border-border px-2 py-1.5">
+			<div className="flex h-10 shrink-0 items-center gap-1.5 border-b border-border px-2">
 				<nav className="flex min-w-0 flex-auto items-center gap-0.5 overflow-hidden whitespace-nowrap font-mono text-[11px]">
 					{inHome
 						? crumb(<House size={13} />, home, t("memonComputer.files.home"))
@@ -229,100 +239,104 @@ export const FilesWindow: React.FC<{
 						);
 					})}
 				</nav>
-				{selected.length ? (
-					<>
-						<span className="shrink-0 text-[11px] text-muted-foreground">
-							{t("memonComputer.files.selected", { count: selected.length })}
-						</span>
-						<button
-							type="button"
-							className={TOOL_BUTTON}
-							onClick={() => toClipboard("cut")}
-						>
-							<Scissors size={12} />
-							{t("memonComputer.files.cut")}
-						</button>
-						<button
-							type="button"
-							className={TOOL_BUTTON}
-							onClick={() => toClipboard("copy")}
-						>
-							<Copy size={12} />
-							{t("memonComputer.files.copy")}
-						</button>
-						<button
-							type="button"
-							className={TOOL_BUTTON}
-							onClick={() => confirmDelete(selected)}
-						>
-							<Trash2 size={12} />
-							{t("buttons.delete")}
-						</button>
-						<button
-							type="button"
-							aria-label={t("memonComputer.files.clear")}
-							title={t("memonComputer.files.clear")}
-							className="rounded p-1 text-muted-foreground hover:bg-muted"
-							onClick={() => setSelected([])}
-						>
-							<X size={12} />
-						</button>
-					</>
-				) : null}
-				{clipboard ? (
-					<button
-						type="button"
-						className={TOOL_BUTTON}
-						title={clipboard.paths.join("\n")}
-						onClick={() => paste()}
-					>
-						<ClipboardPaste size={12} />
-						{t(
-							clipboard.mode === "cut"
-								? "memonComputer.files.pasteCut"
-								: "memonComputer.files.pasteCopy",
-							{ count: clipboard.paths.length },
-						)}
-					</button>
-				) : null}
-				<button
-					type="button"
-					disabled={zipping}
-					onClick={() => void zipFolder()}
-					className={TOOL_BUTTON}
-					title={t("memonComputer.files.zipHint")}
-				>
-					{zipping ? (
-						<Loader2 size={12} className="animate-spin" />
-					) : (
-						<FileArchive size={12} />
-					)}
-					{t("memonComputer.files.zip")}
-				</button>
 				<button
 					type="button"
 					disabled={uploading}
+					aria-label={t("memonComputer.upload")}
+					title={t("memonComputer.upload")}
 					onClick={() => void pickFiles().then((picked) => upload(picked))}
 					className={TOOL_BUTTON}
 				>
 					{uploading ? (
-						<Loader2 size={12} className="animate-spin" />
+						<Loader2 size={13} className="animate-spin" />
 					) : (
-						<Upload size={12} />
+						<Upload size={13} />
 					)}
-					{t("memonComputer.upload")}
 				</button>
 				{newFile ? (
 					<button
 						type="button"
 						data-memon-ref={newFile.ref}
+						aria-label={t("memonComputer.newFile")}
+						title={t("memonComputer.newFile")}
 						onClick={() => open(newFile.ref)}
 						className={TOOL_BUTTON}
 					>
-						<Plus size={12} />
-						{t("memonComputer.newFile")}
+						<Plus size={13} />
 					</button>
 				) : null}
+				<DropdownMenu>
+					<DropdownMenuTrigger asChild>
+						<button
+							type="button"
+							aria-label={t("memonComputer.files.more")}
+							title={t("memonComputer.files.more")}
+							className={cn(TOOL_BUTTON, "relative")}
+						>
+							{zipping ? (
+								<Loader2 size={13} className="animate-spin" />
+							) : (
+								<Menu size={13} />
+							)}
+							{/* Over the button, so a selection never moves the header. */}
+							{selected.length || clipboard ? (
+								<span className="absolute -right-1 -top-1 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-cyan-600 px-0.5 text-[9px] font-semibold leading-none text-white">
+									{selected.length || clipboard?.paths.length}
+								</span>
+							) : null}
+						</button>
+					</DropdownMenuTrigger>
+					<DropdownMenuContent align="end" className="min-w-52">
+						{selected.length ? (
+							<>
+								<DropdownMenuLabel className="text-[11px] font-normal text-muted-foreground">
+									{t("memonComputer.files.selected", {
+										count: selected.length,
+									})}
+								</DropdownMenuLabel>
+								<DropdownMenuItem onSelect={() => toClipboard("cut")}>
+									<Scissors size={13} />
+									{t("memonComputer.files.cut")}
+								</DropdownMenuItem>
+								<DropdownMenuItem onSelect={() => toClipboard("copy")}>
+									<Copy size={13} />
+									{t("memonComputer.files.copy")}
+								</DropdownMenuItem>
+								<DropdownMenuItem onSelect={() => confirmDelete(selected)}>
+									<Trash2 size={13} />
+									{t("buttons.delete")}
+								</DropdownMenuItem>
+								<DropdownMenuItem onSelect={() => setSelected([])}>
+									<X size={13} />
+									{t("memonComputer.files.clear")}
+								</DropdownMenuItem>
+								<DropdownMenuSeparator />
+							</>
+						) : null}
+						{clipboard ? (
+							<DropdownMenuItem
+								title={clipboard.paths.join("\n")}
+								onSelect={() => paste()}
+							>
+								<ClipboardPaste size={13} />
+								{t(
+									clipboard.mode === "cut"
+										? "memonComputer.files.pasteCut"
+										: "memonComputer.files.pasteCopy",
+									{ count: clipboard.paths.length },
+								)}
+							</DropdownMenuItem>
+						) : null}
+						<DropdownMenuItem
+							disabled={zipping}
+							title={t("memonComputer.files.zipHint")}
+							onSelect={() => void zipFolder()}
+						>
+							<FileArchive size={13} />
+							{t("memonComputer.files.zip")}
+						</DropdownMenuItem>
+					</DropdownMenuContent>
+				</DropdownMenu>
 			</div>
 			{/* biome-ignore lint/a11y/noStaticElementInteractions: the list takes dropped files, keys and right-clicks; every action also has a button. */}
 			{/* biome-ignore lint/a11y/useKeyWithClickEvents: a click on empty space only clears the selection; Escape does too. */}

@@ -13,9 +13,12 @@ export interface MemonPageCapture {
 	source?: string;
 }
 
-/** Which element to picture: a ref of the outline the agent read. */
+/**
+ * Which element to picture: a ref of the outline the agent read. Without
+ * one, the page as its viewport shows it.
+ */
 export interface MemonCaptureRequest {
-	ref: string;
+	ref?: string;
 	docToken?: string;
 }
 
@@ -161,6 +164,54 @@ const readCanvas = (canvas: HTMLCanvasElement): Promise<Picture> => {
 				}
 			});
 	});
+};
+
+/** An image file's bytes as a picture, scaled down as page pictures are. */
+export const pictureOfImage = async (
+	bytes: Uint8Array,
+	mimeType: string,
+): Promise<MemonPageCapture> => {
+	let bitmap: ImageBitmap;
+	try {
+		bitmap = await createImageBitmap(
+			new Blob([bytes as BlobPart], { type: mimeType }),
+		);
+	} catch {
+		throw new Error("The image could not be decoded.");
+	}
+	try {
+		return await fitPicture(bitmap, {
+			width: bitmap.width,
+			height: bitmap.height,
+		});
+	} finally {
+		bitmap.close();
+	}
+};
+
+/** The part of a page this window can reach that its viewport shows. */
+export const captureViewport = async (
+	doc: Document,
+): Promise<MemonPageCapture> => {
+	const view = doc.defaultView;
+	const { default: html2canvas } = await import("html2canvas");
+	const drawn = await html2canvas(doc.documentElement, {
+		backgroundColor: null,
+		logging: false,
+		useCORS: true,
+		scale: 1,
+		...(view
+			? {
+					x: view.scrollX,
+					y: view.scrollY,
+					width: view.innerWidth,
+					height: view.innerHeight,
+					windowWidth: view.innerWidth,
+					windowHeight: view.innerHeight,
+				}
+			: {}),
+	});
+	return fitPicture(drawn, { width: drawn.width, height: drawn.height });
 };
 
 /** A picture of an element of a page this window can reach (same origin). */

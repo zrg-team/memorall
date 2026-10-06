@@ -462,3 +462,130 @@ describe("page outline controls", () => {
 		expect(seen).toEqual(["mouseover", "mousemove"]);
 	});
 });
+
+describe("page outline scrolling", () => {
+	/** Every element is drawn at its own (or its nearest ancestor's) data-y. */
+	const drawByDataY = () => {
+		vi.spyOn(Element.prototype, "getClientRects").mockImplementation(
+			() => [{ width: 10, height: 10 }] as unknown as DOMRectList,
+		);
+		vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(
+			function (this: Element) {
+				const y = Number(this.closest("[data-y]")?.getAttribute("data-y") ?? 0);
+				return {
+					top: y,
+					bottom: y + 40,
+					left: 0,
+					right: 100,
+					width: 100,
+					height: 40,
+					x: 0,
+					y,
+				} as DOMRect;
+			},
+		);
+	};
+
+	/** An area that scrolls: `height` of content in a `box`-high window. */
+	const scrollable = (
+		element: Element,
+		height: number,
+		box: number,
+		top = 0,
+	) => {
+		Object.defineProperties(element, {
+			scrollHeight: { value: height },
+			clientHeight: { value: box },
+			clientWidth: { value: 1000 },
+			scrollTop: { value: top, writable: true },
+		});
+		(element as HTMLElement).scrollTo = vi.fn(
+			(options?: ScrollToOptions | number) => {
+				if (typeof options === "object") {
+					(element as HTMLElement).scrollTop = Math.min(
+						Math.max(0, options.top ?? 0),
+						height - box,
+					);
+				}
+			},
+		) as HTMLElement["scrollTo"];
+	};
+
+	beforeEach(() => {
+		drawByDataY();
+	});
+
+	afterEach(() => {
+		vi.restoreAllMocks();
+		Reflect.deleteProperty(document, "elementFromPoint");
+		document.body.innerHTML = "";
+	});
+
+	it("reads on from where the page is scrolled, past a pinned header", () => {
+		// Scrolled 1000 px into twenty sections; the header stays at the top.
+		const sections = Array.from(
+			{ length: 20 },
+			(_, index) =>
+				`<h2 data-y="${index * 100 - 1000}">Section ${index}</h2><p data-y="${index * 100 + 50 - 1000}">Body ${index}</p>`,
+		).join("");
+		document.body.innerHTML = `<header data-y="0"><a href="/">Home</a></header><main>${sections}</main>`;
+
+		const outline = buildPageOutline(document, { maxChars: 200 });
+		const text = formatPageOutline(outline);
+
+		expect(text).toMatch(/\[b\d+\] link "Home"/);
+		expect(text).toContain("## Section 8");
+		expect(text).not.toContain("Section 7");
+		expect(outline.omittedAbove).toBe(16);
+		expect(text).toContain("16 blocks above");
+	});
+
+	it("scrolls an app's main pane when the document itself stays put", () => {
+		document.body.innerHTML = `<nav><a href="/a">Inbox</a></nav><main style="overflow-y: auto"><p>Feed</p></main>`;
+		const main = document.querySelector("main") as HTMLElement;
+		scrollable(main, 3000, 700);
+		const scrolled = vi.fn();
+		main.addEventListener("scroll", scrolled);
+		Object.defineProperty(document, "elementFromPoint", {
+			configurable: true,
+			value: vi.fn(() => main.querySelector("p")),
+		});
+
+		const result = actOnRef(document, {
+			action: "scrollScreen",
+			value: "down",
+		});
+
+		expect(main.scrollTop).toBe(595);
+		expect(result.detail).toBe(
+			"The page's main area is at 595 of 2300 px down.",
+		);
+		expect(scrolled).toHaveBeenCalled();
+		const { scroll } = buildPageOutline(document);
+		expect(scroll.y).toBe(595);
+		expect(scroll.pageHeight - scroll.viewportHeight).toBe(2300);
+	});
+
+	it("goes on to the area around a ref once the ref's own is at its end", () => {
+		document.body.innerHTML = `<div id="outer" style="overflow-y: auto"><div id="inner" style="overflow-y: auto"><button>Last item</button></div></div>`;
+		const outer = document.getElementById("outer") as HTMLElement;
+		const inner = document.getElementById("inner") as HTMLElement;
+		scrollable(outer, 1000, 200);
+		scrollable(inner, 500, 100, 400);
+		const outline = buildPageOutline(document);
+		const button = outline.blocks.find((block) => block.kind === "button");
+		const ref = button?.kind === "button" ? button.ref : "";
+
+		const result = actOnRef(document, {
+			ref,
+			action: "scrollScreen",
+			value: "down",
+		});
+
+		expect(inner.scrollTop).toBe(400);
+		expect(outer.scrollTop).toBe(170);
+		expect(result.detail).toBe(
+			`The area around ${ref} is at 170 of 800 px down.`,
+		);
+	});
+});

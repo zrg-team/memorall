@@ -1,5 +1,5 @@
 import { createMemonEmbeddedPort } from "./embedded-browser";
-import { cropScreenshot } from "./page-capture";
+import { cropScreenshot, pictureOfImage } from "./page-capture";
 import { settleOutline } from "./settle-outline";
 import type { IAgentSandboxService } from "@memorall/agent-harness-sandbox";
 import type { IFlowFileSystem } from "@memorall/agent-harness-flows/interfaces/services/filesystem";
@@ -46,7 +46,7 @@ import {
 import { loadMemonDesktopFiles, migrateMemonHomeFiles } from "./desktop-files";
 import { getLocalTimezone } from "@/services/cron-jobs/cron-expression";
 import type { CronJob } from "@/services/database/types";
-import type { MemonViewerKind } from "./file-kinds";
+import { type MemonViewerKind, memonMimeType } from "./file-kinds";
 import type {
 	MemonCommandOutcome,
 	MemonTerminalPort,
@@ -125,6 +125,16 @@ export const createMemonBrowserPort = (): MemonBrowserPort => ({
 		performOutlineAction(sessionId, request, { maxChars: OUTLINE_MAX_CHARS }),
 	// The tab's screenshot, cut to the element: what the page shows, WebGL too.
 	async capture(sessionId, request) {
+		if (!request.ref) {
+			// No element: the page as the viewport shows it.
+			const shot = await captureWebSessionScreenshot(sessionId);
+			return cropScreenshot(shot.dataUrl, {
+				x: 0,
+				y: 0,
+				width: shot.width,
+				height: shot.height,
+			});
+		}
 		const { result } = await performOutlineAction(
 			sessionId,
 			{ ...request, action: "describe" },
@@ -222,7 +232,7 @@ const previewText = async (
 		}
 		case "image": {
 			const size = await imageSize(bytes);
-			return `An image${size ? `, ${size.width}×${size.height} px` : ""}. The user sees it; its pixels are not text you can read. If Studio has an Image tools model, memon_studio can caption or label it.`;
+			return `An image${size ? `, ${size.width}×${size.height} px` : ""}. The user sees it; to see it too, memon_act { action: "describe" } while the Viewer is in front (or with its Files ref) hands you the picture. If Studio has an Image tools model, memon_studio can caption or label it.`;
 		}
 		case "audio":
 		case "video":
@@ -302,6 +312,10 @@ export const createMemonFilesPort = (
 			text: await previewText(path, kind, bytes),
 			size: bytes.byteLength,
 		};
+	},
+	async picture(path) {
+		const bytes = (await fs.readFile(path)) as Uint8Array;
+		return pictureOfImage(bytes, memonMimeType(path));
 	},
 });
 

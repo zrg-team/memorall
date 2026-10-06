@@ -70,6 +70,7 @@
 		}
 	},
 	"header": {
+		"threadElsewhere": "Cuộc trò chuyện đang mở cạnh MemonOS ở chế độ toàn màn hình.",
 		"openChats": "Mở lịch sử trò chuyện",
 		"conversationActions": "Hành động cuộc trò chuyện",
 		"newContext": "Bắt đầu ngữ cảnh mới",
@@ -600,7 +601,8 @@
 			"description": "Mã OpenUI được tạo ra không hợp lệ. Phản hồi gốc được hiển thị bên dưới."
 		},
 		"partial": "Không hiển thị được một số phần ({{count}})",
-		"partFailed": "Không hiển thị được {{name}}."
+		"partFailed": "Không hiển thị được {{name}}.",
+		"drawingDiagram": "Đang vẽ sơ đồ…"
 	},
 	"webChallenge": {
 		"kind": {
@@ -650,7 +652,9 @@
 		"noPrice": "Cuộc trò chuyện này đến nay (nhà cung cấp không báo giá)",
 		"tokens": "Đầu vào {{input}} token ({{cached}}% từ cache) · đầu ra {{output}}",
 		"requests": "{{requests}} yêu cầu tới mô hình qua {{replies}} câu trả lời",
-		"tokensOnly": "{{tokens}} token"
+		"tokensOnly": "{{tokens}} token",
+		"tools": "Trong đó, công cụ như pi code: {{cost}} qua {{requests}} yêu cầu",
+		"toolsNoPrice": "Trong đó, công cụ như pi code đã gửi {{requests}} yêu cầu"
 	},
 	"queue": {
 		"label": "Tin nhắn đang chờ gửi",

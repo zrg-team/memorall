@@ -233,6 +233,61 @@ const createWorkspaceMaterializationMissResponse = (path) =>
 		headers: { "X-Transform-Error": "true" },
 	});
 
+const FILE_CONTENT_TYPES = {
+	js: "application/javascript; charset=utf-8",
+	mjs: "application/javascript; charset=utf-8",
+	cjs: "application/javascript; charset=utf-8",
+	json: "application/json; charset=utf-8",
+	map: "application/json; charset=utf-8",
+	wasm: "application/wasm",
+	svg: "image/svg+xml",
+	png: "image/png",
+	jpg: "image/jpeg",
+	jpeg: "image/jpeg",
+	gif: "image/gif",
+	webp: "image/webp",
+	avif: "image/avif",
+	ico: "image/x-icon",
+	bmp: "image/bmp",
+	woff: "font/woff",
+	woff2: "font/woff2",
+	ttf: "font/ttf",
+	otf: "font/otf",
+	mp3: "audio/mpeg",
+	wav: "audio/wav",
+	ogg: "audio/ogg",
+	mp4: "video/mp4",
+	webm: "video/webm",
+	txt: "text/plain; charset=utf-8",
+	xml: "application/xml; charset=utf-8",
+	csv: "text/csv; charset=utf-8",
+};
+
+/**
+ * A project file as the dev server would send it. almostnode's
+ * ViteDevServer resolves a plain file's path a second time under its root
+ * (serveFile resolves the path it was handed), so under any root but "/"
+ * every .js, image, font or JSON file 404s: those come from here.
+ */
+const createProjectFileResponse = (vfs, fsPath) => {
+	if (!isExistingFile(vfs, fsPath)) return null;
+	const content = vfs.readFileSync(fsPath);
+	const body =
+		typeof content === "string" ? encodeTextBody(content) : new Uint8Array(content);
+	const extension = fsPath.split(".").pop()?.toLowerCase() ?? "";
+	return {
+		statusCode: 200,
+		statusMessage: "OK",
+		headers: {
+			"Content-Type":
+				FILE_CONTENT_TYPES[extension] ?? "application/octet-stream",
+			"Content-Length": String(body.length),
+			"Cache-Control": "no-cache",
+		},
+		body,
+	};
+};
+
 const isViteCssModuleRequest = (headers) => {
 	const dest =
 		headers?.["sec-fetch-dest"] ??
@@ -1179,7 +1234,7 @@ const createViteServerState = async ({
 				}
 			}
 
-			const response = await viteServer.handleRequest(
+			let response = await viteServer.handleRequest(
 				method,
 				resolvedPath,
 				headers,
@@ -1191,6 +1246,8 @@ const createViteServerState = async ({
 				if (isStubPath(fsPath)) {
 					return createWorkspaceMaterializationMissResponse(fsPath);
 				}
+				response =
+					createProjectFileResponse(containerInstance.vfs, fsPath) ?? response;
 			}
 			const contentType =
 				response.headers?.["Content-Type"] ??

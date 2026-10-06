@@ -57,7 +57,12 @@ import {
 	MEMON_PICTURES_DIR,
 } from "./download";
 import type { FolderZip } from "@/services/filesystem/folder-zip";
-import { listFileRefs, serializeScreen } from "./screen-serializer";
+import {
+	listFileRefs,
+	type MemonWindowScrollDirection,
+	nextWindowScroll,
+	serializeScreen,
+} from "./screen-serializer";
 import { controlsByRef } from "./app-kit/render-text";
 import type { MemonControlValue } from "./app-kit/types";
 import { kitAppForRef } from "./apps";
@@ -187,6 +192,8 @@ export interface MemonFilesPort {
 		path: string,
 		kind: MemonViewerKind,
 	): Promise<{ text: string; size?: number }>;
+	/** An image file as a picture for the agent to look at, scaled down. */
+	picture?(path: string): Promise<MemonPageCapture>;
 }
 
 export interface MemonScheduleInput {
@@ -409,6 +416,8 @@ export class MemonMachine {
 	private homeDir: string = MEMON_GUEST_HOME;
 	private filesCwd: string = MEMON_GUEST_HOME;
 	private fileEntries: MemonFileEntry[] = [];
+	/** The folder `fileEntries` lists. */
+	private listedFilesCwd: string | undefined;
 	private filesError: string | undefined;
 	private fileClipboard: MemonFileClipboard | null = null;
 	private fileExport: MemonFileExport | null = null;
@@ -1070,17 +1079,40 @@ export class MemonMachine {
 	}
 
 	/** A picture of an element of the page in front (a ref of the latest screen). */
-	async captureRef(ref: string): Promise<MemonPageCapture> {
+	/** A picture of a ref of the page, or without one, of what the page shows. */
+	async captureRef(ref?: string): Promise<MemonPageCapture> {
 		this.requireApp("browser");
 		const tab = this.requireActiveTab();
 		const port = this.browserPort(tab);
 		if (!port.capture) {
 			throw new Error("Pictures of pages are not available on this computer.");
 		}
-		return port.capture(tab.sessionId, {
-			ref,
-			docToken: this.readToken(tab),
-		});
+		return port.capture(
+			tab.sessionId,
+			ref ? { ref, docToken: this.readToken(tab) } : {},
+		);
+	}
+
+	/** An image file in Files as a picture for the agent to look at. */
+	async pictureOfFile(path: string): Promise<MemonPageCapture> {
+		this.requireApp("files");
+		const target = this.resolvePath(path);
+		if (memonFileKind(target) !== "image") {
+			throw new Error(
+				`describe looks at images (png, jpeg, gif, webp); ${memonDisplayPath(target, this.home)} is not one. Open it to read it.`,
+			);
+		}
+		if (!this.ports.files.picture) {
+			throw new Error("Pictures of files are not available on this computer.");
+		}
+		return this.ports.files.picture(target);
+	}
+
+	/** The image the Viewer shows, when the Viewer is in front with one. */
+	viewerImage(): string | null {
+		return this.focusedTextWindow() === "viewer" && this.viewerKind === "image"
+			? this.viewerPath
+			: null;
 	}
 
 	/** The page whose refs the agent holds: the one it last read. */
@@ -1384,13 +1416,15 @@ export class MemonMachine {
 			tab.title = outline.title || tab.title;
 		}
 		// A click or a key can start a navigation that replaces the document
-		// after the outline was taken; read again once it settles.
+		// after the outline was taken; a scroll draws a list's next rows and
+		// loads what comes into view only then. Read again once it settles.
 		if (
 			!outline ||
 			request.action === "click" ||
 			request.action === "submit" ||
 			request.action === "press" ||
-			request.action === "toggle"
+			request.action === "toggle" ||
+			request.action === "scrollScreen"
 		) {
 			await new Promise((resolve) => setTimeout(resolve, 400));
 			await this.readTab(tab);
@@ -1721,6 +1755,12 @@ export class MemonMachine {
 	}
 
 	async refreshFiles(): Promise<void> {
+		// Another folder's list starts at its top.
+		if (this.filesCwd !== this.listedFilesCwd) {
+			this.listedFilesCwd = this.filesCwd;
+			const window = this.windowFor("files");
+			if (window) delete window.scroll;
+		}
 		try {
 			this.fileEntries = await this.ports.files.list(this.filesCwd);
 			this.filesError = undefined;
@@ -1924,7 +1964,7 @@ export class MemonMachine {
 	/** Pages the agent's view of the Editor or Viewer text. */
 	scrollText(
 		app: "editor" | "viewer" | "visualize",
-		direction: "up" | "down",
+		direction: MemonWindowScrollDirection,
 	): void {
 		const text =
 			app === "editor"
@@ -1942,20 +1982,53 @@ export class MemonMachine {
 				: app === "visualize"
 					? this.visualScreenLine
 					: this.viewerScreenLine;
-		const next = Math.min(
-			lastPage,
-			Math.max(
-				0,
-				current +
-					(direction === "down"
-						? MEMON_TEXT_PAGE_LINES
-						: -MEMON_TEXT_PAGE_LINES),
-			),
-		);
+		const next =
+			direction === "top"
+				? 0
+				: direction === "bottom"
+					? lastPage
+					: Math.min(
+							lastPage,
+							Math.max(
+								0,
+								current +
+									(direction === "down"
+										? MEMON_TEXT_PAGE_LINES
+										: -MEMON_TEXT_PAGE_LINES),
+							),
+						);
 		if (app === "editor") this.editorScreenLine = next;
 		else if (app === "visualize") this.visualScreenLine = next;
 		else this.viewerScreenLine = next;
 		this.changed();
+	}
+
+	/**
+	 * Pages the agent's view of the focused window's list: Files, an app's
+	 * controls, the Terminal's output or pi's conversation. Null when the
+	 * focused window is the Browser or a text window, which page by
+	 * themselves, or when no window is focused.
+	 */
+	scrollWindow(
+		direction: MemonWindowScrollDirection,
+	): { app: MemonWindowApp; moved: boolean } | null {
+		const window = this.windows.find(
+			(candidate) =>
+				candidate.id === this.focusedWindowId && !candidate.minimized,
+		);
+		if (
+			!window ||
+			window.app === "browser" ||
+			this.focusedTextWindow() !== null
+		) {
+			return null;
+		}
+		const next = nextWindowScroll(this.snapshot(), window, direction);
+		if (!next) return { app: window.app, moved: false };
+		if (next.scroll) window.scroll = next.scroll;
+		else delete window.scroll;
+		if (next.moved) this.changed();
+		return { app: window.app, moved: next.moved };
 	}
 
 	/** The path an `f` ref of the Files window names. */

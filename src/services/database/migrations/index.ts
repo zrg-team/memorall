@@ -65,6 +65,10 @@ import {
 	up as addModelUsageUp,
 	down as addModelUsageDown,
 } from "./017_add_model_usage";
+import {
+	up as addModelUsageConversationUp,
+	down as addModelUsageConversationDown,
+} from "./018_add_model_usage_conversation";
 // import { up as futureExampleUp, down as futureExampleDown } from './001_example_future_migration';
 
 export interface Migration {
@@ -206,6 +210,14 @@ export const migrations: Migration[] = [
 			"Add model_usage for model requests made outside chat replies (pi code, Studio on a computer)",
 		up: addModelUsageUp,
 		down: addModelUsageDown,
+	},
+	{
+		id: "add_model_usage_conversation",
+		version: 18,
+		description:
+			"Add model_usage.conversation_id: the chat pi code worked for, counted in its cost",
+		up: addModelUsageConversationUp,
+		down: addModelUsageConversationDown,
 	},
 	// Example of how to add future migrations:
 	// {

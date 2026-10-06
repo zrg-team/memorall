@@ -48,6 +48,7 @@ export const BROWSER_SANDBOX_PROVIDER_ID = "browser";
  */
 export const BROWSER_SANDBOX_NOTES = [
 	"Commands run side by side, each with its own output and input: tests, node --check or curl run while a server does. One command serves at a time: a second server closes and its command stops with EADDRINUSE. Before starting a server, check what already runs and the port it serves: use that server, or stop its command first.",
+	"A Vite app: `npm run dev`, `vite` or `npx vite` starts the sandbox's built-in Vite dev server (index.html and its TS, JSX, CSS and Tailwind imports; no vite.config plugins). On its own line it runs until stopped; with a trailing & or inside a longer line (npm run dev & sleep 2; curl -s localhost:5173/) it starts the server and returns. npm run dev -- --port 5180 or vite --port 5180 picks the port. The Vite CLI itself cannot run here: no vite build or vite preview.",
 ] as const;
 
 export const BROWSER_SANDBOX_CAPABILITIES: SandboxCapabilities = {

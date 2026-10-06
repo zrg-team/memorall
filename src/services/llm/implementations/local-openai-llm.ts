@@ -31,6 +31,7 @@ import {
 } from "../utils/token-usage";
 import { postCompletionWithBudgetRetry } from "../utils/budget-retry";
 import { readModelReasoning, readReasoningDelta } from "../utils/reasoning";
+import { liftToolImages } from "../utils/tool-images";
 
 // Model patterns for local servers
 const MODEL_TOOL_PATTERNS: Array<{
@@ -158,7 +159,8 @@ export class LocalOpenAICompatibleLLM implements BaseLLM {
 	private serializeMessages(
 		messages: ChatCompletionMessageParam[],
 	): Record<string, unknown>[] {
-		return messages.map((m) => {
+		// A tool's pictures go to the model in a user message after its result.
+		return liftToolImages(messages).map((m) => {
 			const base: Record<string, unknown> = {
 				role: m.role,
 				content: m.content,

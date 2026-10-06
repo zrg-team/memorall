@@ -13,6 +13,8 @@ export interface ModelUsageScope {
 	tool?: string;
 	/** The agent (flow id) they run for, if any. */
 	agentId?: string | null;
+	/** The chat they are made for, if one asked: its cost counts them. */
+	conversationId?: string | null;
 	/** Requests of one session group together, e.g. one pi session. */
 	sessionId: string;
 	/** How the session is listed, e.g. "pi code · ~/todo". */
@@ -59,6 +61,7 @@ export const recordModelUsage: ModelUsageRecorder = async (entry) => {
 				source: entry.source,
 				tool: entry.tool ?? null,
 				agentFlowId: entry.agentId || null,
+				conversationId: entry.conversationId || null,
 				sessionId: entry.sessionId,
 				title: entry.title,
 				provider: entry.provider,

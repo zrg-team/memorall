@@ -8,6 +8,11 @@ import { NEXU_DEFAULT_SKILLS } from "./nexu";
 import type { DefaultSkillManifestEntry } from "./types";
 
 const DEFAULT_SKILLS_LOGICAL_ROOT = "/skills/default";
+/**
+ * Every collection's skills, one per name: a later collection never
+ * shadows a skill an earlier one already has (nexu's `dashboard` was once
+ * replaced by a design skill of the same name that no longer exists).
+ */
 const DEFAULT_SKILL_MANIFEST = [
 	...ANTHROPIC_DEFAULT_SKILLS,
 	...SECONDSKY_DEFAULT_SKILLS,
@@ -16,7 +21,10 @@ const DEFAULT_SKILL_MANIFEST = [
 	...ANDREJ_KARPATHY_SKILLS,
 	...NEXU_DEFAULT_SKILLS,
 	...DESIGN_DEFAULT_SKILLS,
-];
+].filter(
+	(entry, index, all) =>
+		all.findIndex((other) => other.name === entry.name) === index,
+);
 
 const defaultSkillIndex = new Map(
 	DEFAULT_SKILL_MANIFEST.map((entry) => [entry.name, entry]),
@@ -91,23 +99,36 @@ export const readDefaultSkill = async (
 		}
 
 		const rawUrls =
-			manifestEntry.rawUrls ?? [manifestEntry.rawUrl].filter(Boolean);
-		const parts = await Promise.all(
+			manifestEntry.rawUrls ??
+			[manifestEntry.rawUrl].filter((url): url is string => Boolean(url));
+		// A skill whose repo dropped one of its files still loads from the
+		// rest; it fails only when none of them can be read.
+		const parts = await Promise.allSettled(
 			rawUrls.map(async (rawUrl) => {
-				const response = await fetch(rawUrl!);
-				if (!response.ok) {
-					throw new Error(
-						`Failed to load default skill "${name}" from ${manifestEntry.repo}: HTTP ${response.status}`,
-					);
-				}
-
+				const response = await fetch(rawUrl);
+				if (!response.ok) throw new Error(`HTTP ${response.status}`);
 				return stripFrontmatter(await response.text());
 			}),
 		);
+		const loaded = parts.flatMap((part) =>
+			part.status === "fulfilled" ? [part.value] : [],
+		);
+		if (!loaded.length) {
+			const reasons = parts.map((part) =>
+				part.status === "rejected"
+					? part.reason instanceof Error
+						? part.reason.message
+						: String(part.reason)
+					: "",
+			);
+			throw new Error(
+				`Failed to load default skill "${name}" from ${manifestEntry.repo}: ${[...new Set(reasons)].join(", ") || "no source"}`,
+			);
+		}
 
 		return {
 			...toSummary(manifestEntry),
-			body: parts.join("\n\n---\n\n"),
+			body: loaded.join("\n\n---\n\n"),
 		};
 	})();
 

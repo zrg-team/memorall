@@ -48,6 +48,7 @@ import {
 	normalizeTokenUsage,
 	resolveTokenUsage,
 } from "../utils/token-usage";
+import { liftToolImages } from "../utils/tool-images";
 
 // Well-known model configurations with context window and max response tokens
 interface ModelConfig {
@@ -722,7 +723,8 @@ export class OpenAILLM implements BaseLLM {
 	private serializeMessages(
 		messages: ChatCompletionMessageParam[],
 	): Record<string, unknown>[] {
-		return messages.map((m) => {
+		// A tool's pictures go to the model in a user message after its result.
+		return liftToolImages(messages).map((m) => {
 			const base: Record<string, unknown> = {
 				role: m.role,
 				content: m.content,

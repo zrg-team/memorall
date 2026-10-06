@@ -143,17 +143,20 @@ export const migrateMemonHomeFiles = async (
 
 // ── Entries ──────────────────────────────────────────────────────────────────
 //
-// The bot edits both files one entry at a time: an entry is a `- ` (or `* `)
-// list item plus any indented lines under it. Everything else in the file —
-// the heading, the user's own paragraphs — is left exactly as it is.
+// The bot edits both files one entry at a time: an entry is a list item
+// (`- `, `* `, `+ ` or numbered, `1. `) plus any indented lines under it.
+// Everything else in the file — the heading, the user's own paragraphs — is
+// left exactly as it is.
 
-const ENTRY_START = /^ {0,3}[-*]\s+/;
+const ENTRY_START = /^ {0,3}(?:[-*+]|\d{1,9}[.)])\s+/;
 const CONTINUATION = /^\s+\S/;
 
 interface EntryBlock {
 	start: number;
 	end: number;
 	text: string;
+	/** How the item starts ("- ", "2. "), kept when it is reworded. */
+	marker: string;
 }
 
 const parseEntries = (
@@ -174,6 +177,10 @@ const parseEntries = (
 		blocks.push({
 			start: index,
 			end,
+			marker: (ENTRY_START.exec(lines[index])?.[0] ?? "- ").replace(
+				/\s+$/,
+				" ",
+			),
 			text: [
 				lines[index].replace(ENTRY_START, ""),
 				...lines.slice(index + 1, end).map((line) => line.trim()),
@@ -191,7 +198,7 @@ export const listDesktopEntries = (content: string): string[] =>
 const SECRET_PATTERN =
 	/(sk-[A-Za-z0-9_-]{16,}|gh[pousr]_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]*PRIVATE KEY-----|\b(password|passwd|api[_ -]?key|secret|token)\s*[:=]\s*\S+)/i;
 
-const toEntryLines = (text: string): string[] => {
+const toEntryLines = (text: string, marker = "- "): string[] => {
 	const [first, ...rest] = text
 		.split("\n")
 		.map((line) => line.trim())
@@ -202,8 +209,21 @@ const toEntryLines = (text: string): string[] => {
 			"That looks like a password or key. Bot.md and Memory.md must not hold secrets.",
 		);
 	}
-	return [`- ${first}`, ...rest.map((line) => `  ${line}`)];
+	return [`${marker}${first}`, ...rest.map((line) => `  ${line}`)];
 };
+
+/** The next item of a list that ends with `last`: numbered lists count on. */
+const nextMarker = (last: EntryBlock | undefined): string => {
+	if (!last) return "- ";
+	const numbered = /^(\s*)(\d+)([.)])\s$/.exec(last.marker);
+	return numbered
+		? `${numbered[1]}${Number(numbered[2]) + 1}${numbered[3]} `
+		: last.marker;
+};
+
+/** The entries as the prompt numbers them, to pick from. */
+const numberedEntries = (blocks: EntryBlock[]): string =>
+	blocks.map((block, index) => `[${index + 1}] ${block.text}`).join("\n");
 
 export type MemonDesktopEntryChange =
 	| { action: "list" }
@@ -226,16 +246,19 @@ export const changeDesktopEntries = (
 		if (last !== undefined && !blocks.length && !ENTRY_START.test(last)) {
 			kept.push("");
 		}
-		return `${[...kept, ...toEntryLines(change.text)].join("\n")}\n`;
+		const entry = toEntryLines(change.text, nextMarker(blocks.at(-1)));
+		return `${[...kept, ...entry].join("\n")}\n`;
 	}
 	const block = blocks[change.entry - 1];
 	if (!block) {
 		throw new Error(
-			`There is no entry ${change.entry}; the file has ${blocks.length}.`,
+			blocks.length
+				? `There is no entry ${change.entry}; the file has ${blocks.length}, numbered as now:\n${numberedEntries(blocks)}`
+				: `There is no entry ${change.entry}: the file has no entries yet. Save the fact as a new one with { action: "add", text }.`,
 		);
 	}
 	const replacement =
-		change.action === "update" ? toEntryLines(change.text) : [];
+		change.action === "update" ? toEntryLines(change.text, block.marker) : [];
 	return [
 		...lines.slice(0, block.start),
 		...replacement,

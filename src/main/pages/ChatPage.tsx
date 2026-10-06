@@ -92,6 +92,9 @@ const RETRIEVAL_STEP_NAMES = new Set([
 	"structmem-retrieval",
 ]);
 
+/** How often a running reply's chat reads its cost again (its tools' share). */
+const RUNNING_COST_REFRESH_MS = 15_000;
+
 interface ChatPageProps {
 	onOpenAgentWorkspace?: () => void;
 	isNarrowChatPanel?: boolean;
@@ -134,6 +137,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
 	const setRightPanelCollapsed = useShellLayoutStore(
 		(state) => state.setRightPanelCollapsed,
 	);
+	const chatThreadSlot = useShellLayoutStore((state) => state.chatThreadSlot);
 	const currentConversation = useChatStore(
 		(state) => state.currentConversation,
 	);
@@ -161,6 +165,24 @@ export const ChatPage: React.FC<ChatPageProps> = ({
 			void refreshConversationCosts([currentConversation.id]);
 		}
 	}, [currentConversation?.id, refreshConversationCosts]);
+	const replyRunning = useChatStore((state) =>
+		state.currentConversation
+			? Boolean(state.runs[state.currentConversation.id])
+			: false,
+	);
+	// Tools book their requests as they make them (pi code working on what
+	// the agent handed it): while a reply runs, its chat's cost is read again
+	// so their share shows as it grows. A reply's own usage is saved when it
+	// ends, so this never counts the running reply twice.
+	React.useEffect(() => {
+		const conversationId = currentConversation?.id;
+		if (!conversationId || !replyRunning) return;
+		const timer = window.setInterval(
+			() => void refreshConversationCosts([conversationId]),
+			RUNNING_COST_REFRESH_MS,
+		);
+		return () => window.clearInterval(timer);
+	}, [currentConversation?.id, replyRunning, refreshConversationCosts]);
 	const restoreSelectedAgentFlowId = useChatStore(
 		(state) => state.restoreSelectedAgentFlowId,
 	);
@@ -1060,6 +1082,201 @@ ${text}`
 		);
 	}
 
+	// In MemonOS's full screen the thread sits in a narrow panel beside the
+	// computer: drawn compact, as on a narrow chat column.
+	const threadCompact = isCompactChatSurface || Boolean(chatThreadSlot);
+	const threadIconOnly = useIconOnlyHistoryButton || Boolean(chatThreadSlot);
+	// The messages and the input: in the chat column, or in MemonOS's
+	// full-screen panel while it is open (one chat, its draft and its
+	// streaming reply shown wherever the user is).
+	const thread = (
+		<>
+			<Conversation
+				className="min-h-0 flex-1 bg-transparent"
+				resize={hasInProgressMessage ? "instant" : "smooth"}
+			>
+				{completedGroups.length > 0 ? (
+					<div className="pointer-events-none absolute left-0 right-0 top-4 z-20 flex justify-center">
+						<TooltipProvider>
+							<Tooltip>
+								<TooltipTrigger asChild>
+									<Button
+										type="button"
+										variant="ghost"
+										size={threadIconOnly ? "icon" : "sm"}
+										className={`pointer-events-auto h-9 rounded-full border border-border/70 bg-background/90 text-xs font-medium text-muted-foreground shadow-sm backdrop-blur-xl hover:bg-accent/70 hover:text-foreground ${
+											threadIconOnly ? "w-9 px-0" : "px-4"
+										}`}
+										onClick={handlePreviousGroupsClick}
+										aria-label={
+											showPreviousGroups
+												? t("history.scrollUp")
+												: t("history.showPrevious", {
+														count: completedGroups.length,
+													})
+										}
+									>
+										{threadIconOnly ? (
+											showPreviousGroups ? (
+												<ArrowUp size={14} />
+											) : (
+												<History size={14} />
+											)
+										) : showPreviousGroups ? (
+											<>
+												<ArrowUp size={13} />
+												<span>{t("history.scrollUp")}</span>
+											</>
+										) : (
+											t("history.showPrevious", {
+												count: completedGroups.length,
+											})
+										)}
+									</Button>
+								</TooltipTrigger>
+								<TooltipContent side="bottom">
+									{showPreviousGroups
+										? t("history.scrollUp")
+										: t("history.showPrevious", {
+												count: completedGroups.length,
+											})}
+								</TooltipContent>
+							</Tooltip>
+						</TooltipProvider>
+						{showPreviousGroups ? (
+							<Button
+								type="button"
+								variant="ghost"
+								size="icon"
+								className="pointer-events-auto ml-2 h-9 w-9 rounded-full border border-border/70 bg-background/90 text-muted-foreground shadow-sm backdrop-blur-xl hover:bg-accent/70 hover:text-foreground"
+								aria-label={t("history.hidePrevious")}
+								onClick={() => setShowPreviousGroups(false)}
+							>
+								<X size={14} />
+							</Button>
+						) : null}
+					</div>
+				) : null}
+				<ConversationContent
+					className={`mx-auto flex w-full flex-col ${
+						isChatFullWidth ? "max-w-full" : "max-w-4xl"
+					} ${
+						isCompactEmptyLanding
+							? "chat-conversation-content h-full min-h-0 space-y-3 pb-2 pt-12"
+							: threadCompact
+								? "chat-conversation-content min-h-full space-y-8 pb-8 pt-16"
+								: "chat-conversation-content min-h-full space-y-8 pb-8 pt-16 sm:px-6 lg:px-8"
+					}`}
+				>
+					{showPreviousGroups ? (
+						<div className="space-y-8">{completedMessageGroups}</div>
+					) : null}
+
+					{latestGroupIsEmpty ? (
+						<ChatEmptyState
+							screenContent={selectedAgentIconScreenContent}
+							greetingContext={agentGreetingContext}
+							showAgentBuilderCallout={shouldShowAgentBuilderCallout}
+							onOpenAgentWizard={handleOpenAgentWizard}
+							onSelectPrompt={setInputValue}
+							compact={threadCompact}
+						/>
+					) : latestGroup ? (
+						<MessageGroup
+							key={latestGroup.id}
+							group={latestGroup}
+							inProgressMessage={visibleInProgressMessage}
+							defaultCollapsed={false}
+							selectedTopic={selectedTopic}
+							onLoadMessages={loadMessageGroup}
+							onMessageAction={handleMessageAction}
+						/>
+					) : undefined}
+				</ConversationContent>
+				<ConversationScrollButton />
+			</Conversation>
+
+			<ModelLoadPrompt
+				current={current}
+				onModelLoaded={handleModelLoaded}
+				onDownloadProgress={setDownloadProgress}
+				onDownloadModelName={setQuickDownloadModel}
+				onReadyChange={setIsChatInputModelReady}
+			/>
+
+			<SmartSelectContextBanner
+				context={smartSelectContext}
+				onClear={() => setSmartSelectContext(null)}
+			/>
+
+			<AgentContextWarningBanner
+				current={current}
+				selectedAgentFlowId={selectedAgentFlowId}
+				selectedAgentName={selectedAgent?.name}
+				onUseChatMode={() => handleSelectAgentFlow("chat")}
+			/>
+
+			<ChatInput
+				inputValue={inputValue}
+				setInputValue={setInputValue}
+				onSubmit={handleChatSubmit}
+				isLoading={isLoading}
+				runningElsewhere={runningElsewhere}
+				onQueue={handleQueueMessage}
+				queue={{
+					queued: queuedMessages ?? [],
+					pending: pendingMessages ?? [],
+					paused: isQueuePaused,
+					onSend: (id) => {
+						if (currentConversation) {
+							sendQueuedMessage(currentConversation.id, id);
+						}
+					},
+					onEdit: handleEditQueuedMessage,
+					onRemove: (id) => {
+						if (currentConversation) {
+							removeQueuedMessage(currentConversation.id, id);
+						}
+					},
+				}}
+				model={model}
+				currentModel={current}
+				status={status}
+				selectedTopic={selectedTopic}
+				setSelectedTopic={handleSelectTopic}
+				onInsertSeparator={insertSeparator}
+				onStop={handleStop}
+				onDeleteChat={deleteMessages}
+				abortController={abortController}
+				isLoadingTopics={isLoadingTopics}
+				topics={topics}
+				agentFlows={agentFlows}
+				selectedAgentFlowId={selectedAgentFlowId}
+				setSelectedAgentFlowId={handleSelectAgentFlow}
+				onCreateAgentFlow={handleCreateAgentFlow}
+				attachedImages={attachedImages}
+				onAttachedImagesChange={setAttachedImages}
+				attachedDocumentRefs={attachedDocumentRefs}
+				onAttachedDocumentRefsChange={setAttachedDocumentRefs}
+				isModelReady={isChatInputModelReady}
+				focusKey={composerFocusKey}
+				isFullWidth={isChatFullWidth}
+				onToggleFullWidth={() => setIsChatFullWidth((value) => !value)}
+				placeholder={t("input.messageAgent", {
+					agent: selectedAgent?.name ?? t("flowSelector.chat"),
+				})}
+				onOpenAgentSettings={() => {
+					open(selectedAgentFlowId);
+					setRightPanelCollapsed(false);
+					onOpenAgentWorkspace?.();
+					navigate("/agents", {
+						state: { selectedAgentFlowId },
+					});
+				}}
+			/>
+		</>
+	);
+
 	return (
 		<div
 			className="flex h-full bg-background text-foreground [background-image:linear-gradient(180deg,hsl(var(--muted)/0.28)_0%,transparent_190px)]"
@@ -1138,189 +1355,22 @@ ${text}`
 						)
 					: null}
 
-				<Conversation
-					className="min-h-0 flex-1 bg-transparent"
-					resize={hasInProgressMessage ? "instant" : "smooth"}
-				>
-					{completedGroups.length > 0 ? (
-						<div className="pointer-events-none absolute left-0 right-0 top-4 z-20 flex justify-center">
-							<TooltipProvider>
-								<Tooltip>
-									<TooltipTrigger asChild>
-										<Button
-											type="button"
-											variant="ghost"
-											size={useIconOnlyHistoryButton ? "icon" : "sm"}
-											className={`pointer-events-auto h-9 rounded-full border border-border/70 bg-background/90 text-xs font-medium text-muted-foreground shadow-sm backdrop-blur-xl hover:bg-accent/70 hover:text-foreground ${
-												useIconOnlyHistoryButton ? "w-9 px-0" : "px-4"
-											}`}
-											onClick={handlePreviousGroupsClick}
-											aria-label={
-												showPreviousGroups
-													? t("history.scrollUp")
-													: t("history.showPrevious", {
-															count: completedGroups.length,
-														})
-											}
-										>
-											{useIconOnlyHistoryButton ? (
-												showPreviousGroups ? (
-													<ArrowUp size={14} />
-												) : (
-													<History size={14} />
-												)
-											) : showPreviousGroups ? (
-												<>
-													<ArrowUp size={13} />
-													<span>{t("history.scrollUp")}</span>
-												</>
-											) : (
-												t("history.showPrevious", {
-													count: completedGroups.length,
-												})
-											)}
-										</Button>
-									</TooltipTrigger>
-									<TooltipContent side="bottom">
-										{showPreviousGroups
-											? t("history.scrollUp")
-											: t("history.showPrevious", {
-													count: completedGroups.length,
-												})}
-									</TooltipContent>
-								</Tooltip>
-							</TooltipProvider>
-							{showPreviousGroups ? (
-								<Button
-									type="button"
-									variant="ghost"
-									size="icon"
-									className="pointer-events-auto ml-2 h-9 w-9 rounded-full border border-border/70 bg-background/90 text-muted-foreground shadow-sm backdrop-blur-xl hover:bg-accent/70 hover:text-foreground"
-									aria-label={t("history.hidePrevious")}
-									onClick={() => setShowPreviousGroups(false)}
-								>
-									<X size={14} />
-								</Button>
-							) : null}
-						</div>
-					) : null}
-					<ConversationContent
-						className={`mx-auto flex w-full flex-col ${
-							isChatFullWidth ? "max-w-full" : "max-w-4xl"
-						} ${
-							isCompactEmptyLanding
-								? "chat-conversation-content h-full min-h-0 space-y-3 pb-2 pt-12"
-								: isCompactChatSurface
-									? "chat-conversation-content min-h-full space-y-8 pb-8 pt-16"
-									: "chat-conversation-content min-h-full space-y-8 pb-8 pt-16 sm:px-6 lg:px-8"
-						}`}
-					>
-						{showPreviousGroups ? (
-							<div className="space-y-8">{completedMessageGroups}</div>
-						) : null}
-
-						{latestGroupIsEmpty ? (
-							<ChatEmptyState
-								screenContent={selectedAgentIconScreenContent}
-								greetingContext={agentGreetingContext}
-								showAgentBuilderCallout={shouldShowAgentBuilderCallout}
-								onOpenAgentWizard={handleOpenAgentWizard}
-								onSelectPrompt={setInputValue}
-								compact={isCompactChatSurface}
-							/>
-						) : latestGroup ? (
-							<MessageGroup
-								key={latestGroup.id}
-								group={latestGroup}
-								inProgressMessage={visibleInProgressMessage}
-								defaultCollapsed={false}
-								selectedTopic={selectedTopic}
-								onLoadMessages={loadMessageGroup}
-								onMessageAction={handleMessageAction}
-							/>
-						) : undefined}
-					</ConversationContent>
-					<ConversationScrollButton />
-				</Conversation>
-
-				<ModelLoadPrompt
-					current={current}
-					onModelLoaded={handleModelLoaded}
-					onDownloadProgress={setDownloadProgress}
-					onDownloadModelName={setQuickDownloadModel}
-					onReadyChange={setIsChatInputModelReady}
-				/>
-
-				<SmartSelectContextBanner
-					context={smartSelectContext}
-					onClear={() => setSmartSelectContext(null)}
-				/>
-
-				<AgentContextWarningBanner
-					current={current}
-					selectedAgentFlowId={selectedAgentFlowId}
-					selectedAgentName={selectedAgent?.name}
-					onUseChatMode={() => handleSelectAgentFlow("chat")}
-				/>
-
-				<ChatInput
-					inputValue={inputValue}
-					setInputValue={setInputValue}
-					onSubmit={handleChatSubmit}
-					isLoading={isLoading}
-					runningElsewhere={runningElsewhere}
-					onQueue={handleQueueMessage}
-					queue={{
-						queued: queuedMessages ?? [],
-						pending: pendingMessages ?? [],
-						paused: isQueuePaused,
-						onSend: (id) => {
-							if (currentConversation) {
-								sendQueuedMessage(currentConversation.id, id);
-							}
-						},
-						onEdit: handleEditQueuedMessage,
-						onRemove: (id) => {
-							if (currentConversation) {
-								removeQueuedMessage(currentConversation.id, id);
-							}
-						},
-					}}
-					model={model}
-					currentModel={current}
-					status={status}
-					selectedTopic={selectedTopic}
-					setSelectedTopic={handleSelectTopic}
-					onInsertSeparator={insertSeparator}
-					onStop={handleStop}
-					onDeleteChat={deleteMessages}
-					abortController={abortController}
-					isLoadingTopics={isLoadingTopics}
-					topics={topics}
-					agentFlows={agentFlows}
-					selectedAgentFlowId={selectedAgentFlowId}
-					setSelectedAgentFlowId={handleSelectAgentFlow}
-					onCreateAgentFlow={handleCreateAgentFlow}
-					attachedImages={attachedImages}
-					onAttachedImagesChange={setAttachedImages}
-					attachedDocumentRefs={attachedDocumentRefs}
-					onAttachedDocumentRefsChange={setAttachedDocumentRefs}
-					isModelReady={isChatInputModelReady}
-					focusKey={composerFocusKey}
-					isFullWidth={isChatFullWidth}
-					onToggleFullWidth={() => setIsChatFullWidth((value) => !value)}
-					placeholder={t("input.messageAgent", {
-						agent: selectedAgent?.name ?? t("flowSelector.chat"),
-					})}
-					onOpenAgentSettings={() => {
-						open(selectedAgentFlowId);
-						setRightPanelCollapsed(false);
-						onOpenAgentWorkspace?.();
-						navigate("/agents", {
-							state: { selectedAgentFlowId },
-						});
-					}}
-				/>
+				{chatThreadSlot ? (
+					<>
+						{createPortal(
+							// The same container as the column, for its width queries.
+							<div className="chat-panel-container relative flex min-h-0 flex-1 flex-col overflow-hidden">
+								{thread}
+							</div>,
+							chatThreadSlot,
+						)}
+						<p className="m-auto max-w-60 px-4 text-center text-xs text-muted-foreground">
+							{t("header.threadElsewhere")}
+						</p>
+					</>
+				) : (
+					thread
+				)}
 			</div>
 		</div>
 	);

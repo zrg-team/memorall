@@ -1466,6 +1466,49 @@ describe("MemonMachine", () => {
 		expect(screen).toContain("(lines 51–90 of 90; scroll up/down to page)");
 	});
 
+	it("pages a long folder in Files, and starts another folder at its top", async () => {
+		const { machine, files } = createMachine();
+		for (let i = 1; i <= 300; i += 1) files.set(`/big/file-${i}.md`, "x");
+		files.set("/small/a.md", "x");
+
+		await machine.openFolder("/big");
+		expect(machine.readScreen()).toContain("more lines below");
+		expect(machine.scrollWindow("down")).toEqual({ app: "files", moved: true });
+		expect(machine.readScreen()).toContain("lines above — scroll up");
+
+		await machine.openFolder("/small");
+		expect(machine.snapshot().windows[0].scroll).toBeUndefined();
+		expect(machine.scrollWindow("down")).toEqual({
+			app: "files",
+			moved: false,
+		});
+	});
+
+	it("pictures an image in Files for describe, and only an image", async () => {
+		const { machine, ports } = createMachine();
+		const picture = vi.fn(async () => ({
+			dataUrl: "data:image/png;base64,AA",
+			width: 2,
+			height: 1,
+		}));
+		(ports.files as { picture?: typeof picture }).picture = picture;
+
+		await expect(machine.pictureOfFile("/notes/shot.png")).resolves.toEqual({
+			dataUrl: "data:image/png;base64,AA",
+			width: 2,
+			height: 1,
+		});
+		expect(picture).toHaveBeenCalledWith("/notes/shot.png");
+		await expect(machine.pictureOfFile("/notes/a.md")).rejects.toThrow(
+			"describe looks at images (png, jpeg, gif, webp); /notes/a.md is not one.",
+		);
+
+		// The Viewer in front with an image: what describe looks at by default.
+		expect(machine.viewerImage()).toBeNull();
+		await machine.openFile("/notes/photo.png", { create: true });
+		expect(machine.viewerImage()).toBe("/notes/photo.png");
+	});
+
 	it("opens images in the Viewer even when asked for the Editor", async () => {
 		const { machine } = createMachine();
 

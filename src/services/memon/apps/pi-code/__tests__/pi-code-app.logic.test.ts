@@ -169,6 +169,32 @@ const asked = async (piCode: MemonPiCode) => {
 	return approval;
 };
 
+describe("pi code's cost", () => {
+	it("is booked to the chat whose agent handed pi the work", async () => {
+		const { piCode, port } = setup();
+
+		const call = piCode.act(
+			{ action: "prompt", text: "Build the game" },
+			{ conversationId: "chat-1" },
+		);
+		piCode.answerApproval((await asked(piCode)).id, "approve");
+		await call;
+		const chargeTo = vi.mocked(port.start).mock.calls[0]?.[0].chargeTo;
+		expect(chargeTo?.()).toBe("chat-1");
+
+		// Another chat's agent hands it more: pi's requests go there now.
+		await piCode.act(
+			{ action: "prompt", text: "Add sound" },
+			{ conversationId: "chat-2" },
+		);
+		expect(chargeTo?.()).toBe("chat-2");
+
+		// Stopped, pi works for no chat: one the user starts is theirs alone.
+		await piCode.stop();
+		expect(chargeTo?.()).toBeNull();
+	});
+});
+
 describe("pi code, driven by the Memon agent", () => {
 	it("asks the user in the pi window first; allowed, pi starts in the folder and gets the work", async () => {
 		const { piCode, port, host, runners, isWindowOpen, setRun } = setup();

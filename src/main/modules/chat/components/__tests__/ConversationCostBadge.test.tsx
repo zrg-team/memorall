@@ -41,6 +41,24 @@ describe("a chat's cost badge", () => {
 		);
 	});
 
+	it("says how much of the cost pi code spent on the chat's task", () => {
+		render(
+			<ConversationCostBadge
+				cost={{
+					...cost,
+					cost: 1.127,
+					tools: { cost: 1.037, requests: 120 },
+				}}
+				variant="header"
+			/>,
+		);
+		const badge = screen.getByTestId("chat-cost");
+		expect(badge).toHaveTextContent("$1.13");
+		expect(badge.getAttribute("title")).toContain(
+			"Of that, tools such as pi code: $1.04 over 120 requests",
+		);
+	});
+
 	it("shows tokens for a chat whose provider gave no price, and nothing without usage", () => {
 		const { rerender } = render(
 			<ConversationCostBadge

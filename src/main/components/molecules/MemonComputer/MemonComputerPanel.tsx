@@ -7,10 +7,12 @@ import {
 	Loader2,
 	Maximize,
 	Maximize2,
+	MessageSquare,
 	MessageSquarePlus,
 	Minimize,
 	Minimize2,
 	Monitor,
+	PanelLeftClose,
 	Pause,
 	Play,
 	Power,
@@ -359,6 +361,22 @@ export const MemonComputerPanel: React.FC<{
 		}
 	};
 
+	// Full screen covers the chat column: a panel beside the computer shows
+	// the chat's messages and input instead (ChatPage renders them into it),
+	// so the user watches the computer and chats at once.
+	const [chatOpen, setChatOpen] = React.useState(false);
+	const showChat = fullscreen && chatOpen;
+	React.useEffect(() => {
+		if (!showChat) return;
+		// ChatPage draws the thread; it must be there, under the cover.
+		const layout = useShellLayoutStore.getState();
+		if (layout.chatShellCollapsed) layout.setChatShellCollapsed(false);
+		useWorkspaceModeStore.getState().setMode("chat");
+	}, [showChat]);
+	const chatSlotRef = React.useCallback((element: HTMLElement | null) => {
+		useShellLayoutStore.getState().setChatThreadSlot(element);
+	}, []);
+
 	React.useEffect(() => {
 		if (machineKey) void pull(machineKey);
 	}, [machineKey, pull]);
@@ -520,6 +538,32 @@ export const MemonComputerPanel: React.FC<{
 		>
 			<div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b bg-background px-3 py-2">
 				<div className="flex min-w-0 items-center gap-2.5">
+					{fullscreen ? (
+						<Button
+							type="button"
+							variant="ghost"
+							size="icon"
+							className={HEADER_ICON_BUTTON}
+							aria-pressed={chatOpen}
+							aria-label={
+								chatOpen
+									? t("memonComputer.hideChat")
+									: t("memonComputer.showChat")
+							}
+							title={
+								chatOpen
+									? t("memonComputer.hideChat")
+									: t("memonComputer.showChat")
+							}
+							onClick={() => setChatOpen((open) => !open)}
+						>
+							{chatOpen ? (
+								<PanelLeftClose size={15} />
+							) : (
+								<MessageSquare size={15} />
+							)}
+						</Button>
+					) : null}
 					<MemonLogo size={26} />
 					<span className="text-sm font-semibold tracking-tight">
 						{t("memonComputer.title")}
@@ -736,234 +780,243 @@ export const MemonComputerPanel: React.FC<{
 				</button>
 			) : null}
 
-			<div
-				ref={areaRef}
-				className="relative flex min-h-0 flex-1 flex-col overflow-hidden"
-			>
-				{/* biome-ignore lint/a11y/noStaticElementInteractions: right-click asks about what is under the pointer; every window's content stays reachable without it. */}
+			<div className="flex min-h-0 flex-1">
+				{showChat ? (
+					<aside
+						ref={chatSlotRef}
+						aria-label={t("memonComputer.chatPanel")}
+						className="flex w-[min(26rem,40vw)] min-w-72 shrink-0 flex-col border-r bg-background"
+					/>
+				) : null}
 				<div
-					ref={desktopRef}
-					onContextMenu={(event) => {
-						// Empty desktop: paste into the home it shows.
-						if (
-							event.target === event.currentTarget &&
-							snapshot.files.clipboard
-						) {
-							addContextMenuActions(event, [
-								pasteMenuAction(
-									t,
-									() => void send("files.paste", { key, to: snapshot.home }),
-								),
-							]);
-						}
-						askMenu.onContextMenu(event);
-					}}
-					// `isolate`: windows stack by an ever-growing z (one more per focus),
-					// so keep it inside the desktop. Left in the page's stacking, a
-					// window past z 50 covers the menus its own buttons open.
-					className="relative isolate min-h-0 flex-1 overflow-hidden bg-muted/30 bg-[image:radial-gradient(hsl(var(--foreground)/0.07)_1px,transparent_1px)] [background-size:22px_22px]"
+					ref={areaRef}
+					className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
 				>
-					{view === "text" ? (
-						<pre className="absolute inset-0 overflow-auto whitespace-pre-wrap break-words bg-background px-5 py-4 font-mono text-xs leading-relaxed text-foreground/90">
-							{serializeScreen(snapshot)}
-						</pre>
-					) : (
-						<>
-							<MemonDesktopIcons
-								entries={snapshot.desktop}
-								onOpen={(path) => void send("files.open", { key, path })}
-								menuActions={(entry) =>
-									fileMenuActions({
+					{/* biome-ignore lint/a11y/noStaticElementInteractions: right-click asks about what is under the pointer; every window's content stays reachable without it. */}
+					<div
+						ref={desktopRef}
+						onContextMenu={(event) => {
+							// Empty desktop: paste into the home it shows.
+							if (
+								event.target === event.currentTarget &&
+								snapshot.files.clipboard
+							) {
+								addContextMenuActions(event, [
+									pasteMenuAction(
 										t,
-										paths: [entry.path],
-										folder: entry.type === "dir" ? entry.path : undefined,
-										canPaste: Boolean(snapshot.files.clipboard),
-										open: () =>
-											void send("files.open", { key, path: entry.path }),
-										toClipboard: (mode, paths) =>
-											void send("files.clipboard", { key, mode, paths }),
-										paste: (to) => void send("files.paste", { key, to }),
-										remove: confirmDelete,
-									})
-								}
-								onDelete={(path) => confirmDelete([path])}
-							/>
-							{visibleWindows.map((window) => (
-								<MemonWindowFrame
-									key={window.id}
-									window={window}
-									title={windowTitle(snapshot, window, t)}
-									focused={window.id === snapshot.focusedWindowId}
-									userDriving={userDriving}
-									compact={compact}
-									desktopRef={desktopRef}
-									onFocus={() => {
-										if (window.id !== snapshot.focusedWindowId) {
-											void send("window.focus", { key, windowId: window.id });
-										}
-									}}
-									onMinimize={() =>
-										void send("window.minimize", { key, windowId: window.id })
+										() => void send("files.paste", { key, to: snapshot.home }),
+									),
+								]);
+							}
+							askMenu.onContextMenu(event);
+						}}
+						// `isolate`: windows stack by an ever-growing z (one more per focus),
+						// so keep it inside the desktop. Left in the page's stacking, a
+						// window past z 50 covers the menus its own buttons open.
+						className="relative isolate min-h-0 flex-1 overflow-hidden bg-muted/30 bg-[image:radial-gradient(hsl(var(--foreground)/0.07)_1px,transparent_1px)] [background-size:22px_22px]"
+					>
+						{view === "text" ? (
+							<pre className="absolute inset-0 overflow-auto whitespace-pre-wrap break-words bg-background px-5 py-4 font-mono text-xs leading-relaxed text-foreground/90">
+								{serializeScreen(snapshot)}
+							</pre>
+						) : (
+							<>
+								<MemonDesktopIcons
+									entries={snapshot.desktop}
+									onOpen={(path) => void send("files.open", { key, path })}
+									menuActions={(entry) =>
+										fileMenuActions({
+											t,
+											paths: [entry.path],
+											folder: entry.type === "dir" ? entry.path : undefined,
+											canPaste: Boolean(snapshot.files.clipboard),
+											open: () =>
+												void send("files.open", { key, path: entry.path }),
+											toClipboard: (mode, paths) =>
+												void send("files.clipboard", { key, mode, paths }),
+											paste: (to) => void send("files.paste", { key, to }),
+											remove: confirmDelete,
+										})
 									}
-									onMaximize={() =>
-										void send("window.maximize", { key, windowId: window.id })
-									}
-									onClose={() =>
-										void send("window.close", { key, windowId: window.id })
-									}
-									onMove={(rect) =>
-										send("window.move", { key, windowId: window.id, rect })
-									}
-									onAsk={
-										memonWindowTarget(snapshot, window)
-											? () => {
-													const target = memonWindowTarget(snapshot, window);
-													if (target) askInChat(target, t);
-												}
-											: undefined
-									}
-								>
-									<MemonWindowErrorBoundary
+									onDelete={(path) => confirmDelete([path])}
+								/>
+								{visibleWindows.map((window) => (
+									<MemonWindowFrame
 										key={window.id}
-										labels={{
-											failed: t("memonComputer.windowFailed"),
-											retry: t("memonComputer.windowRetry"),
+										window={window}
+										title={windowTitle(snapshot, window, t)}
+										focused={window.id === snapshot.focusedWindowId}
+										userDriving={userDriving}
+										compact={compact}
+										desktopRef={desktopRef}
+										onFocus={() => {
+											if (window.id !== snapshot.focusedWindowId) {
+												void send("window.focus", { key, windowId: window.id });
+											}
 										}}
+										onMinimize={() =>
+											void send("window.minimize", { key, windowId: window.id })
+										}
+										onMaximize={() =>
+											void send("window.maximize", { key, windowId: window.id })
+										}
+										onClose={() =>
+											void send("window.close", { key, windowId: window.id })
+										}
+										onMove={(rect) =>
+											send("window.move", { key, windowId: window.id, rect })
+										}
+										onAsk={
+											memonWindowTarget(snapshot, window)
+												? () => {
+														const target = memonWindowTarget(snapshot, window);
+														if (target) askInChat(target, t);
+													}
+												: undefined
+										}
 									>
-										{renderBody(window)}
-									</MemonWindowErrorBoundary>
-								</MemonWindowFrame>
-							))}
-							<MemonAgentCursor
-								cursor={snapshot.cursor}
-								visible={snapshot.status === "working"}
-								desktopRef={desktopRef}
-								revision={snapshot.revision}
-							/>
-							{captureMode ? (
-								<MemonCaptureOverlay
-									mode={captureMode}
+										<MemonWindowErrorBoundary
+											key={window.id}
+											labels={{
+												failed: t("memonComputer.windowFailed"),
+												retry: t("memonComputer.windowRetry"),
+											}}
+										>
+											{renderBody(window)}
+										</MemonWindowErrorBoundary>
+									</MemonWindowFrame>
+								))}
+								<MemonAgentCursor
+									cursor={snapshot.cursor}
+									visible={snapshot.status === "working"}
 									desktopRef={desktopRef}
-									labels={{
-										window: t("memonComputer.captureWindowHint"),
-										area: t("memonComputer.captureAreaHint"),
-									}}
-									onWindow={(element) => {
-										// The desktop drawn with this window in front, cut to
-										// the window: drawing a window alone misplaces it.
-										const desktop = desktopRef.current;
-										const id = element.getAttribute("data-memon-window");
-										if (!desktop || !id) return;
-										const box = desktop.getBoundingClientRect();
-										const rect = element.getBoundingClientRect();
-										void sendScreenshot(
-											{
-												x: rect.left - box.left,
-												y: rect.top - box.top,
-												width: rect.width,
-												height: rect.height,
-											},
-											`[data-memon-window="${id}"]`,
-										);
-									}}
-									onArea={(crop) => void sendScreenshot(crop)}
-									onCancel={cancelCapture}
+									revision={snapshot.revision}
 								/>
-							) : null}
-						</>
-					)}
-					{askMenu.menu}
-					{userDriving ? (
-						<div className="absolute bottom-4 left-1/2 z-[9100] flex max-w-[calc(100%-1.5rem)] -translate-x-1/2 items-center gap-3 rounded-full border border-orange-400/80 bg-background/95 py-1.5 pl-3.5 pr-1.5 text-[13px] text-foreground shadow-xl shadow-black/15 backdrop-blur">
-							<span className="relative flex h-2.5 w-2.5 shrink-0">
-								<span className="absolute inset-0 animate-ping rounded-full bg-orange-400 opacity-60 motion-reduce:animate-none" />
-								<span className="relative h-2.5 w-2.5 rounded-full bg-orange-400" />
-							</span>
-							<span className="truncate">
-								{snapshot.browser.wallTabId
-									? t("memonComputer.wall.pill")
-									: t("memonComputer.userDriving")}
-							</span>
-							<button
-								type="button"
-								onClick={() =>
-									void send(
-										// Stopped on a wall: Done checks the page is through.
-										snapshot.browser.wallTabId
-											? "browser.recheckWall"
-											: "control.resume",
-										{ key },
-									)
-								}
-								className="shrink-0 rounded-full bg-blue-600 px-3 py-1 text-xs font-semibold text-white transition-colors hover:bg-blue-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-							>
-								{snapshot.browser.wallTabId
-									? t("memonComputer.wall.done")
-									: t("sandboxPanel.managedBrowserResume")}
-							</button>
-						</div>
-					) : null}
-				</div>
-
-				<nav
-					aria-label={t("memonComputer.title")}
-					className={cn(
-						"flex shrink-0 items-center overflow-x-auto overflow-y-hidden border-t bg-background px-2",
-						compact ? "h-12" : "h-14",
-					)}
-				>
-					<div className="mx-auto flex items-center gap-1">
-						{launchers.map((app) => {
-							const windowApp: MemonWindowApp = app.id;
-							const open = snapshot.windows.find(
-								(window) => window.app === windowApp,
-							);
-							return (
-								<DockButton
-									key={app.id}
-									app={windowApp}
-									label={t(`memonComputer.apps.${app.id}`)}
-									open={open}
-									active={Boolean(
-										open &&
-											open.id === snapshot.focusedWindowId &&
-											!open.minimized,
-									)}
-									compact={compact}
-									disabled={!app.available}
-									reason={app.reason}
-									busy={windowApp === "pi" && snapshot.piCode?.working}
-									attention={
-										windowApp === "pi" && Boolean(snapshot.piCode?.approval)
+								{captureMode ? (
+									<MemonCaptureOverlay
+										mode={captureMode}
+										desktopRef={desktopRef}
+										labels={{
+											window: t("memonComputer.captureWindowHint"),
+											area: t("memonComputer.captureAreaHint"),
+										}}
+										onWindow={(element) => {
+											// The desktop drawn with this window in front, cut to
+											// the window: drawing a window alone misplaces it.
+											const desktop = desktopRef.current;
+											const id = element.getAttribute("data-memon-window");
+											if (!desktop || !id) return;
+											const box = desktop.getBoundingClientRect();
+											const rect = element.getBoundingClientRect();
+											void sendScreenshot(
+												{
+													x: rect.left - box.left,
+													y: rect.top - box.top,
+													width: rect.width,
+													height: rect.height,
+												},
+												`[data-memon-window="${id}"]`,
+											);
+										}}
+										onArea={(crop) => void sendScreenshot(crop)}
+										onCancel={cancelCapture}
+									/>
+								) : null}
+							</>
+						)}
+						{askMenu.menu}
+						{userDriving ? (
+							<div className="absolute bottom-4 left-1/2 z-[9100] flex max-w-[calc(100%-1.5rem)] -translate-x-1/2 items-center gap-3 rounded-full border border-orange-400/80 bg-background/95 py-1.5 pl-3.5 pr-1.5 text-[13px] text-foreground shadow-xl shadow-black/15 backdrop-blur">
+								<span className="relative flex h-2.5 w-2.5 shrink-0">
+									<span className="absolute inset-0 animate-ping rounded-full bg-orange-400 opacity-60 motion-reduce:animate-none" />
+									<span className="relative h-2.5 w-2.5 rounded-full bg-orange-400" />
+								</span>
+								<span className="truncate">
+									{snapshot.browser.wallTabId
+										? t("memonComputer.wall.pill")
+										: t("memonComputer.userDriving")}
+								</span>
+								<button
+									type="button"
+									onClick={() =>
+										void send(
+											// Stopped on a wall: Done checks the page is through.
+											snapshot.browser.wallTabId
+												? "browser.recheckWall"
+												: "control.resume",
+											{ key },
+										)
 									}
-									onClick={() => openApp(windowApp)}
-								/>
-							);
-						})}
-						{snapshot.windows.some((window) => window.app === "editor") ? (
-							<DockButton
-								app="editor"
-								label={t("memonComputer.apps.editor")}
-								open={snapshot.windows.find(
-									(window) => window.app === "editor",
-								)}
-								active={snapshot.windows.some(
-									(window) =>
-										window.app === "editor" &&
-										window.id === snapshot.focusedWindowId &&
-										!window.minimized,
-								)}
-								compact={compact}
-								onClick={() => openApp("editor")}
-							/>
+									className="shrink-0 rounded-full bg-blue-600 px-3 py-1 text-xs font-semibold text-white transition-colors hover:bg-blue-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+								>
+									{snapshot.browser.wallTabId
+										? t("memonComputer.wall.done")
+										: t("sandboxPanel.managedBrowserResume")}
+								</button>
+							</div>
 						) : null}
 					</div>
-				</nav>
-				<MemonUserCursor
-					areaRef={areaRef}
-					enabled={view === "desktop" && !captureMode}
-					label={t("memonComputer.you")}
-				/>
+
+					<nav
+						aria-label={t("memonComputer.title")}
+						className={cn(
+							"flex shrink-0 items-center overflow-x-auto overflow-y-hidden border-t bg-background px-2",
+							compact ? "h-12" : "h-14",
+						)}
+					>
+						<div className="mx-auto flex items-center gap-1">
+							{launchers.map((app) => {
+								const windowApp: MemonWindowApp = app.id;
+								const open = snapshot.windows.find(
+									(window) => window.app === windowApp,
+								);
+								return (
+									<DockButton
+										key={app.id}
+										app={windowApp}
+										label={t(`memonComputer.apps.${app.id}`)}
+										open={open}
+										active={Boolean(
+											open &&
+												open.id === snapshot.focusedWindowId &&
+												!open.minimized,
+										)}
+										compact={compact}
+										disabled={!app.available}
+										reason={app.reason}
+										busy={windowApp === "pi" && snapshot.piCode?.working}
+										attention={
+											windowApp === "pi" && Boolean(snapshot.piCode?.approval)
+										}
+										onClick={() => openApp(windowApp)}
+									/>
+								);
+							})}
+							{snapshot.windows.some((window) => window.app === "editor") ? (
+								<DockButton
+									app="editor"
+									label={t("memonComputer.apps.editor")}
+									open={snapshot.windows.find(
+										(window) => window.app === "editor",
+									)}
+									active={snapshot.windows.some(
+										(window) =>
+											window.app === "editor" &&
+											window.id === snapshot.focusedWindowId &&
+											!window.minimized,
+									)}
+									compact={compact}
+									onClick={() => openApp("editor")}
+								/>
+							) : null}
+						</div>
+					</nav>
+					<MemonUserCursor
+						areaRef={areaRef}
+						enabled={view === "desktop" && !captureMode}
+						label={t("memonComputer.you")}
+					/>
+				</div>
 			</div>
 			{deleteDialog}
 		</div>

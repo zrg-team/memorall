@@ -6,6 +6,7 @@ import {
 	timestamp,
 	uuid,
 } from "drizzle-orm/pg-core";
+import { conversation } from "./conversations";
 import { flows } from "./flows";
 
 const tableName = "model_usage";
@@ -25,6 +26,10 @@ export const modelUsage = pgTable(
 		agentFlowId: uuid("agent_flow_id").references(() => flows.id, {
 			onDelete: "set null",
 		}),
+		/** The chat the request was made for (pi code on its agent's work); its cost counts it. */
+		conversationId: uuid("conversation_id").references(() => conversation.id, {
+			onDelete: "set null",
+		}),
 		/** Requests of one session (a pi session, a Studio session) group together. */
 		sessionId: text("session_id").notNull(),
 		title: text("title").notNull().default(""),
@@ -34,7 +39,10 @@ export const modelUsage = pgTable(
 		usage: jsonb("usage").$type<Record<string, unknown>>().notNull(),
 		createdAt: timestamp("created_at").defaultNow().notNull(),
 	},
-	(table) => [index("model_usage_created_at_idx").on(table.createdAt)],
+	(table) => [
+		index("model_usage_created_at_idx").on(table.createdAt),
+		index("model_usage_conversation_idx").on(table.conversationId),
+	],
 );
 
 export type ModelUsageRow = typeof modelUsage.$inferSelect;

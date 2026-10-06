@@ -13,7 +13,16 @@ const PICTURE = "data:image/png;base64,AAAA";
 const fakeMachine = (options: {
 	looks: boolean;
 	capture?: () => Promise<unknown>;
+	/** The image the Viewer shows in front, if any. */
+	viewer?: string;
 }) => ({
+	fileRefPath: vi.fn(() => "/agents/Bot/shots/hero.png"),
+	pictureOfFile: vi.fn(async () => ({
+		dataUrl: PICTURE,
+		width: 640,
+		height: 360,
+	})),
+	viewerImage: () => options.viewer ?? null,
 	home: "/agents/Bot",
 	beginRun: vi.fn(),
 	waitForAgentTurn: async () => "ready",
@@ -68,6 +77,82 @@ describe("memon_act describe", () => {
 		expect(machine.savePicture).not.toHaveBeenCalled();
 	});
 
+	it("hands over an image in Files, by its ref or as the Viewer shows it", async () => {
+		const machine = fakeMachine({ looks: true });
+		vi.mocked(getMemonMachine).mockResolvedValue(machine as never);
+		const result = await createMemonActTool().execute(
+			{ ref: "f3", action: "describe" },
+			undefined,
+		);
+		expect(machine.fileRefPath).toHaveBeenCalledWith("f3");
+		expect(machine.pictureOfFile).toHaveBeenCalledWith(
+			"/agents/Bot/shots/hero.png",
+		);
+		expect(result).toMatchObject({
+			content: [
+				{
+					type: "text",
+					text: "The picture of ~/shots/hero.png (640×360) is attached: look at it.\n\nscreen",
+				},
+				{ type: "image_url", image_url: { url: PICTURE, detail: "auto" } },
+			],
+		});
+
+		const viewing = fakeMachine({
+			looks: true,
+			viewer: "/agents/Bot/chart.webp",
+		});
+		vi.mocked(getMemonMachine).mockResolvedValue(viewing as never);
+		await createMemonActTool().execute({ action: "describe" }, undefined);
+		expect(viewing.pictureOfFile).toHaveBeenCalledWith(
+			"/agents/Bot/chart.webp",
+		);
+		expect(viewing.captureRef).not.toHaveBeenCalled();
+	});
+
+	it("pictures the whole page without a ref, and points a model that cannot look at captions", async () => {
+		const machine = fakeMachine({ looks: true });
+		vi.mocked(getMemonMachine).mockResolvedValue(machine as never);
+		const page = await createMemonActTool().execute(
+			{ action: "describe" },
+			undefined,
+		);
+		expect(machine.captureRef).toHaveBeenCalledWith(undefined);
+		expect(page).toMatchObject({
+			content: [
+				{
+					type: "text",
+					text: expect.stringContaining(
+						"The picture of the page (880×594) is attached",
+					),
+				},
+				{ type: "image_url" },
+			],
+		});
+
+		const blind = fakeMachine({ looks: false });
+		vi.mocked(getMemonMachine).mockResolvedValue(blind as never);
+		const file = await createMemonActTool().execute(
+			{ ref: "f3", action: "describe" },
+			undefined,
+		);
+		expect(blind.pictureOfFile).not.toHaveBeenCalled();
+		expect(file).toMatchObject({
+			content: expect.stringContaining(
+				'memon_studio { action: "run", tool: "image_tools", path: "~/shots/hero.png" } can caption it.',
+			),
+		});
+
+		await expect(
+			createMemonActTool().execute(
+				{ ref: "e1", action: "describe" },
+				undefined,
+			),
+		).resolves.toMatchObject({
+			content: expect.stringContaining("describe takes a page ref (b9)"),
+		});
+	});
+
 	it("saves the picture to Files for a model that cannot look", async () => {
 		const machine = fakeMachine({ looks: false });
 		const result = await describeRef(machine);
@@ -91,6 +176,65 @@ describe("memon_act describe", () => {
 			content: expect.stringContaining(
 				"No picture of b1 (the image is from another site). Image b1 source: http://localhost:8347/logo.png.",
 			),
+		});
+	});
+});
+
+describe("memon_act scroll", () => {
+	beforeEach(() => {
+		vi.mocked(getMemonMachine).mockReset();
+	});
+
+	const scroll = async (
+		focused: { app: "files" | "browser"; moved?: boolean },
+		direction?: "down" | "bottom",
+	) => {
+		const machine = {
+			...fakeMachine({ looks: false }),
+			focusedTextWindow: () => null,
+			scrollWindow: vi.fn(() =>
+				focused.app === "browser"
+					? null
+					: { app: focused.app, moved: focused.moved ?? true },
+			),
+		};
+		machine.browserAction.mockResolvedValue({
+			ok: true,
+			action: "scrollScreen",
+			ref: "",
+			detail: "The page is at 680 of 4000 px down.",
+		});
+		vi.mocked(getMemonMachine).mockResolvedValue(machine as never);
+		const result = await createMemonActTool().execute(
+			{ action: "scroll", ...(direction ? { direction } : {}) },
+			undefined,
+		);
+		return { machine, result };
+	};
+
+	it("pages the focused window's list, not the page behind it", async () => {
+		const { machine, result } = await scroll({ app: "files" }, "bottom");
+		expect(machine.scrollWindow).toHaveBeenCalledWith("bottom");
+		expect(machine.browserAction).not.toHaveBeenCalled();
+		expect(result).toMatchObject({
+			content: expect.stringContaining("Scrolled Files to the bottom."),
+		});
+
+		const atEnd = await scroll({ app: "files", moved: false });
+		expect(atEnd.result).toMatchObject({
+			content: expect.stringContaining("Files cannot scroll down any further."),
+		});
+	});
+
+	it("scrolls the page when the Browser is in front", async () => {
+		const { machine, result } = await scroll({ app: "browser" });
+		expect(machine.browserAction).toHaveBeenCalledWith({
+			action: "scrollScreen",
+			value: "down",
+			ref: undefined,
+		});
+		expect(result).toMatchObject({
+			content: expect.stringContaining("The page is at 680 of 4000 px down."),
 		});
 	});
 });

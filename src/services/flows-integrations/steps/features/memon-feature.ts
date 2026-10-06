@@ -125,14 +125,14 @@ const APP_SECTIONS: Record<MemonAppId, (config: MemonFeatureConfig) => string> =
 				'Organize: { ref: "f3", action: "move", text: "<folder>" } ("copy" copies); cut/copy without text, then { action: "paste" }. Nothing is overwritten: a clash gets a new name.',
 				`Download: memon_act { action: "download", text: "<url>", to: "<folder or file>" } saves a web file (image, font, PDF) in one step, into ~/Downloads by default${config.apps.browser ? '; { ref: "b7", action: "download" } saves an image from the page' : ""}. Do not write a script to download.`,
 				'Zip: memon_act { action: "zip", text: "<folder>" } (or a folder ref) zips it into ~/Downloads for the user, when they ask for a folder as a file. Do not zip with a script.',
-				'PDFs, spreadsheets, images and media open in the Viewer as text or a description; { action: "scroll" } pages a long file.',
+				'PDFs, spreadsheets and media open in the Viewer as text; { action: "scroll" } pages a long file; { action: "describe" } shows you an image.',
 				"New files and folders go in your home, ~ (a folder per piece of work, like ~/<topic>/), unless the user names another place.",
 			]),
 		terminal: () =>
 			section("Terminal", "shell, node, py, git, curl, ffmpeg and magick", [
 				'Run: memon_run { command } in the "/" tree of Files, from your home (~); "cd dir" sticks, "cd" goes home. A long command keeps running: { waitSeconds: 60 } waits, { input: "y" } answers, { stop: true } stops.',
 				'Tabs: the screen shows what runs or last ran in each; { terminal: "new", command } runs in a new tab. { command, saveAs: "Start Site" } saves ~/Start Site.terminal instead; clicking it runs it.',
-				"Code: write JavaScript to a .js file and run node file.js (no node -e); end scripts with process.exit(0) or they hang. npm install works for pure-JS packages; git works.",
+				"Code: write JavaScript to a .js file and run node file.js (no node -e); end scripts with process.exit(0) or they hang. npm install works for pure-JS packages; git works. Vite apps: npm run dev starts a built-in Vite server (no vite build).",
 				`Python: py file.py: stdlib plus ${BUNDLED_PYTHON_BRIEF} (imports load them; pip list names them, pip show <name> says how). Charts: plt.savefig("chart.png").`,
 				"Media: ffmpeg, ffprobe and magick (ImageMagick; convert, identify, mogrify… too) are installed by default: never install them. ffmpeg has one thread: trim and scale down to keep encodes short.",
 				"Web: save files with one curl, not a script: curl -sSL -o assets/hero.jpg <url>; several: --create-dirs --output-dir assets -O <url1> -O <url2>.",
@@ -225,7 +225,7 @@ const homeSection = (
 			[
 				`~ is your home folder${home ? `, ${home}` : ""}: your workspace, and the desktop the user sees. Every agent has its own. Keep what you make there unless the user names another place.`,
 				`~/${MEMON_BOT_FILE_NAME} is the user's standing instructions for you and ~/${MEMON_MEMORY_FILE_NAME} what you remember about them; both are read at the start of every chat.`,
-				'Save a lasting preference or fact, or what the user asks you to remember, right away: memon_memory { action: "add", text: "…" }, one short fact per entry. Fix a wrong one: { action: "update", entry: 2, text } or { action: "remove", entry: 2 } (the [n] below).',
+				'Save a lasting preference or fact, or what the user asks you to remember, right away: memon_memory { action: "add", text: "…" }, one short fact per entry. Fix a wrong one by its [n] below: { action: "update", entry: n, text } or { action: "remove", entry: n }.',
 				`Do not save what only matters for this task${tasks ? " (that goes in Tasks)" : ""}; never save passwords, keys or tokens.`,
 				`Change ${MEMON_BOT_FILE_NAME} only when the user asks to change how you behave from now on: memon_memory { file: "bot", action: "add", text }, then tell them.`,
 			],
