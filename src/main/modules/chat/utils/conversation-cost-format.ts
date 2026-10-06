@@ -14,6 +14,11 @@ export interface ConversationCost {
 	requests: number;
 	/** Replies that reported usage. */
 	replies: number;
+	/**
+	 * Of the totals above, what the chat's tools spent on models for it
+	 * outside the replies (pi code working on the agent's task).
+	 */
+	tools?: { cost?: number; requests: number };
 }
 
 /** What a reply still running has used so far, summed over its requests. */
@@ -44,6 +49,7 @@ export const withRunUsage = (
 		outputTokens: base.outputTokens + usage.completion_tokens,
 		requests: base.requests + usage.requests,
 		replies: base.replies + 1,
+		...(base.tools ? { tools: base.tools } : {}),
 	};
 };
 

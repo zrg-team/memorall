@@ -36,6 +36,22 @@ export const useConversationCostSummary = () => {
 				replies: cost.replies,
 				defaultValue: "{{requests}} model requests over {{replies}} replies",
 			}),
+			...(cost.tools
+				? [
+						cost.tools.cost !== undefined
+							? t("cost.tools", {
+									cost: formatUsd(cost.tools.cost),
+									requests: cost.tools.requests,
+									defaultValue:
+										"Of that, tools such as pi code: {{cost}} over {{requests}} requests",
+								})
+							: t("cost.toolsNoPrice", {
+									requests: cost.tools.requests,
+									defaultValue:
+										"Of that, tools such as pi code made {{requests}} requests",
+								}),
+					]
+				: []),
 		].join("\n");
 };
 

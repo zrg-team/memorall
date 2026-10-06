@@ -107,6 +107,89 @@ describe("a chat's cost", () => {
 		expect(cachedPercent(costs[paid.id]!)).toBe(83);
 	});
 
+	it("counts what pi code spent on a chat's task in that chat's cost", async () => {
+		const db = database.db as ReturnType<typeof drizzle<typeof schema>>;
+		const [coding, piOnly, other] = await db
+			.insert(schema.conversations)
+			.values([{ title: "Coding" }, { title: "pi only" }, { title: "Other" }])
+			.returning();
+		if (!coding || !piOnly || !other) throw new Error("no conversations");
+		await db.insert(schema.messages).values({
+			conversationId: coding.id,
+			type: "text",
+			role: "assistant",
+			content: "pi built it",
+			metadata: {
+				usage: {
+					prompt_tokens: 40_000,
+					cached_tokens: 30_000,
+					completion_tokens: 900,
+					cost: 0.09,
+					requests: 6,
+				},
+			},
+		});
+		const piRequest = (
+			conversationId: string | null,
+			usage: Record<string, number>,
+		) => ({
+			source: "pi-code",
+			tool: "memon_code",
+			conversationId,
+			sessionId: "pi-session",
+			title: "pi code · ~/game",
+			provider: "openrouter",
+			model: "deepseek",
+			usage,
+		});
+		await db.insert(schema.modelUsage).values([
+			piRequest(coding.id, {
+				prompt_tokens: 1_000_000,
+				cached_tokens: 900_000,
+				completion_tokens: 20_000,
+				cost: 0.6,
+			}),
+			piRequest(coding.id, {
+				prompt_tokens: 500_000,
+				completion_tokens: 10_000,
+				cost: 0.4,
+			}),
+			piRequest(piOnly.id, { prompt_tokens: 100, completion_tokens: 10 }),
+			// The user typing to pi: no chat asked for it.
+			piRequest(null, { prompt_tokens: 9_999, completion_tokens: 9, cost: 5 }),
+		]);
+
+		const costs = await loadConversationCosts([coding.id, piOnly.id, other.id]);
+
+		expect(costs[coding.id]).toEqual({
+			cost: expect.closeTo(1.09, 6),
+			inputTokens: 1_540_000,
+			cachedTokens: 930_000,
+			outputTokens: 30_900,
+			requests: 8,
+			replies: 1,
+			tools: { cost: expect.closeTo(1, 6), requests: 2 },
+		});
+		expect(costs[piOnly.id]).toEqual({
+			inputTokens: 100,
+			cachedTokens: 0,
+			outputTokens: 10,
+			requests: 1,
+			replies: 0,
+			tools: { requests: 1 },
+		});
+		expect(costs[other.id]).toBeUndefined();
+		// A running reply keeps the tools' share on top.
+		expect(
+			withRunUsage(costs[coding.id], {
+				prompt_tokens: 1,
+				completion_tokens: 1,
+				total_tokens: 2,
+				requests: 1,
+			}),
+		).toMatchObject({ tools: { requests: 2 } });
+	});
+
 	it("formats a chat's cost and tokens at a glance", () => {
 		expect(formatUsd(0.0926)).toBe("$0.093");
 		expect(formatUsd(1.234)).toBe("$1.23");

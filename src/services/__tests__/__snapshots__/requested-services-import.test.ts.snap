@@ -89,6 +89,7 @@ exports[`requested service module coverage > imports requested service trees 1`]
   "../database/migrations/015_bound_message_history_search_index.ts",
   "../database/migrations/016_add_conversation_mode.ts",
   "../database/migrations/017_add_model_usage.ts",
+  "../database/migrations/018_add_model_usage_conversation.ts",
   "../database/migrations/index.ts",
   "../database/schema.ts",
   "../database/thread-history-search-vector.ts",

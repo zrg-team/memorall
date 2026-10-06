@@ -652,7 +652,9 @@
 		"noPrice": "Cuộc trò chuyện này đến nay (nhà cung cấp không báo giá)",
 		"tokens": "Đầu vào {{input}} token ({{cached}}% từ cache) · đầu ra {{output}}",
 		"requests": "{{requests}} yêu cầu tới mô hình qua {{replies}} câu trả lời",
-		"tokensOnly": "{{tokens}} token"
+		"tokensOnly": "{{tokens}} token",
+		"tools": "Trong đó, công cụ như pi code: {{cost}} qua {{requests}} yêu cầu",
+		"toolsNoPrice": "Trong đó, công cụ như pi code đã gửi {{requests}} yêu cầu"
 	},
 	"queue": {
 		"label": "Tin nhắn đang chờ gửi",

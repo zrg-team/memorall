@@ -80,6 +80,8 @@ export interface MemonPiCodePort {
 		cwd?: string;
 		/** The agent (flow id) the computer belongs to; its usage is booked there. */
 		agentId?: string | null;
+		/** The chat pi works for now, if any: its requests are booked to it too. */
+		chargeTo?: () => string | null;
 		sandboxSessionKey: string;
 		/** A saved session to open instead of a new one. */
 		sessionFile?: string;
@@ -185,6 +187,8 @@ export interface PiCodeActOptions {
 	 * wait for pi returns for them, so the agent never misses the user.
 	 */
 	inbox?: () => number;
+	/** The chat whose agent makes the call: pi's requests on its work are booked to it. */
+	conversationId?: string;
 }
 
 /** How long a prompt waits for pi's turn to end, unless the call says. */
@@ -247,6 +251,11 @@ export class MemonPiCode {
 	private approvedRun: string | null = null;
 	/** The agent stopped pi's last turn itself, so the user did not. */
 	private agentStopped = false;
+	/**
+	 * The chat whose agent last handed this pi work: its requests are booked
+	 * to that chat's cost until pi stops. A pi the user started has none.
+	 */
+	private chargedConversation: string | null = null;
 	/** pi starts again on a saved session (/resume): it did not quit. */
 	private reopening = false;
 	/** The user opened the window: it waits for them to pick a folder. */
@@ -344,6 +353,7 @@ export class MemonPiCode {
 				home: this.host.home(),
 				cwd,
 				agentId: this.host.agentId(),
+				chargeTo: () => this.chargedConversation,
 				sandboxSessionKey: this.host.sessionKey,
 				sessionFile,
 				onQuit: () => this.host.quit(),
@@ -391,6 +401,7 @@ export class MemonPiCode {
 		this.starting = undefined;
 		this.startingCwd = undefined;
 		this.error = undefined;
+		this.chargedConversation = null;
 		await runner?.dispose();
 	}
 
@@ -676,6 +687,7 @@ export class MemonPiCode {
 				const started = !this.active;
 				const runner = await this.launch(cwd);
 				const working = runner.status().running;
+				this.chargedConversation = options.conversationId ?? null;
 				await runner.submit(text, input.queue);
 				this.agentStopped = false;
 				const where = runner.status().cwd;

@@ -92,6 +92,9 @@ const RETRIEVAL_STEP_NAMES = new Set([
 	"structmem-retrieval",
 ]);
 
+/** How often a running reply's chat reads its cost again (its tools' share). */
+const RUNNING_COST_REFRESH_MS = 15_000;
+
 interface ChatPageProps {
 	onOpenAgentWorkspace?: () => void;
 	isNarrowChatPanel?: boolean;
@@ -162,6 +165,24 @@ export const ChatPage: React.FC<ChatPageProps> = ({
 			void refreshConversationCosts([currentConversation.id]);
 		}
 	}, [currentConversation?.id, refreshConversationCosts]);
+	const replyRunning = useChatStore((state) =>
+		state.currentConversation
+			? Boolean(state.runs[state.currentConversation.id])
+			: false,
+	);
+	// Tools book their requests as they make them (pi code working on what
+	// the agent handed it): while a reply runs, its chat's cost is read again
+	// so their share shows as it grows. A reply's own usage is saved when it
+	// ends, so this never counts the running reply twice.
+	React.useEffect(() => {
+		const conversationId = currentConversation?.id;
+		if (!conversationId || !replyRunning) return;
+		const timer = window.setInterval(
+			() => void refreshConversationCosts([conversationId]),
+			RUNNING_COST_REFRESH_MS,
+		);
+		return () => window.clearInterval(timer);
+	}, [currentConversation?.id, replyRunning, refreshConversationCosts]);
 	const restoreSelectedAgentFlowId = useChatStore(
 		(state) => state.restoreSelectedAgentFlowId,
 	);
