@@ -600,7 +600,8 @@
 			"description": "The generated OpenUI markup is invalid. The original response is shown below."
 		},
 		"partial": "Some parts could not be shown ({{count}})",
-		"partFailed": "{{name}} could not be shown."
+		"partFailed": "{{name}} could not be shown.",
+		"drawingDiagram": "Drawing the diagram…"
 	},
 	"webChallenge": {
 		"kind": {

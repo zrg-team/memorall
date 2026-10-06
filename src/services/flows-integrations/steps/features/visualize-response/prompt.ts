@@ -30,6 +30,12 @@ Showing code vs. running it:
 - Choosing between the three: CodeBlockComp when you are explaining code,
   CodeEditorBlock when you are handing it over to be edited, HtmlBlock when only
   the rendered result matters and the source would be noise.
+- For a flowchart, a sequence of messages, a state machine, an entity diagram,
+  a timeline, a mind map or a gantt chart, use MermaidBlock with the Mermaid
+  source rather than drawing it in an HtmlBlock: it lays the diagram out and
+  the user can switch to its source. Write each line break as \\n inside the
+  double-quoted string, and escape the quotes of a label that holds
+  punctuation: A[\\"Step (1)\\"].
 - When the user asks to see how code behaves, a CodeBlockComp with the source and
   an HtmlBlock with the running result is usually better than either alone. If
   they will want to tweak it, one CodeEditorBlock with preview does both.

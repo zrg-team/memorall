@@ -45,6 +45,11 @@ export const OPENUI_COMPONENTS: OpenUIComponentMeta[] = [
 		description:
 			"renders raw HTML in an isolated frame. Scripts, canvas and animation run; storage, cookies, network credentials and the host page are unreachable. height is pixels, 80 to 900, default 320.",
 	},
+	{
+		signature: "MermaidBlock(code, title?)",
+		description:
+			'draws a Mermaid diagram from its source: flowchart, sequenceDiagram, classDiagram, stateDiagram-v2, erDiagram, gantt, mindmap, timeline, pie. Write line breaks as \\n inside the string, e.g. MermaidBlock("flowchart LR\\n  A[Ask] --> B{Valid?}\\n  B -->|yes| C[Answer]", "Flow").',
+	},
 	// Charts & tables
 	{
 		signature: "Col(header, align?)",

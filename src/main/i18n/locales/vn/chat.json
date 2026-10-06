@@ -600,7 +600,8 @@
 			"description": "Mã OpenUI được tạo ra không hợp lệ. Phản hồi gốc được hiển thị bên dưới."
 		},
 		"partial": "Không hiển thị được một số phần ({{count}})",
-		"partFailed": "Không hiển thị được {{name}}."
+		"partFailed": "Không hiển thị được {{name}}.",
+		"drawingDiagram": "Đang vẽ sơ đồ…"
 	},
 	"webChallenge": {
 		"kind": {
