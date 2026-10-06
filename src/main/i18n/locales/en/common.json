@@ -909,6 +909,7 @@
 			"cut": "Cut",
 			"copy": "Copy",
 			"clear": "Clear selection",
+			"more": "More actions",
 			"pasteCut_one": "Paste {{count}} cut item",
 			"pasteCut_other": "Paste {{count}} cut items",
 			"pasteCopy_one": "Paste {{count}} copied item",

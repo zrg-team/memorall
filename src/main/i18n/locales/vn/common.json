@@ -899,6 +899,7 @@
 			"cut": "Cắt",
 			"copy": "Sao chép",
 			"clear": "Bỏ chọn",
+			"more": "Thêm thao tác",
 			"pasteCut_one": "Dán {{count}} mục đã cắt",
 			"pasteCut_other": "Dán {{count}} mục đã cắt",
 			"pasteCopy_one": "Dán {{count}} mục đã sao chép",
