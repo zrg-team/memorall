@@ -1,5 +1,5 @@
 diff --git a/node_modules/almostnode/dist/index.cjs b/node_modules/almostnode/dist/index.cjs
-index 0daddf0..b8595eb 100644
+index 0daddf0..7e07732 100644
 --- a/node_modules/almostnode/dist/index.cjs
 +++ b/node_modules/almostnode/dist/index.cjs
 @@ -4227,6 +4227,7 @@ function _createClientRequest(urlOrOptions, optionsOrCallback, callback, protoco
@@ -21,7 +21,7 @@ index 0daddf0..b8595eb 100644
  }
  function _unregisterServer(port) {
    serverRegistry.delete(port);
-@@ -5909,41 +5914,79 @@ Object.defineProperty = function(target, key, descriptor) {
+@@ -5909,46 +5914,88 @@ Object.defineProperty = function(target, key, descriptor) {
    }
    return _realDefineProperty.call(Object, target, key, descriptor);
  };
@@ -34,6 +34,8 @@ index 0daddf0..b8595eb 100644
 +    onStderr: options2.onStderr || null,
 +    signal: options2.signal || null,
 +    onServerListen: options2.onServerListen || null,
++    commands: options2.commands || null,
++    runScript: options2.runScript || null,
 +    stdin: null
 +  };
 +}
@@ -124,7 +126,14 @@ index 0daddf0..b8595eb 100644
      const scriptPath = args[0];
      if (!scriptPath) {
        return { stdout: "", stderr: "Usage: node <script.js> [args...]\n", exitCode: 1 };
-@@ -5964,15 +6007,16 @@ function initChildProcess(vfs2) {
+     }
+     const resolvedPath2 = scriptPath.startsWith("/") ? scriptPath : `${ctx.cwd}/${scriptPath}`.replace(/\/+/g, "/");
++    const answered = run.runScript ? run.runScript(resolvedPath2, args.slice(1), ctx) : null;
++    if (answered) return answered;
+     if (!currentVfs.existsSync(resolvedPath2)) {
+       return { stdout: "", stderr: `Error: Cannot find module '${resolvedPath2}'
+ `, exitCode: 1 };
+@@ -5964,15 +6011,16 @@ function initChildProcess(vfs2) {
      });
      const appendStdout = (data2) => {
        stdout += data2;
@@ -143,7 +152,7 @@ index 0daddf0..b8595eb 100644
        onConsole: (method, consoleArgs) => {
          const msg = consoleArgs.map((a) => String(a)).join(" ") + "\n";
          if (method === "error") {
-@@ -6001,12 +6045,12 @@ function initChildProcess(vfs2) {
+@@ -6001,12 +6049,12 @@ function initChildProcess(vfs2) {
        }
      };
      proc.argv = ["node", resolvedPath2, ...args.slice(1)];
@@ -158,7 +167,7 @@ index 0daddf0..b8595eb 100644
      }
      try {
        runtime.runFile(resolvedPath2);
-@@ -6055,15 +6099,15 @@ ${reason.stack || ""}
+@@ -6055,15 +6103,15 @@ ${reason.stack || ""}
        const startTime = Date.now();
        let lastOutputLen = stdout.length + stderr.length;
        let idleMs = 0;
@@ -177,7 +186,7 @@ index 0daddf0..b8595eb 100644
          const currentLen = stdout.length + stderr.length;
          if (currentLen > lastOutputLen) {
            lastOutputLen = currentLen;
-@@ -6079,7 +6123,7 @@ ${reason.stack || ""}
+@@ -6079,7 +6127,7 @@ ${reason.stack || ""}
        }
        return { stdout, stderr, exitCode: exitCalled ? exitCode : 0 };
      } finally {
@@ -186,7 +195,7 @@ index 0daddf0..b8595eb 100644
        _onForkedChildExit = prevChildExitHandler;
        globalThis.removeEventListener("unhandledrejection", rejectionHandler);
      }
-@@ -6122,7 +6166,7 @@ ${reason.stack || ""}
+@@ -6122,7 +6170,7 @@ ${reason.stack || ""}
          };
      }
    });
@@ -195,8 +204,18 @@ index 0daddf0..b8595eb 100644
      fs: vfsAdapter,
      cwd: "/",
      env: {
-@@ -6134,6 +6178,52 @@ ${reason.stack || ""}
-     customCommands: [nodeCommand, npmCommand]
+@@ -6131,9 +6179,61 @@ ${reason.stack || ""}
+       PATH: "/usr/local/bin:/usr/bin:/bin:/node_modules/.bin",
+       NODE_ENV: "development"
+     },
+-    customCommands: [nodeCommand, npmCommand]
++    customCommands: [
++      nodeCommand,
++      npmCommand,
++      ...Object.entries(run.commands || {}).map(
++        ([name2, execute]) => justBash.defineCommand(name2, (args, ctx) => execute(args, ctx))
++      )
++    ]
    });
  }
 +function checkScriptSyntax(scriptPath, cwd) {
@@ -248,7 +267,7 @@ index 0daddf0..b8595eb 100644
  function readPackageJson(cwd) {
    const pkgJsonPath = `${cwd}/package.json`.replace(/\/+/g, "/");
    if (!currentVfs.existsSync(pkgJsonPath)) {
-@@ -26387,6 +26477,41 @@ const builtinModules = {
+@@ -26387,6 +26487,41 @@ const builtinModules = {
      scheduler: { wait: (ms) => new Promise((resolve2) => setTimeout(resolve2, ms)) }
    }
  };
@@ -290,7 +309,7 @@ index 0daddf0..b8595eb 100644
  function createRequire(vfs, fsShim, process, currentDir, moduleCache, options, processedCodeCache) {
    const resolutionCache = /* @__PURE__ */ new Map();
    const packageJsonCache = /* @__PURE__ */ new Map();
-@@ -26690,7 +26815,7 @@ ${code}
+@@ -26690,7 +26825,7 @@ ${code}
        };
      }
      if (builtinModules[id]) {
@@ -299,7 +318,7 @@ index 0daddf0..b8595eb 100644
      }
      if (id === "rollup" || id.startsWith("rollup/") || id.startsWith("@rollup/")) {
        console.log("[runtime] Intercepted rollup:", id);
-@@ -26705,7 +26830,7 @@ ${code}
+@@ -26705,7 +26840,7 @@ ${code}
      }
      const resolved = resolveModule(id, currentDir);
      if (builtinModules[resolved]) {
@@ -308,7 +327,7 @@ index 0daddf0..b8595eb 100644
      }
      if (resolved.includes("/node_modules/rollup/") || resolved.includes("/node_modules/@rollup/")) {
        return builtinModules["rollup"];
-@@ -34070,26 +34195,9 @@ function createContainer(options2) {
+@@ -34070,26 +34205,9 @@ function createContainer(options2) {
        if ((_a2 = runOptions == null ? void 0 : runOptions.signal) == null ? void 0 : _a2.aborted) {
          return Promise.resolve({ stdout: "", stderr: "", exitCode: 130 });
        }
@@ -338,19 +357,32 @@ index 0daddf0..b8595eb 100644
      on: (event, listener) => {
        serverBridge.on(event, listener);
 diff --git a/node_modules/almostnode/dist/index.d.ts b/node_modules/almostnode/dist/index.d.ts
-index 4ef7679..69bcb64 100644
+index 4ef7679..3cebcd2 100644
 --- a/node_modules/almostnode/dist/index.d.ts
 +++ b/node_modules/almostnode/dist/index.d.ts
-@@ -61,6 +61,8 @@ export interface RunOptions {
+@@ -61,6 +61,21 @@ export interface RunOptions {
      onStderr?: (data: string) => void;
      /** AbortSignal to cancel long-running commands */
      signal?: AbortSignal;
 +    /** Called when a server this command started listens on a port */
 +    onServerListen?: (port: number, server: unknown) => void;
++    /** Commands this run's shell has besides node and npm, by name */
++    commands?: Record<string, (args: string[], ctx: {
++        cwd: string;
++        env: Map<string, string>;
++        exec?: (command: string, options: {
++            cwd: string;
++        }) => Promise<RunResult>;
++    }) => Promise<RunResult>>;
++    /** Runs `node <script>` itself when it returns a result (a tool whose own entry cannot run here) */
++    runScript?: (path: string, args: string[], ctx: {
++        cwd: string;
++        env: Map<string, string>;
++    }) => Promise<RunResult> | null;
  }
  export interface ContainerOptions extends RuntimeOptions {
      baseUrl?: string;
-@@ -81,7 +83,8 @@ export declare function createContainer(options?: ContainerOptions): {
+@@ -81,7 +96,8 @@ export declare function createContainer(options?: ContainerOptions): {
          exports: unknown;
      };
      run: (command: string, options?: RunOptions) => Promise<RunResult>;
@@ -361,7 +393,7 @@ index 4ef7679..69bcb64 100644
          eval: (code: string) => unknown;
      };
 diff --git a/node_modules/almostnode/dist/index.mjs b/node_modules/almostnode/dist/index.mjs
-index 233b250..f5eb226 100644
+index 233b250..0ecfce8 100644
 --- a/node_modules/almostnode/dist/index.mjs
 +++ b/node_modules/almostnode/dist/index.mjs
 @@ -4203,6 +4203,7 @@ function _createClientRequest(urlOrOptions, optionsOrCallback, callback, protoco
@@ -383,7 +415,7 @@ index 233b250..f5eb226 100644
  }
  function _unregisterServer(port) {
    serverRegistry.delete(port);
-@@ -5885,41 +5890,79 @@ Object.defineProperty = function(target, key, descriptor) {
+@@ -5885,46 +5890,88 @@ Object.defineProperty = function(target, key, descriptor) {
    }
    return _realDefineProperty.call(Object, target, key, descriptor);
  };
@@ -396,6 +428,8 @@ index 233b250..f5eb226 100644
 +    onStderr: options2.onStderr || null,
 +    signal: options2.signal || null,
 +    onServerListen: options2.onServerListen || null,
++    commands: options2.commands || null,
++    runScript: options2.runScript || null,
 +    stdin: null
 +  };
 +}
@@ -486,7 +520,14 @@ index 233b250..f5eb226 100644
      const scriptPath = args[0];
      if (!scriptPath) {
        return { stdout: "", stderr: "Usage: node <script.js> [args...]\n", exitCode: 1 };
-@@ -5940,15 +5983,16 @@ function initChildProcess(vfs2) {
+     }
+     const resolvedPath2 = scriptPath.startsWith("/") ? scriptPath : `${ctx.cwd}/${scriptPath}`.replace(/\/+/g, "/");
++    const answered = run.runScript ? run.runScript(resolvedPath2, args.slice(1), ctx) : null;
++    if (answered) return answered;
+     if (!currentVfs.existsSync(resolvedPath2)) {
+       return { stdout: "", stderr: `Error: Cannot find module '${resolvedPath2}'
+ `, exitCode: 1 };
+@@ -5940,15 +5987,16 @@ function initChildProcess(vfs2) {
      });
      const appendStdout = (data2) => {
        stdout += data2;
@@ -505,7 +546,7 @@ index 233b250..f5eb226 100644
        onConsole: (method, consoleArgs) => {
          const msg = consoleArgs.map((a) => String(a)).join(" ") + "\n";
          if (method === "error") {
-@@ -5977,12 +6021,12 @@ function initChildProcess(vfs2) {
+@@ -5977,12 +6025,12 @@ function initChildProcess(vfs2) {
        }
      };
      proc.argv = ["node", resolvedPath2, ...args.slice(1)];
@@ -520,7 +561,7 @@ index 233b250..f5eb226 100644
      }
      try {
        runtime.runFile(resolvedPath2);
-@@ -6031,15 +6075,15 @@ ${reason.stack || ""}
+@@ -6031,15 +6079,15 @@ ${reason.stack || ""}
        const startTime = Date.now();
        let lastOutputLen = stdout.length + stderr.length;
        let idleMs = 0;
@@ -539,7 +580,7 @@ index 233b250..f5eb226 100644
          const currentLen = stdout.length + stderr.length;
          if (currentLen > lastOutputLen) {
            lastOutputLen = currentLen;
-@@ -6055,7 +6099,7 @@ ${reason.stack || ""}
+@@ -6055,7 +6103,7 @@ ${reason.stack || ""}
        }
        return { stdout, stderr, exitCode: exitCalled ? exitCode : 0 };
      } finally {
@@ -548,7 +589,7 @@ index 233b250..f5eb226 100644
        _onForkedChildExit = prevChildExitHandler;
        globalThis.removeEventListener("unhandledrejection", rejectionHandler);
      }
-@@ -6098,7 +6142,7 @@ ${reason.stack || ""}
+@@ -6098,7 +6146,7 @@ ${reason.stack || ""}
          };
      }
    });
@@ -557,8 +598,18 @@ index 233b250..f5eb226 100644
      fs: vfsAdapter,
      cwd: "/",
      env: {
-@@ -6110,6 +6154,52 @@ ${reason.stack || ""}
-     customCommands: [nodeCommand, npmCommand]
+@@ -6107,9 +6155,61 @@ ${reason.stack || ""}
+       PATH: "/usr/local/bin:/usr/bin:/bin:/node_modules/.bin",
+       NODE_ENV: "development"
+     },
+-    customCommands: [nodeCommand, npmCommand]
++    customCommands: [
++      nodeCommand,
++      npmCommand,
++      ...Object.entries(run.commands || {}).map(
++        ([name2, execute]) => defineCommand(name2, (args, ctx) => execute(args, ctx))
++      )
++    ]
    });
  }
 +function checkScriptSyntax(scriptPath, cwd) {
@@ -610,7 +661,7 @@ index 233b250..f5eb226 100644
  function readPackageJson(cwd) {
    const pkgJsonPath = `${cwd}/package.json`.replace(/\/+/g, "/");
    if (!currentVfs.existsSync(pkgJsonPath)) {
-@@ -26363,6 +26453,41 @@ const builtinModules = {
+@@ -26363,6 +26463,41 @@ const builtinModules = {
      scheduler: { wait: (ms) => new Promise((resolve2) => setTimeout(resolve2, ms)) }
    }
  };
@@ -652,7 +703,7 @@ index 233b250..f5eb226 100644
  function createRequire(vfs, fsShim, process, currentDir, moduleCache, options, processedCodeCache) {
    const resolutionCache = /* @__PURE__ */ new Map();
    const packageJsonCache = /* @__PURE__ */ new Map();
-@@ -26666,7 +26791,7 @@ ${code}
+@@ -26666,7 +26801,7 @@ ${code}
        };
      }
      if (builtinModules[id]) {
@@ -661,7 +712,7 @@ index 233b250..f5eb226 100644
      }
      if (id === "rollup" || id.startsWith("rollup/") || id.startsWith("@rollup/")) {
        console.log("[runtime] Intercepted rollup:", id);
-@@ -26681,7 +26806,7 @@ ${code}
+@@ -26681,7 +26816,7 @@ ${code}
      }
      const resolved = resolveModule(id, currentDir);
      if (builtinModules[resolved]) {
@@ -670,7 +721,7 @@ index 233b250..f5eb226 100644
      }
      if (resolved.includes("/node_modules/rollup/") || resolved.includes("/node_modules/@rollup/")) {
        return builtinModules["rollup"];
-@@ -34046,26 +34171,9 @@ function createContainer(options2) {
+@@ -34046,26 +34181,9 @@ function createContainer(options2) {
        if ((_a2 = runOptions == null ? void 0 : runOptions.signal) == null ? void 0 : _a2.aborted) {
          return Promise.resolve({ stdout: "", stderr: "", exitCode: 130 });
        }

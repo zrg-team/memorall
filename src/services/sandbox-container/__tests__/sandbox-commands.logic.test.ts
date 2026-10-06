@@ -1,10 +1,17 @@
 import * as almostnode from "almostnode";
 import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
+	devServerPlanOf,
+	devServerShellCommands,
+	runDevServerPlan,
+} from "../../../../public/sandbox/runtime/dev-server-commands.js";
+import {
 	executeCommandSession,
 	listenToCommandSession,
 	runtimeState,
 	sendCommandSessionInput,
+	setCommandAnswerer,
+	setShellCommands,
 	stopAllCommands,
 	stopCommandSession,
 } from "../../../../public/sandbox/runtime/shared.js";
@@ -19,6 +26,7 @@ const createContainer = (
 const state = runtimeState as unknown as {
 	container: unknown;
 	commandServers: Map<number, unknown>;
+	servers: Map<number, unknown>;
 };
 
 interface CommandResult {
@@ -206,5 +214,141 @@ http.createServer((q, s) => s.end("b")).listen(7001, () => console.log("both"));
 			exitCode: 0,
 		});
 		expect(container.vfs.existsSync("/app/ran.txt")).toBe(false);
+	});
+});
+
+describe("a dev-server command", () => {
+	// A stand-in for the built-in Vite server.
+	const startServer = async ({ port }: { port: number }) => {
+		const server = { port };
+		state.servers.set(port, server);
+		return server;
+	};
+	const stopServer = async (port: number, server: unknown) => {
+		if (state.servers.get(port) === server) state.servers.delete(port);
+	};
+
+	beforeEach(() => {
+		state.container = container;
+		container.vfs.mkdirSync("/app", { recursive: true });
+		container.vfs.writeFileSync("/app/server.js", SERVER);
+		container.vfs.writeFileSync(
+			"/app/package.json",
+			JSON.stringify({ name: "app", scripts: { dev: "vite" } }),
+		);
+		// As operations.js sets them.
+		setCommandAnswerer(
+			(
+				command: string,
+				cwd: string,
+				env: Record<string, string>,
+				instance: TestContainer,
+			) => {
+				const plan = devServerPlanOf(command, cwd, instance.vfs, env);
+				return plan
+					? (io: Record<string, unknown>) =>
+							runDevServerPlan(plan, {
+								...io,
+								startServer,
+								stopServer,
+							} as never)
+					: null;
+			},
+		);
+		setShellCommands((host: Record<string, unknown>) =>
+			devServerShellCommands({ ...host, startServer } as never),
+		);
+	});
+
+	afterEach(async () => {
+		setCommandAnswerer(null);
+		setShellCommands(null);
+		await stopAllCommands();
+		for (const port of container.serverBridge.getServerPorts()) {
+			container.serverBridge.servers.get(port)?.server.close?.();
+		}
+		state.servers.clear();
+		state.commandServers.clear();
+		state.container = null;
+	});
+
+	it("serves with the built-in Vite server until it is stopped", async () => {
+		const dev = await run("npm run dev", 300);
+		expect(dev.completed).toBe(false);
+		expect(dev.stdout).toContain("> dev\n> vite\n");
+		expect(dev.stdout).toContain("Local:   http://localhost:5173/");
+		expect(state.servers.has(5173)).toBe(true);
+
+		// One server at a time: a second one is refused, naming this one.
+		const other = await run("node server.js", 3_000);
+		expect(other).toMatchObject({ completed: true, exitCode: 1 });
+		expect(other.stderr).toContain(
+			"`npm run dev` already serves http://localhost:5173",
+		);
+
+		await stopCommandSession({ commandId: dev.commandId });
+		await expect(listen(dev.commandId)).resolves.toMatchObject({
+			completed: true,
+			status: "stopped",
+		});
+		expect(state.servers.has(5173)).toBe(false);
+	});
+
+	it("starts it from anywhere on a line, and the rest of the line runs", async () => {
+		// The shell runs `&` in the foreground: the server starts and returns.
+		const line = await run(
+			'npm run dev & echo "=== curl ==="; echo "after: $?"',
+			5_000,
+		);
+		expect(line).toMatchObject({ completed: true, exitCode: 0 });
+		expect(line.stdout).toContain("Local:   http://localhost:5173/");
+		expect(line.stdout).toContain("=== curl ===\nafter: 0\n");
+		expect(state.servers.has(5173)).toBe(true);
+	});
+
+	it("starts it through npm, a pipe and a timeout", async () => {
+		const piped = await run(
+			'timeout 6 npm run dev -- --port 5180 2>&1 | head -20; echo "EXIT:$?"',
+			5_000,
+		);
+		expect(piped).toMatchObject({ completed: true, exitCode: 0 });
+		expect(piped.stdout).toContain("http://localhost:5180/");
+		expect(piped.stdout).toContain("EXIT:0");
+		expect(piped.stdout).not.toContain("command not found");
+	});
+
+	it("takes Vite's own options", async () => {
+		const ported = await run("vite --port 5181 | head -20; echo next", 5_000);
+		expect(ported.stdout).toContain("http://localhost:5181/");
+		expect(state.servers.has(5181)).toBe(true);
+	});
+
+	it("answers Vite's own bin, which awaits at its top level, with the server", async () => {
+		container.vfs.mkdirSync("/app/node_modules/vite/bin", { recursive: true });
+		container.vfs.writeFileSync(
+			"/app/node_modules/vite/bin/vite.js",
+			"#!/usr/bin/env node\nawait import('node:inspector');\n",
+		);
+		const bin = await run(
+			"node node_modules/vite/bin/vite.js --port 5181; echo done",
+			5_000,
+		);
+		expect(bin).toMatchObject({ completed: true, exitCode: 0 });
+		expect(bin.stderr).not.toContain("await is only valid");
+		expect(bin.stdout).toContain("http://localhost:5181/");
+		expect(bin.stdout).toContain("done");
+	});
+
+	it("says what npx cannot do, and what builds cannot", async () => {
+		const npx = await run("npx tsc --version; echo next", 5_000);
+		expect(npx.stderr).toContain(
+			"npx: tsc is not installed in /app/node_modules, and npx cannot download packages in this sandbox",
+		);
+		expect(npx.stdout).toContain("next");
+
+		const build = await run("npx vite build; echo next", 5_000);
+		expect(build.stderr).toContain("vite build cannot run in this sandbox");
+		expect(build.stdout).toContain("next");
+		expect(state.servers.size).toBe(0);
 	});
 });

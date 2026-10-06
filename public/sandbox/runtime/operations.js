@@ -26,10 +26,18 @@ import {
 	runtimeState,
 	safeSerialize,
 	sendCommandSessionInput,
+	setCommandAnswerer,
+	setShellCommands,
 	stopCommandSession,
+	stopServerState,
 	toServerInfo,
 	withTimeout,
 } from "./shared.js";
+import {
+	devServerPlanOf,
+	devServerShellCommands,
+	runDevServerPlan,
+} from "./dev-server-commands.js";
 import { runMediaOperation } from "./media.js";
 import { runPythonOperation } from "./python.js";
 import {
@@ -41,6 +49,38 @@ import {
 	startServerOperation,
 	stopServerOperation,
 } from "./server-ops.js";
+
+const startDevServer = async (options) => {
+	await startServerOperation(options);
+	return runtimeState.servers.get(options.port);
+};
+
+// Only the server this command started: a later one on the port stays.
+const stopDevServer = async (port, server) => {
+	if (runtimeState.servers.get(port) === server) {
+		await stopServerState(port);
+	}
+};
+
+// A command line that is `npm run dev`, `vite`, `npx vite`… (after `cd`s and
+// other steps): the built-in Vite server, served until the command stops.
+setCommandAnswerer((command, cwd, env, containerInstance) => {
+	const plan = devServerPlanOf(command, cwd, containerInstance.vfs, env);
+	return plan
+		? (io) =>
+				runDevServerPlan(plan, {
+					...io,
+					startServer: startDevServer,
+					stopServer: stopDevServer,
+				})
+		: null;
+});
+
+// Vite anywhere else on a line (a pipe, after `;`, inside a script): the
+// shell's own `vite` and `npx`, which start the server and return.
+setShellCommands((host) =>
+	devServerShellCommands({ ...host, startServer: startDevServer }),
+);
 
 const handleHealthOperation = () => ({
 	ready: true,

@@ -639,9 +639,52 @@ const getCommandSessionOrThrow = (commandId) => {
 
 const listeningPorts = () => {
 	const bridge = runtimeState.container?.serverBridge;
-	return new Set(
-		typeof bridge?.getServerPorts === "function" ? bridge.getServerPorts() : [],
-	);
+	return new Set([
+		...(typeof bridge?.getServerPorts === "function"
+			? bridge.getServerPorts()
+			: []),
+		// The runtime's own servers (the built-in Vite server) listen too.
+		...runtimeState.servers.keys(),
+	]);
+};
+
+/**
+ * Claims `port` for a server the runtime starts for a command itself, under
+ * the same one-server rule as a server the command opens: the refusal to
+ * print, or null once the port is the command's.
+ */
+const claimCommandServer = (commandSession, port) => {
+	const serving = serverServingBesides(commandSession, port);
+	if (serving) {
+		return `Error: listen EADDRINUSE: one server runs at a time, and \`${serving.command}\` already serves http://localhost:${serving.port}. Use that server, or stop it first.\n`;
+	}
+	runtimeState.commandServers.set(port, {
+		commandId: commandSession.commandId,
+		command: commandSession.command,
+	});
+	return null;
+};
+
+/**
+ * Commands the runtime answers itself instead of the shell: (command, cwd,
+ * env) → a run(io) for the command, or null. Set by operations.js, so this
+ * file does not import the server operations that import it.
+ */
+let commandAnswerer = null;
+
+export const setCommandAnswerer = (answerer) => {
+	commandAnswerer = answerer;
+};
+
+/**
+ * Commands every run's shell has besides node and npm, and its answer to
+ * `node <script>` for a tool whose own entry cannot run here: (io) →
+ * { commands, runScript }. Set by operations.js.
+ */
+let shellCommands = null;
+
+export const setShellCommands = (factory) => {
+	shellCommands = factory;
 };
 
 /**
@@ -795,15 +838,41 @@ export const executeCommandSession = async (payload = {}) => {
 
 	// Each run has its own output, stop signal, stdin and servers (the
 	// almostnode patch in patches/), so commands run side by side.
-	commandSession.runPromise = containerInstance
-		.run(executedCommand, {
-			cwd: commandSession.cwd,
-			onStdout: (data) => appendCommandChunk(commandSession, "stdout", data),
-			onStderr: (data) => appendCommandChunk(commandSession, "stderr", data),
-			signal: commandSession.abortController.signal,
-			onServerListen: (port, server) =>
-				onCommandServerListen(commandSession, port, server),
-		})
+	const io = {
+		onStdout: (data) => appendCommandChunk(commandSession, "stdout", data),
+		onStderr: (data) => appendCommandChunk(commandSession, "stderr", data),
+		signal: commandSession.abortController.signal,
+		onServerListen: (port, server) =>
+			onCommandServerListen(commandSession, port, server),
+	};
+	const host = {
+		command,
+		vfs: containerInstance.vfs,
+		claimServer: (port) => claimCommandServer(commandSession, port),
+	};
+	const shell = { ...io, ...(shellCommands?.(host) ?? {}) };
+	const answer = commandAnswerer?.(
+		command,
+		commandSession.cwd,
+		payload.env ?? {},
+		containerInstance,
+	);
+	commandSession.runPromise = (
+		answer
+			? answer({
+					...io,
+					...host,
+					runShell: (line, cwd) =>
+						containerInstance.run(applyCommandEnv(line, payload.env), {
+							...shell,
+							cwd,
+						}),
+				})
+			: containerInstance.run(executedCommand, {
+					...shell,
+					cwd: commandSession.cwd,
+				})
+	)
 		.then((result) => {
 			completeCommandSession(commandSession, {
 				exitCode: commandSession.serverRefused

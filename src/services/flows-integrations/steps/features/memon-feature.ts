@@ -132,7 +132,7 @@ const APP_SECTIONS: Record<MemonAppId, (config: MemonFeatureConfig) => string> =
 			section("Terminal", "shell, node, py, git, curl, ffmpeg and magick", [
 				'Run: memon_run { command } in the "/" tree of Files, from your home (~); "cd dir" sticks, "cd" goes home. A long command keeps running: { waitSeconds: 60 } waits, { input: "y" } answers, { stop: true } stops.',
 				'Tabs: the screen shows what runs or last ran in each; { terminal: "new", command } runs in a new tab. { command, saveAs: "Start Site" } saves ~/Start Site.terminal instead; clicking it runs it.',
-				"Code: write JavaScript to a .js file and run node file.js (no node -e); end scripts with process.exit(0) or they hang. npm install works for pure-JS packages; git works.",
+				"Code: write JavaScript to a .js file and run node file.js (no node -e); end scripts with process.exit(0) or they hang. npm install works for pure-JS packages; git works. Vite apps: npm run dev starts a built-in Vite server (no vite build).",
 				`Python: py file.py: stdlib plus ${BUNDLED_PYTHON_BRIEF} (imports load them; pip list names them, pip show <name> says how). Charts: plt.savefig("chart.png").`,
 				"Media: ffmpeg, ffprobe and magick (ImageMagick; convert, identify, mogrify… too) are installed by default: never install them. ffmpeg has one thread: trim and scale down to keep encodes short.",
 				"Web: save files with one curl, not a script: curl -sSL -o assets/hero.jpg <url>; several: --create-dirs --output-dir assets -O <url1> -O <url2>.",

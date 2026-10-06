@@ -31,7 +31,7 @@
 		},
 		{
 			"packageNames": ["almostnode"],
-			"intent": "Give each container.run() command its own output, stop signal, stdin and server ownership instead of module globals, so commands run side by side without stealing a running server's streams, and support node --check."
+			"intent": "Give each container.run() command its own output, stop signal, stdin and server ownership instead of module globals, so commands run side by side without stealing a running server's streams, and support node --check. Let the host add shell commands to a run and answer `node <script>` itself (the sandbox's built-in Vite server for `vite`, `npx vite` and Vite's bin, whose top-level await cannot run here)."
 		}
 	]
 }
