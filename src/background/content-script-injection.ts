@@ -17,6 +17,7 @@
  * listener it registers answers exactly as before.
  */
 
+import { siteAccessOriginFor } from "@/services/web-browser/site-access";
 import { logError, logInfo } from "@/utils/logger";
 
 const CONTENT_SCRIPT_FILES: string[] = (() => {
@@ -66,6 +67,25 @@ export const reinjectContentScript = async (
 	}
 };
 
+/**
+ * Whether the browser lets this extension run on `url`'s site. False is the
+ * one cause of a silent tab that no retry or injection can fix: the user has
+ * to grant access back. Answers true where it cannot tell (no API, a page that
+ * is not http(s)), so a failure there keeps its own error.
+ */
+export const hasSiteAccess = async (
+	url: string | undefined,
+): Promise<boolean> => {
+	const origin = siteAccessOriginFor(url);
+	if (!origin || !chrome.permissions?.contains) return true;
+	try {
+		return await chrome.permissions.contains({ origins: [origin] });
+	} catch (error) {
+		logError("[CONTENT_SCRIPT_INJECTION] Site access check failed", error);
+		return true;
+	}
+};
+
 /** Forget a tab's attempt, so the next document gets its own. */
 export const forgetReinjectedTab = (tabId: number): void => {
 	reinjectedTabs.delete(tabId);
@@ -85,4 +105,6 @@ export const registerContentScriptInjectionListeners = (): void => {
 		if (changeInfo.status === "loading") forgetReinjectedTab(tabId);
 	});
 	chrome.tabs.onRemoved.addListener((tabId) => forgetReinjectedTab(tabId));
+	// Access granted back: the attempts it refused were not the tabs' fault.
+	chrome.permissions?.onAdded?.addListener(() => reinjectedTabs.clear());
 };

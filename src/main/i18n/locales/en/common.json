@@ -872,6 +872,12 @@
 			"done": "Done",
 			"ignore": "Continue anyway"
 		},
+		"siteAccess": {
+			"title": "Memorall can't read this page",
+			"description": "Its site access in the browser is set to “On click”, so neither the Browser nor the agent can read pages. Allow it on all sites to go on.",
+			"allow": "Allow on all sites",
+			"declined": "The browser did not grant it. Try again, or set Memorall's site access to “On all sites” in the browser's extension settings."
+		},
 		"viewer": {
 			"empty": "No file open",
 			"opening": "Opening…",

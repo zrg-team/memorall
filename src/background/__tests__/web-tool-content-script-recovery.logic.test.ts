@@ -34,8 +34,16 @@ const snapshotReply = {
  * leave behind. `sendMessage` fails with Chrome's wording until something puts
  * the script there.
  */
-const installChrome = ({ injectable }: { injectable: boolean }) => {
+const installChrome = ({
+	injectable,
+	siteAccess,
+}: {
+	injectable: boolean;
+	/** Omitted: no permissions API, as on a surface that cannot tell. */
+	siteAccess?: boolean;
+}) => {
 	let hasContentScript = false;
+	let permissionAdded: (() => void) | null = null;
 	const executeScript = vi.fn(async (injection: { files?: string[] }) => {
 		if (!injectable) throw new Error("Cannot access contents of the page.");
 		// Only injecting the content script's files gives the tab a listener;
@@ -92,6 +100,18 @@ const installChrome = ({ injectable }: { injectable: boolean }) => {
 			onRemoved: { addListener: vi.fn() },
 		},
 		scripting: { executeScript },
+		...(siteAccess === undefined
+			? {}
+			: {
+					permissions: {
+						contains: vi.fn(async () => siteAccess),
+						onAdded: {
+							addListener: vi.fn((listener: () => void) => {
+								permissionAdded = listener;
+							}),
+						},
+					},
+				}),
 		storage: {
 			session: {
 				get: vi.fn(async (key: string) => ({ [key]: session.get(key) })),
@@ -110,6 +130,10 @@ const installChrome = ({ injectable }: { injectable: boolean }) => {
 		executeScript,
 		contentScriptInjections,
 		sendMessage,
+		grantSiteAccess: () => {
+			siteAccess = true;
+			permissionAdded?.();
+		},
 		dispatchOpen: async (
 			timeoutMs = 5_000,
 		): Promise<WebBrowserCommandResponse> => {
@@ -181,5 +205,35 @@ describe("web tool recovery when a tab has no content script", () => {
 		expect(response.success === false && response.error).toContain(
 			"on all sites",
 		);
+	});
+
+	it("reports withheld site access at once, without injecting", async () => {
+		const harness = installChrome({ injectable: false, siteAccess: false });
+		const { registerWebToolBrowserHandler } = await loadHandler();
+		registerWebToolBrowserHandler();
+
+		const startedAt = Date.now();
+		const response = await harness.dispatchOpen(5_000);
+
+		expect(response.success).toBe(false);
+		expect(response.success === false && response.error).toContain(
+			"Site access withheld for batdongsan.com.vn",
+		);
+		expect(harness.contentScriptInjections()).toHaveLength(0);
+		// Not the whole deadline: nothing a retry does can change the answer.
+		expect(Date.now() - startedAt).toBeLessThan(2_000);
+	});
+
+	it("injects again once site access is granted back", async () => {
+		const harness = installChrome({ injectable: true, siteAccess: false });
+		const { registerWebToolBrowserHandler } = await loadHandler();
+		registerWebToolBrowserHandler();
+
+		expect((await harness.dispatchOpen(1_200)).success).toBe(false);
+		harness.grantSiteAccess();
+		const response = await harness.dispatchOpen();
+
+		expect(response.success).toBe(true);
+		expect(harness.contentScriptInjections()).toHaveLength(1);
 	});
 });

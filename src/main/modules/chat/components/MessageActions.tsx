@@ -78,6 +78,9 @@ import {
 import { documentConvertRenderer } from "./tools/DocumentConvert";
 import { memoryToolIcon, memoryToolRenderer } from "./tools/MemoryTool";
 import { memonToolRenderer } from "./tools/MemonTool";
+import { SiteAccessNotice } from "./tools/SiteAccessNotice";
+import { siteAccessApplies } from "@/main/hooks/use-site-access";
+import { isSiteAccessWithheldMessage } from "@/services/web-browser/site-access";
 import { composioToolRenderer } from "./tools/ComposioTool";
 import {
 	composioCallTitle,
@@ -447,8 +450,20 @@ const ActionContent: React.FC<ActionContentProps> = React.memo(
 			...item,
 			description: translateActionDescription(t, item.description),
 		};
+		// Any web tool can hit it, so it is not left to each renderer.
+		const siteAccessNotice =
+			isOpen &&
+			siteAccessApplies() &&
+			isSiteAccessWithheldMessage(item.description) ? (
+				<SiteAccessNotice className="mb-2" />
+			) : null;
 		try {
-			return <>{renderer(displayItem, isOpen)}</>;
+			return (
+				<>
+					{siteAccessNotice}
+					{renderer(displayItem, isOpen)}
+				</>
+			);
 		} catch (error) {
 			return (
 				<ActionRenderFallback

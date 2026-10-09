@@ -876,6 +876,12 @@
 			"done": "Xong",
 			"ignore": "Vẫn tiếp tục"
 		},
+		"siteAccess": {
+			"title": "Memorall không đọc được trang này",
+			"description": "Quyền truy cập trang của Memorall trong trình duyệt đang đặt là “Khi nhấp”, nên cả Trình duyệt lẫn tác nhân đều không đọc được trang. Cho phép trên mọi trang để tiếp tục.",
+			"allow": "Cho phép trên mọi trang",
+			"declined": "Trình duyệt chưa cấp quyền. Hãy thử lại, hoặc đặt quyền truy cập trang của Memorall thành “Trên mọi trang web” trong phần cài đặt tiện ích của trình duyệt."
+		},
 		"status": {
 			"idle": "Rảnh",
 			"working": "Agent đang điều khiển",

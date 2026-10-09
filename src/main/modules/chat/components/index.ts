@@ -7,6 +7,7 @@ export { ChatInput } from "./ChatInput";
 export { ChatEmptyState } from "./ChatEmptyState";
 export { ModelLoadPrompt } from "./ModelLoadPrompt";
 export { AgentContextWarningBanner } from "./AgentContextWarningBanner";
+export { SiteAccessBanner } from "./SiteAccessBanner";
 export {
 	SmartSelectContextBanner,
 	useSmartSelectContext,
