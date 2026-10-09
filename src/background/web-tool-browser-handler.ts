@@ -13,8 +13,10 @@ import {
 	type WebOutlineActionResult,
 	type WebPageOutline,
 } from "@/services/web-browser/web-browser-protocol";
+import { siteAccessWithheldMessage } from "@/services/web-browser/site-access";
 import { logError } from "@/utils/logger";
 import {
+	hasSiteAccess,
 	isMissingContentScriptError,
 	registerContentScriptInjectionListeners,
 	reinjectContentScript,
@@ -451,6 +453,13 @@ const sendContentCommand = async (
 			}
 			if (!isMissingContentScriptError(message)) {
 				throw new Error(normalizeContentCommandError(error, tab.url));
+			}
+
+			// Withheld site access is why the script is missing, and injecting
+			// is refused for the same reason: say so now instead of retrying
+			// until the deadline.
+			if (!(await hasSiteAccess(tab.url))) {
+				throw new Error(siteAccessWithheldMessage(tab.url));
 			}
 
 			// The tab is loaded but nothing is listening. Retrying alone only helps

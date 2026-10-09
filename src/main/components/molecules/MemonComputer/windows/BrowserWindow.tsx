@@ -4,6 +4,8 @@ import {
 	ArrowRight,
 	Globe,
 	ImageIcon,
+	Loader2,
+	LockKeyhole,
 	Plus,
 	RefreshCw,
 	Server,
@@ -25,7 +27,9 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "@/main/components/ui/dropdown-menu";
+import { useSiteAccess } from "@/main/hooks/use-site-access";
 import { sandboxTargetOf } from "@/services/memon/embedded-frame";
+import { isSiteAccessWithheldMessage } from "@/services/web-browser/site-access";
 import type {
 	MemonBrowserState,
 	MemonBrowserTab,
@@ -294,6 +298,62 @@ const WallNotice: React.FC<{
 	);
 };
 
+/**
+ * The browser keeps Memorall off web pages ("On click" site access), so neither
+ * this Browser nor the agent can read the real tab. Asks for every site; the
+ * Browser reads the page again once it is granted.
+ */
+const SiteAccessBar: React.FC<{
+	requestAllSites: () => Promise<boolean>;
+}> = ({ requestAllSites }) => {
+	const { t } = useTranslation("common");
+	const [asking, setAsking] = React.useState(false);
+	const [declined, setDeclined] = React.useState(false);
+
+	const handleAllow = async () => {
+		setAsking(true);
+		setDeclined(false);
+		try {
+			setDeclined(!(await requestAllSites()));
+		} finally {
+			setAsking(false);
+		}
+	};
+
+	return (
+		<div
+			role="alert"
+			className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-b border-amber-500/35 bg-amber-500/10 px-3 py-2 text-xs text-amber-900 dark:text-amber-100"
+			data-testid="memon-site-access"
+		>
+			<LockKeyhole size={16} className="shrink-0" />
+			<div className="min-w-0 flex-1">
+				<div className="font-semibold">
+					{t("memonComputer.siteAccess.title")}
+				</div>
+				<div className="text-amber-800/90 dark:text-amber-100/80">
+					{declined
+						? t("memonComputer.siteAccess.declined")
+						: t("memonComputer.siteAccess.description")}
+				</div>
+			</div>
+			<button
+				type="button"
+				disabled={asking}
+				onClick={() => void handleAllow()}
+				className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded border border-transparent bg-amber-600 px-2.5 text-[11px] font-medium text-white hover:bg-amber-500 disabled:opacity-60"
+			>
+				{asking ? (
+					<Loader2 size={12} className="animate-spin" />
+				) : (
+					<Globe size={12} />
+				)}
+				{t("memonComputer.siteAccess.allow")}
+			</button>
+		</div>
+	);
+};
+
 export const BrowserWindow: React.FC<{
 	machineKey: string;
 	browser: MemonBrowserState;
@@ -311,6 +371,7 @@ export const BrowserWindow: React.FC<{
 	React.useEffect(() => setAddress(tab?.url ?? ""), [tab?.url]);
 	// An embedded tab shows its page; the outline is what the agent reads.
 	const [agentView, setAgentView] = React.useState(false);
+	const siteAccess = useSiteAccess();
 
 	// Back from the real browser window: the Browser shows the page as the
 	// user left it, typing included. Where the browser streams its clicks and
@@ -334,6 +395,22 @@ export const BrowserWindow: React.FC<{
 			document.removeEventListener("visibilitychange", sync);
 		};
 	}, [machineKey, realTabOpen, send]);
+
+	// An embedded page is the computer's own; only real tabs need access.
+	const siteAccessBlocked = siteAccess.withheld && realTabOpen;
+
+	// Granted from anywhere — this bar, the chat, the browser's own menu: the
+	// page that could not be read can be now.
+	const wasWithheld = React.useRef(false);
+	React.useEffect(() => {
+		if (siteAccess.withheld) {
+			wasWithheld.current = true;
+			return;
+		}
+		if (!wasWithheld.current) return;
+		wasWithheld.current = false;
+		if (realTabOpen) void send("browser.refresh", { key: machineKey });
+	}, [siteAccess.withheld, realTabOpen, machineKey, send]);
 
 	const act = (
 		ref: string,
@@ -548,6 +625,9 @@ export const BrowserWindow: React.FC<{
 					</button>
 				) : null}
 			</form>
+			{siteAccessBlocked ? (
+				<SiteAccessBar requestAllSites={siteAccess.requestAllSites} />
+			) : null}
 			{tab?.wall ? (
 				<WallNotice
 					wall={tab.wall}
@@ -577,7 +657,9 @@ export const BrowserWindow: React.FC<{
 						embedded && !agentView && "hidden",
 					)}
 				>
-					{tab?.error ? (
+					{/* The bar above says it in the user's words. */}
+					{tab?.error &&
+					!(siteAccessBlocked && isSiteAccessWithheldMessage(tab.error)) ? (
 						<p className="mb-2 rounded-md border border-red-600/20 bg-red-600/5 px-2 py-1 text-xs text-red-700 dark:text-red-300">
 							{tab.error}
 						</p>

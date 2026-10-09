@@ -41,4 +41,15 @@ export class ExtensionHostAccessPort implements HostAccessPort {
 			return false;
 		}
 	}
+
+	onChange(listener: () => void): () => void {
+		const permissions = globalThis.chrome?.permissions;
+		if (!permissions?.onAdded || !permissions.onRemoved) return () => {};
+		permissions.onAdded.addListener(listener);
+		permissions.onRemoved.addListener(listener);
+		return () => {
+			permissions.onAdded.removeListener(listener);
+			permissions.onRemoved.removeListener(listener);
+		};
+	}
 }

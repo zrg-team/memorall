@@ -628,6 +628,19 @@
 		"stopWaiting": "Dừng chờ",
 		"expired": "Yêu cầu này đã hết hạn. Tác nhân đã tiếp tục."
 	},
+	"siteAccess": {
+		"title": "Cho phép Memorall đọc trang web?",
+		"description": "Quyền truy cập trang của Memorall trong trình duyệt đang đặt là “Khi nhấp”, nên mọi công cụ web đều dừng ở các trang tác nhân mở. Cho phép trên mọi trang và tác nhân sẽ tiếp tục từ chỗ đã dừng.",
+		"allow": "Cho phép trên mọi trang",
+		"confirmHint": "Trình duyệt sẽ hỏi bạn xác nhận.",
+		"declined": "Trình duyệt chưa cấp quyền. Hãy thử lại, hoặc đặt quyền truy cập trang của Memorall thành “Trên mọi trang web” trong phần cài đặt tiện ích của trình duyệt.",
+		"granted": "Đã cho phép trên mọi trang",
+		"grantedHint": "Tác nhân đang thử lại.",
+		"continuePrompt": "Memorall đã đọc được trang web trên mọi trang. Hãy tiếp tục từ chỗ đã dừng.",
+		"bannerTitle": "Công cụ web không đọc được hầu hết các trang",
+		"bannerDescription": "Quyền truy cập trang của Memorall đang đặt là “Khi nhấp”, nên trình duyệt chặn nó trên các trang tác nhân mở.",
+		"bannerDismiss": "Ẩn tạm thời"
+	},
 	"coAgent": {
 		"openLink": "Co-agent trên {{host}}",
 		"openLinkTitle": "Mở {{url}} và bật co-agent"

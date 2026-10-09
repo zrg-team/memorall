@@ -179,6 +179,11 @@ export interface HostAccessPort {
 	 * user gesture, so call this from a click handler, never on mount.
 	 */
 	request(origins: string[]): Promise<boolean>;
+	/**
+	 * Calls `listener` whenever the browser grants or takes back access, from
+	 * this page or the browser's own menus. Returns the unsubscribe.
+	 */
+	onChange?(listener: () => void): () => void;
 }
 
 /**

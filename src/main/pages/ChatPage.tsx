@@ -35,6 +35,7 @@ import {
 	ChatInput,
 	ModelLoadPrompt,
 	NoModelsScreen,
+	SiteAccessBanner,
 	SmartSelectContextBanner,
 	useChat,
 	useCurrentModel,
@@ -1208,6 +1209,8 @@ ${text}`
 				context={smartSelectContext}
 				onClear={() => setSmartSelectContext(null)}
 			/>
+
+			<SiteAccessBanner />
 
 			<AgentContextWarningBanner
 				current={current}

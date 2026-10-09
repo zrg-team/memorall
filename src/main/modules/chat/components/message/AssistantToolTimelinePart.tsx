@@ -20,6 +20,8 @@ import {
 	translateActionName,
 } from "../MessageActions";
 import { AppIcon } from "@/main/modules/connections/components/AppIcon";
+import { siteAccessApplies } from "@/main/hooks/use-site-access";
+import { isSiteAccessWithheldMessage } from "@/services/web-browser/site-access";
 
 export const AssistantToolTimelinePart: React.FC<{
 	part: ComplexContentPartTool;
@@ -29,6 +31,12 @@ export const AssistantToolTimelinePart: React.FC<{
 }> = ({ part, isLast, connectsToPrevious = false, forceOpen = false }) => {
 	const { t } = useTranslation("chat");
 	const [isOpen, setIsOpen] = useState(false);
+	// A page Memorall may not read opens on its own: the fix is a button inside.
+	const siteAccessWithheld =
+		siteAccessApplies() && isSiteAccessWithheldMessage(part.description);
+	useEffect(() => {
+		if (siteAccessWithheld) setIsOpen(true);
+	}, [siteAccessWithheld]);
 	const actionName = part.name;
 	const title = translateActionName(t, actionName, part.metadata);
 	const Icon = getActionIcon(actionName);

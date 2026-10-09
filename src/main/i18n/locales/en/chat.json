@@ -628,6 +628,19 @@
 		"stopWaiting": "Stop waiting",
 		"expired": "This request expired. The agent has already moved on."
 	},
+	"siteAccess": {
+		"title": "Allow Memorall to read web pages?",
+		"description": "Its site access in the browser is set to “On click”, so every web tool stops on the pages the agent opens. Allow it on all sites and the agent picks up where it stopped.",
+		"allow": "Allow on all sites",
+		"confirmHint": "Your browser asks you to confirm.",
+		"declined": "The browser did not grant it. Try again, or set Memorall's site access to “On all sites” in the browser's extension settings.",
+		"granted": "Allowed on all sites",
+		"grantedHint": "The agent is trying again.",
+		"continuePrompt": "Memorall can read web pages on all sites now. Carry on where you stopped.",
+		"bannerTitle": "Web tools can't read most pages",
+		"bannerDescription": "Memorall's site access is set to “On click”, so the browser stops it on the pages the agent opens.",
+		"bannerDismiss": "Hide for now"
+	},
 	"coAgent": {
 		"openLink": "Co-agent on {{host}}",
 		"openLinkTitle": "Open {{url}} and turn on the co-agent"
