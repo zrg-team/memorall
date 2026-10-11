@@ -7,6 +7,7 @@ exports[`flows-integrations registered contracts > registers every integrations 
   "documents-feature",
   "documents-fs-feature",
   "embedded-chat-feature",
+  "folder-index-feature",
   "fs-feature",
   "hyperframes-feature",
   "lottie-animation-feature",
@@ -250,6 +251,54 @@ exports[`flows-integrations registered contracts > registers every integrations 
     "executable": true,
     "id": "embedded-chat-feature",
     "name": "embedded-chat-feature",
+  },
+  {
+    "config": {
+      "defaultStateMapping": {
+        "messages": "messages",
+        "tools": "tools",
+      },
+      "description": "Search folders through their indexes. Supports OKF; more index types can be added.",
+      "enabledByDefault": false,
+      "feature": {
+        "graphTypes": [
+          "foundation",
+          "agent",
+        ],
+        "id": "step-folder-index-feature",
+        "inputs": [
+          {
+            "description": "Current chat messages",
+            "name": "messages",
+            "required": true,
+            "type": "Message[]",
+          },
+          {
+            "description": "Current available tools",
+            "name": "tools",
+            "required": true,
+            "type": "Tool[]",
+          },
+        ],
+        "outputs": [
+          {
+            "description": "Messages with instructions for reading folder indexes",
+            "name": "messages",
+            "type": "Message[]",
+          },
+          {
+            "description": "Tools extended with the tools of every index type",
+            "name": "tools",
+            "type": "Tool[]",
+          },
+        ],
+        "type": "feature",
+      },
+      "version": "1.0.0",
+    },
+    "executable": true,
+    "id": "folder-index-feature",
+    "name": "folder-index-feature",
   },
   {
     "config": {
@@ -740,6 +789,9 @@ exports[`flows-integrations registered contracts > registers every integrations 
   "memon_tasks",
   "memon_visualize",
   "memon_window",
+  "okf_index",
+  "okf_read",
+  "okf_search",
   "pdf_generate",
   "pdf_metadata",
   "pdf_to_image",
@@ -2217,6 +2269,60 @@ exports[`flows-integrations registered contracts > registers every integrations 
         "window",
         "op",
       ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "List indexed folders, or return one folder's OKF index.md: every file with its type and one-line description, and its subfolders.",
+    "name": "okf_index",
+    "parameters": {
+      "properties": {
+        "path": {
+          "type": "string",
+        },
+      },
+      "type": "object",
+    },
+  },
+  {
+    "description": "Read one file's OKF card: frontmatter (type, title, description, tags, provenance, trust) and body (file facts and the start of its text).",
+    "name": "okf_read",
+    "parameters": {
+      "properties": {
+        "path": {
+          "type": "string",
+        },
+      },
+      "required": [
+        "path",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "Search the OKF cards of every indexed folder by words, type, tags or folder. Returns file paths with their type, description and matching lines.",
+    "name": "okf_search",
+    "parameters": {
+      "properties": {
+        "folder": {
+          "type": "string",
+        },
+        "limit": {
+          "type": "number",
+        },
+        "query": {
+          "type": "string",
+        },
+        "tags": {
+          "items": {
+            "type": "string",
+          },
+          "type": "array",
+        },
+        "type": {
+          "type": "string",
+        },
+      },
       "type": "object",
     },
   },

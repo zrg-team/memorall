@@ -370,6 +370,10 @@
 			"memonFeature": {
 				"name": "MemonOS Bot",
 				"description": "Cho agent một chiếc máy tính: Trình duyệt, Tệp, Terminal, Công việc và các studio của bạn trên một màn hình mà bạn có thể theo dõi và tiếp quản."
+			},
+			"folderIndexFeature": {
+				"name": "Chỉ mục thư mục",
+				"description": "Tìm trong thư mục qua chỉ mục của chúng. Hỗ trợ OKF; có thể thêm loại chỉ mục khác."
 			}
 		}
 	},

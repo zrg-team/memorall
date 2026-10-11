@@ -8,6 +8,14 @@ import { DocumentLibraryHeader } from "@/main/modules/files/components/DocumentL
 import { DocumentLibrarySidebar } from "@/main/modules/files/components/DocumentLibrarySidebar";
 import { DocumentLibraryContent } from "@/main/modules/files/components/DocumentLibraryContent";
 import { DocumentLibraryCompactNavigator } from "@/main/modules/files/components/DocumentLibraryCompactNavigator";
+import {
+	FolderIndexCardDialog,
+	FolderIndexesDialog,
+	FolderIndexGraphDialog,
+	FolderIndexMappedConfirm,
+	FolderIndexProvider,
+} from "@/main/modules/files/folder-index";
+import { parentFolder } from "@/services/folder-index/index-config";
 import { Button } from "@/main/components/ui/button";
 import { useResponsiveWorkspacePanels } from "@/main/hooks/use-responsive-workspace-panels";
 import { WorkspaceCollapsedSidebarDataItem } from "@/main/components/molecules/WorkspaceCollapsedSidebarDataItem";
@@ -61,6 +69,20 @@ export const DocumentLibraryPage: React.FC = () => {
 		</Button>
 	) : null;
 	const homeOptions = undefined;
+
+	const [openFolderIndexes, setOpenFolderIndexes] = React.useState(false);
+	React.useEffect(() => {
+		if (
+			!(location.state as { openFolderIndexes?: boolean } | null)
+				?.openFolderIndexes
+		)
+			return;
+		setOpenFolderIndexes(true);
+		navigate(`${location.pathname}${location.search}`, {
+			replace: true,
+			state: null,
+		});
+	}, [location.pathname, location.search, location.state, navigate]);
 
 	React.useEffect(() => {
 		const documentPath = (
@@ -121,151 +143,236 @@ export const DocumentLibraryPage: React.FC = () => {
 	}
 
 	return (
-		<div className="flex h-full min-h-0 flex-col overflow-hidden bg-background">
-			{isSplitLayout ? (
-				<div
-					ref={containerRef}
-					className="grid min-h-0 min-w-0 flex-1 overflow-hidden bg-background"
-					style={{
-						gridTemplateColumns,
-					}}
-				>
+		<FolderIndexProvider
+			openDialog={openFolderIndexes}
+			onOpenFile={lib.handleOpenDocumentByPath}
+			currentFolder={
+				lib.isFileSelected
+					? (parentFolder(lib.currentPath) ?? "/")
+					: lib.currentPath
+			}
+		>
+			<div className="flex h-full min-h-0 flex-col overflow-hidden bg-background">
+				{isSplitLayout ? (
 					<div
-						className={`relative z-20 min-h-0 border-r bg-background ${
-							isSidebarCollapsed ||
-							(isCompactSplitLayout && !isSidebarCollapsed)
-								? "overflow-visible"
-								: "overflow-hidden"
-						}`}
+						ref={containerRef}
+						className="grid min-h-0 min-w-0 flex-1 overflow-hidden bg-background"
+						style={{
+							gridTemplateColumns,
+						}}
 					>
-						{isSidebarCollapsed ? (
-							<div className="flex h-full min-h-0 flex-col items-center py-3">
-								<section
-									aria-label="Actions"
-									className="flex w-full flex-col items-center gap-1"
-								>
-									<WorkspaceCollapsedSidebarSection label="Actions" />
-									<WorkspaceCollapsedSidebarItem
-										icon={<PanelLeftOpen className="h-4 w-4" />}
-										label={t("navigator.expand")}
-										onClick={expandSidebar}
-										className="border border-input bg-background hover:bg-accent"
-									/>
-								</section>
-								<section
-									aria-label="Lists"
-									className="mt-3 flex min-h-0 w-full flex-1 flex-col items-center"
-								>
-									<WorkspaceCollapsedSidebarSection label="Lists" />
-									<div className="mt-1 flex min-h-0 w-full flex-1 flex-col items-center gap-1.5 overflow-y-auto px-1">
-										{visibleDocumentNodes.map((node) => (
-											<WorkspaceCollapsedSidebarDataItem
-												key={node.id}
-												label={node.name}
-												active={
-													lib.selectedSection === "documents" &&
-													lib.selectedNode?.id === node.id
-												}
-												onClick={() => lib.handleSelectDocNode(node)}
-											/>
-										))}
-										{visibleWorkspaceNodes.map((node) => (
-											<WorkspaceCollapsedSidebarDataItem
-												key={node.id}
-												label={node.name}
-												active={
-													lib.selectedSection === "workspace" &&
-													lib.selectedNode?.id === node.id
-												}
-												onClick={() => lib.handleSelectWorkspaceNode(node)}
-											/>
-										))}
-									</div>
-								</section>
-							</div>
-						) : (
-							<div
-								className={
-									isCompactSplitLayout
-										? "absolute left-0 top-0 flex h-full min-h-0 flex-col overflow-hidden border-r bg-background shadow-2xl"
-										: "h-full min-h-0 overflow-hidden"
-								}
-								style={
-									isCompactSplitLayout
-										? { width: sidebarOverlayWidth }
-										: undefined
-								}
-							>
-								<DocumentLibrarySidebar
-									tree={lib.tree}
-									workspaceTree={lib.workspaceTree}
-									selectedSection={lib.selectedSection}
-									selectedNodeId={lib.selectedNode?.id ?? null}
-									docsTitle={t("title")}
-									collapseButton={
-										<Button
-											type="button"
-											variant="ghost"
-											size="icon"
-											className="h-8 w-8"
-											onClick={collapseSidebar}
-											aria-label={t("navigator.collapse")}
-											title={t("navigator.collapse")}
-										>
-											<PanelLeftClose className="h-4 w-4" />
-										</Button>
+						<div
+							className={`relative z-20 min-h-0 border-r bg-background ${
+								isSidebarCollapsed ||
+								(isCompactSplitLayout && !isSidebarCollapsed)
+									? "overflow-visible"
+									: "overflow-hidden"
+							}`}
+						>
+							{isSidebarCollapsed ? (
+								<div className="flex h-full min-h-0 flex-col items-center py-3">
+									<section
+										aria-label="Actions"
+										className="flex w-full flex-col items-center gap-1"
+									>
+										<WorkspaceCollapsedSidebarSection label="Actions" />
+										<WorkspaceCollapsedSidebarItem
+											icon={<PanelLeftOpen className="h-4 w-4" />}
+											label={t("navigator.expand")}
+											onClick={expandSidebar}
+											className="border border-input bg-background hover:bg-accent"
+										/>
+									</section>
+									<section
+										aria-label="Lists"
+										className="mt-3 flex min-h-0 w-full flex-1 flex-col items-center"
+									>
+										<WorkspaceCollapsedSidebarSection label="Lists" />
+										<div className="mt-1 flex min-h-0 w-full flex-1 flex-col items-center gap-1.5 overflow-y-auto px-1">
+											{visibleDocumentNodes.map((node) => (
+												<WorkspaceCollapsedSidebarDataItem
+													key={node.id}
+													label={node.name}
+													active={
+														lib.selectedSection === "documents" &&
+														lib.selectedNode?.id === node.id
+													}
+													onClick={() => lib.handleSelectDocNode(node)}
+												/>
+											))}
+											{visibleWorkspaceNodes.map((node) => (
+												<WorkspaceCollapsedSidebarDataItem
+													key={node.id}
+													label={node.name}
+													active={
+														lib.selectedSection === "workspace" &&
+														lib.selectedNode?.id === node.id
+													}
+													onClick={() => lib.handleSelectWorkspaceNode(node)}
+												/>
+											))}
+										</div>
+									</section>
+								</div>
+							) : (
+								<div
+									className={
+										isCompactSplitLayout
+											? "absolute left-0 top-0 flex h-full min-h-0 flex-col overflow-hidden border-r bg-background shadow-2xl"
+											: "h-full min-h-0 overflow-hidden"
 									}
-									onSelectDocumentsRoot={lib.handleSelectDocumentsSection}
-									onSelectDocNode={lib.handleSelectDocNode}
-									onSelectWorkspaceNode={lib.handleSelectWorkspaceNode}
-									onSelectWorkspaceRoot={lib.handleSelectWorkspaceSection}
-									onToggleExpand={lib.handleToggleExpand}
-									onToggleExpandWorkspace={lib.handleToggleExpandWorkspace}
-									onMove={lib.handleMove}
-									onRenameNode={handleTreeRename}
-									onDeleteNode={handleTreeDelete}
-									onDownloadFolderNode={handleTreeDownloadFolder}
+									style={
+										isCompactSplitLayout
+											? { width: sidebarOverlayWidth }
+											: undefined
+									}
+								>
+									<DocumentLibrarySidebar
+										tree={lib.tree}
+										workspaceTree={lib.workspaceTree}
+										selectedSection={lib.selectedSection}
+										selectedNodeId={lib.selectedNode?.id ?? null}
+										docsTitle={t("title")}
+										collapseButton={
+											<Button
+												type="button"
+												variant="ghost"
+												size="icon"
+												className="h-8 w-8"
+												onClick={collapseSidebar}
+												aria-label={t("navigator.collapse")}
+												title={t("navigator.collapse")}
+											>
+												<PanelLeftClose className="h-4 w-4" />
+											</Button>
+										}
+										onSelectDocumentsRoot={lib.handleSelectDocumentsSection}
+										onSelectDocNode={lib.handleSelectDocNode}
+										onSelectWorkspaceNode={lib.handleSelectWorkspaceNode}
+										onSelectWorkspaceRoot={lib.handleSelectWorkspaceSection}
+										onToggleExpand={lib.handleToggleExpand}
+										onToggleExpandWorkspace={lib.handleToggleExpandWorkspace}
+										onMove={lib.handleMove}
+										onRenameNode={handleTreeRename}
+										onDeleteNode={handleTreeDelete}
+										onDownloadFolderNode={handleTreeDownloadFolder}
+									/>
+								</div>
+							)}
+						</div>
+						<div
+							role="separator"
+							aria-orientation="vertical"
+							className={
+								!isSidebarCollapsed && !isCompactSplitLayout
+									? "group relative z-10 -mx-[5px] flex w-3 cursor-col-resize items-center justify-center bg-transparent"
+									: "hidden"
+							}
+							onMouseDown={handleResizeStart}
+						>
+							<div className="h-full w-px bg-border/80 transition-all group-hover:w-[2px] group-hover:bg-foreground/20" />
+						</div>
+						<div className="min-w-0 flex-1 overflow-hidden">
+							<div className="flex h-full min-h-0 flex-col">
+								<DocumentLibraryHeader
+									currentPath={lib.currentPath}
+									activeTree={activeTree}
+									homeTitle={t("title")}
+									isWorkspaceSection={lib.isWorkspaceSection}
+									viewMode={lib.viewMode}
+									searchQuery={lib.searchQuery}
+									topics={lib.topics}
+									selectedTopicIds={lib.selectedTopicIds}
+									error={lib.error}
+									onNavigate={lib.handleSelectNode}
+									homeOptions={homeOptions}
+									onViewModeChange={lib.setViewMode}
+									onSearchChange={lib.setSearchQuery}
+									onTopicFilterChange={lib.handleTopicFilterChange}
+									onRemoveTopicFilter={lib.handleRemoveTopicFilter}
+									onClearTopicFilters={lib.handleClearTopicFilters}
+									onCreateDocument={lib.handleCreateDocument}
+									onTriggerUpload={lib.triggerFileUpload}
+									onCreateFolder={lib.handleCreateFolder}
 								/>
+								<div className="min-h-0 flex-1 overflow-hidden">
+									<DocumentLibraryContent
+										currentPath={lib.currentPath}
+										selectedNode={lib.selectedNode}
+										isFileSelected={lib.isFileSelected}
+										isFolderSelected={lib.isFolderSelected}
+										isWorkspaceSection={lib.isWorkspaceSection}
+										folderContents={lib.folderContents}
+										viewMode={lib.viewMode}
+										fileTopicMap={lib.fileTopicMap}
+										selectedTopicIds={lib.selectedTopicIds}
+										onSelectNodeById={lib.handleSelectNodeInActiveTree}
+										onOpenFolderByPath={lib.handleOpenFolderByPath}
+										onCloseViewer={lib.handleCloseViewer}
+										onDeleteItem={lib.handleDeleteItem}
+										onRenameItem={lib.handleRenameItem}
+										onDownloadFile={lib.handleDownloadFile}
+										onDownloadFolder={lib.handleDownloadFolder}
+										onDownloadSelectedFile={lib.handleDownloadSelectedFile}
+										onManageTopics={lib.handleManageFileTopic}
+										onConvertToKnowledge={lib.handleConvertToKnowledge}
+										onDeleteSelectedFile={lib.handleDeleteSelectedFile}
+										onToggleTopicFilter={lib.handleToggleTopicFilter}
+									/>
+								</div>
 							</div>
-						)}
+						</div>
 					</div>
-					<div
-						role="separator"
-						aria-orientation="vertical"
-						className={
-							!isSidebarCollapsed && !isCompactSplitLayout
-								? "group relative z-10 -mx-[5px] flex w-3 cursor-col-resize items-center justify-center bg-transparent"
-								: "hidden"
-						}
-						onMouseDown={handleResizeStart}
-					>
-						<div className="h-full w-px bg-border/80 transition-all group-hover:w-[2px] group-hover:bg-foreground/20" />
-					</div>
-					<div className="min-w-0 flex-1 overflow-hidden">
-						<div className="flex h-full min-h-0 flex-col">
-							<DocumentLibraryHeader
-								currentPath={lib.currentPath}
-								activeTree={activeTree}
-								homeTitle={t("title")}
-								isWorkspaceSection={lib.isWorkspaceSection}
-								viewMode={lib.viewMode}
-								searchQuery={lib.searchQuery}
-								topics={lib.topics}
-								selectedTopicIds={lib.selectedTopicIds}
-								error={lib.error}
-								onNavigate={lib.handleSelectNode}
-								homeOptions={homeOptions}
-								onViewModeChange={lib.setViewMode}
-								onSearchChange={lib.setSearchQuery}
-								onTopicFilterChange={lib.handleTopicFilterChange}
-								onRemoveTopicFilter={lib.handleRemoveTopicFilter}
-								onClearTopicFilters={lib.handleClearTopicFilters}
-								onCreateDocument={lib.handleCreateDocument}
-								onTriggerUpload={lib.triggerFileUpload}
-								onCreateFolder={lib.handleCreateFolder}
+				) : (
+					<>
+						<DocumentLibraryHeader
+							currentPath={lib.currentPath}
+							activeTree={activeTree}
+							homeTitle={t("title")}
+							isWorkspaceSection={lib.isWorkspaceSection}
+							compact
+							compactLeading={
+								lib.isFileSelected ? null : compactNavigatorExpandButton
+							}
+							viewMode={lib.viewMode}
+							searchQuery={lib.searchQuery}
+							topics={lib.topics}
+							selectedTopicIds={lib.selectedTopicIds}
+							error={lib.error}
+							onNavigate={lib.handleSelectNode}
+							homeOptions={homeOptions}
+							onViewModeChange={lib.setViewMode}
+							onSearchChange={lib.setSearchQuery}
+							onTopicFilterChange={lib.handleTopicFilterChange}
+							onRemoveTopicFilter={lib.handleRemoveTopicFilter}
+							onClearTopicFilters={lib.handleClearTopicFilters}
+							onCreateDocument={lib.handleCreateDocument}
+							onTriggerUpload={lib.triggerFileUpload}
+							onCreateFolder={lib.handleCreateFolder}
+						/>
+						<div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
+							<DocumentLibraryCompactNavigator
+								tree={lib.tree}
+								workspaceTree={lib.workspaceTree}
+								selectedSection={lib.selectedSection}
+								selectedNodeId={lib.selectedNode?.id ?? null}
+								docsTitle={t("title")}
+								isCollapsed={compactNavigatorCollapsed}
+								onCollapsedChange={setCompactNavigatorCollapsed}
+								onSelectDocumentsRoot={lib.handleSelectDocumentsSection}
+								onSelectWorkspaceRoot={lib.handleSelectWorkspaceSection}
+								onSelectDocNode={lib.handleSelectDocNode}
+								onSelectWorkspaceNode={lib.handleSelectWorkspaceNode}
+								onToggleExpand={lib.handleToggleExpand}
+								onToggleExpandWorkspace={lib.handleToggleExpandWorkspace}
+								onMove={lib.handleMove}
+								onRenameNode={handleTreeRename}
+								onDeleteNode={handleTreeDelete}
+								onDownloadFolderNode={handleTreeDownloadFolder}
 							/>
-							<div className="min-h-0 flex-1 overflow-hidden">
+							<div className="min-w-0 flex-1 overflow-hidden">
 								<DocumentLibraryContent
+									currentPath={lib.currentPath}
 									selectedNode={lib.selectedNode}
 									isFileSelected={lib.isFileSelected}
 									isFolderSelected={lib.isFolderSelected}
@@ -274,6 +381,10 @@ export const DocumentLibraryPage: React.FC = () => {
 									viewMode={lib.viewMode}
 									fileTopicMap={lib.fileTopicMap}
 									selectedTopicIds={lib.selectedTopicIds}
+									compact
+									compactNavigatorToggle={
+										lib.isFileSelected ? compactNavigatorExpandButton : null
+									}
 									onSelectNodeById={lib.handleSelectNodeInActiveTree}
 									onOpenFolderByPath={lib.handleOpenFolderByPath}
 									onCloseViewer={lib.handleCloseViewer}
@@ -289,86 +400,13 @@ export const DocumentLibraryPage: React.FC = () => {
 								/>
 							</div>
 						</div>
-					</div>
-				</div>
-			) : (
-				<>
-					<DocumentLibraryHeader
-						currentPath={lib.currentPath}
-						activeTree={activeTree}
-						homeTitle={t("title")}
-						isWorkspaceSection={lib.isWorkspaceSection}
-						compact
-						compactLeading={
-							lib.isFileSelected ? null : compactNavigatorExpandButton
-						}
-						viewMode={lib.viewMode}
-						searchQuery={lib.searchQuery}
-						topics={lib.topics}
-						selectedTopicIds={lib.selectedTopicIds}
-						error={lib.error}
-						onNavigate={lib.handleSelectNode}
-						homeOptions={homeOptions}
-						onViewModeChange={lib.setViewMode}
-						onSearchChange={lib.setSearchQuery}
-						onTopicFilterChange={lib.handleTopicFilterChange}
-						onRemoveTopicFilter={lib.handleRemoveTopicFilter}
-						onClearTopicFilters={lib.handleClearTopicFilters}
-						onCreateDocument={lib.handleCreateDocument}
-						onTriggerUpload={lib.triggerFileUpload}
-						onCreateFolder={lib.handleCreateFolder}
-					/>
-					<div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
-						<DocumentLibraryCompactNavigator
-							tree={lib.tree}
-							workspaceTree={lib.workspaceTree}
-							selectedSection={lib.selectedSection}
-							selectedNodeId={lib.selectedNode?.id ?? null}
-							docsTitle={t("title")}
-							isCollapsed={compactNavigatorCollapsed}
-							onCollapsedChange={setCompactNavigatorCollapsed}
-							onSelectDocumentsRoot={lib.handleSelectDocumentsSection}
-							onSelectWorkspaceRoot={lib.handleSelectWorkspaceSection}
-							onSelectDocNode={lib.handleSelectDocNode}
-							onSelectWorkspaceNode={lib.handleSelectWorkspaceNode}
-							onToggleExpand={lib.handleToggleExpand}
-							onToggleExpandWorkspace={lib.handleToggleExpandWorkspace}
-							onMove={lib.handleMove}
-							onRenameNode={handleTreeRename}
-							onDeleteNode={handleTreeDelete}
-							onDownloadFolderNode={handleTreeDownloadFolder}
-						/>
-						<div className="min-w-0 flex-1 overflow-hidden">
-							<DocumentLibraryContent
-								selectedNode={lib.selectedNode}
-								isFileSelected={lib.isFileSelected}
-								isFolderSelected={lib.isFolderSelected}
-								isWorkspaceSection={lib.isWorkspaceSection}
-								folderContents={lib.folderContents}
-								viewMode={lib.viewMode}
-								fileTopicMap={lib.fileTopicMap}
-								selectedTopicIds={lib.selectedTopicIds}
-								compact
-								compactNavigatorToggle={
-									lib.isFileSelected ? compactNavigatorExpandButton : null
-								}
-								onSelectNodeById={lib.handleSelectNodeInActiveTree}
-								onOpenFolderByPath={lib.handleOpenFolderByPath}
-								onCloseViewer={lib.handleCloseViewer}
-								onDeleteItem={lib.handleDeleteItem}
-								onRenameItem={lib.handleRenameItem}
-								onDownloadFile={lib.handleDownloadFile}
-								onDownloadFolder={lib.handleDownloadFolder}
-								onDownloadSelectedFile={lib.handleDownloadSelectedFile}
-								onManageTopics={lib.handleManageFileTopic}
-								onConvertToKnowledge={lib.handleConvertToKnowledge}
-								onDeleteSelectedFile={lib.handleDeleteSelectedFile}
-								onToggleTopicFilter={lib.handleToggleTopicFilter}
-							/>
-						</div>
-					</div>
-				</>
-			)}
-		</div>
+					</>
+				)}
+			</div>
+			<FolderIndexesDialog />
+			<FolderIndexGraphDialog />
+			<FolderIndexCardDialog />
+			<FolderIndexMappedConfirm />
+		</FolderIndexProvider>
 	);
 };

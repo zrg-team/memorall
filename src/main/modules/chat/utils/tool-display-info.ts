@@ -6,6 +6,23 @@ export const TOOL_DISPLAY_INFO: Record<
 	string,
 	{ name?: string; description: string; descriptionKey?: string }
 > = {
+	okf_index: {
+		name: "List folder index",
+		description:
+			"Read a folder's OKF index.md: each file's type and one-line summary",
+		descriptionKey: "agentSettings.toolDescriptions.okf_index",
+	},
+	okf_read: {
+		name: "Read a card",
+		description: "Open one file's OKF card",
+		descriptionKey: "agentSettings.toolDescriptions.okf_read",
+	},
+	okf_search: {
+		name: "Search cards",
+		description:
+			"Find OKF cards by words, type, tags or folder across indexed folders",
+		descriptionKey: "agentSettings.toolDescriptions.okf_search",
+	},
 	current_time: {
 		name: "Current Time",
 		description: "Get the current date and time",

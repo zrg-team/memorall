@@ -517,7 +517,10 @@
 			"memon_skills": "Xem và quản lý các kỹ năng agent này dùng",
 			"memon_connections": "Xem các ứng dụng đã kết nối và những ứng dụng agent này dùng",
 			"memon_code": "Giao việc lập trình cho pi code, tác tử lập trình trên máy tính, sau khi người dùng xác nhận",
-			"memon_visualize": "Hiển thị hình trực quan viết bằng OpenUI trong ứng dụng Trực quan hóa của MemonOS Bot và lưu lại"
+			"memon_visualize": "Hiển thị hình trực quan viết bằng OpenUI trong ứng dụng Trực quan hóa của MemonOS Bot và lưu lại",
+			"okf_index": "Đọc index.md OKF của thư mục: loại và tóm tắt một dòng của từng tệp",
+			"okf_read": "Mở thẻ OKF của một tệp",
+			"okf_search": "Tìm thẻ OKF theo từ, loại, thẻ hoặc thư mục trong các thư mục có chỉ mục"
 		},
 		"cancel": "Hủy",
 		"saved": "Đã lưu",
@@ -590,6 +593,15 @@
 			"keepDirectToolsHint": "Giữ web_*, fs_* và sandbox_* bên cạnh máy tính, cho các thao tác tệp hàng loạt.",
 			"piCode": "pi code",
 			"piCodeHint": "Tác tử lập trình pi trên màn hình. MemonOS Bot có thể giao việc lập trình cho nó và sẽ hỏi bạn trong cửa sổ pi code trước. Khi tắt, pi code không có trên màn hình và không được dùng."
+		},
+		"folderIndex": {
+			"tools": "Công cụ",
+			"searches": "Tìm trong mọi thư mục có chỉ mục trong Tệp, bằng công cụ của loại chỉ mục đó.",
+			"now_one": "Hiện có: {{folders}} ({{count}} thẻ).",
+			"now_other": "Hiện có: {{folders}} ({{count}} thẻ).",
+			"none": "Chưa có thư mục nào có chỉ mục.",
+			"open": "Mở Tệp › Chỉ mục",
+			"hint": "Thư mục nào có loại chỉ mục nào chỉ được đặt trong Tệp. Khi có loại chỉ mục mới, công cụ của nó sẽ hiện ở đây thành một nhóm khác."
 		}
 	},
 	"openui": {
