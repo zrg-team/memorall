@@ -5,6 +5,12 @@ import type { DocumentTreeNode } from "@/types/document-library";
 
 import { DocumentTree } from "../DocumentTree";
 
+// The tree's folder-index badges reach the native-mounts hook, and with it
+// the library filesystem, which configures ZenFS (IndexedDB) on import.
+vi.mock("@/services/filesystem/document-filesystem", () => ({
+	documentFileSystemService: {},
+}));
+
 const node = (partial: Partial<DocumentTreeNode>): DocumentTreeNode =>
 	partial as unknown as DocumentTreeNode;
 

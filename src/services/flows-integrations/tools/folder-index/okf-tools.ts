@@ -52,7 +52,7 @@ const errorResult = (
 
 /** Folders with an OKF index, and whether the user lets agents suggest more. */
 const okfScope = async (): Promise<{ roots: string[]; mayAsk: boolean }> => {
-	const config = await getFolderIndexRuntime().indexer.loadConfig();
+	const config = await (await getFolderIndexRuntime()).indexer.loadConfig();
 	return {
 		roots: indexRoots(config, OKF_INDEX_TYPE_ID),
 		mayAsk: config.settings.agentsMayAsk,
@@ -90,7 +90,7 @@ export const createOkfIndexTool: ToolFactory<
 	annotations: READ_ONLY,
 	execute: async (input): Promise<ToolExecutionResult> => {
 		try {
-			const { indexer, okfReader } = getFolderIndexRuntime();
+			const { indexer, okfReader } = await getFolderIndexRuntime();
 			const { roots, mayAsk } = await okfScope();
 			if (!roots.length) return { content: noIndexMessage(mayAsk) };
 			if (!input.path?.trim()) {
@@ -155,7 +155,7 @@ export const createOkfReadTool: ToolFactory<
 	annotations: READ_ONLY,
 	execute: async (input): Promise<ToolExecutionResult> => {
 		try {
-			const { okfReader } = getFolderIndexRuntime();
+			const { okfReader } = await getFolderIndexRuntime();
 			const card = await okfReader.readCard(input.path);
 			if (!card) {
 				return {
@@ -225,7 +225,7 @@ export const createOkfSearchTool: ToolFactory<
 					isError: true,
 				};
 			}
-			const { okfReader } = getFolderIndexRuntime();
+			const { okfReader } = await getFolderIndexRuntime();
 			const { roots, mayAsk } = await okfScope();
 			if (!roots.length) return { content: noIndexMessage(mayAsk) };
 			const { hits, searched, truncated } = await okfReader.search(

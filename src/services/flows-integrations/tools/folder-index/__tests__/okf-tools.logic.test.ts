@@ -11,7 +11,7 @@ import {
 let runtime: FolderIndexRuntime;
 
 vi.mock("@/services/folder-index/runtime", () => ({
-	getFolderIndexRuntime: () => runtime,
+	getFolderIndexRuntime: async () => runtime,
 }));
 
 const { createOkfIndexTool, createOkfReadTool, createOkfSearchTool } =

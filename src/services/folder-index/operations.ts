@@ -49,20 +49,20 @@ const toCard = (
 
 /** The OKF bundle root a file's card belongs to, for its bundle-relative links. */
 const okfRootOf = async (path: string): Promise<string> => {
-	const config = await getFolderIndexRuntime().indexer.loadConfig();
+	const config = await (await getFolderIndexRuntime()).indexer.loadConfig();
 	return (
 		indexRootOf(config, OKF_INDEX_TYPE_ID, parentFolder(path) ?? "/") ?? "/"
 	);
 };
 
 const state = (): Promise<FolderIndexStateView> =>
-	getFolderIndexRuntime().indexer.getState();
+	getFolderIndexRuntime().then(({ indexer }) => indexer.getState());
 
 /** Runs one folder-index operation where the indexes live. */
 export const runFolderIndexOperation = async (
 	job: FolderIndexOperationJobPayload,
 ): Promise<FolderIndexOperationJobResult> => {
-	const { indexer, okf, okfReader } = getFolderIndexRuntime();
+	const { indexer, okf, okfReader } = await getFolderIndexRuntime();
 	switch (job.operation) {
 		case "state.get":
 			return { operation: job.operation, result: await state() };

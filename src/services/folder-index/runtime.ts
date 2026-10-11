@@ -1,15 +1,18 @@
-import { documentFileSystemService } from "@/services/filesystem/document-filesystem";
-import type { FilesystemChangeEvent } from "@/services/filesystem/document-filesystem";
+import type {
+	DocumentFileSystem,
+	FilesystemChangeEvent,
+} from "@/services/filesystem/document-filesystem";
 import { logError } from "@/utils/logger";
 import { FolderIndexer } from "./folder-indexer";
 import { OkfIndex } from "./okf/okf-index";
 import { OkfReader } from "./okf/okf-query";
-import { documentLibrary, zenIndexStore } from "./storage-io";
 
 /**
  * The indexes of the context that runs background jobs: one indexer with
  * every built-in index type, kept in step with the library as it changes.
- * Created on first use, so contexts that never index pay nothing.
+ * Created on first use, so contexts that never index pay nothing. The
+ * filesystem is imported then too: importing it configures ZenFS, which
+ * must not happen just because the tools or the job handler are registered.
  */
 
 /** How long to wait for more changes before re-indexing. */
@@ -21,7 +24,7 @@ export interface FolderIndexRuntime {
 	okfReader: OkfReader;
 }
 
-let runtime: FolderIndexRuntime | null = null;
+let runtime: Promise<FolderIndexRuntime> | null = null;
 
 const changedPaths = (change: FilesystemChangeEvent): string[] => {
 	if (change.operation === "batch")
@@ -31,7 +34,10 @@ const changedPaths = (change: FilesystemChangeEvent): string[] => {
 	);
 };
 
-const watchLibrary = (indexer: FolderIndexer): void => {
+const watchLibrary = (
+	library: DocumentFileSystem,
+	indexer: FolderIndexer,
+): void => {
 	const pending = new Set<string>();
 	let timer: ReturnType<typeof setTimeout> | null = null;
 	const flush = () => {
@@ -42,7 +48,7 @@ const watchLibrary = (indexer: FolderIndexer): void => {
 			logError("[folder-index] Re-indexing after a change failed:", error);
 		});
 	};
-	documentFileSystemService.onFilesystemChanged((change) => {
+	library.onFilesystemChanged((change) => {
 		if (!change) return;
 		const handle = async (event: FilesystemChangeEvent) => {
 			// Rules follow their folder when it moves; a deleted folder's go.
@@ -72,12 +78,23 @@ const watchLibrary = (indexer: FolderIndexer): void => {
 	});
 };
 
-export const getFolderIndexRuntime = (): FolderIndexRuntime => {
-	if (runtime) return runtime;
+const createRuntime = async (): Promise<FolderIndexRuntime> => {
+	const [{ documentFileSystemService }, { documentLibrary, zenIndexStore }] =
+		await Promise.all([
+			import("@/services/filesystem/document-filesystem"),
+			import("./storage-io"),
+		]);
 	const indexer = new FolderIndexer(zenIndexStore, documentLibrary);
 	const okf = new OkfIndex({ store: zenIndexStore, library: documentLibrary });
 	indexer.register(okf);
-	runtime = { indexer, okf, okfReader: new OkfReader(zenIndexStore) };
-	watchLibrary(indexer);
+	watchLibrary(documentFileSystemService, indexer);
+	return { indexer, okf, okfReader: new OkfReader(zenIndexStore) };
+};
+
+export const getFolderIndexRuntime = (): Promise<FolderIndexRuntime> => {
+	runtime ??= createRuntime().catch((error: unknown) => {
+		runtime = null;
+		throw error;
+	});
 	return runtime;
 };
