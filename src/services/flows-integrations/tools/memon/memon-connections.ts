@@ -28,9 +28,15 @@ const schema = z
 
 type Input = z.infer<typeof schema>;
 
-const needConnection = (input: Input): number => {
-	if (!input.connection) throw new Error(`${input.action} needs connection.`);
-	return input.connection;
+/** The connection number; without one, the connections to pick from. */
+const needConnection = (machine: MemonMachine, input: Input): number => {
+	if (input.connection) return input.connection;
+	const items = machine.snapshot().connections.items;
+	throw new Error(
+		items.length
+			? `${input.action} needs \`connection\`, its number: ${items.map((item, index) => `${index + 1}. ${item.label}${item.granted ? " (granted)" : ""}`).join("; ")}.`
+			: `${input.action} needs \`connection\`, but the user has no connections yet.`,
+	);
 };
 
 const apply = async (machine: MemonMachine, input: Input): Promise<string> => {
@@ -42,7 +48,7 @@ const apply = async (machine: MemonMachine, input: Input): Promise<string> => {
 	if (!machine.snapshot().connections.items.length) {
 		await machine.openConnections();
 	}
-	const item = machine.connectionAt(needConnection(input));
+	const item = machine.connectionAt(needConnection(machine, input));
 	switch (input.action) {
 		case "tools":
 			machine.openWindow("connections");

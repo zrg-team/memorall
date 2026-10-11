@@ -1633,7 +1633,7 @@ describe("MemonMachine", () => {
 			screen.indexOf("#2 Add charts"),
 		);
 		expect(() => machine.checkTaskItem(1, 9, true)).toThrow(
-			"Task #1 has no item 9; its checklist has 3.",
+			"Task #1 has no item 9; its checklist has 3:\n1. ",
 		);
 		expect(() => machine.setTaskState(9, "done")).toThrow(
 			"Tasks has no task #9. Open tasks: #1, #2, #3.",
@@ -1997,7 +1997,7 @@ describe("MemonMachine", () => {
 			"  - c1__GMAIL_SEND — Send an email (destructive)",
 		);
 		expect(() => machine.connectionAt(4)).toThrow(
-			"Connections has no connection 4; it has 1.",
+			"Connections has no connection 4; it has 1: 1. Gmail.",
 		);
 	});
 

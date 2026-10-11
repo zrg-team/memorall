@@ -55,7 +55,7 @@ const schema = z
 			.number()
 			.optional()
 			.describe(
-				"click/hover by position, in CSS pixels: from the left of the ref (a canvas b9) or, without a ref, of the page's viewport.",
+				"click/hover by position on the Browser's page only, in CSS pixels: from the left of the ref (a canvas b9) or, without a ref, of the page's viewport. Other windows (Files, Tasks, the Editor…) take refs, never x/y.",
 			),
 		y: z
 			.number()
@@ -169,6 +169,23 @@ const describe = async (
 	return `Saved a picture of ${what} (${size}) to ${memonDisplayPath(saved, machine.home)}. The chat's model cannot look at images; if Studio has an Image tools model, memon_studio can caption it.${source}`;
 };
 
+/**
+ * A point or a bare key acts on the Browser's page. Without one, say what
+ * acts on the window in front instead, so the next call is the right one.
+ */
+const requirePage = (machine: MemonMachine, what: string): void => {
+	const { browser, windows, focusedWindowId } = machine.snapshot();
+	if (browser.activeTabId) return;
+	const focused = windows.find((window) => window.id === focusedWindowId);
+	const front =
+		focused && focused.app !== "browser"
+			? ` ${memonWindowLabel(focused.app)} is in front: act on it by a ref from the screen (like f3 in Files, n2 in Tasks, e1 in the Editor).`
+			: " Act on another window by a ref from the screen (like f3 in Files).";
+	throw new Error(
+		`${what} acts on a Browser page, and no page is open.${front} To use a website, memon_open { url } first.`,
+	);
+};
+
 const act = async (
 	machine: MemonMachine,
 	input: Input,
@@ -245,7 +262,14 @@ const act = async (
 			return `Went ${input.action}.`;
 		case "select_tab":
 		case "close_tab": {
-			if (!input.tab) throw new Error("Give the tab number.");
+			if (!input.tab) {
+				const { tabs } = machine.snapshot().browser;
+				throw new Error(
+					tabs.length
+						? `${input.action} needs \`tab\`, its number: ${tabs.map((tab, index) => `${index + 1}. ${tab.title || tab.url}`).join("; ")}.`
+						: `${input.action} needs \`tab\`, but no page is open. Use memon_open with a url.`,
+				);
+			}
 			if (input.action === "select_tab") await machine.selectTab(input.tab);
 			else await machine.closeTab(input.tab);
 			return `${input.action === "select_tab" ? "Switched to" : "Closed"} tab ${input.tab}.`;
@@ -304,6 +328,7 @@ const act = async (
 			input.x !== undefined &&
 			input.y !== undefined
 		) {
+			requirePage(machine, `${input.action} by x, y`);
 			const result = await machine.browserAction({
 				action: input.action,
 				...point,
@@ -311,6 +336,7 @@ const act = async (
 			return `${input.action === "click" ? "Clicked" : "Hovered"} ${(result.ok && result.detail) || `at (${input.x}, ${input.y})`}.`;
 		}
 		if (input.action === "press") {
+			requirePage(machine, "press without a ref");
 			const result = await machine.browserAction({
 				action: "press",
 				value: input.text,

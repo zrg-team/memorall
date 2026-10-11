@@ -39,11 +39,15 @@ const schema = z
 
 type Input = z.infer<typeof schema>;
 
-const needSchedule = (input: Input): number => {
-	if (!input.schedule) {
-		throw new Error(`${input.action} needs the schedule number.`);
-	}
-	return input.schedule;
+/** The schedule number; without one, the schedules to pick from. */
+const needSchedule = (machine: MemonMachine, input: Input): number => {
+	if (input.schedule) return input.schedule;
+	const items = machine.snapshot().scheduler.items;
+	throw new Error(
+		items.length
+			? `${input.action} needs \`schedule\`, its number: ${items.map((item, index) => `${index + 1}. ${item.name} (${item.status})`).join("; ")}.`
+			: `${input.action} needs \`schedule\`, but this agent has no schedules yet.`,
+	);
 };
 
 const apply = async (machine: MemonMachine, input: Input): Promise<string> => {
@@ -65,7 +69,7 @@ const apply = async (machine: MemonMachine, input: Input): Promise<string> => {
 			return `Created schedule "${saved.name}".`;
 		}
 		case "edit": {
-			const current = machine.scheduleAt(needSchedule(input));
+			const current = machine.scheduleAt(needSchedule(machine, input));
 			const saved = await machine.saveSchedule({
 				id: current.id,
 				name: input.name ?? current.name,
@@ -79,7 +83,7 @@ const apply = async (machine: MemonMachine, input: Input): Promise<string> => {
 		}
 		case "pause":
 		case "resume": {
-			const current = machine.scheduleAt(needSchedule(input));
+			const current = machine.scheduleAt(needSchedule(machine, input));
 			await machine.saveSchedule({
 				...current,
 				status: input.action === "pause" ? "paused" : "active",
@@ -87,7 +91,7 @@ const apply = async (machine: MemonMachine, input: Input): Promise<string> => {
 			return `${input.action === "pause" ? "Paused" : "Resumed"} schedule "${current.name}".`;
 		}
 		case "delete": {
-			const current = machine.scheduleAt(needSchedule(input));
+			const current = machine.scheduleAt(needSchedule(machine, input));
 			await machine.deleteSchedule(current.id);
 			return `Deleted schedule "${current.name}".`;
 		}

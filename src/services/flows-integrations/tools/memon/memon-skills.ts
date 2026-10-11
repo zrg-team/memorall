@@ -34,9 +34,23 @@ const schema = z
 
 type Input = z.infer<typeof schema>;
 
-const needSkill = (input: Input): string => {
-	if (!input.skill?.trim()) throw new Error(`${input.action} needs skill.`);
-	return input.skill.trim();
+/** The skill's name; without one, the agent's skills to pick from. */
+const needSkill = (machine: MemonMachine, input: Input): string => {
+	const name = input.skill?.trim();
+	if (name) return name;
+	const enabled = machine
+		.snapshot()
+		.skills.items.filter((item) => item.enabled)
+		.map((item) => item.name);
+	throw new Error(
+		`${input.action} needs \`skill\`, the skill's name${
+			input.action === "create"
+				? " (lowercase, hyphens), with description and body."
+				: enabled.length
+					? `. This agent's skills: ${enabled.join(", ")}; { action: "list" } shows the whole library.`
+					: '; { action: "list" } shows the library.'
+		}`,
+	);
 };
 
 const NEXT_RUN = "It applies from the next message.";
@@ -48,17 +62,17 @@ const apply = async (machine: MemonMachine, input: Input): Promise<string> => {
 			await machine.openSkills();
 			return "Opened Skills.";
 		case "read":
-			await machine.openSkill(needSkill(input));
-			return `Opened the skill "${needSkill(input)}".`;
+			await machine.openSkill(needSkill(machine, input));
+			return `Opened the skill "${needSkill(machine, input)}".`;
 		case "enable":
 		case "disable": {
 			const enabled = input.action === "enable";
-			await machine.setSkillEnabled(needSkill(input), enabled);
-			return `${enabled ? "Enabled" : "Disabled"} "${needSkill(input)}" for this agent. ${NEXT_RUN}`;
+			await machine.setSkillEnabled(needSkill(machine, input), enabled);
+			return `${enabled ? "Enabled" : "Disabled"} "${needSkill(machine, input)}" for this agent. ${NEXT_RUN}`;
 		}
 		case "create":
 		case "edit": {
-			const name = needSkill(input);
+			const name = needSkill(machine, input);
 			if (input.action === "create" && (!input.description || !input.body)) {
 				throw new Error("create needs description and body.");
 			}
@@ -72,8 +86,8 @@ const apply = async (machine: MemonMachine, input: Input): Promise<string> => {
 			return `${input.action === "create" ? "Created" : "Updated"} the skill "${name}". Enable it to use it. ${NEXT_RUN}`;
 		}
 		case "delete":
-			await machine.deleteSkill(needSkill(input));
-			return `Deleted the skill "${needSkill(input)}".`;
+			await machine.deleteSkill(needSkill(machine, input));
+			return `Deleted the skill "${needSkill(machine, input)}".`;
 	}
 };
 

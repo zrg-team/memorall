@@ -6,7 +6,12 @@ import { toolRegistry } from "@memorall/agent-harness-flows/registries/tool-regi
 import z from "zod";
 import { MEMON_TASKS_TOOL } from "@/services/memon/constants";
 import type { MemonMachine } from "@/services/memon/memon-machine";
-import { taskProgress } from "@/services/memon/tasks-file";
+import {
+	currentTask,
+	isTaskOpen,
+	numberedChecklist,
+	taskProgress,
+} from "@/services/memon/tasks-file";
 import type { MemonTask } from "@/services/memon/types";
 import { runMemonTool } from "./memon-tool-utils";
 
@@ -22,7 +27,9 @@ const schema = z
 			.int()
 			.min(1)
 			.optional()
-			.describe("The task's number, #3 in Tasks. Every action but add."),
+			.describe(
+				"The task's number, #3 in Tasks. start/drop need it; check/uncheck/edit/done act on the task in progress (the screen's \"now: #3\") when it is left out.",
+			),
 		title: z
 			.string()
 			.optional()
@@ -40,7 +47,9 @@ const schema = z
 			.int()
 			.min(1)
 			.optional()
-			.describe("check/uncheck: the checklist item's number in the task."),
+			.describe(
+				"check/uncheck (required): the checklist item's number in the task, from 1.",
+			),
 		start: z
 			.boolean()
 			.optional()
@@ -52,9 +61,35 @@ const schema = z
 
 type Input = z.infer<typeof schema>;
 
-const needTask = (input: Input): number => {
-	if (!input.task) throw new Error(`${input.action} needs the task number.`);
-	return input.task;
+const STATE_WORDS: Record<MemonTask["state"], string> = {
+	new: "new",
+	approved: "approved",
+	in_progress: "in progress",
+	done: "done",
+	dropped: "dropped",
+};
+
+/**
+ * The task an action is about: the one given, else (except for start and
+ * drop, which must name it) the task in progress, the screen's "now".
+ */
+const needTask = (machine: MemonMachine, input: Input): number => {
+	if (input.task) return input.task;
+	const open = machine
+		.snapshot()
+		.tasks.items.filter((task) => isTaskOpen(task.state));
+	const now =
+		input.action === "start" || input.action === "drop"
+			? undefined
+			: currentTask(open);
+	if (now) return now.id;
+	throw new Error(
+		`${input.action} needs \`task\`, the task's number. ${
+			open.length
+				? `Open tasks: ${open.map((task) => `#${task.id} ${task.title} (${STATE_WORDS[task.state]})`).join("; ")}.`
+				: "There are no open tasks."
+		}`,
+	);
 };
 
 const progressOf = (task: MemonTask): string => {
@@ -78,15 +113,25 @@ const apply = (machine: MemonMachine, input: Input): string => {
 				: `Proposed task #${task.id}: ${task.title}. It waits for the user's approval.`;
 		}
 		case "start": {
-			const task = machine.setTaskState(needTask(input), "in_progress");
+			const task = machine.setTaskState(
+				needTask(machine, input),
+				"in_progress",
+			);
 			return `Started task #${task.id}: ${task.title}${progressOf(task)}.`;
 		}
 		case "check":
 		case "uncheck": {
-			if (!input.item)
-				throw new Error(`${input.action} needs the item number.`);
+			const id = needTask(machine, input);
+			if (!input.item) {
+				const task = machine.taskById(id);
+				throw new Error(
+					task.checklist.length
+						? `${input.action} needs \`item\`, the item's number in task #${id}:\n${numberedChecklist(task)}`
+						: `${input.action} needs \`item\`, but task #${id} has no checklist; add items with { action: "edit", task: ${id}, items }.`,
+				);
+			}
 			const { task, text } = machine.checkTaskItem(
-				needTask(input),
+				id,
 				input.item,
 				input.action === "check",
 			);
@@ -96,19 +141,19 @@ const apply = (machine: MemonMachine, input: Input): string => {
 			if (input.title === undefined && !input.items) {
 				throw new Error("edit needs a new title or items.");
 			}
-			const task = machine.editTask(needTask(input), {
+			const task = machine.editTask(needTask(machine, input), {
 				title: input.title,
 				checklist: input.items,
 			});
 			return `Edited task #${task.id}: ${task.title}${progressOf(task)}.`;
 		}
 		case "done": {
-			const task = machine.setTaskState(needTask(input), "done");
+			const task = machine.setTaskState(needTask(machine, input), "done");
 			const open = task.checklist.filter((item) => !item.done).length;
 			return `Finished task #${task.id}: ${task.title}.${open ? ` ${open} checklist item${open === 1 ? " is" : "s are"} still unticked.` : ""}`;
 		}
 		case "drop": {
-			const task = machine.setTaskState(needTask(input), "dropped");
+			const task = machine.setTaskState(needTask(machine, input), "dropped");
 			return `Dropped task #${task.id}: ${task.title}. It stays in Tasks as the record.`;
 		}
 	}
