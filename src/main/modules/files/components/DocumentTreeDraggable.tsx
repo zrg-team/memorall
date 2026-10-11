@@ -48,6 +48,7 @@ import { CSS } from "@dnd-kit/utilities";
 
 import type { DocumentTreeNode, DocumentType } from "@/types/document-library";
 import { cn } from "@/lib/utils";
+import { FolderIndexMenuItems } from "../folder-index";
 
 interface DocumentTreeProps {
 	tree: DocumentTreeNode[];
@@ -298,6 +299,7 @@ const TreeItem: React.FC<TreeItemProps> = ({
 					</div>
 				</div>
 				<DropdownMenuContent align="start">
+					{node.type === "folder" && <FolderIndexMenuItems path={node.path} />}
 					{canDownload && (
 						<>
 							<DropdownMenuItem onClick={() => onDownloadFolder?.(node)}>

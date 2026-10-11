@@ -24,7 +24,12 @@ import {
 	type MemonWindowApp,
 } from "./constants";
 import { MemonFileSync } from "./file-sync";
-import { isTaskOpen, parseTasksFile, serializeTasksFile } from "./tasks-file";
+import {
+	isTaskOpen,
+	numberedChecklist,
+	parseTasksFile,
+	serializeTasksFile,
+} from "./tasks-file";
 import {
 	parseTerminalHistory,
 	parseTerminalLauncher,
@@ -1459,9 +1464,20 @@ export class MemonMachine {
 		if (tab) await this.readTab(tab, PAGE_READ_SETTLE_MS);
 	}
 
+	/** Why tab `index` is not there, with the tabs that are. */
+	private noTab(index: number): string {
+		if (!this.tabs.length) {
+			return `There is no tab ${index}: no page is open. Use memon_open with a url.`;
+		}
+		const tabs = this.tabs
+			.map((tab, at) => `${at + 1}. ${tab.title || tab.url}`)
+			.join("; ");
+		return `There is no tab ${index}; the Browser has ${this.tabs.length}: ${tabs}.`;
+	}
+
 	async selectTab(index: number): Promise<void> {
 		const tab = this.tabs[index - 1];
-		if (!tab) throw new Error(`There is no tab ${index}.`);
+		if (!tab) throw new Error(this.noTab(index));
 		this.activeTabId = tab.id;
 		const window = this.windowFor("browser");
 		if (window) this.focusWindow(window.id);
@@ -1470,7 +1486,7 @@ export class MemonMachine {
 
 	async closeTab(index: number): Promise<void> {
 		const tab = this.tabs[index - 1];
-		if (!tab) throw new Error(`There is no tab ${index}.`);
+		if (!tab) throw new Error(this.noTab(index));
 		await this.releaseTab(tab);
 		this.tabs = this.tabs.filter((candidate) => candidate !== tab);
 		if (this.activeTabId === tab.id) {
@@ -2619,7 +2635,9 @@ export class MemonMachine {
 		const entry = task.checklist[item - 1];
 		if (!entry) {
 			throw new Error(
-				`Task #${id} has no item ${item}; its checklist has ${task.checklist.length}.`,
+				task.checklist.length
+					? `Task #${id} has no item ${item}; its checklist has ${task.checklist.length}:\n${numberedChecklist(task)}`
+					: `Task #${id} has no checklist; add items with { action: "edit", task: ${id}, items }.`,
 			);
 		}
 		entry.done = done;
@@ -2982,7 +3000,7 @@ export class MemonMachine {
 		const item = this.connectionItems[number - 1];
 		if (!item) {
 			throw new Error(
-				`Connections has no connection ${number}; it has ${this.connectionItems.length}.`,
+				`Connections has no connection ${number}; it has ${this.connectionItems.length}${this.connectionItems.length ? `: ${this.connectionItems.map((candidate, index) => `${index + 1}. ${candidate.label}`).join("; ")}` : ""}.`,
 			);
 		}
 		return item;
@@ -3010,7 +3028,7 @@ export class MemonMachine {
 		const schedule = this.schedules[number - 1];
 		if (!schedule) {
 			throw new Error(
-				`The Scheduler has no schedule ${number}; it has ${this.schedules.length}.`,
+				`The Scheduler has no schedule ${number}; it has ${this.schedules.length}${this.schedules.length ? `: ${this.schedules.map((candidate, index) => `${index + 1}. ${candidate.name}`).join("; ")}` : ""}.`,
 			);
 		}
 		return schedule;

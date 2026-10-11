@@ -380,6 +380,10 @@
 			"memonFeature": {
 				"name": "MemonOS Bot",
 				"description": "Give the agent a computer: Browser, Files, Terminal, Tasks and your studios on one desktop that you can watch and take over."
+			},
+			"folderIndexFeature": {
+				"name": "Folder Indexes",
+				"description": "Search folders through their indexes. Supports OKF; more index types can be added."
 			}
 		}
 	},

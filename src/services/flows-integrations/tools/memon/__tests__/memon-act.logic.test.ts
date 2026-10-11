@@ -226,6 +226,30 @@ describe("memon_act scroll", () => {
 		});
 	});
 
+	it("points a click by x, y with no page open at the refs of the window in front", async () => {
+		const machine = {
+			...fakeMachine({ looks: false }),
+			snapshot: () => ({
+				revision: 1,
+				focusedWindowId: "w42",
+				windows: [{ id: "w42", app: "files" }],
+				browser: { tabs: [], activeTabId: null },
+			}),
+		};
+		vi.mocked(getMemonMachine).mockResolvedValue(machine as never);
+		const result = await createMemonActTool().execute(
+			{ action: "click", x: 200, y: 200 },
+			undefined,
+		);
+		expect(machine.browserAction).not.toHaveBeenCalled();
+		expect(result).toMatchObject({
+			isError: true,
+			content: expect.stringContaining(
+				"click by x, y acts on a Browser page, and no page is open. Files is in front: act on it by a ref from the screen",
+			),
+		});
+	});
+
 	it("scrolls the page when the Browser is in front", async () => {
 		const { machine, result } = await scroll({ app: "browser" });
 		expect(machine.browserAction).toHaveBeenCalledWith({

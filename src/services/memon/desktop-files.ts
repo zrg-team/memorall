@@ -239,6 +239,11 @@ export const changeDesktopEntries = (
 	if (change.action === "list") return content;
 	const { lines, blocks } = parseEntries(content);
 	if (change.action === "add") {
+		if (!change.text.trim()) {
+			throw new Error(
+				'add needs `text`: the fact to remember, in one short sentence, like { action: "add", text: "Prefers answers in Vietnamese" }.',
+			);
+		}
 		const kept = [...lines];
 		while (kept.length && !kept[kept.length - 1].trim()) kept.pop();
 		// A blank line between the file's text and its first entry.
@@ -253,8 +258,13 @@ export const changeDesktopEntries = (
 	if (!block) {
 		throw new Error(
 			blocks.length
-				? `There is no entry ${change.entry}; the file has ${blocks.length}, numbered as now:\n${numberedEntries(blocks)}`
+				? `There is no entry ${change.entry}; the file has ${blocks.length} (the entries after a removed one move up), numbered as now:\n${numberedEntries(blocks)}`
 				: `There is no entry ${change.entry}: the file has no entries yet. Save the fact as a new one with { action: "add", text }.`,
+		);
+	}
+	if (change.action === "update" && !change.text.trim()) {
+		throw new Error(
+			`update needs \`text\`: the whole new wording of entry ${change.entry}, which now reads: "${block.text}". To delete it, use { action: "remove", entry: ${change.entry} }.`,
 		);
 	}
 	const replacement =

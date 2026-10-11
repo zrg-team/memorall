@@ -36,6 +36,7 @@ import { getAbsorbedFeatures } from "../utils/feature-absorption";
 import { KNOWLEDGE_RETRIEVAL_MODES } from "@/main/stores/agent-config";
 import { VisualizeResponseFeatureConfig } from "../components/VisualizeResponseFeatureConfig";
 import { MemonBotFeatureConfig } from "../components/MemonBotFeatureConfig";
+import { FolderIndexFeatureInfo } from "../components/FolderIndexFeatureInfo";
 
 interface AgentFeatureDetailModalProps {
 	featureName: string;
@@ -573,6 +574,14 @@ export const AgentFeatureDetailModal =
 						}
 						if (slot.component === "VisualizeResponseConfig") {
 							return <VisualizeResponseConfigSlot key={index} />;
+						}
+						if (slot.component === "FolderIndexInfo") {
+							return (
+								<FolderIndexFeatureInfo
+									key={index}
+									onOpenFiles={() => modal.hide()}
+								/>
+							);
 						}
 						if (slot.component === "MemonBotSettings") {
 							return (

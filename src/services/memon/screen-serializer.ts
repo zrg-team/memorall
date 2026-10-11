@@ -8,7 +8,7 @@ import {
 	memonDisplayPath,
 	memonHomePaths,
 } from "./constants";
-import { isTaskOpen, taskProgress } from "./tasks-file";
+import { currentTask, isTaskOpen, taskProgress } from "./tasks-file";
 import type {
 	MemonFileEntry,
 	MemonFilesState,
@@ -171,7 +171,7 @@ const tasksSummary = (snapshot: MemonMachineSnapshot): string | null => {
 		count("approved") && `${count("approved")} approved (waiting for you)`,
 		count("new") && `${count("new")} new (waiting for the user's approval)`,
 	].filter(Boolean);
-	const now = open.find((task) => task.state === "in_progress");
+	const now = currentTask(open);
 	const progress = now ? taskProgress(now) : null;
 	return `tasks: ${parts.join(" · ")}${now ? ` · now: #${now.id} ${truncateLine(now.title, 60)}${now.checklist.length ? ` (${progress?.done}/${progress?.total})` : ""}` : ""}`;
 };

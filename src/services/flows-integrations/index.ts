@@ -116,3 +116,7 @@ import "./steps/features/files-legacy-feature";
 import "./steps/features/files-fs-feature";
 import "./steps/features/document-convert-feature";
 import "./steps/features/pdf-generate-feature";
+
+// Folder indexes: read-only tools over the indexes the user keeps in Files
+import "./tools/folder-index/okf-tools";
+import "./steps/features/folder-index-feature";

@@ -13,6 +13,7 @@ import { PageHeader } from "@/main/components/ui/page-header";
 import type { DocumentTreeNode } from "@/types/document-library";
 import { cn } from "@/lib/utils";
 import { useNativeMounts } from "@/main/modules/files/hooks/use-native-mounts";
+import { FolderIndexesSidebarLink } from "../folder-index";
 
 interface DocumentLibrarySidebarProps {
 	tree: DocumentTreeNode[];
@@ -186,9 +187,11 @@ export const DocumentLibrarySidebar = memo(function DocumentLibrarySidebar({
 			{/* Skills used to live in this tree as a plain `/skills` folder, where
 			    renaming or deleting it silently broke every skill. They now have
 			    their own root and their own tab; this is a link, not a node. */}
+			<div className="mt-auto" />
+			<FolderIndexesSidebarLink />
 			<Link
 				to="/skills"
-				className="mt-auto flex flex-shrink-0 items-center gap-1.5 border-t px-2 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:text-foreground"
+				className="flex flex-shrink-0 items-center gap-1.5 border-t px-2 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:text-foreground"
 			>
 				<GraduationCap className="h-3 w-3 flex-shrink-0" />
 				{t("sidebar.skills")}

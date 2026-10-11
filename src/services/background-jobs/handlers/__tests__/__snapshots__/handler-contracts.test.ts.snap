@@ -103,6 +103,10 @@ exports[`background job handler registry > registers every background job handle
     "jobType": "embedded-chat-history",
   },
   {
+    "handler": "FolderIndexOperationsHandler",
+    "jobType": "folder-index-operation",
+  },
+  {
     "handler": "LLMOperationsHandler",
     "jobType": "get-all-models",
   },

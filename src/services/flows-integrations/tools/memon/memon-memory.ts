@@ -25,14 +25,16 @@ const schema = z
 		text: z
 			.string()
 			.optional()
-			.describe("add/update: one short, self-contained fact or instruction."),
+			.describe(
+				"add/update (required): one short, self-contained fact or instruction; for update, the entry's whole new wording.",
+			),
 		entry: z
 			.number()
 			.int()
 			.min(1)
 			.optional()
 			.describe(
-				"update/remove: the entry number, as [n] in the prompt or list.",
+				"update/remove (required): the entry number, as [n] in the latest list. A remove moves the entries after it up one, so take numbers from the last memon_memory result, not the start of the chat, and make one change per call.",
 			),
 	})
 	.describe("Remember things between chats in Memory.md, and keep Bot.md.");
@@ -40,13 +42,25 @@ const schema = z
 type Input = z.infer<typeof schema>;
 
 const needEntry = (input: Input): number => {
-	if (!input.entry) throw new Error(`${input.action} needs the entry number.`);
+	if (!input.entry) throw new Error(`${input.action} needs \`entry\`.`);
 	return input.entry;
 };
 
 const apply = async (machine: MemonMachine, input: Input): Promise<string> => {
 	const file = input.file ?? "memory";
 	const name = file === "bot" ? "Bot.md" : "Memory.md";
+	if (
+		(input.action === "update" || input.action === "remove") &&
+		!input.entry
+	) {
+		// The entries come with the error, so the retry needs no list first.
+		const { entries } = await machine.editDesktopFile(file, { action: "list" });
+		throw new Error(
+			entries.length
+				? `${input.action} needs \`entry\`, the entry's number. ${name} has ${entries.length}:\n${entries.map((entry, index) => `[${index + 1}] ${entry}`).join("\n")}`
+				: `${input.action} needs \`entry\`, but ${name} has no entries yet.`,
+		);
+	}
 	const { entries, length } = await machine.editDesktopFile(
 		file,
 		input.action === "list"

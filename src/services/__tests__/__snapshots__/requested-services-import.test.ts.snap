@@ -19,6 +19,7 @@ exports[`requested service module coverage > imports requested service trees 1`]
   "../background-jobs/handlers/process-embedding-operations.ts",
   "../background-jobs/handlers/process-factory.ts",
   "../background-jobs/handlers/process-flow-operations.ts",
+  "../background-jobs/handlers/process-folder-index-operations.ts",
   "../background-jobs/handlers/process-knowledge-graph.ts",
   "../background-jobs/handlers/process-llm-operations.ts",
   "../background-jobs/handlers/process-media-operations.ts",

@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { DocumentList } from "./DocumentList";
 import { DocumentViewer } from "./DocumentViewer";
 import { useMultipleSourceStatus } from "../hooks/use-source-status";
+import { FolderIndexBar } from "../folder-index";
 import type {
 	DocumentLibraryItem,
 	DocumentTreeNode,
@@ -16,6 +17,8 @@ const EMPTY_TOPIC_MAP = new Map<string, Topic[]>();
 const EMPTY_TOPIC_IDS: string[] = [];
 
 interface DocumentLibraryContentProps {
+	/** The open folder's library path, for its index. */
+	currentPath?: string;
 	selectedNode: DocumentTreeNode | null;
 	isFileSelected: boolean;
 	isFolderSelected: boolean;
@@ -44,6 +47,7 @@ interface DocumentLibraryContentProps {
 }
 
 export const DocumentLibraryContent = memo(function DocumentLibraryContent({
+	currentPath = "/",
 	selectedNode,
 	isFileSelected,
 	isFolderSelected,
@@ -112,27 +116,38 @@ export const DocumentLibraryContent = memo(function DocumentLibraryContent({
 
 	if (isFolderSelected) {
 		return (
-			<DocumentList
-				items={folderContents}
-				selectedItem={null}
-				sourceStatusMap={sourceStatusMap}
-				onSelectItem={handleSelectItem}
-				onOpenFolder={handleOpenFolder}
-				onDeleteItem={onDeleteItem}
-				onRenameItem={onRenameItem}
-				onDownloadFile={effectiveDownloadFile}
-				onDownloadFolder={
-					onDownloadFolder
-						? (folder) => onDownloadFolder(folder.path)
-						: undefined
-				}
-				onManageTopics={effectiveManageTopics}
-				onConvertToKnowledge={effectiveConvertToKnowledge}
-				fileTopicMap={effectiveFileTopicMap}
-				selectedTopicIds={effectiveSelectedTopicIds}
-				onTopicClick={effectiveOnTopicClick}
-				viewMode={viewMode}
-			/>
+			<div className="flex h-full min-h-0 flex-col">
+				{!isWorkspaceSection && (
+					<FolderIndexBar
+						folderPath={currentPath}
+						fileCount={filePaths.length}
+					/>
+				)}
+				<div className="min-h-0 flex-1">
+					<DocumentList
+						folderPath={isWorkspaceSection ? undefined : currentPath}
+						items={folderContents}
+						selectedItem={null}
+						sourceStatusMap={sourceStatusMap}
+						onSelectItem={handleSelectItem}
+						onOpenFolder={handleOpenFolder}
+						onDeleteItem={onDeleteItem}
+						onRenameItem={onRenameItem}
+						onDownloadFile={effectiveDownloadFile}
+						onDownloadFolder={
+							onDownloadFolder
+								? (folder) => onDownloadFolder(folder.path)
+								: undefined
+						}
+						onManageTopics={effectiveManageTopics}
+						onConvertToKnowledge={effectiveConvertToKnowledge}
+						fileTopicMap={effectiveFileTopicMap}
+						selectedTopicIds={effectiveSelectedTopicIds}
+						onTopicClick={effectiveOnTopicClick}
+						viewMode={viewMode}
+					/>
+				</div>
+			</div>
 		);
 	}
 

@@ -517,7 +517,10 @@
 			"memon_skills": "View and manage the skills this agent uses",
 			"memon_connections": "View the user's connected apps and which ones this agent uses",
 			"memon_code": "Hand coding work to pi code, the coding agent on the computer, after the user confirms",
-			"memon_visualize": "Show a visual written in OpenUI in the MemonOS Bot Visualize app and save it"
+			"memon_visualize": "Show a visual written in OpenUI in the MemonOS Bot Visualize app and save it",
+			"okf_index": "Read a folder's OKF index.md: each file's type and one-line summary",
+			"okf_read": "Open one file's OKF card",
+			"okf_search": "Find OKF cards by words, type, tags or folder across indexed folders"
 		},
 		"cancel": "Cancel",
 		"saved": "Saved",
@@ -590,6 +593,15 @@
 			"keepDirectToolsHint": "Keeps web_*, fs_* and sandbox_* available next to the computer, for bulk file work.",
 			"piCode": "pi code",
 			"piCodeHint": "The pi coding agent on the desktop. MemonOS Bot can hand it coding work, and asks you in the pi code window first. Off, it is neither on the desktop nor used."
+		},
+		"folderIndex": {
+			"tools": "Tools",
+			"searches": "Searches every folder that has an index in Files, using that index type's tools.",
+			"now_one": "Now: {{folders}} ({{count}} card).",
+			"now_other": "Now: {{folders}} ({{count}} cards).",
+			"none": "No folder has an index yet.",
+			"open": "Open Files › Indexes",
+			"hint": "Which folders have which index types is set only in Files. When a new index type is added, its tools appear here as another group."
 		}
 	},
 	"openui": {

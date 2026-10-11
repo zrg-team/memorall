@@ -70,6 +70,7 @@ import {
 } from "./pages/lazy-pages";
 import { initializeRuntimeServices } from "./runtime-initialization";
 import { useEmbeddingSettings } from "./stores/embedding-settings";
+import { subscribeAppNavigation } from "@/main/navigation/app-navigation";
 
 type EncryptionFormat = "master" | "legacy" | "none";
 
@@ -100,10 +101,12 @@ const App: React.FC = () => {
 				if (request) applyNavigation(request);
 			});
 			const unsubscribe = platform.navigation.subscribe(applyNavigation);
+			const unsubscribeApp = subscribeAppNavigation(applyNavigation);
 
 			return () => {
 				active = false;
 				unsubscribe();
+				unsubscribeApp();
 			};
 		}, [navigate]);
 

@@ -19,6 +19,12 @@ import {
 } from "@/services/flows-integrations/steps/features/memon-feature";
 import { THREAD_HISTORY_FEATURE_SYSTEM_PROMPT } from "@/services/flows-integrations/steps/features/thread-history-feature";
 import {
+	FOLDER_INDEX_FEATURE_DESCRIPTION,
+	FOLDER_INDEX_FEATURE_SYSTEM_PROMPT,
+	FOLDER_INDEX_FEATURE_TOOLS,
+} from "@/services/flows-integrations/steps/features/folder-index-feature";
+import { FOLDER_INDEX_FEATURE_ID } from "@/services/folder-index/constants";
+import {
 	MEMON_ABSORBED_STEP_NAMES,
 	MEMON_FEATURE_ID,
 } from "@/services/memon/constants";
@@ -44,7 +50,8 @@ export type FeatureDetailViewSlot =
 	| { component: "RetrievalModeSelect"; configName: "retrievalMode" }
 	| { component: "AgentPicker" }
 	| { component: "VisualizeResponseConfig" }
-	| { component: "MemonBotSettings" };
+	| { component: "MemonBotSettings" }
+	| { component: "FolderIndexInfo" };
 
 export interface FeatureCatalogMetadata extends Record<string, unknown> {
 	description: string;
@@ -392,6 +399,24 @@ const FEATURE_UI_METADATA: Record<string, FeatureCatalogMetadata> = {
 		accentColor: "#06b6d4",
 		section: "core",
 		sectionOrder: 1,
+	},
+	[FOLDER_INDEX_FEATURE_ID]: {
+		description: FOLDER_INDEX_FEATURE_DESCRIPTION,
+		descriptionKey: "flowBuilder.features.folderIndexFeature.description",
+		displayName: "Folder Indexes",
+		nameKey: "flowBuilder.features.folderIndexFeature.name",
+		tools: FOLDER_INDEX_FEATURE_TOOLS,
+		systemPrompt: FOLDER_INDEX_FEATURE_SYSTEM_PROMPT,
+		customizable: false,
+		recommended: false,
+		icon: {
+			name: "Library",
+			type: "lucide",
+		},
+		accentColor: "#38bdf8",
+		section: "core",
+		sectionOrder: 2,
+		detailView: [{ component: "FolderIndexInfo" }],
 	},
 	"step-gpt-boost": {
 		description:

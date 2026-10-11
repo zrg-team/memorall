@@ -31,6 +31,7 @@ import { CreateFolderDialog } from "../modals";
 import type { DocumentTreeNode } from "@/types/document-library";
 import type { Topic } from "@/services/database/entities/topics";
 import { useNativeMounts } from "@/main/modules/files/hooks/use-native-mounts";
+import { FolderIndexesButton } from "../folder-index";
 
 interface DocumentLibraryHeaderProps {
 	currentPath: string;
@@ -163,6 +164,8 @@ export const DocumentLibraryHeader = memo(function DocumentLibraryHeader({
 						/>
 					)}
 
+					{!isWorkspaceSection && <FolderIndexesButton compact />}
+
 					<div className="flex flex-shrink-0 items-center gap-0.5 rounded-md border p-0.5">
 						<Button
 							variant={viewMode === "list" ? "secondary" : "ghost"}
@@ -288,6 +291,8 @@ export const DocumentLibraryHeader = memo(function DocumentLibraryHeader({
 						/>
 					)}
 				</div>
+
+				{!isWorkspaceSection && <FolderIndexesButton className="md:h-9" />}
 
 				<div className="flex flex-shrink-0 items-center gap-0.5 rounded-md border p-0.5">
 					<Button

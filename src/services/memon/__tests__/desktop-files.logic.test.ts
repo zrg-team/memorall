@@ -56,7 +56,13 @@ describe("desktop file entries", () => {
 		expect(() =>
 			changeDesktopEntries(memory, { action: "remove", entry: 5 }),
 		).toThrow(
-			"There is no entry 5; the file has 2, numbered as now:\n[1] Prefers answers in Vietnamese\n[2] Works on Memorall",
+			"There is no entry 5; the file has 2 (the entries after a removed one move up), numbered as now:\n[1] Prefers answers in Vietnamese\n[2] Works on Memorall",
+		);
+		// An update without text shows the entry as it reads, to reword it.
+		expect(() =>
+			changeDesktopEntries(memory, { action: "update", entry: 2, text: "" }),
+		).toThrow(
+			'update needs `text`: the whole new wording of entry 2, which now reads: "Works on Memorall, a browser extension that runs agents locally". To delete it, use { action: "remove", entry: 2 }.',
 		);
 		expect(() =>
 			changeDesktopEntries(MEMON_MEMORY_TEMPLATE, {
@@ -69,7 +75,7 @@ describe("desktop file entries", () => {
 		);
 		expect(() =>
 			changeDesktopEntries(memory, { action: "add", text: "  " }),
-		).toThrow("An entry needs some text.");
+		).toThrow("add needs `text`: the fact to remember");
 		expect(() =>
 			changeDesktopEntries(memory, {
 				action: "add",

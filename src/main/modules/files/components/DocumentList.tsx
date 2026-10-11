@@ -21,6 +21,7 @@ import {
 	FileAudio,
 	FileVideo,
 	Presentation,
+	IdCard,
 } from "lucide-react";
 import type {
 	DocumentLibraryItem,
@@ -45,9 +46,17 @@ import { useProcessMonitor } from "@/main/stores/process-monitor";
 
 import type { SourceStatus } from "../hooks/use-source-status";
 import { logError } from "@/utils/logger";
+import {
+	FolderIndexBadges,
+	FolderIndexMenuItems,
+	IndexTypeBadge,
+	useFolderIndex,
+} from "../folder-index";
 
 interface DocumentListProps {
 	items: DocumentLibraryItem[];
+	/** The folder shown, when its index entries and menus apply (not workspaces). */
+	folderPath?: string;
 	selectedItem: DocumentLibraryItem | null;
 	onSelectItem: (item: DocumentLibraryItem) => void;
 	onOpenFolder?: (path: string) => void;
@@ -91,6 +100,7 @@ const FILE_COLORS: Record<DocumentType, string> = {
 
 export const DocumentList: React.FC<DocumentListProps> = ({
 	items,
+	folderPath,
 	selectedItem,
 	onSelectItem,
 	onOpenFolder,
@@ -107,6 +117,11 @@ export const DocumentList: React.FC<DocumentListProps> = ({
 	viewMode = "list",
 }) => {
 	const { t } = useTranslation("documents");
+	const folderIndex = useFolderIndex();
+	const indexEntries =
+		folderPath !== undefined
+			? (folderIndex?.entriesOf(folderPath) ?? null)
+			: null;
 	const [editingItem, setEditingItem] = useState<string | null>(null);
 	const [editingName, setEditingName] = useState<string>("");
 	const inputRef = useRef<HTMLInputElement>(null);
@@ -235,8 +250,14 @@ export const DocumentList: React.FC<DocumentListProps> = ({
 										{folder.name}
 									</div>
 								)}
-								<div className="text-xs text-muted-foreground">
+								<div className="flex items-center gap-2 text-xs text-muted-foreground">
 									{t("list.items", { count: folder.childCount })}
+									{folderPath !== undefined && (
+										<FolderIndexBadges
+											path={folder.path}
+											className="flex gap-1"
+										/>
+									)}
 								</div>
 							</div>
 							<div className="hidden flex-shrink-0 text-xs text-muted-foreground sm:block">
@@ -279,6 +300,9 @@ export const DocumentList: React.FC<DocumentListProps> = ({
 											</DropdownMenuItem>
 											<DropdownMenuSeparator />
 										</>
+									)}
+									{folderPath !== undefined && (
+										<FolderIndexMenuItems path={folder.path} />
 									)}
 									<DropdownMenuItem
 										onClick={() => onDeleteItem?.(item)}
@@ -328,7 +352,20 @@ export const DocumentList: React.FC<DocumentListProps> = ({
 									<Badge variant="outline" className="text-xs">
 										{file.type.toUpperCase()}
 									</Badge>
+									{indexEntries?.byFile.get(file.path)?.map((entry) => (
+										<IndexTypeBadge
+											key={entry.typeId}
+											label={entry.type}
+											className="normal-case tracking-normal"
+											title={entry.typeId.toUpperCase()}
+										/>
+									))}
 								</div>
+								{indexEntries?.byFile.get(file.path)?.[0]?.description && (
+									<p className="mt-1 truncate text-xs text-muted-foreground">
+										{indexEntries.byFile.get(file.path)?.[0]?.description}
+									</p>
+								)}
 								{/* Topic Badges */}
 								{fileTopics.length > 0 && (
 									<div className="mt-1" onClick={(e) => e.stopPropagation()}>
@@ -400,6 +437,20 @@ export const DocumentList: React.FC<DocumentListProps> = ({
 											>
 												<Edit className="h-4 w-4 mr-2" />
 												{t("list.rename")}
+											</DropdownMenuItem>
+											<DropdownMenuSeparator />
+										</>
+									)}
+									{indexEntries?.byFile.has(file.path) && (
+										<>
+											<DropdownMenuItem
+												onClick={(e) => {
+													e.stopPropagation();
+													folderIndex?.openCard(file.path);
+												}}
+											>
+												<IdCard className="h-4 w-4 mr-2" />
+												{t("folderIndex.card.open")}
 											</DropdownMenuItem>
 											<DropdownMenuSeparator />
 										</>
@@ -483,6 +534,9 @@ export const DocumentList: React.FC<DocumentListProps> = ({
 												<DropdownMenuSeparator />
 											</>
 										)}
+										{folderPath !== undefined && (
+											<FolderIndexMenuItems path={folder.path} />
+										)}
 										<DropdownMenuItem
 											onClick={() => onDeleteItem?.(item)}
 											className="text-destructive"
@@ -513,6 +567,9 @@ export const DocumentList: React.FC<DocumentListProps> = ({
 							<div className="text-xs text-muted-foreground">
 								{t("list.items", { count: folder.childCount })}
 							</div>
+							{folderPath !== undefined && (
+								<FolderIndexBadges path={folder.path} className="flex gap-1" />
+							)}
 						</div>
 					);
 				} else {

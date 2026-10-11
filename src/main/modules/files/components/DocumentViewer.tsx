@@ -57,6 +57,7 @@ import { useSourceStatus } from "../hooks/use-source-status";
 import { type SyncedFile, useDocumentSync } from "../hooks/use-document-sync";
 import { editorRegistry } from "../editors";
 import { CodeEditor } from "../editors/CodeEditor";
+import { FileIndexAction } from "../folder-index";
 
 /** Whether a filesystem change can have altered the file at `path`. */
 function changeTouches(
@@ -345,6 +346,9 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({
 						<h2 className="min-w-0 flex-1 truncate text-sm font-semibold">
 							{file.name}
 						</h2>
+						{!isWorkspaceFile && (
+							<FileIndexAction filePath={file.path} iconOnly />
+						)}
 						<Popover>
 							<PopoverTrigger asChild>
 								<Button
@@ -525,6 +529,7 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({
 						) : null}
 					</div>
 					<div className="flex flex-wrap items-center gap-1 sm:justify-end">
+						{!isWorkspaceFile && <FileIndexAction filePath={file.path} />}
 						{file.type === "pdf" && (
 							<Button
 								variant="default"

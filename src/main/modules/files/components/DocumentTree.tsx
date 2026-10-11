@@ -22,6 +22,7 @@ import {
 import type { DocumentTreeNode, DocumentType } from "@/types/document-library";
 import { useTranslation } from "react-i18next";
 import { ScrollArea } from "@/main/components/ui/scroll-area";
+import { IndexTypeBadge, useFolderIndex } from "../folder-index";
 
 interface DocumentTreeProps {
 	tree: DocumentTreeNode[];
@@ -74,7 +75,13 @@ interface TreeNodeProps {
 const TreeNode: React.FC<TreeNodeProps> = React.memo(
 	({ node, level, selectedId, onSelectNode, onToggleExpand, mappedPaths }) => {
 		const { t } = useTranslation("files");
+		const { t: tDocs } = useTranslation("documents");
 		const isSelected = node.id === selectedId;
+		const folderIndex = useFolderIndex();
+		const indexRule =
+			folderIndex && node.type === "folder"
+				? folderIndex.ruleOf(node.path)
+				: null;
 		// Only a root can be a mapped folder; everything inside one is ordinary.
 		const isMapped = level === 0 && Boolean(mappedPaths?.has(node.path));
 		const isFolder = node.type === "folder";
@@ -152,6 +159,22 @@ const TreeNode: React.FC<TreeNodeProps> = React.memo(
 							{t("mappedFolders.badge")}
 						</span>
 					)}
+
+					{/* Where a folder's own index rules start; subfolders inherit them. */}
+					{indexRule?.on.map((typeId) => (
+						<IndexTypeBadge
+							key={typeId}
+							label={
+								folderIndex?.types.find((type) => type.id === typeId)?.label ??
+								typeId
+							}
+						/>
+					))}
+					{indexRule &&
+						indexRule.off.length > 0 &&
+						indexRule.on.length === 0 && (
+							<IndexTypeBadge label={tDocs("folderIndex.noIndex")} muted />
+						)}
 				</div>
 
 				{/* Render Children (only if folder is expanded) */}

@@ -179,6 +179,29 @@ export const serializeTasksFile = (file: MemonTasksFile): string =>
 		2,
 	)}\n`;
 
+/**
+ * The task being worked on — the screen's "now": of those in progress, the
+ * one changed last. Task actions that leave out the number act on it.
+ */
+export const currentTask = <T extends Pick<MemonTask, "state" | "updatedAt">>(
+	tasks: readonly T[],
+): T | undefined =>
+	tasks
+		.filter((task) => task.state === "in_progress")
+		.reduce<T | undefined>(
+			(latest, task) =>
+				!latest || task.updatedAt > latest.updatedAt ? task : latest,
+			undefined,
+		);
+
+/** A task's checklist, numbered as check/uncheck take it: "1. [x] Write the copy". */
+export const numberedChecklist = (task: Pick<MemonTask, "checklist">): string =>
+	task.checklist
+		.map(
+			(item, index) => `${index + 1}. [${item.done ? "x" : " "}] ${item.text}`,
+		)
+		.join("\n");
+
 /** A task's progress: its ticked checklist items, or its state without one. */
 export const taskProgress = (
 	task: Pick<MemonTask, "state" | "checklist">,
