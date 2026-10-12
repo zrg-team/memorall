@@ -1,9 +1,10 @@
 import React, { memo, useMemo, useCallback } from "react";
-import { Folder } from "lucide-react";
+import { Folder, Loader2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { DocumentList } from "./DocumentList";
 import { DocumentViewer } from "./DocumentViewer";
 import { useMultipleSourceStatus } from "../hooks/use-source-status";
+import { useDocumentSearch } from "../hooks/use-document-search";
 import { FolderIndexBar } from "../folder-index";
 import type {
 	DocumentLibraryItem,
@@ -24,6 +25,7 @@ interface DocumentLibraryContentProps {
 	isFolderSelected: boolean;
 	isWorkspaceSection: boolean;
 	folderContents: DocumentLibraryItem[];
+	searchQuery?: string;
 	viewMode: "grid" | "list";
 	fileTopicMap: Map<string, Topic[]>;
 	selectedTopicIds: string[];
@@ -31,6 +33,7 @@ interface DocumentLibraryContentProps {
 	compactNavigatorToggle?: React.ReactNode;
 	/** Navigate to a node by id in the active tree */
 	onSelectNodeById: (id: string) => void;
+	onOpenFileByPath: (path: string) => void;
 	/** Navigate to a folder by path in the active tree */
 	onOpenFolderByPath: (path: string) => void;
 	/** Close the file viewer and return to parent folder */
@@ -53,11 +56,13 @@ export const DocumentLibraryContent = memo(function DocumentLibraryContent({
 	isFolderSelected,
 	isWorkspaceSection,
 	folderContents,
+	searchQuery = "",
 	viewMode,
 	fileTopicMap,
 	selectedTopicIds,
 	compactNavigatorToggle,
 	onSelectNodeById,
+	onOpenFileByPath,
 	onOpenFolderByPath,
 	onCloseViewer,
 	onDeleteItem,
@@ -72,23 +77,34 @@ export const DocumentLibraryContent = memo(function DocumentLibraryContent({
 	compact = false,
 }: DocumentLibraryContentProps) {
 	const { t } = useTranslation("documents");
+	const search = useDocumentSearch({
+		folder: isFolderSelected ? selectedNode : null,
+		folderContents,
+		searchQuery,
+		fileTopicMap,
+		selectedTopicIds,
+	});
 
 	// Move source-status tracking here so it doesn't run in the page root
 	const filePaths = useMemo(
 		() =>
-			folderContents
+			search.items
 				.filter((item) => item.type === "file")
 				.map((item) => item.item.path),
-		[folderContents],
+		[search.items],
 	);
 	const sourceStatusMap = useMultipleSourceStatus(filePaths);
 
 	// Stable select/open callbacks (look up node in active tree via parent handler)
 	const handleSelectItem = useCallback(
 		(item: DocumentLibraryItem) => {
-			onSelectNodeById(item.item.id);
+			if (search.active && item.type === "file") {
+				onOpenFileByPath(item.item.path);
+			} else {
+				onSelectNodeById(item.item.id);
+			}
 		},
-		[onSelectNodeById],
+		[onSelectNodeById, onOpenFileByPath, search.active],
 	);
 
 	const handleOpenFolder = useCallback(
@@ -120,13 +136,40 @@ export const DocumentLibraryContent = memo(function DocumentLibraryContent({
 				{!isWorkspaceSection && (
 					<FolderIndexBar
 						folderPath={currentPath}
-						fileCount={filePaths.length}
+						fileCount={
+							folderContents.filter((item) => item.type === "file").length
+						}
 					/>
+				)}
+				{search.active && (
+					<div
+						role="status"
+						className="flex items-center gap-2 px-4 py-2 text-xs text-muted-foreground"
+					>
+						{search.busy && (
+							<Loader2 className="h-3 w-3 animate-spin motion-reduce:animate-none" />
+						)}
+						{t(search.busy ? "library.searching" : "library.searchResults", {
+							count: search.items.length,
+						})}
+					</div>
+				)}
+				{search.error && (
+					<p
+						role="alert"
+						title={search.error}
+						className="px-4 pb-2 text-xs text-destructive"
+					>
+						{t("library.searchError")}
+					</p>
 				)}
 				<div className="min-h-0 flex-1">
 					<DocumentList
 						folderPath={isWorkspaceSection ? undefined : currentPath}
-						items={folderContents}
+						items={search.items}
+						searchActive={search.active}
+						searchBusy={search.busy}
+						searchHits={search.hits}
 						selectedItem={null}
 						sourceStatusMap={sourceStatusMap}
 						onSelectItem={handleSelectItem}

@@ -596,12 +596,14 @@
 		},
 		"folderIndex": {
 			"tools": "Tools",
-			"searches": "Searches every folder that has an index in Files, using that index type's tools.",
+			"searches": "Searches folders with a {{type}} index in Files.",
 			"now_one": "Now: {{folders}} ({{count}} card).",
 			"now_other": "Now: {{folders}} ({{count}} cards).",
-			"none": "No folder has an index yet.",
+			"embeddingNow_one": "Now: {{folders}} ({{count}} content chunk).",
+			"embeddingNow_other": "Now: {{folders}} ({{count}} content chunks).",
+			"none": "No folder has this index type yet.",
 			"open": "Open Files › Indexes",
-			"hint": "Which folders have which index types is set only in Files. When a new index type is added, its tools appear here as another group."
+			"hint": "Choose indexed folders in Files › Indexes. Enable each index feature separately in agent settings."
 		}
 	},
 	"openui": {

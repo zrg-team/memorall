@@ -45,6 +45,7 @@ import type { Topic } from "@/services/database/types";
 import { useProcessMonitor } from "@/main/stores/process-monitor";
 
 import type { SourceStatus } from "../hooks/use-source-status";
+import type { EmbeddingSearchHit } from "@/services/folder-index/embedding/types";
 import { logError } from "@/utils/logger";
 import {
 	FolderIndexBadges,
@@ -72,6 +73,9 @@ interface DocumentListProps {
 	onTopicClick?: (topicId: string) => void;
 	sourceStatusMap?: Map<string, SourceStatus>;
 	viewMode?: "grid" | "list";
+	searchActive?: boolean;
+	searchBusy?: boolean;
+	searchHits?: Map<string, EmbeddingSearchHit>;
 }
 
 const FILE_ICONS: Record<DocumentType, React.ComponentType<any>> = {
@@ -115,6 +119,9 @@ export const DocumentList: React.FC<DocumentListProps> = ({
 	onTopicClick,
 	sourceStatusMap,
 	viewMode = "list",
+	searchActive = false,
+	searchBusy = false,
+	searchHits,
 }) => {
 	const { t } = useTranslation("documents");
 	const folderIndex = useFolderIndex();
@@ -215,6 +222,31 @@ export const DocumentList: React.FC<DocumentListProps> = ({
 		}
 	};
 
+	const renderSearchDetails = (path: string) => {
+		if (!searchActive) return null;
+		const hit = searchHits?.get(path);
+		return (
+			<div className="mt-1 min-w-0 w-full text-xs text-muted-foreground">
+				<p className="truncate" title={path}>
+					{path}
+				</p>
+				{hit && (
+					<div className="mt-1">
+						<IndexTypeBadge
+							label={t("library.contentMatch")}
+							className="normal-case tracking-normal"
+						/>
+						{hit.text && (
+							<p className="mt-1 line-clamp-2 break-words">
+								{hit.text.slice(0, 280)}
+							</p>
+						)}
+					</div>
+				)}
+			</div>
+		);
+	};
+
 	const renderListView = () => (
 		<div className="divide-y divide-border">
 			{items.map((item) => {
@@ -259,6 +291,7 @@ export const DocumentList: React.FC<DocumentListProps> = ({
 										/>
 									)}
 								</div>
+								{renderSearchDetails(folder.path)}
 							</div>
 							<div className="hidden flex-shrink-0 text-xs text-muted-foreground sm:block">
 								{formatDate(folder.modifiedAt)}
@@ -361,6 +394,7 @@ export const DocumentList: React.FC<DocumentListProps> = ({
 										/>
 									))}
 								</div>
+								{renderSearchDetails(file.path)}
 								{indexEntries?.byFile.get(file.path)?.[0]?.description && (
 									<p className="mt-1 truncate text-xs text-muted-foreground">
 										{indexEntries.byFile.get(file.path)?.[0]?.description}
@@ -572,6 +606,7 @@ export const DocumentList: React.FC<DocumentListProps> = ({
 							{folderPath !== undefined && (
 								<FolderIndexBadges path={folder.path} className="flex gap-1" />
 							)}
+							{renderSearchDetails(folder.path)}
 						</div>
 					);
 				} else {
@@ -689,6 +724,7 @@ export const DocumentList: React.FC<DocumentListProps> = ({
 							<div className="text-xs text-muted-foreground">
 								{formatFileSize(file.size)}
 							</div>
+							{renderSearchDetails(file.path)}
 
 							{/* Topic Badges */}
 							{fileTopics.length > 0 && (
@@ -715,8 +751,22 @@ export const DocumentList: React.FC<DocumentListProps> = ({
 			<div className="flex items-center justify-center h-full text-muted-foreground flex-1">
 				<div className="text-center">
 					<Folder className="h-12 w-12 mx-auto mb-4 opacity-50" />
-					<p className="text-sm">{t("list.emptyFolder")}</p>
-					<p className="text-xs mt-1">{t("list.emptyFolderDescription")}</p>
+					<p className="text-sm">
+						{t(
+							searchActive
+								? searchBusy
+									? "library.searching"
+									: "library.noSearchResults"
+								: "list.emptyFolder",
+						)}
+					</p>
+					<p className="text-xs mt-1">
+						{t(
+							searchActive
+								? "library.searchHint"
+								: "list.emptyFolderDescription",
+						)}
+					</p>
 				</div>
 			</div>
 		);

@@ -67,6 +67,11 @@ vi.mock("@memorall/agent-harness-flows/utils/flow-config", () => ({
 }));
 
 import { FlowBuilderService } from "../flow-builder-service";
+import { getFeatureCatalogSteps } from "@/services/flow-builder-catalog";
+import {
+	FILE_OKF_INDEX_STEP_NAME,
+	FILE_EMBEDDING_INDEX_STEP_NAME,
+} from "@/services/folder-index/constants";
 
 const now = new Date("2026-01-01T00:00:00.000Z");
 
@@ -576,6 +581,54 @@ describe("FlowBuilderService", () => {
 		expect(
 			harness.insertBatches.some((batch) => batch.table === schema.flowConfigs),
 		).toBe(true);
+	});
+
+	it("splits stored combined index features and persists independent toggles", async () => {
+		const harness = createHarness();
+		const stored: UnifiedFlowConfig = {
+			graphType: "foundation",
+			steps: [{ id: "indexes", name: "folder-index-feature", enabled: true }],
+		};
+		harness.selectQueue.push(
+			[flow()],
+			[flowConfig({ name: "unified_config", type: "object", value: stored })],
+		);
+		const config = await harness.service.getStoredUnifiedFlowConfig({
+			flowId: "flow-1",
+		});
+		expect(config?.steps.map((step) => [step.name, step.enabled])).toEqual([
+			[FILE_OKF_INDEX_STEP_NAME, true],
+			[FILE_EMBEDDING_INDEX_STEP_NAME, true],
+		]);
+		config!.steps[1].enabled = false;
+		harness.selectQueue.push([flow()], [{ id: "existing" }]);
+		await harness.service.saveUnifiedFlowConfig({ flowId: "flow-1" }, config!);
+		expect(
+			harness.updates.find((batch) => batch.table === schema.flowConfigs),
+		).toMatchObject({ value: { value: config } });
+		expect(stored.steps[0].name).toBe("folder-index-feature");
+	});
+
+	it("splits combined legacy row flags before filling new feature defaults", async () => {
+		const harness = createHarness();
+		vi.mocked(getFeatureCatalogSteps).mockReturnValueOnce(
+			[FILE_OKF_INDEX_STEP_NAME, FILE_EMBEDDING_INDEX_STEP_NAME].map(
+				(name) => ({ id: `step-${name}`, name, type: "feature", metadata: {} }),
+			),
+		);
+		harness.selectQueue.push(
+			[flow()],
+			[
+				{ name: "folder-index-feature", metadata: { enabled: true } },
+				{ name: FILE_EMBEDDING_INDEX_STEP_NAME, metadata: { enabled: false } },
+			],
+		);
+		await expect(
+			harness.service.getFlowFeatureFlags({ flowId: "flow-1" }),
+		).resolves.toEqual({
+			[FILE_OKF_INDEX_STEP_NAME]: true,
+			[FILE_EMBEDDING_INDEX_STEP_NAME]: false,
+		});
 	});
 
 	it("reads and writes feature flags through feature step metadata", async () => {

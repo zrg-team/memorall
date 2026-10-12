@@ -581,6 +581,7 @@ export const AgentFeatureDetailModal =
 							return (
 								<FolderIndexFeatureInfo
 									key={index}
+									indexTypeId={slot.indexTypeId}
 									onOpenFiles={() => modal.hide()}
 								/>
 							);

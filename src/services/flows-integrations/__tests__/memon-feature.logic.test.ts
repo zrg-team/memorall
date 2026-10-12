@@ -45,6 +45,8 @@ it("adds the native computer tools while preserving other feature tools and thei
 			"sandbox_snapshot",
 			"lottie_show",
 			"okf_search",
+			"embedding_search",
+			"embedding_chunks",
 			"mcp_github_search",
 			"custom_tool",
 		].map(hostTool),

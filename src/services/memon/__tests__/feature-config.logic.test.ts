@@ -67,6 +67,8 @@ describe("applyMemonAbsorption", () => {
 			{ id: "memory", name: "active-memory-feature", enabled: true },
 			{ id: "history", name: "thread-history-feature", enabled: true },
 			{ id: "folders", name: "folder-index-feature", enabled: true },
+			{ id: "okf", name: "file-okf-index-feature", enabled: true },
+			{ id: "embeddings", name: "file-embedding-index-feature", enabled: true },
 			{ id: "pdf", name: "pdf-generate-feature", enabled: true },
 			{ id: "animation", name: "lottie-animation-feature", enabled: true },
 			{

@@ -51,8 +51,12 @@ failed updates remove stale chunks. Unknown binary formats and codecs unavailabl
 in the browser report a failure. The per-file limit is 2,000 chunks. Search scans
 at most 20,000 eligible chunks and reports when the user should narrow the folder.
 
-Agents with **Folder Indexes** receive `embedding_search` and `embedding_chunks`
-alongside the OKF tools. Results include the original file path, chunk identifier,
+Agents with **File Embedding Indexes** receive `embedding_search` and `embedding_chunks`.
+**File OKF Indexes** independently enables `okf_index`, `okf_read` and `okf_search`.
+Existing combined-feature configurations are split while preserving their enabled
+state; either feature can then be turned off independently. The main Files search
+input combines name/path matches with semantic matches from embedding indexes in
+the current folder and its descendants, and preserves topic filters. Results include the original file path, chunk identifier,
 excerpt where applicable, and page or time range. Scores are cosine similarities,
 not confidence percentages. The Files search dialog previews the actual source
 image or timed media segment and can open the source file or its OKF card.

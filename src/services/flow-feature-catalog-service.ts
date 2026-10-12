@@ -19,11 +19,19 @@ import {
 } from "@/services/flows-integrations/steps/features/memon-feature";
 import { THREAD_HISTORY_FEATURE_SYSTEM_PROMPT } from "@/services/flows-integrations/steps/features/thread-history-feature";
 import {
-	FOLDER_INDEX_FEATURE_DESCRIPTION,
-	FOLDER_INDEX_FEATURE_SYSTEM_PROMPT,
-	FOLDER_INDEX_FEATURE_TOOLS,
+	FILE_OKF_INDEX_FEATURE_DESCRIPTION,
+	FILE_OKF_INDEX_FEATURE_SYSTEM_PROMPT,
+	FILE_OKF_INDEX_FEATURE_TOOLS,
+	FILE_EMBEDDING_INDEX_FEATURE_DESCRIPTION,
+	FILE_EMBEDDING_INDEX_FEATURE_SYSTEM_PROMPT,
+	FILE_EMBEDDING_INDEX_FEATURE_TOOLS,
 } from "@/services/flows-integrations/steps/features/folder-index-feature";
-import { FOLDER_INDEX_FEATURE_ID } from "@/services/folder-index/constants";
+import {
+	FILE_OKF_INDEX_FEATURE_ID,
+	FILE_EMBEDDING_INDEX_FEATURE_ID,
+	OKF_INDEX_TYPE_ID,
+	EMBEDDING_INDEX_TYPE_ID,
+} from "@/services/folder-index/constants";
 import {
 	MEMON_ABSORBED_STEP_NAMES,
 	MEMON_FEATURE_ID,
@@ -51,7 +59,7 @@ export type FeatureDetailViewSlot =
 	| { component: "AgentPicker" }
 	| { component: "VisualizeResponseConfig" }
 	| { component: "MemonBotSettings" }
-	| { component: "FolderIndexInfo" };
+	| { component: "FolderIndexInfo"; indexTypeId: string };
 
 export interface FeatureCatalogMetadata extends Record<string, unknown> {
 	description: string;
@@ -400,13 +408,13 @@ const FEATURE_UI_METADATA: Record<string, FeatureCatalogMetadata> = {
 		section: "core",
 		sectionOrder: 1,
 	},
-	[FOLDER_INDEX_FEATURE_ID]: {
-		description: FOLDER_INDEX_FEATURE_DESCRIPTION,
-		descriptionKey: "flowBuilder.features.folderIndexFeature.description",
-		displayName: "Folder Indexes",
-		nameKey: "flowBuilder.features.folderIndexFeature.name",
-		tools: FOLDER_INDEX_FEATURE_TOOLS,
-		systemPrompt: FOLDER_INDEX_FEATURE_SYSTEM_PROMPT,
+	[FILE_OKF_INDEX_FEATURE_ID]: {
+		description: FILE_OKF_INDEX_FEATURE_DESCRIPTION,
+		descriptionKey: "flowBuilder.features.fileOkfIndexFeature.description",
+		displayName: "File OKF Indexes",
+		nameKey: "flowBuilder.features.fileOkfIndexFeature.name",
+		tools: FILE_OKF_INDEX_FEATURE_TOOLS,
+		systemPrompt: FILE_OKF_INDEX_FEATURE_SYSTEM_PROMPT,
 		customizable: false,
 		recommended: false,
 		icon: {
@@ -416,7 +424,27 @@ const FEATURE_UI_METADATA: Record<string, FeatureCatalogMetadata> = {
 		accentColor: "#38bdf8",
 		section: "core",
 		sectionOrder: 2,
-		detailView: [{ component: "FolderIndexInfo" }],
+		detailView: [
+			{ component: "FolderIndexInfo", indexTypeId: OKF_INDEX_TYPE_ID },
+		],
+	},
+	[FILE_EMBEDDING_INDEX_FEATURE_ID]: {
+		description: FILE_EMBEDDING_INDEX_FEATURE_DESCRIPTION,
+		descriptionKey:
+			"flowBuilder.features.fileEmbeddingIndexFeature.description",
+		displayName: "File Embedding Indexes",
+		nameKey: "flowBuilder.features.fileEmbeddingIndexFeature.name",
+		tools: FILE_EMBEDDING_INDEX_FEATURE_TOOLS,
+		systemPrompt: FILE_EMBEDDING_INDEX_FEATURE_SYSTEM_PROMPT,
+		customizable: false,
+		recommended: false,
+		icon: { name: "Search", type: "lucide" },
+		accentColor: "#a78bfa",
+		section: "core",
+		sectionOrder: 2.1,
+		detailView: [
+			{ component: "FolderIndexInfo", indexTypeId: EMBEDDING_INDEX_TYPE_ID },
+		],
 	},
 	"step-gpt-boost": {
 		description:
