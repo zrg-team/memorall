@@ -1,5 +1,6 @@
 import { Monitor } from "lucide-react";
 import type React from "react";
+import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/main/components/ui/button";
 import { useOpenMemonComputer } from "@/main/components/molecules/MemonComputer/use-open-computer";
@@ -26,6 +27,35 @@ const splitMemonResult = (
 			};
 };
 
+const memonContent = (item: MessageActionItem) => {
+	let text = item.description;
+	let images = Array.isArray(item.metadata?.imageUrls)
+		? item.metadata.imageUrls
+		: [];
+	try {
+		const parts = JSON.parse(item.description);
+		if (Array.isArray(parts)) {
+			text =
+				parts.find(
+					(part) => part?.type === "text" && typeof part.text === "string",
+				)?.text ?? "";
+			images = parts
+				.filter((part) => part?.type === "image_url")
+				.map((part) => part.image_url?.url);
+		}
+	} catch {
+		/* Plain text tool results remain readable. */
+	}
+	return {
+		text,
+		images: images.filter(
+			(url): url is string =>
+				typeof url === "string" &&
+				/^data:image\/(?:png|jpeg|gif|webp);base64,/i.test(url),
+		),
+	};
+};
+
 const REF_SPLIT = /(\[[bfet]\d+\])/g;
 const IS_REF = /^\[[bfet]\d+\]$/;
 
@@ -46,7 +76,11 @@ const ScreenText: React.FC<{ screen: string }> = ({ screen }) => (
 const MemonToolDetails: React.FC<{ item: MessageActionItem }> = ({ item }) => {
 	const { t } = useTranslation("chat");
 	const openComputer = useOpenMemonComputer();
-	const { summary, screen } = splitMemonResult(item.description ?? "");
+	const content = useMemo(
+		() => memonContent(item),
+		[item.description, item.metadata],
+	);
+	const { summary, screen } = splitMemonResult(content.text ?? "");
 	const needsApproval = summary.startsWith("Needs the user's approval");
 
 	return (
@@ -74,6 +108,14 @@ const MemonToolDetails: React.FC<{ item: MessageActionItem }> = ({ item }) => {
 						{t("memon.showOnComputer")}
 					</Button>
 				</div>
+				{content.images.map((src, i) => (
+					<img
+						key={src}
+						src={src}
+						alt={`Image returned by the computer ${i + 1}`}
+						className="mt-3 max-h-96 w-full rounded-md border object-contain"
+					/>
+				))}
 				{screen ? (
 					<div className="mt-3 space-y-1">
 						<p className="text-[11px] font-medium text-muted-foreground">

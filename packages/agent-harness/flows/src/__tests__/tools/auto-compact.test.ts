@@ -39,6 +39,61 @@ function makeFlow(
 const disabledTrim = { stepPercent: 100, maxPercent: 0 };
 const fullTrim = { stepPercent: 100, maxPercent: 100 };
 
+describe("native source images during compaction", () => {
+	const imageUrl = `data:image/png;base64,${"A".repeat(1_000_000)}`;
+	const stateWithPicture = (text = "Source image: /game/portraits.webp") => {
+		const outputMessages = makeFlow("visual-search", "");
+		outputMessages[1] = {
+			role: "tool",
+			tool_call_id: "visual-search",
+			content: [
+				{ type: "text", text },
+				{ type: "image_url", image_url: { url: imageUrl, detail: "auto" } },
+			],
+		} as unknown as ChatCompletionMessageParam;
+		return {
+			messages: [
+				{
+					role: "user",
+					content: "Is there a conical hat?",
+				} as ChatCompletionMessageParam,
+			],
+			outputMessages,
+		};
+	};
+	it("does not compact useful image evidence just because its encoded bytes are large", () => {
+		const state = stateWithPicture();
+		expect(
+			estimatePromptTokens([...state.messages, ...state.outputMessages]),
+		).toBeLessThan(12_000);
+		expect(applyAutoCompactPolicy(state, undefined, 32_000)).toBeUndefined();
+	});
+	it("trims inline text blobs while keeping image content decodable under context pressure", () => {
+		const state = stateWithPicture(
+			`Source image: /game/portraits.webp\nDebug bytes: data:application/octet-stream;base64,${"B".repeat(1000)}`,
+		);
+		const compacted = applyAutoCompactPolicy(
+			state,
+			{
+				toolResultTrim: disabledTrim,
+				toolCallFlowTrim: disabledTrim,
+				chatMessageTrim: disabledTrim,
+				smartTrim: fullTrim,
+			},
+			2500,
+		);
+		const parts = compacted?.outputMessages[1]?.content as unknown as Array<{
+			text?: string;
+			image_url?: { url: string };
+		}>;
+		expect(parts[0].text).toContain("[~1000chars]");
+		expect(parts[1].image_url?.url).toBe(imageUrl);
+		expect(state.outputMessages[1].content).not.toEqual(
+			compacted?.outputMessages[1].content,
+		);
+	});
+});
+
 // ---------------------------------------------------------------------------
 // tool result chunking — structural assertions (behavior is unambiguous)
 // ---------------------------------------------------------------------------

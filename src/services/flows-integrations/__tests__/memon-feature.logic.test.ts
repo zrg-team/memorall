@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
 	buildMemonPrompt,
 	conversationDesktopFiles,
@@ -26,6 +26,11 @@ vi.mock("@/services/memon/ports", () => ({
 	createMemonFilesPort: () => ({ read: async () => "" }),
 	createMemonStudioPort: () => ({ tools: async () => [] }),
 }));
+
+// The step reads home and studios in parallel; prime their shared mock before the run.
+beforeAll(async () => {
+	await import("@/services/memon/ports");
+});
 
 it("adds the native computer tools while preserving other feature tools and their bindings", async () => {
 	const skill = {

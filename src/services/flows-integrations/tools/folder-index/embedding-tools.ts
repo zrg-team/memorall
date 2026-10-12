@@ -15,7 +15,10 @@ import {
 	normalizeFolderPath,
 	parentFolder,
 } from "@/services/folder-index/index-config";
-import { chunkLocationLabel } from "@/services/folder-index/embedding/types";
+import {
+	embeddingToolResult,
+	attachEmbeddingPreviews,
+} from "@/services/folder-index/embedding/tool-results";
 import { getFolderIndexRuntime } from "@/services/folder-index/runtime";
 
 type Services = Record<string, never>;
@@ -54,10 +57,10 @@ export const createEmbeddingSearchTool: ToolFactory<
 	name: EMBEDDING_SEARCH_TOOL,
 	title: "Search file content by meaning",
 	description:
-		"Search EmbeddingGemma 2 content chunks across documents, images, audio, music and video. Returns source paths, excerpts, pages or timestamps, and cosine similarity (not confidence).",
+		"Search indexed file content by meaning. For visual questions use kind=image. Returns source paths, excerpts, locations, ranked similarity and source image previews when the model supports vision. Use the matches and inspect images before answering; text grep cannot inspect visual content.",
 	schema: searchSchema,
 	annotations,
-	execute: async (input) => {
+	execute: async (input, context) => {
 		try {
 			const { indexer, embeddings } = await getFolderIndexRuntime();
 			const config = await indexer.loadConfig();
@@ -76,16 +79,21 @@ export const createEmbeddingSearchTool: ToolFactory<
 						parentFolder(path) ?? "/",
 					) === root,
 			);
+			const output = embeddingToolResult(result, {
+				actionType: EMBEDDING_SEARCH_TOOL,
+				query: input.query,
+				folder: input.folder,
+			});
+			const previews = await attachEmbeddingPreviews(output, context?.signal);
+			const text = JSON.stringify(output, null, 2);
 			return {
-				content:
-					`${result.hits.length} matches from ${result.searched} chunks${result.truncated ? " (search limit reached; narrow the folder)" : ""}:\n\n` +
-					result.hits
-						.map(
-							(hit) =>
-								`${hit.path}\n  ${hit.kind} · ${chunkLocationLabel(hit.location)} · cosine ${hit.score.toFixed(3)}\n  Chunk: ${hit.id}${hit.text ? `\n  ${hit.text}` : ""}`,
-						)
-						.join("\n\n")
-						.slice(0, 16_000),
+				content: previews.length
+					? ([
+							{ type: "text", text },
+							...previews,
+						] as unknown as ToolExecutionResult["content"])
+					: text,
+				structuredContent: output,
 				meta: {
 					searched: result.searched,
 					truncated: result.truncated,
@@ -114,7 +122,7 @@ export const createEmbeddingChunksTool: ToolFactory<
 		"Inspect a source file's content chunks with excerpts and page/time locations. Media chunks identify a segment; they do not contain a generated transcript.",
 	schema: chunksSchema,
 	annotations,
-	execute: async (input) => {
+	execute: async (input, context) => {
 		try {
 			const { indexer, embeddings } = await getFolderIndexRuntime();
 			const config = await indexer.loadConfig();
@@ -131,16 +139,30 @@ export const createEmbeddingChunksTool: ToolFactory<
 			const chunks = await embeddings.chunks(path, root);
 			const offset = input.offset ?? 0;
 			const shown = chunks.slice(offset, offset + (input.limit ?? 10));
+			const output = embeddingToolResult(
+				{
+					hits: shown.map((chunk) => ({ ...chunk, score: 0 })),
+					searched: chunks.length,
+					truncated: false,
+				},
+				{
+					actionType: EMBEDDING_CHUNKS_TOOL,
+					path,
+					total: chunks.length,
+					offset,
+				},
+			);
+			for (const hit of output.hits) delete hit.score;
+			const previews = await attachEmbeddingPreviews(output, context?.signal);
+			const text = JSON.stringify(output, null, 2);
 			return {
-				content:
-					`${path}: ${chunks.length} chunks, showing ${shown.length} from offset ${offset}.\n\n` +
-					shown
-						.map(
-							(chunk) =>
-								`${chunk.id} · ${chunk.kind} · ${chunkLocationLabel(chunk.location)}${chunk.text ? `\n${chunk.text}` : ""}`,
-						)
-						.join("\n\n")
-						.slice(0, 16_000),
+				content: previews.length
+					? ([
+							{ type: "text", text },
+							...previews,
+						] as unknown as ToolExecutionResult["content"])
+					: text,
+				structuredContent: output,
 				meta: { total: chunks.length, offset },
 			};
 		} catch (value) {

@@ -606,6 +606,19 @@
 			"hint": "Chọn thư mục được lập chỉ mục trong Tệp › Chỉ mục. Bật riêng từng tính năng chỉ mục trong cài đặt agent."
 		}
 	},
+	"embeddingTool": {
+		"summary": "{{matches}} kết quả · {{files}} tệp · {{chunks}} đoạn đã lập chỉ mục",
+		"truncated": "Một số kết quả đã được lược bỏ. Thu hẹp thư mục hoặc tìm kiếm để xem thêm.",
+		"empty": "Không có nội dung đã lập chỉ mục phù hợp.",
+		"similarity": "Độ tương đồng",
+		"similarityHint": "Độ tương đồng cosine xếp hạng kết quả; không phải độ tin cậy.",
+		"wholeImage": "Toàn bộ hình ảnh",
+		"wholeFile": "Toàn bộ tệp",
+		"locations": "{{count}} vị trí phù hợp",
+		"open": "Mở tệp",
+		"showAll": "Hiện tất cả {{count}} tệp",
+		"showLess": "Hiện ít tệp hơn"
+	},
 	"openui": {
 		"rendering": "Đang tạo giao diện trực quan",
 		"copied": "Đã sao chép",

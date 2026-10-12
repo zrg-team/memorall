@@ -1424,7 +1424,7 @@ exports[`flows-integrations registered contracts > registers every integrations 
     },
   },
   {
-    "description": "Search EmbeddingGemma 2 content chunks across documents, images, audio, music and video. Returns source paths, excerpts, pages or timestamps, and cosine similarity (not confidence).",
+    "description": "Search indexed file content by meaning. For visual questions use kind=image. Returns source paths, excerpts, locations, ranked similarity and source image previews when the model supports vision. Use the matches and inspect images before answering; text grep cannot inspect visual content.",
     "name": "embedding_search",
     "parameters": {
       "properties": {
@@ -1872,6 +1872,9 @@ exports[`flows-integrations registered contracts > registers every integrations 
             "top",
             "bottom",
           ],
+          "type": "string",
+        },
+        "path": {
           "type": "string",
         },
         "ref": {

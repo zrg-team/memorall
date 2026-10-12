@@ -78,6 +78,7 @@ import {
 import { documentConvertRenderer } from "./tools/DocumentConvert";
 import { memoryToolIcon, memoryToolRenderer } from "./tools/MemoryTool";
 import { memonToolRenderer } from "./tools/MemonTool";
+import { embeddingToolRenderer } from "./tools/EmbeddingTool";
 import { SiteAccessNotice } from "./tools/SiteAccessNotice";
 import { siteAccessApplies } from "@/main/hooks/use-site-access";
 import { isSiteAccessWithheldMessage } from "@/services/web-browser/site-access";
@@ -284,6 +285,8 @@ const translateActionDescription = (
 };
 
 const ACTION_RENDERERS: Record<string, ActionRenderer> = {
+	embedding_search: embeddingToolRenderer,
+	embedding_chunks: embeddingToolRenderer,
 	container_web_access: webAccessRenderer,
 	web_access: webAccessRenderer,
 	web_read: webReadRenderer,

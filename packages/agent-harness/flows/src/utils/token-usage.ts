@@ -11,6 +11,9 @@ const DISABLE_LIBRARY_TOKEN_COUNT_ESTIMATION = true;
 const MESSAGE_OVERHEAD_TOKENS = 4;
 const CONVERSATION_OVERHEAD_TOKENS = 2;
 const DEFAULT_TOKEN_MULTIPLIER = 3;
+// Vision cost varies by provider; image bytes are not text tokens. This bounded
+// fallback is only an estimate, superseded by reported provider usage.
+const ESTIMATED_IMAGE_TOKENS = 2048;
 
 function estimateTokensFromText(text: string): number {
 	if (!text) {
@@ -44,7 +47,7 @@ function stringifyMessageContent(
 			}
 
 			if (part.type === "image_url") {
-				return `[image:${part.image_url?.url || ""}]`;
+				return "[image]";
 			}
 
 			return "";
@@ -220,8 +223,13 @@ export function mergeTokenUsage(
 export function estimateMessageTokens(
 	message: ChatCompletionMessageParam,
 ): number {
+	const imageCount = Array.isArray(message.content)
+		? message.content.filter((part) => part.type === "image_url").length
+		: 0;
 	return (
-		MESSAGE_OVERHEAD_TOKENS + estimateTokensFromText(stringifyMessage(message))
+		MESSAGE_OVERHEAD_TOKENS +
+		estimateTokensFromText(stringifyMessage(message)) +
+		imageCount * ESTIMATED_IMAGE_TOKENS
 	);
 }
 

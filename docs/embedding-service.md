@@ -61,6 +61,25 @@ excerpt where applicable, and page or time range. Scores are cosine similarities
 not confidence percentages. The Files search dialog previews the actual source
 image or timed media segment and can open the source file or its OKF card.
 
+In chat, embedding results appear as compact source cards with thumbnails,
+excerpts, locations, similarity scores and an **Open file** action. Repeated hits
+from the same file are grouped, and long result sets can be expanded. When the
+selected chat model supports images, the tool attaches up to three distinct
+source images, resized to at most 1,024 pixels on their longest side. Those image
+parts are preserved through the agent runtime and provider handoff so the model
+can inspect them, alongside the exact paths and instructions to use the matches.
+Context estimates use a bounded image allowance instead of counting encoded image
+bytes as text, and compaction keeps native image URLs decodable.
+A failed preview keeps its source match available; models without vision receive
+guidance to use an available image-captioning tool. Scanned PDF hits retain their
+page location for opening or rendering the page.
+
+MemonOS can inspect a search hit directly with
+`memon_act { action: "describe", path: "<source image path>" }`, including `~/`
+paths, without guessing a Files ref. Passing a folder opens it in Files and asks
+the agent to choose an image. Text grep does not inspect image content, and a
+similarity score alone does not prove that a visual detail is present.
+
 Validation: the indexing, runner and UI unit tests cover content boundaries,
 incremental updates, deletions, failures, scope exclusions, model-space isolation,
 native modality inputs and source navigation. To exercise real downloaded
