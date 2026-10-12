@@ -19,6 +19,7 @@ export { FOLDER_INDEX_OPERATION_JOB_NAME } from "./constants";
 export type FolderIndexStateView = FolderIndexState & {
 	/** Roots being indexed right now, as "type:/path". */
 	running: string[];
+	activity?: Record<string, "checking" | "indexing">;
 };
 
 export interface FolderIndexCard {

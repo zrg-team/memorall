@@ -38,6 +38,15 @@ const ensureFolder = async (path: string): Promise<void> => {
 };
 
 export const zenIndexStore: IndexStoreIO = {
+	async exists(path) {
+		await initializeFs();
+		try {
+			return (await fs.promises.stat(path)).isFile();
+		} catch (error) {
+			if (isMissing(error)) return false;
+			throw error;
+		}
+	},
 	async read(path) {
 		await initializeFs();
 		try {
@@ -52,7 +61,14 @@ export const zenIndexStore: IndexStoreIO = {
 		await initializeFs();
 		const slash = path.lastIndexOf("/");
 		if (slash > 0) await ensureFolder(path.slice(0, slash));
-		await fs.promises.writeFile(path, new TextEncoder().encode(text));
+		// Keep the previous checkpoint readable if a write is interrupted.
+		const temporary = `${path}.pending-${crypto.randomUUID()}`;
+		try {
+			await fs.promises.writeFile(temporary, new TextEncoder().encode(text));
+			await fs.promises.rename(temporary, path);
+		} finally {
+			await fs.promises.rm(temporary, { force: true }).catch(() => {});
+		}
 	},
 	async remove(path) {
 		await initializeFs();
@@ -87,11 +103,8 @@ const toIso = (value: unknown): string | undefined => {
 
 export const documentLibrary: LibraryIO = {
 	async listFolder(path) {
-		const node = await documentFileSystemService.resolveNode(path);
-		if (node?.type !== "folder") return [];
-		const children = node.isLazy
-			? await documentFileSystemService.getFolderChildren(node.path)
-			: node.children;
+		// One directory listing; resolving a node first builds the entire library tree.
+		const children = await documentFileSystemService.getFolderChildren(path);
 		return children.map(
 			(child): LibraryEntry =>
 				child.type === "folder"

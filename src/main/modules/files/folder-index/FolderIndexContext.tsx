@@ -3,6 +3,7 @@ import { useNativeMounts } from "@/main/modules/files/hooks/use-native-mounts";
 import { folderIndexClient } from "@/services/folder-index/folder-index-client";
 import {
 	effectiveIndexTypes,
+	isSameOrInside,
 	normalizeFolderPath,
 } from "@/services/folder-index/index-config";
 import type { FolderIndexStateView } from "@/services/folder-index/operation-types";
@@ -107,6 +108,9 @@ export const FolderIndexProvider: React.FC<{
 	const [pendingMapped, setPendingMapped] =
 		React.useState<PendingChange | null>(null);
 	const watchedFolders = React.useRef(new Set<string>());
+	const refreshPending = React.useRef<Promise<void> | null>(null);
+	const entriesPending = React.useRef(new Set<string>());
+	const entriesDirty = React.useRef(new Set<string>());
 	const { mountedPaths } = useNativeMounts();
 	const isMapped = React.useCallback(
 		(path: string) => {
@@ -119,19 +123,31 @@ export const FolderIndexProvider: React.FC<{
 		[mountedPaths],
 	);
 
-	const refresh = React.useCallback(async () => {
-		try {
-			setState(await folderIndexClient.request("state.get", {}));
-			setError(null);
-		} catch (err) {
-			logError("[folder-index] Reading index state failed:", err);
-			setError(message(err));
-		}
+	const refresh = React.useCallback(() => {
+		if (refreshPending.current) return refreshPending.current;
+		const work = (async () => {
+			try {
+				setState(await folderIndexClient.request("state.get", {}));
+				setError(null);
+			} catch (err) {
+				logError("[folder-index] Reading index state failed:", err);
+				setError(message(err));
+			} finally {
+				refreshPending.current = null;
+			}
+		})();
+		refreshPending.current = work;
+		return work;
 	}, []);
 
-	const loadEntries = React.useCallback((folder: string) => {
+	const loadEntries = React.useCallback((folder: string): void => {
 		const path = normalizeFolderPath(folder);
 		watchedFolders.current.add(path);
+		if (entriesPending.current.has(path)) {
+			entriesDirty.current.add(path);
+			return;
+		}
+		entriesPending.current.add(path);
 		void folderIndexClient
 			.request("folder.entries", { path })
 			.then((result) => {
@@ -152,6 +168,10 @@ export const FolderIndexProvider: React.FC<{
 			})
 			.catch((err: unknown) => {
 				logError("[folder-index] Reading folder entries failed:", err);
+			})
+			.finally(() => {
+				entriesPending.current.delete(path);
+				if (entriesDirty.current.delete(path)) loadEntries(path);
 			});
 	}, []);
 
@@ -234,7 +254,14 @@ export const FolderIndexProvider: React.FC<{
 			isRunning: (path) =>
 				path
 					? (state?.running ?? []).some((key) =>
-							key.endsWith(`:${normalizeFolderPath(path)}`),
+							(() => {
+								const split = key.indexOf(":");
+								const typeId = key.slice(0, split),
+									root = key.slice(split + 1);
+								return isSameOrInside(path, root)
+									? effectiveIndexTypes(config, path).includes(typeId)
+									: isSameOrInside(root, path);
+							})(),
 						)
 					: (state?.running.length ?? 0) > 0,
 			isMapped,

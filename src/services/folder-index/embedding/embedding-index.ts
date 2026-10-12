@@ -1,5 +1,13 @@
 import type { MultimodalEmbeddingEncoder } from "@/services/embedding/interfaces/multimodal-embedding";
-import { EMBEDDING_INDEX_TYPE_ID, FOLDER_INDEX_ROOT } from "../constants";
+import {
+	EMBEDDING_GEMMA_2_DIMENSIONS,
+	EMBEDDING_GEMMA_2_FINGERPRINT,
+} from "@/services/embedding/implementations/embeddinggemma2-model";
+import {
+	EMBEDDING_INDEX_TYPE_ID,
+	FOLDER_INDEX_ROOT,
+	MAX_EMBEDDING_CHUNKS_PER_FILE,
+} from "../constants";
 import { EMBEDDING_INDEX_TYPE } from "../index-types";
 import {
 	isSameOrInside,
@@ -21,7 +29,7 @@ import type {
 } from "./types";
 
 const STORE_ROOT = `${FOLDER_INDEX_ROOT}/${EMBEDDING_INDEX_TYPE_ID}`;
-const MAX_CHUNKS_PER_FILE = 2000;
+const MAX_CHUNKS_PER_FILE = MAX_EMBEDDING_CHUNKS_PER_FILE;
 export const MAX_SEARCHED_CHUNKS = 20_000;
 const bundlePath = (root: string) =>
 	`${STORE_ROOT}/${encodeURIComponent(normalizeFolderPath(root))}`;
@@ -33,6 +41,9 @@ interface FileState {
 	size: number;
 	chunks: number;
 	error?: string;
+	complete?: boolean;
+	errorAttempts?: number;
+	retryAfter?: number;
 }
 interface Manifest {
 	version: 1;
@@ -46,6 +57,10 @@ interface StoredDocument {
 	fingerprint: string;
 	path: string;
 	chunks: EmbeddingChunk[];
+	source?: { size: number; modifiedAt: string };
+	complete?: boolean;
+	/** Temporary checkpoint pages; completed files retain the original format. */
+	pages?: number;
 }
 
 export const normalizedVector = (
@@ -71,6 +86,7 @@ export class EmbeddingIndex implements FolderIndexType {
 	readonly tools = EMBEDDING_INDEX_TYPE.tools;
 	readonly prompt = EMBEDDING_INDEX_TYPE.prompt;
 	private encoderPromise?: Promise<MultimodalEmbeddingEncoder>;
+	private readonly queryCache = new Map<string, Promise<number[]>>();
 
 	constructor(
 		private readonly options: {
@@ -82,8 +98,27 @@ export class EmbeddingIndex implements FolderIndexType {
 				bytes: Uint8Array,
 			) => AsyncIterable<PreparedChunk>;
 			now?: () => Date;
+			wait?: (ms: number) => Promise<void>;
 		},
 	) {}
+	private identity() {
+		return (
+			this.options.encoder ?? {
+				fingerprint: EMBEDDING_GEMMA_2_FINGERPRINT,
+				dimensions: EMBEDDING_GEMMA_2_DIMENSIONS,
+			}
+		);
+	}
+	private wait(ms: number): Promise<void> {
+		return (
+			this.options.wait?.(ms) ??
+			new Promise((resolve) => setTimeout(resolve, ms))
+		);
+	}
+	private async removeDocument(root: string, path: string): Promise<void> {
+		await this.options.store.remove(documentPath(root, path));
+		await this.options.store.remove(`${documentPath(root, path)}.parts`);
+	}
 
 	private encoder(): Promise<MultimodalEmbeddingEncoder> {
 		if (this.options.encoder) return Promise.resolve(this.options.encoder);
@@ -123,11 +158,32 @@ export class EmbeddingIndex implements FolderIndexType {
 		if (!text) return null;
 		try {
 			const value = JSON.parse(text) as StoredDocument;
-			return value.path === path &&
-				value.fingerprint === fingerprint &&
-				Array.isArray(value.chunks)
-				? value
-				: null;
+			if (
+				!(
+					value.path === path &&
+					value.fingerprint === fingerprint &&
+					Array.isArray(value.chunks)
+				)
+			)
+				return null;
+			if (value.pages !== undefined) {
+				if (
+					!Number.isInteger(value.pages) ||
+					value.pages < 0 ||
+					value.pages > MAX_CHUNKS_PER_FILE
+				)
+					return null;
+				for (let page = 0; page < value.pages; page++) {
+					const text = await this.options.store.read(
+						`${documentPath(root, path)}.parts/${page}.json`,
+					);
+					if (!text) return null;
+					const chunks: unknown = JSON.parse(text);
+					if (!Array.isArray(chunks)) return null;
+					value.chunks.push(...chunks);
+				}
+			}
+			return value;
 		} catch {
 			return null;
 		}
@@ -136,21 +192,34 @@ export class EmbeddingIndex implements FolderIndexType {
 	async sync(
 		root: string,
 		files: IndexedFileInfo[],
-		options: { nestedRoots?: string[] } = {},
+		options: {
+			nestedRoots?: string[];
+			signal?: AbortSignal;
+			batchSize?: number;
+			pauseMs?: number;
+			onActivity?: () => void;
+		} = {},
 	): Promise<FolderIndexSyncResult> {
 		root = normalizeFolderPath(root);
-		const encoder = await this.encoder();
+		const identity = this.identity();
+		const now = () => (this.options.now?.() ?? new Date()).getTime();
+		const batchSize = Number.isFinite(options.batchSize)
+			? Math.max(1, Math.min(16, Math.floor(options.batchSize!)))
+			: 4;
+		const pauseMs = Number.isFinite(options.pauseMs)
+			? Math.max(25, Math.min(2000, options.pauseMs!))
+			: 150;
 		const previous = await this.manifest(root);
+		const compatible =
+			previous?.fingerprint === identity.fingerprint &&
+			previous.dimensions === identity.dimensions;
 		const manifest: Manifest = {
 			version: 1,
 			root,
-			fingerprint: encoder.fingerprint,
-			dimensions: encoder.dimensions,
-			updatedAt: (this.options.now?.() ?? new Date()).toISOString(),
-			files:
-				previous?.fingerprint === encoder.fingerprint
-					? { ...previous.files }
-					: {},
+			fingerprint: identity.fingerprint,
+			dimensions: identity.dimensions,
+			updatedAt: previous?.updatedAt ?? new Date(now()).toISOString(),
+			files: compatible ? { ...previous.files } : {},
 		};
 		const result: FolderIndexSyncResult = {
 			created: 0,
@@ -159,44 +228,164 @@ export class EmbeddingIndex implements FolderIndexType {
 			unchanged: 0,
 			skipped: 0,
 		};
-		const save = () =>
-			this.options.store.write(
+		let dirty = !compatible;
+		let completedSinceSave = 0;
+		let lastSave = now();
+		const save = async (force = false) => {
+			if (
+				!dirty ||
+				(!force && completedSinceSave < 8 && now() - lastSave < 5000)
+			)
+				return;
+			manifest.updatedAt = new Date(now()).toISOString();
+			await this.options.store.write(
 				`${bundlePath(root)}/manifest.json`,
 				JSON.stringify(manifest),
 			);
+			dirty = false;
+			completedSinceSave = 0;
+			lastSave = now();
+		};
 		const paths = new Set(files.map((file) => file.path));
 		for (const path of Object.keys(previous?.files ?? {})) {
 			if (paths.has(path)) continue;
-			await this.options.store.remove(documentPath(root, path));
+			await this.removeDocument(root, path);
 			delete manifest.files[path];
 			result.removed++;
+			dirty = true;
 		}
-		await save();
+		if (result.removed) await save(true);
+		let processedFiles = 0;
+		let burst = 0;
 		for (const file of files) {
+			if (options.signal?.aborted) {
+				await save(true);
+				return result;
+			}
 			const before = manifest.files[file.path];
+			const sameSource =
+				before?.size === file.size && before.modifiedAt === file.modifiedAt;
+			if (sameSource && before.error && (before.retryAfter ?? 0) > now()) {
+				result.skipped++;
+				continue;
+			}
 			if (
-				before &&
+				sameSource &&
 				!before.error &&
-				before.size === file.size &&
-				before.modifiedAt === file.modifiedAt &&
-				(await this.document(root, file.path, encoder.fingerprint))
+				before.complete !== false &&
+				(this.options.store.exists
+					? await this.options.store.exists(documentPath(root, file.path))
+					: await this.document(root, file.path, identity.fingerprint))
 			) {
 				result.unchanged++;
 				continue;
 			}
+			let checkpoint: () => Promise<void> = async () => {};
 			try {
+				let saved =
+					!sameSource || before?.complete === false || !before
+						? await this.document(root, file.path, identity.fingerprint)
+						: null;
+				if (
+					saved?.source?.size !== file.size ||
+					saved.source.modifiedAt !== file.modifiedAt ||
+					!saved.chunks.length ||
+					saved.chunks.length > MAX_CHUNKS_PER_FILE ||
+					!saved.chunks.every(
+						(chunk) =>
+							chunk.vector.length === identity.dimensions &&
+							chunk.vector.every(Number.isFinite),
+					)
+				)
+					saved = null;
+				// A completed file can survive a crash before the batched manifest flush.
+				if (saved && saved.complete !== false) {
+					manifest.files[file.path] = {
+						size: file.size,
+						modifiedAt: file.modifiedAt,
+						chunks: saved.chunks.length,
+						complete: true,
+					};
+					result.unchanged++;
+					dirty = true;
+					completedSinceSave++;
+					await save();
+					continue;
+				}
+				if (!saved) await this.removeDocument(root, file.path);
+				// Repairing a missing document at unchanged metadata must not leave the
+				// old manifest falsely marking a new checkpoint header as complete.
+				if (
+					sameSource &&
+					before &&
+					before.complete !== false &&
+					!before.error
+				) {
+					manifest.files[file.path] = {
+						size: file.size,
+						modifiedAt: file.modifiedAt,
+						chunks: 0,
+						complete: false,
+					};
+					dirty = true;
+					await save(true);
+				}
+				options.onActivity?.();
 				const bytes = await this.options.library.readFile(file.path);
-				const chunks: EmbeddingChunk[] = [];
-				for await (const chunk of (
-					this.options.extract ?? extractEmbeddingChunks
-				)(file, bytes)) {
+				const chunks: EmbeddingChunk[] = saved?.chunks ?? [];
+				const resumeAt = chunks.length;
+				let pages = saved?.pages ?? 0;
+				let pending: EmbeddingChunk[] = [];
+				const source = { size: file.size, modifiedAt: file.modifiedAt };
+				checkpoint = async () => {
+					if (!pending.length) return;
+					// Append small pages, rather than rewriting all vectors after every batch.
+					await this.options.store.write(
+						`${documentPath(root, file.path)}.parts/${pages}.json`,
+						JSON.stringify(pending),
+					);
+					pages++;
+					pending = [];
+					await this.options.store.write(
+						documentPath(root, file.path),
+						JSON.stringify({
+							path: file.path,
+							fingerprint: identity.fingerprint,
+							source,
+							complete: false,
+							pages,
+							chunks: [],
+						} satisfies StoredDocument),
+					);
+					manifest.files[file.path] = {
+						...source,
+						chunks: chunks.length,
+						complete: false,
+					};
+					dirty = true;
+					await save();
+				};
+				let position = this.options.extract ? 0 : resumeAt;
+				const prepared = this.options.extract
+					? this.options.extract(file, bytes)
+					: extractEmbeddingChunks(file, bytes, {
+							skipChunks: resumeAt,
+							signal: options.signal,
+						});
+				for await (const chunk of prepared) {
+					if (options.signal?.aborted) {
+						await checkpoint();
+						await save(true);
+						return result;
+					}
+					if (position++ < resumeAt) continue;
 					if (chunks.length >= MAX_CHUNKS_PER_FILE)
 						throw new Error(
 							`File exceeds the ${MAX_CHUNKS_PER_FILE}-chunk limit`,
 						);
 					const vector = normalizedVector(
-						await encoder.embed(chunk.input),
-						encoder.dimensions,
+						await (await this.encoder()).embed(chunk.input),
+						identity.dimensions,
 					);
 					chunks.push({
 						id: `${file.path}#${chunks.length}`,
@@ -207,36 +396,66 @@ export class EmbeddingIndex implements FolderIndexType {
 						...(chunk.text ? { text: chunk.text } : {}),
 						vector,
 					});
+					pending.push(chunks[chunks.length - 1]);
+					if (++burst >= batchSize) {
+						await checkpoint();
+						burst = 0;
+						if (options.signal?.aborted) {
+							await save(true);
+							return result;
+						}
+						await this.wait(pauseMs);
+					}
 				}
 				if (!chunks.length) throw new Error("File has no content to embed");
 				await this.options.store.write(
 					documentPath(root, file.path),
 					JSON.stringify({
 						path: file.path,
-						fingerprint: encoder.fingerprint,
+						fingerprint: identity.fingerprint,
+						source,
+						complete: true,
 						chunks,
 					} satisfies StoredDocument),
+				);
+				await this.options.store.remove(
+					`${documentPath(root, file.path)}.parts`,
 				);
 				manifest.files[file.path] = {
 					size: file.size,
 					modifiedAt: file.modifiedAt,
 					chunks: chunks.length,
+					complete: true,
 				};
 				if (previous?.files[file.path]) result.updated++;
 				else result.created++;
 			} catch (error) {
+				if (options.signal?.aborted) {
+					await checkpoint();
+					await save(true);
+					return result;
+				}
 				// Never leave old content searchable after a changed file fails to re-index.
-				await this.options.store.remove(documentPath(root, file.path));
+				await this.removeDocument(root, file.path);
+				const attempts = sameSource ? (before?.errorAttempts ?? 0) + 1 : 1;
 				manifest.files[file.path] = {
 					size: file.size,
 					modifiedAt: file.modifiedAt,
 					chunks: 0,
 					error: error instanceof Error ? error.message : String(error),
+					errorAttempts: attempts,
+					retryAfter:
+						now() +
+						Math.min(15 * 60_000, 30_000 * 2 ** Math.min(attempts - 1, 10)),
 				};
 				result.skipped++;
 			}
-			await save(); // Progress and failures survive reloads, as do completed files.
+			dirty = true;
+			completedSinceSave++;
+			await save();
+			if (++processedFiles % 8 === 0) await this.wait(pauseMs);
 		}
+		await save(true);
 		// A formerly independent root may now be inherited from this one.
 		for (const entry of await this.options.store.list(STORE_ROOT)) {
 			if (entry.kind !== "folder") continue;
@@ -302,7 +521,7 @@ export class EmbeddingIndex implements FolderIndexType {
 		path: string,
 		root: string,
 	): Promise<Omit<EmbeddingChunk, "vector">[]> {
-		const encoder = await this.encoder();
+		const encoder = this.identity();
 		const doc = await this.document(
 			root,
 			normalizeFolderPath(path),
@@ -319,14 +538,14 @@ export class EmbeddingIndex implements FolderIndexType {
 		if (!input.query?.trim() || input.query.length > TEXT_QUERY_LIMIT)
 			throw new Error(`Search needs 1–${TEXT_QUERY_LIMIT} characters`);
 		if (!roots.length) return { hits: [], searched: 0, truncated: false };
-		const encoder = await this.encoder();
+		const identity = this.identity();
 		const manifests = (
 			await Promise.all(roots.map((root) => this.manifest(root)))
 		).filter(
 			(value): value is Manifest =>
 				value !== null &&
-				value.fingerprint === encoder.fingerprint &&
-				value.dimensions === encoder.dimensions,
+				value.fingerprint === identity.fingerprint &&
+				value.dimensions === identity.dimensions,
 		);
 		if (
 			!manifests.some((manifest) =>
@@ -336,14 +555,28 @@ export class EmbeddingIndex implements FolderIndexType {
 			)
 		)
 			return { hits: [], searched: 0, truncated: false };
-		const query = normalizedVector(
-			await encoder.embed({
-				kind: "text",
-				text: input.query.trim(),
-				query: true,
-			}),
-			encoder.dimensions,
-		);
+		const queryKey = `${identity.fingerprint}:${input.query.trim()}`;
+		let queryPromise = this.queryCache.get(queryKey);
+		if (!queryPromise) {
+			queryPromise = this.encoder().then(async (encoder) =>
+				normalizedVector(
+					await encoder.embed({
+						kind: "text",
+						text: input.query.trim(),
+						query: true,
+					}),
+					encoder.dimensions,
+				),
+			);
+			this.queryCache.set(queryKey, queryPromise);
+			void queryPromise.catch(() => {
+				if (this.queryCache.get(queryKey) === queryPromise)
+					this.queryCache.delete(queryKey);
+			});
+			if (this.queryCache.size > 64)
+				this.queryCache.delete(this.queryCache.keys().next().value!);
+		}
+		const query = await queryPromise;
 		const result: EmbeddingSearchResult = {
 			hits: [],
 			searched: 0,
@@ -361,7 +594,7 @@ export class EmbeddingIndex implements FolderIndexType {
 				const document = await this.document(
 					manifest.root,
 					path,
-					encoder.fingerprint,
+					identity.fingerprint,
 				);
 				for (const chunk of document?.chunks ?? []) {
 					if (input.kind && chunk.kind !== input.kind) continue;
@@ -375,6 +608,7 @@ export class EmbeddingIndex implements FolderIndexType {
 					)
 						continue;
 					result.searched++;
+					if (result.searched % 250 === 0) await this.wait(0);
 					const { vector, ...hit } = chunk;
 					const score = Math.max(
 						-1,

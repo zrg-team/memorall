@@ -14,6 +14,8 @@ export interface IndexStoreEntry {
 export interface IndexStoreIO {
 	/** The file's text, or null when it does not exist. */
 	read(path: string): Promise<string | null>;
+	/** Check existence without loading potentially large vector data. */
+	exists?(path: string): Promise<boolean>;
 	/** Writes a file, making its folders. */
 	write(path: string, text: string): Promise<void>;
 	/** Removes a file or a folder with everything in it; absent is fine. */

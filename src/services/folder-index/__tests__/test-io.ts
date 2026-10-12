@@ -13,6 +13,7 @@ export const memoryStore = (): IndexStoreIO & {
 	const files = new Map<string, string>();
 	return {
 		files,
+		exists: async (path) => files.has(path),
 		async read(path) {
 			return files.get(path) ?? null;
 		},

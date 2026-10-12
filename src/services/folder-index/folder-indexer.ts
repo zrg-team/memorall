@@ -1,5 +1,5 @@
 import { logError } from "@/utils/logger";
-import { FOLDER_INDEX_CONFIG_PATH } from "./constants";
+import { FOLDER_INDEX_CONFIG_PATH, EMBEDDING_INDEX_TYPE_ID } from "./constants";
 import {
 	effectiveIndexTypes,
 	emptyFolderIndexConfig,
@@ -35,13 +35,16 @@ export class FolderIndexer {
 	private readonly types = new Map<string, FolderIndexType>();
 	/** Roots being synced, as "type:root", for the settings' progress. */
 	private readonly running = new Set<string>();
+	private readonly activity = new Map<string, "checking" | "indexing">();
 	/** Syncs requested but not started, by root: requests in between share one. */
 	private readonly queued = new Map<
 		string,
 		Promise<FolderIndexSyncResult | null>
 	>();
-	/** The last sync of each root, so the next one starts after it. */
-	private readonly chains = new Map<string, Promise<void>>();
+	/** One root at a time across all types: bounds decoding and model memory. */
+	private serial: Promise<unknown> = Promise.resolve();
+	private readonly active = new Map<string, AbortController>();
+	private resumed = false;
 	private configWrite: Promise<unknown> = Promise.resolve();
 	/** Work started by a change and not awaited by its caller. */
 	private readonly pending = new Set<Promise<unknown>>();
@@ -71,7 +74,14 @@ export class FolderIndexer {
 
 	/** Catch up saved folder indexes after changes made while the app was closed. */
 	resume(): void {
+		if (this.resumed) return;
+		this.resumed = true;
 		this.inBackground(this.syncAll());
+	}
+	private enqueue<T>(work: () => Promise<T>): Promise<T> {
+		const run = this.serial.then(work);
+		this.serial = run.catch(() => undefined);
+		return run;
 	}
 
 	register(type: FolderIndexType): void {
@@ -103,10 +113,11 @@ export class FolderIndexer {
 		const run = this.configWrite.then(async () => {
 			const before = await this.loadConfig();
 			const after = normalizeFolderIndexConfig(change(before));
-			await this.store.write(
-				FOLDER_INDEX_CONFIG_PATH,
-				`${JSON.stringify(after, null, 2)}\n`,
-			);
+			if (JSON.stringify(before) !== JSON.stringify(after))
+				await this.store.write(
+					FOLDER_INDEX_CONFIG_PATH,
+					`${JSON.stringify(after, null, 2)}\n`,
+				);
 			return { before, after };
 		});
 		this.configWrite = run.catch(() => undefined);
@@ -118,14 +129,20 @@ export class FolderIndexer {
 		config: FolderIndexConfig,
 		typeId: string,
 		root: string,
+		signal?: AbortSignal,
 	): Promise<{ files: IndexedFileInfo[]; skipped: number }> {
 		const { skipPatterns, maxFileBytes } = config.settings;
 		const files: IndexedFileInfo[] = [];
 		let skipped = 0;
 		const queue = [normalizeFolderPath(root)];
-		while (queue.length) {
-			const folder = queue.shift() as string;
+		let visited = 0;
+		for (let cursor = 0; cursor < queue.length; cursor++) {
+			if (signal?.aborted) break;
+			const folder = queue[cursor];
 			for (const entry of await this.library.listFolder(folder)) {
+				if (signal?.aborted) break;
+				if (++visited % 100 === 0)
+					await new Promise<void>((resolve) => setTimeout(resolve, 0));
 				if (entry.kind === "folder") {
 					if (isSkippedName(entry.name, "folder", skipPatterns)) continue;
 					if (!effectiveIndexTypes(config, entry.path).includes(typeId))
@@ -163,40 +180,52 @@ export class FolderIndexer {
 		// A sync not started yet will see this request's changes too.
 		const waiting = this.queued.get(key);
 		if (waiting) return waiting;
-		const previous = this.chains.get(key) ?? Promise.resolve();
-		const run = previous.then(async () => {
+		const run = this.enqueue(async () => {
 			this.queued.delete(key);
 			const type = this.types.get(typeId);
 			if (!type) return null;
-			this.running.add(key);
+			const controller = new AbortController();
+			this.active.set(typeId, controller);
 			try {
 				const config = await this.loadConfig();
+				if (
+					typeId === EMBEDDING_INDEX_TYPE_ID &&
+					config.settings.embeddingPaused
+				)
+					return null;
 				if (!indexRoots(config, typeId).includes(normalizeFolderPath(root))) {
 					return null;
 				}
+				this.running.add(key);
+				this.activity.set(key, "checking");
 				const { files, skipped } = await this.collectFiles(
 					config,
 					typeId,
 					root,
+					controller.signal,
 				);
 				const rootPath = normalizeFolderPath(root);
 				const nestedRoots = indexRoots(config, typeId).filter(
 					(other) => other !== rootPath && isSameOrInside(other, rootPath),
 				);
-				const result = await type.sync(root, files, { nestedRoots });
+				if (controller.signal.aborted) return null;
+				if (typeId !== EMBEDDING_INDEX_TYPE_ID)
+					this.activity.set(key, "indexing");
+				const result = await type.sync(root, files, {
+					nestedRoots,
+					signal: controller.signal,
+					batchSize: config.settings.embeddingBatchSize,
+					pauseMs: config.settings.embeddingPauseMs,
+					onActivity: () => this.activity.set(key, "indexing"),
+				});
 				return { ...result, skipped: result.skipped + skipped };
 			} finally {
 				this.running.delete(key);
+				this.active.delete(typeId);
+				this.activity.delete(key);
 			}
 		});
 		this.queued.set(key, run);
-		this.chains.set(
-			key,
-			run.then(
-				() => undefined,
-				() => undefined,
-			),
-		);
 		return run;
 	}
 
@@ -240,7 +269,7 @@ export class FolderIndexer {
 			const newRoots = indexRoots(after, type.id);
 			for (const root of oldRoots) {
 				if (!newRoots.some((next) => isSameOrInside(root, next))) {
-					await type.remove(root);
+					await this.enqueue(() => type.remove(root));
 				}
 			}
 			for (const root of newRoots) await this.syncRoot(type.id, root);
@@ -257,6 +286,9 @@ export class FolderIndexer {
 		const { before, after } = await this.updateConfig((config) =>
 			setFolderIndexType(config, folder, typeId, enabled),
 		);
+		if (JSON.stringify(before.folders) === JSON.stringify(after.folders))
+			return;
+		this.active.get(typeId)?.abort();
 		this.inBackground(this.reconcile(before, after));
 	}
 
@@ -265,17 +297,45 @@ export class FolderIndexer {
 			...config,
 			settings: { ...config.settings, ...settings },
 		}));
-		this.inBackground(this.reconcile(before, after));
+		const filtersChanged =
+			before.settings.maxFileBytes !== after.settings.maxFileBytes ||
+			JSON.stringify(before.settings.skipPatterns) !==
+				JSON.stringify(after.settings.skipPatterns);
+		const embeddingChanged = [
+			"embeddingPaused",
+			"embeddingBatchSize",
+			"embeddingPauseMs",
+		].some(
+			(key) =>
+				before.settings[key as keyof FolderIndexSettings] !==
+				after.settings[key as keyof FolderIndexSettings],
+		);
+		if (filtersChanged || embeddingChanged)
+			this.active.get(EMBEDDING_INDEX_TYPE_ID)?.abort();
+		if (filtersChanged) this.inBackground(this.reconcile(before, after));
+		else if (embeddingChanged && !after.settings.embeddingPaused)
+			this.inBackground(
+				(async () => {
+					for (const root of indexRoots(after, EMBEDDING_INDEX_TYPE_ID))
+						await this.syncRoot(EMBEDDING_INDEX_TYPE_ID, root);
+				})(),
+			);
 	}
 
 	/** Builds a root again from nothing: every card is read from its file anew. */
 	async rebuild(folder: string): Promise<void> {
 		const config = await this.loadConfig();
+		this.active.get(EMBEDDING_INDEX_TYPE_ID)?.abort();
 		const work = async () => {
 			for (const type of this.types.values()) {
+				if (
+					type.id === EMBEDDING_INDEX_TYPE_ID &&
+					config.settings.embeddingPaused
+				)
+					continue;
 				for (const root of indexRoots(config, type.id)) {
 					if (isSameOrInside(root, folder) || isSameOrInside(folder, root)) {
-						await type.remove(root);
+						await this.enqueue(() => type.remove(root));
 						await this.syncRoot(type.id, root);
 					}
 				}
@@ -292,6 +352,7 @@ export class FolderIndexer {
 		const { before, after } = await this.updateConfig((current) =>
 			moveFolderIndexRules(current, from, to),
 		);
+		this.active.get(EMBEDDING_INDEX_TYPE_ID)?.abort();
 		this.inBackground(this.reconcile(before, after));
 	}
 
@@ -305,6 +366,7 @@ export class FolderIndexer {
 		const { before, after } = await this.updateConfig((current) =>
 			removeFolderIndexRules(current, folder),
 		);
+		this.active.get(EMBEDDING_INDEX_TYPE_ID)?.abort();
 		this.inBackground(this.reconcile(before, after));
 	}
 
@@ -326,7 +388,12 @@ export class FolderIndexer {
 		return { effective, entries };
 	}
 
-	async getState(): Promise<FolderIndexState & { running: string[] }> {
+	async getState(): Promise<
+		FolderIndexState & {
+			running: string[];
+			activity: Record<string, "checking" | "indexing">;
+		}
+	> {
 		const config = await this.loadConfig();
 		const folders = await Promise.all(
 			Object.entries(config.folders)
@@ -362,6 +429,7 @@ export class FolderIndexer {
 			settings: config.settings,
 			folders,
 			running: [...this.running],
+			activity: Object.fromEntries(this.activity),
 		};
 	}
 }
