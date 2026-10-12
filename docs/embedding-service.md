@@ -4,6 +4,69 @@
 
 The Embedding Service provides a dual-mode architecture for text-to-vector transformation capabilities, supporting both **Main Mode** with direct model access and **Proxy Mode** for cross-context communication. It enables semantic search, similarity matching, and AI-powered memory retrieval through multiple embedding providers with a unified interface.
 
+## File content indexes with EmbeddingGemma 2
+
+In **Files → Indexes**, enable **Embeddings** for a folder. It can coexist with
+the folder's OKF index. Subfolders inherit the index, and the existing folder
+exclusions, file-size limits, skip patterns and mapped-folder confirmation apply.
+The folder's **Semantic search** button searches its indexed content. **Content
+chunks** on an open file lets you inspect the chunks without a search query.
+
+The native multimodal model is
+[`onnx-community/embeddinggemma-2-ONNX`](https://huggingface.co/onnx-community/embeddinggemma-2-ONNX),
+using Transformers.js 4.3.1, q4 weights with fp32 activations, and a pinned model
+revision. Its 768-dimensional vectors are kept in their own index space under
+`/home/indexes/embeddings`. They are never compared with existing MiniLM, Nomic
+or OpenAI memory vectors. The first use downloads the model; inference and
+indexed content stay local, and cached models can be used offline. The runner
+uses WebGPU when available and otherwise WASM, sharing the existing GPU lock
+and model idle-unload lifecycle.
+
+| Content | Chunk representation | Source location |
+| --- | --- | --- |
+| Text, Markdown, OKF, code, HTML and structured text | Full text, 2,000-character windows with 200-character overlap | Character offsets |
+| PDFs | Text per page; pages without text are rendered as images | Page and character offsets |
+| Word documents and presentations | Extracted text using the existing document readers | Character offsets |
+| Spreadsheets | Text from every sheet | Sheet and character offsets |
+| Images | Actual image pixels | Whole image |
+| Audio and music | Native PCM, downmixed to mono and resampled to 16 kHz; 30-second windows with 2-second overlap | Start/end seconds |
+| Video | Actual frames sampled at 1 FPS; 20-second windows with 2-second overlap; its audio track is also indexed | Start/end seconds |
+
+Text search uses the model's search-query prefix; corpus passages use its
+document-title prefix. Media goes directly to the native image/audio/video
+processor. The runner uses the learned `sentence_embedding` output and validates
+its dimensions, finiteness and normalization. No caption or transcript is
+invented for music, images or video.
+
+Each file stores source metadata, content chunks and vectors. Unchanged files
+reuse their vectors. Changed files replace their chunks, and deleted or excluded
+files lose theirs. Detected library and desktop mapped-folder changes are
+debounced for two seconds before indexing. Saved folder indexes are reconciled
+when the indexing service starts, catching up changes made while the app was
+closed. Files checks idle indexing status every five seconds and running status
+every 1.5 seconds, showing an **Indexing…** spinner; there is no percentage or ETA.
+Model/revision changes invalidate cached vectors. Decode and
+model failures appear per file in Indexes and are retried on the next sync;
+failed updates remove stale chunks. Unknown binary formats and codecs unavailable
+in the browser report a failure. The per-file limit is 2,000 chunks. Search scans
+at most 20,000 eligible chunks and reports when the user should narrow the folder.
+
+Agents with **Folder Indexes** receive `embedding_search` and `embedding_chunks`
+alongside the OKF tools. Results include the original file path, chunk identifier,
+excerpt where applicable, and page or time range. Scores are cosine similarities,
+not confidence percentages. The Files search dialog previews the actual source
+image or timed media segment and can open the source file or its OKF card.
+
+Validation: the indexing, runner and UI unit tests cover content boundaries,
+incremental updates, deletions, failures, scope exclusions, model-space isolation,
+native modality inputs and source navigation. To exercise real downloaded
+weights on CPU, run `node tools/smoke-embeddinggemma2.mjs`; its cache is kept in
+the ignored `artifacts/qa/embeddinggemma2-model-cache` folder.
+
+Expected-result mockup (illustrative files and scores, generated with ImageGen):
+
+![EmbeddingGemma 2 semantic content search](./images/embeddinggemma2-content-search.png)
+
 ## 🏗️ Dual-Mode Architecture
 
 ### 🔧 Architecture Overview

@@ -18,8 +18,14 @@ const MASTER_STRONG_PASSWORD_KEY = "master_strong_password";
 // Database key for master encryption
 const MASTER_KEY_RECORD = "master_encryption_key";
 
-type AuthProvider = "openai" | "openrouter";
-const AUTH_PROVIDERS: AuthProvider[] = ["openai", "openrouter"];
+export type AuthProvider = "openai" | "openrouter" | "custom";
+const AUTH_PROVIDERS: AuthProvider[] = ["openai", "openrouter", "custom"];
+
+export interface StoredProviderConfig {
+	apiKey: string;
+	baseUrl: string;
+	modelIds?: string[];
+}
 
 /**
  * Check if master key record exists in database
@@ -467,7 +473,7 @@ export async function deleteSecret(key: string): Promise<void> {
  */
 export async function saveProviderConfig(
 	provider: AuthProvider,
-	config: { apiKey: string; baseUrl: string },
+	config: StoredProviderConfig,
 ): Promise<void> {
 	try {
 		await saveSecret(`${provider}_config`, JSON.stringify(config));
@@ -483,7 +489,7 @@ export async function saveProviderConfig(
  */
 export async function loadProviderConfig(
 	provider: AuthProvider,
-): Promise<{ apiKey: string; baseUrl: string } | null> {
+): Promise<StoredProviderConfig | null> {
 	try {
 		const decryptedData = await loadSecret(`${provider}_config`);
 		return decryptedData ? JSON.parse(decryptedData) : null;

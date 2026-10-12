@@ -7,6 +7,38 @@ const fp16KvBytesPerToken = (
 ) => 2 * attentionLayers * keyValueHeads * headDimension * 2;
 
 export const WEBLLM_MODELS: LLMModelConfig[] = [
+	// Both release artifacts contain the same quantized weight package. The
+	// q4f32 library also works on WebGPU adapters without shader-f16.
+	...["q4f16_1", "q4f32_1"].map(
+		(quantization): LLMModelConfig => ({
+			id: `gemma-4-E2B-it-${quantization}-MLC`,
+			provider: "webllm",
+			displayName: `Gemma 4 E2B${quantization === "q4f32_1" ? " (FP32)" : ""}`,
+			sizeGB: 2_797_577_798 / 1024 ** 3,
+			sizeLabel: "2.61GB",
+			description: `Gemma 4 E2B: multilingual reasoning${quantization === "q4f32_1" ? ", supports GPUs without shader-f16" : ""}`,
+			contextLength: 4096,
+			defaultMaxNewTokens: 1024,
+			// Only the first 15 layers own KV; the remaining 20 share it. Charge
+			// the 3 full-attention layers plus 12 sliding-attention layers.
+			kvBytesPerToken:
+				(fp16KvBytesPerToken(12, 1, 256) + fp16KvBytesPerToken(3, 1, 512)) *
+				(quantization === "q4f32_1" ? 2 : 1),
+			requiresWebGPU: true,
+			minMemoryGB: quantization === "q4f32_1" ? 6 : 5,
+			qualityScore: 90,
+			performanceScore: 65,
+			contextScore: 50,
+			abilities: {
+				tools: "prompt_injection",
+				vision: false,
+				reasoning: true,
+				multilingual: true,
+			},
+			releaseDate: "2026-04",
+			quickDownload: true,
+		}),
+	),
 	{
 		id: "Qwen3.5-0.8B-q4f16_1-MLC",
 		provider: "webllm",
@@ -616,7 +648,7 @@ export const WEBLLM_MODELS: LLMModelConfig[] = [
 		releaseDate: "2024-03",
 		unsupported: true,
 		unsupportedReason:
-			"This model ID is not present in WebLLM 0.2.84. Select TinyLlama-1.1B-Chat-v1.0-q4f16_1-MLC instead.",
+			"This model ID is not present in WebLLM. Select TinyLlama-1.1B-Chat-v1.0-q4f16_1-MLC instead.",
 	},
 	{
 		id: "RedPajama-INCITE-Chat-3B-v1-q4f16_1-MLC",

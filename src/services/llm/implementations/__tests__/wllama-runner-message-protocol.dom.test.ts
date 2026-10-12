@@ -43,6 +43,8 @@ const lab = {
 	cacheEntries: [] as CacheEntry[],
 	deletedPredicates: [] as ((entry: CacheEntry) => boolean)[],
 	completionResult: null as unknown,
+	systemOneCalls: [] as Record<string, unknown>[],
+	metadata: {} as Record<string, string>,
 	streamChunks: [] as unknown[],
 	loadedContextInfo: { n_ctx: 4096 } as Record<string, unknown>,
 	exitCalls: 0,
@@ -74,6 +76,19 @@ class FakeWllama {
 
 	getChatTemplate() {
 		return lab.chatTemplate;
+	}
+
+	getModelMetadata() {
+		return { meta: lab.metadata };
+	}
+
+	async createSystemOne(params: Record<string, unknown>) {
+		lab.systemOneCalls.push(params);
+		return {
+			model: "Julia-1",
+			answers: { refund: { type: "noul", noul: 0.9 } },
+			usage: { input_tokens: 20, output_tokens: 0 },
+		};
 	}
 
 	supportInputModality(modality: string) {
@@ -205,6 +220,8 @@ const textReply = {
 beforeEach(() => {
 	lab.loadCalls = [];
 	lab.completionCalls = [];
+	lab.systemOneCalls = [];
+	lab.metadata = {};
 	lab.loadFailure = null;
 	lab.chatTemplate = "{{ messages }}";
 	lab.modalities = new Set();
@@ -229,6 +246,73 @@ afterEach(() => {
 });
 
 const lastLoad = () => lab.loadCalls[lab.loadCalls.length - 1];
+
+describe("GGUF typed decisions", () => {
+	const decisionModel = "ggml-org/Julia-1-GGUF/Julia-1-Q8_0.gguf";
+
+	it("loads the decision model with the demo's batch sizes and keeps the request typed", async () => {
+		const runner = await loadRunner({ webgpu: false });
+		const questions = {
+			topic: {
+				type: "choice",
+				instructions: "Topic?",
+				criteria: { delivery: "Late delivery", product: "Defective item" },
+			},
+			mood: {
+				type: "score",
+				instructions: "Mood?",
+				criteria: ["unhappy", "neutral", "happy"],
+			},
+			refund: { type: "noul", instructions: "Asks for money back?" },
+		};
+		const state = { message: "Refund the delivery fee." };
+		const [reply] = await runner.send("systemone", {
+			model: decisionModel,
+			state,
+			questions,
+		});
+		expect(reply.type).toBe("complete");
+		expect(reply.payload).toMatchObject({
+			model: decisionModel,
+			answers: { refund: { type: "noul", noul: 0.9 } },
+			usage: { input_tokens: 20 },
+		});
+		expect(lab.systemOneCalls).toEqual([{ state, questions }]);
+		expect(lab.completionCalls).toEqual([]);
+		expect(lastLoad().options).toMatchObject({
+			n_ctx: 2048,
+			n_batch: 1024,
+			n_ubatch: 1024,
+			n_gpu_layers: 0,
+		});
+	});
+
+	it("recognizes custom decision metadata even when its base template declares tools", async () => {
+		lab.metadata = { "qwen35.decision.type": "lev" };
+		lab.chatTemplate = "{{ tools }}";
+		const runner = await loadRunner({ webgpu: true });
+		const [reply] = await runner.send("serve", { model: MODEL });
+		expect(reply.payload.categories).toEqual(["decision"]);
+		expect(reply.payload.supportsNativeTools).toBe(false);
+		const [chat] = await runner.send("chat/completions", {
+			model: MODEL,
+			messages: [{ role: "user", content: "Hello" }],
+		});
+		expect(chat.type).toBe("error");
+		expect(lab.completionCalls).toEqual([]);
+	});
+
+	it("classifies a reviewed decision on serve when the header probe is unavailable", async () => {
+		const runner = await loadRunner({ webgpu: false });
+		const [reply] = await runner.send("serve", {
+			model: decisionModel,
+			_decision: true,
+			_mmprojFile: "",
+		});
+		expect(reply.payload.categories).toEqual(["decision"]);
+		expect(lastLoad().options.n_ctx).toBe(2048);
+	});
+});
 
 describe("WebGPU offload", () => {
 	it("offloads every layer when the device has an adapter", async () => {

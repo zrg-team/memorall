@@ -27,7 +27,7 @@ import {
 	hasMasterKey,
 } from "@/utils/master-key";
 
-type AuthProvider = "openai" | "openrouter";
+type AuthProvider = "openai" | "openrouter" | "custom";
 
 interface MigrationWizardProps {
 	open: boolean;

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { FolderIndexer } from "@/services/folder-index/folder-indexer";
 import { OkfIndex } from "@/services/folder-index/okf/okf-index";
 import { OkfReader } from "@/services/folder-index/okf/okf-query";
+import { EmbeddingIndex } from "@/services/folder-index/embedding/embedding-index";
 import type { FolderIndexRuntime } from "@/services/folder-index/runtime";
 import {
 	memoryLibrary,
@@ -34,7 +35,12 @@ beforeEach(() => {
 	const indexer = new FolderIndexer(store, library);
 	const okf = new OkfIndex({ store, library });
 	indexer.register(okf);
-	runtime = { indexer, okf, okfReader: new OkfReader(store) };
+	runtime = {
+		indexer,
+		okf,
+		okfReader: new OkfReader(store),
+		embeddings: new EmbeddingIndex({ store, library }),
+	};
 });
 
 describe("OKF tools", () => {

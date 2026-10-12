@@ -9,6 +9,7 @@ import { LogsSection } from "./LogsSection";
 import { LocalOpenAITab } from "./LocalOpenAITab";
 import { OpenAITab } from "./OpenAITab";
 import { OpenRouterTab } from "./OpenRouterTab";
+import { CustomProviderTab } from "./CustomProviderTab";
 import { ProgressSection } from "./ProgressSection";
 import { ProviderTabs, type ProviderStatus } from "./ProviderTabs";
 import { RecommendedSetup } from "./RecommendedSetup";
@@ -185,6 +186,7 @@ export const ProviderPanel: React.FC<ProviderPanelProps> = ({
 	}, [isInitialized, chatCurrent]);
 
 	const [statusesReady, setStatusesReady] = React.useState(false);
+	const [configRevision, setConfigRevision] = React.useState(0);
 	const [providerStatuses, setProviderStatuses] = React.useState<
 		Record<ServiceProvider, ProviderStatus>
 	>(() =>
@@ -215,6 +217,12 @@ export const ProviderPanel: React.FC<ProviderPanelProps> = ({
 	const lmstudioModels = useLocalModels(
 		"lmstudio",
 		providerStatuses.lmstudio !== "idle",
+	);
+	const customModels = useLocalModels(
+		"custom",
+		null,
+		providerStatuses.custom !== "idle",
+		configRevision,
 	);
 	const ollamaModels = useLocalModels(
 		"ollama",
@@ -249,10 +257,9 @@ export const ProviderPanel: React.FC<ProviderPanelProps> = ({
 				const hasSavedConfig = configKey
 					? await serviceManager.databaseService
 							.use(({ db, schema }) => {
-								const table =
-									provider === "openai" || provider === "openrouter"
-										? schema.encryption
-										: schema.configurations;
+								const table = PROVIDER_REGISTRY[provider].encryptionKey
+									? schema.encryption
+									: schema.configurations;
 								return db
 									.select()
 									.from(table)
@@ -276,7 +283,7 @@ export const ProviderPanel: React.FC<ProviderPanelProps> = ({
 		return () => {
 			cancelled = true;
 		};
-	}, [advancedProvider, current]);
+	}, [advancedProvider, current, configRevision]);
 
 	// Open the tab the user most likely wants: where the selected model lives,
 	// then where downloaded models are, then a provider already set up. Once
@@ -333,6 +340,7 @@ export const ProviderPanel: React.FC<ProviderPanelProps> = ({
 
 	const quickDownloads = (provider: ServiceProvider) => (
 		<QuickDownloadModels
+			category={modelCategory}
 			quickProvider={provider}
 			downloadedModels={downloadedModels}
 			downloadedOnly={downloadedOnly}
@@ -350,7 +358,9 @@ export const ProviderPanel: React.FC<ProviderPanelProps> = ({
 			advancedProvider === "webllm" ||
 			advancedProvider === "transformer");
 	const activeRemoteProvider =
-		advancedProvider === "openai" || advancedProvider === "openrouter"
+		advancedProvider === "openai" ||
+		advancedProvider === "openrouter" ||
+		advancedProvider === "custom"
 			? advancedProvider
 			: null;
 	const activeLocalModels =
@@ -468,6 +478,7 @@ export const ProviderPanel: React.FC<ProviderPanelProps> = ({
 
 			{advancedProviderSupport.supported && advancedProvider === "wllama" && (
 				<WllamaTab
+					category={modelCategory}
 					repo={repo}
 					setRepo={setRepo}
 					filePath={filePath}
@@ -525,6 +536,12 @@ export const ProviderPanel: React.FC<ProviderPanelProps> = ({
 				<OpenRouterTab onModelLoaded={onModelLoaded} />
 			)}
 
+			{advancedProvider === "custom" && (
+				<CustomProviderTab
+					onConfigurationChange={() => setConfigRevision((value) => value + 1)}
+				/>
+			)}
+
 			{advancedProvider === "lmstudio" && (
 				<LocalOpenAITab providerKind="lmstudio" onModelLoaded={onModelLoaded} />
 			)}
@@ -541,11 +558,15 @@ export const ProviderPanel: React.FC<ProviderPanelProps> = ({
 							models:
 								activeRemoteProvider === "openai"
 									? openaiModels.localModels
-									: openrouterModels.localModels,
+									: activeRemoteProvider === "custom"
+										? customModels.localModels
+										: openrouterModels.localModels,
 							loading:
 								activeRemoteProvider === "openai"
 									? openaiModels.localModelsLoading
-									: openrouterModels.localModelsLoading,
+									: activeRemoteProvider === "custom"
+										? customModels.localModelsLoading
+										: openrouterModels.localModelsLoading,
 							ready: providerStatuses[activeRemoteProvider] !== "idle",
 						},
 					]}

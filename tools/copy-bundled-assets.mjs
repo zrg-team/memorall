@@ -459,11 +459,11 @@ async function main() {
 		let wllamaLibrary = fs.readFileSync(wllamaLibraryDest, "utf8");
 		const compatReplacements = [
 			[
-				"https://cdn.jsdelivr.net/npm/@wllama/wllama-compat@3.5.1/wasm/wllama.js",
+				"https://cdn.jsdelivr.net/npm/@wllama/wllama-compat@3.8.1/wasm/wllama.js",
 				'new URL("./compat/wllama.js", import.meta.url).href',
 			],
 			[
-				"https://cdn.jsdelivr.net/npm/@wllama/wllama-compat@3.5.1/wasm/wllama.wasm",
+				"https://cdn.jsdelivr.net/npm/@wllama/wllama-compat@3.8.1/wasm/wllama.wasm",
 				'new URL("./compat/wllama.wasm", import.meta.url).href',
 			],
 		];
@@ -501,6 +501,11 @@ async function main() {
 			"new URL('web-llm.js', document.baseURI)",
 			6,
 			"WebLLM self URL",
+		);
+		// Preserve upstream code while normalizing generated trailing whitespace.
+		writeFileWithRetry(
+			webllmDest,
+			fs.readFileSync(webllmDest, "utf8").replace(/[\t ]+$/gm, ""),
 		);
 		console.log("✅ WebLLM library copied.\n");
 	} else {

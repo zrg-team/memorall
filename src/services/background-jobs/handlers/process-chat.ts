@@ -28,6 +28,7 @@ import {
 	type MemorallFlowServices,
 	toLegacyFlowStream,
 } from "@/services/agent-harness";
+import { createMemorallFlowCatalog } from "@/services/agent-harness/flow-catalog";
 import {
 	hasReplyParts,
 	MessagePartsAccumulator,
@@ -983,6 +984,7 @@ export class ChatHandler extends BaseProcessHandler<ChatJob | StopChatJob> {
 			sandboxRuntime: toAgentSandbox(sandboxService, fileSystem),
 			webBrowser: toFlowWebBrowser(serviceManager.getWebBrowserService()),
 			mcpStdio: toFlowMcpStdio(platform.mcpStdio),
+			flowCatalog: createMemorallFlowCatalog(serviceManager.flowBuilderService),
 			fs: fileSystem,
 			// The agent's enabled skills (add-skill-context) and load_skill.
 			skillService: {

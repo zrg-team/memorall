@@ -1,4 +1,5 @@
 import type { ModelInfo } from "../interfaces/base-llm";
+import { getModel } from "./model-registry";
 import type {
 	MediaModelConfig,
 	MediaPipelineTask,
@@ -81,6 +82,10 @@ export function resolveModelCategories(
 ): readonly ModelCategory[] {
 	if (info?.categories?.length) {
 		return modelCategoriesOf(info);
+	}
+	if (serviceName === "wllama") {
+		const categories = getModel(modelId, "wllama")?.categories;
+		if (categories?.length) return categories;
 	}
 
 	if (isKnownProvider(serviceName)) {

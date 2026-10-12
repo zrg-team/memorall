@@ -214,11 +214,6 @@ export const useLLMActions = ({
 						: `Loading ${provider} model...`,
 				);
 				setLogs((l) => [...l, `[ui] serve ${modelId}`]);
-				await serviceManager.llmService.setCurrentModel(
-					provider,
-					modelId,
-					serviceName,
-				);
 				await serviceManager.llmService.serveFor(
 					serviceName,
 					modelId,

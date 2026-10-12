@@ -9,6 +9,7 @@ export const DEFAULT_SERVICES = {
 	TRANSFORMER_MEDIA: "transformer-media",
 	OPENAI: "openai",
 	OPENROUTER: "openrouter",
+	CUSTOM: "custom",
 	LMSTUDIO: "lmstudio",
 	OLLAMA: "ollama",
 } as const;
@@ -36,6 +37,7 @@ export const PROVIDER_TO_SERVICE: Record<ServiceProvider, string> = {
 	"transformer-media": DEFAULT_SERVICES.TRANSFORMER_MEDIA,
 	openai: DEFAULT_SERVICES.OPENAI,
 	openrouter: DEFAULT_SERVICES.OPENROUTER,
+	custom: DEFAULT_SERVICES.CUSTOM,
 	lmstudio: DEFAULT_SERVICES.LMSTUDIO,
 	ollama: DEFAULT_SERVICES.OLLAMA,
 };

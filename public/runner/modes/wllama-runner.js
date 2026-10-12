@@ -25,6 +25,8 @@ const loadedModelsCache = new Map();
 const activeOperations = new Map();
 const pendingLoadMemoryHints = new Map();
 const pendingMmprojFiles = new Map();
+const pendingDecisionModels = new Set();
+const DECISION_LOAD_OPTIONS = { n_ctx: 2048, n_batch: 1024, n_ubatch: 1024 };
 const DEFAULT_WLLAMA_N_CTX = 65536;
 // llama.cpp reserves the whole KV cache up front, so an unreviewed GGUF from
 // Hugging Face fails to load outright when the requested window is larger than
@@ -54,7 +56,8 @@ async function detectWebGPU() {
 // what lets an unreviewed Hugging Face model be sized properly instead of
 // starting from a blind default and failing its way down.
 const architectureCache = new Map();
-const ARCH_STORAGE_PREFIX = "wllama:arch:";
+// Include the schema version so old probes without decision metadata are read again.
+const ARCH_STORAGE_PREFIX = "wllama:arch:v2:";
 const ARCH_NONE_SENTINEL = "__none__";
 
 function readArchitectureCache(url) {
@@ -168,6 +171,15 @@ function contextLadder(nCtx) {
 // Detect capabilities from the loaded model's own embedded metadata.
 // Works for any GGUF from HuggingFace — no hardcoded model lists.
 function detectModelCapabilities(wllama) {
+	const metadata = wllama.getModelMetadata?.()?.meta ?? {};
+	const supportsDecisions =
+		wllama._isDecisionModel === true ||
+		Object.entries(metadata).some(
+			([key, value]) =>
+				key.endsWith(".decision.type") &&
+				typeof value === "string" &&
+				value.length > 0,
+		);
 	const template = wllama.getChatTemplate();
 	// Native tool calling = the chat template does something with tools. That is
 	// the `tools` input variable, not the assistant-side `tool_calls` output:
@@ -176,13 +188,21 @@ function detectModelCapabilities(wllama) {
 	// Phi-4-mini) still yields native tool_calls. Requiring the output form
 	// silently downgraded 6 of the 28 catalogued models to prompt injection.
 	const supportsNativeTools =
-		template != null && /\btools\b|tool_call/.test(template);
+		!supportsDecisions &&
+		template != null &&
+		/\btools\b|tool_call/.test(template);
 	// Modalities = wllama v3 reports these from the model's own architecture
 	// metadata, so any multimodal GGUF is covered without a hardcoded list.
 	const supportsVision = supportsModality(wllama, "image");
 	const supportsAudio = supportsModality(wllama, "audio");
 	const usesGPU = wllama._usesGPU ?? false;
-	return { supportsNativeTools, supportsVision, supportsAudio, usesGPU };
+	return {
+		supportsNativeTools,
+		supportsVision,
+		supportsAudio,
+		usesGPU,
+		supportsDecisions,
+	};
 }
 
 /**
@@ -423,7 +443,7 @@ async function loadWllamaModel(modelId, notifyProgress) {
 	const loadArgs = mmprojFile
 		? { repo, file: filename, mmprojFile }
 		: { repo, file: filename };
-	const baseOpts = { progressCallback };
+	let baseOpts = { progressCallback };
 
 	// Read the model's own architecture before committing to a window. Both are
 	// best-effort and independent of the load itself.
@@ -431,6 +451,11 @@ async function loadWllamaModel(modelId, notifyProgress) {
 		probeModelArchitecture(url),
 		getDeviceCeilings(),
 	]);
+	const isDecision =
+		pendingDecisionModels.has(modelId) || !!architecture?.decisionType;
+	if (isDecision) baseOpts = { ...baseOpts, ...DECISION_LOAD_OPTIONS };
+	const decisionContext = (tokens) =>
+		isDecision ? Math.min(tokens, DECISION_LOAD_OPTIONS.n_ctx) : tokens;
 
 	try {
 		// wllama offloads to WebGPU whenever n_gpu_layers > 0 and the device has an
@@ -455,15 +480,17 @@ async function loadWllamaModel(modelId, notifyProgress) {
 			});
 			if (gpuPlan.fits) {
 				console.log(
-					`[wllama-runner] GPU context: ${gpuPlan.contextTokens} tokens (limited by ${gpuPlan.limitedBy})`,
+					`[wllama-runner] GPU context: ${decisionContext(gpuPlan.contextTokens)} tokens (limited by ${gpuPlan.limitedBy})`,
 				);
 				try {
-					return await loadWithContextLadder(
+					const wllama = await loadWithContextLadder(
 						loadArgs,
 						baseOpts,
-						gpuPlan.contextTokens,
+						decisionContext(gpuPlan.contextTokens),
 						999,
 					);
+					wllama._isDecisionModel = isDecision;
+					return wllama;
 				} catch (gpuErr) {
 					console.warn(
 						"[wllama-runner] WebGPU load failed, retrying on CPU:",
@@ -485,18 +512,21 @@ async function loadWllamaModel(modelId, notifyProgress) {
 			);
 		}
 		console.log(
-			`[wllama-runner] CPU context: ${cpuPlan.contextTokens} tokens (limited by ${cpuPlan.limitedBy})`,
+			`[wllama-runner] CPU context: ${decisionContext(cpuPlan.contextTokens)} tokens (limited by ${cpuPlan.limitedBy})`,
 		);
 
-		return await loadWithContextLadder(
+		const wllama = await loadWithContextLadder(
 			loadArgs,
 			baseOpts,
-			cpuPlan.contextTokens,
+			decisionContext(cpuPlan.contextTokens),
 			0,
 		);
+		wllama._isDecisionModel = isDecision;
+		return wllama;
 	} finally {
 		pendingLoadMemoryHints.delete(modelId);
 		pendingMmprojFiles.delete(modelId);
+		pendingDecisionModels.delete(modelId);
 	}
 }
 
@@ -620,10 +650,17 @@ window.addEventListener("message", async (event) => {
 							const isLoaded =
 								currentModelId &&
 								fullModelId.toLowerCase() === currentModelId.toLowerCase();
+							const supportsDecisions = isLoaded
+								? detectModelCapabilities(wllamaManager.model).supportsDecisions
+								: !!readArchitectureCache(originURL).value?.decisionType ||
+									loadedModelsCache
+										.get(fullModelId)
+										?.categories?.includes("decision");
 							return {
 								id: fullModelId,
 								name: fullModelId,
 								filename,
+								categories: supportsDecisions ? ["decision"] : ["chat"],
 								loaded: !!isLoaded,
 								downloaded: true,
 								object: "model",
@@ -648,16 +685,17 @@ window.addEventListener("message", async (event) => {
 			}
 
 			case "serve": {
-				const { model, _memoryHint, _mmprojFile } = payload || {};
+				const { model, _memoryHint, _mmprojFile, _decision } = payload || {};
 				if (!model) throw new Error("Model name is required");
 
 				parseModelName(model);
 				if (_memoryHint) {
 					pendingLoadMemoryHints.set(model, _memoryHint);
 				}
-				if (_mmprojFile) {
+				if (typeof _mmprojFile === "string") {
 					pendingMmprojFiles.set(model, _mmprojFile);
 				}
+				if (_decision) pendingDecisionModels.add(model);
 
 				const notifyProgress = (info) => {
 					reply(src, origin, messageId, "progress", info);
@@ -677,6 +715,9 @@ window.addEventListener("message", async (event) => {
 						root: model,
 						parent: null,
 						loaded: true,
+						categories: capabilities.supportsDecisions
+							? ["decision"]
+							: ["chat"],
 						downloaded: true,
 						// ModelInfo carries these at the top level and that is what the
 						// warm-serve path reads back; nesting them only under
@@ -698,6 +739,48 @@ window.addEventListener("message", async (event) => {
 							code: null,
 						},
 					});
+				} finally {
+					pendingDecisionModels.delete(model);
+					pendingMmprojFiles.delete(model);
+					pendingLoadMemoryHints.delete(model);
+				}
+				break;
+			}
+
+			case "systemone": {
+				const { model, state, questions, _memoryHint } = payload || {};
+				if (!model) throw new Error("Model name is required");
+				parseModelName(model);
+				if (
+					state === undefined ||
+					!questions ||
+					typeof questions !== "object"
+				) {
+					throw new Error("State and questions are required");
+				}
+				const abortController = new AbortController();
+				activeOperations.set(messageId, { abortController });
+				pendingDecisionModels.add(model);
+				pendingMmprojFiles.set(model, "");
+				if (_memoryHint) pendingLoadMemoryHints.set(model, _memoryHint);
+				try {
+					await wllamaManager.withModel(model, (wllama) =>
+						withOptionalGPULock(wllama._usesGPU, async () => {
+							if (abortController.signal.aborted)
+								throw new Error("Operation aborted");
+							// createSystemOne currently has no cancellation parameter. Keep
+							// the model leased until it finishes and discard cancelled output.
+							const result = await wllama.createSystemOne({ state, questions });
+							if (abortController.signal.aborted)
+								throw new Error("Operation aborted");
+							reply(src, origin, messageId, "complete", { ...result, model });
+						}),
+					);
+				} finally {
+					activeOperations.delete(messageId);
+					pendingDecisionModels.delete(model);
+					pendingMmprojFiles.delete(model);
+					pendingLoadMemoryHints.delete(model);
 				}
 				break;
 			}
@@ -744,16 +827,24 @@ window.addEventListener("message", async (event) => {
 						// with the embedding and transformer runners without this lock
 						// invalidates the device instance mid-generation.
 						withOptionalGPULock(wllama._usesGPU, async () => {
+							if (detectModelCapabilities(wllama).supportsDecisions) {
+								throw new Error(
+									"This model answers typed decisions. Use the decision studio.",
+								);
+							}
 							const loadedCtx = wllama.getLoadedContextInfo?.();
 							const maxContextTokens =
 								typeof loadedCtx?.n_ctx === "number"
 									? loadedCtx.n_ctx
 									: undefined;
-							const memoryContextTokens = planContextFromMemoryHint(_memoryHint, {
-								budgetGB: wllama._usesGPU
-									? _memoryHint?.webgpuAvailableGB
-									: undefined,
-							})?.contextTokens;
+							const memoryContextTokens = planContextFromMemoryHint(
+								_memoryHint,
+								{
+									budgetGB: wllama._usesGPU
+										? _memoryHint?.webgpuAvailableGB
+										: undefined,
+								},
+							)?.contextTokens;
 							const maxTotalContext =
 								typeof maxContextTokens === "number" &&
 								typeof memoryContextTokens === "number"
@@ -781,7 +872,8 @@ window.addEventListener("message", async (event) => {
 							const completionOptions = {
 								messages: wllamaMessages,
 								max_tokens: effectiveMaxTokens,
-								temperature: typeof temperature === "number" ? temperature : 0.8,
+								temperature:
+									typeof temperature === "number" ? temperature : 0.8,
 								top_p: typeof top_p === "number" ? top_p : 0.9,
 								top_k: typeof top_k === "number" ? top_k : 40,
 								...(stop ? { stop: Array.isArray(stop) ? stop : [stop] } : {}),

@@ -13,7 +13,7 @@ function getAugmentedNamespace(n) {
 			var isInstance = false;
       try {
         isInstance = this instanceof a;
-      } catch {}
+      } catch (e) {}
 			if (isInstance) {
         return Reflect.construct(f, arguments, this.constructor);
 			}
@@ -396,7 +396,7 @@ function requireLoglevel () {
 		    defaultLogger['default'] = defaultLogger;
 
 		    return defaultLogger;
-		})); 
+		}));
 	} (loglevel$1));
 	return loglevel$1.exports;
 }
@@ -408,6 +408,18 @@ class ModelNotFoundError extends Error {
     constructor(modelId) {
         super(`Cannot find model record in appConfig for ${modelId}. Please check if the model ID is correct and included in the model_list configuration.`);
         this.name = "ModelNotFoundError";
+    }
+}
+class ArtifactManifestError extends Error {
+    constructor(message, options) {
+        super(message, options);
+        this.name = "ArtifactManifestError";
+    }
+}
+class AudioInputError extends Error {
+    constructor(message) {
+        super(message);
+        this.name = "AudioInputError";
     }
 }
 class ConfigValueError extends Error {
@@ -422,12 +434,12 @@ class MinValueError extends ConfigValueError {
         this.name = "MinValueError";
     }
 }
-class RangeError extends ConfigValueError {
+let RangeError$1 = class RangeError extends ConfigValueError {
     constructor(paramName, minValue, maxValue, additionalMessage) {
         super(`Make sure ${minValue} < ${paramName} <= ${maxValue}.${additionalMessage ? " " + additionalMessage : ""}`);
         this.name = "RangeError";
     }
-}
+};
 class NonNegativeError extends ConfigValueError {
     constructor(paramName) {
         super(`Make sure ${paramName} >= 0.`);
@@ -505,6 +517,12 @@ class UserMessageContentErrorForNonVLM extends Error {
             `Therefore, user message only supports string content, but received: ${content}\n` +
             `Loaded modelId: ${modelId}, modelType: ${modelType}`);
         this.name = "UserMessageContentErrorForNonVLM";
+    }
+}
+class UnsupportedContentPartError extends Error {
+    constructor(modelId, contentType) {
+        super(`Model ${modelId} does not declare support for user content type ${JSON.stringify(contentType)}.`);
+        this.name = "UnsupportedContentPartError";
     }
 }
 class PrefillChunkSizeSmallerThanImageError extends Error {
@@ -686,6 +704,15 @@ class InvalidResponseFormatStructuralTagError extends Error {
         this.name = "InvalidResponseFormatStructuralTagError";
     }
 }
+class GrammarMatcherInitError extends Error {
+    constructor(responseFormatType, cause) {
+        const causeMessage = cause instanceof Error ? cause.message : String(cause);
+        super(`Failed to initialize the grammar matcher for response format ` +
+            `\`${responseFormatType}\`: ${causeMessage}`);
+        this.name = "GrammarMatcherInitError";
+        this.cause = cause;
+    }
+}
 class CustomResponseFormatError extends Error {
     constructor(currentFormat) {
         super("When using Hermes-2-Pro function calling via ChatCompletionRequest.tools, " +
@@ -859,24 +886,25 @@ function postInitAndCheckGenerationConfigValues(config) {
         // if we use `if value` directly, `value` being 0 evaluates to false, violating semantics
         return value !== undefined && value !== null;
     }
-    if (config.frequency_penalty &&
-        (config.frequency_penalty < -2 || config.frequency_penalty > 2.0)) {
-        throw new RangeError("frequency_penalty", -2, 2.0);
+    if (_hasValue(config.frequency_penalty) &&
+        !(config.frequency_penalty >= -2 && config.frequency_penalty <= 2.0)) {
+        throw new RangeError$1("frequency_penalty", -2, 2.0);
     }
-    if (config.presence_penalty &&
-        (config.presence_penalty < -2 || config.presence_penalty > 2.0)) {
-        throw new RangeError("presence_penalty", -2, 2.0);
+    if (_hasValue(config.presence_penalty) &&
+        !(config.presence_penalty >= -2 && config.presence_penalty <= 2.0)) {
+        throw new RangeError$1("presence_penalty", -2, 2.0);
     }
-    if (_hasValue(config.repetition_penalty) && config.repetition_penalty <= 0) {
+    if (_hasValue(config.repetition_penalty) &&
+        !(config.repetition_penalty > 0)) {
         throw new MinValueError("repetition_penalty", 0);
     }
-    if (_hasValue(config.max_tokens) && config.max_tokens <= 0) {
+    if (_hasValue(config.max_tokens) && !(config.max_tokens > 0)) {
         throw new MinValueError("max_tokens", 0);
     }
-    if ((_hasValue(config.top_p) && config.top_p <= 0) || config.top_p > 1) {
-        throw new RangeError("top_p", 0, 1);
+    if (_hasValue(config.top_p) && !(config.top_p > 0 && config.top_p <= 1)) {
+        throw new RangeError$1("top_p", 0, 1);
     }
-    if (_hasValue(config.temperature) && config.temperature < 0) {
+    if (_hasValue(config.temperature) && !(config.temperature >= 0)) {
         throw new NonNegativeError("temperature");
     }
     // If only one of frequency or presence penatly is set, make the other one 0.0
@@ -894,8 +922,8 @@ function postInitAndCheckGenerationConfigValues(config) {
     if (_hasValue(config.logit_bias)) {
         for (const tokenID in config.logit_bias) {
             const bias = config.logit_bias[tokenID];
-            if (bias > 100 || bias < -100) {
-                throw new RangeError("logit_bias", -100, 100, "Got " + bias + " for tokenID " + tokenID);
+            if (!(bias >= -100 && bias <= 100)) {
+                throw new RangeError$1("logit_bias", -100, 100, "Got " + bias + " for tokenID " + tokenID);
             }
             if (isNaN(parseInt(tokenID))) {
                 throw new InvalidNumberStringError("logit_bias's keys", tokenID);
@@ -909,8 +937,8 @@ function postInitAndCheckGenerationConfigValues(config) {
             throw new DependencyError("top_logprobs", "logprobs", true);
         }
         // top_logprobs should be in range [0,5]
-        if (config.top_logprobs < 0 || config.top_logprobs > 5) {
-            throw new RangeError("top_logprobs", 0, 5, "Got " + config.top_logprobs);
+        if (!(config.top_logprobs >= 0 && config.top_logprobs <= 5)) {
+            throw new RangeError$1("top_logprobs", 0, 5, "Got " + config.top_logprobs);
         }
     }
     // If defined logprobs but not top_logprobs, simply make it 0
@@ -939,7 +967,7 @@ function getCacheBackend(appConfig) {
  * @note The model version does not have to match the npm version, since not each npm update
  * requires an update of the model libraries.
  */
-const modelVersion = "v0_2_84/base";
+const modelVersion = "v0_2_86/base";
 const modelLibURLPrefix = "https://raw.githubusercontent.com/mlc-ai/binary-mlc-llm-libs/main/web-llm-models/";
 /**
  * Models that support function calling (i.e. usage of `ChatCompletionRequest.tools`). More to come.
@@ -1325,9 +1353,9 @@ const prebuiltAppConfig = {
             model_id: "Phi-3.5-vision-instruct-q4f16_1-MLC",
             model_lib: modelLibURLPrefix +
                 modelVersion +
-                "/Phi-3.5-vision-instruct-q4f16_1_cs2k-webgpu.wasm",
-            vram_required_MB: 3952.18,
-            low_resource_required: true,
+                "/Phi-3.5-vision-instruct-q4f16_1_cs4k-webgpu.wasm",
+            vram_required_MB: 4521.54,
+            low_resource_required: false,
             overrides: {
                 context_window_size: 4096,
             },
@@ -1338,9 +1366,9 @@ const prebuiltAppConfig = {
             model_id: "Phi-3.5-vision-instruct-q4f32_1-MLC",
             model_lib: modelLibURLPrefix +
                 modelVersion +
-                "/Phi-3.5-vision-instruct-q4f32_1_cs2k-webgpu.wasm",
-            vram_required_MB: 5879.84,
-            low_resource_required: true,
+                "/Phi-3.5-vision-instruct-q4f32_1_cs4k-webgpu.wasm",
+            vram_required_MB: 7050.65,
+            low_resource_required: false,
             overrides: {
                 context_window_size: 4096,
             },
@@ -1552,6 +1580,36 @@ const prebuiltAppConfig = {
                 "/SmolLM2-135M-Instruct-q0f32_cs1k-webgpu.wasm",
             vram_required_MB: 719.38,
             low_resource_required: true,
+            overrides: {
+                context_window_size: 4096,
+            },
+        },
+        // Gemma-4
+        {
+            model: "https://huggingface.co/mlc-ai/gemma-4-E2B-it-q4f16_1-MLC",
+            model_id: "gemma-4-E2B-it-q4f16_1-MLC",
+            model_lib: modelLibURLPrefix +
+                modelVersion +
+                "/gemma-4-E2B-it-q4f16_1_cs512-webgpu.wasm",
+            model_manifest: "mlc-model-manifest.json",
+            buffer_size_required_bytes: 201326592,
+            vram_required_MB: 3387.37,
+            low_resource_required: false,
+            required_features: ["shader-f16"],
+            overrides: {
+                context_window_size: 4096,
+            },
+        },
+        {
+            model: "https://huggingface.co/mlc-ai/gemma-4-E2B-it-q4f32_1-MLC",
+            model_id: "gemma-4-E2B-it-q4f32_1-MLC",
+            model_lib: modelLibURLPrefix +
+                modelVersion +
+                "/gemma-4-E2B-it-q4f32_1_cs512-webgpu.wasm",
+            model_manifest: "mlc-model-manifest.json",
+            buffer_size_required_bytes: 201326592,
+            vram_required_MB: 3862.72,
+            low_resource_required: false,
             overrides: {
                 context_window_size: 4096,
             },
@@ -3009,6 +3067,18 @@ PERFORMANCE OF THIS SOFTWARE.
 /* global Reflect, Promise, SuppressedError, Symbol, Iterator */
 
 
+function __rest(s, e) {
+    var t = {};
+    for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p) && e.indexOf(p) < 0)
+        t[p] = s[p];
+    if (s != null && typeof Object.getOwnPropertySymbols === "function")
+        for (var i = 0, p = Object.getOwnPropertySymbols(s); i < p.length; i++) {
+            if (e.indexOf(p[i]) < 0 && Object.prototype.propertyIsEnumerable.call(s, p[i]))
+                t[p[i]] = s[p[i]];
+        }
+    return t;
+}
+
 function __awaiter(thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
@@ -3017,6 +3087,18 @@ function __awaiter(thisArg, _arguments, P, generator) {
         function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
+}
+
+function __values(o) {
+    var s = typeof Symbol === "function" && Symbol.iterator, m = s && o[s], i = 0;
+    if (m) return m.call(o);
+    if (o && typeof o.length === "number") return {
+        next: function () {
+            if (o && i >= o.length) o = void 0;
+            return { value: o && o[i++], done: !o };
+        }
+    };
+    throw new TypeError(s ? "Object is not iterable." : "Symbol.iterator is not defined.");
 }
 
 function __await(v) {
@@ -3034,6 +3116,20 @@ function __asyncGenerator(thisArg, _arguments, generator) {
     function fulfill(value) { resume("next", value); }
     function reject(value) { resume("throw", value); }
     function settle(f, v) { if (f(v), q.shift(), q.length) resume(q[0][0], q[0][1]); }
+}
+
+function __asyncDelegator(o) {
+    var i, p;
+    return i = {}, verb("next"), verb("throw", function (e) { throw e; }), verb("return"), i[Symbol.iterator] = function () { return this; }, i;
+    function verb(n, f) { i[n] = o[n] ? function (v) { return (p = !p) ? { value: __await(o[n](v)), done: false } : f ? f(v) : v; } : f; }
+}
+
+function __asyncValues(o) {
+    if (!Symbol.asyncIterator) throw new TypeError("Symbol.asyncIterator is not defined.");
+    var m = o[Symbol.asyncIterator], i;
+    return m ? m.call(o) : (o = typeof __values === "function" ? __values(o) : o[Symbol.iterator](), i = {}, verb("next"), verb("throw"), verb("return"), i[Symbol.asyncIterator] = function () { return this; }, i);
+    function verb(n) { i[n] = o[n] && function (v) { return new Promise(function (resolve, reject) { v = o[n](v), settle(resolve, reject, v.done, v.value); }); }; }
+    function settle(resolve, reject, d, v) { Promise.resolve(v).then(function(v) { resolve({ value: v, done: d }); }, reject); }
 }
 
 typeof SuppressedError === "function" ? SuppressedError : function (error, suppressed, message) {
@@ -3136,6 +3232,468 @@ function verifyIntegrity(data_1, expectedSRI_1, url_1) {
  */
 function isValidSRI(sri) {
     return parseSRI(sri) !== null;
+}
+
+const MODEL_PACKAGE_MANIFEST_FILENAME = "mlc-model-manifest.json";
+const TENSOR_CACHE_MANIFEST_FILENAME = "tensor-cache.json";
+const ARTIFACT_SCHEMA_VERSION = 1;
+function fail(path, message) {
+    throw new ArtifactManifestError(`${path}: ${message}`);
+}
+function record(value, path) {
+    if (value === null || typeof value !== "object" || Array.isArray(value)) {
+        fail(path, "expected an object");
+    }
+    return value;
+}
+function exactKeys(value, allowed, required, path) {
+    const allowedSet = new Set(allowed);
+    for (const key of Object.keys(value)) {
+        if (!allowedSet.has(key)) {
+            fail(path, `unknown field ${JSON.stringify(key)}`);
+        }
+    }
+    for (const key of required) {
+        if (!(key in value)) {
+            fail(path, `missing field ${JSON.stringify(key)}`);
+        }
+    }
+}
+function stringValue(value, path) {
+    if (typeof value !== "string" || value.length === 0) {
+        fail(path, "expected a non-empty string");
+    }
+    return value;
+}
+function literal(value, expected, path) {
+    if (value !== expected) {
+        fail(path, `expected ${JSON.stringify(expected)}`);
+    }
+    return expected;
+}
+function integer(value, path, minimum = Number.MIN_SAFE_INTEGER) {
+    if (!Number.isSafeInteger(value) || value < minimum) {
+        fail(path, `expected an integer greater than or equal to ${minimum}`);
+    }
+    return value;
+}
+function sha256(value, path) {
+    const result = stringValue(value, path);
+    if (!/^sha256:[0-9a-f]{64}$/.test(result)) {
+        fail(path, "expected a lowercase sha256:<64 hex digits> identifier");
+    }
+    return result;
+}
+function canonicalJson(value) {
+    if (Array.isArray(value)) {
+        return `[${value.map(canonicalJson).join(",")}]`;
+    }
+    if (value !== null && typeof value === "object") {
+        const object = value;
+        const entries = Object.keys(object)
+            .filter((key) => object[key] !== undefined)
+            .sort()
+            .map((key) => `${JSON.stringify(key)}:${canonicalJson(object[key])}`);
+        return `{${entries.join(",")}}`;
+    }
+    const result = JSON.stringify(value);
+    if (result === undefined) {
+        throw new ArtifactManifestError("Artifact identity contains a non-JSON value");
+    }
+    return result;
+}
+/** Hash the task description the same way MLC does. */
+function computeInterfaceId(tasks) {
+    return __awaiter(this, void 0, void 0, function* () {
+        const bytes = new TextEncoder().encode(canonicalJson({ tasks }));
+        // encode() returns a view over a plain ArrayBuffer, but its type says ArrayBufferLike.
+        const buffer = bytes.buffer;
+        const digest = new Uint8Array(yield globalThis.crypto.subtle.digest("SHA-256", buffer));
+        return `sha256:${Array.from(digest, (byte) => byte.toString(16).padStart(2, "0")).join("")}`;
+    });
+}
+function verifyInterfaceId(manifest) {
+    return __awaiter(this, void 0, void 0, function* () {
+        const actual = yield computeInterfaceId(manifest.tasks);
+        if (actual !== manifest.interface_id) {
+            throw new ArtifactManifestError(`${MODEL_PACKAGE_MANIFEST_FILENAME}: interface_id does not match its tasks`);
+        }
+    });
+}
+function integerArray(value, path) {
+    if (!Array.isArray(value)) {
+        fail(path, "expected an array");
+    }
+    return value.map((item, index) => integer(item, `${path}[${index}]`, 0));
+}
+function stringArray(value, path) {
+    if (!Array.isArray(value)) {
+        fail(path, "expected an array");
+    }
+    return value.map((item, index) => stringValue(item, `${path}[${index}]`));
+}
+function parsePromptInsertion(value, path) {
+    const obj = record(value, path);
+    exactKeys(obj, ["prefix_token_ids", "placeholder_token_id", "suffix_token_ids"], ["placeholder_token_id"], path);
+    return {
+        prefix_token_ids: obj.prefix_token_ids === undefined
+            ? []
+            : integerArray(obj.prefix_token_ids, `${path}.prefix_token_ids`),
+        placeholder_token_id: integer(obj.placeholder_token_id, `${path}.placeholder_token_id`, 0),
+        suffix_token_ids: obj.suffix_token_ids === undefined
+            ? []
+            : integerArray(obj.suffix_token_ids, `${path}.suffix_token_ids`),
+    };
+}
+function parseAudioDecodeProcessor(value, path) {
+    const obj = record(value, path);
+    exactKeys(obj, [
+        "kind",
+        "format",
+        "sample_rate_hz",
+        "channels",
+        "min_samples",
+        "max_samples",
+    ], ["kind", "format", "sample_rate_hz", "channels", "max_samples"], path);
+    const minSamples = obj.min_samples === undefined
+        ? 1
+        : integer(obj.min_samples, `${path}.min_samples`, 1);
+    const maxSamples = integer(obj.max_samples, `${path}.max_samples`, 1);
+    if (minSamples > maxSamples) {
+        fail(path, "min_samples must not exceed max_samples");
+    }
+    return {
+        kind: literal(obj.kind, "audio_decode", `${path}.kind`),
+        format: literal(obj.format, "pcm_f32", `${path}.format`),
+        sample_rate_hz: integer(obj.sample_rate_hz, `${path}.sample_rate_hz`, 1),
+        channels: integer(obj.channels, `${path}.channels`, 1) === 1
+            ? 1
+            : fail(path, "channels must be 1"),
+        min_samples: minSamples,
+        max_samples: maxSamples,
+    };
+}
+function parseImageResize(value, path) {
+    const obj = record(value, path);
+    exactKeys(obj, ["mode", "height", "width"], ["mode", "height", "width"], path);
+    if (obj.mode !== "stretch" && obj.mode !== "center_crop") {
+        fail(`${path}.mode`, 'expected "stretch" or "center_crop"');
+    }
+    return {
+        mode: obj.mode,
+        height: integer(obj.height, `${path}.height`, 1),
+        width: integer(obj.width, `${path}.width`, 1),
+    };
+}
+function parseImageDecodeProcessor(value, path) {
+    const obj = record(value, path);
+    exactKeys(obj, ["kind", "format", "layout", "resize", "num_embeddings"], ["kind", "format", "layout", "resize", "num_embeddings"], path);
+    return {
+        kind: literal(obj.kind, "image_decode", `${path}.kind`),
+        format: literal(obj.format, "rgb_u8", `${path}.format`),
+        layout: literal(obj.layout, "nhwc", `${path}.layout`),
+        resize: parseImageResize(obj.resize, `${path}.resize`),
+        num_embeddings: integer(obj.num_embeddings, `${path}.num_embeddings`, 1),
+    };
+}
+function parseProcessor(value, path) {
+    if (typeof value === "string") {
+        return stringValue(value, path);
+    }
+    const kind = record(value, path).kind;
+    if (kind === "image_decode") {
+        return parseImageDecodeProcessor(value, path);
+    }
+    if (kind === "audio_decode") {
+        return parseAudioDecodeProcessor(value, path);
+    }
+    fail(`${path}.kind`, 'expected "audio_decode" or "image_decode"');
+}
+function parseTaskInput(value, path) {
+    const obj = record(value, path);
+    exactKeys(obj, ["processor", "adapter", "prompt"], ["processor"], path);
+    const processor = parseProcessor(obj.processor, `${path}.processor`);
+    const adapter = obj.adapter === undefined
+        ? undefined
+        : stringValue(obj.adapter, `${path}.adapter`);
+    const prompt = obj.prompt === undefined
+        ? undefined
+        : parsePromptInsertion(obj.prompt, `${path}.prompt`);
+    if ((adapter === undefined) !== (prompt === undefined)) {
+        fail(path, "adapter and prompt must be declared together");
+    }
+    return { processor, adapter, prompt };
+}
+function parseTaskSpec(value, path) {
+    const obj = record(value, path);
+    exactKeys(obj, ["executor", "inputs", "output"], ["executor", "inputs", "output"], path);
+    const inputsObj = record(obj.inputs, `${path}.inputs`);
+    if (Object.keys(inputsObj).length === 0) {
+        fail(`${path}.inputs`, "expected at least one input");
+    }
+    const inputs = {};
+    for (const name of Object.keys(inputsObj).sort()) {
+        stringValue(name, `${path}.inputs key`);
+        inputs[name] = parseTaskInput(inputsObj[name], `${path}.inputs.${name}`);
+    }
+    return {
+        executor: stringValue(obj.executor, `${path}.executor`),
+        inputs,
+        output: stringValue(obj.output, `${path}.output`),
+    };
+}
+function parseTasks(value, path) {
+    const obj = record(value, path);
+    if (Object.keys(obj).length === 0) {
+        fail(path, "expected at least one task");
+    }
+    const tasks = {};
+    for (const name of Object.keys(obj).sort()) {
+        stringValue(name, `${path} key`);
+        tasks[name] = parseTaskSpec(obj[name], `${path}.${name}`);
+    }
+    return tasks;
+}
+function parseStringMap(value, path, allowEmpty) {
+    const obj = record(value, path);
+    if (!allowEmpty && Object.keys(obj).length === 0) {
+        fail(path, "expected at least one entrypoint");
+    }
+    const result = {};
+    for (const name of Object.keys(obj).sort()) {
+        stringValue(name, `${path} key`);
+        result[name] = stringValue(obj[name], `${path}.${name}`);
+    }
+    return result;
+}
+function parseProgramSpec(value, path) {
+    const obj = record(value, path);
+    exactKeys(obj, ["kind", "exports", "adapters", "adapter_dtypes"], ["kind", "exports"], path);
+    const adapters = obj.adapters === undefined
+        ? {}
+        : parseStringMap(obj.adapters, `${path}.adapters`, true);
+    const adapterDtypes = obj.adapter_dtypes === undefined
+        ? {}
+        : parseStringMap(obj.adapter_dtypes, `${path}.adapter_dtypes`, true);
+    for (const name of Object.keys(adapterDtypes)) {
+        if (adapters[name] === undefined) {
+            fail(`${path}.adapter_dtypes`, `${JSON.stringify(name)} is not an adapter`);
+        }
+    }
+    return {
+        kind: stringValue(obj.kind, `${path}.kind`),
+        exports: parseStringMap(obj.exports, `${path}.exports`, false),
+        adapters,
+        adapter_dtypes: adapterDtypes,
+    };
+}
+function parsePrograms(value, path) {
+    const obj = record(value, path);
+    if (Object.keys(obj).length === 0) {
+        fail(path, "expected at least one program");
+    }
+    const result = {};
+    for (const name of Object.keys(obj).sort()) {
+        stringValue(name, `${path} key`);
+        result[name] = parseProgramSpec(obj[name], `${path}.${name}`);
+    }
+    return result;
+}
+function parseModelPackageManifest(value) {
+    const path = MODEL_PACKAGE_MANIFEST_FILENAME;
+    const obj = record(value, path);
+    exactKeys(obj, [
+        "schema",
+        "schema_version",
+        "chat_config",
+        "interface_id",
+        "weights",
+        "tasks",
+    ], ["schema", "schema_version", "interface_id", "weights", "tasks"], path);
+    const weights = record(obj.weights, `${path}.weights`);
+    exactKeys(weights, ["manifest", "parameter_schema_id"], ["manifest", "parameter_schema_id"], `${path}.weights`);
+    const version = integer(obj.schema_version, `${path}.schema_version`, 1);
+    if (version !== ARTIFACT_SCHEMA_VERSION) {
+        fail(`${path}.schema_version`, `unsupported version ${version}`);
+    }
+    return {
+        schema: literal(obj.schema, "mlc.model-package", `${path}.schema`),
+        schema_version: 1,
+        chat_config: obj.chat_config === undefined
+            ? "mlc-chat-config.json"
+            : literal(obj.chat_config, "mlc-chat-config.json", `${path}.chat_config`),
+        interface_id: sha256(obj.interface_id, `${path}.interface_id`),
+        weights: {
+            manifest: literal(weights.manifest, TENSOR_CACHE_MANIFEST_FILENAME, `${path}.weights.manifest`),
+            parameter_schema_id: sha256(weights.parameter_schema_id, `${path}.weights.parameter_schema_id`),
+        },
+        tasks: parseTasks(obj.tasks, `${path}.tasks`),
+    };
+}
+/** URLs of the chat config and tensor cache, relative to the model URL. */
+function resolveModelPackageResourceURLs(modelUrl, modelPackage) {
+    var _a, _b;
+    const chatConfigUrl = new URL((_a = modelPackage === null || modelPackage === void 0 ? void 0 : modelPackage.chat_config) !== null && _a !== void 0 ? _a : "mlc-chat-config.json", modelUrl).href;
+    const tensorCacheManifestUrl = new URL((_b = modelPackage === null || modelPackage === void 0 ? void 0 : modelPackage.weights.manifest) !== null && _b !== void 0 ? _b : TENSOR_CACHE_MANIFEST_FILENAME, modelUrl).href;
+    return {
+        chatConfigUrl,
+        tensorCacheBaseUrl: new URL(".", tensorCacheManifestUrl).href,
+        tensorCacheManifestUrl,
+    };
+}
+function parseCompiledProgramArtifact(value) {
+    const path = "_metadata.artifact";
+    const obj = record(value, path);
+    exactKeys(obj, [
+        "schema",
+        "schema_version",
+        "interface_id",
+        "parameter_schema_id",
+        "programs",
+        "resources",
+    ], [
+        "schema",
+        "schema_version",
+        "interface_id",
+        "parameter_schema_id",
+        "programs",
+        "resources",
+    ], path);
+    const version = integer(obj.schema_version, `${path}.schema_version`, 1);
+    if (version !== ARTIFACT_SCHEMA_VERSION) {
+        fail(`${path}.schema_version`, `unsupported version ${version}`);
+    }
+    const resources = record(obj.resources, `${path}.resources`);
+    exactKeys(resources, [
+        "required_features",
+        "max_storage_buffer_binding_size",
+        "estimated_device_memory_bytes",
+    ], [
+        "required_features",
+        "max_storage_buffer_binding_size",
+        "estimated_device_memory_bytes",
+    ], `${path}.resources`);
+    return {
+        schema: literal(obj.schema, "mlc.compiled-program", `${path}.schema`),
+        schema_version: 1,
+        interface_id: sha256(obj.interface_id, `${path}.interface_id`),
+        parameter_schema_id: sha256(obj.parameter_schema_id, `${path}.parameter_schema_id`),
+        programs: parsePrograms(obj.programs, `${path}.programs`),
+        resources: {
+            required_features: stringArray(resources.required_features, `${path}.resources.required_features`),
+            max_storage_buffer_binding_size: integer(resources.max_storage_buffer_binding_size, `${path}.resources.max_storage_buffer_binding_size`, 0),
+            estimated_device_memory_bytes: integer(resources.estimated_device_memory_bytes, `${path}.resources.estimated_device_memory_bytes`, 0),
+        },
+    };
+}
+/** Pick the pair WebLLM calls. The token pair is preferred when both are declared. */
+function resolveGenerationExports(exports) {
+    const declared = [];
+    for (const inputs of ["tokens", "embeds"]) {
+        const prefill = exports[`prefill_${inputs}`];
+        const decode = exports[`decode_${inputs}`];
+        if (prefill !== undefined && decode !== undefined) {
+            declared.push({ inputs, prefill, decode });
+        }
+        else if (prefill !== undefined || decode !== undefined) {
+            fail("artifact contract", `executor declares only one of prefill_${inputs} and decode_${inputs}`);
+        }
+    }
+    if (declared.length === 0) {
+        fail("artifact contract", "executor must declare a complete pair of prefill and decode roles: " +
+            "prefill_tokens with decode_tokens, or prefill_embeds with decode_embeds");
+    }
+    return declared[0];
+}
+function resolveChatCompletionArtifact(modelPackage, compiled) {
+    if (modelPackage.interface_id !== compiled.interface_id) {
+        fail("artifact contract", "model-package and compiled-program interface IDs differ");
+    }
+    if (modelPackage.weights.parameter_schema_id !== compiled.parameter_schema_id) {
+        fail("artifact contract", "weight and compiled-program parameter schema IDs differ");
+    }
+    const task = modelPackage.tasks["chat.completions"];
+    if (task === undefined) {
+        fail("artifact contract", "task chat.completions is not declared");
+    }
+    if (task.output !== "text") {
+        fail("artifact contract", "WebLLM chat.completions requires text output");
+    }
+    const program = compiled.programs[task.executor];
+    if (program === undefined) {
+        fail("artifact contract", `task executor ${JSON.stringify(task.executor)} is missing`);
+    }
+    if (program.kind !== "token_generation") {
+        fail("artifact contract", `unsupported executor kind ${JSON.stringify(program.kind)}`);
+    }
+    for (const role of ["embed_tokens", "create_kv_cache"]) {
+        if (program.exports[role] === undefined) {
+            fail("artifact contract", `executor is missing export role ${JSON.stringify(role)}`);
+        }
+    }
+    const generation = resolveGenerationExports(program.exports);
+    const textInput = task.inputs.text;
+    if (textInput === undefined || textInput.processor !== "tokenizer") {
+        fail("artifact contract", "chat.completions requires a text tokenizer input");
+    }
+    if (textInput.adapter !== undefined || textInput.prompt !== undefined) {
+        fail("artifact contract", "the tokenizer input cannot declare an adapter or prompt insertion");
+    }
+    let audioInput;
+    let imageInput;
+    for (const [name, input] of Object.entries(task.inputs)) {
+        if (typeof input.processor === "string") {
+            continue;
+        }
+        const kind = input.processor.kind === "audio_decode" ? "audio" : "image";
+        if ((kind === "audio" ? audioInput : imageInput) !== undefined) {
+            fail("artifact contract", `WebLLM supports one ${kind} input per task`);
+        }
+        if (input.adapter === undefined || input.prompt === undefined) {
+            fail("artifact contract", `${kind} input ${JSON.stringify(name)} has no adapter prompt`);
+        }
+        if (program.adapters[input.adapter] === undefined) {
+            fail("artifact contract", `${kind} input ${JSON.stringify(name)} references a missing adapter`);
+        }
+        const bound = Object.assign(Object.assign({}, input), { adapter: input.adapter, prompt: input.prompt });
+        const dtype = program.adapter_dtypes[input.adapter];
+        if (input.processor.kind === "audio_decode") {
+            if (dtype !== undefined && dtype !== "float32") {
+                fail("artifact contract", `audio adapter ${JSON.stringify(input.adapter)} must take float32, not ${dtype}`);
+            }
+            audioInput = Object.assign(Object.assign({}, bound), { processor: input.processor });
+        }
+        else {
+            if (dtype !== undefined && dtype !== "uint8" && dtype !== "uint32") {
+                fail("artifact contract", `image adapter ${JSON.stringify(input.adapter)} must take uint8 or uint32, not ${dtype}`);
+            }
+            imageInput = Object.assign(Object.assign({}, bound), { processor: input.processor, dtype: dtype !== null && dtype !== void 0 ? dtype : "uint8" });
+        }
+    }
+    return {
+        task,
+        program,
+        generation,
+        textInput,
+        audioInput,
+        imageInput,
+        compiled,
+    };
+}
+/** Parse a downloaded manifest and check its interface_id against its tasks. */
+function loadModelPackageManifest(data) {
+    return __awaiter(this, void 0, void 0, function* () {
+        let value;
+        try {
+            value = JSON.parse(new TextDecoder().decode(data));
+        }
+        catch (error) {
+            throw new ArtifactManifestError(`${MODEL_PACKAGE_MANIFEST_FILENAME}: invalid JSON`, { cause: error });
+        }
+        const manifest = parseModelPackageManifest(value);
+        yield verifyInterfaceId(manifest);
+        return manifest;
+    });
 }
 
 var lib$5 = {exports: {}};
@@ -3262,20 +3820,12 @@ function requireLib$2 () {
 		    function wasmPath() {
 		        return __dirname + "/wasm";
 		    }
-		    /**
-		     * Linear congruential generator for random number generating that can be seeded.
-		     *
-		     * Follows the implementation of `include/tvm/support/random_engine.h`, which follows the
-		     * sepcification in https://en.cppreference.com/w/cpp/numeric/random/linear_congruential_engine.
-		     *
-		     * Note `Number.MAX_SAFE_INTEGER = 2^53 - 1`, and our intermediates are strictly less than 2^48.
-		     */
 		    class LinearCongruentialGenerator {
 		        /**
 		         * Set modulus, multiplier, and increment. Initialize `rand_state` according to `Date.now()`.
 		         */
 		        constructor() {
-		            this.modulus = 2147483647; // 2^32 - 1
+		            this.modulus = 2147483647; // 2^31 - 1
 		            this.multiplier = 48271; // between 2^15 and 2^16
 		            this.increment = 0;
 		            this.setSeed(Date.now());
@@ -3295,6 +3845,24 @@ function requireLib$2 () {
 		                this.rand_state = 1;
 		            }
 		            this.checkRandState();
+		        }
+		        /**
+		         * Get the current generator state for deterministic restoration.
+		         */
+		        getState() {
+		            return this.rand_state;
+		        }
+		        /**
+		         * Restore a state returned by `getState()`.
+		         */
+		        setState(state) {
+		            if (!Number.isInteger(state)) {
+		                throw new Error("RNG state should be an integer.");
+		            }
+		            if (state <= 0 || state >= this.modulus) {
+		                throw new Error(`RNG state should be an integer in (0, ${this.modulus}).`);
+		            }
+		            this.rand_state = state;
 		        }
 		        /**
 		         * Generate the next integer in the range (0, this.modulus) non-inclusive, updating `rand_state`.
@@ -3327,6 +3895,22 @@ function requireLib$2 () {
 		        }
 		    }
 
+		    const CALL_STACK_CACHE_LIMIT_BYTES = 64 * 1024;
+		    // TVMWasmAllocSpace takes a signed int and rounds `(size + 7) / 8` in C++.
+		    // Keep the input at the largest aligned value that cannot overflow that sum.
+		    const MAX_WASM_ALLOCATION_BYTES = 0x7ffffff8;
+		    class WasmAllocation {
+		        constructor(ptr, freeSpace) {
+		            this.ptr = ptr;
+		            this.freeSpace = freeSpace;
+		        }
+		        dispose() {
+		            if (this.ptr !== 0) {
+		                this.freeSpace(this.ptr);
+		                this.ptr = 0;
+		            }
+		        }
+		    }
 		    /**
 		     * Wasm Memory wrapper to perform JS side raw memory access.
 		     */
@@ -3373,6 +3957,18 @@ function requireLib$2 () {
 		            const base = ptr >> 2;
 		            // assumes little endian, for now truncate high.
 		            return this.viewI32[base];
+		        }
+		        loadU64(ptr) {
+		            if (this.buffer != this.memory.buffer) {
+		                this.updateViews();
+		            }
+		            // WebAssembly is little-endian. Reject values JavaScript cannot represent exactly.
+		            const base = ptr >> 2;
+		            const value = this.viewU32[base] + this.viewU32[base + 1] * 0x100000000;
+		            if (!Number.isSafeInteger(value)) {
+		                throw new Error("Cannot represent uint64 value as a JavaScript number");
+		            }
+		            return value;
 		        }
 		        loadF32(ptr) {
 		            if (this.buffer != this.memory.buffer) {
@@ -3421,8 +4017,34 @@ function requireLib$2 () {
 		                this.updateViews();
 		            }
 		            const result = new Uint8Array(numBytes);
-		            result.set(this.viewU8.slice(ptr, ptr + numBytes));
+		            result.set(this.viewU8.subarray(ptr, ptr + numBytes));
 		            return result;
+		        }
+		        /**
+		         * Return a borrowed view of raw bytes in Wasm memory.
+		         *
+		         * The returned view aliases the current WebAssembly.Memory buffer and must
+		         * not be retained across a call that can grow the memory.
+		         *
+		         * @param ptr The head address.
+		         * @param numBytes The number of bytes.
+		         */
+		        viewRawBytes(ptr, numBytes) {
+		            if (this.buffer != this.memory.buffer) {
+		                this.updateViews();
+		            }
+		            if (!Number.isSafeInteger(ptr) || ptr < 0) {
+		                throw new Error(`Invalid Wasm memory pointer: ${ptr}`);
+		            }
+		            if (!Number.isSafeInteger(numBytes) || numBytes < 0) {
+		                throw new Error(`Invalid Wasm memory byte length: ${numBytes}`);
+		            }
+		            const end = ptr + numBytes;
+		            if (!Number.isSafeInteger(end) || end > this.viewU8.byteLength) {
+		                throw new Error(`Wasm memory range [${ptr}, ${end}) exceeds memory size ` +
+		                    `${this.viewU8.byteLength}`);
+		            }
+		            return this.viewU8.subarray(ptr, end);
 		        }
 		        /**
 		         * Load null-terminated C-string from ptr.
@@ -3504,7 +4126,7 @@ function requireLib$2 () {
 		            const length = this.loadU32(sizePtr);
 		            const dataPtr = ffiAnyPtr + 4 /* SizeOf.I32 */ + 4 /* SizeOf.I32 */;
 		            const result = new Uint8Array(length);
-		            result.set(this.viewU8.slice(dataPtr, dataPtr + length));
+		            result.set(this.viewU8.subarray(dataPtr, dataPtr + length));
 		            return result;
 		        }
 		        /**
@@ -3535,7 +4157,7 @@ function requireLib$2 () {
 		            const ptr = this.loadPointer(byteArrayPtr);
 		            const length = this.loadUSize(byteArrayPtr + this.sizeofPtr());
 		            const result = new Uint8Array(length);
-		            result.set(this.viewU8.slice(ptr, ptr + length));
+		            result.set(this.viewU8.subarray(ptr, ptr + length));
 		            return result;
 		        }
 		        // private functions
@@ -3575,6 +4197,9 @@ function requireLib$2 () {
 		            this.cFreeSpace = freeSpace;
 		            this.buffer = new ArrayBuffer(initCallStackSize);
 		            this.basePtr = this.cAllocSpace(initCallStackSize);
+		            if (this.basePtr === 0) {
+		                throw new Error(`Cannot allocate ${initCallStackSize} bytes in Wasm memory`);
+		            }
 		            this.viewU8 = new Uint8Array(this.buffer);
 		            this.viewI32 = new Int32Array(this.buffer);
 		            this.viewU32 = new Uint32Array(this.buffer);
@@ -3582,6 +4207,7 @@ function requireLib$2 () {
 		            this.updateViews();
 		        }
 		        dispose() {
+		            this.reset();
 		            if (this.basePtr != 0) {
 		                this.cFreeSpace(this.basePtr);
 		                this.basePtr = 0;
@@ -3592,7 +4218,7 @@ function requireLib$2 () {
 		         */
 		        reset() {
 		            this.stackTop = 0;
-		            assert(this.addressToSetTargetValue.length === 0);
+		            this.addressToSetTargetValue.length = 0;
 		            while (this.tempArgs.length != 0) {
 		                this.tempArgs.pop().dispose();
 		            }
@@ -3610,7 +4236,7 @@ function requireLib$2 () {
 		                const [targetOffset, valueOffset] = this.addressToSetTargetValue.pop();
 		                this.storePtr(targetOffset, this.ptrFromOffset(valueOffset));
 		            }
-		            this.memory.storeRawBytes(this.basePtr, this.viewU8.slice(0, nbytes));
+		            this.memory.storeRawBytes(this.basePtr, this.viewU8.subarray(0, nbytes));
 		        }
 		        /**
 		         * Allocate space by number of bytes
@@ -3619,20 +4245,34 @@ function requireLib$2 () {
 		         */
 		        allocRawBytes(nbytes) {
 		            // always aligns to 64bit
-		            nbytes = ((nbytes + 7) >> 3) << 3;
-		            if (this.stackTop + nbytes > this.buffer.byteLength) {
-		                const newSize = Math.max(this.buffer.byteLength * 2, this.stackTop + nbytes);
-		                const oldU8 = this.viewU8;
-		                this.buffer = new ArrayBuffer(newSize);
-		                this.updateViews();
-		                this.viewU8.set(oldU8);
-		                if (this.basePtr != 0) {
-		                    this.cFreeSpace(this.basePtr);
+		            nbytes = this.alignToEight(nbytes);
+		            const requiredSize = this.checkedAdd(this.stackTop, nbytes);
+		            if (requiredSize > this.buffer.byteLength) {
+		                const doubledSize = Math.min(this.buffer.byteLength * 2, MAX_WASM_ALLOCATION_BYTES);
+		                let newSize = Math.max(doubledSize, requiredSize);
+		                if (this.buffer.byteLength < CALL_STACK_CACHE_LIMIT_BYTES &&
+		                    requiredSize <= CALL_STACK_CACHE_LIMIT_BYTES) {
+		                    newSize = Math.min(newSize, CALL_STACK_CACHE_LIMIT_BYTES);
 		                }
-		                this.basePtr = this.cAllocSpace(newSize);
+		                else if (this.buffer.byteLength <= CALL_STACK_CACHE_LIMIT_BYTES &&
+		                    requiredSize > CALL_STACK_CACHE_LIMIT_BYTES) {
+		                    // Headers and non-byte arguments may cross the soft cache cap. Grow
+		                    // only to the requested size instead of doubling past the cap.
+		                    newSize = requiredSize;
+		                }
+		                const newBuffer = new ArrayBuffer(newSize);
+		                new Uint8Array(newBuffer).set(this.viewU8);
+		                const newBasePtr = this.cAllocSpace(newSize);
+		                if (newBasePtr === 0) {
+		                    throw new Error(`Cannot allocate ${newSize} bytes in Wasm memory`);
+		                }
+		                this.cFreeSpace(this.basePtr);
+		                this.basePtr = newBasePtr;
+		                this.buffer = newBuffer;
+		                this.updateViews();
 		            }
 		            const retOffset = this.stackTop;
-		            this.stackTop += nbytes;
+		            this.stackTop = requiredSize;
 		            return retOffset;
 		        }
 		        /**
@@ -3726,14 +4366,79 @@ function requireLib$2 () {
 		         * @param offset The offset to set ot data pointer.
 		         * @param data The string content.
 		         */
-		        allocThenSetArgBytes(offset, data) {
+		        allocThenSetArgBytes(offset, data, wasmSource) {
+		            var _a;
+		            if (wasmSource === undefined && data.buffer === this.memory.memory.buffer) {
+		                wasmSource = {
+		                    buffer: data.buffer,
+		                    byteOffset: data.byteOffset,
+		                    byteLength: data.byteLength,
+		                };
+		            }
 		            // Note: size of size_t equals sizeof ptr.
+		            const dataLength = (_a = wasmSource === null || wasmSource === void 0 ? void 0 : wasmSource.byteLength) !== null && _a !== void 0 ? _a : data.length;
+		            const headerSize = this.alignToEight(this.memory.sizeofPtr() * 2);
+		            const inlineDataSize = this.alignToEight(dataLength);
+		            const cacheSizeWithHeader = this.checkedAdd(this.stackTop, headerSize);
+		            const keepDataInline = cacheSizeWithHeader <= CALL_STACK_CACHE_LIMIT_BYTES &&
+		                inlineDataSize <= CALL_STACK_CACHE_LIMIT_BYTES - cacheSizeWithHeader;
 		            const headerOffset = this.allocRawBytes(this.memory.sizeofPtr() * 2);
-		            const dataOffset = this.allocRawBytes(data.length);
-		            this.storeRawBytes(dataOffset, data);
-		            this.storeUSize(headerOffset + this.memory.sizeofPtr(), data.length);
+		            this.storeUSize(headerOffset + this.memory.sizeofPtr(), dataLength);
 		            this.addressToSetTargetValue.push([offset, headerOffset]);
-		            this.addressToSetTargetValue.push([headerOffset, dataOffset]);
+		            if (keepDataInline) {
+		                const dataOffset = this.allocRawBytes(dataLength);
+		                this.storeRawBytes(dataOffset, this.resolveByteSource(data, wasmSource));
+		                this.addressToSetTargetValue.push([headerOffset, dataOffset]);
+		            }
+		            else {
+		                const dataPtr = dataLength === 0 ? 0 : this.allocTransientBytes(data, wasmSource);
+		                this.storePtr(headerOffset, dataPtr);
+		            }
+		        }
+		        /** Allocate bytes directly in Wasm memory for the duration of one FFI call. */
+		        allocTransientBytes(data, wasmSource) {
+		            var _a;
+		            const dataLength = (_a = wasmSource === null || wasmSource === void 0 ? void 0 : wasmSource.byteLength) !== null && _a !== void 0 ? _a : data.length;
+		            this.checkAllocationSize(dataLength);
+		            const dataPtr = this.cAllocSpace(dataLength);
+		            if (dataPtr === 0) {
+		                throw new Error(`Cannot allocate ${dataLength} bytes in Wasm memory`);
+		            }
+		            const allocation = new WasmAllocation(dataPtr, this.cFreeSpace);
+		            this.tempArgs.push(allocation);
+		            try {
+		                this.memory.storeRawBytes(dataPtr, this.resolveByteSource(data, wasmSource));
+		            }
+		            catch (err) {
+		                this.tempArgs.pop();
+		                allocation.dispose();
+		                throw err;
+		            }
+		            return dataPtr;
+		        }
+		        resolveByteSource(data, wasmSource) {
+		            if (wasmSource !== undefined && wasmSource.buffer !== this.memory.memory.buffer) {
+		                return new Uint8Array(this.memory.memory.buffer, wasmSource.byteOffset, wasmSource.byteLength);
+		            }
+		            return data;
+		        }
+		        alignToEight(nbytes) {
+		            this.checkAllocationSize(nbytes);
+		            const remainder = nbytes % 8;
+		            const aligned = remainder === 0 ? nbytes : nbytes + 8 - remainder;
+		            this.checkAllocationSize(aligned);
+		            return aligned;
+		        }
+		        checkedAdd(lhs, rhs) {
+		            const result = lhs + rhs;
+		            this.checkAllocationSize(result);
+		            return result;
+		        }
+		        checkAllocationSize(nbytes) {
+		            if (!Number.isSafeInteger(nbytes) || nbytes < 0 || nbytes > MAX_WASM_ALLOCATION_BYTES) {
+		                throw new RangeError(`Wasm allocation size must be an integer between 0 and ${MAX_WASM_ALLOCATION_BYTES}, ` +
+		                    `but received ${nbytes}`);
+		            }
 		        }
 		        /**
 		         * Update internal cache views.
@@ -3950,7 +4655,7 @@ function requireLib$2 () {
 		         * @param func The input function
 		         * @returns The wrapped async function
 		         */
-		        wrapExport(func) {
+		        wrapExport(func, onSuspend) {
 		            return (...args) => __awaiter(this, void 0, void 0, function* () {
 		                assert(this.getState() == 0 /* AsyncifyStateKind.None */);
 		                // call the original function
@@ -3961,6 +4666,11 @@ function requireLib$2 () {
 		                // the if (isPromise(value)) condition in wrapImport
 		                while (this.getState() == 1 /* AsyncifyStateKind.Unwinding */) {
 		                    this.stopUnwind();
+		                    // The stack is unwound and no other JavaScript has run yet, so the
+		                    // caller can still take references before the await below.
+		                    if (onSuspend !== undefined) {
+		                        onSuspend();
+		                    }
 		                    // try to resolve the promise that the internal requested
 		                    // we then store it into the temp value in storedValueBeforeRewind
 		                    // which then get passed onto the function(see wrapImport)
@@ -4030,6 +4740,21 @@ function requireLib$2 () {
 		        }
 		    }
 
+		    function roundUpToFourBytes(nbytes) {
+		        if (!Number.isSafeInteger(nbytes) || nbytes < 0) {
+		            throw new Error(`Invalid WebGPU buffer size: ${nbytes}`);
+		        }
+		        const aligned = Math.ceil(nbytes / 4) * 4;
+		        if (!Number.isSafeInteger(aligned)) {
+		            throw new Error(`WebGPU buffer size is too large to align: ${nbytes}`);
+		        }
+		        return aligned;
+		    }
+		    function validateWebGPUCopyOffset(offset, name) {
+		        if (!Number.isSafeInteger(offset) || offset < 0 || offset % 4 != 0) {
+		            throw new Error(`${name} must be a nonnegative multiple of four: ${offset}`);
+		        }
+		    }
 		    /**
 		     * DetectGPU device in the environment.
 		     */
@@ -4148,18 +4873,20 @@ function requireLib$2 () {
 		        device.pushErrorScope("validation");
 		        device.pushErrorScope("internal");
 		        const buffer = device.createBuffer(descriptor);
-		        device.popErrorScope().then((error) => { if (error) {
-		            device.destroy();
-		            console.error(error);
-		        } });
-		        device.popErrorScope().then((error) => { if (error) {
-		            device.destroy();
-		            console.error(error);
-		        } });
-		        device.popErrorScope().then((error) => { if (error) {
-		            device.destroy();
-		            console.error(error);
-		        } });
+		        // Destroy at most once even if multiple error types fire.
+		        Promise.all([
+		            device.popErrorScope(),
+		            device.popErrorScope(),
+		            device.popErrorScope(),
+		        ]).then((errors) => {
+		            const captured = errors.filter((error) => error !== null);
+		            if (captured.length > 0) {
+		                device.destroy();
+		                captured.forEach((error) => console.error(error));
+		            }
+		        }).catch((err) => {
+		            console.error("Failed to pop error scopes:", err);
+		        });
 		        return buffer;
 		    }
 		    const canvasRenderWGSL = `
@@ -4365,14 +5092,12 @@ fn fragment_clear(@location(0) uv : vec2<f32>) -> @location(0) vec4<f32> {
 		            // Pool of MAP_READ staging buffers to avoid per-copy create/destroy overhead
 		            this.readStagingBufferPool = [];
 		            this.maxReadStagingBuffers = 4;
-		            // Pending mapAsync promise from the last GPU→CPU copy.
-		            // Used in sync() as a fast path: if the last queue operation was a
-		            // GPU→CPU copy, awaiting its mapAsync is sufficient (no need for
-		            // the heavier onSubmittedWorkDone). Reset to null after any non-copy
-		            // queue submission so we fall back to onSubmittedWorkDone.
+		            // Pending GPU→CPU copies, including storing the mapped data in WASM memory.
 		            this.pendingGPUToCPUCopy = null;
-		            // Batched command encoding: accumulate compute passes in a single encoder,
-		            // submit only on flush to reduce JS-native transition overhead.
+		            // Whether a pending GPU→CPU copy is still the last queue operation.
+		            this.pendingGPUToCPUCopyIsQueueTail = false;
+		            // Batched command encoding: accumulate compute passes and GPU copies in a
+		            // single encoder, and submit only on flush to reduce JS-native transition overhead.
 		            this.pendingEncoder = null;
 		            // Pool of uniform buffers reused across flushes. Each dispatch in a batch
 		            // gets its own buffer (indexed by pendingDispatchCount). The pool grows
@@ -4398,14 +5123,14 @@ fn fragment_clear(@location(0) uv : vec2<f32>) -> @location(0) vec4<f32> {
 		            this.device = device;
 		        }
 		        /**
-		         * Flush all pending compute passes by finishing and submitting the
+		         * Flush all pending GPU commands by finishing and submitting the
 		         * accumulated command encoder.
 		         *
 		         * Must be called before:
 		         * - GPU→CPU readback (deviceCopyFromGPU)
 		         * - CPU→GPU writes (deviceCopyToGPU, copyRawBytesToBuffer)
-		         * - GPU↔GPU copies (deviceCopyWithinGPU)
 		         * - Buffer deallocation (deviceFreeDataSpace)
+		         * - Canvas drawing (drawImageFromBuffer)
 		         * - Queue sync (sync)
 		         */
 		        flushCommands() {
@@ -4413,9 +5138,7 @@ fn fragment_clear(@location(0) uv : vec2<f32>) -> @location(0) vec4<f32> {
 		                this.device.queue.submit([this.pendingEncoder.finish()]);
 		                this.pendingEncoder = null;
 		                this.pendingDispatchCount = 0;
-		                // A compute submission is now the last queue operation, so the
-		                // GPU→CPU copy fast path in sync() is no longer valid.
-		                this.pendingGPUToCPUCopy = null;
+		                this.pendingGPUToCPUCopyIsQueueTail = false;
 		            }
 		        }
 		        /**
@@ -4444,15 +5167,22 @@ fn fragment_clear(@location(0) uv : vec2<f32>) -> @location(0) vec4<f32> {
 		         */
 		        sync() {
 		            return __awaiter(this, void 0, void 0, function* () {
-		                // Flush any batched compute passes before waiting on the queue.
 		                this.flushCommands();
-		                if (this.pendingGPUToCPUCopy) {
-		                    const p = this.pendingGPUToCPUCopy;
-		                    this.pendingGPUToCPUCopy = null;
-		                    yield p;
+		                const pendingRead = this.pendingGPUToCPUCopy;
+		                const pendingReadIsQueueTail = this.pendingGPUToCPUCopyIsQueueTail;
+		                this.pendingGPUToCPUCopy = null;
+		                this.pendingGPUToCPUCopyIsQueueTail = false;
+		                if (pendingRead && pendingReadIsQueueTail) {
+		                    yield pendingRead;
 		                }
 		                else {
-		                    yield this.device.queue.onSubmittedWorkDone();
+		                    const queueDone = this.device.queue.onSubmittedWorkDone();
+		                    if (pendingRead) {
+		                        yield Promise.all([pendingRead, queueDone]);
+		                    }
+		                    else {
+		                        yield queueDone;
+		                    }
 		                }
 		            });
 		        }
@@ -4475,7 +5205,9 @@ fn fragment_clear(@location(0) uv : vec2<f32>) -> @location(0) vec4<f32> {
 		            if (this.canvasRenderManager == undefined) {
 		                throw Error("Do not have a canvas context, call bindCanvas first");
 		            }
+		            this.flushCommands();
 		            this.canvasRenderManager.draw(this.gpuBufferFromPtr(ptr), height, width);
+		            this.pendingGPUToCPUCopyIsQueueTail = false;
 		        }
 		        /**
 		         * Copy raw bytes into buffer ptr.
@@ -4489,13 +5221,16 @@ fn fragment_clear(@location(0) uv : vec2<f32>) -> @location(0) vec4<f32> {
 		            // Flush batched compute passes before writing, to preserve execution order.
 		            this.flushCommands();
 		            this.device.queue.writeBuffer(this.gpuBufferFromPtr(toPtr), toOffset, rawBytes, 0, nbytes);
+		            this.pendingGPUToCPUCopyIsQueueTail = false;
 		        }
 		        /**
 		         * Clear canvas
 		         */
 		        clearCanvas() {
-		            var _a;
-		            (_a = this.canvasRenderManager) === null || _a === void 0 ? void 0 : _a.clear();
+		            if (this.canvasRenderManager) {
+		                this.canvasRenderManager.clear();
+		                this.pendingGPUToCPUCopyIsQueueTail = false;
+		            }
 		        }
 		        /**
 		         * Bind a canvas element to the runtime.
@@ -4803,16 +5538,14 @@ fn fragment_clear(@location(0) uv : vec2<f32>) -> @location(0) vec4<f32> {
 		        }
 		        // DeviceAPI
 		        deviceAllocDataSpace(nbytes) {
-		            // allocate 0 bytes buffer as 1 bytes buffer.
-		            if (nbytes == 0) {
-		                nbytes = 1;
-		            }
+		            // WebGPU buffer copies and queue writes operate in four-byte units.
+		            const allocationBytes = Math.max(4, roundUpToFourBytes(nbytes));
 		            const buffer = tryCreateBuffer(this.device, {
-		                size: nbytes,
+		                size: allocationBytes,
 		                usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST,
 		            });
-		            this.currAllocatedBytes += nbytes;
-		            this.allAllocatedBytes += nbytes;
+		            this.currAllocatedBytes += buffer.size;
+		            this.allAllocatedBytes += buffer.size;
 		            if (this.currAllocatedBytes > this.peakAllocatedBytes) {
 		                this.peakAllocatedBytes = this.currAllocatedBytes;
 		            }
@@ -4833,11 +5566,12 @@ fn fragment_clear(@location(0) uv : vec2<f32>) -> @location(0) vec4<f32> {
 		            buffer.destroy();
 		        }
 		        deviceCopyToGPU(from, to, toOffset, nbytes) {
+		            validateWebGPUCopyOffset(toOffset, "WebGPU destination offset");
 		            // Flush batched compute passes before writing to a GPU buffer,
 		            // otherwise the write may be reordered before pending dispatches
 		            // that read from the same buffer.
 		            this.flushCommands();
-		            let rawBytes = this.memory.loadRawBytes(from, nbytes);
+		            let rawBytes = this.memory.viewRawBytes(from, nbytes);
 		            if (rawBytes.length % 4 !== 0) {
 		                // writeBuffer requires length to be multiples of 4, so we pad here
 		                const toPad = 4 - rawBytes.length % 4;
@@ -4847,6 +5581,7 @@ fn fragment_clear(@location(0) uv : vec2<f32>) -> @location(0) vec4<f32> {
 		                nbytes = nbytes + toPad;
 		            }
 		            this.device.queue.writeBuffer(this.gpuBufferFromPtr(to), toOffset, rawBytes, 0, nbytes);
+		            this.pendingGPUToCPUCopyIsQueueTail = false;
 		        }
 		        /**
 		         * Get a MAP_READ staging buffer from the pool, or create one if none fits.
@@ -4883,30 +5618,38 @@ fn fragment_clear(@location(0) uv : vec2<f32>) -> @location(0) vec4<f32> {
 		            this.readStagingBufferPool.push({ buffer: buf, size: buf.size });
 		        }
 		        deviceCopyFromGPU(from, fromOffset, to, nbytes) {
+		            validateWebGPUCopyOffset(fromOffset, "WebGPU source offset");
 		            // Flush batched compute passes before the readback copy.
 		            this.flushCommands();
-		            const gpuTemp = this.getOrCreateReadStagingBuffer(nbytes);
+		            if (nbytes == 0) {
+		                this.memory.storeRawBytes(to, new Uint8Array(0));
+		                return;
+		            }
+		            const copyBytes = roundUpToFourBytes(nbytes);
+		            const gpuTemp = this.getOrCreateReadStagingBuffer(copyBytes);
 		            const copyEncoder = this.device.createCommandEncoder();
-		            copyEncoder.copyBufferToBuffer(this.gpuBufferFromPtr(from), fromOffset, gpuTemp, 0, nbytes);
+		            copyEncoder.copyBufferToBuffer(this.gpuBufferFromPtr(from), fromOffset, gpuTemp, 0, copyBytes);
 		            const copyCommands = copyEncoder.finish();
 		            this.device.queue.submit([copyCommands]);
 		            const readPromise = gpuTemp.mapAsync(GPUMapMode.READ).then(() => {
-		                const data = gpuTemp.getMappedRange(0, nbytes);
-		                this.memory.storeRawBytes(to, new Uint8Array(data));
+		                const data = gpuTemp.getMappedRange(0, copyBytes);
+		                this.memory.storeRawBytes(to, new Uint8Array(data).subarray(0, nbytes));
 		                this.recycleReadStagingBuffer(gpuTemp);
 		            });
 		            // Chain with any existing pending read so sync() awaits all of them.
 		            this.pendingGPUToCPUCopy = this.pendingGPUToCPUCopy
 		                ? this.pendingGPUToCPUCopy.then(() => readPromise)
 		                : readPromise;
+		            this.pendingGPUToCPUCopyIsQueueTail = true;
 		        }
 		        deviceCopyWithinGPU(from, fromOffset, to, toOffset, nbytes) {
-		            // Flush batched compute passes before the GPU-to-GPU copy.
-		            this.flushCommands();
-		            const copyEncoder = this.device.createCommandEncoder();
-		            copyEncoder.copyBufferToBuffer(this.gpuBufferFromPtr(from), fromOffset, this.gpuBufferFromPtr(to), toOffset, nbytes);
-		            const copyCommands = copyEncoder.finish();
-		            this.device.queue.submit([copyCommands]);
+		            // Keep copies in the same command encoder as compute dispatches. Command
+		            // ordering within the encoder preserves dependencies, while a later
+		            // readback, CPU write, deallocation, or sync provides the flush point.
+		            if (!this.pendingEncoder) {
+		                this.pendingEncoder = this.device.createCommandEncoder();
+		            }
+		            this.pendingEncoder.copyBufferToBuffer(this.gpuBufferFromPtr(from), fromOffset, this.gpuBufferFromPtr(to), toOffset, nbytes);
 		        }
 		        gpuBufferFromPtr(ptr) {
 		            const buffer = this.bufferTable[ptr];
@@ -5035,8 +5778,8 @@ fn fragment_clear(@location(0) uv : vec2<f32>) -> @location(0) vec4<f32> {
 		     *     the JS→WASM FFI boundary each time. During LLM decode, the same shapes
 		     *     repeat every token (e.g. [1,32,128]), so caching avoids thousands of
 		     *     redundant FFI round-trips.
-		     *   - Invalidation: Never. Shape tuples are immutable value objects that
-		     *     remain valid for the lifetime of the TVM instance.
+		     *   - Invalidation: Cache entries may be evicted, but returned shape tuples
+		     *     hold independent references and remain valid for their caller's scope.
 		     *
 		     * Future additions (follow-up PR):
 		     * - **uniformCache**: Caches GPU uniform buffers keyed by content hash.
@@ -5091,71 +5834,130 @@ fn fragment_clear(@location(0) uv : vec2<f32>) -> @location(0) vec4<f32> {
 		    const HASH_ALGORITHM$1 = "SHA-256";
 		    const OPFS_STORE_ROOT_DIRECTORY = "tvmjs-opfs-store";
 		    class OPFSStore {
-		        constructor(scope) {
+		        constructor(scope, accessMode = "async") {
 		            this.scope = scope;
+		            this.requestedAccessMode = accessMode;
+		            this.accessMode = OPFSStore.resolveAccessMode(accessMode);
 		        }
 		        static isAvailable() {
 		            const storage = OPFSStore.getStorageManager();
 		            return storage !== undefined && typeof storage.getDirectory === "function";
 		        }
+		        static resolveAccessMode(accessMode) {
+		            if (accessMode !== "auto") {
+		                return accessMode;
+		            }
+		            return OPFSStore.isDedicatedWorkerWithSyncAccessHandle()
+		                ? "sync"
+		                : "async";
+		        }
 		        has(url) {
 		            return __awaiter(this, void 0, void 0, function* () {
-		                return (yield this.read(url)) !== undefined;
+		                try {
+		                    const entry = yield this.getStoredEntry(url);
+		                    if (entry === undefined) {
+		                        return false;
+		                    }
+		                    return this.hasExpectedPayloadSize(entry);
+		                }
+		                catch (err) {
+		                    if (this.handleCacheMissStateError(err)) {
+		                        return false;
+		                    }
+		                    throw err;
+		                }
 		            });
 		        }
 		        read(url) {
 		            return __awaiter(this, void 0, void 0, function* () {
-		                const directory = yield this.getScopedDirectory();
-		                const baseName = yield this.hashUrl(url);
-		                const dataHandle = yield this.getFileHandleIfExists(directory, `${baseName}.bin`, false);
-		                if (dataHandle === undefined) {
-		                    return undefined;
-		                }
-		                const dataBlob = yield dataHandle.getFile();
-		                const metadataHandle = yield this.getFileHandleIfExists(directory, `${baseName}.meta.json`, false);
-		                let metadata = undefined;
-		                if (metadataHandle !== undefined) {
-		                    metadata = yield this.readMetadata(metadataHandle);
-		                    if ((metadata === null || metadata === void 0 ? void 0 : metadata.url) !== undefined && metadata.url !== url) {
-		                        throw new Error("OPFSStore: metadata URL does not match key URL.");
+		                try {
+		                    const entry = yield this.getStoredEntry(url);
+		                    if (entry === undefined) {
+		                        return undefined;
 		                    }
+		                    const blob = yield entry.payloadHandle.getFile();
+		                    if (blob.size !== entry.record.nbytes) {
+		                        return undefined;
+		                    }
+		                    return new Response(blob, this.getResponseInit(entry.record));
 		                }
-		                const headers = (metadata === null || metadata === void 0 ? void 0 : metadata.contentType) !== undefined
-		                    ? { "content-type": metadata.contentType }
-		                    : undefined;
-		                return new Response(dataBlob, headers ? { headers } : undefined);
+		                catch (err) {
+		                    if (this.handleCacheMissStateError(err)) {
+		                        return undefined;
+		                    }
+		                    throw err;
+		                }
+		            });
+		        }
+		        readArrayBuffer(url) {
+		            return __awaiter(this, void 0, void 0, function* () {
+		                try {
+		                    const entry = yield this.getStoredEntry(url);
+		                    if (entry === undefined) {
+		                        return undefined;
+		                    }
+		                    const payload = yield this.readPayload(entry.payloadHandle);
+		                    return payload.byteLength === entry.record.nbytes ? payload : undefined;
+		                }
+		                catch (err) {
+		                    if (this.handleCacheMissStateError(err)) {
+		                        return undefined;
+		                    }
+		                    throw err;
+		                }
 		            });
 		        }
 		        write(url, response) {
 		            return __awaiter(this, void 0, void 0, function* () {
 		                var _a;
-		                const directory = yield this.getScopedDirectory();
-		                const baseName = yield this.hashUrl(url);
-		                const dataHandle = yield directory.getFileHandle(`${baseName}.bin`, {
-		                    create: true,
-		                });
-		                const metadataHandle = yield directory.getFileHandle(`${baseName}.meta.json`, { create: true });
-		                const metadata = {
-		                    url,
-		                    contentType: (_a = response.headers.get("content-type")) !== null && _a !== void 0 ? _a : undefined,
-		                };
-		                const writable = yield dataHandle.createWritable();
-		                if (response.body !== null) {
-		                    yield response.body.pipeTo(writable);
+		                try {
+		                    const directory = yield this.getScopedDirectory();
+		                    const baseName = yield this.hashUrl(url);
+		                    yield this.removeEntryIfExists(directory, this.getRecordFilename(baseName));
+		                    const payloadHandle = yield directory.getFileHandle(this.getPayloadFilename(baseName), { create: true });
+		                    const nbytes = yield this.writePayload(payloadHandle, response);
+		                    const recordHandle = yield directory.getFileHandle(this.getRecordFilename(baseName), { create: true });
+		                    const record = {
+		                        url,
+		                        nbytes,
+		                        contentType: (_a = response.headers.get("content-type")) !== null && _a !== void 0 ? _a : undefined,
+		                    };
+		                    yield this.writeRecord(recordHandle, record);
 		                }
-		                else {
-		                    yield writable.write(yield response.arrayBuffer());
-		                    yield writable.close();
+		                catch (err) {
+		                    this.resetDirectoryOnInvalidStateError(err);
+		                    throw err;
 		                }
-		                yield this.writeFile(metadataHandle, new TextEncoder().encode(JSON.stringify(metadata)));
 		            });
 		        }
 		        remove(url) {
 		            return __awaiter(this, void 0, void 0, function* () {
+		                try {
+		                    const directory = yield this.getScopedDirectory();
+		                    const baseName = yield this.hashUrl(url);
+		                    yield this.removeEntryIfExists(directory, this.getPayloadFilename(baseName));
+		                    yield this.removeEntryIfExists(directory, this.getRecordFilename(baseName));
+		                }
+		                catch (err) {
+		                    this.resetDirectoryOnInvalidStateError(err);
+		                    throw err;
+		                }
+		            });
+		        }
+		        getStoredEntry(url) {
+		            return __awaiter(this, void 0, void 0, function* () {
 		                const directory = yield this.getScopedDirectory();
 		                const baseName = yield this.hashUrl(url);
-		                yield this.removeEntryIfExists(directory, `${baseName}.bin`);
-		                yield this.removeEntryIfExists(directory, `${baseName}.meta.json`);
+		                const recordHandle = yield this.getFileHandleIfExists(directory, this.getRecordFilename(baseName), false);
+		                if (recordHandle === undefined) {
+		                    return undefined;
+		                }
+		                const record = yield this.readRecord(recordHandle);
+		                if (record === undefined || record.url !== url) {
+		                    return undefined;
+		                }
+		                const payloadHandle = yield this.getFileHandleIfExists(directory, this.getPayloadFilename(baseName), false);
+		                return payloadHandle === undefined ? undefined : { payloadHandle, record };
 		            });
 		        }
 		        static getStorageManager() {
@@ -5163,6 +5965,14 @@ fn fragment_clear(@location(0) uv : vec2<f32>) -> @location(0) vec4<f32> {
 		                return undefined;
 		            }
 		            return navigator.storage;
+		        }
+		        static isDedicatedWorkerWithSyncAccessHandle() {
+		            var _a, _b;
+		            const scope = globalThis;
+		            return (typeof scope.DedicatedWorkerGlobalScope === "function" &&
+		                globalThis instanceof scope.DedicatedWorkerGlobalScope &&
+		                typeof ((_b = (_a = scope.FileSystemFileHandle) === null || _a === void 0 ? void 0 : _a.prototype) === null || _b === void 0 ? void 0 : _b.createSyncAccessHandle) ===
+		                    "function");
 		        }
 		        getScopedDirectory() {
 		            return __awaiter(this, void 0, void 0, function* () {
@@ -5188,7 +5998,7 @@ fn fragment_clear(@location(0) uv : vec2<f32>) -> @location(0) vec4<f32> {
 		                return this.directoryPromise;
 		            });
 		        }
-		        readMetadata(fileHandle) {
+		        readRecord(fileHandle) {
 		            return __awaiter(this, void 0, void 0, function* () {
 		                try {
 		                    const text = yield (yield fileHandle.getFile()).text();
@@ -5196,31 +6006,188 @@ fn fragment_clear(@location(0) uv : vec2<f32>) -> @location(0) vec4<f32> {
 		                    if (parsed === undefined ||
 		                        parsed === null ||
 		                        typeof parsed !== "object" ||
-		                        typeof parsed.url !== "string") {
-		                        throw new Error("OPFSStore: invalid metadata format.");
+		                        typeof parsed.url !== "string" ||
+		                        !Number.isSafeInteger(parsed.nbytes) ||
+		                        parsed.nbytes < 0) {
+		                        return undefined;
 		                    }
-		                    const metadata = {
+		                    const record = {
 		                        url: parsed.url,
+		                        nbytes: parsed.nbytes,
 		                    };
 		                    if (typeof parsed.contentType === "string") {
-		                        metadata.contentType = parsed.contentType;
+		                        record.contentType = parsed.contentType;
 		                    }
-		                    return metadata;
+		                    return record;
 		                }
 		                catch (err) {
-		                    if (this.isNotFoundError(err)) {
-		                        // Treat metadata disappearance between lookup and read as a cache miss
+		                    if (OPFSStore.getErrorName(err) === "SyntaxError" ||
+		                        this.handleCacheMissStateError(err)) {
 		                        return undefined;
 		                    }
 		                    throw err;
 		                }
 		            });
 		        }
-		        writeFile(handle, data) {
+		        getResponseInit(record) {
+		            return record.contentType !== undefined
+		                ? { headers: { "content-type": record.contentType } }
+		                : undefined;
+		        }
+		        writeRecord(handle, record) {
 		            return __awaiter(this, void 0, void 0, function* () {
 		                const writable = yield handle.createWritable();
-		                yield writable.write(data);
-		                yield writable.close();
+		                try {
+		                    yield writable.write(new TextEncoder().encode(JSON.stringify(record)));
+		                    yield writable.close();
+		                }
+		                catch (err) {
+		                    try {
+		                        yield writable.abort();
+		                    }
+		                    catch (_a) {
+		                        // Preserve the original write error.
+		                    }
+		                    throw err;
+		                }
+		            });
+		        }
+		        readPayload(handle) {
+		            return __awaiter(this, void 0, void 0, function* () {
+		                const syncHandle = yield this.openSyncAccessHandle(handle, "read-only");
+		                return syncHandle !== undefined
+		                    ? this.readPayloadWithSyncHandle(syncHandle)
+		                    : (yield handle.getFile()).arrayBuffer();
+		            });
+		        }
+		        hasExpectedPayloadSize(entry) {
+		            return __awaiter(this, void 0, void 0, function* () {
+		                if (this.accessMode === "sync") {
+		                    const syncHandle = yield this.openSyncAccessHandle(entry.payloadHandle, "read-only");
+		                    if (syncHandle !== undefined) {
+		                        try {
+		                            return syncHandle.getSize() === entry.record.nbytes;
+		                        }
+		                        finally {
+		                            syncHandle.close();
+		                        }
+		                    }
+		                }
+		                const blob = yield entry.payloadHandle.getFile();
+		                return blob.size === entry.record.nbytes;
+		            });
+		        }
+		        writePayload(handle, response) {
+		            return __awaiter(this, void 0, void 0, function* () {
+		                const syncHandle = yield this.openSyncAccessHandle(handle, "readwrite");
+		                if (syncHandle !== undefined) {
+		                    return this.writePayloadWithSyncHandle(syncHandle, response);
+		                }
+		                return this.writePayloadWithWritable(handle, response);
+		            });
+		        }
+		        writePayloadWithWritable(handle, response) {
+		            return __awaiter(this, void 0, void 0, function* () {
+		                const writable = yield handle.createWritable();
+		                try {
+		                    if (response.body !== null) {
+		                        let nbytes = 0;
+		                        const reader = response.body.getReader();
+		                        try {
+		                            while (true) {
+		                                const { done, value } = yield reader.read();
+		                                if (done) {
+		                                    break;
+		                                }
+		                                yield writable.write(value);
+		                                nbytes += value.byteLength;
+		                            }
+		                        }
+		                        finally {
+		                            reader.releaseLock();
+		                        }
+		                        yield writable.close();
+		                        return nbytes;
+		                    }
+		                    const payload = yield response.arrayBuffer();
+		                    yield writable.write(payload);
+		                    yield writable.close();
+		                    return payload.byteLength;
+		                }
+		                catch (err) {
+		                    try {
+		                        yield writable.abort();
+		                    }
+		                    catch (_a) {
+		                        // Preserve the original write error.
+		                    }
+		                    throw err;
+		                }
+		            });
+		        }
+		        readPayloadWithSyncHandle(syncHandle) {
+		            try {
+		                const size = syncHandle.getSize();
+		                const payload = new ArrayBuffer(size);
+		                syncHandle.read(new Uint8Array(payload), { at: 0 });
+		                return payload;
+		            }
+		            finally {
+		                syncHandle.close();
+		            }
+		        }
+		        writePayloadWithSyncHandle(syncHandle, response) {
+		            return __awaiter(this, void 0, void 0, function* () {
+		                try {
+		                    syncHandle.truncate(0);
+		                    let offset = 0;
+		                    if (response.body !== null) {
+		                        const reader = response.body.getReader();
+		                        try {
+		                            while (true) {
+		                                const { done, value } = yield reader.read();
+		                                if (done) {
+		                                    break;
+		                                }
+		                                syncHandle.write(value, { at: offset });
+		                                offset += value.byteLength;
+		                            }
+		                        }
+		                        finally {
+		                            reader.releaseLock();
+		                        }
+		                    }
+		                    else {
+		                        const payload = yield response.arrayBuffer();
+		                        syncHandle.write(new Uint8Array(payload), { at: 0 });
+		                        offset = payload.byteLength;
+		                    }
+		                    syncHandle.flush();
+		                    return offset;
+		                }
+		                finally {
+		                    syncHandle.close();
+		                }
+		            });
+		        }
+		        openSyncAccessHandle(handle, mode) {
+		            return __awaiter(this, void 0, void 0, function* () {
+		                if (this.accessMode === "async") {
+		                    return undefined;
+		                }
+		                if (typeof handle.createSyncAccessHandle !== "function") {
+		                    throw this.createSyncUnavailableError();
+		                }
+		                try {
+		                    return yield handle.createSyncAccessHandle({ mode });
+		                }
+		                catch (err) {
+		                    const isLockContention = OPFSStore.getErrorName(err) === "NoModificationAllowedError";
+		                    if (this.requestedAccessMode === "auto" && isLockContention) {
+		                        return undefined;
+		                    }
+		                    throw err;
+		                }
 		            });
 		        }
 		        getFileHandleIfExists(directory, filename, create) {
@@ -5229,7 +6196,7 @@ fn fragment_clear(@location(0) uv : vec2<f32>) -> @location(0) vec4<f32> {
 		                    return yield directory.getFileHandle(filename, { create });
 		                }
 		                catch (err) {
-		                    if (this.isNotFoundError(err)) {
+		                    if (OPFSStore.isNotFoundError(err)) {
 		                        // NotFound maps to cache miss semantics
 		                        return undefined;
 		                    }
@@ -5243,7 +6210,7 @@ fn fragment_clear(@location(0) uv : vec2<f32>) -> @location(0) vec4<f32> {
 		                    yield directory.removeEntry(filename);
 		                }
 		                catch (err) {
-		                    if (this.isNotFoundError(err)) {
+		                    if (OPFSStore.isNotFoundError(err)) {
 		                        // Delete is intentionally idempotent for missing entries
 		                        return;
 		                    }
@@ -5266,12 +6233,42 @@ fn fragment_clear(@location(0) uv : vec2<f32>) -> @location(0) vec4<f32> {
 		                    .join("");
 		            });
 		        }
-		        isNotFoundError(err) {
+		        static isNotFoundError(err) {
+		            return OPFSStore.getErrorName(err) === "NotFoundError";
+		        }
+		        static isCacheMissStateError(err) {
+		            const name = OPFSStore.getErrorName(err);
+		            return name === "NotFoundError" || name === "InvalidStateError";
+		        }
+		        handleCacheMissStateError(err) {
+		            if (!OPFSStore.isCacheMissStateError(err)) {
+		                return false;
+		            }
+		            this.resetDirectoryOnInvalidStateError(err);
+		            return true;
+		        }
+		        resetDirectoryOnInvalidStateError(err) {
+		            if (OPFSStore.getErrorName(err) === "InvalidStateError") {
+		                this.directoryPromise = undefined;
+		            }
+		        }
+		        static getErrorName(err) {
 		            if (err && typeof err === "object" && "name" in err) {
 		                const name = err.name;
-		                return name === "NotFoundError";
+		                return typeof name === "string" ? name : undefined;
 		            }
-		            return false;
+		            return undefined;
+		        }
+		        getPayloadFilename(baseName) {
+		            return `${baseName}.bin`;
+		        }
+		        getRecordFilename(baseName) {
+		            return `${baseName}.record.json`;
+		        }
+		        createSyncUnavailableError() {
+		            const err = new Error("OPFSStore: createSyncAccessHandle unavailable; sync OPFS access requires a supported dedicated worker context.");
+		            err.name = "NotSupportedError";
+		            return err;
 		        }
 		    }
 
@@ -5293,8 +6290,31 @@ fn fragment_clear(@location(0) uv : vec2<f32>) -> @location(0) vec4<f32> {
 		     * specific language governing permissions and limitations
 		     * under the License.
 		     */
+		    /**
+		     * Return a borrowed view of one tensor record within a shard.
+		     *
+		     * The returned view aliases the shard and is only valid for as long as the
+		     * shard data remains alive. Tensor-cache decoding consumes it synchronously.
+		     */
+		    function getTensorCacheRecordBytes(shardData, record) {
+		        const shardBytes = shardData instanceof Uint8Array ? shardData : new Uint8Array(shardData);
+		        const { byteOffset, nbytes } = record;
+		        if (!Number.isSafeInteger(byteOffset) || byteOffset < 0) {
+		            throw new Error(`Invalid tensor-cache byteOffset: ${byteOffset}`);
+		        }
+		        if (!Number.isSafeInteger(nbytes) || nbytes < 0) {
+		            throw new Error(`Invalid tensor-cache nbytes: ${nbytes}`);
+		        }
+		        const endOffset = byteOffset + nbytes;
+		        if (!Number.isSafeInteger(endOffset) || endOffset > shardBytes.byteLength) {
+		            throw new Error(`Tensor-cache record range [${byteOffset}, ${endOffset}) exceeds ` +
+		                `shard size ${shardBytes.byteLength}`);
+		        }
+		        return shardBytes.subarray(byteOffset, endOffset);
+		    }
 		    const HASH_ALGORITHM = "SHA-256";
 		    const DEFAULT_FETCH_OPTIONS = { method: "GET" };
+		    const COS_HASH_META_CACHE = "tvmjs-cos-hash-meta";
 		    let crossOriginFallbackWarningLogged = false;
 		    const GLOBAL_HASH_CACHE = new Map();
 		    class CrossOriginStorage {
@@ -5302,10 +6322,14 @@ fn fragment_clear(@location(0) uv : vec2<f32>) -> @location(0) vec4<f32> {
 		            this.hashCache = GLOBAL_HASH_CACHE;
 		        }
 		        static isAvailable() {
+		            var _a;
 		            if (typeof navigator === "undefined") {
 		                return false;
 		            }
-		            return navigator.crossOriginStorage !== undefined;
+		            // Check for `getFileHandle()` itself, so that an implementation exposing
+		            // `navigator.crossOriginStorage` without the method falls back to the
+		            // default cache.
+		            return typeof ((_a = navigator.crossOriginStorage) === null || _a === void 0 ? void 0 : _a.getFileHandle) === "function";
 		        }
 		        match(request) {
 		            return __awaiter(this, void 0, void 0, function* () {
@@ -5319,8 +6343,7 @@ fn fragment_clear(@location(0) uv : vec2<f32>) -> @location(0) vec4<f32> {
 		                    if (!api) {
 		                        return undefined;
 		                    }
-		                    const handles = yield api.requestFileHandles([hash]);
-		                    const handle = handles[0];
+		                    const handle = yield api.getFileHandle(hash);
 		                    if (!handle) {
 		                        return undefined;
 		                    }
@@ -5341,15 +6364,15 @@ fn fragment_clear(@location(0) uv : vec2<f32>) -> @location(0) vec4<f32> {
 		                if (!api) {
 		                    throw new Error("Cross-origin storage API unavailable.");
 		                }
-		                const handles = yield api.requestFileHandles([hash], { create: true });
-		                const handle = handles[0];
+		                const handle = yield api.getFileHandle(hash, { create: true, origins: "*" /* All origins */ });
 		                if (!handle) {
-		                    throw new Error("Cross-origin storage API returned no handles.");
+		                    throw new Error("Cross-origin storage API returned no handle.");
 		                }
 		                const writableStream = yield handle.createWritable();
 		                yield writableStream.write(blob);
 		                yield writableStream.close();
 		                this.hashCache.set(url, hash);
+		                yield this.persistHashEntry(url, hash);
 		            });
 		        }
 		        delete(_request) {
@@ -5379,11 +6402,52 @@ fn fragment_clear(@location(0) uv : vec2<f32>) -> @location(0) vec4<f32> {
 		            }
 		            throw new Error("CrossOriginStorage: Unsupported request type.");
 		        }
+		        persistHashEntry(url, hash) {
+		            return __awaiter(this, void 0, void 0, function* () {
+		                try {
+		                    if (typeof caches === "undefined") {
+		                        return;
+		                    }
+		                    const store = yield caches.open(COS_HASH_META_CACHE);
+		                    yield store.put(url, new Response(JSON.stringify(hash)));
+		                }
+		                catch (_a) {
+		                    // best-effort: ignore storage errors
+		                }
+		            });
+		        }
+		        loadPersistedHashEntry(url) {
+		            return __awaiter(this, void 0, void 0, function* () {
+		                try {
+		                    if (typeof caches === "undefined") {
+		                        return null;
+		                    }
+		                    const store = yield caches.open(COS_HASH_META_CACHE);
+		                    const response = yield store.match(url);
+		                    if (!response) {
+		                        return null;
+		                    }
+		                    return JSON.parse(yield response.text());
+		                }
+		                catch (_a) {
+		                    return null;
+		                }
+		            });
+		        }
 		        resolveHashDescriptor(url) {
 		            return __awaiter(this, void 0, void 0, function* () {
 		                const cached = this.hashCache.get(url);
 		                if (cached) {
 		                    return cached;
+		                }
+		                // Check persistent store before falling back to network-based hash extraction.
+		                // This covers non-LFS files (JSON configs, tokenizers) and non-HuggingFace URLs
+		                // (e.g. GitHub raw .wasm files) whose hashes were computed from blob content on a
+		                // previous visit and persisted to the Cache API.
+		                const persisted = yield this.loadPersistedHashEntry(url);
+		                if (persisted) {
+		                    this.hashCache.set(url, persisted);
+		                    return persisted;
 		                }
 		                const hashValue = yield this.getFileHash(url);
 		                if (!hashValue) {
@@ -5394,6 +6458,9 @@ fn fragment_clear(@location(0) uv : vec2<f32>) -> @location(0) vec4<f32> {
 		                    value: hashValue,
 		                };
 		                this.hashCache.set(url, descriptor);
+		                // Persist pointer-derived hashes so subsequent visits skip the LFS pointer
+		                // network request (especially important for models with many shards).
+		                yield this.persistHashEntry(url, descriptor);
 		                return descriptor;
 		            });
 		        }
@@ -5727,18 +6794,35 @@ fn fragment_clear(@location(0) uv : vec2<f32>) -> @location(0) vec4<f32> {
 		     * Cache by Origin Private File System (OPFS).
 		     */
 		    class ArtifactOPFSCache {
-		        constructor(scope) {
-		            this.store = new OPFSStore(scope);
+		        constructor(scope, accessMode = "async") {
+		            this.store = new OPFSStore(scope, accessMode);
 		        }
 		        static isAvailable() {
 		            return OPFSStore.isAvailable();
 		        }
 		        fetchWithCache(url, storetype, signal) {
 		            return __awaiter(this, void 0, void 0, function* () {
+		                // Try the cache first to avoid a redundant OPFS lookup on a hit.
+		                const cached = yield this.readFromCache(url, storetype);
+		                if (cached !== undefined) {
+		                    return cached;
+		                }
 		                yield this.addToCache(url, storetype, signal);
+		                const fetched = yield this.readFromCache(url, storetype);
+		                if (fetched === undefined) {
+		                    throw new Error("ArtifactOPFSCache failed to fetch: " + url);
+		                }
+		                return fetched;
+		            });
+		        }
+		        readFromCache(url, storetype) {
+		            return __awaiter(this, void 0, void 0, function* () {
+		                if ((storetype === null || storetype === void 0 ? void 0 : storetype.toLowerCase()) === "arraybuffer") {
+		                    return this.store.readArrayBuffer(url);
+		                }
 		                const cachedResponse = yield this.store.read(url);
 		                if (cachedResponse === undefined) {
-		                    throw new Error("ArtifactOPFSCache failed to fetch: " + url);
+		                    return undefined;
 		                }
 		                return this.responseToStoreType(cachedResponse, storetype);
 		            });
@@ -5753,7 +6837,7 @@ fn fragment_clear(@location(0) uv : vec2<f32>) -> @location(0) vec4<f32> {
 		                if (!response.ok) {
 		                    throw new Error(`ArtifactOPFSCache: Unable to fetch ${url}, received status ${response.status}`);
 		                }
-		                yield this.store.write(url, response.clone());
+		                yield this.store.write(url, response);
 		            });
 		        }
 		        hasAllKeys(keys) {
@@ -5898,7 +6982,7 @@ fn fragment_clear(@location(0) uv : vec2<f32>) -> @location(0) vec4<f32> {
 		            }
 		        }
 		        if (cacheType === "opfs") {
-		            return new ArtifactOPFSCache(scope);
+		            return new ArtifactOPFSCache(scope, options.opfsAccessMode);
 		        }
 		        return new ArtifactCache(scope);
 		    }
@@ -5939,7 +7023,7 @@ fn fragment_clear(@location(0) uv : vec2<f32>) -> @location(0) vec4<f32> {
 		    }
 
 		    function EmccWASI() {
-		    var Module=typeof Module!="undefined"?Module:{};var __wasmLib={};function __wasmLibInstantiateWasm(imports,successCallback){__wasmLib.imports=imports;__wasmLib.successCallback=successCallback;}function __wasmLibStart(wasmInstance){__wasmLib.successCallback(wasmInstance);}__wasmLib.start=__wasmLibStart;var Module={"instantiateWasm":__wasmLibInstantiateWasm,"wasmLibraryProvider":__wasmLib};var moduleOverrides=Object.assign({},Module);var arguments_=[];var thisProgram="./this.program";var quit_=(status,toThrow)=>{throw toThrow};var ENVIRONMENT_IS_WEB=typeof window=="object";var ENVIRONMENT_IS_WORKER=typeof importScripts=="function";var ENVIRONMENT_IS_NODE=typeof process=="object"&&typeof process.versions=="object"&&typeof process.versions.node=="string";var scriptDirectory="";function locateFile(path){if(Module["locateFile"]){return Module["locateFile"](path,scriptDirectory)}return scriptDirectory+path}var read_,readAsync,readBinary;if(ENVIRONMENT_IS_NODE){var fs=require$$2;var nodePath=require$$2;if(ENVIRONMENT_IS_WORKER){scriptDirectory=nodePath.dirname(scriptDirectory)+"/";}else {scriptDirectory=__dirname+"/";}read_=(filename,binary)=>{filename=isFileURI(filename)?new URL(filename):nodePath.normalize(filename);return fs.readFileSync(filename,binary?undefined:"utf8")};readBinary=filename=>{var ret=read_(filename,true);if(!ret.buffer){ret=new Uint8Array(ret);}return ret};readAsync=(filename,onload,onerror,binary=true)=>{filename=isFileURI(filename)?new URL(filename):nodePath.normalize(filename);fs.readFile(filename,binary?undefined:"utf8",(err,data)=>{if(err)onerror(err);else onload(binary?data.buffer:data);});};if(!Module["thisProgram"]&&process.argv.length>1){thisProgram=process.argv[1].replace(/\\/g,"/");}arguments_=process.argv.slice(2);{module["exports"]=Module;}process.on("uncaughtException",ex=>{if(ex!=="unwind"&&!(ex instanceof ExitStatus)&&!(ex.context instanceof ExitStatus)){throw ex}});quit_=(status,toThrow)=>{process.exitCode=status;throw toThrow};}else if(ENVIRONMENT_IS_WEB||ENVIRONMENT_IS_WORKER){if(ENVIRONMENT_IS_WORKER){scriptDirectory=self.location.href;}else if(typeof document!="undefined"&&document.currentScript){scriptDirectory=document.currentScript.src;}if(scriptDirectory.startsWith("blob:")){scriptDirectory="";}else {scriptDirectory=scriptDirectory.substr(0,scriptDirectory.replace(/[?#].*/,"").lastIndexOf("/")+1);}{read_=url=>{var xhr=new XMLHttpRequest;xhr.open("GET",url,false);xhr.send(null);return xhr.responseText};if(ENVIRONMENT_IS_WORKER){readBinary=url=>{var xhr=new XMLHttpRequest;xhr.open("GET",url,false);xhr.responseType="arraybuffer";xhr.send(null);return new Uint8Array(xhr.response)};}readAsync=(url,onload,onerror)=>{var xhr=new XMLHttpRequest;xhr.open("GET",url,true);xhr.responseType="arraybuffer";xhr.onload=()=>{if(xhr.status==200||xhr.status==0&&xhr.response){onload(xhr.response);return}onerror();};xhr.onerror=onerror;xhr.send(null);};}}else;var out=Module["print"]||console.log.bind(console);var err=Module["printErr"]||console.error.bind(console);Object.assign(Module,moduleOverrides);moduleOverrides=null;if(Module["arguments"])arguments_=Module["arguments"];if(Module["thisProgram"])thisProgram=Module["thisProgram"];if(Module["quit"])quit_=Module["quit"];var wasmBinary;if(Module["wasmBinary"])wasmBinary=Module["wasmBinary"];var wasmMemory;var ABORT=false;var EXITSTATUS;var HEAP8,HEAPU8,HEAP32,HEAPU32,HEAP64;function updateMemoryViews(){var b=wasmMemory.buffer;Module["HEAP8"]=HEAP8=new Int8Array(b);Module["HEAP16"]=new Int16Array(b);Module["HEAPU8"]=HEAPU8=new Uint8Array(b);Module["HEAPU16"]=new Uint16Array(b);Module["HEAP32"]=HEAP32=new Int32Array(b);Module["HEAPU32"]=HEAPU32=new Uint32Array(b);Module["HEAPF32"]=new Float32Array(b);Module["HEAPF64"]=new Float64Array(b);Module["HEAP64"]=HEAP64=new BigInt64Array(b);Module["HEAPU64"]=new BigUint64Array(b);}var __ATPRERUN__=[];var __ATINIT__=[];var __ATMAIN__=[];var __ATPOSTRUN__=[];function preRun(){if(Module["preRun"]){if(typeof Module["preRun"]=="function")Module["preRun"]=[Module["preRun"]];while(Module["preRun"].length){addOnPreRun(Module["preRun"].shift());}}callRuntimeCallbacks(__ATPRERUN__);}function initRuntime(){if(!Module["noFSInit"]&&!FS.init.initialized)FS.init();FS.ignorePermissions=false;callRuntimeCallbacks(__ATINIT__);}function preMain(){callRuntimeCallbacks(__ATMAIN__);}function postRun(){if(Module["postRun"]){if(typeof Module["postRun"]=="function")Module["postRun"]=[Module["postRun"]];while(Module["postRun"].length){addOnPostRun(Module["postRun"].shift());}}callRuntimeCallbacks(__ATPOSTRUN__);}function addOnPreRun(cb){__ATPRERUN__.unshift(cb);}function addOnPostRun(cb){__ATPOSTRUN__.unshift(cb);}var runDependencies=0;var dependenciesFulfilled=null;function getUniqueRunDependency(id){return id}function addRunDependency(id){runDependencies++;Module["monitorRunDependencies"]?.(runDependencies);}function removeRunDependency(id){runDependencies--;Module["monitorRunDependencies"]?.(runDependencies);if(runDependencies==0){if(dependenciesFulfilled){var callback=dependenciesFulfilled;dependenciesFulfilled=null;callback();}}}function abort(what){Module["onAbort"]?.(what);what="Aborted("+what+")";err(what);ABORT=true;EXITSTATUS=1;what+=". Build with -sASSERTIONS for more info.";var e=new WebAssembly.RuntimeError(what);throw e}var dataURIPrefix="data:application/octet-stream;base64,";var isDataURI=filename=>filename.startsWith(dataURIPrefix);var isFileURI=filename=>filename.startsWith("file://");var wasmBinaryFile;wasmBinaryFile="tvmjs_runtime.wasm";if(!isDataURI(wasmBinaryFile)){wasmBinaryFile=locateFile(wasmBinaryFile);}function getBinarySync(file){if(file==wasmBinaryFile&&wasmBinary){return new Uint8Array(wasmBinary)}if(readBinary){return readBinary(file)}throw "both async and sync fetching of the wasm failed"}function getBinaryPromise(binaryFile){if(!wasmBinary&&(ENVIRONMENT_IS_WEB||ENVIRONMENT_IS_WORKER)){if(typeof fetch=="function"&&!isFileURI(binaryFile)){return fetch(binaryFile,{credentials:"same-origin"}).then(response=>{if(!response["ok"]){throw `failed to load wasm binary file at '${binaryFile}'`}return response["arrayBuffer"]()}).catch(()=>getBinarySync(binaryFile))}else if(readAsync){return new Promise((resolve,reject)=>{readAsync(binaryFile,response=>resolve(new Uint8Array(response)),reject);})}}return Promise.resolve().then(()=>getBinarySync(binaryFile))}function instantiateArrayBuffer(binaryFile,imports,receiver){return getBinaryPromise(binaryFile).then(binary=>WebAssembly.instantiate(binary,imports)).then(receiver,reason=>{err(`failed to asynchronously prepare wasm: ${reason}`);abort(reason);})}function instantiateAsync(binary,binaryFile,imports,callback){if(!binary&&typeof WebAssembly.instantiateStreaming=="function"&&!isDataURI(binaryFile)&&!isFileURI(binaryFile)&&!ENVIRONMENT_IS_NODE&&typeof fetch=="function"){return fetch(binaryFile,{credentials:"same-origin"}).then(response=>{var result=WebAssembly.instantiateStreaming(response,imports);return result.then(callback,function(reason){err(`wasm streaming compile failed: ${reason}`);err("falling back to ArrayBuffer instantiation");return instantiateArrayBuffer(binaryFile,imports,callback)})})}return instantiateArrayBuffer(binaryFile,imports,callback)}function createWasm(){var info={"env":wasmImports,"wasi_snapshot_preview1":wasmImports};function receiveInstance(instance,module){wasmExports=instance.exports;wasmExports=Asyncify.instrumentWasmExports(wasmExports);wasmMemory=wasmExports["memory"];updateMemoryViews();removeRunDependency();return wasmExports}addRunDependency();function receiveInstantiationResult(result){receiveInstance(result["instance"]);}if(Module["instantiateWasm"]){try{return Module["instantiateWasm"](info,receiveInstance)}catch(e){err(`Module.instantiateWasm callback failed with error: ${e}`);return false}}instantiateAsync(wasmBinary,wasmBinaryFile,info,receiveInstantiationResult);return {}}function ExitStatus(status){this.name="ExitStatus";this.message=`Program terminated with exit(${status})`;this.status=status;}var callRuntimeCallbacks=callbacks=>{while(callbacks.length>0){callbacks.shift()(Module);}};Module["noExitRuntime"]||true;function _TVMFFIWasmFunctionDeleter(){abort("missing function: TVMFFIWasmFunctionDeleter");}_TVMFFIWasmFunctionDeleter.stub=true;function _TVMFFIWasmSafeCall(){abort("missing function: TVMFFIWasmSafeCall");}_TVMFFIWasmSafeCall.stub=true;function __ZN3tvm7runtime9threading10NumThreadsEv(){abort("missing function: _ZN3tvm7runtime9threading10NumThreadsEv");}__ZN3tvm7runtime9threading10NumThreadsEv.stub=true;function __ZN3tvm7runtime9threading15ResetThreadPoolEv(){abort("missing function: _ZN3tvm7runtime9threading15ResetThreadPoolEv");}__ZN3tvm7runtime9threading15ResetThreadPoolEv.stub=true;var _emscripten_get_now;_emscripten_get_now=()=>performance.now();var checkWasiClock=clock_id=>clock_id==0||clock_id==1||clock_id==2||clock_id==3;var MAX_INT53=9007199254740992;var MIN_INT53=-9007199254740992;var bigintToI53Checked=num=>num<MIN_INT53||num>MAX_INT53?NaN:Number(num);function _clock_time_get(clk_id,ignored_precision,ptime){if(!checkWasiClock(clk_id)){return 28}var now;if(clk_id===0){now=Date.now();}else {now=_emscripten_get_now();}var nsec=Math.round(now*1e3*1e3);HEAP32[ptime>>2]=nsec>>>0;HEAP32[ptime+4>>2]=nsec/Math.pow(2,32)>>>0;return 0}var _emscripten_notify_memory_growth=memoryIndex=>{updateMemoryViews();};var ENV={};var getExecutableName=()=>thisProgram||"./this.program";var getEnvStrings=()=>{if(!getEnvStrings.strings){var lang=(typeof navigator=="object"&&navigator.languages&&navigator.languages[0]||"C").replace("-","_")+".UTF-8";var env={"USER":"web_user","LOGNAME":"web_user","PATH":"/","PWD":"/","HOME":"/home/web_user","LANG":lang,"_":getExecutableName()};for(var x in ENV){if(ENV[x]===undefined)delete env[x];else env[x]=ENV[x];}var strings=[];for(var x in env){strings.push(`${x}=${env[x]}`);}getEnvStrings.strings=strings;}return getEnvStrings.strings};var stringToAscii=(str,buffer)=>{for(var i=0;i<str.length;++i){HEAP8[buffer++]=str.charCodeAt(i);}HEAP8[buffer]=0;};var _environ_get=(__environ,environ_buf)=>{var bufSize=0;getEnvStrings().forEach((string,i)=>{var ptr=environ_buf+bufSize;HEAPU32[__environ+i*4>>2]=ptr;stringToAscii(string,ptr);bufSize+=string.length+1;});return 0};var _environ_sizes_get=(penviron_count,penviron_buf_size)=>{var strings=getEnvStrings();HEAPU32[penviron_count>>2]=strings.length;var bufSize=0;strings.forEach(string=>bufSize+=string.length+1);HEAPU32[penviron_buf_size>>2]=bufSize;return 0};var PATH={isAbs:path=>path.charAt(0)==="/",splitPath:filename=>{var splitPathRe=/^(\/?|)([\s\S]*?)((?:\.{1,2}|[^\/]+?|)(\.[^.\/]*|))(?:[\/]*)$/;return splitPathRe.exec(filename).slice(1)},normalizeArray:(parts,allowAboveRoot)=>{var up=0;for(var i=parts.length-1;i>=0;i--){var last=parts[i];if(last==="."){parts.splice(i,1);}else if(last===".."){parts.splice(i,1);up++;}else if(up){parts.splice(i,1);up--;}}if(allowAboveRoot){for(;up;up--){parts.unshift("..");}}return parts},normalize:path=>{var isAbsolute=PATH.isAbs(path),trailingSlash=path.substr(-1)==="/";path=PATH.normalizeArray(path.split("/").filter(p=>!!p),!isAbsolute).join("/");if(!path&&!isAbsolute){path=".";}if(path&&trailingSlash){path+="/";}return (isAbsolute?"/":"")+path},dirname:path=>{var result=PATH.splitPath(path),root=result[0],dir=result[1];if(!root&&!dir){return "."}if(dir){dir=dir.substr(0,dir.length-1);}return root+dir},basename:path=>{if(path==="/")return "/";path=PATH.normalize(path);path=path.replace(/\/$/,"");var lastSlash=path.lastIndexOf("/");if(lastSlash===-1)return path;return path.substr(lastSlash+1)},join:(...paths)=>PATH.normalize(paths.join("/")),join2:(l,r)=>PATH.normalize(l+"/"+r)};var initRandomFill=()=>{if(typeof crypto=="object"&&typeof crypto["getRandomValues"]=="function"){return view=>crypto.getRandomValues(view)}else if(ENVIRONMENT_IS_NODE){try{var crypto_module=require$$2;var randomFillSync=crypto_module["randomFillSync"];if(randomFillSync){return view=>crypto_module["randomFillSync"](view)}var randomBytes=crypto_module["randomBytes"];return view=>(view.set(randomBytes(view.byteLength)),view)}catch(e){}}abort("initRandomDevice");};var randomFill=view=>(randomFill=initRandomFill())(view);var PATH_FS={resolve:(...args)=>{var resolvedPath="",resolvedAbsolute=false;for(var i=args.length-1;i>=-1&&!resolvedAbsolute;i--){var path=i>=0?args[i]:FS.cwd();if(typeof path!="string"){throw new TypeError("Arguments to path.resolve must be strings")}else if(!path){return ""}resolvedPath=path+"/"+resolvedPath;resolvedAbsolute=PATH.isAbs(path);}resolvedPath=PATH.normalizeArray(resolvedPath.split("/").filter(p=>!!p),!resolvedAbsolute).join("/");return (resolvedAbsolute?"/":"")+resolvedPath||"."},relative:(from,to)=>{from=PATH_FS.resolve(from).substr(1);to=PATH_FS.resolve(to).substr(1);function trim(arr){var start=0;for(;start<arr.length;start++){if(arr[start]!=="")break}var end=arr.length-1;for(;end>=0;end--){if(arr[end]!=="")break}if(start>end)return [];return arr.slice(start,end-start+1)}var fromParts=trim(from.split("/"));var toParts=trim(to.split("/"));var length=Math.min(fromParts.length,toParts.length);var samePartsLength=length;for(var i=0;i<length;i++){if(fromParts[i]!==toParts[i]){samePartsLength=i;break}}var outputParts=[];for(var i=samePartsLength;i<fromParts.length;i++){outputParts.push("..");}outputParts=outputParts.concat(toParts.slice(samePartsLength));return outputParts.join("/")}};var UTF8Decoder=typeof TextDecoder!="undefined"?new TextDecoder("utf8"):undefined;var UTF8ArrayToString=(heapOrArray,idx,maxBytesToRead)=>{var endIdx=idx+maxBytesToRead;var endPtr=idx;while(heapOrArray[endPtr]&&!(endPtr>=endIdx))++endPtr;if(endPtr-idx>16&&heapOrArray.buffer&&UTF8Decoder){return UTF8Decoder.decode(heapOrArray.subarray(idx,endPtr))}var str="";while(idx<endPtr){var u0=heapOrArray[idx++];if(!(u0&128)){str+=String.fromCharCode(u0);continue}var u1=heapOrArray[idx++]&63;if((u0&224)==192){str+=String.fromCharCode((u0&31)<<6|u1);continue}var u2=heapOrArray[idx++]&63;if((u0&240)==224){u0=(u0&15)<<12|u1<<6|u2;}else {u0=(u0&7)<<18|u1<<12|u2<<6|heapOrArray[idx++]&63;}if(u0<65536){str+=String.fromCharCode(u0);}else {var ch=u0-65536;str+=String.fromCharCode(55296|ch>>10,56320|ch&1023);}}return str};var FS_stdin_getChar_buffer=[];var lengthBytesUTF8=str=>{var len=0;for(var i=0;i<str.length;++i){var c=str.charCodeAt(i);if(c<=127){len++;}else if(c<=2047){len+=2;}else if(c>=55296&&c<=57343){len+=4;++i;}else {len+=3;}}return len};var stringToUTF8Array=(str,heap,outIdx,maxBytesToWrite)=>{if(!(maxBytesToWrite>0))return 0;var startIdx=outIdx;var endIdx=outIdx+maxBytesToWrite-1;for(var i=0;i<str.length;++i){var u=str.charCodeAt(i);if(u>=55296&&u<=57343){var u1=str.charCodeAt(++i);u=65536+((u&1023)<<10)|u1&1023;}if(u<=127){if(outIdx>=endIdx)break;heap[outIdx++]=u;}else if(u<=2047){if(outIdx+1>=endIdx)break;heap[outIdx++]=192|u>>6;heap[outIdx++]=128|u&63;}else if(u<=65535){if(outIdx+2>=endIdx)break;heap[outIdx++]=224|u>>12;heap[outIdx++]=128|u>>6&63;heap[outIdx++]=128|u&63;}else {if(outIdx+3>=endIdx)break;heap[outIdx++]=240|u>>18;heap[outIdx++]=128|u>>12&63;heap[outIdx++]=128|u>>6&63;heap[outIdx++]=128|u&63;}}heap[outIdx]=0;return outIdx-startIdx};function intArrayFromString(stringy,dontAddNull,length){var len=lengthBytesUTF8(stringy)+1;var u8array=new Array(len);var numBytesWritten=stringToUTF8Array(stringy,u8array,0,u8array.length);u8array.length=numBytesWritten;return u8array}var FS_stdin_getChar=()=>{if(!FS_stdin_getChar_buffer.length){var result=null;if(ENVIRONMENT_IS_NODE){var BUFSIZE=256;var buf=Buffer.alloc(BUFSIZE);var bytesRead=0;var fd=process.stdin.fd;try{bytesRead=fs.readSync(fd,buf);}catch(e){if(e.toString().includes("EOF"))bytesRead=0;else throw e}if(bytesRead>0){result=buf.slice(0,bytesRead).toString("utf-8");}else {result=null;}}else if(typeof window!="undefined"&&typeof window.prompt=="function"){result=window.prompt("Input: ");if(result!==null){result+="\n";}}else if(typeof readline=="function"){result=readline();if(result!==null){result+="\n";}}if(!result){return null}FS_stdin_getChar_buffer=intArrayFromString(result);}return FS_stdin_getChar_buffer.shift()};var TTY={ttys:[],init(){},shutdown(){},register(dev,ops){TTY.ttys[dev]={input:[],output:[],ops:ops};FS.registerDevice(dev,TTY.stream_ops);},stream_ops:{open(stream){var tty=TTY.ttys[stream.node.rdev];if(!tty){throw new FS.ErrnoError(43)}stream.tty=tty;stream.seekable=false;},close(stream){stream.tty.ops.fsync(stream.tty);},fsync(stream){stream.tty.ops.fsync(stream.tty);},read(stream,buffer,offset,length,pos){if(!stream.tty||!stream.tty.ops.get_char){throw new FS.ErrnoError(60)}var bytesRead=0;for(var i=0;i<length;i++){var result;try{result=stream.tty.ops.get_char(stream.tty);}catch(e){throw new FS.ErrnoError(29)}if(result===undefined&&bytesRead===0){throw new FS.ErrnoError(6)}if(result===null||result===undefined)break;bytesRead++;buffer[offset+i]=result;}if(bytesRead){stream.node.timestamp=Date.now();}return bytesRead},write(stream,buffer,offset,length,pos){if(!stream.tty||!stream.tty.ops.put_char){throw new FS.ErrnoError(60)}try{for(var i=0;i<length;i++){stream.tty.ops.put_char(stream.tty,buffer[offset+i]);}}catch(e){throw new FS.ErrnoError(29)}if(length){stream.node.timestamp=Date.now();}return i}},default_tty_ops:{get_char(tty){return FS_stdin_getChar()},put_char(tty,val){if(val===null||val===10){out(UTF8ArrayToString(tty.output,0));tty.output=[];}else {if(val!=0)tty.output.push(val);}},fsync(tty){if(tty.output&&tty.output.length>0){out(UTF8ArrayToString(tty.output,0));tty.output=[];}},ioctl_tcgets(tty){return {c_iflag:25856,c_oflag:5,c_cflag:191,c_lflag:35387,c_cc:[3,28,127,21,4,0,1,0,17,19,26,0,18,15,23,22,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]}},ioctl_tcsets(tty,optional_actions,data){return 0},ioctl_tiocgwinsz(tty){return [24,80]}},default_tty1_ops:{put_char(tty,val){if(val===null||val===10){err(UTF8ArrayToString(tty.output,0));tty.output=[];}else {if(val!=0)tty.output.push(val);}},fsync(tty){if(tty.output&&tty.output.length>0){err(UTF8ArrayToString(tty.output,0));tty.output=[];}}}};var mmapAlloc=size=>{abort();};var MEMFS={ops_table:null,mount(mount){return MEMFS.createNode(null,"/",16384|511,0)},createNode(parent,name,mode,dev){if(FS.isBlkdev(mode)||FS.isFIFO(mode)){throw new FS.ErrnoError(63)}MEMFS.ops_table||={dir:{node:{getattr:MEMFS.node_ops.getattr,setattr:MEMFS.node_ops.setattr,lookup:MEMFS.node_ops.lookup,mknod:MEMFS.node_ops.mknod,rename:MEMFS.node_ops.rename,unlink:MEMFS.node_ops.unlink,rmdir:MEMFS.node_ops.rmdir,readdir:MEMFS.node_ops.readdir,symlink:MEMFS.node_ops.symlink},stream:{llseek:MEMFS.stream_ops.llseek}},file:{node:{getattr:MEMFS.node_ops.getattr,setattr:MEMFS.node_ops.setattr},stream:{llseek:MEMFS.stream_ops.llseek,read:MEMFS.stream_ops.read,write:MEMFS.stream_ops.write,allocate:MEMFS.stream_ops.allocate,mmap:MEMFS.stream_ops.mmap,msync:MEMFS.stream_ops.msync}},link:{node:{getattr:MEMFS.node_ops.getattr,setattr:MEMFS.node_ops.setattr,readlink:MEMFS.node_ops.readlink},stream:{}},chrdev:{node:{getattr:MEMFS.node_ops.getattr,setattr:MEMFS.node_ops.setattr},stream:FS.chrdev_stream_ops}};var node=FS.createNode(parent,name,mode,dev);if(FS.isDir(node.mode)){node.node_ops=MEMFS.ops_table.dir.node;node.stream_ops=MEMFS.ops_table.dir.stream;node.contents={};}else if(FS.isFile(node.mode)){node.node_ops=MEMFS.ops_table.file.node;node.stream_ops=MEMFS.ops_table.file.stream;node.usedBytes=0;node.contents=null;}else if(FS.isLink(node.mode)){node.node_ops=MEMFS.ops_table.link.node;node.stream_ops=MEMFS.ops_table.link.stream;}else if(FS.isChrdev(node.mode)){node.node_ops=MEMFS.ops_table.chrdev.node;node.stream_ops=MEMFS.ops_table.chrdev.stream;}node.timestamp=Date.now();if(parent){parent.contents[name]=node;parent.timestamp=node.timestamp;}return node},getFileDataAsTypedArray(node){if(!node.contents)return new Uint8Array(0);if(node.contents.subarray)return node.contents.subarray(0,node.usedBytes);return new Uint8Array(node.contents)},expandFileStorage(node,newCapacity){var prevCapacity=node.contents?node.contents.length:0;if(prevCapacity>=newCapacity)return;var CAPACITY_DOUBLING_MAX=1024*1024;newCapacity=Math.max(newCapacity,prevCapacity*(prevCapacity<CAPACITY_DOUBLING_MAX?2:1.125)>>>0);if(prevCapacity!=0)newCapacity=Math.max(newCapacity,256);var oldContents=node.contents;node.contents=new Uint8Array(newCapacity);if(node.usedBytes>0)node.contents.set(oldContents.subarray(0,node.usedBytes),0);},resizeFileStorage(node,newSize){if(node.usedBytes==newSize)return;if(newSize==0){node.contents=null;node.usedBytes=0;}else {var oldContents=node.contents;node.contents=new Uint8Array(newSize);if(oldContents){node.contents.set(oldContents.subarray(0,Math.min(newSize,node.usedBytes)));}node.usedBytes=newSize;}},node_ops:{getattr(node){var attr={};attr.dev=FS.isChrdev(node.mode)?node.id:1;attr.ino=node.id;attr.mode=node.mode;attr.nlink=1;attr.uid=0;attr.gid=0;attr.rdev=node.rdev;if(FS.isDir(node.mode)){attr.size=4096;}else if(FS.isFile(node.mode)){attr.size=node.usedBytes;}else if(FS.isLink(node.mode)){attr.size=node.link.length;}else {attr.size=0;}attr.atime=new Date(node.timestamp);attr.mtime=new Date(node.timestamp);attr.ctime=new Date(node.timestamp);attr.blksize=4096;attr.blocks=Math.ceil(attr.size/attr.blksize);return attr},setattr(node,attr){if(attr.mode!==undefined){node.mode=attr.mode;}if(attr.timestamp!==undefined){node.timestamp=attr.timestamp;}if(attr.size!==undefined){MEMFS.resizeFileStorage(node,attr.size);}},lookup(parent,name){throw FS.genericErrors[44]},mknod(parent,name,mode,dev){return MEMFS.createNode(parent,name,mode,dev)},rename(old_node,new_dir,new_name){if(FS.isDir(old_node.mode)){var new_node;try{new_node=FS.lookupNode(new_dir,new_name);}catch(e){}if(new_node){for(var i in new_node.contents){throw new FS.ErrnoError(55)}}}delete old_node.parent.contents[old_node.name];old_node.parent.timestamp=Date.now();old_node.name=new_name;new_dir.contents[new_name]=old_node;new_dir.timestamp=old_node.parent.timestamp;old_node.parent=new_dir;},unlink(parent,name){delete parent.contents[name];parent.timestamp=Date.now();},rmdir(parent,name){var node=FS.lookupNode(parent,name);for(var i in node.contents){throw new FS.ErrnoError(55)}delete parent.contents[name];parent.timestamp=Date.now();},readdir(node){var entries=[".",".."];for(var key of Object.keys(node.contents)){entries.push(key);}return entries},symlink(parent,newname,oldpath){var node=MEMFS.createNode(parent,newname,511|40960,0);node.link=oldpath;return node},readlink(node){if(!FS.isLink(node.mode)){throw new FS.ErrnoError(28)}return node.link}},stream_ops:{read(stream,buffer,offset,length,position){var contents=stream.node.contents;if(position>=stream.node.usedBytes)return 0;var size=Math.min(stream.node.usedBytes-position,length);if(size>8&&contents.subarray){buffer.set(contents.subarray(position,position+size),offset);}else {for(var i=0;i<size;i++)buffer[offset+i]=contents[position+i];}return size},write(stream,buffer,offset,length,position,canOwn){if(buffer.buffer===HEAP8.buffer){canOwn=false;}if(!length)return 0;var node=stream.node;node.timestamp=Date.now();if(buffer.subarray&&(!node.contents||node.contents.subarray)){if(canOwn){node.contents=buffer.subarray(offset,offset+length);node.usedBytes=length;return length}else if(node.usedBytes===0&&position===0){node.contents=buffer.slice(offset,offset+length);node.usedBytes=length;return length}else if(position+length<=node.usedBytes){node.contents.set(buffer.subarray(offset,offset+length),position);return length}}MEMFS.expandFileStorage(node,position+length);if(node.contents.subarray&&buffer.subarray){node.contents.set(buffer.subarray(offset,offset+length),position);}else {for(var i=0;i<length;i++){node.contents[position+i]=buffer[offset+i];}}node.usedBytes=Math.max(node.usedBytes,position+length);return length},llseek(stream,offset,whence){var position=offset;if(whence===1){position+=stream.position;}else if(whence===2){if(FS.isFile(stream.node.mode)){position+=stream.node.usedBytes;}}if(position<0){throw new FS.ErrnoError(28)}return position},allocate(stream,offset,length){MEMFS.expandFileStorage(stream.node,offset+length);stream.node.usedBytes=Math.max(stream.node.usedBytes,offset+length);},mmap(stream,length,position,prot,flags){if(!FS.isFile(stream.node.mode)){throw new FS.ErrnoError(43)}var ptr;var allocated;var contents=stream.node.contents;if(!(flags&2)&&contents.buffer===HEAP8.buffer){allocated=false;ptr=contents.byteOffset;}else {if(position>0||position+length<contents.length){if(contents.subarray){contents=contents.subarray(position,position+length);}else {contents=Array.prototype.slice.call(contents,position,position+length);}}allocated=true;ptr=mmapAlloc();if(!ptr){throw new FS.ErrnoError(48)}HEAP8.set(contents,ptr);}return {ptr:ptr,allocated:allocated}},msync(stream,buffer,offset,length,mmapFlags){MEMFS.stream_ops.write(stream,buffer,0,length,offset,false);return 0}}};var asyncLoad=(url,onload,onerror,noRunDep)=>{var dep=getUniqueRunDependency(`al ${url}`);readAsync(url,arrayBuffer=>{onload(new Uint8Array(arrayBuffer));if(dep)removeRunDependency();},event=>{if(onerror){onerror();}else {throw `Loading data file "${url}" failed.`}});if(dep)addRunDependency();};var FS_createDataFile=(parent,name,fileData,canRead,canWrite,canOwn)=>{FS.createDataFile(parent,name,fileData,canRead,canWrite,canOwn);};var preloadPlugins=Module["preloadPlugins"]||[];var FS_handledByPreloadPlugin=(byteArray,fullname,finish,onerror)=>{if(typeof Browser!="undefined")Browser.init();var handled=false;preloadPlugins.forEach(plugin=>{if(handled)return;if(plugin["canHandle"](fullname)){plugin["handle"](byteArray,fullname,finish,onerror);handled=true;}});return handled};var FS_createPreloadedFile=(parent,name,url,canRead,canWrite,onload,onerror,dontCreateFile,canOwn,preFinish)=>{var fullname=name?PATH_FS.resolve(PATH.join2(parent,name)):parent;function processData(byteArray){function finish(byteArray){preFinish?.();if(!dontCreateFile){FS_createDataFile(parent,name,byteArray,canRead,canWrite,canOwn);}onload?.();removeRunDependency();}if(FS_handledByPreloadPlugin(byteArray,fullname,finish,()=>{onerror?.();removeRunDependency();})){return}finish(byteArray);}addRunDependency();if(typeof url=="string"){asyncLoad(url,processData,onerror);}else {processData(url);}};var FS_modeStringToFlags=str=>{var flagModes={"r":0,"r+":2,"w":512|64|1,"w+":512|64|2,"a":1024|64|1,"a+":1024|64|2};var flags=flagModes[str];if(typeof flags=="undefined"){throw new Error(`Unknown file open mode: ${str}`)}return flags};var FS_getMode=(canRead,canWrite)=>{var mode=0;if(canRead)mode|=292|73;if(canWrite)mode|=146;return mode};var FS={root:null,mounts:[],devices:{},streams:[],nextInode:1,nameTable:null,currentPath:"/",initialized:false,ignorePermissions:true,ErrnoError:class{constructor(errno){this.name="ErrnoError";this.errno=errno;}},genericErrors:{},filesystems:null,syncFSRequests:0,FSStream:class{constructor(){this.shared={};}get object(){return this.node}set object(val){this.node=val;}get isRead(){return (this.flags&2097155)!==1}get isWrite(){return (this.flags&2097155)!==0}get isAppend(){return this.flags&1024}get flags(){return this.shared.flags}set flags(val){this.shared.flags=val;}get position(){return this.shared.position}set position(val){this.shared.position=val;}},FSNode:class{constructor(parent,name,mode,rdev){if(!parent){parent=this;}this.parent=parent;this.mount=parent.mount;this.mounted=null;this.id=FS.nextInode++;this.name=name;this.mode=mode;this.node_ops={};this.stream_ops={};this.rdev=rdev;this.readMode=292|73;this.writeMode=146;}get read(){return (this.mode&this.readMode)===this.readMode}set read(val){val?this.mode|=this.readMode:this.mode&=~this.readMode;}get write(){return (this.mode&this.writeMode)===this.writeMode}set write(val){val?this.mode|=this.writeMode:this.mode&=~this.writeMode;}get isFolder(){return FS.isDir(this.mode)}get isDevice(){return FS.isChrdev(this.mode)}},lookupPath(path,opts={}){path=PATH_FS.resolve(path);if(!path)return {path:"",node:null};var defaults={follow_mount:true,recurse_count:0};opts=Object.assign(defaults,opts);if(opts.recurse_count>8){throw new FS.ErrnoError(32)}var parts=path.split("/").filter(p=>!!p);var current=FS.root;var current_path="/";for(var i=0;i<parts.length;i++){var islast=i===parts.length-1;if(islast&&opts.parent){break}current=FS.lookupNode(current,parts[i]);current_path=PATH.join2(current_path,parts[i]);if(FS.isMountpoint(current)){if(!islast||islast&&opts.follow_mount){current=current.mounted.root;}}if(!islast||opts.follow){var count=0;while(FS.isLink(current.mode)){var link=FS.readlink(current_path);current_path=PATH_FS.resolve(PATH.dirname(current_path),link);var lookup=FS.lookupPath(current_path,{recurse_count:opts.recurse_count+1});current=lookup.node;if(count++>40){throw new FS.ErrnoError(32)}}}}return {path:current_path,node:current}},getPath(node){var path;while(true){if(FS.isRoot(node)){var mount=node.mount.mountpoint;if(!path)return mount;return mount[mount.length-1]!=="/"?`${mount}/${path}`:mount+path}path=path?`${node.name}/${path}`:node.name;node=node.parent;}},hashName(parentid,name){var hash=0;for(var i=0;i<name.length;i++){hash=(hash<<5)-hash+name.charCodeAt(i)|0;}return (parentid+hash>>>0)%FS.nameTable.length},hashAddNode(node){var hash=FS.hashName(node.parent.id,node.name);node.name_next=FS.nameTable[hash];FS.nameTable[hash]=node;},hashRemoveNode(node){var hash=FS.hashName(node.parent.id,node.name);if(FS.nameTable[hash]===node){FS.nameTable[hash]=node.name_next;}else {var current=FS.nameTable[hash];while(current){if(current.name_next===node){current.name_next=node.name_next;break}current=current.name_next;}}},lookupNode(parent,name){var errCode=FS.mayLookup(parent);if(errCode){throw new FS.ErrnoError(errCode)}var hash=FS.hashName(parent.id,name);for(var node=FS.nameTable[hash];node;node=node.name_next){var nodeName=node.name;if(node.parent.id===parent.id&&nodeName===name){return node}}return FS.lookup(parent,name)},createNode(parent,name,mode,rdev){var node=new FS.FSNode(parent,name,mode,rdev);FS.hashAddNode(node);return node},destroyNode(node){FS.hashRemoveNode(node);},isRoot(node){return node===node.parent},isMountpoint(node){return !!node.mounted},isFile(mode){return (mode&61440)===32768},isDir(mode){return (mode&61440)===16384},isLink(mode){return (mode&61440)===40960},isChrdev(mode){return (mode&61440)===8192},isBlkdev(mode){return (mode&61440)===24576},isFIFO(mode){return (mode&61440)===4096},isSocket(mode){return (mode&49152)===49152},flagsToPermissionString(flag){var perms=["r","w","rw"][flag&3];if(flag&512){perms+="w";}return perms},nodePermissions(node,perms){if(FS.ignorePermissions){return 0}if(perms.includes("r")&&!(node.mode&292)){return 2}else if(perms.includes("w")&&!(node.mode&146)){return 2}else if(perms.includes("x")&&!(node.mode&73)){return 2}return 0},mayLookup(dir){if(!FS.isDir(dir.mode))return 54;var errCode=FS.nodePermissions(dir,"x");if(errCode)return errCode;if(!dir.node_ops.lookup)return 2;return 0},mayCreate(dir,name){try{var node=FS.lookupNode(dir,name);return 20}catch(e){}return FS.nodePermissions(dir,"wx")},mayDelete(dir,name,isdir){var node;try{node=FS.lookupNode(dir,name);}catch(e){return e.errno}var errCode=FS.nodePermissions(dir,"wx");if(errCode){return errCode}if(isdir){if(!FS.isDir(node.mode)){return 54}if(FS.isRoot(node)||FS.getPath(node)===FS.cwd()){return 10}}else {if(FS.isDir(node.mode)){return 31}}return 0},mayOpen(node,flags){if(!node){return 44}if(FS.isLink(node.mode)){return 32}else if(FS.isDir(node.mode)){if(FS.flagsToPermissionString(flags)!=="r"||flags&512){return 31}}return FS.nodePermissions(node,FS.flagsToPermissionString(flags))},MAX_OPEN_FDS:4096,nextfd(){for(var fd=0;fd<=FS.MAX_OPEN_FDS;fd++){if(!FS.streams[fd]){return fd}}throw new FS.ErrnoError(33)},getStreamChecked(fd){var stream=FS.getStream(fd);if(!stream){throw new FS.ErrnoError(8)}return stream},getStream:fd=>FS.streams[fd],createStream(stream,fd=-1){stream=Object.assign(new FS.FSStream,stream);if(fd==-1){fd=FS.nextfd();}stream.fd=fd;FS.streams[fd]=stream;return stream},closeStream(fd){FS.streams[fd]=null;},dupStream(origStream,fd=-1){var stream=FS.createStream(origStream,fd);stream.stream_ops?.dup?.(stream);return stream},chrdev_stream_ops:{open(stream){var device=FS.getDevice(stream.node.rdev);stream.stream_ops=device.stream_ops;stream.stream_ops.open?.(stream);},llseek(){throw new FS.ErrnoError(70)}},major:dev=>dev>>8,minor:dev=>dev&255,makedev:(ma,mi)=>ma<<8|mi,registerDevice(dev,ops){FS.devices[dev]={stream_ops:ops};},getDevice:dev=>FS.devices[dev],getMounts(mount){var mounts=[];var check=[mount];while(check.length){var m=check.pop();mounts.push(m);check.push(...m.mounts);}return mounts},syncfs(populate,callback){if(typeof populate=="function"){callback=populate;populate=false;}FS.syncFSRequests++;if(FS.syncFSRequests>1){err(`warning: ${FS.syncFSRequests} FS.syncfs operations in flight at once, probably just doing extra work`);}var mounts=FS.getMounts(FS.root.mount);var completed=0;function doCallback(errCode){FS.syncFSRequests--;return callback(errCode)}function done(errCode){if(errCode){if(!done.errored){done.errored=true;return doCallback(errCode)}return}if(++completed>=mounts.length){doCallback(null);}}mounts.forEach(mount=>{if(!mount.type.syncfs){return done(null)}mount.type.syncfs(mount,populate,done);});},mount(type,opts,mountpoint){var root=mountpoint==="/";var pseudo=!mountpoint;var node;if(root&&FS.root){throw new FS.ErrnoError(10)}else if(!root&&!pseudo){var lookup=FS.lookupPath(mountpoint,{follow_mount:false});mountpoint=lookup.path;node=lookup.node;if(FS.isMountpoint(node)){throw new FS.ErrnoError(10)}if(!FS.isDir(node.mode)){throw new FS.ErrnoError(54)}}var mount={type:type,opts:opts,mountpoint:mountpoint,mounts:[]};var mountRoot=type.mount(mount);mountRoot.mount=mount;mount.root=mountRoot;if(root){FS.root=mountRoot;}else if(node){node.mounted=mount;if(node.mount){node.mount.mounts.push(mount);}}return mountRoot},unmount(mountpoint){var lookup=FS.lookupPath(mountpoint,{follow_mount:false});if(!FS.isMountpoint(lookup.node)){throw new FS.ErrnoError(28)}var node=lookup.node;var mount=node.mounted;var mounts=FS.getMounts(mount);Object.keys(FS.nameTable).forEach(hash=>{var current=FS.nameTable[hash];while(current){var next=current.name_next;if(mounts.includes(current.mount)){FS.destroyNode(current);}current=next;}});node.mounted=null;var idx=node.mount.mounts.indexOf(mount);node.mount.mounts.splice(idx,1);},lookup(parent,name){return parent.node_ops.lookup(parent,name)},mknod(path,mode,dev){var lookup=FS.lookupPath(path,{parent:true});var parent=lookup.node;var name=PATH.basename(path);if(!name||name==="."||name===".."){throw new FS.ErrnoError(28)}var errCode=FS.mayCreate(parent,name);if(errCode){throw new FS.ErrnoError(errCode)}if(!parent.node_ops.mknod){throw new FS.ErrnoError(63)}return parent.node_ops.mknod(parent,name,mode,dev)},create(path,mode){mode=mode!==undefined?mode:438;mode&=4095;mode|=32768;return FS.mknod(path,mode,0)},mkdir(path,mode){mode=mode!==undefined?mode:511;mode&=511|512;mode|=16384;return FS.mknod(path,mode,0)},mkdirTree(path,mode){var dirs=path.split("/");var d="";for(var i=0;i<dirs.length;++i){if(!dirs[i])continue;d+="/"+dirs[i];try{FS.mkdir(d,mode);}catch(e){if(e.errno!=20)throw e}}},mkdev(path,mode,dev){if(typeof dev=="undefined"){dev=mode;mode=438;}mode|=8192;return FS.mknod(path,mode,dev)},symlink(oldpath,newpath){if(!PATH_FS.resolve(oldpath)){throw new FS.ErrnoError(44)}var lookup=FS.lookupPath(newpath,{parent:true});var parent=lookup.node;if(!parent){throw new FS.ErrnoError(44)}var newname=PATH.basename(newpath);var errCode=FS.mayCreate(parent,newname);if(errCode){throw new FS.ErrnoError(errCode)}if(!parent.node_ops.symlink){throw new FS.ErrnoError(63)}return parent.node_ops.symlink(parent,newname,oldpath)},rename(old_path,new_path){var old_dirname=PATH.dirname(old_path);var new_dirname=PATH.dirname(new_path);var old_name=PATH.basename(old_path);var new_name=PATH.basename(new_path);var lookup,old_dir,new_dir;lookup=FS.lookupPath(old_path,{parent:true});old_dir=lookup.node;lookup=FS.lookupPath(new_path,{parent:true});new_dir=lookup.node;if(!old_dir||!new_dir)throw new FS.ErrnoError(44);if(old_dir.mount!==new_dir.mount){throw new FS.ErrnoError(75)}var old_node=FS.lookupNode(old_dir,old_name);var relative=PATH_FS.relative(old_path,new_dirname);if(relative.charAt(0)!=="."){throw new FS.ErrnoError(28)}relative=PATH_FS.relative(new_path,old_dirname);if(relative.charAt(0)!=="."){throw new FS.ErrnoError(55)}var new_node;try{new_node=FS.lookupNode(new_dir,new_name);}catch(e){}if(old_node===new_node){return}var isdir=FS.isDir(old_node.mode);var errCode=FS.mayDelete(old_dir,old_name,isdir);if(errCode){throw new FS.ErrnoError(errCode)}errCode=new_node?FS.mayDelete(new_dir,new_name,isdir):FS.mayCreate(new_dir,new_name);if(errCode){throw new FS.ErrnoError(errCode)}if(!old_dir.node_ops.rename){throw new FS.ErrnoError(63)}if(FS.isMountpoint(old_node)||new_node&&FS.isMountpoint(new_node)){throw new FS.ErrnoError(10)}if(new_dir!==old_dir){errCode=FS.nodePermissions(old_dir,"w");if(errCode){throw new FS.ErrnoError(errCode)}}FS.hashRemoveNode(old_node);try{old_dir.node_ops.rename(old_node,new_dir,new_name);}catch(e){throw e}finally{FS.hashAddNode(old_node);}},rmdir(path){var lookup=FS.lookupPath(path,{parent:true});var parent=lookup.node;var name=PATH.basename(path);var node=FS.lookupNode(parent,name);var errCode=FS.mayDelete(parent,name,true);if(errCode){throw new FS.ErrnoError(errCode)}if(!parent.node_ops.rmdir){throw new FS.ErrnoError(63)}if(FS.isMountpoint(node)){throw new FS.ErrnoError(10)}parent.node_ops.rmdir(parent,name);FS.destroyNode(node);},readdir(path){var lookup=FS.lookupPath(path,{follow:true});var node=lookup.node;if(!node.node_ops.readdir){throw new FS.ErrnoError(54)}return node.node_ops.readdir(node)},unlink(path){var lookup=FS.lookupPath(path,{parent:true});var parent=lookup.node;if(!parent){throw new FS.ErrnoError(44)}var name=PATH.basename(path);var node=FS.lookupNode(parent,name);var errCode=FS.mayDelete(parent,name,false);if(errCode){throw new FS.ErrnoError(errCode)}if(!parent.node_ops.unlink){throw new FS.ErrnoError(63)}if(FS.isMountpoint(node)){throw new FS.ErrnoError(10)}parent.node_ops.unlink(parent,name);FS.destroyNode(node);},readlink(path){var lookup=FS.lookupPath(path);var link=lookup.node;if(!link){throw new FS.ErrnoError(44)}if(!link.node_ops.readlink){throw new FS.ErrnoError(28)}return PATH_FS.resolve(FS.getPath(link.parent),link.node_ops.readlink(link))},stat(path,dontFollow){var lookup=FS.lookupPath(path,{follow:!dontFollow});var node=lookup.node;if(!node){throw new FS.ErrnoError(44)}if(!node.node_ops.getattr){throw new FS.ErrnoError(63)}return node.node_ops.getattr(node)},lstat(path){return FS.stat(path,true)},chmod(path,mode,dontFollow){var node;if(typeof path=="string"){var lookup=FS.lookupPath(path,{follow:!dontFollow});node=lookup.node;}else {node=path;}if(!node.node_ops.setattr){throw new FS.ErrnoError(63)}node.node_ops.setattr(node,{mode:mode&4095|node.mode&-4096,timestamp:Date.now()});},lchmod(path,mode){FS.chmod(path,mode,true);},fchmod(fd,mode){var stream=FS.getStreamChecked(fd);FS.chmod(stream.node,mode);},chown(path,uid,gid,dontFollow){var node;if(typeof path=="string"){var lookup=FS.lookupPath(path,{follow:!dontFollow});node=lookup.node;}else {node=path;}if(!node.node_ops.setattr){throw new FS.ErrnoError(63)}node.node_ops.setattr(node,{timestamp:Date.now()});},lchown(path,uid,gid){FS.chown(path,uid,gid,true);},fchown(fd,uid,gid){var stream=FS.getStreamChecked(fd);FS.chown(stream.node,uid,gid);},truncate(path,len){if(len<0){throw new FS.ErrnoError(28)}var node;if(typeof path=="string"){var lookup=FS.lookupPath(path,{follow:true});node=lookup.node;}else {node=path;}if(!node.node_ops.setattr){throw new FS.ErrnoError(63)}if(FS.isDir(node.mode)){throw new FS.ErrnoError(31)}if(!FS.isFile(node.mode)){throw new FS.ErrnoError(28)}var errCode=FS.nodePermissions(node,"w");if(errCode){throw new FS.ErrnoError(errCode)}node.node_ops.setattr(node,{size:len,timestamp:Date.now()});},ftruncate(fd,len){var stream=FS.getStreamChecked(fd);if((stream.flags&2097155)===0){throw new FS.ErrnoError(28)}FS.truncate(stream.node,len);},utime(path,atime,mtime){var lookup=FS.lookupPath(path,{follow:true});var node=lookup.node;node.node_ops.setattr(node,{timestamp:Math.max(atime,mtime)});},open(path,flags,mode){if(path===""){throw new FS.ErrnoError(44)}flags=typeof flags=="string"?FS_modeStringToFlags(flags):flags;mode=typeof mode=="undefined"?438:mode;if(flags&64){mode=mode&4095|32768;}else {mode=0;}var node;if(typeof path=="object"){node=path;}else {path=PATH.normalize(path);try{var lookup=FS.lookupPath(path,{follow:!(flags&131072)});node=lookup.node;}catch(e){}}var created=false;if(flags&64){if(node){if(flags&128){throw new FS.ErrnoError(20)}}else {node=FS.mknod(path,mode,0);created=true;}}if(!node){throw new FS.ErrnoError(44)}if(FS.isChrdev(node.mode)){flags&=-513;}if(flags&65536&&!FS.isDir(node.mode)){throw new FS.ErrnoError(54)}if(!created){var errCode=FS.mayOpen(node,flags);if(errCode){throw new FS.ErrnoError(errCode)}}if(flags&512&&!created){FS.truncate(node,0);}flags&=-131713;var stream=FS.createStream({node:node,path:FS.getPath(node),flags:flags,seekable:true,position:0,stream_ops:node.stream_ops,ungotten:[],error:false});if(stream.stream_ops.open){stream.stream_ops.open(stream);}if(Module["logReadFiles"]&&!(flags&1)){if(!FS.readFiles)FS.readFiles={};if(!(path in FS.readFiles)){FS.readFiles[path]=1;}}return stream},close(stream){if(FS.isClosed(stream)){throw new FS.ErrnoError(8)}if(stream.getdents)stream.getdents=null;try{if(stream.stream_ops.close){stream.stream_ops.close(stream);}}catch(e){throw e}finally{FS.closeStream(stream.fd);}stream.fd=null;},isClosed(stream){return stream.fd===null},llseek(stream,offset,whence){if(FS.isClosed(stream)){throw new FS.ErrnoError(8)}if(!stream.seekable||!stream.stream_ops.llseek){throw new FS.ErrnoError(70)}if(whence!=0&&whence!=1&&whence!=2){throw new FS.ErrnoError(28)}stream.position=stream.stream_ops.llseek(stream,offset,whence);stream.ungotten=[];return stream.position},read(stream,buffer,offset,length,position){if(length<0||position<0){throw new FS.ErrnoError(28)}if(FS.isClosed(stream)){throw new FS.ErrnoError(8)}if((stream.flags&2097155)===1){throw new FS.ErrnoError(8)}if(FS.isDir(stream.node.mode)){throw new FS.ErrnoError(31)}if(!stream.stream_ops.read){throw new FS.ErrnoError(28)}var seeking=typeof position!="undefined";if(!seeking){position=stream.position;}else if(!stream.seekable){throw new FS.ErrnoError(70)}var bytesRead=stream.stream_ops.read(stream,buffer,offset,length,position);if(!seeking)stream.position+=bytesRead;return bytesRead},write(stream,buffer,offset,length,position,canOwn){if(length<0||position<0){throw new FS.ErrnoError(28)}if(FS.isClosed(stream)){throw new FS.ErrnoError(8)}if((stream.flags&2097155)===0){throw new FS.ErrnoError(8)}if(FS.isDir(stream.node.mode)){throw new FS.ErrnoError(31)}if(!stream.stream_ops.write){throw new FS.ErrnoError(28)}if(stream.seekable&&stream.flags&1024){FS.llseek(stream,0,2);}var seeking=typeof position!="undefined";if(!seeking){position=stream.position;}else if(!stream.seekable){throw new FS.ErrnoError(70)}var bytesWritten=stream.stream_ops.write(stream,buffer,offset,length,position,canOwn);if(!seeking)stream.position+=bytesWritten;return bytesWritten},allocate(stream,offset,length){if(FS.isClosed(stream)){throw new FS.ErrnoError(8)}if(offset<0||length<=0){throw new FS.ErrnoError(28)}if((stream.flags&2097155)===0){throw new FS.ErrnoError(8)}if(!FS.isFile(stream.node.mode)&&!FS.isDir(stream.node.mode)){throw new FS.ErrnoError(43)}if(!stream.stream_ops.allocate){throw new FS.ErrnoError(138)}stream.stream_ops.allocate(stream,offset,length);},mmap(stream,length,position,prot,flags){if((prot&2)!==0&&(flags&2)===0&&(stream.flags&2097155)!==2){throw new FS.ErrnoError(2)}if((stream.flags&2097155)===1){throw new FS.ErrnoError(2)}if(!stream.stream_ops.mmap){throw new FS.ErrnoError(43)}return stream.stream_ops.mmap(stream,length,position,prot,flags)},msync(stream,buffer,offset,length,mmapFlags){if(!stream.stream_ops.msync){return 0}return stream.stream_ops.msync(stream,buffer,offset,length,mmapFlags)},ioctl(stream,cmd,arg){if(!stream.stream_ops.ioctl){throw new FS.ErrnoError(59)}return stream.stream_ops.ioctl(stream,cmd,arg)},readFile(path,opts={}){opts.flags=opts.flags||0;opts.encoding=opts.encoding||"binary";if(opts.encoding!=="utf8"&&opts.encoding!=="binary"){throw new Error(`Invalid encoding type "${opts.encoding}"`)}var ret;var stream=FS.open(path,opts.flags);var stat=FS.stat(path);var length=stat.size;var buf=new Uint8Array(length);FS.read(stream,buf,0,length,0);if(opts.encoding==="utf8"){ret=UTF8ArrayToString(buf,0);}else if(opts.encoding==="binary"){ret=buf;}FS.close(stream);return ret},writeFile(path,data,opts={}){opts.flags=opts.flags||577;var stream=FS.open(path,opts.flags,opts.mode);if(typeof data=="string"){var buf=new Uint8Array(lengthBytesUTF8(data)+1);var actualNumBytes=stringToUTF8Array(data,buf,0,buf.length);FS.write(stream,buf,0,actualNumBytes,undefined,opts.canOwn);}else if(ArrayBuffer.isView(data)){FS.write(stream,data,0,data.byteLength,undefined,opts.canOwn);}else {throw new Error("Unsupported data type")}FS.close(stream);},cwd:()=>FS.currentPath,chdir(path){var lookup=FS.lookupPath(path,{follow:true});if(lookup.node===null){throw new FS.ErrnoError(44)}if(!FS.isDir(lookup.node.mode)){throw new FS.ErrnoError(54)}var errCode=FS.nodePermissions(lookup.node,"x");if(errCode){throw new FS.ErrnoError(errCode)}FS.currentPath=lookup.path;},createDefaultDirectories(){FS.mkdir("/tmp");FS.mkdir("/home");FS.mkdir("/home/web_user");},createDefaultDevices(){FS.mkdir("/dev");FS.registerDevice(FS.makedev(1,3),{read:()=>0,write:(stream,buffer,offset,length,pos)=>length});FS.mkdev("/dev/null",FS.makedev(1,3));TTY.register(FS.makedev(5,0),TTY.default_tty_ops);TTY.register(FS.makedev(6,0),TTY.default_tty1_ops);FS.mkdev("/dev/tty",FS.makedev(5,0));FS.mkdev("/dev/tty1",FS.makedev(6,0));var randomBuffer=new Uint8Array(1024),randomLeft=0;var randomByte=()=>{if(randomLeft===0){randomLeft=randomFill(randomBuffer).byteLength;}return randomBuffer[--randomLeft]};FS.createDevice("/dev","random",randomByte);FS.createDevice("/dev","urandom",randomByte);FS.mkdir("/dev/shm");FS.mkdir("/dev/shm/tmp");},createSpecialDirectories(){FS.mkdir("/proc");var proc_self=FS.mkdir("/proc/self");FS.mkdir("/proc/self/fd");FS.mount({mount(){var node=FS.createNode(proc_self,"fd",16384|511,73);node.node_ops={lookup(parent,name){var fd=+name;var stream=FS.getStreamChecked(fd);var ret={parent:null,mount:{mountpoint:"fake"},node_ops:{readlink:()=>stream.path}};ret.parent=ret;return ret}};return node}},{},"/proc/self/fd");},createStandardStreams(){if(Module["stdin"]){FS.createDevice("/dev","stdin",Module["stdin"]);}else {FS.symlink("/dev/tty","/dev/stdin");}if(Module["stdout"]){FS.createDevice("/dev","stdout",null,Module["stdout"]);}else {FS.symlink("/dev/tty","/dev/stdout");}if(Module["stderr"]){FS.createDevice("/dev","stderr",null,Module["stderr"]);}else {FS.symlink("/dev/tty1","/dev/stderr");}FS.open("/dev/stdin",0);FS.open("/dev/stdout",1);FS.open("/dev/stderr",1);},staticInit(){[44].forEach(code=>{FS.genericErrors[code]=new FS.ErrnoError(code);FS.genericErrors[code].stack="<generic error, no stack>";});FS.nameTable=new Array(4096);FS.mount(MEMFS,{},"/");FS.createDefaultDirectories();FS.createDefaultDevices();FS.createSpecialDirectories();FS.filesystems={"MEMFS":MEMFS};},init(input,output,error){FS.init.initialized=true;Module["stdin"]=input||Module["stdin"];Module["stdout"]=output||Module["stdout"];Module["stderr"]=error||Module["stderr"];FS.createStandardStreams();},quit(){FS.init.initialized=false;for(var i=0;i<FS.streams.length;i++){var stream=FS.streams[i];if(!stream){continue}FS.close(stream);}},findObject(path,dontResolveLastLink){var ret=FS.analyzePath(path,dontResolveLastLink);if(!ret.exists){return null}return ret.object},analyzePath(path,dontResolveLastLink){try{var lookup=FS.lookupPath(path,{follow:!dontResolveLastLink});path=lookup.path;}catch(e){}var ret={isRoot:false,exists:false,error:0,name:null,path:null,object:null,parentExists:false,parentPath:null,parentObject:null};try{var lookup=FS.lookupPath(path,{parent:true});ret.parentExists=true;ret.parentPath=lookup.path;ret.parentObject=lookup.node;ret.name=PATH.basename(path);lookup=FS.lookupPath(path,{follow:!dontResolveLastLink});ret.exists=true;ret.path=lookup.path;ret.object=lookup.node;ret.name=lookup.node.name;ret.isRoot=lookup.path==="/";}catch(e){ret.error=e.errno;}return ret},createPath(parent,path,canRead,canWrite){parent=typeof parent=="string"?parent:FS.getPath(parent);var parts=path.split("/").reverse();while(parts.length){var part=parts.pop();if(!part)continue;var current=PATH.join2(parent,part);try{FS.mkdir(current);}catch(e){}parent=current;}return current},createFile(parent,name,properties,canRead,canWrite){var path=PATH.join2(typeof parent=="string"?parent:FS.getPath(parent),name);var mode=FS_getMode(canRead,canWrite);return FS.create(path,mode)},createDataFile(parent,name,data,canRead,canWrite,canOwn){var path=name;if(parent){parent=typeof parent=="string"?parent:FS.getPath(parent);path=name?PATH.join2(parent,name):parent;}var mode=FS_getMode(canRead,canWrite);var node=FS.create(path,mode);if(data){if(typeof data=="string"){var arr=new Array(data.length);for(var i=0,len=data.length;i<len;++i)arr[i]=data.charCodeAt(i);data=arr;}FS.chmod(node,mode|146);var stream=FS.open(node,577);FS.write(stream,data,0,data.length,0,canOwn);FS.close(stream);FS.chmod(node,mode);}},createDevice(parent,name,input,output){var path=PATH.join2(typeof parent=="string"?parent:FS.getPath(parent),name);var mode=FS_getMode(!!input,!!output);if(!FS.createDevice.major)FS.createDevice.major=64;var dev=FS.makedev(FS.createDevice.major++,0);FS.registerDevice(dev,{open(stream){stream.seekable=false;},close(stream){if(output?.buffer?.length){output(10);}},read(stream,buffer,offset,length,pos){var bytesRead=0;for(var i=0;i<length;i++){var result;try{result=input();}catch(e){throw new FS.ErrnoError(29)}if(result===undefined&&bytesRead===0){throw new FS.ErrnoError(6)}if(result===null||result===undefined)break;bytesRead++;buffer[offset+i]=result;}if(bytesRead){stream.node.timestamp=Date.now();}return bytesRead},write(stream,buffer,offset,length,pos){for(var i=0;i<length;i++){try{output(buffer[offset+i]);}catch(e){throw new FS.ErrnoError(29)}}if(length){stream.node.timestamp=Date.now();}return i}});return FS.mkdev(path,mode,dev)},forceLoadFile(obj){if(obj.isDevice||obj.isFolder||obj.link||obj.contents)return true;if(typeof XMLHttpRequest!="undefined"){throw new Error("Lazy loading should have been performed (contents set) in createLazyFile, but it was not. Lazy loading only works in web workers. Use --embed-file or --preload-file in emcc on the main thread.")}else if(read_){try{obj.contents=intArrayFromString(read_(obj.url),true);obj.usedBytes=obj.contents.length;}catch(e){throw new FS.ErrnoError(29)}}else {throw new Error("Cannot load without read() or XMLHttpRequest.")}},createLazyFile(parent,name,url,canRead,canWrite){class LazyUint8Array{constructor(){this.lengthKnown=false;this.chunks=[];}get(idx){if(idx>this.length-1||idx<0){return undefined}var chunkOffset=idx%this.chunkSize;var chunkNum=idx/this.chunkSize|0;return this.getter(chunkNum)[chunkOffset]}setDataGetter(getter){this.getter=getter;}cacheLength(){var xhr=new XMLHttpRequest;xhr.open("HEAD",url,false);xhr.send(null);if(!(xhr.status>=200&&xhr.status<300||xhr.status===304))throw new Error("Couldn't load "+url+". Status: "+xhr.status);var datalength=Number(xhr.getResponseHeader("Content-length"));var header;var hasByteServing=(header=xhr.getResponseHeader("Accept-Ranges"))&&header==="bytes";var usesGzip=(header=xhr.getResponseHeader("Content-Encoding"))&&header==="gzip";var chunkSize=1024*1024;if(!hasByteServing)chunkSize=datalength;var doXHR=(from,to)=>{if(from>to)throw new Error("invalid range ("+from+", "+to+") or no bytes requested!");if(to>datalength-1)throw new Error("only "+datalength+" bytes available! programmer error!");var xhr=new XMLHttpRequest;xhr.open("GET",url,false);if(datalength!==chunkSize)xhr.setRequestHeader("Range","bytes="+from+"-"+to);xhr.responseType="arraybuffer";if(xhr.overrideMimeType){xhr.overrideMimeType("text/plain; charset=x-user-defined");}xhr.send(null);if(!(xhr.status>=200&&xhr.status<300||xhr.status===304))throw new Error("Couldn't load "+url+". Status: "+xhr.status);if(xhr.response!==undefined){return new Uint8Array(xhr.response||[])}return intArrayFromString(xhr.responseText||"")};var lazyArray=this;lazyArray.setDataGetter(chunkNum=>{var start=chunkNum*chunkSize;var end=(chunkNum+1)*chunkSize-1;end=Math.min(end,datalength-1);if(typeof lazyArray.chunks[chunkNum]=="undefined"){lazyArray.chunks[chunkNum]=doXHR(start,end);}if(typeof lazyArray.chunks[chunkNum]=="undefined")throw new Error("doXHR failed!");return lazyArray.chunks[chunkNum]});if(usesGzip||!datalength){chunkSize=datalength=1;datalength=this.getter(0).length;chunkSize=datalength;out("LazyFiles on gzip forces download of the whole file when length is accessed");}this._length=datalength;this._chunkSize=chunkSize;this.lengthKnown=true;}get length(){if(!this.lengthKnown){this.cacheLength();}return this._length}get chunkSize(){if(!this.lengthKnown){this.cacheLength();}return this._chunkSize}}if(typeof XMLHttpRequest!="undefined"){if(!ENVIRONMENT_IS_WORKER)throw "Cannot do synchronous binary XHRs outside webworkers in modern browsers. Use --embed-file or --preload-file in emcc";var lazyArray=new LazyUint8Array;var properties={isDevice:false,contents:lazyArray};}else {var properties={isDevice:false,url:url};}var node=FS.createFile(parent,name,properties,canRead,canWrite);if(properties.contents){node.contents=properties.contents;}else if(properties.url){node.contents=null;node.url=properties.url;}Object.defineProperties(node,{usedBytes:{get:function(){return this.contents.length}}});var stream_ops={};var keys=Object.keys(node.stream_ops);keys.forEach(key=>{var fn=node.stream_ops[key];stream_ops[key]=(...args)=>{FS.forceLoadFile(node);return fn(...args)};});function writeChunks(stream,buffer,offset,length,position){var contents=stream.node.contents;if(position>=contents.length)return 0;var size=Math.min(contents.length-position,length);if(contents.slice){for(var i=0;i<size;i++){buffer[offset+i]=contents[position+i];}}else {for(var i=0;i<size;i++){buffer[offset+i]=contents.get(position+i);}}return size}stream_ops.read=(stream,buffer,offset,length,position)=>{FS.forceLoadFile(node);return writeChunks(stream,buffer,offset,length,position)};stream_ops.mmap=(stream,length,position,prot,flags)=>{FS.forceLoadFile(node);var ptr=mmapAlloc();if(!ptr){throw new FS.ErrnoError(48)}writeChunks(stream,HEAP8,ptr,length,position);return {ptr:ptr,allocated:true}};node.stream_ops=stream_ops;return node}};var UTF8ToString=(ptr,maxBytesToRead)=>ptr?UTF8ArrayToString(HEAPU8,ptr,maxBytesToRead):"";var SYSCALLS={DEFAULT_POLLMASK:5,calculateAt(dirfd,path,allowEmpty){if(PATH.isAbs(path)){return path}var dir;if(dirfd===-100){dir=FS.cwd();}else {var dirstream=SYSCALLS.getStreamFromFD(dirfd);dir=dirstream.path;}if(path.length==0){if(!allowEmpty){throw new FS.ErrnoError(44)}return dir}return PATH.join2(dir,path)},doStat(func,path,buf){var stat=func(path);HEAP32[buf>>2]=stat.dev;HEAP32[buf+4>>2]=stat.mode;HEAPU32[buf+8>>2]=stat.nlink;HEAP32[buf+12>>2]=stat.uid;HEAP32[buf+16>>2]=stat.gid;HEAP32[buf+20>>2]=stat.rdev;HEAP64[buf+24>>3]=BigInt(stat.size);HEAP32[buf+32>>2]=4096;HEAP32[buf+36>>2]=stat.blocks;var atime=stat.atime.getTime();var mtime=stat.mtime.getTime();var ctime=stat.ctime.getTime();HEAP64[buf+40>>3]=BigInt(Math.floor(atime/1e3));HEAPU32[buf+48>>2]=atime%1e3*1e3;HEAP64[buf+56>>3]=BigInt(Math.floor(mtime/1e3));HEAPU32[buf+64>>2]=mtime%1e3*1e3;HEAP64[buf+72>>3]=BigInt(Math.floor(ctime/1e3));HEAPU32[buf+80>>2]=ctime%1e3*1e3;HEAP64[buf+88>>3]=BigInt(stat.ino);return 0},doMsync(addr,stream,len,flags,offset){if(!FS.isFile(stream.node.mode)){throw new FS.ErrnoError(43)}if(flags&2){return 0}var buffer=HEAPU8.slice(addr,addr+len);FS.msync(stream,buffer,offset,len,flags);},varargs:undefined,get(){var ret=HEAP32[+SYSCALLS.varargs>>2];SYSCALLS.varargs+=4;return ret},getp(){return SYSCALLS.get()},getStr(ptr){var ret=UTF8ToString(ptr);return ret},getStreamFromFD(fd){var stream=FS.getStreamChecked(fd);return stream}};function _fd_close(fd){try{var stream=SYSCALLS.getStreamFromFD(fd);FS.close(stream);return 0}catch(e){if(typeof FS=="undefined"||!(e.name==="ErrnoError"))throw e;return e.errno}}var doReadv=(stream,iov,iovcnt,offset)=>{var ret=0;for(var i=0;i<iovcnt;i++){var ptr=HEAPU32[iov>>2];var len=HEAPU32[iov+4>>2];iov+=8;var curr=FS.read(stream,HEAP8,ptr,len,offset);if(curr<0)return  -1;ret+=curr;if(curr<len)break;}return ret};function _fd_read(fd,iov,iovcnt,pnum){try{var stream=SYSCALLS.getStreamFromFD(fd);var num=doReadv(stream,iov,iovcnt);HEAPU32[pnum>>2]=num;return 0}catch(e){if(typeof FS=="undefined"||!(e.name==="ErrnoError"))throw e;return e.errno}}function _fd_seek(fd,offset,whence,newOffset){offset=bigintToI53Checked(offset);try{if(isNaN(offset))return 61;var stream=SYSCALLS.getStreamFromFD(fd);FS.llseek(stream,offset,whence);HEAP64[newOffset>>3]=BigInt(stream.position);if(stream.getdents&&offset===0&&whence===0)stream.getdents=null;return 0}catch(e){if(typeof FS=="undefined"||!(e.name==="ErrnoError"))throw e;return e.errno}}var doWritev=(stream,iov,iovcnt,offset)=>{var ret=0;for(var i=0;i<iovcnt;i++){var ptr=HEAPU32[iov>>2];var len=HEAPU32[iov+4>>2];iov+=8;var curr=FS.write(stream,HEAP8,ptr,len,offset);if(curr<0)return  -1;ret+=curr;}return ret};function _fd_write(fd,iov,iovcnt,pnum){try{var stream=SYSCALLS.getStreamFromFD(fd);var num=doWritev(stream,iov,iovcnt);HEAPU32[pnum>>2]=num;return 0}catch(e){if(typeof FS=="undefined"||!(e.name==="ErrnoError"))throw e;return e.errno}}var _proc_exit=code=>{EXITSTATUS=code;quit_(code,new ExitStatus(code));};var exitJS=(status,implicit)=>{EXITSTATUS=status;_proc_exit(status);};var handleException=e=>{if(e instanceof ExitStatus||e=="unwind"){return EXITSTATUS}quit_(1,e);};var runAndAbortIfError=func=>{try{return func()}catch(e){abort(e);}};var maybeExit=()=>{};var callUserCallback=func=>{if(ABORT){return}try{func();maybeExit();}catch(e){handleException(e);}};var Asyncify={instrumentWasmImports(imports){var importPattern=/^(invoke_.*|__asyncjs__.*)$/;for(let[x,original]of Object.entries(imports)){original.sig;if(typeof original=="function"){original.isAsync||importPattern.test(x);}}},instrumentWasmExports(exports){var ret={};for(let[x,original]of Object.entries(exports)){if(typeof original=="function"){ret[x]=(...args)=>{Asyncify.exportCallStack.push(x);try{return original(...args)}finally{if(!ABORT){Asyncify.exportCallStack.pop();Asyncify.maybeStopUnwind();}}};}else {ret[x]=original;}}return ret},State:{Normal:0,Unwinding:1,Rewinding:2,Disabled:3},state:0,StackSize:4096,currData:null,handleSleepReturnValue:0,exportCallStack:[],callStackNameToId:{},callStackIdToName:{},callStackId:0,asyncPromiseHandlers:null,sleepCallbacks:[],getCallStackId(funcName){var id=Asyncify.callStackNameToId[funcName];if(id===undefined){id=Asyncify.callStackId++;Asyncify.callStackNameToId[funcName]=id;Asyncify.callStackIdToName[id]=funcName;}return id},maybeStopUnwind(){if(Asyncify.currData&&Asyncify.state===Asyncify.State.Unwinding&&Asyncify.exportCallStack.length===0){Asyncify.state=Asyncify.State.Normal;runAndAbortIfError(_asyncify_stop_unwind);if(typeof Fibers!="undefined"){Fibers.trampoline();}}},whenDone(){return new Promise((resolve,reject)=>{Asyncify.asyncPromiseHandlers={resolve:resolve,reject:reject};})},allocateData(){var ptr=_malloc(12+Asyncify.StackSize);Asyncify.setDataHeader(ptr,ptr+12,Asyncify.StackSize);Asyncify.setDataRewindFunc(ptr);return ptr},setDataHeader(ptr,stack,stackSize){HEAPU32[ptr>>2]=stack;HEAPU32[ptr+4>>2]=stack+stackSize;},setDataRewindFunc(ptr){var bottomOfCallStack=Asyncify.exportCallStack[0];var rewindId=Asyncify.getCallStackId(bottomOfCallStack);HEAP32[ptr+8>>2]=rewindId;},getDataRewindFunc(ptr){var id=HEAP32[ptr+8>>2];var name=Asyncify.callStackIdToName[id];var func=wasmExports[name];return func},doRewind(ptr){var start=Asyncify.getDataRewindFunc(ptr);return start()},handleSleep(startAsync){if(ABORT)return;if(Asyncify.state===Asyncify.State.Normal){var reachedCallback=false;var reachedAfterCallback=false;startAsync((handleSleepReturnValue=0)=>{if(ABORT)return;Asyncify.handleSleepReturnValue=handleSleepReturnValue;reachedCallback=true;if(!reachedAfterCallback){return}Asyncify.state=Asyncify.State.Rewinding;runAndAbortIfError(()=>_asyncify_start_rewind(Asyncify.currData));if(typeof Browser!="undefined"&&Browser.mainLoop.func){Browser.mainLoop.resume();}var asyncWasmReturnValue,isError=false;try{asyncWasmReturnValue=Asyncify.doRewind(Asyncify.currData);}catch(err){asyncWasmReturnValue=err;isError=true;}var handled=false;if(!Asyncify.currData){var asyncPromiseHandlers=Asyncify.asyncPromiseHandlers;if(asyncPromiseHandlers){Asyncify.asyncPromiseHandlers=null;(isError?asyncPromiseHandlers.reject:asyncPromiseHandlers.resolve)(asyncWasmReturnValue);handled=true;}}if(isError&&!handled){throw asyncWasmReturnValue}});reachedAfterCallback=true;if(!reachedCallback){Asyncify.state=Asyncify.State.Unwinding;Asyncify.currData=Asyncify.allocateData();if(typeof Browser!="undefined"&&Browser.mainLoop.func){Browser.mainLoop.pause();}runAndAbortIfError(()=>_asyncify_start_unwind(Asyncify.currData));}}else if(Asyncify.state===Asyncify.State.Rewinding){Asyncify.state=Asyncify.State.Normal;runAndAbortIfError(_asyncify_stop_rewind);_free(Asyncify.currData);Asyncify.currData=null;Asyncify.sleepCallbacks.forEach(callUserCallback);}else {abort(`invalid state: ${Asyncify.state}`);}return Asyncify.handleSleepReturnValue},handleAsync(startAsync){return Asyncify.handleSleep(wakeUp=>{startAsync().then(wakeUp);})}};FS.createPreloadedFile=FS_createPreloadedFile;FS.staticInit();var wasmImports={TVMFFIWasmFunctionDeleter:_TVMFFIWasmFunctionDeleter,TVMFFIWasmSafeCall:_TVMFFIWasmSafeCall,_ZN3tvm7runtime9threading10NumThreadsEv:__ZN3tvm7runtime9threading10NumThreadsEv,_ZN3tvm7runtime9threading15ResetThreadPoolEv:__ZN3tvm7runtime9threading15ResetThreadPoolEv,clock_time_get:_clock_time_get,emscripten_notify_memory_growth:_emscripten_notify_memory_growth,environ_get:_environ_get,environ_sizes_get:_environ_sizes_get,fd_close:_fd_close,fd_read:_fd_read,fd_seek:_fd_seek,fd_write:_fd_write,proc_exit:_proc_exit};var wasmExports=createWasm();var _malloc=a0=>(_malloc=wasmExports["malloc"])(a0);Module["_TVMFFIBacktrace"]=(a0,a1,a2,a3)=>(Module["_TVMFFIBacktrace"]=wasmExports["TVMFFIBacktrace"])(a0,a1,a2,a3);Module["_TVMFFIEnvSetStream"]=(a0,a1,a2,a3)=>(Module["_TVMFFIEnvSetStream"]=wasmExports["TVMFFIEnvSetStream"])(a0,a1,a2,a3);Module["_TVMFFIEnvGetStream"]=(a0,a1)=>(Module["_TVMFFIEnvGetStream"]=wasmExports["TVMFFIEnvGetStream"])(a0,a1);Module["_TVMBackendGetFuncFromEnv"]=(a0,a1,a2)=>(Module["_TVMBackendGetFuncFromEnv"]=wasmExports["TVMBackendGetFuncFromEnv"])(a0,a1,a2);Module["_TVMFFIEnvModLookupFromImports"]=(a0,a1,a2)=>(Module["_TVMFFIEnvModLookupFromImports"]=wasmExports["TVMFFIEnvModLookupFromImports"])(a0,a1,a2);Module["_TVMBackendAllocWorkspace"]=(a0,a1,a2,a3,a4)=>(Module["_TVMBackendAllocWorkspace"]=wasmExports["TVMBackendAllocWorkspace"])(a0,a1,a2,a3,a4);Module["_TVMBackendFreeWorkspace"]=(a0,a1,a2)=>(Module["_TVMBackendFreeWorkspace"]=wasmExports["TVMBackendFreeWorkspace"])(a0,a1,a2);Module["_TVMBackendRunOnce"]=(a0,a1,a2,a3)=>(Module["_TVMBackendRunOnce"]=wasmExports["TVMBackendRunOnce"])(a0,a1,a2,a3);Module["_TVMFFIDataTypeToString"]=(a0,a1)=>(Module["_TVMFFIDataTypeToString"]=wasmExports["TVMFFIDataTypeToString"])(a0,a1);Module["__ZN3tvm3ffi4json9StringifyERKNS0_3AnyENS0_8OptionalIivEE"]=(a0,a1,a2)=>(Module["__ZN3tvm3ffi4json9StringifyERKNS0_3AnyENS0_8OptionalIivEE"]=wasmExports["_ZN3tvm3ffi4json9StringifyERKNS0_3AnyENS0_8OptionalIivEE"])(a0,a1,a2);Module["__ZN3tvm3ffi4json5ParseERKNS0_6StringEPS2_"]=(a0,a1,a2)=>(Module["__ZN3tvm3ffi4json5ParseERKNS0_6StringEPS2_"]=wasmExports["_ZN3tvm3ffi4json5ParseERKNS0_6StringEPS2_"])(a0,a1,a2);Module["__ZN3tvm7runtime6Tensor5EmptyENS_3ffi5ShapeE10DLDataType8DLDeviceNS2_8OptionalINS2_6StringEvEE"]=(a0,a1,a2,a3,a4)=>(Module["__ZN3tvm7runtime6Tensor5EmptyENS_3ffi5ShapeE10DLDataType8DLDeviceNS2_8OptionalINS2_6StringEvEE"]=wasmExports["_ZN3tvm7runtime6Tensor5EmptyENS_3ffi5ShapeE10DLDataType8DLDeviceNS2_8OptionalINS2_6StringEvEE"])(a0,a1,a2,a3,a4);Module["__ZN3tvm7runtime6Tensor11CopyToBytesEPK8DLTensorPvmS5_"]=(a0,a1,a2,a3)=>(Module["__ZN3tvm7runtime6Tensor11CopyToBytesEPK8DLTensorPvmS5_"]=wasmExports["_ZN3tvm7runtime6Tensor11CopyToBytesEPK8DLTensorPvmS5_"])(a0,a1,a2,a3);Module["_TVMFFITypeGetOrAllocIndex"]=(a0,a1,a2,a3,a4,a5)=>(Module["_TVMFFITypeGetOrAllocIndex"]=wasmExports["TVMFFITypeGetOrAllocIndex"])(a0,a1,a2,a3,a4,a5);Module["__ZN3tvm7runtime5Timer5StartE8DLDevice"]=(a0,a1)=>(Module["__ZN3tvm7runtime5Timer5StartE8DLDevice"]=wasmExports["_ZN3tvm7runtime5Timer5StartE8DLDevice"])(a0,a1);Module["_TVMFFIFunctionGetGlobal"]=(a0,a1)=>(Module["_TVMFFIFunctionGetGlobal"]=wasmExports["TVMFFIFunctionGetGlobal"])(a0,a1);Module["__ZN3tvm7runtime6detail14LogMessageImplERKNSt3__212basic_stringIcNS2_11char_traitsIcEENS2_9allocatorIcEEEEiiSA_"]=(a0,a1,a2,a3)=>(Module["__ZN3tvm7runtime6detail14LogMessageImplERKNSt3__212basic_stringIcNS2_11char_traitsIcEENS2_9allocatorIcEEEEiiSA_"]=wasmExports["_ZN3tvm7runtime6detail14LogMessageImplERKNSt3__212basic_stringIcNS2_11char_traitsIcEENS2_9allocatorIcEEEEiiSA_"])(a0,a1,a2,a3);Module["__ZN3tvm7runtime6Tensor13CopyFromBytesEPK8DLTensorPvmS5_"]=(a0,a1,a2,a3)=>(Module["__ZN3tvm7runtime6Tensor13CopyFromBytesEPK8DLTensorPvmS5_"]=wasmExports["_ZN3tvm7runtime6Tensor13CopyFromBytesEPK8DLTensorPvmS5_"])(a0,a1,a2,a3);Module["__ZNK3tvm7runtime6Tensor10CreateViewENS_3ffi5ShapeE10DLDataTypey"]=(a0,a1,a2,a3,a4)=>(Module["__ZNK3tvm7runtime6Tensor10CreateViewENS_3ffi5ShapeE10DLDataTypey"]=wasmExports["_ZNK3tvm7runtime6Tensor10CreateViewENS_3ffi5ShapeE10DLDataTypey"])(a0,a1,a2,a3,a4);Module["__ZNK3tvm7runtime6Tensor11CopyToBytesEPvm"]=(a0,a1,a2)=>(Module["__ZNK3tvm7runtime6Tensor11CopyToBytesEPvm"]=wasmExports["_ZNK3tvm7runtime6Tensor11CopyToBytesEPvm"])(a0,a1,a2);Module["__ZN3tvm7runtime6Tensor13CopyFromBytesEPKvm"]=(a0,a1,a2)=>(Module["__ZN3tvm7runtime6Tensor13CopyFromBytesEPKvm"]=wasmExports["_ZN3tvm7runtime6Tensor13CopyFromBytesEPKvm"])(a0,a1,a2);Module["__ZNK3tvm7runtime6Tensor6CopyToERK8DLDeviceNS_3ffi8OptionalINS5_6StringEvEE"]=(a0,a1,a2,a3)=>(Module["__ZNK3tvm7runtime6Tensor6CopyToERK8DLDeviceNS_3ffi8OptionalINS5_6StringEvEE"]=wasmExports["_ZNK3tvm7runtime6Tensor6CopyToERK8DLDeviceNS_3ffi8OptionalINS5_6StringEvEE"])(a0,a1,a2,a3);Module["__ZN3tvm7runtime6Tensor10CopyFromToEPK8DLTensorPS2_Pv"]=(a0,a1,a2)=>(Module["__ZN3tvm7runtime6Tensor10CopyFromToEPK8DLTensorPS2_Pv"]=wasmExports["_ZN3tvm7runtime6Tensor10CopyFromToEPK8DLTensorPS2_Pv"])(a0,a1,a2);Module["_TVMFFIDataTypeFromString"]=(a0,a1)=>(Module["_TVMFFIDataTypeFromString"]=wasmExports["TVMFFIDataTypeFromString"])(a0,a1);Module["_TVMFFIErrorSetRaisedFromCStr"]=(a0,a1)=>(Module["_TVMFFIErrorSetRaisedFromCStr"]=wasmExports["TVMFFIErrorSetRaisedFromCStr"])(a0,a1);Module["_TVMFFIErrorSetRaisedFromCStrParts"]=(a0,a1,a2)=>(Module["_TVMFFIErrorSetRaisedFromCStrParts"]=wasmExports["TVMFFIErrorSetRaisedFromCStrParts"])(a0,a1,a2);Module["_TVMFFIErrorSetRaised"]=a0=>(Module["_TVMFFIErrorSetRaised"]=wasmExports["TVMFFIErrorSetRaised"])(a0);Module["_TVMFFIErrorMoveFromRaised"]=a0=>(Module["_TVMFFIErrorMoveFromRaised"]=wasmExports["TVMFFIErrorMoveFromRaised"])(a0);Module["_TVMFFIErrorCreate"]=(a0,a1,a2,a3)=>(Module["_TVMFFIErrorCreate"]=wasmExports["TVMFFIErrorCreate"])(a0,a1,a2,a3);Module["_TVMFFIErrorCreateWithCauseAndExtraContext"]=(a0,a1,a2,a3,a4,a5)=>(Module["_TVMFFIErrorCreateWithCauseAndExtraContext"]=wasmExports["TVMFFIErrorCreateWithCauseAndExtraContext"])(a0,a1,a2,a3,a4,a5);Module["_TVMFFIEnvCheckSignals"]=()=>(Module["_TVMFFIEnvCheckSignals"]=wasmExports["TVMFFIEnvCheckSignals"])();Module["_TVMFFIEnvRegisterCAPI"]=(a0,a1)=>(Module["_TVMFFIEnvRegisterCAPI"]=wasmExports["TVMFFIEnvRegisterCAPI"])(a0,a1);Module["_TVMFFIEnvSetDLPackManagedTensorAllocator"]=(a0,a1,a2)=>(Module["_TVMFFIEnvSetDLPackManagedTensorAllocator"]=wasmExports["TVMFFIEnvSetDLPackManagedTensorAllocator"])(a0,a1,a2);Module["_TVMFFIEnvGetDLPackManagedTensorAllocator"]=()=>(Module["_TVMFFIEnvGetDLPackManagedTensorAllocator"]=wasmExports["TVMFFIEnvGetDLPackManagedTensorAllocator"])();Module["_TVMFFIEnvTensorAlloc"]=(a0,a1)=>(Module["_TVMFFIEnvTensorAlloc"]=wasmExports["TVMFFIEnvTensorAlloc"])(a0,a1);Module["__ZN3tvm3ffi6Module19VisitContextSymbolsERKNS0_13TypedFunctionIFvNS0_6StringEPvEEE"]=a0=>(Module["__ZN3tvm3ffi6Module19VisitContextSymbolsERKNS0_13TypedFunctionIFvNS0_6StringEPvEEE"]=wasmExports["_ZN3tvm3ffi6Module19VisitContextSymbolsERKNS0_13TypedFunctionIFvNS0_6StringEPvEEE"])(a0);Module["_TVMFFIEnvModRegisterContextSymbol"]=(a0,a1)=>(Module["_TVMFFIEnvModRegisterContextSymbol"]=wasmExports["TVMFFIEnvModRegisterContextSymbol"])(a0,a1);Module["_TVMFFIEnvModRegisterSystemLibSymbol"]=(a0,a1)=>(Module["_TVMFFIEnvModRegisterSystemLibSymbol"]=wasmExports["TVMFFIEnvModRegisterSystemLibSymbol"])(a0,a1);Module["__ZN3tvm3ffi6Module12LoadFromFileERKNS0_6StringE"]=(a0,a1)=>(Module["__ZN3tvm3ffi6Module12LoadFromFileERKNS0_6StringE"]=wasmExports["_ZN3tvm3ffi6Module12LoadFromFileERKNS0_6StringE"])(a0,a1);Module["_TVMFFIFunctionCreate"]=(a0,a1,a2,a3)=>(Module["_TVMFFIFunctionCreate"]=wasmExports["TVMFFIFunctionCreate"])(a0,a1,a2,a3);Module["_TVMFFIAnyViewToOwnedAny"]=(a0,a1)=>(Module["_TVMFFIAnyViewToOwnedAny"]=wasmExports["TVMFFIAnyViewToOwnedAny"])(a0,a1);Module["_TVMFFIFunctionSetGlobal"]=(a0,a1,a2)=>(Module["_TVMFFIFunctionSetGlobal"]=wasmExports["TVMFFIFunctionSetGlobal"])(a0,a1,a2);Module["_TVMFFIFunctionSetGlobalFromMethodInfo"]=(a0,a1)=>(Module["_TVMFFIFunctionSetGlobalFromMethodInfo"]=wasmExports["TVMFFIFunctionSetGlobalFromMethodInfo"])(a0,a1);Module["_TVMFFIFunctionCall"]=(a0,a1,a2,a3)=>(Module["_TVMFFIFunctionCall"]=wasmExports["TVMFFIFunctionCall"])(a0,a1,a2,a3);Module["_TVMFFIGetVersion"]=a0=>(Module["_TVMFFIGetVersion"]=wasmExports["TVMFFIGetVersion"])(a0);Module["_TVMFFIObjectDecRef"]=a0=>(Module["_TVMFFIObjectDecRef"]=wasmExports["TVMFFIObjectDecRef"])(a0);Module["_TVMFFIObjectIncRef"]=a0=>(Module["_TVMFFIObjectIncRef"]=wasmExports["TVMFFIObjectIncRef"])(a0);Module["_TVMFFIObjectCreateOpaque"]=(a0,a1,a2,a3)=>(Module["_TVMFFIObjectCreateOpaque"]=wasmExports["TVMFFIObjectCreateOpaque"])(a0,a1,a2,a3);Module["_TVMFFITypeKeyToIndex"]=(a0,a1)=>(Module["_TVMFFITypeKeyToIndex"]=wasmExports["TVMFFITypeKeyToIndex"])(a0,a1);Module["_TVMFFITypeRegisterField"]=(a0,a1)=>(Module["_TVMFFITypeRegisterField"]=wasmExports["TVMFFITypeRegisterField"])(a0,a1);Module["_TVMFFITypeRegisterMethod"]=(a0,a1)=>(Module["_TVMFFITypeRegisterMethod"]=wasmExports["TVMFFITypeRegisterMethod"])(a0,a1);Module["_TVMFFITypeRegisterMetadata"]=(a0,a1)=>(Module["_TVMFFITypeRegisterMetadata"]=wasmExports["TVMFFITypeRegisterMetadata"])(a0,a1);Module["_TVMFFITypeRegisterAttr"]=(a0,a1,a2)=>(Module["_TVMFFITypeRegisterAttr"]=wasmExports["TVMFFITypeRegisterAttr"])(a0,a1,a2);Module["_TVMFFIGetTypeAttrColumn"]=a0=>(Module["_TVMFFIGetTypeAttrColumn"]=wasmExports["TVMFFIGetTypeAttrColumn"])(a0);Module["_TVMFFIGetTypeInfo"]=a0=>(Module["_TVMFFIGetTypeInfo"]=wasmExports["TVMFFIGetTypeInfo"])(a0);Module["_TVMFFIStringFromByteArray"]=(a0,a1)=>(Module["_TVMFFIStringFromByteArray"]=wasmExports["TVMFFIStringFromByteArray"])(a0,a1);Module["_TVMFFIBytesFromByteArray"]=(a0,a1)=>(Module["_TVMFFIBytesFromByteArray"]=wasmExports["TVMFFIBytesFromByteArray"])(a0,a1);Module["_TVMFFITensorCreateUnsafeView"]=(a0,a1,a2)=>(Module["_TVMFFITensorCreateUnsafeView"]=wasmExports["TVMFFITensorCreateUnsafeView"])(a0,a1,a2);Module["_TVMFFITensorFromDLPack"]=(a0,a1,a2,a3)=>(Module["_TVMFFITensorFromDLPack"]=wasmExports["TVMFFITensorFromDLPack"])(a0,a1,a2,a3);Module["_TVMFFITensorFromDLPackVersioned"]=(a0,a1,a2,a3)=>(Module["_TVMFFITensorFromDLPackVersioned"]=wasmExports["TVMFFITensorFromDLPackVersioned"])(a0,a1,a2,a3);Module["_TVMFFITensorToDLPack"]=(a0,a1)=>(Module["_TVMFFITensorToDLPack"]=wasmExports["TVMFFITensorToDLPack"])(a0,a1);Module["_TVMFFITensorToDLPackVersioned"]=(a0,a1)=>(Module["_TVMFFITensorToDLPackVersioned"]=wasmExports["TVMFFITensorToDLPackVersioned"])(a0,a1);Module["___tvm_ffi_testing_dll_schema_id_int"]=(a0,a1,a2,a3)=>(Module["___tvm_ffi_testing_dll_schema_id_int"]=wasmExports["__tvm_ffi_testing_dll_schema_id_int"])(a0,a1,a2,a3);Module["___tvm_ffi_testing_dll_test_add_with_docstring"]=(a0,a1,a2,a3)=>(Module["___tvm_ffi_testing_dll_test_add_with_docstring"]=wasmExports["__tvm_ffi_testing_dll_test_add_with_docstring"])(a0,a1,a2,a3);Module["_TVMFFITestingDummyTarget"]=()=>(Module["_TVMFFITestingDummyTarget"]=wasmExports["TVMFFITestingDummyTarget"])();Module["__ZN3tvm7runtime6memory9Allocator10CreateViewERKNS1_6BufferENS_3ffi5ShapeE10DLDataTypeRKNSt3__212basic_stringIcNS9_11char_traitsIcEENS9_9allocatorIcEEEE"]=(a0,a1,a2,a3,a4)=>(Module["__ZN3tvm7runtime6memory9Allocator10CreateViewERKNS1_6BufferENS_3ffi5ShapeE10DLDataTypeRKNSt3__212basic_stringIcNS9_11char_traitsIcEENS9_9allocatorIcEEEE"]=wasmExports["_ZN3tvm7runtime6memory9Allocator10CreateViewERKNS1_6BufferENS_3ffi5ShapeE10DLDataTypeRKNSt3__212basic_stringIcNS9_11char_traitsIcEENS9_9allocatorIcEEEE"])(a0,a1,a2,a3,a4);Module["__ZN3tvm7runtime6memory9Allocator8FreeViewE8DLDevicePv"]=(a0,a1,a2)=>(Module["__ZN3tvm7runtime6memory9Allocator8FreeViewE8DLDevicePv"]=wasmExports["_ZN3tvm7runtime6memory9Allocator8FreeViewE8DLDevicePv"])(a0,a1,a2);Module["__ZN3tvm7runtime6memory7StorageC2ENS1_6BufferEPNS1_9AllocatorE"]=(a0,a1,a2)=>(Module["__ZN3tvm7runtime6memory7StorageC2ENS1_6BufferEPNS1_9AllocatorE"]=wasmExports["_ZN3tvm7runtime6memory7StorageC2ENS1_6BufferEPNS1_9AllocatorE"])(a0,a1,a2);Module["__ZN3tvm7runtime6memory10StorageObj17AllocTensorScopedExNS_3ffi5ShapeE10DLDataTypeNS3_6StringE"]=(a0,a1,a2,a3,a4,a5)=>(Module["__ZN3tvm7runtime6memory10StorageObj17AllocTensorScopedExNS_3ffi5ShapeE10DLDataTypeNS3_6StringE"]=wasmExports["_ZN3tvm7runtime6memory10StorageObj17AllocTensorScopedExNS_3ffi5ShapeE10DLDataTypeNS3_6StringE"])(a0,a1,a2,a3,a4,a5);Module["__ZN3tvm7runtime6memory10StorageObj11AllocTensorExNS_3ffi5ShapeE10DLDataType"]=(a0,a1,a2,a3,a4)=>(Module["__ZN3tvm7runtime6memory10StorageObj11AllocTensorExNS_3ffi5ShapeE10DLDataType"]=wasmExports["_ZN3tvm7runtime6memory10StorageObj11AllocTensorExNS_3ffi5ShapeE10DLDataType"])(a0,a1,a2,a3,a4);Module["__ZN3tvm7runtime6memory13MemoryManager6GlobalEv"]=()=>(Module["__ZN3tvm7runtime6memory13MemoryManager6GlobalEv"]=wasmExports["_ZN3tvm7runtime6memory13MemoryManager6GlobalEv"])();Module["__ZN3tvm7runtime6memory13MemoryManager20GetOrCreateAllocatorE8DLDeviceNS1_13AllocatorTypeE"]=(a0,a1)=>(Module["__ZN3tvm7runtime6memory13MemoryManager20GetOrCreateAllocatorE8DLDeviceNS1_13AllocatorTypeE"]=wasmExports["_ZN3tvm7runtime6memory13MemoryManager20GetOrCreateAllocatorE8DLDeviceNS1_13AllocatorTypeE"])(a0,a1);Module["__ZN3tvm7runtime6memory13MemoryManager12GetAllocatorE8DLDeviceNS1_13AllocatorTypeE"]=(a0,a1)=>(Module["__ZN3tvm7runtime6memory13MemoryManager12GetAllocatorE8DLDeviceNS1_13AllocatorTypeE"]=wasmExports["_ZN3tvm7runtime6memory13MemoryManager12GetAllocatorE8DLDeviceNS1_13AllocatorTypeE"])(a0,a1);Module["__ZN3tvm7runtime6memory9Allocator5EmptyENS_3ffi5ShapeE10DLDataType8DLDeviceNS3_8OptionalINS3_6StringEvEE"]=(a0,a1,a2,a3,a4,a5)=>(Module["__ZN3tvm7runtime6memory9Allocator5EmptyENS_3ffi5ShapeE10DLDataType8DLDeviceNS3_8OptionalINS3_6StringEvEE"]=wasmExports["_ZN3tvm7runtime6memory9Allocator5EmptyENS_3ffi5ShapeE10DLDataType8DLDeviceNS3_8OptionalINS3_6StringEvEE"])(a0,a1,a2,a3,a4,a5);Module["__ZNK3tvm7runtime6memory9Allocator16AllowMemoryScopeERKNSt3__212basic_stringIcNS3_11char_traitsIcEENS3_9allocatorIcEEEE"]=(a0,a1)=>(Module["__ZNK3tvm7runtime6memory9Allocator16AllowMemoryScopeERKNSt3__212basic_stringIcNS3_11char_traitsIcEENS3_9allocatorIcEEEE"]=wasmExports["_ZNK3tvm7runtime6memory9Allocator16AllowMemoryScopeERKNSt3__212basic_stringIcNS3_11char_traitsIcEENS3_9allocatorIcEEEE"])(a0,a1);Module["__ZN3tvm7runtime6memory9Allocator5AllocE8DLDeviceNS_3ffi5ShapeE10DLDataTypeRKNSt3__212basic_stringIcNS7_11char_traitsIcEENS7_9allocatorIcEEEE"]=(a0,a1,a2,a3,a4,a5)=>(Module["__ZN3tvm7runtime6memory9Allocator5AllocE8DLDeviceNS_3ffi5ShapeE10DLDataTypeRKNSt3__212basic_stringIcNS7_11char_traitsIcEENS7_9allocatorIcEEEE"]=wasmExports["_ZN3tvm7runtime6memory9Allocator5AllocE8DLDeviceNS_3ffi5ShapeE10DLDataTypeRKNSt3__212basic_stringIcNS7_11char_traitsIcEENS7_9allocatorIcEEEE"])(a0,a1,a2,a3,a4,a5);Module["__ZN3tvm7runtime6memory9Allocator5ClearEv"]=a0=>(Module["__ZN3tvm7runtime6memory9Allocator5ClearEv"]=wasmExports["_ZN3tvm7runtime6memory9Allocator5ClearEv"])(a0);Module["__ZN3tvm7runtime15NVTXScopedRangeC2EPKc"]=(a0,a1)=>(Module["__ZN3tvm7runtime15NVTXScopedRangeC2EPKc"]=wasmExports["_ZN3tvm7runtime15NVTXScopedRangeC2EPKc"])(a0,a1);Module["__ZN3tvm7runtime15NVTXScopedRangeD2Ev"]=a0=>(Module["__ZN3tvm7runtime15NVTXScopedRangeD2Ev"]=wasmExports["_ZN3tvm7runtime15NVTXScopedRangeD2Ev"])(a0);Module["__ZN3tvm7runtime6memory7StorageC1ENS1_6BufferEPNS1_9AllocatorE"]=(a0,a1,a2)=>(Module["__ZN3tvm7runtime6memory7StorageC1ENS1_6BufferEPNS1_9AllocatorE"]=wasmExports["_ZN3tvm7runtime6memory7StorageC1ENS1_6BufferEPNS1_9AllocatorE"])(a0,a1,a2);Module["_TVMBackendAnyListSetPackedArg"]=(a0,a1,a2,a3)=>(Module["_TVMBackendAnyListSetPackedArg"]=wasmExports["TVMBackendAnyListSetPackedArg"])(a0,a1,a2,a3);Module["_TVMBackendAnyListResetItem"]=(a0,a1)=>(Module["_TVMBackendAnyListResetItem"]=wasmExports["TVMBackendAnyListResetItem"])(a0,a1);Module["_TVMBackendAnyListMoveFromPackedReturn"]=(a0,a1,a2,a3)=>(Module["_TVMBackendAnyListMoveFromPackedReturn"]=wasmExports["TVMBackendAnyListMoveFromPackedReturn"])(a0,a1,a2,a3);Module["__ZN3tvm7runtime2vm19TensorCacheMetadata4LoadERKNSt3__212basic_stringIcNS3_11char_traitsIcEENS3_9allocatorIcEEEE"]=(a0,a1)=>(Module["__ZN3tvm7runtime2vm19TensorCacheMetadata4LoadERKNSt3__212basic_stringIcNS3_11char_traitsIcEENS3_9allocatorIcEEEE"]=wasmExports["_ZN3tvm7runtime2vm19TensorCacheMetadata4LoadERKNSt3__212basic_stringIcNS3_11char_traitsIcEENS3_9allocatorIcEEEE"])(a0,a1);Module["__ZNK3tvm7runtime2vm19TensorCacheMetadata10FileRecord11ParamRecord4LoadE8DLDevicePKNSt3__212basic_stringIcNS6_11char_traitsIcEENS6_9allocatorIcEEEEPNS_3ffi8OptionalINS0_6TensorEvEE"]=(a0,a1,a2,a3,a4)=>(Module["__ZNK3tvm7runtime2vm19TensorCacheMetadata10FileRecord11ParamRecord4LoadE8DLDevicePKNSt3__212basic_stringIcNS6_11char_traitsIcEENS6_9allocatorIcEEEEPNS_3ffi8OptionalINS0_6TensorEvEE"]=wasmExports["_ZNK3tvm7runtime2vm19TensorCacheMetadata10FileRecord11ParamRecord4LoadE8DLDevicePKNSt3__212basic_stringIcNS6_11char_traitsIcEENS6_9allocatorIcEEEEPNS_3ffi8OptionalINS0_6TensorEvEE"])(a0,a1,a2,a3,a4);Module["__ZNK3tvm7runtime2vm19TensorCacheMetadata10FileRecord4LoadE8DLDeviceRKNSt3__212basic_stringIcNS5_11char_traitsIcEENS5_9allocatorIcEEEEPSB_PNS_3ffi8OptionalINS0_6TensorEvEE"]=(a0,a1,a2,a3,a4,a5)=>(Module["__ZNK3tvm7runtime2vm19TensorCacheMetadata10FileRecord4LoadE8DLDeviceRKNSt3__212basic_stringIcNS5_11char_traitsIcEENS5_9allocatorIcEEEEPSB_PNS_3ffi8OptionalINS0_6TensorEvEE"]=wasmExports["_ZNK3tvm7runtime2vm19TensorCacheMetadata10FileRecord4LoadE8DLDeviceRKNSt3__212basic_stringIcNS5_11char_traitsIcEENS5_9allocatorIcEEEEPSB_PNS_3ffi8OptionalINS0_6TensorEvEE"])(a0,a1,a2,a3,a4,a5);Module["__ZN3tvm7runtime15NVTXScopedRangeD1Ev"]=a0=>(Module["__ZN3tvm7runtime15NVTXScopedRangeD1Ev"]=wasmExports["_ZN3tvm7runtime15NVTXScopedRangeD1Ev"])(a0);Module["_TVMBackendParallelLaunch"]=(a0,a1,a2)=>(Module["_TVMBackendParallelLaunch"]=wasmExports["TVMBackendParallelLaunch"])(a0,a1,a2);Module["_TVMBackendParallelBarrier"]=(a0,a1)=>(Module["_TVMBackendParallelBarrier"]=wasmExports["TVMBackendParallelBarrier"])(a0,a1);Module["__ZN3tvm7runtime6detail12LogFatalImplERKNSt3__212basic_stringIcNS2_11char_traitsIcEENS2_9allocatorIcEEEEiSA_"]=(a0,a1,a2)=>(Module["__ZN3tvm7runtime6detail12LogFatalImplERKNSt3__212basic_stringIcNS2_11char_traitsIcEENS2_9allocatorIcEEEEiSA_"]=wasmExports["_ZN3tvm7runtime6detail12LogFatalImplERKNSt3__212basic_stringIcNS2_11char_traitsIcEENS2_9allocatorIcEEEEiSA_"])(a0,a1,a2);var _free=a0=>(_free=wasmExports["free"])(a0);Module["__ZN3tvm7runtime15NVTXScopedRangeC1EPKc"]=(a0,a1)=>(Module["__ZN3tvm7runtime15NVTXScopedRangeC1EPKc"]=wasmExports["_ZN3tvm7runtime15NVTXScopedRangeC1EPKc"])(a0,a1);Module["_TVMWasmAllocSpace"]=a0=>(Module["_TVMWasmAllocSpace"]=wasmExports["TVMWasmAllocSpace"])(a0);Module["_TVMWasmFreeSpace"]=a0=>(Module["_TVMWasmFreeSpace"]=wasmExports["TVMWasmFreeSpace"])(a0);Module["_TVMFFIWasmFunctionCreate"]=(a0,a1)=>(Module["_TVMFFIWasmFunctionCreate"]=wasmExports["TVMFFIWasmFunctionCreate"])(a0,a1);Module["_TVMFFIWasmGetLastError"]=()=>(Module["_TVMFFIWasmGetLastError"]=wasmExports["TVMFFIWasmGetLastError"])();var __initialize=Module["__initialize"]=()=>(__initialize=Module["__initialize"]=wasmExports["_initialize"])();var _asyncify_start_unwind=a0=>(_asyncify_start_unwind=wasmExports["asyncify_start_unwind"])(a0);var _asyncify_stop_unwind=()=>(_asyncify_stop_unwind=wasmExports["asyncify_stop_unwind"])();var _asyncify_start_rewind=a0=>(_asyncify_start_rewind=wasmExports["asyncify_start_rewind"])(a0);var _asyncify_stop_rewind=()=>(_asyncify_stop_rewind=wasmExports["asyncify_stop_rewind"])();var calledRun;dependenciesFulfilled=function runCaller(){if(!calledRun)run();if(!calledRun)dependenciesFulfilled=runCaller;};function callMain(args=[]){var entryFunction=__initialize;try{entryFunction();var ret=0;exitJS(ret,true);return ret}catch(e){return handleException(e)}}function run(args=arguments_){if(runDependencies>0){return}preRun();if(runDependencies>0){return}function doRun(){if(calledRun)return;calledRun=true;Module["calledRun"]=true;if(ABORT)return;initRuntime();preMain();if(Module["onRuntimeInitialized"])Module["onRuntimeInitialized"]();if(shouldRunNow)callMain(args);postRun();}if(Module["setStatus"]){Module["setStatus"]("Running...");setTimeout(function(){setTimeout(function(){Module["setStatus"]("");},1);doRun();},1);}else {doRun();}}if(Module["preInit"]){if(typeof Module["preInit"]=="function")Module["preInit"]=[Module["preInit"]];while(Module["preInit"].length>0){Module["preInit"].pop()();}}var shouldRunNow=true;if(Module["noInitialRun"])shouldRunNow=false;run();
+		    var Module=typeof Module!="undefined"?Module:{};var __wasmLib={};function __wasmLibInstantiateWasm(imports,successCallback){__wasmLib.imports=imports;__wasmLib.successCallback=successCallback;}function __wasmLibStart(wasmInstance){__wasmLib.successCallback(wasmInstance);}__wasmLib.start=__wasmLibStart;var Module={"instantiateWasm":__wasmLibInstantiateWasm,"wasmLibraryProvider":__wasmLib};var moduleOverrides=Object.assign({},Module);var arguments_=[];var thisProgram="./this.program";var quit_=(status,toThrow)=>{throw toThrow};var ENVIRONMENT_IS_WEB=typeof window=="object";var ENVIRONMENT_IS_WORKER=typeof importScripts=="function";var ENVIRONMENT_IS_NODE=typeof process=="object"&&typeof process.versions=="object"&&typeof process.versions.node=="string";var scriptDirectory="";function locateFile(path){if(Module["locateFile"]){return Module["locateFile"](path,scriptDirectory)}return scriptDirectory+path}var read_,readAsync,readBinary;if(ENVIRONMENT_IS_NODE){var fs=require$$2;var nodePath=require$$2;if(ENVIRONMENT_IS_WORKER){scriptDirectory=nodePath.dirname(scriptDirectory)+"/";}else {scriptDirectory=__dirname+"/";}read_=(filename,binary)=>{filename=isFileURI(filename)?new URL(filename):nodePath.normalize(filename);return fs.readFileSync(filename,binary?undefined:"utf8")};readBinary=filename=>{var ret=read_(filename,true);if(!ret.buffer){ret=new Uint8Array(ret);}return ret};readAsync=(filename,onload,onerror,binary=true)=>{filename=isFileURI(filename)?new URL(filename):nodePath.normalize(filename);fs.readFile(filename,binary?undefined:"utf8",(err,data)=>{if(err)onerror(err);else onload(binary?data.buffer:data);});};if(!Module["thisProgram"]&&process.argv.length>1){thisProgram=process.argv[1].replace(/\\/g,"/");}arguments_=process.argv.slice(2);{module["exports"]=Module;}process.on("uncaughtException",ex=>{if(ex!=="unwind"&&!(ex instanceof ExitStatus)&&!(ex.context instanceof ExitStatus)){throw ex}});quit_=(status,toThrow)=>{process.exitCode=status;throw toThrow};}else if(ENVIRONMENT_IS_WEB||ENVIRONMENT_IS_WORKER){if(ENVIRONMENT_IS_WORKER){scriptDirectory=self.location.href;}else if(typeof document!="undefined"&&document.currentScript){scriptDirectory=document.currentScript.src;}if(scriptDirectory.startsWith("blob:")){scriptDirectory="";}else {scriptDirectory=scriptDirectory.substr(0,scriptDirectory.replace(/[?#].*/,"").lastIndexOf("/")+1);}{read_=url=>{var xhr=new XMLHttpRequest;xhr.open("GET",url,false);xhr.send(null);return xhr.responseText};if(ENVIRONMENT_IS_WORKER){readBinary=url=>{var xhr=new XMLHttpRequest;xhr.open("GET",url,false);xhr.responseType="arraybuffer";xhr.send(null);return new Uint8Array(xhr.response)};}readAsync=(url,onload,onerror)=>{var xhr=new XMLHttpRequest;xhr.open("GET",url,true);xhr.responseType="arraybuffer";xhr.onload=()=>{if(xhr.status==200||xhr.status==0&&xhr.response){onload(xhr.response);return}onerror();};xhr.onerror=onerror;xhr.send(null);};}}else;var out=Module["print"]||console.log.bind(console);var err=Module["printErr"]||console.error.bind(console);Object.assign(Module,moduleOverrides);moduleOverrides=null;if(Module["arguments"])arguments_=Module["arguments"];if(Module["thisProgram"])thisProgram=Module["thisProgram"];if(Module["quit"])quit_=Module["quit"];var wasmBinary;if(Module["wasmBinary"])wasmBinary=Module["wasmBinary"];var wasmMemory;var ABORT=false;var EXITSTATUS;var HEAP8,HEAPU8,HEAP32,HEAPU32,HEAP64;function updateMemoryViews(){var b=wasmMemory.buffer;Module["HEAP8"]=HEAP8=new Int8Array(b);Module["HEAP16"]=new Int16Array(b);Module["HEAPU8"]=HEAPU8=new Uint8Array(b);Module["HEAPU16"]=new Uint16Array(b);Module["HEAP32"]=HEAP32=new Int32Array(b);Module["HEAPU32"]=HEAPU32=new Uint32Array(b);Module["HEAPF32"]=new Float32Array(b);Module["HEAPF64"]=new Float64Array(b);Module["HEAP64"]=HEAP64=new BigInt64Array(b);Module["HEAPU64"]=new BigUint64Array(b);}var __ATPRERUN__=[];var __ATINIT__=[];var __ATMAIN__=[];var __ATPOSTRUN__=[];function preRun(){if(Module["preRun"]){if(typeof Module["preRun"]=="function")Module["preRun"]=[Module["preRun"]];while(Module["preRun"].length){addOnPreRun(Module["preRun"].shift());}}callRuntimeCallbacks(__ATPRERUN__);}function initRuntime(){if(!Module["noFSInit"]&&!FS.init.initialized)FS.init();FS.ignorePermissions=false;callRuntimeCallbacks(__ATINIT__);}function preMain(){callRuntimeCallbacks(__ATMAIN__);}function postRun(){if(Module["postRun"]){if(typeof Module["postRun"]=="function")Module["postRun"]=[Module["postRun"]];while(Module["postRun"].length){addOnPostRun(Module["postRun"].shift());}}callRuntimeCallbacks(__ATPOSTRUN__);}function addOnPreRun(cb){__ATPRERUN__.unshift(cb);}function addOnPostRun(cb){__ATPOSTRUN__.unshift(cb);}var runDependencies=0;var dependenciesFulfilled=null;function getUniqueRunDependency(id){return id}function addRunDependency(id){runDependencies++;Module["monitorRunDependencies"]?.(runDependencies);}function removeRunDependency(id){runDependencies--;Module["monitorRunDependencies"]?.(runDependencies);if(runDependencies==0){if(dependenciesFulfilled){var callback=dependenciesFulfilled;dependenciesFulfilled=null;callback();}}}function abort(what){Module["onAbort"]?.(what);what="Aborted("+what+")";err(what);ABORT=true;EXITSTATUS=1;what+=". Build with -sASSERTIONS for more info.";var e=new WebAssembly.RuntimeError(what);throw e}var dataURIPrefix="data:application/octet-stream;base64,";var isDataURI=filename=>filename.startsWith(dataURIPrefix);var isFileURI=filename=>filename.startsWith("file://");var wasmBinaryFile;wasmBinaryFile="tvmjs_runtime.wasm";if(!isDataURI(wasmBinaryFile)){wasmBinaryFile=locateFile(wasmBinaryFile);}function getBinarySync(file){if(file==wasmBinaryFile&&wasmBinary){return new Uint8Array(wasmBinary)}if(readBinary){return readBinary(file)}throw "both async and sync fetching of the wasm failed"}function getBinaryPromise(binaryFile){if(!wasmBinary&&(ENVIRONMENT_IS_WEB||ENVIRONMENT_IS_WORKER)){if(typeof fetch=="function"&&!isFileURI(binaryFile)){return fetch(binaryFile,{credentials:"same-origin"}).then(response=>{if(!response["ok"]){throw `failed to load wasm binary file at '${binaryFile}'`}return response["arrayBuffer"]()}).catch(()=>getBinarySync(binaryFile))}else if(readAsync){return new Promise((resolve,reject)=>{readAsync(binaryFile,response=>resolve(new Uint8Array(response)),reject);})}}return Promise.resolve().then(()=>getBinarySync(binaryFile))}function instantiateArrayBuffer(binaryFile,imports,receiver){return getBinaryPromise(binaryFile).then(binary=>WebAssembly.instantiate(binary,imports)).then(receiver,reason=>{err(`failed to asynchronously prepare wasm: ${reason}`);abort(reason);})}function instantiateAsync(binary,binaryFile,imports,callback){if(!binary&&typeof WebAssembly.instantiateStreaming=="function"&&!isDataURI(binaryFile)&&!isFileURI(binaryFile)&&!ENVIRONMENT_IS_NODE&&typeof fetch=="function"){return fetch(binaryFile,{credentials:"same-origin"}).then(response=>{var result=WebAssembly.instantiateStreaming(response,imports);return result.then(callback,function(reason){err(`wasm streaming compile failed: ${reason}`);err("falling back to ArrayBuffer instantiation");return instantiateArrayBuffer(binaryFile,imports,callback)})})}return instantiateArrayBuffer(binaryFile,imports,callback)}function createWasm(){var info={"env":wasmImports,"wasi_snapshot_preview1":wasmImports};function receiveInstance(instance,module){wasmExports=instance.exports;wasmExports=Asyncify.instrumentWasmExports(wasmExports);wasmMemory=wasmExports["memory"];updateMemoryViews();removeRunDependency();return wasmExports}addRunDependency();function receiveInstantiationResult(result){receiveInstance(result["instance"]);}if(Module["instantiateWasm"]){try{return Module["instantiateWasm"](info,receiveInstance)}catch(e){err(`Module.instantiateWasm callback failed with error: ${e}`);return false}}instantiateAsync(wasmBinary,wasmBinaryFile,info,receiveInstantiationResult);return {}}function ExitStatus(status){this.name="ExitStatus";this.message=`Program terminated with exit(${status})`;this.status=status;}var callRuntimeCallbacks=callbacks=>{while(callbacks.length>0){callbacks.shift()(Module);}};Module["noExitRuntime"]||true;function _TVMFFIWasmFunctionDeleter(){abort("missing function: TVMFFIWasmFunctionDeleter");}_TVMFFIWasmFunctionDeleter.stub=true;function _TVMFFIWasmSafeCall(){abort("missing function: TVMFFIWasmSafeCall");}_TVMFFIWasmSafeCall.stub=true;var _emscripten_get_now;_emscripten_get_now=()=>performance.now();var checkWasiClock=clock_id=>clock_id==0||clock_id==1||clock_id==2||clock_id==3;var MAX_INT53=9007199254740992;var MIN_INT53=-9007199254740992;var bigintToI53Checked=num=>num<MIN_INT53||num>MAX_INT53?NaN:Number(num);function _clock_time_get(clk_id,ignored_precision,ptime){if(!checkWasiClock(clk_id)){return 28}var now;if(clk_id===0){now=Date.now();}else {now=_emscripten_get_now();}var nsec=Math.round(now*1e3*1e3);HEAP32[ptime>>2]=nsec>>>0;HEAP32[ptime+4>>2]=nsec/Math.pow(2,32)>>>0;return 0}var _emscripten_notify_memory_growth=memoryIndex=>{updateMemoryViews();};var ENV={};var getExecutableName=()=>thisProgram||"./this.program";var getEnvStrings=()=>{if(!getEnvStrings.strings){var lang=(typeof navigator=="object"&&navigator.languages&&navigator.languages[0]||"C").replace("-","_")+".UTF-8";var env={"USER":"web_user","LOGNAME":"web_user","PATH":"/","PWD":"/","HOME":"/home/web_user","LANG":lang,"_":getExecutableName()};for(var x in ENV){if(ENV[x]===undefined)delete env[x];else env[x]=ENV[x];}var strings=[];for(var x in env){strings.push(`${x}=${env[x]}`);}getEnvStrings.strings=strings;}return getEnvStrings.strings};var stringToAscii=(str,buffer)=>{for(var i=0;i<str.length;++i){HEAP8[buffer++]=str.charCodeAt(i);}HEAP8[buffer]=0;};var _environ_get=(__environ,environ_buf)=>{var bufSize=0;getEnvStrings().forEach((string,i)=>{var ptr=environ_buf+bufSize;HEAPU32[__environ+i*4>>2]=ptr;stringToAscii(string,ptr);bufSize+=string.length+1;});return 0};var _environ_sizes_get=(penviron_count,penviron_buf_size)=>{var strings=getEnvStrings();HEAPU32[penviron_count>>2]=strings.length;var bufSize=0;strings.forEach(string=>bufSize+=string.length+1);HEAPU32[penviron_buf_size>>2]=bufSize;return 0};var PATH={isAbs:path=>path.charAt(0)==="/",splitPath:filename=>{var splitPathRe=/^(\/?|)([\s\S]*?)((?:\.{1,2}|[^\/]+?|)(\.[^.\/]*|))(?:[\/]*)$/;return splitPathRe.exec(filename).slice(1)},normalizeArray:(parts,allowAboveRoot)=>{var up=0;for(var i=parts.length-1;i>=0;i--){var last=parts[i];if(last==="."){parts.splice(i,1);}else if(last===".."){parts.splice(i,1);up++;}else if(up){parts.splice(i,1);up--;}}if(allowAboveRoot){for(;up;up--){parts.unshift("..");}}return parts},normalize:path=>{var isAbsolute=PATH.isAbs(path),trailingSlash=path.substr(-1)==="/";path=PATH.normalizeArray(path.split("/").filter(p=>!!p),!isAbsolute).join("/");if(!path&&!isAbsolute){path=".";}if(path&&trailingSlash){path+="/";}return (isAbsolute?"/":"")+path},dirname:path=>{var result=PATH.splitPath(path),root=result[0],dir=result[1];if(!root&&!dir){return "."}if(dir){dir=dir.substr(0,dir.length-1);}return root+dir},basename:path=>{if(path==="/")return "/";path=PATH.normalize(path);path=path.replace(/\/$/,"");var lastSlash=path.lastIndexOf("/");if(lastSlash===-1)return path;return path.substr(lastSlash+1)},join:(...paths)=>PATH.normalize(paths.join("/")),join2:(l,r)=>PATH.normalize(l+"/"+r)};var initRandomFill=()=>{if(typeof crypto=="object"&&typeof crypto["getRandomValues"]=="function"){return view=>crypto.getRandomValues(view)}else if(ENVIRONMENT_IS_NODE){try{var crypto_module=require$$2;var randomFillSync=crypto_module["randomFillSync"];if(randomFillSync){return view=>crypto_module["randomFillSync"](view)}var randomBytes=crypto_module["randomBytes"];return view=>(view.set(randomBytes(view.byteLength)),view)}catch(e){}}abort("initRandomDevice");};var randomFill=view=>(randomFill=initRandomFill())(view);var PATH_FS={resolve:(...args)=>{var resolvedPath="",resolvedAbsolute=false;for(var i=args.length-1;i>=-1&&!resolvedAbsolute;i--){var path=i>=0?args[i]:FS.cwd();if(typeof path!="string"){throw new TypeError("Arguments to path.resolve must be strings")}else if(!path){return ""}resolvedPath=path+"/"+resolvedPath;resolvedAbsolute=PATH.isAbs(path);}resolvedPath=PATH.normalizeArray(resolvedPath.split("/").filter(p=>!!p),!resolvedAbsolute).join("/");return (resolvedAbsolute?"/":"")+resolvedPath||"."},relative:(from,to)=>{from=PATH_FS.resolve(from).substr(1);to=PATH_FS.resolve(to).substr(1);function trim(arr){var start=0;for(;start<arr.length;start++){if(arr[start]!=="")break}var end=arr.length-1;for(;end>=0;end--){if(arr[end]!=="")break}if(start>end)return [];return arr.slice(start,end-start+1)}var fromParts=trim(from.split("/"));var toParts=trim(to.split("/"));var length=Math.min(fromParts.length,toParts.length);var samePartsLength=length;for(var i=0;i<length;i++){if(fromParts[i]!==toParts[i]){samePartsLength=i;break}}var outputParts=[];for(var i=samePartsLength;i<fromParts.length;i++){outputParts.push("..");}outputParts=outputParts.concat(toParts.slice(samePartsLength));return outputParts.join("/")}};var UTF8Decoder=typeof TextDecoder!="undefined"?new TextDecoder("utf8"):undefined;var UTF8ArrayToString=(heapOrArray,idx,maxBytesToRead)=>{var endIdx=idx+maxBytesToRead;var endPtr=idx;while(heapOrArray[endPtr]&&!(endPtr>=endIdx))++endPtr;if(endPtr-idx>16&&heapOrArray.buffer&&UTF8Decoder){return UTF8Decoder.decode(heapOrArray.subarray(idx,endPtr))}var str="";while(idx<endPtr){var u0=heapOrArray[idx++];if(!(u0&128)){str+=String.fromCharCode(u0);continue}var u1=heapOrArray[idx++]&63;if((u0&224)==192){str+=String.fromCharCode((u0&31)<<6|u1);continue}var u2=heapOrArray[idx++]&63;if((u0&240)==224){u0=(u0&15)<<12|u1<<6|u2;}else {u0=(u0&7)<<18|u1<<12|u2<<6|heapOrArray[idx++]&63;}if(u0<65536){str+=String.fromCharCode(u0);}else {var ch=u0-65536;str+=String.fromCharCode(55296|ch>>10,56320|ch&1023);}}return str};var FS_stdin_getChar_buffer=[];var lengthBytesUTF8=str=>{var len=0;for(var i=0;i<str.length;++i){var c=str.charCodeAt(i);if(c<=127){len++;}else if(c<=2047){len+=2;}else if(c>=55296&&c<=57343){len+=4;++i;}else {len+=3;}}return len};var stringToUTF8Array=(str,heap,outIdx,maxBytesToWrite)=>{if(!(maxBytesToWrite>0))return 0;var startIdx=outIdx;var endIdx=outIdx+maxBytesToWrite-1;for(var i=0;i<str.length;++i){var u=str.charCodeAt(i);if(u>=55296&&u<=57343){var u1=str.charCodeAt(++i);u=65536+((u&1023)<<10)|u1&1023;}if(u<=127){if(outIdx>=endIdx)break;heap[outIdx++]=u;}else if(u<=2047){if(outIdx+1>=endIdx)break;heap[outIdx++]=192|u>>6;heap[outIdx++]=128|u&63;}else if(u<=65535){if(outIdx+2>=endIdx)break;heap[outIdx++]=224|u>>12;heap[outIdx++]=128|u>>6&63;heap[outIdx++]=128|u&63;}else {if(outIdx+3>=endIdx)break;heap[outIdx++]=240|u>>18;heap[outIdx++]=128|u>>12&63;heap[outIdx++]=128|u>>6&63;heap[outIdx++]=128|u&63;}}heap[outIdx]=0;return outIdx-startIdx};function intArrayFromString(stringy,dontAddNull,length){var len=lengthBytesUTF8(stringy)+1;var u8array=new Array(len);var numBytesWritten=stringToUTF8Array(stringy,u8array,0,u8array.length);u8array.length=numBytesWritten;return u8array}var FS_stdin_getChar=()=>{if(!FS_stdin_getChar_buffer.length){var result=null;if(ENVIRONMENT_IS_NODE){var BUFSIZE=256;var buf=Buffer.alloc(BUFSIZE);var bytesRead=0;var fd=process.stdin.fd;try{bytesRead=fs.readSync(fd,buf);}catch(e){if(e.toString().includes("EOF"))bytesRead=0;else throw e}if(bytesRead>0){result=buf.slice(0,bytesRead).toString("utf-8");}else {result=null;}}else if(typeof window!="undefined"&&typeof window.prompt=="function"){result=window.prompt("Input: ");if(result!==null){result+="\n";}}else if(typeof readline=="function"){result=readline();if(result!==null){result+="\n";}}if(!result){return null}FS_stdin_getChar_buffer=intArrayFromString(result);}return FS_stdin_getChar_buffer.shift()};var TTY={ttys:[],init(){},shutdown(){},register(dev,ops){TTY.ttys[dev]={input:[],output:[],ops:ops};FS.registerDevice(dev,TTY.stream_ops);},stream_ops:{open(stream){var tty=TTY.ttys[stream.node.rdev];if(!tty){throw new FS.ErrnoError(43)}stream.tty=tty;stream.seekable=false;},close(stream){stream.tty.ops.fsync(stream.tty);},fsync(stream){stream.tty.ops.fsync(stream.tty);},read(stream,buffer,offset,length,pos){if(!stream.tty||!stream.tty.ops.get_char){throw new FS.ErrnoError(60)}var bytesRead=0;for(var i=0;i<length;i++){var result;try{result=stream.tty.ops.get_char(stream.tty);}catch(e){throw new FS.ErrnoError(29)}if(result===undefined&&bytesRead===0){throw new FS.ErrnoError(6)}if(result===null||result===undefined)break;bytesRead++;buffer[offset+i]=result;}if(bytesRead){stream.node.timestamp=Date.now();}return bytesRead},write(stream,buffer,offset,length,pos){if(!stream.tty||!stream.tty.ops.put_char){throw new FS.ErrnoError(60)}try{for(var i=0;i<length;i++){stream.tty.ops.put_char(stream.tty,buffer[offset+i]);}}catch(e){throw new FS.ErrnoError(29)}if(length){stream.node.timestamp=Date.now();}return i}},default_tty_ops:{get_char(tty){return FS_stdin_getChar()},put_char(tty,val){if(val===null||val===10){out(UTF8ArrayToString(tty.output,0));tty.output=[];}else {if(val!=0)tty.output.push(val);}},fsync(tty){if(tty.output&&tty.output.length>0){out(UTF8ArrayToString(tty.output,0));tty.output=[];}},ioctl_tcgets(tty){return {c_iflag:25856,c_oflag:5,c_cflag:191,c_lflag:35387,c_cc:[3,28,127,21,4,0,1,0,17,19,26,0,18,15,23,22,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]}},ioctl_tcsets(tty,optional_actions,data){return 0},ioctl_tiocgwinsz(tty){return [24,80]}},default_tty1_ops:{put_char(tty,val){if(val===null||val===10){err(UTF8ArrayToString(tty.output,0));tty.output=[];}else {if(val!=0)tty.output.push(val);}},fsync(tty){if(tty.output&&tty.output.length>0){err(UTF8ArrayToString(tty.output,0));tty.output=[];}}}};var mmapAlloc=size=>{abort();};var MEMFS={ops_table:null,mount(mount){return MEMFS.createNode(null,"/",16384|511,0)},createNode(parent,name,mode,dev){if(FS.isBlkdev(mode)||FS.isFIFO(mode)){throw new FS.ErrnoError(63)}MEMFS.ops_table||={dir:{node:{getattr:MEMFS.node_ops.getattr,setattr:MEMFS.node_ops.setattr,lookup:MEMFS.node_ops.lookup,mknod:MEMFS.node_ops.mknod,rename:MEMFS.node_ops.rename,unlink:MEMFS.node_ops.unlink,rmdir:MEMFS.node_ops.rmdir,readdir:MEMFS.node_ops.readdir,symlink:MEMFS.node_ops.symlink},stream:{llseek:MEMFS.stream_ops.llseek}},file:{node:{getattr:MEMFS.node_ops.getattr,setattr:MEMFS.node_ops.setattr},stream:{llseek:MEMFS.stream_ops.llseek,read:MEMFS.stream_ops.read,write:MEMFS.stream_ops.write,allocate:MEMFS.stream_ops.allocate,mmap:MEMFS.stream_ops.mmap,msync:MEMFS.stream_ops.msync}},link:{node:{getattr:MEMFS.node_ops.getattr,setattr:MEMFS.node_ops.setattr,readlink:MEMFS.node_ops.readlink},stream:{}},chrdev:{node:{getattr:MEMFS.node_ops.getattr,setattr:MEMFS.node_ops.setattr},stream:FS.chrdev_stream_ops}};var node=FS.createNode(parent,name,mode,dev);if(FS.isDir(node.mode)){node.node_ops=MEMFS.ops_table.dir.node;node.stream_ops=MEMFS.ops_table.dir.stream;node.contents={};}else if(FS.isFile(node.mode)){node.node_ops=MEMFS.ops_table.file.node;node.stream_ops=MEMFS.ops_table.file.stream;node.usedBytes=0;node.contents=null;}else if(FS.isLink(node.mode)){node.node_ops=MEMFS.ops_table.link.node;node.stream_ops=MEMFS.ops_table.link.stream;}else if(FS.isChrdev(node.mode)){node.node_ops=MEMFS.ops_table.chrdev.node;node.stream_ops=MEMFS.ops_table.chrdev.stream;}node.timestamp=Date.now();if(parent){parent.contents[name]=node;parent.timestamp=node.timestamp;}return node},getFileDataAsTypedArray(node){if(!node.contents)return new Uint8Array(0);if(node.contents.subarray)return node.contents.subarray(0,node.usedBytes);return new Uint8Array(node.contents)},expandFileStorage(node,newCapacity){var prevCapacity=node.contents?node.contents.length:0;if(prevCapacity>=newCapacity)return;var CAPACITY_DOUBLING_MAX=1024*1024;newCapacity=Math.max(newCapacity,prevCapacity*(prevCapacity<CAPACITY_DOUBLING_MAX?2:1.125)>>>0);if(prevCapacity!=0)newCapacity=Math.max(newCapacity,256);var oldContents=node.contents;node.contents=new Uint8Array(newCapacity);if(node.usedBytes>0)node.contents.set(oldContents.subarray(0,node.usedBytes),0);},resizeFileStorage(node,newSize){if(node.usedBytes==newSize)return;if(newSize==0){node.contents=null;node.usedBytes=0;}else {var oldContents=node.contents;node.contents=new Uint8Array(newSize);if(oldContents){node.contents.set(oldContents.subarray(0,Math.min(newSize,node.usedBytes)));}node.usedBytes=newSize;}},node_ops:{getattr(node){var attr={};attr.dev=FS.isChrdev(node.mode)?node.id:1;attr.ino=node.id;attr.mode=node.mode;attr.nlink=1;attr.uid=0;attr.gid=0;attr.rdev=node.rdev;if(FS.isDir(node.mode)){attr.size=4096;}else if(FS.isFile(node.mode)){attr.size=node.usedBytes;}else if(FS.isLink(node.mode)){attr.size=node.link.length;}else {attr.size=0;}attr.atime=new Date(node.timestamp);attr.mtime=new Date(node.timestamp);attr.ctime=new Date(node.timestamp);attr.blksize=4096;attr.blocks=Math.ceil(attr.size/attr.blksize);return attr},setattr(node,attr){if(attr.mode!==undefined){node.mode=attr.mode;}if(attr.timestamp!==undefined){node.timestamp=attr.timestamp;}if(attr.size!==undefined){MEMFS.resizeFileStorage(node,attr.size);}},lookup(parent,name){throw FS.genericErrors[44]},mknod(parent,name,mode,dev){return MEMFS.createNode(parent,name,mode,dev)},rename(old_node,new_dir,new_name){if(FS.isDir(old_node.mode)){var new_node;try{new_node=FS.lookupNode(new_dir,new_name);}catch(e){}if(new_node){for(var i in new_node.contents){throw new FS.ErrnoError(55)}}}delete old_node.parent.contents[old_node.name];old_node.parent.timestamp=Date.now();old_node.name=new_name;new_dir.contents[new_name]=old_node;new_dir.timestamp=old_node.parent.timestamp;old_node.parent=new_dir;},unlink(parent,name){delete parent.contents[name];parent.timestamp=Date.now();},rmdir(parent,name){var node=FS.lookupNode(parent,name);for(var i in node.contents){throw new FS.ErrnoError(55)}delete parent.contents[name];parent.timestamp=Date.now();},readdir(node){var entries=[".",".."];for(var key of Object.keys(node.contents)){entries.push(key);}return entries},symlink(parent,newname,oldpath){var node=MEMFS.createNode(parent,newname,511|40960,0);node.link=oldpath;return node},readlink(node){if(!FS.isLink(node.mode)){throw new FS.ErrnoError(28)}return node.link}},stream_ops:{read(stream,buffer,offset,length,position){var contents=stream.node.contents;if(position>=stream.node.usedBytes)return 0;var size=Math.min(stream.node.usedBytes-position,length);if(size>8&&contents.subarray){buffer.set(contents.subarray(position,position+size),offset);}else {for(var i=0;i<size;i++)buffer[offset+i]=contents[position+i];}return size},write(stream,buffer,offset,length,position,canOwn){if(buffer.buffer===HEAP8.buffer){canOwn=false;}if(!length)return 0;var node=stream.node;node.timestamp=Date.now();if(buffer.subarray&&(!node.contents||node.contents.subarray)){if(canOwn){node.contents=buffer.subarray(offset,offset+length);node.usedBytes=length;return length}else if(node.usedBytes===0&&position===0){node.contents=buffer.slice(offset,offset+length);node.usedBytes=length;return length}else if(position+length<=node.usedBytes){node.contents.set(buffer.subarray(offset,offset+length),position);return length}}MEMFS.expandFileStorage(node,position+length);if(node.contents.subarray&&buffer.subarray){node.contents.set(buffer.subarray(offset,offset+length),position);}else {for(var i=0;i<length;i++){node.contents[position+i]=buffer[offset+i];}}node.usedBytes=Math.max(node.usedBytes,position+length);return length},llseek(stream,offset,whence){var position=offset;if(whence===1){position+=stream.position;}else if(whence===2){if(FS.isFile(stream.node.mode)){position+=stream.node.usedBytes;}}if(position<0){throw new FS.ErrnoError(28)}return position},allocate(stream,offset,length){MEMFS.expandFileStorage(stream.node,offset+length);stream.node.usedBytes=Math.max(stream.node.usedBytes,offset+length);},mmap(stream,length,position,prot,flags){if(!FS.isFile(stream.node.mode)){throw new FS.ErrnoError(43)}var ptr;var allocated;var contents=stream.node.contents;if(!(flags&2)&&contents.buffer===HEAP8.buffer){allocated=false;ptr=contents.byteOffset;}else {if(position>0||position+length<contents.length){if(contents.subarray){contents=contents.subarray(position,position+length);}else {contents=Array.prototype.slice.call(contents,position,position+length);}}allocated=true;ptr=mmapAlloc();if(!ptr){throw new FS.ErrnoError(48)}HEAP8.set(contents,ptr);}return {ptr:ptr,allocated:allocated}},msync(stream,buffer,offset,length,mmapFlags){MEMFS.stream_ops.write(stream,buffer,0,length,offset,false);return 0}}};var asyncLoad=(url,onload,onerror,noRunDep)=>{var dep=getUniqueRunDependency(`al ${url}`);readAsync(url,arrayBuffer=>{onload(new Uint8Array(arrayBuffer));if(dep)removeRunDependency();},event=>{if(onerror){onerror();}else {throw `Loading data file "${url}" failed.`}});if(dep)addRunDependency();};var FS_createDataFile=(parent,name,fileData,canRead,canWrite,canOwn)=>{FS.createDataFile(parent,name,fileData,canRead,canWrite,canOwn);};var preloadPlugins=Module["preloadPlugins"]||[];var FS_handledByPreloadPlugin=(byteArray,fullname,finish,onerror)=>{if(typeof Browser!="undefined")Browser.init();var handled=false;preloadPlugins.forEach(plugin=>{if(handled)return;if(plugin["canHandle"](fullname)){plugin["handle"](byteArray,fullname,finish,onerror);handled=true;}});return handled};var FS_createPreloadedFile=(parent,name,url,canRead,canWrite,onload,onerror,dontCreateFile,canOwn,preFinish)=>{var fullname=name?PATH_FS.resolve(PATH.join2(parent,name)):parent;function processData(byteArray){function finish(byteArray){preFinish?.();if(!dontCreateFile){FS_createDataFile(parent,name,byteArray,canRead,canWrite,canOwn);}onload?.();removeRunDependency();}if(FS_handledByPreloadPlugin(byteArray,fullname,finish,()=>{onerror?.();removeRunDependency();})){return}finish(byteArray);}addRunDependency();if(typeof url=="string"){asyncLoad(url,processData,onerror);}else {processData(url);}};var FS_modeStringToFlags=str=>{var flagModes={"r":0,"r+":2,"w":512|64|1,"w+":512|64|2,"a":1024|64|1,"a+":1024|64|2};var flags=flagModes[str];if(typeof flags=="undefined"){throw new Error(`Unknown file open mode: ${str}`)}return flags};var FS_getMode=(canRead,canWrite)=>{var mode=0;if(canRead)mode|=292|73;if(canWrite)mode|=146;return mode};var FS={root:null,mounts:[],devices:{},streams:[],nextInode:1,nameTable:null,currentPath:"/",initialized:false,ignorePermissions:true,ErrnoError:class{constructor(errno){this.name="ErrnoError";this.errno=errno;}},genericErrors:{},filesystems:null,syncFSRequests:0,FSStream:class{constructor(){this.shared={};}get object(){return this.node}set object(val){this.node=val;}get isRead(){return (this.flags&2097155)!==1}get isWrite(){return (this.flags&2097155)!==0}get isAppend(){return this.flags&1024}get flags(){return this.shared.flags}set flags(val){this.shared.flags=val;}get position(){return this.shared.position}set position(val){this.shared.position=val;}},FSNode:class{constructor(parent,name,mode,rdev){if(!parent){parent=this;}this.parent=parent;this.mount=parent.mount;this.mounted=null;this.id=FS.nextInode++;this.name=name;this.mode=mode;this.node_ops={};this.stream_ops={};this.rdev=rdev;this.readMode=292|73;this.writeMode=146;}get read(){return (this.mode&this.readMode)===this.readMode}set read(val){val?this.mode|=this.readMode:this.mode&=~this.readMode;}get write(){return (this.mode&this.writeMode)===this.writeMode}set write(val){val?this.mode|=this.writeMode:this.mode&=~this.writeMode;}get isFolder(){return FS.isDir(this.mode)}get isDevice(){return FS.isChrdev(this.mode)}},lookupPath(path,opts={}){path=PATH_FS.resolve(path);if(!path)return {path:"",node:null};var defaults={follow_mount:true,recurse_count:0};opts=Object.assign(defaults,opts);if(opts.recurse_count>8){throw new FS.ErrnoError(32)}var parts=path.split("/").filter(p=>!!p);var current=FS.root;var current_path="/";for(var i=0;i<parts.length;i++){var islast=i===parts.length-1;if(islast&&opts.parent){break}current=FS.lookupNode(current,parts[i]);current_path=PATH.join2(current_path,parts[i]);if(FS.isMountpoint(current)){if(!islast||islast&&opts.follow_mount){current=current.mounted.root;}}if(!islast||opts.follow){var count=0;while(FS.isLink(current.mode)){var link=FS.readlink(current_path);current_path=PATH_FS.resolve(PATH.dirname(current_path),link);var lookup=FS.lookupPath(current_path,{recurse_count:opts.recurse_count+1});current=lookup.node;if(count++>40){throw new FS.ErrnoError(32)}}}}return {path:current_path,node:current}},getPath(node){var path;while(true){if(FS.isRoot(node)){var mount=node.mount.mountpoint;if(!path)return mount;return mount[mount.length-1]!=="/"?`${mount}/${path}`:mount+path}path=path?`${node.name}/${path}`:node.name;node=node.parent;}},hashName(parentid,name){var hash=0;for(var i=0;i<name.length;i++){hash=(hash<<5)-hash+name.charCodeAt(i)|0;}return (parentid+hash>>>0)%FS.nameTable.length},hashAddNode(node){var hash=FS.hashName(node.parent.id,node.name);node.name_next=FS.nameTable[hash];FS.nameTable[hash]=node;},hashRemoveNode(node){var hash=FS.hashName(node.parent.id,node.name);if(FS.nameTable[hash]===node){FS.nameTable[hash]=node.name_next;}else {var current=FS.nameTable[hash];while(current){if(current.name_next===node){current.name_next=node.name_next;break}current=current.name_next;}}},lookupNode(parent,name){var errCode=FS.mayLookup(parent);if(errCode){throw new FS.ErrnoError(errCode)}var hash=FS.hashName(parent.id,name);for(var node=FS.nameTable[hash];node;node=node.name_next){var nodeName=node.name;if(node.parent.id===parent.id&&nodeName===name){return node}}return FS.lookup(parent,name)},createNode(parent,name,mode,rdev){var node=new FS.FSNode(parent,name,mode,rdev);FS.hashAddNode(node);return node},destroyNode(node){FS.hashRemoveNode(node);},isRoot(node){return node===node.parent},isMountpoint(node){return !!node.mounted},isFile(mode){return (mode&61440)===32768},isDir(mode){return (mode&61440)===16384},isLink(mode){return (mode&61440)===40960},isChrdev(mode){return (mode&61440)===8192},isBlkdev(mode){return (mode&61440)===24576},isFIFO(mode){return (mode&61440)===4096},isSocket(mode){return (mode&49152)===49152},flagsToPermissionString(flag){var perms=["r","w","rw"][flag&3];if(flag&512){perms+="w";}return perms},nodePermissions(node,perms){if(FS.ignorePermissions){return 0}if(perms.includes("r")&&!(node.mode&292)){return 2}else if(perms.includes("w")&&!(node.mode&146)){return 2}else if(perms.includes("x")&&!(node.mode&73)){return 2}return 0},mayLookup(dir){if(!FS.isDir(dir.mode))return 54;var errCode=FS.nodePermissions(dir,"x");if(errCode)return errCode;if(!dir.node_ops.lookup)return 2;return 0},mayCreate(dir,name){try{var node=FS.lookupNode(dir,name);return 20}catch(e){}return FS.nodePermissions(dir,"wx")},mayDelete(dir,name,isdir){var node;try{node=FS.lookupNode(dir,name);}catch(e){return e.errno}var errCode=FS.nodePermissions(dir,"wx");if(errCode){return errCode}if(isdir){if(!FS.isDir(node.mode)){return 54}if(FS.isRoot(node)||FS.getPath(node)===FS.cwd()){return 10}}else {if(FS.isDir(node.mode)){return 31}}return 0},mayOpen(node,flags){if(!node){return 44}if(FS.isLink(node.mode)){return 32}else if(FS.isDir(node.mode)){if(FS.flagsToPermissionString(flags)!=="r"||flags&512){return 31}}return FS.nodePermissions(node,FS.flagsToPermissionString(flags))},MAX_OPEN_FDS:4096,nextfd(){for(var fd=0;fd<=FS.MAX_OPEN_FDS;fd++){if(!FS.streams[fd]){return fd}}throw new FS.ErrnoError(33)},getStreamChecked(fd){var stream=FS.getStream(fd);if(!stream){throw new FS.ErrnoError(8)}return stream},getStream:fd=>FS.streams[fd],createStream(stream,fd=-1){stream=Object.assign(new FS.FSStream,stream);if(fd==-1){fd=FS.nextfd();}stream.fd=fd;FS.streams[fd]=stream;return stream},closeStream(fd){FS.streams[fd]=null;},dupStream(origStream,fd=-1){var stream=FS.createStream(origStream,fd);stream.stream_ops?.dup?.(stream);return stream},chrdev_stream_ops:{open(stream){var device=FS.getDevice(stream.node.rdev);stream.stream_ops=device.stream_ops;stream.stream_ops.open?.(stream);},llseek(){throw new FS.ErrnoError(70)}},major:dev=>dev>>8,minor:dev=>dev&255,makedev:(ma,mi)=>ma<<8|mi,registerDevice(dev,ops){FS.devices[dev]={stream_ops:ops};},getDevice:dev=>FS.devices[dev],getMounts(mount){var mounts=[];var check=[mount];while(check.length){var m=check.pop();mounts.push(m);check.push(...m.mounts);}return mounts},syncfs(populate,callback){if(typeof populate=="function"){callback=populate;populate=false;}FS.syncFSRequests++;if(FS.syncFSRequests>1){err(`warning: ${FS.syncFSRequests} FS.syncfs operations in flight at once, probably just doing extra work`);}var mounts=FS.getMounts(FS.root.mount);var completed=0;function doCallback(errCode){FS.syncFSRequests--;return callback(errCode)}function done(errCode){if(errCode){if(!done.errored){done.errored=true;return doCallback(errCode)}return}if(++completed>=mounts.length){doCallback(null);}}mounts.forEach(mount=>{if(!mount.type.syncfs){return done(null)}mount.type.syncfs(mount,populate,done);});},mount(type,opts,mountpoint){var root=mountpoint==="/";var pseudo=!mountpoint;var node;if(root&&FS.root){throw new FS.ErrnoError(10)}else if(!root&&!pseudo){var lookup=FS.lookupPath(mountpoint,{follow_mount:false});mountpoint=lookup.path;node=lookup.node;if(FS.isMountpoint(node)){throw new FS.ErrnoError(10)}if(!FS.isDir(node.mode)){throw new FS.ErrnoError(54)}}var mount={type:type,opts:opts,mountpoint:mountpoint,mounts:[]};var mountRoot=type.mount(mount);mountRoot.mount=mount;mount.root=mountRoot;if(root){FS.root=mountRoot;}else if(node){node.mounted=mount;if(node.mount){node.mount.mounts.push(mount);}}return mountRoot},unmount(mountpoint){var lookup=FS.lookupPath(mountpoint,{follow_mount:false});if(!FS.isMountpoint(lookup.node)){throw new FS.ErrnoError(28)}var node=lookup.node;var mount=node.mounted;var mounts=FS.getMounts(mount);Object.keys(FS.nameTable).forEach(hash=>{var current=FS.nameTable[hash];while(current){var next=current.name_next;if(mounts.includes(current.mount)){FS.destroyNode(current);}current=next;}});node.mounted=null;var idx=node.mount.mounts.indexOf(mount);node.mount.mounts.splice(idx,1);},lookup(parent,name){return parent.node_ops.lookup(parent,name)},mknod(path,mode,dev){var lookup=FS.lookupPath(path,{parent:true});var parent=lookup.node;var name=PATH.basename(path);if(!name||name==="."||name===".."){throw new FS.ErrnoError(28)}var errCode=FS.mayCreate(parent,name);if(errCode){throw new FS.ErrnoError(errCode)}if(!parent.node_ops.mknod){throw new FS.ErrnoError(63)}return parent.node_ops.mknod(parent,name,mode,dev)},create(path,mode){mode=mode!==undefined?mode:438;mode&=4095;mode|=32768;return FS.mknod(path,mode,0)},mkdir(path,mode){mode=mode!==undefined?mode:511;mode&=511|512;mode|=16384;return FS.mknod(path,mode,0)},mkdirTree(path,mode){var dirs=path.split("/");var d="";for(var i=0;i<dirs.length;++i){if(!dirs[i])continue;d+="/"+dirs[i];try{FS.mkdir(d,mode);}catch(e){if(e.errno!=20)throw e}}},mkdev(path,mode,dev){if(typeof dev=="undefined"){dev=mode;mode=438;}mode|=8192;return FS.mknod(path,mode,dev)},symlink(oldpath,newpath){if(!PATH_FS.resolve(oldpath)){throw new FS.ErrnoError(44)}var lookup=FS.lookupPath(newpath,{parent:true});var parent=lookup.node;if(!parent){throw new FS.ErrnoError(44)}var newname=PATH.basename(newpath);var errCode=FS.mayCreate(parent,newname);if(errCode){throw new FS.ErrnoError(errCode)}if(!parent.node_ops.symlink){throw new FS.ErrnoError(63)}return parent.node_ops.symlink(parent,newname,oldpath)},rename(old_path,new_path){var old_dirname=PATH.dirname(old_path);var new_dirname=PATH.dirname(new_path);var old_name=PATH.basename(old_path);var new_name=PATH.basename(new_path);var lookup,old_dir,new_dir;lookup=FS.lookupPath(old_path,{parent:true});old_dir=lookup.node;lookup=FS.lookupPath(new_path,{parent:true});new_dir=lookup.node;if(!old_dir||!new_dir)throw new FS.ErrnoError(44);if(old_dir.mount!==new_dir.mount){throw new FS.ErrnoError(75)}var old_node=FS.lookupNode(old_dir,old_name);var relative=PATH_FS.relative(old_path,new_dirname);if(relative.charAt(0)!=="."){throw new FS.ErrnoError(28)}relative=PATH_FS.relative(new_path,old_dirname);if(relative.charAt(0)!=="."){throw new FS.ErrnoError(55)}var new_node;try{new_node=FS.lookupNode(new_dir,new_name);}catch(e){}if(old_node===new_node){return}var isdir=FS.isDir(old_node.mode);var errCode=FS.mayDelete(old_dir,old_name,isdir);if(errCode){throw new FS.ErrnoError(errCode)}errCode=new_node?FS.mayDelete(new_dir,new_name,isdir):FS.mayCreate(new_dir,new_name);if(errCode){throw new FS.ErrnoError(errCode)}if(!old_dir.node_ops.rename){throw new FS.ErrnoError(63)}if(FS.isMountpoint(old_node)||new_node&&FS.isMountpoint(new_node)){throw new FS.ErrnoError(10)}if(new_dir!==old_dir){errCode=FS.nodePermissions(old_dir,"w");if(errCode){throw new FS.ErrnoError(errCode)}}FS.hashRemoveNode(old_node);try{old_dir.node_ops.rename(old_node,new_dir,new_name);}catch(e){throw e}finally{FS.hashAddNode(old_node);}},rmdir(path){var lookup=FS.lookupPath(path,{parent:true});var parent=lookup.node;var name=PATH.basename(path);var node=FS.lookupNode(parent,name);var errCode=FS.mayDelete(parent,name,true);if(errCode){throw new FS.ErrnoError(errCode)}if(!parent.node_ops.rmdir){throw new FS.ErrnoError(63)}if(FS.isMountpoint(node)){throw new FS.ErrnoError(10)}parent.node_ops.rmdir(parent,name);FS.destroyNode(node);},readdir(path){var lookup=FS.lookupPath(path,{follow:true});var node=lookup.node;if(!node.node_ops.readdir){throw new FS.ErrnoError(54)}return node.node_ops.readdir(node)},unlink(path){var lookup=FS.lookupPath(path,{parent:true});var parent=lookup.node;if(!parent){throw new FS.ErrnoError(44)}var name=PATH.basename(path);var node=FS.lookupNode(parent,name);var errCode=FS.mayDelete(parent,name,false);if(errCode){throw new FS.ErrnoError(errCode)}if(!parent.node_ops.unlink){throw new FS.ErrnoError(63)}if(FS.isMountpoint(node)){throw new FS.ErrnoError(10)}parent.node_ops.unlink(parent,name);FS.destroyNode(node);},readlink(path){var lookup=FS.lookupPath(path);var link=lookup.node;if(!link){throw new FS.ErrnoError(44)}if(!link.node_ops.readlink){throw new FS.ErrnoError(28)}return PATH_FS.resolve(FS.getPath(link.parent),link.node_ops.readlink(link))},stat(path,dontFollow){var lookup=FS.lookupPath(path,{follow:!dontFollow});var node=lookup.node;if(!node){throw new FS.ErrnoError(44)}if(!node.node_ops.getattr){throw new FS.ErrnoError(63)}return node.node_ops.getattr(node)},lstat(path){return FS.stat(path,true)},chmod(path,mode,dontFollow){var node;if(typeof path=="string"){var lookup=FS.lookupPath(path,{follow:!dontFollow});node=lookup.node;}else {node=path;}if(!node.node_ops.setattr){throw new FS.ErrnoError(63)}node.node_ops.setattr(node,{mode:mode&4095|node.mode&-4096,timestamp:Date.now()});},lchmod(path,mode){FS.chmod(path,mode,true);},fchmod(fd,mode){var stream=FS.getStreamChecked(fd);FS.chmod(stream.node,mode);},chown(path,uid,gid,dontFollow){var node;if(typeof path=="string"){var lookup=FS.lookupPath(path,{follow:!dontFollow});node=lookup.node;}else {node=path;}if(!node.node_ops.setattr){throw new FS.ErrnoError(63)}node.node_ops.setattr(node,{timestamp:Date.now()});},lchown(path,uid,gid){FS.chown(path,uid,gid,true);},fchown(fd,uid,gid){var stream=FS.getStreamChecked(fd);FS.chown(stream.node,uid,gid);},truncate(path,len){if(len<0){throw new FS.ErrnoError(28)}var node;if(typeof path=="string"){var lookup=FS.lookupPath(path,{follow:true});node=lookup.node;}else {node=path;}if(!node.node_ops.setattr){throw new FS.ErrnoError(63)}if(FS.isDir(node.mode)){throw new FS.ErrnoError(31)}if(!FS.isFile(node.mode)){throw new FS.ErrnoError(28)}var errCode=FS.nodePermissions(node,"w");if(errCode){throw new FS.ErrnoError(errCode)}node.node_ops.setattr(node,{size:len,timestamp:Date.now()});},ftruncate(fd,len){var stream=FS.getStreamChecked(fd);if((stream.flags&2097155)===0){throw new FS.ErrnoError(28)}FS.truncate(stream.node,len);},utime(path,atime,mtime){var lookup=FS.lookupPath(path,{follow:true});var node=lookup.node;node.node_ops.setattr(node,{timestamp:Math.max(atime,mtime)});},open(path,flags,mode){if(path===""){throw new FS.ErrnoError(44)}flags=typeof flags=="string"?FS_modeStringToFlags(flags):flags;mode=typeof mode=="undefined"?438:mode;if(flags&64){mode=mode&4095|32768;}else {mode=0;}var node;if(typeof path=="object"){node=path;}else {path=PATH.normalize(path);try{var lookup=FS.lookupPath(path,{follow:!(flags&131072)});node=lookup.node;}catch(e){}}var created=false;if(flags&64){if(node){if(flags&128){throw new FS.ErrnoError(20)}}else {node=FS.mknod(path,mode,0);created=true;}}if(!node){throw new FS.ErrnoError(44)}if(FS.isChrdev(node.mode)){flags&=-513;}if(flags&65536&&!FS.isDir(node.mode)){throw new FS.ErrnoError(54)}if(!created){var errCode=FS.mayOpen(node,flags);if(errCode){throw new FS.ErrnoError(errCode)}}if(flags&512&&!created){FS.truncate(node,0);}flags&=-131713;var stream=FS.createStream({node:node,path:FS.getPath(node),flags:flags,seekable:true,position:0,stream_ops:node.stream_ops,ungotten:[],error:false});if(stream.stream_ops.open){stream.stream_ops.open(stream);}if(Module["logReadFiles"]&&!(flags&1)){if(!FS.readFiles)FS.readFiles={};if(!(path in FS.readFiles)){FS.readFiles[path]=1;}}return stream},close(stream){if(FS.isClosed(stream)){throw new FS.ErrnoError(8)}if(stream.getdents)stream.getdents=null;try{if(stream.stream_ops.close){stream.stream_ops.close(stream);}}catch(e){throw e}finally{FS.closeStream(stream.fd);}stream.fd=null;},isClosed(stream){return stream.fd===null},llseek(stream,offset,whence){if(FS.isClosed(stream)){throw new FS.ErrnoError(8)}if(!stream.seekable||!stream.stream_ops.llseek){throw new FS.ErrnoError(70)}if(whence!=0&&whence!=1&&whence!=2){throw new FS.ErrnoError(28)}stream.position=stream.stream_ops.llseek(stream,offset,whence);stream.ungotten=[];return stream.position},read(stream,buffer,offset,length,position){if(length<0||position<0){throw new FS.ErrnoError(28)}if(FS.isClosed(stream)){throw new FS.ErrnoError(8)}if((stream.flags&2097155)===1){throw new FS.ErrnoError(8)}if(FS.isDir(stream.node.mode)){throw new FS.ErrnoError(31)}if(!stream.stream_ops.read){throw new FS.ErrnoError(28)}var seeking=typeof position!="undefined";if(!seeking){position=stream.position;}else if(!stream.seekable){throw new FS.ErrnoError(70)}var bytesRead=stream.stream_ops.read(stream,buffer,offset,length,position);if(!seeking)stream.position+=bytesRead;return bytesRead},write(stream,buffer,offset,length,position,canOwn){if(length<0||position<0){throw new FS.ErrnoError(28)}if(FS.isClosed(stream)){throw new FS.ErrnoError(8)}if((stream.flags&2097155)===0){throw new FS.ErrnoError(8)}if(FS.isDir(stream.node.mode)){throw new FS.ErrnoError(31)}if(!stream.stream_ops.write){throw new FS.ErrnoError(28)}if(stream.seekable&&stream.flags&1024){FS.llseek(stream,0,2);}var seeking=typeof position!="undefined";if(!seeking){position=stream.position;}else if(!stream.seekable){throw new FS.ErrnoError(70)}var bytesWritten=stream.stream_ops.write(stream,buffer,offset,length,position,canOwn);if(!seeking)stream.position+=bytesWritten;return bytesWritten},allocate(stream,offset,length){if(FS.isClosed(stream)){throw new FS.ErrnoError(8)}if(offset<0||length<=0){throw new FS.ErrnoError(28)}if((stream.flags&2097155)===0){throw new FS.ErrnoError(8)}if(!FS.isFile(stream.node.mode)&&!FS.isDir(stream.node.mode)){throw new FS.ErrnoError(43)}if(!stream.stream_ops.allocate){throw new FS.ErrnoError(138)}stream.stream_ops.allocate(stream,offset,length);},mmap(stream,length,position,prot,flags){if((prot&2)!==0&&(flags&2)===0&&(stream.flags&2097155)!==2){throw new FS.ErrnoError(2)}if((stream.flags&2097155)===1){throw new FS.ErrnoError(2)}if(!stream.stream_ops.mmap){throw new FS.ErrnoError(43)}return stream.stream_ops.mmap(stream,length,position,prot,flags)},msync(stream,buffer,offset,length,mmapFlags){if(!stream.stream_ops.msync){return 0}return stream.stream_ops.msync(stream,buffer,offset,length,mmapFlags)},ioctl(stream,cmd,arg){if(!stream.stream_ops.ioctl){throw new FS.ErrnoError(59)}return stream.stream_ops.ioctl(stream,cmd,arg)},readFile(path,opts={}){opts.flags=opts.flags||0;opts.encoding=opts.encoding||"binary";if(opts.encoding!=="utf8"&&opts.encoding!=="binary"){throw new Error(`Invalid encoding type "${opts.encoding}"`)}var ret;var stream=FS.open(path,opts.flags);var stat=FS.stat(path);var length=stat.size;var buf=new Uint8Array(length);FS.read(stream,buf,0,length,0);if(opts.encoding==="utf8"){ret=UTF8ArrayToString(buf,0);}else if(opts.encoding==="binary"){ret=buf;}FS.close(stream);return ret},writeFile(path,data,opts={}){opts.flags=opts.flags||577;var stream=FS.open(path,opts.flags,opts.mode);if(typeof data=="string"){var buf=new Uint8Array(lengthBytesUTF8(data)+1);var actualNumBytes=stringToUTF8Array(data,buf,0,buf.length);FS.write(stream,buf,0,actualNumBytes,undefined,opts.canOwn);}else if(ArrayBuffer.isView(data)){FS.write(stream,data,0,data.byteLength,undefined,opts.canOwn);}else {throw new Error("Unsupported data type")}FS.close(stream);},cwd:()=>FS.currentPath,chdir(path){var lookup=FS.lookupPath(path,{follow:true});if(lookup.node===null){throw new FS.ErrnoError(44)}if(!FS.isDir(lookup.node.mode)){throw new FS.ErrnoError(54)}var errCode=FS.nodePermissions(lookup.node,"x");if(errCode){throw new FS.ErrnoError(errCode)}FS.currentPath=lookup.path;},createDefaultDirectories(){FS.mkdir("/tmp");FS.mkdir("/home");FS.mkdir("/home/web_user");},createDefaultDevices(){FS.mkdir("/dev");FS.registerDevice(FS.makedev(1,3),{read:()=>0,write:(stream,buffer,offset,length,pos)=>length});FS.mkdev("/dev/null",FS.makedev(1,3));TTY.register(FS.makedev(5,0),TTY.default_tty_ops);TTY.register(FS.makedev(6,0),TTY.default_tty1_ops);FS.mkdev("/dev/tty",FS.makedev(5,0));FS.mkdev("/dev/tty1",FS.makedev(6,0));var randomBuffer=new Uint8Array(1024),randomLeft=0;var randomByte=()=>{if(randomLeft===0){randomLeft=randomFill(randomBuffer).byteLength;}return randomBuffer[--randomLeft]};FS.createDevice("/dev","random",randomByte);FS.createDevice("/dev","urandom",randomByte);FS.mkdir("/dev/shm");FS.mkdir("/dev/shm/tmp");},createSpecialDirectories(){FS.mkdir("/proc");var proc_self=FS.mkdir("/proc/self");FS.mkdir("/proc/self/fd");FS.mount({mount(){var node=FS.createNode(proc_self,"fd",16384|511,73);node.node_ops={lookup(parent,name){var fd=+name;var stream=FS.getStreamChecked(fd);var ret={parent:null,mount:{mountpoint:"fake"},node_ops:{readlink:()=>stream.path}};ret.parent=ret;return ret}};return node}},{},"/proc/self/fd");},createStandardStreams(){if(Module["stdin"]){FS.createDevice("/dev","stdin",Module["stdin"]);}else {FS.symlink("/dev/tty","/dev/stdin");}if(Module["stdout"]){FS.createDevice("/dev","stdout",null,Module["stdout"]);}else {FS.symlink("/dev/tty","/dev/stdout");}if(Module["stderr"]){FS.createDevice("/dev","stderr",null,Module["stderr"]);}else {FS.symlink("/dev/tty1","/dev/stderr");}FS.open("/dev/stdin",0);FS.open("/dev/stdout",1);FS.open("/dev/stderr",1);},staticInit(){[44].forEach(code=>{FS.genericErrors[code]=new FS.ErrnoError(code);FS.genericErrors[code].stack="<generic error, no stack>";});FS.nameTable=new Array(4096);FS.mount(MEMFS,{},"/");FS.createDefaultDirectories();FS.createDefaultDevices();FS.createSpecialDirectories();FS.filesystems={"MEMFS":MEMFS};},init(input,output,error){FS.init.initialized=true;Module["stdin"]=input||Module["stdin"];Module["stdout"]=output||Module["stdout"];Module["stderr"]=error||Module["stderr"];FS.createStandardStreams();},quit(){FS.init.initialized=false;for(var i=0;i<FS.streams.length;i++){var stream=FS.streams[i];if(!stream){continue}FS.close(stream);}},findObject(path,dontResolveLastLink){var ret=FS.analyzePath(path,dontResolveLastLink);if(!ret.exists){return null}return ret.object},analyzePath(path,dontResolveLastLink){try{var lookup=FS.lookupPath(path,{follow:!dontResolveLastLink});path=lookup.path;}catch(e){}var ret={isRoot:false,exists:false,error:0,name:null,path:null,object:null,parentExists:false,parentPath:null,parentObject:null};try{var lookup=FS.lookupPath(path,{parent:true});ret.parentExists=true;ret.parentPath=lookup.path;ret.parentObject=lookup.node;ret.name=PATH.basename(path);lookup=FS.lookupPath(path,{follow:!dontResolveLastLink});ret.exists=true;ret.path=lookup.path;ret.object=lookup.node;ret.name=lookup.node.name;ret.isRoot=lookup.path==="/";}catch(e){ret.error=e.errno;}return ret},createPath(parent,path,canRead,canWrite){parent=typeof parent=="string"?parent:FS.getPath(parent);var parts=path.split("/").reverse();while(parts.length){var part=parts.pop();if(!part)continue;var current=PATH.join2(parent,part);try{FS.mkdir(current);}catch(e){}parent=current;}return current},createFile(parent,name,properties,canRead,canWrite){var path=PATH.join2(typeof parent=="string"?parent:FS.getPath(parent),name);var mode=FS_getMode(canRead,canWrite);return FS.create(path,mode)},createDataFile(parent,name,data,canRead,canWrite,canOwn){var path=name;if(parent){parent=typeof parent=="string"?parent:FS.getPath(parent);path=name?PATH.join2(parent,name):parent;}var mode=FS_getMode(canRead,canWrite);var node=FS.create(path,mode);if(data){if(typeof data=="string"){var arr=new Array(data.length);for(var i=0,len=data.length;i<len;++i)arr[i]=data.charCodeAt(i);data=arr;}FS.chmod(node,mode|146);var stream=FS.open(node,577);FS.write(stream,data,0,data.length,0,canOwn);FS.close(stream);FS.chmod(node,mode);}},createDevice(parent,name,input,output){var path=PATH.join2(typeof parent=="string"?parent:FS.getPath(parent),name);var mode=FS_getMode(!!input,!!output);if(!FS.createDevice.major)FS.createDevice.major=64;var dev=FS.makedev(FS.createDevice.major++,0);FS.registerDevice(dev,{open(stream){stream.seekable=false;},close(stream){if(output?.buffer?.length){output(10);}},read(stream,buffer,offset,length,pos){var bytesRead=0;for(var i=0;i<length;i++){var result;try{result=input();}catch(e){throw new FS.ErrnoError(29)}if(result===undefined&&bytesRead===0){throw new FS.ErrnoError(6)}if(result===null||result===undefined)break;bytesRead++;buffer[offset+i]=result;}if(bytesRead){stream.node.timestamp=Date.now();}return bytesRead},write(stream,buffer,offset,length,pos){for(var i=0;i<length;i++){try{output(buffer[offset+i]);}catch(e){throw new FS.ErrnoError(29)}}if(length){stream.node.timestamp=Date.now();}return i}});return FS.mkdev(path,mode,dev)},forceLoadFile(obj){if(obj.isDevice||obj.isFolder||obj.link||obj.contents)return true;if(typeof XMLHttpRequest!="undefined"){throw new Error("Lazy loading should have been performed (contents set) in createLazyFile, but it was not. Lazy loading only works in web workers. Use --embed-file or --preload-file in emcc on the main thread.")}else if(read_){try{obj.contents=intArrayFromString(read_(obj.url),true);obj.usedBytes=obj.contents.length;}catch(e){throw new FS.ErrnoError(29)}}else {throw new Error("Cannot load without read() or XMLHttpRequest.")}},createLazyFile(parent,name,url,canRead,canWrite){class LazyUint8Array{constructor(){this.lengthKnown=false;this.chunks=[];}get(idx){if(idx>this.length-1||idx<0){return undefined}var chunkOffset=idx%this.chunkSize;var chunkNum=idx/this.chunkSize|0;return this.getter(chunkNum)[chunkOffset]}setDataGetter(getter){this.getter=getter;}cacheLength(){var xhr=new XMLHttpRequest;xhr.open("HEAD",url,false);xhr.send(null);if(!(xhr.status>=200&&xhr.status<300||xhr.status===304))throw new Error("Couldn't load "+url+". Status: "+xhr.status);var datalength=Number(xhr.getResponseHeader("Content-length"));var header;var hasByteServing=(header=xhr.getResponseHeader("Accept-Ranges"))&&header==="bytes";var usesGzip=(header=xhr.getResponseHeader("Content-Encoding"))&&header==="gzip";var chunkSize=1024*1024;if(!hasByteServing)chunkSize=datalength;var doXHR=(from,to)=>{if(from>to)throw new Error("invalid range ("+from+", "+to+") or no bytes requested!");if(to>datalength-1)throw new Error("only "+datalength+" bytes available! programmer error!");var xhr=new XMLHttpRequest;xhr.open("GET",url,false);if(datalength!==chunkSize)xhr.setRequestHeader("Range","bytes="+from+"-"+to);xhr.responseType="arraybuffer";if(xhr.overrideMimeType){xhr.overrideMimeType("text/plain; charset=x-user-defined");}xhr.send(null);if(!(xhr.status>=200&&xhr.status<300||xhr.status===304))throw new Error("Couldn't load "+url+". Status: "+xhr.status);if(xhr.response!==undefined){return new Uint8Array(xhr.response||[])}return intArrayFromString(xhr.responseText||"")};var lazyArray=this;lazyArray.setDataGetter(chunkNum=>{var start=chunkNum*chunkSize;var end=(chunkNum+1)*chunkSize-1;end=Math.min(end,datalength-1);if(typeof lazyArray.chunks[chunkNum]=="undefined"){lazyArray.chunks[chunkNum]=doXHR(start,end);}if(typeof lazyArray.chunks[chunkNum]=="undefined")throw new Error("doXHR failed!");return lazyArray.chunks[chunkNum]});if(usesGzip||!datalength){chunkSize=datalength=1;datalength=this.getter(0).length;chunkSize=datalength;out("LazyFiles on gzip forces download of the whole file when length is accessed");}this._length=datalength;this._chunkSize=chunkSize;this.lengthKnown=true;}get length(){if(!this.lengthKnown){this.cacheLength();}return this._length}get chunkSize(){if(!this.lengthKnown){this.cacheLength();}return this._chunkSize}}if(typeof XMLHttpRequest!="undefined"){if(!ENVIRONMENT_IS_WORKER)throw "Cannot do synchronous binary XHRs outside webworkers in modern browsers. Use --embed-file or --preload-file in emcc";var lazyArray=new LazyUint8Array;var properties={isDevice:false,contents:lazyArray};}else {var properties={isDevice:false,url:url};}var node=FS.createFile(parent,name,properties,canRead,canWrite);if(properties.contents){node.contents=properties.contents;}else if(properties.url){node.contents=null;node.url=properties.url;}Object.defineProperties(node,{usedBytes:{get:function(){return this.contents.length}}});var stream_ops={};var keys=Object.keys(node.stream_ops);keys.forEach(key=>{var fn=node.stream_ops[key];stream_ops[key]=(...args)=>{FS.forceLoadFile(node);return fn(...args)};});function writeChunks(stream,buffer,offset,length,position){var contents=stream.node.contents;if(position>=contents.length)return 0;var size=Math.min(contents.length-position,length);if(contents.slice){for(var i=0;i<size;i++){buffer[offset+i]=contents[position+i];}}else {for(var i=0;i<size;i++){buffer[offset+i]=contents.get(position+i);}}return size}stream_ops.read=(stream,buffer,offset,length,position)=>{FS.forceLoadFile(node);return writeChunks(stream,buffer,offset,length,position)};stream_ops.mmap=(stream,length,position,prot,flags)=>{FS.forceLoadFile(node);var ptr=mmapAlloc();if(!ptr){throw new FS.ErrnoError(48)}writeChunks(stream,HEAP8,ptr,length,position);return {ptr:ptr,allocated:true}};node.stream_ops=stream_ops;return node}};var UTF8ToString=(ptr,maxBytesToRead)=>ptr?UTF8ArrayToString(HEAPU8,ptr,maxBytesToRead):"";var SYSCALLS={DEFAULT_POLLMASK:5,calculateAt(dirfd,path,allowEmpty){if(PATH.isAbs(path)){return path}var dir;if(dirfd===-100){dir=FS.cwd();}else {var dirstream=SYSCALLS.getStreamFromFD(dirfd);dir=dirstream.path;}if(path.length==0){if(!allowEmpty){throw new FS.ErrnoError(44)}return dir}return PATH.join2(dir,path)},doStat(func,path,buf){var stat=func(path);HEAP32[buf>>2]=stat.dev;HEAP32[buf+4>>2]=stat.mode;HEAPU32[buf+8>>2]=stat.nlink;HEAP32[buf+12>>2]=stat.uid;HEAP32[buf+16>>2]=stat.gid;HEAP32[buf+20>>2]=stat.rdev;HEAP64[buf+24>>3]=BigInt(stat.size);HEAP32[buf+32>>2]=4096;HEAP32[buf+36>>2]=stat.blocks;var atime=stat.atime.getTime();var mtime=stat.mtime.getTime();var ctime=stat.ctime.getTime();HEAP64[buf+40>>3]=BigInt(Math.floor(atime/1e3));HEAPU32[buf+48>>2]=atime%1e3*1e3;HEAP64[buf+56>>3]=BigInt(Math.floor(mtime/1e3));HEAPU32[buf+64>>2]=mtime%1e3*1e3;HEAP64[buf+72>>3]=BigInt(Math.floor(ctime/1e3));HEAPU32[buf+80>>2]=ctime%1e3*1e3;HEAP64[buf+88>>3]=BigInt(stat.ino);return 0},doMsync(addr,stream,len,flags,offset){if(!FS.isFile(stream.node.mode)){throw new FS.ErrnoError(43)}if(flags&2){return 0}var buffer=HEAPU8.slice(addr,addr+len);FS.msync(stream,buffer,offset,len,flags);},varargs:undefined,get(){var ret=HEAP32[+SYSCALLS.varargs>>2];SYSCALLS.varargs+=4;return ret},getp(){return SYSCALLS.get()},getStr(ptr){var ret=UTF8ToString(ptr);return ret},getStreamFromFD(fd){var stream=FS.getStreamChecked(fd);return stream}};function _fd_close(fd){try{var stream=SYSCALLS.getStreamFromFD(fd);FS.close(stream);return 0}catch(e){if(typeof FS=="undefined"||!(e.name==="ErrnoError"))throw e;return e.errno}}var doReadv=(stream,iov,iovcnt,offset)=>{var ret=0;for(var i=0;i<iovcnt;i++){var ptr=HEAPU32[iov>>2];var len=HEAPU32[iov+4>>2];iov+=8;var curr=FS.read(stream,HEAP8,ptr,len,offset);if(curr<0)return  -1;ret+=curr;if(curr<len)break;}return ret};function _fd_read(fd,iov,iovcnt,pnum){try{var stream=SYSCALLS.getStreamFromFD(fd);var num=doReadv(stream,iov,iovcnt);HEAPU32[pnum>>2]=num;return 0}catch(e){if(typeof FS=="undefined"||!(e.name==="ErrnoError"))throw e;return e.errno}}function _fd_seek(fd,offset,whence,newOffset){offset=bigintToI53Checked(offset);try{if(isNaN(offset))return 61;var stream=SYSCALLS.getStreamFromFD(fd);FS.llseek(stream,offset,whence);HEAP64[newOffset>>3]=BigInt(stream.position);if(stream.getdents&&offset===0&&whence===0)stream.getdents=null;return 0}catch(e){if(typeof FS=="undefined"||!(e.name==="ErrnoError"))throw e;return e.errno}}var doWritev=(stream,iov,iovcnt,offset)=>{var ret=0;for(var i=0;i<iovcnt;i++){var ptr=HEAPU32[iov>>2];var len=HEAPU32[iov+4>>2];iov+=8;var curr=FS.write(stream,HEAP8,ptr,len,offset);if(curr<0)return  -1;ret+=curr;}return ret};function _fd_write(fd,iov,iovcnt,pnum){try{var stream=SYSCALLS.getStreamFromFD(fd);var num=doWritev(stream,iov,iovcnt);HEAPU32[pnum>>2]=num;return 0}catch(e){if(typeof FS=="undefined"||!(e.name==="ErrnoError"))throw e;return e.errno}}var _proc_exit=code=>{EXITSTATUS=code;quit_(code,new ExitStatus(code));};var exitJS=(status,implicit)=>{EXITSTATUS=status;_proc_exit(status);};var handleException=e=>{if(e instanceof ExitStatus||e=="unwind"){return EXITSTATUS}quit_(1,e);};var runAndAbortIfError=func=>{try{return func()}catch(e){abort(e);}};var maybeExit=()=>{};var callUserCallback=func=>{if(ABORT){return}try{func();maybeExit();}catch(e){handleException(e);}};var Asyncify={instrumentWasmImports(imports){var importPattern=/^(invoke_.*|__asyncjs__.*)$/;for(let[x,original]of Object.entries(imports)){original.sig;if(typeof original=="function"){original.isAsync||importPattern.test(x);}}},instrumentWasmExports(exports){var ret={};for(let[x,original]of Object.entries(exports)){if(typeof original=="function"){ret[x]=(...args)=>{Asyncify.exportCallStack.push(x);try{return original(...args)}finally{if(!ABORT){Asyncify.exportCallStack.pop();Asyncify.maybeStopUnwind();}}};}else {ret[x]=original;}}return ret},State:{Normal:0,Unwinding:1,Rewinding:2,Disabled:3},state:0,StackSize:4096,currData:null,handleSleepReturnValue:0,exportCallStack:[],callStackNameToId:{},callStackIdToName:{},callStackId:0,asyncPromiseHandlers:null,sleepCallbacks:[],getCallStackId(funcName){var id=Asyncify.callStackNameToId[funcName];if(id===undefined){id=Asyncify.callStackId++;Asyncify.callStackNameToId[funcName]=id;Asyncify.callStackIdToName[id]=funcName;}return id},maybeStopUnwind(){if(Asyncify.currData&&Asyncify.state===Asyncify.State.Unwinding&&Asyncify.exportCallStack.length===0){Asyncify.state=Asyncify.State.Normal;runAndAbortIfError(_asyncify_stop_unwind);if(typeof Fibers!="undefined"){Fibers.trampoline();}}},whenDone(){return new Promise((resolve,reject)=>{Asyncify.asyncPromiseHandlers={resolve:resolve,reject:reject};})},allocateData(){var ptr=_malloc(12+Asyncify.StackSize);Asyncify.setDataHeader(ptr,ptr+12,Asyncify.StackSize);Asyncify.setDataRewindFunc(ptr);return ptr},setDataHeader(ptr,stack,stackSize){HEAPU32[ptr>>2]=stack;HEAPU32[ptr+4>>2]=stack+stackSize;},setDataRewindFunc(ptr){var bottomOfCallStack=Asyncify.exportCallStack[0];var rewindId=Asyncify.getCallStackId(bottomOfCallStack);HEAP32[ptr+8>>2]=rewindId;},getDataRewindFunc(ptr){var id=HEAP32[ptr+8>>2];var name=Asyncify.callStackIdToName[id];var func=wasmExports[name];return func},doRewind(ptr){var start=Asyncify.getDataRewindFunc(ptr);return start()},handleSleep(startAsync){if(ABORT)return;if(Asyncify.state===Asyncify.State.Normal){var reachedCallback=false;var reachedAfterCallback=false;startAsync((handleSleepReturnValue=0)=>{if(ABORT)return;Asyncify.handleSleepReturnValue=handleSleepReturnValue;reachedCallback=true;if(!reachedAfterCallback){return}Asyncify.state=Asyncify.State.Rewinding;runAndAbortIfError(()=>_asyncify_start_rewind(Asyncify.currData));if(typeof Browser!="undefined"&&Browser.mainLoop.func){Browser.mainLoop.resume();}var asyncWasmReturnValue,isError=false;try{asyncWasmReturnValue=Asyncify.doRewind(Asyncify.currData);}catch(err){asyncWasmReturnValue=err;isError=true;}var handled=false;if(!Asyncify.currData){var asyncPromiseHandlers=Asyncify.asyncPromiseHandlers;if(asyncPromiseHandlers){Asyncify.asyncPromiseHandlers=null;(isError?asyncPromiseHandlers.reject:asyncPromiseHandlers.resolve)(asyncWasmReturnValue);handled=true;}}if(isError&&!handled){throw asyncWasmReturnValue}});reachedAfterCallback=true;if(!reachedCallback){Asyncify.state=Asyncify.State.Unwinding;Asyncify.currData=Asyncify.allocateData();if(typeof Browser!="undefined"&&Browser.mainLoop.func){Browser.mainLoop.pause();}runAndAbortIfError(()=>_asyncify_start_unwind(Asyncify.currData));}}else if(Asyncify.state===Asyncify.State.Rewinding){Asyncify.state=Asyncify.State.Normal;runAndAbortIfError(_asyncify_stop_rewind);_free(Asyncify.currData);Asyncify.currData=null;Asyncify.sleepCallbacks.forEach(callUserCallback);}else {abort(`invalid state: ${Asyncify.state}`);}return Asyncify.handleSleepReturnValue},handleAsync(startAsync){return Asyncify.handleSleep(wakeUp=>{startAsync().then(wakeUp);})}};FS.createPreloadedFile=FS_createPreloadedFile;FS.staticInit();var wasmImports={TVMFFIWasmFunctionDeleter:_TVMFFIWasmFunctionDeleter,TVMFFIWasmSafeCall:_TVMFFIWasmSafeCall,clock_time_get:_clock_time_get,emscripten_notify_memory_growth:_emscripten_notify_memory_growth,environ_get:_environ_get,environ_sizes_get:_environ_sizes_get,fd_close:_fd_close,fd_read:_fd_read,fd_seek:_fd_seek,fd_write:_fd_write,proc_exit:_proc_exit};var wasmExports=createWasm();Module["_TVMFFIBacktrace"]=(a0,a1,a2,a3)=>(Module["_TVMFFIBacktrace"]=wasmExports["TVMFFIBacktrace"])(a0,a1,a2,a3);var _malloc=a0=>(_malloc=wasmExports["malloc"])(a0);Module["_TVMFFIEnvSetStream"]=(a0,a1,a2,a3)=>(Module["_TVMFFIEnvSetStream"]=wasmExports["TVMFFIEnvSetStream"])(a0,a1,a2,a3);Module["_TVMFFIEnvGetStream"]=(a0,a1)=>(Module["_TVMFFIEnvGetStream"]=wasmExports["TVMFFIEnvGetStream"])(a0,a1);Module["_TVMBackendAllocWorkspace"]=(a0,a1,a2,a3,a4)=>(Module["_TVMBackendAllocWorkspace"]=wasmExports["TVMBackendAllocWorkspace"])(a0,a1,a2,a3,a4);Module["_TVMBackendFreeWorkspace"]=(a0,a1,a2)=>(Module["_TVMBackendFreeWorkspace"]=wasmExports["TVMBackendFreeWorkspace"])(a0,a1,a2);Module["_TVMFFITypeGetOrAllocIndex"]=(a0,a1,a2,a3,a4,a5)=>(Module["_TVMFFITypeGetOrAllocIndex"]=wasmExports["TVMFFITypeGetOrAllocIndex"])(a0,a1,a2,a3,a4,a5);Module["__ZN3tvm7runtime13GetFileFormatERKNSt3__212basic_stringIcNS1_11char_traitsIcEENS1_9allocatorIcEEEES9_"]=(a0,a1,a2)=>(Module["__ZN3tvm7runtime13GetFileFormatERKNSt3__212basic_stringIcNS1_11char_traitsIcEENS1_9allocatorIcEEEES9_"]=wasmExports["_ZN3tvm7runtime13GetFileFormatERKNSt3__212basic_stringIcNS1_11char_traitsIcEENS1_9allocatorIcEEEES9_"])(a0,a1,a2);Module["__ZN3tvm7runtime15GetMetaFilePathERKNSt3__212basic_stringIcNS1_11char_traitsIcEENS1_9allocatorIcEEEE"]=(a0,a1)=>(Module["__ZN3tvm7runtime15GetMetaFilePathERKNSt3__212basic_stringIcNS1_11char_traitsIcEENS1_9allocatorIcEEEE"]=wasmExports["_ZN3tvm7runtime15GetMetaFilePathERKNSt3__212basic_stringIcNS1_11char_traitsIcEENS1_9allocatorIcEEEE"])(a0,a1);Module["__ZN3tvm7runtime18LoadBinaryFromFileERKNSt3__212basic_stringIcNS1_11char_traitsIcEENS1_9allocatorIcEEEEPS7_"]=(a0,a1)=>(Module["__ZN3tvm7runtime18LoadBinaryFromFileERKNSt3__212basic_stringIcNS1_11char_traitsIcEENS1_9allocatorIcEEEEPS7_"]=wasmExports["_ZN3tvm7runtime18LoadBinaryFromFileERKNSt3__212basic_stringIcNS1_11char_traitsIcEENS1_9allocatorIcEEEEPS7_"])(a0,a1);Module["__ZN3tvm7runtime16SaveBinaryToFileERKNSt3__212basic_stringIcNS1_11char_traitsIcEENS1_9allocatorIcEEEES9_"]=(a0,a1)=>(Module["__ZN3tvm7runtime16SaveBinaryToFileERKNSt3__212basic_stringIcNS1_11char_traitsIcEENS1_9allocatorIcEEEES9_"]=wasmExports["_ZN3tvm7runtime16SaveBinaryToFileERKNSt3__212basic_stringIcNS1_11char_traitsIcEENS1_9allocatorIcEEEES9_"])(a0,a1);Module["__ZN3tvm7runtime18SaveMetaDataToFileERKNSt3__212basic_stringIcNS1_11char_traitsIcEENS1_9allocatorIcEEEERKNS_3ffi3MapINSA_6StringENS0_12FunctionInfoEvEE"]=(a0,a1)=>(Module["__ZN3tvm7runtime18SaveMetaDataToFileERKNSt3__212basic_stringIcNS1_11char_traitsIcEENS1_9allocatorIcEEEERKNS_3ffi3MapINSA_6StringENS0_12FunctionInfoEvEE"]=wasmExports["_ZN3tvm7runtime18SaveMetaDataToFileERKNSt3__212basic_stringIcNS1_11char_traitsIcEENS1_9allocatorIcEEEERKNS_3ffi3MapINSA_6StringENS0_12FunctionInfoEvEE"])(a0,a1);Module["_TVMFFIDataTypeToString"]=(a0,a1)=>(Module["_TVMFFIDataTypeToString"]=wasmExports["TVMFFIDataTypeToString"])(a0,a1);Module["__ZN3tvm3ffi4json9StringifyERKNS0_3AnyERKNS0_8OptionalIivEE"]=(a0,a1,a2)=>(Module["__ZN3tvm3ffi4json9StringifyERKNS0_3AnyERKNS0_8OptionalIivEE"]=wasmExports["_ZN3tvm3ffi4json9StringifyERKNS0_3AnyERKNS0_8OptionalIivEE"])(a0,a1,a2);Module["__ZN3tvm7runtime20LoadMetaDataFromFileERKNSt3__212basic_stringIcNS1_11char_traitsIcEENS1_9allocatorIcEEEEPNS_3ffi3MapINSA_6StringENS0_12FunctionInfoEvEE"]=(a0,a1)=>(Module["__ZN3tvm7runtime20LoadMetaDataFromFileERKNSt3__212basic_stringIcNS1_11char_traitsIcEENS1_9allocatorIcEEEEPNS_3ffi3MapINSA_6StringENS0_12FunctionInfoEvEE"]=wasmExports["_ZN3tvm7runtime20LoadMetaDataFromFileERKNSt3__212basic_stringIcNS1_11char_traitsIcEENS1_9allocatorIcEEEEPNS_3ffi3MapINSA_6StringENS0_12FunctionInfoEvEE"])(a0,a1);Module["__ZN3tvm3ffi4json5ParseERKNS0_6StringEPS2_"]=(a0,a1,a2)=>(Module["__ZN3tvm3ffi4json5ParseERKNS0_6StringEPS2_"]=wasmExports["_ZN3tvm3ffi4json5ParseERKNS0_6StringEPS2_"])(a0,a1,a2);Module["__ZN3tvm7runtime6Tensor5EmptyENS_3ffi5ShapeE10DLDataType8DLDeviceNS2_8OptionalINS2_6StringEvEE"]=(a0,a1,a2,a3,a4)=>(Module["__ZN3tvm7runtime6Tensor5EmptyENS_3ffi5ShapeE10DLDataType8DLDeviceNS2_8OptionalINS2_6StringEvEE"]=wasmExports["_ZN3tvm7runtime6Tensor5EmptyENS_3ffi5ShapeE10DLDataType8DLDeviceNS2_8OptionalINS2_6StringEvEE"])(a0,a1,a2,a3,a4);Module["__ZN3tvm7runtime6Tensor11CopyToBytesEPK8DLTensorPvmS5_"]=(a0,a1,a2,a3)=>(Module["__ZN3tvm7runtime6Tensor11CopyToBytesEPK8DLTensorPvmS5_"]=wasmExports["_ZN3tvm7runtime6Tensor11CopyToBytesEPK8DLTensorPvmS5_"])(a0,a1,a2,a3);Module["_TVMFFIFunctionGetGlobal"]=(a0,a1)=>(Module["_TVMFFIFunctionGetGlobal"]=wasmExports["TVMFFIFunctionGetGlobal"])(a0,a1);Module["__ZN3tvm7runtime6Tensor13CopyFromBytesEPK8DLTensorPvmS5_"]=(a0,a1,a2,a3)=>(Module["__ZN3tvm7runtime6Tensor13CopyFromBytesEPK8DLTensorPvmS5_"]=wasmExports["_ZN3tvm7runtime6Tensor13CopyFromBytesEPK8DLTensorPvmS5_"])(a0,a1,a2,a3);Module["__ZNK3tvm7runtime6Tensor10CreateViewENS_3ffi5ShapeE10DLDataTypey"]=(a0,a1,a2,a3,a4)=>(Module["__ZNK3tvm7runtime6Tensor10CreateViewENS_3ffi5ShapeE10DLDataTypey"]=wasmExports["_ZNK3tvm7runtime6Tensor10CreateViewENS_3ffi5ShapeE10DLDataTypey"])(a0,a1,a2,a3,a4);Module["__ZNK3tvm7runtime6Tensor11CopyToBytesEPvm"]=(a0,a1,a2)=>(Module["__ZNK3tvm7runtime6Tensor11CopyToBytesEPvm"]=wasmExports["_ZNK3tvm7runtime6Tensor11CopyToBytesEPvm"])(a0,a1,a2);Module["__ZN3tvm7runtime6Tensor13CopyFromBytesEPKvm"]=(a0,a1,a2)=>(Module["__ZN3tvm7runtime6Tensor13CopyFromBytesEPKvm"]=wasmExports["_ZN3tvm7runtime6Tensor13CopyFromBytesEPKvm"])(a0,a1,a2);Module["__ZNK3tvm7runtime6Tensor6CopyToERK8DLDeviceNS_3ffi8OptionalINS5_6StringEvEE"]=(a0,a1,a2,a3)=>(Module["__ZNK3tvm7runtime6Tensor6CopyToERK8DLDeviceNS_3ffi8OptionalINS5_6StringEvEE"]=wasmExports["_ZNK3tvm7runtime6Tensor6CopyToERK8DLDeviceNS_3ffi8OptionalINS5_6StringEvEE"])(a0,a1,a2,a3);Module["__ZN3tvm7runtime6Tensor10CopyFromToEPK8DLTensorPS2_Pv"]=(a0,a1,a2)=>(Module["__ZN3tvm7runtime6Tensor10CopyFromToEPK8DLTensorPS2_Pv"]=wasmExports["_ZN3tvm7runtime6Tensor10CopyFromToEPK8DLTensorPS2_Pv"])(a0,a1,a2);Module["__ZN3tvm7runtime6Tensor15IsStorageSharedEPK8DLTensorS4_"]=(a0,a1)=>(Module["__ZN3tvm7runtime6Tensor15IsStorageSharedEPK8DLTensorS4_"]=wasmExports["_ZN3tvm7runtime6Tensor15IsStorageSharedEPK8DLTensorS4_"])(a0,a1);Module["__ZN3tvm7runtime5Timer5StartE8DLDevice"]=(a0,a1)=>(Module["__ZN3tvm7runtime5Timer5StartE8DLDevice"]=wasmExports["_ZN3tvm7runtime5Timer5StartE8DLDevice"])(a0,a1);Module["__ZN3tvm7runtime6detail14LogMessageImplERKNSt3__212basic_stringIcNS2_11char_traitsIcEENS2_9allocatorIcEEEEiiSA_"]=(a0,a1,a2,a3)=>(Module["__ZN3tvm7runtime6detail14LogMessageImplERKNSt3__212basic_stringIcNS2_11char_traitsIcEENS2_9allocatorIcEEEEiiSA_"]=wasmExports["_ZN3tvm7runtime6detail14LogMessageImplERKNSt3__212basic_stringIcNS2_11char_traitsIcEENS2_9allocatorIcEEEEiiSA_"])(a0,a1,a2,a3);Module["_TVMFFIGetCustomAllocator"]=()=>(Module["_TVMFFIGetCustomAllocator"]=wasmExports["TVMFFIGetCustomAllocator"])();Module["_TVMFFISetCustomAllocator"]=a0=>(Module["_TVMFFISetCustomAllocator"]=wasmExports["TVMFFISetCustomAllocator"])(a0);Module["_TVMFFIDataTypeFromString"]=(a0,a1)=>(Module["_TVMFFIDataTypeFromString"]=wasmExports["TVMFFIDataTypeFromString"])(a0,a1);Module["_TVMFFIErrorSetRaisedFromCStr"]=(a0,a1)=>(Module["_TVMFFIErrorSetRaisedFromCStr"]=wasmExports["TVMFFIErrorSetRaisedFromCStr"])(a0,a1);Module["_TVMFFIErrorSetRaisedFromCStrParts"]=(a0,a1,a2)=>(Module["_TVMFFIErrorSetRaisedFromCStrParts"]=wasmExports["TVMFFIErrorSetRaisedFromCStrParts"])(a0,a1,a2);Module["_TVMFFIErrorSetRaised"]=a0=>(Module["_TVMFFIErrorSetRaised"]=wasmExports["TVMFFIErrorSetRaised"])(a0);Module["_TVMFFIErrorMoveFromRaised"]=a0=>(Module["_TVMFFIErrorMoveFromRaised"]=wasmExports["TVMFFIErrorMoveFromRaised"])(a0);Module["_TVMFFIErrorCreate"]=(a0,a1,a2,a3)=>(Module["_TVMFFIErrorCreate"]=wasmExports["TVMFFIErrorCreate"])(a0,a1,a2,a3);Module["_TVMFFIErrorCreateWithCauseAndExtraContext"]=(a0,a1,a2,a3,a4,a5)=>(Module["_TVMFFIErrorCreateWithCauseAndExtraContext"]=wasmExports["TVMFFIErrorCreateWithCauseAndExtraContext"])(a0,a1,a2,a3,a4,a5);Module["_TVMFFIEnvCheckSignals"]=()=>(Module["_TVMFFIEnvCheckSignals"]=wasmExports["TVMFFIEnvCheckSignals"])();Module["_TVMFFIEnvRegisterCAPI"]=(a0,a1)=>(Module["_TVMFFIEnvRegisterCAPI"]=wasmExports["TVMFFIEnvRegisterCAPI"])(a0,a1);Module["_TVMFFIEnvSetDLPackManagedTensorAllocator"]=(a0,a1,a2)=>(Module["_TVMFFIEnvSetDLPackManagedTensorAllocator"]=wasmExports["TVMFFIEnvSetDLPackManagedTensorAllocator"])(a0,a1,a2);Module["_TVMFFIEnvGetDLPackManagedTensorAllocator"]=()=>(Module["_TVMFFIEnvGetDLPackManagedTensorAllocator"]=wasmExports["TVMFFIEnvGetDLPackManagedTensorAllocator"])();Module["_TVMFFIEnvTensorAlloc"]=(a0,a1)=>(Module["_TVMFFIEnvTensorAlloc"]=wasmExports["TVMFFIEnvTensorAlloc"])(a0,a1);Module["__ZN3tvm3ffi6Module19VisitContextSymbolsERKNS0_13TypedFunctionIFvNS0_6StringEPvEEE"]=a0=>(Module["__ZN3tvm3ffi6Module19VisitContextSymbolsERKNS0_13TypedFunctionIFvNS0_6StringEPvEEE"]=wasmExports["_ZN3tvm3ffi6Module19VisitContextSymbolsERKNS0_13TypedFunctionIFvNS0_6StringEPvEEE"])(a0);Module["_TVMFFIEnvModRegisterContextSymbol"]=(a0,a1)=>(Module["_TVMFFIEnvModRegisterContextSymbol"]=wasmExports["TVMFFIEnvModRegisterContextSymbol"])(a0,a1);Module["_TVMFFIEnvModRegisterSystemLibSymbol"]=(a0,a1)=>(Module["_TVMFFIEnvModRegisterSystemLibSymbol"]=wasmExports["TVMFFIEnvModRegisterSystemLibSymbol"])(a0,a1);Module["__ZN3tvm3ffi6Module12LoadFromFileERKNS0_6StringE"]=(a0,a1)=>(Module["__ZN3tvm3ffi6Module12LoadFromFileERKNS0_6StringE"]=wasmExports["_ZN3tvm3ffi6Module12LoadFromFileERKNS0_6StringE"])(a0,a1);Module["_TVMFFIEnvModLookupFromImports"]=(a0,a1,a2)=>(Module["_TVMFFIEnvModLookupFromImports"]=wasmExports["TVMFFIEnvModLookupFromImports"])(a0,a1,a2);Module["_TVMFFIFunctionCreate"]=(a0,a1,a2,a3)=>(Module["_TVMFFIFunctionCreate"]=wasmExports["TVMFFIFunctionCreate"])(a0,a1,a2,a3);Module["_TVMFFIAnyViewToOwnedAny"]=(a0,a1)=>(Module["_TVMFFIAnyViewToOwnedAny"]=wasmExports["TVMFFIAnyViewToOwnedAny"])(a0,a1);Module["_TVMFFIFunctionSetGlobal"]=(a0,a1,a2)=>(Module["_TVMFFIFunctionSetGlobal"]=wasmExports["TVMFFIFunctionSetGlobal"])(a0,a1,a2);Module["_TVMFFIFunctionSetGlobalFromMethodInfo"]=(a0,a1)=>(Module["_TVMFFIFunctionSetGlobalFromMethodInfo"]=wasmExports["TVMFFIFunctionSetGlobalFromMethodInfo"])(a0,a1);Module["_TVMFFIFunctionCall"]=(a0,a1,a2,a3)=>(Module["_TVMFFIFunctionCall"]=wasmExports["TVMFFIFunctionCall"])(a0,a1,a2,a3);Module["_TVMFFIHandleInitOnce"]=(a0,a1)=>(Module["_TVMFFIHandleInitOnce"]=wasmExports["TVMFFIHandleInitOnce"])(a0,a1);Module["_TVMFFIHandleDeinitOnce"]=(a0,a1)=>(Module["_TVMFFIHandleDeinitOnce"]=wasmExports["TVMFFIHandleDeinitOnce"])(a0,a1);Module["_TVMFFIGetVersion"]=a0=>(Module["_TVMFFIGetVersion"]=wasmExports["TVMFFIGetVersion"])(a0);Module["_TVMFFIObjectDecRef"]=a0=>(Module["_TVMFFIObjectDecRef"]=wasmExports["TVMFFIObjectDecRef"])(a0);Module["_TVMFFIObjectIncRef"]=a0=>(Module["_TVMFFIObjectIncRef"]=wasmExports["TVMFFIObjectIncRef"])(a0);Module["_TVMFFIObjectCreateOpaque"]=(a0,a1,a2,a3)=>(Module["_TVMFFIObjectCreateOpaque"]=wasmExports["TVMFFIObjectCreateOpaque"])(a0,a1,a2,a3);Module["_TVMFFITypeKeyToIndex"]=(a0,a1)=>(Module["_TVMFFITypeKeyToIndex"]=wasmExports["TVMFFITypeKeyToIndex"])(a0,a1);Module["_TVMFFITypeRegisterField"]=(a0,a1)=>(Module["_TVMFFITypeRegisterField"]=wasmExports["TVMFFITypeRegisterField"])(a0,a1);Module["_TVMFFITypeRegisterMethod"]=(a0,a1)=>(Module["_TVMFFITypeRegisterMethod"]=wasmExports["TVMFFITypeRegisterMethod"])(a0,a1);Module["_TVMFFITypeRegisterMetadata"]=(a0,a1)=>(Module["_TVMFFITypeRegisterMetadata"]=wasmExports["TVMFFITypeRegisterMetadata"])(a0,a1);Module["_TVMFFITypeRegisterAttr"]=(a0,a1,a2)=>(Module["_TVMFFITypeRegisterAttr"]=wasmExports["TVMFFITypeRegisterAttr"])(a0,a1,a2);Module["_TVMFFIGetTypeAttrColumn"]=a0=>(Module["_TVMFFIGetTypeAttrColumn"]=wasmExports["TVMFFIGetTypeAttrColumn"])(a0);Module["_TVMFFIGetTypeInfo"]=a0=>(Module["_TVMFFIGetTypeInfo"]=wasmExports["TVMFFIGetTypeInfo"])(a0);Module["_TVMFFIStringFromByteArray"]=(a0,a1)=>(Module["_TVMFFIStringFromByteArray"]=wasmExports["TVMFFIStringFromByteArray"])(a0,a1);Module["_TVMFFIBytesFromByteArray"]=(a0,a1)=>(Module["_TVMFFIBytesFromByteArray"]=wasmExports["TVMFFIBytesFromByteArray"])(a0,a1);Module["_TVMFFIBigIntFromByteArray"]=(a0,a1)=>(Module["_TVMFFIBigIntFromByteArray"]=wasmExports["TVMFFIBigIntFromByteArray"])(a0,a1);Module["_TVMFFIBigIntGetContentByteArray"]=(a0,a1)=>(Module["_TVMFFIBigIntGetContentByteArray"]=wasmExports["TVMFFIBigIntGetContentByteArray"])(a0,a1);Module["_TVMFFITensorCreateUnsafeView"]=(a0,a1,a2)=>(Module["_TVMFFITensorCreateUnsafeView"]=wasmExports["TVMFFITensorCreateUnsafeView"])(a0,a1,a2);Module["_TVMFFITensorFromDLPack"]=(a0,a1,a2,a3)=>(Module["_TVMFFITensorFromDLPack"]=wasmExports["TVMFFITensorFromDLPack"])(a0,a1,a2,a3);Module["_TVMFFITensorFromDLPackVersioned"]=(a0,a1,a2,a3)=>(Module["_TVMFFITensorFromDLPackVersioned"]=wasmExports["TVMFFITensorFromDLPackVersioned"])(a0,a1,a2,a3);Module["_TVMFFITensorToDLPack"]=(a0,a1)=>(Module["_TVMFFITensorToDLPack"]=wasmExports["TVMFFITensorToDLPack"])(a0,a1);Module["_TVMFFITensorToDLPackVersioned"]=(a0,a1)=>(Module["_TVMFFITensorToDLPackVersioned"]=wasmExports["TVMFFITensorToDLPackVersioned"])(a0,a1);Module["___tvm_ffi_testing_dll_schema_id_int"]=(a0,a1,a2,a3)=>(Module["___tvm_ffi_testing_dll_schema_id_int"]=wasmExports["__tvm_ffi_testing_dll_schema_id_int"])(a0,a1,a2,a3);Module["___tvm_ffi_testing_dll_test_add_with_docstring"]=(a0,a1,a2,a3)=>(Module["___tvm_ffi_testing_dll_test_add_with_docstring"]=wasmExports["__tvm_ffi_testing_dll_test_add_with_docstring"])(a0,a1,a2,a3);Module["_TVMFFITestingDummyTarget"]=()=>(Module["_TVMFFITestingDummyTarget"]=wasmExports["TVMFFITestingDummyTarget"])();Module["__ZN3tvm7runtime6memory7StorageC2ENS1_6BufferEPNS1_9AllocatorE"]=(a0,a1,a2)=>(Module["__ZN3tvm7runtime6memory7StorageC2ENS1_6BufferEPNS1_9AllocatorE"]=wasmExports["_ZN3tvm7runtime6memory7StorageC2ENS1_6BufferEPNS1_9AllocatorE"])(a0,a1,a2);Module["__ZN3tvm7runtime6memory10StorageObj17AllocTensorScopedExNS_3ffi5ShapeE10DLDataTypeNS3_6StringE"]=(a0,a1,a2,a3,a4,a5)=>(Module["__ZN3tvm7runtime6memory10StorageObj17AllocTensorScopedExNS_3ffi5ShapeE10DLDataTypeNS3_6StringE"]=wasmExports["_ZN3tvm7runtime6memory10StorageObj17AllocTensorScopedExNS_3ffi5ShapeE10DLDataTypeNS3_6StringE"])(a0,a1,a2,a3,a4,a5);Module["__ZN3tvm7runtime6memory10StorageObj11AllocTensorExNS_3ffi5ShapeE10DLDataType"]=(a0,a1,a2,a3,a4)=>(Module["__ZN3tvm7runtime6memory10StorageObj11AllocTensorExNS_3ffi5ShapeE10DLDataType"]=wasmExports["_ZN3tvm7runtime6memory10StorageObj11AllocTensorExNS_3ffi5ShapeE10DLDataType"])(a0,a1,a2,a3,a4);Module["__ZN3tvm7runtime6memory13MemoryManager6GlobalEv"]=()=>(Module["__ZN3tvm7runtime6memory13MemoryManager6GlobalEv"]=wasmExports["_ZN3tvm7runtime6memory13MemoryManager6GlobalEv"])();Module["__ZN3tvm7runtime6memory13MemoryManager20GetOrCreateAllocatorE8DLDeviceNS1_13AllocatorTypeE"]=(a0,a1)=>(Module["__ZN3tvm7runtime6memory13MemoryManager20GetOrCreateAllocatorE8DLDeviceNS1_13AllocatorTypeE"]=wasmExports["_ZN3tvm7runtime6memory13MemoryManager20GetOrCreateAllocatorE8DLDeviceNS1_13AllocatorTypeE"])(a0,a1);Module["__ZN3tvm7runtime6memory13MemoryManager12GetAllocatorE8DLDeviceNS1_13AllocatorTypeE"]=(a0,a1)=>(Module["__ZN3tvm7runtime6memory13MemoryManager12GetAllocatorE8DLDeviceNS1_13AllocatorTypeE"]=wasmExports["_ZN3tvm7runtime6memory13MemoryManager12GetAllocatorE8DLDeviceNS1_13AllocatorTypeE"])(a0,a1);Module["__ZN3tvm7runtime6memory7StorageC1ENS1_6BufferEPNS1_9AllocatorE"]=(a0,a1,a2)=>(Module["__ZN3tvm7runtime6memory7StorageC1ENS1_6BufferEPNS1_9AllocatorE"]=wasmExports["_ZN3tvm7runtime6memory7StorageC1ENS1_6BufferEPNS1_9AllocatorE"])(a0,a1,a2);Module["__ZN3tvm7runtime2vm19TensorCacheMetadata11LoadFromStrERKNSt3__212basic_stringIcNS3_11char_traitsIcEENS3_9allocatorIcEEEESB_"]=(a0,a1,a2)=>(Module["__ZN3tvm7runtime2vm19TensorCacheMetadata11LoadFromStrERKNSt3__212basic_stringIcNS3_11char_traitsIcEENS3_9allocatorIcEEEESB_"]=wasmExports["_ZN3tvm7runtime2vm19TensorCacheMetadata11LoadFromStrERKNSt3__212basic_stringIcNS3_11char_traitsIcEENS3_9allocatorIcEEEESB_"])(a0,a1,a2);Module["__ZN3tvm7runtime2vm19TensorCacheMetadata4LoadERKNSt3__212basic_stringIcNS3_11char_traitsIcEENS3_9allocatorIcEEEE"]=(a0,a1)=>(Module["__ZN3tvm7runtime2vm19TensorCacheMetadata4LoadERKNSt3__212basic_stringIcNS3_11char_traitsIcEENS3_9allocatorIcEEEE"]=wasmExports["_ZN3tvm7runtime2vm19TensorCacheMetadata4LoadERKNSt3__212basic_stringIcNS3_11char_traitsIcEENS3_9allocatorIcEEEE"])(a0,a1);Module["__ZNK3tvm7runtime2vm19TensorCacheMetadata10FileRecord11ParamRecord4LoadE8DLDevicePKNSt3__212basic_stringIcNS6_11char_traitsIcEENS6_9allocatorIcEEEEPNS_3ffi8OptionalINS0_6TensorEvEE"]=(a0,a1,a2,a3,a4)=>(Module["__ZNK3tvm7runtime2vm19TensorCacheMetadata10FileRecord11ParamRecord4LoadE8DLDevicePKNSt3__212basic_stringIcNS6_11char_traitsIcEENS6_9allocatorIcEEEEPNS_3ffi8OptionalINS0_6TensorEvEE"]=wasmExports["_ZNK3tvm7runtime2vm19TensorCacheMetadata10FileRecord11ParamRecord4LoadE8DLDevicePKNSt3__212basic_stringIcNS6_11char_traitsIcEENS6_9allocatorIcEEEEPNS_3ffi8OptionalINS0_6TensorEvEE"])(a0,a1,a2,a3,a4);Module["__ZNK3tvm7runtime2vm19TensorCacheMetadata10FileRecord4LoadE8DLDeviceRKNSt3__212basic_stringIcNS5_11char_traitsIcEENS5_9allocatorIcEEEEPSB_PNS_3ffi8OptionalINS0_6TensorEvEE"]=(a0,a1,a2,a3,a4,a5)=>(Module["__ZNK3tvm7runtime2vm19TensorCacheMetadata10FileRecord4LoadE8DLDeviceRKNSt3__212basic_stringIcNS5_11char_traitsIcEENS5_9allocatorIcEEEEPSB_PNS_3ffi8OptionalINS0_6TensorEvEE"]=wasmExports["_ZNK3tvm7runtime2vm19TensorCacheMetadata10FileRecord4LoadE8DLDeviceRKNSt3__212basic_stringIcNS5_11char_traitsIcEENS5_9allocatorIcEEEEPSB_PNS_3ffi8OptionalINS0_6TensorEvEE"])(a0,a1,a2,a3,a4,a5);Module["_TVMBackendParallelLaunch"]=(a0,a1,a2)=>(Module["_TVMBackendParallelLaunch"]=wasmExports["TVMBackendParallelLaunch"])(a0,a1,a2);Module["_TVMBackendParallelBarrier"]=(a0,a1)=>(Module["_TVMBackendParallelBarrier"]=wasmExports["TVMBackendParallelBarrier"])(a0,a1);Module["__ZN3tvm7runtime6detail12LogFatalImplERKNSt3__212basic_stringIcNS2_11char_traitsIcEENS2_9allocatorIcEEEEiSA_"]=(a0,a1,a2)=>(Module["__ZN3tvm7runtime6detail12LogFatalImplERKNSt3__212basic_stringIcNS2_11char_traitsIcEENS2_9allocatorIcEEEEiSA_"]=wasmExports["_ZN3tvm7runtime6detail12LogFatalImplERKNSt3__212basic_stringIcNS2_11char_traitsIcEENS2_9allocatorIcEEEEiSA_"])(a0,a1,a2);var _free=a0=>(_free=wasmExports["free"])(a0);Module["_TVMWasmAllocSpace"]=a0=>(Module["_TVMWasmAllocSpace"]=wasmExports["TVMWasmAllocSpace"])(a0);Module["_TVMWasmFreeSpace"]=a0=>(Module["_TVMWasmFreeSpace"]=wasmExports["TVMWasmFreeSpace"])(a0);Module["_TVMFFIWasmFunctionCreate"]=(a0,a1)=>(Module["_TVMFFIWasmFunctionCreate"]=wasmExports["TVMFFIWasmFunctionCreate"])(a0,a1);Module["_TVMFFIWasmGetLastError"]=()=>(Module["_TVMFFIWasmGetLastError"]=wasmExports["TVMFFIWasmGetLastError"])();var __initialize=Module["__initialize"]=()=>(__initialize=Module["__initialize"]=wasmExports["_initialize"])();var _asyncify_start_unwind=a0=>(_asyncify_start_unwind=wasmExports["asyncify_start_unwind"])(a0);var _asyncify_stop_unwind=()=>(_asyncify_stop_unwind=wasmExports["asyncify_stop_unwind"])();var _asyncify_start_rewind=a0=>(_asyncify_start_rewind=wasmExports["asyncify_start_rewind"])(a0);var _asyncify_stop_rewind=()=>(_asyncify_stop_rewind=wasmExports["asyncify_stop_rewind"])();var calledRun;dependenciesFulfilled=function runCaller(){if(!calledRun)run();if(!calledRun)dependenciesFulfilled=runCaller;};function callMain(args=[]){var entryFunction=__initialize;try{entryFunction();var ret=0;exitJS(ret,true);return ret}catch(e){return handleException(e)}}function run(args=arguments_){if(runDependencies>0){return}preRun();if(runDependencies>0){return}function doRun(){if(calledRun)return;calledRun=true;Module["calledRun"]=true;if(ABORT)return;initRuntime();preMain();if(Module["onRuntimeInitialized"])Module["onRuntimeInitialized"]();if(shouldRunNow)callMain(args);postRun();}if(Module["setStatus"]){Module["setStatus"]("Running...");setTimeout(function(){setTimeout(function(){Module["setStatus"]("");},1);doRun();},1);}else {doRun();}}if(Module["preInit"]){if(typeof Module["preInit"]=="function")Module["preInit"]=[Module["preInit"]];while(Module["preInit"].length>0){Module["preInit"].pop()();}}var shouldRunNow=true;if(Module["noInitialRun"])shouldRunNow=false;run();
 
 		        this.Module = Module;
 		        this.start = Module.wasmLibraryProvider.start;
@@ -6092,6 +7176,7 @@ fn fragment_clear(@location(0) uv : vec2<f32>) -> @location(0) vec4<f32> {
 		            this.tensorCacheUpdate = getGlobalFunc("vm.builtin.tensor_cache.update");
 		            this.tensorCacheClear = getGlobalFunc("vm.builtin.tensor_cache.clear");
 		            this.arrayDecodeStorage = getGlobalFunc("tvmjs.array.decode_storage");
+		            this.arrayDecodeBF16ToF32Inplace = undefined;
 		            this.paramModuleFromCache = getGlobalFunc("vm.builtin.param_module_from_cache");
 		            this.paramModuleFromCacheByName = getGlobalFunc("vm.builtin.param_module_from_cache_by_name");
 		            this.makeShapeTuple = getGlobalFunc("ffi.Shape");
@@ -6104,7 +7189,7 @@ fn fragment_clear(@location(0) uv : vec2<f32>) -> @location(0) vec4<f32> {
 		            this.concatEmbeddings = getGlobalFunc("tvmjs.runtime.ConcatEmbeddings");
 		        }
 		        dispose() {
-		            var _a;
+		            var _a, _b;
 		            // call array cache clear to clear all cached items
 		            this.tensorCacheClear.dispose();
 		            this.arrayGetItem.dispose();
@@ -6115,6 +7200,7 @@ fn fragment_clear(@location(0) uv : vec2<f32>) -> @location(0) vec4<f32> {
 		            this.tensorCacheRemove.dispose();
 		            this.tensorCacheUpdate.dispose();
 		            this.arrayDecodeStorage.dispose();
+		            (_a = this.arrayDecodeBF16ToF32Inplace) === null || _a === void 0 ? void 0 : _a.dispose();
 		            this.paramModuleFromCache.dispose();
 		            this.paramModuleFromCacheByName.dispose();
 		            this.makeShapeTuple.dispose();
@@ -6123,7 +7209,7 @@ fn fragment_clear(@location(0) uv : vec2<f32>) -> @location(0) vec4<f32> {
 		            this.applyRepetitionPenalty.dispose();
 		            this.applyPresenceAndFrequencyPenalty.dispose();
 		            this.applySoftmaxWithTemperature.dispose();
-		            (_a = this.concatEmbeddings) === null || _a === void 0 ? void 0 : _a.dispose();
+		            (_b = this.concatEmbeddings) === null || _b === void 0 ? void 0 : _b.dispose();
 		        }
 		        beginScope() {
 		            this.autoDisposeScope.push([]);
@@ -6361,7 +7447,8 @@ fn fragment_clear(@location(0) uv : vec2<f32>) -> @location(0) vec4<f32> {
 		            const arrayOffsetDtypeLanes = arrayOffsetDtypeBits + 1 /* SizeOf.U8 */;
 		            const arrayOffsetShape = arrayOffsetDtype + 4 /* SizeOf.DLDataType */;
 		            const arrayOffsetStrides = arrayOffsetShape + this.lib.sizeofPtr();
-		            const arrayOffsetByteOffset = arrayOffsetStrides + this.lib.sizeofPtr();
+		            const byteOffsetUnaligned = arrayOffsetStrides + this.lib.sizeofPtr();
+		            const arrayOffsetByteOffset = Math.ceil(byteOffsetUnaligned / 8 /* SizeOf.I64 */) * 8 /* SizeOf.I64 */;
 		            // dataPtr
 		            this.dataPtr = lib.memory.loadPointer(this.dltensor);
 		            // ndim
@@ -6383,7 +7470,7 @@ fn fragment_clear(@location(0) uv : vec2<f32>) -> @location(0) vec4<f32> {
 		            const deviceId = lib.memory.loadI32(this.dltensor + arrayOffsetDevId);
 		            this.device = new DLDevice(deviceType, deviceId, lib);
 		            // byte_offset
-		            this.byteOffset = lib.memory.loadI64(this.dltensor + arrayOffsetByteOffset);
+		            this.byteOffset = lib.memory.loadU64(this.dltensor + arrayOffsetByteOffset);
 		        }
 		        /**
 		         * Create a view of the array.
@@ -6396,7 +7483,7 @@ fn fragment_clear(@location(0) uv : vec2<f32>) -> @location(0) vec4<f32> {
 		            if (dtype === undefined) {
 		                dtype = this.dtype;
 		            }
-		            return this.ctx.tensorCreateView(this, this.ctx.makeShapeTuple(...shapeArray), this.dtype, 
+		            return this.ctx.tensorCreateView(this, this.ctx.makeShapeTuple(...shapeArray), this.dtype,
 		            /*relative_byte_offset=*/ new Scalar(0, "int"));
 		        }
 		        /**
@@ -6409,6 +7496,21 @@ fn fragment_clear(@location(0) uv : vec2<f32>) -> @location(0) vec4<f32> {
 		                throw Error("Tensor has already been disposed");
 		            }
 		            return this.dataPtr;
+		        }
+		        /**
+		         * Return the effective address of a CPU Tensor's storage.
+		         * @returns The address in Wasm linear memory.
+		         * @internal
+		         */
+		        getCPUDataAddress() {
+		            if (this.device.deviceType !== DeviceStrToEnum.cpu) {
+		                throw new Error("Can only obtain a linear-memory address for a CPU Tensor");
+		            }
+		            const address = this.getDataPtr() + this.byteOffset;
+		            if (!Number.isSafeInteger(address) || address < 0) {
+		                throw new Error("Invalid CPU Tensor storage address");
+		            }
+		            return address;
 		        }
 		        /**
 		         * Copy data from another Tensor or javascript array.
@@ -6463,22 +7565,41 @@ fn fragment_clear(@location(0) uv : vec2<f32>) -> @location(0) vec4<f32> {
 		         * @returns this
 		         */
 		        copyFromRawBytes(data) {
-		            var _a;
-		            // short cut for gpu copy
-		            if (this.device.deviceType === DeviceStrToEnum.webgpu) {
-		                (_a = this.lib.webGPUContext) === null || _a === void 0 ? void 0 : _a.copyRawBytesToBuffer(data, this.getDataPtr(), 0, data.length);
-		                return this;
-		            }
-		            // CPU copy
-		            const size = this.shape.reduce((a, b) => {
-		                return a * b;
-		            }, 1);
-		            const nbytes = this.dlDataType.numStorageBytes() * size;
+		            const nbytes = this.numStorageBytes();
 		            if (nbytes != data.length) {
 		                throw new Error("Expect the data's length equals nbytes=" + nbytes);
 		            }
+		            // short cut for gpu copy
+		            if (this.device.deviceType === DeviceStrToEnum.webgpu) {
+		                if (this.byteOffset % 4 != 0 || data.length % 4 != 0) {
+		                    throw new Error("WebGPU raw byte copies require four-byte-aligned offsets and sizes");
+		                }
+		                const webGPUContext = this.lib.webGPUContext;
+		                if (webGPUContext === undefined) {
+		                    throw new Error("WebGPU context is not initialized");
+		                }
+		                webGPUContext.copyRawBytesToBuffer(data, this.getDataPtr(), this.byteOffset, data.length);
+		                return this;
+		            }
+		            // CPU copy
 		            this.ctx.tensorCopyFromJSBytes(this, data);
 		            return this;
+		        }
+		        numStorageBytes() {
+		            let totalBits = this.dlDataType.bits * this.dlDataType.lanes;
+		            if (!Number.isSafeInteger(totalBits) || totalBits < 0) {
+		                throw new Error(`Invalid tensor dtype bit width: ${totalBits}`);
+		            }
+		            for (const dim of this.shape) {
+		                if (!Number.isSafeInteger(dim) || dim < 0) {
+		                    throw new Error(`Invalid tensor dimension: ${dim}`);
+		                }
+		                totalBits *= dim;
+		                if (!Number.isSafeInteger(totalBits)) {
+		                    throw new Error("Tensor storage size exceeds JavaScript's safe integer range");
+		                }
+		            }
+		            return Math.ceil(totalBits / 8);
 		        }
 		        /**
 		         * Return a copied Uint8Array of the raw bytes in the Tensor.
@@ -6584,7 +7705,7 @@ fn fragment_clear(@location(0) uv : vec2<f32>) -> @location(0) vec4<f32> {
 		         */
 		        constructor(mod, device) {
 		            this.mod = mod;
-		            this.mod.getFunction("vm_initialization")(new Scalar(device.deviceType, "int"), new Scalar(device.deviceId, "int"), new Scalar(VMAllocatorKind.POOLED_ALLOCATOR, "int"), 
+		            this.mod.getFunction("vm_initialization")(new Scalar(device.deviceType, "int"), new Scalar(device.deviceId, "int"), new Scalar(VMAllocatorKind.POOLED_ALLOCATOR, "int"),
 		            // explicitly specify host device type
 		            new Scalar(DeviceStrToEnum.cpu, "int"), new Scalar(0, "int"), new Scalar(VMAllocatorKind.POOLED_ALLOCATOR, "int"));
 		        }
@@ -6645,8 +7766,10 @@ fn fragment_clear(@location(0) uv : vec2<f32>) -> @location(0) vec4<f32> {
 		         */
 		        constructor(wasmModule, importObject = {}, wasmInstance, env) {
 		            this.cacheMetadata = {};
+		            this.asyncifyCallInProgress = false;
 		            this.initProgressCallback = [];
 		            this.deviceLostIsError = true; // whether device.lost is due to actual error or dispose()
+		            this.autoDisposeOnDeviceLost = true;
 		            this.cacheState = new CacheState();
 		            if (wasmInstance instanceof WebAssembly.Instance) {
 		                assert(env instanceof Environment, "env must be provided when passing in instance");
@@ -6668,6 +7791,8 @@ fn fragment_clear(@location(0) uv : vec2<f32>) -> @location(0) vec4<f32> {
 		                // runtime context function do not auto-release.
 		                return this.getGlobalFuncInternal(name, autoAttachToScope);
 		            });
+		            this.ctx.arrayDecodeBF16ToF32Inplace = this.getGlobalFuncInternalOptional("tvmjs.array.decode_bf16_to_f32_inplace",
+		            /*autoAttachToScope=*/ false);
 		            this.registerEnvGlobalPackedFuncs();
 		            this.registerObjectFactoryFuncs();
 		            this.rng = new LinearCongruentialGenerator();
@@ -6756,9 +7881,12 @@ fn fragment_clear(@location(0) uv : vec2<f32>) -> @location(0) vec4<f32> {
 		         */
 		        withNewScope(action) {
 		            this.beginScope();
-		            const val = action();
-		            this.endScope();
-		            return val;
+		            try {
+		                return action();
+		            }
+		            finally {
+		                this.endScope();
+		            }
 		        }
 		        /**
 		         * Attach a detached obj to the auto-release pool of the current scope.
@@ -6833,10 +7961,14 @@ fn fragment_clear(@location(0) uv : vec2<f32>) -> @location(0) vec4<f32> {
 		                const packedFunc = this.toPackedFuncInternal(func, autoAttachToScope);
 		                const ioverride = override ? 1 : 0;
 		                const stack = this.lib.getOrAllocCallStack();
-		                const nameOffset = stack.allocByteArrayForString(name);
-		                stack.commitToWasmMemory();
-		                this.lib.checkCall(this.lib.exports.TVMFFIFunctionSetGlobal(stack.ptrFromOffset(nameOffset), packedFunc._tvmPackedCell.getHandle(), ioverride));
-		                this.lib.recycleCallStack(stack);
+		                try {
+		                    const nameOffset = stack.allocByteArrayForString(name);
+		                    stack.commitToWasmMemory();
+		                    this.lib.checkCall(this.lib.exports.TVMFFIFunctionSetGlobal(stack.ptrFromOffset(nameOffset), packedFunc._tvmPackedCell.getHandle(), ioverride));
+		                }
+		                finally {
+		                    this.lib.recycleCallStack(stack);
+		                }
 		            });
 		        }
 		        /**
@@ -6848,16 +7980,28 @@ fn fragment_clear(@location(0) uv : vec2<f32>) -> @location(0) vec4<f32> {
 		            return this.getGlobalFuncInternal(name, true);
 		        }
 		        getGlobalFuncInternal(name, autoAttachToScope = true) {
-		            const stack = this.lib.getOrAllocCallStack();
-		            const nameOffset = stack.allocByteArrayForString(name);
-		            const outOffset = stack.allocPtrArray(1);
-		            const outPtr = stack.ptrFromOffset(outOffset);
-		            stack.commitToWasmMemory(outOffset);
-		            this.lib.checkCall(this.exports.TVMFFIFunctionGetGlobal(stack.ptrFromOffset(nameOffset), outPtr));
-		            const handle = this.memory.loadPointer(outPtr);
-		            this.lib.recycleCallStack(stack);
-		            if (handle === 0) {
+		            const ret = this.getGlobalFuncInternalOptional(name, autoAttachToScope);
+		            if (ret === undefined) {
 		                throw Error("Cannot find global function " + name);
+		            }
+		            return ret;
+		        }
+		        getGlobalFuncInternalOptional(name, autoAttachToScope = true) {
+		            const stack = this.lib.getOrAllocCallStack();
+		            let handle;
+		            try {
+		                const nameOffset = stack.allocByteArrayForString(name);
+		                const outOffset = stack.allocPtrArray(1);
+		                const outPtr = stack.ptrFromOffset(outOffset);
+		                stack.commitToWasmMemory(outOffset);
+		                this.lib.checkCall(this.exports.TVMFFIFunctionGetGlobal(stack.ptrFromOffset(nameOffset), outPtr));
+		                handle = this.memory.loadPointer(outPtr);
+		            }
+		            finally {
+		                this.lib.recycleCallStack(stack);
+		            }
+		            if (handle === 0) {
+		                return undefined;
 		            }
 		            const ret = this.makePackedFunc(handle);
 		            if (autoAttachToScope)
@@ -6983,6 +8127,51 @@ fn fragment_clear(@location(0) uv : vec2<f32>) -> @location(0) vec4<f32> {
 		            });
 		        }
 		        /**
+		         * Consume a tensor-cache record synchronously.
+		         *
+		         * Keeping the borrowed record view local to this non-async helper avoids
+		         * capturing it across the caller's WebGPU synchronization point.
+		         */
+		        loadTensorCacheRecordData(shardBytes, rec, cpuArray, gpuArray) {
+		            const recBytes = getTensorCacheRecordBytes(shardBytes, rec);
+		            if (cpuArray !== undefined) {
+		                const isPackedBF16 = rec.format === "f32-to-bf16" && rec.dtype === "float32";
+		                if (isPackedBF16 && this.ctx.arrayDecodeBF16ToF32Inplace !== undefined) {
+		                    this.memory.storeRawBytes(cpuArray.getCPUDataAddress(), recBytes);
+		                    this.ctx.arrayDecodeBF16ToF32Inplace(cpuArray, new Scalar(recBytes.byteLength, "int64"));
+		                }
+		                else {
+		                    this.ctx.arrayDecodeStorage(cpuArray, recBytes, rec.format, rec.dtype);
+		                }
+		            }
+		            if (gpuArray !== undefined) {
+		                if (cpuArray === undefined) {
+		                    gpuArray.copyFromRawBytes(recBytes);
+		                }
+		                else {
+		                    gpuArray.copyFrom(cpuArray);
+		                }
+		            }
+		        }
+		        /** Return the exact byte size of a packed BF16 tensor. */
+		        getPackedBF16Bytes(shape) {
+		            let numElements = 1;
+		            for (const dim of shape) {
+		                if (!Number.isSafeInteger(dim) || dim < 0) {
+		                    throw new Error(`Invalid tensor dimension: ${dim}`);
+		                }
+		                numElements *= dim;
+		                if (!Number.isSafeInteger(numElements)) {
+		                    throw new Error("Tensor element count exceeds JavaScript's safe integer range");
+		                }
+		            }
+		            const nbytes = numElements * 2;
+		            if (!Number.isSafeInteger(nbytes)) {
+		                throw new Error("Packed BF16 size exceeds JavaScript's safe integer range");
+		            }
+		            return nbytes;
+		        }
+		        /**
 		         * Fetch list of Tensor into the TensorCache.
 		         *
 		         * @param tensorCacheUrl The cache url.
@@ -7079,37 +8268,51 @@ fn fragment_clear(@location(0) uv : vec2<f32>) -> @location(0) vec4<f32> {
 		                        this.env.logger("Error: Cannot fetch " + dataUrl + " err= " + err);
 		                        throw err;
 		                    }
+		                    const shardBytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
 		                    const shardRecords = shard.records;
 		                    for (let j = 0; j < shardRecords.length; ++j) {
+		                        let cpu_arr;
+		                        let gpu_arr;
 		                        try {
 		                            const rec = shardRecords[j];
-		                            const cpu_arr = this.withNewScope(() => {
-		                                return this.detachFromCurrentScope(this.empty(rec.shape, rec.dtype, this.cpu()));
-		                            });
-		                            const recSource = buffer.slice(rec.byteOffset, rec.byteOffset + rec.nbytes);
-		                            // first sync copy to cpu.
-		                            this.ctx.arrayDecodeStorage(cpu_arr, new Uint8Array(recSource), rec.format, rec.dtype);
-		                            // then async stream into GPU if needed
-		                            if (device.deviceType === DeviceStrToEnum.cpu) {
-		                                this.tensorCacheUpdate(rec.name, cpu_arr, false);
-		                                cpu_arr.dispose();
+		                            const isPackedBF16 = rec.format === "f32-to-bf16" && rec.dtype === "float32";
+		                            if (isPackedBF16) {
+		                                const expectedBytes = this.getPackedBF16Bytes(rec.shape);
+		                                if (rec.nbytes !== expectedBytes) {
+		                                    throw new Error(`Packed BF16 record has ${rec.nbytes} bytes, ` +
+		                                        `but shape requires ${expectedBytes}`);
+		                                }
 		                            }
-		                            else {
-		                                // allocate a gpu arr and async copy to it.
-		                                const gpu_arr = this.withNewScope(() => {
+		                            const directToWebGPU = device.deviceType === DeviceStrToEnum.webgpu &&
+		                                !isPackedBF16 &&
+		                                rec.nbytes % 4 === 0;
+		                            if (!directToWebGPU) {
+		                                cpu_arr = this.withNewScope(() => {
+		                                    return this.detachFromCurrentScope(this.empty(rec.shape, rec.dtype, this.cpu()));
+		                                });
+		                            }
+		                            if (device.deviceType !== DeviceStrToEnum.cpu) {
+		                                gpu_arr = this.withNewScope(() => {
 		                                    return this.detachFromCurrentScope(this.empty(rec.shape, rec.dtype, device));
 		                                });
-		                                gpu_arr.copyFrom(cpu_arr);
+		                            }
+		                            this.loadTensorCacheRecordData(shardBytes, rec, cpu_arr, gpu_arr);
+		                            if (device.deviceType === DeviceStrToEnum.cpu) {
+		                                this.tensorCacheUpdate(rec.name, cpu_arr, false);
+		                            }
+		                            else {
 		                                yield device.sync();
 		                                this.tensorCacheUpdate(rec.name, gpu_arr, false);
-		                                cpu_arr.dispose();
-		                                gpu_arr.dispose();
 		                            }
 		                        }
 		                        catch (err) {
 		                            this.env.logger("Failed to load shard " + i + "'s record: " + JSON.stringify(shardRecords[j]) + "\n" +
 		                                "Error: " + err);
 		                            throw err;
+		                        }
+		                        finally {
+		                            cpu_arr === null || cpu_arr === void 0 ? void 0 : cpu_arr.dispose();
+		                            gpu_arr === null || gpu_arr === void 0 ? void 0 : gpu_arr.dispose();
 		                        }
 		                    }
 		                    fetchedBytes += shard.nbytes;
@@ -7188,6 +8391,18 @@ fn fragment_clear(@location(0) uv : vec2<f32>) -> @location(0) vec4<f32> {
 		         */
 		        setSeed(seed) {
 		            this.rng.setSeed(seed);
+		        }
+		        /**
+		         * Get the state of the internal LinearCongruentialGenerator.
+		         */
+		        getRNGState() {
+		            return this.rng.getState();
+		        }
+		        /**
+		         * Restore the state of the internal LinearCongruentialGenerator.
+		         */
+		        setRNGState(state) {
+		            this.rng.setState(state);
 		        }
 		        /**
 		         * Sample index via top-p sampling.
@@ -7327,13 +8542,25 @@ fn fragment_clear(@location(0) uv : vec2<f32>) -> @location(0) vec4<f32> {
 		         */
 		        makeShapeTuple(shape) {
 		            const key = CacheState.computeShapeKey(shape);
-		            return this.cacheState.shapeCache.get(key, () => {
+		            const cachedTuple = this.cacheState.shapeCache.get(key, () => {
 		                const shapeArray = shape.map((value) => new Scalar(value, "int"));
 		                const tuple = this.ctx.makeShapeTuple(...shapeArray);
 		                // Detach from scope so the cached object survives across scopes.
 		                this.detachFromCurrentScope(tuple);
 		                return tuple;
 		            });
+		            // The cache owns its wrapper and may release it on eviction. Give the
+		            // caller an independent strong reference with the usual scope lifetime.
+		            const handle = cachedTuple.getHandle();
+		            this.lib.checkCall(this.lib.exports.TVMFFIObjectIncRef(handle));
+		            const callerTuple = new TVMObject(handle, this.lib, this.ctx);
+		            try {
+		                return this.attachToCurrentScope(callerTuple);
+		            }
+		            catch (err) {
+		                callerTuple.dispose();
+		                throw err;
+		            }
 		        }
 		        /**
 		         * Get type index from type key.
@@ -7342,14 +8569,17 @@ fn fragment_clear(@location(0) uv : vec2<f32>) -> @location(0) vec4<f32> {
 		         */
 		        typeKey2Index(typeKey) {
 		            const stack = this.lib.getOrAllocCallStack();
-		            const typeKeyOffset = stack.allocByteArrayForString(typeKey);
-		            const outOffset = stack.allocPtrArray(1);
-		            const outPtr = stack.ptrFromOffset(outOffset);
-		            stack.commitToWasmMemory(outOffset);
-		            this.lib.checkCall(this.lib.exports.TVMFFITypeKeyToIndex(stack.ptrFromOffset(typeKeyOffset), outPtr));
-		            const typeIndex = this.memory.loadU32(outPtr);
-		            this.lib.recycleCallStack(stack);
-		            return typeIndex;
+		            try {
+		                const typeKeyOffset = stack.allocByteArrayForString(typeKey);
+		                const outOffset = stack.allocPtrArray(1);
+		                const outPtr = stack.ptrFromOffset(outOffset);
+		                stack.commitToWasmMemory(outOffset);
+		                this.lib.checkCall(this.lib.exports.TVMFFITypeKeyToIndex(stack.ptrFromOffset(typeKeyOffset), outPtr));
+		                return this.memory.loadU32(outPtr);
+		            }
+		            finally {
+		                this.lib.recycleCallStack(stack);
+		            }
 		        }
 		        /**
 		         * Register an object constructor.
@@ -7380,8 +8610,52 @@ fn fragment_clear(@location(0) uv : vec2<f32>) -> @location(0) vec4<f32> {
 		         * @returns The wrapped AsyncPackedFunc
 		         */
 		        wrapAsyncifyPackedFunc(func) {
-		            const asyncFunc = this.asyncifyHandler.wrapExport(func);
-		            asyncFunc.dispose = func.dispose;
+		            let callInProgress = false;
+		            let disposeRequested = false;
+		            const asyncFunc = ((...args) => __awaiter(this, void 0, void 0, function* () {
+		                if (this.asyncifyCallInProgress) {
+		                    throw new Error("Another Asyncify packed function is already running");
+		                }
+		                if (disposeRequested || func._tvmPackedCell.getHandle(false) === 0) {
+		                    throw new Error("Asyncify packed function has already been disposed");
+		                }
+		                callInProgress = true;
+		                this.asyncifyCallInProgress = true;
+		                let frame;
+		                try {
+		                    frame = this.preparePackedCall(func._tvmPackedCell, args);
+		                    // Every rewind must enter TVMFFIFunctionCall with the same argument and
+		                    // return storage.  In particular, the Wasm stack may retain pointers
+		                    // into transient byte arguments while its execution is suspended.
+		                    const run = this.asyncifyHandler.wrapExport(() => this.invokePackedCall(frame), () => this.retainPackedCall(frame));
+		                    return yield run();
+		                }
+		                finally {
+		                    try {
+		                        if (frame !== undefined) {
+		                            this.releasePackedCall(frame);
+		                        }
+		                    }
+		                    finally {
+		                        callInProgress = false;
+		                        this.asyncifyCallInProgress = false;
+		                        if (disposeRequested) {
+		                            func.dispose();
+		                        }
+		                    }
+		                }
+		            }));
+		            asyncFunc.dispose = () => {
+		                if (func._tvmPackedCell.getHandle(false) === 0 || disposeRequested) {
+		                    return;
+		                }
+		                if (callInProgress) {
+		                    disposeRequested = true;
+		                }
+		                else {
+		                    func.dispose();
+		                }
+		            };
 		            asyncFunc._tvmPackedCell = func._tvmPackedCell;
 		            return asyncFunc;
 		        }
@@ -7492,7 +8766,7 @@ fn fragment_clear(@location(0) uv : vec2<f32>) -> @location(0) vec4<f32> {
 		                console.error("A WebGPU error was not captured: ", event);
 		            });
 		            device.lost.then((info) => {
-		                if (this.deviceLostIsError) {
+		                if (this.deviceLostIsError && this.autoDisposeOnDeviceLost) {
 		                    console.error("Device lost, calling Instance.dispose(). Please initialize again. ", info);
 		                    this.dispose();
 		                }
@@ -7515,6 +8789,16 @@ fn fragment_clear(@location(0) uv : vec2<f32>) -> @location(0) vec4<f32> {
 		                }));
 		            }
 		            this.lib.webGPUContext = webGPUContext;
+		        }
+		        /**
+		         * Configure automatic disposal after WebGPU device loss.
+		         *
+		         * External owners should disable automatic disposal after initialization if
+		         * they serialize disposal with active runtime calls.
+		         * @param enabled Whether device loss should immediately dispose this instance.
+		         */
+		        setDeviceLostAutoDispose(enabled) {
+		            this.autoDisposeOnDeviceLost = enabled;
 		        }
 		        /** Register all object factory */
 		        registerObjectFactoryFuncs() {
@@ -7585,13 +8869,16 @@ fn fragment_clear(@location(0) uv : vec2<f32>) -> @location(0) vec4<f32> {
 		            }
 		            this.env.packedCFuncTable[findex] = func;
 		            const stack = this.lib.getOrAllocCallStack();
-		            const outOffset = stack.allocPtrArray(1);
-		            const outPtr = stack.ptrFromOffset(outOffset);
-		            this.lib.checkCall(this.exports
-		                .TVMFFIWasmFunctionCreate(findex, outPtr));
-		            const ret = this.makePackedFunc(this.memory.loadPointer(outPtr));
-		            this.lib.recycleCallStack(stack);
-		            return ret;
+		            try {
+		                const outOffset = stack.allocPtrArray(1);
+		                const outPtr = stack.ptrFromOffset(outOffset);
+		                this.lib.checkCall(this.exports
+		                    .TVMFFIWasmFunctionCreate(findex, outPtr));
+		                return this.makePackedFunc(this.memory.loadPointer(outPtr));
+		            }
+		            finally {
+		                this.lib.recycleCallStack(stack);
+		            }
 		        }
 		        /**
 		         * Set packed function arguments into the location indicated by argsValue and argsCode.
@@ -7601,7 +8888,7 @@ fn fragment_clear(@location(0) uv : vec2<f32>) -> @location(0) vec4<f32> {
 		         * @param args  The input arguments.
 		         * @param packedArgs The offset of packedArgs.
 		         */
-		        setPackedArguments(stack, args, packedArgs) {
+		        setPackedArguments(stack, args, packedArgs, wasmByteSources) {
 		            for (let i = 0; i < args.length; ++i) {
 		                let val = args[i];
 		                const tp = typeof val;
@@ -7671,7 +8958,7 @@ fn fragment_clear(@location(0) uv : vec2<f32>) -> @location(0) vec4<f32> {
 		                }
 		                else if (val instanceof Uint8Array) {
 		                    stack.storeI32(argTypeIndexOffset, 9 /* TypeIndex.kTVMFFIByteArrayPtr */);
-		                    stack.allocThenSetArgBytes(argValueOffset, val);
+		                    stack.allocThenSetArgBytes(argValueOffset, val, wasmByteSources === null || wasmByteSources === void 0 ? void 0 : wasmByteSources[i]);
 		                }
 		                else if (val instanceof Function) {
 		                    val = this.toPackedFuncInternal(val, false);
@@ -7695,74 +8982,87 @@ fn fragment_clear(@location(0) uv : vec2<f32>) -> @location(0) vec4<f32> {
 		        wrapJSFuncAsSafeCallType(func) {
 		            const lib = this.lib;
 		            return (self, packedArgs, numArgs, ret) => {
-		                const jsArgs = [];
-		                // use scope to track js values.
-		                this.ctx.beginScope();
-		                for (let i = 0; i < numArgs; ++i) {
-		                    const argPtr = packedArgs + i * 16 /* SizeOf.TVMFFIAny */;
-		                    const typeIndex = lib.memory.loadI32(argPtr);
-		                    if (typeIndex >= 8 /* TypeIndex.kTVMFFIRawStr */) {
-		                        // NOTE: the following code have limitations in asyncify mode.
-		                        // The reason is that the TVMFFIAnyViewToOwnedAny will simply
-		                        // get skipped during the rewinding process, causing memory failure
-		                        if (!this.asyncifyHandler.isNormalStackState()) {
-		                            throw Error("Cannot handle str/object argument callback in asyncify mode");
-		                        }
-		                        lib.checkCall(lib.exports.TVMFFIAnyViewToOwnedAny(argPtr, argPtr));
-		                    }
-		                    jsArgs.push(this.retValueToJS(argPtr, true));
-		                }
 		                let rv;
 		                try {
-		                    rv = func(...jsArgs);
+		                    // use scope to track js values.
+		                    this.ctx.beginScope();
+		                    try {
+		                        const jsArgs = [];
+		                        for (let i = 0; i < numArgs; ++i) {
+		                            const argPtr = packedArgs + i * 16 /* SizeOf.TVMFFIAny */;
+		                            const typeIndex = lib.memory.loadI32(argPtr);
+		                            if (typeIndex >= 8 /* TypeIndex.kTVMFFIRawStr */) {
+		                                // NOTE: the following code have limitations in asyncify mode.
+		                                // The reason is that the TVMFFIAnyViewToOwnedAny will simply
+		                                // get skipped during the rewinding process, causing memory failure
+		                                if (!this.asyncifyHandler.isNormalStackState()) {
+		                                    throw Error("Cannot handle str/object argument callback in asyncify mode");
+		                                }
+		                                lib.checkCall(lib.exports.TVMFFIAnyViewToOwnedAny(argPtr, argPtr));
+		                            }
+		                            jsArgs.push(this.retValueToJS(argPtr, true));
+		                        }
+		                        rv = func(...jsArgs);
+		                    }
+		                    finally {
+		                        // recycle all js object values created for the callback.
+		                        this.ctx.endScope();
+		                    }
+		                    if (rv !== undefined && rv !== null) {
+		                        const wasmByteSources = this.captureWasmByteSources([rv]);
+		                        const stack = lib.getOrAllocCallStack();
+		                        try {
+		                            const argOffset = stack.allocRawBytes(16 /* SizeOf.TVMFFIAny */);
+		                            this.setPackedArguments(stack, [rv], argOffset, wasmByteSources);
+		                            stack.commitToWasmMemory();
+		                            const argPtr = stack.ptrFromOffset(argOffset);
+		                            lib.checkCall(lib.exports.TVMFFIAnyViewToOwnedAny(argPtr, ret));
+		                        }
+		                        finally {
+		                            lib.recycleCallStack(stack);
+		                        }
+		                    }
+		                    return 0;
 		                }
 		                catch (error) {
-		                    // error handling
-		                    // store error via SetLastError
-		                    this.ctx.endScope();
-		                    const errKind = "JSCallbackError";
-		                    const errMsg = error.message;
-		                    const stack = lib.getOrAllocCallStack();
-		                    const errKindOffset = stack.allocRawBytes(errKind.length + 1);
-		                    stack.storeRawBytes(errKindOffset, StringToUint8Array(errKind));
-		                    const errMsgOffset = stack.allocRawBytes(errMsg.length + 1);
-		                    stack.storeRawBytes(errMsgOffset, StringToUint8Array(errMsg));
-		                    stack.commitToWasmMemory();
-		                    this.lib.exports.TVMFFIErrorSetRaisedFromCStr(stack.ptrFromOffset(errKindOffset), stack.ptrFromOffset(errMsgOffset));
-		                    this.lib.recycleCallStack(stack);
+		                    try {
+		                        this.setCallbackError(error);
+		                    }
+		                    catch (reportError) {
+		                        this.env.logger(`Failed to report JS callback error: ${String(reportError)}`);
+		                    }
 		                    return -1;
 		                }
-		                // normal return path
-		                // recycle all js object value in function unless we want to retain them.
-		                this.ctx.endScope();
-		                if (rv !== undefined && rv !== null) {
-		                    const stack = lib.getOrAllocCallStack();
-		                    const argOffset = stack.allocRawBytes(16 /* SizeOf.TVMFFIAny */);
-		                    this.setPackedArguments(stack, [rv], argOffset);
-		                    stack.commitToWasmMemory();
-		                    const argPtr = stack.ptrFromOffset(argOffset);
-		                    lib.checkCall(lib.exports.TVMFFIAnyViewToOwnedAny(argPtr, ret));
-		                    lib.recycleCallStack(stack);
-		                }
-		                return 0;
 		            };
+		        }
+		        setCallbackError(error) {
+		            const errKind = "JSCallbackError";
+		            const errMsg = error instanceof Error ? error.message : String(error);
+		            const errKindBytes = StringToUint8Array(errKind);
+		            const errMsgBytes = StringToUint8Array(errMsg);
+		            const stack = this.lib.getOrAllocCallStack();
+		            try {
+		                const errKindOffset = stack.allocRawBytes(errKindBytes.byteLength);
+		                stack.storeRawBytes(errKindOffset, errKindBytes);
+		                const errMsgOffset = stack.allocRawBytes(errMsgBytes.byteLength);
+		                stack.storeRawBytes(errMsgOffset, errMsgBytes);
+		                stack.commitToWasmMemory();
+		                this.lib.exports.TVMFFIErrorSetRaisedFromCStr(stack.ptrFromOffset(errKindOffset), stack.ptrFromOffset(errMsgOffset));
+		            }
+		            finally {
+		                this.lib.recycleCallStack(stack);
+		            }
 		        }
 		        makePackedFunc(handle) {
 		            const cell = new PackedFuncCell(handle, this.lib, this.ctx);
 		            const packedFunc = (...args) => {
-		                const stack = this.lib.getOrAllocCallStack();
-		                const argsOffset = stack.allocRawBytes(16 /* SizeOf.TVMFFIAny */ * args.length);
-		                this.setPackedArguments(stack, args, argsOffset);
-		                const retOffset = stack.allocRawBytes(16 /* SizeOf.TVMFFIAny */);
-		                // pre-store the result to be null
-		                stack.storeI32(retOffset, 0 /* TypeIndex.kTVMFFINone */);
-		                // clear off the extra zero padding before ptr storage
-		                stack.storeI32(retOffset + 4 /* SizeOf.I32 */, 0);
-		                stack.commitToWasmMemory();
-		                this.lib.checkCall(this.exports.TVMFFIFunctionCall(cell.getHandle(), stack.ptrFromOffset(argsOffset), args.length, stack.ptrFromOffset(retOffset)));
-		                const ret = this.retValueToJS(stack.ptrFromOffset(retOffset), false);
-		                this.lib.recycleCallStack(stack);
-		                return ret;
+		                const frame = this.preparePackedCall(cell, args);
+		                try {
+		                    return this.invokePackedCall(frame);
+		                }
+		                finally {
+		                    this.releasePackedCall(frame);
+		                }
 		            };
 		            // Attach attributes to the function type.
 		            // This is because javascript do not allow us to overload call.
@@ -7772,6 +9072,90 @@ fn fragment_clear(@location(0) uv : vec2<f32>) -> @location(0) vec4<f32> {
 		            };
 		            ret._tvmPackedCell = cell;
 		            return ret;
+		        }
+		        preparePackedCall(cell, args) {
+		            // Capture Wasm-backed views before either call-stack or transient
+		            // allocation can grow memory and detach them.
+		            const wasmByteSources = this.captureWasmByteSources(args);
+		            const stack = this.lib.getOrAllocCallStack();
+		            try {
+		                const argsOffset = stack.allocRawBytes(16 /* SizeOf.TVMFFIAny */ * args.length);
+		                this.setPackedArguments(stack, args, argsOffset, wasmByteSources);
+		                const retOffset = stack.allocRawBytes(16 /* SizeOf.TVMFFIAny */);
+		                // pre-store the result to be null
+		                stack.storeI32(retOffset, 0 /* TypeIndex.kTVMFFINone */);
+		                // clear off the extra zero padding before ptr storage
+		                stack.storeI32(retOffset + 4 /* SizeOf.I32 */, 0);
+		                stack.commitToWasmMemory();
+		                return {
+		                    cell,
+		                    stack,
+		                    argsOffset,
+		                    numArgs: args.length,
+		                    retOffset,
+		                    released: false,
+		                };
+		            }
+		            catch (error) {
+		                this.lib.recycleCallStack(stack);
+		                throw error;
+		            }
+		        }
+		        /**
+		         * Take an extra reference on the function once a call has suspended.
+		         *
+		         * While the Wasm stack is unwound, other JavaScript can dispose the
+		         * function through another wrapper. The frame keeps the callee alive
+		         * until the rewound call finishes. Synchronous calls do not take it.
+		         */
+		        retainPackedCall(frame) {
+		            if (frame.released || frame.retainedCell !== undefined) {
+		                return;
+		            }
+		            const handle = frame.cell.getHandle();
+		            this.lib.checkCall(this.exports.TVMFFIObjectIncRef(handle));
+		            frame.retainedCell = new PackedFuncCell(handle, this.lib, this.ctx);
+		        }
+		        invokePackedCall(frame) {
+		            var _a;
+		            if (frame.released) {
+		                throw new Error("Cannot invoke a released packed-call frame");
+		            }
+		            this.lib.checkCall(this.exports.TVMFFIFunctionCall(((_a = frame.retainedCell) !== null && _a !== void 0 ? _a : frame.cell).getHandle(), frame.stack.ptrFromOffset(frame.argsOffset), frame.numArgs, frame.stack.ptrFromOffset(frame.retOffset)));
+		            if (!this.asyncifyHandler.isNormalStackState()) {
+		                return undefined;
+		            }
+		            return this.retValueToJS(frame.stack.ptrFromOffset(frame.retOffset), false);
+		        }
+		        releasePackedCall(frame) {
+		            var _a;
+		            if (!frame.released) {
+		                frame.released = true;
+		                try {
+		                    this.lib.recycleCallStack(frame.stack);
+		                }
+		                finally {
+		                    (_a = frame.retainedCell) === null || _a === void 0 ? void 0 : _a.dispose();
+		                }
+		            }
+		        }
+		        captureWasmByteSources(args) {
+		            const wasmBuffer = this.memory.memory.buffer;
+		            let sources;
+		            for (let i = 0; i < args.length; ++i) {
+		                const arg = args[i];
+		                if (arg instanceof Uint8Array && arg.buffer === wasmBuffer) {
+		                    if (sources === undefined) {
+		                        sources = new Array(args.length);
+		                    }
+		                    sources[i] = {
+		                        buffer: wasmBuffer,
+		                        byteOffset: arg.byteOffset,
+		                        byteLength: arg.byteLength,
+		                    };
+		                }
+		            }
+		            return sources;
 		        }
 		        /**
 		         * Creaye return value of the packed func. The value us auto-tracked for dispose.
@@ -8284,7 +9668,7 @@ fn fragment_clear(@location(0) uv : vec2<f32>) -> @location(0) vec4<f32> {
 		    exports.instantiate = instantiate;
 		    exports.wasmPath = wasmPath;
 
-		})); 
+		}));
 	} (lib$5, lib$5.exports));
 	return lib$5.exports;
 }
@@ -8307,7 +9691,7 @@ function requireLib$1 () {
 		  var _documentCurrentScript = typeof document !== 'undefined' ? document.currentScript : null;
 		  var Module = (() => {
 		    var _scriptDir = (typeof document === 'undefined' && typeof location === 'undefined' ? "MLC_DUMMY_PATH" : typeof document === 'undefined' ? location.href : (_documentCurrentScript && _documentCurrentScript.tagName.toUpperCase() === 'SCRIPT' && _documentCurrentScript.src || new URL('web-llm.js', document.baseURI).href));
-		    
+
 		    return (
 		  async function(moduleArg = {}) {
 
@@ -8790,7 +10174,7 @@ function requireLib$1 () {
 		      static async createGrammarCompiler(tokenizerInfo, cacheEnabled = true) {
 		          await asyncInitBinding();
 		          // NOTE(Charlie): Have not figured out how to do multithreading in WASM, so always set to 1.
-		          return new GrammarCompiler(new binding.GrammarCompiler(tokenizerInfo.handle, 
+		          return new GrammarCompiler(new binding.GrammarCompiler(tokenizerInfo.handle,
 		          /**max_threads=*/ 1, cacheEnabled));
 		      }
 		      /**
@@ -8977,7 +10361,7 @@ function requireLib$1 () {
 		  Object.defineProperty(exports, '__esModule', { value: true });
 
 		}));
-		
+
 	} (lib$3, lib$3.exports));
 	return lib$3.exports;
 }
@@ -9008,19 +10392,22 @@ class Conversation {
         this.config = config;
         this.isTextCompletion = isTextCompletion;
     }
+    getSystemPrompt() {
+        var _a;
+        const systemMessage = (_a = this.override_system_message) !== null && _a !== void 0 ? _a : this.config.system_message;
+        if (systemMessage === "" &&
+            this.config.render_empty_system_message === false) {
+            return "";
+        }
+        return this.config.system_template.replace(MessagePlaceholders.system, systemMessage);
+    }
     // TODO: Consider rewriting this method, a bit messy.
     getPromptArrayInternal(addSystem, startPos, config) {
         var _a, _b;
         if (this.config.seps.length == 0) {
             throw Error("Need seps to work");
         }
-        // Prepare system message
-        // Get overridden system message if exists, else use default one in config
-        let system_message = this.config.system_message;
-        if (this.override_system_message !== undefined) {
-            system_message = this.override_system_message;
-        }
-        const system_prompt = this.config.system_template.replace(MessagePlaceholders.system, system_message);
+        const system_prompt = this.getSystemPrompt();
         const ret = addSystem && system_prompt !== "" ? [system_prompt] : [];
         // Process each message in this.messages
         for (let i = startPos; i < this.messages.length; ++i) {
@@ -9069,8 +10456,11 @@ class Conversation {
                         textContentPart = curContentPart.text;
                         seenText = true;
                     }
-                    else {
+                    else if (curContentPart.type === "image_url") {
                         imageContentParts.push(curContentPart.image_url);
+                    }
+                    else {
+                        throw new Error("Audio content requires a model artifact manifest and cannot use the legacy image prompt path.");
                     }
                 }
             }
@@ -9173,6 +10563,117 @@ class Conversation {
             throw Error("needs to call getPromptArray for the first message");
         }
         return this.getPromptArrayInternal(false, this.messages.length - 2, config);
+    }
+    getArtifactPromptSegmentsInternal(addSystem, startPos) {
+        var _a, _b, _c, _d, _e, _f;
+        if (this.config.seps.length === 0) {
+            throw new Error("Need seps to work");
+        }
+        const systemPrompt = this.getSystemPrompt();
+        const result = addSystem && systemPrompt !== "" ? [systemPrompt] : [];
+        for (let index = startPos; index < this.messages.length; ++index) {
+            const [role, roleString, content] = this.messages[index];
+            if (content === undefined) {
+                if (index !== this.messages.length - 1) {
+                    throw new Error("InternalError: Only the final message may be an unfinished reply header.");
+                }
+                const emptySeparator = (_a = this.config.role_empty_sep) !== null && _a !== void 0 ? _a : ": ";
+                result.push(roleString + emptySeparator);
+                continue;
+            }
+            if (this.isLastMessageEmptyThinkingReplyHeader &&
+                index === this.messages.length - 1) {
+                const contentSeparator = (_b = this.config.role_content_sep) !== null && _b !== void 0 ? _b : ": ";
+                result.push(roleString + contentSeparator + content);
+                continue;
+            }
+            const parts = typeof content === "string"
+                ? [{ type: "text", text: content }]
+                : content;
+            const textParts = parts.filter((part) => part.type === "text");
+            if (textParts.length > 1) {
+                throw new MultipleTextContentError();
+            }
+            const text = (_d = (_c = textParts[0]) === null || _c === void 0 ? void 0 : _c.text) !== null && _d !== void 0 ? _d : "";
+            // Image and audio parts go inside the role template. Adjacent text is
+            // joined so a text-only message tokenizes as it does without a manifest.
+            let before = "";
+            let after = "";
+            const template = (_e = this.config.role_templates) === null || _e === void 0 ? void 0 : _e[role];
+            if (template !== undefined) {
+                const placeholder = MessagePlaceholders[Role[role]];
+                const at = template.indexOf(placeholder);
+                [before, after] =
+                    at === -1
+                        ? [template, ""]
+                        : [template.slice(0, at), template.slice(at + placeholder.length)];
+                // Same replacements as getPromptArray.
+                const replacements = this.use_function_calling && this.function_string !== ""
+                    ? [this.function_string, ""]
+                    : [""];
+                const fillFunction = (part) => {
+                    while (replacements.length !== 0 &&
+                        part.includes(MessagePlaceholders.function)) {
+                        part = part.replace(MessagePlaceholders.function, replacements.shift());
+                    }
+                    return part;
+                };
+                before = fillFunction(before);
+                after = fillFunction(after);
+            }
+            const messageText = template === undefined ||
+                template.includes(MessagePlaceholders[Role[role]])
+                ? text
+                : "";
+            const omitRole = this.config.add_role_after_system_message === false &&
+                systemPrompt !== "" &&
+                index === 0;
+            const rolePrefix = omitRole
+                ? ""
+                : roleString + ((_f = this.config.role_content_sep) !== null && _f !== void 0 ? _f : ": ");
+            const message = [];
+            const addText = (value) => {
+                if (value === "") {
+                    return;
+                }
+                const last = message[message.length - 1];
+                if (typeof last === "string") {
+                    message[message.length - 1] = last + value;
+                }
+                else {
+                    message.push(value);
+                }
+            };
+            addText(rolePrefix + before);
+            for (const part of parts) {
+                if (part.type === "text") {
+                    addText(messageText);
+                }
+                else {
+                    message.push(part);
+                }
+            }
+            addText(after + this.config.seps[index % this.config.seps.length]);
+            result.push(...message);
+        }
+        return result;
+    }
+    /** The prompt as text, image and audio segments, in the order of the content parts. */
+    getArtifactPromptSegments() {
+        if (this.isTextCompletion) {
+            throw new TextCompletionConversationError("getArtifactPromptSegments");
+        }
+        return this.getArtifactPromptSegmentsInternal(true, 0);
+    }
+    /** Segments of the latest round, which has not been prefilled yet. */
+    getArtifactPromptSegmentsLastRound() {
+        if (this.isTextCompletion) {
+            throw new TextCompletionConversationError("getArtifactPromptSegmentsLastRound");
+        }
+        if (this.messages.length < 3) {
+            throw new Error("needs to call getArtifactPromptSegments for the first message");
+        }
+        return this.getArtifactPromptSegmentsInternal(false, this.messages.length - 2);
     }
     /**
      * Return prompt in an array for non-conversation text completion.
@@ -9322,6 +10823,34 @@ function compareConversationObject(convA, convB) {
                             return false;
                         }
                     }
+                    else if (entryA_k.type === "input_audio" &&
+                        entryB_k.type === "input_audio") {
+                        const audioA = entryA_k.input_audio;
+                        const audioB = entryB_k.input_audio;
+                        if (audioA.format !== audioB.format) {
+                            return false;
+                        }
+                        if (audioA.format === "wav" && audioB.format === "wav") {
+                            if (audioA.data !== audioB.data) {
+                                return false;
+                            }
+                        }
+                        else if (audioA.format === "pcm_f32" &&
+                            audioB.format === "pcm_f32") {
+                            if (audioA.sample_rate !== audioB.sample_rate ||
+                                audioA.data.length !== audioB.data.length) {
+                                return false;
+                            }
+                            for (let sample = 0; sample < audioA.data.length; ++sample) {
+                                if (audioA.data[sample] !== audioB.data[sample]) {
+                                    return false;
+                                }
+                            }
+                        }
+                        else {
+                            return false;
+                        }
+                    }
                     else {
                         // Case 3.3: of different type
                         return false;
@@ -9387,6 +10916,299 @@ function getConversationFromChatCompletionRequest(request, config, includeLastMs
         }
     }
     return conversation;
+}
+
+function audioError(message) {
+    throw new AudioInputError(message);
+}
+function decodeBase64Wav(data) {
+    let encoded = data;
+    if (data.startsWith("data:")) {
+        const match = /^data:(audio\/(?:wav|wave|x-wav));base64,([\s\S]*)$/i.exec(data);
+        if (match === null) {
+            audioError("input_audio data URLs must contain base64-encoded WAV audio");
+        }
+        encoded = match[2];
+    }
+    if (/^https?:/i.test(encoded)) {
+        audioError("audio URLs are not supported");
+    }
+    let binary;
+    try {
+        binary = globalThis.atob(encoded);
+    }
+    catch (_a) {
+        audioError("input_audio.data is not valid base64");
+    }
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; ++i) {
+        bytes[i] = binary.charCodeAt(i);
+    }
+    return bytes;
+}
+function fourCC(view, offset) {
+    return String.fromCharCode(view.getUint8(offset), view.getUint8(offset + 1), view.getUint8(offset + 2), view.getUint8(offset + 3));
+}
+const WAVE_FORMAT_EXTENSIBLE = 0xfffe;
+// Bytes 4..15 of the PCM and IEEE float subformat GUIDs. Bytes 0..3 hold
+// the format tag.
+const SUBFORMAT_GUID_TAIL = [
+    0x00, 0x00, 0x10, 0x00, 0x80, 0x00, 0x00, 0xaa, 0x00, 0x38, 0x9b, 0x71,
+];
+// Returns the format tag carried by an extensible fmt chunk. Subformats
+// outside the known GUID family map to the extensible tag itself so the
+// caller rejects them.
+function readExtensibleFormat(view, payload, size, bitsPerSample) {
+    if (size < 40 || view.getUint16(payload + 16, true) < 22) {
+        audioError("WAV extensible fmt chunk is truncated");
+    }
+    const validBitsPerSample = view.getUint16(payload + 18, true);
+    if (validBitsPerSample < 1 || validBitsPerSample > bitsPerSample) {
+        audioError("WAV valid bits per sample must fit the container bit depth");
+    }
+    const guid = payload + 24;
+    for (let i = 0; i < SUBFORMAT_GUID_TAIL.length; ++i) {
+        if (view.getUint8(guid + 4 + i) !== SUBFORMAT_GUID_TAIL[i]) {
+            return WAVE_FORMAT_EXTENSIBLE;
+        }
+    }
+    return view.getUint32(guid, true);
+}
+/** Number of samples a recording has once resampled to the target rate. */
+function canonicalLength(frameCount, sourceRate, targetRate) {
+    if (frameCount === 0) {
+        return 0;
+    }
+    return sourceRate === targetRate
+        ? frameCount
+        : Math.max(1, Math.round((frameCount * targetRate) / sourceRate));
+}
+function checkSampleRange(length, processor) {
+    if (length < processor.min_samples || length > processor.max_samples) {
+        audioError(`canonical audio must contain ${processor.min_samples}..${processor.max_samples} samples; got ${length}`);
+    }
+}
+function decodeWav(bytes, processor) {
+    if (bytes.byteLength < 12) {
+        audioError("WAV input is truncated");
+    }
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    if (fourCC(view, 0) !== "RIFF" || fourCC(view, 8) !== "WAVE") {
+        audioError("input_audio is not a RIFF/WAVE file");
+    }
+    let format;
+    let channels;
+    let sampleRate;
+    let bitsPerSample;
+    let blockAlign;
+    let dataOffset;
+    let dataSize;
+    let offset = 12;
+    while (offset + 8 <= view.byteLength) {
+        const id = fourCC(view, offset);
+        const size = view.getUint32(offset + 4, true);
+        const payload = offset + 8;
+        if (payload + size > view.byteLength) {
+            audioError(`WAV ${id} chunk is truncated`);
+        }
+        if (id === "fmt ") {
+            if (size < 16) {
+                audioError("WAV fmt chunk is truncated");
+            }
+            format = view.getUint16(payload, true);
+            channels = view.getUint16(payload + 2, true);
+            sampleRate = view.getUint32(payload + 4, true);
+            blockAlign = view.getUint16(payload + 12, true);
+            bitsPerSample = view.getUint16(payload + 14, true);
+            if (format === WAVE_FORMAT_EXTENSIBLE) {
+                format = readExtensibleFormat(view, payload, size, bitsPerSample);
+            }
+        }
+        else if (id === "data") {
+            dataOffset = payload;
+            dataSize = size;
+        }
+        offset = payload + size + (size & 1);
+    }
+    if (format === undefined ||
+        channels === undefined ||
+        sampleRate === undefined ||
+        bitsPerSample === undefined ||
+        blockAlign === undefined ||
+        dataOffset === undefined ||
+        dataSize === undefined) {
+        audioError("WAV input requires fmt and data chunks");
+    }
+    if (format !== 1 && format !== 3) {
+        audioError(`WAV codec ${format} is unsupported; use PCM integer or IEEE float WAV`);
+    }
+    if (channels < 1 || sampleRate < 1 || blockAlign < 1) {
+        audioError("WAV channel count, sample rate, and block alignment must be positive");
+    }
+    const bytesPerSample = bitsPerSample / 8;
+    const validIntegerDepth = format === 1 && [8, 16, 24, 32].includes(bitsPerSample);
+    const validFloatDepth = format === 3 && [32, 64].includes(bitsPerSample);
+    if (!Number.isInteger(bytesPerSample) ||
+        (!validIntegerDepth && !validFloatDepth)) {
+        audioError(`unsupported WAV sample format: codec=${format}, bits=${bitsPerSample}`);
+    }
+    if (blockAlign !== channels * bytesPerSample || dataSize % blockAlign !== 0) {
+        audioError("WAV block alignment does not match its sample format");
+    }
+    const frameCount = dataSize / blockAlign;
+    // Reject a recording that is too long before its samples are allocated.
+    checkSampleRange(canonicalLength(frameCount, sampleRate, processor.sample_rate_hz), processor);
+    const samples = new Float32Array(frameCount);
+    const readSample = (sampleOffset) => {
+        if (format === 3) {
+            return bitsPerSample === 32
+                ? view.getFloat32(sampleOffset, true)
+                : view.getFloat64(sampleOffset, true);
+        }
+        if (bitsPerSample === 8) {
+            return (view.getUint8(sampleOffset) - 128) / 128;
+        }
+        if (bitsPerSample === 16) {
+            return view.getInt16(sampleOffset, true) / 32768;
+        }
+        if (bitsPerSample === 24) {
+            let value = view.getUint8(sampleOffset) |
+                (view.getUint8(sampleOffset + 1) << 8) |
+                (view.getUint8(sampleOffset + 2) << 16);
+            if ((value & 0x800000) !== 0) {
+                value |= 0xff000000;
+            }
+            return value / 8388608;
+        }
+        return view.getInt32(sampleOffset, true) / 2147483648;
+    };
+    for (let frame = 0; frame < frameCount; ++frame) {
+        let mixed = 0;
+        for (let channel = 0; channel < channels; ++channel) {
+            const sampleOffset = dataOffset + frame * blockAlign + channel * bytesPerSample;
+            const sample = readSample(sampleOffset);
+            if (!Number.isFinite(sample)) {
+                audioError("WAV input contains a non-finite sample");
+            }
+            mixed += sample;
+        }
+        samples[frame] = mixed / channels;
+    }
+    return { samples, sampleRate };
+}
+/** Highest sample rate accepted. */
+const MAX_SAMPLE_RATE = 384000;
+/**
+ * Hann windowed sinc kernel for the low-pass applied before downsampling. The
+ * cutoff sits at 90% of the target Nyquist and the kernel spans 32 target
+ * samples on each side, so the transition band ends near the target Nyquist
+ * for any ratio. Returns the taps on one side, so the kernel has 2 * half + 1
+ * entries, and never more than the recording is long.
+ */
+function lowPassKernel(sourceRate, targetRate, maxHalf) {
+    const step = sourceRate / targetRate;
+    const cutoff = 0.45 / step;
+    const half = Math.min(Math.ceil(32 * step), maxHalf);
+    const kernel = new Float32Array(2 * half + 1);
+    for (let t = -half; t <= half; ++t) {
+        const x = 2 * Math.PI * cutoff * t;
+        const sinc = x === 0 ? 1 : Math.sin(x) / x;
+        kernel[t + half] =
+            sinc * (0.5 + 0.5 * Math.cos((Math.PI * t) / (half + 1)));
+    }
+    return { kernel, half };
+}
+/**
+ * The low-passed value at one source index, normalized by the taps that fall
+ * inside the recording so that a constant signal stays constant at the edges.
+ */
+function filteredAt(samples, kernel, half, n) {
+    const first = Math.max(0, n - half);
+    const last = Math.min(samples.length - 1, n + half);
+    let sum = 0;
+    let gain = 0;
+    for (let k = first; k <= last; ++k) {
+        const weight = kernel[k - n + half];
+        sum += samples[k] * weight;
+        gain += weight;
+    }
+    return sum / gain;
+}
+function resampleLinear(samples, sourceRate, targetRate) {
+    if (!Number.isSafeInteger(sourceRate) || sourceRate <= 0) {
+        audioError("input_audio.sample_rate must be a positive integer");
+    }
+    if (sourceRate > MAX_SAMPLE_RATE) {
+        audioError(`input_audio.sample_rate must not exceed ${MAX_SAMPLE_RATE}`);
+    }
+    if (samples.length === 0) {
+        return new Float32Array();
+    }
+    if (sourceRate === targetRate) {
+        return samples.slice();
+    }
+    const outputLength = Math.max(1, Math.round((samples.length * targetRate) / sourceRate));
+    // The low-pass is evaluated only where the interpolation reads.
+    const filter = targetRate < sourceRate
+        ? lowPassKernel(sourceRate, targetRate, samples.length)
+        : undefined;
+    let cachedIndex = -1;
+    let cachedValue = 0;
+    const source = (index) => {
+        if (filter === undefined) {
+            return samples[index];
+        }
+        if (index !== cachedIndex) {
+            cachedIndex = index;
+            cachedValue = filteredAt(samples, filter.kernel, filter.half, index);
+        }
+        return cachedValue;
+    };
+    const output = new Float32Array(outputLength);
+    let previousIndex = -1;
+    let previousValue = 0;
+    for (let i = 0; i < outputLength; ++i) {
+        const sourcePosition = (i * sourceRate) / targetRate;
+        const left = Math.min(Math.floor(sourcePosition), samples.length - 1);
+        const right = Math.min(left + 1, samples.length - 1);
+        const leftValue = left === previousIndex ? previousValue : source(left);
+        const rightValue = right === left ? leftValue : source(right);
+        previousIndex = right;
+        previousValue = rightValue;
+        output[i] = leftValue + (rightValue - leftValue) * (sourcePosition - left);
+    }
+    return output;
+}
+function isPCMInput(input) {
+    return input.format === "pcm_f32";
+}
+function decodeAudioInput(input, processor) {
+    let samples;
+    let sourceRate;
+    if (isPCMInput(input)) {
+        if (!(input.data instanceof Float32Array)) {
+            audioError("pcm_f32 input_audio.data must be a Float32Array");
+        }
+        checkSampleRange(canonicalLength(input.data.length, input.sample_rate, processor.sample_rate_hz), processor);
+        for (const sample of input.data) {
+            if (!Number.isFinite(sample)) {
+                audioError("pcm_f32 input_audio contains a non-finite sample");
+            }
+        }
+        samples = input.data;
+        sourceRate = input.sample_rate;
+    }
+    else {
+        if (typeof input.data !== "string") {
+            audioError("WAV input_audio.data must be a base64 string or WAV data URL");
+        }
+        const decoded = decodeWav(decodeBase64Wav(input.data), processor);
+        samples = decoded.samples;
+        sourceRate = decoded.sampleRate;
+    }
+    const canonical = resampleLinear(samples, sourceRate, processor.sample_rate_hz);
+    checkSampleRange(canonical.length, processor);
+    return canonical;
 }
 
 /**
@@ -9479,11 +11301,11 @@ const officialHermes2FunctionCallSchemaArray = `{"type":"array","items":${offici
 /**
  * Full system prompt for Hermes-2-Pro and Hermes-3 function calling.
  */
-const hermes2FunctionCallingSystemPrompt = `You are a function calling AI model. You are 
-provided with function signatures within <tools></tools> XML tags. You may call one or more functions 
-to assist with the user query. Don't make assumptions about what values to plug into functions. Here 
-are the available tools: <tools> ${MessagePlaceholders.hermes_tools}  </tools>. 
-Use the following pydantic model json schema for each tool call you will make: 
+const hermes2FunctionCallingSystemPrompt = `You are a function calling AI model. You are
+provided with function signatures within <tools></tools> XML tags. You may call one or more functions
+to assist with the user query. Don't make assumptions about what values to plug into functions. Here
+are the available tools: <tools> ${MessagePlaceholders.hermes_tools}  </tools>.
+Use the following pydantic model json schema for each tool call you will make:
 ${officialHermes2FunctionCallSchema} For each function call return a json object.`;
 function getToolCallFromOutputMessage(outputMessage, isStreaming) {
     // 1. Parse outputMessage to JSON object
@@ -9755,12 +11577,69 @@ function getRGBArrayFromImageData(imageData) {
     }
     return newData;
 }
+/**
+ * Plan a manifest resize. `stretch` draws at the target size. `center_crop`
+ * scales uniformly until the image covers the target, then keeps the center.
+ */
+function planImageResize(sourceWidth, sourceHeight, resize) {
+    if (resize.mode === "stretch") {
+        return { width: resize.width, height: resize.height, left: 0, top: 0 };
+    }
+    const scale = Math.max(resize.height / sourceHeight, resize.width / sourceWidth);
+    const width = Math.round(sourceWidth * scale);
+    const height = Math.round(sourceHeight * scale);
+    return {
+        width,
+        height,
+        left: Math.floor((width - resize.width) / 2),
+        top: Math.floor((height - resize.height) / 2),
+    };
+}
+/** Load an image and return its RGB bytes at the size the manifest asks for. */
+function getResizedRGBArrayFromURL(url, resize) {
+    return __awaiter(this, void 0, void 0, function* () {
+        const response = yield fetch(url, { mode: "cors" });
+        const img = yield createImageBitmap(yield response.blob());
+        const plan = planImageResize(img.width, img.height, resize);
+        // Only the target rectangle is read, so draw the scaled image offset into a
+        // target-sized canvas instead of allocating the whole scaled image.
+        const canvas = new OffscreenCanvas(resize.width, resize.height);
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+            throw new Error("Could not get 2d context");
+        }
+        ctx.imageSmoothingQuality = "high";
+        ctx.drawImage(img, -plan.left, -plan.top, plan.width, plan.height);
+        return getRGBArrayFromImageData(ctx.getImageData(0, 0, resize.width, resize.height));
+    });
+}
 
+const KV_CHECKPOINT_FUNC_NAMES = [
+    "vm.builtin.attention_kv_cache_get_checkpoint_metadata",
+    "vm.builtin.attention_kv_cache_export_page_group",
+    "vm.builtin.attention_kv_cache_prepare_import",
+    "vm.builtin.attention_kv_cache_import_page_group",
+    "vm.builtin.attention_kv_cache_finish_import",
+    "vm.builtin.attention_kv_cache_get_sequence_length",
+];
+function commonPrefixLength(lhs, rhs) {
+    const limit = Math.min(lhs.length, rhs.length);
+    let prefixLength = 0;
+    while (prefixLength < limit && lhs[prefixLength] === rhs[prefixLength]) {
+        prefixLength++;
+    }
+    return prefixLength;
+}
+function errorMessage$1(err) {
+    return err instanceof Error ? err.message : String(err);
+}
 class LLMChatPipeline {
-    constructor(tvm, tokenizer, config, logitProcessor) {
+    constructor(tvm, tokenizer, config, logitProcessor, modelPackage, artifactDeviceCapabilities) {
+        var _a, _b, _c, _d, _e, _f;
         this.kvStateKind = "kv_cache";
         this.kvCache = undefined;
         this.rnnState = undefined;
+        this.kvCheckpointFuncs = new Map();
         this.prefillLogitPositions = undefined;
         this.prefillLogitPositionHost = new Int32Array(1);
         this.maxHistorySize = 1;
@@ -9781,6 +11660,8 @@ class LLMChatPipeline {
         // frequency of appeared token ids till now (refresh after PrefillStep); token_id mapped to freq
         this.appearedTokensFreq = new Map();
         this.imageDataCache = new Map();
+        // Resized pixels for manifest image inputs, reused within one prefill.
+        this.artifactImagePixelCache = new Map();
         // The logprob information of all tokens for this current round (cleared upon each prefillStep)
         // Cleared & updated at the exact same spots as `outputMessage`. Only updated when
         // `genConfig.logprobs` is true. Each entry corresponds to a single autoregressive step.
@@ -9792,9 +11673,11 @@ class LLMChatPipeline {
         this.prefillTotalTokens = 0;
         // same stats as above, but reset at every `prefillStep()`
         this.curRoundDecodingTotalTokens = 0;
+        this.curRoundCompletionTotalTokens = 0;
         this.curRoundPrefillTotalTokens = 0;
         this.curRoundDecodingTotalTime = 0;
         this.curRoundPrefillTotalTime = 0;
+        this.pendingSampleOutputTokenBegin = undefined;
         // additional stats, reset at every prefillStep()
         this.curRoundLatencyBreakdown = {
             logitProcessorTime: [],
@@ -9861,7 +11744,31 @@ class LLMChatPipeline {
         // 1. Create VM and read model metadata
         tvm.beginScope();
         this.vm = this.tvm.detachFromCurrentScope(this.tvm.createVirtualMachine(this.device));
-        const vmFunctionRegistry = LLMChatPipeline.loadVMFunctionRegistry(this.vm, [
+        const fgetMetadata = this.vm.getFunction("_metadata");
+        const ret_value = fgetMetadata();
+        const metadataStr = ret_value.toString();
+        const metadata = JSON.parse(metadataStr);
+        if (modelPackage !== undefined) {
+            if (metadata.artifact === undefined) {
+                throw new ArtifactManifestError("mlc-model-manifest.json is present, but _metadata.artifact is missing");
+            }
+            this.artifact = resolveChatCompletionArtifact(modelPackage, parseCompiledProgramArtifact(metadata.artifact));
+            if (artifactDeviceCapabilities !== undefined) {
+                for (const feature of this.artifact.compiled.resources
+                    .required_features) {
+                    if (!artifactDeviceCapabilities.features.has(feature)) {
+                        throw new ArtifactManifestError(`Compiled artifact requires unsupported WebGPU feature ${JSON.stringify(feature)}`);
+                    }
+                }
+                const requiredBuffer = this.artifact.compiled.resources.max_storage_buffer_binding_size;
+                if (requiredBuffer >
+                    artifactDeviceCapabilities.maxStorageBufferBindingSize) {
+                    throw new ArtifactManifestError(`Compiled artifact requires maxStorageBufferBindingSize ${requiredBuffer}, ` +
+                        `but this device exposes ${artifactDeviceCapabilities.maxStorageBufferBindingSize}`);
+                }
+            }
+        }
+        const functionNames = [
             "prefill",
             "batch_prefill",
             "decode",
@@ -9876,14 +11783,35 @@ class LLMChatPipeline {
             "apply_penalty_inplace",
             "apply_logit_bias_inplace",
             "softmax_with_temperature",
-        ]);
-        const fgetMetadata = this.vm.getFunction("_metadata");
-        const ret_value = fgetMetadata();
-        const metadataStr = ret_value.toString();
-        const metadata = JSON.parse(metadataStr);
+        ];
+        if (this.artifact !== undefined) {
+            functionNames.push(...Object.values(this.artifact.program.exports), ...Object.values(this.artifact.program.adapters));
+        }
+        const vmFunctionRegistry = LLMChatPipeline.loadVMFunctionRegistry(this.vm, Array.from(new Set(functionNames)));
         this.kvStateKind = this.parseKVStateKind(metadata.kv_state_kind);
-        const vmFunctionAvailability = LLMChatPipeline.getVMFunctionAvailability(vmFunctionRegistry);
-        this.resolvedModelABI = LLMChatPipeline.resolveModelABI(this.kvStateKind, vmFunctionAvailability);
+        if (this.artifact !== undefined) {
+            // The roles decide the state set: create_kv_cache alone is a KV cache
+            // model, with create_rnn_state it is a hybrid one.
+            const needsRNNState = this.artifact.program.exports.create_rnn_state !== undefined;
+            const kvStateKind = needsRNNState ? "hybrid" : "kv_cache";
+            if (this.kvStateKind !== kvStateKind) {
+                throw new ArtifactManifestError(`the manifest roles imply kv_state_kind=${JSON.stringify(kvStateKind)}, ` +
+                    `but the library reports ${JSON.stringify(this.kvStateKind)}`);
+            }
+            this.resolvedModelABI = {
+                kvStateKind,
+                prefillABI: "single",
+                decodeABI: "single",
+                prefillFunctionName: this.artifact.generation.prefill,
+                decodeFunctionName: this.artifact.generation.decode,
+                needsKVCache: true,
+                needsRNNState,
+            };
+        }
+        else {
+            const vmFunctionAvailability = LLMChatPipeline.getVMFunctionAvailability(vmFunctionRegistry);
+            this.resolvedModelABI = LLMChatPipeline.resolveModelABI(this.kvStateKind, vmFunctionAvailability);
+        }
         const stateKinds = [];
         if (this.resolvedModelABI.needsKVCache) {
             stateKinds.push("kv_cache");
@@ -9897,7 +11825,7 @@ class LLMChatPipeline {
             decode: this.resolvedModelABI.decodeFunctionName,
             states: stateKinds,
         }));
-        // 2. Bind VM functions according to the resolved ABI
+        // 2. Look up the VM functions, by manifest role when the model has a manifest.
         this.prefill = this.tvm.detachFromCurrentScope(LLMChatPipeline.getRequiredVMFunctionByName(this.resolvedModelABI.prefillFunctionName, vmFunctionRegistry));
         this.decoding = this.tvm.detachFromCurrentScope(LLMChatPipeline.getRequiredVMFunctionByName(this.resolvedModelABI.decodeFunctionName, vmFunctionRegistry));
         if (this.resolvedModelABI.prefillABI === "batch") {
@@ -9906,19 +11834,35 @@ class LLMChatPipeline {
         if (this.resolvedModelABI.decodeABI === "batch") {
             log.info("Using batch_decode kernel.");
         }
-        this.embed = this.tvm.detachFromCurrentScope(LLMChatPipeline.getRequiredVMFunctionByName("embed", vmFunctionRegistry));
+        const embedSymbol = (_b = (_a = this.artifact) === null || _a === void 0 ? void 0 : _a.program.exports.embed_tokens) !== null && _b !== void 0 ? _b : "embed";
+        this.embed = this.tvm.detachFromCurrentScope(LLMChatPipeline.getRequiredVMFunctionByName(embedSymbol, vmFunctionRegistry));
         this.fapplyBitmask = this.tvm.detachFromCurrentScope(LLMChatPipeline.getRequiredVMFunctionByName("apply_bitmask_inplace", vmFunctionRegistry));
         this.fapplyPenalty = this.tvm.detachFromCurrentScope(LLMChatPipeline.getRequiredVMFunctionByName("apply_penalty_inplace", vmFunctionRegistry));
         this.fapplyLogitBias = this.tvm.detachFromCurrentScope(LLMChatPipeline.getRequiredVMFunctionByName("apply_logit_bias_inplace", vmFunctionRegistry));
         this.fsoftmaxWithTemperature = this.tvm.detachFromCurrentScope(LLMChatPipeline.getRequiredVMFunctionByName("softmax_with_temperature", vmFunctionRegistry));
         this.fsampleWithTopP = this.tvm.detachFromCurrentScope(LLMChatPipeline.getRequiredVMFunctionByName("sample_with_top_p", vmFunctionRegistry));
         this.fargsortProbs = this.tvm.detachFromCurrentScope(LLMChatPipeline.getRequiredVMFunctionByName("argsort_probs", vmFunctionRegistry));
+        // A manifest model reaches its vision function only through the adapter
+        // the manifest names, which may be this same image_embed.
         const imageEmbed = vmFunctionRegistry.image_embed;
-        if (imageEmbed !== undefined) {
+        if (imageEmbed === undefined) {
+            log.info("Cannot find function image_embed.");
+        }
+        else if (this.artifact === undefined) {
             this.image_embed = this.tvm.detachFromCurrentScope(imageEmbed);
         }
-        else {
-            log.info("Cannot find function image_embed.");
+        if (this.artifact !== undefined) {
+            const { audioInput, imageInput, program } = this.artifact;
+            const bindAdapter = (name) => this.tvm.detachFromCurrentScope(LLMChatPipeline.getRequiredVMFunctionByName(program.adapters[name], vmFunctionRegistry));
+            if (audioInput !== undefined) {
+                this.artifactAudioAdapter = bindAdapter(audioInput.adapter);
+            }
+            if (imageInput !== undefined) {
+                this.artifactImageAdapter = bindAdapter(imageInput.adapter);
+            }
+            if (audioInput !== undefined || imageInput !== undefined) {
+                this.fTensorCreateView = this.tvm.detachFromCurrentScope(this.tvm.getGlobalFunc("runtime.TVMTensorCreateView"));
+            }
         }
         // 3. Load parameters by name
         const paramNames = [];
@@ -9982,7 +11926,7 @@ class LLMChatPipeline {
             ? this.slidingWindowSize
             : this.contextWindowSize;
         if (this.resolvedModelABI.needsKVCache) {
-            const createKVCache = LLMChatPipeline.getRequiredVMFunctionByName("create_tir_paged_kv_cache", vmFunctionRegistry);
+            const createKVCache = LLMChatPipeline.getRequiredVMFunctionByName((_d = (_c = this.artifact) === null || _c === void 0 ? void 0 : _c.program.exports.create_kv_cache) !== null && _d !== void 0 ? _d : "create_tir_paged_kv_cache", vmFunctionRegistry);
             this.kvCache = this.tvm.detachFromCurrentScope(createKVCache(this.tvm.makeShapeTuple([defaultMaxNumSequence]), // max_num_sequence
             this.tvm.makeShapeTuple([maxTotalSeqLen]), // max_total_sequence_length
             this.tvm.makeShapeTuple([this.prefillChunkSize]), // prefill_chunk_size
@@ -9990,7 +11934,7 @@ class LLMChatPipeline {
             this.tvm.makeShapeTuple([this.slidingWindowSize != -1 ? 1 : 0])));
         }
         if (this.resolvedModelABI.needsRNNState) {
-            const createRNNState = LLMChatPipeline.getRequiredVMFunctionByName("create_rnn_state", vmFunctionRegistry);
+            const createRNNState = LLMChatPipeline.getRequiredVMFunctionByName((_f = (_e = this.artifact) === null || _e === void 0 ? void 0 : _e.program.exports.create_rnn_state) !== null && _f !== void 0 ? _f : "create_rnn_state", vmFunctionRegistry);
             this.rnnState = this.tvm.detachFromCurrentScope(createRNNState(this.tvm.makeShapeTuple([defaultMaxNumSequence]), this.tvm.makeShapeTuple([this.maxHistorySize])));
             log.info("Using maxHistorySize for RNN state: ", this.maxHistorySize);
         }
@@ -10013,28 +11957,35 @@ class LLMChatPipeline {
         tvm.endScope();
     }
     dispose() {
-        var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k;
+        var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o;
         // TODO: Do we need to dispose all PackedFuncs here?
         (_a = this.grammarMatcher) === null || _a === void 0 ? void 0 : _a.dispose();
         this.params.dispose();
         this.decoding.dispose();
         this.prefill.dispose();
         this.embed.dispose();
-        (_b = this.image_embed) === null || _b === void 0 ? void 0 : _b.dispose();
-        (_c = this.prefillLogitPositions) === null || _c === void 0 ? void 0 : _c.dispose();
-        (_d = this.rnnState) === null || _d === void 0 ? void 0 : _d.dispose();
-        (_e = this.kvCache) === null || _e === void 0 ? void 0 : _e.dispose();
+        (_b = this.artifactAudioAdapter) === null || _b === void 0 ? void 0 : _b.dispose();
+        (_c = this.artifactImageAdapter) === null || _c === void 0 ? void 0 : _c.dispose();
+        (_d = this.fTensorCreateView) === null || _d === void 0 ? void 0 : _d.dispose();
+        (_e = this.image_embed) === null || _e === void 0 ? void 0 : _e.dispose();
+        (_f = this.prefillLogitPositions) === null || _f === void 0 ? void 0 : _f.dispose();
+        (_g = this.rnnState) === null || _g === void 0 ? void 0 : _g.dispose();
+        (_h = this.kvCache) === null || _h === void 0 ? void 0 : _h.dispose();
         this.fsampleWithTopP.dispose();
         this.fargsortProbs.dispose();
-        (_f = this.sampleIndicesDevice) === null || _f === void 0 ? void 0 : _f.dispose();
-        (_g = this.topPDevice) === null || _g === void 0 ? void 0 : _g.dispose();
+        for (const func of this.kvCheckpointFuncs.values()) {
+            func.dispose();
+        }
+        this.kvCheckpointFuncs.clear();
+        (_j = this.sampleIndicesDevice) === null || _j === void 0 ? void 0 : _j.dispose();
+        (_k = this.topPDevice) === null || _k === void 0 ? void 0 : _k.dispose();
         this.vm.dispose();
         this.fclearKVCaches.dispose();
-        (_h = this.logitsOnCPU) === null || _h === void 0 ? void 0 : _h.dispose();
+        (_l = this.logitsOnCPU) === null || _l === void 0 ? void 0 : _l.dispose();
         this.tvm.dispose();
         this.tokenizer.dispose();
-        (_j = this.xgTokenizerInfo) === null || _j === void 0 ? void 0 : _j.dispose();
-        (_k = this.grammarCompiler) === null || _k === void 0 ? void 0 : _k.dispose();
+        (_m = this.xgTokenizerInfo) === null || _m === void 0 ? void 0 : _m.dispose();
+        (_o = this.grammarCompiler) === null || _o === void 0 ? void 0 : _o.dispose();
     }
     /**
      * Get the current message.
@@ -10058,6 +12009,7 @@ class LLMChatPipeline {
         var _a;
         this.tvm.beginScope();
         this.conversation.reset();
+        this.finishReason = undefined;
         if (!keepStats) {
             this.resetRuntimeStats();
         }
@@ -10103,6 +12055,13 @@ class LLMChatPipeline {
      */
     getCurRoundDecodingTotalTokens() {
         return this.curRoundDecodingTotalTokens;
+    }
+    /**
+     * Number of tokens committed to the output this round: the token sampled
+     * after prefill, every decoded token, and a terminating stop token.
+     */
+    getCurRoundCompletionTotalTokens() {
+        return this.curRoundCompletionTotalTokens;
     }
     /**
      * @returns the number of tokens decoded for a single request or a single choice in the request.
@@ -10195,6 +12154,96 @@ class LLMChatPipeline {
         }
         return undefined;
     }
+    isGrammarConstrained(responseFormat) {
+        return ((responseFormat === null || responseFormat === void 0 ? void 0 : responseFormat.type) === "json_object" ||
+            (responseFormat === null || responseFormat === void 0 ? void 0 : responseFormat.type) === "grammar" ||
+            (responseFormat === null || responseFormat === void 0 ? void 0 : responseFormat.type) === "structural_tag");
+    }
+    resetGenerationRoundState() {
+        this.outputIds = [];
+        this.appearedTokensFreq.clear();
+        this.outputMessage = "";
+        this.tokenLogprobArray = [];
+        this.curRoundDecodingTotalTokens = 0;
+        this.curRoundCompletionTotalTokens = 0;
+        this.curRoundPrefillTotalTokens = 0;
+        this.curRoundPrefillTotalTime = 0;
+        this.curRoundDecodingTotalTime = 0;
+        this.curRoundGrammarInitTotalTime = 0;
+        this.curRoundGrammarPerTokenTotalTime = 0;
+        this.pendingSampleOutputTokenBegin = undefined;
+        this.curRoundLatencyBreakdown = {
+            logitProcessorTime: [],
+            logitBiasTime: [],
+            penaltyTime: [],
+            sampleTime: [],
+            totalTime: [],
+            grammarBitmaskTime: [],
+        };
+    }
+    prepareGrammarMatcherForSampling(genConfig) {
+        const responseFormat = genConfig === null || genConfig === void 0 ? void 0 : genConfig.response_format;
+        if (responseFormat === undefined ||
+            responseFormat === null ||
+            !this.isGrammarConstrained(responseFormat)) {
+            return undefined;
+        }
+        const curResponseFormatKey = this.getResponseFormatKey(responseFormat);
+        if (curResponseFormatKey === this.responseFormatCacheKey &&
+            this.grammarMatcher) {
+            // If we did not change the schema and have instantiated a GrammarMatcher, we reuse it.
+            const tGrammarInitStart = performance.now();
+            log.info("Reuse grammar matcher.");
+            this.grammarMatcher.reset();
+            this.curRoundGrammarInitTotalTime =
+                (performance.now() - tGrammarInitStart) / 1e3;
+            return undefined;
+        }
+        // Else dispose current grammarMatcher, reinitialize, and update this.schema.
+        const initialization = (() => __awaiter(this, void 0, void 0, function* () {
+            var _a;
+            const tGrammarInitStart = performance.now();
+            log.info("Initialize new grammar matcher.");
+            try {
+                if (this.grammarMatcher) {
+                    this.grammarMatcher.dispose();
+                    this.grammarMatcher = undefined;
+                }
+                if (this.xgTokenizerInfo === undefined) {
+                    log.info("Initialize token table.");
+                    // Post process entire table
+                    const rawTokenTable = getTokenTableFromTokenizer(this.tokenizer);
+                    this.xgTokenizerInfo = yield libExports$1.TokenizerInfo.createTokenizerInfo(rawTokenTable, this.token_postproc_method, this.prepend_space_in_encode, this.fullVocabSize, this.stopTokens);
+                    this.grammarCompiler =
+                        yield libExports$1.GrammarCompiler.createGrammarCompiler(this.xgTokenizerInfo);
+                }
+                const grammar = responseFormat.type === undefined
+                    ? yield this.grammarCompiler.compileBuiltinJSONGrammar()
+                    : responseFormat.type === "json_object"
+                        ? yield this.grammarCompiler.compileJSONSchema(responseFormat.schema)
+                        : responseFormat.type === "grammar"
+                            ? yield this.grammarCompiler.compileGrammar(responseFormat.grammar)
+                            : yield this.grammarCompiler.compileStructuralTag(responseFormat.structural_tag);
+                try {
+                    this.grammarMatcher =
+                        yield libExports$1.GrammarMatcher.createGrammarMatcher(grammar);
+                }
+                finally {
+                    grammar.dispose();
+                }
+                this.responseFormatCacheKey = curResponseFormatKey;
+                this.curRoundGrammarInitTotalTime =
+                    (performance.now() - tGrammarInitStart) / 1e3;
+            }
+            catch (err) {
+                throw new GrammarMatcherInitError((_a = responseFormat.type) !== null && _a !== void 0 ? _a : "json_object", err);
+            }
+        }))();
+        // Observe failures immediately while prefill is still in flight. Awaiting the
+        // original promise below still propagates the initialization error.
+        void initialization.catch(() => undefined);
+        return initialization;
+    }
     // Getters and setters for this.conversation.
     /**
      * @returns The conversation object (not a deep copy).
@@ -10210,6 +12259,25 @@ class LLMChatPipeline {
         this.stopStr = this.conversation.getStopStr();
         this.stopTokens = this.conversation.getStopTokens();
     }
+    /** Input kinds other than text that the loaded model accepts. */
+    getSupportedInputKinds() {
+        const result = new Set();
+        if (this.artifact !== undefined) {
+            if (this.artifact.audioInput !== undefined) {
+                result.add("audio");
+            }
+            if (this.artifact.imageInput !== undefined) {
+                result.add("image");
+            }
+            return result;
+        }
+        if (this.image_embed !== undefined) {
+            result.add("image");
+            return result;
+        }
+        // Text-only models keep the existing checks and error messages.
+        return undefined;
+    }
     asyncLoadWebGPUPipelines() {
         return __awaiter(this, void 0, void 0, function* () {
             yield this.tvm.asyncLoadWebGPUPipelines(this.vm.getInternalModule());
@@ -10224,134 +12292,162 @@ class LLMChatPipeline {
             if (msgRole !== Role.user && msgRole !== Role.tool) {
                 throw new MessageOrderError("The last message should be from `user` or `tool`.");
             }
+            const step = yield this.samplePrefillStep(inp, msgRole, inp_role_str, genConfig);
+            this.commitSampledStep(step, genConfig);
+        });
+    }
+    samplePrefillStep(inp_1, msgRole_1, inp_role_str_1, genConfig_1) {
+        return __awaiter(this, arguments, void 0, function* (inp, msgRole, inp_role_str, genConfig, opts = {}) {
+            if (msgRole !== Role.user && msgRole !== Role.tool) {
+                throw new MessageOrderError("The last message should be from `user` or `tool`.");
+            }
             if (this.resetStatsPerPrefill) {
                 this.resetRuntimeStats();
             }
             const tstart = performance.now();
-            // cleanup the per convo states
-            this.outputIds = [];
-            this.appearedTokensFreq.clear();
-            this.outputMessage = "";
-            this.tokenLogprobArray = [];
-            this.curRoundDecodingTotalTokens = 0;
-            this.curRoundPrefillTotalTokens = 0;
-            this.curRoundPrefillTotalTime = 0;
-            this.curRoundDecodingTotalTime = 0;
-            this.curRoundGrammarInitTotalTime = 0;
-            this.curRoundGrammarPerTokenTotalTime = 0;
-            this.curRoundLatencyBreakdown = {
-                logitProcessorTime: [],
-                logitBiasTime: [],
-                penaltyTime: [],
-                sampleTime: [],
-                totalTime: [],
-                grammarBitmaskTime: [],
-            };
+            this.resetGenerationRoundState();
             this.stopTriggered = false;
-            const conversation = this.conversation;
             // -1. Instantiate grammar matcher according to generation config. This step is overlapped
             // with prefilling the prompt to hide overhead by using this promise.
-            let grammarMatcherInitPromise = undefined;
-            const responseFormat = genConfig === null || genConfig === void 0 ? void 0 : genConfig.response_format;
-            if ((responseFormat === null || responseFormat === void 0 ? void 0 : responseFormat.type) === "json_object" ||
-                (responseFormat === null || responseFormat === void 0 ? void 0 : responseFormat.type) === "grammar" ||
-                (responseFormat === null || responseFormat === void 0 ? void 0 : responseFormat.type) === "structural_tag") {
-                const curResponseFormatKey = this.getResponseFormatKey(responseFormat);
-                if (curResponseFormatKey === this.responseFormatCacheKey &&
-                    this.grammarMatcher) {
-                    // If we did not change the schema and have instantiated a GrammarMatcher, we reuse it.
-                    const tGrammarInitStart = performance.now();
-                    log.info("Reuse grammar matcher.");
-                    this.grammarMatcher.reset();
-                    this.curRoundGrammarInitTotalTime =
-                        (performance.now() - tGrammarInitStart) / 1e3;
-                }
-                else {
-                    // Else dispose current grammarMatcher, reinitialize, and update this.schema.
-                    /* eslint-disable no-async-promise-executor */
-                    grammarMatcherInitPromise = new Promise((resolve) => __awaiter(this, void 0, void 0, function* () {
-                        const tGrammarInitStart = performance.now();
-                        log.info("Initialize new grammar matcher.");
-                        if (this.grammarMatcher) {
-                            this.grammarMatcher.dispose();
-                        }
-                        if (this.xgTokenizerInfo === undefined) {
-                            log.info("Initialize token table.");
-                            // Post process entire table
-                            const rawTokenTable = getTokenTableFromTokenizer(this.tokenizer);
-                            this.xgTokenizerInfo = yield libExports$1.TokenizerInfo.createTokenizerInfo(rawTokenTable, this.token_postproc_method, this.prepend_space_in_encode, this.fullVocabSize, this.stopTokens);
-                            this.grammarCompiler =
-                                yield libExports$1.GrammarCompiler.createGrammarCompiler(this.xgTokenizerInfo);
-                        }
-                        const grammar = responseFormat.type === undefined
-                            ? yield this.grammarCompiler.compileBuiltinJSONGrammar()
-                            : responseFormat.type === "json_object"
-                                ? yield this.grammarCompiler.compileJSONSchema(responseFormat.schema)
-                                : responseFormat.type === "grammar"
-                                    ? yield this.grammarCompiler.compileGrammar(responseFormat.grammar)
-                                    : yield this.grammarCompiler.compileStructuralTag(responseFormat.structural_tag);
-                        this.grammarMatcher =
-                            yield libExports$1.GrammarMatcher.createGrammarMatcher(grammar);
-                        grammar.dispose();
-                        this.responseFormatCacheKey = curResponseFormatKey;
-                        this.curRoundGrammarInitTotalTime =
-                            (performance.now() - tGrammarInitStart) / 1e3;
-                        resolve();
-                    }));
-                }
+            const grammarMatcherInitPromise = this.prepareGrammarMatcherForSampling(genConfig);
+            const { logits, promptLen, promptTokenIds, assistantPrefixTokenIds } = yield this.forwardPrefill(inp, msgRole, inp_role_str, genConfig);
+            let promptCheckpoint;
+            let nextToken;
+            try {
+                promptCheckpoint =
+                    opts.capturePromptCheckpoint === true
+                        ? yield this.tryExportPromptCheckpoint(logits, opts.storeCheckpointLogits !== false)
+                        : undefined;
+                // 4. Sample, stats, post process token sampled.
+                // We wait for prefill and grammar matcher init to finish
+                yield this.device.sync();
+                yield grammarMatcherInitPromise;
+                nextToken = yield this.sampleFromRawLogits(logits, genConfig);
             }
+            finally {
+                logits.dispose();
+            }
+            const tend = performance.now();
+            this.prefillTotalTime += (tend - tstart) / 1e3;
+            this.prefillTotalTokens += promptLen;
+            this.curRoundPrefillTotalTokens += promptLen;
+            this.curRoundPrefillTotalTime += (tend - tstart) / 1e3;
+            return {
+                source: "prefill",
+                tokenId: nextToken,
+                globalTokenPos: this.filledKVCacheLength,
+                promptLen,
+                promptTokenIds,
+                assistantPrefixTokenIds,
+                promptCheckpoint,
+                logprob: this.tokenLogprobArray.at(-1),
+            };
+        });
+    }
+    forwardPrefill(inp, msgRole, inpRoleStr, genConfig) {
+        return __awaiter(this, void 0, void 0, function* () {
+            var _a;
+            const conversation = this.conversation;
+            const assistantPrefixTokenIds = [];
             // 0. Get inputData from conversation
             if (conversation.isTextCompletion) {
+                if (typeof inp !== "string") {
+                    throw new TypeError("Text completion requires a string prompt");
+                }
                 conversation.prompt = inp;
             }
             else {
-                conversation.appendMessage(msgRole, inp, inp_role_str);
+                conversation.appendMessage(msgRole, inp, inpRoleStr);
                 if ((genConfig === null || genConfig === void 0 ? void 0 : genConfig.enable_thinking) === false) {
                     // TODO(Charlie): In future we should make emptyThinkingBlockStr configurable.
                     const emptyThinkingBlockStr = "<think>\n\n</think>\n\n";
-                    const encoded = this.tokenizer.encode(emptyThinkingBlockStr);
+                    const encoded = Array.from(this.tokenizer.encode(emptyThinkingBlockStr));
                     this.outputIds.push(...encoded);
+                    assistantPrefixTokenIds.push(...encoded);
                     conversation.appendEmptyThinkingReplyHeader(Role.assistant, emptyThinkingBlockStr);
                 }
                 else {
                     conversation.appendReplyHeader(Role.assistant);
                 }
             }
-            const [inputData, promptLen, getEmbedSize] = yield this.getInputData();
-            // Check if LLMChatPipeline fits for forwarding image input
-            const hasImageInput = inputData.some((data) => !Array.isArray(data));
-            if (hasImageInput && this.image_embed === undefined) {
-                throw new CannotFindImageEmbedError();
-            }
-            // 1. Chunk inputData to embed and forward in one shot for each, minimize intermediate data
-            const retGetChunks = getChunkedPrefillInputData(inputData, this.prefillChunkSize, getEmbedSize);
-            const chunks = retGetChunks[0];
-            const chunkLens = retGetChunks[1];
-            // 2. Prefill each chunk
-            this.tvm.beginScope();
+            let promptLen;
+            let promptTokenIds;
             let logits;
-            for (let i = 0; i < chunks.length; i++) {
-                const chunk = chunks[i];
-                const chunkLen = chunkLens[i];
-                const prevFilledLen = this.filledKVCacheLength;
-                logits = this.tvm.detachFromCurrentScope(yield this.embedAndForward(chunk, chunkLen));
-                if (this.filledKVCacheLength !== prevFilledLen + chunkLen) {
-                    throw new Error("Internal Error: filledKVCacheLength does not match expected value.");
+            this.tvm.beginScope();
+            try {
+                if (this.artifact !== undefined) {
+                    const [chunks, artifactPromptLen] = yield this.getArtifactPrefillChunks();
+                    promptLen = artifactPromptLen;
+                    if (chunks.every((chunk) => chunk.modalityIds.every((kind) => kind === 0))) {
+                        promptTokenIds = chunks.flatMap((chunk) => chunk.tokenIds);
+                    }
+                    for (let i = 0; i < chunks.length; i++) {
+                        const chunk = chunks[i];
+                        const previousLength = this.filledKVCacheLength;
+                        const embeddings = (_a = chunk.embeddings) !== null && _a !== void 0 ? _a : this.getArtifactTextEmbeddings(chunk.tokenIds);
+                        const chunkLogits = this.artifactPrefillAndForward(embeddings, chunk.tokenIds, chunk.modalityIds);
+                        if (this.filledKVCacheLength !==
+                            previousLength + chunk.tokenIds.length) {
+                            throw new Error("Internal Error: filledKVCacheLength does not match expected value.");
+                        }
+                        if (i === chunks.length - 1) {
+                            logits = this.tvm.detachFromCurrentScope(chunkLogits);
+                        }
+                    }
+                }
+                else {
+                    const [inputData, legacyPromptLen, getEmbedSize] = yield this.getInputData();
+                    promptLen = legacyPromptLen;
+                    promptTokenIds = inputData.every((data) => Array.isArray(data))
+                        ? inputData.flatMap((data) => data)
+                        : undefined;
+                    const hasImageInput = inputData.some((data) => !Array.isArray(data));
+                    if (hasImageInput && this.image_embed === undefined) {
+                        throw new CannotFindImageEmbedError();
+                    }
+                    const [chunks, chunkLens] = getChunkedPrefillInputData(inputData, this.prefillChunkSize, getEmbedSize);
+                    for (let i = 0; i < chunks.length; i++) {
+                        const previousLength = this.filledKVCacheLength;
+                        const chunkLogits = yield this.embedAndForward(chunks[i], chunkLens[i]);
+                        if (this.filledKVCacheLength !== previousLength + chunkLens[i]) {
+                            throw new Error("Internal Error: filledKVCacheLength does not match expected value.");
+                        }
+                        if (i === chunks.length - 1) {
+                            logits = this.tvm.detachFromCurrentScope(chunkLogits);
+                        }
+                    }
                 }
             }
-            this.imageDataCache.clear();
-            this.tvm.endScope();
-            // 4. Sample, stats, post process token sampled.
-            // We wait for prefill and grammar matcher init to finish
-            yield Promise.all([this.device.sync(), grammarMatcherInitPromise]);
-            const nextToken = yield this.sampleTokenFromLogits(logits, genConfig);
-            logits.dispose();
-            const tend = performance.now();
-            this.prefillTotalTime += (tend - tstart) / 1e3;
-            this.prefillTotalTokens += promptLen;
-            this.curRoundPrefillTotalTokens += promptLen;
-            this.curRoundPrefillTotalTime += (tend - tstart) / 1e3;
-            this.processNextToken(nextToken, genConfig);
+            finally {
+                this.imageDataCache.clear();
+                this.artifactImagePixelCache.clear();
+                this.tvm.endScope();
+            }
+            if (logits === undefined) {
+                throw new Error("Internal Error: prefill did not produce logits.");
+            }
+            return { logits, promptLen, promptTokenIds, assistantPrefixTokenIds };
+        });
+    }
+    forwardDecodeToken(tokenId) {
+        return __awaiter(this, void 0, void 0, function* () {
+            if (tokenId === undefined) {
+                throw new Error("Internal Error: missing decode token.");
+            }
+            this.tvm.beginScope();
+            try {
+                const previousLength = this.filledKVCacheLength;
+                const logits = this.artifact === undefined
+                    ? yield this.embedAndForward([[tokenId]], 1)
+                    : this.artifactDecodeAndForward(tokenId);
+                if (this.filledKVCacheLength !== previousLength + 1) {
+                    throw new Error("Internal Error: filledKVCacheLength does not match expected value.");
+                }
+                return this.tvm.detachFromCurrentScope(logits);
+            }
+            finally {
+                this.tvm.endScope();
+            }
         });
     }
     decodeStep(genConfig) {
@@ -10359,27 +12455,43 @@ class LLMChatPipeline {
             if (this.stopTriggered) {
                 throw Error("Cannot run decode when stopped");
             }
-            const tstart = performance.now();
-            this.tvm.beginScope();
-            const chunk = [
-                this.outputIds.slice(this.outputIds.length - 1),
-            ];
-            const chunkLen = chunk.length;
-            const prevFilledLen = this.filledKVCacheLength;
-            const logits = this.tvm.detachFromCurrentScope(yield this.embedAndForward(chunk, chunkLen));
-            if (this.filledKVCacheLength !== prevFilledLen + chunkLen) {
-                throw new Error("Internal Error: filledKVCacheLength does not match expected value.");
+            const step = yield this.sampleDecodeStep(genConfig);
+            this.commitSampledStep(step, genConfig);
+        });
+    }
+    sampleDecodeStep(genConfig_1) {
+        return __awaiter(this, arguments, void 0, function* (genConfig, opts = {}) {
+            if (this.stopTriggered) {
+                throw Error("Cannot run decode when stopped");
             }
-            this.tvm.endScope();
-            // sample from logits
-            const nextToken = yield this.sampleTokenFromLogits(logits, genConfig);
-            logits.dispose();
+            const tstart = performance.now();
+            const lastToken = this.outputIds[this.outputIds.length - 1];
+            const logits = yield this.forwardDecodeToken(lastToken);
+            let decodeCheckpoint;
+            let nextToken;
+            try {
+                decodeCheckpoint =
+                    opts.captureCheckpoint === true
+                        ? yield this.tryExportPromptCheckpoint(logits, opts.storeCheckpointLogits !== false)
+                        : undefined;
+                // sample from logits
+                nextToken = yield this.sampleFromRawLogits(logits, genConfig);
+            }
+            finally {
+                logits.dispose();
+            }
             const tend = performance.now();
             this.decodingTotalTime += (tend - tstart) / 1e3;
             this.decodingTotalTokens += 1;
             this.curRoundDecodingTotalTokens += 1;
             this.curRoundDecodingTotalTime += (tend - tstart) / 1e3;
-            this.processNextToken(nextToken, genConfig);
+            return {
+                source: "decode",
+                tokenId: nextToken,
+                globalTokenPos: this.filledKVCacheLength,
+                decodeCheckpoint,
+                logprob: this.tokenLogprobArray.at(-1),
+            };
         });
     }
     /**
@@ -10401,17 +12513,15 @@ class LLMChatPipeline {
      * @param nextToken The next token.
      * @param genConfig Configs that override `this.config` for this round of generation.
      */
-    processNextToken(nextToken, genConfig) {
+    processNextToken(nextToken, genConfig, processedSeqLen = this.filledKVCacheLength) {
+        var _a;
         if (this.stopTriggered) {
             throw Error("Cannot call process when it is stoppped");
         }
         // Get max_tokens from generationConfig (specified by user in completion request)
         // If not specified, do not set a limit
-        let max_tokens = Infinity;
-        if (genConfig !== undefined && genConfig.max_tokens) {
-            max_tokens = genConfig.max_tokens;
-        }
-        if (max_tokens <= 0) {
+        const max_tokens = (_a = genConfig === null || genConfig === void 0 ? void 0 : genConfig.max_tokens) !== null && _a !== void 0 ? _a : Infinity;
+        if (!(max_tokens > 0)) {
             throw new MinValueError("max_tokens", 0);
         }
         // Get ignore_eos from generationConfig (specified by user in completion request)
@@ -10469,7 +12579,7 @@ class LLMChatPipeline {
         }
         // Stop condition 4: exceed KVCache's context window size
         if (this.slidingWindowSize == -1 &&
-            this.filledKVCacheLength == this.contextWindowSize) {
+            processedSeqLen == this.contextWindowSize) {
             this.stopTriggered = true;
             this.finishReason = "length";
             log.info("Generation stopped due to exceeding context_window_size.");
@@ -10479,6 +12589,570 @@ class LLMChatPipeline {
             if (!this.conversation.isTextCompletion) {
                 this.conversation.finishReply(this.outputMessage);
             }
+        }
+    }
+    commitSampledToken(nextToken, genConfig, source) {
+        switch (source) {
+            case "prefill":
+            case "decode":
+                this.commitSamplerState(nextToken, genConfig);
+                this.processNextToken(nextToken, genConfig);
+                this.curRoundCompletionTotalTokens += 1;
+                return;
+        }
+    }
+    commitSampledStep(step, genConfig) {
+        const prevOutputMessage = this.outputMessage;
+        this.commitSampledToken(step.tokenId, genConfig, step.source);
+        const textPrefixLength = commonPrefixLength(prevOutputMessage, this.outputMessage);
+        const textDelta = this.outputMessage.slice(textPrefixLength);
+        return {
+            source: step.source,
+            tokenId: step.tokenId,
+            globalTokenPos: step.globalTokenPos,
+            textDelta,
+            textPrefixLength,
+            outputMessage: this.outputMessage,
+            stopped: this.stopTriggered,
+            finishReason: this.finishReason,
+        };
+    }
+    getRNGState() {
+        var _a, _b;
+        return (_b = (_a = this.tvm).getRNGState) === null || _b === void 0 ? void 0 : _b.call(_a);
+    }
+    setRNGState(state) {
+        const setRNGState = this.tvm.setRNGState;
+        if (setRNGState === undefined) {
+            return false;
+        }
+        setRNGState.call(this.tvm, state);
+        return true;
+    }
+    getKVCheckpointFunc(name) {
+        const cached = this.kvCheckpointFuncs.get(name);
+        if (cached !== undefined) {
+            return cached;
+        }
+        this.tvm.beginScope();
+        try {
+            const func = this.tvm.detachFromCurrentScope(this.tvm.getGlobalFunc(name));
+            this.kvCheckpointFuncs.set(name, func);
+            return func;
+        }
+        finally {
+            this.tvm.endScope();
+        }
+    }
+    resolveKVCheckpointFuncs() {
+        for (const name of KV_CHECKPOINT_FUNC_NAMES) {
+            this.getKVCheckpointFunc(name);
+        }
+    }
+    tryExportPromptCheckpoint(logits, storeCheckpointLogits) {
+        return __awaiter(this, void 0, void 0, function* () {
+            if (this.kvCache === undefined || this.kvStateKind !== "kv_cache") {
+                return undefined;
+            }
+            if (this.kvCheckpointUnavailableReason !== undefined) {
+                return undefined;
+            }
+            try {
+                this.resolveKVCheckpointFuncs();
+                return yield this.exportPromptCheckpoint(logits, storeCheckpointLogits);
+            }
+            catch (err) {
+                this.kvCheckpointUnavailableReason = errorMessage$1(err);
+                log.warn(`KV checkpoint capture disabled for this model: ${this.kvCheckpointUnavailableReason}`);
+                return undefined;
+            }
+        });
+    }
+    copyTensorRawBytes(tensor) {
+        return tensor.toRawBytes();
+    }
+    copyTensorToCPUBytes(tensor) {
+        return __awaiter(this, void 0, void 0, function* () {
+            this.tvm.beginScope();
+            try {
+                const cpuTensor = this.tvm.empty(tensor.shape, tensor.dtype, this.tvm.cpu());
+                cpuTensor.copyFrom(tensor);
+                yield this.device.sync();
+                return this.copyTensorRawBytes(cpuTensor);
+            }
+            finally {
+                this.tvm.endScope();
+            }
+        });
+    }
+    checkpointGroupInfo(group) {
+        var _a, _b, _c;
+        const value = group;
+        const groupId = (_a = value.group_index) !== null && _a !== void 0 ? _a : value.groupIndex;
+        const layerStart = (_b = value.layer_begin) !== null && _b !== void 0 ? _b : value.layerBegin;
+        const layerEnd = (_c = value.layer_end) !== null && _c !== void 0 ? _c : value.layerEnd;
+        const shape = value.shape;
+        const dtype = value.dtype;
+        if (typeof groupId !== "number" ||
+            !Number.isInteger(groupId) ||
+            typeof layerStart !== "number" ||
+            !Number.isInteger(layerStart) ||
+            typeof layerEnd !== "number" ||
+            !Number.isInteger(layerEnd) ||
+            !Array.isArray(shape) ||
+            !shape.every(Number.isInteger) ||
+            typeof dtype !== "string") {
+            throw new Error("Invalid KV checkpoint group metadata.");
+        }
+        return {
+            groupId,
+            layerStart,
+            layerEnd,
+            shape: shape,
+            dtype,
+        };
+    }
+    exportPromptCheckpoint(logits, storeCheckpointLogits) {
+        return __awaiter(this, void 0, void 0, function* () {
+            var _a, _b;
+            if (this.kvCache === undefined || this.kvStateKind !== "kv_cache") {
+                return undefined;
+            }
+            const seqId = new libExports$2.Scalar(0, "int64");
+            const getMetadata = this.getKVCheckpointFunc("vm.builtin.attention_kv_cache_get_checkpoint_metadata");
+            const metadata = JSON.parse(String(getMetadata(this.kvCache, seqId)));
+            const groups = metadata.groups;
+            if (!Array.isArray(groups)) {
+                throw new Error("KV checkpoint metadata is missing page groups.");
+            }
+            const exportPageGroup = this.getKVCheckpointFunc("vm.builtin.attention_kv_cache_export_page_group");
+            const pageGroups = [];
+            for (const group of groups) {
+                const info = this.checkpointGroupInfo(group);
+                this.tvm.beginScope();
+                try {
+                    const dst = this.tvm.empty(info.shape, info.dtype, this.device);
+                    exportPageGroup(this.kvCache, seqId, new libExports$2.Scalar(info.groupId, "int64"), dst);
+                    pageGroups.push({
+                        groupId: info.groupId,
+                        layerStart: info.layerStart,
+                        layerEnd: info.layerEnd,
+                        data: yield this.copyTensorToCPUBytes(dst),
+                    });
+                }
+                finally {
+                    this.tvm.endScope();
+                }
+            }
+            const seqLength = (_a = metadata.seq_length) !== null && _a !== void 0 ? _a : metadata.seqLength;
+            const metadataLayoutHash = (_b = metadata.layout_hash) !== null && _b !== void 0 ? _b : metadata.layoutHash;
+            const processedSeqLen = typeof seqLength === "number" ? seqLength : this.filledKVCacheLength;
+            return {
+                processedSeqLen,
+                layoutHash: typeof metadataLayoutHash === "string" ? metadataLayoutHash : undefined,
+                metadata,
+                pageGroups,
+                nextLogits: storeCheckpointLogits
+                    ? {
+                        shape: [...logits.shape],
+                        dtype: logits.dtype,
+                        data: yield this.copyTensorToCPUBytes(logits),
+                    }
+                    : undefined,
+            };
+        });
+    }
+    importPromptCheckpoint(checkpoint) {
+        return __awaiter(this, void 0, void 0, function* () {
+            if (this.kvCache === undefined || this.kvStateKind !== "kv_cache") {
+                throw new Error("KV checkpoint import requires a pure KV cache.");
+            }
+            const seqId = new libExports$2.Scalar(0, "int64");
+            const prepareImport = this.getKVCheckpointFunc("vm.builtin.attention_kv_cache_prepare_import");
+            prepareImport(this.kvCache, seqId, JSON.stringify(checkpoint.metadata));
+            const groups = checkpoint.metadata.groups;
+            if (!Array.isArray(groups)) {
+                throw new Error("KV checkpoint metadata is missing page groups.");
+            }
+            const groupInfo = new Map();
+            for (const group of groups) {
+                const info = this.checkpointGroupInfo(group);
+                groupInfo.set(info.groupId, info);
+            }
+            const importPageGroup = this.getKVCheckpointFunc("vm.builtin.attention_kv_cache_import_page_group");
+            for (const group of checkpoint.pageGroups) {
+                const info = groupInfo.get(group.groupId);
+                if (info === undefined) {
+                    throw new Error(`Missing metadata for KV checkpoint group ${group.groupId}.`);
+                }
+                this.tvm.beginScope();
+                try {
+                    const src = this.tvm.empty(info.shape, info.dtype, this.device);
+                    src.copyFromRawBytes(group.data);
+                    importPageGroup(this.kvCache, seqId, new libExports$2.Scalar(group.groupId, "int64"), src);
+                }
+                finally {
+                    this.tvm.endScope();
+                }
+            }
+            const finishImport = this.getKVCheckpointFunc("vm.builtin.attention_kv_cache_finish_import");
+            finishImport(this.kvCache, seqId);
+            const getSequenceLength = this.getKVCheckpointFunc("vm.builtin.attention_kv_cache_get_sequence_length");
+            this.filledKVCacheLength = Number(getSequenceLength(this.kvCache, seqId));
+            yield this.device.sync();
+        });
+    }
+    replayFromPromptCheckpoint(checkpoint, assistantPrefixTokenIds, coveredGeneratedTokens, tailGeneratedTokens, genConfig) {
+        return __awaiter(this, void 0, void 0, function* () {
+            if (this.resetStatsPerPrefill) {
+                this.resetRuntimeStats();
+            }
+            this.resetChat();
+            this.setConversation(getConversation(this.config.conv_template, this.config.conv_config, true));
+            this.resetGenerationRoundState();
+            this.stopTriggered = false;
+            this.finishReason = undefined;
+            const grammarMatcherInitPromise = this.prepareGrammarMatcherForSampling(genConfig);
+            yield this.importPromptCheckpoint(checkpoint);
+            yield Promise.all([this.device.sync(), grammarMatcherInitPromise]);
+            if (this.filledKVCacheLength !== checkpoint.processedSeqLen) {
+                throw new Error(`KV checkpoint sequence length mismatch: expected ${checkpoint.processedSeqLen}, got ${this.filledKVCacheLength}.`);
+            }
+            this.outputIds.push(...assistantPrefixTokenIds);
+            for (const token of coveredGeneratedTokens) {
+                // The imported cache already covers these tokens. Rebuild output and
+                // penalties using each token's original position for the context limit.
+                this.commitSamplerState(token.tokenId, genConfig);
+                this.processNextToken(token.tokenId, genConfig, token.globalTokenPos);
+            }
+            for (let i = 0; i < tailGeneratedTokens.length; i++) {
+                if (i > 0) {
+                    const logits = yield this.forwardDecodeToken(tailGeneratedTokens[i - 1].tokenId);
+                    logits.dispose();
+                }
+                this.commitSampledToken(tailGeneratedTokens[i].tokenId, genConfig, "decode");
+            }
+            if (tailGeneratedTokens.length > 0) {
+                return {
+                    replayedTokens: tailGeneratedTokens.length,
+                    sampledFromCheckpointLogits: false,
+                };
+            }
+            if (checkpoint.nextLogits === undefined) {
+                throw new Error("Prompt checkpoint is missing next-token logits.");
+            }
+            this.tvm.beginScope();
+            try {
+                const logits = this.tvm.empty(checkpoint.nextLogits.shape, checkpoint.nextLogits.dtype, this.device);
+                logits.copyFromRawBytes(checkpoint.nextLogits.data);
+                const tokenId = yield this.sampleFromRawLogits(logits, genConfig);
+                const sampledToken = {
+                    source: "prefill",
+                    tokenId,
+                    globalTokenPos: checkpoint.processedSeqLen,
+                };
+                const committedToken = this.commitSampledStep(sampledToken, genConfig);
+                return {
+                    replayedTokens: 0,
+                    sampledFromCheckpointLogits: true,
+                    sampledToken,
+                    committedToken,
+                };
+            }
+            finally {
+                this.tvm.endScope();
+            }
+        });
+    }
+    commitSamplerState(sampledToken, genConfig) {
+        var _a;
+        (_a = this.logitProcessor) === null || _a === void 0 ? void 0 : _a.processSampledToken(sampledToken);
+        if (this.isGrammarConstrained(genConfig === null || genConfig === void 0 ? void 0 : genConfig.response_format)) {
+            if (this.grammarMatcher === undefined) {
+                throw Error("Expect grammar matcher to be initialized.");
+            }
+            const tAcceptStart = performance.now();
+            const accepted = this.grammarMatcher.acceptToken(sampledToken);
+            this.curRoundGrammarPerTokenTotalTime +=
+                (performance.now() - tAcceptStart) / 1e3;
+            if (!accepted) {
+                throw Error("Grammar matcher rejected the newly sampled token.");
+            }
+        }
+        if ((genConfig === null || genConfig === void 0 ? void 0 : genConfig.enable_latency_breakdown) &&
+            this.pendingSampleOutputTokenBegin !== undefined) {
+            const outputTokenEnd = performance.now();
+            const outputTokenTimeSpent = (outputTokenEnd - this.pendingSampleOutputTokenBegin) / 1e3;
+            this.curRoundLatencyBreakdown.totalTime.push(outputTokenTimeSpent);
+        }
+        this.pendingSampleOutputTokenBegin = undefined;
+    }
+    getArtifactTextEmbeddings(inputTokens) {
+        if (inputTokens.length === 0 ||
+            inputTokens.length > this.prefillChunkSize) {
+            throw new Error(`Artifact text chunks must contain 1..${this.prefillChunkSize} tokens`);
+        }
+        this.tvm.beginScope();
+        const inputData = this.tvm.empty([inputTokens.length], "int32", this.device);
+        inputData.copyFrom(inputTokens);
+        const embeddings = this.tvm.detachFromCurrentScope(this.embed(inputData, this.params));
+        this.tvm.endScope();
+        this.tvm.attachToCurrentScope(embeddings);
+        return embeddings;
+    }
+    getArtifactAudioEmbeddings(part) {
+        var _a;
+        if (((_a = this.artifact) === null || _a === void 0 ? void 0 : _a.audioInput) === undefined ||
+            this.artifactAudioAdapter === undefined) {
+            throw new ArtifactManifestError("input_audio was provided, but the artifact has no bound audio adapter");
+        }
+        const samples = decodeAudioInput(part.input_audio, this.artifact.audioInput.processor);
+        let embeddings;
+        this.tvm.beginScope();
+        try {
+            const sampleTensor = this.tvm
+                .empty([samples.length], "float32", this.device)
+                .copyFrom(samples);
+            embeddings = this.tvm.detachFromCurrentScope(this.artifactAudioAdapter(sampleTensor, this.params));
+        }
+        finally {
+            this.tvm.endScope();
+        }
+        // The caller's scope owns the result, so it is freed there if it is rejected.
+        this.tvm.attachToCurrentScope(embeddings);
+        if (embeddings.shape.length !== 2 ||
+            embeddings.shape[0] <= 0 ||
+            embeddings.shape[1] <= 0) {
+            throw new ArtifactManifestError(`audio adapter must return [audio_tokens, hidden_size], got [${embeddings.shape.join(", ")}]`);
+        }
+        return embeddings;
+    }
+    getArtifactImageEmbeddings(part) {
+        return __awaiter(this, void 0, void 0, function* () {
+            var _a;
+            if (((_a = this.artifact) === null || _a === void 0 ? void 0 : _a.imageInput) === undefined ||
+                this.artifactImageAdapter === undefined) {
+                throw new ArtifactManifestError("image_url was provided, but the artifact has no bound image adapter");
+            }
+            const { processor, dtype } = this.artifact.imageInput;
+            const { resize, num_embeddings } = processor;
+            const cacheKey = `${resize.mode}:${resize.width}x${resize.height}:${part.image_url.url}`;
+            let pixels = this.artifactImagePixelCache.get(cacheKey);
+            if (pixels === undefined) {
+                pixels = yield getResizedRGBArrayFromURL(part.image_url.url, resize);
+                this.artifactImagePixelCache.set(cacheKey, pixels);
+            }
+            let embeddings;
+            this.tvm.beginScope();
+            try {
+                // The values stay 0..255 whichever width the compiled adapter takes.
+                const pixelTensor = this.tvm.empty([1, resize.height, resize.width, 3], dtype, this.device);
+                if (dtype === "uint32") {
+                    pixelTensor.copyFromRawBytes(new Uint8Array(Uint32Array.from(pixels).buffer));
+                }
+                else {
+                    pixelTensor.copyFrom(pixels);
+                }
+                embeddings = this.tvm.detachFromCurrentScope(this.artifactImageAdapter(pixelTensor, this.params));
+            }
+            finally {
+                this.tvm.endScope();
+            }
+            // The caller's scope owns the result, so it is freed there if it is rejected.
+            this.tvm.attachToCurrentScope(embeddings);
+            if (embeddings.shape.length !== 2 ||
+                embeddings.shape[0] !== num_embeddings ||
+                embeddings.shape[1] <= 0) {
+                throw new ArtifactManifestError(`image adapter must return [${num_embeddings}, hidden_size], got [${embeddings.shape.join(", ")}]`);
+            }
+            return embeddings;
+        });
+    }
+    static dtypeBytes(dtype) {
+        if (dtype === "bfloat16") {
+            return 2;
+        }
+        const match = /^(?:float|int|uint)(\d+)$/.exec(dtype);
+        if (match === null || Number(match[1]) % 8 !== 0) {
+            throw new Error(`Cannot determine element size for dtype ${dtype}`);
+        }
+        return Number(match[1]) / 8;
+    }
+    sliceTensorRows(tensor, rowStart, rowCount) {
+        if (rowStart === 0 && rowCount === tensor.shape[0]) {
+            return tensor;
+        }
+        if (this.fTensorCreateView === undefined || tensor.shape.length !== 2) {
+            throw new ArtifactManifestError("runtime tensor-view support is required to chunk adapter embeddings");
+        }
+        const hiddenSize = tensor.shape[1];
+        const relativeByteOffset = rowStart * hiddenSize * LLMChatPipeline.dtypeBytes(tensor.dtype);
+        const view = this.fTensorCreateView(tensor, this.tvm.makeShapeTuple([rowCount, hiddenSize]), tensor.dtype, new libExports$2.Scalar(relativeByteOffset, "int"));
+        if (relativeByteOffset === 0) {
+            return view;
+        }
+        // Compiled prefill kernels need inputs with no byte offset, so chunks after
+        // the first are copied on the GPU.
+        return this.tvm
+            .empty([rowCount, hiddenSize], tensor.dtype, this.device)
+            .copyFrom(view);
+    }
+    getArtifactPromptSegments() {
+        if (this.conversation.isTextCompletion) {
+            if (this.filledKVCacheLength !== 0) {
+                throw new TextCompletionExpectsKVEmptyError();
+            }
+            return this.conversation.getPromptArrayTextCompletion();
+        }
+        return this.filledKVCacheLength === 0
+            ? this.conversation.getArtifactPromptSegments()
+            : this.conversation.getArtifactPromptSegmentsLastRound();
+    }
+    getArtifactPrefillChunks() {
+        return __awaiter(this, void 0, void 0, function* () {
+            if (this.artifact === undefined) {
+                throw new Error("InternalError: artifact prompt path has no artifact");
+            }
+            const chunks = [];
+            let pendingTokens = [];
+            const flushTokens = () => {
+                if (pendingTokens.length !== 0) {
+                    chunks.push({
+                        tokenIds: pendingTokens,
+                        modalityIds: new Array(pendingTokens.length).fill(0),
+                    });
+                    pendingTokens = [];
+                }
+            };
+            const appendTokens = (tokenIds) => {
+                for (const tokenId of tokenIds) {
+                    pendingTokens.push(tokenId);
+                    if (pendingTokens.length === this.prefillChunkSize) {
+                        flushTokens();
+                    }
+                }
+            };
+            if (this.filledKVCacheLength === 0 &&
+                this.conversation.config.system_prefix_token_ids !== undefined &&
+                this.conversation.config.system_prefix_token_ids !== null) {
+                appendTokens(this.conversation.config.system_prefix_token_ids);
+            }
+            for (const segment of this.getArtifactPromptSegments()) {
+                if (typeof segment === "string") {
+                    appendTokens(this.tokenizer.encode(segment));
+                }
+                else {
+                    const isImage = segment.type === "image_url";
+                    const input = isImage
+                        ? this.artifact.imageInput
+                        : this.artifact.audioInput;
+                    if (input === undefined) {
+                        throw new ArtifactManifestError(`The loaded artifact does not declare an ${isImage ? "image" : "audio"} input`);
+                    }
+                    appendTokens(input.prompt.prefix_token_ids);
+                    flushTokens();
+                    const embeddings = segment.type === "image_url"
+                        ? yield this.getArtifactImageEmbeddings(segment)
+                        : this.getArtifactAudioEmbeddings(segment);
+                    const adapterTokenCount = embeddings.shape[0];
+                    // Reject an input that cannot fit before slicing it.
+                    const lengthSoFar = this.filledKVCacheLength +
+                        pendingTokens.length +
+                        adapterTokenCount +
+                        chunks.reduce((total, chunk) => total + chunk.tokenIds.length, 0);
+                    if (this.slidingWindowSize === -1 &&
+                        lengthSoFar > this.contextWindowSize) {
+                        embeddings.dispose();
+                        throw new ContextWindowSizeExceededError(lengthSoFar - this.filledKVCacheLength, this.contextWindowSize);
+                    }
+                    for (let start = 0; start < adapterTokenCount;) {
+                        const count = Math.min(this.prefillChunkSize, adapterTokenCount - start);
+                        chunks.push({
+                            tokenIds: new Array(count).fill(input.prompt.placeholder_token_id),
+                            modalityIds: new Array(count).fill(1),
+                            embeddings: this.sliceTensorRows(embeddings, start, count),
+                        });
+                        start += count;
+                    }
+                    appendTokens(input.prompt.suffix_token_ids);
+                }
+            }
+            flushTokens();
+            const promptLength = chunks.reduce((total, chunk) => total + chunk.tokenIds.length, 0);
+            if (promptLength === 0) {
+                throw new Error("Prompt must contain at least one token");
+            }
+            if (this.slidingWindowSize === -1 &&
+                promptLength + this.filledKVCacheLength > this.contextWindowSize) {
+                throw new ContextWindowSizeExceededError(promptLength, this.contextWindowSize);
+            }
+            return [chunks, promptLength];
+        });
+    }
+    artifactPrefillAndForward(embeddings, tokenIds, modalityIds) {
+        var _a;
+        if (tokenIds.length === 0) {
+            throw new Error("Artifact prefill chunk has no tokens");
+        }
+        if (tokenIds.length !== modalityIds.length ||
+            embeddings.shape.length !== 2 ||
+            embeddings.shape[0] !== tokenIds.length) {
+            throw new Error("Artifact prompt bundle dimensions do not match");
+        }
+        this.tvm.beginScope();
+        const inputLength = tokenIds.length;
+        const inputEmbeddings = embeddings.view([
+            1,
+            inputLength,
+            embeddings.shape[1],
+        ]);
+        const idTensors = ((_a = this.artifact) === null || _a === void 0 ? void 0 : _a.generation.inputs) === "embeds"
+            ? []
+            : [tokenIds, modalityIds].map((ids) => this.tvm
+                .empty([1, inputLength], "int32", this.device)
+                .copyFrom(ids));
+        const states = this.beginArtifactForward(inputLength);
+        const result = this.prefill(inputEmbeddings, ...idTensors, ...states, this.params);
+        this.endArtifactForward(states);
+        this.filledKVCacheLength += inputLength;
+        const logits = this.tvm.detachFromCurrentScope(result.get(0));
+        this.tvm.endScope();
+        this.tvm.attachToCurrentScope(logits);
+        return logits;
+    }
+    artifactDecodeAndForward(tokenId) {
+        var _a;
+        this.tvm.beginScope();
+        let input;
+        if (((_a = this.artifact) === null || _a === void 0 ? void 0 : _a.generation.inputs) === "embeds") {
+            const embedding = this.getArtifactTextEmbeddings([tokenId]);
+            input = embedding.view([1, 1, embedding.shape[1]]);
+        }
+        else {
+            input = this.tvm.empty([1, 1], "int32", this.device).copyFrom([tokenId]);
+        }
+        const states = this.beginArtifactForward(1);
+        const result = this.decoding(input, ...states, this.params);
+        this.endArtifactForward(states);
+        this.filledKVCacheLength += 1;
+        const logits = this.tvm.detachFromCurrentScope(result.get(0));
+        this.tvm.endScope();
+        this.tvm.attachToCurrentScope(logits);
+        return logits;
+    }
+    /** Begin a forward of `inputLength` positions on every state the model keeps, in the order the functions take them. */
+    beginArtifactForward(inputLength) {
+        const inputLenShape = this.tvm.makeShapeTuple([inputLength]);
+        const seqIdsTuple = this.tvm.makeShapeTuple([0]);
+        const states = this.getActiveKVStates();
+        for (const state of states) {
+            this.fKVCacheBeginForward(state, seqIdsTuple, inputLenShape);
+        }
+        return states;
+    }
+    endArtifactForward(states) {
+        for (let i = states.length - 1; i >= 0; --i) {
+            this.fKVCacheEndForward(states[i]);
         }
     }
     /**
@@ -10884,9 +13558,8 @@ class LLMChatPipeline {
         this.logitsOnCPU.copyFrom(logits);
         return this.logitsOnCPU;
     }
-    sampleTokenFromLogits(logitsOnGPU, genConfig) {
+    sampleFromRawLogits(logitsOnGPU, genConfig) {
         return __awaiter(this, void 0, void 0, function* () {
-            var _a;
             // 0. Get value of temperature, top_p, and various penalties, possibly overridden by genConfig
             // Also load other genConfig items like logit_bias. Consume all fields of `genConfig` here.
             function _hasValue(value) {
@@ -10951,27 +13624,24 @@ class LLMChatPipeline {
                 }
             }
             // Check range validity
-            if (top_p <= 0 || top_p > 1) {
-                throw new RangeError("top_p", 0, 1);
+            if (!(top_p > 0 && top_p <= 1)) {
+                throw new RangeError$1("top_p", 0, 1);
             }
-            if (temperature < 0) {
+            if (!(temperature >= 0)) {
                 throw new MinValueError("temperature", 0);
             }
-            if (repetition_penalty <= 0) {
+            if (!(repetition_penalty > 0)) {
                 throw new MinValueError("repetition_penalty", 0);
             }
-            if (frequency_penalty &&
-                (frequency_penalty < -2 || frequency_penalty > 2.0)) {
-                throw new RangeError("frequency_penalty", -2, 2.0);
+            if (!(frequency_penalty >= -2 && frequency_penalty <= 2.0)) {
+                throw new RangeError$1("frequency_penalty", -2, 2.0);
             }
-            if (presence_penalty &&
-                (presence_penalty < -2 || presence_penalty > 2.0)) {
-                throw new RangeError("presence_penalty", -2, 2.0);
+            if (!(presence_penalty >= -2 && presence_penalty <= 2.0)) {
+                throw new RangeError$1("presence_penalty", -2, 2.0);
             }
             const outputTokenBegin = performance.now();
-            const grammarConstrained = (response_format === null || response_format === void 0 ? void 0 : response_format.type) === "json_object" ||
-                (response_format === null || response_format === void 0 ? void 0 : response_format.type) === "grammar" ||
-                (response_format === null || response_format === void 0 ? void 0 : response_format.type) === "structural_tag";
+            this.pendingSampleOutputTokenBegin = outputTokenBegin;
+            const grammarConstrained = this.isGrammarConstrained(response_format);
             // 0. Update logitsOnGPU with on-GPU grammar bitmasking
             if (grammarConstrained) {
                 const grammarBitmaskBegin = performance.now();
@@ -11135,6 +13805,7 @@ class LLMChatPipeline {
             sampledToken = sampledTokensHost.toArray()[0];
             sampledTokensHost.dispose();
             if (sampledToken < 0) {
+                this.pendingSampleOutputTokenBegin = undefined;
                 throw new Error("InternalError: failed to sample a valid token.");
             }
             if (logprobs && top_logprobs > 0) {
@@ -11144,26 +13815,6 @@ class LLMChatPipeline {
                 const sampleEnd = performance.now();
                 const sampleTimeSpent = (sampleEnd - sampleBegin) / 1e3;
                 this.curRoundLatencyBreakdown.sampleTime.push(sampleTimeSpent);
-            }
-            // 5. Update logit processor
-            (_a = this.logitProcessor) === null || _a === void 0 ? void 0 : _a.processSampledToken(sampledToken);
-            // 6. Update grammar matcher with new token
-            if (grammarConstrained) {
-                if (this.grammarMatcher === undefined) {
-                    throw Error("Expect grammar matcher to be initialized.");
-                }
-                const tAcceptStart = performance.now();
-                const accepted = this.grammarMatcher.acceptToken(sampledToken);
-                this.curRoundGrammarPerTokenTotalTime +=
-                    (performance.now() - tAcceptStart) / 1e3;
-                if (!accepted) {
-                    throw Error("Grammar matcher rejected the newly sampled token.");
-                }
-            }
-            if (genConfig === null || genConfig === void 0 ? void 0 : genConfig.enable_latency_breakdown) {
-                const outputTokenEnd = performance.now();
-                const outputTokenTimeSpent = (outputTokenEnd - outputTokenBegin) / 1e3;
-                this.curRoundLatencyBreakdown.totalTime.push(outputTokenTimeSpent);
             }
             return sampledToken;
         });
@@ -11308,6 +13959,42 @@ class LLMChatPipeline {
         return __awaiter(this, void 0, void 0, function* () {
             const tstart = performance.now();
             this.tvm.beginScope();
+            if (this.artifact !== undefined) {
+                if (inputIds.length === 0) {
+                    throw new Error("inputIds must not be empty");
+                }
+                let logitsOnGPU;
+                if (isPrefill) {
+                    for (let start = 0; start < inputIds.length;) {
+                        const tokenIds = inputIds.slice(start, start + this.prefillChunkSize);
+                        logitsOnGPU = this.artifactPrefillAndForward(this.getArtifactTextEmbeddings(tokenIds), tokenIds, new Array(tokenIds.length).fill(0));
+                        start += tokenIds.length;
+                    }
+                }
+                else {
+                    if (inputIds.length !== 1) {
+                        throw new Error("Artifact decode expects exactly one token ID");
+                    }
+                    logitsOnGPU = this.artifactDecodeAndForward(inputIds[0]);
+                }
+                const nextToken = yield this.sampleFromRawLogits(logitsOnGPU);
+                this.commitSamplerState(nextToken, undefined);
+                this.tvm.endScope();
+                const tend = performance.now();
+                if (isPrefill) {
+                    this.prefillTotalTime += (tend - tstart) / 1e3;
+                    this.prefillTotalTokens += inputIds.length;
+                    this.curRoundPrefillTotalTokens += inputIds.length;
+                    this.curRoundPrefillTotalTime += (tend - tstart) / 1e3;
+                }
+                else {
+                    this.decodingTotalTime += (tend - tstart) / 1e3;
+                    this.decodingTotalTokens += 1;
+                    this.curRoundDecodingTotalTokens += 1;
+                    this.curRoundDecodingTotalTime += (tend - tstart) / 1e3;
+                }
+                return nextToken;
+            }
             // 1. Chunk inputData if needed
             const inputData = [inputIds];
             const retGetChunks = getChunkedPrefillInputData(inputData, this.prefillChunkSize, () => 0);
@@ -11325,7 +14012,8 @@ class LLMChatPipeline {
                 }
             }
             // 3. Sample next token
-            const nextToken = yield this.sampleTokenFromLogits(logitsOnGPU);
+            const nextToken = yield this.sampleFromRawLogits(logitsOnGPU);
+            this.commitSamplerState(nextToken);
             this.tvm.endScope();
             // 4. Stats
             const tend = performance.now();
@@ -11343,6 +14031,98 @@ class LLMChatPipeline {
                 this.curRoundDecodingTotalTime += (tend - tstart) / 1e3;
             }
             return nextToken;
+        });
+    }
+    forwardKnownTokens(inputIds, isPrefill) {
+        return __awaiter(this, void 0, void 0, function* () {
+            if (inputIds.length === 0) {
+                return undefined;
+            }
+            const tstart = performance.now();
+            this.tvm.beginScope();
+            const inputData = [inputIds];
+            const retGetChunks = getChunkedPrefillInputData(inputData, this.prefillChunkSize, () => 0);
+            const chunks = retGetChunks[0];
+            const chunkLens = retGetChunks[1];
+            let lastLogits;
+            try {
+                for (let i = 0; i < chunks.length; i++) {
+                    const chunk = chunks[i];
+                    const chunkLen = chunkLens[i];
+                    const prevFilledLen = this.filledKVCacheLength;
+                    const tokenIds = chunk.flat();
+                    const logits = this.artifact === undefined
+                        ? yield this.embedAndForward(chunk, chunkLen)
+                        : this.artifactPrefillAndForward(this.getArtifactTextEmbeddings(tokenIds), tokenIds, new Array(tokenIds.length).fill(0));
+                    if (this.filledKVCacheLength !== prevFilledLen + chunkLen) {
+                        throw new Error("Internal Error: filledKVCacheLength does not match expected value.");
+                    }
+                    if (i === chunks.length - 1) {
+                        lastLogits = this.tvm.detachFromCurrentScope(logits);
+                    }
+                }
+            }
+            finally {
+                this.tvm.endScope();
+            }
+            const tend = performance.now();
+            if (isPrefill) {
+                this.prefillTotalTime += (tend - tstart) / 1e3;
+                this.prefillTotalTokens += inputIds.length;
+                this.curRoundPrefillTotalTokens += inputIds.length;
+                this.curRoundPrefillTotalTime += (tend - tstart) / 1e3;
+            }
+            return lastLogits;
+        });
+    }
+    replayGenerationTokens(promptTokenIds, assistantPrefixTokenIds, generatedTokens, genConfig) {
+        return __awaiter(this, void 0, void 0, function* () {
+            if (this.resetStatsPerPrefill) {
+                this.resetRuntimeStats();
+            }
+            this.resetChat();
+            this.setConversation(getConversation(this.config.conv_template, this.config.conv_config, true));
+            this.resetGenerationRoundState();
+            this.stopTriggered = false;
+            this.finishReason = undefined;
+            const grammarMatcherInitPromise = this.prepareGrammarMatcherForSampling(genConfig);
+            const promptLogits = yield this.forwardKnownTokens(promptTokenIds, true);
+            try {
+                yield Promise.all([this.device.sync(), grammarMatcherInitPromise]);
+                this.outputIds.push(...assistantPrefixTokenIds);
+                if (generatedTokens.length === 0) {
+                    if (promptLogits === undefined) {
+                        throw new Error("Cannot resume from an empty prompt token record.");
+                    }
+                    const tokenId = yield this.sampleFromRawLogits(promptLogits, genConfig);
+                    const sampledToken = {
+                        source: "prefill",
+                        tokenId,
+                        globalTokenPos: promptTokenIds.length,
+                    };
+                    const committedToken = this.commitSampledStep(sampledToken, genConfig);
+                    return {
+                        replayedTokens: 0,
+                        sampledFromCheckpointLogits: false,
+                        sampledToken,
+                        committedToken,
+                    };
+                }
+                for (let i = 0; i < generatedTokens.length; i++) {
+                    if (i > 0) {
+                        const logits = yield this.forwardDecodeToken(generatedTokens[i - 1].tokenId);
+                        logits.dispose();
+                    }
+                    this.commitSampledToken(generatedTokens[i].tokenId, genConfig, "decode");
+                }
+                return {
+                    replayedTokens: generatedTokens.length,
+                    sampledFromCheckpointLogits: false,
+                };
+            }
+            finally {
+                promptLogits === null || promptLogits === void 0 ? void 0 : promptLogits.dispose();
+            }
         });
     }
     /**
@@ -11411,14 +14191,21 @@ class LLMChatPipeline {
             const prefillChunk = [tokens];
             const prefillChunkLen = tokens.length;
             const prefillStart = performance.now();
-            yield this.embedAndForward(prefillChunk, prefillChunkLen);
+            if (this.artifact === undefined) {
+                yield this.embedAndForward(prefillChunk, prefillChunkLen);
+            }
+            else {
+                this.artifactPrefillAndForward(this.getArtifactTextEmbeddings(tokens), tokens, new Array(tokens.length).fill(0));
+            }
             this.tvm.endScope();
             yield this.device.sync();
             const decodingStart = performance.now();
             this.tvm.beginScope();
             const decodeChunk = [[6234]];
             const decodeChunkLen = 1;
-            const logitsOnCPU = this.updateLogitsOnCPU(yield this.embedAndForward(decodeChunk, decodeChunkLen));
+            const logitsOnCPU = this.updateLogitsOnCPU(this.artifact === undefined
+                ? yield this.embedAndForward(decodeChunk, decodeChunkLen)
+                : this.artifactDecodeAndForward(6234));
             yield this.device.sync();
             this.tvm.endScope();
             const decodingEnd = performance.now();
@@ -11471,7 +14258,7 @@ const ChatCompletionRequestUnsupportedFields = []; // all supported as of now
  * @param currentModelId The current model loaded that will perform this request.
  * @param currentModelType The type of the model loaded, decide what requests can be handled.
  */
-function postInitAndCheckFields$2(request, currentModelId, currentModelType) {
+function postInitAndCheckFields$2(request, currentModelId, currentModelType, supportedInputKinds) {
     var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q;
     // Generation-related checks and post inits are in `postInitAndCheckGenerationConfigValues()`
     // 1. Check unsupported fields in request
@@ -11488,7 +14275,8 @@ function postInitAndCheckFields$2(request, currentModelId, currentModelType) {
     request.messages.forEach((message, index) => {
         // Check content array messages (that are not simple string)
         if (message.role === "user" && typeof message.content !== "string") {
-            if (currentModelType !== ModelType.VLM) {
+            if (supportedInputKinds === undefined &&
+                currentModelType !== ModelType.VLM) {
                 // Only VLM can handle non-string content (i.e. message with image)
                 throw new UserMessageContentErrorForNonVLM(currentModelId, ModelType[currentModelType], message.content);
             }
@@ -11496,6 +14284,10 @@ function postInitAndCheckFields$2(request, currentModelId, currentModelType) {
             for (let i = 0; i < message.content.length; i++) {
                 const curContent = message.content[i];
                 if (curContent.type === "image_url") {
+                    if (supportedInputKinds !== undefined &&
+                        !supportedInputKinds.has("image")) {
+                        throw new UnsupportedContentPartError(currentModelId, curContent.type);
+                    }
                     // Do not support image_url.detail
                     const detail = curContent.image_url.detail;
                     if (detail !== undefined && detail !== null) {
@@ -11505,6 +14297,25 @@ function postInitAndCheckFields$2(request, currentModelId, currentModelType) {
                     const url = curContent.image_url.url;
                     if (!url.startsWith("data:image") && !url.startsWith("http")) {
                         throw new UnsupportedImageURLError(url);
+                    }
+                }
+                else if (curContent.type === "input_audio") {
+                    if (supportedInputKinds === undefined ||
+                        !supportedInputKinds.has("audio")) {
+                        throw new UnsupportedContentPartError(currentModelId, curContent.type);
+                    }
+                    if (curContent.input_audio.format === "pcm_f32") {
+                        if (!(curContent.input_audio.data instanceof Float32Array)) {
+                            throw new TypeError("pcm_f32 input_audio.data must be a Float32Array");
+                        }
+                        if (!Number.isSafeInteger(curContent.input_audio.sample_rate) ||
+                            curContent.input_audio.sample_rate <= 0) {
+                            throw new TypeError("pcm_f32 input_audio.sample_rate must be a positive integer");
+                        }
+                    }
+                    else if (typeof curContent.input_audio.data !== "string" ||
+                        /^https?:/i.test(curContent.input_audio.data)) {
+                        throw new TypeError("WAV input_audio.data must be raw base64 or a WAV data URL");
                     }
                 }
                 else {
@@ -11645,15 +14456,22 @@ const CompletionCreateParamsUnsupportedFields = [
     "user",
     "best_of",
 ];
+function rejectCompletionResumable(request) {
+    const extraBody = request.extra_body;
+    if ((extraBody === null || extraBody === void 0 ? void 0 : extraBody.resumable) !== undefined && extraBody.resumable !== null) {
+        throw new UnsupportedFieldsError(["extra_body.resumable"], "CompletionCreateParams");
+    }
+}
 /**
  * Post init and verify whether the input of the request is valid. Thus, this function can throw
  * error or in-place update request.
  * @param request User's input request.
  * @param currentModelId The current model loaded that will perform this request.
  */
-function postInitAndCheckFields$1(request, 
+function postInitAndCheckFields$1(request,
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 currentModelId) {
+    rejectCompletionResumable(request);
     // 1. Check unsupported fields in request
     const unsupported = [];
     CompletionCreateParamsUnsupportedFields.forEach((field) => {
@@ -11713,7 +14531,7 @@ const EmbeddingCreateParamsUnsupportedFields = [
     "dimensions",
     "user",
 ];
-function postInitAndCheckFields(request, 
+function postInitAndCheckFields(request,
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 currentModelId) {
     // 1. Check unsupported fields in request
@@ -11826,7 +14644,7 @@ function requireLib () {
 
 		  var Module = (() => {
 		    var _scriptDir = (typeof document === 'undefined' && typeof location === 'undefined' ? "MLC_DUMMY_PATH" : typeof document === 'undefined' ? location.href : (document.currentScript && document.currentScript.tagName.toUpperCase() === 'SCRIPT' && document.currentScript.src || new URL('web-llm.js', document.baseURI).href));
-		    
+
 		    return (
 		  async function(moduleArg = {}) {
 
@@ -11981,21 +14799,27 @@ function requireLib () {
 		  Object.defineProperty(exports, '__esModule', { value: true });
 
 		}));
-		
+
 	} (lib$1, lib$1.exports));
 	return lib$1.exports;
 }
 
 var libExports = requireLib();
 
-function getCacheAccessOptions(scope, appConfig) {
-    return {
-        cacheScope: scope,
+function getCacheOptions(appConfig) {
+    const options = {
         cacheType: getCacheBackend(appConfig),
     };
+    if (appConfig.opfsAccessMode !== undefined) {
+        options.opfsAccessMode = appConfig.opfsAccessMode;
+    }
+    return options;
+}
+function getTensorCacheAccessOptions(scope, appConfig) {
+    return Object.assign({ cacheScope: scope }, getCacheOptions(appConfig));
 }
 function createScopedArtifactCache(scope, appConfig) {
-    return libExports$2.createArtifactCache(scope, getCacheAccessOptions(scope, appConfig));
+    return libExports$2.createArtifactCache(scope, getCacheOptions(appConfig));
 }
 function maybeVerifyTokenizerIntegrity(data, filename, url, integrity) {
     return __awaiter(this, void 0, void 0, function* () {
@@ -12020,7 +14844,7 @@ function hasModelInCache(modelId, appConfig) {
         }
         const modelRecord = findModelRecord(modelId, appConfig);
         const modelUrl = cleanModelUrl(modelRecord.model);
-        return libExports$2.hasTensorInCache(modelUrl, getCacheAccessOptions("webllm/model", appConfig));
+        return libExports$2.hasTensorInCache(modelUrl, getTensorCacheAccessOptions("webllm/model", appConfig));
     });
 }
 function deleteModelAllInfoInCache(modelId, appConfig) {
@@ -12046,7 +14870,7 @@ function deleteModelInCache(modelId, appConfig) {
         const modelRecord = findModelRecord(modelId, appConfig);
         const modelUrl = cleanModelUrl(modelRecord.model);
         const modelCache = createScopedArtifactCache("webllm/model", appConfig);
-        yield libExports$2.deleteTensorCache(modelUrl, getCacheAccessOptions("webllm/model", appConfig));
+        yield libExports$2.deleteTensorCache(modelUrl, getTensorCacheAccessOptions("webllm/model", appConfig));
         yield modelCache.deleteInCache(new URL("tokenizer.model", modelUrl).href);
         yield modelCache.deleteInCache(new URL("tokenizer.json", modelUrl).href);
     });
@@ -12062,6 +14886,9 @@ function deleteChatConfigInCache(modelId, appConfig) {
         const modelUrl = cleanModelUrl(modelRecord.model);
         const configUrl = new URL("mlc-chat-config.json", modelUrl).href;
         yield configCache.deleteInCache(configUrl);
+        if (modelRecord.model_manifest !== undefined) {
+            yield configCache.deleteInCache(new URL(modelRecord.model_manifest, modelUrl).href);
+        }
     });
 }
 function deleteModelWasmInCache(modelId, appConfig) {
@@ -12333,6 +15160,2895 @@ class EmbeddingPipeline {
     }
 }
 
+const LOCK_POLL_INTERVAL_MS = 25; // OPFS exposes no wait primitive for sync access handle locks
+const processLocks = new Map();
+const WEB_LOCK_PREFIX = "webllm-resumable:";
+class CrossContextLockUnavailableError extends Error {
+    constructor(path) {
+        super(`Cross-context locking is unavailable for resumable storage: ${path}`);
+        this.name = "CrossContextLockUnavailableError";
+    }
+}
+function sleep(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
+function splitPath(path) {
+    if (path.includes("\0")) {
+        throw new Error("OPFS paths cannot contain null bytes");
+    }
+    const parts = [];
+    for (const part of path.split("/")) {
+        if (part === "" || part === ".") {
+            continue;
+        }
+        if (part === "..") {
+            throw new Error("OPFS paths cannot contain '..'");
+        }
+        parts.push(part);
+    }
+    return parts;
+}
+function filePath(path) {
+    const parts = splitPath(path);
+    const name = parts.pop();
+    if (name === undefined) {
+        throw new Error("OPFS file path cannot be the root directory");
+    }
+    return { dirs: parts, name };
+}
+function errorName(err) {
+    return err === null || err === void 0 ? void 0 : err.name;
+}
+function isNotFound(err) {
+    return errorName(err) === "NotFoundError";
+}
+function isSyncLockBusy(err) {
+    return errorName(err) === "NoModificationAllowedError";
+}
+function isSyncUnavailable(err) {
+    if (err instanceof TypeError) {
+        return true;
+    }
+    const name = errorName(err);
+    return name === "InvalidStateError" || name === "NotSupportedError";
+}
+function acquireProcessLock(key, waitForLock) {
+    return __awaiter(this, void 0, void 0, function* () {
+        const previous = processLocks.get(key);
+        if (previous !== undefined && !waitForLock) {
+            return undefined;
+        }
+        let releaseCurrent;
+        const current = new Promise((resolve) => {
+            releaseCurrent = resolve;
+        });
+        const tail = (previous !== null && previous !== void 0 ? previous : Promise.resolve()).then(() => current, () => current);
+        processLocks.set(key, tail);
+        yield (previous === null || previous === void 0 ? void 0 : previous.catch(() => undefined));
+        let released = false;
+        return () => {
+            if (released) {
+                return;
+            }
+            released = true;
+            releaseCurrent();
+            if (processLocks.get(key) === tail) {
+                processLocks.delete(key);
+            }
+        };
+    });
+}
+function getWebLockManager() {
+    var _a;
+    return (_a = globalThis.navigator) === null || _a === void 0 ? void 0 : _a.locks;
+}
+function acquireWebLock(key, waitForLock) {
+    return __awaiter(this, void 0, void 0, function* () {
+        const manager = getWebLockManager();
+        if (manager === undefined) {
+            return undefined;
+        }
+        let releaseHold;
+        const hold = new Promise((resolve) => {
+            releaseHold = resolve;
+        });
+        let settle;
+        let reject;
+        let settled = false;
+        const acquired = new Promise((resolve, rej) => {
+            settle = resolve;
+            reject = rej;
+        });
+        void manager
+            .request(`${WEB_LOCK_PREFIX}${key}`, Object.assign({ mode: "exclusive" }, (waitForLock ? {} : { ifAvailable: true })), (lock) => __awaiter(this, void 0, void 0, function* () {
+            if (lock === null) {
+                settled = true;
+                settle(undefined);
+                return;
+            }
+            let released = false;
+            settled = true;
+            settle(() => {
+                if (!released) {
+                    released = true;
+                    releaseHold();
+                }
+            });
+            yield hold;
+        }))
+            .catch((err) => {
+            if (!settled) {
+                reject(err);
+            }
+        });
+        return acquired;
+    });
+}
+function getNavigatorOPFSRoot() {
+    var _a;
+    const storage = (_a = globalThis.navigator) === null || _a === void 0 ? void 0 : _a.storage;
+    if ((storage === null || storage === void 0 ? void 0 : storage.getDirectory) === undefined) {
+        throw new Error("OPFS is unavailable in this environment");
+    }
+    return storage.getDirectory();
+}
+function collectNames(dir) {
+    return __awaiter(this, void 0, void 0, function* () {
+        var _a, e_1, _b, _c, _d, e_2, _e, _f;
+        const iterableDir = dir;
+        const names = [];
+        if (iterableDir.keys !== undefined) {
+            try {
+                for (var _g = true, _h = __asyncValues(iterableDir.keys()), _j; _j = yield _h.next(), _a = _j.done, !_a; _g = true) {
+                    _c = _j.value;
+                    _g = false;
+                    const name = _c;
+                    names.push(name);
+                }
+            }
+            catch (e_1_1) { e_1 = { error: e_1_1 }; }
+            finally {
+                try {
+                    if (!_g && !_a && (_b = _h.return)) yield _b.call(_h);
+                }
+                finally { if (e_1) throw e_1.error; }
+            }
+        }
+        else if (iterableDir.entries !== undefined) {
+            try {
+                for (var _k = true, _l = __asyncValues(iterableDir.entries()), _m; _m = yield _l.next(), _d = _m.done, !_d; _k = true) {
+                    _f = _m.value;
+                    _k = false;
+                    const [name] = _f;
+                    names.push(name);
+                }
+            }
+            catch (e_2_1) { e_2 = { error: e_2_1 }; }
+            finally {
+                try {
+                    if (!_k && !_d && (_e = _l.return)) yield _e.call(_l);
+                }
+                finally { if (e_2) throw e_2.error; }
+            }
+        }
+        else {
+            throw new Error("OPFS directory listing is unavailable");
+        }
+        names.sort();
+        return names;
+    });
+}
+class BrowserOPFSFileStore {
+    constructor(root) {
+        this.root =
+            root === undefined ? getNavigatorOPFSRoot() : Promise.resolve(root);
+        // A streaming request may never be consumed. Observe initialization failure
+        // now; storage operations still receive the original rejection when awaited.
+        void this.root.catch(() => undefined);
+    }
+    read(path) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const file = yield this.getFile(path, false);
+            if (file === undefined) {
+                return undefined;
+            }
+            return (yield file.getFile()).arrayBuffer();
+        });
+    }
+    write(path, data) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const file = (yield this.getFile(path, true));
+            const writable = yield this.createWritable(file);
+            if (writable === undefined) {
+                throw new Error("OPFS write requires createWritable");
+            }
+            try {
+                yield writable.write(data);
+            }
+            catch (err) {
+                // Abandon partial writes without masking the original storage failure.
+                yield writable.abort().catch(() => undefined);
+                throw err;
+            }
+            yield writable.close();
+        });
+    }
+    append(path, data) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const file = (yield this.getFile(path, true));
+            const writable = yield this.createWritable(file, {
+                keepExistingData: true,
+            });
+            if (writable === undefined) {
+                throw new Error("OPFS append requires createWritable");
+            }
+            try {
+                const size = (yield file.getFile()).size;
+                yield writable.seek(size);
+                yield writable.write(data);
+            }
+            catch (err) {
+                yield writable.abort().catch(() => undefined);
+                throw err;
+            }
+            yield writable.close();
+        });
+    }
+    remove(path, opts) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const parts = splitPath(path);
+            if (parts.length === 0) {
+                throw new Error("OPFS remove path cannot be the root directory");
+            }
+            const name = parts.pop();
+            const dir = yield this.getDirectory(parts, false);
+            if (dir === undefined) {
+                return;
+            }
+            try {
+                yield dir.removeEntry(name, { recursive: (opts === null || opts === void 0 ? void 0 : opts.recursive) === true });
+            }
+            catch (err) {
+                if (!isNotFound(err)) {
+                    throw err;
+                }
+            }
+        });
+    }
+    list(path) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const dir = yield this.getDirectory(splitPath(path), false);
+            if (dir === undefined) {
+                return [];
+            }
+            return collectNames(dir);
+        });
+    }
+    mkdir(path) {
+        return __awaiter(this, void 0, void 0, function* () {
+            yield this.getDirectory(splitPath(path), true);
+        });
+    }
+    lock(path) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const release = yield this.acquireLock(path, true);
+            if (release === undefined) {
+                throw new Error(`Unable to acquire OPFS lock: ${path}`);
+            }
+            return release;
+        });
+    }
+    tryLock(path) {
+        return __awaiter(this, void 0, void 0, function* () {
+            return this.acquireLock(path, false);
+        });
+    }
+    acquireLock(path, waitForLock) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const key = splitPath(path).join("/");
+            if (key === "") {
+                throw new Error("OPFS lock path cannot be the root directory");
+            }
+            const releaseProcessLock = yield acquireProcessLock(key, waitForLock);
+            if (releaseProcessLock === undefined) {
+                return undefined;
+            }
+            try {
+                if (getWebLockManager() !== undefined) {
+                    const releaseWebLock = yield acquireWebLock(key, waitForLock);
+                    if (releaseWebLock === undefined) {
+                        releaseProcessLock();
+                        return undefined;
+                    }
+                    let released = false;
+                    return () => {
+                        if (released) {
+                            return;
+                        }
+                        released = true;
+                        releaseWebLock();
+                        releaseProcessLock();
+                    };
+                }
+                const file = yield this.getFile(key, true);
+                if (file === undefined) {
+                    throw new Error(`Unable to create OPFS lock file: ${path}`);
+                }
+                const accessResult = yield this.createSyncAccessHandle(file, waitForLock);
+                if (accessResult.state === "busy") {
+                    releaseProcessLock();
+                    return undefined;
+                }
+                if (accessResult.state === "unavailable") {
+                    releaseProcessLock();
+                    throw new CrossContextLockUnavailableError(path);
+                }
+                if (accessResult.state !== "acquired") {
+                    releaseProcessLock();
+                    return undefined;
+                }
+                const access = accessResult.access;
+                let released = false;
+                return () => {
+                    if (released) {
+                        return;
+                    }
+                    released = true;
+                    access === null || access === void 0 ? void 0 : access.close();
+                    releaseProcessLock();
+                };
+            }
+            catch (err) {
+                releaseProcessLock();
+                throw err;
+            }
+        });
+    }
+    getDirectory(parts, create) {
+        return __awaiter(this, void 0, void 0, function* () {
+            let dir = yield this.root;
+            for (const part of parts) {
+                try {
+                    dir = yield dir.getDirectoryHandle(part, { create });
+                }
+                catch (err) {
+                    if (!create && isNotFound(err)) {
+                        return undefined;
+                    }
+                    throw err;
+                }
+            }
+            return dir;
+        });
+    }
+    getFile(path, create) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const { dirs, name } = filePath(path);
+            const dir = yield this.getDirectory(dirs, create);
+            if (dir === undefined) {
+                return undefined;
+            }
+            try {
+                return yield dir.getFileHandle(name, { create });
+            }
+            catch (err) {
+                if (!create && isNotFound(err)) {
+                    return undefined;
+                }
+                throw err;
+            }
+        });
+    }
+    createWritable(file, opts) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const createWritable = file.createWritable;
+            if (createWritable === undefined) {
+                return undefined;
+            }
+            return createWritable.call(file, opts);
+        });
+    }
+    createSyncAccessHandle(file, waitForLock) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const create = file.createSyncAccessHandle;
+            while (true) {
+                try {
+                    return { state: "acquired", access: yield create.call(file) };
+                }
+                catch (err) {
+                    if (isSyncLockBusy(err)) {
+                        if (waitForLock) {
+                            yield sleep(LOCK_POLL_INTERVAL_MS);
+                            continue;
+                        }
+                        return { state: "busy" };
+                    }
+                    if (isSyncUnavailable(err)) {
+                        return { state: "unavailable" };
+                    }
+                    throw err;
+                }
+            }
+        });
+    }
+}
+function createOPFSFileStore(root) {
+    return new BrowserOPFSFileStore(root);
+}
+
+const table = new Uint32Array(256);
+for (let i = 0; i < table.length; i++) {
+    let crc = i;
+    for (let bit = 0; bit < 8; bit++) {
+        crc = (crc & 1) === 1 ? (crc >>> 1) ^ 0x82f63b78 : crc >>> 1;
+    }
+    table[i] = crc >>> 0;
+}
+/** CRC32C shared by journal records and checkpoint payloads. */
+function crc32c(data) {
+    let crc = 0xffffffff;
+    for (const value of data) {
+        crc = table[(crc ^ value) & 0xff] ^ (crc >>> 8);
+    }
+    return (crc ^ 0xffffffff) >>> 0;
+}
+
+class ResumableInjectedFault extends Error {
+    constructor(point, context = {}) {
+        super(`Injected resumable fault at ${point}`);
+        this.point = point;
+        this.context = context;
+        this.name = "ResumableInjectedFault";
+    }
+}
+function isResumableInjectedFault(err) {
+    return err instanceof ResumableInjectedFault;
+}
+function triggerResumableFault(point_1) {
+    return __awaiter(this, arguments, void 0, function* (point, context = {}) {
+        yield (void 0 );
+    });
+}
+
+const JOURNAL_MAGIC = 0x574c4c4a;
+const HEADER_SIZE = 30;
+const RECORD_TYPE_OFFSET = 4;
+const SEQ_NO_OFFSET = 6;
+const CREATED_AT_MS_OFFSET = 14;
+const PAYLOAD_LEN_OFFSET = 22;
+const PAYLOAD_CRC32C_OFFSET = 26;
+const textEncoder$2 = new TextEncoder();
+const textDecoder$2 = new TextDecoder();
+var JournalRecordType;
+(function (JournalRecordType) {
+    JournalRecordType[JournalRecordType["SessionBegin"] = 1] = "SessionBegin";
+    JournalRecordType[JournalRecordType["PromptTokens"] = 2] = "PromptTokens";
+    JournalRecordType[JournalRecordType["AssistantPrefixTokens"] = 3] = "AssistantPrefixTokens";
+    JournalRecordType[JournalRecordType["GenerationConfig"] = 4] = "GenerationConfig";
+    JournalRecordType[JournalRecordType["GeneratedToken"] = 5] = "GeneratedToken";
+    JournalRecordType[JournalRecordType["CheckpointCommit"] = 6] = "CheckpointCommit";
+    JournalRecordType[JournalRecordType["GenerationFinished"] = 7] = "GenerationFinished";
+    JournalRecordType[JournalRecordType["GenerationAborted"] = 8] = "GenerationAborted";
+    JournalRecordType[JournalRecordType["EngineError"] = 9] = "EngineError";
+})(JournalRecordType || (JournalRecordType = {}));
+function bytes$1(data) {
+    const encoded = textEncoder$2.encode(data);
+    const copy = new Uint8Array(encoded.byteLength);
+    copy.set(encoded);
+    return copy;
+}
+function payloadBytes(payload) {
+    return bytes$1(JSON.stringify(payload));
+}
+function copyRecordBytes(header, payload) {
+    const out = new Uint8Array(HEADER_SIZE + payload.byteLength);
+    out.set(new Uint8Array(header), 0);
+    out.set(payload, HEADER_SIZE);
+    return out.buffer;
+}
+function parsePayload(type, payload) {
+    const parsed = JSON.parse(textDecoder$2.decode(payload));
+    switch (type) {
+        case JournalRecordType.SessionBegin:
+            return parsed;
+        case JournalRecordType.PromptTokens:
+        case JournalRecordType.AssistantPrefixTokens:
+            return parsed;
+        case JournalRecordType.GenerationConfig:
+            return parsed;
+        case JournalRecordType.GeneratedToken:
+            return parsed;
+        case JournalRecordType.CheckpointCommit:
+            return parsed;
+        case JournalRecordType.GenerationFinished:
+            return parsed;
+        case JournalRecordType.GenerationAborted:
+            return parsed;
+        case JournalRecordType.EngineError:
+            return parsed;
+        default:
+            throw new Error(`Unknown journal record type: ${type}`);
+    }
+}
+function encodeJournalRecord(record) {
+    const payload = payloadBytes(record.payload);
+    const header = new ArrayBuffer(HEADER_SIZE);
+    const view = new DataView(header);
+    view.setUint32(0, JOURNAL_MAGIC, true);
+    view.setUint16(RECORD_TYPE_OFFSET, record.type, true);
+    view.setBigUint64(SEQ_NO_OFFSET, BigInt(record.seqNo), true);
+    view.setBigUint64(CREATED_AT_MS_OFFSET, BigInt(record.createdAtMs), true);
+    view.setUint32(PAYLOAD_LEN_OFFSET, payload.byteLength, true);
+    view.setUint32(PAYLOAD_CRC32C_OFFSET, crc32c(payload), true);
+    return copyRecordBytes(header, payload);
+}
+function decodeJournalRecordAt(data, offset = 0) {
+    const view = new DataView(data);
+    if (offset + HEADER_SIZE > data.byteLength) {
+        throw new Error("Partial journal record header");
+    }
+    const magic = view.getUint32(offset, true);
+    if (magic !== JOURNAL_MAGIC) {
+        throw new Error("Bad journal record magic");
+    }
+    const type = view.getUint16(offset + RECORD_TYPE_OFFSET, true);
+    const seqNo = Number(view.getBigUint64(offset + SEQ_NO_OFFSET, true));
+    const createdAtMs = Number(view.getBigUint64(offset + CREATED_AT_MS_OFFSET, true));
+    const payloadLen = view.getUint32(offset + PAYLOAD_LEN_OFFSET, true);
+    const expectedCrc = view.getUint32(offset + PAYLOAD_CRC32C_OFFSET, true);
+    const payloadStart = offset + HEADER_SIZE;
+    const nextOffset = payloadStart + payloadLen;
+    if (nextOffset > data.byteLength) {
+        throw new Error("Partial journal record payload");
+    }
+    const payload = new Uint8Array(data, payloadStart, payloadLen);
+    if (crc32c(payload) !== expectedCrc) {
+        throw new Error("Journal payload CRC mismatch");
+    }
+    return {
+        record: {
+            type,
+            seqNo,
+            createdAtMs,
+            payload: parsePayload(type, payload),
+        },
+        nextOffset,
+    };
+}
+function scanJournalRecords(data) {
+    const records = [];
+    let offset = 0;
+    const view = new DataView(data);
+    while (offset < data.byteLength) {
+        if (offset + HEADER_SIZE > data.byteLength) {
+            return { records, validBytes: offset, stoppedReason: "partial_record" };
+        }
+        const payloadLen = view.getUint32(offset + PAYLOAD_LEN_OFFSET, true);
+        if (offset + HEADER_SIZE + payloadLen > data.byteLength) {
+            return { records, validBytes: offset, stoppedReason: "partial_record" };
+        }
+        const magic = view.getUint32(offset, true);
+        if (magic !== JOURNAL_MAGIC) {
+            return { records, validBytes: offset, stoppedReason: "bad_magic" };
+        }
+        const expectedCrc = view.getUint32(offset + PAYLOAD_CRC32C_OFFSET, true);
+        const payloadStart = offset + HEADER_SIZE;
+        const payload = new Uint8Array(data, payloadStart, payloadLen);
+        if (crc32c(payload) !== expectedCrc) {
+            return { records, validBytes: offset, stoppedReason: "crc_mismatch" };
+        }
+        try {
+            const decoded = decodeJournalRecordAt(data, offset);
+            records.push(decoded.record);
+            offset = decoded.nextOffset;
+        }
+        catch (_a) {
+            return { records, validBytes: offset, stoppedReason: "invalid_payload" };
+        }
+    }
+    return { records, validBytes: offset };
+}
+// Readers wait only for the current I/O operation. They do not acquire the
+// session's generation lock. The sidecar also supports sync-access locking
+// in workers without Web Locks.
+function journalLockPath(path) {
+    return `${path}.lock`;
+}
+function appendJournalRecord(store, path, record) {
+    return __awaiter(this, void 0, void 0, function* () {
+        const faultContext = {
+            path,
+            recordType: record.type,
+            seqNo: record.seqNo,
+        };
+        yield triggerResumableFault("journal.before_append", faultContext);
+        const release = yield store.lock(journalLockPath(path));
+        try {
+            yield store.append(path, encodeJournalRecord(record));
+        }
+        finally {
+            release();
+        }
+        yield triggerResumableFault("journal.after_append", faultContext);
+    });
+}
+function readJournalRecords(store, path) {
+    return __awaiter(this, void 0, void 0, function* () {
+        let release;
+        try {
+            release = yield store.lock(journalLockPath(path));
+        }
+        catch (err) {
+            // Preserve best-effort text inspection in environments that cannot lock.
+            // Persistence/continuation still require cross-context exclusion.
+            if (!(err instanceof CrossContextLockUnavailableError)) {
+                throw err;
+            }
+        }
+        let data;
+        try {
+            // File snapshots can become unreadable when a concurrent OPFS writable
+            // commits. Hold exclusion until all snapshot bytes have been materialized.
+            data = yield store.read(path);
+        }
+        finally {
+            release === null || release === void 0 ? void 0 : release();
+        }
+        if (data === undefined) {
+            return { records: [], validBytes: 0 };
+        }
+        return scanJournalRecords(data);
+    });
+}
+/**
+ * Truncate a torn or corrupt journal tail while retaining every validated
+ * record before it. Callers must hold the session lock while repairing.
+ */
+function repairJournalTail(store, path) {
+    return __awaiter(this, void 0, void 0, function* () {
+        const release = yield store.lock(journalLockPath(path));
+        try {
+            const data = yield store.read(path);
+            if (data === undefined) {
+                return { records: [], validBytes: 0 };
+            }
+            const scan = scanJournalRecords(data);
+            if (scan.stoppedReason === undefined) {
+                return scan;
+            }
+            yield store.write(path, data.slice(0, scan.validBytes));
+            return {
+                records: scan.records,
+                validBytes: scan.validBytes,
+            };
+        }
+        finally {
+            release();
+        }
+    });
+}
+
+function isObject(value) {
+    return typeof value === "object" && value !== null;
+}
+function booleanField(value, field) {
+    const fieldValue = value[field];
+    return typeof fieldValue === "boolean" ? fieldValue : undefined;
+}
+function positiveIntegerField(value, field) {
+    const fieldValue = value[field];
+    return Number.isInteger(fieldValue) && fieldValue > 0
+        ? fieldValue
+        : undefined;
+}
+function parseResumableConfig(value) {
+    if (!isObject(value) || value.enabled !== true) {
+        return undefined;
+    }
+    const sessionId = value.sessionId;
+    const checkpointIntervalTokens = positiveIntegerField(value, "checkpointIntervalTokens");
+    const checkpointPrompt = booleanField(value, "checkpointPrompt");
+    const durabilityMode = value.durabilityMode;
+    const strictPersistence = booleanField(value, "strictPersistence");
+    const storeCheckpointLogits = booleanField(value, "storeCheckpointLogits");
+    if (typeof sessionId !== "string" ||
+        checkpointIntervalTokens === undefined ||
+        checkpointPrompt === undefined ||
+        (durabilityMode !== "exact" && durabilityMode !== "relaxed") ||
+        strictPersistence === undefined ||
+        storeCheckpointLogits === undefined) {
+        return undefined;
+    }
+    return {
+        enabled: true,
+        sessionId,
+        checkpointIntervalTokens,
+        checkpointPrompt,
+        durabilityMode,
+        strictPersistence,
+        storeCheckpointLogits,
+    };
+}
+function getGenerationConfig(record) {
+    if (record.type !== JournalRecordType.GenerationConfig) {
+        return undefined;
+    }
+    const config = record.payload.config;
+    if (!isObject(config)) {
+        return undefined;
+    }
+    const generationConfig = config.generationConfig;
+    return isObject(generationConfig)
+        ? generationConfig
+        : config;
+}
+function getResumableGenerationConfig(record) {
+    if (record.type !== JournalRecordType.GenerationConfig) {
+        return undefined;
+    }
+    const config = record.payload.config;
+    if (!isObject(config)) {
+        return undefined;
+    }
+    return parseResumableConfig(config.resumable);
+}
+function hasUnsupportedGrammarReplay(genConfig) {
+    var _a;
+    const type = (_a = genConfig === null || genConfig === void 0 ? void 0 : genConfig.response_format) === null || _a === void 0 ? void 0 : _a.type;
+    return (type === "json_object" || type === "grammar" || type === "structural_tag");
+}
+function applyGeneratedTokenText(previousText, textDelta, textPrefixLength) {
+    if (textPrefixLength === undefined) {
+        return previousText + textDelta;
+    }
+    if (!Number.isInteger(textPrefixLength) ||
+        textPrefixLength < 0 ||
+        textPrefixLength > previousText.length) {
+        throw new Error(`Invalid resumable text prefix length ${textPrefixLength} for text of length ${previousText.length}.`);
+    }
+    return previousText.slice(0, textPrefixLength) + textDelta;
+}
+function summarizeReplayState(session, scan) {
+    var _a, _b, _c;
+    let modelId = (_b = (_a = session.manifest) === null || _a === void 0 ? void 0 : _a.modelId) !== null && _b !== void 0 ? _b : "";
+    let request;
+    let promptTokenIds = [];
+    let assistantPrefixTokenIds = [];
+    let generationConfig;
+    let resumableConfig;
+    let processedSeqLen = 0;
+    let finished = false;
+    let sessionBeginCount = 0;
+    let recoveredText = "";
+    const generatedTokens = [];
+    let hasPromptTokens = false;
+    let hasGenerationConfig = false;
+    let hasResumableGenerationConfig = false;
+    let unsupportedGrammarReplay = false;
+    let aborted = false;
+    let engineErrorMessage;
+    for (const record of scan.records) {
+        switch (record.type) {
+            case JournalRecordType.SessionBegin:
+                sessionBeginCount++;
+                if (sessionBeginCount > 1) {
+                    throw new Error(`Resumable session ${session.sessionId} contains multiple session-begin records.`);
+                }
+                if (record.payload.sessionId !== session.sessionId) {
+                    throw new Error(`Resumable journal session mismatch: expected ${session.sessionId}, got ${record.payload.sessionId}.`);
+                }
+                modelId = (_c = record.payload.modelId) !== null && _c !== void 0 ? _c : modelId;
+                request = record.payload.request;
+                break;
+            case JournalRecordType.PromptTokens:
+                hasPromptTokens = true;
+                promptTokenIds = [...record.payload.tokenIds];
+                processedSeqLen = Math.max(processedSeqLen, promptTokenIds.length);
+                break;
+            case JournalRecordType.AssistantPrefixTokens:
+                assistantPrefixTokenIds = [...record.payload.tokenIds];
+                break;
+            case JournalRecordType.GenerationConfig:
+                hasGenerationConfig = true;
+                generationConfig = getGenerationConfig(record);
+                resumableConfig = getResumableGenerationConfig(record);
+                hasResumableGenerationConfig || (hasResumableGenerationConfig = resumableConfig !== undefined);
+                unsupportedGrammarReplay || (unsupportedGrammarReplay = hasUnsupportedGrammarReplay(generationConfig));
+                break;
+            case JournalRecordType.GeneratedToken:
+                recoveredText = applyGeneratedTokenText(recoveredText, record.payload.textDelta, record.payload.textPrefixLength);
+                generatedTokens.push({
+                    globalTokenPos: record.payload.globalTokenPos,
+                    tokenId: record.payload.tokenId,
+                    textDelta: record.payload.textDelta,
+                    textPrefixLength: record.payload.textPrefixLength,
+                    rngState: record.payload.rngState,
+                });
+                processedSeqLen = Math.max(processedSeqLen, record.payload.globalTokenPos + 1);
+                break;
+            case JournalRecordType.GenerationFinished:
+                finished = true;
+                break;
+            case JournalRecordType.GenerationAborted:
+                aborted = true;
+                break;
+            case JournalRecordType.EngineError:
+                engineErrorMessage = record.payload.message;
+                break;
+        }
+    }
+    return {
+        sessionId: session.sessionId,
+        modelId,
+        request,
+        promptTokenIds,
+        assistantPrefixTokenIds,
+        generatedTokens,
+        recoveredText,
+        emittedTokens: generatedTokens.length,
+        processedSeqLen,
+        generationConfig,
+        resumableConfig,
+        scanStoppedReason: scan.stoppedReason,
+        finished,
+        recordCount: scan.records.length,
+        hasPromptTokens,
+        hasGenerationConfig,
+        hasResumableGenerationConfig,
+        hasUnsupportedGrammarReplay: unsupportedGrammarReplay,
+        aborted,
+        engineErrorMessage,
+    };
+}
+function readResumableReplayState(files, session) {
+    return __awaiter(this, void 0, void 0, function* () {
+        const scan = yield readJournalRecords(files, session.paths.journalPath);
+        return summarizeReplayState(session, scan);
+    });
+}
+
+/** Invalid stored bytes, as distinct from a transient storage read failure. */
+class InvalidCheckpointError extends Error {
+}
+const META_FILE = "meta.json";
+const NEXT_LOGITS_FILE = "next_logits.f16";
+const COMPLETE_FILE$1 = "complete";
+const textEncoder$1 = new TextEncoder();
+const textDecoder$1 = new TextDecoder();
+function bytes(data) {
+    const view = ArrayBuffer.isView(data)
+        ? new Uint8Array(data.buffer, data.byteOffset, data.byteLength)
+        : new Uint8Array(data);
+    return new Uint8Array(view);
+}
+function crc32cHex(data) {
+    return crc32c(data).toString(16).padStart(8, "0");
+}
+function encodeText$1(data) {
+    const encoded = textEncoder$1.encode(data);
+    const copy = new Uint8Array(encoded.byteLength);
+    copy.set(encoded);
+    return copy.buffer;
+}
+function parseCheckpointMeta(data) {
+    if (data === undefined) {
+        return undefined;
+    }
+    let parsed;
+    try {
+        parsed = JSON.parse(textDecoder$1.decode(data));
+    }
+    catch (_a) {
+        return undefined;
+    }
+    if (parsed === null || typeof parsed !== "object")
+        return undefined;
+    const processedSeqLen = parsed.processedSeqLen;
+    if (typeof parsed.checkpointId !== "string" ||
+        typeof processedSeqLen !== "number" ||
+        !Number.isInteger(processedSeqLen) ||
+        processedSeqLen < 0 ||
+        typeof parsed.createdAtMs !== "number" ||
+        !Array.isArray(parsed.pageGroups) ||
+        !parsed.pageGroups.every((group) => isCheckpointFileMeta(group) &&
+            Number.isSafeInteger(group.groupId) &&
+            group.groupId >= 0 &&
+            Number.isSafeInteger(group.layerStart) &&
+            group.layerStart >= 0 &&
+            Number.isSafeInteger(group.layerEnd) &&
+            group.layerEnd >= group.layerStart) ||
+        (parsed.nextLogits !== undefined &&
+            !isCheckpointFileMeta(parsed.nextLogits))) {
+        return undefined;
+    }
+    return parsed;
+}
+function isCheckpointFileMeta(meta) {
+    return (meta !== null &&
+        typeof meta === "object" &&
+        typeof meta.path === "string" &&
+        isSafeFileName(meta.path) &&
+        Number.isSafeInteger(meta.bytes) &&
+        meta.bytes >= 0 &&
+        typeof meta.crc32c === "string" &&
+        /^[0-9a-f]{8}$/.test(meta.crc32c));
+}
+function readCheckedFile(files, path, meta) {
+    return __awaiter(this, void 0, void 0, function* () {
+        const data = yield files.read(joinPath$1(path, meta.path));
+        if (data === undefined) {
+            throw new InvalidCheckpointError(`Checkpoint file is missing: ${meta.path}`);
+        }
+        const bytes = new Uint8Array(data);
+        if (bytes.byteLength !== meta.bytes) {
+            throw new InvalidCheckpointError(`Checkpoint file ${meta.path} size mismatch: expected ${meta.bytes}, got ${bytes.byteLength}.`);
+        }
+        const actual = crc32cHex(bytes);
+        if (actual !== meta.crc32c) {
+            throw new InvalidCheckpointError(`Checkpoint file ${meta.path} CRC mismatch: expected ${meta.crc32c}, got ${actual}.`);
+        }
+        return new Uint8Array(bytes);
+    });
+}
+function joinPath$1(...parts) {
+    return parts
+        .flatMap((part) => part.split("/"))
+        .filter((part) => part !== "")
+        .join("/");
+}
+function isSafeFileName(value) {
+    return (value !== "" &&
+        value !== "." &&
+        value !== ".." &&
+        !value.includes("/") &&
+        !value.includes("\0"));
+}
+function assertSafeFileName(value) {
+    if (!isSafeFileName(value)) {
+        throw new Error(`Invalid checkpoint file name: ${value}`);
+    }
+}
+function pad3(value) {
+    if (!Number.isInteger(value) || value < 0) {
+        throw new Error(`Checkpoint numeric segment must be a non-negative integer: ${value}`);
+    }
+    return value.toString().padStart(3, "0");
+}
+function pageGroupFileName(group) {
+    if (group.fileName !== undefined) {
+        assertSafeFileName(group.fileName);
+        return group.fileName;
+    }
+    return `group_${pad3(group.groupId)}_layers_${pad3(group.layerStart)}_${pad3(group.layerEnd)}_pages.wkv`;
+}
+class ResumableCheckpointWriter {
+    constructor(files, sessions, now = Date.now) {
+        this.files = files;
+        this.sessions = sessions;
+        this.now = now;
+    }
+    writeCheckpoint(input) {
+        return __awaiter(this, void 0, void 0, function* () {
+            if (!Number.isInteger(input.processedSeqLen) || input.processedSeqLen < 0) {
+                throw new Error("Checkpoint processedSeqLen must be a non-negative integer.");
+            }
+            yield this.sessions.createSession(input.sessionId);
+            const ref = this.sessions.getCheckpointRef(input.sessionId, input.checkpointId);
+            yield this.files.remove(ref.path, { recursive: true });
+            yield this.files.mkdir(ref.path);
+            const faultContext = {
+                path: ref.path,
+                sessionId: input.sessionId,
+                checkpointId: input.checkpointId,
+                processedSeqLen: input.processedSeqLen,
+            };
+            const pageGroups = [];
+            for (const group of input.pageGroups) {
+                const fileName = pageGroupFileName(group);
+                const data = bytes(group.data);
+                yield this.files.write(joinPath$1(ref.path, fileName), data);
+                yield triggerResumableFault("checkpoint.after_page_group", Object.assign(Object.assign({}, faultContext), { path: joinPath$1(ref.path, fileName), groupId: group.groupId }));
+                pageGroups.push({
+                    groupId: group.groupId,
+                    layerStart: group.layerStart,
+                    layerEnd: group.layerEnd,
+                    path: fileName,
+                    bytes: data.byteLength,
+                    crc32c: crc32cHex(data),
+                });
+            }
+            let nextLogits;
+            if (input.nextLogits !== undefined) {
+                const data = bytes(input.nextLogits);
+                yield this.files.write(joinPath$1(ref.path, NEXT_LOGITS_FILE), data);
+                nextLogits = {
+                    path: NEXT_LOGITS_FILE,
+                    bytes: data.byteLength,
+                    crc32c: crc32cHex(data),
+                };
+            }
+            yield triggerResumableFault("checkpoint.after_next_logits", faultContext);
+            const createdAtMs = this.now();
+            yield this.files.write(joinPath$1(ref.path, META_FILE), encodeText$1(`${JSON.stringify({
+                checkpointId: input.checkpointId,
+                processedSeqLen: input.processedSeqLen,
+                layoutHash: input.layoutHash,
+                createdAtMs,
+                pageGroups,
+                nextLogits,
+                metadata: input.metadata,
+            })}\n`));
+            yield triggerResumableFault("checkpoint.after_meta", faultContext);
+            yield this.files.write(joinPath$1(ref.path, COMPLETE_FILE$1), encodeText$1(""));
+            yield triggerResumableFault("checkpoint.after_complete", faultContext);
+            return ref;
+        });
+    }
+}
+function readResumableCheckpointPayload(files, ref) {
+    return __awaiter(this, void 0, void 0, function* () {
+        if ((yield files.read(ref.completePath)) === undefined) {
+            return undefined;
+        }
+        const meta = parseCheckpointMeta(yield files.read(joinPath$1(ref.path, META_FILE)));
+        if (meta === undefined || meta.checkpointId !== ref.checkpointId) {
+            return undefined;
+        }
+        const pageGroups = [];
+        for (const group of meta.pageGroups) {
+            pageGroups.push(Object.assign(Object.assign({}, group), { data: yield readCheckedFile(files, ref.path, group) }));
+        }
+        const nextLogits = meta.nextLogits === undefined
+            ? undefined
+            : Object.assign(Object.assign({}, meta.nextLogits), { data: yield readCheckedFile(files, ref.path, meta.nextLogits) });
+        return { meta, pageGroups, nextLogits };
+    });
+}
+
+const RESUMABLE_STORE_ROOT = "webllm-resume";
+
+const MANIFEST_FILE = "manifest.json";
+const JOURNAL_FILE = "journal.bin";
+const LOCK_FILE = "lock";
+const JOURNAL_LOCK_FILE = journalLockPath(JOURNAL_FILE);
+const KV_DIR = "kv";
+const COMPLETE_FILE = "complete";
+const textEncoder = new TextEncoder();
+const textDecoder = new TextDecoder();
+class ResumableSessionExistsError extends Error {
+    constructor(sessionId) {
+        super(`Resumable session already exists: ${sessionId}`);
+        this.name = "ResumableSessionExistsError";
+    }
+}
+function joinPath(...parts) {
+    return parts
+        .flatMap((part) => part.split("/"))
+        .filter((part) => part !== "")
+        .join("/");
+}
+function encodeText(data) {
+    const bytes = textEncoder.encode(data);
+    const copy = new Uint8Array(bytes.byteLength);
+    copy.set(bytes);
+    return copy.buffer;
+}
+function isSafeSegment(value) {
+    return (value !== "" &&
+        value !== "." &&
+        value !== ".." &&
+        !value.includes("/") &&
+        !value.includes("\0"));
+}
+function assertSafeSegment(value, label) {
+    if (!isSafeSegment(value)) {
+        throw new Error(`Invalid resumable ${label}: ${value}`);
+    }
+}
+function parseManifest(data, sessionId) {
+    if (data === undefined) {
+        return undefined;
+    }
+    try {
+        const parsed = JSON.parse(textDecoder.decode(data));
+        if (parsed.sessionId === sessionId &&
+            typeof parsed.createdAtMs === "number" &&
+            typeof parsed.updatedAtMs === "number") {
+            return parsed;
+        }
+        return undefined;
+    }
+    catch (_a) {
+        return undefined;
+    }
+}
+class ResumableSessionStore {
+    constructor(files, opts = {}) {
+        var _a, _b;
+        this.files = files;
+        this.rootPath = (_a = opts.rootPath) !== null && _a !== void 0 ? _a : RESUMABLE_STORE_ROOT;
+        this.now = (_b = opts.now) !== null && _b !== void 0 ? _b : Date.now;
+    }
+    getSessionPaths(sessionId) {
+        assertSafeSegment(sessionId, "session id");
+        const sessionDir = joinPath(this.rootPath, "sessions", sessionId);
+        return {
+            sessionDir,
+            manifestPath: joinPath(sessionDir, MANIFEST_FILE),
+            journalPath: joinPath(sessionDir, JOURNAL_FILE),
+            lockPath: joinPath(sessionDir, LOCK_FILE),
+            kvDir: joinPath(sessionDir, KV_DIR),
+        };
+    }
+    getCheckpointRef(sessionId, checkpointId) {
+        assertSafeSegment(checkpointId, "checkpoint id");
+        const path = joinPath(this.getSessionPaths(sessionId).kvDir, checkpointId);
+        return {
+            checkpointId,
+            path,
+            completePath: joinPath(path, COMPLETE_FILE),
+        };
+    }
+    createSession(sessionId_1) {
+        return __awaiter(this, arguments, void 0, function* (sessionId, init = {}) {
+            var _a, _b, _c;
+            const paths = this.getSessionPaths(sessionId);
+            yield this.files.mkdir(paths.sessionDir);
+            const existing = yield this.readManifest(sessionId);
+            const now = this.now();
+            const manifest = Object.assign(Object.assign(Object.assign({}, existing), init), { sessionId, createdAtMs: (_b = (_a = existing === null || existing === void 0 ? void 0 : existing.createdAtMs) !== null && _a !== void 0 ? _a : init.createdAtMs) !== null && _b !== void 0 ? _b : now, updatedAtMs: (_c = init.updatedAtMs) !== null && _c !== void 0 ? _c : now });
+            yield this.tryWriteManifest(manifest);
+            return { sessionId, paths, manifest };
+        });
+    }
+    createNewSession(sessionId_1) {
+        return __awaiter(this, arguments, void 0, function* (sessionId, init = {}) {
+            var _a, _b;
+            const paths = this.getSessionPaths(sessionId);
+            yield this.files.mkdir(paths.sessionDir);
+            const [manifestData, journalData, entries] = yield Promise.all([
+                this.files.read(paths.manifestPath),
+                this.files.read(paths.journalPath),
+                this.files.list(paths.sessionDir),
+            ]);
+            const persistedEntries = entries.filter((entry) => entry !== LOCK_FILE && entry !== JOURNAL_LOCK_FILE);
+            if (manifestData !== undefined ||
+                journalData !== undefined ||
+                persistedEntries.length > 0) {
+                throw new ResumableSessionExistsError(sessionId);
+            }
+            const now = this.now();
+            const manifest = Object.assign(Object.assign({}, init), { sessionId, createdAtMs: (_a = init.createdAtMs) !== null && _a !== void 0 ? _a : now, updatedAtMs: (_b = init.updatedAtMs) !== null && _b !== void 0 ? _b : now });
+            yield this.tryWriteManifest(manifest);
+            return { sessionId, paths, manifest };
+        });
+    }
+    openSession(sessionId) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const paths = this.getSessionPaths(sessionId);
+            const manifest = yield this.readManifest(sessionId);
+            const entries = yield this.files.list(paths.sessionDir);
+            const persistedEntries = entries.filter((entry) => entry !== LOCK_FILE && entry !== JOURNAL_LOCK_FILE);
+            if (manifest === undefined && persistedEntries.length === 0) {
+                return undefined;
+            }
+            return { sessionId, paths, manifest };
+        });
+    }
+    listSessions() {
+        return __awaiter(this, void 0, void 0, function* () {
+            const sessionRoot = joinPath(this.rootPath, "sessions");
+            const sessionIds = (yield this.files.list(sessionRoot))
+                .filter(isSafeSegment)
+                .sort();
+            const sessions = [];
+            for (const sessionId of sessionIds) {
+                const session = yield this.openSession(sessionId);
+                if (session !== undefined) {
+                    sessions.push(session);
+                }
+            }
+            return sessions;
+        });
+    }
+    /** Repair and maintain an idle session. Caller must hold its lifetime lock. */
+    repairSession(session) {
+        return __awaiter(this, void 0, void 0, function* () {
+            yield repairJournalTail(this.files, session.paths.journalPath);
+            yield this.pruneCommittedCheckpoints(session.sessionId);
+            const state = yield readResumableReplayState(this.files, session);
+            if (state.finished)
+                yield this.deleteKV(session.sessionId);
+            return state;
+        });
+    }
+    /** Active sessions are read without mutation; idle sessions are repaired first. */
+    inspectSession(session) {
+        return __awaiter(this, void 0, void 0, function* () {
+            let release;
+            try {
+                release = yield this.files.tryLock(session.paths.lockPath);
+            }
+            catch (err) {
+                if (!(err instanceof CrossContextLockUnavailableError))
+                    throw err;
+            }
+            if (release === undefined)
+                return readResumableReplayState(this.files, session);
+            try {
+                return yield this.repairSession(session);
+            }
+            finally {
+                release();
+            }
+        });
+    }
+    deleteSession(sessionId) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const paths = this.getSessionPaths(sessionId);
+            const release = yield this.files.tryLock(paths.lockPath);
+            if (release === undefined) {
+                throw new Error(`Resumable session is already active: ${sessionId}`);
+            }
+            try {
+                const releaseJournal = yield this.files.lock(journalLockPath(paths.journalPath));
+                try {
+                    for (const entry of yield this.files.list(paths.sessionDir)) {
+                        if (entry !== LOCK_FILE && entry !== JOURNAL_LOCK_FILE) {
+                            yield this.files.remove(joinPath(paths.sessionDir, entry), {
+                                recursive: true,
+                            });
+                        }
+                    }
+                    // Web Locks need no sidecar files. Sync-access handles may leave a
+                    // lock-only directory, which remains invisible to openSession().
+                    yield this.files
+                        .remove(paths.sessionDir, { recursive: true })
+                        .catch(() => undefined);
+                }
+                finally {
+                    releaseJournal();
+                }
+            }
+            finally {
+                release();
+            }
+        });
+    }
+    deleteKV(sessionId) {
+        return __awaiter(this, void 0, void 0, function* () {
+            yield this.files.remove(this.getSessionPaths(sessionId).kvDir, {
+                recursive: true,
+            });
+        });
+    }
+    readManifest(sessionId) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const data = yield this.files.read(this.getSessionPaths(sessionId).manifestPath);
+            return parseManifest(data, sessionId);
+        });
+    }
+    tryWriteManifest(manifest) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                yield this.files.write(this.getSessionPaths(manifest.sessionId).manifestPath, encodeText(`${JSON.stringify(manifest)}\n`));
+                return true;
+            }
+            catch (_a) {
+                return false;
+            }
+        });
+    }
+    readCheckpointIndex(sessionId) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const paths = this.getSessionPaths(sessionId);
+            const journal = yield readJournalRecords(this.files, paths.journalPath);
+            const commits = new Map();
+            for (const record of journal.records) {
+                if (record.type === JournalRecordType.CheckpointCommit) {
+                    commits.delete(record.payload.checkpointId);
+                    commits.set(record.payload.checkpointId, record.payload);
+                }
+            }
+            const checkpointIds = (yield this.files.list(paths.kvDir))
+                .filter(isSafeSegment)
+                .sort();
+            return { commits, checkpointIds };
+        });
+    }
+    listCommittedCheckpoints(sessionId) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const { commits, checkpointIds } = yield this.readCheckpointIndex(sessionId);
+            const refs = [];
+            for (const checkpointId of checkpointIds) {
+                const ref = this.getCheckpointRef(sessionId, checkpointId);
+                if (commits.has(checkpointId) &&
+                    (yield this.files.read(ref.completePath)) !== undefined) {
+                    refs.push(ref);
+                }
+            }
+            return refs;
+        });
+    }
+    /** Remove incomplete checkpoints and complete directories lacking a commit. */
+    reconcileCheckpoints(sessionId) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const { commits, checkpointIds } = yield this.readCheckpointIndex(sessionId);
+            const removed = [];
+            for (const checkpointId of checkpointIds) {
+                const ref = this.getCheckpointRef(sessionId, checkpointId);
+                const complete = (yield this.files.read(ref.completePath)) !== undefined;
+                if (!complete || !commits.has(checkpointId)) {
+                    yield this.files.remove(ref.path, { recursive: true });
+                    removed.push(ref);
+                }
+            }
+            return removed;
+        });
+    }
+    /** Under the session lock, retain the newest valid commits and remove all other directories. */
+    pruneCommittedCheckpoints(sessionId_1) {
+        return __awaiter(this, arguments, void 0, function* (sessionId, retain = 2) {
+            if (!Number.isInteger(retain) || retain < 0) {
+                throw new Error("Checkpoint retention count must be non-negative.");
+            }
+            const { commits, checkpointIds } = yield this.readCheckpointIndex(sessionId);
+            const keep = new Set();
+            for (const commit of [...commits.values()].reverse()) {
+                if (keep.size === retain)
+                    break;
+                if (!checkpointIds.includes(commit.checkpointId))
+                    continue;
+                const ref = this.getCheckpointRef(sessionId, commit.checkpointId);
+                try {
+                    const payload = yield readResumableCheckpointPayload(this.files, ref);
+                    if (payload !== undefined &&
+                        payload.meta.processedSeqLen === commit.processedSeqLen &&
+                        (commit.layoutHash === undefined ||
+                            payload.meta.layoutHash === commit.layoutHash)) {
+                        keep.add(commit.checkpointId);
+                    }
+                }
+                catch (err) {
+                    // Do not delete checkpoints on a transient I/O failure.
+                    if (!(err instanceof InvalidCheckpointError))
+                        throw err;
+                    log.warn(`Ignoring invalid KV checkpoint ${commit.checkpointId}:`, err);
+                }
+            }
+            const removed = [];
+            for (const checkpointId of checkpointIds) {
+                if (!keep.has(checkpointId)) {
+                    const ref = this.getCheckpointRef(sessionId, checkpointId);
+                    yield this.files.remove(ref.path, { recursive: true });
+                    removed.push(ref);
+                }
+            }
+            return removed;
+        });
+    }
+    cleanupIncompleteCheckpoints(sessionId) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const sessionIds = sessionId === undefined
+                ? (yield this.listSessions()).map((session) => session.sessionId)
+                : [sessionId];
+            const removed = [];
+            for (const id of sessionIds) {
+                removed.push(...(yield this.reconcileCheckpoints(id)));
+            }
+            return removed;
+        });
+    }
+    getManifestRebuildInputs(sessionId) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const session = yield this.openSession(sessionId);
+            if (session === undefined) {
+                return undefined;
+            }
+            const hasJournal = (yield this.files.read(session.paths.journalPath)) !== undefined;
+            return {
+                sessionId,
+                manifest: session.manifest,
+                journalPath: session.paths.journalPath,
+                hasJournal,
+                checkpoints: yield this.listCommittedCheckpoints(sessionId),
+            };
+        });
+    }
+}
+
+function onceAsync(action) {
+    let promise;
+    return () => {
+        promise !== null && promise !== void 0 ? promise : (promise = action());
+        return promise;
+    };
+}
+/** Ensure return() releases resources even before an async generator starts. */
+function managedAsyncIterable(source, cleanup) {
+    let closed = false;
+    const close = onceAsync(() => __awaiter(this, void 0, void 0, function* () {
+        closed = true;
+        yield cleanup();
+    }));
+    const iterator = {
+        next() {
+            return __awaiter(this, void 0, void 0, function* () {
+                if (closed) {
+                    return { done: true, value: undefined };
+                }
+                try {
+                    const result = yield source.next();
+                    if (result.done) {
+                        yield close();
+                    }
+                    return result;
+                }
+                catch (err) {
+                    yield close();
+                    throw err;
+                }
+            });
+        },
+        return() {
+            return __awaiter(this, void 0, void 0, function* () {
+                try {
+                    yield source.return(undefined);
+                }
+                finally {
+                    yield close();
+                }
+                return { done: true, value: undefined };
+            });
+        },
+        throw(err) {
+            return __awaiter(this, void 0, void 0, function* () {
+                try {
+                    if (source.throw !== undefined) {
+                        return yield source.throw(err);
+                    }
+                    throw err;
+                }
+                finally {
+                    yield close();
+                }
+            });
+        },
+        [Symbol.asyncIterator]() {
+            return this;
+        },
+    };
+    return iterator;
+}
+/** Defer constructing a resource-owning stream until its first operation. */
+function lazyAsyncIterable(factory) {
+    let sourcePromise;
+    let closed = false;
+    const getSource = () => {
+        sourcePromise !== null && sourcePromise !== void 0 ? sourcePromise : (sourcePromise = factory().then((source) => source[Symbol.asyncIterator]()));
+        return sourcePromise;
+    };
+    const iterator = {
+        next() {
+            return __awaiter(this, void 0, void 0, function* () {
+                if (closed) {
+                    return { done: true, value: undefined };
+                }
+                try {
+                    const result = yield (yield getSource()).next();
+                    closed = result.done === true;
+                    return result;
+                }
+                catch (err) {
+                    closed = true;
+                    throw err;
+                }
+            });
+        },
+        return() {
+            return __awaiter(this, void 0, void 0, function* () {
+                var _a;
+                closed = true;
+                if (sourcePromise !== undefined) {
+                    const source = yield sourcePromise;
+                    yield ((_a = source.return) === null || _a === void 0 ? void 0 : _a.call(source));
+                }
+                return { done: true, value: undefined };
+            });
+        },
+        throw(err) {
+            return __awaiter(this, void 0, void 0, function* () {
+                closed = true;
+                if (sourcePromise !== undefined) {
+                    const source = yield sourcePromise;
+                    if (source.throw !== undefined) {
+                        return source.throw(err);
+                    }
+                }
+                throw err;
+            });
+        },
+        [Symbol.asyncIterator]() {
+            return this;
+        },
+    };
+    return iterator;
+}
+function isAsyncIterable(value) {
+    return (typeof value === "object" && value !== null && Symbol.asyncIterator in value);
+}
+
+const DEFAULT_CHECKPOINT_INTERVAL_TOKENS = 512;
+function defaultSessionId() {
+    var _a, _b, _c;
+    return (_c = (_b = (_a = globalThis.crypto) === null || _a === void 0 ? void 0 : _a.randomUUID) === null || _b === void 0 ? void 0 : _b.call(_a)) !== null && _c !== void 0 ? _c : `session-${Date.now()}`;
+}
+function nowMs() {
+    return Date.now();
+}
+function errorField(err, field) {
+    const value = err === null || err === void 0 ? void 0 : err[field];
+    return typeof value === "string" ? value : undefined;
+}
+function errorMessage(err) {
+    if (err instanceof Error) {
+        return err.message;
+    }
+    return String(err);
+}
+function normalizeResumableGenerationConfig(config) {
+    var _a, _b, _c, _d, _e, _f;
+    if ((config === null || config === void 0 ? void 0 : config.enabled) !== true) {
+        return undefined;
+    }
+    const checkpointIntervalTokens = (_a = config.checkpointIntervalTokens) !== null && _a !== void 0 ? _a : DEFAULT_CHECKPOINT_INTERVAL_TOKENS;
+    if (!Number.isInteger(checkpointIntervalTokens)) {
+        throw new Error("resumable.checkpointIntervalTokens must be an integer.");
+    }
+    if (checkpointIntervalTokens <= 0) {
+        throw new Error("resumable.checkpointIntervalTokens must be positive.");
+    }
+    return {
+        enabled: true,
+        sessionId: (_b = config.sessionId) !== null && _b !== void 0 ? _b : defaultSessionId(),
+        checkpointIntervalTokens,
+        checkpointPrompt: (_c = config.checkpointPrompt) !== null && _c !== void 0 ? _c : true,
+        durabilityMode: (_d = config.durabilityMode) !== null && _d !== void 0 ? _d : "exact",
+        strictPersistence: (_e = config.strictPersistence) !== null && _e !== void 0 ? _e : false,
+        storeCheckpointLogits: (_f = config.storeCheckpointLogits) !== null && _f !== void 0 ? _f : true,
+    };
+}
+class ResumableGenerationJournal {
+    constructor(files, sessions, config) {
+        this.files = files;
+        this.sessions = sessions;
+        this.config = config;
+        this.seqNo = 0;
+        this.emittedTokens = 0;
+        this.disabled = false;
+        this.pendingWrite = Promise.resolve();
+        this.lastFlushAtMs = nowMs();
+    }
+    get sessionId() {
+        return this.config.sessionId;
+    }
+    get emittedTokenCount() {
+        return this.emittedTokens;
+    }
+    get checkpointPrompt() {
+        return this.config.checkpointPrompt;
+    }
+    get checkpointIntervalTokens() {
+        return this.config.checkpointIntervalTokens;
+    }
+    get storeCheckpointLogits() {
+        return this.config.storeCheckpointLogits;
+    }
+    get strictPersistence() {
+        return this.config.strictPersistence;
+    }
+    get active() {
+        return !this.disabled && this.session !== undefined;
+    }
+    begin(init) {
+        return __awaiter(this, void 0, void 0, function* () {
+            var _a;
+            const paths = this.sessions.getSessionPaths(this.config.sessionId);
+            let releaseSessionLock;
+            try {
+                releaseSessionLock = yield this.files.tryLock(paths.lockPath);
+            }
+            catch (err) {
+                if (this.config.strictPersistence) {
+                    throw err;
+                }
+                this.disabled = true;
+                this.pendingError = err;
+                return;
+            }
+            if (releaseSessionLock === undefined) {
+                throw new Error(`Resumable session is already active: ${this.config.sessionId}`);
+            }
+            this.releaseSessionLock = releaseSessionLock;
+            try {
+                this.session = yield this.sessions.createNewSession(this.config.sessionId, { modelId: init.modelId });
+                yield this.writeInitialRecords(init);
+            }
+            catch (err) {
+                (_a = this.releaseSessionLock) === null || _a === void 0 ? void 0 : _a.call(this);
+                this.releaseSessionLock = undefined;
+                if (!this.config.strictPersistence &&
+                    !(err instanceof ResumableSessionExistsError)) {
+                    this.disabled = true;
+                    this.pendingError = err;
+                    return;
+                }
+                throw err;
+            }
+        });
+    }
+    attachExistingSession(session, emittedTokens) {
+        return __awaiter(this, void 0, void 0, function* () {
+            if (session.sessionId !== this.config.sessionId) {
+                throw new Error(`Resumable journal session mismatch: expected ${this.config.sessionId}, got ${session.sessionId}.`);
+            }
+            if (!Number.isInteger(emittedTokens) || emittedTokens < 0) {
+                throw new Error("Resumable emitted token count must be non-negative.");
+            }
+            this.session = session;
+            this.emittedTokens = emittedTokens;
+            const scan = yield readJournalRecords(this.files, session.paths.journalPath);
+            this.seqNo =
+                scan.records.length === 0
+                    ? 0
+                    : Math.max(...scan.records.map((record) => record.seqNo));
+        });
+    }
+    recordGeneratedToken(input) {
+        return __awaiter(this, void 0, void 0, function* () {
+            this.emittedTokens++;
+            const payload = {
+                globalTokenPos: input.globalTokenPos,
+                tokenId: input.tokenId,
+                textDelta: input.textDelta,
+                textPrefixLength: input.textPrefixLength,
+            };
+            if (input.rngState !== undefined) {
+                payload.rngState = input.rngState;
+            }
+            if (input.logprob !== undefined) {
+                payload.logprob = input.logprob;
+            }
+            const shouldWait = this.config.durabilityMode === "exact" ||
+                this.emittedTokens % 8 === 0 ||
+                nowMs() - this.lastFlushAtMs >= 250;
+            yield this.append({
+                type: JournalRecordType.GeneratedToken,
+                seqNo: this.nextSeqNo(),
+                createdAtMs: nowMs(),
+                payload,
+            }, shouldWait);
+        });
+    }
+    recordCheckpointCommit(payload) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const faultContext = {
+                path: payload.path,
+                sessionId: this.sessionId,
+                checkpointId: payload.checkpointId,
+                processedSeqLen: payload.processedSeqLen,
+            };
+            yield triggerResumableFault("checkpoint.before_commit", faultContext);
+            yield this.append({
+                type: JournalRecordType.CheckpointCommit,
+                seqNo: this.nextSeqNo(),
+                createdAtMs: nowMs(),
+                payload,
+            }, true);
+            yield triggerResumableFault("checkpoint.after_commit", faultContext);
+        });
+    }
+    recordGenerationEnd(input) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const finishReason = input.finishReason;
+            if (finishReason === "abort") {
+                yield this.append({
+                    type: JournalRecordType.GenerationAborted,
+                    seqNo: this.nextSeqNo(),
+                    createdAtMs: nowMs(),
+                    payload: { reason: "abort" },
+                }, true);
+            }
+            else {
+                yield this.append({
+                    type: JournalRecordType.GenerationFinished,
+                    seqNo: this.nextSeqNo(),
+                    createdAtMs: nowMs(),
+                    payload: {
+                        finishReason,
+                        emittedTokens: input.emittedTokens,
+                    },
+                }, true);
+            }
+        });
+    }
+    recordEngineError(input) {
+        return __awaiter(this, void 0, void 0, function* () {
+            yield this.append({
+                type: JournalRecordType.EngineError,
+                seqNo: this.nextSeqNo(),
+                createdAtMs: nowMs(),
+                payload: {
+                    message: errorMessage(input.err),
+                    name: errorField(input.err, "name"),
+                    stack: errorField(input.err, "stack"),
+                },
+            }, true);
+        });
+    }
+    close() {
+        return __awaiter(this, void 0, void 0, function* () {
+            var _a;
+            try {
+                yield this.flush();
+            }
+            finally {
+                (_a = this.releaseSessionLock) === null || _a === void 0 ? void 0 : _a.call(this);
+                this.releaseSessionLock = undefined;
+            }
+        });
+    }
+    refreshSeqNo() {
+        return __awaiter(this, void 0, void 0, function* () {
+            if (this.session === undefined) {
+                throw new Error("Resumable journal session is not initialized.");
+            }
+            const scan = yield readJournalRecords(this.files, this.session.paths.journalPath);
+            this.seqNo =
+                scan.records.length === 0
+                    ? 0
+                    : Math.max(...scan.records.map((record) => record.seqNo));
+        });
+    }
+    writeInitialRecords(init) {
+        return __awaiter(this, void 0, void 0, function* () {
+            yield this.append({
+                type: JournalRecordType.SessionBegin,
+                seqNo: this.nextSeqNo(),
+                createdAtMs: nowMs(),
+                payload: {
+                    sessionId: this.config.sessionId,
+                    modelId: init.modelId,
+                    createdAtMs: nowMs(),
+                    request: init.request,
+                },
+            }, true);
+            yield this.append({
+                type: JournalRecordType.PromptTokens,
+                seqNo: this.nextSeqNo(),
+                createdAtMs: nowMs(),
+                payload: { tokenIds: init.promptTokenIds },
+            }, true);
+            if (init.assistantPrefixTokenIds.length > 0) {
+                yield this.append({
+                    type: JournalRecordType.AssistantPrefixTokens,
+                    seqNo: this.nextSeqNo(),
+                    createdAtMs: nowMs(),
+                    payload: { tokenIds: init.assistantPrefixTokenIds },
+                }, true);
+            }
+            yield this.append({
+                type: JournalRecordType.GenerationConfig,
+                seqNo: this.nextSeqNo(),
+                createdAtMs: nowMs(),
+                payload: {
+                    config: {
+                        generationConfig: init.generationConfig,
+                        resumable: this.config,
+                    },
+                },
+            }, true);
+        });
+    }
+    nextSeqNo() {
+        this.seqNo += 1;
+        return this.seqNo;
+    }
+    append(record, wait) {
+        return __awaiter(this, void 0, void 0, function* () {
+            if (this.disabled) {
+                return;
+            }
+            const write = this.pendingWrite.then(() => __awaiter(this, void 0, void 0, function* () {
+                if (this.disabled || this.pendingError !== undefined) {
+                    return;
+                }
+                if (this.session === undefined) {
+                    throw new Error("Resumable journal session is not initialized.");
+                }
+                yield appendJournalRecord(this.files, this.session.paths.journalPath, record);
+            }));
+            this.pendingWrite = write.catch((err) => {
+                var _a;
+                (_a = this.pendingError) !== null && _a !== void 0 ? _a : (this.pendingError = err);
+            });
+            if (!wait) {
+                return;
+            }
+            yield this.flush(write);
+            this.lastFlushAtMs = nowMs();
+        });
+    }
+    flush() {
+        return __awaiter(this, arguments, void 0, function* (write = this.pendingWrite) {
+            try {
+                yield write;
+            }
+            catch (err) {
+                this.pendingError = err;
+            }
+            if (this.pendingError !== undefined) {
+                this.disabled = true;
+                if (this.config.strictPersistence) {
+                    throw this.pendingError;
+                }
+            }
+        });
+    }
+}
+
+/** Present recovery eligibility from the same snapshot used for replay. */
+function probeReplayState(state) {
+    var _a;
+    const result = {
+        sessionId: state.sessionId,
+        modelId: state.modelId,
+        emittedTokens: state.emittedTokens,
+        processedSeqLen: state.processedSeqLen,
+        resumable: false,
+        recoveryMode: state.emittedTokens > 0 ? "text_only" : "none",
+    };
+    const stopped = state.scanStoppedReason;
+    if (state.recordCount === 0) {
+        return Object.assign(Object.assign({}, result), { reason: stopped === undefined
+                ? "missing journal records"
+                : `journal scan stopped at ${stopped}` });
+    }
+    if (stopped !== undefined) {
+        return Object.assign(Object.assign({}, result), { reason: `journal scan stopped at ${stopped}; token replay unavailable` });
+    }
+    if (state.finished) {
+        return Object.assign(Object.assign({}, result), { recoveryMode: "none", reason: "generation finished" });
+    }
+    let reason;
+    if (!state.hasPromptTokens) {
+        reason = "missing prompt token record; token replay unavailable";
+    }
+    else if (!state.hasGenerationConfig) {
+        reason = "missing generation config record; token replay unavailable";
+    }
+    else if (!state.hasResumableGenerationConfig) {
+        reason = "missing resumable generation config; continuation unavailable";
+    }
+    else if (state.hasUnsupportedGrammarReplay) {
+        reason = "unsupported grammar replay; token replay unavailable";
+    }
+    else if (state.emittedTokens > 0 &&
+        ((_a = state.generatedTokens.at(-1)) === null || _a === void 0 ? void 0 : _a.rngState) === undefined) {
+        reason = "missing RNG state; token replay unavailable";
+    }
+    else if (state.modelId === "") {
+        reason = "missing model id; token replay unavailable";
+    }
+    if (reason !== undefined)
+        return Object.assign(Object.assign({}, result), { reason });
+    return Object.assign(Object.assign({}, result), { resumable: true, recoveryMode: "token_replay", reason: state.aborted
+            ? "generation aborted"
+            : state.engineErrorMessage !== undefined
+                ? `engine error: ${state.engineErrorMessage}`
+                : "generation incomplete" });
+}
+
+const MIN_FREE_SPACE_BEFORE_KV_CHECKPOINT_BYTES = 512 * 1024 * 1024;
+const CHECKPOINT_RETENTION_COUNT = 2;
+const checkpointMetadataEncoder = new TextEncoder();
+function isOPFSUnavailableError(err) {
+    return (err instanceof Error &&
+        err.message === "OPFS is unavailable in this environment");
+}
+function promptCheckpointId(processedSeqLen) {
+    return `checkpoint_00000000_${processedSeqLen.toString().padStart(8, "0")}`;
+}
+function requestSeed(request) {
+    const seed = request === null || request === void 0 ? void 0 : request.seed;
+    return typeof seed === "number" ? seed : undefined;
+}
+function hasMultimodalInput(request) {
+    return request.messages.some((message) => {
+        if (!Array.isArray(message.content)) {
+            return false;
+        }
+        return message.content.some((part) => typeof part === "object" &&
+            part !== null &&
+            part.type !== "text");
+    });
+}
+function estimateFreeStorageBytes() {
+    return __awaiter(this, void 0, void 0, function* () {
+        var _a;
+        const storage = (_a = globalThis.navigator) === null || _a === void 0 ? void 0 : _a.storage;
+        if ((storage === null || storage === void 0 ? void 0 : storage.estimate) === undefined) {
+            return undefined;
+        }
+        try {
+            const estimate = yield storage.estimate();
+            if (typeof estimate.quota !== "number" ||
+                typeof estimate.usage !== "number") {
+                return undefined;
+            }
+            return Math.max(0, estimate.quota - estimate.usage);
+        }
+        catch (_b) {
+            return undefined;
+        }
+    });
+}
+function hasKVCheckpointQuota() {
+    return __awaiter(this, arguments, void 0, function* (estimatedCheckpointBytes = 0) {
+        const freeBytes = yield estimateFreeStorageBytes();
+        if (freeBytes === undefined) {
+            return true;
+        }
+        return (freeBytes >=
+            Math.max(MIN_FREE_SPACE_BEFORE_KV_CHECKPOINT_BYTES, 2 * estimatedCheckpointBytes));
+    });
+}
+function metadataInteger(metadata, field) {
+    const value = metadata[field];
+    return typeof value === "number" && Number.isInteger(value) && value > 0
+        ? value
+        : undefined;
+}
+function checkpointPageSize(checkpoint) {
+    var _a;
+    return ((_a = metadataInteger(checkpoint.metadata, "pageSize")) !== null && _a !== void 0 ? _a : metadataInteger(checkpoint.metadata, "page_size"));
+}
+function checkpointByteLength(checkpoint) {
+    var _a, _b;
+    const pageGroupBytes = checkpoint.pageGroups.reduce((sum, group) => sum + group.data.byteLength, 0);
+    const logitsBytes = (_b = (_a = checkpoint.nextLogits) === null || _a === void 0 ? void 0 : _a.data.byteLength) !== null && _b !== void 0 ? _b : 0;
+    const metadataBytes = checkpointMetadataEncoder.encode(JSON.stringify(checkpoint.metadata)).byteLength;
+    return pageGroupBytes + logitsBytes + metadataBytes;
+}
+function normalizeCheckpointInterval(intervalTokens, pageSize) {
+    if (pageSize === undefined) {
+        return intervalTokens;
+    }
+    return Math.ceil(intervalTokens / pageSize) * pageSize;
+}
+function shouldCaptureDecodeCheckpoint(scheduler, nextProcessedSeqLen) {
+    const intervalTokens = normalizeCheckpointInterval(scheduler.intervalTokens, scheduler.pageSize);
+    if (nextProcessedSeqLen - scheduler.lastCheckpointSeqLen < intervalTokens) {
+        return false;
+    }
+    return (scheduler.pageSize === undefined ||
+        nextProcessedSeqLen % scheduler.pageSize === 0);
+}
+function noteCommittedCheckpoint(scheduler, checkpoint) {
+    var _a;
+    scheduler.lastCheckpointSeqLen = checkpoint.processedSeqLen;
+    scheduler.pageSize = (_a = checkpointPageSize(checkpoint)) !== null && _a !== void 0 ? _a : scheduler.pageSize;
+}
+function replayPromptSeqLen(state) {
+    if (state.emittedTokens === 0) {
+        return state.promptTokenIds.length;
+    }
+    return Math.max(0, state.processedSeqLen - state.emittedTokens);
+}
+function isChatCompletionReplayRequest(request) {
+    const messages = request === null || request === void 0 ? void 0 : request.messages;
+    return (typeof request === "object" &&
+        request !== null &&
+        Array.isArray(messages) &&
+        messages.length > 0);
+}
+class ResumableGenerationCoordinator {
+    constructor(options) {
+        this.options = options;
+    }
+    decodeGenerationStep(journal, scheduler, promptSeqLen, pipeline, genConfig) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const captureCheckpoint = journal.active &&
+                (yield this.shouldCaptureDecodeCheckpoint(scheduler, promptSeqLen + journal.emittedTokenCount));
+            const decodeStep = yield this.options.host.sampleDecode(pipeline, genConfig, {
+                captureCheckpoint,
+                storeCheckpointLogits: journal.storeCheckpointLogits,
+            });
+            const committed = pipeline.commitSampledStep(decodeStep, genConfig);
+            yield this.recordGeneratedToken(journal, pipeline, decodeStep, committed);
+            yield this.writeDecodeCheckpoint(journal, scheduler, decodeStep);
+        });
+    }
+    finalizeResumedConversation(state, pipeline, chatConfig) {
+        if (!isChatCompletionReplayRequest(state.request)) {
+            return;
+        }
+        const conversation = getConversationFromChatCompletionRequest(state.request, chatConfig, true);
+        conversation.appendReplyHeader(Role.assistant);
+        conversation.finishReply(pipeline.getMessage());
+        pipeline.setConversation(conversation);
+    }
+    finishContinuation(state, pipeline, chatConfig, genConfig, restored, journal, checkpointScheduler, promptSeqLen) {
+        return __awaiter(this, void 0, void 0, function* () {
+            this.options.host.resetInterrupt();
+            const firstTokenStart = performance.now();
+            let recordedFirstToken = restored.firstTokenRecorded;
+            try {
+                yield this.recordPendingResumeToken(journal, pipeline, restored);
+                while (!pipeline.stopped()) {
+                    if (this.options.host.isInterrupted()) {
+                        pipeline.triggerStop();
+                        break;
+                    }
+                    yield this.decodeGenerationStep(journal, checkpointScheduler, promptSeqLen, pipeline, genConfig);
+                    if (!recordedFirstToken) {
+                        this.metrics().resumeFirstTokenMs =
+                            performance.now() - firstTokenStart;
+                        recordedFirstToken = true;
+                    }
+                }
+                yield this.finishJournal(journal, pipeline.getFinishReason());
+                this.finalizeResumedConversation(state, pipeline, chatConfig);
+                return {
+                    sessionId: state.sessionId,
+                    recoveredText: pipeline.getMessage(),
+                    emittedTokens: journal.emittedTokenCount,
+                    processedSeqLen: promptSeqLen + journal.emittedTokenCount,
+                    replayedTokens: restored.replayedTokens,
+                    recoveryMode: restored.recoveryMode,
+                };
+            }
+            catch (err) {
+                yield this.recordEngineError(journal, err);
+                throw err;
+            }
+            finally {
+                yield journal.close();
+            }
+        });
+    }
+    streamContinuation(request, model, pipeline, chatConfig, genConfig, state, restored, journal, checkpointScheduler, promptSeqLen, release) {
+        return __asyncGenerator(this, arguments, function* streamContinuation_1() {
+            var _a, e_1, _b, _c;
+            var _d;
+            this.options.host.resetInterrupt();
+            const firstTokenStart = performance.now();
+            let recordedFirstToken = restored.firstTokenRecorded;
+            let journalEnded = false;
+            let failure;
+            const streamState = {
+                id: crypto.randomUUID(),
+                created: Math.floor(Date.now() / 1000),
+                prevMessageLength: (_d = restored.streamDeltaStart) !== null && _d !== void 0 ? _d : pipeline.getMessage().length,
+            };
+            try {
+                yield __await(this.recordPendingResumeToken(journal, pipeline, restored));
+                const chunks = this.options.host.streamCurrentGeneration(request, model, pipeline, genConfig, Date.now(), streamState, () => __awaiter(this, void 0, void 0, function* () {
+                    yield this.decodeGenerationStep(journal, checkpointScheduler, promptSeqLen, pipeline, genConfig);
+                    if (!recordedFirstToken) {
+                        this.metrics().resumeFirstTokenMs =
+                            performance.now() - firstTokenStart;
+                        recordedFirstToken = true;
+                    }
+                }), {
+                    emitCurrent: restored.extraEmittedTokens > 0,
+                    skipEmptyDelta: true,
+                    completionTokenOffset: restored.extraEmittedTokens,
+                    beforeFinalChunk: () => __awaiter(this, void 0, void 0, function* () {
+                        yield this.finishJournal(journal, pipeline.getFinishReason());
+                        journalEnded = true;
+                        this.finalizeResumedConversation(state, pipeline, chatConfig);
+                    }),
+                });
+                try {
+                    for (var _e = true, chunks_1 = __asyncValues(chunks), chunks_1_1; chunks_1_1 = yield __await(chunks_1.next()), _a = chunks_1_1.done, !_a; _e = true) {
+                        _c = chunks_1_1.value;
+                        _e = false;
+                        const chunk = _c;
+                        yield yield __await(chunk);
+                    }
+                }
+                catch (e_1_1) { e_1 = { error: e_1_1 }; }
+                finally {
+                    try {
+                        if (!_e && !_a && (_b = chunks_1.return)) yield __await(_b.call(chunks_1));
+                    }
+                    finally { if (e_1) throw e_1.error; }
+                }
+            }
+            catch (err) {
+                failure = err;
+                yield __await(this.recordEngineError(journal, err));
+                throw err;
+            }
+            finally {
+                try {
+                    yield __await(this.closeStreamJournal(journal, pipeline, !journalEnded, failure));
+                }
+                finally {
+                    try {
+                        if (request.seed != null)
+                            pipeline.setSeed(Date.now());
+                    }
+                    finally {
+                        yield __await(release());
+                    }
+                }
+            }
+        });
+    }
+    // Keep the journal-begin boundary explicit: errors after it belong to this
+    // generation, including failures while writing the first checkpoint/token.
+    prefillGeneration(input, modelId, pipeline, chatConfig, genConfig, journal) {
+        return __awaiter(this, void 0, void 0, function* () {
+            var _a;
+            const prefillStep = yield this.options.host.samplePrefill(input, pipeline, chatConfig, genConfig, {
+                capturePromptCheckpoint: yield this.shouldCapturePromptCheckpoint(journal),
+                storeCheckpointLogits: journal.storeCheckpointLogits,
+                reuseKVCache: false,
+            });
+            if (prefillStep.promptTokenIds === undefined) {
+                throw new Error("Resumable generation currently supports text-only prompts.");
+            }
+            yield journal.begin({
+                modelId,
+                request: input,
+                promptTokenIds: prefillStep.promptTokenIds,
+                assistantPrefixTokenIds: (_a = prefillStep.assistantPrefixTokenIds) !== null && _a !== void 0 ? _a : [],
+                generationConfig: genConfig,
+            });
+            return prefillStep;
+        });
+    }
+    commitPrefill(journal, pipeline, genConfig, prefillStep) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const checkpointScheduler = {
+                intervalTokens: journal.checkpointIntervalTokens,
+                lastCheckpointSeqLen: prefillStep.globalTokenPos,
+            };
+            yield this.writePromptCheckpoint(journal, prefillStep, checkpointScheduler);
+            const committedPrefill = pipeline.commitSampledStep(prefillStep, genConfig);
+            yield this.recordGeneratedToken(journal, pipeline, prefillStep, committedPrefill);
+            return checkpointScheduler;
+        });
+    }
+    streamGeneration(request, model, pipeline, chatConfig, genConfig, timeReceived, streamState, journal) {
+        return __asyncGenerator(this, arguments, function* streamGeneration_1() {
+            this.resetMetrics();
+            let journalStarted = false;
+            let journalEnded = false;
+            let failure;
+            try {
+                const prefillStep = yield __await(this.prefillGeneration(request, model, pipeline, chatConfig, genConfig, journal));
+                journalStarted = journal.active;
+                const scheduler = yield __await(this.commitPrefill(journal, pipeline, genConfig, prefillStep));
+                yield __await(yield* __asyncDelegator(__asyncValues(this.options.host.streamCurrentGeneration(request, model, pipeline, genConfig, timeReceived, streamState, () => this.decodeGenerationStep(journal, scheduler, prefillStep.globalTokenPos, pipeline, genConfig), {
+                    emitCurrent: true,
+                    beforeFinalChunk: () => __awaiter(this, void 0, void 0, function* () {
+                        yield this.finishJournal(journal, pipeline.getFinishReason());
+                        journalEnded = true;
+                    }),
+                }))));
+            }
+            catch (err) {
+                failure = err;
+                if (journalStarted)
+                    yield __await(this.recordEngineError(journal, err));
+                throw err;
+            }
+            finally {
+                yield __await(this.closeStreamJournal(journal, pipeline, journalStarted && !journalEnded, failure));
+            }
+        });
+    }
+    generate(input, modelId, pipeline, chatConfig, genConfig, journal) {
+        return __awaiter(this, void 0, void 0, function* () {
+            this.resetMetrics();
+            this.options.host.resetInterrupt();
+            if (genConfig !== undefined) {
+                postInitAndCheckGenerationConfigValues(genConfig);
+            }
+            let journalStarted = false;
+            try {
+                const prefillStep = yield this.prefillGeneration(input, modelId, pipeline, chatConfig, genConfig, journal);
+                journalStarted = journal.active;
+                const checkpointScheduler = yield this.commitPrefill(journal, pipeline, genConfig, prefillStep);
+                while (!pipeline.stopped()) {
+                    if (this.options.host.isInterrupted()) {
+                        pipeline.triggerStop();
+                        break;
+                    }
+                    yield this.decodeGenerationStep(journal, checkpointScheduler, prefillStep.globalTokenPos, pipeline, genConfig);
+                }
+                yield this.finishJournal(journal, pipeline.getFinishReason());
+                return pipeline.getMessage();
+            }
+            catch (err) {
+                if (journalStarted) {
+                    yield this.recordEngineError(journal, err);
+                }
+                throw err;
+            }
+            finally {
+                yield journal.close();
+            }
+        });
+    }
+    normalizeForRequest(request, modelId) {
+        var _a, _b;
+        const config = normalizeResumableGenerationConfig((_a = request.extra_body) === null || _a === void 0 ? void 0 : _a.resumable);
+        if (config === undefined) {
+            return undefined;
+        }
+        if (((_b = request.n) !== null && _b !== void 0 ? _b : 1) > 1) {
+            throw new Error("Resumable generation currently requires n <= 1.");
+        }
+        if (hasUnsupportedGrammarReplay({
+            response_format: request.response_format,
+        })) {
+            throw new Error("Resumable generation does not support grammar-constrained response formats.");
+        }
+        if (this.options.hasCustomLogitProcessor(modelId)) {
+            throw new Error("Resumable generation does not support a custom LogitProcessor.");
+        }
+        if (hasMultimodalInput(request)) {
+            throw new Error("Resumable generation supports text-only prompts.");
+        }
+        return config;
+    }
+    resetMetrics() {
+        var _a, _b;
+        const metrics = {
+            journalAppendMs: 0,
+            checkpointWriteMs: 0,
+            kvRestoreMs: 0,
+            tokenReplayMs: 0,
+        };
+        this.lastMetrics = metrics;
+        (_b = (_a = this.options).onMetricsChanged) === null || _b === void 0 ? void 0 : _b.call(_a, metrics);
+        return metrics;
+    }
+    metrics() {
+        var _a;
+        return (_a = this.lastMetrics) !== null && _a !== void 0 ? _a : this.resetMetrics();
+    }
+    tryCreateJournal(config) {
+        if (config === undefined) {
+            return undefined;
+        }
+        try {
+            return new ResumableGenerationJournal(this.options.getFileStore(), this.options.getSessionStore(), config);
+        }
+        catch (err) {
+            if (config.strictPersistence) {
+                throw err;
+            }
+            log.warn("Resumable journal disabled:", err);
+            return undefined;
+        }
+    }
+    recordGeneratedToken(journal, pipeline, sampled, committed) {
+        return __awaiter(this, void 0, void 0, function* () {
+            if (journal === undefined) {
+                return;
+            }
+            const start = performance.now();
+            try {
+                yield journal.recordGeneratedToken({
+                    globalTokenPos: sampled.globalTokenPos,
+                    tokenId: sampled.tokenId,
+                    textDelta: committed.textDelta,
+                    textPrefixLength: committed.textPrefixLength,
+                    rngState: pipeline.getRNGState(),
+                    logprob: sampled.logprob,
+                });
+            }
+            finally {
+                this.metrics().journalAppendMs += performance.now() - start;
+            }
+        });
+    }
+    shouldCaptureDecodeCheckpoint(scheduler, nextProcessedSeqLen) {
+        return __awaiter(this, void 0, void 0, function* () {
+            return (shouldCaptureDecodeCheckpoint(scheduler, nextProcessedSeqLen) &&
+                (yield hasKVCheckpointQuota()));
+        });
+    }
+    shouldCapturePromptCheckpoint(journal) {
+        return __awaiter(this, void 0, void 0, function* () {
+            return journal.checkpointPrompt && (yield hasKVCheckpointQuota());
+        });
+    }
+    writePromptCheckpoint(journal, sampled, scheduler) {
+        return __awaiter(this, void 0, void 0, function* () {
+            if (yield this.writeKVCheckpoint(journal, sampled.promptCheckpoint)) {
+                noteCommittedCheckpoint(scheduler, sampled.promptCheckpoint);
+            }
+        });
+    }
+    writeDecodeCheckpoint(journal, scheduler, sampled) {
+        return __awaiter(this, void 0, void 0, function* () {
+            if (yield this.writeKVCheckpoint(journal, sampled.decodeCheckpoint)) {
+                noteCommittedCheckpoint(scheduler, sampled.decodeCheckpoint);
+            }
+        });
+    }
+    finishJournal(journal, finishReason) {
+        return __awaiter(this, void 0, void 0, function* () {
+            yield journal.recordGenerationEnd({
+                finishReason,
+                emittedTokens: journal.emittedTokenCount,
+            });
+            if (journal.active && finishReason !== "abort") {
+                yield this.cleanupKVAfterFinish(journal);
+            }
+        });
+    }
+    recordEngineError(journal, err) {
+        return __awaiter(this, void 0, void 0, function* () {
+            if (!isResumableInjectedFault(err)) {
+                yield journal.recordEngineError({ err }).catch(() => undefined);
+            }
+        });
+    }
+    closeStreamJournal(journal, pipeline, unfinished, failure) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                try {
+                    if (unfinished && !isResumableInjectedFault(failure)) {
+                        pipeline.triggerStop();
+                        yield this.finishJournal(journal, "abort");
+                    }
+                }
+                finally {
+                    yield journal.close();
+                }
+            }
+            catch (err) {
+                // Preserve an existing generation error. Otherwise, let cancellation
+                // report strict persistence failures to its caller.
+                if (failure === undefined)
+                    throw err;
+            }
+        });
+    }
+    createResumeCheckpointScheduler(journal, restored) {
+        return {
+            intervalTokens: journal.checkpointIntervalTokens,
+            lastCheckpointSeqLen: restored.lastCheckpointSeqLen,
+            pageSize: restored.checkpointPageSize,
+        };
+    }
+    createResumeContinuationJournal(locked) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const { files, sessions, session, state } = locked;
+            if (state.resumableConfig === undefined) {
+                throw new Error(`Resumable session ${state.sessionId} is missing journal configuration.`);
+            }
+            const journal = new ResumableGenerationJournal(files, sessions, state.resumableConfig);
+            yield journal.attachExistingSession(session, state.emittedTokens);
+            return journal;
+        });
+    }
+    recordPendingResumeToken(journal, pipeline, restored) {
+        return __awaiter(this, void 0, void 0, function* () {
+            if (restored.pendingJournaledToken === undefined) {
+                return;
+            }
+            yield this.recordGeneratedToken(journal, pipeline, restored.pendingJournaledToken.sampled, restored.pendingJournaledToken.committed);
+            restored.pendingJournaledToken = undefined;
+        });
+    }
+    resume(sessionId, options) {
+        return __awaiter(this, void 0, void 0, function* () {
+            if ((options === null || options === void 0 ? void 0 : options.continueGeneration) !== true) {
+                return this.readTextOnlyResult(sessionId);
+            }
+            if (options.stream === true) {
+                const replayState = yield this.readReplayState(sessionId);
+                if (this.canAttemptContinuation(replayState) &&
+                    isChatCompletionReplayRequest(replayState.request) &&
+                    replayState.request.stream === true) {
+                    if (this.options.host.getModel(replayState.modelId) === undefined) {
+                        return this.makeTextOnlyResumeResult(replayState);
+                    }
+                    return lazyAsyncIterable(() => __awaiter(this, void 0, void 0, function* () {
+                        const resumed = yield this.resumeEager(sessionId, options);
+                        if (!isAsyncIterable(resumed)) {
+                            throw new Error(`Resumable session ${sessionId} became unavailable for continued streaming.`);
+                        }
+                        return resumed;
+                    }));
+                }
+            }
+            return this.resumeEager(sessionId, options);
+        });
+    }
+    resumeEager(sessionId, options) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const locked = yield this.openLockedSession(sessionId);
+            let releaseSessionLockOnExit = true;
+            try {
+                this.resetMetrics();
+                const replayState = locked.state;
+                if (replayState.resumableConfig === undefined) {
+                    throw new Error(`Resumable session ${sessionId} is missing or has malformed resumable generation config.`);
+                }
+                const model = this.options.host.getModel(replayState.modelId);
+                if (model === undefined)
+                    return this.makeTextOnlyResumeResult(replayState);
+                const { modelId: selectedModelId, pipeline: selectedPipeline, chatConfig: selectedChatConfig, lock, } = model;
+                yield lock.acquire();
+                let releaseModelLockOnExit = true;
+                try {
+                    if (replayState.generationConfig === undefined) {
+                        return this.makeTextOnlyResumeResult(replayState);
+                    }
+                    const genConfig = replayState.generationConfig;
+                    postInitAndCheckGenerationConfigValues(genConfig);
+                    let restored = yield this.tryRestoreKVResumeState(locked, selectedPipeline, genConfig);
+                    if (restored === undefined) {
+                        restored = yield this.restoreByTokenReplay(replayState, selectedPipeline, genConfig);
+                    }
+                    if (restored === undefined) {
+                        return this.makeTextOnlyResumeResult(replayState);
+                    }
+                    const resumeJournal = yield this.createResumeContinuationJournal(locked);
+                    const checkpointScheduler = this.createResumeCheckpointScheduler(resumeJournal, restored);
+                    const promptSeqLen = replayPromptSeqLen(replayState);
+                    if ((options === null || options === void 0 ? void 0 : options.stream) === true &&
+                        isChatCompletionReplayRequest(replayState.request) &&
+                        replayState.request.stream === true) {
+                        releaseModelLockOnExit = false;
+                        releaseSessionLockOnExit = false;
+                        const cleanup = onceAsync(() => __awaiter(this, void 0, void 0, function* () {
+                            try {
+                                yield resumeJournal.close();
+                            }
+                            finally {
+                                try {
+                                    yield lock.release();
+                                }
+                                finally {
+                                    locked.release();
+                                }
+                            }
+                        }));
+                        const source = this.streamContinuation(replayState.request, selectedModelId, selectedPipeline, selectedChatConfig, genConfig, replayState, restored, resumeJournal, checkpointScheduler, promptSeqLen, cleanup);
+                        return managedAsyncIterable(source, cleanup);
+                    }
+                    return yield this.finishContinuation(replayState, selectedPipeline, selectedChatConfig, genConfig, restored, resumeJournal, checkpointScheduler, promptSeqLen);
+                }
+                finally {
+                    if (releaseModelLockOnExit) {
+                        yield lock.release();
+                    }
+                }
+            }
+            finally {
+                if (releaseSessionLockOnExit) {
+                    locked.release();
+                }
+            }
+        });
+    }
+    openLockedSession(sessionId) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const files = this.options.getFileStore();
+            const sessions = this.options.getSessionStore();
+            const session = yield sessions.openSession(sessionId);
+            if (session === undefined) {
+                throw new Error(`Resumable session not found: ${sessionId}`);
+            }
+            const release = yield files.tryLock(session.paths.lockPath);
+            if (release === undefined) {
+                throw new Error(`Resumable session is already active: ${sessionId}`);
+            }
+            try {
+                const state = yield sessions.repairSession(session);
+                return { files, sessions, session, state, release };
+            }
+            catch (err) {
+                release();
+                throw err;
+            }
+        });
+    }
+    readReplayState(sessionId) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const files = this.options.getFileStore();
+            const session = yield this.options.getSessionStore().openSession(sessionId);
+            if (session === undefined) {
+                throw new Error(`Resumable session not found: ${sessionId}`);
+            }
+            return readResumableReplayState(files, session);
+        });
+    }
+    canAttemptContinuation(state) {
+        return (state.resumableConfig !== undefined &&
+            // The read-only stream probe sees an un-repaired tail. Actual recovery
+            // truncates it under the session lock, acquired only on first next().
+            this.getContinuationBlockReason(Object.assign(Object.assign({}, state), { scanStoppedReason: undefined })) === undefined);
+    }
+    readTextOnlyResult(sessionId) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const sessions = this.options.getSessionStore();
+            const session = yield sessions.openSession(sessionId);
+            if (session === undefined) {
+                throw new Error(`Resumable session not found: ${sessionId}`);
+            }
+            return this.makeTextOnlyResumeResult(yield sessions.inspectSession(session));
+        });
+    }
+    listSessions() {
+        return __awaiter(this, void 0, void 0, function* () {
+            var _a, _b;
+            let files;
+            let sessions;
+            try {
+                files = this.options.getFileStore();
+                sessions = this.options.getSessionStore();
+            }
+            catch (err) {
+                if (isOPFSUnavailableError(err)) {
+                    return [];
+                }
+                throw err;
+            }
+            let handles;
+            try {
+                handles = yield sessions.listSessions();
+            }
+            catch (err) {
+                if (isOPFSUnavailableError(err)) {
+                    return [];
+                }
+                throw err;
+            }
+            const results = [];
+            for (const session of handles) {
+                try {
+                    const state = yield sessions.inspectSession(session);
+                    let result = probeReplayState(state);
+                    if (result.resumable &&
+                        result.recoveryMode === "token_replay" &&
+                        (yield this.readBestKVCheckpoint(files, sessions, session, state)) !==
+                            undefined) {
+                        result = Object.assign(Object.assign({}, result), { recoveryMode: "kv" });
+                    }
+                    if (result.resumable &&
+                        this.options.hasCustomLogitProcessor(result.modelId)) {
+                        result = Object.assign(Object.assign({}, result), { resumable: false, reason: "custom LogitProcessor replay unsupported", recoveryMode: result.emittedTokens > 0 ? "text_only" : "none" });
+                    }
+                    results.push(result);
+                }
+                catch (err) {
+                    results.push({
+                        sessionId: session.sessionId,
+                        resumable: false,
+                        reason: `session inspection failed: ${err instanceof Error ? err.message : String(err)}`,
+                        modelId: (_b = (_a = session.manifest) === null || _a === void 0 ? void 0 : _a.modelId) !== null && _b !== void 0 ? _b : "",
+                        emittedTokens: 0,
+                        processedSeqLen: 0,
+                        recoveryMode: "none",
+                    });
+                }
+            }
+            return results;
+        });
+    }
+    deleteSession(sessionId) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                yield this.options.getSessionStore().deleteSession(sessionId);
+            }
+            catch (err) {
+                if (!isOPFSUnavailableError(err)) {
+                    throw err;
+                }
+            }
+        });
+    }
+    tryRestoreKVResumeState(locked, pipeline, genConfig) {
+        return __awaiter(this, void 0, void 0, function* () {
+            var _a, _b, _c;
+            const { files, sessions, session, state } = locked;
+            if (this.getContinuationBlockReason(state) !== undefined) {
+                return undefined;
+            }
+            try {
+                const resume = yield this.readBestKVCheckpoint(files, sessions, session, state);
+                if (resume === undefined) {
+                    return undefined;
+                }
+                if (resume.tailGeneratedTokens.length === 0) {
+                    const seed = requestSeed(state.request);
+                    const rngState = (_a = resume.coveredGeneratedTokens.at(-1)) === null || _a === void 0 ? void 0 : _a.rngState;
+                    if (rngState !== undefined) {
+                        if (!pipeline.setRNGState(rngState)) {
+                            return undefined;
+                        }
+                    }
+                    else if (seed !== undefined) {
+                        pipeline.setSeed(seed);
+                    }
+                    else if (state.generatedTokens.length > 0) {
+                        return undefined;
+                    }
+                }
+                const restoreStart = performance.now();
+                const replay = yield pipeline.replayFromPromptCheckpoint(resume.checkpoint, state.assistantPrefixTokenIds, resume.coveredGeneratedTokens, resume.tailGeneratedTokens, genConfig);
+                const restoreElapsed = performance.now() - restoreStart;
+                this.metrics().kvRestoreMs += restoreElapsed;
+                if (replay.sampledToken !== undefined) {
+                    this.metrics().resumeFirstTokenMs = restoreElapsed;
+                }
+                const rngState = (_b = resume.tailGeneratedTokens.at(-1)) === null || _b === void 0 ? void 0 : _b.rngState;
+                if (rngState !== undefined && !pipeline.setRNGState(rngState)) {
+                    pipeline.resetChat();
+                    return undefined;
+                }
+                return {
+                    recoveryMode: "kv",
+                    replayedTokens: replay.replayedTokens,
+                    extraEmittedTokens: replay.sampledToken === undefined ? 0 : 1,
+                    firstTokenRecorded: replay.sampledToken !== undefined,
+                    lastCheckpointSeqLen: resume.checkpoint.processedSeqLen,
+                    checkpointPageSize: checkpointPageSize(resume.checkpoint),
+                    streamDeltaStart: (_c = replay.committedToken) === null || _c === void 0 ? void 0 : _c.textPrefixLength,
+                    pendingJournaledToken: replay.sampledToken !== undefined &&
+                        replay.committedToken !== undefined
+                        ? {
+                            sampled: replay.sampledToken,
+                            committed: replay.committedToken,
+                        }
+                        : undefined,
+                };
+            }
+            catch (err) {
+                log.warn("KV checkpoint restore failed; falling back:", err);
+                pipeline.resetChat();
+                return undefined;
+            }
+        });
+    }
+    restoreByTokenReplay(state, pipeline, genConfig) {
+        return __awaiter(this, void 0, void 0, function* () {
+            var _a, _b, _c;
+            const blockReason = this.getContinuationBlockReason(state);
+            if (blockReason !== undefined) {
+                log.warn(`Resumable session ${state.sessionId} recovered as text-only: ${blockReason}.`);
+                return undefined;
+            }
+            if (state.generatedTokens.length === 0) {
+                const seed = requestSeed(state.request);
+                if (seed !== undefined) {
+                    pipeline.setSeed(seed);
+                }
+            }
+            const replayStart = performance.now();
+            const replay = (_a = (yield pipeline.replayGenerationTokens(state.promptTokenIds, state.assistantPrefixTokenIds, state.generatedTokens, genConfig))) !== null && _a !== void 0 ? _a : {
+                // Compatibility with pipeline-like integrations compiled against the
+                // previous void return; the production pipeline always returns detail.
+                replayedTokens: state.generatedTokens.length};
+            const replayElapsed = performance.now() - replayStart;
+            this.metrics().tokenReplayMs += replayElapsed;
+            if (replay.sampledToken !== undefined) {
+                this.metrics().resumeFirstTokenMs = replayElapsed;
+            }
+            if (state.generatedTokens.length > 0) {
+                const rngState = (_b = state.generatedTokens.at(-1)) === null || _b === void 0 ? void 0 : _b.rngState;
+                if (!pipeline.setRNGState(rngState)) {
+                    pipeline.resetChat();
+                    return undefined;
+                }
+            }
+            return {
+                recoveryMode: "token_replay",
+                replayedTokens: replay.replayedTokens,
+                extraEmittedTokens: replay.sampledToken === undefined ? 0 : 1,
+                firstTokenRecorded: replay.sampledToken !== undefined,
+                lastCheckpointSeqLen: replayPromptSeqLen(state),
+                streamDeltaStart: (_c = replay.committedToken) === null || _c === void 0 ? void 0 : _c.textPrefixLength,
+                pendingJournaledToken: replay.sampledToken !== undefined && replay.committedToken !== undefined
+                    ? {
+                        sampled: replay.sampledToken,
+                        committed: replay.committedToken,
+                    }
+                    : undefined,
+            };
+        });
+    }
+    makeTextOnlyResumeResult(state) {
+        return {
+            sessionId: state.sessionId,
+            recoveredText: state.recoveredText,
+            emittedTokens: state.emittedTokens,
+            processedSeqLen: state.processedSeqLen,
+            replayedTokens: 0,
+            recoveryMode: "text_only",
+        };
+    }
+    writeKVCheckpoint(journal, checkpoint) {
+        return __awaiter(this, void 0, void 0, function* () {
+            var _a, _b, _c;
+            if (checkpoint === undefined || !journal.active) {
+                return false;
+            }
+            if (!(yield hasKVCheckpointQuota(checkpointByteLength(checkpoint)))) {
+                return false;
+            }
+            const sessions = this.options.getSessionStore();
+            try {
+                const writer = new ResumableCheckpointWriter(this.options.getFileStore(), sessions);
+                const start = performance.now();
+                let ref;
+                try {
+                    ref = yield writer.writeCheckpoint({
+                        sessionId: journal.sessionId,
+                        checkpointId: promptCheckpointId(checkpoint.processedSeqLen),
+                        processedSeqLen: checkpoint.processedSeqLen,
+                        layoutHash: checkpoint.layoutHash,
+                        metadata: Object.assign(Object.assign({}, checkpoint.metadata), { nextLogitsShape: (_a = checkpoint.nextLogits) === null || _a === void 0 ? void 0 : _a.shape, nextLogitsDtype: (_b = checkpoint.nextLogits) === null || _b === void 0 ? void 0 : _b.dtype }),
+                        pageGroups: checkpoint.pageGroups,
+                        nextLogits: (_c = checkpoint.nextLogits) === null || _c === void 0 ? void 0 : _c.data,
+                    });
+                    yield journal.recordCheckpointCommit({
+                        checkpointId: ref.checkpointId,
+                        processedSeqLen: checkpoint.processedSeqLen,
+                        path: ref.path,
+                        layoutHash: checkpoint.layoutHash,
+                    });
+                }
+                finally {
+                    this.metrics().checkpointWriteMs += performance.now() - start;
+                }
+                if (!journal.active) {
+                    yield sessions.reconcileCheckpoints(journal.sessionId);
+                    return false;
+                }
+                yield sessions.pruneCommittedCheckpoints(journal.sessionId, CHECKPOINT_RETENTION_COUNT);
+                return true;
+            }
+            catch (err) {
+                yield sessions.reconcileCheckpoints(journal.sessionId).catch(() => []);
+                if (journal.strictPersistence) {
+                    throw err;
+                }
+                log.warn("KV checkpoint disabled:", err);
+                return false;
+            }
+        });
+    }
+    cleanupKVAfterFinish(journal) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                yield this.options.getSessionStore().deleteKV(journal.sessionId);
+            }
+            catch (err) {
+                // The finished record is durable already. Housekeeping must not turn a
+                // successfully persisted response into a failed, non-resumable request.
+                log.warn("KV checkpoint cleanup failed:", err);
+            }
+        });
+    }
+    checkpointPayloadToKVData(payload) {
+        const metadata = payload.meta.metadata;
+        if (metadata === undefined) {
+            throw new Error("KV checkpoint metadata is missing runtime metadata.");
+        }
+        const nextLogitsShape = metadata.nextLogitsShape;
+        const nextLogitsDtype = metadata.nextLogitsDtype;
+        return {
+            processedSeqLen: payload.meta.processedSeqLen,
+            layoutHash: payload.meta.layoutHash,
+            metadata,
+            pageGroups: payload.pageGroups.map((group) => ({
+                groupId: group.groupId,
+                layerStart: group.layerStart,
+                layerEnd: group.layerEnd,
+                data: group.data,
+            })),
+            nextLogits: payload.nextLogits === undefined
+                ? undefined
+                : {
+                    shape: Array.isArray(nextLogitsShape)
+                        ? nextLogitsShape
+                        : [],
+                    dtype: typeof nextLogitsDtype === "string"
+                        ? nextLogitsDtype
+                        : "float32",
+                    data: payload.nextLogits.data,
+                },
+        };
+    }
+    readBestKVCheckpoint(files, sessions, session, state) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const promptSeqLen = state.promptTokenIds.length;
+            const refs = yield sessions.listCommittedCheckpoints(session.sessionId);
+            let best;
+            for (const ref of refs) {
+                try {
+                    const payload = yield readResumableCheckpointPayload(files, ref);
+                    if (payload === undefined) {
+                        log.warn(`Ignoring invalid KV checkpoint ${ref.checkpointId}: checkpoint payload is incomplete.`);
+                        continue;
+                    }
+                    if (payload.meta.processedSeqLen >= promptSeqLen &&
+                        payload.meta.processedSeqLen <= state.processedSeqLen &&
+                        (best === undefined ||
+                            payload.meta.processedSeqLen > best.processedSeqLen)) {
+                        best = this.checkpointPayloadToKVData(payload);
+                    }
+                }
+                catch (err) {
+                    log.warn(`Ignoring invalid KV checkpoint ${ref.checkpointId}:`, err);
+                }
+            }
+            if (best === undefined) {
+                return undefined;
+            }
+            return {
+                checkpoint: best,
+                coveredGeneratedTokens: state.generatedTokens.filter((token) => token.globalTokenPos < best.processedSeqLen),
+                tailGeneratedTokens: state.generatedTokens.filter((token) => token.globalTokenPos >= best.processedSeqLen),
+            };
+        });
+    }
+    getContinuationBlockReason(state) {
+        var _a;
+        if (state.finished) {
+            return "generation already finished";
+        }
+        if (state.scanStoppedReason !== undefined) {
+            return `journal scan stopped at ${state.scanStoppedReason}`;
+        }
+        if (state.promptTokenIds.length === 0) {
+            return "missing prompt token record";
+        }
+        if (state.generationConfig === undefined) {
+            return "missing generation config record";
+        }
+        if (hasUnsupportedGrammarReplay(state.generationConfig)) {
+            return "unsupported grammar replay";
+        }
+        if (state.generatedTokens.length > 0 &&
+            ((_a = state.generatedTokens.at(-1)) === null || _a === void 0 ? void 0 : _a.rngState) === undefined) {
+            return "missing RNG state";
+        }
+        if (state.modelId === "") {
+            return "missing model id";
+        }
+        if (this.options.hasCustomLogitProcessor(state.modelId)) {
+            return "custom LogitProcessor replay unsupported";
+        }
+        return undefined;
+    }
+}
+
+function getUnixTimestampSeconds() {
+    return Math.floor(Date.now() / 1000);
+}
+function countTrailingReplacementChar(value) {
+    let count = 0;
+    for (let i = value.length - 1; i >= 0; i--) {
+        if (value.charAt(i) !== "�") {
+            return count;
+        }
+        count++;
+    }
+    return count;
+}
 /**
  * Creates `MLCEngine`, and loads `modelId` onto WebGPU.
  *
@@ -12376,6 +18092,42 @@ class MLCEngine {
         this.setLogLevel((engineConfig === null || engineConfig === void 0 ? void 0 : engineConfig.logLevel) || DefaultLogLevel);
         this.setInitProgressCallback(engineConfig === null || engineConfig === void 0 ? void 0 : engineConfig.initProgressCallback);
         this.setLogitProcessorRegistry(engineConfig === null || engineConfig === void 0 ? void 0 : engineConfig.logitProcessorRegistry);
+        this.resumableCoordinator = new ResumableGenerationCoordinator({
+            host: {
+                getModel: (modelId) => {
+                    try {
+                        const [selectedModelId, pipeline, chatConfig] = this.getLLMStates("resumeChatCompletion", modelId);
+                        if (selectedModelId !== modelId)
+                            return undefined;
+                        return {
+                            modelId,
+                            pipeline,
+                            chatConfig,
+                            lock: this.loadedModelIdToLock.get(modelId),
+                        };
+                    }
+                    catch (err) {
+                        if (err instanceof ModelNotLoadedError ||
+                            err instanceof SpecifiedModelNotFoundError)
+                            return undefined;
+                        throw err;
+                    }
+                },
+                resetInterrupt: () => {
+                    this.interruptSignal = false;
+                },
+                isInterrupted: () => this.interruptSignal,
+                samplePrefill: (...args) => this.samplePrefill(...args),
+                sampleDecode: (...args) => this.sampleDecode(...args),
+                streamCurrentGeneration: (...args) => this.streamCurrentGeneration(...args),
+            },
+            getFileStore: () => this.getResumableFileStore(),
+            getSessionStore: () => this.getResumableSessionStore(),
+            hasCustomLogitProcessor: (modelId) => { var _a; return ((_a = this.logitProcessorRegistry) === null || _a === void 0 ? void 0 : _a.has(modelId)) === true; },
+            onMetricsChanged: (metrics) => {
+                this.lastResumableMetrics = metrics;
+            },
+        });
         this.chat = new Chat(this);
         this.completions = new Completions(this);
         this.embeddings = new Embeddings(this);
@@ -12394,6 +18146,18 @@ class MLCEngine {
     }
     setLogitProcessorRegistry(logitProcessorRegistry) {
         this.logitProcessorRegistry = logitProcessorRegistry;
+    }
+    getResumableFileStore() {
+        if (this.resumableFileStore === undefined) {
+            this.resumableFileStore = createOPFSFileStore();
+        }
+        return this.resumableFileStore;
+    }
+    getResumableSessionStore() {
+        if (this.resumableSessionStore === undefined) {
+            this.resumableSessionStore = new ResumableSessionStore(this.getResumableFileStore());
+        }
+        return this.resumableSessionStore;
     }
     /**
      * Set MLCEngine logging output level
@@ -12447,7 +18211,7 @@ class MLCEngine {
     }
     reloadInternal(modelId, chatOpts) {
         return __awaiter(this, void 0, void 0, function* () {
-            var _a, _b, _c, _d, _e;
+            var _a, _b, _c, _d, _e, _f;
             const logitProcessor = (_a = this.logitProcessorRegistry) === null || _a === void 0 ? void 0 : _a.get(modelId);
             const tstart = performance.now();
             // look up and parse model record, record model type
@@ -12463,23 +18227,23 @@ class MLCEngine {
                 ? ModelType.LLM
                 : modelRecord.model_type;
             this.loadedModelIdToModelType.set(modelId, modelType);
-            const cacheType = getCacheBackend(this.appConfig);
             // instantiate cache
-            const configCache = libExports$2.createArtifactCache("webllm/config", {
-                cacheType,
-            });
+            const configCache = libExports$2.createArtifactCache("webllm/config", getCacheOptions(this.appConfig));
+            // A model uses its manifest only when the record names one.
+            const modelPackage = modelRecord.model_manifest === undefined
+                ? undefined
+                : yield loadModelPackageManifest((yield configCache.fetchWithCache(new URL(modelRecord.model_manifest, modelUrl).href, "arraybuffer", (_b = this.reloadController) === null || _b === void 0 ? void 0 : _b.signal)));
+            const packageResources = resolveModelPackageResourceURLs(modelUrl, modelPackage);
             // load config
-            const configUrl = new URL("mlc-chat-config.json", modelUrl).href;
-            const configData = (yield configCache.fetchWithCache(configUrl, "arraybuffer", (_b = this.reloadController) === null || _b === void 0 ? void 0 : _b.signal));
-            if ((_c = modelRecord.integrity) === null || _c === void 0 ? void 0 : _c.config) {
+            const configUrl = packageResources.chatConfigUrl;
+            const configData = (yield configCache.fetchWithCache(configUrl, "arraybuffer", (_c = this.reloadController) === null || _c === void 0 ? void 0 : _c.signal));
+            if ((_d = modelRecord.integrity) === null || _d === void 0 ? void 0 : _d.config) {
                 yield verifyIntegrity(configData, modelRecord.integrity.config, configUrl, modelRecord.integrity.onFailure);
             }
             const curModelConfig = Object.assign(Object.assign(Object.assign({}, JSON.parse(new TextDecoder().decode(configData))), modelRecord.overrides), chatOpts);
             this.loadedModelIdToChatConfig.set(modelId, curModelConfig);
             // load tvm wasm
-            const wasmCache = libExports$2.createArtifactCache("webllm/wasm", {
-                cacheType,
-            });
+            const wasmCache = libExports$2.createArtifactCache("webllm/wasm", getCacheOptions(this.appConfig));
             const wasmUrl = modelRecord.model_lib;
             if (wasmUrl === undefined) {
                 throw new MissingModelWasmError(modelRecord.model_id);
@@ -12500,7 +18264,7 @@ class MLCEngine {
                 }
             });
             const wasmSource = yield fetchWasmSource();
-            if ((_d = modelRecord.integrity) === null || _d === void 0 ? void 0 : _d.model_lib) {
+            if ((_e = modelRecord.integrity) === null || _e === void 0 ? void 0 : _e.model_lib) {
                 yield verifyIntegrity(wasmSource, modelRecord.integrity.model_lib, wasmUrl, modelRecord.integrity.onFailure);
             }
             const wasm = new Uint8Array(wasmSource);
@@ -12546,11 +18310,7 @@ class MLCEngine {
             });
             tvm.initWebGPU(gpuDetectOutput.device);
             const tokenizer = yield asyncLoadTokenizer(modelUrl, curModelConfig, this.appConfig, this.logger, modelRecord.integrity);
-            yield tvm.fetchTensorCache(modelUrl, tvm.webgpu(), {
-                cacheScope: "webllm/model",
-                cacheType,
-                signal: (_e = this.reloadController) === null || _e === void 0 ? void 0 : _e.signal,
-            });
+            yield tvm.fetchTensorCache(packageResources.tensorCacheBaseUrl, tvm.webgpu(), Object.assign(Object.assign({}, getTensorCacheAccessOptions("webllm/model", this.appConfig)), { signal: (_f = this.reloadController) === null || _f === void 0 ? void 0 : _f.signal }));
             // Instantiate pipeline
             // TODO: would be good to somehow check for error when LLMChatPipeline is loaded for an
             // embedding model, and prompt user to use ModelRecord.model_type
@@ -12559,7 +18319,10 @@ class MLCEngine {
                 newPipeline = new EmbeddingPipeline(tvm, tokenizer, curModelConfig);
             }
             else {
-                newPipeline = new LLMChatPipeline(tvm, tokenizer, curModelConfig, logitProcessor);
+                newPipeline = new LLMChatPipeline(tvm, tokenizer, curModelConfig, logitProcessor, modelPackage, {
+                    features: gpuDetectOutput.device.features,
+                    maxStorageBufferBindingSize: gpuDetectOutput.device.limits.maxStorageBufferBindingSize,
+                });
             }
             yield newPipeline.asyncLoadWebGPUPipelines();
             this.loadedModelIdToPipeline.set(modelId, newPipeline);
@@ -12621,250 +18384,222 @@ class MLCEngine {
             return pipeline.getMessage();
         });
     }
-    asyncGenerate(request, model, pipeline, chatConfig, genConfig, timeReceived) {
+    makeStreamDeltaChunk(request, model, pipeline, state, skipEmptyDelta = false) {
+        const curMessage = pipeline.getMessage();
+        if (countTrailingReplacementChar(curMessage) % 4 !== 0) {
+            return undefined;
+        }
+        const deltaMessage = curMessage.slice(state.prevMessageLength);
+        state.prevMessageLength = curMessage.length;
+        if (skipEmptyDelta && deltaMessage === "") {
+            return undefined;
+        }
+        const logprobs = request.logprobs
+            ? {
+                content: pipeline.getTokenLogprobArray().slice(-1),
+            }
+            : null;
+        if ("messages" in request) {
+            return {
+                id: state.id,
+                choices: [
+                    {
+                        delta: { content: deltaMessage, role: "assistant" },
+                        finish_reason: null,
+                        index: 0,
+                        logprobs,
+                    },
+                ],
+                model,
+                object: "chat.completion.chunk",
+                created: state.created,
+            };
+        }
+        return {
+            id: state.id,
+            choices: [
+                {
+                    text: deltaMessage,
+                    finish_reason: null,
+                    index: 0,
+                    logprobs,
+                },
+            ],
+            model,
+            object: "text_completion",
+            created: state.created,
+        };
+    }
+    makeStreamFinalChunk(request, model, pipeline, state) {
+        let finishReason = pipeline.getFinishReason();
+        const isChatCompletion = "messages" in request;
+        const isFunctionCalling = isChatCompletion && request.tools !== undefined && request.tools !== null;
+        let toolCalls;
+        if (pipeline.getFinishReason() === "stop" && isFunctionCalling) {
+            finishReason = "tool_calls";
+            toolCalls = getToolCallFromOutputMessage(pipeline.getMessage(),
+            /*isStreaming=*/ true);
+        }
+        if (isChatCompletion) {
+            return {
+                id: state.id,
+                choices: [
+                    {
+                        delta: isFunctionCalling
+                            ? {
+                                role: "assistant",
+                                tool_calls: toolCalls,
+                            }
+                            : {},
+                        finish_reason: finishReason,
+                        index: 0,
+                    },
+                ],
+                model,
+                object: "chat.completion.chunk",
+                created: state.created,
+            };
+        }
+        return {
+            id: state.id,
+            choices: [
+                {
+                    text: "",
+                    finish_reason: finishReason,
+                    index: 0,
+                },
+            ],
+            model,
+            object: "text_completion",
+            created: state.created,
+        };
+    }
+    makeStreamUsageChunk(request, model, pipeline, state, completionTokenOffset, timeReceived) {
+        var _a, _b, _c, _d;
+        if (((_a = request.stream_options) === null || _a === void 0 ? void 0 : _a.include_usage) !== true) {
+            return undefined;
+        }
+        const usedGrammar = "response_format" in request &&
+            (((_b = request.response_format) === null || _b === void 0 ? void 0 : _b.type) === "grammar" ||
+                ((_c = request.response_format) === null || _c === void 0 ? void 0 : _c.type) === "json_object");
+        const completionTokens = pipeline.getCurRoundCompletionTotalTokens() + completionTokenOffset;
+        const decodeTokens = pipeline.getCurRoundDecodingTotalTokens();
+        const promptTokens = pipeline.getCurRoundPrefillTotalTokens();
+        const prefillTime = pipeline.getCurRoundPrefillTotalTime();
+        const decodeTime = pipeline.getCurRoundDecodingTotalTime();
+        const defaultExtra = {
+            e2e_latency_s: (Date.now() - timeReceived) / 1000,
+            prefill_tokens_per_s: pipeline.getCurRoundPrefillTokensPerSec(),
+            decode_tokens_per_s: pipeline.getCurRoundDecodingTokensPerSec(),
+            time_to_first_token_s: prefillTime,
+            time_per_output_token_s: decodeTokens > 0 ? decodeTime / decodeTokens : 0,
+            latencyBreakdown: ((_d = request.extra_body) === null || _d === void 0 ? void 0 : _d.enable_latency_breakdown)
+                ? pipeline.getCurRoundLatencyBreakdown()
+                : undefined,
+        };
+        const usage = {
+            completion_tokens: completionTokens,
+            prompt_tokens: promptTokens,
+            total_tokens: completionTokens + promptTokens,
+            extra: usedGrammar
+                ? Object.assign(Object.assign({}, defaultExtra), { grammar_init_s: pipeline.getCurRoundGrammarInitTotalTime(), grammar_per_token_s: pipeline.getCurRoundGrammarPerTokenTotalTime() / completionTokens }) : defaultExtra,
+        };
+        if ("messages" in request) {
+            return {
+                id: state.id,
+                choices: [],
+                usage,
+                model,
+                object: "chat.completion.chunk",
+                created: state.created,
+            };
+        }
+        return {
+            id: state.id,
+            choices: [],
+            usage,
+            model,
+            object: "text_completion",
+            created: state.created,
+        };
+    }
+    streamCurrentGeneration(request_1, model_1, pipeline_1, genConfig_1, timeReceived_1, state_1, decodeStep_1) {
+        return __asyncGenerator(this, arguments, function* streamCurrentGeneration_1(request, model, pipeline, genConfig, timeReceived, state, decodeStep, opts = {}) {
+            var _a, _b;
+            if (opts.emitCurrent === true) {
+                const chunk = this.makeStreamDeltaChunk(request, model, pipeline, state, opts.skipEmptyDelta);
+                if (chunk !== undefined) {
+                    yield yield __await(chunk);
+                }
+            }
+            while (!pipeline.stopped()) {
+                if (this.interruptSignal) {
+                    pipeline.triggerStop();
+                    break;
+                }
+                yield __await(decodeStep());
+                const chunk = this.makeStreamDeltaChunk(request, model, pipeline, state, opts.skipEmptyDelta);
+                if (chunk !== undefined) {
+                    yield yield __await(chunk);
+                }
+            }
+            yield __await(((_a = opts.beforeFinalChunk) === null || _a === void 0 ? void 0 : _a.call(opts)));
+            yield yield __await(this.makeStreamFinalChunk(request, model, pipeline, state));
+            const usageChunk = this.makeStreamUsageChunk(request, model, pipeline, state, (_b = opts.completionTokenOffset) !== null && _b !== void 0 ? _b : 0, timeReceived);
+            if (usageChunk !== undefined) {
+                yield yield __await(usageChunk);
+            }
+        });
+    }
+    asyncGenerate(request, model, pipeline, chatConfig, genConfig, timeReceived, journal) {
         return __asyncGenerator(this, arguments, function* asyncGenerate_1() {
-            var _a, _b, _c, _d;
-            // Since it is an async generator, we need to do fine-grained try-catch to ensure lock is
-            // released only when errors occur. Then release at the very end when no error occurs.
-            // TODO: This makes code less readable, is there a better way to do this?
+            // The engine owns model locking and request seeds; the coordinator owns
+            // the resumable journal, checkpoints, and their cancellation cleanup.
             const lock = this.loadedModelIdToLock.get(model);
-            // 0. Pre-processing
-            const isChatCompletion = "messages" in request;
-            const isFunctionCalling = "tools" in request &&
-                request.tools !== undefined &&
-                request.tools !== null;
+            yield __await(lock.acquire());
+            let seeded = false;
+            let prefilled = false;
             try {
+                const isChatCompletion = "messages" in request;
+                const isFunctionCalling = "tools" in request && request.tools != null;
                 if (isFunctionCalling && !isChatCompletion) {
                     throw new Error("Expect `chat.completions` with tools, not `completions`.");
                 }
                 postInitAndCheckGenerationConfigValues(genConfig);
-                if (request.seed !== null && request.seed !== undefined) {
+                if (request.seed != null) {
                     pipeline.setSeed(request.seed);
+                    seeded = true;
                 }
-            }
-            catch (err) {
-                yield __await(lock.release());
-                throw err;
-            }
-            // 1. Helper function that generates the chunk
-            const created = Date.now();
-            const id = crypto.randomUUID();
-            this.interruptSignal = false;
-            let prevMessageLength = 0; // to know where to start slicing the delta; does not count �
-            function _countTrailingReplacementChar(curMessage) {
-                let cntr = 0;
-                for (let i = curMessage.length - 1; i >= 0; i--) {
-                    if (curMessage.charAt(i) === "�") {
-                        cntr += 1;
-                    }
-                    else {
-                        return cntr;
-                    }
-                }
-                return cntr;
-            }
-            function _getChunk(selectedPipeline) {
-                return __awaiter(this, void 0, void 0, function* () {
-                    // Remove the replacement character (U+FFFD) from the response to handle emojis.
-                    // Each emoji is made up of multiples of 4 tokens; when truncated, it is displayed as �, so
-                    // we skip this delta until a full emoji is rendered
-                    // TODO(Charlie): This does not consider cases of � not being emoji, need to fix with Streamer
-                    const curMessage = selectedPipeline.getMessage();
-                    const numTrailingReplacementChar = _countTrailingReplacementChar(curMessage);
-                    if (numTrailingReplacementChar % 4 !== 0) {
-                        return undefined;
-                    }
-                    const deltaMessage = curMessage.slice(prevMessageLength);
-                    prevMessageLength = curMessage.length;
-                    const logprobs = request.logprobs
-                        ? {
-                            content: selectedPipeline.getTokenLogprobArray().slice(-1), // always the last entry
-                        }
-                        : null;
-                    if (isChatCompletion) {
-                        const chunk = {
-                            id: id,
-                            choices: [
-                                {
-                                    delta: { content: deltaMessage, role: "assistant" },
-                                    finish_reason: null, // not finished yet
-                                    index: 0,
-                                    logprobs: logprobs,
-                                },
-                            ],
-                            model: model,
-                            object: "chat.completion.chunk",
-                            created: created,
-                        };
-                        return chunk;
-                    }
-                    else {
-                        const chunk = {
-                            id: id,
-                            choices: [
-                                {
-                                    text: deltaMessage,
-                                    finish_reason: null, // not finished yet
-                                    index: 0,
-                                    logprobs: logprobs,
-                                },
-                            ],
-                            model: model,
-                            object: "text_completion",
-                            created: created,
-                        };
-                        return chunk;
-                    }
-                });
-            }
-            // 2. Auto-regressive loop
-            let curChunk;
-            try {
-                yield __await(this.prefill(request, pipeline, chatConfig, genConfig));
-                curChunk = yield __await(_getChunk(pipeline)); // prefill produces a chunk
-            }
-            catch (err) {
-                yield __await(lock.release());
-                throw err;
-            }
-            if (curChunk) {
-                yield yield __await(curChunk);
-            }
-            while (!pipeline.stopped()) {
-                if (this.interruptSignal) {
-                    // TODO: should we directly release lock here and return the async
-                    // generator? Though no issue observed as of now with interruptGenerate()
-                    pipeline.triggerStop();
-                    break;
-                }
-                try {
-                    yield __await(this.decode(pipeline, genConfig));
-                    curChunk = yield __await(_getChunk(pipeline));
-                }
-                catch (err) {
-                    yield __await(lock.release());
-                    throw err;
-                }
-                if (curChunk) {
-                    yield yield __await(curChunk);
-                }
-            }
-            // Reset seed -- we do not want this seed to affect future requests
-            if (request.seed !== null && request.seed !== undefined) {
-                pipeline.setSeed(Date.now());
-            }
-            // 3. Last chunk empty marking the end
-            // If function calling, use the last chunk to return tool_calls
-            let finish_reason = pipeline.getFinishReason();
-            let tool_calls;
-            try {
-                if (pipeline.getFinishReason() === "stop" && isFunctionCalling) {
-                    // If stopped due to length or abort, cannot output return tool_calls field
-                    finish_reason = "tool_calls";
-                    const outputMessage = pipeline.getMessage();
-                    tool_calls = getToolCallFromOutputMessage(outputMessage, 
-                    /*isStreaming=*/ true);
-                }
-            }
-            catch (err) {
-                yield __await(lock.release());
-                throw err;
-            }
-            if (isChatCompletion) {
-                const lastChunk = {
-                    id: id,
-                    choices: [
-                        {
-                            delta: isFunctionCalling
-                                ? {
-                                    role: "assistant",
-                                    tool_calls: tool_calls,
-                                }
-                                : {},
-                            finish_reason: finish_reason,
-                            index: 0,
-                        },
-                    ],
-                    model: model,
-                    object: "chat.completion.chunk",
-                    created: created,
+                const state = {
+                    id: crypto.randomUUID(),
+                    created: getUnixTimestampSeconds(),
+                    prevMessageLength: 0,
                 };
-                yield yield __await(lastChunk);
-            }
-            else {
-                const lastChunk = {
-                    id: id,
-                    choices: [
-                        {
-                            text: "",
-                            finish_reason: finish_reason,
-                            index: 0,
-                        },
-                    ],
-                    model: model,
-                    object: "text_completion",
-                    created: created,
-                };
-                yield yield __await(lastChunk);
-            }
-            // 4. Usage chunk
-            if ((_a = request.stream_options) === null || _a === void 0 ? void 0 : _a.include_usage) {
-                const usedGrammar = "response_format" in request &&
-                    (((_b = request.response_format) === null || _b === void 0 ? void 0 : _b.type) === "grammar" ||
-                        ((_c = request.response_format) === null || _c === void 0 ? void 0 : _c.type) === "json_object");
-                const completion_tokens = pipeline.getCurRoundDecodingTotalTokens();
-                const prompt_tokens = pipeline.getCurRoundPrefillTotalTokens();
-                const prefill_tokens_per_s = pipeline.getCurRoundPrefillTokensPerSec();
-                const decode_tokens_per_s = pipeline.getCurRoundDecodingTokensPerSec();
-                const grammar_init_s = pipeline.getCurRoundGrammarInitTotalTime();
-                const prefill_time = pipeline.getCurRoundPrefillTotalTime();
-                const decode_time = pipeline.getCurRoundDecodingTotalTime();
-                const grammar_per_token_s = pipeline.getCurRoundGrammarPerTokenTotalTime();
-                const latencyBreakdown = pipeline.getCurRoundLatencyBreakdown();
-                const defaultExtra = {
-                    e2e_latency_s: (Date.now() - timeReceived) / 1000,
-                    prefill_tokens_per_s: prefill_tokens_per_s,
-                    decode_tokens_per_s: decode_tokens_per_s,
-                    time_to_first_token_s: prefill_time,
-                    time_per_output_token_s: decode_time / completion_tokens,
-                    latencyBreakdown: ((_d = request.extra_body) === null || _d === void 0 ? void 0 : _d.enable_latency_breakdown)
-                        ? latencyBreakdown
-                        : undefined,
-                };
-                const usage = {
-                    completion_tokens: completion_tokens,
-                    prompt_tokens: prompt_tokens,
-                    total_tokens: completion_tokens + prompt_tokens,
-                    extra: usedGrammar
-                        ? Object.assign(Object.assign({}, defaultExtra), {
-                            grammar_init_s: grammar_init_s,
-                            grammar_per_token_s: grammar_per_token_s / completion_tokens,
-                        }) : defaultExtra,
-                };
-                if (isChatCompletion) {
-                    const usageChunk = {
-                        id: id,
-                        choices: [],
-                        usage: usage,
-                        model: model,
-                        object: "chat.completion.chunk",
-                        created: created,
-                    };
-                    yield yield __await(usageChunk);
+                this.interruptSignal = false;
+                if (journal !== undefined) {
+                    yield __await(yield* __asyncDelegator(__asyncValues(this.resumableCoordinator.streamGeneration(request, model, pipeline, chatConfig, genConfig, timeReceived, state, journal))));
                 }
                 else {
-                    const usageChunk = {
-                        id: id,
-                        choices: [],
-                        usage: usage,
-                        model: model,
-                        object: "text_completion",
-                        created: created,
-                    };
-                    yield yield __await(usageChunk);
+                    yield __await(this.prefill(request, pipeline, chatConfig, genConfig));
+                    prefilled = true;
+                    yield __await(yield* __asyncDelegator(__asyncValues(this.streamCurrentGeneration(request, model, pipeline, genConfig, timeReceived, state, () => this.decode(pipeline, genConfig), { emitCurrent: true }))));
                 }
             }
-            yield __await(lock.release());
+            finally {
+                try {
+                    if (prefilled && !pipeline.stopped())
+                        pipeline.triggerStop();
+                }
+                finally {
+                    try {
+                        if (seeded)
+                            pipeline.setSeed(Date.now());
+                    }
+                    finally {
+                        yield __await(lock.release());
+                    }
+                }
+            }
         });
     }
     interruptGenerate() {
@@ -12874,12 +18609,12 @@ class MLCEngine {
     }
     chatCompletion(request) {
         return __awaiter(this, void 0, void 0, function* () {
-            var _a, _b, _c, _d, _e;
+            var _a, _b, _c, _d, _e, _f;
             const timeReceived = Date.now();
             // 0. Check model loaded and preprocess inputs
             const [selectedModelId, selectedPipeline, selectedChatConfig] = this.getLLMStates("ChatCompletionRequest", request.model);
             const selectedModelType = this.loadedModelIdToModelType.get(selectedModelId);
-            postInitAndCheckFields$2(request, selectedModelId, selectedModelType);
+            postInitAndCheckFields$2(request, selectedModelId, selectedModelType, (_a = selectedPipeline.getSupportedInputKinds) === null || _a === void 0 ? void 0 : _a.call(selectedPipeline));
             const genConfig = {
                 frequency_penalty: request.frequency_penalty,
                 presence_penalty: request.presence_penalty,
@@ -12893,18 +18628,22 @@ class MLCEngine {
                 top_logprobs: request.top_logprobs,
                 response_format: request.response_format,
                 ignore_eos: request.ignore_eos,
-                enable_thinking: (_a = request.extra_body) === null || _a === void 0 ? void 0 : _a.enable_thinking,
-                enable_latency_breakdown: (_b = request.extra_body) === null || _b === void 0 ? void 0 : _b.enable_latency_breakdown,
+                enable_thinking: (_b = request.extra_body) === null || _b === void 0 ? void 0 : _b.enable_thinking,
+                enable_latency_breakdown: (_c = request.extra_body) === null || _c === void 0 ? void 0 : _c.enable_latency_breakdown,
             };
-            // 0.5 Block wait until this pipeline finishes all previous requests
-            const lock = this.loadedModelIdToLock.get(selectedModelId);
-            yield lock.acquire();
+            const resumableConfig = this.resumableCoordinator.normalizeForRequest(request, selectedModelId);
+            const resumableJournal = this.resumableCoordinator.tryCreateJournal(resumableConfig);
             // 1. If request is streaming, return an AsyncIterable (an iterable version of `_generate()`)
             if (request.stream) {
-                return this.asyncGenerate(request, selectedModelId, selectedPipeline, selectedChatConfig, genConfig, timeReceived);
+                return this.asyncGenerate(request, selectedModelId, selectedPipeline, selectedChatConfig, genConfig, timeReceived, resumableJournal);
             }
+            // 0.5 Block wait until this pipeline finishes all previous requests.
+            const lock = this.loadedModelIdToLock.get(selectedModelId);
+            yield lock.acquire();
             // Big try-finally to release lock in case of errors
             try {
+                // An interrupt applies only to the request that was running when it was raised.
+                this.interruptSignal = false;
                 if (request.seed !== null && request.seed !== undefined) {
                     selectedPipeline.setSeed(request.seed);
                 }
@@ -12912,6 +18651,7 @@ class MLCEngine {
                 const n = request.n ? request.n : 1;
                 const choices = [];
                 let completion_tokens = 0;
+                let decode_tokens = 0;
                 let prompt_tokens = 0;
                 let prefill_time = 0;
                 let decode_time = 0;
@@ -12925,7 +18665,10 @@ class MLCEngine {
                         outputMessage = "";
                     }
                     else {
-                        outputMessage = yield this._generate(request, selectedPipeline, selectedChatConfig, genConfig);
+                        outputMessage =
+                            resumableJournal === undefined
+                                ? yield this._generate(request, selectedPipeline, selectedChatConfig, genConfig)
+                                : yield this.resumableCoordinator.generate(request, selectedModelId, selectedPipeline, selectedChatConfig, genConfig, resumableJournal);
                     }
                     let finish_reason = selectedPipeline.getFinishReason();
                     // 3. Post processing for function calling
@@ -12935,7 +18678,7 @@ class MLCEngine {
                         isFunctionCalling) {
                         // If stopped due to length or abort, cannot output return tool_calls field
                         finish_reason = "tool_calls";
-                        tool_calls = getToolCallFromOutputMessage(outputMessage, 
+                        tool_calls = getToolCallFromOutputMessage(outputMessage,
                         /*isStreaming=*/ false);
                     }
                     choices.push({
@@ -12957,7 +18700,9 @@ class MLCEngine {
                                 role: "assistant",
                             },
                     });
-                    completion_tokens += selectedPipeline.getCurRoundDecodingTotalTokens();
+                    completion_tokens +=
+                        selectedPipeline.getCurRoundCompletionTotalTokens();
+                    decode_tokens += selectedPipeline.getCurRoundDecodingTotalTokens();
                     prompt_tokens += selectedPipeline.getCurRoundPrefillTotalTokens();
                     prefill_time += selectedPipeline.getCurRoundPrefillTotalTime();
                     decode_time += selectedPipeline.getCurRoundDecodingTotalTime();
@@ -12966,16 +18711,16 @@ class MLCEngine {
                         selectedPipeline.getCurRoundGrammarPerTokenTotalTime();
                 }
                 const usedGrammar = "response_format" in request &&
-                    (((_c = request.response_format) === null || _c === void 0 ? void 0 : _c.type) === "grammar" ||
-                        ((_d = request.response_format) === null || _d === void 0 ? void 0 : _d.type) === "json_object");
+                    (((_d = request.response_format) === null || _d === void 0 ? void 0 : _d.type) === "grammar" ||
+                        ((_e = request.response_format) === null || _e === void 0 ? void 0 : _e.type) === "json_object");
                 const latencyBreakdown = selectedPipeline.getCurRoundLatencyBreakdown();
                 const defaultExtra = {
                     e2e_latency_s: (Date.now() - timeReceived) / 1000,
                     prefill_tokens_per_s: prompt_tokens / prefill_time,
-                    decode_tokens_per_s: completion_tokens / decode_time,
+                    decode_tokens_per_s: decode_time > 0 ? decode_tokens / decode_time : 0,
                     time_to_first_token_s: prefill_time,
-                    time_per_output_token_s: decode_time / completion_tokens,
-                    latencyBreakdown: ((_e = request.extra_body) === null || _e === void 0 ? void 0 : _e.enable_latency_breakdown)
+                    time_per_output_token_s: decode_tokens > 0 ? decode_time / decode_tokens : 0,
+                    latencyBreakdown: ((_f = request.extra_body) === null || _f === void 0 ? void 0 : _f.enable_latency_breakdown)
                         ? latencyBreakdown
                         : undefined,
                 };
@@ -12984,7 +18729,7 @@ class MLCEngine {
                     choices: choices,
                     model: selectedModelId,
                     object: "chat.completion",
-                    created: Date.now(),
+                    created: getUnixTimestampSeconds(),
                     usage: {
                         completion_tokens: completion_tokens,
                         prompt_tokens: prompt_tokens,
@@ -13009,8 +18754,9 @@ class MLCEngine {
     }
     completion(request) {
         return __awaiter(this, void 0, void 0, function* () {
-            var _a;
+            var _a, _b;
             const timeReceived = Date.now();
+            rejectCompletionResumable(request);
             // 0. Check model loaded and preprocess inputs
             const [selectedModelId, selectedPipeline, selectedChatConfig] = this.getLLMStates("CompletionCreateParams", request.model);
             postInitAndCheckFields$1(request);
@@ -13026,16 +18772,19 @@ class MLCEngine {
                 logprobs: request.logprobs,
                 top_logprobs: request.top_logprobs,
                 ignore_eos: request.ignore_eos,
+                enable_latency_breakdown: (_a = request.extra_body) === null || _a === void 0 ? void 0 : _a.enable_latency_breakdown,
             };
-            // 0.5 Block wait until this pipeline finishes all previous requests
-            const lock = this.loadedModelIdToLock.get(selectedModelId);
-            yield lock.acquire();
             // 1. If request is streaming, return an AsyncIterable (an iterable version of `_generate()`)
             if (request.stream) {
                 return this.asyncGenerate(request, selectedModelId, selectedPipeline, selectedChatConfig, genConfig, timeReceived);
             }
+            // 0.5 Block wait until this pipeline finishes all previous requests
+            const lock = this.loadedModelIdToLock.get(selectedModelId);
+            yield lock.acquire();
             // Big try-finally to release lock in case of errors
             try {
+                // An interrupt applies only to the request that was running when it was raised.
+                this.interruptSignal = false;
                 if (request.seed !== null && request.seed !== undefined) {
                     selectedPipeline.setSeed(request.seed);
                 }
@@ -13043,6 +18792,7 @@ class MLCEngine {
                 const n = request.n ? request.n : 1;
                 const choices = [];
                 let completion_tokens = 0;
+                let decode_tokens = 0;
                 let prompt_tokens = 0;
                 let prefill_time = 0;
                 let decode_time = 0;
@@ -13067,7 +18817,9 @@ class MLCEngine {
                             : null,
                         text: request.echo ? request.prompt + outputMessage : outputMessage,
                     });
-                    completion_tokens += selectedPipeline.getCurRoundDecodingTotalTokens();
+                    completion_tokens +=
+                        selectedPipeline.getCurRoundCompletionTotalTokens();
+                    decode_tokens += selectedPipeline.getCurRoundDecodingTotalTokens();
                     prompt_tokens += selectedPipeline.getCurRoundPrefillTotalTokens();
                     prefill_time += selectedPipeline.getCurRoundPrefillTotalTime();
                     decode_time += selectedPipeline.getCurRoundDecodingTotalTime();
@@ -13078,7 +18830,7 @@ class MLCEngine {
                     choices: choices,
                     model: selectedModelId,
                     object: "text_completion",
-                    created: Date.now(),
+                    created: getUnixTimestampSeconds(),
                     usage: {
                         completion_tokens: completion_tokens,
                         prompt_tokens: prompt_tokens,
@@ -13086,10 +18838,10 @@ class MLCEngine {
                         extra: {
                             e2e_latency_s: (Date.now() - timeReceived) / 1000,
                             prefill_tokens_per_s: prompt_tokens / prefill_time,
-                            decode_tokens_per_s: completion_tokens / decode_time,
+                            decode_tokens_per_s: decode_time > 0 ? decode_tokens / decode_time : 0,
                             time_to_first_token_s: prefill_time,
-                            time_per_output_token_s: decode_time / completion_tokens,
-                            latencyBreakdown: ((_a = request.extra_body) === null || _a === void 0 ? void 0 : _a.enable_latency_breakdown)
+                            time_per_output_token_s: decode_tokens > 0 ? decode_time / decode_tokens : 0,
+                            latencyBreakdown: ((_b = request.extra_body) === null || _b === void 0 ? void 0 : _b.enable_latency_breakdown)
                                 ? latencyBreakdown
                                 : undefined,
                         },
@@ -13144,6 +18896,21 @@ class MLCEngine {
             finally {
                 yield lock.release();
             }
+        });
+    }
+    listResumableSessions() {
+        return __awaiter(this, void 0, void 0, function* () {
+            return this.resumableCoordinator.listSessions();
+        });
+    }
+    resumeChatCompletion(sessionId, options) {
+        return __awaiter(this, void 0, void 0, function* () {
+            return this.resumableCoordinator.resume(sessionId, options);
+        });
+    }
+    deleteResumableSession(sessionId) {
+        return __awaiter(this, void 0, void 0, function* () {
+            yield this.resumableCoordinator.deleteSession(sessionId);
         });
     }
     //-----------------------------
@@ -13300,50 +19067,68 @@ class MLCEngine {
      * @param input The OpenAI-style prompt to prefill.
      * @param pipeline The loaded pipeline, hence model, to carry out this prefill.
      * @param chatConfig The chat config to use for this model.
-     * @param genConfig Generation config.
+     * @param reuseKVCache Whether a matching conversation may reuse its existing KV cache.
      */
-    prefill(input, pipeline, chatConfig, genConfig) {
-        return __awaiter(this, void 0, void 0, function* () {
-            // TODO: SPECIFY MODEL TO PERFORM PREFILL, HENCE RETRIEVE CONFIG
-            if (chatConfig === undefined) {
-                throw new ConfigurationNotInitializedError();
-            }
-            let input_str;
-            let input_role_str;
-            let lastMsgRole = Role.user;
-            if ("messages" in input) {
-                // For ChatCompletionRequest, we prepare input using `messages`
-                // 1. Get new conversation based on request, determine if we are in multiround chatting
-                const oldConv = pipeline.getConversationObject();
-                const newConv = getConversationFromChatCompletionRequest(input, chatConfig);
-                if (!compareConversationObject(oldConv, newConv)) {
-                    // Not the same conversation, so not multiround chatting, reset everything (KV cache, etc.)
-                    pipeline.resetChat();
-                    pipeline.setConversation(newConv);
-                }
-                else if (newConv.messages.length === 0) {
-                    // Empty oldConv, and no chat history in newConv, so reset and setConversation
-                    pipeline.resetChat();
-                    pipeline.setConversation(newConv);
-                }
-                else {
-                    log.info("Multiround chatting, reuse KVCache.");
-                }
-                // 2. Treat the last message as the usual input
-                const last_msg = input.messages[input.messages.length - 1];
-                input_str = last_msg.content;
-                input_role_str =
-                    last_msg.role === "user" && last_msg.name ? last_msg.name : undefined;
-                lastMsgRole = last_msg.role === "tool" ? Role.tool : Role.user;
-            }
-            else {
-                // For CompletionCreateParams, the input is just the prompt
-                input_str = input.prompt;
+    preparePrefillInput(input, pipeline, chatConfig, reuseKVCache = true) {
+        // TODO: SPECIFY MODEL TO PERFORM PREFILL, HENCE RETRIEVE CONFIG
+        if (chatConfig === undefined) {
+            throw new ConfigurationNotInitializedError();
+        }
+        let inputStr;
+        let inputRoleStr;
+        let lastMsgRole = Role.user;
+        if ("messages" in input) {
+            // For ChatCompletionRequest, we prepare input using `messages`
+            // 1. Get new conversation based on request, determine if we are in multiround chatting
+            const oldConv = pipeline.getConversationObject();
+            const newConv = getConversationFromChatCompletionRequest(input, chatConfig);
+            const previousFinishReason = pipeline.getFinishReason();
+            if (!reuseKVCache ||
+                previousFinishReason === "abort" ||
+                previousFinishReason === "length" ||
+                !compareConversationObject(oldConv, newConv)) {
+                // Not the same conversation, so not multiround chatting, reset everything (KV cache, etc.)
+                // An interrupted or length-limited reply ends with a sampled token that is
+                // in the visible text but not yet in the KV cache, so its conversation
+                // cannot be continued in place. Rebuild it from the caller's messages.
                 pipeline.resetChat();
-                const newConv = getConversation(chatConfig.conv_template, chatConfig.conv_config, true);
                 pipeline.setConversation(newConv);
             }
-            return pipeline.prefillStep(input_str, lastMsgRole, input_role_str, genConfig);
+            else if (newConv.messages.length === 0) {
+                // Empty oldConv, and no chat history in newConv, so reset and setConversation
+                pipeline.resetChat();
+                pipeline.setConversation(newConv);
+            }
+            else {
+                log.info("Multiround chatting, reuse KVCache.");
+            }
+            // 2. Treat the last message as the usual input
+            const last_msg = input.messages[input.messages.length - 1];
+            inputStr = last_msg.content;
+            inputRoleStr =
+                last_msg.role === "user" && last_msg.name ? last_msg.name : undefined;
+            lastMsgRole = last_msg.role === "tool" ? Role.tool : Role.user;
+        }
+        else {
+            // For CompletionCreateParams, the input is just the prompt
+            inputStr = input.prompt;
+            pipeline.resetChat();
+            const newConv = getConversation(chatConfig.conv_template, chatConfig.conv_config, true);
+            pipeline.setConversation(newConv);
+        }
+        return { inputStr, lastMsgRole, inputRoleStr };
+    }
+    prefill(input, pipeline, chatConfig, genConfig) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const { inputStr, lastMsgRole, inputRoleStr } = this.preparePrefillInput(input, pipeline, chatConfig);
+            return pipeline.prefillStep(inputStr, lastMsgRole, inputRoleStr, genConfig);
+        });
+    }
+    samplePrefill(input_1, pipeline_1, chatConfig_1, genConfig_1) {
+        return __awaiter(this, arguments, void 0, function* (input, pipeline, chatConfig, genConfig, opts = {}) {
+            const { reuseKVCache = true } = opts, pipelineOpts = __rest(opts, ["reuseKVCache"]);
+            const { inputStr, lastMsgRole, inputRoleStr } = this.preparePrefillInput(input, pipeline, chatConfig, reuseKVCache);
+            return pipeline.samplePrefillStep(inputStr, lastMsgRole, inputRoleStr, genConfig, pipelineOpts);
         });
     }
     /**
@@ -13352,6 +19137,11 @@ class MLCEngine {
     decode(pipeline, genConfig) {
         return __awaiter(this, void 0, void 0, function* () {
             return pipeline.decodeStep(genConfig);
+        });
+    }
+    sampleDecode(pipeline, genConfig, opts) {
+        return __awaiter(this, void 0, void 0, function* () {
+            return pipeline.sampleDecodeStep(genConfig, opts);
         });
     }
 }
@@ -13456,7 +19246,7 @@ class WebWorkerMLCEngineHandler {
      */
     constructor() {
         this.engine = new MLCEngine();
-        this.loadedModelIdToAsyncGenerator = new Map();
+        this.streamIdToAsyncGenerator = new Map();
         this.engine.setInitProgressCallback((report) => {
             const msg = {
                 kind: "initProgressCallback",
@@ -13544,7 +19334,7 @@ class WebWorkerMLCEngineHandler {
                     yield this.reloadIfUnmatched(params.modelId, params.chatOpts);
                     // Register new async generator for this new request of the model
                     const curGenerator = (yield this.engine.chatCompletion(params.request));
-                    this.loadedModelIdToAsyncGenerator.set(params.selectedModelId, curGenerator);
+                    this.streamIdToAsyncGenerator.set(params.streamId, curGenerator);
                     onComplete === null || onComplete === void 0 ? void 0 : onComplete(null);
                     return null;
                 }));
@@ -13570,7 +19360,7 @@ class WebWorkerMLCEngineHandler {
                     yield this.reloadIfUnmatched(params.modelId, params.chatOpts);
                     // Register new async generator for this new request of the model
                     const curGenerator = (yield this.engine.completion(params.request));
-                    this.loadedModelIdToAsyncGenerator.set(params.selectedModelId, curGenerator);
+                    this.streamIdToAsyncGenerator.set(params.streamId, curGenerator);
                     onComplete === null || onComplete === void 0 ? void 0 : onComplete(null);
                     return null;
                 }));
@@ -13582,14 +19372,39 @@ class WebWorkerMLCEngineHandler {
                 // For any subsequent request, we return whatever `next()` yields
                 this.handleTask(msg.uuid, () => __awaiter(this, void 0, void 0, function* () {
                     const params = msg.content;
-                    const curGenerator = this.loadedModelIdToAsyncGenerator.get(params.selectedModelId);
+                    const curGenerator = this.streamIdToAsyncGenerator.get(params.streamId);
                     if (curGenerator === undefined) {
                         throw Error("InternalError: Chunk generator in worker should be instantiated by now.");
                     }
                     // Yield the next chunk
-                    const { value } = yield curGenerator.next();
-                    onComplete === null || onComplete === void 0 ? void 0 : onComplete(value);
-                    return value;
+                    try {
+                        const { value, done } = yield curGenerator.next();
+                        if (done) {
+                            this.streamIdToAsyncGenerator.delete(params.streamId);
+                        }
+                        onComplete === null || onComplete === void 0 ? void 0 : onComplete(value);
+                        return value;
+                    }
+                    catch (err) {
+                        this.streamIdToAsyncGenerator.delete(params.streamId);
+                        throw err;
+                    }
+                }));
+                return;
+            }
+            case "completionStreamReturn": {
+                this.handleTask(msg.uuid, () => __awaiter(this, void 0, void 0, function* () {
+                    var _a;
+                    const params = msg.content;
+                    const curGenerator = this.streamIdToAsyncGenerator.get(params.streamId);
+                    try {
+                        yield ((_a = curGenerator === null || curGenerator === void 0 ? void 0 : curGenerator.return) === null || _a === void 0 ? void 0 : _a.call(curGenerator));
+                    }
+                    finally {
+                        this.streamIdToAsyncGenerator.delete(params.streamId);
+                    }
+                    onComplete === null || onComplete === void 0 ? void 0 : onComplete(null);
+                    return null;
                 }));
                 return;
             }
@@ -13602,6 +19417,46 @@ class WebWorkerMLCEngineHandler {
                     const res = yield this.engine.embedding(params.request);
                     onComplete === null || onComplete === void 0 ? void 0 : onComplete(res);
                     return res;
+                }));
+                return;
+            }
+            case "listResumableSessions": {
+                this.handleTask(msg.uuid, () => __awaiter(this, void 0, void 0, function* () {
+                    const res = yield this.engine.listResumableSessions();
+                    onComplete === null || onComplete === void 0 ? void 0 : onComplete(res);
+                    return res;
+                }));
+                return;
+            }
+            case "resumeChatCompletion": {
+                this.handleTask(msg.uuid, () => __awaiter(this, void 0, void 0, function* () {
+                    const params = msg.content;
+                    const res = yield this.engine.resumeChatCompletion(params.sessionId, params.options);
+                    onComplete === null || onComplete === void 0 ? void 0 : onComplete(res);
+                    return res;
+                }));
+                return;
+            }
+            case "resumeChatCompletionStreamInit": {
+                this.handleTask(msg.uuid, () => __awaiter(this, void 0, void 0, function* () {
+                    const params = msg.content;
+                    const res = yield this.engine.resumeChatCompletion(params.sessionId, params.options);
+                    if (isAsyncIterable(res)) {
+                        this.streamIdToAsyncGenerator.set(params.streamId, res[Symbol.asyncIterator]());
+                        onComplete === null || onComplete === void 0 ? void 0 : onComplete(null);
+                        return null;
+                    }
+                    onComplete === null || onComplete === void 0 ? void 0 : onComplete(res);
+                    return res;
+                }));
+                return;
+            }
+            case "deleteResumableSession": {
+                this.handleTask(msg.uuid, () => __awaiter(this, void 0, void 0, function* () {
+                    const params = msg.content;
+                    yield this.engine.deleteResumableSession(params.sessionId);
+                    onComplete === null || onComplete === void 0 ? void 0 : onComplete(null);
+                    return null;
                 }));
                 return;
             }
@@ -13631,7 +19486,7 @@ class WebWorkerMLCEngineHandler {
                     // This may not be cleaned properly when one asyncGenerator finishes.
                     // We only clear at unload(), which may not be called upon reload().
                     // However, service_worker may skip reload(). Will leave as is for now.
-                    this.loadedModelIdToAsyncGenerator.clear();
+                    this.streamIdToAsyncGenerator.clear();
                     onComplete === null || onComplete === void 0 ? void 0 : onComplete(null);
                     return null;
                 }));
@@ -13712,6 +19567,8 @@ class WebWorkerMLCEngineHandler {
                     "but it is not. This may due to web/service worker is unexpectedly killed.\n" +
                     "Reloading engine in WebWorkerMLCEngineHandler.");
                 yield this.engine.reload(expectedModelId, expectedChatOpts);
+                this.modelId = expectedModelId;
+                this.chatOpts = expectedChatOpts;
             }
         });
     }
@@ -13936,30 +19793,58 @@ class WebWorkerMLCEngine {
      * the worker which we yield. The last message is `void`, meaning the generator has nothing
      * to yield anymore.
      *
-     * @param selectedModelId: The model of whose async generator to call next() to get next chunk.
-     *   Needed because an engine can load multiple models.
+     * @param streamId: Request-unique identity of the worker-side iterator.
      *
      * @note ChatCompletion and Completion share the same chunk generator.
      */
-    asyncGenerate(selectedModelId) {
-        return __asyncGenerator(this, arguments, function* asyncGenerate_1() {
-            // Every time it gets called, sends message to worker, asking for the next chunk
-            while (true) {
-                const msg = {
-                    kind: "completionStreamNextChunk",
-                    uuid: crypto.randomUUID(),
-                    content: {
-                        selectedModelId: selectedModelId,
-                    },
-                };
-                const ret = yield __await(this.getPromise(msg));
-                // If the worker's generator reached the end, it would return a `void`
-                if (typeof ret !== "object") {
-                    break;
+    asyncGenerate(streamId) {
+        let completed = false;
+        let closePromise;
+        const close = () => {
+            closePromise !== null && closePromise !== void 0 ? closePromise : (closePromise = (() => __awaiter(this, void 0, void 0, function* () {
+                if (completed) {
+                    return;
                 }
-                yield yield __await(ret);
-            }
-        });
+                completed = true;
+                const msg = {
+                    kind: "completionStreamReturn",
+                    uuid: crypto.randomUUID(),
+                    content: { streamId },
+                };
+                yield this.getPromise(msg);
+            }))());
+            return closePromise;
+        };
+        const getPromise = this.getPromise.bind(this);
+        // Native generators serialize next/return/throw, including reads at EOF.
+        const iterator = (function () {
+            return __asyncGenerator(this, arguments, function* () {
+                try {
+                    while (true) {
+                        const msg = {
+                            kind: "completionStreamNextChunk",
+                            uuid: crypto.randomUUID(),
+                            content: { streamId },
+                        };
+                        const ret = yield __await(getPromise(msg));
+                        if (typeof ret !== "object") {
+                            completed = true;
+                            return yield __await(void 0);
+                        }
+                        yield yield __await(ret);
+                    }
+                }
+                finally {
+                    yield __await(close());
+                }
+            });
+        })();
+        // A generator closed before its first next() never enters its finally.
+        const returnSource = iterator.return.bind(iterator);
+        const throwSource = iterator.throw.bind(iterator);
+        iterator.return = (value) => returnSource(value).finally(close);
+        iterator.throw = (err) => throwSource(err).finally(close);
+        return iterator;
     }
     chatCompletion(request) {
         return __awaiter(this, void 0, void 0, function* () {
@@ -13971,6 +19856,7 @@ class WebWorkerMLCEngine {
             // Since handler can maintain multiple generators concurrently
             const selectedModelId = getModelIdToUse(this.modelId ? this.modelId : [], request.model, "ChatCompletionRequest");
             if (request.stream) {
+                const streamId = crypto.randomUUID();
                 // First let worker instantiate a generator
                 const msg = {
                     kind: "chatCompletionStreamInit",
@@ -13978,13 +19864,14 @@ class WebWorkerMLCEngine {
                     content: {
                         request: request,
                         selectedModelId: selectedModelId,
+                        streamId,
                         modelId: this.modelId,
                         chatOpts: this.chatOpts,
                     },
                 };
                 yield this.getPromise(msg);
                 // Then return an async chunk generator that resides on the client side
-                return this.asyncGenerate(selectedModelId);
+                return this.asyncGenerate(streamId);
             }
             // Non streaming case is more straightforward
             const msg = {
@@ -14009,6 +19896,7 @@ class WebWorkerMLCEngine {
             // Since handler can maintain multiple generators concurrently
             const selectedModelId = getModelIdToUse(this.modelId ? this.modelId : [], request.model, "CompletionCreateParams");
             if (request.stream) {
+                const streamId = crypto.randomUUID();
                 // First let worker instantiate a generator
                 const msg = {
                     kind: "completionStreamInit",
@@ -14016,13 +19904,14 @@ class WebWorkerMLCEngine {
                     content: {
                         request: request,
                         selectedModelId: selectedModelId,
+                        streamId,
                         modelId: this.modelId,
                         chatOpts: this.chatOpts,
                     },
                 };
                 yield this.getPromise(msg);
                 // Then return an async chunk generator that resides on the client side
-                return this.asyncGenerate(selectedModelId);
+                return this.asyncGenerate(streamId);
             }
             // Non streaming case is more straightforward
             const msg = {
@@ -14052,6 +19941,53 @@ class WebWorkerMLCEngine {
                 },
             };
             return yield this.getPromise(msg);
+        });
+    }
+    listResumableSessions() {
+        return __awaiter(this, void 0, void 0, function* () {
+            const msg = {
+                kind: "listResumableSessions",
+                uuid: crypto.randomUUID(),
+                content: null,
+            };
+            return yield this.getPromise(msg);
+        });
+    }
+    resumeChatCompletion(sessionId, options) {
+        return __awaiter(this, void 0, void 0, function* () {
+            if ((options === null || options === void 0 ? void 0 : options.continueGeneration) === true && options.stream === true) {
+                const streamId = crypto.randomUUID();
+                const msg = {
+                    kind: "resumeChatCompletionStreamInit",
+                    uuid: crypto.randomUUID(),
+                    content: {
+                        sessionId,
+                        options,
+                        streamId,
+                    },
+                };
+                const result = yield this.getPromise(msg);
+                if (result !== null) {
+                    return result;
+                }
+                return this.asyncGenerate(streamId);
+            }
+            const msg = {
+                kind: "resumeChatCompletion",
+                uuid: crypto.randomUUID(),
+                content: { sessionId, options },
+            };
+            return yield this.getPromise(msg);
+        });
+    }
+    deleteResumableSession(sessionId) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const msg = {
+                kind: "deleteResumableSession",
+                uuid: crypto.randomUUID(),
+                content: { sessionId },
+            };
+            yield this.getPromise(msg);
         });
     }
     onmessage(event) {
@@ -14098,18 +20034,17 @@ class WebWorkerMLCEngine {
 /**
  * Worker handler that can be used in a ServiceWorker.
  *
+ * Construct the handler during the service worker script's initial evaluation.
+ * Registering it from an `activate` or `message` listener is too late: the
+ * browser can restart an already-active worker without dispatching `activate`,
+ * and service worker event listeners must be registered synchronously on startup.
+ *
  * @example
  *
- * const engine = new MLCEngine();
- * let handler;
- * chrome.runtime.onConnect.addListener(function (port) {
- *   if (handler === undefined) {
- *     handler = new ServiceWorkerMLCEngineHandler(engine, port);
- *   } else {
- *     handler.setPort(port);
- *   }
- *   port.onMessage.addListener(handler.onmessage.bind(handler));
- * });
+ * // sw.ts
+ * import { ServiceWorkerMLCEngineHandler } from "@mlc-ai/web-llm";
+ *
+ * new ServiceWorkerMLCEngineHandler();
  */
 let ServiceWorkerMLCEngineHandler$1 = class ServiceWorkerMLCEngineHandler extends WebWorkerMLCEngineHandler {
     constructor() {
@@ -14439,5 +20374,5 @@ class ServiceWorkerMLCEngine extends WebWorkerMLCEngine {
     }
 }
 
-export { Chat, ChatCompletionRequestUnsupportedFields, Completions, CreateServiceWorkerMLCEngine as CreateExtensionServiceWorkerMLCEngine, CreateMLCEngine, CreateServiceWorkerMLCEngine$1 as CreateServiceWorkerMLCEngine, CreateWebWorkerMLCEngine, Embeddings, ServiceWorkerMLCEngine as ExtensionServiceWorkerMLCEngine, ServiceWorkerMLCEngineHandler as ExtensionServiceWorkerMLCEngineHandler, IntegrityError, MLCEngine, ModelType, ServiceWorkerMLCEngine$1 as ServiceWorkerMLCEngine, ServiceWorkerMLCEngineHandler$1 as ServiceWorkerMLCEngineHandler, WebWorkerMLCEngine, WebWorkerMLCEngineHandler, deleteChatConfigInCache, deleteModelAllInfoInCache, deleteModelInCache, deleteModelWasmInCache, functionCallingModelIds, hasModelInCache, isValidSRI, modelLibURLPrefix, modelVersion, postInitAndCheckFields$2 as postInitAndCheckFieldsChatCompletion, postInitAndCheckFields$1 as postInitAndCheckFieldsCompletion, postInitAndCheckFields as postInitAndCheckFieldsEmbedding, prebuiltAppConfig, verifyIntegrity };
+export { ARTIFACT_SCHEMA_VERSION, Chat, ChatCompletionRequestUnsupportedFields, Completions, CreateServiceWorkerMLCEngine as CreateExtensionServiceWorkerMLCEngine, CreateMLCEngine, CreateServiceWorkerMLCEngine$1 as CreateServiceWorkerMLCEngine, CreateWebWorkerMLCEngine, Embeddings, ServiceWorkerMLCEngine as ExtensionServiceWorkerMLCEngine, ServiceWorkerMLCEngineHandler as ExtensionServiceWorkerMLCEngineHandler, IntegrityError, MLCEngine, MODEL_PACKAGE_MANIFEST_FILENAME, ModelType, ServiceWorkerMLCEngine$1 as ServiceWorkerMLCEngine, ServiceWorkerMLCEngineHandler$1 as ServiceWorkerMLCEngineHandler, TENSOR_CACHE_MANIFEST_FILENAME, WebWorkerMLCEngine, WebWorkerMLCEngineHandler, deleteChatConfigInCache, deleteModelAllInfoInCache, deleteModelInCache, deleteModelWasmInCache, functionCallingModelIds, hasModelInCache, isValidSRI, modelLibURLPrefix, modelVersion, postInitAndCheckFields$2 as postInitAndCheckFieldsChatCompletion, postInitAndCheckFields$1 as postInitAndCheckFieldsCompletion, postInitAndCheckFields as postInitAndCheckFieldsEmbedding, prebuiltAppConfig, rejectCompletionResumable, verifyIntegrity };
 //# sourceMappingURL=index.js.map

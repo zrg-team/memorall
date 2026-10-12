@@ -88,7 +88,7 @@ export const NoModelsScreen: React.FC<NoModelsScreenProps> = ({
 	const [externalProviderConfigured, setExternalProviderConfigured] =
 		React.useState<ServiceProvider | null>(null);
 	const [defaultProvider, setDefaultProvider] = React.useState<
-		"openai" | "openrouter" | undefined
+		"openai" | "openrouter" | "custom" | undefined
 	>(undefined);
 
 	// Setup hooks for model operations
@@ -218,7 +218,11 @@ export const NoModelsScreen: React.FC<NoModelsScreenProps> = ({
 		provider: ServiceProvider,
 	) => {
 		// When API key is configured, track the provider
-		if (provider === "openai" || provider === "openrouter") {
+		if (
+			provider === "openai" ||
+			provider === "openrouter" ||
+			provider === "custom"
+		) {
 			setExternalProviderConfigured(provider);
 		}
 		// Also call the parent's onModelLoaded

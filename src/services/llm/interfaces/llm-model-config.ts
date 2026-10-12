@@ -1,4 +1,5 @@
 import type { ToolSupportMode } from "./tool-capability";
+import type { ModelCategory } from "./model-category";
 
 export type LLMProvider = "transformer" | "webllm" | "wllama";
 
@@ -64,11 +65,13 @@ export interface TransformerRunnerConfig {
 export interface WllamaModelConfig {
 	filename: string;
 	mmprojFilename?: string;
+	runtime?: "chat" | "decision";
 }
 
 export interface LLMModelConfig {
 	id: string;
 	provider: LLMProvider;
+	categories?: ModelCategory[];
 	displayName: string;
 	sizeGB: number;
 	sizeLabel: string;

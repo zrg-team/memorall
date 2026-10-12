@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { type ModelInfo } from "@/services/llm";
+import type { ModelInfo } from "@/services/llm/interfaces/base-llm";
 import { eq } from "drizzle-orm";
 import { logError } from "@/utils/logger";
 import { serviceManager } from "@/services";
@@ -9,28 +9,38 @@ export function useLocalModels(
 	quickProvider: ServiceProvider,
 	localConfigExists: boolean | null,
 	authProviderReady?: boolean,
+	refreshKey = 0,
 ) {
 	const [localModels, setLocalModels] = useState<ModelInfo[]>([]);
 	const [localModelsLoading, setLocalModelsLoading] = useState(false);
 
 	// Fetch models from providers when configuration exists
 	useEffect(() => {
+		let cancelled = false;
+		const updateModels = (models: ModelInfo[]) => {
+			if (!cancelled) setLocalModels(models);
+		};
+		const updateLoading = (loading: boolean) => {
+			if (!cancelled) setLocalModelsLoading(loading);
+		};
+		updateModels([]);
+		updateLoading(false);
 		const fetchLocalModels = async () => {
 			// Handle local server providers (lmstudio, ollama)
 			if (quickProvider === "lmstudio" || quickProvider === "ollama") {
 				if (!localConfigExists) {
-					setLocalModels([]);
+					updateModels([]);
 					return;
 				}
 
-				setLocalModelsLoading(true);
+				updateLoading(true);
 				try {
 					// For local providers, the service is created with their provider name
 					// Check if the service exists
 					if (serviceManager.llmService.has(quickProvider)) {
 						const response =
 							await serviceManager.llmService.modelsFor(quickProvider);
-						setLocalModels(response.data);
+						updateModels(response.data);
 					} else {
 						// Try to create the service from saved configuration
 						const configKey =
@@ -57,52 +67,59 @@ export function useLocalModels(
 								// Now fetch models
 								const response =
 									await serviceManager.llmService.modelsFor(quickProvider);
-								setLocalModels(response.data);
+								updateModels(response.data);
 							} else {
-								setLocalModels([]);
+								updateModels([]);
 							}
 						} catch (createErr) {
 							logError(`Failed to create ${quickProvider} service:`, createErr);
-							setLocalModels([]);
+							updateModels([]);
 						}
 					}
 				} catch (err) {
 					logError(`Failed to fetch ${quickProvider} models:`, err);
-					setLocalModels([]);
+					updateModels([]);
 				} finally {
-					setLocalModelsLoading(false);
+					updateLoading(false);
 				}
 				return;
 			}
 
 			// Handle cloud API providers (openai, openrouter)
-			if (quickProvider === "openai" || quickProvider === "openrouter") {
+			if (
+				quickProvider === "openai" ||
+				quickProvider === "openrouter" ||
+				quickProvider === "custom"
+			) {
 				// Check if service exists (means it's been configured and loaded)
 				if (!serviceManager.llmService.has(quickProvider)) {
-					setLocalModels([]);
+					updateModels([]);
 					return;
 				}
 
-				setLocalModelsLoading(true);
+				updateLoading(true);
 				try {
 					const response =
 						await serviceManager.llmService.modelsFor(quickProvider);
-					setLocalModels(response.data);
+					updateModels(response.data);
 				} catch (err) {
 					logError(`Failed to fetch ${quickProvider} models:`, err);
-					setLocalModels([]);
+					updateModels([]);
 				} finally {
-					setLocalModelsLoading(false);
+					updateLoading(false);
 				}
 				return;
 			}
 
 			// For other providers (wllama, webllm), don't fetch models
-			setLocalModels([]);
+			updateModels([]);
 		};
 
 		fetchLocalModels();
-	}, [quickProvider, localConfigExists, authProviderReady]);
+		return () => {
+			cancelled = true;
+		};
+	}, [quickProvider, localConfigExists, authProviderReady, refreshKey]);
 
 	return { localModels, localModelsLoading };
 }

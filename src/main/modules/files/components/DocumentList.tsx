@@ -441,7 +441,9 @@ export const DocumentList: React.FC<DocumentListProps> = ({
 											<DropdownMenuSeparator />
 										</>
 									)}
-									{indexEntries?.byFile.has(file.path) && (
+									{indexEntries?.byFile
+										.get(file.path)
+										?.some((entry) => entry.typeId === "okf") && (
 										<>
 											<DropdownMenuItem
 												onClick={(e) => {

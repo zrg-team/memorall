@@ -200,10 +200,17 @@ describe("master-key lifecycle", () => {
 			[{ key: "master_encryption_key" }],
 			[{ key: "openai_config" }],
 			[],
+			[],
 		);
 		await expect(deleteMasterKeyIfUnused()).resolves.toBe(false);
 
-		queueDatabaseResults([{ key: "master_encryption_key" }], [], [], undefined);
+		queueDatabaseResults(
+			[{ key: "master_encryption_key" }],
+			[],
+			[],
+			[],
+			undefined,
+		);
 		await expect(deleteMasterKeyIfUnused()).resolves.toBe(true);
 	});
 
@@ -212,20 +219,24 @@ describe("master-key lifecycle", () => {
 		secureValues.set("master_strong_password", "strong");
 		secureValues.set("openai_ready", "true");
 		secureValues.set("openrouter_ready", "true");
+		secureValues.set("custom_ready", "true");
 		queueDatabaseResults(
 			[{ key: "openai_config" }],
 			[{ key: "openrouter_config" }],
+			[{ key: "custom_config" }],
 		);
 		databaseTransaction.mockResolvedValue(undefined);
 
 		await expect(resetMasterKeyAndEncryptedConfigs()).resolves.toEqual([
 			"openai",
 			"openrouter",
+			"custom",
 		]);
 		expect(databaseTransaction).toHaveBeenCalledTimes(1);
 		await expect(isMasterKeyUnlocked()).resolves.toBe(false);
 		expect(secureValues.has("openai_ready")).toBe(false);
 		expect(secureValues.has("openrouter_ready")).toBe(false);
+		expect(secureValues.has("custom_ready")).toBe(false);
 	});
 });
 
@@ -291,8 +302,15 @@ describe("provider config encryption with master key", () => {
 	});
 
 	it("lists providers with encrypted configs", async () => {
-		queueDatabaseResults([{ key: "openai_config" }], []);
+		queueDatabaseResults(
+			[{ key: "openai_config" }],
+			[],
+			[{ key: "custom_config" }],
+		);
 
-		await expect(getEncryptedProviders()).resolves.toEqual(["openai"]);
+		await expect(getEncryptedProviders()).resolves.toEqual([
+			"openai",
+			"custom",
+		]);
 	});
 });

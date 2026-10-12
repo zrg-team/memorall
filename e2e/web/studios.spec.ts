@@ -86,7 +86,7 @@ test("narrows the models page to providers that serve the chosen kind", async ({
 				tabs.map((tab) => tab.getAttribute("data-provider-tab")),
 			),
 		)
-		.toEqual(["transformer-media", "openai"]);
+		.toEqual(["transformer-media", "openai", "custom"]);
 
 	await page.locator('[data-provider-tab="transformer-media"]').click();
 	await expect(
@@ -117,6 +117,7 @@ test("narrows the models page to providers that serve the chosen kind", async ({
 			"webllm",
 			"openai",
 			"openrouter",
+			"custom",
 			"lmstudio",
 			"ollama",
 		]);

@@ -49,8 +49,10 @@
 			"openai": "OpenAI",
 			"openrouter": "Router",
 			"lmstudio": "Studio",
-			"ollama": "Ollama"
-		}
+			"ollama": "Ollama",
+			"custom": "Custom"
+		},
+		"custom": "Custom (OpenAI-compatible)"
 	},
 	"providerTabs": {
 		"status": {
@@ -347,6 +349,10 @@
 				"name": "OpenRouter",
 				"description": "Access multiple AI providers",
 				"apiKeyUrl": "https://openrouter.ai/keys"
+			},
+			"custom": {
+				"name": "Custom (OpenAI-compatible)",
+				"description": "Use your own API endpoint"
 			}
 		}
 	},
@@ -521,5 +527,23 @@
 		"title": "Input {{input}} · output {{output}} per 1M tokens",
 		"cached": "Cached input {{price}} per 1M tokens",
 		"full": "{{input}} in · {{output}} out / 1M"
+	},
+	"custom": {
+		"description": "Connect any provider that supports the OpenAI-compatible API.",
+		"optional": "(optional)",
+		"apiKeyPlaceholder": "Your provider API key",
+		"baseUrlPlaceholder": "https://api.example.com/v1",
+		"baseUrlDescription": "Enter the API base URL, including /v1 if required. Leave the API key empty for servers without authentication.",
+		"modelIds": "Model IDs (optional)",
+		"modelIdsPlaceholder": "my-chat-model, another-model",
+		"modelIdsDescription": "Comma-separated model IDs. These are added to the discovered models and work even if your provider has no /models endpoint.",
+		"ready": "Custom provider ready",
+		"editConfiguration": "Edit configuration",
+		"invalidBaseUrl": "Enter a valid HTTP or HTTPS API base URL without credentials, query parameters, or a fragment.",
+		"apiKey": "API key",
+		"deleteConfigurationConfirm": "Delete your custom provider configuration?",
+		"noConfigurationFoundError": "No custom provider configuration found",
+		"modelsAvailable": "Choose a model from the provider list. Use Edit configuration to add model IDs if none are listed.",
+		"unlockWithMasterKey": "Load this configuration using your master passkey."
 	}
 }

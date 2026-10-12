@@ -100,16 +100,16 @@ export interface CancelChatCompletionPayload {
 }
 
 export interface RestoreAuthProviderPayload {
-	provider: "openai" | "openrouter";
+	provider: "openai" | "openrouter" | "custom";
 	passkey: string;
 }
 
 export interface RemoveAuthProviderPayload {
-	provider: "openai" | "openrouter";
+	provider: "openai" | "openrouter" | "custom";
 }
 
 export interface CheckProviderNeedsRestorePayload {
-	provider: "openai" | "openrouter";
+	provider: "openai" | "openrouter" | "custom";
 }
 
 export interface RestoreAllProvidersPayload {

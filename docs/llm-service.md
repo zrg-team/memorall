@@ -206,6 +206,24 @@ and it keeps the request shape cache-friendly on purpose:
   turn (retrieved context, timestamps) goes on the latest user message, never
   into the system prompt. Tool lists and schemas must not reorder between turns.
 
+### Custom OpenAI-compatible provider
+
+The `custom` provider uses the same HTTP and streaming adapter as OpenAI. The API base URL is required; authentication is optional. The adapter sends `Authorization: Bearer ...` only when an API key is provided.
+
+```typescript
+await llmService.create('custom', {
+  type: 'custom',
+  baseURL: 'https://api.example.com/v1',
+  apiKey: 'your-provider-key', // omit for an unauthenticated server
+  modelIds: ['vendor/chat-model'], // optional additional model IDs
+});
+await llmService.serveFor('custom', 'vendor/chat-model');
+```
+
+The base URL must be an HTTP or HTTPS API root, without embedded credentials, query parameters, or a fragment. Include any API version prefix; the adapter appends `/models`, `/chat/completions`, and the supported media endpoint paths. Additional model IDs are merged with discovered models and remain available if `/models` is absent or unavailable. Model selection records the provider as `custom`, keeping it separate from OpenAI even when both serve the same model ID.
+
+In the UI, **Custom (OpenAI-compatible)** supports saving, unlocking, restoring, editing, and deleting its configuration through the existing master passkey flow. Changing a loaded configuration clears its previous model selections so you can choose a model from the new endpoint. The endpoint must allow browser requests from the app's origin. Speech and image operations are available when the endpoint implements the corresponding OpenAI-compatible APIs.
+
 ### 🏠 Local OpenAI Compatible (LM Studio & Ollama)
 
 Single implementation for both LM Studio and Ollama via their OpenAI-compatible endpoints.

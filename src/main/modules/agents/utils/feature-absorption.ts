@@ -1,12 +1,15 @@
 import type { AgentFeatureDefinition } from "@/main/stores/agent-config";
+import {
+	MEMON_NATIVE_SANDBOX_TOOLS,
+	MEMON_STEP_NAME,
+} from "@/services/memon/constants";
 
 type StepConfigEntry = { name: string; config?: Record<string, unknown> };
 
 /**
  * Features an enabled feature has taken over, keyed by the absorbed feature's
  * name. MemonOS Bot absorbs web, files and sandbox unless its settings keep the
- * direct tools; runs switch the absorbed steps off, so their tools must not be
- * counted as enabled either.
+ * direct tools. Native tools no longer count; any additional tools still do.
  */
 export const getAbsorbedFeatures = (
 	featureDefinitions: AgentFeatureDefinition[],
@@ -23,4 +26,21 @@ export const getAbsorbedFeatures = (
 		for (const name of feature.absorbsFeatures) absorbed.set(name, feature);
 	}
 	return absorbed;
+};
+
+/** A taken-over feature can still contribute tools the computer does not have. */
+export const getFeatureTools = (
+	feature: AgentFeatureDefinition,
+	absorbed: Map<string, AgentFeatureDefinition>,
+): string[] => {
+	const absorber = absorbed.get(feature.name);
+	if (!absorber) return feature.tools;
+	if (
+		absorber.name === MEMON_STEP_NAME &&
+		feature.name === "nodejs-sandbox-feature"
+	) {
+		const native = new Set<string>(MEMON_NATIVE_SANDBOX_TOOLS);
+		return feature.tools.filter((tool) => !native.has(tool));
+	}
+	return [];
 };

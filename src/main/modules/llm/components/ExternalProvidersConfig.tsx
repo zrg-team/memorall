@@ -10,9 +10,14 @@ import {
 } from "@/main/components/ui/card";
 import { OpenAITab } from "./OpenAITab";
 import { OpenRouterTab } from "./OpenRouterTab";
+import { CustomProviderTab } from "./CustomProviderTab";
+import { useLocalModels } from "../hooks/use-local-models";
+import { useCurrentModel } from "@/main/hooks/use-current-model";
+import { RemoteModelsSection } from "./YourModels/components/RemoteModelsSection";
+import { serviceManager } from "@/services";
 import type { ServiceProvider } from "@/services/llm/interfaces/llm-service.interface";
 
-type ProviderKey = "openai" | "openrouter";
+type ProviderKey = "openai" | "openrouter" | "custom";
 
 interface ProviderConfig {
 	key: ProviderKey;
@@ -21,10 +26,18 @@ interface ProviderConfig {
 	iconBgColor: string;
 	component: React.ComponentType<{
 		onModelLoaded?: (modelId: string, provider: ServiceProvider) => void;
+		onConfigurationChange?: (ready: boolean) => void;
 	}>;
 }
 
 const PROVIDERS: ProviderConfig[] = [
+	{
+		key: "custom",
+		icon: Globe,
+		iconColor: "text-primary",
+		iconBgColor: "bg-primary/10",
+		component: CustomProviderTab,
+	},
 	{
 		key: "openrouter",
 		icon: Globe,
@@ -51,11 +64,19 @@ export const ExternalProvidersConfig: React.FC<
 > = ({ onModelLoaded, defaultProvider }) => {
 	const { t } = useTranslation("llm");
 	const [activeProvider, setActiveProvider] = useState<ProviderKey>(
-		defaultProvider || PROVIDERS[0].key,
+		defaultProvider || "openrouter",
 	);
 
 	const activeConfig = PROVIDERS.find((p) => p.key === activeProvider);
 	const ActiveComponent = activeConfig?.component;
+	const [configRevision, setConfigRevision] = useState(0);
+	const { current } = useCurrentModel();
+	const customModels = useLocalModels(
+		"custom",
+		null,
+		serviceManager.llmService.has("custom"),
+		configRevision,
+	);
 
 	return (
 		<div className="space-y-6">
@@ -114,9 +135,27 @@ export const ExternalProvidersConfig: React.FC<
 				<div className="p-6 pt-0">
 					{ActiveComponent && (
 						<ActiveComponent
+							onConfigurationChange={() =>
+								setConfigRevision((value) => value + 1)
+							}
 							onModelLoaded={(modelId) =>
 								onModelLoaded?.(modelId, activeProvider as ServiceProvider)
 							}
+						/>
+					)}
+					{activeProvider === "custom" && (
+						<RemoteModelsSection
+							providers={[
+								{
+									provider: "custom",
+									models: customModels.localModels,
+									loading: customModels.localModelsLoading,
+									ready: serviceManager.llmService.has("custom"),
+								},
+							]}
+							current={current}
+							loading={false}
+							onModelLoaded={onModelLoaded}
 						/>
 					)}
 				</div>
@@ -128,20 +167,26 @@ export const ExternalProvidersConfig: React.FC<
 					{t("externalProviders.noApiKey")}
 				</p>
 				<div className="flex justify-center gap-4 text-xs flex-wrap">
-					{PROVIDERS.map((provider) => (
-						<a
-							key={provider.key}
-							href={t(`externalProviders.providers.${provider.key}.apiKeyUrl`)}
-							target="_blank"
-							rel="noopener noreferrer"
-							className="text-primary hover:underline"
-						>
-							{t("externalProviders.getApiKey", {
-								provider: t(`externalProviders.providers.${provider.key}.name`),
-							})}{" "}
-							→
-						</a>
-					))}
+					{PROVIDERS.filter((provider) => provider.key !== "custom").map(
+						(provider) => (
+							<a
+								key={provider.key}
+								href={t(
+									`externalProviders.providers.${provider.key}.apiKeyUrl`,
+								)}
+								target="_blank"
+								rel="noopener noreferrer"
+								className="text-primary hover:underline"
+							>
+								{t("externalProviders.getApiKey", {
+									provider: t(
+										`externalProviders.providers.${provider.key}.name`,
+									),
+								})}{" "}
+								→
+							</a>
+						),
+					)}
 				</div>
 			</div>
 		</div>

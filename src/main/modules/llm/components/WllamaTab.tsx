@@ -3,7 +3,8 @@ import { useTranslation } from "react-i18next";
 import { Button } from "@/main/components/ui/button";
 import { Input } from "@/main/components/ui/input";
 import { ChevronDown, ChevronRight, Search, Zap } from "lucide-react";
-import { RECOMMENDATION_WALLAMA_LLMS } from "@/constants/wllama";
+import { getSupportedModels } from "@/services/llm/registry/model-registry";
+import type { WorkspaceMode } from "@/services/llm/interfaces/model-category";
 import {
 	Select,
 	SelectContent,
@@ -18,6 +19,7 @@ interface FileInfo {
 }
 
 interface WllamaTabProps {
+	category?: WorkspaceMode;
 	repo: string;
 	setRepo: (repo: string) => void;
 	filePath: string;
@@ -37,6 +39,7 @@ interface WllamaTabProps {
 }
 
 export const WllamaTab: React.FC<WllamaTabProps> = ({
+	category = "chat",
 	repo,
 	setRepo,
 	filePath,
@@ -56,6 +59,22 @@ export const WllamaTab: React.FC<WllamaTabProps> = ({
 }) => {
 	const { t } = useTranslation("llm");
 	const [showAdvantages, setShowAdvantages] = React.useState(false);
+	React.useEffect(() => {
+		const models = getSupportedModels("wllama", category);
+		if (!useCustomRepo && !models.some((model) => model.id === repo)) {
+			const first = models[0];
+			if (first) {
+				setRepo(first.id);
+				setFilePath(first.wllamaConfig!.filename);
+				setAvailableFiles([
+					{
+						name: first.wllamaConfig!.filename,
+						size: first.sizeGB * 1024 ** 3,
+					},
+				]);
+			}
+		}
+	}, [category, repo, useCustomRepo, setRepo, setFilePath, setAvailableFiles]);
 	return (
 		<div className="space-y-4">
 			<section className="rounded-lg border bg-muted/20">
@@ -132,11 +151,13 @@ export const WllamaTab: React.FC<WllamaTabProps> = ({
 								<SelectValue placeholder={t("wllama.selectRepository")} />
 							</SelectTrigger>
 							<SelectContent>
-								{RECOMMENDATION_WALLAMA_LLMS.map((r) => (
-									<SelectItem key={r} value={r}>
-										{r}
-									</SelectItem>
-								))}
+								{getSupportedModels("wllama", category)
+									.map((model) => model.id)
+									.map((r) => (
+										<SelectItem key={r} value={r}>
+											{r}
+										</SelectItem>
+									))}
 							</SelectContent>
 						</Select>
 					</div>

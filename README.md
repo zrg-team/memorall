@@ -333,7 +333,9 @@ Offline-first in Memorall is architectural, not decorative. The product is fully
 - PGlite keeps the entire knowledge store in-browser; no server database required.
 - Background jobs and offscreen services keep heavy embedding and LLM work local to the extension runtime.
 - Supabase auth is optional. The app runs local-only by default; Supabase becomes available when configured.
-- Remote providers — OpenAI, OpenRouter, LM Studio, Ollama — are available when you want them, not when you need them.
+- Remote providers — OpenAI, OpenRouter, custom OpenAI-compatible endpoints, LM Studio, Ollama — are available when you want them, not when you need them.
+
+To connect another provider, choose **Custom (OpenAI-compatible)** on the models page or in provider setup. Enter the API base URL (including `/v1` or another API prefix if required) and an optional API key. Models are discovered through `/models`; you can also enter comma-separated model IDs for APIs that do not offer a model listing. The configuration is encrypted with your master passkey and restored when you unlock it. Use **Edit configuration** to change the endpoint, key, or model IDs.
 - Embedding sizes: small `384d`, medium `768d`, and large `1536d` (remote-backed).
 - Storage: PGlite + Drizzle with vectors, migrations, topics, conversations, sources, nodes/edges, activities, and flow-builder state.
 

@@ -9,7 +9,7 @@ import {
 	Trash2,
 } from "lucide-react";
 import type React from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { MasterKeySetupDialog } from "@/main/components/molecules/MasterKeySetupDialog";
 import { PasskeyPromptDialog } from "@/main/components/molecules/PasskeyPromptDialog";
@@ -32,12 +32,25 @@ import {
 	unlockMasterKey,
 } from "@/utils/master-key";
 import secureSession from "@/utils/secure-session";
+import type { ServiceProvider } from "@/services/llm/interfaces/llm-service.interface";
+import {
+	normalizeCustomBaseURL,
+	normalizeCustomModelIds,
+} from "@/services/llm/utils/custom-provider";
+import type { AuthProvider, StoredProviderConfig } from "@/utils/master-key";
 
-interface OpenAITabProps {
-	onModelLoaded?: (modelId: string, provider: "openai") => void;
+interface OpenAICompatibleProviderTabProps {
+	provider: "openai" | "custom";
+	onModelLoaded?: (modelId: string, provider: ServiceProvider) => void;
+	onConfigurationChange?: (ready: boolean) => void;
 }
 
-export const OpenAITab: React.FC<OpenAITabProps> = ({ onModelLoaded }) => {
+export const OpenAICompatibleProviderTab: React.FC<
+	OpenAICompatibleProviderTabProps
+> = ({ provider = "openai", onModelLoaded, onConfigurationChange }) => {
+	const isCustom = provider === "custom";
+	const formId = useId();
+	const [isEditing, setIsEditing] = useState(false);
 	const { t } = useTranslation("llm");
 	// Component state
 	const [configState, setConfigState] = useState<
@@ -49,32 +62,32 @@ export const OpenAITab: React.FC<OpenAITabProps> = ({ onModelLoaded }) => {
 
 	// Form states for new configuration
 	const [tempApiKey, setTempApiKey] = useState("");
-	const [tempBaseUrl, setTempBaseUrl] = useState("https://api.openai.com/v1");
+	const [tempBaseUrl, setTempBaseUrl] = useState(
+		isCustom ? "" : "https://api.openai.com/v1",
+	);
 	const [showApiKey, setShowApiKey] = useState(false);
+	const [tempModelIds, setTempModelIds] = useState("");
 
 	// Master key setup dialog
 	const [showMasterKeySetup, setShowMasterKeySetup] = useState(false);
 	const [showMasterKeyUnlock, setShowMasterKeyUnlock] = useState(false);
-	const [unlockProviders, setUnlockProviders] = useState<
-		("openai" | "openrouter")[]
-	>([]);
-	const [pendingSaveConfig, setPendingSaveConfig] = useState<{
-		apiKey: string;
-		baseUrl: string;
-	} | null>(null);
+	const [pendingLoad, setPendingLoad] = useState(false);
+	const [unlockProviders, setUnlockProviders] = useState<AuthProvider[]>([]);
+	const [pendingSaveConfig, setPendingSaveConfig] =
+		useState<StoredProviderConfig | null>(null);
 
 	// Check state on mount: DB -> memory -> ready
 	useEffect(() => {
-		checkOpenAIState();
+		checkProviderState();
 	}, []);
 
-	const checkOpenAIState = async () => {
+	const checkProviderState = async () => {
 		setConfigState("loading");
 		try {
 			// Check if already loaded in memory
 			if (
-				serviceManager.llmService.has("openai") &&
-				(await secureSession.exists("openai_ready"))
+				serviceManager.llmService.has(provider) &&
+				(await secureSession.exists(`${provider}_ready`))
 			) {
 				setConfigState("loaded");
 				return;
@@ -86,7 +99,7 @@ export const OpenAITab: React.FC<OpenAITabProps> = ({ onModelLoaded }) => {
 					return db
 						.select()
 						.from(schema.encryption)
-						.where(eq(schema.encryption.key, "openai_config"));
+						.where(eq(schema.encryption.key, `${provider}_config`));
 				})
 			)[0];
 
@@ -97,24 +110,26 @@ export const OpenAITab: React.FC<OpenAITabProps> = ({ onModelLoaded }) => {
 				setConfigState("no-config");
 			}
 		} catch (error) {
-			logError("Failed to check OpenAI state:", error);
+			logError(`Failed to check ${provider} state:`, error);
 			setConfigState("no-config");
 		}
 	};
 
-	const saveAndActivateConfig = async (config: {
-		apiKey: string;
-		baseUrl: string;
-	}) => {
-		await saveProviderConfig("openai", config);
+	const saveAndActivateConfig = async (config: StoredProviderConfig) => {
+		await saveProviderConfig(provider, config);
+		if (isCustom && serviceManager.llmService.has(provider)) {
+			await serviceManager.llmService.clearCurrentModelsForProvider(provider);
+			serviceManager.llmService.remove(provider);
+		}
 
-		await serviceManager.llmService.create("openai", {
-			type: "openai",
+		await serviceManager.llmService.create(provider, {
+			type: provider,
 			apiKey: config.apiKey,
 			baseURL: config.baseUrl,
+			...(isCustom ? { modelIds: config.modelIds } : {}),
 		});
 
-		await secureSession.set("openai_ready", "true");
+		await secureSession.set(`${provider}_ready`, "true");
 
 		const masterStrongPassword = await getMasterStrongPassword();
 		if (masterStrongPassword) {
@@ -126,14 +141,16 @@ export const OpenAITab: React.FC<OpenAITabProps> = ({ onModelLoaded }) => {
 		}
 
 		setTempApiKey("");
+		setIsEditing(false);
 		setConfigState("loaded");
-		logInfo("OpenAI configuration saved successfully");
-		onModelLoaded?.(DEFAULT_OPENAI_MODEL, "openai");
+		logInfo(`${provider} configuration saved successfully`);
+		onConfigurationChange?.(true);
+		if (!isCustom) onModelLoaded?.(DEFAULT_OPENAI_MODEL, provider);
 	};
 
 	// Save new configuration to database
 	const handleSaveConfig = async () => {
-		if (!tempApiKey.trim()) {
+		if ((!isCustom && !tempApiKey.trim()) || !tempBaseUrl.trim()) {
 			setError(t("openai.fillAllRequiredFields"));
 			return;
 		}
@@ -142,9 +159,22 @@ export const OpenAITab: React.FC<OpenAITabProps> = ({ onModelLoaded }) => {
 		setError("");
 
 		try {
+			if (isCustom) {
+				try {
+					normalizeCustomBaseURL(tempBaseUrl);
+				} catch {
+					setError(t("custom.invalidBaseUrl"));
+					return;
+				}
+			}
 			const config = {
 				apiKey: tempApiKey.trim(),
-				baseUrl: tempBaseUrl.trim(),
+				baseUrl: isCustom
+					? normalizeCustomBaseURL(tempBaseUrl)
+					: tempBaseUrl.trim(),
+				...(isCustom
+					? { modelIds: normalizeCustomModelIds(tempModelIds.split(/[,\n]/)) }
+					: {}),
 			};
 
 			// Check if master key exists
@@ -199,9 +229,11 @@ export const OpenAITab: React.FC<OpenAITabProps> = ({ onModelLoaded }) => {
 		if (pendingSaveConfig) {
 			await saveAndActivateConfig(pendingSaveConfig);
 		}
+		if (pendingLoad) await handleLoadConfig();
 
 		setShowMasterKeyUnlock(false);
 		setPendingSaveConfig(null);
+		setPendingLoad(false);
 	};
 
 	const handleForgotMasterPasskey = async () => {
@@ -231,7 +263,11 @@ export const OpenAITab: React.FC<OpenAITabProps> = ({ onModelLoaded }) => {
 
 		setUnlockProviders([]);
 		setShowMasterKeyUnlock(false);
-		setShowMasterKeySetup(true);
+		setPendingLoad(false);
+		if (isCustom && !pendingSaveConfig) {
+			await checkProviderState();
+			onConfigurationChange?.(false);
+		} else setShowMasterKeySetup(true);
 	};
 
 	// Load configuration (auto-load if master key is unlocked)
@@ -243,28 +279,45 @@ export const OpenAITab: React.FC<OpenAITabProps> = ({ onModelLoaded }) => {
 			// Check if master key is unlocked
 			const isUnlocked = await isMasterKeyUnlocked();
 			if (!isUnlocked) {
+				if (isCustom) {
+					setUnlockProviders(await getEncryptedProviders());
+					setPendingLoad(true);
+					setShowMasterKeyUnlock(true);
+					return;
+				}
 				setError(t("openai.masterKeyNotUnlocked"));
 				setIsLoading(false);
 				return;
 			}
 
 			// Load config
-			const config = await loadProviderConfig("openai");
+			const config = await loadProviderConfig(provider);
 			if (!config) {
-				setError(t("openai.noConfigurationFoundError"));
+				setError(
+					t(
+						isCustom
+							? "custom.noConfigurationFoundError"
+							: "openai.noConfigurationFoundError",
+					),
+				);
 				setIsLoading(false);
 				return;
 			}
 
-			// Create OpenAI service
-			await serviceManager.llmService.create("openai", {
-				type: "openai",
+			// Replace a custom client that may still be present after locking.
+			if (isCustom && serviceManager.llmService.has(provider)) {
+				serviceManager.llmService.remove(provider);
+			}
+			// Create the provider service.
+			await serviceManager.llmService.create(provider, {
+				type: provider,
 				apiKey: config.apiKey,
 				baseURL: config.baseUrl,
+				...(isCustom ? { modelIds: config.modelIds } : {}),
 			});
 
 			// Mark as ready
-			await secureSession.set("openai_ready", "true");
+			await secureSession.set(`${provider}_ready`, "true");
 
 			// Also restore in offscreen thread via background job
 			const masterStrongPassword = await getMasterStrongPassword();
@@ -277,9 +330,10 @@ export const OpenAITab: React.FC<OpenAITabProps> = ({ onModelLoaded }) => {
 			}
 
 			setConfigState("loaded");
-			logInfo("OpenAI configuration loaded successfully");
+			logInfo(`${provider} configuration loaded successfully`);
 
-			onModelLoaded?.(DEFAULT_OPENAI_MODEL, "openai");
+			onConfigurationChange?.(true);
+			if (!isCustom) onModelLoaded?.(DEFAULT_OPENAI_MODEL, provider);
 		} catch (error) {
 			const msg = error instanceof Error ? error.message : "Unknown error";
 			setError(t("openai.failedToLoadConfiguration", { error: msg }));
@@ -291,7 +345,15 @@ export const OpenAITab: React.FC<OpenAITabProps> = ({ onModelLoaded }) => {
 
 	// Delete configuration from database
 	const handleDeleteConfig = async () => {
-		if (!confirm(t("openai.deleteConfigurationConfirm"))) {
+		if (
+			!confirm(
+				t(
+					isCustom
+						? "custom.deleteConfigurationConfirm"
+						: "openai.deleteConfigurationConfirm",
+				),
+			)
+		) {
 			return;
 		}
 
@@ -300,34 +362,37 @@ export const OpenAITab: React.FC<OpenAITabProps> = ({ onModelLoaded }) => {
 
 		try {
 			// Check if current model is using openai provider
-			await serviceManager.llmService.clearCurrentModelsForProvider("openai");
-			logInfo("Cleared chat and studio models that used the openai provider");
+			await serviceManager.llmService.clearCurrentModelsForProvider(provider);
+			logInfo(
+				`Cleared chat and studio models that used the ${provider} provider`,
+			);
 
 			await serviceManager.databaseService.use(({ db, schema }) => {
 				return db
 					.delete(schema.encryption)
-					.where(eq(schema.encryption.key, "openai_config"));
+					.where(eq(schema.encryption.key, `${provider}_config`));
 			});
 
 			// Clear memory and remove the master key if no config still uses it.
-			await secureSession.delete("openai_ready");
+			await secureSession.delete(`${provider}_ready`);
 			await deleteMasterKeyIfUnused();
 
 			// Remove LLM service
-			if (serviceManager.llmService.has("openai")) {
-				serviceManager.llmService.remove("openai");
-				logInfo("Removed openai LLM service");
+			if (serviceManager.llmService.has(provider)) {
+				serviceManager.llmService.remove(provider);
+				logInfo(`Removed ${provider} LLM service`);
 			}
 
 			// Also remove from offscreen thread via background job
 			await backgroundJob.execute(
 				"remove-auth-provider",
-				{ provider: "openai" },
+				{ provider: provider },
 				{ stream: false },
 			);
 
-			await checkOpenAIState();
-			logInfo("OpenAI configuration deleted successfully");
+			await checkProviderState();
+			onConfigurationChange?.(false);
+			logInfo("Provider configuration deleted successfully");
 		} catch (error) {
 			const msg = error instanceof Error ? error.message : "Unknown error";
 			setError(t("openai.failedToDeleteConfiguration", { error: msg }));
@@ -339,7 +404,7 @@ export const OpenAITab: React.FC<OpenAITabProps> = ({ onModelLoaded }) => {
 
 	// Validation helpers
 	const isValidNewConfig =
-		tempApiKey.trim().length > 0 && tempBaseUrl.trim().length > 0;
+		(isCustom || tempApiKey.trim().length > 0) && tempBaseUrl.trim().length > 0;
 
 	return (
 		<div className="space-y-4">
@@ -371,22 +436,44 @@ export const OpenAITab: React.FC<OpenAITabProps> = ({ onModelLoaded }) => {
 				<div className="space-y-4">
 					<div className="text-center py-2">
 						<h3 className="text-sm font-medium text-foreground mb-1">
-							{t("openai.noConfigurationFound")}
+							{t(
+								isEditing
+									? "custom.editConfiguration"
+									: "openai.noConfigurationFound",
+							)}
 						</h3>
 						<p className="text-xs text-muted-foreground">
-							{t("openai.createNewConfiguration")}
+							{t(
+								isCustom
+									? "custom.description"
+									: "openai.createNewConfiguration",
+							)}
 						</p>
 					</div>
 
 					<div className="grid grid-cols-1 gap-3">
 						<div>
-							<label className="text-xs text-muted-foreground">
-								{t("openai.apiKey")} <span className="text-destructive">*</span>
+							<label
+								htmlFor={`${formId}-api-key`}
+								className="text-xs text-muted-foreground"
+							>
+								{t(isCustom ? "custom.apiKey" : "openai.apiKey")}{" "}
+								{isCustom ? (
+									t("custom.optional")
+								) : (
+									<span className="text-destructive">*</span>
+								)}
 							</label>
 							<div className="relative">
 								<Input
+									id={`${formId}-api-key`}
+									aria-required={!isCustom}
 									type={showApiKey ? "text" : "password"}
-									placeholder={t("openai.placeholders.apiKey")}
+									placeholder={t(
+										isCustom
+											? "custom.apiKeyPlaceholder"
+											: "openai.placeholders.apiKey",
+									)}
 									value={tempApiKey}
 									onChange={(e) => setTempApiKey(e.target.value)}
 									disabled={isLoading}
@@ -408,30 +495,66 @@ export const OpenAITab: React.FC<OpenAITabProps> = ({ onModelLoaded }) => {
 						</div>
 
 						<div>
-							<label className="text-xs text-muted-foreground">
+							<label
+								htmlFor={`${formId}-base-url`}
+								className="text-xs text-muted-foreground"
+							>
 								{t("openai.baseUrl")}
 							</label>
 							<Input
-								placeholder={t("openai.placeholders.baseUrl")}
+								id={`${formId}-base-url`}
+								aria-required={true}
+								placeholder={t(
+									isCustom
+										? "custom.baseUrlPlaceholder"
+										: "openai.placeholders.baseUrl",
+								)}
 								value={tempBaseUrl}
 								onChange={(e) => setTempBaseUrl(e.target.value)}
 								disabled={isLoading}
 							/>
 							<div className="text-xs text-muted-foreground mt-1">
-								{t("openai.baseUrlDescription")}
+								{t(
+									isCustom
+										? "custom.baseUrlDescription"
+										: "openai.baseUrlDescription",
+								)}
 							</div>
 						</div>
 					</div>
 
-					{/* Validation Warnings */}
-					{tempApiKey.trim().length > 0 && !tempApiKey.startsWith("sk-") && (
-						<div className="flex items-center gap-2 p-2 border rounded bg-muted/50 border-border">
-							<AlertCircle className="w-4 h-4 text-muted-foreground" />
-							<span className="text-xs text-muted-foreground">
-								{t("openai.apiKeyWarning")}
-							</span>
+					{isCustom && (
+						<div>
+							<label
+								htmlFor={`${formId}-model-ids`}
+								className="text-xs text-muted-foreground"
+							>
+								{t("custom.modelIds")}
+							</label>
+							<Input
+								id={`${formId}-model-ids`}
+								placeholder={t("custom.modelIdsPlaceholder")}
+								value={tempModelIds}
+								onChange={(event) => setTempModelIds(event.target.value)}
+								disabled={isLoading}
+							/>
+							<p className="text-xs text-muted-foreground mt-1">
+								{t("custom.modelIdsDescription")}
+							</p>
 						</div>
 					)}
+
+					{/* Validation Warnings */}
+					{!isCustom &&
+						tempApiKey.trim().length > 0 &&
+						!tempApiKey.startsWith("sk-") && (
+							<div className="flex items-center gap-2 p-2 border rounded bg-muted/50 border-border">
+								<AlertCircle className="w-4 h-4 text-muted-foreground" />
+								<span className="text-xs text-muted-foreground">
+									{t("openai.apiKeyWarning")}
+								</span>
+							</div>
+						)}
 
 					<Button
 						onClick={handleSaveConfig}
@@ -472,7 +595,11 @@ export const OpenAITab: React.FC<OpenAITabProps> = ({ onModelLoaded }) => {
 
 					<div className="text-center py-2">
 						<p className="text-xs text-muted-foreground">
-							{t("openai.unlockWithMasterKey")}
+							{t(
+								isCustom
+									? "custom.unlockWithMasterKey"
+									: "openai.unlockWithMasterKey",
+							)}
 						</p>
 					</div>
 
@@ -513,7 +640,7 @@ export const OpenAITab: React.FC<OpenAITabProps> = ({ onModelLoaded }) => {
 						<CheckCircle className="w-4 h-4 text-primary" />
 						<div className="flex-1">
 							<div className="text-sm font-medium text-foreground">
-								{t("openai.openaiReady")}
+								{t(isCustom ? "custom.ready" : "openai.openaiReady")}
 							</div>
 							<div className="text-xs text-primary">
 								{t("openai.configurationLoadedAndConnected")}
@@ -523,17 +650,41 @@ export const OpenAITab: React.FC<OpenAITabProps> = ({ onModelLoaded }) => {
 
 					<div className="text-center py-4">
 						<p className="text-sm text-muted-foreground">
-							{t("openai.modelsAvailableInYourModels")}
+							{t(
+								isCustom
+									? "custom.modelsAvailable"
+									: "openai.modelsAvailableInYourModels",
+							)}
 						</p>
 					</div>
 
 					<div className="flex gap-2">
 						<Button
-							onClick={() => setConfigState("has-config")}
+							onClick={async () => {
+								if (isCustom) {
+									try {
+										const config = await loadProviderConfig(provider);
+										if (!config) return;
+										setTempApiKey(config.apiKey);
+										setTempBaseUrl(config.baseUrl);
+										setTempModelIds(config.modelIds?.join(", ") ?? "");
+										setIsEditing(true);
+										setConfigState("no-config");
+									} catch (error) {
+										setError(
+											error instanceof Error ? error.message : String(error),
+										);
+									}
+								} else setConfigState("has-config");
+							}}
 							variant="outline"
 							className="flex-1"
 						>
-							{t("openai.unloadConfiguration")}
+							{t(
+								isCustom
+									? "custom.editConfiguration"
+									: "openai.unloadConfiguration",
+							)}
 						</Button>
 						<Button
 							onClick={handleDeleteConfig}
@@ -573,8 +724,13 @@ export const OpenAITab: React.FC<OpenAITabProps> = ({ onModelLoaded }) => {
 				onCancel={() => {
 					setShowMasterKeyUnlock(false);
 					setPendingSaveConfig(null);
+					setPendingLoad(false);
 				}}
 			/>
 		</div>
 	);
 };
+
+export const OpenAITab: React.FC<
+	Omit<OpenAICompatibleProviderTabProps, "provider">
+> = (props) => <OpenAICompatibleProviderTab {...props} provider="openai" />;

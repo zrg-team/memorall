@@ -1,7 +1,4 @@
-import {
-	defineStep,
-	bindStep,
-} from "../../../interfaces/engine/step.js";
+import { defineStep, bindStep } from "../../../interfaces/engine/step.js";
 import type {
 	BoundStep,
 	StepFactoryFromSpec,
@@ -100,7 +97,14 @@ const definition = defineStep<
 	MultiAgentFeatureConfig
 >({
 	name: STEP_NAME,
-	execute: async ({ input, config, runLifecycle, services, registries }) => {
+	execute: async ({
+		input,
+		config,
+		runConfig,
+		runLifecycle,
+		services,
+		registries,
+	}) => {
 		try {
 			const configuredIds = normalizeAccessibleAgentIds(
 				config?.accessibleAgentIds,
@@ -137,6 +141,7 @@ const definition = defineStep<
 				allowedAgents,
 				services,
 				registries,
+				runConfig,
 			);
 			runLifecycle?.onFinish("multi-agent-feature-manager", async () => {
 				multiAgentManager.dispose();

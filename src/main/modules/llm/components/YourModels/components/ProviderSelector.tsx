@@ -26,6 +26,7 @@ export const ProviderSelector: React.FC<ProviderSelectorProps> = ({
 	const providerLabel = (provider: ServiceProvider) => {
 		const descriptor = PROVIDER_REGISTRY[provider];
 		const name = t(`providers.${provider}`, { defaultValue: descriptor.label });
+		if (provider === "custom") return name;
 		if (descriptor.residentLocal) return name;
 		return `${name} (${descriptor.isLocal ? "Local" : "Cloud"})`;
 	};

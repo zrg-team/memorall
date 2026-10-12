@@ -60,7 +60,7 @@ export const OpenRouterTab: React.FC<OpenRouterTabProps> = ({
 	const [showMasterKeySetup, setShowMasterKeySetup] = useState(false);
 	const [showMasterKeyUnlock, setShowMasterKeyUnlock] = useState(false);
 	const [unlockProviders, setUnlockProviders] = useState<
-		("openai" | "openrouter")[]
+		("openai" | "openrouter" | "custom")[]
 	>([]);
 	const [pendingSaveConfig, setPendingSaveConfig] = useState<{
 		apiKey: string;

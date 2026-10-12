@@ -25,10 +25,85 @@ const enabledNames = (flow: UnifiedFlowConfig) =>
 	flow.steps.filter((step) => step.enabled).map((step) => step.name);
 
 describe("applyMemonAbsorption", () => {
-	it("switches off web, files, sandbox and planner for runs with MemonOS Bot on", () => {
+	it("replaces native features while keeping the sandbox's extra tools", () => {
 		expect(
 			enabledNames(applyMemonAbsorption(config({ enabled: true }))),
-		).toEqual(["memon-feature"]);
+		).toEqual(["nodejs-sandbox-feature", "memon-feature"]);
+		expect(
+			applyMemonAbsorption(config({ enabled: true })).steps[2].config,
+		).toMatchObject({
+			excludedTools: [
+				"sandbox_inspect",
+				"sandbox_run",
+				"sandbox_process",
+				"sandbox_packages",
+				"sandbox_preview",
+				"sandbox_network",
+			],
+		});
+	});
+
+	it("preserves every other enabled feature, explicit tool binding and disabled choice", () => {
+		const flow = config({ enabled: true });
+		const others = [
+			{
+				id: "multi",
+				name: "multi-agent-feature",
+				enabled: true,
+				config: { accessibleAgentIds: ["child"] },
+			},
+			{
+				id: "mcp",
+				name: "mcp-feature",
+				enabled: true,
+				config: { connections: [{ connectionId: "github" }] },
+			},
+			{
+				id: "skills",
+				name: "add-skill-context",
+				enabled: true,
+				config: { enabledSkillNames: ["review"] },
+			},
+			{ id: "memory", name: "active-memory-feature", enabled: true },
+			{ id: "history", name: "thread-history-feature", enabled: true },
+			{ id: "folders", name: "folder-index-feature", enabled: true },
+			{ id: "pdf", name: "pdf-generate-feature", enabled: true },
+			{ id: "animation", name: "lottie-animation-feature", enabled: true },
+			{
+				id: "custom",
+				name: "custom-feature",
+				enabled: true,
+				config: { tools: ["custom_tool"] },
+			},
+			{ id: "off", name: "other-feature", enabled: false },
+			{
+				id: "complete",
+				name: "agent-completion",
+				enabled: true,
+				config: {
+					tools: [{ name: "doc_write", config: { root: "/reports" } }],
+				},
+			},
+		];
+		flow.steps.push(...others);
+		const before = structuredClone(flow);
+		const run = applyMemonAbsorption(flow);
+		for (const step of others)
+			expect(run.steps.find(({ id }) => id === step.id)).toBe(step);
+		expect(flow).toEqual(before);
+	});
+
+	it("keeps snapshots and existing sandbox exclusions in the stateful profile", () => {
+		const flow = config({ enabled: true });
+		flow.steps[2].config = {
+			profile: "stateful",
+			excludedTools: ["sandbox_network"],
+		};
+		const step = applyMemonAbsorption(flow).steps[2];
+		expect(step.enabled).toBe(true);
+		expect(step.config?.profile).toBe("stateful");
+		expect(step.config?.excludedTools).not.toContain("sandbox_snapshot");
+		expect(new Set(step.config?.excludedTools as string[]).size).toBe(6);
 	});
 
 	it("leaves the config alone when MemonOS Bot is off or absent", () => {
@@ -90,7 +165,10 @@ describe("Visualize", () => {
 
 	it("comes from Visualize response, which a MemonOS Bot run takes over", () => {
 		const run = applyMemonAbsorption(withVisualize("glass"));
-		expect(enabledNames(run)).toEqual(["memon-feature"]);
+		expect(enabledNames(run)).toEqual([
+			"nodejs-sandbox-feature",
+			"memon-feature",
+		]);
 		expect(
 			run.steps.find((step) => step.name === "memon-feature")?.config,
 		).toMatchObject({ apps: { visualize: true }, visualTheme: "glass" });

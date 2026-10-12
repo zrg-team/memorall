@@ -2,6 +2,10 @@ import { TRANSFORMER_MODELS } from "../configs/transformer-models";
 import { WEBLLM_MODELS } from "../configs/webllm-models";
 import { WLLAMA_MODELS } from "../configs/wllama-models";
 import {
+	modelSupportsCategory,
+	type ModelCategory,
+} from "../interfaces/model-category";
+import {
 	getModelRunConfig,
 	getQuickDownloadModelId,
 	type LLMModelConfig,
@@ -73,14 +77,22 @@ export function getModelsByProvider(provider: LLMProvider): LLMModelConfig[] {
 	return ALL_MODELS.filter((model) => model.provider === provider);
 }
 
-export function getSupportedModels(provider: LLMProvider): LLMModelConfig[] {
-	return getModelsByProvider(provider).filter((model) => !model.unsupported);
+export function getSupportedModels(
+	provider: LLMProvider,
+	category: ModelCategory = "chat",
+): LLMModelConfig[] {
+	return getModelsByProvider(provider).filter(
+		(model) => !model.unsupported && modelSupportsCategory(model, category),
+	);
 }
 
 export function getQuickDownloadModels(
 	provider: LLMProvider,
+	category: ModelCategory = "chat",
 ): LLMModelConfig[] {
-	return getSupportedModels(provider).filter((model) => model.quickDownload);
+	return getSupportedModels(provider, category).filter(
+		(model) => model.quickDownload,
+	);
 }
 
 export function getModelRuntimeProfile(

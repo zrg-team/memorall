@@ -9,7 +9,13 @@ import {
 type OpenAICompatibleLLM = OpenAILLM | LocalOpenAICompatibleLLM;
 
 interface ProviderCase {
-	name: "OpenAI" | "OpenRouter" | "LM Studio" | "Ollama";
+	name:
+		| "OpenAI"
+		| "OpenRouter"
+		| "LM Studio"
+		| "Ollama"
+		| "Custom"
+		| "Custom without authentication";
 	create: () => OpenAICompatibleLLM;
 	baseURL: string;
 	expectedAuthorization?: string;
@@ -17,6 +23,20 @@ interface ProviderCase {
 }
 
 const providers: ProviderCase[] = [
+	{
+		name: "Custom",
+		create: () =>
+			new OpenAILLM("custom-key", "https://custom.test/api/v1///", {}),
+		baseURL: "https://custom.test/api/v1",
+		expectedAuthorization: "Bearer custom-key",
+		expectedInfoType: "custom",
+	},
+	{
+		name: "Custom without authentication",
+		create: () => new OpenAILLM(undefined, "http://custom.test/v1", {}),
+		baseURL: "http://custom.test/v1",
+		expectedInfoType: "custom",
+	},
 	{
 		name: "OpenAI",
 		create: () => new OpenAILLM("openai-key", "https://openai.test/v1"),
@@ -124,6 +144,45 @@ afterEach(() => {
 });
 
 describe("OpenAI-compatible provider contracts", () => {
+	it("keeps manual custom model IDs available when /models is unsupported", async () => {
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(async () => new Response(null, { status: 404 })),
+		);
+		const llm = new OpenAILLM(undefined, "https://custom.test/v1", {
+			modelIds: [" vendor/model ", "vendor/model", "", "other-model"],
+		});
+		await expect(llm.models()).resolves.toMatchObject({
+			data: [
+				{ id: "vendor/model", provider: "custom", categories: ["chat"] },
+				{ id: "other-model", provider: "custom" },
+			],
+		});
+	});
+
+	it("merges custom model IDs with discovered models without duplicates", async () => {
+		vi.stubGlobal("fetch", createFetchMock());
+		const llm = new OpenAILLM("key", "https://custom.test/v1", {
+			modelIds: ["contract-model", "manual-model"],
+		});
+		expect(
+			(await llm.models()).data.map((model) => [model.id, model.provider]),
+		).toEqual([
+			["contract-model", "custom"],
+			["manual-model", "custom"],
+		]);
+	});
+
+	it.each([
+		"",
+		"invalid",
+		"ftp://custom.test/v1",
+		"https://user:pass@custom.test/v1",
+		"https://custom.test/v1?key=x",
+		"https://custom.test/v1#fragment",
+	])("rejects invalid custom API roots: %s", (baseURL) =>
+		expect(() => new OpenAILLM("key", baseURL, {})).toThrow(),
+	);
 	it("rejects a remote provider without credentials before chat can start", async () => {
 		const fetchMock = vi.fn();
 		vi.stubGlobal("fetch", fetchMock);

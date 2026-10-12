@@ -44,6 +44,9 @@ export interface FolderIndexTypeStatus {
 	/** Files the index covers. */
 	files: number;
 	updatedAt?: string;
+	/** Content chunks and per-file failures, for embedding indexes. */
+	chunks?: number;
+	errors?: Array<{ path: string; message: string }>;
 }
 
 export interface FolderIndexSyncResult {

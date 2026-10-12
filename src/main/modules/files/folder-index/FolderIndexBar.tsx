@@ -1,10 +1,18 @@
-import { Library, Loader2, RefreshCw, Settings2, Share2 } from "lucide-react";
+import {
+	Library,
+	Loader2,
+	RefreshCw,
+	Search,
+	Settings2,
+	Share2,
+} from "lucide-react";
 import React from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/main/components/ui/button";
 import { normalizeFolderPath } from "@/services/folder-index/index-config";
 import { useFolderIndex } from "./FolderIndexContext";
 import { IndexTypeBadge } from "./IndexTypeBadge";
+import { EmbeddingSearchDialog } from "./EmbeddingSearchDialog";
 
 /**
  * Above a folder's files when the folder has an index: which types, how many
@@ -17,6 +25,7 @@ export const FolderIndexBar: React.FC<{
 }> = ({ folderPath, fileCount }) => {
 	const { t } = useTranslation("documents");
 	const index = useFolderIndex();
+	const [searchOpen, setSearchOpen] = React.useState(false);
 	const path = normalizeFolderPath(folderPath);
 	const effective = index?.effectiveAt(path) ?? [];
 	const effectiveKey = effective.join(",");
@@ -64,6 +73,26 @@ export const FolderIndexBar: React.FC<{
 					<Share2 className="h-3.5 w-3.5" />
 					{t("folderIndex.graph.open")}
 				</Button>
+			)}
+			{effective.includes("embeddings") && (
+				<>
+					<Button
+						variant="outline"
+						size="sm"
+						className="h-7 gap-1.5 px-2.5 text-xs"
+						onClick={() => setSearchOpen(true)}
+					>
+						<Search className="h-3.5 w-3.5" />
+						{t("folderIndex.embedding.search")}
+					</Button>
+					<EmbeddingSearchDialog
+						open={searchOpen}
+						onOpenChange={setSearchOpen}
+						folderPath={path}
+						onOpenFile={index.openFile}
+						onOpenCard={effective.includes("okf") ? index.openCard : undefined}
+					/>
+				</>
 			)}
 			<Button
 				variant="outline"

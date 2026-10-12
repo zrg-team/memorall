@@ -17,7 +17,7 @@ import { resolveModelCategories } from "@/services/llm/registry/media-model-regi
 
 interface RemoteModelsSectionProps {
 	providers: Array<{
-		provider: Extract<ServiceProvider, "openai" | "openrouter">;
+		provider: Extract<ServiceProvider, "openai" | "openrouter" | "custom">;
 		models: ModelInfo[];
 		loading: boolean;
 		ready: boolean;
@@ -57,10 +57,10 @@ export const RemoteModelsSection: React.FC<RemoteModelsSectionProps> = ({
 		),
 	}));
 	const [collapsedProviders, setCollapsedProviders] = React.useState<
-		Partial<Record<"openai" | "openrouter", boolean>>
+		Partial<Record<"openai" | "openrouter" | "custom", boolean>>
 	>({});
 	const [searchFilters, setSearchFilters] = React.useState<
-		Partial<Record<"openai" | "openrouter", string>>
+		Partial<Record<"openai" | "openrouter" | "custom", string>>
 	>({});
 	const configuredProviders = providers.filter(
 		(providerState) => providerState.ready || providerState.models.length > 0,

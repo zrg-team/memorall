@@ -1,5 +1,14 @@
-import { OKF_INDEX_TYPE_ID, OKF_USER_ACTOR } from "./constants";
-import { indexRootOf, normalizeFolderPath, parentFolder } from "./index-config";
+import {
+	OKF_INDEX_TYPE_ID,
+	OKF_USER_ACTOR,
+	EMBEDDING_INDEX_TYPE_ID,
+} from "./constants";
+import {
+	indexRootOf,
+	indexRoots,
+	normalizeFolderPath,
+	parentFolder,
+} from "./index-config";
 import { readCardBody } from "./okf/okf-query";
 import {
 	frontmatterString,
@@ -62,8 +71,37 @@ const state = (): Promise<FolderIndexStateView> =>
 export const runFolderIndexOperation = async (
 	job: FolderIndexOperationJobPayload,
 ): Promise<FolderIndexOperationJobResult> => {
-	const { indexer, okf, okfReader } = await getFolderIndexRuntime();
+	const { indexer, okf, okfReader, embeddings } = await getFolderIndexRuntime();
 	switch (job.operation) {
+		case "embedding.search": {
+			const config = await indexer.loadConfig();
+			return {
+				operation: job.operation,
+				result: await embeddings.search(
+					job.payload,
+					indexRoots(config, EMBEDDING_INDEX_TYPE_ID),
+					(path, root) =>
+						indexRootOf(
+							config,
+							EMBEDDING_INDEX_TYPE_ID,
+							parentFolder(path) ?? "/",
+						) === root,
+				),
+			};
+		}
+		case "embedding.chunks": {
+			const path = normalizeFolderPath(job.payload.path);
+			const config = await indexer.loadConfig();
+			const root = indexRootOf(
+				config,
+				EMBEDDING_INDEX_TYPE_ID,
+				parentFolder(path) ?? "/",
+			);
+			return {
+				operation: job.operation,
+				result: root ? await embeddings.chunks(path, root) : [],
+			};
+		}
 		case "state.get":
 			return { operation: job.operation, result: await state() };
 		case "folder.setType":

@@ -31,7 +31,10 @@ vi.mock("@/services", () => ({
 		},
 		embeddingService: {},
 		databaseService: { use: vi.fn(async () => undefined) },
-		flowBuilderService: { getUnifiedFlowConfig: vi.fn(async () => null) },
+		flowBuilderService: {
+			getUnifiedFlowConfig: vi.fn(async () => null),
+			listPredefinedFlows: vi.fn(async () => []),
+		},
 		getSandboxContainerService: vi.fn(() => ({})),
 		getWebBrowserService: vi.fn(() => ({})),
 	},
@@ -817,6 +820,27 @@ describe("a split conversation does not turn plain chat into an agent", () => {
 			}),
 		);
 	});
+
+	it.each(["agent", "custom"])(
+		"supplies the saved-agent catalog in %s mode",
+		async (mode) => {
+			flowStream.mockImplementation(async function* () {
+				yield ["values", { response: "ok" }];
+			});
+			await runChat({
+				messages: [{ role: "user", content: "delegate it" }],
+				model: "test-model",
+				mode,
+			});
+			const { createMemorallFlowRun } = await import(
+				"@/services/agent-harness"
+			);
+			const catalog = vi.mocked(createMemorallFlowRun).mock.calls.at(-1)?.[0]
+				.services.flowCatalog;
+			expect(catalog?.getFlowConfig).toEqual(expect.any(Function));
+			await expect(catalog?.listFlows("foundation")).resolves.toEqual([]);
+		},
+	);
 
 	it("routes every request of the run to the conversation's prompt cache", async () => {
 		flowStream.mockImplementation(

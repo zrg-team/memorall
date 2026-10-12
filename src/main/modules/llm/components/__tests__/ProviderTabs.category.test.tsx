@@ -46,13 +46,18 @@ describe("provider tabs by model category", () => {
 			"webllm",
 			"openai",
 			"openrouter",
+			"custom",
 			"lmstudio",
 			"ollama",
 		]);
 	});
 
 	it("narrows speech to the providers that can speak", () => {
-		expect(tabsFor("text-to-speech")).toEqual(["transformer-media", "openai"]);
+		expect(tabsFor("text-to-speech")).toEqual([
+			"transformer-media",
+			"openai",
+			"custom",
+		]);
 	});
 
 	it("offers only on-device runners for image tools", () => {

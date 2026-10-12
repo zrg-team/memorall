@@ -53,7 +53,7 @@ export const FOLDER_INDEX_FEATURE_TOOLS: string[] = FOLDER_INDEX_TYPES.flatMap(
 );
 
 export const FOLDER_INDEX_FEATURE_DESCRIPTION =
-	"Search folders through their indexes. Supports OKF; more index types can be added.";
+	"Search folders through OKF cards and EmbeddingGemma 2 content chunks, including images, audio, music and video.";
 
 const definition = defineStep<
 	FolderIndexFeatureInput,

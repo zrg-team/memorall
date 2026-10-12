@@ -32,6 +32,38 @@ function sizeLabelToMiB(label: string): number {
 }
 
 describe("local LLM model catalog", () => {
+	it("offers all upstream GGUF decision models separately from chat", () => {
+		const decisions = getSupportedModels("wllama", "decision");
+		expect(decisions.map((model) => model.id)).toEqual([
+			"ggml-org/Julia-1-GGUF",
+			"ggml-org/Laya-GGUF",
+			"ggml-org/Kev-4B-GGUF",
+			"ggml-org/lev-GGUF",
+		]);
+		expect(
+			getSupportedModels("wllama").every(
+				(model) => model.wllamaConfig?.runtime !== "decision",
+			),
+		).toBe(true);
+		for (const model of decisions) {
+			expect(model.wllamaConfig?.filename).toBeTruthy();
+			expect(model.abilities.tools).toBe("none");
+			if (model.sizeGB > 2) expect(model.requiresWebGPU).toBe(true);
+		}
+	});
+
+	it("offers both Gemma 4 E2B libraries including the adapter without shader-f16", () => {
+		for (const quant of ["q4f16_1", "q4f32_1"]) {
+			const id = `gemma-4-E2B-it-${quant}-MLC`;
+			expect(getModel(id, "webllm")?.quickDownload).toBe(true);
+			const entry = prebuiltAppConfig.model_list.find(
+				(model) => model.model_id === id,
+			);
+			expect(entry?.model_lib).toContain("v0_2_86/base");
+			if (quant === "q4f32_1")
+				expect(entry?.required_features ?? []).not.toContain("shader-f16");
+		}
+	});
 	it("uses unique provider-qualified model IDs and valid metadata", () => {
 		const keys = ALL_MODELS.map(
 			(model) => `${model.provider}:${model.id.toLowerCase()}`,
@@ -144,7 +176,10 @@ describe("local LLM model catalog", () => {
 	});
 
 	it("pins supported wllama files below the single-file limit", () => {
-		for (const model of WLLAMA_MODELS.filter((entry) => !entry.unsupported)) {
+		for (const model of WLLAMA_MODELS.filter(
+			(entry) =>
+				!entry.unsupported && entry.wllamaConfig?.runtime !== "decision",
+		)) {
 			expect(model.wllamaConfig?.filename, model.id).toBeTruthy();
 			expect(model.sizeGB * 1024 ** 3, model.id).toBeLessThan(TWO_GIB);
 		}

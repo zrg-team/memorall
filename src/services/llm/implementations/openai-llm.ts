@@ -49,6 +49,10 @@ import {
 	resolveTokenUsage,
 } from "../utils/token-usage";
 import { liftToolImages } from "../utils/tool-images";
+import {
+	normalizeCustomBaseURL,
+	normalizeCustomModelIds,
+} from "../utils/custom-provider";
 
 // Well-known model configurations with context window and max response tokens
 interface ModelConfig {
@@ -421,9 +425,16 @@ export class OpenAILLM implements BaseLLM {
 	private modelLimits = new Map<string, ModelConfig>();
 	private modelLimitsLoad: Promise<void> | null = null;
 
-	constructor(apiKey?: string, baseURL?: string) {
+	constructor(
+		apiKey?: string,
+		baseURL?: string,
+		private readonly custom?: { modelIds?: readonly string[] },
+	) {
+		if (custom) this.name = "custom";
 		this.apiKey = apiKey || "";
-		this.baseURL = (baseURL || "https://api.openai.com/v1").replace(/\/$/, "");
+		this.baseURL = custom
+			? normalizeCustomBaseURL(baseURL ?? "")
+			: (baseURL || "https://api.openai.com/v1").replace(/\/$/, "");
 	}
 
 	/**
@@ -593,11 +604,11 @@ export class OpenAILLM implements BaseLLM {
 	async initialize(): Promise<void> {
 		if (this.ready) return;
 
-		// Remote OpenAI-compatible endpoints require authentication. Local servers
-		// use LocalOpenAICompatibleLLM and may intentionally run without a key.
+		// Built-in remote providers require authentication. Custom endpoints and
+		// local servers may intentionally run without a key.
 		// Rejecting the invalid configuration here prevents a delayed HTTP 401 in
 		// the chat window and keeps unusable providers out of the model selector.
-		if (!this.isLocalBase() && !this.apiKey) {
+		if (!this.custom && !this.isLocalBase() && !this.apiKey) {
 			throw new Error("API key is required for remote AI providers");
 		}
 
@@ -668,10 +679,15 @@ export class OpenAILLM implements BaseLLM {
 					object: "model",
 					created: Number(m.created || now),
 					owned_by: String(
-						m.owned_by || (this.isLocalBase() ? "local" : "openai"),
+						m.owned_by ||
+							(this.isLocalBase()
+								? "local"
+								: this.custom
+									? "custom"
+									: "openai"),
 					),
 					loaded: true,
-					provider: "openai",
+					provider: this.custom ? "custom" : "openai",
 					// OpenRouter publishes modalities; OpenAI's listing only has ids.
 					categories:
 						classifyByModalities({
@@ -680,11 +696,29 @@ export class OpenAILLM implements BaseLLM {
 						}) ?? classifyRemoteModel(id),
 				};
 			});
-			return { object: "list", data: modelInfos };
+			return { object: "list", data: this.withCustomModels(modelInfos) };
 		} catch (error) {
 			// For local servers that don't support /models, return an empty list gracefully
-			return { object: "list", data: [] };
+			return { object: "list", data: this.withCustomModels([]) };
 		}
+	}
+
+	private withCustomModels(models: ModelInfo[]): ModelInfo[] {
+		const listed = new Set(models.map((model) => model.id));
+		for (const id of normalizeCustomModelIds(this.custom?.modelIds ?? [])) {
+			if (listed.has(id)) continue;
+			models.push({
+				id,
+				name: id,
+				object: "model",
+				created: Math.floor(Date.now() / 1000),
+				owned_by: "custom",
+				provider: "custom",
+				loaded: true,
+				categories: classifyRemoteModel(id),
+			});
+		}
+		return models;
 	}
 
 	/** Decision models are optional extras: a failure lists none of them. */
@@ -959,7 +993,7 @@ export class OpenAILLM implements BaseLLM {
 	getInfo(): LLMInfo {
 		return {
 			name: this.name,
-			type: "openai",
+			type: this.custom ? "custom" : "openai",
 			ready: this.ready,
 		};
 	}

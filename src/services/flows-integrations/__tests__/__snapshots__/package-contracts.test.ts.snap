@@ -258,7 +258,7 @@ exports[`flows-integrations registered contracts > registers every integrations 
         "messages": "messages",
         "tools": "tools",
       },
-      "description": "Search folders through their indexes. Supports OKF; more index types can be added.",
+      "description": "Search folders through OKF cards and EmbeddingGemma 2 content chunks, including images, audio, music and video.",
       "enabledByDefault": false,
       "feature": {
         "graphTypes": [
@@ -758,6 +758,8 @@ exports[`flows-integrations registered contracts > registers every integrations 
   "document_fs_read",
   "document_fs_remove",
   "document_fs_write",
+  "embedding_chunks",
+  "embedding_search",
   "excel_to_text",
   "hyperframes_edit",
   "hyperframes_init",
@@ -1332,6 +1334,57 @@ exports[`flows-integrations registered contracts > registers every integrations 
       "required": [
         "file_path",
         "content",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "Inspect a source file's content chunks with excerpts and page/time locations. Media chunks identify a segment; they do not contain a generated transcript.",
+    "name": "embedding_chunks",
+    "parameters": {
+      "properties": {
+        "limit": {
+          "type": "number",
+        },
+        "offset": {
+          "type": "number",
+        },
+        "path": {
+          "type": "string",
+        },
+      },
+      "required": [
+        "path",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "Search EmbeddingGemma 2 content chunks across documents, images, audio, music and video. Returns source paths, excerpts, pages or timestamps, and cosine similarity (not confidence).",
+    "name": "embedding_search",
+    "parameters": {
+      "properties": {
+        "folder": {
+          "type": "string",
+        },
+        "kind": {
+          "enum": [
+            "text",
+            "image",
+            "audio",
+            "video",
+          ],
+          "type": "string",
+        },
+        "limit": {
+          "type": "number",
+        },
+        "query": {
+          "type": "string",
+        },
+      },
+      "required": [
+        "query",
       ],
       "type": "object",
     },

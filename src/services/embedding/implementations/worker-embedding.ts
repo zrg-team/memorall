@@ -1,4 +1,5 @@
 import type { BaseEmbedding } from "../interfaces/base-embedding";
+import type { MultimodalEmbeddingInput } from "../interfaces/multimodal-embedding";
 import { LLM_RUNNER_URLS } from "@/config/llm-runner";
 import { waitForDOMReady } from "@/utils/dom";
 import { logError, logInfo, logWarn } from "@/utils/logger";
@@ -8,7 +9,7 @@ interface BaseMessage {
 }
 
 interface OutgoingMessage extends BaseMessage {
-	type: "init" | "embeddings" | "models";
+	type: "init" | "embeddings" | "models" | "embed-content";
 	payload?: unknown;
 }
 
@@ -41,6 +42,7 @@ export interface WorkerEmbeddingOptions {
 	modelName?: string;
 	runnerUrl?: string;
 	device?: "wasm" | "webgpu" | "auto";
+	revision?: string;
 }
 
 export class WorkerEmbedding implements BaseEmbedding {
@@ -67,6 +69,7 @@ export class WorkerEmbedding implements BaseEmbedding {
 		url.searchParams.set("mode", "embedding");
 		url.searchParams.set("model", this.modelName);
 		url.searchParams.set("device", this.device);
+		if (options.revision) url.searchParams.set("revision", options.revision);
 		this.url = url.toString();
 	}
 
@@ -91,8 +94,12 @@ export class WorkerEmbedding implements BaseEmbedding {
 
 			window.addEventListener("message", this.onMessage);
 
-			await new Promise<void>((resolve) => {
+			await new Promise<void>((resolve, reject) => {
 				logInfo("🔤 WorkerEmbedding waiting for RUNNER_READY...");
+				const timeout = setTimeout(() => {
+					window.removeEventListener("message", handler);
+					reject(new Error("Embedding runner did not become ready"));
+				}, 30_000);
 				const handler = (e: MessageEvent<IncomingMessage>) => {
 					if (e.data?.messageId === "RUNNER_READY") {
 						const isFromRunner = e.source === this.iframe?.contentWindow;
@@ -100,6 +107,7 @@ export class WorkerEmbedding implements BaseEmbedding {
 							`🔤 WorkerEmbedding received RUNNER_READY (origin=${e.origin}, fromRunner=${isFromRunner})`,
 						);
 						if (isFromRunner) {
+							clearTimeout(timeout);
 							window.removeEventListener("message", handler);
 							resolve();
 						}
@@ -110,7 +118,11 @@ export class WorkerEmbedding implements BaseEmbedding {
 
 			logInfo("🔤 WorkerEmbedding sending init to runner...");
 			const initStartTime = Date.now();
-			await this.send("init", { modelName: this.modelName }, { timeoutMs: 0 });
+			await this.send(
+				"init",
+				{ modelName: this.modelName },
+				{ timeoutMs: 600_000 },
+			);
 			const initDuration = Date.now() - initStartTime;
 			logInfo(
 				`🔤 WorkerEmbedding init completed (took ${Math.round(initDuration / 1000)}s)`,
@@ -140,6 +152,17 @@ export class WorkerEmbedding implements BaseEmbedding {
 			data: Array<{ embedding: number[] }>;
 		};
 		return response.data[0].embedding;
+	}
+
+	/** Native text, image, audio or sampled-video input; requires a multimodal model. */
+	async contentToVector(input: MultimodalEmbeddingInput): Promise<number[]> {
+		if (!this.ready) await this.initialize();
+		const response = (await this.send(
+			"embed-content",
+			{ input, model: this.modelName },
+			{ timeoutMs: 600_000 },
+		)) as { embedding: number[] };
+		return response.embedding;
 	}
 
 	async textsToVectors(texts: string[]): Promise<number[][]> {

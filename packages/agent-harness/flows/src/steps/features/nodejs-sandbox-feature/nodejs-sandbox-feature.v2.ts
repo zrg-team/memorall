@@ -13,6 +13,7 @@ import { logError } from "../../../logging/logger.js";
 import {
 	getSandboxToolsForProfile,
 	SANDBOX_WEB_APP_TOOLS,
+	type SandboxToolName,
 	type SandboxToolProfile,
 } from "../../../tools/agent-sandbox/profiles.js";
 import {
@@ -42,6 +43,8 @@ export interface NodejsSandboxFeatureOutput {
 
 export interface NodejsSandboxFeatureConfig {
 	profile?: SandboxToolProfile;
+	/** Tools provided by another surface; keep the remaining feature tools. */
+	excludedTools?: readonly SandboxToolName[];
 }
 
 export type NodejsSandboxFeatureServices =
@@ -168,19 +171,33 @@ export const buildBrowserSandboxPrompt = (
 	python?: SandboxPythonCapability,
 	commands: readonly SandboxInstalledCommand[] = [],
 	notes: readonly string[] = [],
-): string => `# BROWSER SANDBOX
+): string =>
+	tools.length === 0
+		? ""
+		: `# BROWSER SANDBOX
 Use the active browser sandbox when code must be executed, packages tested, commands run, or a web app previewed.
 
 Available sandbox tools: ${tools.join(", ")}.
 
 - The runtime is AlmostNode in the browser, not OS Node.js. Browser-compatible JavaScript, TypeScript, npm packages, and common Node shims are supported; native addons and OS process assumptions are not.${python ? `\n${pythonGuidance(python)}` : ""}${commands.length ? `\n${commandsGuidance(commands)}` : ""}${notes.map((note) => `\n- ${note}`).join("")}
-- Use the existing fs_read, fs_write, fs_edit, fs_ls, fs_glob, fs_grep, fs_mkdir, and fs_remove tools for workspace files. The harness synchronizes those files with the sandbox.
-- Use sandbox_run for code, workspace files, commands, and REPL evaluation. For a running command, continue with sandbox_process read and its returned nextCursor; never invent or alter opaque IDs and cursors.
-- Use sandbox_packages only when a dependency is required.
-- Use sandbox_preview for web server lifecycle. Use request for APIs and render for visible web pages. Always use the returned preview URL or render result; never construct localhost URLs.
-- After changing files used by a running preview, call sandbox_preview with restart before checking the result.
-- Use sandbox_inspect for status and diagnostics. Reset only when session state must be discarded.
-- Output, logs, and response bodies are bounded. Continue process reads with nextCursor when output is truncated or the process is still running.`;
+${[
+	tools.includes("sandbox_run") &&
+		"- Use the existing fs_read, fs_write, fs_edit, fs_ls, fs_glob, fs_grep, fs_mkdir, and fs_remove tools for workspace files. The harness synchronizes those files with the sandbox.",
+	tools.includes("sandbox_run") &&
+		"- Use sandbox_run for code, workspace files, commands, and REPL evaluation.",
+	tools.includes("sandbox_process") &&
+		"- For a running command, continue with sandbox_process read and its returned nextCursor; never invent or alter opaque IDs and cursors. Output, logs, and response bodies are bounded; continue reads when output is truncated or the process is still running.",
+	tools.includes("sandbox_packages") &&
+		"- Use sandbox_packages only when a dependency is required.",
+	tools.includes("sandbox_preview") &&
+		"- Use sandbox_preview for web server lifecycle. Use request for APIs and render for visible web pages. Always use the returned preview URL or render result; never construct localhost URLs. After changing files used by a running preview, call sandbox_preview with restart before checking the result.",
+	tools.includes("sandbox_inspect") &&
+		"- Use sandbox_inspect for status and diagnostics. Reset only when session state must be discarded.",
+	tools.includes("sandbox_snapshot") &&
+		"- Use sandbox_snapshot to capture or restore sandbox state. Use the snapshot ID returned by capture.",
+]
+	.filter(Boolean)
+	.join("\n")}`;
 
 export const BROWSER_SANDBOX_FEATURE_SYSTEM_PROMPT = buildBrowserSandboxPrompt(
 	SANDBOX_WEB_APP_TOOLS,
@@ -204,18 +221,23 @@ const definition = defineStep<
 	execute: async ({ input, services, config, runConfig }) => {
 		try {
 			const profile = config?.profile ?? "web_app";
+			const excludedTools = new Set(config?.excludedTools ?? []);
+			const requestedTools = getSandboxToolsForProfile(profile).filter(
+				(tool) => !excludedTools.has(tool),
+			);
 			const runtimeVars = getFlowRuntimeVars(runConfig);
 			const sessionKey = getRuntimeGraphId(runtimeVars);
-			const capabilities = services?.sandboxRuntime
-				? await services.sandboxRuntime.getCapabilities({
-						operationId: "browser-sandbox-feature:capabilities",
-						sessionKey,
-					})
-				: undefined;
+			const capabilities =
+				requestedTools.length > 0 && services?.sandboxRuntime
+					? await services.sandboxRuntime.getCapabilities({
+							operationId: "browser-sandbox-feature:capabilities",
+							sessionKey,
+						})
+					: undefined;
 			const sandboxTools = getSandboxToolsForProfile(
 				profile,
 				capabilities?.supported,
-			);
+			).filter((tool) => !excludedTools.has(tool));
 			const tools = GraphBase.chat.addTool(
 				input.tools,
 				...sandboxTools,
@@ -229,7 +251,12 @@ const definition = defineStep<
 			const notes = readSandboxNotes(extensions);
 			const messages = GraphBase.chat.systemMessage(
 				input.messages,
-				`${buildBrowserSandboxPrompt(sandboxTools, python, commands, notes)}\n\n${ARTIFACT_FEATURE_SYSTEM_PROMPT}`,
+				[
+					buildBrowserSandboxPrompt(sandboxTools, python, commands, notes),
+					ARTIFACT_FEATURE_SYSTEM_PROMPT,
+				]
+					.filter(Boolean)
+					.join("\n\n"),
 			);
 
 			return { output: { tools, messages } };

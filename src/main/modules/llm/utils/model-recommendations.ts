@@ -198,7 +198,10 @@ export function generateRecommendations(
 	limit: number = 4,
 ): ModelRecommendation[] {
 	const compatibleModels = ALL_MODELS.filter((model) => {
-		if (model.unsupported) {
+		if (
+			model.unsupported ||
+			(model.categories && !model.categories.includes("chat"))
+		) {
 			return false;
 		}
 
