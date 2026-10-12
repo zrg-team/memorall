@@ -9,6 +9,9 @@ export type TokenUsage = NonNullable<ChatCompletionResponse["usage"]>;
 const ESTIMATED_CHARS_PER_TOKEN = 4;
 const MESSAGE_OVERHEAD_TOKENS = 4;
 const CONVERSATION_OVERHEAD_TOKENS = 2;
+// A fallback for providers that omit usage. Image bytes are not text tokens;
+// provider-reported usage remains authoritative for actual vision costs.
+const ESTIMATED_IMAGE_TOKENS = 2048;
 
 function estimateTokensFromText(text: string): number {
 	if (!text) {
@@ -36,7 +39,7 @@ function stringifyMessageContent(
 			}
 
 			if (part.type === "image_url") {
-				return `[image:${part.image_url?.url || ""}]`;
+				return "[image]";
 			}
 
 			return "";
@@ -256,10 +259,14 @@ export function estimatePromptTokens(
 	}
 
 	return messages.reduce((total, message) => {
+		const imageCount = Array.isArray(message.content)
+			? message.content.filter((part) => part.type === "image_url").length
+			: 0;
 		return (
 			total +
 			MESSAGE_OVERHEAD_TOKENS +
-			estimateTokensFromText(stringifyMessage(message))
+			estimateTokensFromText(stringifyMessage(message)) +
+			imageCount * ESTIMATED_IMAGE_TOKENS
 		);
 	}, CONVERSATION_OVERHEAD_TOKENS);
 }

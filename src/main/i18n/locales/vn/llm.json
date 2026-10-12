@@ -49,8 +49,10 @@
 			"openai": "OpenAI",
 			"openrouter": "Router",
 			"lmstudio": "Studio",
-			"ollama": "Ollama"
-		}
+			"ollama": "Ollama",
+			"custom": "Tùy chỉnh"
+		},
+		"custom": "Tùy chỉnh (tương thích OpenAI)"
 	},
 	"providerTabs": {
 		"status": {
@@ -345,6 +347,10 @@
 				"name": "OpenRouter",
 				"description": "Truy cập nhiều nhà cung cấp AI",
 				"apiKeyUrl": "https://openrouter.ai/keys"
+			},
+			"custom": {
+				"name": "Tùy chỉnh (tương thích OpenAI)",
+				"description": "Sử dụng endpoint API của bạn"
 			}
 		}
 	},
@@ -519,5 +525,23 @@
 		"title": "Đầu vào {{input}} · đầu ra {{output}} cho 1 triệu token",
 		"cached": "Đầu vào từ bộ nhớ đệm {{price}} cho 1 triệu token",
 		"full": "vào {{input}} · ra {{output}} / 1 triệu"
+	},
+	"custom": {
+		"description": "Kết nối nhà cung cấp hỗ trợ API tương thích OpenAI.",
+		"optional": "(tùy chọn)",
+		"apiKeyPlaceholder": "Khóa API của nhà cung cấp",
+		"baseUrlPlaceholder": "https://api.example.com/v1",
+		"baseUrlDescription": "Nhập URL gốc của API, bao gồm /v1 nếu cần. Để trống khóa API nếu máy chủ không yêu cầu xác thực.",
+		"modelIds": "ID mô hình (tùy chọn)",
+		"modelIdsPlaceholder": "my-chat-model, another-model",
+		"modelIdsDescription": "Các ID mô hình được phân cách bằng dấu phẩy. Chúng được thêm vào danh sách và hoạt động cả khi nhà cung cấp không có endpoint /models.",
+		"ready": "Nhà cung cấp tùy chỉnh sẵn sàng",
+		"editConfiguration": "Chỉnh sửa cấu hình",
+		"invalidBaseUrl": "Nhập URL API HTTP hoặc HTTPS hợp lệ, không có thông tin đăng nhập, tham số truy vấn hoặc đoạn định danh.",
+		"apiKey": "Khóa API",
+		"deleteConfigurationConfirm": "Xóa cấu hình nhà cung cấp tùy chỉnh?",
+		"noConfigurationFoundError": "Không tìm thấy cấu hình nhà cung cấp tùy chỉnh",
+		"modelsAvailable": "Chọn mô hình từ danh sách. Chỉnh sửa cấu hình để thêm ID mô hình nếu danh sách trống.",
+		"unlockWithMasterKey": "Tải cấu hình này bằng mật khẩu chính."
 	}
 }

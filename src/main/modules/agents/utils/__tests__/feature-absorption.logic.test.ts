@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { getAbsorbedFeatures } from "../feature-absorption";
+import { getAbsorbedFeatures, getFeatureTools } from "../feature-absorption";
 
 const memon = {
 	name: "memon-feature",
@@ -10,6 +10,23 @@ const web = { name: "web-feature" } as any;
 const fs = { name: "fs-feature" } as any;
 
 describe("getAbsorbedFeatures", () => {
+	it("retains artifact rendering and snapshots when the computer replaces sandbox execution", () => {
+		const sandbox = {
+			name: "nodejs-sandbox-feature",
+			tools: [
+				"sandbox_run",
+				"sandbox_network",
+				"render_artifact",
+				"sandbox_snapshot",
+			],
+		} as any;
+		const absorbed = new Map([[sandbox.name, memon]]);
+		expect(getFeatureTools(sandbox, absorbed)).toEqual([
+			"render_artifact",
+			"sandbox_snapshot",
+		]);
+		expect(getFeatureTools(sandbox, new Map())).toBe(sandbox.tools);
+	});
 	it("maps each absorbed feature to the enabled feature that took it", () => {
 		const absorbed = getAbsorbedFeatures([memon, web, fs], {
 			"memon-feature": true,

@@ -1,7 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
 	buildMemonPrompt,
 	conversationDesktopFiles,
+	createMemonFeatureStep,
 	desktopFilesChangedReminder,
 	memonToolsFor,
 	openTasksReminder,
@@ -11,6 +12,63 @@ import {
 	MEMON_MEMORY_TEMPLATE,
 } from "@/services/memon/desktop-files";
 import { DEFAULT_MEMON_FEATURE_CONFIG } from "@/services/memon/feature-config";
+import { hostTool } from "@memorall/agent-harness-flows/graph/graph.base";
+
+const resolveHome = vi.hoisted(() =>
+	vi.fn(async () => "/agents/compatibility"),
+);
+vi.mock("@/services/filesystem/document-filesystem", () => ({
+	documentFileSystemService: {},
+}));
+
+vi.mock("@/services/memon/ports", () => ({
+	createMemonHomePort: () => ({ resolve: resolveHome }),
+	createMemonFilesPort: () => ({ read: async () => "" }),
+	createMemonStudioPort: () => ({ tools: async () => [] }),
+}));
+
+// The step reads home and studios in parallel; prime their shared mock before the run.
+beforeAll(async () => {
+	await import("@/services/memon/ports");
+});
+
+it("adds the native computer tools while preserving other feature tools and their bindings", async () => {
+	const skill = {
+		name: "load_skill" as const,
+		config: { enabledSkillNames: ["review"] },
+	};
+	const tools = [
+		skill,
+		...[
+			"send_message_to_agent",
+			"memory_remember",
+			"memory_retrieve",
+			"thread_history_read",
+			"doc_write",
+			"pdf_generate",
+			"render_artifact",
+			"sandbox_snapshot",
+			"lottie_show",
+			"okf_search",
+			"embedding_search",
+			"embedding_chunks",
+			"mcp_github_search",
+			"custom_tool",
+		].map(hostTool),
+	];
+	const step = createMemonFeatureStep({}, { ...DEFAULT_MEMON_FEATURE_CONFIG });
+	const result = await step.execute({
+		messages: [{ role: "system", content: "Enabled feature instructions" }],
+		tools,
+	});
+	expect(resolveHome).toHaveBeenCalled();
+	for (const tool of tools) expect(result.output.tools).toContain(tool);
+	for (const tool of memonToolsFor(DEFAULT_MEMON_FEATURE_CONFIG))
+		expect(result.output.tools).toContain(tool);
+	expect(JSON.stringify(result.output.messages)).toContain(
+		"Enabled feature instructions",
+	);
+});
 
 describe("buildMemonPrompt", () => {
 	it("explains only the apps the agent has", () => {

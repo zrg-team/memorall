@@ -98,21 +98,17 @@ export function useModelOperations({
 					modelStructure.default
 				)();
 
-				await serviceManager.llmService.setCurrentModel(
-					provider,
-					currentModelId,
-					serviceName,
-				);
-
 				// Always call serveFor - each implementation knows if it needs to download
-				await serviceManager.llmService.serveFor(
+				const served = await serviceManager.llmService.serveFor(
 					serviceName,
 					serveModelId,
 					(progress) => {
 						setDownloadProgress({ ...progress, text: progress.text || "" });
 					},
 				);
-				setCurrent({ modelId: currentModelId, provider });
+				if (!served.categories?.includes("decision")) {
+					setCurrent({ modelId: currentModelId, provider });
+				}
 				logInfo(`${modelName} loaded successfully`);
 
 				// Refresh models list after a brief delay to ensure background service is updated
@@ -121,7 +117,7 @@ export function useModelOperations({
 				}, 100);
 
 				// Notify parent component
-				onModelLoaded?.(currentModelId, provider);
+				onModelLoaded?.(serveModelId, provider);
 			} catch (err) {
 				const msg = err instanceof Error ? err.message : "Unknown error";
 				logError(`Error loading ${modelName}: ${msg}`);

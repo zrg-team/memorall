@@ -7,6 +7,82 @@ const fp16KvBytesPerToken = (
 ) => 2 * attentionLayers * keyValueHeads * headDimension * 2;
 
 export const WLLAMA_MODELS: LLMModelConfig[] = [
+	// Quantizations used by the upstream wllama decision demo. Large decision
+	// models use the v3 memory64 runtime and WebGPU; chat recommendations stay
+	// below the compatibility runtime's single-file limit.
+	...[
+		{
+			name: "Julia-1",
+			filename: "Julia-1-Q8_0.gguf",
+			bytes: 168_166_496,
+			gpu: false,
+			memoryGB: 2,
+			kvBytesPerToken: fp16KvBytesPerToken(24, 6, 64),
+		},
+		{
+			name: "Laya",
+			filename: "Laya-Q8_0.gguf",
+			bytes: 449_397_600,
+			gpu: false,
+			memoryGB: 3,
+			kvBytesPerToken: fp16KvBytesPerToken(30, 16, 64),
+		},
+		{
+			name: "Kev-4B",
+			filename: "Kev-4B-Q4_K_M.gguf",
+			bytes: 3_033_489_824,
+			gpu: true,
+			memoryGB: 6,
+			kvBytesPerToken: fp16KvBytesPerToken(8, 4, 256),
+		},
+		{
+			name: "lev",
+			filename: "lev-Q4_K_M.gguf",
+			bytes: 3_011_777_440,
+			gpu: true,
+			memoryGB: 6,
+			kvBytesPerToken: fp16KvBytesPerToken(8, 4, 256),
+		},
+	].map(
+		({
+			name,
+			filename,
+			bytes,
+			gpu,
+			memoryGB,
+			kvBytesPerToken,
+		}): LLMModelConfig => ({
+			id: `ggml-org/${name}-GGUF`,
+			provider: "wllama",
+			categories: ["decision"],
+			displayName: name,
+			sizeGB: bytes / 1024 ** 3,
+			sizeLabel:
+				bytes < 1024 ** 3
+					? `${Math.round(bytes / 1024 ** 2)}MB`
+					: `${(bytes / 1024 ** 3).toFixed(2)}GB`,
+			description: `${name}: typed choices, scores and yes/no decisions with probabilities`,
+			contextLength: 2048,
+			defaultMaxNewTokens: 512,
+			// Encoder models do not retain an autoregressive KV cache. Their
+			// K/V tensor sizes provide a conservative attention workspace budget.
+			kvBytesPerToken,
+			requiresWebGPU: gpu,
+			minMemoryGB: memoryGB,
+			qualityScore: 50,
+			performanceScore: gpu ? 50 : 80,
+			contextScore: 35,
+			abilities: {
+				tools: "none",
+				vision: false,
+				reasoning: false,
+				multilingual: false,
+			},
+			releaseDate: "2026-10",
+			quickDownload: true,
+			wllamaConfig: { filename, mmprojFilename: "", runtime: "decision" },
+		}),
+	),
 	{
 		id: "LiquidAI/LFM2.5-350M-GGUF",
 		provider: "wllama",

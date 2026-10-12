@@ -17,7 +17,10 @@ import {
 import type { FeatureIcon } from "@/services/flow-feature-catalog-service";
 import { HoverBadgeList } from "./AgentHoverInfo";
 import { FeatureCard, FeatureIconDisplay } from "./FeatureCard";
-import { getAbsorbedFeatures } from "../utils/feature-absorption";
+import {
+	getAbsorbedFeatures,
+	getFeatureTools,
+} from "../utils/feature-absorption";
 import {
 	getAgentFeatureDescription,
 	getAgentFeatureDisplayName,
@@ -71,7 +74,7 @@ export const FeaturesGrid: React.FC<FeaturesGridProps> = ({ summary }) => {
 
 	// Features an enabled feature has taken over (MemonOS Bot absorbs web, files
 	// and sandbox) unless its settings keep the direct tools. Runs switch them
-	// off, so their tools are not counted.
+	// over; any tools outside the computer's capabilities still count.
 	const absorbed = React.useMemo(
 		() =>
 			getAbsorbedFeatures(
@@ -88,8 +91,7 @@ export const FeaturesGrid: React.FC<FeaturesGridProps> = ({ summary }) => {
 			if (feature.detailView?.some((s) => s.component === "ToolPicker"))
 				continue;
 			if (!draftFeatures[feature.name]) continue;
-			if (absorbed.has(feature.name)) continue;
-			for (const tool of feature.tools) set.add(tool);
+			for (const tool of getFeatureTools(feature, absorbed)) set.add(tool);
 		}
 		return set;
 	}, [featureDefinitions, draftFeatures, absorbed]);
@@ -99,13 +101,13 @@ export const FeaturesGrid: React.FC<FeaturesGridProps> = ({ summary }) => {
 		for (const feature of featureDefinitions) {
 			if (hasToolPickerSlot(feature)) continue;
 			if (!draftFeatures[feature.name]) continue;
-			if (absorbed.has(feature.name)) continue;
 			if (
 				feature.requiresAccessibleAgents &&
 				draftMultiAgentAccessibleAgentIds.length === 0
 			)
 				continue;
-			for (const tool of feature.tools) enabledToolSet.add(tool);
+			for (const tool of getFeatureTools(feature, absorbed))
+				enabledToolSet.add(tool);
 		}
 		const availableToolSet = new Set(availableTools);
 		return [

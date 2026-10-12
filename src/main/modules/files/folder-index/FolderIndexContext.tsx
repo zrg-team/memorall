@@ -22,6 +22,8 @@ import { logError } from "@/utils/logger";
 
 /** How often the state is read again while a folder is being indexed. */
 const RUNNING_POLL_MS = 1_500;
+/** Notice automatic runs started by the filesystem watcher or another context. */
+const IDLE_POLL_MS = 5_000;
 
 export interface FolderEntries {
 	/** Index types in effect in the folder. */
@@ -157,18 +159,36 @@ export const FolderIndexProvider: React.FC<{
 		void refresh();
 	}, [refresh]);
 
-	// While a folder is being indexed, keep the state and open folders current.
+	// An idle page must also notice jobs started outside its own buttons.
 	const running = (state?.running.length ?? 0) > 0;
-	const wasRunning = React.useRef(false);
+	const hasIndexes =
+		state?.folders.some((folder) => folder.effective.length > 0) ?? false;
+	const indexRevision = JSON.stringify(
+		state?.folders.map((folder) => [
+			folder.path,
+			folder.status.map((status) => [
+				status.typeId,
+				status.updatedAt,
+				status.entries,
+				status.chunks,
+				status.errors,
+			]),
+		]),
+	);
 	React.useEffect(() => {
-		if (wasRunning.current && !running) {
+		// Revision changes also catch a short run that finished between two polls.
+		if (!running) {
 			for (const folder of watchedFolders.current) loadEntries(folder);
 		}
-		wasRunning.current = running;
-		if (!running) return;
-		const timer = setInterval(() => void refresh(), RUNNING_POLL_MS);
+	}, [running, indexRevision, loadEntries]);
+	React.useEffect(() => {
+		if (!hasIndexes && !running) return;
+		const timer = setInterval(
+			() => void refresh(),
+			running ? RUNNING_POLL_MS : IDLE_POLL_MS,
+		);
 		return () => clearInterval(timer);
-	}, [running, refresh, loadEntries]);
+	}, [running, hasIndexes, refresh]);
 
 	const applyChange = React.useCallback(
 		async (path: string, typeId: string, enabled: boolean) => {

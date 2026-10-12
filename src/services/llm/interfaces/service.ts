@@ -49,7 +49,10 @@ export interface OpenRouterConfig {
 
 export interface CustomConfig {
 	type: "custom";
-	[key: string]: unknown;
+	apiKey?: string;
+	baseURL: string;
+	/** Additional model IDs for endpoints without a model listing. */
+	modelIds?: string[];
 }
 
 // Default service names for consistency
@@ -68,7 +71,8 @@ export type ServiceProvider =
 	| "openai"
 	| "lmstudio"
 	| "ollama"
-	| "openrouter";
+	| "openrouter"
+	| "custom";
 
 export interface CurrentModelInfo {
 	modelId: string;
@@ -111,6 +115,6 @@ export interface LLMRegistry {
 	};
 	custom: {
 		config: CustomConfig;
-		llm: BaseLLM; // Placeholder until implemented
+		llm: BaseLLM;
 	};
 }

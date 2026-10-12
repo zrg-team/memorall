@@ -234,6 +234,10 @@ export function describeGgufArchitecture(metadata) {
 
 	return {
 		architecture: arch,
+		decisionType:
+			typeof read("decision.type") === "string"
+				? read("decision.type")
+				: undefined,
 		blockCount,
 		kvHeadsPerLayer,
 		keyLength,
@@ -259,12 +263,12 @@ export function kvBytesPerToken(architecture, bytesPerElement = 2) {
 	if (!architecture) return undefined;
 	const { kvHeadsPerLayer, keyLength, valueLength } = architecture;
 	const headsAcrossLayers = sum(kvHeadsPerLayer);
-	const bytes =
-		headsAcrossLayers * (keyLength + valueLength) * bytesPerElement;
+	const bytes = headsAcrossLayers * (keyLength + valueLength) * bytesPerElement;
 	return Number.isFinite(bytes) && bytes > 0 ? bytes : undefined;
 }
 
 const WANTED_SUFFIXES = [
+	"decision.type",
 	"block_count",
 	"context_length",
 	"embedding_length",

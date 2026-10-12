@@ -106,7 +106,11 @@ async function auditWllamaModels(models) {
 		const filename = model.wllamaConfig?.filename;
 		const file = files.find((entry) => entry.path === filename);
 		assert(file, `${model.id}/${filename} does not exist`);
-		assert(file.size < TWO_GIB, `${model.id}/${filename} exceeds 2 GiB`);
+		assert(
+			file.size < TWO_GIB ||
+				(model.wllamaConfig?.runtime === "decision" && model.requiresWebGPU),
+			`${model.id}/${filename} exceeds 2 GiB without the memory64 WebGPU decision runtime`,
+		);
 		assert(
 			Math.round(model.sizeGB * 1024 ** 3) === file.size,
 			`${model.id}/${filename} size does not match the registry`,
@@ -185,6 +189,13 @@ async function auditAbilities(models) {
 	for (const model of models.filter((entry) => !entry.unsupported)) {
 		const label = `${model.provider}:${model.id}`;
 		assert(model.abilities, `${label} is missing abilities`);
+		if (model.wllamaConfig?.runtime === "decision") {
+			assert(
+				model.abilities.tools === "none",
+				`${label} is a decision model, not a tool-calling chat model`,
+			);
+			continue;
+		}
 
 		if (model.provider === "webllm") {
 			assert(

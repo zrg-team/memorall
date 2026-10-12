@@ -23,6 +23,12 @@ export const FOLDER_INDEX_OPERATION_JOB_NAME =
 
 export const FOLDER_INDEX_FEATURE_ID = "step-folder-index-feature" as const;
 export const FOLDER_INDEX_STEP_NAME = "folder-index-feature" as const;
+export const FILE_OKF_INDEX_FEATURE_ID = "step-file-okf-index-feature" as const;
+export const FILE_OKF_INDEX_STEP_NAME = "file-okf-index-feature" as const;
+export const FILE_EMBEDDING_INDEX_FEATURE_ID =
+	"step-file-embedding-index-feature" as const;
+export const FILE_EMBEDDING_INDEX_STEP_NAME =
+	"file-embedding-index-feature" as const;
 
 /** OKF: Open Knowledge Format, https://github.com/GoogleCloudPlatform/knowledge-catalog/tree/main/okf */
 export const OKF_INDEX_TYPE_ID = "okf" as const;
@@ -40,6 +46,10 @@ export const OKF_TOOLS = [
 /** Who wrote a card, in OKF's actor convention (§7). */
 export const OKF_INDEXER_ACTOR = "process:memorall-okf-indexer" as const;
 export const OKF_USER_ACTOR = "human:me" as const;
+
+export const EMBEDDING_INDEX_TYPE_ID = "embeddings" as const;
+export const EMBEDDING_SEARCH_TOOL = "embedding_search" as const;
+export const EMBEDDING_CHUNKS_TOOL = "embedding_chunks" as const;
 
 export const DEFAULT_MAX_INDEXED_FILE_BYTES = 50 * 1024 * 1024;
 export const DEFAULT_SKIP_PATTERNS: readonly string[] = [

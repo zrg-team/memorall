@@ -88,6 +88,7 @@ describe("provider registry", () => {
 		expect(providersForCategory("text-to-speech")).toEqual([
 			"transformer-media",
 			"openai",
+			"custom",
 		]);
 		expect(providersForCategory("image-tools")).toEqual(["transformer-media"]);
 		expect(providersForCategory("image-generation")).not.toContain(

@@ -5,6 +5,7 @@ import { normalizeLangGraphStreamChunk } from "../../../utils/langgraph-stream.j
 import type { ChatCompletionMessageParam } from "../../../interfaces/engine/messages.js";
 import { logInfo, logWarn } from "../../../logging/logger.js";
 import type { FlowRegistrySet } from "../../../registries/registry-set.js";
+import type { LangGraphRunnableConfig } from "@langchain/langgraph";
 
 export interface MultiAgentChildAgent {
 	id: string;
@@ -23,6 +24,7 @@ export interface MultiAgentManagerConfig {
 	 */
 	getContextQueries?: (topicId?: string) => Promise<string[]>;
 	registries?: FlowRegistrySet;
+	runConfig?: LangGraphRunnableConfig;
 }
 
 export interface ChildAgentMessageResult {
@@ -70,12 +72,14 @@ export class MultiAgentManager {
 		childAgents: MultiAgentChildAgent[],
 		services: AllServices,
 		registries?: FlowRegistrySet,
+		runConfig?: LangGraphRunnableConfig,
 	): MultiAgentManager {
 		return new MultiAgentManager({
 			childAgents,
 			topicId: input.topicId,
 			services,
 			registries,
+			runConfig,
 		});
 	}
 
@@ -167,13 +171,21 @@ export class MultiAgentManager {
 			graphRegistries ? { registries: graphRegistries } : undefined,
 		);
 
+		const childRunConfig = this.config.services.flowCatalog?.getRunConfig?.(
+			{ flowId: agentId },
+			this.config.runConfig,
+		) ?? { configurable: this.config.runConfig?.configurable };
 		const stream = await graph.stream(
 			getInitialState({
 				messages,
 				topicId: this.config.topicId,
 				contextQueries,
 			}),
-			{ streamMode: ["values"] },
+			{
+				...childRunConfig,
+				signal: this.config.runConfig?.signal ?? childRunConfig.signal,
+				streamMode: ["values"],
+			},
 		);
 
 		let content = "";

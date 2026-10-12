@@ -119,6 +119,8 @@ import {
 } from "../constants";
 import { UnsupportedModelOperationError } from "../llm-service-core";
 import { LLMServiceMain } from "../llm-service-main";
+import { LLMServiceProxy } from "../llm-service-proxy";
+import { OpenAILLM } from "../implementations/openai-llm";
 
 const MEDIA = "transformer-media";
 const SPEECH_MODEL = "org/speech-model";
@@ -160,6 +162,29 @@ describe("per-category model selection", () => {
 			createRunner("openai", { extra: { serve: undefined } }),
 		);
 	});
+
+	it.each([LLMServiceMain, LLMServiceProxy])(
+		"creates and selects a custom provider in %s",
+		async (Service) => {
+			const service = new Service();
+			await service.create("custom", {
+				type: "custom",
+				baseURL: "https://custom.test/v1",
+				modelIds: ["vendor/model"],
+			});
+			expect(OpenAILLM).toHaveBeenCalledWith(
+				undefined,
+				"https://custom.test/v1",
+				{ modelIds: ["vendor/model"] },
+			);
+			await service.serveFor("custom", "vendor/model");
+			expect(await service.getCurrentModel()).toEqual({
+				modelId: "vendor/model",
+				provider: "custom",
+				serviceName: "custom",
+			});
+		},
+	);
 
 	it("serving a speech model never replaces the chat model", async () => {
 		const service = await createService();

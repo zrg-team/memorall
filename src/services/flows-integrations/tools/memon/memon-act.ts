@@ -10,6 +10,7 @@ import type { MemonMachine } from "@/services/memon/memon-machine";
 import type { MemonPageCapture } from "@/services/memon/page-capture";
 import { kitAppForRef } from "@/services/memon/apps";
 import { memonWindowLabel } from "@/services/memon/screen-serializer";
+import { memonFileKind } from "@/services/memon/file-kinds";
 import { type MemonToolOutput, runMemonTool } from "./memon-tool-utils";
 
 const schema = z
@@ -50,6 +51,14 @@ const schema = z
 			.optional()
 			.describe(
 				"type: the text (it replaces the field's value; in the editor e1, the whole file). press: the key. select: the option. toggle: on or off. move/copy: the folder to put the entry in. download: the file's address. zip: the folder's path.",
+			),
+		path: z
+			.string()
+			.trim()
+			.min(1)
+			.optional()
+			.describe(
+				'describe: the exact image file path from search results, such as "/agents/Bot/assets/hero.webp" or "~/assets/hero.webp". No Files ref or open Viewer is needed. A folder opens in Files so you can choose an image.',
 			),
 		x: z
 			.number()
@@ -108,6 +117,13 @@ const describeFile = async (
 	path: string,
 ): Promise<string | MemonToolOutput> => {
 	const shown = memonDisplayPath(path, machine.home);
+	if (await machine.isFolder(path)) {
+		await machine.openFolder(path);
+		return `Opened folder ${shown} in Files. This is a folder, not an image. Choose an image from the listing and use memon_act { action: "describe", path: "<exact image file path>" }. For images found by embedding_search, use the returned source path directly; text grep cannot inspect image content.`;
+	}
+	if (memonFileKind(path) !== "image") {
+		return `${shown} is not an image file. Use memon_open to read this file, or describe an image using the exact path returned by embedding_search.`;
+	}
 	if (!(await machine.modelAcceptsImages())) {
 		return `The chat's model cannot look at images. If Studio has an Image tools model, memon_studio { action: "run", tool: "image_tools", path: "${shown}" } can caption it.`;
 	}
@@ -128,14 +144,16 @@ const describeFile = async (
 const describe = async (
 	machine: MemonMachine,
 	ref: string | undefined,
+	path?: string,
 ): Promise<string | MemonToolOutput> => {
+	if (path) return describeFile(machine, machine.resolvePath(path));
 	const app = refApp(ref);
 	if (app === "files" && ref) {
 		return describeFile(machine, machine.fileRefPath(ref));
 	}
 	if (ref && app !== "browser") {
 		throw new Error(
-			"describe takes a page ref (b9), an image in Files (f3), or no ref: the image the Viewer shows, else the page.",
+			"describe takes a page ref (b9), an image in Files (f3), an exact image path in path, or no ref: the image the Viewer shows, else the page.",
 		);
 	}
 	const viewed = ref ? null : machine.viewerImage();
@@ -255,7 +273,7 @@ const act = async (
 			return (result.ok && result.detail) || `Scrolled ${direction}.`;
 		}
 		case "describe":
-			return describe(machine, input.ref);
+			return describe(machine, input.ref, input.path ?? input.text);
 		case "back":
 		case "forward":
 			await machine.browserHistory(input.action);
@@ -448,16 +466,19 @@ export const createMemonActTool: ToolFactory<Input> = (): Tool<Input> => ({
 			context,
 			input.action === "download"
 				? "Downloading a file"
-				: input.action === "describe" && !input.ref
-					? "Looking at the screen"
-					: input.ref
-						? `${input.action === "type" ? "Typing into" : input.action === "describe" ? "Looking at" : "Clicking"} ${input.ref}`
-						: input.x !== undefined
-							? `${input.action} at (${input.x}, ${input.y})`
-							: `${input.action}`,
+				: input.action === "describe" && (input.path || input.text)
+					? `Looking at ${input.path ?? input.text}`
+					: input.action === "describe" && !input.ref
+						? "Looking at the screen"
+						: input.ref
+							? `${input.action === "type" ? "Typing into" : input.action === "describe" ? "Looking at" : "Clicking"} ${input.ref}`
+							: input.x !== undefined
+								? `${input.action} at (${input.x}, ${input.y})`
+								: `${input.action}`,
 			(machine) => {
 				const app =
-					input.action === "download"
+					input.action === "download" ||
+					(input.action === "describe" && (input.path || input.text))
 						? "files"
 						: ((input.ref && kitAppForRef(input.ref)?.[0]) ??
 							refApp(input.ref) ??

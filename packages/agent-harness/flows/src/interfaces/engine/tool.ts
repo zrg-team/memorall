@@ -148,14 +148,31 @@ export const extractToolResult = (
 			value.structuredContent === undefined
 				? undefined
 				: serializeStructuredContent(value.structuredContent);
+		const bodyText =
+			typeof value.content === "string"
+				? value.content
+				: value.content
+						.map((part) => (typeof part?.text === "string" ? part.text : ""))
+						.filter(Boolean)
+						.join("\n");
+		const appendStructured =
+			structuredText && bodyText.trim() !== structuredText.trim();
 		const modelText = structuredText
-			? contentText.trim() && contentText.trim() !== structuredText.trim()
+			? contentText.trim() && appendStructured
 				? `${contentText}\n\n${structuredText}`
-				: structuredText
+				: contentText || structuredText
 			: contentText;
 		return {
-			content: modelText,
+			content:
+				typeof value.content === "string"
+					? modelText
+					: appendStructured
+						? [...value.content, { type: "text", text: structuredText }]
+						: value.content,
 			contentText: modelText,
+			...(toolMessageContentImages(value.content).length
+				? { imageUrls: toolMessageContentImages(value.content) }
+				: {}),
 			structuredContent: value.structuredContent,
 			isError: value.isError ?? false,
 			meta: value.meta,

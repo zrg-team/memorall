@@ -36,6 +36,7 @@ export type ServiceProvider =
 	| "transformer-media"
 	| "openai"
 	| "openrouter"
+	| "custom"
 	| "lmstudio"
 	| "ollama";
 

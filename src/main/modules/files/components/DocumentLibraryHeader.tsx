@@ -148,9 +148,14 @@ export const DocumentLibraryHeader = memo(function DocumentLibraryHeader({
 					<div className="relative min-w-0 flex-1">
 						<Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
 						<Input
+							type="search"
+							aria-label={t("library.searchPlaceholder")}
 							placeholder={t("library.searchPlaceholder")}
 							value={searchQuery}
 							onChange={(e) => onSearchChange(e.target.value)}
+							onKeyDown={(e) => {
+								if (e.key === "Escape") onSearchChange("");
+							}}
 							className="h-8 pl-8 text-sm"
 						/>
 					</div>
@@ -275,9 +280,14 @@ export const DocumentLibraryHeader = memo(function DocumentLibraryHeader({
 					<div className="relative flex-1 min-w-0">
 						<Search className="absolute left-2 md:left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 md:h-4 md:w-4 text-muted-foreground" />
 						<Input
+							type="search"
+							aria-label={t("library.searchPlaceholder")}
 							placeholder={t("library.searchPlaceholder")}
 							value={searchQuery}
 							onChange={(e) => onSearchChange(e.target.value)}
+							onKeyDown={(e) => {
+								if (e.key === "Escape") onSearchChange("");
+							}}
 							className="pl-8 md:pl-10 h-8 md:h-9 text-sm"
 						/>
 					</div>

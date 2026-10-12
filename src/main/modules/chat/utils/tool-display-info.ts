@@ -6,6 +6,15 @@ export const TOOL_DISPLAY_INFO: Record<
 	string,
 	{ name?: string; description: string; descriptionKey?: string }
 > = {
+	embedding_search: {
+		name: "Search content by meaning",
+		description:
+			"Find indexed passages, images, audio and video with a natural-language query",
+	},
+	embedding_chunks: {
+		name: "Read content chunks",
+		description: "Inspect a file's indexed passages and media locations",
+	},
 	okf_index: {
 		name: "List folder index",
 		description:

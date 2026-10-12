@@ -192,7 +192,23 @@ export const FolderIndexesDialog: React.FC = () => {
 																{t("folderIndex.indexing")}
 															</span>
 														) : folder.status.length ? (
-															files
+															<span>
+																{files}
+																{folder.status.some(
+																	(status) => status.chunks !== undefined,
+																) && (
+																	<span className="ml-1.5 text-muted-foreground">
+																		·{" "}
+																		{t("folderIndex.embedding.chunkCount", {
+																			count: folder.status.reduce(
+																				(sum, status) =>
+																					sum + (status.chunks ?? 0),
+																				0,
+																			),
+																		})}
+																	</span>
+																)}
+															</span>
 														) : folder.off.length ? (
 															t("folderIndex.turnedOff")
 														) : (
@@ -223,6 +239,19 @@ export const FolderIndexesDialog: React.FC = () => {
 						<p className="text-[11px] text-muted-foreground">
 							{t("folderIndex.addHint")}
 						</p>
+						{folders
+							.flatMap((folder) =>
+								folder.status.flatMap((status) => status.errors ?? []),
+							)
+							.slice(0, 10)
+							.map((error) => (
+								<p
+									key={error.path}
+									className="break-all text-xs text-destructive"
+								>
+									{error.path}: {error.message}
+								</p>
+							))}
 					</section>
 
 					{settings && (

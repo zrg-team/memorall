@@ -69,6 +69,11 @@ export class FolderIndexer {
 		while (this.pending.size) await Promise.all([...this.pending]);
 	}
 
+	/** Catch up saved folder indexes after changes made while the app was closed. */
+	resume(): void {
+		this.inBackground(this.syncAll());
+	}
+
 	register(type: FolderIndexType): void {
 		this.types.set(type.id, type);
 	}

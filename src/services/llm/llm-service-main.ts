@@ -20,6 +20,7 @@ import { isResidentLocalProvider } from "./provider-registry";
 import { ResidencyManager } from "./residency-manager";
 import type {
 	LLMRegistry,
+	CustomConfig,
 	LMStudioConfig,
 	OllamaConfig,
 	OpenAIConfig,
@@ -126,7 +127,12 @@ export class LLMServiceMain extends LLMServiceCore implements ILLMService {
 				) as LLMRegistry[K]["llm"];
 				break;
 			case "custom":
-				throw new Error("Custom LLM implementation not yet supported");
+				llm = new OpenAILLM(
+					(config as CustomConfig).apiKey,
+					(config as CustomConfig).baseURL,
+					{ modelIds: (config as CustomConfig).modelIds },
+				) as LLMRegistry[K]["llm"];
+				break;
 			default:
 				throw new Error("Unknown LLM type");
 		}
@@ -327,6 +333,14 @@ export class LLMServiceMain extends LLMServiceCore implements ILLMService {
 				});
 			} catch (e) {
 				logWarn("models(): OpenAI models error", e);
+			}
+		}
+		if (this.has(DEFAULT_SERVICES.CUSTOM)) {
+			try {
+				const custom = await this.modelsFor(DEFAULT_SERVICES.CUSTOM);
+				results.push(...custom.data);
+			} catch (error) {
+				logWarn("models(): Custom provider models error", error);
 			}
 		}
 		return { object: "list", data: results } as const;

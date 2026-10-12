@@ -381,9 +381,13 @@
 				"name": "MemonOS Bot",
 				"description": "Give the agent a computer: Browser, Files, Terminal, Tasks and your studios on one desktop that you can watch and take over."
 			},
-			"folderIndexFeature": {
-				"name": "Folder Indexes",
-				"description": "Search folders through their indexes. Supports OKF; more index types can be added."
+			"fileOkfIndexFeature": {
+				"name": "File OKF Indexes",
+				"description": "Find files through their OKF cards, summaries, types and tags."
+			},
+			"fileEmbeddingIndexFeature": {
+				"name": "File Embedding Indexes",
+				"description": "Search document passages, images, audio, music and video by meaning using local content embeddings."
 			}
 		}
 	},

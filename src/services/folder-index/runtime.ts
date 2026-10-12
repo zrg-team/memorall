@@ -6,6 +6,7 @@ import { logError } from "@/utils/logger";
 import { FolderIndexer } from "./folder-indexer";
 import { OkfIndex } from "./okf/okf-index";
 import { OkfReader } from "./okf/okf-query";
+import { EmbeddingIndex } from "./embedding/embedding-index";
 
 /**
  * The indexes of the context that runs background jobs: one indexer with
@@ -22,6 +23,7 @@ export interface FolderIndexRuntime {
 	indexer: FolderIndexer;
 	okf: OkfIndex;
 	okfReader: OkfReader;
+	embeddings: EmbeddingIndex;
 }
 
 let runtime: Promise<FolderIndexRuntime> | null = null;
@@ -87,8 +89,14 @@ const createRuntime = async (): Promise<FolderIndexRuntime> => {
 	const indexer = new FolderIndexer(zenIndexStore, documentLibrary);
 	const okf = new OkfIndex({ store: zenIndexStore, library: documentLibrary });
 	indexer.register(okf);
+	const embeddings = new EmbeddingIndex({
+		store: zenIndexStore,
+		library: documentLibrary,
+	});
+	indexer.register(embeddings);
 	watchLibrary(documentFileSystemService, indexer);
-	return { indexer, okf, okfReader: new OkfReader(zenIndexStore) };
+	indexer.resume();
+	return { indexer, okf, okfReader: new OkfReader(zenIndexStore), embeddings };
 };
 
 export const getFolderIndexRuntime = (): Promise<FolderIndexRuntime> => {

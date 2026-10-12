@@ -10,8 +10,11 @@ import { type ModelInfo } from "@/services/llm";
 import { serviceManager } from "@/services";
 import type { CurrentModel } from "@/main/hooks/use-current-model";
 import type { ServiceProvider } from "@/services/llm/interfaces/llm-service.interface";
+import type { WorkspaceMode } from "@/services/llm/interfaces/model-category";
+import { getQuickDownloadModels } from "@/services/llm/registry/model-registry";
 
 interface QuickDownloadModelsProps {
+	category?: WorkspaceMode;
 	quickProvider: ServiceProvider;
 	downloadedModels: ModelInfo[];
 	downloadedOnly: ModelInfo[];
@@ -30,6 +33,7 @@ interface QuickDownloadModelsProps {
 }
 
 export const QuickDownloadModels: React.FC<QuickDownloadModelsProps> = ({
+	category = "chat",
 	quickProvider,
 	downloadedModels,
 	downloadedOnly,
@@ -42,7 +46,12 @@ export const QuickDownloadModels: React.FC<QuickDownloadModelsProps> = ({
 	const { t } = useTranslation("llm");
 	const currentQuickModels =
 		quickProvider === "wllama"
-			? QUICK_WALLAMA_LLMS
+			? getQuickDownloadModels("wllama", category).map((model) => ({
+					repo: model.id,
+					filename: model.wllamaConfig!.filename,
+					size: model.sizeLabel,
+					description: model.description,
+				}))
 			: quickProvider === "webllm"
 				? QUICK_WEBLLM_LLMS
 				: quickProvider === "transformer"

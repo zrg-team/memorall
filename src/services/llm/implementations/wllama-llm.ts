@@ -6,6 +6,8 @@ import type {
 	ChatCompletionResponse,
 } from "@/types/openai";
 import { waitForDOMReady } from "@/utils/dom";
+import type { SystemOneParams, SystemOneResponse } from "@/types/openai-media";
+import { normalizeSystemOneResponse } from "../utils/decision-schema";
 import type {
 	BaseLLM,
 	LLMInfo,
@@ -13,6 +15,7 @@ import type {
 	ModelsResponse,
 } from "../interfaces/base-llm";
 import type { ToolCapabilityInfo } from "../interfaces/tool-capability";
+import { NO_TOOL_SUPPORT } from "../interfaces/tool-capability";
 import { getModel } from "../registry/model-registry";
 import {
 	extractToolCallsFromResponse,
@@ -59,7 +62,14 @@ interface BaseMessage {
 }
 
 interface OutgoingMessage extends BaseMessage {
-	type: "init" | "serve" | "models" | "chat/completions" | "unload" | "delete";
+	type:
+		| "init"
+		| "serve"
+		| "models"
+		| "chat/completions"
+		| "systemone"
+		| "unload"
+		| "delete";
 	payload?: unknown;
 }
 
@@ -83,6 +93,7 @@ interface ErrorResponse {
 }
 
 interface DetectedCapabilities {
+	supportsDecisions?: boolean;
 	supportsNativeTools: boolean;
 	supportsVision: boolean;
 	supportsAudio: boolean;
@@ -175,10 +186,42 @@ export class WllamaLLM implements BaseLLM {
 	}
 
 	async models(): Promise<ModelsResponse> {
-		return (
+		const response =
 			(await this.iframeRuntime.cachedModelsWhenNotCurrent()) ??
-			(await this.iframeRuntime.run(() => this.iframeRuntime.refreshModels()))
-		);
+			(await this.iframeRuntime.run(() => this.iframeRuntime.refreshModels()));
+		return {
+			...response,
+			data: response.data.map((model) => ({
+				...model,
+				categories:
+					getModel(model.id, "wllama")?.categories ?? model.categories,
+			})),
+		};
+	}
+
+	async systemOne(request: SystemOneParams): Promise<SystemOneResponse> {
+		let signalId: string | undefined;
+		this.iframeRuntime.beginOperation();
+		try {
+			if (!this.ready) await this.initialize();
+			const { signal, ...payload } = request;
+			if (signal) {
+				signalId = Math.random().toString(36).slice(2);
+				this.signalMap.set(signalId, signal);
+			}
+			const result = await this.send(
+				"systemone",
+				{
+					...payload,
+					_memoryHint: await this.getRunnerMemoryHint(request.model),
+				},
+				{ signalId },
+			);
+			return normalizeSystemOneResponse(result, request.model);
+		} finally {
+			if (signalId) this.signalMap.delete(signalId);
+			await this.iframeRuntime.finishOperation();
+		}
 	}
 
 	chatCompletions(
@@ -419,6 +462,12 @@ export class WllamaLLM implements BaseLLM {
 
 	async getToolCapabilities(model?: string): Promise<ToolCapabilityInfo> {
 		const detected = model ? this.modelCapabilities.get(model) : undefined;
+		if (
+			detected?.supportsDecisions ||
+			getModel(model ?? "", "wllama")?.wllamaConfig?.runtime === "decision"
+		) {
+			return NO_TOOL_SUPPORT;
+		}
 		if (detected?.supportsNativeTools) {
 			return WLLAMA_NATIVE_TOOL_SUPPORT;
 		}
@@ -469,6 +518,7 @@ export class WllamaLLM implements BaseLLM {
 				// native tool support and silently degrades to prompt injection.
 				if (!this.modelCapabilities.has(model)) {
 					this.modelCapabilities.set(model, {
+						supportsDecisions: existingModel.categories?.includes("decision"),
 						supportsNativeTools: existingModel.supportsNativeTools === true,
 						supportsVision: existingModel.supportsVision === true,
 						supportsAudio: existingModel.supportsAudio === true,
@@ -519,20 +569,22 @@ export class WllamaLLM implements BaseLLM {
 		(Omit<ChatCompletionRequest, "signal"> | ServeRequest) & {
 			_memoryHint?: RunnerMemoryHint;
 			_mmprojFile?: string;
+			_decision?: boolean;
 		}
 	> {
 		const memoryHint = await this.getRunnerMemoryHint(requestPayload.model);
-		const mmprojFile = requestPayload.model
-			? getModel(requestPayload.model, "wllama")?.wllamaConfig?.mmprojFilename
-			: undefined;
-		if (!memoryHint && !mmprojFile) {
+		const config = getModel(requestPayload.model ?? "", "wllama")?.wllamaConfig;
+		const mmprojFile = config?.mmprojFilename;
+		const decision = config?.runtime === "decision";
+		if (!memoryHint && mmprojFile === undefined && !decision) {
 			return requestPayload;
 		}
 
 		return {
 			...requestPayload,
 			...(memoryHint ? { _memoryHint: memoryHint } : {}),
-			...(mmprojFile ? { _mmprojFile: mmprojFile } : {}),
+			...(mmprojFile !== undefined ? { _mmprojFile: mmprojFile } : {}),
+			...(decision ? { _decision: true } : {}),
 		};
 	}
 
@@ -655,13 +707,19 @@ export class WllamaLLM implements BaseLLM {
 				const signal = this.signalMap.get(options.signalId);
 				if (signal) {
 					const abortHandler = () => {
-						this.pending.delete(id);
-						reject(new Error("Operation aborted"));
+						// System One has no native abort API yet. Await the runner's
+						// terminal reply so the residency lease cannot unload its model
+						// while the decision head is still evaluating.
+						if (type !== "systemone") {
+							this.pending.delete(id);
+							reject(new Error("Operation aborted"));
+						}
 						target.postMessage({ messageId: id, type: "abort" }, "*");
 					};
 
 					if (signal.aborted) {
-						abortHandler();
+						this.pending.delete(id);
+						reject(new Error("Operation aborted"));
 						return;
 					}
 

@@ -15,7 +15,10 @@ import {
 	type AgentConfigSummary,
 	type FeaturePromptSummary,
 } from "../types";
-import { getAbsorbedFeatures } from "../utils/feature-absorption";
+import {
+	getAbsorbedFeatures,
+	getFeatureTools,
+} from "../utils/feature-absorption";
 import { getAgentFeatureDisplayName } from "../utils/feature-display";
 
 const hasToolPickerSlot = (feature: AgentFeatureDefinition): boolean =>
@@ -47,7 +50,7 @@ export const useAgentConfigSummary = ({
 	return React.useMemo<AgentConfigSummary | null>(() => {
 		if (!selectedPreset) return null;
 		const graphMeta = GRAPH_REGISTRY.find((g) => g.id === currentGraphType);
-		// Runs switch absorbed features off, so they add no tools or prompts.
+		// Native apps replace their feature prompts, while extra tools remain.
 		const absorbed = getAbsorbedFeatures(
 			featureDefinitions,
 			draftFeatures,
@@ -66,13 +69,13 @@ export const useAgentConfigSummary = ({
 		for (const feature of featureDefinitions) {
 			if (hasToolPickerSlot(feature)) continue;
 			if (!draftFeatures[feature.name]) continue;
-			if (absorbed.has(feature.name)) continue;
 			if (
 				feature.requiresAccessibleAgents &&
 				draftMultiAgentAccessibleAgentIds.length === 0
 			)
 				continue;
-			for (const tool of feature.tools) enabledToolSet.add(tool);
+			for (const tool of getFeatureTools(feature, absorbed))
+				enabledToolSet.add(tool);
 		}
 
 		const availableToolSet = new Set(availableTools);

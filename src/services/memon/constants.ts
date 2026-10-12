@@ -1,4 +1,5 @@
 import type { MediaCategory } from "@/services/llm/interfaces/model-category";
+import type { SandboxToolName } from "@memorall/agent-harness-flows/tools/agent-sandbox/profiles";
 
 export const MEMON_STEP_NAME = "memon-feature" as const;
 export const MEMON_FEATURE_ID = "step-memon-feature" as const;
@@ -9,8 +10,8 @@ export const MEMON_HOME_RUNTIME_KEY = "memon.home" as const;
 
 /**
  * Features whose services MemonOS Bot drives through its apps. While MemonOS Bot
- * is on (and direct tools are not kept) these steps are switched off for the
- * run, so their tools, prompts and end-of-run cleanup never reach the model.
+ * is on (and direct tools are not kept), their native capabilities are replaced
+ * for the run. Tools outside the native apps' capabilities remain available.
  */
 export const MEMON_ABSORBED_STEP_NAMES = [
 	"web-feature",
@@ -19,6 +20,16 @@ export const MEMON_ABSORBED_STEP_NAMES = [
 	"planner-feature",
 	"visualize-response",
 ] as const;
+
+/** Explicit native replacements: new sandbox tools must not disappear by default. */
+export const MEMON_NATIVE_SANDBOX_TOOLS = [
+	"sandbox_inspect",
+	"sandbox_run",
+	"sandbox_process",
+	"sandbox_packages",
+	"sandbox_preview",
+	"sandbox_network",
+] as const satisfies readonly SandboxToolName[];
 
 export const MEMON_SCREEN_TOOL = "memon_screen" as const;
 export const MEMON_OPEN_TOOL = "memon_open" as const;

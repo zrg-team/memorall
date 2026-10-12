@@ -66,7 +66,7 @@ describe("useSelectableModels", () => {
 	});
 
 	it("gathers models from every configured provider", async () => {
-		mocks.list.mockReturnValue(["openai", "openrouter"]);
+		mocks.list.mockReturnValue(["openai", "openrouter", "custom"]);
 		mocks.modelsFor.mockImplementation(async (service: string) => ({
 			object: "list" as const,
 			data: [model({ id: `${service}-a`, provider: service })],
@@ -74,8 +74,8 @@ describe("useSelectableModels", () => {
 
 		const { result } = renderHook(() => useSelectableModels());
 
-		await waitFor(() => expect(result.current.models).toHaveLength(2));
-		expect(result.current.byProvider.size).toBe(2);
+		await waitFor(() => expect(result.current.models).toHaveLength(3));
+		expect(result.current.byProvider.size).toBe(3);
 	});
 
 	it("carries a local model's download size, from the runner or its catalog", async () => {

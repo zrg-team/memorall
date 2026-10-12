@@ -64,6 +64,30 @@ beforeEach(() => {
 });
 
 describe("auth provider restoration", () => {
+	it("restores custom endpoints and their manual model IDs after unlocking", async () => {
+		const { decryptWithMasterPassword, getEncryptedProviders: listProviders } =
+			await import("../master-key");
+		vi.mocked(decryptWithMasterPassword).mockResolvedValueOnce(
+			JSON.stringify({
+				apiKey: "",
+				baseUrl: "https://custom.test/v1",
+				modelIds: ["custom-model"],
+			}),
+		);
+		vi.mocked(listProviders).mockResolvedValueOnce(["custom"]);
+		databaseUse.mockResolvedValue([
+			{ key: "custom_config", encryptedData: "custom-config" },
+		]);
+		await restoreAllProviders("master-strong-password");
+		expect(llmService.create).toHaveBeenCalledWith("custom", {
+			type: "custom",
+			apiKey: "",
+			baseURL: "https://custom.test/v1",
+			modelIds: ["custom-model"],
+		});
+		expect(sessionReady.has("custom_ready")).toBe(true);
+	});
+
 	it("restores a master-key provider into the LLM service", async () => {
 		databaseUse.mockResolvedValue([
 			{ key: "openai_config", encryptedData: "master-config" },

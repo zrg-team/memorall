@@ -287,7 +287,7 @@ export const DocumentLibraryPage: React.FC = () => {
 									onNavigate={lib.handleSelectNode}
 									homeOptions={homeOptions}
 									onViewModeChange={lib.setViewMode}
-									onSearchChange={lib.setSearchQuery}
+									onSearchChange={lib.handleSearchChange}
 									onTopicFilterChange={lib.handleTopicFilterChange}
 									onRemoveTopicFilter={lib.handleRemoveTopicFilter}
 									onClearTopicFilters={lib.handleClearTopicFilters}
@@ -303,10 +303,12 @@ export const DocumentLibraryPage: React.FC = () => {
 										isFolderSelected={lib.isFolderSelected}
 										isWorkspaceSection={lib.isWorkspaceSection}
 										folderContents={lib.folderContents}
+										searchQuery={lib.searchQuery}
 										viewMode={lib.viewMode}
 										fileTopicMap={lib.fileTopicMap}
 										selectedTopicIds={lib.selectedTopicIds}
 										onSelectNodeById={lib.handleSelectNodeInActiveTree}
+										onOpenFileByPath={lib.handleOpenDocumentByPath}
 										onOpenFolderByPath={lib.handleOpenFolderByPath}
 										onCloseViewer={lib.handleCloseViewer}
 										onDeleteItem={lib.handleDeleteItem}
@@ -342,7 +344,7 @@ export const DocumentLibraryPage: React.FC = () => {
 							onNavigate={lib.handleSelectNode}
 							homeOptions={homeOptions}
 							onViewModeChange={lib.setViewMode}
-							onSearchChange={lib.setSearchQuery}
+							onSearchChange={lib.handleSearchChange}
 							onTopicFilterChange={lib.handleTopicFilterChange}
 							onRemoveTopicFilter={lib.handleRemoveTopicFilter}
 							onClearTopicFilters={lib.handleClearTopicFilters}
@@ -378,6 +380,7 @@ export const DocumentLibraryPage: React.FC = () => {
 									isFolderSelected={lib.isFolderSelected}
 									isWorkspaceSection={lib.isWorkspaceSection}
 									folderContents={lib.folderContents}
+									searchQuery={lib.searchQuery}
 									viewMode={lib.viewMode}
 									fileTopicMap={lib.fileTopicMap}
 									selectedTopicIds={lib.selectedTopicIds}
@@ -386,6 +389,7 @@ export const DocumentLibraryPage: React.FC = () => {
 										lib.isFileSelected ? compactNavigatorExpandButton : null
 									}
 									onSelectNodeById={lib.handleSelectNodeInActiveTree}
+									onOpenFileByPath={lib.handleOpenDocumentByPath}
 									onOpenFolderByPath={lib.handleOpenFolderByPath}
 									onCloseViewer={lib.handleCloseViewer}
 									onDeleteItem={lib.handleDeleteItem}

@@ -596,13 +596,28 @@
 		},
 		"folderIndex": {
 			"tools": "Công cụ",
-			"searches": "Tìm trong mọi thư mục có chỉ mục trong Tệp, bằng công cụ của loại chỉ mục đó.",
+			"searches": "Tìm trong các thư mục có chỉ mục {{type}} trong Tệp.",
 			"now_one": "Hiện có: {{folders}} ({{count}} thẻ).",
 			"now_other": "Hiện có: {{folders}} ({{count}} thẻ).",
-			"none": "Chưa có thư mục nào có chỉ mục.",
+			"embeddingNow_one": "Hiện có: {{folders}} ({{count}} đoạn nội dung).",
+			"embeddingNow_other": "Hiện có: {{folders}} ({{count}} đoạn nội dung).",
+			"none": "Chưa có thư mục nào có loại chỉ mục này.",
 			"open": "Mở Tệp › Chỉ mục",
-			"hint": "Thư mục nào có loại chỉ mục nào chỉ được đặt trong Tệp. Khi có loại chỉ mục mới, công cụ của nó sẽ hiện ở đây thành một nhóm khác."
+			"hint": "Chọn thư mục được lập chỉ mục trong Tệp › Chỉ mục. Bật riêng từng tính năng chỉ mục trong cài đặt agent."
 		}
+	},
+	"embeddingTool": {
+		"summary": "{{matches}} kết quả · {{files}} tệp · {{chunks}} đoạn đã lập chỉ mục",
+		"truncated": "Một số kết quả đã được lược bỏ. Thu hẹp thư mục hoặc tìm kiếm để xem thêm.",
+		"empty": "Không có nội dung đã lập chỉ mục phù hợp.",
+		"similarity": "Độ tương đồng",
+		"similarityHint": "Độ tương đồng cosine xếp hạng kết quả; không phải độ tin cậy.",
+		"wholeImage": "Toàn bộ hình ảnh",
+		"wholeFile": "Toàn bộ tệp",
+		"locations": "{{count}} vị trí phù hợp",
+		"open": "Mở tệp",
+		"showAll": "Hiện tất cả {{count}} tệp",
+		"showLess": "Hiện ít tệp hơn"
 	},
 	"openui": {
 		"rendering": "Đang tạo giao diện trực quan",

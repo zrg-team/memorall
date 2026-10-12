@@ -16,6 +16,8 @@ import {
 	getMasterStrongPassword,
 	decryptWithMasterPassword,
 	getEncryptedProviders as getMasterEncryptedProviders,
+	type AuthProvider,
+	type StoredProviderConfig,
 } from "@/utils/master-key";
 
 /**
@@ -28,8 +30,6 @@ const NON_PROVIDER_SECRET_LABELS: Record<string, string> = {
 };
 
 const NON_PROVIDER_SECRET_KEYS = Object.keys(NON_PROVIDER_SECRET_LABELS);
-
-type AuthProvider = "openai" | "openrouter";
 
 /**
  * Restore all encrypted providers at once using master key
@@ -99,6 +99,7 @@ async function restoreProviderWithMasterPassword(
 			type: provider,
 			apiKey: config.apiKey,
 			baseURL: config.baseUrl,
+			...(provider === "custom" ? { modelIds: config.modelIds } : {}),
 		});
 
 		// 4. Mark as ready in secure session
@@ -135,7 +136,7 @@ export async function restoreAuthProvider(
 			throw new Error(`No ${provider} configuration found in database`);
 		}
 
-		let config: { apiKey: string; baseUrl: string };
+		let config: StoredProviderConfig;
 
 		// Check if this is master key format (no advancedSeed) or legacy format
 		if (encryptedConfig.advancedSeed) {
@@ -179,6 +180,7 @@ export async function restoreAuthProvider(
 			type: provider,
 			apiKey: config.apiKey,
 			baseURL: config.baseUrl,
+			...(provider === "custom" ? { modelIds: config.modelIds } : {}),
 		});
 
 		// 4. Mark as ready in secure session

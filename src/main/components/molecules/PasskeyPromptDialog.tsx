@@ -54,7 +54,13 @@ export const PasskeyPromptDialog: React.FC<PasskeyPromptDialogProps> = ({
 
 	// Format provider list for display
 	const providerLabels = providers.map((p) =>
-		p === "openai" ? "OpenAI" : p === "openrouter" ? "OpenRouter" : p,
+		p === "openai"
+			? "OpenAI"
+			: p === "openrouter"
+				? "OpenRouter"
+				: p === "custom"
+					? "Custom"
+					: p,
 	);
 	const providerText =
 		providerLabels.length > 0

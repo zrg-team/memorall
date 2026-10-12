@@ -12,12 +12,22 @@ import {
 	defineStep,
 } from "@memorall/agent-harness-flows/interfaces/engine/step";
 import { logError } from "@memorall/agent-harness-flows/logging/logger";
-import { stepRegistry } from "@memorall/agent-harness-flows/registries/step-registry";
 import {
-	FOLDER_INDEX_FEATURE_ID,
+	stepRegistry,
+	type StepFeatureMetadata,
+} from "@memorall/agent-harness-flows/registries/step-registry";
+import {
 	FOLDER_INDEX_STEP_NAME,
+	FILE_OKF_INDEX_FEATURE_ID,
+	FILE_OKF_INDEX_STEP_NAME,
+	FILE_EMBEDDING_INDEX_FEATURE_ID,
+	FILE_EMBEDDING_INDEX_STEP_NAME,
 } from "@/services/folder-index/constants";
-import { FOLDER_INDEX_TYPES } from "@/services/folder-index/index-types";
+import {
+	FOLDER_INDEX_TYPES,
+	OKF_INDEX_TYPE,
+	EMBEDDING_INDEX_TYPE,
+} from "@/services/folder-index/index-types";
 
 const STEP_NAME = FOLDER_INDEX_STEP_NAME;
 
@@ -53,42 +63,74 @@ export const FOLDER_INDEX_FEATURE_TOOLS: string[] = FOLDER_INDEX_TYPES.flatMap(
 );
 
 export const FOLDER_INDEX_FEATURE_DESCRIPTION =
-	"Search folders through their indexes. Supports OKF; more index types can be added.";
+	"Search folders through OKF cards and EmbeddingGemma 2 content chunks, including images, audio, music and video.";
 
-const definition = defineStep<
-	FolderIndexFeatureInput,
-	FolderIndexFeatureOutput,
-	FolderIndexFeatureServices,
-	FolderIndexFeatureConfig
->({
-	name: STEP_NAME,
-	execute: async ({ input }) => {
-		try {
-			const tools = GraphBase.chat.addTool(
-				input.tools,
-				...(FOLDER_INDEX_FEATURE_TOOLS as GraphTool[]),
-			);
-			const messages = GraphBase.chat.systemMessage(
-				input.messages,
-				FOLDER_INDEX_FEATURE_SYSTEM_PROMPT,
-			);
-			return { output: { tools, messages } };
-		} catch (error) {
-			logError("[FOLDER_INDEX_FEATURE] Failed:", error);
-			return {
-				output: {
-					tools: input.tools,
-					messages: input.messages,
-					errors: [
-						error instanceof Error
-							? error.message
-							: "Folder index feature step failed",
-					],
-				},
-			};
-		}
-	},
-});
+export const FILE_OKF_INDEX_FEATURE_TOOLS = [...OKF_INDEX_TYPE.tools];
+export const FILE_EMBEDDING_INDEX_FEATURE_TOOLS = [
+	...EMBEDDING_INDEX_TYPE.tools,
+];
+export const FILE_OKF_INDEX_FEATURE_DESCRIPTION =
+	"Find files through their Open Knowledge Format cards, summaries, types and tags.";
+export const FILE_EMBEDDING_INDEX_FEATURE_DESCRIPTION =
+	"Find document passages, images, audio, music and video by meaning using local content embeddings.";
+export const FILE_OKF_INDEX_FEATURE_SYSTEM_PROMPT = `# FILE OKF INDEXES\nThe user enables OKF indexes in Files › Indexes. These tools read the indexed cards and never change source files.\n\n${OKF_INDEX_TYPE.prompt}`;
+export const FILE_EMBEDDING_INDEX_FEATURE_SYSTEM_PROMPT =
+	EMBEDDING_INDEX_TYPE.prompt;
+
+const defineIndexFeature = (
+	name: string,
+	featureTools: string[],
+	prompt: string,
+) =>
+	defineStep<
+		FolderIndexFeatureInput,
+		FolderIndexFeatureOutput,
+		FolderIndexFeatureServices,
+		FolderIndexFeatureConfig
+	>({
+		name,
+		execute: async ({ input }) => {
+			try {
+				const tools = GraphBase.chat.addTool(
+					input.tools,
+					...(featureTools as GraphTool[]),
+				);
+				const messages = GraphBase.chat.systemMessage(input.messages, prompt);
+				return { output: { tools, messages } };
+			} catch (error) {
+				logError("[FOLDER_INDEX_FEATURE] Failed:", error);
+				return {
+					output: {
+						tools: input.tools,
+						messages: input.messages,
+						errors: [
+							error instanceof Error
+								? error.message
+								: "Folder index feature step failed",
+						],
+					},
+				};
+			}
+		},
+	});
+
+// The combined runtime step remains readable for old custom graphs; new agents
+// and saved configurations use the two independent feature steps below.
+const definition = defineIndexFeature(
+	STEP_NAME,
+	FOLDER_INDEX_FEATURE_TOOLS,
+	FOLDER_INDEX_FEATURE_SYSTEM_PROMPT,
+);
+const okfDefinition = defineIndexFeature(
+	FILE_OKF_INDEX_STEP_NAME,
+	FILE_OKF_INDEX_FEATURE_TOOLS,
+	FILE_OKF_INDEX_FEATURE_SYSTEM_PROMPT,
+);
+const embeddingDefinition = defineIndexFeature(
+	FILE_EMBEDDING_INDEX_STEP_NAME,
+	FILE_EMBEDDING_INDEX_FEATURE_TOOLS,
+	FILE_EMBEDDING_INDEX_FEATURE_SYSTEM_PROMPT,
+);
 
 type FolderIndexFeatureSpec = StepSpecFromDefinition<typeof definition>;
 
@@ -97,46 +139,78 @@ export const createFolderIndexFeatureStep: StepFactoryFromSpec<
 > = (services: FolderIndexFeatureServices, config?: FolderIndexFeatureConfig) =>
 	bindStep(definition, services, config);
 
+type FileOkfIndexFeatureSpec = StepSpecFromDefinition<typeof okfDefinition>;
+type FileEmbeddingIndexFeatureSpec = StepSpecFromDefinition<
+	typeof embeddingDefinition
+>;
+export const createFileOkfIndexFeatureStep: StepFactoryFromSpec<
+	FileOkfIndexFeatureSpec
+> = (services, config) => bindStep(okfDefinition, services, config);
+export const createFileEmbeddingIndexFeatureStep: StepFactoryFromSpec<
+	FileEmbeddingIndexFeatureSpec
+> = (services, config) => bindStep(embeddingDefinition, services, config);
+
 stepRegistry.register(STEP_NAME, createFolderIndexFeatureStep, {
 	version: "1.0.0",
 	description: FOLDER_INDEX_FEATURE_DESCRIPTION,
 	defaultStateMapping: { messages: "messages", tools: "tools" },
 	enabledByDefault: false,
-	feature: {
-		id: FOLDER_INDEX_FEATURE_ID,
-		type: "feature",
-		graphTypes: ["foundation", "agent"],
-		inputs: [
-			{
-				name: "messages",
-				type: "Message[]",
-				required: true,
-				description: "Current chat messages",
-			},
-			{
-				name: "tools",
-				type: "Tool[]",
-				required: true,
-				description: "Current available tools",
-			},
-		],
-		outputs: [
-			{
-				name: "messages",
-				type: "Message[]",
-				description: "Messages with instructions for reading folder indexes",
-			},
-			{
-				name: "tools",
-				type: "Tool[]",
-				description: "Tools extended with the tools of every index type",
-			},
-		],
-	},
 });
+
+const indexFeatureMetadata: StepFeatureMetadata = {
+	type: "feature",
+	graphTypes: ["foundation", "agent"],
+	inputs: [
+		{
+			name: "messages",
+			type: "Message[]",
+			required: true,
+			description: "Current chat messages",
+		},
+		{
+			name: "tools",
+			type: "Tool[]",
+			required: true,
+			description: "Current available tools",
+		},
+	],
+	outputs: [
+		{
+			name: "messages",
+			type: "Message[]",
+			description: "Messages with instructions for reading folder indexes",
+		},
+		{
+			name: "tools",
+			type: "Tool[]",
+			description: "Tools extended with this index type's tools",
+		},
+	],
+};
+
+stepRegistry.register(FILE_OKF_INDEX_STEP_NAME, createFileOkfIndexFeatureStep, {
+	version: "1.0.0",
+	description: FILE_OKF_INDEX_FEATURE_DESCRIPTION,
+	defaultStateMapping: { messages: "messages", tools: "tools" },
+	enabledByDefault: false,
+	feature: { ...indexFeatureMetadata, id: FILE_OKF_INDEX_FEATURE_ID },
+});
+stepRegistry.register(
+	FILE_EMBEDDING_INDEX_STEP_NAME,
+	createFileEmbeddingIndexFeatureStep,
+	{
+		version: "1.0.0",
+		description: FILE_EMBEDDING_INDEX_FEATURE_DESCRIPTION,
+		defaultStateMapping: { messages: "messages", tools: "tools" },
+		enabledByDefault: false,
+		feature: { ...indexFeatureMetadata, id: FILE_EMBEDDING_INDEX_FEATURE_ID },
+	},
+);
 
 declare global {
 	interface StepTypeRegistry {
 		[STEP_NAME]: FolderIndexFeatureSpec;
+		[FILE_OKF_INDEX_STEP_NAME]: FileOkfIndexFeatureSpec;
+		[FILE_EMBEDDING_INDEX_STEP_NAME]: FileEmbeddingIndexFeatureSpec;
 	}
 }

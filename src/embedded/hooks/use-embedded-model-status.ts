@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { backgroundJob } from "@/services/background-jobs/background-job";
 import { logError, logInfo } from "@/utils/logger";
 
-type EncryptedProvider = "openai" | "openrouter";
+type EncryptedProvider = "openai" | "openrouter" | "custom";
 
 export const useEmbeddedModelStatus = () => {
 	const [selectedModel, setSelectedModel] = useState<string>("");
@@ -13,7 +13,7 @@ export const useEmbeddedModelStatus = () => {
 	const [encryptedProviders, setEncryptedProviders] = useState<string[]>([]);
 
 	const checkProvidersNeedRestore = useCallback(async () => {
-		const providers: EncryptedProvider[] = ["openai", "openrouter"];
+		const providers: EncryptedProvider[] = ["openai", "openrouter", "custom"];
 		const checks = await Promise.all(
 			providers.map(async (provider) => {
 				const checkResult = await backgroundJob.createJob(
@@ -76,7 +76,11 @@ export const useEmbeddedModelStatus = () => {
 				setSelectedModel(`${modelInfo.modelId}`);
 				setSelectedProvider(provider);
 
-				if (provider === "openai" || provider === "openrouter") {
+				if (
+					provider === "openai" ||
+					provider === "openrouter" ||
+					provider === "custom"
+				) {
 					const restoreState = await checkProvidersNeedRestore();
 					if (restoreState.needsRestore) {
 						logInfo(

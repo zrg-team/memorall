@@ -40,6 +40,11 @@ import {
 import type { UnifiedFlowConfig } from "@memorall/agent-harness-flows/interfaces/config/flow-config";
 import { uniqueAgentName } from "@/services/memon/agent-home";
 import {
+	splitFolderIndexFeatures,
+	splitFolderIndexFeatureFlags,
+} from "@/services/folder-index/feature-migration";
+import { FOLDER_INDEX_STEP_NAME } from "@/services/folder-index/constants";
+import {
 	buildDefaultFlowConfig,
 	mergeWithDefaultConfig,
 } from "@memorall/agent-harness-flows/utils/flow-config";
@@ -611,13 +616,22 @@ export class FlowBuilderService {
 				),
 		);
 
+		const storedFlags: Record<string, boolean> = {};
 		for (const row of rows) {
-			if (!featureNameSet.has(row.name)) {
+			if (
+				!featureNameSet.has(row.name) &&
+				row.name !== FOLDER_INDEX_STEP_NAME
+			) {
 				continue;
 			}
-			flags[row.name] = Boolean(
+			storedFlags[row.name] = Boolean(
 				(row.metadata as { enabled?: unknown } | null | undefined)?.enabled,
 			);
+		}
+		for (const [name, enabled] of Object.entries(
+			splitFolderIndexFeatureFlags(storedFlags),
+		)) {
+			if (featureNameSet.has(name)) flags[name] = enabled;
 		}
 
 		return {
@@ -876,7 +890,7 @@ export class FlowBuilderService {
 		) {
 			const stored = unifiedRow.value as Partial<UnifiedFlowConfig>;
 			return mergeWithDefaultConfig(
-				stored,
+				splitFolderIndexFeatures(stored),
 				(stored.graphType as string | undefined) ?? graphType,
 			);
 		}
@@ -932,7 +946,7 @@ export class FlowBuilderService {
 		const converted = applyLegacyDraftToUnified(
 			buildDefaultFlowConfig(graphType),
 			legacyConfig,
-			effectiveFlags,
+			splitFolderIndexFeatureFlags(effectiveFlags),
 			[],
 			[],
 			[],
@@ -955,6 +969,7 @@ export class FlowBuilderService {
 		config: UnifiedFlowConfig,
 	): Promise<void> {
 		const flow = await this.resolveFlow(ref);
+		config = splitFolderIndexFeatures(config);
 
 		await this.databaseService.transaction(async ({ db, schema }) => {
 			const existing = await db

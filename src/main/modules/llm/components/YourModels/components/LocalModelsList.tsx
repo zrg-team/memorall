@@ -75,7 +75,7 @@ export const LocalModelsList: React.FC<LocalModelsListProps> = ({
 				<div className="space-y-2 max-h-[400px] overflow-y-auto pr-2">
 					{filteredModels.map((model) => {
 						const isLoaded =
-							serviceManager.llmService.has("openai") &&
+							serviceManager.llmService.has(quickProvider) &&
 							current?.modelId === model.id &&
 							current?.provider === quickProvider;
 						return (

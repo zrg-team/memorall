@@ -2,10 +2,12 @@
 import { reply, sendReady } from "../utils/common.js";
 import { ModelLifecycleManager } from "../utils/model-lifecycle.js";
 import { withGPULock, withOptionalGPULock } from "../utils/gpu-lock.js";
+import { loadEmbeddingGemma2 } from "./embeddinggemma2.js";
 
 // Read model from query params if provided
 const params = new URLSearchParams(self.location ? self.location.search : "");
 const requestedDevice = (params.get("device") || "wasm").toLowerCase();
+const modelRevision = params.get("revision") || undefined;
 
 let HF;
 let defaultEmbeddingModel = params.get("model");
@@ -21,7 +23,8 @@ console.log("[embedding-runner] startup", {
 });
 
 function nowMs() {
-	return typeof performance !== "undefined" && typeof performance.now === "function"
+	return typeof performance !== "undefined" &&
+		typeof performance.now === "function"
 		? performance.now()
 		: Date.now();
 }
@@ -52,7 +55,8 @@ function createProgressLogger(context, notify) {
 			const model = info?.model || info?.id || context?.model;
 
 			if (status === "progress") {
-				const pct = typeof info?.progress === "number" ? info.progress : undefined;
+				const pct =
+					typeof info?.progress === "number" ? info.progress : undefined;
 				if (file && typeof pct === "number") {
 					const prev = lastPctByFile.get(file);
 					// Throttle to 1% increments
@@ -134,10 +138,7 @@ async function ensureHFLibrary() {
 				const wasmPath =
 					typeof chrome !== "undefined" && chrome.runtime?.getURL
 						? chrome.runtime.getURL("vendors/transformers/")
-						: new URL(
-								"../../vendors/transformers/",
-								import.meta.url,
-							).href;
+						: new URL("../../vendors/transformers/", import.meta.url).href;
 				HF.env.backends.onnx.wasm.wasmPaths = wasmPath;
 				HF.env.backends.onnx.wasm.proxy = false;
 				console.log("[embedding-runner] configured wasmPaths", wasmPath);
@@ -159,7 +160,19 @@ async function loadEmbeddingPipeline(modelName, notifyProgress) {
 	const hasWebGPU =
 		typeof navigator !== "undefined" && typeof navigator.gpu !== "undefined";
 	const device = resolveEmbeddingDevice(hasWebGPU);
-	const progress_callback = createProgressLogger({ model: modelName }, notifyProgress);
+	const progress_callback = createProgressLogger(
+		{ model: modelName },
+		notifyProgress,
+	);
+	if (modelName === "onnx-community/embeddinggemma-2-ONNX") {
+		return withOptionalGPULock(device === "webgpu", () =>
+			loadEmbeddingGemma2(HF, modelName, {
+				device,
+				progress_callback,
+				revision: modelRevision,
+			}),
+		);
+	}
 
 	console.log("[embedding-runner] creating pipeline", {
 		modelName,
@@ -216,15 +229,18 @@ async function unloadEmbeddingPipeline(pipeline) {
 	// The lifecycle manager unloads on an idle timer, so this dispose can land
 	// while another runner is mid-generation. Releasing a WebGPU session out
 	// from under it invalidates the shared device instance.
-	return withOptionalGPULock(pipeline?.__memorallDevice === "webgpu", async () => {
-		try {
-			if (pipeline && typeof pipeline.dispose === "function") {
-				await pipeline.dispose();
+	return withOptionalGPULock(
+		pipeline?.__memorallDevice === "webgpu",
+		async () => {
+			try {
+				if (pipeline && typeof pipeline.dispose === "function") {
+					await pipeline.dispose();
+				}
+			} catch (err) {
+				console.warn("[embedding-runner] dispose error:", err);
 			}
-		} catch (err) {
-			console.warn("[embedding-runner] dispose error:", err);
-		}
-	});
+		},
+	);
 }
 
 // Model lifecycle manager - handles caching and auto-unload after 5 min idle
@@ -321,42 +337,87 @@ window.addEventListener("message", async (event) => {
 				reply(src, origin, messageId, "complete", modelInfo);
 				break;
 			}
+			case "embed-content": {
+				const targetModel = payload?.model || defaultEmbeddingModel;
+				const embedding = await embeddingManager.withModel(
+					targetModel,
+					(pipeline) => {
+						if (typeof pipeline.embed !== "function")
+							throw new Error(
+								"This model does not support native media embeddings",
+							);
+						return withOptionalGPULock(
+							pipeline.__memorallDevice === "webgpu",
+							() => pipeline.embed(payload?.input),
+						);
+					},
+				);
+				reply(src, origin, messageId, "complete", {
+					embedding,
+					model: targetModel,
+				});
+				break;
+			}
 			case "embeddings": {
 				const { input, model } = payload || {};
 				if (!input) throw new Error("input is required");
 
-				const targetModel = model || embeddingManager.modelId || defaultEmbeddingModel;
+				const targetModel =
+					model || embeddingManager.modelId || defaultEmbeddingModel;
 				const texts = Array.isArray(input) ? input : [input];
 				const processed = texts.map((t) =>
 					typeof t === "string" ? t.replace(/\n/g, " ") : String(t),
 				);
 
-				const response = await embeddingManager.withModel(targetModel, async (pipeline) => {
-					const result =
-						pipeline?.__memorallDevice === "webgpu"
-							? await withGPULock(() =>
-									pipeline(processed, {
+				const response = await embeddingManager.withModel(
+					targetModel,
+					async (pipeline) => {
+						if (typeof pipeline.embed === "function") {
+							const data = [];
+							for (const text of processed) {
+								const embedding = await withOptionalGPULock(
+									pipeline.__memorallDevice === "webgpu",
+									() => pipeline.embed({ kind: "text", text, query: true }),
+								);
+								data.push({
+									object: "embedding",
+									embedding,
+									index: data.length,
+								});
+							}
+							return {
+								object: "list",
+								data,
+								model: targetModel,
+								usage: { prompt_tokens: -1, total_tokens: -1 },
+							};
+						}
+						const result =
+							pipeline?.__memorallDevice === "webgpu"
+								? await withGPULock(() =>
+										pipeline(processed, {
+											pooling: "mean",
+											normalize: true,
+										}),
+									)
+								: await pipeline(processed, {
 										pooling: "mean",
 										normalize: true,
-									}),
-								)
-							: await pipeline(processed, {
-									pooling: "mean",
-									normalize: true,
-								});
-					const list =
-						typeof result.tolist === "function" ? result.tolist() : result;
-					return {
-						object: "list",
-						data: list.map((vec, idx) => ({
-							object: "embedding",
-							embedding: vec,
-							index: idx,
-						})),
-						model: targetModel,
-						usage: { prompt_tokens: -1, total_tokens: -1 },
-					};
-				});
+									});
+						const list =
+							typeof result.tolist === "function" ? result.tolist() : result;
+						return {
+							object: "list",
+							data: list.map((vec, idx) => ({
+								object: "embedding",
+								embedding: vec,
+								index: idx,
+							})),
+							model: targetModel,
+							usage: { prompt_tokens: -1, total_tokens: -1 },
+						};
+					},
+				);
 
 				reply(src, origin, messageId, "complete", response);
 				break;

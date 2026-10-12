@@ -1,4 +1,4 @@
-import { IdCard, Library, Loader2 } from "lucide-react";
+import { IdCard, Library, Loader2, Layers } from "lucide-react";
 import React from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/main/components/ui/button";
@@ -14,6 +14,37 @@ import { cn } from "@/lib/utils";
 import { parentFolder } from "@/services/folder-index/index-config";
 import { useFolderIndex } from "./FolderIndexContext";
 import { IndexTypeBadge } from "./IndexTypeBadge";
+import { EmbeddingSearchDialog } from "./EmbeddingSearchDialog";
+
+const FileEmbeddingAction: React.FC<{
+	filePath: string;
+	iconOnly?: boolean;
+}> = ({ filePath, iconOnly = false }) => {
+	const { t } = useTranslation("documents");
+	const index = useFolderIndex();
+	const [open, setOpen] = React.useState(false);
+	return (
+		<>
+			<Button
+				variant="outline"
+				size="sm"
+				className={cn("gap-1.5", iconOnly ? "h-7 w-7 p-0" : "h-8 px-3")}
+				title={t("folderIndex.embedding.fileChunks")}
+				onClick={() => setOpen(true)}
+			>
+				<Layers className="h-4 w-4 text-sky-500" />
+				{!iconOnly && t("folderIndex.embedding.fileChunks")}
+			</Button>
+			<EmbeddingSearchDialog
+				open={open}
+				onOpenChange={setOpen}
+				folderPath={parentFolder(filePath) ?? "/"}
+				filePath={filePath}
+				onOpenFile={index?.openFile}
+			/>
+		</>
+	);
+};
 
 /**
  * The index action of an open file. Indexes are kept per folder, so a file
@@ -36,25 +67,36 @@ export const FileIndexAction: React.FC<{
 
 	if (!index?.types.length) return null;
 	const folderName = folder === "/" ? t("title") : folder.split("/").pop();
-	const hasCard = index.entriesOf(folder)?.byFile.has(filePath) ?? false;
+	const fileEntries = index.entriesOf(folder)?.byFile.get(filePath) ?? [];
+	const hasCard = fileEntries.some((entry) => entry.typeId === "okf");
+	const hasEmbeddings = fileEntries.some(
+		(entry) => entry.typeId === "embeddings",
+	);
 	const label = (text: string) =>
 		iconOnly ? null : <span className="hidden sm:inline">{text}</span>;
 	const buttonClass = cn("gap-1.5", iconOnly ? "h-7 w-7 p-0" : "h-8 px-3");
 
 	if (hasCard) {
 		return (
-			<Button
-				variant="outline"
-				size="sm"
-				className={buttonClass}
-				title={t("folderIndex.card.title")}
-				onClick={() => index.openCard(filePath)}
-			>
-				<IdCard className="h-4 w-4 text-sky-600 dark:text-sky-400" />
-				{label(t("folderIndex.card.open"))}
-			</Button>
+			<>
+				<Button
+					variant="outline"
+					size="sm"
+					className={buttonClass}
+					title={t("folderIndex.card.title")}
+					onClick={() => index.openCard(filePath)}
+				>
+					<IdCard className="h-4 w-4 text-sky-600 dark:text-sky-400" />
+					{label(t("folderIndex.card.open"))}
+				</Button>
+				{hasEmbeddings && (
+					<FileEmbeddingAction filePath={filePath} iconOnly={iconOnly} />
+				)}
+			</>
 		);
 	}
+	if (hasEmbeddings)
+		return <FileEmbeddingAction filePath={filePath} iconOnly={iconOnly} />;
 
 	if (effective.length) {
 		// The folder is indexed but this file has no entry yet (being indexed,

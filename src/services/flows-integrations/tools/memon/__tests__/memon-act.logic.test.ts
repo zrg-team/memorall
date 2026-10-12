@@ -17,6 +17,11 @@ const fakeMachine = (options: {
 	viewer?: string;
 }) => ({
 	fileRefPath: vi.fn(() => "/agents/Bot/shots/hero.png"),
+	resolvePath: vi.fn((path: string) =>
+		path.startsWith("~/") ? `/agents/Bot/${path.slice(2)}` : path,
+	),
+	isFolder: vi.fn(async () => false),
+	openFolder: vi.fn(async () => {}),
 	pictureOfFile: vi.fn(async () => ({
 		dataUrl: PICTURE,
 		width: 640,
@@ -57,6 +62,41 @@ const describeRef = async (machine: ReturnType<typeof fakeMachine>) => {
 };
 
 describe("memon_act describe", () => {
+	it("inspects the exact image path returned by search without guessing a screen ref", async () => {
+		const machine = fakeMachine({ looks: true });
+		vi.mocked(getMemonMachine).mockResolvedValue(machine as never);
+		const result = await createMemonActTool().execute(
+			{ action: "describe", path: "~/assets/portraits.webp" },
+			undefined,
+		);
+		expect(machine.pictureOfFile).toHaveBeenCalledWith(
+			"/agents/Bot/assets/portraits.webp",
+		);
+		expect(machine.fileRefPath).not.toHaveBeenCalled();
+		expect(machine.captureRef).not.toHaveBeenCalled();
+		expect(result).toMatchObject({
+			content: [{ type: "text" }, { type: "image_url" }],
+		});
+	});
+	it.each([true, false])(
+		"opens a folder ref for browsing instead of trying to describe it, vision %s",
+		async (looks) => {
+			const machine = fakeMachine({ looks });
+			machine.fileRefPath.mockReturnValue("/agents/Bot/ttv");
+			machine.isFolder.mockResolvedValue(true);
+			vi.mocked(getMemonMachine).mockResolvedValue(machine as never);
+			const result = await createMemonActTool().execute(
+				{ action: "describe", ref: "f3" },
+				undefined,
+			);
+			expect(machine.openFolder).toHaveBeenCalledWith("/agents/Bot/ttv");
+			expect(machine.pictureOfFile).not.toHaveBeenCalled();
+			expect(result).toMatchObject({
+				content: expect.stringContaining("Opened folder ~/ttv in Files."),
+			});
+			expect(result).not.toHaveProperty("isError", true);
+		},
+	);
 	beforeEach(() => {
 		vi.mocked(getMemonMachine).mockReset();
 	});

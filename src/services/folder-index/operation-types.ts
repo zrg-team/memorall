@@ -4,6 +4,11 @@ import type {
 	FolderIndexSettings,
 	FolderIndexState,
 } from "./types";
+import type {
+	EmbeddingChunk,
+	EmbeddingSearchInput,
+	EmbeddingSearchResult,
+} from "./embedding/types";
 
 /**
  * Operations of the `folder-index-operation` background job. Import-free at
@@ -49,6 +54,8 @@ export interface FolderIndexOperationPayloadMap {
 	"folder.entries": { path: string };
 	/** The folder's OKF index as a graph of folders and cards. */
 	"folder.graph": { path: string };
+	"embedding.search": EmbeddingSearchInput;
+	"embedding.chunks": { path: string };
 	"card.get": { path: string };
 	"card.save": {
 		path: string;
@@ -71,6 +78,8 @@ export interface FolderIndexOperationResultMap {
 		entries: Record<string, FolderIndexFileEntry[]>;
 	};
 	"folder.graph": FolderIndexGraph;
+	"embedding.search": EmbeddingSearchResult;
+	"embedding.chunks": Omit<EmbeddingChunk, "vector">[];
 	"card.get": FolderIndexCard | null;
 	"card.save": FolderIndexCard | null;
 }

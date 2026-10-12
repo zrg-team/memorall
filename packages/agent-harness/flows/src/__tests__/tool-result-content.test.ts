@@ -52,6 +52,50 @@ describe("toolMessageContentImages", () => {
 });
 
 describe("extractToolResult", () => {
+	it("preserves pictures in an envelope with structured data through to the model", () => {
+		const picture = imagePart("data:image/png;base64,AAA");
+		const content = [textPart("Inspect the matched image."), picture];
+		const extracted = extractToolResult({
+			content,
+			structuredContent: { path: "/hero.png", ok: true },
+		});
+		expect(extracted.content).toEqual([
+			...content,
+			textPart(JSON.stringify({ path: "/hero.png", ok: true }, null, 2)),
+		]);
+		expect(extracted.imageUrls).toEqual(["data:image/png;base64,AAA"]);
+		expect(extracted.contentText).toContain("Inspect the matched image.");
+		expect(extracted.contentText).toContain("[1 image attached]");
+		expect(content).toHaveLength(2);
+	});
+	it("preserves pictures in an envelope without structured data", () => {
+		const content = [imagePart("data:image/webp;base64,AAA")];
+		const extracted = extractToolResult({ content });
+		expect(extracted.content).toBe(content);
+		expect(extracted.imageUrls).toEqual(["data:image/webp;base64,AAA"]);
+	});
+	it("does not duplicate structured JSON already present beside pictures", () => {
+		const payload = { hits: [{ path: "/hero.png" }] };
+		const content = [
+			textPart(JSON.stringify(payload, null, 2)),
+			imagePart("data:image/png;base64,AAA"),
+		];
+		const extracted = extractToolResult({
+			content,
+			structuredContent: payload,
+		});
+		expect(extracted.content).toBe(content);
+		expect(extracted.contentText.match(/"hits"/g)).toHaveLength(1);
+	});
+	it("keeps text-only structured results compatible", () => {
+		const extracted = extractToolResult({
+			content: "Found a file.",
+			structuredContent: { path: "/file.md" },
+		});
+		expect(extracted.content).toBe(
+			'Found a file.\n\n{\n  "path": "/file.md"\n}',
+		);
+	});
 	it("carries image urls separately from the readable text", () => {
 		const result = extractToolResult([
 			textPart("Inspect 1 image:"),

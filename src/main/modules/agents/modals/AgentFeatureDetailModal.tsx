@@ -32,7 +32,10 @@ import {
 	getAgentFeatureDescription,
 	getAgentFeatureDisplayName,
 } from "../utils/feature-display";
-import { getAbsorbedFeatures } from "../utils/feature-absorption";
+import {
+	getAbsorbedFeatures,
+	getFeatureTools,
+} from "../utils/feature-absorption";
 import { KNOWLEDGE_RETRIEVAL_MODES } from "@/main/stores/agent-config";
 import { VisualizeResponseFeatureConfig } from "../components/VisualizeResponseFeatureConfig";
 import { MemonBotFeatureConfig } from "../components/MemonBotFeatureConfig";
@@ -109,7 +112,7 @@ const ToolPickerSlot: React.FC<{
 			: availableTools.filter((tool) => !claimedToolSet.has(tool));
 
 	// Tools that are enabled transitively by active features (not by this
-	// ToolPicker). Features another feature absorbed are off at run time.
+	// ToolPicker), including tools its native replacement does not provide.
 	const featureEnabledTools = React.useMemo(() => {
 		const absorbed = getAbsorbedFeatures(
 			featureDefinitions,
@@ -121,8 +124,7 @@ const ToolPickerSlot: React.FC<{
 			if (feature.detailView?.some((s) => s.component === "ToolPicker"))
 				continue;
 			if (!draftFeatures[feature.name]) continue;
-			if (absorbed.has(feature.name)) continue;
-			for (const tool of feature.tools) set.add(tool);
+			for (const tool of getFeatureTools(feature, absorbed)) set.add(tool);
 		}
 		return set;
 	}, [featureDefinitions, draftFeatures, savedUnifiedConfig]);
@@ -579,6 +581,7 @@ export const AgentFeatureDetailModal =
 							return (
 								<FolderIndexFeatureInfo
 									key={index}
+									indexTypeId={slot.indexTypeId}
 									onOpenFiles={() => modal.hide()}
 								/>
 							);

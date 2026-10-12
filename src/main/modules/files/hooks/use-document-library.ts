@@ -3,6 +3,10 @@ import { useTranslation } from "react-i18next";
 import NiceModal from "@ebay/nice-modal-react";
 import { documentFileSystemService } from "@/services/filesystem/document-filesystem";
 import {
+	folderLineage,
+	parentFolder,
+} from "@/services/folder-index/index-config";
+import {
 	toSandboxPath,
 	toDocumentsSandboxPath,
 	normalizeSandboxPath,
@@ -101,6 +105,7 @@ export function useDocumentLibrary() {
 	const currentPathRef = useRef(currentPath);
 	const fileTopicMapRef = useRef(fileTopicMap);
 	const topicsRef = useRef(topics);
+	const navigationRequestRef = useRef(0);
 
 	useEffect(() => {
 		selectedNodeRef.current = selectedNode;
@@ -285,6 +290,7 @@ export function useDocumentLibrary() {
 
 	const handleSelectNode = useCallback(
 		(node: DocumentTreeNode | null) => {
+			navigationRequestRef.current++;
 			if (!node) {
 				setSelectedNode(makeDocsRoot(treeRef.current));
 				return;
@@ -297,6 +303,7 @@ export function useDocumentLibrary() {
 
 	const handleSelectDocNode = useCallback(
 		(node: DocumentTreeNode) => {
+			navigationRequestRef.current++;
 			setSelectedSection("documents");
 			setSelectedNode(node);
 			void materializeFolder(node);
@@ -306,6 +313,7 @@ export function useDocumentLibrary() {
 
 	/** Select the documents section, falling back to the first top-level node. */
 	const handleSelectDocumentsSection = useCallback(() => {
+		navigationRequestRef.current++;
 		setSelectedSection("documents");
 		const currentNode = selectedNodeRef.current;
 		if (currentNode) {
@@ -321,11 +329,13 @@ export function useDocumentLibrary() {
 	}, []);
 
 	const handleSelectWorkspaceNode = useCallback((node: DocumentTreeNode) => {
+		navigationRequestRef.current++;
 		setSelectedNode(node);
 	}, []);
 
 	/** Select the workspace root (used by the sidebar label click). */
 	const handleSelectWorkspaceSection = useCallback(() => {
+		navigationRequestRef.current++;
 		setSelectedSection("documents");
 		setSelectedNode(makeDocsRoot(treeRef.current));
 	}, []);
@@ -365,6 +375,7 @@ export function useDocumentLibrary() {
 
 	/** Navigate to a node by id in the currently active tree. */
 	const handleSelectNodeInActiveTree = useCallback((id: string) => {
+		navigationRequestRef.current++;
 		const activeTree = treeRef.current;
 		const node = findNodeById(activeTree, id);
 		if (node) {
@@ -375,33 +386,74 @@ export function useDocumentLibrary() {
 		}
 	}, []);
 
-	/** Navigate to a folder by path in the currently active tree. */
-	const handleOpenFolderByPath = useCallback((path: string) => {
-		const activeTree = treeRef.current;
-		const node = findNodeByPath(activeTree, path);
-		if (node) {
-			setSelectedNode(node);
-			setTree((prev) => expandNodePath(prev, path));
-		}
-	}, []);
+	/** Search and index results can point inside a mapped folder not yet in the tree. */
+	const handleOpenDocumentByPath = useCallback(
+		async (path: string) => {
+			const request = ++navigationRequestRef.current;
+			const normalizedPath = normalizeSandboxPath(path);
+			try {
+				const node =
+					normalizedPath === "/"
+						? makeDocsRoot(treeRef.current)
+						: (findNodeByPath(treeRef.current, normalizedPath) ??
+							(await documentFileSystemService.resolveNode(normalizedPath)));
+				if (!node || request !== navigationRequestRef.current) return;
+				// Reveal deferred ancestors so the selection also survives tree refreshes.
+				let visibleTree = treeRef.current;
+				for (const ancestorPath of folderLineage(
+					parentFolder(normalizedPath) ?? "/",
+				)) {
+					if (request !== navigationRequestRef.current) return;
+					const ancestor = findNodeByPath(visibleTree, ancestorPath);
+					if (!ancestor?.isLazy) continue;
+					const loaded = await materializeFolder(ancestor);
+					visibleTree = updateNodeByPath(
+						visibleTree,
+						ancestorPath,
+						() => loaded,
+					);
+				}
+				if (request !== navigationRequestRef.current) return;
+				setSelectedSection("documents");
+				setTree((prev) => expandNodePath(prev, normalizedPath));
+				setSelectedNode(node);
+				void materializeFolder(node);
+			} catch (err) {
+				if (request !== navigationRequestRef.current) return;
+				logError("Failed to open library item:", err);
+				setError(t("library.openItemError"));
+			}
+		},
+		[materializeFolder, t],
+	);
 
-	const handleOpenDocumentByPath = useCallback((path: string) => {
-		const normalizedPath = normalizeSandboxPath(path);
-		setSelectedSection("documents");
-		const node = findNodeByPath(treeRef.current, normalizedPath);
-		if (node) {
-			setTree((prev) => expandNodePath(prev, normalizedPath));
-			setSelectedNode(node);
-		}
-	}, []);
+	const handleOpenFolderByPath = useCallback(
+		(path: string) => {
+			void handleOpenDocumentByPath(path);
+		},
+		[handleOpenDocumentByPath],
+	);
 
 	/** Go to parent folder when closing a file viewer. */
 	const handleCloseViewer = useCallback(() => {
 		const path = currentPathRef.current;
 		const parentPath = path.substring(0, path.lastIndexOf("/")) || "/";
-		const parentNode = findNodeByPath(treeRef.current, parentPath);
-		setSelectedNode(parentNode ?? null);
-	}, []);
+		void handleOpenDocumentByPath(parentPath);
+	}, [handleOpenDocumentByPath]);
+
+	const handleSearchChange = useCallback(
+		(query: string) => {
+			setSearchQuery(query);
+			const node = selectedNodeRef.current;
+			if (node?.type !== "file") return;
+			if (query.trim()) {
+				void handleOpenDocumentByPath(parentFolder(node.path) ?? "/");
+			} else {
+				navigationRequestRef.current++;
+			}
+		},
+		[handleOpenDocumentByPath],
+	);
 
 	// ── Upload ───────────────────────────────────────────────────────────────
 	const updateProgress = useCallback(
@@ -654,18 +706,8 @@ export function useDocumentLibrary() {
 				const content = await documentFileSystemService.readFile(
 					toDocumentsSandboxPath(fileId),
 				);
-				const findFile = (nodes: DocumentTreeNode[]): DocumentFile | null => {
-					for (const node of nodes) {
-						if (node.type === "file" && node.id === fileId && node.file)
-							return node.file;
-						if (node.children) {
-							const found = findFile(node.children);
-							if (found) return found;
-						}
-					}
-					return null;
-				};
-				const file = findFile(treeRef.current);
+				const node = await documentFileSystemService.resolveNode(fileId);
+				const file = node?.file;
 				if (!file) return;
 				const blob = new Blob([content.slice()], { type: file.mimeType });
 				const url = URL.createObjectURL(blob);
@@ -823,6 +865,7 @@ export function useDocumentLibrary() {
 		// Setters (stable)
 		setViewMode,
 		setSearchQuery,
+		handleSearchChange,
 		// Handlers
 		handleSelectNode,
 		handleSelectDocNode,

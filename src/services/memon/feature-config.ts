@@ -3,6 +3,7 @@ import {
 	MEMON_ABSORBED_STEP_NAMES,
 	MEMON_APP_FEATURES,
 	MEMON_APP_IDS,
+	MEMON_NATIVE_SANDBOX_TOOLS,
 	MEMON_STEP_NAME,
 	MEMON_VISUAL_THEMES,
 	type MemonAppId,
@@ -135,8 +136,9 @@ export const memonConfigFromFlow = (
 /**
  * Prepares a run of a MemonOS Bot agent: the app features it has turned on
  * become the computer's apps, and are switched off as features so their
- * tools, prompts and end-of-run cleanup never reach the model (unless the
- * settings keep the direct tools).
+ * native tools, prompts and end-of-run cleanup never reach the model (unless
+ * the settings keep the direct tools). The sandbox feature also contributes
+ * artifacts and optional snapshots, which the computer does not replace.
  *
  * Doing this at the config level (instead of inside the step) keeps their
  * prompts out of the system message and does not depend on step registration
@@ -158,6 +160,26 @@ export const applyMemonAbsorption = (
 						...step.config,
 						apps: memonConfig.apps,
 						visualTheme: memonConfig.visualTheme,
+					},
+				};
+			}
+			if (
+				step.name === MEMON_APP_FEATURES.terminal &&
+				step.enabled &&
+				!memonConfig.keepDirectTools
+			) {
+				return {
+					...step,
+					config: {
+						...step.config,
+						excludedTools: [
+							...new Set([
+								...(Array.isArray(step.config?.excludedTools)
+									? step.config.excludedTools
+									: []),
+								...MEMON_NATIVE_SANDBOX_TOOLS,
+							]),
+						],
 					},
 				};
 			}

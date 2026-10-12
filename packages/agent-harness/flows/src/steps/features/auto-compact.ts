@@ -385,12 +385,6 @@ function isBase64Strippable(message: ChatCompletionMessageParam): boolean {
 	if (Array.isArray(message.content)) {
 		for (const part of message.content) {
 			if (part.type === "text" && hasBase64DataUri(part.text)) return true;
-			if (
-				part.type === "image_url" &&
-				part.image_url?.url &&
-				hasBase64DataUri(part.image_url.url)
-			)
-				return true;
 		}
 	}
 	if ("tool_calls" in message && message.tool_calls?.length) {
@@ -413,19 +407,8 @@ function stripBase64FromMessage(
 			if (part.type === "text" && hasBase64DataUri(part.text)) {
 				return { ...part, text: stripBase64DataUris(part.text) };
 			}
-			if (
-				part.type === "image_url" &&
-				part.image_url?.url &&
-				hasBase64DataUri(part.image_url.url)
-			) {
-				return {
-					...part,
-					image_url: {
-						...part.image_url,
-						url: stripBase64DataUris(part.image_url.url),
-					},
-				};
-			}
+			// Native image parts must remain decodable. Old attachments can leave
+			// with an entire trimmed message or tool flow, never as invalid URLs.
 			return part;
 		});
 		m = { ...m, content: newParts } as ChatCompletionMessageParam;

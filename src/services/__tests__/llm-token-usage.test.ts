@@ -61,6 +61,29 @@ describe("LLM token usage utilities", () => {
 		expect(estimatePromptTokens([])).toBe(0);
 	});
 
+	it("does not charge base64 characters as text tokens for source images", () => {
+		const pictureTokens = (bytes: number) =>
+			estimatePromptTokens([
+				{
+					role: "user",
+					content: [
+						{ type: "text", text: "Inspect this source match." },
+						{
+							type: "image_url",
+							image_url: { url: `data:image/png;base64,${"A".repeat(bytes)}` },
+						},
+					],
+				},
+			]);
+		expect(pictureTokens(1_000_000)).toBe(pictureTokens(4));
+		expect(pictureTokens(1_000_000)).toBeLessThan(4000);
+		expect(pictureTokens(4)).toBeGreaterThan(
+			estimatePromptTokens([
+				{ role: "user", content: "Inspect this source match." },
+			]),
+		);
+	});
+
 	it("extracts output text from responses and stream chunks", () => {
 		expect(
 			extractResponseOutputText({

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Loader2, Zap } from "lucide-react";
 import { OpenAITab } from "@/main/modules/llm/components/OpenAITab";
 import { OpenRouterTab } from "@/main/modules/llm/components/OpenRouterTab";
+import { CustomProviderTab } from "../CustomProviderTab";
 import { LocalOpenAITab } from "@/main/modules/llm/components/LocalOpenAITab";
 import { useTranslation } from "react-i18next";
 
@@ -52,6 +53,7 @@ export const YourModels: React.FC<YourModelsProps> = ({
 
 	// Local state
 	const [loading, setLoading] = useState(false);
+	const [configRevision, setConfigRevision] = useState(0);
 
 	// Custom hooks
 	const {
@@ -76,6 +78,7 @@ export const YourModels: React.FC<YourModelsProps> = ({
 	// Get provider-specific states
 	const openaiState = getState("openai");
 	const openrouterState = getState("openrouter");
+	const customState = getState("custom");
 
 	const { localModels, localModelsLoading } = useLocalModels(
 		quickProvider,
@@ -84,7 +87,10 @@ export const YourModels: React.FC<YourModelsProps> = ({
 			? openaiState.ready
 			: quickProvider === "openrouter"
 				? openrouterState.ready
-				: undefined,
+				: quickProvider === "custom"
+					? customState.ready
+					: undefined,
+		configRevision,
 	);
 	const { localModels: openaiModels, localModelsLoading: openaiModelsLoading } =
 		useLocalModels("openai", null, openaiState.ready);
@@ -92,6 +98,8 @@ export const YourModels: React.FC<YourModelsProps> = ({
 		localModels: openrouterModels,
 		localModelsLoading: openrouterModelsLoading,
 	} = useLocalModels("openrouter", null, openrouterState.ready);
+	const { localModels: customModels, localModelsLoading: customModelsLoading } =
+		useLocalModels("custom", null, customState.ready, configRevision);
 
 	const {
 		downloadProgress,
@@ -131,6 +139,12 @@ export const YourModels: React.FC<YourModelsProps> = ({
 					loading: openrouterModelsLoading,
 					ready: openrouterState.ready,
 				},
+				{
+					provider: "custom" as const,
+					models: customModels,
+					loading: customModelsLoading,
+					ready: customState.ready,
+				},
 			].filter(
 				(providerState) =>
 					!allowedProviders ||
@@ -144,6 +158,9 @@ export const YourModels: React.FC<YourModelsProps> = ({
 			openrouterModels,
 			openrouterModelsLoading,
 			openrouterState.ready,
+			customModels,
+			customModelsLoading,
+			customState.ready,
 		],
 	);
 
@@ -215,6 +232,7 @@ export const YourModels: React.FC<YourModelsProps> = ({
 					{/* Config gating for OpenAI, OpenRouter and Local providers */}
 					{(quickProvider === "openai" && !openaiState.ready) ||
 					(quickProvider === "openrouter" && !openrouterState.ready) ||
+					(quickProvider === "custom" && !customState.ready) ||
 					((quickProvider === "lmstudio" || quickProvider === "ollama") &&
 						!localConfigExists) ? (
 						<div className="border rounded-lg p-4">
@@ -234,6 +252,14 @@ export const YourModels: React.FC<YourModelsProps> = ({
 										onModelLoaded?.(modelId, "openrouter");
 									}}
 								/>
+							) : quickProvider === "custom" ? (
+								<CustomProviderTab
+									onConfigurationChange={(ready) => {
+										setStateReady("custom", ready);
+										setConfigExists("custom", ready);
+										setConfigRevision((value) => value + 1);
+									}}
+								/>
 							) : (
 								<LocalOpenAITab
 									providerKind={quickProvider as "lmstudio" | "ollama"}
@@ -248,7 +274,8 @@ export const YourModels: React.FC<YourModelsProps> = ({
 						(quickProvider === "lmstudio" ||
 							quickProvider === "ollama" ||
 							quickProvider === "openai" ||
-							quickProvider === "openrouter") ? (
+							quickProvider === "openrouter" ||
+							quickProvider === "custom") ? (
 						<div className="flex items-center justify-center p-4 border rounded-lg">
 							<Loader2 className="w-4 h-4 animate-spin mr-2" />
 							<span className="text-sm text-muted-foreground">
@@ -260,7 +287,8 @@ export const YourModels: React.FC<YourModelsProps> = ({
 							{quickProvider === "lmstudio" ||
 							quickProvider === "ollama" ||
 							quickProvider === "openai" ||
-							quickProvider === "openrouter" ? (
+							quickProvider === "openrouter" ||
+							quickProvider === "custom" ? (
 								<LocalModelsList
 									localModels={localModels}
 									quickProvider={quickProvider}

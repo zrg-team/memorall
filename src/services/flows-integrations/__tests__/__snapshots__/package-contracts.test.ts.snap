@@ -7,6 +7,8 @@ exports[`flows-integrations registered contracts > registers every integrations 
   "documents-feature",
   "documents-fs-feature",
   "embedded-chat-feature",
+  "file-embedding-index-feature",
+  "file-okf-index-feature",
   "folder-index-feature",
   "fs-feature",
   "hyperframes-feature",
@@ -258,14 +260,14 @@ exports[`flows-integrations registered contracts > registers every integrations 
         "messages": "messages",
         "tools": "tools",
       },
-      "description": "Search folders through their indexes. Supports OKF; more index types can be added.",
+      "description": "Find document passages, images, audio, music and video by meaning using local content embeddings.",
       "enabledByDefault": false,
       "feature": {
         "graphTypes": [
           "foundation",
           "agent",
         ],
-        "id": "step-folder-index-feature",
+        "id": "step-file-embedding-index-feature",
         "inputs": [
           {
             "description": "Current chat messages",
@@ -287,13 +289,75 @@ exports[`flows-integrations registered contracts > registers every integrations 
             "type": "Message[]",
           },
           {
-            "description": "Tools extended with the tools of every index type",
+            "description": "Tools extended with this index type's tools",
             "name": "tools",
             "type": "Tool[]",
           },
         ],
         "type": "feature",
       },
+      "version": "1.0.0",
+    },
+    "executable": true,
+    "id": "file-embedding-index-feature",
+    "name": "file-embedding-index-feature",
+  },
+  {
+    "config": {
+      "defaultStateMapping": {
+        "messages": "messages",
+        "tools": "tools",
+      },
+      "description": "Find files through their Open Knowledge Format cards, summaries, types and tags.",
+      "enabledByDefault": false,
+      "feature": {
+        "graphTypes": [
+          "foundation",
+          "agent",
+        ],
+        "id": "step-file-okf-index-feature",
+        "inputs": [
+          {
+            "description": "Current chat messages",
+            "name": "messages",
+            "required": true,
+            "type": "Message[]",
+          },
+          {
+            "description": "Current available tools",
+            "name": "tools",
+            "required": true,
+            "type": "Tool[]",
+          },
+        ],
+        "outputs": [
+          {
+            "description": "Messages with instructions for reading folder indexes",
+            "name": "messages",
+            "type": "Message[]",
+          },
+          {
+            "description": "Tools extended with this index type's tools",
+            "name": "tools",
+            "type": "Tool[]",
+          },
+        ],
+        "type": "feature",
+      },
+      "version": "1.0.0",
+    },
+    "executable": true,
+    "id": "file-okf-index-feature",
+    "name": "file-okf-index-feature",
+  },
+  {
+    "config": {
+      "defaultStateMapping": {
+        "messages": "messages",
+        "tools": "tools",
+      },
+      "description": "Search folders through OKF cards and EmbeddingGemma 2 content chunks, including images, audio, music and video.",
+      "enabledByDefault": false,
       "version": "1.0.0",
     },
     "executable": true,
@@ -758,6 +822,8 @@ exports[`flows-integrations registered contracts > registers every integrations 
   "document_fs_read",
   "document_fs_remove",
   "document_fs_write",
+  "embedding_chunks",
+  "embedding_search",
   "excel_to_text",
   "hyperframes_edit",
   "hyperframes_init",
@@ -1337,6 +1403,57 @@ exports[`flows-integrations registered contracts > registers every integrations 
     },
   },
   {
+    "description": "Inspect a source file's content chunks with excerpts and page/time locations. Media chunks identify a segment; they do not contain a generated transcript.",
+    "name": "embedding_chunks",
+    "parameters": {
+      "properties": {
+        "limit": {
+          "type": "number",
+        },
+        "offset": {
+          "type": "number",
+        },
+        "path": {
+          "type": "string",
+        },
+      },
+      "required": [
+        "path",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "Search indexed file content by meaning. For visual questions use kind=image. Returns source paths, excerpts, locations, ranked similarity and source image previews when the model supports vision. Use the matches and inspect images before answering; text grep cannot inspect visual content.",
+    "name": "embedding_search",
+    "parameters": {
+      "properties": {
+        "folder": {
+          "type": "string",
+        },
+        "kind": {
+          "enum": [
+            "text",
+            "image",
+            "audio",
+            "video",
+          ],
+          "type": "string",
+        },
+        "limit": {
+          "type": "number",
+        },
+        "query": {
+          "type": "string",
+        },
+      },
+      "required": [
+        "query",
+      ],
+      "type": "object",
+    },
+  },
+  {
     "description": "Extract text from an Excel file in the root filesystem and return it or save it to a new file. Supports Markdown table or CSV output with optional sheet filtering.",
     "name": "excel_to_text",
     "parameters": {
@@ -1755,6 +1872,9 @@ exports[`flows-integrations registered contracts > registers every integrations 
             "top",
             "bottom",
           ],
+          "type": "string",
+        },
+        "path": {
           "type": "string",
         },
         "ref": {

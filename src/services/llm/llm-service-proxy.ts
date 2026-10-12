@@ -15,6 +15,7 @@ import { LocalOpenAICompatibleLLM } from "./implementations/local-openai-llm";
 import { LLMProxy } from "./implementations/llm-proxy";
 import type {
 	LLMRegistry,
+	CustomConfig,
 	LMStudioConfig,
 	OllamaConfig,
 	OpenAIConfig,
@@ -57,6 +58,16 @@ export class LLMServiceProxy extends LLMServiceCore implements ILLMService {
 					(config as OpenRouterConfig).apiKey,
 					(config as OpenRouterConfig).baseURL ||
 						"https://openrouter.ai/api/v1",
+				) as LLMRegistry[K]["llm"];
+				await llm.initialize();
+				this.llms.set(name, llm);
+				return llm;
+
+			case "custom":
+				llm = new OpenAILLM(
+					(config as CustomConfig).apiKey,
+					(config as CustomConfig).baseURL,
+					{ modelIds: (config as CustomConfig).modelIds },
 				) as LLMRegistry[K]["llm"];
 				await llm.initialize();
 				this.llms.set(name, llm);

@@ -53,7 +53,7 @@ export const PROVIDER_REGISTRY: Readonly<
 		isLocal: true,
 		residentLocal: true,
 		requiresAuth: false,
-		categories: ["chat"],
+		categories: ["chat", "decision"],
 	},
 	webllm: {
 		id: "webllm",
@@ -108,6 +108,22 @@ export const PROVIDER_REGISTRY: Readonly<
 		encryptionKey: "openrouter_config",
 		categories: ["chat", "image-generation", "decision"],
 	},
+	custom: {
+		id: "custom",
+		label: "Custom (OpenAI-compatible)",
+		shortLabel: "Custom",
+		isLocal: false,
+		residentLocal: false,
+		requiresAuth: true,
+		readyKey: "custom_ready",
+		encryptionKey: "custom_config",
+		categories: [
+			"chat",
+			"text-to-speech",
+			"speech-to-text",
+			"image-generation",
+		],
+	},
 	lmstudio: {
 		id: "lmstudio",
 		label: "LM Studio",
@@ -138,6 +154,7 @@ export const PROVIDER_ORDER: readonly ServiceProvider[] = [
 	"transformer-media",
 	"openai",
 	"openrouter",
+	"custom",
 	"lmstudio",
 	"ollama",
 ];
