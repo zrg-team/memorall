@@ -17,6 +17,10 @@ export interface FolderIndexSettings {
 	askBeforeMapped: boolean;
 	/** Agents may ask the user to add an index to a folder. */
 	agentsMayAsk: boolean;
+	/** Background embedding controls; older configs receive safe defaults. */
+	embeddingPaused?: boolean;
+	embeddingBatchSize?: number;
+	embeddingPauseMs?: number;
 }
 
 export interface FolderIndexConfig {
@@ -86,7 +90,13 @@ export interface FolderIndexType {
 	sync(
 		root: string,
 		files: IndexedFileInfo[],
-		options?: { nestedRoots?: string[] },
+		options?: {
+			nestedRoots?: string[];
+			signal?: AbortSignal;
+			batchSize?: number;
+			pauseMs?: number;
+			onActivity?: () => void;
+		},
 	): Promise<FolderIndexSyncResult>;
 	/** Removes everything this type built for `root`. */
 	remove(root: string): Promise<void>;

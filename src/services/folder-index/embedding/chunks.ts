@@ -1,4 +1,5 @@
 import type { IndexedFileInfo } from "../types";
+import { MAX_EMBEDDING_CHUNKS_PER_FILE } from "../constants";
 import type { ChunkLocation, PreparedChunk } from "./types";
 
 export const TEXT_CHUNK_CHARS = 2000;
@@ -115,8 +116,36 @@ const is = (file: IndexedFileInfo, kind: string, extension: RegExp) =>
 export async function* extractEmbeddingChunks(
 	file: IndexedFileInfo,
 	bytes: Uint8Array,
+	options: { skipChunks?: number; signal?: AbortSignal } = {},
 ): AsyncGenerator<PreparedChunk> {
+	let skip = Math.max(0, Math.floor(options.skipChunks ?? 0));
+	const remaining = function* (chunks: Iterable<PreparedChunk>) {
+		for (const chunk of chunks) {
+			options.signal?.throwIfAborted();
+			if (skip > 0) {
+				skip--;
+				continue;
+			}
+			yield chunk;
+		}
+	};
+	const limitError = () =>
+		new Error(`File exceeds the ${MAX_EMBEDDING_CHUNKS_PER_FILE}-chunk limit`);
+	let textCount = 0;
+	const selectText = (text: string, location: ChunkLocation = {}) => {
+		for (const _chunk of textChunks(text, file.name, location))
+			if (++textCount > MAX_EMBEDDING_CHUNKS_PER_FILE) throw limitError();
+		return remaining(textChunks(text, file.name, location));
+	};
+	const rangeCount = (duration: number, window: number) => {
+		let count = 0;
+		for (const _range of mediaRanges(duration, window))
+			if (++count > MAX_EMBEDDING_CHUNKS_PER_FILE) break;
+		return count;
+	};
+	options.signal?.throwIfAborted();
 	if (is(file, "image", /\.(png|jpe?g|webp|gif|bmp|svg|avif)$/i)) {
+		if (skip > 0) return;
 		yield {
 			kind: "image",
 			location: {},
@@ -138,26 +167,48 @@ export async function* extractEmbeddingChunks(
 			formats: ALL_FORMATS,
 		});
 		try {
+			const audioTrack = await input.getPrimaryAudioTrack();
+			const audioDuration = audioTrack
+				? await audioTrack.computeDuration()
+				: undefined;
+			if (
+				audioDuration !== undefined &&
+				rangeCount(audioDuration, AUDIO_CHUNK_SECONDS) >
+					MAX_EMBEDDING_CHUNKS_PER_FILE
+			)
+				throw limitError();
 			if (video) {
 				const track = await input.getPrimaryVideoTrack();
 				if (!track || !(await track.canDecode()))
 					throw new Error("This browser cannot decode the video track");
+				const duration = await track.computeDuration();
+				if (
+					rangeCount(duration, VIDEO_CHUNK_SECONDS) +
+						(audioDuration !== undefined
+							? rangeCount(audioDuration, AUDIO_CHUNK_SECONDS)
+							: 0) >
+					MAX_EMBEDDING_CHUNKS_PER_FILE
+				)
+					throw limitError();
 				const sink = new CanvasSink(track, {
 					width: 512,
 					height: 512,
 					fit: "contain",
 					poolSize: 1,
 				});
-				for (const [start, end] of mediaRanges(
-					await track.computeDuration(),
-					VIDEO_CHUNK_SECONDS,
-				)) {
+				for (const [start, end] of mediaRanges(duration, VIDEO_CHUNK_SECONDS)) {
+					options.signal?.throwIfAborted();
+					if (skip > 0) {
+						skip--;
+						continue;
+					}
 					const times = Array.from(
 						{ length: Math.ceil(end - start) },
 						(_, i) => start + i,
 					);
 					const frames: Array<{ bytes: ArrayBuffer; timestamp: number }> = [];
 					for await (const frame of sink.canvasesAtTimestamps(times)) {
+						options.signal?.throwIfAborted();
 						if (frame)
 							frames.push({
 								bytes: await canvasBytes(frame.canvas),
@@ -173,21 +224,27 @@ export async function* extractEmbeddingChunks(
 					};
 				}
 			}
-			const track = await input.getPrimaryAudioTrack();
+			const track = audioTrack;
 			if (audio && !track) throw new Error("No audio track found");
 			if (track) {
 				if (!(await track.canDecode()))
 					throw new Error("This browser cannot decode the audio track");
 				const sink = new AudioBufferSink(track);
 				for (const [start, end] of mediaRanges(
-					await track.computeDuration(),
+					audioDuration!,
 					AUDIO_CHUNK_SECONDS,
 				)) {
+					options.signal?.throwIfAborted();
+					if (skip > 0) {
+						skip--;
+						continue;
+					}
 					const samples = new Float32Array(
 						Math.ceil((end - start) * AUDIO_SAMPLE_RATE),
 					);
 					let decoded = false;
 					for await (const part of sink.buffers(start, end)) {
+						options.signal?.throwIfAborted();
 						copyAudioWindow(samples, start, part.timestamp, part.buffer);
 						decoded = true;
 					}
@@ -210,7 +267,9 @@ export async function* extractEmbeddingChunks(
 		);
 		const { doc, close } = await openPDFDocument(new Uint8Array(bytes));
 		try {
+			if (doc.numPages > MAX_EMBEDDING_CHUNKS_PER_FILE) throw limitError();
 			for (let number = 1; number <= doc.numPages; number++) {
+				options.signal?.throwIfAborted();
 				const page = await doc.getPage(number);
 				const content = await page.getTextContent();
 				const text = content.items
@@ -218,8 +277,13 @@ export async function* extractEmbeddingChunks(
 						"str" in item ? item.str + (item.hasEOL ? "\n" : " ") : "",
 					)
 					.join("");
-				if (text.trim()) yield* textChunks(text, file.name, { page: number });
+				if (text.trim()) yield* selectText(text, { page: number });
 				else {
+					if (skip > 0) {
+						skip--;
+						page.cleanup();
+						continue;
+					}
 					const original = page.getViewport({ scale: 1 });
 					const viewport = page.getViewport({
 						scale: Math.min(
@@ -259,24 +323,21 @@ export async function* extractEmbeddingChunks(
 		);
 		const book = await parseExcelFile(bytes);
 		for (const sheet of book.SheetNames)
-			yield* textChunks(sheetToCsv(book, sheet), file.name, { sheet });
+			yield* selectText(sheetToCsv(book, sheet), { sheet });
 		return;
 	}
 	if (/\.docx$/i.test(file.name)) {
 		const { docxToMarkdown } = await import(
 			"@/main/modules/files/handlers/docx-extraction"
 		);
-		yield* textChunks(docxToMarkdown(bytes), file.name);
+		yield* selectText(docxToMarkdown(bytes));
 		return;
 	}
 	if (file.documentType === "presentation" || /\.pptx?$/i.test(file.name)) {
 		const { readPresentation, presentationToMarkdown } = await import(
 			"@/main/modules/files/handlers/pptx-extraction"
 		);
-		yield* textChunks(
-			presentationToMarkdown(await readPresentation(bytes)),
-			file.name,
-		);
+		yield* selectText(presentationToMarkdown(await readPresentation(bytes)));
 		return;
 	}
 	if (
@@ -287,7 +348,7 @@ export async function* extractEmbeddingChunks(
 			file.name,
 		)
 	) {
-		yield* textChunks(new TextDecoder().decode(bytes), file.name);
+		yield* selectText(new TextDecoder().decode(bytes));
 		return;
 	}
 	throw new Error("This file format cannot be embedded yet");

@@ -36,10 +36,15 @@ const changedPaths = (change: FilesystemChangeEvent): string[] => {
 	);
 };
 
-const watchLibrary = (
-	library: DocumentFileSystem,
+const leafChanges = (change: FilesystemChangeEvent): FilesystemChangeEvent[] =>
+	change.operation === "batch"
+		? (change.changes ?? []).flatMap(leafChanges)
+		: [change];
+
+export const watchLibrary = (
+	library: Pick<DocumentFileSystem, "onFilesystemChanged">,
 	indexer: FolderIndexer,
-): void => {
+): (() => void) => {
 	const pending = new Set<string>();
 	let timer: ReturnType<typeof setTimeout> | null = null;
 	const flush = () => {
@@ -50,8 +55,15 @@ const watchLibrary = (
 			logError("[folder-index] Re-indexing after a change failed:", error);
 		});
 	};
-	library.onFilesystemChanged((change) => {
+	const unsubscribe = library.onFilesystemChanged((change) => {
 		if (!change) return;
+		// Origins distinguish generated data from a user's logical folder that
+		// happens to have the same name as our private physical store.
+		const events = leafChanges(change).filter(
+			(event) => event.origin !== "folder-index",
+		);
+		const paths = events.flatMap(changedPaths);
+		if (!paths.length) return;
 		const handle = async (event: FilesystemChangeEvent) => {
 			// Rules follow their folder when it moves; a deleted folder's go.
 			if (
@@ -64,8 +76,6 @@ const watchLibrary = (
 				await indexer.forgetFolder(event.path);
 			}
 		};
-		const events =
-			change.operation === "batch" ? (change.changes ?? []) : [change];
 		for (const event of events) {
 			void handle(event).catch((error: unknown) => {
 				logError(
@@ -74,10 +84,15 @@ const watchLibrary = (
 				);
 			});
 		}
-		for (const path of changedPaths(change)) pending.add(path);
+		for (const path of paths) pending.add(path);
 		if (timer) clearTimeout(timer);
 		timer = setTimeout(flush, CHANGE_DEBOUNCE_MS);
 	});
+	return () => {
+		if (timer) clearTimeout(timer);
+		pending.clear();
+		unsubscribe();
+	};
 };
 
 const createRuntime = async (): Promise<FolderIndexRuntime> => {

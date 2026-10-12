@@ -18,6 +18,9 @@ export const DEFAULT_FOLDER_INDEX_SETTINGS: FolderIndexSettings = {
 	maxFileBytes: DEFAULT_MAX_INDEXED_FILE_BYTES,
 	askBeforeMapped: true,
 	agentsMayAsk: true,
+	embeddingPaused: false,
+	embeddingBatchSize: 4,
+	embeddingPauseMs: 150,
 };
 
 export const emptyFolderIndexConfig = (): FolderIndexConfig => ({
@@ -117,6 +120,16 @@ export const normalizeFolderIndexConfig = (
 		}
 		if (typeof settings.agentsMayAsk === "boolean") {
 			config.settings.agentsMayAsk = settings.agentsMayAsk;
+		}
+		if (typeof settings.embeddingPaused === "boolean")
+			config.settings.embeddingPaused = settings.embeddingPaused;
+		for (const [key, min, max] of [
+			["embeddingBatchSize", 1, 16],
+			["embeddingPauseMs", 25, 2000],
+		] as const) {
+			const value = settings[key];
+			if (typeof value === "number" && Number.isFinite(value))
+				config.settings[key] = Math.min(max, Math.max(min, Math.floor(value)));
 		}
 	}
 	return config;

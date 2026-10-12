@@ -104,6 +104,7 @@ exports[`requested service module coverage > imports requested service trees 1`]
   "../embedding/embedding-service-proxy.ts",
   "../embedding/implementations/embedding-proxy.ts",
   "../embedding/implementations/embeddinggemma2-embedding.ts",
+  "../embedding/implementations/embeddinggemma2-model.ts",
   "../embedding/implementations/local-embedding.ts",
   "../embedding/implementations/openai-embedding.ts",
   "../embedding/implementations/worker-embedding.ts",

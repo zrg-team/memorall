@@ -98,4 +98,29 @@ describe("folder index config", () => {
 		expect(isSkippedName("node_modules", "file", patterns)).toBe(false);
 		expect(isSkippedName("notes.md", "file", patterns)).toBe(false);
 	});
+	it("defaults and bounds background embedding controls", () => {
+		expect(emptyFolderIndexConfig().settings).toMatchObject({
+			embeddingPaused: false,
+			embeddingBatchSize: 4,
+			embeddingPauseMs: 150,
+		});
+		expect(
+			normalizeFolderIndexConfig({
+				settings: {
+					embeddingPaused: true,
+					embeddingBatchSize: 999,
+					embeddingPauseMs: -50,
+				},
+			}).settings,
+		).toMatchObject({
+			embeddingPaused: true,
+			embeddingBatchSize: 16,
+			embeddingPauseMs: 25,
+		});
+		expect(
+			normalizeFolderIndexConfig({
+				settings: { embeddingBatchSize: NaN, embeddingPauseMs: Infinity },
+			}).settings,
+		).toMatchObject({ embeddingBatchSize: 4, embeddingPauseMs: 150 });
+	});
 });

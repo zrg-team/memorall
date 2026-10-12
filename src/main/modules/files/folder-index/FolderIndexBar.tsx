@@ -9,7 +9,10 @@ import {
 import React from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/main/components/ui/button";
-import { normalizeFolderPath } from "@/services/folder-index/index-config";
+import {
+	normalizeFolderPath,
+	isSameOrInside,
+} from "@/services/folder-index/index-config";
 import { useFolderIndex } from "./FolderIndexContext";
 import { IndexTypeBadge } from "./IndexTypeBadge";
 import { EmbeddingSearchDialog } from "./EmbeddingSearchDialog";
@@ -38,7 +41,15 @@ export const FolderIndexBar: React.FC<{
 	if (!index || !effective.length) return null;
 	const entries = index.entriesOf(path);
 	const withEntry = entries ? entries.byFile.size : 0;
-	const busy = index.isRunning();
+	const busy = index.isRunning(path);
+	const activity = Object.entries(index.state?.activity ?? {}).filter(
+		([key]) => {
+			const root = key.slice(key.indexOf(":") + 1);
+			return isSameOrInside(path, root) || isSameOrInside(root, path);
+		},
+	);
+	const checking =
+		activity.length > 0 && activity.every(([, phase]) => phase === "checking");
 
 	return (
 		<div className="m-2 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-md border border-sky-500/30 bg-sky-500/5 px-3 py-2 text-xs">
@@ -57,7 +68,7 @@ export const FolderIndexBar: React.FC<{
 				{busy ? (
 					<span className="inline-flex items-center gap-1 text-amber-700 dark:text-amber-300">
 						<Loader2 className="h-3 w-3 animate-spin motion-reduce:animate-none" />
-						{t("folderIndex.indexing")}
+						{t(checking ? "folderIndex.checking" : "folderIndex.indexing")}
 					</span>
 				) : (
 					t("folderIndex.barStatus", { count: withEntry, total: fileCount })

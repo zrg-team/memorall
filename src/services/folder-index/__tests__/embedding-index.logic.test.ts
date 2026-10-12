@@ -33,8 +33,23 @@ const setup = () => {
 		"/Music/cats.txt": { content: "A cat asleep on the sofa." },
 	});
 	const model = encoder();
-	const embeddings = new EmbeddingIndex({ store, library, encoder: model });
-	return { store, library, model, embeddings };
+	let clock = new Date("2026-10-12T12:00:00Z").getTime();
+	const embeddings = new EmbeddingIndex({
+		store,
+		library,
+		encoder: model,
+		now: () => new Date(clock),
+		wait: async () => {},
+	});
+	return {
+		store,
+		library,
+		model,
+		embeddings,
+		advance: (ms: number) => {
+			clock += ms;
+		},
+	};
 };
 const files = async (library: ReturnType<typeof memoryLibrary>) =>
 	(await library.listFolder("/Music")).map((file) => ({
@@ -166,7 +181,7 @@ describe("EmbeddingGemma content index", () => {
 		expect(result.hits[0].text).toBeUndefined();
 	});
 	it("reports unsupported formats and failed updates, removes stale chunks, and retries failed files", async () => {
-		const { store, library, model, embeddings } = setup();
+		const { store, library, model, embeddings, advance } = setup();
 		await embeddings.sync("/Music", await files(library));
 		library.files.set("/Music/notes.md", {
 			content: "new piano recording",
@@ -195,6 +210,12 @@ describe("EmbeddingGemma content index", () => {
 			),
 		).toEqual(["/Music/cats.txt"]);
 		model.embed.mockResolvedValue([1, 0, 0]);
+		const reads = vi.spyOn(library, "readFile");
+		expect(await embeddings.sync("/Music", await files(library))).toMatchObject(
+			{ skipped: 2 },
+		);
+		expect(reads).not.toHaveBeenCalled();
+		advance(30_001);
 		expect(await embeddings.sync("/Music", await files(library))).toMatchObject(
 			{ updated: 1, skipped: 1 },
 		);

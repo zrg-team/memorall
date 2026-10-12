@@ -3,28 +3,71 @@ import type {
 	MultimodalEmbeddingInput,
 } from "../interfaces/multimodal-embedding";
 import { WorkerEmbedding } from "./worker-embedding";
+import {
+	EMBEDDING_GEMMA_2_MODEL,
+	EMBEDDING_GEMMA_2_DIMENSIONS,
+	EMBEDDING_GEMMA_2_REVISION,
+	EMBEDDING_GEMMA_2_FINGERPRINT,
+} from "./embeddinggemma2-model";
+export {
+	EMBEDDING_GEMMA_2_MODEL,
+	EMBEDDING_GEMMA_2_DIMENSIONS,
+	EMBEDDING_GEMMA_2_REVISION,
+} from "./embeddinggemma2-model";
 
-export const EMBEDDING_GEMMA_2_MODEL = "onnx-community/embeddinggemma-2-ONNX";
-export const EMBEDDING_GEMMA_2_DIMENSIONS = 768;
-export const EMBEDDING_GEMMA_2_REVISION =
-	"daa72c51243991dfcaf9f9137d2c573d8f7790c0";
+interface PendingEmbedding {
+	input: MultimodalEmbeddingInput;
+	resolve(vector: number[]): void;
+	reject(error: unknown): void;
+}
 
 /** Isolated from legacy memory embeddings: equal dimensions do not imply equal spaces. */
 export class EmbeddingGemma2Encoder implements MultimodalEmbeddingEncoder {
 	readonly dimensions = EMBEDDING_GEMMA_2_DIMENSIONS;
-	readonly fingerprint =
-		`${EMBEDDING_GEMMA_2_MODEL}@${EMBEDDING_GEMMA_2_REVISION}:q4:768:chunks-v1`;
+	readonly fingerprint = EMBEDDING_GEMMA_2_FINGERPRINT;
 	private readonly worker = new WorkerEmbedding({
 		modelName: EMBEDDING_GEMMA_2_MODEL,
 		device: "auto",
 		revision: EMBEDDING_GEMMA_2_REVISION,
 	});
-	private queue: Promise<unknown> = Promise.resolve();
+	private readonly foreground: PendingEmbedding[] = [];
+	private readonly background: PendingEmbedding[] = [];
+	private running = false;
+	private searchStreak = 0;
 
 	embed(input: MultimodalEmbeddingInput): Promise<number[]> {
-		// Share one model across indexing and search without concurrent initialization/inference.
-		const work = this.queue.then(() => this.worker.contentToVector(input));
-		this.queue = work.catch(() => undefined);
-		return work;
+		if (this.foreground.length + this.background.length >= 32)
+			return Promise.reject(
+				new Error("Embedding queue is busy. Try again shortly."),
+			);
+		return new Promise((resolve, reject) => {
+			const queue =
+				input.kind === "text" && input.query
+					? this.foreground
+					: this.background;
+			queue.push({ input, resolve, reject });
+			void this.drain();
+		});
+	}
+	private async drain(): Promise<void> {
+		if (this.running) return;
+		this.running = true;
+		try {
+			while (this.foreground.length || this.background.length) {
+				// Search gets the next slot, but cannot starve background work.
+				const search =
+					this.foreground.length > 0 &&
+					(this.searchStreak < 4 || !this.background.length);
+				const work = (search ? this.foreground : this.background).shift()!;
+				this.searchStreak = search ? this.searchStreak + 1 : 0;
+				try {
+					work.resolve(await this.worker.contentToVector(work.input));
+				} catch (error) {
+					work.reject(error);
+				}
+			}
+		} finally {
+			this.running = false;
+		}
 	}
 }

@@ -52,6 +52,7 @@ export const EMBEDDING_SEARCH_TOOL = "embedding_search" as const;
 export const EMBEDDING_CHUNKS_TOOL = "embedding_chunks" as const;
 
 export const DEFAULT_MAX_INDEXED_FILE_BYTES = 50 * 1024 * 1024;
+export const MAX_EMBEDDING_CHUNKS_PER_FILE = 2000;
 export const DEFAULT_SKIP_PATTERNS: readonly string[] = [
 	"*.tmp",
 	"*.key",

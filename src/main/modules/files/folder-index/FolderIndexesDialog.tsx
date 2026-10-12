@@ -256,6 +256,92 @@ export const FolderIndexesDialog: React.FC = () => {
 
 					{settings && (
 						<section className="grid gap-4 md:grid-cols-3">
+							<div className="col-span-full space-y-3 rounded-md border p-3">
+								<div className="flex items-center gap-2">
+									<Switch
+										id="folder-index-pause-embeddings"
+										checked={settings.embeddingPaused ?? false}
+										onCheckedChange={(paused) =>
+											void index.saveSettings({ embeddingPaused: paused })
+										}
+									/>
+									<Label
+										htmlFor="folder-index-pause-embeddings"
+										className="text-xs font-normal"
+									>
+										{t("folderIndex.embeddingPause")}
+									</Label>
+								</div>
+								<div className="grid gap-3 sm:grid-cols-2">
+									<div className="space-y-1">
+										<Label htmlFor="folder-index-batch" className="text-xs">
+											{t("folderIndex.embeddingBatch")}
+										</Label>
+										<select
+											id="folder-index-batch"
+											value={settings.embeddingBatchSize ?? 4}
+											onChange={(event) =>
+												void index.saveSettings({
+													embeddingBatchSize: Number(event.target.value),
+												})
+											}
+											className="h-8 w-full rounded-md border border-input bg-background px-2.5 text-xs"
+										>
+											{[
+												...new Set([
+													1,
+													2,
+													4,
+													8,
+													16,
+													settings.embeddingBatchSize ?? 4,
+												]),
+											]
+												.sort((a, b) => a - b)
+												.map((size) => (
+													<option key={size} value={size}>
+														{size}
+													</option>
+												))}
+										</select>
+									</div>
+									<div className="space-y-1">
+										<Label htmlFor="folder-index-throttle" className="text-xs">
+											{t("folderIndex.embeddingThrottle")}
+										</Label>
+										<select
+											id="folder-index-throttle"
+											value={settings.embeddingPauseMs ?? 150}
+											onChange={(event) =>
+												void index.saveSettings({
+													embeddingPauseMs: Number(event.target.value),
+												})
+											}
+											className="h-8 w-full rounded-md border border-input bg-background px-2.5 text-xs"
+										>
+											{[
+												...new Set([
+													50,
+													150,
+													300,
+													750,
+													1500,
+													settings.embeddingPauseMs ?? 150,
+												]),
+											]
+												.sort((a, b) => a - b)
+												.map((ms) => (
+													<option key={ms} value={ms}>
+														{ms} ms
+													</option>
+												))}
+										</select>
+									</div>
+								</div>
+								<p className="text-[11px] text-muted-foreground">
+									{t("folderIndex.embeddingWorkHint")}
+								</p>
+							</div>
 							<div className="space-y-1">
 								<Label
 									htmlFor="folder-index-skip"

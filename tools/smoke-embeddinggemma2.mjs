@@ -5,7 +5,7 @@ import fs from "node:fs";
 import * as HF from "@huggingface/transformers";
 import { loadEmbeddingGemma2 } from "../public/runner/modes/embeddinggemma2.js";
 
-const source = fs.readFileSync(new URL("../src/services/embedding/implementations/embeddinggemma2-embedding.ts", import.meta.url), "utf8");
+const source = fs.readFileSync(new URL("../src/services/embedding/implementations/embeddinggemma2-model.ts", import.meta.url), "utf8");
 const modelId = /EMBEDDING_GEMMA_2_MODEL\s*=\s*"([^"]+)"/.exec(source)?.[1];
 const revision = /EMBEDDING_GEMMA_2_REVISION\s*=\s*"([^"]+)"/.exec(source)?.[1];
 assert(modelId && revision, "Model and revision must be pinned");

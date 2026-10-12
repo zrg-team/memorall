@@ -40,16 +40,44 @@ invented for music, images or video.
 
 Each file stores source metadata, content chunks and vectors. Unchanged files
 reuse their vectors. Changed files replace their chunks, and deleted or excluded
-files lose theirs. Detected library and desktop mapped-folder changes are
+files lose theirs. Opening Files checks saved source metadata once per runtime;
+unchanged files do not reread vector payloads, initialize the model, rewrite the
+index timestamp, or trigger another embedding pass. Detected library and desktop mapped-folder changes are
 debounced for two seconds before indexing. Saved folder indexes are reconciled
 when the indexing service starts, catching up changes made while the app was
 closed. Files checks idle indexing status every five seconds and running status
-every 1.5 seconds, showing an **Indexing…** spinner; there is no percentage or ETA.
+every 1.5 seconds. The folder banner distinguishes **Checking for changes…** from
+**Indexing…** and only reports jobs affecting that folder; there is no percentage
+or ETA. Slow polls and repeated folder-entry requests are coalesced.
 Model/revision changes invalidate cached vectors. Decode and
 model failures appear per file in Indexes and are retried on the next sync;
-failed updates remove stale chunks. Unknown binary formats and codecs unavailable
-in the browser report a failure. The per-file limit is 2,000 chunks. Search scans
+failed updates remove stale chunks. Unchanged failures back off from 30 seconds
+up to 15 minutes between attempts; a source edit or explicit rebuild resets that
+delay. Unknown binary formats and codecs unavailable
+in the browser report a failure. The per-file limit is 2,000 chunks; known oversized
+text, media duration and PDF page counts are rejected before expensive inference.
+Search scans
 at most 20,000 eligible chunks and reports when the user should narrow the folder.
+
+Background indexing runs one root at a time, with one embedding inference in
+flight. Files → Indexes provides **Pause background embedding indexing**, **Chunks
+per batch** (1–16; default 4) and **Pause between batches** (25–2,000 ms; default
+150 ms). Batches span files, including folders of individual images. The worker
+also pauses between bursts of eight files and yields during large directory and
+similarity scans. Interactive search gets the next inference slot, with one
+background slot after four searches to prevent starvation; the pending inference
+queue is capped at 32 requests. Up to 64 query vectors are reused, including
+concurrent identical searches and unchanged polling refreshes.
+
+Chunk checkpoints append small pages instead of rewriting all vectors every
+batch. Completed files retain the existing storage format; manifest writes are
+batched after eight files or five seconds and flushed when a run ends or pauses.
+Writes replace files atomically. Reopening resumes saved chunks, and audio/video
+windows and PDF image pages already indexed are skipped before decoding/rendering.
+An interrupted manifest flush can recover completed documents without embedding
+them again. Pause takes effect between operations and leaves existing search
+available; resuming continues remaining work. Paused embedding rebuilds preserve
+the saved index; rebuild after enabling processing again.
 
 Agents with **File Embedding Indexes** receive `embedding_search` and `embedding_chunks`.
 **File OKF Indexes** independently enables `okf_index`, `okf_read` and `okf_search`.
