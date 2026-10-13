@@ -13,10 +13,10 @@ import { describe, expect, it, vi } from "vitest";
 
 const backend = vi.hoisted(() => ({ creates: 0, store: null as unknown }));
 
-vi.mock("@zenfs/dom", async () => {
+vi.mock("@/services/filesystem/indexeddb-backend", async () => {
 	const { InMemoryStore, StoreFS } = await import("@zenfs/core");
 	return {
-		IndexedDB: {
+		TransactionScopedIndexedDB: {
 			name: "IndexedDB",
 			options: {},
 			create: () => {

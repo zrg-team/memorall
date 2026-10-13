@@ -25,6 +25,8 @@ vi.mock("@zenfs/core", () => ({
 
 vi.mock("@zenfs/dom", () => ({
 	IndexedDB: {},
+	IndexedDBStore: class {},
+	IndexedDBTransaction: class {},
 }));
 
 vi.mock("@/main/modules/files/handlers/pdf-extraction", () => ({
