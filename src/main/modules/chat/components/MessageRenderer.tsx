@@ -3,8 +3,7 @@ import {
 	isCoAgentSessionMarker,
 } from "@/services/chat/coagent-session";
 import { Bot } from "lucide-react";
-import React, { Suspense, useMemo } from "react";
-import { useLocation } from "react-router-dom";
+import React, { Suspense, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import dayjs from "dayjs";
 
@@ -43,7 +42,9 @@ import {
 	MessageAttachedContexts,
 } from "./message/MessageAttachedContexts";
 import {
+	type AssistantContentPartsCache,
 	buildAssistantContentParts,
+	createAssistantContentPartsCache,
 	hasAssistantContentParts,
 } from "./message/message-parts-adapter";
 
@@ -76,11 +77,34 @@ interface MessageRendererProps {
 	index: number;
 	isLastMessage: boolean;
 	isStreaming: boolean;
+	/** The messages shown with this one, for a host that renders a fixed list. */
 	groupMessages?: DBMessage[];
+	/**
+	 * The messages shown with this one, read only when the user saves them.
+	 * Passed instead of `groupMessages` by a list that grows, so a row does not
+	 * render again each time another message arrives.
+	 */
+	getGroupMessages?: () => DBMessage[];
+	/** The reply before this one, whose last request this reply's first follows. */
+	previousAssistantMessage?: DBMessage;
 	selectedTopic?: string;
 	showMessageControls?: boolean;
+	/** Shows artifacts as references only, for a page that previews them itself. */
+	suppressArtifactPreviews?: boolean;
 	onMessageAction?: (action: MessageActionRequest) => void | Promise<void>;
 }
+
+/** The reply before `messageId` in `messages`, if there is one. */
+export const findPreviousAssistantMessage = (
+	messages: DBMessage[],
+	messageId: string,
+): DBMessage | undefined => {
+	const index = messages.findIndex((entry) => entry.id === messageId);
+	for (let i = index - 1; i >= 0; i--) {
+		if (messages[i]?.role === "assistant") return messages[i];
+	}
+	return undefined;
+};
 
 export const MessageRenderer: React.FC<MessageRendererProps> = React.memo(
 	({
@@ -88,16 +112,40 @@ export const MessageRenderer: React.FC<MessageRendererProps> = React.memo(
 		isLastMessage,
 		isStreaming,
 		groupMessages,
+		getGroupMessages,
+		previousAssistantMessage,
 		selectedTopic,
 		showMessageControls = true,
+		suppressArtifactPreviews = false,
 		onMessageAction,
 	}) => {
-		const location = useLocation();
 		const formattedDate = useMemo(
 			() => dayjs(message.createdAt).format("h:mm A"),
 			[message.createdAt],
 		);
 		const { t } = useTranslation("chat");
+		// A fixed list hands its messages over; a growing one, a way to read them.
+		const readGroupMessages = useMemo(
+			() =>
+				getGroupMessages ??
+				(groupMessages && groupMessages.length > 0
+					? () => groupMessages
+					: undefined),
+			[getGroupMessages, groupMessages],
+		);
+		const previousReply = useMemo(
+			() =>
+				previousAssistantMessage ??
+				(showMessageControls && groupMessages
+					? findPreviousAssistantMessage(groupMessages, message.id)
+					: undefined),
+			[
+				previousAssistantMessage,
+				showMessageControls,
+				groupMessages,
+				message.id,
+			],
+		);
 
 		const complexContent = useMemo<ComplexContent | null>(() => {
 			if (!message.complexContent || !Array.isArray(message.complexContent))
@@ -157,6 +205,13 @@ export const MessageRenderer: React.FC<MessageRendererProps> = React.memo(
 			() => (Array.isArray(metadata?.compactions) ? metadata.compactions : []),
 			[metadata],
 		);
+		// Lives as long as the row, so a part rebuilt with nothing changed in
+		// it (every chunk rebuilds a streaming reply) stays the same object.
+		const contentPartsCacheRef = useRef<AssistantContentPartsCache | null>(
+			null,
+		);
+		contentPartsCacheRef.current ??= createAssistantContentPartsCache();
+		const contentPartsCache = contentPartsCacheRef.current;
 		const partsContentParts = useMemo<AssistantContentPart[]>(
 			() =>
 				message.role === "assistant"
@@ -166,10 +221,12 @@ export const MessageRenderer: React.FC<MessageRendererProps> = React.memo(
 							executeState: isStreaming ? executeState : undefined,
 							toolExecutions,
 							compactions,
+							cache: contentPartsCache,
 						})
 					: [],
 			[
 				compactions,
+				contentPartsCache,
 				executeState,
 				executionParts,
 				isStreaming,
@@ -369,9 +426,7 @@ export const MessageRenderer: React.FC<MessageRendererProps> = React.memo(
 													parts={renderedAssistantContentParts}
 													isStreaming={isStreaming}
 													messageId={message.id}
-													suppressArtifactPreviews={
-														location.pathname === "/runtime"
-													}
+													suppressArtifactPreviews={suppressArtifactPreviews}
 													onMessageAction={onMessageAction}
 												/>
 												{messageNotices}
@@ -381,9 +436,7 @@ export const MessageRenderer: React.FC<MessageRendererProps> = React.memo(
 												<MessageContentWithArtifacts
 													content={message.content}
 													isStreaming={isStreaming}
-													suppressArtifactPreviews={
-														location.pathname === "/runtime"
-													}
+													suppressArtifactPreviews={suppressArtifactPreviews}
 													configuredTheme={configuredOpenUITheme}
 													onMessageAction={onMessageAction}
 												/>
@@ -416,11 +469,11 @@ export const MessageRenderer: React.FC<MessageRendererProps> = React.memo(
 										!isStreaming &&
 										message.role === "assistant" &&
 										message.metadata &&
-										groupMessages &&
-										groupMessages.length > 0 ? (
+										readGroupMessages ? (
 											<MessageFooter
 												message={message}
-												groupMessages={groupMessages}
+												getTranscriptMessages={readGroupMessages}
+												previousMessage={previousReply}
 												selectedTopic={selectedTopic}
 												metadata={message.metadata as MessageMetadata}
 											/>
@@ -452,6 +505,11 @@ export const MessageRenderer: React.FC<MessageRendererProps> = React.memo(
 			prev.isLastMessage === next.isLastMessage &&
 			prev.isStreaming === next.isStreaming &&
 			prev.showMessageControls === next.showMessageControls &&
+			prev.suppressArtifactPreviews === next.suppressArtifactPreviews &&
+			prev.groupMessages === next.groupMessages &&
+			prev.getGroupMessages === next.getGroupMessages &&
+			prev.previousAssistantMessage === next.previousAssistantMessage &&
+			prev.selectedTopic === next.selectedTopic &&
 			prev.onMessageAction === next.onMessageAction
 		);
 	},

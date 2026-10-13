@@ -1,9 +1,10 @@
 import React, { useMemo } from "react";
-import ReactMarkdown from "react-markdown";
+import type ReactMarkdown from "react-markdown";
 import { cn } from "@/lib/utils";
 import { useTheme } from "@/main/components/molecules/ThemeContext";
 import {
 	createMarkdownComponents,
+	MarkdownBlocks,
 	rehypePlugins,
 	remarkPlugins,
 } from "./markdownComponents";
@@ -57,19 +58,23 @@ export const MarkdownMessageBody: React.FC<MarkdownMessageBodyProps> = ({
 			)}
 		>
 			<ThinkingSections
+				// Mounted afresh when the reply finishes, so its sections fold as
+				// they did when the finished message replaced the streaming one.
+				key={isStreaming ? "streaming" : "done"}
 				thinking={thinking}
 				hasIncompleteThinking={hasIncompleteThinking}
 				isStreaming={isStreaming}
 				components={themeAwareComponents}
 			/>
 
-			<ReactMarkdown
+			<MarkdownBlocks
+				isStreaming={isStreaming}
 				remarkPlugins={remarkPluginsOverride}
 				rehypePlugins={rehypePluginsOverride}
 				components={themeAwareComponents}
 			>
 				{content || ""}
-			</ReactMarkdown>
+			</MarkdownBlocks>
 		</div>
 	);
 };

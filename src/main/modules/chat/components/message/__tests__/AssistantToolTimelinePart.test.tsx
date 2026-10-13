@@ -1,12 +1,30 @@
-import { render, screen } from "@testing-library/react";
-import React from "react";
-import { describe, expect, it, vi } from "vitest";
+import { act, render, screen } from "@testing-library/react";
+import type React from "react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ComplexContentPartTool } from "@/types/chat";
 import { AssistantToolTimelinePart } from "../AssistantToolTimelinePart";
 
 vi.mock("react-i18next", () => ({
 	useTranslation: () => ({ t: (key: string) => key }),
 }));
+
+/** Each item the details were rendered with, in order. */
+const detailItems = vi.hoisted(() => [] as unknown[]);
+
+// The real details, recording what they were handed on every render.
+vi.mock("../../MessageActions", async (importOriginal) => {
+	const ReactModule = await import("react");
+	const actual = await importOriginal<typeof import("../../MessageActions")>();
+	return {
+		...actual,
+		ToolActionDetails: (
+			props: React.ComponentProps<typeof actual.ToolActionDetails>,
+		) => {
+			detailItems.push(props.item);
+			return ReactModule.createElement(actual.ToolActionDetails, props);
+		},
+	};
+});
 
 // The document filesystem mounts IndexedDB on import, which jsdom has not got.
 vi.mock("@/services/filesystem/document-filesystem", () => ({
@@ -127,5 +145,49 @@ describe("AssistantToolTimelinePart", () => {
 
 		expect(screen.getByText("MCP")).toBeInTheDocument();
 		expect(screen.getByText("filesystem · Read file")).toBeInTheDocument();
+	});
+});
+
+describe("AssistantToolTimelinePart rendering", () => {
+	afterEach(() => {
+		vi.useRealTimers();
+		detailItems.length = 0;
+	});
+
+	const runningPart: ComplexContentPartTool = {
+		...genericMcpPart,
+		id: "call_2",
+		state: "running",
+		metadata: {
+			...genericMcpPart.metadata,
+			startedAt: new Date().toISOString(),
+		},
+	};
+
+	it("does not render again when nothing it shows changed", () => {
+		const { rerender } = render(
+			<AssistantToolTimelinePart part={mcpPart} isLast={true} forceOpen />,
+		);
+		const rendered = detailItems.length;
+
+		rerender(
+			<AssistantToolTimelinePart part={mcpPart} isLast={true} forceOpen />,
+		);
+
+		expect(rendered).toBeGreaterThan(0);
+		expect(detailItems).toHaveLength(rendered);
+	});
+
+	it("hands its details the same item while its clock ticks", () => {
+		vi.useFakeTimers();
+		render(
+			<AssistantToolTimelinePart part={runningPart} isLast={true} forceOpen />,
+		);
+		act(() => {
+			vi.advanceTimersByTime(3_100);
+		});
+
+		expect(detailItems.length).toBeGreaterThan(1);
+		expect(new Set(detailItems).size).toBe(1);
 	});
 });

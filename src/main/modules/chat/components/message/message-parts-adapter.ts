@@ -15,6 +15,38 @@ type ExecuteState = {
 	metadata?: Record<string, unknown>;
 };
 
+/**
+ * The parts built for one message so far, by what they were built from. A
+ * streaming reply is rebuilt on every chunk, and without this each of its
+ * tools was parsed again into a new object, so every tool card rendered again
+ * though only the newest had changed. Held by whatever renders the message.
+ */
+export type AssistantContentPartsCache = Map<
+	string,
+	{ inputs: readonly unknown[]; part: AssistantContentPart }
+>;
+
+export const createAssistantContentPartsCache =
+	(): AssistantContentPartsCache => new Map();
+
+const sameInputs = (left: readonly unknown[], right: readonly unknown[]) =>
+	left.length === right.length &&
+	left.every((input, index) => input === right[index]);
+
+/** The part built last time from these very inputs, or a new one. */
+const reusePart = <T extends AssistantContentPart>(
+	cache: AssistantContentPartsCache | undefined,
+	key: string,
+	inputs: readonly unknown[],
+	build: () => T,
+): T => {
+	const entry = cache?.get(key);
+	if (entry && sameInputs(entry.inputs, inputs)) return entry.part as T;
+	const part = build();
+	cache?.set(key, { inputs, part });
+	return part;
+};
+
 const parseToolContent = (content: unknown): Record<string, unknown> | null => {
 	if (typeof content !== "string") return null;
 	try {
@@ -189,6 +221,7 @@ export const buildAssistantContentParts = ({
 	executeState,
 	toolExecutions,
 	compactions,
+	cache,
 }: {
 	parts: MessageParts | null | undefined;
 	executions?: AssistantExecutionPart[];
@@ -196,6 +229,8 @@ export const buildAssistantContentParts = ({
 	toolExecutions?: ToolExecutionRecord[];
 	/** Where the conversation was compacted: shown before the part that came next. */
 	compactions?: ChatCompaction[];
+	/** Earlier builds of this message, whose unchanged parts are reused. */
+	cache?: AssistantContentPartsCache;
 }): AssistantContentPart[] => {
 	const hasExecutionRecords = Boolean(toolExecutions?.length);
 	const toolCallsById = new Map<string, ChatCompletionMessageToolCall>();
@@ -222,15 +257,19 @@ export const buildAssistantContentParts = ({
 	);
 	const placedRecordIds = new Set<string>();
 	const contentParts: AssistantContentPart[] = [...(executions ?? [])];
+	const recordPart = (record: ToolExecutionRecord) => {
+		const content = toolContentById.get(record.id);
+		const toolCall = findToolCall(toolCallsById, record.id);
+		return reusePart(
+			cache,
+			`record:${record.id}`,
+			[record, content, toolCall],
+			() => buildPersistedToolPart(record, content, toolCall),
+		);
+	};
 	const pushRecord = (record: ToolExecutionRecord) => {
 		placedRecordIds.add(record.id);
-		contentParts.push(
-			buildPersistedToolPart(
-				record,
-				toolContentById.get(record.id),
-				findToolCall(toolCallsById, record.id),
-			),
-		);
+		contentParts.push(recordPart(record));
 	};
 
 	// Walk the parts in the order they happened, so each tool card lands after
@@ -302,11 +341,13 @@ export const buildAssistantContentParts = ({
 		}
 		// A tool message with no execution record — an older conversation, or a
 		// result the stream never reported — still gets its own card.
+		const toolCall = findToolCall(toolCallsById, part.tool_call_id);
 		contentParts.push(
-			buildToolPart(
-				part.tool_call_id,
-				part.content,
-				findToolCall(toolCallsById, part.tool_call_id),
+			reusePart(
+				cache,
+				`tool:${part.tool_call_id}`,
+				[part.content, toolCall],
+				() => buildToolPart(part.tool_call_id, part.content, toolCall),
 			),
 		);
 	}
@@ -320,13 +361,7 @@ export const buildAssistantContentParts = ({
 	// latest tool block, or ahead of the answer when there is no block at all.
 	const unplaced = (toolExecutions ?? [])
 		.filter((record) => !placedRecordIds.has(record.id))
-		.map((record) =>
-			buildPersistedToolPart(
-				record,
-				toolContentById.get(record.id),
-				findToolCall(toolCallsById, record.id),
-			),
-		);
+		.map(recordPart);
 	if (unplaced.length > 0) {
 		const lastTextIndex = contentParts.findLastIndex(
 			(part) => part.type === "text",
@@ -342,12 +377,18 @@ export const buildAssistantContentParts = ({
 
 	if (executeState) {
 		if (isToolExecution(executeState) && !hasExecutionRecords) {
-			const runningTool = buildRunningToolPart(executeState);
+			const runningTool = reusePart(cache, "running-tool", [executeState], () =>
+				buildRunningToolPart(executeState),
+			);
 			if (!completedToolCallIds.has(runningTool.id)) {
 				contentParts.push(runningTool);
 			}
 		} else {
-			contentParts.push(buildRunningExecutionPart(executeState));
+			contentParts.push(
+				reusePart(cache, "running-execution", [executeState], () =>
+					buildRunningExecutionPart(executeState),
+				),
+			);
 		}
 	}
 

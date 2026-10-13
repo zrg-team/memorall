@@ -6,12 +6,23 @@ import {
 	type AssistantContentPart,
 } from "../AssistantContentFlow";
 
-const textMounts = vi.hoisted(() => ({ count: 0 }));
+const textMounts = vi.hoisted(() => ({
+	count: 0,
+	/** The artifact claims each text block rendered with, by its content. */
+	claims: [] as Array<{ content: string; claims?: Map<string, string> }>,
+}));
 
 vi.mock("../MessageContentWithArtifacts", async () => {
 	const ReactModule = await import("react");
 	return {
-		MessageContentWithArtifacts: ({ content }: { content: string }) => {
+		MessageContentWithArtifacts: ({
+			content,
+			seenArtifactKeys,
+		}: {
+			content: string;
+			seenArtifactKeys?: Map<string, string>;
+		}) => {
+			textMounts.claims.push({ content, claims: seenArtifactKeys });
 			ReactModule.useEffect(() => {
 				textMounts.count += 1;
 			}, []);
@@ -67,6 +78,44 @@ const flowOrder = () =>
 describe("AssistantContentFlow", () => {
 	beforeEach(() => {
 		textMounts.count = 0;
+		textMounts.claims.length = 0;
+	});
+
+	it("keeps one set of artifact claims while only the last block grows", () => {
+		const parts = (last: string): AssistantContentPart[] => [
+			{ type: "text", text: "Let me look." },
+			tool("a"),
+			{ type: "text", text: last },
+		];
+		const { rerender } = render(
+			<AssistantContentFlow parts={parts("Found")} isStreaming={true} />,
+		);
+		rerender(
+			<AssistantContentFlow parts={parts("Found it.")} isStreaming={true} />,
+		);
+		const streamedClaims = new Set(
+			textMounts.claims.map((entry) => entry.claims),
+		);
+
+		// Unchanged props for the first block, so its frame need not render again.
+		expect(streamedClaims.size).toBe(1);
+
+		// Another block arriving starts the claims over, for every block.
+		rerender(
+			<AssistantContentFlow
+				parts={[
+					...parts("Found it."),
+					tool("b"),
+					{ type: "text", text: "More." },
+				]}
+				isStreaming={true}
+			/>,
+		);
+		const latest = textMounts.claims.at(-1)?.claims;
+		expect(latest).not.toBe([...streamedClaims][0]);
+		expect(
+			textMounts.claims.slice(-3).every((entry) => entry.claims === latest),
+		).toBe(true);
 	});
 
 	it("renders adjacent assistant text parts as one Markdown block", () => {

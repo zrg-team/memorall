@@ -9,7 +9,12 @@ import {
 	COAGENT_SESSION_START,
 } from "@/services/chat/coagent-session";
 
-const rendererCalls = vi.hoisted(() => ({ count: 0 }));
+const rendererCalls = vi.hoisted(() => ({
+	count: 0,
+	renders: new Map<string, number>(),
+	mounts: new Map<string, number>(),
+	props: new Map<string, Record<string, unknown>>(),
+}));
 
 vi.mock("react-i18next", () => ({
 	useTranslation: () => ({
@@ -29,24 +34,34 @@ vi.mock("@/components/AgentIcon", () => ({
 	AgentIcon: () => <div data-testid="agent-icon" />,
 }));
 
-vi.mock("../MessageRenderer", () => ({
-	MessageRenderer: ({
-		message,
-		isLastMessage,
-	}: {
+// Memoized like the real one, so a test sees which rows render again.
+vi.mock("../MessageRenderer", async () => {
+	const ReactModule = await import("react");
+	const MessageRenderer = (props: {
 		message: Message;
 		isLastMessage: boolean;
+		isStreaming: boolean;
 	}) => {
+		const { message, isLastMessage, isStreaming } = props;
 		rendererCalls.count += 1;
+		const count = (map: Map<string, number>) =>
+			map.set(message.id, (map.get(message.id) ?? 0) + 1);
+		count(rendererCalls.renders);
+		rendererCalls.props.set(message.id, props);
+		ReactModule.useEffect(() => {
+			count(rendererCalls.mounts);
+		}, []);
 		return (
 			<div
 				data-testid="message-renderer"
 				data-id={message.id}
 				data-last={String(isLastMessage)}
+				data-streaming={String(isStreaming)}
 			/>
 		);
-	},
-}));
+	};
+	return { MessageRenderer: ReactModule.memo(MessageRenderer) };
+});
 
 const buildCoAgentMessage = (id: string, pageUrl: string): Message =>
 	({
@@ -330,5 +345,148 @@ describe("the route a co-agent session took", () => {
 		);
 
 		expect(dividers()).toHaveLength(0);
+	});
+});
+
+describe("a reply streaming into the group", () => {
+	beforeEach(() => {
+		rendererCalls.count = 0;
+		rendererCalls.renders.clear();
+		rendererCalls.mounts.clear();
+		rendererCalls.props.clear();
+	});
+
+	const row = (
+		id: string,
+		role: Message["role"],
+		content: string,
+		metadata: Record<string, unknown> = {},
+	): Message =>
+		({
+			...buildCoAgentMessage(id, "https://example.com"),
+			role,
+			content,
+			metadata,
+		}) as Message;
+
+	const latest = (messages: Message[]): ChatMessageGroup => ({
+		id: "g-latest",
+		previousSeparator: null,
+		separator: null,
+		messages,
+		isLatest: true,
+		isLoaded: true,
+		isLoading: false,
+	});
+
+	const streaming = (content: string) => ({
+		id: "a2",
+		conversationId: "c1",
+		content,
+		complexContent: null,
+		parts: null,
+		actions: [],
+	});
+
+	const onMessageAction = vi.fn();
+	const question = row("u1", "user", "question");
+	const answer = row("a1", "assistant", "answer");
+	const followUp = row("u2", "user", "follow-up");
+	// The run saves its reply's row before a word of it has arrived.
+	const placeholder = row("a2", "assistant", "");
+
+	it("stays mounted when the reply finishes, in the row it streamed in", () => {
+		const { rerender } = render(
+			<MessageGroup
+				group={latest([question, answer, followUp, placeholder])}
+				inProgressMessage={streaming("partial")}
+				onMessageAction={onMessageAction}
+			/>,
+		);
+		expect(
+			screen.getAllByTestId("message-renderer").map((el) => el.dataset.id),
+		).toEqual(["u1", "a1", "u2", "a2"]);
+
+		rerender(
+			<MessageGroup
+				group={latest([
+					question,
+					answer,
+					followUp,
+					{ ...placeholder, content: "final" } as Message,
+				])}
+				inProgressMessage={null}
+				onMessageAction={onMessageAction}
+			/>,
+		);
+
+		const finished = screen
+			.getAllByTestId("message-renderer")
+			.find((el) => el.dataset.id === "a2");
+		expect(finished?.dataset.streaming).toBe("false");
+		// Rendered again in place, not mounted anew.
+		expect(rendererCalls.mounts.get("a2")).toBe(1);
+	});
+
+	it("renders only the streaming row as the reply grows", () => {
+		const group = latest([question, answer, followUp, placeholder]);
+		const { rerender } = render(
+			<MessageGroup
+				group={group}
+				inProgressMessage={streaming("par")}
+				onMessageAction={onMessageAction}
+			/>,
+		);
+		for (const next of ["part", "parti", "partial"]) {
+			rerender(
+				<MessageGroup
+					group={group}
+					inProgressMessage={streaming(next)}
+					onMessageAction={onMessageAction}
+				/>,
+			);
+		}
+
+		expect(rendererCalls.renders.get("u1")).toBe(1);
+		expect(rendererCalls.renders.get("a1")).toBe(1);
+		expect(rendererCalls.renders.get("u2")).toBe(1);
+		expect(rendererCalls.renders.get("a2")).toBe(4);
+	});
+
+	it("hands a reply the one before it, and the group as it is when read", () => {
+		const second = row("a2", "assistant", "second answer");
+		const { rerender } = render(
+			<MessageGroup
+				group={latest([question, answer, followUp, second])}
+				onMessageAction={onMessageAction}
+			/>,
+		);
+		expect(rendererCalls.props.get("a2")?.previousAssistantMessage).toBe(
+			answer,
+		);
+		expect(rendererCalls.props.get("a1")?.previousAssistantMessage).toBe(
+			undefined,
+		);
+
+		const later = row("u3", "user", "one more");
+		rerender(
+			<MessageGroup
+				group={latest([question, answer, followUp, second, later])}
+				onMessageAction={onMessageAction}
+			/>,
+		);
+
+		// The earlier rows did not render again for the new message, yet what
+		// their footer saves is the group as it now stands.
+		expect(rendererCalls.renders.get("a1")).toBe(1);
+		const getGroupMessages = rendererCalls.props.get("a1")
+			?.getGroupMessages as () => Message[];
+		expect(getGroupMessages().map((message) => message.id)).toEqual([
+			"u1",
+			"a1",
+			"u2",
+			"a2",
+			"u3",
+		]);
 	});
 });

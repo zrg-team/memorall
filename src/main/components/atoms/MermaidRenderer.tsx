@@ -32,6 +32,12 @@ const getMermaid = (): Promise<Mermaid> => {
 
 // Global counter for unique mermaid IDs
 let mermaidCounter = 0;
+/**
+ * Rendered diagrams by source, the most recently used last. Bounded: every
+ * source rendered once stayed for good, which in a long session is every
+ * diagram the user scrolled past.
+ */
+const MERMAID_RENDER_CACHE_LIMIT = 50;
 const mermaidRenderCache = new Map<string, Promise<string>>();
 
 interface MermaidRendererProps {
@@ -43,12 +49,20 @@ type RenderState = "idle" | "loading" | "success" | "error";
 
 const renderMermaid = (id: string, chart: string): Promise<string> => {
 	const cached = mermaidRenderCache.get(chart);
-	if (cached) return cached;
+	if (cached) {
+		mermaidRenderCache.delete(chart);
+		mermaidRenderCache.set(chart, cached);
+		return cached;
+	}
 
 	const next = getMermaid()
 		.then((mermaid) => mermaid.render(id, chart))
 		.then(({ svg }) => svg);
 	mermaidRenderCache.set(chart, next);
+	if (mermaidRenderCache.size > MERMAID_RENDER_CACHE_LIMIT) {
+		const oldest = mermaidRenderCache.keys().next().value;
+		if (oldest !== undefined) mermaidRenderCache.delete(oldest);
+	}
 	return next;
 };
 

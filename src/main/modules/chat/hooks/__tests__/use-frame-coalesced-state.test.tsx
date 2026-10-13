@@ -1,6 +1,9 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { useFrameCoalescedState } from "../use-frame-coalesced-state";
+import {
+	createFrameCoalescer,
+	useFrameCoalescedState,
+} from "../use-frame-coalesced-state";
 
 describe("useFrameCoalescedState", () => {
 	let frameId = 0;
@@ -63,5 +66,26 @@ describe("useFrameCoalescedState", () => {
 		act(() => result.current.setCoalesced("queued"));
 		unmount();
 		expect(cancelAnimationFrame).toHaveBeenCalledTimes(2);
+	});
+
+	it("publishes outside React at most once a frame, with every update in it", () => {
+		const publish = vi.fn();
+		const coalescer = createFrameCoalescer<string[]>([], publish);
+
+		coalescer.setCoalesced((value) => [...value, "a"]);
+		coalescer.setCoalesced((value) => [...value, "b"]);
+
+		expect(publish).not.toHaveBeenCalled();
+		expect(coalescer.latest()).toEqual(["a", "b"]);
+		frames.values().next().value?.(16);
+		expect(publish).toHaveBeenCalledTimes(1);
+		expect(publish).toHaveBeenLastCalledWith(["a", "b"]);
+
+		coalescer.setCoalesced((value) => [...value, "c"]);
+		coalescer.setImmediate((value) => [...value, "d"]);
+		expect(publish).toHaveBeenCalledTimes(2);
+		expect(publish).toHaveBeenLastCalledWith(["a", "b", "c", "d"]);
+		// The frame queued for "c" is dropped: its update went out with "d".
+		expect(cancelAnimationFrame).toHaveBeenCalledTimes(1);
 	});
 });

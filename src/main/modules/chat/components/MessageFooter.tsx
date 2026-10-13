@@ -58,13 +58,34 @@ const cacheChipClass = (percent?: number): string => {
 
 interface MessageFooterProps {
 	message: DBMessage;
-	groupMessages: DBMessage[];
+	/**
+	 * The conversation a saved transcript holds. Read when it is saved, not on
+	 * every render: each reply's footer building the whole transcript whenever
+	 * a message arrived made a long chat quadratic.
+	 */
+	getTranscriptMessages: () => DBMessage[];
+	/** The reply before this one, if any: its last request is what this reply's first should reuse. */
+	previousMessage?: DBMessage;
 	selectedTopic?: string;
 	metadata: MessageFooterMetadata;
 }
 
+/** The conversation as the saved document has it. */
+const buildTranscript = (messages: DBMessage[]): string => {
+	const conversationText = messages
+		.filter((msg) => !isNonModelMessageType(msg.type) && msg.content)
+		.map((msg) => {
+			const role = msg.role === "user" ? "User" : "Assistant";
+			return `${role}: ${msg.content}`;
+		})
+		.join("\n\n");
+
+	const sourceInfo = `Conversation from chat\nDate: ${dayjs().format("MMM D, YYYY h:mm A")}\n\n`;
+	return sourceInfo + conversationText;
+};
+
 export const MessageFooter: React.FC<MessageFooterProps> = React.memo(
-	({ message, groupMessages, metadata }) => {
+	({ message, getTranscriptMessages, previousMessage, metadata }) => {
 		const { t } = useTranslation("chat");
 		const [copied, setCopied] = useState(false);
 		const [saved, setSaved] = useState(false);
@@ -82,26 +103,23 @@ export const MessageFooter: React.FC<MessageFooterProps> = React.memo(
 
 		// The previous answer's last request: this turn's first should reuse it.
 		const previousTurn = useMemo(() => {
-			const index = groupMessages.findIndex((entry) => entry.id === message.id);
-			for (let i = index - 1; i >= 0; i--) {
-				const entry = groupMessages[i];
-				if (entry?.role !== "assistant") continue;
-				const call = (
-					entry.metadata as MessageFooterMetadata | null | undefined
-				)?.usage?.calls?.at(-1);
-				if (!call) return undefined;
-				const ended = new Date(entry.updatedAt ?? entry.createdAt).getTime();
-				const started = new Date(message.createdAt).getTime();
-				return {
-					call,
-					minutesBefore:
-						Number.isFinite(ended) && Number.isFinite(started)
-							? Math.max(0, (started - ended) / 60_000)
-							: undefined,
-				};
-			}
-			return undefined;
-		}, [groupMessages, message.id, message.createdAt]);
+			if (!previousMessage) return undefined;
+			const call = (
+				previousMessage.metadata as MessageFooterMetadata | null | undefined
+			)?.usage?.calls?.at(-1);
+			if (!call) return undefined;
+			const ended = new Date(
+				previousMessage.updatedAt ?? previousMessage.createdAt,
+			).getTime();
+			const started = new Date(message.createdAt).getTime();
+			return {
+				call,
+				minutesBefore:
+					Number.isFinite(ended) && Number.isFinite(started)
+						? Math.max(0, (started - ended) / 60_000)
+						: undefined,
+			};
+		}, [previousMessage, message.createdAt]);
 
 		const cacheHitRatio = getCacheHitRatio(usage);
 		const cacheHitPercent =
@@ -140,18 +158,10 @@ export const MessageFooter: React.FC<MessageFooterProps> = React.memo(
 			}
 		}, [message.content]);
 
-		const documentContent = useMemo(() => {
-			const conversationText = groupMessages
-				.filter((msg) => !isNonModelMessageType(msg.type) && msg.content)
-				.map((msg) => {
-					const role = msg.role === "user" ? "User" : "Assistant";
-					return `${role}: ${msg.content}`;
-				})
-				.join("\n\n");
-
-			const sourceInfo = `Conversation from chat\nDate: ${dayjs().format("MMM D, YYYY h:mm A")}\n\n`;
-			return sourceInfo + conversationText;
-		}, [groupMessages]);
+		const loadDocumentContent = useCallback(
+			async () => buildTranscript(getTranscriptMessages()),
+			[getTranscriptMessages],
+		);
 
 		const documentFileName = useMemo(
 			() => `chat-conversation-${dayjs().format("YYYY-MM-DD-HHmmss")}.md`,
@@ -306,7 +316,7 @@ export const MessageFooter: React.FC<MessageFooterProps> = React.memo(
 				</div>
 				<DocumentSaveFolderDialog
 					open={saveDialogOpen}
-					content={documentContent}
+					content={loadDocumentContent}
 					initialFileName={documentFileName}
 					mimeType="text/markdown"
 					onOpenChange={setSaveDialogOpen}

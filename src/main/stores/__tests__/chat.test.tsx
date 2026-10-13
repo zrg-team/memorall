@@ -584,3 +584,121 @@ describe("runs in several chats", () => {
 		expect(useChatStore.getState().runs).toEqual({});
 	});
 });
+
+describe("reading the open chat again", () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+		useChatStore.setState(useChatStore.getInitialState(), true);
+	});
+
+	/** The same row as a new read hands it back: equal, but no object shared. */
+	const reread = <T extends { createdAt: Date; updatedAt: Date }>(row: T): T =>
+		({
+			...structuredClone(row),
+			createdAt: new Date(row.createdAt.getTime()),
+			updatedAt: new Date(row.updatedAt.getTime()),
+		}) as T;
+
+	const conv = conversation({ id: "conv-open" });
+	const older = message({ id: "m1", conversationId: "conv-open" });
+	const separator = message({
+		id: "sep",
+		conversationId: "conv-open",
+		role: "system",
+		type: "separator",
+		content: "---",
+	});
+	const question = message({
+		id: "m2",
+		conversationId: "conv-open",
+		content: "Question",
+	});
+	const answer = message({
+		id: "m3",
+		conversationId: "conv-open",
+		role: "assistant",
+		content: "Answer",
+		metadata: { usage: { total_tokens: 3 } },
+	});
+
+	const openChat = async (
+		harness: ReturnType<typeof createDbHarness>,
+	): Promise<void> => {
+		harness.selectQueue.push([conv], [separator], [question, answer]);
+		await useChatStore.getState().loadConversation("conv-open");
+		harness.selectQueue.push([older]);
+		await useChatStore.getState().loadMessageGroup("group:sep");
+	};
+
+	it("changes nothing when nothing changed, and keeps an opened group open", async () => {
+		const harness = createDbHarness();
+		await openChat(harness);
+		const before = useChatStore.getState();
+		const listener = vi.fn();
+		const unsubscribe = useChatStore.subscribe(listener);
+
+		harness.selectQueue.push(
+			[reread(conv)],
+			[reread(separator)],
+			[reread(question), reread(answer)],
+		);
+		await useChatStore.getState().loadConversation("conv-open");
+		unsubscribe();
+
+		expect(listener).not.toHaveBeenCalled();
+		const after = useChatStore.getState();
+		expect(after.currentConversation).toBe(before.currentConversation);
+		expect(after.messageGroups).toBe(before.messageGroups);
+		expect(after.messages).toBe(before.messages);
+		expect(after.messageGroups[0]).toMatchObject({
+			isLoaded: true,
+			messages: [expect.objectContaining({ id: "m1" })],
+		});
+	});
+
+	it("renews only the message that changed", async () => {
+		const harness = createDbHarness();
+		await openChat(harness);
+		const before = useChatStore.getState();
+
+		harness.selectQueue.push(
+			[reread(conv)],
+			[reread(separator)],
+			[
+				reread(question),
+				{ ...reread(answer), content: "Answer, edited on the page" },
+			],
+		);
+		await useChatStore.getState().loadConversation("conv-open");
+
+		const after = useChatStore.getState();
+		const [beforeOlder, beforeLatest] = before.messageGroups;
+		const [afterOlder, afterLatest] = after.messageGroups;
+		expect(afterOlder).toBe(beforeOlder);
+		expect(afterLatest).not.toBe(beforeLatest);
+		expect(afterLatest.messages[0]).toBe(beforeLatest.messages[0]);
+		expect(afterLatest.messages[1]).toMatchObject({
+			id: "m3",
+			content: "Answer, edited on the page",
+		});
+		// What did not change in the message stays too.
+		expect(afterLatest.messages[1].metadata).toBe(
+			beforeLatest.messages[1].metadata,
+		);
+		expect(after.messages).toEqual(afterLatest.messages);
+	});
+
+	it("rebuilds only the group holding a message that is saved", async () => {
+		const harness = createDbHarness();
+		await openChat(harness);
+		const before = useChatStore.getState().messageGroups;
+
+		useChatStore.getState().updateMessage("m3", { content: "Saved" });
+
+		const after = useChatStore.getState().messageGroups;
+		expect(after[0]).toBe(before[0]);
+		expect(after[1]).not.toBe(before[1]);
+		expect(after[1].messages[0]).toBe(before[1].messages[0]);
+		expect(after[1].messages[1]).toMatchObject({ content: "Saved" });
+	});
+});

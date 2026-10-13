@@ -9,6 +9,7 @@ import {
 import { useTheme } from "@/main/components/molecules/ThemeContext";
 import { logError } from "@/utils/logger";
 import { DocumentSaveFolderDialog } from "../DocumentSaveFolderDialog";
+import { DeferredMount } from "./DeferredMount";
 
 type SaveState = "idle" | "saving" | "saved";
 
@@ -77,13 +78,17 @@ export const HtmlCodePreview: React.FC<{ code: string }> = React.memo(
 						{code}
 					</SyntaxHighlighter>
 				) : (
-					<iframe
-						srcDoc={code}
-						sandbox="allow-scripts allow-same-origin"
-						className="w-full bg-white"
-						style={{ height: "60vh", border: "none" }}
-						title="HTML Preview"
-					/>
+					// A live page per preview: only mounted while near the screen, so
+					// a long chat does not keep every one it ever showed running.
+					<DeferredMount minHeight={240}>
+						<iframe
+							srcDoc={code}
+							sandbox="allow-scripts allow-same-origin"
+							className="w-full bg-white"
+							style={{ height: "60vh", border: "none" }}
+							title="HTML Preview"
+						/>
+					</DeferredMount>
 				)}
 				<DocumentSaveFolderDialog
 					open={saveDialogOpen}
