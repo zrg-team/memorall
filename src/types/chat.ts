@@ -81,6 +81,12 @@ export interface ToolExecutionRecord {
 	 * the UI say *what* ran rather than only dumping its output.
 	 */
 	toolMetadata?: Record<string, unknown>;
+	/**
+	 * What the call reported beside its result, for the card rather than the
+	 * model — a child agent's steps and usage, say. Updated while the call runs
+	 * when the tool reports progress. Redacted and bounded like the previews.
+	 */
+	meta?: Record<string, unknown>;
 }
 
 export type AssistantToolPartState = "running" | "complete" | "error";

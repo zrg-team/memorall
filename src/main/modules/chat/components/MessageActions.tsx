@@ -43,11 +43,13 @@ import {
 	TaskItem,
 	TaskTrigger,
 } from "@/main/components/ui/shadcn-io/ai/task";
+import { SEND_MESSAGE_TO_AGENT_TOOL_NAME } from "@memorall/agent-harness-flows/interfaces/tools/multi-agent";
 import { cn } from "@/lib/utils";
 import { AppIcon } from "@/main/modules/connections/components/AppIcon";
 import type { ActionRenderer, MessageActionItem } from "./types";
 import { webAccessRenderer } from "./tools/WebAccess";
 import { apiResultRenderer } from "./tools/APIResult";
+import { getChildAgentRun } from "./tools/child-agent-run";
 import { defaultActionRenderer } from "./tools/DefaultActionRenderer";
 import { webReadRenderer } from "./tools/WebRead";
 import { webOpenRenderer } from "./tools/WebOpen";
@@ -224,6 +226,18 @@ export const translateActionName = (
 	actionName: string,
 	metadata?: Record<string, unknown>,
 ): string => {
+	// Titled by who it went to: "Message Researcher", not the tool.
+	const childRun =
+		actionName === SEND_MESSAGE_TO_AGENT_TOOL_NAME
+			? getChildAgentRun(metadata)
+			: undefined;
+	if (childRun) {
+		return t(
+			childRun.turn > 1 ? "childAgent.titleContinue" : "childAgent.title",
+			{ name: childRun.agent.name },
+		);
+	}
+
 	const translationKey = `actions.${actionName}`;
 	const translated = t(translationKey);
 

@@ -56,6 +56,14 @@ export interface BaseStateBase {
 	 * which is what the provider's prompt cache matches on.
 	 */
 	reminders: string[];
+	/**
+	 * The last request the model read, followed by its reply to it: system
+	 * prompt, history, reminders, tool calls and results, byte for byte. A
+	 * caller that runs the same conversation again replays this rather than a
+	 * summary of it, so the next request extends the cached prefix instead of
+	 * diverging from it at the first tool call.
+	 */
+	transcript?: ChatCompletionMessageParam[];
 }
 
 export type SystemPlacement = "append" | "top" | "replace";

@@ -62,6 +62,28 @@ export interface ToolExecutionContext<TState = unknown> {
 	 * stopped chat keeps that work running until its own timeout.
 	 */
 	signal?: AbortSignal;
+	/**
+	 * Reports to the run's stream, as the graph's own nodes do. A tool that runs
+	 * model work of its own (a child agent) reports its usage here, so the reply
+	 * pays for it, and its progress, so the chat can show what it is doing.
+	 */
+	writer?: (chunk: unknown) => void;
+}
+
+/**
+ * What a running tool has done so far, for the chat to show on its card before
+ * the result arrives. `meta` has the shape the tool's result `meta` will have.
+ */
+export const TOOL_PROGRESS_EVENT = "tool-progress" as const;
+
+export interface ToolProgressEvent {
+	type: typeof TOOL_PROGRESS_EVENT;
+	node: "tool_executor";
+	metadata: {
+		tool: string;
+		tool_call_id: string;
+		meta: ToolExecutionMeta;
+	};
 }
 
 /**

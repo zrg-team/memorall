@@ -6,7 +6,10 @@ import type {
 import { stepRegistry } from "../../registries/step-registry.js";
 import type {} from "../../interfaces/engine/tool.js";
 import type { AllServices } from "../../interfaces/services/services.js";
-import type { ChatMessage } from "../../interfaces/engine/messages.js";
+import type {
+	ChatCompletionMessageParam,
+	ChatMessage,
+} from "../../interfaces/engine/messages.js";
 import { AgentGraph } from "../../graph/agent/index.js";
 import { logInfo } from "../../logging/logger.js";
 import {
@@ -40,6 +43,8 @@ export interface AgentCompletionStepInput {
 
 export interface AgentCompletionStepOutput {
 	response: string;
+	/** The nested agent's own transcript, which would otherwise end with it. */
+	transcript?: ChatCompletionMessageParam[];
 }
 
 export type AgentCompletionStepServices = AllServices;
@@ -103,6 +108,7 @@ const definition = defineStep<
 		);
 
 		let response = "";
+		let transcript: ChatCompletionMessageParam[] | undefined;
 
 		for await (const partial of stream) {
 			const { mode, payload } = normalizeLangGraphStreamChunk(partial);
@@ -117,10 +123,13 @@ const definition = defineStep<
 				if (stateValues?.response) {
 					response = stateValues.response as string;
 				}
+				if (Array.isArray(stateValues?.transcript)) {
+					transcript = stateValues.transcript as ChatCompletionMessageParam[];
+				}
 			}
 		}
 
-		return { output: { response } };
+		return { output: { response, ...(transcript ? { transcript } : {}) } };
 	},
 });
 

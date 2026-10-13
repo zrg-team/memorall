@@ -272,6 +272,29 @@
 		"error": "Lỗi",
 		"done": "Hoàn tất"
 	},
+	"childAgent": {
+		"title": "Nhắn {{name}}",
+		"titleContinue": "Tiếp tục với {{name}}",
+		"unknownAgent": "Tác nhân con",
+		"newConversation": "Cuộc trò chuyện mới",
+		"turn": "Tin nhắn {{count}}",
+		"sentByParent": "Do tác nhân cha gửi",
+		"showEarlier_one": "Xem {{count}} tin nhắn trước",
+		"showEarlier_other": "Xem {{count}} tin nhắn trước",
+		"hideEarlier": "Ẩn tin nhắn trước",
+		"remembers": "{{name}} vẫn đọc các tin này, kể cả lần gọi công cụ",
+		"notListed": "+{{count}} tin cũ hơn, không liệt kê",
+		"toolCalls_one": "{{count}} lần gọi công cụ",
+		"toolCalls_other": "{{count}} lần gọi công cụ",
+		"working": "Đang làm…",
+		"noReply": "Không có phản hồi.",
+		"input": "{{value}} vào",
+		"output": "{{value}} ra",
+		"cached": "{{percent}}% từ bộ nhớ đệm",
+		"requests_one": "{{count}} yêu cầu",
+		"requests_other": "{{count}} yêu cầu",
+		"estimated": "ước tính"
+	},
 	"toolTimeline": {
 		"running": "{{count}} hành động · đang chạy",
 		"finished": "{{count}} hành động · {{duration}}"

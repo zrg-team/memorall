@@ -237,9 +237,11 @@ export class AgentGraph extends GraphBase<
 				`[AGENT] Stopped repeated ${toolName} failure after ${count} attempts`,
 			);
 
+			const nextMessages = [...state.messages, ...committedMessages];
 			return {
 				outputMessages: [finalMessage],
-				messages: [...state.messages, ...committedMessages],
+				messages: nextMessages,
+				transcript: nextMessages,
 				response: buildResponseFromOutputMessages([], committedMessages),
 				toolFailureStreak: null,
 			};
@@ -336,15 +338,19 @@ export class AgentGraph extends GraphBase<
 					maxIterations: state.maxIterations,
 				} satisfies IterationLimitEvent);
 			}
+			const nextOutputMessages = [
+				...outputMessages,
+				{
+					role: "assistant" as const,
+					content: content || null,
+					tool_calls: toolCalls,
+				},
+			];
 			return {
-				outputMessages: [
-					...outputMessages,
-					{
-						role: "assistant" as const,
-						content: content || null,
-						tool_calls: toolCalls,
-					},
-				],
+				outputMessages: nextOutputMessages,
+				// Kept current on every turn, not only the last: a run stopped by
+				// its iteration limit ends here, with these calls still unmade.
+				transcript: [...messages, ...nextOutputMessages],
 				...(turn.compacted ? { messages } : {}),
 				...(inboxReminders ? { reminders: inboxReminders } : {}),
 				currentIteration: state.currentIteration + 1,
@@ -354,10 +360,12 @@ export class AgentGraph extends GraphBase<
 		// Finished path: commit working memory + final response into messages
 		const finalMessage = { role: "assistant" as const, content };
 		const committedMessages = [...outputMessages, finalMessage];
+		const nextMessages = [...messages, ...committedMessages];
 
 		return {
 			outputMessages: [finalMessage],
-			messages: [...messages, ...committedMessages],
+			messages: nextMessages,
+			transcript: nextMessages,
 			response: buildResponseFromOutputMessages([], committedMessages),
 			currentIteration: state.currentIteration + 1,
 		};
@@ -510,6 +518,7 @@ export class AgentGraph extends GraphBase<
 					runtime: getFlowRuntimeVars(runConfig),
 					toolCallId: toolCall.id,
 					signal: runConfig?.signal,
+					writer: runConfig?.writer,
 				});
 				const {
 					content,

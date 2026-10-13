@@ -204,6 +204,7 @@ const buildPersistedToolPart = (
 			truncated: record.truncated,
 			status: record.status,
 			...(record.toolMetadata ? { tool_metadata: record.toolMetadata } : {}),
+			...(record.meta ? { meta: record.meta } : {}),
 			...(record.error ? { error: record.error } : {}),
 		},
 		state:

@@ -146,10 +146,18 @@ describe("saved-agent catalog", () => {
 		);
 		await expect(
 			tool.execute({ agentId: "child", message: "Research the release" }),
-		).resolves.toBe("Research complete");
+		).resolves.toMatchObject({
+			content: "Research complete",
+			meta: {
+				childRun: { agent: { id: "child", name: "Researcher" }, turn: 1 },
+			},
+		});
 		await expect(
 			tool.execute({ agentId: "child", message: "Check the sources" }),
-		).resolves.toBe("Research complete");
+		).resolves.toMatchObject({
+			content: "Research complete",
+			meta: { childRun: { turn: 2 } },
+		});
 		await expect(
 			tool.execute({ agentId: "unselected", message: "Do this too" }),
 		).rejects.toThrow("not in the selected child-agent list");

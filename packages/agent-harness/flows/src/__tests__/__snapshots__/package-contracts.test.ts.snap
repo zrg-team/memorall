@@ -1782,7 +1782,7 @@ exports[`Memorall flow registered contracts > registers every core tool contract
     },
   },
   {
-    "description": "Send a focused message to a selected child agent. The child agent keeps its own conversation history for the current run.",
+    "description": "Send a focused message to a selected child agent. The child agent keeps its own conversation for the current run, including its earlier tool calls and results, so a follow-up only needs what is new.",
     "name": "send_message_to_agent",
     "parameters": {
       "properties": {

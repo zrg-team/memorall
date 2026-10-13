@@ -1,5 +1,5 @@
 import React from "react";
-import { Bot, Clock3, ScrollText } from "lucide-react";
+import { Clock3, ScrollText } from "lucide-react";
 import type {
 	ActionRenderer,
 	MessageActionItem,
@@ -144,52 +144,15 @@ export const loadSkillToolRenderer: ActionRenderer = (item, isOpen) => {
 	);
 };
 
-export const sendMessageToAgentToolRenderer: ActionRenderer = (
-	item,
-	isOpen,
-) => {
-	if (!isOpen) return null;
+// Loaded on open: it draws its tool calls with the chat's own tool rows,
+// which import this module's renderers in turn.
+const ChildAgentConversation = React.lazy(
+	() => import("./ChildAgentConversation"),
+);
 
-	const args = getToolCallArguments(item);
-	const output = getActionOutput(item);
-	const parentMessage = getStringArg(args, "message");
-	const agentId = getStringArg(args, "agentId");
-
-	return (
-		<div className="space-y-3">
-			<ToolSection title="Child Agent Conversation">
-				<div className="space-y-3">
-					{agentId ? (
-						<ToolDetailsGrid>
-							<ToolDetail label="Agent ID" value={agentId} mono />
-						</ToolDetailsGrid>
-					) : null}
-					<div className="space-y-2">
-						<div className="flex justify-end">
-							<div className="max-w-[90%] rounded-2xl rounded-br-md bg-primary/10 px-4 py-3 text-sm text-foreground">
-								<div className="mb-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-									Parent agent
-								</div>
-								<div className="whitespace-pre-wrap break-words">
-									{parentMessage || "No parent message available."}
-								</div>
-							</div>
-						</div>
-						<div className="flex justify-start">
-							<div className="max-w-[90%] rounded-2xl rounded-bl-md border border-border/60 bg-muted/20 px-4 py-3 text-sm text-foreground">
-								<div className="mb-1 flex items-center gap-2 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-									<Bot className="h-3.5 w-3.5" />
-									Child agent
-								</div>
-								<div className="whitespace-pre-wrap break-words">
-									{output || "No response returned."}
-								</div>
-							</div>
-						</div>
-					</div>
-				</div>
-			</ToolSection>
-			<ToolItemRawIO item={item} input={args ?? undefined} output={output} />
-		</div>
-	);
-};
+export const sendMessageToAgentToolRenderer: ActionRenderer = (item, isOpen) =>
+	isOpen ? (
+		<React.Suspense fallback={null}>
+			<ChildAgentConversation item={item} />
+		</React.Suspense>
+	) : null;
