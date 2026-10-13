@@ -1,4 +1,4 @@
-import { eq, like, desc, sql } from "drizzle-orm";
+import { and, eq, like, desc, sql } from "drizzle-orm";
 import type { Topic, NewTopic } from "@/services/database/types";
 import {
 	DEFAULT_GROW_TYPE,
@@ -350,8 +350,10 @@ export class TopicService {
 					.select()
 					.from(schema.topicFiles)
 					.where(
-						eq(schema.topicFiles.topicId, topicId) &&
+						and(
+							eq(schema.topicFiles.topicId, topicId),
 							eq(schema.topicFiles.filePath, filePath),
+						),
 					)
 					.limit(1);
 
@@ -384,8 +386,10 @@ export class TopicService {
 				await db
 					.delete(schema.topicFiles)
 					.where(
-						eq(schema.topicFiles.topicId, topicId) &&
+						and(
+							eq(schema.topicFiles.topicId, topicId),
 							eq(schema.topicFiles.filePath, filePath),
+						),
 					);
 			});
 
