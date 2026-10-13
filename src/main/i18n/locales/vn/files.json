@@ -235,6 +235,8 @@
 		"description": "Chọn thư mục nào có chỉ mục. Agent tìm kiếm từng loại chỉ mục qua tính năng chỉ mục tệp tương ứng. Thư mục con theo thư mục cha trừ khi bạn tắt.",
 		"types": "Loại chỉ mục",
 		"moreTypes": "Mỗi loại chỉ mục có cột, công cụ và tính năng agent riêng.",
+		"beta": "Beta",
+		"betaNote": "Beta · có thể ảnh hưởng hiệu năng. Chỉ mục này chạy mô hình cục bộ trên từng tệp nên khá nặng: thư mục lớn có thể làm trình duyệt chậm và tốn nhiều bộ nhớ, CPU/GPU và pin. Hãy bắt đầu với thư mục nhỏ, và tạm dừng hoặc giảm tốc độ trong Chỉ mục nếu cần.",
 		"folders": "Thư mục",
 		"noFolders": "Chưa có thư mục nào có chỉ mục. Thêm cho thư mục hiện tại ở trên, hoặc dùng nút Chỉ mục hay menu của thư mục.",
 		"folder": "Thư mục",

@@ -420,12 +420,15 @@ export class FolderIndexer {
 				}),
 		);
 		return {
-			types: this.listTypes().map(({ id, label, description, tools }) => ({
-				id,
-				label,
-				description,
-				tools,
-			})),
+			types: this.listTypes().map(
+				({ id, label, description, tools, beta }) => ({
+					id,
+					label,
+					description,
+					tools,
+					beta,
+				}),
+			),
 			settings: config.settings,
 			folders,
 			running: [...this.running],

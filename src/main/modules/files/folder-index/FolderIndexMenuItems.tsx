@@ -38,6 +38,7 @@ export const FolderIndexMenuItems: React.FC<{
 						return (
 							<DropdownMenuItem
 								key={type.id}
+								title={type.beta ? t("folderIndex.betaNote") : undefined}
 								onClick={(event) => {
 									event.stopPropagation();
 									void index.setFolderType(path, type.id, !on, { mapped });
@@ -46,7 +47,11 @@ export const FolderIndexMenuItems: React.FC<{
 								<span className="mr-2 flex h-4 w-4 items-center justify-center">
 									{on && <Check className="h-3.5 w-3.5" />}
 								</span>
-								<IndexTypeBadge label={type.label} className="mr-2" />
+								<IndexTypeBadge
+									label={type.label}
+									beta={type.beta}
+									className="mr-2"
+								/>
 								{on ? t("folderIndex.removeHere") : t("folderIndex.addHere")}
 							</DropdownMenuItem>
 						);

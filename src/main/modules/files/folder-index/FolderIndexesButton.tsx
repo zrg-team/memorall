@@ -70,12 +70,17 @@ export const FolderIndexesButton: React.FC<{
 					return (
 						<DropdownMenuItem
 							key={type.id}
+							title={type.beta ? t("folderIndex.betaNote") : undefined}
 							onClick={() => void index.setFolderType(folder, type.id, !on)}
 						>
 							<span className="mr-2 flex h-4 w-4 items-center justify-center">
 								{on && <Check className="h-3.5 w-3.5" />}
 							</span>
-							<IndexTypeBadge label={type.label} className="mr-2" />
+							<IndexTypeBadge
+								label={type.label}
+								beta={type.beta}
+								className="mr-2"
+							/>
 							{on
 								? t("folderIndex.removeFrom", { folder: folderName })
 								: t("folderIndex.addTo", { folder: folderName })}

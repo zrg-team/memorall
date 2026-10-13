@@ -140,9 +140,14 @@ export const FileIndexAction: React.FC<{
 				{index.types.map((type) => (
 					<DropdownMenuItem
 						key={type.id}
+						title={type.beta ? t("folderIndex.betaNote") : undefined}
 						onClick={() => void index.setFolderType(folder, type.id, true)}
 					>
-						<IndexTypeBadge label={type.label} className="mr-2" />
+						<IndexTypeBadge
+							label={type.label}
+							beta={type.beta}
+							className="mr-2"
+						/>
 						{t("folderIndex.addTo", { folder: folderName })}
 					</DropdownMenuItem>
 				))}

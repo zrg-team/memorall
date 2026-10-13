@@ -243,6 +243,8 @@
 		"description": "Choose which folders get indexes. Agents can search each index type through its corresponding file index feature. Subfolders follow their parent unless you turn them off.",
 		"types": "Index types",
 		"moreTypes": "Each index type has its own column, tools and agent feature.",
+		"beta": "Beta",
+		"betaNote": "Beta · may affect performance. This index runs a local model on every file, which is heavy: large folders can slow the browser and use a lot of memory, CPU/GPU and battery. Start with a small folder, and pause or slow it down in Indexes if needed.",
 		"folders": "Folders",
 		"noFolders": "No folder has an index yet. Add one for the folder you are in above, or use the Indexes button or a folder's menu.",
 		"folder": "Folder",

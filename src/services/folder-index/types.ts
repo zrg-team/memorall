@@ -82,6 +82,8 @@ export interface FolderIndexType {
 	tools: readonly string[];
 	/** Instructions for those tools, added to the agent's prompt. */
 	prompt: string;
+	/** Still being tuned and can be heavy on large folders. */
+	beta?: boolean;
 	/**
 	 * Brings the index of `root` (a folder this type covers) up to date.
 	 * `nestedRoots` are roots of the same type inside it (below a subfolder
@@ -131,6 +133,7 @@ export interface FolderIndexTypeInfo {
 	label: string;
 	description: string;
 	tools: readonly string[];
+	beta?: boolean;
 }
 
 /** One folder with an index, for the Indexes settings. */

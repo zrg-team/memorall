@@ -85,6 +85,7 @@ export class EmbeddingIndex implements FolderIndexType {
 	readonly description = EMBEDDING_INDEX_TYPE.description;
 	readonly tools = EMBEDDING_INDEX_TYPE.tools;
 	readonly prompt = EMBEDDING_INDEX_TYPE.prompt;
+	readonly beta = EMBEDDING_INDEX_TYPE.beta;
 	private encoderPromise?: Promise<MultimodalEmbeddingEncoder>;
 	private readonly queryCache = new Map<string, Promise<number[]>>();
 
