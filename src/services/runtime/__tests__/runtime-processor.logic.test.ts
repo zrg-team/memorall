@@ -136,6 +136,39 @@ describe("RuntimeProcessor", () => {
 		expect(observedAbort).toBe(true);
 	});
 
+	it("runs notified jobs and never polls without a pending-job listing", async () => {
+		const bridge = new FakeBridge();
+		const executeJob = vi.fn(async (_job: BaseJob) => undefined);
+		const setIntervalSpy = vi.spyOn(globalThis, "setInterval");
+		const processor = new RuntimeProcessor({
+			notifications: bridge,
+			executeJob,
+		});
+		await processor.start();
+		expect(setIntervalSpy).not.toHaveBeenCalled();
+		setIntervalSpy.mockRestore();
+
+		bridge.emit({
+			type: "JOB_UPDATED",
+			target: "offscreen",
+			sender: "popup",
+			timestamp: 1,
+		});
+		bridge.emit({
+			type: "JOB_ENQUEUED",
+			target: "offscreen",
+			sender: "popup",
+			timestamp: 2,
+			jobId: "direct",
+			job: job("direct"),
+		});
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		expect(executeJob.mock.calls.map(([value]) => value.id)).toEqual([
+			"direct",
+		]);
+		await processor.stop();
+	});
+
 	it("enters failed state when initial queue recovery fails", async () => {
 		const processor = new RuntimeProcessor({
 			notifications: new FakeBridge(),

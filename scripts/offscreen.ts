@@ -256,18 +256,12 @@ class OffscreenProcessor {
 		}
 	}
 	private async startQueueProcessing(): Promise<void> {
+		// Jobs come in through JOB_ENQUEUED. There is no pending-job listing: the
+		// background never answered the GET_BACKGROUND_JOBS this used to send, so
+		// polling it only woke the service worker every two minutes.
 		this.runtimeProcessor = new RuntimeProcessor({
 			notifications: backgroundJob.getNotificationBridge(),
-			listPendingJobs: async () => {
-				const response = await chrome.runtime.sendMessage({
-					type: "GET_BACKGROUND_JOBS",
-				});
-				return response?.success && Array.isArray(response.jobs)
-					? response.jobs
-					: [];
-			},
 			executeJob: (job) => this.processFactory.executeJob(job.id, job),
-			safetyIntervalMs: 120_000,
 			logger: {
 				debug: (message, data) => logDebug(message, data),
 				info: (message, data) => logInfo(message, data),

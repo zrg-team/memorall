@@ -17,7 +17,12 @@ export interface RuntimeProcessorLogger {
 
 export interface RuntimeProcessorDependencies {
 	notifications: IJobNotificationBridge;
-	listPendingJobs(): Promise<BaseJob[]>;
+	/**
+	 * Jobs waiting in the queue's store, drained at start, on job updates, and
+	 * every `safetyIntervalMs`. Without it the processor runs only the jobs it
+	 * is notified about.
+	 */
+	listPendingJobs?(): Promise<BaseJob[]>;
 	executeJob(job: BaseJob, signal: AbortSignal): Promise<void>;
 	safetyIntervalMs?: number;
 	logger?: RuntimeProcessorLogger;
@@ -66,7 +71,7 @@ export class RuntimeProcessor {
 			);
 
 			const interval = this.dependencies.safetyIntervalMs ?? 120_000;
-			if (interval > 0)
+			if (interval > 0 && this.dependencies.listPendingJobs)
 				this.timer = setInterval(() => void this.drain(), interval);
 			this.state = "running";
 			await this.drain();
@@ -79,6 +84,8 @@ export class RuntimeProcessor {
 	}
 
 	async drain(): Promise<void> {
+		const listPendingJobs = this.dependencies.listPendingJobs;
+		if (!listPendingJobs) return;
 		if (this.state !== "running" && this.state !== "starting") return;
 		if (this.draining) {
 			this.drainRequested = true;
@@ -88,7 +95,7 @@ export class RuntimeProcessor {
 		this.draining = (async () => {
 			do {
 				this.drainRequested = false;
-				const jobs = await this.dependencies.listPendingJobs();
+				const jobs = await listPendingJobs();
 				for (const job of jobs) {
 					if (this.controller.signal.aborted) return;
 					if (job.status === "pending") await this.execute(job);
