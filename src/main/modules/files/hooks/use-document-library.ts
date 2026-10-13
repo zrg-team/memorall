@@ -1,7 +1,10 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import NiceModal from "@ebay/nice-modal-react";
-import { documentFileSystemService } from "@/services/filesystem/document-filesystem";
+import {
+	documentFileSystemService,
+	type FilesystemChangeEvent,
+} from "@/services/filesystem/document-filesystem";
 import {
 	folderLineage,
 	parentFolder,
@@ -40,6 +43,30 @@ import { downloadFolderAsZip } from "../utils/save-download";
 // ── Module-level helpers ──────────────────────────────────────────────────────
 
 // toSandboxPath is imported from @/services/filesystem/sandbox-paths
+
+/**
+ * How long a burst of filesystem changes (an agent or the sandbox writing many
+ * files) is gathered before the tree is read again, once for all of them.
+ */
+const FILESYSTEM_RELOAD_DELAY_MS = 200;
+/** A steady stream of changes still shows up at least this often. */
+const FILESYSTEM_RELOAD_MAX_DELAY_MS = 1_000;
+
+/**
+ * Whether a change can alter which topics files have. Topics are kept by file
+ * path, so writing or creating files leaves them as they were; anything that
+ * moves or removes a path, or says nothing about what changed, may not.
+ */
+const changeAffectsTopics = (change: FilesystemChangeEvent | null): boolean => {
+	if (!change) return true;
+	if (change.operation === "batch")
+		return (change.changes ?? []).some(changeAffectsTopics);
+	return !["write", "create", "mkdir"].includes(change.operation);
+};
+
+/** Same content, as the database hands it back (dates included). */
+const sameJson = (a: unknown, b: unknown): boolean =>
+	JSON.stringify(a) === JSON.stringify(b);
 
 /** Build the virtual documents-root DocumentTreeNode that wraps top-level doc items. */
 function makeDocsRoot(items: DocumentTreeNode[]): DocumentTreeNode {
@@ -82,9 +109,10 @@ export function useDocumentLibrary() {
 	const [error, setError] = useState<string | null>(null);
 	const [viewMode, setViewMode] = useState<"grid" | "list">("list");
 	const [searchQuery, setSearchQuery] = useState("");
-	const [uploadProgress, setUploadProgress] = useState<
-		Map<string, DocumentUploadProgress>
-	>(new Map());
+	// Not state: nothing on the page draws it, so a tick must not redraw the page.
+	const uploadProgressRef = useRef<Map<string, DocumentUploadProgress>>(
+		new Map(),
+	);
 	const [topics, setTopics] = useState<Array<Topic & { fileCount: number }>>(
 		[],
 	);
@@ -143,7 +171,7 @@ export function useDocumentLibrary() {
 			}
 		}
 		return items;
-	}, [selectedNode, selectedTopicIds, fileTopicMap, isWorkspaceSection]);
+	}, [selectedNode, selectedTopicIds, fileTopicMap]);
 
 	// ── Data loaders (stable — only use setters + services) ─────────────────
 	const loadTopics = useCallback(async () => {
@@ -152,8 +180,16 @@ export function useDocumentLibrary() {
 				topicService.getTopicsWithContentCount(),
 				topicService.getFileTopicMap(),
 			]);
-			setTopics(topicsData);
-			setFileTopicMap(fileTopicMapData);
+			// Unchanged reads keep the old objects: the list and every row that
+			// shows topics would otherwise redraw for nothing.
+			setTopics((previous) =>
+				sameJson(previous, topicsData) ? previous : topicsData,
+			);
+			setFileTopicMap((previous) =>
+				sameJson([...previous], [...fileTopicMapData])
+					? previous
+					: fileTopicMapData,
+			);
 		} catch (err) {
 			logError("[DOCUMENT_LIBRARY] Failed to load topics:", err);
 		}
@@ -172,7 +208,8 @@ export function useDocumentLibrary() {
 			// mapped folder has no children, so selecting it would empty the
 			// content pane on every unrelated change.
 			setSelectedNode((prev) => {
-				if (!prev || prev.id === "__docs_root__") return makeDocsRoot(merged);
+				if (!prev || prev.id === "__docs_root__")
+					return prev?.children === merged ? prev : makeDocsRoot(merged);
 				return (
 					findNodeById(merged, prev.id) ??
 					findNodeByPath(merged, prev.path) ??
@@ -207,21 +244,62 @@ export function useDocumentLibrary() {
 		}
 	}, [loadTree, loadTopics, t]);
 
+	// biome-ignore lint/correctness/useExhaustiveDependencies: the library is read once, when the page opens.
 	useEffect(() => {
 		initializeLibrary();
 	}, []); // eslint-disable-line react-hooks/exhaustive-deps
 
 	useEffect(() => {
-		return documentFileSystemService.onFilesystemChanged((change) => {
-			// The editor's own save: redrawing would reset the editor.
-			if (change?.quiet) return;
-			Promise.all([loadTree(), loadTopics()]).catch((err) => {
-				logError(
-					"[DOCUMENT_LIBRARY] Failed to reload after filesystem change:",
-					err,
-				);
-			});
-		});
+		// A burst of changes is read once, after it settles, and never by two
+		// reads at a time: each read walks the whole tree, and topics take a
+		// database round trip.
+		let timer: ReturnType<typeof setTimeout> | null = null;
+		let firstChangeAt = 0;
+		let reading = false;
+		let again = false;
+		let topicsChanged = false;
+		let disposed = false;
+		const reload = () => {
+			timer = null;
+			if (disposed) return;
+			if (reading) {
+				again = true;
+				return;
+			}
+			reading = true;
+			const withTopics = topicsChanged;
+			topicsChanged = false;
+			Promise.all([loadTree(), withTopics ? loadTopics() : null])
+				.catch((err) => {
+					logError(
+						"[DOCUMENT_LIBRARY] Failed to reload after filesystem change:",
+						err,
+					);
+				})
+				.finally(() => {
+					reading = false;
+					if (!again) return;
+					again = false;
+					reload();
+				});
+		};
+		const unsubscribe = documentFileSystemService.onFilesystemChanged(
+			(change) => {
+				// The editor's own save: redrawing would reset the editor.
+				if (change?.quiet) return;
+				if (changeAffectsTopics(change)) topicsChanged = true;
+				const now = Date.now();
+				if (timer === null) firstChangeAt = now;
+				else if (now - firstChangeAt >= FILESYSTEM_RELOAD_MAX_DELAY_MS) return;
+				else clearTimeout(timer);
+				timer = setTimeout(reload, FILESYSTEM_RELOAD_DELAY_MS);
+			},
+		);
+		return () => {
+			disposed = true;
+			if (timer) clearTimeout(timer);
+			unsubscribe();
+		};
 	}, [loadTree, loadTopics]);
 
 	// ── Node navigation (stable, [] deps) ───────────────────────────────────
@@ -463,12 +541,10 @@ export function useDocumentLibrary() {
 			status: DocumentUploadProgress["status"],
 			errorMsg?: string,
 		) => {
-			setUploadProgress((prev) => {
-				const next = new Map(prev);
-				const item = next.get(id);
-				if (item) next.set(id, { ...item, progress, status, error: errorMsg });
-				return next;
-			});
+			const next = new Map(uploadProgressRef.current);
+			const item = next.get(id);
+			if (item) next.set(id, { ...item, progress, status, error: errorMsg });
+			uploadProgressRef.current = next;
 		},
 		[],
 	);
@@ -481,7 +557,7 @@ export function useDocumentLibrary() {
 				const id = `${Date.now()}-${file.name}`;
 				newProgress.set(id, { id, file, progress: 0, status: "pending" });
 			}
-			setUploadProgress(newProgress);
+			uploadProgressRef.current = newProgress;
 			NiceModal.show(UploadProgressDialog, { uploadProgress: newProgress });
 
 			const targetSandboxPath = toSandboxPath(currentPathRef.current);
@@ -541,7 +617,7 @@ export function useDocumentLibrary() {
 			await loadTree();
 			setTimeout(() => {
 				NiceModal.hide(UploadProgressDialog);
-				setUploadProgress(new Map());
+				uploadProgressRef.current = new Map();
 			}, 2000);
 		},
 		[updateProgress, loadTree],

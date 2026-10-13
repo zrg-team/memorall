@@ -176,6 +176,20 @@ export const MarkdownEditor: React.FC<DocumentEditorProps> = ({
 		}),
 		[isDark, file.path],
 	);
+	// Parsed once per content: the viewer around it redraws for unrelated
+	// reasons, and each redraw used to parse and render the document again.
+	const preview = useMemo(
+		() => (
+			<ReactMarkdown
+				remarkPlugins={remarkPlugins}
+				rehypePlugins={rehypePlugins}
+				components={previewComponents}
+			>
+				{initialContent}
+			</ReactMarkdown>
+		),
+		[initialContent, previewComponents],
+	);
 
 	return (
 		<div className={cn("flex flex-col h-full min-h-0", className)}>
@@ -207,13 +221,7 @@ export const MarkdownEditor: React.FC<DocumentEditorProps> = ({
 						!readOnly && "-mt-10",
 					)}
 				>
-					<ReactMarkdown
-						remarkPlugins={remarkPlugins}
-						rehypePlugins={rehypePlugins}
-						components={previewComponents}
-					>
-						{initialContent}
-					</ReactMarkdown>
+					{preview}
 				</div>
 			</div>
 

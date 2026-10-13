@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useSyncExternalStore } from "react";
 import { platform } from "@/platform/current";
 import type { NativeMountRoot } from "@/platform/contracts/core";
 import { documentFileSystemService } from "@/services/filesystem/document-filesystem";
@@ -31,6 +31,39 @@ export interface UseNativeMounts {
 	clearError: () => void;
 }
 
+interface NativeMountsState {
+	roots: NativeMountRoot[];
+	mountedPaths: ReadonlySet<string>;
+	busy: boolean;
+	error: string | null;
+}
+
+/**
+ * One list for the whole page. The provider, the sidebar and the header each
+ * use this hook; with state of their own, each asked the OS for the list when
+ * it mounted and kept a copy that the others' changes did not reach.
+ */
+let shared: NativeMountsState = {
+	roots: [],
+	mountedPaths: new Set<string>(),
+	busy: false,
+	error: null,
+};
+const listeners = new Set<() => void>();
+const update = (patch: Partial<NativeMountsState>) => {
+	shared = { ...shared, ...patch };
+	for (const listener of listeners) listener();
+};
+const subscribe = (listener: () => void) => {
+	listeners.add(listener);
+	return () => {
+		listeners.delete(listener);
+	};
+};
+const snapshot = () => shared;
+/** The read in progress, joined by every hook that mounts meanwhile. */
+let reading: Promise<void> | null = null;
+
 /**
  * Mapped folders, for the Document Library.
  *
@@ -44,32 +77,50 @@ export function useNativeMounts(): UseNativeMounts {
 	const supported =
 		Boolean(port) && platform.capabilities.get("filesystem.native").available;
 
-	const [roots, setRoots] = useState<NativeMountRoot[]>([]);
-	const [mountedPaths, setMountedPaths] = useState<ReadonlySet<string>>(
-		() => new Set<string>(),
+	const { roots, mountedPaths, busy, error } = useSyncExternalStore(
+		subscribe,
+		snapshot,
+		snapshot,
 	);
-	const [busy, setBusy] = useState(false);
-	const [error, setError] = useState<string | null>(null);
 
+	// Each action reads the port when it runs rather than closing over it.
 	const refresh = useCallback(async () => {
+		const port = platform.nativeFilesystem;
 		if (!port) return;
-		try {
-			setRoots(await port.listRoots());
-			setMountedPaths(new Set(nativeMountLabels().map((label) => `/${label}`)));
-		} catch (failure) {
-			logError("Could not list mapped folders:", failure);
-			setError(failure instanceof Error ? failure.message : String(failure));
-		}
-	}, [port]);
+		if (reading) return reading;
+		// Started a microtask later, so `reading` is set before it can settle: a
+		// port that fails at once used to run `finally` first and leave a settled
+		// read in place, after which the list never refreshed.
+		const read: Promise<void> = Promise.resolve().then(async () => {
+			try {
+				const listed = await port.listRoots();
+				update({
+					roots: listed,
+					mountedPaths: new Set(
+						nativeMountLabels().map((label) => `/${label}`),
+					),
+				});
+			} catch (failure) {
+				logError("Could not list mapped folders:", failure);
+				update({
+					error: failure instanceof Error ? failure.message : String(failure),
+				});
+			} finally {
+				if (reading === read) reading = null;
+			}
+		});
+		reading = read;
+		return read;
+	}, []);
 
 	useEffect(() => {
 		void refresh();
 	}, [refresh]);
 
 	const addRoot = useCallback(async () => {
+		const port = platform.nativeFilesystem;
 		if (!port) return null;
-		setBusy(true);
-		setError(null);
+		update({ busy: true, error: null });
 		try {
 			const root = await port.addRoot();
 			if (!root) return null;
@@ -82,6 +133,8 @@ export function useNativeMounts(): UseNativeMounts {
 			// clears the cache *and* wakes the listeners, so the row appears as
 			// soon as the mount does; its contents are read when it is opened.
 			documentFileSystemService.notifyExternalChange(null);
+			// A read begun before the change would miss it: wait it out, read anew.
+			await reading;
 			await refresh();
 			// Read the top level now, while the user is still looking at the
 			// picker closing. Opening the folder a moment later then costs a cache
@@ -93,32 +146,38 @@ export function useNativeMounts(): UseNativeMounts {
 			return root;
 		} catch (failure) {
 			logError("Could not map a folder:", failure);
-			setError(failure instanceof Error ? failure.message : String(failure));
+			update({
+				error: failure instanceof Error ? failure.message : String(failure),
+			});
 			return null;
 		} finally {
-			setBusy(false);
+			update({ busy: false });
 		}
-	}, [port, refresh]);
+	}, [refresh]);
 
 	const removeRoot = useCallback(
 		async (rootId: string) => {
+			const port = platform.nativeFilesystem;
 			if (!port) return;
-			setBusy(true);
-			setError(null);
+			update({ busy: true, error: null });
 			try {
 				await port.removeRoot(rootId);
 				await syncNativeFolderMounts();
 				documentFileSystemService.notifyExternalChange(null);
+				await reading;
 				await refresh();
 			} catch (failure) {
 				logError("Could not unmap a folder:", failure);
-				setError(failure instanceof Error ? failure.message : String(failure));
+				update({
+					error: failure instanceof Error ? failure.message : String(failure),
+				});
 			} finally {
-				setBusy(false);
+				update({ busy: false });
 			}
 		},
-		[port, refresh],
+		[refresh],
 	);
+	const clearError = useCallback(() => update({ error: null }), []);
 
 	return {
 		supported,
@@ -129,6 +188,6 @@ export function useNativeMounts(): UseNativeMounts {
 		addRoot,
 		removeRoot,
 		refresh,
-		clearError: () => setError(null),
+		clearError,
 	};
 }

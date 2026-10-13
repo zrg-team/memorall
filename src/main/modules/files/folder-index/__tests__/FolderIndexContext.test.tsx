@@ -181,6 +181,120 @@ describe("Files indexing status", () => {
 		expect(screen.getByTestId("running")).toHaveTextContent("Idle");
 		expect(screen.getByTestId("entries")).toHaveTextContent("3");
 	});
+	it("leaves the page alone when a poll finds nothing new", async () => {
+		const renders = vi.fn();
+		const Counter = () => {
+			renders(useFolderIndex());
+			return null;
+		};
+		await act(async () => {
+			render(
+				<FolderIndexProvider>
+					<Probe />
+					<Counter />
+				</FolderIndexProvider>,
+			);
+		});
+		const before = renders.mock.calls.length;
+		const value = renders.mock.lastCall?.[0];
+		const polls = () =>
+			mocks.request.mock.calls.filter(
+				([operation]) => operation === "state.get",
+			).length;
+		const pollsBefore = polls();
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(15_000);
+		});
+		expect(polls()).toBe(pollsBefore + 3);
+		expect(renders).toHaveBeenCalledTimes(before);
+		state.folders[0].status[0].updatedAt = "changed";
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(5_000);
+		});
+		expect(renders.mock.calls.length).toBeGreaterThan(before);
+		// Unchanged parts keep their identity for memoised readers.
+		expect(renders.mock.lastCall?.[0].types).toBe(value.types);
+	});
+	it("does not poll while the page is hidden, and catches up when it is shown", async () => {
+		let visibility: DocumentVisibilityState = "visible";
+		Object.defineProperty(document, "visibilityState", {
+			configurable: true,
+			get: () => visibility,
+		});
+		try {
+			await mount();
+			const polls = () =>
+				mocks.request.mock.calls.filter(
+					([operation]) => operation === "state.get",
+				).length;
+			await act(async () => {
+				visibility = "hidden";
+				document.dispatchEvent(new Event("visibilitychange"));
+			});
+			const hiddenAt = polls();
+			await act(async () => {
+				await vi.advanceTimersByTimeAsync(30_000);
+			});
+			expect(polls()).toBe(hiddenAt);
+			state.running = ["embeddings:/Music"];
+			await act(async () => {
+				visibility = "visible";
+				document.dispatchEvent(new Event("visibilitychange"));
+			});
+			expect(polls()).toBe(hiddenAt + 1);
+			expect(screen.getByTestId("running")).toHaveTextContent("Indexing");
+		} finally {
+			// The own property shadowed jsdom's getter; removing it restores it.
+			delete (document as { visibilityState?: unknown }).visibilityState;
+		}
+	});
+	it("re-reads only the folders whose index changed", async () => {
+		state.folders.push({
+			path: "/Photos",
+			on: ["embeddings"],
+			off: [],
+			effective: ["embeddings"],
+			mapped: false,
+			status: [
+				{
+					typeId: "embeddings",
+					entries: 1,
+					files: 1,
+					chunks: 1,
+					updatedAt: "before",
+				},
+			],
+		});
+		let index: ReturnType<typeof useFolderIndex> = null;
+		const Loader = () => {
+			index = useFolderIndex();
+			return null;
+		};
+		await act(async () => {
+			render(
+				<FolderIndexProvider>
+					<Probe />
+					<Loader />
+				</FolderIndexProvider>,
+			);
+		});
+		await act(async () => {
+			index?.loadEntries("/Photos");
+		});
+		const reads = (path: string) =>
+			mocks.request.mock.calls.filter(
+				([operation, payload]) =>
+					operation === "folder.entries" && payload.path === path,
+			).length;
+		const music = reads("/Music"),
+			photos = reads("/Photos");
+		state.folders[1].status[0].updatedAt = "after";
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(5_000);
+		});
+		expect(reads("/Photos")).toBe(photos + 1);
+		expect(reads("/Music")).toBe(music);
+	});
 	it("does not poll when there are no configured indexes, and stops on unmount", async () => {
 		state.folders = [];
 		const view = await mount();

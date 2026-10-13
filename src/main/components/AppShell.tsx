@@ -105,6 +105,12 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
 		!(isNarrowChatPanel && isCompactChatListOpen);
 	const isMobileWorkspaceOpen =
 		isNarrow && workspaceNavigationPaths.has(location.pathname);
+	const closeMobileWorkspace = React.useCallback(
+		(collapsed: boolean) => {
+			if (collapsed) navigate("/");
+		},
+		[navigate],
+	);
 
 	React.useEffect(() => {
 		void refreshRuntimeSessions();
@@ -300,35 +306,34 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
 				) : null}
 			</section>
 
+			{/* One section for both layouts: beside the chat on a wide screen, over
+			    the page on a phone. The page inside stays mounted when the width
+			    crosses the breakpoint, and is never mounted twice. */}
 			<section
-				className={`min-h-0 min-w-0 flex-shrink-0 overflow-hidden max-[640px]:!hidden ${panelTransitionClass}`}
+				className={
+					isMobileWorkspaceOpen
+						? "fixed inset-0 z-50 bg-background"
+						: `min-h-0 min-w-0 flex-shrink-0 overflow-hidden max-[640px]:!hidden ${panelTransitionClass}`
+				}
 				data-copilot="right-panel"
 				data-agent-cursor-point="copilot-right-panel"
-				style={{
-					width: rightPanelWidth,
-					flexBasis: rightPanelWidth,
-				}}
+				style={
+					isMobileWorkspaceOpen
+						? undefined
+						: { width: rightPanelWidth, flexBasis: rightPanelWidth }
+				}
 			>
 				<RightApplicationLayout
-					collapsed={rightPanelCollapsed}
-					onCollapsedChange={setRightPanelCollapsed}
+					collapsed={isMobileWorkspaceOpen ? false : rightPanelCollapsed}
+					onCollapsedChange={
+						isMobileWorkspaceOpen
+							? closeMobileWorkspace
+							: setRightPanelCollapsed
+					}
 				>
 					{children}
 				</RightApplicationLayout>
 			</section>
-
-			{isMobileWorkspaceOpen ? (
-				<section className="fixed inset-0 z-50 bg-background min-[641px]:hidden">
-					<RightApplicationLayout
-						collapsed={false}
-						onCollapsedChange={(collapsed) => {
-							if (collapsed) navigate("/");
-						}}
-					>
-						{children}
-					</RightApplicationLayout>
-				</section>
-			) : null}
 		</div>
 	);
 };

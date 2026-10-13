@@ -9,6 +9,19 @@ vi.mock("@/services/filesystem/document-filesystem", () => ({
 	documentFileSystemService: {},
 }));
 
+// Every row asks for its drag handle once per render: a cheap render count.
+const drawn = vi.hoisted(() => [] as string[]);
+vi.mock("@dnd-kit/core", async (importOriginal) => {
+	const actual = await importOriginal<typeof import("@dnd-kit/core")>();
+	return {
+		...actual,
+		useDraggable: (args: Parameters<typeof actual.useDraggable>[0]) => {
+			drawn.push(String(args.id));
+			return actual.useDraggable(args);
+		},
+	};
+});
+
 const node = (partial: Partial<DocumentTreeNode>): DocumentTreeNode =>
 	partial as unknown as DocumentTreeNode;
 
@@ -88,5 +101,62 @@ describe("DocumentTreeDraggable's context menu", () => {
 		openMenu("notes");
 		fireEvent.click(screen.getByText("list.downloadZip"));
 		expect(onDownloadFolder).toHaveBeenCalledWith(tree[0]);
+	});
+});
+
+describe("DocumentTreeDraggable's rows", () => {
+	const folder = (path: string, children: DocumentTreeNode[]) =>
+		node({
+			id: path,
+			name: path.split("/").at(-1),
+			path,
+			type: "folder",
+			isExpanded: true,
+			children,
+		});
+	const file = (path: string) =>
+		node({
+			id: path,
+			name: path.split("/").at(-1),
+			path,
+			type: "file",
+			file: { type: "markdown" } as DocumentTreeNode["file"],
+		});
+	const big = [
+		folder("/A", [file("/A/a1.md"), file("/A/a2.md")]),
+		folder("/B", [file("/B/b1.md")]),
+		file("/c.md"),
+	];
+	const handlers = { onSelectNode: vi.fn(), onToggleExpand: vi.fn() };
+
+	it("redraws only the rows on the way to the old and new selection", () => {
+		const view = render(
+			<DocumentTreeDraggable tree={big} selectedId={null} {...handlers} />,
+		);
+		drawn.length = 0;
+		view.rerender(
+			<DocumentTreeDraggable tree={big} selectedId={null} {...handlers} />,
+		);
+		expect(drawn).toEqual([]);
+		view.rerender(
+			<DocumentTreeDraggable tree={big} selectedId="/A/a1.md" {...handlers} />,
+		);
+		expect(drawn.sort()).toEqual(["/A", "/A/a1.md"]);
+
+		drawn.length = 0;
+		view.rerender(
+			<DocumentTreeDraggable tree={big} selectedId="/A/a1.md" {...handlers} />,
+		);
+		expect(drawn).toEqual([]);
+
+		drawn.length = 0;
+		view.rerender(
+			<DocumentTreeDraggable tree={big} selectedId="/B/b1.md" {...handlers} />,
+		);
+		expect(drawn.sort()).toEqual(["/A", "/A/a1.md", "/B", "/B/b1.md"]);
+		expect(screen.getByText("b1.md").closest("[style]")?.className).toContain(
+			"bg-accent",
+		);
+		view.unmount();
 	});
 });

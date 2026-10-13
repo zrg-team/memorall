@@ -202,7 +202,8 @@ vi.mock("@/main/modules/files/hooks/use-native-mounts", () => ({
 	}),
 }));
 vi.mock("@/main/stores/process-monitor", () => ({
-	useProcessMonitor: (select: any) => select({ isProcessing: () => false }),
+	useProcessMonitor: (select: any) =>
+		select({ activeProcesses: new Map(), isProcessing: () => false }),
 }));
 vi.mock("@/main/modules/files/modals", () => ({
 	CreateFolderDialog: () => null,

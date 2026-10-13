@@ -366,4 +366,41 @@ describe("Files search", () => {
 		expect(mocks.getFolderChildren).toHaveBeenCalledTimes(1);
 		expect(result.current.items).toBe(props.folderContents);
 	});
+	it("keeps results and does not search again when a filesystem change rebuilds the folder", async () => {
+		mocks.index = indexWith({ "/Memory": { on: ["embeddings"] } });
+		mocks.request.mockResolvedValue(resultOf([hit(notes.path)]));
+		const { result, rerender } = search();
+		await tick();
+		expect(paths(result.current.items)).toEqual([mobile.path, notes.path]);
+
+		// The same folder as a new node, as every rebuild of the tree hands it.
+		const rebuilt = folder("/Memory", [
+			...memory.children,
+			file("/Memory/mobile-game-2.txt"),
+		]);
+		rerender({ ...options, folder: rebuilt });
+		expect(paths(result.current.items)).toEqual([
+			mobile.path,
+			"/Memory/mobile-game-2.txt",
+			notes.path,
+		]);
+		expect(result.current.busy).toBe(false);
+		await tick();
+		expect(mocks.request).toHaveBeenCalledTimes(1);
+	});
+	it("reads a bounded number of unopened folders per search", async () => {
+		const lazy = (path: string) => folder(path, [], true);
+		let next = 0;
+		mocks.getFolderChildren.mockImplementation(async () => [
+			lazy(`/Memory/deep/${++next}`),
+			lazy(`/Memory/deep/${++next}`),
+		]);
+		const root = folder("/Memory", [lazy("/Memory/deep")]);
+		search({ folder: root, folderContents: [], searchQuery: "anything" });
+		await tick();
+		await act(async () => {
+			await vi.runAllTimersAsync();
+		});
+		expect(mocks.getFolderChildren).toHaveBeenCalledTimes(200);
+	});
 });
