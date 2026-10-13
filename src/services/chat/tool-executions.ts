@@ -4,6 +4,15 @@ import { sanitizeForJson } from "@/utils/sanitize-json";
 const SECRET_KEY_PATTERN =
 	/(?:api[-_]?key|authorization|cookie|credential|password|secret|token)/i;
 const PREVIEW_LIMIT = 4_000;
+/**
+ * What a tool may report beside its result for the chat to show (a child
+ * agent's steps). Kept with the reply, so it is bounded like the previews.
+ */
+const META_LIMIT = 64_000;
+
+/** A count or a flag is never the secret, even under a `*_tokens` key. */
+const isPlainValue = (value: unknown): boolean =>
+	typeof value === "number" || typeof value === "boolean";
 
 const redactSecrets = (
 	value: unknown,
@@ -20,7 +29,9 @@ const redactSecrets = (
 	return Object.fromEntries(
 		Object.entries(value as Record<string, unknown>).map(([key, item]) => [
 			key,
-			SECRET_KEY_PATTERN.test(key) ? "[REDACTED]" : redactSecrets(item, seen),
+			SECRET_KEY_PATTERN.test(key) && !isPlainValue(item)
+				? "[REDACTED]"
+				: redactSecrets(item, seen),
 		]),
 	);
 };
@@ -45,6 +56,26 @@ export const createToolExecutionPreview = (
 		preview: `${preview.slice(0, PREVIEW_LIMIT).trimEnd()}\n… [truncated]`,
 		truncated: true,
 	};
+};
+
+/**
+ * A tool's `meta`, redacted like the previews, or nothing when it is not an
+ * object or too large to keep with the reply.
+ */
+export const createToolExecutionMeta = (
+	value: unknown,
+): Record<string, unknown> | undefined => {
+	if (!value || typeof value !== "object" || Array.isArray(value)) {
+		return undefined;
+	}
+	const sanitized = sanitizeForJson(redactSecrets(value));
+	if (!sanitized || typeof sanitized !== "object") return undefined;
+	try {
+		if (JSON.stringify(sanitized).length > META_LIMIT) return undefined;
+	} catch {
+		return undefined;
+	}
+	return sanitized as Record<string, unknown>;
 };
 
 export const upsertToolExecution = (

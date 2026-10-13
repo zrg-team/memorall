@@ -10,6 +10,7 @@ import {
 	SYSTEM_REMINDER_EVENT,
 	systemReminderMessage,
 } from "@memorall/agent-harness-flows/graph/system-reminders";
+import { TOOL_PROGRESS_EVENT } from "@memorall/agent-harness-flows/interfaces/engine/tool";
 import { ITERATION_LIMIT_EVENT } from "@memorall/agent-harness-flows/limits";
 import {
 	buildDefaultFlowConfig,
@@ -41,6 +42,7 @@ import {
 	type ToolCallAccumulator,
 } from "@/services/chat/tool-call-accumulator";
 import {
+	createToolExecutionMeta,
 	createToolExecutionPreview,
 	finishRunningToolExecutions,
 	upsertToolExecution,
@@ -526,7 +528,7 @@ type FlowCustomPayloadDeps = {
 		metadata?: Record<string, unknown>;
 	}) => void;
 	handleToolExecution: (
-		phase: "start" | "result",
+		phase: "start" | "progress" | "result",
 		event: { node: string; metadata?: Record<string, unknown> },
 	) => ToolExecutionRecord | undefined;
 	/** A compaction the flow reported; returns it as the reply keeps it. */
@@ -1137,6 +1139,7 @@ export class ChatHandler extends BaseProcessHandler<ChatJob | StopChatJob> {
 					}
 				}
 				return;
+			case TOOL_PROGRESS_EVENT:
 			case "tool-result":
 				if ("node" in payload) {
 					const event = {
@@ -1146,7 +1149,10 @@ export class ChatHandler extends BaseProcessHandler<ChatJob | StopChatJob> {
 								? (payload.metadata as Record<string, unknown> | undefined)
 								: undefined,
 					};
-					const execution = handleToolExecution("result", event);
+					const execution = handleToolExecution(
+						payload.type === TOOL_PROGRESS_EVENT ? "progress" : "result",
+						event,
+					);
 					if (execution) {
 						dispatcher.send(() =>
 							dependencies.updateJobProgress(jobId, {
@@ -1424,6 +1430,16 @@ export class ChatHandler extends BaseProcessHandler<ChatJob | StopChatJob> {
 				return record;
 			}
 
+			const meta = createToolExecutionMeta(metadata?.meta);
+			if (phase === "progress") {
+				// Only a call still running moves: a late report must not reopen
+				// one that has finished.
+				if (existing?.status !== "running" || !meta) return undefined;
+				const record: ToolExecutionRecord = { ...existing, meta };
+				toolExecutions = upsertToolExecution(toolExecutions, record);
+				return record;
+			}
+
 			const output = createToolExecutionPreview(
 				metadata?.content ?? metadata?.structuredContent,
 			);
@@ -1455,6 +1471,7 @@ export class ChatHandler extends BaseProcessHandler<ChatJob | StopChatJob> {
 				...((toolMetadata ?? existing?.toolMetadata)
 					? { toolMetadata: toolMetadata ?? existing?.toolMetadata }
 					: {}),
+				...((meta ?? existing?.meta) ? { meta: meta ?? existing?.meta } : {}),
 			};
 			toolExecutions = upsertToolExecution(toolExecutions, record);
 			return record;
