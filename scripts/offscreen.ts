@@ -7,7 +7,6 @@ import {
 	logInfo,
 	logWarn,
 } from "@/utils/logger";
-import { platform } from "@/platform/current";
 import {
 	backgroundProcessFactory,
 	ProcessFactory,
@@ -41,8 +40,9 @@ type OffscreenGlobal = typeof globalThis & {
 
 const offscreenGlobal = globalThis as OffscreenGlobal;
 
-// Logs are recorded when the Logs page's switch, kept in storage, says so.
-connectLogRecording(platform.persistentStore);
+// Logs are recorded when the Logs page's switch says so. Kept in shared
+// storage, not chrome.storage: an offscreen document has no chrome.storage.
+connectLogRecording(sharedStorageService.asKeyValueStore());
 
 type PatchedEmbeddingService = EmbeddingServiceMain & {
 	__memorallSkipDefaultEmbedding__?: boolean;

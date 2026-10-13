@@ -26,8 +26,8 @@ vi.mock("@/utils/logger", () => ({
 	logDebug: vi.fn(),
 	connectLogRecording: vi.fn(),
 }));
-vi.mock("@/platform/extension/chrome-storage-key-value-store", () => ({
-	ChromeStorageKeyValueStore: vi.fn(),
+vi.mock("@/services/shared-storage", () => ({
+	sharedStorageService: { asKeyValueStore: vi.fn() },
 }));
 vi.mock("@/background/core/init", () => ({
 	init: mocks.init,

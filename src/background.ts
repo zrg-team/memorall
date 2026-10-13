@@ -2,7 +2,7 @@
 // Responsibilities: register listeners synchronously, wire subsystems, manage lifecycle.
 
 import { connectLogRecording, logInfo, logError } from "@/utils/logger";
-import { ChromeStorageKeyValueStore } from "@/platform/extension/chrome-storage-key-value-store";
+import { sharedStorageService } from "@/services/shared-storage";
 import { init, isInitializing } from "@/background/core/init";
 import { offscreenWatchdogCheck } from "@/background/core/offscreen";
 import {
@@ -28,8 +28,8 @@ import { openStandalonePage } from "@/utils/open-standalone";
 // Pages reach the database in the offscreen document directly over a
 // `runtime.connect` port; the service worker does not relay it.
 
-// Logs are recorded when the Logs page's switch, kept in storage, says so.
-connectLogRecording(new ChromeStorageKeyValueStore("local"));
+// Logs are recorded when the Logs page's switch says so.
+connectLogRecording(sharedStorageService.asKeyValueStore());
 
 registerContextMenuHandler();
 registerWebToolBrowserHandler();
