@@ -272,6 +272,29 @@
 		"error": "Error",
 		"done": "Done"
 	},
+	"childAgent": {
+		"title": "Message {{name}}",
+		"titleContinue": "Continue with {{name}}",
+		"unknownAgent": "Child agent",
+		"newConversation": "New conversation",
+		"turn": "Message {{count}}",
+		"sentByParent": "Sent by the parent agent",
+		"showEarlier_one": "Show {{count}} earlier message",
+		"showEarlier_other": "Show {{count}} earlier messages",
+		"hideEarlier": "Hide earlier messages",
+		"remembers": "{{name}} still reads these, tool calls included",
+		"notListed": "+{{count}} older, not listed",
+		"toolCalls_one": "{{count}} tool call",
+		"toolCalls_other": "{{count}} tool calls",
+		"working": "Working…",
+		"noReply": "No reply returned.",
+		"input": "{{value}} in",
+		"output": "{{value}} out",
+		"cached": "{{percent}}% cached",
+		"requests_one": "{{count}} request",
+		"requests_other": "{{count}} requests",
+		"estimated": "estimated"
+	},
 	"toolTimeline": {
 		"running": "{{count}} agent actions · running",
 		"finished": "{{count}} agent actions · {{duration}}"
