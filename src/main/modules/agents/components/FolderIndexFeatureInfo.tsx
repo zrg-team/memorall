@@ -66,7 +66,7 @@ export const FolderIndexFeatureInfo: React.FC<{
 							<p className="text-xs font-semibold text-foreground/80">
 								{t("agentSettings.folderIndex.tools")}
 							</p>
-							<IndexTypeBadge label={type.label} />
+							<IndexTypeBadge label={type.label} beta={type.beta} />
 						</div>
 						<div className="grid grid-cols-1 gap-1.5 min-[520px]:grid-cols-2">
 							{type.tools.map((tool) => {

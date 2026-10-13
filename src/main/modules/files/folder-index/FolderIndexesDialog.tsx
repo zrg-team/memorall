@@ -1,4 +1,4 @@
-import { Library, Loader2, Plus, RefreshCw } from "lucide-react";
+import { AlertTriangle, Library, Loader2, Plus, RefreshCw } from "lucide-react";
 import React from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/main/components/ui/button";
@@ -72,11 +72,17 @@ export const FolderIndexesDialog: React.FC = () => {
 									key={type.id}
 									className="flex items-start gap-2 rounded-md border border-sky-500/40 bg-sky-500/5 px-3 py-2 text-xs"
 								>
-									<IndexTypeBadge label={type.label} />
+									<IndexTypeBadge label={type.label} beta={type.beta} />
 									<div className="min-w-0 flex-1">
 										<p className="text-[11px] text-muted-foreground">
 											{type.description}
 										</p>
+										{type.beta && (
+											<p className="mt-1 flex items-start gap-1 text-[11px] text-amber-700 dark:text-amber-400">
+												<AlertTriangle className="mt-px h-3 w-3 shrink-0" />
+												<span>{t("folderIndex.betaNote")}</span>
+											</p>
+										)}
 										<p className="mt-1 font-mono text-[10px] text-muted-foreground/80">
 											{type.tools.join(" · ")}
 										</p>
@@ -133,7 +139,7 @@ export const FolderIndexesDialog: React.FC = () => {
 											</th>
 											{types.map((type) => (
 												<th key={type.id} className="px-3 py-2 font-medium">
-													<IndexTypeBadge label={type.label} />
+													<IndexTypeBadge label={type.label} beta={type.beta} />
 												</th>
 											))}
 											<th className="px-3 py-2 font-medium">
