@@ -24,6 +24,17 @@ const TRIM_INTERVAL = 100;
 // and every later trim read it back again.
 const MAX_PERSISTED_MESSAGE_LENGTH = 2_000;
 
+/**
+ * Whether log entries are written to IndexedDB, for the Logs page. Off unless
+ * someone turns it on there: writing every line cost a transaction per line in
+ * every context. Kept in `chrome.storage.local` (`localStorage` outside the
+ * extension) so every context follows the same choice.
+ */
+export const LOG_RECORDING_STORAGE_KEY = "memorall.logs.recording";
+
+// The database older versions also wrote from content scripts.
+const LEGACY_PAGE_LOG_DATABASE = "MemorallLogs";
+
 const safeStringify = (value: unknown): string => {
 	if (value === undefined) return "";
 	try {
@@ -33,31 +44,153 @@ const safeStringify = (value: unknown): string => {
 	}
 };
 
+const extensionStorage = (): chrome.storage.StorageArea | null => {
+	try {
+		return typeof chrome !== "undefined" && chrome.storage?.local
+			? chrome.storage.local
+			: null;
+	} catch {
+		return null;
+	}
+};
+
+/**
+ * A content script runs on the visited site's origin: its IndexedDB belongs to
+ * the site, which can read anything written there.
+ */
+const isContentScript = (): boolean => {
+	try {
+		if (typeof chrome === "undefined" || !chrome.runtime?.id) return false;
+		// Protocol and host, not `origin`: URL reports "null" as the origin of
+		// an extension URL outside the browser.
+		const extension = new URL(chrome.runtime.getURL(""));
+		const here = globalThis.location;
+		return (
+			!here ||
+			here.protocol !== extension.protocol ||
+			here.host !== extension.host
+		);
+	} catch {
+		return false;
+	}
+};
+
+const readRecordingSetting = async (): Promise<boolean> => {
+	const storage = extensionStorage();
+	if (storage) {
+		const stored = await storage.get(LOG_RECORDING_STORAGE_KEY);
+		return stored[LOG_RECORDING_STORAGE_KEY] === true;
+	}
+	try {
+		return globalThis.localStorage?.getItem(LOG_RECORDING_STORAGE_KEY) === "1";
+	} catch {
+		return false;
+	}
+};
+
+const writeRecordingSetting = async (enabled: boolean): Promise<void> => {
+	const storage = extensionStorage();
+	if (storage) {
+		await storage.set({ [LOG_RECORDING_STORAGE_KEY]: enabled });
+		return;
+	}
+	try {
+		globalThis.localStorage?.setItem(
+			LOG_RECORDING_STORAGE_KEY,
+			enabled ? "1" : "0",
+		);
+	} catch {
+		// No storage here: the choice lasts for this context only.
+	}
+};
+
+const onRecordingSettingChanged = (
+	listener: (enabled: boolean) => void,
+): void => {
+	try {
+		if (extensionStorage()) {
+			chrome.storage.onChanged.addListener((changes, areaName) => {
+				const change = changes[LOG_RECORDING_STORAGE_KEY];
+				if (areaName === "local" && change) listener(change.newValue === true);
+			});
+			return;
+		}
+		globalThis.addEventListener?.("storage", (event: StorageEvent) => {
+			if (event.key === LOG_RECORDING_STORAGE_KEY) {
+				listener(event.newValue === "1");
+			}
+		});
+	} catch {
+		// Without change events the setting applies from the next start.
+	}
+};
+
 class Logger {
 	private storage: IndexedDBLogStorage;
 	private config: LoggerConfig;
 	private isShowLog: boolean;
 	private writesSinceTrim = 0;
 	private trimming: Promise<void> | null = null;
+	private readonly inContentScript: boolean;
+	private recordingSettingLoaded: Promise<void> = Promise.resolve();
 
 	constructor(config: Partial<LoggerConfig> = {}) {
+		this.inContentScript = isContentScript();
 		this.config = {
 			maxEntries: MAX_LOG_STORED,
 			enableConsoleOutput: true,
-			enablePersistence: true,
+			enablePersistence: false,
 			...config,
 		};
-
-		console.log(`[Logger] init isShowLog: ${SHOW_LOG}`);
 
 		this.isShowLog = SHOW_LOG;
 
 		this.storage = new IndexedDBLogStorage();
 
-		// Initialize storage if persistence is enabled and available in this runtime.
-		if (this.config.enablePersistence && this.storage.isAvailable()) {
+		if (this.inContentScript) {
+			this.config.enablePersistence = false;
+			removeLegacyPageLogDatabase();
+			return;
+		}
+
+		if (config.enablePersistence === undefined) {
+			this.followRecordingSetting();
+		} else if (this.config.enablePersistence && this.storage.isAvailable()) {
 			this.initializeStorage();
 		}
+	}
+
+	private followRecordingSetting(): void {
+		onRecordingSettingChanged((enabled) => this.applyRecording(enabled));
+		this.recordingSettingLoaded = readRecordingSetting()
+			.then((enabled) => this.applyRecording(enabled))
+			.catch(() => undefined);
+	}
+
+	private applyRecording(enabled: boolean): void {
+		const wasEnabled = this.config.enablePersistence;
+		this.config.enablePersistence = enabled;
+		if (enabled && !wasEnabled && this.storage.isAvailable()) {
+			this.initializeStorage();
+		}
+	}
+
+	/** Whether this context writes log entries for the Logs page. */
+	async isRecording(): Promise<boolean> {
+		await this.recordingSettingLoaded;
+		return this.config.enablePersistence;
+	}
+
+	/** Turn recording on or off in every context. */
+	async setRecording(enabled: boolean): Promise<void> {
+		if (this.inContentScript) return;
+		this.applyRecording(enabled);
+		await writeRecordingSetting(enabled);
+	}
+
+	/** Recorded logs can be read even while recording is off. */
+	private canReadStorage(): boolean {
+		return !this.inContentScript && this.storage.isAvailable();
 	}
 
 	private async initializeStorage(): Promise<void> {
@@ -317,7 +450,7 @@ class Logger {
 		source?: string;
 		limit?: number;
 	}): Promise<LogEntry[]> {
-		if (!this.config.enablePersistence || !this.storage.isAvailable()) {
+		if (!this.canReadStorage()) {
 			return [];
 		}
 
@@ -331,7 +464,7 @@ class Logger {
 
 	// Clear all logs
 	async clearLogs(): Promise<void> {
-		if (!this.config.enablePersistence || !this.storage.isAvailable()) {
+		if (!this.canReadStorage()) {
 			return;
 		}
 
@@ -344,7 +477,7 @@ class Logger {
 
 	// Get total log count
 	async getLogCount(): Promise<number> {
-		if (!this.config.enablePersistence || !this.storage.isAvailable()) {
+		if (!this.canReadStorage()) {
 			return 0;
 		}
 
@@ -365,7 +498,7 @@ class Logger {
 		source?: string;
 		limit?: number;
 	}): Promise<string> {
-		if (!this.config.enablePersistence || !this.storage.isAvailable()) {
+		if (!this.canReadStorage()) {
 			return JSON.stringify([]);
 		}
 
@@ -391,14 +524,32 @@ class Logger {
 
 	// Update configuration
 	updateConfig(newConfig: Partial<LoggerConfig>): void {
-		this.config = { ...this.config, ...newConfig };
-
-		// Reinitialize storage if persistence settings changed
-		if (newConfig.enablePersistence !== undefined) {
-			if (this.config.enablePersistence && this.storage.isAvailable()) {
-				this.initializeStorage();
-			}
+		const { enablePersistence, ...rest } = newConfig;
+		this.config = { ...this.config, ...rest };
+		if (enablePersistence !== undefined && !this.inContentScript) {
+			this.applyRecording(enablePersistence);
 		}
+	}
+}
+
+/**
+ * Older versions logged from content scripts into the site's own IndexedDB,
+ * where the site could read it. Remove what they left, once per page.
+ */
+function removeLegacyPageLogDatabase(): void {
+	try {
+		const factory = globalThis.indexedDB;
+		if (!factory?.databases) return;
+		void factory
+			.databases()
+			.then((databases) => {
+				if (databases.some((db) => db.name === LEGACY_PAGE_LOG_DATABASE)) {
+					factory.deleteDatabase(LEGACY_PAGE_LOG_DATABASE);
+				}
+			})
+			.catch(() => undefined);
+	} catch {
+		// IndexedDB unavailable on this page.
 	}
 }
 

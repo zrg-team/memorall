@@ -5,6 +5,7 @@ import { Button } from "@/main/components/ui/button";
 import { Input } from "@/main/components/ui/input";
 import { Badge } from "@/main/components/ui/badge";
 import { ScrollArea } from "@/main/components/ui/scroll-area";
+import { Switch } from "@/main/components/ui/switch";
 import {
 	Select,
 	SelectContent,
@@ -41,6 +42,7 @@ export const LogsPage: React.FC<LogsPageProps> = () => {
 	const { t } = useTranslation("logs");
 	const [logs, setLogs] = useState<LogEntry[]>([]);
 	const [loading, setLoading] = useState(true);
+	const [recording, setRecording] = useState(false);
 	const [searchQuery, setSearchQuery] = useState("");
 	const [viewMode, setViewMode] = useState<"cards" | "text">("cards");
 	const [filters, setFilters] = useState({
@@ -106,7 +108,24 @@ export const LogsPage: React.FC<LogsPageProps> = () => {
 			loadLogs();
 		};
 		initializeAndLoadLogs();
+		let active = true;
+		void logger.isRecording().then((enabled) => {
+			if (active) setRecording(enabled);
+		});
+		return () => {
+			active = false;
+		};
 	}, []);
+
+	const handleRecordingChange = async (enabled: boolean) => {
+		setRecording(enabled);
+		try {
+			await logger.setRecording(enabled);
+		} catch (error) {
+			setRecording(!enabled);
+			logError("Failed to change log recording:", error);
+		}
+	};
 
 	useEffect(() => {
 		const debounceTimer = setTimeout(() => {
@@ -235,6 +254,32 @@ export const LogsPage: React.FC<LogsPageProps> = () => {
 						<h1 className="text-lg font-bold text-foreground">{t("title")}</h1>
 						<TooltipProvider>
 							<div className="flex items-center space-x-1">
+								<Tooltip>
+									<TooltipTrigger asChild>
+										<div className="mr-2 flex items-center gap-2 text-xs text-muted-foreground">
+											<Switch
+												id="logs-recording"
+												checked={recording}
+												onCheckedChange={(enabled) =>
+													void handleRecordingChange(enabled)
+												}
+												aria-label={t("recording.label")}
+											/>
+											<label
+												htmlFor="logs-recording"
+												className="cursor-pointer"
+											>
+												{t("recording.label")}
+											</label>
+										</div>
+									</TooltipTrigger>
+									<TooltipContent className="max-w-xs">
+										<p>{t("recording.hint")}</p>
+									</TooltipContent>
+								</Tooltip>
+
+								<div className="w-px h-6 bg-border mx-1"></div>
+
 								<Tooltip>
 									<TooltipTrigger asChild>
 										<Button
@@ -418,6 +463,11 @@ export const LogsPage: React.FC<LogsPageProps> = () => {
 					) : logs.length === 0 ? (
 						<div className="text-center py-8">
 							<p className="text-muted-foreground">{t("status.empty")}</p>
+							{!recording && (
+								<p className="mt-2 text-xs text-muted-foreground">
+									{t("status.notRecording")}
+								</p>
+							)}
 						</div>
 					) : viewMode === "text" ? (
 						<div className="bg-black text-green-400 p-4 rounded-lg font-mono text-sm overflow-auto">
