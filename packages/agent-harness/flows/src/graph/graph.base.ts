@@ -339,6 +339,10 @@ export const BaseAnnotation = {
 		value: (x, y) => y ?? x,
 		default: () => [],
 	}),
+	transcript: Annotation<ChatCompletionMessageParam[] | undefined>({
+		value: (x, y) => y ?? x,
+		default: () => undefined,
+	}),
 };
 
 const getGraphToolName = (tool: GraphTool): string =>

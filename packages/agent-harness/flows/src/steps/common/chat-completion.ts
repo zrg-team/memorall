@@ -8,6 +8,7 @@ import type {} from "../../interfaces/engine/tool.js";
 import type { AllServices } from "../../interfaces/services/services.js";
 import type {
 	ChatCompletionChunk,
+	ChatCompletionMessageParam,
 	ChatCompletionResponse,
 	ChatMessage,
 } from "../../interfaces/engine/messages.js";
@@ -35,6 +36,8 @@ export interface ChatCompletionInput {
 
 export interface ChatCompletionOutput {
 	response: string;
+	/** The request this step sent, followed by the reply. */
+	transcript: ChatCompletionMessageParam[];
 }
 
 export type ChatCompletionServices = Pick<AllServices, "llm">;
@@ -76,10 +79,11 @@ const definition = defineStep<
 			} satisfies SystemReminderEvent);
 		}
 
+		const messages = reminderMessage
+			? [...input.messages, reminderMessage]
+			: input.messages;
 		const llmResponse = await llm.chatCompletions({
-			messages: reminderMessage
-				? [...input.messages, reminderMessage]
-				: input.messages,
+			messages,
 			temperature,
 			max_tokens: maxTokens,
 			stream,
@@ -99,6 +103,10 @@ const definition = defineStep<
 		return {
 			output: {
 				response: responseContent,
+				transcript: [
+					...messages,
+					{ role: "assistant", content: responseContent },
+				],
 			},
 		};
 	},
