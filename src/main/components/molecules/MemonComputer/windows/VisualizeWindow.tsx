@@ -33,7 +33,7 @@ const sendToChat = (text: string) => {
  * Visualize: a visual the agent wrote in OpenUI Lang, drawn as in chat and
  * kept as a .openui file. The source view edits that file.
  */
-export const VisualizeWindow: React.FC<{
+const VisualizeWindowView: React.FC<{
 	machineKey: string;
 	visual: MemonVisualState;
 	home: string;
@@ -203,3 +203,6 @@ export const VisualizeWindow: React.FC<{
 		</div>
 	);
 };
+
+/** Renders only when its slice of the machine changes: the store keeps unchanged slices by reference. */
+export const VisualizeWindow = React.memo(VisualizeWindowView);

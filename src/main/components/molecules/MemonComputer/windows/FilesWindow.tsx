@@ -52,7 +52,7 @@ const DRAG_TYPE = "application/x-memon-files";
 const TOOL_BUTTON =
 	"inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-input bg-background text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-60";
 
-export const FilesWindow: React.FC<{
+const FilesWindowView: React.FC<{
 	machineKey: string;
 	files: MemonFilesState;
 	/** The agent's home folder, drawn as a house. */
@@ -494,3 +494,6 @@ export const FilesWindow: React.FC<{
 		</div>
 	);
 };
+
+/** Renders only when its slice of the machine changes: the store keeps unchanged slices by reference. */
+export const FilesWindow = React.memo(FilesWindowView);

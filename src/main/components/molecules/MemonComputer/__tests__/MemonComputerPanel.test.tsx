@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("react-i18next", () => ({
@@ -6,10 +6,28 @@ vi.mock("react-i18next", () => ({
 }));
 // The windows (and the PDF, file and terminal code behind them) are not
 // what this tests: the desktop is empty.
-vi.mock("../windows/BrowserWindow", () => ({ BrowserWindow: () => null }));
+// Memoized like the real ones, counting renders.
+const windowRenders = vi.hoisted(() => ({ browser: 0, terminal: 0 }));
+vi.mock("../windows/BrowserWindow", async () => {
+	const React = await import("react");
+	return {
+		BrowserWindow: React.memo(() => {
+			windowRenders.browser += 1;
+			return null;
+		}),
+	};
+});
 vi.mock("../windows/EditorWindow", () => ({ EditorWindow: () => null }));
 vi.mock("../windows/FilesWindow", () => ({ FilesWindow: () => null }));
-vi.mock("../windows/TerminalWindow", () => ({ TerminalWindow: () => null }));
+vi.mock("../windows/TerminalWindow", async () => {
+	const React = await import("react");
+	return {
+		TerminalWindow: React.memo(() => {
+			windowRenders.terminal += 1;
+			return null;
+		}),
+	};
+});
 vi.mock("../windows/PiCodeWindow", () => ({ PiCodeWindow: () => null }));
 vi.mock("../windows/ViewerWindow", () => ({ ViewerWindow: () => null }));
 vi.mock("../windows/KitWindow", () => ({ KitWindow: () => null }));
@@ -125,5 +143,50 @@ describe("MemonComputerPanel in full screen", () => {
 		fireEvent.click(screen.getByLabelText("memonComputer.exitFullscreen"));
 		expect(screen.queryByLabelText("memonComputer.chatPanel")).toBeNull();
 		expect(useShellLayoutStore.getState().chatThreadSlot).toBeNull();
+	});
+});
+
+describe("MemonComputerPanel rendering", () => {
+	const frame = (id: string, app: string, z: number) => ({
+		id,
+		app,
+		x: 0,
+		y: 0,
+		w: 0.5,
+		h: 0.5,
+		z,
+		minimized: false,
+		maximized: false,
+	});
+
+	it("renders a window again only when its own part of the machine changes", () => {
+		const first = {
+			...snapshot,
+			windows: [frame("w1", "terminal", 1), frame("w2", "browser", 2)],
+			focusedWindowId: "w2",
+		} as unknown as MemonMachineSnapshot;
+		useMemonMachineStore.setState({
+			snapshots: { "agent-1": first },
+			watch: () => () => undefined,
+			send: vi.fn(async () => undefined),
+		});
+		render(<MemonComputerPanel machineKey="agent-1" />);
+		const before = { ...windowRenders };
+
+		// What the store keeps after a pull: unchanged parts by reference.
+		act(() =>
+			useMemonMachineStore.setState({
+				snapshots: {
+					"agent-1": {
+						...first,
+						revision: 2,
+						browser: { tabs: [], activeTabId: "next" },
+					} as unknown as MemonMachineSnapshot,
+				},
+			}),
+		);
+
+		expect(windowRenders.terminal).toBe(before.terminal);
+		expect(windowRenders.browser).toBe(before.browser + 1);
 	});
 });

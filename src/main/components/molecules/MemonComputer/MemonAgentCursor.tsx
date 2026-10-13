@@ -19,6 +19,8 @@ export const MemonAgentCursor: React.FC<{
 	);
 
 	React.useLayoutEffect(() => {
+		// Hidden, nothing is placed: no layout forced after every commit.
+		if (!visible) return;
 		const desktop = desktopRef.current;
 		if (!desktop || !cursor?.windowId) {
 			setPoint(null);
@@ -37,11 +39,13 @@ export const MemonAgentCursor: React.FC<{
 		}
 		const box = desktop.getBoundingClientRect();
 		const rect = target.getBoundingClientRect();
-		setPoint({
-			x: rect.left - box.left + Math.min(rect.width / 2, 28),
-			y: rect.top - box.top + Math.min(rect.height / 2, 16),
-		});
-	}, [cursor, desktopRef, revision]);
+		const x = rect.left - box.left + Math.min(rect.width / 2, 28);
+		const y = rect.top - box.top + Math.min(rect.height / 2, 16);
+		// Unchanged, the same object: no second render.
+		setPoint((current) =>
+			current && current.x === x && current.y === y ? current : { x, y },
+		);
+	}, [cursor, desktopRef, revision, visible]);
 
 	if (!visible || !cursor || !point) return null;
 	return (
@@ -105,11 +109,14 @@ export const MemonUserCursor: React.FC<{
 		if (!enabled || !area || !layer || !hasFinePointer()) return;
 		area.setAttribute("data-memon-user-cursor", "");
 		let frame = 0;
-		let x = 0;
-		let y = 0;
+		let clientX = 0;
+		let clientY = 0;
+		// Measured once per frame, where the layout is settled anyway; measuring
+		// in each pointermove forced a layout between a window drag's writes.
 		const place = () => {
 			frame = 0;
-			layer.style.transform = `translate(${x}px, ${y}px)`;
+			const box = area.getBoundingClientRect();
+			layer.style.transform = `translate(${clientX - box.left}px, ${clientY - box.top}px)`;
 		};
 		const hide = () => {
 			layer.style.visibility = "hidden";
@@ -118,9 +125,8 @@ export const MemonUserCursor: React.FC<{
 			if (event.pointerType !== "mouse") return hide();
 			const target = event.target instanceof Element ? event.target : null;
 			if (target?.closest("iframe, .cursor-nwse-resize")) return hide();
-			const box = area.getBoundingClientRect();
-			x = event.clientX - box.left;
-			y = event.clientY - box.top;
+			clientX = event.clientX;
+			clientY = event.clientY;
 			const text = Boolean(
 				target?.closest("input, textarea, [contenteditable='true']"),
 			);

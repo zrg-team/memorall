@@ -38,7 +38,7 @@ const useNow = (active: boolean): number => {
  * stops it). A command of the agent's that needs approval waits here for the
  * user to run or decline it.
  */
-export const TerminalWindow: React.FC<{
+const TerminalWindowView: React.FC<{
 	machineKey: string;
 	terminal: MemonTerminalState;
 	/** The agent's home, shown as `~` in the prompt. */
@@ -221,3 +221,6 @@ export const TerminalWindow: React.FC<{
 		</div>
 	);
 };
+
+/** Renders only when its slice of the machine changes: the store keeps unchanged slices by reference. */
+export const TerminalWindow = React.memo(TerminalWindowView);

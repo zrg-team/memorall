@@ -22,6 +22,7 @@ import {
 	useMemonAgents,
 } from "@/main/components/molecules/MemonComputer";
 import { useMemonMachineStore } from "@/main/stores/memon-machine";
+import type { MemonMachineSummary } from "@/services/memon/types";
 import { useShellLayoutStore } from "@/main/stores/shell-layout";
 import { useRuntimeSessionsStore } from "@/main/stores/runtime-sessions";
 import { useChatStore } from "@/main/stores/chat";
@@ -45,6 +46,17 @@ import { platform } from "@/platform/current";
 const HTML_LAZY_RENDER_THRESHOLD = 500_000;
 
 type RuntimeSection = "artifacts" | "runtime" | "computer";
+
+/** The most recently active machine's key. */
+const latestMachineKey = (
+	summaries: Record<string, MemonMachineSummary>,
+): string | null => {
+	let latest: MemonMachineSummary | undefined;
+	for (const summary of Object.values(summaries)) {
+		if (!latest || summary.updatedAt > latest.updatedAt) latest = summary;
+	}
+	return latest?.key ?? null;
+};
 
 const wantsComputerSection = (state: unknown): boolean =>
 	typeof state === "object" &&
@@ -310,23 +322,23 @@ export const RuntimePage: React.FC = () => {
 	);
 	const location = useLocation();
 	const chatAgentId = useChatStore((state) => state.selectedAgentFlowId);
-	const memonSummaries = useMemonMachineStore((state) => state.summaries);
-	const memonSnapshots = useMemonMachineStore((state) => state.snapshots);
+	// Primitives, not the maps: a working machine publishes several summaries a
+	// second, and this page should render only when the answer changes.
+	const chatAgentComputerRunning = useMemonMachineStore((state) =>
+		chatAgentId !== null ? Boolean(state.summaries[chatAgentId]) : false,
+	);
+	const latestMemonKey = useMemonMachineStore((state) =>
+		latestMachineKey(state.summaries),
+	);
 	const startMemon = useMemonMachineStore((state) => state.start);
 	const { agents: memonAgents, loading: memonAgentsLoading } = useMemonAgents();
 	// The chat agent's computer: a computer belongs to its agent, whatever the
 	// chat. For an agent without MemonOS Bot, the most recently active one.
 	const memonKey = useMemo(() => {
-		const running =
-			chatAgentId !== null &&
-			Boolean(memonSummaries[chatAgentId] || memonSnapshots[chatAgentId]);
-		if (chatAgentId && running) return chatAgentId;
+		if (chatAgentId && chatAgentComputerRunning) return chatAgentId;
 		if (memonAgents.some((agent) => agent.id === chatAgentId)) return null;
-		const latest = Object.values(memonSummaries).sort(
-			(a, b) => b.updatedAt - a.updatedAt,
-		)[0];
-		return latest?.key ?? null;
-	}, [chatAgentId, memonAgents, memonSummaries, memonSnapshots]);
+		return latestMemonKey;
+	}, [chatAgentId, chatAgentComputerRunning, memonAgents, latestMemonKey]);
 	// Any agent with MemonOS Bot can have its computer started from here.
 	const hasComputer =
 		memonKey !== null ||
