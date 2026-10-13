@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { documentFileSystemService } from "@/services/filesystem/document-filesystem";
 import { folderIndexClient } from "@/services/folder-index/folder-index-client";
 import { EMBEDDING_INDEX_TYPE_ID } from "@/services/folder-index/constants";
@@ -12,6 +12,12 @@ import type {
 import { useFolderIndex } from "../folder-index/FolderIndexContext";
 
 const SEARCH_DELAY_MS = 300;
+/**
+ * Unopened folders read per search. Each is a round trip to the OS, and a
+ * mapped disk can hold far more than anyone would wait for; past this, names
+ * deeper down are left to the content index.
+ */
+const MAX_SEARCH_FOLDER_READS = 200;
 const EMPTY_HITS = new Map<string, EmbeddingSearchHit>();
 
 const inventoryOf = (folder: DocumentTreeNode | null) => {
@@ -35,7 +41,6 @@ const inventoryOf = (folder: DocumentTreeNode | null) => {
 
 interface SearchState {
 	key: string;
-	folder: DocumentTreeNode | null;
 	names: DocumentLibraryItem[];
 	semantic: DocumentLibraryItem[];
 	hits: Map<string, EmbeddingSearchHit>;
@@ -90,6 +95,11 @@ export function useDocumentSearch({
 	);
 	const key = JSON.stringify([path, query, revision]);
 	const [state, setState] = useState<SearchState | null>(null);
+	// Read when a search starts, not a reason to start one: the folder's node is
+	// rebuilt by every filesystem change, and searching again for each of them
+	// re-ran inference while the agent was writing files.
+	const inventoryRef = useRef(inventory);
+	inventoryRef.current = inventory;
 
 	useEffect(() => {
 		if (!active) {
@@ -97,11 +107,11 @@ export function useDocumentSearch({
 			return;
 		}
 		let cancelled = false;
+		const inventory = inventoryRef.current;
 		const pending =
 			Number(inventory.deferred.length > 0) + Number(hasEmbeddings);
 		setState({
 			key,
-			folder,
 			names: [],
 			semantic: [],
 			hits: new Map(),
@@ -111,7 +121,7 @@ export function useDocumentSearch({
 		const update = (patch: Partial<SearchState>) => {
 			if (cancelled) return;
 			setState((previous) =>
-				previous?.key === key && previous.folder === folder
+				previous?.key === key
 					? { ...previous, ...patch, pending: previous.pending - 1 }
 					: previous,
 			);
@@ -123,8 +133,10 @@ export function useDocumentSearch({
 				void (async () => {
 					const names: DocumentLibraryItem[] = [];
 					const queue = [...inventory.deferred];
+					let reads = 0;
 					for (const node of queue) {
 						if (cancelled) return;
+						if (reads++ >= MAX_SEARCH_FOLDER_READS) break;
 						const children = await documentFileSystemService.getFolderChildren(
 							node.path,
 						);
@@ -177,9 +189,9 @@ export function useDocumentSearch({
 			cancelled = true;
 			clearTimeout(timer);
 		};
-	}, [active, folder, inventory, hasEmbeddings, key, path, query]);
+	}, [active, hasEmbeddings, key, path, query]);
 
-	const current = state?.key === key && state.folder === folder ? state : null;
+	const current = state?.key === key ? state : null;
 	const items = useMemo(() => {
 		if (!active) return folderContents;
 		const terms = query.toLocaleLowerCase().split(/\s+/u);

@@ -3,7 +3,7 @@
  * Hierarchical navigation with drag-and-drop support for reorganizing files and folders
  */
 
-import React, { useMemo, useRef } from "react";
+import React, { useCallback, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import {
 	ChevronRight,
@@ -48,6 +48,7 @@ import { CSS } from "@dnd-kit/utilities";
 
 import type { DocumentTreeNode, DocumentType } from "@/types/document-library";
 import { cn } from "@/lib/utils";
+import { contentVisibilityAuto } from "@/main/components/atoms/content-visibility";
 import { FolderIndexMenuItems } from "../folder-index";
 
 interface DocumentTreeProps {
@@ -96,10 +97,27 @@ const FILE_COLORS: Record<DocumentType, string> = {
 	other: "text-gray-400",
 };
 
+/**
+ * Require 8px movement to start a drag (prevents accidental drags). A module
+ * constant: new options on each render make dnd-kit rebuild its context, which
+ * redraws every row in the tree.
+ */
+const POINTER_SENSOR_OPTIONS = { activationConstraint: { distance: 8 } };
+
+/** Whether the selected node is `node` or somewhere below it. */
+const leadsTo = (node: DocumentTreeNode, selectedPath: string | null) =>
+	selectedPath !== null &&
+	(selectedPath === node.path || selectedPath.startsWith(`${node.path}/`));
+
 interface TreeItemProps {
 	node: DocumentTreeNode;
 	level: number;
+	/**
+	 * The selection, given only to rows on the way down to it (null for every
+	 * other row), so selecting redraws that path instead of the whole tree.
+	 */
 	selectedId: string | null;
+	selectedPath: string | null;
 	onSelectNode: (node: DocumentTreeNode) => void;
 	onToggleExpand?: (node: DocumentTreeNode) => void;
 	onRename?: (node: DocumentTreeNode, newName: string) => void;
@@ -109,10 +127,14 @@ interface TreeItemProps {
 	onUnmap?: (path: string) => void;
 }
 
-const TreeItem: React.FC<TreeItemProps> = ({
+// Memoised: a big mapped folder has thousands of rows, each with drag, drop
+// and menu hooks, and most of them are unchanged by any one update. The inner
+// function has its own name so the rows it nests resolve to the memoised one.
+const TreeItem = React.memo(function TreeItemRow({
 	node,
 	level,
 	selectedId,
+	selectedPath,
 	onSelectNode,
 	onToggleExpand,
 	onRename,
@@ -120,7 +142,7 @@ const TreeItem: React.FC<TreeItemProps> = ({
 	onDownloadFolder,
 	mappedPaths,
 	onUnmap,
-}) => {
+}: TreeItemProps) {
 	const { t } = useTranslation("documents");
 	// Only a root can be a mapped folder; everything inside one is ordinary.
 	const isMapped = level === 0 && Boolean(mappedPaths?.has(node.path));
@@ -215,6 +237,8 @@ const TreeItem: React.FC<TreeItemProps> = ({
 							isOver && isFolder && "ring-2 ring-primary ring-inset",
 						)}
 						style={{
+							// Rows scrolled out of view skip layout and paint.
+							...contentVisibilityAuto(28),
 							paddingLeft: `${level * 12 + 8}px`,
 							transform: dragStyle.transform,
 							opacity: dragStyle.opacity,
@@ -355,23 +379,64 @@ const TreeItem: React.FC<TreeItemProps> = ({
 			{/* Render Children OUTSIDE droppable area */}
 			{isFolder && hasChildren && node.isExpanded && (
 				<div>
-					{node.children.map((child) => (
-						<TreeItem
-							key={child.id}
-							node={child}
-							level={level + 1}
-							selectedId={selectedId}
-							onSelectNode={onSelectNode}
-							onToggleExpand={onToggleExpand}
-							onRename={onRename}
-							onDelete={onDelete}
-							onDownloadFolder={onDownloadFolder}
-							mappedPaths={mappedPaths}
-							onUnmap={onUnmap}
-						/>
-					))}
+					{node.children.map((child) => {
+						const onPath = leadsTo(child, selectedPath);
+						return (
+							<TreeItem
+								key={child.id}
+								node={child}
+								level={level + 1}
+								selectedId={onPath ? selectedId : null}
+								selectedPath={onPath ? selectedPath : null}
+								onSelectNode={onSelectNode}
+								onToggleExpand={onToggleExpand}
+								onRename={onRename}
+								onDelete={onDelete}
+								onDownloadFolder={onDownloadFolder}
+								mappedPaths={mappedPaths}
+								onUnmap={onUnmap}
+							/>
+						);
+					})}
 				</div>
 			)}
+		</div>
+	);
+});
+
+/**
+ * Drop here to move to the top level; shown only while dragging. Defined once
+ * at module level: declared inside the tree it was a new component on every
+ * render, so it was torn down and registered again each time.
+ */
+const RootDropZone: React.FC<{ active: boolean }> = ({ active }) => {
+	const { t } = useTranslation("documents");
+	const { setNodeRef, isOver } = useDroppable({
+		id: "root-dropzone",
+		data: {
+			type: "folder",
+			path: "/",
+		},
+	});
+
+	if (!active) return null;
+
+	return (
+		<div
+			ref={setNodeRef}
+			className={cn(
+				"mx-2 mb-2 px-3 py-2 rounded-md border-2 border-dashed transition-all",
+				isOver
+					? "border-primary bg-primary/20 scale-105"
+					: "border-muted-foreground/30 bg-muted/30",
+			)}
+		>
+			<div className="flex items-center gap-2 text-sm">
+				<Home className="h-4 w-4" />
+				<span className="font-medium">
+					{isOver ? t("tree.dropToRoot") : t("tree.rootFolder")}
+				</span>
+			</div>
 		</div>
 	);
 };
@@ -391,11 +456,7 @@ export const DocumentTreeDraggable: React.FC<DocumentTreeProps> = ({
 	const [activeId, setActiveId] = React.useState<string | null>(null);
 
 	const sensors = useSensors(
-		useSensor(PointerSensor, {
-			activationConstraint: {
-				distance: 8, // Require 8px movement to start drag (prevents accidental drags)
-			},
-		}),
+		useSensor(PointerSensor, POINTER_SENSOR_OPTIONS),
 		useSensor(KeyboardSensor),
 	);
 
@@ -416,114 +477,93 @@ export const DocumentTreeDraggable: React.FC<DocumentTreeProps> = ({
 		() => flattenedTree.find((node) => node.id === activeId),
 		[activeId, flattenedTree],
 	);
+	const selectedPath = useMemo(
+		() =>
+			selectedId === null
+				? null
+				: (flattenedTree.find((node) => node.id === selectedId)?.path ?? null),
+		[flattenedTree, selectedId],
+	);
 
-	const handleDragStart = (event: DragStartEvent) => {
+	const handleDragStart = useCallback((event: DragStartEvent) => {
 		setActiveId(event.active.id as string);
-	};
+	}, []);
 
-	const handleDragEnd = (event: DragEndEvent) => {
-		const { active, over } = event;
+	const handleDragEnd = useCallback(
+		(event: DragEndEvent) => {
+			const { active, over } = event;
 
-		setActiveId(null);
+			setActiveId(null);
 
-		if (!over || active.id === over.id) {
-			return;
-		}
-
-		const activeNode = flattenedTree.find((node) => node.id === active.id);
-		if (!activeNode) {
-			return;
-		}
-
-		// Determine target folder
-		let targetFolderId: string;
-
-		// Check if dropped on root drop zone
-		if (over.id === "root-dropzone") {
-			targetFolderId = "/";
-		} else {
-			// Extract node ID from droppable ID
-			const overNodeId =
-				typeof over.id === "string" && over.id.startsWith("droppable-")
-					? over.id.replace("droppable-", "")
-					: over.id;
-
-			const overNode = flattenedTree.find((node) => node.id === overNodeId);
-			if (!overNode) {
+			if (!over || active.id === over.id) {
 				return;
 			}
 
-			if (overNode.type === "folder") {
-				// Dropped onto a folder - move into it
-				targetFolderId = overNode.path;
-			} else {
-				// Dropped onto a file - move into its parent folder
-				targetFolderId =
-					overNode.path.substring(0, overNode.path.lastIndexOf("/")) || "/";
+			const activeNode = flattenedTree.find((node) => node.id === active.id);
+			if (!activeNode) {
+				return;
 			}
-		}
 
-		// Get current parent folder of the active node
-		const currentParentPath =
-			activeNode.path.substring(0, activeNode.path.lastIndexOf("/")) || "/";
+			// Determine target folder
+			let targetFolderId: string;
 
-		// Don't do anything if dropping into the same folder
-		if (currentParentPath === targetFolderId) {
-			return;
-		}
+			// Check if dropped on root drop zone
+			if (over.id === "root-dropzone") {
+				targetFolderId = "/";
+			} else {
+				// Extract node ID from droppable ID
+				const overNodeId =
+					typeof over.id === "string" && over.id.startsWith("droppable-")
+						? over.id.replace("droppable-", "")
+						: over.id;
 
-		// Prevent moving a folder into itself or its children
-		if (
-			activeNode.type === "folder" &&
-			targetFolderId.startsWith(activeNode.path)
-		) {
-			return;
-		}
+				const overNode = flattenedTree.find((node) => node.id === overNodeId);
+				if (!overNode) {
+					return;
+				}
 
-		// Trigger move callback
-		onMove?.(activeNode.id, targetFolderId, activeNode.type);
-	};
+				if (overNode.type === "folder") {
+					// Dropped onto a folder - move into it
+					targetFolderId = overNode.path;
+				} else {
+					// Dropped onto a file - move into its parent folder
+					targetFolderId =
+						overNode.path.substring(0, overNode.path.lastIndexOf("/")) || "/";
+				}
+			}
 
-	// Root drop zone component (only visible when dragging)
-	const RootDropZone = () => {
-		const { t } = useTranslation("documents");
-		const { setNodeRef, isOver } = useDroppable({
-			id: "root-dropzone",
-			data: {
-				type: "folder",
-				path: "/",
-			},
-		});
+			// Get current parent folder of the active node
+			const currentParentPath =
+				activeNode.path.substring(0, activeNode.path.lastIndexOf("/")) || "/";
 
-		if (!activeId) return null;
+			// Don't do anything if dropping into the same folder
+			if (currentParentPath === targetFolderId) {
+				return;
+			}
 
-		return (
-			<div
-				ref={setNodeRef}
-				className={cn(
-					"mx-2 mb-2 px-3 py-2 rounded-md border-2 border-dashed transition-all",
-					isOver
-						? "border-primary bg-primary/20 scale-105"
-						: "border-muted-foreground/30 bg-muted/30",
-				)}
-			>
-				<div className="flex items-center gap-2 text-sm">
-					<Home className="h-4 w-4" />
-					<span className="font-medium">
-						{isOver ? t("tree.dropToRoot") : t("tree.rootFolder")}
-					</span>
-				</div>
-			</div>
-		);
-	};
+			// Prevent moving a folder into itself or its children
+			if (
+				activeNode.type === "folder" &&
+				targetFolderId.startsWith(activeNode.path)
+			) {
+				return;
+			}
+
+			// Trigger move callback
+			onMove?.(activeNode.id, targetFolderId, activeNode.type);
+		},
+		[flattenedTree, onMove],
+	);
 
 	const renderNode = (node: DocumentTreeNode, level: number = 0) => {
+		const onPath = leadsTo(node, selectedPath);
 		return (
 			<TreeItem
 				key={node.id}
 				node={node}
 				level={level}
-				selectedId={selectedId}
+				selectedId={onPath ? selectedId : null}
+				selectedPath={onPath ? selectedPath : null}
 				onSelectNode={onSelectNode}
 				onToggleExpand={onToggleExpand}
 				onRename={onRename}
@@ -544,7 +584,7 @@ export const DocumentTreeDraggable: React.FC<DocumentTreeProps> = ({
 		>
 			<div className="h-full overflow-y-auto">
 				<div className="py-2 px-1">
-					<RootDropZone />
+					<RootDropZone active={activeId !== null} />
 					{tree.map((node) => renderNode(node))}
 				</div>
 			</div>

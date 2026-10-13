@@ -1,9 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-	portBridge: {
-		initialize: vi.fn(),
-	},
 	init: vi.fn(async () => undefined),
 	isInitializing: vi.fn(() => false),
 	offscreenWatchdogCheck: vi.fn(async () => undefined),
@@ -27,9 +24,10 @@ vi.mock("@/utils/logger", () => ({
 	logError: mocks.logError,
 	logWarn: vi.fn(),
 	logDebug: vi.fn(),
+	connectLogRecording: vi.fn(),
 }));
-vi.mock("@/background/port-bridge", () => ({
-	portBridge: mocks.portBridge,
+vi.mock("@/services/shared-storage", () => ({
+	sharedStorageService: { asKeyValueStore: vi.fn() },
 }));
 vi.mock("@/background/core/init", () => ({
 	init: mocks.init,
@@ -82,6 +80,9 @@ const installChrome = () => {
 					startupListeners.push(listener);
 				}),
 			},
+			onConnect: {
+				addListener: vi.fn(),
+			},
 		},
 		action: {
 			onClicked: {
@@ -127,9 +128,8 @@ describe("background service worker entrypoint", () => {
 
 		await importBackground();
 
-		expect(mocks.portBridge.initialize).toHaveBeenCalledWith({
-			proxyOptions: { channelName: "postgres-rpc" },
-		});
+		// The database port goes straight to the offscreen document.
+		expect(chrome.runtime.onConnect.addListener).not.toHaveBeenCalled();
 		expect(mocks.registerContextMenuHandler).toHaveBeenCalledTimes(1);
 		expect(mocks.registerWebToolBrowserHandler).toHaveBeenCalledTimes(1);
 		expect(mocks.registerCoAgentBrowserHandler).toHaveBeenCalledTimes(1);

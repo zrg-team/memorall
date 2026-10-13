@@ -129,6 +129,87 @@ describe("mergeTreeState", () => {
 
 		expect(mergeTreeState(before, fresh).map((n) => n.path)).toEqual(["/b"]);
 	});
+
+	/** A rebuild as the service reads it: new objects, and folders dated now. */
+	const read = (stamp: number, size = 3) => [
+		node({
+			id: "/docs",
+			name: "docs",
+			path: "/docs",
+			folder: {
+				id: "/docs",
+				name: "docs",
+				path: "/docs",
+				parentPath: null,
+				childCount: 1,
+				createdAt: new Date(stamp),
+				modifiedAt: new Date(stamp),
+			},
+			children: [
+				node({
+					id: "/docs/a.md",
+					name: "a.md",
+					path: "/docs/a.md",
+					type: "file",
+					file: {
+						id: "/docs/a.md",
+						name: "a.md",
+						path: "/docs/a.md",
+						type: "markdown",
+						mimeType: "text/markdown",
+						size,
+						createdAt: new Date(0),
+						modifiedAt: new Date(0),
+						metadata: {},
+					},
+				}),
+			],
+		}),
+		node({ id: "/other", name: "other", path: "/other" }),
+	];
+
+	it("returns the previous tree when a rebuild changed nothing, folder dates aside", () => {
+		const before = mergeTreeState([], read(1));
+
+		expect(mergeTreeState(before, read(2))).toBe(before);
+	});
+
+	it("rebuilds only the path down to a changed node", () => {
+		const before = mergeTreeState([], read(1));
+
+		const after = mergeTreeState(before, read(2, 4));
+
+		expect(after).not.toBe(before);
+		expect(after[0]).not.toBe(before[0]);
+		expect(after[0]?.children[0]?.file?.size).toBe(4);
+		expect(after[1]).toBe(before[1]);
+	});
+
+	it("keeps a read mapped folder, and its count, the same object across rebuilds", () => {
+		const child = node({ id: "/m/x", name: "x", path: "/m/x", type: "file" });
+		const before = [
+			node({
+				id: "/m",
+				name: "m",
+				path: "/m",
+				isLazy: false,
+				isExpanded: true,
+				children: [child],
+				folder: { id: "/m", name: "m", path: "/m", childCount: 1 },
+			}),
+		];
+		const fresh = [
+			node({
+				id: "/m",
+				name: "m",
+				path: "/m",
+				isLazy: true,
+				folder: { id: "/m", name: "m", path: "/m", childCount: 0 },
+			}),
+		];
+
+		expect(mergeTreeState(before, fresh)).toBe(before);
+	});
 });
 
 describe("updateNodeByPath", () => {

@@ -92,6 +92,19 @@ interface DocumentViewerProps {
 	onTopicClick?: (topicId: string) => void;
 }
 
+/**
+ * The bytes as a Blob part. Blob copies them anyway; copying first as well
+ * doubled the memory a large PDF or video took to open. Only bytes over a
+ * shared buffer, which Blob refuses, need their own copy.
+ */
+const blobPart = (bytes: Uint8Array): Uint8Array<ArrayBuffer> =>
+	bytes.buffer instanceof ArrayBuffer
+		? (bytes as Uint8Array<ArrayBuffer>)
+		: bytes.slice();
+
+/** One empty list, so a default does not count as a new prop each render. */
+const EMPTY_TOPIC_IDS: string[] = [];
+
 /** Shown when the browser cannot decode a stored audio or video file. */
 const MediaUnsupportedNote: React.FC = () => {
 	const { t } = useTranslation("documents");
@@ -105,7 +118,9 @@ const MediaUnsupportedNote: React.FC = () => {
 	);
 };
 
-export const DocumentViewer: React.FC<DocumentViewerProps> = ({
+// Memoised: the page around it redraws for the tree, the list and the index
+// status, and redrawing the viewer re-renders the open document with it.
+export const DocumentViewer = React.memo(function DocumentViewer({
 	file,
 	isWorkspaceFile = false,
 	compact = false,
@@ -116,9 +131,9 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({
 	onManageTopics,
 	onConvertToKnowledge,
 	fileTopics: propFileTopics,
-	selectedTopicIds = [],
+	selectedTopicIds = EMPTY_TOPIC_IDS,
 	onTopicClick,
-}) => {
+}: DocumentViewerProps) {
 	const { t, i18n } = useTranslation("documents");
 	const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 	const [mediaError, setMediaError] = useState(false);
@@ -150,6 +165,7 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({
 		? toWorkspacesSandboxPath(file.path)
 		: toDocumentsSandboxPath(file.id);
 
+	// biome-ignore lint/correctness/useExhaustiveDependencies: a preview is read again only when another file opens.
 	useEffect(() => {
 		// Reset content state when file changes
 		setTextContent(null);
@@ -157,6 +173,13 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({
 		setExcelData(null);
 		setPresentationData(null);
 		setMediaError(false);
+		// A file left mid-load never clears its own spinner (its read is
+		// cancelled), and a text file never sets one.
+		setLoading(false);
+		// This read's own URL, and whether another file was opened since: the
+		// state is stale in the cleanup, so revoking from it never released one.
+		let url: string | null = null;
+		let cancelled = false;
 
 		// Load preview for supported file types
 		const loadPreview = async () => {
@@ -172,13 +195,14 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({
 				setLoading(true);
 				try {
 					const content = await loadContent();
-					const blob = new Blob([content.slice()], { type: file.mimeType });
-					const url = URL.createObjectURL(blob);
+					if (cancelled) return;
+					const blob = new Blob([blobPart(content)], { type: file.mimeType });
+					url = URL.createObjectURL(blob);
 					setPreviewUrl(url);
 				} catch (error) {
 					logError("Failed to load preview:", error);
 				} finally {
-					setLoading(false);
+					if (!cancelled) setLoading(false);
 				}
 			} else if (
 				file.type === "text" ||
@@ -188,6 +212,7 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({
 			) {
 				try {
 					const content = await loadContent();
+					if (cancelled) return;
 					const textDecoder = new TextDecoder("utf-8");
 					const text = textDecoder.decode(content);
 					setTextContent(text);
@@ -199,22 +224,24 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({
 				try {
 					logInfo("Loading Excel file content for:", file.name);
 					const content = await loadContent();
+					if (cancelled) return;
 					logInfo("Excel content loaded, size:", content.length, "bytes");
 					setExcelData(content);
 					logInfo("Excel data set in state");
 				} catch (error) {
 					logError("Failed to load Excel file:", error);
 				} finally {
-					setLoading(false);
+					if (!cancelled) setLoading(false);
 				}
 			} else if (file.type === "presentation") {
 				setLoading(true);
 				try {
-					setPresentationData(await loadContent());
+					const content = await loadContent();
+					if (!cancelled) setPresentationData(content);
 				} catch (error) {
 					logError("Failed to load presentation:", error);
 				} finally {
-					setLoading(false);
+					if (!cancelled) setLoading(false);
 				}
 			}
 		};
@@ -222,9 +249,8 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({
 		loadPreview();
 
 		return () => {
-			if (previewUrl) {
-				URL.revokeObjectURL(previewUrl);
-			}
+			cancelled = true;
+			if (url) URL.revokeObjectURL(url);
 		};
 	}, [file.id]);
 
@@ -921,6 +947,7 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({
 									<h3 className="text-sm font-semibold">{t("viewer.tags")}</h3>
 									<div className="flex flex-wrap gap-2">
 										{file.metadata.tags.map((tag, index) => (
+											// biome-ignore lint/suspicious/noArrayIndexKey: tags may repeat.
 											<Badge key={index} variant="outline">
 												{tag}
 											</Badge>
@@ -985,4 +1012,4 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({
 			)}
 		</div>
 	);
-};
+});

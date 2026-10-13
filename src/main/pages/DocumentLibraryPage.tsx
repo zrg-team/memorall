@@ -1,4 +1,4 @@
-import React, { useCallback } from "react";
+import React, { useCallback, useMemo } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
@@ -53,21 +53,62 @@ export const DocumentLibraryPage: React.FC = () => {
 		splitBreakpoint: 700,
 		collapseBreakpoint: 1180,
 	});
+	const {
+		handleRenameItem,
+		handleDeleteItem,
+		handleDownloadFolder,
+		handleOpenDocumentByPath,
+		loading,
+	} = lib;
 	const activeTree = lib.tree;
-	const visibleDocumentNodes = getVisibleTreeNodes(lib.tree);
-	const visibleWorkspaceNodes = getVisibleTreeNodes(lib.workspaceTree);
-	const compactNavigatorExpandButton = compactNavigatorCollapsed ? (
-		<Button
-			variant="ghost"
-			size="sm"
-			onClick={() => setCompactNavigatorCollapsed(false)}
-			className="h-8 w-8 flex-shrink-0 p-0"
-			title={t("navigator.expand")}
-			aria-label={t("navigator.expand")}
-		>
-			<PanelLeftOpen className="h-4 w-4" />
-		</Button>
-	) : null;
+	// Only the collapsed rail lists every visible node; walking the trees for
+	// it on each render of the page cost as much as drawing them.
+	const showsCollapsedRail = isSplitLayout && isSidebarCollapsed;
+	const visibleDocumentNodes = useMemo(
+		() => (showsCollapsedRail ? getVisibleTreeNodes(lib.tree) : []),
+		[showsCollapsedRail, lib.tree],
+	);
+	const visibleWorkspaceNodes = useMemo(
+		() => (showsCollapsedRail ? getVisibleTreeNodes(lib.workspaceTree) : []),
+		[showsCollapsedRail, lib.workspaceTree],
+	);
+	// Elements passed to memoised panels are built once, not on every render,
+	// or the panels would redraw whenever the page does.
+	const compactNavigatorExpandButton = useMemo(
+		() =>
+			compactNavigatorCollapsed ? (
+				<Button
+					variant="ghost"
+					size="sm"
+					onClick={() => setCompactNavigatorCollapsed(false)}
+					className="h-8 w-8 flex-shrink-0 p-0"
+					title={t("navigator.expand")}
+					aria-label={t("navigator.expand")}
+				>
+					<PanelLeftOpen className="h-4 w-4" />
+				</Button>
+			) : null,
+		[compactNavigatorCollapsed, t],
+	);
+	const collapseButton = useMemo(
+		() => (
+			<Button
+				type="button"
+				variant="ghost"
+				size="icon"
+				className="h-8 w-8"
+				onClick={collapseSidebar}
+				aria-label={t("navigator.collapse")}
+				title={t("navigator.collapse")}
+			>
+				<PanelLeftClose className="h-4 w-4" />
+			</Button>
+		),
+		[collapseSidebar, t],
+	);
+	// Typing stays responsive: the input follows every key, the results follow
+	// when React has time.
+	const searchQuery = React.useDeferredValue(lib.searchQuery);
 	const homeOptions = undefined;
 
 	const [openFolderIndexes, setOpenFolderIndexes] = React.useState(false);
@@ -88,15 +129,15 @@ export const DocumentLibraryPage: React.FC = () => {
 		const documentPath = (
 			location.state as { openDocumentPath?: string } | null
 		)?.openDocumentPath;
-		if (!documentPath || lib.loading) return;
-		lib.handleOpenDocumentByPath(documentPath);
+		if (!documentPath || loading) return;
+		handleOpenDocumentByPath(documentPath);
 		navigate(`${location.pathname}${location.search}`, {
 			replace: true,
 			state: null,
 		});
 	}, [
-		lib.loading,
-		lib.handleOpenDocumentByPath,
+		loading,
+		handleOpenDocumentByPath,
 		location.pathname,
 		location.search,
 		location.state,
@@ -110,35 +151,35 @@ export const DocumentLibraryPage: React.FC = () => {
 	const handleTreeRename = useCallback(
 		(node: DocumentTreeNode, newName: string) => {
 			if (node.type === "file" && node.file) {
-				lib.handleRenameItem({ type: "file", item: node.file }, newName);
+				handleRenameItem({ type: "file", item: node.file }, newName);
 			} else if (node.type === "folder" && node.folder) {
-				lib.handleRenameItem({ type: "folder", item: node.folder }, newName);
+				handleRenameItem({ type: "folder", item: node.folder }, newName);
 			}
 		},
-		[lib],
+		[handleRenameItem],
 	);
 
 	const handleTreeDelete = useCallback(
 		(node: DocumentTreeNode) => {
 			if (node.type === "file" && node.file) {
-				lib.handleDeleteItem({ type: "file", item: node.file });
+				handleDeleteItem({ type: "file", item: node.file });
 			} else if (node.type === "folder" && node.folder) {
-				lib.handleDeleteItem({ type: "folder", item: node.folder });
+				handleDeleteItem({ type: "folder", item: node.folder });
 			}
 		},
-		[lib],
+		[handleDeleteItem],
 	);
 
 	const handleTreeDownloadFolder = useCallback(
 		(node: DocumentTreeNode) => {
 			if (node.type === "folder") {
-				void lib.handleDownloadFolder(node.folder?.path ?? node.path);
+				void handleDownloadFolder(node.folder?.path ?? node.path);
 			}
 		},
-		[lib],
+		[handleDownloadFolder],
 	);
 
-	if (lib.loading) {
+	if (loading) {
 		return <WorkspaceContentSkeleton />;
 	}
 
@@ -233,19 +274,7 @@ export const DocumentLibraryPage: React.FC = () => {
 										selectedSection={lib.selectedSection}
 										selectedNodeId={lib.selectedNode?.id ?? null}
 										docsTitle={t("title")}
-										collapseButton={
-											<Button
-												type="button"
-												variant="ghost"
-												size="icon"
-												className="h-8 w-8"
-												onClick={collapseSidebar}
-												aria-label={t("navigator.collapse")}
-												title={t("navigator.collapse")}
-											>
-												<PanelLeftClose className="h-4 w-4" />
-											</Button>
-										}
+										collapseButton={collapseButton}
 										onSelectDocumentsRoot={lib.handleSelectDocumentsSection}
 										onSelectDocNode={lib.handleSelectDocNode}
 										onSelectWorkspaceNode={lib.handleSelectWorkspaceNode}
@@ -303,7 +332,7 @@ export const DocumentLibraryPage: React.FC = () => {
 										isFolderSelected={lib.isFolderSelected}
 										isWorkspaceSection={lib.isWorkspaceSection}
 										folderContents={lib.folderContents}
-										searchQuery={lib.searchQuery}
+										searchQuery={searchQuery}
 										viewMode={lib.viewMode}
 										fileTopicMap={lib.fileTopicMap}
 										selectedTopicIds={lib.selectedTopicIds}
@@ -380,7 +409,7 @@ export const DocumentLibraryPage: React.FC = () => {
 									isFolderSelected={lib.isFolderSelected}
 									isWorkspaceSection={lib.isWorkspaceSection}
 									folderContents={lib.folderContents}
-									searchQuery={lib.searchQuery}
+									searchQuery={searchQuery}
 									viewMode={lib.viewMode}
 									fileTopicMap={lib.fileTopicMap}
 									selectedTopicIds={lib.selectedTopicIds}

@@ -25,6 +25,8 @@ import {
 
 const FONT_FAMILY = '"IBM Plex Mono", ui-monospace, monospace';
 const FONT_SIZE = 12;
+/** A resize this long without another counts as finished. */
+const RESIZE_SETTLE_MS = 100;
 /** A line sent stays on screen this long for the tab's lines to bring it. */
 const ECHO_GRACE_MS = 400;
 
@@ -444,12 +446,18 @@ export const XtermTerminal = React.forwardRef<
 			if (wider) screen.redraw();
 		};
 		let frame = 0;
+		let settle: ReturnType<typeof setTimeout> | undefined;
+		// Fitted once the size settles: a new width rewraps and redraws every
+		// line, which every frame of a window resize did before.
 		const observer =
 			typeof ResizeObserver === "undefined"
 				? null
 				: new ResizeObserver(() => {
 						cancelAnimationFrame(frame);
-						frame = requestAnimationFrame(fitToHost);
+						clearTimeout(settle);
+						settle = setTimeout(() => {
+							frame = requestAnimationFrame(fitToHost);
+						}, RESIZE_SETTLE_MS);
 					});
 		observer?.observe(host);
 
@@ -468,6 +476,7 @@ export const XtermTerminal = React.forwardRef<
 		return () => {
 			disposed = true;
 			cancelAnimationFrame(frame);
+			clearTimeout(settle);
 			observer?.disconnect();
 			host.removeEventListener("contextmenu", onContextMenu);
 			data.dispose();

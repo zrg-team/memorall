@@ -147,6 +147,22 @@ export const groupAssistantParts = (
 	return segments;
 };
 
+/**
+ * What the artifact claims of a streaming reply's text blocks depend on: the
+ * blocks there are and every block but the last, which is the one still
+ * being written.
+ */
+const textClaimsVersion = (segments: AssistantFlowSegment[]): string => {
+	const texts = segments.filter((segment) => segment.kind === "text");
+	return texts
+		.map((segment, index) =>
+			index === texts.length - 1
+				? segment.key
+				: `${segment.key}:${segment.text.length}`,
+		)
+		.join("|");
+};
+
 interface AssistantContentFlowProps {
 	parts: AssistantContentPart[];
 	isStreaming: boolean;
@@ -165,13 +181,6 @@ export const AssistantContentFlow: React.FC<AssistantContentFlowProps> =
 			suppressArtifactPreviews = false,
 			onMessageAction,
 		}) => {
-			// Some flows re-emit the same assistant text (and its artifact tags) across
-			// multiple content parts (e.g. one per agent iteration). Share a dedupe set
-			// across all text parts so a single artifact only renders once.
-			const seenArtifactKeys = useMemo(
-				() => new Map<string, string>(),
-				[parts],
-			);
 			const mergedParts = useMemo(
 				() => mergeAdjacentAssistantTextParts(parts),
 				[parts],
@@ -188,6 +197,19 @@ export const AssistantContentFlow: React.FC<AssistantContentFlowProps> =
 			const segments = useMemo(
 				() => groupAssistantParts(mergedParts),
 				[mergedParts],
+			);
+			// Some flows re-emit the same assistant text (and its artifact tags) across
+			// multiple content parts (e.g. one per agent iteration). Share a dedupe set
+			// across all text parts so a single artifact only renders once.
+			//
+			// While a reply streams only its last block grows, so the earlier blocks'
+			// claims hold and the map is kept: a new one on every chunk changed a prop
+			// of every text block and re-rendered each of them. Anything else that
+			// moves (a block added, an earlier one reshaped) starts it over.
+			const claimsVersion = isStreaming ? textClaimsVersion(segments) : parts;
+			const seenArtifactKeys = useMemo(
+				() => new Map<string, string>(),
+				[claimsVersion],
 			);
 			const lastToolSegmentIndex = segments.findLastIndex(
 				(segment) => segment.kind === "tools",

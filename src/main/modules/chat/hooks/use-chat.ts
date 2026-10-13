@@ -4,6 +4,7 @@ import {
 	shouldCloseCoAgentSession,
 } from "@/services/chat/coagent-session";
 import { useEffect, useRef, useState } from "react";
+import { create } from "zustand";
 import { chatService } from "@/main/modules/chat/services/chat-service";
 import { getAgentOpenUITheme } from "@/main/modules/chat/utils/agent-openui-theme";
 import { buildSendMessages } from "@/main/modules/chat/utils/build-send-messages";
@@ -24,10 +25,7 @@ import {
 import { useWebChallengePromptStore } from "@/main/stores/web-challenge-prompts";
 import { backgroundJob } from "@/services/background-jobs/background-job";
 import { createJobErrorMetadata } from "@/services/background-jobs/handlers/error-metadata";
-import {
-	cloneMessageParts,
-	hasReplyParts,
-} from "@/services/chat/message-parts";
+import { hasReplyParts } from "@/services/chat/message-parts";
 import {
 	finishRunningToolExecutions,
 	upsertToolExecution,
@@ -49,7 +47,7 @@ import type { ChatMessage } from "@/types/openai";
 import { isAbortError } from "@/utils/abort";
 import { logError, logInfo } from "@/utils/logger";
 import { v4 } from "@/utils/uuid";
-import { useFrameCoalescedState } from "./use-frame-coalesced-state";
+import { createFrameCoalescer } from "./use-frame-coalesced-state";
 import { createCoAgentFlowPrefixConfig } from "@/co-agent/flow-config";
 import { useCoAgentActivationStore } from "@/main/stores/co-agent-activation";
 
@@ -87,9 +85,38 @@ export interface ChatMessageDraft {
 export interface UseChatOptions {
 	/** New runs may share the time with runs in other chats (`ChatRun.concurrent`). */
 	concurrent?: boolean;
+	/**
+	 * Whether the hook returns the reply being written, rendering with each
+	 * streamed frame (default: it does). A page that shows the reply through
+	 * `useInProgressMessage` turns this off and reads `inProgressMessageId`.
+	 */
+	readInProgressMessage?: boolean;
 }
 
 type InProgressMessages = Record<string, InProgressMessage>;
+
+/**
+ * The replies being written, by chat (a chat runs one at a time). Kept out of
+ * the page's state so a streamed frame renders only what shows the reply: as
+ * the page's state, every frame rendered the whole chat page and its composer.
+ */
+const useInProgressMessagesStore = create<{ messages: InProgressMessages }>(
+	() => ({ messages: {} }),
+);
+
+/** Chunks arrive far faster than frames: the store takes one update a frame. */
+const inProgressUpdates = createFrameCoalescer<InProgressMessages>(
+	{},
+	(messages) => useInProgressMessagesStore.setState({ messages }),
+);
+
+/** The reply being written in `conversationId`, if one is. */
+export const useInProgressMessage = (
+	conversationId: string | null | undefined,
+): InProgressMessage | null =>
+	useInProgressMessagesStore((state) =>
+		conversationId ? (state.messages[conversationId] ?? null) : null,
+	);
 
 const cloneActions = (
 	actions: InProgressMessage["actions"],
@@ -210,12 +237,7 @@ export const useChat = (model: string, options: UseChatOptions = {}) => {
 	const [inputValue, setInputValue] = useState("");
 	// By conversation: each chat's run has its own status and reply.
 	const [statuses, setStatuses] = useState<Record<string, ChatStatus>>({});
-	const {
-		value: inProgressMessages,
-		latestRef: inProgressMessagesRef,
-		setCoalesced: setInProgressMessagesCoalesced,
-		setImmediate: setInProgressMessagesImmediate,
-	} = useFrameCoalescedState<InProgressMessages>({});
+	const readInProgressMessage = options.readInProgressMessage ?? true;
 
 	// State selectors - only re-render when specific value changes
 	const messages = useChatStore((state) => state.messages);
@@ -269,9 +291,17 @@ export const useChat = (model: string, options: UseChatOptions = {}) => {
 	const isLoading = currentRun !== undefined;
 	const status: ChatStatus =
 		(currentConversationId && statuses[currentConversationId]) || "ready";
-	const inProgressMessage = currentConversationId
-		? (inProgressMessages[currentConversationId] ?? null)
-		: null;
+	const inProgressMessage = useInProgressMessagesStore((state) =>
+		readInProgressMessage && currentConversationId
+			? (state.messages[currentConversationId] ?? null)
+			: null,
+	);
+	// Which reply is being written changes only when one starts or ends.
+	const inProgressMessageId = useInProgressMessagesStore((state) =>
+		currentConversationId
+			? (state.messages[currentConversationId]?.id ?? null)
+			: null,
+	);
 	const abortController = currentRun?.controller ?? null;
 
 	const setRunStatus = (conversationId: string, next: ChatStatus) =>
@@ -286,7 +316,7 @@ export const useChat = (model: string, options: UseChatOptions = {}) => {
 		conversationId: string,
 		update: (message: InProgressMessage) => InProgressMessage,
 	) =>
-		setInProgressMessagesCoalesced((previous) => {
+		inProgressUpdates.setCoalesced((previous) => {
 			const current = previous[conversationId];
 			return current
 				? { ...previous, [conversationId]: update(current) }
@@ -296,13 +326,13 @@ export const useChat = (model: string, options: UseChatOptions = {}) => {
 		conversationId: string,
 		message: InProgressMessage | null,
 	) =>
-		setInProgressMessagesImmediate((previous) =>
+		inProgressUpdates.setImmediate((previous) =>
 			message
 				? { ...previous, [conversationId]: message }
 				: withoutKey(previous, conversationId),
 		);
 	const latestToolExecutions = (conversationId: string) =>
-		inProgressMessagesRef.current[conversationId]?.toolExecutions ?? [];
+		inProgressUpdates.latest()[conversationId]?.toolExecutions ?? [];
 
 	// Initialize conversation
 	useEffect(() => {
@@ -700,7 +730,9 @@ export const useChat = (model: string, options: UseChatOptions = {}) => {
 						}));
 					},
 					onParts: (parts) => {
-						currentParts = cloneMessageParts(parts);
+						// Already a copy, whose unchanged parts keep their identity
+						// from the last chunk; copying again would lose that.
+						currentParts = parts;
 						updateInProgress(conversationId, (prev) => ({
 							...prev,
 							parts: currentParts,
@@ -838,7 +870,7 @@ export const useChat = (model: string, options: UseChatOptions = {}) => {
 						metadata: {
 							actions:
 								(conversationId &&
-									inProgressMessagesRef.current[conversationId]?.actions) ||
+									inProgressUpdates.latest()[conversationId]?.actions) ||
 								[],
 							toolExecutions: finishRunningToolExecutions(
 								toolExecutions,
@@ -1050,6 +1082,7 @@ export const useChat = (model: string, options: UseChatOptions = {}) => {
 		isLoading,
 		abortController,
 		inProgressMessage,
+		inProgressMessageId,
 		submitMessage,
 		handleSubmit,
 		continueRun,

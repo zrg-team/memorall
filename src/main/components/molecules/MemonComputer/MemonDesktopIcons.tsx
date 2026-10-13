@@ -137,7 +137,7 @@ const rank = (entry: MemonFileEntry): number =>
  * its type, a folder in Files, and runs a launcher. A long name is cut to
  * two lines with "…"; its tooltip has the whole name.
  */
-export const MemonDesktopIcons: React.FC<{
+const MemonDesktopIconsView: React.FC<{
 	entries: MemonFileEntry[];
 	onOpen: (path: string) => void;
 	/** What a right-click on an icon offers: Open, Cut, Copy, Delete… */
@@ -219,3 +219,6 @@ export const MemonDesktopIcons: React.FC<{
 		</div>
 	);
 };
+
+/** Sorts its entries on every render; renders only when they or its callbacks change. */
+export const MemonDesktopIcons = React.memo(MemonDesktopIconsView);

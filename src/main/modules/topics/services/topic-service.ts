@@ -1,4 +1,4 @@
-import { eq, like, desc } from "drizzle-orm";
+import { and, eq, like, desc, sql } from "drizzle-orm";
 import type { Topic, NewTopic } from "@/services/database/types";
 import {
 	DEFAULT_GROW_TYPE,
@@ -218,27 +218,29 @@ export class TopicService {
 
 			const result = await serviceManager.databaseService.use(
 				async ({ db, schema }) => {
-					const topics = await db
-						.select()
-						.from(schema.topics)
-						.orderBy(desc(schema.topics.createdAt));
-
-					// Get file count for each topic
-					const topicsWithCount = await Promise.all(
-						topics.map(async (topic) => {
-							const files = await db
-								.select()
-								.from(schema.topicFiles)
-								.where(eq(schema.topicFiles.topicId, topic.id));
-
-							return {
-								...topic,
-								fileCount: files.length,
-							};
-						}),
+					// Two queries whatever the number of topics, counted by the
+					// database rather than by fetching every topic's file rows.
+					const [topics, counts] = await Promise.all([
+						db
+							.select()
+							.from(schema.topics)
+							.orderBy(desc(schema.topics.createdAt)),
+						db
+							.select({
+								topicId: schema.topicFiles.topicId,
+								fileCount: sql<number>`count(*)::int`,
+							})
+							.from(schema.topicFiles)
+							.groupBy(schema.topicFiles.topicId),
+					]);
+					const fileCounts = new Map(
+						counts.map((row) => [row.topicId, Number(row.fileCount)]),
 					);
 
-					return topicsWithCount;
+					return topics.map((topic) => ({
+						...topic,
+						fileCount: fileCounts.get(topic.id) ?? 0,
+					}));
 				},
 			);
 
@@ -348,8 +350,10 @@ export class TopicService {
 					.select()
 					.from(schema.topicFiles)
 					.where(
-						eq(schema.topicFiles.topicId, topicId) &&
+						and(
+							eq(schema.topicFiles.topicId, topicId),
 							eq(schema.topicFiles.filePath, filePath),
+						),
 					)
 					.limit(1);
 
@@ -382,8 +386,10 @@ export class TopicService {
 				await db
 					.delete(schema.topicFiles)
 					.where(
-						eq(schema.topicFiles.topicId, topicId) &&
+						and(
+							eq(schema.topicFiles.topicId, topicId),
 							eq(schema.topicFiles.filePath, filePath),
+						),
 					);
 			});
 
@@ -437,17 +443,23 @@ export class TopicService {
 
 			const result = await serviceManager.databaseService.use(
 				async ({ db, schema }) => {
-					// Get all topic files
-					const topicFiles = await db.select().from(schema.topicFiles);
-
-					// Get all topics
-					const topics = await db.select().from(schema.topics);
+					// Only the two columns the map is built from.
+					const [topicFiles, topics] = await Promise.all([
+						db
+							.select({
+								topicId: schema.topicFiles.topicId,
+								filePath: schema.topicFiles.filePath,
+							})
+							.from(schema.topicFiles),
+						db.select().from(schema.topics),
+					]);
+					const topicsById = new Map(topics.map((topic) => [topic.id, topic]));
 
 					// Build map
 					const map = new Map<string, Topic[]>();
 
 					for (const tf of topicFiles) {
-						const topic = topics.find((t) => t.id === tf.topicId);
+						const topic = topicsById.get(tf.topicId);
 						if (topic) {
 							const existing = map.get(tf.filePath) || [];
 							existing.push(topic);

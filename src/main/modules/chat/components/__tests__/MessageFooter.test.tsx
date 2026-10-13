@@ -24,8 +24,19 @@ vi.mock("react-i18next", () => ({
 	}),
 }));
 
+const saveDialog = vi.hoisted(() => ({
+	content: null as null | (() => Promise<unknown>),
+}));
+
 vi.mock("../DocumentSaveFolderDialog", () => ({
-	DocumentSaveFolderDialog: () => null,
+	DocumentSaveFolderDialog: ({
+		content,
+	}: {
+		content: () => Promise<unknown>;
+	}) => {
+		saveDialog.content = content;
+		return null;
+	},
 }));
 
 const message = {
@@ -49,7 +60,7 @@ const renderFooter = (usage: MessageFooterMetadata["usage"]) => {
 	render(
 		<MessageFooter
 			message={message}
-			groupMessages={[message]}
+			getTranscriptMessages={() => [message]}
 			metadata={{
 				model: "gpt-5.6-terra",
 				provider: "openai",
@@ -296,11 +307,12 @@ describe("MessageFooter token usage", () => {
 		render(
 			<MessageFooter
 				message={next}
-				groupMessages={[
+				getTranscriptMessages={() => [
 					previous,
 					{ ...message, id: "u1", role: "user" } as Message,
 					next,
 				]}
+				previousMessage={previous}
 				metadata={{
 					usage: { ...call, requests: 1, calls: [call] },
 				}}
@@ -424,6 +436,35 @@ describe("MessageFooter token usage", () => {
 		expect(screen.getByTestId("message-usage-details")).toHaveTextContent(
 			"Estimated locally, the provider sent no usage",
 		);
+	});
+
+	it("reads the transcript when it is saved, not when it renders", async () => {
+		const messages: Message[] = [
+			{ ...message, id: "u1", role: "user", content: "question" } as Message,
+			message,
+		];
+		const getTranscriptMessages = vi.fn(() => messages);
+		render(
+			<MessageFooter
+				message={message}
+				getTranscriptMessages={getTranscriptMessages}
+				metadata={{}}
+			/>,
+		);
+		expect(getTranscriptMessages).not.toHaveBeenCalled();
+
+		// A message that arrives after the footer rendered is in what is saved.
+		messages.push({
+			...message,
+			id: "u2",
+			role: "user",
+			content: "a later question",
+		} as Message);
+		const transcript = await saveDialog.content?.();
+
+		expect(getTranscriptMessages).toHaveBeenCalledTimes(1);
+		expect(transcript).toContain("User: question\n\nAssistant: answer");
+		expect(transcript).toContain("User: a later question");
 	});
 
 	it("renders the legacy chips alone when a message has no usage", () => {

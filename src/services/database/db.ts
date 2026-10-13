@@ -10,11 +10,17 @@ import { idbFastSyncExtension } from "./idb-fast-sync";
 import { runMigrations } from "./migrations";
 import { DatabaseMode, type DatabaseConfig } from "./constants";
 import { schema } from "./schema";
+import { PGLITE_START_PARAMS } from "./pglite-settings";
+import {
+	type IdleDatabaseMaintenance,
+	trackIdleMaintenance,
+} from "./idle-maintenance";
 
 // Database instances - support both main and proxy modes
 let pgliteInstance: PGlite | null = null;
 let db: ReturnType<typeof drizzle<typeof schema>> | null = null;
 let currentMode: DatabaseMode | null = null;
+let maintenance: IdleDatabaseMaintenance | null = null;
 
 // Initialize database with mode support
 export async function initDB(
@@ -47,8 +53,12 @@ export async function initDB(configOrDataDir?: DatabaseConfig | string) {
 					// without it; see ./idb-fast-sync.ts.
 					idbFastSync: idbFastSyncExtension,
 				},
+				startParams: [...PGLITE_START_PARAMS],
 			});
 			await realPglite.waitReady;
+			maintenance = trackIdleMaintenance(realPglite);
+			// One pass once things are quiet trims the WAL earlier sessions left.
+			maintenance.markWritten();
 			pgliteInstance = realPglite;
 
 			// Run database migrations in main mode only
@@ -130,6 +140,11 @@ export async function healthCheck() {
 
 // Close database
 export async function closeDB() {
+	if (maintenance) {
+		maintenance.stop();
+		await maintenance.whenIdle();
+		maintenance = null;
+	}
 	if (pgliteInstance) {
 		await pgliteInstance.close();
 		pgliteInstance = null;

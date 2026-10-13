@@ -53,6 +53,8 @@ export { DOCUMENTS_SANDBOX_ROOT as SANDBOX_DOCUMENTS_ROOT };
 export { WORKSPACES_SANDBOX_ROOT as SANDBOX_WORKSPACE_ROOT };
 
 const ROOT_MIGRATION_STORAGE_KEY = "memorall.filesystem.rootMigration.v1";
+/** The longest another context's change waits to be announced here. */
+const REMOTE_CHANGE_MAX_DELAY_MS = 1_000;
 
 // ── Event types ───────────────────────────────────────────────────────────────
 
@@ -137,6 +139,27 @@ export class DocumentFileSystem {
 	// Keyed by sandbox root. Root filesystem uses "/".
 	// Cleared entirely on any filesystem change — simpler and always correct.
 	private readonly treeCache = new Map<string, DocumentTreeNode[]>();
+	/**
+	 * Bumped whenever the cache is cleared. A read started before a change must
+	 * neither be shared with callers asking after it nor fill the cache.
+	 */
+	private treeGeneration = 0;
+	/** The full read in progress, shared by everyone asking meanwhile. */
+	private treeRead: {
+		generation: number;
+		promise: Promise<DocumentTreeNode[]>;
+	} | null = null;
+	/**
+	 * Other contexts' changes waiting for the reload that makes them visible
+	 * here, and how many such reloads are still running. Listeners hear about
+	 * them once, when the last one settles, rather than once per message.
+	 */
+	private remoteChanges: Array<{
+		change: FilesystemChangeEvent | null;
+		receivedAt: number;
+		/** The reload that makes it visible here has run. */
+		settled: boolean;
+	}> = [];
 
 	/**
 	 * Children of folders that `getTree` deferred, keyed by logical path.
@@ -275,6 +298,8 @@ export class DocumentFileSystem {
 	 */
 	private invalidateCache(change?: FilesystemChangeEvent | null): void {
 		this.treeCache.clear();
+		this.treeGeneration++;
+		this.treeRead = null;
 
 		const paths = [change?.path, change?.oldPath, change?.newPath].filter(
 			(value): value is string => typeof value === "string" && value.length > 0,
@@ -415,24 +440,95 @@ export class DocumentFileSystem {
 			);
 			// Listeners hear about the change once this context can see it. Told
 			// any earlier, they re-read the tree from the store loaded before it.
+			// A burst shares one reload, so it is announced once, after it.
+			const entry = { change, receivedAt: Date.now(), settled: false };
+			this.remoteChanges.push(entry);
 			this.invalidateCacheAndRefreshFs()
 				.catch((err) => {
 					logError("Failed to refresh FS cache:", err);
 				})
 				.finally(() => {
-					let notifiedCount = 0;
-					this.changeListeners.forEach((cb) => {
-						try {
-							cb(change);
-							notifiedCount++;
-						} catch (err) {
-							logError("Error in filesystem change listener:", err);
-						}
-					});
-					logInfo(`✅ Notified ${notifiedCount} local listeners`);
+					entry.settled = true;
+					this.announceRemoteChanges();
 				});
 		}
 	};
+
+	/**
+	 * Tell listeners about other contexts' changes this context can now see.
+	 * Reloads finish in the order the changes came, so the settled ones are
+	 * the oldest. They wait for the rest of their burst, but no longer than
+	 * REMOTE_CHANGE_MAX_DELAY_MS: a steady stream of changes (an agent
+	 * writing, an index being built) keeps reloads running without end.
+	 */
+	private announceRemoteChanges(): void {
+		const queue = this.remoteChanges;
+		let settled = 0;
+		while (settled < queue.length && queue[settled]?.settled) settled++;
+		if (settled === 0) return;
+		const oldest = queue[0]?.receivedAt ?? Date.now();
+		if (
+			settled < queue.length &&
+			Date.now() - oldest < REMOTE_CHANGE_MAX_DELAY_MS
+		) {
+			return;
+		}
+		const changes = queue.splice(0, settled).map((entry) => entry.change);
+		// A change without details means "re-read everything"; the known ones
+		// still go out, so listeners that act on paths (re-indexing, moving a
+		// folder's rules) do not lose them to it.
+		const known = changes.filter(
+			(change): change is FilesystemChangeEvent => change !== null,
+		);
+		const announcements: Array<FilesystemChangeEvent | null> = [];
+		if (known.length > 0) {
+			announcements.push(DocumentFileSystem.mergeChanges(known));
+		}
+		if (known.length < changes.length) announcements.push(null);
+		let notifiedCount = 0;
+		for (const announcement of announcements) {
+			this.changeListeners.forEach((cb) => {
+				try {
+					cb(announcement);
+					notifiedCount++;
+				} catch (err) {
+					logError("Error in filesystem change listener:", err);
+				}
+			});
+		}
+		logInfo(
+			`✅ Notified ${notifiedCount} local listener calls of ${changes.length} change(s)`,
+		);
+	}
+
+	/**
+	 * Several changes as one: the change itself when there is one, otherwise
+	 * a "batch" of them all. The batch is quiet only if every change was, and
+	 * keeps an origin they all share, so listeners that skip their own or
+	 * quiet changes still can.
+	 */
+	private static mergeChanges(
+		known: FilesystemChangeEvent[],
+	): FilesystemChangeEvent {
+		if (known.length === 1 && known[0]) return known[0];
+		const leaves = known.flatMap((change) =>
+			change.operation === "batch"
+				? (change.changes ?? []).map((inner) => ({
+						...inner,
+						origin: inner.origin ?? change.origin,
+					}))
+				: [change],
+		);
+		const origins = new Set(known.map((change) => change.origin));
+		const [origin] = origins;
+		return {
+			scope: "root",
+			operation: "batch",
+			changes: leaves,
+			...(origins.size === 1 && origin !== undefined ? { origin } : {}),
+			...(known.every((change) => change.quiet) ? { quiet: true } : {}),
+		};
+	}
 
 	async initialize(): Promise<void> {
 		if (this.initialized) return;
@@ -1262,10 +1358,27 @@ export class DocumentFileSystem {
 			return cached;
 		}
 
+		// Callers arriving while a read is running share it instead of each
+		// walking the whole store, unless a change has happened since it began.
+		const running = this.treeRead;
+		if (running && running.generation === this.treeGeneration) {
+			return running.promise;
+		}
+
 		logInfo("🔄 Fetching fresh tree data");
-		const fresh = await this.scanDirectory(fsRoot, "/");
-		this.treeCache.set(FILESYSTEM_SANDBOX_ROOT, fresh);
-		return fresh;
+		const generation = this.treeGeneration;
+		const promise = this.scanDirectory(fsRoot, "/")
+			.then((fresh) => {
+				if (generation === this.treeGeneration) {
+					this.treeCache.set(FILESYSTEM_SANDBOX_ROOT, fresh);
+				}
+				return fresh;
+			})
+			.finally(() => {
+				if (this.treeRead?.promise === promise) this.treeRead = null;
+			});
+		this.treeRead = { generation, promise };
+		return promise;
 	}
 
 	/**

@@ -74,6 +74,9 @@ export const useResponsiveWorkspacePanels = ({
 	const [hasManualSidebarToggle, setHasManualSidebarToggle] =
 		React.useState(false);
 	const containerRef = React.useRef<HTMLDivElement | null>(null);
+	// While the splitter is dragged, sizes are saved once on release rather
+	// than on every move.
+	const isResizingRef = React.useRef(false);
 
 	React.useEffect(() => {
 		if (typeof window === "undefined") return;
@@ -118,7 +121,7 @@ export const useResponsiveWorkspacePanels = ({
 	}, [collapseBreakpoint, hasManualSidebarToggle, splitBreakpoint]);
 
 	React.useEffect(() => {
-		if (typeof window === "undefined") return;
+		if (typeof window === "undefined" || isResizingRef.current) return;
 		window.localStorage.setItem(storageKey, JSON.stringify(panelSizes));
 	}, [panelSizes, storageKey]);
 
@@ -160,25 +163,44 @@ export const useResponsiveWorkspacePanels = ({
 			const containerWidth = containerRef.current.getBoundingClientRect().width;
 			document.body.style.cursor = "col-resize";
 			document.body.style.userSelect = "none";
+			isResizingRef.current = true;
+			// Mouse moves arrive faster than frames; the page is laid out again
+			// at most once a frame, with the latest position.
+			let pending: [number, number] | null = null;
+			let frame: number | null = null;
+			const flush = () => {
+				frame = null;
+				if (!pending) return;
+				const next = pending;
+				pending = null;
+				setPanelSizes(next);
+			};
 			const handlePointerMove = (pointerEvent: MouseEvent) => {
 				const deltaInFr =
 					((pointerEvent.clientX - startX) / containerWidth) *
 					(startSizes[0] + startSizes[1]);
-				setPanelSizes(() => {
-					const [left, right] = clampPair(
-						startSizes[0] + deltaInFr,
-						startSizes[0] + startSizes[1],
-						minPanelSizes[0],
-						minPanelSizes[1],
-					);
-					return [left, right];
-				});
+				pending = clampPair(
+					startSizes[0] + deltaInFr,
+					startSizes[0] + startSizes[1],
+					minPanelSizes[0],
+					minPanelSizes[1],
+				);
+				frame ??= window.requestAnimationFrame(flush);
 			};
 			const handlePointerUp = () => {
 				document.body.style.cursor = "";
 				document.body.style.userSelect = "";
 				window.removeEventListener("mousemove", handlePointerMove);
 				window.removeEventListener("mouseup", handlePointerUp);
+				if (frame !== null) window.cancelAnimationFrame(frame);
+				isResizingRef.current = false;
+				// The last position, saved by the effect now that the drag is over.
+				const last = pending;
+				pending = null;
+				setPanelSizes((current) => {
+					const [left, right] = last ?? current;
+					return [left, right];
+				});
 			};
 			window.addEventListener("mousemove", handlePointerMove);
 			window.addEventListener("mouseup", handlePointerUp);

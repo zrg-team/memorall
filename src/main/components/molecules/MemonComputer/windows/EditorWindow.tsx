@@ -9,7 +9,7 @@ import { textPreviewKind } from "../text-preview";
 import type { MemonSend } from "../types";
 import { TextPreview } from "./TextPreview";
 
-export const EditorWindow: React.FC<{
+const EditorWindowView: React.FC<{
 	machineKey: string;
 	editor: MemonEditorState;
 	send: MemonSend;
@@ -162,3 +162,6 @@ export const EditorWindow: React.FC<{
 		</div>
 	);
 };
+
+/** Renders only when its slice of the machine changes: the store keeps unchanged slices by reference. */
+export const EditorWindow = React.memo(EditorWindowView);

@@ -354,7 +354,7 @@ const SiteAccessBar: React.FC<{
 	);
 };
 
-export const BrowserWindow: React.FC<{
+const BrowserWindowView: React.FC<{
 	machineKey: string;
 	browser: MemonBrowserState;
 	/** Ports of servers running in the computer, to open embedded. */
@@ -713,3 +713,6 @@ export const BrowserWindow: React.FC<{
 		</div>
 	);
 };
+
+/** Renders only when its slice of the machine changes: the store keeps unchanged slices by reference. */
+export const BrowserWindow = React.memo(BrowserWindowView);

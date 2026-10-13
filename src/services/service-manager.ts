@@ -319,12 +319,16 @@ export class ServiceManager {
 					);
 				}
 
-				await this.embeddingService.create("default", "worker", {
-					type: "worker",
-					modelName: modelId,
-				});
+				// Registered, not loaded: the model (several hundred MB once loaded)
+				// loads on the first request and is released again when idle.
+				await this.embeddingService.create(
+					"default",
+					"worker",
+					{ type: "worker", modelName: modelId },
+					{ initialize: false },
+				);
 				logInfo(
-					`✅ Embedding service initialized with ${embeddingInfo.size} model (${embeddingInfo.dimensions}d): ${modelId}`,
+					`✅ Embedding service ready with ${embeddingInfo.size} model (${embeddingInfo.dimensions}d), loaded on first use: ${modelId}`,
 				);
 			} else {
 				logInfo(

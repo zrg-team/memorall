@@ -1,5 +1,5 @@
 import dayjs from "dayjs";
-import React, { useMemo, useState, useCallback } from "react";
+import React, { useMemo, useRef, useState, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { AgentIcon } from "@/components/AgentIcon";
@@ -14,10 +14,24 @@ import {
 } from "../utils/coagent-timeline";
 import type { InProgressMessage } from "../hooks/use-chat";
 import type { ChatMessageGroup } from "@/main/stores/chat";
+import type { Message } from "@/services/database/types";
 import type { MessageActionRequest } from "./artifacts/ArtifactActionsMenu";
 
 /** Shared empty map so a collapsed group does not allocate one per render. */
 const NO_PAGE_CHANGES: ReadonlyMap<string, CoAgentPage> = new Map();
+
+/** Each reply's previous reply, found in one pass rather than one per reply. */
+const findPreviousReplies = (
+	messages: Message[],
+): ReadonlyMap<string, Message> => {
+	const previousReplies = new Map<string, Message>();
+	let previous: Message | undefined;
+	for (const message of messages) {
+		if (previous) previousReplies.set(message.id, previous);
+		if (message.role === "assistant") previous = message;
+	}
+	return previousReplies;
+};
 
 const hasRenderableMessageContent = (
 	message: ChatMessageGroup["messages"][number],
@@ -47,6 +61,8 @@ interface MessageGroupProps {
 	selectedTopic?: string;
 	suppressSeparator?: boolean;
 	forceExpanded?: boolean;
+	/** Shows artifacts as references only, for a page that previews them itself. */
+	suppressArtifactPreviews?: boolean;
 	onLoadMessages?: (groupId: string) => Promise<void>;
 	onMessageAction?: (action: MessageActionRequest) => void | Promise<void>;
 }
@@ -59,6 +75,7 @@ export const MessageGroup: React.FC<MessageGroupProps> = React.memo(
 		selectedTopic,
 		suppressSeparator = false,
 		forceExpanded = false,
+		suppressArtifactPreviews = false,
 		onLoadMessages,
 		onMessageAction,
 	}) => {
@@ -140,51 +157,71 @@ export const MessageGroup: React.FC<MessageGroupProps> = React.memo(
 			[group.messages, shouldRenderMessages],
 		);
 
-		const messageComponents = useMemo(() => {
-			if (!shouldRenderMessages) return null;
+		// Read by a reply's footer only when it saves the transcript, so the rows
+		// need not render again whenever a message is added to the group.
+		const groupMessagesRef = useRef(group.messages);
+		groupMessagesRef.current = group.messages;
+		const getGroupMessages = useCallback(() => groupMessagesRef.current, []);
+		const previousReplies = useMemo(
+			() =>
+				shouldRenderMessages
+					? findPreviousReplies(group.messages)
+					: new Map<string, Message>(),
+			[group.messages, shouldRenderMessages],
+		);
+
+		// Where the streaming reply sits among the rows: the place of its saved
+		// copy, or the end before that is in the group.
+		const { rows: messageComponents, inProgressIndex } = useMemo(() => {
+			const rows: React.ReactElement[] = [];
+			if (!shouldRenderMessages) return { rows, inProgressIndex: -1 };
 
 			let seenPageChange = false;
+			let inProgressIndex = -1;
 
-			return group.messages.map((message, index) => {
-				if (!hasRenderableMessageContent(message)) return undefined;
+			group.messages.forEach((message, index) => {
 				// The run saves its reply as it goes; while it streams, the live
-				// copy below is the one shown, and a refresh must not add the saved one.
-				if (message.id === inProgressId) return undefined;
-
-				const renderer = (
-					<MessageRenderer
-						message={message}
-						index={index}
-						isLastMessage={message.id === lastMessageId}
-						isStreaming={false}
-						groupMessages={group.messages}
-						selectedTopic={selectedTopic}
-						onMessageAction={onMessageAction}
-					/>
-				);
+				// copy is the one shown, and a refresh must not add the saved one.
+				if (message.id === inProgressId) {
+					inProgressIndex = rows.length;
+					return;
+				}
+				if (!hasRenderableMessageContent(message)) return;
 
 				const page = pageChanges.get(message.id);
-				if (!page) {
-					return <React.Fragment key={message.id}>{renderer}</React.Fragment>;
-				}
-
-				const isFirst = !seenPageChange;
-				seenPageChange = true;
-				return (
+				const isFirst = Boolean(page) && !seenPageChange;
+				if (page) seenPageChange = true;
+				// The renderer is always the fragment's second child, as it is in
+				// the streaming row, so a reply that finishes keeps its subtree.
+				rows.push(
 					<React.Fragment key={message.id}>
-						<CoAgentPageDivider page={page} isFirst={isFirst} />
-						{renderer}
-					</React.Fragment>
+						{page ? <CoAgentPageDivider page={page} isFirst={isFirst} /> : null}
+						<MessageRenderer
+							message={message}
+							index={index}
+							isLastMessage={message.id === lastMessageId}
+							isStreaming={false}
+							getGroupMessages={getGroupMessages}
+							previousAssistantMessage={previousReplies.get(message.id)}
+							selectedTopic={selectedTopic}
+							suppressArtifactPreviews={suppressArtifactPreviews}
+							onMessageAction={onMessageAction}
+						/>
+					</React.Fragment>,
 				);
 			});
+			return { rows, inProgressIndex };
 		}, [
+			getGroupMessages,
 			group.messages,
 			inProgressId,
 			lastMessageId,
 			onMessageAction,
 			pageChanges,
+			previousReplies,
 			selectedTopic,
 			shouldRenderMessages,
+			suppressArtifactPreviews,
 		]);
 
 		const inProgressMetadata = useMemo(() => {
@@ -228,18 +265,35 @@ export const MessageGroup: React.FC<MessageGroupProps> = React.memo(
 			};
 		}, [inProgressMessage, inProgressMetadata]);
 
+		// Keyed like the row it becomes, in the same list: when the reply ends it
+		// renders again in place rather than mounting anew, which rebuilt all of
+		// it — parsed markdown, highlighted code, artifact frames, diagrams.
 		const inProgressMessageComponent = useMemo(() => {
 			return inProgressMessageData ? (
-				<MessageRenderer
-					key={inProgressMessageData.id}
-					message={inProgressMessageData}
-					index={0}
-					isLastMessage={true}
-					isStreaming={true}
-					onMessageAction={onMessageAction}
-				/>
+				<React.Fragment key={inProgressMessageData.id}>
+					{null}
+					<MessageRenderer
+						message={inProgressMessageData}
+						index={0}
+						isLastMessage={true}
+						isStreaming={true}
+						suppressArtifactPreviews={suppressArtifactPreviews}
+						onMessageAction={onMessageAction}
+					/>
+				</React.Fragment>
 			) : undefined;
-		}, [inProgressMessageData, onMessageAction]);
+		}, [inProgressMessageData, onMessageAction, suppressArtifactPreviews]);
+
+		const rows = useMemo(() => {
+			if (!inProgressMessageComponent) return messageComponents;
+			const at =
+				inProgressIndex === -1 ? messageComponents.length : inProgressIndex;
+			return [
+				...messageComponents.slice(0, at),
+				inProgressMessageComponent,
+				...messageComponents.slice(at),
+			];
+		}, [inProgressIndex, inProgressMessageComponent, messageComponents]);
 
 		return (
 			<div className="message-group">
@@ -276,12 +330,7 @@ export const MessageGroup: React.FC<MessageGroupProps> = React.memo(
 					</button>
 				)}
 
-				{shouldRenderMessages && (
-					<div className="space-y-5">
-						{messageComponents}
-						{inProgressMessageComponent}
-					</div>
-				)}
+				{shouldRenderMessages && <div className="space-y-5">{rows}</div>}
 
 				{displaySeparator || showLatestEmptyIcon ? (
 					<div className="my-6 flex flex-col items-center gap-3">

@@ -13,6 +13,7 @@ import type {
 	FolderIndexTypeInfo,
 } from "@/services/folder-index/types";
 import { logError } from "@/utils/logger";
+import { replaceEqualDeep } from "@/utils/replace-equal-deep";
 
 /**
  * Folder indexes on the Files page: which folders have which index types,
@@ -25,6 +26,22 @@ import { logError } from "@/utils/logger";
 const RUNNING_POLL_MS = 1_500;
 /** Notice automatic runs started by the filesystem watcher or another context. */
 const IDLE_POLL_MS = 5_000;
+/**
+ * Folders whose entries are kept and refreshed after a run. Older ones are
+ * dropped and read again when the user goes back to them, so a long session
+ * does not re-read every folder it ever visited on each run.
+ */
+const MAX_WATCHED_FOLDERS = 16;
+
+const subscribeVisibility = (onChange: () => void) => {
+	document.addEventListener("visibilitychange", onChange);
+	return () => document.removeEventListener("visibilitychange", onChange);
+};
+const isPageVisible = () => document.visibilityState !== "hidden";
+
+/** Whether the page can be seen: a hidden tab has nobody to show a poll to. */
+const usePageVisible = (): boolean =>
+	React.useSyncExternalStore(subscribeVisibility, isPageVisible, () => true);
 
 export interface FolderEntries {
 	/** Index types in effect in the folder. */
@@ -107,10 +124,16 @@ export const FolderIndexProvider: React.FC<{
 	const [graphPath, openGraph] = React.useState<string | null>(null);
 	const [pendingMapped, setPendingMapped] =
 		React.useState<PendingChange | null>(null);
+	// Oldest first: re-adding a folder moves it to the end.
 	const watchedFolders = React.useRef(new Set<string>());
 	const refreshPending = React.useRef<Promise<void> | null>(null);
 	const entriesPending = React.useRef(new Set<string>());
 	const entriesDirty = React.useRef(new Set<string>());
+	/** Each folder's last response, so an unchanged one does not redraw. */
+	const entriesRead = React.useRef(new Map<string, string>());
+	/** Each index root's revision when the watched entries were last read. */
+	const readRevisions = React.useRef(new Map<string, string>());
+	const visible = usePageVisible();
 	const { mountedPaths } = useNativeMounts();
 	const isMapped = React.useCallback(
 		(path: string) => {
@@ -123,11 +146,17 @@ export const FolderIndexProvider: React.FC<{
 		[mountedPaths],
 	);
 
+	// Every read returns a fresh copy; keeping the parts that did not change
+	// lets an unchanged poll leave the page alone instead of redrawing it.
+	const keepState = React.useCallback((next: FolderIndexStateView) => {
+		setState((previous) => replaceEqualDeep(previous, next));
+	}, []);
+
 	const refresh = React.useCallback(() => {
 		if (refreshPending.current) return refreshPending.current;
 		const work = (async () => {
 			try {
-				setState(await folderIndexClient.request("state.get", {}));
+				keepState(await folderIndexClient.request("state.get", {}));
 				setError(null);
 			} catch (err) {
 				logError("[folder-index] Reading index state failed:", err);
@@ -138,11 +167,10 @@ export const FolderIndexProvider: React.FC<{
 		})();
 		refreshPending.current = work;
 		return work;
-	}, []);
+	}, [keepState]);
 
-	const loadEntries = React.useCallback((folder: string): void => {
-		const path = normalizeFolderPath(folder);
-		watchedFolders.current.add(path);
+	/** Reads a watched folder's entries again, one request at a time. */
+	const readEntries = React.useCallback((path: string): void => {
 		if (entriesPending.current.has(path)) {
 			entriesDirty.current.add(path);
 			return;
@@ -151,6 +179,13 @@ export const FolderIndexProvider: React.FC<{
 		void folderIndexClient
 			.request("folder.entries", { path })
 			.then((result) => {
+				const read = JSON.stringify(result);
+				if (
+					!watchedFolders.current.has(path) ||
+					entriesRead.current.get(path) === read
+				)
+					return;
+				entriesRead.current.set(path, read);
 				const byFile = new Map<
 					string,
 					Array<FolderIndexFileEntry & { typeId: string }>
@@ -171,9 +206,31 @@ export const FolderIndexProvider: React.FC<{
 			})
 			.finally(() => {
 				entriesPending.current.delete(path);
-				if (entriesDirty.current.delete(path)) loadEntries(path);
+				if (entriesDirty.current.delete(path)) readEntries(path);
 			});
 	}, []);
+
+	const loadEntries = React.useCallback(
+		(folder: string): void => {
+			const path = normalizeFolderPath(folder);
+			const watched = watchedFolders.current;
+			watched.delete(path);
+			watched.add(path);
+			if (watched.size > MAX_WATCHED_FOLDERS) {
+				const oldest = watched.values().next().value as string;
+				watched.delete(oldest);
+				entriesRead.current.delete(oldest);
+				setEntries((previous) => {
+					if (!previous.has(oldest)) return previous;
+					const next = new Map(previous);
+					next.delete(oldest);
+					return next;
+				});
+			}
+			readEntries(path);
+		},
+		[readEntries],
+	);
 
 	React.useEffect(() => {
 		void refresh();
@@ -186,34 +243,71 @@ export const FolderIndexProvider: React.FC<{
 	const indexRevision = JSON.stringify(
 		state?.folders.map((folder) => [
 			folder.path,
-			folder.status.map((status) => [
-				status.typeId,
-				status.updatedAt,
-				status.entries,
-				status.chunks,
-				status.errors,
-			]),
-		]),
+			[
+				folder.on,
+				folder.off,
+				folder.status.map((status) => [
+					status.typeId,
+					status.updatedAt,
+					status.entries,
+					status.chunks,
+					status.errors,
+				]),
+			],
+		]) ?? [],
 	);
 	React.useEffect(() => {
-		// Revision changes also catch a short run that finished between two polls.
-		if (!running) {
-			for (const folder of watchedFolders.current) loadEntries(folder);
+		// Compared with the last read rather than the last poll, so a run that
+		// changed its root while it was still going is read once it finishes,
+		// and a short run that finished between two polls is caught too.
+		if (running) return;
+		const next = new Map(
+			(JSON.parse(indexRevision) as Array<[string, unknown]>).map(
+				([root, revision]) => [root, JSON.stringify(revision)],
+			),
+		);
+		const previous = readRevisions.current;
+		readRevisions.current = next;
+		const changed = [...new Set([...previous.keys(), ...next.keys()])].filter(
+			(root) => previous.get(root) !== next.get(root),
+		);
+		if (!changed.length) return;
+		// Only folders a changed root covers, or that hold one, can have new
+		// entries; the rest keep what they have.
+		for (const folder of watchedFolders.current) {
+			if (
+				changed.some(
+					(root) =>
+						isSameOrInside(folder, root) || isSameOrInside(root, folder),
+				)
+			)
+				readEntries(folder);
 		}
-	}, [running, indexRevision, loadEntries]);
+	}, [running, indexRevision, readEntries]);
 	React.useEffect(() => {
-		if (!hasIndexes && !running) return;
+		if (!visible || (!hasIndexes && !running)) return;
 		const timer = setInterval(
 			() => void refresh(),
 			running ? RUNNING_POLL_MS : IDLE_POLL_MS,
 		);
 		return () => clearInterval(timer);
-	}, [running, hasIndexes, refresh]);
+	}, [visible, running, hasIndexes, refresh]);
+	// Polling stops while the page is hidden; catch up as soon as it is back.
+	const wasHidden = React.useRef(false);
+	React.useEffect(() => {
+		if (!visible) {
+			wasHidden.current = true;
+			return;
+		}
+		if (!wasHidden.current) return;
+		wasHidden.current = false;
+		void refresh();
+	}, [visible, refresh]);
 
 	const applyChange = React.useCallback(
 		async (path: string, typeId: string, enabled: boolean) => {
 			try {
-				setState(
+				keepState(
 					await folderIndexClient.request("folder.setType", {
 						path,
 						typeId,
@@ -225,7 +319,7 @@ export const FolderIndexProvider: React.FC<{
 				setError(message(err));
 			}
 		},
-		[],
+		[keepState],
 	);
 
 	const value = React.useMemo<FolderIndexContextValue>(() => {
@@ -276,14 +370,16 @@ export const FolderIndexProvider: React.FC<{
 			},
 			rebuild: async (path) => {
 				try {
-					setState(await folderIndexClient.request("folder.rebuild", { path }));
+					keepState(
+						await folderIndexClient.request("folder.rebuild", { path }),
+					);
 				} catch (err) {
 					setError(message(err));
 				}
 			},
 			saveSettings: async (settings) => {
 				try {
-					setState(
+					keepState(
 						await folderIndexClient.request("settings.set", { settings }),
 					);
 				} catch (err) {
@@ -327,6 +423,7 @@ export const FolderIndexProvider: React.FC<{
 		onOpenFile,
 		pendingMapped,
 		applyChange,
+		keepState,
 		loadEntries,
 		isMapped,
 	]);

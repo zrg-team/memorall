@@ -75,7 +75,7 @@ const TablePreview: React.FC<{ text: string; delimiter: string }> = ({
  * page it is, SVG as an image, CSV and TSV as a table. The agent reads the
  * same file as text.
  */
-export const TextPreview: React.FC<{
+const TextPreviewView: React.FC<{
 	kind: MemonTextPreviewKind;
 	text: string;
 	title: string;
@@ -130,3 +130,6 @@ export const TextPreview: React.FC<{
 			return <TablePreview text={text} delimiter={"\t"} />;
 	}
 };
+
+/** Markdown and code are parsed on every render; renders only when the text changes. */
+export const TextPreview = React.memo(TextPreviewView);

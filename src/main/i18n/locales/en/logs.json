@@ -10,6 +10,10 @@
 		"clearAll": "Clear all logs",
 		"clearConfirm": "Are you sure you want to clear all logs? This action cannot be undone."
 	},
+	"recording": {
+		"label": "Record logs",
+		"hint": "Saves new log entries from every part of the extension here. Recording slows things down, so leave it off unless you are tracking down a problem."
+	},
 	"stats": {
 		"total": "Total: {{count}}",
 		"errors": "Errors: {{count}}",
@@ -45,7 +49,8 @@
 	},
 	"status": {
 		"loading": "Loading logs...",
-		"empty": "No logs found"
+		"empty": "No logs found",
+		"notRecording": "Recording is off. Turn on Record logs to capture new entries."
 	},
 	"entry": {
 		"context": "Context:",

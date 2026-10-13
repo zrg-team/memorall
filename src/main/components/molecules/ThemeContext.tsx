@@ -1,5 +1,12 @@
 import type React from "react";
-import { createContext, useContext, useEffect, useState } from "react";
+import {
+	createContext,
+	useCallback,
+	useContext,
+	useEffect,
+	useMemo,
+	useState,
+} from "react";
 
 export type Theme = "light" | "dark" | "system";
 
@@ -16,14 +23,15 @@ const prefersDark = () =>
 	window.matchMedia("(prefers-color-scheme: dark)").matches;
 
 // Tracks the OS preference so surfaces rendered without a provider still resolve
-// a live theme instead of a frozen guess.
-const useSystemTheme = (): "light" | "dark" => {
+// a live theme instead of a frozen guess. Under a provider it does not listen:
+// every code block and message body reads the theme, each adding a listener.
+const useSystemTheme = (enabled: boolean): "light" | "dark" => {
 	const [systemTheme, setSystemTheme] = useState<"light" | "dark">(() =>
 		prefersDark() ? "dark" : "light",
 	);
 
 	useEffect(() => {
-		if (typeof window === "undefined") return;
+		if (!enabled || typeof window === "undefined") return;
 		const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
 		const handleChange = () => setSystemTheme(prefersDark() ? "dark" : "light");
 		handleChange();
@@ -34,7 +42,7 @@ const useSystemTheme = (): "light" | "dark" => {
 		}
 		mediaQuery.addListener(handleChange);
 		return () => mediaQuery.removeListener(handleChange);
-	}, []);
+	}, [enabled]);
 
 	return systemTheme;
 };
@@ -47,7 +55,7 @@ const noopSetTheme = () => {};
 // tree rather than degrading to plain markdown.
 export const useTheme = (): ThemeContextType => {
 	const context = useContext(ThemeContext);
-	const systemTheme = useSystemTheme();
+	const systemTheme = useSystemTheme(!context);
 
 	if (context) return context;
 	return { theme: "system", setTheme: noopSetTheme, actualTheme: systemTheme };
@@ -158,16 +166,20 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({
 		root.classList.add(actualTheme);
 	}, [actualTheme, themeTarget]);
 
-	const setTheme = (newTheme: Theme) => {
-		setThemeState(newTheme);
-		storage.write?.(newTheme);
-	};
+	const setTheme = useCallback(
+		(newTheme: Theme) => {
+			setThemeState(newTheme);
+			storage.write?.(newTheme);
+		},
+		[storage],
+	);
 
-	const value: ThemeContextType = {
-		theme,
-		setTheme,
-		actualTheme,
-	};
+	// Kept while nothing in it changes: every reader of the theme renders
+	// again when the value is a new object.
+	const value = useMemo<ThemeContextType>(
+		() => ({ theme, setTheme, actualTheme }),
+		[theme, setTheme, actualTheme],
+	);
 
 	return (
 		<ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>

@@ -141,7 +141,7 @@ const PiCodeApprovalCard: React.FC<{
  * works, Stop ends its turn (as Escape in pi does) and MemonOS Bot, waiting
  * on pi, hears that the user stopped it.
  */
-export const PiCodeWindow: React.FC<{
+const PiCodeWindowView: React.FC<{
 	machineKey: string;
 	state: MemonPiCodeState | undefined;
 	/** The agent's home, shown as `~`. */
@@ -534,3 +534,6 @@ export const PiCodeWindow: React.FC<{
 		</div>
 	);
 };
+
+/** Renders only when its slice of the machine changes: the store keeps unchanged slices by reference. */
+export const PiCodeWindow = React.memo(PiCodeWindowView);

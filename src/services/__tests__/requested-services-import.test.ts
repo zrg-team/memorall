@@ -43,6 +43,8 @@ vi.mock("@zenfs/core", () => ({
 
 vi.mock("@zenfs/dom", () => ({
 	IndexedDB: {},
+	IndexedDBStore: class {},
+	IndexedDBTransaction: class {},
 }));
 
 vi.mock("@/services/background-jobs/background-job", () => ({

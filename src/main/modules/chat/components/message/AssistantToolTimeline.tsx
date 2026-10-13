@@ -31,7 +31,7 @@ const getTimelineDuration = (parts: ComplexContentPartTool[]): number => {
 	return durations.reduce((total, duration) => total + duration, 0);
 };
 
-export const AssistantToolTimeline: React.FC<{
+interface AssistantToolTimelineProps {
 	parts: ComplexContentPartTool[];
 	isStreaming: boolean;
 	/**
@@ -40,106 +40,128 @@ export const AssistantToolTimeline: React.FC<{
 	 * or each group would repeat the same card.
 	 */
 	showUnattributedPrompts?: boolean;
-}> = React.memo(({ parts, isStreaming, showUnattributedPrompts = true }) => {
-	const { t } = useTranslation("chat");
-	const [isOpen, setIsOpen] = useStreamingDisclosure(isStreaming);
-	const hasError = parts.some((part) => part.state === "error");
-	const newPartIds = useNewItemIds(parts.map((part) => part.id));
-	const durationMs = useMemo(() => getTimelineDuration(parts), [parts]);
-	const startPromptStore = useWebChallengePromptStore((state) => state.start);
-	const allPrompts = useWebChallengePromptStore((state) => state.prompts);
-	React.useEffect(() => {
-		startPromptStore();
-	}, [startPromptStore]);
-	const partIds = useMemo(() => new Set(parts.map((part) => part.id)), [parts]);
-	// Only the walls belonging to a tool call in this timeline. A prompt with no
-	// tool call id still shows, since a card the user cannot answer is worse than
-	// one attached to the wrong turn.
-	const prompts = useMemo(
-		() =>
-			allPrompts.filter((prompt) =>
-				prompt.toolCallId
-					? partIds.has(prompt.toolCallId)
-					: showUnattributedPrompts,
-			),
-		[allPrompts, partIds, showUnattributedPrompts],
-	);
+}
 
-	const summary = isStreaming
-		? t("toolTimeline.running", {
-				count: parts.length,
-				defaultValue: `${parts.length} agent action${parts.length === 1 ? "" : "s"} · running`,
-			})
-		: t("toolTimeline.finished", {
-				count: parts.length,
-				duration: formatDuration(durationMs),
-				defaultValue: `${parts.length} agent action${parts.length === 1 ? "" : "s"} · ${formatDuration(durationMs)}`,
-			});
-	// Mounted before the first action lands, so even row one grows in.
-	if (parts.length === 0) return null;
+/**
+ * The group is a new array whenever the reply's parts are rebuilt, which a
+ * streaming reply does on every chunk; the tools in it are what changed or not.
+ */
+const sameTimelineProps = (
+	previous: AssistantToolTimelineProps,
+	next: AssistantToolTimelineProps,
+): boolean =>
+	previous.isStreaming === next.isStreaming &&
+	previous.showUnattributedPrompts === next.showUnattributedPrompts &&
+	previous.parts.length === next.parts.length &&
+	previous.parts.every((part, index) => part === next.parts[index]);
 
-	const disclosureLabel = isOpen
-		? t("workflow.hideDetails", { defaultValue: "Hide run details" })
-		: t("workflow.showDetails", { defaultValue: "Show run details" });
+export const AssistantToolTimeline: React.FC<AssistantToolTimelineProps> =
+	React.memo(({ parts, isStreaming, showUnattributedPrompts = true }) => {
+		const { t } = useTranslation("chat");
+		const [isOpen, setIsOpen] = useStreamingDisclosure(isStreaming);
+		const hasError = parts.some((part) => part.state === "error");
+		const newPartIds = useNewItemIds(parts.map((part) => part.id));
+		const durationMs = useMemo(() => getTimelineDuration(parts), [parts]);
+		const startPromptStore = useWebChallengePromptStore((state) => state.start);
+		const allPrompts = useWebChallengePromptStore((state) => state.prompts);
+		React.useEffect(() => {
+			startPromptStore();
+		}, [startPromptStore]);
+		const partIds = useMemo(
+			() => new Set(parts.map((part) => part.id)),
+			[parts],
+		);
+		// Only the walls belonging to a tool call in this timeline. A prompt with no
+		// tool call id still shows, since a card the user cannot answer is worse than
+		// one attached to the wrong turn.
+		const prompts = useMemo(
+			() =>
+				allPrompts.filter((prompt) =>
+					prompt.toolCallId
+						? partIds.has(prompt.toolCallId)
+						: showUnattributedPrompts,
+				),
+			[allPrompts, partIds, showUnattributedPrompts],
+		);
 
-	return (
-		<>
-			{/* Outside the disclosure on purpose: the agent is waiting on the person
+		const summary = isStreaming
+			? t("toolTimeline.running", {
+					count: parts.length,
+					defaultValue: `${parts.length} agent action${parts.length === 1 ? "" : "s"} · running`,
+				})
+			: t("toolTimeline.finished", {
+					count: parts.length,
+					duration: formatDuration(durationMs),
+					defaultValue: `${parts.length} agent action${parts.length === 1 ? "" : "s"} · ${formatDuration(durationMs)}`,
+				});
+		// Mounted before the first action lands, so even row one grows in.
+		if (parts.length === 0) return null;
+
+		const disclosureLabel = isOpen
+			? t("workflow.hideDetails", { defaultValue: "Hide run details" })
+			: t("workflow.showDetails", { defaultValue: "Show run details" });
+
+		return (
+			<>
+				{/* Outside the disclosure on purpose: the agent is waiting on the person
 			    reading this, so collapsing run details must not hide the answer. */}
-			{prompts.map((prompt) => (
-				<WebChallengePromptCard key={prompt.id} prompt={prompt} />
-			))}
-			<Collapsible open={isOpen} onOpenChange={setIsOpen}>
-				<CollapsibleTrigger asChild>
-					<button
-						type="button"
-						title={summary}
-						className={cn(
-							"group/run-details",
-							ASSISTANT_DISCLOSURE_TRIGGER_CLASS,
-						)}
-					>
-						<SlidersHorizontal
+				{prompts.map((prompt) => (
+					<WebChallengePromptCard key={prompt.id} prompt={prompt} />
+				))}
+				<Collapsible open={isOpen} onOpenChange={setIsOpen}>
+					<CollapsibleTrigger asChild>
+						<button
+							type="button"
+							title={summary}
 							className={cn(
-								ASSISTANT_DISCLOSURE_ICON_CLASS,
-								isStreaming && "animate-pulse text-primary",
-								hasError && !isStreaming && "text-destructive",
+								"group/run-details",
+								ASSISTANT_DISCLOSURE_TRIGGER_CLASS,
 							)}
-						/>
-						<span className="truncate">
-							{disclosureLabel} ({parts.length})
-						</span>
-						<ChevronDown
-							className={cn(
-								"h-3.5 w-3.5 shrink-0 transition-transform duration-200",
-								isOpen && "rotate-180",
-							)}
-						/>
-					</button>
-				</CollapsibleTrigger>
-				<CollapsibleContent className="overflow-hidden data-[state=open]:animate-collapsible-down data-[state=closed]:animate-collapsible-up">
-					{/* The rail's dots sit under the trigger icon's center. */}
-					<div className="mt-1.5 min-w-0 pl-px">
-						{parts.map((part, index) => (
-							<StreamingListItem key={part.id} isNew={newPartIds.has(part.id)}>
-								<AssistantToolTimelinePart
-									part={part}
-									connectsToPrevious={index > 0}
-									isLast={index === parts.length - 1}
-									forceOpen={isStreaming && part.state === "running"}
-								/>
-							</StreamingListItem>
-						))}
-					</div>
-				</CollapsibleContent>
-				{isStreaming ? (
-					<div className="sr-only" role="status" aria-live="polite">
-						{summary}
-					</div>
-				) : null}
-			</Collapsible>
-		</>
-	);
-});
+						>
+							<SlidersHorizontal
+								className={cn(
+									ASSISTANT_DISCLOSURE_ICON_CLASS,
+									isStreaming && "animate-pulse text-primary",
+									hasError && !isStreaming && "text-destructive",
+								)}
+							/>
+							<span className="truncate">
+								{disclosureLabel} ({parts.length})
+							</span>
+							<ChevronDown
+								className={cn(
+									"h-3.5 w-3.5 shrink-0 transition-transform duration-200",
+									isOpen && "rotate-180",
+								)}
+							/>
+						</button>
+					</CollapsibleTrigger>
+					<CollapsibleContent className="overflow-hidden data-[state=open]:animate-collapsible-down data-[state=closed]:animate-collapsible-up">
+						{/* The rail's dots sit under the trigger icon's center. */}
+						<div className="mt-1.5 min-w-0 pl-px">
+							{parts.map((part, index) => (
+								<StreamingListItem
+									key={part.id}
+									isNew={newPartIds.has(part.id)}
+								>
+									<AssistantToolTimelinePart
+										part={part}
+										connectsToPrevious={index > 0}
+										isLast={index === parts.length - 1}
+										forceOpen={isStreaming && part.state === "running"}
+									/>
+								</StreamingListItem>
+							))}
+						</div>
+					</CollapsibleContent>
+					{isStreaming ? (
+						<div className="sr-only" role="status" aria-live="polite">
+							{summary}
+						</div>
+					) : null}
+				</Collapsible>
+			</>
+		);
+	}, sameTimelineProps);
 
 AssistantToolTimeline.displayName = "AssistantToolTimeline";

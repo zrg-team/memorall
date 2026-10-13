@@ -1,9 +1,19 @@
 import { configure, InMemory, fs, resolveMountConfig } from "@zenfs/core";
-import { IndexedDB } from "@zenfs/dom";
 import { logDebug, logError, logInfo } from "@/utils/logger";
 import { syncNativeFolderMounts } from "./native-folders/mount-registry";
+import { TransactionScopedIndexedDB } from "./indexeddb-backend";
 
 const HOME_MOUNT = "/home";
+
+/**
+ * `/home` keeps no file contents in memory between operations: mounting reads
+ * only the directory tree (see indexeddb-backend). `disableAsyncCache` is what
+ * tells ZenFS not to look for a preloaded root.
+ */
+const HOME_BACKEND = {
+	backend: TransactionScopedIndexedDB,
+	disableAsyncCache: true,
+} as const;
 
 /**
  * How long to wait for more FILESYSTEM_CHANGED events before reloading. An
@@ -23,7 +33,7 @@ const initializeFs = async (): Promise<void> => {
 		fsReadyPromise = configure({
 			mounts: {
 				"/tmp": InMemory,
-				"/home": IndexedDB,
+				"/home": { ...HOME_BACKEND },
 			},
 		})
 			.then(async () => {
@@ -45,9 +55,9 @@ const initializeFs = async (): Promise<void> => {
 
 // ── Remount gate ──────────────────────────────────────────────────────────────
 //
-// Every context loads the whole IndexedDB store into memory when it mounts
-// `/home`, along with ZenFS's path → inode table. A write made by another
-// context is invisible until `/home` is mounted again.
+// Every context that mounts `/home` builds ZenFS's path → inode table from the
+// IndexedDB store. A file another context adds or removes is missing from that
+// table until `/home` is mounted again.
 //
 // The remount used to unmount `/home`, sleep, and reconfigure, while this
 // context's own operations kept running. A `mkdir` that landed in that gap went
@@ -64,6 +74,9 @@ let remountGate: Promise<void> | null = null;
 let notifyDrained: (() => void) | null = null;
 
 const runOperation = async <T>(operation: () => Promise<T>): Promise<T> => {
+	// Mounted on first use rather than at import: a context that never touches
+	// a file (most service-worker wake-ups) never reads the store.
+	if (!fsReady) await initializeFs();
 	while (remountGate) await remountGate;
 	activeOperations++;
 	try {
@@ -93,7 +106,7 @@ const remountHome = async (): Promise<void> => {
 		logInfo("🔄 Reloading /home from IndexedDB");
 		// Loaded only after the drain, so it includes every write this context
 		// just committed.
-		const next = await resolveMountConfig({ backend: IndexedDB });
+		const next = await resolveMountConfig({ ...HOME_BACKEND });
 		// No await between these two: nothing can see `/home` missing.
 		fs.umount(HOME_MOUNT);
 		fs.mount(HOME_MOUNT, next);
@@ -126,6 +139,8 @@ let releaseDebounce: (() => void) | null = null;
 const refreshFsCache = (
 	options: { immediate?: boolean } = {},
 ): Promise<void> => {
+	// Never mounted here: the first use reads the store as it is by then.
+	if (!fsReadyPromise) return Promise.resolve();
 	if (pendingRefresh) {
 		if (options.immediate) releaseDebounce?.();
 		return pendingRefresh;
@@ -188,9 +203,6 @@ const gatedFs = new Proxy(fs, {
 			: Reflect.get(target, property, receiver);
 	},
 }) as typeof fs;
-
-// Start initialization immediately
-initializeFs();
 
 // Export both the fs object and the ready promise
 export default gatedFs;

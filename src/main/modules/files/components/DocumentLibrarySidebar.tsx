@@ -82,6 +82,24 @@ export const DocumentLibrarySidebar = memo(function DocumentLibrarySidebar({
 		setWorkspaceExpanded(selectedSection === "workspace");
 	}, [selectedSection]);
 
+	// Stable, so the memoised tree rows are not all redrawn on every render.
+	const selectDocNode = useCallback(
+		(node: DocumentTreeNode) => {
+			setDocsExpanded(true);
+			setWorkspaceExpanded(false);
+			onSelectDocNode(node);
+		},
+		[onSelectDocNode],
+	);
+	const selectWorkspaceNode = useCallback(
+		(node: DocumentTreeNode) => {
+			setWorkspaceExpanded(true);
+			setDocsExpanded(false);
+			onSelectWorkspaceNode(node);
+		},
+		[onSelectWorkspaceNode],
+	);
+
 	return (
 		<div className="flex h-full flex-col overflow-hidden flex-shrink-0 bg-background">
 			<PageHeader
@@ -121,11 +139,7 @@ export const DocumentLibrarySidebar = memo(function DocumentLibrarySidebar({
 					<DocumentTreeDraggable
 						tree={tree}
 						selectedId={selectedSection === "documents" ? selectedNodeId : null}
-						onSelectNode={(node) => {
-							setDocsExpanded(true);
-							setWorkspaceExpanded(false);
-							onSelectDocNode(node);
-						}}
+						onSelectNode={selectDocNode}
 						onToggleExpand={onToggleExpand}
 						onMove={onMove}
 						onRename={onRenameNode}
@@ -170,11 +184,7 @@ export const DocumentLibrarySidebar = memo(function DocumentLibrarySidebar({
 								selectedId={
 									selectedSection === "workspace" ? selectedNodeId : null
 								}
-								onSelectNode={(node) => {
-									setWorkspaceExpanded(true);
-									setDocsExpanded(false);
-									onSelectWorkspaceNode(node);
-								}}
+								onSelectNode={selectWorkspaceNode}
 								onToggleExpand={onToggleExpandWorkspace}
 								onRename={onRenameNode}
 								onDelete={onDeleteNode}

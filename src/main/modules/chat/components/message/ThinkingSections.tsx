@@ -1,6 +1,5 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
-import ReactMarkdown from "react-markdown";
 import { Brain, ChevronDownIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -13,7 +12,11 @@ import {
 	ASSISTANT_DISCLOSURE_ICON_CLASS,
 	ASSISTANT_DISCLOSURE_TRIGGER_CLASS,
 } from "./assistant-disclosure";
-import { rehypePlugins, remarkPlugins } from "./markdownComponents";
+import {
+	MarkdownBlocks,
+	rehypePlugins,
+	remarkPlugins,
+} from "./markdownComponents";
 
 interface ThinkingSectionsProps {
 	thinking: string[];
@@ -22,59 +25,79 @@ interface ThinkingSectionsProps {
 	components: any;
 }
 
-export const ThinkingSections: React.FC<ThinkingSectionsProps> = ({
-	thinking,
-	hasIncompleteThinking,
-	isStreaming,
-	components,
-}) => {
-	const { t } = useTranslation("chat");
+/**
+ * The sections are parsed out of the message again on every update, so the
+ * list is new each time; what counts is whether any section's text changed.
+ */
+const sameThinkingProps = (
+	previous: ThinkingSectionsProps,
+	next: ThinkingSectionsProps,
+): boolean =>
+	previous.hasIncompleteThinking === next.hasIncompleteThinking &&
+	previous.isStreaming === next.isStreaming &&
+	previous.components === next.components &&
+	previous.thinking.length === next.thinking.length &&
+	previous.thinking.every((section, index) => section === next.thinking[index]);
 
-	if (thinking.length === 0) return null;
+export const ThinkingSections: React.FC<ThinkingSectionsProps> = React.memo(
+	({ thinking, hasIncompleteThinking, isStreaming, components }) => {
+		const { t } = useTranslation("chat");
 
-	return (
-		<div className="mb-4 space-y-2">
-			{thinking.map((thinkContent, index) => {
-				const isIncomplete = hasIncompleteThinking && index === 0;
-				const isThinking = isStreaming && isIncomplete;
+		if (thinking.length === 0) return null;
 
-				return (
-					<Task key={index} defaultOpen={isIncomplete}>
-						<TaskTrigger
-							title={
-								isThinking ? t("messages.thinking") : t("messages.thought")
-							}
-						>
-							<button
-								type="button"
-								className={ASSISTANT_DISCLOSURE_TRIGGER_CLASS}
+		return (
+			<div className="mb-4 space-y-2">
+				{thinking.map((thinkContent, index) => {
+					const isIncomplete = hasIncompleteThinking && index === 0;
+					const isThinking = isStreaming && isIncomplete;
+
+					return (
+						// biome-ignore lint/suspicious/noArrayIndexKey: sections are positional
+						<Task key={index} defaultOpen={isIncomplete}>
+							<TaskTrigger
+								title={
+									isThinking ? t("messages.thinking") : t("messages.thought")
+								}
 							>
-								<Brain
-									className={cn(
-										ASSISTANT_DISCLOSURE_ICON_CLASS,
-										isThinking && "animate-pulse text-primary",
-									)}
-								/>
-								<span className="truncate">
-									{isThinking ? t("messages.thinking") : t("messages.thought")}
-								</span>
-								<ChevronDownIcon className="h-3.5 w-3.5 shrink-0 transition-transform duration-200 group-data-[state=open]:rotate-180" />
-							</button>
-						</TaskTrigger>
-						<TaskContent>
-							<TaskItem>
-								<ReactMarkdown
-									remarkPlugins={remarkPlugins}
-									rehypePlugins={rehypePlugins}
-									components={components}
+								<button
+									type="button"
+									className={ASSISTANT_DISCLOSURE_TRIGGER_CLASS}
 								>
-									{thinkContent}
-								</ReactMarkdown>
-							</TaskItem>
-						</TaskContent>
-					</Task>
-				);
-			})}
-		</div>
-	);
-};
+									<Brain
+										className={cn(
+											ASSISTANT_DISCLOSURE_ICON_CLASS,
+											isThinking && "animate-pulse text-primary",
+										)}
+									/>
+									<span className="truncate">
+										{isThinking
+											? t("messages.thinking")
+											: t("messages.thought")}
+									</span>
+									<ChevronDownIcon className="h-3.5 w-3.5 shrink-0 transition-transform duration-200 group-data-[state=open]:rotate-180" />
+								</button>
+							</TaskTrigger>
+							<TaskContent>
+								<TaskItem>
+									{/* Block by block while it is written, and memoized, so a
+									    finished section is not parsed again as the rest grows. */}
+									<MarkdownBlocks
+										isStreaming={isThinking}
+										remarkPlugins={remarkPlugins}
+										rehypePlugins={rehypePlugins}
+										components={components}
+									>
+										{thinkContent}
+									</MarkdownBlocks>
+								</TaskItem>
+							</TaskContent>
+						</Task>
+					);
+				})}
+			</div>
+		);
+	},
+	sameThinkingProps,
+);
+
+ThinkingSections.displayName = "ThinkingSections";

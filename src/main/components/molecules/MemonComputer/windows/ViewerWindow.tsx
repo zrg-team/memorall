@@ -20,7 +20,7 @@ const Centered: React.FC<{ children: React.ReactNode }> = ({ children }) => (
  * The file the Viewer shows, previewed the way the Files page does. The agent
  * reads `viewer.text` instead; this is what the user sees.
  */
-export const ViewerWindow: React.FC<{ viewer: MemonViewerState }> = ({
+const ViewerWindowView: React.FC<{ viewer: MemonViewerState }> = ({
 	viewer,
 }) => {
 	const { t } = useTranslation("common");
@@ -194,3 +194,6 @@ export const ViewerWindow: React.FC<{ viewer: MemonViewerState }> = ({
 			);
 	}
 };
+
+/** Renders only when its slice of the machine changes: the store keeps unchanged slices by reference. */
+export const ViewerWindow = React.memo(ViewerWindowView);

@@ -254,6 +254,26 @@ describe("SandboxContainerServiceMain", () => {
 		await rejection;
 	});
 
+	it("lists without starting a runtime that is not running", async () => {
+		const service = createService();
+		const initialize = vi.spyOn(service, "initialize");
+		const request = vi.spyOn(service, "request");
+
+		await expect(service.listCommands()).resolves.toEqual({ commands: [] });
+		await expect(service.listServers()).resolves.toEqual({ servers: [] });
+		await expect(service.getLogs()).resolves.toEqual({ logs: [] });
+
+		expect(initialize).not.toHaveBeenCalled();
+		expect(request).not.toHaveBeenCalled();
+
+		installReadyIframe(service);
+		request.mockResolvedValue({ commands: [{ commandId: "c1" }] } as never);
+		await expect(service.listCommands()).resolves.toEqual({
+			commands: [{ commandId: "c1" }],
+		});
+		expect(request).toHaveBeenCalledWith("runtime.listCommands", undefined);
+	});
+
 	it("maps public runtime, package, server, and snapshot methods to sandbox operations", async () => {
 		const service = createService({ requestTimeoutMs: 40 });
 		const sync = stubSync(service);

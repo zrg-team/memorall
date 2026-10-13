@@ -5,7 +5,10 @@ import type {
 	MessageParts,
 	ToolExecutionRecord,
 } from "@/types/chat";
-import { buildAssistantContentParts } from "../message-parts-adapter";
+import {
+	buildAssistantContentParts,
+	createAssistantContentPartsCache,
+} from "../message-parts-adapter";
 
 const toolParts = (
 	parts: ReturnType<typeof buildAssistantContentParts>,
@@ -426,5 +429,63 @@ describe("buildAssistantContentParts reasoning", () => {
 		});
 
 		expect(built).toEqual([{ type: "reasoning", text: "Working…" }]);
+	});
+});
+
+describe("buildAssistantContentParts with a cache", () => {
+	it("returns a tool part built from the same inputs as the same object", () => {
+		const cache = createAssistantContentPartsCache();
+		const first = buildAssistantContentParts({
+			parts,
+			toolExecutions: [record],
+			cache,
+		});
+		// The next streamed chunk: new arrays, the tool's inputs unchanged.
+		const second = buildAssistantContentParts({
+			parts: [...parts],
+			toolExecutions: [record],
+			cache,
+		});
+
+		expect(toolParts(second)[0]).toBe(toolParts(first)[0]);
+	});
+
+	it("builds the part again once its record changes", () => {
+		const cache = createAssistantContentPartsCache();
+		const first = buildAssistantContentParts({
+			parts,
+			toolExecutions: [{ ...record, status: "running" }],
+			cache,
+		});
+		const second = buildAssistantContentParts({
+			parts,
+			toolExecutions: [record],
+			cache,
+		});
+
+		expect(toolParts(second)[0]).not.toBe(toolParts(first)[0]);
+		expect(toolParts(second)[0].state).toBe("complete");
+		expect(toolParts(second)[0]).toEqual(
+			toolParts(
+				buildAssistantContentParts({ parts, toolExecutions: [record] }),
+			)[0],
+		);
+	});
+
+	it("reuses a tool with no record while its result is unchanged", () => {
+		const cache = createAssistantContentPartsCache();
+		const first = buildAssistantContentParts({ parts, cache });
+		const second = buildAssistantContentParts({ parts: [...parts], cache });
+		const grown = buildAssistantContentParts({
+			parts: [
+				parts[0],
+				{ role: "tool", tool_call_id: "call_1", content: "{}" },
+				parts[2],
+			],
+			cache,
+		});
+
+		expect(toolParts(second)[0]).toBe(toolParts(first)[0]);
+		expect(toolParts(grown)[0]).not.toBe(toolParts(first)[0]);
 	});
 });

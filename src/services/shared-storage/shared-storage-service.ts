@@ -43,9 +43,43 @@ export class SharedStorageService {
 		return SharedStorageService.instance;
 	}
 
+	private initializing: Promise<void> | null = null;
+
 	async initialize(): Promise<void> {
 		if (this.initialized) return;
+		// Callers starting at once share one opening, and one bus subscription.
+		this.initializing ??= this.open().finally(() => {
+			this.initializing = null;
+		});
+		return this.initializing;
+	}
 
+	/**
+	 * A plain key-value view of this storage: opened on first use, and
+	 * listeners get the new value. What a context hands the logger to follow
+	 * the shared "record logs" choice — unlike the extension storage API, it
+	 * works in the offscreen document too.
+	 */
+	asKeyValueStore(): {
+		get<T>(key: string): Promise<T | null>;
+		set<T>(key: string, value: T): Promise<void>;
+		subscribe<T>(key: string, listener: (value: T | null) => void): () => void;
+	} {
+		return {
+			get: async <T>(key: string) => {
+				await this.initialize();
+				return this.get<T>(key);
+			},
+			set: async <T>(key: string, value: T) => {
+				await this.initialize();
+				await this.set(key, value);
+			},
+			subscribe: <T>(key: string, listener: (value: T | null) => void) =>
+				this.subscribe<T>(key, (event) => listener(event.newValue)),
+		};
+	}
+
+	private async open(): Promise<void> {
 		try {
 			// Open IndexedDB (works in all contexts including offscreen)
 			await this.openDatabase();

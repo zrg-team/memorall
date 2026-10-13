@@ -46,7 +46,7 @@ import {
 import { handleWebContentCommand } from "./content/modules/web-commands";
 import type { BackgroundMessage, MessageResponse } from "./embedded/types";
 import { isJobNotificationMessage } from "./services/background-jobs/bridges/types";
-import { logError, logInfo } from "./utils/logger";
+import { logError, logInfo, removeLegacyPageLogDatabase } from "./utils/logger";
 
 type ContentSendResponse = (
 	response:
@@ -214,6 +214,9 @@ const messageListener = (
 // listener even if everything below this line fails.
 
 chrome.runtime.onMessage.addListener(messageListener);
+
+// Nothing here connects log recording: this page's IndexedDB is the site's.
+removeLegacyPageLogDatabase();
 
 logInfo("🚀 Memorall content script loaded on:", window.location.href);
 

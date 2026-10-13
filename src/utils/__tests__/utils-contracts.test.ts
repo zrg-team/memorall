@@ -32,6 +32,8 @@ vi.mock("@zenfs/core", () => ({
 
 vi.mock("@zenfs/dom", () => ({
 	IndexedDB: {},
+	IndexedDBStore: class {},
+	IndexedDBTransaction: class {},
 }));
 
 beforeAll(() => {

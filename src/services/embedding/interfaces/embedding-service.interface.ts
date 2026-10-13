@@ -1,5 +1,10 @@
 import type { BaseEmbedding } from "./base-embedding";
 
+export interface CreateEmbeddingOptions {
+	/** Load the model now (default). `false` registers it to load on first use. */
+	initialize?: boolean;
+}
+
 export interface IEmbeddingService {
 	// Initialization - Core functionality
 	initialize(): Promise<void>;
@@ -9,6 +14,7 @@ export interface IEmbeddingService {
 		name: string,
 		embeddingType: string,
 		config: any,
+		options?: CreateEmbeddingOptions,
 	): Promise<BaseEmbedding>;
 	get(name: string): Promise<BaseEmbedding | null | undefined>;
 	has(name: string): boolean;

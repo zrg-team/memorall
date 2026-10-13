@@ -43,6 +43,7 @@ import {
 } from "@/services/memon/constants";
 import { serializeScreen } from "@/services/memon/screen-serializer";
 import type {
+	MemonFileEntry,
 	MemonMachineSnapshot,
 	MemonStatus,
 	MemonWindowState,
@@ -270,35 +271,47 @@ const windowTitle = (
 	}
 };
 
-const useElementWidth = (ref: React.RefObject<HTMLElement | null>): number => {
-	const [width, setWidth] = React.useState(0);
+/**
+ * Whether the element is narrower than `limit`. A boolean, not the width: the
+ * panel renders only when it crosses the limit, not on every pixel of a
+ * resize or a maximize transition.
+ */
+const useNarrowerThan = (
+	ref: React.RefObject<HTMLElement | null>,
+	limit: number,
+): boolean => {
+	const [narrow, setNarrow] = React.useState(false);
 	React.useLayoutEffect(() => {
 		const element = ref.current;
 		if (!element) return;
-		const observer = new ResizeObserver(([entry]) =>
-			setWidth(entry.contentRect.width),
-		);
+		const observer = new ResizeObserver(([entry]) => {
+			const width = entry.contentRect.width;
+			setNarrow(width > 0 && width < limit);
+		});
 		observer.observe(element);
 		return () => observer.disconnect();
-	}, [ref]);
-	return width;
+	}, [ref, limit]);
+	return narrow;
 };
+
+/** One empty list, so a machine without servers does not re-render its browser. */
+const NO_SERVERS: NonNullable<MemonMachineSnapshot["terminal"]["servers"]> = [];
 
 /**
  * The MemonOS Bot computer: the agent's windows, drawn from the same snapshot
  * its screen text is built from. Any input here goes to the machine as the
  * user; input while the agent is acting takes the computer over first.
  */
-export const MemonComputerPanel: React.FC<{
+export const MemonComputerPanel = React.memo<{
 	machineKey: string | null;
 	/** Shown while there is no computer, e.g. a way to start one. */
 	emptyState?: React.ReactNode;
-}> = ({ machineKey, emptyState }) => {
+}>(function MemonComputerPanel({ machineKey, emptyState }) {
 	const { t } = useTranslation("common");
 	const snapshot = useMemonMachineStore((state) =>
 		machineKey ? state.snapshots[machineKey] : undefined,
 	);
-	const pull = useMemonMachineStore((state) => state.pull);
+	const watch = useMemonMachineStore((state) => state.watch);
 	const send = useMemonMachineStore((state) => state.send);
 	const error = useMemonMachineStore((state) => state.error);
 	const clearError = useMemonMachineStore((state) => state.clearError);
@@ -312,8 +325,7 @@ export const MemonComputerPanel: React.FC<{
 		"window" | "area" | null
 	>(null);
 	const cancelCapture = React.useCallback(() => setCaptureMode(null), []);
-	const width = useElementWidth(desktopRef);
-	const compact = width > 0 && width < COMPACT_WIDTH;
+	const compact = useNarrowerThan(desktopRef, COMPACT_WIDTH);
 	const askMenu = useMemonAskMenu(snapshot, desktopRef);
 	useMemonExportDownloads(snapshot?.files.exported);
 	const { confirmDelete, dialog: deleteDialog } = useDeleteConfirm((paths) => {
@@ -377,9 +389,50 @@ export const MemonComputerPanel: React.FC<{
 		useShellLayoutStore.getState().setChatThreadSlot(element);
 	}, []);
 
-	React.useEffect(() => {
-		if (machineKey) void pull(machineKey);
-	}, [machineKey, pull]);
+	// The machine's snapshot is kept current only while this shows it.
+	React.useEffect(
+		() => (machineKey ? watch(machineKey) : undefined),
+		[machineKey, watch],
+	);
+
+	// Stable while the files they act on are, so the desktop icons (sorted on
+	// every render) render only when the desktop changes.
+	const snapshotKey = snapshot?.key;
+	const hasClipboard = Boolean(snapshot?.files.clipboard);
+	const openDesktopEntry = React.useCallback(
+		(path: string) => {
+			if (snapshotKey) void send("files.open", { key: snapshotKey, path });
+		},
+		[send, snapshotKey],
+	);
+	const desktopEntryMenu = React.useCallback(
+		(entry: MemonFileEntry) =>
+			fileMenuActions({
+				t,
+				paths: [entry.path],
+				folder: entry.type === "dir" ? entry.path : undefined,
+				canPaste: hasClipboard,
+				open: () => openDesktopEntry(entry.path),
+				toClipboard: (mode, paths) => {
+					if (snapshotKey)
+						void send("files.clipboard", { key: snapshotKey, mode, paths });
+				},
+				paste: (to) => {
+					if (snapshotKey) void send("files.paste", { key: snapshotKey, to });
+				},
+				remove: confirmDelete,
+			}),
+		[t, hasClipboard, openDesktopEntry, send, snapshotKey, confirmDelete],
+	);
+	const deleteDesktopEntry = React.useCallback(
+		(path: string) => confirmDelete([path]),
+		[confirmDelete],
+	);
+	// Built only for the Screen text view, and once per snapshot there.
+	const screenText = React.useMemo(
+		() => (view === "text" && snapshot ? serializeScreen(snapshot) : ""),
+		[view, snapshot],
+	);
 
 	if (!machineKey || !snapshot) {
 		if (emptyState) return <>{emptyState}</>;
@@ -428,7 +481,7 @@ export const MemonComputerPanel: React.FC<{
 					<BrowserWindow
 						machineKey={key}
 						browser={snapshot.browser}
-						servers={snapshot.terminal.servers ?? []}
+						servers={snapshot.terminal.servers ?? NO_SERVERS}
 						send={send}
 					/>
 				);
@@ -817,28 +870,15 @@ export const MemonComputerPanel: React.FC<{
 					>
 						{view === "text" ? (
 							<pre className="absolute inset-0 overflow-auto whitespace-pre-wrap break-words bg-background px-5 py-4 font-mono text-xs leading-relaxed text-foreground/90">
-								{serializeScreen(snapshot)}
+								{screenText}
 							</pre>
 						) : (
 							<>
 								<MemonDesktopIcons
 									entries={snapshot.desktop}
-									onOpen={(path) => void send("files.open", { key, path })}
-									menuActions={(entry) =>
-										fileMenuActions({
-											t,
-											paths: [entry.path],
-											folder: entry.type === "dir" ? entry.path : undefined,
-											canPaste: Boolean(snapshot.files.clipboard),
-											open: () =>
-												void send("files.open", { key, path: entry.path }),
-											toClipboard: (mode, paths) =>
-												void send("files.clipboard", { key, mode, paths }),
-											paste: (to) => void send("files.paste", { key, to }),
-											remove: confirmDelete,
-										})
-									}
-									onDelete={(path) => confirmDelete([path])}
+									onOpen={openDesktopEntry}
+									menuActions={desktopEntryMenu}
+									onDelete={deleteDesktopEntry}
 								/>
 								{visibleWindows.map((window) => (
 									<MemonWindowFrame
@@ -1021,4 +1061,4 @@ export const MemonComputerPanel: React.FC<{
 			{deleteDialog}
 		</div>
 	);
-};
+});

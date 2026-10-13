@@ -24,6 +24,26 @@ const TRIM_INTERVAL = 100;
 // and every later trim read it back again.
 const MAX_PERSISTED_MESSAGE_LENGTH = 2_000;
 
+/**
+ * Whether log entries are written to IndexedDB, for the Logs page. Off unless
+ * someone turns it on there: writing every line cost a transaction per line in
+ * every context. Each app context connects the store that keeps the choice
+ * (`connectLogRecording`), so all of them follow it. A context that connects
+ * none never writes: a content script, whose IndexedDB belongs to the visited
+ * website, which can read anything written there.
+ */
+export const LOG_RECORDING_STORAGE_KEY = "memorall.logs.recording";
+
+/** Where the recording choice is kept and watched: a platform key-value store. */
+export interface LogRecordingStore {
+	get<T>(key: string): Promise<T | null>;
+	set<T>(key: string, value: T): Promise<void>;
+	subscribe<T>(key: string, listener: (value: T | null) => void): () => void;
+}
+
+// The database older versions also wrote from content scripts.
+const LEGACY_PAGE_LOG_DATABASE = "MemorallLogs";
+
 const safeStringify = (value: unknown): string => {
 	if (value === undefined) return "";
 	try {
@@ -39,25 +59,63 @@ class Logger {
 	private isShowLog: boolean;
 	private writesSinceTrim = 0;
 	private trimming: Promise<void> | null = null;
+	private recordingStore: LogRecordingStore | null = null;
+	private recordingSettingLoaded: Promise<void> = Promise.resolve();
 
 	constructor(config: Partial<LoggerConfig> = {}) {
 		this.config = {
 			maxEntries: MAX_LOG_STORED,
 			enableConsoleOutput: true,
-			enablePersistence: true,
+			enablePersistence: false,
 			...config,
 		};
-
-		console.log(`[Logger] init isShowLog: ${SHOW_LOG}`);
 
 		this.isShowLog = SHOW_LOG;
 
 		this.storage = new IndexedDBLogStorage();
 
-		// Initialize storage if persistence is enabled and available in this runtime.
 		if (this.config.enablePersistence && this.storage.isAvailable()) {
 			this.initializeStorage();
 		}
+	}
+
+	/** Follow the shared recording choice kept in `store`. */
+	connectRecording(store: LogRecordingStore): void {
+		if (this.recordingStore) return;
+		this.recordingStore = store;
+		store.subscribe<boolean>(LOG_RECORDING_STORAGE_KEY, (enabled) =>
+			this.applyRecording(enabled === true),
+		);
+		this.recordingSettingLoaded = store
+			.get<boolean>(LOG_RECORDING_STORAGE_KEY)
+			.then((enabled) => this.applyRecording(enabled === true))
+			.catch(() => undefined);
+	}
+
+	private applyRecording(enabled: boolean): void {
+		const wasEnabled = this.config.enablePersistence;
+		this.config.enablePersistence = enabled;
+		if (enabled && !wasEnabled && this.storage.isAvailable()) {
+			this.initializeStorage();
+		}
+	}
+
+	/** Whether this context writes log entries for the Logs page. */
+	async isRecording(): Promise<boolean> {
+		await this.recordingSettingLoaded;
+		return this.config.enablePersistence;
+	}
+
+	/** Turn recording on or off in every connected context. */
+	async setRecording(enabled: boolean): Promise<void> {
+		if (!this.recordingStore) return;
+		this.applyRecording(enabled);
+		await this.recordingStore.set(LOG_RECORDING_STORAGE_KEY, enabled);
+	}
+
+	/** Recorded logs can be read even while recording is off. */
+	private canReadStorage(): boolean {
+		return this.recordingStore !== null && this.storage.isAvailable();
 	}
 
 	private async initializeStorage(): Promise<void> {
@@ -317,7 +375,7 @@ class Logger {
 		source?: string;
 		limit?: number;
 	}): Promise<LogEntry[]> {
-		if (!this.config.enablePersistence || !this.storage.isAvailable()) {
+		if (!this.canReadStorage()) {
 			return [];
 		}
 
@@ -331,7 +389,7 @@ class Logger {
 
 	// Clear all logs
 	async clearLogs(): Promise<void> {
-		if (!this.config.enablePersistence || !this.storage.isAvailable()) {
+		if (!this.canReadStorage()) {
 			return;
 		}
 
@@ -344,7 +402,7 @@ class Logger {
 
 	// Get total log count
 	async getLogCount(): Promise<number> {
-		if (!this.config.enablePersistence || !this.storage.isAvailable()) {
+		if (!this.canReadStorage()) {
 			return 0;
 		}
 
@@ -365,7 +423,7 @@ class Logger {
 		source?: string;
 		limit?: number;
 	}): Promise<string> {
-		if (!this.config.enablePersistence || !this.storage.isAvailable()) {
+		if (!this.canReadStorage()) {
 			return JSON.stringify([]);
 		}
 
@@ -391,19 +449,42 @@ class Logger {
 
 	// Update configuration
 	updateConfig(newConfig: Partial<LoggerConfig>): void {
-		this.config = { ...this.config, ...newConfig };
-
-		// Reinitialize storage if persistence settings changed
-		if (newConfig.enablePersistence !== undefined) {
-			if (this.config.enablePersistence && this.storage.isAvailable()) {
-				this.initializeStorage();
-			}
+		const { enablePersistence, ...rest } = newConfig;
+		this.config = { ...this.config, ...rest };
+		if (enablePersistence !== undefined) {
+			this.applyRecording(enablePersistence);
 		}
+	}
+}
+
+/**
+ * Older versions logged from content scripts into the site's own IndexedDB,
+ * where the site could read it. The content script removes what they left,
+ * once per page.
+ */
+export function removeLegacyPageLogDatabase(): void {
+	try {
+		const factory = globalThis.indexedDB;
+		if (!factory?.databases) return;
+		void factory
+			.databases()
+			.then((databases) => {
+				if (databases.some((db) => db.name === LEGACY_PAGE_LOG_DATABASE)) {
+					factory.deleteDatabase(LEGACY_PAGE_LOG_DATABASE);
+				}
+			})
+			.catch(() => undefined);
+	} catch {
+		// IndexedDB unavailable on this page.
 	}
 }
 
 // Create singleton logger instance
 const logger = new Logger();
+
+/** Follow the shared "record logs" choice in this context. */
+export const connectLogRecording = (store: LogRecordingStore): void =>
+	logger.connectRecording(store);
 
 // Helper to format log output
 function formatLogArgs(

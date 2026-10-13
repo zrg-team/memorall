@@ -12,8 +12,13 @@ export const useMemonAutoOpen = (
 ): void => {
 	const openComputer = useOpenMemonComputer();
 	const start = useMemonMachineStore((state) => state.start);
-	const summary = useMemonMachineStore((state) =>
-		machineKey ? state.summaries[machineKey] : undefined,
+	// Just the two fields read, not the summary: a new summary arrives several
+	// times a second while the agent works, and this runs inside ChatPage.
+	const status = useMemonMachineStore((state) =>
+		machineKey ? state.summaries[machineKey]?.status : undefined,
+	);
+	const showComputer = useMemonMachineStore((state) =>
+		machineKey ? state.summaries[machineKey]?.showComputer : undefined,
 	);
 	const openedForRef = React.useRef<string | null>(null);
 
@@ -22,14 +27,14 @@ export const useMemonAutoOpen = (
 	}, [start]);
 
 	React.useEffect(() => {
-		if (!summary) return;
-		if (summary.status !== "working") {
-			if (summary.status === "idle") openedForRef.current = null;
+		if (!machineKey || !status) return;
+		if (status !== "working") {
+			if (status === "idle") openedForRef.current = null;
 			return;
 		}
-		if (summary.showComputer !== "auto") return;
-		if (openedForRef.current === summary.key) return;
-		openedForRef.current = summary.key;
+		if (showComputer !== "auto") return;
+		if (openedForRef.current === machineKey) return;
+		openedForRef.current = machineKey;
 		openComputer();
-	}, [summary, openComputer]);
+	}, [machineKey, status, showComputer, openComputer]);
 };

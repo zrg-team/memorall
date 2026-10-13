@@ -1,4 +1,8 @@
-import type { DocumentTreeNode } from "@/types/document-library";
+import type {
+	DocumentFile,
+	DocumentFolder,
+	DocumentTreeNode,
+} from "@/types/document-library";
 
 export function findNodeById(
 	nodes: DocumentTreeNode[],
@@ -90,30 +94,87 @@ export function updateNodeByPath(
  * anywhere changed — including the agent writing a file somewhere else
  * entirely. Matching on path, open folders stay open and listings already paid
  * for are kept.
+ *
+ * Nodes that come back the same are the previous objects, and so is the whole
+ * tree when nothing changed, so the rows of an untouched branch (and the open
+ * file's node) keep their identity and memoised rows skip the rebuild.
  */
 export function mergeTreeState(
 	previous: DocumentTreeNode[],
 	next: DocumentTreeNode[],
 ): DocumentTreeNode[] {
-	if (previous.length === 0) return next;
+	if (previous.length === 0) return next.length === 0 ? previous : next;
 	const byPath = new Map(previous.map((node) => [node.path, node]));
+	let changed = previous.length !== next.length;
 
-	return next.map((node) => {
+	const merged = next.map((node, index) => {
 		const before = byPath.get(node.path);
-		if (!before) return node;
+		if (!before) {
+			changed = true;
+			return node;
+		}
 
 		// A folder that was read stays read: the service still holds the listing,
 		// and re-reading it is the cost this exists to avoid.
+		const keptRead = node.isLazy === true && !before.isLazy;
 		const keptChildren =
-			node.isLazy && !before.isLazy && before.children.length > 0
+			keptRead && before.children.length > 0
 				? before.children
 				: mergeTreeState(before.children, node.children);
 
-		return {
+		const candidate: DocumentTreeNode = {
 			...node,
 			isExpanded: before.isExpanded,
 			children: keptChildren,
-			...(node.isLazy && !before.isLazy ? { isLazy: false } : {}),
+			...(keptRead ? { isLazy: false } : {}),
+			...(keptRead && node.folder
+				? { folder: { ...node.folder, childCount: keptChildren.length } }
+				: {}),
 		};
+		const kept = sameNode(before, candidate) ? before : candidate;
+		if (kept !== previous[index]) changed = true;
+		return kept;
 	});
+	return changed ? merged : previous;
 }
+
+const sameFolder = (a?: DocumentFolder, b?: DocumentFolder): boolean =>
+	a === b ||
+	(a !== undefined &&
+		b !== undefined &&
+		a.id === b.id &&
+		a.name === b.name &&
+		a.path === b.path &&
+		a.parentPath === b.parentPath &&
+		// Folder dates are stamped when the tree is read, not stored, so a
+		// rebuild alone would make every folder look changed.
+		a.childCount === b.childCount);
+
+const time = (date: Date | string): number => new Date(date).getTime();
+
+const sameFile = (a?: DocumentFile, b?: DocumentFile): boolean =>
+	a === b ||
+	(a !== undefined &&
+		b !== undefined &&
+		a.id === b.id &&
+		a.name === b.name &&
+		a.path === b.path &&
+		a.type === b.type &&
+		a.mimeType === b.mimeType &&
+		a.size === b.size &&
+		Object.is(time(a.createdAt), time(b.createdAt)) &&
+		Object.is(time(a.modifiedAt), time(b.modifiedAt)) &&
+		JSON.stringify(a.metadata ?? {}) === JSON.stringify(b.metadata ?? {}));
+
+/** Same as far as anything draws it; children by identity (merged first). */
+const sameNode = (a: DocumentTreeNode, b: DocumentTreeNode): boolean =>
+	a.id === b.id &&
+	a.name === b.name &&
+	a.path === b.path &&
+	a.type === b.type &&
+	a.isExpanded === b.isExpanded &&
+	Boolean(a.isLazy) === Boolean(b.isLazy) &&
+	Boolean(a.isLoading) === Boolean(b.isLoading) &&
+	a.children === b.children &&
+	sameFolder(a.folder, b.folder) &&
+	sameFile(a.file, b.file);

@@ -11,6 +11,8 @@ vi.mock("react-i18next", () => ({
 	}),
 }));
 
+const partRenders = vi.hoisted(() => ({ count: 0 }));
+
 vi.mock("../AssistantToolTimelinePart", () => ({
 	AssistantToolTimelinePart: ({
 		part,
@@ -18,14 +20,17 @@ vi.mock("../AssistantToolTimelinePart", () => ({
 	}: {
 		part: ComplexContentPartTool;
 		forceOpen?: boolean;
-	}) => (
-		<div
-			data-testid={`action-${part.id}`}
-			data-force-open={String(Boolean(forceOpen))}
-		>
-			{part.description}
-		</div>
-	),
+	}) => {
+		partRenders.count += 1;
+		return (
+			<div
+				data-testid={`action-${part.id}`}
+				data-force-open={String(Boolean(forceOpen))}
+			>
+				{part.description}
+			</div>
+		);
+	},
 }));
 
 const part: ComplexContentPartTool = {
@@ -43,6 +48,28 @@ const rowWrapperClass = (id: string): string =>
 	"";
 
 describe("AssistantToolTimeline", () => {
+	it("does not render again for a new list holding the same tools", () => {
+		const second = { ...part, id: "call-2" };
+		const { rerender } = render(
+			<AssistantToolTimeline parts={[part, second]} isStreaming={true} />,
+		);
+		partRenders.count = 0;
+
+		// A streamed chunk rebuilds the reply's parts: a new group array.
+		rerender(
+			<AssistantToolTimeline parts={[part, second]} isStreaming={true} />,
+		);
+		expect(partRenders.count).toBe(0);
+
+		rerender(
+			<AssistantToolTimeline
+				parts={[part, { ...second, state: "complete" }]}
+				isStreaming={true}
+			/>,
+		);
+		expect(partRenders.count).toBeGreaterThan(0);
+	});
+
 	it("animates only the rows that arrive while the user is watching", () => {
 		const { rerender } = render(
 			<AssistantToolTimeline parts={[part]} isStreaming={true} />,

@@ -7,6 +7,7 @@ import {
 } from "@/services/database/types";
 import { serviceManager } from "@/services";
 import { logError } from "@/utils/logger";
+import { replaceEqualDeep } from "@/utils/replace-equal-deep";
 import { sanitizeForJson } from "@/utils/sanitize-json";
 import { v4 } from "@/utils/uuid";
 import type { ChatMode } from "@/main/modules/chat/services/chat-service";
@@ -225,17 +226,122 @@ const replaceGroup = (
 	updater: (group: ChatMessageGroup) => ChatMessageGroup,
 ) => groups.map((group) => (group.id === groupId ? updater(group) : group));
 
+/**
+ * The groups with one message changed. Only the group holding it is a new
+ * object: rebuilding every group re-rendered every group on screen each time a
+ * reply was saved.
+ */
 const replaceMessageInGroups = (
 	groups: ChatMessageGroup[],
 	messageId: string,
 	message: Partial<Message>,
-) =>
-	groups.map((group) => ({
-		...group,
-		messages: group.messages.map((current) =>
-			current.id === messageId ? { ...current, ...message } : current,
-		),
-	}));
+) => {
+	const groupIndex = groups.findIndex((group) =>
+		group.messages.some((current) => current.id === messageId),
+	);
+	if (groupIndex === -1) return groups;
+	return groups.map((group, index) =>
+		index === groupIndex
+			? {
+					...group,
+					messages: group.messages.map((current) =>
+						current.id === messageId ? { ...current, ...message } : current,
+					),
+				}
+			: group,
+	);
+};
+
+/** `next`, or `previous` when the two are equal, reading dates by their time. */
+const reuseEqualValue = (previous: unknown, next: unknown): unknown =>
+	previous instanceof Date && next instanceof Date
+		? previous.getTime() === next.getTime()
+			? previous
+			: next
+		: replaceEqualDeep(previous, next);
+
+/**
+ * A row read again from the database, as the object already held for it when
+ * nothing in it changed (and with its unchanged fields kept when something
+ * did). The database hands back new objects on every read, and each of them
+ * renders its message again.
+ */
+const reuseEqualRow = <T extends object>(
+	previous: T | null | undefined,
+	next: T,
+): T => {
+	if (!previous) return next;
+	const keys = Object.keys(next) as Array<keyof T>;
+	let equal = keys.length === Object.keys(previous).length;
+	const merged = {} as T;
+	for (const key of keys) {
+		const kept = reuseEqualValue(previous[key], next[key]) as T[keyof T];
+		if (kept !== previous[key] || !(key in previous)) equal = false;
+		merged[key] = kept;
+	}
+	return equal ? previous : merged;
+};
+
+const reuseEqualRows = <T extends { id: string }>(
+	previous: T[],
+	next: T[],
+): T[] => {
+	const heldById = new Map(previous.map((row) => [row.id, row]));
+	const rows = next.map((row) => reuseEqualRow(heldById.get(row.id), row));
+	return rows.length === previous.length &&
+		rows.every((row, index) => row === previous[index])
+		? previous
+		: rows;
+};
+
+const GROUP_FIELDS = [
+	"id",
+	"previousSeparator",
+	"separator",
+	"messages",
+	"isLatest",
+	"isLoaded",
+	"isLoading",
+] as const satisfies ReadonlyArray<keyof ChatMessageGroup>;
+
+/**
+ * A chat's groups read again, keeping what is on screen: a group the user has
+ * opened keeps its messages (a group is only read when opened, and re-reading
+ * the chat used to fold every one of them up again), and a group in which
+ * nothing changed stays the same object.
+ */
+const reuseGroups = (
+	previous: ChatMessageGroup[],
+	next: ChatMessageGroup[],
+): ChatMessageGroup[] => {
+	const heldById = new Map(previous.map((group) => [group.id, group]));
+	const groups = next.map((group) => {
+		const held = heldById.get(group.id);
+		if (!held) return group;
+		const candidate: ChatMessageGroup = {
+			...group,
+			previousSeparator:
+				group.previousSeparator &&
+				reuseEqualRow(held.previousSeparator, group.previousSeparator),
+			separator:
+				group.separator && reuseEqualRow(held.separator, group.separator),
+			...(group.isLatest
+				? { messages: reuseEqualRows(held.messages, group.messages) }
+				: {
+						messages: held.messages,
+						isLoaded: held.isLoaded,
+						isLoading: held.isLoading,
+					}),
+		};
+		return GROUP_FIELDS.every((field) => candidate[field] === held[field])
+			? held
+			: candidate;
+	});
+	return groups.length === previous.length &&
+		groups.every((group, index) => group === previous[index])
+		? previous
+		: groups;
+};
 
 export const useChatStore = create<ChatStore>((set, get) => {
 	const groupLoads = new Map<string, Promise<void>>();
@@ -288,20 +394,37 @@ export const useChatStore = create<ChatStore>((set, get) => {
 			null,
 		);
 		if (version !== hydrationVersion) return conversation;
-		const messageGroups = createGroupsFromSeparators(
-			separators,
-			latestMessages,
+		const readGroups = createGroupsFromSeparators(separators, latestMessages);
+		const state = get();
+		if (state.currentConversation?.id !== conversation.id) {
+			const latestGroup = getLatestGroup(readGroups) ?? createLatestGroup(null);
+			set({
+				currentConversation: conversation,
+				messageGroups: readGroups,
+				messages: latestGroup.messages,
+			});
+			return conversation;
+		}
+
+		// The chat on screen read again (the page coming back into focus does
+		// this): only what changed is new, and when nothing did, nothing is set.
+		const currentConversation = reuseEqualRow(
+			state.currentConversation,
+			conversation,
 		);
+		const messageGroups = reuseGroups(state.messageGroups, readGroups);
 		const latestGroup =
 			getLatestGroup(messageGroups) ?? createLatestGroup(null);
+		const messages = reuseEqualRows(state.messages, latestGroup.messages);
+		if (
+			currentConversation !== state.currentConversation ||
+			messageGroups !== state.messageGroups ||
+			messages !== state.messages
+		) {
+			set({ currentConversation, messageGroups, messages });
+		}
 
-		set({
-			currentConversation: conversation,
-			messageGroups,
-			messages: latestGroup.messages,
-		});
-
-		return conversation;
+		return currentConversation;
 	};
 
 	return {

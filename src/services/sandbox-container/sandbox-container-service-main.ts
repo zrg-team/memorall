@@ -246,6 +246,15 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 		return this.initialized && this.iframe !== null;
 	}
 
+	/**
+	 * Whether the runtime was started. Listing what runs in it must not start
+	 * it: pages ask on every open, and a started runtime is a service worker, an
+	 * iframe and the AlmostNode VFS kept alive from then on.
+	 */
+	private isStarted(): boolean {
+		return this.initialized || this.initializing !== null;
+	}
+
 	getInitializedAt(): number | null {
 		return this.initializedAt;
 	}
@@ -972,6 +981,7 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 	}
 
 	async listCommands(): Promise<SandboxListCommandsResult> {
+		if (!this.isStarted()) return { commands: [] };
 		return this.request("runtime.listCommands", undefined);
 	}
 
@@ -988,6 +998,7 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 	async getLogs(
 		request: SandboxGetLogsRequest = {},
 	): Promise<SandboxGetLogsResult> {
+		if (!this.isStarted()) return { logs: [] };
 		return this.request("runtime.getLogs", request);
 	}
 
@@ -1363,6 +1374,7 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 	}
 
 	async listServers(): Promise<SandboxListServersResult> {
+		if (!this.isStarted()) return { servers: [] };
 		return this.request("server.list", undefined);
 	}
 

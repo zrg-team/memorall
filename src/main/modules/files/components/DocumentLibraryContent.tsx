@@ -10,12 +10,14 @@ import type {
 	DocumentLibraryItem,
 	DocumentTreeNode,
 	DocumentFile,
+	DocumentFolder,
 } from "@/types/document-library";
 import type { Topic } from "@/services/database/entities/topics";
 
 // Stable empty map to avoid creating new Map() on every render
 const EMPTY_TOPIC_MAP = new Map<string, Topic[]>();
 const EMPTY_TOPIC_IDS: string[] = [];
+const EMPTY_TOPICS: Topic[] = [];
 
 interface DocumentLibraryContentProps {
 	/** The open folder's library path, for its index. */
@@ -114,6 +116,11 @@ export const DocumentLibraryContent = memo(function DocumentLibraryContent({
 		[onOpenFolderByPath],
 	);
 
+	const handleDownloadFolder = useCallback(
+		(folder: DocumentFolder) => onDownloadFolder?.(folder.path),
+		[onDownloadFolder],
+	);
+
 	// For workspace section — pass undefined to hide topic/convert actions
 	const effectiveManageTopics = isWorkspaceSection ? undefined : onManageTopics;
 	const effectiveConvertToKnowledge = isWorkspaceSection
@@ -178,9 +185,7 @@ export const DocumentLibraryContent = memo(function DocumentLibraryContent({
 						onRenameItem={onRenameItem}
 						onDownloadFile={effectiveDownloadFile}
 						onDownloadFolder={
-							onDownloadFolder
-								? (folder) => onDownloadFolder(folder.path)
-								: undefined
+							onDownloadFolder ? handleDownloadFolder : undefined
 						}
 						onManageTopics={effectiveManageTopics}
 						onConvertToKnowledge={effectiveConvertToKnowledge}
@@ -208,8 +213,8 @@ export const DocumentLibraryContent = memo(function DocumentLibraryContent({
 				onConvertToKnowledge={effectiveConvertToKnowledge}
 				fileTopics={
 					isWorkspaceSection
-						? []
-						: (fileTopicMap.get(selectedNode.file.path) ?? [])
+						? EMPTY_TOPICS
+						: (fileTopicMap.get(selectedNode.file.path) ?? EMPTY_TOPICS)
 				}
 				selectedTopicIds={effectiveSelectedTopicIds}
 				onTopicClick={effectiveOnTopicClick}

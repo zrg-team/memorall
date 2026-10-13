@@ -145,3 +145,67 @@ describe("reminders in message parts", () => {
 		expect(withReplyText([], "text")).toEqual([]);
 	});
 });
+
+describe("streamed parts snapshots", () => {
+	const chunk = (delta: Record<string, unknown>) => ({
+		id: "chunk",
+		object: "chat.completion.chunk" as const,
+		created: 1,
+		model: "test-model",
+		choices: [{ index: 0, delta, finish_reason: null }],
+	});
+
+	it("hands back the parts a chunk did not touch as the same objects", () => {
+		const accumulator = new MessagePartsAccumulator();
+		accumulator.addChunk(
+			chunk({
+				role: "assistant",
+				content: "Let me look.",
+				tool_calls: [
+					{
+						index: 0,
+						id: "call-1",
+						function: { name: "fs_read", arguments: "{}" },
+					},
+				],
+			}),
+		);
+		accumulator.addChunk(
+			chunk({ role: "tool", tool_call_id: "call-1", content: "file" }),
+		);
+		accumulator.addChunk(chunk({ content: "It says" }));
+		const before = accumulator.toParts();
+
+		accumulator.addChunk(chunk({ content: " hello." }));
+		const after = accumulator.toParts();
+
+		expect(after).not.toBe(before);
+		// Only the part being written is a new copy.
+		expect(after[0]).toBe(before[0]);
+		expect(after[1]).toBe(before[1]);
+		expect(after[2]).not.toBe(before[2]);
+		expect(after[2]).toEqual({ role: "assistant", content: "It says hello." });
+		// What was handed out earlier is a copy: later chunks do not change it.
+		expect(before[2]).toEqual({ role: "assistant", content: "It says" });
+	});
+
+	it("copies a tool result again only while it grows", () => {
+		const accumulator = new MessagePartsAccumulator();
+		accumulator.addChunk(
+			chunk({ role: "tool", tool_call_id: "call-1", content: "par" }),
+		);
+		const before = accumulator.toParts();
+		accumulator.addChunk(
+			chunk({ role: "tool", tool_call_id: "call-1", content: "tial" }),
+		);
+		const after = accumulator.toParts();
+
+		expect(after[0]).not.toBe(before[0]);
+		expect(before[0]).toEqual({
+			role: "tool",
+			tool_call_id: "call-1",
+			content: "par",
+		});
+		expect(accumulator.toParts()[0]).toBe(after[0]);
+	});
+});

@@ -1,5 +1,6 @@
 import React, { useMemo } from "react";
 import { useTheme } from "@/main/components/molecules/ThemeContext";
+import { useThrottledValue } from "@/main/modules/openui/use-throttled-value";
 import { createMarkdownComponents } from "./markdownComponents";
 import { ThinkingSections } from "./ThinkingSections";
 
@@ -11,6 +12,9 @@ import { ThinkingSections } from "./ThinkingSections";
 export const ReasoningBlock: React.FC<{ text: string; isThinking: boolean }> =
 	React.memo(({ text, isThinking }) => {
 		const { actualTheme } = useTheme();
+		// At most ~20 updates a second while it is written, as the answer's text
+		// is: every streamed frame re-rendered the thought's markdown.
+		const renderText = useThrottledValue(text, isThinking, 48);
 		const components = useMemo(
 			() =>
 				createMarkdownComponents({
@@ -20,12 +24,13 @@ export const ReasoningBlock: React.FC<{ text: string; isThinking: boolean }> =
 				}),
 			[actualTheme, isThinking],
 		);
+		const thinking = useMemo(() => [renderText], [renderText]);
 
 		return (
 			<ThinkingSections
 				// Remounted when thinking ends, so it starts folded from then on.
 				key={isThinking ? "thinking" : "thought"}
-				thinking={[text]}
+				thinking={thinking}
 				hasIncompleteThinking={isThinking}
 				isStreaming={isThinking}
 				components={components}

@@ -10,6 +10,10 @@
 		"clearAll": "Xóa tất cả nhật ký",
 		"clearConfirm": "Bạn có chắc chắn muốn xóa tất cả nhật ký? Hành động này không thể hoàn tác."
 	},
+	"recording": {
+		"label": "Ghi nhật ký",
+		"hint": "Lưu các mục nhật ký mới từ mọi phần của tiện ích vào đây. Việc ghi làm chậm hệ thống, vì vậy hãy tắt trừ khi bạn đang tìm lỗi."
+	},
 	"stats": {
 		"total": "Tổng: {{count}}",
 		"errors": "Lỗi: {{count}}",
@@ -45,7 +49,8 @@
 	},
 	"status": {
 		"loading": "Đang tải nhật ký...",
-		"empty": "Không có nhật ký"
+		"empty": "Không có nhật ký",
+		"notRecording": "Đang tắt ghi nhật ký. Bật Ghi nhật ký để lưu các mục mới."
 	},
 	"entry": {
 		"context": "Ngữ cảnh:",

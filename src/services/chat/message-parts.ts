@@ -66,22 +66,23 @@ export const getOutputMessageParts = (
 	return outputMessages.filter(isReplyPart);
 };
 
+const cloneMessagePart = (
+	part: MessageParts[number],
+): MessageParts[number] => ({
+	...part,
+	...(part.role === "assistant" && part.tool_calls
+		? {
+				tool_calls: part.tool_calls.map((toolCall) => ({
+					...toolCall,
+					function: { ...toolCall.function },
+				})),
+			}
+		: {}),
+});
+
 export const cloneMessageParts = (
 	parts: MessageParts | null | undefined,
-): MessageParts | null =>
-	parts
-		? parts.map((part) => ({
-				...part,
-				...(part.role === "assistant" && part.tool_calls
-					? {
-							tool_calls: part.tool_calls.map((toolCall) => ({
-								...toolCall,
-								function: { ...toolCall.function },
-							})),
-						}
-					: {}),
-			}))
-		: null;
+): MessageParts | null => (parts ? parts.map(cloneMessagePart) : null);
 
 /**
  * The graph's own messages never carry reasoning — it only ever reached the
@@ -133,6 +134,13 @@ export const resolveMessageParts = ({
 
 export class MessagePartsAccumulator {
 	private readonly parts: MessageParts = [];
+	/**
+	 * The copy `toParts` last handed out for each part, until the part changes.
+	 * A chunk only ever changes the part being written, so the parts before it
+	 * keep their identity from one snapshot to the next and whatever renders
+	 * them can tell nothing changed there.
+	 */
+	private readonly snapshots = new Map<number, MessageParts[number]>();
 	private readonly assistantToolCalls = new Map<number, ToolCallAccumulator>();
 	private currentAssistantIndex: number | null = null;
 
@@ -153,6 +161,9 @@ export class MessagePartsAccumulator {
 				delta.tool_calls?.length
 			) {
 				const assistant = this.ensureAssistantPart();
+				if (this.currentAssistantIndex !== null) {
+					this.snapshots.delete(this.currentAssistantIndex);
+				}
 				if (delta.reasoning) {
 					assistant.reasoning = `${assistant.reasoning ?? ""}${delta.reasoning}`;
 				}
@@ -189,8 +200,15 @@ export class MessagePartsAccumulator {
 		this.parts.push({ role: "user", content });
 	}
 
+	/** A copy safe to hand out: unchanged parts come back as the same objects. */
 	toParts(): MessageParts {
-		return cloneMessageParts(this.parts) ?? [];
+		return this.parts.map((part, index) => {
+			const snapshot = this.snapshots.get(index);
+			if (snapshot) return snapshot;
+			const copy = cloneMessagePart(part);
+			this.snapshots.set(index, copy);
+			return copy;
+		});
 	}
 
 	private ensureAssistantPart(): AssistantPart {
@@ -216,6 +234,7 @@ export class MessagePartsAccumulator {
 		const last = this.parts[this.parts.length - 1];
 		if (last?.role === "tool" && last.tool_call_id === toolCallId) {
 			last.content = `${last.content ?? ""}${content ?? ""}`;
+			this.snapshots.delete(this.parts.length - 1);
 			return;
 		}
 

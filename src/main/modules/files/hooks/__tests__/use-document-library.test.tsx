@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
 	getFolderChildren: vi.fn(),
 	readFile: vi.fn(),
 	subscribe: vi.fn(),
+	topics: vi.fn(),
 	t: (key: string) => key,
 }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: mocks.t }) }));
@@ -26,7 +27,7 @@ vi.mock("@/services/filesystem/document-filesystem", () => ({
 }));
 vi.mock("@/main/modules/topics/services/topic-service", () => ({
 	topicService: {
-		getTopicsWithContentCount: async () => [],
+		getTopicsWithContentCount: mocks.topics,
 		getFileTopicMap: async () => new Map(),
 	},
 }));
@@ -98,6 +99,7 @@ const renderLibrary = async () => {
 beforeEach(() => {
 	vi.resetAllMocks();
 	mocks.subscribe.mockReturnValue(() => {});
+	mocks.topics.mockResolvedValue([]);
 	mocks.getTree.mockResolvedValue([native]);
 	mocks.resolveNode.mockImplementation(async (path: string) =>
 		path === target.path ? target : null,
@@ -138,12 +140,14 @@ describe("opening Files search results", () => {
 			native.path,
 			deep.path,
 		]);
+		const reads = mocks.getTree.mock.calls.length;
 		await act(async () => {
 			mocks.subscribe.mock.calls[0][0]({
 				operation: "write",
 				path: "/elsewhere.txt",
 			});
 		});
+		await waitFor(() => expect(mocks.getTree).toHaveBeenCalledTimes(reads + 1));
 		expect(result.current.selectedNode?.path).toBe(target.path);
 		act(() => result.current.handleCloseViewer());
 		await waitFor(() => expect(result.current.currentPath).toBe(deep.path));
@@ -207,5 +211,72 @@ describe("opening Files search results", () => {
 		});
 		expect(result.current.currentPath).toBe("/");
 		expect(result.current.error).toBe("library.openItemError");
+	});
+});
+
+describe("following filesystem changes", () => {
+	const change = (operation: string, path: string) =>
+		mocks.subscribe.mock.calls[0][0]({ scope: "root", operation, path });
+
+	it("reads the tree once for a burst of changes, and leaves topics alone for writes", async () => {
+		vi.useFakeTimers({ shouldAdvanceTime: true });
+		try {
+			const { result } = await renderLibrary();
+			const tree = result.current.tree;
+			const reads = mocks.getTree.mock.calls.length;
+			const topicReads = mocks.topics.mock.calls.length;
+			act(() => {
+				for (let i = 0; i < 20; i++) change("write", `/notes-${i}.md`);
+			});
+			expect(mocks.getTree).toHaveBeenCalledTimes(reads);
+			await act(async () => {
+				await vi.advanceTimersByTimeAsync(250);
+			});
+			expect(mocks.getTree).toHaveBeenCalledTimes(reads + 1);
+			expect(mocks.topics).toHaveBeenCalledTimes(topicReads);
+			// Nothing changed on disk: the same tree, so nothing redraws.
+			expect(result.current.tree).toBe(tree);
+
+			act(() => change("rename", "/notes-1.md"));
+			await act(async () => {
+				await vi.advanceTimersByTimeAsync(250);
+			});
+			expect(mocks.getTree).toHaveBeenCalledTimes(reads + 2);
+			expect(mocks.topics).toHaveBeenCalledTimes(topicReads + 1);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it("does not start a second read while one is running, and reads again after it", async () => {
+		vi.useFakeTimers({ shouldAdvanceTime: true });
+		try {
+			await renderLibrary();
+			const reads = mocks.getTree.mock.calls.length;
+			let finish!: () => void;
+			mocks.getTree.mockImplementationOnce(
+				() =>
+					new Promise((resolve) => {
+						finish = () => resolve([native]);
+					}),
+			);
+			act(() => change("write", "/a.md"));
+			await act(async () => {
+				await vi.advanceTimersByTimeAsync(250);
+			});
+			act(() => change("write", "/b.md"));
+			await act(async () => {
+				await vi.advanceTimersByTimeAsync(250);
+			});
+			expect(mocks.getTree).toHaveBeenCalledTimes(reads + 1);
+			await act(async () => {
+				finish();
+			});
+			await waitFor(() =>
+				expect(mocks.getTree).toHaveBeenCalledTimes(reads + 2),
+			);
+		} finally {
+			vi.useRealTimers();
+		}
 	});
 });

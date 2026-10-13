@@ -447,10 +447,12 @@ export class EmbeddingOperationsHandler implements ProcessHandler<BaseJob> {
 			progress: 30,
 		});
 
-		// Create new "default" embedding with the new model
+		// Create new "default" embedding with the new model, in a runner iframe
+		// like the one created at startup (the "local" type ran it full precision
+		// on the offscreen document's own thread, never released).
 		// TODO: Add progress callback when embedding service supports it
-		await embeddingService.create("default", "local", {
-			type: "local",
+		await embeddingService.create("default", "worker", {
+			type: "worker",
 			modelName: embeddingInfo.modelId,
 		});
 

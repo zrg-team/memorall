@@ -65,6 +65,7 @@ import { findBlockingRun, useChatStore } from "@/main/stores/chat";
 import { useChatMessageQueueStore } from "@/main/stores/chat-message-queue";
 import { useCoAgentToggle } from "@/main/stores/co-agent-activation";
 import { LOCAL_PROVIDERS } from "@/main/hooks/selectable-model";
+import { useInProgressMessage } from "@/main/modules/chat/hooks/use-chat";
 import { useRefreshOnFocus } from "@/main/modules/chat/hooks/use-refresh-on-focus";
 import { useRuntimeSessionsStore } from "@/main/stores/runtime-sessions";
 import {
@@ -96,6 +97,19 @@ const RETRIEVAL_STEP_NAMES = new Set([
 /** How often a running reply's chat reads its cost again (its tools' share). */
 const RUNNING_COST_REFRESH_MS = 15_000;
 
+/**
+ * The newest group, with the reply being written in its chat. It reads that
+ * reply itself, so a streamed frame renders this group and not the page.
+ */
+const LiveMessageGroup: React.FC<
+	Omit<React.ComponentProps<typeof MessageGroup>, "inProgressMessage"> & {
+		conversationId: string | undefined;
+	}
+> = ({ conversationId, ...props }) => {
+	const inProgressMessage = useInProgressMessage(conversationId);
+	return <MessageGroup {...props} inProgressMessage={inProgressMessage} />;
+};
+
 interface ChatPageProps {
 	onOpenAgentWorkspace?: () => void;
 	isNarrowChatPanel?: boolean;
@@ -111,6 +125,9 @@ export const ChatPage: React.FC<ChatPageProps> = ({
 }) => {
 	const navigate = useNavigate();
 	const location = useLocation();
+	// Read once here rather than by every message row, each of which rendered
+	// again on any navigation: the runtime page previews artifacts itself.
+	const suppressArtifactPreviews = location.pathname === "/runtime";
 	const { t } = useTranslation(["chat"]);
 	const { model, current, isInitialized, handleModelLoaded } =
 		useCurrentModel();
@@ -131,7 +148,8 @@ export const ChatPage: React.FC<ChatPageProps> = ({
 		React.useState<string[]>([]);
 	const [selectedAgentComputer, setSelectedAgentComputer] =
 		React.useState<MemonFeatureConfig | null>(null);
-	const { isOpen, open } = useAgentConfigStore();
+	const isOpen = useAgentConfigStore((state) => state.isOpen);
+	const open = useAgentConfigStore((state) => state.open);
 	const refreshRuntimeSessions = useRuntimeSessionsStore(
 		(state) => state.refresh,
 	);
@@ -242,7 +260,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
 		messageGroups,
 		isLoading,
 		abortController,
-		inProgressMessage,
+		inProgressMessageId,
 		handleSubmit,
 		handleStop,
 		insertSeparator,
@@ -253,7 +271,12 @@ export const ChatPage: React.FC<ChatPageProps> = ({
 		enqueueMessage,
 		injectMessage,
 		sendQueuedMessage,
-	} = useChat(model, { concurrent: canRunConcurrently });
+		// The reply being written is read by the latest group itself, so the
+		// page does not render with every streamed frame.
+	} = useChat(model, {
+		concurrent: canRunConcurrently,
+		readInProgressMessage: false,
+	});
 	const coAgentToggle = useCoAgentToggle();
 	const agentComputer = useAgentComputer(
 		selectedAgentFlowId,
@@ -269,13 +292,8 @@ export const ChatPage: React.FC<ChatPageProps> = ({
 		);
 		return () => setMemonChatAgent(null);
 	}, [selectedAgentFlowId, selectedAgentComputer, setMemonChatAgent]);
-	// The run shows only in the chat it belongs to.
-	const visibleInProgressMessage =
-		inProgressMessage &&
-		inProgressMessage.conversationId === currentConversation?.id
-			? inProgressMessage
-			: null;
-	const hasInProgressMessage = visibleInProgressMessage != null;
+	// The run shows only in the chat it belongs to: the id is the open chat's.
+	const hasInProgressMessage = inProgressMessageId != null;
 	// A run in another chat that this one has to wait for: runs share the time
 	// only on a remote model and without an agent computer on either side.
 	const runs = useChatStore((state) => state.runs);
@@ -377,104 +395,110 @@ export const ChatPage: React.FC<ChatPageProps> = ({
 		setAttachedDocumentRefs((current) => [...message.documentRefs, ...current]);
 	};
 
-	const handleMessageAction = React.useCallback(
-		async (action: MessageActionRequest) => {
-			// A reply its iteration limit cut off: the agent goes on, unprompted.
-			if (action.type === "continue_run") {
-				await continueRun();
-				return;
-			}
-			if (action.type === "openui_action") {
-				const detail = action.payload?.detail as MemorallOpenUIActionDetail;
-				if (!detail?.action) return;
-				const { action: openUIAction } = detail;
+	const handleMessageAction = async (action: MessageActionRequest) => {
+		// A reply its iteration limit cut off: the agent goes on, unprompted.
+		if (action.type === "continue_run") {
+			await continueRun();
+			return;
+		}
+		if (action.type === "openui_action") {
+			const detail = action.payload?.detail as MemorallOpenUIActionDetail;
+			if (!detail?.action) return;
+			const { action: openUIAction } = detail;
 
-				if (openUIAction.type === "send_message") {
-					const message = getOpenUISendMessageText(
-						openUIAction,
-						detail.formState,
-						detail.formName,
-						detail.humanFriendlyMessage,
-					);
-					const shouldIncludeFormState =
-						openUIAction.includeFormState ?? Boolean(detail.formName);
-					const formContext = shouldIncludeFormState
-						? formatOpenUIFormStateContext(detail.formState, detail.formName)
-						: undefined;
-					await submitMessage({
-						inputText: message,
-						contextPrefix: formContext,
-						clearComposer: false,
-					});
-					return;
-				}
-
-				if (openUIAction.type === "add_message_to_input") {
-					const text = resolveOpenUITemplate(
-						openUIAction.text,
-						detail.formState,
-						detail.formName,
-					);
-					setInputValue(
-						openUIAction.mode === "replace"
-							? text
-							: inputValue.trim()
-								? `${inputValue}\n${text}`
-								: text,
-					);
-					return;
-				}
-
-				if (openUIAction.type === "open_document") {
-					const path = normalizeOpenUIDocumentPath(
-						resolveOpenUITemplate(
-							openUIAction.path,
-							detail.formState,
-							detail.formName,
-						),
-					);
-					if (path) navigate("/files", { state: { openDocumentPath: path } });
-					return;
-				}
-
-				if (openUIAction.type === "open_route") {
-					const route = resolveOpenUITemplate(
-						openUIAction.route,
-						detail.formState,
-						detail.formName,
-					).trim();
-					if (isAllowedOpenUIRoute(route)) navigate(route);
-				}
+			if (openUIAction.type === "send_message") {
+				const message = getOpenUISendMessageText(
+					openUIAction,
+					detail.formState,
+					detail.formName,
+					detail.humanFriendlyMessage,
+				);
+				const shouldIncludeFormState =
+					openUIAction.includeFormState ?? Boolean(detail.formName);
+				const formContext = shouldIncludeFormState
+					? formatOpenUIFormStateContext(detail.formState, detail.formName)
+					: undefined;
+				await submitMessage({
+					inputText: message,
+					contextPrefix: formContext,
+					clearComposer: false,
+				});
 				return;
 			}
 
-			if (action.type === "artifact.preview.error.report") {
-				const errors = Array.isArray(action.payload?.errors)
-					? action.payload.errors.filter(
-							(error): error is string => typeof error === "string",
-						)
-					: [];
-				const title = action.title?.trim() || action.identifier?.trim();
-				const errorLines = errors
-					.slice(0, 12)
-					.map((error, index) => `${index + 1}. ${error}`)
-					.join("\n");
-				const prompt = [
-					`Please update the latest ${action.component} artifact to resolve the preview errors.`,
-					title ? `Artifact: ${title}` : null,
-					"",
-					"Errors from the preview iframe:",
-					errorLines || "- No error details were captured.",
-					"",
-					"Return an updated artifact that resolves these runtime/resource errors.",
-				]
-					.filter((part): part is string => part !== null)
-					.join("\n");
-
-				await submitMessage({ inputText: prompt, clearComposer: false });
+			if (openUIAction.type === "add_message_to_input") {
+				const text = resolveOpenUITemplate(
+					openUIAction.text,
+					detail.formState,
+					detail.formName,
+				);
+				setInputValue(
+					openUIAction.mode === "replace"
+						? text
+						: inputValue.trim()
+							? `${inputValue}\n${text}`
+							: text,
+				);
+				return;
 			}
-		},
-		[continueRun, inputValue, navigate, setInputValue, submitMessage],
+
+			if (openUIAction.type === "open_document") {
+				const path = normalizeOpenUIDocumentPath(
+					resolveOpenUITemplate(
+						openUIAction.path,
+						detail.formState,
+						detail.formName,
+					),
+				);
+				if (path) navigate("/files", { state: { openDocumentPath: path } });
+				return;
+			}
+
+			if (openUIAction.type === "open_route") {
+				const route = resolveOpenUITemplate(
+					openUIAction.route,
+					detail.formState,
+					detail.formName,
+				).trim();
+				if (isAllowedOpenUIRoute(route)) navigate(route);
+			}
+			return;
+		}
+
+		if (action.type === "artifact.preview.error.report") {
+			const errors = Array.isArray(action.payload?.errors)
+				? action.payload.errors.filter(
+						(error): error is string => typeof error === "string",
+					)
+				: [];
+			const title = action.title?.trim() || action.identifier?.trim();
+			const errorLines = errors
+				.slice(0, 12)
+				.map((error, index) => `${index + 1}. ${error}`)
+				.join("\n");
+			const prompt = [
+				`Please update the latest ${action.component} artifact to resolve the preview errors.`,
+				title ? `Artifact: ${title}` : null,
+				"",
+				"Errors from the preview iframe:",
+				errorLines || "- No error details were captured.",
+				"",
+				"Return an updated artifact that resolves these runtime/resource errors.",
+			]
+				.filter((part): part is string => part !== null)
+				.join("\n");
+
+			await submitMessage({ inputText: prompt, clearComposer: false });
+		}
+	};
+	// Every row holds on to this, so it stays one function that calls the
+	// latest handler: a new one each render (its inputs change on every
+	// keystroke and every streamed frame) made every message render again.
+	const messageActionRef = useRef(handleMessageAction);
+	messageActionRef.current = handleMessageAction;
+	const onMessageAction = React.useCallback(
+		(action: MessageActionRequest) => messageActionRef.current(action),
+		[],
 	);
 
 	// A tool call cannot block waiting for a person, so when a web tool hits a bot
@@ -548,10 +572,13 @@ ${text}`
 		return () => window.removeEventListener("keydown", handleKeyDown);
 	}, [isCompactSidePanelOpen]);
 
-	// Refresh after each assistant response finishes
+	// Refresh after each assistant response this page started finishes. Its
+	// own run status, not the shared reply: a run started from another chat
+	// panel on the same chat (Activities) must not move this page to Runtime.
+	const ownRunActive = status === "submitted" || status === "streaming";
 	const wasInProgressRef = useRef(false);
 	useEffect(() => {
-		const isNow = hasInProgressMessage;
+		const isNow = ownRunActive;
 		if (!isNow && wasInProgressRef.current) {
 			void (async () => {
 				await refreshRuntimeSessions();
@@ -569,12 +596,7 @@ ${text}`
 			})();
 		}
 		wasInProgressRef.current = isNow;
-	}, [
-		hasInProgressMessage,
-		navigate,
-		refreshRuntimeSessions,
-		setRightPanelCollapsed,
-	]);
+	}, [ownRunActive, navigate, refreshRuntimeSessions, setRightPanelCollapsed]);
 
 	const completedGroups = useMemo(
 		() => messageGroups.filter((group) => !group.isLatest),
@@ -650,8 +672,9 @@ ${text}`
 						latestGroupIsEmpty &&
 						latestGroup?.previousSeparator?.id === group.separator?.id
 					}
+					suppressArtifactPreviews={suppressArtifactPreviews}
 					onLoadMessages={loadMessageGroup}
-					onMessageAction={handleMessageAction}
+					onMessageAction={onMessageAction}
 				/>
 			</div>
 		));
@@ -665,7 +688,8 @@ ${text}`
 		setCompletedGroupRef,
 		expandedMessageGroupId,
 		showPreviousGroups,
-		handleMessageAction,
+		suppressArtifactPreviews,
+		onMessageAction,
 	]);
 
 	const scrollToPreviousGroups = React.useCallback(() => {
@@ -1183,14 +1207,15 @@ ${text}`
 							compact={threadCompact}
 						/>
 					) : latestGroup ? (
-						<MessageGroup
+						<LiveMessageGroup
 							key={latestGroup.id}
+							conversationId={currentConversation?.id}
 							group={latestGroup}
-							inProgressMessage={visibleInProgressMessage}
 							defaultCollapsed={false}
 							selectedTopic={selectedTopic}
+							suppressArtifactPreviews={suppressArtifactPreviews}
 							onLoadMessages={loadMessageGroup}
-							onMessageAction={handleMessageAction}
+							onMessageAction={onMessageAction}
 						/>
 					) : undefined}
 				</ConversationContent>

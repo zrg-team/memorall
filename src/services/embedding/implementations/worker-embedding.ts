@@ -43,24 +43,45 @@ export interface WorkerEmbeddingOptions {
 	runnerUrl?: string;
 	device?: "wasm" | "webgpu" | "auto";
 	revision?: string;
+	/**
+	 * Remove the runner iframe after this long without a request (0 keeps it).
+	 * The model and ONNX Runtime's arena live in the iframe's wasm memory —
+	 * hundreds of MB — and a wasm memory never shrinks, so removing the iframe
+	 * is the only way to give it back. The next request loads the model again,
+	 * from the browser's cache.
+	 */
+	idleReleaseMs?: number;
 }
+
+export const DEFAULT_EMBEDDING_IDLE_RELEASE_MS = 3 * 60_000;
+/** After a failed load, report not ready for this long so callers fall back. */
+const FAILED_LOAD_COOLDOWN_MS = 60_000;
 
 export class WorkerEmbedding implements BaseEmbedding {
 	name: string;
 	dimensions: number = 0;
 	private iframe: HTMLIFrameElement | null = null;
-	private ready = false;
-	private loading = false;
+	/** The runner iframe exists and has the model loaded. */
+	private loaded = false;
+	private loading: Promise<void> | null = null;
+	private activeRequests = 0;
+	private idleTimer: ReturnType<typeof setTimeout> | null = null;
+	private lastLoadFailedAt: number | null = null;
+	/** Removed from its service: it never loads again. */
+	private removed = false;
 	private pending = new Map<string, PendingRequest>();
 	private pendingMeta = new Map<string, PendingMeta>();
 	private url: string;
 	private modelName: string;
 	private device: NonNullable<WorkerEmbeddingOptions["device"]>;
+	private readonly idleReleaseMs: number;
 
 	constructor(options: WorkerEmbeddingOptions = {}) {
 		this.modelName = options.modelName || "nomic-ai/nomic-embed-text-v1.5";
 		this.name = this.modelName;
 		this.device = options.device || "wasm";
+		this.idleReleaseMs =
+			options.idleReleaseMs ?? DEFAULT_EMBEDDING_IDLE_RELEASE_MS;
 		const baseUrl = options.runnerUrl || LLM_RUNNER_URLS?.embedding;
 		const url = new URL(
 			baseUrl,
@@ -73,13 +94,18 @@ export class WorkerEmbedding implements BaseEmbedding {
 		this.url = url.toString();
 	}
 
+	/** Load the model now. Requests load it on their own when needed. */
 	async initialize(): Promise<void> {
-		if (this.ready) return;
-		if (this.loading) {
-			while (this.loading) await new Promise((r) => setTimeout(r, 50));
-			return;
-		}
-		this.loading = true;
+		if (this.removed) throw new Error("Embedding was removed");
+		if (this.loaded) return;
+		this.loading ??= this.load().finally(() => {
+			this.loading = null;
+		});
+		await this.loading;
+		this.scheduleIdleRelease();
+	}
+
+	private async load(): Promise<void> {
 		try {
 			logInfo(
 				`🔤 WorkerEmbedding initialize (model=${this.modelName}, device=${this.device})`,
@@ -131,46 +157,102 @@ export class WorkerEmbedding implements BaseEmbedding {
 			// Get model info to set dimensions (embedding models typically have known dimensions)
 			this.dimensions = 768; // Default for most embedding models, will be updated if needed
 
-			this.ready = true;
+			this.loaded = true;
+			this.lastLoadFailedAt = null;
 		} catch (e) {
 			// Ensure we don't leave a broken iframe/listeners around which can cause
 			// subsequent initializations to hang.
-			this.destroy();
+			this.releaseRunner();
+			this.lastLoadFailedAt = Date.now();
 			throw e;
-		} finally {
-			this.loading = false;
 		}
 	}
 
+	/**
+	 * Whether requests can be served. The model loads on first use and is
+	 * released when idle, so this holds while it is unloaded too; only a load
+	 * that just failed makes it false, so callers fall back to working without
+	 * vectors instead of waiting on a model that cannot load.
+	 */
 	isReady(): boolean {
-		return this.ready;
+		if (this.removed) return false;
+		return (
+			this.lastLoadFailedAt === null ||
+			Date.now() - this.lastLoadFailedAt >= FAILED_LOAD_COOLDOWN_MS
+		);
+	}
+
+	/** Whether the model is in memory right now. */
+	isLoaded(): boolean {
+		return this.loaded;
 	}
 
 	async textToVector(text: string): Promise<number[]> {
-		if (!this.ready) await this.initialize();
-		const response = (await this.send("embeddings", { input: text })) as {
-			data: Array<{ embedding: number[] }>;
-		};
-		return response.data[0].embedding;
+		return this.withRunner(async () => {
+			const response = (await this.send("embeddings", { input: text })) as {
+				data: Array<{ embedding: number[] }>;
+			};
+			return response.data[0].embedding;
+		});
 	}
 
 	/** Native text, image, audio or sampled-video input; requires a multimodal model. */
 	async contentToVector(input: MultimodalEmbeddingInput): Promise<number[]> {
-		if (!this.ready) await this.initialize();
-		const response = (await this.send(
-			"embed-content",
-			{ input, model: this.modelName },
-			{ timeoutMs: 600_000 },
-		)) as { embedding: number[] };
-		return response.embedding;
+		return this.withRunner(async () => {
+			const response = (await this.send(
+				"embed-content",
+				{ input, model: this.modelName },
+				{ timeoutMs: 600_000 },
+			)) as { embedding: number[] };
+			return response.embedding;
+		});
 	}
 
 	async textsToVectors(texts: string[]): Promise<number[][]> {
-		if (!this.ready) await this.initialize();
-		const response = (await this.send("embeddings", { input: texts })) as {
-			data: Array<{ embedding: number[] }>;
-		};
-		return response.data.map((item) => item.embedding);
+		return this.withRunner(async () => {
+			const response = (await this.send("embeddings", { input: texts })) as {
+				data: Array<{ embedding: number[] }>;
+			};
+			return response.data.map((item) => item.embedding);
+		});
+	}
+
+	/** Run a request with the model loaded, holding off the idle release. */
+	private async withRunner<T>(request: () => Promise<T>): Promise<T> {
+		this.activeRequests += 1;
+		this.cancelIdleRelease();
+		try {
+			await this.initialize();
+			return await request();
+		} finally {
+			this.activeRequests -= 1;
+			this.scheduleIdleRelease();
+		}
+	}
+
+	private cancelIdleRelease(): void {
+		if (this.idleTimer) clearTimeout(this.idleTimer);
+		this.idleTimer = null;
+	}
+
+	private scheduleIdleRelease(): void {
+		this.cancelIdleRelease();
+		if (
+			this.removed ||
+			!this.loaded ||
+			this.activeRequests > 0 ||
+			this.idleReleaseMs <= 0
+		) {
+			return;
+		}
+		this.idleTimer = setTimeout(() => {
+			this.idleTimer = null;
+			if (this.activeRequests > 0 || this.loading || !this.loaded) return;
+			logInfo(
+				`🔤 WorkerEmbedding releasing idle runner (model=${this.modelName})`,
+			);
+			this.releaseRunner();
+		}, this.idleReleaseMs);
 	}
 
 	getInfo(): {
@@ -185,7 +267,15 @@ export class WorkerEmbedding implements BaseEmbedding {
 		};
 	}
 
+	/** Remove for good: called when the embedding is removed from its service. */
 	destroy(): void {
+		this.removed = true;
+		this.cancelIdleRelease();
+		this.releaseRunner();
+	}
+
+	/** Remove the runner iframe and with it the model; the next request loads it again. */
+	private releaseRunner(): void {
 		this.iframe?.remove();
 		this.iframe = null;
 		window.removeEventListener("message", this.onMessage);
@@ -198,7 +288,7 @@ export class WorkerEmbedding implements BaseEmbedding {
 			reject(new Error("Service destroyed")),
 		);
 		this.pending.clear();
-		this.ready = false;
+		this.loaded = false;
 	}
 
 	private onMessage = (ev: MessageEvent<IncomingMessage>) => {

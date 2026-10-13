@@ -155,13 +155,20 @@ export const MemonWindowFrame: React.FC<MemonWindowFrameProps> = ({
 		const desktop = desktopRef.current?.getBoundingClientRect();
 		if (!desktop) return;
 		event.preventDefault();
-		onFocus();
+		// No onFocus here: the pointerdown bubbles to the frame's own handler,
+		// and asking twice sent the machine two focus inputs per click.
 		const target = event.currentTarget;
 		target.setPointerCapture(event.pointerId);
 		const start = { x: event.clientX, y: event.clientY };
 		// Start from what is on screen: a dropped rect may still be saving.
 		const origin: Rect = { x: rect.x, y: rect.y, w: rect.w, h: rect.h };
 		let latest = origin;
+		// One render per frame, however many pointer events arrive in it.
+		let frame = 0;
+		const draw = () => {
+			frame = 0;
+			setDraft(latest);
+		};
 		const move = (moveEvent: PointerEvent) => {
 			const dx = (moveEvent.clientX - start.x) / desktop.width;
 			const dy = (moveEvent.clientY - start.y) / desktop.height;
@@ -177,14 +184,17 @@ export const MemonWindowFrame: React.FC<MemonWindowFrameProps> = ({
 							w: clamp(origin.w + dx, 0.2, 1 - origin.x),
 							h: clamp(origin.h + dy, 0.18, 1 - origin.y),
 						};
-			setDraft(latest);
+			if (!frame) frame = requestAnimationFrame(draw);
 		};
 		const end = () => {
 			target.removeEventListener("pointermove", move);
 			target.removeEventListener("pointerup", end);
 			target.removeEventListener("pointercancel", end);
+			if (frame) cancelAnimationFrame(frame);
+			frame = 0;
 			if (latest === origin) return;
 			const dropped = latest;
+			setDraft(dropped);
 			// Hold the dropped rect until the machine's snapshot carries it, or the
 			// window flashes back to its old place for a frame. A newer drag keeps
 			// its own draft.
