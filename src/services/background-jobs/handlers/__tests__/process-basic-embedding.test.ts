@@ -300,8 +300,9 @@ describe("EmbeddingOperationsHandler", () => {
 		expect(embeddingConfig.setCurrentEmbeddingSize).toHaveBeenCalledWith(
 			"small",
 		);
-		expect(embeddingService.create).toHaveBeenCalledWith("default", "local", {
-			type: "local",
+		// In a runner iframe, like the startup embedding, so it is released when idle.
+		expect(embeddingService.create).toHaveBeenCalledWith("default", "worker", {
+			type: "worker",
 			modelName: "local-model",
 		});
 	});

@@ -6,7 +6,10 @@ import type {
 	OpenAIEmbeddingConfig,
 	WorkerEmbeddingConfig,
 } from "./interfaces/base-embedding";
-import type { IEmbeddingService } from "./interfaces/embedding-service.interface";
+import type {
+	CreateEmbeddingOptions,
+	IEmbeddingService,
+} from "./interfaces/embedding-service.interface";
 import { LocalEmbedding } from "./implementations/local-embedding";
 import { OpenAIEmbedding } from "./implementations/openai-embedding";
 import { WorkerEmbedding } from "./implementations/worker-embedding";
@@ -29,6 +32,7 @@ export class EmbeddingServiceMain
 		name: string,
 		embeddingType: string,
 		config: any,
+		options: CreateEmbeddingOptions = {},
 	): Promise<BaseEmbedding> {
 		let embedding: BaseEmbedding;
 
@@ -59,9 +63,17 @@ export class EmbeddingServiceMain
 				throw new Error(`Unknown embedding type: ${embeddingType}`);
 		}
 
-		// Initialize the embedding
-		await embedding.initialize();
+		// Load now unless the caller only registers it; every embedding loads on
+		// first use anyway.
+		if (options.initialize !== false) await embedding.initialize();
+
+		// A replaced embedding is destroyed, or its runner and model stay loaded
+		// with nothing left to use them.
+		const previous = this.embeddings.get(name);
 		this.embeddings.set(name, embedding);
+		if (previous && previous !== embedding) {
+			(previous as { destroy?: () => void }).destroy?.();
+		}
 		return embedding;
 	}
 
