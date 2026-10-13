@@ -19,11 +19,14 @@ interface QueuedResponse {
 	port: chrome.runtime.Port;
 }
 
-interface ProcessedRequest {
-	response: RpcResponse;
-	timestamp: number;
-}
-
+/**
+ * Serves database requests from pages over `runtime.connect` ports.
+ *
+ * Each request arrives once, on the port of the page that sent it, and is
+ * answered on that port. (A service-worker relay used to forward every page
+ * port as well, so each request arrived twice and the answers were cached to
+ * deduplicate them.)
+ */
 export class DatabaseRpcHandler {
 	private static instance: DatabaseRpcHandler;
 	private ports = new Map<string, chrome.runtime.Port>();
@@ -32,13 +35,6 @@ export class DatabaseRpcHandler {
 	private readonly maxQueueSize = 100;
 	private readonly queueTimeout = 30000; // 30 seconds
 	private retryTimer: ReturnType<typeof setTimeout> | null = null;
-
-	// Request deduplication cache to prevent duplicate operations
-	private processedRequests = new Map<number, ProcessedRequest>();
-	private readonly requestCacheTimeout = 60000; // 60 seconds - longer than proxy timeout
-
-	// Track in-flight requests to prevent race conditions with duplicate messages
-	private inFlightRequests = new Set<number>();
 
 	// Track listener registration to prevent duplicates
 	private isListening: boolean = false;
@@ -122,30 +118,7 @@ export class DatabaseRpcHandler {
 	): Promise<void> {
 		const { id, op, payload } = request;
 
-		// SYNCHRONOUS check - prevents race condition when duplicate messages arrive rapidly
-		if (this.inFlightRequests.has(id)) {
-			logInfo(`[DB] Ignoring duplicate in-flight request ${id}`);
-			return;
-		}
-
-		// Check if this request was already processed (deduplication)
-		const cached = this.processedRequests.get(id);
-		if (cached) {
-			const age = Date.now() - cached.timestamp;
-			logInfo(
-				`[DB] Returning cached response for duplicate request ${id} (age: ${age}ms)`,
-			);
-			this.sendResponse(cached.response, senderPort);
-			return;
-		}
-
-		// Mark as in-flight SYNCHRONOUSLY before any async work
-		this.inFlightRequests.add(id);
-
 		try {
-			// Clean up old cached requests periodically
-			this.cleanupRequestCache();
-
 			// Deserialize payload (handles Date objects from proxy)
 			const deserializedPayload = deserializeFromRpc(payload);
 
@@ -185,25 +158,12 @@ export class DatabaseRpcHandler {
 
 			// Serialize result before sending (handles Date objects to proxy)
 			const serializedResult = serializeForRpc(result);
-			const response: RpcResponse = { id, ok: true, data: serializedResult };
-
-			// Cache the response for deduplication
-			this.cacheRequest(id, response);
-
-			this.sendResponse(response, senderPort);
+			this.sendResponse({ id, ok: true, data: serializedResult }, senderPort);
 		} catch (error) {
 			const errorMessage =
 				error instanceof Error ? error.message : "Unknown error";
 			logError(`❌ RPC operation '${op}' failed:`, error);
-			const response: RpcResponse = { id, ok: false, error: errorMessage };
-
-			// Cache error responses too to prevent retrying failed operations
-			this.cacheRequest(id, response);
-
-			this.sendResponse(response, senderPort);
-		} finally {
-			// Remove from in-flight set after processing completes
-			this.inFlightRequests.delete(id);
+			this.sendResponse({ id, ok: false, error: errorMessage }, senderPort);
 		}
 	}
 
@@ -234,32 +194,6 @@ export class DatabaseRpcHandler {
 
 		// Execute SQL on the real PGlite instance
 		await pglite.exec(sql);
-	}
-
-	// Cache a processed request to prevent duplicate execution
-	private cacheRequest(id: number, response: RpcResponse): void {
-		this.processedRequests.set(id, {
-			response,
-			timestamp: Date.now(),
-		});
-	}
-
-	// Remove expired cached requests
-	private cleanupRequestCache(): void {
-		const now = Date.now();
-		let removed = 0;
-
-		for (const [id, cached] of this.processedRequests.entries()) {
-			const age = now - cached.timestamp;
-			if (age > this.requestCacheTimeout) {
-				this.processedRequests.delete(id);
-				removed++;
-			}
-		}
-
-		if (removed > 0) {
-			logInfo(`[DB] 🧹 Cleaned up ${removed} expired cached requests`);
-		}
 	}
 
 	// Send response back to the specific proxy port that made the request
@@ -417,17 +351,6 @@ export class DatabaseRpcHandler {
 			);
 			this.responseQueue = [];
 		}
-
-		// Clear request cache
-		if (this.processedRequests.size > 0) {
-			logInfo(
-				`[DB] 🧹 Clearing ${this.processedRequests.size} cached requests on stop`,
-			);
-			this.processedRequests.clear();
-		}
-
-		// Clear in-flight requests
-		this.inFlightRequests.clear();
 
 		// Disconnect all active ports
 		for (const port of this.ports.values()) {

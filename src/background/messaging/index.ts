@@ -558,6 +558,14 @@ export function registerMessageHandler(onPopupOpened: () => void): void {
 			return false;
 		}
 
+		// A page's database connection went unanswered: the offscreen document
+		// may be gone. Same check as a page opening.
+		if (type === BACKGROUND_EVENTS.ENSURE_OFFSCREEN) {
+			onPopupOpened();
+			sendResponse({ success: true });
+			return false;
+		}
+
 		if (type === BACKGROUND_EVENTS.ACTIVITY_CAPTURED)
 			return handleActivityCaptured(msg, sender.tab?.id, sendResponse);
 

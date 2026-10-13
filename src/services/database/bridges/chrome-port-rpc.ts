@@ -4,14 +4,14 @@
 
 import type { RpcRequest, RpcResponse, RpcTransport } from "./types";
 import { serializeForRpc } from "./serialization";
-import { logError, logInfo, logWarn } from "@/utils/logger";
+import { logInfo, logWarn } from "@/utils/logger";
 
 export interface ChromePortTransportOptions {
 	/** Port name; must match on the server side */
 	channelName?: string;
 	/**
-	 * Ensure the Offscreen Document exists before connecting.
-	 * Provide a function that creates it if missing (MV3 Offscreen API).
+	 * Ask for the server's document (the MV3 offscreen document) to be created.
+	 * Called before reconnecting after a connection the server never answered.
 	 */
 	ensureOffscreen?: () => Promise<void>;
 	/** Automatic reconnect with exponential backoff (enabled by default). */
@@ -23,6 +23,8 @@ export interface ChromePortTransportOptions {
 	};
 	/** Heartbeat interval in ms to detect dead connections (default: 30000, 0 disables) */
 	heartbeatIntervalMs?: number;
+	/** How long the server has to answer a handshake or heartbeat (default: 2000). */
+	responseTimeoutMs?: number;
 }
 
 /** Type guard to validate RpcResponse shape at runtime. */
@@ -40,8 +42,14 @@ function isRpcResponse(value: unknown): value is RpcResponse {
 }
 
 /**
- * Create a high-performance RpcTransport backed by chrome.runtime Port.
- * Uses structured clone for messages (no JSON stringify/parse).
+ * Create an RpcTransport backed by a chrome.runtime Port.
+ *
+ * `runtime.connect` reaches every extension context with an `onConnect`
+ * listener, and a port opened before the server registered its listener —
+ * or after the server's document went away — can look connected while
+ * nobody reads it. So a port carries requests only once the server answered a
+ * handshake on it; until then they wait here. A heartbeat the server stops
+ * answering drops the port the same way.
  */
 export async function createChromePortTransport(
 	options: ChromePortTransportOptions = {},
@@ -51,6 +59,7 @@ export async function createChromePortTransport(
 		ensureOffscreen,
 		reconnect = {},
 		heartbeatIntervalMs = 30000,
+		responseTimeoutMs = 2000,
 	} = options;
 
 	const reconnectEnabled = reconnect.enabled ?? true;
@@ -59,170 +68,175 @@ export async function createChromePortTransport(
 	const backoffFactor = reconnect.factor ?? 2;
 
 	let port: chrome.runtime.Port | null = null;
+	/** The server answered the handshake on `port`. */
+	let ready = false;
 	let disposed = false;
-	let connecting: Promise<void> | null = null;
+	let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 	let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
-	let connectedAt: number | null = null;
+	/** Waits for the answer to the handshake or the latest heartbeat. */
+	let responseTimer: ReturnType<typeof setTimeout> | null = null;
+	let controlId: number | null = null;
+	let unansweredConnects = 0;
+	let backoff = backoffInit;
+	let nextControlId = 0;
 
 	const subscribers = new Set<(msg: RpcResponse) => void>();
 	const queue: RpcRequest[] = [];
 
-	// Minimum connection duration (ms) before the backoff is considered "used up"
-	// and can be reset. Prevents backoff reset when the port immediately disconnects
-	// (e.g. offscreen document not ready yet).
-	const STABLE_CONNECTION_THRESHOLD_MS = 1000;
+	// Negative ids never collide with the proxy's positive request ids.
+	const newControlId = (): number => {
+		nextControlId = (nextControlId + 1) % 1_000_000_000;
+		return -(nextControlId + 1);
+	};
 
-	let backoff = backoffInit;
-
-	const handleMessage = (msg: unknown): void => {
-		// Don't deserialize here - let each operation handle its own deserialization
-		// This preserves serialized dates as {__type: "Date", __value: "..."} for query results
-		if (!isRpcResponse(msg)) return;
-		subscribers.forEach((fn) => fn(msg));
+	const clearResponseTimer = (): void => {
+		if (responseTimer) clearTimeout(responseTimer);
+		responseTimer = null;
+		controlId = null;
 	};
 
 	const stopHeartbeat = (): void => {
-		if (heartbeatTimer) {
-			clearInterval(heartbeatTimer);
-			heartbeatTimer = null;
+		if (heartbeatTimer) clearInterval(heartbeatTimer);
+		heartbeatTimer = null;
+	};
+
+	const scheduleReconnect = (): void => {
+		if (!reconnectEnabled || disposed || reconnectTimer) return;
+		const delay = backoff;
+		backoff = Math.min(backoff * backoffFactor, backoffMax);
+		reconnectTimer = setTimeout(() => {
+			reconnectTimer = null;
+			void connect();
+		}, delay);
+	};
+
+	const dropPort = (reason: string): void => {
+		stopHeartbeat();
+		clearResponseTimer();
+		const current = port;
+		port = null;
+		ready = false;
+		if (current) {
+			current.onMessage.removeListener(handleMessage);
+			current.onDisconnect.removeListener(handleDisconnect);
+			try {
+				current.disconnect();
+			} catch {
+				// Already closed.
+			}
+		}
+		logInfo(`[ChromePortRPC] Connection dropped (${reason})`);
+		scheduleReconnect();
+	};
+
+	/** Post a handshake or heartbeat and drop the port if it goes unanswered. */
+	const sendControl = (target: chrome.runtime.Port, reason: string): void => {
+		clearResponseTimer();
+		const id = newControlId();
+		controlId = id;
+		responseTimer = setTimeout(() => {
+			if (port !== target) return;
+			if (!ready) unansweredConnects += 1;
+			dropPort(reason);
+		}, responseTimeoutMs);
+		try {
+			target.postMessage(serializeForRpc({ id, op: "health", payload: {} }));
+		} catch {
+			dropPort(`${reason}: post failed`);
+		}
+	};
+
+	const flushQueue = (): void => {
+		while (queue.length > 0 && port && ready) {
+			const message = queue[0]!;
+			try {
+				port.postMessage(serializeForRpc(message));
+				queue.shift();
+			} catch (error) {
+				logWarn("[ChromePortRPC] Failed to send a queued request", error);
+				dropPort("send failed");
+				return;
+			}
 		}
 	};
 
 	const startHeartbeat = (): void => {
 		stopHeartbeat();
 		if (heartbeatIntervalMs <= 0) return;
-
 		heartbeatTimer = setInterval(() => {
-			if (!port || disposed) {
-				stopHeartbeat();
-				return;
-			}
-
-			// Send a health check ping
-			try {
-				const pingRequest: RpcRequest = {
-					id: -Math.floor(Math.random() * 1000000), // Negative ID for heartbeat
-					op: "health",
-					payload: {},
-				};
-				port.postMessage(serializeForRpc(pingRequest));
-			} catch (error) {
-				logWarn(
-					`[ChromePortRPC] ⚠️ Heartbeat ping failed, connection may be dead:`,
-					error,
-				);
-				// Trigger reconnection
-				handleDisconnect();
+			if (port && ready && controlId === null) {
+				sendControl(port, "no heartbeat answer");
 			}
 		}, heartbeatIntervalMs);
 	};
 
-	const handleDisconnect = (): void => {
-		stopHeartbeat();
-		if (port) {
-			port.onMessage.removeListener(handleMessage);
-			port.onDisconnect.removeListener(handleDisconnect);
-			port = null;
-		}
-
-		// Only reset backoff if the connection was stable long enough.
-		// If the port immediately disconnected (offscreen not ready yet), keep
-		// accumulating backoff so we don't spin at 100 ms forever.
-		if (connectedAt !== null) {
-			const duration = Date.now() - connectedAt;
-			if (duration >= STABLE_CONNECTION_THRESHOLD_MS) {
+	function handleMessage(msg: unknown): void {
+		if (!isRpcResponse(msg)) return;
+		if (msg.id === controlId) {
+			clearResponseTimer();
+			if (!ready) {
+				ready = true;
+				unansweredConnects = 0;
 				backoff = backoffInit;
-			}
-			connectedAt = null;
-		}
-
-		if (!reconnectEnabled || disposed) return;
-
-		const delay = backoff;
-		backoff = Math.min(backoff * backoffFactor, backoffMax);
-		logInfo(
-			`[ChromePortRPC] 🔄 Port disconnected, reconnecting in ${delay}ms (backoff: ${backoff}ms)`,
-		);
-		// eslint-disable-next-line @typescript-eslint/no-misused-promises
-		setTimeout(connect, delay);
-	};
-
-	const connect = async (): Promise<void> => {
-		if (disposed) return;
-		if (connecting) return connecting;
-
-		connecting = (async () => {
-			try {
-				if (ensureOffscreen) {
-					try {
-						await ensureOffscreen();
-					} catch {
-						// Offscreen may already exist; ignore.
-					}
-				}
-
-				const p = chrome.runtime.connect({ name: channelName });
-				p.onMessage.addListener(handleMessage);
-				p.onDisconnect.addListener(handleDisconnect);
-				port = p;
-				connectedAt = Date.now();
-
-				// Flush queued messages
-				while (queue.length > 0 && port) {
-					const m = queue.shift()!;
-					const serializedM = serializeForRpc(m);
-					try {
-						port.postMessage(serializedM);
-					} catch (error) {
-						// If posting fails, put it back in queue
-						queue.unshift(m);
-						logWarn(
-							`[ChromePortRPC] ⚠️ Failed to send queued message, keeping in queue`,
-							error,
-						);
-						break;
-					}
-				}
-
-				// Start heartbeat to monitor connection health
 				startHeartbeat();
-			} catch (error) {
-				logError(`[ChromePortRPC] ❌ Connection failed, will retry:`, error);
-				port = null;
-				// Trigger reconnection on error
-				if (reconnectEnabled && !disposed) {
-					const delay = backoff;
-					backoff = Math.min(backoff * backoffFactor, backoffMax);
-					// eslint-disable-next-line @typescript-eslint/no-misused-promises
-					setTimeout(connect, delay);
-				}
+				flushQueue();
 			}
-		})();
+			return;
+		}
+		for (const fn of subscribers) fn(msg);
+	}
 
-		await connecting;
-		connecting = null;
-	};
+	function handleDisconnect(): void {
+		// Reading lastError marks it handled ("Receiving end does not exist").
+		void chrome.runtime.lastError;
+		if (!ready) unansweredConnects += 1;
+		dropPort("disconnected");
+	}
+
+	let connecting: Promise<void> | null = null;
+
+	function connect(): Promise<void> {
+		connecting ??= openPort().finally(() => {
+			connecting = null;
+		});
+		return connecting;
+	}
+
+	async function openPort(): Promise<void> {
+		if (disposed || port) return;
+		if (unansweredConnects > 0 && ensureOffscreen) {
+			try {
+				await ensureOffscreen();
+			} catch {
+				// The background may be restarting; the next attempt asks again.
+			}
+			if (disposed || port) return;
+		}
+		try {
+			const next = chrome.runtime.connect({ name: channelName });
+			next.onMessage.addListener(handleMessage);
+			next.onDisconnect.addListener(handleDisconnect);
+			port = next;
+			ready = false;
+			sendControl(next, "no handshake answer");
+		} catch (error) {
+			logWarn("[ChromePortRPC] Connection failed, will retry", error);
+			port = null;
+			unansweredConnects += 1;
+			scheduleReconnect();
+		}
+	}
 
 	await connect();
 
 	const transport: RpcTransport = {
 		post(msg: RpcRequest): void {
 			if (disposed) return;
-			const serializedMsg = serializeForRpc(msg);
-			if (port) {
-				try {
-					port.postMessage(serializedMsg);
-				} catch (error) {
-					// If posting fails due to a race with disconnect, enqueue and reconnect.
-					queue.push(msg);
-					// eslint-disable-next-line @typescript-eslint/no-floating-promises
-					connect();
-					logWarn(`[ChromePortRPC] post error`, error);
-				}
-			} else {
-				queue.push(msg);
-				// eslint-disable-next-line @typescript-eslint/no-floating-promises
-				connect();
+			queue.push(msg);
+			if (port && ready) {
+				flushQueue();
+			} else if (!port && !reconnectTimer) {
+				void connect();
 			}
 		},
 

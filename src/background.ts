@@ -2,7 +2,6 @@
 // Responsibilities: register listeners synchronously, wire subsystems, manage lifecycle.
 
 import { logInfo, logError } from "@/utils/logger";
-import { portBridge } from "@/background/port-bridge";
 import { init, isInitializing } from "@/background/core/init";
 import { offscreenWatchdogCheck } from "@/background/core/offscreen";
 import {
@@ -22,12 +21,11 @@ import { registerViewportCaptureHandler } from "./background/viewport-capture-ha
 import { openStandalonePage } from "@/utils/open-standalone";
 
 // ── CRITICAL: synchronous setup at module load time ───────────────────────────
-// Chrome extensions require onConnect listeners to be registered before any
-// connection attempts — they must live in global scope, not inside async calls.
-
-portBridge.initialize({
-	proxyOptions: { channelName: "postgres-rpc" },
-});
+// Event listeners must be registered in global scope, not inside async calls,
+// or a wake-up event can arrive before they exist.
+//
+// Pages reach the database in the offscreen document directly over a
+// `runtime.connect` port; the service worker does not relay it.
 
 registerContextMenuHandler();
 registerWebToolBrowserHandler();
