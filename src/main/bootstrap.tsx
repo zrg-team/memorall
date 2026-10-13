@@ -7,6 +7,7 @@ import "@fontsource/space-grotesk/500.css";
 import "@fontsource/space-grotesk/700.css";
 import type { AppSurface } from "@/platform";
 import { platform } from "@/platform/current";
+import { connectLogRecording } from "@/utils/logger";
 import App from "./App";
 import "../globals.css";
 
@@ -25,6 +26,8 @@ export function mountMemorallApp({
 
 	document.documentElement.dataset.uiSurface = surface;
 	void platform.lifecycle.onSurfaceOpened(surface);
+	// Logs are recorded when the Logs page's switch, kept here, says so.
+	connectLogRecording(platform.persistentStore);
 
 	const heightClass = surface === "popup" ? "h-full" : "h-screen";
 	createRoot(container).render(

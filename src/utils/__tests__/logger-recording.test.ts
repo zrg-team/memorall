@@ -18,54 +18,30 @@ vi.mock("../indexeddb-storage", () => ({
 
 const KEY = "memorall.logs.recording";
 
-type ChangeListener = (
-	changes: Record<string, { newValue?: unknown }>,
-	areaName: string,
-) => void;
-
-const installChrome = (options: {
-	recording?: boolean;
-	pageOrigin?: string;
-}) => {
-	const values: Record<string, unknown> = { [KEY]: options.recording };
-	const listeners: ChangeListener[] = [];
-	const chrome = {
-		runtime: {
-			id: "abc",
-			getURL: (path: string) => `chrome-extension://abc/${path}`,
-		},
-		storage: {
-			local: {
-				get: vi.fn(async (key: string) => ({ [key]: values[key] })),
-				set: vi.fn(async (items: Record<string, unknown>) => {
-					Object.assign(values, items);
-					for (const listener of listeners) {
-						listener(
-							Object.fromEntries(
-								Object.entries(items).map(([k, v]) => [k, { newValue: v }]),
-							),
-							"local",
-						);
-					}
-				}),
-			},
-			onChanged: {
-				addListener: vi.fn((listener: ChangeListener) =>
-					listeners.push(listener),
-				),
-			},
-		},
+/** A key-value store like the platform's, shared by every "context". */
+const createStore = (initial: Record<string, unknown> = {}) => {
+	const values = { ...initial };
+	const listeners = new Map<string, Set<(value: unknown) => void>>();
+	return {
+		get: vi.fn(async (key: string) => (key in values ? values[key] : null)),
+		set: vi.fn(async (key: string, value: unknown) => {
+			values[key] = value;
+			for (const listener of listeners.get(key) ?? []) listener(value);
+		}),
+		subscribe: vi.fn((key: string, listener: (value: unknown) => void) => {
+			const set = listeners.get(key) ?? new Set();
+			set.add(listener);
+			listeners.set(key, set);
+			return () => set.delete(listener);
+		}),
+	} as {
+		get: <T>(key: string) => Promise<T | null>;
+		set: <T>(key: string, value: T) => Promise<void>;
+		subscribe: <T>(
+			key: string,
+			listener: (value: T | null) => void,
+		) => () => void;
 	};
-	Object.defineProperty(globalThis, "chrome", {
-		configurable: true,
-		value: chrome,
-	});
-	const page = new URL(options.pageOrigin ?? "chrome-extension://abc/");
-	Object.defineProperty(globalThis, "location", {
-		configurable: true,
-		value: { protocol: page.protocol, host: page.host },
-	});
-	return { chrome, listeners };
 };
 
 const importLogger = async () => {
@@ -80,15 +56,13 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-	Reflect.deleteProperty(globalThis, "chrome");
-	Reflect.deleteProperty(globalThis, "location");
 	Reflect.deleteProperty(globalThis, "indexedDB");
 });
 
 describe("logger recording", () => {
 	it("writes nothing to IndexedDB unless recording was turned on", async () => {
-		installChrome({});
-		const { logger, logInfo } = await importLogger();
+		const { logger, logInfo, connectLogRecording } = await importLogger();
+		connectLogRecording(createStore());
 		expect(await logger.isRecording()).toBe(false);
 
 		logInfo("hello");
@@ -98,8 +72,8 @@ describe("logger recording", () => {
 	});
 
 	it("records once the shared setting is on", async () => {
-		installChrome({ recording: true });
-		const { logger, logInfo } = await importLogger();
+		const { logger, logInfo, connectLogRecording } = await importLogger();
+		connectLogRecording(createStore({ [KEY]: true }));
 		expect(await logger.isRecording()).toBe(true);
 
 		logInfo("hello");
@@ -110,24 +84,43 @@ describe("logger recording", () => {
 	});
 
 	it("follows the setting when another context changes it", async () => {
-		const { chrome } = installChrome({});
-		const { logger, logInfo } = await importLogger();
+		const store = createStore();
+		const { logger, logInfo, connectLogRecording } = await importLogger();
+		connectLogRecording(store);
 		await logger.isRecording();
 
-		await chrome.storage.local.set({ [KEY]: true });
+		await store.set(KEY, true);
 		logInfo("now recorded");
 		await flush();
 		expect(storage.store).toHaveBeenCalledTimes(1);
 
 		await logger.setRecording(false);
-		expect(chrome.storage.local.set).toHaveBeenLastCalledWith({ [KEY]: false });
+		expect(store.set).toHaveBeenLastCalledWith(KEY, false);
 		logInfo("not recorded");
 		await flush();
 		expect(storage.store).toHaveBeenCalledTimes(1);
 	});
 
-	it("never writes from a content script, and removes the old page database", async () => {
-		installChrome({ recording: true, pageOrigin: "https://example.com" });
+	it("never writes or reads where no store is connected, as in a content script", async () => {
+		const { logger, logInfo } = await importLogger();
+
+		await logger.setRecording(true);
+		logInfo("page log");
+		await flush();
+
+		expect(await logger.isRecording()).toBe(false);
+		expect(storage.store).not.toHaveBeenCalled();
+		expect(await logger.getLogs()).toEqual([]);
+	});
+
+	it("reads recorded logs while recording is off", async () => {
+		const { logger, connectLogRecording } = await importLogger();
+		connectLogRecording(createStore());
+		await logger.getLogs();
+		expect(storage.retrieve).toHaveBeenCalled();
+	});
+
+	it("removes the log database older versions left in a website's storage", async () => {
 		const deleteDatabase = vi.fn();
 		Object.defineProperty(globalThis, "indexedDB", {
 			configurable: true,
@@ -136,23 +129,12 @@ describe("logger recording", () => {
 				deleteDatabase,
 			},
 		});
-		const { logger, logInfo } = await importLogger();
+		const { removeLegacyPageLogDatabase } = await importLogger();
+
+		removeLegacyPageLogDatabase();
 		await flush();
 
-		expect(deleteDatabase).toHaveBeenCalledWith("MemorallLogs");
 		expect(deleteDatabase).toHaveBeenCalledTimes(1);
-		await logger.setRecording(true);
-		logInfo("page log");
-		await flush();
-		expect(await logger.isRecording()).toBe(false);
-		expect(storage.store).not.toHaveBeenCalled();
-		expect(await logger.getLogs()).toEqual([]);
-	});
-
-	it("reads recorded logs while recording is off", async () => {
-		installChrome({});
-		const { logger } = await importLogger();
-		await logger.getLogs();
-		expect(storage.retrieve).toHaveBeenCalled();
+		expect(deleteDatabase).toHaveBeenCalledWith("MemorallLogs");
 	});
 });

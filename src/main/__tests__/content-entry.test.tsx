@@ -94,6 +94,7 @@ vi.mock("@/utils/logger", () => ({
 	logError: vi.fn(),
 	logWarn: vi.fn(),
 	logDebug: vi.fn(),
+	removeLegacyPageLogDatabase: vi.fn(),
 }));
 
 const installChrome = () => {

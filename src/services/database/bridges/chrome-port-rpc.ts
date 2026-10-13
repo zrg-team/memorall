@@ -4,7 +4,18 @@
 
 import type { RpcRequest, RpcResponse, RpcTransport } from "./types";
 import { serializeForRpc } from "./serialization";
+import { BACKGROUND_EVENTS } from "@/constants/events";
 import { logInfo, logWarn } from "@/utils/logger";
+
+/**
+ * Ask the background service worker to create the offscreen document again
+ * if it is missing: the database lives there.
+ */
+export const requestOffscreenDocument = async (): Promise<void> => {
+	await chrome.runtime.sendMessage({
+		type: BACKGROUND_EVENTS.ENSURE_OFFSCREEN,
+	});
+};
 
 export interface ChromePortTransportOptions {
 	/** Port name; must match on the server side */

@@ -1,6 +1,13 @@
 // Offscreen document for background knowledge graph processing
 // This runs in a hidden document with full DOM access for LLM/Embedding services
-import { logDebug, logError, logInfo, logWarn } from "@/utils/logger";
+import {
+	connectLogRecording,
+	logDebug,
+	logError,
+	logInfo,
+	logWarn,
+} from "@/utils/logger";
+import { platform } from "@/platform/current";
 import {
 	backgroundProcessFactory,
 	ProcessFactory,
@@ -33,6 +40,9 @@ type OffscreenGlobal = typeof globalThis & {
 };
 
 const offscreenGlobal = globalThis as OffscreenGlobal;
+
+// Logs are recorded when the Logs page's switch, kept in storage, says so.
+connectLogRecording(platform.persistentStore);
 
 type PatchedEmbeddingService = EmbeddingServiceMain & {
 	__memorallSkipDefaultEmbedding__?: boolean;

@@ -24,6 +24,10 @@ vi.mock("@/utils/logger", () => ({
 	logError: mocks.logError,
 	logWarn: vi.fn(),
 	logDebug: vi.fn(),
+	connectLogRecording: vi.fn(),
+}));
+vi.mock("@/platform/extension/chrome-storage-key-value-store", () => ({
+	ChromeStorageKeyValueStore: vi.fn(),
 }));
 vi.mock("@/background/core/init", () => ({
 	init: mocks.init,
