@@ -24,15 +24,13 @@ import { useTranslation } from "react-i18next";
 import { useTheme } from "@/main/components/molecules/ThemeContext";
 import { cn } from "@/lib/utils";
 import { platform } from "@/platform/current";
-import { serviceManager } from "@/services";
 import { documentFileSystemService } from "@/services/filesystem/document-filesystem";
 import { toDocumentsSandboxPath } from "@/services/filesystem/sandbox-paths";
 import { toFlowFileSystem } from "@/services/flow-service-adapters";
-import { meterLlmService } from "@/services/model-usage/metered-llm";
 import {
 	createHostedAppAi,
 	hostedAppUsageScope,
-	hostedChatModel,
+	lazyHostedChatModel,
 } from "@/services/memon/apps/hosted/ai";
 import {
 	createHostedAppBridge,
@@ -139,14 +137,20 @@ const HostedAppFrameView = React.forwardRef<
 	// when the agent or file it is charged to changes.
 	const charge = useRef({ app, path, agentId });
 	charge.current = { app, path, agentId };
+	// The LLM service loads on the app's first AI request, metered so the
+	// request counts on the Usage page.
 	const ai = useMemo(
 		() =>
 			createHostedAppAi(
-				hostedChatModel(
-					meterLlmService(serviceManager.llmService, () =>
+				lazyHostedChatModel(async () => {
+					const [{ serviceManager }, { meterLlmService }] = await Promise.all([
+						import("@/services"),
+						import("@/services/model-usage/metered-llm"),
+					]);
+					return meterLlmService(serviceManager.llmService, () =>
 						hostedAppUsageScope(charge.current),
-					),
-				),
+					);
+				}),
 			),
 		[],
 	);

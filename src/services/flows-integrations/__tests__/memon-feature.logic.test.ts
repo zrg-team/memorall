@@ -68,7 +68,8 @@ it("adds the native computer tools while preserving other feature tools and thei
 	expect(JSON.stringify(result.output.messages)).toContain(
 		"Enabled feature instructions",
 	);
-});
+	// The first run loads the computer's modules cold.
+}, 30_000);
 
 describe("buildMemonPrompt", () => {
 	it("explains only the apps the agent has", () => {

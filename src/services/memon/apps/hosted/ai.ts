@@ -268,3 +268,29 @@ export const hostedChatModel = (llm: MeteredLlmService): HostedChatModel => ({
 			stream: true,
 		}) as AsyncIterable<ChatCompletionChunk>,
 });
+
+/**
+ * The chat model, reached on the first request: whatever hosts an app does
+ * not load the LLM service (and all it brings) just to open a file.
+ */
+export const lazyHostedChatModel = (
+	load: () => Promise<MeteredLlmService>,
+): HostedChatModel => {
+	let model: Promise<HostedChatModel> | null = null;
+	const get = () => {
+		model ??= load()
+			.then(hostedChatModel)
+			.catch((error) => {
+				// A failed load is tried again on the next request.
+				model = null;
+				throw error;
+			});
+		return model;
+	};
+	return {
+		ready: async () => (await get()).ready(),
+		async *stream(request) {
+			yield* (await get()).stream(request);
+		},
+	};
+};
