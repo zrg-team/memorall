@@ -44,6 +44,7 @@ import {
 	loadFeatureLabels,
 	loadReportedSpend,
 	loadUsageRequests,
+	loadUsageRows,
 } from "../usage-repository";
 
 type Db = ReturnType<typeof drizzle<typeof schema>>;
@@ -143,7 +144,9 @@ describe("usage repository", () => {
 				conversationId: scheduled.id,
 				role: "assistant",
 				content: "briefing",
-				createdAt: now,
+				// After the chat's reply: replies at the same instant come in id
+				// order, which is random.
+				createdAt: new Date(now.getTime() + 1_000),
 				metadata: {
 					source: "cron",
 					model: "qwen2.5-7b-instruct.gguf",
@@ -218,6 +221,15 @@ describe("usage repository", () => {
 
 		await expect(loadReportedSpend(since)).resolves.toBeCloseTo(0.06);
 		expect(loadFeatureLabels().get("step-fs")).toBe("File System");
+	});
+
+	it("reads a window a few replies per request, in order", async () => {
+		const since = new Date(Date.now() - 7 * 86_400_000);
+		const whole = await loadUsageRows(since, 1_000);
+		const paged = await loadUsageRows(since, 1);
+
+		expect(whole.length).toBeGreaterThan(1);
+		expect(paged).toEqual(whole);
 	});
 
 	it("adds the model usage ledger: requests made on a computer, charged to their tool", async () => {

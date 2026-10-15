@@ -1,4 +1,4 @@
-import { and, eq, gte, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, sql } from "drizzle-orm";
 import { serviceManager } from "@/services";
 import {
 	MODEL_USAGE_SOURCE_LABELS,
@@ -13,11 +13,33 @@ import {
 import { toUsageRequests } from "../utils/usage-records";
 
 /**
- * Every assistant reply with usage since `since`, slimmed in the database: the
+ * Replies read per database request. The page reaches the database over a
+ * bridge that gives up on a request after 30 s and cannot carry a message over
+ * 64 MB; reading a whole window in one request crossed both once it held a few
+ * thousand tool-heavy replies.
+ */
+export const USAGE_ROWS_PER_REQUEST = 200;
+
+/** Ids of the assistant replies since `since`, oldest first. */
+const loadReplyIds = (since: Date): Promise<string[]> =>
+	serviceManager.databaseService.use(async ({ db, schema }) => {
+		const { messages } = schema;
+		const rows = await db
+			.select({ id: messages.id })
+			.from(messages)
+			.where(
+				and(eq(messages.role, "assistant"), gte(messages.createdAt, since)),
+			)
+			.orderBy(messages.createdAt, messages.id);
+		return rows.map((row) => row.id);
+	});
+
+/**
+ * The replies among `ids` that carry usage, slimmed in the database: the
  * reply's parts come back as role + tool call ids + result sizes, and tool runs
  * as id + name + source, so long tool outputs never cross the bridge.
  */
-export const loadUsageRows = (since: Date): Promise<UsageMessageRow[]> =>
+const loadUsageRowsByIds = (ids: string[]): Promise<UsageMessageRow[]> =>
 	serviceManager.databaseService.use(({ db, schema }) => {
 		const { messages, conversations, flows } = schema;
 		return db
@@ -67,13 +89,30 @@ export const loadUsageRows = (since: Date): Promise<UsageMessageRow[]> =>
 			.leftJoin(flows, eq(flows.id, conversations.agentFlowId))
 			.where(
 				and(
-					eq(messages.role, "assistant"),
-					gte(messages.createdAt, since),
+					inArray(messages.id, ids),
 					sql`jsonb_typeof(${messages.metadata}->'usage') = 'object'`,
 				),
 			)
-			.orderBy(messages.createdAt);
+			.orderBy(messages.createdAt, messages.id);
 	});
+
+/**
+ * Every assistant reply with usage since `since`, oldest first, read
+ * `pageSize` replies per request so no request outgrows the bridge.
+ */
+export const loadUsageRows = async (
+	since: Date,
+	pageSize = USAGE_ROWS_PER_REQUEST,
+): Promise<UsageMessageRow[]> => {
+	const ids = await loadReplyIds(since);
+	const rows: UsageMessageRow[] = [];
+	for (let start = 0; start < ids.length; start += pageSize) {
+		rows.push(
+			...(await loadUsageRowsByIds(ids.slice(start, start + pageSize))),
+		);
+	}
+	return rows;
+};
 
 /**
  * Model requests booked outside chat replies since `since` (pi code and

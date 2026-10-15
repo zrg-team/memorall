@@ -10,6 +10,7 @@ exports[`src/utils module coverage > imports every utility module without requir
   "../deep-equal.ts",
   "../dom.ts",
   "../embedding-size-config.ts",
+  "../error-message.ts",
   "../indexeddb-storage.ts",
   "../logger.ts",
   "../map-refine.ts",
