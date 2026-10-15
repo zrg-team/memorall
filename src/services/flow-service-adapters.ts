@@ -198,18 +198,27 @@ const toDirEntry = (node: {
 	...(typeof node.file?.size === "number" ? { size: node.file.size } : {}),
 });
 
-const toFileStat = (size = 0, type: "file" | "folder" = "file"): FileStat => {
-	const now = new Date();
+/**
+ * The node's own times, as the library read them from storage. Callers
+ * compare them between stats to learn whether a file changed (an editor
+ * checks before it saves that nobody else wrote the file), so a time must
+ * stay put until the file is written again; "now" only stands in for a node
+ * that carries none, such as the root.
+ */
+const toFileStat = (node: DocumentTreeNode): FileStat => {
+	const entry = node.file ?? node.folder;
+	const modified = entry?.modifiedAt ? new Date(entry.modifiedAt) : new Date();
+	const created = entry?.createdAt ? new Date(entry.createdAt) : modified;
 	return {
-		isFile: () => type === "file",
-		isDirectory: () => type === "folder",
+		isFile: () => node.type === "file",
+		isDirectory: () => node.type === "folder",
 		isSymbolicLink: () => false,
-		size,
-		mtime: now,
-		atime: now,
-		ctime: now,
-		birthtime: now,
-		mode: type === "folder" ? 0o755 : 0o644,
+		size: node.file?.size ?? 0,
+		mtime: modified,
+		atime: modified,
+		ctime: modified,
+		birthtime: created,
+		mode: node.type === "folder" ? 0o755 : 0o644,
 	};
 };
 
@@ -491,8 +500,7 @@ export const toFlowFileSystem = (
 				: nodes.map((node) => node.name);
 		}) as IFlowFileSystem["readdir"],
 		stat: async (path) => {
-			const node = await getTreeNode(service, path);
-			return toFileStat(node.file?.size ?? 0, node.type);
+			return toFileStat(await getTreeNode(service, path));
 		},
 		access: async (path) => {
 			await getTreeNode(service, path);
