@@ -814,6 +814,7 @@ exports[`flows-integrations registered contracts > registers every integrations 
   "doc_remove",
   "doc_search",
   "doc_write",
+  "document_fs_app",
   "document_fs_edit",
   "document_fs_glob",
   "document_fs_grep",
@@ -843,6 +844,7 @@ exports[`flows-integrations registered contracts > registers every integrations 
   "lottie_validate",
   "lottie_write",
   "memon_act",
+  "memon_app",
   "memon_code",
   "memon_connections",
   "memon_memory",
@@ -1222,6 +1224,42 @@ exports[`flows-integrations registered contracts > registers every integrations 
       "required": [
         "file_path",
         "content",
+      ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "Read and change spreadsheets (.xlsx), Word documents (.docx), presentations (.pptx), whiteboards (.whiteboard) and PDFs with their apps' own commands. Call with only file_path first: it lists the app's commands and shows the file. Then pass commands: [{ name, args }]; they run in order and the file is saved once. Never write these files with document_fs_write or document_fs_edit.",
+    "name": "document_fs_app",
+    "parameters": {
+      "properties": {
+        "commands": {
+          "items": {
+            "properties": {
+              "args": {
+                "additionalProperties": {},
+                "type": "object",
+              },
+              "name": {
+                "type": "string",
+              },
+            },
+            "required": [
+              "name",
+            ],
+            "type": "object",
+          },
+          "type": "array",
+        },
+        "file_path": {
+          "type": "string",
+        },
+        "help": {
+          "type": "string",
+        },
+      },
+      "required": [
+        "file_path",
       ],
       "type": "object",
     },
@@ -1902,6 +1940,39 @@ exports[`flows-integrations registered contracts > registers every integrations 
       "required": [
         "action",
       ],
+      "type": "object",
+    },
+  },
+  {
+    "description": "Work in the computer's file apps: Spreadsheet (.xlsx), Documents (.docx), Presentation (.pptx), Whiteboard (.whiteboard) and PDF. { path } opens the file in its app and lists the app's commands; { path, commands: [{ name, args }] } runs them and saves the file, which the user sees change in the app's window; { path, help: "<command>" } gives one command's full parameters. Never write these files as text.",
+    "name": "memon_app",
+    "parameters": {
+      "properties": {
+        "commands": {
+          "items": {
+            "properties": {
+              "args": {
+                "additionalProperties": {},
+                "type": "object",
+              },
+              "name": {
+                "type": "string",
+              },
+            },
+            "required": [
+              "name",
+            ],
+            "type": "object",
+          },
+          "type": "array",
+        },
+        "help": {
+          "type": "string",
+        },
+        "path": {
+          "type": "string",
+        },
+      },
       "type": "object",
     },
   },

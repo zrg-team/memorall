@@ -1,6 +1,12 @@
 import { formatPageOutline } from "@/co-agent/dom/page-outline";
 import { renderViewText } from "./app-kit/render-text";
 import { isKitApp, MEMON_KIT_APPS } from "./apps";
+import {
+	HOSTED_APP_IDS,
+	HOSTED_APPS,
+	type HostedAppId,
+	isHostedAppId,
+} from "./apps/hosted/catalog";
 import { describeSchedule } from "./apps/scheduler-view";
 import {
 	MEMON_SCREEN_CHAR_BUDGET,
@@ -43,6 +49,65 @@ const APP_LABEL: Record<MemonWindowState["app"], string> = {
 	connections: "Connections",
 	visualize: "Visualize",
 	pi: "pi code",
+	...(Object.fromEntries(
+		HOSTED_APP_IDS.map((id) => [id, HOSTED_APPS[id].name]),
+	) as Record<HostedAppId, string>),
+};
+
+const isHostedApp = (
+	window: MemonWindowState,
+): window is MemonWindowState & { app: HostedAppId } =>
+	isHostedAppId(window.app);
+
+/** A hosted app's window in one line: its file, or its own home. */
+const hostedBrief = (
+	snapshot: MemonMachineSnapshot,
+	window: MemonWindowState & { app: HostedAppId },
+	min: string,
+): string => {
+	const state = snapshot.hosted?.[window.app];
+	const file = state?.path
+		? memonDisplayPath(state.path, snapshot.home)
+		: "its home (no file open)";
+	return `── ${window.id} ${APP_LABEL[window.app]}${min} · ${file}${state?.loading ? " · opening…" : ""}`;
+};
+
+/** What the agent reads of a hosted app: the file as its app describes it. */
+const hostedBody = (
+	snapshot: MemonMachineSnapshot,
+	app: HostedAppId,
+): ScrollBody | null => {
+	const state = snapshot.hosted?.[app];
+	if (!state?.path || state.loading || state.error) return null;
+	return {
+		lines: state.text.split("\n"),
+		room: WINDOW_PAGE_CHARS,
+		tail: false,
+	};
+};
+
+const hostedLines = (
+	snapshot: MemonMachineSnapshot,
+	window: MemonWindowState & { app: HostedAppId },
+	scroll: number,
+): string[] => {
+	const state = snapshot.hosted?.[window.app];
+	const lines = [hostedBrief(snapshot, { ...window, minimized: false }, "")];
+	if (!state?.path) {
+		lines.push(
+			`(the user is in ${APP_LABEL[window.app]}'s own home; open one of its files with memon_open)`,
+		);
+		return lines;
+	}
+	if (state.loading) return [...lines, "(opening…)"];
+	if (state.error) return [...lines, `error: ${state.error}`];
+	const body = hostedBody(snapshot, window.app);
+	if (body) lines.push(...scrolledLines(body, scroll));
+	const path = memonDisplayPath(state.path, snapshot.home);
+	lines.push(
+		`The user sees and edits it in the window. memon_app { path: "${path}" } lists its commands; memon_app { path: "${path}", commands: [{ name, args }] } changes it.`,
+	);
+	return lines;
 };
 
 /** pi code in one line: what it is doing and on which model. */
@@ -465,7 +530,9 @@ const briefLine = (
 	window: MemonWindowState,
 ): string => {
 	const min = window.minimized ? " (minimized)" : "";
-	switch (window.app) {
+	const app = window.app;
+	if (isHostedAppId(app)) return hostedBrief(snapshot, { ...window, app }, min);
+	switch (app) {
 		case "browser": {
 			const tab = snapshot.browser.tabs.find(
 				(candidate) => candidate.id === snapshot.browser.activeTabId,
@@ -527,6 +594,7 @@ const fullLines = (
 	window: MemonWindowState,
 ): string[] => {
 	const scroll = window.scroll ?? 0;
+	if (isHostedApp(window)) return hostedLines(snapshot, window, scroll);
 	// Apps built with the kit: the window's own controls, with their refs.
 	if (isKitApp(window.app)) {
 		const body = scrollBodyOf(snapshot, window);
@@ -699,6 +767,7 @@ const scrollBodyOf = (
 			tail: false,
 		};
 	}
+	if (isHostedApp(window)) return hostedBody(snapshot, window.app);
 	switch (window.app) {
 		case "files":
 			return {

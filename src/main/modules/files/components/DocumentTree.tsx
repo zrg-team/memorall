@@ -23,6 +23,7 @@ import type { DocumentTreeNode, DocumentType } from "@/types/document-library";
 import { useTranslation } from "react-i18next";
 import { ScrollArea } from "@/main/components/ui/scroll-area";
 import { IndexTypeBadge, useFolderIndex } from "../folder-index";
+import { hostedFileLook } from "../utils/hosted-file-look";
 
 interface DocumentTreeProps {
 	tree: DocumentTreeNode[];
@@ -106,8 +107,9 @@ const TreeNode: React.FC<TreeNodeProps> = React.memo(
 			iconColorClass = isMapped ? "text-amber-500" : "text-blue-500";
 		} else {
 			const fileType = node.file?.type || "other";
-			IconComponent = FILE_ICONS[fileType];
-			iconColorClass = FILE_COLORS[fileType];
+			const look = hostedFileLook(node.name);
+			IconComponent = look?.icon ?? FILE_ICONS[fileType];
+			iconColorClass = look?.color ?? FILE_COLORS[fileType];
 		}
 
 		return (

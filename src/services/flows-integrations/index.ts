@@ -68,6 +68,7 @@ import "./tools/memon/memon-studio";
 import "./tools/memon/memon-skills";
 import "./tools/memon/memon-connections";
 import "./tools/memon/memon-code";
+import "./tools/memon/memon-app";
 
 // Memorall document filesystem tools retained in the app integration layer.
 import "./tools/files-fs/fs-glob";
@@ -78,6 +79,7 @@ import "./tools/files-fs/fs-edit";
 import "./tools/files-fs/fs-mkdir";
 import "./tools/files-fs/fs-remove";
 import "./tools/files-fs/fs-ls";
+import "./tools/files-fs/fs-app";
 
 // Feature step overrides — must come after core features are registered
 // Memorall's own artifact formats. These are product behaviour, not harness

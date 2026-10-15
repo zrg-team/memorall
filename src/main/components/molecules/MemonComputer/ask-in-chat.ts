@@ -1,6 +1,10 @@
 import type { TFunction } from "i18next";
 import { useShellLayoutStore } from "@/main/stores/shell-layout";
 import { useWorkspaceModeStore } from "@/main/stores/workspace-mode";
+import {
+	HOSTED_APPS,
+	isHostedAppId,
+} from "@/services/memon/apps/hosted/catalog";
 import { sortTasks, taskStateLabel } from "@/services/memon/apps/tasks-view";
 import {
 	memonAttachmentType,
@@ -25,7 +29,12 @@ export const memonWindowSource = (
 	snapshot: MemonMachineSnapshot,
 	window: MemonWindowState,
 ): string => {
-	switch (window.app) {
+	const app = window.app;
+	if (isHostedAppId(app)) {
+		const path = snapshot.hosted?.[app]?.path;
+		return path ? `${HOSTED_APPS[app].name} · ${path}` : HOSTED_APPS[app].name;
+	}
+	switch (app) {
 		case "browser": {
 			const tab = snapshot.browser.tabs.find(
 				(candidate) => candidate.id === snapshot.browser.activeTabId,
@@ -69,7 +78,12 @@ export const memonWindowTarget = (
 	window: MemonWindowState,
 ): MemonAskTarget | null => {
 	const source = memonWindowSource(snapshot, window);
-	switch (window.app) {
+	const app = window.app;
+	if (isHostedAppId(app)) {
+		const path = snapshot.hosted?.[app]?.path;
+		return path ? { kind: "file", source, path } : null;
+	}
+	switch (app) {
 		case "browser": {
 			const tab = snapshot.browser.tabs.find(
 				(candidate) => candidate.id === snapshot.browser.activeTabId,

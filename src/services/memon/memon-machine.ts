@@ -71,6 +71,15 @@ import {
 import { controlsByRef } from "./app-kit/render-text";
 import type { MemonControlValue } from "./app-kit/types";
 import { kitAppForRef } from "./apps";
+import {
+	HOSTED_APP_IDS,
+	type HostedAppId,
+	isHostedAppId,
+} from "./apps/hosted/catalog";
+import {
+	MemonHostedApps,
+	type MemonHostedAppsPort,
+} from "./apps/hosted/hosted-apps-app";
 import { studioDraftsFromSettings } from "./apps/studio-view";
 import { MemonApprovalRequiredError } from "./approval-error";
 import { findVerificationWall } from "./verification-wall";
@@ -280,6 +289,8 @@ export interface MemonPorts {
 	homes?: MemonHomePort;
 	/** Without it pi code is not available. */
 	piCode?: MemonPiCodePort;
+	/** Without it Office files open in the Viewer, to read only. */
+	hosted?: MemonHostedAppsPort;
 	/** Without it the agent gets pictures of pages as files, never to look at. */
 	models?: MemonModelsPort;
 }
@@ -287,6 +298,13 @@ export interface MemonPorts {
 export type MemonTurnOutcome = "ready" | "timeout" | "cancelled";
 
 // ─── Layout ───────────────────────────────────────────────────────────────────
+
+/** The same entry for every hosted app. */
+const forHostedApps = <T>(value: T): Record<HostedAppId, T> =>
+	Object.fromEntries(HOSTED_APP_IDS.map((id) => [id, value])) as Record<
+		HostedAppId,
+		T
+	>;
 
 const DEFAULT_LAYOUT: Record<
 	MemonWindowApp,
@@ -304,9 +322,12 @@ const DEFAULT_LAYOUT: Record<
 	connections: { x: 0.24, y: 0.06, w: 0.56, h: 0.8 },
 	visualize: { x: 0.12, y: 0.04, w: 0.7, h: 0.88 },
 	pi: { x: 0.1, y: 0.04, w: 0.74, h: 0.88 },
+	// Office apps need room: a ribbon above the sheet, deck or page.
+	...forHostedApps({ x: 0.05, y: 0.03, w: 0.84, h: 0.9 }),
 };
 /** The app each window needs turned on; built-in apps need none. */
 const APP_OF_WINDOW: Record<MemonWindowApp, MemonAppId | null> = {
+	...forHostedApps<MemonAppId | null>("files"),
 	browser: "browser",
 	files: "files",
 	editor: "files",
@@ -480,6 +501,8 @@ export class MemonMachine {
 	readonly terminal: MemonTerminal;
 	/** pi code: runs while its window is open, with or without a view. */
 	readonly piCode: MemonPiCode;
+	/** Spreadsheet, Documents, Presentation, Whiteboard and PDF. */
+	readonly hosted: MemonHostedApps;
 	private disposed = false;
 	private cursor: MemonCursorState | null = null;
 	private userChanges: string[] = [];
@@ -578,6 +601,19 @@ export class MemonMachine {
 			},
 			ports.piCode,
 		);
+		this.hosted = new MemonHostedApps(
+			{
+				showWindow: (app) => {
+					this.openWindow(app);
+				},
+				isWindowOpen: (app) => Boolean(this.windowFor(app)),
+				changed: () => this.changed(),
+				enabled: () => this.config.apps.files,
+			},
+			ports.hosted,
+		);
+		// Which apps this build has, for the dock (asked once, in the background).
+		void this.hosted.availableApps();
 	}
 
 	// ── Lifecycle ───────────────────────────────────────────────────────────
@@ -993,6 +1029,7 @@ export class MemonMachine {
 			this.unsubscribeFiles = undefined;
 		}
 		if (window.app === "editor") this.unwatchEditorFile();
+		if (isHostedAppId(window.app)) this.hosted.close(window.app);
 		// Closing pi's window quits pi, like closing an app.
 		if (window.app === "pi") await this.piCode.stop();
 		this.windows = this.windows.filter((candidate) => candidate !== window);
@@ -1852,6 +1889,10 @@ export class MemonMachine {
 		if (target.endsWith(MEMON_VISUAL_EXTENSION) && this.config.apps.visualize) {
 			return this.openVisual(target);
 		}
+		// Spreadsheets, Word documents, decks, boards and PDFs open in their
+		// app, where the user edits them and the agent's memon_app changes them.
+		const hostedApp = asApp ? await this.hosted.appFor(target) : null;
+		if (hostedApp) return this.hosted.open(hostedApp, target);
 		// PDFs, images, media and spreadsheets always open in the Viewer; the
 		// Editor would show their bytes as noise.
 		const kind = memonFileKind(target);
@@ -3088,10 +3129,13 @@ export class MemonMachine {
 		return {
 			key: this.key,
 			revision: this.revision,
+			agentId: this.agentId,
 			driver: this.driver,
 			status: this.status,
 			apps: this.apps(),
 			builtInApps: this.builtInApps(),
+			hostedApps: this.hosted.knownApps(),
+			hosted: this.hosted.snapshot(),
 			windows: this.windows.map((window) => ({ ...window })),
 			focusedWindowId: this.focusedWindowId,
 			browser: {

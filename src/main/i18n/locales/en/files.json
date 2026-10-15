@@ -52,12 +52,14 @@
 		"sheets": "{{count}} sheet",
 		"manage": "Manage",
 		"addTopics": "Add Topics",
+		"manageTopics": "Manage topics",
 		"convertToKnowledge": "Convert to Knowledge",
 		"converting": "Converting...",
 		"properties": "Properties",
 		"download": "Download",
 		"delete": "Delete",
 		"close": "Close",
+		"moreActions": "More actions",
 		"loadingPreview": "Loading preview...",
 		"documentInformation": "File Information",
 		"title": "Title",
@@ -156,7 +158,8 @@
 		"extensionRequired": "Extension is required",
 		"invalidCharacters": "Name contains invalid characters",
 		"cancel": "Cancel",
-		"create": "Create"
+		"create": "Create",
+		"appsLabel": "Apps"
 	},
 	"editor": {
 		"unsaved": "Unsaved",
@@ -324,6 +327,40 @@
 			"select": "Click a card to see it here.",
 			"search": "Find a card",
 			"fit": "Fit"
+		}
+	},
+	"hostedApp": {
+		"opening": "Opening {{app}}…",
+		"updated": "Updated: the file changed.",
+		"apps": {
+			"spreadsheet": "Spreadsheet",
+			"documents": "Document",
+			"presentation": "Presentation",
+			"whiteboard": "Whiteboard",
+			"pdf": "PDF"
+		},
+		"picker": {
+			"title": "Open a file",
+			"up": "Up",
+			"empty": "Nothing to open here.",
+			"open": "Open",
+			"cancel": "Cancel"
+		},
+		"assistant": {
+			"title": "Assistant",
+			"newChat": "New conversation",
+			"close": "Close",
+			"empty": "Ask about {{name}}, or say what to change: I work with {{app}}'s tools and save to the file.",
+			"placeholder": "Ask or say what to change…",
+			"send": "Send",
+			"stop": "Stop",
+			"working": "Working…",
+			"running": "Running {{commands}}…",
+			"saved": "Saved {{name}}.",
+			"read": "Read {{name}}.",
+			"failed_one": "{{count}} command failed.",
+			"failed_other": "{{count}} commands failed.",
+			"stopped": "Stopped."
 		}
 	}
 }

@@ -150,8 +150,9 @@ describe("buildMemonPrompt", () => {
 			expect(lines[0]).toMatch(/^- /);
 		}
 		// The whole computer, pi code included, without Bot.md and Memory.md,
-		// in about 2k tokens (a line on Vite apps added the last 100 characters).
-		expect(prompt.length).toBeLessThan(9_800);
+		// in about 2k tokens (a line on Vite apps added 100 characters, the line
+		// on Office files and memon_app the last 200).
+		expect(prompt.length).toBeLessThan(10_000);
 	});
 
 	it("says how to fetch a file in one step, with Files and with the Terminal", () => {

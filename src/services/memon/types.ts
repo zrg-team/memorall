@@ -7,7 +7,11 @@ import type {
 	MemonStudioToolId,
 	MemonWindowApp,
 } from "./constants";
+import type { HostedAppId } from "./apps/hosted/catalog";
+import type { MemonHostedAppState } from "./apps/hosted/hosted-apps-app";
 import type { MemonViewerKind } from "./file-kinds";
+
+export type { MemonHostedAppState };
 import type { MemonStudioAppSettings } from "./studio-app-file";
 import type { MemonVerificationWall } from "./verification-wall";
 
@@ -420,11 +424,17 @@ export interface MemonCursorState {
 export interface MemonMachineSnapshot {
 	key: string;
 	revision: number;
+	/** The agent using the computer, once one has. */
+	agentId?: string | null;
 	driver: MemonDriver;
 	status: MemonStatus;
 	apps: MemonAppAvailability[];
 	/** The built-in apps this computer has (pi code can be turned off). */
 	builtInApps?: MemonBuiltinApp[];
+	/** The hosted apps this computer has (they come with Files). */
+	hostedApps?: HostedAppId[];
+	/** Each open hosted app window: its file and what the agent reads of it. */
+	hosted?: Partial<Record<HostedAppId, MemonHostedAppState>>;
 	windows: MemonWindowState[];
 	focusedWindowId: string | null;
 	browser: MemonBrowserState;

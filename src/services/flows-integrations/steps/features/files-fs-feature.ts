@@ -57,6 +57,7 @@ The workspace root is "/" — all paths are absolute virtual paths (e.g. "/notes
 | \`document_fs_edit\` | Replace exact text inside a file |
 | \`document_fs_mkdir\` | Create a directory |
 | \`document_fs_remove\` | Delete a file or directory |
+| \`document_fs_app\` | Read and change spreadsheets, Word documents, presentations, whiteboards and PDFs with their apps |
 
 ## RECOMMENDED WORKFLOWS
 
@@ -112,6 +113,11 @@ The workspace root is "/" — all paths are absolute virtual paths (e.g. "/notes
 - \`document_fs_mkdir\` creates a directory (recursive by default — parent dirs are created automatically).
 - \`document_fs_remove\` deletes a file. To delete a non-empty directory, pass \`recursive: true\`.
 
+### Office files (.xlsx, .docx, .pptx, .whiteboard, .pdf)
+- These are not text: change them only with \`document_fs_app\`, never with \`document_fs_write\` or \`document_fs_edit\`.
+- \`document_fs_app\` with only \`file_path\` lists the app's commands and shows the file; then pass \`commands: [{ name, args }]\` (they run in order and the file is saved once). A path that does not exist yet makes a new file.
+- The user opens these files in the same apps on the Files page and sees your changes there.
+
 ## IMPORTANT RULES
 - Always use \`document_fs_read\` before \`document_fs_edit\` — verify the exact text to replace.
 - Prefer \`document_fs_edit\` over \`document_fs_write\` when modifying a small portion of a large file.
@@ -132,6 +138,7 @@ export const DOCUMENTS_FS_FEATURE_TOOLS = [
 	"document_fs_edit",
 	"document_fs_mkdir",
 	"document_fs_remove",
+	"document_fs_app",
 ] as const;
 
 export const DOCUMENTS_FS_FEATURE_DESCRIPTION =

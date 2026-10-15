@@ -605,7 +605,12 @@
 			"skills": "Skills",
 			"connections": "Connections",
 			"visualize": "Visualize",
-			"pi": "pi code"
+			"pi": "pi code",
+			"spreadsheet": "Spreadsheet",
+			"documents": "Documents",
+			"presentation": "Presentation",
+			"whiteboard": "Whiteboard",
+			"pdf": "PDF"
 		},
 		"piCode": {
 			"starting": "Starting pi…",

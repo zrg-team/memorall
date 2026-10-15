@@ -18,6 +18,7 @@ import {
 import { logError } from "@memorall/agent-harness-flows/logging/logger";
 import { stepRegistry } from "@memorall/agent-harness-flows/registries/step-registry";
 import {
+	MEMON_APP_TOOL,
 	MEMON_BOT_FILE_NAME,
 	MEMON_CODE_TOOL,
 	MEMON_CONFIG_RUNTIME_KEY,
@@ -81,6 +82,7 @@ export const memonToolsFor = (
 			(tool !== MEMON_TASKS_TOOL || config.apps.tasks) &&
 			(tool !== MEMON_VISUALIZE_TOOL || config.apps.visualize) &&
 			(tool !== MEMON_CODE_TOOL || config.piCode) &&
+			(tool !== MEMON_APP_TOOL || config.apps.files) &&
 			(tool !== MEMON_STUDIO_TOOL || studio.some((entry) => entry.ready)),
 	);
 
@@ -125,6 +127,7 @@ const APP_SECTIONS: Record<MemonAppId, (config: MemonFeatureConfig) => string> =
 				'Organize: { ref: "f3", action: "move", text: "<folder>" } ("copy" copies); cut/copy without text, then { action: "paste" }. Nothing is overwritten: a clash gets a new name.',
 				`Download: memon_act { action: "download", text: "<url>", to: "<folder or file>" } saves a web file (image, font, PDF) in one step, into ~/Downloads by default${config.apps.browser ? '; { ref: "b7", action: "download" } saves an image from the page' : ""}. Do not write a script to download.`,
 				'Zip: memon_act { action: "zip", text: "<folder>" } (or a folder ref) zips it into ~/Downloads for the user, when they ask for a folder as a file. Do not zip with a script.',
+				"Office files (.xlsx .docx .pptx .whiteboard .pdf) open in their apps: change them only with memon_app ({ path } lists commands; a new path makes the file).",
 				'Viewer: PDFs and media show text; scroll reads on. See images: memon_act { action: "describe", path: "<file>" }. No path/ref: Viewer image, else page.',
 				"New files and folders go in your home, ~ (a folder per piece of work, like ~/<topic>/), unless the user names another place.",
 			]),

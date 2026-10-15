@@ -599,6 +599,14 @@ Apps that need their own surface, such as a terminal or a live page, are
 - A brief in the screen serializer lets the agent read the window like any
   other.
 
+Whole web apps are **hosted apps**: Spreadsheet, Documents, Presentation,
+Whiteboard and PDF are built from a pinned upstream into
+`public/vendors/apps/`, run in a frame on the Files page and in MemonOS
+windows behind a Puter-compatible SDK shim, and give the agent their own
+document engines through `memon_app` and `document_fs_app`. Adding one is a
+catalog entry plus an engine; see
+[docs/hosted-apps.md](./docs/hosted-apps.md).
+
 ### 📈 How MemonOS Scales
 
 - **An app is data plus one handler.** View nodes give the user a window, the

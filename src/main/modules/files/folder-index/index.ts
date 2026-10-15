@@ -1,4 +1,4 @@
-export { FileIndexAction } from "./FileIndexAction";
+export { useFileIndexActions } from "./use-file-index-actions";
 export { FolderIndexBadges } from "./FolderIndexBadges";
 export { FolderIndexBar } from "./FolderIndexBar";
 export { FolderIndexCardDialog } from "./FolderIndexCardDialog";

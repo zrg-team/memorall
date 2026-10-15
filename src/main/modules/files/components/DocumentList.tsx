@@ -65,6 +65,7 @@ import {
 	IndexTypeBadge,
 	useFolderIndex,
 } from "../folder-index";
+import { hostedFileLook } from "../utils/hosted-file-look";
 
 interface DocumentListProps {
 	items: DocumentLibraryItem[];
@@ -430,8 +431,9 @@ const FileEntry = memo(function FileEntry({
 }) {
 	const { t } = useTranslation("documents");
 	const file = item.item as DocumentFile;
-	const Icon = FILE_ICONS[file.type];
-	const colorClass = FILE_COLORS[file.type];
+	const look = hostedFileLook(file.name);
+	const Icon = look?.icon ?? FILE_ICONS[file.type];
+	const colorClass = look?.color ?? FILE_COLORS[file.type];
 	const {
 		onManageTopics,
 		onConvertToKnowledge,
