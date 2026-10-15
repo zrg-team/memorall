@@ -1,3 +1,4 @@
+import { createHostedAppsPort } from "./apps/hosted/port";
 import { createMemonEmbeddedPort } from "./embedded-browser";
 import { cropScreenshot, pictureOfImage } from "./page-capture";
 import { settleOutline } from "./settle-outline";
@@ -640,4 +641,9 @@ export const createMemonPorts = (
 			sandbox: resolveMemonSandbox,
 			models,
 		}),
+	hosted:
+		overrides.hosted ??
+		createHostedAppsPort(getFlowFileSystem(), (listener) =>
+			documentFileSystemService.onFilesystemChanged(() => listener()),
+		),
 });

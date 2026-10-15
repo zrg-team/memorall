@@ -71,6 +71,9 @@ import { MemonWindowErrorBoundary } from "./MemonWindowErrorBoundary";
 import { ViewerWindow } from "./windows/ViewerWindow";
 import { KitWindow } from "./windows/KitWindow";
 import { VisualizeWindow } from "./windows/VisualizeWindow";
+import { HostedAppWindow } from "./windows/HostedAppWindow";
+import type { HostedAppFrameHandle } from "@/main/modules/files/components/HostedAppFrame";
+import { isHostedAppId } from "@/services/memon/apps/hosted/catalog";
 import { useDeleteConfirm } from "./use-delete-confirm";
 import { useMemonAskMenu } from "./use-memon-ask-menu";
 import { useMemonExportDownloads } from "./use-export-downloads";
@@ -230,7 +233,14 @@ const windowTitle = (
 	window: MemonWindowState,
 	t: (key: string, values?: Record<string, unknown>) => string,
 ): string => {
-	switch (window.app) {
+	const app = window.app;
+	if (isHostedAppId(app)) {
+		const file = snapshot.hosted?.[app]?.path?.split("/").pop();
+		return file
+			? `${t(`memonComputer.apps.${app}`)} · ${file}`
+			: t(`memonComputer.apps.${app}`);
+	}
+	switch (app) {
 		case "browser": {
 			const tab = snapshot.browser.tabs.find(
 				(candidate) => candidate.id === snapshot.browser.activeTabId,
@@ -319,6 +329,22 @@ export const MemonComputerPanel = React.memo<{
 	const desktopRef = React.useRef<HTMLDivElement>(null);
 	// Desktop plus dock: where the user's own cursor is drawn.
 	const areaRef = React.useRef<HTMLDivElement>(null);
+	// Open hosted app windows, by window, so an app saves before its window closes.
+	const hostedFrames = React.useRef(new Map<string, HostedAppFrameHandle>());
+	const hostedFrameRefs = React.useRef(
+		new Map<string, (handle: HostedAppFrameHandle | null) => void>(),
+	);
+	const hostedFrameRef = (windowId: string) => {
+		let ref = hostedFrameRefs.current.get(windowId);
+		if (!ref) {
+			ref = (handle) => {
+				if (handle) hostedFrames.current.set(windowId, handle);
+				else hostedFrames.current.delete(windowId);
+			};
+			hostedFrameRefs.current.set(windowId, ref);
+		}
+		return ref;
+	};
 	const [capturing, setCapturing] = React.useState(false);
 	const [captureError, setCaptureError] = React.useState<string | null>(null);
 	const [captureMode, setCaptureMode] = React.useState<
@@ -468,6 +494,8 @@ export const MemonComputerPanel = React.memo<{
 			available,
 			reason,
 		})),
+		// Spreadsheet, Documents, Presentation, Whiteboard, PDF: with Files.
+		...(snapshot.hostedApps ?? []).map((id) => ({ id, available: true })),
 		...(snapshot.builtInApps ?? MEMON_BUILTIN_APPS).map((id) => ({
 			id,
 			available: true,
@@ -475,7 +503,21 @@ export const MemonComputerPanel = React.memo<{
 	];
 
 	const renderBody = (window: MemonWindowState) => {
-		switch (window.app) {
+		const app = window.app;
+		if (isHostedAppId(app)) {
+			return (
+				<HostedAppWindow
+					ref={hostedFrameRef(window.id)}
+					app={app}
+					machineKey={key}
+					state={snapshot.hosted?.[app]}
+					home={snapshot.home}
+					send={send}
+					agentId={snapshot.agentId}
+				/>
+			);
+		}
+		switch (app) {
 			case "browser":
 				return (
 					<BrowserWindow
@@ -507,7 +549,7 @@ export const MemonComputerPanel = React.memo<{
 			case "connections":
 				return (
 					<KitWindow
-						app={window.app}
+						app={app}
 						machineKey={key}
 						snapshot={snapshot}
 						send={send}
@@ -901,7 +943,13 @@ export const MemonComputerPanel = React.memo<{
 											void send("window.maximize", { key, windowId: window.id })
 										}
 										onClose={() =>
-											void send("window.close", { key, windowId: window.id })
+											// A hosted app saves what it still holds first.
+											void (
+												hostedFrames.current.get(window.id)?.requestClose() ??
+												Promise.resolve()
+											).then(() =>
+												send("window.close", { key, windowId: window.id }),
+											)
 										}
 										onMove={(rect) =>
 											send("window.move", { key, windowId: window.id, rect })

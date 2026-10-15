@@ -609,7 +609,12 @@
 			"skills": "Kỹ năng",
 			"connections": "Kết nối",
 			"visualize": "Trực quan hóa",
-			"pi": "pi code"
+			"pi": "pi code",
+			"spreadsheet": "Bảng tính",
+			"documents": "Tài liệu",
+			"presentation": "Trình chiếu",
+			"whiteboard": "Bảng trắng",
+			"pdf": "PDF"
 		},
 		"piCode": {
 			"starting": "Đang khởi động pi…",

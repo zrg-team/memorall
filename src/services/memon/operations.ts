@@ -1,6 +1,7 @@
 import { base64ToBytes } from "@/services/llm/utils/media-encoding";
 import type { WebOutlineActionRequest } from "@/services/web-browser/web-browser-protocol";
 import { MEMON_KIT_APPS } from "./apps";
+import { HOSTED_APPS, isHostedAppId } from "./apps/hosted/catalog";
 import { normalizeMemonFeatureConfig } from "./feature-config";
 import {
 	cancelMemonWaits,
@@ -413,6 +414,15 @@ export const runMemonOperation = async (
 			if (!machine) return null;
 			machine.setEditorContent(job.payload.content);
 			return machine.snapshot();
+		}
+		case "hosted.saved": {
+			const { key, app, path } = job.payload;
+			if (!isHostedAppId(app)) return null;
+			return userInput(
+				key,
+				`edited and saved ${path} in ${HOSTED_APPS[app].name}`,
+				(machine) => machine.hosted.noteSaved(app, path),
+			);
 		}
 		case "editor.save": {
 			const { key, content, base, overwrite } = job.payload;

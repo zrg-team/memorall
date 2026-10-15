@@ -126,7 +126,11 @@ function baseTree(): any[] {
 					path: "/notes/a.txt",
 					type: "file",
 					isExpanded: false,
-					file: { size: 5 },
+					file: {
+						size: 5,
+						createdAt: new Date("2026-01-02T03:04:05Z"),
+						modifiedAt: new Date("2026-02-03T04:05:06Z"),
+					},
 					children: [],
 				},
 			],
@@ -293,6 +297,10 @@ describe("flow service adapters", () => {
 		const stat = await fs.stat("/notes/a.txt");
 		expect(stat.isFile()).toBe(true);
 		expect(stat.size).toBe(5);
+		// The file's own times, the same on every stat until it is written:
+		// editors compare them to learn whether someone else wrote the file.
+		expect(stat.mtime.toISOString()).toBe("2026-02-03T04:05:06.000Z");
+		expect(stat.birthtime.toISOString()).toBe("2026-01-02T03:04:05.000Z");
 		await expect(fs.access("/notes/a.txt")).resolves.toBeUndefined();
 		await expect(fs.rm("/notes", { recursive: false })).rejects.toThrow(
 			/directory/,

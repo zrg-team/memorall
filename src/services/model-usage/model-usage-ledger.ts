@@ -4,7 +4,8 @@ import { logError } from "@/utils/logger";
 /**
  * Who a model request is charged to. Chat replies keep their usage in their
  * message; everything else (an app on an agent's computer, a Studio run
- * there) books each request here, so the Usage page counts both.
+ * there, the AI inside a hosted app) books each request here, so the Usage
+ * page counts both.
  */
 export interface ModelUsageScope {
 	/** What makes the requests, e.g. "pi-code" or "studio". */
@@ -34,11 +35,14 @@ export type ModelUsageRecorder = (entry: ModelUsageEntry) => Promise<void>;
 /** What makes ledger requests. */
 export const PI_CODE_USAGE_SOURCE = "pi-code";
 export const STUDIO_USAGE_SOURCE = "studio";
+/** The AI inside a hosted app (Spreadsheet, Presentation…), in Files or MemonOS. */
+export const HOSTED_APPS_USAGE_SOURCE = "apps";
 
 /** How the Usage page names a source whose requests belong to no agent. */
 export const MODEL_USAGE_SOURCE_LABELS: Readonly<Record<string, string>> = {
 	[PI_CODE_USAGE_SOURCE]: "pi code",
 	[STUDIO_USAGE_SOURCE]: "Studio",
+	[HOSTED_APPS_USAGE_SOURCE]: "Apps",
 };
 
 /** The prefix that marks a Usage-page session as a ledger session, not a chat. */

@@ -1,5 +1,6 @@
 import type { MediaCategory } from "@/services/llm/interfaces/model-category";
 import type { SandboxToolName } from "@memorall/agent-harness-flows/tools/agent-sandbox/profiles";
+import type { HostedAppId } from "./apps/hosted/catalog";
 
 export const MEMON_STEP_NAME = "memon-feature" as const;
 export const MEMON_FEATURE_ID = "step-memon-feature" as const;
@@ -44,6 +45,7 @@ export const MEMON_SKILLS_TOOL = "memon_skills" as const;
 export const MEMON_CONNECTIONS_TOOL = "memon_connections" as const;
 export const MEMON_VISUALIZE_TOOL = "memon_visualize" as const;
 export const MEMON_CODE_TOOL = "memon_code" as const;
+export const MEMON_APP_TOOL = "memon_app" as const;
 
 export const MEMON_TOOL_NAMES = [
 	MEMON_SCREEN_TOOL,
@@ -59,6 +61,7 @@ export const MEMON_TOOL_NAMES = [
 	MEMON_CONNECTIONS_TOOL,
 	MEMON_VISUALIZE_TOOL,
 	MEMON_CODE_TOOL,
+	MEMON_APP_TOOL,
 ] as const;
 
 export type MemonToolName = (typeof MEMON_TOOL_NAMES)[number];
@@ -85,10 +88,16 @@ export const MEMON_BUILTIN_APPS = [
 export type MemonBuiltinApp = (typeof MEMON_BUILTIN_APPS)[number];
 
 /**
- * Editor and Viewer come with Files. Built-in apps are always there, except
+ * Editor, Viewer and the hosted apps (Spreadsheet, Documents, Presentation,
+ * Whiteboard, PDF) come with Files. Built-in apps are always there, except
  * pi code, which the agent's settings can turn off.
  */
-export type MemonWindowApp = MemonAppId | MemonBuiltinApp | "editor" | "viewer";
+export type MemonWindowApp =
+	| MemonAppId
+	| MemonBuiltinApp
+	| "editor"
+	| "viewer"
+	| HostedAppId;
 
 /**
  * The Studio app's tools, each run on the studio (model category) of the

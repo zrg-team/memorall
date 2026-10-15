@@ -9,6 +9,8 @@ import { createMemoryJournal } from "../change-journal";
 
 type Node = { type: "dir" } | { type: "file"; data: Uint8Array };
 const nodes = new Map<string, Node>();
+/** In the store, but not yet in this context's table: made by another context. */
+const unseen = new Set<string>();
 const fsError = (code: string, path: string) =>
 	Object.assign(new Error(`${code}: ${path}`), { code });
 
@@ -18,7 +20,7 @@ const fakeFs = {
 			nodes.set(path, { type: "dir" });
 		},
 		async stat(path: string) {
-			const node = nodes.get(path);
+			const node = unseen.has(path) ? undefined : nodes.get(path);
 			if (!node) throw fsError("ENOENT", path);
 			return {
 				isDirectory: () => node.type === "dir",
@@ -37,6 +39,8 @@ const fakeFs = {
 			return node.data;
 		},
 		async writeFile(path: string, data: Uint8Array | string) {
+			// Not in the table, so ZenFS creates it; the folder lists it already.
+			if (unseen.has(path)) throw fsError("EEXIST", path);
 			nodes.set(path, {
 				type: "file",
 				data: typeof data === "string" ? new TextEncoder().encode(data) : data,
@@ -54,9 +58,9 @@ const fakeFs = {
 	},
 };
 
-const refreshFsCache = vi.fn(
-	async (_options?: { immediate?: boolean }) => undefined,
-);
+const refreshFsCache = vi.fn(async (_options?: { immediate?: boolean }) => {
+	unseen.clear();
+});
 
 vi.mock("@/services/filesystem/fs", () => ({
 	default: fakeFs,
@@ -95,6 +99,7 @@ const load = async () => {
 describe("the filesystem's change journal", () => {
 	beforeEach(() => {
 		nodes.clear();
+		unseen.clear();
 		nodes.set("/home/files", { type: "dir" });
 		refreshFsCache.mockClear();
 	});
@@ -141,6 +146,28 @@ describe("the filesystem's change journal", () => {
 		await files.writeFile("/notes/c.md", "C");
 		await offscreen.ensureFresh();
 		expect(refreshFsCache).toHaveBeenCalledTimes(1);
+	});
+
+	it("writes over a file another context made before this one reloaded", async () => {
+		const { files } = await load();
+		const heard: unknown[] = [];
+		files.onFilesystemChanged((change) => heard.push(change));
+		nodes.set("/home/files/notes/test.xlsx", {
+			type: "file",
+			data: new Uint8Array([1]),
+		});
+		unseen.add("/home/files/notes/test.xlsx");
+
+		await files.writeFile("/notes/test.xlsx", new Uint8Array([2]));
+
+		expect(refreshFsCache).toHaveBeenCalledWith({ immediate: true });
+		expect(nodes.get("/home/files/notes/test.xlsx")).toEqual({
+			type: "file",
+			data: new Uint8Array([2]),
+		});
+		expect(heard).toEqual([
+			{ scope: "root", operation: "write", path: "/notes/test.xlsx" },
+		]);
 	});
 
 	it("announces the editor's quiet saves to everyone, marked quiet", async () => {

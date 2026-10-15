@@ -39,6 +39,13 @@ import {
 	mergeTreeState,
 } from "../utils/tree-utils";
 import { downloadFolderAsZip } from "../utils/save-download";
+import {
+	HOSTED_APP_IDS,
+	HOSTED_APPS,
+	hostedAppForPath,
+} from "@/services/memon/apps/hosted/catalog";
+import { createHostedFile } from "@/services/memon/apps/hosted/commands";
+import { loadHostedEngine } from "@/services/memon/apps/hosted/engines";
 
 // ── Module-level helpers ──────────────────────────────────────────────────────
 
@@ -49,6 +56,24 @@ import { downloadFolderAsZip } from "../utils/save-download";
  * files) is gathered before the tree is read again, once for all of them.
  */
 const FILESYSTEM_RELOAD_DELAY_MS = 200;
+
+/**
+ * What "Upload files" offers to pick: what the viewers show, the text the
+ * editors open, and every file a hosted app opens (Office files, boards,
+ * PDFs), from the apps' own catalog.
+ */
+const UPLOAD_ACCEPT = [
+	".pdf,.png,.jpg,.jpeg,.gif,.webp",
+	".txt,.md,.markdown,.json,.yaml,.yml,.csv,.tsv,.html,.htm",
+	// Audio and video play in the viewer.
+	".wav,.mp3,.ogg,.oga,.m4a,.flac,.mp4,.m4v,.mov,.webm,.ogv,.mkv",
+	"audio/*,video/*",
+	...new Set(
+		HOSTED_APP_IDS.flatMap((id) =>
+			HOSTED_APPS[id].extensions.map((extension) => `.${extension}`),
+		),
+	),
+].join(",");
 /** A steady stream of changes still shows up at least this often. */
 const FILESYSTEM_RELOAD_MAX_DELAY_MS = 1_000;
 
@@ -627,12 +652,7 @@ export function useDocumentLibrary() {
 		const input = document.createElement("input");
 		input.type = "file";
 		input.multiple = true;
-		input.accept = [
-			".pdf,.txt,.md,.png,.jpg,.jpeg,.gif,.webp,.xls,.xlsx,.xlsm",
-			// Audio and video play in the viewer.
-			".wav,.mp3,.ogg,.oga,.m4a,.flac,.mp4,.m4v,.mov,.webm,.ogv,.mkv",
-			"audio/*,video/*",
-		].join(",");
+		input.accept = UPLOAD_ACCEPT;
 		input.onchange = (e) => {
 			const files = (e.target as HTMLInputElement).files;
 			if (files?.length) handleUploadFiles(files);
@@ -675,10 +695,17 @@ export function useDocumentLibrary() {
 					? `/${fullFileName}`
 					: `${targetPath}/${fullFileName}`;
 
+			// A spreadsheet, document, deck or board starts as its app starts
+			// one: an empty file would not open.
+			const app = hostedAppForPath(fullFileName);
+			const content = app
+				? await createHostedFile(fullFileName, loadHostedEngine)
+				: "";
+			const type = app ? "application/octet-stream" : "text/markdown";
 			const file = new File(
-				[new Blob([""], { type: "text/markdown" })],
+				[new Blob([content as BlobPart], { type })],
 				fullFileName,
-				{ type: "text/markdown" },
+				{ type },
 			);
 			await documentFileSystemService.uploadFile(
 				file,

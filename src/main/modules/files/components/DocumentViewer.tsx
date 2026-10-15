@@ -12,12 +12,9 @@ import {
 	FileType,
 	Download,
 	Trash2,
-	X,
 	Info,
 	BookmarkPlus,
 	Tag,
-	Tags,
-	MoreHorizontal,
 	Code,
 	Eye,
 } from "lucide-react";
@@ -25,7 +22,6 @@ import { eq, inArray } from "drizzle-orm";
 
 import { logInfo, logError } from "@/utils/logger";
 import { serviceManager } from "@/services";
-import { TopicBadgeList } from "@/main/modules/topics/components";
 import { useIsProcessing } from "@/main/stores/process-monitor";
 import type { DocumentFile } from "@/types/document-library";
 import type { Topic } from "@/services/database/types";
@@ -33,21 +29,17 @@ import { ScrollArea } from "@/main/components/ui/scroll-area";
 import { Button } from "@/main/components/ui/button";
 import { Badge } from "@/main/components/ui/badge";
 import { Separator } from "@/main/components/ui/separator";
-import {
-	Popover,
-	PopoverContent,
-	PopoverTrigger,
-} from "@/main/components/ui/popover";
-import {
-	documentFileSystemService,
-	type FilesystemChangeEvent,
-} from "@/services/filesystem/document-filesystem";
+import { documentFileSystemService } from "@/services/filesystem/document-filesystem";
 import {
 	toDocumentsSandboxPath,
 	toWorkspacesSandboxPath,
 } from "@/services/filesystem/sandbox-paths";
 
 import { FileConflictBanner } from "./FileConflictBanner";
+import {
+	DocumentViewerHeader,
+	type ViewerAction,
+} from "./DocumentViewerHeader";
 import { PDFPageSelector } from "./PDFPageSelector";
 import { LazyExcelViewer } from "./LazyExcelViewer";
 import { LazyPresentationViewer } from "./LazyPresentationViewer";
@@ -57,25 +49,11 @@ import { useSourceStatus } from "../hooks/use-source-status";
 import { type SyncedFile, useDocumentSync } from "../hooks/use-document-sync";
 import { editorRegistry } from "../editors";
 import { CodeEditor } from "../editors/CodeEditor";
-import { FileIndexAction } from "../folder-index";
-
-/** Whether a filesystem change can have altered the file at `path`. */
-function changeTouches(
-	change: FilesystemChangeEvent | null,
-	path: string,
-): boolean {
-	// No details: anything may have changed.
-	if (!change) return true;
-	if (change.changes) {
-		return change.changes.some((inner) => changeTouches(inner, path));
-	}
-	return [change.path, change.oldPath, change.newPath].some((changed) => {
-		if (changed === undefined) return false;
-		const target = changed.replace(/\/+$/, "");
-		// The file itself, or a folder it is in.
-		return path === target || path.startsWith(`${target}/`);
-	});
-}
+import { useFileIndexActions } from "../folder-index";
+import { useHostedAppFor } from "../hooks/use-hosted-app";
+import { changeTouches } from "../utils/change-touches";
+import { HostedAppFrame } from "./HostedAppFrame";
+import { HOSTED_APPS_DATA_DIR } from "@/services/memon/apps/hosted/catalog";
 
 interface DocumentViewerProps {
 	file: DocumentFile;
@@ -164,8 +142,12 @@ export const DocumentViewer = React.memo(function DocumentViewer({
 	const sandboxPath = isWorkspaceFile
 		? toWorkspacesSandboxPath(file.path)
 		: toDocumentsSandboxPath(file.id);
+	// Spreadsheets, Word documents, slides, boards and PDFs open in their app
+	// when this build has it; the built-in previews stay for the rest.
+	const hosted = useHostedAppFor(file.name);
+	const inHostedApp = hosted.app !== null && hosted.available !== false;
 
-	// biome-ignore lint/correctness/useExhaustiveDependencies: a preview is read again only when another file opens.
+	// biome-ignore lint/correctness/useExhaustiveDependencies: a preview is read again only when another file opens, or when its app turns out to be missing.
 	useEffect(() => {
 		// Reset content state when file changes
 		setTextContent(null);
@@ -176,6 +158,8 @@ export const DocumentViewer = React.memo(function DocumentViewer({
 		// A file left mid-load never clears its own spinner (its read is
 		// cancelled), and a text file never sets one.
 		setLoading(false);
+		// The app reads the file itself.
+		if (inHostedApp) return;
 		// This read's own URL, and whether another file was opened since: the
 		// state is stale in the cleanup, so revoking from it never released one.
 		let url: string | null = null;
@@ -252,7 +236,7 @@ export const DocumentViewer = React.memo(function DocumentViewer({
 			cancelled = true;
 			if (url) URL.revokeObjectURL(url);
 		};
-	}, [file.id]);
+	}, [file.id, inHostedApp]);
 
 	// Load topics for this file (only if not provided via props)
 	useEffect(() => {
@@ -313,10 +297,11 @@ export const DocumentViewer = React.memo(function DocumentViewer({
 
 	// Text files follow their file on disk while open: the agent may write them.
 	const isTextFile =
-		file.type === "text" ||
-		file.type === "markdown" ||
-		file.type === "other" ||
-		isSvg;
+		!inHostedApp &&
+		(file.type === "text" ||
+			file.type === "markdown" ||
+			file.type === "other" ||
+			isSvg);
 	const syncedFile = useMemo<SyncedFile | null>(
 		() =>
 			isTextFile
@@ -361,274 +346,91 @@ export const DocumentViewer = React.memo(function DocumentViewer({
 		alert(t("viewer.convertSuccess"));
 	};
 
-	return (
-		<div className="flex h-full min-w-0 flex-1 flex-col bg-card">
-			{/* Header */}
-			{compact ? (
-				<div className="flex min-h-[53px] flex-col justify-center gap-1 border-b px-3 py-2">
-					{/* Line 1: filename + more popover */}
-					<div className="flex min-w-0 items-center gap-1">
-						{compactNavigatorToggle}
-						<h2 className="min-w-0 flex-1 truncate text-sm font-semibold">
-							{file.name}
-						</h2>
-						{!isWorkspaceFile && (
-							<FileIndexAction filePath={file.path} iconOnly />
-						)}
-						<Popover>
-							<PopoverTrigger asChild>
-								<Button
-									variant="ghost"
-									size="sm"
-									className="h-7 w-7 flex-shrink-0 p-0"
-								>
-									<MoreHorizontal className="h-4 w-4" />
-								</Button>
-							</PopoverTrigger>
-							<PopoverContent align="end" className="w-56 p-2">
-								{fileTopics.length > 0 && (
-									<div className="mb-2 flex flex-wrap gap-1">
-										<TopicBadgeList
-											topics={fileTopics}
-											maxVisible={5}
-											size="sm"
-											onTopicClick={(topic) => onTopicClick?.(topic.id)}
-											activeTopicIds={selectedTopicIds}
-										/>
-									</div>
-								)}
-								{onManageTopics && (
-									<Button
-										variant="ghost"
-										size="sm"
-										onClick={() => onManageTopics(file)}
-										className="w-full justify-start text-xs"
-									>
-										<Tags className="mr-2 h-3.5 w-3.5" />
-										{fileTopics.length > 0
-											? t("viewer.manage")
-											: t("viewer.addTopics")}
-									</Button>
-								)}
-								{file.type === "pdf" && (
-									<Button
-										variant="ghost"
-										size="sm"
-										onClick={pdfPageSelector.openSelector}
-										className="w-full justify-start text-xs"
-									>
-										<BookmarkPlus className="mr-2 h-3.5 w-3.5" />
-										{t("viewer.convertToKnowledge")}
-									</Button>
-								)}
-								{(file.type === "text" ||
-									file.type === "markdown" ||
-									file.type === "other" ||
-									file.type === "presentation") &&
-									onConvertToKnowledge && (
-										<Button
-											variant="ghost"
-											size="sm"
-											onClick={() => onConvertToKnowledge(file)}
-											disabled={sourceStatus.isGenerating || isProcessing}
-											className="w-full justify-start text-xs"
-										>
-											<BookmarkPlus className="mr-2 h-3.5 w-3.5" />
-											{sourceStatus.isGenerating || isProcessing
-												? t("viewer.converting")
-												: t("viewer.convertToKnowledge")}
-										</Button>
-									)}
-								{file.type === "excel" && (
-									<Button
-										variant="ghost"
-										size="sm"
-										onClick={excelSheetSelector.openSelector}
-										className="w-full justify-start text-xs"
-									>
-										<BookmarkPlus className="mr-2 h-3.5 w-3.5" />
-										{t("viewer.convertToKnowledge")}
-									</Button>
-								)}
-								<Separator className="my-1" />
-								<Button
-									variant="ghost"
-									size="sm"
-									onClick={() => setShowProperties(!showProperties)}
-									className="w-full justify-start text-xs"
-								>
-									<Info className="mr-2 h-3.5 w-3.5" />
-									{t("viewer.properties")}
-								</Button>
-								{onDownload && (
-									<Button
-										variant="ghost"
-										size="sm"
-										onClick={onDownload}
-										className="w-full justify-start text-xs"
-									>
-										<Download className="mr-2 h-3.5 w-3.5" />
-										{t("viewer.download")}
-									</Button>
-								)}
-								{onDelete && (
-									<Button
-										variant="ghost"
-										size="sm"
-										onClick={onDelete}
-										className="w-full justify-start text-xs text-destructive hover:text-destructive"
-									>
-										<Trash2 className="mr-2 h-3.5 w-3.5" />
-										{t("viewer.delete")}
-									</Button>
-								)}
-								{onClose && (
-									<Button
-										variant="ghost"
-										size="sm"
-										onClick={onClose}
-										className="w-full justify-start text-xs"
-									>
-										<X className="mr-2 h-3.5 w-3.5" />
-										{t("viewer.close")}
-									</Button>
-								)}
-							</PopoverContent>
-						</Popover>
-					</div>
-				</div>
-			) : (
-				<div className="flex flex-col gap-3 border-b p-3 sm:flex-row sm:items-start sm:justify-between sm:p-4">
-					<div className="mr-0 min-w-0 flex-1 sm:mr-4">
-						{/* File name + metadata on same line */}
-						<div className="flex items-center gap-2 flex-wrap mb-2">
-							<h2 className="text-lg font-semibold truncate">{file.name}</h2>
-							{file.metadata?.pageCount && (
-								<>
-									<span className="text-muted-foreground">•</span>
-									<span className="text-sm text-muted-foreground">
-										{t("viewer.pages", { count: file.metadata.pageCount })}
-									</span>
-								</>
-							)}
-							{file.metadata?.sheetCount && (
-								<>
-									<span className="text-muted-foreground">•</span>
-									<span className="text-sm text-muted-foreground">
-										{t("viewer.sheets", { count: file.metadata.sheetCount })}
-									</span>
-								</>
-							)}
-						</div>
-						{/* Topic Badges - Second line */}
-						{fileTopics.length > 0 ? (
-							<div className="flex items-center gap-2 flex-wrap">
-								<TopicBadgeList
-									topics={fileTopics}
-									maxVisible={3}
-									size="sm"
-									onTopicClick={(topic) => onTopicClick?.(topic.id)}
-									activeTopicIds={selectedTopicIds}
-								/>
-								{onManageTopics && (
-									<Button
-										variant="ghost"
-										size="sm"
-										onClick={() => onManageTopics(file)}
-										className="h-6 px-2 text-xs"
-									>
-										<Tags className="h-3 w-3 mr-1" />
-										{t("viewer.manage")}
-									</Button>
-								)}
-							</div>
-						) : onManageTopics ? (
-							<Button
-								variant="outline"
-								size="sm"
-								onClick={() => onManageTopics(file)}
-								className="h-7 px-2 text-xs gap-1"
-							>
-								<Tags className="h-3 w-3" />
-								{t("viewer.addTopics")}
-							</Button>
-						) : null}
-					</div>
-					<div className="flex flex-wrap items-center gap-1 sm:justify-end">
-						{!isWorkspaceFile && <FileIndexAction filePath={file.path} />}
-						{file.type === "pdf" && (
-							<Button
-								variant="default"
-								size="sm"
-								onClick={pdfPageSelector.openSelector}
-							>
-								<BookmarkPlus className="h-4 w-4 mr-2" />
-								<span className="hidden sm:inline">
-									{t("viewer.convertToKnowledge")}
-								</span>
-							</Button>
-						)}
-						{(file.type === "text" ||
+	// The header's actions: drawn as icons, or in one menu when the viewer is narrow.
+	const indexActions = useFileIndexActions(file.path, !isWorkspaceFile);
+	const converting = sourceStatus.isGenerating || isProcessing;
+	const convertLabel = t("viewer.convertToKnowledge");
+	const convertIcon = <BookmarkPlus className="h-4 w-4 text-primary" />;
+	const convertAction: ViewerAction | null =
+		file.type === "pdf"
+			? {
+					id: "convert",
+					label: convertLabel,
+					icon: convertIcon,
+					onSelect: pdfPageSelector.openSelector,
+				}
+			: file.type === "excel"
+				? {
+						id: "convert",
+						label: convertLabel,
+						icon: convertIcon,
+						onSelect: excelSheetSelector.openSelector,
+					}
+				: (file.type === "text" ||
 							file.type === "markdown" ||
 							file.type === "other" ||
 							file.type === "presentation") &&
-							onConvertToKnowledge && (
-								<Button
-									variant="default"
-									size="sm"
-									onClick={() => onConvertToKnowledge(file)}
-									disabled={sourceStatus.isGenerating || isProcessing}
-								>
-									<BookmarkPlus className="h-4 w-4 mr-2" />
-									<span className="hidden sm:inline">
-										{sourceStatus.isGenerating || isProcessing
-											? t("viewer.converting")
-											: t("viewer.convertToKnowledge")}
-									</span>
-								</Button>
-							)}
-						{file.type === "excel" && (
-							<Button
-								variant="default"
-								size="sm"
-								onClick={excelSheetSelector.openSelector}
-							>
-								<BookmarkPlus className="h-4 w-4 mr-2" />
-								<span className="hidden sm:inline">
-									{t("viewer.convertToKnowledge")}
-								</span>
-							</Button>
-						)}
-						<Button
-							variant={showProperties ? "secondary" : "ghost"}
-							size="sm"
-							onClick={() => setShowProperties(!showProperties)}
-						>
-							<Info className="h-4 w-4" />
-						</Button>
-						{onDownload && (
-							<Button variant="ghost" size="sm" onClick={onDownload}>
-								<Download className="h-4 w-4" />
-							</Button>
-						)}
-						{onDelete && (
-							<Button
-								variant="ghost"
-								size="sm"
-								onClick={onDelete}
-								className="text-destructive hover:text-destructive"
-							>
-								<Trash2 className="h-4 w-4" />
-							</Button>
-						)}
-						{onClose && (
-							<Button variant="ghost" size="sm" onClick={onClose}>
-								<X className="h-4 w-4" />
-							</Button>
-						)}
-					</div>
-				</div>
-			)}
+						onConvertToKnowledge
+					? {
+							id: "convert",
+							label: converting ? t("viewer.converting") : convertLabel,
+							icon: convertIcon,
+							disabled: converting,
+							onSelect: () => onConvertToKnowledge(file),
+						}
+					: null;
+	const headerActions: ViewerAction[] = [
+		...indexActions.actions,
+		...(convertAction ? [convertAction] : []),
+		{
+			id: "properties",
+			label: t("viewer.properties"),
+			icon: <Info className="h-4 w-4" />,
+			pressed: showProperties,
+			onSelect: () => setShowProperties(!showProperties),
+		},
+		...(onDownload
+			? [
+					{
+						id: "download",
+						label: t("viewer.download"),
+						icon: <Download className="h-4 w-4" />,
+						onSelect: onDownload,
+					},
+				]
+			: []),
+		...(onDelete
+			? [
+					{
+						id: "delete",
+						label: t("viewer.delete"),
+						icon: <Trash2 className="h-4 w-4" />,
+						onSelect: onDelete,
+						destructive: true,
+					},
+				]
+			: []),
+	];
+	const headerDetail = file.metadata?.pageCount
+		? t("viewer.pages", { count: file.metadata.pageCount })
+		: file.metadata?.sheetCount
+			? t("viewer.sheets", { count: file.metadata.sheetCount })
+			: undefined;
+
+	return (
+		<div className="flex h-full min-w-0 flex-1 flex-col bg-card">
+			<DocumentViewerHeader
+				title={file.name}
+				detail={headerDetail}
+				leading={compact ? compactNavigatorToggle : undefined}
+				topics={fileTopics}
+				activeTopicIds={selectedTopicIds}
+				onTopicClick={onTopicClick}
+				onManageTopics={onManageTopics ? () => onManageTopics(file) : undefined}
+				actions={headerActions}
+				onClose={onClose}
+			/>
+			{indexActions.dialogs}
 
 			{/* Content Area - Flex layout */}
 			<div className="flex-1 flex flex-col overflow-hidden">
@@ -640,6 +442,20 @@ export const DocumentViewer = React.memo(function DocumentViewer({
 						onKeepMine={sync.keepMine}
 					/>
 				)}
+				{inHostedApp && hosted.app ? (
+					hosted.available ? (
+						<HostedAppFrame
+							app={hosted.app}
+							path={sandboxPath}
+							home={HOSTED_APPS_DATA_DIR}
+						/>
+					) : (
+						<div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
+							{t("viewer.loadingPreview")}
+						</div>
+					)
+				) : null}
+
 				{/* Preview Section - Takes remaining space */}
 				{file.type === "pdf" && previewUrl && (
 					<div className="flex-1 overflow-hidden p-3 sm:p-4">

@@ -683,6 +683,15 @@ export class DocumentFileSystem {
 		);
 	}
 
+	private isAlreadyExistsError(error: unknown): boolean {
+		return !!(
+			error &&
+			typeof error === "object" &&
+			"code" in error &&
+			error.code === "EEXIST"
+		);
+	}
+
 	private async ensureDirectory(fullPath: string): Promise<void> {
 		await initializeFs();
 		fullPath = fullPath.replace(/\\/g, "/");
@@ -1079,11 +1088,21 @@ export class DocumentFileSystem {
 		try {
 			await doWrite();
 		} catch (err) {
-			if (!this.isNotFoundError(err)) throw err;
-			// IndexedDB-backed ZenFS can briefly miss a newly-created parent across
-			// contexts. Re-ensure the directory and retry once.
-			await this.ensureDirectory(dirPath);
-			await doWrite();
+			if (this.isAlreadyExistsError(err)) {
+				// Another context made this file after this one last loaded the
+				// store: the path is missing from this context's table, so the
+				// write tried to create it, and the folder already lists it. Load
+				// the store and write over the file, as asked.
+				await this.invalidateCacheAndRefreshFs(true);
+				operation = "write";
+				await doWrite();
+			} else {
+				if (!this.isNotFoundError(err)) throw err;
+				// IndexedDB-backed ZenFS can briefly miss a newly-created parent across
+				// contexts. Re-ensure the directory and retry once.
+				await this.ensureDirectory(dirPath);
+				await doWrite();
+			}
 		}
 
 		if (notify) {

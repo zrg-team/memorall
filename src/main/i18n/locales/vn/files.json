@@ -52,12 +52,14 @@
 		"sheets": "{{count}} bảng tính",
 		"manage": "Quản lý",
 		"addTopics": "Thêm chủ đề",
+		"manageTopics": "Quản lý chủ đề",
 		"convertToKnowledge": "Chuyển đổi thành kiến thức",
 		"converting": "Đang chuyển đổi...",
 		"properties": "Thuộc tính",
 		"download": "Tải xuống",
 		"delete": "Xóa",
 		"close": "Đóng",
+		"moreActions": "Thêm thao tác",
 		"loadingPreview": "Đang tải xem trước...",
 		"documentInformation": "Thông tin tệp",
 		"title": "Tiêu đề",
@@ -148,7 +150,8 @@
 		"extensionRequired": "Phần mở rộng là bắt buộc",
 		"invalidCharacters": "Tên chứa ký tự không hợp lệ",
 		"cancel": "Hủy",
-		"create": "Tạo"
+		"create": "Tạo",
+		"appsLabel": "Ứng dụng"
 	},
 	"editor": {
 		"unsaved": "Chưa lưu",
@@ -316,6 +319,40 @@
 			"select": "Bấm vào một thẻ để xem ở đây.",
 			"search": "Tìm thẻ",
 			"fit": "Vừa khung"
+		}
+	},
+	"hostedApp": {
+		"opening": "Đang mở {{app}}…",
+		"updated": "Đã cập nhật: tệp vừa thay đổi.",
+		"apps": {
+			"spreadsheet": "Bảng tính",
+			"documents": "Tài liệu",
+			"presentation": "Bài trình chiếu",
+			"whiteboard": "Bảng trắng",
+			"pdf": "PDF"
+		},
+		"picker": {
+			"title": "Mở một tệp",
+			"up": "Lên",
+			"empty": "Không có gì để mở ở đây.",
+			"open": "Mở",
+			"cancel": "Hủy"
+		},
+		"assistant": {
+			"title": "Trợ lý",
+			"newChat": "Cuộc trò chuyện mới",
+			"close": "Đóng",
+			"empty": "Hỏi về {{name}}, hoặc nói điều cần thay đổi: tôi dùng các công cụ của {{app}} và lưu vào tệp.",
+			"placeholder": "Hỏi hoặc nói điều cần thay đổi…",
+			"send": "Gửi",
+			"stop": "Dừng",
+			"working": "Đang làm…",
+			"running": "Đang chạy {{commands}}…",
+			"saved": "Đã lưu {{name}}.",
+			"read": "Đã đọc {{name}}.",
+			"failed_one": "{{count}} lệnh thất bại.",
+			"failed_other": "{{count}} lệnh thất bại.",
+			"stopped": "Đã dừng."
 		}
 	}
 }

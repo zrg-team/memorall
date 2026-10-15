@@ -1,7 +1,12 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import NiceModal, { useModal } from "@ebay/nice-modal-react";
 import { FileText } from "lucide-react";
+import {
+	HOSTED_APPS,
+	type HostedAppId,
+} from "@/services/memon/apps/hosted/catalog";
+import { availableHostedApps } from "@/services/memon/apps/hosted/engines";
 
 import {
 	Dialog,
@@ -32,6 +37,17 @@ export const CreateDocumentDialog = NiceModal.create<object>(() => {
 	const [customExt, setCustomExt] = useState("");
 	const [isCustom, setIsCustom] = useState(false);
 	const [error, setError] = useState("");
+	// Spreadsheets, documents, decks, boards and PDFs, when this build has the apps.
+	const [apps, setApps] = useState<HostedAppId[]>([]);
+	useEffect(() => {
+		let live = true;
+		void availableHostedApps().then((ids) => {
+			if (live) setApps(ids);
+		});
+		return () => {
+			live = false;
+		};
+	}, []);
 
 	const activeExt = isCustom
 		? customExt.trim().replace(/^\.+/, "")
@@ -102,6 +118,41 @@ export const CreateDocumentDialog = NiceModal.create<object>(() => {
 						/>
 						{error && <p className="text-sm text-destructive">{error}</p>}
 					</div>
+
+					{apps.length > 0 && (
+						<div className="space-y-2">
+							<Label>{t("create.appsLabel", { defaultValue: "Apps" })}</Label>
+							<div className="flex flex-wrap gap-1.5">
+								{apps.map((id) => {
+									const { extension } = HOSTED_APPS[id].newFile;
+									return (
+										<button
+											key={id}
+											type="button"
+											onClick={() => {
+												setSelectedExt(extension);
+												setIsCustom(false);
+												setError("");
+											}}
+											className={cn(
+												"px-2.5 py-1 rounded-md text-xs border transition-colors",
+												!isCustom && selectedExt === extension
+													? "bg-primary text-primary-foreground border-primary"
+													: "bg-muted/40 text-muted-foreground border-border hover:bg-muted hover:text-foreground",
+											)}
+										>
+											{t(`hostedApp.apps.${id}`, {
+												defaultValue: HOSTED_APPS[id].name,
+											})}
+											<span className="ml-1 font-mono opacity-70">
+												.{extension}
+											</span>
+										</button>
+									);
+								})}
+							</div>
+						</div>
+					)}
 
 					{/* Extension */}
 					<div className="space-y-2">

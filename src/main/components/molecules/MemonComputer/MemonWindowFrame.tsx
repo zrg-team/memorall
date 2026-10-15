@@ -1,4 +1,5 @@
 import {
+	BookOpenText,
 	CalendarClock,
 	Eye,
 	FileText,
@@ -8,8 +9,12 @@ import {
 	Maximize2,
 	MessageSquarePlus,
 	Minus,
+	NotebookText,
 	Pi,
 	Plug,
+	Presentation,
+	Shapes,
+	Sheet,
 	Sparkles,
 	SquareTerminal,
 	WandSparkles,
@@ -39,6 +44,11 @@ export const MEMON_APP_ICONS: Record<
 	connections: Plug,
 	visualize: LayoutDashboard,
 	pi: Pi,
+	spreadsheet: Sheet,
+	documents: NotebookText,
+	presentation: Presentation,
+	whiteboard: Shapes,
+	pdf: BookOpenText,
 };
 
 /** Each app's tile color, shared by window title bars, the dock and the launcher. */
@@ -55,6 +65,11 @@ export const MEMON_APP_TINTS: Record<MemonWindowApp, string> = {
 	connections: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300",
 	visualize: "bg-indigo-500/15 text-indigo-700 dark:text-indigo-300",
 	pi: "bg-lime-500/15 text-lime-700 dark:text-lime-300",
+	spreadsheet: "bg-green-500/15 text-green-700 dark:text-green-300",
+	documents: "bg-blue-500/15 text-blue-700 dark:text-blue-300",
+	presentation: "bg-orange-500/15 text-orange-700 dark:text-orange-300",
+	whiteboard: "bg-amber-500/15 text-amber-700 dark:text-amber-300",
+	pdf: "bg-red-500/15 text-red-700 dark:text-red-300",
 };
 
 const LOGO_URL = platform.assets.url("logo.png");

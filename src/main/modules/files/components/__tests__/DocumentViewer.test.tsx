@@ -37,9 +37,9 @@ vi.mock("../../editors", () => ({
 }));
 vi.mock("../../editors/CodeEditor", () => ({ CodeEditor: () => null }));
 vi.mock("../../folder-index", () => ({
-	FileIndexAction: () => {
+	useFileIndexActions: () => {
 		mocks.actionRenders();
-		return null;
+		return { actions: [], dialogs: null };
 	},
 }));
 vi.mock("../PDFPageSelector", () => ({ PDFPageSelector: () => null }));

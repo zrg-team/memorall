@@ -6,6 +6,7 @@ import type { MemonStudioToolId, MemonWindowApp } from "./constants";
 import type { MemonFeatureConfig } from "./feature-config";
 import type { MemonScheduleInput } from "./memon-machine";
 import type { MemonKitAppId } from "./apps";
+import type { HostedAppId } from "./apps/hosted/catalog";
 import type { MemonStudioRequest } from "./studio-app";
 import type { MemonTerminalCompletion } from "./terminal/terminal-commands";
 import type {
@@ -99,6 +100,8 @@ export interface MemonOperationPayloadMap {
 	/** The user edited the open visual's source and saved it. */
 	"visual.save": Keyed<{ source: string }>;
 	"editor.update": Keyed<{ content: string }>;
+	/** The user saved a file in a hosted app (Spreadsheet, Documents…). */
+	"hosted.saved": Keyed<{ app: HostedAppId; path: string }>;
 	/**
 	 * `base`: the text the user's edits started from; the save is refused if
 	 * the file no longer holds it, unless `overwrite`.

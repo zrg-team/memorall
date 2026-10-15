@@ -50,6 +50,7 @@ import type { DocumentTreeNode, DocumentType } from "@/types/document-library";
 import { cn } from "@/lib/utils";
 import { contentVisibilityAuto } from "@/main/components/atoms/content-visibility";
 import { FolderIndexMenuItems } from "../folder-index";
+import { hostedFileLook } from "../utils/hosted-file-look";
 
 interface DocumentTreeProps {
 	tree: DocumentTreeNode[];
@@ -206,8 +207,9 @@ const TreeItem = React.memo(function TreeItemRow({
 		iconColorClass = isMapped ? "text-amber-500" : "text-blue-500";
 	} else {
 		const fileType = node.file?.type || "other";
-		IconComponent = FILE_ICONS[fileType];
-		iconColorClass = FILE_COLORS[fileType];
+		const look = hostedFileLook(node.name);
+		IconComponent = look?.icon ?? FILE_ICONS[fileType];
+		iconColorClass = look?.color ?? FILE_COLORS[fileType];
 	}
 
 	const handleRenameSubmit = () => {
