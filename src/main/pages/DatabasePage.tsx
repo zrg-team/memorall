@@ -21,6 +21,7 @@ import {
 	ne,
 	isNull,
 	isNotNull,
+	sql,
 } from "drizzle-orm";
 
 import { Button } from "@/main/components/ui/button";
@@ -216,13 +217,14 @@ export const DatabasePage: React.FC = () => {
 	const loadStats = async () => {
 		try {
 			await serviceManager.databaseService.use(async ({ db, schema }) => {
-				// Build dynamic promise array for all entities
+				// Counted in the database: reading every row to count it moved
+				// whole tables (embeddings, tool output) across the bridge.
 				const entityKeys = Object.keys(schema) as EntityType[];
 				const countPromises = entityKeys.map((entityKey) =>
 					db
-						.select()
+						.select({ count: sql<number>`count(*)::int` })
 						.from(schema[entityKey])
-						.then((r) => r.length),
+						.then((rows) => rows[0]?.count ?? 0),
 				);
 
 				const counts = await Promise.all(countPromises);

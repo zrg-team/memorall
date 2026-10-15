@@ -1,4 +1,6 @@
 import React from "react";
+import { rootErrorMessage } from "@/utils/error-message";
+import { logError } from "@/utils/logger";
 import type { UsageRequest } from "../types";
 import { loadUsageRequests } from "../services/usage-repository";
 
@@ -29,10 +31,11 @@ export const useUsageRequests = (since: number) => {
 			})
 			.catch((error: unknown) => {
 				if (cancelled) return;
+				logError("[Usage] Couldn't load usage:", error);
 				setState((previous) => ({
 					...previous,
 					loading: false,
-					error: error instanceof Error ? error.message : String(error),
+					error: rootErrorMessage(error),
 				}));
 			});
 		return () => {
