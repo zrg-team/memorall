@@ -9,8 +9,24 @@ import remarkMath from "remark-math";
 import { cn } from "@/lib/utils";
 import { CodeBlock, CodeBlockCopyButton } from "./code-block";
 import "katex/dist/katex.min.css";
-import hardenReactMarkdown from "harden-react-markdown";
+import hardenReactMarkdownExport from "harden-react-markdown";
 import { logError, logInfo } from "@/utils/logger";
+
+/**
+ * harden-react-markdown is CommonJS (`exports.default`, marked `__esModule`),
+ * and bundlers disagree on what its default import is. Rspack (the extension)
+ * honours `__esModule` and gives the function; Rolldown (web, desktop) follows
+ * Node for this `"type": "module"` package and gives the whole exports object,
+ * so calling it threw while the app loaded and left the page blank.
+ */
+const hardenReactMarkdown: typeof hardenReactMarkdownExport =
+	typeof hardenReactMarkdownExport === "function"
+		? hardenReactMarkdownExport
+		: (
+				hardenReactMarkdownExport as unknown as {
+					default: typeof hardenReactMarkdownExport;
+				}
+			).default;
 
 /**
  * Parses markdown text and removes incomplete tokens to prevent partial rendering
