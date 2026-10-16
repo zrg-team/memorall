@@ -173,6 +173,18 @@ export interface MemonOperationPayloadMap {
 	 */
 	"piCode.pasteImage": Keyed<{ data: string; mimeType: string }>;
 	"piCode.resize": Keyed<{ columns: number; rows: number }>;
+	/** Starts fx again in its window, after it failed to start. */
+	"fx.start": Keyed;
+	/**
+	 * An fx view connects: fx takes its size, and the view replays fx's
+	 * output from the returned cursor. Null when fx is not running.
+	 */
+	"fx.attach": Keyed<{ columns: number; rows: number }>;
+	/** fx's terminal output after `cursor`, waiting up to `waitMs` for some. */
+	"fx.read": Keyed<{ cursor: number; waitMs: number }>;
+	/** Raw key data from the view (escape sequences, pastes). */
+	"fx.input": Keyed<{ data: string }>;
+	"fx.resize": Keyed<{ columns: number; rows: number }>;
 }
 
 export type MemonOperation = keyof MemonOperationPayloadMap;
@@ -188,16 +200,20 @@ export type MemonOperationResultMap = {
 					? MemonPiCodeFolder[]
 					: K extends "piCode.browse"
 						? MemonPiCodeBrowse | null
-						: K extends "piCode.attach"
+						: K extends "piCode.attach" | "fx.attach"
 							? { cursor: number } | null
 							: K extends "piCode.read"
 								? MemonPiCodeOutput
-								: K extends
-											| "piCode.input"
-											| "piCode.pasteImage"
-											| "piCode.resize"
-									? null
-									: MemonMachineSnapshot | null;
+								: K extends "fx.read"
+									? MemonFxOutput
+									: K extends
+												| "piCode.input"
+												| "piCode.pasteImage"
+												| "piCode.resize"
+												| "fx.input"
+												| "fx.resize"
+										? null
+										: MemonMachineSnapshot | null;
 };
 
 /** A read of pi code's terminal output. */
@@ -207,6 +223,16 @@ export interface MemonPiCodeOutput {
 	/** The cursor was out of date: clear the view and write `data`. */
 	reset: boolean;
 	/** pi is not running: stop reading. */
+	closed: boolean;
+}
+
+/** A read of fx's terminal output. */
+export interface MemonFxOutput {
+	data: string;
+	cursor: number;
+	/** The cursor was out of date: clear the view and replay `data`. */
+	reset: boolean;
+	/** fx is not running: stop reading. */
 	closed: boolean;
 }
 

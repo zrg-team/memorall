@@ -56,16 +56,14 @@ import {
 } from "./context-menu-actions";
 import { MemonAgentCursor, MemonUserCursor } from "./MemonAgentCursor";
 import { MemonDesktopIcons } from "./MemonDesktopIcons";
-import {
-	MEMON_APP_ICONS,
-	MEMON_APP_TINTS,
-	MemonLogo,
-	MemonWindowFrame,
-} from "./MemonWindowFrame";
+import type { MemonDockLauncher } from "./dock-layout";
+import { MemonDock } from "./MemonDock";
+import { MemonLogo, MemonWindowFrame } from "./MemonWindowFrame";
 import { BrowserWindow } from "./windows/BrowserWindow";
 import { EditorWindow } from "./windows/EditorWindow";
 import { FilesWindow } from "./windows/FilesWindow";
 import { TerminalWindow } from "./windows/TerminalWindow";
+import { FxWindow } from "./windows/FxWindow";
 import { PiCodeWindow } from "./windows/PiCodeWindow";
 import { MemonWindowErrorBoundary } from "./MemonWindowErrorBoundary";
 import { ViewerWindow } from "./windows/ViewerWindow";
@@ -153,81 +151,6 @@ const YOU_BUTTON =
 const MEMON_BUTTON =
 	"h-8 rounded-md border-transparent bg-blue-600 text-[13px] font-semibold text-white hover:bg-blue-500 hover:text-white";
 
-const DockButton: React.FC<{
-	app: MemonWindowApp;
-	label: string;
-	open?: MemonWindowState;
-	active: boolean;
-	compact: boolean;
-	disabled?: boolean;
-	reason?: string;
-	/** The app is working on its own (pi code mid-turn), shown in the dot. */
-	busy?: boolean;
-	/** The app waits for the user's answer (an agent request in pi code). */
-	attention?: boolean;
-	onClick: () => void;
-}> = ({
-	app,
-	label,
-	open,
-	active,
-	compact,
-	disabled,
-	reason,
-	busy,
-	attention,
-	onClick,
-}) => {
-	const Icon = MEMON_APP_ICONS[app];
-	const name = open ? `${label} · ${open.id}` : label;
-	return (
-		<button
-			type="button"
-			disabled={disabled}
-			title={disabled ? reason : name}
-			aria-label={name}
-			aria-current={active ? "true" : undefined}
-			onClick={onClick}
-			className={cn(
-				"group relative flex shrink-0 flex-col items-center justify-center gap-0.5 rounded-lg px-1.5 text-[11px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40",
-				compact ? "h-10 w-10" : "h-12 min-w-[60px]",
-				active
-					? "bg-blue-500/10 text-foreground"
-					: open
-						? "text-foreground hover:bg-muted"
-						: "text-muted-foreground hover:bg-muted hover:text-foreground",
-			)}
-		>
-			<span
-				className={cn(
-					"flex h-6 w-6 items-center justify-center rounded-md transition-transform duration-150 group-hover:-translate-y-px group-disabled:translate-y-0 motion-reduce:transition-none",
-					MEMON_APP_TINTS[app],
-				)}
-			>
-				<Icon size={14} />
-			</span>
-			{!compact ? (
-				<span className="max-w-[72px] truncate leading-tight">{label}</span>
-			) : null}
-			{open ? (
-				<span
-					className={cn(
-						"absolute bottom-px h-[3px] rounded-full",
-						active ? "w-4" : "w-1",
-						attention
-							? "w-4 bg-amber-500 motion-safe:animate-pulse"
-							: busy
-								? "bg-emerald-500 motion-safe:animate-pulse"
-								: active
-									? "bg-blue-500"
-									: "bg-muted-foreground/60",
-					)}
-				/>
-			) : null}
-		</button>
-	);
-};
-
 const windowTitle = (
 	snapshot: MemonMachineSnapshot,
 	window: MemonWindowState,
@@ -278,6 +201,10 @@ const windowTitle = (
 			return snapshot.piCode?.cwd
 				? `${t("memonComputer.apps.pi")} · ${memonDisplayPath(snapshot.piCode.cwd, snapshot.home)}`
 				: t("memonComputer.apps.pi");
+		case "fx":
+			return snapshot.fx?.cwd
+				? `${t("memonComputer.apps.fx")} · ${memonDisplayPath(snapshot.fx.cwd, snapshot.home)}`
+				: t("memonComputer.apps.fx");
 	}
 };
 
@@ -484,11 +411,7 @@ export const MemonComputerPanel = React.memo<{
 	);
 	const enabledApps = snapshot.apps.filter((app) => app.enabled);
 	// The agent's apps, then the built-in ones.
-	const launchers: Array<{
-		id: MemonWindowApp;
-		available: boolean;
-		reason?: string;
-	}> = [
+	const launchers: MemonDockLauncher[] = [
 		...enabledApps.map(({ id, available, reason }) => ({
 			id,
 			available,
@@ -579,6 +502,15 @@ export const MemonComputerPanel = React.memo<{
 						machineKey={key}
 						state={snapshot.piCode}
 						home={snapshot.home}
+						focused={window.id === snapshot.focusedWindowId}
+						send={send}
+					/>
+				);
+			case "fx":
+				return (
+					<FxWindow
+						machineKey={key}
+						state={snapshot.fx}
 						focused={window.id === snapshot.focusedWindowId}
 						send={send}
 					/>
@@ -1045,60 +977,17 @@ export const MemonComputerPanel = React.memo<{
 						) : null}
 					</div>
 
-					<nav
-						aria-label={t("memonComputer.title")}
-						className={cn(
-							"flex shrink-0 items-center overflow-x-auto overflow-y-hidden border-t bg-background px-2",
-							compact ? "h-12" : "h-14",
-						)}
-					>
-						<div className="mx-auto flex items-center gap-1">
-							{launchers.map((app) => {
-								const windowApp: MemonWindowApp = app.id;
-								const open = snapshot.windows.find(
-									(window) => window.app === windowApp,
-								);
-								return (
-									<DockButton
-										key={app.id}
-										app={windowApp}
-										label={t(`memonComputer.apps.${app.id}`)}
-										open={open}
-										active={Boolean(
-											open &&
-												open.id === snapshot.focusedWindowId &&
-												!open.minimized,
-										)}
-										compact={compact}
-										disabled={!app.available}
-										reason={app.reason}
-										busy={windowApp === "pi" && snapshot.piCode?.working}
-										attention={
-											windowApp === "pi" && Boolean(snapshot.piCode?.approval)
-										}
-										onClick={() => openApp(windowApp)}
-									/>
-								);
-							})}
-							{snapshot.windows.some((window) => window.app === "editor") ? (
-								<DockButton
-									app="editor"
-									label={t("memonComputer.apps.editor")}
-									open={snapshot.windows.find(
-										(window) => window.app === "editor",
-									)}
-									active={snapshot.windows.some(
-										(window) =>
-											window.app === "editor" &&
-											window.id === snapshot.focusedWindowId &&
-											!window.minimized,
-									)}
-									compact={compact}
-									onClick={() => openApp("editor")}
-								/>
-							) : null}
-						</div>
-					</nav>
+					<MemonDock
+						label={t("memonComputer.title")}
+						launchers={launchers}
+						windows={snapshot.windows}
+						focusedWindowId={snapshot.focusedWindowId}
+						compact={compact}
+						piWorking={snapshot.piCode?.working}
+						piAttention={Boolean(snapshot.piCode?.approval)}
+						fxWorking={snapshot.fx?.working}
+						onOpen={openApp}
+					/>
 					<MemonUserCursor
 						areaRef={areaRef}
 						enabled={view === "desktop" && !captureMode}

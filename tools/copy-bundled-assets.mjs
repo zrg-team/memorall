@@ -21,6 +21,10 @@
     - Source: node_modules/pdfjs-dist/build
     - Dest:   public/vendors/pdfjs
 
+ 4b. fx terminal (libfx), for MemonOS's fx app
+    - Source: node_modules/libfx/fx-term.wasm
+    - Dest:   public/vendors/fx
+
  5-6. Sandbox runtime and HyperFrames vendor assets (see inline comments)
 
  7. Patch @hyperframes/player CDN fallback
@@ -552,6 +556,28 @@ async function main() {
 		console.log("✅ PDF.js worker copied.\n");
 	} else {
 		console.warn("⚠️  pdfjs-dist worker not found, skipping.\n");
+	}
+
+	// 4b. Copy the fx terminal. MemonOS loads it from here (libfx/wasm takes
+	// the asset's URL), since MV3 runs no remote WebAssembly.
+	const fxTermSrc = path.resolve(
+		process.cwd(),
+		"node_modules/libfx/fx-term.wasm",
+	);
+	const fxTermDest = path.resolve(
+		process.cwd(),
+		"public/vendors/fx/fx-term.wasm",
+	);
+	if (fs.existsSync(fxTermSrc)) {
+		copyFile(fxTermSrc, fxTermDest);
+		// Apache-2.0: the license travels with the WebAssembly it covers.
+		copyFile(
+			path.resolve(process.cwd(), "node_modules/libfx/LICENSE"),
+			path.resolve(process.cwd(), "public/vendors/fx/LICENSE"),
+		);
+		console.log("✅ fx terminal copied.\n");
+	} else {
+		console.warn("⚠️  libfx fx-term.wasm not found, skipping.\n");
 	}
 
 	// 5. Copy sandbox assets to extension root (for manifest sandbox.pages)

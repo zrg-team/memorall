@@ -97,7 +97,9 @@ export const MemonComputerStart: React.FC<{
 							{[
 								...MEMON_APP_IDS.filter((app) => agent.config.apps[app]),
 								...MEMON_BUILTIN_APPS.filter(
-									(app) => app !== "pi" || agent.config.piCode,
+									(app) =>
+										(app !== "pi" || agent.config.piCode) &&
+										(app !== "fx" || agent.config.fx),
 								),
 							].map((app) => {
 								const Icon = MEMON_APP_ICONS[app];

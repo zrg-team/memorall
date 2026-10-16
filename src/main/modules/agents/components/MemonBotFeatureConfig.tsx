@@ -4,6 +4,7 @@ import {
 	LayoutDashboard,
 	ListChecks,
 	Pi,
+	SquareFunction,
 	SquareTerminal,
 } from "lucide-react";
 import type React from "react";
@@ -191,6 +192,27 @@ export const MemonBotFeatureConfig: React.FC = () => {
 					checked={config.piCode}
 					onCheckedChange={(checked) => patch({ piCode: checked })}
 					aria-label={t("agentSettings.memon.piCode")}
+				/>
+			</div>
+
+			<div className="flex items-start justify-between gap-3 rounded-xl border border-border/60 px-3 py-2.5">
+				<span className="flex min-w-0 items-start gap-3">
+					<span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-neutral-500/20 text-neutral-800 dark:text-neutral-200">
+						<SquareFunction size={14} />
+					</span>
+					<span className="min-w-0">
+						<span className="block text-sm font-medium">
+							{t("agentSettings.memon.fx")}
+						</span>
+						<span className="block text-[11px] leading-snug text-muted-foreground">
+							{t("agentSettings.memon.fxHint")}
+						</span>
+					</span>
+				</span>
+				<Switch
+					checked={config.fx}
+					onCheckedChange={(checked) => patch({ fx: checked })}
+					aria-label={t("agentSettings.memon.fx")}
 				/>
 			</div>
 

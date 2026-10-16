@@ -610,11 +610,24 @@
 			"connections": "Kết nối",
 			"visualize": "Trực quan hóa",
 			"pi": "pi code",
+			"fx": "fx",
 			"spreadsheet": "Bảng tính",
 			"documents": "Tài liệu",
 			"presentation": "Trình chiếu",
 			"whiteboard": "Bảng trắng",
 			"pdf": "PDF"
+		},
+		"dock": {
+			"groups": {
+				"office": "Văn phòng",
+				"create": "Sáng tạo",
+				"agent": "Agent"
+			}
+		},
+		"fx": {
+			"starting": "Đang khởi động fx…",
+			"error": "Không khởi động được fx: {{error}}",
+			"retry": "Khởi động lại"
 		},
 		"piCode": {
 			"starting": "Đang khởi động pi…",

@@ -60,6 +60,7 @@ import {
 } from "./settings-ports";
 import { STUDIO_USAGE_SOURCE } from "@/services/model-usage/model-usage-ledger";
 import { createStudioPort, type MemonStudioPort } from "./studio-app";
+import { createFxPort } from "./apps/fx/fx-port";
 import { createPiCodePort } from "./apps/pi-code/pi-code-port";
 import { createMemonModelsPort, type MemonModelsPort } from "./models-port";
 import { formatDownloadSize, MEMON_DOWNLOAD_MAX_BYTES } from "./download";
@@ -622,28 +623,39 @@ export const createMemonPorts = (
 	overrides: Partial<MemonPorts> = {},
 	/** The one way the computer's apps reach the models (metered). */
 	models: MemonModelsPort = createMemonModelsPort(),
-): MemonPorts => ({
-	browser: overrides.browser ?? createMemonBrowserPort(),
-	embedded: overrides.embedded ?? createMemonEmbeddedPort(),
-	files: overrides.files ?? createMemonFilesPort(),
-	terminal: overrides.terminal ?? createMemonTerminalPort(),
-	scheduler: overrides.scheduler ?? createMemonSchedulerPort(),
-	studio: overrides.studio ?? createMemonStudioPort(models),
-	skills: overrides.skills ?? createMemonSkillsPort(),
-	connections: overrides.connections ?? createMemonConnectionsPort(),
-	download: overrides.download ?? createMemonDownloadPort(),
-	homes: overrides.homes ?? createMemonHomePort(),
-	models: overrides.models ?? models,
-	piCode:
-		overrides.piCode ??
-		createPiCodePort({
-			fs: getFlowFileSystem,
-			sandbox: resolveMemonSandbox,
-			models,
-		}),
-	hosted:
-		overrides.hosted ??
-		createHostedAppsPort(getFlowFileSystem(), (listener) =>
-			documentFileSystemService.onFilesystemChanged(() => listener()),
-		),
-});
+): MemonPorts => {
+	const skills = overrides.skills ?? createMemonSkillsPort();
+	return {
+		browser: overrides.browser ?? createMemonBrowserPort(),
+		embedded: overrides.embedded ?? createMemonEmbeddedPort(),
+		files: overrides.files ?? createMemonFilesPort(),
+		terminal: overrides.terminal ?? createMemonTerminalPort(),
+		scheduler: overrides.scheduler ?? createMemonSchedulerPort(),
+		studio: overrides.studio ?? createMemonStudioPort(models),
+		skills,
+		connections: overrides.connections ?? createMemonConnectionsPort(),
+		download: overrides.download ?? createMemonDownloadPort(),
+		homes: overrides.homes ?? createMemonHomePort(),
+		models: overrides.models ?? models,
+		piCode:
+			overrides.piCode ??
+			createPiCodePort({
+				fs: getFlowFileSystem,
+				sandbox: resolveMemonSandbox,
+				models,
+			}),
+		fx:
+			overrides.fx ??
+			createFxPort({
+				fs: getFlowFileSystem,
+				sandbox: resolveMemonSandbox,
+				models,
+				skills,
+			}),
+		hosted:
+			overrides.hosted ??
+			createHostedAppsPort(getFlowFileSystem(), (listener) =>
+				documentFileSystemService.onFilesystemChanged(() => listener()),
+			),
+	};
+};

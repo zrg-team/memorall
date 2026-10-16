@@ -577,7 +577,8 @@
 				"studio": "Studio",
 				"skills": "Skills",
 				"connections": "Connections",
-				"pi": "pi code"
+				"pi": "pi code",
+				"fx": "fx"
 			},
 			"appsShort": "Apps",
 			"apps": {
@@ -615,7 +616,9 @@
 			"keepDirectTools": "Also keep the direct tools",
 			"keepDirectToolsHint": "Keeps web_*, fs_* and sandbox_* available next to the computer, for bulk file work.",
 			"piCode": "pi code",
-			"piCodeHint": "The pi coding agent on the desktop. MemonOS Bot can hand it coding work, and asks you in the pi code window first. Off, it is neither on the desktop nor used."
+			"piCodeHint": "The pi coding agent on the desktop. MemonOS Bot can hand it coding work, and asks you in the pi code window first. Off, it is neither on the desktop nor used.",
+			"fx": "fx",
+			"fxHint": "Vercel's fx coding agent on the desktop, in its own terminal. It uses your Memorall model and this agent's skills. Off, it is not on the desktop."
 		},
 		"folderIndex": {
 			"tools": "Tools",

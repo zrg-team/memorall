@@ -606,11 +606,24 @@
 			"connections": "Connections",
 			"visualize": "Visualize",
 			"pi": "pi code",
+			"fx": "fx",
 			"spreadsheet": "Spreadsheet",
 			"documents": "Documents",
 			"presentation": "Presentation",
 			"whiteboard": "Whiteboard",
 			"pdf": "PDF"
+		},
+		"dock": {
+			"groups": {
+				"office": "Office",
+				"create": "Create",
+				"agent": "Agent"
+			}
+		},
+		"fx": {
+			"starting": "Starting fx…",
+			"error": "fx could not start: {{error}}",
+			"retry": "Start again"
 		},
 		"piCode": {
 			"starting": "Starting pi…",

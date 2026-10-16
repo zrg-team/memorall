@@ -29,6 +29,10 @@ type InputOperation = Exclude<
 	| "piCode.input"
 	| "piCode.pasteImage"
 	| "piCode.resize"
+	| "fx.attach"
+	| "fx.read"
+	| "fx.input"
+	| "fx.resize"
 >;
 
 /** The open chat's agent, when it is a MemonOS Bot. */

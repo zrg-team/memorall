@@ -455,6 +455,8 @@ export interface MemonMachineSnapshot {
 	visual: MemonVisualState;
 	/** pi code, while its window is open (absent before it is opened). */
 	piCode?: MemonPiCodeState;
+	/** fx, while its window is open (absent before it is opened). */
+	fx?: MemonFxState;
 	/** The agent's home folder, `/agents/<agent name>` (shown as `~`). */
 	home: string;
 	cursor: MemonCursorState | null;
@@ -482,6 +484,20 @@ export interface MemonMachineSummary {
 	showComputer: "auto" | "manual";
 	updatedAt: number;
 	disposed?: boolean;
+}
+
+/**
+ * fx: Vercel's fx coding agent, its terminal running in the computer with
+ * the chat's model. Its screen is a terminal the window streams.
+ */
+export interface MemonFxState {
+	status: "starting" | "running" | "error";
+	/** Which start this is: a view that saw another one replays from scratch. */
+	instance?: number;
+	/** fx is answering or running a command. */
+	working: boolean;
+	cwd?: string;
+	error?: string;
 }
 
 /**

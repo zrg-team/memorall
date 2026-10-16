@@ -9,6 +9,7 @@ import {
 } from "../feature-config";
 import type { MemonEmbeddedPort } from "../embedded-browser";
 import { MemonApprovalRequiredError } from "../approval-error";
+import type { FxRunner, MemonFxPort } from "../apps/fx/fx-app";
 import type {
 	MemonPiCodePort,
 	PiCodeRunner,
@@ -2679,6 +2680,7 @@ describe("MemonMachine zipping a folder for the user", () => {
 			"studio",
 			"skills",
 			"connections",
+			"fx",
 		]);
 		expect(() => machine.openWindow("pi")).toThrow(
 			"pi code is turned off for this agent",
@@ -2801,5 +2803,156 @@ describe("MemonMachine zipping a folder for the user", () => {
 		expect(piCode.start).toHaveBeenCalledWith(
 			expect.objectContaining({ cwd: "/notes/app" }),
 		);
+	});
+});
+
+/** An fx port whose terminals do nothing; `exit()` ends the latest one. */
+const fakeFx = () => {
+	const exits: Array<() => void> = [];
+	const disposed = vi.fn(async () => {});
+	const port = {
+		start: vi.fn(
+			async ({ cwd, onExit }: { cwd: string; onExit: () => void }) => {
+				exits.push(onExit);
+				return {
+					status: () => ({ working: false, cwd }),
+					attach: () => 0,
+					read: async (cursor: number) => ({ data: "", cursor, reset: false }),
+					input: () => {},
+					resize: () => {},
+					dispose: disposed,
+				} satisfies FxRunner;
+			},
+		),
+	};
+	return {
+		port: port as typeof port & MemonFxPort,
+		disposed,
+		exit: () => exits.at(-1)?.(),
+	};
+};
+
+describe("MemonMachine fx", () => {
+	it("starts fx in the home when its window opens, and stops it when it closes", async () => {
+		const { ports } = createPorts();
+		const fx = fakeFx();
+		const machine = new MemonMachine("conversation-1", {
+			...ports,
+			fx: fx.port,
+		});
+		const home = machine.snapshot().home;
+
+		machine.openWindow("fx");
+
+		expect(fx.port.start).toHaveBeenCalledWith(
+			expect.objectContaining({ cwd: home, home }),
+		);
+		await vi.waitFor(() =>
+			expect(machine.snapshot().fx).toMatchObject({
+				status: "running",
+				cwd: home,
+				working: false,
+			}),
+		);
+		expect(machine.snapshot().builtInApps).toContain("fx");
+
+		const window = machine.findWindow("fx");
+		await machine.closeWindow(window?.id ?? "");
+		expect(fx.disposed).toHaveBeenCalled();
+		expect(machine.snapshot().fx).toBeUndefined();
+	});
+
+	it("closes fx's window when fx exits", async () => {
+		const { ports } = createPorts();
+		const fx = fakeFx();
+		const machine = new MemonMachine("conversation-1", {
+			...ports,
+			fx: fx.port,
+		});
+		machine.openWindow("fx");
+		await vi.waitFor(() =>
+			expect(machine.snapshot().fx?.status).toBe("running"),
+		);
+
+		fx.exit();
+
+		await vi.waitFor(() => expect(machine.findWindow("fx")).toBeUndefined());
+	});
+
+	it("takes fx off the desktop while it is turned off, quitting it", async () => {
+		const { ports } = createPorts();
+		const fx = fakeFx();
+		const machine = new MemonMachine("conversation-1", {
+			...ports,
+			fx: fx.port,
+		});
+		machine.openWindow("fx");
+		await vi.waitFor(() =>
+			expect(machine.snapshot().fx?.status).toBe("running"),
+		);
+
+		machine.configure({ ...DEFAULT_MEMON_FEATURE_CONFIG, fx: false });
+
+		await vi.waitFor(() => expect(machine.findWindow("fx")).toBeUndefined());
+		expect(fx.disposed).toHaveBeenCalled();
+		expect(machine.snapshot().builtInApps).not.toContain("fx");
+		expect(() => machine.openWindow("fx")).toThrow(
+			"fx is turned off for this agent",
+		);
+	});
+
+	it("opens fx from the Terminal in the tab's folder, and the tab exits", async () => {
+		const { ports } = createPorts();
+		const fx = fakeFx();
+		const machine = new MemonMachine("conversation-1", {
+			...ports,
+			fx: fx.port,
+		});
+		await machine.terminal.runCommand("cd /notes", { byUser: true });
+		machine.terminal.openTab();
+
+		await machine.terminal.runCommand("fx -c", {
+			byUser: true,
+			terminalId: "1",
+		});
+
+		expect(fx.port.start).toHaveBeenCalledWith(
+			expect.objectContaining({ cwd: "/notes", continueLast: true }),
+		);
+		expect(machine.snapshot().focusedWindowId).toBe(
+			machine.findWindow("fx")?.id,
+		);
+		expect(machine.snapshot().terminal.tabs.map((tab) => tab.id)).toEqual([
+			"2",
+		]);
+	});
+
+	it("says in the tab what fx cannot open, and the tab stays", async () => {
+		const { ports } = createPorts();
+		const fx = fakeFx();
+		const machine = new MemonMachine("conversation-1", {
+			...ports,
+			fx: fx.port,
+		});
+		const run = async (command: string) => {
+			const outcome = await machine.terminal.runCommand(command, {
+				byUser: true,
+			});
+			return {
+				exitCode: outcome.exitCode,
+				said: machine.snapshot().terminal.lines.at(-1)?.text,
+			};
+		};
+
+		await expect(run("fx /nope")).resolves.toEqual({
+			exitCode: 1,
+			said: "fx: /nope is not a folder.",
+		});
+		await expect(run("fx --verbose")).resolves.toEqual({
+			exitCode: 2,
+			said: "  -c, --continue  open fx's latest conversation",
+		});
+		expect(fx.port.start).not.toHaveBeenCalled();
+		expect(machine.snapshot().terminal.tabs).toHaveLength(1);
 	});
 });

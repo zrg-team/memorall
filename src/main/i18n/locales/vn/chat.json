@@ -576,7 +576,8 @@
 				"studio": "Studio",
 				"skills": "Kỹ năng",
 				"connections": "Kết nối",
-				"pi": "pi code"
+				"pi": "pi code",
+				"fx": "fx"
 			},
 			"appsShort": "Ứng dụng",
 			"appsLabel": "Ứng dụng trên màn hình",
@@ -615,7 +616,9 @@
 			"keepDirectTools": "Giữ lại cả công cụ trực tiếp",
 			"keepDirectToolsHint": "Giữ web_*, fs_* và sandbox_* bên cạnh máy tính, cho các thao tác tệp hàng loạt.",
 			"piCode": "pi code",
-			"piCodeHint": "Tác tử lập trình pi trên màn hình. MemonOS Bot có thể giao việc lập trình cho nó và sẽ hỏi bạn trong cửa sổ pi code trước. Khi tắt, pi code không có trên màn hình và không được dùng."
+			"piCodeHint": "Tác tử lập trình pi trên màn hình. MemonOS Bot có thể giao việc lập trình cho nó và sẽ hỏi bạn trong cửa sổ pi code trước. Khi tắt, pi code không có trên màn hình và không được dùng.",
+			"fx": "fx",
+			"fxHint": "Tác tử lập trình fx của Vercel trên màn hình, trong terminal riêng. fx dùng mô hình Memorall của bạn và các kỹ năng của tác tử này. Khi tắt, fx không có trên màn hình."
 		},
 		"folderIndex": {
 			"tools": "Công cụ",

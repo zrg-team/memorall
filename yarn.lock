@@ -12197,6 +12197,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"libfx@npm:0.0.14":
+  version: 0.0.14
+  resolution: "libfx@npm:0.0.14"
+  checksum: 10c0/bbf704eb12a86fe03c506fc49ba13b3162198a49051a83baee52ad8856b9195e5a4324b65a3cdfa1918a25fd9281916b79fa003ed434576b2217feada5b93bf9
+  languageName: node
+  linkType: hard
+
 "librewolf-location@npm:1.2.1":
   version: 1.2.1
   resolution: "librewolf-location@npm:1.2.1"
@@ -13125,6 +13132,7 @@ __metadata:
     jspdf: "npm:4.2.1"
     katex: "npm:0.18.4"
     kerium: "npm:1.4.2"
+    libfx: "npm:0.0.14"
     lottie-web: "npm:5.13.0"
     lucide: "npm:1.31.0"
     lucide-react: "npm:1.31.0"

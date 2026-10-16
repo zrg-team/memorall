@@ -76,7 +76,7 @@ export const MEMON_APP_IDS = [
 export type MemonAppId = (typeof MEMON_APP_IDS)[number];
 /**
  * Apps every computer has: the agent's own settings (schedules, skills,
- * connections), the user's studios and pi code (the pi coding agent).
+ * connections), the user's studios, and the coding agents pi code and fx.
  */
 export const MEMON_BUILTIN_APPS = [
 	"scheduler",
@@ -84,13 +84,14 @@ export const MEMON_BUILTIN_APPS = [
 	"skills",
 	"connections",
 	"pi",
+	"fx",
 ] as const;
 export type MemonBuiltinApp = (typeof MEMON_BUILTIN_APPS)[number];
 
 /**
  * Editor, Viewer and the hosted apps (Spreadsheet, Documents, Presentation,
  * Whiteboard, PDF) come with Files. Built-in apps are always there, except
- * pi code, which the agent's settings can turn off.
+ * pi code and fx, which the agent's settings can turn off.
  */
 export type MemonWindowApp =
 	| MemonAppId

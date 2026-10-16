@@ -610,5 +610,33 @@ export const runMemonOperation = async (
 			await findMemonMachine(key)?.piCode.resize(columns, rows);
 			return null;
 		}
+		case "fx.start":
+			return userAside(job.payload.key, "started fx again", (machine) =>
+				machine.fx.start(),
+			);
+		case "fx.attach": {
+			const { key, columns, rows } = job.payload;
+			const cursor = await findMemonMachine(key)?.fx.attach(columns, rows);
+			return cursor === null || cursor === undefined ? null : { cursor };
+		}
+		case "fx.read": {
+			const { key, cursor, waitMs } = job.payload;
+			const machine = findMemonMachine(key);
+			if (!machine) return { data: "", cursor, reset: false, closed: true };
+			return machine.fx.read(cursor, Math.min(Math.max(waitMs, 0), 5_000));
+		}
+		case "fx.input": {
+			const machine = findMemonMachine(job.payload.key);
+			if (!machine) return null;
+			// Typing into fx keeps an idle computer from being put away.
+			machine.lastActiveAt = Date.now();
+			await machine.fx.input(job.payload.data);
+			return null;
+		}
+		case "fx.resize": {
+			const { key, columns, rows } = job.payload;
+			await findMemonMachine(key)?.fx.resize(columns, rows);
+			return null;
+		}
 	}
 };

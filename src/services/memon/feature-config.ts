@@ -22,6 +22,8 @@ export interface MemonFeatureConfig {
 	 * it coding work (the user confirms each time). Off, it is neither.
 	 */
 	piCode: boolean;
+	/** fx, Vercel's coding agent: on the desktop. Off, it is not. */
+	fx: boolean;
 	/** Visualize's look: the theme the Visualize response feature has. */
 	visualTheme: MemonVisualTheme;
 }
@@ -39,6 +41,7 @@ export const DEFAULT_MEMON_FEATURE_CONFIG: MemonFeatureConfig = {
 	askBefore: { forms: true, installs: true, deletes: false },
 	keepDirectTools: false,
 	piCode: true,
+	fx: true,
 	visualTheme: "shadcn",
 };
 
@@ -84,6 +87,7 @@ export const normalizeMemonFeatureConfig = (
 			defaults.keepDirectTools,
 		),
 		piCode: asBoolean(config.piCode, defaults.piCode),
+		fx: asBoolean(config.fx, defaults.fx),
 		visualTheme: asVisualTheme(config.visualTheme),
 	};
 };
