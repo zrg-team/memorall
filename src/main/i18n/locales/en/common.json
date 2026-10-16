@@ -918,6 +918,12 @@
 		},
 		"ask": {
 			"button": "Ask in chat",
+		"captureAccess": {
+			"title": "Screenshots need your permission",
+			"description": "The browser asks once before Memorall can take a picture of a tab, for you or the agent.",
+			"allow": "Allow screenshots",
+			"declined": "The browser did not allow it. Try again; screenshots of tabs stay off until it does."
+		},
 			"lead": "From the computer ({{source}}):",
 			"folder": "folder {{path}}",
 			"selection": "Ask about “{{text}}”",
@@ -973,7 +979,12 @@
 			"pageView": "Page",
 			"agentView": "What the agent reads",
 			"notAServer": "{{url}} is not a server in this computer. Embedded tabs show servers started in the Terminal.",
-			"newEmbeddedTab": "New embedded tab (a local server)"
+			"newEmbeddedTab": "New embedded tab (a local server)",
+			"screenshot": "Save a screenshot of the page to Files",
+			"screenshotView": "Current view",
+			"screenshotFullPage": "Whole page",
+			"screenshotSaved": "Saved {{path}} ({{size}})",
+			"openScreenshot": "Open the screenshot"
 		},
 		"visualize": {
 			"empty": "No visual open. The agent shows dashboards, reports, charts and forms here and saves them as .openui files; open one from Files to see it again.",

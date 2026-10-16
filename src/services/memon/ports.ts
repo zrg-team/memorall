@@ -1,6 +1,6 @@
 import { createHostedAppsPort } from "./apps/hosted/port";
 import { createMemonEmbeddedPort } from "./embedded-browser";
-import { cropScreenshot, pictureOfImage } from "./page-capture";
+import { cropScreenshot, pictureMaxSide, pictureOfImage } from "./page-capture";
 import { settleOutline } from "./settle-outline";
 import type { IAgentSandboxService } from "@memorall/agent-harness-sandbox";
 import type { IFlowFileSystem } from "@memorall/agent-harness-flows/interfaces/services/filesystem";
@@ -127,15 +127,22 @@ export const createMemonBrowserPort = (): MemonBrowserPort => ({
 		performOutlineAction(sessionId, request, { maxChars: OUTLINE_MAX_CHARS }),
 	// The tab's screenshot, cut to the element: what the page shows, WebGL too.
 	async capture(sessionId, request) {
+		const maxSide = pictureMaxSide(request);
 		if (!request.ref) {
-			// No element: the page as the viewport shows it.
-			const shot = await captureWebSessionScreenshot(sessionId);
-			return cropScreenshot(shot.dataUrl, {
-				x: 0,
-				y: 0,
-				width: shot.width,
-				height: shot.height,
+			// No element: the page as the viewport shows it, a rectangle of it,
+			// or the whole page.
+			const shot = await captureWebSessionScreenshot(sessionId, {
+				fullPage: request.fullPage,
+				clip: request.area,
 			});
+			// For a file, the browser's own PNG as it is.
+			if (request.fullSize) return shot;
+			const picture = await cropScreenshot(
+				shot.dataUrl,
+				{ x: 0, y: 0, width: shot.width, height: shot.height },
+				maxSide,
+			);
+			return shot.cut ? { ...picture, cut: true } : picture;
 		}
 		const { result } = await performOutlineAction(
 			sessionId,
@@ -148,12 +155,16 @@ export const createMemonBrowserPort = (): MemonBrowserPort => ({
 		const { box } = result;
 		const shot = await captureWebSessionScreenshot(sessionId);
 		const scale = box.viewportWidth > 0 ? shot.width / box.viewportWidth : 1;
-		const picture = await cropScreenshot(shot.dataUrl, {
-			x: box.x * scale,
-			y: box.y * scale,
-			width: box.width * scale,
-			height: box.height * scale,
-		});
+		const picture = await cropScreenshot(
+			shot.dataUrl,
+			{
+				x: box.x * scale,
+				y: box.y * scale,
+				width: box.width * scale,
+				height: box.height * scale,
+			},
+			maxSide,
+		);
 		return result.detail ? { ...picture, source: result.detail } : picture;
 	},
 	async history(sessionId, direction) {

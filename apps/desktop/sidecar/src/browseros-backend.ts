@@ -13,8 +13,10 @@ import {
 	pngDimensions,
 	requiredNumber,
 	requiredString,
+	type ScreenshotOptions,
 	withTimeoutSignal,
 } from "./browser-runtime-types";
+import { CdpConnection, captureCdpPage } from "./chromium-cdp-backend";
 import type { ManagedBrowserOsRuntime } from "./managed-browseros-runtime";
 import {
 	isNavigationTeardown,
@@ -39,6 +41,31 @@ const browserSnapshotCode = (maxHtmlChars: number): string => `(() => {
     domAccessible: true
   };
 })()`;
+
+/** A target in the browser's CDP `/json/list`. */
+export interface CdpTarget {
+	type?: string;
+	url?: string;
+	webSocketDebuggerUrl?: string;
+}
+
+/**
+ * The page target showing `url`, to take a screenshot of. Null when no page
+ * or several show it: with more than one page open, any other pick could be
+ * a picture of the wrong tab.
+ */
+export const pickScreenshotTarget = (
+	targets: readonly CdpTarget[],
+	url: string,
+): CdpTarget | null => {
+	const pages = targets.filter(
+		(target) => target.type === "page" && target.webSocketDebuggerUrl,
+	);
+	const showing = pages.filter((target) => target.url === url);
+	if (showing.length === 1) return showing[0] ?? null;
+	if (pages.length === 1) return pages[0] ?? null;
+	return null;
+};
 
 const evaluateValue = <T>(result: McpToolResult): T => {
 	const value = result.structuredContent?.value;
@@ -449,19 +476,25 @@ export class BrowserOsBackend implements BrowserBackend {
 	async screenshot(
 		session: BackendSession,
 		signal?: AbortSignal,
-	): Promise<{ dataUrl: string; width: number; height: number }> {
+		options: ScreenshotOptions = {},
+	): Promise<{
+		dataUrl: string;
+		width: number;
+		height: number;
+		cut?: boolean;
+	}> {
 		const cdpEndpoint = this.runtime.getCdpEndpoint();
-		if (cdpEndpoint) {
-			const bytes = await this.captureCdpScreenshot(
-				cdpEndpoint,
-				session.url,
-				signal,
+		const captured = cdpEndpoint
+			? await this.captureCdpScreenshot(cdpEndpoint, session, options, signal)
+			: null;
+		if (captured) return captured;
+		if (options.fullPage || options.clip) {
+			throw new BrowserAutomationError(
+				"SCREENSHOT_UNAVAILABLE",
+				"This page can only be captured as its viewport shows it here.",
 			);
-			return {
-				dataUrl: `data:image/png;base64,${bytes.toString("base64")}`,
-				...pngDimensions(bytes),
-			};
 		}
+		// BrowserOS's own screenshot, of the session's page by its handle.
 		const client = await this.ensureClient(signal);
 		const result = await client.callTool(
 			"screenshot",
@@ -481,103 +514,53 @@ export class BrowserOsBackend implements BrowserBackend {
 		};
 	}
 
+	/**
+	 * A screenshot over CDP of the page target showing the session's page.
+	 * The session's address can be behind the page (a redirect, a click the
+	 * page handled), so it is read again before giving up. Null when the
+	 * target cannot be told apart from the others.
+	 */
 	private async captureCdpScreenshot(
 		cdpEndpoint: string,
-		pageUrl: string,
+		session: BackendSession,
+		options: ScreenshotOptions,
 		signal?: AbortSignal,
-	): Promise<Buffer> {
-		const response = await fetch(`${cdpEndpoint}/json/list`, { signal });
-		if (!response.ok) {
-			throw new BrowserAutomationError(
-				"CDP_SCREENSHOT_FAILED",
-				`Browser CDP target list returned HTTP ${response.status}.`,
-			);
-		}
-		const targets = (await response.json()) as Array<{
-			type?: string;
-			url?: string;
-			webSocketDebuggerUrl?: string;
-		}>;
-		const target =
-			targets.find(
-				(candidate) =>
-					candidate.type === "page" &&
-					candidate.url === pageUrl &&
-					candidate.webSocketDebuggerUrl,
-			) ??
-			targets.find(
-				(candidate) =>
-					candidate.type === "page" && candidate.webSocketDebuggerUrl,
-			);
-		if (!target?.webSocketDebuggerUrl) {
-			throw new BrowserAutomationError(
-				"CDP_SCREENSHOT_FAILED",
-				"Browser page target was not found.",
-			);
-		}
-		return await new Promise<Buffer>((resolve, reject) => {
-			const socket = new WebSocket(target.webSocketDebuggerUrl as string);
-			const timeout = setTimeout(() => {
-				socket.close();
-				reject(
-					new BrowserAutomationError(
-						"CDP_SCREENSHOT_TIMEOUT",
-						"Browser screenshot timed out.",
-					),
+	): Promise<{
+		dataUrl: string;
+		width: number;
+		height: number;
+		cut?: boolean;
+	} | null> {
+		const listTargets = async (): Promise<CdpTarget[]> => {
+			const response = await fetch(`${cdpEndpoint}/json/list`, { signal });
+			if (!response.ok) {
+				throw new BrowserAutomationError(
+					"CDP_SCREENSHOT_FAILED",
+					`Browser CDP target list returned HTTP ${response.status}.`,
 				);
-			}, 15_000);
-			const abort = () => {
-				clearTimeout(timeout);
-				socket.close();
-				reject(new BrowserAutomationError("CANCELLED", "Operation cancelled."));
-			};
-			const finish = (error?: unknown, data?: string) => {
-				clearTimeout(timeout);
-				signal?.removeEventListener("abort", abort);
-				socket.close();
-				if (error || !data) {
-					reject(
-						error instanceof Error
-							? error
-							: new BrowserAutomationError(
-									"CDP_SCREENSHOT_FAILED",
-									String(error ?? "No image returned."),
-								),
-					);
-				} else resolve(Buffer.from(data, "base64"));
-			};
-			signal?.addEventListener("abort", abort, { once: true });
-			socket.addEventListener("open", () => {
-				socket.send(
-					JSON.stringify({
-						id: 1,
-						method: "Page.captureScreenshot",
-						params: { format: "png", fromSurface: true },
-					}),
-				);
-			});
-			socket.addEventListener("message", (event) => {
-				try {
-					const message = JSON.parse(String(event.data)) as {
-						id?: number;
-						result?: { data?: string };
-						error?: { message?: string };
-					};
-					if (message.id !== 1) return;
-					finish(message.error?.message, message.result?.data);
-				} catch (error) {
-					finish(error);
-				}
-			});
-			socket.addEventListener("error", () =>
-				finish(
-					new BrowserAutomationError(
-						"CDP_SCREENSHOT_FAILED",
-						"Browser CDP socket failed.",
-					),
-				),
-			);
-		});
+			}
+			return (await response.json()) as CdpTarget[];
+		};
+		let target = pickScreenshotTarget(await listTargets(), session.url);
+		if (!target) {
+			const url = await this.evaluate<string>(
+				session,
+				"location.href",
+				signal,
+			).catch(() => null);
+			if (typeof url === "string" && url && url !== session.url) {
+				session.url = url;
+				target = pickScreenshotTarget(await listTargets(), url);
+			}
+		}
+		const socketUrl = target?.webSocketDebuggerUrl;
+		if (!socketUrl) return null;
+		const page = await CdpConnection.connect(socketUrl, signal);
+		try {
+			return await captureCdpPage(page, options, signal);
+		} finally {
+			page.close();
+		}
 	}
 
 	async fetchImage(

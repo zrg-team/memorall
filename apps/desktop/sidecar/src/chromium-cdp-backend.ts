@@ -8,12 +8,15 @@ import {
 	type BrowserMode,
 	type BrowserSnapshot,
 	BLANK_PAGE_URL,
+	type CdpLayoutMetrics,
 	checkedHttpUrl,
 	checkedPageUrl,
 	type EngineStatus,
 	pngDimensions,
 	requiredNumber,
 	requiredString,
+	type ScreenshotOptions,
+	screenshotClip,
 	withTimeoutSignal,
 } from "./browser-runtime-types";
 import type { ManagedBrowserOsRuntime } from "./managed-browseros-runtime";
@@ -32,7 +35,7 @@ type CdpMessage = {
 	error?: { code?: number; message?: string };
 };
 
-class CdpConnection {
+export class CdpConnection {
 	private nextId = 0;
 	private readonly pending = new Map<
 		number,
@@ -230,6 +233,90 @@ interface CdpTarget {
 	url?: string;
 	webSocketDebuggerUrl?: string;
 }
+
+/** Scrolls the page to its top, returning where it was. */
+const SCROLL_TO_TOP = `(() => {
+  const at = { x: window.scrollX, y: window.scrollY };
+  window.scrollTo({ left: 0, top: 0, behavior: "instant" });
+  return at;
+})()`;
+
+/**
+ * A screenshot over CDP: the viewport, a rectangle of it, or the whole page,
+ * which Chromium paints beyond the viewport itself. The whole page is taken
+ * from its top, so a header that sticks as the page scrolls is drawn where
+ * it starts, not where the scroll left it; the scroll is put back after.
+ */
+export const captureCdpPage = async (
+	page: Pick<CdpConnection, "send">,
+	options: ScreenshotOptions,
+	signal?: AbortSignal,
+): Promise<{
+	dataUrl: string;
+	width: number;
+	height: number;
+	cut?: boolean;
+}> => {
+	const params: Record<string, unknown> = {
+		format: "png",
+		fromSurface: true,
+		captureBeyondViewport: false,
+	};
+	let cut = false;
+	let scrolledFrom: { x: number; y: number } | undefined;
+	let result: { data?: string };
+	try {
+		if (options.fullPage) {
+			const scrolled = await page.send<{
+				result?: { value?: { x: number; y: number } };
+			}>(
+				"Runtime.evaluate",
+				{ expression: SCROLL_TO_TOP, returnByValue: true },
+				signal,
+			);
+			scrolledFrom = scrolled.result?.value;
+		}
+		if (options.fullPage || options.clip) {
+			const planned = screenshotClip(
+				options,
+				await page.send<CdpLayoutMetrics & Record<string, unknown>>(
+					"Page.getLayoutMetrics",
+					{},
+					signal,
+				),
+			);
+			params.clip = planned.clip;
+			params.captureBeyondViewport = options.fullPage === true;
+			cut = planned.cut;
+		}
+		result = await page.send<{ data?: string }>(
+			"Page.captureScreenshot",
+			params,
+			signal,
+			// A whole page is painted in one go, and a long one takes a while.
+			options.fullPage ? 90_000 : 30_000,
+		);
+	} finally {
+		if (scrolledFrom && (scrolledFrom.x || scrolledFrom.y)) {
+			await page
+				.send("Runtime.evaluate", {
+					expression: `window.scrollTo({ left: ${Number(scrolledFrom.x)}, top: ${Number(scrolledFrom.y)}, behavior: "instant" })`,
+				})
+				.catch(() => undefined);
+		}
+	}
+	if (!result.data)
+		throw new BrowserAutomationError(
+			"CDP_SCREENSHOT_FAILED",
+			"No image returned.",
+		);
+	const bytes = Buffer.from(result.data, "base64");
+	return {
+		dataUrl: `data:image/png;base64,${result.data}`,
+		...pngDimensions(bytes),
+		...(cut ? { cut: true } : {}),
+	};
+};
 
 const snapshotCode = (maxHtmlChars: number): string => `(() => {
   const clone = document.cloneNode(true);
@@ -607,22 +694,14 @@ export class ChromiumCdpBackend implements BrowserBackend {
 	async screenshot(
 		session: BackendSession,
 		signal?: AbortSignal,
-	): Promise<{ dataUrl: string; width: number; height: number }> {
-		const result = await this.page(session).send<{ data?: string }>(
-			"Page.captureScreenshot",
-			{ format: "png", fromSurface: true, captureBeyondViewport: false },
-			signal,
-		);
-		if (!result.data)
-			throw new BrowserAutomationError(
-				"CDP_SCREENSHOT_FAILED",
-				"No image returned.",
-			);
-		const bytes = Buffer.from(result.data, "base64");
-		return {
-			dataUrl: `data:image/png;base64,${result.data}`,
-			...pngDimensions(bytes),
-		};
+		options: ScreenshotOptions = {},
+	): Promise<{
+		dataUrl: string;
+		width: number;
+		height: number;
+		cut?: boolean;
+	}> {
+		return await captureCdpPage(this.page(session), options, signal);
 	}
 
 	async fetchImage(

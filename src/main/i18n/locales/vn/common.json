@@ -922,6 +922,12 @@
 		},
 		"kit": {
 			"new": "Mới",
+		"captureAccess": {
+			"title": "Cần bạn cho phép chụp màn hình",
+			"description": "Trình duyệt hỏi một lần trước khi Memorall được chụp ảnh một thẻ, cho bạn hoặc cho tác nhân.",
+			"allow": "Cho phép chụp màn hình",
+			"declined": "Trình duyệt chưa cho phép. Hãy thử lại; việc chụp ảnh thẻ sẽ tắt cho đến khi được cho phép."
+		},
 			"refresh": "Làm mới",
 			"loading": "(đang tải…)",
 			"save": "Lưu",
@@ -963,7 +969,12 @@
 			"pageView": "Trang",
 			"agentView": "Nội dung tác nhân đọc",
 			"notAServer": "{{url}} không phải máy chủ trong máy tính này. Thẻ nhúng hiển thị các máy chủ khởi động trong Terminal.",
-			"newEmbeddedTab": "Thẻ nhúng mới (máy chủ cục bộ)"
+			"newEmbeddedTab": "Thẻ nhúng mới (máy chủ cục bộ)",
+			"screenshot": "Lưu ảnh chụp màn hình trang vào Tệp",
+			"screenshotView": "Khung nhìn hiện tại",
+			"screenshotFullPage": "Toàn bộ trang",
+			"screenshotSaved": "Đã lưu {{path}} ({{size}})",
+			"openScreenshot": "Mở ảnh chụp màn hình"
 		},
 		"visualize": {
 			"empty": "Chưa mở hình trực quan nào. Tác nhân hiển thị bảng điều khiển, báo cáo, biểu đồ và biểu mẫu ở đây và lưu chúng thành tệp .openui; mở một tệp từ Tệp để xem lại.",

@@ -22,6 +22,7 @@ import {
 	reinjectContentScript,
 } from "./content-script-injection";
 import { keepAgentTabAwake } from "./keep-agent-tab-awake";
+import { captureTabArea, captureVisible } from "./tab-screenshot";
 import {
 	AGENT_ACTION_GRACE_MS,
 	AGENT_NAVIGATION_GRACE_MS,
@@ -1095,9 +1096,24 @@ const handleScreenshotCommand = async (
 		await chrome.tabs.update(request.tabId, { active: true });
 		await delay(150);
 
-		const dataUrl = await chrome.tabs.captureVisibleTab(windowId, {
-			format: "png",
-		});
+		if (request.fullPage || request.clip) {
+			const picture = await captureTabArea(request.tabId, windowId, {
+				fullPage: request.fullPage,
+				clip: request.clip,
+			});
+			return {
+				source: WEB_BROWSER_COMMAND_SOURCE,
+				command: "screenshot",
+				success: true,
+				sessionId: request.sessionId,
+				dataUrl: picture.dataUrl,
+				width: picture.width,
+				height: picture.height,
+				...(picture.cut ? { cut: true } : {}),
+			};
+		}
+
+		const dataUrl = await captureVisible(windowId);
 
 		const base64 = dataUrl.replace(/^data:image\/png;base64,/, "");
 		const binaryStr = atob(base64);

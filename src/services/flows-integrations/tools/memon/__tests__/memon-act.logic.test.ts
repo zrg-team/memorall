@@ -302,3 +302,157 @@ describe("memon_act scroll", () => {
 		});
 	});
 });
+
+describe("memon_act screenshot", () => {
+	const shooter = (activeTabId: string | null) => ({
+		...fakeMachine({ looks: true }),
+		snapshot: () => ({
+			revision: 1,
+			focusedWindowId: null,
+			windows: [],
+			browser: { tabs: [], activeTabId },
+		}),
+		saveScreenshot: vi.fn(async () => ({
+			id: 1,
+			path: "/agents/Bot/Pictures/example.com-b4-2026-10-16-14-03-22.png",
+			width: 2560,
+			height: 1600,
+		})),
+	});
+
+	beforeEach(() => {
+		vi.mocked(getMemonMachine).mockReset();
+	});
+
+	it("saves the current view by default, or a ref, and says where", async () => {
+		const machine = shooter("tab1");
+		vi.mocked(getMemonMachine).mockResolvedValue(machine as never);
+		const view = await createMemonActTool().execute(
+			{ action: "screenshot" },
+			undefined,
+		);
+		expect(machine.saveScreenshot).toHaveBeenLastCalledWith({
+			ref: undefined,
+			to: undefined,
+			fullPage: false,
+			area: undefined,
+		});
+		expect(view).toMatchObject({
+			content: expect.stringContaining(
+				"Saved a screenshot of the current view (2560×1600 px)",
+			),
+		});
+
+		const element = await createMemonActTool().execute(
+			{ action: "screenshot", ref: "b4", to: "~/shots" },
+			undefined,
+		);
+		expect(machine.saveScreenshot).toHaveBeenLastCalledWith({
+			ref: "b4",
+			to: "~/shots",
+			fullPage: false,
+			area: undefined,
+		});
+		// A file for the user: no picture handed to the model.
+		expect(element).toMatchObject({
+			content: expect.stringContaining(
+				"Saved a screenshot of b4 (2560×1600 px) to ~/Pictures/example.com-b4-2026-10-16-14-03-22.png.",
+			),
+		});
+		expect(machine.captureRef).not.toHaveBeenCalled();
+	});
+
+	it("takes the whole page, or a region of the view or of the page", async () => {
+		const machine = shooter("tab1");
+		vi.mocked(getMemonMachine).mockResolvedValue(machine as never);
+		machine.saveScreenshot.mockResolvedValueOnce({
+			id: 2,
+			path: "/agents/Bot/Pictures/example.com-page-2026-10-16-14-03-22.png",
+			width: 1280,
+			height: 16_384,
+			cut: true,
+		} as never);
+		const whole = await createMemonActTool().execute(
+			{ action: "screenshot", capture: "page" },
+			undefined,
+		);
+		expect(machine.saveScreenshot).toHaveBeenLastCalledWith({
+			ref: undefined,
+			to: undefined,
+			fullPage: true,
+			area: undefined,
+		});
+		expect(whole).toMatchObject({
+			content: expect.stringContaining(
+				"Saved a screenshot of the whole page (1280×16384 px) to ~/Pictures/example.com-page-2026-10-16-14-03-22.png. The page is longer than a picture keeps",
+			),
+		});
+
+		// As the screen gives places: "[b9] canvas 800×600 at 0,120".
+		const region = { x: 0, y: 120, width: 800, height: 600 };
+		const part = await createMemonActTool().execute(
+			{ action: "screenshot", region },
+			undefined,
+		);
+		expect(machine.saveScreenshot).toHaveBeenLastCalledWith({
+			ref: undefined,
+			to: undefined,
+			fullPage: false,
+			area: region,
+		});
+		expect(part).toMatchObject({
+			content: expect.stringContaining(
+				"Saved a screenshot of the view's region 800×600 at 0,120",
+			),
+		});
+
+		await createMemonActTool().execute(
+			{ action: "screenshot", capture: "page", region },
+			undefined,
+		);
+		expect(machine.saveScreenshot).toHaveBeenLastCalledWith({
+			ref: undefined,
+			to: undefined,
+			fullPage: true,
+			area: region,
+		});
+	});
+
+	it("takes a ref on its own", async () => {
+		const machine = shooter("tab1");
+		vi.mocked(getMemonMachine).mockResolvedValue(machine as never);
+		for (const input of [
+			{ ref: "b4", capture: "page" as const },
+			{ ref: "b4", region: { x: 0, y: 0, width: 10, height: 10 } },
+		]) {
+			await expect(
+				createMemonActTool().execute(
+					{ action: "screenshot", ...input },
+					undefined,
+				),
+			).resolves.toMatchObject({
+				content: expect.stringContaining("not both"),
+			});
+		}
+		expect(machine.saveScreenshot).not.toHaveBeenCalled();
+	});
+
+	it("needs a page, and takes only page refs", async () => {
+		const blank = shooter(null);
+		vi.mocked(getMemonMachine).mockResolvedValue(blank as never);
+		await expect(
+			createMemonActTool().execute({ action: "screenshot" }, undefined),
+		).resolves.toMatchObject({
+			content: expect.stringContaining("no page is open"),
+		});
+		await expect(
+			createMemonActTool().execute(
+				{ action: "screenshot", ref: "f3" },
+				undefined,
+			),
+		).resolves.toMatchObject({
+			content: expect.stringContaining("screenshot takes a page ref (b9)"),
+		});
+		expect(blank.saveScreenshot).not.toHaveBeenCalled();
+	});
+});

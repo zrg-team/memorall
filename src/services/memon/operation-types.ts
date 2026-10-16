@@ -64,6 +64,13 @@ export interface MemonOperationPayloadMap {
 	/** The user lets the agent past a page it stopped on as a wall. */
 	"browser.continuePastWall": Keyed;
 	"scheduler.refresh": Keyed;
+	/**
+	 * Saves a screenshot of the page in front into ~/Pictures: what it shows,
+	 * or with `fullPage`, all of it.
+	 */
+	"browser.screenshot": Keyed<{ fullPage?: boolean }>;
+	/** The user allowed screenshots of tabs (the browser asked them). */
+	"browser.captureAllowed": Keyed;
 	"scheduler.save": Keyed<{ schedule: MemonScheduleInput }>;
 	"scheduler.delete": Keyed<{ id: string }>;
 	"skills.refresh": Keyed;

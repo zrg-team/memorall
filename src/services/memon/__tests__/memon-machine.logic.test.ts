@@ -19,7 +19,12 @@ import {
 	type MemonPorts,
 	type MemonScheduleInput,
 	normalizeBrowserUrl,
+	screenshotName,
 } from "../memon-machine";
+import {
+	SCREEN_CAPTURE_WITHHELD_MARKER,
+	screenCaptureWithheldMessage,
+} from "@/services/web-browser/site-access";
 import type { MemonStudioRequest } from "../studio-app";
 import { runTerminalAction } from "../terminal/terminal-actions";
 import type { MemonPiCodeFolder, MemonSchedule } from "../types";
@@ -2452,6 +2457,97 @@ describe("MemonMachine", () => {
 			acceptsImages: vi.fn(async () => true),
 		};
 		expect(await machine.modelAcceptsImages()).toBe(true);
+	});
+
+	it("saves a screenshot of a real tab at the browser's size, and keeps a refusal for the user to lift", async () => {
+		const { ports, files } = createPorts();
+		const capture = vi.fn(async (_sessionId: string, _request: unknown) => ({
+			dataUrl: `data:image/png;base64,${btoa("shot")}`,
+			width: 2560,
+			height: 1600,
+		}));
+		ports.browser.capture = capture;
+		const machine = new MemonMachine(
+			"conversation-1",
+			ports,
+			DEFAULT_MEMON_FEATURE_CONFIG,
+		);
+		await machine.openUrl("https://www.example.com/docs");
+
+		// The browser wants the user's permission first: the Browser asks them.
+		capture.mockRejectedValueOnce(new Error(screenCaptureWithheldMessage()));
+		await expect(machine.saveScreenshot()).rejects.toThrow(
+			SCREEN_CAPTURE_WITHHELD_MARKER,
+		);
+		expect(machine.snapshot().browser.captureBlocked).toBe(true);
+		machine.allowCapture();
+		expect(machine.snapshot().browser.captureBlocked).toBeUndefined();
+
+		const shot = await machine.saveScreenshot();
+		expect(capture).toHaveBeenLastCalledWith("s1", { fullSize: true });
+		expect(shot.path.startsWith(`${machine.home}/Pictures/`)).toBe(true);
+		expect(shot.path).toMatch(/\/example\.com(-\d{2,4}){6}\.png$/);
+		expect(files.get(shot.path)).toEqual(new TextEncoder().encode("shot"));
+		expect(machine.snapshot().browser.shot).toEqual({
+			id: 1,
+			path: shot.path,
+			width: 2560,
+			height: 1600,
+		});
+
+		// A ref, into a folder; a .png path is the file itself, never overwritten.
+		const part = await machine.saveScreenshot({ ref: "b1", to: "~/shots" });
+		expect(capture).toHaveBeenLastCalledWith("s1", {
+			ref: "b1",
+			docToken: "doc-Example",
+			fullSize: true,
+		});
+		expect(part.path.startsWith(`${machine.home}/shots/`)).toBe(true);
+		expect(part.path).toMatch(/\/example\.com-b1-.+\.png$/);
+		const named = await machine.saveScreenshot({ to: "~/shots/home.png" });
+		expect(named.path).toBe(`${machine.home}/shots/home.png`);
+		const again = await machine.saveScreenshot({ to: "~/shots/home.png" });
+		expect(again.path).toBe(`${machine.home}/shots/home 2.png`);
+		expect(machine.snapshot().browser.shot?.id).toBe(4);
+
+		// What the agent looks at stays small; only files keep the full size.
+		await machine.captureRef();
+		expect(capture).toHaveBeenLastCalledWith("s1", {});
+
+		// The whole page, or a rectangle: named for what they are of.
+		capture.mockResolvedValueOnce({
+			dataUrl: `data:image/png;base64,${btoa("long")}`,
+			width: 1280,
+			height: 16_384,
+			cut: true,
+		} as never);
+		const whole = await machine.saveScreenshot({ fullPage: true });
+		expect(capture).toHaveBeenLastCalledWith("s1", {
+			fullSize: true,
+			fullPage: true,
+		});
+		expect(whole).toMatchObject({ height: 16_384, cut: true });
+		expect(whole.path).toMatch(/\/example\.com-page-.+\.png$/);
+		const area = { x: 10, y: 20, width: 300, height: 100 };
+		const region = await machine.saveScreenshot({ area });
+		expect(capture).toHaveBeenLastCalledWith("s1", { fullSize: true, area });
+		expect(region.path).toMatch(/\/example\.com-region-.+\.png$/);
+		await expect(
+			machine.saveScreenshot({ ref: "b1", fullPage: true }),
+		).rejects.toThrow("not both");
+	});
+
+	it("names a screenshot by its site, ref and local time", () => {
+		const at = new Date(2026, 9, 16, 14, 3, 22);
+		expect(screenshotName("https://www.example.com/a", undefined, at)).toBe(
+			"example.com-2026-10-16-14-03-22.png",
+		);
+		expect(screenshotName("http://localhost:3000/", "b4", at)).toBe(
+			"localhost-3000-b4-2026-10-16-14-03-22.png",
+		);
+		expect(screenshotName("about:blank", undefined, at)).toBe(
+			"page-2026-10-16-14-03-22.png",
+		);
 	});
 
 	it("opens any local address embedded where there are no real tabs", async () => {

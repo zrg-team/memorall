@@ -56,3 +56,27 @@ export const siteAccessWithheldMessage = (url: string | undefined): string =>
 export const isSiteAccessWithheldMessage = (
 	text: string | undefined | null,
 ): boolean => Boolean(text?.includes(SITE_ACCESS_WITHHELD_MARKER));
+
+/**
+ * What a screenshot of a tab needs. `chrome.tabs.captureVisibleTab` asks for
+ * `<all_urls>` itself (or an activeTab grant), not for the sites it covers:
+ * `permissions.contains` says `<all_urls>` is held already, and the capture
+ * is refused all the same. The manifest declares it as optional; asked for
+ * from a click, Chrome grants it without a prompt, since every site is held.
+ */
+export const SCREEN_CAPTURE_ORIGINS = ["<all_urls>"];
+
+/** Leads every error of a screenshot the browser refused for want of it. */
+export const SCREEN_CAPTURE_WITHHELD_MARKER = "Screenshots not allowed yet";
+
+/** Chrome's wording when neither `<all_urls>` nor an activeTab grant is held. */
+export const isCapturePermissionError = (text: string): boolean =>
+	text.includes("'<all_urls>' or 'activeTab'");
+
+/** What a screenshot reports when the browser refused it. Written for the model. */
+export const screenCaptureWithheldMessage = (): string =>
+	`${SCREEN_CAPTURE_WITHHELD_MARKER}: the browser needs the user's one-time permission before Memorall can take a picture of a tab, and retrying will not help. The Browser window shows an "Allow screenshots" button; ask the user to press it, then try again.`;
+
+export const isScreenCaptureWithheldMessage = (
+	text: string | undefined | null,
+): boolean => Boolean(text?.includes(SCREEN_CAPTURE_WITHHELD_MARKER));

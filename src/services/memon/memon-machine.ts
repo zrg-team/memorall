@@ -91,7 +91,12 @@ import {
 import { type FxOpened, MemonFx, type MemonFxPort } from "./apps/fx/fx-app";
 import type { MemonEmbeddedPort } from "./embedded-browser";
 import type { MemonModelsPort } from "./models-port";
-import type { MemonCaptureRequest, MemonPageCapture } from "./page-capture";
+import type {
+	CaptureRect,
+	MemonCaptureRequest,
+	MemonPageCapture,
+} from "./page-capture";
+import { isScreenCaptureWithheldMessage } from "@/services/web-browser/site-access";
 import {
 	isLocalAddress,
 	isLoopbackUrl,
@@ -106,6 +111,7 @@ import type {
 	MemonAppAvailability,
 	MemonBrowserTab,
 	MemonCursorState,
+	MemonBrowserShot,
 	MemonDriver,
 	MemonFileClipboard,
 	MemonFileExport,
@@ -377,6 +383,42 @@ const normalizePath = (path: string, cwd = "/"): string => {
 	for (const part of absolute.split("/")) {
 		if (!part || part === ".") continue;
 		if (part === "..") parts.pop();
+
+/** The bytes of a base64 data URL. */
+const dataUrlBytes = (dataUrl: string): Uint8Array =>
+	Uint8Array.from(atob(dataUrl.slice(dataUrl.indexOf(",") + 1)), (char) =>
+		char.charCodeAt(0),
+	);
+
+/**
+ * A screenshot's file name: the site, what it is of (a ref, "page", "region")
+ * and the local time, as `example.com-b12-2026-10-16-14-03-22.png`.
+ */
+export const screenshotName = (
+	url: string,
+	part: string | undefined,
+	at: Date,
+): string => {
+	let site = "page";
+	try {
+		const parsed = new URL(url);
+		site =
+			`${parsed.hostname.replace(/^www\./, "")}${parsed.port ? `-${parsed.port}` : ""}` ||
+			site;
+	} catch {
+		// Not an address: the generic name.
+	}
+	const two = (value: number) => String(value).padStart(2, "0");
+	const stamp = [
+		at.getFullYear(),
+		two(at.getMonth() + 1),
+		two(at.getDate()),
+		two(at.getHours()),
+		two(at.getMinutes()),
+		two(at.getSeconds()),
+	].join("-");
+	return `${[site, part, stamp].filter(Boolean).join("-")}.png`;
+};
 		else parts.push(part);
 	}
 	return `/${parts.join("/")}`;
@@ -451,6 +493,9 @@ export class MemonMachine {
 	private fileEntries: MemonFileEntry[] = [];
 	/** The folder `fileEntries` lists. */
 	private listedFilesCwd: string | undefined;
+	/** The browser refused a screenshot until the user allows it. */
+	private captureBlocked = false;
+	private lastShot: MemonBrowserShot | null = null;
 	private filesError: string | undefined;
 	private fileClipboard: MemonFileClipboard | null = null;
 	private fileExport: MemonFileExport | null = null;
@@ -1194,18 +1239,89 @@ export class MemonMachine {
 		return tab;
 	}
 
-	/** A picture of an element of the page in front (a ref of the latest screen). */
 	/** A picture of a ref of the page, or without one, of what the page shows. */
 	async captureRef(ref?: string): Promise<MemonPageCapture> {
 		this.requireApp("browser");
-		const tab = this.requireActiveTab();
 		const port = this.browserPort(tab);
 		if (!port.capture) {
 			throw new Error("Pictures of pages are not available on this computer.");
 		}
-		return port.capture(
-			tab.sessionId,
-			ref ? { ref, docToken: this.readToken(tab) } : {},
+		const request: MemonCaptureRequest = ref
+			? { ref, docToken: this.readToken(tab) }
+			: {};
+		if (options.fullSize) request.fullSize = true;
+		if (options.fullPage) request.fullPage = true;
+		if (options.area) request.area = options.area;
+		try {
+			const picture = await port.capture(tab.sessionId, request);
+			this.setCaptureBlocked(false);
+			return picture;
+		} catch (error) {
+			if (
+				isScreenCaptureWithheldMessage(
+					error instanceof Error ? error.message : String(error),
+				)
+			) {
+				this.setCaptureBlocked(true);
+			}
+			throw error;
+		}
+	}
+
+	private setCaptureBlocked(blocked: boolean): void {
+		if (this.captureBlocked === blocked) return;
+		this.captureBlocked = blocked;
+		this.changed();
+	}
+
+	/** The user allowed screenshots: the Browser stops asking. */
+	allowCapture(): void {
+		this.setCaptureBlocked(false);
+	}
+
+	/**
+	 * Saves a screenshot of the page in front as a PNG in Files, at the size
+	 * the browser took it: what the viewport shows, a ref of it, a rectangle
+	 * (`area`, of the viewport, or with `fullPage` of the page), or the whole
+	 * page. Into ~/Pictures by default, or `to`, a folder or a .png path.
+	 * Nothing is overwritten.
+	 */
+	async saveScreenshot({
+		ref,
+		to,
+		fullPage,
+		area,
+	}: {
+		ref?: string;
+		to?: string;
+		fullPage?: boolean;
+		area?: CaptureRect;
+	} = {}): Promise<MemonBrowserShot> {
+		this.requireApp("files");
+		if (ref && (fullPage || area)) {
+			throw new Error(
+				"A screenshot is of a ref, or of a rectangle or the whole page, not both.",
+			);
+		}
+		const tab = this.requireActiveTab();
+		const picture = await this.capturePage(tab, {
+			ref,
+			fullSize: true,
+			fullPage,
+			area,
+		});
+		const target = to?.trim();
+		const path = await this.placeFile(
+			// Anything but a .png path is a folder to put it in.
+			target && !/\.png$/i.test(target)
+				? `${target.replace(/\/+$/, "")}/`
+				: target,
+			MEMON_PICTURES_DIR,
+			screenshotName(
+				tab.url,
+				ref ?? (area ? "region" : fullPage ? "page" : undefined),
+				new Date(),
+			),
 		);
 	}
 
@@ -1235,6 +1351,18 @@ export class MemonMachine {
 	private readToken(tab: MemonBrowserTab): string | undefined {
 		return this.readTokens.get(tab.id) ?? tab.outline?.docToken;
 	}
+		return this.capturePage(this.requireActiveTab(), { ref });
+	}
+
+	/**
+	 * A picture of the tab's page as the browser shows it: a real tab's is the
+	 * browser's own screenshot. A refusal for want of the user's permission is
+	 * kept, so the Browser can ask for it.
+	 */
+	private async capturePage(
+		tab: MemonBrowserTab,
+		{ ref, ...options }: Omit<MemonCaptureRequest, "docToken"> = {},
+	): Promise<MemonPageCapture> {
 
 	/** The chat's model can look at pictures, so a picture goes to it. */
 	async modelAcceptsImages(): Promise<boolean> {
@@ -1245,15 +1373,23 @@ export class MemonMachine {
 
 	/** Saves a picture (a PNG data URL) into ~/Pictures; returns its path. */
 	async savePicture(dataUrl: string, name: string): Promise<string> {
+		await this.ports.files.write(path, dataUrlBytes(picture.dataUrl));
+		this.lastShot = {
+			id: (this.lastShot?.id ?? 0) + 1,
+			path,
+			width: picture.width,
+			height: picture.height,
+			...(picture.cut ? { cut: true } : {}),
+		};
+		await this.refreshFiles().catch(() => this.changed());
+		return { ...this.lastShot };
 		this.requireApp("files");
-		const binary = atob(dataUrl.slice(dataUrl.indexOf(",") + 1));
-		const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
 		const path = await this.freeName(
 			this.resolvePath(MEMON_PICTURES_DIR),
 			`${name}.png`,
 			"move",
 		);
-		await this.ports.files.write(path, bytes);
+		await this.ports.files.write(path, dataUrlBytes(dataUrl));
 		await this.refreshFiles().catch(() => undefined);
 		return path;
 	}
@@ -2227,6 +2363,30 @@ export class MemonMachine {
 			throw new Error(
 				`Give a full http(s) address to download, not "${source}".`,
 			);
+	/**
+	 * Where a new file goes: `to`, a folder (the file keeps `name`) or a file
+	 * path, else `dir`. A name taken already gets a number.
+	 */
+	private async placeFile(
+		to: string | undefined,
+		dir: string,
+		name: string,
+	): Promise<string> {
+		const target = to?.trim();
+		const wanted = this.resolvePath(target || dir);
+		const intoFolder =
+			!target ||
+			/\/$/.test(target) ||
+			(await this.ports.files.isDirectory(wanted).catch(() => false));
+		return intoFolder
+			? this.freeName(wanted, name, "move")
+			: this.freeName(
+					wanted.replace(/\/[^/]*$/, "") || "/",
+					wanted.slice(wanted.lastIndexOf("/") + 1),
+					"move",
+				);
+	}
+
 		}
 		if (sandboxTargetOf(source)) {
 			throw new Error(
@@ -2234,19 +2394,11 @@ export class MemonMachine {
 			);
 		}
 		const fetched = await download.fetch(source);
-		const name = downloadFileName(fetched.url, fetched.contentType);
-		const wanted = this.resolvePath(to?.trim() || MEMON_DOWNLOADS_DIR);
-		const intoFolder =
-			!to?.trim() ||
-			/\/$/.test(to.trim()) ||
-			(await this.ports.files.isDirectory(wanted).catch(() => false));
-		const path = intoFolder
-			? await this.freeName(wanted, name, "move")
-			: await this.freeName(
-					wanted.replace(/\/[^/]*$/, "") || "/",
-					wanted.slice(wanted.lastIndexOf("/") + 1),
-					"move",
-				);
+		const path = await this.placeFile(
+			to,
+			MEMON_DOWNLOADS_DIR,
+			downloadFileName(fetched.url, fetched.contentType),
+		);
 		await this.ports.files.write(path, fetched.bytes);
 		await this.refreshFiles().catch(() => undefined);
 		return {
@@ -2271,18 +2423,7 @@ export class MemonMachine {
 			throw new Error(`${folder} is not a folder: zip takes a folder.`);
 		}
 		const zip = await this.ports.files.zip(source);
-		const wanted = this.resolvePath(to?.trim() || MEMON_DOWNLOADS_DIR);
-		const intoFolder =
-			!to?.trim() ||
-			/\/$/.test(to.trim()) ||
-			(await this.ports.files.isDirectory(wanted).catch(() => false));
-		const path = intoFolder
-			? await this.freeName(wanted, zip.name, "move")
-			: await this.freeName(
-					wanted.replace(/\/[^/]*$/, "") || "/",
-					wanted.slice(wanted.lastIndexOf("/") + 1),
-					"move",
-				);
+		const path = await this.placeFile(to, MEMON_DOWNLOADS_DIR, zip.name);
 		await this.ports.files.write(path, zip.bytes);
 		this.fileExport = {
 			id: (this.fileExport?.id ?? 0) + 1,
@@ -3269,6 +3410,8 @@ export class MemonMachine {
 				agentName: this.agentName,
 				items: this.connectionItems.map((item) => ({
 					...item,
+				...(this.captureBlocked ? { captureBlocked: true } : {}),
+				...(this.lastShot ? { shot: { ...this.lastShot } } : {}),
 					tools: [...item.tools],
 				})),
 				unlocked: this.connectionsUnlocked,

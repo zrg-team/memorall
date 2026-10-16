@@ -19,6 +19,9 @@ import {
 } from "./mcp-client";
 import { ManagedLightpandaRuntime } from "./managed-lightpanda-runtime";
 
+/** The least time the MCP handshake with Lightpanda gets, before any page. */
+const HANDSHAKE_TIMEOUT_MS = 5_000;
+
 const evaluatedValue = <T>(result: McpToolResult): T => {
 	if (result.structuredContent?.value !== undefined) {
 		return result.structuredContent.value as T;
@@ -101,9 +104,17 @@ export class LightpandaBackend implements BrowserBackend {
 		const session: BackendSession = { engine: this.engine, handle, url };
 		const client = new StreamableHttpMcpClient(endpoint);
 		this.clients.set(handle, client);
-		const timed = withTimeoutSignal(timeoutMs, signal);
+		// Only the page's load counts against `timeoutMs`. A handshake slower
+		// than that used to time the open out before `goto` was sent, keeping a
+		// tab that never started loading as if it were still on its way.
+		const handshake = withTimeoutSignal(
+			Math.max(timeoutMs, HANDSHAKE_TIMEOUT_MS),
+			signal,
+		);
+		let timed: ReturnType<typeof withTimeoutSignal> | undefined;
 		try {
-			await client.initialize(timed.signal);
+			await client.initialize(handshake.signal);
+			timed = withTimeoutSignal(timeoutMs, signal);
 			await client.callTool(
 				"goto",
 				{ url, timeout: timeoutMs, waitUntil: "domcontentloaded" },
@@ -115,8 +126,10 @@ export class LightpandaBackend implements BrowserBackend {
 			};
 		} catch (error) {
 			if (
-				timed.signal.aborted ||
-				(error instanceof McpClientError && /timeout/i.test(error.message))
+				timed?.signal.aborted ||
+				(timed &&
+					error instanceof McpClientError &&
+					/timeout/i.test(error.message))
 			) {
 				throw new BackendOpenError(
 					"NAVIGATION_TIMEOUT",
@@ -128,7 +141,8 @@ export class LightpandaBackend implements BrowserBackend {
 			await client.close().catch(() => {});
 			throw error;
 		} finally {
-			timed.dispose();
+			handshake.dispose();
+			timed?.dispose();
 		}
 	}
 

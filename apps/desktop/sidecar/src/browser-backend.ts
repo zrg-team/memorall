@@ -4,6 +4,7 @@ import type {
 	BrowserMode,
 	BrowserSnapshot,
 	EngineStatus,
+	ScreenshotOptions,
 } from "./browser-runtime-types";
 
 export interface BackendSession {
@@ -56,7 +57,8 @@ export interface BrowserBackend {
 	screenshot?(
 		session: BackendSession,
 		signal?: AbortSignal,
-	): Promise<{ dataUrl: string; width: number; height: number }>;
+		options?: ScreenshotOptions,
+	): Promise<{ dataUrl: string; width: number; height: number; cut?: boolean }>;
 	fetchImage?(
 		session: BackendSession,
 		url: string,

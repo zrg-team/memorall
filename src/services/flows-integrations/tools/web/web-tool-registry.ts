@@ -8,6 +8,7 @@ import { actOnRef, buildPageOutline } from "@/co-agent/dom/page-outline";
 import { UnavailableBrowserCommandPort } from "@/platform/core/unavailable-browser-command-port";
 import { platform } from "@/platform/current";
 import { resolveWebBrowserMode } from "@/services/web-browser/browser-mode";
+import type { WebScreenshotOptions } from "@/services/web-browser/page-screenshot";
 import {
 	awaitChallengeDecision,
 	cancelChallenges,
@@ -1866,9 +1867,22 @@ export const performDomAction = async (
 	return response.result;
 };
 
+/** A whole page is several captures, scrolled between: give it time. */
+const FULL_PAGE_SCREENSHOT_TIMEOUT_MS = 90_000;
+
+/**
+ * The session's page as the browser shows it: the viewport, a rectangle of
+ * it, or the whole page (`cut` when the page was too long to keep whole).
+ */
 export const captureWebSessionScreenshot = async (
 	sessionId: string,
-): Promise<{ dataUrl: string; width: number; height: number }> => {
+	options: WebScreenshotOptions = {},
+): Promise<{
+	dataUrl: string;
+	width: number;
+	height: number;
+	cut?: boolean;
+}> => {
 	const session =
 		WEB_SESSIONS.get(sessionId) ?? (await recoverSession(sessionId));
 	if (!session) {
@@ -1876,6 +1890,11 @@ export const captureWebSessionScreenshot = async (
 	}
 
 	if (session.mode === "iframe") {
+		if (options.fullPage || options.clip) {
+			throw new Error(
+				"Only a page in a browser tab can be captured whole or in part.",
+			);
+		}
 		if (!session.iframe) {
 			throw new Error("Iframe element is not available for screenshot.");
 		}
@@ -1904,6 +1923,10 @@ export const captureWebSessionScreenshot = async (
 		sessionId,
 		tabId: session.tabId,
 		windowId: session.windowId,
+		...(options.fullPage
+			? { fullPage: true, timeoutMs: FULL_PAGE_SCREENSHOT_TIMEOUT_MS }
+			: {}),
+		...(options.clip ? { clip: options.clip } : {}),
 	});
 
 	if (response.command !== "screenshot") {
@@ -1914,6 +1937,7 @@ export const captureWebSessionScreenshot = async (
 		dataUrl: response.dataUrl,
 		width: response.width,
 		height: response.height,
+		...(response.cut ? { cut: true } : {}),
 	};
 };
 

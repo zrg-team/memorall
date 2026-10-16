@@ -1,6 +1,7 @@
 import { base64ToBytes } from "@/services/llm/utils/media-encoding";
 import type { WebOutlineActionRequest } from "@/services/web-browser/web-browser-protocol";
 import { MEMON_KIT_APPS } from "./apps";
+import { memonDisplayPath } from "./constants";
 import { HOSTED_APPS, isHostedAppId } from "./apps/hosted/catalog";
 import { normalizeMemonFeatureConfig } from "./feature-config";
 import {
@@ -218,6 +219,25 @@ export const runMemonOperation = async (
 				job.payload.key,
 				"let the agent continue past the page's verification check",
 				(machine) => machine.continuePastWall(),
+			);
+		case "browser.screenshot": {
+			const { key, fullPage } = job.payload;
+			return userAside(
+				key,
+				(saved: string) =>
+					`saved a screenshot of ${fullPage ? "the whole page" : "the page"} to ${saved}`,
+				async (machine) =>
+					memonDisplayPath(
+						(await machine.saveScreenshot({ fullPage })).path,
+						machine.home,
+					),
+			);
+		}
+		case "browser.captureAllowed":
+			return userAside(
+				job.payload.key,
+				"allowed screenshots of browser tabs",
+				(machine) => machine.allowCapture(),
 			);
 		case "scheduler.refresh": {
 			const machine = findMemonMachine(job.payload.key);

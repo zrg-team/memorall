@@ -72,6 +72,24 @@ export interface MemonBrowserState {
 	 * user gets the page through, or lets it continue anyway.
 	 */
 	wallTabId?: string;
+	/**
+	 * The browser refused a screenshot of a tab until the user allows it
+	 * (the extension asks for that from a click).
+	 */
+	captureBlocked?: boolean;
+	/** The screenshot saved last, for the Browser to say where it went. */
+	shot?: MemonBrowserShot;
+}
+
+export interface MemonBrowserShot {
+	/** Counts up with each screenshot, so the same path saved twice still shows. */
+	id: number;
+	/** The PNG in Files. */
+	path: string;
+	width: number;
+	height: number;
+	/** The page was too long to keep whole: the picture stops short of its end. */
+	cut?: boolean;
 }
 
 export interface MemonFileEntry {
