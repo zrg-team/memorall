@@ -95,7 +95,8 @@ describe("describeSchemaIssues", () => {
 		expect(message).toContain("`web_search` rejected the arguments:");
 		expect(message).toContain("- query:");
 		expect(message).toContain("- limit:");
-		expect(message).toContain("Omit a field entirely rather than");
+		expect(message).toContain("Every required field needs a value");
+		expect(message).toContain("leave out an optional field");
 		// The thing that made the transcript unreadable.
 		expect(message).not.toContain('"code"');
 		expect(message).not.toContain('"inclusive"');
@@ -108,6 +109,54 @@ describe("describeSchemaIssues", () => {
 		const result = schema.safeParse({ filters: [{ name: "" }] });
 
 		expect(describeSchemaIssues(result.error)).toContain("- filters[0].name:");
+	});
+
+	it("names a required field the model left out as missing", () => {
+		// The reported failure: `memory_remember` without `object` came back as
+		// "object: Invalid input", and the model left it out again.
+		const schema = z.object({
+			subject: z.string().min(1),
+			relation: z.string().min(1),
+			object: z.string().min(1),
+			factText: z.string().min(1),
+			tags: z.array(z.string()).optional(),
+		});
+		const input = {
+			subject: "Muse Spark Open",
+			relation: "runs on",
+			factText: "Muse Spark Open runs on two Mac Studios.",
+			tags: ["ai"],
+		};
+
+		const message = (() => {
+			try {
+				parseToolInput(schema, input, "memory_remember");
+			} catch (error) {
+				return (error as Error).message;
+			}
+			return "";
+		})();
+
+		expect(message).toContain("- object: required, but missing");
+		expect(message).not.toContain("Invalid input");
+		expect(message).not.toContain("- subject:");
+	});
+
+	it("reports a blank required field as missing once the blank is dropped", () => {
+		const schema = z.object({ object: z.string().min(1) });
+
+		expect(() => parseToolInput(schema, { object: "" }, "t")).toThrow(
+			"- object: required, but missing",
+		);
+	});
+
+	it("keeps Zod's own message for a value of the wrong type", () => {
+		const schema = z.object({ count: z.number() });
+		const result = schema.safeParse({ count: "ten" });
+
+		expect(describeSchemaIssues(result.error, "t", { count: "ten" })).toContain(
+			"- count: Invalid input: expected number, received string",
+		);
 	});
 
 	it("passes a plain error through untouched", () => {

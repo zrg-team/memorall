@@ -78,11 +78,49 @@ const unwrapSchema = (schema: z.ZodTypeAny): z.ZodTypeAny => {
 	return schema;
 };
 
+/**
+ * The `.describe()` text for a field, wherever in the wrapper chain it was set.
+ *
+ * Zod keeps a description on the instance `.describe()` was called on, so
+ * `z.string().describe("…").optional()` carries it on the inner string while
+ * `z.string().optional().describe("…")` carries it on the wrapper. The
+ * outermost one is used.
+ */
+const findDescription = (schema: z.ZodTypeAny): string | undefined => {
+	const description = (schema as { description?: unknown }).description;
+	if (typeof description === "string" && description.trim()) {
+		return description;
+	}
+	const inner = (schema as { _def?: { innerType?: z.ZodTypeAny } })._def
+		?.innerType;
+	if (!inner) return undefined;
+	if (
+		schema instanceof z.ZodOptional ||
+		schema instanceof z.ZodDefault ||
+		schema instanceof z.ZodNullable
+	) {
+		return findDescription(inner);
+	}
+	return undefined;
+};
+
+/**
+ * Tool parameters as the model sees them. A field's description is the only
+ * place the model learns what the field means — a bare `{type: "string"}`
+ * says nothing about what belongs there, and models skip fields they cannot
+ * place — so it is carried over at every level.
+ */
 const toJsonSchema = (schema: ToolSchema): Record<string, unknown> => {
 	if (isJsonToolSchema(schema)) {
 		return schema.jsonSchema;
 	}
 
+	const converted = toJsonSchemaShape(schema);
+	const description = findDescription(schema);
+	return description ? { ...converted, description } : converted;
+};
+
+const toJsonSchemaShape = (schema: z.ZodTypeAny): Record<string, unknown> => {
 	const unwrapped = unwrapSchema(schema);
 
 	if (unwrapped instanceof z.ZodString) {

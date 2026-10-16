@@ -22,10 +22,19 @@
  * twenty lines of `{"code": "too_small", "inclusive": true, …}` — which tells
  * the reader the tool is broken and tells the model nothing it can act on.
  * Render the issues as a short list of what to fix instead.
+ *
+ * A required field the model left out is named as missing, not as invalid:
+ * "object: Invalid input" read alongside advice to omit fields led models to
+ * leave the same field out again on the retry.
  */
 
-import type { z } from "zod";
+import { z } from "zod";
 import { isJsonToolSchema, type ToolSchema } from "./tool.js";
+
+// Zod installs its English messages from a module it marks side-effect free,
+// so production bundles drop that call and every issue reads just "Invalid
+// input". Install them here, where the messages reach the model.
+z.config(z.locales.en());
 
 interface ZodLikeIssue {
 	readonly code: string;
@@ -67,16 +76,34 @@ const formatIssuePath = (path: ReadonlyArray<PropertyKey>): string => {
 	}, "");
 };
 
+/** Whether `path` names a key the arguments do not have at all. */
+const isMissingAt = (
+	input: unknown,
+	path: ReadonlyArray<PropertyKey>,
+): boolean => {
+	const key = path.at(-1);
+	if (key === undefined) return false;
+	let container: unknown = input;
+	for (const segment of path.slice(0, -1)) {
+		if (typeof container !== "object" || container === null) return false;
+		container = (container as Record<PropertyKey, unknown>)[segment];
+	}
+	if (typeof container !== "object" || container === null) return false;
+	return (container as Record<PropertyKey, unknown>)[key] === undefined;
+};
+
 /**
  * A short, actionable rendering of what the schema rejected.
  *
  * One line per issue, deduplicated: Zod reports both the field-level failure
  * and any object-level refine that failed because of it, and the model does not
- * need to be told twice.
+ * need to be told twice. Pass the arguments that were validated so a field the
+ * model left out is reported as missing rather than as a wrong value.
  */
 export const describeSchemaIssues = (
 	error: unknown,
 	toolName?: string,
+	input?: unknown,
 ): string => {
 	if (!isZodLikeError(error)) {
 		return error instanceof Error ? error.message : String(error);
@@ -86,7 +113,11 @@ export const describeSchemaIssues = (
 	const lines: string[] = [];
 	for (const issue of error.issues) {
 		const path = formatIssuePath(issue.path);
-		const line = path ? `- ${path}: ${issue.message}` : `- ${issue.message}`;
+		const message =
+			issue.code === "invalid_type" && isMissingAt(input, issue.path)
+				? "required, but missing"
+				: issue.message;
+		const line = path ? `- ${path}: ${message}` : `- ${message}`;
 		if (seen.has(line)) continue;
 		seen.add(line);
 		lines.push(line);
@@ -97,7 +128,7 @@ export const describeSchemaIssues = (
 		`${subject} rejected the arguments:`,
 		...lines,
 		"",
-		"Fix those fields and call it again. Omit a field entirely rather than passing an empty string.",
+		"Fix those fields and call it again. Every required field needs a value; leave out an optional field you have no value for rather than passing an empty string.",
 	].join("\n");
 };
 
@@ -164,14 +195,14 @@ export const parseToolInput = <T>(
 			// Still invalid — report the retry's issues, which no longer mention
 			// the empty fields the model can do nothing about.
 			throw new ToolInputError(
-				describeSchemaIssues(second.error, toolName),
+				describeSchemaIssues(second.error, toolName, retried),
 				isZodLikeError(second.error) ? second.error.issues : [],
 			);
 		}
 	}
 
 	throw new ToolInputError(
-		describeSchemaIssues(first.error, toolName),
+		describeSchemaIssues(first.error, toolName, input),
 		isZodLikeError(first.error) ? first.error.issues : [],
 	);
 };

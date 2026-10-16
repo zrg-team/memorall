@@ -497,24 +497,30 @@ exports[`flows-memory registered contracts > registers every memory tool contrac
     "parameters": {
       "properties": {
         "entity": {
+          "description": "Entity alias for backward compatibility",
           "type": "string",
         },
         "graphId": {
+          "description": "Knowledge graph/topic id to scope retrieval",
           "type": "string",
         },
         "limit": {
+          "description": "Result limit",
           "type": "number",
         },
         "queries": {
+          "description": "Additional knowledge retrieval queries",
           "items": {
             "type": "string",
           },
           "type": "array",
         },
         "query": {
+          "description": "Primary knowledge query",
           "type": "string",
         },
         "relationship": {
+          "description": "Specific relationship type to filter edges",
           "type": "string",
         },
       },
@@ -527,9 +533,11 @@ exports[`flows-memory registered contracts > registers every memory tool contrac
     "parameters": {
       "properties": {
         "edges": {
+          "description": "Facts/edges linking two nodes by name. Omit sourceName or destinationName to use the input node.",
           "items": {
             "properties": {
               "destinationName": {
+                "description": "Destination node name — omit to use the input node",
                 "type": "string",
               },
               "edgeType": {
@@ -539,6 +547,7 @@ exports[`flows-memory registered contracts > registers every memory tool contrac
                 "type": "string",
               },
               "sourceName": {
+                "description": "Source node name — omit to use the input node",
                 "type": "string",
               },
             },
@@ -550,9 +559,11 @@ exports[`flows-memory registered contracts > registers every memory tool contrac
           "type": "array",
         },
         "graphId": {
+          "description": "Graph/topic scope",
           "type": "string",
         },
         "node": {
+          "description": "Node to create or update by name",
           "properties": {
             "attributes": {
               "additionalProperties": {},
@@ -584,6 +595,7 @@ exports[`flows-memory registered contracts > registers every memory tool contrac
     "parameters": {
       "properties": {
         "edgeId": {
+          "description": "Memory edge id to explain",
           "type": "string",
         },
       },
@@ -594,7 +606,7 @@ exports[`flows-memory registered contracts > registers every memory tool contrac
     },
   },
   {
-    "description": "Remember a durable user fact, preference, or project-context item in the currently selected memory graph.",
+    "description": "Remember a durable user fact, preference, or project-context item in the currently selected memory graph. Give it as subject → relation → object plus the full sentence, e.g. subject "user", relation "prefers", object "dark mode", factText "The user prefers dark mode."",
     "name": "memory_remember",
     "parameters": {
       "properties": {
@@ -602,6 +614,7 @@ exports[`flows-memory registered contracts > registers every memory tool contrac
           "type": "number",
         },
         "factText": {
+          "description": "The whole memory as one natural-language sentence, e.g. "The user prefers dark mode."",
           "type": "string",
         },
         "memoryKind": {
@@ -613,21 +626,27 @@ exports[`flows-memory registered contracts > registers every memory tool contrac
           "type": "string",
         },
         "object": {
+          "description": "What the subject relates to: the end of subject → relation → object, e.g. "dark mode". Required even when factText already says it.",
           "type": "string",
         },
         "objectType": {
+          "description": "Kind of thing the object is, e.g. "setting", "tool"",
           "type": "string",
         },
         "reason": {
+          "description": "Why this memory is being saved",
           "type": "string",
         },
         "relation": {
+          "description": "How the subject relates to the object, as a short predicate, e.g. "prefers", "works on"",
           "type": "string",
         },
         "subject": {
+          "description": "Who or what the memory is about: the start of subject → relation → object, e.g. "user"",
           "type": "string",
         },
         "subjectType": {
+          "description": "Kind of thing the subject is, e.g. "person", "project"",
           "type": "string",
         },
         "tags": {
@@ -637,6 +656,7 @@ exports[`flows-memory registered contracts > registers every memory tool contrac
           "type": "array",
         },
         "validAt": {
+          "description": "Optional ISO timestamp when valid",
           "type": "string",
         },
       },
@@ -655,15 +675,18 @@ exports[`flows-memory registered contracts > registers every memory tool contrac
     "parameters": {
       "properties": {
         "edgeId": {
+          "description": "Exact memory edge id to remove",
           "type": "string",
         },
         "limit": {
           "type": "number",
         },
         "query": {
+          "description": "Search query for memories to remove",
           "type": "string",
         },
         "reason": {
+          "description": "Why the memory is being removed",
           "type": "string",
         },
       },
@@ -690,9 +713,11 @@ exports[`flows-memory registered contracts > registers every memory tool contrac
           "type": "string",
         },
         "query": {
+          "description": "What memory to search for",
           "type": "string",
         },
         "scope": {
+          "description": "'all' (default) searches everything in the graph, including knowledge extracted from saved pages, files, and chats. 'active' searches only memories saved through memory_remember.",
           "enum": [
             "active",
             "all",
@@ -707,7 +732,7 @@ exports[`flows-memory registered contracts > registers every memory tool contrac
     },
   },
   {
-    "description": "Update a memory in the currently selected memory graph by invalidating the old fact and creating a replacement.",
+    "description": "Update a memory in the currently selected memory graph by invalidating the old fact and creating a replacement. Identify the old memory with edgeId or query, then give the replacement in full as subject → relation → object plus factText.",
     "name": "memory_update",
     "parameters": {
       "properties": {
@@ -715,9 +740,11 @@ exports[`flows-memory registered contracts > registers every memory tool contrac
           "type": "number",
         },
         "edgeId": {
+          "description": "Exact memory edge id to update",
           "type": "string",
         },
         "factText": {
+          "description": "The whole memory as one natural-language sentence, e.g. "The user prefers dark mode."",
           "type": "string",
         },
         "memoryKind": {
@@ -729,24 +756,31 @@ exports[`flows-memory registered contracts > registers every memory tool contrac
           "type": "string",
         },
         "object": {
+          "description": "What the subject relates to: the end of subject → relation → object, e.g. "dark mode". Required even when factText already says it.",
           "type": "string",
         },
         "objectType": {
+          "description": "Kind of thing the object is, e.g. "setting", "tool"",
           "type": "string",
         },
         "query": {
+          "description": "Search query for memory to update",
           "type": "string",
         },
         "reason": {
+          "description": "Why this memory is being saved",
           "type": "string",
         },
         "relation": {
+          "description": "How the subject relates to the object, as a short predicate, e.g. "prefers", "works on"",
           "type": "string",
         },
         "subject": {
+          "description": "Who or what the memory is about: the start of subject → relation → object, e.g. "user"",
           "type": "string",
         },
         "subjectType": {
+          "description": "Kind of thing the subject is, e.g. "person", "project"",
           "type": "string",
         },
         "tags": {

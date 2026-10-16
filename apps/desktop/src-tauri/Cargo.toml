@@ -1,6 +1,6 @@
 [package]
 name = "memorall-desktop"
-version = "0.5.45"
+version = "0.5.46"
 description = "Memorall desktop supervisor"
 edition = "2021"
 
