@@ -598,6 +598,7 @@ const fxStatus = (fx: MemonMachineSnapshot["fx"]): string => {
 	if (fx.status === "error")
 		return `failed: ${truncateLine(fx.error ?? "unknown error", 120)}`;
 	if (fx.status === "starting") return "starting";
+	if (fx.status === "choosing") return "the user picks a folder to open";
 	return fx.working ? "working" : "waiting for the user";
 };
 
@@ -617,6 +618,11 @@ const fxLines = (
 ): string[] => [
 	fxBrief(snapshot, windowId, ""),
 	"fx is Vercel's coding agent, in its own terminal on the chat's model; the user drives it there and its conversation is not on this screen.",
+	...(snapshot.fx?.status === "choosing"
+		? [
+				"(fx starts once the user picks a folder; `fx <path>` in the Terminal starts it in the one you name)",
+			]
+		: []),
 ];
 
 const fullLines = (

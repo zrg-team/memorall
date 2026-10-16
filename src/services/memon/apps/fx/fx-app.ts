@@ -1,13 +1,14 @@
 import { memonDisplayPath } from "../../constants";
-import type { MemonFxState } from "../../types";
+import type { MemonFxState, MemonPiCodeFolder } from "../../types";
 import type { OutputRead } from "./output-log";
 
 /**
  * fx on a Memon machine: Vercel's fx coding agent, its terminal running in
  * the machine and shown in the fx window.
  *
- * Opening the window starts fx in the home (`fx` in the Terminal starts it in
- * the tab's folder). Closing the window, fx's /exit or shutting the computer
+ * fx works in a folder and keeps its conversations per folder, so opening its
+ * window asks for one, as pi code does (`fx` in the Terminal opens it in the
+ * tab's folder). Closing the window, fx's /exit or shutting the computer
  * down stops it; leaving the view does not, so fx keeps working while no
  * view is attached. Views attach with a size, replay fx's output from the
  * start, then follow it by cursor and send raw keys.
@@ -38,6 +39,8 @@ export interface MemonFxPort {
 		onExit: () => void;
 		onChange: () => void;
 	}): Promise<FxRunner>;
+	/** The folders fx kept conversations in, the one used last first. */
+	folders(home: string): Promise<MemonPiCodeFolder[]>;
 }
 
 export interface FxRead extends OutputRead {
@@ -69,6 +72,8 @@ export class MemonFx {
 	/** The folder the fx on its way works in. */
 	private startingCwd: string | undefined;
 	private error: string | undefined;
+	/** The window asks which folder to open fx in. */
+	private choosing = false;
 	/** Bumped by stop(), so a start still on its way is thrown away. */
 	private generation = 0;
 
@@ -81,15 +86,26 @@ export class MemonFx {
 		return Boolean(this.runner || this.starting);
 	}
 
-	/** Starts fx in the home, unless it runs or starts already. */
-	start(): void {
+	/**
+	 * The user opened fx: its window asks which folder to open, unless fx runs
+	 * or starts.
+	 */
+	choose(): void {
 		if (this.active) return;
-		this.boot(this.host.home());
+		this.choosing = true;
+		this.error = undefined;
+		this.host.changed();
+	}
+
+	/** The folders fx kept conversations in, the one used last first. */
+	async recentFolders(): Promise<MemonPiCodeFolder[]> {
+		return (await this.port?.folders(this.host.home())) ?? [];
 	}
 
 	/**
-	 * The user opens fx in a folder (`fx` in the Terminal): fx starts there,
-	 * or starts again there when it was idle elsewhere. Throws while it works.
+	 * The user opens fx in a folder (the folder picker, `fx` in the Terminal),
+	 * on its last conversation there with `continueLast`: fx starts there, or
+	 * starts again there when it was idle elsewhere. Throws while it works.
 	 */
 	async open(
 		cwd: string,
@@ -118,6 +134,7 @@ export class MemonFx {
 			return;
 		}
 		this.error = undefined;
+		this.choosing = false;
 		const generation = ++this.generation;
 		this.startingCwd = cwd;
 		this.starting = this.port
@@ -167,6 +184,7 @@ export class MemonFx {
 		this.starting = undefined;
 		this.startingCwd = undefined;
 		this.error = undefined;
+		this.choosing = false;
 		await runner?.dispose();
 	}
 
@@ -190,6 +208,7 @@ export class MemonFx {
 		}
 		if (this.error)
 			return { status: "error", working: false, error: this.error };
+		if (this.choosing) return { status: "choosing", working: false };
 		return undefined;
 	}
 

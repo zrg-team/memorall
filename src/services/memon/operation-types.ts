@@ -137,8 +137,11 @@ export interface MemonOperationPayloadMap {
 	"piCode.stop": Keyed;
 	/** The folders pi worked in, for its folder picker. Changes nothing. */
 	"piCode.folders": Keyed;
-	/** The folders in a folder (the home by default). Changes nothing. */
-	"piCode.browse": Keyed<{ dir?: string }>;
+	/**
+	 * The folders in a folder (the home by default), for the folder picker
+	 * of pi code and fx. Changes nothing.
+	 */
+	"folders.browse": Keyed<{ dir?: string }>;
 	/**
 	 * Opens pi code in a folder: `continueLast` opens its last session,
 	 * `create` makes it.
@@ -173,8 +176,17 @@ export interface MemonOperationPayloadMap {
 	 */
 	"piCode.pasteImage": Keyed<{ data: string; mimeType: string }>;
 	"piCode.resize": Keyed<{ columns: number; rows: number }>;
-	/** Starts fx again in its window, after it failed to start. */
-	"fx.start": Keyed;
+	/** The folders fx kept conversations in, the one used last first. */
+	"fx.folders": Keyed;
+	/**
+	 * Opens fx in a folder: `continueLast` opens its last conversation there,
+	 * `create` makes the folder.
+	 */
+	"fx.open": Keyed<{
+		cwd: string;
+		continueLast?: boolean;
+		create?: boolean;
+	}>;
 	/**
 	 * An fx view connects: fx takes its size, and the view replays fx's
 	 * output from the returned cursor. Null when fx is not running.
@@ -196,9 +208,9 @@ export type MemonOperationResultMap = {
 			? string
 			: K extends "terminal.complete"
 				? MemonTerminalCompletion
-				: K extends "piCode.folders"
+				: K extends "piCode.folders" | "fx.folders"
 					? MemonPiCodeFolder[]
-					: K extends "piCode.browse"
+					: K extends "folders.browse"
 						? MemonPiCodeBrowse | null
 						: K extends "piCode.attach" | "fx.attach"
 							? { cursor: number } | null

@@ -10,6 +10,7 @@
 
 import type { IAgentSandboxService } from "@memorall/agent-harness-sandbox";
 import type { IFlowFileSystem } from "@memorall/agent-harness-flows/interfaces/services/filesystem";
+import { logWarn } from "@/utils/logger";
 import type { MemonSkillsPort } from "../../memon-machine";
 import {
 	createFxGatewayFetch,
@@ -150,12 +151,21 @@ export class FxSession {
 				instructions,
 			}),
 			configStore: createFxConfigStore(options.fs, options.home),
-			promptHistoryStore: createFxPromptHistoryStore(options.fs, options.home),
-			sessionStore: createFxSessionStore(options.fs, options.home),
+			promptHistoryStore: createFxPromptHistoryStore(
+				options.fs,
+				options.home,
+				options.cwd,
+			),
+			sessionStore: createFxSessionStore(options.fs, options.home, options.cwd),
 			// The machine has no clipboard or browser of its own: fx prints
 			// links, and the window copies what the user selects.
 			clipboard: null,
 			openUrl: () => false,
+			// fx says only that saving its history or a session failed; why
+			// comes as an event.
+			onEvent: (event) => {
+				if (event.type.endsWith("_error")) logWarn(`fx ${event.type}`, event);
+			},
 		});
 		this.runtime = runtime;
 		runtime.exited.then((code) => {

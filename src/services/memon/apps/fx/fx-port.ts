@@ -51,4 +51,8 @@ export const createFxPort = (deps: {
 		});
 		return session;
 	},
+	async folders(home) {
+		const { listFxFolders } = await import("./fx-stores");
+		return listFxFolders(deps.fs(), home);
+	},
 });

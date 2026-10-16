@@ -6,6 +6,7 @@
  */
 
 import type { IFlowFileSystem } from "@memorall/agent-harness-flows/interfaces/services/filesystem";
+import type { MemonPiCodeFolder } from "../../types";
 
 /** fx's own folder in the home. */
 export const fxDir = (home: string): string => `${home}/.fx`;
@@ -13,6 +14,9 @@ const terminalDir = (home: string): string => `${fxDir(home)}/terminal`;
 
 /** A prompt longer than this is not kept in the history. */
 const MAX_HISTORY_RECORD_CHARS = 64 * 1024;
+/** Folders the folder picker lists. */
+const MAX_FOLDERS = 12;
+const TITLE_CHARS = 120;
 
 /** A file's text, or null when it cannot be read (it is not there yet). */
 const readText = (fs: IFlowFileSystem, path: string): Promise<string | null> =>
@@ -69,59 +73,65 @@ interface HistoryRecord {
 	at: number;
 }
 
-/** What the user typed at fx's prompt, per workspace, oldest first. */
+const historyPath = (home: string): string =>
+	`${terminalDir(home)}/history.jsonl`;
+
+const parseHistory = (text: string): HistoryRecord[] =>
+	text
+		.split("\n")
+		.filter(Boolean)
+		.flatMap((line) => {
+			try {
+				const record = JSON.parse(line) as HistoryRecord;
+				return typeof record.value === "string" &&
+					typeof record.root === "string"
+					? [record]
+					: [];
+			} catch {
+				return [];
+			}
+		});
+
+/**
+ * What the user typed at fx's prompt in the folder it works in, oldest
+ * first. fx's WebAssembly terminal names every workspace `/`, so the folder
+ * is the one this fx was started in, not the one fx passes.
+ */
 export const createFxPromptHistoryStore = (
 	fs: IFlowFileSystem,
 	home: string,
+	cwd: string,
 ) => {
-	const path = `${terminalDir(home)}/history.jsonl`;
+	const path = historyPath(home);
 	const queue = serial();
-	const parse = (text: string): HistoryRecord[] =>
-		text
-			.split("\n")
-			.filter(Boolean)
-			.flatMap((line) => {
-				try {
-					const record = JSON.parse(line) as HistoryRecord;
-					return typeof record.value === "string" &&
-						typeof record.root === "string"
-						? [record]
-						: [];
-				} catch {
-					return [];
-				}
-			});
+	const parse = parseHistory;
 	const records = async (): Promise<HistoryRecord[]> =>
 		parse((await readText(fs, path)) ?? "");
 	return {
-		load: async (workspaceRoot: string, limit: number): Promise<string[]> =>
+		load: async (_workspaceRoot: string, limit: number): Promise<string[]> =>
 			(await records())
-				.filter((record) => record.root === workspaceRoot)
+				.filter((record) => record.root === cwd)
 				.slice(-Math.max(0, limit))
 				.map((record) => record.value),
 		append: (
-			workspaceRoot: string,
+			_workspaceRoot: string,
 			value: string,
 			timestampMs: number,
 		): Promise<"duplicate" | "record_too_large" | undefined> =>
 			queue(async () => {
 				if (value.length > MAX_HISTORY_RECORD_CHARS) return "record_too_large";
 				const text = (await readText(fs, path)) ?? "";
-				const mine = parse(text).filter(
-					(record) => record.root === workspaceRoot,
-				);
+				const mine = parse(text).filter((record) => record.root === cwd);
 				if (mine.at(-1)?.value === value) return "duplicate";
-				const line = `${JSON.stringify({ root: workspaceRoot, value, at: timestampMs })}\n`;
+				const line = `${JSON.stringify({ root: cwd, value, at: timestampMs })}\n`;
 				// Written whole: the Memon file system appends only to a file that
 				// is already there.
 				await writeText(fs, path, text + line);
 				return undefined;
 			}),
-		clear: (workspaceRoot: string): Promise<void> =>
+		clear: (_workspaceRoot: string): Promise<void> =>
 			queue(async () => {
-				const kept = (await records()).filter(
-					(record) => record.root !== workspaceRoot,
-				);
+				const kept = (await records()).filter((record) => record.root !== cwd);
 				await writeText(
 					fs,
 					path,
@@ -134,25 +144,40 @@ export const createFxPromptHistoryStore = (
 interface SessionIndexEntry {
 	revision: string;
 	updatedAtMs: number;
+	/** The folder fx worked in; the home for sessions saved before it was kept. */
+	cwd?: string;
 }
+
+const sessionsDir = (home: string): string => `${terminalDir(home)}/sessions`;
+
+const readSessionIndex = async (
+	fs: IFlowFileSystem,
+	home: string,
+): Promise<Record<string, SessionIndexEntry>> => {
+	try {
+		const parsed = JSON.parse(
+			(await readText(fs, `${sessionsDir(home)}/index.json`)) ?? "{}",
+		);
+		return parsed && typeof parsed === "object" ? parsed : {};
+	} catch {
+		return {};
+	}
+};
 
 export const FX_SESSION_REVISION_CONFLICT = "FX_SESSION_REVISION_CONFLICT";
 
 /** fx's saved conversations; `fx -c` continues the latest one. */
-export const createFxSessionStore = (fs: IFlowFileSystem, home: string) => {
-	const dir = `${terminalDir(home)}/sessions`;
+export const createFxSessionStore = (
+	fs: IFlowFileSystem,
+	home: string,
+	cwd: string,
+) => {
+	const dir = sessionsDir(home);
 	const indexPath = `${dir}/index.json`;
 	const fileOf = (id: string) => `${dir}/${encodeURIComponent(id)}.fxsession`;
 	const queue = serial();
 	let seq = 0;
-	const index = async (): Promise<Record<string, SessionIndexEntry>> => {
-		try {
-			const parsed = JSON.parse((await readText(fs, indexPath)) ?? "{}");
-			return parsed && typeof parsed === "object" ? parsed : {};
-		} catch {
-			return {};
-		}
-	};
+	const index = () => readSessionIndex(fs, home);
 	const saveIndex = (entries: Record<string, SessionIndexEntry>) =>
 		writeText(fs, indexPath, `${JSON.stringify(entries, null, "\t")}\n`);
 
@@ -183,15 +208,16 @@ export const createFxSessionStore = (fs: IFlowFileSystem, home: string) => {
 				const revision = `${Date.now().toString(36)}-${(++seq).toString(36)}`;
 				await fs.mkdir(dir, { recursive: true });
 				await fs.writeFile(fileOf(id), bytes);
-				entries[id] = { revision, updatedAtMs: Date.now() };
+				entries[id] = { revision, updatedAtMs: Date.now(), cwd };
 				await saveIndex(entries);
 				return { revision };
 			}),
+		// A folder's own conversations: what /resume lists and `--resume last`
+		// continues.
 		list: async (): Promise<Array<{ id: string; updatedAtMs: number }>> =>
-			Object.entries(await index()).map(([id, entry]) => ({
-				id,
-				updatedAtMs: entry.updatedAtMs,
-			})),
+			Object.entries(await index())
+				.filter(([, entry]) => (entry.cwd ?? home) === cwd)
+				.map(([id, entry]) => ({ id, updatedAtMs: entry.updatedAtMs })),
 		remove: (id: string): Promise<void> =>
 			queue(async () => {
 				const entries = await index();
@@ -202,4 +228,62 @@ export const createFxSessionStore = (fs: IFlowFileSystem, home: string) => {
 				await fs.unlink(fileOf(id)).catch(() => {});
 			}),
 	};
+};
+
+/**
+ * The folders fx kept conversations in, the one used last first, for the
+ * folder picker. Each is labelled with the last prompt typed there. Folders
+ * gone from disk are left out.
+ */
+export const listFxFolders = async (
+	fs: IFlowFileSystem,
+	home: string,
+): Promise<MemonPiCodeFolder[]> => {
+	const byPath = new Map<string, MemonPiCodeFolder>();
+	for (const [id, entry] of Object.entries(await readSessionIndex(fs, home))) {
+		const path = entry.cwd ?? home;
+		const known = byPath.get(path);
+		if (!known) {
+			byPath.set(path, {
+				path,
+				lastUsed: entry.updatedAtMs,
+				sessions: 1,
+				latest: { file: id },
+			});
+			continue;
+		}
+		known.sessions += 1;
+		if (entry.updatedAtMs > known.lastUsed) {
+			known.lastUsed = entry.updatedAtMs;
+			known.latest = { file: id };
+		}
+	}
+	const recent = [...byPath.values()]
+		.sort((a, b) => b.lastUsed - a.lastUsed)
+		.slice(0, MAX_FOLDERS);
+	const lastPrompt = new Map<string, string>();
+	for (const record of parseHistory(
+		(await readText(fs, historyPath(home))) ?? "",
+	)) {
+		lastPrompt.set(record.root, record.value);
+	}
+	const there = await Promise.all(
+		recent.map((folder) =>
+			fs.stat(folder.path).then(
+				(stat) => stat.isDirectory(),
+				() => false,
+			),
+		),
+	);
+	return recent
+		.filter((_, index) => there[index])
+		.map((folder) => {
+			const prompt = lastPrompt.get(folder.path)?.replace(/\s+/g, " ").trim();
+			if (!prompt) return folder;
+			const title =
+				prompt.length > TITLE_CHARS
+					? `${prompt.slice(0, TITLE_CHARS - 1)}…`
+					: prompt;
+			return { ...folder, latest: { ...folder.latest, title } };
+		});
 };

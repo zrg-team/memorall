@@ -1005,8 +1005,8 @@ export class MemonMachine {
 		// pi runs while its window is open. Opened by the user, the window
 		// asks for a folder; the agent starts pi in the folder it names.
 		if (app === "pi") this.piCode.choose();
-		// fx runs while its window is open; opened by the user, in the home.
-		if (app === "fx") this.fx.start();
+		// fx too, and its window asks for a folder the same way.
+		if (app === "fx") this.fx.choose();
 		this.focusWindow(window.id);
 		return window;
 	}
@@ -1097,11 +1097,35 @@ export class MemonMachine {
 				"pi code is turned off for this agent. The user can turn it on in MemonOS Bot settings.",
 			);
 		}
+		const cwd = await this.codeFolder(path, options.create);
+		return this.piCode.open(cwd, options);
+	}
+
+	// ── fx ──────────────────────────────────────────────────────────────────
+
+	/**
+	 * Opens fx in a folder (`~` is the home): the user's pick in its window,
+	 * or `fx` in the Terminal. `continueLast` opens the folder's last
+	 * conversation; `create` a new folder, which fx makes as it starts.
+	 */
+	async openFx(
+		path: string,
+		options: { continueLast?: boolean; create?: boolean } = {},
+	): Promise<FxOpened> {
+		if (!this.config.fx) throw new Error(FX_TURNED_OFF);
+		const cwd = await this.codeFolder(path, options.create);
+		return this.fx.open(cwd, options);
+	}
+
+	/**
+	 * The folder a coding app opens (`~` is the home): one that is there, or
+	 * with `create` one that is not yet, in a folder that is.
+	 */
+	private async codeFolder(path: string, create?: boolean): Promise<string> {
 		const cwd = this.resolvePath(path, this.home);
 		const shown = memonDisplayPath(cwd, this.home);
-		const isFolder = (folder: string) =>
-			this.ports.files.isDirectory(folder).catch(() => false);
-		if (options.create) {
+		const isFolder = (folder: string) => this.isFolderOrHome(folder);
+		if (create) {
 			if (await this.ports.files.exists(cwd).catch(() => false)) {
 				throw new Error(`${shown} is already there.`);
 			}
@@ -1114,34 +1138,29 @@ export class MemonMachine {
 		} else if (!(await isFolder(cwd))) {
 			throw new Error(`${shown} is not a folder.`);
 		}
-		return this.piCode.open(cwd, options);
+		return cwd;
 	}
-
-	// ── fx ──────────────────────────────────────────────────────────────────
 
 	/**
-	 * Opens fx in a folder (`~` is the home): `fx` in the Terminal.
-	 * `continueLast` opens fx's latest conversation.
+	 * A folder that is there, or the home: a new agent's home is made when
+	 * something is first put in it, and pi code and fx make the folder they
+	 * open as they start.
 	 */
-	async openFx(
-		path: string,
-		options: { continueLast?: boolean } = {},
-	): Promise<FxOpened> {
-		if (!this.config.fx) throw new Error(FX_TURNED_OFF);
-		const cwd = this.resolvePath(path, this.home);
-		if (!(await this.ports.files.isDirectory(cwd).catch(() => false))) {
-			throw new Error(`${memonDisplayPath(cwd, this.home)} is not a folder.`);
-		}
-		return this.fx.open(cwd, options);
+	private async isFolderOrHome(folder: string): Promise<boolean> {
+		return (
+			folder === this.home ||
+			(await this.ports.files.isDirectory(folder).catch(() => false))
+		);
 	}
 
-	/** The folders in a folder (the home by default), for pi's folder picker. */
+	/** The folders in a folder (the home by default), for the folder picker. */
 	async browseFolders(path = "~"): Promise<MemonPiCodeBrowse> {
 		const dir = this.resolvePath(path, this.home);
-		if (!(await this.ports.files.isDirectory(dir).catch(() => false))) {
+		if (!(await this.isFolderOrHome(dir))) {
 			throw new Error(`${memonDisplayPath(dir, this.home)} is not a folder.`);
 		}
-		const entries = await this.ports.files.list(dir);
+		const there = await this.ports.files.isDirectory(dir).catch(() => false);
+		const entries = there ? await this.ports.files.list(dir) : [];
 		return {
 			dir,
 			parent: dir === "/" ? undefined : dir.replace(/\/[^/]*$/, "") || "/",

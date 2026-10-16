@@ -491,7 +491,8 @@ export interface MemonMachineSummary {
  * the chat's model. Its screen is a terminal the window streams.
  */
 export interface MemonFxState {
-	status: "starting" | "running" | "error";
+	/** choosing: the window asks which folder to open fx in. */
+	status: "choosing" | "starting" | "running" | "error";
 	/** Which start this is: a view that saw another one replays from scratch. */
 	instance?: number;
 	/** fx is answering or running a command. */

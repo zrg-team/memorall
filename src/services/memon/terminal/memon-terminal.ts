@@ -173,7 +173,7 @@ const FX = /^fx(?:\s+(.*?))?\s*$/;
 const FX_USAGE = [
 	"Usage: fx [-c] [folder]",
 	"Opens fx in the folder (this one by default); this tab exits.",
-	"  -c, --continue  open fx's latest conversation",
+	"  -c, --continue  open the folder's last fx conversation",
 ];
 
 /**

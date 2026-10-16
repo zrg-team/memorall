@@ -2,7 +2,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { type ITheme, Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
-import { RotateCcw } from "lucide-react";
+import { FolderOpen } from "lucide-react";
 import React from "react";
 import { useTranslation } from "react-i18next";
 import { useTheme } from "@/main/components/molecules/ThemeContext";
@@ -10,6 +10,7 @@ import { Button } from "@/main/components/ui/button";
 import type { MemonFxOutput } from "@/services/memon/operation-types";
 import type { MemonFxState } from "@/services/memon/types";
 import type { MemonSend } from "../types";
+import { CodeFolderPicker } from "./CodeFolderPicker";
 
 const FONT_FAMILY = '"IBM Plex Mono", ui-monospace, monospace';
 const FONT_SIZE = 12;
@@ -89,16 +90,20 @@ export const fxKeySequence = (event: KeyboardEvent): string | null => {
  *
  * fx runs in the computer, not here: this window attaches with its size,
  * replays fx's output from the start (fx prints inline and cannot redraw),
- * follows it and sends raw keys. Closing the window quits fx; leaving the
- * page or collapsing the panel only detaches the view.
+ * follows it and sends raw keys. It opens on a folder picker, as pi code's
+ * does, and the folder button over fx moves it to another folder. Closing the
+ * window quits fx; leaving the page or collapsing the panel only detaches the
+ * view.
  */
 const FxWindowView: React.FC<{
 	machineKey: string;
 	state: MemonFxState | undefined;
+	/** The agent's home, where the folder picker starts. */
+	home: string;
 	/** Window in front: keys go to fx. */
 	focused: boolean;
 	send: MemonSend;
-}> = ({ machineKey, state, focused, send }) => {
+}> = ({ machineKey, state, home, focused, send }) => {
 	const { t } = useTranslation("common");
 	const { actualTheme } = useTheme();
 	const hostRef = React.useRef<HTMLDivElement>(null);
@@ -109,6 +114,12 @@ const FxWindowView: React.FC<{
 	const status = state?.status;
 	/** A new start of fx needs attaching again. */
 	const instance = state?.instance;
+	/** The folder picker, over fx or its error, to open another folder. */
+	const [picking, setPicking] = React.useState(false);
+	// biome-ignore lint/correctness/useExhaustiveDependencies: a new start of fx closes the picker.
+	React.useEffect(() => {
+		setPicking(false);
+	}, [instance]);
 
 	// One xterm.js terminal per start of fx, attached while it runs.
 	// biome-ignore lint/correctness/useExhaustiveDependencies: reconnects when fx (re)starts; other inputs are read through `live`.
@@ -345,15 +356,21 @@ const FxWindowView: React.FC<{
 	}, [actualTheme, connected]);
 
 	React.useEffect(() => {
-		if (focused && connected) termRef.current?.focus();
-	}, [focused, connected]);
+		if (focused && connected && !picking) termRef.current?.focus();
+	}, [focused, connected, picking]);
 
-	const notice =
-		status === "error"
+	const choosing = status === "choosing";
+	const notice = choosing
+		? null
+		: status === "error"
 			? t("memonComputer.fx.error", { error: state?.error ?? "" })
 			: status !== "running" || !connected
 				? t("memonComputer.fx.starting")
 				: null;
+	const closePicker = () => {
+		setPicking(false);
+		termRef.current?.focus();
+	};
 
 	return (
 		<div
@@ -367,6 +384,20 @@ const FxWindowView: React.FC<{
 					data-testid="memon-fx-screen"
 					className="h-full w-full"
 				/>
+				{choosing || picking ? (
+					<div className="absolute inset-0 z-20">
+						<CodeFolderPicker
+							app="fx"
+							machineKey={machineKey}
+							home={home}
+							send={send}
+							focused={focused}
+							current={status === "running" ? state?.cwd : undefined}
+							onCancel={picking ? closePicker : undefined}
+							onOpened={() => setPicking(false)}
+						/>
+					</div>
+				) : null}
 				{notice ? (
 					<div
 						role="status"
@@ -379,13 +410,24 @@ const FxWindowView: React.FC<{
 								size="sm"
 								variant="outline"
 								className="h-7 gap-1.5 font-sans text-[11px]"
-								onClick={() => void send("fx.start", { key: machineKey })}
+								onClick={() => setPicking(true)}
 							>
-								<RotateCcw size={12} />
-								{t("memonComputer.fx.retry")}
+								<FolderOpen size={12} />
+								{t("memonComputer.fx.chooseFolder")}
 							</Button>
 						) : null}
 					</div>
+				) : connected && !picking && !state?.working ? (
+					<button
+						type="button"
+						data-testid="memon-fx-open-folder-button"
+						title={t("memonComputer.fx.openFolder")}
+						aria-label={t("memonComputer.fx.openFolder")}
+						onClick={() => setPicking(true)}
+						className="absolute right-3 top-2 z-10 inline-flex h-6 w-6 items-center justify-center rounded-md border border-input bg-background/90 text-muted-foreground opacity-70 shadow-sm hover:bg-accent hover:text-foreground hover:opacity-100"
+					>
+						<FolderOpen size={12} />
+					</button>
 				) : null}
 			</div>
 		</div>

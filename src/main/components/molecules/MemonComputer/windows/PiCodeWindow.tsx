@@ -16,7 +16,7 @@ import type {
 } from "@/services/memon/types";
 import { pastedFiles } from "@/utils/clipboard-files";
 import type { MemonSend } from "../types";
-import { PiCodeFolderPicker } from "./PiCodeFolderPicker";
+import { CodeFolderPicker } from "./CodeFolderPicker";
 
 const FONT_FAMILY = '"IBM Plex Mono", ui-monospace, monospace';
 const FONT_SIZE = 12;
@@ -474,7 +474,8 @@ const PiCodeWindowView: React.FC<{
 				/>
 				{choosing || picking ? (
 					<div className="absolute inset-0 z-20">
-						<PiCodeFolderPicker
+						<CodeFolderPicker
+							app="pi"
 							machineKey={machineKey}
 							home={home}
 							send={send}

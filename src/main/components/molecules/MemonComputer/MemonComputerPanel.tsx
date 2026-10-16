@@ -511,6 +511,7 @@ export const MemonComputerPanel = React.memo<{
 					<FxWindow
 						machineKey={key}
 						state={snapshot.fx}
+						home={snapshot.home}
 						focused={window.id === snapshot.focusedWindowId}
 						send={send}
 					/>

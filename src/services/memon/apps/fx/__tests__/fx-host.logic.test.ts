@@ -7,6 +7,7 @@ import {
 	createFxPromptHistoryStore,
 	createFxSessionStore,
 	FX_SESSION_REVISION_CONFLICT,
+	listFxFolders,
 } from "../fx-stores";
 import { createFxWorkspace, fxHomeInstructionsPath } from "../fx-workspace";
 import type { MemonSkillsPort } from "../../../memon-machine";
@@ -45,6 +46,14 @@ class MemoryFs {
 	}
 	async mkdir() {
 		return undefined;
+	}
+	async stat(path: string) {
+		const isDirectory = [...this.files.keys()].some((key) =>
+			key.startsWith(`${path}/`),
+		);
+		if (!isDirectory && !this.files.has(path))
+			throw new Error(`ENOENT: ${path}`);
+		return { isDirectory: () => isDirectory };
 	}
 	async unlink(path: string) {
 		this.files.delete(path);
@@ -127,23 +136,26 @@ describe("fx stores", () => {
 		expect(await again.get("mode")).toBe("ask");
 	});
 
-	it("keeps prompt history per workspace and skips a repeat", async () => {
-		const store = createFxPromptHistoryStore(asFs(new MemoryFs()), HOME);
-		await store.append("/agents/Bot", "first", 1);
-		await store.append("/agents/Bot/app", "elsewhere", 2);
-		expect(await store.append("/agents/Bot", "first", 3)).toBe("duplicate");
-		await store.append("/agents/Bot", "second", 4);
+	it("keeps prompt history per folder and skips a repeat", async () => {
+		const fs = asFs(new MemoryFs());
+		// fx's WebAssembly terminal names every workspace "/".
+		const home = createFxPromptHistoryStore(fs, HOME, HOME);
+		const app = createFxPromptHistoryStore(fs, HOME, `${HOME}/app`);
+		await home.append("/", "first", 1);
+		await app.append("/", "elsewhere", 2);
+		expect(await home.append("/", "first", 3)).toBe("duplicate");
+		await home.append("/", "second", 4);
 
-		expect(await store.load("/agents/Bot", 10)).toEqual(["first", "second"]);
-		expect(await store.load("/agents/Bot", 1)).toEqual(["second"]);
+		expect(await home.load("/", 10)).toEqual(["first", "second"]);
+		expect(await home.load("/", 1)).toEqual(["second"]);
 
-		await store.clear("/agents/Bot");
-		expect(await store.load("/agents/Bot", 10)).toEqual([]);
-		expect(await store.load("/agents/Bot/app", 10)).toEqual(["elsewhere"]);
+		await home.clear("/");
+		expect(await home.load("/", 10)).toEqual([]);
+		expect(await app.load("/", 10)).toEqual(["elsewhere"]);
 	});
 
 	it("saves conversations by revision and refuses a stale write", async () => {
-		const store = createFxSessionStore(asFs(new MemoryFs()), HOME);
+		const store = createFxSessionStore(asFs(new MemoryFs()), HOME, HOME);
 		const bytes = new Uint8Array([1, 2, 3]);
 
 		const { revision } = await store.commit("s1", bytes, undefined);
@@ -159,6 +171,66 @@ describe("fx stores", () => {
 		await store.remove("s1");
 		expect(await store.load("s1")).toBeNull();
 		expect(await store.list()).toEqual([]);
+	});
+
+	it("lists only the conversations of the folder fx works in", async () => {
+		const fs = asFs(new MemoryFs());
+		const app = createFxSessionStore(fs, HOME, `${HOME}/app`);
+		const home = createFxSessionStore(fs, HOME, HOME);
+		await app.commit("in-app", new Uint8Array([1]), undefined);
+		await home.commit("in-home", new Uint8Array([2]), undefined);
+
+		expect((await app.list()).map((entry) => entry.id)).toEqual(["in-app"]);
+		expect((await home.list()).map((entry) => entry.id)).toEqual(["in-home"]);
+		// Any of them still loads: /resume <id> names one outright.
+		expect(await app.load("in-home")).not.toBeNull();
+	});
+
+	it("lists the folders fx worked in, the last used first, each with its last prompt", async () => {
+		const memory = new MemoryFs({
+			[`${HOME}/app/package.json`]: "{}",
+			[`${HOME}/site/index.html`]: "",
+		});
+		const fs = asFs(memory);
+		let now = 1_000;
+		const at = (time: number) => {
+			now = time;
+		};
+		const realNow = Date.now;
+		Date.now = () => now;
+		try {
+			const app = createFxSessionStore(fs, HOME, `${HOME}/app`);
+			const site = createFxSessionStore(fs, HOME, `${HOME}/site`);
+			const gone = createFxSessionStore(fs, HOME, `${HOME}/gone`);
+			at(1_000);
+			await app.commit("a1", new Uint8Array([1]), undefined);
+			at(2_000);
+			await site.commit("s1", new Uint8Array([1]), undefined);
+			at(3_000);
+			await app.commit("a2", new Uint8Array([1]), undefined);
+			at(4_000);
+			await gone.commit("g1", new Uint8Array([1]), undefined);
+		} finally {
+			Date.now = realNow;
+		}
+		const history = createFxPromptHistoryStore(fs, HOME, `${HOME}/app`);
+		await history.append("/", "add a login page", 1);
+		await history.append("/", "now   write\n its tests", 2);
+
+		expect(await listFxFolders(fs, HOME)).toEqual([
+			{
+				path: `${HOME}/app`,
+				lastUsed: 3_000,
+				sessions: 2,
+				latest: { file: "a2", title: "now write its tests" },
+			},
+			{
+				path: `${HOME}/site`,
+				lastUsed: 2_000,
+				sessions: 1,
+				latest: { file: "s1" },
+			},
+		]);
 	});
 });
 

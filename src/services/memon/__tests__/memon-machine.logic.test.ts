@@ -22,7 +22,7 @@ import {
 } from "../memon-machine";
 import type { MemonStudioRequest } from "../studio-app";
 import { runTerminalAction } from "../terminal/terminal-actions";
-import type { MemonSchedule } from "../types";
+import type { MemonPiCodeFolder, MemonSchedule } from "../types";
 
 const outline = (url: string, title: string): WebPageOutline => ({
 	url,
@@ -2811,6 +2811,7 @@ const fakeFx = () => {
 	const exits: Array<() => void> = [];
 	const disposed = vi.fn(async () => {});
 	const port = {
+		folders: vi.fn(async (_home: string) => [] as MemonPiCodeFolder[]),
 		start: vi.fn(
 			async ({ cwd, onExit }: { cwd: string; onExit: () => void }) => {
 				exits.push(onExit);
@@ -2833,7 +2834,7 @@ const fakeFx = () => {
 };
 
 describe("MemonMachine fx", () => {
-	it("starts fx in the home when its window opens, and stops it when it closes", async () => {
+	it("opens fx's window on a folder picker, starts fx in the folder picked, and stops it when it closes", async () => {
 		const { ports } = createPorts();
 		const fx = fakeFx();
 		const machine = new MemonMachine("conversation-1", {
@@ -2844,22 +2845,68 @@ describe("MemonMachine fx", () => {
 
 		machine.openWindow("fx");
 
+		expect(machine.snapshot().fx).toEqual({
+			status: "choosing",
+			working: false,
+		});
+		expect(fx.port.start).not.toHaveBeenCalled();
+		await machine.fx.recentFolders();
+		expect(fx.port.folders).toHaveBeenCalledWith(home);
+
+		await machine.openFx("/notes");
+
 		expect(fx.port.start).toHaveBeenCalledWith(
-			expect.objectContaining({ cwd: home, home }),
+			expect.objectContaining({ cwd: "/notes", home }),
 		);
 		await vi.waitFor(() =>
 			expect(machine.snapshot().fx).toMatchObject({
 				status: "running",
-				cwd: home,
+				cwd: "/notes",
 				working: false,
 			}),
 		);
 		expect(machine.snapshot().builtInApps).toContain("fx");
 
+		// Another folder: fx starts again there. A new one is made as fx
+		// starts; one that is there is refused.
+		await expect(machine.openFx("/notes", { create: true })).rejects.toThrow(
+			"/notes is already there.",
+		);
+		await machine.openFx("/notes/app", { create: true });
+		expect(fx.port.start).toHaveBeenLastCalledWith(
+			expect.objectContaining({ cwd: "/notes/app" }),
+		);
+		expect(fx.disposed).toHaveBeenCalledTimes(1);
+
 		const window = machine.findWindow("fx");
 		await machine.closeWindow(window?.id ?? "");
 		expect(fx.disposed).toHaveBeenCalled();
 		expect(machine.snapshot().fx).toBeUndefined();
+	});
+
+	it("opens fx in a new agent's home before anything is in it", async () => {
+		const { ports } = createPorts();
+		const fx = fakeFx();
+		const machine = new MemonMachine("conversation-1", {
+			...ports,
+			fx: fx.port,
+		});
+		const home = machine.snapshot().home;
+		expect(await ports.files.isDirectory(home)).toBe(false);
+
+		await expect(machine.browseFolders("~")).resolves.toMatchObject({
+			dir: home,
+			folders: [],
+			files: [],
+		});
+		await machine.openFx("~");
+		expect(fx.port.start).toHaveBeenCalledWith(
+			expect.objectContaining({ cwd: home }),
+		);
+		await machine.openFx("~/app", { create: true });
+		expect(fx.port.start).toHaveBeenLastCalledWith(
+			expect.objectContaining({ cwd: `${home}/app` }),
+		);
 	});
 
 	it("closes fx's window when fx exits", async () => {
@@ -2869,7 +2916,7 @@ describe("MemonMachine fx", () => {
 			...ports,
 			fx: fx.port,
 		});
-		machine.openWindow("fx");
+		await machine.openFx("~");
 		await vi.waitFor(() =>
 			expect(machine.snapshot().fx?.status).toBe("running"),
 		);
@@ -2886,7 +2933,7 @@ describe("MemonMachine fx", () => {
 			...ports,
 			fx: fx.port,
 		});
-		machine.openWindow("fx");
+		await machine.openFx("~");
 		await vi.waitFor(() =>
 			expect(machine.snapshot().fx?.status).toBe("running"),
 		);
@@ -2950,7 +2997,7 @@ describe("MemonMachine fx", () => {
 		});
 		await expect(run("fx --verbose")).resolves.toEqual({
 			exitCode: 2,
-			said: "  -c, --continue  open fx's latest conversation",
+			said: "  -c, --continue  open the folder's last fx conversation",
 		});
 		expect(fx.port.start).not.toHaveBeenCalled();
 		expect(machine.snapshot().terminal.tabs).toHaveLength(1);

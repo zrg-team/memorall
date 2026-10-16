@@ -623,7 +623,13 @@
 		"fx": {
 			"starting": "Starting fx…",
 			"error": "fx could not start: {{error}}",
-			"retry": "Start again"
+			"openFolder": "Open another folder",
+			"chooseFolder": "Open a folder",
+			"picker": {
+				"title": "Open a folder in fx",
+				"subtitle": "fx reads, edits and runs code in the folder you open, and keeps its conversations there.",
+				"createHint": "Made in {{folder}}, then fx opens in it."
+			}
 		},
 		"piCode": {
 			"starting": "Starting pi…",

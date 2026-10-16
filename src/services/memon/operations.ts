@@ -524,7 +524,7 @@ export const runMemonOperation = async (
 			return (
 				(await findMemonMachine(job.payload.key)?.piCode.recentFolders()) ?? []
 			);
-		case "piCode.browse": {
+		case "folders.browse": {
 			const machine = findMemonMachine(job.payload.key);
 			return machine ? machine.browseFolders(job.payload.dir) : null;
 		}
@@ -610,10 +610,18 @@ export const runMemonOperation = async (
 			await findMemonMachine(key)?.piCode.resize(columns, rows);
 			return null;
 		}
-		case "fx.start":
-			return userAside(job.payload.key, "started fx again", (machine) =>
-				machine.fx.start(),
+		case "fx.folders":
+			return (
+				(await findMemonMachine(job.payload.key)?.fx.recentFolders()) ?? []
 			);
+		case "fx.open": {
+			const { key, cwd, continueLast, create } = job.payload;
+			return userInput(
+				key,
+				`opened fx in ${create ? "a new folder, " : ""}${cwd}${continueLast ? " on its last conversation" : ""}`,
+				(machine) => machine.openFx(cwd, { continueLast, create }),
+			);
+		}
 		case "fx.attach": {
 			const { key, columns, rows } = job.payload;
 			const cursor = await findMemonMachine(key)?.fx.attach(columns, rows);

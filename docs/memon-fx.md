@@ -43,8 +43,15 @@ flowchart LR
 
 ## Lifecycle
 
-- Opening the fx window starts fx in the home; `fx [-c] [folder]` in the
-  Terminal starts it in a folder (`-c` continues the latest conversation).
+- Opening the fx window asks for a folder, with pi code's folder picker
+  (`CodeFolderPicker`): the folders fx was used in, the last first, each
+  labelled with its last prompt and able to **Continue** its last
+  conversation, then the folders to go through, a typed path or a new
+  folder. The folder button over a running fx opens the picker again to move
+  it. `fx [-c] [folder]` in the Terminal opens it in a folder directly.
+- fx keeps its conversations per folder: the session store records each
+  one's folder and lists only the current folder's, so `/resume` and
+  `--resume last` (Continue, `fx -c`) stay in that folder.
 - Closing the window, fx's `/exit`, turning fx off for the agent or shutting
   the computer down stops it. Leaving the view (another tab, the panel
   collapsed) does not: fx keeps working, and the next view replays its

@@ -9,6 +9,32 @@ vi.mock("@/services/memon/memon-client", () => ({
 	memonClient: { request: (...args: unknown[]) => request(...args) },
 }));
 
+const HOME = "/agents/Bot";
+
+/** The machine's answers to the folder picker. */
+const pickerRequests = (operation: unknown, payload: unknown) => {
+	if (operation === "fx.folders") {
+		return [
+			{
+				path: `${HOME}/app`,
+				lastUsed: Date.now(),
+				sessions: 2,
+				latest: { file: "a2", title: "add a login page" },
+			},
+		];
+	}
+	if (operation === "folders.browse") {
+		const dir = (payload as { dir?: string }).dir ?? HOME;
+		return {
+			dir,
+			parent: "/agents",
+			folders: [{ name: "app", path: `${HOME}/app` }],
+			files: [],
+		};
+	}
+	return null;
+};
+
 const send = () =>
 	vi.fn(async () => null) as unknown as MemonSend & ReturnType<typeof vi.fn>;
 
@@ -22,6 +48,7 @@ describe("FxWindow", () => {
 			<FxWindow
 				machineKey="m1"
 				state={{ status: "starting", working: false }}
+				home={HOME}
 				focused
 				send={send()}
 			/>,
@@ -33,20 +60,110 @@ describe("FxWindow", () => {
 		expect(request).not.toHaveBeenCalled();
 	});
 
-	it("shows why fx could not start, and starts it again", () => {
-		const sent = send();
+	it("shows why fx could not start, and opens a folder from there", async () => {
+		request.mockImplementation(async (operation, payload) =>
+			pickerRequests(operation, payload),
+		);
 		const failed: MemonFxState = {
 			status: "error",
 			working: false,
 			error: "fx needs WebAssembly JSPI",
 		};
-		render(<FxWindow machineKey="m1" state={failed} focused send={sent} />);
+		render(
+			<FxWindow
+				machineKey="m1"
+				state={failed}
+				home={HOME}
+				focused
+				send={send()}
+			/>,
+		);
 
 		expect(screen.getByRole("status").textContent).toContain(
 			"memonComputer.fx.error",
 		);
-		fireEvent.click(screen.getByText("memonComputer.fx.retry"));
-		expect(sent).toHaveBeenLastCalledWith("fx.start", { key: "m1" });
+		fireEvent.click(screen.getByText("memonComputer.fx.chooseFolder"));
+		expect(await screen.findByTestId("memon-fx-picker")).toBeTruthy();
+	});
+
+	it("opens on a folder picker: a recent folder continues its last conversation", async () => {
+		request.mockImplementation(async (operation, payload) =>
+			pickerRequests(operation, payload),
+		);
+		const sent = send();
+		render(
+			<FxWindow
+				machineKey="m1"
+				state={{ status: "choosing", working: false }}
+				home={HOME}
+				focused
+				send={sent}
+			/>,
+		);
+
+		expect(screen.getByText("memonComputer.fx.picker.title")).toBeTruthy();
+		const recent = await screen.findByTestId("memon-fx-recent");
+		expect(recent.textContent).toContain("app");
+		fireEvent.click(screen.getByTestId("memon-fx-continue"));
+		await waitFor(() =>
+			expect(sent).toHaveBeenLastCalledWith(
+				"fx.open",
+				{ key: "m1", cwd: "~/app", continueLast: true },
+				{ rethrow: true },
+			),
+		);
+
+		// The folder shown opens as it is.
+		await screen.findByTestId("memon-fx-folder");
+		fireEvent.click(screen.getByTestId("memon-fx-open-here"));
+		await waitFor(() =>
+			expect(sent).toHaveBeenLastCalledWith(
+				"fx.open",
+				{ key: "m1", cwd: "~" },
+				{ rethrow: true },
+			),
+		);
+	});
+
+	it("moves a running fx to another folder from the button over it", async () => {
+		request.mockImplementation(async (operation, payload) => {
+			if (operation === "fx.attach") return { cursor: 0 };
+			if (operation === "fx.read") {
+				await new Promise((resolve) => setTimeout(resolve, 50));
+				return {
+					data: "",
+					cursor: (payload as { cursor: number }).cursor,
+					reset: false,
+					closed: false,
+				};
+			}
+			return pickerRequests(operation, payload);
+		});
+		const view = render(
+			<FxWindow
+				machineKey="m1"
+				state={{
+					status: "running",
+					instance: 1,
+					working: false,
+					cwd: `${HOME}/app`,
+				}}
+				home={HOME}
+				focused
+				send={send()}
+			/>,
+		);
+
+		fireEvent.click(await screen.findByTestId("memon-fx-open-folder-button"));
+		expect(await screen.findByTestId("memon-fx-picker")).toBeTruthy();
+		expect(
+			screen.getByText("memonComputer.piCode.picker.switchTitle"),
+		).toBeTruthy();
+		fireEvent.click(
+			screen.getAllByText("memonComputer.piCode.picker.cancel")[0],
+		);
+		expect(screen.queryByTestId("memon-fx-picker")).toBeNull();
+		view.unmount();
 	});
 
 	it("attaches with its size, then replays fx's output from the cursor it was given", async () => {
@@ -70,6 +187,7 @@ describe("FxWindow", () => {
 			<FxWindow
 				machineKey="m1"
 				state={{ status: "running", instance: 1, working: false }}
+				home={HOME}
 				focused
 				send={send()}
 			/>,
